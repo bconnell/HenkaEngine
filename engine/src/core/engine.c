@@ -26,6 +26,41 @@ static char* henka_duplicate_string(const char* value)
     return copy;
 }
 
+static char* henka_engine_resolve_base_path(const char* configured_path, const char* default_suffix)
+{
+    char* resolved_path;
+
+    if (configured_path != NULL && configured_path[0] != '\0')
+    {
+        return henka_duplicate_string(configured_path);
+    }
+
+    resolved_path = henka_platform_get_base_path_copy();
+    if (resolved_path == NULL)
+    {
+        return NULL;
+    }
+
+    if (default_suffix == NULL || default_suffix[0] == '\0')
+    {
+        return resolved_path;
+    }
+
+    {
+        char* joined_path;
+        henka_result result;
+
+        result = henka_path_resolve(resolved_path, default_suffix, &joined_path);
+        henka_free(resolved_path);
+        if (result != HENKA_SUCCESS)
+        {
+            return NULL;
+        }
+
+        return joined_path;
+    }
+}
+
 static bool henka_engine_config_is_valid(const henka_engine_config* config)
 {
     if (config == NULL)
@@ -124,14 +159,7 @@ henka_result henka_engine_create(const henka_engine_config* config, henka_engine
         return result;
     }
 
-    if (engine->config.asset_base_path != NULL && engine->config.asset_base_path[0] != '\0')
-    {
-        engine->asset_base_path = henka_duplicate_string(engine->config.asset_base_path);
-    }
-    else
-    {
-        engine->asset_base_path = henka_platform_get_base_path_copy();
-    }
+    engine->asset_base_path = henka_engine_resolve_base_path(engine->config.asset_base_path, NULL);
 
     if (engine->asset_base_path == NULL)
     {
@@ -141,10 +169,21 @@ henka_result henka_engine_create(const henka_engine_config* config, henka_engine
         return HENKA_ERROR_OUT_OF_MEMORY;
     }
 
+    engine->user_data_base_path = henka_engine_resolve_base_path(engine->config.user_data_base_path, "user");
+    if (engine->user_data_base_path == NULL)
+    {
+        HENKA_LOG_ERROR("user data path initialization failed");
+        henka_free(engine->asset_base_path);
+        henka_platform_destroy(engine->platform);
+        henka_free(engine);
+        return HENKA_ERROR_OUT_OF_MEMORY;
+    }
+
     result = henka_renderer_create(engine->platform, engine->config.enable_vsync, &engine->renderer);
     if (result != HENKA_SUCCESS)
     {
         HENKA_LOG_ERROR("renderer initialization failed: %s", henka_result_to_string(result));
+        henka_free(engine->user_data_base_path);
         henka_free(engine->asset_base_path);
         henka_platform_destroy(engine->platform);
         henka_free(engine);
@@ -156,6 +195,7 @@ henka_result henka_engine_create(const henka_engine_config* config, henka_engine
     {
         HENKA_LOG_ERROR("asset manager initialization failed: %s", henka_result_to_string(result));
         henka_renderer_destroy(engine->renderer);
+        henka_free(engine->user_data_base_path);
         henka_free(engine->asset_base_path);
         henka_platform_destroy(engine->platform);
         henka_free(engine);
@@ -193,6 +233,7 @@ void henka_engine_destroy(henka_engine* engine)
     henka_asset_manager_destroy(engine->asset_manager);
     henka_renderer_destroy(engine->renderer);
     henka_platform_destroy(engine->platform);
+    henka_free(engine->user_data_base_path);
     henka_free(engine->asset_base_path);
     henka_free(engine);
     henka_memory_report_leaks();
@@ -426,6 +467,16 @@ const char* henka_engine_get_asset_base_path(const henka_engine* engine)
     }
 
     return engine->asset_base_path;
+}
+
+const char* henka_engine_get_user_data_base_path(const henka_engine* engine)
+{
+    if (engine == NULL || engine->user_data_base_path == NULL)
+    {
+        return "";
+    }
+
+    return engine->user_data_base_path;
 }
 
 henka_asset_manager* henka_engine_get_asset_manager(henka_engine* engine)

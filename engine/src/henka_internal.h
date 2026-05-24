@@ -10,6 +10,7 @@
 #include <henka/input.h>
 #include <henka/math.h>
 #include <henka/mesh.h>
+#include <henka/persistence.h>
 #include <henka/platform.h>
 #include <henka/renderer.h>
 #include <henka/result.h>
@@ -159,6 +160,7 @@ struct henka_engine
     struct henka_asset_manager* asset_manager;
     struct henka_scene* active_scene;
     char* asset_base_path;
+    char* user_data_base_path;
     henka_input_state input;
     henka_time_state time;
     bool exit_requested;
@@ -172,6 +174,7 @@ henka_result henka_platform_set_vsync(struct henka_platform* platform, bool enab
 bool henka_platform_get_framebuffer_size(struct henka_platform* platform, int* out_width, int* out_height);
 henka_result henka_platform_set_mouse_capture(struct henka_platform* platform, bool enabled);
 char* henka_platform_get_base_path_copy(void);
+henka_result henka_platform_create_directory_tree(const char* path);
 
 henka_result henka_renderer_create(struct henka_platform* platform, bool enable_vsync, struct henka_renderer** out_renderer);
 void henka_renderer_destroy(struct henka_renderer* renderer);

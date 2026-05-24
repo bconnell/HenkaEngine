@@ -1,6 +1,8 @@
 # Build output
 /build/
 /out/
+/user/
+/user_data/
 /bin/
 /lib/
 

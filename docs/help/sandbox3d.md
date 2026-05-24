@@ -10,6 +10,8 @@
 - a fallback-texture example that stays visible when a texture file is missing
 - a fallback-model example that stays visible when an OBJ file is missing
 
+The sandbox also saves a small local settings file so wireframe, grid visibility, mouse sensitivity, and camera state can carry across runs.
+
 ## Controls
 
 - `W A S D`: move across the scene
@@ -48,11 +50,13 @@
 ## Packaged runs
 
 Packaged Windows builds include `docs/help/sandbox3d.md` beside the executable so the same offline help stays available after you copy the runnable folder elsewhere.
+Packaged runs also save sandbox settings in `user/sandbox3d.settings` beside the executable.
 
 ## Current limitations
 
 - The sandbox uses built-in meshes plus a small early OBJ loading path.
 - OBJ support is intentionally limited to simple geometry and does not include imported materials, negative indices, or animation.
+- The current settings file is a small local key/value format. It is easy to inspect by hand, but it is not a finished save-game system.
 - Help is printed to the console because in-window text and UI rendering do not exist yet.
 - Editor tools, asset browser UI, and broader 2D or 2.5D workflows are not available yet.
 

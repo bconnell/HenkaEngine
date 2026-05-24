@@ -5,27 +5,6 @@
 #include <henka/log.h>
 #include <henka/memory.h>
 
-static bool henka_path_is_separator(char character)
-{
-    return character == '/' || character == '\\';
-}
-
-static bool henka_path_is_absolute(const char* path)
-{
-    if (path == NULL || path[0] == '\0')
-    {
-        return false;
-    }
-
-    if ((path[0] != '\0' && path[1] == ':') ||
-        (henka_path_is_separator(path[0]) && henka_path_is_separator(path[1])))
-    {
-        return true;
-    }
-
-    return henka_path_is_separator(path[0]);
-}
-
 static char* henka_duplicate_string(const char* value)
 {
     char* copy;
@@ -49,58 +28,7 @@ static char* henka_duplicate_string(const char* value)
 
 henka_result henka_assets_resolve_path(const char* base_path, const char* asset_path, char** out_path)
 {
-    char* resolved_path;
-    size_t asset_length;
-    size_t base_length;
-    bool needs_separator;
-
-    if (asset_path == NULL || out_path == NULL)
-    {
-        return HENKA_ERROR_INVALID_ARGUMENT;
-    }
-
-    *out_path = NULL;
-
-    if (base_path == NULL || base_path[0] == '\0' || henka_path_is_absolute(asset_path))
-    {
-        resolved_path = henka_duplicate_string(asset_path);
-        if (resolved_path == NULL)
-        {
-            return HENKA_ERROR_OUT_OF_MEMORY;
-        }
-
-        *out_path = resolved_path;
-        return HENKA_SUCCESS;
-    }
-
-    base_length = strlen(base_path);
-    asset_length = strlen(asset_path);
-
-    while (base_length > 0U && henka_path_is_separator(base_path[base_length - 1U]))
-    {
-        base_length -= 1U;
-    }
-
-    needs_separator = base_length > 0U && !henka_path_is_separator(asset_path[0]);
-    resolved_path = henka_malloc(base_length + asset_length + (needs_separator ? 2U : 1U));
-    if (resolved_path == NULL)
-    {
-        return HENKA_ERROR_OUT_OF_MEMORY;
-    }
-
-    memcpy(resolved_path, base_path, base_length);
-    if (needs_separator)
-    {
-        resolved_path[base_length] = '/';
-        memcpy(resolved_path + base_length + 1U, asset_path, asset_length + 1U);
-    }
-    else
-    {
-        memcpy(resolved_path + base_length, asset_path, asset_length + 1U);
-    }
-
-    *out_path = resolved_path;
-    return HENKA_SUCCESS;
+    return henka_path_resolve(base_path, asset_path, out_path);
 }
 
 static henka_result henka_asset_manager_grow_shaders(henka_asset_manager* manager)

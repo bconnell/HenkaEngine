@@ -5,6 +5,7 @@
 typedef struct sandbox3d_state
 {
     henka_scene* scene;
+    henka_settings* settings;
     henka_camera camera;
     henka_mesh* cube_mesh;
     henka_mesh* ground_mesh;
@@ -25,7 +26,8 @@ typedef struct sandbox3d_state
     henka_entity fallback_model_entity;
 } sandbox3d_state;
 
-static const float g_mouse_look_sensitivity = 0.0025f;
+static const float g_default_mouse_look_sensitivity = 0.0025f;
+static const float g_default_camera_movement_speed = 4.0f;
 static const henka_vec3 g_camera_start_position = {0.0f, 2.4f, 8.6f};
 static const float g_camera_start_yaw = -HENKA_PI * 0.5f;
 static const float g_camera_start_pitch = -0.22f;
@@ -34,6 +36,11 @@ static const henka_vec3 g_colored_cube_position = {-2.6f, 0.5f, 1.4f};
 static const henka_vec3 g_missing_texture_position = {2.6f, 0.5f, 1.4f};
 static const henka_vec3 g_marker_position = {-4.4f, 0.0f, -0.9f};
 static const henka_vec3 g_missing_model_position = {4.4f, 0.5f, -0.9f};
+
+static henka_result sandbox3d_get_settings_path(const henka_engine* engine, char** out_path)
+{
+    return henka_path_resolve(henka_engine_get_user_data_base_path(engine), "sandbox3d.settings", out_path);
+}
 
 static const char* sandbox3d_safe_entity_name(const sandbox3d_state* state, henka_entity entity, const char* fallback_name)
 {
@@ -102,6 +109,7 @@ static void sandbox3d_release_owned_resources(sandbox3d_state* state)
     henka_mesh_destroy(state->ground_mesh);
     henka_mesh_destroy(state->cube_mesh);
     henka_scene_destroy(state->scene);
+    henka_settings_destroy(state->settings);
 
     state->grid_mesh = NULL;
     state->ground_mesh = NULL;
@@ -109,6 +117,98 @@ static void sandbox3d_release_owned_resources(sandbox3d_state* state)
     state->marker_mesh = NULL;
     state->missing_model_mesh = NULL;
     state->scene = NULL;
+    state->settings = NULL;
+}
+
+static float sandbox3d_get_mouse_sensitivity(const sandbox3d_state* state)
+{
+    float value;
+
+    if (state == NULL || state->settings == NULL)
+    {
+        return g_default_mouse_look_sensitivity;
+    }
+
+    value = henka_settings_get_float(state->settings, "mouse_sensitivity", g_default_mouse_look_sensitivity);
+    return value > 0.0f ? value : g_default_mouse_look_sensitivity;
+}
+
+static void sandbox3d_apply_loaded_settings(henka_engine* engine, sandbox3d_state* state)
+{
+    bool grid_visible;
+    bool wireframe_enabled;
+    float movement_speed;
+    henka_result result;
+
+    if (engine == NULL || state == NULL || state->settings == NULL || state->scene == NULL)
+    {
+        return;
+    }
+
+    grid_visible = henka_settings_get_bool(state->settings, "grid_visible", true);
+    wireframe_enabled = henka_settings_get_bool(state->settings, "wireframe_enabled", false);
+    movement_speed = henka_settings_get_float(state->settings, "camera_movement_speed", g_default_camera_movement_speed);
+
+    state->camera.position.x = henka_settings_get_float(state->settings, "camera_position_x", g_camera_start_position.x);
+    state->camera.position.y = henka_settings_get_float(state->settings, "camera_position_y", g_camera_start_position.y);
+    state->camera.position.z = henka_settings_get_float(state->settings, "camera_position_z", g_camera_start_position.z);
+    state->camera.yaw_radians = henka_settings_get_float(state->settings, "camera_yaw_radians", g_camera_start_yaw);
+    state->camera.pitch_radians = henka_settings_get_float(state->settings, "camera_pitch_radians", g_camera_start_pitch);
+    state->camera.movement_speed = movement_speed > 0.0f ? movement_speed : g_default_camera_movement_speed;
+    state->camera.fast_movement_multiplier = 2.5f;
+
+    result = henka_scene_set_entity_visible(state->scene, state->grid_entity, grid_visible);
+    if (result != HENKA_SUCCESS)
+    {
+        HENKA_LOG_WARN("Debug grid visibility could not be restored from sandbox settings.");
+    }
+
+    result = henka_engine_set_wireframe(engine, wireframe_enabled);
+    if (result != HENKA_SUCCESS)
+    {
+        HENKA_LOG_WARN("Wireframe state could not be restored from sandbox settings.");
+    }
+
+    if (henka_settings_get_float(state->settings, "mouse_sensitivity", g_default_mouse_look_sensitivity) <= 0.0f)
+    {
+        henka_settings_set_float(state->settings, "mouse_sensitivity", g_default_mouse_look_sensitivity);
+    }
+}
+
+static void sandbox3d_save_settings(henka_engine* engine, sandbox3d_state* state)
+{
+    char* settings_path;
+    henka_result result;
+
+    if (engine == NULL || state == NULL || state->settings == NULL || state->scene == NULL)
+    {
+        return;
+    }
+
+    henka_settings_set_bool(state->settings, "grid_visible", henka_scene_is_entity_visible(state->scene, state->grid_entity));
+    henka_settings_set_bool(state->settings, "wireframe_enabled", henka_engine_is_wireframe_enabled(engine));
+    henka_settings_set_float(state->settings, "mouse_sensitivity", sandbox3d_get_mouse_sensitivity(state));
+    henka_settings_set_float(state->settings, "camera_movement_speed", state->camera.movement_speed);
+    henka_settings_set_float(state->settings, "camera_position_x", state->camera.position.x);
+    henka_settings_set_float(state->settings, "camera_position_y", state->camera.position.y);
+    henka_settings_set_float(state->settings, "camera_position_z", state->camera.position.z);
+    henka_settings_set_float(state->settings, "camera_yaw_radians", state->camera.yaw_radians);
+    henka_settings_set_float(state->settings, "camera_pitch_radians", state->camera.pitch_radians);
+
+    result = sandbox3d_get_settings_path(engine, &settings_path);
+    if (result != HENKA_SUCCESS)
+    {
+        HENKA_LOG_WARN("Sandbox settings could not be saved because the local settings path could not be resolved.");
+        return;
+    }
+
+    result = henka_settings_save_file(state->settings, settings_path);
+    if (result != HENKA_SUCCESS)
+    {
+        HENKA_LOG_WARN("Sandbox settings could not be saved to '%s'.", settings_path);
+    }
+
+    henka_free(settings_path);
 }
 
 static void sandbox3d_print_help(const sandbox3d_state* state)
@@ -133,6 +233,7 @@ static void sandbox3d_print_help(const sandbox3d_state* state)
     printf("  OBJ loading is still early and currently limited to a small, documented subset.\n");
     printf("  OBJ material libraries, negative indices, animation, editor tools, and broader 2D or 2.5D workflows are not available yet.\n");
     printf("  Help is printed to the console because in-window text and UI rendering do not exist yet.\n");
+    printf("  Sandbox settings are saved locally beside the executable in the user folder.\n");
     fflush(stdout);
 }
 
@@ -164,6 +265,12 @@ static henka_result sandbox3d_initialize(henka_engine* engine, void* user_data)
     sandbox3d_state* state;
 
     state = (sandbox3d_state*)user_data;
+
+    result = henka_settings_create(&state->settings);
+    if (result != HENKA_SUCCESS)
+    {
+        goto fail;
+    }
 
     result = henka_scene_create(&state->scene);
     if (result != HENKA_SUCCESS)
@@ -369,6 +476,40 @@ static henka_result sandbox3d_initialize(henka_engine* engine, void* user_data)
     state->camera.position = g_camera_start_position;
     state->camera.yaw_radians = g_camera_start_yaw;
     state->camera.pitch_radians = g_camera_start_pitch;
+    state->camera.movement_speed = g_default_camera_movement_speed;
+
+    {
+        FILE* settings_file;
+        char* settings_path;
+        henka_result load_result;
+
+        settings_path = NULL;
+        result = sandbox3d_get_settings_path(engine, &settings_path);
+        if (result == HENKA_SUCCESS)
+        {
+            settings_file = NULL;
+            if (fopen_s(&settings_file, settings_path, "r") == 0 && settings_file != NULL)
+            {
+                fclose(settings_file);
+
+                load_result = henka_settings_load_file(state->settings, settings_path);
+                if (load_result == HENKA_ERROR_UNKNOWN)
+                {
+                    HENKA_LOG_WARN("Sandbox settings were loaded with one or more invalid lines. Defaults were kept for the invalid values.");
+                }
+                else if (load_result != HENKA_SUCCESS)
+                {
+                    HENKA_LOG_WARN("Sandbox settings were not loaded. The sandbox is using first-run defaults.");
+                }
+            }
+
+            henka_free(settings_path);
+        }
+        else
+        {
+            HENKA_LOG_WARN("Sandbox settings path could not be resolved. The sandbox is using first-run defaults.");
+        }
+    }
 
     result = henka_scene_set_camera(state->scene, &state->camera);
     if (result != HENKA_SUCCESS)
@@ -382,11 +523,7 @@ static henka_result sandbox3d_initialize(henka_engine* engine, void* user_data)
         goto fail;
     }
 
-    result = henka_engine_set_wireframe(engine, false);
-    if (result != HENKA_SUCCESS)
-    {
-        goto fail;
-    }
+    sandbox3d_apply_loaded_settings(engine, state);
 
     result = henka_engine_set_mouse_capture(engine, false);
     if (result != HENKA_SUCCESS)
@@ -463,8 +600,8 @@ static void sandbox3d_update(henka_engine* engine, double delta_seconds, void* u
         mouse_delta = henka_input_get_mouse_delta(engine);
         henka_camera_apply_mouse_look(
             &state->camera,
-            -mouse_delta.x * g_mouse_look_sensitivity,
-            -mouse_delta.y * g_mouse_look_sensitivity);
+            -mouse_delta.x * sandbox3d_get_mouse_sensitivity(state),
+            -mouse_delta.y * sandbox3d_get_mouse_sensitivity(state));
     }
 
     henka_camera_move_fly(&state->camera, engine, delta_seconds);
@@ -487,6 +624,7 @@ static void sandbox3d_shutdown(henka_engine* engine, void* user_data)
     sandbox3d_state* state;
 
     state = (sandbox3d_state*)user_data;
+    sandbox3d_save_settings(engine, state);
     henka_engine_set_mouse_capture(engine, false);
     henka_engine_set_scene(engine, NULL);
     sandbox3d_release_owned_resources(state);
@@ -500,6 +638,7 @@ int main(void)
     sandbox3d_state state;
 
     state.scene = NULL;
+    state.settings = NULL;
     state.camera = henka_camera_create_perspective(60.0f * HENKA_DEG_TO_RAD, 16.0f / 9.0f, 0.1f, 100.0f);
     state.cube_mesh = NULL;
     state.ground_mesh = NULL;
@@ -524,6 +663,7 @@ int main(void)
     config.window_height = 720;
     config.enable_vsync = true;
     config.asset_base_path = NULL;
+    config.user_data_base_path = NULL;
     config.on_initialize = sandbox3d_initialize;
     config.on_update = sandbox3d_update;
     config.on_shutdown = sandbox3d_shutdown;

@@ -9,5 +9,6 @@ if (Test-Path $buildPath) {
 }
 
 if (Test-Path $outPath) {
+    Write-Host "Removing the generated out folder, including any package-local user data."
     Remove-Item -LiteralPath $outPath -Recurse -Force
 }

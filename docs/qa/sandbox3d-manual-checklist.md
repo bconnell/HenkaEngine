@@ -28,6 +28,9 @@ Use this checklist when you want to confirm that `henka_sandbox3d` is visually r
 5. Confirm the console help still prints and `docs/help/sandbox3d.md` is present beside the executable.
 6. Confirm there are no unexpected shader, texture, model, or asset path errors.
 7. Confirm the missing-texture and missing-model examples still use the intended fallback visuals.
+8. Change `F1` or `F3`, exit cleanly, and confirm `out/HenkaSandbox3D/user/sandbox3d.settings` is created.
+9. Run the package script again and confirm the `user/` folder is preserved by default.
+10. If you intentionally test `-ResetUserData`, confirm the settings file is removed only when that switch is used.
 
 ## Expected startup behavior
 
@@ -35,6 +38,7 @@ Use this checklist when you want to confirm that `henka_sandbox3d` is visually r
 - Console help prints once at startup.
 - The console legend explains what each example object represents.
 - The sandbox keeps running until you close it or press `Escape` while mouse capture is released.
+- If `user/sandbox3d.settings` is missing, the sandbox should still start with safe defaults.
 
 ## Expected scene examples
 
@@ -104,6 +108,9 @@ Mark each item as `Pass`, `Needs Review`, or `Fail`.
 - Packaged executable launches from `out/HenkaSandbox3D`
 - Packaged assets load without relying on the repo root
 - Offline help file is included with the packaged output
+- Packaged settings file is created after a clean exit
+- Packaged user folder is preserved across a normal package refresh
+- Packaged user folder resets only when requested explicitly
 
 ## Safe screenshots
 
@@ -117,6 +124,7 @@ Do not commit screenshots unless that is an intentional, reviewed part of the re
 - Help is printed to the console because the sandbox does not have in-window text rendering yet.
 - Manual visual inspection is still the best way to confirm scene readability and interaction feel.
 - The packaged Windows folder is meant for local manual testing, not as a full installer or release pipeline.
+- The current persistence layer is local-only and stores simple key/value settings, not encrypted save data.
 
 ## Manual results template
 

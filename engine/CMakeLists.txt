@@ -5,6 +5,7 @@ add_library(henka STATIC
     src/core/engine.c
     src/core/log.c
     src/core/memory.c
+    src/core/persistence.c
     src/core/result.c
     src/core/time.c
     src/platform/platform_sdl.c

@@ -34,6 +34,22 @@ char* henka_platform_get_base_path_copy(void)
     return copy;
 }
 
+henka_result henka_platform_create_directory_tree(const char* path)
+{
+    if (path == NULL || path[0] == '\0')
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    if (!SDL_CreateDirectory(path))
+    {
+        HENKA_LOG_ERROR("SDL_CreateDirectory failed for '%s': %s", path, SDL_GetError());
+        return HENKA_ERROR_PLATFORM;
+    }
+
+    return HENKA_SUCCESS;
+}
+
 static henka_key henka_translate_key(SDL_Keycode keycode)
 {
     switch (keycode)

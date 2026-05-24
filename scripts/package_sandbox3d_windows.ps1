@@ -1,7 +1,13 @@
+param(
+    [switch]$ResetUserData
+)
+
 $ErrorActionPreference = "Stop"
 
 $repoRoot = Resolve-Path (Join-Path $PSScriptRoot "..")
 $packageRoot = Join-Path $repoRoot "out\HenkaSandbox3D"
+$packageUserDir = Join-Path $packageRoot "user"
+$preservedUserDir = Join-Path $repoRoot "out\.henka_sandbox3d_user_preserve"
 $buildDebugExe = Join-Path $repoRoot "build\examples\sandbox3d\Debug\henka_sandbox3d.exe"
 $buildReleaseExe = Join-Path $repoRoot "build\examples\sandbox3d\Release\henka_sandbox3d.exe"
 
@@ -22,6 +28,14 @@ $packageAssetsDir = Join-Path $packageRoot "assets"
 $runGuidePath = Join-Path $packageRoot "README.txt"
 
 if (Test-Path $packageRoot) {
+    if ((-not $ResetUserData) -and (Test-Path $packageUserDir)) {
+        if (Test-Path $preservedUserDir) {
+            Remove-Item -LiteralPath $preservedUserDir -Recurse -Force
+        }
+
+        Move-Item -LiteralPath $packageUserDir -Destination $preservedUserDir
+    }
+
     Remove-Item -LiteralPath $packageRoot -Recurse -Force
 }
 
@@ -31,6 +45,10 @@ New-Item -ItemType Directory -Path $packageHelpDir | Out-Null
 Copy-Item -LiteralPath $sourceExe -Destination $packagedExe
 Copy-Item -LiteralPath (Join-Path $repoRoot "assets") -Destination $packageAssetsDir -Recurse
 Copy-Item -LiteralPath (Join-Path $repoRoot "docs\help\sandbox3d.md") -Destination (Join-Path $packageHelpDir "sandbox3d.md")
+
+if ((-not $ResetUserData) -and (Test-Path $preservedUserDir)) {
+    Move-Item -LiteralPath $preservedUserDir -Destination $packageUserDir
+}
 
 $runtimeDlls = Get-ChildItem -LiteralPath $sourceDir -Filter *.dll -File -ErrorAction SilentlyContinue
 foreach ($dll in $runtimeDlls) {
@@ -49,11 +67,23 @@ Keep these folders beside the executable:
 Offline help:
 - docs\help\sandbox3d.md
 
+Local settings:
+- user\sandbox3d.settings
+
+The package script preserves the user folder by default so local sandbox settings stay in place when you refresh the package.
+
 If the sandbox does not start, rebuild the project and package it again from the repository root.
 "@ | Set-Content -LiteralPath $runGuidePath
 
 Write-Host "Packaged sandbox ready:"
 Write-Host "  $packagedExe"
+Write-Host ""
+if ($ResetUserData) {
+    Write-Host "Local sandbox settings were reset for this package refresh."
+}
+else {
+    Write-Host "Local sandbox settings were preserved if a user folder already existed."
+}
 Write-Host ""
 Write-Host "Next step:"
 Write-Host "  Open out\HenkaSandbox3D and double-click HenkaSandbox3D.exe."

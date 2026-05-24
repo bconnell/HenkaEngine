@@ -23,6 +23,7 @@ void henka_test_result(void)
     invalid_config.window_height = 480;
     invalid_config.enable_vsync = true;
     invalid_config.asset_base_path = NULL;
+    invalid_config.user_data_base_path = NULL;
     invalid_config.on_initialize = NULL;
     invalid_config.on_update = NULL;
     invalid_config.on_shutdown = NULL;

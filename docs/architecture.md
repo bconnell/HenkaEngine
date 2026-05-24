@@ -13,6 +13,7 @@ The core layer owns:
 - memory wrappers
 - engine lifecycle
 - frame timing
+- persistence helpers and settings I/O
 - shared math types
 - asset manager ownership
 
@@ -71,6 +72,17 @@ The current camera module provides a perspective camera, simple fly movement, an
 
 The current asset layer is intentionally modest. It loads and caches shaders, textures, and OBJ meshes by path, resolves relative asset paths against the engine asset base directory, owns fallback textures and a fallback mesh, caches failed path lookups against those fallbacks, and keeps asset lifetime tied to the engine runtime.
 
+### Persistence
+
+The persistence layer is intentionally small and local-first. Right now it provides:
+
+- a text `key=value` settings format
+- safe load and save helpers
+- path resolution helpers shared with other runtime path work
+- executable-local user data paths by default
+
+The current layer is meant for local preferences and early project state. It is not a full save system, cloud system, or content database.
+
 ### Scene
 
 The scene layer is intentionally minimal. It is not a full ECS. Right now it provides:
@@ -107,9 +119,11 @@ The sandbox is a consumer of the public API only. It creates a scene, shaders, t
 - The engine owns the main loop, timing, scene pointer, and renderer lifecycle.
 - The engine also owns the asset manager and fallback assets.
 - The engine resolves runtime assets relative to the executable directory by default, which keeps packaged sandbox runs independent from the repository root.
+- The engine also resolves a local user data base path beside the executable by default, which keeps sandbox settings local to the runnable folder.
 - The sandbox does not include SDL, Windows, or OpenGL headers.
 - OpenGL stays in renderer implementation files.
 - Scene data is public enough to build with, but renderer details stay private.
+- The sandbox is an engine sample and QA target. Real games should live in separate repositories and point at Henka from there.
 
 ## Near-term direction
 
@@ -119,4 +133,5 @@ The next steps should continue building upward from these boundaries:
 - broader material import
 - broader model loading beyond the current OBJ subset
 - stronger asset management
+- broader persistence and external project support once the current local-first path has settled
 - early 2.5D-friendly camera and layering rules after the shared runtime is steadier

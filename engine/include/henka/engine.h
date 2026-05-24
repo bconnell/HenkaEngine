@@ -22,6 +22,8 @@ typedef struct henka_engine_config
     bool enable_vsync;
     /* When NULL or empty, runtime assets resolve relative to the executable directory. */
     const char* asset_base_path;
+    /* When NULL or empty, local user data resolves to a "user" folder beside the executable. */
+    const char* user_data_base_path;
     henka_engine_initialize_fn on_initialize;
     henka_engine_update_fn on_update;
     henka_engine_shutdown_fn on_shutdown;
@@ -48,6 +50,7 @@ double henka_engine_get_total_time(const henka_engine* engine);
 uint64_t henka_engine_get_frame_index(const henka_engine* engine);
 henka_result henka_engine_get_framebuffer_size(const henka_engine* engine, int* out_width, int* out_height);
 const char* henka_engine_get_asset_base_path(const henka_engine* engine);
+const char* henka_engine_get_user_data_base_path(const henka_engine* engine);
 henka_asset_manager* henka_engine_get_asset_manager(henka_engine* engine);
 const henka_asset_manager* henka_engine_get_asset_manager_const(const henka_engine* engine);
 

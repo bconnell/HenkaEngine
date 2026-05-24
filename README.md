@@ -1,6 +1,6 @@
 # Henka Engine
 
-Henka Engine is an early-stage open source engine written in C. The long-term direction is first-class 3D, 2D, and 2.5D support, with the current focus on building a solid 3D runtime foundation first.
+Henka Engine is an early-stage open source engine written in C. The long-term direction is first-class 3D, 2D, and 2.5D support, with the current focus on building a solid 3D runtime foundation first. The engine now also includes a small local persistence layer and guidance for keeping real games in separate repositories.
 
 ## Current status
 
@@ -22,6 +22,9 @@ Henka Engine is still early, but the sandbox now renders a visible 3D scene with
 - Sandbox window titled `Henka Engine Sandbox 3D`
 - Ground plane, cubes, debug grid, a loaded OBJ marker, textured materials, and visible fallback behavior for missing texture and model assets
 - Keyboard movement, mouse look when capture is active, wireframe toggle, and offline runtime help
+- Local settings persistence for the sandbox
+- Packaged sandbox user data that stays in place across package refreshes by default
+- Generic documentation and starter template for external game repositories
 
 ### What does not exist yet
 
@@ -44,6 +47,7 @@ examples/sandbox3d/  Visible 3D sandbox application
 tests/               Headless unit tests
 docs/                Architecture, build, roadmap, and help documents
 scripts/             Windows helper scripts
+templates/           Generic starter content for separate game repositories
 third_party/         Bundled third-party source used by the engine
 ```
 
@@ -89,6 +93,8 @@ The sandbox starts a visible 3D scene with:
 - a fallback-texture example for missing texture loads
 - a fallback-model example for missing OBJ loads
 
+Sandbox settings are saved locally in a `user/` folder beside the executable. In a packaged run, the settings file is `out/HenkaSandbox3D/user/sandbox3d.settings`.
+
 ### Sandbox controls
 
 - `W A S D`: move across the scene
@@ -104,6 +110,8 @@ The sandbox starts a visible 3D scene with:
 
 Offline help is also available in [docs/help/sandbox3d.md](docs/help/sandbox3d.md).
 Model loading notes are documented in [docs/model-loading.md](docs/model-loading.md).
+A persistence overview is available in [docs/persistence.md](docs/persistence.md).
+A guide for separate game repositories is available in [docs/external-game-projects.md](docs/external-game-projects.md).
 A manual verification checklist is available in [docs/qa/sandbox3d-manual-checklist.md](docs/qa/sandbox3d-manual-checklist.md).
 Packaged output is generated under `out/` and should not be committed.
 
@@ -119,9 +127,12 @@ Packaged output is generated under `out/` and should not be committed.
 - Missing textures fall back safely to an error texture, and missing OBJ assets fall back to a visible mesh.
 - OBJ support is intentionally limited to comments, blank lines, triangles, simple quads, positions, optional UVs, and optional normals.
 - OBJ material libraries, negative indices, polygons with more than four vertices, and animation are not supported yet.
+- The current settings format is a simple local key/value file. It is meant for engine samples and early projects, not for a finished save pipeline.
+- Cloud saves, telemetry, analytics, registry storage, encryption, and network-backed persistence are not implemented.
 - There is no in-window text or overlay help yet.
 - 2D and 2.5D are part of the engine direction, but those workflows are not implemented yet.
 - Visual and interaction checks still need manual QA on a local desktop session.
+- HenkaSandbox3D is an engine sample and QA target, not a game. Real games built with Henka should live in separate repositories.
 
 ## License
 

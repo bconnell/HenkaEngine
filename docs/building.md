@@ -42,8 +42,17 @@ The package script creates:
 - `out/HenkaSandbox3D/assets/`
 - `out/HenkaSandbox3D/docs/help/sandbox3d.md`
 - `out/HenkaSandbox3D/README.txt`
+- `out/HenkaSandbox3D/user/` when local sandbox settings have already been created
 
 If any runtime DLLs are needed beside the executable, the package script copies them into the same folder.
+
+By default, packaging refreshes the executable, assets, and offline help while keeping `out/HenkaSandbox3D/user/` in place. That preserves local sandbox settings across repackaging.
+
+To intentionally clear the packaged sandbox settings:
+
+```powershell
+.\scripts\package_sandbox3d_windows.ps1 -ResetUserData
+```
 
 ## Launch the packaged sandbox
 
@@ -53,6 +62,10 @@ You can launch the packaged sandbox in either of these ways:
 - run `.\scripts\run_packaged_sandbox3d_windows.ps1`
 
 The packaged sandbox does not rely on the repository root as its working directory. Assets resolve relative to the executable folder by default.
+
+Sandbox settings are also written relative to the executable folder by default. In a packaged run, the default settings file is:
+
+- `out/HenkaSandbox3D/user/sandbox3d.settings`
 
 ## Manual CMake commands
 
@@ -77,3 +90,7 @@ The sandbox runtime assets live under:
 CMake copies the `assets/` directory next to the sandbox executable after build.
 
 Packaged output in `out/` is generated locally and should not be committed.
+
+The packaged sandbox `user/` folder is also generated locally and should not be committed.
+
+If you run `.\scripts\clean_windows.ps1`, it removes the generated `out/` folder as well as `build/`. That also removes any package-local sandbox settings stored under `out/HenkaSandbox3D/user/`.
