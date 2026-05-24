@@ -69,7 +69,7 @@ The current camera module provides a perspective camera, simple fly movement, an
 
 ### Assets
 
-The current asset layer is intentionally modest. It loads and caches shaders, textures, and OBJ meshes by path, owns fallback textures and a fallback mesh, and keeps asset lifetime tied to the engine runtime.
+The current asset layer is intentionally modest. It loads and caches shaders, textures, and OBJ meshes by path, owns fallback textures and a fallback mesh, caches failed path lookups against those fallbacks, and keeps asset lifetime tied to the engine runtime.
 
 ### Scene
 
@@ -77,6 +77,7 @@ The scene layer is intentionally minimal. It is not a full ECS. Right now it pro
 
 - scene ownership
 - lightweight entity handles
+- per-entity labels and visibility state
 - per-entity transform, mesh, and material assignment
 - one active scene camera
 - one directional light direction and ambient color

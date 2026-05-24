@@ -5,17 +5,23 @@ Henka Engine currently supports a small, early OBJ loading path aimed at proving
 ## What works now
 
 - OBJ files loaded from local assets
+- comments and blank lines
+- Windows and Unix line endings
+- extra whitespace around tokens
 - vertex positions
 - texture coordinates when present
 - normals when present
 - computed face normals when normals are missing
 - triangle faces
 - simple quad triangulation
+- ignored non-render statements for `o`, `g`, `s`, `mtllib`, and `usemtl`
 - cached OBJ mesh loading through the asset manager
 
 ## What does not work yet
 
 - MTL material import
+- negative OBJ indices
+- polygons with more than four vertices
 - model hierarchies
 - skeletal animation
 - glTF
@@ -29,6 +35,7 @@ If an OBJ file is missing or cannot be parsed:
 - the engine logs a clear error
 - the sandbox keeps running
 - the asset manager returns a fallback mesh so the scene stays visible
+- repeated loads of the same path reuse the cached result instead of rebuilding ownership each time
 
 The sandbox includes both a valid sample OBJ asset and a missing-model example so this behavior is easy to inspect during manual QA.
 

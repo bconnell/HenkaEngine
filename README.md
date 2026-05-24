@@ -97,7 +97,8 @@ Model loading notes are documented in [docs/model-loading.md](docs/model-loading
 
 - The sandbox uses built-in primitives plus a small early OBJ loading path.
 - Missing textures fall back safely to an error texture, and missing OBJ assets fall back to a visible mesh.
-- OBJ support is intentionally limited and does not include MTL import or animation.
+- OBJ support is intentionally limited to comments, blank lines, triangles, simple quads, positions, optional UVs, and optional normals.
+- OBJ material libraries, negative indices, polygons with more than four vertices, and animation are not supported yet.
 - There is no in-window text or overlay help yet.
 - 2D and 2.5D are part of the engine direction, but those workflows are not implemented yet.
 - Visual and interaction checks still need manual QA on a local desktop session.

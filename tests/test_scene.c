@@ -24,6 +24,7 @@ void henka_test_scene(void)
     HENKA_TEST_ASSERT(henka_scene_get_entity_count(scene) == 2U);
     HENKA_TEST_ASSERT(henka_scene_is_entity_visible(scene, first));
     HENKA_TEST_ASSERT(strcmp(henka_scene_get_entity_name(scene, first), "Ground") == 0);
+    HENKA_TEST_ASSERT(henka_scene_get_entity_name(scene, second) == NULL);
 
     transform = henka_transform_identity();
     transform.position.x = 5.0f;

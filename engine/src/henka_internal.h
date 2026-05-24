@@ -77,12 +77,14 @@ typedef struct henka_asset_texture_entry
 {
     char* key;
     henka_texture* texture;
+    bool owns_texture;
 } henka_asset_texture_entry;
 
 typedef struct henka_asset_mesh_entry
 {
     char* key;
     henka_mesh* mesh;
+    bool owns_mesh;
 } henka_asset_mesh_entry;
 
 struct henka_asset_manager

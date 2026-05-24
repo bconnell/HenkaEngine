@@ -51,6 +51,13 @@ void henka_test_math(void)
     HENKA_TEST_ASSERT_FLOAT_CLOSE(look_at.m[14], -5.0f, 0.0001);
 
     transform = henka_transform_identity();
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(transform.position.x, 0.0f, 0.0001);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(transform.position.y, 0.0f, 0.0001);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(transform.position.z, 0.0f, 0.0001);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(transform.scale.x, 1.0f, 0.0001);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(transform.scale.y, 1.0f, 0.0001);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(transform.scale.z, 1.0f, 0.0001);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(transform.rotation.w, 1.0f, 0.0001);
     transform.position = (henka_vec3){1.0f, 2.0f, 3.0f};
     transform.scale = (henka_vec3){2.0f, 2.0f, 2.0f};
     transform_matrix = henka_transform_to_mat4(transform);

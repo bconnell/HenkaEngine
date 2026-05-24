@@ -27,6 +27,7 @@ The next likely layers are:
 - richer material support
 - stronger asset management
 - scene growth beyond the current lightweight entity model
+- broader OBJ and model import coverage after the current foundation has settled
 
 ## 2.5D direction
 

@@ -214,13 +214,19 @@ void henka_asset_manager_destroy(struct henka_asset_manager* manager)
 
     for (index = 0U; index < manager->texture_count; ++index)
     {
-        henka_texture_destroy(manager->texture_entries[index].texture);
+        if (manager->texture_entries[index].owns_texture)
+        {
+            henka_texture_destroy(manager->texture_entries[index].texture);
+        }
         henka_free(manager->texture_entries[index].key);
     }
 
     for (index = 0U; index < manager->mesh_count; ++index)
     {
-        henka_mesh_destroy(manager->mesh_entries[index].mesh);
+        if (manager->mesh_entries[index].owns_mesh)
+        {
+            henka_mesh_destroy(manager->mesh_entries[index].mesh);
+        }
         henka_free(manager->mesh_entries[index].key);
     }
 
@@ -315,8 +321,7 @@ henka_result henka_assets_load_texture(henka_asset_manager* manager, const char*
     if (result != HENKA_SUCCESS)
     {
         HENKA_LOG_ERROR("Using the error texture because '%s' could not be loaded", path);
-        *out_texture = manager->error_texture;
-        return HENKA_SUCCESS;
+        texture = manager->error_texture;
     }
 
     if (manager->texture_count == manager->texture_capacity)
@@ -324,7 +329,10 @@ henka_result henka_assets_load_texture(henka_asset_manager* manager, const char*
         result = henka_asset_manager_grow_textures(manager);
         if (result != HENKA_SUCCESS)
         {
-            henka_texture_destroy(texture);
+            if (texture != manager->error_texture)
+            {
+                henka_texture_destroy(texture);
+            }
             return result;
         }
     }
@@ -332,12 +340,16 @@ henka_result henka_assets_load_texture(henka_asset_manager* manager, const char*
     key = henka_duplicate_string(path);
     if (key == NULL)
     {
-        henka_texture_destroy(texture);
+        if (texture != manager->error_texture)
+        {
+            henka_texture_destroy(texture);
+        }
         return HENKA_ERROR_OUT_OF_MEMORY;
     }
 
     manager->texture_entries[manager->texture_count].key = key;
     manager->texture_entries[manager->texture_count].texture = texture;
+    manager->texture_entries[manager->texture_count].owns_texture = texture != manager->error_texture;
     manager->texture_count += 1U;
     *out_texture = texture;
     return HENKA_SUCCESS;
@@ -365,8 +377,7 @@ henka_result henka_assets_load_obj_mesh(henka_asset_manager* manager, const char
     if (result != HENKA_SUCCESS)
     {
         HENKA_LOG_ERROR("Using the fallback mesh because '%s' could not be loaded", path);
-        *out_mesh = manager->fallback_mesh;
-        return HENKA_SUCCESS;
+        mesh = manager->fallback_mesh;
     }
 
     if (manager->mesh_count == manager->mesh_capacity)
@@ -374,7 +385,10 @@ henka_result henka_assets_load_obj_mesh(henka_asset_manager* manager, const char
         result = henka_asset_manager_grow_meshes(manager);
         if (result != HENKA_SUCCESS)
         {
-            henka_mesh_destroy(mesh);
+            if (mesh != manager->fallback_mesh)
+            {
+                henka_mesh_destroy(mesh);
+            }
             return result;
         }
     }
@@ -382,12 +396,16 @@ henka_result henka_assets_load_obj_mesh(henka_asset_manager* manager, const char
     key = henka_duplicate_string(path);
     if (key == NULL)
     {
-        henka_mesh_destroy(mesh);
+        if (mesh != manager->fallback_mesh)
+        {
+            henka_mesh_destroy(mesh);
+        }
         return HENKA_ERROR_OUT_OF_MEMORY;
     }
 
     manager->mesh_entries[manager->mesh_count].key = key;
     manager->mesh_entries[manager->mesh_count].mesh = mesh;
+    manager->mesh_entries[manager->mesh_count].owns_mesh = mesh != manager->fallback_mesh;
     manager->mesh_count += 1U;
     *out_mesh = mesh;
     return HENKA_SUCCESS;

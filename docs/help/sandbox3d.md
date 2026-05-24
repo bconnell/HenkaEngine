@@ -30,10 +30,11 @@
 - Toggle mouse capture and use the mouse to look around.
 - Find the fallback-texture example to confirm that missing textures fail visibly without stopping the engine.
 - Find the fallback-model example to confirm that missing OBJ assets fail visibly without stopping the engine.
+- Compare the colored cube, textured cube, and OBJ marker so it is easy to tell which material path each object is using.
 
 ## Current limitations
 
 - The sandbox uses built-in meshes plus a small early OBJ loading path.
-- OBJ support is intentionally limited to simple geometry and does not include imported materials or animation.
+- OBJ support is intentionally limited to simple geometry and does not include imported materials, negative indices, or animation.
 - Help is printed to the console because in-window text and UI rendering do not exist yet.
 - Editor tools, asset browser UI, and broader 2D or 2.5D workflows are not available yet.

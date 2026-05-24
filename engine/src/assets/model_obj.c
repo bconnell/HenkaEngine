@@ -49,6 +49,15 @@ typedef struct henka_obj_index_array
     size_t capacity;
 } henka_obj_index_array;
 
+typedef struct henka_obj_parse_context
+{
+    const char* label;
+    int line_number;
+    const char* error_message;
+} henka_obj_parse_context;
+
+static const size_t g_henka_obj_max_line_length = 4096U;
+
 static char* henka_read_binary_text_file(const char* path)
 {
     char* buffer;
@@ -87,6 +96,14 @@ static char* henka_read_binary_text_file(const char* path)
     fclose(file);
     buffer[bytes_read] = '\0';
     return buffer;
+}
+
+static void henka_obj_set_error(henka_obj_parse_context* context, const char* message)
+{
+    if (context != NULL && context->error_message == NULL)
+    {
+        context->error_message = message;
+    }
 }
 
 static void henka_obj_vec2_array_destroy(henka_obj_vec2_array* array)
@@ -236,6 +253,59 @@ static char* henka_trim_whitespace(char* value)
     return value;
 }
 
+static bool henka_obj_is_ignored_statement(const char* keyword)
+{
+    return strcmp(keyword, "o") == 0 ||
+        strcmp(keyword, "g") == 0 ||
+        strcmp(keyword, "s") == 0 ||
+        strcmp(keyword, "mtllib") == 0 ||
+        strcmp(keyword, "usemtl") == 0;
+}
+
+static int henka_obj_split_tokens(char* line, char** tokens, int max_tokens)
+{
+    char* cursor;
+    int count;
+
+    count = 0;
+    cursor = line;
+    while (*cursor != '\0')
+    {
+        while (*cursor == ' ' || *cursor == '\t')
+        {
+            cursor += 1;
+        }
+
+        if (*cursor == '\0')
+        {
+            break;
+        }
+
+        if (count >= max_tokens)
+        {
+            return -1;
+        }
+
+        tokens[count] = cursor;
+        count += 1;
+
+        while (*cursor != '\0' && *cursor != ' ' && *cursor != '\t')
+        {
+            cursor += 1;
+        }
+
+        if (*cursor == '\0')
+        {
+            break;
+        }
+
+        *cursor = '\0';
+        cursor += 1;
+    }
+
+    return count;
+}
+
 static bool henka_parse_float_token(const char* token, float* out_value)
 {
     char* end;
@@ -256,14 +326,44 @@ static bool henka_parse_float_token(const char* token, float* out_value)
     return true;
 }
 
-static bool henka_parse_face_index(const char* token, henka_obj_index* out_index)
+static bool henka_parse_face_sub_index(const char* token, int* out_index, henka_obj_parse_context* context)
 {
-    const char* cursor;
     char* end;
     long parsed_value;
 
+    parsed_value = strtol(token, &end, 10);
+    if (end == token || *end != '\0' || parsed_value == 0L)
+    {
+        henka_obj_set_error(context, "face indices must be non-zero integers");
+        return false;
+    }
+
+    if (parsed_value < 0L)
+    {
+        henka_obj_set_error(context, "negative OBJ indices are not supported yet");
+        return false;
+    }
+
+    *out_index = (int)(parsed_value - 1L);
+    return true;
+}
+
+static bool henka_parse_face_index(const char* token, henka_obj_index* out_index, henka_obj_parse_context* context)
+{
+    char local_copy[128];
+    char* first_separator;
+    char* second_separator;
+    char* normal_token;
+    char* uv_token;
+
     if (token == NULL || out_index == NULL)
     {
+        return false;
+    }
+
+    if (strcpy_s(local_copy, sizeof(local_copy), token) != 0)
+    {
+        henka_obj_set_error(context, "face token is too long");
         return false;
     }
 
@@ -271,195 +371,204 @@ static bool henka_parse_face_index(const char* token, henka_obj_index* out_index
     out_index->uv_index = -1;
     out_index->normal_index = -1;
 
-    cursor = token;
-    parsed_value = strtol(cursor, &end, 10);
-    if (end == cursor || parsed_value <= 0L)
+    first_separator = strchr(local_copy, '/');
+    if (first_separator == NULL)
+    {
+        return henka_parse_face_sub_index(local_copy, &out_index->position_index, context);
+    }
+
+    *first_separator = '\0';
+    uv_token = first_separator + 1;
+    if (!henka_parse_face_sub_index(local_copy, &out_index->position_index, context))
     {
         return false;
     }
 
-    out_index->position_index = (int)(parsed_value - 1L);
-    cursor = end;
-
-    if (*cursor == '\0')
+    second_separator = strchr(uv_token, '/');
+    if (second_separator == NULL)
     {
-        return true;
-    }
-
-    if (*cursor != '/')
-    {
-        return false;
-    }
-
-    cursor += 1;
-    if (*cursor != '/' && *cursor != '\0')
-    {
-        parsed_value = strtol(cursor, &end, 10);
-        if (end == cursor || parsed_value <= 0L)
+        if (*uv_token == '\0')
         {
-            return false;
+            return true;
         }
 
-        out_index->uv_index = (int)(parsed_value - 1L);
-        cursor = end;
+        return henka_parse_face_sub_index(uv_token, &out_index->uv_index, context);
     }
 
-    if (*cursor == '\0')
-    {
-        return true;
-    }
+    *second_separator = '\0';
+    normal_token = second_separator + 1;
 
-    if (*cursor != '/')
+    if (*uv_token != '\0' && !henka_parse_face_sub_index(uv_token, &out_index->uv_index, context))
     {
         return false;
     }
 
-    cursor += 1;
-    if (*cursor == '\0')
+    if (*normal_token == '\0')
     {
+        henka_obj_set_error(context, "face normal index is missing after '//'");
         return false;
     }
 
-    parsed_value = strtol(cursor, &end, 10);
-    if (end == cursor || parsed_value <= 0L || *end != '\0')
-    {
-        return false;
-    }
-
-    out_index->normal_index = (int)(parsed_value - 1L);
-    return true;
+    return henka_parse_face_sub_index(normal_token, &out_index->normal_index, context);
 }
 
-static henka_result henka_parse_vertex_line(const char* line, henka_obj_vec3_array* positions)
+static henka_result henka_parse_vertex_tokens(char** tokens, int token_count, henka_obj_vec3_array* positions, henka_obj_parse_context* context)
 {
-    char local_copy[256];
-    char* context;
-    char* token;
     henka_vec3 value;
 
-    if (strcpy_s(local_copy, sizeof(local_copy), line) != 0)
+    if (token_count < 4)
     {
+        henka_obj_set_error(context, "vertex positions require three numeric components");
         return HENKA_ERROR_UNKNOWN;
     }
 
-    token = strtok_s(local_copy, " \t", &context);
-    token = strtok_s(NULL, " \t", &context);
-    if (!henka_parse_float_token(token, &value.x))
+    if (!henka_parse_float_token(tokens[1], &value.x) ||
+        !henka_parse_float_token(tokens[2], &value.y) ||
+        !henka_parse_float_token(tokens[3], &value.z))
     {
-        return HENKA_ERROR_UNKNOWN;
-    }
-
-    token = strtok_s(NULL, " \t", &context);
-    if (!henka_parse_float_token(token, &value.y))
-    {
-        return HENKA_ERROR_UNKNOWN;
-    }
-
-    token = strtok_s(NULL, " \t", &context);
-    if (!henka_parse_float_token(token, &value.z))
-    {
+        henka_obj_set_error(context, "vertex positions require valid numeric components");
         return HENKA_ERROR_UNKNOWN;
     }
 
     return henka_obj_vec3_array_push(positions, value);
 }
 
-static henka_result henka_parse_uv_line(const char* line, henka_obj_vec2_array* texcoords)
+static henka_result henka_parse_uv_tokens(char** tokens, int token_count, henka_obj_vec2_array* texcoords, henka_obj_parse_context* context)
 {
-    char local_copy[256];
-    char* context;
-    char* token;
     henka_vec2 value;
 
-    if (strcpy_s(local_copy, sizeof(local_copy), line) != 0)
+    if (token_count < 3)
     {
+        henka_obj_set_error(context, "texture coordinates require two numeric components");
         return HENKA_ERROR_UNKNOWN;
     }
 
-    token = strtok_s(local_copy, " \t", &context);
-    token = strtok_s(NULL, " \t", &context);
-    if (!henka_parse_float_token(token, &value.x))
+    if (!henka_parse_float_token(tokens[1], &value.x) ||
+        !henka_parse_float_token(tokens[2], &value.y))
     {
-        return HENKA_ERROR_UNKNOWN;
-    }
-
-    token = strtok_s(NULL, " \t", &context);
-    if (!henka_parse_float_token(token, &value.y))
-    {
+        henka_obj_set_error(context, "texture coordinates require valid numeric components");
         return HENKA_ERROR_UNKNOWN;
     }
 
     return henka_obj_vec2_array_push(texcoords, value);
 }
 
-static henka_result henka_parse_normal_line(const char* line, henka_obj_vec3_array* normals)
+static henka_result henka_parse_normal_tokens(char** tokens, int token_count, henka_obj_vec3_array* normals, henka_obj_parse_context* context)
 {
-    char local_copy[256];
-    char* context;
-    char* token;
     henka_vec3 value;
 
-    if (strcpy_s(local_copy, sizeof(local_copy), line) != 0)
+    if (token_count < 4)
     {
+        henka_obj_set_error(context, "vertex normals require three numeric components");
         return HENKA_ERROR_UNKNOWN;
     }
 
-    token = strtok_s(local_copy, " \t", &context);
-    token = strtok_s(NULL, " \t", &context);
-    if (!henka_parse_float_token(token, &value.x))
+    if (!henka_parse_float_token(tokens[1], &value.x) ||
+        !henka_parse_float_token(tokens[2], &value.y) ||
+        !henka_parse_float_token(tokens[3], &value.z))
     {
-        return HENKA_ERROR_UNKNOWN;
-    }
-
-    token = strtok_s(NULL, " \t", &context);
-    if (!henka_parse_float_token(token, &value.y))
-    {
-        return HENKA_ERROR_UNKNOWN;
-    }
-
-    token = strtok_s(NULL, " \t", &context);
-    if (!henka_parse_float_token(token, &value.z))
-    {
+        henka_obj_set_error(context, "vertex normals require valid numeric components");
         return HENKA_ERROR_UNKNOWN;
     }
 
     return henka_obj_vec3_array_push(normals, value);
 }
 
-static henka_result henka_parse_face_line(const char* line, henka_obj_face* out_face)
+static henka_result henka_parse_face_tokens(char** tokens, int token_count, henka_obj_face* out_face, henka_obj_parse_context* context)
 {
-    char local_copy[512];
-    char* context;
-    char* token;
+    int token_index;
 
-    if (strcpy_s(local_copy, sizeof(local_copy), line) != 0)
+    if (token_count < 4)
     {
+        henka_obj_set_error(context, "faces require at least three vertices");
+        return HENKA_ERROR_UNKNOWN;
+    }
+
+    if (token_count > 5)
+    {
+        henka_obj_set_error(context, "polygons with more than four vertices are not supported yet");
         return HENKA_ERROR_UNKNOWN;
     }
 
     out_face->count = 0;
-    token = strtok_s(local_copy, " \t", &context);
-    token = strtok_s(NULL, " \t", &context);
-
-    while (token != NULL)
+    for (token_index = 1; token_index < token_count; ++token_index)
     {
-        if (out_face->count >= 4)
-        {
-            return HENKA_ERROR_UNKNOWN;
-        }
-
-        if (!henka_parse_face_index(token, &out_face->indices[out_face->count]))
+        if (!henka_parse_face_index(tokens[token_index], &out_face->indices[out_face->count], context))
         {
             return HENKA_ERROR_UNKNOWN;
         }
 
         out_face->count += 1;
-        token = strtok_s(NULL, " \t", &context);
     }
 
-    if (out_face->count < 3)
+    return HENKA_SUCCESS;
+}
+
+static henka_result henka_resolve_face_index(int parsed_index, size_t count, henka_obj_parse_context* context)
+{
+    if (parsed_index < 0 || (size_t)parsed_index >= count)
     {
+        henka_obj_set_error(context, "face index references data that does not exist");
         return HENKA_ERROR_UNKNOWN;
+    }
+
+    return HENKA_SUCCESS;
+}
+
+static char* henka_copy_line_range(const char* start, size_t length)
+{
+    char* line;
+
+    line = henka_malloc(length + 1U);
+    if (line == NULL)
+    {
+        return NULL;
+    }
+
+    memcpy(line, start, length);
+    line[length] = '\0';
+    return line;
+}
+
+static henka_result henka_get_next_line(const char** cursor, char** out_line, henka_obj_parse_context* context)
+{
+    const char* start;
+    size_t length;
+
+    if (cursor == NULL || *cursor == NULL || out_line == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    if (**cursor == '\0')
+    {
+        *out_line = NULL;
+        return HENKA_SUCCESS;
+    }
+
+    start = *cursor;
+    length = 0U;
+    while ((*cursor)[length] != '\0' && (*cursor)[length] != '\n')
+    {
+        length += 1U;
+    }
+
+    if (length > g_henka_obj_max_line_length)
+    {
+        henka_obj_set_error(context, "a line is longer than the current safe OBJ limit");
+        return HENKA_ERROR_UNKNOWN;
+    }
+
+    *out_line = henka_copy_line_range(start, length);
+    if (*out_line == NULL)
+    {
+        return HENKA_ERROR_OUT_OF_MEMORY;
+    }
+
+    *cursor += length;
+    if (**cursor == '\n')
+    {
+        *cursor += 1;
     }
 
     return HENKA_SUCCESS;
@@ -470,6 +579,7 @@ static henka_result henka_build_face_vertices(
     const henka_obj_vec3_array* positions,
     const henka_obj_vec2_array* texcoords,
     const henka_obj_vec3_array* normals,
+    henka_obj_parse_context* context,
     henka_model_vertex out_vertices[4])
 {
     henka_vec3 computed_normal;
@@ -482,7 +592,7 @@ static henka_result henka_build_face_vertices(
         const henka_obj_index* obj_index;
 
         obj_index = &face->indices[index];
-        if (obj_index->position_index < 0 || (size_t)obj_index->position_index >= positions->count)
+        if (henka_resolve_face_index(obj_index->position_index, positions->count, context) != HENKA_SUCCESS)
         {
             return HENKA_ERROR_UNKNOWN;
         }
@@ -493,7 +603,7 @@ static henka_result henka_build_face_vertices(
 
         if (obj_index->uv_index >= 0)
         {
-            if ((size_t)obj_index->uv_index >= texcoords->count)
+            if (henka_resolve_face_index(obj_index->uv_index, texcoords->count, context) != HENKA_SUCCESS)
             {
                 return HENKA_ERROR_UNKNOWN;
             }
@@ -503,7 +613,7 @@ static henka_result henka_build_face_vertices(
 
         if (obj_index->normal_index >= 0)
         {
-            if ((size_t)obj_index->normal_index >= normals->count)
+            if (henka_resolve_face_index(obj_index->normal_index, normals->count, context) != HENKA_SUCCESS)
             {
                 return HENKA_ERROR_UNKNOWN;
             }
@@ -581,13 +691,14 @@ static henka_result henka_emit_face(
     const henka_obj_vec3_array* positions,
     const henka_obj_vec2_array* texcoords,
     const henka_obj_vec3_array* normals,
+    henka_obj_parse_context* context,
     henka_obj_vertex_array* vertices,
     henka_obj_index_array* indices)
 {
     henka_model_vertex face_vertices[4];
     henka_result result;
 
-    result = henka_build_face_vertices(face, positions, texcoords, normals, face_vertices);
+    result = henka_build_face_vertices(face, positions, texcoords, normals, context, face_vertices);
     if (result != HENKA_SUCCESS)
     {
         return result;
@@ -613,17 +724,22 @@ static henka_result henka_emit_face(
 
 henka_result henka_model_data_load_obj_from_memory(const char* source, const char* label, henka_model_data* out_model)
 {
-    char* context;
+    const char* cursor;
+    char* inline_comment;
     char* line;
-    char* text;
     char* trimmed_line;
+    char* tokens[8];
+    int token_count;
     henka_obj_vec2_array texcoords;
     henka_obj_vec3_array normals;
     henka_obj_vec3_array positions;
     henka_obj_vertex_array vertices;
     henka_obj_index_array indices;
     henka_obj_face face;
+    henka_obj_parse_context context;
     henka_result result;
+    bool saw_face;
+    bool saw_vertex_statement;
 
     if (source == NULL || out_model == NULL)
     {
@@ -637,58 +753,104 @@ henka_result henka_model_data_load_obj_from_memory(const char* source, const cha
     memset(&vertices, 0, sizeof(vertices));
     memset(&indices, 0, sizeof(indices));
 
-    text = henka_malloc(strlen(source) + 1U);
-    if (text == NULL)
-    {
-        return HENKA_ERROR_OUT_OF_MEMORY;
-    }
-
-    strcpy_s(text, strlen(source) + 1U, source);
-
+    context.label = label != NULL ? label : "<memory>";
+    context.line_number = 0;
+    context.error_message = NULL;
+    cursor = source;
+    saw_face = false;
+    saw_vertex_statement = false;
     result = HENKA_SUCCESS;
-    line = strtok_s(text, "\n", &context);
-    while (line != NULL)
+
+    while (*cursor != '\0')
     {
-        trimmed_line = henka_trim_whitespace(line);
-        if (trimmed_line[0] == '\0' || trimmed_line[0] == '#')
-        {
-            line = strtok_s(NULL, "\n", &context);
-            continue;
-        }
-
-        if (strncmp(trimmed_line, "v ", 2) == 0)
-        {
-            result = henka_parse_vertex_line(trimmed_line, &positions);
-        }
-        else if (strncmp(trimmed_line, "vt ", 3) == 0)
-        {
-            result = henka_parse_uv_line(trimmed_line, &texcoords);
-        }
-        else if (strncmp(trimmed_line, "vn ", 3) == 0)
-        {
-            result = henka_parse_normal_line(trimmed_line, &normals);
-        }
-        else if (strncmp(trimmed_line, "f ", 2) == 0)
-        {
-            result = henka_parse_face_line(trimmed_line, &face);
-            if (result == HENKA_SUCCESS)
-            {
-                result = henka_emit_face(&face, &positions, &texcoords, &normals, &vertices, &indices);
-            }
-        }
-
+        result = henka_get_next_line(&cursor, &line, &context);
         if (result != HENKA_SUCCESS)
         {
-            HENKA_LOG_ERROR("Unable to parse OBJ data from '%s'", label != NULL ? label : "<memory>");
             break;
         }
 
-        line = strtok_s(NULL, "\n", &context);
+        context.line_number += 1;
+        trimmed_line = henka_trim_whitespace(line);
+        inline_comment = strchr(trimmed_line, '#');
+        if (inline_comment != NULL)
+        {
+            *inline_comment = '\0';
+            trimmed_line = henka_trim_whitespace(trimmed_line);
+        }
+
+        if (trimmed_line[0] == '\0')
+        {
+            henka_free(line);
+            continue;
+        }
+
+        token_count = henka_obj_split_tokens(trimmed_line, tokens, (int)(sizeof(tokens) / sizeof(tokens[0])));
+        if (token_count < 0)
+        {
+            henka_obj_set_error(&context, "a line contains too many tokens");
+            result = HENKA_ERROR_UNKNOWN;
+        }
+        else if (token_count == 0)
+        {
+            result = HENKA_SUCCESS;
+        }
+        else if (strcmp(tokens[0], "v") == 0)
+        {
+            saw_vertex_statement = true;
+            result = henka_parse_vertex_tokens(tokens, token_count, &positions, &context);
+        }
+        else if (strcmp(tokens[0], "vt") == 0)
+        {
+            result = henka_parse_uv_tokens(tokens, token_count, &texcoords, &context);
+        }
+        else if (strcmp(tokens[0], "vn") == 0)
+        {
+            result = henka_parse_normal_tokens(tokens, token_count, &normals, &context);
+        }
+        else if (strcmp(tokens[0], "f") == 0)
+        {
+            saw_face = true;
+            result = henka_parse_face_tokens(tokens, token_count, &face, &context);
+            if (result == HENKA_SUCCESS)
+            {
+                result = henka_emit_face(&face, &positions, &texcoords, &normals, &context, &vertices, &indices);
+            }
+        }
+        else if (!henka_obj_is_ignored_statement(tokens[0]))
+        {
+            henka_obj_set_error(&context, "this OBJ statement is not supported yet");
+            result = HENKA_ERROR_UNKNOWN;
+        }
+
+        henka_free(line);
+
+        if (result != HENKA_SUCCESS)
+        {
+            if (context.error_message != NULL)
+            {
+                HENKA_LOG_ERROR("OBJ '%s' line %d: %s", context.label, context.line_number, context.error_message);
+            }
+            else
+            {
+                HENKA_LOG_ERROR("OBJ '%s' line %d: unable to parse this line", context.label, context.line_number);
+            }
+            break;
+        }
     }
 
-    if (result == HENKA_SUCCESS && vertices.count == 0U)
+    if (result == HENKA_SUCCESS && !saw_vertex_statement && !saw_face)
     {
-        HENKA_LOG_ERROR("OBJ data from '%s' did not contain any renderable faces", label != NULL ? label : "<memory>");
+        HENKA_LOG_ERROR("OBJ '%s' is empty or only contains comments", context.label);
+        result = HENKA_ERROR_UNKNOWN;
+    }
+    else if (result == HENKA_SUCCESS && !saw_face)
+    {
+        HENKA_LOG_ERROR("OBJ '%s' contains vertex data but no faces", context.label);
+        result = HENKA_ERROR_UNKNOWN;
+    }
+    else if (result == HENKA_SUCCESS && vertices.count == 0U)
+    {
+        HENKA_LOG_ERROR("OBJ '%s' did not produce any renderable triangles", context.label);
         result = HENKA_ERROR_UNKNOWN;
     }
 
@@ -702,7 +864,6 @@ henka_result henka_model_data_load_obj_from_memory(const char* source, const cha
         indices.items = NULL;
     }
 
-    henka_free(text);
     henka_obj_vec3_array_destroy(&positions);
     henka_obj_vec2_array_destroy(&texcoords);
     henka_obj_vec3_array_destroy(&normals);

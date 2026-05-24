@@ -32,6 +32,7 @@ typedef struct henka_quat
 
 typedef struct henka_mat4
 {
+    /* Column-major storage for direct upload to OpenGL-style APIs. */
     float m[16];
 } henka_mat4;
 

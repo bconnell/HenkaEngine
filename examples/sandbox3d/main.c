@@ -27,6 +27,30 @@ typedef struct sandbox3d_state
 
 static const float g_mouse_look_sensitivity = 0.0025f;
 
+static henka_result sandbox3d_configure_entity(
+    henka_scene* scene,
+    henka_entity entity,
+    henka_mesh* mesh,
+    henka_material material,
+    henka_transform transform)
+{
+    henka_result result;
+
+    result = henka_scene_set_entity_transform(scene, entity, transform);
+    if (result != HENKA_SUCCESS)
+    {
+        return result;
+    }
+
+    result = henka_scene_set_entity_mesh(scene, entity, mesh);
+    if (result != HENKA_SUCCESS)
+    {
+        return result;
+    }
+
+    return henka_scene_set_entity_material(scene, entity, material);
+}
+
 static void sandbox3d_release_owned_resources(sandbox3d_state* state)
 {
     if (state == NULL)
@@ -51,6 +75,7 @@ static void sandbox3d_print_help(void)
 {
     printf("Henka Engine Sandbox 3D\n");
     printf("This scene shows a textured cube, a textured ground plane, a colored cube, a loaded OBJ marker, and visible fallback examples for missing texture and missing model assets.\n");
+    printf("The magenta checker examples show how the sandbox stays visible when an asset file cannot be loaded.\n");
     printf("Controls:\n");
     printf("  W A S D          Move across the scene\n");
     printf("  Q / E            Move down / up\n");
@@ -62,7 +87,8 @@ static void sandbox3d_print_help(void)
     printf("  Escape           Release the mouse first, then exit\n");
     printf("Current limitations:\n");
     printf("  OBJ loading is an early foundation with support for simple triangle and quad faces.\n");
-    printf("  Material import, model animation, editor tools, and broader 2D or 2.5D workflows are not available yet.\n");
+    printf("  OBJ material libraries, negative indices, and animation are not supported yet.\n");
+    printf("  Material import, editor tools, and broader 2D or 2.5D workflows are not available yet.\n");
     printf("  Help is printed to the console because in-window text and UI rendering do not exist yet.\n");
     fflush(stdout);
 }
@@ -79,9 +105,11 @@ static henka_result sandbox3d_initialize(henka_engine* engine, void* user_data)
     henka_result result;
     henka_material cube_material;
     henka_material fallback_material;
+    henka_material fallback_model_material;
     henka_material ground_material;
     henka_material grid_material;
     henka_material colored_material;
+    henka_material marker_material;
     henka_transform transform;
     int framebuffer_height;
     int framebuffer_width;
@@ -200,60 +228,85 @@ static henka_result sandbox3d_initialize(henka_engine* engine, void* user_data)
     colored_material.base_color = (henka_vec4){0.22f, 0.66f, 0.54f, 1.0f};
     colored_material.use_texture = false;
 
+    marker_material = henka_material_default();
+    marker_material.shader = state->basic_shader;
+    marker_material.base_color = (henka_vec4){0.95f, 0.66f, 0.18f, 1.0f};
+    marker_material.use_texture = false;
+
     fallback_material = henka_material_default();
     fallback_material.shader = state->basic_shader;
     fallback_material.base_color_texture = state->missing_texture;
     fallback_material.use_texture = true;
     fallback_material.base_color = (henka_vec4){1.0f, 1.0f, 1.0f, 1.0f};
 
+    fallback_model_material = henka_material_default();
+    fallback_model_material.shader = state->basic_shader;
+    fallback_model_material.base_color_texture = state->missing_texture;
+    fallback_model_material.use_texture = true;
+    fallback_model_material.base_color = (henka_vec4){1.0f, 1.0f, 1.0f, 1.0f};
+
     grid_material = henka_material_default();
     grid_material.shader = state->grid_shader;
-    grid_material.base_color = (henka_vec4){0.30f, 0.55f, 0.74f, 1.0f};
+    grid_material.base_color = (henka_vec4){0.40f, 0.68f, 0.90f, 1.0f};
     grid_material.use_texture = false;
     grid_material.use_lighting = false;
 
     transform = henka_transform_identity();
     transform.position.y = -0.02f;
-    henka_scene_set_entity_transform(state->scene, state->ground_entity, transform);
-    henka_scene_set_entity_mesh(state->scene, state->ground_entity, state->ground_mesh);
-    henka_scene_set_entity_material(state->scene, state->ground_entity, ground_material);
+    result = sandbox3d_configure_entity(state->scene, state->ground_entity, state->ground_mesh, ground_material, transform);
+    if (result != HENKA_SUCCESS)
+    {
+        goto fail;
+    }
 
     transform = henka_transform_identity();
     transform.position = (henka_vec3){0.0f, 0.5f, 0.0f};
-    henka_scene_set_entity_transform(state->scene, state->cube_entity, transform);
-    henka_scene_set_entity_mesh(state->scene, state->cube_entity, state->cube_mesh);
-    henka_scene_set_entity_material(state->scene, state->cube_entity, cube_material);
+    result = sandbox3d_configure_entity(state->scene, state->cube_entity, state->cube_mesh, cube_material, transform);
+    if (result != HENKA_SUCCESS)
+    {
+        goto fail;
+    }
 
     transform = henka_transform_identity();
     transform.position = (henka_vec3){-2.0f, 0.5f, 1.5f};
-    henka_scene_set_entity_transform(state->scene, state->colored_cube_entity, transform);
-    henka_scene_set_entity_mesh(state->scene, state->colored_cube_entity, state->cube_mesh);
-    henka_scene_set_entity_material(state->scene, state->colored_cube_entity, colored_material);
+    result = sandbox3d_configure_entity(state->scene, state->colored_cube_entity, state->cube_mesh, colored_material, transform);
+    if (result != HENKA_SUCCESS)
+    {
+        goto fail;
+    }
 
     transform = henka_transform_identity();
     transform.position = (henka_vec3){2.1f, 0.5f, -1.3f};
-    henka_scene_set_entity_transform(state->scene, state->fallback_cube_entity, transform);
-    henka_scene_set_entity_mesh(state->scene, state->fallback_cube_entity, state->cube_mesh);
-    henka_scene_set_entity_material(state->scene, state->fallback_cube_entity, fallback_material);
+    result = sandbox3d_configure_entity(state->scene, state->fallback_cube_entity, state->cube_mesh, fallback_material, transform);
+    if (result != HENKA_SUCCESS)
+    {
+        goto fail;
+    }
 
     transform = henka_transform_identity();
     transform.position = (henka_vec3){-3.1f, 0.0f, -1.8f};
     transform.scale = (henka_vec3){1.2f, 1.2f, 1.2f};
-    henka_scene_set_entity_transform(state->scene, state->marker_entity, transform);
-    henka_scene_set_entity_mesh(state->scene, state->marker_entity, state->marker_mesh);
-    henka_scene_set_entity_material(state->scene, state->marker_entity, cube_material);
+    result = sandbox3d_configure_entity(state->scene, state->marker_entity, state->marker_mesh, marker_material, transform);
+    if (result != HENKA_SUCCESS)
+    {
+        goto fail;
+    }
 
     transform = henka_transform_identity();
     transform.position = (henka_vec3){3.6f, 0.5f, 2.0f};
     transform.scale = (henka_vec3){0.8f, 0.8f, 0.8f};
-    henka_scene_set_entity_transform(state->scene, state->fallback_model_entity, transform);
-    henka_scene_set_entity_mesh(state->scene, state->fallback_model_entity, state->missing_model_mesh);
-    henka_scene_set_entity_material(state->scene, state->fallback_model_entity, colored_material);
+    result = sandbox3d_configure_entity(state->scene, state->fallback_model_entity, state->missing_model_mesh, fallback_model_material, transform);
+    if (result != HENKA_SUCCESS)
+    {
+        goto fail;
+    }
 
     transform = henka_transform_identity();
-    henka_scene_set_entity_transform(state->scene, state->grid_entity, transform);
-    henka_scene_set_entity_mesh(state->scene, state->grid_entity, state->grid_mesh);
-    henka_scene_set_entity_material(state->scene, state->grid_entity, grid_material);
+    result = sandbox3d_configure_entity(state->scene, state->grid_entity, state->grid_mesh, grid_material, transform);
+    if (result != HENKA_SUCCESS)
+    {
+        goto fail;
+    }
 
     henka_scene_set_light_direction(state->scene, (henka_vec3){-0.5f, -1.0f, -0.3f});
     henka_scene_set_ambient_color(state->scene, (henka_vec3){0.18f, 0.20f, 0.25f});
