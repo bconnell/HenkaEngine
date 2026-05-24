@@ -2,35 +2,48 @@
 
 ## Current focus
 
-Henka Engine is currently focused on a clean 3D foundation:
+Henka Engine is currently focused on a clean visible 3D foundation:
 
 - engine lifecycle
 - logging
 - memory wrappers
+- math and timing
 - platform abstraction
 - input handling
 - renderer abstraction
-- sandbox startup path
+- mesh and shader-backed draw path
+- minimal scene and camera flow
+- sandbox startup and movement
 
-## Next layers
+## Near-term roadmap
 
-Once the foundation is stable, the next likely additions are:
+The next likely layers are:
 
-- math types and helpers
-- shader management
-- mesh primitives
+- safer camera controls
 - texture loading
-- camera support
-- scene representation
-- asset management
+- model loading
+- richer material support
+- stronger asset management
+- scene growth beyond the current lightweight entity model
 
-## Later work
+## 2.5D direction
 
-Later milestones can expand into:
+Henka Engine is planned to support 2.5D as a distinct workflow rather than treating it as an afterthought. That later work should include:
 
-- 2D renderer
+- camera constraints
+- layered depth
+- parallax
+- side-scroller support
+- top-down support
+- isometric support
+
+## Longer-term work
+
+Longer-term milestones can expand into:
+
+- full 2D renderer
 - audio
 - scripting
 - physics
-- editor tooling
+- editor workflows
 - other renderer backends

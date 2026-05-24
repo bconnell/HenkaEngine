@@ -1,11 +1,17 @@
 add_library(henka STATIC
+    src/core/math.c
     src/core/engine.c
     src/core/log.c
     src/core/memory.c
     src/core/result.c
+    src/core/time.c
     src/platform/platform_sdl.c
+    src/renderer/mesh.c
     src/renderer/renderer.c
     src/renderer/renderer_opengl.c
+    src/renderer/shader.c
+    src/scene/camera.c
+    src/scene/scene.c
 )
 
 target_include_directories(henka

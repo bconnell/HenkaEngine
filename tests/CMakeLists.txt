@@ -1,7 +1,9 @@
 add_executable(henka_tests
     test_main.c
+    test_math.c
     test_result.c
     test_memory.c
+    test_scene.c
 )
 
 target_link_libraries(henka_tests

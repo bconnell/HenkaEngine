@@ -16,14 +16,32 @@ static henka_key henka_translate_key(SDL_Keycode keycode)
     {
         case SDLK_ESCAPE:
             return HENKA_KEY_ESCAPE;
+        case SDLK_W:
+            return HENKA_KEY_W;
+        case SDLK_A:
+            return HENKA_KEY_A;
+        case SDLK_S:
+            return HENKA_KEY_S;
+        case SDLK_D:
+            return HENKA_KEY_D;
+        case SDLK_Q:
+            return HENKA_KEY_Q;
+        case SDLK_E:
+            return HENKA_KEY_E;
+        case SDLK_LSHIFT:
+            return HENKA_KEY_LEFT_SHIFT;
+        case SDLK_F1:
+            return HENKA_KEY_F1;
+        case SDLK_H:
+            return HENKA_KEY_H;
         default:
             return HENKA_KEY_UNKNOWN;
     }
 }
 
-henka_result henka_platform_create(const henka_platform_desc* desc, henka_platform** out_platform)
+henka_result henka_platform_create(const henka_platform_desc* desc, struct henka_platform** out_platform)
 {
-    henka_platform* platform;
+    struct henka_platform* platform;
     Uint64 window_flags;
 
     if (desc == NULL || out_platform == NULL)
@@ -64,7 +82,7 @@ henka_result henka_platform_create(const henka_platform_desc* desc, henka_platfo
     return HENKA_SUCCESS;
 }
 
-void henka_platform_destroy(henka_platform* platform)
+void henka_platform_destroy(struct henka_platform* platform)
 {
     if (platform == NULL)
     {
@@ -82,7 +100,7 @@ void henka_platform_destroy(henka_platform* platform)
     SDL_Quit();
 }
 
-henka_result henka_platform_poll_events(henka_platform* platform, henka_input_state* input, henka_platform_frame_state* out_state)
+henka_result henka_platform_poll_events(struct henka_platform* platform, henka_input_state* input, henka_platform_frame_state* out_state)
 {
     SDL_Event event;
 
@@ -101,6 +119,7 @@ henka_result henka_platform_poll_events(henka_platform* platform, henka_input_st
         switch (event.type)
         {
             case SDL_EVENT_QUIT:
+            case SDL_EVENT_WINDOW_CLOSE_REQUESTED:
                 input->close_requested = true;
                 out_state->close_requested = true;
                 break;
@@ -142,11 +161,10 @@ henka_result henka_platform_poll_events(henka_platform* platform, henka_input_st
         }
     }
 
-    (void)platform;
     return HENKA_SUCCESS;
 }
 
-henka_result henka_platform_set_vsync(henka_platform* platform, bool enabled)
+henka_result henka_platform_set_vsync(struct henka_platform* platform, bool enabled)
 {
     int interval;
 
@@ -159,15 +177,24 @@ henka_result henka_platform_set_vsync(henka_platform* platform, bool enabled)
     if (!SDL_GL_SetSwapInterval(interval))
     {
         HENKA_LOG_WARN("SDL_GL_SetSwapInterval failed: %s", SDL_GetError());
-        return HENKA_SUCCESS;
     }
 
     return HENKA_SUCCESS;
 }
 
-SDL_Window* henka_platform_get_sdl_window(henka_platform* platform);
+bool henka_platform_get_framebuffer_size(struct henka_platform* platform, int* out_width, int* out_height)
+{
+    if (platform == NULL || out_width == NULL || out_height == NULL)
+    {
+        return false;
+    }
 
-SDL_Window* henka_platform_get_sdl_window(henka_platform* platform)
+    return SDL_GetWindowSizeInPixels(platform->window, out_width, out_height);
+}
+
+SDL_Window* henka_platform_get_sdl_window(struct henka_platform* platform);
+
+SDL_Window* henka_platform_get_sdl_window(struct henka_platform* platform)
 {
     if (platform == NULL)
     {

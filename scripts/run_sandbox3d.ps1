@@ -5,13 +5,25 @@ $debugExe = Join-Path $repoRoot "build\examples\sandbox3d\Debug\henka_sandbox3d.
 $releaseExe = Join-Path $repoRoot "build\examples\sandbox3d\Release\henka_sandbox3d.exe"
 
 if (Test-Path $debugExe) {
-    & $debugExe
-    exit $LASTEXITCODE
+    Push-Location (Split-Path $debugExe)
+    try {
+        & ".\henka_sandbox3d.exe"
+        exit $LASTEXITCODE
+    }
+    finally {
+        Pop-Location
+    }
 }
 
 if (Test-Path $releaseExe) {
-    & $releaseExe
-    exit $LASTEXITCODE
+    Push-Location (Split-Path $releaseExe)
+    try {
+        & ".\henka_sandbox3d.exe"
+        exit $LASTEXITCODE
+    }
+    finally {
+        Pop-Location
+    }
 }
 
 throw "Sandbox executable not found. Build the project first."

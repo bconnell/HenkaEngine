@@ -1,7 +1,5 @@
 #include "henka_internal.h"
 
-#include <string.h>
-
 #include <henka/log.h>
 #include <henka/memory.h>
 
@@ -37,11 +35,30 @@ static void henka_input_reset_frame_state(henka_input_state* input)
     input->close_requested = false;
 }
 
+static void henka_engine_handle_resize(henka_engine* engine, const henka_platform_frame_state* frame_state)
+{
+    if (engine == NULL || frame_state == NULL || !frame_state->resized)
+    {
+        return;
+    }
+
+    henka_renderer_resize_viewport(engine->renderer, frame_state->framebuffer_width, frame_state->framebuffer_height);
+
+    if (engine->active_scene != NULL && engine->active_scene->has_camera && frame_state->framebuffer_height > 0)
+    {
+        henka_camera_set_aspect_ratio(
+            &engine->active_scene->camera,
+            (float)frame_state->framebuffer_width / (float)frame_state->framebuffer_height);
+    }
+}
+
 henka_result henka_engine_create(const henka_engine_config* config, henka_engine** out_engine)
 {
     henka_engine* engine;
     henka_platform_desc platform_desc;
     henka_result result;
+    int framebuffer_height;
+    int framebuffer_width;
 
     if (!henka_engine_config_is_valid(config) || out_engine == NULL)
     {
@@ -86,6 +103,14 @@ henka_result henka_engine_create(const henka_engine_config* config, henka_engine
         return result;
     }
 
+    henka_time_reset(&engine->time);
+
+    if (henka_platform_get_framebuffer_size(engine->platform, &framebuffer_width, &framebuffer_height))
+    {
+        engine->renderer->framebuffer_width = framebuffer_width;
+        engine->renderer->framebuffer_height = framebuffer_height;
+    }
+
     HENKA_LOG_INFO("engine startup complete");
 
     *out_engine = engine;
@@ -100,6 +125,11 @@ void henka_engine_destroy(henka_engine* engine)
     }
 
     HENKA_LOG_INFO("shutting down engine");
+
+    if (engine->initialized_callback_ran && engine->config.on_shutdown != NULL)
+    {
+        engine->config.on_shutdown(engine, engine->config.user_data);
+    }
 
     henka_renderer_destroy(engine->renderer);
     henka_platform_destroy(engine->platform);
@@ -117,10 +147,23 @@ henka_result henka_engine_run(henka_engine* engine)
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
 
+    if (engine->config.on_initialize != NULL)
+    {
+        result = engine->config.on_initialize(engine, engine->config.user_data);
+        if (result != HENKA_SUCCESS)
+        {
+            HENKA_LOG_ERROR("engine initialize callback failed: %s", henka_result_to_string(result));
+            return result;
+        }
+
+        engine->initialized_callback_ran = true;
+    }
+
     HENKA_LOG_INFO("entering engine run loop");
 
     while (!engine->exit_requested)
     {
+        henka_time_tick(&engine->time);
         henka_input_reset_frame_state(&engine->input);
 
         result = henka_platform_poll_events(engine->platform, &engine->input, &frame_state);
@@ -135,9 +178,11 @@ henka_result henka_engine_run(henka_engine* engine)
             henka_engine_request_exit(engine);
         }
 
-        if (frame_state.resized)
+        henka_engine_handle_resize(engine, &frame_state);
+
+        if (engine->config.on_update != NULL)
         {
-            henka_renderer_resize_viewport(engine->renderer, frame_state.framebuffer_width, frame_state.framebuffer_height);
+            engine->config.on_update(engine, engine->time.delta_seconds, engine->config.user_data);
         }
 
         result = henka_renderer_begin_frame(engine->renderer);
@@ -148,6 +193,16 @@ henka_result henka_engine_run(henka_engine* engine)
         }
 
         henka_renderer_clear_frame(engine->renderer);
+
+        if (engine->active_scene != NULL)
+        {
+            result = henka_renderer_draw_scene(engine->renderer, engine->active_scene);
+            if (result != HENKA_SUCCESS)
+            {
+                HENKA_LOG_ERROR("renderer draw scene failed: %s", henka_result_to_string(result));
+                return result;
+            }
+        }
 
         result = henka_renderer_end_frame(engine->renderer);
         if (result != HENKA_SUCCESS)
@@ -167,6 +222,99 @@ void henka_engine_request_exit(henka_engine* engine)
     {
         engine->exit_requested = true;
     }
+}
+
+henka_result henka_engine_set_scene(henka_engine* engine, henka_scene* scene)
+{
+    if (engine == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    engine->active_scene = scene;
+    return HENKA_SUCCESS;
+}
+
+henka_result henka_engine_set_vsync(henka_engine* engine, bool enabled)
+{
+    if (engine == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    return henka_renderer_set_vsync(engine->renderer, enabled);
+}
+
+bool henka_engine_is_vsync_enabled(const henka_engine* engine)
+{
+    if (engine == NULL || engine->renderer == NULL)
+    {
+        return false;
+    }
+
+    return engine->renderer->vsync_enabled;
+}
+
+henka_result henka_engine_set_wireframe(henka_engine* engine, bool enabled)
+{
+    if (engine == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    return henka_renderer_set_wireframe(engine->renderer, enabled);
+}
+
+bool henka_engine_is_wireframe_enabled(const henka_engine* engine)
+{
+    if (engine == NULL || engine->renderer == NULL)
+    {
+        return false;
+    }
+
+    return engine->renderer->wireframe_enabled;
+}
+
+double henka_engine_get_delta_time(const henka_engine* engine)
+{
+    if (engine == NULL)
+    {
+        return 0.0;
+    }
+
+    return engine->time.delta_seconds;
+}
+
+double henka_engine_get_total_time(const henka_engine* engine)
+{
+    if (engine == NULL)
+    {
+        return 0.0;
+    }
+
+    return engine->time.total_seconds;
+}
+
+uint64_t henka_engine_get_frame_index(const henka_engine* engine)
+{
+    if (engine == NULL)
+    {
+        return 0U;
+    }
+
+    return engine->time.frame_index;
+}
+
+henka_result henka_engine_get_framebuffer_size(const henka_engine* engine, int* out_width, int* out_height)
+{
+    if (engine == NULL || out_width == NULL || out_height == NULL || engine->renderer == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    *out_width = engine->renderer->framebuffer_width;
+    *out_height = engine->renderer->framebuffer_height;
+    return HENKA_SUCCESS;
 }
 
 bool henka_input_is_key_down(const henka_engine* engine, henka_key key)

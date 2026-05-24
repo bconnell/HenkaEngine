@@ -1,40 +1,11 @@
 #include "henka_internal.h"
 
-#include <SDL3/SDL.h>
-
 #include <henka/log.h>
 #include <henka/memory.h>
 
-struct henka_renderer
-{
-    struct henka_platform* platform;
-    SDL_Window* window;
-    SDL_GLContext gl_context;
-    bool vsync_enabled;
-};
-
-SDL_Window* henka_platform_get_sdl_window(struct henka_platform* platform);
-
-static henka_result henka_renderer_configure_gl_attributes(void)
-{
-    if (!SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3) ||
-        !SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 3) ||
-        !SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE) ||
-        !SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1) ||
-        !SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, 24))
-    {
-        HENKA_LOG_ERROR("SDL_GL_SetAttribute failed: %s", SDL_GetError());
-        return HENKA_ERROR_RENDERER;
-    }
-
-    return HENKA_SUCCESS;
-}
-
 henka_result henka_renderer_create(struct henka_platform* platform, bool enable_vsync, struct henka_renderer** out_renderer)
 {
-    henka_renderer* renderer;
-    int framebuffer_height;
-    int framebuffer_width;
+    struct henka_renderer* renderer;
     henka_result result;
 
     if (platform == NULL || out_renderer == NULL)
@@ -44,12 +15,6 @@ henka_result henka_renderer_create(struct henka_platform* platform, bool enable_
 
     *out_renderer = NULL;
 
-    result = henka_renderer_configure_gl_attributes();
-    if (result != HENKA_SUCCESS)
-    {
-        return result;
-    }
-
     renderer = henka_calloc(1U, sizeof(*renderer));
     if (renderer == NULL)
     {
@@ -57,38 +22,130 @@ henka_result henka_renderer_create(struct henka_platform* platform, bool enable_
     }
 
     renderer->platform = platform;
-    renderer->window = henka_platform_get_sdl_window(platform);
-    renderer->gl_context = SDL_GL_CreateContext(renderer->window);
-    if (renderer->gl_context == NULL)
-    {
-        HENKA_LOG_ERROR("SDL_GL_CreateContext failed: %s", SDL_GetError());
-        henka_free(renderer);
-        return HENKA_ERROR_RENDERER;
-    }
 
-    if (!SDL_GL_MakeCurrent(renderer->window, renderer->gl_context))
-    {
-        HENKA_LOG_ERROR("SDL_GL_MakeCurrent failed: %s", SDL_GetError());
-        SDL_GL_DestroyContext(renderer->gl_context);
-        henka_free(renderer);
-        return HENKA_ERROR_RENDERER;
-    }
-
-    result = henka_renderer_set_vsync(renderer, enable_vsync);
+    result = henka_opengl_renderer_create(renderer, platform, enable_vsync);
     if (result != HENKA_SUCCESS)
     {
-        SDL_GL_DestroyContext(renderer->gl_context);
         henka_free(renderer);
         return result;
     }
 
-    HENKA_LOG_INFO("renderer initialized with OpenGL backend");
-
-    if (SDL_GetWindowSizeInPixels(renderer->window, &framebuffer_width, &framebuffer_height))
-    {
-        henka_renderer_resize_viewport(renderer, framebuffer_width, framebuffer_height);
-    }
-
     *out_renderer = renderer;
     return HENKA_SUCCESS;
+}
+
+void henka_renderer_destroy(struct henka_renderer* renderer)
+{
+    if (renderer == NULL)
+    {
+        return;
+    }
+
+    HENKA_LOG_INFO("destroying renderer");
+    henka_opengl_renderer_destroy(renderer);
+    henka_free(renderer);
+}
+
+henka_result henka_renderer_begin_frame(struct henka_renderer* renderer)
+{
+    return henka_opengl_renderer_begin_frame(renderer);
+}
+
+void henka_renderer_clear_frame(struct henka_renderer* renderer)
+{
+    henka_opengl_renderer_clear_frame(renderer);
+}
+
+henka_result henka_renderer_draw_scene(struct henka_renderer* renderer, const struct henka_scene* scene)
+{
+    if (renderer == NULL || scene == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    return henka_opengl_renderer_draw_scene(renderer, scene);
+}
+
+henka_result henka_renderer_end_frame(struct henka_renderer* renderer)
+{
+    return henka_opengl_renderer_end_frame(renderer);
+}
+
+void henka_renderer_resize_viewport(struct henka_renderer* renderer, int width, int height)
+{
+    if (renderer == NULL)
+    {
+        return;
+    }
+
+    renderer->framebuffer_width = width;
+    renderer->framebuffer_height = height;
+    henka_opengl_renderer_resize_viewport(renderer, width, height);
+}
+
+henka_result henka_renderer_set_vsync(struct henka_renderer* renderer, bool enabled)
+{
+    henka_result result;
+
+    if (renderer == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    result = henka_opengl_renderer_set_vsync(renderer, enabled);
+    if (result == HENKA_SUCCESS)
+    {
+        renderer->vsync_enabled = enabled;
+    }
+
+    return result;
+}
+
+henka_result henka_renderer_set_wireframe(struct henka_renderer* renderer, bool enabled)
+{
+    henka_result result;
+
+    if (renderer == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    result = henka_opengl_renderer_set_wireframe(renderer, enabled);
+    if (result == HENKA_SUCCESS)
+    {
+        renderer->wireframe_enabled = enabled;
+    }
+
+    return result;
+}
+
+henka_result henka_renderer_create_mesh_from_data(
+    struct henka_renderer* renderer,
+    const henka_vertex* vertices,
+    int vertex_count,
+    const unsigned int* indices,
+    int index_count,
+    henka_mesh_primitive primitive,
+    struct henka_mesh** out_mesh)
+{
+    return henka_opengl_renderer_create_mesh_from_data(renderer, vertices, vertex_count, indices, index_count, primitive, out_mesh);
+}
+
+void henka_renderer_destroy_mesh(struct henka_mesh* mesh)
+{
+    henka_opengl_renderer_destroy_mesh(mesh);
+}
+
+henka_result henka_renderer_create_shader_from_files(
+    struct henka_renderer* renderer,
+    const char* vertex_path,
+    const char* fragment_path,
+    struct henka_shader** out_shader)
+{
+    return henka_opengl_renderer_create_shader_from_files(renderer, vertex_path, fragment_path, out_shader);
+}
+
+void henka_renderer_destroy_shader(struct henka_shader* shader)
+{
+    henka_opengl_renderer_destroy_shader(shader);
 }

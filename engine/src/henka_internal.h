@@ -2,12 +2,32 @@
 #define HENKA_INTERNAL_H
 
 #include <stdbool.h>
+#include <stddef.h>
 
+#include <henka/camera.h>
 #include <henka/engine.h>
 #include <henka/input.h>
+#include <henka/math.h>
+#include <henka/mesh.h>
 #include <henka/platform.h>
 #include <henka/renderer.h>
 #include <henka/result.h>
+#include <henka/scene.h>
+#include <henka/shader.h>
+#include <henka/time.h>
+
+typedef enum henka_mesh_primitive
+{
+    HENKA_MESH_PRIMITIVE_TRIANGLES = 0,
+    HENKA_MESH_PRIMITIVE_LINES
+} henka_mesh_primitive;
+
+typedef struct henka_vertex
+{
+    henka_vec3 position;
+    henka_vec3 normal;
+    henka_vec2 uv;
+} henka_vertex;
 
 typedef struct henka_input_state
 {
@@ -32,29 +52,118 @@ typedef struct henka_platform_frame_state
     int framebuffer_height;
 } henka_platform_frame_state;
 
+typedef struct henka_scene_entity_record
+{
+    bool active;
+    henka_transform transform;
+    henka_mesh* mesh;
+    henka_material material;
+} henka_scene_entity_record;
+
+struct henka_scene
+{
+    henka_scene_entity_record* entities;
+    size_t entity_capacity;
+    size_t entity_count;
+    henka_camera camera;
+    bool has_camera;
+    henka_vec3 light_direction;
+    henka_vec3 ambient_color;
+};
+
 struct henka_platform;
-struct henka_renderer;
+
+struct henka_renderer
+{
+    struct henka_platform* platform;
+    void* backend_state;
+    bool vsync_enabled;
+    bool wireframe_enabled;
+    int framebuffer_width;
+    int framebuffer_height;
+};
+
+struct henka_mesh
+{
+    struct henka_renderer* renderer;
+    henka_mesh_primitive primitive;
+    int vertex_count;
+    int index_count;
+    void* backend_data;
+};
+
+struct henka_shader
+{
+    struct henka_renderer* renderer;
+    void* backend_data;
+};
 
 struct henka_engine
 {
     henka_engine_config config;
     struct henka_platform* platform;
     struct henka_renderer* renderer;
+    struct henka_scene* active_scene;
     henka_input_state input;
+    henka_time_state time;
     bool exit_requested;
+    bool initialized_callback_ran;
 };
 
 henka_result henka_platform_create(const henka_platform_desc* desc, struct henka_platform** out_platform);
 void henka_platform_destroy(struct henka_platform* platform);
 henka_result henka_platform_poll_events(struct henka_platform* platform, henka_input_state* input, henka_platform_frame_state* out_state);
 henka_result henka_platform_set_vsync(struct henka_platform* platform, bool enabled);
+bool henka_platform_get_framebuffer_size(struct henka_platform* platform, int* out_width, int* out_height);
 
 henka_result henka_renderer_create(struct henka_platform* platform, bool enable_vsync, struct henka_renderer** out_renderer);
 void henka_renderer_destroy(struct henka_renderer* renderer);
 henka_result henka_renderer_begin_frame(struct henka_renderer* renderer);
 void henka_renderer_clear_frame(struct henka_renderer* renderer);
+henka_result henka_renderer_draw_scene(struct henka_renderer* renderer, const struct henka_scene* scene);
 henka_result henka_renderer_end_frame(struct henka_renderer* renderer);
 void henka_renderer_resize_viewport(struct henka_renderer* renderer, int width, int height);
 henka_result henka_renderer_set_vsync(struct henka_renderer* renderer, bool enabled);
+henka_result henka_renderer_set_wireframe(struct henka_renderer* renderer, bool enabled);
+henka_result henka_renderer_create_mesh_from_data(
+    struct henka_renderer* renderer,
+    const henka_vertex* vertices,
+    int vertex_count,
+    const unsigned int* indices,
+    int index_count,
+    henka_mesh_primitive primitive,
+    struct henka_mesh** out_mesh);
+void henka_renderer_destroy_mesh(struct henka_mesh* mesh);
+henka_result henka_renderer_create_shader_from_files(
+    struct henka_renderer* renderer,
+    const char* vertex_path,
+    const char* fragment_path,
+    struct henka_shader** out_shader);
+void henka_renderer_destroy_shader(struct henka_shader* shader);
+
+henka_result henka_opengl_renderer_create(struct henka_renderer* renderer, struct henka_platform* platform, bool enable_vsync);
+void henka_opengl_renderer_destroy(struct henka_renderer* renderer);
+henka_result henka_opengl_renderer_begin_frame(struct henka_renderer* renderer);
+void henka_opengl_renderer_clear_frame(struct henka_renderer* renderer);
+henka_result henka_opengl_renderer_draw_scene(struct henka_renderer* renderer, const struct henka_scene* scene);
+henka_result henka_opengl_renderer_end_frame(struct henka_renderer* renderer);
+void henka_opengl_renderer_resize_viewport(struct henka_renderer* renderer, int width, int height);
+henka_result henka_opengl_renderer_set_vsync(struct henka_renderer* renderer, bool enabled);
+henka_result henka_opengl_renderer_set_wireframe(struct henka_renderer* renderer, bool enabled);
+henka_result henka_opengl_renderer_create_mesh_from_data(
+    struct henka_renderer* renderer,
+    const henka_vertex* vertices,
+    int vertex_count,
+    const unsigned int* indices,
+    int index_count,
+    henka_mesh_primitive primitive,
+    struct henka_mesh** out_mesh);
+void henka_opengl_renderer_destroy_mesh(struct henka_mesh* mesh);
+henka_result henka_opengl_renderer_create_shader_from_files(
+    struct henka_renderer* renderer,
+    const char* vertex_path,
+    const char* fragment_path,
+    struct henka_shader** out_shader);
+void henka_opengl_renderer_destroy_shader(struct henka_shader* shader);
 
 #endif

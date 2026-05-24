@@ -7,6 +7,15 @@ typedef enum henka_key
 {
     HENKA_KEY_UNKNOWN = 0,
     HENKA_KEY_ESCAPE,
+    HENKA_KEY_W,
+    HENKA_KEY_A,
+    HENKA_KEY_S,
+    HENKA_KEY_D,
+    HENKA_KEY_Q,
+    HENKA_KEY_E,
+    HENKA_KEY_LEFT_SHIFT,
+    HENKA_KEY_F1,
+    HENKA_KEY_H,
     HENKA_KEY_COUNT
 } henka_key;
 

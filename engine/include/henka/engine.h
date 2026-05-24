@@ -2,10 +2,16 @@
 #define HENKA_ENGINE_H
 
 #include <stdbool.h>
+#include <stdint.h>
 
 #include <henka/result.h>
 
 typedef struct henka_engine henka_engine;
+typedef struct henka_scene henka_scene;
+
+typedef henka_result (*henka_engine_initialize_fn)(henka_engine* engine, void* user_data);
+typedef void (*henka_engine_update_fn)(henka_engine* engine, double delta_seconds, void* user_data);
+typedef void (*henka_engine_shutdown_fn)(henka_engine* engine, void* user_data);
 
 typedef struct henka_engine_config
 {
@@ -13,6 +19,10 @@ typedef struct henka_engine_config
     int window_width;
     int window_height;
     bool enable_vsync;
+    henka_engine_initialize_fn on_initialize;
+    henka_engine_update_fn on_update;
+    henka_engine_shutdown_fn on_shutdown;
+    void* user_data;
 } henka_engine_config;
 
 /*
@@ -23,5 +33,14 @@ henka_result henka_engine_create(const henka_engine_config* config, henka_engine
 void henka_engine_destroy(henka_engine* engine);
 henka_result henka_engine_run(henka_engine* engine);
 void henka_engine_request_exit(henka_engine* engine);
+henka_result henka_engine_set_scene(henka_engine* engine, henka_scene* scene);
+henka_result henka_engine_set_vsync(henka_engine* engine, bool enabled);
+bool henka_engine_is_vsync_enabled(const henka_engine* engine);
+henka_result henka_engine_set_wireframe(henka_engine* engine, bool enabled);
+bool henka_engine_is_wireframe_enabled(const henka_engine* engine);
+double henka_engine_get_delta_time(const henka_engine* engine);
+double henka_engine_get_total_time(const henka_engine* engine);
+uint64_t henka_engine_get_frame_index(const henka_engine* engine);
+henka_result henka_engine_get_framebuffer_size(const henka_engine* engine, int* out_width, int* out_height);
 
 #endif
