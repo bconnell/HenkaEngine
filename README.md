@@ -57,10 +57,26 @@ Quick start from the repository root:
 .\scripts\build_windows.ps1
 ```
 
+To create a run-ready Windows folder that you can open in Explorer and launch by double-clicking:
+
+```powershell
+.\scripts\package_sandbox3d_windows.ps1
+```
+
 ## Run the sandbox
 
 ```powershell
 .\scripts\run_sandbox3d.ps1
+```
+
+## Run the packaged sandbox
+
+After packaging, open `out/HenkaSandbox3D/` in Explorer and double-click `HenkaSandbox3D.exe`.
+
+You can also launch it from PowerShell:
+
+```powershell
+.\scripts\run_packaged_sandbox3d_windows.ps1
 ```
 
 The sandbox starts a visible 3D scene with:
@@ -89,6 +105,7 @@ The sandbox starts a visible 3D scene with:
 Offline help is also available in [docs/help/sandbox3d.md](docs/help/sandbox3d.md).
 Model loading notes are documented in [docs/model-loading.md](docs/model-loading.md).
 A manual verification checklist is available in [docs/qa/sandbox3d-manual-checklist.md](docs/qa/sandbox3d-manual-checklist.md).
+Packaged output is generated under `out/` and should not be committed.
 
 ## Run tests
 

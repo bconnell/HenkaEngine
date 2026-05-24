@@ -158,6 +158,7 @@ struct henka_engine
     struct henka_renderer* renderer;
     struct henka_asset_manager* asset_manager;
     struct henka_scene* active_scene;
+    char* asset_base_path;
     henka_input_state input;
     henka_time_state time;
     bool exit_requested;
@@ -170,6 +171,7 @@ henka_result henka_platform_poll_events(struct henka_platform* platform, henka_i
 henka_result henka_platform_set_vsync(struct henka_platform* platform, bool enabled);
 bool henka_platform_get_framebuffer_size(struct henka_platform* platform, int* out_width, int* out_height);
 henka_result henka_platform_set_mouse_capture(struct henka_platform* platform, bool enabled);
+char* henka_platform_get_base_path_copy(void);
 
 henka_result henka_renderer_create(struct henka_platform* platform, bool enable_vsync, struct henka_renderer** out_renderer);
 void henka_renderer_destroy(struct henka_renderer* renderer);

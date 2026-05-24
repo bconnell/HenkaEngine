@@ -11,6 +11,11 @@ typedef struct henka_texture henka_texture;
 
 henka_asset_manager* henka_engine_get_asset_manager(henka_engine* engine);
 const henka_asset_manager* henka_engine_get_asset_manager_const(const henka_engine* engine);
+/*
+ * Resolves an asset path against a base directory. The caller owns the
+ * returned string and must release it with henka_free.
+ */
+henka_result henka_assets_resolve_path(const char* base_path, const char* asset_path, char** out_path);
 henka_result henka_assets_load_shader(
     henka_asset_manager* manager,
     const char* vertex_path,

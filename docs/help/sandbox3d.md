@@ -45,6 +45,10 @@
 - Compare the colored cube, textured cube, and OBJ marker so it is easy to tell which material path each object is using.
 - Use `F3` to hide the grid briefly, then show it again to confirm the scene layout still reads clearly.
 
+## Packaged runs
+
+Packaged Windows builds include `docs/help/sandbox3d.md` beside the executable so the same offline help stays available after you copy the runnable folder elsewhere.
+
 ## Current limitations
 
 - The sandbox uses built-in meshes plus a small early OBJ loading path.

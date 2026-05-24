@@ -5,6 +5,27 @@
 #include <henka/log.h>
 #include <henka/memory.h>
 
+static bool henka_path_is_separator(char character)
+{
+    return character == '/' || character == '\\';
+}
+
+static bool henka_path_is_absolute(const char* path)
+{
+    if (path == NULL || path[0] == '\0')
+    {
+        return false;
+    }
+
+    if ((path[0] != '\0' && path[1] == ':') ||
+        (henka_path_is_separator(path[0]) && henka_path_is_separator(path[1])))
+    {
+        return true;
+    }
+
+    return henka_path_is_separator(path[0]);
+}
+
 static char* henka_duplicate_string(const char* value)
 {
     char* copy;
@@ -24,6 +45,62 @@ static char* henka_duplicate_string(const char* value)
 
     memcpy(copy, value, length + 1U);
     return copy;
+}
+
+henka_result henka_assets_resolve_path(const char* base_path, const char* asset_path, char** out_path)
+{
+    char* resolved_path;
+    size_t asset_length;
+    size_t base_length;
+    bool needs_separator;
+
+    if (asset_path == NULL || out_path == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    *out_path = NULL;
+
+    if (base_path == NULL || base_path[0] == '\0' || henka_path_is_absolute(asset_path))
+    {
+        resolved_path = henka_duplicate_string(asset_path);
+        if (resolved_path == NULL)
+        {
+            return HENKA_ERROR_OUT_OF_MEMORY;
+        }
+
+        *out_path = resolved_path;
+        return HENKA_SUCCESS;
+    }
+
+    base_length = strlen(base_path);
+    asset_length = strlen(asset_path);
+
+    while (base_length > 0U && henka_path_is_separator(base_path[base_length - 1U]))
+    {
+        base_length -= 1U;
+    }
+
+    needs_separator = base_length > 0U && !henka_path_is_separator(asset_path[0]);
+    resolved_path = henka_malloc(base_length + asset_length + (needs_separator ? 2U : 1U));
+    if (resolved_path == NULL)
+    {
+        return HENKA_ERROR_OUT_OF_MEMORY;
+    }
+
+    memcpy(resolved_path, base_path, base_length);
+    if (needs_separator)
+    {
+        resolved_path[base_length] = '/';
+        memcpy(resolved_path + base_length + 1U, asset_path, asset_length + 1U);
+    }
+    else
+    {
+        memcpy(resolved_path + base_length, asset_path, asset_length + 1U);
+    }
+
+    *out_path = resolved_path;
+    return HENKA_SUCCESS;
 }
 
 static henka_result henka_asset_manager_grow_shaders(henka_asset_manager* manager)
@@ -246,6 +323,8 @@ henka_result henka_assets_load_shader(
     henka_shader** out_shader)
 {
     char* key;
+    char* resolved_fragment_path;
+    char* resolved_vertex_path;
     henka_shader* shader;
     henka_result result;
     size_t key_length;
@@ -274,7 +353,24 @@ henka_result henka_assets_load_shader(
         return HENKA_SUCCESS;
     }
 
-    result = henka_shader_create_from_files(manager->engine, vertex_path, fragment_path, &shader);
+    result = henka_assets_resolve_path(henka_engine_get_asset_base_path(manager->engine), vertex_path, &resolved_vertex_path);
+    if (result != HENKA_SUCCESS)
+    {
+        henka_free(key);
+        return result;
+    }
+
+    result = henka_assets_resolve_path(henka_engine_get_asset_base_path(manager->engine), fragment_path, &resolved_fragment_path);
+    if (result != HENKA_SUCCESS)
+    {
+        henka_free(resolved_vertex_path);
+        henka_free(key);
+        return result;
+    }
+
+    result = henka_shader_create_from_files(manager->engine, resolved_vertex_path, resolved_fragment_path, &shader);
+    henka_free(resolved_vertex_path);
+    henka_free(resolved_fragment_path);
     if (result != HENKA_SUCCESS)
     {
         henka_free(key);
@@ -302,6 +398,7 @@ henka_result henka_assets_load_shader(
 henka_result henka_assets_load_texture(henka_asset_manager* manager, const char* path, henka_texture** out_texture)
 {
     char* key;
+    char* resolved_path;
     henka_texture* texture;
     henka_result result;
 
@@ -317,7 +414,14 @@ henka_result henka_assets_load_texture(henka_asset_manager* manager, const char*
         return HENKA_SUCCESS;
     }
 
-    result = henka_texture_create_from_file(manager->engine, path, &texture);
+    result = henka_assets_resolve_path(henka_engine_get_asset_base_path(manager->engine), path, &resolved_path);
+    if (result != HENKA_SUCCESS)
+    {
+        return result;
+    }
+
+    result = henka_texture_create_from_file(manager->engine, resolved_path, &texture);
+    henka_free(resolved_path);
     if (result != HENKA_SUCCESS)
     {
         HENKA_LOG_ERROR("Using the error texture because '%s' could not be loaded", path);
@@ -358,6 +462,7 @@ henka_result henka_assets_load_texture(henka_asset_manager* manager, const char*
 henka_result henka_assets_load_obj_mesh(henka_asset_manager* manager, const char* path, henka_mesh** out_mesh)
 {
     char* key;
+    char* resolved_path;
     henka_mesh* mesh;
     henka_result result;
 
@@ -373,7 +478,14 @@ henka_result henka_assets_load_obj_mesh(henka_asset_manager* manager, const char
         return HENKA_SUCCESS;
     }
 
-    result = henka_mesh_create_from_obj(manager->engine, path, &mesh);
+    result = henka_assets_resolve_path(henka_engine_get_asset_base_path(manager->engine), path, &resolved_path);
+    if (result != HENKA_SUCCESS)
+    {
+        return result;
+    }
+
+    result = henka_mesh_create_from_obj(manager->engine, resolved_path, &mesh);
+    henka_free(resolved_path);
     if (result != HENKA_SUCCESS)
     {
         HENKA_LOG_ERROR("Using the fallback mesh because '%s' could not be loaded", path);

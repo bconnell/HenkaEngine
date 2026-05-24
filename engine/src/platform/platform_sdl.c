@@ -10,6 +10,32 @@ struct henka_platform
     SDL_Window* window;
 };
 
+char* henka_platform_get_base_path_copy(void)
+{
+    char* copy;
+    const char* sdl_base_path;
+    size_t length;
+
+    sdl_base_path = SDL_GetBasePath();
+    if (sdl_base_path == NULL)
+    {
+        HENKA_LOG_ERROR("SDL_GetBasePath failed: %s", SDL_GetError());
+        return NULL;
+    }
+
+    length = SDL_strlen(sdl_base_path);
+    copy = henka_malloc(length + 1U);
+    if (copy == NULL)
+    {
+        SDL_free((void*)sdl_base_path);
+        return NULL;
+    }
+
+    SDL_memcpy(copy, sdl_base_path, length + 1U);
+    SDL_free((void*)sdl_base_path);
+    return copy;
+}
+
 static henka_key henka_translate_key(SDL_Keycode keycode)
 {
     switch (keycode)

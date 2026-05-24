@@ -4,6 +4,7 @@ int g_henka_test_failures = 0;
 
 int main(void)
 {
+    henka_test_assets();
     henka_test_camera();
     henka_test_math();
     henka_test_material();

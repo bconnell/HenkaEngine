@@ -69,7 +69,7 @@ The current camera module provides a perspective camera, simple fly movement, an
 
 ### Assets
 
-The current asset layer is intentionally modest. It loads and caches shaders, textures, and OBJ meshes by path, owns fallback textures and a fallback mesh, caches failed path lookups against those fallbacks, and keeps asset lifetime tied to the engine runtime.
+The current asset layer is intentionally modest. It loads and caches shaders, textures, and OBJ meshes by path, resolves relative asset paths against the engine asset base directory, owns fallback textures and a fallback mesh, caches failed path lookups against those fallbacks, and keeps asset lifetime tied to the engine runtime.
 
 ### Scene
 
@@ -106,6 +106,7 @@ The sandbox is a consumer of the public API only. It creates a scene, shaders, t
 - Applications talk to the engine through the public Henka headers.
 - The engine owns the main loop, timing, scene pointer, and renderer lifecycle.
 - The engine also owns the asset manager and fallback assets.
+- The engine resolves runtime assets relative to the executable directory by default, which keeps packaged sandbox runs independent from the repository root.
 - The sandbox does not include SDL, Windows, or OpenGL headers.
 - OpenGL stays in renderer implementation files.
 - Scene data is public enough to build with, but renderer details stay private.

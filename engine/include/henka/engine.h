@@ -20,6 +20,8 @@ typedef struct henka_engine_config
     int window_width;
     int window_height;
     bool enable_vsync;
+    /* When NULL or empty, runtime assets resolve relative to the executable directory. */
+    const char* asset_base_path;
     henka_engine_initialize_fn on_initialize;
     henka_engine_update_fn on_update;
     henka_engine_shutdown_fn on_shutdown;
@@ -45,6 +47,7 @@ double henka_engine_get_delta_time(const henka_engine* engine);
 double henka_engine_get_total_time(const henka_engine* engine);
 uint64_t henka_engine_get_frame_index(const henka_engine* engine);
 henka_result henka_engine_get_framebuffer_size(const henka_engine* engine, int* out_width, int* out_height);
+const char* henka_engine_get_asset_base_path(const henka_engine* engine);
 henka_asset_manager* henka_engine_get_asset_manager(henka_engine* engine);
 const henka_asset_manager* henka_engine_get_asset_manager_const(const henka_engine* engine);
 

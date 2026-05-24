@@ -14,6 +14,21 @@ Use this checklist when you want to confirm that `henka_sandbox3d` is visually r
 .\scripts\run_sandbox3d.ps1
 ```
 
+## Packaged executable test
+
+1. Run:
+
+   ```powershell
+   .\scripts\package_sandbox3d_windows.ps1
+   ```
+
+2. Open `out/HenkaSandbox3D` in Explorer.
+3. Double-click `HenkaSandbox3D.exe`.
+4. Confirm the window opens and the scene loads from the packaged `assets/` folder.
+5. Confirm the console help still prints and `docs/help/sandbox3d.md` is present beside the executable.
+6. Confirm there are no unexpected shader, texture, model, or asset path errors.
+7. Confirm the missing-texture and missing-model examples still use the intended fallback visuals.
+
 ## Expected startup behavior
 
 - A window opens with the title `Henka Engine Sandbox 3D`.
@@ -86,6 +101,9 @@ Mark each item as `Pass`, `Needs Review`, or `Fail`.
 - `Escape` releases capture first, then exits
 - Window close exits cleanly
 - Resize behavior remains readable
+- Packaged executable launches from `out/HenkaSandbox3D`
+- Packaged assets load without relying on the repo root
+- Offline help file is included with the packaged output
 
 ## Safe screenshots
 
@@ -98,6 +116,7 @@ Do not commit screenshots unless that is an intentional, reviewed part of the re
 - OBJ loading is still early and limited to the documented subset in [docs/model-loading.md](../model-loading.md).
 - Help is printed to the console because the sandbox does not have in-window text rendering yet.
 - Manual visual inspection is still the best way to confirm scene readability and interaction feel.
+- The packaged Windows folder is meant for local manual testing, not as a full installer or release pipeline.
 
 ## Manual results template
 

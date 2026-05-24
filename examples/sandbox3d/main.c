@@ -523,6 +523,7 @@ int main(void)
     config.window_width = 1280;
     config.window_height = 720;
     config.enable_vsync = true;
+    config.asset_base_path = NULL;
     config.on_initialize = sandbox3d_initialize;
     config.on_update = sandbox3d_update;
     config.on_shutdown = sandbox3d_shutdown;

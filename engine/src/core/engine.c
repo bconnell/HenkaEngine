@@ -1,7 +1,30 @@
 #include "henka_internal.h"
 
+#include <string.h>
+
 #include <henka/log.h>
 #include <henka/memory.h>
+
+static char* henka_duplicate_string(const char* value)
+{
+    char* copy;
+    size_t length;
+
+    if (value == NULL)
+    {
+        return NULL;
+    }
+
+    length = strlen(value);
+    copy = henka_malloc(length + 1U);
+    if (copy == NULL)
+    {
+        return NULL;
+    }
+
+    memcpy(copy, value, length + 1U);
+    return copy;
+}
 
 static bool henka_engine_config_is_valid(const henka_engine_config* config)
 {
@@ -101,10 +124,28 @@ henka_result henka_engine_create(const henka_engine_config* config, henka_engine
         return result;
     }
 
+    if (engine->config.asset_base_path != NULL && engine->config.asset_base_path[0] != '\0')
+    {
+        engine->asset_base_path = henka_duplicate_string(engine->config.asset_base_path);
+    }
+    else
+    {
+        engine->asset_base_path = henka_platform_get_base_path_copy();
+    }
+
+    if (engine->asset_base_path == NULL)
+    {
+        HENKA_LOG_ERROR("asset base path initialization failed");
+        henka_platform_destroy(engine->platform);
+        henka_free(engine);
+        return HENKA_ERROR_OUT_OF_MEMORY;
+    }
+
     result = henka_renderer_create(engine->platform, engine->config.enable_vsync, &engine->renderer);
     if (result != HENKA_SUCCESS)
     {
         HENKA_LOG_ERROR("renderer initialization failed: %s", henka_result_to_string(result));
+        henka_free(engine->asset_base_path);
         henka_platform_destroy(engine->platform);
         henka_free(engine);
         return result;
@@ -115,6 +156,7 @@ henka_result henka_engine_create(const henka_engine_config* config, henka_engine
     {
         HENKA_LOG_ERROR("asset manager initialization failed: %s", henka_result_to_string(result));
         henka_renderer_destroy(engine->renderer);
+        henka_free(engine->asset_base_path);
         henka_platform_destroy(engine->platform);
         henka_free(engine);
         return result;
@@ -151,6 +193,7 @@ void henka_engine_destroy(henka_engine* engine)
     henka_asset_manager_destroy(engine->asset_manager);
     henka_renderer_destroy(engine->renderer);
     henka_platform_destroy(engine->platform);
+    henka_free(engine->asset_base_path);
     henka_free(engine);
     henka_memory_report_leaks();
 }
@@ -373,6 +416,16 @@ henka_result henka_engine_get_framebuffer_size(const henka_engine* engine, int* 
     *out_width = engine->renderer->framebuffer_width;
     *out_height = engine->renderer->framebuffer_height;
     return HENKA_SUCCESS;
+}
+
+const char* henka_engine_get_asset_base_path(const henka_engine* engine)
+{
+    if (engine == NULL || engine->asset_base_path == NULL)
+    {
+        return "";
+    }
+
+    return engine->asset_base_path;
 }
 
 henka_asset_manager* henka_engine_get_asset_manager(henka_engine* engine)
