@@ -27,12 +27,10 @@ char* henka_platform_get_base_path_copy(void)
     copy = henka_malloc(length + 1U);
     if (copy == NULL)
     {
-        SDL_free((void*)sdl_base_path);
         return NULL;
     }
 
     SDL_memcpy(copy, sdl_base_path, length + 1U);
-    SDL_free((void*)sdl_base_path);
     return copy;
 }
 

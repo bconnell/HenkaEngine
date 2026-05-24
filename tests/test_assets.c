@@ -40,4 +40,11 @@ void henka_test_assets(void)
         &resolved_path) == HENKA_SUCCESS);
     HENKA_TEST_ASSERT(strcmp(resolved_path, "D:/Shared/henka_marker.obj") == 0);
     henka_free(resolved_path);
+
+    HENKA_TEST_ASSERT(henka_assets_resolve_path(
+        "C:/HenkaSandbox3D",
+        "\\\\server\\share\\henka_marker.obj",
+        &resolved_path) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(strcmp(resolved_path, "\\\\server\\share\\henka_marker.obj") == 0);
+    henka_free(resolved_path);
 }
