@@ -34,6 +34,10 @@ static henka_key henka_translate_key(SDL_Keycode keycode)
             return HENKA_KEY_TAB;
         case SDLK_F1:
             return HENKA_KEY_F1;
+        case SDLK_F2:
+            return HENKA_KEY_F2;
+        case SDLK_F3:
+            return HENKA_KEY_F3;
         case SDLK_H:
             return HENKA_KEY_H;
         default:

@@ -28,6 +28,7 @@ The next likely layers are:
 - stronger asset management
 - scene growth beyond the current lightweight entity model
 - broader OBJ and model import coverage after the current foundation has settled
+- in-window inspection and QA tools after a text or UI rendering path exists
 
 ## 2.5D direction
 

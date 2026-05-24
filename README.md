@@ -81,11 +81,14 @@ The sandbox starts a visible 3D scene with:
 - `Mouse`: look around while mouse capture is active
 - `Right Mouse / Tab`: toggle mouse capture
 - `F1`: toggle wireframe
-- `H`: print help again
+- `F2`: print the scene legend again
+- `F3`: show or hide the debug grid
+- `H`: print controls and the scene legend again
 - `Escape`: release the mouse first, then exit
 
 Offline help is also available in [docs/help/sandbox3d.md](docs/help/sandbox3d.md).
 Model loading notes are documented in [docs/model-loading.md](docs/model-loading.md).
+A manual verification checklist is available in [docs/qa/sandbox3d-manual-checklist.md](docs/qa/sandbox3d-manual-checklist.md).
 
 ## Run tests
 

@@ -18,9 +18,21 @@
 - `Mouse`: look around while mouse capture is active
 - `Right Mouse / Tab`: toggle mouse capture
 - `F1`: toggle wireframe
-- `H`: print help to the console again
+- `F2`: print the scene legend to the console again
+- `F3`: show or hide the debug grid
+- `H`: print controls and the scene legend to the console again
 - `Escape`: release the mouse first, then exit
 - Window close: exit
+
+## Scene legend
+
+- `Textured Cube`: centered, shows texture material rendering.
+- `Ground`: under the scene, shows repeated local texture use.
+- `Colored Cube`: left side, shows untextured material color.
+- `OBJ Marker`: farther left, shows the current OBJ loading path.
+- `Missing Texture`: right side, shows the error texture fallback.
+- `Missing Model`: farther right, shows the fallback mesh.
+- `Debug Grid`: spans the floor so you can judge position, depth, and movement.
 
 ## What to try
 
@@ -31,6 +43,7 @@
 - Find the fallback-texture example to confirm that missing textures fail visibly without stopping the engine.
 - Find the fallback-model example to confirm that missing OBJ assets fail visibly without stopping the engine.
 - Compare the colored cube, textured cube, and OBJ marker so it is easy to tell which material path each object is using.
+- Use `F3` to hide the grid briefly, then show it again to confirm the scene layout still reads clearly.
 
 ## Current limitations
 
@@ -38,3 +51,5 @@
 - OBJ support is intentionally limited to simple geometry and does not include imported materials, negative indices, or animation.
 - Help is printed to the console because in-window text and UI rendering do not exist yet.
 - Editor tools, asset browser UI, and broader 2D or 2.5D workflows are not available yet.
+
+For a step-by-step manual verification flow, use [docs/qa/sandbox3d-manual-checklist.md](../qa/sandbox3d-manual-checklist.md).

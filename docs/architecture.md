@@ -99,7 +99,7 @@ The renderer layer exposes engine-owned drawing functionality while keeping Open
 
 ### Sandbox
 
-The sandbox is a consumer of the public API only. It creates a scene, shaders, textures, meshes, materials, and camera through Henka headers, then hands those objects to the engine run loop through callbacks.
+The sandbox is a consumer of the public API only. It creates a scene, shaders, textures, meshes, materials, and camera through Henka headers, then hands those objects to the engine run loop through callbacks. It also uses scene entity names and visibility state to support console legends and manual verification without adding a separate overlay system.
 
 ## Current boundaries
 

@@ -18,6 +18,8 @@ typedef enum henka_key
     HENKA_KEY_LEFT_SHIFT,
     HENKA_KEY_TAB,
     HENKA_KEY_F1,
+    HENKA_KEY_F2,
+    HENKA_KEY_F3,
     HENKA_KEY_H,
     HENKA_KEY_COUNT
 } henka_key;

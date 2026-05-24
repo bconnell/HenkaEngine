@@ -26,6 +26,46 @@ typedef struct sandbox3d_state
 } sandbox3d_state;
 
 static const float g_mouse_look_sensitivity = 0.0025f;
+static const henka_vec3 g_camera_start_position = {0.0f, 2.4f, 8.6f};
+static const float g_camera_start_yaw = -HENKA_PI * 0.5f;
+static const float g_camera_start_pitch = -0.22f;
+static const henka_vec3 g_textured_cube_position = {0.0f, 0.5f, 0.0f};
+static const henka_vec3 g_colored_cube_position = {-2.6f, 0.5f, 1.4f};
+static const henka_vec3 g_missing_texture_position = {2.6f, 0.5f, 1.4f};
+static const henka_vec3 g_marker_position = {-4.4f, 0.0f, -0.9f};
+static const henka_vec3 g_missing_model_position = {4.4f, 0.5f, -0.9f};
+
+static const char* sandbox3d_safe_entity_name(const sandbox3d_state* state, henka_entity entity, const char* fallback_name)
+{
+    const char* name;
+
+    if (state == NULL || state->scene == NULL)
+    {
+        return fallback_name;
+    }
+
+    name = henka_scene_get_entity_name(state->scene, entity);
+    return name != NULL ? name : fallback_name;
+}
+
+static void sandbox3d_print_scene_legend(const sandbox3d_state* state)
+{
+    printf("Scene examples:\n");
+    printf("  %s: center view, shows textured material rendering.\n",
+        sandbox3d_safe_entity_name(state, state != NULL ? state->cube_entity : HENKA_INVALID_ENTITY, "Textured Cube"));
+    printf("  %s: under the scene, shows repeated local texture use.\n",
+        sandbox3d_safe_entity_name(state, state != NULL ? state->ground_entity : HENKA_INVALID_ENTITY, "Ground"));
+    printf("  %s: left side, shows an untextured material color.\n",
+        sandbox3d_safe_entity_name(state, state != NULL ? state->colored_cube_entity : HENKA_INVALID_ENTITY, "Colored Cube"));
+    printf("  %s: farther left, shows the current OBJ loading path.\n",
+        sandbox3d_safe_entity_name(state, state != NULL ? state->marker_entity : HENKA_INVALID_ENTITY, "OBJ Marker"));
+    printf("  %s: right side, shows the error texture fallback when a texture file is missing.\n",
+        sandbox3d_safe_entity_name(state, state != NULL ? state->fallback_cube_entity : HENKA_INVALID_ENTITY, "Missing Texture"));
+    printf("  %s: farther right, shows the fallback mesh when an OBJ file is missing.\n",
+        sandbox3d_safe_entity_name(state, state != NULL ? state->fallback_model_entity : HENKA_INVALID_ENTITY, "Missing Model"));
+    printf("  %s: spans the floor so you can judge position, depth, and movement.\n",
+        sandbox3d_safe_entity_name(state, state != NULL ? state->grid_entity : HENKA_INVALID_ENTITY, "Debug Grid"));
+}
 
 static henka_result sandbox3d_configure_entity(
     henka_scene* scene,
@@ -71,11 +111,10 @@ static void sandbox3d_release_owned_resources(sandbox3d_state* state)
     state->scene = NULL;
 }
 
-static void sandbox3d_print_help(void)
+static void sandbox3d_print_help(const sandbox3d_state* state)
 {
     printf("Henka Engine Sandbox 3D\n");
-    printf("This scene shows a textured cube, a textured ground plane, a colored cube, a loaded OBJ marker, and visible fallback examples for missing texture and missing model assets.\n");
-    printf("The magenta checker examples show how the sandbox stays visible when an asset file cannot be loaded.\n");
+    printf("This scene shows texture rendering, untextured material color, early OBJ loading, and visible fallback behavior for missing assets.\n");
     printf("Controls:\n");
     printf("  W A S D          Move across the scene\n");
     printf("  Q / E            Move down / up\n");
@@ -83,19 +122,28 @@ static void sandbox3d_print_help(void)
     printf("  Mouse            Look around while mouse capture is active\n");
     printf("  Right Mouse / Tab Toggle mouse capture\n");
     printf("  F1               Toggle wireframe\n");
-    printf("  H                Print this help again\n");
+    printf("  F2               Print the scene legend again\n");
+    printf("  F3               Show or hide the debug grid\n");
+    printf("  H                Print controls and the scene legend again\n");
     printf("  Escape           Release the mouse first, then exit\n");
+    sandbox3d_print_scene_legend(state);
+    printf("Manual QA focus:\n");
+    printf("  Confirm each scene example is visible, mouse capture toggles cleanly, wireframe is readable, and the view stays stable when the window is resized.\n");
     printf("Current limitations:\n");
-    printf("  OBJ loading is an early foundation with support for simple triangle and quad faces.\n");
-    printf("  OBJ material libraries, negative indices, and animation are not supported yet.\n");
-    printf("  Material import, editor tools, and broader 2D or 2.5D workflows are not available yet.\n");
+    printf("  OBJ loading is still early and currently limited to a small, documented subset.\n");
+    printf("  OBJ material libraries, negative indices, animation, editor tools, and broader 2D or 2.5D workflows are not available yet.\n");
     printf("  Help is printed to the console because in-window text and UI rendering do not exist yet.\n");
     fflush(stdout);
 }
 
-static void sandbox3d_print_capture_state(henka_engine* engine)
+static void sandbox3d_print_capture_state(henka_engine* engine, const char* trigger)
 {
-    printf("Mouse look: %s\n", henka_engine_is_mouse_captured(engine) ? "captured" : "released");
+    printf("Mouse look: %s", henka_engine_is_mouse_captured(engine) ? "captured" : "released");
+    if (trigger != NULL)
+    {
+        printf(" with %s", trigger);
+    }
+    printf("\n");
     fflush(stdout);
 }
 
@@ -116,7 +164,6 @@ static henka_result sandbox3d_initialize(henka_engine* engine, void* user_data)
     sandbox3d_state* state;
 
     state = (sandbox3d_state*)user_data;
-    sandbox3d_print_help();
 
     result = henka_scene_create(&state->scene);
     if (result != HENKA_SUCCESS)
@@ -215,7 +262,7 @@ static henka_result sandbox3d_initialize(henka_engine* engine, void* user_data)
     ground_material.shader = state->basic_shader;
     ground_material.base_color_texture = state->ground_texture;
     ground_material.use_texture = true;
-    ground_material.base_color = (henka_vec4){0.82f, 0.84f, 0.88f, 1.0f};
+    ground_material.base_color = (henka_vec4){0.88f, 0.88f, 0.90f, 1.0f};
 
     cube_material = henka_material_default();
     cube_material.shader = state->basic_shader;
@@ -225,12 +272,12 @@ static henka_result sandbox3d_initialize(henka_engine* engine, void* user_data)
 
     colored_material = henka_material_default();
     colored_material.shader = state->basic_shader;
-    colored_material.base_color = (henka_vec4){0.22f, 0.66f, 0.54f, 1.0f};
+    colored_material.base_color = (henka_vec4){0.20f, 0.72f, 0.56f, 1.0f};
     colored_material.use_texture = false;
 
     marker_material = henka_material_default();
     marker_material.shader = state->basic_shader;
-    marker_material.base_color = (henka_vec4){0.95f, 0.66f, 0.18f, 1.0f};
+    marker_material.base_color = (henka_vec4){0.96f, 0.72f, 0.18f, 1.0f};
     marker_material.use_texture = false;
 
     fallback_material = henka_material_default();
@@ -247,7 +294,7 @@ static henka_result sandbox3d_initialize(henka_engine* engine, void* user_data)
 
     grid_material = henka_material_default();
     grid_material.shader = state->grid_shader;
-    grid_material.base_color = (henka_vec4){0.40f, 0.68f, 0.90f, 1.0f};
+    grid_material.base_color = (henka_vec4){0.48f, 0.78f, 0.98f, 1.0f};
     grid_material.use_texture = false;
     grid_material.use_lighting = false;
 
@@ -260,7 +307,7 @@ static henka_result sandbox3d_initialize(henka_engine* engine, void* user_data)
     }
 
     transform = henka_transform_identity();
-    transform.position = (henka_vec3){0.0f, 0.5f, 0.0f};
+    transform.position = g_textured_cube_position;
     result = sandbox3d_configure_entity(state->scene, state->cube_entity, state->cube_mesh, cube_material, transform);
     if (result != HENKA_SUCCESS)
     {
@@ -268,7 +315,7 @@ static henka_result sandbox3d_initialize(henka_engine* engine, void* user_data)
     }
 
     transform = henka_transform_identity();
-    transform.position = (henka_vec3){-2.0f, 0.5f, 1.5f};
+    transform.position = g_colored_cube_position;
     result = sandbox3d_configure_entity(state->scene, state->colored_cube_entity, state->cube_mesh, colored_material, transform);
     if (result != HENKA_SUCCESS)
     {
@@ -276,7 +323,7 @@ static henka_result sandbox3d_initialize(henka_engine* engine, void* user_data)
     }
 
     transform = henka_transform_identity();
-    transform.position = (henka_vec3){2.1f, 0.5f, -1.3f};
+    transform.position = g_missing_texture_position;
     result = sandbox3d_configure_entity(state->scene, state->fallback_cube_entity, state->cube_mesh, fallback_material, transform);
     if (result != HENKA_SUCCESS)
     {
@@ -284,8 +331,8 @@ static henka_result sandbox3d_initialize(henka_engine* engine, void* user_data)
     }
 
     transform = henka_transform_identity();
-    transform.position = (henka_vec3){-3.1f, 0.0f, -1.8f};
-    transform.scale = (henka_vec3){1.2f, 1.2f, 1.2f};
+    transform.position = g_marker_position;
+    transform.scale = (henka_vec3){1.35f, 1.35f, 1.35f};
     result = sandbox3d_configure_entity(state->scene, state->marker_entity, state->marker_mesh, marker_material, transform);
     if (result != HENKA_SUCCESS)
     {
@@ -293,8 +340,8 @@ static henka_result sandbox3d_initialize(henka_engine* engine, void* user_data)
     }
 
     transform = henka_transform_identity();
-    transform.position = (henka_vec3){3.6f, 0.5f, 2.0f};
-    transform.scale = (henka_vec3){0.8f, 0.8f, 0.8f};
+    transform.position = g_missing_model_position;
+    transform.scale = (henka_vec3){0.95f, 0.95f, 0.95f};
     result = sandbox3d_configure_entity(state->scene, state->fallback_model_entity, state->missing_model_mesh, fallback_model_material, transform);
     if (result != HENKA_SUCCESS)
     {
@@ -319,9 +366,9 @@ static henka_result sandbox3d_initialize(henka_engine* engine, void* user_data)
     }
 
     state->camera = henka_camera_create_perspective(60.0f * HENKA_DEG_TO_RAD, (float)framebuffer_width / (float)framebuffer_height, 0.1f, 100.0f);
-    state->camera.position = (henka_vec3){3.0f, 2.2f, 6.0f};
-    state->camera.yaw_radians = -2.2f;
-    state->camera.pitch_radians = -0.25f;
+    state->camera.position = g_camera_start_position;
+    state->camera.yaw_radians = g_camera_start_yaw;
+    state->camera.pitch_radians = g_camera_start_pitch;
 
     result = henka_scene_set_camera(state->scene, &state->camera);
     if (result != HENKA_SUCCESS)
@@ -347,6 +394,8 @@ static henka_result sandbox3d_initialize(henka_engine* engine, void* user_data)
         goto fail;
     }
 
+    sandbox3d_print_help(state);
+
     return HENKA_SUCCESS;
 
 fail:
@@ -366,7 +415,13 @@ static void sandbox3d_update(henka_engine* engine, double delta_seconds, void* u
 
     if (henka_input_was_key_pressed(engine, HENKA_KEY_H))
     {
-        sandbox3d_print_help();
+        sandbox3d_print_help(state);
+    }
+
+    if (henka_input_was_key_pressed(engine, HENKA_KEY_F2))
+    {
+        sandbox3d_print_scene_legend(state);
+        fflush(stdout);
     }
 
     if (henka_input_was_key_pressed(engine, HENKA_KEY_F1))
@@ -376,11 +431,26 @@ static void sandbox3d_update(henka_engine* engine, double delta_seconds, void* u
         fflush(stdout);
     }
 
-    if (henka_input_was_key_pressed(engine, HENKA_KEY_TAB) ||
-        henka_input_was_mouse_button_pressed(engine, HENKA_MOUSE_BUTTON_RIGHT))
+    if (henka_input_was_key_pressed(engine, HENKA_KEY_F3))
+    {
+        bool visible;
+
+        visible = henka_scene_is_entity_visible(state->scene, state->grid_entity);
+        henka_scene_set_entity_visible(state->scene, state->grid_entity, !visible);
+        printf("Debug grid: %s\n", visible ? "hidden" : "shown");
+        fflush(stdout);
+    }
+
+    if (henka_input_was_key_pressed(engine, HENKA_KEY_TAB))
     {
         henka_engine_set_mouse_capture(engine, !henka_engine_is_mouse_captured(engine));
-        sandbox3d_print_capture_state(engine);
+        sandbox3d_print_capture_state(engine, "Tab");
+    }
+
+    if (henka_input_was_mouse_button_pressed(engine, HENKA_MOUSE_BUTTON_RIGHT))
+    {
+        henka_engine_set_mouse_capture(engine, !henka_engine_is_mouse_captured(engine));
+        sandbox3d_print_capture_state(engine, "Right Mouse");
     }
 
     if (henka_engine_get_framebuffer_size(engine, &framebuffer_width, &framebuffer_height) == HENKA_SUCCESS && framebuffer_height > 0)
@@ -401,13 +471,13 @@ static void sandbox3d_update(henka_engine* engine, double delta_seconds, void* u
     henka_scene_set_camera(state->scene, &state->camera);
 
     cube_transform = henka_transform_identity();
-    cube_transform.position = (henka_vec3){0.0f, 0.5f, 0.0f};
+    cube_transform.position = g_textured_cube_position;
     cube_transform.rotation = henka_quat_from_euler(0.0f, (float)henka_engine_get_total_time(engine), 0.0f);
     henka_scene_set_entity_transform(state->scene, state->cube_entity, cube_transform);
 
     cube_transform = henka_transform_identity();
-    cube_transform.position = (henka_vec3){-3.1f, 0.0f, -1.8f};
-    cube_transform.scale = (henka_vec3){1.2f, 1.2f, 1.2f};
+    cube_transform.position = g_marker_position;
+    cube_transform.scale = (henka_vec3){1.35f, 1.35f, 1.35f};
     cube_transform.rotation = henka_quat_from_euler(0.0f, (float)henka_engine_get_total_time(engine) * 0.5f, 0.0f);
     henka_scene_set_entity_transform(state->scene, state->marker_entity, cube_transform);
 }

@@ -31,8 +31,12 @@ void henka_test_scene(void)
     HENKA_TEST_ASSERT(henka_scene_set_entity_transform(scene, first, transform) == HENKA_SUCCESS);
     HENKA_TEST_ASSERT(henka_scene_set_entity_visible(scene, first, false) == HENKA_SUCCESS);
     HENKA_TEST_ASSERT(!henka_scene_is_entity_visible(scene, first));
+    HENKA_TEST_ASSERT(henka_scene_set_entity_visible(scene, first, true) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_scene_is_entity_visible(scene, first));
     HENKA_TEST_ASSERT(henka_scene_set_entity_name(scene, second, "Marker") == HENKA_SUCCESS);
     HENKA_TEST_ASSERT(strcmp(henka_scene_get_entity_name(scene, second), "Marker") == 0);
+    HENKA_TEST_ASSERT(henka_scene_set_entity_name(scene, second, NULL) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_scene_get_entity_name(scene, second) == NULL);
 
     henka_scene_destroy_entity(scene, first);
     HENKA_TEST_ASSERT(!henka_scene_is_entity_valid(scene, first));
