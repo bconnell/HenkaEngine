@@ -48,3 +48,7 @@ Desktop.ini
 # Local environment files
 .env
 .env.*
+
+# Keep public sample model assets tracked.
+!assets/models/
+!assets/models/*.obj

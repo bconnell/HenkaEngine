@@ -14,6 +14,7 @@ Henka Engine is currently focused on a clean visible 3D foundation:
 - mesh and shader-backed draw path
 - texture and material foundation
 - asset manager foundation
+- early OBJ model loading
 - minimal scene and camera flow
 - sandbox startup and movement
 
@@ -22,7 +23,7 @@ Henka Engine is currently focused on a clean visible 3D foundation:
 The next likely layers are:
 
 - safer camera controls
-- model loading
+- broader model loading beyond the current OBJ subset
 - richer material support
 - stronger asset management
 - scene growth beyond the current lightweight entity model

@@ -48,5 +48,6 @@ The sandbox runtime assets live under:
 
 - `assets/shaders/`
 - `assets/textures/`
+- `assets/models/`
 
 CMake copies the `assets/` directory next to the sandbox executable after build.

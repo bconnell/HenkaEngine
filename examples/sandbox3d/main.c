@@ -9,6 +9,8 @@ typedef struct sandbox3d_state
     henka_mesh* cube_mesh;
     henka_mesh* ground_mesh;
     henka_mesh* grid_mesh;
+    henka_mesh* marker_mesh;
+    henka_mesh* missing_model_mesh;
     henka_shader* basic_shader;
     henka_shader* grid_shader;
     henka_texture* cube_texture;
@@ -19,6 +21,8 @@ typedef struct sandbox3d_state
     henka_entity grid_entity;
     henka_entity colored_cube_entity;
     henka_entity fallback_cube_entity;
+    henka_entity marker_entity;
+    henka_entity fallback_model_entity;
 } sandbox3d_state;
 
 static const float g_mouse_look_sensitivity = 0.0025f;
@@ -38,13 +42,15 @@ static void sandbox3d_release_owned_resources(sandbox3d_state* state)
     state->grid_mesh = NULL;
     state->ground_mesh = NULL;
     state->cube_mesh = NULL;
+    state->marker_mesh = NULL;
+    state->missing_model_mesh = NULL;
     state->scene = NULL;
 }
 
 static void sandbox3d_print_help(void)
 {
     printf("Henka Engine Sandbox 3D\n");
-    printf("This scene shows a textured cube, a textured ground plane, a colored cube, and a fallback-texture example beside the debug grid.\n");
+    printf("This scene shows a textured cube, a textured ground plane, a colored cube, a loaded OBJ marker, and visible fallback examples for missing texture and missing model assets.\n");
     printf("Controls:\n");
     printf("  W A S D          Move across the scene\n");
     printf("  Q / E            Move down / up\n");
@@ -55,8 +61,8 @@ static void sandbox3d_print_help(void)
     printf("  H                Print this help again\n");
     printf("  Escape           Release the mouse first, then exit\n");
     printf("Current limitations:\n");
-    printf("  The sandbox uses built-in meshes and local shader and texture assets.\n");
-    printf("  Model loading, editor tools, and broader 2D or 2.5D workflows are not available yet.\n");
+    printf("  OBJ loading is an early foundation with support for simple triangle and quad faces.\n");
+    printf("  Material import, model animation, editor tools, and broader 2D or 2.5D workflows are not available yet.\n");
     printf("  Help is printed to the console because in-window text and UI rendering do not exist yet.\n");
     fflush(stdout);
 }
@@ -145,17 +151,33 @@ static henka_result sandbox3d_initialize(henka_engine* engine, void* user_data)
         goto fail;
     }
 
-    state->ground_entity = henka_scene_create_entity(state->scene);
-    state->cube_entity = henka_scene_create_entity(state->scene);
-    state->grid_entity = henka_scene_create_entity(state->scene);
-    state->colored_cube_entity = henka_scene_create_entity(state->scene);
-    state->fallback_cube_entity = henka_scene_create_entity(state->scene);
+    result = henka_assets_load_obj_mesh(assets, "assets/models/henka_marker.obj", &state->marker_mesh);
+    if (result != HENKA_SUCCESS)
+    {
+        goto fail;
+    }
+
+    result = henka_assets_load_obj_mesh(assets, "assets/models/missing_marker.obj", &state->missing_model_mesh);
+    if (result != HENKA_SUCCESS)
+    {
+        goto fail;
+    }
+
+    state->ground_entity = henka_scene_create_entity_named(state->scene, "Ground");
+    state->cube_entity = henka_scene_create_entity_named(state->scene, "Textured Cube");
+    state->grid_entity = henka_scene_create_entity_named(state->scene, "Debug Grid");
+    state->colored_cube_entity = henka_scene_create_entity_named(state->scene, "Colored Cube");
+    state->fallback_cube_entity = henka_scene_create_entity_named(state->scene, "Missing Texture");
+    state->marker_entity = henka_scene_create_entity_named(state->scene, "OBJ Marker");
+    state->fallback_model_entity = henka_scene_create_entity_named(state->scene, "Missing Model");
 
     if (state->ground_entity == HENKA_INVALID_ENTITY ||
         state->cube_entity == HENKA_INVALID_ENTITY ||
         state->grid_entity == HENKA_INVALID_ENTITY ||
         state->colored_cube_entity == HENKA_INVALID_ENTITY ||
-        state->fallback_cube_entity == HENKA_INVALID_ENTITY)
+        state->fallback_cube_entity == HENKA_INVALID_ENTITY ||
+        state->marker_entity == HENKA_INVALID_ENTITY ||
+        state->fallback_model_entity == HENKA_INVALID_ENTITY)
     {
         result = HENKA_ERROR_OUT_OF_MEMORY;
         goto fail;
@@ -213,6 +235,20 @@ static henka_result sandbox3d_initialize(henka_engine* engine, void* user_data)
     henka_scene_set_entity_transform(state->scene, state->fallback_cube_entity, transform);
     henka_scene_set_entity_mesh(state->scene, state->fallback_cube_entity, state->cube_mesh);
     henka_scene_set_entity_material(state->scene, state->fallback_cube_entity, fallback_material);
+
+    transform = henka_transform_identity();
+    transform.position = (henka_vec3){-3.1f, 0.0f, -1.8f};
+    transform.scale = (henka_vec3){1.2f, 1.2f, 1.2f};
+    henka_scene_set_entity_transform(state->scene, state->marker_entity, transform);
+    henka_scene_set_entity_mesh(state->scene, state->marker_entity, state->marker_mesh);
+    henka_scene_set_entity_material(state->scene, state->marker_entity, cube_material);
+
+    transform = henka_transform_identity();
+    transform.position = (henka_vec3){3.6f, 0.5f, 2.0f};
+    transform.scale = (henka_vec3){0.8f, 0.8f, 0.8f};
+    henka_scene_set_entity_transform(state->scene, state->fallback_model_entity, transform);
+    henka_scene_set_entity_mesh(state->scene, state->fallback_model_entity, state->missing_model_mesh);
+    henka_scene_set_entity_material(state->scene, state->fallback_model_entity, colored_material);
 
     transform = henka_transform_identity();
     henka_scene_set_entity_transform(state->scene, state->grid_entity, transform);
@@ -315,6 +351,12 @@ static void sandbox3d_update(henka_engine* engine, double delta_seconds, void* u
     cube_transform.position = (henka_vec3){0.0f, 0.5f, 0.0f};
     cube_transform.rotation = henka_quat_from_euler(0.0f, (float)henka_engine_get_total_time(engine), 0.0f);
     henka_scene_set_entity_transform(state->scene, state->cube_entity, cube_transform);
+
+    cube_transform = henka_transform_identity();
+    cube_transform.position = (henka_vec3){-3.1f, 0.0f, -1.8f};
+    cube_transform.scale = (henka_vec3){1.2f, 1.2f, 1.2f};
+    cube_transform.rotation = henka_quat_from_euler(0.0f, (float)henka_engine_get_total_time(engine) * 0.5f, 0.0f);
+    henka_scene_set_entity_transform(state->scene, state->marker_entity, cube_transform);
 }
 
 static void sandbox3d_shutdown(henka_engine* engine, void* user_data)
@@ -339,6 +381,8 @@ int main(void)
     state.cube_mesh = NULL;
     state.ground_mesh = NULL;
     state.grid_mesh = NULL;
+    state.marker_mesh = NULL;
+    state.missing_model_mesh = NULL;
     state.basic_shader = NULL;
     state.grid_shader = NULL;
     state.cube_texture = NULL;
@@ -349,6 +393,8 @@ int main(void)
     state.grid_entity = HENKA_INVALID_ENTITY;
     state.colored_cube_entity = HENKA_INVALID_ENTITY;
     state.fallback_cube_entity = HENKA_INVALID_ENTITY;
+    state.marker_entity = HENKA_INVALID_ENTITY;
+    state.fallback_model_entity = HENKA_INVALID_ENTITY;
 
     config.application_name = "Henka Engine Sandbox 3D";
     config.window_width = 1280;

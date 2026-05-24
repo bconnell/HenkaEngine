@@ -7,6 +7,7 @@ int main(void)
     henka_test_camera();
     henka_test_math();
     henka_test_material();
+    henka_test_model();
     henka_test_result();
     henka_test_memory();
     henka_test_scene();

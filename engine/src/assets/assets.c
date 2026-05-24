@@ -60,6 +60,23 @@ static henka_result henka_asset_manager_grow_textures(henka_asset_manager* manag
     return HENKA_SUCCESS;
 }
 
+static henka_result henka_asset_manager_grow_meshes(henka_asset_manager* manager)
+{
+    henka_asset_mesh_entry* entries;
+    size_t new_capacity;
+
+    new_capacity = manager->mesh_capacity == 0U ? 8U : manager->mesh_capacity * 2U;
+    entries = henka_realloc(manager->mesh_entries, new_capacity * sizeof(*entries));
+    if (entries == NULL)
+    {
+        return HENKA_ERROR_OUT_OF_MEMORY;
+    }
+
+    manager->mesh_entries = entries;
+    manager->mesh_capacity = new_capacity;
+    return HENKA_SUCCESS;
+}
+
 static henka_shader* henka_asset_manager_find_shader(henka_asset_manager* manager, const char* key)
 {
     size_t index;
@@ -84,6 +101,21 @@ static henka_texture* henka_asset_manager_find_texture(henka_asset_manager* mana
         if (strcmp(manager->texture_entries[index].key, key) == 0)
         {
             return manager->texture_entries[index].texture;
+        }
+    }
+
+    return NULL;
+}
+
+static henka_mesh* henka_asset_manager_find_mesh(henka_asset_manager* manager, const char* key)
+{
+    size_t index;
+
+    for (index = 0U; index < manager->mesh_count; ++index)
+    {
+        if (strcmp(manager->mesh_entries[index].key, key) == 0)
+        {
+            return manager->mesh_entries[index].mesh;
         }
     }
 
@@ -120,6 +152,11 @@ static henka_result henka_asset_manager_create_fallback_textures(henka_asset_man
     return HENKA_SUCCESS;
 }
 
+static henka_result henka_asset_manager_create_fallback_mesh(henka_asset_manager* manager)
+{
+    return henka_mesh_create_cube(manager->engine, &manager->fallback_mesh);
+}
+
 henka_result henka_asset_manager_create(struct henka_engine* engine, struct henka_asset_manager** out_manager)
 {
     henka_asset_manager* manager;
@@ -143,6 +180,15 @@ henka_result henka_asset_manager_create(struct henka_engine* engine, struct henk
     result = henka_asset_manager_create_fallback_textures(manager);
     if (result != HENKA_SUCCESS)
     {
+        henka_free(manager);
+        return result;
+    }
+
+    result = henka_asset_manager_create_fallback_mesh(manager);
+    if (result != HENKA_SUCCESS)
+    {
+        henka_texture_destroy(manager->error_texture);
+        henka_texture_destroy(manager->white_texture);
         henka_free(manager);
         return result;
     }
@@ -172,8 +218,16 @@ void henka_asset_manager_destroy(struct henka_asset_manager* manager)
         henka_free(manager->texture_entries[index].key);
     }
 
+    for (index = 0U; index < manager->mesh_count; ++index)
+    {
+        henka_mesh_destroy(manager->mesh_entries[index].mesh);
+        henka_free(manager->mesh_entries[index].key);
+    }
+
     henka_free(manager->shader_entries);
     henka_free(manager->texture_entries);
+    henka_free(manager->mesh_entries);
+    henka_mesh_destroy(manager->fallback_mesh);
     henka_texture_destroy(manager->white_texture);
     henka_texture_destroy(manager->error_texture);
     henka_free(manager);
@@ -289,6 +343,56 @@ henka_result henka_assets_load_texture(henka_asset_manager* manager, const char*
     return HENKA_SUCCESS;
 }
 
+henka_result henka_assets_load_obj_mesh(henka_asset_manager* manager, const char* path, henka_mesh** out_mesh)
+{
+    char* key;
+    henka_mesh* mesh;
+    henka_result result;
+
+    if (manager == NULL || path == NULL || out_mesh == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    mesh = henka_asset_manager_find_mesh(manager, path);
+    if (mesh != NULL)
+    {
+        *out_mesh = mesh;
+        return HENKA_SUCCESS;
+    }
+
+    result = henka_mesh_create_from_obj(manager->engine, path, &mesh);
+    if (result != HENKA_SUCCESS)
+    {
+        HENKA_LOG_ERROR("Using the fallback mesh because '%s' could not be loaded", path);
+        *out_mesh = manager->fallback_mesh;
+        return HENKA_SUCCESS;
+    }
+
+    if (manager->mesh_count == manager->mesh_capacity)
+    {
+        result = henka_asset_manager_grow_meshes(manager);
+        if (result != HENKA_SUCCESS)
+        {
+            henka_mesh_destroy(mesh);
+            return result;
+        }
+    }
+
+    key = henka_duplicate_string(path);
+    if (key == NULL)
+    {
+        henka_mesh_destroy(mesh);
+        return HENKA_ERROR_OUT_OF_MEMORY;
+    }
+
+    manager->mesh_entries[manager->mesh_count].key = key;
+    manager->mesh_entries[manager->mesh_count].mesh = mesh;
+    manager->mesh_count += 1U;
+    *out_mesh = mesh;
+    return HENKA_SUCCESS;
+}
+
 henka_texture* henka_assets_get_white_texture(henka_asset_manager* manager)
 {
     if (manager == NULL)
@@ -307,4 +411,14 @@ henka_texture* henka_assets_get_error_texture(henka_asset_manager* manager)
     }
 
     return manager->error_texture;
+}
+
+henka_mesh* henka_assets_get_fallback_mesh(henka_asset_manager* manager)
+{
+    if (manager == NULL)
+    {
+        return NULL;
+    }
+
+    return manager->fallback_mesh;
 }

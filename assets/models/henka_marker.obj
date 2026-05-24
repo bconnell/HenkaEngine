@@ -1,0 +1,17 @@
+# Henka Engine sample OBJ
+# This file is a simple self-authored pyramid marker used to verify early OBJ loading.
+v 0.0 0.9 0.0
+v -0.45 0.0 -0.45
+v 0.45 0.0 -0.45
+v 0.45 0.0 0.45
+v -0.45 0.0 0.45
+vt 0.5 1.0
+vt 0.0 0.0
+vt 1.0 0.0
+vt 1.0 1.0
+vt 0.0 1.0
+f 1/1 2/2 3/3
+f 1/1 3/2 4/3
+f 1/1 4/2 5/3
+f 1/1 5/2 2/3
+f 2/5 5/2 4/3 3/4

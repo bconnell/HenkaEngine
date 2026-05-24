@@ -1,5 +1,7 @@
 #include "henka_internal.h"
 
+#include <string.h>
+
 #include <henka/memory.h>
 
 henka_material henka_material_default(void)
@@ -37,6 +39,27 @@ static henka_scene_entity_record* henka_scene_get_entity_record(henka_scene* sce
     return &scene->entities[index];
 }
 
+static char* henka_scene_duplicate_string(const char* value)
+{
+    char* copy;
+    size_t length;
+
+    if (value == NULL)
+    {
+        return NULL;
+    }
+
+    length = strlen(value);
+    copy = henka_malloc(length + 1U);
+    if (copy == NULL)
+    {
+        return NULL;
+    }
+
+    memcpy(copy, value, length + 1U);
+    return copy;
+}
+
 static const henka_scene_entity_record* henka_scene_get_entity_record_const(const henka_scene* scene, henka_entity entity)
 {
     return henka_scene_get_entity_record((henka_scene*)scene, entity);
@@ -58,6 +81,8 @@ static henka_result henka_scene_grow(henka_scene* scene)
     for (index = scene->entity_capacity; index < new_capacity; ++index)
     {
         new_entities[index].active = false;
+        new_entities[index].visible = true;
+        new_entities[index].name = NULL;
         new_entities[index].transform = henka_transform_identity();
         new_entities[index].mesh = NULL;
         new_entities[index].material = henka_material_default();
@@ -98,9 +123,16 @@ henka_result henka_scene_create(henka_scene** out_scene)
 
 void henka_scene_destroy(henka_scene* scene)
 {
+    size_t index;
+
     if (scene == NULL)
     {
         return;
+    }
+
+    for (index = 0U; index < scene->entity_capacity; ++index)
+    {
+        henka_free(scene->entities[index].name);
     }
 
     henka_free(scene->entities);
@@ -109,7 +141,13 @@ void henka_scene_destroy(henka_scene* scene)
 
 henka_entity henka_scene_create_entity(henka_scene* scene)
 {
+    return henka_scene_create_entity_named(scene, NULL);
+}
+
+henka_entity henka_scene_create_entity_named(henka_scene* scene, const char* name)
+{
     size_t index;
+    char* copy;
 
     if (scene == NULL)
     {
@@ -121,7 +159,24 @@ henka_entity henka_scene_create_entity(henka_scene* scene)
         if (!scene->entities[index].active)
         {
             scene->entities[index].active = true;
+            scene->entities[index].visible = true;
             scene->entities[index].transform = henka_transform_identity();
+            scene->entities[index].mesh = NULL;
+            scene->entities[index].material = henka_material_default();
+            henka_free(scene->entities[index].name);
+            scene->entities[index].name = NULL;
+
+            if (name != NULL)
+            {
+                copy = henka_scene_duplicate_string(name);
+                if (copy == NULL)
+                {
+                    scene->entities[index].active = false;
+                    return HENKA_INVALID_ENTITY;
+                }
+
+                scene->entities[index].name = copy;
+            }
             scene->entity_count += 1U;
             return (henka_entity)(index + 1U);
         }
@@ -133,7 +188,19 @@ henka_entity henka_scene_create_entity(henka_scene* scene)
     }
 
     scene->entities[scene->entity_count].active = true;
+    scene->entities[scene->entity_count].visible = true;
     scene->entities[scene->entity_count].transform = henka_transform_identity();
+    if (name != NULL)
+    {
+        copy = henka_scene_duplicate_string(name);
+        if (copy == NULL)
+        {
+            scene->entities[scene->entity_count].active = false;
+            return HENKA_INVALID_ENTITY;
+        }
+
+        scene->entities[scene->entity_count].name = copy;
+    }
     scene->entity_count += 1U;
     return (henka_entity)scene->entity_count;
 }
@@ -149,8 +216,11 @@ void henka_scene_destroy_entity(henka_scene* scene, henka_entity entity)
     }
 
     record->active = false;
+    record->visible = true;
     record->mesh = NULL;
-    record->material.shader = NULL;
+    record->material = henka_material_default();
+    henka_free(record->name);
+    record->name = NULL;
     if (scene->entity_count > 0U)
     {
         scene->entity_count -= 1U;
@@ -162,6 +232,14 @@ bool henka_scene_is_entity_valid(const henka_scene* scene, henka_entity entity)
     return henka_scene_get_entity_record_const(scene, entity) != NULL;
 }
 
+bool henka_scene_is_entity_visible(const henka_scene* scene, henka_entity entity)
+{
+    const henka_scene_entity_record* record;
+
+    record = henka_scene_get_entity_record_const(scene, entity);
+    return record != NULL ? record->visible : false;
+}
+
 size_t henka_scene_get_entity_count(const henka_scene* scene)
 {
     if (scene == NULL)
@@ -170,6 +248,19 @@ size_t henka_scene_get_entity_count(const henka_scene* scene)
     }
 
     return scene->entity_count;
+}
+
+const char* henka_scene_get_entity_name(const henka_scene* scene, henka_entity entity)
+{
+    const henka_scene_entity_record* record;
+
+    record = henka_scene_get_entity_record_const(scene, entity);
+    if (record == NULL)
+    {
+        return NULL;
+    }
+
+    return record->name;
 }
 
 henka_result henka_scene_set_entity_transform(henka_scene* scene, henka_entity entity, henka_transform transform)
@@ -211,6 +302,46 @@ henka_result henka_scene_set_entity_material(henka_scene* scene, henka_entity en
     }
 
     record->material = material;
+    return HENKA_SUCCESS;
+}
+
+henka_result henka_scene_set_entity_name(henka_scene* scene, henka_entity entity, const char* name)
+{
+    char* copy;
+    henka_scene_entity_record* record;
+
+    record = henka_scene_get_entity_record(scene, entity);
+    if (record == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    copy = NULL;
+    if (name != NULL)
+    {
+        copy = henka_scene_duplicate_string(name);
+        if (copy == NULL)
+        {
+            return HENKA_ERROR_OUT_OF_MEMORY;
+        }
+    }
+
+    henka_free(record->name);
+    record->name = copy;
+    return HENKA_SUCCESS;
+}
+
+henka_result henka_scene_set_entity_visible(henka_scene* scene, henka_entity entity, bool visible)
+{
+    henka_scene_entity_record* record;
+
+    record = henka_scene_get_entity_record(scene, entity);
+    if (record == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    record->visible = visible;
     return HENKA_SUCCESS;
 }
 

@@ -69,7 +69,7 @@ The current camera module provides a perspective camera, simple fly movement, an
 
 ### Assets
 
-The current asset layer is intentionally modest. It loads and caches shaders and textures by path, owns fallback textures, and keeps asset lifetime tied to the engine runtime.
+The current asset layer is intentionally modest. It loads and caches shaders, textures, and OBJ meshes by path, owns fallback textures and a fallback mesh, and keeps asset lifetime tied to the engine runtime.
 
 ### Scene
 
@@ -80,6 +80,7 @@ The scene layer is intentionally minimal. It is not a full ECS. Right now it pro
 - per-entity transform, mesh, and material assignment
 - one active scene camera
 - one directional light direction and ambient color
+- per-object visibility and debug labels
 
 ### Renderer
 
@@ -113,8 +114,7 @@ The sandbox is a consumer of the public API only. It creates a scene, shaders, t
 The next steps should continue building upward from these boundaries:
 
 - safer camera orientation controls
-- texture loading
-- richer material data
-- model loading
+- broader material import
+- broader model loading beyond the current OBJ subset
 - stronger asset management
 - early 2.5D-friendly camera and layering rules after the shared runtime is steadier

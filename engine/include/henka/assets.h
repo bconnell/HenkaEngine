@@ -5,6 +5,7 @@
 
 typedef struct henka_asset_manager henka_asset_manager;
 typedef struct henka_engine henka_engine;
+typedef struct henka_mesh henka_mesh;
 typedef struct henka_shader henka_shader;
 typedef struct henka_texture henka_texture;
 
@@ -16,7 +17,9 @@ henka_result henka_assets_load_shader(
     const char* fragment_path,
     henka_shader** out_shader);
 henka_result henka_assets_load_texture(henka_asset_manager* manager, const char* path, henka_texture** out_texture);
+henka_result henka_assets_load_obj_mesh(henka_asset_manager* manager, const char* path, henka_mesh** out_mesh);
 henka_texture* henka_assets_get_white_texture(henka_asset_manager* manager);
 henka_texture* henka_assets_get_error_texture(henka_asset_manager* manager);
+henka_mesh* henka_assets_get_fallback_mesh(henka_asset_manager* manager);
 
 #endif

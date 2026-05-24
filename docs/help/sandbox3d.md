@@ -5,8 +5,10 @@
 - a textured cube
 - a textured ground plane
 - a colored cube
+- a loaded OBJ marker
 - a debug grid
 - a fallback-texture example that stays visible when a texture file is missing
+- a fallback-model example that stays visible when an OBJ file is missing
 
 ## Controls
 
@@ -23,13 +25,15 @@
 ## What to try
 
 - Walk around the cube and the grid.
+- Walk around the OBJ marker to confirm model loading is active.
 - Toggle wireframe to inspect the scene layout.
 - Toggle mouse capture and use the mouse to look around.
 - Find the fallback-texture example to confirm that missing textures fail visibly without stopping the engine.
+- Find the fallback-model example to confirm that missing OBJ assets fail visibly without stopping the engine.
 
 ## Current limitations
 
-- The sandbox uses built-in meshes and local shader and texture assets only.
-- There is no model loading yet.
+- The sandbox uses built-in meshes plus a small early OBJ loading path.
+- OBJ support is intentionally limited to simple geometry and does not include imported materials or animation.
 - Help is printed to the console because in-window text and UI rendering do not exist yet.
 - Editor tools, asset browser UI, and broader 2D or 2.5D workflows are not available yet.

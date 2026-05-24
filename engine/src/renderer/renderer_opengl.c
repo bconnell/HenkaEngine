@@ -416,7 +416,7 @@ henka_result henka_opengl_renderer_draw_scene(struct henka_renderer* renderer, c
         henka_mat4 model;
 
         entity = &scene->entities[index];
-        if (!entity->active || entity->mesh == NULL || entity->material.shader == NULL)
+        if (!entity->active || !entity->visible || entity->mesh == NULL || entity->material.shader == NULL)
         {
             continue;
         }

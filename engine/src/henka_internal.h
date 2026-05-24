@@ -60,6 +60,8 @@ typedef struct henka_platform_frame_state
 typedef struct henka_scene_entity_record
 {
     bool active;
+    bool visible;
+    char* name;
     henka_transform transform;
     henka_mesh* mesh;
     henka_material material;
@@ -77,6 +79,12 @@ typedef struct henka_asset_texture_entry
     henka_texture* texture;
 } henka_asset_texture_entry;
 
+typedef struct henka_asset_mesh_entry
+{
+    char* key;
+    henka_mesh* mesh;
+} henka_asset_mesh_entry;
+
 struct henka_asset_manager
 {
     struct henka_engine* engine;
@@ -86,8 +94,12 @@ struct henka_asset_manager
     henka_asset_texture_entry* texture_entries;
     size_t texture_count;
     size_t texture_capacity;
+    henka_asset_mesh_entry* mesh_entries;
+    size_t mesh_count;
+    size_t mesh_capacity;
     henka_texture* white_texture;
     henka_texture* error_texture;
+    henka_mesh* fallback_mesh;
 };
 
 struct henka_scene

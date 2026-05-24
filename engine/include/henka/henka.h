@@ -10,6 +10,7 @@
 #include <henka/math.h>
 #include <henka/memory.h>
 #include <henka/mesh.h>
+#include <henka/model.h>
 #include <henka/platform.h>
 #include <henka/renderer.h>
 #include <henka/result.h>

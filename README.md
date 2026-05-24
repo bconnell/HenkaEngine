@@ -16,15 +16,15 @@ Henka Engine is still early, but the sandbox now renders a visible 3D scene with
 - OpenGL renderer backend isolated inside renderer implementation files
 - Public math, time, camera, mesh, texture, shader, scene, and asset APIs
 - Asset manager foundation for cached shader and texture loading
+- Early OBJ model loading with cached mesh assets
 - Fallback white and error textures
 - Shader-based rendering of built-in primitives
 - Sandbox window titled `Henka Engine Sandbox 3D`
-- Ground plane, cube, debug grid, textured materials, and visible fallback-texture behavior
+- Ground plane, cubes, debug grid, a loaded OBJ marker, textured materials, and visible fallback behavior for missing texture and model assets
 - Keyboard movement, mouse look when capture is active, wireframe toggle, and offline runtime help
 
 ### What does not exist yet
 
-- Model loading
 - Editor UI
 - Drag and drop workflows
 - Asset browser UI
@@ -38,7 +38,7 @@ Henka Engine is still early, but the sandbox now renders a visible 3D scene with
 ## Repository layout
 
 ```text
-assets/              Runtime shader and texture assets
+assets/              Runtime shader, texture, and model assets
 engine/              Core library and public headers
 examples/sandbox3d/  Visible 3D sandbox application
 tests/               Headless unit tests
@@ -68,8 +68,10 @@ The sandbox starts a visible 3D scene with:
 - a textured cube
 - a textured ground plane
 - a colored cube
+- a loaded OBJ marker
 - a debug grid
 - a fallback-texture example for missing texture loads
+- a fallback-model example for missing OBJ loads
 
 ### Sandbox controls
 
@@ -83,6 +85,7 @@ The sandbox starts a visible 3D scene with:
 - `Escape`: release the mouse first, then exit
 
 Offline help is also available in [docs/help/sandbox3d.md](docs/help/sandbox3d.md).
+Model loading notes are documented in [docs/model-loading.md](docs/model-loading.md).
 
 ## Run tests
 
@@ -92,8 +95,9 @@ Offline help is also available in [docs/help/sandbox3d.md](docs/help/sandbox3d.m
 
 ## Current limitations
 
-- The sandbox uses built-in meshes and local shader and texture assets.
-- Missing textures fall back safely to an error texture, but there is no broader content pipeline yet.
+- The sandbox uses built-in primitives plus a small early OBJ loading path.
+- Missing textures fall back safely to an error texture, and missing OBJ assets fall back to a visible mesh.
+- OBJ support is intentionally limited and does not include MTL import or animation.
 - There is no in-window text or overlay help yet.
 - 2D and 2.5D are part of the engine direction, but those workflows are not implemented yet.
 - Visual and interaction checks still need manual QA on a local desktop session.
