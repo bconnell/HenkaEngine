@@ -45,6 +45,8 @@ typedef struct henka_opengl_functions
     PFNGLVERTEXATTRIBPOINTERPROC VertexAttribPointer;
     PFNGLDELETEBUFFERSPROC DeleteBuffers;
     PFNGLDELETEVERTEXARRAYSPROC DeleteVertexArrays;
+    PFNGLACTIVETEXTUREPROC ActiveTexture;
+    PFNGLGENERATEMIPMAPPROC GenerateMipmap;
 } henka_opengl_functions;
 
 typedef struct henka_opengl_mesh_data
@@ -60,6 +62,11 @@ typedef struct henka_opengl_shader_data
 {
     GLuint program;
 } henka_opengl_shader_data;
+
+typedef struct henka_opengl_texture_data
+{
+    GLuint texture_id;
+} henka_opengl_texture_data;
 
 static henka_opengl_functions g_gl;
 
@@ -85,7 +92,7 @@ static bool henka_opengl_load_functions(void)
 #define HENKA_GL_LOAD(name)                                                                 \
     do                                                                                      \
     {                                                                                       \
-        void* proc_address;                                                                 \
+        SDL_FunctionPointer proc_address;                                                   \
         proc_address = SDL_GL_GetProcAddress("gl" #name);                                   \
         if (proc_address == NULL)                                                           \
         {                                                                                   \
@@ -122,6 +129,8 @@ static bool henka_opengl_load_functions(void)
     HENKA_GL_LOAD(VertexAttribPointer);
     HENKA_GL_LOAD(DeleteBuffers);
     HENKA_GL_LOAD(DeleteVertexArrays);
+    HENKA_GL_LOAD(ActiveTexture);
+    HENKA_GL_LOAD(GenerateMipmap);
 
 #undef HENKA_GL_LOAD
     return true;
@@ -245,6 +254,17 @@ static void henka_set_uniform_bool(GLuint program, const char* name, bool value)
     if (location >= 0)
     {
         g_gl.Uniform1i(location, value ? 1 : 0);
+    }
+}
+
+static void henka_set_uniform_int(GLuint program, const char* name, int value)
+{
+    GLint location;
+
+    location = g_gl.GetUniformLocation(program, name);
+    if (location >= 0)
+    {
+        g_gl.Uniform1i(location, value);
     }
 }
 
@@ -392,6 +412,7 @@ henka_result henka_opengl_renderer_draw_scene(struct henka_renderer* renderer, c
         const henka_scene_entity_record* entity;
         const henka_opengl_mesh_data* mesh_data;
         const henka_opengl_shader_data* shader_data;
+        const henka_opengl_texture_data* texture_data;
         henka_mat4 model;
 
         entity = &scene->entities[index];
@@ -416,13 +437,26 @@ henka_result henka_opengl_renderer_draw_scene(struct henka_renderer* renderer, c
         henka_set_uniform_vec4(shader_data->program, "baseColor", entity->material.base_color);
         henka_set_uniform_vec3(shader_data->program, "lightDirection", scene->light_direction);
         henka_set_uniform_vec3(shader_data->program, "ambientColor", scene->ambient_color);
+        henka_set_uniform_bool(shader_data->program, "useTexture", entity->material.use_texture && entity->material.base_color_texture != NULL);
         henka_set_uniform_bool(shader_data->program, "useLighting", entity->material.use_lighting);
+        henka_set_uniform_int(shader_data->program, "baseColorTexture", 0);
+
+        if (entity->material.base_color_texture != NULL)
+        {
+            texture_data = (const henka_opengl_texture_data*)entity->material.base_color_texture->backend_data;
+            if (texture_data != NULL)
+            {
+                g_gl.ActiveTexture(GL_TEXTURE0);
+                glBindTexture(GL_TEXTURE_2D, texture_data->texture_id);
+            }
+        }
 
         g_gl.BindVertexArray(mesh_data->vao);
         glDrawElements(mesh_data->primitive_mode, mesh_data->index_count, GL_UNSIGNED_INT, 0);
     }
 
     g_gl.BindVertexArray(0);
+    glBindTexture(GL_TEXTURE_2D, 0);
     g_gl.UseProgram(0);
     return HENKA_SUCCESS;
 }
@@ -634,4 +668,65 @@ void henka_opengl_renderer_destroy_shader(struct henka_shader* shader)
     g_gl.DeleteProgram(shader_data->program);
     henka_free(shader_data);
     henka_free(shader);
+}
+
+henka_result henka_opengl_renderer_create_texture_from_rgba8(
+    struct henka_renderer* renderer,
+    int width,
+    int height,
+    const unsigned char* pixels,
+    struct henka_texture** out_texture)
+{
+    henka_texture* texture;
+    henka_opengl_texture_data* texture_data;
+
+    if (renderer == NULL || pixels == NULL || out_texture == NULL || width <= 0 || height <= 0)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    *out_texture = NULL;
+
+    texture = henka_calloc(1U, sizeof(*texture));
+    texture_data = henka_calloc(1U, sizeof(*texture_data));
+    if (texture == NULL || texture_data == NULL)
+    {
+        henka_free(texture_data);
+        henka_free(texture);
+        return HENKA_ERROR_OUT_OF_MEMORY;
+    }
+
+    glGenTextures(1, &texture_data->texture_id);
+    g_gl.ActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, texture_data->texture_id);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, pixels);
+    g_gl.GenerateMipmap(GL_TEXTURE_2D);
+    glBindTexture(GL_TEXTURE_2D, 0);
+
+    texture->renderer = renderer;
+    texture->backend_data = texture_data;
+    texture->width = width;
+    texture->height = height;
+
+    *out_texture = texture;
+    return HENKA_SUCCESS;
+}
+
+void henka_opengl_renderer_destroy_texture(struct henka_texture* texture)
+{
+    henka_opengl_texture_data* texture_data;
+
+    if (texture == NULL || texture->backend_data == NULL)
+    {
+        return;
+    }
+
+    texture_data = (henka_opengl_texture_data*)texture->backend_data;
+    glDeleteTextures(1, &texture_data->texture_id);
+    henka_free(texture_data);
+    henka_free(texture);
 }

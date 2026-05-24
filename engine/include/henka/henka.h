@@ -1,6 +1,7 @@
 #ifndef HENKA_H
 #define HENKA_H
 
+#include <henka/assets.h>
 #include <henka/camera.h>
 #include <henka/core.h>
 #include <henka/engine.h>
@@ -15,5 +16,6 @@
 #include <henka/scene.h>
 #include <henka/shader.h>
 #include <henka/time.h>
+#include <henka/texture.h>
 
 #endif

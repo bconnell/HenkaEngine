@@ -4,6 +4,7 @@
 #include <stdbool.h>
 #include <stddef.h>
 
+#include <henka/assets.h>
 #include <henka/camera.h>
 #include <henka/engine.h>
 #include <henka/input.h>
@@ -14,6 +15,7 @@
 #include <henka/result.h>
 #include <henka/scene.h>
 #include <henka/shader.h>
+#include <henka/texture.h>
 #include <henka/time.h>
 
 typedef enum henka_mesh_primitive
@@ -33,6 +35,9 @@ typedef struct henka_input_state
 {
     bool keys_down[HENKA_KEY_COUNT];
     bool keys_pressed[HENKA_KEY_COUNT];
+    bool mouse_buttons_down[HENKA_MOUSE_BUTTON_COUNT];
+    bool mouse_buttons_pressed[HENKA_MOUSE_BUTTON_COUNT];
+    henka_vec2 mouse_delta;
     bool close_requested;
 } henka_input_state;
 
@@ -60,6 +65,31 @@ typedef struct henka_scene_entity_record
     henka_material material;
 } henka_scene_entity_record;
 
+typedef struct henka_asset_shader_entry
+{
+    char* key;
+    henka_shader* shader;
+} henka_asset_shader_entry;
+
+typedef struct henka_asset_texture_entry
+{
+    char* key;
+    henka_texture* texture;
+} henka_asset_texture_entry;
+
+struct henka_asset_manager
+{
+    struct henka_engine* engine;
+    henka_asset_shader_entry* shader_entries;
+    size_t shader_count;
+    size_t shader_capacity;
+    henka_asset_texture_entry* texture_entries;
+    size_t texture_count;
+    size_t texture_capacity;
+    henka_texture* white_texture;
+    henka_texture* error_texture;
+};
+
 struct henka_scene
 {
     henka_scene_entity_record* entities;
@@ -79,6 +109,7 @@ struct henka_renderer
     void* backend_state;
     bool vsync_enabled;
     bool wireframe_enabled;
+    bool mouse_captured;
     int framebuffer_width;
     int framebuffer_height;
 };
@@ -98,11 +129,20 @@ struct henka_shader
     void* backend_data;
 };
 
+struct henka_texture
+{
+    struct henka_renderer* renderer;
+    void* backend_data;
+    int width;
+    int height;
+};
+
 struct henka_engine
 {
     henka_engine_config config;
     struct henka_platform* platform;
     struct henka_renderer* renderer;
+    struct henka_asset_manager* asset_manager;
     struct henka_scene* active_scene;
     henka_input_state input;
     henka_time_state time;
@@ -115,6 +155,7 @@ void henka_platform_destroy(struct henka_platform* platform);
 henka_result henka_platform_poll_events(struct henka_platform* platform, henka_input_state* input, henka_platform_frame_state* out_state);
 henka_result henka_platform_set_vsync(struct henka_platform* platform, bool enabled);
 bool henka_platform_get_framebuffer_size(struct henka_platform* platform, int* out_width, int* out_height);
+henka_result henka_platform_set_mouse_capture(struct henka_platform* platform, bool enabled);
 
 henka_result henka_renderer_create(struct henka_platform* platform, bool enable_vsync, struct henka_renderer** out_renderer);
 void henka_renderer_destroy(struct henka_renderer* renderer);
@@ -140,6 +181,13 @@ henka_result henka_renderer_create_shader_from_files(
     const char* fragment_path,
     struct henka_shader** out_shader);
 void henka_renderer_destroy_shader(struct henka_shader* shader);
+henka_result henka_renderer_create_texture_from_rgba8(
+    struct henka_renderer* renderer,
+    int width,
+    int height,
+    const unsigned char* pixels,
+    struct henka_texture** out_texture);
+void henka_renderer_destroy_texture(struct henka_texture* texture);
 
 henka_result henka_opengl_renderer_create(struct henka_renderer* renderer, struct henka_platform* platform, bool enable_vsync);
 void henka_opengl_renderer_destroy(struct henka_renderer* renderer);
@@ -165,5 +213,15 @@ henka_result henka_opengl_renderer_create_shader_from_files(
     const char* fragment_path,
     struct henka_shader** out_shader);
 void henka_opengl_renderer_destroy_shader(struct henka_shader* shader);
+henka_result henka_opengl_renderer_create_texture_from_rgba8(
+    struct henka_renderer* renderer,
+    int width,
+    int height,
+    const unsigned char* pixels,
+    struct henka_texture** out_texture);
+void henka_opengl_renderer_destroy_texture(struct henka_texture* texture);
+
+henka_result henka_asset_manager_create(struct henka_engine* engine, struct henka_asset_manager** out_manager);
+void henka_asset_manager_destroy(struct henka_asset_manager* manager);
 
 #endif

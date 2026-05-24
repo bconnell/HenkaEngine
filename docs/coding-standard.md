@@ -12,6 +12,7 @@
 - Match create and destroy functions clearly.
 - Do not return borrowed memory without saying so.
 - Keep renderer-owned resources explicit. Meshes and shaders should have obvious lifecycle calls.
+- Make shared asset ownership obvious when an asset manager returns cached resources.
 
 ## Error handling
 
@@ -32,6 +33,13 @@
 - Application code should use Henka APIs, not raw OpenGL.
 - Keep SDL out of public headers.
 - Keep OpenGL in renderer implementation files.
+- Keep texture upload and binding behind the renderer abstraction.
+
+## User-facing text
+
+- Write runtime help, README usage text, and visible error messages for the person using the engine or sandbox.
+- Explain what is visible, what controls are available, what the user can try, and what is currently limited.
+- Keep internal implementation or workflow language out of user-facing text.
 
 ## Scope discipline
 

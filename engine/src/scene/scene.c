@@ -2,6 +2,18 @@
 
 #include <henka/memory.h>
 
+henka_material henka_material_default(void)
+{
+    henka_material material;
+
+    material.shader = NULL;
+    material.base_color_texture = NULL;
+    material.base_color = (henka_vec4){1.0f, 1.0f, 1.0f, 1.0f};
+    material.use_texture = false;
+    material.use_lighting = true;
+    return material;
+}
+
 static henka_scene_entity_record* henka_scene_get_entity_record(henka_scene* scene, henka_entity entity)
 {
     size_t index;
@@ -48,12 +60,7 @@ static henka_result henka_scene_grow(henka_scene* scene)
         new_entities[index].active = false;
         new_entities[index].transform = henka_transform_identity();
         new_entities[index].mesh = NULL;
-        new_entities[index].material.shader = NULL;
-        new_entities[index].material.base_color.x = 1.0f;
-        new_entities[index].material.base_color.y = 1.0f;
-        new_entities[index].material.base_color.z = 1.0f;
-        new_entities[index].material.base_color.w = 1.0f;
-        new_entities[index].material.use_lighting = true;
+        new_entities[index].material = henka_material_default();
     }
 
     scene->entities = new_entities;

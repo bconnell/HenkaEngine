@@ -10,11 +10,13 @@ uniform mat4 projection;
 
 out vec3 fragNormal;
 out vec3 fragWorldPosition;
+out vec2 fragUv;
 
 void main()
 {
     vec4 worldPosition = model * vec4(inPosition, 1.0);
     fragWorldPosition = worldPosition.xyz;
     fragNormal = mat3(transpose(inverse(model))) * inNormal;
+    fragUv = inUv;
     gl_Position = projection * view * worldPosition;
 }

@@ -30,12 +30,29 @@ static henka_key henka_translate_key(SDL_Keycode keycode)
             return HENKA_KEY_E;
         case SDLK_LSHIFT:
             return HENKA_KEY_LEFT_SHIFT;
+        case SDLK_TAB:
+            return HENKA_KEY_TAB;
         case SDLK_F1:
             return HENKA_KEY_F1;
         case SDLK_H:
             return HENKA_KEY_H;
         default:
             return HENKA_KEY_UNKNOWN;
+    }
+}
+
+static henka_mouse_button henka_translate_mouse_button(Uint8 button)
+{
+    switch (button)
+    {
+        case SDL_BUTTON_LEFT:
+            return HENKA_MOUSE_BUTTON_LEFT;
+        case SDL_BUTTON_RIGHT:
+            return HENKA_MOUSE_BUTTON_RIGHT;
+        case SDL_BUTTON_MIDDLE:
+            return HENKA_MOUSE_BUTTON_MIDDLE;
+        default:
+            return HENKA_MOUSE_BUTTON_UNKNOWN;
     }
 }
 
@@ -156,6 +173,36 @@ henka_result henka_platform_poll_events(struct henka_platform* platform, henka_i
                 break;
             }
 
+            case SDL_EVENT_MOUSE_MOTION:
+                input->mouse_delta.x += event.motion.xrel;
+                input->mouse_delta.y += event.motion.yrel;
+                break;
+
+            case SDL_EVENT_MOUSE_BUTTON_DOWN:
+            {
+                henka_mouse_button button;
+
+                button = henka_translate_mouse_button(event.button.button);
+                if (button != HENKA_MOUSE_BUTTON_UNKNOWN)
+                {
+                    input->mouse_buttons_down[button] = true;
+                    input->mouse_buttons_pressed[button] = true;
+                }
+                break;
+            }
+
+            case SDL_EVENT_MOUSE_BUTTON_UP:
+            {
+                henka_mouse_button button;
+
+                button = henka_translate_mouse_button(event.button.button);
+                if (button != HENKA_MOUSE_BUTTON_UNKNOWN)
+                {
+                    input->mouse_buttons_down[button] = false;
+                }
+                break;
+            }
+
             default:
                 break;
         }
@@ -190,6 +237,27 @@ bool henka_platform_get_framebuffer_size(struct henka_platform* platform, int* o
     }
 
     return SDL_GetWindowSizeInPixels(platform->window, out_width, out_height);
+}
+
+henka_result henka_platform_set_mouse_capture(struct henka_platform* platform, bool enabled)
+{
+    if (platform == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    if (!SDL_SetWindowRelativeMouseMode(platform->window, enabled))
+    {
+        HENKA_LOG_ERROR("SDL_SetWindowRelativeMouseMode failed: %s", SDL_GetError());
+        return HENKA_ERROR_PLATFORM;
+    }
+
+    if (!SDL_SetWindowMouseGrab(platform->window, enabled))
+    {
+        HENKA_LOG_WARN("SDL_SetWindowMouseGrab failed: %s", SDL_GetError());
+    }
+
+    return HENKA_SUCCESS;
 }
 
 SDL_Window* henka_platform_get_sdl_window(struct henka_platform* platform);

@@ -14,6 +14,7 @@ The core layer owns:
 - engine lifecycle
 - frame timing
 - shared math types
+- asset manager ownership
 
 ### Memory
 
@@ -32,12 +33,19 @@ The platform layer currently uses SDL3 internally. It owns:
 - framebuffer resize notifications
 - close request state
 - swap interval control
+- relative mouse capture
 
 SDL types remain outside the public Henka headers.
 
 ### Input
 
-The current input layer is still intentionally small. It tracks the key state needed for sandbox movement, help toggles, wireframe toggles, and exit handling.
+The current input layer is still intentionally small, but it now tracks the state needed for:
+
+- keyboard movement
+- mouse delta
+- mouse button toggles
+- help and wireframe controls
+- exit handling
 
 ### Time
 
@@ -57,7 +65,11 @@ These types are public because they are part of the engine-facing scene and came
 
 ### Camera
 
-The current camera module provides a perspective camera and simple fly movement based on keyboard input. Mouse look is intentionally deferred until the input layer is ready for it.
+The current camera module provides a perspective camera, simple fly movement, and clamped mouse look.
+
+### Assets
+
+The current asset layer is intentionally modest. It loads and caches shaders and textures by path, owns fallback textures, and keeps asset lifetime tied to the engine runtime.
 
 ### Scene
 
@@ -77,6 +89,7 @@ The renderer layer exposes engine-owned drawing functionality while keeping Open
 - viewport resize
 - shader compilation and linking
 - mesh upload
+- texture upload and binding
 - depth testing
 - backface culling
 - wireframe toggle
@@ -84,12 +97,13 @@ The renderer layer exposes engine-owned drawing functionality while keeping Open
 
 ### Sandbox
 
-The sandbox is a consumer of the public API only. It creates a scene, shaders, meshes, materials, and camera through Henka headers, then hands those objects to the engine run loop through callbacks.
+The sandbox is a consumer of the public API only. It creates a scene, shaders, textures, meshes, materials, and camera through Henka headers, then hands those objects to the engine run loop through callbacks.
 
 ## Current boundaries
 
 - Applications talk to the engine through the public Henka headers.
 - The engine owns the main loop, timing, scene pointer, and renderer lifecycle.
+- The engine also owns the asset manager and fallback assets.
 - The sandbox does not include SDL, Windows, or OpenGL headers.
 - OpenGL stays in renderer implementation files.
 - Scene data is public enough to build with, but renderer details stay private.
@@ -100,7 +114,7 @@ The next steps should continue building upward from these boundaries:
 
 - safer camera orientation controls
 - texture loading
-- model loading
 - richer material data
+- model loading
 - stronger asset management
 - early 2.5D-friendly camera and layering rules after the shared runtime is steadier

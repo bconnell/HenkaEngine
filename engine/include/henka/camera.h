@@ -25,5 +25,6 @@ henka_vec3 henka_camera_get_forward(const henka_camera* camera);
 henka_vec3 henka_camera_get_right(const henka_camera* camera);
 void henka_camera_set_aspect_ratio(henka_camera* camera, float aspect_ratio);
 void henka_camera_move_fly(henka_camera* camera, const struct henka_engine* engine, double delta_seconds);
+void henka_camera_apply_mouse_look(henka_camera* camera, float delta_yaw_radians, float delta_pitch_radians);
 
 #endif

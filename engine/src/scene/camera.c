@@ -97,6 +97,17 @@ void henka_camera_set_aspect_ratio(henka_camera* camera, float aspect_ratio)
     }
 }
 
+void henka_camera_apply_mouse_look(henka_camera* camera, float delta_yaw_radians, float delta_pitch_radians)
+{
+    if (camera == NULL)
+    {
+        return;
+    }
+
+    camera->yaw_radians += delta_yaw_radians;
+    camera->pitch_radians = henka_clamp_pitch(camera->pitch_radians + delta_pitch_radians);
+}
+
 void henka_camera_move_fly(henka_camera* camera, const struct henka_engine* engine, double delta_seconds)
 {
     float speed;
@@ -163,6 +174,4 @@ void henka_camera_move_fly(henka_camera* camera, const struct henka_engine* engi
         move_direction = henka_vec3_normalize(move_direction);
         camera->position = henka_vec3_add(camera->position, henka_vec3_scale(move_direction, distance));
     }
-
-    camera->pitch_radians = henka_clamp_pitch(camera->pitch_radians);
 }

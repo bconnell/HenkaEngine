@@ -149,3 +149,18 @@ void henka_renderer_destroy_shader(struct henka_shader* shader)
 {
     henka_opengl_renderer_destroy_shader(shader);
 }
+
+henka_result henka_renderer_create_texture_from_rgba8(
+    struct henka_renderer* renderer,
+    int width,
+    int height,
+    const unsigned char* pixels,
+    struct henka_texture** out_texture)
+{
+    return henka_opengl_renderer_create_texture_from_rgba8(renderer, width, height, pixels, out_texture);
+}
+
+void henka_renderer_destroy_texture(struct henka_texture* texture)
+{
+    henka_opengl_renderer_destroy_texture(texture);
+}

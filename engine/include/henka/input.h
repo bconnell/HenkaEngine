@@ -3,6 +3,8 @@
 
 #include <stdbool.h>
 
+#include <henka/math.h>
+
 typedef enum henka_key
 {
     HENKA_KEY_UNKNOWN = 0,
@@ -14,14 +16,27 @@ typedef enum henka_key
     HENKA_KEY_Q,
     HENKA_KEY_E,
     HENKA_KEY_LEFT_SHIFT,
+    HENKA_KEY_TAB,
     HENKA_KEY_F1,
     HENKA_KEY_H,
     HENKA_KEY_COUNT
 } henka_key;
 
+typedef enum henka_mouse_button
+{
+    HENKA_MOUSE_BUTTON_UNKNOWN = 0,
+    HENKA_MOUSE_BUTTON_LEFT,
+    HENKA_MOUSE_BUTTON_RIGHT,
+    HENKA_MOUSE_BUTTON_MIDDLE,
+    HENKA_MOUSE_BUTTON_COUNT
+} henka_mouse_button;
+
 struct henka_engine;
 
 bool henka_input_is_key_down(const struct henka_engine* engine, henka_key key);
 bool henka_input_was_key_pressed(const struct henka_engine* engine, henka_key key);
+bool henka_input_is_mouse_button_down(const struct henka_engine* engine, henka_mouse_button button);
+bool henka_input_was_mouse_button_pressed(const struct henka_engine* engine, henka_mouse_button button);
+henka_vec2 henka_input_get_mouse_delta(const struct henka_engine* engine);
 
 #endif

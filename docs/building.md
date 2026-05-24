@@ -44,4 +44,9 @@ If `cmake` is not on `PATH`, use the full path from the Visual Studio installati
 
 ## Runtime assets
 
-The sandbox shader assets live in `assets/shaders/`. CMake copies the `assets/` directory next to the sandbox executable after build.
+The sandbox runtime assets live under:
+
+- `assets/shaders/`
+- `assets/textures/`
+
+CMake copies the `assets/` directory next to the sandbox executable after build.

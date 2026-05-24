@@ -11,6 +11,7 @@ Henka Engine is in an early foundation phase. Contributions should favor clarity
 - Validate inputs and return structured errors instead of failing silently.
 - Keep files focused. If a source file starts carrying multiple responsibilities, split it.
 - Update docs when behavior or project status changes.
+- Write user-facing text for the person using the engine or sandbox, not for the developer implementing the feature.
 
 ## Suggested workflow
 
@@ -25,3 +26,4 @@ Henka Engine is in an early foundation phase. Contributions should favor clarity
 - Confirm generated files and local build output are not staged.
 - Make sure README and docs still describe the current state accurately.
 - Call out known limitations rather than glossing over them.
+- Check runtime help and visible error messages for clarity and tone.

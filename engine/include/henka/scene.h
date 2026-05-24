@@ -10,6 +10,7 @@
 #include <henka/mesh.h>
 #include <henka/result.h>
 #include <henka/shader.h>
+#include <henka/texture.h>
 
 typedef struct henka_scene henka_scene;
 typedef uint32_t henka_entity;
@@ -19,10 +20,13 @@ typedef uint32_t henka_entity;
 typedef struct henka_material
 {
     henka_shader* shader;
+    henka_texture* base_color_texture;
     henka_vec4 base_color;
+    bool use_texture;
     bool use_lighting;
 } henka_material;
 
+henka_material henka_material_default(void);
 henka_result henka_scene_create(henka_scene** out_scene);
 void henka_scene_destroy(henka_scene* scene);
 henka_entity henka_scene_create_entity(henka_scene* scene);

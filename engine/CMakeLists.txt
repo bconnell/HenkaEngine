@@ -1,4 +1,5 @@
 add_library(henka STATIC
+    src/assets/assets.c
     src/core/math.c
     src/core/engine.c
     src/core/log.c
@@ -10,6 +11,7 @@ add_library(henka STATIC
     src/renderer/renderer.c
     src/renderer/renderer_opengl.c
     src/renderer/shader.c
+    src/renderer/texture.c
     src/scene/camera.c
     src/scene/scene.c
 )
@@ -19,6 +21,7 @@ target_include_directories(henka
         ${CMAKE_CURRENT_SOURCE_DIR}/include
     PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/src
+        ${CMAKE_SOURCE_DIR}/third_party/stb
 )
 
 if(TARGET SDL3::SDL3)

@@ -32,6 +32,13 @@ static void henka_input_reset_frame_state(henka_input_state* input)
         input->keys_pressed[index] = false;
     }
 
+    for (index = 0; index < HENKA_MOUSE_BUTTON_COUNT; ++index)
+    {
+        input->mouse_buttons_pressed[index] = false;
+    }
+
+    input->mouse_delta.x = 0.0f;
+    input->mouse_delta.y = 0.0f;
     input->close_requested = false;
 }
 
@@ -103,6 +110,16 @@ henka_result henka_engine_create(const henka_engine_config* config, henka_engine
         return result;
     }
 
+    result = henka_asset_manager_create(engine, &engine->asset_manager);
+    if (result != HENKA_SUCCESS)
+    {
+        HENKA_LOG_ERROR("asset manager initialization failed: %s", henka_result_to_string(result));
+        henka_renderer_destroy(engine->renderer);
+        henka_platform_destroy(engine->platform);
+        henka_free(engine);
+        return result;
+    }
+
     henka_time_reset(&engine->time);
 
     if (henka_platform_get_framebuffer_size(engine->platform, &framebuffer_width, &framebuffer_height))
@@ -131,6 +148,7 @@ void henka_engine_destroy(henka_engine* engine)
         engine->config.on_shutdown(engine, engine->config.user_data);
     }
 
+    henka_asset_manager_destroy(engine->asset_manager);
     henka_renderer_destroy(engine->renderer);
     henka_platform_destroy(engine->platform);
     henka_free(engine);
@@ -173,9 +191,21 @@ henka_result henka_engine_run(henka_engine* engine)
             return result;
         }
 
-        if (frame_state.close_requested || henka_input_was_key_pressed(engine, HENKA_KEY_ESCAPE))
+        if (frame_state.close_requested)
         {
             henka_engine_request_exit(engine);
+        }
+
+        if (henka_input_was_key_pressed(engine, HENKA_KEY_ESCAPE))
+        {
+            if (henka_engine_is_mouse_captured(engine))
+            {
+                henka_engine_set_mouse_capture(engine, false);
+            }
+            else
+            {
+                henka_engine_request_exit(engine);
+            }
         }
 
         henka_engine_handle_resize(engine, &frame_state);
@@ -275,6 +305,34 @@ bool henka_engine_is_wireframe_enabled(const henka_engine* engine)
     return engine->renderer->wireframe_enabled;
 }
 
+henka_result henka_engine_set_mouse_capture(henka_engine* engine, bool enabled)
+{
+    henka_result result;
+
+    if (engine == NULL || engine->renderer == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    result = henka_platform_set_mouse_capture(engine->platform, enabled);
+    if (result == HENKA_SUCCESS)
+    {
+        engine->renderer->mouse_captured = enabled;
+    }
+
+    return result;
+}
+
+bool henka_engine_is_mouse_captured(const henka_engine* engine)
+{
+    if (engine == NULL || engine->renderer == NULL)
+    {
+        return false;
+    }
+
+    return engine->renderer->mouse_captured;
+}
+
 double henka_engine_get_delta_time(const henka_engine* engine)
 {
     if (engine == NULL)
@@ -317,6 +375,26 @@ henka_result henka_engine_get_framebuffer_size(const henka_engine* engine, int* 
     return HENKA_SUCCESS;
 }
 
+henka_asset_manager* henka_engine_get_asset_manager(henka_engine* engine)
+{
+    if (engine == NULL)
+    {
+        return NULL;
+    }
+
+    return engine->asset_manager;
+}
+
+const henka_asset_manager* henka_engine_get_asset_manager_const(const henka_engine* engine)
+{
+    if (engine == NULL)
+    {
+        return NULL;
+    }
+
+    return engine->asset_manager;
+}
+
 bool henka_input_is_key_down(const henka_engine* engine, henka_key key)
 {
     if (engine == NULL || key <= HENKA_KEY_UNKNOWN || key >= HENKA_KEY_COUNT)
@@ -335,4 +413,34 @@ bool henka_input_was_key_pressed(const henka_engine* engine, henka_key key)
     }
 
     return engine->input.keys_pressed[key];
+}
+
+bool henka_input_is_mouse_button_down(const henka_engine* engine, henka_mouse_button button)
+{
+    if (engine == NULL || button <= HENKA_MOUSE_BUTTON_UNKNOWN || button >= HENKA_MOUSE_BUTTON_COUNT)
+    {
+        return false;
+    }
+
+    return engine->input.mouse_buttons_down[button];
+}
+
+bool henka_input_was_mouse_button_pressed(const henka_engine* engine, henka_mouse_button button)
+{
+    if (engine == NULL || button <= HENKA_MOUSE_BUTTON_UNKNOWN || button >= HENKA_MOUSE_BUTTON_COUNT)
+    {
+        return false;
+    }
+
+    return engine->input.mouse_buttons_pressed[button];
+}
+
+henka_vec2 henka_input_get_mouse_delta(const henka_engine* engine)
+{
+    if (engine == NULL)
+    {
+        return (henka_vec2){0.0f, 0.0f};
+    }
+
+    return engine->input.mouse_delta;
 }

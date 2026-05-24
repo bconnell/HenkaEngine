@@ -8,6 +8,7 @@
 
 typedef struct henka_engine henka_engine;
 typedef struct henka_scene henka_scene;
+typedef struct henka_asset_manager henka_asset_manager;
 
 typedef henka_result (*henka_engine_initialize_fn)(henka_engine* engine, void* user_data);
 typedef void (*henka_engine_update_fn)(henka_engine* engine, double delta_seconds, void* user_data);
@@ -38,9 +39,13 @@ henka_result henka_engine_set_vsync(henka_engine* engine, bool enabled);
 bool henka_engine_is_vsync_enabled(const henka_engine* engine);
 henka_result henka_engine_set_wireframe(henka_engine* engine, bool enabled);
 bool henka_engine_is_wireframe_enabled(const henka_engine* engine);
+henka_result henka_engine_set_mouse_capture(henka_engine* engine, bool enabled);
+bool henka_engine_is_mouse_captured(const henka_engine* engine);
 double henka_engine_get_delta_time(const henka_engine* engine);
 double henka_engine_get_total_time(const henka_engine* engine);
 uint64_t henka_engine_get_frame_index(const henka_engine* engine);
 henka_result henka_engine_get_framebuffer_size(const henka_engine* engine, int* out_width, int* out_height);
+henka_asset_manager* henka_engine_get_asset_manager(henka_engine* engine);
+const henka_asset_manager* henka_engine_get_asset_manager_const(const henka_engine* engine);
 
 #endif
