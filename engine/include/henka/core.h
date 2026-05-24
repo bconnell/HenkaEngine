@@ -1,0 +1,8 @@
+#ifndef HENKA_CORE_H
+#define HENKA_CORE_H
+
+#define HENKA_VERSION_MAJOR 0
+#define HENKA_VERSION_MINOR 1
+#define HENKA_VERSION_PATCH 0
+
+#endif

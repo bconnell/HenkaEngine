@@ -1,0 +1,50 @@
+# Build output
+/build/
+/out/
+/bin/
+/lib/
+
+# CMake
+CMakeUserPresets.json
+CMakeCache.txt
+CMakeFiles/
+CTestTestfile.cmake
+Testing/
+cmake_install.cmake
+install_manifest.txt
+compile_commands.json
+_deps/
+
+# Visual Studio
+/.vs/
+*.sln
+*.vcxproj
+*.vcxproj.filters
+*.vcxproj.user
+*.VC.db
+*.VC.opendb
+
+# Binaries and logs
+*.exe
+*.dll
+*.lib
+*.obj
+*.pdb
+*.ilk
+*.log
+
+# Temporary files
+*.tmp
+*.temp
+*.user
+*.suo
+*.ncb
+*.cache
+*.bak
+*.orig
+Thumbs.db
+Desktop.ini
+
+# Local environment files
+.env
+.env.*
