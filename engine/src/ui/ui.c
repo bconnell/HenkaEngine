@@ -70,6 +70,8 @@ static const henka_vec4 g_ui_heading_color = {0.72f, 0.84f, 0.98f, 1.0f};
 static const henka_vec4 g_ui_button_fill = {0.17f, 0.21f, 0.28f, 0.98f};
 static const henka_vec4 g_ui_button_hover = {0.25f, 0.31f, 0.41f, 1.0f};
 static const henka_vec4 g_ui_button_active = {0.33f, 0.40f, 0.52f, 1.0f};
+static const henka_vec4 g_ui_selected_fill = {0.20f, 0.29f, 0.43f, 1.0f};
+static const henka_vec4 g_ui_selected_hover = {0.26f, 0.37f, 0.54f, 1.0f};
 static const henka_vec4 g_ui_toggle_on = {0.18f, 0.58f, 0.40f, 1.0f};
 static const henka_vec4 g_ui_toggle_off = {0.44f, 0.20f, 0.20f, 1.0f};
 static const henka_vec4 g_ui_value_fill = {0.11f, 0.15f, 0.21f, 1.0f};
@@ -498,6 +500,65 @@ bool henka_ui_button(henka_ui_context* context, const char* id, henka_ui_rect bo
     }
 
     result = henka_ui_push_border(context, bounds, 1.0f, g_ui_panel_border);
+    if (result != HENKA_SUCCESS)
+    {
+        return false;
+    }
+
+    if (henka_ui_draw_text(context, bounds.x + 10.0f, bounds.y + 9.0f, 1.0f, label, g_ui_text_color) != HENKA_SUCCESS)
+    {
+        return false;
+    }
+
+    return clicked;
+}
+
+bool henka_ui_selectable(henka_ui_context* context, const char* id, henka_ui_rect bounds, const char* label, bool selected)
+{
+    bool clicked;
+    bool hot;
+    bool active;
+    henka_result result;
+    henka_vec4 fill_color;
+
+    if (context == NULL || id == NULL || label == NULL || !context->visible)
+    {
+        return false;
+    }
+
+    hot = henka_ui_control_is_hot(context, bounds);
+    if (hot && context->mouse_left_pressed)
+    {
+        context->active_id = id;
+    }
+
+    active = context->mouse_left_down && henka_ui_id_equals(context->active_id, id);
+    clicked = hot && context->mouse_left_pressed;
+    if (context->mouse_left_released && henka_ui_id_equals(context->active_id, id))
+    {
+        context->active_id = NULL;
+    }
+
+    if (active)
+    {
+        fill_color = g_ui_button_active;
+    }
+    else if (selected)
+    {
+        fill_color = hot ? g_ui_selected_hover : g_ui_selected_fill;
+    }
+    else
+    {
+        fill_color = hot ? g_ui_button_hover : g_ui_button_fill;
+    }
+
+    result = henka_ui_push_rect(context, bounds, fill_color);
+    if (result != HENKA_SUCCESS)
+    {
+        return false;
+    }
+
+    result = henka_ui_push_border(context, bounds, 1.0f, selected ? g_ui_heading_color : g_ui_panel_border);
     if (result != HENKA_SUCCESS)
     {
         return false;

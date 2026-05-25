@@ -24,6 +24,7 @@ Henka Engine is still early, but the sandbox now renders a visible 3D scene with
 - Keyboard movement, mouse look when capture is active, wireframe toggle, and offline runtime help
 - Local settings persistence for the sandbox
 - Early in-window UI overlay with buttons, toggles, labels, and simple text rendering
+- Scene Objects and Object Details panels for named sandbox object inspection
 - Packaged sandbox user data that stays in place across package refreshes by default
 - Generic documentation and starter template for external game repositories
 
@@ -108,9 +109,9 @@ Sandbox settings are saved locally in a `user/` folder beside the executable. In
 - `F3`: show or hide the debug grid
 - `F4`: show or hide the sandbox panel
 - `H`: print controls and the scene legend again
-- `Escape`: close the panel first, then release the mouse, then exit
+- `Escape`: close the UI first, then release the mouse, then exit
 
-Press `F4` to open the in-window sandbox panel. The panel can toggle the grid and wireframe view, reset the camera, adjust mouse sensitivity and camera speed, save settings, reset sandbox settings, and print the same help and scene legend you can reach from the keyboard. Mouse look and camera movement pause while the panel is open.
+Press `F4` to open the in-window sandbox panels. The controls panel can toggle the grid and wireframe view, reset the camera, adjust mouse sensitivity and camera speed, save settings, reset sandbox settings, and print the same help and scene legend you can reach from the keyboard. The Scene Objects and Object Details panels let you select named scene examples, inspect what they demonstrate, toggle visibility, focus the camera, reset their transforms, and print object info to the console. Mouse look and camera movement pause while the UI is open.
 
 Offline help is also available in [docs/help/sandbox3d.md](docs/help/sandbox3d.md).
 Model loading notes are documented in [docs/model-loading.md](docs/model-loading.md).
@@ -137,7 +138,7 @@ To validate the generic external game template against the current Henka checkou
 - OBJ material libraries, negative indices, polygons with more than four vertices, and animation are not supported yet.
 - The current settings format is a simple local key/value file. It is meant for engine samples and early projects, not for a finished save pipeline.
 - Cloud saves, telemetry, analytics, registry storage, encryption, and network-backed persistence are not implemented.
-- The in-window UI overlay is intentionally small. It is useful for sandbox controls, but it is not an editor or a general UI toolkit yet.
+- The in-window UI overlay is intentionally small. It now supports object inspection and safe scene actions, but it is still not a full editor or a general UI toolkit yet.
 - 2D and 2.5D are part of the engine direction, but those workflows are not implemented yet.
 - Visual and interaction checks still need manual QA on a local desktop session.
 - HenkaSandbox3D is an engine sample and QA target, not a game. Real games built with Henka should live in separate repositories.

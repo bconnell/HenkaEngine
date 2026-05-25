@@ -103,6 +103,7 @@ The scene layer is intentionally minimal. It is not a full ECS. Right now it pro
 
 - scene ownership
 - lightweight entity handles
+- entity enumeration and lookup for developer inspection
 - per-entity labels and visibility state
 - per-entity transform, mesh, and material assignment
 - one active scene camera
@@ -126,7 +127,13 @@ The renderer layer exposes engine-owned drawing functionality while keeping Open
 
 ### Sandbox
 
-The sandbox is a consumer of the public API only. It creates a scene, shaders, textures, meshes, materials, camera, settings object, and UI context through Henka headers, then hands those objects to the engine run loop through callbacks. It uses scene entity names and visibility state for the console legend, and it uses the early UI layer for a small in-window control panel without turning the sandbox into an editor. The current interaction rules pause camera movement and mouse look while the panel is open, release mouse capture when the panel opens, and let `Escape` close the panel before it resumes the normal capture and exit flow.
+The sandbox is a consumer of the public API only. It creates a scene, shaders, textures, meshes, materials, camera, settings object, and UI context through Henka headers, then hands those objects to the engine run loop through callbacks. It uses scene entity names and visibility state for the console legend, and it now uses the early UI layer for three small developer-facing panels without turning the sandbox into an editor:
+
+- `Controls`
+- `Scene Objects`
+- `Object Details`
+
+The current interaction rules pause camera movement and mouse look while the UI is open, release mouse capture when the UI opens, and let `Escape` close the UI before it resumes the normal capture and exit flow.
 
 ## Current boundaries
 
@@ -136,6 +143,7 @@ The sandbox is a consumer of the public API only. It creates a scene, shaders, t
 - The engine resolves runtime assets relative to the executable directory by default, which keeps packaged sandbox runs independent from the repository root.
 - The engine also resolves a local user data base path beside the executable by default, which keeps sandbox settings local to the runnable folder.
 - The engine can also draw an optional UI context after the 3D scene, which keeps sandbox overlays inside the engine render path instead of requiring an external UI dependency.
+- The sandbox reads object selection and details from the scene plus sandbox-owned descriptors rather than from a saved scene file or editor-only data model.
 - The sandbox does not include SDL, Windows, or OpenGL headers.
 - OpenGL stays in renderer implementation files.
 - Scene data is public enough to build with, but renderer details stay private.
@@ -152,3 +160,4 @@ The next steps should continue building upward from these boundaries:
 - broader persistence and external project support once the current local-first path has settled
 - early 2.5D-friendly camera and layering rules after the shared runtime is steadier
 - richer engine UI controls after the current lightweight overlay has settled
+- object inspection that can grow into broader developer tooling without requiring an editor rewrite first

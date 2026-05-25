@@ -250,6 +250,35 @@ size_t henka_scene_get_entity_count(const henka_scene* scene)
     return scene->entity_count;
 }
 
+henka_entity henka_scene_get_entity_at_index(const henka_scene* scene, size_t index)
+{
+    size_t active_index;
+    size_t entity_index;
+
+    if (scene == NULL)
+    {
+        return HENKA_INVALID_ENTITY;
+    }
+
+    active_index = 0U;
+    for (entity_index = 0U; entity_index < scene->entity_capacity; ++entity_index)
+    {
+        if (!scene->entities[entity_index].active)
+        {
+            continue;
+        }
+
+        if (active_index == index)
+        {
+            return (henka_entity)(entity_index + 1U);
+        }
+
+        active_index += 1U;
+    }
+
+    return HENKA_INVALID_ENTITY;
+}
+
 const char* henka_scene_get_entity_name(const henka_scene* scene, henka_entity entity)
 {
     const henka_scene_entity_record* record;
@@ -261,6 +290,48 @@ const char* henka_scene_get_entity_name(const henka_scene* scene, henka_entity e
     }
 
     return record->name;
+}
+
+henka_result henka_scene_find_entity_by_name(const henka_scene* scene, const char* name, henka_entity* out_entity)
+{
+    size_t index;
+
+    if (scene == NULL || name == NULL || name[0] == '\0' || out_entity == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    *out_entity = HENKA_INVALID_ENTITY;
+
+    for (index = 0U; index < scene->entity_capacity; ++index)
+    {
+        if (!scene->entities[index].active || scene->entities[index].name == NULL)
+        {
+            continue;
+        }
+
+        if (strcmp(scene->entities[index].name, name) == 0)
+        {
+            *out_entity = (henka_entity)(index + 1U);
+            return HENKA_SUCCESS;
+        }
+    }
+
+    return HENKA_ERROR_UNKNOWN;
+}
+
+henka_result henka_scene_get_entity_transform(const henka_scene* scene, henka_entity entity, henka_transform* out_transform)
+{
+    const henka_scene_entity_record* record;
+
+    record = henka_scene_get_entity_record_const(scene, entity);
+    if (record == NULL || out_transform == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    *out_transform = record->transform;
+    return HENKA_SUCCESS;
 }
 
 henka_result henka_scene_set_entity_transform(henka_scene* scene, henka_entity entity, henka_transform transform)

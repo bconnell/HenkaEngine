@@ -20,7 +20,7 @@ The current UI layer is not:
 - a full editor
 - a docking system
 - a scene hierarchy
-- an inspector
+- a full inspector
 - an asset browser
 - a full runtime UI framework
 
@@ -58,11 +58,11 @@ The built-in text path is intentionally simple:
 
 That is enough for the current sandbox panel, status text, and small runtime controls.
 
-## Sandbox panel
+## Sandbox panels
 
-In `henka_sandbox3d`, press `F4` to open the panel.
+In `henka_sandbox3d`, press `F4` to open the panels.
 
-The current panel can:
+The current `Controls` panel can:
 
 - toggle the debug grid
 - toggle wireframe
@@ -76,7 +76,24 @@ The current panel can:
 
 It also shows short state text for mouse capture, frame timing, camera position, and local runtime paths.
 
-When the panel is open:
+The current `Scene Objects` panel can:
+
+- list the current sandbox examples by name
+- show hidden state
+- let you select one object at a time
+
+The current `Object Details` panel can:
+
+- show the selected object name
+- show visibility and transform state
+- explain what the object demonstrates
+- show mesh, material, and texture or fallback summary
+- toggle visibility
+- focus the camera
+- reset the default transform
+- print object info to the console
+
+When the UI is open:
 
 - mouse capture is released
 - mouse look pauses
@@ -86,4 +103,4 @@ When the panel is open:
 
 ## Future direction
 
-This layer is a foundation for better engine-side inspection and sample controls. It is not yet meant to replace the planned editor work or a broader UI toolkit.
+This layer is a foundation for better engine-side inspection and sample controls. It is not yet meant to replace planned editor work, hierarchy tooling, numeric property editing, or a broader UI toolkit.

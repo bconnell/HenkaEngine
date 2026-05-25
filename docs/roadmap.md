@@ -32,7 +32,7 @@ The next likely layers are:
 - clearer external project integration beyond the current starter template
 - scene growth beyond the current lightweight entity model
 - broader OBJ and model import coverage after the current foundation has settled
-- richer in-window inspection and QA tools beyond the current lightweight sandbox panel
+- richer in-window inspection and QA tools beyond the current lightweight sandbox panels and object inspection
 - stronger external-project packaging and validation beyond the current starter template and validation script
 
 ## 2.5D direction

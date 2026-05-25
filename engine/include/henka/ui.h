@@ -38,6 +38,7 @@ henka_result henka_ui_measure_text(const char* text, float scale, int* out_width
 henka_result henka_ui_panel(henka_ui_context* context, henka_ui_rect bounds, const char* title);
 henka_result henka_ui_label(henka_ui_context* context, float x, float y, float scale, const char* text);
 bool henka_ui_button(henka_ui_context* context, const char* id, henka_ui_rect bounds, const char* label);
+bool henka_ui_selectable(henka_ui_context* context, const char* id, henka_ui_rect bounds, const char* label, bool selected);
 bool henka_ui_toggle(henka_ui_context* context, const char* id, henka_ui_rect bounds, const char* label, bool* value);
 
 #endif

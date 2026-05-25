@@ -31,7 +31,7 @@ Use this checklist when you want to confirm that `henka_sandbox3d` is visually r
 8. Change `F1` or `F3`, exit cleanly, and confirm `out/HenkaSandbox3D/user/sandbox3d.settings` is created.
 9. Run the package script again and confirm the `user/` folder is preserved by default.
 10. If you intentionally test `-ResetUserData`, confirm the settings file is removed only when that switch is used.
-11. Press `F4` and confirm the sandbox panel appears in the packaged run.
+11. Press `F4` and confirm the sandbox panels appear in the packaged run.
 12. If you want a quick automated packaged check first, run:
 
    ```powershell
@@ -50,7 +50,7 @@ Use this checklist when you want to confirm that `henka_sandbox3d` is visually r
 
 You should be able to identify these examples:
 
-- `Textured Cube`: centered in the scene and rotating.
+- `Textured Cube`: centered in the scene.
 - `Ground`: textured plane under the scene.
 - `Colored Cube`: left side of the scene.
 - `OBJ Marker`: farther left, using the current OBJ loading path.
@@ -68,22 +68,25 @@ You should be able to identify these examples:
 - `F1`: toggle wireframe
 - `F2`: print the scene legend again
 - `F3`: show or hide the debug grid
-- `F4`: show or hide the sandbox panel
+- `F4`: show or hide the sandbox panels
 - `H`: print controls and the scene legend again
-- `Escape`: release mouse capture first, then exit
+- `Escape`: close the UI first, then release mouse capture, then exit
 - Window close: exit
 
 ## Expected sandbox panel behavior
 
-- Pressing `F4` opens a panel titled `Henka Sandbox`.
-- Opening the panel releases mouse capture.
-- Mouse look pauses while the panel is open.
-- The panel can toggle the debug grid and wireframe state with the mouse.
-- The panel can adjust mouse sensitivity and camera speed with the mouse.
-- The panel can reset the camera, save settings, reset sandbox settings, print help, and print the scene legend.
-- Pressing `F4` again closes the panel.
-- After the panel closes, `Right Mouse` and `Tab` can capture the mouse again.
-- Pressing `Escape` while the panel is open closes the panel first.
+- Pressing `F4` opens panels titled `Controls`, `Scene Objects`, and `Object Details`.
+- Opening the UI releases mouse capture.
+- Mouse look pauses while the UI is open.
+- The `Controls` panel can toggle the debug grid and wireframe state with the mouse.
+- The `Controls` panel can adjust mouse sensitivity and camera speed with the mouse.
+- The `Controls` panel can reset the camera, save settings, reset sandbox settings, print help, print the scene legend, and reset the panel layout.
+- The `Scene Objects` panel lists the current scene examples by name.
+- Clicking an object updates the `Object Details` panel.
+- The `Object Details` panel can toggle visibility, focus the camera, reset the selected transform, and print object info.
+- Pressing `F4` again closes the UI.
+- After the UI closes, `Right Mouse` and `Tab` can capture the mouse again.
+- Pressing `Escape` while the UI is open closes the UI first.
 
 ## Expected fallback behavior
 
@@ -121,8 +124,11 @@ Mark each item as `Pass`, `Needs Review`, or `Fail`.
 - `F2` scene legend prints again
 - `F3` debug grid visibility toggle works
 - `F4` sandbox panel toggle works
-- UI panel appears and is readable
-- UI panel releases mouse capture when opened
+- UI panels appear and are readable
+- UI releases mouse capture when opened
+- Scene Objects panel appears
+- Object Details panel appears
+- Object selection updates the details panel
 - UI grid toggle works
 - UI wireframe toggle works
 - UI mouse sensitivity controls work
@@ -130,7 +136,11 @@ Mark each item as `Pass`, `Needs Review`, or `Fail`.
 - UI reset camera works
 - UI save settings works
 - UI reset sandbox settings works
-- `Escape` closes the panel first
+- UI visibility toggle works
+- UI focus camera works
+- UI reset transform works
+- UI print object info works
+- `Escape` closes the UI first
 - Persisted state reloads after a clean restart
 - `H` help prints again
 - `Escape` releases capture first, then exits
@@ -185,6 +195,9 @@ Controls:
 - F2 legend:
 - F3 grid:
 - F4 panel:
+- Scene Objects panel:
+- Object Details panel:
+- Object selection:
 - UI grid toggle:
 - UI wireframe toggle:
 - UI mouse sensitivity:
@@ -192,6 +205,10 @@ Controls:
 - UI reset camera:
 - UI save settings:
 - UI reset settings:
+- UI visibility toggle:
+- UI focus camera:
+- UI reset transform:
+- UI print object info:
 - Persisted UI state:
 - H help:
 - Escape behavior:

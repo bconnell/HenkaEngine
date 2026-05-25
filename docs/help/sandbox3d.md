@@ -10,8 +10,8 @@
 - a fallback-texture example that stays visible when a texture file is missing
 - a fallback-model example that stays visible when an OBJ file is missing
 
-The sandbox also saves a small local settings file so wireframe, grid visibility, mouse sensitivity, and camera state can carry across runs.
-It now also includes a small in-window control panel for the most useful inspection and settings tasks.
+The sandbox also saves a small local settings file so wireframe, grid visibility, mouse sensitivity, camera state, selected object, and panel visibility can carry across runs.
+It now also includes small in-window developer panels for inspection and settings tasks.
 
 ## Controls
 
@@ -23,9 +23,9 @@ It now also includes a small in-window control panel for the most useful inspect
 - `F1`: toggle wireframe
 - `F2`: print the scene legend to the console again
 - `F3`: show or hide the debug grid
-- `F4`: show or hide the sandbox panel
+- `F4`: show or hide the sandbox panels
 - `H`: print controls and the scene legend to the console again
-- `Escape`: close the sandbox panel first, then release the mouse, then exit
+- `Escape`: close the sandbox UI first, then release the mouse, then exit
 - Window close: exit
 
 ## Scene legend
@@ -48,14 +48,16 @@ It now also includes a small in-window control panel for the most useful inspect
 - Find the fallback-model example to confirm that missing OBJ assets fail visibly without stopping the engine.
 - Compare the colored cube, textured cube, and OBJ marker so it is easy to tell which material path each object is using.
 - Use `F3` to hide the grid briefly, then show it again to confirm the scene layout still reads clearly.
-- Press `F4` to open the sandbox panel, then click the grid and wireframe controls to confirm the in-window UI updates the same engine state as the keyboard shortcuts.
-- Use the panel to reset the camera, save settings, and reset sandbox settings.
+- Press `F4` to open the sandbox panels, then click the grid and wireframe controls to confirm the in-window UI updates the same engine state as the keyboard shortcuts.
+- Select each scene object and confirm the Object Details panel updates.
+- Use Focus Camera, Reset Transform, and Print Object Info on a few different objects.
+- Use the controls panel to reset the camera, save settings, and reset sandbox settings.
 
-## Sandbox panel
+## Sandbox panels
 
-Press `F4` to open the in-window sandbox panel.
+Press `F4` to open the in-window sandbox panels.
 
-The panel currently includes:
+The `Controls` panel currently includes:
 
 - a debug-grid toggle
 - a wireframe toggle
@@ -66,8 +68,25 @@ The panel currently includes:
 - a reset-settings button
 - help and scene-legend buttons
 - short status text for mouse capture, wireframe, grid state, frame timing, camera position, asset path, user-data path, and settings path
+- panel visibility toggles for the object-inspection panels
 
-When the panel is open:
+The `Scene Objects` panel lists the current sandbox examples by name.
+
+- Clicking a row selects that object.
+- Hidden objects stay listed and show a hidden state tag.
+
+The `Object Details` panel shows the current selection.
+
+- name
+- visible state
+- position
+- rotation
+- scale
+- what the object demonstrates
+- mesh, material, and texture or fallback summary
+- safe actions for visibility, camera focus, transform reset, and console info output
+
+When the UI is open:
 
 - mouse capture is released
 - mouse look pauses
@@ -85,7 +104,7 @@ Packaged runs also save sandbox settings in `user/sandbox3d.settings` beside the
 - The sandbox uses built-in meshes plus a small early OBJ loading path.
 - OBJ support is intentionally limited to simple geometry and does not include imported materials, negative indices, or animation.
 - The current settings file is a small local key/value format. It is easy to inspect by hand, but it is not a finished save-game system.
-- The UI overlay is intentionally small. It is meant for sandbox control and inspection, not as a full editor or a complete runtime UI system.
+- The UI overlay is intentionally small. It is meant for sandbox control and object inspection, not as a full editor or a complete runtime UI system.
 - Editor tools, asset browser UI, and broader 2D or 2.5D workflows are not available yet.
 
 More detail about the current UI layer is available in [docs/ui.md](../ui.md).
