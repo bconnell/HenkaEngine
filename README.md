@@ -6,7 +6,7 @@ Henka Engine is an early-stage open source engine written in C. The long-term di
 
 Henka Engine is still early, but the sandbox now renders a visible 3D scene with textured and untextured materials through Henka systems.
 
-### What currently works
+### What currently exists
 
 - C17 build through CMake
 - `henka` static library target
