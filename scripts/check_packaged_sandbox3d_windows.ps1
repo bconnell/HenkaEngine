@@ -176,6 +176,7 @@ Assert-PathExists -Path $helpPath -Description "Packaged offline help"
 Assert-PathExists -Path $readmePath -Description "Packaged run guide"
 Assert-PathExists -Path $packageInfoPath -Description "Packaged build marker"
 Assert-FileContains -Path $readmePath -Pattern "Use the in-window utilities" -Description "Packaged utility guidance"
+Assert-FileContains -Path $readmePath -Pattern "status area" -Description "Packaged status guidance"
 Assert-FileContains -Path $helpPath -Pattern "Utility panel" -Description "Packaged utility help"
 
 New-Item -ItemType Directory -Path $logDir -Force | Out-Null
@@ -204,6 +205,7 @@ try {
     Assert-FileContains -Path $stdoutPath -Pattern "F5               Cycle View, Inspect, and Full Tools layouts" -Description "F5 help text"
     Assert-FileContains -Path $stdoutPath -Pattern "Startup UI:" -Description "Startup UI cue"
     Assert-FileContains -Path $stdoutPath -Pattern "use the in-window .*utilities" -Description "Startup utility cue"
+    Assert-FileContains -Path $stdoutPath -Pattern "recent actions and warnings appear" -Description "Startup status cue"
 
     Write-Step "Checking packaged UI open and close"
     [NativeMethods]::SetForegroundWindow($process.MainWindowHandle) | Out-Null
@@ -231,11 +233,11 @@ try {
 
     if ($uiAutomationVerified) {
         Write-Step "Checking packaged UI click controls"
-        Click-WindowPoint -Handle $process.MainWindowHandle -OffsetX 120 -OffsetY 114
-        Click-WindowPoint -Handle $process.MainWindowHandle -OffsetX 120 -OffsetY 114
-        Click-WindowPoint -Handle $process.MainWindowHandle -OffsetX 248 -OffsetY 114
-        Click-WindowPoint -Handle $process.MainWindowHandle -OffsetX 248 -OffsetY 114
-        Click-WindowPoint -Handle $process.MainWindowHandle -OffsetX 248 -OffsetY 164
+        Click-WindowPoint -Handle $process.MainWindowHandle -OffsetX 120 -OffsetY 158
+        Click-WindowPoint -Handle $process.MainWindowHandle -OffsetX 120 -OffsetY 158
+        Click-WindowPoint -Handle $process.MainWindowHandle -OffsetX 248 -OffsetY 158
+        Click-WindowPoint -Handle $process.MainWindowHandle -OffsetX 248 -OffsetY 158
+        Click-WindowPoint -Handle $process.MainWindowHandle -OffsetX 248 -OffsetY 194
 
         $uiClickChecks = @(
             @{ Pattern = "Debug grid: hidden"; Description = "UI debug grid click output" },

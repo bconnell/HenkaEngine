@@ -56,9 +56,12 @@ void henka_test_ui(void)
     HENKA_TEST_ASSERT(henka_ui_panel(ui, (henka_ui_rect){20.0f, 20.0f, 200.0f, 100.0f}, "Panel") == HENKA_SUCCESS);
     HENKA_TEST_ASSERT(henka_ui_heading(ui, 28.0f, 60.0f, 1.0f, "Section") == HENKA_SUCCESS);
     HENKA_TEST_ASSERT(henka_ui_value_row(ui, (henka_ui_rect){28.0f, 76.0f, 160.0f, 22.0f}, "Label", "Value") == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_ui_status_chip(ui, (henka_ui_rect){28.0f, 102.0f, 80.0f, 20.0f}, "Status", false) == HENKA_SUCCESS);
     HENKA_TEST_ASSERT(henka_ui_get_wants_mouse(ui) == true);
     HENKA_TEST_ASSERT(henka_ui_button(ui, "button", (henka_ui_rect){40.0f, 40.0f, 120.0f, 28.0f}, "Click") == true);
+    HENKA_TEST_ASSERT(henka_ui_primary_button(ui, "primary", (henka_ui_rect){40.0f, 132.0f, 120.0f, 28.0f}, "Apply") == false);
     HENKA_TEST_ASSERT(henka_ui_selectable(ui, "selected", (henka_ui_rect){40.0f, 72.0f, 120.0f, 28.0f}, "Cube", true) == false);
+    HENKA_TEST_ASSERT(henka_ui_tab(ui, "tab", (henka_ui_rect){40.0f, 164.0f, 120.0f, 24.0f}, "Utility", true) == false);
     HENKA_TEST_ASSERT(henka_ui_get_draw_rect_count(ui) > 0U);
     HENKA_TEST_ASSERT(henka_ui_end_frame(ui) == HENKA_SUCCESS);
 
@@ -127,6 +130,8 @@ void henka_test_ui(void)
     result = henka_ui_label(ui, 0.0f, 0.0f, 1.0f, NULL);
     HENKA_TEST_ASSERT(result == HENKA_ERROR_INVALID_ARGUMENT);
     result = henka_ui_value_row(ui, (henka_ui_rect){0.0f, 0.0f, 100.0f, 20.0f}, "Label", NULL);
+    HENKA_TEST_ASSERT(result == HENKA_ERROR_INVALID_ARGUMENT);
+    result = henka_ui_status_chip(ui, (henka_ui_rect){0.0f, 0.0f, 100.0f, 20.0f}, NULL, false);
     HENKA_TEST_ASSERT(result == HENKA_ERROR_INVALID_ARGUMENT);
 
     henka_ui_destroy(ui);

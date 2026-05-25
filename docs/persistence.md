@@ -56,6 +56,8 @@ The current sandbox saves:
 - Scene Objects panel visibility
 - Object Details panel visibility
 
+Short in-window status messages are not persisted. They are only meant to confirm the most recent action during the current run.
+
 The sandbox panel can also:
 
 - save the current settings on demand

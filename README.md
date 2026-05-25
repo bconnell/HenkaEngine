@@ -113,7 +113,7 @@ The packaged folder also includes `PACKAGE_INFO.txt` so you can tell when the pa
 - `H`: print controls and the scene legend again
 - `Escape`: close the UI first, then release the mouse, then exit
 
-Press `F4` to open the in-window sandbox panels. On a first run with no local settings file, the packaged sandbox opens the UI in `View` mode so the controls are visible without covering most of the scene. Press `F5` to cycle between `View`, `Inspect`, and `Full Tools`. The viewport stays the main surface while the panels provide object inspection, help, scene legend, paths, settings, and diagnostics inside the window. Console output remains available for fallback logs and automation.
+Press `F4` to open the in-window sandbox panels. On a first run with no local settings file, the packaged sandbox opens the UI in `View` mode so the controls are visible without covering most of the scene. Press `F5` to cycle between `View`, `Inspect`, and `Full Tools`. The viewport stays the main surface while the panels provide object inspection, help, scene legend, paths, settings, diagnostics, and short in-window status updates. Console output remains available for fallback logs and automation, but normal viewer use no longer depends on reading it.
 
 Offline help is also available in [docs/help/sandbox3d.md](docs/help/sandbox3d.md).
 Model loading notes are documented in [docs/model-loading.md](docs/model-loading.md).
@@ -140,7 +140,7 @@ To validate the generic external game template against the current Henka checkou
 - OBJ material libraries, negative indices, polygons with more than four vertices, and animation are not supported yet.
 - The current settings format is a simple local key/value file. It is meant for engine samples and early projects, not for a finished save pipeline.
 - Cloud saves, telemetry, analytics, registry storage, encryption, and network-backed persistence are not implemented.
-- The in-window UI overlay is intentionally small. It now supports object inspection and safe scene actions, but it is still not a full editor or a general UI toolkit yet.
+- The in-window UI overlay is intentionally small. It now supports object inspection, utility views, and short status feedback, but it is still not a full editor or a general UI toolkit yet.
 - 2D and 2.5D are part of the engine direction, but those workflows are not implemented yet.
 - Visual and interaction checks still need manual QA on a local desktop session.
 - HenkaSandbox3D is an engine sample and QA target, not a game. Real games built with Henka should live in separate repositories.

@@ -81,35 +81,18 @@ The persistence layer is intentionally small and local-first. Right now it provi
 
 ### UI
 
-The current UI layer is an engine-owned overlay built for viewer controls and lightweight developer inspection.
-
-Right now it provides:
-
-- panel layout state
-- scene-first and inspection-heavy workspace modes
-- compact structured rows for status and utility content
-- object inspection without editable fields
-- in-window utility views for help, legend, paths, settings, diagnostics, and object info
-
-The goal is to support a viewport-first developer workspace without introducing a separate third-party UI stack.
-- path resolution helpers shared with other runtime path work
-- executable-local user data paths by default
-
-The current layer is meant for local preferences and early project state. It is not a full save system, cloud system, or content database.
-
-### UI
-
 The current UI layer is intentionally small and dependency-conscious. Right now it provides:
 
 - a lightweight UI context
 - frame begin and end flow
-- panel, label, button, and toggle primitives
+- panel, label, button, toggle, tab, and status-chip primitives
 - basic hover and click state
 - simple built-in text rendering from engine-owned source code glyph data
 - screen-space overlay drawing through the existing renderer
 - mouse hover, press, and release handling for basic clickable controls
+- sandbox workspace modes, utility views, and short in-window status feedback built on top of those primitives
 
-It is meant to support engine samples and early runtime controls without exposing OpenGL or SDL types in the public UI API.
+It is meant to support engine samples and a viewport-first developer workspace without exposing OpenGL or SDL types in the public UI API.
 
 ### Scene
 

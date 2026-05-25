@@ -16,6 +16,7 @@ try {
     Write-Host "Press F4 to open the in-window panels."
     Write-Host "Press F5 to cycle View, Inspect, and Full Tools."
     Write-Host "Use the in-window utilities for help, legend, paths, settings, and diagnostics."
+    Write-Host "Watch the in-window status area for recent actions and warnings."
 }
 finally {
     Pop-Location

@@ -53,6 +53,7 @@ On a first packaged run with no existing settings file, the UI opens in `View` m
 - Press `F4` to open the sandbox panels, then use `F5` to compare the View, Inspect, and Full Tools layouts.
 - Click the grid and wireframe controls to confirm the in-window UI updates the same engine state as the keyboard shortcuts.
 - Open Help, Scene Legend, Paths, Settings, and Diagnostics in the Utility panel so you can inspect the sandbox without relying on the console.
+- Confirm the small in-window status area reports common actions such as layout changes, camera reset, saved settings, or object focus.
 - Select each scene object and confirm the Object Details panel updates.
 - Use Focus Camera, Reset Transform, and Print Object Info on a few different objects.
 - Use the controls panel to reset the camera, save settings, and reset sandbox settings.
@@ -70,13 +71,14 @@ If the panels do not appear when you expect them to, refresh the packaged sandbo
 The `Controls` panel currently includes:
 
 - layout buttons for `View`, `Inspect`, and `Full Tools`
-- a debug-grid toggle
-- a wireframe toggle
+- a `Grid` toggle
+- a `Wire` toggle
 - a camera reset button
 - a save-settings button
 - a reset-layout button
-- panel visibility toggles for the object-inspection panels
-- utility buttons for Help, Scene Legend, Paths, Settings, and Diagnostics
+- panel visibility toggles for the object-inspection panels in the heavier layouts
+- utility tabs for Help, Scene Legend, Paths, Settings, Diagnostics, and Object Info
+- a small in-window status area for recent actions and warnings
 
 `Inspect` and `Full Tools` also expose the wider inspection controls.
 `Full Tools` keeps the most detailed inspection workspace visible.
@@ -107,6 +109,7 @@ The `Utility` panel provides short in-window views for:
 - Diagnostics
 
 Those utilities are the preferred path for normal viewer use. The console remains useful for fallback logs, warnings, and automated checks.
+Status messages also appear in-window for common actions so normal packaged use does not depend on the console.
 
 When the UI is open:
 
@@ -128,6 +131,7 @@ The packaged folder also includes `PACKAGE_INFO.txt` so you can confirm the pack
 - OBJ support is intentionally limited to simple geometry and does not include imported materials, negative indices, or animation.
 - The current settings file is a small local key/value format. It is easy to inspect by hand, but it is not a finished save-game system.
 - The UI overlay is intentionally small. It is meant for sandbox control and object inspection, not as a full editor or a complete runtime UI system.
+- The packaged sandbox still opens a console window at this stage. In-window utilities and status are the preferred viewer workflow, while the console remains available for fallback logs.
 - Editor tools, asset browser UI, and broader 2D or 2.5D workflows are not available yet.
 
 More detail about the current UI layer is available in [docs/ui.md](../ui.md).

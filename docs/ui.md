@@ -12,6 +12,8 @@ The current UI layer is an early engine-owned overlay that can draw:
 - structured value rows
 - buttons
 - toggles
+- tabs
+- status chips
 
 It is meant to make engine samples easier to inspect and control without pulling in a larger third-party UI stack.
 
@@ -68,12 +70,13 @@ On a first packaged run with no local settings file, the UI opens in `View` mode
 The current `Controls` panel can:
 
 - switch between `View`, `Inspect`, and `Full Tools`
-- toggle the debug grid
+- toggle the grid
 - toggle wireframe
 - reset the camera
 - save sandbox settings
 - reset the layout
 - open in-window utilities for help, legend, paths, settings, and diagnostics
+- show short in-window status feedback for recent actions
 
 `Inspect` and `Full Tools` keep the object panels available. `Full Tools` also keeps the heavier adjustment and status text visible.
 
@@ -104,6 +107,7 @@ The current `Utility` panel can show:
 - Diagnostics
 
 That keeps normal viewer use in the window while the console remains available for fallback logs and automation.
+The packaged sandbox still opens a console window at this stage, but normal viewer interaction is meant to stay inside the viewport and panels rather than depending on console output.
 
 When the UI is open:
 

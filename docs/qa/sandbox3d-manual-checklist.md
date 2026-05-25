@@ -59,16 +59,20 @@ Use this checklist when you want to confirm that `henka_sandbox3d` is visually r
 12. Confirm `Reset Layout` restores a usable default.
 13. Confirm panel text is readable by eye.
 14. Confirm panel background contrast is readable against the scene.
-15. Confirm the Utility panel feels readable and does not dominate the viewport.
-16. Confirm Help opens in-window.
-17. Confirm Scene Legend opens in-window.
-18. Confirm Object Info appears in-window after selecting an object.
-19. Confirm Paths, Settings, and Diagnostics utilities are usable in-window.
-20. Confirm the console still receives fallback logs for help, legend, object info, warnings, or errors when those actions are used.
-21. Confirm `Escape` behavior still works.
-22. Confirm close-window exit remains clean.
-23. Confirm no named-engine comparisons appear in runtime text or packaged help.
-24. If the UI is not visible or feels wrong, note whether the console reports `Sandbox panel: shown`, `Sandbox panel: hidden`, or `Sandbox UI ready`.
+15. Confirm View mode controls feel less cramped than earlier passes.
+16. Confirm toggle labels and `ON` or `OFF` state text do not overlap or feel squeezed.
+17. Confirm the Utility panel feels readable and does not dominate the viewport.
+18. Confirm utility tabs are readable and the active utility state is obvious.
+19. Confirm Help opens in-window.
+20. Confirm Scene Legend opens in-window.
+21. Confirm Object Info appears in-window after selecting an object.
+22. Confirm Paths, Settings, and Diagnostics utilities are usable in-window.
+23. Confirm the small in-window status area reports common actions without forcing you to read the console.
+24. Confirm the console still receives fallback logs for help, legend, object info, warnings, or errors when those actions are used.
+25. Confirm `Escape` behavior still works.
+26. Confirm close-window exit remains clean.
+27. Confirm no named-engine comparisons appear in runtime text or packaged help.
+28. If the UI is not visible or feels wrong, note whether the console reports `Sandbox panel: shown`, `Sandbox panel: hidden`, or `Sandbox UI ready`.
 
 ## Expected startup behavior
 
@@ -114,6 +118,7 @@ You should be able to identify these examples:
 - Mouse look pauses while the UI is open.
 - `F5` cycles View, Inspect, and Full Tools layouts.
 - The `Controls` panel can toggle the debug grid and wireframe state with the mouse.
+- The `Controls` panel looks lighter in `View` mode and keeps a visible in-window status area.
 - The `Controls` panel can adjust mouse sensitivity and camera speed with the mouse.
 - The `Controls` panel can reset the camera, save settings, reset sandbox settings, print help, print the scene legend, and reset the panel layout.
 - The `Scene Objects` panel lists the current scene examples by name.
@@ -160,6 +165,8 @@ Mark each item as `Pass`, `Needs Review`, or `Fail`.
 - `F3` debug grid visibility toggle works
 - `F4` sandbox panel toggle works
 - UI panels appear and are readable
+- Controls feel lighter and less cramped
+- Toggle labels and `ON` or `OFF` text are clear
 - UI releases mouse capture when opened
 - Scene Objects panel appears
 - Object Details panel appears
@@ -175,6 +182,9 @@ Mark each item as `Pass`, `Needs Review`, or `Fail`.
 - UI focus camera works
 - UI reset transform works
 - UI print object info works
+- Utility tabs are readable
+- Active utility state is clear
+- In-window status feedback works
 - `Escape` closes the UI first
 - Persisted state reloads after a clean restart
 - `H` help prints again
@@ -245,6 +255,9 @@ Controls:
 - UI focus camera:
 - UI reset transform:
 - UI print object info:
+- Utility tabs:
+- Active utility state:
+- In-window status:
 - Persisted UI state:
 - H help:
 - Escape behavior:

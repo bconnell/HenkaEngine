@@ -42,7 +42,10 @@ henka_result henka_ui_heading(henka_ui_context* context, float x, float y, float
 henka_result henka_ui_label(henka_ui_context* context, float x, float y, float scale, const char* text);
 henka_result henka_ui_value_row(henka_ui_context* context, henka_ui_rect bounds, const char* label, const char* value);
 bool henka_ui_button(henka_ui_context* context, const char* id, henka_ui_rect bounds, const char* label);
+bool henka_ui_primary_button(henka_ui_context* context, const char* id, henka_ui_rect bounds, const char* label);
 bool henka_ui_selectable(henka_ui_context* context, const char* id, henka_ui_rect bounds, const char* label, bool selected);
+bool henka_ui_tab(henka_ui_context* context, const char* id, henka_ui_rect bounds, const char* label, bool selected);
 bool henka_ui_toggle(henka_ui_context* context, const char* id, henka_ui_rect bounds, const char* label, bool* value);
+henka_result henka_ui_status_chip(henka_ui_context* context, henka_ui_rect bounds, const char* label, bool warning);
 
 #endif
