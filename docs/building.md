@@ -41,6 +41,7 @@ The package script creates:
 - `out/HenkaSandbox3D/HenkaSandbox3D.exe`
 - `out/HenkaSandbox3D/assets/`
 - `out/HenkaSandbox3D/docs/help/sandbox3d.md`
+- `out/HenkaSandbox3D/PACKAGE_INFO.txt`
 - `out/HenkaSandbox3D/README.txt`
 - `out/HenkaSandbox3D/user/` when local sandbox settings have already been created
 
@@ -61,13 +62,17 @@ You can launch the packaged sandbox in either of these ways:
 - open `out/HenkaSandbox3D` in Explorer and double-click `HenkaSandbox3D.exe`
 - run `.\scripts\run_packaged_sandbox3d_windows.ps1`
 
+On a first packaged run with no local settings file yet, the sandbox opens the in-window panels automatically so the UI is visible right away.
+
 ## Run a packaged sandbox check
 
 ```powershell
 .\scripts\check_packaged_sandbox3d_windows.ps1
 ```
 
-The packaged check script confirms that the packaged folder contains the expected files, launches the sandbox, checks the startup help text, opens and closes the `F4` panel, exercises a few UI clicks, and confirms the close-window path exits cleanly.
+The packaged check script confirms that the packaged folder contains the expected files, launches the sandbox, checks the startup help text and package marker, confirms UI state logs when available, exercises a few UI clicks, and confirms the close-window path exits cleanly.
+
+It does not replace human visual QA. You should still confirm by eye that the panels are actually visible and readable in the packaged window.
 
 ## Validate the external game template
 

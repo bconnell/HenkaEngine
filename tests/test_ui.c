@@ -17,6 +17,7 @@ void henka_test_ui(void)
     HENKA_TEST_ASSERT(ui != NULL);
     HENKA_TEST_ASSERT(henka_ui_is_visible(ui) == false);
     HENKA_TEST_ASSERT(henka_ui_get_wants_mouse(ui) == false);
+    HENKA_TEST_ASSERT(henka_ui_get_draw_rect_count(ui) == 0U);
 
     HENKA_TEST_ASSERT(henka_ui_begin_frame(NULL, NULL) == HENKA_ERROR_INVALID_ARGUMENT);
     HENKA_TEST_ASSERT(henka_ui_end_frame(NULL) == HENKA_ERROR_INVALID_ARGUMENT);
@@ -44,6 +45,7 @@ void henka_test_ui(void)
     HENKA_TEST_ASSERT(henka_ui_panel(ui, (henka_ui_rect){20.0f, 20.0f, 200.0f, 100.0f}, "Panel") == HENKA_SUCCESS);
     HENKA_TEST_ASSERT(henka_ui_label(ui, 28.0f, 44.0f, 1.0f, "Status") == HENKA_SUCCESS);
     HENKA_TEST_ASSERT(henka_ui_get_wants_mouse(ui) == false);
+    HENKA_TEST_ASSERT(henka_ui_get_draw_rect_count(ui) == 0U);
     HENKA_TEST_ASSERT(henka_ui_button(ui, "hidden_button", (henka_ui_rect){40.0f, 40.0f, 120.0f, 28.0f}, "Click") == false);
     HENKA_TEST_ASSERT(henka_ui_end_frame(ui) == HENKA_SUCCESS);
 
@@ -55,6 +57,7 @@ void henka_test_ui(void)
     HENKA_TEST_ASSERT(henka_ui_get_wants_mouse(ui) == true);
     HENKA_TEST_ASSERT(henka_ui_button(ui, "button", (henka_ui_rect){40.0f, 40.0f, 120.0f, 28.0f}, "Click") == true);
     HENKA_TEST_ASSERT(henka_ui_selectable(ui, "selected", (henka_ui_rect){40.0f, 72.0f, 120.0f, 28.0f}, "Cube", true) == false);
+    HENKA_TEST_ASSERT(henka_ui_get_draw_rect_count(ui) > 0U);
     HENKA_TEST_ASSERT(henka_ui_end_frame(ui) == HENKA_SUCCESS);
 
     frame_desc.mouse_left_down = false;

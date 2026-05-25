@@ -71,6 +71,9 @@ typedef struct sandbox3d_state
     sandbox3d_object_descriptor descriptors[SANDBOX3D_OBJECT_COUNT];
     sandbox3d_workspace_state workspace;
     henka_entity selected_entity;
+    bool settings_file_found;
+    bool startup_panels_auto_opened;
+    bool ui_visibility_report_pending;
     bool ui_visible_last_frame;
 } sandbox3d_state;
 
@@ -106,6 +109,15 @@ static const char* g_setting_key_scene_panel_visible = "ui.scene_objects_panel_v
 static const char* g_setting_key_details_panel_visible = "ui.object_details_panel_visible";
 
 static float sandbox3d_get_mouse_sensitivity(const sandbox3d_state* state);
+
+static const char* sandbox3d_get_build_configuration_label(void)
+{
+#if defined(_DEBUG)
+    return "Debug";
+#else
+    return "Release";
+#endif
+}
 
 static henka_result sandbox3d_get_settings_path(const henka_engine* engine, char** out_path)
 {
@@ -309,9 +321,30 @@ static void sandbox3d_print_ui_state(bool visible)
     fflush(stdout);
 }
 
+static void sandbox3d_print_startup_ui_cue(const sandbox3d_state* state)
+{
+    if (state == NULL)
+    {
+        return;
+    }
+
+    if (state->startup_panels_auto_opened)
+    {
+        printf("Startup UI: the in-window panels start open on first run so the scene tools are immediately visible.\n");
+        printf("Startup UI: press F4 to hide the panels and press F4 again to bring them back.\n");
+    }
+    else
+    {
+        printf("Startup UI: press F4 to open the in-window panels.\n");
+    }
+
+    fflush(stdout);
+}
+
 static void sandbox3d_print_help(const sandbox3d_state* state)
 {
     printf("Henka Engine Sandbox 3D\n");
+    printf("Build: local %s %s %s\n", sandbox3d_get_build_configuration_label(), __DATE__, __TIME__);
     printf("This scene shows texture rendering, untextured material color, early OBJ loading, visible fallback behavior, and the first developer-facing scene inspection panels.\n");
     printf("Controls:\n");
     printf("  W A S D          Move across the scene\n");
@@ -326,6 +359,7 @@ static void sandbox3d_print_help(const sandbox3d_state* state)
     printf("  H                Print controls and the scene legend again\n");
     printf("  Escape           Close the panels first. Then release the mouse. Then exit.\n");
     printf("Panel shortcuts:\n");
+    printf("  Press F4 to open the in-window panels.\n");
     printf("  Use the panels to inspect named scene objects, focus the camera, reset object transforms, toggle visibility, and save or reset local sandbox settings.\n");
     printf("  Mouse look and camera movement pause while the UI is open.\n");
     sandbox3d_print_scene_legend(state);
@@ -1378,6 +1412,19 @@ static void sandbox3d_build_ui(henka_engine* engine, sandbox3d_state* state)
         sandbox3d_draw_scene_objects_panel(state, &layout);
         sandbox3d_draw_object_details_panel(state, &layout);
 
+        if (state->ui_visibility_report_pending)
+        {
+            printf(
+                "Sandbox UI ready: framebuffer %dx%d, draw rects %zu, scene panel %s, details panel %s.\n",
+                frame_desc.framebuffer_width,
+                frame_desc.framebuffer_height,
+                henka_ui_get_draw_rect_count(state->ui),
+                state->workspace.scene_objects_panel_visible ? "on" : "off",
+                state->workspace.object_details_panel_visible ? "on" : "off");
+            fflush(stdout);
+            state->ui_visibility_report_pending = false;
+        }
+
         henka_free(settings_path);
     }
 
@@ -1722,6 +1769,7 @@ static henka_result sandbox3d_initialize(henka_engine* engine, void* user_data)
             settings_file = NULL;
             if (fopen_s(&settings_file, settings_path, "r") == 0 && settings_file != NULL)
             {
+                state->settings_file_found = true;
                 fclose(settings_file);
 
                 load_result = henka_settings_load_file(state->settings, settings_path);
@@ -1762,6 +1810,12 @@ static henka_result sandbox3d_initialize(henka_engine* engine, void* user_data)
     }
 
     sandbox3d_apply_loaded_settings(engine, state);
+    state->startup_panels_auto_opened = !state->settings_file_found;
+    if (state->startup_panels_auto_opened)
+    {
+        henka_ui_set_visible(state->ui, true);
+        state->ui_visibility_report_pending = true;
+    }
 
     result = henka_engine_set_mouse_capture(engine, false);
     if (result != HENKA_SUCCESS)
@@ -1770,6 +1824,7 @@ static henka_result sandbox3d_initialize(henka_engine* engine, void* user_data)
     }
 
     sandbox3d_print_help(state);
+    sandbox3d_print_startup_ui_cue(state);
     return HENKA_SUCCESS;
 
 fail:
@@ -1801,6 +1856,7 @@ static void sandbox3d_update(henka_engine* engine, double delta_seconds, void* u
         if (ui_visible)
         {
             henka_engine_set_mouse_capture(engine, false);
+            state->ui_visibility_report_pending = true;
         }
         sandbox3d_print_ui_state(ui_visible);
         ui_toggled_with_f4 = true;

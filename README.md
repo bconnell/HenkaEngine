@@ -96,6 +96,7 @@ The sandbox starts a visible 3D scene with:
 - a fallback-model example for missing OBJ loads
 
 Sandbox settings are saved locally in a `user/` folder beside the executable. In a packaged run, the settings file is `out/HenkaSandbox3D/user/sandbox3d.settings`.
+The packaged folder also includes `PACKAGE_INFO.txt` so you can tell when the package was last refreshed.
 
 ### Sandbox controls
 
@@ -111,7 +112,7 @@ Sandbox settings are saved locally in a `user/` folder beside the executable. In
 - `H`: print controls and the scene legend again
 - `Escape`: close the UI first, then release the mouse, then exit
 
-Press `F4` to open the in-window sandbox panels. The controls panel can toggle the grid and wireframe view, reset the camera, adjust mouse sensitivity and camera speed, save settings, reset sandbox settings, and print the same help and scene legend you can reach from the keyboard. The Scene Objects and Object Details panels let you select named scene examples, inspect what they demonstrate, toggle visibility, focus the camera, reset their transforms, and print object info to the console. Mouse look and camera movement pause while the UI is open.
+Press `F4` to open the in-window sandbox panels. On a first run with no local settings file, the packaged sandbox opens the panels automatically so the UI is immediately visible. The controls panel can toggle the grid and wireframe view, reset the camera, adjust mouse sensitivity and camera speed, save settings, reset sandbox settings, and print the same help and scene legend you can reach from the keyboard. The Scene Objects and Object Details panels let you select named scene examples, inspect what they demonstrate, toggle visibility, focus the camera, reset their transforms, and print object info to the console. Mouse look and camera movement pause while the UI is open.
 
 Offline help is also available in [docs/help/sandbox3d.md](docs/help/sandbox3d.md).
 Model loading notes are documented in [docs/model-loading.md](docs/model-loading.md).

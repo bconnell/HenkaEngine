@@ -61,6 +61,7 @@ That is enough for the current sandbox panel, status text, and small runtime con
 ## Sandbox panels
 
 In `henka_sandbox3d`, press `F4` to open the panels.
+On a first packaged run with no local settings file, the panels open automatically so the UI is immediately visible.
 
 The current `Controls` panel can:
 
@@ -100,6 +101,15 @@ When the UI is open:
 - camera movement pauses
 - you can click the UI with the left mouse button
 - `Escape` closes the panel before it returns to the usual mouse-capture and exit flow
+
+If the packaged sandbox opens but you do not see the panels:
+
+- refresh the package with `.\scripts\package_sandbox3d_windows.ps1`
+- check `out/HenkaSandbox3D/PACKAGE_INFO.txt` to confirm the package was refreshed
+- launch `out/HenkaSandbox3D/HenkaSandbox3D.exe` again
+- confirm the startup console help mentions `F4`
+
+The packaged QA script can confirm startup logs and UI state output, but it still does not replace a human visual check for readability.
 
 ## Future direction
 

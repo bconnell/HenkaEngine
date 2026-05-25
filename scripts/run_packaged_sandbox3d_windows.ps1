@@ -13,6 +13,7 @@ try {
     Start-Process -FilePath $packagedExe -WorkingDirectory $packageRoot
     Write-Host "Launched packaged sandbox:"
     Write-Host "  $packagedExe"
+    Write-Host "Press F4 to open the in-window panels."
 }
 finally {
     Pop-Location

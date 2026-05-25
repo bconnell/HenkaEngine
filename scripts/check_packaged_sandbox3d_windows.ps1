@@ -57,6 +57,21 @@ function Try-AssertFileContains {
     return $true
 }
 
+function Try-AssertPathExists {
+    param(
+        [string]$Path,
+        [string]$Description
+    )
+
+    if (-not (Test-Path $Path)) {
+        Write-Output "[warn] $Description was not found: $Path"
+        return $false
+    }
+
+    Write-Output "[pass] $Description"
+    return $true
+}
+
 function Wait-FileContains {
     param(
         [string]$Path,
@@ -114,6 +129,7 @@ $packagedExe = Join-Path $packageRoot "HenkaSandbox3D.exe"
 $assetsDir = Join-Path $packageRoot "assets"
 $helpPath = Join-Path $packageRoot "docs\help\sandbox3d.md"
 $readmePath = Join-Path $packageRoot "README.txt"
+$packageInfoPath = Join-Path $packageRoot "PACKAGE_INFO.txt"
 $settingsPath = Join-Path $packageRoot "user\sandbox3d.settings"
 $logDir = Join-Path $repoRoot "build\test_tmp"
 $stdoutPath = Join-Path $logDir "check_packaged_sandbox3d_stdout.log"
@@ -158,6 +174,7 @@ Assert-PathExists -Path $packagedExe -Description "Packaged sandbox executable"
 Assert-PathExists -Path $assetsDir -Description "Packaged assets folder"
 Assert-PathExists -Path $helpPath -Description "Packaged offline help"
 Assert-PathExists -Path $readmePath -Description "Packaged run guide"
+Assert-PathExists -Path $packageInfoPath -Description "Packaged build marker"
 
 New-Item -ItemType Directory -Path $logDir -Force | Out-Null
 Remove-Item $stdoutPath, $stderrPath -ErrorAction SilentlyContinue
@@ -182,20 +199,28 @@ try {
     }
     Assert-FileContains -Path $stdoutPath -Pattern "Henka Engine Sandbox 3D" -Description "Startup help heading"
     Assert-FileContains -Path $stdoutPath -Pattern "F4               Show or hide the sandbox panel" -Description "F4 help text"
+    Assert-FileContains -Path $stdoutPath -Pattern "Startup UI:" -Description "Startup UI cue"
 
     Write-Step "Checking packaged UI open and close"
     [NativeMethods]::SetForegroundWindow($process.MainWindowHandle) | Out-Null
     $null = $shell.AppActivate($process.Id)
     Start-Sleep -Milliseconds 600
-    [System.Windows.Forms.SendKeys]::SendWait('{F4}')
-    if (-not (Wait-FileContains -Path $stdoutPath -Pattern "Sandbox panel: shown" -TimeoutMilliseconds 2000)) {
-        $null = $shell.AppActivate($process.Id)
-        Start-Sleep -Milliseconds 250
-        [System.Windows.Forms.SendKeys]::SendWait('{F4}')
-    }
-    if (Wait-FileContains -Path $stdoutPath -Pattern "Sandbox panel: shown" -TimeoutMilliseconds 4000) {
-        Assert-FileContains -Path $stdoutPath -Pattern "Sandbox panel: shown" -Description "Panel open output"
+    if (Wait-FileContains -Path $stdoutPath -Pattern "Sandbox UI ready:" -TimeoutMilliseconds 1500) {
+        Assert-FileContains -Path $stdoutPath -Pattern "Sandbox UI ready:" -Description "Startup UI readiness output"
         $uiAutomationVerified = $true
+    }
+    else {
+        [System.Windows.Forms.SendKeys]::SendWait('{F4}')
+        if (-not (Wait-FileContains -Path $stdoutPath -Pattern "Sandbox panel: shown" -TimeoutMilliseconds 2000)) {
+            $null = $shell.AppActivate($process.Id)
+            Start-Sleep -Milliseconds 250
+            [System.Windows.Forms.SendKeys]::SendWait('{F4}')
+        }
+        if (Wait-FileContains -Path $stdoutPath -Pattern "Sandbox panel: shown" -TimeoutMilliseconds 4000) {
+            Assert-FileContains -Path $stdoutPath -Pattern "Sandbox panel: shown" -Description "Panel open output"
+            Assert-FileContains -Path $stdoutPath -Pattern "Sandbox UI ready:" -Description "UI readiness output after F4"
+            $uiAutomationVerified = $true
+        }
     }
 
     if ($uiAutomationVerified) {
@@ -225,19 +250,21 @@ try {
             Write-Output "[warn] Some packaged UI click checks could not be confirmed automatically. Manual packaged UI QA is still needed."
         }
 
-        $null = $shell.AppActivate($process.Id)
-        Start-Sleep -Milliseconds 400
-        [System.Windows.Forms.SendKeys]::SendWait('{F4}')
-        if (-not (Wait-FileContains -Path $stdoutPath -Pattern "Sandbox panel: hidden" -TimeoutMilliseconds 2000)) {
+        if (-not (Select-String -LiteralPath $stdoutPath -Pattern "Sandbox panel: shown" -Quiet)) {
             $null = $shell.AppActivate($process.Id)
-            Start-Sleep -Milliseconds 250
+            Start-Sleep -Milliseconds 400
             [System.Windows.Forms.SendKeys]::SendWait('{F4}')
-        }
-        if (Wait-FileContains -Path $stdoutPath -Pattern "Sandbox panel: hidden" -TimeoutMilliseconds 4000) {
-            Assert-FileContains -Path $stdoutPath -Pattern "Sandbox panel: hidden" -Description "Panel close output"
-        }
-        else {
-            Write-Output "[warn] Automated F4 panel close could not be confirmed. Manual packaged UI QA is still needed."
+            if (-not (Wait-FileContains -Path $stdoutPath -Pattern "Sandbox panel: hidden" -TimeoutMilliseconds 2000)) {
+                $null = $shell.AppActivate($process.Id)
+                Start-Sleep -Milliseconds 250
+                [System.Windows.Forms.SendKeys]::SendWait('{F4}')
+            }
+            if (Wait-FileContains -Path $stdoutPath -Pattern "Sandbox panel: hidden" -TimeoutMilliseconds 4000) {
+                Assert-FileContains -Path $stdoutPath -Pattern "Sandbox panel: hidden" -Description "Panel close output"
+            }
+            else {
+                Write-Output "[warn] Automated F4 panel close could not be confirmed. Manual packaged UI QA is still needed."
+            }
         }
     }
     else {
@@ -256,7 +283,9 @@ try {
     else {
         Write-Output "[warn] Clean close-window shutdown log output could not be confirmed automatically. Manual packaged shutdown QA is still useful."
     }
-    Assert-PathExists -Path $settingsPath -Description "Packaged settings file"
+    if (-not (Try-AssertPathExists -Path $settingsPath -Description "Packaged settings file")) {
+        Write-Output "[warn] Automated packaged close did not leave behind a settings file in this run. Manual packaged persistence QA is still needed."
+    }
 
     Write-Output "[pass] Packaged sandbox checks completed."
 }

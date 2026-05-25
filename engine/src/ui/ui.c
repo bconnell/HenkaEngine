@@ -367,6 +367,16 @@ bool henka_ui_get_wants_mouse(const henka_ui_context* context)
     return context != NULL && context->wants_mouse;
 }
 
+size_t henka_ui_get_draw_rect_count(const henka_ui_context* context)
+{
+    if (context == NULL)
+    {
+        return 0U;
+    }
+
+    return context->draw_rect_count;
+}
+
 bool henka_ui_rect_contains(henka_ui_rect rect, henka_vec2 point)
 {
     return point.x >= rect.x &&

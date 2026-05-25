@@ -26,6 +26,20 @@ $packagedExe = Join-Path $packageRoot "HenkaSandbox3D.exe"
 $packageHelpDir = Join-Path $packageRoot "docs\help"
 $packageAssetsDir = Join-Path $packageRoot "assets"
 $runGuidePath = Join-Path $packageRoot "README.txt"
+$packageInfoPath = Join-Path $packageRoot "PACKAGE_INFO.txt"
+$packageRefreshedAt = Get-Date -Format "yyyy-MM-dd HH:mm:ss zzz"
+$sourceExeTimestamp = (Get-Item $sourceExe).LastWriteTime.ToString("yyyy-MM-dd HH:mm:ss zzz")
+$gitCommit = "unknown"
+
+try {
+    $gitCommit = (git -C $repoRoot log -1 --format=%h 2>$null).Trim()
+    if ([string]::IsNullOrWhiteSpace($gitCommit)) {
+        $gitCommit = "unknown"
+    }
+}
+catch {
+    $gitCommit = "unknown"
+}
 
 if (Test-Path $packageRoot) {
     if ((-not $ResetUserData) -and (Test-Path $packageUserDir)) {
@@ -59,6 +73,7 @@ foreach ($dll in $runtimeDlls) {
 Henka Engine Sandbox 3D
 
 Double-click HenkaSandbox3D.exe to launch the packaged sandbox.
+Press F4 to open the in-window panels.
 
 Keep these folders beside the executable:
 - assets
@@ -75,8 +90,19 @@ The package script preserves the user folder by default so local sandbox setting
 If the sandbox does not start, rebuild the project and package it again from the repository root.
 "@ | Set-Content -LiteralPath $runGuidePath
 
+@"
+Henka Engine Sandbox 3D package
+Package refreshed: $packageRefreshedAt
+Source executable build time: $sourceExeTimestamp
+Source commit: $gitCommit
+Executable: HenkaSandbox3D.exe
+UI: Press F4 to open the in-window panels.
+"@ | Set-Content -LiteralPath $packageInfoPath
+
 Write-Host "Packaged sandbox ready:"
 Write-Host "  $packagedExe"
+Write-Host "Package marker:"
+Write-Host "  $packageInfoPath"
 Write-Host ""
 if ($ResetUserData) {
     Write-Host "Local sandbox settings were reset for this package refresh."
@@ -87,3 +113,4 @@ else {
 Write-Host ""
 Write-Host "Next step:"
 Write-Host "  Open out\HenkaSandbox3D and double-click HenkaSandbox3D.exe."
+Write-Host "  Press F4 to open the in-window panels."

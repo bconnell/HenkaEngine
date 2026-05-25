@@ -12,6 +12,7 @@
 
 The sandbox also saves a small local settings file so wireframe, grid visibility, mouse sensitivity, camera state, selected object, and panel visibility can carry across runs.
 It now also includes small in-window developer panels for inspection and settings tasks.
+On a first packaged run with no existing settings file, the panels open automatically so the UI is immediately visible.
 
 ## Controls
 
@@ -55,7 +56,7 @@ It now also includes small in-window developer panels for inspection and setting
 
 ## Sandbox panels
 
-Press `F4` to open the in-window sandbox panels.
+Press `F4` to open the in-window sandbox panels. If the panels do not appear when you expect them to, refresh the packaged sandbox with `.\scripts\package_sandbox3d_windows.ps1`, confirm `out/HenkaSandbox3D/PACKAGE_INFO.txt` was refreshed, and try again.
 
 The `Controls` panel currently includes:
 
@@ -98,6 +99,7 @@ When the UI is open:
 
 Packaged Windows builds include `docs/help/sandbox3d.md` beside the executable so the same offline help stays available after you copy the runnable folder elsewhere.
 Packaged runs also save sandbox settings in `user/sandbox3d.settings` beside the executable.
+The packaged folder also includes `PACKAGE_INFO.txt` so you can confirm the package was refreshed after a new build.
 
 ## Current limitations
 

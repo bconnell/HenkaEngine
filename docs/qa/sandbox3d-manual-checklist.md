@@ -38,6 +38,28 @@ Use this checklist when you want to confirm that `henka_sandbox3d` is visually r
    .\scripts\check_packaged_sandbox3d_windows.ps1
    ```
 
+## Visible UI verification
+
+1. Run:
+
+   ```powershell
+   .\scripts\package_sandbox3d_windows.ps1
+   ```
+
+2. Open `out/HenkaSandbox3D\HenkaSandbox3D.exe`.
+3. Confirm the startup help says `F4` opens the in-window panels.
+4. Confirm `out/HenkaSandbox3D/PACKAGE_INFO.txt` was refreshed for the current package.
+5. If there was no existing packaged settings file, confirm the panels start open automatically on first run.
+6. Press `F4` and confirm the visible UI appears or hides as expected.
+7. Confirm the `Controls` panel is visible.
+8. Confirm the `Scene Objects` panel is visible.
+9. Confirm the `Object Details` panel is visible.
+10. Confirm panel text is readable by eye.
+11. Confirm panel background contrast is readable against the scene.
+12. Confirm `Escape` behavior still works.
+13. Confirm close-window exit remains clean.
+14. If the UI is not visible, note whether the console reports `Sandbox panel: shown`, `Sandbox panel: hidden`, or `Sandbox UI ready`.
+
 ## Expected startup behavior
 
 - A window opens with the title `Henka Engine Sandbox 3D`.
@@ -76,6 +98,7 @@ You should be able to identify these examples:
 ## Expected sandbox panel behavior
 
 - Pressing `F4` opens panels titled `Controls`, `Scene Objects`, and `Object Details`.
+- On a first packaged run with no existing settings file, the panels start open automatically.
 - Opening the UI releases mouse capture.
 - Mouse look pauses while the UI is open.
 - The `Controls` panel can toggle the debug grid and wireframe state with the mouse.
