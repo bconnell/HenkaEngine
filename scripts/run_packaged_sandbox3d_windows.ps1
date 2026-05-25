@@ -14,6 +14,7 @@ try {
     Write-Host "Launched packaged sandbox:"
     Write-Host "  $packagedExe"
     Write-Host "Press F4 to open the in-window panels."
+    Write-Host "Press F5 to cycle View, Inspect, and Full Tools."
 }
 finally {
     Pop-Location

@@ -108,11 +108,12 @@ The packaged folder also includes `PACKAGE_INFO.txt` so you can tell when the pa
 - `F1`: toggle wireframe
 - `F2`: print the scene legend again
 - `F3`: show or hide the debug grid
-- `F4`: show or hide the sandbox panel
+- `F4`: show or hide the sandbox panels
+- `F5`: cycle View, Inspect, and Full Tools layouts
 - `H`: print controls and the scene legend again
 - `Escape`: close the UI first, then release the mouse, then exit
 
-Press `F4` to open the in-window sandbox panels. On a first run with no local settings file, the packaged sandbox opens the panels automatically so the UI is immediately visible. The controls panel can toggle the grid and wireframe view, reset the camera, adjust mouse sensitivity and camera speed, save settings, reset sandbox settings, and print the same help and scene legend you can reach from the keyboard. The Scene Objects and Object Details panels let you select named scene examples, inspect what they demonstrate, toggle visibility, focus the camera, reset their transforms, and print object info to the console. Mouse look and camera movement pause while the UI is open.
+Press `F4` to open the in-window sandbox panels. On a first run with no local settings file, the packaged sandbox opens the UI in `View` mode so the controls are visible without covering most of the scene. Press `F5` to cycle between `View`, `Inspect`, and `Full Tools`. The controls panel can toggle the grid and wireframe view, reset the camera, save settings, reset the panel layout, and switch layouts. Inspect and Full Tools also expose the object panels so you can select named scene examples, inspect what they demonstrate, toggle visibility, focus the camera, reset their transforms, and print object info to the console. Mouse look and camera movement pause while the UI is open.
 
 Offline help is also available in [docs/help/sandbox3d.md](docs/help/sandbox3d.md).
 Model loading notes are documented in [docs/model-loading.md](docs/model-loading.md).

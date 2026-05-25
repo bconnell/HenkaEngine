@@ -62,7 +62,7 @@ You can launch the packaged sandbox in either of these ways:
 - open `out/HenkaSandbox3D` in Explorer and double-click `HenkaSandbox3D.exe`
 - run `.\scripts\run_packaged_sandbox3d_windows.ps1`
 
-On a first packaged run with no local settings file yet, the sandbox opens the in-window panels automatically so the UI is visible right away.
+On a first packaged run with no local settings file yet, the sandbox opens the in-window UI in `View` mode so the controls are visible without covering most of the viewport.
 
 ## Run a packaged sandbox check
 
@@ -72,7 +72,7 @@ On a first packaged run with no local settings file yet, the sandbox opens the i
 
 The packaged check script confirms that the packaged folder contains the expected files, launches the sandbox, checks the startup help text and package marker, confirms UI state logs when available, exercises a few UI clicks, and confirms the close-window path exits cleanly.
 
-It does not replace human visual QA. You should still confirm by eye that the panels are actually visible and readable in the packaged window.
+It does not replace human visual QA. You should still confirm by eye that the layout leaves the scene comfortably visible in the packaged window.
 
 ## Validate the external game template
 

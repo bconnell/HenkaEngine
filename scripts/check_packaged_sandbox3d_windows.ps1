@@ -198,7 +198,8 @@ try {
         throw "Startup help heading was not found in the packaged sandbox output."
     }
     Assert-FileContains -Path $stdoutPath -Pattern "Henka Engine Sandbox 3D" -Description "Startup help heading"
-    Assert-FileContains -Path $stdoutPath -Pattern "F4               Show or hide the sandbox panel" -Description "F4 help text"
+    Assert-FileContains -Path $stdoutPath -Pattern "F4               Show or hide the sandbox panels" -Description "F4 help text"
+    Assert-FileContains -Path $stdoutPath -Pattern "F5               Cycle View, Inspect, and Full Tools layouts" -Description "F5 help text"
     Assert-FileContains -Path $stdoutPath -Pattern "Startup UI:" -Description "Startup UI cue"
 
     Write-Step "Checking packaged UI open and close"
@@ -207,6 +208,7 @@ try {
     Start-Sleep -Milliseconds 600
     if (Wait-FileContains -Path $stdoutPath -Pattern "Sandbox UI ready:" -TimeoutMilliseconds 1500) {
         Assert-FileContains -Path $stdoutPath -Pattern "Sandbox UI ready:" -Description "Startup UI readiness output"
+        Assert-FileContains -Path $stdoutPath -Pattern "View mode|Inspect mode|Full Tools mode" -Description "Layout mode output"
         $uiAutomationVerified = $true
     }
     else {
@@ -219,17 +221,18 @@ try {
         if (Wait-FileContains -Path $stdoutPath -Pattern "Sandbox panel: shown" -TimeoutMilliseconds 4000) {
             Assert-FileContains -Path $stdoutPath -Pattern "Sandbox panel: shown" -Description "Panel open output"
             Assert-FileContains -Path $stdoutPath -Pattern "Sandbox UI ready:" -Description "UI readiness output after F4"
+            Assert-FileContains -Path $stdoutPath -Pattern "View mode|Inspect mode|Full Tools mode" -Description "Layout mode output after F4"
             $uiAutomationVerified = $true
         }
     }
 
     if ($uiAutomationVerified) {
         Write-Step "Checking packaged UI click controls"
-        Click-WindowPoint -Handle $process.MainWindowHandle -OffsetX 150 -OffsetY 92
-        Click-WindowPoint -Handle $process.MainWindowHandle -OffsetX 150 -OffsetY 92
-        Click-WindowPoint -Handle $process.MainWindowHandle -OffsetX 392 -OffsetY 92
-        Click-WindowPoint -Handle $process.MainWindowHandle -OffsetX 392 -OffsetY 92
-        Click-WindowPoint -Handle $process.MainWindowHandle -OffsetX 392 -OffsetY 136
+        Click-WindowPoint -Handle $process.MainWindowHandle -OffsetX 120 -OffsetY 114
+        Click-WindowPoint -Handle $process.MainWindowHandle -OffsetX 120 -OffsetY 114
+        Click-WindowPoint -Handle $process.MainWindowHandle -OffsetX 248 -OffsetY 114
+        Click-WindowPoint -Handle $process.MainWindowHandle -OffsetX 248 -OffsetY 114
+        Click-WindowPoint -Handle $process.MainWindowHandle -OffsetX 248 -OffsetY 148
 
         $uiClickChecks = @(
             @{ Pattern = "Debug grid: hidden"; Description = "UI debug grid click output" },

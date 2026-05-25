@@ -74,6 +74,7 @@ Henka Engine Sandbox 3D
 
 Double-click HenkaSandbox3D.exe to launch the packaged sandbox.
 Press F4 to open the in-window panels.
+Press F5 to cycle View, Inspect, and Full Tools.
 
 Keep these folders beside the executable:
 - assets
@@ -97,6 +98,7 @@ Source executable build time: $sourceExeTimestamp
 Source commit: $gitCommit
 Executable: HenkaSandbox3D.exe
 UI: Press F4 to open the in-window panels.
+Layout: Press F5 to cycle View, Inspect, and Full Tools.
 "@ | Set-Content -LiteralPath $packageInfoPath
 
 Write-Host "Packaged sandbox ready:"
@@ -114,3 +116,4 @@ Write-Host ""
 Write-Host "Next step:"
 Write-Host "  Open out\HenkaSandbox3D and double-click HenkaSandbox3D.exe."
 Write-Host "  Press F4 to open the in-window panels."
+Write-Host "  Press F5 to cycle View, Inspect, and Full Tools."

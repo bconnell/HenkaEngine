@@ -50,6 +50,7 @@ The current sandbox saves:
 - camera position
 - camera yaw
 - camera pitch
+- UI layout mode
 - selected scene object
 - Scene Objects panel visibility
 - Object Details panel visibility

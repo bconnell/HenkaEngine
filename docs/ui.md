@@ -61,21 +61,19 @@ That is enough for the current sandbox panel, status text, and small runtime con
 ## Sandbox panels
 
 In `henka_sandbox3d`, press `F4` to open the panels.
-On a first packaged run with no local settings file, the panels open automatically so the UI is immediately visible.
+On a first packaged run with no local settings file, the UI opens in `View` mode so the controls are immediately visible without covering most of the scene.
 
 The current `Controls` panel can:
 
+- switch between `View`, `Inspect`, and `Full Tools`
 - toggle the debug grid
 - toggle wireframe
-- adjust mouse sensitivity
-- adjust camera speed
 - reset the camera
 - save sandbox settings
-- reset sandbox settings
 - print help
-- print the scene legend
+- reset the layout
 
-It also shows short state text for mouse capture, frame timing, camera position, and local runtime paths.
+`Inspect` and `Full Tools` keep the object panels available. `Full Tools` also keeps the heavier adjustment and status text visible.
 
 The current `Scene Objects` panel can:
 
@@ -101,6 +99,12 @@ When the UI is open:
 - camera movement pauses
 - you can click the UI with the left mouse button
 - `Escape` closes the panel before it returns to the usual mouse-capture and exit flow
+
+`F5` cycles the current layout mode:
+
+- `View`: compact controls, scene-first
+- `Inspect`: object selection and concise details
+- `Full Tools`: larger inspection footprint with more controls and status text
 
 If the packaged sandbox opens but you do not see the panels:
 

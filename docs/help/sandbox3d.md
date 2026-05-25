@@ -12,7 +12,7 @@
 
 The sandbox also saves a small local settings file so wireframe, grid visibility, mouse sensitivity, camera state, selected object, and panel visibility can carry across runs.
 It now also includes small in-window developer panels for inspection and settings tasks.
-On a first packaged run with no existing settings file, the panels open automatically so the UI is immediately visible.
+On a first packaged run with no existing settings file, the UI opens in `View` mode so the controls are visible while most of the scene stays open.
 
 ## Controls
 
@@ -25,6 +25,7 @@ On a first packaged run with no existing settings file, the panels open automati
 - `F2`: print the scene legend to the console again
 - `F3`: show or hide the debug grid
 - `F4`: show or hide the sandbox panels
+- `F5`: cycle View, Inspect, and Full Tools layouts
 - `H`: print controls and the scene legend to the console again
 - `Escape`: close the sandbox UI first, then release the mouse, then exit
 - Window close: exit
@@ -49,27 +50,35 @@ On a first packaged run with no existing settings file, the panels open automati
 - Find the fallback-model example to confirm that missing OBJ assets fail visibly without stopping the engine.
 - Compare the colored cube, textured cube, and OBJ marker so it is easy to tell which material path each object is using.
 - Use `F3` to hide the grid briefly, then show it again to confirm the scene layout still reads clearly.
-- Press `F4` to open the sandbox panels, then click the grid and wireframe controls to confirm the in-window UI updates the same engine state as the keyboard shortcuts.
+- Press `F4` to open the sandbox panels, then use `F5` to compare the View, Inspect, and Full Tools layouts.
+- Click the grid and wireframe controls to confirm the in-window UI updates the same engine state as the keyboard shortcuts.
 - Select each scene object and confirm the Object Details panel updates.
 - Use Focus Camera, Reset Transform, and Print Object Info on a few different objects.
 - Use the controls panel to reset the camera, save settings, and reset sandbox settings.
 
 ## Sandbox panels
 
-Press `F4` to open the in-window sandbox panels. If the panels do not appear when you expect them to, refresh the packaged sandbox with `.\scripts\package_sandbox3d_windows.ps1`, confirm `out/HenkaSandbox3D/PACKAGE_INFO.txt` was refreshed, and try again.
+Press `F4` to open the in-window sandbox panels. Press `F5` to cycle between:
+
+- `View`: keeps most of the scene visible and shows a compact controls panel
+- `Inspect`: keeps the object panels available while leaving the center view clearer
+- `Full Tools`: shows the heavier inspection layout
+
+If the panels do not appear when you expect them to, refresh the packaged sandbox with `.\scripts\package_sandbox3d_windows.ps1`, confirm `out/HenkaSandbox3D/PACKAGE_INFO.txt` was refreshed, and try again.
 
 The `Controls` panel currently includes:
 
+- layout buttons for `View`, `Inspect`, and `Full Tools`
 - a debug-grid toggle
 - a wireframe toggle
 - a camera reset button
-- mouse-sensitivity controls
-- camera-speed controls
 - a save-settings button
-- a reset-settings button
-- help and scene-legend buttons
-- short status text for mouse capture, wireframe, grid state, frame timing, camera position, asset path, user-data path, and settings path
+- a reset-layout button
 - panel visibility toggles for the object-inspection panels
+
+`Inspect` and `Full Tools` also expose the wider inspection controls.
+
+`Full Tools` keeps the most status text, adjustment controls, and path details visible.
 
 The `Scene Objects` panel lists the current sandbox examples by name.
 

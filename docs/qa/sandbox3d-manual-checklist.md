@@ -49,16 +49,19 @@ Use this checklist when you want to confirm that `henka_sandbox3d` is visually r
 2. Open `out/HenkaSandbox3D\HenkaSandbox3D.exe`.
 3. Confirm the startup help says `F4` opens the in-window panels.
 4. Confirm `out/HenkaSandbox3D/PACKAGE_INFO.txt` was refreshed for the current package.
-5. If there was no existing packaged settings file, confirm the panels start open automatically on first run.
-6. Press `F4` and confirm the visible UI appears or hides as expected.
-7. Confirm the `Controls` panel is visible.
-8. Confirm the `Scene Objects` panel is visible.
-9. Confirm the `Object Details` panel is visible.
-10. Confirm panel text is readable by eye.
-11. Confirm panel background contrast is readable against the scene.
-12. Confirm `Escape` behavior still works.
-13. Confirm close-window exit remains clean.
-14. If the UI is not visible, note whether the console reports `Sandbox panel: shown`, `Sandbox panel: hidden`, or `Sandbox UI ready`.
+5. If there was no existing packaged settings file, confirm the UI starts in a compact layout that leaves most of the scene visible.
+6. Confirm the main scene objects remain visible while the UI is open.
+7. Press `F4` and confirm the visible UI appears or hides as expected.
+8. Press `F5` and confirm the layout cycles between `View`, `Inspect`, and `Full Tools`.
+9. Confirm `View` leaves the scene mostly visible.
+10. Confirm `Inspect` keeps Scene Objects and Object Details usable.
+11. Confirm `Full Tools` shows the heavier inspection layout.
+12. Confirm `Reset Layout` restores a usable default.
+13. Confirm panel text is readable by eye.
+14. Confirm panel background contrast is readable against the scene.
+15. Confirm `Escape` behavior still works.
+16. Confirm close-window exit remains clean.
+17. If the UI is not visible or feels wrong, note whether the console reports `Sandbox panel: shown`, `Sandbox panel: hidden`, or `Sandbox UI ready`.
 
 ## Expected startup behavior
 
@@ -91,6 +94,7 @@ You should be able to identify these examples:
 - `F2`: print the scene legend again
 - `F3`: show or hide the debug grid
 - `F4`: show or hide the sandbox panels
+- `F5`: cycle View, Inspect, and Full Tools
 - `H`: print controls and the scene legend again
 - `Escape`: close the UI first, then release mouse capture, then exit
 - Window close: exit
@@ -98,9 +102,10 @@ You should be able to identify these examples:
 ## Expected sandbox panel behavior
 
 - Pressing `F4` opens panels titled `Controls`, `Scene Objects`, and `Object Details`.
-- On a first packaged run with no existing settings file, the panels start open automatically.
+- On a first packaged run with no existing settings file, the UI starts in a scene-first layout.
 - Opening the UI releases mouse capture.
 - Mouse look pauses while the UI is open.
+- `F5` cycles View, Inspect, and Full Tools layouts.
 - The `Controls` panel can toggle the debug grid and wireframe state with the mouse.
 - The `Controls` panel can adjust mouse sensitivity and camera speed with the mouse.
 - The `Controls` panel can reset the camera, save settings, reset sandbox settings, print help, print the scene legend, and reset the panel layout.
@@ -218,6 +223,7 @@ Controls:
 - F2 legend:
 - F3 grid:
 - F4 panel:
+- F5 layout:
 - Scene Objects panel:
 - Object Details panel:
 - Object selection:
