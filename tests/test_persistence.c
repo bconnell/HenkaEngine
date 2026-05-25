@@ -12,6 +12,11 @@ void henka_test_persistence(void)
     char* parent_directory;
     FILE* file;
     henka_result result;
+    henka_save_data* save_data;
+    henka_save_data* loaded_save;
+    float loaded_pitch;
+    henka_vec3 loaded_position;
+    float loaded_yaw;
     henka_settings* reloaded;
     henka_settings* settings;
 
@@ -91,8 +96,39 @@ void henka_test_persistence(void)
     result = henka_settings_load_file(settings, "build/test_tmp/does_not_exist.settings");
     HENKA_TEST_ASSERT(result == HENKA_ERROR_UNKNOWN);
 
+    HENKA_TEST_ASSERT(henka_save_data_create(&save_data) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_save_data_set_scene_id(save_data, "sample_scene") == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_save_data_set_camera_pose(save_data, (henka_vec3){1.0f, 2.0f, 3.0f}, -1.2f, 0.35f) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_save_data_set_flag_bool(save_data, "grid_visible", true) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_save_data_build_slot_path("build/test_tmp", "slot_a", &path) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(strstr(path, "saves/slot_a.save") != NULL);
+    henka_free(path);
+    HENKA_TEST_ASSERT(henka_save_data_save_file(save_data, "build/test_tmp/save_roundtrip.save") == HENKA_SUCCESS);
+
+    HENKA_TEST_ASSERT(henka_save_data_create(&loaded_save) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_save_data_load_file(loaded_save, "build/test_tmp/save_roundtrip.save") == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(strcmp(henka_save_data_get_scene_id(loaded_save), "sample_scene") == 0);
+    HENKA_TEST_ASSERT(henka_save_data_get_camera_pose(loaded_save, &loaded_position, &loaded_yaw, &loaded_pitch) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(loaded_position.x, 1.0f, 0.0001f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(loaded_yaw, -1.2f, 0.0001f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(loaded_pitch, 0.35f, 0.0001f);
+    HENKA_TEST_ASSERT(henka_save_data_get_flag_bool(loaded_save, "grid_visible", false) == true);
+    henka_save_data_destroy(loaded_save);
+
+    file = NULL;
+    HENKA_TEST_ASSERT(fopen_s(&file, "build/test_tmp/save_bad_version.save", "w") == 0);
+    fputs("save.version=99\n", file);
+    fputs("save.scene_id=bad\n", file);
+    fclose(file);
+    HENKA_TEST_ASSERT(henka_save_data_create(&loaded_save) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_save_data_load_file(loaded_save, "build/test_tmp/save_bad_version.save") == HENKA_ERROR_UNKNOWN);
+    henka_save_data_destroy(loaded_save);
+
     DeleteFileA("build/test_tmp/persistence_roundtrip.settings");
     DeleteFileA("build/test_tmp/persistence_malformed.settings");
+    DeleteFileA("build/test_tmp/save_roundtrip.save");
+    DeleteFileA("build/test_tmp/save_bad_version.save");
 
+    henka_save_data_destroy(save_data);
     henka_settings_destroy(settings);
 }

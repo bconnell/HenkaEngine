@@ -67,12 +67,14 @@ Use this checklist when you want to confirm that `henka_sandbox3d` is visually r
 20. Confirm Scene Legend opens in-window.
 21. Confirm Object Info appears in-window after selecting an object.
 22. Confirm Paths, Settings, and Diagnostics utilities are usable in-window.
-23. Confirm the small in-window status area reports common actions without forcing you to read the console.
-24. Confirm the console still receives fallback logs for help, legend, object info, warnings, or errors when those actions are used.
-25. Confirm `Escape` behavior still works.
-26. Confirm close-window exit remains clean.
-27. Confirm no named-engine comparisons appear in runtime text or packaged help.
-28. If the UI is not visible or feels wrong, note whether the console reports `Sandbox panel: shown`, `Sandbox panel: hidden`, or `Sandbox UI ready`.
+23. Confirm the Paths or Diagnostics utility reports the expected runtime mode for the current run.
+24. Close the UI, release mouse capture, left-click a visible object, and confirm picking updates the selection.
+25. Confirm the small in-window status area reports common actions without forcing you to read the console.
+26. Confirm the console still receives fallback logs for help, legend, object info, warnings, or errors when those actions are used.
+27. Confirm `Escape` behavior still works.
+28. Confirm close-window exit remains clean.
+29. Confirm no named-engine comparisons appear in runtime text or packaged help.
+30. If the UI is not visible or feels wrong, note whether the console reports `Sandbox panel: shown`, `Sandbox panel: hidden`, or `Sandbox UI ready`.
 
 ## Expected startup behavior
 
@@ -101,6 +103,7 @@ You should be able to identify these examples:
 - `Shift`: move faster
 - `Mouse`: look around while mouse capture is active
 - `Right Mouse / Tab`: toggle mouse capture
+- `Left Mouse`: pick a visible object when the UI is closed and mouse capture is released
 - `F1`: toggle wireframe
 - `F2`: print the scene legend again
 - `F3`: show or hide the debug grid
@@ -124,8 +127,10 @@ You should be able to identify these examples:
 - The `Scene Objects` panel lists the current scene examples by name.
 - Clicking an object updates the `Object Details` panel.
 - The `Object Details` panel can toggle visibility, focus the camera, reset the selected transform, and print object info.
+- The `Object Details` panel shows tag and interaction state when those foundations are available.
 - Pressing `F4` again closes the UI.
 - After the UI closes, `Right Mouse` and `Tab` can capture the mouse again.
+- With the UI closed and mouse capture released, left-click can select a visible sample object.
 - Pressing `Escape` while the UI is open closes the UI first.
 
 ## Expected fallback behavior

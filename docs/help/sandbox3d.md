@@ -21,6 +21,7 @@ On a first packaged run with no existing settings file, the UI opens in `View` m
 - `Shift`: move faster
 - `Mouse`: look around while mouse capture is active
 - `Right Mouse / Tab`: toggle mouse capture
+- `Left Mouse`: pick a visible scene object when the UI is closed and mouse capture is released
 - `F1`: toggle wireframe
 - `F2`: print the scene legend to the console again
 - `F3`: show or hide the debug grid
@@ -51,6 +52,7 @@ On a first packaged run with no existing settings file, the UI opens in `View` m
 - Compare the colored cube, textured cube, and OBJ marker so it is easy to tell which material path each object is using.
 - Use `F3` to hide the grid briefly, then show it again to confirm the scene layout still reads clearly.
 - Press `F4` to open the sandbox panels, then use `F5` to compare the View, Inspect, and Full Tools layouts.
+- Close the UI, release mouse capture, and left-click a visible object to test the current picking foundation.
 - Click the grid and wireframe controls to confirm the in-window UI updates the same engine state as the keyboard shortcuts.
 - Open Help, Scene Legend, Paths, Settings, and Diagnostics in the Utility panel so you can inspect the sandbox without relying on the console.
 - Confirm the small in-window status area reports common actions such as layout changes, camera reset, saved settings, or object focus.
@@ -92,11 +94,12 @@ The `Scene Objects` panel lists the current sandbox examples by name.
 The `Object Details` panel shows the current selection.
 
 - name
+- tag when available
 - visible state
 - position
 - scale
 - what the object demonstrates
-- mesh, material, and texture or fallback summary
+- mesh, material, texture or fallback summary, and interaction availability
 - safe actions for visibility, camera focus, transform reset, and console info output
 
 The `Utility` panel provides short in-window views for:
@@ -124,12 +127,14 @@ When the UI is open:
 Packaged Windows builds include `docs/help/sandbox3d.md` beside the executable so the same offline help stays available after you copy the runnable folder elsewhere.
 Packaged runs also save sandbox settings in `user/sandbox3d.settings` beside the executable.
 The packaged folder also includes `PACKAGE_INFO.txt` so you can confirm the package was refreshed after a new build.
+The runtime also reports whether it is running in `Development` or `Packaged` mode.
 
 ## Current limitations
 
 - The sandbox uses built-in meshes plus a small early OBJ loading path.
 - OBJ support is intentionally limited to simple geometry and does not include imported materials, negative indices, or animation.
 - The current settings file is a small local key/value format. It is easy to inspect by hand, but it is not a finished save-game system.
+- A separate save-data foundation now exists for scene id, camera pose, and simple flags, but the sandbox still uses settings for its normal viewer state.
 - The UI overlay is intentionally small. It is meant for sandbox control and object inspection, not as a full editor or a complete runtime UI system.
 - The packaged sandbox still opens a console window at this stage. In-window utilities and status are the preferred viewer workflow, while the console remains available for fallback logs.
 - Editor tools, asset browser UI, and broader 2D or 2.5D workflows are not available yet.

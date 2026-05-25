@@ -17,6 +17,8 @@ void henka_test_result(void)
     HENKA_TEST_ASSERT(strcmp(henka_result_to_string(HENKA_ERROR_PLATFORM), "platform error") == 0);
     HENKA_TEST_ASSERT(strcmp(henka_result_to_string(HENKA_ERROR_RENDERER), "renderer error") == 0);
     HENKA_TEST_ASSERT(strcmp(henka_result_to_string(HENKA_ERROR_UNKNOWN), "unknown error") == 0);
+    HENKA_TEST_ASSERT(strcmp(henka_engine_get_package_mode_label(HENKA_PACKAGE_MODE_DEVELOPMENT), "Development") == 0);
+    HENKA_TEST_ASSERT(strcmp(henka_engine_get_package_mode_label(HENKA_PACKAGE_MODE_PACKAGED), "Packaged") == 0);
 
     invalid_config.application_name = NULL;
     invalid_config.window_width = 640;
@@ -24,6 +26,7 @@ void henka_test_result(void)
     invalid_config.enable_vsync = true;
     invalid_config.asset_base_path = NULL;
     invalid_config.user_data_base_path = NULL;
+    invalid_config.package_mode = HENKA_PACKAGE_MODE_AUTO;
     invalid_config.on_initialize = NULL;
     invalid_config.on_update = NULL;
     invalid_config.on_shutdown = NULL;

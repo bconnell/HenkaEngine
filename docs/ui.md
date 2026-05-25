@@ -85,13 +85,16 @@ The current `Scene Objects` panel can:
 - list the current sandbox examples by name
 - show hidden state
 - let you select one object at a time
+- stay aligned with the scene object tag and bounds foundation behind the sandbox descriptors
 
 The current `Object Details` panel can:
 
 - show the selected object name
+- show a scene tag when available
 - show visibility and transform state
 - explain what the object demonstrates
 - show mesh, material, and texture or fallback summary
+- show whether the current object is interactable from the current camera position
 - toggle visibility
 - focus the camera
 - reset the default transform
@@ -108,6 +111,8 @@ The current `Utility` panel can show:
 
 That keeps normal viewer use in the window while the console remains available for fallback logs and automation.
 The packaged sandbox still opens a console window at this stage, but normal viewer interaction is meant to stay inside the viewport and panels rather than depending on console output.
+
+The sandbox also uses the current engine diagnostics snapshot in the Utility panel, and object picking can update selection when the UI is closed and mouse capture is released.
 
 When the UI is open:
 

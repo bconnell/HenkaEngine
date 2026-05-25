@@ -1,5 +1,7 @@
 #include "henka_internal.h"
 
+#include <ctype.h>
+#include <stdio.h>
 #include <string.h>
 
 #include <henka/log.h>
@@ -24,6 +26,61 @@ static char* henka_duplicate_string(const char* value)
 
     memcpy(copy, value, length + 1U);
     return copy;
+}
+
+static bool henka_file_exists(const char* path)
+{
+    FILE* file;
+
+    if (path == NULL || path[0] == '\0')
+    {
+        return false;
+    }
+
+    file = NULL;
+    if (fopen_s(&file, path, "r") != 0 || file == NULL)
+    {
+        return false;
+    }
+
+    fclose(file);
+    return true;
+}
+
+static bool henka_action_name_equals(const char* left, const char* right)
+{
+    if (left == NULL || right == NULL)
+    {
+        return false;
+    }
+
+    while (*left != '\0' || *right != '\0')
+    {
+        while (*left == ' ' || *left == '_' || *left == '-')
+        {
+            ++left;
+        }
+
+        while (*right == ' ' || *right == '_' || *right == '-')
+        {
+            ++right;
+        }
+
+        if (tolower((unsigned char)*left) != tolower((unsigned char)*right))
+        {
+            return false;
+        }
+
+        if (*left == '\0' || *right == '\0')
+        {
+            return *left == *right;
+        }
+
+        ++left;
+        ++right;
+    }
+
+    return true;
 }
 
 static char* henka_engine_resolve_base_path(const char* configured_path, const char* default_suffix)
@@ -81,6 +138,89 @@ static bool henka_engine_config_is_valid(const henka_engine_config* config)
     return true;
 }
 
+static const char* henka_input_action_default_name(henka_input_action action)
+{
+    switch (action)
+    {
+        case HENKA_INPUT_ACTION_MOVE_FORWARD:
+            return "Move Forward";
+        case HENKA_INPUT_ACTION_MOVE_BACK:
+            return "Move Back";
+        case HENKA_INPUT_ACTION_MOVE_LEFT:
+            return "Move Left";
+        case HENKA_INPUT_ACTION_MOVE_RIGHT:
+            return "Move Right";
+        case HENKA_INPUT_ACTION_MOVE_UP:
+            return "Move Up";
+        case HENKA_INPUT_ACTION_MOVE_DOWN:
+            return "Move Down";
+        case HENKA_INPUT_ACTION_INTERACT:
+            return "Interact";
+        case HENKA_INPUT_ACTION_OPEN_PANELS:
+            return "Open Panels";
+        case HENKA_INPUT_ACTION_CHANGE_LAYOUT:
+            return "Change Layout";
+        case HENKA_INPUT_ACTION_TOGGLE_MOUSE_CAPTURE:
+            return "Toggle Mouse Capture";
+        case HENKA_INPUT_ACTION_UNKNOWN:
+        default:
+            return "Unknown";
+    }
+}
+
+static void henka_engine_initialize_action_bindings(henka_engine* engine)
+{
+    size_t index;
+
+    for (index = 0; index < HENKA_INPUT_ACTION_COUNT; ++index)
+    {
+        engine->action_key_bindings[index] = HENKA_KEY_UNKNOWN;
+        engine->action_mouse_bindings[index] = HENKA_MOUSE_BUTTON_UNKNOWN;
+    }
+
+    engine->action_key_bindings[HENKA_INPUT_ACTION_MOVE_FORWARD] = HENKA_KEY_W;
+    engine->action_key_bindings[HENKA_INPUT_ACTION_MOVE_BACK] = HENKA_KEY_S;
+    engine->action_key_bindings[HENKA_INPUT_ACTION_MOVE_LEFT] = HENKA_KEY_A;
+    engine->action_key_bindings[HENKA_INPUT_ACTION_MOVE_RIGHT] = HENKA_KEY_D;
+    engine->action_key_bindings[HENKA_INPUT_ACTION_MOVE_UP] = HENKA_KEY_E;
+    engine->action_key_bindings[HENKA_INPUT_ACTION_MOVE_DOWN] = HENKA_KEY_Q;
+    engine->action_key_bindings[HENKA_INPUT_ACTION_INTERACT] = HENKA_KEY_UNKNOWN;
+    engine->action_key_bindings[HENKA_INPUT_ACTION_OPEN_PANELS] = HENKA_KEY_F4;
+    engine->action_key_bindings[HENKA_INPUT_ACTION_CHANGE_LAYOUT] = HENKA_KEY_F5;
+    engine->action_key_bindings[HENKA_INPUT_ACTION_TOGGLE_MOUSE_CAPTURE] = HENKA_KEY_TAB;
+    engine->action_mouse_bindings[HENKA_INPUT_ACTION_TOGGLE_MOUSE_CAPTURE] = HENKA_MOUSE_BUTTON_RIGHT;
+}
+
+static henka_package_mode henka_engine_resolve_package_mode(const henka_engine* engine)
+{
+    char* marker_path;
+    henka_package_mode package_mode;
+
+    if (engine == NULL)
+    {
+        return HENKA_PACKAGE_MODE_DEVELOPMENT;
+    }
+
+    if (engine->config.package_mode != HENKA_PACKAGE_MODE_AUTO)
+    {
+        return engine->config.package_mode;
+    }
+
+    marker_path = NULL;
+    package_mode = HENKA_PACKAGE_MODE_DEVELOPMENT;
+    if (henka_path_resolve(engine->asset_base_path, "PACKAGE_INFO.txt", &marker_path) == HENKA_SUCCESS)
+    {
+        if (henka_file_exists(marker_path))
+        {
+            package_mode = HENKA_PACKAGE_MODE_PACKAGED;
+        }
+
+        henka_free(marker_path);
+    }
+
+    return package_mode;
+}
+
 static void henka_input_reset_frame_state(henka_input_state* input)
 {
     size_t index;
@@ -88,6 +228,7 @@ static void henka_input_reset_frame_state(henka_input_state* input)
     for (index = 0; index < HENKA_KEY_COUNT; ++index)
     {
         input->keys_pressed[index] = false;
+        input->keys_released[index] = false;
     }
 
     for (index = 0; index < HENKA_MOUSE_BUTTON_COUNT; ++index)
@@ -140,6 +281,7 @@ henka_result henka_engine_create(const henka_engine_config* config, henka_engine
     }
 
     engine->config = *config;
+    henka_engine_initialize_action_bindings(engine);
 
     HENKA_LOG_INFO("creating engine for '%s' (%dx%d, vsync=%s)",
         engine->config.application_name,
@@ -210,6 +352,8 @@ henka_result henka_engine_create(const henka_engine_config* config, henka_engine
         engine->renderer->framebuffer_width = framebuffer_width;
         engine->renderer->framebuffer_height = framebuffer_height;
     }
+
+    engine->package_mode = henka_engine_resolve_package_mode(engine);
 
     HENKA_LOG_INFO("engine startup complete");
 
@@ -496,6 +640,50 @@ const char* henka_engine_get_asset_base_path(const henka_engine* engine)
     return engine->asset_base_path;
 }
 
+henka_package_mode henka_engine_get_package_mode(const henka_engine* engine)
+{
+    if (engine == NULL)
+    {
+        return HENKA_PACKAGE_MODE_DEVELOPMENT;
+    }
+
+    return engine->package_mode;
+}
+
+const char* henka_engine_get_package_mode_label(henka_package_mode package_mode)
+{
+    switch (package_mode)
+    {
+        case HENKA_PACKAGE_MODE_PACKAGED:
+            return "Packaged";
+        case HENKA_PACKAGE_MODE_DEVELOPMENT:
+            return "Development";
+        case HENKA_PACKAGE_MODE_AUTO:
+        default:
+            return "Auto";
+    }
+}
+
+henka_result henka_engine_get_diagnostics(const henka_engine* engine, henka_engine_diagnostics* out_diagnostics)
+{
+    if (engine == NULL || out_diagnostics == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    out_diagnostics->delta_seconds = engine->time.delta_seconds;
+    out_diagnostics->frame_time_milliseconds = engine->time.delta_seconds * 1000.0;
+    out_diagnostics->frames_per_second = engine->time.delta_seconds > 0.0 ? (1.0 / engine->time.delta_seconds) : 0.0;
+    out_diagnostics->frame_index = engine->time.frame_index;
+    out_diagnostics->framebuffer_width = engine->renderer != NULL ? engine->renderer->framebuffer_width : 0;
+    out_diagnostics->framebuffer_height = engine->renderer != NULL ? engine->renderer->framebuffer_height : 0;
+    out_diagnostics->wireframe_enabled = henka_engine_is_wireframe_enabled(engine);
+    out_diagnostics->mouse_captured = henka_engine_is_mouse_captured(engine);
+    out_diagnostics->ui_visible = engine->active_ui != NULL && henka_ui_is_visible(engine->active_ui);
+    out_diagnostics->package_mode = engine->package_mode;
+    return HENKA_SUCCESS;
+}
+
 const char* henka_engine_get_user_data_base_path(const henka_engine* engine)
 {
     if (engine == NULL || engine->user_data_base_path == NULL)
@@ -546,6 +734,16 @@ bool henka_input_was_key_pressed(const henka_engine* engine, henka_key key)
     return engine->input.keys_pressed[key];
 }
 
+bool henka_input_was_key_released(const henka_engine* engine, henka_key key)
+{
+    if (engine == NULL || key <= HENKA_KEY_UNKNOWN || key >= HENKA_KEY_COUNT)
+    {
+        return false;
+    }
+
+    return engine->input.keys_released[key];
+}
+
 bool henka_input_is_mouse_button_down(const henka_engine* engine, henka_mouse_button button)
 {
     if (engine == NULL || button <= HENKA_MOUSE_BUTTON_UNKNOWN || button >= HENKA_MOUSE_BUTTON_COUNT)
@@ -594,4 +792,97 @@ henka_vec2 henka_input_get_mouse_delta(const henka_engine* engine)
     }
 
     return engine->input.mouse_delta;
+}
+
+const char* henka_input_action_get_name(henka_input_action action)
+{
+    return henka_input_action_default_name(action);
+}
+
+henka_input_action henka_input_action_find_by_name(const char* name)
+{
+    henka_input_action action;
+
+    if (name == NULL || name[0] == '\0')
+    {
+        return HENKA_INPUT_ACTION_UNKNOWN;
+    }
+
+    for (action = HENKA_INPUT_ACTION_MOVE_FORWARD; action < HENKA_INPUT_ACTION_COUNT; ++action)
+    {
+        if (henka_action_name_equals(henka_input_action_default_name(action), name))
+        {
+            return action;
+        }
+    }
+
+    return HENKA_INPUT_ACTION_UNKNOWN;
+}
+
+henka_result henka_input_bind_action_key(struct henka_engine* engine, henka_input_action action, henka_key key)
+{
+    if (engine == NULL || action <= HENKA_INPUT_ACTION_UNKNOWN || action >= HENKA_INPUT_ACTION_COUNT)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    if (key < HENKA_KEY_UNKNOWN || key >= HENKA_KEY_COUNT)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    engine->action_key_bindings[action] = key;
+    return HENKA_SUCCESS;
+}
+
+henka_result henka_input_bind_action_mouse_button(struct henka_engine* engine, henka_input_action action, henka_mouse_button button)
+{
+    if (engine == NULL || action <= HENKA_INPUT_ACTION_UNKNOWN || action >= HENKA_INPUT_ACTION_COUNT)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    if (button < HENKA_MOUSE_BUTTON_UNKNOWN || button >= HENKA_MOUSE_BUTTON_COUNT)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    engine->action_mouse_bindings[action] = button;
+    return HENKA_SUCCESS;
+}
+
+static bool henka_input_action_query_key(
+    const henka_engine* engine,
+    henka_input_action action,
+    bool (*query_key)(const henka_engine*, henka_key),
+    bool (*query_mouse)(const henka_engine*, henka_mouse_button))
+{
+    henka_key key;
+    henka_mouse_button button;
+
+    if (engine == NULL || action <= HENKA_INPUT_ACTION_UNKNOWN || action >= HENKA_INPUT_ACTION_COUNT)
+    {
+        return false;
+    }
+
+    key = engine->action_key_bindings[action];
+    button = engine->action_mouse_bindings[action];
+
+    return ((key > HENKA_KEY_UNKNOWN) ? query_key(engine, key) : false) ||
+        ((button > HENKA_MOUSE_BUTTON_UNKNOWN) ? query_mouse(engine, button) : false);
+}
+
+bool henka_input_action_is_down(const struct henka_engine* engine, henka_input_action action)
+{
+    return henka_input_action_query_key(engine, action, henka_input_is_key_down, henka_input_is_mouse_button_down);
+}
+
+bool henka_input_action_was_pressed(const struct henka_engine* engine, henka_input_action action)
+{
+    return henka_input_action_query_key(engine, action, henka_input_was_key_pressed, henka_input_was_mouse_button_pressed);
+}
+
+bool henka_input_action_was_released(const struct henka_engine* engine, henka_input_action action)
+{
+    return henka_input_action_query_key(engine, action, henka_input_was_key_released, henka_input_was_mouse_button_released);
 }

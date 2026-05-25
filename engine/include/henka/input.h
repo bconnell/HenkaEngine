@@ -4,6 +4,7 @@
 #include <stdbool.h>
 
 #include <henka/math.h>
+#include <henka/result.h>
 
 typedef enum henka_key
 {
@@ -35,14 +36,38 @@ typedef enum henka_mouse_button
     HENKA_MOUSE_BUTTON_COUNT
 } henka_mouse_button;
 
+typedef enum henka_input_action
+{
+    HENKA_INPUT_ACTION_UNKNOWN = 0,
+    HENKA_INPUT_ACTION_MOVE_FORWARD,
+    HENKA_INPUT_ACTION_MOVE_BACK,
+    HENKA_INPUT_ACTION_MOVE_LEFT,
+    HENKA_INPUT_ACTION_MOVE_RIGHT,
+    HENKA_INPUT_ACTION_MOVE_UP,
+    HENKA_INPUT_ACTION_MOVE_DOWN,
+    HENKA_INPUT_ACTION_INTERACT,
+    HENKA_INPUT_ACTION_OPEN_PANELS,
+    HENKA_INPUT_ACTION_CHANGE_LAYOUT,
+    HENKA_INPUT_ACTION_TOGGLE_MOUSE_CAPTURE,
+    HENKA_INPUT_ACTION_COUNT
+} henka_input_action;
+
 struct henka_engine;
 
 bool henka_input_is_key_down(const struct henka_engine* engine, henka_key key);
 bool henka_input_was_key_pressed(const struct henka_engine* engine, henka_key key);
+bool henka_input_was_key_released(const struct henka_engine* engine, henka_key key);
 bool henka_input_is_mouse_button_down(const struct henka_engine* engine, henka_mouse_button button);
 bool henka_input_was_mouse_button_pressed(const struct henka_engine* engine, henka_mouse_button button);
 bool henka_input_was_mouse_button_released(const struct henka_engine* engine, henka_mouse_button button);
 henka_vec2 henka_input_get_mouse_position(const struct henka_engine* engine);
 henka_vec2 henka_input_get_mouse_delta(const struct henka_engine* engine);
+const char* henka_input_action_get_name(henka_input_action action);
+henka_input_action henka_input_action_find_by_name(const char* name);
+henka_result henka_input_bind_action_key(struct henka_engine* engine, henka_input_action action, henka_key key);
+henka_result henka_input_bind_action_mouse_button(struct henka_engine* engine, henka_input_action action, henka_mouse_button button);
+bool henka_input_action_is_down(const struct henka_engine* engine, henka_input_action action);
+bool henka_input_action_was_pressed(const struct henka_engine* engine, henka_input_action action);
+bool henka_input_action_was_released(const struct henka_engine* engine, henka_input_action action);
 
 #endif

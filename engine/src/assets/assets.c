@@ -1,5 +1,6 @@
 #include "henka_internal.h"
 
+#include <stdio.h>
 #include <string.h>
 
 #include <henka/log.h>
@@ -24,6 +25,50 @@ static char* henka_duplicate_string(const char* value)
 
     memcpy(copy, value, length + 1U);
     return copy;
+}
+
+static const char* henka_asset_display_name(const char* path)
+{
+    const char* cursor;
+    const char* last_separator;
+
+    if (path == NULL)
+    {
+        return "";
+    }
+
+    last_separator = path;
+    for (cursor = path; *cursor != '\0'; ++cursor)
+    {
+        if (*cursor == '/' || *cursor == '\\')
+        {
+            last_separator = cursor + 1;
+        }
+    }
+
+    return last_separator;
+}
+
+static void henka_asset_set_summary(henka_asset_metadata* metadata, const char* summary, const char* error_summary)
+{
+    metadata->summary = summary;
+    metadata->error_summary = error_summary;
+}
+
+const char* henka_assets_get_type_label(henka_asset_type type)
+{
+    switch (type)
+    {
+        case HENKA_ASSET_TYPE_SHADER:
+            return "Shader";
+        case HENKA_ASSET_TYPE_TEXTURE:
+            return "Texture";
+        case HENKA_ASSET_TYPE_MESH:
+            return "Mesh";
+        case HENKA_ASSET_TYPE_UNKNOWN:
+        default:
+            return "Unknown";
+    }
 }
 
 henka_result henka_assets_resolve_path(const char* base_path, const char* asset_path, char** out_path)
@@ -318,6 +363,13 @@ henka_result henka_assets_load_shader(
 
     manager->shader_entries[manager->shader_count].key = key;
     manager->shader_entries[manager->shader_count].shader = shader;
+    manager->shader_entries[manager->shader_count].metadata.type = HENKA_ASSET_TYPE_SHADER;
+    manager->shader_entries[manager->shader_count].metadata.source_path = manager->shader_entries[manager->shader_count].key;
+    manager->shader_entries[manager->shader_count].metadata.display_name = henka_asset_display_name(vertex_path);
+    manager->shader_entries[manager->shader_count].metadata.loaded = true;
+    manager->shader_entries[manager->shader_count].metadata.fallback = false;
+    manager->shader_entries[manager->shader_count].metadata.reload_supported = true;
+    henka_asset_set_summary(&manager->shader_entries[manager->shader_count].metadata, "Shader loaded from vertex and fragment sources.", "");
     manager->shader_count += 1U;
     *out_shader = shader;
     return HENKA_SUCCESS;
@@ -382,6 +434,16 @@ henka_result henka_assets_load_texture(henka_asset_manager* manager, const char*
     manager->texture_entries[manager->texture_count].key = key;
     manager->texture_entries[manager->texture_count].texture = texture;
     manager->texture_entries[manager->texture_count].owns_texture = texture != manager->error_texture;
+    manager->texture_entries[manager->texture_count].metadata.type = HENKA_ASSET_TYPE_TEXTURE;
+    manager->texture_entries[manager->texture_count].metadata.source_path = manager->texture_entries[manager->texture_count].key;
+    manager->texture_entries[manager->texture_count].metadata.display_name = henka_asset_display_name(path);
+    manager->texture_entries[manager->texture_count].metadata.loaded = texture != manager->error_texture;
+    manager->texture_entries[manager->texture_count].metadata.fallback = texture == manager->error_texture;
+    manager->texture_entries[manager->texture_count].metadata.reload_supported = true;
+    henka_asset_set_summary(
+        &manager->texture_entries[manager->texture_count].metadata,
+        texture == manager->error_texture ? "Texture fallback is active." : "Texture loaded from the asset path.",
+        texture == manager->error_texture ? "Texture load failed and the error texture fallback was used." : "");
     manager->texture_count += 1U;
     *out_texture = texture;
     return HENKA_SUCCESS;
@@ -446,9 +508,122 @@ henka_result henka_assets_load_obj_mesh(henka_asset_manager* manager, const char
     manager->mesh_entries[manager->mesh_count].key = key;
     manager->mesh_entries[manager->mesh_count].mesh = mesh;
     manager->mesh_entries[manager->mesh_count].owns_mesh = mesh != manager->fallback_mesh;
+    manager->mesh_entries[manager->mesh_count].metadata.type = HENKA_ASSET_TYPE_MESH;
+    manager->mesh_entries[manager->mesh_count].metadata.source_path = manager->mesh_entries[manager->mesh_count].key;
+    manager->mesh_entries[manager->mesh_count].metadata.display_name = henka_asset_display_name(path);
+    manager->mesh_entries[manager->mesh_count].metadata.loaded = mesh != manager->fallback_mesh;
+    manager->mesh_entries[manager->mesh_count].metadata.fallback = mesh == manager->fallback_mesh;
+    manager->mesh_entries[manager->mesh_count].metadata.reload_supported = true;
+    henka_asset_set_summary(
+        &manager->mesh_entries[manager->mesh_count].metadata,
+        mesh == manager->fallback_mesh ? "Mesh fallback is active." : "Mesh loaded from the asset path.",
+        mesh == manager->fallback_mesh ? "Mesh load failed and the fallback mesh was used." : "");
     manager->mesh_count += 1U;
     *out_mesh = mesh;
     return HENKA_SUCCESS;
+}
+
+size_t henka_assets_get_metadata_count(const henka_asset_manager* manager)
+{
+    if (manager == NULL)
+    {
+        return 0U;
+    }
+
+    return manager->shader_count + manager->texture_count + manager->mesh_count;
+}
+
+henka_result henka_assets_get_metadata_at_index(const henka_asset_manager* manager, size_t index, henka_asset_metadata* out_metadata)
+{
+    if (manager == NULL || out_metadata == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    if (index < manager->shader_count)
+    {
+        *out_metadata = manager->shader_entries[index].metadata;
+        return HENKA_SUCCESS;
+    }
+
+    index -= manager->shader_count;
+    if (index < manager->texture_count)
+    {
+        *out_metadata = manager->texture_entries[index].metadata;
+        return HENKA_SUCCESS;
+    }
+
+    index -= manager->texture_count;
+    if (index < manager->mesh_count)
+    {
+        *out_metadata = manager->mesh_entries[index].metadata;
+        return HENKA_SUCCESS;
+    }
+
+    return HENKA_ERROR_INVALID_ARGUMENT;
+}
+
+henka_result henka_assets_get_shader_metadata(const henka_asset_manager* manager, const henka_shader* shader, henka_asset_metadata* out_metadata)
+{
+    size_t index;
+
+    if (manager == NULL || shader == NULL || out_metadata == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    for (index = 0U; index < manager->shader_count; ++index)
+    {
+        if (manager->shader_entries[index].shader == shader)
+        {
+            *out_metadata = manager->shader_entries[index].metadata;
+            return HENKA_SUCCESS;
+        }
+    }
+
+    return HENKA_ERROR_UNKNOWN;
+}
+
+henka_result henka_assets_get_texture_metadata(const henka_asset_manager* manager, const henka_texture* texture, henka_asset_metadata* out_metadata)
+{
+    size_t index;
+
+    if (manager == NULL || texture == NULL || out_metadata == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    for (index = 0U; index < manager->texture_count; ++index)
+    {
+        if (manager->texture_entries[index].texture == texture)
+        {
+            *out_metadata = manager->texture_entries[index].metadata;
+            return HENKA_SUCCESS;
+        }
+    }
+
+    return HENKA_ERROR_UNKNOWN;
+}
+
+henka_result henka_assets_get_mesh_metadata(const henka_asset_manager* manager, const henka_mesh* mesh, henka_asset_metadata* out_metadata)
+{
+    size_t index;
+
+    if (manager == NULL || mesh == NULL || out_metadata == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    for (index = 0U; index < manager->mesh_count; ++index)
+    {
+        if (manager->mesh_entries[index].mesh == mesh)
+        {
+            *out_metadata = manager->mesh_entries[index].metadata;
+            return HENKA_SUCCESS;
+        }
+    }
+
+    return HENKA_ERROR_UNKNOWN;
 }
 
 henka_texture* henka_assets_get_white_texture(henka_asset_manager* manager)

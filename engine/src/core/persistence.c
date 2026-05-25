@@ -24,6 +24,16 @@ struct henka_settings
     size_t capacity;
 };
 
+struct henka_save_data
+{
+    int version;
+    char* scene_id;
+    henka_vec3 camera_position;
+    float camera_yaw_radians;
+    float camera_pitch_radians;
+    henka_settings* flags;
+};
+
 static bool henka_path_is_separator(char character)
 {
     return character == '/' || character == '\\';
@@ -581,6 +591,22 @@ henka_result henka_settings_set_string(henka_settings* settings, const char* key
     return HENKA_SUCCESS;
 }
 
+static henka_result henka_save_data_reset_flags(henka_save_data* save_data)
+{
+    if (save_data == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    if (save_data->flags != NULL)
+    {
+        henka_settings_destroy(save_data->flags);
+        save_data->flags = NULL;
+    }
+
+    return henka_settings_create(&save_data->flags);
+}
+
 henka_result henka_settings_set_int(henka_settings* settings, const char* key, int value)
 {
     char buffer[32];
@@ -637,4 +663,289 @@ henka_result henka_settings_remove(henka_settings* settings, const char* key)
     }
 
     return HENKA_SUCCESS;
+}
+
+henka_result henka_save_data_build_slot_path(const char* user_data_base_path, const char* slot_name, char** out_path)
+{
+    char relative_path[256];
+
+    if (slot_name == NULL || slot_name[0] == '\0' || out_path == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    if (sprintf_s(relative_path, sizeof(relative_path), "saves/%s.save", slot_name) < 0)
+    {
+        return HENKA_ERROR_UNKNOWN;
+    }
+
+    return henka_path_resolve(user_data_base_path, relative_path, out_path);
+}
+
+henka_result henka_save_data_create(henka_save_data** out_save_data)
+{
+    henka_save_data* save_data;
+    henka_result result;
+
+    if (out_save_data == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    *out_save_data = NULL;
+    save_data = henka_calloc(1U, sizeof(*save_data));
+    if (save_data == NULL)
+    {
+        return HENKA_ERROR_OUT_OF_MEMORY;
+    }
+
+    save_data->version = 1;
+    save_data->scene_id = henka_duplicate_string("sandbox3d");
+    if (save_data->scene_id == NULL)
+    {
+        henka_free(save_data);
+        return HENKA_ERROR_OUT_OF_MEMORY;
+    }
+
+    result = henka_settings_create(&save_data->flags);
+    if (result != HENKA_SUCCESS)
+    {
+        henka_free(save_data->scene_id);
+        henka_free(save_data);
+        return result;
+    }
+
+    *out_save_data = save_data;
+    return HENKA_SUCCESS;
+}
+
+void henka_save_data_destroy(henka_save_data* save_data)
+{
+    if (save_data == NULL)
+    {
+        return;
+    }
+
+    henka_settings_destroy(save_data->flags);
+    henka_free(save_data->scene_id);
+    henka_free(save_data);
+}
+
+int henka_save_data_get_version(const henka_save_data* save_data)
+{
+    return save_data != NULL ? save_data->version : 0;
+}
+
+const char* henka_save_data_get_scene_id(const henka_save_data* save_data)
+{
+    return (save_data != NULL && save_data->scene_id != NULL) ? save_data->scene_id : "";
+}
+
+henka_result henka_save_data_set_scene_id(henka_save_data* save_data, const char* scene_id)
+{
+    char* copy;
+
+    if (save_data == NULL || scene_id == NULL || scene_id[0] == '\0')
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    copy = henka_duplicate_string(scene_id);
+    if (copy == NULL)
+    {
+        return HENKA_ERROR_OUT_OF_MEMORY;
+    }
+
+    henka_free(save_data->scene_id);
+    save_data->scene_id = copy;
+    return HENKA_SUCCESS;
+}
+
+henka_result henka_save_data_set_camera_pose(henka_save_data* save_data, henka_vec3 position, float yaw_radians, float pitch_radians)
+{
+    if (save_data == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    save_data->camera_position = position;
+    save_data->camera_yaw_radians = yaw_radians;
+    save_data->camera_pitch_radians = pitch_radians;
+    return HENKA_SUCCESS;
+}
+
+henka_result henka_save_data_get_camera_pose(
+    const henka_save_data* save_data,
+    henka_vec3* out_position,
+    float* out_yaw_radians,
+    float* out_pitch_radians)
+{
+    if (save_data == NULL || out_position == NULL || out_yaw_radians == NULL || out_pitch_radians == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    *out_position = save_data->camera_position;
+    *out_yaw_radians = save_data->camera_yaw_radians;
+    *out_pitch_radians = save_data->camera_pitch_radians;
+    return HENKA_SUCCESS;
+}
+
+henka_result henka_save_data_set_flag_bool(henka_save_data* save_data, const char* key, bool value)
+{
+    if (save_data == NULL || save_data->flags == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    return henka_settings_set_bool(save_data->flags, key, value);
+}
+
+bool henka_save_data_get_flag_bool(const henka_save_data* save_data, const char* key, bool default_value)
+{
+    if (save_data == NULL || save_data->flags == NULL)
+    {
+        return default_value;
+    }
+
+    return henka_settings_get_bool(save_data->flags, key, default_value);
+}
+
+henka_result henka_save_data_load_file(henka_save_data* save_data, const char* path)
+{
+    henka_settings* loaded;
+    henka_result result;
+    int version;
+
+    if (save_data == NULL || path == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    result = henka_settings_create(&loaded);
+    if (result != HENKA_SUCCESS)
+    {
+        return result;
+    }
+
+    result = henka_settings_load_file(loaded, path);
+    if (result != HENKA_SUCCESS && result != HENKA_ERROR_UNKNOWN)
+    {
+        henka_settings_destroy(loaded);
+        return result;
+    }
+
+    version = henka_settings_get_int(loaded, "save.version", 0);
+    if (version != 1)
+    {
+        henka_settings_destroy(loaded);
+        return HENKA_ERROR_UNKNOWN;
+    }
+
+    if (henka_save_data_set_scene_id(save_data, henka_settings_get_string(loaded, "save.scene_id", "sandbox3d")) != HENKA_SUCCESS)
+    {
+        henka_settings_destroy(loaded);
+        return HENKA_ERROR_OUT_OF_MEMORY;
+    }
+
+    save_data->camera_position.x = henka_settings_get_float(loaded, "camera.position.x", 0.0f);
+    save_data->camera_position.y = henka_settings_get_float(loaded, "camera.position.y", 0.0f);
+    save_data->camera_position.z = henka_settings_get_float(loaded, "camera.position.z", 0.0f);
+    save_data->camera_yaw_radians = henka_settings_get_float(loaded, "camera.yaw_radians", 0.0f);
+    save_data->camera_pitch_radians = henka_settings_get_float(loaded, "camera.pitch_radians", 0.0f);
+
+    if (henka_save_data_reset_flags(save_data) != HENKA_SUCCESS)
+    {
+        henka_settings_destroy(loaded);
+        return HENKA_ERROR_OUT_OF_MEMORY;
+    }
+
+    {
+        size_t index;
+        for (index = 0U; index < loaded->count; ++index)
+        {
+            if (strncmp(loaded->entries[index].key, "flag.", 5U) == 0)
+            {
+                if (henka_settings_set_string(save_data->flags, loaded->entries[index].key + 5U, loaded->entries[index].value) != HENKA_SUCCESS)
+                {
+                    henka_settings_destroy(loaded);
+                    return HENKA_ERROR_OUT_OF_MEMORY;
+                }
+            }
+        }
+    }
+
+    henka_settings_destroy(loaded);
+    return result;
+}
+
+henka_result henka_save_data_save_file(const henka_save_data* save_data, const char* path)
+{
+    henka_settings* settings;
+    henka_result result;
+
+    if (save_data == NULL || path == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    result = henka_settings_create(&settings);
+    if (result != HENKA_SUCCESS)
+    {
+        return result;
+    }
+
+    result = henka_settings_set_int(settings, "save.version", save_data->version);
+    if (result == HENKA_SUCCESS)
+    {
+        result = henka_settings_set_string(settings, "save.scene_id", henka_save_data_get_scene_id(save_data));
+    }
+    if (result == HENKA_SUCCESS)
+    {
+        result = henka_settings_set_float(settings, "camera.position.x", save_data->camera_position.x);
+    }
+    if (result == HENKA_SUCCESS)
+    {
+        result = henka_settings_set_float(settings, "camera.position.y", save_data->camera_position.y);
+    }
+    if (result == HENKA_SUCCESS)
+    {
+        result = henka_settings_set_float(settings, "camera.position.z", save_data->camera_position.z);
+    }
+    if (result == HENKA_SUCCESS)
+    {
+        result = henka_settings_set_float(settings, "camera.yaw_radians", save_data->camera_yaw_radians);
+    }
+    if (result == HENKA_SUCCESS)
+    {
+        result = henka_settings_set_float(settings, "camera.pitch_radians", save_data->camera_pitch_radians);
+    }
+
+    if (result == HENKA_SUCCESS && save_data->flags != NULL)
+    {
+        size_t index;
+        for (index = 0U; index < save_data->flags->count; ++index)
+        {
+            char prefixed_key[256];
+            if (sprintf_s(prefixed_key, sizeof(prefixed_key), "flag.%s", save_data->flags->entries[index].key) < 0)
+            {
+                result = HENKA_ERROR_UNKNOWN;
+                break;
+            }
+
+            result = henka_settings_set_string(settings, prefixed_key, save_data->flags->entries[index].value);
+            if (result != HENKA_SUCCESS)
+            {
+                break;
+            }
+        }
+    }
+
+    if (result == HENKA_SUCCESS)
+    {
+        result = henka_settings_save_file(settings, path);
+    }
+
+    henka_settings_destroy(settings);
+    return result;
 }

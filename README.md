@@ -15,6 +15,12 @@ Henka Engine is still early, but the sandbox now renders a visible 3D scene with
 - SDL3-backed platform layer hidden behind Henka headers
 - OpenGL renderer backend isolated inside renderer implementation files
 - Public math, time, camera, mesh, texture, shader, scene, and asset APIs
+- Input action foundation for named engine-level controls
+- Scene object metadata, bounds, and interaction foundation
+- Reusable camera helpers for reset, focus, and screen-ray creation
+- Asset metadata and stronger material summaries
+- Local save-data foundation beyond settings
+- Package mode and engine diagnostics foundation
 - Asset manager foundation for cached shader and texture loading
 - Early OBJ model loading with cached mesh assets
 - Fallback white and error textures
@@ -105,6 +111,7 @@ The packaged folder also includes `PACKAGE_INFO.txt` so you can tell when the pa
 - `Shift`: move faster
 - `Mouse`: look around while mouse capture is active
 - `Right Mouse / Tab`: toggle mouse capture
+- `Left Mouse`: pick a visible object when the UI is closed and mouse capture is released
 - `F1`: toggle wireframe
 - `F2`: print the scene legend again
 - `F3`: show or hide the debug grid
@@ -118,6 +125,7 @@ Press `F4` to open the in-window sandbox panels. On a first run with no local se
 Offline help is also available in [docs/help/sandbox3d.md](docs/help/sandbox3d.md).
 Model loading notes are documented in [docs/model-loading.md](docs/model-loading.md).
 A persistence overview is available in [docs/persistence.md](docs/persistence.md).
+A runtime foundation overview is available in [docs/runtime-foundations.md](docs/runtime-foundations.md).
 A UI overview is available in [docs/ui.md](docs/ui.md).
 A guide for separate game repositories is available in [docs/external-game-projects.md](docs/external-game-projects.md).
 A manual verification checklist is available in [docs/qa/sandbox3d-manual-checklist.md](docs/qa/sandbox3d-manual-checklist.md).
@@ -139,6 +147,7 @@ To validate the generic external game template against the current Henka checkou
 - OBJ support is intentionally limited to comments, blank lines, triangles, simple quads, positions, optional UVs, and optional normals.
 - OBJ material libraries, negative indices, polygons with more than four vertices, and animation are not supported yet.
 - The current settings format is a simple local key/value file. It is meant for engine samples and early projects, not for a finished save pipeline.
+- A small save-data foundation now exists for local scene id, camera pose, and simple flags, but it is still intentionally modest.
 - Cloud saves, telemetry, analytics, registry storage, encryption, and network-backed persistence are not implemented.
 - The in-window UI overlay is intentionally small. It now supports object inspection, utility views, and short status feedback, but it is still not a full editor or a general UI toolkit yet.
 - 2D and 2.5D are part of the engine direction, but those workflows are not implemented yet.

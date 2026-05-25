@@ -19,6 +19,7 @@ Henka Engine is currently focused on a clean visible 3D foundation:
 - early OBJ model loading
 - minimal scene and camera flow
 - sandbox startup and movement
+- reusable input, picking, save-data, diagnostics, and package-mode foundations
 
 ## Near-term roadmap
 

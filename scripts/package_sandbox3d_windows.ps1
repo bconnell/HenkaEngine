@@ -82,6 +82,7 @@ Press F4 to open the in-window panels.
 Press F5 to cycle View, Inspect, and Full Tools.
 Use the in-window utilities for help, legend, paths, settings, and diagnostics.
 Watch the small in-window status area for recent actions and warnings.
+The packaged runtime reports Packaged mode automatically when PACKAGE_INFO.txt is present.
 
 Keep these folders beside the executable:
 - assets
@@ -106,6 +107,7 @@ Source commit: $gitCommit
 Executable: HenkaSandbox3D.exe
 UI: Press F4 to open the in-window panels.
 Layout: Press F5 to cycle View, Inspect, and Full Tools.
+Runtime mode: Packaged is detected automatically from PACKAGE_INFO.txt.
 "@ | Set-Content -LiteralPath $packageInfoPath
 
 Write-Host "Packaged sandbox ready:"
@@ -126,3 +128,4 @@ Write-Host "  Press F4 to open the in-window panels."
 Write-Host "  Press F5 to cycle View, Inspect, and Full Tools."
 Write-Host "  Use the in-window utilities for help, legend, paths, settings, and diagnostics."
 Write-Host "  Watch the in-window status area for recent actions and warnings."
+Write-Host "  The packaged runtime should report Packaged mode at startup."

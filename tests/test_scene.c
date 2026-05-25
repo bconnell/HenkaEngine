@@ -6,11 +6,15 @@
 
 void henka_test_scene(void)
 {
+    henka_bounds bounds;
     henka_scene* scene;
     henka_entity found;
     henka_entity first;
     henka_entity listed;
+    henka_ray ray;
+    henka_scene_object_info info;
     henka_entity second;
+    henka_interaction_desc interaction;
     henka_transform transform;
     henka_transform read_back;
 
@@ -50,6 +54,26 @@ void henka_test_scene(void)
     HENKA_TEST_ASSERT(henka_scene_set_entity_name(scene, second, "Marker") == HENKA_SUCCESS);
     HENKA_TEST_ASSERT(strcmp(henka_scene_get_entity_name(scene, second), "Marker") == 0);
     HENKA_TEST_ASSERT(henka_scene_find_entity_by_name(scene, "Marker", &found) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(found == second);
+    HENKA_TEST_ASSERT(henka_scene_set_entity_tag(scene, second, "marker") == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(strcmp(henka_scene_get_entity_tag(scene, second), "marker") == 0);
+    HENKA_TEST_ASSERT(henka_scene_find_entity_by_tag(scene, "marker", &found) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(found == second);
+    bounds = (henka_bounds){{0.0f, 0.5f, 0.0f}, {0.5f, 0.5f, 0.5f}};
+    HENKA_TEST_ASSERT(henka_scene_set_entity_local_bounds(scene, second, bounds) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_scene_get_entity_local_bounds(scene, second, &bounds) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(bounds.extents.x, 0.5f, 0.0001f);
+    interaction = (henka_interaction_desc){true, 3.5f, "Inspect sample"};
+    HENKA_TEST_ASSERT(henka_scene_set_entity_interaction(scene, second, &interaction) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_scene_get_entity_interaction(scene, second, &interaction) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(interaction.enabled);
+    HENKA_TEST_ASSERT(henka_scene_can_interact(scene, second, (henka_vec3){0.0f, 0.0f, 0.0f}) == HENKA_INTERACTION_RESULT_AVAILABLE);
+    HENKA_TEST_ASSERT(henka_scene_get_entity_info(scene, second, &info) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(info.entity == second);
+    HENKA_TEST_ASSERT(strcmp(info.tag, "marker") == 0);
+    ray.origin = (henka_vec3){0.0f, 0.5f, 3.0f};
+    ray.direction = henka_vec3_normalize((henka_vec3){0.0f, 0.0f, -1.0f});
+    HENKA_TEST_ASSERT(henka_scene_pick_entity(scene, ray, &found, NULL) == HENKA_SUCCESS);
     HENKA_TEST_ASSERT(found == second);
     HENKA_TEST_ASSERT(henka_scene_set_entity_name(scene, second, NULL) == HENKA_SUCCESS);
     HENKA_TEST_ASSERT(henka_scene_get_entity_name(scene, second) == NULL);

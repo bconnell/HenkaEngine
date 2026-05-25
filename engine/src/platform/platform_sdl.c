@@ -217,6 +217,7 @@ henka_result henka_platform_poll_events(struct henka_platform* platform, henka_i
                 if (key != HENKA_KEY_UNKNOWN)
                 {
                     input->keys_down[key] = false;
+                    input->keys_released[key] = true;
                 }
                 break;
             }

@@ -13,6 +13,11 @@ The current persistence layer is meant for:
 
 It is not a finished save-game system yet.
 
+Henka now separates two persistence concepts:
+
+- `henka_settings` for preferences and workspace state
+- `henka_save_data` for local runtime or game-state snapshots
+
 ## Current file format
 
 Settings files use a simple `key=value` format.
@@ -33,6 +38,24 @@ camera_pitch_radians=-0.220000
 
 Blank lines and comment lines that start with `#` or `;` are accepted when loading.
 Saved files are rewritten as plain `key=value` lines, so comment lines are not preserved yet.
+
+## Save data foundation
+
+The save-data layer is intentionally small and local-only.
+
+It currently supports:
+
+- a version field
+- a scene id string
+- camera position, yaw, and pitch
+- simple boolean flags
+- slot-style file paths under `user/saves/`
+
+The current save-data path helper produces paths such as:
+
+- `user/saves/slot_a.save`
+
+This foundation is meant for future samples and external projects that want a clean split between preferences and save-state data. It is still intentionally modest and does not add cloud sync, encryption, accounts, or a complex serialization system.
 
 ## Current sandbox behavior
 
@@ -87,5 +110,6 @@ The sandbox UI reflects the loaded state after startup, so the panel stays align
 - binary serialization
 - a general content database
 - per-game save slot workflows
+- autosave or background save loops
 
 External games should decide their own save policy and data layout. The current Henka layer is a small foundation, not a complete answer for shipped game persistence.

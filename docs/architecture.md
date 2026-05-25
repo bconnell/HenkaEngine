@@ -47,6 +47,7 @@ The current input layer is still intentionally small, but it now tracks the stat
 - mouse button toggles
 - help and wireframe controls
 - exit handling
+- named input actions with key and mouse-button bindings
 
 ### Time
 
@@ -66,11 +67,27 @@ These types are public because they are part of the engine-facing scene and came
 
 ### Camera
 
-The current camera module provides a perspective camera, simple fly movement, and clamped mouse look.
+The current camera module provides:
+
+- perspective camera creation
+- orthographic camera creation
+- simple fly movement
+- clamped mouse look
+- camera reset helpers
+- camera focus on bounds
+- screen-point ray creation
 
 ### Assets
 
 The current asset layer is intentionally modest. It loads and caches shaders, textures, and OBJ meshes by path, resolves relative asset paths against the engine asset base directory, owns fallback textures and a fallback mesh, caches failed path lookups against those fallbacks, and keeps asset lifetime tied to the engine runtime.
+
+It also now exposes read-only asset metadata so samples can inspect:
+
+- asset type
+- source path
+- display name
+- loaded or fallback state
+- short summary strings
 
 ### Persistence
 
@@ -78,6 +95,8 @@ The persistence layer is intentionally small and local-first. Right now it provi
 
 - a text `key=value` settings format
 - safe load and save helpers
+- a small save-data model separate from settings
+- slot-path helpers under the user-data directory
 
 ### UI
 
@@ -102,7 +121,11 @@ The scene layer is intentionally minimal. It is not a full ECS. Right now it pro
 - lightweight entity handles
 - entity enumeration and lookup for developer inspection
 - per-entity labels and visibility state
+- per-entity tags
 - per-entity transform, mesh, and material assignment
+- per-entity local bounds
+- per-entity interaction metadata
+- nearest-hit picking against simple bounds
 - one active scene camera
 - one directional light direction and ambient color
 - per-object visibility and debug labels
@@ -135,7 +158,7 @@ The current interaction rules pause camera movement and mouse look while the UI 
 ## Current boundaries
 
 - Applications talk to the engine through the public Henka headers.
-- The engine owns the main loop, timing, scene pointer, and renderer lifecycle.
+- The engine owns the main loop, timing, scene pointer, renderer lifecycle, action bindings, package mode, and diagnostics snapshot.
 - The engine also owns the asset manager and fallback assets.
 - The engine resolves runtime assets relative to the executable directory by default, which keeps packaged sandbox runs independent from the repository root.
 - The engine also resolves a local user data base path beside the executable by default, which keeps sandbox settings local to the runnable folder.

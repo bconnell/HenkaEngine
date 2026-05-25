@@ -37,6 +37,7 @@ typedef struct henka_input_state
 {
     bool keys_down[HENKA_KEY_COUNT];
     bool keys_pressed[HENKA_KEY_COUNT];
+    bool keys_released[HENKA_KEY_COUNT];
     bool mouse_buttons_down[HENKA_MOUSE_BUTTON_COUNT];
     bool mouse_buttons_pressed[HENKA_MOUSE_BUTTON_COUNT];
     bool mouse_buttons_released[HENKA_MOUSE_BUTTON_COUNT];
@@ -66,15 +67,20 @@ typedef struct henka_scene_entity_record
     bool active;
     bool visible;
     char* name;
+    char* tag;
     henka_transform transform;
     henka_mesh* mesh;
     henka_material material;
+    bool has_local_bounds;
+    henka_bounds local_bounds;
+    henka_interaction_desc interaction;
 } henka_scene_entity_record;
 
 typedef struct henka_asset_shader_entry
 {
     char* key;
     henka_shader* shader;
+    henka_asset_metadata metadata;
 } henka_asset_shader_entry;
 
 typedef struct henka_asset_texture_entry
@@ -82,6 +88,7 @@ typedef struct henka_asset_texture_entry
     char* key;
     henka_texture* texture;
     bool owns_texture;
+    henka_asset_metadata metadata;
 } henka_asset_texture_entry;
 
 typedef struct henka_asset_mesh_entry
@@ -89,6 +96,7 @@ typedef struct henka_asset_mesh_entry
     char* key;
     henka_mesh* mesh;
     bool owns_mesh;
+    henka_asset_metadata metadata;
 } henka_asset_mesh_entry;
 
 struct henka_asset_manager
@@ -165,7 +173,10 @@ struct henka_engine
     struct henka_ui_context* active_ui;
     char* asset_base_path;
     char* user_data_base_path;
+    henka_package_mode package_mode;
     henka_input_state input;
+    henka_key action_key_bindings[HENKA_INPUT_ACTION_COUNT];
+    henka_mouse_button action_mouse_bindings[HENKA_INPUT_ACTION_COUNT];
     henka_time_state time;
     bool exit_requested;
     bool initialized_callback_ran;
