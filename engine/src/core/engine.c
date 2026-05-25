@@ -93,6 +93,7 @@ static void henka_input_reset_frame_state(henka_input_state* input)
     for (index = 0; index < HENKA_MOUSE_BUTTON_COUNT; ++index)
     {
         input->mouse_buttons_pressed[index] = false;
+        input->mouse_buttons_released[index] = false;
     }
 
     input->mouse_delta.x = 0.0f;
@@ -282,7 +283,12 @@ henka_result henka_engine_run(henka_engine* engine)
 
         if (henka_input_was_key_pressed(engine, HENKA_KEY_ESCAPE))
         {
-            if (henka_engine_is_mouse_captured(engine))
+            if (engine->active_ui != NULL && henka_ui_is_visible(engine->active_ui))
+            {
+                henka_ui_set_visible(engine->active_ui, false);
+                henka_engine_set_mouse_capture(engine, false);
+            }
+            else if (henka_engine_is_mouse_captured(engine))
             {
                 henka_engine_set_mouse_capture(engine, false);
             }
@@ -558,6 +564,16 @@ bool henka_input_was_mouse_button_pressed(const henka_engine* engine, henka_mous
     }
 
     return engine->input.mouse_buttons_pressed[button];
+}
+
+bool henka_input_was_mouse_button_released(const henka_engine* engine, henka_mouse_button button)
+{
+    if (engine == NULL || button <= HENKA_MOUSE_BUTTON_UNKNOWN || button >= HENKA_MOUSE_BUTTON_COUNT)
+    {
+        return false;
+    }
+
+    return engine->input.mouse_buttons_released[button];
 }
 
 henka_vec2 henka_input_get_mouse_position(const henka_engine* engine)

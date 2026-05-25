@@ -43,6 +43,12 @@ cmake -S . -B build -DHENKA_ENGINE_DIR="C:/Path/To/HenkaEngine"
 
 The template under `templates/external_game_minimal/` shows one way to do that.
 
+To validate that template against the current Henka checkout from this repository, run:
+
+```powershell
+.\scripts\test_external_game_template_windows.ps1
+```
+
 ## Suggested external project layout
 
 ```text

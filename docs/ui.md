@@ -66,6 +66,8 @@ The current panel can:
 
 - toggle the debug grid
 - toggle wireframe
+- adjust mouse sensitivity
+- adjust camera speed
 - reset the camera
 - save sandbox settings
 - reset sandbox settings
@@ -78,7 +80,9 @@ When the panel is open:
 
 - mouse capture is released
 - mouse look pauses
+- camera movement pauses
 - you can click the UI with the left mouse button
+- `Escape` closes the panel before it returns to the usual mouse-capture and exit flow
 
 ## Future direction
 

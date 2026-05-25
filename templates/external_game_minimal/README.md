@@ -22,9 +22,16 @@ cmake -S . -B build -DHENKA_ENGINE_DIR="C:/Path/To/HenkaEngine"
 cmake --build build --config Debug
 ```
 
+## Run
+
+```powershell
+.\build\Debug\external_game_minimal.exe
+```
+
 ## Template notes
 
 - `src/main.c` is intentionally small.
 - `assets/` is where your game-specific content can start.
 - `.gitignore` ignores local build and user data output.
+- The template turns off Henka example and test targets so your game build stays focused on the engine library plus your own project.
 - This template is generic on purpose. It does not include story, characters, or game-specific content.

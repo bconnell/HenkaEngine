@@ -108,9 +108,9 @@ Sandbox settings are saved locally in a `user/` folder beside the executable. In
 - `F3`: show or hide the debug grid
 - `F4`: show or hide the sandbox panel
 - `H`: print controls and the scene legend again
-- `Escape`: release the mouse first, then exit
+- `Escape`: close the panel first, then release the mouse, then exit
 
-Press `F4` to open the in-window sandbox panel. The panel can toggle the grid and wireframe view, reset the camera, save settings, reset sandbox settings, and print the same help and scene legend you can reach from the keyboard. Mouse look pauses while the panel is open.
+Press `F4` to open the in-window sandbox panel. The panel can toggle the grid and wireframe view, reset the camera, adjust mouse sensitivity and camera speed, save settings, reset sandbox settings, and print the same help and scene legend you can reach from the keyboard. Mouse look and camera movement pause while the panel is open.
 
 Offline help is also available in [docs/help/sandbox3d.md](docs/help/sandbox3d.md).
 Model loading notes are documented in [docs/model-loading.md](docs/model-loading.md).
@@ -119,6 +119,9 @@ A UI overview is available in [docs/ui.md](docs/ui.md).
 A guide for separate game repositories is available in [docs/external-game-projects.md](docs/external-game-projects.md).
 A manual verification checklist is available in [docs/qa/sandbox3d-manual-checklist.md](docs/qa/sandbox3d-manual-checklist.md).
 Packaged output is generated under `out/` and should not be committed.
+
+For repeated packaged checks on Windows, use `.\scripts\check_packaged_sandbox3d_windows.ps1`.
+To validate the generic external game template against the current Henka checkout, use `.\scripts\test_external_game_template_windows.ps1`.
 
 ## Run tests
 

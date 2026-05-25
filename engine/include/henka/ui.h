@@ -23,6 +23,7 @@ typedef struct henka_ui_frame_desc
     henka_vec2 mouse_position;
     bool mouse_left_down;
     bool mouse_left_pressed;
+    bool mouse_left_released;
 } henka_ui_frame_desc;
 
 henka_result henka_ui_create(henka_ui_context** out_context);

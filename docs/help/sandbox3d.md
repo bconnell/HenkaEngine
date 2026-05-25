@@ -25,7 +25,7 @@ It now also includes a small in-window control panel for the most useful inspect
 - `F3`: show or hide the debug grid
 - `F4`: show or hide the sandbox panel
 - `H`: print controls and the scene legend to the console again
-- `Escape`: release the mouse first, then exit
+- `Escape`: close the sandbox panel first, then release the mouse, then exit
 - Window close: exit
 
 ## Scene legend
@@ -60,6 +60,8 @@ The panel currently includes:
 - a debug-grid toggle
 - a wireframe toggle
 - a camera reset button
+- mouse-sensitivity controls
+- camera-speed controls
 - a save-settings button
 - a reset-settings button
 - help and scene-legend buttons
@@ -69,7 +71,9 @@ When the panel is open:
 
 - mouse capture is released
 - mouse look pauses
+- camera movement pauses
 - `Right Mouse` and `Tab` can be used again after you close the panel
+- `Escape` closes the panel before it returns to the normal mouse-capture and exit flow
 
 ## Packaged runs
 

@@ -66,11 +66,13 @@ static const henka_ui_glyph g_ui_glyphs[] =
 static const henka_vec4 g_ui_panel_fill = {0.08f, 0.10f, 0.14f, 0.92f};
 static const henka_vec4 g_ui_panel_border = {0.22f, 0.36f, 0.56f, 1.0f};
 static const henka_vec4 g_ui_text_color = {0.94f, 0.96f, 0.99f, 1.0f};
-static const henka_vec4 g_ui_button_fill = {0.17f, 0.21f, 0.28f, 0.96f};
+static const henka_vec4 g_ui_heading_color = {0.72f, 0.84f, 0.98f, 1.0f};
+static const henka_vec4 g_ui_button_fill = {0.17f, 0.21f, 0.28f, 0.98f};
 static const henka_vec4 g_ui_button_hover = {0.25f, 0.31f, 0.41f, 1.0f};
 static const henka_vec4 g_ui_button_active = {0.33f, 0.40f, 0.52f, 1.0f};
-static const henka_vec4 g_ui_toggle_on = {0.24f, 0.57f, 0.39f, 1.0f};
-static const henka_vec4 g_ui_toggle_off = {0.33f, 0.17f, 0.18f, 1.0f};
+static const henka_vec4 g_ui_toggle_on = {0.18f, 0.58f, 0.40f, 1.0f};
+static const henka_vec4 g_ui_toggle_off = {0.44f, 0.20f, 0.20f, 1.0f};
+static const henka_vec4 g_ui_value_fill = {0.11f, 0.15f, 0.21f, 1.0f};
 
 static char henka_ui_normalize_character(char character)
 {
@@ -265,6 +267,16 @@ static bool henka_ui_control_is_hot(henka_ui_context* context, henka_ui_rect bou
     return false;
 }
 
+static bool henka_ui_id_equals(const char* left, const char* right)
+{
+    if (left == NULL || right == NULL)
+    {
+        return false;
+    }
+
+    return strcmp(left, right) == 0;
+}
+
 henka_result henka_ui_create(henka_ui_context** out_context)
 {
     henka_ui_context* context;
@@ -310,7 +322,12 @@ henka_result henka_ui_begin_frame(henka_ui_context* context, const henka_ui_fram
     context->mouse_position = frame_desc->mouse_position;
     context->mouse_left_down = frame_desc->mouse_left_down;
     context->mouse_left_pressed = frame_desc->mouse_left_pressed;
+    context->mouse_left_released = frame_desc->mouse_left_released;
     context->draw_rect_count = 0U;
+    if (!context->mouse_left_down && !context->mouse_left_released)
+    {
+        context->active_id = NULL;
+    }
     return HENKA_SUCCESS;
 }
 
@@ -330,6 +347,11 @@ void henka_ui_set_visible(henka_ui_context* context, bool visible)
     if (context != NULL)
     {
         context->visible = visible;
+        if (!visible)
+        {
+            context->active_id = NULL;
+            context->wants_mouse = false;
+        }
     }
 }
 
@@ -457,8 +479,17 @@ bool henka_ui_button(henka_ui_context* context, const char* id, henka_ui_rect bo
     (void)id;
 
     hot = henka_ui_control_is_hot(context, bounds);
-    active = hot && context->mouse_left_down;
+    if (hot && context->mouse_left_pressed)
+    {
+        context->active_id = id;
+    }
+
+    active = context->mouse_left_down && henka_ui_id_equals(context->active_id, id);
     clicked = hot && context->mouse_left_pressed;
+    if (context->mouse_left_released && henka_ui_id_equals(context->active_id, id))
+    {
+        context->active_id = NULL;
+    }
 
     result = henka_ui_push_rect(context, bounds, active ? g_ui_button_active : (hot ? g_ui_button_hover : g_ui_button_fill));
     if (result != HENKA_SUCCESS)
@@ -486,6 +517,7 @@ bool henka_ui_toggle(henka_ui_context* context, const char* id, henka_ui_rect bo
     bool hot;
     henka_result result;
     henka_ui_rect checkbox_bounds;
+    henka_ui_rect value_bounds;
 
     if (context == NULL || id == NULL || label == NULL || value == NULL || !context->visible)
     {
@@ -495,7 +527,16 @@ bool henka_ui_toggle(henka_ui_context* context, const char* id, henka_ui_rect bo
     (void)id;
 
     hot = henka_ui_control_is_hot(context, bounds);
+    if (hot && context->mouse_left_pressed)
+    {
+        context->active_id = id;
+    }
+
     clicked = hot && context->mouse_left_pressed;
+    if (context->mouse_left_released && henka_ui_id_equals(context->active_id, id))
+    {
+        context->active_id = NULL;
+    }
     if (clicked)
     {
         *value = !*value;
@@ -513,7 +554,7 @@ bool henka_ui_toggle(henka_ui_context* context, const char* id, henka_ui_rect bo
         return false;
     }
 
-    checkbox_bounds = (henka_ui_rect){bounds.x + 8.0f, bounds.y + 8.0f, 14.0f, 14.0f};
+    checkbox_bounds = (henka_ui_rect){bounds.x + 8.0f, bounds.y + 6.0f, 20.0f, 18.0f};
     result = henka_ui_push_rect(context, checkbox_bounds, *value ? g_ui_toggle_on : g_ui_toggle_off);
     if (result != HENKA_SUCCESS)
     {
@@ -526,7 +567,25 @@ bool henka_ui_toggle(henka_ui_context* context, const char* id, henka_ui_rect bo
         return false;
     }
 
-    if (henka_ui_draw_text(context, bounds.x + 30.0f, bounds.y + 9.0f, 1.0f, label, g_ui_text_color) != HENKA_SUCCESS)
+    value_bounds = (henka_ui_rect){bounds.x + bounds.width - 48.0f, bounds.y + 6.0f, 38.0f, 18.0f};
+    result = henka_ui_push_rect(context, value_bounds, g_ui_value_fill);
+    if (result != HENKA_SUCCESS)
+    {
+        return false;
+    }
+
+    result = henka_ui_push_border(context, value_bounds, 1.0f, g_ui_panel_border);
+    if (result != HENKA_SUCCESS)
+    {
+        return false;
+    }
+
+    if (henka_ui_draw_text(context, bounds.x + 36.0f, bounds.y + 9.0f, 1.0f, label, g_ui_text_color) != HENKA_SUCCESS)
+    {
+        return false;
+    }
+
+    if (henka_ui_draw_text(context, value_bounds.x + 7.0f, value_bounds.y + 5.0f, 1.0f, *value ? "ON" : "OFF", g_ui_heading_color) != HENKA_SUCCESS)
     {
         return false;
     }

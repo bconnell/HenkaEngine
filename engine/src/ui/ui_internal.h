@@ -22,6 +22,8 @@ struct henka_ui_context
     henka_vec2 mouse_position;
     bool mouse_left_down;
     bool mouse_left_pressed;
+    bool mouse_left_released;
+    const char* active_id;
     henka_ui_draw_rect* draw_rects;
     size_t draw_rect_count;
     size_t draw_rect_capacity;

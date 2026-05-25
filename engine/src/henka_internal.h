@@ -39,6 +39,7 @@ typedef struct henka_input_state
     bool keys_pressed[HENKA_KEY_COUNT];
     bool mouse_buttons_down[HENKA_MOUSE_BUTTON_COUNT];
     bool mouse_buttons_pressed[HENKA_MOUSE_BUTTON_COUNT];
+    bool mouse_buttons_released[HENKA_MOUSE_BUTTON_COUNT];
     henka_vec2 mouse_position;
     henka_vec2 mouse_delta;
     bool close_requested;

@@ -61,6 +61,22 @@ You can launch the packaged sandbox in either of these ways:
 - open `out/HenkaSandbox3D` in Explorer and double-click `HenkaSandbox3D.exe`
 - run `.\scripts\run_packaged_sandbox3d_windows.ps1`
 
+## Run a packaged sandbox check
+
+```powershell
+.\scripts\check_packaged_sandbox3d_windows.ps1
+```
+
+The packaged check script confirms that the packaged folder contains the expected files, launches the sandbox, checks the startup help text, opens and closes the `F4` panel, exercises a few UI clicks, and confirms the close-window path exits cleanly.
+
+## Validate the external game template
+
+```powershell
+.\scripts\test_external_game_template_windows.ps1
+```
+
+This script copies `templates/external_game_minimal` into a repo-local validation folder under `build/`, configures it against the current Henka checkout, builds it, and runs a small smoke test.
+
 The packaged sandbox does not rely on the repository root as its working directory. Assets resolve relative to the executable folder by default.
 
 Sandbox settings are also written relative to the executable folder by default. In a packaged run, the default settings file is:

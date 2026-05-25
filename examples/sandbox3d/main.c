@@ -26,6 +26,7 @@ typedef struct sandbox3d_state
     henka_entity fallback_cube_entity;
     henka_entity marker_entity;
     henka_entity fallback_model_entity;
+    bool ui_visible_last_frame;
 } sandbox3d_state;
 
 static const float g_default_mouse_look_sensitivity = 0.0025f;
@@ -38,7 +39,43 @@ static const henka_vec3 g_colored_cube_position = {-2.6f, 0.5f, 1.4f};
 static const henka_vec3 g_missing_texture_position = {2.6f, 0.5f, 1.4f};
 static const henka_vec3 g_marker_position = {-4.4f, 0.0f, -0.9f};
 static const henka_vec3 g_missing_model_position = {4.4f, 0.5f, -0.9f};
-static const henka_ui_rect g_ui_panel_bounds = {20.0f, 20.0f, 452.0f, 404.0f};
+static const float g_ui_panel_margin = 20.0f;
+static const float g_ui_panel_width = 520.0f;
+static const float g_ui_panel_min_height = 456.0f;
+
+static float sandbox3d_get_mouse_sensitivity(const sandbox3d_state* state);
+
+static henka_ui_rect sandbox3d_get_ui_panel_bounds(int framebuffer_width, int framebuffer_height)
+{
+    henka_ui_rect bounds;
+
+    bounds.x = g_ui_panel_margin;
+    bounds.y = g_ui_panel_margin;
+    bounds.width = g_ui_panel_width;
+    bounds.height = g_ui_panel_min_height;
+
+    if (framebuffer_width > 0 && bounds.width > (float)framebuffer_width - g_ui_panel_margin * 2.0f)
+    {
+        bounds.width = (float)framebuffer_width - g_ui_panel_margin * 2.0f;
+    }
+
+    if (framebuffer_height > 0 && bounds.height > (float)framebuffer_height - g_ui_panel_margin * 2.0f)
+    {
+        bounds.height = (float)framebuffer_height - g_ui_panel_margin * 2.0f;
+    }
+
+    if (bounds.width < 340.0f)
+    {
+        bounds.width = 340.0f;
+    }
+
+    if (bounds.height < 320.0f)
+    {
+        bounds.height = 320.0f;
+    }
+
+    return bounds;
+}
 
 static henka_result sandbox3d_get_settings_path(const henka_engine* engine, char** out_path)
 {
@@ -137,6 +174,50 @@ static void sandbox3d_reset_camera_defaults(sandbox3d_state* state)
     state->camera.pitch_radians = g_camera_start_pitch;
     state->camera.movement_speed = g_default_camera_movement_speed;
     state->camera.fast_movement_multiplier = 2.5f;
+}
+
+static void sandbox3d_adjust_mouse_sensitivity(sandbox3d_state* state, float delta)
+{
+    float next_value;
+
+    if (state == NULL || state->settings == NULL)
+    {
+        return;
+    }
+
+    next_value = sandbox3d_get_mouse_sensitivity(state) + delta;
+    if (next_value < 0.0005f)
+    {
+        next_value = 0.0005f;
+    }
+    if (next_value > 0.02f)
+    {
+        next_value = 0.02f;
+    }
+
+    henka_settings_set_float(state->settings, "mouse_sensitivity", next_value);
+}
+
+static void sandbox3d_adjust_camera_speed(sandbox3d_state* state, float delta)
+{
+    float next_value;
+
+    if (state == NULL)
+    {
+        return;
+    }
+
+    next_value = state->camera.movement_speed + delta;
+    if (next_value < 1.0f)
+    {
+        next_value = 1.0f;
+    }
+    if (next_value > 16.0f)
+    {
+        next_value = 16.0f;
+    }
+
+    state->camera.movement_speed = next_value;
 }
 
 static float sandbox3d_get_mouse_sensitivity(const sandbox3d_state* state)
@@ -301,10 +382,10 @@ static void sandbox3d_print_help(const sandbox3d_state* state)
     printf("  F3               Show or hide the debug grid\n");
     printf("  F4               Show or hide the sandbox panel\n");
     printf("  H                Print controls and the scene legend again\n");
-    printf("  Escape           Release the mouse first, then exit\n");
+    printf("  Escape           Close the panel first. Then release the mouse. Then exit.\n");
     printf("Panel shortcuts:\n");
-    printf("  Use the sandbox panel to toggle the grid and wireframe view, reset the camera, and save or reset local sandbox settings.\n");
-    printf("  Mouse look pauses while the panel is open.\n");
+    printf("  Use the sandbox panel to toggle the grid and wireframe view, reset the camera, adjust movement settings, and save or reset local sandbox settings.\n");
+    printf("  Mouse look and camera movement pause while the panel is open.\n");
     sandbox3d_print_scene_legend(state);
     printf("Manual QA focus:\n");
     printf("  Confirm each scene example is visible, mouse capture toggles cleanly, wireframe is readable, and the view stays stable when the window is resized.\n");
@@ -340,9 +421,9 @@ static void sandbox3d_format_display_path(const char* label, const char* path, c
     value = (path != NULL && path[0] != '\0') ? path : "(unavailable)";
     path_length = strlen(value);
 
-    if (path_length > 38U)
+    if (path_length > 54U)
     {
-        snprintf(buffer, buffer_size, "%s: ...%s", label, value + path_length - 35U);
+        snprintf(buffer, buffer_size, "%s: ...%s", label, value + path_length - 51U);
     }
     else
     {
@@ -358,17 +439,24 @@ static void sandbox3d_print_ui_state(bool visible)
 
 static void sandbox3d_build_ui(henka_engine* engine, sandbox3d_state* state)
 {
-    char asset_path_text[96];
+    char asset_path_text[128];
     char camera_text[96];
     char capture_text[64];
-    char fps_text[48];
-    char settings_path_text[96];
-    char user_path_text[96];
+    char fps_text[56];
+    char mouse_text[48];
+    char settings_path_text[128];
+    char speed_text[48];
+    char user_path_text[128];
     char* settings_path;
+    float button_width;
     float fps;
     float milliseconds;
+    float panel_bottom;
+    float scale_text_y;
+    float speed_text_y;
     bool grid_visible;
     bool wireframe_enabled;
+    henka_ui_rect panel_bounds;
     henka_result result;
     henka_ui_frame_desc frame_desc;
 
@@ -387,6 +475,7 @@ static void sandbox3d_build_ui(henka_engine* engine, sandbox3d_state* state)
     frame_desc.mouse_position = henka_input_get_mouse_position(engine);
     frame_desc.mouse_left_down = henka_input_is_mouse_button_down(engine, HENKA_MOUSE_BUTTON_LEFT);
     frame_desc.mouse_left_pressed = henka_input_was_mouse_button_pressed(engine, HENKA_MOUSE_BUTTON_LEFT);
+    frame_desc.mouse_left_released = henka_input_was_mouse_button_released(engine, HENKA_MOUSE_BUTTON_LEFT);
 
     if (henka_ui_begin_frame(state->ui, &frame_desc) != HENKA_SUCCESS)
     {
@@ -397,6 +486,11 @@ static void sandbox3d_build_ui(henka_engine* engine, sandbox3d_state* state)
     {
         settings_path = NULL;
         result = sandbox3d_get_settings_path(engine, &settings_path);
+        panel_bounds = sandbox3d_get_ui_panel_bounds(frame_desc.framebuffer_width, frame_desc.framebuffer_height);
+        button_width = (panel_bounds.width - 52.0f) * 0.5f;
+        panel_bottom = panel_bounds.y + panel_bounds.height;
+        scale_text_y = panel_bounds.y + 221.0f;
+        speed_text_y = panel_bounds.y + 261.0f;
         sandbox3d_format_display_path("Assets", henka_engine_get_asset_base_path(engine), asset_path_text, sizeof(asset_path_text));
         sandbox3d_format_display_path("User", henka_engine_get_user_data_base_path(engine), user_path_text, sizeof(user_path_text));
         sandbox3d_format_display_path("Settings", result == HENKA_SUCCESS ? settings_path : NULL, settings_path_text, sizeof(settings_path_text));
@@ -406,6 +500,8 @@ static void sandbox3d_build_ui(henka_engine* engine, sandbox3d_state* state)
         milliseconds = (float)(henka_engine_get_delta_time(engine) * 1000.0);
         fps = milliseconds > 0.0f ? 1000.0f / milliseconds : 0.0f;
         snprintf(fps_text, sizeof(fps_text), "Frame: %.2f ms  FPS: %.1f", milliseconds, fps);
+        snprintf(mouse_text, sizeof(mouse_text), "Mouse: %.4f", sandbox3d_get_mouse_sensitivity(state));
+        snprintf(speed_text, sizeof(speed_text), "Speed: %.1f", state->camera.movement_speed);
         snprintf(
             camera_text,
             sizeof(camera_text),
@@ -414,21 +510,29 @@ static void sandbox3d_build_ui(henka_engine* engine, sandbox3d_state* state)
             state->camera.position.y,
             state->camera.position.z);
 
-        henka_ui_panel(state->ui, g_ui_panel_bounds, "Henka Sandbox");
-        henka_ui_label(state->ui, 34.0f, 54.0f, 1.0f, "Scene Controls");
-        henka_ui_toggle(state->ui, "grid", (henka_ui_rect){34.0f, 72.0f, 188.0f, 30.0f}, "Debug Grid", &grid_visible);
+        henka_ui_panel(state->ui, panel_bounds, "Henka Sandbox");
+        henka_ui_label(state->ui, panel_bounds.x + 14.0f, panel_bounds.y + 36.0f, 1.0f, "Scene Controls");
+        if (henka_ui_toggle(state->ui, "grid", (henka_ui_rect){panel_bounds.x + 14.0f, panel_bounds.y + 54.0f, button_width, 32.0f}, "Debug Grid", &grid_visible))
+        {
+            printf("Debug grid: %s\n", grid_visible ? "shown" : "hidden");
+            fflush(stdout);
+        }
         henka_scene_set_entity_visible(state->scene, state->grid_entity, grid_visible);
-        henka_ui_toggle(state->ui, "wireframe", (henka_ui_rect){236.0f, 72.0f, 188.0f, 30.0f}, "Wireframe", &wireframe_enabled);
+        if (henka_ui_toggle(state->ui, "wireframe", (henka_ui_rect){panel_bounds.x + 26.0f + button_width, panel_bounds.y + 54.0f, button_width, 32.0f}, "Wireframe", &wireframe_enabled))
+        {
+            printf("Wireframe: %s\n", wireframe_enabled ? "on" : "off");
+            fflush(stdout);
+        }
         henka_engine_set_wireframe(engine, wireframe_enabled);
 
-        if (henka_ui_button(state->ui, "reset_camera", (henka_ui_rect){34.0f, 114.0f, 188.0f, 30.0f}, "Reset Camera"))
+        if (henka_ui_button(state->ui, "reset_camera", (henka_ui_rect){panel_bounds.x + 14.0f, panel_bounds.y + 98.0f, button_width, 32.0f}, "Reset Camera"))
         {
             sandbox3d_reset_camera_defaults(state);
             printf("Camera reset to the default sandbox view.\n");
             fflush(stdout);
         }
 
-        if (henka_ui_button(state->ui, "save_settings", (henka_ui_rect){236.0f, 114.0f, 188.0f, 30.0f}, "Save Settings"))
+        if (henka_ui_button(state->ui, "save_settings", (henka_ui_rect){panel_bounds.x + 26.0f + button_width, panel_bounds.y + 98.0f, button_width, 32.0f}, "Save Settings"))
         {
             if (sandbox3d_save_settings(engine, state) == HENKA_SUCCESS)
             {
@@ -441,7 +545,7 @@ static void sandbox3d_build_ui(henka_engine* engine, sandbox3d_state* state)
             fflush(stdout);
         }
 
-        if (henka_ui_button(state->ui, "reset_settings", (henka_ui_rect){34.0f, 156.0f, 188.0f, 30.0f}, "Reset Settings"))
+        if (henka_ui_button(state->ui, "reset_settings", (henka_ui_rect){panel_bounds.x + 14.0f, panel_bounds.y + 142.0f, button_width, 32.0f}, "Reset Settings"))
         {
             if (sandbox3d_reset_settings(engine, state) == HENKA_SUCCESS)
             {
@@ -454,26 +558,47 @@ static void sandbox3d_build_ui(henka_engine* engine, sandbox3d_state* state)
             fflush(stdout);
         }
 
-        if (henka_ui_button(state->ui, "print_help", (henka_ui_rect){236.0f, 156.0f, 188.0f, 30.0f}, "Print Help"))
+        if (henka_ui_button(state->ui, "print_help", (henka_ui_rect){panel_bounds.x + 26.0f + button_width, panel_bounds.y + 142.0f, button_width, 32.0f}, "Print Help"))
         {
             sandbox3d_print_help(state);
         }
 
-        if (henka_ui_button(state->ui, "print_legend", (henka_ui_rect){34.0f, 198.0f, 188.0f, 30.0f}, "Scene Legend"))
+        if (henka_ui_button(state->ui, "print_legend", (henka_ui_rect){panel_bounds.x + 14.0f, panel_bounds.y + 186.0f, button_width, 32.0f}, "Scene Legend"))
         {
             sandbox3d_print_scene_legend(state);
             fflush(stdout);
         }
 
-        henka_ui_label(state->ui, 34.0f, 242.0f, 1.0f, capture_text);
-        henka_ui_label(state->ui, 34.0f, 258.0f, 1.0f, grid_visible ? "Grid: Visible" : "Grid: Hidden");
-        henka_ui_label(state->ui, 236.0f, 258.0f, 1.0f, wireframe_enabled ? "Wireframe: On" : "Wireframe: Off");
-        henka_ui_label(state->ui, 34.0f, 282.0f, 1.0f, fps_text);
-        henka_ui_label(state->ui, 34.0f, 298.0f, 1.0f, camera_text);
-        henka_ui_label(state->ui, 34.0f, 322.0f, 1.0f, asset_path_text);
-        henka_ui_label(state->ui, 34.0f, 338.0f, 1.0f, user_path_text);
-        henka_ui_label(state->ui, 34.0f, 354.0f, 1.0f, settings_path_text);
-        henka_ui_label(state->ui, 34.0f, 378.0f, 1.0f, "F4 closes the panel. Mouse look is paused while it stays open.");
+        henka_ui_label(state->ui, panel_bounds.x + 26.0f + button_width, panel_bounds.y + 194.0f, 1.0f, "Adjust");
+        if (henka_ui_button(state->ui, "mouse_less", (henka_ui_rect){panel_bounds.x + 26.0f + button_width, panel_bounds.y + 214.0f, 72.0f, 28.0f}, "Less"))
+        {
+            sandbox3d_adjust_mouse_sensitivity(state, -0.0005f);
+        }
+        if (henka_ui_button(state->ui, "mouse_more", (henka_ui_rect){panel_bounds.x + 106.0f + button_width, panel_bounds.y + 214.0f, 72.0f, 28.0f}, "More"))
+        {
+            sandbox3d_adjust_mouse_sensitivity(state, 0.0005f);
+        }
+        if (henka_ui_button(state->ui, "speed_less", (henka_ui_rect){panel_bounds.x + 26.0f + button_width, panel_bounds.y + 254.0f, 72.0f, 28.0f}, "Less"))
+        {
+            sandbox3d_adjust_camera_speed(state, -0.5f);
+        }
+        if (henka_ui_button(state->ui, "speed_more", (henka_ui_rect){panel_bounds.x + 106.0f + button_width, panel_bounds.y + 254.0f, 72.0f, 28.0f}, "More"))
+        {
+            sandbox3d_adjust_camera_speed(state, 0.5f);
+        }
+
+        henka_ui_label(state->ui, panel_bounds.x + 14.0f, panel_bounds.y + 232.0f, 1.0f, "Status");
+        henka_ui_label(state->ui, panel_bounds.x + 14.0f, panel_bounds.y + 250.0f, 1.0f, capture_text);
+        henka_ui_label(state->ui, panel_bounds.x + 14.0f, panel_bounds.y + 266.0f, 1.0f, grid_visible ? "Grid: Visible" : "Grid: Hidden");
+        henka_ui_label(state->ui, panel_bounds.x + 14.0f, panel_bounds.y + 282.0f, 1.0f, wireframe_enabled ? "Wireframe: On" : "Wireframe: Off");
+        henka_ui_label(state->ui, panel_bounds.x + 14.0f, panel_bounds.y + 298.0f, 1.0f, fps_text);
+        henka_ui_label(state->ui, panel_bounds.x + 14.0f, panel_bounds.y + 314.0f, 1.0f, camera_text);
+        henka_ui_label(state->ui, panel_bounds.x + 26.0f + button_width, scale_text_y, 1.0f, mouse_text);
+        henka_ui_label(state->ui, panel_bounds.x + 26.0f + button_width, speed_text_y, 1.0f, speed_text);
+        henka_ui_label(state->ui, panel_bounds.x + 14.0f, panel_bottom - 84.0f, 1.0f, asset_path_text);
+        henka_ui_label(state->ui, panel_bounds.x + 14.0f, panel_bottom - 68.0f, 1.0f, user_path_text);
+        henka_ui_label(state->ui, panel_bounds.x + 14.0f, panel_bottom - 52.0f, 1.0f, settings_path_text);
+        henka_ui_label(state->ui, panel_bounds.x + 14.0f, panel_bottom - 28.0f, 1.0f, "Escape closes the panel first. Close the panel to resume camera control.");
 
         henka_free(settings_path);
     }
@@ -791,12 +916,14 @@ static void sandbox3d_update(henka_engine* engine, double delta_seconds, void* u
 {
     henka_transform cube_transform;
     henka_vec2 mouse_delta;
+    bool ui_toggled_with_f4;
     bool ui_visible;
     int framebuffer_height;
     int framebuffer_width;
     sandbox3d_state* state;
 
     state = (sandbox3d_state*)user_data;
+    ui_toggled_with_f4 = false;
 
     if (henka_input_was_key_pressed(engine, HENKA_KEY_H))
     {
@@ -812,6 +939,7 @@ static void sandbox3d_update(henka_engine* engine, double delta_seconds, void* u
             henka_engine_set_mouse_capture(engine, false);
         }
         sandbox3d_print_ui_state(ui_visible);
+        ui_toggled_with_f4 = true;
     }
 
     if (henka_input_was_key_pressed(engine, HENKA_KEY_F2))
@@ -838,6 +966,10 @@ static void sandbox3d_update(henka_engine* engine, double delta_seconds, void* u
     }
 
     ui_visible = state->ui != NULL && henka_ui_is_visible(state->ui);
+    if (!ui_toggled_with_f4 && state->ui_visible_last_frame && !ui_visible)
+    {
+        sandbox3d_print_ui_state(false);
+    }
 
     if (!ui_visible && henka_input_was_key_pressed(engine, HENKA_KEY_TAB))
     {
@@ -865,7 +997,10 @@ static void sandbox3d_update(henka_engine* engine, double delta_seconds, void* u
             -mouse_delta.y * sandbox3d_get_mouse_sensitivity(state));
     }
 
-    henka_camera_move_fly(&state->camera, engine, delta_seconds);
+    if (!ui_visible)
+    {
+        henka_camera_move_fly(&state->camera, engine, delta_seconds);
+    }
     henka_scene_set_camera(state->scene, &state->camera);
 
     cube_transform = henka_transform_identity();
@@ -880,6 +1015,7 @@ static void sandbox3d_update(henka_engine* engine, double delta_seconds, void* u
     henka_scene_set_entity_transform(state->scene, state->marker_entity, cube_transform);
 
     sandbox3d_build_ui(engine, state);
+    state->ui_visible_last_frame = ui_visible;
 }
 
 static void sandbox3d_shutdown(henka_engine* engine, void* user_data)
@@ -922,6 +1058,7 @@ int main(void)
     state.fallback_cube_entity = HENKA_INVALID_ENTITY;
     state.marker_entity = HENKA_INVALID_ENTITY;
     state.fallback_model_entity = HENKA_INVALID_ENTITY;
+    state.ui_visible_last_frame = false;
 
     config.application_name = "Henka Engine Sandbox 3D";
     config.window_width = 1280;

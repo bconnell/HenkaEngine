@@ -38,6 +38,7 @@ void henka_test_ui(void)
     frame_desc.mouse_position = (henka_vec2){48.0f, 52.0f};
     frame_desc.mouse_left_down = true;
     frame_desc.mouse_left_pressed = true;
+    frame_desc.mouse_left_released = false;
 
     HENKA_TEST_ASSERT(henka_ui_begin_frame(ui, &frame_desc) == HENKA_SUCCESS);
     HENKA_TEST_ASSERT(henka_ui_panel(ui, (henka_ui_rect){20.0f, 20.0f, 200.0f, 100.0f}, "Panel") == HENKA_SUCCESS);
@@ -55,8 +56,18 @@ void henka_test_ui(void)
     HENKA_TEST_ASSERT(henka_ui_button(ui, "button", (henka_ui_rect){40.0f, 40.0f, 120.0f, 28.0f}, "Click") == true);
     HENKA_TEST_ASSERT(henka_ui_end_frame(ui) == HENKA_SUCCESS);
 
+    frame_desc.mouse_left_down = false;
+    frame_desc.mouse_left_pressed = false;
+    frame_desc.mouse_left_released = true;
+    HENKA_TEST_ASSERT(henka_ui_begin_frame(ui, &frame_desc) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_ui_button(ui, "button", (henka_ui_rect){40.0f, 40.0f, 120.0f, 28.0f}, "Click") == false);
+    HENKA_TEST_ASSERT(henka_ui_end_frame(ui) == HENKA_SUCCESS);
+
     toggle_value = false;
     frame_desc.mouse_position = (henka_vec2){48.0f, 92.0f};
+    frame_desc.mouse_left_down = true;
+    frame_desc.mouse_left_pressed = true;
+    frame_desc.mouse_left_released = false;
     HENKA_TEST_ASSERT(henka_ui_begin_frame(ui, &frame_desc) == HENKA_SUCCESS);
     HENKA_TEST_ASSERT(henka_ui_toggle(
         ui,
@@ -67,9 +78,23 @@ void henka_test_ui(void)
     HENKA_TEST_ASSERT(toggle_value == true);
     HENKA_TEST_ASSERT(henka_ui_end_frame(ui) == HENKA_SUCCESS);
 
+    frame_desc.mouse_left_down = false;
+    frame_desc.mouse_left_pressed = false;
+    frame_desc.mouse_left_released = true;
+    HENKA_TEST_ASSERT(henka_ui_begin_frame(ui, &frame_desc) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_ui_toggle(
+        ui,
+        "toggle",
+        (henka_ui_rect){40.0f, 80.0f, 140.0f, 30.0f},
+        "Grid",
+        &toggle_value) == false);
+    HENKA_TEST_ASSERT(toggle_value == true);
+    HENKA_TEST_ASSERT(henka_ui_end_frame(ui) == HENKA_SUCCESS);
+
     frame_desc.mouse_position = (henka_vec2){300.0f, 300.0f};
     frame_desc.mouse_left_down = false;
     frame_desc.mouse_left_pressed = false;
+    frame_desc.mouse_left_released = false;
     HENKA_TEST_ASSERT(henka_ui_begin_frame(ui, &frame_desc) == HENKA_SUCCESS);
     HENKA_TEST_ASSERT(henka_ui_panel(ui, (henka_ui_rect){20.0f, 20.0f, 200.0f, 100.0f}, "Panel") == HENKA_SUCCESS);
     HENKA_TEST_ASSERT(henka_ui_get_wants_mouse(ui) == false);

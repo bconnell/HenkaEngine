@@ -7,6 +7,7 @@ set(CMAKE_C_STANDARD_REQUIRED ON)
 set(CMAKE_C_EXTENSIONS OFF)
 
 option(HENKA_BUILD_TESTS "Build Henka Engine tests." ON)
+option(HENKA_BUILD_EXAMPLES "Build Henka Engine example applications." ON)
 
 include(FetchContent)
 
@@ -25,7 +26,10 @@ FetchContent_Declare(
 FetchContent_MakeAvailable(SDL3)
 
 add_subdirectory(engine)
-add_subdirectory(examples/sandbox3d)
+
+if(HENKA_BUILD_EXAMPLES)
+    add_subdirectory(examples/sandbox3d)
+endif()
 
 if(HENKA_BUILD_TESTS)
     enable_testing()

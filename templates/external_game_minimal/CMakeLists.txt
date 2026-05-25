@@ -14,6 +14,9 @@ if(NOT EXISTS "${HENKA_ENGINE_DIR}/CMakeLists.txt")
     message(FATAL_ERROR "HENKA_ENGINE_DIR does not point to a valid Henka Engine checkout.")
 endif()
 
+set(HENKA_BUILD_EXAMPLES OFF CACHE BOOL "Build Henka Engine example applications." FORCE)
+set(HENKA_BUILD_TESTS OFF CACHE BOOL "Build Henka Engine tests." FORCE)
+
 add_subdirectory("${HENKA_ENGINE_DIR}" "${CMAKE_BINARY_DIR}/henka-engine")
 
 add_executable(external_game_minimal

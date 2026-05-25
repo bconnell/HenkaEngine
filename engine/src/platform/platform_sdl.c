@@ -251,6 +251,7 @@ henka_result henka_platform_poll_events(struct henka_platform* platform, henka_i
                 if (button != HENKA_MOUSE_BUTTON_UNKNOWN)
                 {
                     input->mouse_buttons_down[button] = false;
+                    input->mouse_buttons_released[button] = true;
                 }
                 break;
             }

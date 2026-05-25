@@ -93,6 +93,7 @@ The current UI layer is intentionally small and dependency-conscious. Right now 
 - basic hover and click state
 - simple built-in text rendering from engine-owned source code glyph data
 - screen-space overlay drawing through the existing renderer
+- mouse hover, press, and release handling for basic clickable controls
 
 It is meant to support engine samples and early runtime controls without exposing OpenGL or SDL types in the public UI API.
 
@@ -125,7 +126,7 @@ The renderer layer exposes engine-owned drawing functionality while keeping Open
 
 ### Sandbox
 
-The sandbox is a consumer of the public API only. It creates a scene, shaders, textures, meshes, materials, camera, settings object, and UI context through Henka headers, then hands those objects to the engine run loop through callbacks. It uses scene entity names and visibility state for the console legend, and it uses the early UI layer for a small in-window control panel without turning the sandbox into an editor.
+The sandbox is a consumer of the public API only. It creates a scene, shaders, textures, meshes, materials, camera, settings object, and UI context through Henka headers, then hands those objects to the engine run loop through callbacks. It uses scene entity names and visibility state for the console legend, and it uses the early UI layer for a small in-window control panel without turning the sandbox into an editor. The current interaction rules pause camera movement and mouse look while the panel is open, release mouse capture when the panel opens, and let `Escape` close the panel before it resumes the normal capture and exit flow.
 
 ## Current boundaries
 

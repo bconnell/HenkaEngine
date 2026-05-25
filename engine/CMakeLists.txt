@@ -24,7 +24,7 @@ target_include_directories(henka
         ${CMAKE_CURRENT_SOURCE_DIR}/include
     PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/src
-        ${CMAKE_SOURCE_DIR}/third_party/stb
+        ${CMAKE_CURRENT_LIST_DIR}/../third_party/stb
 )
 
 if(TARGET SDL3::SDL3)

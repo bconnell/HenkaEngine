@@ -32,6 +32,11 @@ Use this checklist when you want to confirm that `henka_sandbox3d` is visually r
 9. Run the package script again and confirm the `user/` folder is preserved by default.
 10. If you intentionally test `-ResetUserData`, confirm the settings file is removed only when that switch is used.
 11. Press `F4` and confirm the sandbox panel appears in the packaged run.
+12. If you want a quick automated packaged check first, run:
+
+   ```powershell
+   .\scripts\check_packaged_sandbox3d_windows.ps1
+   ```
 
 ## Expected startup behavior
 
@@ -74,9 +79,11 @@ You should be able to identify these examples:
 - Opening the panel releases mouse capture.
 - Mouse look pauses while the panel is open.
 - The panel can toggle the debug grid and wireframe state with the mouse.
+- The panel can adjust mouse sensitivity and camera speed with the mouse.
 - The panel can reset the camera, save settings, reset sandbox settings, print help, and print the scene legend.
 - Pressing `F4` again closes the panel.
 - After the panel closes, `Right Mouse` and `Tab` can capture the mouse again.
+- Pressing `Escape` while the panel is open closes the panel first.
 
 ## Expected fallback behavior
 
@@ -118,9 +125,12 @@ Mark each item as `Pass`, `Needs Review`, or `Fail`.
 - UI panel releases mouse capture when opened
 - UI grid toggle works
 - UI wireframe toggle works
+- UI mouse sensitivity controls work
+- UI camera speed controls work
 - UI reset camera works
 - UI save settings works
 - UI reset sandbox settings works
+- `Escape` closes the panel first
 - Persisted state reloads after a clean restart
 - `H` help prints again
 - `Escape` releases capture first, then exits
@@ -177,6 +187,8 @@ Controls:
 - F4 panel:
 - UI grid toggle:
 - UI wireframe toggle:
+- UI mouse sensitivity:
+- UI camera speed:
 - UI reset camera:
 - UI save settings:
 - UI reset settings:

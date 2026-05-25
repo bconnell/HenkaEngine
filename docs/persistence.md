@@ -56,6 +56,7 @@ The sandbox panel can also:
 - save the current settings on demand
 - reset the current sandbox settings back to defaults
 - reset the camera to the default sandbox view
+- adjust mouse sensitivity and camera speed before saving
 
 ## Missing or malformed settings
 
