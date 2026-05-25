@@ -20,6 +20,7 @@ typedef enum henka_key
     HENKA_KEY_F1,
     HENKA_KEY_F2,
     HENKA_KEY_F3,
+    HENKA_KEY_F4,
     HENKA_KEY_H,
     HENKA_KEY_COUNT
 } henka_key;
@@ -39,6 +40,7 @@ bool henka_input_is_key_down(const struct henka_engine* engine, henka_key key);
 bool henka_input_was_key_pressed(const struct henka_engine* engine, henka_key key);
 bool henka_input_is_mouse_button_down(const struct henka_engine* engine, henka_mouse_button button);
 bool henka_input_was_mouse_button_pressed(const struct henka_engine* engine, henka_mouse_button button);
+henka_vec2 henka_input_get_mouse_position(const struct henka_engine* engine);
 henka_vec2 henka_input_get_mouse_delta(const struct henka_engine* engine);
 
 #endif

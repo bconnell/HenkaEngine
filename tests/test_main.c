@@ -13,6 +13,7 @@ int main(void)
     henka_test_result();
     henka_test_memory();
     henka_test_scene();
+    henka_test_ui();
 
     if (g_henka_test_failures > 0)
     {

@@ -16,6 +16,7 @@ add_library(henka STATIC
     src/renderer/texture.c
     src/scene/camera.c
     src/scene/scene.c
+    src/ui/ui.c
 )
 
 target_include_directories(henka

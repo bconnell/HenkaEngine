@@ -23,6 +23,7 @@ Henka Engine is still early, but the sandbox now renders a visible 3D scene with
 - Ground plane, cubes, debug grid, a loaded OBJ marker, textured materials, and visible fallback behavior for missing texture and model assets
 - Keyboard movement, mouse look when capture is active, wireframe toggle, and offline runtime help
 - Local settings persistence for the sandbox
+- Early in-window UI overlay with buttons, toggles, labels, and simple text rendering
 - Packaged sandbox user data that stays in place across package refreshes by default
 - Generic documentation and starter template for external game repositories
 
@@ -105,12 +106,16 @@ Sandbox settings are saved locally in a `user/` folder beside the executable. In
 - `F1`: toggle wireframe
 - `F2`: print the scene legend again
 - `F3`: show or hide the debug grid
+- `F4`: show or hide the sandbox panel
 - `H`: print controls and the scene legend again
 - `Escape`: release the mouse first, then exit
+
+Press `F4` to open the in-window sandbox panel. The panel can toggle the grid and wireframe view, reset the camera, save settings, reset sandbox settings, and print the same help and scene legend you can reach from the keyboard. Mouse look pauses while the panel is open.
 
 Offline help is also available in [docs/help/sandbox3d.md](docs/help/sandbox3d.md).
 Model loading notes are documented in [docs/model-loading.md](docs/model-loading.md).
 A persistence overview is available in [docs/persistence.md](docs/persistence.md).
+A UI overview is available in [docs/ui.md](docs/ui.md).
 A guide for separate game repositories is available in [docs/external-game-projects.md](docs/external-game-projects.md).
 A manual verification checklist is available in [docs/qa/sandbox3d-manual-checklist.md](docs/qa/sandbox3d-manual-checklist.md).
 Packaged output is generated under `out/` and should not be committed.
@@ -129,7 +134,7 @@ Packaged output is generated under `out/` and should not be committed.
 - OBJ material libraries, negative indices, polygons with more than four vertices, and animation are not supported yet.
 - The current settings format is a simple local key/value file. It is meant for engine samples and early projects, not for a finished save pipeline.
 - Cloud saves, telemetry, analytics, registry storage, encryption, and network-backed persistence are not implemented.
-- There is no in-window text or overlay help yet.
+- The in-window UI overlay is intentionally small. It is useful for sandbox controls, but it is not an editor or a general UI toolkit yet.
 - 2D and 2.5D are part of the engine direction, but those workflows are not implemented yet.
 - Visual and interaction checks still need manual QA on a local desktop session.
 - HenkaSandbox3D is an engine sample and QA target, not a game. Real games built with Henka should live in separate repositories.

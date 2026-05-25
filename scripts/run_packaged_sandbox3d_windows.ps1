@@ -10,7 +10,7 @@ if (-not (Test-Path $packagedExe)) {
 
 Push-Location $packageRoot
 try {
-    Start-Process -FilePath ".\HenkaSandbox3D.exe" -WorkingDirectory $packageRoot
+    Start-Process -FilePath $packagedExe -WorkingDirectory $packageRoot
     Write-Host "Launched packaged sandbox:"
     Write-Host "  $packagedExe"
 }

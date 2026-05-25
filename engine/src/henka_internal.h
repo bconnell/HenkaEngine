@@ -18,6 +18,7 @@
 #include <henka/shader.h>
 #include <henka/texture.h>
 #include <henka/time.h>
+#include <henka/ui.h>
 
 typedef enum henka_mesh_primitive
 {
@@ -38,6 +39,7 @@ typedef struct henka_input_state
     bool keys_pressed[HENKA_KEY_COUNT];
     bool mouse_buttons_down[HENKA_MOUSE_BUTTON_COUNT];
     bool mouse_buttons_pressed[HENKA_MOUSE_BUTTON_COUNT];
+    henka_vec2 mouse_position;
     henka_vec2 mouse_delta;
     bool close_requested;
 } henka_input_state;
@@ -159,6 +161,7 @@ struct henka_engine
     struct henka_renderer* renderer;
     struct henka_asset_manager* asset_manager;
     struct henka_scene* active_scene;
+    struct henka_ui_context* active_ui;
     char* asset_base_path;
     char* user_data_base_path;
     henka_input_state input;
@@ -181,6 +184,7 @@ void henka_renderer_destroy(struct henka_renderer* renderer);
 henka_result henka_renderer_begin_frame(struct henka_renderer* renderer);
 void henka_renderer_clear_frame(struct henka_renderer* renderer);
 henka_result henka_renderer_draw_scene(struct henka_renderer* renderer, const struct henka_scene* scene);
+henka_result henka_renderer_draw_ui(struct henka_renderer* renderer, const struct henka_ui_context* ui_context);
 henka_result henka_renderer_end_frame(struct henka_renderer* renderer);
 void henka_renderer_resize_viewport(struct henka_renderer* renderer, int width, int height);
 henka_result henka_renderer_set_vsync(struct henka_renderer* renderer, bool enabled);
@@ -213,6 +217,7 @@ void henka_opengl_renderer_destroy(struct henka_renderer* renderer);
 henka_result henka_opengl_renderer_begin_frame(struct henka_renderer* renderer);
 void henka_opengl_renderer_clear_frame(struct henka_renderer* renderer);
 henka_result henka_opengl_renderer_draw_scene(struct henka_renderer* renderer, const struct henka_scene* scene);
+henka_result henka_opengl_renderer_draw_ui(struct henka_renderer* renderer, const struct henka_ui_context* ui_context);
 henka_result henka_opengl_renderer_end_frame(struct henka_renderer* renderer);
 void henka_opengl_renderer_resize_viewport(struct henka_renderer* renderer, int width, int height);
 henka_result henka_opengl_renderer_set_vsync(struct henka_renderer* renderer, bool enabled);

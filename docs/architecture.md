@@ -83,6 +83,19 @@ The persistence layer is intentionally small and local-first. Right now it provi
 
 The current layer is meant for local preferences and early project state. It is not a full save system, cloud system, or content database.
 
+### UI
+
+The current UI layer is intentionally small and dependency-conscious. Right now it provides:
+
+- a lightweight UI context
+- frame begin and end flow
+- panel, label, button, and toggle primitives
+- basic hover and click state
+- simple built-in text rendering from engine-owned source code glyph data
+- screen-space overlay drawing through the existing renderer
+
+It is meant to support engine samples and early runtime controls without exposing OpenGL or SDL types in the public UI API.
+
 ### Scene
 
 The scene layer is intentionally minimal. It is not a full ECS. Right now it provides:
@@ -108,10 +121,11 @@ The renderer layer exposes engine-owned drawing functionality while keeping Open
 - backface culling
 - wireframe toggle
 - draw submission for scene entities
+- draw submission for simple screen-space UI rectangles
 
 ### Sandbox
 
-The sandbox is a consumer of the public API only. It creates a scene, shaders, textures, meshes, materials, and camera through Henka headers, then hands those objects to the engine run loop through callbacks. It also uses scene entity names and visibility state to support console legends and manual verification without adding a separate overlay system.
+The sandbox is a consumer of the public API only. It creates a scene, shaders, textures, meshes, materials, camera, settings object, and UI context through Henka headers, then hands those objects to the engine run loop through callbacks. It uses scene entity names and visibility state for the console legend, and it uses the early UI layer for a small in-window control panel without turning the sandbox into an editor.
 
 ## Current boundaries
 
@@ -120,6 +134,7 @@ The sandbox is a consumer of the public API only. It creates a scene, shaders, t
 - The engine also owns the asset manager and fallback assets.
 - The engine resolves runtime assets relative to the executable directory by default, which keeps packaged sandbox runs independent from the repository root.
 - The engine also resolves a local user data base path beside the executable by default, which keeps sandbox settings local to the runnable folder.
+- The engine can also draw an optional UI context after the 3D scene, which keeps sandbox overlays inside the engine render path instead of requiring an external UI dependency.
 - The sandbox does not include SDL, Windows, or OpenGL headers.
 - OpenGL stays in renderer implementation files.
 - Scene data is public enough to build with, but renderer details stay private.
@@ -135,3 +150,4 @@ The next steps should continue building upward from these boundaries:
 - stronger asset management
 - broader persistence and external project support once the current local-first path has settled
 - early 2.5D-friendly camera and layering rules after the shared runtime is steadier
+- richer engine UI controls after the current lightweight overlay has settled

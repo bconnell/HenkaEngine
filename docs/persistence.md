@@ -51,6 +51,12 @@ The current sandbox saves:
 - camera yaw
 - camera pitch
 
+The sandbox panel can also:
+
+- save the current settings on demand
+- reset the current sandbox settings back to defaults
+- reset the camera to the default sandbox view
+
 ## Missing or malformed settings
 
 If the settings file is missing, the sandbox starts with safe defaults.
@@ -61,6 +67,8 @@ If the settings file contains invalid lines or invalid values:
 - valid values are still loaded when possible
 - invalid values fall back to defaults
 - a warning is printed to the console
+
+The sandbox UI reflects the loaded state after startup, so the panel stays aligned with the current grid, wireframe, and camera settings.
 
 ## What is not supported yet
 

@@ -4,16 +4,22 @@
 #include <SDL3/SDL_opengl.h>
 #include <SDL3/SDL_opengl_glext.h>
 
+#include <stddef.h>
 #include <stdio.h>
 #include <string.h>
 
 #include <henka/log.h>
 #include <henka/memory.h>
 
+#include "../ui/ui_internal.h"
+
 typedef struct henka_opengl_renderer_state
 {
     SDL_Window* window;
     SDL_GLContext gl_context;
+    GLuint ui_program;
+    GLuint ui_vertex_array;
+    GLuint ui_vertex_buffer;
 } henka_opengl_renderer_state;
 
 typedef struct henka_opengl_functions
@@ -35,6 +41,7 @@ typedef struct henka_opengl_functions
     PFNGLUNIFORMMATRIX4FVPROC UniformMatrix4fv;
     PFNGLUNIFORM4FPROC Uniform4f;
     PFNGLUNIFORM3FPROC Uniform3f;
+    PFNGLUNIFORM2FPROC Uniform2f;
     PFNGLUNIFORM1IPROC Uniform1i;
     PFNGLGENVERTEXARRAYSPROC GenVertexArrays;
     PFNGLGENBUFFERSPROC GenBuffers;
@@ -68,9 +75,22 @@ typedef struct henka_opengl_texture_data
     GLuint texture_id;
 } henka_opengl_texture_data;
 
+typedef struct henka_ui_vertex
+{
+    float x;
+    float y;
+    float r;
+    float g;
+    float b;
+    float a;
+} henka_ui_vertex;
+
 static henka_opengl_functions g_gl;
 
 SDL_Window* henka_platform_get_sdl_window(struct henka_platform* platform);
+
+static bool henka_compile_shader(GLuint shader, const char* source, const char* label);
+static bool henka_link_program(GLuint program);
 
 static henka_result henka_renderer_configure_gl_attributes(void)
 {
@@ -119,6 +139,7 @@ static bool henka_opengl_load_functions(void)
     HENKA_GL_LOAD(UniformMatrix4fv);
     HENKA_GL_LOAD(Uniform4f);
     HENKA_GL_LOAD(Uniform3f);
+    HENKA_GL_LOAD(Uniform2f);
     HENKA_GL_LOAD(Uniform1i);
     HENKA_GL_LOAD(GenVertexArrays);
     HENKA_GL_LOAD(GenBuffers);
@@ -176,6 +197,50 @@ static char* henka_read_text_file(const char* path)
 
     buffer[bytes_read] = '\0';
     return buffer;
+}
+
+static bool henka_compile_program_from_source(
+    const char* vertex_source,
+    const char* fragment_source,
+    const char* vertex_label,
+    const char* fragment_label,
+    GLuint* out_program)
+{
+    GLuint fragment_shader;
+    GLuint program;
+    GLuint vertex_shader;
+
+    if (vertex_source == NULL || fragment_source == NULL || out_program == NULL)
+    {
+        return false;
+    }
+
+    *out_program = 0U;
+    vertex_shader = g_gl.CreateShader(GL_VERTEX_SHADER);
+    fragment_shader = g_gl.CreateShader(GL_FRAGMENT_SHADER);
+    if (!henka_compile_shader(vertex_shader, vertex_source, vertex_label) ||
+        !henka_compile_shader(fragment_shader, fragment_source, fragment_label))
+    {
+        g_gl.DeleteShader(vertex_shader);
+        g_gl.DeleteShader(fragment_shader);
+        return false;
+    }
+
+    program = g_gl.CreateProgram();
+    g_gl.AttachShader(program, vertex_shader);
+    g_gl.AttachShader(program, fragment_shader);
+    if (!henka_link_program(program))
+    {
+        g_gl.DeleteProgram(program);
+        g_gl.DeleteShader(vertex_shader);
+        g_gl.DeleteShader(fragment_shader);
+        return false;
+    }
+
+    g_gl.DeleteShader(vertex_shader);
+    g_gl.DeleteShader(fragment_shader);
+    *out_program = program;
+    return true;
 }
 
 static bool henka_compile_shader(GLuint shader, const char* source, const char* label)
@@ -268,6 +333,53 @@ static void henka_set_uniform_int(GLuint program, const char* name, int value)
     }
 }
 
+static henka_result henka_opengl_renderer_create_ui_resources(henka_opengl_renderer_state* state)
+{
+    static const char* g_ui_vertex_shader_source =
+        "#version 330 core\n"
+        "layout(location = 0) in vec2 inPosition;\n"
+        "layout(location = 1) in vec4 inColor;\n"
+        "uniform vec2 framebufferSize;\n"
+        "out vec4 vertexColor;\n"
+        "void main(void)\n"
+        "{\n"
+        "    vec2 clip = vec2((inPosition.x / framebufferSize.x) * 2.0 - 1.0,\n"
+        "                     1.0 - (inPosition.y / framebufferSize.y) * 2.0);\n"
+        "    gl_Position = vec4(clip, 0.0, 1.0);\n"
+        "    vertexColor = inColor;\n"
+        "}\n";
+    static const char* g_ui_fragment_shader_source =
+        "#version 330 core\n"
+        "in vec4 vertexColor;\n"
+        "out vec4 fragmentColor;\n"
+        "void main(void)\n"
+        "{\n"
+        "    fragmentColor = vertexColor;\n"
+        "}\n";
+
+    if (!henka_compile_program_from_source(
+            g_ui_vertex_shader_source,
+            g_ui_fragment_shader_source,
+            "ui overlay vertex shader",
+            "ui overlay fragment shader",
+            &state->ui_program))
+    {
+        return HENKA_ERROR_RENDERER;
+    }
+
+    g_gl.GenVertexArrays(1, &state->ui_vertex_array);
+    g_gl.GenBuffers(1, &state->ui_vertex_buffer);
+    g_gl.BindVertexArray(state->ui_vertex_array);
+    g_gl.BindBuffer(GL_ARRAY_BUFFER, state->ui_vertex_buffer);
+    g_gl.EnableVertexAttribArray(0);
+    g_gl.VertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, sizeof(henka_ui_vertex), (const void*)offsetof(henka_ui_vertex, x));
+    g_gl.EnableVertexAttribArray(1);
+    g_gl.VertexAttribPointer(1, 4, GL_FLOAT, GL_FALSE, sizeof(henka_ui_vertex), (const void*)offsetof(henka_ui_vertex, r));
+    g_gl.BindVertexArray(0);
+    g_gl.BindBuffer(GL_ARRAY_BUFFER, 0);
+    return HENKA_SUCCESS;
+}
+
 henka_result henka_opengl_renderer_create(struct henka_renderer* renderer, struct henka_platform* platform, bool enable_vsync)
 {
     henka_opengl_renderer_state* state;
@@ -341,6 +453,15 @@ henka_result henka_opengl_renderer_create(struct henka_renderer* renderer, struc
         return result;
     }
 
+    result = henka_opengl_renderer_create_ui_resources(state);
+    if (result != HENKA_SUCCESS)
+    {
+        SDL_GL_DestroyContext(state->gl_context);
+        henka_free(state);
+        renderer->backend_state = NULL;
+        return result;
+    }
+
     HENKA_LOG_INFO("renderer initialized with OpenGL backend");
     return HENKA_SUCCESS;
 }
@@ -355,6 +476,18 @@ void henka_opengl_renderer_destroy(struct henka_renderer* renderer)
     }
 
     state = (henka_opengl_renderer_state*)renderer->backend_state;
+    if (state->ui_vertex_buffer != 0U)
+    {
+        g_gl.DeleteBuffers(1, &state->ui_vertex_buffer);
+    }
+    if (state->ui_vertex_array != 0U)
+    {
+        g_gl.DeleteVertexArrays(1, &state->ui_vertex_array);
+    }
+    if (state->ui_program != 0U)
+    {
+        g_gl.DeleteProgram(state->ui_program);
+    }
     if (state->gl_context != NULL)
     {
         SDL_GL_DestroyContext(state->gl_context);
@@ -458,6 +591,84 @@ henka_result henka_opengl_renderer_draw_scene(struct henka_renderer* renderer, c
     g_gl.BindVertexArray(0);
     glBindTexture(GL_TEXTURE_2D, 0);
     g_gl.UseProgram(0);
+    return HENKA_SUCCESS;
+}
+
+henka_result henka_opengl_renderer_draw_ui(struct henka_renderer* renderer, const struct henka_ui_context* ui_context)
+{
+    const henka_opengl_renderer_state* state;
+    henka_ui_vertex* vertices;
+    size_t index;
+    size_t vertex_count;
+
+    if (renderer == NULL || renderer->backend_state == NULL || ui_context == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    if (!ui_context->visible || ui_context->draw_rect_count == 0U)
+    {
+        return HENKA_SUCCESS;
+    }
+
+    state = (const henka_opengl_renderer_state*)renderer->backend_state;
+    vertex_count = ui_context->draw_rect_count * 6U;
+    vertices = henka_malloc(vertex_count * sizeof(*vertices));
+    if (vertices == NULL)
+    {
+        return HENKA_ERROR_OUT_OF_MEMORY;
+    }
+
+    for (index = 0U; index < ui_context->draw_rect_count; ++index)
+    {
+        const henka_ui_draw_rect* draw_rect;
+        henka_vec4 color;
+        float x0;
+        float x1;
+        float y0;
+        float y1;
+        size_t base_index;
+
+        draw_rect = &ui_context->draw_rects[index];
+        x0 = draw_rect->bounds.x;
+        y0 = draw_rect->bounds.y;
+        x1 = draw_rect->bounds.x + draw_rect->bounds.width;
+        y1 = draw_rect->bounds.y + draw_rect->bounds.height;
+        color = draw_rect->color;
+        base_index = index * 6U;
+
+        vertices[base_index + 0U] = (henka_ui_vertex){x0, y0, color.x, color.y, color.z, color.w};
+        vertices[base_index + 1U] = (henka_ui_vertex){x1, y0, color.x, color.y, color.z, color.w};
+        vertices[base_index + 2U] = (henka_ui_vertex){x1, y1, color.x, color.y, color.z, color.w};
+        vertices[base_index + 3U] = (henka_ui_vertex){x0, y0, color.x, color.y, color.z, color.w};
+        vertices[base_index + 4U] = (henka_ui_vertex){x1, y1, color.x, color.y, color.z, color.w};
+        vertices[base_index + 5U] = (henka_ui_vertex){x0, y1, color.x, color.y, color.z, color.w};
+    }
+
+    glDisable(GL_DEPTH_TEST);
+    glDisable(GL_CULL_FACE);
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
+    g_gl.UseProgram(state->ui_program);
+    {
+        GLint location;
+
+        location = g_gl.GetUniformLocation(state->ui_program, "framebufferSize");
+        if (location >= 0)
+        {
+            g_gl.Uniform2f(location, (GLfloat)renderer->framebuffer_width, (GLfloat)renderer->framebuffer_height);
+        }
+    }
+    g_gl.BindVertexArray(state->ui_vertex_array);
+    g_gl.BindBuffer(GL_ARRAY_BUFFER, state->ui_vertex_buffer);
+    g_gl.BufferData(GL_ARRAY_BUFFER, vertex_count * sizeof(*vertices), vertices, GL_DYNAMIC_DRAW);
+    glDrawArrays(GL_TRIANGLES, 0, (GLsizei)vertex_count);
+    g_gl.BindBuffer(GL_ARRAY_BUFFER, 0);
+    g_gl.BindVertexArray(0);
+    g_gl.UseProgram(0);
+    glDisable(GL_BLEND);
+    henka_free(vertices);
     return HENKA_SUCCESS;
 }
 

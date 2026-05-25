@@ -19,5 +19,6 @@
 #include <henka/shader.h>
 #include <henka/time.h>
 #include <henka/texture.h>
+#include <henka/ui.h>
 
 #endif

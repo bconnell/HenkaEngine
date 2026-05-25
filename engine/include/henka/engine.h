@@ -9,6 +9,7 @@
 typedef struct henka_engine henka_engine;
 typedef struct henka_scene henka_scene;
 typedef struct henka_asset_manager henka_asset_manager;
+typedef struct henka_ui_context henka_ui_context;
 
 typedef henka_result (*henka_engine_initialize_fn)(henka_engine* engine, void* user_data);
 typedef void (*henka_engine_update_fn)(henka_engine* engine, double delta_seconds, void* user_data);
@@ -39,6 +40,7 @@ void henka_engine_destroy(henka_engine* engine);
 henka_result henka_engine_run(henka_engine* engine);
 void henka_engine_request_exit(henka_engine* engine);
 henka_result henka_engine_set_scene(henka_engine* engine, henka_scene* scene);
+henka_result henka_engine_set_ui_context(henka_engine* engine, henka_ui_context* ui_context);
 henka_result henka_engine_set_vsync(henka_engine* engine, bool enabled);
 bool henka_engine_is_vsync_enabled(const henka_engine* engine);
 henka_result henka_engine_set_wireframe(henka_engine* engine, bool enabled);

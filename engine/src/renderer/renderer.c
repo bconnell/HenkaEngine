@@ -66,6 +66,16 @@ henka_result henka_renderer_draw_scene(struct henka_renderer* renderer, const st
     return henka_opengl_renderer_draw_scene(renderer, scene);
 }
 
+henka_result henka_renderer_draw_ui(struct henka_renderer* renderer, const struct henka_ui_context* ui_context)
+{
+    if (renderer == NULL || ui_context == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    return henka_opengl_renderer_draw_ui(renderer, ui_context);
+}
+
 henka_result henka_renderer_end_frame(struct henka_renderer* renderer)
 {
     return henka_opengl_renderer_end_frame(renderer);

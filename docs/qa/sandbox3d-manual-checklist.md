@@ -31,6 +31,7 @@ Use this checklist when you want to confirm that `henka_sandbox3d` is visually r
 8. Change `F1` or `F3`, exit cleanly, and confirm `out/HenkaSandbox3D/user/sandbox3d.settings` is created.
 9. Run the package script again and confirm the `user/` folder is preserved by default.
 10. If you intentionally test `-ResetUserData`, confirm the settings file is removed only when that switch is used.
+11. Press `F4` and confirm the sandbox panel appears in the packaged run.
 
 ## Expected startup behavior
 
@@ -62,9 +63,20 @@ You should be able to identify these examples:
 - `F1`: toggle wireframe
 - `F2`: print the scene legend again
 - `F3`: show or hide the debug grid
+- `F4`: show or hide the sandbox panel
 - `H`: print controls and the scene legend again
 - `Escape`: release mouse capture first, then exit
 - Window close: exit
+
+## Expected sandbox panel behavior
+
+- Pressing `F4` opens a panel titled `Henka Sandbox`.
+- Opening the panel releases mouse capture.
+- Mouse look pauses while the panel is open.
+- The panel can toggle the debug grid and wireframe state with the mouse.
+- The panel can reset the camera, save settings, reset sandbox settings, print help, and print the scene legend.
+- Pressing `F4` again closes the panel.
+- After the panel closes, `Right Mouse` and `Tab` can capture the mouse again.
 
 ## Expected fallback behavior
 
@@ -101,6 +113,15 @@ Mark each item as `Pass`, `Needs Review`, or `Fail`.
 - `F1` wireframe toggle works
 - `F2` scene legend prints again
 - `F3` debug grid visibility toggle works
+- `F4` sandbox panel toggle works
+- UI panel appears and is readable
+- UI panel releases mouse capture when opened
+- UI grid toggle works
+- UI wireframe toggle works
+- UI reset camera works
+- UI save settings works
+- UI reset sandbox settings works
+- Persisted state reloads after a clean restart
 - `H` help prints again
 - `Escape` releases capture first, then exits
 - Window close exits cleanly
@@ -121,7 +142,7 @@ Do not commit screenshots unless that is an intentional, reviewed part of the re
 ## Known limitations
 
 - OBJ loading is still early and limited to the documented subset in [docs/model-loading.md](../model-loading.md).
-- Help is printed to the console because the sandbox does not have in-window text rendering yet.
+- The UI overlay is still intentionally small and is not an editor.
 - Manual visual inspection is still the best way to confirm scene readability and interaction feel.
 - The packaged Windows folder is meant for local manual testing, not as a full installer or release pipeline.
 - The current persistence layer is local-only and stores simple key/value settings, not encrypted save data.
@@ -153,6 +174,13 @@ Controls:
 - F1 wireframe:
 - F2 legend:
 - F3 grid:
+- F4 panel:
+- UI grid toggle:
+- UI wireframe toggle:
+- UI reset camera:
+- UI save settings:
+- UI reset settings:
+- Persisted UI state:
 - H help:
 - Escape behavior:
 - Window close:

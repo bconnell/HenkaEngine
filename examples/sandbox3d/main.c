@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <string.h>
 
 #include <henka/henka.h>
 
@@ -6,6 +7,7 @@ typedef struct sandbox3d_state
 {
     henka_scene* scene;
     henka_settings* settings;
+    henka_ui_context* ui;
     henka_camera camera;
     henka_mesh* cube_mesh;
     henka_mesh* ground_mesh;
@@ -36,6 +38,7 @@ static const henka_vec3 g_colored_cube_position = {-2.6f, 0.5f, 1.4f};
 static const henka_vec3 g_missing_texture_position = {2.6f, 0.5f, 1.4f};
 static const henka_vec3 g_marker_position = {-4.4f, 0.0f, -0.9f};
 static const henka_vec3 g_missing_model_position = {4.4f, 0.5f, -0.9f};
+static const henka_ui_rect g_ui_panel_bounds = {20.0f, 20.0f, 452.0f, 404.0f};
 
 static henka_result sandbox3d_get_settings_path(const henka_engine* engine, char** out_path)
 {
@@ -110,6 +113,7 @@ static void sandbox3d_release_owned_resources(sandbox3d_state* state)
     henka_mesh_destroy(state->cube_mesh);
     henka_scene_destroy(state->scene);
     henka_settings_destroy(state->settings);
+    henka_ui_destroy(state->ui);
 
     state->grid_mesh = NULL;
     state->ground_mesh = NULL;
@@ -118,6 +122,21 @@ static void sandbox3d_release_owned_resources(sandbox3d_state* state)
     state->missing_model_mesh = NULL;
     state->scene = NULL;
     state->settings = NULL;
+    state->ui = NULL;
+}
+
+static void sandbox3d_reset_camera_defaults(sandbox3d_state* state)
+{
+    if (state == NULL)
+    {
+        return;
+    }
+
+    state->camera.position = g_camera_start_position;
+    state->camera.yaw_radians = g_camera_start_yaw;
+    state->camera.pitch_radians = g_camera_start_pitch;
+    state->camera.movement_speed = g_default_camera_movement_speed;
+    state->camera.fast_movement_multiplier = 2.5f;
 }
 
 static float sandbox3d_get_mouse_sensitivity(const sandbox3d_state* state)
@@ -175,14 +194,14 @@ static void sandbox3d_apply_loaded_settings(henka_engine* engine, sandbox3d_stat
     }
 }
 
-static void sandbox3d_save_settings(henka_engine* engine, sandbox3d_state* state)
+static henka_result sandbox3d_save_settings(henka_engine* engine, sandbox3d_state* state)
 {
     char* settings_path;
     henka_result result;
 
     if (engine == NULL || state == NULL || state->settings == NULL || state->scene == NULL)
     {
-        return;
+        return HENKA_ERROR_INVALID_ARGUMENT;
     }
 
     henka_settings_set_bool(state->settings, "grid_visible", henka_scene_is_entity_visible(state->scene, state->grid_entity));
@@ -199,7 +218,7 @@ static void sandbox3d_save_settings(henka_engine* engine, sandbox3d_state* state
     if (result != HENKA_SUCCESS)
     {
         HENKA_LOG_WARN("Sandbox settings could not be saved because the local settings path could not be resolved.");
-        return;
+        return result;
     }
 
     result = henka_settings_save_file(state->settings, settings_path);
@@ -209,6 +228,62 @@ static void sandbox3d_save_settings(henka_engine* engine, sandbox3d_state* state
     }
 
     henka_free(settings_path);
+    return result;
+}
+
+static henka_result sandbox3d_reset_settings_object(sandbox3d_state* state)
+{
+    henka_result result;
+
+    if (state == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    henka_settings_destroy(state->settings);
+    state->settings = NULL;
+    result = henka_settings_create(&state->settings);
+    return result;
+}
+
+static henka_result sandbox3d_reset_settings(henka_engine* engine, sandbox3d_state* state)
+{
+    char* settings_path;
+    henka_result result;
+
+    if (engine == NULL || state == NULL || state->scene == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    result = sandbox3d_reset_settings_object(state);
+    if (result != HENKA_SUCCESS)
+    {
+        return result;
+    }
+
+    sandbox3d_reset_camera_defaults(state);
+    result = henka_scene_set_entity_visible(state->scene, state->grid_entity, true);
+    if (result != HENKA_SUCCESS)
+    {
+        return result;
+    }
+
+    result = henka_engine_set_wireframe(engine, false);
+    if (result != HENKA_SUCCESS)
+    {
+        return result;
+    }
+
+    result = sandbox3d_get_settings_path(engine, &settings_path);
+    if (result != HENKA_SUCCESS)
+    {
+        return result;
+    }
+
+    remove(settings_path);
+    henka_free(settings_path);
+    return sandbox3d_save_settings(engine, state);
 }
 
 static void sandbox3d_print_help(const sandbox3d_state* state)
@@ -224,15 +299,19 @@ static void sandbox3d_print_help(const sandbox3d_state* state)
     printf("  F1               Toggle wireframe\n");
     printf("  F2               Print the scene legend again\n");
     printf("  F3               Show or hide the debug grid\n");
+    printf("  F4               Show or hide the sandbox panel\n");
     printf("  H                Print controls and the scene legend again\n");
     printf("  Escape           Release the mouse first, then exit\n");
+    printf("Panel shortcuts:\n");
+    printf("  Use the sandbox panel to toggle the grid and wireframe view, reset the camera, and save or reset local sandbox settings.\n");
+    printf("  Mouse look pauses while the panel is open.\n");
     sandbox3d_print_scene_legend(state);
     printf("Manual QA focus:\n");
     printf("  Confirm each scene example is visible, mouse capture toggles cleanly, wireframe is readable, and the view stays stable when the window is resized.\n");
     printf("Current limitations:\n");
     printf("  OBJ loading is still early and currently limited to a small, documented subset.\n");
     printf("  OBJ material libraries, negative indices, animation, editor tools, and broader 2D or 2.5D workflows are not available yet.\n");
-    printf("  Help is printed to the console because in-window text and UI rendering do not exist yet.\n");
+    printf("  The UI overlay is intentionally small and is not an editor.\n");
     printf("  Sandbox settings are saved locally beside the executable in the user folder.\n");
     fflush(stdout);
 }
@@ -246,6 +325,160 @@ static void sandbox3d_print_capture_state(henka_engine* engine, const char* trig
     }
     printf("\n");
     fflush(stdout);
+}
+
+static void sandbox3d_format_display_path(const char* label, const char* path, char* buffer, size_t buffer_size)
+{
+    const char* value;
+    size_t path_length;
+
+    if (buffer == NULL || buffer_size == 0U)
+    {
+        return;
+    }
+
+    value = (path != NULL && path[0] != '\0') ? path : "(unavailable)";
+    path_length = strlen(value);
+
+    if (path_length > 38U)
+    {
+        snprintf(buffer, buffer_size, "%s: ...%s", label, value + path_length - 35U);
+    }
+    else
+    {
+        snprintf(buffer, buffer_size, "%s: %s", label, value);
+    }
+}
+
+static void sandbox3d_print_ui_state(bool visible)
+{
+    printf("Sandbox panel: %s\n", visible ? "shown" : "hidden");
+    fflush(stdout);
+}
+
+static void sandbox3d_build_ui(henka_engine* engine, sandbox3d_state* state)
+{
+    char asset_path_text[96];
+    char camera_text[96];
+    char capture_text[64];
+    char fps_text[48];
+    char settings_path_text[96];
+    char user_path_text[96];
+    char* settings_path;
+    float fps;
+    float milliseconds;
+    bool grid_visible;
+    bool wireframe_enabled;
+    henka_result result;
+    henka_ui_frame_desc frame_desc;
+
+    if (engine == NULL || state == NULL || state->ui == NULL)
+    {
+        return;
+    }
+
+    frame_desc.framebuffer_width = 0;
+    frame_desc.framebuffer_height = 0;
+    if (henka_engine_get_framebuffer_size(engine, &frame_desc.framebuffer_width, &frame_desc.framebuffer_height) != HENKA_SUCCESS)
+    {
+        frame_desc.framebuffer_width = 1280;
+        frame_desc.framebuffer_height = 720;
+    }
+    frame_desc.mouse_position = henka_input_get_mouse_position(engine);
+    frame_desc.mouse_left_down = henka_input_is_mouse_button_down(engine, HENKA_MOUSE_BUTTON_LEFT);
+    frame_desc.mouse_left_pressed = henka_input_was_mouse_button_pressed(engine, HENKA_MOUSE_BUTTON_LEFT);
+
+    if (henka_ui_begin_frame(state->ui, &frame_desc) != HENKA_SUCCESS)
+    {
+        return;
+    }
+
+    if (henka_ui_is_visible(state->ui))
+    {
+        settings_path = NULL;
+        result = sandbox3d_get_settings_path(engine, &settings_path);
+        sandbox3d_format_display_path("Assets", henka_engine_get_asset_base_path(engine), asset_path_text, sizeof(asset_path_text));
+        sandbox3d_format_display_path("User", henka_engine_get_user_data_base_path(engine), user_path_text, sizeof(user_path_text));
+        sandbox3d_format_display_path("Settings", result == HENKA_SUCCESS ? settings_path : NULL, settings_path_text, sizeof(settings_path_text));
+        snprintf(capture_text, sizeof(capture_text), "Capture: %s", henka_engine_is_mouse_captured(engine) ? "On" : "Off");
+        grid_visible = henka_scene_is_entity_visible(state->scene, state->grid_entity);
+        wireframe_enabled = henka_engine_is_wireframe_enabled(engine);
+        milliseconds = (float)(henka_engine_get_delta_time(engine) * 1000.0);
+        fps = milliseconds > 0.0f ? 1000.0f / milliseconds : 0.0f;
+        snprintf(fps_text, sizeof(fps_text), "Frame: %.2f ms  FPS: %.1f", milliseconds, fps);
+        snprintf(
+            camera_text,
+            sizeof(camera_text),
+            "Camera: %.1f %.1f %.1f",
+            state->camera.position.x,
+            state->camera.position.y,
+            state->camera.position.z);
+
+        henka_ui_panel(state->ui, g_ui_panel_bounds, "Henka Sandbox");
+        henka_ui_label(state->ui, 34.0f, 54.0f, 1.0f, "Scene Controls");
+        henka_ui_toggle(state->ui, "grid", (henka_ui_rect){34.0f, 72.0f, 188.0f, 30.0f}, "Debug Grid", &grid_visible);
+        henka_scene_set_entity_visible(state->scene, state->grid_entity, grid_visible);
+        henka_ui_toggle(state->ui, "wireframe", (henka_ui_rect){236.0f, 72.0f, 188.0f, 30.0f}, "Wireframe", &wireframe_enabled);
+        henka_engine_set_wireframe(engine, wireframe_enabled);
+
+        if (henka_ui_button(state->ui, "reset_camera", (henka_ui_rect){34.0f, 114.0f, 188.0f, 30.0f}, "Reset Camera"))
+        {
+            sandbox3d_reset_camera_defaults(state);
+            printf("Camera reset to the default sandbox view.\n");
+            fflush(stdout);
+        }
+
+        if (henka_ui_button(state->ui, "save_settings", (henka_ui_rect){236.0f, 114.0f, 188.0f, 30.0f}, "Save Settings"))
+        {
+            if (sandbox3d_save_settings(engine, state) == HENKA_SUCCESS)
+            {
+                printf("Sandbox settings saved.\n");
+            }
+            else
+            {
+                printf("Sandbox settings could not be saved.\n");
+            }
+            fflush(stdout);
+        }
+
+        if (henka_ui_button(state->ui, "reset_settings", (henka_ui_rect){34.0f, 156.0f, 188.0f, 30.0f}, "Reset Settings"))
+        {
+            if (sandbox3d_reset_settings(engine, state) == HENKA_SUCCESS)
+            {
+                printf("Sandbox settings reset to defaults.\n");
+            }
+            else
+            {
+                printf("Sandbox settings could not be reset.\n");
+            }
+            fflush(stdout);
+        }
+
+        if (henka_ui_button(state->ui, "print_help", (henka_ui_rect){236.0f, 156.0f, 188.0f, 30.0f}, "Print Help"))
+        {
+            sandbox3d_print_help(state);
+        }
+
+        if (henka_ui_button(state->ui, "print_legend", (henka_ui_rect){34.0f, 198.0f, 188.0f, 30.0f}, "Scene Legend"))
+        {
+            sandbox3d_print_scene_legend(state);
+            fflush(stdout);
+        }
+
+        henka_ui_label(state->ui, 34.0f, 242.0f, 1.0f, capture_text);
+        henka_ui_label(state->ui, 34.0f, 258.0f, 1.0f, grid_visible ? "Grid: Visible" : "Grid: Hidden");
+        henka_ui_label(state->ui, 236.0f, 258.0f, 1.0f, wireframe_enabled ? "Wireframe: On" : "Wireframe: Off");
+        henka_ui_label(state->ui, 34.0f, 282.0f, 1.0f, fps_text);
+        henka_ui_label(state->ui, 34.0f, 298.0f, 1.0f, camera_text);
+        henka_ui_label(state->ui, 34.0f, 322.0f, 1.0f, asset_path_text);
+        henka_ui_label(state->ui, 34.0f, 338.0f, 1.0f, user_path_text);
+        henka_ui_label(state->ui, 34.0f, 354.0f, 1.0f, settings_path_text);
+        henka_ui_label(state->ui, 34.0f, 378.0f, 1.0f, "F4 closes the panel. Mouse look is paused while it stays open.");
+
+        henka_free(settings_path);
+    }
+
+    henka_ui_end_frame(state->ui);
 }
 
 static henka_result sandbox3d_initialize(henka_engine* engine, void* user_data)
@@ -271,6 +504,14 @@ static henka_result sandbox3d_initialize(henka_engine* engine, void* user_data)
     {
         goto fail;
     }
+
+    result = henka_ui_create(&state->ui);
+    if (result != HENKA_SUCCESS)
+    {
+        goto fail;
+    }
+
+    henka_ui_set_visible(state->ui, false);
 
     result = henka_scene_create(&state->scene);
     if (result != HENKA_SUCCESS)
@@ -523,6 +764,12 @@ static henka_result sandbox3d_initialize(henka_engine* engine, void* user_data)
         goto fail;
     }
 
+    result = henka_engine_set_ui_context(engine, state->ui);
+    if (result != HENKA_SUCCESS)
+    {
+        goto fail;
+    }
+
     sandbox3d_apply_loaded_settings(engine, state);
 
     result = henka_engine_set_mouse_capture(engine, false);
@@ -544,6 +791,7 @@ static void sandbox3d_update(henka_engine* engine, double delta_seconds, void* u
 {
     henka_transform cube_transform;
     henka_vec2 mouse_delta;
+    bool ui_visible;
     int framebuffer_height;
     int framebuffer_width;
     sandbox3d_state* state;
@@ -553,6 +801,17 @@ static void sandbox3d_update(henka_engine* engine, double delta_seconds, void* u
     if (henka_input_was_key_pressed(engine, HENKA_KEY_H))
     {
         sandbox3d_print_help(state);
+    }
+
+    if (henka_input_was_key_pressed(engine, HENKA_KEY_F4) && state->ui != NULL)
+    {
+        ui_visible = !henka_ui_is_visible(state->ui);
+        henka_ui_set_visible(state->ui, ui_visible);
+        if (ui_visible)
+        {
+            henka_engine_set_mouse_capture(engine, false);
+        }
+        sandbox3d_print_ui_state(ui_visible);
     }
 
     if (henka_input_was_key_pressed(engine, HENKA_KEY_F2))
@@ -578,13 +837,15 @@ static void sandbox3d_update(henka_engine* engine, double delta_seconds, void* u
         fflush(stdout);
     }
 
-    if (henka_input_was_key_pressed(engine, HENKA_KEY_TAB))
+    ui_visible = state->ui != NULL && henka_ui_is_visible(state->ui);
+
+    if (!ui_visible && henka_input_was_key_pressed(engine, HENKA_KEY_TAB))
     {
         henka_engine_set_mouse_capture(engine, !henka_engine_is_mouse_captured(engine));
         sandbox3d_print_capture_state(engine, "Tab");
     }
 
-    if (henka_input_was_mouse_button_pressed(engine, HENKA_MOUSE_BUTTON_RIGHT))
+    if (!ui_visible && henka_input_was_mouse_button_pressed(engine, HENKA_MOUSE_BUTTON_RIGHT))
     {
         henka_engine_set_mouse_capture(engine, !henka_engine_is_mouse_captured(engine));
         sandbox3d_print_capture_state(engine, "Right Mouse");
@@ -595,7 +856,7 @@ static void sandbox3d_update(henka_engine* engine, double delta_seconds, void* u
         henka_camera_set_aspect_ratio(&state->camera, (float)framebuffer_width / (float)framebuffer_height);
     }
 
-    if (henka_engine_is_mouse_captured(engine))
+    if (!ui_visible && henka_engine_is_mouse_captured(engine))
     {
         mouse_delta = henka_input_get_mouse_delta(engine);
         henka_camera_apply_mouse_look(
@@ -617,6 +878,8 @@ static void sandbox3d_update(henka_engine* engine, double delta_seconds, void* u
     cube_transform.scale = (henka_vec3){1.35f, 1.35f, 1.35f};
     cube_transform.rotation = henka_quat_from_euler(0.0f, (float)henka_engine_get_total_time(engine) * 0.5f, 0.0f);
     henka_scene_set_entity_transform(state->scene, state->marker_entity, cube_transform);
+
+    sandbox3d_build_ui(engine, state);
 }
 
 static void sandbox3d_shutdown(henka_engine* engine, void* user_data)
@@ -627,6 +890,7 @@ static void sandbox3d_shutdown(henka_engine* engine, void* user_data)
     sandbox3d_save_settings(engine, state);
     henka_engine_set_mouse_capture(engine, false);
     henka_engine_set_scene(engine, NULL);
+    henka_engine_set_ui_context(engine, NULL);
     sandbox3d_release_owned_resources(state);
 }
 
@@ -639,6 +903,7 @@ int main(void)
 
     state.scene = NULL;
     state.settings = NULL;
+    state.ui = NULL;
     state.camera = henka_camera_create_perspective(60.0f * HENKA_DEG_TO_RAD, 16.0f / 9.0f, 0.1f, 100.0f);
     state.cube_mesh = NULL;
     state.ground_mesh = NULL;

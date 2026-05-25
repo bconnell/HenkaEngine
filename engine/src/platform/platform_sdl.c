@@ -78,6 +78,8 @@ static henka_key henka_translate_key(SDL_Keycode keycode)
             return HENKA_KEY_F2;
         case SDLK_F3:
             return HENKA_KEY_F3;
+        case SDLK_F4:
+            return HENKA_KEY_F4;
         case SDLK_H:
             return HENKA_KEY_H;
         default:
@@ -218,6 +220,8 @@ henka_result henka_platform_poll_events(struct henka_platform* platform, henka_i
             }
 
             case SDL_EVENT_MOUSE_MOTION:
+                input->mouse_position.x = event.motion.x;
+                input->mouse_position.y = event.motion.y;
                 input->mouse_delta.x += event.motion.xrel;
                 input->mouse_delta.y += event.motion.yrel;
                 break;
@@ -227,6 +231,8 @@ henka_result henka_platform_poll_events(struct henka_platform* platform, henka_i
                 henka_mouse_button button;
 
                 button = henka_translate_mouse_button(event.button.button);
+                input->mouse_position.x = event.button.x;
+                input->mouse_position.y = event.button.y;
                 if (button != HENKA_MOUSE_BUTTON_UNKNOWN)
                 {
                     input->mouse_buttons_down[button] = true;
@@ -240,6 +246,8 @@ henka_result henka_platform_poll_events(struct henka_platform* platform, henka_i
                 henka_mouse_button button;
 
                 button = henka_translate_mouse_button(event.button.button);
+                input->mouse_position.x = event.button.x;
+                input->mouse_position.y = event.button.y;
                 if (button != HENKA_MOUSE_BUTTON_UNKNOWN)
                 {
                     input->mouse_buttons_down[button] = false;

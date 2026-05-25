@@ -318,6 +318,16 @@ henka_result henka_engine_run(henka_engine* engine)
             }
         }
 
+        if (engine->active_ui != NULL)
+        {
+            result = henka_renderer_draw_ui(engine->renderer, engine->active_ui);
+            if (result != HENKA_SUCCESS)
+            {
+                HENKA_LOG_ERROR("renderer draw ui failed: %s", henka_result_to_string(result));
+                return result;
+            }
+        }
+
         result = henka_renderer_end_frame(engine->renderer);
         if (result != HENKA_SUCCESS)
         {
@@ -346,6 +356,17 @@ henka_result henka_engine_set_scene(henka_engine* engine, henka_scene* scene)
     }
 
     engine->active_scene = scene;
+    return HENKA_SUCCESS;
+}
+
+henka_result henka_engine_set_ui_context(henka_engine* engine, henka_ui_context* ui_context)
+{
+    if (engine == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    engine->active_ui = ui_context;
     return HENKA_SUCCESS;
 }
 
@@ -537,6 +558,16 @@ bool henka_input_was_mouse_button_pressed(const henka_engine* engine, henka_mous
     }
 
     return engine->input.mouse_buttons_pressed[button];
+}
+
+henka_vec2 henka_input_get_mouse_position(const henka_engine* engine)
+{
+    if (engine == NULL)
+    {
+        return (henka_vec2){0.0f, 0.0f};
+    }
+
+    return engine->input.mouse_position;
 }
 
 henka_vec2 henka_input_get_mouse_delta(const henka_engine* engine)
