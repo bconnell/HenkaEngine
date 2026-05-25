@@ -598,6 +598,46 @@ henka_result henka_ui_panel(henka_ui_context* context, henka_ui_rect bounds, con
     return henka_ui_draw_text(context, bounds.x + 12.0f, bounds.y + 8.0f, 1.5f, title, g_ui_heading_color);
 }
 
+henka_result henka_ui_viewport_frame(henka_ui_context* context, henka_ui_rect bounds, const char* title)
+{
+    henka_ui_rect header_bounds;
+    henka_result result;
+
+    if (context == NULL || title == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    if (!context->visible)
+    {
+        return HENKA_SUCCESS;
+    }
+
+    header_bounds = (henka_ui_rect){bounds.x, bounds.y, bounds.width, 30.0f};
+    result = henka_ui_push_rect(context, header_bounds, g_ui_panel_header_fill);
+    if (result != HENKA_SUCCESS)
+    {
+        return result;
+    }
+
+    result = henka_ui_push_rect(
+        context,
+        (henka_ui_rect){bounds.x, bounds.y + header_bounds.height, bounds.width, 1.0f},
+        g_ui_panel_separator);
+    if (result != HENKA_SUCCESS)
+    {
+        return result;
+    }
+
+    result = henka_ui_push_border(context, bounds, 2.0f, g_ui_panel_border);
+    if (result != HENKA_SUCCESS)
+    {
+        return result;
+    }
+
+    return henka_ui_draw_text(context, bounds.x + 12.0f, bounds.y + 8.0f, 1.5f, title, g_ui_heading_color);
+}
+
 henka_result henka_ui_heading(henka_ui_context* context, float x, float y, float scale, const char* text)
 {
     if (context == NULL || text == NULL)

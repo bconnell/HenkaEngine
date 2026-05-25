@@ -11,6 +11,7 @@ add_executable(henka_tests
     test_memory.c
     test_scene.c
     test_ui.c
+    test_workspace.c
 )
 
 target_link_libraries(henka_tests

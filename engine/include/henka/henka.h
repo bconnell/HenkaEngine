@@ -20,5 +20,6 @@
 #include <henka/time.h>
 #include <henka/texture.h>
 #include <henka/ui.h>
+#include <henka/workspace.h>
 
 #endif

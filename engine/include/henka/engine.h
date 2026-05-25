@@ -4,6 +4,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 
+#include <henka/core.h>
 #include <henka/result.h>
 
 typedef struct henka_engine henka_engine;
@@ -73,6 +74,8 @@ double henka_engine_get_delta_time(const henka_engine* engine);
 double henka_engine_get_total_time(const henka_engine* engine);
 uint64_t henka_engine_get_frame_index(const henka_engine* engine);
 henka_result henka_engine_get_framebuffer_size(const henka_engine* engine, int* out_width, int* out_height);
+henka_result henka_engine_set_scene_viewport(henka_engine* engine, henka_viewport viewport);
+henka_result henka_engine_get_scene_viewport(const henka_engine* engine, henka_viewport* out_viewport);
 henka_package_mode henka_engine_get_package_mode(const henka_engine* engine);
 const char* henka_engine_get_package_mode_label(henka_package_mode package_mode);
 henka_result henka_engine_get_diagnostics(const henka_engine* engine, henka_engine_diagnostics* out_diagnostics);

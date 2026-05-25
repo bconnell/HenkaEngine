@@ -59,15 +59,27 @@ The camera module now exposes reusable helpers for:
 
 The sandbox still uses a free camera, but the math is now reusable outside the example.
 
+### Workspace and viewport
+
+Henka now also includes a small docked workspace helper for viewport-first tools:
+
+- dock region layout math
+- dedicated scene viewport bounds
+- viewport aspect-ratio helpers
+- window-point to viewport-local conversion
+
+The sandbox uses this to keep the scene in its own viewport while panels stay in separate docked regions.
+
 ### Picking
 
 Henka now includes a small picking foundation:
 
 - screen point to world ray
+- viewport-relative window-to-ray conversion
 - ray versus bounds checks
 - nearest visible object pick in a scene
 
-The sandbox uses this for lightweight click selection when the UI is closed and mouse capture is released.
+The sandbox uses this for lightweight click selection when the UI is closed and mouse capture is released. With the docked workspace layout, picks only start from the dedicated scene viewport.
 
 ### Asset metadata
 

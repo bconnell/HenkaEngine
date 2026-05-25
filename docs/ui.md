@@ -68,6 +68,14 @@ In `henka_sandbox3d`, press `F4` to open the panels.
 On a first packaged run with no local settings file, the UI opens in `View` mode so the controls are immediately visible without covering most of the scene.
 If you hide the panels, a small in-window recall hint stays visible so the viewport can stay clean without losing the `F4` and `F5` cues.
 
+The sandbox now uses a docked workspace layout:
+
+- left and right dock regions for panels
+- a dedicated scene viewport in the center
+- a viewport frame that keeps the scene visually separate from the docked tools
+
+The panels no longer draw on top of the scene in normal docked modes.
+
 The current `Controls` panel can:
 
 - switch between `View`, `Inspect`, and `Full Tools`
@@ -113,7 +121,7 @@ The current `Utility` panel can show:
 That keeps normal viewer use in the window while the console remains available for fallback logs and automation.
 The packaged sandbox still opens a console window at this stage, but normal viewer interaction is meant to stay inside the viewport and panels rather than depending on console output.
 
-The sandbox also uses the current engine diagnostics snapshot in the Utility panel, and object picking can update selection when the UI is closed and mouse capture is released.
+The sandbox also uses the current engine diagnostics snapshot in the Utility panel, and object picking can update selection when the UI is closed and mouse capture is released. Picking now uses viewport-relative coordinates, so docked panel clicks do not trigger scene picks.
 
 When the UI is open:
 

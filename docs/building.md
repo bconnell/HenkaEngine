@@ -62,7 +62,7 @@ You can launch the packaged sandbox in either of these ways:
 - open `out/HenkaSandbox3D` in Explorer and double-click `HenkaSandbox3D.exe`
 - run `.\scripts\run_packaged_sandbox3d_windows.ps1`
 
-On a first packaged run with no local settings file yet, the sandbox opens the in-window UI in `View` mode so the controls are visible without covering most of the viewport.
+On a first packaged run with no local settings file yet, the sandbox opens the docked workspace in `View` mode so the controls are visible without covering most of the viewport.
 The packaged sandbox still opens a console window at this stage, but the in-window panels, utilities, and status area are the intended normal workflow.
 At startup, the sandbox also reports whether it detected `Development` or `Packaged` runtime mode.
 
@@ -75,7 +75,7 @@ At startup, the sandbox also reports whether it detected `Development` or `Packa
 The packaged check script confirms that the packaged folder contains the expected files, launches the sandbox, checks the startup help text and package marker, confirms UI state logs when available, exercises a few UI clicks, and confirms the close-window path exits cleanly.
 It also checks the packaged runtime marker and runtime-mode output when that signal is available.
 
-It does not replace human visual QA. You should still confirm by eye that the layout leaves the scene comfortably visible in the packaged window, that the controls are not cramped, and that the in-window utilities and status area feel readable and useful.
+It does not replace human visual QA. You should still confirm by eye that the scene stays inside its own viewport, that docked panels do not cover scene graphics, that the controls are not cramped, and that the in-window utilities and status area feel readable and useful.
 
 ## Validate the external game template
 

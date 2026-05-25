@@ -34,6 +34,7 @@ The next likely layers are:
 - scene growth beyond the current lightweight entity model
 - broader OBJ and model import coverage after the current foundation has settled
 - richer in-window inspection and QA tools beyond the current lightweight sandbox panels and object inspection
+- optional floating or undocked workspace regions after the current docked viewport foundation has settled
 - stronger external-project packaging and validation beyond the current starter template and validation script
 
 ## 2.5D direction

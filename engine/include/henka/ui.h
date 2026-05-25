@@ -38,6 +38,7 @@ size_t henka_ui_get_draw_rect_count(const henka_ui_context* context);
 bool henka_ui_rect_contains(henka_ui_rect rect, henka_vec2 point);
 henka_result henka_ui_measure_text(const char* text, float scale, int* out_width, int* out_height);
 henka_result henka_ui_panel(henka_ui_context* context, henka_ui_rect bounds, const char* title);
+henka_result henka_ui_viewport_frame(henka_ui_context* context, henka_ui_rect bounds, const char* title);
 henka_result henka_ui_heading(henka_ui_context* context, float x, float y, float scale, const char* text);
 henka_result henka_ui_label(henka_ui_context* context, float x, float y, float scale, const char* text);
 henka_result henka_ui_value_row(henka_ui_context* context, henka_ui_rect bounds, const char* label, const char* value);

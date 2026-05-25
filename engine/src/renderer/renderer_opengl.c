@@ -92,6 +92,44 @@ SDL_Window* henka_platform_get_sdl_window(struct henka_platform* platform);
 static bool henka_compile_shader(GLuint shader, const char* source, const char* label);
 static bool henka_link_program(GLuint program);
 
+static void henka_apply_full_framebuffer_viewport(const struct henka_renderer* renderer)
+{
+    if (renderer == NULL)
+    {
+        return;
+    }
+
+    glDisable(GL_SCISSOR_TEST);
+    glViewport(0, 0, renderer->framebuffer_width, renderer->framebuffer_height);
+}
+
+static void henka_apply_scene_viewport(const struct henka_renderer* renderer)
+{
+    henka_viewport viewport;
+    GLint gl_y;
+
+    if (renderer == NULL)
+    {
+        return;
+    }
+
+    viewport = renderer->scene_viewport;
+    if (viewport.width <= 0 || viewport.height <= 0)
+    {
+        viewport = (henka_viewport){0, 0, renderer->framebuffer_width, renderer->framebuffer_height};
+    }
+
+    gl_y = (GLint)(renderer->framebuffer_height - (viewport.y + viewport.height));
+    if (gl_y < 0)
+    {
+        gl_y = 0;
+    }
+
+    glEnable(GL_SCISSOR_TEST);
+    glViewport((GLint)viewport.x, gl_y, (GLsizei)viewport.width, (GLsizei)viewport.height);
+    glScissor((GLint)viewport.x, gl_y, (GLsizei)viewport.width, (GLsizei)viewport.height);
+}
+
 static henka_result henka_renderer_configure_gl_attributes(void)
 {
     if (!SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3) ||
@@ -521,7 +559,7 @@ henka_result henka_opengl_renderer_begin_frame(struct henka_renderer* renderer)
 
 void henka_opengl_renderer_clear_frame(struct henka_renderer* renderer)
 {
-    (void)renderer;
+    henka_apply_full_framebuffer_viewport(renderer);
     glClearColor(0.08f, 0.09f, 0.12f, 1.0f);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 }
@@ -537,6 +575,7 @@ henka_result henka_opengl_renderer_draw_scene(struct henka_renderer* renderer, c
         return HENKA_SUCCESS;
     }
 
+    henka_apply_scene_viewport(renderer);
     projection = henka_camera_get_projection_matrix(&scene->camera);
     view = henka_camera_get_view_matrix(&scene->camera);
 
@@ -591,6 +630,7 @@ henka_result henka_opengl_renderer_draw_scene(struct henka_renderer* renderer, c
     g_gl.BindVertexArray(0);
     glBindTexture(GL_TEXTURE_2D, 0);
     g_gl.UseProgram(0);
+    glDisable(GL_SCISSOR_TEST);
     return HENKA_SUCCESS;
 }
 
@@ -606,11 +646,12 @@ henka_result henka_opengl_renderer_draw_ui(struct henka_renderer* renderer, cons
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
 
-    if (!ui_context->visible || ui_context->draw_rect_count == 0U)
+    if (ui_context->draw_rect_count == 0U)
     {
         return HENKA_SUCCESS;
     }
 
+    henka_apply_full_framebuffer_viewport(renderer);
     state = (const henka_opengl_renderer_state*)renderer->backend_state;
     vertex_count = ui_context->draw_rect_count * 6U;
     vertices = henka_malloc(vertex_count * sizeof(*vertices));
@@ -694,6 +735,7 @@ henka_result henka_opengl_renderer_end_frame(struct henka_renderer* renderer)
 void henka_opengl_renderer_resize_viewport(struct henka_renderer* renderer, int width, int height)
 {
     (void)renderer;
+    glDisable(GL_SCISSOR_TEST);
     glViewport(0, 0, width, height);
 }
 

@@ -40,5 +40,6 @@ void henka_test_model(void);
 void henka_test_persistence(void);
 void henka_test_scene(void);
 void henka_test_ui(void);
+void henka_test_workspace(void);
 
 #endif

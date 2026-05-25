@@ -80,6 +80,7 @@ Henka Engine Sandbox 3D
 Double-click HenkaSandbox3D.exe to launch the packaged sandbox.
 Press F4 to open the in-window panels.
 Press F5 to cycle View, Inspect, and Full Tools.
+The scene renders inside its own docked viewport when panels are visible.
 Use the in-window utilities for help, legend, paths, settings, and diagnostics.
 Watch the small in-window status area for recent actions and warnings.
 The packaged runtime reports Packaged mode automatically when PACKAGE_INFO.txt is present.
@@ -126,6 +127,7 @@ Write-Host "Next step:"
 Write-Host "  Open out\HenkaSandbox3D and double-click HenkaSandbox3D.exe."
 Write-Host "  Press F4 to open the in-window panels."
 Write-Host "  Press F5 to cycle View, Inspect, and Full Tools."
+Write-Host "  The scene should render inside its own docked viewport when panels are visible."
 Write-Host "  Use the in-window utilities for help, legend, paths, settings, and diagnostics."
 Write-Host "  Watch the in-window status area for recent actions and warnings."
 Write-Host "  The packaged runtime should report Packaged mode at startup."

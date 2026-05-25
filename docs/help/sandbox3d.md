@@ -12,7 +12,7 @@
 
 The sandbox also saves a small local settings file so wireframe, grid visibility, mouse sensitivity, camera state, selected object, and panel visibility can carry across runs.
 It now also includes small in-window developer panels for inspection and settings tasks.
-On a first packaged run with no existing settings file, the UI opens in `View` mode so the controls are visible while most of the scene stays open.
+On a first packaged run with no existing settings file, the docked workspace opens in `View` mode so the controls are visible while most of the scene stays open.
 
 ## Controls
 
@@ -21,7 +21,7 @@ On a first packaged run with no existing settings file, the UI opens in `View` m
 - `Shift`: move faster
 - `Mouse`: look around while mouse capture is active
 - `Right Mouse / Tab`: toggle mouse capture
-- `Left Mouse`: pick a visible scene object when the UI is closed and mouse capture is released
+- `Left Mouse`: pick a visible scene object inside the scene viewport when the UI is closed and mouse capture is released
 - `F1`: toggle wireframe
 - `F2`: print the scene legend to the console again
 - `F3`: show or hide the debug grid
@@ -64,11 +64,12 @@ On a first packaged run with no existing settings file, the UI opens in `View` m
 
 Press `F4` to open the in-window sandbox panels. Press `F5` to cycle between:
 
-- `View`: keeps most of the scene visible and shows a compact controls panel
-- `Inspect`: keeps the object panels available while leaving the center view clearer
-- `Full Tools`: shows the heavier inspection layout
+- `View`: keeps the largest dedicated scene viewport and shows compact docked tools
+- `Inspect`: keeps the object panels available beside the dedicated viewport
+- `Full Tools`: shows the heavier docked workspace while keeping the scene in its own viewport box
 
 If you hide the panels, a small in-window hint stays in the viewport corner so you can still see that `F4` restores panels and `F5` changes layout.
+When the panels are visible, the scene stays inside its own dedicated viewport region instead of drawing underneath the docked panels.
 
 If the panels do not appear when you expect them to, refresh the packaged sandbox with `.\scripts\package_sandbox3d_windows.ps1`, confirm `out/HenkaSandbox3D/PACKAGE_INFO.txt` was refreshed, and try again.
 
@@ -123,6 +124,8 @@ When the UI is open:
 - camera movement pauses
 - `Right Mouse` and `Tab` can be used again after you close the panel
 - `Escape` closes the panel before it returns to the normal mouse-capture and exit flow
+
+Picking uses the dedicated scene viewport. Clicks in docked panels do not count as viewport picks.
 
 ## Packaged runs
 

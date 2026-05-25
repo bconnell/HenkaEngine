@@ -253,9 +253,12 @@ static void henka_engine_handle_resize(henka_engine* engine, const henka_platfor
 
     if (engine->active_scene != NULL && engine->active_scene->has_camera && frame_state->framebuffer_height > 0)
     {
+        henka_viewport viewport;
+
+        viewport = henka_renderer_get_scene_viewport(engine->renderer);
         henka_camera_set_aspect_ratio(
             &engine->active_scene->camera,
-            (float)frame_state->framebuffer_width / (float)frame_state->framebuffer_height);
+            henka_viewport_get_aspect_ratio(viewport));
     }
 }
 
@@ -351,6 +354,7 @@ henka_result henka_engine_create(const henka_engine_config* config, henka_engine
     {
         engine->renderer->framebuffer_width = framebuffer_width;
         engine->renderer->framebuffer_height = framebuffer_height;
+        engine->renderer->scene_viewport = (henka_viewport){0, 0, framebuffer_width, framebuffer_height};
     }
 
     engine->package_mode = henka_engine_resolve_package_mode(engine);
@@ -627,6 +631,33 @@ henka_result henka_engine_get_framebuffer_size(const henka_engine* engine, int* 
 
     *out_width = engine->renderer->framebuffer_width;
     *out_height = engine->renderer->framebuffer_height;
+    return HENKA_SUCCESS;
+}
+
+henka_result henka_engine_set_scene_viewport(henka_engine* engine, henka_viewport viewport)
+{
+    if (engine == NULL || engine->renderer == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    henka_renderer_set_scene_viewport(engine->renderer, viewport);
+    if (engine->active_scene != NULL && engine->active_scene->has_camera)
+    {
+        henka_camera_set_aspect_ratio(&engine->active_scene->camera, henka_viewport_get_aspect_ratio(henka_renderer_get_scene_viewport(engine->renderer)));
+    }
+
+    return HENKA_SUCCESS;
+}
+
+henka_result henka_engine_get_scene_viewport(const henka_engine* engine, henka_viewport* out_viewport)
+{
+    if (engine == NULL || engine->renderer == NULL || out_viewport == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    *out_viewport = henka_renderer_get_scene_viewport(engine->renderer);
     return HENKA_SUCCESS;
 }
 

@@ -15,6 +15,7 @@ int main(void)
     henka_test_memory();
     henka_test_scene();
     henka_test_ui();
+    henka_test_workspace();
 
     if (g_henka_test_failures > 0)
     {

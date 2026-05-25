@@ -19,6 +19,7 @@
 #include <henka/texture.h>
 #include <henka/time.h>
 #include <henka/ui.h>
+#include <henka/workspace.h>
 
 typedef enum henka_mesh_primitive
 {
@@ -138,6 +139,7 @@ struct henka_renderer
     bool mouse_captured;
     int framebuffer_width;
     int framebuffer_height;
+    henka_viewport scene_viewport;
 };
 
 struct henka_mesh
@@ -199,6 +201,8 @@ henka_result henka_renderer_draw_scene(struct henka_renderer* renderer, const st
 henka_result henka_renderer_draw_ui(struct henka_renderer* renderer, const struct henka_ui_context* ui_context);
 henka_result henka_renderer_end_frame(struct henka_renderer* renderer);
 void henka_renderer_resize_viewport(struct henka_renderer* renderer, int width, int height);
+void henka_renderer_set_scene_viewport(struct henka_renderer* renderer, henka_viewport viewport);
+henka_viewport henka_renderer_get_scene_viewport(const struct henka_renderer* renderer);
 henka_result henka_renderer_set_vsync(struct henka_renderer* renderer, bool enabled);
 henka_result henka_renderer_set_wireframe(struct henka_renderer* renderer, bool enabled);
 henka_result henka_renderer_create_mesh_from_data(

@@ -8,6 +8,7 @@ add_library(henka STATIC
     src/core/persistence.c
     src/core/result.c
     src/core/time.c
+    src/core/workspace.c
     src/platform/platform_sdl.c
     src/renderer/mesh.c
     src/renderer/renderer.c

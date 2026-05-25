@@ -108,6 +108,7 @@ The current UI layer is intentionally small and dependency-conscious. Right now 
 - basic hover and click state
 - simple built-in text rendering from engine-owned source code glyph data
 - screen-space overlay drawing through the existing renderer
+- viewport frame drawing for a docked scene-view region
 - mouse hover, press, and release handling for basic clickable controls
 - sandbox workspace modes, utility views, and short in-window status feedback built on top of those primitives
 
@@ -142,6 +143,8 @@ The renderer layer exposes engine-owned drawing functionality while keeping Open
 - depth testing
 - backface culling
 - wireframe toggle
+- scene viewport bounds
+- scene scissor and viewport state for docked workspaces
 - draw submission for scene entities
 - draw submission for simple screen-space UI rectangles
 
@@ -153,7 +156,7 @@ The sandbox is a consumer of the public API only. It creates a scene, shaders, t
 - `Scene Objects`
 - `Object Details`
 
-The current interaction rules pause camera movement and mouse look while the UI is open, release mouse capture when the UI opens, and let `Escape` close the UI before it resumes the normal capture and exit flow.
+The current interaction rules pause camera movement and mouse look while the UI is open, release mouse capture when the UI opens, and let `Escape` close the UI before it resumes the normal capture and exit flow. The sandbox now also calculates a docked workspace layout so the scene renders inside a dedicated viewport region while the panels stay in separate docked boxes.
 
 ## Current boundaries
 

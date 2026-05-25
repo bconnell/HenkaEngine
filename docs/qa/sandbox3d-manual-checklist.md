@@ -49,35 +49,40 @@ Use this checklist when you want to confirm that `henka_sandbox3d` is visually r
 2. Open `out/HenkaSandbox3D\HenkaSandbox3D.exe`.
 3. Confirm the startup help says `F4` opens the in-window panels.
 4. Confirm `out/HenkaSandbox3D/PACKAGE_INFO.txt` was refreshed for the current package.
-5. If there was no existing packaged settings file, confirm the UI starts in a compact layout that leaves most of the scene visible.
-6. Confirm the main scene objects remain visible while the UI is open.
-7. Press `F4` and confirm the visible UI appears or hides as expected.
-8. With the panels hidden, confirm a small in-window recall hint appears inside the sandbox window.
-9. Confirm the hint is readable and does not block the main object cluster.
-10. Press `F4` again and confirm the panels return.
-11. Press `F5` and confirm the layout cycles between `View`, `Inspect`, and `Full Tools`.
-12. Confirm `View` leaves the scene mostly visible.
-13. Confirm `Inspect` keeps Scene Objects and Object Details usable.
-14. Confirm `Full Tools` shows the heavier inspection layout.
-15. Confirm `Reset Layout` restores a usable default.
-16. Confirm panel text is readable by eye.
-17. Confirm panel background contrast is readable against the scene.
-18. Confirm View mode controls feel less cramped than earlier passes.
-19. Confirm toggle labels and `ON` or `OFF` state text do not overlap or feel squeezed.
-20. Confirm the Utility panel feels readable and does not dominate the viewport.
-21. Confirm utility tabs are readable and the active utility state is obvious.
-22. Confirm Help opens in-window.
-23. Confirm Scene Legend opens in-window.
-24. Confirm Object Info appears in-window after selecting an object.
-25. Confirm Paths, Settings, and Diagnostics utilities are usable in-window.
-26. Confirm the Paths or Diagnostics utility reports the expected runtime mode for the current run.
-27. Close the UI, release mouse capture, left-click a visible object, and confirm picking updates the selection.
-28. Confirm the small in-window status area reports common actions without forcing you to read the console.
-29. Confirm the console still receives fallback logs for help, legend, object info, warnings, or errors when those actions are used.
-30. Confirm `Escape` behavior still works.
-31. Confirm close-window exit remains clean.
-32. Confirm no named-engine comparisons appear in runtime text or packaged help.
-33. If the UI is not visible or feels wrong, note whether the console reports `Sandbox panel: shown`, `Sandbox panel: hidden`, or `Sandbox UI ready`.
+5. If there was no existing packaged settings file, confirm the UI starts in a docked scene-first layout with a dedicated viewport.
+6. Confirm the scene renders inside its own viewport region.
+7. Confirm docked panels do not cover scene graphics.
+8. Confirm the main scene objects remain visible while the UI is open.
+9. Press `F4` and confirm the visible UI appears or hides as expected.
+10. With the panels hidden, confirm a small in-window recall hint appears inside the sandbox window.
+11. Confirm the hint is readable and does not block the main object cluster.
+12. Press `F4` again and confirm the panels return.
+13. Press `F5` and confirm the layout cycles between `View`, `Inspect`, and `Full Tools`.
+14. Confirm `View` has the largest viewport.
+15. Confirm `Inspect` keeps Scene Objects and Object Details docked beside the viewport.
+16. Confirm `Full Tools` still leaves a dedicated viewport.
+17. Confirm `Reset Layout` restores a usable default.
+18. Confirm window resize keeps a valid viewport and docked layout.
+19. Confirm panel text is readable by eye.
+20. Confirm panel background contrast is readable against the workspace.
+21. Confirm View mode controls feel less cramped than earlier passes.
+22. Confirm toggle labels and `ON` or `OFF` state text do not overlap or feel squeezed.
+23. Confirm the Utility panel feels readable and does not dominate the viewport.
+24. Confirm utility tabs are readable and the active utility state is obvious.
+25. Confirm Help opens in-window.
+26. Confirm Scene Legend opens in-window.
+27. Confirm Object Info appears in-window after selecting an object.
+28. Confirm Paths, Settings, and Diagnostics utilities are usable in-window.
+29. Confirm the Paths or Diagnostics utility reports the expected runtime mode for the current run.
+30. Confirm clicking inside docked panels does not pick scene objects.
+31. Close the UI, release mouse capture, left-click a visible object inside the viewport, and confirm picking updates the selection.
+32. Confirm the camera view does not look stretched.
+33. Confirm the small in-window status area reports common actions without forcing you to read the console.
+34. Confirm the console still receives fallback logs for help, legend, object info, warnings, or errors when those actions are used.
+35. Confirm `Escape` behavior still works.
+36. Confirm close-window exit remains clean.
+37. Confirm no named-engine comparisons appear in runtime text or packaged help.
+38. If the UI is not visible or feels wrong, note whether the console reports `Sandbox panel: shown`, `Sandbox panel: hidden`, `Sandbox UI ready`, or `Sandbox viewport`.
 
 ## Expected startup behavior
 
@@ -106,7 +111,7 @@ You should be able to identify these examples:
 - `Shift`: move faster
 - `Mouse`: look around while mouse capture is active
 - `Right Mouse / Tab`: toggle mouse capture
-- `Left Mouse`: pick a visible object when the UI is closed and mouse capture is released
+- `Left Mouse`: pick a visible object inside the viewport when the UI is closed and mouse capture is released
 - `F1`: toggle wireframe
 - `F2`: print the scene legend again
 - `F3`: show or hide the debug grid
@@ -119,12 +124,14 @@ You should be able to identify these examples:
 ## Expected sandbox panel behavior
 
 - Pressing `F4` opens panels titled `Controls`, `Scene Objects`, and `Object Details`.
-- On a first packaged run with no existing settings file, the UI starts in a scene-first layout.
+- On a first packaged run with no existing settings file, the UI starts in a docked scene-first layout.
+- The scene stays inside its own dedicated viewport when panels are visible.
 - Opening the UI releases mouse capture.
 - Mouse look pauses while the UI is open.
 - `F5` cycles View, Inspect, and Full Tools layouts.
 - The `Controls` panel can toggle the debug grid and wireframe state with the mouse.
 - The `Controls` panel looks lighter in `View` mode and keeps a visible in-window status area.
+- Docked panels stay outside the dedicated scene viewport in normal workspace modes.
 - The `Controls` panel can adjust mouse sensitivity and camera speed with the mouse.
 - The `Controls` panel can reset the camera, save settings, reset sandbox settings, print help, print the scene legend, and reset the panel layout.
 - The `Scene Objects` panel lists the current scene examples by name.
@@ -135,6 +142,7 @@ You should be able to identify these examples:
 - When the UI is closed, a small in-window hint reminds you that `F4` restores panels and `F5` changes layout.
 - After the UI closes, `Right Mouse` and `Tab` can capture the mouse again.
 - With the UI closed and mouse capture released, left-click can select a visible sample object.
+- Picking should only respond to clicks inside the viewport.
 - Pressing `Escape` while the UI is open closes the UI first.
 
 ## Expected fallback behavior

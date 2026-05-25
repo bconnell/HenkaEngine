@@ -55,6 +55,7 @@ void henka_test_ui(void)
 
     HENKA_TEST_ASSERT(henka_ui_begin_frame(ui, &frame_desc) == HENKA_SUCCESS);
     HENKA_TEST_ASSERT(henka_ui_panel(ui, (henka_ui_rect){20.0f, 20.0f, 200.0f, 100.0f}, "Panel") == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_ui_viewport_frame(ui, (henka_ui_rect){240.0f, 20.0f, 320.0f, 220.0f}, "Scene View") == HENKA_SUCCESS);
     HENKA_TEST_ASSERT(henka_ui_heading(ui, 28.0f, 60.0f, 1.0f, "Section") == HENKA_SUCCESS);
     HENKA_TEST_ASSERT(henka_ui_value_row(ui, (henka_ui_rect){28.0f, 76.0f, 160.0f, 22.0f}, "Label", "Value") == HENKA_SUCCESS);
     HENKA_TEST_ASSERT(henka_ui_status_chip(ui, (henka_ui_rect){28.0f, 102.0f, 80.0f, 20.0f}, "Status", false) == HENKA_SUCCESS);
@@ -129,6 +130,8 @@ void henka_test_ui(void)
     result = henka_ui_heading(ui, 0.0f, 0.0f, 1.0f, NULL);
     HENKA_TEST_ASSERT(result == HENKA_ERROR_INVALID_ARGUMENT);
     result = henka_ui_label(ui, 0.0f, 0.0f, 1.0f, NULL);
+    HENKA_TEST_ASSERT(result == HENKA_ERROR_INVALID_ARGUMENT);
+    result = henka_ui_viewport_frame(ui, (henka_ui_rect){0.0f, 0.0f, 100.0f, 80.0f}, NULL);
     HENKA_TEST_ASSERT(result == HENKA_ERROR_INVALID_ARGUMENT);
     result = henka_ui_value_row(ui, (henka_ui_rect){0.0f, 0.0f, 100.0f, 20.0f}, "Label", NULL);
     HENKA_TEST_ASSERT(result == HENKA_ERROR_INVALID_ARGUMENT);

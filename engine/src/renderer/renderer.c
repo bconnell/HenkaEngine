@@ -22,6 +22,7 @@ henka_result henka_renderer_create(struct henka_platform* platform, bool enable_
     }
 
     renderer->platform = platform;
+    renderer->scene_viewport = (henka_viewport){0, 0, 1, 1};
 
     result = henka_opengl_renderer_create(renderer, platform, enable_vsync);
     if (result != HENKA_SUCCESS)
@@ -90,7 +91,40 @@ void henka_renderer_resize_viewport(struct henka_renderer* renderer, int width, 
 
     renderer->framebuffer_width = width;
     renderer->framebuffer_height = height;
+    renderer->scene_viewport = (henka_viewport){0, 0, width > 0 ? width : 1, height > 0 ? height : 1};
     henka_opengl_renderer_resize_viewport(renderer, width, height);
+}
+
+void henka_renderer_set_scene_viewport(struct henka_renderer* renderer, henka_viewport viewport)
+{
+    if (renderer == NULL)
+    {
+        return;
+    }
+
+    if (viewport.width <= 0 || viewport.height <= 0)
+    {
+        renderer->scene_viewport = (henka_viewport)
+        {
+            0,
+            0,
+            renderer->framebuffer_width > 0 ? renderer->framebuffer_width : 1,
+            renderer->framebuffer_height > 0 ? renderer->framebuffer_height : 1
+        };
+        return;
+    }
+
+    renderer->scene_viewport = viewport;
+}
+
+henka_viewport henka_renderer_get_scene_viewport(const struct henka_renderer* renderer)
+{
+    if (renderer == NULL || renderer->scene_viewport.width <= 0 || renderer->scene_viewport.height <= 0)
+    {
+        return (henka_viewport){0, 0, 1, 1};
+    }
+
+    return renderer->scene_viewport;
 }
 
 henka_result henka_renderer_set_vsync(struct henka_renderer* renderer, bool enabled)
