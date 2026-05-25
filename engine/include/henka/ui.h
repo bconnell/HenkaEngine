@@ -41,6 +41,7 @@ henka_result henka_ui_panel(henka_ui_context* context, henka_ui_rect bounds, con
 henka_result henka_ui_heading(henka_ui_context* context, float x, float y, float scale, const char* text);
 henka_result henka_ui_label(henka_ui_context* context, float x, float y, float scale, const char* text);
 henka_result henka_ui_value_row(henka_ui_context* context, henka_ui_rect bounds, const char* label, const char* value);
+henka_result henka_ui_overlay_hint(henka_ui_context* context, henka_ui_rect bounds, const char* primary_text, const char* secondary_text);
 bool henka_ui_button(henka_ui_context* context, const char* id, henka_ui_rect bounds, const char* label);
 bool henka_ui_primary_button(henka_ui_context* context, const char* id, henka_ui_rect bounds, const char* label);
 bool henka_ui_selectable(henka_ui_context* context, const char* id, henka_ui_rect bounds, const char* label, bool selected);

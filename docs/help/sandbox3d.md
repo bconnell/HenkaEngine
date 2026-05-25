@@ -68,6 +68,8 @@ Press `F4` to open the in-window sandbox panels. Press `F5` to cycle between:
 - `Inspect`: keeps the object panels available while leaving the center view clearer
 - `Full Tools`: shows the heavier inspection layout
 
+If you hide the panels, a small in-window hint stays in the viewport corner so you can still see that `F4` restores panels and `F5` changes layout.
+
 If the panels do not appear when you expect them to, refresh the packaged sandbox with `.\scripts\package_sandbox3d_windows.ps1`, confirm `out/HenkaSandbox3D/PACKAGE_INFO.txt` was refreshed, and try again.
 
 The `Controls` panel currently includes:

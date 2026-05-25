@@ -44,8 +44,9 @@ void henka_test_ui(void)
     HENKA_TEST_ASSERT(henka_ui_begin_frame(ui, &frame_desc) == HENKA_SUCCESS);
     HENKA_TEST_ASSERT(henka_ui_panel(ui, (henka_ui_rect){20.0f, 20.0f, 200.0f, 100.0f}, "Panel") == HENKA_SUCCESS);
     HENKA_TEST_ASSERT(henka_ui_label(ui, 28.0f, 44.0f, 1.0f, "Status") == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_ui_overlay_hint(ui, (henka_ui_rect){980.0f, 650.0f, 180.0f, 44.0f}, "F4 Panels", "F5 Layout") == HENKA_SUCCESS);
     HENKA_TEST_ASSERT(henka_ui_get_wants_mouse(ui) == false);
-    HENKA_TEST_ASSERT(henka_ui_get_draw_rect_count(ui) == 0U);
+    HENKA_TEST_ASSERT(henka_ui_get_draw_rect_count(ui) > 0U);
     HENKA_TEST_ASSERT(henka_ui_button(ui, "hidden_button", (henka_ui_rect){40.0f, 40.0f, 120.0f, 28.0f}, "Click") == false);
     HENKA_TEST_ASSERT(henka_ui_end_frame(ui) == HENKA_SUCCESS);
 
@@ -130,6 +131,8 @@ void henka_test_ui(void)
     result = henka_ui_label(ui, 0.0f, 0.0f, 1.0f, NULL);
     HENKA_TEST_ASSERT(result == HENKA_ERROR_INVALID_ARGUMENT);
     result = henka_ui_value_row(ui, (henka_ui_rect){0.0f, 0.0f, 100.0f, 20.0f}, "Label", NULL);
+    HENKA_TEST_ASSERT(result == HENKA_ERROR_INVALID_ARGUMENT);
+    result = henka_ui_overlay_hint(ui, (henka_ui_rect){0.0f, 0.0f, 100.0f, 20.0f}, NULL, "Layout");
     HENKA_TEST_ASSERT(result == HENKA_ERROR_INVALID_ARGUMENT);
     result = henka_ui_status_chip(ui, (henka_ui_rect){0.0f, 0.0f, 100.0f, 20.0f}, NULL, false);
     HENKA_TEST_ASSERT(result == HENKA_ERROR_INVALID_ARGUMENT);

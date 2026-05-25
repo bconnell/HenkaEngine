@@ -52,29 +52,32 @@ Use this checklist when you want to confirm that `henka_sandbox3d` is visually r
 5. If there was no existing packaged settings file, confirm the UI starts in a compact layout that leaves most of the scene visible.
 6. Confirm the main scene objects remain visible while the UI is open.
 7. Press `F4` and confirm the visible UI appears or hides as expected.
-8. Press `F5` and confirm the layout cycles between `View`, `Inspect`, and `Full Tools`.
-9. Confirm `View` leaves the scene mostly visible.
-10. Confirm `Inspect` keeps Scene Objects and Object Details usable.
-11. Confirm `Full Tools` shows the heavier inspection layout.
-12. Confirm `Reset Layout` restores a usable default.
-13. Confirm panel text is readable by eye.
-14. Confirm panel background contrast is readable against the scene.
-15. Confirm View mode controls feel less cramped than earlier passes.
-16. Confirm toggle labels and `ON` or `OFF` state text do not overlap or feel squeezed.
-17. Confirm the Utility panel feels readable and does not dominate the viewport.
-18. Confirm utility tabs are readable and the active utility state is obvious.
-19. Confirm Help opens in-window.
-20. Confirm Scene Legend opens in-window.
-21. Confirm Object Info appears in-window after selecting an object.
-22. Confirm Paths, Settings, and Diagnostics utilities are usable in-window.
-23. Confirm the Paths or Diagnostics utility reports the expected runtime mode for the current run.
-24. Close the UI, release mouse capture, left-click a visible object, and confirm picking updates the selection.
-25. Confirm the small in-window status area reports common actions without forcing you to read the console.
-26. Confirm the console still receives fallback logs for help, legend, object info, warnings, or errors when those actions are used.
-27. Confirm `Escape` behavior still works.
-28. Confirm close-window exit remains clean.
-29. Confirm no named-engine comparisons appear in runtime text or packaged help.
-30. If the UI is not visible or feels wrong, note whether the console reports `Sandbox panel: shown`, `Sandbox panel: hidden`, or `Sandbox UI ready`.
+8. With the panels hidden, confirm a small in-window recall hint appears inside the sandbox window.
+9. Confirm the hint is readable and does not block the main object cluster.
+10. Press `F4` again and confirm the panels return.
+11. Press `F5` and confirm the layout cycles between `View`, `Inspect`, and `Full Tools`.
+12. Confirm `View` leaves the scene mostly visible.
+13. Confirm `Inspect` keeps Scene Objects and Object Details usable.
+14. Confirm `Full Tools` shows the heavier inspection layout.
+15. Confirm `Reset Layout` restores a usable default.
+16. Confirm panel text is readable by eye.
+17. Confirm panel background contrast is readable against the scene.
+18. Confirm View mode controls feel less cramped than earlier passes.
+19. Confirm toggle labels and `ON` or `OFF` state text do not overlap or feel squeezed.
+20. Confirm the Utility panel feels readable and does not dominate the viewport.
+21. Confirm utility tabs are readable and the active utility state is obvious.
+22. Confirm Help opens in-window.
+23. Confirm Scene Legend opens in-window.
+24. Confirm Object Info appears in-window after selecting an object.
+25. Confirm Paths, Settings, and Diagnostics utilities are usable in-window.
+26. Confirm the Paths or Diagnostics utility reports the expected runtime mode for the current run.
+27. Close the UI, release mouse capture, left-click a visible object, and confirm picking updates the selection.
+28. Confirm the small in-window status area reports common actions without forcing you to read the console.
+29. Confirm the console still receives fallback logs for help, legend, object info, warnings, or errors when those actions are used.
+30. Confirm `Escape` behavior still works.
+31. Confirm close-window exit remains clean.
+32. Confirm no named-engine comparisons appear in runtime text or packaged help.
+33. If the UI is not visible or feels wrong, note whether the console reports `Sandbox panel: shown`, `Sandbox panel: hidden`, or `Sandbox UI ready`.
 
 ## Expected startup behavior
 
@@ -129,6 +132,7 @@ You should be able to identify these examples:
 - The `Object Details` panel can toggle visibility, focus the camera, reset the selected transform, and print object info.
 - The `Object Details` panel shows tag and interaction state when those foundations are available.
 - Pressing `F4` again closes the UI.
+- When the UI is closed, a small in-window hint reminds you that `F4` restores panels and `F5` changes layout.
 - After the UI closes, `Right Mouse` and `Tab` can capture the mouse again.
 - With the UI closed and mouse capture released, left-click can select a visible sample object.
 - Pressing `Escape` while the UI is open closes the UI first.

@@ -66,6 +66,7 @@ That is enough for the current sandbox panel, status text, and small runtime con
 
 In `henka_sandbox3d`, press `F4` to open the panels.
 On a first packaged run with no local settings file, the UI opens in `View` mode so the controls are immediately visible without covering most of the scene.
+If you hide the panels, a small in-window recall hint stays visible so the viewport can stay clean without losing the `F4` and `F5` cues.
 
 The current `Controls` panel can:
 

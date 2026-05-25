@@ -88,6 +88,8 @@ static const henka_vec4 g_ui_row_fill = {0.11f, 0.15f, 0.21f, 0.98f};
 static const henka_vec4 g_ui_status_fill = {0.11f, 0.24f, 0.18f, 1.0f};
 static const henka_vec4 g_ui_status_warning_fill = {0.42f, 0.24f, 0.10f, 1.0f};
 static const henka_vec4 g_ui_muted_text_color = {0.72f, 0.78f, 0.88f, 1.0f};
+static const henka_vec4 g_ui_hint_fill = {0.07f, 0.09f, 0.13f, 0.76f};
+static const henka_vec4 g_ui_hint_border = {0.22f, 0.30f, 0.40f, 0.88f};
 
 static char henka_ui_normalize_character(char character)
 {
@@ -682,6 +684,54 @@ henka_result henka_ui_value_row(henka_ui_context* context, henka_ui_rect bounds,
     }
 
     return henka_ui_draw_text(context, value_x, bounds.y + 6.0f, 1.0f, value_buffer, g_ui_text_color);
+}
+
+henka_result henka_ui_overlay_hint(
+    henka_ui_context* context,
+    henka_ui_rect bounds,
+    const char* primary_text,
+    const char* secondary_text)
+{
+    henka_result result;
+
+    if (context == NULL || primary_text == NULL || secondary_text == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    result = henka_ui_push_rect(context, bounds, g_ui_hint_fill);
+    if (result != HENKA_SUCCESS)
+    {
+        return result;
+    }
+
+    result = henka_ui_push_border(context, bounds, 1.0f, g_ui_hint_border);
+    if (result != HENKA_SUCCESS)
+    {
+        return result;
+    }
+
+    result = henka_ui_draw_fit_text(
+        context,
+        bounds,
+        10.0f,
+        bounds.y + 8.0f,
+        1.0f,
+        primary_text,
+        g_ui_text_color);
+    if (result != HENKA_SUCCESS)
+    {
+        return result;
+    }
+
+    return henka_ui_draw_fit_text(
+        context,
+        bounds,
+        10.0f,
+        bounds.y + 24.0f,
+        1.0f,
+        secondary_text,
+        g_ui_muted_text_color);
 }
 
 bool henka_ui_button(henka_ui_context* context, const char* id, henka_ui_rect bounds, const char* label)

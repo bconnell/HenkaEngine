@@ -120,7 +120,7 @@ The packaged folder also includes `PACKAGE_INFO.txt` so you can tell when the pa
 - `H`: print controls and the scene legend again
 - `Escape`: close the UI first, then release the mouse, then exit
 
-Press `F4` to open the in-window sandbox panels. On a first run with no local settings file, the packaged sandbox opens the UI in `View` mode so the controls are visible without covering most of the scene. Press `F5` to cycle between `View`, `Inspect`, and `Full Tools`. The viewport stays the main surface while the panels provide object inspection, help, scene legend, paths, settings, diagnostics, and short in-window status updates. Console output remains available for fallback logs and automation, but normal viewer use no longer depends on reading it.
+Press `F4` to open the in-window sandbox panels. On a first run with no local settings file, the packaged sandbox opens the UI in `View` mode so the controls are visible without covering most of the scene. Press `F5` to cycle between `View`, `Inspect`, and `Full Tools`. If you hide the panels, a small in-window hint stays in the corner so it is still clear how to bring them back. The viewport stays the main surface while the panels provide object inspection, help, scene legend, paths, settings, diagnostics, and short in-window status updates. Console output remains available for fallback logs and automation, but normal viewer use no longer depends on reading it.
 
 Offline help is also available in [docs/help/sandbox3d.md](docs/help/sandbox3d.md).
 Model loading notes are documented in [docs/model-loading.md](docs/model-loading.md).

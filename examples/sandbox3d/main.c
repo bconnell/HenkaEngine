@@ -1459,6 +1459,29 @@ static void sandbox3d_draw_status_block(
     }
 }
 
+static void sandbox3d_draw_panel_recall_hint(henka_ui_context* ui, int framebuffer_width, int framebuffer_height)
+{
+    henka_ui_rect bounds;
+    float height;
+    float margin;
+    float width;
+
+    if (ui == NULL || framebuffer_width <= 0 || framebuffer_height <= 0)
+    {
+        return;
+    }
+
+    width = 176.0f;
+    height = 44.0f;
+    margin = 18.0f;
+    bounds.x = (float)framebuffer_width - width - margin;
+    bounds.y = (float)framebuffer_height - height - margin;
+    bounds.width = width;
+    bounds.height = height;
+
+    henka_ui_overlay_hint(ui, bounds, "Press F4 for panels", "F5 changes layout");
+}
+
 static void sandbox3d_draw_controls_panel(
     henka_engine* engine,
     sandbox3d_state* state,
@@ -2162,6 +2185,10 @@ static void sandbox3d_build_ui(henka_engine* engine, sandbox3d_state* state)
         henka_free(settings_path);
         henka_free(save_path);
     }
+    else
+    {
+        sandbox3d_draw_panel_recall_hint(state->ui, frame_desc.framebuffer_width, frame_desc.framebuffer_height);
+    }
 
     henka_ui_end_frame(state->ui);
 }
@@ -2670,7 +2697,12 @@ static void sandbox3d_update(henka_engine* engine, double delta_seconds, void* u
             henka_engine_set_mouse_capture(engine, false);
             state->ui_visibility_report_pending = true;
         }
-        sandbox3d_set_statusf(state, false, false, "Panels %s.", ui_visible ? "shown" : "hidden");
+        sandbox3d_set_statusf(
+            state,
+            false,
+            false,
+            "%s",
+            ui_visible ? "Panels shown." : "Panels hidden. Press F4 for panels.");
         sandbox3d_print_ui_state(ui_visible);
         ui_toggled_with_f4 = true;
     }
