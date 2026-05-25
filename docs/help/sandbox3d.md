@@ -52,6 +52,7 @@ On a first packaged run with no existing settings file, the UI opens in `View` m
 - Use `F3` to hide the grid briefly, then show it again to confirm the scene layout still reads clearly.
 - Press `F4` to open the sandbox panels, then use `F5` to compare the View, Inspect, and Full Tools layouts.
 - Click the grid and wireframe controls to confirm the in-window UI updates the same engine state as the keyboard shortcuts.
+- Open Help, Scene Legend, Paths, Settings, and Diagnostics in the Utility panel so you can inspect the sandbox without relying on the console.
 - Select each scene object and confirm the Object Details panel updates.
 - Use Focus Camera, Reset Transform, and Print Object Info on a few different objects.
 - Use the controls panel to reset the camera, save settings, and reset sandbox settings.
@@ -75,26 +76,37 @@ The `Controls` panel currently includes:
 - a save-settings button
 - a reset-layout button
 - panel visibility toggles for the object-inspection panels
+- utility buttons for Help, Scene Legend, Paths, Settings, and Diagnostics
 
 `Inspect` and `Full Tools` also expose the wider inspection controls.
-
-`Full Tools` keeps the most status text, adjustment controls, and path details visible.
+`Full Tools` keeps the most detailed inspection workspace visible.
 
 The `Scene Objects` panel lists the current sandbox examples by name.
 
 - Clicking a row selects that object.
 - Hidden objects stay listed and show a hidden state tag.
+- The selected row stays highlighted so the current object is easy to track.
 
 The `Object Details` panel shows the current selection.
 
 - name
 - visible state
 - position
-- rotation
 - scale
 - what the object demonstrates
 - mesh, material, and texture or fallback summary
 - safe actions for visibility, camera focus, transform reset, and console info output
+
+The `Utility` panel provides short in-window views for:
+
+- Help
+- Scene Legend
+- Object Info
+- Paths
+- Settings
+- Diagnostics
+
+Those utilities are the preferred path for normal viewer use. The console remains useful for fallback logs, warnings, and automated checks.
 
 When the UI is open:
 

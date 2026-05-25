@@ -51,6 +51,7 @@ The current sandbox saves:
 - camera yaw
 - camera pitch
 - UI layout mode
+- active utility panel
 - selected scene object
 - Scene Objects panel visibility
 - Object Details panel visibility

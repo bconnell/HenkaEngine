@@ -78,6 +78,20 @@ The persistence layer is intentionally small and local-first. Right now it provi
 
 - a text `key=value` settings format
 - safe load and save helpers
+
+### UI
+
+The current UI layer is an engine-owned overlay built for viewer controls and lightweight developer inspection.
+
+Right now it provides:
+
+- panel layout state
+- scene-first and inspection-heavy workspace modes
+- compact structured rows for status and utility content
+- object inspection without editable fields
+- in-window utility views for help, legend, paths, settings, diagnostics, and object info
+
+The goal is to support a viewport-first developer workspace without introducing a separate third-party UI stack.
 - path resolution helpers shared with other runtime path work
 - executable-local user data paths by default
 

@@ -59,9 +59,16 @@ Use this checklist when you want to confirm that `henka_sandbox3d` is visually r
 12. Confirm `Reset Layout` restores a usable default.
 13. Confirm panel text is readable by eye.
 14. Confirm panel background contrast is readable against the scene.
-15. Confirm `Escape` behavior still works.
-16. Confirm close-window exit remains clean.
-17. If the UI is not visible or feels wrong, note whether the console reports `Sandbox panel: shown`, `Sandbox panel: hidden`, or `Sandbox UI ready`.
+15. Confirm the Utility panel feels readable and does not dominate the viewport.
+16. Confirm Help opens in-window.
+17. Confirm Scene Legend opens in-window.
+18. Confirm Object Info appears in-window after selecting an object.
+19. Confirm Paths, Settings, and Diagnostics utilities are usable in-window.
+20. Confirm the console still receives fallback logs for help, legend, object info, warnings, or errors when those actions are used.
+21. Confirm `Escape` behavior still works.
+22. Confirm close-window exit remains clean.
+23. Confirm no named-engine comparisons appear in runtime text or packaged help.
+24. If the UI is not visible or feels wrong, note whether the console reports `Sandbox panel: shown`, `Sandbox panel: hidden`, or `Sandbox UI ready`.
 
 ## Expected startup behavior
 

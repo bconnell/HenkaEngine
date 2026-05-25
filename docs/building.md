@@ -72,7 +72,7 @@ On a first packaged run with no local settings file yet, the sandbox opens the i
 
 The packaged check script confirms that the packaged folder contains the expected files, launches the sandbox, checks the startup help text and package marker, confirms UI state logs when available, exercises a few UI clicks, and confirms the close-window path exits cleanly.
 
-It does not replace human visual QA. You should still confirm by eye that the layout leaves the scene comfortably visible in the packaged window.
+It does not replace human visual QA. You should still confirm by eye that the layout leaves the scene comfortably visible in the packaged window and that the in-window utilities feel readable and useful.
 
 ## Validate the external game template
 

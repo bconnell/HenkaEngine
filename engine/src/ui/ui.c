@@ -1,6 +1,7 @@
 #include <henka/ui.h>
 
 #include <ctype.h>
+#include <stdio.h>
 #include <string.h>
 
 #include <henka/memory.h>
@@ -64,7 +65,9 @@ static const henka_ui_glyph g_ui_glyphs[] =
 };
 
 static const henka_vec4 g_ui_panel_fill = {0.08f, 0.10f, 0.14f, 0.92f};
+static const henka_vec4 g_ui_panel_header_fill = {0.10f, 0.13f, 0.18f, 0.96f};
 static const henka_vec4 g_ui_panel_border = {0.22f, 0.36f, 0.56f, 1.0f};
+static const henka_vec4 g_ui_panel_separator = {0.16f, 0.24f, 0.36f, 1.0f};
 static const henka_vec4 g_ui_text_color = {0.94f, 0.96f, 0.99f, 1.0f};
 static const henka_vec4 g_ui_heading_color = {0.72f, 0.84f, 0.98f, 1.0f};
 static const henka_vec4 g_ui_button_fill = {0.17f, 0.21f, 0.28f, 0.98f};
@@ -75,6 +78,7 @@ static const henka_vec4 g_ui_selected_hover = {0.26f, 0.37f, 0.54f, 1.0f};
 static const henka_vec4 g_ui_toggle_on = {0.18f, 0.58f, 0.40f, 1.0f};
 static const henka_vec4 g_ui_toggle_off = {0.44f, 0.20f, 0.20f, 1.0f};
 static const henka_vec4 g_ui_value_fill = {0.11f, 0.15f, 0.21f, 1.0f};
+static const henka_vec4 g_ui_row_fill = {0.11f, 0.15f, 0.21f, 0.98f};
 
 static char henka_ui_normalize_character(char character)
 {
@@ -279,6 +283,31 @@ static bool henka_ui_id_equals(const char* left, const char* right)
     return strcmp(left, right) == 0;
 }
 
+static void henka_ui_copy_fit_text(const char* source, char* buffer, size_t buffer_size, size_t max_characters)
+{
+    size_t length;
+
+    if (buffer == NULL || buffer_size == 0U)
+    {
+        return;
+    }
+
+    if (source == NULL)
+    {
+        buffer[0] = '\0';
+        return;
+    }
+
+    length = strlen(source);
+    if (length <= max_characters || max_characters < 4U)
+    {
+        snprintf(buffer, buffer_size, "%s", source);
+        return;
+    }
+
+    snprintf(buffer, buffer_size, "%.*s...", (int)(max_characters - 3U), source);
+}
+
 henka_result henka_ui_create(henka_ui_context** out_context)
 {
     henka_ui_context* context;
@@ -429,6 +458,7 @@ henka_result henka_ui_measure_text(const char* text, float scale, int* out_width
 
 henka_result henka_ui_panel(henka_ui_context* context, henka_ui_rect bounds, const char* title)
 {
+    henka_ui_rect header_bounds;
     henka_result result;
 
     if (context == NULL || title == NULL)
@@ -452,13 +482,44 @@ henka_result henka_ui_panel(henka_ui_context* context, henka_ui_rect bounds, con
         return result;
     }
 
+    header_bounds = (henka_ui_rect){bounds.x, bounds.y, bounds.width, 30.0f};
+    result = henka_ui_push_rect(context, header_bounds, g_ui_panel_header_fill);
+    if (result != HENKA_SUCCESS)
+    {
+        return result;
+    }
+
+    result = henka_ui_push_rect(
+        context,
+        (henka_ui_rect){bounds.x, bounds.y + header_bounds.height, bounds.width, 1.0f},
+        g_ui_panel_separator);
+    if (result != HENKA_SUCCESS)
+    {
+        return result;
+    }
+
     result = henka_ui_push_border(context, bounds, 2.0f, g_ui_panel_border);
     if (result != HENKA_SUCCESS)
     {
         return result;
     }
 
-    return henka_ui_draw_text(context, bounds.x + 12.0f, bounds.y + 10.0f, 2.0f, title, g_ui_text_color);
+    return henka_ui_draw_text(context, bounds.x + 12.0f, bounds.y + 8.0f, 1.5f, title, g_ui_heading_color);
+}
+
+henka_result henka_ui_heading(henka_ui_context* context, float x, float y, float scale, const char* text)
+{
+    if (context == NULL || text == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    if (!context->visible)
+    {
+        return HENKA_SUCCESS;
+    }
+
+    return henka_ui_draw_text(context, x, y, scale, text, g_ui_heading_color);
 }
 
 henka_result henka_ui_label(henka_ui_context* context, float x, float y, float scale, const char* text)
@@ -474,6 +535,64 @@ henka_result henka_ui_label(henka_ui_context* context, float x, float y, float s
     }
 
     return henka_ui_draw_text(context, x, y, scale, text, g_ui_text_color);
+}
+
+henka_result henka_ui_value_row(henka_ui_context* context, henka_ui_rect bounds, const char* label, const char* value)
+{
+    char label_buffer[48];
+    char value_buffer[96];
+    float label_x;
+    float value_x;
+    henka_result result;
+    size_t label_characters;
+    size_t value_characters;
+
+    if (context == NULL || label == NULL || value == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    if (!context->visible)
+    {
+        return HENKA_SUCCESS;
+    }
+
+    result = henka_ui_push_rect(context, bounds, g_ui_row_fill);
+    if (result != HENKA_SUCCESS)
+    {
+        return result;
+    }
+
+    result = henka_ui_push_border(context, bounds, 1.0f, g_ui_panel_separator);
+    if (result != HENKA_SUCCESS)
+    {
+        return result;
+    }
+
+    label_characters = (size_t)((bounds.width * 0.36f) / 6.0f);
+    if (label_characters < 6U)
+    {
+        label_characters = 6U;
+    }
+    value_characters = (size_t)((bounds.width * 0.48f) / 6.0f);
+    if (value_characters < 8U)
+    {
+        value_characters = 8U;
+    }
+
+    henka_ui_copy_fit_text(label, label_buffer, sizeof(label_buffer), label_characters);
+    henka_ui_copy_fit_text(value, value_buffer, sizeof(value_buffer), value_characters);
+
+    label_x = bounds.x + 8.0f;
+    value_x = bounds.x + bounds.width * 0.40f;
+
+    result = henka_ui_draw_text(context, label_x, bounds.y + 6.0f, 1.0f, label_buffer, g_ui_heading_color);
+    if (result != HENKA_SUCCESS)
+    {
+        return result;
+    }
+
+    return henka_ui_draw_text(context, value_x, bounds.y + 6.0f, 1.0f, value_buffer, g_ui_text_color);
 }
 
 bool henka_ui_button(henka_ui_context* context, const char* id, henka_ui_rect bounds, const char* label)
@@ -574,7 +693,16 @@ bool henka_ui_selectable(henka_ui_context* context, const char* id, henka_ui_rec
         return false;
     }
 
-    if (henka_ui_draw_text(context, bounds.x + 10.0f, bounds.y + 9.0f, 1.0f, label, g_ui_text_color) != HENKA_SUCCESS)
+    if (selected)
+    {
+        result = henka_ui_push_rect(context, (henka_ui_rect){bounds.x + 2.0f, bounds.y + 2.0f, 3.0f, bounds.height - 4.0f}, g_ui_heading_color);
+        if (result != HENKA_SUCCESS)
+        {
+            return false;
+        }
+    }
+
+    if (henka_ui_draw_text(context, bounds.x + 12.0f, bounds.y + 9.0f, 1.0f, label, g_ui_text_color) != HENKA_SUCCESS)
     {
         return false;
     }

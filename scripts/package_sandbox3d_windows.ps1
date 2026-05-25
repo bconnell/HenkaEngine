@@ -30,6 +30,7 @@ $packageInfoPath = Join-Path $packageRoot "PACKAGE_INFO.txt"
 $packageRefreshedAt = Get-Date -Format "yyyy-MM-dd HH:mm:ss zzz"
 $sourceExeTimestamp = (Get-Item $sourceExe).LastWriteTime.ToString("yyyy-MM-dd HH:mm:ss zzz")
 $gitCommit = "unknown"
+$packagedProcessName = "HenkaSandbox3D"
 
 try {
     $gitCommit = (git -C $repoRoot log -1 --format=%h 2>$null).Trim()
@@ -39,6 +40,10 @@ try {
 }
 catch {
     $gitCommit = "unknown"
+}
+
+if (Get-Process -Name $packagedProcessName -ErrorAction SilentlyContinue) {
+    throw "The packaged sandbox is still running. Close HenkaSandbox3D.exe before refreshing the package."
 }
 
 if (Test-Path $packageRoot) {
@@ -75,6 +80,7 @@ Henka Engine Sandbox 3D
 Double-click HenkaSandbox3D.exe to launch the packaged sandbox.
 Press F4 to open the in-window panels.
 Press F5 to cycle View, Inspect, and Full Tools.
+Use the in-window utilities for help, legend, paths, settings, and diagnostics.
 
 Keep these folders beside the executable:
 - assets
@@ -117,3 +123,4 @@ Write-Host "Next step:"
 Write-Host "  Open out\HenkaSandbox3D and double-click HenkaSandbox3D.exe."
 Write-Host "  Press F4 to open the in-window panels."
 Write-Host "  Press F5 to cycle View, Inspect, and Full Tools."
+Write-Host "  Use the in-window utilities for help, legend, paths, settings, and diagnostics."

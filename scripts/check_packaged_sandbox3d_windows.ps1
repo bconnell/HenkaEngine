@@ -175,6 +175,8 @@ Assert-PathExists -Path $assetsDir -Description "Packaged assets folder"
 Assert-PathExists -Path $helpPath -Description "Packaged offline help"
 Assert-PathExists -Path $readmePath -Description "Packaged run guide"
 Assert-PathExists -Path $packageInfoPath -Description "Packaged build marker"
+Assert-FileContains -Path $readmePath -Pattern "Use the in-window utilities" -Description "Packaged utility guidance"
+Assert-FileContains -Path $helpPath -Pattern "Utility panel" -Description "Packaged utility help"
 
 New-Item -ItemType Directory -Path $logDir -Force | Out-Null
 Remove-Item $stdoutPath, $stderrPath -ErrorAction SilentlyContinue
@@ -201,6 +203,7 @@ try {
     Assert-FileContains -Path $stdoutPath -Pattern "F4               Show or hide the sandbox panels" -Description "F4 help text"
     Assert-FileContains -Path $stdoutPath -Pattern "F5               Cycle View, Inspect, and Full Tools layouts" -Description "F5 help text"
     Assert-FileContains -Path $stdoutPath -Pattern "Startup UI:" -Description "Startup UI cue"
+    Assert-FileContains -Path $stdoutPath -Pattern "use the in-window .*utilities" -Description "Startup utility cue"
 
     Write-Step "Checking packaged UI open and close"
     [NativeMethods]::SetForegroundWindow($process.MainWindowHandle) | Out-Null
@@ -232,7 +235,7 @@ try {
         Click-WindowPoint -Handle $process.MainWindowHandle -OffsetX 120 -OffsetY 114
         Click-WindowPoint -Handle $process.MainWindowHandle -OffsetX 248 -OffsetY 114
         Click-WindowPoint -Handle $process.MainWindowHandle -OffsetX 248 -OffsetY 114
-        Click-WindowPoint -Handle $process.MainWindowHandle -OffsetX 248 -OffsetY 148
+        Click-WindowPoint -Handle $process.MainWindowHandle -OffsetX 248 -OffsetY 164
 
         $uiClickChecks = @(
             @{ Pattern = "Debug grid: hidden"; Description = "UI debug grid click output" },

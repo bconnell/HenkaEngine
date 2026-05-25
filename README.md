@@ -23,8 +23,8 @@ Henka Engine is still early, but the sandbox now renders a visible 3D scene with
 - Ground plane, cubes, debug grid, a loaded OBJ marker, textured materials, and visible fallback behavior for missing texture and model assets
 - Keyboard movement, mouse look when capture is active, wireframe toggle, and offline runtime help
 - Local settings persistence for the sandbox
-- Early in-window UI overlay with buttons, toggles, labels, and simple text rendering
-- Scene Objects and Object Details panels for named sandbox object inspection
+- Early in-window UI overlay with buttons, toggles, labels, structured rows, and simple text rendering
+- Scene Objects, Object Details, and Utility panels for named sandbox object inspection and viewer workflows
 - Packaged sandbox user data that stays in place across package refreshes by default
 - Generic documentation and starter template for external game repositories
 
@@ -113,7 +113,7 @@ The packaged folder also includes `PACKAGE_INFO.txt` so you can tell when the pa
 - `H`: print controls and the scene legend again
 - `Escape`: close the UI first, then release the mouse, then exit
 
-Press `F4` to open the in-window sandbox panels. On a first run with no local settings file, the packaged sandbox opens the UI in `View` mode so the controls are visible without covering most of the scene. Press `F5` to cycle between `View`, `Inspect`, and `Full Tools`. The controls panel can toggle the grid and wireframe view, reset the camera, save settings, reset the panel layout, and switch layouts. Inspect and Full Tools also expose the object panels so you can select named scene examples, inspect what they demonstrate, toggle visibility, focus the camera, reset their transforms, and print object info to the console. Mouse look and camera movement pause while the UI is open.
+Press `F4` to open the in-window sandbox panels. On a first run with no local settings file, the packaged sandbox opens the UI in `View` mode so the controls are visible without covering most of the scene. Press `F5` to cycle between `View`, `Inspect`, and `Full Tools`. The viewport stays the main surface while the panels provide object inspection, help, scene legend, paths, settings, and diagnostics inside the window. Console output remains available for fallback logs and automation.
 
 Offline help is also available in [docs/help/sandbox3d.md](docs/help/sandbox3d.md).
 Model loading notes are documented in [docs/model-loading.md](docs/model-loading.md).

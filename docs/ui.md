@@ -8,6 +8,8 @@ The current UI layer is an early engine-owned overlay that can draw:
 
 - panels
 - labels
+- headings
+- structured value rows
 - buttons
 - toggles
 
@@ -70,8 +72,8 @@ The current `Controls` panel can:
 - toggle wireframe
 - reset the camera
 - save sandbox settings
-- print help
 - reset the layout
+- open in-window utilities for help, legend, paths, settings, and diagnostics
 
 `Inspect` and `Full Tools` keep the object panels available. `Full Tools` also keeps the heavier adjustment and status text visible.
 
@@ -90,7 +92,18 @@ The current `Object Details` panel can:
 - toggle visibility
 - focus the camera
 - reset the default transform
-- print object info to the console
+- open object info in the utility panel and still print it to the console
+
+The current `Utility` panel can show:
+
+- Help
+- Scene Legend
+- Object Info
+- Paths
+- Settings
+- Diagnostics
+
+That keeps normal viewer use in the window while the console remains available for fallback logs and automation.
 
 When the UI is open:
 
@@ -103,8 +116,8 @@ When the UI is open:
 `F5` cycles the current layout mode:
 
 - `View`: compact controls, scene-first
-- `Inspect`: object selection and concise details
-- `Full Tools`: larger inspection footprint with more controls and status text
+- `Inspect`: object selection, concise details, and utility support
+- `Full Tools`: larger inspection footprint with more utility space
 
 If the packaged sandbox opens but you do not see the panels:
 
