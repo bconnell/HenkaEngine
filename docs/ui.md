@@ -22,7 +22,6 @@ It is meant to make engine samples easier to inspect and control without pulling
 The current UI layer is not:
 
 - a full editor
-- a docking system
 - a scene hierarchy
 - a full inspector
 - an asset browser
@@ -68,13 +67,17 @@ In `henka_sandbox3d`, press `F4` to open the panels.
 On a first packaged run with no local settings file, the UI opens in `View` mode so the controls are immediately visible without covering most of the scene.
 If you hide the panels, a small in-window recall hint stays visible so the viewport can stay clean without losing the `F4` and `F5` cues.
 
-The sandbox now uses a docked workspace layout:
+The sandbox now uses a movable workspace layout:
 
 - left and right dock regions for panels
 - a dedicated scene viewport in the center
 - a viewport frame that keeps the scene visually separate from the docked tools
+- `Float` actions on panel headers for undocking
+- title dragging and lower-right resize grips on floating panels
+- `L`, `R`, and `Home` controls for reliable redocking
+- visible splitter bars for occupied dock width resizing
 
-The panels no longer draw on top of the scene in normal docked modes.
+Docked panels stay outside the scene. Floating panels can cover scene pixels visually, but they own their full visible input rectangle so clicks, drag, and resize do not leak through to viewport tools.
 
 The current `Controls` panel can:
 
@@ -145,7 +148,7 @@ The viewport now also supports direct navigation while mouse capture is released
 
 Mouse wheel input over the `Controls` or `Scene Objects` panels is routed to panel paging instead of the viewport, so panel interaction does not leak into scene zooming.
 
-A compact diagnostic strip stays visible immediately below the Scene View while panels are open. It shows the active tool, selected object, mouse capture state, whether the cursor is in the viewport, whether a visible panel owns the pointer, gizmo model state, handle count, hovered handle, drag state, and last rejection reason. The strip is informational and does not consume viewport input.
+A compact diagnostic strip stays visible immediately below the Scene View while panels are open. It shows the active tool, selected object, mouse capture state, whether the cursor is in the viewport, whether a visible panel owns the pointer, gizmo model state, handle count, hovered handle, drag state, last rejection reason, hovered panel, active panel movement or resize, dock target, and latest workspace action. The strip is informational and does not consume viewport input.
 
 The current `Utility` panel can show:
 
@@ -164,6 +167,8 @@ The sandbox also uses the current engine diagnostics snapshot in the Utility pan
 The diagnostics view now surfaces the current viewport tool, gizmo mode, mouse capture state, UI mouse ownership, cursor position, selected object, gizmo validity, overlay primitive count, hovered handle, active drag state, last rejected interaction reason, last Action API command, and last Action API result.
 The Transform QA view exposes direct move, rotate, scale, and reset controls that use the same local Action API path as normal object manipulation, which makes it easier to separate Action API failures from gizmo or input failures during packaged QA.
 When Diagnostics or Transform QA is open in the heavier layout, the utility view uses the right dock directly so its controls do not draw through Object Details.
+
+Panel placement and dock resizing are session-only in the current sandbox. `Reset Layout` redocks the standard panels, restores safe dock widths, and clears active workspace drag or resize state.
 
 When the UI is open:
 
@@ -190,4 +195,4 @@ The packaged QA script can confirm startup logs and UI state output, and the loc
 
 ## Future direction
 
-This layer is a foundation for better engine-side inspection and sample controls. It is not yet meant to replace planned editor work, hierarchy tooling, numeric property editing, floating panels, or a broader UI toolkit.
+This layer is a foundation for better engine-side inspection and sample controls. It is not yet meant to replace planned editor work, hierarchy tooling, numeric property editing, saved workspace layouts, or a broader UI toolkit.

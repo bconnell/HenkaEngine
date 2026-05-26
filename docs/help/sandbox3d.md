@@ -66,6 +66,8 @@ On a first packaged run with no existing settings file, the docked workspace ope
 - Open Help, Scene Legend, Paths, Settings, Diagnostics, and Transform QA in the Utility panel so you can inspect the sandbox without relying on the console.
 - Watch the compact strip below Scene View while testing; it reports tool, selection, pointer ownership, gizmo, hover, drag, and rejection state live.
 - Use Transform QA first to confirm whether selected-object mutation works even if gizmo dragging or viewport input is failing.
+- Use `Float` on a panel header to undock it, drag a floating title bar to move it, and drag its lower-right grip to resize it.
+- Use floating-panel `L`, `R`, or `Home` to redock it, drag the narrow bars beside Scene View to resize occupied docks, and use `Reset Layout` to recover defaults.
 - Confirm the small in-window status area reports common actions such as layout changes, camera reset, saved settings, or object focus.
 - Select each scene object and confirm the Object Details panel updates.
 - Use Focus Camera, Reset Transform, and Print Object Info on a few different objects.
@@ -103,7 +105,7 @@ The `Controls` panel currently includes:
 
 `Inspect` and `Full Tools` also expose the wider inspection controls.
 `Full Tools` keeps the most detailed inspection workspace visible.
-Transform manipulation happens in the dedicated scene viewport, not inside the docked panels.
+Transform manipulation happens in the dedicated scene viewport, not inside workspace panels.
 
 The `Scene Objects` panel lists the current sandbox examples by name.
 
@@ -151,8 +153,10 @@ Those utilities are the preferred path for normal viewer use. The console remain
 Status messages also appear in-window for common actions so normal packaged use does not depend on the console.
 Diagnostics now report input ownership, viewport-local cursor state, selected object state, gizmo model validity, overlay primitive count, hovered handle, active drag target, last rejected interaction reason, and last Action API result.
 Transform QA exposes direct move, rotate, scale, and reset controls that use the selected real object and the same Action API path as the normal object workflow.
-The compact strip below Scene View keeps the essential input gate and gizmo state visible while the cursor is over the viewport, so a rejected click or drag can be diagnosed without switching views.
+The compact strip below Scene View keeps essential input-gate, gizmo, and workspace drag state visible while testing, so a rejected viewport or panel gesture can be diagnosed without switching views.
 `Object Use` in Object Details reports the optional object interaction prompt and range only; it is separate from transform tools and gizmo state.
+
+Workspace panel placement and dock sizes are session-only in this version. `Reset Layout` is the supported recovery path for floating or resized panels.
 
 When the UI is open:
 
@@ -162,7 +166,7 @@ When the UI is open:
 - `Right Mouse` and `Tab` can be used again after you close the panel
 - `Escape` closes the panel before it returns to the normal mouse-capture and exit flow
 
-Picking and gizmo hit testing both use the dedicated scene viewport. Clicks in docked panels do not count as viewport picks or transform drags.
+Picking and gizmo hit testing both use the dedicated scene viewport. Clicks in docked or floating panels do not count as viewport picks or transform drags.
 Mouse wheel input over paged panels stays with those panels instead of zooming the scene.
 
 ## Packaged runs
@@ -179,7 +183,7 @@ The runtime also reports whether it is running in `Development` or `Packaged` mo
 - The current settings file is a small local key/value format. It is easy to inspect by hand, but it is not a finished save-game system.
 - A separate save-data foundation now exists for scene id, camera pose, and simple flags, but the sandbox still uses settings for its normal viewer state.
 - The UI overlay is intentionally small. It is meant for sandbox control and object inspection, not as a full editor or a complete runtime UI system.
-- The transform gizmo is intentionally scoped to world-axis move, rotate, and scale for the current sandbox object model. Undo, numeric editing, floating panels, and resizable docks are separate future work.
+- The transform gizmo is intentionally scoped to world-axis move, rotate, and scale for the current sandbox object model. Undo, numeric editing, saved workspace arrangements, scene authoring, and broader tool surfaces are separate future work.
 - Scale is currently uniform-only in the viewport gizmo path. Per-axis scale handles are intentionally not shown until they are reliable enough to ship.
 - Manual desktop QA is still the best way to judge gizmo handle feel, hover clarity, and transform drag comfort.
 - Manual desktop QA is also still the best way to judge whether Orbit and Pan feel reliable in a packaged run.

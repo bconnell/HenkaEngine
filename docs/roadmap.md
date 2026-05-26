@@ -35,16 +35,20 @@ The next development work is focused on making existing systems easier to test, 
 
 Henka is moving toward a practical developer workspace, but this should happen in layers.
 
+Current workspace foundations include:
+
+1. Docked panels with a dedicated Scene View.
+2. Session-only floating, draggable, and resizable panel placement in the sandbox.
+3. Resizable occupied dock regions and reset-layout recovery.
+4. Visible workspace and viewport interaction diagnostics.
+
 Planned workspace improvements include:
 
-1. Resizable docked panels.
-2. Floating panels.
-3. Saved and resettable workspace layouts.
-4. Better status messages and tool feedback.
-5. A clearer scene hierarchy.
-6. Numeric transform editing.
-7. Undo and redo for basic scene operations.
-8. Scene save and load support.
+1. Saved workspace placement and dock sizes.
+2. A clearer scene hierarchy.
+3. Numeric transform editing.
+4. Undo and redo for basic scene operations.
+5. Scene save and load support.
 
 These features should not be added as placeholder UI. Each one should be wired into the engine, tested, documented, and useful before it is treated as complete.
 
@@ -133,6 +137,7 @@ Current limitations include:
 2. The transform gizmo workflow still needs manual desktop QA for visual feel and mouse comfort.
 3. Scene saving and loading are not complete authoring workflows yet.
 4. The UI is useful for inspection and testing, but it is not a full editor.
-5. Asset loading is still limited.
-6. 2D and 2.5D workflows are planned, but not implemented yet.
-7. Physics, audio, scripting, and release distribution are later milestones.
+5. Workspace movement and sizing require desktop QA for feel, and current panel placement is session-only.
+6. Asset loading is still limited.
+7. 2D and 2.5D workflows are planned, but not implemented yet.
+8. Physics, audio, scripting, and release distribution are later milestones.

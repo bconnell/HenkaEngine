@@ -7,6 +7,7 @@
 #include <henka/henka.h>
 
 #include "interaction_tools.h"
+#include "workspace_tools.h"
 
 typedef enum sandbox3d_object_kind
 {
@@ -125,6 +126,7 @@ typedef struct sandbox3d_workspace_state
     bool scene_objects_panel_visible;
     bool object_details_panel_visible;
     sandbox3d_utility_view active_utility;
+    sandbox3d_workspace_model model;
 } sandbox3d_workspace_state;
 
 typedef struct sandbox3d_workspace_layout
@@ -138,6 +140,8 @@ typedef struct sandbox3d_workspace_layout
     henka_ui_rect utility_panel;
     henka_viewport scene_viewport;
     henka_ui_rect debug_strip;
+    henka_ui_rect left_splitter;
+    henka_ui_rect right_splitter;
 } sandbox3d_workspace_layout;
 
 typedef enum sandbox3d_panel_scroll_target
@@ -188,6 +192,11 @@ typedef struct sandbox3d_interaction_diagnostics
     char last_action_command[64];
     char last_action_result[160];
     char last_success_result[160];
+    char last_workspace_action[128];
+    sandbox3d_workspace_panel_id hovered_panel;
+    sandbox3d_workspace_panel_id active_panel_drag;
+    sandbox3d_workspace_panel_id active_panel_resize;
+    sandbox3d_workspace_resize_target active_workspace_resize;
 } sandbox3d_interaction_diagnostics;
 
 typedef struct sandbox3d_gizmo_render_state
@@ -297,7 +306,7 @@ static const float g_ui_controls_width = 320.0f;
 static const float g_ui_scene_width = 260.0f;
 static const float g_ui_details_width = 352.0f;
 static const float g_ui_panel_height = 360.0f;
-static const float g_ui_debug_strip_height = 42.0f;
+static const float g_ui_debug_strip_height = 58.0f;
 
 static const char* g_setting_key_grid_visible = "grid_visible";
 static const char* g_setting_key_wireframe_enabled = "wireframe_enabled";
@@ -370,6 +379,32 @@ static bool sandbox3d_collect_gizmo_overlay_state(
     bool* out_in_dead_zone);
 static void sandbox3d_refresh_interaction_diagnostics(henka_engine* engine, sandbox3d_state* state);
 static bool sandbox3d_ui_owns_mouse_at_point(const sandbox3d_state* state, henka_vec2 framebuffer_mouse);
+static bool sandbox3d_handle_workspace_input(
+    henka_engine* engine,
+    sandbox3d_state* state,
+    henka_vec2 framebuffer_mouse,
+    int framebuffer_width,
+    int framebuffer_height);
+static void sandbox3d_draw_workspace_affordances(sandbox3d_state* state, const sandbox3d_workspace_layout* layout);
+static bool sandbox3d_workspace_can_dock_panel(
+    const sandbox3d_state* state,
+    sandbox3d_workspace_panel_id panel_id,
+    sandbox3d_workspace_dock_zone dock_zone);
+static void sandbox3d_dock_workspace_panel(
+    sandbox3d_state* state,
+    sandbox3d_workspace_panel_id panel_id,
+    sandbox3d_workspace_dock_zone dock_zone);
+static void sandbox3d_draw_panel_workspace_controls(
+    henka_engine* engine,
+    sandbox3d_state* state,
+    const sandbox3d_workspace_layout* layout,
+    sandbox3d_workspace_panel_id panel_id);
+static henka_ui_rect sandbox3d_get_panel_rect(
+    const sandbox3d_workspace_layout* layout,
+    sandbox3d_workspace_panel_id panel_id);
+static bool sandbox3d_workspace_panel_visible(
+    const sandbox3d_state* state,
+    sandbox3d_workspace_panel_id panel_id);
 static bool sandbox3d_apply_transform_action(
     sandbox3d_state* state,
     henka_action_command command,
@@ -1262,23 +1297,26 @@ static void sandbox3d_reset_workspace_layout(sandbox3d_state* state)
     state->workspace.scene_objects_panel_visible = true;
     state->workspace.object_details_panel_visible = true;
     state->workspace.active_utility = SANDBOX3D_UTILITY_NONE;
+    sandbox3d_workspace_model_reset(&state->workspace.model);
     state->viewport_tool = SANDBOX3D_VIEWPORT_TOOL_SELECT;
     state->gizmo.mode = SANDBOX3D_GIZMO_MODE_SELECT;
     sandbox3d_clear_gizmo_drag(state, true);
-    sandbox3d_set_status(state, false, "View mode keeps the scene open while tools stay nearby.");
+    sandbox3d_set_status(state, false, "Layout reset. Panels are redocked and dock sizes restored.");
 }
 
 static bool sandbox3d_workspace_shows_scene_panel(const sandbox3d_state* state)
 {
     return state != NULL &&
-        state->workspace.layout_mode != SANDBOX3D_LAYOUT_VIEW &&
+        (state->workspace.layout_mode != SANDBOX3D_LAYOUT_VIEW ||
+         sandbox3d_workspace_panel_is_floating(&state->workspace.model, SANDBOX3D_WORKSPACE_PANEL_SCENE_OBJECTS)) &&
         state->workspace.scene_objects_panel_visible;
 }
 
 static bool sandbox3d_workspace_shows_details_panel(const sandbox3d_state* state)
 {
     return state != NULL &&
-        state->workspace.layout_mode != SANDBOX3D_LAYOUT_VIEW &&
+        (state->workspace.layout_mode != SANDBOX3D_LAYOUT_VIEW ||
+         sandbox3d_workspace_panel_is_floating(&state->workspace.model, SANDBOX3D_WORKSPACE_PANEL_OBJECT_DETAILS)) &&
         state->workspace.object_details_panel_visible;
 }
 
@@ -1290,8 +1328,29 @@ static bool sandbox3d_workspace_shows_utility_panel(const sandbox3d_state* state
 static bool sandbox3d_utility_uses_full_dock(const sandbox3d_state* state)
 {
     return state != NULL &&
+        !sandbox3d_workspace_panel_is_floating(&state->workspace.model, SANDBOX3D_WORKSPACE_PANEL_UTILITY) &&
         (state->workspace.active_utility == SANDBOX3D_UTILITY_DIAGNOSTICS ||
          state->workspace.active_utility == SANDBOX3D_UTILITY_TRANSFORM_QA);
+}
+
+static bool sandbox3d_workspace_panel_visible(
+    const sandbox3d_state* state,
+    sandbox3d_workspace_panel_id panel_id)
+{
+    switch (panel_id)
+    {
+        case SANDBOX3D_WORKSPACE_PANEL_CONTROLS:
+            return state != NULL;
+        case SANDBOX3D_WORKSPACE_PANEL_SCENE_OBJECTS:
+            return sandbox3d_workspace_shows_scene_panel(state);
+        case SANDBOX3D_WORKSPACE_PANEL_OBJECT_DETAILS:
+            return sandbox3d_workspace_shows_details_panel(state);
+        case SANDBOX3D_WORKSPACE_PANEL_UTILITY:
+            return sandbox3d_workspace_shows_utility_panel(state);
+        case SANDBOX3D_WORKSPACE_PANEL_NONE:
+        default:
+            return false;
+    }
 }
 
 static void sandbox3d_set_active_utility(sandbox3d_state* state, sandbox3d_utility_view utility)
@@ -1778,7 +1837,9 @@ static void sandbox3d_print_help(const sandbox3d_state* state)
     printf("  Escape           Close the panels first. Then release the mouse. Then exit.\n");
     printf("Panel shortcuts:\n");
     printf("  Press F4 to open the in-window panels.\n");
-    printf("  View keeps the largest dedicated scene viewport. Inspect adds docked object panels. Full Tools shows the full docked workspace.\n");
+    printf("  View keeps the largest dedicated scene viewport. Inspect adds object panels. Full Tools shows the complete workspace.\n");
+    printf("  Panel headers provide Float. Floating panels drag by title, resize at the lower-right grip, and redock with L, R, or Home.\n");
+    printf("  Drag the narrow bars beside Scene View to resize occupied docks. Reset Layout restores safe defaults.\n");
     printf("  Use the panels to inspect named scene objects, switch gizmo modes, focus the camera, reset object transforms, toggle visibility, and open in-window Help, Scene Legend, Object Info, Paths, Settings, and Diagnostics utilities.\n");
     printf("  The Controls panel uses readable pages, and Scene Objects supports paging when the dock is tighter than the full list.\n");
     printf("  Select an object from the list or with Left Mouse in the viewport, then use Move, Rotate, or Scale in the Transform section.\n");
@@ -2628,7 +2689,7 @@ static bool sandbox3d_collect_gizmo_overlay_state(
 
 static bool sandbox3d_ui_owns_mouse_at_point(const sandbox3d_state* state, henka_vec2 framebuffer_mouse)
 {
-    henka_ui_rect panels[4];
+    henka_ui_rect panels[6];
     size_t panel_count;
 
     if (state == NULL || state->ui == NULL || !henka_ui_is_visible(state->ui))
@@ -2650,8 +2711,183 @@ static bool sandbox3d_ui_owns_mouse_at_point(const sandbox3d_state* state, henka
     {
         panels[panel_count++] = state->frame_layout.utility_panel;
     }
+    if (state->frame_layout.left_splitter.width > 0.0f)
+    {
+        panels[panel_count++] = state->frame_layout.left_splitter;
+    }
+    if (state->frame_layout.right_splitter.width > 0.0f)
+    {
+        panels[panel_count++] = state->frame_layout.right_splitter;
+    }
 
-    return sandbox3d_point_is_owned_by_panels(framebuffer_mouse, panels, panel_count);
+    return state->workspace.model.active_drag_panel != SANDBOX3D_WORKSPACE_PANEL_NONE ||
+        state->workspace.model.resize_target != SANDBOX3D_WORKSPACE_RESIZE_NONE ||
+        sandbox3d_point_is_owned_by_panels(framebuffer_mouse, panels, panel_count);
+}
+
+static bool sandbox3d_handle_workspace_input(
+    henka_engine* engine,
+    sandbox3d_state* state,
+    henka_vec2 framebuffer_mouse,
+    int framebuffer_width,
+    int framebuffer_height)
+{
+    const bool left_down = henka_input_is_mouse_button_down(engine, HENKA_MOUSE_BUTTON_LEFT);
+    const bool left_pressed = henka_input_was_mouse_button_pressed(engine, HENKA_MOUSE_BUTTON_LEFT);
+    const bool left_released = henka_input_was_mouse_button_released(engine, HENKA_MOUSE_BUTTON_LEFT);
+    const sandbox3d_workspace_panel* panel;
+    henka_ui_rect bounds;
+    sandbox3d_workspace_panel_id top_panel;
+    bool top_panel_is_floating;
+    unsigned int top_z;
+    int index;
+
+    if (engine == NULL || state == NULL || state->ui == NULL || !henka_ui_is_visible(state->ui))
+    {
+        return false;
+    }
+
+    state->workspace.model.hovered_panel = SANDBOX3D_WORKSPACE_PANEL_NONE;
+    top_panel = SANDBOX3D_WORKSPACE_PANEL_NONE;
+    top_panel_is_floating = false;
+    top_z = 0U;
+    for (index = 0; index < SANDBOX3D_WORKSPACE_PANEL_COUNT; ++index)
+    {
+        if (!sandbox3d_workspace_panel_visible(state, (sandbox3d_workspace_panel_id)index))
+        {
+            continue;
+        }
+        panel = sandbox3d_workspace_get_panel_const(&state->workspace.model, (sandbox3d_workspace_panel_id)index);
+        bounds = sandbox3d_get_panel_rect(&state->frame_layout, (sandbox3d_workspace_panel_id)index);
+        if (panel != NULL && bounds.width > 0.0f && henka_ui_rect_contains(bounds, framebuffer_mouse) &&
+            ((panel->dock == SANDBOX3D_WORKSPACE_DOCK_FLOATING &&
+              (!top_panel_is_floating || panel->z_order >= top_z)) ||
+             (panel->dock != SANDBOX3D_WORKSPACE_DOCK_FLOATING && !top_panel_is_floating)))
+        {
+            top_panel = (sandbox3d_workspace_panel_id)index;
+            top_panel_is_floating = panel->dock == SANDBOX3D_WORKSPACE_DOCK_FLOATING;
+            top_z = top_panel_is_floating ? panel->z_order : top_z;
+        }
+    }
+    state->workspace.model.hovered_panel = top_panel;
+
+    if (state->workspace.model.active_drag_panel != SANDBOX3D_WORKSPACE_PANEL_NONE)
+    {
+        if (left_down)
+        {
+            sandbox3d_workspace_update_panel_drag(
+                &state->workspace.model,
+                framebuffer_mouse,
+                framebuffer_width,
+                framebuffer_height);
+            state->workspace.model.active_dock_target = SANDBOX3D_WORKSPACE_DOCK_FLOATING;
+            if (henka_ui_rect_contains(state->frame_layout.left_dock, framebuffer_mouse) &&
+                sandbox3d_workspace_can_dock_panel(state, state->workspace.model.active_drag_panel, SANDBOX3D_WORKSPACE_DOCK_LEFT))
+            {
+                state->workspace.model.active_dock_target = SANDBOX3D_WORKSPACE_DOCK_LEFT;
+            }
+            else if (henka_ui_rect_contains(state->frame_layout.right_dock, framebuffer_mouse) &&
+                sandbox3d_workspace_can_dock_panel(state, state->workspace.model.active_drag_panel, SANDBOX3D_WORKSPACE_DOCK_RIGHT))
+            {
+                state->workspace.model.active_dock_target = SANDBOX3D_WORKSPACE_DOCK_RIGHT;
+            }
+        }
+        if (left_released)
+        {
+            const sandbox3d_workspace_panel_id active_panel = state->workspace.model.active_drag_panel;
+            const sandbox3d_workspace_dock_zone target = state->workspace.model.active_dock_target;
+            if (target != SANDBOX3D_WORKSPACE_DOCK_FLOATING)
+            {
+                sandbox3d_dock_workspace_panel(state, active_panel, target);
+            }
+            else
+            {
+                snprintf(state->workspace.model.last_action, sizeof(state->workspace.model.last_action), "%s moved", sandbox3d_workspace_panel_name(active_panel));
+                sandbox3d_set_statusf(state, false, false, "%s moved.", sandbox3d_workspace_panel_name(active_panel));
+            }
+            sandbox3d_workspace_end_interaction(&state->workspace.model);
+        }
+        return true;
+    }
+
+    if (state->workspace.model.resize_target != SANDBOX3D_WORKSPACE_RESIZE_NONE)
+    {
+        if (left_down)
+        {
+            if (state->workspace.model.resize_target == SANDBOX3D_WORKSPACE_RESIZE_FLOATING_PANEL)
+            {
+                sandbox3d_workspace_update_panel_resize(
+                    &state->workspace.model,
+                    framebuffer_mouse,
+                    framebuffer_width,
+                    framebuffer_height);
+            }
+            else
+            {
+                const float other_width = state->workspace.model.resize_target == SANDBOX3D_WORKSPACE_RESIZE_LEFT_DOCK
+                    ? state->frame_layout.right_dock.width
+                    : state->frame_layout.left_dock.width;
+                const float minimum_dock_width = state->workspace.model.resize_target == SANDBOX3D_WORKSPACE_RESIZE_LEFT_DOCK
+                    ? 300.0f
+                    : 332.0f;
+                sandbox3d_workspace_update_dock_resize(
+                    &state->workspace.model,
+                    framebuffer_mouse,
+                    framebuffer_width,
+                    520.0f,
+                    minimum_dock_width,
+                    other_width);
+            }
+        }
+        if (left_released)
+        {
+            snprintf(state->workspace.model.last_action, sizeof(state->workspace.model.last_action), "Resize completed");
+            sandbox3d_set_status(state, false, "Workspace resize completed.");
+            sandbox3d_workspace_end_interaction(&state->workspace.model);
+        }
+        return true;
+    }
+
+    if (!left_pressed)
+    {
+        return false;
+    }
+
+    if (state->frame_layout.left_splitter.width > 0.0f &&
+        henka_ui_rect_contains(state->frame_layout.left_splitter, framebuffer_mouse))
+    {
+        sandbox3d_workspace_begin_dock_resize(&state->workspace.model, SANDBOX3D_WORKSPACE_RESIZE_LEFT_DOCK, framebuffer_mouse);
+        sandbox3d_clear_gizmo_drag(state, true);
+        return true;
+    }
+    if (state->frame_layout.right_splitter.width > 0.0f &&
+        henka_ui_rect_contains(state->frame_layout.right_splitter, framebuffer_mouse))
+    {
+        sandbox3d_workspace_begin_dock_resize(&state->workspace.model, SANDBOX3D_WORKSPACE_RESIZE_RIGHT_DOCK, framebuffer_mouse);
+        sandbox3d_clear_gizmo_drag(state, true);
+        return true;
+    }
+
+    if (top_panel != SANDBOX3D_WORKSPACE_PANEL_NONE &&
+        sandbox3d_workspace_panel_is_floating(&state->workspace.model, top_panel))
+    {
+        bounds = sandbox3d_get_panel_rect(&state->frame_layout, top_panel);
+        sandbox3d_workspace_bring_to_front(&state->workspace.model, top_panel);
+        if (henka_ui_rect_contains(sandbox3d_workspace_resize_rect(bounds), framebuffer_mouse))
+        {
+            sandbox3d_workspace_begin_panel_resize(&state->workspace.model, top_panel, framebuffer_mouse);
+            sandbox3d_clear_gizmo_drag(state, true);
+            return true;
+        }
+        if (henka_ui_rect_contains(sandbox3d_workspace_title_drag_rect(bounds), framebuffer_mouse))
+        {
+            sandbox3d_workspace_begin_panel_drag(&state->workspace.model, top_panel, framebuffer_mouse);
+            sandbox3d_clear_gizmo_drag(state, true);
+            return true;
+        }
+    }
+
+    return false;
 }
 
 static void sandbox3d_refresh_interaction_diagnostics(henka_engine* engine, sandbox3d_state* state)
@@ -2678,6 +2914,15 @@ static void sandbox3d_refresh_interaction_diagnostics(henka_engine* engine, sand
     state->diagnostics.selected_entity = sandbox3d_get_real_selected_entity(state);
     state->diagnostics.drag_target_entity = state->gizmo.drag.target_entity;
     state->diagnostics.dragging = state->gizmo.drag.dragging;
+    state->diagnostics.hovered_panel = state->workspace.model.hovered_panel;
+    state->diagnostics.active_panel_drag = state->workspace.model.active_drag_panel;
+    state->diagnostics.active_panel_resize = state->workspace.model.active_resize_panel;
+    state->diagnostics.active_workspace_resize = state->workspace.model.resize_target;
+    snprintf(
+        state->diagnostics.last_workspace_action,
+        sizeof(state->diagnostics.last_workspace_action),
+        "%s",
+        state->workspace.model.last_action);
     state->diagnostics.mouse_framebuffer_valid = sandbox3d_try_get_mouse_framebuffer_position(engine, &framebuffer_mouse);
     state->diagnostics.ui_wants_mouse =
         state->diagnostics.mouse_framebuffer_valid &&
@@ -2813,19 +3058,27 @@ static sandbox3d_panel_scroll_target sandbox3d_get_panel_scroll_target(const san
         return SANDBOX3D_PANEL_SCROLL_NONE;
     }
 
-    if (henka_ui_rect_contains(state->frame_layout.controls_panel, point))
+    if (state->workspace.model.hovered_panel == SANDBOX3D_WORKSPACE_PANEL_CONTROLS ||
+        (state->workspace.model.hovered_panel == SANDBOX3D_WORKSPACE_PANEL_NONE &&
+         henka_ui_rect_contains(state->frame_layout.controls_panel, point)))
     {
         return SANDBOX3D_PANEL_SCROLL_CONTROLS;
     }
-    if (henka_ui_rect_contains(state->frame_layout.scene_objects_panel, point))
+    if (state->workspace.model.hovered_panel == SANDBOX3D_WORKSPACE_PANEL_SCENE_OBJECTS ||
+        (state->workspace.model.hovered_panel == SANDBOX3D_WORKSPACE_PANEL_NONE &&
+         henka_ui_rect_contains(state->frame_layout.scene_objects_panel, point)))
     {
         return SANDBOX3D_PANEL_SCROLL_SCENE_OBJECTS;
     }
-    if (henka_ui_rect_contains(state->frame_layout.object_details_panel, point))
+    if (state->workspace.model.hovered_panel == SANDBOX3D_WORKSPACE_PANEL_OBJECT_DETAILS ||
+        (state->workspace.model.hovered_panel == SANDBOX3D_WORKSPACE_PANEL_NONE &&
+         henka_ui_rect_contains(state->frame_layout.object_details_panel, point)))
     {
         return SANDBOX3D_PANEL_SCROLL_DETAILS;
     }
-    if (henka_ui_rect_contains(state->frame_layout.utility_panel, point))
+    if (state->workspace.model.hovered_panel == SANDBOX3D_WORKSPACE_PANEL_UTILITY ||
+        (state->workspace.model.hovered_panel == SANDBOX3D_WORKSPACE_PANEL_NONE &&
+         henka_ui_rect_contains(state->frame_layout.utility_panel, point)))
     {
         return SANDBOX3D_PANEL_SCROLL_UTILITY;
     }
@@ -3274,8 +3527,19 @@ static sandbox3d_workspace_layout sandbox3d_get_workspace_layout(
     henka_workspace_layout docked_layout;
     sandbox3d_workspace_layout layout;
     sandbox3d_layout_mode layout_mode;
+    bool controls_left;
+    bool controls_right;
     bool details_visible;
+    bool details_left;
+    bool details_right;
+    bool left_visible;
+    const sandbox3d_workspace_panel* panel;
+    bool right_visible;
+    bool scene_left;
+    bool scene_right;
     bool scene_visible;
+    bool utility_left;
+    bool utility_right;
     bool utility_visible;
 
     memset(&layout, 0, sizeof(layout));
@@ -3301,6 +3565,20 @@ static sandbox3d_workspace_layout sandbox3d_get_workspace_layout(
     scene_visible = sandbox3d_workspace_shows_scene_panel(state);
     details_visible = sandbox3d_workspace_shows_details_panel(state);
     utility_visible = sandbox3d_workspace_shows_utility_panel(state);
+    panel = sandbox3d_workspace_get_panel_const(&state->workspace.model, SANDBOX3D_WORKSPACE_PANEL_CONTROLS);
+    controls_left = panel != NULL && panel->dock == SANDBOX3D_WORKSPACE_DOCK_LEFT;
+    controls_right = panel != NULL && panel->dock == SANDBOX3D_WORKSPACE_DOCK_RIGHT;
+    panel = sandbox3d_workspace_get_panel_const(&state->workspace.model, SANDBOX3D_WORKSPACE_PANEL_SCENE_OBJECTS);
+    scene_left = scene_visible && panel != NULL && panel->dock == SANDBOX3D_WORKSPACE_DOCK_LEFT;
+    scene_right = scene_visible && panel != NULL && panel->dock == SANDBOX3D_WORKSPACE_DOCK_RIGHT;
+    panel = sandbox3d_workspace_get_panel_const(&state->workspace.model, SANDBOX3D_WORKSPACE_PANEL_OBJECT_DETAILS);
+    details_left = details_visible && panel != NULL && panel->dock == SANDBOX3D_WORKSPACE_DOCK_LEFT;
+    details_right = details_visible && panel != NULL && panel->dock == SANDBOX3D_WORKSPACE_DOCK_RIGHT;
+    panel = sandbox3d_workspace_get_panel_const(&state->workspace.model, SANDBOX3D_WORKSPACE_PANEL_UTILITY);
+    utility_left = utility_visible && panel != NULL && panel->dock == SANDBOX3D_WORKSPACE_DOCK_LEFT;
+    utility_right = utility_visible && panel != NULL && panel->dock == SANDBOX3D_WORKSPACE_DOCK_RIGHT;
+    left_visible = controls_left || scene_left || details_left || utility_left;
+    right_visible = controls_right || scene_right || details_right || utility_right;
 
     memset(&workspace_desc, 0, sizeof(workspace_desc));
     workspace_desc.framebuffer_width = framebuffer_width;
@@ -3310,32 +3588,12 @@ static sandbox3d_workspace_layout sandbox3d_get_workspace_layout(
     workspace_desc.scene_header_height = 30.0f;
     workspace_desc.scene_padding = 8.0f;
     workspace_desc.min_scene_width = framebuffer_width >= 1280 ? 520 : (framebuffer_width >= 960 ? 420 : 260);
-    workspace_desc.min_scene_height = framebuffer_height >= 720 ? 388 : (framebuffer_height >= 640 ? 328 : 228);
-    workspace_desc.left_dock_visible = true;
-    workspace_desc.right_dock_visible = false;
+    workspace_desc.min_scene_height = framebuffer_height >= 720 ? 404 : (framebuffer_height >= 640 ? 344 : 244);
+    workspace_desc.left_dock_visible = left_visible;
+    workspace_desc.right_dock_visible = right_visible;
     workspace_desc.bottom_dock_visible = false;
-
-    switch (layout_mode)
-    {
-        case SANDBOX3D_LAYOUT_VIEW:
-            workspace_desc.left_dock_width = 312.0f;
-            workspace_desc.right_dock_visible = utility_visible;
-            workspace_desc.right_dock_width = 332.0f;
-            break;
-
-        case SANDBOX3D_LAYOUT_INSPECT:
-            workspace_desc.left_dock_width = 320.0f;
-            workspace_desc.right_dock_visible = details_visible || utility_visible;
-            workspace_desc.right_dock_width = 344.0f;
-            break;
-
-        case SANDBOX3D_LAYOUT_FULL:
-        default:
-            workspace_desc.left_dock_width = 328.0f;
-            workspace_desc.right_dock_visible = true;
-            workspace_desc.right_dock_width = 356.0f;
-            break;
-    }
+    workspace_desc.left_dock_width = state->workspace.model.left_dock_width;
+    workspace_desc.right_dock_width = state->workspace.model.right_dock_width;
 
     layout_result = henka_workspace_layout_docked(&workspace_desc, &docked_layout);
     if (layout_result != HENKA_SUCCESS)
@@ -3348,28 +3606,10 @@ static sandbox3d_workspace_layout sandbox3d_get_workspace_layout(
     layout.right_dock = docked_layout.right_dock;
     layout.scene_viewport = docked_layout.scene_viewport;
     sandbox3d_reserve_debug_strip(&layout);
-
-    if (layout_mode == SANDBOX3D_LAYOUT_VIEW)
-    {
-        layout.controls_panel = (henka_ui_rect)
-        {
-            layout.left_dock.x,
-            layout.left_dock.y,
-            layout.left_dock.width,
-            layout.left_dock.height
-        };
-        if (utility_visible)
-        {
-            layout.utility_panel = (henka_ui_rect)
-            {
-                layout.right_dock.x,
-                layout.right_dock.y,
-                layout.right_dock.width,
-                layout.right_dock.height
-            };
-        }
-        return layout;
-    }
+    layout.controls_panel = (henka_ui_rect){0.0f, 0.0f, 0.0f, 0.0f};
+    layout.scene_objects_panel = (henka_ui_rect){0.0f, 0.0f, 0.0f, 0.0f};
+    layout.object_details_panel = (henka_ui_rect){0.0f, 0.0f, 0.0f, 0.0f};
+    layout.utility_panel = (henka_ui_rect){0.0f, 0.0f, 0.0f, 0.0f};
 
     controls_height = layout.left_dock.height * (layout_mode == SANDBOX3D_LAYOUT_FULL ? 0.70f : 0.69f);
     if (controls_height < 470.0f)
@@ -3381,16 +3621,9 @@ static sandbox3d_workspace_layout sandbox3d_get_workspace_layout(
         controls_height = layout.left_dock.height;
     }
 
-    layout.controls_panel = (henka_ui_rect)
+    if (controls_left && scene_left)
     {
-        layout.left_dock.x,
-        layout.left_dock.y,
-        layout.left_dock.width,
-        controls_height
-    };
-
-    if (scene_visible)
-    {
+        layout.controls_panel = (henka_ui_rect){layout.left_dock.x, layout.left_dock.y, layout.left_dock.width, controls_height};
         layout.scene_objects_panel = (henka_ui_rect)
         {
             layout.left_dock.x,
@@ -3403,15 +3636,31 @@ static sandbox3d_workspace_layout sandbox3d_get_workspace_layout(
             layout.scene_objects_panel.height = 0.0f;
         }
     }
+    else if (controls_left)
+    {
+        layout.controls_panel = layout.left_dock;
+    }
+    else if (scene_left)
+    {
+        layout.scene_objects_panel = layout.left_dock;
+    }
+    else if (details_left)
+    {
+        layout.object_details_panel = layout.left_dock;
+    }
+    else if (utility_left)
+    {
+        layout.utility_panel = layout.left_dock;
+    }
 
-    if (sandbox3d_utility_uses_full_dock(state))
+    if (utility_right && sandbox3d_utility_uses_full_dock(state))
     {
         layout.object_details_panel = (henka_ui_rect){0.0f, 0.0f, 0.0f, 0.0f};
         layout.utility_panel = layout.right_dock;
     }
-    else if (details_visible || utility_visible || layout_mode == SANDBOX3D_LAYOUT_FULL)
+    else if (details_right && utility_right)
     {
-        details_height = utility_visible ? layout.right_dock.height * (layout_mode == SANDBOX3D_LAYOUT_FULL ? 0.56f : 0.54f) : layout.right_dock.height;
+        details_height = layout.right_dock.height * (layout_mode == SANDBOX3D_LAYOUT_FULL ? 0.56f : 0.54f);
         if (details_height < 400.0f)
         {
             details_height = 400.0f;
@@ -3421,38 +3670,262 @@ static sandbox3d_workspace_layout sandbox3d_get_workspace_layout(
             details_height = layout.right_dock.height;
         }
 
-        if (details_visible || layout_mode == SANDBOX3D_LAYOUT_FULL)
+        layout.object_details_panel = (henka_ui_rect){layout.right_dock.x, layout.right_dock.y, layout.right_dock.width, details_height};
+        layout.utility_panel = (henka_ui_rect)
         {
-            layout.object_details_panel = (henka_ui_rect)
-            {
-                layout.right_dock.x,
-                layout.right_dock.y,
-                layout.right_dock.width,
-                details_height
-            };
-        }
+            layout.right_dock.x,
+            layout.right_dock.y + details_height + g_ui_panel_gap,
+            layout.right_dock.width,
+            layout.right_dock.height - details_height - g_ui_panel_gap
+        };
+    }
+    else if (details_right)
+    {
+        layout.object_details_panel = layout.right_dock;
+    }
+    else if (utility_right)
+    {
+        layout.utility_panel = layout.right_dock;
+    }
+    else if (controls_right)
+    {
+        layout.controls_panel = layout.right_dock;
+    }
+    else if (scene_right)
+    {
+        layout.scene_objects_panel = layout.right_dock;
+    }
 
-        if (utility_visible)
-        {
-            layout.utility_panel = (henka_ui_rect)
-            {
-                layout.right_dock.x,
-                layout.right_dock.y + details_height + (details_visible ? g_ui_panel_gap : 0.0f),
-                layout.right_dock.width,
-                layout.right_dock.height - details_height - (details_visible ? g_ui_panel_gap : 0.0f)
-            };
-            if (layout.utility_panel.height < 0.0f)
-            {
-                layout.utility_panel.height = 0.0f;
-            }
-            else if (layout.utility_panel.height < 140.0f)
-            {
-                layout.utility_panel.height = 140.0f;
-            }
-        }
+    if (sandbox3d_workspace_panel_is_floating(&state->workspace.model, SANDBOX3D_WORKSPACE_PANEL_CONTROLS))
+    {
+        layout.controls_panel = sandbox3d_workspace_get_panel_const(&state->workspace.model, SANDBOX3D_WORKSPACE_PANEL_CONTROLS)->floating_rect;
+    }
+    if (scene_visible && sandbox3d_workspace_panel_is_floating(&state->workspace.model, SANDBOX3D_WORKSPACE_PANEL_SCENE_OBJECTS))
+    {
+        layout.scene_objects_panel = sandbox3d_workspace_get_panel_const(&state->workspace.model, SANDBOX3D_WORKSPACE_PANEL_SCENE_OBJECTS)->floating_rect;
+    }
+    if (details_visible && sandbox3d_workspace_panel_is_floating(&state->workspace.model, SANDBOX3D_WORKSPACE_PANEL_OBJECT_DETAILS))
+    {
+        layout.object_details_panel = sandbox3d_workspace_get_panel_const(&state->workspace.model, SANDBOX3D_WORKSPACE_PANEL_OBJECT_DETAILS)->floating_rect;
+    }
+    if (utility_visible && sandbox3d_workspace_panel_is_floating(&state->workspace.model, SANDBOX3D_WORKSPACE_PANEL_UTILITY))
+    {
+        layout.utility_panel = sandbox3d_workspace_get_panel_const(&state->workspace.model, SANDBOX3D_WORKSPACE_PANEL_UTILITY)->floating_rect;
+    }
+
+    if (left_visible)
+    {
+        layout.left_splitter = sandbox3d_workspace_left_splitter_rect(layout.left_dock, layout.scene_frame);
+    }
+    if (right_visible)
+    {
+        layout.right_splitter = sandbox3d_workspace_right_splitter_rect(layout.scene_frame, layout.right_dock);
     }
 
     return layout;
+}
+
+static henka_ui_rect sandbox3d_get_panel_rect(
+    const sandbox3d_workspace_layout* layout,
+    sandbox3d_workspace_panel_id panel_id)
+{
+    if (layout == NULL)
+    {
+        return (henka_ui_rect){0.0f, 0.0f, 0.0f, 0.0f};
+    }
+
+    switch (panel_id)
+    {
+        case SANDBOX3D_WORKSPACE_PANEL_CONTROLS:
+            return layout->controls_panel;
+        case SANDBOX3D_WORKSPACE_PANEL_SCENE_OBJECTS:
+            return layout->scene_objects_panel;
+        case SANDBOX3D_WORKSPACE_PANEL_OBJECT_DETAILS:
+            return layout->object_details_panel;
+        case SANDBOX3D_WORKSPACE_PANEL_UTILITY:
+            return layout->utility_panel;
+        case SANDBOX3D_WORKSPACE_PANEL_NONE:
+        default:
+            return (henka_ui_rect){0.0f, 0.0f, 0.0f, 0.0f};
+    }
+}
+
+static bool sandbox3d_workspace_can_dock_panel(
+    const sandbox3d_state* state,
+    sandbox3d_workspace_panel_id panel_id,
+    sandbox3d_workspace_dock_zone dock_zone)
+{
+    const sandbox3d_workspace_panel* panel;
+    int index;
+
+    if (state == NULL || dock_zone == SANDBOX3D_WORKSPACE_DOCK_FLOATING)
+    {
+        return false;
+    }
+
+    for (index = 0; index < SANDBOX3D_WORKSPACE_PANEL_COUNT; ++index)
+    {
+        if (index == (int)panel_id)
+        {
+            continue;
+        }
+        panel = sandbox3d_workspace_get_panel_const(&state->workspace.model, (sandbox3d_workspace_panel_id)index);
+        if (panel != NULL && panel->dock == dock_zone)
+        {
+            const bool supported_default_pair =
+                (dock_zone == SANDBOX3D_WORKSPACE_DOCK_LEFT &&
+                 ((panel_id == SANDBOX3D_WORKSPACE_PANEL_CONTROLS && index == SANDBOX3D_WORKSPACE_PANEL_SCENE_OBJECTS) ||
+                  (panel_id == SANDBOX3D_WORKSPACE_PANEL_SCENE_OBJECTS && index == SANDBOX3D_WORKSPACE_PANEL_CONTROLS))) ||
+                (dock_zone == SANDBOX3D_WORKSPACE_DOCK_RIGHT &&
+                 ((panel_id == SANDBOX3D_WORKSPACE_PANEL_OBJECT_DETAILS && index == SANDBOX3D_WORKSPACE_PANEL_UTILITY) ||
+                  (panel_id == SANDBOX3D_WORKSPACE_PANEL_UTILITY && index == SANDBOX3D_WORKSPACE_PANEL_OBJECT_DETAILS)));
+            if (!supported_default_pair)
+            {
+                return false;
+            }
+        }
+    }
+    return true;
+}
+
+static void sandbox3d_dock_workspace_panel(
+    sandbox3d_state* state,
+    sandbox3d_workspace_panel_id panel_id,
+    sandbox3d_workspace_dock_zone dock_zone)
+{
+    if (!sandbox3d_workspace_can_dock_panel(state, panel_id, dock_zone))
+    {
+        sandbox3d_set_statusf(
+            state,
+            true,
+            false,
+            "Dock %s is reserved. Float its home panels first or use Home.",
+            sandbox3d_workspace_dock_name(dock_zone));
+        snprintf(state->workspace.model.last_action, sizeof(state->workspace.model.last_action), "Dock rejected: occupied");
+        return;
+    }
+
+    sandbox3d_workspace_dock_panel(&state->workspace.model, panel_id, dock_zone);
+    sandbox3d_set_statusf(
+        state,
+        false,
+        false,
+        "%s docked %s.",
+        sandbox3d_workspace_panel_name(panel_id),
+        sandbox3d_workspace_dock_name(dock_zone));
+}
+
+static void sandbox3d_draw_panel_workspace_controls(
+    henka_engine* engine,
+    sandbox3d_state* state,
+    const sandbox3d_workspace_layout* layout,
+    sandbox3d_workspace_panel_id panel_id)
+{
+    char button_id[48];
+    const sandbox3d_workspace_panel* panel;
+    henka_ui_rect bounds;
+    int framebuffer_height;
+    int framebuffer_width;
+
+    if (engine == NULL || state == NULL || layout == NULL)
+    {
+        return;
+    }
+    bounds = sandbox3d_get_panel_rect(layout, panel_id);
+    panel = sandbox3d_workspace_get_panel_const(&state->workspace.model, panel_id);
+    if (panel == NULL || bounds.width <= 0.0f || bounds.height <= 0.0f)
+    {
+        return;
+    }
+
+    framebuffer_width = 1280;
+    framebuffer_height = 720;
+    henka_engine_get_framebuffer_size(engine, &framebuffer_width, &framebuffer_height);
+    if (panel->dock != SANDBOX3D_WORKSPACE_DOCK_FLOATING)
+    {
+        snprintf(button_id, sizeof(button_id), "float_panel_%d", (int)panel_id);
+        if (henka_ui_button(state->ui, button_id, (henka_ui_rect){bounds.x + bounds.width - 62.0f, bounds.y + 4.0f, 54.0f, 22.0f}, "Float"))
+        {
+            sandbox3d_workspace_undock_panel(
+                &state->workspace.model,
+                panel_id,
+                bounds,
+                framebuffer_width,
+                framebuffer_height);
+            sandbox3d_set_statusf(state, false, false, "%s is floating. Drag its title or use docking buttons.", sandbox3d_workspace_panel_name(panel_id));
+        }
+        return;
+    }
+
+    henka_ui_label(state->ui, bounds.x + 94.0f, bounds.y + 10.0f, 1.0f, "drag");
+    snprintf(button_id, sizeof(button_id), "dock_left_%d", (int)panel_id);
+    if (henka_ui_button(state->ui, button_id, (henka_ui_rect){bounds.x + bounds.width - 158.0f, bounds.y + 4.0f, 34.0f, 22.0f}, "L"))
+    {
+        sandbox3d_dock_workspace_panel(state, panel_id, SANDBOX3D_WORKSPACE_DOCK_LEFT);
+    }
+    snprintf(button_id, sizeof(button_id), "dock_right_%d", (int)panel_id);
+    if (henka_ui_button(state->ui, button_id, (henka_ui_rect){bounds.x + bounds.width - 120.0f, bounds.y + 4.0f, 34.0f, 22.0f}, "R"))
+    {
+        sandbox3d_dock_workspace_panel(state, panel_id, SANDBOX3D_WORKSPACE_DOCK_RIGHT);
+    }
+    snprintf(button_id, sizeof(button_id), "dock_home_%d", (int)panel_id);
+    if (henka_ui_button(state->ui, button_id, (henka_ui_rect){bounds.x + bounds.width - 82.0f, bounds.y + 4.0f, 74.0f, 22.0f}, "Home"))
+    {
+        sandbox3d_dock_workspace_panel(state, panel_id, panel->default_dock);
+    }
+}
+
+static void sandbox3d_draw_workspace_affordances(sandbox3d_state* state, const sandbox3d_workspace_layout* layout)
+{
+    const sandbox3d_workspace_panel* panel;
+    henka_ui_rect bounds;
+    int index;
+
+    if (state == NULL || layout == NULL || state->ui == NULL)
+    {
+        return;
+    }
+
+    if (layout->left_splitter.width > 0.0f)
+    {
+        henka_ui_overlay_rect(state->ui, layout->left_splitter, (henka_vec4){0.20f, 0.40f, 0.60f, 0.90f});
+    }
+    if (layout->right_splitter.width > 0.0f)
+    {
+        henka_ui_overlay_rect(state->ui, layout->right_splitter, (henka_vec4){0.20f, 0.40f, 0.60f, 0.90f});
+    }
+
+    if (state->workspace.model.active_drag_panel != SANDBOX3D_WORKSPACE_PANEL_NONE)
+    {
+        bounds = state->workspace.model.active_dock_target == SANDBOX3D_WORKSPACE_DOCK_LEFT
+            ? layout->left_dock
+            : layout->right_dock;
+        if (state->workspace.model.active_dock_target != SANDBOX3D_WORKSPACE_DOCK_FLOATING &&
+            bounds.width > 0.0f)
+        {
+            henka_ui_overlay_rect(state->ui, bounds, (henka_vec4){0.10f, 0.42f, 0.62f, 0.22f});
+        }
+    }
+
+    for (index = 0; index < SANDBOX3D_WORKSPACE_PANEL_COUNT; ++index)
+    {
+        if (!sandbox3d_workspace_panel_visible(state, (sandbox3d_workspace_panel_id)index))
+        {
+            continue;
+        }
+        panel = sandbox3d_workspace_get_panel_const(&state->workspace.model, (sandbox3d_workspace_panel_id)index);
+        if (panel == NULL || panel->dock != SANDBOX3D_WORKSPACE_DOCK_FLOATING)
+        {
+            continue;
+        }
+        bounds = sandbox3d_workspace_resize_rect(sandbox3d_get_panel_rect(layout, (sandbox3d_workspace_panel_id)index));
+        henka_ui_overlay_rect(
+            state->ui,
+            bounds,
+            state->workspace.model.active_resize_panel == (sandbox3d_workspace_panel_id)index
+                ? (henka_vec4){0.96f, 0.72f, 0.18f, 1.0f}
+                : (henka_vec4){0.26f, 0.55f, 0.72f, 1.0f});
+    }
 }
 
 static void sandbox3d_draw_section_heading(henka_ui_context* ui, float x, float y, const char* title)
@@ -3531,8 +4004,10 @@ static void sandbox3d_draw_viewport_debug_strip(
 {
     char fit_first_row[160];
     char fit_second_row[192];
+    char fit_third_row[192];
     char first_row[160];
     char second_row[192];
+    char third_row[192];
     char selected_text[32];
     const char* hover_axis;
     const char* selected_name;
@@ -3565,9 +4040,25 @@ static void sandbox3d_draw_viewport_debug_strip(
         state->diagnostics.dragging ? "Yes" : "No",
         (unsigned int)state->diagnostics.drag_target_entity,
         sandbox3d_interaction_reject_reason_to_string(state->diagnostics.last_reject_reason));
+    snprintf(
+        third_row,
+        sizeof(third_row),
+        "P:%s | Move:%s | Size:%s | Dock:%s | WS:%s",
+        sandbox3d_workspace_panel_name(state->diagnostics.hovered_panel),
+        sandbox3d_workspace_panel_name(state->diagnostics.active_panel_drag),
+        state->diagnostics.active_workspace_resize == SANDBOX3D_WORKSPACE_RESIZE_LEFT_DOCK
+            ? "Left Dock"
+            : (state->diagnostics.active_workspace_resize == SANDBOX3D_WORKSPACE_RESIZE_RIGHT_DOCK
+                ? "Right Dock"
+                : sandbox3d_workspace_panel_name(state->diagnostics.active_panel_resize)),
+        state->workspace.model.active_drag_panel == SANDBOX3D_WORKSPACE_PANEL_NONE
+            ? "None"
+            : sandbox3d_workspace_dock_name(state->workspace.model.active_dock_target),
+        state->diagnostics.last_workspace_action);
     max_characters = bounds.width > 24.0f ? (size_t)((bounds.width - 16.0f) / 6.0f) : 4U;
     sandbox3d_truncate_text(first_row, fit_first_row, sizeof(fit_first_row), max_characters);
     sandbox3d_truncate_text(second_row, fit_second_row, sizeof(fit_second_row), max_characters);
+    sandbox3d_truncate_text(third_row, fit_third_row, sizeof(fit_third_row), max_characters);
 
     henka_ui_overlay_rect(state->ui, bounds, (henka_vec4){0.05f, 0.08f, 0.12f, 0.94f});
     henka_ui_overlay_rect(
@@ -3576,6 +4067,7 @@ static void sandbox3d_draw_viewport_debug_strip(
         (henka_vec4){0.22f, 0.36f, 0.56f, 1.0f});
     henka_ui_label(state->ui, bounds.x + 8.0f, bounds.y + 8.0f, 1.0f, fit_first_row);
     henka_ui_label(state->ui, bounds.x + 8.0f, bounds.y + 24.0f, 1.0f, fit_second_row);
+    henka_ui_label(state->ui, bounds.x + 8.0f, bounds.y + 40.0f, 1.0f, fit_third_row);
 }
 
 static void sandbox3d_draw_panel_recall_hint(henka_ui_context* ui, henka_viewport viewport)
@@ -3658,6 +4150,7 @@ static void sandbox3d_draw_controls_panel(
     inspect_mode = layout_mode == SANDBOX3D_LAYOUT_INSPECT;
     full_mode = layout_mode == SANDBOX3D_LAYOUT_FULL;
     henka_ui_panel(state->ui, panel_bounds, "Controls");
+    sandbox3d_draw_panel_workspace_controls(engine, state, layout, SANDBOX3D_WORKSPACE_PANEL_CONTROLS);
     if (henka_ui_tab(state->ui, "controls_page_main", (henka_ui_rect){x_left, panel_bounds.y + 38.0f, half_button_width, 24.0f}, "Main", controls_page == 0))
     {
         state->paging.controls_page = 0;
@@ -3866,7 +4359,7 @@ static void sandbox3d_draw_controls_panel(
         if (henka_ui_button(state->ui, "reset_layout", (henka_ui_rect){x_middle, y, half_button_width, 28.0f}, "Reset Layout"))
         {
             sandbox3d_reset_workspace_layout(state);
-            sandbox3d_set_statusf(state, false, true, "Layout reset to View.");
+            sandbox3d_set_statusf(state, false, true, "Layout reset to View. Panels redocked and dock sizes restored.");
             sandbox3d_print_layout_mode(state, false);
         }
         y += 34.0f;
@@ -3892,6 +4385,7 @@ static void sandbox3d_draw_controls_panel(
 }
 
 static void sandbox3d_draw_scene_objects_panel(
+    henka_engine* engine,
     sandbox3d_state* state,
     const sandbox3d_workspace_layout* layout)
 {
@@ -3910,7 +4404,7 @@ static void sandbox3d_draw_scene_objects_panel(
     size_t descriptor_index;
     size_t visible_index;
 
-    if (state == NULL || layout == NULL || state->scene == NULL || !sandbox3d_workspace_shows_scene_panel(state))
+    if (engine == NULL || state == NULL || layout == NULL || state->scene == NULL || !sandbox3d_workspace_shows_scene_panel(state))
     {
         return;
     }
@@ -3921,6 +4415,7 @@ static void sandbox3d_draw_scene_objects_panel(
         return;
     }
     henka_ui_panel(state->ui, panel_bounds, "Scene Objects");
+    sandbox3d_draw_panel_workspace_controls(engine, state, layout, SANDBOX3D_WORKSPACE_PANEL_SCENE_OBJECTS);
     henka_ui_label(state->ui, panel_bounds.x + 14.0f, panel_bounds.y + 38.0f, 1.0f, "Current scene examples");
 
     selectable_count = 0U;
@@ -4019,6 +4514,7 @@ static void sandbox3d_draw_scene_objects_panel(
 }
 
 static void sandbox3d_draw_object_details_panel(
+    henka_engine* engine,
     sandbox3d_state* state,
     const sandbox3d_workspace_layout* layout)
 {
@@ -4043,7 +4539,7 @@ static void sandbox3d_draw_object_details_panel(
     float action_button_width;
 
     bool compact_mode;
-    if (state == NULL || layout == NULL || !sandbox3d_workspace_shows_details_panel(state))
+    if (engine == NULL || state == NULL || layout == NULL || !sandbox3d_workspace_shows_details_panel(state))
     {
         return;
     }
@@ -4054,6 +4550,7 @@ static void sandbox3d_draw_object_details_panel(
         return;
     }
     henka_ui_panel(state->ui, panel_bounds, "Object Details");
+    sandbox3d_draw_panel_workspace_controls(engine, state, layout, SANDBOX3D_WORKSPACE_PANEL_OBJECT_DETAILS);
     compact_mode = true;
     action_button_width = (panel_bounds.width - 42.0f) * 0.5f;
 
@@ -4229,11 +4726,7 @@ static void sandbox3d_draw_utility_panel(
     snprintf(package_text, sizeof(package_text), "%s", henka_engine_get_package_mode_label(diagnostics.package_mode));
 
     henka_ui_panel(state->ui, panel_bounds, "Utility");
-    henka_ui_status_chip(
-        state->ui,
-        (henka_ui_rect){panel_bounds.x + panel_bounds.width - 96.0f, panel_bounds.y + 7.0f, 78.0f, 18.0f},
-        sandbox3d_get_utility_label(state->workspace.active_utility),
-        false);
+    sandbox3d_draw_panel_workspace_controls(engine, state, layout, SANDBOX3D_WORKSPACE_PANEL_UTILITY);
     if (henka_ui_tab(state->ui, "utility_tab_help", (henka_ui_rect){x_left, y_start, button_width, 24.0f}, "Help", state->workspace.active_utility == SANDBOX3D_UTILITY_HELP))
     {
         sandbox3d_set_active_utility(state, SANDBOX3D_UTILITY_HELP);
@@ -4378,10 +4871,16 @@ static void sandbox3d_draw_utility_panel(
                 (unsigned int)state->diagnostics.drag_target_entity);
             sandbox3d_draw_value_row(state->ui, x_left, y_start + 382.0f, panel_bounds.width - 28.0f, "Drag", row_value);
             sandbox3d_draw_value_row(state->ui, x_left, y_start + 408.0f, panel_bounds.width - 28.0f, "Reject", sandbox3d_interaction_reject_reason_to_string(state->diagnostics.last_reject_reason));
-            sandbox3d_draw_value_row(state->ui, x_left, y_start + 434.0f, panel_bounds.width - 28.0f, "Last Drag", state->diagnostics.last_drag_result);
+            snprintf(
+                row_value,
+                sizeof(row_value),
+                "%s / %s",
+                sandbox3d_workspace_panel_name(state->diagnostics.hovered_panel),
+                sandbox3d_workspace_panel_name(state->diagnostics.active_panel_drag));
+            sandbox3d_draw_value_row(state->ui, x_left, y_start + 434.0f, panel_bounds.width - 28.0f, "Panel/Move", row_value);
             sandbox3d_draw_value_row(state->ui, x_left, y_start + 460.0f, panel_bounds.width - 28.0f, "Action", state->diagnostics.last_action_command);
             sandbox3d_draw_value_row(state->ui, x_left, y_start + 486.0f, panel_bounds.width - 28.0f, "Result", state->diagnostics.last_action_result);
-            sandbox3d_draw_value_row(state->ui, x_left, y_start + 512.0f, panel_bounds.width - 28.0f, "Success", state->diagnostics.last_success_result);
+            sandbox3d_draw_value_row(state->ui, x_left, y_start + 512.0f, panel_bounds.width - 28.0f, "Workspace", state->diagnostics.last_workspace_action);
             break;
 
         case SANDBOX3D_UTILITY_TRANSFORM_QA:
@@ -4487,9 +4986,12 @@ static void sandbox3d_build_ui(henka_engine* engine, sandbox3d_state* state)
     char* settings_path;
     float fps;
     float milliseconds;
+    int panel_index;
     henka_result result;
     henka_ui_frame_desc frame_desc;
     sandbox3d_workspace_layout layout;
+    const sandbox3d_workspace_panel* workspace_panel;
+    unsigned int z_order;
 
     if (engine == NULL || state == NULL || state->ui == NULL)
     {
@@ -4535,24 +5037,60 @@ static void sandbox3d_build_ui(henka_engine* engine, sandbox3d_state* state)
         sandbox3d_draw_scene_viewport_frame(state->ui, layout.scene_frame);
         sandbox3d_draw_gizmo_overlay(engine, state, layout.scene_viewport);
         sandbox3d_draw_viewport_debug_strip(engine, state, layout.debug_strip);
-        sandbox3d_draw_controls_panel(
-            engine,
-            state,
-            &layout);
-        sandbox3d_draw_scene_objects_panel(state, &layout);
-        sandbox3d_draw_object_details_panel(state, &layout);
-        sandbox3d_draw_utility_panel(
-            engine,
-            state,
-            &layout,
-            asset_path_text,
-            user_path_text,
-            settings_path_text,
-            save_path_text,
-            capture_text,
-            fps_text,
-            frame_desc.framebuffer_width,
-            frame_desc.framebuffer_height);
+        if (!sandbox3d_workspace_panel_is_floating(&state->workspace.model, SANDBOX3D_WORKSPACE_PANEL_CONTROLS))
+        {
+            sandbox3d_draw_controls_panel(engine, state, &layout);
+        }
+        if (!sandbox3d_workspace_panel_is_floating(&state->workspace.model, SANDBOX3D_WORKSPACE_PANEL_SCENE_OBJECTS))
+        {
+            sandbox3d_draw_scene_objects_panel(engine, state, &layout);
+        }
+        if (!sandbox3d_workspace_panel_is_floating(&state->workspace.model, SANDBOX3D_WORKSPACE_PANEL_OBJECT_DETAILS))
+        {
+            sandbox3d_draw_object_details_panel(engine, state, &layout);
+        }
+        if (!sandbox3d_workspace_panel_is_floating(&state->workspace.model, SANDBOX3D_WORKSPACE_PANEL_UTILITY))
+        {
+            sandbox3d_draw_utility_panel(
+                engine, state, &layout, asset_path_text, user_path_text, settings_path_text,
+                save_path_text, capture_text, fps_text, frame_desc.framebuffer_width, frame_desc.framebuffer_height);
+        }
+
+        for (z_order = 1U; z_order < state->workspace.model.next_z_order; ++z_order)
+        {
+            for (panel_index = 0; panel_index < SANDBOX3D_WORKSPACE_PANEL_COUNT; ++panel_index)
+            {
+                workspace_panel = sandbox3d_workspace_get_panel_const(&state->workspace.model, (sandbox3d_workspace_panel_id)panel_index);
+                if (workspace_panel == NULL ||
+                    workspace_panel->dock != SANDBOX3D_WORKSPACE_DOCK_FLOATING ||
+                    workspace_panel->z_order != z_order ||
+                    !sandbox3d_workspace_panel_visible(state, (sandbox3d_workspace_panel_id)panel_index))
+                {
+                    continue;
+                }
+                switch ((sandbox3d_workspace_panel_id)panel_index)
+                {
+                    case SANDBOX3D_WORKSPACE_PANEL_CONTROLS:
+                        sandbox3d_draw_controls_panel(engine, state, &layout);
+                        break;
+                    case SANDBOX3D_WORKSPACE_PANEL_SCENE_OBJECTS:
+                        sandbox3d_draw_scene_objects_panel(engine, state, &layout);
+                        break;
+                    case SANDBOX3D_WORKSPACE_PANEL_OBJECT_DETAILS:
+                        sandbox3d_draw_object_details_panel(engine, state, &layout);
+                        break;
+                    case SANDBOX3D_WORKSPACE_PANEL_UTILITY:
+                        sandbox3d_draw_utility_panel(
+                            engine, state, &layout, asset_path_text, user_path_text, settings_path_text,
+                            save_path_text, capture_text, fps_text, frame_desc.framebuffer_width, frame_desc.framebuffer_height);
+                        break;
+                    case SANDBOX3D_WORKSPACE_PANEL_NONE:
+                    default:
+                        break;
+                }
+            }
+        }
+        sandbox3d_draw_workspace_affordances(state, &layout);
 
         if (state->ui_visibility_report_pending)
         {
@@ -5092,14 +5630,18 @@ static void sandbox3d_update(henka_engine* engine, double delta_seconds, void* u
     bool navigation_active;
     bool ui_toggled_with_f4;
     bool ui_visible;
+    bool workspace_input_active;
     int framebuffer_height;
     int framebuffer_width;
     sandbox3d_workspace_layout layout;
     sandbox3d_state* state;
 
     state = (sandbox3d_state*)user_data;
+    framebuffer_width = 1280;
+    framebuffer_height = 720;
     ui_toggled_with_f4 = false;
     navigation_active = false;
+    workspace_input_active = false;
 
     if (henka_input_was_key_pressed(engine, HENKA_KEY_H))
     {
@@ -5115,6 +5657,7 @@ static void sandbox3d_update(henka_engine* engine, double delta_seconds, void* u
     {
         ui_visible = !henka_ui_is_visible(state->ui);
         sandbox3d_clear_gizmo_drag(state, true);
+        sandbox3d_workspace_end_interaction(&state->workspace.model);
         henka_ui_set_visible(state->ui, ui_visible);
         if (ui_visible)
         {
@@ -5134,6 +5677,7 @@ static void sandbox3d_update(henka_engine* engine, double delta_seconds, void* u
     if (henka_input_action_was_pressed(engine, HENKA_INPUT_ACTION_CHANGE_LAYOUT) && state->ui != NULL)
     {
         sandbox3d_clear_gizmo_drag(state, true);
+        sandbox3d_workspace_end_interaction(&state->workspace.model);
         state->workspace.layout_mode = sandbox3d_cycle_layout_mode(state->workspace.layout_mode);
         if (!henka_ui_is_visible(state->ui))
         {
@@ -5215,6 +5759,25 @@ static void sandbox3d_update(henka_engine* engine, double delta_seconds, void* u
     mouse_wheel_delta = henka_input_get_mouse_wheel_delta(engine);
     framebuffer_mouse_position = mouse_position;
     sandbox3d_try_get_mouse_framebuffer_position(engine, &framebuffer_mouse_position);
+    if (ui_visible && !henka_engine_is_mouse_captured(engine))
+    {
+        workspace_input_active = sandbox3d_handle_workspace_input(
+            engine,
+            state,
+            framebuffer_mouse_position,
+            framebuffer_width > 0 ? framebuffer_width : 1280,
+            framebuffer_height > 0 ? framebuffer_height : 720);
+        if (workspace_input_active)
+        {
+            layout = sandbox3d_get_workspace_layout(
+                state,
+                framebuffer_width > 0 ? framebuffer_width : 1280,
+                framebuffer_height > 0 ? framebuffer_height : 720);
+            state->frame_layout = layout;
+            henka_engine_set_scene_viewport(engine, layout.scene_viewport);
+            henka_camera_set_aspect_ratio(&state->camera, henka_viewport_get_aspect_ratio(layout.scene_viewport));
+        }
+    }
 
     if (!ui_visible && henka_engine_is_mouse_captured(engine))
     {
@@ -5230,7 +5793,7 @@ static void sandbox3d_update(henka_engine* engine, double delta_seconds, void* u
         sandbox3d_record_reject_reason(state, SANDBOX3D_INTERACTION_REJECT_MOUSE_CAPTURE_ACTIVE, true);
     }
 
-    if (!henka_engine_is_mouse_captured(engine))
+    if (!henka_engine_is_mouse_captured(engine) && !workspace_input_active)
     {
         const bool mouse_in_viewport = henka_viewport_contains_point(state->frame_layout.scene_viewport, framebuffer_mouse_position);
         const bool ui_wants_mouse = sandbox3d_ui_owns_mouse_at_point(state, framebuffer_mouse_position);

@@ -90,7 +90,7 @@ Henka now also includes a small docked workspace helper for viewport-first tools
 - window-point to framebuffer-point conversion for scene-space interaction paths
 
 The sandbox uses this to keep the scene in its own viewport while panels stay in separate docked regions.
-The current sandbox also layers safe panel paging on top of that docked layout so scene-first modes stay readable without treating the workspace as a floating editor yet.
+The current sandbox also layers safe panel paging and session-only floating panel placement on top of that docked layout so scene-first modes remain readable while workspace movement is evaluated.
 The sandbox now also uses explicit viewport tool modes on top of that viewport math so selection, orbit, pan, and gizmo manipulation can route through one visible user-facing tool state instead of relying only on hidden mouse modifiers.
 
 ### Viewport interaction testing
@@ -213,6 +213,7 @@ Henka still uses console logging for development and troubleshooting, but the en
 The sandbox uses that data in its in-window diagnostics utility so normal inspection does not depend on the console.
 That diagnostics surface now also includes sandbox-level interaction state such as viewport tool mode, cursor ownership, selected object validity, gizmo model validity, hovered handle, active drag target, last rejected interaction reason, and last Action API result.
 The sandbox keeps the essential gate state in a compact Scene View strip during interaction, while the fuller Diagnostics and Transform QA utility views remain available for deeper packaged testing.
+The sandbox workspace now tracks docked or floating panel rectangles, z order, title dragging, floating resize grips, and dock splitter interactions in session state. The same visible rectangles are fed back into mouse ownership before viewport tools run.
 
 ### Package modes
 

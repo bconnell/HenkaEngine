@@ -60,6 +60,15 @@ void henka_test_workspace(void)
     HENKA_TEST_ASSERT(henka_viewport_contains_point(layout.scene_viewport, (henka_vec2){layout.right_dock.x + 10.0f, layout.right_dock.y + 10.0f}) == false);
     HENKA_TEST_ASSERT(layout.scene_viewport.width >= 400);
     HENKA_TEST_ASSERT(layout.scene_viewport.height >= 250);
+    {
+        const int default_viewport_width = layout.scene_viewport.width;
+        desc.left_dock_width += 48.0f;
+        result = henka_workspace_layout_docked(&desc, &layout);
+        HENKA_TEST_ASSERT(result == HENKA_SUCCESS);
+        HENKA_TEST_ASSERT(layout.scene_viewport.width < default_viewport_width);
+        HENKA_TEST_ASSERT(layout.scene_viewport.width >= 400);
+        desc.left_dock_width -= 48.0f;
+    }
 
     desc.framebuffer_width = 720;
     desc.framebuffer_height = 420;
