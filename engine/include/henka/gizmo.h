@@ -106,6 +106,37 @@ typedef struct henka_gizmo_drag_state
     henka_gizmo_mode active_mode;
 } henka_gizmo_drag_state;
 
+typedef enum henka_gizmo_overlay_primitive_type
+{
+    HENKA_GIZMO_OVERLAY_PRIMITIVE_NONE = 0,
+    HENKA_GIZMO_OVERLAY_PRIMITIVE_LINE,
+    HENKA_GIZMO_OVERLAY_PRIMITIVE_RECT,
+    HENKA_GIZMO_OVERLAY_PRIMITIVE_POLYLINE
+} henka_gizmo_overlay_primitive_type;
+
+typedef struct henka_gizmo_overlay_primitive
+{
+    bool visible;
+    henka_gizmo_axis axis;
+    henka_gizmo_handle_type handle_type;
+    henka_gizmo_overlay_primitive_type type;
+    henka_vec2 start;
+    henka_vec2 end;
+    henka_vec2 center;
+    henka_vec2 half_extents;
+    size_t point_count;
+    henka_vec2 points[HENKA_GIZMO_RING_SAMPLES];
+} henka_gizmo_overlay_primitive;
+
+typedef struct henka_gizmo_overlay_model
+{
+    bool valid;
+    henka_entity target_entity;
+    henka_gizmo_mode mode;
+    size_t primitive_count;
+    henka_gizmo_overlay_primitive primitives[HENKA_GIZMO_MAX_HANDLES];
+} henka_gizmo_overlay_model;
+
 henka_result henka_gizmo_get_axis_direction(henka_gizmo_axis axis, henka_vec3* out_direction);
 const char* henka_gizmo_mode_to_string(henka_gizmo_mode mode);
 const char* henka_gizmo_axis_to_string(henka_gizmo_axis axis);
@@ -179,6 +210,9 @@ henka_result henka_gizmo_build_model(
 henka_result henka_gizmo_hit_test_model(
     const henka_gizmo_model* model,
     henka_gizmo_handle_hit* out_hit);
+henka_result henka_gizmo_build_overlay_model(
+    const henka_gizmo_model* model,
+    henka_gizmo_overlay_model* out_overlay);
 henka_result henka_gizmo_begin_drag(
     const henka_gizmo_model* model,
     const henka_gizmo_handle_hit* hit,

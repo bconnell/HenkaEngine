@@ -891,6 +891,25 @@ static bool sandbox3d_gizmo_hit_test_model(
     return true;
 }
 
+static henka_vec2 sandbox3d_viewport_local_to_framebuffer_point(henka_viewport viewport, henka_vec2 point)
+{
+    return (henka_vec2){(float)viewport.x + point.x, (float)viewport.y + point.y};
+}
+
+static henka_ui_rect sandbox3d_viewport_local_box_to_framebuffer_rect(
+    henka_viewport viewport,
+    henka_vec2 center,
+    henka_vec2 half_extents)
+{
+    return (henka_ui_rect)
+    {
+        (float)viewport.x + center.x - half_extents.x,
+        (float)viewport.y + center.y - half_extents.y,
+        half_extents.x * 2.0f,
+        half_extents.y * 2.0f
+    };
+}
+
 static henka_quat sandbox3d_get_axis_rotation(sandbox3d_gizmo_axis axis)
 {
     switch (axis)
@@ -941,6 +960,112 @@ static henka_vec4 sandbox3d_get_gizmo_color(
     }
 
     return color;
+}
+
+static void sandbox3d_hide_gizmo_helpers(sandbox3d_state* state)
+{
+    size_t index;
+
+    if (state == NULL || state->scene == NULL)
+    {
+        return;
+    }
+
+    for (index = 0U; index < 3U; ++index)
+    {
+        henka_scene_set_entity_visible(state->scene, state->gizmo_render.axis_entities[index], false);
+        henka_scene_set_entity_visible(state->scene, state->gizmo_render.axis_handle_entities[index], false);
+        henka_scene_set_entity_visible(state->scene, state->gizmo_render.ring_entities[index], false);
+    }
+
+    henka_scene_set_entity_visible(state->scene, state->gizmo_render.center_entity, false);
+}
+
+static void sandbox3d_draw_gizmo_overlay(henka_engine* engine, sandbox3d_state* state, henka_viewport viewport)
+{
+    henka_gizmo_model model;
+    henka_gizmo_overlay_model overlay;
+    sandbox3d_gizmo_axis active_axis;
+    sandbox3d_gizmo_axis hover_axis;
+    size_t index;
+
+    if (engine == NULL || state == NULL || state->ui == NULL || !henka_viewport_is_valid(viewport))
+    {
+        return;
+    }
+
+    if (state->gizmo.mode == SANDBOX3D_GIZMO_MODE_SELECT ||
+        !sandbox3d_try_build_gizmo_model(engine, state, &model) ||
+        henka_gizmo_build_overlay_model(&model, &overlay) != HENKA_SUCCESS)
+    {
+        return;
+    }
+
+    active_axis = state->gizmo.drag.dragging ? (sandbox3d_gizmo_axis)state->gizmo.drag.active_axis : SANDBOX3D_GIZMO_AXIS_NONE;
+    hover_axis = state->gizmo.hover_axis;
+    for (index = 0U; index < overlay.primitive_count; ++index)
+    {
+        const henka_gizmo_overlay_primitive* primitive = &overlay.primitives[index];
+        const sandbox3d_gizmo_axis primitive_axis = (sandbox3d_gizmo_axis)primitive->axis;
+        const henka_vec4 color = sandbox3d_get_gizmo_color(primitive_axis, hover_axis, active_axis);
+        const float thickness = primitive_axis == active_axis ? 5.0f : (primitive_axis == hover_axis ? 4.0f : 3.0f);
+
+        if (!primitive->visible)
+        {
+            continue;
+        }
+
+        switch (primitive->type)
+        {
+            case HENKA_GIZMO_OVERLAY_PRIMITIVE_LINE:
+                henka_ui_overlay_line(
+                    state->ui,
+                    sandbox3d_viewport_local_to_framebuffer_point(viewport, primitive->start),
+                    sandbox3d_viewport_local_to_framebuffer_point(viewport, primitive->end),
+                    thickness,
+                    color);
+                break;
+
+            case HENKA_GIZMO_OVERLAY_PRIMITIVE_RECT:
+            {
+                const henka_ui_rect rect = sandbox3d_viewport_local_box_to_framebuffer_rect(
+                    viewport,
+                    primitive->center,
+                    primitive->half_extents);
+                const henka_vec4 fill = (henka_vec4){color.x, color.y, color.z, primitive_axis == active_axis ? 0.95f : 0.82f};
+                const henka_vec4 border = (henka_vec4){0.98f, 0.98f, 0.99f, 0.95f};
+                const henka_vec2 top_left = (henka_vec2){rect.x, rect.y};
+                const henka_vec2 top_right = (henka_vec2){rect.x + rect.width, rect.y};
+                const henka_vec2 bottom_left = (henka_vec2){rect.x, rect.y + rect.height};
+                const henka_vec2 bottom_right = (henka_vec2){rect.x + rect.width, rect.y + rect.height};
+
+                henka_ui_overlay_rect(state->ui, rect, fill);
+                henka_ui_overlay_line(state->ui, top_left, top_right, 2.0f, border);
+                henka_ui_overlay_line(state->ui, top_right, bottom_right, 2.0f, border);
+                henka_ui_overlay_line(state->ui, bottom_right, bottom_left, 2.0f, border);
+                henka_ui_overlay_line(state->ui, bottom_left, top_left, 2.0f, border);
+                break;
+            }
+
+            case HENKA_GIZMO_OVERLAY_PRIMITIVE_POLYLINE:
+            {
+                henka_vec2 framebuffer_points[HENKA_GIZMO_RING_SAMPLES];
+                size_t point_index;
+
+                for (point_index = 0U; point_index < primitive->point_count && point_index < HENKA_GIZMO_RING_SAMPLES; ++point_index)
+                {
+                    framebuffer_points[point_index] = sandbox3d_viewport_local_to_framebuffer_point(viewport, primitive->points[point_index]);
+                }
+
+                henka_ui_overlay_polyline(state->ui, framebuffer_points, primitive->point_count, thickness, color);
+                break;
+            }
+
+            case HENKA_GIZMO_OVERLAY_PRIMITIVE_NONE:
+            default:
+                break;
+        }
+    }
 }
 
 static henka_result sandbox3d_get_settings_path(const henka_engine* engine, char** out_path)
@@ -2268,133 +2393,7 @@ static void sandbox3d_advance_panel_paging(sandbox3d_state* state, sandbox3d_pan
 
 static void sandbox3d_update_gizmo_rendering(sandbox3d_state* state)
 {
-    const sandbox3d_object_descriptor* descriptor;
-    henka_transform selected_transform;
-    henka_transform transform;
-    float gizmo_size;
-    size_t index;
-    bool selected_visible;
-    sandbox3d_gizmo_axis active_axis;
-    sandbox3d_gizmo_axis hover_axis;
-
-    if (state == NULL || state->scene == NULL)
-    {
-        return;
-    }
-
-    active_axis = state->gizmo.drag.dragging ? (sandbox3d_gizmo_axis)state->gizmo.drag.active_axis : SANDBOX3D_GIZMO_AXIS_NONE;
-    hover_axis = state->gizmo.hover_axis;
-    descriptor = sandbox3d_get_selected_descriptor(state);
-    selected_visible = descriptor != NULL && henka_scene_is_entity_visible(state->scene, descriptor->entity);
-    if (descriptor == NULL ||
-        !selected_visible ||
-        sandbox3d_entity_get_transform(state->scene, descriptor->entity, &selected_transform) != HENKA_SUCCESS)
-    {
-        sandbox3d_clear_gizmo_drag(state, true);
-        for (index = 0U; index < 3U; ++index)
-        {
-            henka_scene_set_entity_visible(state->scene, state->gizmo_render.axis_entities[index], false);
-            henka_scene_set_entity_visible(state->scene, state->gizmo_render.axis_handle_entities[index], false);
-            henka_scene_set_entity_visible(state->scene, state->gizmo_render.ring_entities[index], false);
-        }
-        henka_scene_set_entity_visible(state->scene, state->gizmo_render.center_entity, false);
-        return;
-    }
-
-    gizmo_size = sandbox3d_get_gizmo_size(state, selected_transform.position);
-    for (index = 0U; index < 3U; ++index)
-    {
-        sandbox3d_gizmo_axis axis;
-        henka_vec3 axis_direction;
-        henka_vec4 color;
-        henka_material material;
-
-        axis = (sandbox3d_gizmo_axis)(index + 1U);
-        sandbox3d_gizmo_get_axis_direction(axis, &axis_direction);
-        color = sandbox3d_get_gizmo_color(axis, hover_axis, active_axis);
-        material = sandbox3d_make_gizmo_material(state, color);
-
-        transform = henka_transform_identity();
-        transform.position = selected_transform.position;
-        transform.rotation = sandbox3d_get_axis_rotation(axis);
-        transform.scale = (henka_vec3)
-        {
-            gizmo_size,
-            gizmo_size * (axis == active_axis ? 1.18f : (axis == hover_axis ? 1.10f : 1.0f)),
-            gizmo_size * (axis == active_axis ? 1.18f : (axis == hover_axis ? 1.10f : 1.0f))
-        };
-        henka_scene_set_entity_transform(state->scene, state->gizmo_render.axis_entities[index], transform);
-        henka_scene_set_entity_material(state->scene, state->gizmo_render.axis_entities[index], material);
-
-        transform = henka_transform_identity();
-        transform.position = henka_vec3_add(selected_transform.position, henka_vec3_scale(axis_direction, gizmo_size));
-        transform.scale = (henka_vec3)
-        {
-            gizmo_size * (axis == active_axis ? 0.18f : (axis == hover_axis ? 0.16f : 0.14f)),
-            gizmo_size * (axis == active_axis ? 0.18f : (axis == hover_axis ? 0.16f : 0.14f)),
-            gizmo_size * (axis == active_axis ? 0.18f : (axis == hover_axis ? 0.16f : 0.14f))
-        };
-        henka_scene_set_entity_transform(state->scene, state->gizmo_render.axis_handle_entities[index], transform);
-        henka_scene_set_entity_material(state->scene, state->gizmo_render.axis_handle_entities[index], material);
-
-        transform = henka_transform_identity();
-        transform.position = selected_transform.position;
-        transform.rotation = sandbox3d_get_ring_rotation(axis);
-        transform.scale = (henka_vec3)
-        {
-            gizmo_size * (axis == active_axis ? 1.12f : (axis == hover_axis ? 1.06f : 1.0f)),
-            gizmo_size * (axis == active_axis ? 1.12f : (axis == hover_axis ? 1.06f : 1.0f)),
-            gizmo_size * (axis == active_axis ? 1.12f : (axis == hover_axis ? 1.06f : 1.0f))
-        };
-        henka_scene_set_entity_transform(state->scene, state->gizmo_render.ring_entities[index], transform);
-        henka_scene_set_entity_material(state->scene, state->gizmo_render.ring_entities[index], material);
-
-        henka_scene_set_entity_visible(
-            state->scene,
-            state->gizmo_render.axis_entities[index],
-            state->gizmo.mode == SANDBOX3D_GIZMO_MODE_MOVE || state->gizmo.mode == SANDBOX3D_GIZMO_MODE_SELECT);
-        henka_scene_set_entity_visible(
-            state->scene,
-            state->gizmo_render.axis_handle_entities[index],
-            state->gizmo.mode == SANDBOX3D_GIZMO_MODE_MOVE);
-        henka_scene_set_entity_visible(
-            state->scene,
-            state->gizmo_render.ring_entities[index],
-            state->gizmo.mode == SANDBOX3D_GIZMO_MODE_ROTATE);
-    }
-
-    transform = henka_transform_identity();
-    transform.position = selected_transform.position;
-    if (state->gizmo.mode == SANDBOX3D_GIZMO_MODE_SCALE)
-    {
-        transform.scale = (henka_vec3){gizmo_size * 0.24f, gizmo_size * 0.24f, gizmo_size * 0.24f};
-        henka_scene_set_entity_material(
-            state->scene,
-            state->gizmo_render.center_entity,
-            sandbox3d_make_gizmo_material(
-                state,
-                sandbox3d_get_gizmo_color(SANDBOX3D_GIZMO_AXIS_UNIFORM, hover_axis, active_axis)));
-        henka_scene_set_entity_visible(state->scene, state->gizmo_render.center_entity, true);
-    }
-    else if (state->gizmo.mode == SANDBOX3D_GIZMO_MODE_SELECT)
-    {
-        transform.scale = (henka_vec3){gizmo_size * 0.10f, gizmo_size * 0.10f, gizmo_size * 0.10f};
-        henka_scene_set_entity_material(
-            state->scene,
-            state->gizmo_render.center_entity,
-            sandbox3d_make_gizmo_material(state, (henka_vec4){0.95f, 0.95f, 0.95f, 1.0f}));
-        henka_scene_set_entity_visible(state->scene, state->gizmo_render.center_entity, true);
-    }
-    else
-    {
-        transform.scale = (henka_vec3){gizmo_size * 0.08f, gizmo_size * 0.08f, gizmo_size * 0.08f};
-        henka_scene_set_entity_material(
-            state->scene,
-            state->gizmo_render.center_entity,
-            sandbox3d_make_gizmo_material(state, (henka_vec4){0.92f, 0.92f, 0.92f, 1.0f}));
-        henka_scene_set_entity_visible(state->scene, state->gizmo_render.center_entity, true);
-    }
-    henka_scene_set_entity_transform(state->scene, state->gizmo_render.center_entity, transform);
+    sandbox3d_hide_gizmo_helpers(state);
 }
 
 static bool sandbox3d_workspace_layout_is_valid(const sandbox3d_workspace_layout* layout)
@@ -3777,6 +3776,7 @@ static void sandbox3d_build_ui(henka_engine* engine, sandbox3d_state* state)
         snprintf(capture_text, sizeof(capture_text), "Capture: %s", henka_engine_is_mouse_captured(engine) ? "On" : "Off");
         snprintf(fps_text, sizeof(fps_text), "Frame: %.2f ms  FPS: %.1f", milliseconds, fps);
         sandbox3d_draw_scene_viewport_frame(state->ui, layout.scene_frame);
+        sandbox3d_draw_gizmo_overlay(engine, state, layout.scene_viewport);
         sandbox3d_draw_controls_panel(
             engine,
             state,
@@ -3822,6 +3822,7 @@ static void sandbox3d_build_ui(henka_engine* engine, sandbox3d_state* state)
     }
     else
     {
+        sandbox3d_draw_gizmo_overlay(engine, state, layout.scene_viewport);
         sandbox3d_draw_panel_recall_hint(state->ui, layout.scene_viewport);
     }
 

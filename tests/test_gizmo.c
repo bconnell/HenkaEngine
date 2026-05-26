@@ -16,6 +16,7 @@ void henka_test_gizmo(void)
     henka_gizmo_drag_state drag;
     henka_gizmo_handle_hit hit;
     henka_gizmo_model model;
+    henka_gizmo_overlay_model overlay;
     henka_gizmo_snap_settings snap;
     henka_scene* scene;
     float snapped;
@@ -25,6 +26,7 @@ void henka_test_gizmo(void)
     float value;
     henka_gizmo_axis axis;
     size_t handle_index;
+    size_t overlay_index;
     henka_vec2 ring_points[5];
     henka_vec2 screen_point;
     henka_viewport viewport;
@@ -202,9 +204,20 @@ void henka_test_gizmo(void)
         cube,
         transform,
         HENKA_GIZMO_MODE_MOVE,
+        (henka_vec2){(float)viewport.x + screen_point.x, (float)viewport.y + screen_point.y},
+        1.0f,
+        &model) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_gizmo_build_model(
+        &camera,
+        viewport,
+        cube,
+        transform,
+        HENKA_GIZMO_MODE_MOVE,
         (henka_vec2){10.0f, 10.0f},
         1.0f,
-        &model) == HENKA_ERROR_INVALID_ARGUMENT);
+        &model) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_gizmo_hit_test_model(&model, &hit) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(!hit.hit);
     HENKA_TEST_ASSERT(henka_gizmo_build_model(
         &camera,
         viewport,
@@ -217,6 +230,32 @@ void henka_test_gizmo(void)
     HENKA_TEST_ASSERT(henka_gizmo_hit_test_model(&model, &hit) == HENKA_SUCCESS);
     HENKA_TEST_ASSERT(hit.hit);
     HENKA_TEST_ASSERT(hit.axis == HENKA_GIZMO_AXIS_X);
+    HENKA_TEST_ASSERT(henka_gizmo_build_overlay_model(&model, &overlay) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(overlay.valid);
+    HENKA_TEST_ASSERT(overlay.target_entity == cube);
+    HENKA_TEST_ASSERT(overlay.primitive_count == model.handle_count);
+    overlay_index = 0U;
+    while (overlay_index < overlay.primitive_count &&
+        !(overlay.primitives[overlay_index].axis == HENKA_GIZMO_AXIS_X &&
+            overlay.primitives[overlay_index].handle_type == HENKA_GIZMO_HANDLE_MOVE_AXIS))
+    {
+        overlay_index += 1U;
+    }
+    HENKA_TEST_ASSERT(overlay_index < overlay.primitive_count);
+    HENKA_TEST_ASSERT(overlay.primitives[overlay_index].type == HENKA_GIZMO_OVERLAY_PRIMITIVE_LINE);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(overlay.primitives[overlay_index].start.x, model.handles[0].screen_start.x, 0.001f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(overlay.primitives[overlay_index].end.y, model.handles[0].screen_end.y, 0.001f);
+    overlay_index = 0U;
+    while (overlay_index < overlay.primitive_count &&
+        !(overlay.primitives[overlay_index].axis == HENKA_GIZMO_AXIS_X &&
+            overlay.primitives[overlay_index].handle_type == HENKA_GIZMO_HANDLE_MOVE_BOX))
+    {
+        overlay_index += 1U;
+    }
+    HENKA_TEST_ASSERT(overlay_index < overlay.primitive_count);
+    HENKA_TEST_ASSERT(overlay.primitives[overlay_index].type == HENKA_GIZMO_OVERLAY_PRIMITIVE_RECT);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(overlay.primitives[overlay_index].center.x, model.handles[1].screen_center.x, 0.001f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(overlay.primitives[overlay_index].half_extents.y, model.handles[1].screen_half_extents.y, 0.001f);
     HENKA_TEST_ASSERT(henka_gizmo_begin_drag(&model, &hit, &drag) == HENKA_SUCCESS);
     HENKA_TEST_ASSERT(drag.target_entity == cube);
     HENKA_TEST_ASSERT(henka_gizmo_apply_drag_to_transform(
@@ -270,6 +309,11 @@ void henka_test_gizmo(void)
         model.handles[handle_index].screen_center,
         model.handles[handle_index].screen_half_extents,
         model.handles[handle_index].hit_tolerance));
+    HENKA_TEST_ASSERT(henka_gizmo_build_overlay_model(&model, &overlay) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(overlay.primitive_count == model.handle_count);
+    HENKA_TEST_ASSERT(overlay.primitives[0].type == HENKA_GIZMO_OVERLAY_PRIMITIVE_RECT);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(overlay.primitives[0].center.x, model.handles[handle_index].screen_center.x, 0.001f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(overlay.primitives[0].half_extents.y, model.handles[handle_index].screen_half_extents.y, 0.001f);
     HENKA_TEST_ASSERT(henka_gizmo_begin_drag(&model, &hit, &drag) == HENKA_SUCCESS);
     HENKA_TEST_ASSERT(henka_gizmo_apply_drag_to_transform(
         &drag,
@@ -318,6 +362,23 @@ void henka_test_gizmo(void)
     HENKA_TEST_ASSERT(henka_gizmo_hit_test_model(&model, &hit) == HENKA_SUCCESS);
     HENKA_TEST_ASSERT(hit.hit);
     HENKA_TEST_ASSERT(hit.type == HENKA_GIZMO_HANDLE_ROTATE_RING);
+    HENKA_TEST_ASSERT(henka_gizmo_build_overlay_model(&model, &overlay) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(overlay.primitive_count == model.handle_count);
+    overlay_index = 0U;
+    while (overlay_index < overlay.primitive_count &&
+        !(overlay.primitives[overlay_index].axis == HENKA_GIZMO_AXIS_Y &&
+            overlay.primitives[overlay_index].handle_type == HENKA_GIZMO_HANDLE_ROTATE_RING))
+    {
+        overlay_index += 1U;
+    }
+    HENKA_TEST_ASSERT(overlay_index < overlay.primitive_count);
+    HENKA_TEST_ASSERT(overlay.primitives[overlay_index].type == HENKA_GIZMO_OVERLAY_PRIMITIVE_POLYLINE);
+    HENKA_TEST_ASSERT(overlay.primitives[overlay_index].point_count == model.handles[handle_index].point_count);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(overlay.primitives[overlay_index].points[0].x, model.handles[handle_index].points[0].x, 0.001f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(
+        overlay.primitives[overlay_index].points[overlay.primitives[overlay_index].point_count - 1U].y,
+        model.handles[handle_index].points[model.handles[handle_index].point_count - 1U].y,
+        0.001f);
     HENKA_TEST_ASSERT(henka_gizmo_begin_drag(&model, &hit, &drag) == HENKA_SUCCESS);
     HENKA_TEST_ASSERT(henka_gizmo_apply_drag_to_transform(
         &drag,

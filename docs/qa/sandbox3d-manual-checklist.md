@@ -162,10 +162,10 @@ You should be able to identify these examples:
 - Clicking an object updates the `Object Details` panel.
 - The `Object Details` panel can toggle visibility, focus the camera, reset the selected transform, and print object info.
 - The `Object Details` panel shows tag and interaction state when those foundations are available.
-- A selected object shows a visible transform gizmo in the viewport.
+- A selected object shows a visible transform gizmo in the viewport, and the visible handle matches the clickable region.
 - Move, Rotate, and Scale mode handles should drag only inside the viewport.
 - The visible handle under the cursor should be the handle that becomes active.
-- Internal gizmo helper pieces should not appear as selected sandbox objects.
+- Internal gizmo helper pieces should not appear as selected sandbox objects or visible standalone scene content.
 - Gizmo dragging should stop safely if the viewport changes, the selected object becomes hidden, or the panels reopen mid-drag.
 - Pressing `F4` again closes the UI.
 - When the UI is closed, a small in-window hint reminds you that `F4` restores panels and `F5` changes layout.

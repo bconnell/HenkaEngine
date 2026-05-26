@@ -125,6 +125,18 @@ static void henka_gizmo_append_handle(henka_gizmo_model* model, henka_gizmo_hand
     model->handles[model->handle_count++] = handle;
 }
 
+static void henka_gizmo_append_overlay_primitive(
+    henka_gizmo_overlay_model* overlay,
+    henka_gizmo_overlay_primitive primitive)
+{
+    if (overlay == NULL || overlay->primitive_count >= HENKA_GIZMO_MAX_HANDLES)
+    {
+        return;
+    }
+
+    overlay->primitives[overlay->primitive_count++] = primitive;
+}
+
 static henka_result henka_gizmo_build_axis_drag_plane(
     henka_vec3 origin,
     henka_vec3 axis_direction,
@@ -673,15 +685,15 @@ henka_result henka_gizmo_build_model(
     if (camera == NULL ||
         out_model == NULL ||
         !henka_viewport_is_valid(viewport) ||
-        !henka_viewport_contains_point(viewport, mouse_framebuffer) ||
         gizmo_size <= 0.0f)
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
 
     memset(&model, 0, sizeof(model));
-    if (henka_viewport_window_to_local(viewport, mouse_framebuffer, &model.mouse_local) != HENKA_SUCCESS ||
-        henka_gizmo_project_handle_point(camera, viewport, target_transform.position, &model.screen_center) != HENKA_SUCCESS)
+    model.mouse_local.x = mouse_framebuffer.x - (float)viewport.x;
+    model.mouse_local.y = mouse_framebuffer.y - (float)viewport.y;
+    if (henka_gizmo_project_handle_point(camera, viewport, target_transform.position, &model.screen_center) != HENKA_SUCCESS)
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
@@ -928,6 +940,73 @@ henka_result henka_gizmo_hit_test_model(
             out_hit->type = handle->type;
             out_hit->distance = hit_distance;
         }
+    }
+
+    return HENKA_SUCCESS;
+}
+
+henka_result henka_gizmo_build_overlay_model(
+    const henka_gizmo_model* model,
+    henka_gizmo_overlay_model* out_overlay)
+{
+    size_t index;
+
+    if (model == NULL || out_overlay == NULL || !model->valid)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    memset(out_overlay, 0, sizeof(*out_overlay));
+    out_overlay->valid = true;
+    out_overlay->target_entity = model->target_entity;
+    out_overlay->mode = model->mode;
+
+    for (index = 0U; index < model->handle_count; ++index)
+    {
+        const henka_gizmo_handle_model* handle = &model->handles[index];
+        henka_gizmo_overlay_primitive primitive;
+
+        if (!handle->visible)
+        {
+            continue;
+        }
+
+        memset(&primitive, 0, sizeof(primitive));
+        primitive.visible = true;
+        primitive.axis = handle->axis;
+        primitive.handle_type = handle->type;
+
+        switch (handle->type)
+        {
+            case HENKA_GIZMO_HANDLE_MOVE_AXIS:
+                primitive.type = HENKA_GIZMO_OVERLAY_PRIMITIVE_LINE;
+                primitive.start = handle->screen_start;
+                primitive.end = handle->screen_end;
+                break;
+
+            case HENKA_GIZMO_HANDLE_MOVE_BOX:
+            case HENKA_GIZMO_HANDLE_SCALE_UNIFORM:
+                primitive.type = HENKA_GIZMO_OVERLAY_PRIMITIVE_RECT;
+                primitive.center = handle->screen_center;
+                primitive.half_extents = handle->screen_half_extents;
+                break;
+
+            case HENKA_GIZMO_HANDLE_ROTATE_RING:
+                primitive.type = HENKA_GIZMO_OVERLAY_PRIMITIVE_POLYLINE;
+                primitive.point_count = handle->point_count;
+                if (primitive.point_count > HENKA_GIZMO_RING_SAMPLES)
+                {
+                    primitive.point_count = HENKA_GIZMO_RING_SAMPLES;
+                }
+                memcpy(primitive.points, handle->points, primitive.point_count * sizeof(primitive.points[0]));
+                break;
+
+            case HENKA_GIZMO_HANDLE_NONE:
+            default:
+                continue;
+        }
+
+        henka_gizmo_append_overlay_primitive(out_overlay, primitive);
     }
 
     return HENKA_SUCCESS;

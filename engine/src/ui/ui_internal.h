@@ -12,6 +12,14 @@ typedef struct henka_ui_draw_rect
     henka_vec4 color;
 } henka_ui_draw_rect;
 
+typedef struct henka_ui_draw_line
+{
+    henka_vec2 start;
+    henka_vec2 end;
+    float thickness;
+    henka_vec4 color;
+} henka_ui_draw_line;
+
 struct henka_ui_context
 {
     bool visible;
@@ -27,6 +35,9 @@ struct henka_ui_context
     henka_ui_draw_rect* draw_rects;
     size_t draw_rect_count;
     size_t draw_rect_capacity;
+    henka_ui_draw_line* draw_lines;
+    size_t draw_line_count;
+    size_t draw_line_capacity;
 };
 
 #endif

@@ -35,8 +35,17 @@ void henka_ui_set_visible(henka_ui_context* context, bool visible);
 bool henka_ui_is_visible(const henka_ui_context* context);
 bool henka_ui_get_wants_mouse(const henka_ui_context* context);
 size_t henka_ui_get_draw_rect_count(const henka_ui_context* context);
+size_t henka_ui_get_draw_line_count(const henka_ui_context* context);
 bool henka_ui_rect_contains(henka_ui_rect rect, henka_vec2 point);
 henka_result henka_ui_measure_text(const char* text, float scale, int* out_width, int* out_height);
+henka_result henka_ui_overlay_rect(henka_ui_context* context, henka_ui_rect bounds, henka_vec4 color);
+henka_result henka_ui_overlay_line(henka_ui_context* context, henka_vec2 start, henka_vec2 end, float thickness, henka_vec4 color);
+henka_result henka_ui_overlay_polyline(
+    henka_ui_context* context,
+    const henka_vec2* points,
+    size_t point_count,
+    float thickness,
+    henka_vec4 color);
 henka_result henka_ui_panel(henka_ui_context* context, henka_ui_rect bounds, const char* title);
 henka_result henka_ui_viewport_frame(henka_ui_context* context, henka_ui_rect bounds, const char* title);
 henka_result henka_ui_heading(henka_ui_context* context, float x, float y, float scale, const char* text);

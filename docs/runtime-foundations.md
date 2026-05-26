@@ -128,10 +128,10 @@ Henka now also includes a small transform gizmo foundation for selected scene ob
 - world-to-screen projection for viewport tools
 - projected screen-space handle hit helpers
 - stable drag cancellation around viewport changes and invalid targets
-- shared projected handle-model logic used by both runtime interaction and tests
+- shared projected handle-model logic used by both overlay drawing, runtime interaction, and tests
 
-The sandbox uses these helpers to draw scene-space gizmos inside the dedicated viewport and manipulate selected objects without turning the current sample into a full editor.
-The helper pieces that draw those gizmos stay internal to the tool path, are excluded from normal scene picking, and are not treated as persisted or user-facing scene selection targets.
+The sandbox uses these helpers to draw overlay gizmos inside the dedicated viewport and manipulate selected objects without turning the current sample into a full editor.
+The helper scene pieces that used to visualize those gizmos stay internal to the tool path, are hidden from the normal runtime view, are excluded from normal scene picking, and are not treated as persisted or user-facing scene selection targets.
 The current automated coverage now proves real selected-object mutation more directly, but manual desktop QA is still needed for handle readability, drag comfort, and general interaction feel.
 
 ### Asset metadata

@@ -18,6 +18,7 @@ void henka_test_ui(void)
     HENKA_TEST_ASSERT(henka_ui_is_visible(ui) == false);
     HENKA_TEST_ASSERT(henka_ui_get_wants_mouse(ui) == false);
     HENKA_TEST_ASSERT(henka_ui_get_draw_rect_count(ui) == 0U);
+    HENKA_TEST_ASSERT(henka_ui_get_draw_line_count(ui) == 0U);
 
     HENKA_TEST_ASSERT(henka_ui_begin_frame(NULL, NULL) == HENKA_ERROR_INVALID_ARGUMENT);
     HENKA_TEST_ASSERT(henka_ui_end_frame(NULL) == HENKA_ERROR_INVALID_ARGUMENT);
@@ -42,11 +43,20 @@ void henka_test_ui(void)
     frame_desc.mouse_left_released = false;
 
     HENKA_TEST_ASSERT(henka_ui_begin_frame(ui, &frame_desc) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_ui_overlay_rect(ui, (henka_ui_rect){960.0f, 24.0f, 18.0f, 18.0f}, (henka_vec4){1.0f, 0.0f, 0.0f, 1.0f}) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_ui_overlay_line(ui, (henka_vec2){980.0f, 40.0f}, (henka_vec2){1012.0f, 54.0f}, 3.0f, (henka_vec4){0.0f, 1.0f, 0.0f, 1.0f}) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_ui_overlay_polyline(
+        ui,
+        (henka_vec2[]){{1020.0f, 24.0f}, {1040.0f, 36.0f}, {1050.0f, 54.0f}},
+        3U,
+        2.0f,
+        (henka_vec4){0.0f, 0.5f, 1.0f, 1.0f}) == HENKA_SUCCESS);
     HENKA_TEST_ASSERT(henka_ui_panel(ui, (henka_ui_rect){20.0f, 20.0f, 200.0f, 100.0f}, "Panel") == HENKA_SUCCESS);
     HENKA_TEST_ASSERT(henka_ui_label(ui, 28.0f, 44.0f, 1.0f, "Status") == HENKA_SUCCESS);
     HENKA_TEST_ASSERT(henka_ui_overlay_hint(ui, (henka_ui_rect){980.0f, 650.0f, 180.0f, 44.0f}, "F4 Panels", "F5 Layout") == HENKA_SUCCESS);
     HENKA_TEST_ASSERT(henka_ui_get_wants_mouse(ui) == false);
     HENKA_TEST_ASSERT(henka_ui_get_draw_rect_count(ui) > 0U);
+    HENKA_TEST_ASSERT(henka_ui_get_draw_line_count(ui) >= 3U);
     HENKA_TEST_ASSERT(henka_ui_button(ui, "hidden_button", (henka_ui_rect){40.0f, 40.0f, 120.0f, 28.0f}, "Click") == false);
     HENKA_TEST_ASSERT(henka_ui_end_frame(ui) == HENKA_SUCCESS);
 

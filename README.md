@@ -34,7 +34,7 @@ Henka Engine is still early, but the sandbox now renders a visible 3D scene with
 - Asset metadata and stronger material summaries
 - Local save-data foundation beyond settings
 - Package mode and engine diagnostics foundation
-- Scene-space transform gizmo foundation for selected object manipulation, with visual drag behavior still being hardened through manual QA
+- Shared overlay-handle transform gizmo foundation for selected object manipulation, with visual feel still being hardened through manual QA
 - Viewport interaction test helpers for reducing manual QA around selection, gizmo hit testing, and transform changes
 - Asset manager foundation for cached shader and texture loading
 - Early OBJ model loading with cached mesh assets
@@ -151,7 +151,7 @@ The packaged folder also includes `PACKAGE_INFO.txt` so you can tell when the pa
 - `Home`: reset the camera view
 - `Escape`: close the UI first, then release the mouse, then exit
 
-Press `F4` to open the in-window sandbox panels. On a first run with no local settings file, the packaged sandbox opens the docked workspace in `View` mode so the controls are visible without covering most of the scene. Press `F5` to cycle between `View`, `Inspect`, and `Full Tools`. The 3D scene now renders inside its own dedicated viewport region while the panels stay docked beside it. If you hide the panels, a small in-window hint stays in the corner so it is still clear how to bring them back. Console output remains available for fallback logs and automation, but normal viewer use no longer depends on reading it. Select a scene object from the list or with `Left Mouse` in the viewport, then use the Transform section to inspect the current `Select`, `Move`, `Rotate`, and `Scale` gizmo workflow. The Controls panel now splits its content into two readable pages, the Scene Objects list supports paging, and mouse wheel input over those panels advances the visible page instead of affecting the viewport. Visual drag behavior is still being hardened through manual desktop QA.
+Press `F4` to open the in-window sandbox panels. On a first run with no local settings file, the packaged sandbox opens the docked workspace in `View` mode so the controls are visible without covering most of the scene. Press `F5` to cycle between `View`, `Inspect`, and `Full Tools`. The 3D scene now renders inside its own dedicated viewport region while the panels stay docked beside it. If you hide the panels, a small in-window hint stays in the corner so it is still clear how to bring them back. Console output remains available for fallback logs and automation, but normal viewer use no longer depends on reading it. Select a scene object from the list or with `Left Mouse` in the viewport, then use the Transform section to inspect the current `Select`, `Move`, `Rotate`, and `Scale` gizmo workflow. The visible gizmo overlay and its click or drag hit regions now come from the same projected handle model, so the sandbox is no longer using one normal runtime path for drawing and a different one for interaction. The Controls panel now splits its content into two readable pages, the Scene Objects list supports paging, and mouse wheel input over those panels advances the visible page instead of affecting the viewport. Visual feel is still being hardened through manual desktop QA.
 
 Offline help is also available in [docs/help/sandbox3d.md](docs/help/sandbox3d.md).
 Model loading notes are documented in [docs/model-loading.md](docs/model-loading.md).

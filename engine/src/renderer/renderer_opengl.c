@@ -4,6 +4,7 @@
 #include <SDL3/SDL_opengl.h>
 #include <SDL3/SDL_opengl_glext.h>
 
+#include <math.h>
 #include <stddef.h>
 #include <stdio.h>
 #include <string.h>
@@ -648,6 +649,8 @@ henka_result henka_opengl_renderer_draw_ui(struct henka_renderer* renderer, cons
     const henka_opengl_renderer_state* state;
     henka_ui_vertex* vertices;
     size_t index;
+    size_t line_vertex_count;
+    size_t rect_vertex_count;
     size_t vertex_count;
 
     if (renderer == NULL || renderer->backend_state == NULL || ui_context == NULL)
@@ -655,14 +658,16 @@ henka_result henka_opengl_renderer_draw_ui(struct henka_renderer* renderer, cons
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
 
-    if (ui_context->draw_rect_count == 0U)
+    if (ui_context->draw_rect_count == 0U && ui_context->draw_line_count == 0U)
     {
         return HENKA_SUCCESS;
     }
 
     henka_apply_full_framebuffer_viewport(renderer);
     state = (const henka_opengl_renderer_state*)renderer->backend_state;
-    vertex_count = ui_context->draw_rect_count * 6U;
+    rect_vertex_count = ui_context->draw_rect_count * 6U;
+    line_vertex_count = ui_context->draw_line_count * 6U;
+    vertex_count = rect_vertex_count + line_vertex_count;
     vertices = henka_malloc(vertex_count * sizeof(*vertices));
     if (vertices == NULL)
     {
@@ -693,6 +698,60 @@ henka_result henka_opengl_renderer_draw_ui(struct henka_renderer* renderer, cons
         vertices[base_index + 3U] = (henka_ui_vertex){x0, y0, color.x, color.y, color.z, color.w};
         vertices[base_index + 4U] = (henka_ui_vertex){x1, y1, color.x, color.y, color.z, color.w};
         vertices[base_index + 5U] = (henka_ui_vertex){x0, y1, color.x, color.y, color.z, color.w};
+    }
+
+    for (index = 0U; index < ui_context->draw_line_count; ++index)
+    {
+        const henka_ui_draw_line* draw_line;
+        henka_vec4 color;
+        float dx;
+        float dy;
+        float half_thickness;
+        float inv_length;
+        float normal_x;
+        float normal_y;
+        float x0;
+        float y0;
+        float x1;
+        float y1;
+        float x2;
+        float y2;
+        float x3;
+        float y3;
+        size_t base_index;
+
+        draw_line = &ui_context->draw_lines[index];
+        dx = draw_line->end.x - draw_line->start.x;
+        dy = draw_line->end.y - draw_line->start.y;
+        half_thickness = draw_line->thickness * 0.5f;
+        color = draw_line->color;
+
+        if ((dx * dx + dy * dy) <= 0.0001f)
+        {
+            dx = draw_line->thickness;
+            dy = 0.0f;
+        }
+
+        inv_length = 1.0f / sqrtf(dx * dx + dy * dy);
+        normal_x = -dy * inv_length * half_thickness;
+        normal_y = dx * inv_length * half_thickness;
+
+        x0 = draw_line->start.x + normal_x;
+        y0 = draw_line->start.y + normal_y;
+        x1 = draw_line->end.x + normal_x;
+        y1 = draw_line->end.y + normal_y;
+        x2 = draw_line->end.x - normal_x;
+        y2 = draw_line->end.y - normal_y;
+        x3 = draw_line->start.x - normal_x;
+        y3 = draw_line->start.y - normal_y;
+        base_index = rect_vertex_count + index * 6U;
+
+        vertices[base_index + 0U] = (henka_ui_vertex){x0, y0, color.x, color.y, color.z, color.w};
+        vertices[base_index + 1U] = (henka_ui_vertex){x1, y1, color.x, color.y, color.z, color.w};
+        vertices[base_index + 2U] = (henka_ui_vertex){x2, y2, color.x, color.y, color.z, color.w};
+        vertices[base_index + 3U] = (henka_ui_vertex){x0, y0, color.x, color.y, color.z, color.w};
+        vertices[base_index + 4U] = (henka_ui_vertex){x2, y2, color.x, color.y, color.z, color.w};
+        vertices[base_index + 5U] = (henka_ui_vertex){x3, y3, color.x, color.y, color.z, color.w};
     }
 
     glDisable(GL_DEPTH_TEST);

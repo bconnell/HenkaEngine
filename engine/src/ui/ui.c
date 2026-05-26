@@ -160,6 +160,40 @@ static henka_result henka_ui_ensure_rect_capacity(henka_ui_context* context, siz
     return HENKA_SUCCESS;
 }
 
+static henka_result henka_ui_ensure_line_capacity(henka_ui_context* context, size_t additional_lines)
+{
+    henka_ui_draw_line* lines;
+    size_t minimum_capacity;
+    size_t new_capacity;
+
+    if (context == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    minimum_capacity = context->draw_line_count + additional_lines;
+    if (minimum_capacity <= context->draw_line_capacity)
+    {
+        return HENKA_SUCCESS;
+    }
+
+    new_capacity = context->draw_line_capacity == 0U ? 128U : context->draw_line_capacity;
+    while (new_capacity < minimum_capacity)
+    {
+        new_capacity *= 2U;
+    }
+
+    lines = henka_realloc(context->draw_lines, new_capacity * sizeof(*lines));
+    if (lines == NULL)
+    {
+        return HENKA_ERROR_OUT_OF_MEMORY;
+    }
+
+    context->draw_lines = lines;
+    context->draw_line_capacity = new_capacity;
+    return HENKA_SUCCESS;
+}
+
 static henka_result henka_ui_push_rect(henka_ui_context* context, henka_ui_rect bounds, henka_vec4 color)
 {
     henka_result result;
@@ -178,6 +212,34 @@ static henka_result henka_ui_push_rect(henka_ui_context* context, henka_ui_rect 
     context->draw_rects[context->draw_rect_count].bounds = bounds;
     context->draw_rects[context->draw_rect_count].color = color;
     context->draw_rect_count += 1U;
+    return HENKA_SUCCESS;
+}
+
+static henka_result henka_ui_push_line(
+    henka_ui_context* context,
+    henka_vec2 start,
+    henka_vec2 end,
+    float thickness,
+    henka_vec4 color)
+{
+    henka_result result;
+
+    if (context == NULL || thickness <= 0.0f)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    result = henka_ui_ensure_line_capacity(context, 1U);
+    if (result != HENKA_SUCCESS)
+    {
+        return result;
+    }
+
+    context->draw_lines[context->draw_line_count].start = start;
+    context->draw_lines[context->draw_line_count].end = end;
+    context->draw_lines[context->draw_line_count].thickness = thickness;
+    context->draw_lines[context->draw_line_count].color = color;
+    context->draw_line_count += 1U;
     return HENKA_SUCCESS;
 }
 
@@ -427,6 +489,7 @@ void henka_ui_destroy(henka_ui_context* context)
     }
 
     henka_free(context->draw_rects);
+    henka_free(context->draw_lines);
     henka_free(context);
 }
 
@@ -446,6 +509,7 @@ henka_result henka_ui_begin_frame(henka_ui_context* context, const henka_ui_fram
     context->mouse_left_pressed = frame_desc->mouse_left_pressed;
     context->mouse_left_released = frame_desc->mouse_left_released;
     context->draw_rect_count = 0U;
+    context->draw_line_count = 0U;
     if (!context->mouse_left_down && !context->mouse_left_released)
     {
         context->active_id = NULL;
@@ -497,6 +561,61 @@ size_t henka_ui_get_draw_rect_count(const henka_ui_context* context)
     return context->draw_rect_count;
 }
 
+size_t henka_ui_get_draw_line_count(const henka_ui_context* context)
+{
+    if (context == NULL)
+    {
+        return 0U;
+    }
+
+    return context->draw_line_count;
+}
+
+henka_result henka_ui_overlay_rect(henka_ui_context* context, henka_ui_rect bounds, henka_vec4 color)
+{
+    if (context == NULL || !context->frame_active)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    return henka_ui_push_rect(context, bounds, color);
+}
+
+henka_result henka_ui_overlay_line(henka_ui_context* context, henka_vec2 start, henka_vec2 end, float thickness, henka_vec4 color)
+{
+    if (context == NULL || !context->frame_active)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    return henka_ui_push_line(context, start, end, thickness, color);
+}
+
+henka_result henka_ui_overlay_polyline(
+    henka_ui_context* context,
+    const henka_vec2* points,
+    size_t point_count,
+    float thickness,
+    henka_vec4 color)
+{
+    size_t index;
+
+    if (context == NULL || !context->frame_active || points == NULL || point_count < 2U || thickness <= 0.0f)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    for (index = 0U; index + 1U < point_count; ++index)
+    {
+        henka_result result = henka_ui_push_line(context, points[index], points[index + 1U], thickness, color);
+        if (result != HENKA_SUCCESS)
+        {
+            return result;
+        }
+    }
+
+    return HENKA_SUCCESS;
+}
 bool henka_ui_rect_contains(henka_ui_rect rect, henka_vec2 point)
 {
     return point.x >= rect.x &&

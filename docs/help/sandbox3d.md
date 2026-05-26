@@ -125,9 +125,9 @@ The selected object also shows a visible transform gizmo in the scene viewport.
 - `Rotate` mode drags the selected object around the chosen world axis.
 - `Scale` mode uses the center square for uniform scale in the current sandbox pass.
 - Snap can be enabled or disabled from the Controls panel.
-- Gizmo dragging uses viewport-relative framebuffer coordinates and projected handle hit areas, so the visible handles stay aligned with the mouse inside the dedicated scene viewport.
+- Gizmo dragging uses viewport-relative framebuffer coordinates and the same projected handle model that the overlay draws, so the visible handles stay aligned with the mouse inside the dedicated scene viewport.
 - The current sandbox path now also shares a local validated action-command layer and deterministic gizmo interaction helpers with the test suite, which reduces manual QA for basic object-selection and transform-mutation outcomes.
-- The gizmo helper pieces are internal scene tools. They follow the selected object, but they do not become the selected object, do not appear in Scene Objects, and are ignored by normal scene picking.
+- The gizmo helper pieces are internal scene tools. They remain hidden from the normal runtime path, do not become the selected object, do not appear in Scene Objects, and are ignored by normal scene picking.
 - If the selected object becomes hidden, invalid, or the viewport changes during a drag, the drag stops safely and the selected real object remains the source of truth.
 
 The `Utility` panel provides short in-window views for:

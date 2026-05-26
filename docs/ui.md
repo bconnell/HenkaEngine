@@ -122,10 +122,11 @@ The selected object also shows a transform gizmo inside the dedicated scene view
 - `Rotate` exposes world-axis rotation rings.
 - `Scale` currently exposes a uniform center handle for the current sandbox pass.
 - Snapping can be toggled from the Controls panel.
-- Gizmo hit testing uses the active scene viewport plus projected handle bounds, so the visible handles and the mouse stay aligned at normal window sizes.
-- The gizmo helper pieces are internal to the viewport tool path and do not appear as normal sandbox objects in selection, object details, persisted selection state, or normal scene picking.
+- The sandbox now draws the normal runtime gizmo as a viewport overlay from the same projected handle model that hit testing and drag start use.
+- Gizmo hit testing uses the active scene viewport plus those same projected handle bounds, so the visible handles and the mouse stay aligned at normal window sizes.
+- The gizmo helper pieces remain internal to the viewport tool path and do not appear as normal sandbox objects in selection, object details, persisted selection state, or normal scene picking.
 - Dragging cancels safely if the selected object becomes invalid, hidden, or the active viewport changes during manipulation.
-- The current sandbox path shares its projected handle model and drag math with automated tests, which helps catch real selection and transform regressions earlier.
+- The current sandbox path shares its projected handle model, overlay conversion, and drag math with automated tests, which helps catch real selection and transform regressions earlier.
 
 The viewport now also supports direct navigation while mouse capture is released:
 
@@ -172,7 +173,7 @@ If the packaged sandbox opens but you do not see the panels:
 - launch `out/HenkaSandbox3D/HenkaSandbox3D.exe` again
 - confirm the startup console help mentions `F4`
 
-The packaged QA script can confirm startup logs and UI state output, and the local viewport interaction tests can now prove more basic transform outcomes, camera helpers, and workspace sizing, but neither replaces a human visual check for readability, drag feel, handle alignment, or gizmo handle clarity.
+The packaged QA script can confirm startup logs and UI state output, and the local viewport interaction tests can now prove more basic transform outcomes, camera helpers, workspace sizing, and shared gizmo overlay geometry, but neither replaces a human visual check for readability, drag feel, handle alignment, or gizmo handle clarity.
 
 ## Future direction
 
