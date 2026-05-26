@@ -1,4 +1,5 @@
 add_executable(henka_tests
+    test_action.c
     test_assets.c
     test_camera.c
     test_gizmo.c

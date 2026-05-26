@@ -30,10 +30,12 @@ Henka Engine is still early, but the sandbox now renders a visible 3D scene with
 - Input action foundation for named engine-level controls
 - Scene object metadata, bounds, and interaction foundation
 - Reusable camera helpers for reset, focus, and screen-ray creation
+- Local action-command foundation for validated scene and object operations
 - Asset metadata and stronger material summaries
 - Local save-data foundation beyond settings
 - Package mode and engine diagnostics foundation
 - Scene-space transform gizmo foundation for selected object manipulation, with visual drag behavior still being hardened through manual QA
+- Viewport interaction test helpers for reducing manual QA around selection, gizmo hit testing, and transform changes
 - Asset manager foundation for cached shader and texture loading
 - Early OBJ model loading with cached mesh assets
 - Fallback white and error textures
@@ -149,6 +151,7 @@ Press `F4` to open the in-window sandbox panels. On a first run with no local se
 Offline help is also available in [docs/help/sandbox3d.md](docs/help/sandbox3d.md).
 Model loading notes are documented in [docs/model-loading.md](docs/model-loading.md).
 A persistence overview is available in [docs/persistence.md](docs/persistence.md).
+A local action-command overview is available in [docs/action-api.md](docs/action-api.md).
 A runtime foundation overview is available in [docs/runtime-foundations.md](docs/runtime-foundations.md).
 A UI overview is available in [docs/ui.md](docs/ui.md).
 A guide for separate game repositories is available in [docs/external-game-projects.md](docs/external-game-projects.md).

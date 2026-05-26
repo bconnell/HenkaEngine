@@ -1,6 +1,7 @@
 #ifndef HENKA_H
 #define HENKA_H
 
+#include <henka/action.h>
 #include <henka/assets.h>
 #include <henka/camera.h>
 #include <henka/core.h>

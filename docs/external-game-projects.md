@@ -73,3 +73,16 @@ External games can reuse Henka's small settings API for:
 - prototype save flags
 
 The current format is local-only and human-readable. It is a good fit for early project settings, but it is not a full save pipeline yet.
+
+## Using the current action foundation
+
+External game repositories can also use Henka's local Action API for validated scene and object operations in tools or tests.
+
+That API is intentionally local-only:
+
+- no network listener
+- no cloud bridge
+- no scripting runtime
+- no arbitrary code execution
+
+It is useful for deterministic local testing, basic scene-object workflows, and future editor-style tool surfaces that need validated requests instead of direct unchecked mutation.

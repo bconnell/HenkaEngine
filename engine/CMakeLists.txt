@@ -1,5 +1,6 @@
 add_library(henka STATIC
     src/assets/assets.c
+    src/core/action.c
     src/assets/model_obj.c
     src/core/math.c
     src/core/engine.c

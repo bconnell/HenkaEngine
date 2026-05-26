@@ -59,6 +59,23 @@ The camera module now exposes reusable helpers for:
 
 The sandbox still uses a free camera, but the math is now reusable outside the example.
 
+### Action commands
+
+Henka now includes a small local Action API for validated scene and object operations.
+
+Current Action API v1 coverage includes:
+
+- scene summary and object listing
+- object create, delete, rename, select, and details queries
+- position, rotation, and scale changes
+- move, rotate, and scale-by-multiplier commands
+- transform reset when a default transform is registered
+- visibility actions
+- camera focus when a camera context exists
+- dry-run validation with structured results
+
+The engine still owns authority. Tests, tools, and future workspace panels request actions through a context instead of reaching into scene state blindly.
+
 ### Workspace and viewport
 
 Henka now also includes a small docked workspace helper for viewport-first tools:
@@ -70,6 +87,19 @@ Henka now also includes a small docked workspace helper for viewport-first tools
 - window-point to framebuffer-point conversion for scene-space interaction paths
 
 The sandbox uses this to keep the scene in its own viewport while panels stay in separate docked regions.
+
+### Viewport interaction testing
+
+Henka now also exposes deterministic viewport interaction helpers around the current transform gizmo path:
+
+- viewport-aware mouse conversion
+- world-to-screen projection
+- projected gizmo handle models
+- screen-space handle hit testing
+- drag-state creation from a visible handle
+- deterministic move, rotate, and uniform-scale drag math
+
+The sandbox uses the same handle-model and drag helpers that the tests now exercise. This reduces manual QA for basic object-selection and transform-mutation outcomes without claiming that visual feel is fully automated.
 
 ### Picking
 
@@ -94,9 +124,11 @@ Henka now also includes a small transform gizmo foundation for selected scene ob
 - world-to-screen projection for viewport tools
 - projected screen-space handle hit helpers
 - stable drag cancellation around viewport changes and invalid targets
+- shared projected handle-model logic used by both runtime interaction and tests
 
 The sandbox uses these helpers to draw scene-space gizmos inside the dedicated viewport and manipulate selected objects without turning the current sample into a full editor.
 The helper pieces that draw those gizmos stay internal to the tool path, are excluded from normal scene picking, and are not treated as persisted or user-facing scene selection targets.
+The current automated coverage now proves real selected-object mutation more directly, but manual desktop QA is still needed for handle readability, drag comfort, and general interaction feel.
 
 ### Asset metadata
 

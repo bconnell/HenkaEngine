@@ -121,6 +121,7 @@ The selected object also shows a transform gizmo inside the dedicated scene view
 - Gizmo hit testing uses the active scene viewport plus projected handle bounds, so the visible handles and the mouse stay aligned at normal window sizes.
 - The gizmo helper pieces are internal to the viewport tool path and do not appear as normal sandbox objects in selection, object details, persisted selection state, or normal scene picking.
 - Dragging cancels safely if the selected object becomes invalid, hidden, or the active viewport changes during manipulation.
+- The current sandbox path shares its projected handle model and drag math with automated tests, which helps catch real selection and transform regressions earlier.
 
 The current `Utility` panel can show:
 
@@ -157,7 +158,7 @@ If the packaged sandbox opens but you do not see the panels:
 - launch `out/HenkaSandbox3D/HenkaSandbox3D.exe` again
 - confirm the startup console help mentions `F4`
 
-The packaged QA script can confirm startup logs and UI state output, but it still does not replace a human visual check for readability, drag feel, handle alignment, or gizmo handle clarity.
+The packaged QA script can confirm startup logs and UI state output, and the local viewport interaction tests can now prove more basic transform outcomes, but neither replaces a human visual check for readability, drag feel, handle alignment, or gizmo handle clarity.
 
 ## Future direction
 
