@@ -67,6 +67,7 @@ typedef struct henka_scene_entity_record
 {
     bool active;
     bool visible;
+    uint32_t flags;
     char* name;
     char* tag;
     henka_transform transform;

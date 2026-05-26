@@ -77,21 +77,25 @@ Use this checklist when you want to confirm that `henka_sandbox3d` is visually r
 30. Confirm clicking inside docked panels does not pick scene objects.
 31. Left-click a visible object inside the viewport and confirm picking updates the selection.
 32. Confirm the selected object shows a visible gizmo in the viewport.
-33. Test Move mode on the X, Y, and Z handles.
-34. Test Rotate mode on the X, Y, and Z rings.
-35. Test Scale mode on the axis handles and the center uniform handle.
-36. Toggle snap on and off and confirm movement, rotation, and scale respond differently.
-37. Confirm Object Details updates after manipulation.
-38. Confirm picking still works after movement, rotation, or scale changes.
-39. Confirm Reset Transform restores the selected object.
-40. Confirm Focus Camera still works after manipulation.
-41. Confirm the camera view does not look stretched.
-42. Confirm the small in-window status area reports common actions without forcing you to read the console.
-43. Confirm the console still receives fallback logs for help, legend, object info, warnings, or errors when those actions are used.
-44. Confirm `Escape` behavior still works.
-45. Confirm close-window exit remains clean.
-46. Confirm no named-engine comparisons appear in runtime text or packaged help.
-47. If the UI is not visible or feels wrong, note whether the console reports `Sandbox panel: shown`, `Sandbox panel: hidden`, `Sandbox UI ready`, or `Sandbox viewport`.
+33. Select `Textured Cube` from Scene Objects, switch to `Move`, and drag X, Y, and Z.
+34. Confirm the cube moves, not just the gizmo.
+35. Switch to `Rotate` and drag X, Y, and Z.
+36. Confirm the object rotates, not just the gizmo.
+37. Switch to `Scale` and drag the center uniform handle.
+38. Confirm the object scales, not just the gizmo.
+39. Toggle snap on and off and confirm movement, rotation, and scale respond differently.
+40. Confirm Object Details updates after manipulation.
+41. Confirm picking still works after movement, rotation, or scale changes.
+42. Click empty viewport space and confirm no gizmo helper becomes the selected object.
+43. Confirm Reset Transform restores the selected object.
+44. Confirm Focus Camera still works after manipulation.
+45. Confirm the camera view does not look stretched.
+46. Confirm the small in-window status area reports common actions without forcing you to read the console.
+47. Confirm the console still receives fallback logs for help, legend, object info, warnings, or errors when those actions are used.
+48. Confirm `Escape` behavior still works.
+49. Confirm close-window exit remains clean.
+50. Confirm no named-engine comparisons appear in runtime text or packaged help.
+51. If the UI is not visible or feels wrong, note whether the console reports `Sandbox panel: shown`, `Sandbox panel: hidden`, `Sandbox UI ready`, or `Sandbox viewport`.
 
 ## Expected startup behavior
 
@@ -151,6 +155,7 @@ You should be able to identify these examples:
 - The `Object Details` panel shows tag and interaction state when those foundations are available.
 - A selected object shows a visible transform gizmo in the viewport.
 - Move, Rotate, and Scale mode handles should drag only inside the viewport.
+- Internal gizmo helper pieces should not appear as selected sandbox objects.
 - Pressing `F4` again closes the UI.
 - When the UI is closed, a small in-window hint reminds you that `F4` restores panels and `F5` changes layout.
 - After the UI closes, `Right Mouse` and `Tab` can capture the mouse again.

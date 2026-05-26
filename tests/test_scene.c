@@ -9,9 +9,11 @@
 void henka_test_scene(void)
 {
     henka_bounds bounds;
+    uint32_t flags;
     henka_scene* scene;
     henka_entity found;
     henka_entity first;
+    henka_entity helper;
     henka_entity listed;
     henka_ray ray;
     henka_scene_object_info info;
@@ -71,10 +73,21 @@ void henka_test_scene(void)
     HENKA_TEST_ASSERT(strcmp(henka_scene_get_entity_tag(scene, second), "marker") == 0);
     HENKA_TEST_ASSERT(henka_scene_find_entity_by_tag(scene, "marker", &found) == HENKA_SUCCESS);
     HENKA_TEST_ASSERT(found == second);
+    helper = henka_scene_create_entity_named(scene, "Transform Gizmo");
+    HENKA_TEST_ASSERT(helper != HENKA_INVALID_ENTITY);
+    HENKA_TEST_ASSERT(henka_scene_set_entity_flags(scene, helper, HENKA_SCENE_ENTITY_FLAG_HELPER) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_scene_is_entity_helper(scene, helper));
+    HENKA_TEST_ASSERT(henka_scene_get_entity_flags(scene, helper, &flags) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT((flags & HENKA_SCENE_ENTITY_FLAG_HELPER) != 0U);
     bounds = (henka_bounds){{0.0f, 0.5f, 0.0f}, {0.5f, 0.5f, 0.5f}};
     HENKA_TEST_ASSERT(henka_scene_set_entity_local_bounds(scene, second, bounds) == HENKA_SUCCESS);
     HENKA_TEST_ASSERT(henka_scene_get_entity_local_bounds(scene, second, &bounds) == HENKA_SUCCESS);
     HENKA_TEST_ASSERT_FLOAT_CLOSE(bounds.extents.x, 0.5f, 0.0001f);
+    bounds = (henka_bounds){{0.0f, 0.0f, 0.0f}, {1.0f, 1.0f, 1.0f}};
+    HENKA_TEST_ASSERT(henka_scene_set_entity_local_bounds(scene, helper, bounds) == HENKA_SUCCESS);
+    transform = henka_transform_identity();
+    transform.position = (henka_vec3){10.0f, 0.0f, 0.0f};
+    HENKA_TEST_ASSERT(henka_scene_set_entity_transform(scene, helper, transform) == HENKA_SUCCESS);
     transform = henka_transform_identity();
     transform.position = (henka_vec3){1.0f, 0.0f, 0.0f};
     transform.rotation = henka_quat_from_axis_angle((henka_vec3){0.0f, 1.0f, 0.0f}, 45.0f * HENKA_DEG_TO_RAD);
@@ -95,6 +108,9 @@ void henka_test_scene(void)
     ray.direction = henka_vec3_normalize((henka_vec3){0.0f, 0.0f, -1.0f});
     HENKA_TEST_ASSERT(henka_scene_pick_entity(scene, ray, &found, NULL) == HENKA_SUCCESS);
     HENKA_TEST_ASSERT(found == second);
+    ray.origin = (henka_vec3){10.0f, 0.0f, 3.0f};
+    ray.direction = henka_vec3_normalize((henka_vec3){0.0f, 0.0f, -1.0f});
+    HENKA_TEST_ASSERT(henka_scene_pick_entity(scene, ray, &found, NULL) == HENKA_ERROR_UNKNOWN);
     HENKA_TEST_ASSERT(henka_scene_set_entity_name(scene, second, NULL) == HENKA_SUCCESS);
     HENKA_TEST_ASSERT(henka_scene_get_entity_name(scene, second) == NULL);
     HENKA_TEST_ASSERT(henka_scene_get_entity_transform(scene, HENKA_INVALID_ENTITY, &read_back) == HENKA_ERROR_INVALID_ARGUMENT);
@@ -108,8 +124,9 @@ void henka_test_scene(void)
 
     henka_scene_destroy_entity(scene, first);
     HENKA_TEST_ASSERT(!henka_scene_is_entity_valid(scene, first));
-    HENKA_TEST_ASSERT(henka_scene_get_entity_count(scene) == 1U);
+    HENKA_TEST_ASSERT(henka_scene_get_entity_count(scene) == 2U);
     HENKA_TEST_ASSERT(henka_scene_get_entity_at_index(scene, 0U) == second);
+    HENKA_TEST_ASSERT(henka_scene_get_entity_at_index(scene, 1U) == helper);
 
     henka_scene_destroy(scene);
 }

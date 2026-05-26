@@ -269,6 +269,7 @@ static henka_result henka_scene_grow(henka_scene* scene)
     {
         new_entities[index].active = false;
         new_entities[index].visible = true;
+        new_entities[index].flags = HENKA_SCENE_ENTITY_FLAG_NONE;
         new_entities[index].name = NULL;
         new_entities[index].tag = NULL;
         new_entities[index].transform = henka_transform_identity();
@@ -352,6 +353,7 @@ henka_entity henka_scene_create_entity_named(henka_scene* scene, const char* nam
         {
             scene->entities[index].active = true;
             scene->entities[index].visible = true;
+            scene->entities[index].flags = HENKA_SCENE_ENTITY_FLAG_NONE;
             scene->entities[index].transform = henka_transform_identity();
             scene->entities[index].mesh = NULL;
             scene->entities[index].material = henka_material_default();
@@ -386,6 +388,7 @@ henka_entity henka_scene_create_entity_named(henka_scene* scene, const char* nam
 
     scene->entities[scene->entity_count].active = true;
     scene->entities[scene->entity_count].visible = true;
+    scene->entities[scene->entity_count].flags = HENKA_SCENE_ENTITY_FLAG_NONE;
     scene->entities[scene->entity_count].transform = henka_transform_identity();
     scene->entities[scene->entity_count].material = henka_material_default();
     scene->entities[scene->entity_count].has_local_bounds = false;
@@ -418,6 +421,7 @@ void henka_scene_destroy_entity(henka_scene* scene, henka_entity entity)
 
     record->active = false;
     record->visible = true;
+    record->flags = HENKA_SCENE_ENTITY_FLAG_NONE;
     record->mesh = NULL;
     record->material = henka_material_default();
     henka_free(record->name);
@@ -699,6 +703,25 @@ henka_result henka_scene_get_entity_interaction(const henka_scene* scene, henka_
     return HENKA_SUCCESS;
 }
 
+henka_result henka_scene_get_entity_flags(const henka_scene* scene, henka_entity entity, uint32_t* out_flags)
+{
+    const henka_scene_entity_record* record;
+
+    if (out_flags == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    record = henka_scene_get_entity_record_const(scene, entity);
+    if (record == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    *out_flags = record->flags;
+    return HENKA_SUCCESS;
+}
+
 henka_result henka_scene_set_entity_transform(henka_scene* scene, henka_entity entity, henka_transform transform)
 {
     henka_scene_entity_record* record;
@@ -912,6 +935,33 @@ henka_result henka_scene_set_entity_interaction(henka_scene* scene, henka_entity
     return HENKA_SUCCESS;
 }
 
+henka_result henka_scene_set_entity_flags(henka_scene* scene, henka_entity entity, uint32_t flags)
+{
+    henka_scene_entity_record* record;
+
+    record = henka_scene_get_entity_record(scene, entity);
+    if (record == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    record->flags = flags;
+    return HENKA_SUCCESS;
+}
+
+bool henka_scene_is_entity_helper(const henka_scene* scene, henka_entity entity)
+{
+    const henka_scene_entity_record* record;
+
+    record = henka_scene_get_entity_record_const(scene, entity);
+    if (record == NULL)
+    {
+        return false;
+    }
+
+    return (record->flags & HENKA_SCENE_ENTITY_FLAG_HELPER) != 0U;
+}
+
 henka_interaction_result henka_scene_can_interact(const henka_scene* scene, henka_entity entity, henka_vec3 observer_position)
 {
     const henka_scene_entity_record* record;
@@ -962,7 +1012,7 @@ henka_result henka_scene_pick_entity(const henka_scene* scene, henka_ray ray, he
         float distance;
         const henka_scene_entity_record* record = &scene->entities[index];
 
-        if (!record->active || !record->visible || !record->has_local_bounds)
+        if (!record->active || !record->visible || !record->has_local_bounds || (record->flags & HENKA_SCENE_ENTITY_FLAG_HELPER) != 0U)
         {
             continue;
         }

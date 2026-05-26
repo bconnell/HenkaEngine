@@ -119,6 +119,7 @@ The selected object also shows a transform gizmo inside the dedicated scene view
 - `Scale` exposes axis scale handles plus a uniform center handle.
 - Snapping can be toggled from the Controls panel.
 - Gizmo hit testing only uses the active scene viewport, so docked panel clicks do not manipulate scene objects.
+- The gizmo helper pieces are internal to the viewport tool path and do not appear as normal sandbox objects in selection or object details.
 
 The current `Utility` panel can show:
 

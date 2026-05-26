@@ -118,6 +118,7 @@ The selected object also shows a visible transform gizmo in the scene viewport.
 - `Scale` mode supports axis scale and a uniform center handle.
 - Snap can be enabled or disabled from the Controls panel.
 - Gizmo dragging uses viewport-relative mouse coordinates, so docked panel clicks do not manipulate scene objects.
+- The gizmo helper pieces are internal scene tools. They follow the selected object, but they do not become the selected object.
 
 The `Utility` panel provides short in-window views for:
 
