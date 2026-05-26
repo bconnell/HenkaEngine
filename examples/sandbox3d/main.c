@@ -137,6 +137,7 @@ typedef struct sandbox3d_workspace_layout
     henka_ui_rect object_details_panel;
     henka_ui_rect utility_panel;
     henka_viewport scene_viewport;
+    henka_ui_rect debug_strip;
 } sandbox3d_workspace_layout;
 
 typedef enum sandbox3d_panel_scroll_target
@@ -296,6 +297,7 @@ static const float g_ui_controls_width = 320.0f;
 static const float g_ui_scene_width = 260.0f;
 static const float g_ui_details_width = 352.0f;
 static const float g_ui_panel_height = 360.0f;
+static const float g_ui_debug_strip_height = 42.0f;
 
 static const char* g_setting_key_grid_visible = "grid_visible";
 static const char* g_setting_key_wireframe_enabled = "wireframe_enabled";
@@ -367,6 +369,7 @@ static bool sandbox3d_collect_gizmo_overlay_state(
     sandbox3d_gizmo_handle_type* out_hover_type,
     bool* out_in_dead_zone);
 static void sandbox3d_refresh_interaction_diagnostics(henka_engine* engine, sandbox3d_state* state);
+static bool sandbox3d_ui_owns_mouse_at_point(const sandbox3d_state* state, henka_vec2 framebuffer_mouse);
 static bool sandbox3d_apply_transform_action(
     sandbox3d_state* state,
     henka_action_command command,
@@ -660,6 +663,8 @@ static void sandbox3d_set_viewport_tool_mode(
     {
         state->viewport_tool = tool_mode;
         state->gizmo.mode = (sandbox3d_gizmo_mode)gizmo_mode;
+        state->view_navigation.orbiting = false;
+        state->view_navigation.panning = false;
         sandbox3d_clear_gizmo_drag(state, true);
         if (update_status)
         {
@@ -1280,6 +1285,13 @@ static bool sandbox3d_workspace_shows_details_panel(const sandbox3d_state* state
 static bool sandbox3d_workspace_shows_utility_panel(const sandbox3d_state* state)
 {
     return state != NULL && state->workspace.active_utility != SANDBOX3D_UTILITY_NONE;
+}
+
+static bool sandbox3d_utility_uses_full_dock(const sandbox3d_state* state)
+{
+    return state != NULL &&
+        (state->workspace.active_utility == SANDBOX3D_UTILITY_DIAGNOSTICS ||
+         state->workspace.active_utility == SANDBOX3D_UTILITY_TRANSFORM_QA);
 }
 
 static void sandbox3d_set_active_utility(sandbox3d_state* state, sandbox3d_utility_view utility)
@@ -2614,6 +2626,34 @@ static bool sandbox3d_collect_gizmo_overlay_state(
     return true;
 }
 
+static bool sandbox3d_ui_owns_mouse_at_point(const sandbox3d_state* state, henka_vec2 framebuffer_mouse)
+{
+    henka_ui_rect panels[4];
+    size_t panel_count;
+
+    if (state == NULL || state->ui == NULL || !henka_ui_is_visible(state->ui))
+    {
+        return false;
+    }
+
+    panel_count = 0U;
+    panels[panel_count++] = state->frame_layout.controls_panel;
+    if (sandbox3d_workspace_shows_scene_panel(state))
+    {
+        panels[panel_count++] = state->frame_layout.scene_objects_panel;
+    }
+    if (sandbox3d_workspace_shows_details_panel(state))
+    {
+        panels[panel_count++] = state->frame_layout.object_details_panel;
+    }
+    if (sandbox3d_workspace_shows_utility_panel(state))
+    {
+        panels[panel_count++] = state->frame_layout.utility_panel;
+    }
+
+    return sandbox3d_point_is_owned_by_panels(framebuffer_mouse, panels, panel_count);
+}
+
 static void sandbox3d_refresh_interaction_diagnostics(henka_engine* engine, sandbox3d_state* state)
 {
     henka_bounds bounds;
@@ -2639,7 +2679,9 @@ static void sandbox3d_refresh_interaction_diagnostics(henka_engine* engine, sand
     state->diagnostics.drag_target_entity = state->gizmo.drag.target_entity;
     state->diagnostics.dragging = state->gizmo.drag.dragging;
     state->diagnostics.mouse_framebuffer_valid = sandbox3d_try_get_mouse_framebuffer_position(engine, &framebuffer_mouse);
-    state->diagnostics.ui_wants_mouse = state->ui != NULL && henka_ui_get_wants_mouse(state->ui);
+    state->diagnostics.ui_wants_mouse =
+        state->diagnostics.mouse_framebuffer_valid &&
+        sandbox3d_ui_owns_mouse_at_point(state, framebuffer_mouse);
     state->diagnostics.cursor_in_viewport =
         state->diagnostics.mouse_framebuffer_valid &&
         henka_viewport_contains_point(viewport, framebuffer_mouse);
@@ -3026,13 +3068,33 @@ static void sandbox3d_apply_gizmo_drag(henka_engine* engine, sandbox3d_state* st
     }
 
     target_entity = state->gizmo.drag.target_entity;
-    if (!sandbox3d_is_drag_target_valid(state, target_entity) ||
-        !sandbox3d_try_get_mouse_viewport_local(engine, current_viewport, &current_mouse_framebuffer, &current_mouse_local))
+    if (!sandbox3d_is_drag_target_valid(state, target_entity))
     {
         sandbox3d_clear_gizmo_drag(state, true);
         sandbox3d_record_reject_reason(state, SANDBOX3D_INTERACTION_REJECT_DRAG_TARGET_INVALID, false);
         sandbox3d_record_drag_result(state, "Drag cancelled: target invalid");
         sandbox3d_set_status(state, true, "Gizmo drag cancelled. Target is no longer valid.");
+        return;
+    }
+    if (!sandbox3d_try_get_mouse_viewport_local(engine, current_viewport, &current_mouse_framebuffer, &current_mouse_local))
+    {
+        sandbox3d_interaction_reject_reason reason = SANDBOX3D_INTERACTION_REJECT_CURSOR_OUTSIDE_VIEWPORT;
+        henka_vec2 framebuffer_mouse;
+
+        if (sandbox3d_try_get_mouse_framebuffer_position(engine, &framebuffer_mouse) &&
+            sandbox3d_ui_owns_mouse_at_point(state, framebuffer_mouse))
+        {
+            reason = SANDBOX3D_INTERACTION_REJECT_UI_OWNS_MOUSE;
+        }
+        sandbox3d_clear_gizmo_drag(state, true);
+        sandbox3d_record_reject_reason(state, reason, false);
+        sandbox3d_record_drag_result(state, "Drag cancelled: pointer left viewport");
+        sandbox3d_set_statusf(
+            state,
+            true,
+            false,
+            "Gizmo drag cancelled: %s.",
+            sandbox3d_interaction_reject_reason_to_string(reason));
         return;
     }
 
@@ -3178,6 +3240,28 @@ static void sandbox3d_print_selected_object_info(const sandbox3d_state* state)
     fflush(stdout);
 }
 
+static void sandbox3d_reserve_debug_strip(sandbox3d_workspace_layout* layout)
+{
+    const float gap = 6.0f;
+
+    if (layout == NULL || !henka_viewport_is_valid(layout->scene_viewport))
+    {
+        return;
+    }
+
+    if (layout->scene_viewport.height > (int)(g_ui_debug_strip_height + gap + 80.0f))
+    {
+        layout->scene_viewport.height -= (int)(g_ui_debug_strip_height + gap);
+    }
+    layout->debug_strip = (henka_ui_rect)
+    {
+        (float)layout->scene_viewport.x,
+        (float)(layout->scene_viewport.y + layout->scene_viewport.height) + gap,
+        (float)layout->scene_viewport.width,
+        g_ui_debug_strip_height
+    };
+}
+
 static sandbox3d_workspace_layout sandbox3d_get_workspace_layout(
     const sandbox3d_state* state,
     int framebuffer_width,
@@ -3226,7 +3310,7 @@ static sandbox3d_workspace_layout sandbox3d_get_workspace_layout(
     workspace_desc.scene_header_height = 30.0f;
     workspace_desc.scene_padding = 8.0f;
     workspace_desc.min_scene_width = framebuffer_width >= 1280 ? 520 : (framebuffer_width >= 960 ? 420 : 260);
-    workspace_desc.min_scene_height = framebuffer_height >= 720 ? 340 : (framebuffer_height >= 640 ? 280 : 180);
+    workspace_desc.min_scene_height = framebuffer_height >= 720 ? 388 : (framebuffer_height >= 640 ? 328 : 228);
     workspace_desc.left_dock_visible = true;
     workspace_desc.right_dock_visible = false;
     workspace_desc.bottom_dock_visible = false;
@@ -3263,6 +3347,7 @@ static sandbox3d_workspace_layout sandbox3d_get_workspace_layout(
     layout.scene_frame = docked_layout.scene_frame;
     layout.right_dock = docked_layout.right_dock;
     layout.scene_viewport = docked_layout.scene_viewport;
+    sandbox3d_reserve_debug_strip(&layout);
 
     if (layout_mode == SANDBOX3D_LAYOUT_VIEW)
     {
@@ -3286,10 +3371,10 @@ static sandbox3d_workspace_layout sandbox3d_get_workspace_layout(
         return layout;
     }
 
-    controls_height = layout.left_dock.height * (layout_mode == SANDBOX3D_LAYOUT_FULL ? 0.66f : 0.62f);
-    if (controls_height < 404.0f)
+    controls_height = layout.left_dock.height * (layout_mode == SANDBOX3D_LAYOUT_FULL ? 0.70f : 0.69f);
+    if (controls_height < 470.0f)
     {
-        controls_height = 404.0f;
+        controls_height = 470.0f;
     }
     if (controls_height > layout.left_dock.height)
     {
@@ -3319,12 +3404,17 @@ static sandbox3d_workspace_layout sandbox3d_get_workspace_layout(
         }
     }
 
-    if (details_visible || utility_visible || layout_mode == SANDBOX3D_LAYOUT_FULL)
+    if (sandbox3d_utility_uses_full_dock(state))
+    {
+        layout.object_details_panel = (henka_ui_rect){0.0f, 0.0f, 0.0f, 0.0f};
+        layout.utility_panel = layout.right_dock;
+    }
+    else if (details_visible || utility_visible || layout_mode == SANDBOX3D_LAYOUT_FULL)
     {
         details_height = utility_visible ? layout.right_dock.height * (layout_mode == SANDBOX3D_LAYOUT_FULL ? 0.56f : 0.54f) : layout.right_dock.height;
-        if (details_height < 316.0f)
+        if (details_height < 400.0f)
         {
-            details_height = 316.0f;
+            details_height = 400.0f;
         }
         if (details_height > layout.right_dock.height)
         {
@@ -3434,6 +3524,60 @@ static void sandbox3d_draw_scene_viewport_frame(henka_ui_context* ui, henka_ui_r
     henka_ui_viewport_frame(ui, bounds, "Scene View");
 }
 
+static void sandbox3d_draw_viewport_debug_strip(
+    henka_engine* engine,
+    const sandbox3d_state* state,
+    henka_ui_rect bounds)
+{
+    char fit_first_row[160];
+    char fit_second_row[192];
+    char first_row[160];
+    char second_row[192];
+    char selected_text[32];
+    const char* hover_axis;
+    const char* selected_name;
+    size_t max_characters;
+
+    if (engine == NULL || state == NULL || state->ui == NULL || bounds.width <= 0.0f || bounds.height <= 0.0f)
+    {
+        return;
+    }
+
+    selected_name = sandbox3d_safe_entity_name(state, state->diagnostics.selected_entity, "(none)");
+    sandbox3d_truncate_text(selected_name, selected_text, sizeof(selected_text), 18U);
+    hover_axis = sandbox3d_get_gizmo_axis_label(state->gizmo.hover_axis);
+    snprintf(
+        first_row,
+        sizeof(first_row),
+        "Tool:%s | Sel:%s | Cap:%s | View:%s | UI:%s",
+        sandbox3d_viewport_tool_mode_to_string(state->viewport_tool),
+        selected_text,
+        henka_engine_is_mouse_captured(engine) ? "On" : "Off",
+        state->diagnostics.cursor_in_viewport ? "Yes" : "No",
+        state->diagnostics.ui_wants_mouse ? "Yes" : "No");
+    snprintf(
+        second_row,
+        sizeof(second_row),
+        "Giz:%s | H:%zu | Hover:%s | Drag:%s/%u | Reject:%s",
+        state->diagnostics.gizmo_model_valid ? "Valid" : "None",
+        state->diagnostics.overlay_primitive_count,
+        hover_axis,
+        state->diagnostics.dragging ? "Yes" : "No",
+        (unsigned int)state->diagnostics.drag_target_entity,
+        sandbox3d_interaction_reject_reason_to_string(state->diagnostics.last_reject_reason));
+    max_characters = bounds.width > 24.0f ? (size_t)((bounds.width - 16.0f) / 6.0f) : 4U;
+    sandbox3d_truncate_text(first_row, fit_first_row, sizeof(fit_first_row), max_characters);
+    sandbox3d_truncate_text(second_row, fit_second_row, sizeof(fit_second_row), max_characters);
+
+    henka_ui_overlay_rect(state->ui, bounds, (henka_vec4){0.05f, 0.08f, 0.12f, 0.94f});
+    henka_ui_overlay_rect(
+        state->ui,
+        (henka_ui_rect){bounds.x, bounds.y, bounds.width, 1.0f},
+        (henka_vec4){0.22f, 0.36f, 0.56f, 1.0f});
+    henka_ui_label(state->ui, bounds.x + 8.0f, bounds.y + 8.0f, 1.0f, fit_first_row);
+    henka_ui_label(state->ui, bounds.x + 8.0f, bounds.y + 24.0f, 1.0f, fit_second_row);
+}
+
 static void sandbox3d_draw_panel_recall_hint(henka_ui_context* ui, henka_viewport viewport)
 {
     henka_ui_rect bounds;
@@ -3462,10 +3606,6 @@ static void sandbox3d_draw_controls_panel(
     sandbox3d_state* state,
     const sandbox3d_workspace_layout* layout)
 {
-    char axis_text[32];
-    char mode_text[48];
-    char selected_text[48];
-    char snap_text[64];
     bool details_panel_visible;
     bool full_mode;
     bool grid_visible;
@@ -3474,7 +3614,6 @@ static void sandbox3d_draw_controls_panel(
     float button_width;
     float half_button_width;
     int controls_page;
-    const sandbox3d_object_descriptor* selected_descriptor;
     bool scene_panel_visible;
     float third_button_width;
     bool wireframe_enabled;
@@ -3518,23 +3657,6 @@ static void sandbox3d_draw_controls_panel(
     layout_mode = state->workspace.layout_mode;
     inspect_mode = layout_mode == SANDBOX3D_LAYOUT_INSPECT;
     full_mode = layout_mode == SANDBOX3D_LAYOUT_FULL;
-    selected_descriptor = sandbox3d_get_selected_descriptor(state);
-    sandbox3d_truncate_text(selected_descriptor != NULL ? selected_descriptor->display_name : "(none)", selected_text, sizeof(selected_text), 22U);
-    snprintf(mode_text, sizeof(mode_text), "%s / %s", selected_text, sandbox3d_viewport_tool_mode_to_string(state->viewport_tool));
-    snprintf(
-        axis_text,
-        sizeof(axis_text),
-        "%s",
-        sandbox3d_get_gizmo_axis_label(state->gizmo.drag.dragging ? state->gizmo.drag.active_axis : state->gizmo.hover_axis));
-    snprintf(
-        snap_text,
-        sizeof(snap_text),
-        "%s | %.2f / %.0f deg / %.2f",
-        state->gizmo.snap.enabled ? "On" : "Off",
-        state->gizmo.snap.move_snap_increment,
-        state->gizmo.snap.rotate_snap_increment * HENKA_RAD_TO_DEG,
-        state->gizmo.snap.scale_snap_increment);
-
     henka_ui_panel(state->ui, panel_bounds, "Controls");
     if (henka_ui_tab(state->ui, "controls_page_main", (henka_ui_rect){x_left, panel_bounds.y + 38.0f, half_button_width, 24.0f}, "Main", controls_page == 0))
     {
@@ -3568,15 +3690,7 @@ static void sandbox3d_draw_controls_panel(
             sandbox3d_set_statusf(state, false, false, "Layout set to %s.", sandbox3d_get_layout_mode_label(state->workspace.layout_mode));
             sandbox3d_print_layout_mode(state, false);
         }
-        y += 36.0f;
-        if (henka_ui_button(state->ui, "reset_layout", (henka_ui_rect){x_left, y, panel_bounds.width - 28.0f, 28.0f}, "Reset Layout"))
-        {
-            sandbox3d_reset_workspace_layout(state);
-            sandbox3d_set_statusf(state, false, true, "Layout reset to View.");
-            sandbox3d_print_layout_mode(state, false);
-        }
-
-        y += 44.0f;
+        y += 42.0f;
         sandbox3d_draw_section_heading(state->ui, x_left, y, "Viewer");
         y += 20.0f;
         if (henka_ui_toggle(state->ui, "grid", (henka_ui_rect){x_left, y, half_button_width, 28.0f}, "Grid", &grid_visible))
@@ -3618,9 +3732,6 @@ static void sandbox3d_draw_controls_panel(
         {
             sandbox3d_zoom_camera_to_target(state, 1.0f);
         }
-        y += 36.0f;
-        sandbox3d_draw_value_row(state->ui, x_left, y, panel_bounds.width - 28.0f, "Mouse", "Left drag uses the active tool. Wheel zooms.");
-
         y += 42.0f;
         sandbox3d_draw_section_heading(state->ui, x_left, y, "Viewport Tool");
         y += 20.0f;
@@ -3659,24 +3770,15 @@ static void sandbox3d_draw_controls_panel(
             sandbox3d_set_statusf(state, false, false, "Handle hit boxes %s.", state->diagnostics.show_handle_hit_boxes ? "shown" : "hidden");
         }
         y += 36.0f;
-        sandbox3d_draw_value_row(state->ui, x_left, y, panel_bounds.width - 28.0f, "Active", mode_text);
-        y += 26.0f;
-        sandbox3d_draw_value_row(state->ui, x_left, y, panel_bounds.width - 28.0f, "Gizmo", sandbox3d_get_gizmo_mode_label(state->gizmo.mode));
-        y += 26.0f;
-        sandbox3d_draw_value_row(state->ui, x_left, y, panel_bounds.width - 28.0f, "Handle", axis_text);
-        y += 26.0f;
-        sandbox3d_draw_value_row(state->ui, x_left, y, panel_bounds.width - 28.0f, "Snap", snap_text);
-        y += 38.0f;
-        if (henka_ui_button(state->ui, "save_settings", (henka_ui_rect){x_left, y, panel_bounds.width - 28.0f, 28.0f}, "Save Settings"))
+        if (henka_ui_primary_button(state->ui, "quick_diagnostics", (henka_ui_rect){x_left, y, half_button_width, 28.0f}, "Diagnostics"))
         {
-            if (sandbox3d_save_settings(engine, state) == HENKA_SUCCESS)
-            {
-                sandbox3d_set_statusf(state, false, true, "Settings saved.");
-            }
-            else
-            {
-                sandbox3d_set_statusf(state, true, true, "Settings could not be saved.");
-            }
+            sandbox3d_set_active_utility(state, SANDBOX3D_UTILITY_DIAGNOSTICS);
+            sandbox3d_set_statusf(state, false, false, "Diagnostics are open in the Utility panel.");
+        }
+        if (henka_ui_primary_button(state->ui, "quick_transform_qa", (henka_ui_rect){x_middle, y, half_button_width, 28.0f}, "Transform QA"))
+        {
+            sandbox3d_set_active_utility(state, SANDBOX3D_UTILITY_TRANSFORM_QA);
+            sandbox3d_set_statusf(state, false, false, "Transform QA is open in the Utility panel.");
         }
     }
     else
@@ -3747,9 +3849,27 @@ static void sandbox3d_draw_controls_panel(
         y += 46.0f;
         sandbox3d_draw_section_heading(state->ui, x_left, y, "Status");
         y += 20.0f;
-        sandbox3d_draw_status_block(state, x_left, y, panel_bounds.width - 28.0f, !full_mode);
+        sandbox3d_draw_status_block(state, x_left, y, panel_bounds.width - 28.0f, true);
 
-        y = panel_bounds.y + panel_bounds.height - 72.0f;
+        y = panel_bounds.y + panel_bounds.height - 106.0f;
+        if (henka_ui_button(state->ui, "save_settings", (henka_ui_rect){x_left, y, half_button_width, 28.0f}, "Save Settings"))
+        {
+            if (sandbox3d_save_settings(engine, state) == HENKA_SUCCESS)
+            {
+                sandbox3d_set_statusf(state, false, true, "Settings saved.");
+            }
+            else
+            {
+                sandbox3d_set_statusf(state, true, true, "Settings could not be saved.");
+            }
+        }
+        if (henka_ui_button(state->ui, "reset_layout", (henka_ui_rect){x_middle, y, half_button_width, 28.0f}, "Reset Layout"))
+        {
+            sandbox3d_reset_workspace_layout(state);
+            sandbox3d_set_statusf(state, false, true, "Layout reset to View.");
+            sandbox3d_print_layout_mode(state, false);
+        }
+        y += 34.0f;
         if (henka_ui_button(state->ui, "reset_settings", (henka_ui_rect){x_left, y, half_button_width, 28.0f}, "Reset Settings"))
         {
             if (sandbox3d_reset_settings(engine, state) == HENKA_SUCCESS)
@@ -3934,7 +4054,7 @@ static void sandbox3d_draw_object_details_panel(
         return;
     }
     henka_ui_panel(state->ui, panel_bounds, "Object Details");
-    compact_mode = state->workspace.layout_mode != SANDBOX3D_LAYOUT_FULL;
+    compact_mode = true;
     action_button_width = (panel_bounds.width - 42.0f) * 0.5f;
 
     descriptor = sandbox3d_get_selected_descriptor(state);
@@ -4007,20 +4127,17 @@ static void sandbox3d_draw_object_details_panel(
     {
         snprintf(interaction_text, sizeof(interaction_text), "%s", interaction.prompt != NULL ? interaction.prompt : "Available");
     }
-    if (!compact_mode)
-    {
-        sandbox3d_draw_value_row(
-            state->ui,
-            panel_bounds.x + 14.0f,
-            panel_bounds.y + 332.0f,
-            panel_bounds.width - 28.0f,
-            "Interact",
-            interaction_text);
-    }
+    sandbox3d_draw_value_row(
+        state->ui,
+        panel_bounds.x + 14.0f,
+        compact_mode ? panel_bounds.y + 278.0f : panel_bounds.y + 332.0f,
+        panel_bounds.width - 28.0f,
+        "Object Use",
+        interaction_text);
 
     snprintf(action_label, sizeof(action_label), "%s", visible ? "Hide Object" : "Show Object");
-    sandbox3d_draw_section_heading(state->ui, panel_bounds.x + 14.0f, compact_mode ? panel_bounds.y + 286.0f : panel_bounds.y + 356.0f, "Actions");
-    if (henka_ui_button(state->ui, "toggle_selected_visibility", (henka_ui_rect){panel_bounds.x + 14.0f, compact_mode ? panel_bounds.y + 304.0f : panel_bounds.y + 374.0f, action_button_width, 28.0f}, action_label))
+    sandbox3d_draw_section_heading(state->ui, panel_bounds.x + 14.0f, compact_mode ? panel_bounds.y + 308.0f : panel_bounds.y + 356.0f, "Actions");
+    if (henka_ui_button(state->ui, "toggle_selected_visibility", (henka_ui_rect){panel_bounds.x + 14.0f, compact_mode ? panel_bounds.y + 326.0f : panel_bounds.y + 374.0f, action_button_width, 28.0f}, action_label))
     {
         if (sandbox3d_toggle_selected_entity_visibility(state))
         {
@@ -4032,7 +4149,7 @@ static void sandbox3d_draw_object_details_panel(
         }
     }
 
-    if (henka_ui_primary_button(state->ui, "focus_selected_camera", (henka_ui_rect){panel_bounds.x + 28.0f + action_button_width, compact_mode ? panel_bounds.y + 304.0f : panel_bounds.y + 374.0f, action_button_width, 28.0f}, "Focus Camera"))
+    if (henka_ui_primary_button(state->ui, "focus_selected_camera", (henka_ui_rect){panel_bounds.x + 28.0f + action_button_width, compact_mode ? panel_bounds.y + 326.0f : panel_bounds.y + 374.0f, action_button_width, 28.0f}, "Focus Camera"))
     {
         if (sandbox3d_focus_camera_on_selected(state))
         {
@@ -4044,7 +4161,7 @@ static void sandbox3d_draw_object_details_panel(
         }
     }
 
-    if (henka_ui_button(state->ui, "reset_selected_transform", (henka_ui_rect){panel_bounds.x + 14.0f, compact_mode ? panel_bounds.y + 338.0f : panel_bounds.y + 402.0f, action_button_width, 28.0f}, "Reset Transform"))
+    if (henka_ui_button(state->ui, "reset_selected_transform", (henka_ui_rect){panel_bounds.x + 14.0f, compact_mode ? panel_bounds.y + 360.0f : panel_bounds.y + 402.0f, action_button_width, 28.0f}, "Reset Transform"))
     {
         if (sandbox3d_reset_selected_entity_transform(state))
         {
@@ -4056,7 +4173,7 @@ static void sandbox3d_draw_object_details_panel(
         }
     }
 
-    if (henka_ui_button(state->ui, "print_selected_info", (henka_ui_rect){panel_bounds.x + 28.0f + action_button_width, compact_mode ? panel_bounds.y + 338.0f : panel_bounds.y + 402.0f, action_button_width, 28.0f}, "Object Info"))
+    if (henka_ui_button(state->ui, "print_selected_info", (henka_ui_rect){panel_bounds.x + 28.0f + action_button_width, compact_mode ? panel_bounds.y + 360.0f : panel_bounds.y + 402.0f, action_button_width, 28.0f}, "Object Info"))
     {
         sandbox3d_set_active_utility(state, SANDBOX3D_UTILITY_OBJECT_INFO);
         sandbox3d_set_statusf(state, false, false, "Object info is open for %s.", descriptor->display_name);
@@ -4417,6 +4534,7 @@ static void sandbox3d_build_ui(henka_engine* engine, sandbox3d_state* state)
         snprintf(fps_text, sizeof(fps_text), "Frame: %.2f ms  FPS: %.1f", milliseconds, fps);
         sandbox3d_draw_scene_viewport_frame(state->ui, layout.scene_frame);
         sandbox3d_draw_gizmo_overlay(engine, state, layout.scene_viewport);
+        sandbox3d_draw_viewport_debug_strip(engine, state, layout.debug_strip);
         sandbox3d_draw_controls_panel(
             engine,
             state,
@@ -5105,11 +5223,17 @@ static void sandbox3d_update(henka_engine* engine, double delta_seconds, void* u
             -mouse_delta.x * sandbox3d_get_mouse_sensitivity(state),
             -mouse_delta.y * sandbox3d_get_mouse_sensitivity(state));
     }
+    if (henka_engine_is_mouse_captured(engine) &&
+        henka_input_was_mouse_button_pressed(engine, HENKA_MOUSE_BUTTON_LEFT) &&
+        state->viewport_tool != SANDBOX3D_VIEWPORT_TOOL_SELECT)
+    {
+        sandbox3d_record_reject_reason(state, SANDBOX3D_INTERACTION_REJECT_MOUSE_CAPTURE_ACTIVE, true);
+    }
 
     if (!henka_engine_is_mouse_captured(engine))
     {
-        const bool ui_wants_mouse = state->ui != NULL && henka_ui_get_wants_mouse(state->ui);
         const bool mouse_in_viewport = henka_viewport_contains_point(state->frame_layout.scene_viewport, framebuffer_mouse_position);
+        const bool ui_wants_mouse = sandbox3d_ui_owns_mouse_at_point(state, framebuffer_mouse_position);
         const bool alt_orbit_held = henka_input_is_key_down(engine, HENKA_KEY_LEFT_ALT) && henka_input_is_mouse_button_down(engine, HENKA_MOUSE_BUTTON_LEFT);
         const bool alt_orbit_pressed = henka_input_is_key_down(engine, HENKA_KEY_LEFT_ALT) && henka_input_was_mouse_button_pressed(engine, HENKA_MOUSE_BUTTON_LEFT);
         const bool middle_pan_held = henka_input_is_mouse_button_down(engine, HENKA_MOUSE_BUTTON_MIDDLE);
@@ -5144,11 +5268,15 @@ static void sandbox3d_update(henka_engine* engine, double delta_seconds, void* u
             sandbox3d_set_view_navigation_target(state, sandbox3d_get_view_navigation_target(state));
             sandbox3d_record_success_result(state, "Pan shortcut started");
         }
-        if (!alt_orbit_held)
+        if (state->view_navigation.orbiting &&
+            !alt_orbit_held &&
+            !(state->viewport_tool == SANDBOX3D_VIEWPORT_TOOL_ORBIT && left_down))
         {
             state->view_navigation.orbiting = false;
         }
-        if (!middle_pan_held)
+        if (state->view_navigation.panning &&
+            !middle_pan_held &&
+            !(state->viewport_tool == SANDBOX3D_VIEWPORT_TOOL_PAN && left_down))
         {
             state->view_navigation.panning = false;
         }
@@ -5244,12 +5372,6 @@ static void sandbox3d_update(henka_engine* engine, double delta_seconds, void* u
             state->view_navigation.panning = false;
         }
 
-        if (ui_visible && state->gizmo.drag.dragging)
-        {
-            sandbox3d_clear_gizmo_drag(state, true);
-            sandbox3d_set_status(state, false, "Panels are open. Gizmo drag stopped.");
-        }
-
         if (!navigation_active)
         {
             sandbox3d_update_gizmo_hover(engine, state);
@@ -5286,7 +5408,16 @@ static void sandbox3d_update(henka_engine* engine, double delta_seconds, void* u
             }
             else if (sandbox3d_viewport_tool_mode_uses_gizmo(state->viewport_tool))
             {
-                sandbox3d_try_pick_object(engine, state);
+                const sandbox3d_interaction_reject_reason reason =
+                    sandbox3d_evaluate_select_reject_reason(&gate);
+                if (reason == SANDBOX3D_INTERACTION_REJECT_NONE)
+                {
+                    sandbox3d_try_pick_object(engine, state);
+                }
+                else
+                {
+                    sandbox3d_record_reject_reason(state, reason, true);
+                }
             }
         }
     }

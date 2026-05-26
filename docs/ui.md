@@ -88,6 +88,7 @@ The current `Controls` panel can:
 - switch between explicit `Select`, `Orbit`, `Pan`, `Move`, `Rotate`, and `Scale` viewport tools
 - toggle transform snapping and show the current snap increments
 - toggle `Hit Boxes` so the viewport can draw the same handle regions that gizmo hit testing uses
+- open `Diagnostics` and `Transform QA` directly from the main Controls page
 - save sandbox settings
 - reset the layout
 - open in-window utilities for help, legend, paths, settings, diagnostics, and transform QA
@@ -144,6 +145,8 @@ The viewport now also supports direct navigation while mouse capture is released
 
 Mouse wheel input over the `Controls` or `Scene Objects` panels is routed to panel paging instead of the viewport, so panel interaction does not leak into scene zooming.
 
+A compact diagnostic strip stays visible immediately below the Scene View while panels are open. It shows the active tool, selected object, mouse capture state, whether the cursor is in the viewport, whether a visible panel owns the pointer, gizmo model state, handle count, hovered handle, drag state, and last rejection reason. The strip is informational and does not consume viewport input.
+
 The current `Utility` panel can show:
 
 - Help
@@ -160,6 +163,7 @@ The packaged sandbox still opens a console window at this stage, but normal view
 The sandbox also uses the current engine diagnostics snapshot in the Utility panel, and object picking can update selection when mouse capture is released. Picking and gizmo dragging use viewport-relative coordinates, so docked panel clicks do not trigger scene picks or transform drags.
 The diagnostics view now surfaces the current viewport tool, gizmo mode, mouse capture state, UI mouse ownership, cursor position, selected object, gizmo validity, overlay primitive count, hovered handle, active drag state, last rejected interaction reason, last Action API command, and last Action API result.
 The Transform QA view exposes direct move, rotate, scale, and reset controls that use the same local Action API path as normal object manipulation, which makes it easier to separate Action API failures from gizmo or input failures during packaged QA.
+When Diagnostics or Transform QA is open in the heavier layout, the utility view uses the right dock directly so its controls do not draw through Object Details.
 
 When the UI is open:
 

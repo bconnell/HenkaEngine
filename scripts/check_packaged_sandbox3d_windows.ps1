@@ -236,11 +236,12 @@ try {
 
     if ($uiAutomationVerified) {
         Write-Step "Checking packaged UI click controls"
-        Click-WindowPoint -Handle $process.MainWindowHandle -OffsetX 120 -OffsetY 158
-        Click-WindowPoint -Handle $process.MainWindowHandle -OffsetX 120 -OffsetY 158
-        Click-WindowPoint -Handle $process.MainWindowHandle -OffsetX 248 -OffsetY 158
-        Click-WindowPoint -Handle $process.MainWindowHandle -OffsetX 248 -OffsetY 158
-        Click-WindowPoint -Handle $process.MainWindowHandle -OffsetX 248 -OffsetY 194
+        Click-WindowPoint -Handle $process.MainWindowHandle -OffsetX 120 -OffsetY 180
+        Click-WindowPoint -Handle $process.MainWindowHandle -OffsetX 120 -OffsetY 180
+        Click-WindowPoint -Handle $process.MainWindowHandle -OffsetX 248 -OffsetY 180
+        Click-WindowPoint -Handle $process.MainWindowHandle -OffsetX 248 -OffsetY 180
+        Click-WindowPoint -Handle $process.MainWindowHandle -OffsetX 230 -OffsetY 60
+        Click-WindowPoint -Handle $process.MainWindowHandle -OffsetX 100 -OffsetY 610
 
         $uiClickChecks = @(
             @{ Pattern = "Debug grid: hidden"; Description = "UI debug grid click output" },

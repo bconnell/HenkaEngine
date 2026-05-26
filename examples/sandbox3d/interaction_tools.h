@@ -2,9 +2,11 @@
 #define SANDBOX3D_INTERACTION_TOOLS_H
 
 #include <stdbool.h>
+#include <stddef.h>
 
 #include <henka/gizmo.h>
 #include <henka/math.h>
+#include <henka/ui.h>
 
 typedef enum sandbox3d_viewport_tool_mode
 {
@@ -66,6 +68,10 @@ const char* sandbox3d_interaction_reject_reason_to_string(sandbox3d_interaction_
 henka_gizmo_mode sandbox3d_viewport_tool_mode_to_gizmo_mode(sandbox3d_viewport_tool_mode tool_mode);
 bool sandbox3d_viewport_tool_mode_uses_gizmo(sandbox3d_viewport_tool_mode tool_mode);
 bool sandbox3d_viewport_tool_mode_is_navigation(sandbox3d_viewport_tool_mode tool_mode);
+bool sandbox3d_point_is_owned_by_panels(
+    henka_vec2 framebuffer_point,
+    const henka_ui_rect* panel_bounds,
+    size_t panel_count);
 sandbox3d_interaction_reject_reason sandbox3d_evaluate_navigation_reject_reason(
     sandbox3d_viewport_tool_mode tool_mode,
     const sandbox3d_interaction_gate* gate);

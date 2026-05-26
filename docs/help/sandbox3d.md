@@ -64,7 +64,8 @@ On a first packaged run with no existing settings file, the docked workspace ope
 - Toggle snapping on and off to compare free movement with stepped adjustments.
 - Click the grid and wireframe controls to confirm the in-window UI updates the same engine state as the keyboard shortcuts.
 - Open Help, Scene Legend, Paths, Settings, Diagnostics, and Transform QA in the Utility panel so you can inspect the sandbox without relying on the console.
-- Use Transform QA to confirm whether selected-object mutation works even if gizmo dragging or viewport input is failing.
+- Watch the compact strip below Scene View while testing; it reports tool, selection, pointer ownership, gizmo, hover, drag, and rejection state live.
+- Use Transform QA first to confirm whether selected-object mutation works even if gizmo dragging or viewport input is failing.
 - Confirm the small in-window status area reports common actions such as layout changes, camera reset, saved settings, or object focus.
 - Select each scene object and confirm the Object Details panel updates.
 - Use Focus Camera, Reset Transform, and Print Object Info on a few different objects.
@@ -97,6 +98,7 @@ The `Controls` panel currently includes:
 - a reset-layout button
 - panel visibility toggles for the object-inspection panels in the heavier layouts
 - utility tabs for Help, Scene Legend, Paths, Settings, Diagnostics, Transform QA, and Object Info
+- direct `Diagnostics` and `Transform QA` buttons on the main page
 - a small in-window status area for recent actions and warnings
 
 `Inspect` and `Full Tools` also expose the wider inspection controls.
@@ -149,6 +151,8 @@ Those utilities are the preferred path for normal viewer use. The console remain
 Status messages also appear in-window for common actions so normal packaged use does not depend on the console.
 Diagnostics now report input ownership, viewport-local cursor state, selected object state, gizmo model validity, overlay primitive count, hovered handle, active drag target, last rejected interaction reason, and last Action API result.
 Transform QA exposes direct move, rotate, scale, and reset controls that use the selected real object and the same Action API path as the normal object workflow.
+The compact strip below Scene View keeps the essential input gate and gizmo state visible while the cursor is over the viewport, so a rejected click or drag can be diagnosed without switching views.
+`Object Use` in Object Details reports the optional object interaction prompt and range only; it is separate from transform tools and gizmo state.
 
 When the UI is open:
 

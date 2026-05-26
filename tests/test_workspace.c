@@ -24,6 +24,9 @@ void henka_test_workspace(void)
     HENKA_TEST_ASSERT(henka_window_point_to_framebuffer_point(800, 600, 1200, 900, (henka_vec2){200.0f, 150.0f}, &framebuffer_point) == HENKA_SUCCESS);
     HENKA_TEST_ASSERT_FLOAT_CLOSE(framebuffer_point.x, 300.0f, 0.0001f);
     HENKA_TEST_ASSERT_FLOAT_CLOSE(framebuffer_point.y, 225.0f, 0.0001f);
+    HENKA_TEST_ASSERT(henka_viewport_contains_point((henka_viewport){250, 200, 400, 300}, framebuffer_point));
+    HENKA_TEST_ASSERT(henka_window_point_to_framebuffer_point(800, 600, 1200, 900, (henka_vec2){60.0f, 40.0f}, &framebuffer_point) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(!henka_viewport_contains_point((henka_viewport){250, 200, 400, 300}, framebuffer_point));
     HENKA_TEST_ASSERT(henka_window_point_to_framebuffer_point(0, 600, 1200, 900, (henka_vec2){200.0f, 150.0f}, &framebuffer_point) == HENKA_ERROR_INVALID_ARGUMENT);
 
     desc = (henka_workspace_desc){

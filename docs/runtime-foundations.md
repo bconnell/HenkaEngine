@@ -106,6 +106,7 @@ Henka now also exposes deterministic viewport interaction helpers around the cur
 
 The sandbox uses the same handle-model and drag helpers that the tests now exercise. This reduces manual QA for basic object-selection and transform-mutation outcomes without claiming that visual feel is fully automated.
 The current sandbox layer also exposes compact interaction-gate helpers and reject reasons so runtime diagnostics can say why a viewport interaction did not start instead of failing silently.
+Panel ownership checks use current visible panel rectangles and framebuffer-space mouse coordinates, matching the coordinate space used by viewport selection and gizmo hit testing.
 
 ### Picking
 
@@ -211,6 +212,7 @@ Henka still uses console logging for development and troubleshooting, but the en
 
 The sandbox uses that data in its in-window diagnostics utility so normal inspection does not depend on the console.
 That diagnostics surface now also includes sandbox-level interaction state such as viewport tool mode, cursor ownership, selected object validity, gizmo model validity, hovered handle, active drag target, last rejected interaction reason, and last Action API result.
+The sandbox keeps the essential gate state in a compact Scene View strip during interaction, while the fuller Diagnostics and Transform QA utility views remain available for deeper packaged testing.
 
 ### Package modes
 

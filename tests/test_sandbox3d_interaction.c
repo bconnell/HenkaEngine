@@ -10,6 +10,7 @@ void henka_test_sandbox3d_interaction(void)
     henka_vec3 move_delta;
     henka_vec3 scale_multiplier;
     sandbox3d_interaction_gate gate;
+    henka_ui_rect panels[4];
 
     HENKA_TEST_ASSERT(sandbox3d_viewport_tool_mode_to_gizmo_mode(SANDBOX3D_VIEWPORT_TOOL_MOVE) == HENKA_GIZMO_MODE_MOVE);
     HENKA_TEST_ASSERT(sandbox3d_viewport_tool_mode_to_gizmo_mode(SANDBOX3D_VIEWPORT_TOOL_ROTATE) == HENKA_GIZMO_MODE_ROTATE);
@@ -19,6 +20,16 @@ void henka_test_sandbox3d_interaction(void)
     HENKA_TEST_ASSERT(!sandbox3d_viewport_tool_mode_uses_gizmo(SANDBOX3D_VIEWPORT_TOOL_PAN));
     HENKA_TEST_ASSERT(sandbox3d_viewport_tool_mode_is_navigation(SANDBOX3D_VIEWPORT_TOOL_ORBIT));
     HENKA_TEST_ASSERT(!sandbox3d_viewport_tool_mode_is_navigation(SANDBOX3D_VIEWPORT_TOOL_SCALE));
+
+    panels[0] = (henka_ui_rect){16.0f, 16.0f, 320.0f, 470.0f};
+    panels[1] = (henka_ui_rect){16.0f, 498.0f, 320.0f, 190.0f};
+    panels[2] = (henka_ui_rect){924.0f, 16.0f, 340.0f, 400.0f};
+    panels[3] = (henka_ui_rect){924.0f, 428.0f, 340.0f, 260.0f};
+    HENKA_TEST_ASSERT(sandbox3d_point_is_owned_by_panels((henka_vec2){120.0f, 100.0f}, panels, 4U));
+    HENKA_TEST_ASSERT(sandbox3d_point_is_owned_by_panels((henka_vec2){120.0f, 520.0f}, panels, 4U));
+    HENKA_TEST_ASSERT(sandbox3d_point_is_owned_by_panels((henka_vec2){1020.0f, 120.0f}, panels, 4U));
+    HENKA_TEST_ASSERT(sandbox3d_point_is_owned_by_panels((henka_vec2){1020.0f, 500.0f}, panels, 4U));
+    HENKA_TEST_ASSERT(!sandbox3d_point_is_owned_by_panels((henka_vec2){600.0f, 240.0f}, panels, 4U));
 
     memset(&gate, 0, sizeof(gate));
     gate.supported_mouse_button = true;
@@ -42,26 +53,14 @@ void henka_test_sandbox3d_interaction(void)
         SANDBOX3D_INTERACTION_REJECT_NAVIGATION_MODE_INACTIVE);
     HENKA_TEST_ASSERT(
         sandbox3d_evaluate_navigation_reject_reason(SANDBOX3D_VIEWPORT_TOOL_ORBIT, &gate) ==
-        SANDBOX3D_INTERACTION_REJECT_NO_SELECTED_OBJECT);
-    gate.selected_object_present = true;
+        SANDBOX3D_INTERACTION_REJECT_NONE);
+    gate.ui_wants_mouse = true;
     HENKA_TEST_ASSERT(
-        sandbox3d_evaluate_navigation_reject_reason(SANDBOX3D_VIEWPORT_TOOL_ORBIT, &gate) ==
-        SANDBOX3D_INTERACTION_REJECT_SELECTED_OBJECT_INVALID);
-    gate.selected_object_valid = true;
+        sandbox3d_evaluate_navigation_reject_reason(SANDBOX3D_VIEWPORT_TOOL_PAN, &gate) ==
+        SANDBOX3D_INTERACTION_REJECT_UI_OWNS_MOUSE);
+    gate.ui_wants_mouse = false;
     HENKA_TEST_ASSERT(
-        sandbox3d_evaluate_navigation_reject_reason(SANDBOX3D_VIEWPORT_TOOL_ORBIT, &gate) ==
-        SANDBOX3D_INTERACTION_REJECT_SELECTED_OBJECT_HIDDEN);
-    gate.selected_object_visible = true;
-    HENKA_TEST_ASSERT(
-        sandbox3d_evaluate_navigation_reject_reason(SANDBOX3D_VIEWPORT_TOOL_ORBIT, &gate) ==
-        SANDBOX3D_INTERACTION_REJECT_SELECTED_OBJECT_NOT_SELECTABLE);
-    gate.selected_object_selectable = true;
-    HENKA_TEST_ASSERT(
-        sandbox3d_evaluate_navigation_reject_reason(SANDBOX3D_VIEWPORT_TOOL_ORBIT, &gate) ==
-        SANDBOX3D_INTERACTION_REJECT_SELECTED_BOUNDS_INVALID);
-    gate.selected_bounds_valid = true;
-    HENKA_TEST_ASSERT(
-        sandbox3d_evaluate_navigation_reject_reason(SANDBOX3D_VIEWPORT_TOOL_ORBIT, &gate) ==
+        sandbox3d_evaluate_navigation_reject_reason(SANDBOX3D_VIEWPORT_TOOL_PAN, &gate) ==
         SANDBOX3D_INTERACTION_REJECT_NONE);
 
     memset(&gate, 0, sizeof(gate));
@@ -86,6 +85,21 @@ void henka_test_sandbox3d_interaction(void)
         sandbox3d_evaluate_gizmo_reject_reason(SANDBOX3D_VIEWPORT_TOOL_MOVE, &gate) ==
         SANDBOX3D_INTERACTION_REJECT_OVERLAY_HAS_NO_PRIMITIVES);
     gate.overlay_has_primitives = true;
+    gate.ui_wants_mouse = true;
+    HENKA_TEST_ASSERT(
+        sandbox3d_evaluate_gizmo_reject_reason(SANDBOX3D_VIEWPORT_TOOL_MOVE, &gate) ==
+        SANDBOX3D_INTERACTION_REJECT_UI_OWNS_MOUSE);
+    gate.ui_wants_mouse = false;
+    gate.mouse_capture_active = true;
+    HENKA_TEST_ASSERT(
+        sandbox3d_evaluate_gizmo_reject_reason(SANDBOX3D_VIEWPORT_TOOL_MOVE, &gate) ==
+        SANDBOX3D_INTERACTION_REJECT_MOUSE_CAPTURE_ACTIVE);
+    gate.mouse_capture_active = false;
+    gate.cursor_in_viewport = false;
+    HENKA_TEST_ASSERT(
+        sandbox3d_evaluate_gizmo_reject_reason(SANDBOX3D_VIEWPORT_TOOL_MOVE, &gate) ==
+        SANDBOX3D_INTERACTION_REJECT_CURSOR_OUTSIDE_VIEWPORT);
+    gate.cursor_in_viewport = true;
     gate.cursor_in_gizmo_dead_zone = true;
     HENKA_TEST_ASSERT(
         sandbox3d_evaluate_gizmo_reject_reason(SANDBOX3D_VIEWPORT_TOOL_MOVE, &gate) ==

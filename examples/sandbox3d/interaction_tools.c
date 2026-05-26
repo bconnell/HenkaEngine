@@ -101,6 +101,31 @@ bool sandbox3d_viewport_tool_mode_is_navigation(sandbox3d_viewport_tool_mode too
         tool_mode == SANDBOX3D_VIEWPORT_TOOL_PAN;
 }
 
+bool sandbox3d_point_is_owned_by_panels(
+    henka_vec2 framebuffer_point,
+    const henka_ui_rect* panel_bounds,
+    size_t panel_count)
+{
+    size_t index;
+
+    if (panel_bounds == NULL)
+    {
+        return false;
+    }
+
+    for (index = 0U; index < panel_count; ++index)
+    {
+        if (panel_bounds[index].width > 0.0f &&
+            panel_bounds[index].height > 0.0f &&
+            henka_ui_rect_contains(panel_bounds[index], framebuffer_point))
+        {
+            return true;
+        }
+    }
+
+    return false;
+}
+
 static sandbox3d_interaction_reject_reason sandbox3d_evaluate_common_reject_reason(
     const sandbox3d_interaction_gate* gate)
 {
@@ -149,27 +174,6 @@ sandbox3d_interaction_reject_reason sandbox3d_evaluate_navigation_reject_reason(
     {
         return SANDBOX3D_INTERACTION_REJECT_NAVIGATION_MODE_INACTIVE;
     }
-    if (!gate->selected_object_present)
-    {
-        return SANDBOX3D_INTERACTION_REJECT_NO_SELECTED_OBJECT;
-    }
-    if (!gate->selected_object_valid)
-    {
-        return SANDBOX3D_INTERACTION_REJECT_SELECTED_OBJECT_INVALID;
-    }
-    if (!gate->selected_object_visible)
-    {
-        return SANDBOX3D_INTERACTION_REJECT_SELECTED_OBJECT_HIDDEN;
-    }
-    if (!gate->selected_object_selectable)
-    {
-        return SANDBOX3D_INTERACTION_REJECT_SELECTED_OBJECT_NOT_SELECTABLE;
-    }
-    if (!gate->selected_bounds_valid)
-    {
-        return SANDBOX3D_INTERACTION_REJECT_SELECTED_BOUNDS_INVALID;
-    }
-
     return SANDBOX3D_INTERACTION_REJECT_NONE;
 }
 
