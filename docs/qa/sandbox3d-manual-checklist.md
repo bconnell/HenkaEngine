@@ -87,15 +87,17 @@ Use this checklist when you want to confirm that `henka_sandbox3d` is visually r
 40. Confirm Object Details updates after manipulation.
 41. Confirm picking still works after movement, rotation, or scale changes.
 42. Click empty viewport space and confirm no gizmo helper becomes the selected object.
-43. Confirm Reset Transform restores the selected object.
-44. Confirm Focus Camera still works after manipulation.
-45. Confirm the camera view does not look stretched.
-46. Confirm the small in-window status area reports common actions without forcing you to read the console.
-47. Confirm the console still receives fallback logs for help, legend, object info, warnings, or errors when those actions are used.
-48. Confirm `Escape` behavior still works.
-49. Confirm close-window exit remains clean.
-50. Confirm no named-engine comparisons appear in runtime text or packaged help.
-51. If the UI is not visible or feels wrong, note whether the console reports `Sandbox panel: shown`, `Sandbox panel: hidden`, `Sandbox UI ready`, or `Sandbox viewport`.
+43. Open panels or resize the window during a drag and confirm the drag stops cleanly instead of jumping to a new target.
+44. Hide the selected object and confirm gizmo dragging stops safely.
+45. Confirm Reset Transform restores the selected object.
+46. Confirm Focus Camera still works after manipulation.
+47. Confirm the camera view does not look stretched.
+48. Confirm the small in-window status area reports common actions without forcing you to read the console.
+49. Confirm the console still receives fallback logs for help, legend, object info, warnings, or errors when those actions are used.
+50. Confirm `Escape` behavior still works.
+51. Confirm close-window exit remains clean.
+52. Confirm no named-engine comparisons appear in runtime text or packaged help.
+53. If the UI is not visible or feels wrong, note whether the console reports `Sandbox panel: shown`, `Sandbox panel: hidden`, `Sandbox UI ready`, or `Sandbox viewport`.
 
 ## Expected startup behavior
 
@@ -156,6 +158,7 @@ You should be able to identify these examples:
 - A selected object shows a visible transform gizmo in the viewport.
 - Move, Rotate, and Scale mode handles should drag only inside the viewport.
 - Internal gizmo helper pieces should not appear as selected sandbox objects.
+- Gizmo dragging should stop safely if the viewport changes, the selected object becomes hidden, or the panels reopen mid-drag.
 - Pressing `F4` again closes the UI.
 - When the UI is closed, a small in-window hint reminds you that `F4` restores panels and `F5` changes layout.
 - After the UI closes, `Right Mouse` and `Tab` can capture the mouse again.

@@ -119,7 +119,8 @@ The selected object also shows a transform gizmo inside the dedicated scene view
 - `Scale` exposes axis scale handles plus a uniform center handle.
 - Snapping can be toggled from the Controls panel.
 - Gizmo hit testing only uses the active scene viewport, so docked panel clicks do not manipulate scene objects.
-- The gizmo helper pieces are internal to the viewport tool path and do not appear as normal sandbox objects in selection or object details.
+- The gizmo helper pieces are internal to the viewport tool path and do not appear as normal sandbox objects in selection, object details, persisted selection state, or normal scene picking.
+- Dragging cancels safely if the selected object becomes invalid, hidden, or the active viewport changes during manipulation.
 
 The current `Utility` panel can show:
 
@@ -156,7 +157,7 @@ If the packaged sandbox opens but you do not see the panels:
 - launch `out/HenkaSandbox3D/HenkaSandbox3D.exe` again
 - confirm the startup console help mentions `F4`
 
-The packaged QA script can confirm startup logs and UI state output, but it still does not replace a human visual check for readability.
+The packaged QA script can confirm startup logs and UI state output, but it still does not replace a human visual check for readability, drag feel, or gizmo handle clarity.
 
 ## Future direction
 

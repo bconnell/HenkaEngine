@@ -93,7 +93,7 @@ Henka now also includes a small transform gizmo foundation for selected scene ob
 - ray-to-plane and projected drag helpers
 
 The sandbox uses these helpers to draw scene-space gizmos inside the dedicated viewport and manipulate selected objects without turning the current sample into a full editor.
-The helper pieces that draw those gizmos stay internal to the tool path and are excluded from normal scene picking.
+The helper pieces that draw those gizmos stay internal to the tool path, are excluded from normal scene picking, and are not treated as persisted or user-facing scene selection targets.
 
 ### Asset metadata
 

@@ -118,7 +118,8 @@ The selected object also shows a visible transform gizmo in the scene viewport.
 - `Scale` mode supports axis scale and a uniform center handle.
 - Snap can be enabled or disabled from the Controls panel.
 - Gizmo dragging uses viewport-relative mouse coordinates, so docked panel clicks do not manipulate scene objects.
-- The gizmo helper pieces are internal scene tools. They follow the selected object, but they do not become the selected object.
+- The gizmo helper pieces are internal scene tools. They follow the selected object, but they do not become the selected object, do not appear in Scene Objects, and are ignored by normal scene picking.
+- If the selected object becomes hidden, invalid, or the viewport changes during a drag, the drag stops safely and the selected real object remains the source of truth.
 
 The `Utility` panel provides short in-window views for:
 
@@ -157,6 +158,7 @@ The runtime also reports whether it is running in `Development` or `Packaged` mo
 - A separate save-data foundation now exists for scene id, camera pose, and simple flags, but the sandbox still uses settings for its normal viewer state.
 - The UI overlay is intentionally small. It is meant for sandbox control and object inspection, not as a full editor or a complete runtime UI system.
 - The transform gizmo is intentionally scoped to world-axis move, rotate, and scale for the current sandbox object model. Undo, numeric editing, floating panels, and resizable docks are separate future work.
+- Manual desktop QA is still the best way to judge gizmo handle feel, hover clarity, and transform drag comfort.
 - The packaged sandbox still opens a console window at this stage. In-window utilities and status are the preferred viewer workflow, while the console remains available for fallback logs.
 - Editor tools, asset browser UI, and broader 2D or 2.5D workflows are not available yet.
 

@@ -983,7 +983,7 @@ bool henka_ui_toggle(henka_ui_context* context, const char* id, henka_ui_rect bo
         return false;
     }
 
-    state_bounds = (henka_ui_rect){bounds.x + bounds.width - 58.0f, bounds.y + 5.0f, 48.0f, 18.0f};
+    state_bounds = (henka_ui_rect){bounds.x + bounds.width - 60.0f, bounds.y + 4.0f, 50.0f, 20.0f};
     result = henka_ui_push_rect(context, state_bounds, *value ? g_ui_toggle_on : g_ui_toggle_off);
     if (result != HENKA_SUCCESS)
     {
@@ -996,7 +996,7 @@ bool henka_ui_toggle(henka_ui_context* context, const char* id, henka_ui_rect bo
         return false;
     }
 
-    label_characters = (size_t)((bounds.width - 80.0f) / 6.0f);
+    label_characters = (size_t)((bounds.width - 84.0f) / 6.0f);
     if (label_characters < 4U)
     {
         label_characters = 4U;
@@ -1005,7 +1005,7 @@ bool henka_ui_toggle(henka_ui_context* context, const char* id, henka_ui_rect bo
 
     result = henka_ui_push_rect(
         context,
-        (henka_ui_rect){bounds.x + 8.0f, bounds.y + 8.0f, 8.0f, bounds.height - 16.0f},
+        (henka_ui_rect){bounds.x + 8.0f, bounds.y + 7.0f, 8.0f, bounds.height - 14.0f},
         *value ? g_ui_toggle_on : g_ui_toggle_off);
     if (result != HENKA_SUCCESS)
     {
@@ -1017,7 +1017,7 @@ bool henka_ui_toggle(henka_ui_context* context, const char* id, henka_ui_rect bo
         return false;
     }
 
-    if (henka_ui_draw_text(context, state_bounds.x + (*value ? 12.0f : 9.0f), state_bounds.y + 5.0f, 1.0f, *value ? "ON" : "OFF", g_ui_text_color) != HENKA_SUCCESS)
+    if (henka_ui_draw_text(context, state_bounds.x + (*value ? 14.0f : 11.0f), state_bounds.y + 6.0f, 1.0f, *value ? "ON" : "OFF", g_ui_text_color) != HENKA_SUCCESS)
     {
         return false;
     }

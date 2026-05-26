@@ -77,6 +77,7 @@ typedef struct sandbox3d_gizmo_drag_state
     bool dragging;
     henka_entity target_entity;
     henka_vec2 drag_start_mouse;
+    henka_viewport drag_start_viewport;
     henka_ray drag_start_ray;
     henka_transform drag_start_transform;
     sandbox3d_gizmo_axis active_axis;
@@ -203,6 +204,10 @@ static float sandbox3d_get_mouse_sensitivity(const sandbox3d_state* state);
 static void sandbox3d_set_status(sandbox3d_state* state, bool warning, const char* message);
 static void sandbox3d_set_statusf(sandbox3d_state* state, bool warning, bool print_console, const char* format, ...);
 static const sandbox3d_object_descriptor* sandbox3d_get_descriptor_by_entity(const sandbox3d_state* state, henka_entity entity);
+static bool sandbox3d_is_drag_target_valid(const sandbox3d_state* state, henka_entity entity);
+static void sandbox3d_clear_gizmo_drag(sandbox3d_state* state, bool clear_hover_axis);
+static henka_entity sandbox3d_get_real_selected_entity(const sandbox3d_state* state);
+static const sandbox3d_object_descriptor* sandbox3d_get_selected_descriptor(const sandbox3d_state* state);
 static const char* sandbox3d_safe_entity_name(const sandbox3d_state* state, henka_entity entity, const char* fallback_name);
 static bool sandbox3d_is_selectable_entity(const sandbox3d_state* state, henka_entity entity);
 static void sandbox3d_select_entity(sandbox3d_state* state, henka_entity entity);
@@ -408,6 +413,7 @@ static void sandbox3d_gizmo_init_defaults(sandbox3d_gizmo_state* gizmo)
     gizmo->hover_axis = SANDBOX3D_GIZMO_AXIS_NONE;
     gizmo->drag.dragging = false;
     gizmo->drag.target_entity = HENKA_INVALID_ENTITY;
+    gizmo->drag.drag_start_viewport = (henka_viewport){0, 0, 0, 0};
     gizmo->drag.active_axis = SANDBOX3D_GIZMO_AXIS_NONE;
     gizmo->drag.active_mode = SANDBOX3D_GIZMO_MODE_SELECT;
     gizmo->snap.enabled = true;
@@ -445,10 +451,7 @@ static void sandbox3d_gizmo_set_mode(sandbox3d_state* state, sandbox3d_gizmo_mod
     if (state->gizmo.mode != mode)
     {
         state->gizmo.mode = mode;
-        state->gizmo.drag.dragging = false;
-        state->gizmo.drag.target_entity = HENKA_INVALID_ENTITY;
-        state->gizmo.drag.active_axis = SANDBOX3D_GIZMO_AXIS_NONE;
-        state->gizmo.hover_axis = SANDBOX3D_GIZMO_AXIS_NONE;
+        sandbox3d_clear_gizmo_drag(state, true);
         sandbox3d_set_statusf(state, false, false, "Gizmo mode: %s", sandbox3d_get_gizmo_mode_label(mode));
     }
 }
@@ -568,7 +571,7 @@ static henka_result sandbox3d_gizmo_hit_test(
                     gizmo_transform.position,
                     ray,
                     gizmo_size,
-                    gizmo_size * 0.16f,
+                    gizmo_size * 0.24f,
                     &gizmo_axis,
                     &axis_distance) == HENKA_SUCCESS)
             {
@@ -585,7 +588,7 @@ static henka_result sandbox3d_gizmo_hit_test(
                     gizmo_transform.position,
                     ray,
                     gizmo_size,
-                    gizmo_size * 0.18f,
+                    gizmo_size * 0.26f,
                     &gizmo_axis,
                     &ring_distance) == HENKA_SUCCESS)
             {
@@ -606,7 +609,7 @@ static henka_result sandbox3d_gizmo_hit_test(
                     gizmo_transform.position,
                     ray,
                     gizmo_size,
-                    gizmo_size * 0.16f,
+                    gizmo_size * 0.24f,
                     &gizmo_axis,
                     &axis_distance) != HENKA_SUCCESS)
             {
@@ -619,7 +622,7 @@ static henka_result sandbox3d_gizmo_hit_test(
             if (henka_gizmo_hit_test_uniform_handle(
                     gizmo_transform.position,
                     ray,
-                    gizmo_size * 0.22f,
+                    gizmo_size * 0.30f,
                     &uniform_distance) == HENKA_SUCCESS &&
                 uniform_distance <= axis_distance)
             {
@@ -757,6 +760,7 @@ static void sandbox3d_reset_workspace_layout(sandbox3d_state* state)
     state->workspace.scene_objects_panel_visible = true;
     state->workspace.object_details_panel_visible = true;
     state->workspace.active_utility = SANDBOX3D_UTILITY_NONE;
+    sandbox3d_clear_gizmo_drag(state, true);
     sandbox3d_set_status(state, false, "View mode keeps the scene open while tools stay nearby.");
 }
 
@@ -900,6 +904,55 @@ static const sandbox3d_object_descriptor* sandbox3d_get_descriptor_by_entity(
     }
 
     return NULL;
+}
+
+static henka_entity sandbox3d_get_real_selected_entity(const sandbox3d_state* state)
+{
+    if (!sandbox3d_is_selectable_entity(state, state != NULL ? state->selected_entity : HENKA_INVALID_ENTITY))
+    {
+        return HENKA_INVALID_ENTITY;
+    }
+
+    return state->selected_entity;
+}
+
+static const sandbox3d_object_descriptor* sandbox3d_get_selected_descriptor(const sandbox3d_state* state)
+{
+    return sandbox3d_get_descriptor_by_entity(state, sandbox3d_get_real_selected_entity(state));
+}
+
+static bool sandbox3d_viewports_match(henka_viewport left, henka_viewport right)
+{
+    return left.x == right.x &&
+        left.y == right.y &&
+        left.width == right.width &&
+        left.height == right.height;
+}
+
+static void sandbox3d_clear_gizmo_drag(sandbox3d_state* state, bool clear_hover_axis)
+{
+    if (state == NULL)
+    {
+        return;
+    }
+
+    state->gizmo.drag.dragging = false;
+    state->gizmo.drag.target_entity = HENKA_INVALID_ENTITY;
+    state->gizmo.drag.active_axis = SANDBOX3D_GIZMO_AXIS_NONE;
+    state->gizmo.drag.active_mode = SANDBOX3D_GIZMO_MODE_SELECT;
+    state->gizmo.drag.drag_start_viewport = (henka_viewport){0, 0, 0, 0};
+    if (clear_hover_axis)
+    {
+        state->gizmo.hover_axis = SANDBOX3D_GIZMO_AXIS_NONE;
+    }
+}
+
+static bool sandbox3d_is_drag_target_valid(const sandbox3d_state* state, henka_entity entity)
+{
+    return sandbox3d_is_selectable_entity(state, entity) &&
+        state != NULL &&
+        state->scene != NULL &&
+        henka_scene_is_entity_visible(state->scene, entity);
 }
 
 static henka_entity sandbox3d_get_first_selectable_entity(const sandbox3d_state* state)
@@ -1431,16 +1484,18 @@ static void sandbox3d_select_entity(sandbox3d_state* state, henka_entity entity)
         state->selected_entity = HENKA_INVALID_ENTITY;
     }
 
-    descriptor = sandbox3d_get_descriptor_by_entity(state, state->selected_entity);
+    descriptor = sandbox3d_get_selected_descriptor(state);
     if (descriptor != NULL)
     {
         if (previous_entity != state->selected_entity)
         {
-            state->gizmo.drag.dragging = false;
-            state->gizmo.drag.target_entity = HENKA_INVALID_ENTITY;
-            state->gizmo.drag.active_axis = SANDBOX3D_GIZMO_AXIS_NONE;
+            sandbox3d_clear_gizmo_drag(state, true);
         }
         sandbox3d_set_statusf(state, false, false, "Selected %s.", descriptor->display_name);
+    }
+    else if (previous_entity != state->selected_entity)
+    {
+        sandbox3d_clear_gizmo_drag(state, true);
     }
 }
 
@@ -1552,7 +1607,7 @@ static henka_result sandbox3d_save_settings(henka_engine* engine, sandbox3d_stat
     henka_settings_set_bool(state->settings, g_setting_key_details_panel_visible, state->workspace.object_details_panel_visible);
     henka_settings_set_string(state->settings, g_setting_key_active_utility, sandbox3d_get_utility_setting_value(state->workspace.active_utility));
 
-    descriptor = sandbox3d_get_descriptor_by_entity(state, state->selected_entity);
+    descriptor = sandbox3d_get_selected_descriptor(state);
     if (descriptor != NULL && descriptor->display_name != NULL)
     {
         henka_settings_set_string(state->settings, g_setting_key_selected_object_name, descriptor->display_name);
@@ -1612,7 +1667,7 @@ static henka_result sandbox3d_reset_settings(henka_engine* engine, sandbox3d_sta
 
     sandbox3d_reset_camera_defaults(state);
     sandbox3d_reset_workspace_layout(state);
-    state->selected_entity = sandbox3d_get_first_selectable_entity(state);
+    sandbox3d_select_entity(state, sandbox3d_get_first_selectable_entity(state));
 
     result = henka_scene_set_entity_visible(state->scene, state->grid_entity, true);
     if (result != HENKA_SUCCESS)
@@ -1682,12 +1737,13 @@ static bool sandbox3d_reset_selected_entity_transform(sandbox3d_state* state)
 {
     const sandbox3d_object_descriptor* descriptor;
 
-    descriptor = sandbox3d_get_descriptor_by_entity(state, state != NULL ? state->selected_entity : HENKA_INVALID_ENTITY);
+    descriptor = sandbox3d_get_selected_descriptor(state);
     if (state == NULL || state->scene == NULL || descriptor == NULL || !descriptor->can_reset)
     {
         return false;
     }
 
+    sandbox3d_clear_gizmo_drag(state, true);
     return henka_scene_set_entity_transform(state->scene, descriptor->entity, descriptor->default_transform) == HENKA_SUCCESS;
 }
 
@@ -1696,14 +1752,23 @@ static bool sandbox3d_toggle_selected_entity_visibility(sandbox3d_state* state)
     bool currently_visible;
     const sandbox3d_object_descriptor* descriptor;
 
-    descriptor = sandbox3d_get_descriptor_by_entity(state, state != NULL ? state->selected_entity : HENKA_INVALID_ENTITY);
+    descriptor = sandbox3d_get_selected_descriptor(state);
     if (state == NULL || state->scene == NULL || descriptor == NULL || !descriptor->can_hide)
     {
         return false;
     }
 
     currently_visible = henka_scene_is_entity_visible(state->scene, descriptor->entity);
-    return henka_scene_set_entity_visible(state->scene, descriptor->entity, !currently_visible) == HENKA_SUCCESS;
+    if (henka_scene_set_entity_visible(state->scene, descriptor->entity, !currently_visible) != HENKA_SUCCESS)
+    {
+        return false;
+    }
+
+    if (currently_visible)
+    {
+        sandbox3d_clear_gizmo_drag(state, true);
+    }
+    return true;
 }
 
 static bool sandbox3d_focus_camera_on_selected(sandbox3d_state* state)
@@ -1716,7 +1781,7 @@ static bool sandbox3d_focus_camera_on_selected(sandbox3d_state* state)
         return false;
     }
 
-    descriptor = sandbox3d_get_descriptor_by_entity(state, state->selected_entity);
+    descriptor = sandbox3d_get_selected_descriptor(state);
     if (descriptor == NULL)
     {
         return false;
@@ -1748,12 +1813,13 @@ static void sandbox3d_update_gizmo_rendering(sandbox3d_state* state)
 
     active_axis = state->gizmo.drag.dragging ? state->gizmo.drag.active_axis : SANDBOX3D_GIZMO_AXIS_NONE;
     hover_axis = state->gizmo.hover_axis;
-    descriptor = sandbox3d_get_descriptor_by_entity(state, state->selected_entity);
+    descriptor = sandbox3d_get_selected_descriptor(state);
     selected_visible = descriptor != NULL && henka_scene_is_entity_visible(state->scene, descriptor->entity);
     if (descriptor == NULL ||
         !selected_visible ||
         sandbox3d_entity_get_transform(state->scene, descriptor->entity, &selected_transform) != HENKA_SUCCESS)
     {
+        sandbox3d_clear_gizmo_drag(state, true);
         for (index = 0U; index < 3U; ++index)
         {
             henka_scene_set_entity_visible(state->scene, state->gizmo_render.axis_entities[index], false);
@@ -1780,20 +1846,35 @@ static void sandbox3d_update_gizmo_rendering(sandbox3d_state* state)
         transform = henka_transform_identity();
         transform.position = selected_transform.position;
         transform.rotation = sandbox3d_get_axis_rotation(axis);
-        transform.scale = (henka_vec3){gizmo_size, gizmo_size, gizmo_size};
+        transform.scale = (henka_vec3)
+        {
+            gizmo_size,
+            gizmo_size * (axis == active_axis ? 1.18f : (axis == hover_axis ? 1.10f : 1.0f)),
+            gizmo_size * (axis == active_axis ? 1.18f : (axis == hover_axis ? 1.10f : 1.0f))
+        };
         henka_scene_set_entity_transform(state->scene, state->gizmo_render.axis_entities[index], transform);
         henka_scene_set_entity_material(state->scene, state->gizmo_render.axis_entities[index], material);
 
         transform = henka_transform_identity();
         transform.position = henka_vec3_add(selected_transform.position, henka_vec3_scale(axis_direction, gizmo_size));
-        transform.scale = (henka_vec3){gizmo_size * 0.12f, gizmo_size * 0.12f, gizmo_size * 0.12f};
+        transform.scale = (henka_vec3)
+        {
+            gizmo_size * (axis == active_axis ? 0.18f : (axis == hover_axis ? 0.16f : 0.14f)),
+            gizmo_size * (axis == active_axis ? 0.18f : (axis == hover_axis ? 0.16f : 0.14f)),
+            gizmo_size * (axis == active_axis ? 0.18f : (axis == hover_axis ? 0.16f : 0.14f))
+        };
         henka_scene_set_entity_transform(state->scene, state->gizmo_render.axis_handle_entities[index], transform);
         henka_scene_set_entity_material(state->scene, state->gizmo_render.axis_handle_entities[index], material);
 
         transform = henka_transform_identity();
         transform.position = selected_transform.position;
         transform.rotation = sandbox3d_get_ring_rotation(axis);
-        transform.scale = (henka_vec3){gizmo_size, gizmo_size, gizmo_size};
+        transform.scale = (henka_vec3)
+        {
+            gizmo_size * (axis == active_axis ? 1.12f : (axis == hover_axis ? 1.06f : 1.0f)),
+            gizmo_size * (axis == active_axis ? 1.12f : (axis == hover_axis ? 1.06f : 1.0f)),
+            gizmo_size * (axis == active_axis ? 1.12f : (axis == hover_axis ? 1.06f : 1.0f))
+        };
         henka_scene_set_entity_transform(state->scene, state->gizmo_render.ring_entities[index], transform);
         henka_scene_set_entity_material(state->scene, state->gizmo_render.ring_entities[index], material);
 
@@ -1890,6 +1971,7 @@ static void sandbox3d_update_gizmo_hover(henka_engine* engine, sandbox3d_state* 
     henka_ray ray;
     henka_transform selected_transform;
     float gizmo_size;
+    henka_entity selected_entity;
 
     if (engine == NULL || state == NULL || state->scene == NULL || state->gizmo.drag.dragging)
     {
@@ -1897,10 +1979,11 @@ static void sandbox3d_update_gizmo_hover(henka_engine* engine, sandbox3d_state* 
     }
 
     state->gizmo.hover_axis = SANDBOX3D_GIZMO_AXIS_NONE;
+    selected_entity = sandbox3d_get_real_selected_entity(state);
     if (state->gizmo.mode == SANDBOX3D_GIZMO_MODE_SELECT ||
-        state->selected_entity == HENKA_INVALID_ENTITY ||
+        selected_entity == HENKA_INVALID_ENTITY ||
         !sandbox3d_try_build_viewport_ray(engine, state, &ray) ||
-        sandbox3d_entity_get_transform(state->scene, state->selected_entity, &selected_transform) != HENKA_SUCCESS)
+        sandbox3d_entity_get_transform(state->scene, selected_entity, &selected_transform) != HENKA_SUCCESS)
     {
         return;
     }
@@ -1914,31 +1997,52 @@ static void sandbox3d_try_pick_object(henka_engine* engine, sandbox3d_state* sta
     henka_entity picked_entity;
     henka_ray ray;
     float distance;
+    const sandbox3d_object_descriptor* selected_descriptor;
     henka_transform selected_transform;
     float gizmo_size;
     sandbox3d_gizmo_axis gizmo_axis;
+    henka_entity selected_entity;
+    henka_viewport scene_viewport;
 
-    if (engine == NULL || state == NULL || state->scene == NULL || !sandbox3d_try_build_viewport_ray(engine, state, &ray))
+    if (engine == NULL || state == NULL || state->scene == NULL)
     {
         return;
     }
 
+    if (henka_engine_get_scene_viewport(engine, &scene_viewport) != HENKA_SUCCESS ||
+        !henka_viewport_is_valid(scene_viewport) ||
+        !henka_viewport_contains_point(scene_viewport, henka_input_get_mouse_position(engine)) ||
+        !sandbox3d_try_build_viewport_ray(engine, state, &ray))
+    {
+        return;
+    }
+
+    selected_entity = sandbox3d_get_real_selected_entity(state);
+    selected_descriptor = sandbox3d_get_selected_descriptor(state);
     if (state->gizmo.mode != SANDBOX3D_GIZMO_MODE_SELECT &&
-        sandbox3d_is_selectable_entity(state, state->selected_entity) &&
-        sandbox3d_entity_get_transform(state->scene, state->selected_entity, &selected_transform) == HENKA_SUCCESS)
+        selected_entity != HENKA_INVALID_ENTITY &&
+        selected_descriptor != NULL &&
+        sandbox3d_entity_get_transform(state->scene, selected_entity, &selected_transform) == HENKA_SUCCESS)
     {
         gizmo_size = sandbox3d_get_gizmo_size(state, selected_transform.position);
         if (sandbox3d_gizmo_hit_test(state->gizmo.mode, selected_transform, ray, gizmo_size, &gizmo_axis) == HENKA_SUCCESS)
         {
             state->gizmo.drag.dragging = true;
-            state->gizmo.drag.target_entity = state->selected_entity;
+            state->gizmo.drag.target_entity = selected_entity;
             state->gizmo.drag.drag_start_mouse = henka_input_get_mouse_position(engine);
+            state->gizmo.drag.drag_start_viewport = scene_viewport;
             state->gizmo.drag.drag_start_ray = ray;
             state->gizmo.drag.drag_start_transform = selected_transform;
             state->gizmo.drag.active_axis = gizmo_axis;
             state->gizmo.drag.active_mode = state->gizmo.mode;
             state->gizmo.hover_axis = gizmo_axis;
-            sandbox3d_set_statusf(state, false, false, "Gizmo drag started on %s axis.", sandbox3d_get_gizmo_axis_label(gizmo_axis));
+            sandbox3d_set_statusf(
+                state,
+                false,
+                false,
+                "Gizmo drag started for %s on %s.",
+                selected_descriptor->display_name,
+                sandbox3d_get_gizmo_axis_label(gizmo_axis));
             return;
         }
     }
@@ -1949,11 +2053,16 @@ static void sandbox3d_try_pick_object(henka_engine* engine, sandbox3d_state* sta
         sandbox3d_select_entity(state, picked_entity);
         sandbox3d_set_statusf(state, false, false, "Picked %s.", sandbox3d_safe_entity_name(state, picked_entity, "object"));
     }
+    else
+    {
+        sandbox3d_set_statusf(state, false, false, "No viewport object hit.");
+    }
 }
 
 static void sandbox3d_apply_gizmo_drag(henka_engine* engine, sandbox3d_state* state)
 {
     henka_ray current_ray;
+    henka_viewport current_viewport;
     henka_transform transform;
     henka_vec3 axis_direction;
     float delta;
@@ -1968,14 +2077,20 @@ static void sandbox3d_apply_gizmo_drag(henka_engine* engine, sandbox3d_state* st
         return;
     }
 
+    if (henka_engine_get_scene_viewport(engine, &current_viewport) != HENKA_SUCCESS ||
+        !henka_viewport_is_valid(current_viewport) ||
+        !sandbox3d_viewports_match(current_viewport, state->gizmo.drag.drag_start_viewport))
+    {
+        sandbox3d_clear_gizmo_drag(state, true);
+        sandbox3d_set_status(state, true, "Viewport changed. Gizmo drag cancelled.");
+        return;
+    }
+
     target_entity = state->gizmo.drag.target_entity;
-    if (!sandbox3d_is_selectable_entity(state, target_entity) ||
-        !henka_scene_is_entity_visible(state->scene, target_entity) ||
+    if (!sandbox3d_is_drag_target_valid(state, target_entity) ||
         !sandbox3d_try_build_viewport_ray(engine, state, &current_ray))
     {
-        state->gizmo.drag.dragging = false;
-        state->gizmo.drag.target_entity = HENKA_INVALID_ENTITY;
-        state->gizmo.drag.active_axis = SANDBOX3D_GIZMO_AXIS_NONE;
+        sandbox3d_clear_gizmo_drag(state, true);
         return;
     }
 
@@ -2013,8 +2128,15 @@ static void sandbox3d_apply_gizmo_drag(henka_engine* engine, sandbox3d_state* st
                         sandbox3d_gizmo_apply_snap_move(transform.position.z, state->gizmo.snap.move_snap_increment, &transform.position.z);
                     }
                 }
-                sandbox3d_entity_set_transform(state->scene, target_entity, &transform);
-                sandbox3d_set_statusf(state, false, false, "Moving %s on %s.", entity_name, sandbox3d_get_gizmo_axis_label(state->gizmo.drag.active_axis));
+                if (sandbox3d_entity_set_transform(state->scene, target_entity, &transform) == HENKA_SUCCESS)
+                {
+                    sandbox3d_set_statusf(state, false, false, "Moving %s on %s.", entity_name, sandbox3d_get_gizmo_axis_label(state->gizmo.drag.active_axis));
+                }
+                else
+                {
+                    sandbox3d_clear_gizmo_drag(state, true);
+                    sandbox3d_set_statusf(state, true, false, "%s could not be moved.", entity_name);
+                }
             }
             break;
 
@@ -2035,8 +2157,15 @@ static void sandbox3d_apply_gizmo_drag(henka_engine* engine, sandbox3d_state* st
                     sandbox3d_gizmo_apply_snap_rotate(delta, state->gizmo.snap.rotate_snap_increment, &delta);
                 }
                 transform.rotation = henka_quat_multiply(henka_quat_from_axis_angle(axis_direction, delta), transform.rotation);
-                sandbox3d_entity_set_transform(state->scene, target_entity, &transform);
-                sandbox3d_set_statusf(state, false, false, "Rotating %s on %s.", entity_name, sandbox3d_get_gizmo_axis_label(state->gizmo.drag.active_axis));
+                if (sandbox3d_entity_set_transform(state->scene, target_entity, &transform) == HENKA_SUCCESS)
+                {
+                    sandbox3d_set_statusf(state, false, false, "Rotating %s on %s.", entity_name, sandbox3d_get_gizmo_axis_label(state->gizmo.drag.active_axis));
+                }
+                else
+                {
+                    sandbox3d_clear_gizmo_drag(state, true);
+                    sandbox3d_set_statusf(state, true, false, "%s could not be rotated.", entity_name);
+                }
             }
             break;
 
@@ -2062,8 +2191,15 @@ static void sandbox3d_apply_gizmo_drag(henka_engine* engine, sandbox3d_state* st
                     transform.scale.y = snapped_value;
                     transform.scale.z = snapped_value;
                 }
-                sandbox3d_entity_set_transform(state->scene, target_entity, &transform);
-                sandbox3d_set_statusf(state, false, false, "Scaling %s uniformly.", entity_name);
+                if (sandbox3d_entity_set_transform(state->scene, target_entity, &transform) == HENKA_SUCCESS)
+                {
+                    sandbox3d_set_statusf(state, false, false, "Scaling %s uniformly.", entity_name);
+                }
+                else
+                {
+                    sandbox3d_clear_gizmo_drag(state, true);
+                    sandbox3d_set_statusf(state, true, false, "%s could not be scaled.", entity_name);
+                }
             }
             else if (sandbox3d_gizmo_get_axis_direction(state->gizmo.drag.active_axis, &axis_direction) == HENKA_SUCCESS &&
                      henka_gizmo_project_axis_delta(
@@ -2098,8 +2234,15 @@ static void sandbox3d_apply_gizmo_drag(henka_engine* engine, sandbox3d_state* st
                         sandbox3d_gizmo_apply_snap_scale(transform.scale.z, state->gizmo.snap.scale_snap_increment, &transform.scale.z);
                     }
                 }
-                sandbox3d_entity_set_transform(state->scene, target_entity, &transform);
-                sandbox3d_set_statusf(state, false, false, "Scaling %s on %s.", entity_name, sandbox3d_get_gizmo_axis_label(state->gizmo.drag.active_axis));
+                if (sandbox3d_entity_set_transform(state->scene, target_entity, &transform) == HENKA_SUCCESS)
+                {
+                    sandbox3d_set_statusf(state, false, false, "Scaling %s on %s.", entity_name, sandbox3d_get_gizmo_axis_label(state->gizmo.drag.active_axis));
+                }
+                else
+                {
+                    sandbox3d_clear_gizmo_drag(state, true);
+                    sandbox3d_set_statusf(state, true, false, "%s could not be scaled.", entity_name);
+                }
             }
             break;
 
@@ -2123,7 +2266,7 @@ static void sandbox3d_print_selected_object_info(const sandbox3d_state* state)
         return;
     }
 
-    descriptor = sandbox3d_get_descriptor_by_entity(state, state->selected_entity);
+    descriptor = sandbox3d_get_selected_descriptor(state);
     if (descriptor == NULL)
     {
         printf("No sandbox object is currently selected.\n");
@@ -2391,7 +2534,7 @@ static void sandbox3d_draw_status_block(
     }
 
     status_text = state->status_message[0] != '\0' ? state->status_message : "Ready.";
-    descriptor = sandbox3d_get_descriptor_by_entity(state, state->selected_entity);
+    descriptor = sandbox3d_get_selected_descriptor(state);
 
     henka_ui_status_chip(
         state->ui,
@@ -2446,6 +2589,7 @@ static void sandbox3d_draw_controls_panel(
     const sandbox3d_workspace_layout* layout)
 {
     char axis_text[32];
+    char mode_text[48];
     char selected_text[48];
     char snap_text[64];
     bool full_mode;
@@ -2487,8 +2631,9 @@ static void sandbox3d_draw_controls_panel(
     inspect_mode = layout_mode == SANDBOX3D_LAYOUT_INSPECT;
     full_mode = layout_mode == SANDBOX3D_LAYOUT_FULL;
     narrow_button_width = (panel_bounds.width - 56.0f) / 3.0f;
-    selected_descriptor = sandbox3d_get_descriptor_by_entity(state, state->selected_entity);
-    sandbox3d_truncate_text(selected_descriptor != NULL ? selected_descriptor->display_name : "(none)", selected_text, sizeof(selected_text), 18U);
+    selected_descriptor = sandbox3d_get_selected_descriptor(state);
+    sandbox3d_truncate_text(selected_descriptor != NULL ? selected_descriptor->display_name : "(none)", selected_text, sizeof(selected_text), 20U);
+    snprintf(mode_text, sizeof(mode_text), "%s / %s", selected_text, sandbox3d_get_gizmo_mode_label(state->gizmo.mode));
     snprintf(
         axis_text,
         sizeof(axis_text),
@@ -2497,7 +2642,8 @@ static void sandbox3d_draw_controls_panel(
     snprintf(
         snap_text,
         sizeof(snap_text),
-        "%.2f / %.0f deg / %.2f",
+        "%s | %.2f / %.0f deg / %.2f",
+        state->gizmo.snap.enabled ? "On" : "Off",
         state->gizmo.snap.move_snap_increment,
         state->gizmo.snap.rotate_snap_increment * HENKA_RAD_TO_DEG,
         state->gizmo.snap.scale_snap_increment);
@@ -2570,7 +2716,7 @@ static void sandbox3d_draw_controls_panel(
     {
         sandbox3d_gizmo_toggle_snap(state);
     }
-    sandbox3d_draw_value_row(state->ui, x_left, panel_bounds.y + 298.0f, panel_bounds.width - 28.0f, "Selected", selected_text);
+    sandbox3d_draw_value_row(state->ui, x_left, panel_bounds.y + 298.0f, panel_bounds.width - 28.0f, "Object", mode_text);
     sandbox3d_draw_value_row(state->ui, x_left, panel_bounds.y + 324.0f, panel_bounds.width - 28.0f, "Axis", axis_text);
     sandbox3d_draw_value_row(state->ui, x_left, panel_bounds.y + 350.0f, panel_bounds.width - 28.0f, "Snap", snap_text);
 
@@ -2763,7 +2909,7 @@ static void sandbox3d_draw_scene_objects_panel(
             entity_name != NULL ? entity_name : row_label,
             (henka_ui_rect){panel_bounds.x + 14.0f, row_y, panel_bounds.width - 28.0f, 28.0f},
             row_label,
-            state->selected_entity == entity))
+            sandbox3d_get_real_selected_entity(state) == entity))
         {
             sandbox3d_select_entity(state, entity);
         }
@@ -2809,7 +2955,7 @@ static void sandbox3d_draw_object_details_panel(
     henka_ui_panel(state->ui, panel_bounds, "Object Details");
     compact_mode = state->workspace.layout_mode != SANDBOX3D_LAYOUT_FULL;
 
-    descriptor = sandbox3d_get_descriptor_by_entity(state, state->selected_entity);
+    descriptor = sandbox3d_get_selected_descriptor(state);
     if (state->scene == NULL || descriptor == NULL)
     {
         henka_ui_label(state->ui, panel_bounds.x + 14.0f, panel_bounds.y + 38.0f, 1.0f, "Select an object from Scene Objects to inspect it.");
@@ -3037,7 +3183,7 @@ static void sandbox3d_draw_utility_panel(
             break;
 
         case SANDBOX3D_UTILITY_OBJECT_INFO:
-            descriptor = sandbox3d_get_descriptor_by_entity(state, state->selected_entity);
+            descriptor = sandbox3d_get_selected_descriptor(state);
             if (descriptor == NULL || state->scene == NULL || henka_scene_get_entity_transform(state->scene, descriptor->entity, &transform) != HENKA_SUCCESS)
             {
                 henka_ui_label(state->ui, x_left, y_start, 1.0f, "Select an object to inspect it here.");
@@ -3064,7 +3210,7 @@ static void sandbox3d_draw_utility_panel(
             break;
 
         case SANDBOX3D_UTILITY_SETTINGS:
-            descriptor = sandbox3d_get_descriptor_by_entity(state, state->selected_entity);
+            descriptor = sandbox3d_get_selected_descriptor(state);
             sandbox3d_draw_section_heading(state->ui, x_left, y_start, "Sandbox settings");
             sandbox3d_draw_value_row(state->ui, x_left, y_start + 18.0f, panel_bounds.width - 28.0f, "Layout", sandbox3d_get_layout_mode_label(state->workspace.layout_mode));
             sandbox3d_draw_value_row(state->ui, x_left, y_start + 44.0f, panel_bounds.width - 28.0f, "Selected", descriptor != NULL ? descriptor->display_name : "(none)");
@@ -3091,7 +3237,7 @@ static void sandbox3d_draw_utility_panel(
             break;
 
         case SANDBOX3D_UTILITY_DIAGNOSTICS:
-            descriptor = sandbox3d_get_descriptor_by_entity(state, state->selected_entity);
+            descriptor = sandbox3d_get_selected_descriptor(state);
             sandbox3d_draw_section_heading(state->ui, x_left, y_start, "Diagnostics");
             sandbox3d_draw_value_row(state->ui, x_left, y_start + 18.0f, panel_bounds.width - 28.0f, "Frame", fps_text + 7);
             sandbox3d_draw_value_row(state->ui, x_left, y_start + 44.0f, panel_bounds.width - 28.0f, "Layout", sandbox3d_get_layout_mode_label(state->workspace.layout_mode));
@@ -3725,6 +3871,7 @@ static void sandbox3d_update(henka_engine* engine, double delta_seconds, void* u
     if (henka_input_action_was_pressed(engine, HENKA_INPUT_ACTION_OPEN_PANELS) && state->ui != NULL)
     {
         ui_visible = !henka_ui_is_visible(state->ui);
+        sandbox3d_clear_gizmo_drag(state, true);
         henka_ui_set_visible(state->ui, ui_visible);
         if (ui_visible)
         {
@@ -3743,6 +3890,7 @@ static void sandbox3d_update(henka_engine* engine, double delta_seconds, void* u
 
     if (henka_input_action_was_pressed(engine, HENKA_INPUT_ACTION_CHANGE_LAYOUT) && state->ui != NULL)
     {
+        sandbox3d_clear_gizmo_drag(state, true);
         state->workspace.layout_mode = sandbox3d_cycle_layout_mode(state->workspace.layout_mode);
         if (!henka_ui_is_visible(state->ui))
         {
@@ -3783,6 +3931,7 @@ static void sandbox3d_update(henka_engine* engine, double delta_seconds, void* u
 
     if (!ui_visible && henka_input_action_was_pressed(engine, HENKA_INPUT_ACTION_TOGGLE_MOUSE_CAPTURE))
     {
+        sandbox3d_clear_gizmo_drag(state, true);
         henka_engine_set_mouse_capture(engine, !henka_engine_is_mouse_captured(engine));
         sandbox3d_set_statusf(state, false, false, "Mouse capture %s.", henka_engine_is_mouse_captured(engine) ? "enabled" : "released");
         sandbox3d_print_capture_state(engine, "bound action");
@@ -3791,6 +3940,12 @@ static void sandbox3d_update(henka_engine* engine, double delta_seconds, void* u
     if (henka_engine_get_framebuffer_size(engine, &framebuffer_width, &framebuffer_height) == HENKA_SUCCESS && framebuffer_height > 0)
     {
         layout = sandbox3d_get_workspace_layout(state, framebuffer_width, framebuffer_height);
+        if (state->gizmo.drag.dragging &&
+            !sandbox3d_viewports_match(layout.scene_viewport, state->gizmo.drag.drag_start_viewport))
+        {
+            sandbox3d_clear_gizmo_drag(state, true);
+            sandbox3d_set_status(state, false, "Viewport changed. Gizmo drag stopped.");
+        }
         state->frame_layout = layout;
         henka_engine_set_scene_viewport(engine, layout.scene_viewport);
         henka_camera_set_aspect_ratio(&state->camera, henka_viewport_get_aspect_ratio(layout.scene_viewport));
@@ -3812,6 +3967,12 @@ static void sandbox3d_update(henka_engine* engine, double delta_seconds, void* u
 
     if (!henka_engine_is_mouse_captured(engine))
     {
+        if (ui_visible && state->gizmo.drag.dragging)
+        {
+            sandbox3d_clear_gizmo_drag(state, true);
+            sandbox3d_set_status(state, false, "Panels are open. Gizmo drag stopped.");
+        }
+
         sandbox3d_update_gizmo_hover(engine, state);
 
         if (state->gizmo.drag.dragging)
@@ -3821,15 +3982,13 @@ static void sandbox3d_update(henka_engine* engine, double delta_seconds, void* u
 
         if (state->gizmo.drag.dragging && !henka_input_is_mouse_button_down(engine, HENKA_MOUSE_BUTTON_LEFT))
         {
-            state->gizmo.drag.dragging = false;
             sandbox3d_set_statusf(
                 state,
                 false,
                 false,
                 "Gizmo drag completed on %s axis.",
                 sandbox3d_get_gizmo_axis_label(state->gizmo.drag.active_axis));
-            state->gizmo.drag.target_entity = HENKA_INVALID_ENTITY;
-            state->gizmo.drag.active_axis = SANDBOX3D_GIZMO_AXIS_NONE;
+            sandbox3d_clear_gizmo_drag(state, false);
         }
 
         if (henka_input_was_mouse_button_pressed(engine, HENKA_MOUSE_BUTTON_LEFT))

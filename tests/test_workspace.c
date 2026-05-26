@@ -14,6 +14,8 @@ void henka_test_workspace(void)
     HENKA_TEST_ASSERT_FLOAT_CLOSE(henka_viewport_get_aspect_ratio((henka_viewport){0, 0, 400, 200}), 2.0f, 0.0001f);
     HENKA_TEST_ASSERT(henka_viewport_contains_point((henka_viewport){100, 50, 320, 180}, (henka_vec2){120.0f, 60.0f}) == true);
     HENKA_TEST_ASSERT(henka_viewport_contains_point((henka_viewport){100, 50, 320, 180}, (henka_vec2){90.0f, 60.0f}) == false);
+    HENKA_TEST_ASSERT(henka_viewport_contains_point((henka_viewport){100, 50, 320, 180}, (henka_vec2){420.0f, 60.0f}) == false);
+    HENKA_TEST_ASSERT(henka_viewport_contains_point((henka_viewport){100, 50, 320, 180}, (henka_vec2){120.0f, 230.0f}) == false);
     HENKA_TEST_ASSERT(henka_viewport_window_to_local((henka_viewport){100, 50, 320, 180}, (henka_vec2){132.0f, 94.0f}, &local_point) == HENKA_SUCCESS);
     HENKA_TEST_ASSERT_FLOAT_CLOSE(local_point.x, 32.0f, 0.0001f);
     HENKA_TEST_ASSERT_FLOAT_CLOSE(local_point.y, 44.0f, 0.0001f);
@@ -46,6 +48,8 @@ void henka_test_workspace(void)
     HENKA_TEST_ASSERT(layout.scene_viewport.y >= (int)layout.scene_frame.y);
     HENKA_TEST_ASSERT(layout.scene_viewport.x + layout.scene_viewport.width <= (int)(layout.scene_frame.x + layout.scene_frame.width));
     HENKA_TEST_ASSERT(layout.scene_viewport.y + layout.scene_viewport.height <= (int)(layout.scene_frame.y + layout.scene_frame.height));
+    HENKA_TEST_ASSERT(henka_viewport_contains_point(layout.scene_viewport, (henka_vec2){layout.left_dock.x + 10.0f, layout.left_dock.y + 10.0f}) == false);
+    HENKA_TEST_ASSERT(henka_viewport_contains_point(layout.scene_viewport, (henka_vec2){layout.right_dock.x + 10.0f, layout.right_dock.y + 10.0f}) == false);
 
     desc.framebuffer_width = 720;
     desc.framebuffer_height = 420;
