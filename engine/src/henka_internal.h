@@ -44,6 +44,7 @@ typedef struct henka_input_state
     bool mouse_buttons_released[HENKA_MOUSE_BUTTON_COUNT];
     henka_vec2 mouse_position;
     henka_vec2 mouse_delta;
+    henka_vec2 mouse_wheel_delta;
     bool close_requested;
 } henka_input_state;
 

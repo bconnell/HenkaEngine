@@ -138,15 +138,20 @@ The packaged folder also includes `PACKAGE_INFO.txt` so you can tell when the pa
 - `Mouse`: look around while mouse capture is active
 - `Right Mouse / Tab`: toggle mouse capture
 - `Left Mouse`: select or manipulate inside the scene viewport when mouse capture is released
+- `Alt + Left Mouse`: orbit around the selected object or current view target
+- `Middle Mouse`: pan the viewport
+- `Mouse Wheel`: zoom the viewport when the cursor is over the scene view
 - `F1`: toggle wireframe
 - `F2`: print the scene legend again
 - `F3`: show or hide the debug grid
 - `F4`: show or hide the sandbox panels
 - `F5`: cycle View, Inspect, and Full Tools layouts
+- `F`: frame the selected object
 - `H`: print controls and the scene legend again
+- `Home`: reset the camera view
 - `Escape`: close the UI first, then release the mouse, then exit
 
-Press `F4` to open the in-window sandbox panels. On a first run with no local settings file, the packaged sandbox opens the docked workspace in `View` mode so the controls are visible without covering most of the scene. Press `F5` to cycle between `View`, `Inspect`, and `Full Tools`. The 3D scene now renders inside its own dedicated viewport region while the panels stay docked beside it. If you hide the panels, a small in-window hint stays in the corner so it is still clear how to bring them back. Console output remains available for fallback logs and automation, but normal viewer use no longer depends on reading it. Select a scene object from the list or with `Left Mouse` in the viewport, then use the Transform section to inspect the current `Select`, `Move`, `Rotate`, and `Scale` gizmo workflow. Visual drag behavior is still being hardened through manual desktop QA.
+Press `F4` to open the in-window sandbox panels. On a first run with no local settings file, the packaged sandbox opens the docked workspace in `View` mode so the controls are visible without covering most of the scene. Press `F5` to cycle between `View`, `Inspect`, and `Full Tools`. The 3D scene now renders inside its own dedicated viewport region while the panels stay docked beside it. If you hide the panels, a small in-window hint stays in the corner so it is still clear how to bring them back. Console output remains available for fallback logs and automation, but normal viewer use no longer depends on reading it. Select a scene object from the list or with `Left Mouse` in the viewport, then use the Transform section to inspect the current `Select`, `Move`, `Rotate`, and `Scale` gizmo workflow. The Controls panel now splits its content into two readable pages, the Scene Objects list supports paging, and mouse wheel input over those panels advances the visible page instead of affecting the viewport. Visual drag behavior is still being hardened through manual desktop QA.
 
 Offline help is also available in [docs/help/sandbox3d.md](docs/help/sandbox3d.md).
 Model loading notes are documented in [docs/model-loading.md](docs/model-loading.md).

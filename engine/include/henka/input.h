@@ -10,13 +10,16 @@ typedef enum henka_key
 {
     HENKA_KEY_UNKNOWN = 0,
     HENKA_KEY_ESCAPE,
+    HENKA_KEY_F,
     HENKA_KEY_W,
     HENKA_KEY_A,
     HENKA_KEY_S,
     HENKA_KEY_D,
     HENKA_KEY_Q,
     HENKA_KEY_E,
+    HENKA_KEY_LEFT_ALT,
     HENKA_KEY_LEFT_SHIFT,
+    HENKA_KEY_HOME,
     HENKA_KEY_TAB,
     HENKA_KEY_F1,
     HENKA_KEY_F2,
@@ -62,6 +65,7 @@ bool henka_input_was_mouse_button_pressed(const struct henka_engine* engine, hen
 bool henka_input_was_mouse_button_released(const struct henka_engine* engine, henka_mouse_button button);
 henka_vec2 henka_input_get_mouse_position(const struct henka_engine* engine);
 henka_vec2 henka_input_get_mouse_delta(const struct henka_engine* engine);
+henka_vec2 henka_input_get_mouse_wheel_delta(const struct henka_engine* engine);
 const char* henka_input_action_get_name(henka_input_action action);
 henka_input_action henka_input_action_find_by_name(const char* name);
 henka_result henka_input_bind_action_key(struct henka_engine* engine, henka_input_action action, henka_key key);

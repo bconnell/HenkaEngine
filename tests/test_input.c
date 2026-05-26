@@ -10,6 +10,9 @@ void henka_test_input(void)
     HENKA_TEST_ASSERT(henka_input_action_find_by_name("move_forward") == HENKA_INPUT_ACTION_MOVE_FORWARD);
     HENKA_TEST_ASSERT(henka_input_action_find_by_name("Move Forward") == HENKA_INPUT_ACTION_MOVE_FORWARD);
     HENKA_TEST_ASSERT(henka_input_action_find_by_name("toggle-mouse-capture") == HENKA_INPUT_ACTION_TOGGLE_MOUSE_CAPTURE);
+    HENKA_TEST_ASSERT(HENKA_KEY_F != HENKA_KEY_UNKNOWN);
+    HENKA_TEST_ASSERT(HENKA_KEY_HOME != HENKA_KEY_UNKNOWN);
+    HENKA_TEST_ASSERT(HENKA_KEY_LEFT_ALT != HENKA_KEY_UNKNOWN);
     HENKA_TEST_ASSERT(henka_input_action_find_by_name(NULL) == HENKA_INPUT_ACTION_UNKNOWN);
     HENKA_TEST_ASSERT(henka_input_action_find_by_name("missing") == HENKA_INPUT_ACTION_UNKNOWN);
 }

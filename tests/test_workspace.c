@@ -55,6 +55,8 @@ void henka_test_workspace(void)
     HENKA_TEST_ASSERT(layout.scene_viewport.y + layout.scene_viewport.height <= (int)(layout.scene_frame.y + layout.scene_frame.height));
     HENKA_TEST_ASSERT(henka_viewport_contains_point(layout.scene_viewport, (henka_vec2){layout.left_dock.x + 10.0f, layout.left_dock.y + 10.0f}) == false);
     HENKA_TEST_ASSERT(henka_viewport_contains_point(layout.scene_viewport, (henka_vec2){layout.right_dock.x + 10.0f, layout.right_dock.y + 10.0f}) == false);
+    HENKA_TEST_ASSERT(layout.scene_viewport.width >= 400);
+    HENKA_TEST_ASSERT(layout.scene_viewport.height >= 250);
 
     desc.framebuffer_width = 720;
     desc.framebuffer_height = 420;
@@ -69,4 +71,17 @@ void henka_test_workspace(void)
     HENKA_TEST_ASSERT(layout.scene_viewport.height >= 1);
     HENKA_TEST_ASSERT(layout.scene_frame.x >= 0.0f);
     HENKA_TEST_ASSERT(layout.scene_frame.y >= 0.0f);
+
+    desc.framebuffer_width = 1920;
+    desc.framebuffer_height = 1080;
+    desc.left_dock_width = 328.0f;
+    desc.right_dock_width = 356.0f;
+    desc.min_scene_width = 520;
+    desc.min_scene_height = 340;
+    result = henka_workspace_layout_docked(&desc, &layout);
+    HENKA_TEST_ASSERT(result == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(layout.scene_viewport.width >= 520);
+    HENKA_TEST_ASSERT(layout.scene_viewport.height >= 340);
+    HENKA_TEST_ASSERT(layout.scene_frame.x >= layout.left_dock.x + layout.left_dock.width);
+    HENKA_TEST_ASSERT(layout.right_dock.x >= layout.scene_frame.x + layout.scene_frame.width);
 }

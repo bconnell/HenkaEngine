@@ -22,12 +22,17 @@ On a first packaged run with no existing settings file, the docked workspace ope
 - `Mouse`: look around while mouse capture is active
 - `Right Mouse / Tab`: toggle mouse capture
 - `Left Mouse`: select or manipulate inside the scene viewport when mouse capture is released
+- `Alt + Left Mouse`: orbit around the selected object or current view target
+- `Middle Mouse`: pan the viewport
+- `Mouse Wheel`: zoom the viewport when the cursor is over the scene view
 - `F1`: toggle wireframe
 - `F2`: print the scene legend to the console again
 - `F3`: show or hide the debug grid
 - `F4`: show or hide the sandbox panels
 - `F5`: cycle View, Inspect, and Full Tools layouts
+- `F`: frame the selected object
 - `H`: print controls and the scene legend to the console again
+- `Home`: reset the camera view
 - `Escape`: close the sandbox UI first, then release the mouse, then exit
 - Window close: exit
 
@@ -53,6 +58,7 @@ On a first packaged run with no existing settings file, the docked workspace ope
 - Use `F3` to hide the grid briefly, then show it again to confirm the scene layout still reads clearly.
 - Press `F4` to open the sandbox panels, then use `F5` to compare the View, Inspect, and Full Tools layouts.
 - Release mouse capture, then left-click a visible object in the viewport to test selection and transform dragging.
+- Use `Alt + Left Mouse`, `Middle Mouse`, `Mouse Wheel`, `F`, and `Home` to test orbit, pan, zoom, frame selected, and reset view.
 - Switch the Transform section between Select, Move, Rotate, and Scale, then drag the gizmo on a selected object.
 - Toggle snapping on and off to compare free movement with stepped adjustments.
 - Click the grid and wireframe controls to confirm the in-window UI updates the same engine state as the keyboard shortcuts.
@@ -78,11 +84,12 @@ If the panels do not appear when you expect them to, refresh the packaged sandbo
 The `Controls` panel currently includes:
 
 - layout buttons for `View`, `Inspect`, and `Full Tools`
+- a readable `Main` page and `Panels/Status` page
 - a `Grid` toggle
 - a `Wire` toggle
+- visible `Frame Selected`, `Reset View`, `Zoom In`, and `Zoom Out` controls
 - Transform tabs for `Select`, `Move`, `Rotate`, and `Scale`
 - a snap toggle with current move, rotate, and scale snap values
-- a camera reset button
 - a save-settings button
 - a reset-layout button
 - panel visibility toggles for the object-inspection panels in the heavier layouts
@@ -98,6 +105,7 @@ The `Scene Objects` panel lists the current sandbox examples by name.
 - Clicking a row selects that object.
 - Hidden objects stay listed and show a hidden state tag.
 - The selected row stays highlighted so the current object is easy to track.
+- If the dock is too short to show the whole list at once, page buttons keep every sample object reachable.
 
 The `Object Details` panel shows the current selection.
 
@@ -143,6 +151,7 @@ When the UI is open:
 - `Escape` closes the panel before it returns to the normal mouse-capture and exit flow
 
 Picking and gizmo hit testing both use the dedicated scene viewport. Clicks in docked panels do not count as viewport picks or transform drags.
+Mouse wheel input over paged panels stays with those panels instead of zooming the scene.
 
 ## Packaged runs
 

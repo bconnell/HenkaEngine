@@ -67,37 +67,44 @@ Use this checklist when you want to confirm that `henka_sandbox3d` is visually r
 20. Confirm panel background contrast is readable against the workspace.
 21. Confirm View mode controls feel less cramped than earlier passes.
 22. Confirm toggle labels and `ON` or `OFF` state text do not overlap or feel squeezed.
-23. Confirm the Utility panel feels readable and does not dominate the viewport.
-24. Confirm utility tabs are readable and the active utility state is obvious.
-25. Confirm Help opens in-window.
-26. Confirm Scene Legend opens in-window.
-27. Confirm Object Info appears in-window after selecting an object.
-28. Confirm Paths, Settings, and Diagnostics utilities are usable in-window.
-29. Confirm the Paths or Diagnostics utility reports the expected runtime mode for the current run.
-30. Confirm clicking inside docked panels does not pick scene objects.
-31. Left-click a visible object inside the viewport and confirm picking updates the selection.
-32. Confirm the selected object shows a visible gizmo in the viewport.
-33. Select `Textured Cube` from Scene Objects, switch to `Move`, and drag X, Y, and Z.
-34. Confirm the cube moves, not just the gizmo.
-35. Switch to `Rotate` and drag X, Y, and Z.
-36. Confirm the object rotates, not just the gizmo.
-37. Switch to `Scale` and drag the center square handle.
-38. Confirm the object scales, not just the gizmo.
-39. Toggle snap on and off and confirm movement, rotation, and scale respond differently.
-40. Confirm Object Details updates after manipulation.
-41. Confirm picking still works after movement, rotation, or scale changes.
-42. Click empty viewport space and confirm no gizmo helper becomes the selected object.
-43. Open panels or resize the window during a drag and confirm the drag stops cleanly instead of jumping to a new target.
-44. Hide the selected object and confirm gizmo dragging stops safely.
-45. Confirm Reset Transform restores the selected object.
-46. Confirm Focus Camera still works after manipulation.
-47. Confirm the camera view does not look stretched.
-48. Confirm the small in-window status area reports common actions without forcing you to read the console.
-49. Confirm the console still receives fallback logs for help, legend, object info, warnings, or errors when those actions are used.
-50. Confirm `Escape` behavior still works.
-51. Confirm close-window exit remains clean.
-52. Confirm no named-engine comparisons appear in runtime text or packaged help.
-53. If the UI is not visible or feels wrong, note whether the console reports `Sandbox panel: shown`, `Sandbox panel: hidden`, `Sandbox UI ready`, or `Sandbox viewport`.
+23. Confirm the Controls panel `Main` and `Panels/Status` pages are both readable and that page switching is obvious.
+24. Confirm the Scene Objects panel can reach every sample object through its page buttons or mouse wheel paging.
+25. Confirm the Utility panel feels readable and does not dominate the viewport.
+26. Confirm utility tabs are readable and the active utility state is obvious.
+27. Confirm Help opens in-window.
+28. Confirm Scene Legend opens in-window.
+29. Confirm Object Info appears in-window after selecting an object.
+30. Confirm Paths, Settings, and Diagnostics utilities are usable in-window.
+31. Confirm the Paths or Diagnostics utility reports the expected runtime mode for the current run.
+32. Confirm clicking inside docked panels does not pick scene objects.
+33. Left-click a visible object inside the viewport and confirm picking updates the selection.
+34. Confirm the selected object shows a visible gizmo in the viewport.
+35. Use `Alt + Left Mouse` to orbit around the selected object and confirm the view target feels stable.
+36. Use `Middle Mouse` to pan and confirm the camera and target move together predictably.
+37. Use the mouse wheel over the viewport and confirm zoom works without affecting paged panels.
+38. Press `F` and confirm the selected object is framed in a useful inspection view.
+39. Press `Home` and confirm the sandbox returns to the default view.
+40. Select `Textured Cube` from Scene Objects, switch to `Move`, and drag X, Y, and Z.
+41. Confirm the cube moves, not just the gizmo.
+42. Switch to `Rotate` and drag X, Y, and Z.
+43. Confirm the object rotates, not just the gizmo.
+44. Switch to `Scale` and drag the center square handle.
+45. Confirm the object scales, not just the gizmo.
+46. Toggle snap on and off and confirm movement, rotation, and scale respond differently.
+47. Confirm Object Details updates after manipulation.
+48. Confirm picking still works after movement, rotation, or scale changes.
+49. Click empty viewport space and confirm no gizmo helper becomes the selected object.
+50. Open panels or resize the window during a drag and confirm the drag stops cleanly instead of jumping to a new target.
+51. Hide the selected object and confirm gizmo dragging stops safely.
+52. Confirm Reset Transform restores the selected object.
+53. Confirm Focus Camera still works after manipulation.
+54. Confirm the camera view does not look stretched.
+55. Confirm the small in-window status area reports common actions without forcing you to read the console.
+56. Confirm the console still receives fallback logs for help, legend, object info, warnings, or errors when those actions are used.
+57. Confirm `Escape` behavior still works.
+58. Confirm close-window exit remains clean.
+59. Confirm no named-engine comparisons appear in runtime text or packaged help.
+60. If the UI is not visible or feels wrong, note whether the console reports `Sandbox panel: shown`, `Sandbox panel: hidden`, `Sandbox UI ready`, or `Sandbox viewport`.
 
 ## Expected startup behavior
 

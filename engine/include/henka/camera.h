@@ -50,8 +50,13 @@ henka_vec3 henka_camera_get_right(const henka_camera* camera);
 void henka_camera_set_aspect_ratio(henka_camera* camera, float aspect_ratio);
 float henka_camera_clamp_pitch(float pitch_radians);
 void henka_camera_reset(henka_camera* camera, const henka_camera* source);
+bool henka_camera_look_at(henka_camera* camera, henka_vec3 target);
 void henka_camera_move_relative(henka_camera* camera, henka_vec3 local_direction, float distance);
 bool henka_camera_focus_on_bounds(henka_camera* camera, henka_bounds bounds);
+bool henka_camera_frame_bounds(henka_camera* camera, henka_bounds bounds, float yaw_radians, float pitch_radians);
+bool henka_camera_orbit_target(henka_camera* camera, henka_vec3 target, float delta_yaw_radians, float delta_pitch_radians);
+bool henka_camera_pan_target(henka_camera* camera, henka_vec3* target, float delta_right, float delta_up);
+bool henka_camera_dolly_target(henka_camera* camera, henka_vec3 target, float delta_distance, float minimum_distance);
 henka_result henka_camera_screen_point_to_ray(
     const henka_camera* camera,
     int framebuffer_width,

@@ -52,9 +52,12 @@ The camera module now exposes reusable helpers for:
 - perspective camera creation
 - orthographic camera creation
 - pitch clamping
+- look-at orientation
 - camera reset
 - relative camera movement
 - camera focus on bounds
+- camera framing on bounds
+- orbit, pan, and dolly behavior around a target
 - screen-point ray creation
 
 The sandbox still uses a free camera, but the math is now reusable outside the example.
@@ -87,6 +90,7 @@ Henka now also includes a small docked workspace helper for viewport-first tools
 - window-point to framebuffer-point conversion for scene-space interaction paths
 
 The sandbox uses this to keep the scene in its own viewport while panels stay in separate docked regions.
+The current sandbox also layers safe panel paging on top of that docked layout so scene-first modes stay readable without treating the workspace as a floating editor yet.
 
 ### Viewport interaction testing
 

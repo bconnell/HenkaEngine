@@ -79,11 +79,14 @@ The panels no longer draw on top of the scene in normal docked modes.
 The current `Controls` panel can:
 
 - switch between `View`, `Inspect`, and `Full Tools`
+- split its content into a readable `Main` page and a `Panels/Status` page
 - toggle the grid
 - toggle wireframe
+- frame the selected object
+- reset the view
+- zoom in and out with visible buttons
 - switch between `Select`, `Move`, `Rotate`, and `Scale` gizmo modes
 - toggle transform snapping and show the current snap increments
-- reset the camera
 - save sandbox settings
 - reset the layout
 - open in-window utilities for help, legend, paths, settings, and diagnostics
@@ -96,6 +99,7 @@ The current `Scene Objects` panel can:
 - list the current sandbox examples by name
 - show hidden state
 - let you select one object at a time
+- page through the list when the dock height is tighter than the full object list
 - stay aligned with the scene object tag and bounds foundation behind the sandbox descriptors
 
 The current `Object Details` panel can:
@@ -122,6 +126,16 @@ The selected object also shows a transform gizmo inside the dedicated scene view
 - The gizmo helper pieces are internal to the viewport tool path and do not appear as normal sandbox objects in selection, object details, persisted selection state, or normal scene picking.
 - Dragging cancels safely if the selected object becomes invalid, hidden, or the active viewport changes during manipulation.
 - The current sandbox path shares its projected handle model and drag math with automated tests, which helps catch real selection and transform regressions earlier.
+
+The viewport now also supports direct navigation while mouse capture is released:
+
+- `Alt + Left Mouse`: orbit around the selected object or current view target
+- `Middle Mouse`: pan the view
+- `Mouse Wheel`: zoom the view when the cursor is over the viewport
+- `F`: frame the selected object
+- `Home`: reset the default camera view
+
+Mouse wheel input over the `Controls` or `Scene Objects` panels is routed to panel paging instead of the viewport, so panel interaction does not leak into scene zooming.
 
 The current `Utility` panel can show:
 
@@ -158,7 +172,7 @@ If the packaged sandbox opens but you do not see the panels:
 - launch `out/HenkaSandbox3D/HenkaSandbox3D.exe` again
 - confirm the startup console help mentions `F4`
 
-The packaged QA script can confirm startup logs and UI state output, and the local viewport interaction tests can now prove more basic transform outcomes, but neither replaces a human visual check for readability, drag feel, handle alignment, or gizmo handle clarity.
+The packaged QA script can confirm startup logs and UI state output, and the local viewport interaction tests can now prove more basic transform outcomes, camera helpers, and workspace sizing, but neither replaces a human visual check for readability, drag feel, handle alignment, or gizmo handle clarity.
 
 ## Future direction
 

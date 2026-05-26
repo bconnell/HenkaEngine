@@ -47,6 +47,11 @@ static void henka_mat4_multiply_vec4(const henka_mat4* matrix, const float input
         matrix->m[15] * input[3];
 }
 
+static float henka_max_float(float left, float right)
+{
+    return left > right ? left : right;
+}
+
 henka_camera henka_camera_create_perspective(float field_of_view_radians, float aspect_ratio, float near_plane, float far_plane)
 {
     henka_camera camera;
@@ -160,6 +165,29 @@ void henka_camera_reset(henka_camera* camera, const henka_camera* source)
     *camera = *source;
 }
 
+bool henka_camera_look_at(henka_camera* camera, henka_vec3 target)
+{
+    henka_vec3 direction;
+    float horizontal_length;
+
+    if (camera == NULL)
+    {
+        return false;
+    }
+
+    direction = henka_vec3_subtract(target, camera->position);
+    if (henka_vec3_length(direction) <= 0.0001f)
+    {
+        return false;
+    }
+
+    direction = henka_vec3_normalize(direction);
+    horizontal_length = sqrtf(direction.x * direction.x + direction.z * direction.z);
+    camera->yaw_radians = atan2f(direction.z, direction.x);
+    camera->pitch_radians = henka_clamp_pitch(atan2f(direction.y, horizontal_length));
+    return true;
+}
+
 void henka_camera_move_relative(henka_camera* camera, henka_vec3 local_direction, float distance)
 {
     henka_vec3 world_up;
@@ -233,6 +261,118 @@ bool henka_camera_focus_on_bounds(henka_camera* camera, henka_bounds bounds)
     }
 
     camera->position = henka_vec3_subtract(bounds.center, henka_vec3_scale(forward, distance));
+    return true;
+}
+
+bool henka_camera_frame_bounds(henka_camera* camera, henka_bounds bounds, float yaw_radians, float pitch_radians)
+{
+    henka_vec3 forward;
+    float radius;
+    float distance;
+    float horizontal_distance;
+    float horizontal_fov;
+    float vertical_distance;
+
+    if (camera == NULL)
+    {
+        return false;
+    }
+
+    radius = henka_vec3_length(bounds.extents);
+    if (radius <= 0.0f)
+    {
+        radius = 0.5f;
+    }
+
+    camera->yaw_radians = yaw_radians;
+    camera->pitch_radians = henka_clamp_pitch(pitch_radians);
+    forward = henka_camera_get_forward(camera);
+    if (camera->projection_mode == HENKA_CAMERA_PROJECTION_ORTHOGRAPHIC)
+    {
+        camera->position = henka_vec3_subtract(bounds.center, henka_vec3_scale(forward, radius + camera->near_plane + 2.0f));
+        return true;
+    }
+
+    vertical_distance = radius / tanf(camera->field_of_view_radians * 0.5f);
+    horizontal_fov = 2.0f * atanf(tanf(camera->field_of_view_radians * 0.5f) * camera->aspect_ratio);
+    horizontal_distance = radius / tanf(horizontal_fov * 0.5f);
+    distance = henka_max_float(vertical_distance, horizontal_distance) + radius * 0.9f;
+    distance = henka_max_float(distance, camera->near_plane + radius + 0.75f);
+    camera->position = henka_vec3_subtract(bounds.center, henka_vec3_scale(forward, distance));
+    return true;
+}
+
+bool henka_camera_orbit_target(henka_camera* camera, henka_vec3 target, float delta_yaw_radians, float delta_pitch_radians)
+{
+    float distance;
+    henka_vec3 forward;
+
+    if (camera == NULL)
+    {
+        return false;
+    }
+
+    distance = henka_vec3_length(henka_vec3_subtract(target, camera->position));
+    if (distance <= 0.0001f)
+    {
+        distance = 1.0f;
+    }
+
+    camera->yaw_radians += delta_yaw_radians;
+    camera->pitch_radians = henka_clamp_pitch(camera->pitch_radians + delta_pitch_radians);
+    forward = henka_camera_get_forward(camera);
+    camera->position = henka_vec3_subtract(target, henka_vec3_scale(forward, distance));
+    return true;
+}
+
+bool henka_camera_pan_target(henka_camera* camera, henka_vec3* target, float delta_right, float delta_up)
+{
+    henka_vec3 offset;
+    henka_vec3 right;
+    henka_vec3 up;
+
+    if (camera == NULL || target == NULL)
+    {
+        return false;
+    }
+
+    right = henka_camera_get_right(camera);
+    up = henka_vec3_normalize(henka_vec3_cross(right, henka_camera_get_forward(camera)));
+    offset = henka_vec3_add(henka_vec3_scale(right, delta_right), henka_vec3_scale(up, delta_up));
+    camera->position = henka_vec3_add(camera->position, offset);
+    *target = henka_vec3_add(*target, offset);
+    return true;
+}
+
+bool henka_camera_dolly_target(henka_camera* camera, henka_vec3 target, float delta_distance, float minimum_distance)
+{
+    float distance;
+    henka_vec3 forward;
+
+    if (camera == NULL)
+    {
+        return false;
+    }
+
+    if (minimum_distance <= 0.0f)
+    {
+        minimum_distance = 0.25f;
+    }
+
+    distance = henka_vec3_length(henka_vec3_subtract(target, camera->position));
+    if (distance <= 0.0001f)
+    {
+        distance = minimum_distance;
+    }
+
+    distance += delta_distance;
+    if (distance < minimum_distance)
+    {
+        distance = minimum_distance;
+    }
+
+    forward = henka_camera_get_forward(camera);
+    camera->position = henka_vec3_subtract(target, henka_vec3_scale(forward, distance));
     return true;
 }
 

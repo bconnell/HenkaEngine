@@ -56,6 +56,8 @@ static henka_key henka_translate_key(SDL_Keycode keycode)
     {
         case SDLK_ESCAPE:
             return HENKA_KEY_ESCAPE;
+        case SDLK_F:
+            return HENKA_KEY_F;
         case SDLK_W:
             return HENKA_KEY_W;
         case SDLK_A:
@@ -68,8 +70,12 @@ static henka_key henka_translate_key(SDL_Keycode keycode)
             return HENKA_KEY_Q;
         case SDLK_E:
             return HENKA_KEY_E;
+        case SDLK_LALT:
+            return HENKA_KEY_LEFT_ALT;
         case SDLK_LSHIFT:
             return HENKA_KEY_LEFT_SHIFT;
+        case SDLK_HOME:
+            return HENKA_KEY_HOME;
         case SDLK_TAB:
             return HENKA_KEY_TAB;
         case SDLK_F1:
@@ -258,6 +264,11 @@ henka_result henka_platform_poll_events(struct henka_platform* platform, henka_i
                 }
                 break;
             }
+
+            case SDL_EVENT_MOUSE_WHEEL:
+                input->mouse_wheel_delta.x += event.wheel.x;
+                input->mouse_wheel_delta.y += event.wheel.y;
+                break;
 
             default:
                 break;

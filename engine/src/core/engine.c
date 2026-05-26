@@ -239,6 +239,8 @@ static void henka_input_reset_frame_state(henka_input_state* input)
 
     input->mouse_delta.x = 0.0f;
     input->mouse_delta.y = 0.0f;
+    input->mouse_wheel_delta.x = 0.0f;
+    input->mouse_wheel_delta.y = 0.0f;
     input->close_requested = false;
 }
 
@@ -838,6 +840,16 @@ henka_vec2 henka_input_get_mouse_delta(const henka_engine* engine)
     }
 
     return engine->input.mouse_delta;
+}
+
+henka_vec2 henka_input_get_mouse_wheel_delta(const henka_engine* engine)
+{
+    if (engine == NULL)
+    {
+        return (henka_vec2){0.0f, 0.0f};
+    }
+
+    return engine->input.mouse_wheel_delta;
 }
 
 const char* henka_input_action_get_name(henka_input_action action)
