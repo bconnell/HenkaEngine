@@ -3,6 +3,7 @@
 
 #include <henka/camera.h>
 #include <henka/result.h>
+#include <stddef.h>
 
 typedef enum henka_gizmo_axis
 {
@@ -55,5 +56,22 @@ henka_result henka_gizmo_project_rotation_delta(
     henka_ray start_ray,
     henka_ray current_ray,
     float* out_angle_radians);
+henka_result henka_gizmo_hit_test_segment_2d(
+    henka_vec2 point,
+    henka_vec2 start,
+    henka_vec2 end,
+    float tolerance,
+    float* out_distance);
+bool henka_gizmo_hit_test_rect_2d(
+    henka_vec2 point,
+    henka_vec2 center,
+    henka_vec2 half_extents,
+    float padding);
+henka_result henka_gizmo_hit_test_polyline_2d(
+    henka_vec2 point,
+    const henka_vec2* points,
+    size_t point_count,
+    float tolerance,
+    float* out_distance);
 
 #endif

@@ -67,6 +67,7 @@ Henka now also includes a small docked workspace helper for viewport-first tools
 - dedicated scene viewport bounds
 - viewport aspect-ratio helpers
 - window-point to viewport-local conversion
+- window-point to framebuffer-point conversion for scene-space interaction paths
 
 The sandbox uses this to keep the scene in its own viewport while panels stay in separate docked regions.
 
@@ -87,10 +88,12 @@ Henka now also includes a small transform gizmo foundation for selected scene ob
 
 - world-axis move helpers
 - world-axis rotation helpers
-- axis and uniform scale helpers
+- uniform scale helpers
 - snap helpers for move, rotate, and scale
 - viewport-aware gizmo hit testing
-- ray-to-plane and projected drag helpers
+- world-to-screen projection for viewport tools
+- projected screen-space handle hit helpers
+- stable drag cancellation around viewport changes and invalid targets
 
 The sandbox uses these helpers to draw scene-space gizmos inside the dedicated viewport and manipulate selected objects without turning the current sample into a full editor.
 The helper pieces that draw those gizmos stay internal to the tool path, are excluded from normal scene picking, and are not treated as persisted or user-facing scene selection targets.

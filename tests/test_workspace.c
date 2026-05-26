@@ -4,6 +4,7 @@
 
 void henka_test_workspace(void)
 {
+    henka_vec2 framebuffer_point;
     henka_result result;
     henka_vec2 local_point;
     henka_workspace_desc desc;
@@ -20,6 +21,10 @@ void henka_test_workspace(void)
     HENKA_TEST_ASSERT_FLOAT_CLOSE(local_point.x, 32.0f, 0.0001f);
     HENKA_TEST_ASSERT_FLOAT_CLOSE(local_point.y, 44.0f, 0.0001f);
     HENKA_TEST_ASSERT(henka_viewport_window_to_local((henka_viewport){100, 50, 320, 180}, (henka_vec2){40.0f, 94.0f}, &local_point) == HENKA_ERROR_INVALID_ARGUMENT);
+    HENKA_TEST_ASSERT(henka_window_point_to_framebuffer_point(800, 600, 1200, 900, (henka_vec2){200.0f, 150.0f}, &framebuffer_point) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(framebuffer_point.x, 300.0f, 0.0001f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(framebuffer_point.y, 225.0f, 0.0001f);
+    HENKA_TEST_ASSERT(henka_window_point_to_framebuffer_point(0, 600, 1200, 900, (henka_vec2){200.0f, 150.0f}, &framebuffer_point) == HENKA_ERROR_INVALID_ARGUMENT);
 
     desc = (henka_workspace_desc){
         1280,

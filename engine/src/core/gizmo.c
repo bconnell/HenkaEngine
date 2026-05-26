@@ -10,6 +10,13 @@ static float henka_gizmo_absf(float value)
     return value < 0.0f ? -value : value;
 }
 
+static float henka_gizmo_distance_sq_2d(henka_vec2 left, henka_vec2 right)
+{
+    const float dx = left.x - right.x;
+    const float dy = left.y - right.y;
+    return dx * dx + dy * dy;
+}
+
 static henka_result henka_gizmo_build_axis_drag_plane(
     henka_vec3 origin,
     henka_vec3 axis_direction,
@@ -398,5 +405,112 @@ henka_result henka_gizmo_project_rotation_delta(
     }
     sine = henka_vec3_dot(axis_direction, henka_vec3_cross(start_vector, current_vector));
     *out_angle_radians = atan2f(sine, cosine);
+    return HENKA_SUCCESS;
+}
+
+henka_result henka_gizmo_hit_test_segment_2d(
+    henka_vec2 point,
+    henka_vec2 start,
+    henka_vec2 end,
+    float tolerance,
+    float* out_distance)
+{
+    const float segment_dx = end.x - start.x;
+    const float segment_dy = end.y - start.y;
+    const float segment_length_sq = segment_dx * segment_dx + segment_dy * segment_dy;
+    float closest_x;
+    float closest_y;
+    float distance;
+    float t;
+
+    if (out_distance == NULL || tolerance <= 0.0f)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    if (segment_length_sq <= 0.00001f)
+    {
+        distance = sqrtf(henka_gizmo_distance_sq_2d(point, start));
+        if (distance > tolerance)
+        {
+            return HENKA_ERROR_UNKNOWN;
+        }
+
+        *out_distance = distance;
+        return HENKA_SUCCESS;
+    }
+
+    t = ((point.x - start.x) * segment_dx + (point.y - start.y) * segment_dy) / segment_length_sq;
+    if (t < 0.0f)
+    {
+        t = 0.0f;
+    }
+    if (t > 1.0f)
+    {
+        t = 1.0f;
+    }
+
+    closest_x = start.x + segment_dx * t;
+    closest_y = start.y + segment_dy * t;
+    distance = sqrtf((point.x - closest_x) * (point.x - closest_x) + (point.y - closest_y) * (point.y - closest_y));
+    if (distance > tolerance)
+    {
+        return HENKA_ERROR_UNKNOWN;
+    }
+
+    *out_distance = distance;
+    return HENKA_SUCCESS;
+}
+
+bool henka_gizmo_hit_test_rect_2d(
+    henka_vec2 point,
+    henka_vec2 center,
+    henka_vec2 half_extents,
+    float padding)
+{
+    if (half_extents.x < 0.0f || half_extents.y < 0.0f || padding < 0.0f)
+    {
+        return false;
+    }
+
+    return point.x >= center.x - (half_extents.x + padding) &&
+        point.x <= center.x + (half_extents.x + padding) &&
+        point.y >= center.y - (half_extents.y + padding) &&
+        point.y <= center.y + (half_extents.y + padding);
+}
+
+henka_result henka_gizmo_hit_test_polyline_2d(
+    henka_vec2 point,
+    const henka_vec2* points,
+    size_t point_count,
+    float tolerance,
+    float* out_distance)
+{
+    float best_distance;
+    size_t index;
+
+    if (points == NULL || out_distance == NULL || point_count < 2U || tolerance <= 0.0f)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    best_distance = FLT_MAX;
+    for (index = 0U; index + 1U < point_count; ++index)
+    {
+        float segment_distance;
+
+        if (henka_gizmo_hit_test_segment_2d(point, points[index], points[index + 1U], tolerance, &segment_distance) == HENKA_SUCCESS &&
+            segment_distance < best_distance)
+        {
+            best_distance = segment_distance;
+        }
+    }
+
+    if (best_distance == FLT_MAX)
+    {
+        return HENKA_ERROR_UNKNOWN;
+    }
+
+    *out_distance = best_distance;
     return HENKA_SUCCESS;
 }

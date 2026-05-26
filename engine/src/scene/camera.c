@@ -23,6 +23,30 @@ static float henka_clamp_pitch(float pitch_radians)
     return pitch_radians;
 }
 
+static void henka_mat4_multiply_vec4(const henka_mat4* matrix, const float input[4], float output[4])
+{
+    output[0] =
+        matrix->m[0] * input[0] +
+        matrix->m[4] * input[1] +
+        matrix->m[8] * input[2] +
+        matrix->m[12] * input[3];
+    output[1] =
+        matrix->m[1] * input[0] +
+        matrix->m[5] * input[1] +
+        matrix->m[9] * input[2] +
+        matrix->m[13] * input[3];
+    output[2] =
+        matrix->m[2] * input[0] +
+        matrix->m[6] * input[1] +
+        matrix->m[10] * input[2] +
+        matrix->m[14] * input[3];
+    output[3] =
+        matrix->m[3] * input[0] +
+        matrix->m[7] * input[1] +
+        matrix->m[11] * input[2] +
+        matrix->m[15] * input[3];
+}
+
 henka_camera henka_camera_create_perspective(float field_of_view_radians, float aspect_ratio, float near_plane, float far_plane)
 {
     henka_camera camera;
@@ -259,6 +283,59 @@ henka_result henka_camera_screen_point_to_ray(
         direction,
         henka_vec3_scale(up, ndc_y * tanf(camera->field_of_view_radians * 0.5f)));
     out_ray->direction = henka_vec3_normalize(direction);
+    return HENKA_SUCCESS;
+}
+
+henka_result henka_camera_world_to_screen(
+    const henka_camera* camera,
+    int framebuffer_width,
+    int framebuffer_height,
+    henka_vec3 world_position,
+    henka_vec2* out_screen_position,
+    float* out_depth)
+{
+    henka_mat4 projection;
+    henka_mat4 view;
+    henka_mat4 view_projection;
+    float clip[4];
+    float ndc_x;
+    float ndc_y;
+    float ndc_z;
+    float world[4];
+
+    if (camera == NULL ||
+        out_screen_position == NULL ||
+        framebuffer_width <= 0 ||
+        framebuffer_height <= 0)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    world[0] = world_position.x;
+    world[1] = world_position.y;
+    world[2] = world_position.z;
+    world[3] = 1.0f;
+
+    view = henka_camera_get_view_matrix(camera);
+    projection = henka_camera_get_projection_matrix(camera);
+    view_projection = henka_mat4_multiply(projection, view);
+    henka_mat4_multiply_vec4(&view_projection, world, clip);
+    if (fabsf(clip[3]) <= 0.00001f || clip[3] < 0.0f)
+    {
+        return HENKA_ERROR_UNKNOWN;
+    }
+
+    ndc_x = clip[0] / clip[3];
+    ndc_y = clip[1] / clip[3];
+    ndc_z = clip[2] / clip[3];
+
+    out_screen_position->x = (ndc_x * 0.5f + 0.5f) * (float)framebuffer_width;
+    out_screen_position->y = (1.0f - (ndc_y * 0.5f + 0.5f)) * (float)framebuffer_height;
+    if (out_depth != NULL)
+    {
+        *out_depth = ndc_z;
+    }
+
     return HENKA_SUCCESS;
 }
 

@@ -58,6 +58,13 @@ henka_result henka_camera_screen_point_to_ray(
     int framebuffer_height,
     henka_vec2 screen_position,
     henka_ray* out_ray);
+henka_result henka_camera_world_to_screen(
+    const henka_camera* camera,
+    int framebuffer_width,
+    int framebuffer_height,
+    henka_vec3 world_position,
+    henka_vec2* out_screen_position,
+    float* out_depth);
 void henka_camera_move_fly(henka_camera* camera, const struct henka_engine* engine, double delta_seconds);
 void henka_camera_apply_mouse_look(henka_camera* camera, float delta_yaw_radians, float delta_pitch_radians);
 

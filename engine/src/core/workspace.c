@@ -43,6 +43,28 @@ bool henka_viewport_contains_point(henka_viewport viewport, henka_vec2 window_po
         window_point.y < (float)(viewport.y + viewport.height);
 }
 
+henka_result henka_window_point_to_framebuffer_point(
+    int window_width,
+    int window_height,
+    int framebuffer_width,
+    int framebuffer_height,
+    henka_vec2 window_point,
+    henka_vec2* out_framebuffer_point)
+{
+    if (out_framebuffer_point == NULL ||
+        window_width <= 0 ||
+        window_height <= 0 ||
+        framebuffer_width <= 0 ||
+        framebuffer_height <= 0)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    out_framebuffer_point->x = (window_point.x / (float)window_width) * (float)framebuffer_width;
+    out_framebuffer_point->y = (window_point.y / (float)window_height) * (float)framebuffer_height;
+    return HENKA_SUCCESS;
+}
+
 henka_result henka_viewport_window_to_local(henka_viewport viewport, henka_vec2 window_point, henka_vec2* out_local_point)
 {
     if (out_local_point == NULL || !henka_viewport_contains_point(viewport, window_point))

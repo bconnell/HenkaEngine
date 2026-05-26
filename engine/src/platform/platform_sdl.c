@@ -295,6 +295,16 @@ bool henka_platform_get_framebuffer_size(struct henka_platform* platform, int* o
     return SDL_GetWindowSizeInPixels(platform->window, out_width, out_height);
 }
 
+bool henka_platform_get_window_size(struct henka_platform* platform, int* out_width, int* out_height)
+{
+    if (platform == NULL || out_width == NULL || out_height == NULL)
+    {
+        return false;
+    }
+
+    return SDL_GetWindowSize(platform->window, out_width, out_height);
+}
+
 henka_result henka_platform_set_mouse_capture(struct henka_platform* platform, bool enabled)
 {
     if (platform == NULL)

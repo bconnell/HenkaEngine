@@ -8,6 +8,8 @@ void henka_test_camera(void)
     henka_camera camera;
     henka_bounds bounds;
     henka_ray ray;
+    henka_vec2 screen_point;
+    henka_vec3 forward;
 
     camera = henka_camera_create_perspective(60.0f * HENKA_DEG_TO_RAD, 16.0f / 9.0f, 0.1f, 100.0f);
     henka_camera_apply_mouse_look(&camera, 1.25f, 99.0f);
@@ -23,6 +25,23 @@ void henka_test_camera(void)
     HENKA_TEST_ASSERT(henka_camera_focus_on_bounds(&camera, bounds));
     HENKA_TEST_ASSERT(henka_camera_screen_point_to_ray(&camera, 1280, 720, (henka_vec2){640.0f, 360.0f}, &ray) == HENKA_SUCCESS);
     HENKA_TEST_ASSERT_FLOAT_CLOSE(henka_vec3_length(ray.direction), 1.0f, 0.0001f);
+    forward = henka_camera_get_forward(&camera);
+    HENKA_TEST_ASSERT(henka_camera_world_to_screen(
+        &camera,
+        1280,
+        720,
+        henka_vec3_add(camera.position, henka_vec3_scale(forward, 5.0f)),
+        &screen_point,
+        NULL) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(screen_point.x, 640.0f, 0.5f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(screen_point.y, 360.0f, 0.5f);
+    HENKA_TEST_ASSERT(henka_camera_world_to_screen(
+        &camera,
+        1280,
+        720,
+        henka_vec3_subtract(camera.position, henka_vec3_scale(forward, 5.0f)),
+        &screen_point,
+        NULL) != HENKA_SUCCESS);
 
     camera = henka_camera_create_orthographic(8.0f, 16.0f / 9.0f, 0.1f, 100.0f);
     HENKA_TEST_ASSERT(camera.projection_mode == HENKA_CAMERA_PROJECTION_ORTHOGRAPHIC);

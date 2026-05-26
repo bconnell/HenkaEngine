@@ -81,7 +81,7 @@ Use this checklist when you want to confirm that `henka_sandbox3d` is visually r
 34. Confirm the cube moves, not just the gizmo.
 35. Switch to `Rotate` and drag X, Y, and Z.
 36. Confirm the object rotates, not just the gizmo.
-37. Switch to `Scale` and drag the center uniform handle.
+37. Switch to `Scale` and drag the center square handle.
 38. Confirm the object scales, not just the gizmo.
 39. Toggle snap on and off and confirm movement, rotation, and scale respond differently.
 40. Confirm Object Details updates after manipulation.
@@ -157,6 +157,7 @@ You should be able to identify these examples:
 - The `Object Details` panel shows tag and interaction state when those foundations are available.
 - A selected object shows a visible transform gizmo in the viewport.
 - Move, Rotate, and Scale mode handles should drag only inside the viewport.
+- The visible handle under the cursor should be the handle that becomes active.
 - Internal gizmo helper pieces should not appear as selected sandbox objects.
 - Gizmo dragging should stop safely if the viewport changes, the selected object becomes hidden, or the panels reopen mid-drag.
 - Pressing `F4` again closes the UI.
@@ -225,6 +226,7 @@ Mark each item as `Pass`, `Needs Review`, or `Fail`.
 - Viewport rotate gizmo works
 - Viewport scale gizmo works
 - Viewport uniform scale handle works
+- Visible handle and mouse alignment feel correct
 - Snap affects transform dragging
 - UI print object info works
 - Utility tabs are readable

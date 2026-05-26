@@ -73,6 +73,7 @@ bool henka_engine_is_mouse_captured(const henka_engine* engine);
 double henka_engine_get_delta_time(const henka_engine* engine);
 double henka_engine_get_total_time(const henka_engine* engine);
 uint64_t henka_engine_get_frame_index(const henka_engine* engine);
+henka_result henka_engine_get_window_size(const henka_engine* engine, int* out_width, int* out_height);
 henka_result henka_engine_get_framebuffer_size(const henka_engine* engine, int* out_width, int* out_height);
 henka_result henka_engine_set_scene_viewport(henka_engine* engine, henka_viewport viewport);
 henka_result henka_engine_get_scene_viewport(const henka_engine* engine, henka_viewport* out_viewport);

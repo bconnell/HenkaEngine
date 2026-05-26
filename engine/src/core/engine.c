@@ -634,6 +634,21 @@ henka_result henka_engine_get_framebuffer_size(const henka_engine* engine, int* 
     return HENKA_SUCCESS;
 }
 
+henka_result henka_engine_get_window_size(const henka_engine* engine, int* out_width, int* out_height)
+{
+    if (engine == NULL || engine->platform == NULL || out_width == NULL || out_height == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    if (!henka_platform_get_window_size(engine->platform, out_width, out_height))
+    {
+        return HENKA_ERROR_PLATFORM;
+    }
+
+    return HENKA_SUCCESS;
+}
+
 henka_result henka_engine_set_scene_viewport(henka_engine* engine, henka_viewport viewport)
 {
     if (engine == NULL || engine->renderer == NULL)
