@@ -1,0 +1,5 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Support Henka Engine
+    url: https://github.com/sponsors/bconnell
+    about: Sponsor the project through GitHub Sponsors.

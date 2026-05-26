@@ -1,0 +1,66 @@
+name: Feature request
+description: Suggest a focused improvement for Henka Engine.
+title: "[Feature]: "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Feature requests are most useful when they are scoped, practical, and tied to the engine's current direction.
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: What would you like Henka Engine to support?
+      placeholder: Describe the feature clearly.
+    validations:
+      required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem or use case
+      description: What problem does this solve?
+      placeholder: Explain the user or developer workflow this would improve.
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Engine core
+        - Renderer
+        - Input
+        - Camera
+        - Scene
+        - Transform tools
+        - UI or workspace tools
+        - Asset pipeline
+        - Packaging
+        - Documentation
+        - External project templates
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: proposed
+    attributes:
+      label: Proposed behavior
+      description: What should the completed feature do?
+    validations:
+      required: true
+  - type: textarea
+    id: scope
+    attributes:
+      label: Scope notes
+      description: What should be included or intentionally left out?
+      placeholder: Include any boundaries that would keep the feature focused.
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Checklist
+      options:
+        - label: This request does not require real game content to be added to the engine repository.
+          required: true
+        - label: This request does not assume sponsorship purchases feature priority.
+          required: true

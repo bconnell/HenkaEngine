@@ -1,0 +1,69 @@
+name: Manual QA report
+description: Report visual, interaction, packaging, or runtime behavior that automated tests cannot fully prove.
+title: "[Manual QA]: "
+labels: ["manual QA needed"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Manual QA is important for Henka Engine because visual and interaction behavior cannot be fully proven by automated tests.
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: What did you manually test?
+      placeholder: Describe the manual test focus.
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Packaged sandbox
+        - Development sandbox
+        - Transform gizmo
+        - Viewport and panels
+        - Camera controls
+        - Object selection
+        - Asset loading
+        - External project template
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps tested
+      description: List what you actually did.
+      placeholder: |
+        1. Packaged the sandbox.
+        2. Opened HenkaSandbox3D.exe.
+        3. Selected...
+        4. Tested...
+    validations:
+      required: true
+  - type: textarea
+    id: result
+    attributes:
+      label: Result
+      description: What worked or failed?
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+      description: What did you expect to happen?
+  - type: textarea
+    id: notes
+    attributes:
+      label: Notes
+      description: Include visual feel, mouse alignment, drag comfort, readability, or resize behavior details.
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Privacy checklist
+      options:
+        - label: I did not include private files, secrets, local user data, or screenshots with private information.
+          required: true

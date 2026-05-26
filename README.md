@@ -12,6 +12,8 @@ Sponsors help the project move forward, but sponsorship does not purchase featur
 
 Use the Sponsor button on this repository to support the project through GitHub Sponsors.
 
+See SUPPORT.md for what sponsorship supports and what it does not promise.
+
 ## Current status
 
 Henka Engine is still early, but the sandbox now renders a visible 3D scene with textured and untextured materials through Henka systems.
@@ -31,7 +33,7 @@ Henka Engine is still early, but the sandbox now renders a visible 3D scene with
 - Asset metadata and stronger material summaries
 - Local save-data foundation beyond settings
 - Package mode and engine diagnostics foundation
-- Scene-space transform gizmo foundation for selected object manipulation
+- Scene-space transform gizmo foundation for selected object manipulation, with visual drag behavior still being hardened through manual QA
 - Asset manager foundation for cached shader and texture loading
 - Early OBJ model loading with cached mesh assets
 - Fallback white and error textures
@@ -69,6 +71,17 @@ scripts/             Windows helper scripts
 templates/           Generic starter content for separate game repositories
 third_party/         Bundled third-party source used by the engine
 ```
+
+## Try the sandbox
+
+On Windows, the quickest way to try the current sandbox is:
+
+```powershell
+.\scripts\build_windows.ps1
+.\scripts\package_sandbox3d_windows.ps1
+```
+
+The sandbox is an engine sample and QA target. It is not a game, and real games built with Henka should live in separate repositories.
 
 ## Build
 
@@ -131,7 +144,7 @@ The packaged folder also includes `PACKAGE_INFO.txt` so you can tell when the pa
 - `H`: print controls and the scene legend again
 - `Escape`: close the UI first, then release the mouse, then exit
 
-Press `F4` to open the in-window sandbox panels. On a first run with no local settings file, the packaged sandbox opens the docked workspace in `View` mode so the controls are visible without covering most of the scene. Press `F5` to cycle between `View`, `Inspect`, and `Full Tools`. The 3D scene now renders inside its own dedicated viewport region while the panels stay docked beside it. If you hide the panels, a small in-window hint stays in the corner so it is still clear how to bring them back. Console output remains available for fallback logs and automation, but normal viewer use no longer depends on reading it. Select a scene object from the list or with `Left Mouse` in the viewport, then use the Transform section to switch between `Select`, `Move`, `Rotate`, and `Scale` gizmo modes and adjust the object with snapping when needed.
+Press `F4` to open the in-window sandbox panels. On a first run with no local settings file, the packaged sandbox opens the docked workspace in `View` mode so the controls are visible without covering most of the scene. Press `F5` to cycle between `View`, `Inspect`, and `Full Tools`. The 3D scene now renders inside its own dedicated viewport region while the panels stay docked beside it. If you hide the panels, a small in-window hint stays in the corner so it is still clear how to bring them back. Console output remains available for fallback logs and automation, but normal viewer use no longer depends on reading it. Select a scene object from the list or with `Left Mouse` in the viewport, then use the Transform section to inspect the current `Select`, `Move`, `Rotate`, and `Scale` gizmo workflow. Visual drag behavior is still being hardened through manual desktop QA.
 
 Offline help is also available in [docs/help/sandbox3d.md](docs/help/sandbox3d.md).
 Model loading notes are documented in [docs/model-loading.md](docs/model-loading.md).

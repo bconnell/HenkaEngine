@@ -1,0 +1,90 @@
+name: Bug report
+description: Report a reproducible problem in Henka Engine.
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting a bug. Clear reproduction steps are the most useful part of the report.
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: What went wrong?
+      placeholder: Describe the problem clearly.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: List the exact steps needed to reproduce the issue.
+      placeholder: |
+        1. Build or package the project.
+        2. Open the sandbox.
+        3. Press or click...
+        4. Observe...
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+      description: What should have happened?
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+      description: What happened instead?
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Build
+        - Packaging
+        - Sandbox
+        - Renderer
+        - Input
+        - Camera
+        - Scene
+        - Transform gizmo
+        - UI
+        - Asset loading
+        - Documentation
+        - External project template
+        - Other
+    validations:
+      required: true
+  - type: input
+    id: commit
+    attributes:
+      label: Commit or branch
+      description: Include the commit hash or branch if known.
+      placeholder: "main, f538c87, etc."
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: Operating system, compiler, graphics hardware, and any relevant setup details.
+      placeholder: "Windows version, Visual Studio version, GPU, CMake version, etc."
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs or console output
+      description: Paste relevant output only. Do not include private paths, secrets, or unrelated logs.
+      render: text
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Checklist
+      options:
+        - label: I checked that this issue does not include private files, secrets, local user data, or screenshots with private information.
+          required: true
+        - label: I included reproduction steps or explained why reproduction is not available.
+          required: true
