@@ -52,8 +52,11 @@ float henka_vec3_dot(henka_vec3 left, henka_vec3 right);
 henka_vec3 henka_vec3_cross(henka_vec3 left, henka_vec3 right);
 
 henka_quat henka_quat_identity(void);
+henka_quat henka_quat_from_axis_angle(henka_vec3 axis, float angle_radians);
 henka_quat henka_quat_from_euler(float pitch_radians, float yaw_radians, float roll_radians);
+henka_quat henka_quat_multiply(henka_quat left, henka_quat right);
 henka_quat henka_quat_normalize(henka_quat value);
+henka_vec3 henka_quat_rotate_vec3(henka_quat rotation, henka_vec3 value);
 
 henka_mat4 henka_mat4_identity(void);
 henka_mat4 henka_mat4_multiply(henka_mat4 left, henka_mat4 right);

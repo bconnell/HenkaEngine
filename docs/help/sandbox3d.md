@@ -21,7 +21,7 @@ On a first packaged run with no existing settings file, the docked workspace ope
 - `Shift`: move faster
 - `Mouse`: look around while mouse capture is active
 - `Right Mouse / Tab`: toggle mouse capture
-- `Left Mouse`: pick a visible scene object inside the scene viewport when the UI is closed and mouse capture is released
+- `Left Mouse`: select or manipulate inside the scene viewport when mouse capture is released
 - `F1`: toggle wireframe
 - `F2`: print the scene legend to the console again
 - `F3`: show or hide the debug grid
@@ -52,7 +52,9 @@ On a first packaged run with no existing settings file, the docked workspace ope
 - Compare the colored cube, textured cube, and OBJ marker so it is easy to tell which material path each object is using.
 - Use `F3` to hide the grid briefly, then show it again to confirm the scene layout still reads clearly.
 - Press `F4` to open the sandbox panels, then use `F5` to compare the View, Inspect, and Full Tools layouts.
-- Close the UI, release mouse capture, and left-click a visible object to test the current picking foundation.
+- Release mouse capture, then left-click a visible object in the viewport to test selection and transform dragging.
+- Switch the Transform section between Select, Move, Rotate, and Scale, then drag the gizmo on a selected object.
+- Toggle snapping on and off to compare free movement with stepped adjustments.
 - Click the grid and wireframe controls to confirm the in-window UI updates the same engine state as the keyboard shortcuts.
 - Open Help, Scene Legend, Paths, Settings, and Diagnostics in the Utility panel so you can inspect the sandbox without relying on the console.
 - Confirm the small in-window status area reports common actions such as layout changes, camera reset, saved settings, or object focus.
@@ -78,6 +80,8 @@ The `Controls` panel currently includes:
 - layout buttons for `View`, `Inspect`, and `Full Tools`
 - a `Grid` toggle
 - a `Wire` toggle
+- Transform tabs for `Select`, `Move`, `Rotate`, and `Scale`
+- a snap toggle with current move, rotate, and scale snap values
 - a camera reset button
 - a save-settings button
 - a reset-layout button
@@ -87,6 +91,7 @@ The `Controls` panel currently includes:
 
 `Inspect` and `Full Tools` also expose the wider inspection controls.
 `Full Tools` keeps the most detailed inspection workspace visible.
+Transform manipulation happens in the dedicated scene viewport, not inside the docked panels.
 
 The `Scene Objects` panel lists the current sandbox examples by name.
 
@@ -104,6 +109,15 @@ The `Object Details` panel shows the current selection.
 - what the object demonstrates
 - mesh, material, texture or fallback summary, and interaction availability
 - safe actions for visibility, camera focus, transform reset, and console info output
+
+The selected object also shows a visible transform gizmo in the scene viewport.
+
+- `Select` mode keeps normal object picking active.
+- `Move` mode drags the selected object on the chosen world axis.
+- `Rotate` mode drags the selected object around the chosen world axis.
+- `Scale` mode supports axis scale and a uniform center handle.
+- Snap can be enabled or disabled from the Controls panel.
+- Gizmo dragging uses viewport-relative mouse coordinates, so docked panel clicks do not manipulate scene objects.
 
 The `Utility` panel provides short in-window views for:
 
@@ -125,7 +139,7 @@ When the UI is open:
 - `Right Mouse` and `Tab` can be used again after you close the panel
 - `Escape` closes the panel before it returns to the normal mouse-capture and exit flow
 
-Picking uses the dedicated scene viewport. Clicks in docked panels do not count as viewport picks.
+Picking and gizmo hit testing both use the dedicated scene viewport. Clicks in docked panels do not count as viewport picks or transform drags.
 
 ## Packaged runs
 
@@ -141,6 +155,7 @@ The runtime also reports whether it is running in `Development` or `Packaged` mo
 - The current settings file is a small local key/value format. It is easy to inspect by hand, but it is not a finished save-game system.
 - A separate save-data foundation now exists for scene id, camera pose, and simple flags, but the sandbox still uses settings for its normal viewer state.
 - The UI overlay is intentionally small. It is meant for sandbox control and object inspection, not as a full editor or a complete runtime UI system.
+- The transform gizmo is intentionally scoped to world-axis move, rotate, and scale for the current sandbox object model. Undo, numeric editing, floating panels, and resizable docks are separate future work.
 - The packaged sandbox still opens a console window at this stage. In-window utilities and status are the preferred viewer workflow, while the console remains available for fallback logs.
 - Editor tools, asset browser UI, and broader 2D or 2.5D workflows are not available yet.
 

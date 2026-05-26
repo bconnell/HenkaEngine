@@ -1,5 +1,8 @@
 #include "henka_internal.h"
 
+#include <math.h>
+
+#include <henka/core.h>
 #include <henka/memory.h>
 
 henka_result henka_mesh_create_cube(henka_engine* engine, henka_mesh** out_mesh)
@@ -144,6 +147,72 @@ henka_result henka_mesh_create_debug_grid(henka_engine* engine, int half_extent,
         HENKA_MESH_PRIMITIVE_LINES,
         out_mesh);
 
+    henka_free(indices);
+    henka_free(vertices);
+    return result;
+}
+
+henka_result henka_mesh_create_line(henka_engine* engine, henka_vec3 start, henka_vec3 end, henka_mesh** out_mesh)
+{
+    henka_vertex vertices[2];
+    unsigned int indices[2];
+
+    if (engine == NULL || out_mesh == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    vertices[0] = (henka_vertex){start, {0.0f, 1.0f, 0.0f}, {0.0f, 0.0f}};
+    vertices[1] = (henka_vertex){end, {0.0f, 1.0f, 0.0f}, {0.0f, 0.0f}};
+    indices[0] = 0U;
+    indices[1] = 1U;
+    return henka_renderer_create_mesh_from_data(engine->renderer, vertices, 2, indices, 2, HENKA_MESH_PRIMITIVE_LINES, out_mesh);
+}
+
+henka_result henka_mesh_create_circle_ring(henka_engine* engine, float radius, int segments, henka_mesh** out_mesh)
+{
+    henka_vertex* vertices;
+    unsigned int* indices;
+    int index;
+    int index_count;
+    henka_result result;
+
+    if (engine == NULL || out_mesh == NULL || radius <= 0.0f || segments < 8)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    vertices = henka_calloc((size_t)segments, sizeof(*vertices));
+    indices = henka_calloc((size_t)(segments * 2), sizeof(*indices));
+    if (vertices == NULL || indices == NULL)
+    {
+        henka_free(indices);
+        henka_free(vertices);
+        return HENKA_ERROR_OUT_OF_MEMORY;
+    }
+
+    for (index = 0; index < segments; ++index)
+    {
+        float angle = ((float)index / (float)segments) * HENKA_PI * 2.0f;
+        vertices[index] = (henka_vertex)
+        {
+            {cosf(angle) * radius, sinf(angle) * radius, 0.0f},
+            {0.0f, 0.0f, 1.0f},
+            {0.0f, 0.0f}
+        };
+        indices[index * 2] = (unsigned int)index;
+        indices[index * 2 + 1] = (unsigned int)((index + 1) % segments);
+    }
+
+    index_count = segments * 2;
+    result = henka_renderer_create_mesh_from_data(
+        engine->renderer,
+        vertices,
+        segments,
+        indices,
+        index_count,
+        HENKA_MESH_PRIMITIVE_LINES,
+        out_mesh);
     henka_free(indices);
     henka_free(vertices);
     return result;

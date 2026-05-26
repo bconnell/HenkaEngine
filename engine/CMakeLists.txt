@@ -3,6 +3,7 @@ add_library(henka STATIC
     src/assets/model_obj.c
     src/core/math.c
     src/core/engine.c
+    src/core/gizmo.c
     src/core/log.c
     src/core/memory.c
     src/core/persistence.c

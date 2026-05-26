@@ -114,6 +114,17 @@ The current UI layer is intentionally small and dependency-conscious. Right now 
 
 It is meant to support engine samples and a viewport-first developer workspace without exposing OpenGL or SDL types in the public UI API.
 
+### Gizmos
+
+The current transform gizmo path is a small engine-owned foundation, not a separate editor subsystem. Right now it provides:
+
+- axis labels and snap helpers
+- viewport-aware gizmo hit testing
+- projected drag math for world-axis move and rotate
+- reusable scene-space mesh helpers for lines and rings
+
+The sandbox builds on that foundation with scene entities that render as gizmo handles inside the dedicated viewport. Those helper entities stay outside the normal sample-object list and picking rules so the current scene inspection flow remains predictable.
+
 ### Scene
 
 The scene layer is intentionally minimal. It is not a full ECS. Right now it provides:
@@ -156,7 +167,7 @@ The sandbox is a consumer of the public API only. It creates a scene, shaders, t
 - `Scene Objects`
 - `Object Details`
 
-The current interaction rules pause camera movement and mouse look while the UI is open, release mouse capture when the UI opens, and let `Escape` close the UI before it resumes the normal capture and exit flow. The sandbox now also calculates a docked workspace layout so the scene renders inside a dedicated viewport region while the panels stay in separate docked boxes.
+The current interaction rules pause camera movement and mouse look while the UI is open, release mouse capture when the UI opens, and let `Escape` close the UI before it resumes the normal capture and exit flow. The sandbox now also calculates a docked workspace layout so the scene renders inside a dedicated viewport region while the panels stay in separate docked boxes. Selected objects can show a transform gizmo in that viewport, and manipulation uses viewport-relative rays so docked panel clicks do not affect scene transforms.
 
 ## Current boundaries
 
@@ -184,3 +195,4 @@ The next steps should continue building upward from these boundaries:
 - early 2.5D-friendly camera and layering rules after the shared runtime is steadier
 - richer engine UI controls after the current lightweight overlay has settled
 - object inspection that can grow into broader developer tooling without requiring an editor rewrite first
+- future floating panels and resizable docks built on the current dedicated viewport foundation

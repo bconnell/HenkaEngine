@@ -1,5 +1,6 @@
 #include "henka_internal.h"
 
+#include <float.h>
 #include <math.h>
 #include <stdio.h>
 #include <string.h>
@@ -17,6 +18,7 @@ henka_material henka_material_default(void)
     material.base_color = (henka_vec4){1.0f, 1.0f, 1.0f, 1.0f};
     material.use_texture = false;
     material.use_lighting = true;
+    material.depth_test = true;
     return material;
 }
 
@@ -108,12 +110,79 @@ static char* henka_scene_duplicate_string(const char* value)
 static henka_bounds henka_scene_transform_bounds(henka_bounds local_bounds, henka_transform transform)
 {
     henka_bounds world_bounds;
+    henka_mat4 rotation;
+    henka_vec3 scaled_center;
+    henka_vec3 scaled_extents;
+    henka_vec3 rotated_center;
 
-    world_bounds.center = henka_vec3_add(local_bounds.center, transform.position);
-    world_bounds.extents.x = fabsf(local_bounds.extents.x * transform.scale.x);
-    world_bounds.extents.y = fabsf(local_bounds.extents.y * transform.scale.y);
-    world_bounds.extents.z = fabsf(local_bounds.extents.z * transform.scale.z);
+    scaled_center = (henka_vec3)
+    {
+        local_bounds.center.x * transform.scale.x,
+        local_bounds.center.y * transform.scale.y,
+        local_bounds.center.z * transform.scale.z
+    };
+    scaled_extents = (henka_vec3)
+    {
+        fabsf(local_bounds.extents.x * transform.scale.x),
+        fabsf(local_bounds.extents.y * transform.scale.y),
+        fabsf(local_bounds.extents.z * transform.scale.z)
+    };
+    rotated_center = henka_quat_rotate_vec3(transform.rotation, scaled_center);
+    rotation = henka_mat4_rotation(transform.rotation);
+
+    world_bounds.center = henka_vec3_add(transform.position, rotated_center);
+    world_bounds.extents.x =
+        fabsf(rotation.m[0]) * scaled_extents.x +
+        fabsf(rotation.m[4]) * scaled_extents.y +
+        fabsf(rotation.m[8]) * scaled_extents.z;
+    world_bounds.extents.y =
+        fabsf(rotation.m[1]) * scaled_extents.x +
+        fabsf(rotation.m[5]) * scaled_extents.y +
+        fabsf(rotation.m[9]) * scaled_extents.z;
+    world_bounds.extents.z =
+        fabsf(rotation.m[2]) * scaled_extents.x +
+        fabsf(rotation.m[6]) * scaled_extents.y +
+        fabsf(rotation.m[10]) * scaled_extents.z;
     return world_bounds;
+}
+
+static bool henka_is_finite_float(float value)
+{
+    return isfinite(value) != 0;
+}
+
+static bool henka_transform_is_valid(henka_transform transform)
+{
+    return henka_is_finite_float(transform.position.x) &&
+        henka_is_finite_float(transform.position.y) &&
+        henka_is_finite_float(transform.position.z) &&
+        henka_is_finite_float(transform.rotation.x) &&
+        henka_is_finite_float(transform.rotation.y) &&
+        henka_is_finite_float(transform.rotation.z) &&
+        henka_is_finite_float(transform.rotation.w) &&
+        henka_is_finite_float(transform.scale.x) &&
+        henka_is_finite_float(transform.scale.y) &&
+        henka_is_finite_float(transform.scale.z);
+}
+
+static henka_transform henka_transform_sanitize(henka_transform transform)
+{
+    const float minimum_scale = 0.01f;
+
+    transform.rotation = henka_quat_normalize(transform.rotation);
+    if (transform.scale.x < minimum_scale)
+    {
+        transform.scale.x = minimum_scale;
+    }
+    if (transform.scale.y < minimum_scale)
+    {
+        transform.scale.y = minimum_scale;
+    }
+    if (transform.scale.z < minimum_scale)
+    {
+        transform.scale.z = minimum_scale;
+    }
+    return transform;
 }
 
 static bool henka_scene_ray_intersects_bounds(henka_ray ray, henka_bounds bounds, float* out_distance)
@@ -635,13 +704,74 @@ henka_result henka_scene_set_entity_transform(henka_scene* scene, henka_entity e
     henka_scene_entity_record* record;
 
     record = henka_scene_get_entity_record(scene, entity);
-    if (record == NULL)
+    if (record == NULL || !henka_transform_is_valid(transform))
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
 
-    record->transform = transform;
+    record->transform = henka_transform_sanitize(transform);
     return HENKA_SUCCESS;
+}
+
+henka_result henka_scene_translate_entity(henka_scene* scene, henka_entity entity, henka_vec3 delta)
+{
+    henka_transform transform;
+
+    if (!henka_is_finite_float(delta.x) || !henka_is_finite_float(delta.y) || !henka_is_finite_float(delta.z))
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    if (henka_scene_get_entity_transform(scene, entity, &transform) != HENKA_SUCCESS)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    transform.position = henka_vec3_add(transform.position, delta);
+    return henka_scene_set_entity_transform(scene, entity, transform);
+}
+
+henka_result henka_scene_rotate_entity(henka_scene* scene, henka_entity entity, henka_quat delta_rotation)
+{
+    henka_transform transform;
+
+    if (!henka_is_finite_float(delta_rotation.x) ||
+        !henka_is_finite_float(delta_rotation.y) ||
+        !henka_is_finite_float(delta_rotation.z) ||
+        !henka_is_finite_float(delta_rotation.w))
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    if (henka_scene_get_entity_transform(scene, entity, &transform) != HENKA_SUCCESS)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    transform.rotation = henka_quat_multiply(delta_rotation, transform.rotation);
+    return henka_scene_set_entity_transform(scene, entity, transform);
+}
+
+henka_result henka_scene_scale_entity(henka_scene* scene, henka_entity entity, henka_vec3 scale_multiplier)
+{
+    henka_transform transform;
+
+    if (!henka_is_finite_float(scale_multiplier.x) ||
+        !henka_is_finite_float(scale_multiplier.y) ||
+        !henka_is_finite_float(scale_multiplier.z))
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    if (henka_scene_get_entity_transform(scene, entity, &transform) != HENKA_SUCCESS)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    transform.scale.x *= scale_multiplier.x;
+    transform.scale.y *= scale_multiplier.y;
+    transform.scale.z *= scale_multiplier.z;
+    return henka_scene_set_entity_transform(scene, entity, transform);
 }
 
 henka_result henka_scene_set_entity_mesh(henka_scene* scene, henka_entity entity, henka_mesh* mesh)

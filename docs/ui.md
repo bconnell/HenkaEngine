@@ -81,6 +81,8 @@ The current `Controls` panel can:
 - switch between `View`, `Inspect`, and `Full Tools`
 - toggle the grid
 - toggle wireframe
+- switch between `Select`, `Move`, `Rotate`, and `Scale` gizmo modes
+- toggle transform snapping and show the current snap increments
 - reset the camera
 - save sandbox settings
 - reset the layout
@@ -109,6 +111,15 @@ The current `Object Details` panel can:
 - reset the default transform
 - open object info in the utility panel and still print it to the console
 
+The selected object also shows a transform gizmo inside the dedicated scene viewport.
+
+- `Select` keeps normal viewport selection active.
+- `Move` exposes world-axis translation handles.
+- `Rotate` exposes world-axis rotation rings.
+- `Scale` exposes axis scale handles plus a uniform center handle.
+- Snapping can be toggled from the Controls panel.
+- Gizmo hit testing only uses the active scene viewport, so docked panel clicks do not manipulate scene objects.
+
 The current `Utility` panel can show:
 
 - Help
@@ -121,7 +132,7 @@ The current `Utility` panel can show:
 That keeps normal viewer use in the window while the console remains available for fallback logs and automation.
 The packaged sandbox still opens a console window at this stage, but normal viewer interaction is meant to stay inside the viewport and panels rather than depending on console output.
 
-The sandbox also uses the current engine diagnostics snapshot in the Utility panel, and object picking can update selection when the UI is closed and mouse capture is released. Picking now uses viewport-relative coordinates, so docked panel clicks do not trigger scene picks.
+The sandbox also uses the current engine diagnostics snapshot in the Utility panel, and object picking can update selection when mouse capture is released. Picking and gizmo dragging use viewport-relative coordinates, so docked panel clicks do not trigger scene picks or transform drags.
 
 When the UI is open:
 
@@ -148,4 +159,4 @@ The packaged QA script can confirm startup logs and UI state output, but it stil
 
 ## Future direction
 
-This layer is a foundation for better engine-side inspection and sample controls. It is not yet meant to replace planned editor work, hierarchy tooling, numeric property editing, or a broader UI toolkit.
+This layer is a foundation for better engine-side inspection and sample controls. It is not yet meant to replace planned editor work, hierarchy tooling, numeric property editing, floating panels, or a broader UI toolkit.

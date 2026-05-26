@@ -76,6 +76,27 @@ henka_quat henka_quat_identity(void)
     return result;
 }
 
+henka_quat henka_quat_from_axis_angle(henka_vec3 axis, float angle_radians)
+{
+    henka_quat result;
+    float half_angle;
+    float sine;
+
+    axis = henka_vec3_normalize(axis);
+    if (henka_vec3_length(axis) <= 0.000001f)
+    {
+        return henka_quat_identity();
+    }
+
+    half_angle = angle_radians * 0.5f;
+    sine = sinf(half_angle);
+    result.x = axis.x * sine;
+    result.y = axis.y * sine;
+    result.z = axis.z * sine;
+    result.w = cosf(half_angle);
+    return henka_quat_normalize(result);
+}
+
 henka_quat henka_quat_from_euler(float pitch_radians, float yaw_radians, float roll_radians)
 {
     float cy;
@@ -100,6 +121,17 @@ henka_quat henka_quat_from_euler(float pitch_radians, float yaw_radians, float r
     return henka_quat_normalize(result);
 }
 
+henka_quat henka_quat_multiply(henka_quat left, henka_quat right)
+{
+    henka_quat result;
+
+    result.x = (left.w * right.x) + (left.x * right.w) + (left.y * right.z) - (left.z * right.y);
+    result.y = (left.w * right.y) - (left.x * right.z) + (left.y * right.w) + (left.z * right.x);
+    result.z = (left.w * right.z) + (left.x * right.y) - (left.y * right.x) + (left.z * right.w);
+    result.w = (left.w * right.w) - (left.x * right.x) - (left.y * right.y) - (left.z * right.z);
+    return henka_quat_normalize(result);
+}
+
 henka_quat henka_quat_normalize(henka_quat value)
 {
     float magnitude;
@@ -116,6 +148,21 @@ henka_quat henka_quat_normalize(henka_quat value)
     result.z = value.z / magnitude;
     result.w = value.w / magnitude;
     return result;
+}
+
+henka_vec3 henka_quat_rotate_vec3(henka_quat rotation, henka_vec3 value)
+{
+    henka_vec3 qv;
+    henka_vec3 uv;
+    henka_vec3 uuv;
+
+    rotation = henka_quat_normalize(rotation);
+    qv = (henka_vec3){rotation.x, rotation.y, rotation.z};
+    uv = henka_vec3_cross(qv, value);
+    uuv = henka_vec3_cross(qv, uv);
+    uv = henka_vec3_scale(uv, 2.0f * rotation.w);
+    uuv = henka_vec3_scale(uuv, 2.0f);
+    return henka_vec3_add(value, henka_vec3_add(uv, uuv));
 }
 
 henka_mat4 henka_mat4_identity(void)

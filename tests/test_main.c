@@ -6,6 +6,7 @@ int main(void)
 {
     henka_test_assets();
     henka_test_camera();
+    henka_test_gizmo();
     henka_test_input();
     henka_test_math();
     henka_test_material();

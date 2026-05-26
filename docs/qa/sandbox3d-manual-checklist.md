@@ -75,14 +75,23 @@ Use this checklist when you want to confirm that `henka_sandbox3d` is visually r
 28. Confirm Paths, Settings, and Diagnostics utilities are usable in-window.
 29. Confirm the Paths or Diagnostics utility reports the expected runtime mode for the current run.
 30. Confirm clicking inside docked panels does not pick scene objects.
-31. Close the UI, release mouse capture, left-click a visible object inside the viewport, and confirm picking updates the selection.
-32. Confirm the camera view does not look stretched.
-33. Confirm the small in-window status area reports common actions without forcing you to read the console.
-34. Confirm the console still receives fallback logs for help, legend, object info, warnings, or errors when those actions are used.
-35. Confirm `Escape` behavior still works.
-36. Confirm close-window exit remains clean.
-37. Confirm no named-engine comparisons appear in runtime text or packaged help.
-38. If the UI is not visible or feels wrong, note whether the console reports `Sandbox panel: shown`, `Sandbox panel: hidden`, `Sandbox UI ready`, or `Sandbox viewport`.
+31. Left-click a visible object inside the viewport and confirm picking updates the selection.
+32. Confirm the selected object shows a visible gizmo in the viewport.
+33. Test Move mode on the X, Y, and Z handles.
+34. Test Rotate mode on the X, Y, and Z rings.
+35. Test Scale mode on the axis handles and the center uniform handle.
+36. Toggle snap on and off and confirm movement, rotation, and scale respond differently.
+37. Confirm Object Details updates after manipulation.
+38. Confirm picking still works after movement, rotation, or scale changes.
+39. Confirm Reset Transform restores the selected object.
+40. Confirm Focus Camera still works after manipulation.
+41. Confirm the camera view does not look stretched.
+42. Confirm the small in-window status area reports common actions without forcing you to read the console.
+43. Confirm the console still receives fallback logs for help, legend, object info, warnings, or errors when those actions are used.
+44. Confirm `Escape` behavior still works.
+45. Confirm close-window exit remains clean.
+46. Confirm no named-engine comparisons appear in runtime text or packaged help.
+47. If the UI is not visible or feels wrong, note whether the console reports `Sandbox panel: shown`, `Sandbox panel: hidden`, `Sandbox UI ready`, or `Sandbox viewport`.
 
 ## Expected startup behavior
 
@@ -111,7 +120,7 @@ You should be able to identify these examples:
 - `Shift`: move faster
 - `Mouse`: look around while mouse capture is active
 - `Right Mouse / Tab`: toggle mouse capture
-- `Left Mouse`: pick a visible object inside the viewport when the UI is closed and mouse capture is released
+- `Left Mouse`: select or manipulate inside the viewport when mouse capture is released
 - `F1`: toggle wireframe
 - `F2`: print the scene legend again
 - `F3`: show or hide the debug grid
@@ -131,6 +140,8 @@ You should be able to identify these examples:
 - `F5` cycles View, Inspect, and Full Tools layouts.
 - The `Controls` panel can toggle the debug grid and wireframe state with the mouse.
 - The `Controls` panel looks lighter in `View` mode and keeps a visible in-window status area.
+- The `Controls` panel can switch between `Select`, `Move`, `Rotate`, and `Scale`.
+- Snap can be toggled for transform dragging.
 - Docked panels stay outside the dedicated scene viewport in normal workspace modes.
 - The `Controls` panel can adjust mouse sensitivity and camera speed with the mouse.
 - The `Controls` panel can reset the camera, save settings, reset sandbox settings, print help, print the scene legend, and reset the panel layout.
@@ -138,10 +149,12 @@ You should be able to identify these examples:
 - Clicking an object updates the `Object Details` panel.
 - The `Object Details` panel can toggle visibility, focus the camera, reset the selected transform, and print object info.
 - The `Object Details` panel shows tag and interaction state when those foundations are available.
+- A selected object shows a visible transform gizmo in the viewport.
+- Move, Rotate, and Scale mode handles should drag only inside the viewport.
 - Pressing `F4` again closes the UI.
 - When the UI is closed, a small in-window hint reminds you that `F4` restores panels and `F5` changes layout.
 - After the UI closes, `Right Mouse` and `Tab` can capture the mouse again.
-- With the UI closed and mouse capture released, left-click can select a visible sample object.
+- With mouse capture released, left-click can select a visible sample object or drag the active gizmo in the viewport.
 - Picking should only respond to clicks inside the viewport.
 - Pressing `Escape` while the UI is open closes the UI first.
 
@@ -198,6 +211,13 @@ Mark each item as `Pass`, `Needs Review`, or `Fail`.
 - UI visibility toggle works
 - UI focus camera works
 - UI reset transform works
+- UI gizmo mode tabs work
+- UI snap toggle works
+- Viewport move gizmo works
+- Viewport rotate gizmo works
+- Viewport scale gizmo works
+- Viewport uniform scale handle works
+- Snap affects transform dragging
 - UI print object info works
 - Utility tabs are readable
 - Active utility state is clear
@@ -272,6 +292,13 @@ Controls:
 - UI focus camera:
 - UI reset transform:
 - UI print object info:
+- UI gizmo modes:
+- UI snap toggle:
+- Viewport move gizmo:
+- Viewport rotate gizmo:
+- Viewport scale gizmo:
+- Viewport uniform scale:
+- Transform snapping:
 - Utility tabs:
 - Active utility state:
 - In-window status:

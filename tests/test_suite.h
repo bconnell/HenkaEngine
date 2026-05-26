@@ -32,6 +32,7 @@ extern int g_henka_test_failures;
 void henka_test_result(void);
 void henka_test_memory(void);
 void henka_test_assets(void);
+void henka_test_gizmo(void);
 void henka_test_input(void);
 void henka_test_math(void);
 void henka_test_camera(void);

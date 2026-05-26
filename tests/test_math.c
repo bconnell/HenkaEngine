@@ -7,6 +7,7 @@ void henka_test_math(void)
 {
     henka_vec3 added;
     henka_vec3 normalized;
+    henka_vec3 rotated;
     henka_vec3 crossed;
     henka_mat4 identity;
     henka_mat4 translation;
@@ -16,6 +17,7 @@ void henka_test_math(void)
     henka_mat4 look_at;
     henka_transform transform;
     henka_mat4 transform_matrix;
+    henka_quat rotation;
 
     added = henka_vec3_add((henka_vec3){1.0f, 2.0f, 3.0f}, (henka_vec3){4.0f, 5.0f, 6.0f});
     HENKA_TEST_ASSERT_FLOAT_CLOSE(added.x, 5.0f, 0.0001);
@@ -29,6 +31,12 @@ void henka_test_math(void)
 
     crossed = henka_vec3_cross((henka_vec3){1.0f, 0.0f, 0.0f}, (henka_vec3){0.0f, 1.0f, 0.0f});
     HENKA_TEST_ASSERT_FLOAT_CLOSE(crossed.z, 1.0f, 0.0001);
+    rotation = henka_quat_from_axis_angle((henka_vec3){0.0f, 1.0f, 0.0f}, 90.0f * HENKA_DEG_TO_RAD);
+    rotated = henka_quat_rotate_vec3(rotation, (henka_vec3){1.0f, 0.0f, 0.0f});
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(rotated.x, 0.0f, 0.0002f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(rotated.z, -1.0f, 0.0002f);
+    rotation = henka_quat_multiply(henka_quat_identity(), rotation);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(rotation.w, henka_quat_normalize(rotation).w, 0.0001f);
 
     identity = henka_mat4_identity();
     HENKA_TEST_ASSERT_FLOAT_CLOSE(identity.m[0], 1.0f, 0.0001);

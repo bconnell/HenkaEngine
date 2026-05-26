@@ -603,6 +603,14 @@ henka_result henka_opengl_renderer_draw_scene(struct henka_renderer* renderer, c
         model = henka_transform_to_mat4(entity->transform);
 
         g_gl.UseProgram(shader_data->program);
+        if (entity->material.depth_test)
+        {
+            glEnable(GL_DEPTH_TEST);
+        }
+        else
+        {
+            glDisable(GL_DEPTH_TEST);
+        }
         henka_set_uniform_mat4(shader_data->program, "model", model);
         henka_set_uniform_mat4(shader_data->program, "view", view);
         henka_set_uniform_mat4(shader_data->program, "projection", projection);
@@ -630,6 +638,7 @@ henka_result henka_opengl_renderer_draw_scene(struct henka_renderer* renderer, c
     g_gl.BindVertexArray(0);
     glBindTexture(GL_TEXTURE_2D, 0);
     g_gl.UseProgram(0);
+    glEnable(GL_DEPTH_TEST);
     glDisable(GL_SCISSOR_TEST);
     return HENKA_SUCCESS;
 }

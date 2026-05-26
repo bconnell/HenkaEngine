@@ -79,7 +79,20 @@ Henka now includes a small picking foundation:
 - ray versus bounds checks
 - nearest visible object pick in a scene
 
-The sandbox uses this for lightweight click selection when the UI is closed and mouse capture is released. With the docked workspace layout, picks only start from the dedicated scene viewport.
+The sandbox uses this for lightweight click selection and gizmo dragging when mouse capture is released. With the docked workspace layout, picks only start from the dedicated scene viewport.
+
+### Transform gizmos
+
+Henka now also includes a small transform gizmo foundation for selected scene objects:
+
+- world-axis move helpers
+- world-axis rotation helpers
+- axis and uniform scale helpers
+- snap helpers for move, rotate, and scale
+- viewport-aware gizmo hit testing
+- ray-to-plane and projected drag helpers
+
+The sandbox uses these helpers to draw scene-space gizmos inside the dedicated viewport and manipulate selected objects without turning the current sample into a full editor.
 
 ### Asset metadata
 

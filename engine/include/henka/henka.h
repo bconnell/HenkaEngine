@@ -5,6 +5,7 @@
 #include <henka/camera.h>
 #include <henka/core.h>
 #include <henka/engine.h>
+#include <henka/gizmo.h>
 #include <henka/input.h>
 #include <henka/log.h>
 #include <henka/math.h>

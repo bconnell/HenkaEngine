@@ -34,6 +34,7 @@ typedef struct henka_material
     henka_vec4 base_color;
     bool use_texture;
     bool use_lighting;
+    bool depth_test;
 } henka_material;
 
 typedef struct henka_scene_object_info
@@ -86,6 +87,9 @@ henka_result henka_scene_get_entity_local_bounds(const henka_scene* scene, henka
 henka_result henka_scene_get_entity_world_bounds(const henka_scene* scene, henka_entity entity, henka_bounds* out_bounds);
 henka_result henka_scene_get_entity_interaction(const henka_scene* scene, henka_entity entity, henka_interaction_desc* out_interaction);
 henka_result henka_scene_set_entity_transform(henka_scene* scene, henka_entity entity, henka_transform transform);
+henka_result henka_scene_translate_entity(henka_scene* scene, henka_entity entity, henka_vec3 delta);
+henka_result henka_scene_rotate_entity(henka_scene* scene, henka_entity entity, henka_quat delta_rotation);
+henka_result henka_scene_scale_entity(henka_scene* scene, henka_entity entity, henka_vec3 scale_multiplier);
 henka_result henka_scene_set_entity_mesh(henka_scene* scene, henka_entity entity, henka_mesh* mesh);
 henka_result henka_scene_set_entity_material(henka_scene* scene, henka_entity entity, henka_material material);
 henka_result henka_scene_set_entity_name(henka_scene* scene, henka_entity entity, const char* name);
