@@ -1,9 +1,11 @@
 add_executable(henka_tests
+    ../examples/sandbox3d/interaction_tools.c
     test_action.c
     test_assets.c
     test_camera.c
     test_gizmo.c
     test_input.c
+    test_sandbox3d_interaction.c
     test_main.c
     test_math.c
     test_material.c

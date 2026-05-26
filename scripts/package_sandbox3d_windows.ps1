@@ -23,6 +23,7 @@ else {
 
 $sourceDir = Split-Path $sourceExe
 $packagedExe = Join-Path $packageRoot "HenkaSandbox3D.exe"
+$packageDocsDir = Join-Path $packageRoot "docs"
 $packageHelpDir = Join-Path $packageRoot "docs\help"
 $packageAssetsDir = Join-Path $packageRoot "assets"
 $runGuidePath = Join-Path $packageRoot "README.txt"
@@ -31,6 +32,37 @@ $packageRefreshedAt = Get-Date -Format "yyyy-MM-dd HH:mm:ss zzz"
 $sourceExeTimestamp = (Get-Item $sourceExe).LastWriteTime.ToString("yyyy-MM-dd HH:mm:ss zzz")
 $gitCommit = "unknown"
 $packagedProcessName = "HenkaSandbox3D"
+
+function Remove-HenkaDirectoryTree {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Path
+    )
+
+    if (-not (Test-Path -LiteralPath $Path)) {
+        return
+    }
+
+    try {
+        Remove-Item -LiteralPath $Path -Recurse -Force -ErrorAction Stop
+        return
+    }
+    catch {
+        if (-not (Test-Path -LiteralPath $Path)) {
+            return
+        }
+    }
+
+    Get-ChildItem -LiteralPath $Path -Recurse -Force -ErrorAction SilentlyContinue |
+        Sort-Object FullName -Descending |
+        ForEach-Object {
+            Remove-Item -LiteralPath $_.FullName -Force -Recurse -ErrorAction SilentlyContinue
+        }
+
+    if (Test-Path -LiteralPath $Path) {
+        Remove-Item -LiteralPath $Path -Force -Recurse -ErrorAction SilentlyContinue
+    }
+}
 
 try {
     $gitCommit = (git -C $repoRoot log -1 --format=%h 2>$null).Trim()
@@ -49,20 +81,23 @@ if (Get-Process -Name $packagedProcessName -ErrorAction SilentlyContinue) {
 if (Test-Path $packageRoot) {
     if ((-not $ResetUserData) -and (Test-Path $packageUserDir)) {
         if (Test-Path $preservedUserDir) {
-            Remove-Item -LiteralPath $preservedUserDir -Recurse -Force
+            Remove-HenkaDirectoryTree -Path $preservedUserDir
         }
 
-        Move-Item -LiteralPath $packageUserDir -Destination $preservedUserDir
+        if (Test-Path -LiteralPath $packageUserDir) {
+            Move-Item -LiteralPath $packageUserDir -Destination $preservedUserDir
+        }
     }
 
-    Remove-Item -LiteralPath $packageRoot -Recurse -Force
+    Remove-HenkaDirectoryTree -Path $packageRoot
 }
 
-New-Item -ItemType Directory -Path $packageRoot | Out-Null
-New-Item -ItemType Directory -Path $packageHelpDir | Out-Null
+[System.IO.Directory]::CreateDirectory($packageRoot) | Out-Null
+[System.IO.Directory]::CreateDirectory($packageDocsDir) | Out-Null
+[System.IO.Directory]::CreateDirectory($packageHelpDir) | Out-Null
 
 Copy-Item -LiteralPath $sourceExe -Destination $packagedExe
-Copy-Item -LiteralPath (Join-Path $repoRoot "assets") -Destination $packageAssetsDir -Recurse
+Copy-Item -LiteralPath (Join-Path $repoRoot "assets") -Destination $packageRoot -Recurse
 Copy-Item -LiteralPath (Join-Path $repoRoot "docs\help\sandbox3d.md") -Destination (Join-Path $packageHelpDir "sandbox3d.md")
 
 if ((-not $ResetUserData) -and (Test-Path $preservedUserDir)) {
@@ -81,8 +116,8 @@ Double-click HenkaSandbox3D.exe to launch the packaged sandbox.
 Press F4 to open the in-window panels.
 Press F5 to cycle View, Inspect, and Full Tools.
 The scene renders inside its own docked viewport when panels are visible.
-Select an object in the viewport or Scene Objects panel, then use Select, Move, Rotate, and Scale from the Transform section.
-Use the in-window utilities for help, legend, paths, settings, and diagnostics.
+Select an object in the viewport or Scene Objects panel, then use Select, Orbit, Pan, Move, Rotate, and Scale from the Viewport Tool section.
+Use the in-window utilities for help, legend, paths, settings, diagnostics, and Transform QA.
 Watch the small in-window status area for recent actions and warnings.
 The packaged runtime reports Packaged mode automatically when PACKAGE_INFO.txt is present.
 
@@ -129,7 +164,7 @@ Write-Host "  Open out\HenkaSandbox3D and double-click HenkaSandbox3D.exe."
 Write-Host "  Press F4 to open the in-window panels."
 Write-Host "  Press F5 to cycle View, Inspect, and Full Tools."
 Write-Host "  The scene should render inside its own docked viewport when panels are visible."
-Write-Host "  Select an object in the viewport or Scene Objects panel, then use Select, Move, Rotate, and Scale in the Transform section."
-Write-Host "  Use the in-window utilities for help, legend, paths, settings, and diagnostics."
+Write-Host "  Select an object in the viewport or Scene Objects panel, then use Select, Orbit, Pan, Move, Rotate, and Scale in the Viewport Tool section."
+Write-Host "  Use the in-window utilities for help, legend, paths, settings, diagnostics, and Transform QA."
 Write-Host "  Watch the in-window status area for recent actions and warnings."
 Write-Host "  The packaged runtime should report Packaged mode at startup."

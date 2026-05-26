@@ -15,6 +15,7 @@ int main(void)
     henka_test_persistence();
     henka_test_result();
     henka_test_memory();
+    henka_test_sandbox3d_interaction();
     henka_test_scene();
     henka_test_ui();
     henka_test_workspace();

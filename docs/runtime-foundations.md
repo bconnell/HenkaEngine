@@ -91,6 +91,7 @@ Henka now also includes a small docked workspace helper for viewport-first tools
 
 The sandbox uses this to keep the scene in its own viewport while panels stay in separate docked regions.
 The current sandbox also layers safe panel paging on top of that docked layout so scene-first modes stay readable without treating the workspace as a floating editor yet.
+The sandbox now also uses explicit viewport tool modes on top of that viewport math so selection, orbit, pan, and gizmo manipulation can route through one visible user-facing tool state instead of relying only on hidden mouse modifiers.
 
 ### Viewport interaction testing
 
@@ -104,6 +105,7 @@ Henka now also exposes deterministic viewport interaction helpers around the cur
 - deterministic move, rotate, and uniform-scale drag math
 
 The sandbox uses the same handle-model and drag helpers that the tests now exercise. This reduces manual QA for basic object-selection and transform-mutation outcomes without claiming that visual feel is fully automated.
+The current sandbox layer also exposes compact interaction-gate helpers and reject reasons so runtime diagnostics can say why a viewport interaction did not start instead of failing silently.
 
 ### Picking
 
@@ -133,6 +135,7 @@ Henka now also includes a small transform gizmo foundation for selected scene ob
 The sandbox uses these helpers to draw overlay gizmos inside the dedicated viewport and manipulate selected objects without turning the current sample into a full editor.
 The helper scene pieces that used to visualize those gizmos stay internal to the tool path, are hidden from the normal runtime view, are excluded from normal scene picking, and are not treated as persisted or user-facing scene selection targets.
 The current automated coverage now proves real selected-object mutation more directly, but manual desktop QA is still needed for handle readability, drag comfort, and general interaction feel.
+The sandbox also now keeps direct transform fallback controls beside those gizmo helpers so packaged QA can confirm selected-object mutation through the Action API even when viewport input or handle hit testing still needs investigation.
 
 ### Asset metadata
 
@@ -207,6 +210,7 @@ Henka still uses console logging for development and troubleshooting, but the en
 - package mode
 
 The sandbox uses that data in its in-window diagnostics utility so normal inspection does not depend on the console.
+That diagnostics surface now also includes sandbox-level interaction state such as viewport tool mode, cursor ownership, selected object validity, gizmo model validity, hovered handle, active drag target, last rejected interaction reason, and last Action API result.
 
 ### Package modes
 

@@ -137,9 +137,9 @@ The packaged folder also includes `PACKAGE_INFO.txt` so you can tell when the pa
 - `Shift`: move faster
 - `Mouse`: look around while mouse capture is active
 - `Right Mouse / Tab`: toggle mouse capture
-- `Left Mouse`: select or manipulate inside the scene viewport when mouse capture is released
-- `Alt + Left Mouse`: orbit around the selected object or current view target
-- `Middle Mouse`: pan the viewport
+- `Left Mouse`: uses the active viewport tool when mouse capture is released
+- `Alt + Left Mouse`: optional orbit shortcut around the selected object or current view target
+- `Middle Mouse`: optional pan shortcut
 - `Mouse Wheel`: zoom the viewport when the cursor is over the scene view
 - `F1`: toggle wireframe
 - `F2`: print the scene legend again
@@ -151,7 +151,7 @@ The packaged folder also includes `PACKAGE_INFO.txt` so you can tell when the pa
 - `Home`: reset the camera view
 - `Escape`: close the UI first, then release the mouse, then exit
 
-Press `F4` to open the in-window sandbox panels. On a first run with no local settings file, the packaged sandbox opens the docked workspace in `View` mode so the controls are visible without covering most of the scene. Press `F5` to cycle between `View`, `Inspect`, and `Full Tools`. The 3D scene now renders inside its own dedicated viewport region while the panels stay docked beside it. If you hide the panels, a small in-window hint stays in the corner so it is still clear how to bring them back. Console output remains available for fallback logs and automation, but normal viewer use no longer depends on reading it. Select a scene object from the list or with `Left Mouse` in the viewport, then use the Transform section to inspect the current `Select`, `Move`, `Rotate`, and `Scale` gizmo workflow. The visible gizmo overlay and its click or drag hit regions now come from the same projected handle model, so the sandbox is no longer using one normal runtime path for drawing and a different one for interaction. The Controls panel now splits its content into two readable pages, the Scene Objects list supports paging, and mouse wheel input over those panels advances the visible page instead of affecting the viewport. Visual feel is still being hardened through manual desktop QA.
+Press `F4` to open the in-window sandbox panels. On a first run with no local settings file, the packaged sandbox opens the docked workspace in `View` mode so the controls are visible without covering most of the scene. Press `F5` to cycle between `View`, `Inspect`, and `Full Tools`. The 3D scene now renders inside its own dedicated viewport region while the panels stay docked beside it. If you hide the panels, a small in-window hint stays in the corner so it is still clear how to bring them back. Console output remains available for fallback logs and automation, but normal viewer use no longer depends on reading it. Select a scene object from the list or with `Left Mouse` in the viewport, then use the Viewport Tool section to switch between `Select`, `Orbit`, `Pan`, `Move`, `Rotate`, and `Scale`. The Utility panel now also includes `Diagnostics` and `Transform QA` views so packaged runs can report current input ownership, selected object, hovered handle, active drag target, last failure reason, and last Action API result without falling back to guesswork. The visible gizmo overlay and its click or drag hit regions still come from the same projected handle model, but manual desktop QA is still required before the transform workflow can be called fully complete.
 
 Offline help is also available in [docs/help/sandbox3d.md](docs/help/sandbox3d.md).
 Model loading notes are documented in [docs/model-loading.md](docs/model-loading.md).
@@ -183,7 +183,7 @@ To validate the generic external game template against the current Henka checkou
 - A small save-data foundation now exists for local scene id, camera pose, and simple flags, but it is still intentionally modest.
 - Cloud saves, telemetry, analytics, registry storage, encryption, and network-backed persistence are not implemented.
 - The in-window UI overlay is intentionally small. It now supports object inspection, utility views, and short status feedback, but it is still not a full editor or a general UI toolkit yet.
-- The viewport transform gizmo is intentionally scoped to world-axis move, rotate, and scale behavior for the current sandbox object model. It is not yet a broader authoring workflow with undo, editable numeric fields, or docking tools.
+- The viewport transform gizmo is intentionally scoped to world-axis move, rotate, and scale behavior for the current sandbox object model. The sandbox now also exposes explicit viewport tool modes, diagnostics, and direct transform fallback controls so interaction failures can be diagnosed without assuming the gizmo is the only path.
 - 2D and 2.5D are part of the engine direction, but those workflows are not implemented yet.
 - Visual and interaction checks still need manual QA on a local desktop session.
 - HenkaSandbox3D is an engine sample and QA target, not a game. Real games built with Henka should live in separate repositories.

@@ -79,32 +79,40 @@ Use this checklist when you want to confirm that `henka_sandbox3d` is visually r
 32. Confirm clicking inside docked panels does not pick scene objects.
 33. Left-click a visible object inside the viewport and confirm picking updates the selection.
 34. Confirm the selected object shows a visible gizmo in the viewport.
-35. Use `Alt + Left Mouse` to orbit around the selected object and confirm the view target feels stable.
-36. Use `Middle Mouse` to pan and confirm the camera and target move together predictably.
-37. Use the mouse wheel over the viewport and confirm zoom works without affecting paged panels.
-38. Press `F` and confirm the selected object is framed in a useful inspection view.
-39. Press `Home` and confirm the sandbox returns to the default view.
-40. Select `Textured Cube` from Scene Objects, switch to `Move`, and drag X, Y, and Z.
-41. Confirm the cube moves, not just the gizmo.
-42. Switch to `Rotate` and drag X, Y, and Z.
-43. Confirm the object rotates, not just the gizmo.
-44. Switch to `Scale` and drag the center square handle.
-45. Confirm the object scales, not just the gizmo.
-46. Toggle snap on and off and confirm movement, rotation, and scale respond differently.
-47. Confirm Object Details updates after manipulation.
-48. Confirm picking still works after movement, rotation, or scale changes.
-49. Click empty viewport space and confirm no gizmo helper becomes the selected object.
-50. Open panels or resize the window during a drag and confirm the drag stops cleanly instead of jumping to a new target.
-51. Hide the selected object and confirm gizmo dragging stops safely.
-52. Confirm Reset Transform restores the selected object.
-53. Confirm Focus Camera still works after manipulation.
-54. Confirm the camera view does not look stretched.
-55. Confirm the small in-window status area reports common actions without forcing you to read the console.
-56. Confirm the console still receives fallback logs for help, legend, object info, warnings, or errors when those actions are used.
-57. Confirm `Escape` behavior still works.
-58. Confirm close-window exit remains clean.
-59. Confirm no named-engine comparisons appear in runtime text or packaged help.
-60. If the UI is not visible or feels wrong, note whether the console reports `Sandbox panel: shown`, `Sandbox panel: hidden`, `Sandbox UI ready`, or `Sandbox viewport`.
+35. Open `Diagnostics` and confirm selected object, tool mode, mouse capture state, cursor-in-viewport state, and viewport-local coordinates all update as you interact.
+36. Confirm `Last rejected interaction reason` changes when you click a panel, click outside the viewport, or miss a gizmo handle.
+37. Open `Transform QA` and confirm the direct move, rotate, scale, and reset controls visibly change the selected real object.
+38. Confirm Object Details updates after each Transform QA action.
+39. Click `Orbit` and left-drag in the viewport. Confirm the camera orbits around the selected object or current target.
+40. Repeat `Orbit` more than once and confirm it is repeatable.
+41. Click `Pan` and left-drag in the viewport. Confirm the camera pans predictably.
+42. Repeat `Pan` more than once and confirm it is repeatable.
+43. Use the mouse wheel over the viewport and confirm zoom works without affecting paged panels.
+44. Use the mouse wheel over `Controls` or `Scene Objects` and confirm it changes paging instead of zooming the viewport.
+45. Press `F` and confirm the selected object is framed in a useful inspection view.
+46. Press `Home` and confirm the sandbox returns to the default view.
+47. Select `Textured Cube` from Scene Objects, switch to `Move`, hover X, Y, and Z, and confirm Diagnostics reports the hovered handle.
+48. Drag X, Y, and Z and confirm the cube moves, not just the gizmo.
+49. Switch to `Rotate`, hover X, Y, and Z, and confirm Diagnostics reports the hovered ring.
+50. Drag X, Y, and Z and confirm the object rotates, not just the gizmo.
+51. Switch to `Scale`, hover the center handle, and confirm Diagnostics reports the hovered scale handle.
+52. Drag the center square handle and confirm the object scales, not just the gizmo.
+53. Toggle `Hit Boxes` and confirm the viewport shows the same handle regions used for hit testing.
+54. Toggle snap on and off and confirm movement, rotation, and scale respond differently.
+55. Confirm Object Details updates after viewport manipulation.
+56. Confirm picking still works after movement, rotation, or scale changes.
+57. Click empty viewport space and confirm no gizmo helper becomes the selected object.
+58. Open panels or resize the window during a drag and confirm the drag stops cleanly instead of jumping to a new target.
+59. Hide the selected object and confirm gizmo dragging stops safely.
+60. Confirm Reset Transform restores the selected object.
+61. Confirm Focus Camera still works after manipulation.
+62. Confirm the camera view does not look stretched.
+63. Confirm the small in-window status area reports common actions without forcing you to read the console.
+64. Confirm the console still receives fallback logs for help, legend, object info, warnings, or errors when those actions are used.
+65. Confirm `Escape` behavior still works.
+66. Confirm close-window exit remains clean.
+67. Confirm no named-engine comparisons appear in runtime text or packaged help.
+68. If the UI is not visible or feels wrong, note whether the console reports `Sandbox panel: shown`, `Sandbox panel: hidden`, `Sandbox UI ready`, or `Sandbox viewport`.
 
 ## Expected startup behavior
 
@@ -153,12 +161,15 @@ You should be able to identify these examples:
 - `F5` cycles View, Inspect, and Full Tools layouts.
 - The `Controls` panel can toggle the debug grid and wireframe state with the mouse.
 - The `Controls` panel looks lighter in `View` mode and keeps a visible in-window status area.
-- The `Controls` panel can switch between `Select`, `Move`, `Rotate`, and `Scale`.
+- The `Controls` panel can switch between `Select`, `Orbit`, `Pan`, `Move`, `Rotate`, and `Scale`.
 - Snap can be toggled for transform dragging.
+- The `Hit Boxes` toggle can show the current gizmo hit regions.
 - Docked panels stay outside the dedicated scene viewport in normal workspace modes.
 - The `Controls` panel can adjust mouse sensitivity and camera speed with the mouse.
 - The `Controls` panel can reset the camera, save settings, reset sandbox settings, print help, print the scene legend, and reset the panel layout.
 - The `Scene Objects` panel lists the current scene examples by name.
+- The `Diagnostics` utility reports current viewport, selection, and interaction state.
+- The `Transform QA` utility can move, rotate, scale, and reset the selected object through direct controls.
 - Clicking an object updates the `Object Details` panel.
 - The `Object Details` panel can toggle visibility, focus the camera, reset the selected transform, and print object info.
 - The `Object Details` panel shows tag and interaction state when those foundations are available.

@@ -85,11 +85,12 @@ The current `Controls` panel can:
 - frame the selected object
 - reset the view
 - zoom in and out with visible buttons
-- switch between `Select`, `Move`, `Rotate`, and `Scale` gizmo modes
+- switch between explicit `Select`, `Orbit`, `Pan`, `Move`, `Rotate`, and `Scale` viewport tools
 - toggle transform snapping and show the current snap increments
+- toggle `Hit Boxes` so the viewport can draw the same handle regions that gizmo hit testing uses
 - save sandbox settings
 - reset the layout
-- open in-window utilities for help, legend, paths, settings, and diagnostics
+- open in-window utilities for help, legend, paths, settings, diagnostics, and transform QA
 - show short in-window status feedback for recent actions
 
 `Inspect` and `Full Tools` keep the object panels available. `Full Tools` also keeps the heavier adjustment and status text visible.
@@ -118,6 +119,8 @@ The current `Object Details` panel can:
 The selected object also shows a transform gizmo inside the dedicated scene viewport.
 
 - `Select` keeps normal viewport selection active.
+- `Orbit` uses left drag in the viewport to orbit around the selected object or current view target.
+- `Pan` uses left drag in the viewport to pan the camera and target together.
 - `Move` exposes world-axis translation handles.
 - `Rotate` exposes world-axis rotation rings.
 - `Scale` currently exposes a uniform center handle for the current sandbox pass.
@@ -127,11 +130,14 @@ The selected object also shows a transform gizmo inside the dedicated scene view
 - The gizmo helper pieces remain internal to the viewport tool path and do not appear as normal sandbox objects in selection, object details, persisted selection state, or normal scene picking.
 - Dragging cancels safely if the selected object becomes invalid, hidden, or the active viewport changes during manipulation.
 - The current sandbox path shares its projected handle model, overlay conversion, and drag math with automated tests, which helps catch real selection and transform regressions earlier.
+- If the direct transform QA buttons work but gizmo dragging does not, the current failure is likely in viewport input routing or handle hit testing rather than the selected-object mutation path.
 
 The viewport now also supports direct navigation while mouse capture is released:
 
-- `Alt + Left Mouse`: orbit around the selected object or current view target
-- `Middle Mouse`: pan the view
+- `Orbit` tool plus `Left Mouse`: orbit around the selected object or current view target
+- `Pan` tool plus `Left Mouse`: pan the view
+- `Alt + Left Mouse`: optional orbit shortcut
+- `Middle Mouse`: optional pan shortcut
 - `Mouse Wheel`: zoom the view when the cursor is over the viewport
 - `F`: frame the selected object
 - `Home`: reset the default camera view
@@ -146,11 +152,14 @@ The current `Utility` panel can show:
 - Paths
 - Settings
 - Diagnostics
+- Transform QA
 
 That keeps normal viewer use in the window while the console remains available for fallback logs and automation.
 The packaged sandbox still opens a console window at this stage, but normal viewer interaction is meant to stay inside the viewport and panels rather than depending on console output.
 
 The sandbox also uses the current engine diagnostics snapshot in the Utility panel, and object picking can update selection when mouse capture is released. Picking and gizmo dragging use viewport-relative coordinates, so docked panel clicks do not trigger scene picks or transform drags.
+The diagnostics view now surfaces the current viewport tool, gizmo mode, mouse capture state, UI mouse ownership, cursor position, selected object, gizmo validity, overlay primitive count, hovered handle, active drag state, last rejected interaction reason, last Action API command, and last Action API result.
+The Transform QA view exposes direct move, rotate, scale, and reset controls that use the same local Action API path as normal object manipulation, which makes it easier to separate Action API failures from gizmo or input failures during packaged QA.
 
 When the UI is open:
 

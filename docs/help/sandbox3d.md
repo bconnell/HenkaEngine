@@ -21,9 +21,9 @@ On a first packaged run with no existing settings file, the docked workspace ope
 - `Shift`: move faster
 - `Mouse`: look around while mouse capture is active
 - `Right Mouse / Tab`: toggle mouse capture
-- `Left Mouse`: select or manipulate inside the scene viewport when mouse capture is released
-- `Alt + Left Mouse`: orbit around the selected object or current view target
-- `Middle Mouse`: pan the viewport
+- `Left Mouse`: uses the active viewport tool when mouse capture is released
+- `Alt + Left Mouse`: optional orbit shortcut around the selected object or current view target
+- `Middle Mouse`: optional pan shortcut
 - `Mouse Wheel`: zoom the viewport when the cursor is over the scene view
 - `F1`: toggle wireframe
 - `F2`: print the scene legend to the console again
@@ -57,12 +57,14 @@ On a first packaged run with no existing settings file, the docked workspace ope
 - Compare the colored cube, textured cube, and OBJ marker so it is easy to tell which material path each object is using.
 - Use `F3` to hide the grid briefly, then show it again to confirm the scene layout still reads clearly.
 - Press `F4` to open the sandbox panels, then use `F5` to compare the View, Inspect, and Full Tools layouts.
-- Release mouse capture, then left-click a visible object in the viewport to test selection and transform dragging.
-- Use `Alt + Left Mouse`, `Middle Mouse`, `Mouse Wheel`, `F`, and `Home` to test orbit, pan, zoom, frame selected, and reset view.
-- Switch the Transform section between Select, Move, Rotate, and Scale, then drag the gizmo on a selected object.
+- Release mouse capture, then use the Viewport Tool buttons to switch between Select, Orbit, Pan, Move, Rotate, and Scale.
+- Use `Orbit` and `Pan` with left drag, plus `Mouse Wheel`, `F`, and `Home`, to test orbit, pan, zoom, frame selected, and reset view.
+- Use the optional `Alt + Left Mouse` orbit and `Middle Mouse` pan shortcuts if you want to compare them with the explicit tool modes.
+- Switch the Viewport Tool section between Select, Move, Rotate, and Scale, then drag the gizmo on a selected object.
 - Toggle snapping on and off to compare free movement with stepped adjustments.
 - Click the grid and wireframe controls to confirm the in-window UI updates the same engine state as the keyboard shortcuts.
-- Open Help, Scene Legend, Paths, Settings, and Diagnostics in the Utility panel so you can inspect the sandbox without relying on the console.
+- Open Help, Scene Legend, Paths, Settings, Diagnostics, and Transform QA in the Utility panel so you can inspect the sandbox without relying on the console.
+- Use Transform QA to confirm whether selected-object mutation works even if gizmo dragging or viewport input is failing.
 - Confirm the small in-window status area reports common actions such as layout changes, camera reset, saved settings, or object focus.
 - Select each scene object and confirm the Object Details panel updates.
 - Use Focus Camera, Reset Transform, and Print Object Info on a few different objects.
@@ -88,12 +90,13 @@ The `Controls` panel currently includes:
 - a `Grid` toggle
 - a `Wire` toggle
 - visible `Frame Selected`, `Reset View`, `Zoom In`, and `Zoom Out` controls
-- Transform tabs for `Select`, `Move`, `Rotate`, and `Scale`
+- Viewport Tool tabs for `Select`, `Orbit`, `Pan`, `Move`, `Rotate`, and `Scale`
 - a snap toggle with current move, rotate, and scale snap values
+- a `Hit Boxes` toggle for the viewport debug overlay
 - a save-settings button
 - a reset-layout button
 - panel visibility toggles for the object-inspection panels in the heavier layouts
-- utility tabs for Help, Scene Legend, Paths, Settings, Diagnostics, and Object Info
+- utility tabs for Help, Scene Legend, Paths, Settings, Diagnostics, Transform QA, and Object Info
 - a small in-window status area for recent actions and warnings
 
 `Inspect` and `Full Tools` also expose the wider inspection controls.
@@ -121,6 +124,8 @@ The `Object Details` panel shows the current selection.
 The selected object also shows a visible transform gizmo in the scene viewport.
 
 - `Select` mode keeps normal object picking active.
+- `Orbit` mode uses left drag to orbit around the current view target.
+- `Pan` mode uses left drag to pan the current view target.
 - `Move` mode drags the selected object on the chosen world axis.
 - `Rotate` mode drags the selected object around the chosen world axis.
 - `Scale` mode uses the center square for uniform scale in the current sandbox pass.
@@ -138,9 +143,12 @@ The `Utility` panel provides short in-window views for:
 - Paths
 - Settings
 - Diagnostics
+- Transform QA
 
 Those utilities are the preferred path for normal viewer use. The console remains useful for fallback logs, warnings, and automated checks.
 Status messages also appear in-window for common actions so normal packaged use does not depend on the console.
+Diagnostics now report input ownership, viewport-local cursor state, selected object state, gizmo model validity, overlay primitive count, hovered handle, active drag target, last rejected interaction reason, and last Action API result.
+Transform QA exposes direct move, rotate, scale, and reset controls that use the selected real object and the same Action API path as the normal object workflow.
 
 When the UI is open:
 
@@ -170,6 +178,7 @@ The runtime also reports whether it is running in `Development` or `Packaged` mo
 - The transform gizmo is intentionally scoped to world-axis move, rotate, and scale for the current sandbox object model. Undo, numeric editing, floating panels, and resizable docks are separate future work.
 - Scale is currently uniform-only in the viewport gizmo path. Per-axis scale handles are intentionally not shown until they are reliable enough to ship.
 - Manual desktop QA is still the best way to judge gizmo handle feel, hover clarity, and transform drag comfort.
+- Manual desktop QA is also still the best way to judge whether Orbit and Pan feel reliable in a packaged run.
 - The packaged sandbox still opens a console window at this stage. In-window utilities and status are the preferred viewer workflow, while the console remains available for fallback logs.
 - Editor tools, asset browser UI, and broader 2D or 2.5D workflows are not available yet.
 
