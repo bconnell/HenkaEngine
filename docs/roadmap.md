@@ -58,3 +58,11 @@ Longer-term milestones can expand into:
 - physics
 - editor workflows
 - other renderer backends
+
+## Sponsorship supported work
+
+Henka Engine is open source, and sponsorship helps support the time needed to continue development.
+
+Funding can help with engine foundation work, sandbox usability, documentation, examples, packaged builds, testing, asset workflow improvements, and future workspace tools.
+
+Sponsorship does not change the license, purchase feature priority, or override the project roadmap. Roadmap decisions remain based on stability, maintainability, scope, and usefulness to the engine.

@@ -2,6 +2,16 @@
 
 Henka Engine is an early-stage open source engine written in C. The long-term direction is first-class 3D, 2D, and 2.5D support, with the current focus on building a solid 3D runtime foundation first. The engine now also includes a small local persistence layer and guidance for keeping real games in separate repositories.
 
+## Support Henka Engine
+
+Henka Engine is an open source C engine project focused on practical 3D, 2D, and 2.5D development foundations.
+
+Sponsorship helps support development time, testing, documentation, examples, packaged builds, and future workspace tooling. The project will remain open source under its current license.
+
+Sponsors help the project move forward, but sponsorship does not purchase feature priority, private support, ownership, or a different license. Feature decisions are still based on project direction, stability, maintainability, and usefulness to the wider engine.
+
+Use the Sponsor button on this repository to support the project through GitHub Sponsors.
+
 ## Current status
 
 Henka Engine is still early, but the sandbox now renders a visible 3D scene with textured and untextured materials through Henka systems.
@@ -130,6 +140,7 @@ A runtime foundation overview is available in [docs/runtime-foundations.md](docs
 A UI overview is available in [docs/ui.md](docs/ui.md).
 A guide for separate game repositories is available in [docs/external-game-projects.md](docs/external-game-projects.md).
 A manual verification checklist is available in [docs/qa/sandbox3d-manual-checklist.md](docs/qa/sandbox3d-manual-checklist.md).
+[Support Henka Engine](SUPPORT.md)
 Packaged output is generated under `out/` and should not be committed.
 
 For repeated packaged checks on Windows, use `.\scripts\check_packaged_sandbox3d_windows.ps1`.
