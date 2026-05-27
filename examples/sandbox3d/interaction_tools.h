@@ -63,6 +63,14 @@ typedef struct sandbox3d_interaction_gate
     bool navigation_mode_active;
 } sandbox3d_interaction_gate;
 
+typedef struct sandbox3d_selection_highlight_model
+{
+    bool valid;
+    size_t edge_count;
+    henka_vec3 edge_starts[12];
+    henka_vec3 edge_ends[12];
+} sandbox3d_selection_highlight_model;
+
 const char* sandbox3d_viewport_tool_mode_to_string(sandbox3d_viewport_tool_mode tool_mode);
 const char* sandbox3d_interaction_reject_reason_to_string(sandbox3d_interaction_reject_reason reason);
 henka_gizmo_mode sandbox3d_viewport_tool_mode_to_gizmo_mode(sandbox3d_viewport_tool_mode tool_mode);
@@ -83,5 +91,8 @@ sandbox3d_interaction_reject_reason sandbox3d_evaluate_select_reject_reason(
 henka_vec3 sandbox3d_make_move_delta(henka_gizmo_axis axis, float magnitude);
 henka_quat sandbox3d_make_rotation_delta(henka_gizmo_axis axis, float radians);
 henka_vec3 sandbox3d_make_uniform_scale_multiplier(float delta_scale);
+bool sandbox3d_build_selection_highlight_model(
+    henka_bounds bounds,
+    sandbox3d_selection_highlight_model* out_model);
 
 #endif

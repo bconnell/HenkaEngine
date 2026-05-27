@@ -6,6 +6,8 @@ void henka_test_sandbox3d_interaction(void)
 {
     henka_camera camera;
     henka_quat rotation_delta;
+    henka_bounds selection_bounds;
+    sandbox3d_selection_highlight_model highlight_model;
     henka_vec3 focus_target;
     henka_vec3 move_delta;
     henka_vec3 scale_multiplier;
@@ -125,6 +127,15 @@ void henka_test_sandbox3d_interaction(void)
     HENKA_TEST_ASSERT_FLOAT_CLOSE(scale_multiplier.x, 1.10f, 0.0001f);
     scale_multiplier = sandbox3d_make_uniform_scale_multiplier(-1.5f);
     HENKA_TEST_ASSERT_FLOAT_CLOSE(scale_multiplier.x, 0.10f, 0.0001f);
+
+    selection_bounds = (henka_bounds){{1.0f, 2.0f, 3.0f}, {0.5f, 0.75f, 1.0f}};
+    HENKA_TEST_ASSERT(sandbox3d_build_selection_highlight_model(selection_bounds, &highlight_model));
+    HENKA_TEST_ASSERT(highlight_model.valid);
+    HENKA_TEST_ASSERT(highlight_model.edge_count == 12U);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(highlight_model.edge_starts[0].x, 0.5f, 0.0001f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(highlight_model.edge_ends[0].x, 1.5f, 0.0001f);
+    selection_bounds.extents.x = 0.0f;
+    HENKA_TEST_ASSERT(!sandbox3d_build_selection_highlight_model(selection_bounds, &highlight_model));
 
     camera = henka_camera_create_perspective(60.0f * HENKA_DEG_TO_RAD, 16.0f / 9.0f, 0.1f, 100.0f);
     camera.position = (henka_vec3){0.0f, 2.4f, 8.6f};

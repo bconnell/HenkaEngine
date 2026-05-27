@@ -53,6 +53,18 @@ void henka_test_action(void)
     HENKA_TEST_ASSERT(henka_action_context_get_selected_entity(actions) == cube);
 
     memset(&request, 0, sizeof(request));
+    request.command = HENKA_ACTION_COMMAND_CLEAR_SELECTION;
+    HENKA_TEST_ASSERT(henka_action_execute(actions, &request, &result) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(result.success);
+    HENKA_TEST_ASSERT(henka_action_context_get_selected_entity(actions) == HENKA_INVALID_ENTITY);
+    memset(&request, 0, sizeof(request));
+    request.command = HENKA_ACTION_COMMAND_SELECT_OBJECT;
+    request.params.entity.entity = cube;
+    HENKA_TEST_ASSERT(henka_action_execute(actions, &request, &result) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(result.success);
+    HENKA_TEST_ASSERT(henka_action_context_get_selected_entity(actions) == cube);
+
+    memset(&request, 0, sizeof(request));
     request.command = HENKA_ACTION_COMMAND_MOVE_BY_DELTA;
     request.params.move_by_delta.entity = cube;
     request.params.move_by_delta.delta = (henka_vec3){2.0f, 0.0f, -1.0f};

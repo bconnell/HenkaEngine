@@ -158,7 +158,7 @@ static void henka_action_remove_default_transform(henka_action_context* context,
     }
 }
 
-static void henka_action_reset_tracking(henka_action_context* context)
+static void henka_action_reset_state(henka_action_context* context)
 {
     if (context == NULL)
     {
@@ -377,7 +377,7 @@ henka_result henka_action_context_set_scene(henka_action_context* context, henka
     }
 
     context->scene = scene;
-    henka_action_reset_tracking(context);
+    henka_action_reset_state(context);
     return HENKA_SUCCESS;
 }
 
@@ -534,7 +534,7 @@ henka_result henka_action_execute(
                     }
                     henka_scene_destroy_entity(context->scene, entity);
                 }
-                henka_action_reset_tracking(context);
+                henka_action_reset_state(context);
                 henka_action_fill_scene_summary(context, &result.scene_summary);
             }
             result.success = true;
@@ -678,6 +678,18 @@ henka_result henka_action_execute(
             }
             result.selected_entity = request->params.entity.entity;
             henka_action_set_message(&result, request->dry_run ? "Validated object selection." : "Selected object.");
+            break;
+
+        case HENKA_ACTION_COMMAND_CLEAR_SELECTION:
+            result.status = HENKA_ACTION_STATUS_OK;
+            result.engine_result = HENKA_SUCCESS;
+            result.success = true;
+            if (!request->dry_run)
+            {
+                context->selected_entity = HENKA_INVALID_ENTITY;
+            }
+            result.selected_entity = HENKA_INVALID_ENTITY;
+            henka_action_set_message(&result, request->dry_run ? "Validated clear selection." : "Selection cleared.");
             break;
 
         case HENKA_ACTION_COMMAND_GET_SELECTED_OBJECT:
@@ -1007,6 +1019,8 @@ const char* henka_action_command_to_string(henka_action_command command)
             return "rename_object";
         case HENKA_ACTION_COMMAND_SELECT_OBJECT:
             return "select_object";
+        case HENKA_ACTION_COMMAND_CLEAR_SELECTION:
+            return "clear_selection";
         case HENKA_ACTION_COMMAND_GET_SELECTED_OBJECT:
             return "get_selected_object";
         case HENKA_ACTION_COMMAND_GET_OBJECT_DETAILS:

@@ -24,7 +24,7 @@ The broadphase currently iterates body pairs directly, which is appropriate for 
 
 ## Sandbox Physics QA
 
-Open the sandbox panels and select `Physics QA` in the Utility panel. Simulation remains opt-in until you use `Enable` or `Reset Demo`.
+The sandbox panels open automatically on startup and reset-style launches, and `Physics QA` is reachable from the main Controls area. Simulation remains opt-in until you use `Enable` or `Reset Demo`.
 
 The QA view provides real controls for:
 
@@ -34,9 +34,16 @@ The QA view provides real controls for:
 - toggling gravity
 - toggling collider and contact overlays
 - changing the selected linked body's static, dynamic, or kinematic type
+- making a supported selected body Dynamic and running gravity for quick drop tests
 - applying upward or camera-forward impulses to a selected dynamic body
 - clearing selected-body velocity
 - raycasting from the camera
+
+Body-type behavior is intentionally explicit in the UI:
+
+- Static bodies do not move from gravity, forces, or impulses.
+- Dynamic bodies fall and respond to gravity, forces, impulses, contacts, friction, restitution, and damping.
+- Kinematic bodies do not fall from gravity and move only through explicit tool or code movement.
 
 The demo links existing generic sample objects to bodies: the ground is a plane, the cubes use AABB colliders, the marker uses a sphere collider, one sample is a static obstacle, and one sample is a trigger volume. Collider debug lines come from the same collider data the solver tests, and they are not selectable scene objects.
 

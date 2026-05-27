@@ -18,7 +18,7 @@ Current priorities include:
 6. A packaged sandbox that can be tested without private setup.
 7. Documentation that stays aligned with what the engine actually does.
 8. Test coverage for core behavior that should not depend on manual QA.
-9. A scoped rigid-body physics layer with sandbox inspection and debug visualization.
+9. A scoped rigid-body physics layer with sandbox inspection, debug visualization, and clearer body-type guidance.
 
 ## Near-term priorities
 
@@ -28,8 +28,8 @@ The next development work is focused on making existing systems easier to test, 
 2. Keep viewport interaction test helpers aligned with the real sandbox behavior.
 3. Finish manual QA for transform gizmos and fix any remaining interaction problems.
 4. Add Windows CMake CI for public build and test checks.
-5. Improve sandbox usability, help text, and first-run guidance.
-6. Keep object inspection, transform tools, and viewport behavior consistent.
+5. Continue improving sandbox usability, help text, first-run guidance, and visual feedback.
+6. Keep object inspection, selection highlighting, transform tools, physics QA, and viewport behavior consistent.
 7. Keep external game project templates working against the current engine.
 
 ## Workspace and tools
@@ -44,7 +44,7 @@ Current workspace foundations include:
 4. Visible workspace and viewport interaction diagnostics.
 5. A multi-window platform foundation with a separate native test panel for render and event-routing validation.
 
-Current runtime foundations also include rigid-body physics v1: fixed-step worlds, static/dynamic/kinematic bodies, sphere/AABB/plane collision, impulse response, friction, restitution, trigger events, raycasts, and opt-in sandbox QA controls.
+Current runtime foundations also include rigid-body physics v1: fixed-step worlds, static/dynamic/kinematic bodies, sphere/AABB/plane collision, impulse response, friction, restitution, trigger events, raycasts, opt-in sandbox QA controls, and viewport selection highlighting for the selected real scene object.
 
 Planned workspace improvements include:
 

@@ -1,6 +1,7 @@
 #include "interaction_tools.h"
 
 #include <math.h>
+#include <string.h>
 
 const char* sandbox3d_viewport_tool_mode_to_string(sandbox3d_viewport_tool_mode tool_mode)
 {
@@ -279,4 +280,51 @@ henka_vec3 sandbox3d_make_uniform_scale_multiplier(float delta_scale)
     }
 
     return (henka_vec3){scale_multiplier, scale_multiplier, scale_multiplier};
+}
+
+bool sandbox3d_build_selection_highlight_model(
+    henka_bounds bounds,
+    sandbox3d_selection_highlight_model* out_model)
+{
+    static const int edges[12][2] = {
+        {0, 1}, {1, 3}, {3, 2}, {2, 0},
+        {4, 5}, {5, 7}, {7, 6}, {6, 4},
+        {0, 4}, {1, 5}, {2, 6}, {3, 7}};
+    henka_vec3 points[8];
+    int edge;
+    int point;
+
+    if (out_model == NULL ||
+        !isfinite(bounds.center.x) ||
+        !isfinite(bounds.center.y) ||
+        !isfinite(bounds.center.z) ||
+        !isfinite(bounds.extents.x) ||
+        !isfinite(bounds.extents.y) ||
+        !isfinite(bounds.extents.z) ||
+        bounds.extents.x <= 0.0f ||
+        bounds.extents.y <= 0.0f ||
+        bounds.extents.z <= 0.0f)
+    {
+        return false;
+    }
+
+    memset(out_model, 0, sizeof(*out_model));
+    for (point = 0; point < 8; ++point)
+    {
+        points[point] = henka_vec3_add(
+            bounds.center,
+            (henka_vec3){
+                (point & 1) ? bounds.extents.x : -bounds.extents.x,
+                (point & 2) ? bounds.extents.y : -bounds.extents.y,
+                (point & 4) ? bounds.extents.z : -bounds.extents.z});
+    }
+
+    for (edge = 0; edge < 12; ++edge)
+    {
+        out_model->edge_starts[edge] = points[edges[edge][0]];
+        out_model->edge_ends[edge] = points[edges[edge][1]];
+    }
+    out_model->edge_count = 12U;
+    out_model->valid = true;
+    return true;
 }

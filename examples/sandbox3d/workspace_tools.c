@@ -113,6 +113,12 @@ void sandbox3d_workspace_model_reset(sandbox3d_workspace_model* model)
     snprintf(model->last_action, sizeof(model->last_action), "Layout reset");
 }
 
+bool sandbox3d_workspace_should_start_panels_visible(bool settings_file_found)
+{
+    (void)settings_file_found;
+    return true;
+}
+
 sandbox3d_workspace_panel* sandbox3d_workspace_get_panel(
     sandbox3d_workspace_model* model,
     sandbox3d_workspace_panel_id panel_id)

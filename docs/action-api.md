@@ -21,6 +21,7 @@ The current action context supports:
 - deleting an object
 - renaming an object
 - selecting an object
+- clearing selection
 - reading the selected object
 - reading object details
 - setting position

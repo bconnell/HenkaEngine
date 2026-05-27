@@ -11,6 +11,8 @@ void henka_test_sandbox3d_workspace(void)
     sandbox3d_workspace_model model;
 
     sandbox3d_workspace_model_reset(&model);
+    HENKA_TEST_ASSERT(sandbox3d_workspace_should_start_panels_visible(false));
+    HENKA_TEST_ASSERT(sandbox3d_workspace_should_start_panels_visible(true));
     panel = sandbox3d_workspace_get_panel_const(&model, SANDBOX3D_WORKSPACE_PANEL_CONTROLS);
     HENKA_TEST_ASSERT(panel != NULL);
     HENKA_TEST_ASSERT(panel->dock == SANDBOX3D_WORKSPACE_DOCK_LEFT);

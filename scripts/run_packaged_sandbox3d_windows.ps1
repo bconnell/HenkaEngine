@@ -13,7 +13,8 @@ try {
     Start-Process -FilePath $packagedExe -WorkingDirectory $packageRoot
     Write-Host "Launched packaged sandbox:"
     Write-Host "  $packagedExe"
-    Write-Host "Press F4 to open the in-window panels."
+    Write-Host "The in-window panels open automatically; press F4 to hide or show them."
+    Write-Host "Open Physics QA from Controls for body-type notes and quick drop tests."
     Write-Host "Press F5 to cycle View, Inspect, and Full Tools."
     Write-Host "The scene should render inside its own docked viewport when panels are visible."
     Write-Host "Select an object in the viewport or Scene Objects panel, then use Select, Move, Rotate, and Scale in the Transform section."

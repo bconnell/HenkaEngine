@@ -61,6 +61,7 @@ typedef struct sandbox3d_workspace_model
 } sandbox3d_workspace_model;
 
 void sandbox3d_workspace_model_reset(sandbox3d_workspace_model* model);
+bool sandbox3d_workspace_should_start_panels_visible(bool settings_file_found);
 sandbox3d_workspace_panel* sandbox3d_workspace_get_panel(
     sandbox3d_workspace_model* model,
     sandbox3d_workspace_panel_id panel_id);

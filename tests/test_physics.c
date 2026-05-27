@@ -76,6 +76,15 @@ static void henka_test_physics_motion_and_materials(void)
     HENKA_TEST_ASSERT(henka_physics_body_get_state(world, kinematic, &state) == HENKA_SUCCESS);
     HENKA_TEST_ASSERT(state.transform.position.x > 5.0f);
     HENKA_TEST_ASSERT_FLOAT_CLOSE(state.transform.position.y, 3.0f, 0.0001f);
+    HENKA_TEST_ASSERT(henka_physics_body_set_type(world, stationary, HENKA_PHYSICS_BODY_DYNAMIC) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_physics_body_clear_velocity(world, stationary) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_physics_world_step_fixed(world) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_physics_body_get_state(world, stationary, &state) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(state.type == HENKA_PHYSICS_BODY_DYNAMIC);
+    HENKA_TEST_ASSERT(state.transform.position.y < 3.0f);
+    HENKA_TEST_ASSERT(henka_physics_body_set_type(world, stationary, HENKA_PHYSICS_BODY_KINEMATIC) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_physics_body_get_state(world, stationary, &state) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(state.type == HENKA_PHYSICS_BODY_KINEMATIC);
 
     for (index = 0; index < 180; ++index)
     {

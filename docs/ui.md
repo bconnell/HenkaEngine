@@ -91,7 +91,7 @@ The current `Controls` panel can:
 - switch between explicit `Select`, `Orbit`, `Pan`, `Move`, `Rotate`, and `Scale` viewport tools
 - toggle transform snapping and show the current snap increments
 - toggle `Hit Boxes` so the viewport can draw the same handle regions that gizmo hit testing uses
-- open `Diagnostics`, `Transform QA`, and `Physics QA` directly from the main Controls page
+- start with panels visible on startup and reset-style launches so `Diagnostics`, `Transform QA`, and `Physics QA` are reachable from the main Controls page without using `F4` first
 - open `Physics QA` for the opt-in rigid-body demo, playback controls, selected-body actions, and debug visualization
 - open `Native Panel Test` as a separate OS-level foundation window
 - save sandbox settings
@@ -150,7 +150,7 @@ The viewport now also supports direct navigation while mouse capture is released
 
 Mouse wheel input over the `Controls` or `Scene Objects` panels is routed to panel paging instead of the viewport, so panel interaction does not leak into scene zooming.
 
-A compact diagnostic strip stays visible immediately below the Scene View while panels are open. It shows the active tool, selected object, mouse capture state, whether the cursor is in the viewport, whether a visible panel owns the pointer, gizmo model state, handle count, hovered handle, drag state, last rejection reason, hovered panel, whether the cursor is on a draggable header, active panel movement or resize, dock target, and latest workspace action. The strip is informational and does not consume viewport input.
+A compact diagnostic strip stays visible immediately below the Scene View while panels are open. It shows the active tool, selected object, selected-highlight state, mouse capture state, whether the cursor is in the viewport, whether a visible panel owns the pointer, gizmo model state, handle count, hovered handle, drag state, last rejection reason, hovered panel, whether the cursor is on a draggable header, active panel movement or resize, dock target, and latest workspace action. The strip is informational and does not consume viewport input.
 
 The current `Utility` panel can show:
 
@@ -169,10 +169,12 @@ The packaged sandbox still opens a console window at this stage, but normal view
 The sandbox also uses the current engine diagnostics snapshot in the Utility panel, and object picking can update selection when mouse capture is released. Picking and gizmo dragging use viewport-relative coordinates, so docked panel clicks do not trigger scene picks or transform drags.
 The diagnostics view now surfaces the current viewport tool, gizmo mode, mouse capture state, UI mouse ownership, cursor position, selected object, gizmo validity, overlay primitive count, hovered handle, active drag state, last rejected interaction reason, last Action API command, last Action API result, and compact native test-window state.
 The Transform QA view exposes direct move, rotate, scale, and reset controls that use the same local Action API path as normal object manipulation, which makes it easier to separate Action API failures from gizmo or input failures during packaged QA.
-The Physics QA view exposes real enable, pause/resume, fixed-step, demo reset, gravity, collider/contact debug, impulse, velocity clear, body-type, and camera-raycast controls. Collider overlays are generated from the same collider descriptions used for collision detection, and physics-linked entities are ordinary selectable scene objects rather than debug helpers.
+The Physics QA view exposes real enable, pause/resume, fixed-step, demo reset, gravity, collider/contact debug, impulse, velocity clear, body-type, Make Dynamic + Drop, and camera-raycast controls. It explains that Static bodies do not move from physics, Dynamic bodies fall and respond to gravity, forces, impulses, and collisions, and Kinematic bodies do not fall from gravity because they move only through explicit tool or code movement. Collider overlays are generated from the same collider descriptions used for collision detection, and physics-linked entities are ordinary selectable scene objects rather than debug helpers.
 When Diagnostics, Transform QA, or Physics QA is open in the heavier layout, the utility view uses the right dock directly so its controls do not draw through Object Details.
 
-Panel placement and dock resizing are session-only in the current sandbox. `Reset Layout` redocks the standard panels, restores safe dock widths, clears active workspace drag or resize state, and closes `Native Panel Test` if it is open. The Scene View remains the main center viewport. The test window establishes separate-window rendering and event routing; production tool-panel conversion and detachable Scene View support remain future work.
+Selection is also visible directly in the Scene View through a non-selectable highlighted bounds outline around the selected real scene object. Clearing selection, clicking empty viewport space in Select mode, hiding the selected object, or deleting it removes the highlight and updates Object Details and Diagnostics.
+
+Panel placement and dock resizing are session-only in the current sandbox. `Reset Layout` redocks the standard panels, restores safe dock widths, makes panels visible, clears active workspace drag or resize state, and closes `Native Panel Test` if it is open. The Scene View remains the main center viewport. The test window establishes separate-window rendering and event routing; production tool-panel conversion and detachable Scene View support remain future work.
 
 When the UI is open:
 
