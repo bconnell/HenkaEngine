@@ -47,6 +47,7 @@ Henka Engine is still early, but the sandbox now renders a visible 3D scene with
 - Early in-window UI overlay with buttons, toggles, labels, structured rows, and simple text rendering
 - Scene Objects, Object Details, and Utility panels for named sandbox object inspection and viewer workflows
 - Movable in-window sandbox workspace panels with header drag, resize, redock, dock splitter, and reset-layout recovery controls
+- Multi-window platform foundation with a separate `Native Panel Test` window for close, focus, resize, and event-routing QA
 - Packaged sandbox user data that stays in place across package refreshes by default
 - Generic documentation and starter template for external game repositories
 
@@ -151,7 +152,7 @@ The packaged folder also includes `PACKAGE_INFO.txt` so you can tell when the pa
 - `Home`: reset the camera view
 - `Escape`: close the UI first, then release the mouse, then exit
 
-Press `F4` to open the in-window sandbox panels. On a first run with no local settings file, the packaged sandbox opens the workspace in `View` mode so the controls are visible without covering most of the scene. Press `F5` to cycle between `View`, `Inspect`, and `Full Tools`. Drag a docked panel header to undock and move it within the sandbox window; floating panels continue to drag by their header, resize from the lower-right grip, and can be returned with `L`, `R`, or `Home`. Native floating panel windows and a detachable Scene View are not implemented yet. Visible bars beside the Scene View resize occupied docks, and `Reset Layout` restores safe default docking and sizes. Select a scene object from the list or with `Left Mouse` in the viewport, then use the Viewport Tool section to switch between `Select`, `Orbit`, `Pan`, `Move`, `Rotate`, and `Scale`. A compact strip below the Scene View reports viewport and workspace interaction state while you test. `Diagnostics` and `Transform QA` remain directly available on the main Controls page. Manual desktop QA is still required before panel drag comfort and transform workflow feel can be called fully complete.
+Press `F4` to open the in-window sandbox panels. On a first run with no local settings file, the packaged sandbox opens the workspace in `View` mode so the controls are visible without covering most of the scene. Press `F5` to cycle between `View`, `Inspect`, and `Full Tools`. Drag a docked panel header to undock and move it within the sandbox window; floating panels continue to drag by their header, resize from the lower-right grip, and can be returned with `L`, `R`, or `Home`. `Open Native Panel Test` opens a separate OS-level test window that exercises the new multi-window foundation. The standard tool panels still float in-window, and detachable Scene View is not implemented. Visible bars beside the Scene View resize occupied docks, and `Reset Layout` restores safe default docking and closes the native test window. Select a scene object from the list or with `Left Mouse` in the viewport, then use the Viewport Tool section to switch between `Select`, `Orbit`, `Pan`, `Move`, `Rotate`, and `Scale`. A compact strip below the Scene View reports viewport and workspace interaction state while you test. `Diagnostics` and `Transform QA` remain directly available on the main Controls page. Manual desktop QA is still required before native window behavior, panel drag comfort, and transform workflow feel can be called fully complete.
 
 Offline help is also available in [docs/help/sandbox3d.md](docs/help/sandbox3d.md).
 Model loading notes are documented in [docs/model-loading.md](docs/model-loading.md).
@@ -184,7 +185,7 @@ To validate the generic external game template against the current Henka checkou
 - Cloud saves, analytics, registry storage, encryption, and network-backed persistence are not implemented.
 - The in-window UI overlay is intentionally small. It now supports object inspection, utility views, and short status feedback, but it is still not a full editor or a general UI toolkit yet.
 - Floating panel positions and resized dock widths are session-only in this first workspace pass; `Reset Layout` is the recovery path.
-- Current floating panels remain inside the main sandbox window. Separate OS-level panel windows and detachable Scene View support require future multi-window rendering and input-routing work.
+- Current production tool panels remain inside the main sandbox window. `Native Panel Test` proves a separate OS-level UI window and window-aware event path; converting tool panels and detaching Scene View remain future work.
 - The viewport transform gizmo is intentionally scoped to world-axis move, rotate, and scale behavior for the current sandbox object model. The sandbox now also exposes explicit viewport tool modes, diagnostics, and direct transform fallback controls so interaction failures can be diagnosed without assuming the gizmo is the only path.
 - 2D and 2.5D are part of the engine direction, but those workflows are not implemented yet.
 - Visual and interaction checks still need manual QA on a local desktop session.

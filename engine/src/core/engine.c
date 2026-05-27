@@ -264,6 +264,50 @@ static void henka_engine_handle_resize(henka_engine* engine, const henka_platfor
     }
 }
 
+static henka_tool_window_slot* henka_engine_find_tool_window_slot(henka_engine* engine, henka_window_id window_id)
+{
+    size_t index;
+
+    if (engine == NULL || window_id == HENKA_INVALID_WINDOW_ID)
+    {
+        return NULL;
+    }
+
+    for (index = 0U; index < HENKA_MAX_TOOL_WINDOWS; ++index)
+    {
+        if (engine->tool_windows[index].id == window_id)
+        {
+            return &engine->tool_windows[index];
+        }
+    }
+
+    return NULL;
+}
+
+static void henka_engine_close_requested_tool_windows(henka_engine* engine)
+{
+    size_t index;
+
+    if (engine == NULL)
+    {
+        return;
+    }
+
+    for (index = 0U; index < HENKA_MAX_TOOL_WINDOWS; ++index)
+    {
+        henka_tool_window_state state;
+
+        if (engine->tool_windows[index].id == HENKA_INVALID_WINDOW_ID ||
+            !henka_platform_get_tool_window_state(engine->platform, engine->tool_windows[index].id, &state) ||
+            !state.close_requested)
+        {
+            continue;
+        }
+
+        henka_engine_close_tool_window(engine, engine->tool_windows[index].id);
+    }
+}
+
 henka_result henka_engine_create(const henka_engine_config* config, henka_engine** out_engine)
 {
     henka_engine* engine;
@@ -369,6 +413,8 @@ henka_result henka_engine_create(const henka_engine_config* config, henka_engine
 
 void henka_engine_destroy(henka_engine* engine)
 {
+    size_t index;
+
     if (engine == NULL)
     {
         return;
@@ -379,6 +425,14 @@ void henka_engine_destroy(henka_engine* engine)
     if (engine->initialized_callback_ran && engine->config.on_shutdown != NULL)
     {
         engine->config.on_shutdown(engine, engine->config.user_data);
+    }
+
+    for (index = 0U; index < HENKA_MAX_TOOL_WINDOWS; ++index)
+    {
+        if (engine->tool_windows[index].id != HENKA_INVALID_WINDOW_ID)
+        {
+            henka_engine_close_tool_window(engine, engine->tool_windows[index].id);
+        }
     }
 
     henka_asset_manager_destroy(engine->asset_manager);
@@ -430,6 +484,8 @@ henka_result henka_engine_run(henka_engine* engine)
         {
             henka_engine_request_exit(engine);
         }
+
+        henka_engine_close_requested_tool_windows(engine);
 
         if (henka_input_was_key_pressed(engine, HENKA_KEY_ESCAPE))
         {
@@ -490,6 +546,28 @@ henka_result henka_engine_run(henka_engine* engine)
             HENKA_LOG_ERROR("renderer end frame failed: %s", henka_result_to_string(result));
             return result;
         }
+
+        {
+            size_t index;
+            for (index = 0U; index < HENKA_MAX_TOOL_WINDOWS; ++index)
+            {
+                if (engine->tool_windows[index].id == HENKA_INVALID_WINDOW_ID ||
+                    engine->tool_windows[index].ui_context == NULL)
+                {
+                    continue;
+                }
+
+                result = henka_renderer_draw_tool_window_ui(
+                    engine->renderer,
+                    engine->tool_windows[index].id,
+                    engine->tool_windows[index].ui_context);
+                if (result != HENKA_SUCCESS)
+                {
+                    HENKA_LOG_ERROR("renderer draw tool window ui failed: %s", henka_result_to_string(result));
+                    return result;
+                }
+            }
+        }
     }
 
     HENKA_LOG_INFO("leaving engine run loop");
@@ -524,6 +602,109 @@ henka_result henka_engine_set_ui_context(henka_engine* engine, henka_ui_context*
 
     engine->active_ui = ui_context;
     return HENKA_SUCCESS;
+}
+
+henka_result henka_engine_open_tool_window(
+    henka_engine* engine,
+    const henka_tool_window_desc* desc,
+    henka_ui_context* ui_context,
+    henka_window_id* out_window_id)
+{
+    henka_window_id window_id;
+    size_t index;
+    henka_result result;
+
+    if (engine == NULL || desc == NULL || ui_context == NULL || out_window_id == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    *out_window_id = HENKA_INVALID_WINDOW_ID;
+    for (index = 0U; index < HENKA_MAX_TOOL_WINDOWS; ++index)
+    {
+        if (engine->tool_windows[index].id == HENKA_INVALID_WINDOW_ID)
+        {
+            break;
+        }
+    }
+    if (index >= HENKA_MAX_TOOL_WINDOWS)
+    {
+        return HENKA_ERROR_PLATFORM;
+    }
+
+    result = henka_platform_create_tool_window(engine->platform, desc, &window_id);
+    if (result != HENKA_SUCCESS)
+    {
+        return result;
+    }
+
+    result = henka_renderer_create_tool_window_target(engine->renderer, window_id);
+    if (result != HENKA_SUCCESS)
+    {
+        henka_platform_destroy_tool_window(engine->platform, window_id);
+        return result;
+    }
+
+    engine->tool_windows[index].id = window_id;
+    engine->tool_windows[index].ui_context = ui_context;
+    *out_window_id = window_id;
+    return HENKA_SUCCESS;
+}
+
+henka_result henka_engine_close_tool_window(henka_engine* engine, henka_window_id window_id)
+{
+    henka_tool_window_slot* slot;
+
+    if (engine == NULL || window_id == HENKA_INVALID_WINDOW_ID)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    slot = henka_engine_find_tool_window_slot(engine, window_id);
+    if (slot == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    henka_renderer_destroy_tool_window_target(engine->renderer, window_id);
+    henka_platform_destroy_tool_window(engine->platform, window_id);
+    slot->id = HENKA_INVALID_WINDOW_ID;
+    slot->ui_context = NULL;
+    return HENKA_SUCCESS;
+}
+
+henka_result henka_engine_get_tool_window_state(
+    const henka_engine* engine,
+    henka_window_id window_id,
+    henka_tool_window_state* out_state)
+{
+    if (engine == NULL || out_state == NULL || window_id == HENKA_INVALID_WINDOW_ID)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    if (!henka_platform_get_tool_window_state(engine->platform, window_id, out_state))
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    return HENKA_SUCCESS;
+}
+
+const char* henka_window_event_route_to_string(henka_window_event_route route)
+{
+    switch (route)
+    {
+        case HENKA_WINDOW_EVENT_ROUTE_MAIN:
+            return "Main";
+        case HENKA_WINDOW_EVENT_ROUTE_TOOL:
+            return "Tool";
+        case HENKA_WINDOW_EVENT_ROUTE_UNKNOWN:
+            return "Unknown";
+        case HENKA_WINDOW_EVENT_ROUTE_NONE:
+        default:
+            return "None";
+    }
 }
 
 henka_result henka_engine_set_vsync(henka_engine* engine, bool enabled)
@@ -714,6 +895,8 @@ const char* henka_engine_get_package_mode_label(henka_package_mode package_mode)
 
 henka_result henka_engine_get_diagnostics(const henka_engine* engine, henka_engine_diagnostics* out_diagnostics)
 {
+    henka_platform_diagnostics platform_diagnostics;
+
     if (engine == NULL || out_diagnostics == NULL)
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
@@ -729,6 +912,15 @@ henka_result henka_engine_get_diagnostics(const henka_engine* engine, henka_engi
     out_diagnostics->mouse_captured = henka_engine_is_mouse_captured(engine);
     out_diagnostics->ui_visible = engine->active_ui != NULL && henka_ui_is_visible(engine->active_ui);
     out_diagnostics->package_mode = engine->package_mode;
+    memset(&platform_diagnostics, 0, sizeof(platform_diagnostics));
+    henka_platform_get_diagnostics(engine->platform, &platform_diagnostics);
+    out_diagnostics->multi_window_available = true;
+    out_diagnostics->main_window_focused = platform_diagnostics.main_window_focused;
+    out_diagnostics->open_tool_window_count = platform_diagnostics.open_tool_window_count;
+    out_diagnostics->last_window_event_route = platform_diagnostics.last_event_route;
+    out_diagnostics->last_tool_window_id = platform_diagnostics.last_tool_window_id;
+    out_diagnostics->last_tool_window_close_requested = platform_diagnostics.last_tool_window_close_requested;
+    out_diagnostics->last_tool_window_resized = platform_diagnostics.last_tool_window_resized;
     return HENKA_SUCCESS;
 }
 

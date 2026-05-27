@@ -18,6 +18,7 @@ try {
     Write-Host "The scene should render inside its own docked viewport when panels are visible."
     Write-Host "Select an object in the viewport or Scene Objects panel, then use Select, Move, Rotate, and Scale in the Transform section."
     Write-Host "Use the in-window utilities for help, legend, paths, settings, and diagnostics."
+    Write-Host "Use Open Native Panel Test in Controls to exercise the separate-window foundation."
     Write-Host "Watch the in-window status area for recent actions and warnings."
     Write-Host "The packaged runtime should report Packaged mode at startup."
 }

@@ -77,7 +77,7 @@ The sandbox now uses a movable in-window workspace layout:
 - `L`, `R`, and `Home` controls as secondary reliable redocking paths
 - visible splitter bars for occupied dock width resizing
 
-Docked panels stay outside the scene. Floating panels remain overlay rectangles inside the main sandbox window and can cover scene pixels visually, but they own their full visible input rectangle so clicks, drag, and resize do not leak through to viewport tools. Native floating panel windows are not part of the current UI path.
+Docked panels stay outside the scene. Floating workspace panels remain overlay rectangles inside the main sandbox window and can cover scene pixels visually, but they own their full visible input rectangle so clicks, drag, and resize do not leak through to viewport tools. The sandbox also provides `Open Native Panel Test`, which opens a separate OS-level UI window for validating the new multi-window foundation; it is not yet a replacement for the workspace panels.
 
 The current `Controls` panel can:
 
@@ -92,6 +92,7 @@ The current `Controls` panel can:
 - toggle transform snapping and show the current snap increments
 - toggle `Hit Boxes` so the viewport can draw the same handle regions that gizmo hit testing uses
 - open `Diagnostics` and `Transform QA` directly from the main Controls page
+- open `Native Panel Test` as a separate OS-level foundation window
 - save sandbox settings
 - reset the layout
 - open in-window utilities for help, legend, paths, settings, diagnostics, and transform QA
@@ -164,11 +165,11 @@ That keeps normal viewer use in the window while the console remains available f
 The packaged sandbox still opens a console window at this stage, but normal viewer interaction is meant to stay inside the viewport and panels rather than depending on console output.
 
 The sandbox also uses the current engine diagnostics snapshot in the Utility panel, and object picking can update selection when mouse capture is released. Picking and gizmo dragging use viewport-relative coordinates, so docked panel clicks do not trigger scene picks or transform drags.
-The diagnostics view now surfaces the current viewport tool, gizmo mode, mouse capture state, UI mouse ownership, cursor position, selected object, gizmo validity, overlay primitive count, hovered handle, active drag state, last rejected interaction reason, last Action API command, and last Action API result.
+The diagnostics view now surfaces the current viewport tool, gizmo mode, mouse capture state, UI mouse ownership, cursor position, selected object, gizmo validity, overlay primitive count, hovered handle, active drag state, last rejected interaction reason, last Action API command, last Action API result, and compact native test-window state.
 The Transform QA view exposes direct move, rotate, scale, and reset controls that use the same local Action API path as normal object manipulation, which makes it easier to separate Action API failures from gizmo or input failures during packaged QA.
 When Diagnostics or Transform QA is open in the heavier layout, the utility view uses the right dock directly so its controls do not draw through Object Details.
 
-Panel placement and dock resizing are session-only in the current sandbox. `Reset Layout` redocks the standard panels, restores safe dock widths, and clears active workspace drag or resize state. The Scene View remains the main center viewport; native floating panel windows and detachable Scene View support need future multi-window rendering and input routing work.
+Panel placement and dock resizing are session-only in the current sandbox. `Reset Layout` redocks the standard panels, restores safe dock widths, clears active workspace drag or resize state, and closes `Native Panel Test` if it is open. The Scene View remains the main center viewport. The test window establishes separate-window rendering and event routing; production tool-panel conversion and detachable Scene View support remain future work.
 
 When the UI is open:
 

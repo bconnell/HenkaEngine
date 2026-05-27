@@ -41,10 +41,11 @@ Current workspace foundations include:
 2. Session-only in-window floating, draggable, and resizable panel placement in the sandbox.
 3. Resizable occupied dock regions and reset-layout recovery.
 4. Visible workspace and viewport interaction diagnostics.
+5. A multi-window platform foundation with a separate native test panel for render and event-routing validation.
 
 Planned workspace improvements include:
 
-1. Native floating panel windows with safe event routing and reliable redocking.
+1. Convert tool panels to native floating windows with reliable redocking on top of the multi-window foundation.
 2. Saved workspace placement and dock sizes.
 3. A detachable Scene View after multi-window rendering and viewport input are dependable.
 4. A clearer scene hierarchy.
@@ -140,7 +141,7 @@ Current limitations include:
 3. Scene saving and loading are not complete authoring workflows yet.
 4. The UI is useful for inspection and testing, but it is not a full editor.
 5. Workspace movement and sizing require desktop QA for feel, and current panel placement is session-only inside the main sandbox window.
-6. Native floating panel windows and detachable Scene View support are not implemented yet.
+6. The native test panel establishes multi-window rendering and event routing, but production tool panels and the Scene View do not detach yet.
 7. Asset loading is still limited.
 8. 2D and 2.5D workflows are planned, but not implemented yet.
 9. Physics, audio, scripting, and release distribution are later milestones.

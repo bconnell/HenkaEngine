@@ -82,6 +82,24 @@ henka_result henka_renderer_end_frame(struct henka_renderer* renderer)
     return henka_opengl_renderer_end_frame(renderer);
 }
 
+henka_result henka_renderer_create_tool_window_target(struct henka_renderer* renderer, henka_window_id window_id)
+{
+    return henka_opengl_renderer_create_tool_window_target(renderer, window_id);
+}
+
+void henka_renderer_destroy_tool_window_target(struct henka_renderer* renderer, henka_window_id window_id)
+{
+    henka_opengl_renderer_destroy_tool_window_target(renderer, window_id);
+}
+
+henka_result henka_renderer_draw_tool_window_ui(
+    struct henka_renderer* renderer,
+    henka_window_id window_id,
+    const struct henka_ui_context* ui_context)
+{
+    return henka_opengl_renderer_draw_tool_window_ui(renderer, window_id, ui_context);
+}
+
 void henka_renderer_resize_viewport(struct henka_renderer* renderer, int width, int height)
 {
     if (renderer == NULL)

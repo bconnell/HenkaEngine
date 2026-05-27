@@ -253,6 +253,8 @@ typedef struct sandbox3d_state
     henka_action_context* actions;
     henka_settings* settings;
     henka_ui_context* ui;
+    henka_ui_context* native_panel_ui;
+    henka_window_id native_panel_window_id;
     henka_camera camera;
     henka_mesh* cube_mesh;
     henka_mesh* ground_mesh;
@@ -427,6 +429,16 @@ static bool sandbox3d_apply_rotate_step(sandbox3d_state* state, henka_gizmo_axis
 static bool sandbox3d_apply_scale_step(sandbox3d_state* state, float delta_scale);
 static sandbox3d_panel_scroll_target sandbox3d_get_panel_scroll_target(const sandbox3d_state* state, henka_vec2 point);
 static void sandbox3d_advance_panel_paging(sandbox3d_state* state, sandbox3d_panel_scroll_target target, int delta);
+static void sandbox3d_draw_value_row(
+    henka_ui_context* ui,
+    float x,
+    float y,
+    float width,
+    const char* label,
+    const char* value);
+static bool sandbox3d_open_native_panel_test(henka_engine* engine, sandbox3d_state* state);
+static void sandbox3d_close_native_panel_test(henka_engine* engine, sandbox3d_state* state);
+static void sandbox3d_build_native_panel_test_ui(henka_engine* engine, sandbox3d_state* state);
 
 static const char* sandbox3d_get_build_configuration_label(void)
 {
@@ -1851,6 +1863,7 @@ static void sandbox3d_print_help(const sandbox3d_state* state)
     printf("  View keeps the largest dedicated scene viewport. Inspect adds object panels. Full Tools shows the complete workspace.\n");
     printf("  Drag any panel header to undock and move it. Floating panels resize at the lower-right grip and redock with L, R, or Home.\n");
     printf("  Drag the narrow bars beside Scene View to resize occupied docks. Reset Layout restores safe defaults.\n");
+    printf("  Open Native Panel Test from Controls to validate a separate OS-level tool window without detaching the workspace panels.\n");
     printf("  Use the panels to inspect named scene objects, switch gizmo modes, focus the camera, reset object transforms, toggle visibility, and open in-window Help, Scene Legend, Object Info, Paths, Settings, and Diagnostics utilities.\n");
     printf("  The Controls panel uses readable pages, and Scene Objects supports paging when the dock is tighter than the full list.\n");
     printf("  Select an object from the list or with Left Mouse in the viewport, then use Move, Rotate, or Scale in the Transform section.\n");
@@ -1863,6 +1876,7 @@ static void sandbox3d_print_help(const sandbox3d_state* state)
     printf("  OBJ loading is still early and currently limited to a small, documented subset.\n");
     printf("  OBJ material libraries, negative indices, animation, hierarchy tools, scene saving, and broader 2D or 2.5D workflows are not available yet.\n");
     printf("  The UI overlay is intentionally small and is not a full editor.\n");
+    printf("  Production workspace panels remain in-window, and Scene View does not detach yet.\n");
     printf("  Sandbox settings are saved locally beside the executable in the user folder.\n");
     fflush(stdout);
 }
@@ -2066,6 +2080,7 @@ static void sandbox3d_release_owned_resources(sandbox3d_state* state)
     henka_action_context_destroy(state->actions);
     henka_settings_destroy(state->settings);
     henka_ui_destroy(state->ui);
+    henka_ui_destroy(state->native_panel_ui);
 
     state->grid_mesh = NULL;
     state->ground_mesh = NULL;
@@ -2078,6 +2093,111 @@ static void sandbox3d_release_owned_resources(sandbox3d_state* state)
     state->actions = NULL;
     state->settings = NULL;
     state->ui = NULL;
+    state->native_panel_ui = NULL;
+}
+
+static bool sandbox3d_open_native_panel_test(henka_engine* engine, sandbox3d_state* state)
+{
+    henka_tool_window_desc desc;
+    henka_result result;
+
+    if (engine == NULL || state == NULL || state->native_panel_ui == NULL)
+    {
+        return false;
+    }
+    if (state->native_panel_window_id != HENKA_INVALID_WINDOW_ID &&
+        henka_engine_get_tool_window_state(engine, state->native_panel_window_id, &(henka_tool_window_state){0}) == HENKA_SUCCESS)
+    {
+        sandbox3d_set_status(state, false, "Native Panel Test is already open.");
+        return true;
+    }
+
+    state->native_panel_window_id = HENKA_INVALID_WINDOW_ID;
+    desc.title = "Henka Native Panel Test";
+    desc.width = 420;
+    desc.height = 300;
+    desc.minimum_width = 360;
+    desc.minimum_height = 240;
+    result = henka_engine_open_tool_window(engine, &desc, state->native_panel_ui, &state->native_panel_window_id);
+    if (result != HENKA_SUCCESS)
+    {
+        sandbox3d_set_status(state, true, "Native Panel Test could not be opened.");
+        return false;
+    }
+
+    sandbox3d_set_status(state, false, "Native Panel Test opened in a separate window.");
+    printf("Native Panel Test: opened (window %u).\n", (unsigned int)state->native_panel_window_id);
+    fflush(stdout);
+    return true;
+}
+
+static void sandbox3d_close_native_panel_test(henka_engine* engine, sandbox3d_state* state)
+{
+    if (engine == NULL || state == NULL || state->native_panel_window_id == HENKA_INVALID_WINDOW_ID)
+    {
+        return;
+    }
+
+    if (henka_engine_close_tool_window(engine, state->native_panel_window_id) == HENKA_SUCCESS)
+    {
+        printf("Native Panel Test: closed.\n");
+        fflush(stdout);
+    }
+    state->native_panel_window_id = HENKA_INVALID_WINDOW_ID;
+}
+
+static void sandbox3d_build_native_panel_test_ui(henka_engine* engine, sandbox3d_state* state)
+{
+    char value[96];
+    henka_engine_diagnostics diagnostics;
+    henka_tool_window_state window_state;
+    henka_ui_frame_desc frame_desc;
+
+    if (engine == NULL || state == NULL || state->native_panel_ui == NULL ||
+        state->native_panel_window_id == HENKA_INVALID_WINDOW_ID)
+    {
+        return;
+    }
+
+    if (henka_engine_get_tool_window_state(engine, state->native_panel_window_id, &window_state) != HENKA_SUCCESS)
+    {
+        state->native_panel_window_id = HENKA_INVALID_WINDOW_ID;
+        sandbox3d_set_status(state, false, "Native Panel Test was closed. Open it again from Controls.");
+        return;
+    }
+
+    memset(&frame_desc, 0, sizeof(frame_desc));
+    frame_desc.framebuffer_width = window_state.width > 0 ? window_state.width : 420;
+    frame_desc.framebuffer_height = window_state.height > 0 ? window_state.height : 300;
+    if (henka_ui_begin_frame(state->native_panel_ui, &frame_desc) != HENKA_SUCCESS)
+    {
+        return;
+    }
+
+    henka_ui_panel(
+        state->native_panel_ui,
+        (henka_ui_rect){8.0f, 8.0f, (float)frame_desc.framebuffer_width - 16.0f, (float)frame_desc.framebuffer_height - 16.0f},
+        "Native Panel Test");
+    henka_ui_label(state->native_panel_ui, 22.0f, 50.0f, 1.0f, "Separate OS-level tool window foundation");
+    snprintf(value, sizeof(value), "%u / native %u", (unsigned int)window_state.id, (unsigned int)window_state.native_window_id);
+    sandbox3d_draw_value_row(state->native_panel_ui, 22.0f, 72.0f, (float)frame_desc.framebuffer_width - 44.0f, "Window ID", value);
+    sandbox3d_draw_value_row(state->native_panel_ui, 22.0f, 100.0f, (float)frame_desc.framebuffer_width - 44.0f, "Focus", window_state.focused ? "Focused" : "Not focused");
+    snprintf(value, sizeof(value), "%d x %d", window_state.width, window_state.height);
+    sandbox3d_draw_value_row(state->native_panel_ui, 22.0f, 128.0f, (float)frame_desc.framebuffer_width - 44.0f, "Size", value);
+    sandbox3d_draw_value_row(state->native_panel_ui, 22.0f, 156.0f, (float)frame_desc.framebuffer_width - 44.0f, "Last Event", window_state.last_event);
+    if (henka_engine_get_diagnostics(engine, &diagnostics) == HENKA_SUCCESS)
+    {
+        sandbox3d_draw_value_row(
+            state->native_panel_ui,
+            22.0f,
+            184.0f,
+            (float)frame_desc.framebuffer_width - 44.0f,
+            "Route",
+            henka_window_event_route_to_string(diagnostics.last_window_event_route));
+    }
+    henka_ui_label(state->native_panel_ui, 22.0f, 222.0f, 1.0f, "Close this window safely with its OS close button.");
+    henka_ui_label(state->native_panel_ui, 22.0f, 238.0f, 1.0f, "Scene View remains in the main sandbox window.");
+    henka_ui_end_frame(state->native_panel_ui);
 }
 
 static void sandbox3d_reset_camera_defaults(sandbox3d_state* state)
@@ -4357,6 +4477,15 @@ static void sandbox3d_draw_controls_panel(
             sandbox3d_set_active_utility(state, SANDBOX3D_UTILITY_TRANSFORM_QA);
             sandbox3d_set_statusf(state, false, false, "Transform QA is open in the Utility panel.");
         }
+        y += 36.0f;
+        if (henka_ui_primary_button(
+                state->ui,
+                "native_panel_test",
+                (henka_ui_rect){x_left, y, panel_bounds.width - 28.0f, 28.0f},
+                "Open Native Panel Test"))
+        {
+            sandbox3d_open_native_panel_test(engine, state);
+        }
     }
     else
     {
@@ -4442,6 +4571,7 @@ static void sandbox3d_draw_controls_panel(
         }
         if (henka_ui_button(state->ui, "reset_layout", (henka_ui_rect){x_middle, y, half_button_width, 28.0f}, "Reset Layout"))
         {
+            sandbox3d_close_native_panel_test(engine, state);
             sandbox3d_reset_workspace_layout(state);
             sandbox3d_set_statusf(state, false, true, "Layout reset to View. Panels redocked and dock sizes restored.");
             sandbox3d_print_layout_mode(state, false);
@@ -4966,6 +5096,30 @@ static void sandbox3d_draw_utility_panel(
             sandbox3d_draw_value_row(state->ui, x_left, y_start + 460.0f, panel_bounds.width - 28.0f, "Action", state->diagnostics.last_action_command);
             sandbox3d_draw_value_row(state->ui, x_left, y_start + 486.0f, panel_bounds.width - 28.0f, "Result", state->diagnostics.last_action_result);
             sandbox3d_draw_value_row(state->ui, x_left, y_start + 512.0f, panel_bounds.width - 28.0f, "Workspace", state->diagnostics.last_workspace_action);
+            if (state->native_panel_window_id != HENKA_INVALID_WINDOW_ID)
+            {
+                henka_tool_window_state native_state;
+                if (henka_engine_get_tool_window_state(engine, state->native_panel_window_id, &native_state) == HENKA_SUCCESS)
+                {
+                    snprintf(
+                        row_value,
+                        sizeof(row_value),
+                        "Open %u %s %dx%d",
+                        (unsigned int)native_state.id,
+                        native_state.focused ? "Focus" : "Idle",
+                        native_state.width,
+                        native_state.height);
+                }
+                else
+                {
+                    snprintf(row_value, sizeof(row_value), "Closed | Route %s", henka_window_event_route_to_string(diagnostics.last_window_event_route));
+                }
+            }
+            else
+            {
+                snprintf(row_value, sizeof(row_value), "Closed | Route %s", henka_window_event_route_to_string(diagnostics.last_window_event_route));
+            }
+            sandbox3d_draw_value_row(state->ui, x_left, y_start + 538.0f, panel_bounds.width - 28.0f, "Native", row_value);
             break;
 
         case SANDBOX3D_UTILITY_TRANSFORM_QA:
@@ -5245,6 +5399,14 @@ static henka_result sandbox3d_initialize(henka_engine* engine, void* user_data)
         goto fail;
     }
 
+    result = henka_ui_create(&state->native_panel_ui);
+    if (result != HENKA_SUCCESS)
+    {
+        goto fail;
+    }
+
+    henka_ui_set_visible(state->native_panel_ui, true);
+    state->native_panel_window_id = HENKA_INVALID_WINDOW_ID;
     henka_ui_set_visible(state->ui, false);
     sandbox3d_reset_workspace_layout(state);
 
@@ -6083,6 +6245,7 @@ static void sandbox3d_update(henka_engine* engine, double delta_seconds, void* u
     sandbox3d_update_gizmo_rendering(state);
     sandbox3d_refresh_interaction_diagnostics(engine, state);
     sandbox3d_build_ui(engine, state);
+    sandbox3d_build_native_panel_test_ui(engine, state);
     state->ui_visible_last_frame = ui_visible;
 }
 
@@ -6092,6 +6255,7 @@ static void sandbox3d_shutdown(henka_engine* engine, void* user_data)
 
     state = (sandbox3d_state*)user_data;
     sandbox3d_save_settings(engine, state);
+    sandbox3d_close_native_panel_test(engine, state);
     henka_engine_set_mouse_capture(engine, false);
     henka_engine_set_scene(engine, NULL);
     henka_engine_set_ui_context(engine, NULL);
@@ -6116,6 +6280,7 @@ int main(void)
     state.marker_entity = HENKA_INVALID_ENTITY;
     state.fallback_model_entity = HENKA_INVALID_ENTITY;
     state.selected_entity = HENKA_INVALID_ENTITY;
+    state.native_panel_window_id = HENKA_INVALID_WINDOW_ID;
     state.ui_visible_last_frame = false;
     sandbox3d_reset_workspace_layout(&state);
     sandbox3d_gizmo_init_defaults(&state.gizmo);

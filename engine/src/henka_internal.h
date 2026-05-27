@@ -64,6 +64,22 @@ typedef struct henka_platform_frame_state
     int framebuffer_height;
 } henka_platform_frame_state;
 
+typedef struct henka_platform_diagnostics
+{
+    bool main_window_focused;
+    unsigned int open_tool_window_count;
+    henka_window_event_route last_event_route;
+    henka_window_id last_tool_window_id;
+    bool last_tool_window_close_requested;
+    bool last_tool_window_resized;
+} henka_platform_diagnostics;
+
+typedef struct henka_tool_window_slot
+{
+    henka_window_id id;
+    struct henka_ui_context* ui_context;
+} henka_tool_window_slot;
+
 typedef struct henka_scene_entity_record
 {
     bool active;
@@ -179,6 +195,7 @@ struct henka_engine
     char* user_data_base_path;
     henka_package_mode package_mode;
     henka_input_state input;
+    henka_tool_window_slot tool_windows[HENKA_MAX_TOOL_WINDOWS];
     henka_key action_key_bindings[HENKA_INPUT_ACTION_COUNT];
     henka_mouse_button action_mouse_bindings[HENKA_INPUT_ACTION_COUNT];
     henka_time_state time;
@@ -189,6 +206,17 @@ struct henka_engine
 henka_result henka_platform_create(const henka_platform_desc* desc, struct henka_platform** out_platform);
 void henka_platform_destroy(struct henka_platform* platform);
 henka_result henka_platform_poll_events(struct henka_platform* platform, henka_input_state* input, henka_platform_frame_state* out_state);
+henka_result henka_platform_create_tool_window(
+    struct henka_platform* platform,
+    const henka_tool_window_desc* desc,
+    henka_window_id* out_window_id);
+void henka_platform_destroy_tool_window(struct henka_platform* platform, henka_window_id window_id);
+bool henka_platform_get_tool_window_state(
+    const struct henka_platform* platform,
+    henka_window_id window_id,
+    henka_tool_window_state* out_state);
+void henka_platform_get_diagnostics(const struct henka_platform* platform, henka_platform_diagnostics* out_diagnostics);
+void* henka_platform_get_native_tool_window(struct henka_platform* platform, henka_window_id window_id);
 henka_result henka_platform_set_vsync(struct henka_platform* platform, bool enabled);
 bool henka_platform_get_framebuffer_size(struct henka_platform* platform, int* out_width, int* out_height);
 bool henka_platform_get_window_size(struct henka_platform* platform, int* out_width, int* out_height);
@@ -203,6 +231,12 @@ void henka_renderer_clear_frame(struct henka_renderer* renderer);
 henka_result henka_renderer_draw_scene(struct henka_renderer* renderer, const struct henka_scene* scene);
 henka_result henka_renderer_draw_ui(struct henka_renderer* renderer, const struct henka_ui_context* ui_context);
 henka_result henka_renderer_end_frame(struct henka_renderer* renderer);
+henka_result henka_renderer_create_tool_window_target(struct henka_renderer* renderer, henka_window_id window_id);
+void henka_renderer_destroy_tool_window_target(struct henka_renderer* renderer, henka_window_id window_id);
+henka_result henka_renderer_draw_tool_window_ui(
+    struct henka_renderer* renderer,
+    henka_window_id window_id,
+    const struct henka_ui_context* ui_context);
 void henka_renderer_resize_viewport(struct henka_renderer* renderer, int width, int height);
 void henka_renderer_set_scene_viewport(struct henka_renderer* renderer, henka_viewport viewport);
 henka_viewport henka_renderer_get_scene_viewport(const struct henka_renderer* renderer);
@@ -238,6 +272,12 @@ void henka_opengl_renderer_clear_frame(struct henka_renderer* renderer);
 henka_result henka_opengl_renderer_draw_scene(struct henka_renderer* renderer, const struct henka_scene* scene);
 henka_result henka_opengl_renderer_draw_ui(struct henka_renderer* renderer, const struct henka_ui_context* ui_context);
 henka_result henka_opengl_renderer_end_frame(struct henka_renderer* renderer);
+henka_result henka_opengl_renderer_create_tool_window_target(struct henka_renderer* renderer, henka_window_id window_id);
+void henka_opengl_renderer_destroy_tool_window_target(struct henka_renderer* renderer, henka_window_id window_id);
+henka_result henka_opengl_renderer_draw_tool_window_ui(
+    struct henka_renderer* renderer,
+    henka_window_id window_id,
+    const struct henka_ui_context* ui_context);
 void henka_opengl_renderer_resize_viewport(struct henka_renderer* renderer, int width, int height);
 henka_result henka_opengl_renderer_set_vsync(struct henka_renderer* renderer, bool enabled);
 henka_result henka_opengl_renderer_set_wireframe(struct henka_renderer* renderer, bool enabled);

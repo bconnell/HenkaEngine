@@ -21,6 +21,15 @@ typedef struct henka_opengl_renderer_state
     GLuint ui_program;
     GLuint ui_vertex_array;
     GLuint ui_vertex_buffer;
+    struct
+    {
+        henka_window_id id;
+        SDL_Window* window;
+        SDL_GLContext gl_context;
+        GLuint ui_program;
+        GLuint ui_vertex_array;
+        GLuint ui_vertex_buffer;
+    } tool_targets[HENKA_MAX_TOOL_WINDOWS];
 } henka_opengl_renderer_state;
 
 typedef struct henka_opengl_functions
@@ -372,7 +381,10 @@ static void henka_set_uniform_int(GLuint program, const char* name, int value)
     }
 }
 
-static henka_result henka_opengl_renderer_create_ui_resources(henka_opengl_renderer_state* state)
+static henka_result henka_opengl_renderer_create_ui_resources(
+    GLuint* out_program,
+    GLuint* out_vertex_array,
+    GLuint* out_vertex_buffer)
 {
     static const char* g_ui_vertex_shader_source =
         "#version 330 core\n"
@@ -401,15 +413,15 @@ static henka_result henka_opengl_renderer_create_ui_resources(henka_opengl_rende
             g_ui_fragment_shader_source,
             "ui overlay vertex shader",
             "ui overlay fragment shader",
-            &state->ui_program))
+            out_program))
     {
         return HENKA_ERROR_RENDERER;
     }
 
-    g_gl.GenVertexArrays(1, &state->ui_vertex_array);
-    g_gl.GenBuffers(1, &state->ui_vertex_buffer);
-    g_gl.BindVertexArray(state->ui_vertex_array);
-    g_gl.BindBuffer(GL_ARRAY_BUFFER, state->ui_vertex_buffer);
+    g_gl.GenVertexArrays(1, out_vertex_array);
+    g_gl.GenBuffers(1, out_vertex_buffer);
+    g_gl.BindVertexArray(*out_vertex_array);
+    g_gl.BindBuffer(GL_ARRAY_BUFFER, *out_vertex_buffer);
     g_gl.EnableVertexAttribArray(0);
     g_gl.VertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, sizeof(henka_ui_vertex), (const void*)offsetof(henka_ui_vertex, x));
     g_gl.EnableVertexAttribArray(1);
@@ -492,7 +504,10 @@ henka_result henka_opengl_renderer_create(struct henka_renderer* renderer, struc
         return result;
     }
 
-    result = henka_opengl_renderer_create_ui_resources(state);
+    result = henka_opengl_renderer_create_ui_resources(
+        &state->ui_program,
+        &state->ui_vertex_array,
+        &state->ui_vertex_buffer);
     if (result != HENKA_SUCCESS)
     {
         SDL_GL_DestroyContext(state->gl_context);
@@ -508,6 +523,7 @@ henka_result henka_opengl_renderer_create(struct henka_renderer* renderer, struc
 void henka_opengl_renderer_destroy(struct henka_renderer* renderer)
 {
     henka_opengl_renderer_state* state;
+    size_t index;
 
     if (renderer == NULL || renderer->backend_state == NULL)
     {
@@ -515,6 +531,14 @@ void henka_opengl_renderer_destroy(struct henka_renderer* renderer)
     }
 
     state = (henka_opengl_renderer_state*)renderer->backend_state;
+    for (index = 0U; index < HENKA_MAX_TOOL_WINDOWS; ++index)
+    {
+        if (state->tool_targets[index].id != HENKA_INVALID_WINDOW_ID)
+        {
+            henka_opengl_renderer_destroy_tool_window_target(renderer, state->tool_targets[index].id);
+        }
+    }
+    SDL_GL_MakeCurrent(state->window, state->gl_context);
     if (state->ui_vertex_buffer != 0U)
     {
         g_gl.DeleteBuffers(1, &state->ui_vertex_buffer);
@@ -644,16 +668,21 @@ henka_result henka_opengl_renderer_draw_scene(struct henka_renderer* renderer, c
     return HENKA_SUCCESS;
 }
 
-henka_result henka_opengl_renderer_draw_ui(struct henka_renderer* renderer, const struct henka_ui_context* ui_context)
+static henka_result henka_opengl_renderer_draw_ui_resources(
+    const struct henka_ui_context* ui_context,
+    GLuint ui_program,
+    GLuint ui_vertex_array,
+    GLuint ui_vertex_buffer,
+    int framebuffer_width,
+    int framebuffer_height)
 {
-    const henka_opengl_renderer_state* state;
     henka_ui_vertex* vertices;
     size_t index;
     size_t line_vertex_count;
     size_t rect_vertex_count;
     size_t vertex_count;
 
-    if (renderer == NULL || renderer->backend_state == NULL || ui_context == NULL)
+    if (ui_context == NULL || framebuffer_width <= 0 || framebuffer_height <= 0)
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
@@ -663,8 +692,8 @@ henka_result henka_opengl_renderer_draw_ui(struct henka_renderer* renderer, cons
         return HENKA_SUCCESS;
     }
 
-    henka_apply_full_framebuffer_viewport(renderer);
-    state = (const henka_opengl_renderer_state*)renderer->backend_state;
+    glDisable(GL_SCISSOR_TEST);
+    glViewport(0, 0, framebuffer_width, framebuffer_height);
     rect_vertex_count = ui_context->draw_rect_count * 6U;
     line_vertex_count = ui_context->draw_line_count * 6U;
     vertex_count = rect_vertex_count + line_vertex_count;
@@ -759,18 +788,18 @@ henka_result henka_opengl_renderer_draw_ui(struct henka_renderer* renderer, cons
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
     glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
-    g_gl.UseProgram(state->ui_program);
+    g_gl.UseProgram(ui_program);
     {
         GLint location;
 
-        location = g_gl.GetUniformLocation(state->ui_program, "framebufferSize");
+        location = g_gl.GetUniformLocation(ui_program, "framebufferSize");
         if (location >= 0)
         {
-            g_gl.Uniform2f(location, (GLfloat)renderer->framebuffer_width, (GLfloat)renderer->framebuffer_height);
+            g_gl.Uniform2f(location, (GLfloat)framebuffer_width, (GLfloat)framebuffer_height);
         }
     }
-    g_gl.BindVertexArray(state->ui_vertex_array);
-    g_gl.BindBuffer(GL_ARRAY_BUFFER, state->ui_vertex_buffer);
+    g_gl.BindVertexArray(ui_vertex_array);
+    g_gl.BindBuffer(GL_ARRAY_BUFFER, ui_vertex_buffer);
     g_gl.BufferData(GL_ARRAY_BUFFER, vertex_count * sizeof(*vertices), vertices, GL_DYNAMIC_DRAW);
     glDrawArrays(GL_TRIANGLES, 0, (GLsizei)vertex_count);
     g_gl.BindBuffer(GL_ARRAY_BUFFER, 0);
@@ -779,6 +808,25 @@ henka_result henka_opengl_renderer_draw_ui(struct henka_renderer* renderer, cons
     glDisable(GL_BLEND);
     henka_free(vertices);
     return HENKA_SUCCESS;
+}
+
+henka_result henka_opengl_renderer_draw_ui(struct henka_renderer* renderer, const struct henka_ui_context* ui_context)
+{
+    const henka_opengl_renderer_state* state;
+
+    if (renderer == NULL || renderer->backend_state == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    state = (const henka_opengl_renderer_state*)renderer->backend_state;
+    return henka_opengl_renderer_draw_ui_resources(
+        ui_context,
+        state->ui_program,
+        state->ui_vertex_array,
+        state->ui_vertex_buffer,
+        renderer->framebuffer_width,
+        renderer->framebuffer_height);
 }
 
 henka_result henka_opengl_renderer_end_frame(struct henka_renderer* renderer)
@@ -798,6 +846,151 @@ henka_result henka_opengl_renderer_end_frame(struct henka_renderer* renderer)
     }
 
     return HENKA_SUCCESS;
+}
+
+henka_result henka_opengl_renderer_create_tool_window_target(struct henka_renderer* renderer, henka_window_id window_id)
+{
+    henka_opengl_renderer_state* state;
+    SDL_Window* window;
+    size_t index;
+    henka_result result;
+
+    if (renderer == NULL || renderer->backend_state == NULL || window_id == HENKA_INVALID_WINDOW_ID)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    state = (henka_opengl_renderer_state*)renderer->backend_state;
+    window = (SDL_Window*)henka_platform_get_native_tool_window(renderer->platform, window_id);
+    if (window == NULL)
+    {
+        return HENKA_ERROR_PLATFORM;
+    }
+
+    for (index = 0U; index < HENKA_MAX_TOOL_WINDOWS; ++index)
+    {
+        if (state->tool_targets[index].id == HENKA_INVALID_WINDOW_ID)
+        {
+            state->tool_targets[index].id = window_id;
+            state->tool_targets[index].window = window;
+            state->tool_targets[index].gl_context = SDL_GL_CreateContext(window);
+            if (state->tool_targets[index].gl_context == NULL)
+            {
+                memset(&state->tool_targets[index], 0, sizeof(state->tool_targets[index]));
+                return HENKA_ERROR_RENDERER;
+            }
+            if (!SDL_GL_MakeCurrent(window, state->tool_targets[index].gl_context))
+            {
+                SDL_GL_DestroyContext(state->tool_targets[index].gl_context);
+                memset(&state->tool_targets[index], 0, sizeof(state->tool_targets[index]));
+                return HENKA_ERROR_RENDERER;
+            }
+            result = henka_opengl_renderer_create_ui_resources(
+                &state->tool_targets[index].ui_program,
+                &state->tool_targets[index].ui_vertex_array,
+                &state->tool_targets[index].ui_vertex_buffer);
+            SDL_GL_MakeCurrent(state->window, state->gl_context);
+            if (result != HENKA_SUCCESS)
+            {
+                SDL_GL_DestroyContext(state->tool_targets[index].gl_context);
+                memset(&state->tool_targets[index], 0, sizeof(state->tool_targets[index]));
+                return result;
+            }
+            return HENKA_SUCCESS;
+        }
+    }
+
+    return HENKA_ERROR_RENDERER;
+}
+
+void henka_opengl_renderer_destroy_tool_window_target(struct henka_renderer* renderer, henka_window_id window_id)
+{
+    henka_opengl_renderer_state* state;
+    size_t index;
+
+    if (renderer == NULL || renderer->backend_state == NULL || window_id == HENKA_INVALID_WINDOW_ID)
+    {
+        return;
+    }
+
+    state = (henka_opengl_renderer_state*)renderer->backend_state;
+    for (index = 0U; index < HENKA_MAX_TOOL_WINDOWS; ++index)
+    {
+        if (state->tool_targets[index].id != window_id)
+        {
+            continue;
+        }
+        SDL_GL_MakeCurrent(state->tool_targets[index].window, state->tool_targets[index].gl_context);
+        if (state->tool_targets[index].ui_vertex_buffer != 0U)
+        {
+            g_gl.DeleteBuffers(1, &state->tool_targets[index].ui_vertex_buffer);
+        }
+        if (state->tool_targets[index].ui_vertex_array != 0U)
+        {
+            g_gl.DeleteVertexArrays(1, &state->tool_targets[index].ui_vertex_array);
+        }
+        if (state->tool_targets[index].ui_program != 0U)
+        {
+            g_gl.DeleteProgram(state->tool_targets[index].ui_program);
+        }
+        SDL_GL_DestroyContext(state->tool_targets[index].gl_context);
+        memset(&state->tool_targets[index], 0, sizeof(state->tool_targets[index]));
+        SDL_GL_MakeCurrent(state->window, state->gl_context);
+        return;
+    }
+}
+
+henka_result henka_opengl_renderer_draw_tool_window_ui(
+    struct henka_renderer* renderer,
+    henka_window_id window_id,
+    const struct henka_ui_context* ui_context)
+{
+    henka_opengl_renderer_state* state;
+    henka_tool_window_state window_state;
+    size_t index;
+
+    if (renderer == NULL || renderer->backend_state == NULL || ui_context == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    if (!henka_platform_get_tool_window_state(renderer->platform, window_id, &window_state) || !window_state.open)
+    {
+        return HENKA_ERROR_PLATFORM;
+    }
+
+    state = (henka_opengl_renderer_state*)renderer->backend_state;
+    for (index = 0U; index < HENKA_MAX_TOOL_WINDOWS; ++index)
+    {
+        if (state->tool_targets[index].id != window_id)
+        {
+            continue;
+        }
+        if (!SDL_GL_MakeCurrent(state->tool_targets[index].window, state->tool_targets[index].gl_context))
+        {
+            return HENKA_ERROR_RENDERER;
+        }
+        glDisable(GL_SCISSOR_TEST);
+        glViewport(0, 0, window_state.width, window_state.height);
+        glClearColor(0.06f, 0.08f, 0.12f, 1.0f);
+        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+        if (henka_opengl_renderer_draw_ui_resources(
+                ui_context,
+                state->tool_targets[index].ui_program,
+                state->tool_targets[index].ui_vertex_array,
+                state->tool_targets[index].ui_vertex_buffer,
+                window_state.width,
+                window_state.height) != HENKA_SUCCESS)
+        {
+            return HENKA_ERROR_RENDERER;
+        }
+        if (!SDL_GL_SwapWindow(state->tool_targets[index].window))
+        {
+            return HENKA_ERROR_RENDERER;
+        }
+        return HENKA_SUCCESS;
+    }
+
+    return HENKA_ERROR_RENDERER;
 }
 
 void henka_opengl_renderer_resize_viewport(struct henka_renderer* renderer, int width, int height)

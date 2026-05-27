@@ -139,8 +139,11 @@ Add-Type -AssemblyName System.Windows.Forms
 Add-Type @'
 using System;
 using System.Runtime.InteropServices;
+using System.Text;
 
 public static class NativeMethods {
+    public delegate bool EnumWindowsProc(IntPtr hWnd, IntPtr lParam);
+
     [StructLayout(LayoutKind.Sequential)]
     public struct RECT {
         public int Left;
@@ -163,6 +166,36 @@ public static class NativeMethods {
 
     [DllImport("user32.dll")]
     public static extern void mouse_event(uint dwFlags, uint dx, uint dy, uint dwData, UIntPtr dwExtraInfo);
+
+    [DllImport("user32.dll")]
+    public static extern bool EnumWindows(EnumWindowsProc callback, IntPtr lParam);
+
+    [DllImport("user32.dll")]
+    public static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint processId);
+
+    [DllImport("user32.dll")]
+    public static extern int GetWindowText(IntPtr hWnd, StringBuilder text, int maxLength);
+
+    [DllImport("user32.dll")]
+    public static extern bool PostMessage(IntPtr hWnd, uint message, IntPtr wParam, IntPtr lParam);
+
+    public static IntPtr FindProcessWindow(uint processId, string title) {
+        IntPtr result = IntPtr.Zero;
+        EnumWindows(delegate(IntPtr hWnd, IntPtr lParam) {
+            uint owner;
+            GetWindowThreadProcessId(hWnd, out owner);
+            if (owner == processId) {
+                StringBuilder text = new StringBuilder(256);
+                GetWindowText(hWnd, text, text.Capacity);
+                if (text.ToString().Contains(title)) {
+                    result = hWnd;
+                    return false;
+                }
+            }
+            return true;
+        }, IntPtr.Zero);
+        return result;
+    }
 }
 '@
 
@@ -177,7 +210,8 @@ Assert-PathExists -Path $readmePath -Description "Packaged run guide"
 Assert-PathExists -Path $packageInfoPath -Description "Packaged build marker"
 Assert-FileContains -Path $readmePath -Pattern "Use the in-window utilities" -Description "Packaged utility guidance"
 Assert-FileContains -Path $readmePath -Pattern "Drag a panel header to undock and move it inside this window" -Description "Packaged workspace guidance"
-Assert-FileContains -Path $readmePath -Pattern "Native floating panel windows and a detachable Scene View are not implemented yet" -Description "Packaged workspace limitation guidance"
+Assert-FileContains -Path $readmePath -Pattern "Open Native Panel Test from Controls to exercise a separate OS-level validation window" -Description "Packaged native test panel guidance"
+Assert-FileContains -Path $readmePath -Pattern "Production tool panels remain in-window and detachable Scene View is not implemented yet" -Description "Packaged workspace limitation guidance"
 Assert-FileContains -Path $readmePath -Pattern "status area" -Description "Packaged status guidance"
 Assert-FileContains -Path $helpPath -Pattern "Utility panel" -Description "Packaged utility help"
 
@@ -185,17 +219,19 @@ New-Item -ItemType Directory -Path $logDir -Force | Out-Null
 Remove-Item $stdoutPath, $stderrPath -ErrorAction SilentlyContinue
 
 $process = $null
+$mainWindowHandle = [System.IntPtr]::Zero
 $uiAutomationVerified = $false
 try {
     Write-Step "Launching the packaged sandbox"
     $process = Start-Process -FilePath $packagedExe -WorkingDirectory $packageRoot -PassThru -RedirectStandardOutput $stdoutPath -RedirectStandardError $stderrPath
 
-    for ($index = 0; $index -lt 80 -and $process.MainWindowHandle -eq 0; $index++) {
+    for ($index = 0; $index -lt 80 -and $mainWindowHandle -eq [System.IntPtr]::Zero; $index++) {
         Start-Sleep -Milliseconds 250
         $process.Refresh()
+        $mainWindowHandle = [NativeMethods]::FindProcessWindow([uint32]$process.Id, "Henka Engine Sandbox 3D")
     }
 
-    if ($process.MainWindowHandle -eq 0) {
+    if ($mainWindowHandle -eq [System.IntPtr]::Zero) {
         throw "The packaged sandbox window did not become available."
     }
 
@@ -211,7 +247,7 @@ try {
     Assert-FileContains -Path $stdoutPath -Pattern "recent actions and warnings appear" -Description "Startup status cue"
 
     Write-Step "Checking packaged UI open and close"
-    [NativeMethods]::SetForegroundWindow($process.MainWindowHandle) | Out-Null
+    [NativeMethods]::SetForegroundWindow($mainWindowHandle) | Out-Null
     $null = $shell.AppActivate($process.Id)
     Start-Sleep -Milliseconds 600
     if (Wait-FileContains -Path $stdoutPath -Pattern "Sandbox UI ready:" -TimeoutMilliseconds 1500) {
@@ -223,7 +259,7 @@ try {
     else {
         [System.Windows.Forms.SendKeys]::SendWait('{F4}')
         if (-not (Wait-FileContains -Path $stdoutPath -Pattern "Sandbox panel: shown" -TimeoutMilliseconds 2000)) {
-            $null = $shell.AppActivate($process.Id)
+            [NativeMethods]::SetForegroundWindow($mainWindowHandle) | Out-Null
             Start-Sleep -Milliseconds 250
             [System.Windows.Forms.SendKeys]::SendWait('{F4}')
         }
@@ -238,12 +274,30 @@ try {
 
     if ($uiAutomationVerified) {
         Write-Step "Checking packaged UI click controls"
-        Click-WindowPoint -Handle $process.MainWindowHandle -OffsetX 120 -OffsetY 180
-        Click-WindowPoint -Handle $process.MainWindowHandle -OffsetX 120 -OffsetY 180
-        Click-WindowPoint -Handle $process.MainWindowHandle -OffsetX 248 -OffsetY 180
-        Click-WindowPoint -Handle $process.MainWindowHandle -OffsetX 248 -OffsetY 180
-        Click-WindowPoint -Handle $process.MainWindowHandle -OffsetX 230 -OffsetY 60
-        Click-WindowPoint -Handle $process.MainWindowHandle -OffsetX 100 -OffsetY 610
+        Click-WindowPoint -Handle $mainWindowHandle -OffsetX 120 -OffsetY 180
+        Click-WindowPoint -Handle $mainWindowHandle -OffsetX 120 -OffsetY 180
+        Click-WindowPoint -Handle $mainWindowHandle -OffsetX 248 -OffsetY 180
+        Click-WindowPoint -Handle $mainWindowHandle -OffsetX 248 -OffsetY 180
+        Click-WindowPoint -Handle $mainWindowHandle -OffsetX 140 -OffsetY 520
+        if (-not (Wait-FileContains -Path $stdoutPath -Pattern "Native Panel Test: opened" -TimeoutMilliseconds 3000)) {
+            throw "The Native Panel Test control did not open the secondary native window."
+        }
+        Assert-FileContains -Path $stdoutPath -Pattern "Native Panel Test: opened" -Description "Native test panel open output"
+        $nativeWindowHandle = [NativeMethods]::FindProcessWindow([uint32]$process.Id, "Henka Native Panel Test")
+        if ($nativeWindowHandle -eq [System.IntPtr]::Zero) {
+            throw "The Native Panel Test window was not visible as a separate OS-level window."
+        }
+        Write-Output "[pass] Native test panel visible as a separate OS-level window"
+        [NativeMethods]::PostMessage($nativeWindowHandle, 0x0010, [System.IntPtr]::Zero, [System.IntPtr]::Zero) | Out-Null
+        Start-Sleep -Milliseconds 500
+        Click-WindowPoint -Handle $mainWindowHandle -OffsetX 140 -OffsetY 520
+        Start-Sleep -Milliseconds 500
+        if ((Select-String -LiteralPath $stdoutPath -Pattern "Native Panel Test: opened").Count -lt 2) {
+            throw "The Native Panel Test window did not reopen after being closed."
+        }
+        Write-Output "[pass] Native test panel closes and reopens without closing the main sandbox"
+        Click-WindowPoint -Handle $mainWindowHandle -OffsetX 230 -OffsetY 60
+        Click-WindowPoint -Handle $mainWindowHandle -OffsetX 100 -OffsetY 610
 
         $uiClickChecks = @(
             @{ Pattern = "Debug grid: hidden"; Description = "UI debug grid click output" },
@@ -265,11 +319,11 @@ try {
         }
 
         if (-not (Select-String -LiteralPath $stdoutPath -Pattern "Sandbox panel: shown" -Quiet)) {
-            $null = $shell.AppActivate($process.Id)
+            [NativeMethods]::SetForegroundWindow($mainWindowHandle) | Out-Null
             Start-Sleep -Milliseconds 400
             [System.Windows.Forms.SendKeys]::SendWait('{F4}')
             if (-not (Wait-FileContains -Path $stdoutPath -Pattern "Sandbox panel: hidden" -TimeoutMilliseconds 2000)) {
-                $null = $shell.AppActivate($process.Id)
+                [NativeMethods]::SetForegroundWindow($mainWindowHandle) | Out-Null
                 Start-Sleep -Milliseconds 250
                 [System.Windows.Forms.SendKeys]::SendWait('{F4}')
             }
@@ -286,7 +340,7 @@ try {
     }
 
     Write-Step "Checking clean close-window shutdown"
-    $null = $process.CloseMainWindow()
+    [NativeMethods]::PostMessage($mainWindowHandle, 0x0010, [System.IntPtr]::Zero, [System.IntPtr]::Zero) | Out-Null
     if (-not $process.WaitForExit(10000)) {
         throw "The packaged sandbox did not exit within the expected time."
     }
