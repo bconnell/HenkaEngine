@@ -3,7 +3,7 @@
 `henka_sandbox3d` is the current visible Henka Engine example. It opens a small 3D scene with:
 
 - a textured cube
-- a textured ground plane
+- a textured ground plane with a visible floor surface and grid
 - a colored cube
 - a loaded OBJ marker
 - a debug grid
@@ -118,6 +118,7 @@ The `Scene Objects` panel lists the current sandbox examples by name.
 - Clicking a row selects that object.
 - Hidden objects stay listed and show a hidden state tag.
 - The selected row and the selected real scene object stay highlighted so the current object is easy to track from either the panels or the viewport.
+- Ground selection uses a bounded floor outline instead of infinite plane bounds, and selection overlays are clipped to the Scene View so they do not draw over panels or the status strip.
 - If the dock is too short to show the whole list at once, page buttons keep every sample object reachable.
 
 The `Object Details` panel shows the current selection.
@@ -160,7 +161,7 @@ Those utilities are the preferred path for normal viewer use. The console remain
 Status messages also appear in-window for common actions so normal packaged use does not depend on the console.
 Diagnostics now report input ownership, viewport-local cursor state, selected object state, gizmo model validity, overlay primitive count, hovered handle, active drag target, last rejected interaction reason, last Action API result, and the native test-window open/focus/size state.
 Transform QA exposes direct move, rotate, scale, and reset controls that use the selected real object and the same Action API path as the normal object workflow.
-Physics QA exposes an opt-in fixed-step rigid-body demo with linked real scene objects, pause/resume/step/reset, gravity, body type changes, Make Dynamic + Drop, impulse actions, velocity clearing, camera raycast results, collision/trigger events, and truthful collider/contact overlays. Its supported colliders are sphere, axis-aligned box, and plane. Static bodies do not move from gravity, forces, or impulses; Dynamic bodies fall and respond to physics; Kinematic bodies do not fall from gravity and move only through explicit tool or code movement.
+Physics QA exposes an opt-in fixed-step rigid-body demo with linked real scene objects, pause/resume/step/reset, gravity, body type changes, Make Dynamic + Drop, impulse actions, velocity clearing, camera raycast results, collision/trigger events, and truthful collider/contact overlays. Its supported colliders are sphere, axis-aligned box, and plane. Static bodies do not move from gravity, forces, or impulses; Dynamic bodies fall and respond to physics; Kinematic bodies do not fall from gravity and move only through explicit tool or code movement. Collider/contact debug overlays are separate from the selected-object highlight and are clipped to the Scene View.
 The compact strip below Scene View keeps essential input-gate, gizmo, hovered-panel, panel-header, and workspace drag state visible while testing, so a rejected viewport or panel gesture can be diagnosed without switching views.
 `Object Use` in Object Details reports the optional object interaction prompt and range only; it is separate from transform tools and gizmo state.
 

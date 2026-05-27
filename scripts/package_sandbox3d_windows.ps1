@@ -120,6 +120,7 @@ The scene renders inside its own docked viewport when panels are visible.
 Select an object in the viewport or Scene Objects panel, then use Select, Orbit, Pan, Move, Rotate, and Scale from the Viewport Tool section.
 Use the in-window utilities for help, legend, paths, settings, diagnostics, Transform QA, and Physics QA.
 Selected real scene objects show a viewport highlight until selection is cleared.
+Ground selection uses a bounded Scene View highlight, and viewport overlays do not draw over panels.
 Physics QA explains Static, Dynamic, and Kinematic bodies and includes Make Dynamic + Drop for quick gravity tests.
 Drag a panel header to undock and move it inside this window, then drag a floating title again to reposition it or drag the lower-right grip to resize.
 Open Native Panel Test from Controls to exercise a separate OS-level validation window.

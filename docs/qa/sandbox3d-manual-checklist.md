@@ -88,26 +88,28 @@ Use this checklist when you want to confirm that `henka_sandbox3d` is visually r
 41. Confirm clicking docked or floating panels does not pick scene objects.
 42. Left-click a visible object inside the viewport and confirm picking updates the selection.
 43. Confirm the selected real scene object has a visible viewport highlight that follows the object.
-44. Click empty viewport space in Select mode or use Clear Selection and confirm the viewport highlight disappears.
-45. Confirm Object Details and Diagnostics both report no selected object after deselection.
-46. Confirm the selected object shows a visible gizmo in the viewport when a transform tool is active.
-47. Confirm the compact strip continues to update viewport tool, highlight, gizmo, ownership, and workspace fields while panels are moved.
-48. Open `Diagnostics` directly from Controls and confirm interaction fields update.
-49. Confirm Object Details labels optional object interaction availability as `Object Use`, separate from transform status.
-50. Open `Transform QA` and confirm direct move, rotate, scale, and reset controls visibly change the selected real object.
-51. Click `Orbit` and left-drag more than once; confirm it remains repeatable after floating and redocking panels.
-52. Click `Pan` and left-drag more than once; confirm it remains repeatable after floating and redocking panels.
-53. Use the mouse wheel over the viewport and confirm zoom works; wheel over a panel must not zoom the viewport.
-54. Press `F` and `Home` and confirm camera framing and reset remain usable.
-55. Select `Textured Cube`, use Move X/Y/Z, Rotate X/Y/Z, and Scale, and confirm the selected object transforms after dock movement and resize.
-56. Toggle `Hit Boxes` and confirm the viewport still shows handle regions used for hit testing.
-57. Confirm Object Details updates after viewport manipulation.
-58. Confirm no gizmo helper becomes the selected object.
-59. Hide the selected object during a gizmo interaction and confirm it stops safely.
-60. Confirm Reset Transform and Focus Camera still work after workspace changes.
-61. Confirm `F4`, `F5`, `Escape`, and close-window behavior remain clean.
-62. Confirm no named-engine comparisons appear in runtime text or packaged help.
-63. Confirm the runtime and help do not present in-window panels as separate OS-level windows or imply that Scene View can detach.
+44. Select Ground and confirm it uses a finite floor highlight, not diagonal lines across the viewport.
+45. Confirm selection highlight lines do not draw over Controls, Utility, Scene Objects, Object Details, or the bottom debug/status strip.
+46. Click empty viewport space in Select mode or use Clear Selection and confirm the viewport highlight disappears.
+47. Confirm Object Details and Diagnostics both report no selected object after deselection.
+48. Confirm the selected object shows a visible gizmo in the viewport when a transform tool is active.
+49. Confirm the compact strip continues to update viewport tool, highlight, gizmo, ownership, and workspace fields while panels are moved.
+50. Open `Diagnostics` directly from Controls and confirm interaction fields update.
+51. Confirm Object Details labels optional object interaction availability as `Object Use`, separate from transform status.
+52. Open `Transform QA` and confirm direct move, rotate, scale, and reset controls visibly change the selected real object.
+53. Click `Orbit` and left-drag more than once; confirm it remains repeatable after floating and redocking panels.
+54. Click `Pan` and left-drag more than once; confirm it remains repeatable after floating and redocking panels.
+55. Use the mouse wheel over the viewport and confirm zoom works; wheel over a panel must not zoom the viewport.
+56. Press `F` and `Home` and confirm camera framing and reset remain usable.
+57. Select `Textured Cube`, use Move X/Y/Z, Rotate X/Y/Z, and Scale, and confirm the selected object transforms after dock movement and resize.
+58. Toggle `Hit Boxes` and confirm the viewport still shows handle regions used for hit testing.
+59. Confirm Object Details updates after viewport manipulation.
+60. Confirm no gizmo helper becomes the selected object.
+61. Hide the selected object during a gizmo interaction and confirm it stops safely.
+62. Confirm Reset Transform and Focus Camera still work after workspace changes.
+63. Confirm `F4`, `F5`, `Escape`, and close-window behavior remain clean.
+64. Confirm no named-engine comparisons appear in runtime text or packaged help.
+65. Confirm the runtime and help do not present in-window panels as separate OS-level windows or imply that Scene View can detach.
 
 ## Physics QA Verification
 
@@ -117,8 +119,8 @@ Use this checklist when you want to confirm that `henka_sandbox3d` is visually r
 4. Click `Pause`, then `Step`, and confirm one fixed-step movement occurs while paused.
 5. Click `Reset Demo` and confirm the test positions and velocities reset.
 6. Toggle `Gravity` off and confirm dynamic motion no longer accelerates downward; restore it afterward.
-7. Toggle `Colliders` and confirm sphere, AABB, plane, and trigger outlines correspond to the linked visible samples.
-8. Toggle `Contacts` and confirm contact normal lines appear during collisions without becoming selectable.
+7. Toggle `Colliders` and confirm sphere, AABB, plane, and trigger outlines correspond to the linked visible samples and do not draw outside the Scene View.
+8. Toggle `Contacts` and confirm contact normal lines appear during collisions without becoming selectable or drawing over panels.
 9. Select a dynamic physics-linked sample, use `Impulse Up` and `Impulse Forward`, and confirm visible movement and updated status.
 10. Use `Clear Velocity` and confirm the selected body motion changes predictably.
 11. Change a selected supported sample between `Static`, `Dynamic`, and `Kinematic`, and confirm the UI explains that only Dynamic bodies fall from gravity.

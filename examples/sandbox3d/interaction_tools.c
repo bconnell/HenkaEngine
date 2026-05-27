@@ -328,3 +328,129 @@ bool sandbox3d_build_selection_highlight_model(
     out_model->valid = true;
     return true;
 }
+
+bool sandbox3d_build_ground_selection_highlight_model(
+    henka_vec3 center,
+    float half_extent,
+    float y_offset,
+    sandbox3d_selection_highlight_model* out_model)
+{
+    const float y = center.y + y_offset;
+    henka_vec3 corners[4];
+    int edge;
+
+    if (out_model == NULL ||
+        !isfinite(center.x) ||
+        !isfinite(center.y) ||
+        !isfinite(center.z) ||
+        !isfinite(half_extent) ||
+        !isfinite(y_offset) ||
+        half_extent <= 0.0f ||
+        half_extent > 1000.0f)
+    {
+        return false;
+    }
+
+    memset(out_model, 0, sizeof(*out_model));
+    corners[0] = (henka_vec3){center.x - half_extent, y, center.z - half_extent};
+    corners[1] = (henka_vec3){center.x + half_extent, y, center.z - half_extent};
+    corners[2] = (henka_vec3){center.x + half_extent, y, center.z + half_extent};
+    corners[3] = (henka_vec3){center.x - half_extent, y, center.z + half_extent};
+    for (edge = 0; edge < 4; ++edge)
+    {
+        out_model->edge_starts[edge] = corners[edge];
+        out_model->edge_ends[edge] = corners[(edge + 1) % 4];
+    }
+
+    out_model->edge_count = 4U;
+    out_model->valid = true;
+    return true;
+}
+
+static bool sandbox3d_clip_line_parameter(float p, float q, float* t0, float* t1)
+{
+    float r;
+
+    if (p == 0.0f)
+    {
+        return q >= 0.0f;
+    }
+
+    r = q / p;
+    if (p < 0.0f)
+    {
+        if (r > *t1)
+        {
+            return false;
+        }
+        if (r > *t0)
+        {
+            *t0 = r;
+        }
+    }
+    else
+    {
+        if (r < *t0)
+        {
+            return false;
+        }
+        if (r < *t1)
+        {
+            *t1 = r;
+        }
+    }
+
+    return true;
+}
+
+bool sandbox3d_clip_line_to_rect(
+    henka_vec2* start,
+    henka_vec2* end,
+    henka_ui_rect rect)
+{
+    const float max_x = rect.x + rect.width;
+    const float max_y = rect.y + rect.height;
+    const float dx = end != NULL && start != NULL ? end->x - start->x : 0.0f;
+    const float dy = end != NULL && start != NULL ? end->y - start->y : 0.0f;
+    float t0 = 0.0f;
+    float t1 = 1.0f;
+    henka_vec2 original_start;
+
+    if (start == NULL ||
+        end == NULL ||
+        !isfinite(start->x) ||
+        !isfinite(start->y) ||
+        !isfinite(end->x) ||
+        !isfinite(end->y) ||
+        !isfinite(rect.x) ||
+        !isfinite(rect.y) ||
+        !isfinite(rect.width) ||
+        !isfinite(rect.height) ||
+        rect.width <= 0.0f ||
+        rect.height <= 0.0f)
+    {
+        return false;
+    }
+
+    if (!sandbox3d_clip_line_parameter(-dx, start->x - rect.x, &t0, &t1) ||
+        !sandbox3d_clip_line_parameter(dx, max_x - start->x, &t0, &t1) ||
+        !sandbox3d_clip_line_parameter(-dy, start->y - rect.y, &t0, &t1) ||
+        !sandbox3d_clip_line_parameter(dy, max_y - start->y, &t0, &t1))
+    {
+        return false;
+    }
+
+    original_start = *start;
+    if (t1 < 1.0f)
+    {
+        end->x = original_start.x + t1 * dx;
+        end->y = original_start.y + t1 * dy;
+    }
+    if (t0 > 0.0f)
+    {
+        start->x = original_start.x + t0 * dx;
+        start->y = original_start.y + t0 * dy;
+    }
+
+    return true;
+}

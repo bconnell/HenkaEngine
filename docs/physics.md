@@ -45,7 +45,7 @@ Body-type behavior is intentionally explicit in the UI:
 - Dynamic bodies fall and respond to gravity, forces, impulses, contacts, friction, restitution, and damping.
 - Kinematic bodies do not fall from gravity and move only through explicit tool or code movement.
 
-The demo links existing generic sample objects to bodies: the ground is a plane, the cubes use AABB colliders, the marker uses a sphere collider, one sample is a static obstacle, and one sample is a trigger volume. Collider debug lines come from the same collider data the solver tests, and they are not selectable scene objects.
+The demo links existing generic sample objects to bodies: the ground is a plane, the cubes use AABB colliders, the marker uses a sphere collider, one sample is a static obstacle, and one sample is a trigger volume. Collider debug lines come from the same collider data the solver tests, are clipped to the Scene View, and are not selectable scene objects. The visible ground uses a finite floor surface and grid; selecting it shows a bounded floor indicator rather than infinite plane bounds.
 
 Physics simulation writes linked-body transforms to the real scene entities. Editor-style transforms continue to use the Action API and synchronize their linked body so gizmos and Transform QA remain usable.
 

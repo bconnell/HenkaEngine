@@ -1120,6 +1120,35 @@ static henka_ui_rect sandbox3d_viewport_local_box_to_framebuffer_rect(
     };
 }
 
+static bool sandbox3d_draw_viewport_clipped_overlay_line(
+    henka_ui_context* ui,
+    henka_viewport viewport,
+    henka_vec2 start,
+    henka_vec2 end,
+    float thickness,
+    henka_vec4 color)
+{
+    henka_ui_rect clip_rect;
+
+    if (ui == NULL || !henka_viewport_is_valid(viewport))
+    {
+        return false;
+    }
+
+    clip_rect = (henka_ui_rect){0.0f, 0.0f, (float)viewport.width, (float)viewport.height};
+    if (!sandbox3d_clip_line_to_rect(&start, &end, clip_rect))
+    {
+        return false;
+    }
+
+    return henka_ui_overlay_line(
+               ui,
+               sandbox3d_viewport_local_to_framebuffer_point(viewport, start),
+               sandbox3d_viewport_local_to_framebuffer_point(viewport, end),
+               thickness,
+               color) == HENKA_SUCCESS;
+}
+
 static henka_quat sandbox3d_get_axis_rotation(sandbox3d_gizmo_axis axis)
 {
     switch (axis)
@@ -1324,10 +1353,11 @@ static void sandbox3d_physics_overlay_line(
     if (sandbox3d_project_handle_point(state, viewport, start, &screen_start) &&
         sandbox3d_project_handle_point(state, viewport, end, &screen_end))
     {
-        (void)henka_ui_overlay_line(
+        (void)sandbox3d_draw_viewport_clipped_overlay_line(
             state->ui,
-            sandbox3d_viewport_local_to_framebuffer_point(viewport, screen_start),
-            sandbox3d_viewport_local_to_framebuffer_point(viewport, screen_end),
+            viewport,
+            screen_start,
+            screen_end,
             thickness,
             color);
     }
@@ -1449,13 +1479,32 @@ static void sandbox3d_draw_selection_highlight(sandbox3d_state* state, henka_vie
 {
     henka_bounds bounds;
     sandbox3d_selection_highlight_model model;
+    henka_entity selected_entity;
+    henka_transform selected_transform;
     henka_vec4 outer_color;
     henka_vec4 inner_color;
     size_t edge;
 
     if (state == NULL || state->ui == NULL || !henka_viewport_is_valid(viewport) ||
-        !sandbox3d_get_selected_bounds(state, &bounds) ||
-        !sandbox3d_build_selection_highlight_model(bounds, &model))
+        !sandbox3d_get_selected_bounds(state, &bounds))
+    {
+        return;
+    }
+
+    selected_entity = sandbox3d_get_real_selected_entity(state);
+    if (selected_entity == state->ground_entity &&
+        sandbox3d_entity_get_transform(state->scene, selected_entity, &selected_transform) == HENKA_SUCCESS)
+    {
+        if (!sandbox3d_build_ground_selection_highlight_model(
+                selected_transform.position,
+                6.0f,
+                0.04f,
+                &model))
+        {
+            return;
+        }
+    }
+    else if (!sandbox3d_build_selection_highlight_model(bounds, &model))
     {
         return;
     }
@@ -1471,10 +1520,8 @@ static void sandbox3d_draw_selection_highlight(sandbox3d_state* state, henka_vie
         {
             continue;
         }
-        start = sandbox3d_viewport_local_to_framebuffer_point(viewport, start);
-        end = sandbox3d_viewport_local_to_framebuffer_point(viewport, end);
-        henka_ui_overlay_line(state->ui, start, end, 4.0f, outer_color);
-        henka_ui_overlay_line(state->ui, start, end, 2.0f, inner_color);
+        sandbox3d_draw_viewport_clipped_overlay_line(state->ui, viewport, start, end, 4.0f, outer_color);
+        sandbox3d_draw_viewport_clipped_overlay_line(state->ui, viewport, start, end, 2.0f, inner_color);
     }
 }
 
@@ -6188,7 +6235,7 @@ static henka_result sandbox3d_initialize(henka_engine* engine, void* user_data)
     ground_material.shader = state->basic_shader;
     ground_material.base_color_texture = state->ground_texture;
     ground_material.use_texture = true;
-    ground_material.base_color = (henka_vec4){0.88f, 0.88f, 0.90f, 1.0f};
+    ground_material.base_color = (henka_vec4){0.66f, 0.72f, 0.66f, 1.0f};
 
     cube_material = henka_material_default();
     cube_material.name = "Cube Albedo";
@@ -6233,7 +6280,7 @@ static henka_result sandbox3d_initialize(henka_engine* engine, void* user_data)
     grid_material.name = "Debug Grid";
     grid_material.type = HENKA_MATERIAL_TYPE_UNLIT;
     grid_material.shader = state->grid_shader;
-    grid_material.base_color = (henka_vec4){0.48f, 0.78f, 0.98f, 1.0f};
+    grid_material.base_color = (henka_vec4){0.36f, 0.66f, 0.88f, 0.88f};
     grid_material.use_texture = false;
     grid_material.use_lighting = false;
 

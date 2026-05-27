@@ -94,5 +94,14 @@ henka_vec3 sandbox3d_make_uniform_scale_multiplier(float delta_scale);
 bool sandbox3d_build_selection_highlight_model(
     henka_bounds bounds,
     sandbox3d_selection_highlight_model* out_model);
+bool sandbox3d_build_ground_selection_highlight_model(
+    henka_vec3 center,
+    float half_extent,
+    float y_offset,
+    sandbox3d_selection_highlight_model* out_model);
+bool sandbox3d_clip_line_to_rect(
+    henka_vec2* start,
+    henka_vec2* end,
+    henka_ui_rect rect);
 
 #endif

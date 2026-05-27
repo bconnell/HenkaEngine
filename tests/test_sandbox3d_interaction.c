@@ -8,11 +8,15 @@ void henka_test_sandbox3d_interaction(void)
     henka_quat rotation_delta;
     henka_bounds selection_bounds;
     sandbox3d_selection_highlight_model highlight_model;
+    sandbox3d_selection_highlight_model ground_highlight_model;
     henka_vec3 focus_target;
     henka_vec3 move_delta;
     henka_vec3 scale_multiplier;
+    henka_vec2 clip_start;
+    henka_vec2 clip_end;
     sandbox3d_interaction_gate gate;
     henka_ui_rect panels[4];
+    henka_ui_rect viewport_clip;
 
     HENKA_TEST_ASSERT(sandbox3d_viewport_tool_mode_to_gizmo_mode(SANDBOX3D_VIEWPORT_TOOL_MOVE) == HENKA_GIZMO_MODE_MOVE);
     HENKA_TEST_ASSERT(sandbox3d_viewport_tool_mode_to_gizmo_mode(SANDBOX3D_VIEWPORT_TOOL_ROTATE) == HENKA_GIZMO_MODE_ROTATE);
@@ -136,6 +140,33 @@ void henka_test_sandbox3d_interaction(void)
     HENKA_TEST_ASSERT_FLOAT_CLOSE(highlight_model.edge_ends[0].x, 1.5f, 0.0001f);
     selection_bounds.extents.x = 0.0f;
     HENKA_TEST_ASSERT(!sandbox3d_build_selection_highlight_model(selection_bounds, &highlight_model));
+
+    HENKA_TEST_ASSERT(sandbox3d_build_ground_selection_highlight_model(
+        (henka_vec3){0.0f, -0.02f, 0.0f},
+        6.0f,
+        0.04f,
+        &ground_highlight_model));
+    HENKA_TEST_ASSERT(ground_highlight_model.valid);
+    HENKA_TEST_ASSERT(ground_highlight_model.edge_count == 4U);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(ground_highlight_model.edge_starts[0].x, -6.0f, 0.0001f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(ground_highlight_model.edge_starts[0].y, 0.02f, 0.0001f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(ground_highlight_model.edge_ends[1].z, 6.0f, 0.0001f);
+    HENKA_TEST_ASSERT(!sandbox3d_build_ground_selection_highlight_model(
+        (henka_vec3){0.0f, 0.0f, 0.0f},
+        5000.0f,
+        0.0f,
+        &ground_highlight_model));
+
+    viewport_clip = (henka_ui_rect){0.0f, 0.0f, 640.0f, 360.0f};
+    clip_start = (henka_vec2){-100.0f, 120.0f};
+    clip_end = (henka_vec2){700.0f, 120.0f};
+    HENKA_TEST_ASSERT(sandbox3d_clip_line_to_rect(&clip_start, &clip_end, viewport_clip));
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(clip_start.x, 0.0f, 0.0001f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(clip_end.x, 640.0f, 0.0001f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(clip_start.y, 120.0f, 0.0001f);
+    clip_start = (henka_vec2){-50.0f, -50.0f};
+    clip_end = (henka_vec2){-10.0f, -10.0f};
+    HENKA_TEST_ASSERT(!sandbox3d_clip_line_to_rect(&clip_start, &clip_end, viewport_clip));
 
     camera = henka_camera_create_perspective(60.0f * HENKA_DEG_TO_RAD, 16.0f / 9.0f, 0.1f, 100.0f);
     camera.position = (henka_vec3){0.0f, 2.4f, 8.6f};
