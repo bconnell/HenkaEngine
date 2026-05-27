@@ -106,6 +106,25 @@ Use this checklist when you want to confirm that `henka_sandbox3d` is visually r
 59. Confirm no named-engine comparisons appear in runtime text or packaged help.
 60. Confirm the runtime and help do not present in-window panels as separate OS-level windows or imply that Scene View can detach.
 
+## Physics QA Verification
+
+1. Open `Physics QA` in the Utility panel and confirm its status rows and controls are visible.
+2. Click `Enable` and confirm the dynamic cube bodies and sphere-collider marker move under gravity.
+3. Confirm moving bodies collide with the ground instead of falling through it in normal playback.
+4. Click `Pause`, then `Step`, and confirm one fixed-step movement occurs while paused.
+5. Click `Reset Demo` and confirm the test positions and velocities reset.
+6. Toggle `Gravity` off and confirm dynamic motion no longer accelerates downward; restore it afterward.
+7. Toggle `Colliders` and confirm sphere, AABB, plane, and trigger outlines correspond to the linked visible samples.
+8. Toggle `Contacts` and confirm contact normal lines appear during collisions without becoming selectable.
+9. Select a dynamic physics-linked sample, use `Impulse Up` and `Impulse Forward`, and confirm visible movement and updated status.
+10. Use `Clear Velocity` and confirm the selected body motion changes predictably.
+11. Change a selected supported sample between `Static`, `Dynamic`, and `Kinematic`, and confirm gravity affects only the dynamic state.
+12. Use `Camera Raycast` while aiming toward a physics sample and confirm the latest-action result reports a hit or miss.
+13. Confirm collision and trigger event reporting updates while bodies collide or pass through the trigger volume.
+14. Pause physics, move a linked selected object with the gizmo or Transform QA, and confirm the body and object remain synchronized.
+15. Confirm physics debug overlays do not become selected objects and do not interfere with gizmos.
+16. With Physics QA active, repeat Move, Rotate, Scale, Orbit, Pan, Zoom, `F4`, `F5`, and Native Panel Test checks to confirm the existing baseline remains usable.
+
 ## Expected startup behavior
 
 - A window opens with the title `Henka Engine Sandbox 3D`.

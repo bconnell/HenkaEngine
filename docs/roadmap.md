@@ -18,6 +18,7 @@ Current priorities include:
 6. A packaged sandbox that can be tested without private setup.
 7. Documentation that stays aligned with what the engine actually does.
 8. Test coverage for core behavior that should not depend on manual QA.
+9. A scoped rigid-body physics layer with sandbox inspection and debug visualization.
 
 ## Near-term priorities
 
@@ -42,6 +43,8 @@ Current workspace foundations include:
 3. Resizable occupied dock regions and reset-layout recovery.
 4. Visible workspace and viewport interaction diagnostics.
 5. A multi-window platform foundation with a separate native test panel for render and event-routing validation.
+
+Current runtime foundations also include rigid-body physics v1: fixed-step worlds, static/dynamic/kinematic bodies, sphere/AABB/plane collision, impulse response, friction, restitution, trigger events, raycasts, and opt-in sandbox QA controls.
 
 Planned workspace improvements include:
 
@@ -98,7 +101,7 @@ Planned 2.5D work includes:
 
 Longer-term work may include:
 
-1. Physics.
+1. Expanded physics features such as joints, controllers, and additional collider types.
 2. Audio.
 3. Scripting or extension support.
 4. Additional renderer backends.
@@ -144,4 +147,5 @@ Current limitations include:
 6. The native test panel establishes multi-window rendering and event routing, but production tool panels and the Scene View do not detach yet.
 7. Asset loading is still limited.
 8. 2D and 2.5D workflows are planned, but not implemented yet.
-9. Physics, audio, scripting, and release distribution are later milestones.
+9. Physics v1 is intentionally limited to rigid bodies and primitive colliders; mesh collision, joints, character controllers, and advanced simulation remain future work.
+10. Audio, scripting, and release distribution are later milestones.

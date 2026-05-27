@@ -91,7 +91,8 @@ The current `Controls` panel can:
 - switch between explicit `Select`, `Orbit`, `Pan`, `Move`, `Rotate`, and `Scale` viewport tools
 - toggle transform snapping and show the current snap increments
 - toggle `Hit Boxes` so the viewport can draw the same handle regions that gizmo hit testing uses
-- open `Diagnostics` and `Transform QA` directly from the main Controls page
+- open `Diagnostics`, `Transform QA`, and `Physics QA` directly from the main Controls page
+- open `Physics QA` for the opt-in rigid-body demo, playback controls, selected-body actions, and debug visualization
 - open `Native Panel Test` as a separate OS-level foundation window
 - save sandbox settings
 - reset the layout
@@ -160,6 +161,7 @@ The current `Utility` panel can show:
 - Settings
 - Diagnostics
 - Transform QA
+- Physics QA
 
 That keeps normal viewer use in the window while the console remains available for fallback logs and automation.
 The packaged sandbox still opens a console window at this stage, but normal viewer interaction is meant to stay inside the viewport and panels rather than depending on console output.
@@ -167,7 +169,8 @@ The packaged sandbox still opens a console window at this stage, but normal view
 The sandbox also uses the current engine diagnostics snapshot in the Utility panel, and object picking can update selection when mouse capture is released. Picking and gizmo dragging use viewport-relative coordinates, so docked panel clicks do not trigger scene picks or transform drags.
 The diagnostics view now surfaces the current viewport tool, gizmo mode, mouse capture state, UI mouse ownership, cursor position, selected object, gizmo validity, overlay primitive count, hovered handle, active drag state, last rejected interaction reason, last Action API command, last Action API result, and compact native test-window state.
 The Transform QA view exposes direct move, rotate, scale, and reset controls that use the same local Action API path as normal object manipulation, which makes it easier to separate Action API failures from gizmo or input failures during packaged QA.
-When Diagnostics or Transform QA is open in the heavier layout, the utility view uses the right dock directly so its controls do not draw through Object Details.
+The Physics QA view exposes real enable, pause/resume, fixed-step, demo reset, gravity, collider/contact debug, impulse, velocity clear, body-type, and camera-raycast controls. Collider overlays are generated from the same collider descriptions used for collision detection, and physics-linked entities are ordinary selectable scene objects rather than debug helpers.
+When Diagnostics, Transform QA, or Physics QA is open in the heavier layout, the utility view uses the right dock directly so its controls do not draw through Object Details.
 
 Panel placement and dock resizing are session-only in the current sandbox. `Reset Layout` redocks the standard panels, restores safe dock widths, clears active workspace drag or resize state, and closes `Native Panel Test` if it is open. The Scene View remains the main center viewport. The test window establishes separate-window rendering and event routing; production tool-panel conversion and detachable Scene View support remain future work.
 

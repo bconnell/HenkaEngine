@@ -8,6 +8,7 @@ add_library(henka STATIC
     src/core/log.c
     src/core/memory.c
     src/core/persistence.c
+    src/core/physics.c
     src/core/result.c
     src/core/time.c
     src/core/workspace.c

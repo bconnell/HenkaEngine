@@ -139,6 +139,21 @@ The helper scene pieces that used to visualize those gizmos stay internal to the
 The current automated coverage now proves real selected-object mutation more directly, but manual desktop QA is still needed for handle readability, drag comfort, and general interaction feel.
 The sandbox also now keeps direct transform fallback controls beside those gizmo helpers so packaged QA can confirm selected-object mutation through the Action API even when viewport input or handle hit testing still needs investigation.
 
+### Rigid-body physics
+
+Henka now exposes a deterministic rigid-body physics v1 API with:
+
+- physics-world creation, gravity, fixed timestep accumulation, explicit fixed stepping, and reset
+- static, dynamic, and kinematic bodies with stable handles
+- linear and angular velocity, force, impulse, torque, damping, restitution, and friction
+- sphere, axis-aligned box, and plane colliders with collision masks and trigger flags
+- brute-force pair generation suitable for current small scenes
+- collision response, collision and trigger enter/stay/exit events, and raycasts
+- optional links that write simulated transforms to real scene entities
+- debug-shape queries so visual overlays use the actual collider data
+
+Boxes are axis-aligned in v1; rotated box collision, mesh colliders, constraints, continuous collision detection, controllers, and advanced simulation remain future work. In the sandbox, physics playback is opt-in through `Physics QA`, leaving normal transform inspection unchanged until the demo is enabled.
+
 ### Asset metadata
 
 The asset manager now tracks read-only metadata for cached assets:

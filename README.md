@@ -48,6 +48,7 @@ Henka Engine is still early, but the sandbox now renders a visible 3D scene with
 - Scene Objects, Object Details, and Utility panels for named sandbox object inspection and viewer workflows
 - Movable in-window sandbox workspace panels with header drag, resize, redock, dock splitter, and reset-layout recovery controls
 - Multi-window platform foundation with a separate `Native Panel Test` window for close, focus, resize, and event-routing QA
+- Rigid-body physics v1 with fixed-step worlds, static/dynamic/kinematic bodies, sphere/AABB/plane colliders, triggers, events, raycasts, and sandbox debug controls
 - Packaged sandbox user data that stays in place across package refreshes by default
 - Generic documentation and starter template for external game repositories
 
@@ -55,7 +56,6 @@ Henka Engine is still early, but the sandbox now renders a visible 3D scene with
 
 - Editor UI
 - Asset browser UI
-- Physics
 - Audio
 - Scripting
 - Full 2D renderer
@@ -152,12 +152,13 @@ The packaged folder also includes `PACKAGE_INFO.txt` so you can tell when the pa
 - `Home`: reset the camera view
 - `Escape`: close the UI first, then release the mouse, then exit
 
-Press `F4` to open the in-window sandbox panels. On a first run with no local settings file, the packaged sandbox opens the workspace in `View` mode so the controls are visible without covering most of the scene. Press `F5` to cycle between `View`, `Inspect`, and `Full Tools`. Drag a docked panel header to undock and move it within the sandbox window; floating panels continue to drag by their header, resize from the lower-right grip, and can be returned with `L`, `R`, or `Home`. `Open Native Panel Test` opens a separate OS-level test window that exercises the new multi-window foundation. The standard tool panels still float in-window, and detachable Scene View is not implemented. Visible bars beside the Scene View resize occupied docks, and `Reset Layout` restores safe default docking and closes the native test window. Select a scene object from the list or with `Left Mouse` in the viewport, then use the Viewport Tool section to switch between `Select`, `Orbit`, `Pan`, `Move`, `Rotate`, and `Scale`. A compact strip below the Scene View reports viewport and workspace interaction state while you test. `Diagnostics` and `Transform QA` remain directly available on the main Controls page. Manual desktop QA is still required before native window behavior, panel drag comfort, and transform workflow feel can be called fully complete.
+Press `F4` to open the in-window sandbox panels. On a first run with no local settings file, the packaged sandbox opens the workspace in `View` mode so the controls are visible without covering most of the scene. Press `F5` to cycle between `View`, `Inspect`, and `Full Tools`. Drag a docked panel header to undock and move it within the sandbox window; floating panels continue to drag by their header, resize from the lower-right grip, and can be returned with `L`, `R`, or `Home`. `Open Native Panel Test` opens a separate OS-level test window that exercises the multi-window foundation. The standard tool panels still float in-window, and detachable Scene View is not implemented. Visible bars beside the Scene View resize occupied docks, and `Reset Layout` restores safe default docking and closes the native test window. Select a scene object from the list or with `Left Mouse` in the viewport, then use the Viewport Tool section to switch between `Select`, `Orbit`, `Pan`, `Move`, `Rotate`, and `Scale`. Open `Physics QA` to start or step the opt-in rigid-body demo, inspect contacts and events, apply impulses, raycast, and draw the actual collider shapes. `Diagnostics` and `Transform QA` remain available for viewport and object-mutation verification. Manual desktop QA is still required before physics feel, native window behavior, panel drag comfort, and transform workflow feel can be called fully complete.
 
 Offline help is also available in [docs/help/sandbox3d.md](docs/help/sandbox3d.md).
 Model loading notes are documented in [docs/model-loading.md](docs/model-loading.md).
 A persistence overview is available in [docs/persistence.md](docs/persistence.md).
 A local action-command overview is available in [docs/action-api.md](docs/action-api.md).
+A rigid-body physics overview is available in [docs/physics.md](docs/physics.md).
 A runtime foundation overview is available in [docs/runtime-foundations.md](docs/runtime-foundations.md).
 A UI overview is available in [docs/ui.md](docs/ui.md).
 A guide for separate game repositories is available in [docs/external-game-projects.md](docs/external-game-projects.md).
@@ -182,11 +183,12 @@ To validate the generic external game template against the current Henka checkou
 - OBJ material libraries, negative indices, polygons with more than four vertices, and animation are not supported yet.
 - The current settings format is a simple local key/value file. It is meant for engine samples and early projects, not for a finished save pipeline.
 - A small save-data foundation now exists for local scene id, camera pose, and simple flags, but it is still intentionally modest.
-- Cloud saves, analytics, registry storage, encryption, and network-backed persistence are not implemented.
+- Remote saves, usage collection, registry storage, encryption, and network-backed persistence are not implemented.
 - The in-window UI overlay is intentionally small. It now supports object inspection, utility views, and short status feedback, but it is still not a full editor or a general UI toolkit yet.
 - Floating panel positions and resized dock widths are session-only in this first workspace pass; `Reset Layout` is the recovery path.
 - Current production tool panels remain inside the main sandbox window. `Native Panel Test` proves a separate OS-level UI window and window-aware event path; converting tool panels and detaching Scene View remain future work.
 - The viewport transform gizmo is intentionally scoped to world-axis move, rotate, and scale behavior for the current sandbox object model. The sandbox now also exposes explicit viewport tool modes, diagnostics, and direct transform fallback controls so interaction failures can be diagnosed without assuming the gizmo is the only path.
+- Rigid-body physics v1 supports static, dynamic, and kinematic bodies with sphere, axis-aligned box, and plane colliders; mesh collision, constraints, controllers, and advanced simulation remain future work.
 - 2D and 2.5D are part of the engine direction, but those workflows are not implemented yet.
 - Visual and interaction checks still need manual QA on a local desktop session.
 - HenkaSandbox3D is an engine sample and QA target, not a game. Real games built with Henka should live in separate repositories.

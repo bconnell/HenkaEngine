@@ -13,6 +13,7 @@ add_executable(henka_tests
     test_material.c
     test_model.c
     test_persistence.c
+    test_physics.c
     test_result.c
     test_memory.c
     test_scene.c
