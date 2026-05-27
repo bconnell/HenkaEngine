@@ -73,16 +73,11 @@ bool sandbox3d_workspace_panel_is_floating(
 void sandbox3d_workspace_bring_to_front(
     sandbox3d_workspace_model* model,
     sandbox3d_workspace_panel_id panel_id);
-void sandbox3d_workspace_undock_panel(
-    sandbox3d_workspace_model* model,
-    sandbox3d_workspace_panel_id panel_id,
-    henka_ui_rect current_rect,
-    int framebuffer_width,
-    int framebuffer_height);
 void sandbox3d_workspace_dock_panel(
     sandbox3d_workspace_model* model,
     sandbox3d_workspace_panel_id panel_id,
     sandbox3d_workspace_dock_zone dock_zone);
+henka_ui_rect sandbox3d_workspace_docked_title_drag_rect(henka_ui_rect panel_rect);
 henka_ui_rect sandbox3d_workspace_title_drag_rect(henka_ui_rect panel_rect);
 henka_ui_rect sandbox3d_workspace_resize_rect(henka_ui_rect panel_rect);
 henka_ui_rect sandbox3d_workspace_left_splitter_rect(henka_ui_rect left_dock, henka_ui_rect scene_frame);
@@ -91,6 +86,13 @@ void sandbox3d_workspace_begin_panel_drag(
     sandbox3d_workspace_model* model,
     sandbox3d_workspace_panel_id panel_id,
     henka_vec2 pointer);
+void sandbox3d_workspace_begin_docked_panel_drag(
+    sandbox3d_workspace_model* model,
+    sandbox3d_workspace_panel_id panel_id,
+    henka_ui_rect current_rect,
+    henka_vec2 pointer,
+    int framebuffer_width,
+    int framebuffer_height);
 void sandbox3d_workspace_update_panel_drag(
     sandbox3d_workspace_model* model,
     henka_vec2 pointer,

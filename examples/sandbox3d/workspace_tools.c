@@ -155,30 +155,6 @@ void sandbox3d_workspace_bring_to_front(
     panel->z_order = model->next_z_order++;
 }
 
-void sandbox3d_workspace_undock_panel(
-    sandbox3d_workspace_model* model,
-    sandbox3d_workspace_panel_id panel_id,
-    henka_ui_rect current_rect,
-    int framebuffer_width,
-    int framebuffer_height)
-{
-    sandbox3d_workspace_panel* panel = sandbox3d_workspace_get_panel(model, panel_id);
-    if (panel == NULL)
-    {
-        return;
-    }
-
-    panel->dock = SANDBOX3D_WORKSPACE_DOCK_FLOATING;
-    panel->floating_rect = current_rect;
-    panel->floating_rect.width = panel->floating_rect.width > panel->minimum_width ? panel->floating_rect.width : panel->minimum_width;
-    panel->floating_rect.height = panel->floating_rect.height > panel->minimum_height ? panel->floating_rect.height : panel->minimum_height;
-    panel->floating_rect.x += 18.0f;
-    panel->floating_rect.y += 18.0f;
-    sandbox3d_workspace_clamp_floating_rect(panel, framebuffer_width, framebuffer_height);
-    sandbox3d_workspace_bring_to_front(model, panel_id);
-    snprintf(model->last_action, sizeof(model->last_action), "%s floated", sandbox3d_workspace_panel_name(panel_id));
-}
-
 void sandbox3d_workspace_dock_panel(
     sandbox3d_workspace_model* model,
     sandbox3d_workspace_panel_id panel_id,
@@ -205,6 +181,11 @@ void sandbox3d_workspace_dock_panel(
 henka_ui_rect sandbox3d_workspace_title_drag_rect(henka_ui_rect panel_rect)
 {
     return (henka_ui_rect){panel_rect.x + 4.0f, panel_rect.y + 2.0f, panel_rect.width - 170.0f, 26.0f};
+}
+
+henka_ui_rect sandbox3d_workspace_docked_title_drag_rect(henka_ui_rect panel_rect)
+{
+    return (henka_ui_rect){panel_rect.x + 4.0f, panel_rect.y + 2.0f, panel_rect.width - 8.0f, 26.0f};
 }
 
 henka_ui_rect sandbox3d_workspace_resize_rect(henka_ui_rect panel_rect)
@@ -240,6 +221,32 @@ void sandbox3d_workspace_begin_panel_drag(
     model->drag_offset.x = pointer.x - panel->floating_rect.x;
     model->drag_offset.y = pointer.y - panel->floating_rect.y;
     snprintf(model->last_action, sizeof(model->last_action), "Moving %s", sandbox3d_workspace_panel_name(panel_id));
+}
+
+void sandbox3d_workspace_begin_docked_panel_drag(
+    sandbox3d_workspace_model* model,
+    sandbox3d_workspace_panel_id panel_id,
+    henka_ui_rect current_rect,
+    henka_vec2 pointer,
+    int framebuffer_width,
+    int framebuffer_height)
+{
+    sandbox3d_workspace_panel* panel = sandbox3d_workspace_get_panel(model, panel_id);
+    if (panel == NULL || panel->dock == SANDBOX3D_WORKSPACE_DOCK_FLOATING)
+    {
+        return;
+    }
+
+    panel->dock = SANDBOX3D_WORKSPACE_DOCK_FLOATING;
+    panel->floating_rect = current_rect;
+    panel->floating_rect.width = panel->floating_rect.width > panel->minimum_width ? panel->floating_rect.width : panel->minimum_width;
+    panel->floating_rect.height = panel->floating_rect.height > panel->minimum_height ? panel->floating_rect.height : panel->minimum_height;
+    sandbox3d_workspace_clamp_floating_rect(panel, framebuffer_width, framebuffer_height);
+    sandbox3d_workspace_bring_to_front(model, panel_id);
+    model->active_drag_panel = panel_id;
+    model->drag_offset.x = pointer.x - panel->floating_rect.x;
+    model->drag_offset.y = pointer.y - panel->floating_rect.y;
+    snprintf(model->last_action, sizeof(model->last_action), "Dragging %s from dock", sandbox3d_workspace_panel_name(panel_id));
 }
 
 void sandbox3d_workspace_update_panel_drag(

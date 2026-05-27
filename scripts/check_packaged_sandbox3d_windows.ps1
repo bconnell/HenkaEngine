@@ -176,7 +176,7 @@ Assert-PathExists -Path $helpPath -Description "Packaged offline help"
 Assert-PathExists -Path $readmePath -Description "Packaged run guide"
 Assert-PathExists -Path $packageInfoPath -Description "Packaged build marker"
 Assert-FileContains -Path $readmePath -Pattern "Use the in-window utilities" -Description "Packaged utility guidance"
-Assert-FileContains -Path $readmePath -Pattern "Use Float in a panel header" -Description "Packaged workspace guidance"
+Assert-FileContains -Path $readmePath -Pattern "Drag a panel header to undock and move it" -Description "Packaged workspace guidance"
 Assert-FileContains -Path $readmePath -Pattern "status area" -Description "Packaged status guidance"
 Assert-FileContains -Path $helpPath -Pattern "Utility panel" -Description "Packaged utility help"
 

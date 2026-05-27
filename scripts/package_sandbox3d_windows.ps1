@@ -118,7 +118,7 @@ Press F5 to cycle View, Inspect, and Full Tools.
 The scene renders inside its own docked viewport when panels are visible.
 Select an object in the viewport or Scene Objects panel, then use Select, Orbit, Pan, Move, Rotate, and Scale from the Viewport Tool section.
 Use the in-window utilities for help, legend, paths, settings, diagnostics, and Transform QA.
-Use Float in a panel header to undock it, drag floating titles to move panels, and drag the lower-right grip to resize.
+Drag a panel header to undock and move it, then drag a floating title again to reposition it or drag the lower-right grip to resize.
 Use L, R, or Home on a floating panel to redock it, and drag dock splitters beside Scene View to resize occupied docks.
 Use Reset Layout in Controls to recover all panels and default dock sizes.
 Watch the small in-window status area for recent actions and warnings.
@@ -169,7 +169,7 @@ Write-Host "  Press F5 to cycle View, Inspect, and Full Tools."
 Write-Host "  The scene should render inside its own docked viewport when panels are visible."
 Write-Host "  Select an object in the viewport or Scene Objects panel, then use Select, Orbit, Pan, Move, Rotate, and Scale in the Viewport Tool section."
 Write-Host "  Use the in-window utilities for help, legend, paths, settings, diagnostics, and Transform QA."
-Write-Host "  Use Float, title dragging, resize grips, L/R/Home, and dock splitters to arrange the workspace."
+Write-Host "  Use panel header dragging, resize grips, L/R/Home, and dock splitters to arrange the workspace."
 Write-Host "  Use Reset Layout to recover all panels and default dock sizes."
 Write-Host "  Watch the in-window status area for recent actions and warnings."
 Write-Host "  The packaged runtime should report Packaged mode at startup."

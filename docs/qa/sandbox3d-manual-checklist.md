@@ -62,15 +62,15 @@ Use this checklist when you want to confirm that `henka_sandbox3d` is visually r
 15. Confirm `Inspect` keeps Scene Objects and Object Details docked beside the viewport.
 16. Confirm `Full Tools` still leaves a dedicated viewport.
 17. Confirm `Reset Layout` restores a usable default.
-18. Confirm each visible panel header offers a working `Float` control.
-19. Float Controls and confirm it draws above the docked workspace.
-20. Drag the floating Controls title more than once and confirm movement is repeatable.
-21. Resize floating Controls from its lower-right grip and confirm its controls remain readable.
-22. Use `Home` to redock Controls at its default dock.
-23. Repeat float, move, resize, and `Home` recovery for Scene Objects, Object Details, and Utility as they become visible.
-24. Float a panel into available space and use `L` or `R` to dock it on the requested available side.
+18. Drag the `Controls` header and confirm it undocks directly without requiring a button or opening a transient menu.
+19. Keep dragging `Controls` and confirm it visibly follows the cursor, then remains floating when released away from a dock target.
+20. Drag the floating `Controls` header more than once and confirm movement is repeatable.
+21. Resize floating `Controls` from its lower-right grip and confirm its controls remain readable.
+22. Drag floating `Controls` onto a visible valid dock target and confirm it redocks; also confirm `Home` is a reliable secondary default redock path.
+23. Repeat direct header undock, move, resize, and redock recovery for Scene Objects, Object Details, and Utility as they become visible.
+24. Confirm stable floating-panel `L` or `R` controls dock onto an available requested side if retained.
 25. Drag each visible dock splitter and confirm the Scene View resizes without becoming unusable.
-26. Confirm the debug strip reports hovered panel, panel move or resize state, dock target, and last workspace action.
+26. Confirm the debug strip reports hovered panel, panel header hover, panel move or resize state, dock target, and last workspace action.
 27. Confirm panel drag, resize, and splitter drag do not select objects or begin viewport tools behind the panel.
 28. Confirm `Reset Layout` redocks panels and restores safe dock widths after moving and resizing them.
 29. Confirm window resize keeps a valid viewport and workspace layout.

@@ -72,9 +72,9 @@ The sandbox now uses a movable workspace layout:
 - left and right dock regions for panels
 - a dedicated scene viewport in the center
 - a viewport frame that keeps the scene visually separate from the docked tools
-- `Float` actions on panel headers for undocking
-- title dragging and lower-right resize grips on floating panels
-- `L`, `R`, and `Home` controls for reliable redocking
+- header dragging that undocks docked panels directly and moves floating panels
+- lower-right resize grips on floating panels
+- `L`, `R`, and `Home` controls as secondary reliable redocking paths
 - visible splitter bars for occupied dock width resizing
 
 Docked panels stay outside the scene. Floating panels can cover scene pixels visually, but they own their full visible input rectangle so clicks, drag, and resize do not leak through to viewport tools.
@@ -148,7 +148,7 @@ The viewport now also supports direct navigation while mouse capture is released
 
 Mouse wheel input over the `Controls` or `Scene Objects` panels is routed to panel paging instead of the viewport, so panel interaction does not leak into scene zooming.
 
-A compact diagnostic strip stays visible immediately below the Scene View while panels are open. It shows the active tool, selected object, mouse capture state, whether the cursor is in the viewport, whether a visible panel owns the pointer, gizmo model state, handle count, hovered handle, drag state, last rejection reason, hovered panel, active panel movement or resize, dock target, and latest workspace action. The strip is informational and does not consume viewport input.
+A compact diagnostic strip stays visible immediately below the Scene View while panels are open. It shows the active tool, selected object, mouse capture state, whether the cursor is in the viewport, whether a visible panel owns the pointer, gizmo model state, handle count, hovered handle, drag state, last rejection reason, hovered panel, whether the cursor is on a draggable header, active panel movement or resize, dock target, and latest workspace action. The strip is informational and does not consume viewport input.
 
 The current `Utility` panel can show:
 

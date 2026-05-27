@@ -66,8 +66,9 @@ On a first packaged run with no existing settings file, the docked workspace ope
 - Open Help, Scene Legend, Paths, Settings, Diagnostics, and Transform QA in the Utility panel so you can inspect the sandbox without relying on the console.
 - Watch the compact strip below Scene View while testing; it reports tool, selection, pointer ownership, gizmo, hover, drag, and rejection state live.
 - Use Transform QA first to confirm whether selected-object mutation works even if gizmo dragging or viewport input is failing.
-- Use `Float` on a panel header to undock it, drag a floating title bar to move it, and drag its lower-right grip to resize it.
-- Use floating-panel `L`, `R`, or `Home` to redock it, drag the narrow bars beside Scene View to resize occupied docks, and use `Reset Layout` to recover defaults.
+- Drag a docked panel header to undock it immediately; keep dragging to place it, or drag a floating header to move it again.
+- Use a floating panel's lower-right grip to resize it. `L`, `R`, and `Home` remain secondary redock controls, and `Reset Layout` recovers defaults.
+- Drag the narrow bars beside Scene View to resize occupied docks.
 - Confirm the small in-window status area reports common actions such as layout changes, camera reset, saved settings, or object focus.
 - Select each scene object and confirm the Object Details panel updates.
 - Use Focus Camera, Reset Transform, and Print Object Info on a few different objects.
@@ -153,7 +154,7 @@ Those utilities are the preferred path for normal viewer use. The console remain
 Status messages also appear in-window for common actions so normal packaged use does not depend on the console.
 Diagnostics now report input ownership, viewport-local cursor state, selected object state, gizmo model validity, overlay primitive count, hovered handle, active drag target, last rejected interaction reason, and last Action API result.
 Transform QA exposes direct move, rotate, scale, and reset controls that use the selected real object and the same Action API path as the normal object workflow.
-The compact strip below Scene View keeps essential input-gate, gizmo, and workspace drag state visible while testing, so a rejected viewport or panel gesture can be diagnosed without switching views.
+The compact strip below Scene View keeps essential input-gate, gizmo, hovered-panel, panel-header, and workspace drag state visible while testing, so a rejected viewport or panel gesture can be diagnosed without switching views.
 `Object Use` in Object Details reports the optional object interaction prompt and range only; it is separate from transform tools and gizmo state.
 
 Workspace panel placement and dock sizes are session-only in this version. `Reset Layout` is the supported recovery path for floating or resized panels.

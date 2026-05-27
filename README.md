@@ -46,7 +46,7 @@ Henka Engine is still early, but the sandbox now renders a visible 3D scene with
 - Local settings persistence for the sandbox
 - Early in-window UI overlay with buttons, toggles, labels, structured rows, and simple text rendering
 - Scene Objects, Object Details, and Utility panels for named sandbox object inspection and viewer workflows
-- Movable sandbox workspace panels with float, drag, resize, redock, dock splitter, and reset-layout recovery controls
+- Movable sandbox workspace panels with header drag, resize, redock, dock splitter, and reset-layout recovery controls
 - Packaged sandbox user data that stays in place across package refreshes by default
 - Generic documentation and starter template for external game repositories
 
@@ -151,7 +151,7 @@ The packaged folder also includes `PACKAGE_INFO.txt` so you can tell when the pa
 - `Home`: reset the camera view
 - `Escape`: close the UI first, then release the mouse, then exit
 
-Press `F4` to open the in-window sandbox panels. On a first run with no local settings file, the packaged sandbox opens the workspace in `View` mode so the controls are visible without covering most of the scene. Press `F5` to cycle between `View`, `Inspect`, and `Full Tools`. Panel headers provide `Float`; floating panels can be dragged by their title, resized from the lower-right grip, and returned with `L`, `R`, or `Home`. Visible bars beside the Scene View resize occupied docks, and `Reset Layout` restores safe default docking and sizes. Select a scene object from the list or with `Left Mouse` in the viewport, then use the Viewport Tool section to switch between `Select`, `Orbit`, `Pan`, `Move`, `Rotate`, and `Scale`. A compact strip below the Scene View reports viewport and workspace interaction state while you test. `Diagnostics` and `Transform QA` remain directly available on the main Controls page. Manual desktop QA is still required before panel drag comfort and transform workflow feel can be called fully complete.
+Press `F4` to open the in-window sandbox panels. On a first run with no local settings file, the packaged sandbox opens the workspace in `View` mode so the controls are visible without covering most of the scene. Press `F5` to cycle between `View`, `Inspect`, and `Full Tools`. Drag a docked panel header to undock and move it; floating panels continue to drag by their header, resize from the lower-right grip, and can be returned with `L`, `R`, or `Home`. Visible bars beside the Scene View resize occupied docks, and `Reset Layout` restores safe default docking and sizes. Select a scene object from the list or with `Left Mouse` in the viewport, then use the Viewport Tool section to switch between `Select`, `Orbit`, `Pan`, `Move`, `Rotate`, and `Scale`. A compact strip below the Scene View reports viewport and workspace interaction state while you test. `Diagnostics` and `Transform QA` remain directly available on the main Controls page. Manual desktop QA is still required before panel drag comfort and transform workflow feel can be called fully complete.
 
 Offline help is also available in [docs/help/sandbox3d.md](docs/help/sandbox3d.md).
 Model loading notes are documented in [docs/model-loading.md](docs/model-loading.md).
