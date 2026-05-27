@@ -67,7 +67,7 @@ In `henka_sandbox3d`, press `F4` to open the panels.
 On a first packaged run with no local settings file, the UI opens in `View` mode so the controls are immediately visible without covering most of the scene.
 If you hide the panels, a small in-window recall hint stays visible so the viewport can stay clean without losing the `F4` and `F5` cues.
 
-The sandbox now uses a movable workspace layout:
+The sandbox now uses a movable in-window workspace layout:
 
 - left and right dock regions for panels
 - a dedicated scene viewport in the center
@@ -77,7 +77,7 @@ The sandbox now uses a movable workspace layout:
 - `L`, `R`, and `Home` controls as secondary reliable redocking paths
 - visible splitter bars for occupied dock width resizing
 
-Docked panels stay outside the scene. Floating panels can cover scene pixels visually, but they own their full visible input rectangle so clicks, drag, and resize do not leak through to viewport tools.
+Docked panels stay outside the scene. Floating panels remain overlay rectangles inside the main sandbox window and can cover scene pixels visually, but they own their full visible input rectangle so clicks, drag, and resize do not leak through to viewport tools. Native floating panel windows are not part of the current UI path.
 
 The current `Controls` panel can:
 
@@ -168,7 +168,7 @@ The diagnostics view now surfaces the current viewport tool, gizmo mode, mouse c
 The Transform QA view exposes direct move, rotate, scale, and reset controls that use the same local Action API path as normal object manipulation, which makes it easier to separate Action API failures from gizmo or input failures during packaged QA.
 When Diagnostics or Transform QA is open in the heavier layout, the utility view uses the right dock directly so its controls do not draw through Object Details.
 
-Panel placement and dock resizing are session-only in the current sandbox. `Reset Layout` redocks the standard panels, restores safe dock widths, and clears active workspace drag or resize state.
+Panel placement and dock resizing are session-only in the current sandbox. `Reset Layout` redocks the standard panels, restores safe dock widths, and clears active workspace drag or resize state. The Scene View remains the main center viewport; native floating panel windows and detachable Scene View support need future multi-window rendering and input routing work.
 
 When the UI is open:
 
