@@ -3386,18 +3386,6 @@ static bool sandbox3d_handle_workspace_input(
 
     if (state->workspace.model.active_drag_panel != SANDBOX3D_WORKSPACE_PANEL_NONE)
     {
-        const henka_ui_rect left_target = sandbox3d_get_workspace_dock_target_rect(
-            state,
-            &state->frame_layout,
-            SANDBOX3D_WORKSPACE_DOCK_LEFT,
-            framebuffer_width,
-            framebuffer_height);
-        const henka_ui_rect right_target = sandbox3d_get_workspace_dock_target_rect(
-            state,
-            &state->frame_layout,
-            SANDBOX3D_WORKSPACE_DOCK_RIGHT,
-            framebuffer_width,
-            framebuffer_height);
         if (left_down)
         {
             sandbox3d_workspace_update_panel_drag(
@@ -3405,16 +3393,16 @@ static bool sandbox3d_handle_workspace_input(
                 framebuffer_mouse,
                 framebuffer_width,
                 framebuffer_height);
-            state->workspace.model.active_dock_target = SANDBOX3D_WORKSPACE_DOCK_FLOATING;
-            if (henka_ui_rect_contains(left_target, framebuffer_mouse) &&
-                sandbox3d_workspace_can_dock_panel(state, state->workspace.model.active_drag_panel, SANDBOX3D_WORKSPACE_DOCK_LEFT))
+            state->workspace.model.active_dock_target = sandbox3d_workspace_evaluate_dock_zone(
+                framebuffer_mouse,
+                state->frame_layout.left_dock,
+                state->frame_layout.scene_frame,
+                state->frame_layout.right_dock,
+                48.0f);
+            if (state->workspace.model.active_dock_target != SANDBOX3D_WORKSPACE_DOCK_FLOATING &&
+                !sandbox3d_workspace_can_dock_panel(state, state->workspace.model.active_drag_panel, state->workspace.model.active_dock_target))
             {
-                state->workspace.model.active_dock_target = SANDBOX3D_WORKSPACE_DOCK_LEFT;
-            }
-            else if (henka_ui_rect_contains(right_target, framebuffer_mouse) &&
-                sandbox3d_workspace_can_dock_panel(state, state->workspace.model.active_drag_panel, SANDBOX3D_WORKSPACE_DOCK_RIGHT))
-            {
-                state->workspace.model.active_dock_target = SANDBOX3D_WORKSPACE_DOCK_RIGHT;
+                state->workspace.model.active_dock_target = SANDBOX3D_WORKSPACE_DOCK_FLOATING;
             }
         }
         if (left_released)

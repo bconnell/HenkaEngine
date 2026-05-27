@@ -243,11 +243,11 @@ void sandbox3d_workspace_begin_docked_panel_drag(
         return;
     }
 
-    panel->dock = SANDBOX3D_WORKSPACE_DOCK_FLOATING;
     panel->floating_rect = current_rect;
     panel->floating_rect.width = panel->floating_rect.width > panel->minimum_width ? panel->floating_rect.width : panel->minimum_width;
     panel->floating_rect.height = panel->floating_rect.height > panel->minimum_height ? panel->floating_rect.height : panel->minimum_height;
     sandbox3d_workspace_clamp_floating_rect(panel, framebuffer_width, framebuffer_height);
+    panel->dock = SANDBOX3D_WORKSPACE_DOCK_FLOATING;
     sandbox3d_workspace_bring_to_front(model, panel_id);
     model->active_drag_panel = panel_id;
     model->drag_offset.x = pointer.x - panel->floating_rect.x;
@@ -374,6 +374,34 @@ void sandbox3d_workspace_end_interaction(sandbox3d_workspace_model* model)
     model->active_resize_panel = SANDBOX3D_WORKSPACE_PANEL_NONE;
     model->resize_target = SANDBOX3D_WORKSPACE_RESIZE_NONE;
     model->active_dock_target = SANDBOX3D_WORKSPACE_DOCK_FLOATING;
+}
+
+sandbox3d_workspace_dock_zone sandbox3d_workspace_evaluate_dock_zone(
+    henka_vec2 pointer,
+    henka_ui_rect left_dock,
+    henka_ui_rect scene_frame,
+    henka_ui_rect right_dock,
+    float dock_margin)
+{
+    if (left_dock.width > 0.0f &&
+        pointer.x >= left_dock.x - dock_margin &&
+        pointer.x < left_dock.x + left_dock.width + dock_margin &&
+        pointer.y >= left_dock.y &&
+        pointer.y < left_dock.y + left_dock.height)
+    {
+        return SANDBOX3D_WORKSPACE_DOCK_LEFT;
+    }
+
+    if (right_dock.width > 0.0f &&
+        pointer.x >= right_dock.x - dock_margin &&
+        pointer.x < right_dock.x + right_dock.width + dock_margin &&
+        pointer.y >= right_dock.y &&
+        pointer.y < right_dock.y + right_dock.height)
+    {
+        return SANDBOX3D_WORKSPACE_DOCK_RIGHT;
+    }
+
+    return SANDBOX3D_WORKSPACE_DOCK_FLOATING;
 }
 
 const char* sandbox3d_workspace_panel_name(sandbox3d_workspace_panel_id panel_id)

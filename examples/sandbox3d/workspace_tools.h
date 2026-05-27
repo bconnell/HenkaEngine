@@ -120,6 +120,12 @@ void sandbox3d_workspace_update_dock_resize(
     float minimum_dock_width,
     float reserved_other_dock_width);
 void sandbox3d_workspace_end_interaction(sandbox3d_workspace_model* model);
+sandbox3d_workspace_dock_zone sandbox3d_workspace_evaluate_dock_zone(
+    henka_vec2 pointer,
+    henka_ui_rect left_dock,
+    henka_ui_rect scene_frame,
+    henka_ui_rect right_dock,
+    float dock_margin);
 const char* sandbox3d_workspace_panel_name(sandbox3d_workspace_panel_id panel_id);
 const char* sandbox3d_workspace_dock_name(sandbox3d_workspace_dock_zone dock_zone);
 
