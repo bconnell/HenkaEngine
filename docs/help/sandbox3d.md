@@ -10,9 +10,9 @@
 - a fallback-texture example that stays visible when a texture file is missing
 - a fallback-model example that stays visible when an OBJ file is missing
 
-The sandbox also saves a small local settings file so wireframe, grid visibility, mouse sensitivity, camera state, selected object, and panel visibility can carry across runs.
+The sandbox also saves a small local settings file so wireframe, grid visibility, mouse sensitivity, camera state, and panel visibility can carry across runs.
 It now also includes small in-window developer panels for inspection and settings tasks.
-On a first packaged run with no existing settings file, the docked workspace opens in `View` mode so the controls are visible while most of the scene stays open.
+The docked workspace opens in `View` mode with no selected scene object so the controls are visible while most of the scene stays open.
 
 ## Controls
 
@@ -66,10 +66,11 @@ On a first packaged run with no existing settings file, the docked workspace ope
 - Open Help, Scene Legend, Paths, Settings, Diagnostics, and Transform QA in the Utility panel so you can inspect the sandbox without relying on the console.
 - Choose `Open Native Panel Test` in Controls to open a separate OS-level window that shows its identifier, focus, size, last routed event, and close guidance.
 - The in-window panels open on startup and after reset-style launches. `F4` hides or shows them; it is not required for first discovery.
+- Starts have no selected scene object; Object Details, Physics QA, Diagnostics, and the compact strip report no selection until you choose one.
 - Watch the compact strip below Scene View while testing; it reports tool, selection, selected-highlight state, pointer ownership, gizmo, hover, drag, and rejection state live.
 - Use Transform QA first to confirm whether selected-object mutation works even if gizmo dragging or viewport input is failing.
 - Open `Physics QA`, click `Enable`, and observe the linked sample bodies fall and collide; use pause, fixed step, reset, body-type controls, Make Dynamic + Drop, impulses, raycast, and collider/contact debug to inspect the rigid-body path.
-- Drag a docked panel header to undock it inside the main sandbox window; keep dragging to place it there, or drag a floating header to move it again.
+- `DRAG` marks a live panel header. Drag a docked panel header to undock it inside the main sandbox window; keep dragging to place it there, or drag a floating header to move it again.
 - Use a floating panel's lower-right grip to resize it. `L`, `R`, and `Home` remain secondary redock controls, and `Reset Layout` recovers defaults.
 - Drag the narrow bars beside Scene View to resize occupied docks.
 - Confirm the small in-window status area reports common actions such as layout changes, camera reset, saved settings, or object focus.
@@ -118,7 +119,7 @@ The `Scene Objects` panel lists the current sandbox examples by name.
 - Clicking a row selects that object.
 - Hidden objects stay listed and show a hidden state tag.
 - The selected row and the selected real scene object stay highlighted so the current object is easy to track from either the panels or the viewport.
-- Ground selection uses a bounded floor outline instead of infinite plane bounds, and selection overlays are clipped to the Scene View so they do not draw over panels or the status strip.
+- Ground selection uses one bounded floor outline instead of infinite plane bounds, and selection overlays are clipped to the Scene View so they do not draw over panels or the status strip.
 - If the dock is too short to show the whole list at once, page buttons keep every sample object reachable.
 
 The `Object Details` panel shows the current selection.

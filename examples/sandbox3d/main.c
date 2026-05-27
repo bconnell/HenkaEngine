@@ -337,7 +337,6 @@ static const char* g_setting_key_camera_position_y = "camera_position_y";
 static const char* g_setting_key_camera_position_z = "camera_position_z";
 static const char* g_setting_key_camera_yaw = "camera_yaw_radians";
 static const char* g_setting_key_camera_pitch = "camera_pitch_radians";
-static const char* g_setting_key_selected_object_name = "ui.selected_object_name";
 static const char* g_setting_key_scene_panel_visible = "ui.scene_objects_panel_visible";
 static const char* g_setting_key_details_panel_visible = "ui.object_details_panel_visible";
 static const char* g_setting_key_layout_mode = "ui.layout_mode";
@@ -436,6 +435,9 @@ static henka_ui_rect sandbox3d_get_workspace_dock_target_rect(
 static bool sandbox3d_workspace_panel_visible(
     const sandbox3d_state* state,
     sandbox3d_workspace_panel_id panel_id);
+static sandbox3d_workspace_panel_id sandbox3d_find_workspace_header_drag_panel_at_point(
+    const sandbox3d_state* state,
+    henka_vec2 framebuffer_mouse);
 static bool sandbox3d_apply_transform_action(
     sandbox3d_state* state,
     henka_action_command command,
@@ -1483,6 +1485,7 @@ static void sandbox3d_draw_selection_highlight(sandbox3d_state* state, henka_vie
     henka_transform selected_transform;
     henka_vec4 outer_color;
     henka_vec4 inner_color;
+    bool ground_selection;
     size_t edge;
 
     if (state == NULL || state->ui == NULL || !henka_viewport_is_valid(viewport) ||
@@ -1492,13 +1495,14 @@ static void sandbox3d_draw_selection_highlight(sandbox3d_state* state, henka_vie
     }
 
     selected_entity = sandbox3d_get_real_selected_entity(state);
-    if (selected_entity == state->ground_entity &&
+    ground_selection = selected_entity == state->ground_entity;
+    if (ground_selection &&
         sandbox3d_entity_get_transform(state->scene, selected_entity, &selected_transform) == HENKA_SUCCESS)
     {
         if (!sandbox3d_build_ground_selection_highlight_model(
                 selected_transform.position,
                 6.0f,
-                0.04f,
+                0.05f,
                 &model))
         {
             return;
@@ -1520,8 +1524,15 @@ static void sandbox3d_draw_selection_highlight(sandbox3d_state* state, henka_vie
         {
             continue;
         }
-        sandbox3d_draw_viewport_clipped_overlay_line(state->ui, viewport, start, end, 4.0f, outer_color);
-        sandbox3d_draw_viewport_clipped_overlay_line(state->ui, viewport, start, end, 2.0f, inner_color);
+        if (!ground_selection)
+        {
+            sandbox3d_draw_viewport_clipped_overlay_line(state->ui, viewport, start, end, 4.0f, outer_color);
+            sandbox3d_draw_viewport_clipped_overlay_line(state->ui, viewport, start, end, 2.0f, inner_color);
+        }
+        else
+        {
+            sandbox3d_draw_viewport_clipped_overlay_line(state->ui, viewport, start, end, 3.0f, inner_color);
+        }
     }
 }
 
@@ -1569,6 +1580,7 @@ static void sandbox3d_reset_workspace_layout(sandbox3d_state* state)
     state->viewport_tool = SANDBOX3D_VIEWPORT_TOOL_SELECT;
     state->gizmo.mode = SANDBOX3D_GIZMO_MODE_SELECT;
     sandbox3d_clear_gizmo_drag(state, true);
+    sandbox3d_clear_selection(state, "Layout reset. No object selected.");
     if (state->ui != NULL)
     {
         henka_ui_set_visible(state->ui, true);
@@ -1625,6 +1637,76 @@ static bool sandbox3d_workspace_panel_visible(
         default:
             return false;
     }
+}
+
+static sandbox3d_workspace_panel_id sandbox3d_find_workspace_header_drag_panel_at_point(
+    const sandbox3d_state* state,
+    henka_vec2 framebuffer_mouse)
+{
+    const sandbox3d_workspace_panel* panel;
+    sandbox3d_workspace_panel_id best_floating_panel;
+    unsigned int best_z;
+    int index;
+
+    if (state == NULL)
+    {
+        return SANDBOX3D_WORKSPACE_PANEL_NONE;
+    }
+
+    best_floating_panel = SANDBOX3D_WORKSPACE_PANEL_NONE;
+    best_z = 0U;
+    for (index = 0; index < SANDBOX3D_WORKSPACE_PANEL_COUNT; ++index)
+    {
+        henka_ui_rect bounds;
+
+        if (!sandbox3d_workspace_panel_visible(state, (sandbox3d_workspace_panel_id)index))
+        {
+            continue;
+        }
+
+        panel = sandbox3d_workspace_get_panel_const(&state->workspace.model, (sandbox3d_workspace_panel_id)index);
+        if (panel == NULL || panel->dock != SANDBOX3D_WORKSPACE_DOCK_FLOATING)
+        {
+            continue;
+        }
+
+        bounds = sandbox3d_get_panel_rect(&state->frame_layout, (sandbox3d_workspace_panel_id)index);
+        if (henka_ui_rect_contains(sandbox3d_workspace_title_drag_rect(bounds), framebuffer_mouse) &&
+            (best_floating_panel == SANDBOX3D_WORKSPACE_PANEL_NONE || panel->z_order >= best_z))
+        {
+            best_floating_panel = (sandbox3d_workspace_panel_id)index;
+            best_z = panel->z_order;
+        }
+    }
+
+    if (best_floating_panel != SANDBOX3D_WORKSPACE_PANEL_NONE)
+    {
+        return best_floating_panel;
+    }
+
+    for (index = SANDBOX3D_WORKSPACE_PANEL_COUNT - 1; index >= 0; --index)
+    {
+        henka_ui_rect bounds;
+
+        if (!sandbox3d_workspace_panel_visible(state, (sandbox3d_workspace_panel_id)index))
+        {
+            continue;
+        }
+
+        panel = sandbox3d_workspace_get_panel_const(&state->workspace.model, (sandbox3d_workspace_panel_id)index);
+        if (panel == NULL || panel->dock == SANDBOX3D_WORKSPACE_DOCK_FLOATING)
+        {
+            continue;
+        }
+
+        bounds = sandbox3d_get_panel_rect(&state->frame_layout, (sandbox3d_workspace_panel_id)index);
+        if (henka_ui_rect_contains(sandbox3d_workspace_docked_title_drag_rect(bounds), framebuffer_mouse))
+        {
+            return (sandbox3d_workspace_panel_id)index;
+        }
+    }
+
+    return SANDBOX3D_WORKSPACE_PANEL_NONE;
 }
 
 static void sandbox3d_set_active_utility(sandbox3d_state* state, sandbox3d_utility_view utility)
@@ -2784,34 +2866,12 @@ static void sandbox3d_clear_selection(sandbox3d_state* state, const char* reason
 
 static void sandbox3d_restore_selected_object(sandbox3d_state* state)
 {
-    const char* selected_name;
-    henka_entity selected_entity;
-
-    if (state == NULL || state->settings == NULL || state->scene == NULL)
+    if (state == NULL)
     {
         return;
     }
 
-    selected_entity = HENKA_INVALID_ENTITY;
-    selected_name = henka_settings_get_string(state->settings, g_setting_key_selected_object_name, "");
-    if (selected_name[0] != '\0')
-    {
-        if (henka_scene_find_entity_by_name(state->scene, selected_name, &selected_entity) != HENKA_SUCCESS)
-        {
-            selected_entity = HENKA_INVALID_ENTITY;
-        }
-    }
-
-    if (selected_entity == HENKA_INVALID_ENTITY)
-    {
-        selected_entity = sandbox3d_get_first_selectable_entity(state);
-    }
-    else if (!sandbox3d_is_selectable_entity(state, selected_entity))
-    {
-        selected_entity = sandbox3d_get_first_selectable_entity(state);
-    }
-
-    sandbox3d_select_entity(state, selected_entity);
+    sandbox3d_clear_selection(state, "No object selected.");
 }
 
 static void sandbox3d_apply_loaded_settings(henka_engine* engine, sandbox3d_state* state)
@@ -2867,7 +2927,6 @@ static void sandbox3d_apply_loaded_settings(henka_engine* engine, sandbox3d_stat
 
 static henka_result sandbox3d_save_settings(henka_engine* engine, sandbox3d_state* state)
 {
-    const sandbox3d_object_descriptor* descriptor;
     char* settings_path;
     henka_result result;
 
@@ -2889,16 +2948,6 @@ static henka_result sandbox3d_save_settings(henka_engine* engine, sandbox3d_stat
     henka_settings_set_bool(state->settings, g_setting_key_scene_panel_visible, state->workspace.scene_objects_panel_visible);
     henka_settings_set_bool(state->settings, g_setting_key_details_panel_visible, state->workspace.object_details_panel_visible);
     henka_settings_set_string(state->settings, g_setting_key_active_utility, sandbox3d_get_utility_setting_value(state->workspace.active_utility));
-
-    descriptor = sandbox3d_get_selected_descriptor(state);
-    if (descriptor != NULL && descriptor->display_name != NULL)
-    {
-        henka_settings_set_string(state->settings, g_setting_key_selected_object_name, descriptor->display_name);
-    }
-    else
-    {
-        henka_settings_remove(state->settings, g_setting_key_selected_object_name);
-    }
 
     result = sandbox3d_get_settings_path(engine, &settings_path);
     if (result != HENKA_SUCCESS)
@@ -2950,7 +2999,7 @@ static henka_result sandbox3d_reset_settings(henka_engine* engine, sandbox3d_sta
 
     sandbox3d_reset_camera_defaults(state);
     sandbox3d_reset_workspace_layout(state);
-    sandbox3d_select_entity(state, sandbox3d_get_first_selectable_entity(state));
+    sandbox3d_clear_selection(state, "Settings reset. No object selected.");
 
     result = henka_scene_set_entity_visible(state->scene, state->grid_entity, true);
     if (result != HENKA_SUCCESS)
@@ -3301,6 +3350,7 @@ static bool sandbox3d_handle_workspace_input(
     const sandbox3d_workspace_panel* panel;
     henka_ui_rect bounds;
     sandbox3d_workspace_panel_id top_panel;
+    sandbox3d_workspace_panel_id header_drag_panel;
     bool top_panel_is_floating;
     unsigned int top_z;
     int index;
@@ -3443,6 +3493,30 @@ static bool sandbox3d_handle_workspace_input(
         return true;
     }
 
+    header_drag_panel = sandbox3d_find_workspace_header_drag_panel_at_point(state, framebuffer_mouse);
+    if (header_drag_panel != SANDBOX3D_WORKSPACE_PANEL_NONE)
+    {
+        bounds = sandbox3d_get_panel_rect(&state->frame_layout, header_drag_panel);
+        if (sandbox3d_workspace_panel_is_floating(&state->workspace.model, header_drag_panel))
+        {
+            sandbox3d_workspace_begin_panel_drag(&state->workspace.model, header_drag_panel, framebuffer_mouse);
+        }
+        else
+        {
+            sandbox3d_workspace_begin_docked_panel_drag(
+                &state->workspace.model,
+                header_drag_panel,
+                bounds,
+                framebuffer_mouse,
+                framebuffer_width,
+                framebuffer_height);
+            sandbox3d_set_statusf(state, false, false, "%s undocked. Drag to place or redock.", sandbox3d_workspace_panel_name(header_drag_panel));
+        }
+        state->workspace.model.hovered_panel = header_drag_panel;
+        sandbox3d_clear_gizmo_drag(state, true);
+        return true;
+    }
+
     if (top_panel != SANDBOX3D_WORKSPACE_PANEL_NONE &&
         sandbox3d_workspace_panel_is_floating(&state->workspace.model, top_panel))
     {
@@ -3452,29 +3526,6 @@ static bool sandbox3d_handle_workspace_input(
         {
             sandbox3d_workspace_begin_panel_resize(&state->workspace.model, top_panel, framebuffer_mouse);
             sandbox3d_clear_gizmo_drag(state, true);
-            return true;
-        }
-        if (henka_ui_rect_contains(sandbox3d_workspace_title_drag_rect(bounds), framebuffer_mouse))
-        {
-            sandbox3d_workspace_begin_panel_drag(&state->workspace.model, top_panel, framebuffer_mouse);
-            sandbox3d_clear_gizmo_drag(state, true);
-            return true;
-        }
-    }
-    else if (top_panel != SANDBOX3D_WORKSPACE_PANEL_NONE)
-    {
-        bounds = sandbox3d_get_panel_rect(&state->frame_layout, top_panel);
-        if (henka_ui_rect_contains(sandbox3d_workspace_docked_title_drag_rect(bounds), framebuffer_mouse))
-        {
-            sandbox3d_workspace_begin_docked_panel_drag(
-                &state->workspace.model,
-                top_panel,
-                bounds,
-                framebuffer_mouse,
-                framebuffer_width,
-                framebuffer_height);
-            sandbox3d_clear_gizmo_drag(state, true);
-            sandbox3d_set_statusf(state, false, false, "%s undocked. Drag to place or redock.", sandbox3d_workspace_panel_name(top_panel));
             return true;
         }
     }
@@ -6235,7 +6286,8 @@ static henka_result sandbox3d_initialize(henka_engine* engine, void* user_data)
     ground_material.shader = state->basic_shader;
     ground_material.base_color_texture = state->ground_texture;
     ground_material.use_texture = true;
-    ground_material.base_color = (henka_vec4){0.66f, 0.72f, 0.66f, 1.0f};
+    ground_material.base_color = (henka_vec4){0.96f, 0.98f, 0.90f, 1.0f};
+    ground_material.use_lighting = false;
 
     cube_material = henka_material_default();
     cube_material.name = "Cube Albedo";
@@ -6280,7 +6332,7 @@ static henka_result sandbox3d_initialize(henka_engine* engine, void* user_data)
     grid_material.name = "Debug Grid";
     grid_material.type = HENKA_MATERIAL_TYPE_UNLIT;
     grid_material.shader = state->grid_shader;
-    grid_material.base_color = (henka_vec4){0.36f, 0.66f, 0.88f, 0.88f};
+    grid_material.base_color = (henka_vec4){0.24f, 0.46f, 0.62f, 0.82f};
     grid_material.use_texture = false;
     grid_material.use_lighting = false;
 
@@ -6575,6 +6627,8 @@ static henka_result sandbox3d_initialize(henka_engine* engine, void* user_data)
 
     sandbox3d_print_help(state);
     printf("Runtime mode: %s\n", henka_engine_get_package_mode_label(henka_engine_get_package_mode(engine)));
+    printf("Startup selection: %s\n",
+           sandbox3d_get_real_selected_entity(state) == HENKA_INVALID_ENTITY ? "None" : sandbox3d_safe_entity_name(state, sandbox3d_get_real_selected_entity(state), "Unknown"));
     fflush(stdout);
     sandbox3d_print_startup_ui_cue(state);
     sandbox3d_print_layout_mode(state, true);

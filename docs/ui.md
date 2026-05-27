@@ -64,7 +64,7 @@ That is enough for the current sandbox panel, status text, and small runtime con
 ## Sandbox panels
 
 In `henka_sandbox3d`, press `F4` to open the panels.
-On a first packaged run with no local settings file, the UI opens in `View` mode so the controls are immediately visible without covering most of the scene.
+On startup, the UI opens in `View` mode with no selected scene object so the controls are immediately visible without covering most of the scene.
 If you hide the panels, a small in-window recall hint stays visible so the viewport can stay clean without losing the `F4` and `F5` cues.
 
 The sandbox now uses a movable in-window workspace layout:
@@ -92,6 +92,7 @@ The current `Controls` panel can:
 - toggle transform snapping and show the current snap increments
 - toggle `Hit Boxes` so the viewport can draw the same handle regions that gizmo hit testing uses
 - start with panels visible on startup and reset-style launches so `Diagnostics`, `Transform QA`, and `Physics QA` are reachable from the main Controls page without using `F4` first
+- start launches with no selected scene object until the user selects one
 - open `Physics QA` for the opt-in rigid-body demo, playback controls, selected-body actions, and debug visualization
 - open `Native Panel Test` as a separate OS-level foundation window
 - save sandbox settings
@@ -172,7 +173,7 @@ The Transform QA view exposes direct move, rotate, scale, and reset controls tha
 The Physics QA view exposes real enable, pause/resume, fixed-step, demo reset, gravity, collider/contact debug, impulse, velocity clear, body-type, Make Dynamic + Drop, and camera-raycast controls. It explains that Static bodies do not move from physics, Dynamic bodies fall and respond to gravity, forces, impulses, and collisions, and Kinematic bodies do not fall from gravity because they move only through explicit tool or code movement. Collider overlays are generated from the same collider descriptions used for collision detection, clipped to the Scene View, and physics-linked entities are ordinary selectable scene objects rather than debug helpers.
 When Diagnostics, Transform QA, or Physics QA is open in the heavier layout, the utility view uses the right dock directly so its controls do not draw through Object Details.
 
-Selection is also visible directly in the Scene View through a non-selectable highlighted bounds outline around the selected real scene object. The highlight is clipped to the Scene View and does not draw over workspace panels or the debug strip. Ground selection uses a finite floor outline around the visible ground area instead of unbounded plane geometry. Clearing selection, clicking empty viewport space in Select mode, hiding the selected object, or deleting it removes the highlight and updates Object Details and Diagnostics.
+Selection is also visible directly in the Scene View through a non-selectable highlighted bounds outline around the selected real scene object. The highlight is clipped to the Scene View and does not draw over workspace panels or the debug strip. Ground selection uses one finite floor outline around the visible ground area instead of unbounded plane geometry. Clearing selection, clicking empty viewport space in Select mode, hiding the selected object, or deleting it removes the highlight and updates Object Details and Diagnostics.
 
 Panel placement and dock resizing are session-only in the current sandbox. `Reset Layout` redocks the standard panels, restores safe dock widths, makes panels visible, clears active workspace drag or resize state, and closes `Native Panel Test` if it is open. The Scene View remains the main center viewport. The test window establishes separate-window rendering and event routing; production tool-panel conversion and detachable Scene View support remain future work.
 

@@ -22,6 +22,7 @@ void henka_test_action(void)
     HENKA_TEST_ASSERT(henka_scene_create(&scene) == HENKA_SUCCESS);
     HENKA_TEST_ASSERT(henka_action_context_create(&actions) == HENKA_SUCCESS);
     HENKA_TEST_ASSERT(henka_action_context_set_scene(actions, scene) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_action_context_get_selected_entity(actions) == HENKA_INVALID_ENTITY);
     camera = henka_camera_create_perspective(60.0f * HENKA_DEG_TO_RAD, 16.0f / 9.0f, 0.1f, 100.0f);
     HENKA_TEST_ASSERT(henka_action_context_set_camera(actions, &camera) == HENKA_SUCCESS);
 

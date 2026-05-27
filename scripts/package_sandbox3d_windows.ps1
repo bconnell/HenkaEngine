@@ -117,12 +117,13 @@ The in-window panels open automatically so Controls and Physics QA are visible w
 Press F4 to hide or show the in-window panels.
 Press F5 to cycle View, Inspect, and Full Tools.
 The scene renders inside its own docked viewport when panels are visible.
+Starts have no selected scene object until you select one.
 Select an object in the viewport or Scene Objects panel, then use Select, Orbit, Pan, Move, Rotate, and Scale from the Viewport Tool section.
 Use the in-window utilities for help, legend, paths, settings, diagnostics, Transform QA, and Physics QA.
 Selected real scene objects show a viewport highlight until selection is cleared.
-Ground selection uses a bounded Scene View highlight, and viewport overlays do not draw over panels.
+Ground selection uses one bounded Scene View highlight, and viewport overlays do not draw over panels.
 Physics QA explains Static, Dynamic, and Kinematic bodies and includes Make Dynamic + Drop for quick gravity tests.
-Drag a panel header to undock and move it inside this window, then drag a floating title again to reposition it or drag the lower-right grip to resize.
+DRAG marks a live panel header. Drag a panel header to undock and move it inside this window, then drag a floating title again to reposition it or drag the lower-right grip to resize.
 Open Native Panel Test from Controls to exercise a separate OS-level validation window.
 Production tool panels remain in-window and detachable Scene View is not implemented yet.
 Use L, R, or Home on a floating panel to redock it, and drag dock splitters beside Scene View to resize occupied docks.
@@ -173,6 +174,7 @@ Write-Host "  Open out\HenkaSandbox3D and double-click HenkaSandbox3D.exe."
 Write-Host "  The in-window panels open automatically; press F4 only to hide or show them."
 Write-Host "  Press F5 to cycle View, Inspect, and Full Tools."
 Write-Host "  The scene should render inside its own docked viewport when panels are visible."
+Write-Host "  Starts should have no selected scene object until you select one."
 Write-Host "  Select an object in the viewport or Scene Objects panel, then use Select, Orbit, Pan, Move, Rotate, and Scale in the Viewport Tool section."
 Write-Host "  Use the in-window utilities for help, legend, paths, settings, diagnostics, Transform QA, and Physics QA."
 Write-Host "  Watch the viewport selection highlight and use Make Dynamic + Drop in Physics QA for quick gravity tests."
