@@ -123,7 +123,7 @@ Use the in-window utilities for help, legend, paths, settings, diagnostics, Tran
 Selected real scene objects show a viewport highlight until selection is cleared.
 Ground selection uses one bounded Scene View highlight, and viewport overlays do not draw over panels.
 Physics QA explains Static, Dynamic, and Kinematic bodies and includes Make Dynamic + Drop for quick gravity tests.
-DRAG marks a live panel header. Drag a panel header to undock and move it inside this window, then drag a floating title again to reposition it or drag the lower-right grip to resize.
+DRAG marks a live panel header. Drag a panel header to undock and move it freely, including beyond the main window frame. Release away from valid dock outlines to keep it floating, or release over a valid outline to redock.
 Open Native Panel Test from Controls to exercise a separate OS-level validation window.
 Production tool panels remain in-window and detachable Scene View is not implemented yet.
 Use L, R, or Home on a floating panel to redock it, and drag dock splitters beside Scene View to resize occupied docks.
@@ -178,7 +178,7 @@ Write-Host "  Starts should have no selected scene object until you select one."
 Write-Host "  Select an object in the viewport or Scene Objects panel, then use Select, Orbit, Pan, Move, Rotate, and Scale in the Viewport Tool section."
 Write-Host "  Use the in-window utilities for help, legend, paths, settings, diagnostics, Transform QA, and Physics QA."
 Write-Host "  Watch the viewport selection highlight and use Make Dynamic + Drop in Physics QA for quick gravity tests."
-Write-Host "  Use panel header dragging, resize grips, L/R/Home, and dock splitters to arrange the in-window workspace."
+Write-Host "  Use panel header dragging, valid dock outlines, resize grips, L/R/Home, Reset Layout, and dock splitters to arrange the in-window workspace."
 Write-Host "  Open Native Panel Test from Controls to exercise a separate OS-level validation window."
 Write-Host "  Production tool panels remain in-window and detachable Scene View is not implemented yet."
 Write-Host "  Use Reset Layout to recover all panels and default dock sizes."

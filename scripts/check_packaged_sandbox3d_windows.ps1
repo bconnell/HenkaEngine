@@ -214,7 +214,7 @@ Assert-FileContains -Path $readmePath -Pattern "no selected scene object" -Descr
 Assert-FileContains -Path $readmePath -Pattern "Physics QA explains Static, Dynamic, and Kinematic" -Description "Packaged physics body-type guidance"
 Assert-FileContains -Path $readmePath -Pattern "viewport highlight" -Description "Packaged selection highlight guidance"
 Assert-FileContains -Path $readmePath -Pattern "one bounded Scene View highlight" -Description "Packaged ground highlight guidance"
-Assert-FileContains -Path $readmePath -Pattern "Drag a panel header to undock and move it inside this window" -Description "Packaged workspace guidance"
+Assert-FileContains -Path $readmePath -Pattern "Release away from valid dock outlines to keep it floating" -Description "Packaged workspace guidance"
 Assert-FileContains -Path $readmePath -Pattern "Open Native Panel Test from Controls to exercise a separate OS-level validation window" -Description "Packaged native test panel guidance"
 Assert-FileContains -Path $readmePath -Pattern "Production tool panels remain in-window and detachable Scene View is not implemented yet" -Description "Packaged workspace limitation guidance"
 Assert-FileContains -Path $readmePath -Pattern "status area" -Description "Packaged status guidance"

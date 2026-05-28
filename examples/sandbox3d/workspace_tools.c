@@ -16,42 +16,22 @@ static float sandbox3d_workspace_clamp_float(float value, float minimum, float m
     return value;
 }
 
-static void sandbox3d_workspace_clamp_floating_rect(
-    sandbox3d_workspace_panel* panel,
-    int framebuffer_width,
-    int framebuffer_height)
+static void sandbox3d_workspace_enforce_minimum_floating_size(
+    sandbox3d_workspace_panel* panel)
 {
-    const float margin = 8.0f;
-    float maximum_height;
-    float maximum_width;
-    float minimum_height;
-    float minimum_width;
-
-    if (panel == NULL || framebuffer_width <= 0 || framebuffer_height <= 0)
+    if (panel == NULL)
     {
         return;
     }
 
-    maximum_width = (float)framebuffer_width - margin * 2.0f;
-    maximum_height = (float)framebuffer_height - margin * 2.0f;
-    minimum_width = panel->minimum_width < maximum_width ? panel->minimum_width : maximum_width;
-    minimum_height = panel->minimum_height < maximum_height ? panel->minimum_height : maximum_height;
-    panel->floating_rect.width = sandbox3d_workspace_clamp_float(
-        panel->floating_rect.width,
-        minimum_width,
-        maximum_width);
-    panel->floating_rect.height = sandbox3d_workspace_clamp_float(
-        panel->floating_rect.height,
-        minimum_height,
-        maximum_height);
-    panel->floating_rect.x = sandbox3d_workspace_clamp_float(
-        panel->floating_rect.x,
-        margin,
-        (float)framebuffer_width - panel->floating_rect.width - margin);
-    panel->floating_rect.y = sandbox3d_workspace_clamp_float(
-        panel->floating_rect.y,
-        margin,
-        (float)framebuffer_height - panel->floating_rect.height - margin);
+    if (panel->floating_rect.width < panel->minimum_width)
+    {
+        panel->floating_rect.width = panel->minimum_width;
+    }
+    if (panel->floating_rect.height < panel->minimum_height)
+    {
+        panel->floating_rect.height = panel->minimum_height;
+    }
 }
 
 void sandbox3d_workspace_model_reset(sandbox3d_workspace_model* model)
@@ -244,9 +224,9 @@ void sandbox3d_workspace_begin_docked_panel_drag(
     }
 
     panel->floating_rect = current_rect;
-    panel->floating_rect.width = panel->floating_rect.width > panel->minimum_width ? panel->floating_rect.width : panel->minimum_width;
-    panel->floating_rect.height = panel->floating_rect.height > panel->minimum_height ? panel->floating_rect.height : panel->minimum_height;
-    sandbox3d_workspace_clamp_floating_rect(panel, framebuffer_width, framebuffer_height);
+    (void)framebuffer_width;
+    (void)framebuffer_height;
+    sandbox3d_workspace_enforce_minimum_floating_size(panel);
     panel->dock = SANDBOX3D_WORKSPACE_DOCK_FLOATING;
     sandbox3d_workspace_bring_to_front(model, panel_id);
     model->active_drag_panel = panel_id;
@@ -274,7 +254,9 @@ void sandbox3d_workspace_update_panel_drag(
     }
     panel->floating_rect.x = pointer.x - model->drag_offset.x;
     panel->floating_rect.y = pointer.y - model->drag_offset.y;
-    sandbox3d_workspace_clamp_floating_rect(panel, framebuffer_width, framebuffer_height);
+    (void)framebuffer_width;
+    (void)framebuffer_height;
+    sandbox3d_workspace_enforce_minimum_floating_size(panel);
 }
 
 void sandbox3d_workspace_begin_panel_resize(
@@ -316,7 +298,9 @@ void sandbox3d_workspace_update_panel_resize(
     }
     panel->floating_rect.width = model->resize_start_rect.width + pointer.x - model->resize_start_mouse.x;
     panel->floating_rect.height = model->resize_start_rect.height + pointer.y - model->resize_start_mouse.y;
-    sandbox3d_workspace_clamp_floating_rect(panel, framebuffer_width, framebuffer_height);
+    (void)framebuffer_width;
+    (void)framebuffer_height;
+    sandbox3d_workspace_enforce_minimum_floating_size(panel);
 }
 
 void sandbox3d_workspace_begin_dock_resize(
@@ -383,6 +367,8 @@ sandbox3d_workspace_dock_zone sandbox3d_workspace_evaluate_dock_zone(
     henka_ui_rect right_dock,
     float dock_margin)
 {
+    (void)scene_frame;
+
     if (left_dock.width > 0.0f &&
         pointer.x >= left_dock.x - dock_margin &&
         pointer.x < left_dock.x + left_dock.width + dock_margin &&

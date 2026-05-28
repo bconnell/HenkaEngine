@@ -71,48 +71,49 @@ Use this checklist when you want to confirm that `henka_sandbox3d` is visually r
 24. Close the native test window and confirm only that window closes, then reopen it successfully.
 25. Open the native test window again, use `Reset Layout`, and confirm the test window closes safely.
 26. Drag the `Controls` header where `DRAG` is shown and confirm it undocks directly inside the main sandbox window without requiring a button or opening a transient menu.
-27. Keep dragging `Controls` and confirm it visibly follows the cursor inside that window, then remains floating when released away from a dock target.
+27. Keep dragging `Controls` and confirm it visibly follows the cursor, can move partly beyond the main window frame, and remains floating where released away from a dock target.
 28. Drag the floating `Controls` header more than once and confirm movement is repeatable.
 29. Resize floating `Controls` from its lower-right grip and confirm its controls remain readable.
-30. Drag floating `Controls` onto a visible valid dock target and confirm it redocks; also confirm `Home` is a reliable secondary default redock path.
+30. Drag floating `Controls` onto a visible valid dock outline and confirm it redocks; also confirm `Home` is a reliable secondary default redock path.
 31. Repeat direct header undock, move, resize, and redock recovery for Scene Objects, Object Details, and Utility wherever `DRAG` is shown.
 32. Confirm stable floating-panel `L` or `R` controls dock onto an available requested side if retained.
-33. Drag each visible dock splitter and confirm the Scene View resizes without becoming unusable.
-34. Confirm the debug strip reports hovered panel, panel header hover, panel move or resize state, dock target, and last workspace action.
-35. Confirm panel drag, resize, and splitter drag do not select objects or begin viewport tools behind the panel.
-36. Confirm `Reset Layout` redocks panels and restores safe dock widths after moving and resizing them.
-37. Confirm window resize keeps a valid viewport and workspace layout.
-38. Confirm panel text is readable by eye.
-39. Confirm panel background contrast is readable against the workspace.
-40. Confirm the Controls panel `Main` and `Panels/Status` pages are readable and that page switching is obvious.
-41. Confirm the Scene Objects panel can reach every sample object through its page buttons or mouse wheel paging.
-42. Confirm utility tabs are readable and the active utility state is obvious.
-43. Confirm Help, Scene Legend, Object Info, Paths, Settings, and Diagnostics are usable in-window.
-44. Confirm clicking docked or floating panels does not pick scene objects.
-45. Left-click a visible object inside the viewport and confirm picking updates the selection.
-46. Confirm the selected real scene object has a visible viewport highlight that follows the object.
-47. Select Ground and confirm it uses one finite floor highlight, not doubled outlines or diagonal lines across the viewport.
-48. Confirm selection highlight lines do not draw over Controls, Utility, Scene Objects, Object Details, or the bottom debug/status strip.
-49. Click empty viewport space in Select mode or use Clear Selection and confirm the viewport highlight disappears.
-50. Confirm Object Details and Diagnostics both report no selected object after deselection.
-51. Confirm the selected object shows a visible gizmo in the viewport when a transform tool is active.
-52. Confirm the compact strip continues to update viewport tool, highlight, gizmo, ownership, and workspace fields while panels are moved.
-53. Open `Diagnostics` directly from Controls and confirm interaction fields update.
-54. Confirm Object Details labels optional object interaction availability as `Object Use`, separate from transform status.
-55. Open `Transform QA` and confirm direct move, rotate, scale, and reset controls visibly change the selected real object.
-56. Click `Orbit` and left-drag more than once; confirm it remains repeatable after floating and redocking panels.
-57. Click `Pan` and left-drag more than once; confirm it remains repeatable after floating and redocking panels.
-58. Use the mouse wheel over the viewport and confirm zoom works; wheel over a panel must not zoom the viewport.
-59. Press `F` and `Home` and confirm camera framing and reset remain usable.
-60. Select `Textured Cube`, use Move X/Y/Z, Rotate X/Y/Z, and Scale, and confirm the selected object transforms after dock movement and resize.
-61. Toggle `Hit Boxes` and confirm the viewport still shows handle regions used for hit testing.
-62. Confirm Object Details updates after viewport manipulation.
-63. Confirm no gizmo helper becomes the selected object.
-64. Hide the selected object during a gizmo interaction and confirm it stops safely.
-65. Confirm Reset Transform and Focus Camera still work after workspace changes.
-66. Confirm `F4`, `F5`, `Escape`, and close-window behavior remain clean.
-67. Confirm no named-engine comparisons appear in runtime text or packaged help.
-68. Confirm the runtime and help do not present in-window panels as separate OS-level windows or imply that Scene View can detach.
+33. Release a floating panel away from any dock outline and confirm it does not snap back; use `Reset Layout` to recover it if needed.
+34. Drag each visible dock splitter and confirm the Scene View resizes without becoming unusable.
+35. Confirm the debug strip reports hovered panel, panel header hover, panel move or resize state, dock target, and last workspace action.
+36. Confirm panel drag, resize, and splitter drag do not select objects or begin viewport tools behind the panel.
+37. Confirm `Reset Layout` redocks panels and restores safe dock widths after moving and resizing them.
+38. Confirm window resize keeps a valid viewport and workspace layout.
+39. Confirm panel text is readable by eye.
+40. Confirm panel background contrast is readable against the workspace.
+41. Confirm the Controls panel `Main` and `Panels/Status` pages are readable and that page switching is obvious.
+42. Confirm the Scene Objects panel can reach every sample object through its page buttons or mouse wheel paging.
+43. Confirm utility tabs are readable and the active utility state is obvious.
+44. Confirm Help, Scene Legend, Object Info, Paths, Settings, and Diagnostics are usable in-window.
+45. Confirm clicking docked or floating panels does not pick scene objects.
+46. Left-click a visible object inside the viewport and confirm picking updates the selection.
+47. Confirm the selected real scene object has a visible viewport highlight that follows the object.
+48. Select Ground and confirm it uses one finite floor highlight, not doubled outlines or diagonal lines across the viewport.
+49. Confirm selection highlight lines do not draw over Controls, Utility, Scene Objects, Object Details, or the bottom debug/status strip.
+50. Click empty viewport space in Select mode or use Clear Selection and confirm the viewport highlight disappears.
+51. Confirm Object Details and Diagnostics both report no selected object after deselection.
+52. Confirm the selected object shows a visible gizmo in the viewport when a transform tool is active.
+53. Confirm the compact strip continues to update viewport tool, highlight, gizmo, ownership, and workspace fields while panels are moved.
+54. Open `Diagnostics` directly from Controls and confirm interaction fields update.
+55. Confirm Object Details labels optional object interaction availability as `Object Use`, separate from transform status.
+56. Open `Transform QA` and confirm direct move, rotate, scale, and reset controls visibly change the selected real object.
+57. Click `Orbit` and left-drag more than once; confirm it remains repeatable after floating and redocking panels.
+58. Click `Pan` and left-drag more than once; confirm it remains repeatable after floating and redocking panels.
+59. Use the mouse wheel over the viewport and confirm zoom works; wheel over a panel must not zoom the viewport.
+60. Press `F` and `Home` and confirm camera framing and reset remain usable.
+61. Select `Textured Cube`, use Move X/Y/Z, Rotate X/Y/Z, and Scale, and confirm the selected object transforms after dock movement and resize.
+62. Toggle `Hit Boxes` and confirm the viewport still shows handle regions used for hit testing.
+63. Confirm Object Details updates after viewport manipulation.
+64. Confirm no gizmo helper becomes the selected object.
+65. Hide the selected object during a gizmo interaction and confirm it stops safely.
+66. Confirm Reset Transform and Focus Camera still work after workspace changes.
+67. Confirm `F4`, `F5`, `Escape`, and close-window behavior remain clean.
+68. Confirm no named-engine comparisons appear in runtime text or packaged help.
+69. Confirm the runtime and help do not present in-window panels as separate OS-level windows or imply that Scene View can detach.
 
 ## Physics QA Verification
 

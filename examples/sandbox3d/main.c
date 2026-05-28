@@ -3388,6 +3388,18 @@ static bool sandbox3d_handle_workspace_input(
     {
         if (left_down)
         {
+            const henka_ui_rect left_target = sandbox3d_get_workspace_dock_target_rect(
+                state,
+                &state->frame_layout,
+                SANDBOX3D_WORKSPACE_DOCK_LEFT,
+                framebuffer_width,
+                framebuffer_height);
+            const henka_ui_rect right_target = sandbox3d_get_workspace_dock_target_rect(
+                state,
+                &state->frame_layout,
+                SANDBOX3D_WORKSPACE_DOCK_RIGHT,
+                framebuffer_width,
+                framebuffer_height);
             sandbox3d_workspace_update_panel_drag(
                 &state->workspace.model,
                 framebuffer_mouse,
@@ -3395,10 +3407,10 @@ static bool sandbox3d_handle_workspace_input(
                 framebuffer_height);
             state->workspace.model.active_dock_target = sandbox3d_workspace_evaluate_dock_zone(
                 framebuffer_mouse,
-                state->frame_layout.left_dock,
+                left_target,
                 state->frame_layout.scene_frame,
-                state->frame_layout.right_dock,
-                48.0f);
+                right_target,
+                0.0f);
             if (state->workspace.model.active_dock_target != SANDBOX3D_WORKSPACE_DOCK_FLOATING &&
                 !sandbox3d_workspace_can_dock_panel(state, state->workspace.model.active_drag_panel, state->workspace.model.active_dock_target))
             {
@@ -4582,7 +4594,15 @@ static void sandbox3d_draw_workspace_affordances(
         if (state->workspace.model.active_dock_target != SANDBOX3D_WORKSPACE_DOCK_FLOATING &&
             bounds.width > 0.0f)
         {
-            henka_ui_overlay_rect(state->ui, bounds, (henka_vec4){0.10f, 0.42f, 0.62f, 0.22f});
+            const henka_vec4 outline = {0.18f, 0.58f, 0.78f, 0.72f};
+            const henka_vec2 top_left = {bounds.x, bounds.y};
+            const henka_vec2 top_right = {bounds.x + bounds.width, bounds.y};
+            const henka_vec2 bottom_right = {bounds.x + bounds.width, bounds.y + bounds.height};
+            const henka_vec2 bottom_left = {bounds.x, bounds.y + bounds.height};
+            henka_ui_overlay_line(state->ui, top_left, top_right, 2.0f, outline);
+            henka_ui_overlay_line(state->ui, top_right, bottom_right, 2.0f, outline);
+            henka_ui_overlay_line(state->ui, bottom_right, bottom_left, 2.0f, outline);
+            henka_ui_overlay_line(state->ui, bottom_left, top_left, 2.0f, outline);
         }
     }
 

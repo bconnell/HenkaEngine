@@ -70,7 +70,8 @@ The docked workspace opens in `View` mode with no selected scene object so the c
 - Watch the compact strip below Scene View while testing; it reports tool, selection, selected-highlight state, pointer ownership, gizmo, hover, drag, and rejection state live.
 - Use Transform QA first to confirm whether selected-object mutation works even if gizmo dragging or viewport input is failing.
 - Open `Physics QA`, click `Enable`, and observe the linked sample bodies fall and collide; use pause, fixed step, reset, body-type controls, Make Dynamic + Drop, impulses, raycast, and collider/contact debug to inspect the rigid-body path.
-- `DRAG` marks a live panel header. Drag a docked panel header to undock it inside the main sandbox window; keep dragging to place it there, or drag a floating header to move it again.
+- `DRAG` marks a live panel header. Drag a docked panel header to undock it and move it freely, including beyond the main sandbox window frame.
+- Release away from a valid dock outline to keep the panel floating where released, or release over a valid dock outline to redock it.
 - Use a floating panel's lower-right grip to resize it. `L`, `R`, and `Home` remain secondary redock controls, and `Reset Layout` recovers defaults.
 - Drag the narrow bars beside Scene View to resize occupied docks.
 - Confirm the small in-window status area reports common actions such as layout changes, camera reset, saved settings, or object focus.

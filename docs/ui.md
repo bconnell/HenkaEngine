@@ -77,7 +77,7 @@ The sandbox now uses a movable in-window workspace layout:
 - `L`, `R`, and `Home` controls as secondary reliable redocking paths
 - visible splitter bars for occupied dock width resizing
 
-Docked panels stay outside the scene. Floating workspace panels remain overlay rectangles inside the main sandbox window and can cover scene pixels visually, but they own their full visible input rectangle so clicks, drag, and resize do not leak through to viewport tools. The sandbox also provides `Open Native Panel Test`, which opens a separate OS-level UI window for validating the new multi-window foundation; it is not yet a replacement for the workspace panels.
+Docked panels stay outside the scene. Floating workspace panels remain overlay rectangles and may be dragged freely, including beyond the main window frame; `Reset Layout` is the recovery path if a panel is moved somewhere inconvenient. While dragging, valid redock targets show a thin outline. Releasing away from a valid target keeps the panel floating where released, and releasing over a valid target redocks it. Floating panels own their full visible input rectangle so clicks, drag, and resize do not leak through to viewport tools. The sandbox also provides `Open Native Panel Test`, which opens a separate OS-level UI window for validating the new multi-window foundation; it is not yet a replacement for the workspace panels.
 
 The current `Controls` panel can:
 

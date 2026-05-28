@@ -19,6 +19,7 @@ try {
     Write-Host "Press F5 to cycle View, Inspect, and Full Tools."
     Write-Host "The scene should render inside its own docked viewport when panels are visible."
     Write-Host "Select an object in the viewport or Scene Objects panel, then use Select, Move, Rotate, and Scale in the Transform section."
+    Write-Host "Floating panels can move beyond the main window frame; release on valid dock outlines to redock or use Reset Layout to recover."
     Write-Host "Ground selection uses one bounded Scene View highlight, and viewport overlays should not draw over panels."
     Write-Host "Use the in-window utilities for help, legend, paths, settings, and diagnostics."
     Write-Host "Use Open Native Panel Test in Controls to exercise the separate-window foundation."

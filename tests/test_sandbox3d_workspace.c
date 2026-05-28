@@ -57,9 +57,19 @@ void henka_test_sandbox3d_workspace(void)
     panel = sandbox3d_workspace_get_panel_const(&model, SANDBOX3D_WORKSPACE_PANEL_CONTROLS);
     HENKA_TEST_ASSERT_FLOAT_CLOSE(panel->floating_rect.x, 618.0f, 0.0001f);
     HENKA_TEST_ASSERT_FLOAT_CLOSE(panel->floating_rect.y, 230.0f, 0.0001f);
+    sandbox3d_workspace_update_panel_drag(&model, (henka_vec2){-80.0f, -40.0f}, 1280, 720);
+    panel = sandbox3d_workspace_get_panel_const(&model, SANDBOX3D_WORKSPACE_PANEL_CONTROLS);
+    HENKA_TEST_ASSERT(panel->floating_rect.x < 0.0f);
+    HENKA_TEST_ASSERT(panel->floating_rect.y < 0.0f);
+    sandbox3d_workspace_update_panel_drag(&model, (henka_vec2){1500.0f, 920.0f}, 1280, 720);
+    panel = sandbox3d_workspace_get_panel_const(&model, SANDBOX3D_WORKSPACE_PANEL_CONTROLS);
+    HENKA_TEST_ASSERT(panel->floating_rect.x + panel->floating_rect.width > 1280.0f);
+    HENKA_TEST_ASSERT(panel->floating_rect.y + panel->floating_rect.height > 720.0f);
+    HENKA_TEST_ASSERT(panel->floating_rect.width >= panel->minimum_width);
+    HENKA_TEST_ASSERT(panel->floating_rect.height >= panel->minimum_height);
     ownership[0] = panel->floating_rect;
     ownership[1] = (henka_ui_rect){350.0f, 16.0f, 500.0f, 600.0f};
-    HENKA_TEST_ASSERT(sandbox3d_point_is_owned_by_panels((henka_vec2){625.0f, 235.0f}, ownership, 2U));
+    HENKA_TEST_ASSERT(sandbox3d_point_is_owned_by_panels((henka_vec2){1505.0f, 925.0f}, ownership, 2U));
     sandbox3d_workspace_end_interaction(&model);
     HENKA_TEST_ASSERT(sandbox3d_workspace_panel_is_floating(&model, SANDBOX3D_WORKSPACE_PANEL_CONTROLS));
     HENKA_TEST_ASSERT(model.active_drag_panel == SANDBOX3D_WORKSPACE_PANEL_NONE);
@@ -79,6 +89,28 @@ void henka_test_sandbox3d_workspace(void)
     HENKA_TEST_ASSERT(panel->floating_rect.width >= panel->minimum_width);
     HENKA_TEST_ASSERT(panel->floating_rect.height >= panel->minimum_height);
     sandbox3d_workspace_end_interaction(&model);
+
+    HENKA_TEST_ASSERT(
+        sandbox3d_workspace_evaluate_dock_zone(
+            (henka_vec2){24.0f, 80.0f},
+            (henka_ui_rect){16.0f, 16.0f, 320.0f, 620.0f},
+            (henka_ui_rect){350.0f, 16.0f, 500.0f, 620.0f},
+            (henka_ui_rect){900.0f, 16.0f, 356.0f, 620.0f},
+            48.0f) == SANDBOX3D_WORKSPACE_DOCK_LEFT);
+    HENKA_TEST_ASSERT(
+        sandbox3d_workspace_evaluate_dock_zone(
+            (henka_vec2){1230.0f, 80.0f},
+            (henka_ui_rect){16.0f, 16.0f, 320.0f, 620.0f},
+            (henka_ui_rect){350.0f, 16.0f, 500.0f, 620.0f},
+            (henka_ui_rect){900.0f, 16.0f, 356.0f, 620.0f},
+            48.0f) == SANDBOX3D_WORKSPACE_DOCK_RIGHT);
+    HENKA_TEST_ASSERT(
+        sandbox3d_workspace_evaluate_dock_zone(
+            (henka_vec2){620.0f, 80.0f},
+            (henka_ui_rect){16.0f, 16.0f, 320.0f, 620.0f},
+            (henka_ui_rect){350.0f, 16.0f, 500.0f, 620.0f},
+            (henka_ui_rect){900.0f, 16.0f, 356.0f, 620.0f},
+            48.0f) == SANDBOX3D_WORKSPACE_DOCK_FLOATING);
 
     sandbox3d_workspace_dock_panel(&model, SANDBOX3D_WORKSPACE_PANEL_CONTROLS, SANDBOX3D_WORKSPACE_DOCK_RIGHT);
     HENKA_TEST_ASSERT(!sandbox3d_workspace_panel_is_floating(&model, SANDBOX3D_WORKSPACE_PANEL_CONTROLS));
@@ -131,8 +163,8 @@ void henka_test_sandbox3d_workspace(void)
         1280,
         720);
     panel = sandbox3d_workspace_get_panel_const(&model, SANDBOX3D_WORKSPACE_PANEL_OBJECT_DETAILS);
-    HENKA_TEST_ASSERT(panel->floating_rect.x + panel->floating_rect.width <= 1272.0f);
-    HENKA_TEST_ASSERT(panel->floating_rect.y + panel->floating_rect.height <= 712.0f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(panel->floating_rect.x, 920.0f, 0.0001f);
+    HENKA_TEST_ASSERT(panel->floating_rect.y + panel->floating_rect.height > 720.0f);
     sandbox3d_workspace_model_reset(&model);
     sandbox3d_workspace_begin_docked_panel_drag(
         &model,
