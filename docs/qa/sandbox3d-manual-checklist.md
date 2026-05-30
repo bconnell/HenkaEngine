@@ -114,6 +114,15 @@ Use this checklist when you want to confirm that `henka_sandbox3d` is visually r
 67. Confirm `F4`, `F5`, `Escape`, and close-window behavior remain clean.
 68. Confirm no named-engine comparisons appear in runtime text or packaged help.
 69. Confirm the runtime and help do not present in-window panels as separate OS-level windows or imply that Scene View can detach.
+70. Open Help and confirm the active control profile plus move, rotate, scale, axis, apply, cancel, snap, and fine-adjustment bindings are readable.
+71. Select a cube, press `M`, move the mouse, and confirm move preview begins. Cancel with `Escape` and confirm the original transform returns.
+72. Press `G` and confirm the alternate move binding starts the same action.
+73. Press `R`, then `X`, `Y`, and `Z` in separate attempts; confirm the active rotation axis status changes and `Enter` applies the preview.
+74. Press `S`, move the mouse, and confirm `Left Mouse` applies the preview while `Right Mouse` cancels safely.
+75. Hold `Left Ctrl` during a transform and confirm stepped adjustment. Hold `Left Shift` and confirm finer adjustment.
+76. With no transform active, confirm `Escape` still closes panels first, releases capture next, and exits only after those states are clear.
+77. Add a temporary custom profile using [editor-controls.md](../editor-controls.md), restart, and confirm its trimmed name and bindings appear in Help.
+78. Corrupt a temporary controls version or key in a test package copy and confirm the runtime falls back to `Henka Default` without crashing.
 
 ## Physics QA Verification
 

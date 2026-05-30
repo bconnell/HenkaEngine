@@ -78,6 +78,7 @@ The docked workspace opens in `View` mode with no selected scene object so the c
 - Select each scene object and confirm the Object Details panel updates.
 - Use Focus Camera, Reset Transform, and Print Object Info on a few different objects.
 - Use the controls panel to reset the camera, save settings, and reset sandbox settings.
+- Select an object and use `M` or `G`, `R`, or `S` to start a move, rotate, or scale transform. Use `X`, `Y`, or `Z` to constrain it, then confirm or cancel.
 
 ## Sandbox panels
 
@@ -148,6 +149,8 @@ The selected object also shows a visible transform gizmo in the scene viewport.
 - The gizmo helper pieces are internal scene tools. They remain hidden from the normal runtime path, do not become the selected object, do not appear in Scene Objects, and are ignored by normal scene picking.
 - If the selected object becomes hidden, invalid, or the viewport changes during a drag, the drag stops safely and the selected real object remains the source of truth.
 
+The viewport also supports action-based transform hotkeys. `M` and `G` start move, `R` starts rotate, and `S` starts scale for the selected visible object. While active, `X`, `Y`, and `Z` choose an axis, `Enter` or `Left Mouse` confirms, and `Escape` or `Right Mouse` restores the original transform. `Left Ctrl` enables stepped adjustment and `Left Shift` enables finer movement. The active profile and bindings appear in Help. Custom profiles are local config entries documented in [editor-controls.md](../editor-controls.md).
+
 The `Utility` panel provides short in-window views for:
 
 - Help
@@ -167,7 +170,7 @@ Physics QA exposes an opt-in fixed-step rigid-body demo with linked real scene o
 The compact strip below Scene View keeps essential input-gate, gizmo, hovered-panel, panel-header, and workspace drag state visible while testing, so a rejected viewport or panel gesture can be diagnosed without switching views.
 `Object Use` in Object Details reports the optional object interaction prompt and range only; it is separate from transform tools and gizmo state.
 
-Workspace panel placement and dock sizes are session-only in this version. Production panels can detach into separate OS-level windows with safe close-to-redock recovery. Full detached controls, OS-title-bar drag-back docking, saved detached placement, configurable transform hotkeys, and detachable Scene View are not implemented yet. `Native Panel Test` remains available for focused multi-window verification.
+Workspace panel placement and dock sizes are session-only in this version. Production panels can detach into separate OS-level windows with safe close-to-redock recovery. Full detached controls, OS-title-bar drag-back docking, saved detached placement, and detachable Scene View are not implemented yet. `Native Panel Test` remains available for focused multi-window verification.
 
 When the UI is open:
 
@@ -194,7 +197,7 @@ The runtime also reports whether it is running in `Development` or `Packaged` mo
 - The current settings file is a small local key/value format. It is easy to inspect by hand, but it is not a finished save-game system.
 - A separate save-data foundation now exists for scene id, camera pose, and simple flags, but the sandbox still uses settings for its normal viewer state.
 - The UI overlay is intentionally small. It is meant for sandbox control and object inspection, not as a full editor or a complete runtime UI system.
-- Panel floating is currently limited to in-window layout arrangement. The separate `Native Panel Test` validates the multi-window foundation; production OS-level panel detachment and detachable Scene View support remain future workspace work.
+- Docked workspace panels can detach into separate native windows, move independently, and return to their last valid dock when closed. Detachable Scene View support remains future workspace work.
 - The transform gizmo is intentionally scoped to world-axis move, rotate, and scale for the current sandbox object model. Undo, numeric editing, saved workspace arrangements, scene authoring, and broader tool surfaces are separate future work.
 - Scale is currently uniform-only in the viewport gizmo path. Per-axis scale handles are intentionally not shown until they are reliable enough to ship.
 - Manual desktop QA is still the best way to judge gizmo handle feel, hover clarity, and transform drag comfort.

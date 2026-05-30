@@ -50,12 +50,12 @@ Planned workspace improvements include:
 
 1. Finish full controls and drag-back redocking for native detached tool windows.
 2. Add saved workspace placement and dock sizes.
-3. Add configurable editor hotkeys and local keybinding profiles.
+3. Add an in-window controls editor for the existing local keybinding profiles.
 4. A detachable Scene View after multi-window rendering and viewport input are dependable.
 5. A clearer scene hierarchy.
 6. Numeric transform editing.
-6. Undo and redo for basic scene operations.
-7. Scene save and load support.
+7. Undo and redo for basic scene operations.
+8. Scene save and load support.
 
 These features should not be added as placeholder UI. Each one should be wired into the engine, tested, documented, and useful before it is treated as complete.
 

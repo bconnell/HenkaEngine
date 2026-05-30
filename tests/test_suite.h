@@ -37,6 +37,7 @@ void henka_test_gizmo(void);
 void henka_test_input(void);
 void henka_test_math(void);
 void henka_test_camera(void);
+void henka_test_editor_controls(void);
 void henka_test_material(void);
 void henka_test_model(void);
 void henka_test_persistence(void);

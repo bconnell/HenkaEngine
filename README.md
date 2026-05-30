@@ -150,15 +150,23 @@ The packaged folder also includes `PACKAGE_INFO.txt` so you can tell when the pa
 - `F`: frame the selected object
 - `H`: print controls and the scene legend again
 - `Home`: reset the camera view
-- `Escape`: close the UI first, then release the mouse, then exit
+- `M` or `G`: move the selected object
+- `R`: rotate the selected object
+- `S`: scale the selected object
+- `X`, `Y`, or `Z`: constrain an active transform
+- `Enter` or `Left Mouse`: confirm an active transform
+- `Escape` or `Right Mouse`: cancel an active transform
+- `Left Ctrl` / `Left Shift`: stepped or fine transform adjustment
+- `Escape`: when no transform is active, close the UI first, then release the mouse, then exit
 
-The sandbox panels open automatically on startup and reset-style launches so Controls and `Physics QA` are discoverable without knowing `F4` first. Starts have no selected scene object until the user selects one. Press `F4` to hide or show panels, and press `F5` to cycle between `View`, `Inspect`, and `Full Tools`. `DRAG` marks a live panel header. Release on a valid left or right dock outline to redock there, or release away from the outlines to move the panel into a separate native tool window. Closing a detached tool window returns its panel to the last valid dock, and `Reset Layout` restores the default workspace. Detached windows currently show a compact panel-state surface while full detached controls are integrated. `Open Native Panel Test` remains available for focused multi-window QA. Visible bars beside the Scene View resize occupied docks. Select a scene object from the list or with `Left Mouse` in the viewport, then use the Viewport Tool section to switch between `Select`, `Orbit`, `Pan`, `Move`, `Rotate`, and `Scale`; the selected real scene object is highlighted in the viewport until selection is cleared, and ground selection uses one bounded Scene View highlight instead of unbounded plane lines. Open `Physics QA` to start or step the opt-in rigid-body demo, inspect contacts and events, switch body types, make a supported body Dynamic for drop testing, apply impulses, raycast, and draw the actual collider shapes. Static bodies do not move from physics, Dynamic bodies fall and respond to physics, and Kinematic bodies move only through explicit tool or code movement. `Diagnostics` and `Transform QA` remain available for viewport and object-mutation verification. Manual desktop QA is still required before physics feel, native window behavior, panel drag comfort, and transform workflow feel can be called fully complete.
+The sandbox panels open automatically on startup and reset-style launches so Controls and `Physics QA` are discoverable without knowing `F4` first. Starts have no selected scene object until the user selects one. Press `F4` to hide or show panels, and press `F5` to cycle between `View`, `Inspect`, and `Full Tools`. `DRAG` marks a live panel header. Release on a valid left or right dock outline to redock there, or release away from the outlines to move the panel into a separate native tool window. Closing a detached tool window returns its panel to the last valid dock, and `Reset Layout` restores the default workspace. Detached windows currently show a compact panel-state surface while full detached controls are integrated. Select a scene object, then use `M` or `G`, `R`, and `S` to start move, rotate, and scale transforms. Active transforms support `X`, `Y`, or `Z` constraints, confirm, cancel, stepped adjustment, and fine adjustment through the action-based local control profile. Open `Physics QA` to inspect the opt-in rigid-body demo. Manual desktop QA is still required before physics feel, native window behavior, panel drag comfort, and transform workflow feel can be called fully complete.
 
 Offline help is also available in [docs/help/sandbox3d.md](docs/help/sandbox3d.md).
 Model loading notes are documented in [docs/model-loading.md](docs/model-loading.md).
 A persistence overview is available in [docs/persistence.md](docs/persistence.md).
 A local action-command overview is available in [docs/action-api.md](docs/action-api.md).
 A rigid-body physics overview is available in [docs/physics.md](docs/physics.md).
+An editor controls overview is available in [docs/editor-controls.md](docs/editor-controls.md).
 A runtime foundation overview is available in [docs/runtime-foundations.md](docs/runtime-foundations.md).
 A UI overview is available in [docs/ui.md](docs/ui.md).
 A guide for separate game repositories is available in [docs/external-game-projects.md](docs/external-game-projects.md).
@@ -186,7 +194,8 @@ To validate the generic external game template against the current Henka checkou
 - Remote saves, usage collection, registry storage, encryption, and network-backed persistence are not implemented.
 - The in-window UI overlay is intentionally small. It now supports object inspection, utility views, and short status feedback, but it is still not a full editor or a general UI toolkit yet.
 - Detached panel placement and resized dock widths are session-only; `Reset Layout` is the recovery path.
-- Production tool panels can detach into separate OS-level windows with safe close-to-redock recovery. Full detached-panel controls, drag-back docking from OS title bars, saved detached placement, configurable editor hotkeys, and detachable Scene View remain future work.
+- Production tool panels can detach into separate OS-level windows with safe close-to-redock recovery. Full detached-panel controls, drag-back docking from OS title bars, saved detached placement, and detachable Scene View remain future work.
+- Viewport transform hotkeys use local action profiles. The current profile editor is config-based; a richer in-window controls editor remains future work.
 - The viewport transform gizmo is intentionally scoped to world-axis move, rotate, and scale behavior for the current sandbox object model. The sandbox now also exposes explicit viewport tool modes, diagnostics, and direct transform fallback controls so interaction failures can be diagnosed without assuming the gizmo is the only path.
 - Rigid-body physics v1 supports static, dynamic, and kinematic bodies with sphere, axis-aligned box, and plane colliders; mesh collision, constraints, controllers, and advanced simulation remain future work.
 - 2D and 2.5D are part of the engine direction, but those workflows are not implemented yet.

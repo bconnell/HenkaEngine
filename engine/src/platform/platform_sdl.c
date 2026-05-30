@@ -184,6 +184,22 @@ static henka_key henka_translate_key(SDL_Keycode keycode)
             return HENKA_KEY_Q;
         case SDLK_E:
             return HENKA_KEY_E;
+        case SDLK_G:
+            return HENKA_KEY_G;
+        case SDLK_R:
+            return HENKA_KEY_R;
+        case SDLK_M:
+            return HENKA_KEY_M;
+        case SDLK_X:
+            return HENKA_KEY_X;
+        case SDLK_Y:
+            return HENKA_KEY_Y;
+        case SDLK_Z:
+            return HENKA_KEY_Z;
+        case SDLK_RETURN:
+            return HENKA_KEY_ENTER;
+        case SDLK_LCTRL:
+            return HENKA_KEY_LEFT_CTRL;
         case SDLK_LALT:
             return HENKA_KEY_LEFT_ALT;
         case SDLK_LSHIFT:

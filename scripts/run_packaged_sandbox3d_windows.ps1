@@ -19,6 +19,7 @@ try {
     Write-Host "Press F5 to cycle View, Inspect, and Full Tools."
     Write-Host "The scene should render inside its own docked viewport when panels are visible."
     Write-Host "Select an object in the viewport or Scene Objects panel, then use Select, Move, Rotate, and Scale in the Transform section."
+    Write-Host "Use M or G, R, and S for action-based transforms. X/Y/Z constrain, Enter applies, and Escape cancels."
     Write-Host "Release panels on valid left or right dock outlines to redock, or away from outlines to open a separate native tool window."
     Write-Host "Ground selection uses one bounded Scene View highlight, and viewport overlays should not draw over panels."
     Write-Host "Use the in-window utilities for help, legend, paths, settings, and diagnostics."

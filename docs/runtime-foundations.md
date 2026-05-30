@@ -230,6 +230,7 @@ The sandbox uses that data in its in-window diagnostics utility so normal inspec
 That diagnostics surface now also includes sandbox-level interaction state such as viewport tool mode, cursor ownership, selected object validity, gizmo model validity, hovered handle, active drag target, last rejected interaction reason, and last Action API result.
 The sandbox keeps the essential gate state in a compact Scene View strip during interaction, including selected-object highlight state, while the fuller Diagnostics, Transform QA, and Physics QA utility views remain available for deeper packaged testing.
 The sandbox workspace now tracks dock zones, allowed dock masks, last valid docks, transient header dragging, native detached-window handles, and dock splitter interactions in session state. Detached production-panel surfaces and `Native Panel Test` use separate-window rendering without routing pointer input into Scene View. Closing a detached production panel safely returns it to its last dock. The Scene View remains the main viewport; full detached controls, saved detached placement, and detaching the viewport remain future work.
+The sandbox also layers local editor-control profiles over the engine input actions. Transform actions support bounded key and mouse aliases, validated local settings, protected built-in defaults, named custom profiles, safe fallback, and an Escape-consumption path that lets an active transform restore its original object transform before normal UI, mouse-capture, or exit handling continues.
 
 ### Package modes
 

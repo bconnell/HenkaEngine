@@ -196,8 +196,8 @@ struct henka_engine
     henka_package_mode package_mode;
     henka_input_state input;
     henka_tool_window_slot tool_windows[HENKA_MAX_TOOL_WINDOWS];
-    henka_key action_key_bindings[HENKA_INPUT_ACTION_COUNT];
-    henka_mouse_button action_mouse_bindings[HENKA_INPUT_ACTION_COUNT];
+    henka_key action_key_bindings[HENKA_INPUT_ACTION_COUNT][HENKA_MAX_ACTION_KEY_BINDINGS];
+    henka_mouse_button action_mouse_bindings[HENKA_INPUT_ACTION_COUNT][HENKA_MAX_ACTION_MOUSE_BINDINGS];
     henka_time_state time;
     bool exit_requested;
     bool initialized_callback_ran;

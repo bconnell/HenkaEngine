@@ -162,6 +162,28 @@ static const char* henka_input_action_default_name(henka_input_action action)
             return "Change Layout";
         case HENKA_INPUT_ACTION_TOGGLE_MOUSE_CAPTURE:
             return "Toggle Mouse Capture";
+        case HENKA_INPUT_ACTION_SELECT_TOOL:
+            return "Select Tool";
+        case HENKA_INPUT_ACTION_MOVE_TOOL:
+            return "Move Tool";
+        case HENKA_INPUT_ACTION_ROTATE_TOOL:
+            return "Rotate Tool";
+        case HENKA_INPUT_ACTION_SCALE_TOOL:
+            return "Scale Tool";
+        case HENKA_INPUT_ACTION_CONSTRAIN_X:
+            return "Constrain X";
+        case HENKA_INPUT_ACTION_CONSTRAIN_Y:
+            return "Constrain Y";
+        case HENKA_INPUT_ACTION_CONSTRAIN_Z:
+            return "Constrain Z";
+        case HENKA_INPUT_ACTION_CONFIRM_TRANSFORM:
+            return "Confirm Transform";
+        case HENKA_INPUT_ACTION_CANCEL_TRANSFORM:
+            return "Cancel Transform";
+        case HENKA_INPUT_ACTION_SNAP_MODIFIER:
+            return "Snap Modifier";
+        case HENKA_INPUT_ACTION_FINE_ADJUSTMENT_MODIFIER:
+            return "Fine Adjustment Modifier";
         case HENKA_INPUT_ACTION_UNKNOWN:
         default:
             return "Unknown";
@@ -172,23 +194,37 @@ static void henka_engine_initialize_action_bindings(henka_engine* engine)
 {
     size_t index;
 
+    memset(engine->action_key_bindings, 0, sizeof(engine->action_key_bindings));
+    memset(engine->action_mouse_bindings, 0, sizeof(engine->action_mouse_bindings));
     for (index = 0; index < HENKA_INPUT_ACTION_COUNT; ++index)
     {
-        engine->action_key_bindings[index] = HENKA_KEY_UNKNOWN;
-        engine->action_mouse_bindings[index] = HENKA_MOUSE_BUTTON_UNKNOWN;
+        engine->action_key_bindings[index][0] = HENKA_KEY_UNKNOWN;
+        engine->action_mouse_bindings[index][0] = HENKA_MOUSE_BUTTON_UNKNOWN;
     }
 
-    engine->action_key_bindings[HENKA_INPUT_ACTION_MOVE_FORWARD] = HENKA_KEY_W;
-    engine->action_key_bindings[HENKA_INPUT_ACTION_MOVE_BACK] = HENKA_KEY_S;
-    engine->action_key_bindings[HENKA_INPUT_ACTION_MOVE_LEFT] = HENKA_KEY_A;
-    engine->action_key_bindings[HENKA_INPUT_ACTION_MOVE_RIGHT] = HENKA_KEY_D;
-    engine->action_key_bindings[HENKA_INPUT_ACTION_MOVE_UP] = HENKA_KEY_E;
-    engine->action_key_bindings[HENKA_INPUT_ACTION_MOVE_DOWN] = HENKA_KEY_Q;
-    engine->action_key_bindings[HENKA_INPUT_ACTION_INTERACT] = HENKA_KEY_UNKNOWN;
-    engine->action_key_bindings[HENKA_INPUT_ACTION_OPEN_PANELS] = HENKA_KEY_F4;
-    engine->action_key_bindings[HENKA_INPUT_ACTION_CHANGE_LAYOUT] = HENKA_KEY_F5;
-    engine->action_key_bindings[HENKA_INPUT_ACTION_TOGGLE_MOUSE_CAPTURE] = HENKA_KEY_TAB;
-    engine->action_mouse_bindings[HENKA_INPUT_ACTION_TOGGLE_MOUSE_CAPTURE] = HENKA_MOUSE_BUTTON_RIGHT;
+    engine->action_key_bindings[HENKA_INPUT_ACTION_MOVE_FORWARD][0] = HENKA_KEY_W;
+    engine->action_key_bindings[HENKA_INPUT_ACTION_MOVE_BACK][0] = HENKA_KEY_S;
+    engine->action_key_bindings[HENKA_INPUT_ACTION_MOVE_LEFT][0] = HENKA_KEY_A;
+    engine->action_key_bindings[HENKA_INPUT_ACTION_MOVE_RIGHT][0] = HENKA_KEY_D;
+    engine->action_key_bindings[HENKA_INPUT_ACTION_MOVE_UP][0] = HENKA_KEY_E;
+    engine->action_key_bindings[HENKA_INPUT_ACTION_MOVE_DOWN][0] = HENKA_KEY_Q;
+    engine->action_key_bindings[HENKA_INPUT_ACTION_OPEN_PANELS][0] = HENKA_KEY_F4;
+    engine->action_key_bindings[HENKA_INPUT_ACTION_CHANGE_LAYOUT][0] = HENKA_KEY_F5;
+    engine->action_key_bindings[HENKA_INPUT_ACTION_TOGGLE_MOUSE_CAPTURE][0] = HENKA_KEY_TAB;
+    engine->action_mouse_bindings[HENKA_INPUT_ACTION_TOGGLE_MOUSE_CAPTURE][0] = HENKA_MOUSE_BUTTON_RIGHT;
+    engine->action_key_bindings[HENKA_INPUT_ACTION_MOVE_TOOL][0] = HENKA_KEY_M;
+    engine->action_key_bindings[HENKA_INPUT_ACTION_MOVE_TOOL][1] = HENKA_KEY_G;
+    engine->action_key_bindings[HENKA_INPUT_ACTION_ROTATE_TOOL][0] = HENKA_KEY_R;
+    engine->action_key_bindings[HENKA_INPUT_ACTION_SCALE_TOOL][0] = HENKA_KEY_S;
+    engine->action_key_bindings[HENKA_INPUT_ACTION_CONSTRAIN_X][0] = HENKA_KEY_X;
+    engine->action_key_bindings[HENKA_INPUT_ACTION_CONSTRAIN_Y][0] = HENKA_KEY_Y;
+    engine->action_key_bindings[HENKA_INPUT_ACTION_CONSTRAIN_Z][0] = HENKA_KEY_Z;
+    engine->action_key_bindings[HENKA_INPUT_ACTION_CONFIRM_TRANSFORM][0] = HENKA_KEY_ENTER;
+    engine->action_mouse_bindings[HENKA_INPUT_ACTION_CONFIRM_TRANSFORM][0] = HENKA_MOUSE_BUTTON_LEFT;
+    engine->action_key_bindings[HENKA_INPUT_ACTION_CANCEL_TRANSFORM][0] = HENKA_KEY_ESCAPE;
+    engine->action_mouse_bindings[HENKA_INPUT_ACTION_CANCEL_TRANSFORM][0] = HENKA_MOUSE_BUTTON_RIGHT;
+    engine->action_key_bindings[HENKA_INPUT_ACTION_SNAP_MODIFIER][0] = HENKA_KEY_LEFT_CTRL;
+    engine->action_key_bindings[HENKA_INPUT_ACTION_FINE_ADJUSTMENT_MODIFIER][0] = HENKA_KEY_LEFT_SHIFT;
 }
 
 static henka_package_mode henka_engine_resolve_package_mode(const henka_engine* engine)
@@ -487,6 +523,13 @@ henka_result henka_engine_run(henka_engine* engine)
 
         henka_engine_close_requested_tool_windows(engine);
 
+        henka_engine_handle_resize(engine, &frame_state);
+
+        if (engine->config.on_update != NULL)
+        {
+            engine->config.on_update(engine, engine->time.delta_seconds, engine->config.user_data);
+        }
+
         if (henka_input_was_key_pressed(engine, HENKA_KEY_ESCAPE))
         {
             if (engine->active_ui != NULL && henka_ui_is_visible(engine->active_ui))
@@ -502,13 +545,6 @@ henka_result henka_engine_run(henka_engine* engine)
             {
                 henka_engine_request_exit(engine);
             }
-        }
-
-        henka_engine_handle_resize(engine, &frame_state);
-
-        if (engine->config.on_update != NULL)
-        {
-            engine->config.on_update(engine, engine->time.delta_seconds, engine->config.user_data);
         }
 
         result = henka_renderer_begin_frame(engine->renderer);
@@ -1049,6 +1085,46 @@ const char* henka_input_action_get_name(henka_input_action action)
     return henka_input_action_default_name(action);
 }
 
+const char* henka_input_key_get_name(henka_key key)
+{
+    static const char* names[HENKA_KEY_COUNT] = {
+        "Unknown", "Escape", "F", "W", "A", "S", "D", "Q", "E", "G", "R", "M", "X", "Y", "Z",
+        "Enter", "Left Ctrl", "Left Alt", "Left Shift", "Home", "Tab", "F1", "F2", "F3", "F4", "F5", "H"};
+    return key >= HENKA_KEY_UNKNOWN && key < HENKA_KEY_COUNT ? names[key] : "Unknown";
+}
+
+henka_key henka_input_key_find_by_name(const char* name)
+{
+    henka_key key;
+    for (key = HENKA_KEY_ESCAPE; key < HENKA_KEY_COUNT; ++key)
+    {
+        if (henka_action_name_equals(henka_input_key_get_name(key), name))
+        {
+            return key;
+        }
+    }
+    return HENKA_KEY_UNKNOWN;
+}
+
+const char* henka_input_mouse_button_get_name(henka_mouse_button button)
+{
+    static const char* names[HENKA_MOUSE_BUTTON_COUNT] = {"Unknown", "Mouse Left", "Mouse Right", "Mouse Middle"};
+    return button >= HENKA_MOUSE_BUTTON_UNKNOWN && button < HENKA_MOUSE_BUTTON_COUNT ? names[button] : "Unknown";
+}
+
+henka_mouse_button henka_input_mouse_button_find_by_name(const char* name)
+{
+    henka_mouse_button button;
+    for (button = HENKA_MOUSE_BUTTON_LEFT; button < HENKA_MOUSE_BUTTON_COUNT; ++button)
+    {
+        if (henka_action_name_equals(henka_input_mouse_button_get_name(button), name))
+        {
+            return button;
+        }
+    }
+    return HENKA_MOUSE_BUTTON_UNKNOWN;
+}
+
 henka_input_action henka_input_action_find_by_name(const char* name)
 {
     henka_input_action action;
@@ -1071,34 +1147,115 @@ henka_input_action henka_input_action_find_by_name(const char* name)
 
 henka_result henka_input_bind_action_key(struct henka_engine* engine, henka_input_action action, henka_key key)
 {
-    if (engine == NULL || action <= HENKA_INPUT_ACTION_UNKNOWN || action >= HENKA_INPUT_ACTION_COUNT)
-    {
-        return HENKA_ERROR_INVALID_ARGUMENT;
-    }
-
-    if (key < HENKA_KEY_UNKNOWN || key >= HENKA_KEY_COUNT)
-    {
-        return HENKA_ERROR_INVALID_ARGUMENT;
-    }
-
-    engine->action_key_bindings[action] = key;
-    return HENKA_SUCCESS;
+    henka_result result;
+    result = henka_input_clear_action_bindings(engine, action);
+    return result == HENKA_SUCCESS ? henka_input_add_action_key_binding(engine, action, key) : result;
 }
 
-henka_result henka_input_bind_action_mouse_button(struct henka_engine* engine, henka_input_action action, henka_mouse_button button)
+henka_result henka_input_clear_action_bindings(struct henka_engine* engine, henka_input_action action)
 {
     if (engine == NULL || action <= HENKA_INPUT_ACTION_UNKNOWN || action >= HENKA_INPUT_ACTION_COUNT)
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
+    memset(engine->action_key_bindings[action], 0, sizeof(engine->action_key_bindings[action]));
+    memset(engine->action_mouse_bindings[action], 0, sizeof(engine->action_mouse_bindings[action]));
+    return HENKA_SUCCESS;
+}
 
-    if (button < HENKA_MOUSE_BUTTON_UNKNOWN || button >= HENKA_MOUSE_BUTTON_COUNT)
+henka_result henka_input_bind_action_mouse_button(struct henka_engine* engine, henka_input_action action, henka_mouse_button button)
+{
+    henka_result result;
+    result = henka_input_clear_action_bindings(engine, action);
+    return result == HENKA_SUCCESS ? henka_input_add_action_mouse_button_binding(engine, action, button) : result;
+}
+
+henka_result henka_input_add_action_key_binding(struct henka_engine* engine, henka_input_action action, henka_key key)
+{
+    size_t index;
+    if (engine == NULL || action <= HENKA_INPUT_ACTION_UNKNOWN || action >= HENKA_INPUT_ACTION_COUNT ||
+        key <= HENKA_KEY_UNKNOWN || key >= HENKA_KEY_COUNT)
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
+    for (index = 0U; index < HENKA_MAX_ACTION_KEY_BINDINGS; ++index)
+    {
+        if (engine->action_key_bindings[action][index] == key)
+        {
+            return HENKA_SUCCESS;
+        }
+        if (engine->action_key_bindings[action][index] == HENKA_KEY_UNKNOWN)
+        {
+            engine->action_key_bindings[action][index] = key;
+            return HENKA_SUCCESS;
+        }
+    }
+    return HENKA_ERROR_INVALID_ARGUMENT;
+}
 
-    engine->action_mouse_bindings[action] = button;
-    return HENKA_SUCCESS;
+henka_result henka_input_add_action_mouse_button_binding(struct henka_engine* engine, henka_input_action action, henka_mouse_button button)
+{
+    size_t index;
+    if (engine == NULL || action <= HENKA_INPUT_ACTION_UNKNOWN || action >= HENKA_INPUT_ACTION_COUNT ||
+        button <= HENKA_MOUSE_BUTTON_UNKNOWN || button >= HENKA_MOUSE_BUTTON_COUNT)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    for (index = 0U; index < HENKA_MAX_ACTION_MOUSE_BINDINGS; ++index)
+    {
+        if (engine->action_mouse_bindings[action][index] == button)
+        {
+            return HENKA_SUCCESS;
+        }
+        if (engine->action_mouse_bindings[action][index] == HENKA_MOUSE_BUTTON_UNKNOWN)
+        {
+            engine->action_mouse_bindings[action][index] = button;
+            return HENKA_SUCCESS;
+        }
+    }
+    return HENKA_ERROR_INVALID_ARGUMENT;
+}
+
+size_t henka_input_get_action_key_binding_count(const struct henka_engine* engine, henka_input_action action)
+{
+    size_t index;
+    if (engine == NULL || action <= HENKA_INPUT_ACTION_UNKNOWN || action >= HENKA_INPUT_ACTION_COUNT)
+    {
+        return 0U;
+    }
+    for (index = 0U; index < HENKA_MAX_ACTION_KEY_BINDINGS && engine->action_key_bindings[action][index] != HENKA_KEY_UNKNOWN; ++index) {}
+    return index;
+}
+
+henka_key henka_input_get_action_key_binding(const struct henka_engine* engine, henka_input_action action, size_t index)
+{
+    return engine != NULL && action > HENKA_INPUT_ACTION_UNKNOWN && action < HENKA_INPUT_ACTION_COUNT &&
+        index < HENKA_MAX_ACTION_KEY_BINDINGS ? engine->action_key_bindings[action][index] : HENKA_KEY_UNKNOWN;
+}
+
+size_t henka_input_get_action_mouse_button_binding_count(const struct henka_engine* engine, henka_input_action action)
+{
+    size_t index;
+    if (engine == NULL || action <= HENKA_INPUT_ACTION_UNKNOWN || action >= HENKA_INPUT_ACTION_COUNT)
+    {
+        return 0U;
+    }
+    for (index = 0U; index < HENKA_MAX_ACTION_MOUSE_BINDINGS && engine->action_mouse_bindings[action][index] != HENKA_MOUSE_BUTTON_UNKNOWN; ++index) {}
+    return index;
+}
+
+henka_mouse_button henka_input_get_action_mouse_button_binding(const struct henka_engine* engine, henka_input_action action, size_t index)
+{
+    return engine != NULL && action > HENKA_INPUT_ACTION_UNKNOWN && action < HENKA_INPUT_ACTION_COUNT &&
+        index < HENKA_MAX_ACTION_MOUSE_BINDINGS ? engine->action_mouse_bindings[action][index] : HENKA_MOUSE_BUTTON_UNKNOWN;
+}
+
+void henka_input_consume_key_press(struct henka_engine* engine, henka_key key)
+{
+    if (engine != NULL && key > HENKA_KEY_UNKNOWN && key < HENKA_KEY_COUNT)
+    {
+        engine->input.keys_pressed[key] = false;
+    }
 }
 
 static bool henka_input_action_query_key(
@@ -1107,19 +1264,30 @@ static bool henka_input_action_query_key(
     bool (*query_key)(const henka_engine*, henka_key),
     bool (*query_mouse)(const henka_engine*, henka_mouse_button))
 {
-    henka_key key;
-    henka_mouse_button button;
+    size_t index;
 
     if (engine == NULL || action <= HENKA_INPUT_ACTION_UNKNOWN || action >= HENKA_INPUT_ACTION_COUNT)
     {
         return false;
     }
 
-    key = engine->action_key_bindings[action];
-    button = engine->action_mouse_bindings[action];
-
-    return ((key > HENKA_KEY_UNKNOWN) ? query_key(engine, key) : false) ||
-        ((button > HENKA_MOUSE_BUTTON_UNKNOWN) ? query_mouse(engine, button) : false);
+    for (index = 0U; index < HENKA_MAX_ACTION_KEY_BINDINGS; ++index)
+    {
+        const henka_key key = engine->action_key_bindings[action][index];
+        if (key > HENKA_KEY_UNKNOWN && query_key(engine, key))
+        {
+            return true;
+        }
+    }
+    for (index = 0U; index < HENKA_MAX_ACTION_MOUSE_BINDINGS; ++index)
+    {
+        const henka_mouse_button button = engine->action_mouse_bindings[action][index];
+        if (button > HENKA_MOUSE_BUTTON_UNKNOWN && query_mouse(engine, button))
+        {
+            return true;
+        }
+    }
+    return false;
 }
 
 bool henka_input_action_is_down(const struct henka_engine* engine, henka_input_action action)

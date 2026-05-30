@@ -6,6 +6,7 @@
 
 #include <henka/henka.h>
 
+#include "editor_controls.h"
 #include "interaction_tools.h"
 #include "workspace_tools.h"
 
@@ -309,6 +310,9 @@ typedef struct sandbox3d_state
     sandbox3d_viewport_tool_mode viewport_tool;
     sandbox3d_interaction_diagnostics diagnostics;
     sandbox3d_physics_state physics;
+    sandbox3d_editor_controls editor_controls;
+    sandbox3d_transform_session transform_session;
+    bool editor_controls_loaded_safely;
 } sandbox3d_state;
 
 static const float g_default_mouse_look_sensitivity = 0.0025f;
@@ -2203,13 +2207,19 @@ static void sandbox3d_print_help(const sandbox3d_state* state)
     printf("  F                Frame the selected object\n");
     printf("  H                Print controls and the scene legend again\n");
     printf("  Home             Reset the camera view\n");
-    printf("  Escape           Close the panels first. Then release the mouse. Then exit.\n");
+    printf("  M / G            Move selected object\n");
+    printf("  R / S            Rotate / scale selected object\n");
+    printf("  X / Y / Z        Constrain active transform\n");
+    printf("  Enter / Left Mouse Confirm active transform\n");
+    printf("  Escape / Right Mouse Cancel active transform\n");
+    printf("  Left Ctrl / Shift Stepped / fine transform adjustment\n");
+    printf("  Escape           Without a transform: close panels, release mouse, then exit.\n");
     printf("Panel shortcuts:\n");
     printf("  The in-window panels open on startup; F4 hides or shows them.\n");
     printf("  View keeps the largest dedicated scene viewport. Inspect adds object panels. Full Tools shows the complete workspace.\n");
-    printf("  Drag any panel header to undock and move it. Floating panels resize at the lower-right grip and redock with L, R, or Home.\n");
+    printf("  Drag any panel header to a left or right outline to redock, or release away to open a native detached window.\n");
     printf("  Drag the narrow bars beside Scene View to resize occupied docks. Reset Layout restores safe defaults.\n");
-    printf("  Open Native Panel Test from Controls to validate a separate OS-level tool window without detaching the workspace panels.\n");
+    printf("  Open Native Panel Test from Controls to validate a separate OS-level tool window.\n");
     printf("  Use the panels to inspect named scene objects, clear selection, switch gizmo modes, focus the camera, reset object transforms, toggle visibility, and open in-window Help, Scene Legend, Object Info, Paths, Settings, Diagnostics, Transform QA, and Physics QA utilities.\n");
     printf("  Physics QA enables an opt-in fixed-step rigid-body demo with collider/contact debug drawing, impulses, body modes, and camera raycasts.\n");
     printf("  The Controls panel uses readable pages, and Scene Objects supports paging when the dock is tighter than the full list.\n");
@@ -2223,7 +2233,7 @@ static void sandbox3d_print_help(const sandbox3d_state* state)
     printf("  OBJ loading is still early and currently limited to a small, documented subset.\n");
     printf("  OBJ material libraries, negative indices, animation, hierarchy tools, scene saving, and broader 2D or 2.5D workflows are not available yet.\n");
     printf("  The UI overlay is intentionally small and is not a full editor.\n");
-    printf("  Production workspace panels remain in-window, and Scene View does not detach yet.\n");
+    printf("  Detached panel windows currently show compact state surfaces, and Scene View does not detach yet.\n");
     printf("  Rigid-body physics v1 uses sphere, axis-aligned box, and plane colliders; advanced physics features remain future work.\n");
     printf("  Sandbox settings are saved locally beside the executable in the user folder.\n");
     fflush(stdout);
@@ -3099,6 +3109,10 @@ static henka_result sandbox3d_save_settings(henka_engine* engine, sandbox3d_stat
     henka_settings_set_bool(state->settings, g_setting_key_scene_panel_visible, state->workspace.scene_objects_panel_visible);
     henka_settings_set_bool(state->settings, g_setting_key_details_panel_visible, state->workspace.object_details_panel_visible);
     henka_settings_set_string(state->settings, g_setting_key_active_utility, sandbox3d_get_utility_setting_value(state->workspace.active_utility));
+    if (state->editor_controls_loaded_safely)
+    {
+        sandbox3d_editor_controls_save(&state->editor_controls, state->settings);
+    }
 
     result = sandbox3d_get_settings_path(engine, &settings_path);
     if (result != HENKA_SUCCESS)
@@ -3149,6 +3163,9 @@ static henka_result sandbox3d_reset_settings(henka_engine* engine, sandbox3d_sta
     }
 
     sandbox3d_reset_camera_defaults(state);
+    sandbox3d_editor_controls_reset_all(&state->editor_controls);
+    sandbox3d_editor_controls_apply(&state->editor_controls, engine);
+    state->editor_controls_loaded_safely = true;
     sandbox3d_close_all_detached_workspace_panels(engine, state);
     sandbox3d_reset_workspace_layout(state);
     sandbox3d_clear_selection(state, "Settings reset. No object selected.");
@@ -3864,6 +3881,144 @@ static bool sandbox3d_apply_scale_step(sandbox3d_state* state, float delta_scale
         entity,
         sandbox3d_make_uniform_scale_multiplier(delta_scale),
         henka_quat_identity());
+}
+
+static bool sandbox3d_apply_transform_preview(sandbox3d_state* state, henka_entity entity, henka_transform transform)
+{
+    henka_action_request request;
+    henka_action_result result;
+    if (state == NULL || entity == HENKA_INVALID_ENTITY || !sandbox3d_transform_is_finite(transform))
+    {
+        return false;
+    }
+    memset(&request, 0, sizeof(request));
+    request.command = HENKA_ACTION_COMMAND_SET_POSITION;
+    request.params.set_position.entity = entity;
+    request.params.set_position.position = transform.position;
+    if (!sandbox3d_execute_action(state, &request, &result)) return false;
+    memset(&request, 0, sizeof(request));
+    request.command = HENKA_ACTION_COMMAND_SET_ROTATION;
+    request.params.set_rotation.entity = entity;
+    request.params.set_rotation.rotation = transform.rotation;
+    if (!sandbox3d_execute_action(state, &request, &result)) return false;
+    memset(&request, 0, sizeof(request));
+    request.command = HENKA_ACTION_COMMAND_SET_SCALE;
+    request.params.set_scale.entity = entity;
+    request.params.set_scale.scale = transform.scale;
+    return sandbox3d_execute_action(state, &request, &result);
+}
+
+static sandbox3d_transform_tool sandbox3d_get_requested_transform_tool(const henka_engine* engine)
+{
+    if (henka_input_action_was_pressed(engine, HENKA_INPUT_ACTION_MOVE_TOOL)) return SANDBOX3D_TRANSFORM_TOOL_MOVE;
+    if (henka_input_action_was_pressed(engine, HENKA_INPUT_ACTION_ROTATE_TOOL)) return SANDBOX3D_TRANSFORM_TOOL_ROTATE;
+    if (henka_input_action_was_pressed(engine, HENKA_INPUT_ACTION_SCALE_TOOL)) return SANDBOX3D_TRANSFORM_TOOL_SCALE;
+    return SANDBOX3D_TRANSFORM_TOOL_NONE;
+}
+
+static sandbox3d_viewport_tool_mode sandbox3d_get_viewport_tool_for_transform(sandbox3d_transform_tool tool)
+{
+    if (tool == SANDBOX3D_TRANSFORM_TOOL_MOVE) return SANDBOX3D_VIEWPORT_TOOL_MOVE;
+    if (tool == SANDBOX3D_TRANSFORM_TOOL_ROTATE) return SANDBOX3D_VIEWPORT_TOOL_ROTATE;
+    if (tool == SANDBOX3D_TRANSFORM_TOOL_SCALE) return SANDBOX3D_VIEWPORT_TOOL_SCALE;
+    return SANDBOX3D_VIEWPORT_TOOL_SELECT;
+}
+
+static bool sandbox3d_handle_transform_hotkeys(henka_engine* engine, sandbox3d_state* state)
+{
+    const bool workspace_busy =
+        state->workspace.model.active_drag_panel != SANDBOX3D_WORKSPACE_PANEL_NONE ||
+        state->workspace.model.active_resize_panel != SANDBOX3D_WORKSPACE_PANEL_NONE ||
+        state->workspace.model.resize_target != SANDBOX3D_WORKSPACE_RESIZE_NONE;
+    sandbox3d_transform_tool requested_tool;
+    henka_transform transform;
+    henka_vec2 mouse_delta;
+    float delta;
+
+    if (engine == NULL || state == NULL || workspace_busy || state->gizmo.drag.dragging)
+    {
+        return false;
+    }
+
+    if (!state->transform_session.active)
+    {
+        const henka_entity entity = sandbox3d_get_real_selected_entity(state);
+        requested_tool = sandbox3d_get_requested_transform_tool(engine);
+        if (requested_tool == SANDBOX3D_TRANSFORM_TOOL_NONE)
+        {
+            return false;
+        }
+        if (henka_engine_is_mouse_captured(engine))
+        {
+            return false;
+        }
+        if (entity == HENKA_INVALID_ENTITY ||
+            state->scene == NULL ||
+            henka_scene_get_entity_transform(state->scene, entity, &transform) != HENKA_SUCCESS)
+        {
+            sandbox3d_set_status(state, true, "Select a visible object before starting a transform.");
+            return true;
+        }
+        sandbox3d_clear_gizmo_drag(state, true);
+        sandbox3d_set_viewport_tool_mode(state, sandbox3d_get_viewport_tool_for_transform(requested_tool), false);
+        sandbox3d_transform_session_begin(&state->transform_session, requested_tool, entity, transform);
+        sandbox3d_set_statusf(state, false, false, "%s transform active. Move the mouse, constrain with X/Y/Z, confirm or cancel.", sandbox3d_transform_tool_name(requested_tool));
+        return true;
+    }
+
+    if (sandbox3d_get_real_selected_entity(state) != state->transform_session.entity ||
+        state->scene == NULL ||
+        henka_scene_get_entity_transform(state->scene, state->transform_session.entity, &transform) != HENKA_SUCCESS)
+    {
+        sandbox3d_transform_session_cancel(&state->transform_session, &transform);
+        sandbox3d_apply_transform_preview(state, state->transform_session.entity, transform);
+        sandbox3d_set_status(state, true, "Transform cancelled because the selected object is no longer available.");
+        return true;
+    }
+
+    if (henka_input_action_was_pressed(engine, HENKA_INPUT_ACTION_CANCEL_TRANSFORM))
+    {
+        if (sandbox3d_transform_session_cancel(&state->transform_session, &transform))
+        {
+            sandbox3d_apply_transform_preview(state, state->transform_session.entity, transform);
+            if (henka_input_was_key_pressed(engine, HENKA_KEY_ESCAPE)) henka_input_consume_key_press(engine, HENKA_KEY_ESCAPE);
+            sandbox3d_set_status(state, false, "Transform cancelled. Original transform restored.");
+        }
+        return true;
+    }
+    if (henka_input_action_was_pressed(engine, HENKA_INPUT_ACTION_CONFIRM_TRANSFORM))
+    {
+        sandbox3d_transform_session_confirm(&state->transform_session, &transform);
+        sandbox3d_set_status(state, false, "Transform confirmed.");
+        return true;
+    }
+    if (henka_input_action_was_pressed(engine, HENKA_INPUT_ACTION_CONSTRAIN_X)) sandbox3d_transform_session_set_axis(&state->transform_session, SANDBOX3D_TRANSFORM_AXIS_X);
+    if (henka_input_action_was_pressed(engine, HENKA_INPUT_ACTION_CONSTRAIN_Y)) sandbox3d_transform_session_set_axis(&state->transform_session, SANDBOX3D_TRANSFORM_AXIS_Y);
+    if (henka_input_action_was_pressed(engine, HENKA_INPUT_ACTION_CONSTRAIN_Z)) sandbox3d_transform_session_set_axis(&state->transform_session, SANDBOX3D_TRANSFORM_AXIS_Z);
+
+    mouse_delta = henka_input_get_mouse_delta(engine);
+    delta = mouse_delta.x - mouse_delta.y;
+    if (delta != 0.0f)
+    {
+        const float scale = state->transform_session.tool == SANDBOX3D_TRANSFORM_TOOL_ROTATE ? 0.01f :
+            (state->transform_session.tool == SANDBOX3D_TRANSFORM_TOOL_SCALE ? 0.005f : 0.01f);
+        if (sandbox3d_transform_session_preview(
+                &state->transform_session,
+                delta * scale,
+                henka_input_action_is_down(engine, HENKA_INPUT_ACTION_SNAP_MODIFIER),
+                henka_input_action_is_down(engine, HENKA_INPUT_ACTION_FINE_ADJUSTMENT_MODIFIER)))
+        {
+            sandbox3d_apply_transform_preview(state, state->transform_session.entity, state->transform_session.preview);
+        }
+    }
+    sandbox3d_set_statusf(
+        state,
+        false,
+        false,
+        "%s transform active on %s. Confirm or cancel.",
+        sandbox3d_transform_tool_name(state->transform_session.tool),
+        sandbox3d_transform_axis_name(state->transform_session.axis));
+    return true;
 }
 
 static sandbox3d_panel_scroll_target sandbox3d_get_panel_scroll_target(const sandbox3d_state* state, henka_vec2 point)
@@ -5577,6 +5732,9 @@ static void sandbox3d_draw_utility_panel(
     char diag_text[96];
     char package_text[48];
     char row_value[96];
+    char binding_text[96];
+    char binding_text_secondary[96];
+    char binding_text_tertiary[96];
     const henka_asset_manager* assets;
     const sandbox3d_object_descriptor* descriptor;
     float button_width;
@@ -5646,12 +5804,26 @@ static void sandbox3d_draw_utility_panel(
     {
         case SANDBOX3D_UTILITY_HELP:
             sandbox3d_draw_section_heading(state->ui, x_left, y_start, "Viewer help");
-            henka_ui_label(state->ui, x_left, y_start + 18.0f, 1.0f, "Select, Orbit, Pan, Move, Rotate, and Scale are explicit tools.");
-            henka_ui_label(state->ui, x_left, y_start + 34.0f, 1.0f, "Left drag uses the selected viewport tool when capture is released.");
-            henka_ui_label(state->ui, x_left, y_start + 50.0f, 1.0f, "Wheel zooms over the viewport and pages over docked panels.");
-            henka_ui_label(state->ui, x_left, y_start + 66.0f, 1.0f, "Transform QA confirms Action API object mutation without gizmo hits.");
-            henka_ui_label(state->ui, x_left, y_start + 82.0f, 1.0f, "Diagnostics show input ownership, tool state, and last failures.");
-            sandbox3d_draw_value_row(state->ui, x_left, y_start + 112.0f, panel_bounds.width - 28.0f, "Status", "Use T QA if gizmo input still fails.");
+            sandbox3d_draw_value_row(state->ui, x_left, y_start + 18.0f, panel_bounds.width - 28.0f, "Profile", sandbox3d_editor_controls_get_active_profile_name(&state->editor_controls));
+            sandbox3d_editor_controls_format_binding(&state->editor_controls, HENKA_INPUT_ACTION_MOVE_TOOL, binding_text, sizeof(binding_text));
+            sandbox3d_draw_value_row(state->ui, x_left, y_start + 44.0f, panel_bounds.width - 28.0f, "Move", binding_text);
+            sandbox3d_editor_controls_format_binding(&state->editor_controls, HENKA_INPUT_ACTION_ROTATE_TOOL, binding_text, sizeof(binding_text));
+            sandbox3d_draw_value_row(state->ui, x_left, y_start + 70.0f, panel_bounds.width - 28.0f, "Rotate", binding_text);
+            sandbox3d_editor_controls_format_binding(&state->editor_controls, HENKA_INPUT_ACTION_SCALE_TOOL, binding_text, sizeof(binding_text));
+            sandbox3d_draw_value_row(state->ui, x_left, y_start + 96.0f, panel_bounds.width - 28.0f, "Scale", binding_text);
+            sandbox3d_editor_controls_format_binding(&state->editor_controls, HENKA_INPUT_ACTION_CONSTRAIN_X, binding_text, sizeof(binding_text));
+            sandbox3d_editor_controls_format_binding(&state->editor_controls, HENKA_INPUT_ACTION_CONSTRAIN_Y, binding_text_secondary, sizeof(binding_text_secondary));
+            sandbox3d_editor_controls_format_binding(&state->editor_controls, HENKA_INPUT_ACTION_CONSTRAIN_Z, binding_text_tertiary, sizeof(binding_text_tertiary));
+            snprintf(row_value, sizeof(row_value), "%s / %s / %s", binding_text, binding_text_secondary, binding_text_tertiary);
+            sandbox3d_draw_value_row(state->ui, x_left, y_start + 122.0f, panel_bounds.width - 28.0f, "Axis", row_value);
+            sandbox3d_editor_controls_format_binding(&state->editor_controls, HENKA_INPUT_ACTION_CONFIRM_TRANSFORM, binding_text, sizeof(binding_text));
+            sandbox3d_draw_value_row(state->ui, x_left, y_start + 148.0f, panel_bounds.width - 28.0f, "Apply", binding_text);
+            sandbox3d_editor_controls_format_binding(&state->editor_controls, HENKA_INPUT_ACTION_CANCEL_TRANSFORM, binding_text, sizeof(binding_text));
+            sandbox3d_draw_value_row(state->ui, x_left, y_start + 174.0f, panel_bounds.width - 28.0f, "Cancel", binding_text);
+            sandbox3d_editor_controls_format_binding(&state->editor_controls, HENKA_INPUT_ACTION_SNAP_MODIFIER, binding_text, sizeof(binding_text));
+            sandbox3d_editor_controls_format_binding(&state->editor_controls, HENKA_INPUT_ACTION_FINE_ADJUSTMENT_MODIFIER, binding_text_secondary, sizeof(binding_text_secondary));
+            snprintf(row_value, sizeof(row_value), "%s snap / %s fine", binding_text, binding_text_secondary);
+            sandbox3d_draw_value_row(state->ui, x_left, y_start + 200.0f, panel_bounds.width - 28.0f, "Adjust", row_value);
             break;
 
         case SANDBOX3D_UTILITY_SCENE_LEGEND:
@@ -5699,19 +5871,20 @@ static void sandbox3d_draw_utility_panel(
             sandbox3d_draw_value_row(state->ui, x_left, y_start + 96.0f, panel_bounds.width - 28.0f, "Wireframe", henka_engine_is_wireframe_enabled(engine) ? "On" : "Off");
             snprintf(row_value, sizeof(row_value), "%.4f  /  %.1f", sandbox3d_get_mouse_sensitivity(state), state->camera.movement_speed);
             sandbox3d_draw_value_row(state->ui, x_left, y_start + 122.0f, panel_bounds.width - 28.0f, "Sense/Speed", row_value);
-            if (henka_ui_button(state->ui, "utility_mouse_less", (henka_ui_rect){x_left, y_start + 152.0f, 60.0f, 24.0f}, "Sense-"))
+            sandbox3d_draw_value_row(state->ui, x_left, y_start + 148.0f, panel_bounds.width - 28.0f, "Controls", sandbox3d_editor_controls_get_active_profile_name(&state->editor_controls));
+            if (henka_ui_button(state->ui, "utility_mouse_less", (henka_ui_rect){x_left, y_start + 178.0f, 60.0f, 24.0f}, "Sense-"))
             {
                 sandbox3d_adjust_mouse_sensitivity(state, -0.0005f);
             }
-            if (henka_ui_button(state->ui, "utility_mouse_more", (henka_ui_rect){x_left + 68.0f, y_start + 152.0f, 60.0f, 24.0f}, "Sense+"))
+            if (henka_ui_button(state->ui, "utility_mouse_more", (henka_ui_rect){x_left + 68.0f, y_start + 178.0f, 60.0f, 24.0f}, "Sense+"))
             {
                 sandbox3d_adjust_mouse_sensitivity(state, 0.0005f);
             }
-            if (henka_ui_button(state->ui, "utility_speed_less", (henka_ui_rect){x_left + 146.0f, y_start + 152.0f, 60.0f, 24.0f}, "Speed-"))
+            if (henka_ui_button(state->ui, "utility_speed_less", (henka_ui_rect){x_left + 146.0f, y_start + 178.0f, 60.0f, 24.0f}, "Speed-"))
             {
                 sandbox3d_adjust_camera_speed(state, -0.5f);
             }
-            if (henka_ui_button(state->ui, "utility_speed_more", (henka_ui_rect){x_left + 214.0f, y_start + 152.0f, 60.0f, 24.0f}, "Speed+"))
+            if (henka_ui_button(state->ui, "utility_speed_more", (henka_ui_rect){x_left + 214.0f, y_start + 178.0f, 60.0f, 24.0f}, "Speed+"))
             {
                 sandbox3d_adjust_camera_speed(state, 0.5f);
             }
@@ -6292,6 +6465,8 @@ static henka_result sandbox3d_initialize(henka_engine* engine, void* user_data)
     sandbox3d_workspace_layout layout;
 
     state = (sandbox3d_state*)user_data;
+    sandbox3d_editor_controls_initialize(&state->editor_controls);
+    state->editor_controls_loaded_safely = true;
 
     result = henka_settings_create(&state->settings);
     if (result != HENKA_SUCCESS)
@@ -6765,6 +6940,12 @@ static henka_result sandbox3d_initialize(henka_engine* engine, void* user_data)
     }
 
     sandbox3d_apply_loaded_settings(engine, state);
+    if (sandbox3d_editor_controls_load(&state->editor_controls, state->settings) != HENKA_SUCCESS)
+    {
+        state->editor_controls_loaded_safely = false;
+        HENKA_LOG_WARN("%s", state->editor_controls.warning);
+    }
+    sandbox3d_editor_controls_apply(&state->editor_controls, engine);
     state->startup_panels_auto_opened = sandbox3d_workspace_should_start_panels_visible(state->settings_file_found);
     if (!state->settings_file_found && state->workspace.active_utility == SANDBOX3D_UTILITY_NONE)
     {
@@ -6772,7 +6953,12 @@ static henka_result sandbox3d_initialize(henka_engine* engine, void* user_data)
     }
     henka_ui_set_visible(state->ui, state->startup_panels_auto_opened);
     state->ui_visibility_report_pending = state->startup_panels_auto_opened;
-    sandbox3d_set_status(state, false, "Panels are open. Use Controls or Physics QA to start testing.");
+    sandbox3d_set_status(
+        state,
+        !state->editor_controls_loaded_safely,
+        state->editor_controls_loaded_safely
+            ? "Panels are open. Use Controls or Physics QA to start testing."
+            : "Control profile settings were invalid. Henka Default controls are active.");
 
     result = henka_engine_set_mouse_capture(engine, false);
     if (result != HENKA_SUCCESS)
@@ -6801,6 +6987,7 @@ static void sandbox3d_update(henka_engine* engine, double delta_seconds, void* u
     henka_vec2 mouse_delta;
     henka_vec2 mouse_wheel_delta;
     bool navigation_active;
+    bool transform_input_active;
     bool ui_toggled_with_f4;
     bool ui_visible;
     bool workspace_input_active;
@@ -6814,6 +7001,7 @@ static void sandbox3d_update(henka_engine* engine, double delta_seconds, void* u
     framebuffer_height = 720;
     ui_toggled_with_f4 = false;
     navigation_active = false;
+    transform_input_active = sandbox3d_handle_transform_hotkeys(engine, state);
     workspace_input_active = false;
 
     if (henka_input_was_key_pressed(engine, HENKA_KEY_H))
@@ -6889,7 +7077,7 @@ static void sandbox3d_update(henka_engine* engine, double delta_seconds, void* u
         sandbox3d_print_ui_state(false);
     }
 
-    if (!ui_visible && henka_input_action_was_pressed(engine, HENKA_INPUT_ACTION_TOGGLE_MOUSE_CAPTURE))
+    if (!transform_input_active && !ui_visible && henka_input_action_was_pressed(engine, HENKA_INPUT_ACTION_TOGGLE_MOUSE_CAPTURE))
     {
         sandbox3d_clear_gizmo_drag(state, true);
         henka_engine_set_mouse_capture(engine, !henka_engine_is_mouse_captured(engine));
@@ -6932,7 +7120,7 @@ static void sandbox3d_update(henka_engine* engine, double delta_seconds, void* u
     mouse_wheel_delta = henka_input_get_mouse_wheel_delta(engine);
     framebuffer_mouse_position = mouse_position;
     sandbox3d_try_get_mouse_framebuffer_position(engine, &framebuffer_mouse_position);
-    if (ui_visible && !henka_engine_is_mouse_captured(engine))
+    if (!transform_input_active && ui_visible && !henka_engine_is_mouse_captured(engine))
     {
         workspace_input_active = sandbox3d_handle_workspace_input(
             engine,
@@ -6966,7 +7154,7 @@ static void sandbox3d_update(henka_engine* engine, double delta_seconds, void* u
         sandbox3d_record_reject_reason(state, SANDBOX3D_INTERACTION_REJECT_MOUSE_CAPTURE_ACTIVE, true);
     }
 
-    if (!henka_engine_is_mouse_captured(engine) && !workspace_input_active)
+    if (!transform_input_active && !henka_engine_is_mouse_captured(engine) && !workspace_input_active)
     {
         const bool mouse_in_viewport = henka_viewport_contains_point(state->frame_layout.scene_viewport, framebuffer_mouse_position);
         const bool ui_wants_mouse = sandbox3d_ui_owns_mouse_at_point(state, framebuffer_mouse_position);

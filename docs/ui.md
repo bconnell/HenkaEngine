@@ -88,6 +88,7 @@ The current `Controls` panel can:
 - reset the view
 - zoom in and out with visible buttons
 - switch between explicit `Select`, `Orbit`, `Pan`, `Move`, `Rotate`, and `Scale` viewport tools
+- use action-based move, rotate, scale, axis-constraint, confirm, cancel, stepped-adjustment, and fine-adjustment hotkeys
 - toggle transform snapping and show the current snap increments
 - toggle `Hit Boxes` so the viewport can draw the same handle regions that gizmo hit testing uses
 - start with panels visible on startup and reset-style launches so `Diagnostics`, `Transform QA`, and `Physics QA` are reachable from the main Controls page without using `F4` first
@@ -174,7 +175,7 @@ When Diagnostics, Transform QA, or Physics QA is open in the heavier layout, the
 
 Selection is also visible directly in the Scene View through a non-selectable highlighted bounds outline around the selected real scene object. The highlight is clipped to the Scene View and does not draw over workspace panels or the debug strip. Ground selection uses one finite floor outline around the visible ground area instead of unbounded plane geometry. Clearing selection, clicking empty viewport space in Select mode, hiding the selected object, or deleting it removes the highlight and updates Object Details and Diagnostics.
 
-Panel placement and dock resizing are session-only in the current sandbox. `Reset Layout` redocks the standard panels, closes detached windows, restores safe dock widths, makes panels visible, clears active workspace drag or resize state, and closes `Native Panel Test` if it is open. The Scene View remains the main center viewport. Saved detached placement, full detached controls, configurable editor hotkeys, and detachable Scene View support remain future work.
+Panel placement and dock resizing are session-only in the current sandbox. `Reset Layout` redocks the standard panels, closes detached windows, restores safe dock widths, makes panels visible, clears active workspace drag or resize state, and closes `Native Panel Test` if it is open. The Scene View remains the main center viewport. Saved detached placement, full detached controls, a richer in-window profile editor, and detachable Scene View support remain future work.
 
 When the UI is open:
 
