@@ -13,7 +13,7 @@ typedef struct henka_asset_manager henka_asset_manager;
 typedef struct henka_ui_context henka_ui_context;
 
 #define HENKA_INVALID_WINDOW_ID 0U
-#define HENKA_MAX_TOOL_WINDOWS 4U
+#define HENKA_MAX_TOOL_WINDOWS 5U
 
 typedef uint32_t henka_window_id;
 

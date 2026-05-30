@@ -72,12 +72,11 @@ The sandbox now uses a movable in-window workspace layout:
 - left and right dock regions for panels
 - a dedicated scene viewport in the center
 - a viewport frame that keeps the scene visually separate from the docked tools
-- header dragging that undocks docked panels directly and moves floating panels
-- lower-right resize grips on floating panels
-- `L`, `R`, and `Home` controls as secondary reliable redocking paths
+- header dragging that redocks across valid zones or opens native detached windows
+- native OS frame movement and resizing for detached windows
 - visible splitter bars for occupied dock width resizing
 
-Docked panels stay outside the scene. Floating workspace panels remain overlay rectangles and may be dragged freely, including beyond the main window frame; `Reset Layout` is the recovery path if a panel is moved somewhere inconvenient. While dragging, valid redock targets show a thin outline. Releasing away from a valid target keeps the panel floating where released, and releasing over a valid target redocks it. Floating panels own their full visible input rectangle so clicks, drag, and resize do not leak through to viewport tools. The sandbox also provides `Open Native Panel Test`, which opens a separate OS-level UI window for validating the new multi-window foundation; it is not yet a replacement for the workspace panels.
+Docked panels stay outside the scene. While dragging a docked panel, valid left and right dock targets show a thin outline. Releasing on an outline redocks there, including across the workspace. Releasing away from the outlines opens a separate native tool window, so the detached panel can move outside the main sandbox frame without clipping. Closing that native window returns the panel to its last valid dock. Detached windows currently present a compact panel-state surface while full detached controls and OS-title-bar drag-back docking remain future work. `Reset Layout` closes detached windows and restores the default workspace.
 
 The current `Controls` panel can:
 
@@ -175,7 +174,7 @@ When Diagnostics, Transform QA, or Physics QA is open in the heavier layout, the
 
 Selection is also visible directly in the Scene View through a non-selectable highlighted bounds outline around the selected real scene object. The highlight is clipped to the Scene View and does not draw over workspace panels or the debug strip. Ground selection uses one finite floor outline around the visible ground area instead of unbounded plane geometry. Clearing selection, clicking empty viewport space in Select mode, hiding the selected object, or deleting it removes the highlight and updates Object Details and Diagnostics.
 
-Panel placement and dock resizing are session-only in the current sandbox. `Reset Layout` redocks the standard panels, restores safe dock widths, makes panels visible, clears active workspace drag or resize state, and closes `Native Panel Test` if it is open. The Scene View remains the main center viewport. The test window establishes separate-window rendering and event routing; production tool-panel conversion and detachable Scene View support remain future work.
+Panel placement and dock resizing are session-only in the current sandbox. `Reset Layout` redocks the standard panels, closes detached windows, restores safe dock widths, makes panels visible, clears active workspace drag or resize state, and closes `Native Panel Test` if it is open. The Scene View remains the main center viewport. Saved detached placement, full detached controls, configurable editor hotkeys, and detachable Scene View support remain future work.
 
 When the UI is open:
 

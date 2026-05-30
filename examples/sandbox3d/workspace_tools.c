@@ -47,6 +47,9 @@ void sandbox3d_workspace_model_reset(sandbox3d_workspace_model* model)
         SANDBOX3D_WORKSPACE_PANEL_CONTROLS,
         SANDBOX3D_WORKSPACE_DOCK_LEFT,
         SANDBOX3D_WORKSPACE_DOCK_LEFT,
+        SANDBOX3D_WORKSPACE_DOCK_LEFT,
+        SANDBOX3D_WORKSPACE_DOCK_MASK_LEFT | SANDBOX3D_WORKSPACE_DOCK_MASK_RIGHT,
+        0U,
         {28.0f, 32.0f, 328.0f, 500.0f},
         300.0f,
         470.0f,
@@ -57,6 +60,9 @@ void sandbox3d_workspace_model_reset(sandbox3d_workspace_model* model)
         SANDBOX3D_WORKSPACE_PANEL_SCENE_OBJECTS,
         SANDBOX3D_WORKSPACE_DOCK_LEFT,
         SANDBOX3D_WORKSPACE_DOCK_LEFT,
+        SANDBOX3D_WORKSPACE_DOCK_LEFT,
+        SANDBOX3D_WORKSPACE_DOCK_MASK_LEFT | SANDBOX3D_WORKSPACE_DOCK_MASK_RIGHT,
+        0U,
         {46.0f, 138.0f, 300.0f, 242.0f},
         260.0f,
         152.0f,
@@ -67,6 +73,9 @@ void sandbox3d_workspace_model_reset(sandbox3d_workspace_model* model)
         SANDBOX3D_WORKSPACE_PANEL_OBJECT_DETAILS,
         SANDBOX3D_WORKSPACE_DOCK_RIGHT,
         SANDBOX3D_WORKSPACE_DOCK_RIGHT,
+        SANDBOX3D_WORKSPACE_DOCK_RIGHT,
+        SANDBOX3D_WORKSPACE_DOCK_MASK_LEFT | SANDBOX3D_WORKSPACE_DOCK_MASK_RIGHT,
+        0U,
         {868.0f, 38.0f, 356.0f, 404.0f},
         344.0f,
         400.0f,
@@ -77,6 +86,9 @@ void sandbox3d_workspace_model_reset(sandbox3d_workspace_model* model)
         SANDBOX3D_WORKSPACE_PANEL_UTILITY,
         SANDBOX3D_WORKSPACE_DOCK_RIGHT,
         SANDBOX3D_WORKSPACE_DOCK_RIGHT,
+        SANDBOX3D_WORKSPACE_DOCK_RIGHT,
+        SANDBOX3D_WORKSPACE_DOCK_MASK_LEFT | SANDBOX3D_WORKSPACE_DOCK_MASK_RIGHT,
+        0U,
         {820.0f, 94.0f, 396.0f, 560.0f},
         332.0f,
         672.0f,
@@ -129,6 +141,47 @@ bool sandbox3d_workspace_panel_is_floating(
     return panel != NULL && panel->dock == SANDBOX3D_WORKSPACE_DOCK_FLOATING;
 }
 
+bool sandbox3d_workspace_panel_is_detached(
+    const sandbox3d_workspace_model* model,
+    sandbox3d_workspace_panel_id panel_id)
+{
+    const sandbox3d_workspace_panel* panel = sandbox3d_workspace_get_panel_const(model, panel_id);
+    return panel != NULL && panel->dock == SANDBOX3D_WORKSPACE_DOCK_DETACHED;
+}
+
+bool sandbox3d_workspace_panel_allows_dock(
+    const sandbox3d_workspace_model* model,
+    sandbox3d_workspace_panel_id panel_id,
+    sandbox3d_workspace_dock_zone dock_zone)
+{
+    const sandbox3d_workspace_panel* panel = sandbox3d_workspace_get_panel_const(model, panel_id);
+    if (panel == NULL || (dock_zone != SANDBOX3D_WORKSPACE_DOCK_LEFT && dock_zone != SANDBOX3D_WORKSPACE_DOCK_RIGHT))
+    {
+        return false;
+    }
+    return (panel->allowed_dock_mask & (1U << dock_zone)) != 0U;
+}
+
+void sandbox3d_workspace_detach_panel(
+    sandbox3d_workspace_model* model,
+    sandbox3d_workspace_panel_id panel_id,
+    uint32_t detached_window_id)
+{
+    sandbox3d_workspace_panel* panel = sandbox3d_workspace_get_panel(model, panel_id);
+    if (panel == NULL || detached_window_id == 0U)
+    {
+        return;
+    }
+    if (panel->dock == SANDBOX3D_WORKSPACE_DOCK_LEFT || panel->dock == SANDBOX3D_WORKSPACE_DOCK_RIGHT)
+    {
+        panel->last_docked_zone = panel->dock;
+    }
+    panel->dock = SANDBOX3D_WORKSPACE_DOCK_DETACHED;
+    panel->detached_window_id = detached_window_id;
+    model->active_drag_panel = SANDBOX3D_WORKSPACE_PANEL_NONE;
+    snprintf(model->last_action, sizeof(model->last_action), "%s detached", sandbox3d_workspace_panel_name(panel_id));
+}
+
 void sandbox3d_workspace_bring_to_front(
     sandbox3d_workspace_model* model,
     sandbox3d_workspace_panel_id panel_id)
@@ -147,12 +200,14 @@ void sandbox3d_workspace_dock_panel(
     sandbox3d_workspace_dock_zone dock_zone)
 {
     sandbox3d_workspace_panel* panel = sandbox3d_workspace_get_panel(model, panel_id);
-    if (panel == NULL || dock_zone == SANDBOX3D_WORKSPACE_DOCK_FLOATING)
+    if (panel == NULL || !sandbox3d_workspace_panel_allows_dock(model, panel_id, dock_zone))
     {
         return;
     }
 
     panel->dock = dock_zone;
+    panel->last_docked_zone = dock_zone;
+    panel->detached_window_id = 0U;
     model->active_drag_panel = SANDBOX3D_WORKSPACE_PANEL_NONE;
     model->active_resize_panel = SANDBOX3D_WORKSPACE_PANEL_NONE;
     model->resize_target = SANDBOX3D_WORKSPACE_RESIZE_NONE;
@@ -416,6 +471,8 @@ const char* sandbox3d_workspace_dock_name(sandbox3d_workspace_dock_zone dock_zon
             return "left";
         case SANDBOX3D_WORKSPACE_DOCK_RIGHT:
             return "right";
+        case SANDBOX3D_WORKSPACE_DOCK_DETACHED:
+            return "detached";
         case SANDBOX3D_WORKSPACE_DOCK_FLOATING:
         default:
             return "floating";

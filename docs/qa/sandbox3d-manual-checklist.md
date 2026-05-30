@@ -70,14 +70,14 @@ Use this checklist when you want to confirm that `henka_sandbox3d` is visually r
 23. Click inside the native test window and confirm it does not select an object, start a gizmo drag, orbit, or pan the main Scene View.
 24. Close the native test window and confirm only that window closes, then reopen it successfully.
 25. Open the native test window again, use `Reset Layout`, and confirm the test window closes safely.
-26. Drag the `Controls` header where `DRAG` is shown and confirm it undocks directly inside the main sandbox window without requiring a button or opening a transient menu.
-27. Keep dragging `Controls` and confirm it visibly follows the cursor, can move partly beyond the main window frame, and remains floating where released away from a dock target.
-28. Drag the floating `Controls` header more than once and confirm movement is repeatable.
-29. Resize floating `Controls` from its lower-right grip and confirm its controls remain readable.
-30. Drag floating `Controls` onto a visible valid dock outline and confirm it redocks; also confirm `Home` is a reliable secondary default redock path.
-31. Repeat direct header undock, move, resize, and redock recovery for Scene Objects, Object Details, and Utility wherever `DRAG` is shown.
-32. Confirm stable floating-panel `L` or `R` controls dock onto an available requested side if retained.
-33. Release a floating panel away from any dock outline and confirm it does not snap back; use `Reset Layout` to recover it if needed.
+26. Drag the `Controls` header where `DRAG` is shown and release it over the right dock outline; confirm it docks on the right.
+27. Drag `Controls` from the right and release it over the left dock outline; confirm it docks on the left.
+28. Drag `Utility` from the right and release it over the left dock outline; confirm it docks on the left.
+29. Drag `Utility` from the left and release it over the right dock outline; confirm it docks on the right.
+30. Release `Utility` away from both dock outlines and confirm a separate native OS-level window opens.
+31. Move and resize the detached `Utility` window outside the main sandbox frame and confirm it is not clipped.
+32. Close detached `Utility` and confirm it safely returns to its last valid dock.
+33. Repeat native detach and close-to-redock recovery for Controls, Scene Objects, and Object Details wherever `DRAG` is shown.
 34. Drag each visible dock splitter and confirm the Scene View resizes without becoming unusable.
 35. Confirm the debug strip reports hovered panel, panel header hover, panel move or resize state, dock target, and last workspace action.
 36. Confirm panel drag, resize, and splitter drag do not select objects or begin viewport tools behind the panel.
@@ -294,7 +294,7 @@ Do not commit screenshots unless that is an intentional, reviewed part of the re
 
 - OBJ loading is still early and limited to the documented subset in [docs/model-loading.md](../model-loading.md).
 - The UI overlay is still intentionally small and is not an editor.
-- Floating production panels currently remain inside the main sandbox window. `Native Panel Test` is a separate OS-level validation surface; production native panel detachment and detachable Scene View behavior are not implemented yet.
+- Production panels can detach into separate OS-level windows with close-to-redock recovery. Detached windows currently show compact panel state; full detached controls, OS-title-bar drag-back docking, saved placement, and detachable Scene View behavior are not implemented yet.
 - Local action and viewport interaction tests now prove more basic selection and transform outcomes, but manual QA is still required for visual feel and drag comfort.
 - Manual visual inspection is still the best way to confirm scene readability and interaction feel.
 - The packaged Windows folder is meant for local manual testing, not as a full installer or release pipeline.

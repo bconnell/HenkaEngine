@@ -39,7 +39,7 @@ Henka is moving toward a practical developer workspace, but this should happen i
 Current workspace foundations include:
 
 1. Docked panels with a dedicated Scene View.
-2. Session-only in-window floating, draggable, and resizable panel placement in the sandbox.
+2. Session-only native detached tool windows with close-to-redock recovery.
 3. Resizable occupied dock regions and reset-layout recovery.
 4. Visible workspace and viewport interaction diagnostics.
 5. A multi-window platform foundation with a separate native test panel for render and event-routing validation.
@@ -48,11 +48,12 @@ Current runtime foundations also include rigid-body physics v1: fixed-step world
 
 Planned workspace improvements include:
 
-1. Convert tool panels to native floating windows with reliable redocking on top of the multi-window foundation.
-2. Saved workspace placement and dock sizes.
-3. A detachable Scene View after multi-window rendering and viewport input are dependable.
-4. A clearer scene hierarchy.
-5. Numeric transform editing.
+1. Finish full controls and drag-back redocking for native detached tool windows.
+2. Add saved workspace placement and dock sizes.
+3. Add configurable editor hotkeys and local keybinding profiles.
+4. A detachable Scene View after multi-window rendering and viewport input are dependable.
+5. A clearer scene hierarchy.
+6. Numeric transform editing.
 6. Undo and redo for basic scene operations.
 7. Scene save and load support.
 
@@ -143,8 +144,8 @@ Current limitations include:
 2. The transform gizmo workflow still needs manual desktop QA for visual feel and mouse comfort.
 3. Scene saving and loading are not complete authoring workflows yet.
 4. The UI is useful for inspection and testing, but it is not a full editor.
-5. Workspace movement and sizing require desktop QA for feel, and current panel placement is session-only inside the main sandbox window.
-6. The native test panel establishes multi-window rendering and event routing, but production tool panels and the Scene View do not detach yet.
+5. Workspace movement and sizing require desktop QA for feel. Detached placement is session-only, and full detached controls plus OS-title-bar drag-back docking still need implementation.
+6. The native test panel and compact detached production-panel surfaces use multi-window rendering and event routing, but full detached controls and detachable Scene View are not implemented yet.
 7. Asset loading is still limited.
 8. 2D and 2.5D workflows are planned, but not implemented yet.
 9. Physics v1 is intentionally limited to rigid bodies and primitive colliders; mesh collision, joints, character controllers, and advanced simulation remain future work.

@@ -2,6 +2,7 @@
 #define SANDBOX3D_WORKSPACE_TOOLS_H
 
 #include <stdbool.h>
+#include <stdint.h>
 
 #include <henka/math.h>
 #include <henka/ui.h>
@@ -20,8 +21,12 @@ typedef enum sandbox3d_workspace_dock_zone
 {
     SANDBOX3D_WORKSPACE_DOCK_LEFT = 0,
     SANDBOX3D_WORKSPACE_DOCK_RIGHT,
-    SANDBOX3D_WORKSPACE_DOCK_FLOATING
+    SANDBOX3D_WORKSPACE_DOCK_FLOATING,
+    SANDBOX3D_WORKSPACE_DOCK_DETACHED
 } sandbox3d_workspace_dock_zone;
+
+#define SANDBOX3D_WORKSPACE_DOCK_MASK_LEFT (1U << SANDBOX3D_WORKSPACE_DOCK_LEFT)
+#define SANDBOX3D_WORKSPACE_DOCK_MASK_RIGHT (1U << SANDBOX3D_WORKSPACE_DOCK_RIGHT)
 
 typedef enum sandbox3d_workspace_resize_target
 {
@@ -36,6 +41,9 @@ typedef struct sandbox3d_workspace_panel
     sandbox3d_workspace_panel_id id;
     sandbox3d_workspace_dock_zone default_dock;
     sandbox3d_workspace_dock_zone dock;
+    sandbox3d_workspace_dock_zone last_docked_zone;
+    unsigned int allowed_dock_mask;
+    uint32_t detached_window_id;
     henka_ui_rect floating_rect;
     float minimum_width;
     float minimum_height;
@@ -71,6 +79,17 @@ const sandbox3d_workspace_panel* sandbox3d_workspace_get_panel_const(
 bool sandbox3d_workspace_panel_is_floating(
     const sandbox3d_workspace_model* model,
     sandbox3d_workspace_panel_id panel_id);
+bool sandbox3d_workspace_panel_is_detached(
+    const sandbox3d_workspace_model* model,
+    sandbox3d_workspace_panel_id panel_id);
+bool sandbox3d_workspace_panel_allows_dock(
+    const sandbox3d_workspace_model* model,
+    sandbox3d_workspace_panel_id panel_id,
+    sandbox3d_workspace_dock_zone dock_zone);
+void sandbox3d_workspace_detach_panel(
+    sandbox3d_workspace_model* model,
+    sandbox3d_workspace_panel_id panel_id,
+    uint32_t detached_window_id);
 void sandbox3d_workspace_bring_to_front(
     sandbox3d_workspace_model* model,
     sandbox3d_workspace_panel_id panel_id);
