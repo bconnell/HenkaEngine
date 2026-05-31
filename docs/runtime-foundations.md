@@ -91,6 +91,7 @@ Henka now also includes a small docked workspace helper for viewport-first tools
 
 The sandbox uses this to keep the scene in its own viewport while panels stay in separate docked regions.
 The current sandbox layers safe panel paging and session-only native detached panel placement on top of that docked layout so scene-first modes remain readable while workspace movement is evaluated.
+The current side docks can now hold ordered panel groups, so cross-docked panels stack cleanly instead of covering one another.
 Henka now has a small multi-window platform foundation: secondary OS-level tool windows receive stable engine identifiers, route close/focus/resize/pointer events separately from the main viewport input path, and can present their own UI-only OpenGL surface. The sandbox uses this for `Native Panel Test` and for compact detached production-panel state surfaces. Full detached controls and OS-title-bar drag-back docking remain future work.
 The sandbox now also uses explicit viewport tool modes on top of that viewport math so selection, orbit, pan, and gizmo manipulation can route through one visible user-facing tool state instead of relying only on hidden mouse modifiers.
 

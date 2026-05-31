@@ -3,6 +3,148 @@
 #include <stdio.h>
 #include <string.h>
 
+static sandbox3d_workspace_panel_id* sandbox3d_workspace_get_dock_list(
+    sandbox3d_workspace_model* model,
+    sandbox3d_workspace_dock_zone dock_zone,
+    size_t** out_count)
+{
+    if (out_count == NULL || model == NULL)
+    {
+        return NULL;
+    }
+
+    switch (dock_zone)
+    {
+        case SANDBOX3D_WORKSPACE_DOCK_LEFT:
+            *out_count = &model->left_dock_panel_count;
+            return model->left_dock_panels;
+        case SANDBOX3D_WORKSPACE_DOCK_RIGHT:
+            *out_count = &model->right_dock_panel_count;
+            return model->right_dock_panels;
+        case SANDBOX3D_WORKSPACE_DOCK_FLOATING:
+        case SANDBOX3D_WORKSPACE_DOCK_DETACHED:
+        default:
+            return NULL;
+    }
+}
+
+static const sandbox3d_workspace_panel_id* sandbox3d_workspace_get_dock_list_const(
+    const sandbox3d_workspace_model* model,
+    sandbox3d_workspace_dock_zone dock_zone,
+    size_t* out_count)
+{
+    if (out_count == NULL || model == NULL)
+    {
+        return NULL;
+    }
+
+    switch (dock_zone)
+    {
+        case SANDBOX3D_WORKSPACE_DOCK_LEFT:
+            *out_count = model->left_dock_panel_count;
+            return model->left_dock_panels;
+        case SANDBOX3D_WORKSPACE_DOCK_RIGHT:
+            *out_count = model->right_dock_panel_count;
+            return model->right_dock_panels;
+        case SANDBOX3D_WORKSPACE_DOCK_FLOATING:
+        case SANDBOX3D_WORKSPACE_DOCK_DETACHED:
+        default:
+            return NULL;
+    }
+}
+
+static bool sandbox3d_workspace_dock_contains_panel(
+    const sandbox3d_workspace_model* model,
+    sandbox3d_workspace_dock_zone dock_zone,
+    sandbox3d_workspace_panel_id panel_id)
+{
+    const sandbox3d_workspace_panel_id* dock_panels;
+    size_t count;
+    size_t index;
+
+    dock_panels = sandbox3d_workspace_get_dock_list_const(model, dock_zone, &count);
+    if (dock_panels == NULL)
+    {
+        return false;
+    }
+
+    for (index = 0U; index < count; ++index)
+    {
+        if (dock_panels[index] == panel_id)
+        {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+static void sandbox3d_workspace_remove_panel_from_docks(
+    sandbox3d_workspace_model* model,
+    sandbox3d_workspace_panel_id panel_id)
+{
+    sandbox3d_workspace_dock_zone dock_zone;
+
+    if (model == NULL)
+    {
+        return;
+    }
+
+    for (dock_zone = SANDBOX3D_WORKSPACE_DOCK_LEFT;
+         dock_zone <= SANDBOX3D_WORKSPACE_DOCK_RIGHT;
+         dock_zone = (sandbox3d_workspace_dock_zone)(dock_zone + 1))
+    {
+        sandbox3d_workspace_panel_id* dock_panels;
+        size_t* count;
+        size_t index;
+
+        dock_panels = sandbox3d_workspace_get_dock_list(model, dock_zone, &count);
+        if (dock_panels == NULL || count == NULL)
+        {
+            continue;
+        }
+
+        for (index = 0U; index < *count; ++index)
+        {
+            if (dock_panels[index] != panel_id)
+            {
+                continue;
+            }
+
+            for (; index + 1U < *count; ++index)
+            {
+                dock_panels[index] = dock_panels[index + 1U];
+            }
+            *count -= 1U;
+            dock_panels[*count] = SANDBOX3D_WORKSPACE_PANEL_NONE;
+            break;
+        }
+    }
+}
+
+static void sandbox3d_workspace_append_panel_to_dock(
+    sandbox3d_workspace_model* model,
+    sandbox3d_workspace_dock_zone dock_zone,
+    sandbox3d_workspace_panel_id panel_id)
+{
+    sandbox3d_workspace_panel_id* dock_panels;
+    size_t* count;
+
+    dock_panels = sandbox3d_workspace_get_dock_list(model, dock_zone, &count);
+    if (dock_panels == NULL || count == NULL || *count >= SANDBOX3D_WORKSPACE_PANEL_COUNT)
+    {
+        return;
+    }
+
+    if (sandbox3d_workspace_dock_contains_panel(model, dock_zone, panel_id))
+    {
+        return;
+    }
+
+    dock_panels[*count] = panel_id;
+    *count += 1U;
+}
+
 static float sandbox3d_workspace_clamp_float(float value, float minimum, float maximum)
 {
     if (value < minimum)
@@ -94,6 +236,12 @@ void sandbox3d_workspace_model_reset(sandbox3d_workspace_model* model)
         672.0f,
         4U
     };
+    model->left_dock_panels[0] = SANDBOX3D_WORKSPACE_PANEL_CONTROLS;
+    model->left_dock_panels[1] = SANDBOX3D_WORKSPACE_PANEL_SCENE_OBJECTS;
+    model->right_dock_panels[0] = SANDBOX3D_WORKSPACE_PANEL_OBJECT_DETAILS;
+    model->right_dock_panels[1] = SANDBOX3D_WORKSPACE_PANEL_UTILITY;
+    model->left_dock_panel_count = 2U;
+    model->right_dock_panel_count = 2U;
     model->left_dock_width = 320.0f;
     model->right_dock_width = 356.0f;
     model->hovered_panel = SANDBOX3D_WORKSPACE_PANEL_NONE;
@@ -162,6 +310,37 @@ bool sandbox3d_workspace_panel_allows_dock(
     return (panel->allowed_dock_mask & (1U << dock_zone)) != 0U;
 }
 
+size_t sandbox3d_workspace_get_dock_panel_count(
+    const sandbox3d_workspace_model* model,
+    sandbox3d_workspace_dock_zone dock_zone)
+{
+    size_t count;
+
+    if (sandbox3d_workspace_get_dock_list_const(model, dock_zone, &count) == NULL)
+    {
+        return 0U;
+    }
+
+    return count;
+}
+
+sandbox3d_workspace_panel_id sandbox3d_workspace_get_dock_panel_at(
+    const sandbox3d_workspace_model* model,
+    sandbox3d_workspace_dock_zone dock_zone,
+    size_t index)
+{
+    const sandbox3d_workspace_panel_id* dock_panels;
+    size_t count;
+
+    dock_panels = sandbox3d_workspace_get_dock_list_const(model, dock_zone, &count);
+    if (dock_panels == NULL || index >= count)
+    {
+        return SANDBOX3D_WORKSPACE_PANEL_NONE;
+    }
+
+    return dock_panels[index];
+}
+
 void sandbox3d_workspace_detach_panel(
     sandbox3d_workspace_model* model,
     sandbox3d_workspace_panel_id panel_id,
@@ -176,6 +355,7 @@ void sandbox3d_workspace_detach_panel(
     {
         panel->last_docked_zone = panel->dock;
     }
+    sandbox3d_workspace_remove_panel_from_docks(model, panel_id);
     panel->dock = SANDBOX3D_WORKSPACE_DOCK_DETACHED;
     panel->detached_window_id = detached_window_id;
     model->active_drag_panel = SANDBOX3D_WORKSPACE_PANEL_NONE;
@@ -205,9 +385,11 @@ void sandbox3d_workspace_dock_panel(
         return;
     }
 
+    sandbox3d_workspace_remove_panel_from_docks(model, panel_id);
     panel->dock = dock_zone;
     panel->last_docked_zone = dock_zone;
     panel->detached_window_id = 0U;
+    sandbox3d_workspace_append_panel_to_dock(model, dock_zone, panel_id);
     model->active_drag_panel = SANDBOX3D_WORKSPACE_PANEL_NONE;
     model->active_resize_panel = SANDBOX3D_WORKSPACE_PANEL_NONE;
     model->resize_target = SANDBOX3D_WORKSPACE_RESIZE_NONE;
@@ -282,6 +464,7 @@ void sandbox3d_workspace_begin_docked_panel_drag(
     (void)framebuffer_width;
     (void)framebuffer_height;
     sandbox3d_workspace_enforce_minimum_floating_size(panel);
+    sandbox3d_workspace_remove_panel_from_docks(model, panel_id);
     panel->dock = SANDBOX3D_WORKSPACE_DOCK_FLOATING;
     sandbox3d_workspace_bring_to_front(model, panel_id);
     model->active_drag_panel = panel_id;

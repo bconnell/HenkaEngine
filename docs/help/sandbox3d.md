@@ -71,6 +71,7 @@ The docked workspace opens in `View` mode with no selected scene object so the c
 - Use Transform QA first to confirm whether selected-object mutation works even if gizmo dragging or viewport input is failing.
 - Open `Physics QA`, click `Enable`, and observe the linked sample bodies fall and collide; use pause, fixed step, reset, body-type controls, Make Dynamic + Drop, impulses, raycast, and collider/contact debug to inspect the rigid-body path.
 - `DRAG` marks a live panel header. Drag a docked panel header and release over a valid left or right outline to dock there.
+- If a side dock already contains a panel, the incoming panel stacks into the same side instead of covering it.
 - Release away from the dock outlines to open a separate native tool window. Move or resize that window with the operating-system frame.
 - Close a detached tool window to return its panel to its last valid dock. Detached windows currently show panel state while full detached controls are integrated. `Reset Layout` recovers defaults.
 - Drag the narrow bars beside Scene View to resize occupied docks.
@@ -170,7 +171,7 @@ Physics QA exposes an opt-in fixed-step rigid-body demo with linked real scene o
 The compact strip below Scene View keeps essential input-gate, gizmo, hovered-panel, panel-header, and workspace drag state visible while testing, so a rejected viewport or panel gesture can be diagnosed without switching views.
 `Object Use` in Object Details reports the optional object interaction prompt and range only; it is separate from transform tools and gizmo state.
 
-Workspace panel placement and dock sizes are session-only in this version. Production panels can detach into separate OS-level windows with safe close-to-redock recovery. Full detached controls, OS-title-bar drag-back docking, saved detached placement, and detachable Scene View are not implemented yet. `Native Panel Test` remains available for focused multi-window verification.
+Workspace panel placement and dock sizes are session-only in this version. Production panels can detach into separate OS-level windows with safe close-to-redock recovery, and shared side docks stack panels vertically instead of overlapping them. Full detached controls, OS-title-bar drag-back docking, saved detached placement, and detachable Scene View are not implemented yet. `Native Panel Test` remains available for focused multi-window verification.
 
 When the UI is open:
 

@@ -2,6 +2,7 @@
 #define SANDBOX3D_WORKSPACE_TOOLS_H
 
 #include <stdbool.h>
+#include <stddef.h>
 #include <stdint.h>
 
 #include <henka/math.h>
@@ -53,6 +54,10 @@ typedef struct sandbox3d_workspace_panel
 typedef struct sandbox3d_workspace_model
 {
     sandbox3d_workspace_panel panels[SANDBOX3D_WORKSPACE_PANEL_COUNT];
+    sandbox3d_workspace_panel_id left_dock_panels[SANDBOX3D_WORKSPACE_PANEL_COUNT];
+    sandbox3d_workspace_panel_id right_dock_panels[SANDBOX3D_WORKSPACE_PANEL_COUNT];
+    size_t left_dock_panel_count;
+    size_t right_dock_panel_count;
     float left_dock_width;
     float right_dock_width;
     sandbox3d_workspace_panel_id hovered_panel;
@@ -86,6 +91,13 @@ bool sandbox3d_workspace_panel_allows_dock(
     const sandbox3d_workspace_model* model,
     sandbox3d_workspace_panel_id panel_id,
     sandbox3d_workspace_dock_zone dock_zone);
+size_t sandbox3d_workspace_get_dock_panel_count(
+    const sandbox3d_workspace_model* model,
+    sandbox3d_workspace_dock_zone dock_zone);
+sandbox3d_workspace_panel_id sandbox3d_workspace_get_dock_panel_at(
+    const sandbox3d_workspace_model* model,
+    sandbox3d_workspace_dock_zone dock_zone,
+    size_t index);
 void sandbox3d_workspace_detach_panel(
     sandbox3d_workspace_model* model,
     sandbox3d_workspace_panel_id panel_id,

@@ -17,6 +17,20 @@ void henka_test_sandbox3d_workspace(void)
     HENKA_TEST_ASSERT(panel != NULL);
     HENKA_TEST_ASSERT(panel->dock == SANDBOX3D_WORKSPACE_DOCK_LEFT);
     HENKA_TEST_ASSERT(panel->last_docked_zone == SANDBOX3D_WORKSPACE_DOCK_LEFT);
+    HENKA_TEST_ASSERT(sandbox3d_workspace_get_dock_panel_count(&model, SANDBOX3D_WORKSPACE_DOCK_LEFT) == 2U);
+    HENKA_TEST_ASSERT(sandbox3d_workspace_get_dock_panel_count(&model, SANDBOX3D_WORKSPACE_DOCK_RIGHT) == 2U);
+    HENKA_TEST_ASSERT(
+        sandbox3d_workspace_get_dock_panel_at(&model, SANDBOX3D_WORKSPACE_DOCK_LEFT, 0U) ==
+        SANDBOX3D_WORKSPACE_PANEL_CONTROLS);
+    HENKA_TEST_ASSERT(
+        sandbox3d_workspace_get_dock_panel_at(&model, SANDBOX3D_WORKSPACE_DOCK_LEFT, 1U) ==
+        SANDBOX3D_WORKSPACE_PANEL_SCENE_OBJECTS);
+    HENKA_TEST_ASSERT(
+        sandbox3d_workspace_get_dock_panel_at(&model, SANDBOX3D_WORKSPACE_DOCK_RIGHT, 0U) ==
+        SANDBOX3D_WORKSPACE_PANEL_OBJECT_DETAILS);
+    HENKA_TEST_ASSERT(
+        sandbox3d_workspace_get_dock_panel_at(&model, SANDBOX3D_WORKSPACE_DOCK_RIGHT, 1U) ==
+        SANDBOX3D_WORKSPACE_PANEL_UTILITY);
     HENKA_TEST_ASSERT(sandbox3d_workspace_panel_allows_dock(&model, SANDBOX3D_WORKSPACE_PANEL_CONTROLS, SANDBOX3D_WORKSPACE_DOCK_RIGHT));
     HENKA_TEST_ASSERT(!sandbox3d_workspace_panel_allows_dock(&model, SANDBOX3D_WORKSPACE_PANEL_CONTROLS, SANDBOX3D_WORKSPACE_DOCK_FLOATING));
     HENKA_TEST_ASSERT_FLOAT_CLOSE(model.left_dock_width, 320.0f, 0.0001f);
@@ -119,18 +133,35 @@ void henka_test_sandbox3d_workspace(void)
     HENKA_TEST_ASSERT(!sandbox3d_workspace_panel_is_floating(&model, SANDBOX3D_WORKSPACE_PANEL_CONTROLS));
     HENKA_TEST_ASSERT(sandbox3d_workspace_get_panel_const(&model, SANDBOX3D_WORKSPACE_PANEL_CONTROLS)->dock == SANDBOX3D_WORKSPACE_DOCK_RIGHT);
     HENKA_TEST_ASSERT(sandbox3d_workspace_get_panel_const(&model, SANDBOX3D_WORKSPACE_PANEL_CONTROLS)->last_docked_zone == SANDBOX3D_WORKSPACE_DOCK_RIGHT);
+    HENKA_TEST_ASSERT(sandbox3d_workspace_get_dock_panel_count(&model, SANDBOX3D_WORKSPACE_DOCK_LEFT) == 1U);
+    HENKA_TEST_ASSERT(sandbox3d_workspace_get_dock_panel_count(&model, SANDBOX3D_WORKSPACE_DOCK_RIGHT) == 3U);
+    HENKA_TEST_ASSERT(
+        sandbox3d_workspace_get_dock_panel_at(&model, SANDBOX3D_WORKSPACE_DOCK_RIGHT, 2U) ==
+        SANDBOX3D_WORKSPACE_PANEL_CONTROLS);
     sandbox3d_workspace_dock_panel(&model, SANDBOX3D_WORKSPACE_PANEL_UTILITY, SANDBOX3D_WORKSPACE_DOCK_LEFT);
     HENKA_TEST_ASSERT(sandbox3d_workspace_get_panel_const(&model, SANDBOX3D_WORKSPACE_PANEL_UTILITY)->dock == SANDBOX3D_WORKSPACE_DOCK_LEFT);
     HENKA_TEST_ASSERT(sandbox3d_workspace_get_panel_const(&model, SANDBOX3D_WORKSPACE_PANEL_UTILITY)->last_docked_zone == SANDBOX3D_WORKSPACE_DOCK_LEFT);
+    HENKA_TEST_ASSERT(sandbox3d_workspace_get_dock_panel_count(&model, SANDBOX3D_WORKSPACE_DOCK_LEFT) == 2U);
+    HENKA_TEST_ASSERT(sandbox3d_workspace_get_dock_panel_count(&model, SANDBOX3D_WORKSPACE_DOCK_RIGHT) == 2U);
+    HENKA_TEST_ASSERT(
+        sandbox3d_workspace_get_dock_panel_at(&model, SANDBOX3D_WORKSPACE_DOCK_LEFT, 1U) ==
+        SANDBOX3D_WORKSPACE_PANEL_UTILITY);
     sandbox3d_workspace_detach_panel(&model, SANDBOX3D_WORKSPACE_PANEL_UTILITY, 42U);
     HENKA_TEST_ASSERT(sandbox3d_workspace_panel_is_detached(&model, SANDBOX3D_WORKSPACE_PANEL_UTILITY));
     HENKA_TEST_ASSERT(sandbox3d_workspace_get_panel_const(&model, SANDBOX3D_WORKSPACE_PANEL_UTILITY)->detached_window_id == 42U);
     HENKA_TEST_ASSERT(sandbox3d_workspace_get_panel_const(&model, SANDBOX3D_WORKSPACE_PANEL_UTILITY)->last_docked_zone == SANDBOX3D_WORKSPACE_DOCK_LEFT);
+    HENKA_TEST_ASSERT(sandbox3d_workspace_get_dock_panel_count(&model, SANDBOX3D_WORKSPACE_DOCK_LEFT) == 1U);
     sandbox3d_workspace_dock_panel(&model, SANDBOX3D_WORKSPACE_PANEL_UTILITY, SANDBOX3D_WORKSPACE_DOCK_RIGHT);
     HENKA_TEST_ASSERT(!sandbox3d_workspace_panel_is_detached(&model, SANDBOX3D_WORKSPACE_PANEL_UTILITY));
     HENKA_TEST_ASSERT(sandbox3d_workspace_get_panel_const(&model, SANDBOX3D_WORKSPACE_PANEL_UTILITY)->detached_window_id == 0U);
+    HENKA_TEST_ASSERT(sandbox3d_workspace_get_dock_panel_count(&model, SANDBOX3D_WORKSPACE_DOCK_RIGHT) == 3U);
+    HENKA_TEST_ASSERT(
+        sandbox3d_workspace_get_dock_panel_at(&model, SANDBOX3D_WORKSPACE_DOCK_RIGHT, 2U) ==
+        SANDBOX3D_WORKSPACE_PANEL_UTILITY);
     sandbox3d_workspace_dock_panel(&model, SANDBOX3D_WORKSPACE_PANEL_CONTROLS, SANDBOX3D_WORKSPACE_DOCK_LEFT);
     HENKA_TEST_ASSERT(sandbox3d_workspace_get_panel_const(&model, SANDBOX3D_WORKSPACE_PANEL_CONTROLS)->dock == SANDBOX3D_WORKSPACE_DOCK_LEFT);
+    HENKA_TEST_ASSERT(sandbox3d_workspace_get_dock_panel_count(&model, SANDBOX3D_WORKSPACE_DOCK_LEFT) == 2U);
+    HENKA_TEST_ASSERT(sandbox3d_workspace_get_dock_panel_count(&model, SANDBOX3D_WORKSPACE_DOCK_RIGHT) == 2U);
 
     rect = (henka_ui_rect){910.0f, 16.0f, 340.0f, 560.0f};
     HENKA_TEST_ASSERT(henka_ui_rect_contains(
@@ -155,6 +186,20 @@ void henka_test_sandbox3d_workspace(void)
     sandbox3d_workspace_end_interaction(&model);
     sandbox3d_workspace_dock_panel(&model, SANDBOX3D_WORKSPACE_PANEL_UTILITY, SANDBOX3D_WORKSPACE_DOCK_RIGHT);
     HENKA_TEST_ASSERT(sandbox3d_workspace_get_panel_const(&model, SANDBOX3D_WORKSPACE_PANEL_UTILITY)->dock == SANDBOX3D_WORKSPACE_DOCK_RIGHT);
+    HENKA_TEST_ASSERT(sandbox3d_workspace_get_dock_panel_count(&model, SANDBOX3D_WORKSPACE_DOCK_RIGHT) == 2U);
+
+    sandbox3d_workspace_dock_panel(&model, SANDBOX3D_WORKSPACE_PANEL_CONTROLS, SANDBOX3D_WORKSPACE_DOCK_RIGHT);
+    sandbox3d_workspace_dock_panel(&model, SANDBOX3D_WORKSPACE_PANEL_CONTROLS, SANDBOX3D_WORKSPACE_DOCK_LEFT);
+    sandbox3d_workspace_dock_panel(&model, SANDBOX3D_WORKSPACE_PANEL_CONTROLS, SANDBOX3D_WORKSPACE_DOCK_RIGHT);
+    HENKA_TEST_ASSERT(sandbox3d_workspace_get_dock_panel_count(&model, SANDBOX3D_WORKSPACE_DOCK_LEFT) == 1U);
+    HENKA_TEST_ASSERT(sandbox3d_workspace_get_dock_panel_count(&model, SANDBOX3D_WORKSPACE_DOCK_RIGHT) == 3U);
+    HENKA_TEST_ASSERT(
+        sandbox3d_workspace_get_dock_panel_at(&model, SANDBOX3D_WORKSPACE_DOCK_RIGHT, 2U) ==
+        SANDBOX3D_WORKSPACE_PANEL_CONTROLS);
+    HENKA_TEST_ASSERT(
+        sandbox3d_workspace_get_dock_panel_at(&model, SANDBOX3D_WORKSPACE_DOCK_RIGHT, 1U) !=
+        SANDBOX3D_WORKSPACE_PANEL_CONTROLS);
+    sandbox3d_workspace_dock_panel(&model, SANDBOX3D_WORKSPACE_PANEL_CONTROLS, SANDBOX3D_WORKSPACE_DOCK_LEFT);
 
     sandbox3d_workspace_begin_dock_resize(
         &model,

@@ -67,16 +67,17 @@ In `henka_sandbox3d`, press `F4` to open the panels.
 On startup, the UI opens in `View` mode with no selected scene object so the controls are immediately visible without covering most of the scene.
 If you hide the panels, a small in-window recall hint stays visible so the viewport can stay clean without losing the `F4` and `F5` cues.
 
-The sandbox now uses a movable in-window workspace layout:
+The sandbox now uses a movable workspace layout with a more neutral graphite and slate shell:
 
 - left and right dock regions for panels
+- stacked multi-panel side docks that share space instead of covering each other
 - a dedicated scene viewport in the center
 - a viewport frame that keeps the scene visually separate from the docked tools
 - header dragging that redocks across valid zones or opens native detached windows
 - native OS frame movement and resizing for detached windows
 - visible splitter bars for occupied dock width resizing
 
-Docked panels stay outside the scene. While dragging a docked panel, valid left and right dock targets show a thin outline. Releasing on an outline redocks there, including across the workspace. Releasing away from the outlines opens a separate native tool window, so the detached panel can move outside the main sandbox frame without clipping. Closing that native window returns the panel to its last valid dock. Detached windows currently present a compact panel-state surface while full detached controls and OS-title-bar drag-back docking remain future work. `Reset Layout` closes detached windows and restores the default workspace.
+Docked panels stay outside the scene. While dragging a docked panel, valid left and right dock targets show a thin outline over the final stack slot. Releasing on an outline redocks there, including across the workspace. Releasing away from the outlines opens a separate native tool window, so the detached panel can move outside the main sandbox frame without clipping. Closing that native window returns the panel to its last valid dock. Detached windows currently present a compact panel-state surface while full detached controls and OS-title-bar drag-back docking remain future work. `Reset Layout` closes detached windows and restores the default workspace.
 
 The current `Controls` panel can:
 

@@ -70,26 +70,29 @@ Use this checklist when you want to confirm that `henka_sandbox3d` is visually r
 23. Click inside the native test window and confirm it does not select an object, start a gizmo drag, orbit, or pan the main Scene View.
 24. Close the native test window and confirm only that window closes, then reopen it successfully.
 25. Open the native test window again, use `Reset Layout`, and confirm the test window closes safely.
-26. Drag the `Controls` header where `DRAG` is shown and release it over the right dock outline; confirm it docks on the right.
-27. Drag `Controls` from the right and release it over the left dock outline; confirm it docks on the left.
-28. Drag `Utility` from the right and release it over the left dock outline; confirm it docks on the left.
-29. Drag `Utility` from the left and release it over the right dock outline; confirm it docks on the right.
-30. Release `Utility` away from both dock outlines and confirm a separate native OS-level window opens.
-31. Move and resize the detached `Utility` window outside the main sandbox frame and confirm it is not clipped.
-32. Close detached `Utility` and confirm it safely returns to its last valid dock.
-33. Repeat native detach and close-to-redock recovery for Controls, Scene Objects, and Object Details wherever `DRAG` is shown.
-34. Drag each visible dock splitter and confirm the Scene View resizes without becoming unusable.
-35. Confirm the debug strip reports hovered panel, panel header hover, panel move or resize state, dock target, and last workspace action.
-36. Confirm panel drag, resize, and splitter drag do not select objects or begin viewport tools behind the panel.
-37. Confirm `Reset Layout` redocks panels and restores safe dock widths after moving and resizing them.
-38. Confirm window resize keeps a valid viewport and workspace layout.
-39. Confirm panel text is readable by eye.
-40. Confirm panel background contrast is readable against the workspace.
-41. Confirm the Controls panel `Main` and `Panels/Status` pages are readable and that page switching is obvious.
-42. Confirm the Scene Objects panel can reach every sample object through its page buttons or mouse wheel paging.
-43. Confirm utility tabs are readable and the active utility state is obvious.
-44. Confirm Help, Scene Legend, Object Info, Paths, Settings, and Diagnostics are usable in-window.
-45. Confirm clicking docked or floating panels does not pick scene objects.
+26. Drag the `Controls` header where `DRAG` is shown and release it over the right dock outline; confirm it docks on the right without covering `Utility`.
+27. Confirm both right-side panels stay visible and usable after that cross-dock.
+28. Drag `Controls` from the right and release it over the left dock outline; confirm it docks on the left without covering any left-side panel.
+29. Drag `Utility` from the right and release it over the left dock outline; confirm it docks on the left without covering `Controls`.
+30. Confirm both left-side panels stay visible and usable after that cross-dock.
+31. Drag `Utility` from the left and release it over the right dock outline; confirm it docks on the right without covering any right-side panel.
+32. Release `Utility` away from both dock outlines and confirm a separate native OS-level window opens.
+33. Move and resize the detached `Utility` window outside the main sandbox frame and confirm it is not clipped.
+34. Close detached `Utility` and confirm it safely returns to its last valid dock.
+35. Repeat native detach and close-to-redock recovery for Controls, Scene Objects, and Object Details wherever `DRAG` is shown.
+36. Drag each visible dock splitter and confirm the Scene View resizes without becoming unusable.
+37. Confirm the debug strip reports hovered panel, panel header hover, panel move or resize state, dock target, and last workspace action.
+38. Confirm panel drag, resize, and splitter drag do not select objects or begin viewport tools behind the panel.
+39. Confirm `Reset Layout` redocks panels and restores safe dock widths after moving and resizing them.
+40. Confirm window resize keeps a valid viewport and workspace layout.
+41. Confirm panel text is readable by eye.
+42. Confirm panel background contrast is readable against the workspace.
+43. Confirm the graphite and slate theme feels neutral and tool-focused instead of a black-and-blue personal theme.
+44. Confirm the Controls panel `Main` and `Panels/Status` pages are readable and that page switching is obvious.
+45. Confirm the Scene Objects panel can reach every sample object through its page buttons or mouse wheel paging.
+46. Confirm utility tabs are readable and the active utility state is obvious.
+47. Confirm Help, Scene Legend, Object Info, Paths, Settings, and Diagnostics are usable in-window.
+48. Confirm clicking docked or floating panels does not pick scene objects.
 46. Left-click a visible object inside the viewport and confirm picking updates the selection.
 47. Confirm the selected real scene object has a visible viewport highlight that follows the object.
 48. Select Ground and confirm it uses one finite floor highlight, not doubled outlines or diagonal lines across the viewport.

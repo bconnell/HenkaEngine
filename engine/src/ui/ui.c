@@ -64,32 +64,32 @@ static const henka_ui_glyph g_ui_glyphs[] =
     { '?', {0x0E, 0x11, 0x01, 0x02, 0x04, 0, 0x04} }
 };
 
-static const henka_vec4 g_ui_panel_fill = {0.08f, 0.10f, 0.14f, 0.92f};
-static const henka_vec4 g_ui_panel_header_fill = {0.10f, 0.13f, 0.18f, 0.96f};
-static const henka_vec4 g_ui_panel_border = {0.22f, 0.36f, 0.56f, 1.0f};
-static const henka_vec4 g_ui_panel_separator = {0.16f, 0.24f, 0.36f, 1.0f};
-static const henka_vec4 g_ui_text_color = {0.94f, 0.96f, 0.99f, 1.0f};
-static const henka_vec4 g_ui_heading_color = {0.72f, 0.84f, 0.98f, 1.0f};
-static const henka_vec4 g_ui_button_fill = {0.17f, 0.21f, 0.28f, 0.98f};
-static const henka_vec4 g_ui_button_hover = {0.25f, 0.31f, 0.41f, 1.0f};
-static const henka_vec4 g_ui_button_active = {0.33f, 0.40f, 0.52f, 1.0f};
-static const henka_vec4 g_ui_primary_fill = {0.21f, 0.36f, 0.58f, 1.0f};
-static const henka_vec4 g_ui_primary_hover = {0.27f, 0.45f, 0.70f, 1.0f};
-static const henka_vec4 g_ui_primary_active = {0.16f, 0.29f, 0.48f, 1.0f};
-static const henka_vec4 g_ui_tab_fill = {0.12f, 0.16f, 0.22f, 0.98f};
-static const henka_vec4 g_ui_tab_hover = {0.17f, 0.22f, 0.31f, 1.0f};
-static const henka_vec4 g_ui_tab_active = {0.24f, 0.32f, 0.45f, 1.0f};
-static const henka_vec4 g_ui_selected_fill = {0.20f, 0.29f, 0.43f, 1.0f};
-static const henka_vec4 g_ui_selected_hover = {0.26f, 0.37f, 0.54f, 1.0f};
-static const henka_vec4 g_ui_toggle_on = {0.18f, 0.58f, 0.40f, 1.0f};
-static const henka_vec4 g_ui_toggle_off = {0.44f, 0.20f, 0.20f, 1.0f};
-static const henka_vec4 g_ui_value_fill = {0.11f, 0.15f, 0.21f, 1.0f};
-static const henka_vec4 g_ui_row_fill = {0.11f, 0.15f, 0.21f, 0.98f};
-static const henka_vec4 g_ui_status_fill = {0.11f, 0.24f, 0.18f, 1.0f};
-static const henka_vec4 g_ui_status_warning_fill = {0.42f, 0.24f, 0.10f, 1.0f};
-static const henka_vec4 g_ui_muted_text_color = {0.72f, 0.78f, 0.88f, 1.0f};
-static const henka_vec4 g_ui_hint_fill = {0.07f, 0.09f, 0.13f, 0.76f};
-static const henka_vec4 g_ui_hint_border = {0.22f, 0.30f, 0.40f, 0.88f};
+static const henka_vec4 g_ui_panel_fill = {0.11f, 0.12f, 0.14f, 0.96f};
+static const henka_vec4 g_ui_panel_header_fill = {0.15f, 0.16f, 0.19f, 0.98f};
+static const henka_vec4 g_ui_panel_border = {0.28f, 0.31f, 0.36f, 1.0f};
+static const henka_vec4 g_ui_panel_separator = {0.21f, 0.23f, 0.27f, 1.0f};
+static const henka_vec4 g_ui_text_color = {0.92f, 0.93f, 0.95f, 1.0f};
+static const henka_vec4 g_ui_heading_color = {0.84f, 0.87f, 0.91f, 1.0f};
+static const henka_vec4 g_ui_button_fill = {0.18f, 0.20f, 0.23f, 0.98f};
+static const henka_vec4 g_ui_button_hover = {0.23f, 0.26f, 0.30f, 1.0f};
+static const henka_vec4 g_ui_button_active = {0.29f, 0.33f, 0.38f, 1.0f};
+static const henka_vec4 g_ui_primary_fill = {0.24f, 0.33f, 0.41f, 1.0f};
+static const henka_vec4 g_ui_primary_hover = {0.29f, 0.40f, 0.50f, 1.0f};
+static const henka_vec4 g_ui_primary_active = {0.19f, 0.28f, 0.36f, 1.0f};
+static const henka_vec4 g_ui_tab_fill = {0.15f, 0.17f, 0.20f, 0.98f};
+static const henka_vec4 g_ui_tab_hover = {0.20f, 0.23f, 0.27f, 1.0f};
+static const henka_vec4 g_ui_tab_active = {0.25f, 0.31f, 0.38f, 1.0f};
+static const henka_vec4 g_ui_selected_fill = {0.22f, 0.29f, 0.36f, 1.0f};
+static const henka_vec4 g_ui_selected_hover = {0.27f, 0.35f, 0.43f, 1.0f};
+static const henka_vec4 g_ui_toggle_on = {0.28f, 0.50f, 0.37f, 1.0f};
+static const henka_vec4 g_ui_toggle_off = {0.53f, 0.24f, 0.24f, 1.0f};
+static const henka_vec4 g_ui_value_fill = {0.14f, 0.16f, 0.19f, 1.0f};
+static const henka_vec4 g_ui_row_fill = {0.14f, 0.16f, 0.19f, 0.98f};
+static const henka_vec4 g_ui_status_fill = {0.20f, 0.34f, 0.27f, 1.0f};
+static const henka_vec4 g_ui_status_warning_fill = {0.55f, 0.36f, 0.16f, 1.0f};
+static const henka_vec4 g_ui_muted_text_color = {0.72f, 0.76f, 0.81f, 1.0f};
+static const henka_vec4 g_ui_hint_fill = {0.10f, 0.11f, 0.13f, 0.82f};
+static const henka_vec4 g_ui_hint_border = {0.27f, 0.30f, 0.35f, 0.92f};
 
 static char henka_ui_normalize_character(char character)
 {
