@@ -19,6 +19,10 @@ typedef struct henka_platform_tool_window
     bool resized;
     int width;
     int height;
+    henka_vec2 mouse_position;
+    bool mouse_left_down;
+    bool mouse_left_pressed;
+    bool mouse_left_released;
     char last_event[48];
 } henka_platform_tool_window;
 
@@ -122,6 +126,27 @@ static void henka_platform_record_tool_event(
 static bool henka_platform_event_is_main_window(const struct henka_platform* platform, SDL_WindowID window_id)
 {
     return platform != NULL && window_id != 0U && platform->main_window_id == window_id;
+}
+
+static void henka_platform_reset_tool_window_frame_input(struct henka_platform* platform)
+{
+    size_t index;
+
+    if (platform == NULL)
+    {
+        return;
+    }
+
+    for (index = 0U; index < HENKA_MAX_TOOL_WINDOWS; ++index)
+    {
+        if (!platform->tool_windows[index].open)
+        {
+            continue;
+        }
+
+        platform->tool_windows[index].mouse_left_pressed = false;
+        platform->tool_windows[index].mouse_left_released = false;
+    }
 }
 
 char* henka_platform_get_base_path_copy(void)
@@ -431,6 +456,10 @@ bool henka_platform_get_tool_window_state(
     out_state->focused = slot->focused;
     out_state->width = slot->width;
     out_state->height = slot->height;
+    out_state->mouse_position = slot->mouse_position;
+    out_state->mouse_left_down = slot->mouse_left_down;
+    out_state->mouse_left_pressed = slot->mouse_left_pressed;
+    out_state->mouse_left_released = slot->mouse_left_released;
     out_state->close_requested = slot->close_requested;
     out_state->resized = slot->resized;
     snprintf(out_state->last_event, sizeof(out_state->last_event), "%s", slot->last_event);
@@ -480,6 +509,7 @@ henka_result henka_platform_poll_events(struct henka_platform* platform, henka_i
     out_state->resized = false;
     out_state->framebuffer_width = 0;
     out_state->framebuffer_height = 0;
+    henka_platform_reset_tool_window_frame_input(platform);
 
     while (SDL_PollEvent(&event))
     {
@@ -645,6 +675,8 @@ henka_result henka_platform_poll_events(struct henka_platform* platform, henka_i
                     if (tool_window != NULL)
                     {
                         henka_platform_record_tool_event(platform, tool_window, "pointer moved");
+                        tool_window->mouse_position.x = event.motion.x;
+                        tool_window->mouse_position.y = event.motion.y;
                     }
                     else
                     {
@@ -669,7 +701,15 @@ henka_result henka_platform_poll_events(struct henka_platform* platform, henka_i
                     tool_window = henka_platform_find_tool_window_by_native_id(platform, event.button.windowID);
                     if (tool_window != NULL)
                     {
+                        button = henka_translate_mouse_button(event.button.button);
                         henka_platform_record_tool_event(platform, tool_window, "button pressed");
+                        tool_window->mouse_position.x = event.button.x;
+                        tool_window->mouse_position.y = event.button.y;
+                        if (button == HENKA_MOUSE_BUTTON_LEFT)
+                        {
+                            tool_window->mouse_left_down = true;
+                            tool_window->mouse_left_pressed = true;
+                        }
                     }
                     else
                     {
@@ -699,7 +739,15 @@ henka_result henka_platform_poll_events(struct henka_platform* platform, henka_i
                     tool_window = henka_platform_find_tool_window_by_native_id(platform, event.button.windowID);
                     if (tool_window != NULL)
                     {
+                        button = henka_translate_mouse_button(event.button.button);
                         henka_platform_record_tool_event(platform, tool_window, "button released");
+                        tool_window->mouse_position.x = event.button.x;
+                        tool_window->mouse_position.y = event.button.y;
+                        if (button == HENKA_MOUSE_BUTTON_LEFT)
+                        {
+                            tool_window->mouse_left_down = false;
+                            tool_window->mouse_left_released = true;
+                        }
                     }
                     else
                     {

@@ -5,6 +5,7 @@
 #include <stdint.h>
 
 #include <henka/core.h>
+#include <henka/math.h>
 #include <henka/result.h>
 
 typedef struct henka_engine henka_engine;
@@ -42,6 +43,10 @@ typedef struct henka_tool_window_state
     bool focused;
     int width;
     int height;
+    henka_vec2 mouse_position;
+    bool mouse_left_down;
+    bool mouse_left_pressed;
+    bool mouse_left_released;
     bool close_requested;
     bool resized;
     char last_event[48];

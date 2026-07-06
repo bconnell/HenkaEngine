@@ -7,6 +7,18 @@
 
 void henka_test_input(void)
 {
+    henka_tool_window_state tool_window_state;
+
+    memset(&tool_window_state, 0, sizeof(tool_window_state));
+    tool_window_state.mouse_position = (henka_vec2){12.0f, 34.0f};
+    tool_window_state.mouse_left_down = true;
+    tool_window_state.mouse_left_pressed = true;
+    HENKA_TEST_ASSERT(tool_window_state.mouse_position.x == 12.0f);
+    HENKA_TEST_ASSERT(tool_window_state.mouse_position.y == 34.0f);
+    HENKA_TEST_ASSERT(tool_window_state.mouse_left_down);
+    HENKA_TEST_ASSERT(tool_window_state.mouse_left_pressed);
+    HENKA_TEST_ASSERT(!tool_window_state.mouse_left_released);
+
     HENKA_TEST_ASSERT(strcmp(henka_input_action_get_name(HENKA_INPUT_ACTION_MOVE_FORWARD), "Move Forward") == 0);
     HENKA_TEST_ASSERT(henka_input_action_find_by_name("move_forward") == HENKA_INPUT_ACTION_MOVE_FORWARD);
     HENKA_TEST_ASSERT(henka_input_action_find_by_name("Move Forward") == HENKA_INPUT_ACTION_MOVE_FORWARD);
