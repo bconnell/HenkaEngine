@@ -981,9 +981,15 @@ henka_result henka_opengl_renderer_draw_tool_window_ui(
                 window_state.width,
                 window_state.height) != HENKA_SUCCESS)
         {
+            (void)SDL_GL_MakeCurrent(state->window, state->gl_context);
             return HENKA_ERROR_RENDERER;
         }
         if (!SDL_GL_SwapWindow(state->tool_targets[index].window))
+        {
+            (void)SDL_GL_MakeCurrent(state->window, state->gl_context);
+            return HENKA_ERROR_RENDERER;
+        }
+        if (!SDL_GL_MakeCurrent(state->window, state->gl_context))
         {
             return HENKA_ERROR_RENDERER;
         }

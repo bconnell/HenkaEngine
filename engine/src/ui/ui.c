@@ -435,7 +435,7 @@ static bool henka_ui_button_internal(
     }
 
     active = context->mouse_left_down && henka_ui_id_equals(context->active_id, id);
-    clicked = hot && context->mouse_left_pressed;
+    clicked = hot && context->mouse_left_released && henka_ui_id_equals(context->active_id, id);
     if (context->mouse_left_released && henka_ui_id_equals(context->active_id, id))
     {
         context->active_id = NULL;
@@ -939,7 +939,7 @@ bool henka_ui_selectable(henka_ui_context* context, const char* id, henka_ui_rec
     }
 
     active = context->mouse_left_down && henka_ui_id_equals(context->active_id, id);
-    clicked = hot && context->mouse_left_pressed;
+    clicked = hot && context->mouse_left_released && henka_ui_id_equals(context->active_id, id);
     if (context->mouse_left_released && henka_ui_id_equals(context->active_id, id))
     {
         context->active_id = NULL;
@@ -1007,7 +1007,7 @@ bool henka_ui_tab(henka_ui_context* context, const char* id, henka_ui_rect bound
     }
 
     active = context->mouse_left_down && henka_ui_id_equals(context->active_id, id);
-    clicked = hot && context->mouse_left_pressed;
+    clicked = hot && context->mouse_left_released && henka_ui_id_equals(context->active_id, id);
     if (context->mouse_left_released && henka_ui_id_equals(context->active_id, id))
     {
         context->active_id = NULL;
@@ -1072,15 +1072,13 @@ bool henka_ui_toggle(henka_ui_context* context, const char* id, henka_ui_rect bo
         return false;
     }
 
-    (void)id;
-
     hot = henka_ui_control_is_hot(context, bounds);
     if (hot && context->mouse_left_pressed)
     {
         context->active_id = id;
     }
 
-    clicked = hot && context->mouse_left_pressed;
+    clicked = hot && context->mouse_left_released && henka_ui_id_equals(context->active_id, id);
     if (context->mouse_left_released && henka_ui_id_equals(context->active_id, id))
     {
         context->active_id = NULL;

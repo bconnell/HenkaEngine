@@ -70,7 +70,7 @@ void henka_test_ui(void)
     HENKA_TEST_ASSERT(henka_ui_value_row(ui, (henka_ui_rect){28.0f, 76.0f, 160.0f, 22.0f}, "Label", "Value") == HENKA_SUCCESS);
     HENKA_TEST_ASSERT(henka_ui_status_chip(ui, (henka_ui_rect){28.0f, 102.0f, 80.0f, 20.0f}, "Status", false) == HENKA_SUCCESS);
     HENKA_TEST_ASSERT(henka_ui_get_wants_mouse(ui) == true);
-    HENKA_TEST_ASSERT(henka_ui_button(ui, "button", (henka_ui_rect){40.0f, 40.0f, 120.0f, 28.0f}, "Click") == true);
+    HENKA_TEST_ASSERT(henka_ui_button(ui, "button", (henka_ui_rect){40.0f, 40.0f, 120.0f, 28.0f}, "Click") == false);
     HENKA_TEST_ASSERT(henka_ui_primary_button(ui, "primary", (henka_ui_rect){40.0f, 132.0f, 120.0f, 28.0f}, "Apply") == false);
     HENKA_TEST_ASSERT(henka_ui_selectable(ui, "selected", (henka_ui_rect){40.0f, 72.0f, 120.0f, 28.0f}, "Cube", true) == false);
     HENKA_TEST_ASSERT(henka_ui_tab(ui, "tab", (henka_ui_rect){40.0f, 164.0f, 120.0f, 24.0f}, "Utility", true) == false);
@@ -81,7 +81,7 @@ void henka_test_ui(void)
     frame_desc.mouse_left_pressed = false;
     frame_desc.mouse_left_released = true;
     HENKA_TEST_ASSERT(henka_ui_begin_frame(ui, &frame_desc) == HENKA_SUCCESS);
-    HENKA_TEST_ASSERT(henka_ui_button(ui, "button", (henka_ui_rect){40.0f, 40.0f, 120.0f, 28.0f}, "Click") == false);
+    HENKA_TEST_ASSERT(henka_ui_button(ui, "button", (henka_ui_rect){40.0f, 40.0f, 120.0f, 28.0f}, "Click") == true);
     HENKA_TEST_ASSERT(henka_ui_end_frame(ui) == HENKA_SUCCESS);
 
     toggle_value = false;
@@ -89,6 +89,18 @@ void henka_test_ui(void)
     frame_desc.mouse_left_down = true;
     frame_desc.mouse_left_pressed = true;
     frame_desc.mouse_left_released = false;
+    HENKA_TEST_ASSERT(henka_ui_begin_frame(ui, &frame_desc) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_ui_selectable(
+        ui,
+        "selectable",
+        (henka_ui_rect){40.0f, 80.0f, 140.0f, 30.0f},
+        "Ground",
+        false) == false);
+    HENKA_TEST_ASSERT(henka_ui_end_frame(ui) == HENKA_SUCCESS);
+
+    frame_desc.mouse_left_down = false;
+    frame_desc.mouse_left_pressed = false;
+    frame_desc.mouse_left_released = true;
     HENKA_TEST_ASSERT(henka_ui_begin_frame(ui, &frame_desc) == HENKA_SUCCESS);
     HENKA_TEST_ASSERT(henka_ui_selectable(
         ui,
@@ -108,8 +120,8 @@ void henka_test_ui(void)
         "toggle",
         (henka_ui_rect){40.0f, 120.0f, 140.0f, 30.0f},
         "Grid",
-        &toggle_value) == true);
-    HENKA_TEST_ASSERT(toggle_value == true);
+        &toggle_value) == false);
+    HENKA_TEST_ASSERT(toggle_value == false);
     HENKA_TEST_ASSERT(henka_ui_end_frame(ui) == HENKA_SUCCESS);
 
     frame_desc.mouse_left_down = false;
@@ -121,7 +133,7 @@ void henka_test_ui(void)
         "toggle",
         (henka_ui_rect){40.0f, 120.0f, 140.0f, 30.0f},
         "Grid",
-        &toggle_value) == false);
+        &toggle_value) == true);
     HENKA_TEST_ASSERT(toggle_value == true);
     HENKA_TEST_ASSERT(henka_ui_end_frame(ui) == HENKA_SUCCESS);
 

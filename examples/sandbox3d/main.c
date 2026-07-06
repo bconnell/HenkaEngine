@@ -1,3 +1,4 @@
+#include <errno.h>
 #include <math.h>
 #include <stdio.h>
 #include <stdarg.h>
@@ -3179,7 +3180,11 @@ static henka_result sandbox3d_reset_settings(henka_engine* engine, sandbox3d_sta
         return result;
     }
 
-    remove(settings_path);
+    errno = 0;
+    if (remove(settings_path) != 0 && errno != ENOENT)
+    {
+        HENKA_LOG_WARN("Sandbox settings file could not be removed before reset: %s", settings_path);
+    }
     henka_free(settings_path);
     return sandbox3d_save_settings(engine, state);
 }
