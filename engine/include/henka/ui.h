@@ -17,6 +17,19 @@ typedef struct henka_ui_rect
     float height;
 } henka_ui_rect;
 
+typedef enum henka_ui_semantic_color
+{
+    HENKA_UI_COLOR_NORMAL = 0,
+    HENKA_UI_COLOR_MUTED,
+    HENKA_UI_COLOR_INFO,
+    HENKA_UI_COLOR_ACCENT,
+    HENKA_UI_COLOR_SUCCESS,
+    HENKA_UI_COLOR_WARNING,
+    HENKA_UI_COLOR_ORANGE,
+    HENKA_UI_COLOR_DANGER,
+    HENKA_UI_COLOR_DISABLED
+} henka_ui_semantic_color;
+
 typedef struct henka_ui_frame_desc
 {
     int framebuffer_width;
@@ -50,7 +63,21 @@ henka_result henka_ui_panel(henka_ui_context* context, henka_ui_rect bounds, con
 henka_result henka_ui_viewport_frame(henka_ui_context* context, henka_ui_rect bounds, const char* title);
 henka_result henka_ui_heading(henka_ui_context* context, float x, float y, float scale, const char* text);
 henka_result henka_ui_label(henka_ui_context* context, float x, float y, float scale, const char* text);
+henka_result henka_ui_label_colored(
+    henka_ui_context* context,
+    float x,
+    float y,
+    float scale,
+    const char* text,
+    henka_ui_semantic_color color);
 henka_result henka_ui_value_row(henka_ui_context* context, henka_ui_rect bounds, const char* label, const char* value);
+henka_result henka_ui_value_row_colored(
+    henka_ui_context* context,
+    henka_ui_rect bounds,
+    const char* label,
+    const char* value,
+    henka_ui_semantic_color label_color,
+    henka_ui_semantic_color value_color);
 henka_result henka_ui_overlay_hint(henka_ui_context* context, henka_ui_rect bounds, const char* primary_text, const char* secondary_text);
 bool henka_ui_button(henka_ui_context* context, const char* id, henka_ui_rect bounds, const char* label);
 bool henka_ui_primary_button(henka_ui_context* context, const char* id, henka_ui_rect bounds, const char* label);

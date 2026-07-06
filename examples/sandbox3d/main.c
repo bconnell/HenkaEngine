@@ -5157,21 +5157,120 @@ static void sandbox3d_draw_scene_viewport_frame(henka_ui_context* ui, henka_ui_r
     henka_ui_viewport_frame(ui, bounds, "Scene View");
 }
 
+static henka_ui_semantic_color sandbox3d_debug_bool_color(bool value)
+{
+    return value ? HENKA_UI_COLOR_SUCCESS : HENKA_UI_COLOR_DANGER;
+}
+
+static henka_ui_semantic_color sandbox3d_debug_on_off_color(bool value)
+{
+    return value ? HENKA_UI_COLOR_SUCCESS : HENKA_UI_COLOR_ORANGE;
+}
+
+static henka_ui_semantic_color sandbox3d_debug_name_color(const char* value)
+{
+    if (value == NULL ||
+        strcmp(value, "None") == 0 ||
+        strcmp(value, "(none)") == 0 ||
+        strcmp(value, "NONE") == 0)
+    {
+        return HENKA_UI_COLOR_MUTED;
+    }
+
+    return HENKA_UI_COLOR_ACCENT;
+}
+
+static henka_ui_semantic_color sandbox3d_debug_action_color(const char* value)
+{
+    if (value == NULL || value[0] == '\0' || strcmp(value, "None") == 0)
+    {
+        return HENKA_UI_COLOR_MUTED;
+    }
+
+    if (strstr(value, "reject") != NULL ||
+        strstr(value, "Reject") != NULL ||
+        strstr(value, "blocked") != NULL ||
+        strstr(value, "Blocked") != NULL)
+    {
+        return HENKA_UI_COLOR_DANGER;
+    }
+
+    if (strstr(value, "drag") != NULL ||
+        strstr(value, "Drag") != NULL ||
+        strstr(value, "Moving") != NULL)
+    {
+        return HENKA_UI_COLOR_WARNING;
+    }
+
+    return HENKA_UI_COLOR_ACCENT;
+}
+
+static float sandbox3d_draw_debug_text_segment(
+    henka_ui_context* ui,
+    float x,
+    float y,
+    float max_x,
+    const char* text,
+    henka_ui_semantic_color color)
+{
+    int text_height;
+    int text_width;
+
+    if (ui == NULL || text == NULL || text[0] == '\0' || x >= max_x)
+    {
+        return x;
+    }
+
+    if (henka_ui_measure_text(text, 1.0f, &text_width, &text_height) != HENKA_SUCCESS)
+    {
+        return x;
+    }
+
+    if (x + (float)text_width > max_x)
+    {
+        return max_x;
+    }
+
+    (void)henka_ui_label_colored(ui, x, y, 1.0f, text, color);
+    return x + (float)text_width + 7.0f;
+}
+
+static float sandbox3d_draw_debug_pair(
+    henka_ui_context* ui,
+    float x,
+    float y,
+    float max_x,
+    const char* label,
+    const char* value,
+    henka_ui_semantic_color value_color)
+{
+    char label_text[32];
+
+    if (label == NULL || value == NULL)
+    {
+        return x;
+    }
+
+    snprintf(label_text, sizeof(label_text), "%s:", label);
+    x = sandbox3d_draw_debug_text_segment(ui, x, y, max_x, label_text, HENKA_UI_COLOR_INFO);
+    x = sandbox3d_draw_debug_text_segment(ui, x, y, max_x, value, value_color);
+    return x + 4.0f;
+}
+
 static void sandbox3d_draw_viewport_debug_strip(
     henka_engine* engine,
     const sandbox3d_state* state,
     henka_ui_rect bounds)
 {
-    char fit_first_row[160];
-    char fit_second_row[192];
-    char fit_third_row[192];
-    char first_row[160];
-    char second_row[192];
-    char third_row[192];
+    char drag_text[32];
+    char resize_text[32];
     char selected_text[32];
+    char workspace_text[48];
     const char* hover_axis;
     const char* selected_name;
-    size_t max_characters;
+    float max_x;
+    float x;
+    float y;
 
     if (engine == NULL || state == NULL || state->ui == NULL || bounds.width <= 0.0f || bounds.height <= 0.0f)
     {
@@ -5181,57 +5280,80 @@ static void sandbox3d_draw_viewport_debug_strip(
     selected_name = sandbox3d_safe_entity_name(state, state->diagnostics.selected_entity, "(none)");
     sandbox3d_truncate_text(selected_name, selected_text, sizeof(selected_text), 18U);
     hover_axis = sandbox3d_get_gizmo_axis_label(state->gizmo.hover_axis);
+    snprintf(drag_text, sizeof(drag_text), "%s/%u", state->diagnostics.dragging ? "Yes" : "No", (unsigned int)state->diagnostics.drag_target_entity);
     snprintf(
-        first_row,
-        sizeof(first_row),
-        "Tool:%s | Sel:%s | HL:%s | Cap:%s | View:%s | UI:%s",
-        sandbox3d_viewport_tool_mode_to_string(state->viewport_tool),
-        selected_text,
-        state->diagnostics.selected_highlight_active ? "On" : "Off",
-        henka_engine_is_mouse_captured(engine) ? "On" : "Off",
-        state->diagnostics.cursor_in_viewport ? "Yes" : "No",
-        state->diagnostics.ui_wants_mouse ? "Yes" : "No");
-    snprintf(
-        second_row,
-        sizeof(second_row),
-        "Giz:%s | H:%zu | Hover:%s | Drag:%s/%u | Reject:%s",
-        state->diagnostics.gizmo_model_valid ? "Valid" : "None",
-        state->diagnostics.overlay_primitive_count,
-        hover_axis,
-        state->diagnostics.dragging ? "Yes" : "No",
-        (unsigned int)state->diagnostics.drag_target_entity,
-        sandbox3d_interaction_reject_reason_to_string(state->diagnostics.last_reject_reason));
-    snprintf(
-        third_row,
-        sizeof(third_row),
-        "P:%s | Head:%s | Move:%s | Size:%s | Dock:%s | WS:%s",
-        sandbox3d_workspace_panel_name(state->diagnostics.hovered_panel),
-        state->diagnostics.cursor_in_panel_header ? "Yes" : "No",
-        sandbox3d_workspace_panel_name(state->diagnostics.active_panel_drag),
+        resize_text,
+        sizeof(resize_text),
+        "%s",
         state->diagnostics.active_workspace_resize == SANDBOX3D_WORKSPACE_RESIZE_LEFT_DOCK
             ? "Left Dock"
             : (state->diagnostics.active_workspace_resize == SANDBOX3D_WORKSPACE_RESIZE_RIGHT_DOCK
                 ? "Right Dock"
-                : sandbox3d_workspace_panel_name(state->diagnostics.active_panel_resize)),
-        state->workspace.model.active_drag_panel == SANDBOX3D_WORKSPACE_PANEL_NONE
-            ? "None"
-            : sandbox3d_workspace_dock_name(state->workspace.model.active_dock_target),
-        state->diagnostics.last_workspace_action);
-    max_characters = bounds.width > 24.0f ? (size_t)((bounds.width - 16.0f) / 6.0f) : 4U;
-    sandbox3d_truncate_text(first_row, fit_first_row, sizeof(fit_first_row), max_characters);
-    sandbox3d_truncate_text(second_row, fit_second_row, sizeof(fit_second_row), max_characters);
-    sandbox3d_truncate_text(third_row, fit_third_row, sizeof(fit_third_row), max_characters);
+                : sandbox3d_workspace_panel_name(state->diagnostics.active_panel_resize)));
+    sandbox3d_truncate_text(
+        state->diagnostics.last_workspace_action[0] != '\0' ? state->diagnostics.last_workspace_action : "None",
+        workspace_text,
+        sizeof(workspace_text),
+        38U);
 
-    henka_ui_overlay_rect(state->ui, bounds, (henka_vec4){0.09f, 0.10f, 0.12f, 0.95f});
+    henka_ui_overlay_rect(state->ui, bounds, (henka_vec4){0.06f, 0.07f, 0.09f, 0.97f});
     henka_ui_overlay_rect(
         state->ui,
         (henka_ui_rect){bounds.x, bounds.y, bounds.width, 1.0f},
-        (henka_vec4){0.29f, 0.33f, 0.38f, 1.0f});
-    henka_ui_label(state->ui, bounds.x + 8.0f, bounds.y + 8.0f, 1.0f, fit_first_row);
-    henka_ui_label(state->ui, bounds.x + 8.0f, bounds.y + 24.0f, 1.0f, fit_second_row);
-    henka_ui_label(state->ui, bounds.x + 8.0f, bounds.y + 40.0f, 1.0f, fit_third_row);
-}
+        (henka_vec4){0.26f, 0.70f, 0.95f, 1.0f});
 
+    max_x = bounds.x + bounds.width - 8.0f;
+
+    x = bounds.x + 8.0f;
+    y = bounds.y + 8.0f;
+    x = sandbox3d_draw_debug_pair(state->ui, x, y, max_x, "Tool", sandbox3d_viewport_tool_mode_to_string(state->viewport_tool), HENKA_UI_COLOR_ACCENT);
+    x = sandbox3d_draw_debug_pair(state->ui, x, y, max_x, "Sel", selected_text, sandbox3d_debug_name_color(selected_text));
+    x = sandbox3d_draw_debug_pair(state->ui, x, y, max_x, "HL", state->diagnostics.selected_highlight_active ? "On" : "Off", sandbox3d_debug_on_off_color(state->diagnostics.selected_highlight_active));
+    x = sandbox3d_draw_debug_pair(state->ui, x, y, max_x, "Cap", henka_engine_is_mouse_captured(engine) ? "On" : "Off", sandbox3d_debug_on_off_color(henka_engine_is_mouse_captured(engine)));
+    x = sandbox3d_draw_debug_pair(state->ui, x, y, max_x, "View", state->diagnostics.cursor_in_viewport ? "Yes" : "No", sandbox3d_debug_bool_color(state->diagnostics.cursor_in_viewport));
+    (void)sandbox3d_draw_debug_pair(state->ui, x, y, max_x, "UI", state->diagnostics.ui_wants_mouse ? "Yes" : "No", sandbox3d_debug_bool_color(state->diagnostics.ui_wants_mouse));
+
+    x = bounds.x + 8.0f;
+    y = bounds.y + 24.0f;
+    x = sandbox3d_draw_debug_pair(state->ui, x, y, max_x, "Giz", state->diagnostics.gizmo_model_valid ? "Valid" : "None", state->diagnostics.gizmo_model_valid ? HENKA_UI_COLOR_SUCCESS : HENKA_UI_COLOR_MUTED);
+    snprintf(workspace_text, sizeof(workspace_text), "%zu", state->diagnostics.overlay_primitive_count);
+    x = sandbox3d_draw_debug_pair(state->ui, x, y, max_x, "H", workspace_text, state->diagnostics.overlay_primitive_count > 0U ? HENKA_UI_COLOR_SUCCESS : HENKA_UI_COLOR_MUTED);
+    x = sandbox3d_draw_debug_pair(state->ui, x, y, max_x, "Hover", hover_axis, sandbox3d_debug_name_color(hover_axis));
+    x = sandbox3d_draw_debug_pair(state->ui, x, y, max_x, "Drag", drag_text, state->diagnostics.dragging ? HENKA_UI_COLOR_WARNING : HENKA_UI_COLOR_MUTED);
+    (void)sandbox3d_draw_debug_pair(
+        state->ui,
+        x,
+        y,
+        max_x,
+        "Reject",
+        sandbox3d_interaction_reject_reason_to_string(state->diagnostics.last_reject_reason),
+        state->diagnostics.last_reject_reason == SANDBOX3D_INTERACTION_REJECT_NONE ? HENKA_UI_COLOR_SUCCESS : HENKA_UI_COLOR_DANGER);
+
+    x = bounds.x + 8.0f;
+    y = bounds.y + 40.0f;
+    x = sandbox3d_draw_debug_pair(state->ui, x, y, max_x, "P", sandbox3d_workspace_panel_name(state->diagnostics.hovered_panel), sandbox3d_debug_name_color(sandbox3d_workspace_panel_name(state->diagnostics.hovered_panel)));
+    x = sandbox3d_draw_debug_pair(state->ui, x, y, max_x, "Head", state->diagnostics.cursor_in_panel_header ? "Yes" : "No", sandbox3d_debug_bool_color(state->diagnostics.cursor_in_panel_header));
+    x = sandbox3d_draw_debug_pair(state->ui, x, y, max_x, "Move", sandbox3d_workspace_panel_name(state->diagnostics.active_panel_drag), sandbox3d_debug_name_color(sandbox3d_workspace_panel_name(state->diagnostics.active_panel_drag)));
+    x = sandbox3d_draw_debug_pair(state->ui, x, y, max_x, "Size", resize_text, sandbox3d_debug_name_color(resize_text));
+    x = sandbox3d_draw_debug_pair(
+        state->ui,
+        x,
+        y,
+        max_x,
+        "Dock",
+        state->workspace.model.active_drag_panel == SANDBOX3D_WORKSPACE_PANEL_NONE
+            ? "None"
+            : sandbox3d_workspace_dock_name(state->workspace.model.active_dock_target),
+        state->workspace.model.active_drag_panel == SANDBOX3D_WORKSPACE_PANEL_NONE
+            ? HENKA_UI_COLOR_MUTED
+            : HENKA_UI_COLOR_WARNING);
+    sandbox3d_truncate_text(
+        state->diagnostics.last_workspace_action[0] != '\0' ? state->diagnostics.last_workspace_action : "None",
+        workspace_text,
+        sizeof(workspace_text),
+        38U);
+    (void)sandbox3d_draw_debug_pair(state->ui, x, y, max_x, "WS", workspace_text, sandbox3d_debug_action_color(workspace_text));
+}
 static void sandbox3d_draw_panel_recall_hint(henka_ui_context* ui, henka_viewport viewport)
 {
     henka_ui_rect bounds;
