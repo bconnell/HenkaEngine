@@ -35,18 +35,23 @@ void henka_test_model(void)
         "v 1.0 0.0 0.0\n"
         "v 0.0 1.0 0.0\n"
         "f 1 2 4\n";
-    static const char* unsupported_polygon_obj =
+    static const char* valid_ngon_obj =
         "v 0.0 0.0 0.0\n"
         "v 1.0 0.0 0.0\n"
         "v 1.0 1.0 0.0\n"
         "v 0.0 1.0 0.0\n"
         "v -1.0 0.5 0.0\n"
         "f 1 2 3 4 5\n";
-    static const char* unsupported_negative_index_obj =
+    static const char* valid_negative_index_obj =
         "v 0.0 0.0 0.0\n"
         "v 1.0 0.0 0.0\n"
         "v 0.0 1.0 0.0\n"
         "f -3 -2 -1\n";
+    static const char* degenerate_face_obj =
+        "v 0.0 0.0 0.0\n"
+        "v 1.0 0.0 0.0\n"
+        "v 2.0 0.0 0.0\n"
+        "f 1 2 3\n";
     static const char* vertices_without_faces_obj =
         "v 0.0 0.0 0.0\n"
         "v 1.0 0.0 0.0\n";
@@ -108,15 +113,31 @@ void henka_test_model(void)
     model.indices = NULL;
     model.vertex_count = 0U;
     model.index_count = 0U;
-    HENKA_TEST_ASSERT(henka_model_data_load_obj_from_memory(unsupported_polygon_obj, "unsupported_polygon_obj", &model) != HENKA_SUCCESS);
-    HENKA_TEST_ASSERT(model.vertices == NULL);
-    HENKA_TEST_ASSERT(model.indices == NULL);
+    HENKA_TEST_ASSERT(henka_model_data_load_obj_from_memory(valid_ngon_obj, "valid_ngon_obj", &model) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(model.vertices != NULL);
+    HENKA_TEST_ASSERT(model.indices != NULL);
+    HENKA_TEST_ASSERT(model.vertex_count == 9U);
+    HENKA_TEST_ASSERT(model.index_count == 9U);
+    henka_model_data_destroy(&model);
 
     model.vertices = NULL;
     model.indices = NULL;
     model.vertex_count = 0U;
     model.index_count = 0U;
-    HENKA_TEST_ASSERT(henka_model_data_load_obj_from_memory(unsupported_negative_index_obj, "unsupported_negative_index_obj", &model) != HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_model_data_load_obj_from_memory(valid_negative_index_obj, "valid_negative_index_obj", &model) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(model.vertices != NULL);
+    HENKA_TEST_ASSERT(model.indices != NULL);
+    HENKA_TEST_ASSERT(model.vertex_count == 3U);
+    HENKA_TEST_ASSERT(model.index_count == 3U);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(model.vertices[0].position.x, 0.0f, 0.0001f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(model.vertices[1].position.x, 1.0f, 0.0001f);
+    henka_model_data_destroy(&model);
+
+    model.vertices = NULL;
+    model.indices = NULL;
+    model.vertex_count = 0U;
+    model.index_count = 0U;
+    HENKA_TEST_ASSERT(henka_model_data_load_obj_from_memory(degenerate_face_obj, "degenerate_face_obj", &model) != HENKA_SUCCESS);
     HENKA_TEST_ASSERT(model.vertices == NULL);
     HENKA_TEST_ASSERT(model.indices == NULL);
 

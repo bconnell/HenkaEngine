@@ -37,7 +37,7 @@ Henka Engine is still early, but the sandbox now renders a visible 3D scene with
 - Shared overlay-handle transform gizmo foundation for selected object manipulation, with visual feel still being hardened through manual QA
 - Viewport interaction test helpers for reducing manual QA around selection, gizmo hit testing, and transform changes
 - Asset manager foundation for cached shader and texture loading
-- Early OBJ model loading with cached mesh assets
+- Early OBJ model loading with cached mesh assets, negative indices, n-gon fan triangulation, and degenerate-face rejection
 - Fallback white and error textures
 - Shader-based rendering of built-in primitives
 - Sandbox window titled `Henka Engine Sandbox 3D`
@@ -187,8 +187,8 @@ To validate the generic external game template against the current Henka checkou
 
 - The sandbox uses built-in primitives plus a small early OBJ loading path.
 - Missing textures fall back safely to an error texture, and missing OBJ assets fall back to a visible mesh.
-- OBJ support is intentionally limited to comments, blank lines, triangles, simple quads, positions, optional UVs, and optional normals.
-- OBJ material libraries, negative indices, polygons with more than four vertices, and animation are not supported yet.
+- OBJ support is intentionally limited to comments, blank lines, positions, optional UVs, optional normals, positive and negative indices, and triangle/quad/n-gon faces through basic fan triangulation.
+- OBJ material libraries, concave polygon correction beyond basic fan triangulation, model hierarchies, and animation are not supported yet.
 - The current settings format is a simple local key/value file. It is meant for engine samples and early projects, not for a finished save pipeline.
 - A small save-data foundation now exists for local scene id, camera pose, and simple flags, but it is still intentionally modest.
 - Remote saves, usage collection, registry storage, encryption, and network-backed persistence are not implemented.

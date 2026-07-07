@@ -1,5 +1,6 @@
 #include "henka_internal.h"
 
+#include <limits.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -7,6 +8,12 @@
 #include <henka/log.h>
 #include <henka/memory.h>
 #include <henka/model.h>
+
+enum
+{
+    HENKA_OBJ_MAX_FACE_VERTICES = 128,
+    HENKA_OBJ_MAX_LINE_TOKENS = HENKA_OBJ_MAX_FACE_VERTICES + 1
+};
 
 typedef struct henka_obj_index
 {
@@ -17,7 +24,7 @@ typedef struct henka_obj_index
 
 typedef struct henka_obj_face
 {
-    henka_obj_index indices[4];
+    henka_obj_index indices[HENKA_OBJ_MAX_FACE_VERTICES];
     int count;
 } henka_obj_face;
 
@@ -338,16 +345,22 @@ static bool henka_parse_face_sub_index(const char* token, int* out_index, henka_
         return false;
     }
 
-    if (parsed_value < 0L)
+    if (parsed_value < (long)INT_MIN || parsed_value > (long)INT_MAX)
     {
-        henka_obj_set_error(context, "negative OBJ indices are not supported yet");
+        henka_obj_set_error(context, "face index is outside the supported integer range");
         return false;
     }
 
-    *out_index = (int)(parsed_value - 1L);
+    if (parsed_value > 0L)
+    {
+        *out_index = (int)(parsed_value - 1L);
+    }
+    else
+    {
+        *out_index = (int)parsed_value;
+    }
     return true;
 }
-
 static bool henka_parse_face_index(const char* token, henka_obj_index* out_index, henka_obj_parse_context* context)
 {
     char local_copy[128];
@@ -484,9 +497,9 @@ static henka_result henka_parse_face_tokens(char** tokens, int token_count, henk
         return HENKA_ERROR_UNKNOWN;
     }
 
-    if (token_count > 5)
+    if (token_count > HENKA_OBJ_MAX_LINE_TOKENS)
     {
-        henka_obj_set_error(context, "polygons with more than four vertices are not supported yet");
+        henka_obj_set_error(context, "face has more vertices than the current safe OBJ limit");
         return HENKA_ERROR_UNKNOWN;
     }
 
@@ -503,18 +516,74 @@ static henka_result henka_parse_face_tokens(char** tokens, int token_count, henk
 
     return HENKA_SUCCESS;
 }
-
-static henka_result henka_resolve_face_index(int parsed_index, size_t count, henka_obj_parse_context* context)
+static henka_result henka_resolve_face_index(int parsed_index, size_t count, henka_obj_parse_context* context, size_t* out_index)
 {
-    if (parsed_index < 0 || (size_t)parsed_index >= count)
+    size_t relative_from_end;
+
+    if (out_index == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    if (count == 0U)
     {
         henka_obj_set_error(context, "face index references data that does not exist");
         return HENKA_ERROR_UNKNOWN;
     }
 
+    if (parsed_index >= 0)
+    {
+        if ((size_t)parsed_index >= count)
+        {
+            henka_obj_set_error(context, "face index references data that does not exist");
+            return HENKA_ERROR_UNKNOWN;
+        }
+
+        *out_index = (size_t)parsed_index;
+        return HENKA_SUCCESS;
+    }
+
+    relative_from_end = (size_t)(-(parsed_index + 1)) + 1U;
+    if (relative_from_end > count)
+    {
+        henka_obj_set_error(context, "negative face index references data that does not exist");
+        return HENKA_ERROR_UNKNOWN;
+    }
+
+    *out_index = count - relative_from_end;
     return HENKA_SUCCESS;
 }
 
+static henka_vec3 henka_obj_triangle_cross(
+    const henka_model_vertex* a,
+    const henka_model_vertex* b,
+    const henka_model_vertex* c)
+{
+    henka_vec3 edge_a;
+    henka_vec3 edge_b;
+
+    edge_a = henka_vec3_subtract(b->position, a->position);
+    edge_b = henka_vec3_subtract(c->position, a->position);
+    return henka_vec3_cross(edge_a, edge_b);
+}
+
+static bool henka_obj_cross_is_degenerate(henka_vec3 cross_value)
+{
+    const float epsilon = 0.0000001f;
+    const float length_squared =
+        cross_value.x * cross_value.x +
+        cross_value.y * cross_value.y +
+        cross_value.z * cross_value.z;
+    return length_squared <= epsilon;
+}
+
+static bool henka_obj_triangle_is_degenerate(
+    const henka_model_vertex* a,
+    const henka_model_vertex* b,
+    const henka_model_vertex* c)
+{
+    return henka_obj_cross_is_degenerate(henka_obj_triangle_cross(a, b, c));
+}
 static char* henka_copy_line_range(const char* start, size_t length)
 {
     char* line;
@@ -580,45 +649,50 @@ static henka_result henka_build_face_vertices(
     const henka_obj_vec2_array* texcoords,
     const henka_obj_vec3_array* normals,
     henka_obj_parse_context* context,
-    henka_model_vertex out_vertices[4])
+    henka_model_vertex out_vertices[HENKA_OBJ_MAX_FACE_VERTICES])
 {
     henka_vec3 computed_normal;
+    bool has_computed_normal;
     bool needs_computed_normal;
     int index;
 
+    has_computed_normal = false;
     needs_computed_normal = false;
     for (index = 0; index < face->count; ++index)
     {
         const henka_obj_index* obj_index;
+        size_t normal_index;
+        size_t position_index;
+        size_t uv_index;
 
         obj_index = &face->indices[index];
-        if (henka_resolve_face_index(obj_index->position_index, positions->count, context) != HENKA_SUCCESS)
+        if (henka_resolve_face_index(obj_index->position_index, positions->count, context, &position_index) != HENKA_SUCCESS)
         {
             return HENKA_ERROR_UNKNOWN;
         }
 
-        out_vertices[index].position = positions->items[obj_index->position_index];
+        out_vertices[index].position = positions->items[position_index];
         out_vertices[index].uv = (henka_vec2){0.0f, 0.0f};
         out_vertices[index].normal = (henka_vec3){0.0f, 1.0f, 0.0f};
 
-        if (obj_index->uv_index >= 0)
+        if (obj_index->uv_index != -1)
         {
-            if (henka_resolve_face_index(obj_index->uv_index, texcoords->count, context) != HENKA_SUCCESS)
+            if (henka_resolve_face_index(obj_index->uv_index, texcoords->count, context, &uv_index) != HENKA_SUCCESS)
             {
                 return HENKA_ERROR_UNKNOWN;
             }
 
-            out_vertices[index].uv = texcoords->items[obj_index->uv_index];
+            out_vertices[index].uv = texcoords->items[uv_index];
         }
 
-        if (obj_index->normal_index >= 0)
+        if (obj_index->normal_index != -1)
         {
-            if (henka_resolve_face_index(obj_index->normal_index, normals->count, context) != HENKA_SUCCESS)
+            if (henka_resolve_face_index(obj_index->normal_index, normals->count, context, &normal_index) != HENKA_SUCCESS)
             {
                 return HENKA_ERROR_UNKNOWN;
             }
 
-            out_vertices[index].normal = normals->items[obj_index->normal_index];
+            out_vertices[index].normal = normals->items[normal_index];
         }
         else
         {
@@ -628,12 +702,30 @@ static henka_result henka_build_face_vertices(
 
     if (needs_computed_normal)
     {
-        henka_vec3 edge_a;
-        henka_vec3 edge_b;
+        int triangle_index;
 
-        edge_a = henka_vec3_subtract(out_vertices[1].position, out_vertices[0].position);
-        edge_b = henka_vec3_subtract(out_vertices[2].position, out_vertices[0].position);
-        computed_normal = henka_vec3_normalize(henka_vec3_cross(edge_a, edge_b));
+        computed_normal = (henka_vec3){0.0f, 1.0f, 0.0f};
+        for (triangle_index = 1; triangle_index + 1 < face->count; ++triangle_index)
+        {
+            const henka_vec3 candidate_cross = henka_obj_triangle_cross(
+                &out_vertices[0],
+                &out_vertices[triangle_index],
+                &out_vertices[triangle_index + 1]);
+
+            if (!henka_obj_cross_is_degenerate(candidate_cross))
+            {
+                computed_normal = henka_vec3_normalize(candidate_cross);
+                has_computed_normal = true;
+                break;
+            }
+        }
+
+        if (!has_computed_normal)
+        {
+            henka_obj_set_error(context, "face is degenerate and cannot produce a normal");
+            return HENKA_ERROR_UNKNOWN;
+        }
+
         for (index = 0; index < face->count; ++index)
         {
             out_vertices[index].normal = computed_normal;
@@ -642,7 +734,6 @@ static henka_result henka_build_face_vertices(
 
     return HENKA_SUCCESS;
 }
-
 static henka_result henka_append_triangle(
     henka_obj_vertex_array* vertices,
     henka_obj_index_array* indices,
@@ -695,8 +786,9 @@ static henka_result henka_emit_face(
     henka_obj_vertex_array* vertices,
     henka_obj_index_array* indices)
 {
-    henka_model_vertex face_vertices[4];
+    henka_model_vertex face_vertices[HENKA_OBJ_MAX_FACE_VERTICES];
     henka_result result;
+    int triangle_index;
 
     result = henka_build_face_vertices(face, positions, texcoords, normals, context, face_vertices);
     if (result != HENKA_SUCCESS)
@@ -704,15 +796,23 @@ static henka_result henka_emit_face(
         return result;
     }
 
-    result = henka_append_triangle(vertices, indices, &face_vertices[0], &face_vertices[1], &face_vertices[2]);
-    if (result != HENKA_SUCCESS)
+    for (triangle_index = 1; triangle_index + 1 < face->count; ++triangle_index)
     {
-        return result;
-    }
+        if (henka_obj_triangle_is_degenerate(
+                &face_vertices[0],
+                &face_vertices[triangle_index],
+                &face_vertices[triangle_index + 1]))
+        {
+            henka_obj_set_error(context, "face triangulation produced a degenerate triangle");
+            return HENKA_ERROR_UNKNOWN;
+        }
 
-    if (face->count == 4)
-    {
-        result = henka_append_triangle(vertices, indices, &face_vertices[0], &face_vertices[2], &face_vertices[3]);
+        result = henka_append_triangle(
+            vertices,
+            indices,
+            &face_vertices[0],
+            &face_vertices[triangle_index],
+            &face_vertices[triangle_index + 1]);
         if (result != HENKA_SUCCESS)
         {
             return result;
@@ -721,14 +821,13 @@ static henka_result henka_emit_face(
 
     return HENKA_SUCCESS;
 }
-
 henka_result henka_model_data_load_obj_from_memory(const char* source, const char* label, henka_model_data* out_model)
 {
     const char* cursor;
     char* inline_comment;
     char* line;
     char* trimmed_line;
-    char* tokens[8];
+    char* tokens[HENKA_OBJ_MAX_LINE_TOKENS];
     int token_count;
     henka_obj_vec2_array texcoords;
     henka_obj_vec3_array normals;

@@ -13,15 +13,16 @@ Henka Engine currently supports a small, early OBJ loading path aimed at proving
 - normals when present
 - computed face normals when normals are missing
 - triangle faces
-- simple quad triangulation
+- quad and n-gon fan triangulation
+- positive and negative OBJ indices
+- degenerate face rejection before mesh emission
 - ignored non-render statements for `o`, `g`, `s`, `mtllib`, and `usemtl`
 - cached OBJ mesh loading through the asset manager
 
 ## What does not work yet
 
 - MTL material import
-- negative OBJ indices
-- polygons with more than four vertices
+- concave polygon correction beyond basic fan triangulation
 - model hierarchies
 - skeletal animation
 - glTF
@@ -36,6 +37,7 @@ If an OBJ file is missing or cannot be parsed:
 - the sandbox keeps running
 - the asset manager returns a fallback mesh so the scene stays visible
 - repeated loads of the same path reuse the cached result instead of rebuilding ownership each time
+- malformed faces, out-of-range indices, and degenerate triangles are rejected instead of being emitted as unstable geometry
 
 The sandbox includes both a valid sample OBJ asset and a missing-model example so this behavior is easy to inspect during manual QA.
 
