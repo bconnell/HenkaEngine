@@ -18,6 +18,7 @@ Henka Engine currently supports a small, early OBJ loading path aimed at proving
 - degenerate face rejection before mesh emission
 - ignored non-render statements for `o`, `g`, `s`, `mtllib`, and `usemtl`
 - cached OBJ mesh loading through the asset manager
+- explicit retry of failed cached OBJ mesh fallbacks after a source asset is fixed
 
 ## What does not work yet
 
@@ -27,7 +28,7 @@ Henka Engine currently supports a small, early OBJ loading path aimed at proving
 - skeletal animation
 - glTF
 - editor import workflows
-- model reloading
+- full live replacement of already-loaded mesh assets that scenes may still reference
 
 ## Failure behavior
 
@@ -36,7 +37,9 @@ If an OBJ file is missing or cannot be parsed:
 - the engine logs a clear error
 - the sandbox keeps running
 - the asset manager returns a fallback mesh so the scene stays visible
-- repeated loads of the same path reuse the cached result instead of rebuilding ownership each time
+- repeated normal loads of the same path reuse the cached result instead of rebuilding ownership each time
+- failed cached OBJ mesh fallbacks can be retried explicitly after the source asset is fixed
+- already-loaded real meshes are not destroyed by the retry helper, so scenes do not lose a mesh they may still reference
 - malformed faces, out-of-range indices, and degenerate triangles are rejected instead of being emitted as unstable geometry
 
 The sandbox includes both a valid sample OBJ asset and a missing-model example so this behavior is easy to inspect during manual QA.

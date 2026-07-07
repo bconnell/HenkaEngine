@@ -157,19 +157,66 @@ static henka_texture* henka_asset_manager_find_texture(henka_asset_manager* mana
     return NULL;
 }
 
-static henka_mesh* henka_asset_manager_find_mesh(henka_asset_manager* manager, const char* key)
+static henka_asset_mesh_entry* henka_asset_manager_find_mesh_entry(
+    henka_asset_manager* manager,
+    const char* key,
+    size_t* out_index)
 {
     size_t index;
+
+    if (manager == NULL || key == NULL)
+    {
+        return NULL;
+    }
 
     for (index = 0U; index < manager->mesh_count; ++index)
     {
         if (strcmp(manager->mesh_entries[index].key, key) == 0)
         {
-            return manager->mesh_entries[index].mesh;
+            if (out_index != NULL)
+            {
+                *out_index = index;
+            }
+            return &manager->mesh_entries[index];
         }
     }
 
     return NULL;
+}
+
+static henka_mesh* henka_asset_manager_find_mesh(henka_asset_manager* manager, const char* key)
+{
+    henka_asset_mesh_entry* entry;
+
+    entry = henka_asset_manager_find_mesh_entry(manager, key, NULL);
+    return entry != NULL ? entry->mesh : NULL;
+}
+
+static void henka_asset_manager_remove_mesh_entry_at(henka_asset_manager* manager, size_t index)
+{
+    henka_asset_mesh_entry* entry;
+
+    if (manager == NULL || index >= manager->mesh_count)
+    {
+        return;
+    }
+
+    entry = &manager->mesh_entries[index];
+    if (entry->owns_mesh)
+    {
+        henka_mesh_destroy(entry->mesh);
+    }
+    henka_free(entry->key);
+
+    if (index + 1U < manager->mesh_count)
+    {
+        memmove(
+            &manager->mesh_entries[index],
+            &manager->mesh_entries[index + 1U],
+            (manager->mesh_count - index - 1U) * sizeof(*manager->mesh_entries));
+    }
+
+    manager->mesh_count -= 1U;
 }
 
 static henka_result henka_asset_manager_create_fallback_textures(henka_asset_manager* manager)
@@ -516,11 +563,37 @@ henka_result henka_assets_load_obj_mesh(henka_asset_manager* manager, const char
     manager->mesh_entries[manager->mesh_count].metadata.reload_supported = true;
     henka_asset_set_summary(
         &manager->mesh_entries[manager->mesh_count].metadata,
-        mesh == manager->fallback_mesh ? "Mesh fallback is active." : "Mesh loaded from the asset path.",
-        mesh == manager->fallback_mesh ? "Mesh load failed and the fallback mesh was used." : "");
+        mesh == manager->fallback_mesh ? "Mesh fallback is active and can be retried." : "Mesh loaded from the asset path.",
+        mesh == manager->fallback_mesh ? "Mesh load failed and the fallback mesh was used. Retry after fixing the source asset." : "");
     manager->mesh_count += 1U;
     *out_mesh = mesh;
     return HENKA_SUCCESS;
+}
+
+henka_result henka_assets_retry_failed_obj_mesh(henka_asset_manager* manager, const char* path, henka_mesh** out_mesh)
+{
+    henka_asset_mesh_entry* entry;
+    size_t entry_index;
+
+    if (manager == NULL || path == NULL || out_mesh == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    entry_index = 0U;
+    entry = henka_asset_manager_find_mesh_entry(manager, path, &entry_index);
+    if (entry != NULL && !entry->metadata.fallback)
+    {
+        *out_mesh = entry->mesh;
+        return HENKA_SUCCESS;
+    }
+
+    if (entry != NULL)
+    {
+        henka_asset_manager_remove_mesh_entry_at(manager, entry_index);
+    }
+
+    return henka_assets_load_obj_mesh(manager, path, out_mesh);
 }
 
 size_t henka_assets_get_metadata_count(const henka_asset_manager* manager)

@@ -46,6 +46,12 @@ henka_result henka_assets_load_shader(
     henka_shader** out_shader);
 henka_result henka_assets_load_texture(henka_asset_manager* manager, const char* path, henka_texture** out_texture);
 henka_result henka_assets_load_obj_mesh(henka_asset_manager* manager, const char* path, henka_mesh** out_mesh);
+/*
+ * Retries an OBJ mesh path only when the cached entry is a fallback from a
+ * previous failed load. Already-loaded real meshes are returned unchanged so
+ * scenes do not lose a mesh they may still reference.
+ */
+henka_result henka_assets_retry_failed_obj_mesh(henka_asset_manager* manager, const char* path, henka_mesh** out_mesh);
 const char* henka_assets_get_type_label(henka_asset_type type);
 size_t henka_assets_get_metadata_count(const henka_asset_manager* manager);
 henka_result henka_assets_get_metadata_at_index(const henka_asset_manager* manager, size_t index, henka_asset_metadata* out_metadata);
