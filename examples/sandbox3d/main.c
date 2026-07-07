@@ -2826,13 +2826,25 @@ static void sandbox3d_draw_detached_workspace_panel_content(
     char user_path_text[128];
     char* save_path;
     char* settings_path;
+    const float return_bar_height = 36.0f;
+    const sandbox3d_workspace_panel* panel;
+    float content_height;
+    float content_y;
+    float dock_button_width;
     float fps;
     float milliseconds;
     henka_result result;
     henka_ui_context* previous_ui;
+    sandbox3d_workspace_dock_zone requested_dock;
     sandbox3d_workspace_layout detached_layout;
 
     if (engine == NULL || state == NULL || panel_id < 0 || panel_id >= SANDBOX3D_WORKSPACE_PANEL_COUNT)
+    {
+        return;
+    }
+
+    panel = sandbox3d_workspace_get_panel_const(&state->workspace.model, panel_id);
+    if (panel == NULL)
     {
         return;
     }
@@ -2846,21 +2858,28 @@ static void sandbox3d_draw_detached_workspace_panel_content(
         framebuffer_height = 1;
     }
 
+    content_y = return_bar_height + 4.0f;
+    content_height = (float)framebuffer_height - content_y;
+    if (content_height < 1.0f)
+    {
+        content_height = 1.0f;
+    }
+
     memset(&detached_layout, 0, sizeof(detached_layout));
     detached_layout.scene_viewport = (henka_viewport){0, 0, framebuffer_width, framebuffer_height};
     switch (panel_id)
     {
         case SANDBOX3D_WORKSPACE_PANEL_CONTROLS:
-            detached_layout.controls_panel = (henka_ui_rect){0.0f, 0.0f, (float)framebuffer_width, (float)framebuffer_height};
+            detached_layout.controls_panel = (henka_ui_rect){0.0f, content_y, (float)framebuffer_width, content_height};
             break;
         case SANDBOX3D_WORKSPACE_PANEL_SCENE_OBJECTS:
-            detached_layout.scene_objects_panel = (henka_ui_rect){0.0f, 0.0f, (float)framebuffer_width, (float)framebuffer_height};
+            detached_layout.scene_objects_panel = (henka_ui_rect){0.0f, content_y, (float)framebuffer_width, content_height};
             break;
         case SANDBOX3D_WORKSPACE_PANEL_OBJECT_DETAILS:
-            detached_layout.object_details_panel = (henka_ui_rect){0.0f, 0.0f, (float)framebuffer_width, (float)framebuffer_height};
+            detached_layout.object_details_panel = (henka_ui_rect){0.0f, content_y, (float)framebuffer_width, content_height};
             break;
         case SANDBOX3D_WORKSPACE_PANEL_UTILITY:
-            detached_layout.utility_panel = (henka_ui_rect){0.0f, 0.0f, (float)framebuffer_width, (float)framebuffer_height};
+            detached_layout.utility_panel = (henka_ui_rect){0.0f, content_y, (float)framebuffer_width, content_height};
             break;
         case SANDBOX3D_WORKSPACE_PANEL_NONE:
         default:
@@ -2869,6 +2888,61 @@ static void sandbox3d_draw_detached_workspace_panel_content(
 
     previous_ui = state->ui;
     state->ui = state->detached_panel_ui[panel_id];
+    requested_dock = SANDBOX3D_WORKSPACE_DOCK_DETACHED;
+
+    dock_button_width = ((float)framebuffer_width - 142.0f) / 3.0f;
+    if (dock_button_width < 68.0f)
+    {
+        dock_button_width = 68.0f;
+    }
+    if (dock_button_width > 112.0f)
+    {
+        dock_button_width = 112.0f;
+    }
+
+    henka_ui_overlay_rect(
+        state->ui,
+        (henka_ui_rect){0.0f, 0.0f, (float)framebuffer_width, return_bar_height},
+        (henka_vec4){0.07f, 0.09f, 0.12f, 0.98f});
+    henka_ui_overlay_line(
+        state->ui,
+        (henka_vec2){0.0f, return_bar_height - 1.0f},
+        (henka_vec2){(float)framebuffer_width, return_bar_height - 1.0f},
+        1.0f,
+        (henka_vec4){0.26f, 0.70f, 0.95f, 1.0f});
+    henka_ui_label_colored(state->ui, 8.0f, 11.0f, 1.0f, "Return:", HENKA_UI_COLOR_INFO);
+
+    if (henka_ui_primary_button(
+            state->ui,
+            "detached_dock_left",
+            (henka_ui_rect){72.0f, 6.0f, dock_button_width, 24.0f},
+            "Dock L"))
+    {
+        requested_dock = SANDBOX3D_WORKSPACE_DOCK_LEFT;
+    }
+    if (henka_ui_primary_button(
+            state->ui,
+            "detached_dock_right",
+            (henka_ui_rect){78.0f + dock_button_width, 6.0f, dock_button_width, 24.0f},
+            "Dock R"))
+    {
+        requested_dock = SANDBOX3D_WORKSPACE_DOCK_RIGHT;
+    }
+    if (henka_ui_button(
+            state->ui,
+            "detached_dock_home",
+            (henka_ui_rect){84.0f + dock_button_width * 2.0f, 6.0f, dock_button_width, 24.0f},
+            "Home"))
+    {
+        requested_dock = panel->default_dock;
+    }
+
+    if (requested_dock != SANDBOX3D_WORKSPACE_DOCK_DETACHED)
+    {
+        sandbox3d_dock_workspace_panel(state, panel_id, requested_dock);
+        state->ui = previous_ui;
+        return;
+    }
 
     switch (panel_id)
     {
@@ -2920,7 +2994,6 @@ static void sandbox3d_draw_detached_workspace_panel_content(
 
     state->ui = previous_ui;
 }
-
 static void sandbox3d_build_detached_workspace_panel_ui(henka_engine* engine, sandbox3d_state* state)
 {
     int panel_index;
@@ -2976,6 +3049,18 @@ static void sandbox3d_build_detached_workspace_panel_ui(henka_engine* engine, sa
             frame_desc.framebuffer_height);
 
         henka_ui_end_frame(ui);
+
+        {
+            const sandbox3d_workspace_panel* panel =
+                sandbox3d_workspace_get_panel_const(&state->workspace.model, panel_id);
+            if (panel != NULL &&
+                panel->dock != SANDBOX3D_WORKSPACE_DOCK_DETACHED &&
+                state->detached_panel_window_ids[panel_index] != HENKA_INVALID_WINDOW_ID)
+            {
+                (void)henka_engine_close_tool_window(engine, state->detached_panel_window_ids[panel_index]);
+                state->detached_panel_window_ids[panel_index] = HENKA_INVALID_WINDOW_ID;
+            }
+        }
     }
 }
 static void sandbox3d_reset_camera_defaults(sandbox3d_state* state)
@@ -3701,6 +3786,7 @@ static bool sandbox3d_handle_workspace_input(
     {
         if (left_down)
         {
+            const float dock_margin = 28.0f;
             const henka_ui_rect left_target = sandbox3d_get_workspace_dock_target_rect(
                 state,
                 &state->frame_layout,
@@ -3723,7 +3809,7 @@ static bool sandbox3d_handle_workspace_input(
                 left_target,
                 state->frame_layout.scene_frame,
                 right_target,
-                0.0f);
+                dock_margin);
             if (state->workspace.model.active_dock_target != SANDBOX3D_WORKSPACE_DOCK_FLOATING &&
                 !sandbox3d_workspace_can_dock_panel(state, state->workspace.model.active_drag_panel, state->workspace.model.active_dock_target))
             {
@@ -3740,10 +3826,17 @@ static bool sandbox3d_handle_workspace_input(
             }
             else
             {
-                if (!sandbox3d_open_detached_workspace_panel(engine, state, active_panel))
-                {
-                    snprintf(state->workspace.model.last_action, sizeof(state->workspace.model.last_action), "%s floating fallback", sandbox3d_workspace_panel_name(active_panel));
-                }
+                snprintf(
+                    state->workspace.model.last_action,
+                    sizeof(state->workspace.model.last_action),
+                    "%s left floating",
+                    sandbox3d_workspace_panel_name(active_panel));
+                sandbox3d_set_statusf(
+                    state,
+                    false,
+                    false,
+                    "%s left floating. Drag onto a dock target to redock, or use Pop for a native window.",
+                    sandbox3d_workspace_panel_name(active_panel));
             }
             sandbox3d_workspace_end_interaction(&state->workspace.model);
         }
@@ -4998,11 +5091,16 @@ static void sandbox3d_draw_panel_workspace_controls(
 
     if (panel->dock != SANDBOX3D_WORKSPACE_DOCK_FLOATING)
     {
-        henka_ui_label(state->ui, bounds.x + bounds.width - 42.0f, bounds.y + 10.0f, 1.0f, "DRAG");
+        henka_ui_label_colored(state->ui, bounds.x + bounds.width - 42.0f, bounds.y + 10.0f, 1.0f, "DRAG", HENKA_UI_COLOR_INFO);
         return;
     }
 
-    henka_ui_label(state->ui, bounds.x + bounds.width - 196.0f, bounds.y + 10.0f, 1.0f, "DRAG");
+    henka_ui_label_colored(state->ui, bounds.x + bounds.width - 248.0f, bounds.y + 10.0f, 1.0f, "DRAG", HENKA_UI_COLOR_WARNING);
+    snprintf(button_id, sizeof(button_id), "detach_panel_%d", (int)panel_id);
+    if (henka_ui_primary_button(state->ui, button_id, (henka_ui_rect){bounds.x + bounds.width - 206.0f, bounds.y + 4.0f, 44.0f, 22.0f}, "Pop"))
+    {
+        (void)sandbox3d_open_detached_workspace_panel(engine, state, panel_id);
+    }
     snprintf(button_id, sizeof(button_id), "dock_left_%d", (int)panel_id);
     if (henka_ui_button(state->ui, button_id, (henka_ui_rect){bounds.x + bounds.width - 158.0f, bounds.y + 4.0f, 34.0f, 22.0f}, "L"))
     {
@@ -5055,15 +5153,24 @@ static void sandbox3d_draw_workspace_affordances(
         if (state->workspace.model.active_dock_target != SANDBOX3D_WORKSPACE_DOCK_FLOATING &&
             bounds.width > 0.0f)
         {
-            const henka_vec4 outline = {0.46f, 0.59f, 0.70f, 0.82f};
+            char drop_label[64];
+            const henka_vec4 fill = {0.06f, 0.27f, 0.34f, 0.36f};
+            const henka_vec4 outline = {0.26f, 0.90f, 1.0f, 1.0f};
             const henka_vec2 top_left = {bounds.x, bounds.y};
             const henka_vec2 top_right = {bounds.x + bounds.width, bounds.y};
             const henka_vec2 bottom_right = {bounds.x + bounds.width, bounds.y + bounds.height};
             const henka_vec2 bottom_left = {bounds.x, bounds.y + bounds.height};
-            henka_ui_overlay_line(state->ui, top_left, top_right, 2.0f, outline);
-            henka_ui_overlay_line(state->ui, top_right, bottom_right, 2.0f, outline);
-            henka_ui_overlay_line(state->ui, bottom_right, bottom_left, 2.0f, outline);
-            henka_ui_overlay_line(state->ui, bottom_left, top_left, 2.0f, outline);
+            henka_ui_overlay_rect(state->ui, bounds, fill);
+            henka_ui_overlay_line(state->ui, top_left, top_right, 3.0f, outline);
+            henka_ui_overlay_line(state->ui, top_right, bottom_right, 3.0f, outline);
+            henka_ui_overlay_line(state->ui, bottom_right, bottom_left, 3.0f, outline);
+            henka_ui_overlay_line(state->ui, bottom_left, top_left, 3.0f, outline);
+            snprintf(
+                drop_label,
+                sizeof(drop_label),
+                "DROP TO %s DOCK",
+                state->workspace.model.active_dock_target == SANDBOX3D_WORKSPACE_DOCK_LEFT ? "LEFT" : "RIGHT");
+            henka_ui_label_colored(state->ui, bounds.x + 12.0f, bounds.y + 12.0f, 1.0f, drop_label, HENKA_UI_COLOR_WARNING);
         }
     }
 
