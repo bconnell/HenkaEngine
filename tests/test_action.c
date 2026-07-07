@@ -118,13 +118,25 @@ void henka_test_action(void)
     memset(&request, 0, sizeof(request));
     request.command = HENKA_ACTION_COMMAND_SCALE_BY_MULTIPLIER;
     request.params.scale_by_multiplier.entity = cube;
-    request.params.scale_by_multiplier.scale_multiplier = (henka_vec3){1.5f, 2.0f, 0.0f};
+    request.params.scale_by_multiplier.scale_multiplier = (henka_vec3){-1.5f, 2.0f, 1.0f};
     HENKA_TEST_ASSERT(henka_action_execute(actions, &request, &result) == HENKA_SUCCESS);
     HENKA_TEST_ASSERT(result.success);
     HENKA_TEST_ASSERT(henka_scene_get_entity_transform(scene, cube, &transform) == HENKA_SUCCESS);
-    HENKA_TEST_ASSERT_FLOAT_CLOSE(transform.scale.x, 1.5f, 0.0001f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(transform.scale.x, -1.5f, 0.0001f);
     HENKA_TEST_ASSERT_FLOAT_CLOSE(transform.scale.y, 2.0f, 0.0001f);
-    HENKA_TEST_ASSERT_FLOAT_CLOSE(transform.scale.z, 0.01f, 0.0001f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(transform.scale.z, 1.0f, 0.0001f);
+
+    memset(&request, 0, sizeof(request));
+    request.command = HENKA_ACTION_COMMAND_SCALE_BY_MULTIPLIER;
+    request.params.scale_by_multiplier.entity = cube;
+    request.params.scale_by_multiplier.scale_multiplier = (henka_vec3){1.0f, 0.0f, 1.0f};
+    HENKA_TEST_ASSERT(henka_action_execute(actions, &request, &result) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(!result.success);
+    HENKA_TEST_ASSERT(result.status == HENKA_ACTION_STATUS_INVALID_TRANSFORM);
+    HENKA_TEST_ASSERT(henka_scene_get_entity_transform(scene, cube, &transform) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(transform.scale.x, -1.5f, 0.0001f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(transform.scale.y, 2.0f, 0.0001f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(transform.scale.z, 1.0f, 0.0001f);
 
     memset(&request, 0, sizeof(request));
     request.command = HENKA_ACTION_COMMAND_SCALE_BY_MULTIPLIER;
@@ -133,7 +145,7 @@ void henka_test_action(void)
     HENKA_TEST_ASSERT(henka_action_execute(actions, &request, &result) == HENKA_SUCCESS);
     HENKA_TEST_ASSERT(result.success);
     HENKA_TEST_ASSERT(henka_scene_get_entity_transform(scene, cube, &transform) == HENKA_SUCCESS);
-    HENKA_TEST_ASSERT_FLOAT_CLOSE(transform.scale.x, 1.65f, 0.0001f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(transform.scale.x, -1.65f, 0.0001f);
 
     memset(&request, 0, sizeof(request));
     request.command = HENKA_ACTION_COMMAND_SCALE_BY_MULTIPLIER;
@@ -142,7 +154,7 @@ void henka_test_action(void)
     HENKA_TEST_ASSERT(henka_action_execute(actions, &request, &result) == HENKA_SUCCESS);
     HENKA_TEST_ASSERT(result.success);
     HENKA_TEST_ASSERT(henka_scene_get_entity_transform(scene, cube, &transform) == HENKA_SUCCESS);
-    HENKA_TEST_ASSERT_FLOAT_CLOSE(transform.scale.x, 1.485f, 0.0001f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(transform.scale.x, -1.485f, 0.0001f);
 
     memset(&request, 0, sizeof(request));
     request.command = HENKA_ACTION_COMMAND_GET_OBJECT_DETAILS;

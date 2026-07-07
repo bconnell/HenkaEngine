@@ -56,11 +56,14 @@ void henka_test_scene(void)
     HENKA_TEST_ASSERT_FLOAT_CLOSE(read_back.position.x, 3.0f, 0.0001f);
     HENKA_TEST_ASSERT_FLOAT_CLOSE(read_back.position.y, 1.0f, 0.0001f);
     HENKA_TEST_ASSERT(henka_scene_rotate_entity(scene, first, henka_quat_from_axis_angle((henka_vec3){0.0f, 1.0f, 0.0f}, 90.0f * HENKA_DEG_TO_RAD)) == HENKA_SUCCESS);
-    HENKA_TEST_ASSERT(henka_scene_scale_entity(scene, first, (henka_vec3){2.0f, 0.0f, 0.5f}) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_scene_scale_entity(scene, first, (henka_vec3){2.0f, -1.0f, 0.5f}) == HENKA_SUCCESS);
     HENKA_TEST_ASSERT(henka_scene_get_entity_transform(scene, first, &read_back) == HENKA_SUCCESS);
     HENKA_TEST_ASSERT_FLOAT_CLOSE(read_back.scale.x, 2.0f, 0.0001f);
-    HENKA_TEST_ASSERT_FLOAT_CLOSE(read_back.scale.y, 0.01f, 0.0001f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(read_back.scale.y, -1.0f, 0.0001f);
     HENKA_TEST_ASSERT_FLOAT_CLOSE(read_back.scale.z, 0.5f, 0.0001f);
+    HENKA_TEST_ASSERT(henka_scene_scale_entity(scene, first, (henka_vec3){1.0f, 0.0f, 1.0f}) == HENKA_ERROR_INVALID_ARGUMENT);
+    HENKA_TEST_ASSERT(henka_scene_get_entity_transform(scene, first, &read_back) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(read_back.scale.y, -1.0f, 0.0001f);
     HENKA_TEST_ASSERT(henka_scene_set_entity_visible(scene, first, false) == HENKA_SUCCESS);
     HENKA_TEST_ASSERT(!henka_scene_is_entity_visible(scene, first));
     HENKA_TEST_ASSERT(henka_scene_set_entity_visible(scene, first, true) == HENKA_SUCCESS);
@@ -91,8 +94,10 @@ void henka_test_scene(void)
     transform = henka_transform_identity();
     transform.position = (henka_vec3){1.0f, 0.0f, 0.0f};
     transform.rotation = henka_quat_from_axis_angle((henka_vec3){0.0f, 1.0f, 0.0f}, 45.0f * HENKA_DEG_TO_RAD);
-    transform.scale = (henka_vec3){2.0f, 1.0f, 0.5f};
+    transform.scale = (henka_vec3){-2.0f, 1.0f, 0.5f};
     HENKA_TEST_ASSERT(henka_scene_set_entity_transform(scene, second, transform) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_scene_get_entity_transform(scene, second, &read_back) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(read_back.scale.x, -2.0f, 0.0001f);
     HENKA_TEST_ASSERT(henka_scene_get_entity_world_bounds(scene, second, &bounds) == HENKA_SUCCESS);
     HENKA_TEST_ASSERT(bounds.extents.x > 0.5f);
     HENKA_TEST_ASSERT(bounds.extents.z > 0.25f);

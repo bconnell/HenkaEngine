@@ -23,9 +23,24 @@ struct henka_action_context
     size_t default_transform_capacity;
 };
 
+static const float g_henka_action_minimum_scale_magnitude = 0.01f;
+
 static bool henka_action_is_finite_float(float value)
 {
     return isfinite(value) != 0;
+}
+
+static bool henka_action_scale_component_is_valid(float value)
+{
+    return henka_action_is_finite_float(value) &&
+        fabsf(value) >= g_henka_action_minimum_scale_magnitude;
+}
+
+static bool henka_action_scale_vector_is_valid(henka_vec3 value)
+{
+    return henka_action_scale_component_is_valid(value.x) &&
+        henka_action_scale_component_is_valid(value.y) &&
+        henka_action_scale_component_is_valid(value.z);
 }
 
 static bool henka_action_name_is_valid(const char* value)
@@ -42,9 +57,7 @@ static bool henka_action_transform_is_valid(henka_transform transform)
         henka_action_is_finite_float(transform.rotation.y) &&
         henka_action_is_finite_float(transform.rotation.z) &&
         henka_action_is_finite_float(transform.rotation.w) &&
-        henka_action_is_finite_float(transform.scale.x) &&
-        henka_action_is_finite_float(transform.scale.y) &&
-        henka_action_is_finite_float(transform.scale.z);
+        henka_action_scale_vector_is_valid(transform.scale);
 }
 
 static bool henka_action_vector_is_valid(henka_vec3 value)
@@ -830,11 +843,11 @@ henka_result henka_action_execute(
                         next_transform.rotation = request->params.set_rotation.rotation;
                         break;
                     case HENKA_ACTION_COMMAND_SET_SCALE:
-                        if (!henka_action_vector_is_valid(request->params.set_scale.scale))
+                        if (!henka_action_scale_vector_is_valid(request->params.set_scale.scale))
                         {
                             result.status = HENKA_ACTION_STATUS_INVALID_TRANSFORM;
                             result.engine_result = HENKA_ERROR_INVALID_ARGUMENT;
-                            henka_action_set_message(&result, "Scale is not finite.");
+                            henka_action_set_message(&result, "Scale components must be finite and not zero or near zero.");
                             goto mutation_done;
                         }
                         next_transform.scale = request->params.set_scale.scale;
@@ -860,11 +873,11 @@ henka_result henka_action_execute(
                         next_transform.rotation = henka_quat_multiply(request->params.rotate_by_delta.delta_rotation, transform.rotation);
                         break;
                     case HENKA_ACTION_COMMAND_SCALE_BY_MULTIPLIER:
-                        if (!henka_action_vector_is_valid(request->params.scale_by_multiplier.scale_multiplier))
+                        if (!henka_action_scale_vector_is_valid(request->params.scale_by_multiplier.scale_multiplier))
                         {
                             result.status = HENKA_ACTION_STATUS_INVALID_TRANSFORM;
                             result.engine_result = HENKA_ERROR_INVALID_ARGUMENT;
-                            henka_action_set_message(&result, "Scale multiplier is not finite.");
+                            henka_action_set_message(&result, "Scale multiplier components must be finite and not zero or near zero.");
                             goto mutation_done;
                         }
                         next_transform.scale.x = transform.scale.x * request->params.scale_by_multiplier.scale_multiplier.x;
@@ -890,7 +903,7 @@ henka_result henka_action_execute(
                 {
                     result.status = HENKA_ACTION_STATUS_INVALID_TRANSFORM;
                     result.engine_result = HENKA_ERROR_INVALID_ARGUMENT;
-                    henka_action_set_message(&result, "Resulting transform is not finite.");
+                    henka_action_set_message(&result, "Resulting transform contains invalid or near-zero scale data.");
                     goto mutation_done;
                 }
 

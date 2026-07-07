@@ -146,9 +146,24 @@ static henka_bounds henka_scene_transform_bounds(henka_bounds local_bounds, henk
     return world_bounds;
 }
 
+static const float g_henka_scene_minimum_scale_magnitude = 0.01f;
+
 static bool henka_is_finite_float(float value)
 {
     return isfinite(value) != 0;
+}
+
+static bool henka_scale_component_is_valid(float value)
+{
+    return henka_is_finite_float(value) &&
+        fabsf(value) >= g_henka_scene_minimum_scale_magnitude;
+}
+
+static bool henka_scale_vector_is_valid(henka_vec3 value)
+{
+    return henka_scale_component_is_valid(value.x) &&
+        henka_scale_component_is_valid(value.y) &&
+        henka_scale_component_is_valid(value.z);
 }
 
 static bool henka_transform_is_valid(henka_transform transform)
@@ -160,28 +175,12 @@ static bool henka_transform_is_valid(henka_transform transform)
         henka_is_finite_float(transform.rotation.y) &&
         henka_is_finite_float(transform.rotation.z) &&
         henka_is_finite_float(transform.rotation.w) &&
-        henka_is_finite_float(transform.scale.x) &&
-        henka_is_finite_float(transform.scale.y) &&
-        henka_is_finite_float(transform.scale.z);
+        henka_scale_vector_is_valid(transform.scale);
 }
 
 static henka_transform henka_transform_sanitize(henka_transform transform)
 {
-    const float minimum_scale = 0.01f;
-
     transform.rotation = henka_quat_normalize(transform.rotation);
-    if (transform.scale.x < minimum_scale)
-    {
-        transform.scale.x = minimum_scale;
-    }
-    if (transform.scale.y < minimum_scale)
-    {
-        transform.scale.y = minimum_scale;
-    }
-    if (transform.scale.z < minimum_scale)
-    {
-        transform.scale.z = minimum_scale;
-    }
     return transform;
 }
 
