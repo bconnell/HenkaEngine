@@ -47,6 +47,15 @@ void henka_test_model(void)
         "v 1.0 0.0 0.0\n"
         "v 0.0 1.0 0.0\n"
         "f -3 -2 -1\n";
+    static const char* valid_negative_optional_index_obj =
+        "v 0.0 0.0 0.0\n"
+        "v 1.0 0.0 0.0\n"
+        "v 0.0 1.0 0.0\n"
+        "vt 0.125 0.250\n"
+        "vt 0.500 0.750\n"
+        "vt 0.900 0.100\n"
+        "vn 0.0 1.0 0.0\n"
+        "f 1/-3/-1 2/-2/-1 3/-1/-1\n";
     static const char* degenerate_face_obj =
         "v 0.0 0.0 0.0\n"
         "v 1.0 0.0 0.0\n"
@@ -131,6 +140,29 @@ void henka_test_model(void)
     HENKA_TEST_ASSERT(model.index_count == 3U);
     HENKA_TEST_ASSERT_FLOAT_CLOSE(model.vertices[0].position.x, 0.0f, 0.0001f);
     HENKA_TEST_ASSERT_FLOAT_CLOSE(model.vertices[1].position.x, 1.0f, 0.0001f);
+    henka_model_data_destroy(&model);
+
+    model.vertices = NULL;
+    model.indices = NULL;
+    model.vertex_count = 0U;
+    model.index_count = 0U;
+    HENKA_TEST_ASSERT(
+        henka_model_data_load_obj_from_memory(
+            valid_negative_optional_index_obj,
+            "valid_negative_optional_index_obj",
+            &model) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(model.vertices != NULL);
+    HENKA_TEST_ASSERT(model.indices != NULL);
+    HENKA_TEST_ASSERT(model.vertex_count == 3U);
+    HENKA_TEST_ASSERT(model.index_count == 3U);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(model.vertices[0].uv.x, 0.125f, 0.0001f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(model.vertices[1].uv.y, 0.750f, 0.0001f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(model.vertices[2].uv.x, 0.900f, 0.0001f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(model.vertices[2].uv.y, 0.100f, 0.0001f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(model.vertices[0].normal.y, 1.0f, 0.0001f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(model.vertices[1].normal.y, 1.0f, 0.0001f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(model.vertices[2].normal.y, 1.0f, 0.0001f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(model.vertices[2].normal.z, 0.0f, 0.0001f);
     henka_model_data_destroy(&model);
 
     model.vertices = NULL;

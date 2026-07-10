@@ -15,6 +15,13 @@ enum
     HENKA_OBJ_MAX_LINE_TOKENS = HENKA_OBJ_MAX_FACE_VERTICES + 1
 };
 
+/*
+ * Parsed positive indices are converted to zero-based values and therefore
+ * cannot equal INT_MAX. Parsed negative indices remain negative, so INT_MAX is
+ * a distinct marker for an omitted optional UV or normal index.
+ */
+#define HENKA_OBJ_INDEX_MISSING INT_MAX
+
 typedef struct henka_obj_index
 {
     int position_index;
@@ -381,8 +388,8 @@ static bool henka_parse_face_index(const char* token, henka_obj_index* out_index
     }
 
     out_index->position_index = -1;
-    out_index->uv_index = -1;
-    out_index->normal_index = -1;
+    out_index->uv_index = HENKA_OBJ_INDEX_MISSING;
+    out_index->normal_index = HENKA_OBJ_INDEX_MISSING;
 
     first_separator = strchr(local_copy, '/');
     if (first_separator == NULL)
@@ -675,7 +682,7 @@ static henka_result henka_build_face_vertices(
         out_vertices[index].uv = (henka_vec2){0.0f, 0.0f};
         out_vertices[index].normal = (henka_vec3){0.0f, 1.0f, 0.0f};
 
-        if (obj_index->uv_index != -1)
+        if (obj_index->uv_index != HENKA_OBJ_INDEX_MISSING)
         {
             if (henka_resolve_face_index(obj_index->uv_index, texcoords->count, context, &uv_index) != HENKA_SUCCESS)
             {
@@ -685,7 +692,7 @@ static henka_result henka_build_face_vertices(
             out_vertices[index].uv = texcoords->items[uv_index];
         }
 
-        if (obj_index->normal_index != -1)
+        if (obj_index->normal_index != HENKA_OBJ_INDEX_MISSING)
         {
             if (henka_resolve_face_index(obj_index->normal_index, normals->count, context, &normal_index) != HENKA_SUCCESS)
             {

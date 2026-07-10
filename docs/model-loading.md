@@ -14,7 +14,7 @@ Henka Engine currently supports a small, early OBJ loading path aimed at proving
 - computed face normals when normals are missing
 - triangle faces
 - quad and n-gon fan triangulation
-- positive and negative OBJ indices
+- positive and negative position, texture-coordinate, and normal OBJ indices
 - degenerate face rejection before mesh emission
 - ignored non-render statements for `o`, `g`, `s`, `mtllib`, and `usemtl`
 - cached OBJ mesh loading through the asset manager
