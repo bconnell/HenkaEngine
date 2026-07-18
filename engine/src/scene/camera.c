@@ -52,6 +52,11 @@ static float henka_max_float(float left, float right)
     return left > right ? left : right;
 }
 
+static bool henka_vec3_is_finite(henka_vec3 value)
+{
+    return isfinite(value.x) && isfinite(value.y) && isfinite(value.z);
+}
+
 henka_camera henka_camera_create_perspective(float field_of_view_radians, float aspect_ratio, float near_plane, float far_plane)
 {
     henka_camera camera;
@@ -82,6 +87,106 @@ henka_camera henka_camera_create_orthographic(float orthographic_height, float a
     return camera;
 }
 
+const char* henka_camera_preset_get_label(henka_camera_preset preset)
+{
+    switch (preset)
+    {
+        case HENKA_CAMERA_PRESET_PERSPECTIVE_3D:
+            return "Perspective 3D";
+        case HENKA_CAMERA_PRESET_SIDE_2_5D:
+            return "Side 2.5D";
+        case HENKA_CAMERA_PRESET_TOP_DOWN_2_5D:
+            return "Top-down 2.5D";
+        case HENKA_CAMERA_PRESET_ISOMETRIC_2_5D:
+            return "Isometric 2.5D";
+        case HENKA_CAMERA_PRESET_COUNT:
+        default:
+            return "Unknown";
+    }
+}
+
+henka_result henka_camera_apply_preset(henka_camera* camera, henka_camera_preset preset, henka_vec3 target)
+{
+    float distance;
+    henka_vec3 forward;
+
+    if (camera == NULL ||
+        !henka_vec3_is_finite(target) ||
+        preset < HENKA_CAMERA_PRESET_PERSPECTIVE_3D ||
+        preset >= HENKA_CAMERA_PRESET_COUNT)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    if (!isfinite(camera->aspect_ratio) || camera->aspect_ratio <= 0.0f)
+    {
+        camera->aspect_ratio = 1.0f;
+    }
+    if (!isfinite(camera->near_plane) || camera->near_plane <= 0.0f)
+    {
+        camera->near_plane = 0.1f;
+    }
+    if (!isfinite(camera->far_plane) || camera->far_plane <= camera->near_plane)
+    {
+        camera->far_plane = camera->near_plane + 100.0f;
+    }
+    if (!isfinite(camera->field_of_view_radians) || camera->field_of_view_radians <= 0.0f)
+    {
+        camera->field_of_view_radians = 60.0f * HENKA_DEG_TO_RAD;
+    }
+    if (!isfinite(camera->movement_speed) || camera->movement_speed <= 0.0f)
+    {
+        camera->movement_speed = 4.0f;
+    }
+    if (!isfinite(camera->fast_movement_multiplier) || camera->fast_movement_multiplier <= 0.0f)
+    {
+        camera->fast_movement_multiplier = 2.5f;
+    }
+
+    switch (preset)
+    {
+        case HENKA_CAMERA_PRESET_PERSPECTIVE_3D:
+            camera->projection_mode = HENKA_CAMERA_PROJECTION_PERSPECTIVE;
+            camera->yaw_radians = -HENKA_PI * 0.5f;
+            camera->pitch_radians = -0.22f;
+            camera->orthographic_height = 6.0f;
+            distance = 8.6f;
+            break;
+
+        case HENKA_CAMERA_PRESET_SIDE_2_5D:
+            camera->projection_mode = HENKA_CAMERA_PROJECTION_ORTHOGRAPHIC;
+            camera->yaw_radians = -HENKA_PI * 0.5f;
+            camera->pitch_radians = 0.0f;
+            camera->orthographic_height = 8.0f;
+            distance = 10.0f;
+            break;
+
+        case HENKA_CAMERA_PRESET_TOP_DOWN_2_5D:
+            camera->projection_mode = HENKA_CAMERA_PROJECTION_ORTHOGRAPHIC;
+            camera->yaw_radians = -HENKA_PI * 0.5f;
+            camera->pitch_radians = -HENKA_PI * 0.5f;
+            camera->orthographic_height = 10.0f;
+            distance = 12.0f;
+            break;
+
+        case HENKA_CAMERA_PRESET_ISOMETRIC_2_5D:
+            camera->projection_mode = HENKA_CAMERA_PROJECTION_ORTHOGRAPHIC;
+            camera->yaw_radians = -HENKA_PI * 0.75f;
+            camera->pitch_radians = -0.6154797087f;
+            camera->orthographic_height = 10.0f;
+            distance = 12.0f;
+            break;
+
+        case HENKA_CAMERA_PRESET_COUNT:
+        default:
+            return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    forward = henka_camera_get_forward(camera);
+    camera->position = henka_vec3_subtract(target, henka_vec3_scale(forward, distance));
+    return HENKA_SUCCESS;
+}
+
 henka_vec3 henka_camera_get_forward(const henka_camera* camera)
 {
     henka_vec3 forward;
@@ -102,27 +207,69 @@ henka_vec3 henka_camera_get_forward(const henka_camera* camera)
 
 henka_vec3 henka_camera_get_right(const henka_camera* camera)
 {
-    henka_vec3 world_up;
+    henka_vec3 forward;
     henka_vec3 right;
+    henka_vec3 world_up;
 
-    world_up.x = 0.0f;
-    world_up.y = 1.0f;
-    world_up.z = 0.0f;
+    world_up = (henka_vec3){0.0f, 1.0f, 0.0f};
+    if (camera == NULL)
+    {
+        return (henka_vec3){1.0f, 0.0f, 0.0f};
+    }
 
-    right = henka_vec3_cross(henka_camera_get_forward(camera), world_up);
+    forward = henka_camera_get_forward(camera);
+    right = henka_vec3_cross(forward, world_up);
+    if (!henka_vec3_is_finite(right) || henka_vec3_length(right) <= 0.0001f)
+    {
+        right = (henka_vec3)
+        {
+            -sinf(camera->yaw_radians),
+            0.0f,
+            cosf(camera->yaw_radians)
+        };
+    }
+
+    if (!henka_vec3_is_finite(right) || henka_vec3_length(right) <= 0.0001f)
+    {
+        return (henka_vec3){1.0f, 0.0f, 0.0f};
+    }
+
     return henka_vec3_normalize(right);
+}
+
+henka_vec3 henka_camera_get_up(const henka_camera* camera)
+{
+    henka_vec3 forward;
+    henka_vec3 right;
+    henka_vec3 up;
+
+    if (camera == NULL)
+    {
+        return (henka_vec3){0.0f, 1.0f, 0.0f};
+    }
+
+    forward = henka_camera_get_forward(camera);
+    right = henka_camera_get_right(camera);
+    up = henka_vec3_cross(right, forward);
+    if (!henka_vec3_is_finite(up) || henka_vec3_length(up) <= 0.0001f)
+    {
+        return (henka_vec3){0.0f, 1.0f, 0.0f};
+    }
+
+    return henka_vec3_normalize(up);
 }
 
 henka_mat4 henka_camera_get_view_matrix(const henka_camera* camera)
 {
     henka_vec3 target;
-    henka_vec3 up;
+
+    if (camera == NULL)
+    {
+        return henka_mat4_identity();
+    }
 
     target = henka_vec3_add(camera->position, henka_camera_get_forward(camera));
-    up.x = 0.0f;
-    up.y = 1.0f;
-    up.z = 0.0f;
-    return henka_mat4_look_at(camera->position, target, up);
+    return henka_mat4_look_at(camera->position, target, henka_camera_get_up(camera));
 }
 
 henka_mat4 henka_camera_get_projection_matrix(const henka_camera* camera)
@@ -144,10 +291,51 @@ henka_mat4 henka_camera_get_projection_matrix(const henka_camera* camera)
 
 void henka_camera_set_aspect_ratio(henka_camera* camera, float aspect_ratio)
 {
-    if (camera != NULL && aspect_ratio > 0.0f)
+    if (camera != NULL && isfinite(aspect_ratio) && aspect_ratio > 0.0f)
     {
         camera->aspect_ratio = aspect_ratio;
     }
+}
+
+henka_result henka_camera_zoom_orthographic(
+    henka_camera* camera,
+    float zoom_factor,
+    float minimum_height,
+    float maximum_height)
+{
+    float next_height;
+
+    if (camera == NULL ||
+        camera->projection_mode != HENKA_CAMERA_PROJECTION_ORTHOGRAPHIC ||
+        !isfinite(camera->orthographic_height) ||
+        camera->orthographic_height <= 0.0f ||
+        !isfinite(zoom_factor) ||
+        zoom_factor <= 0.0f ||
+        !isfinite(minimum_height) ||
+        !isfinite(maximum_height) ||
+        minimum_height <= 0.0f ||
+        maximum_height < minimum_height)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    next_height = camera->orthographic_height * zoom_factor;
+    if (!isfinite(next_height))
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    if (next_height < minimum_height)
+    {
+        next_height = minimum_height;
+    }
+    if (next_height > maximum_height)
+    {
+        next_height = maximum_height;
+    }
+
+    camera->orthographic_height = next_height;
+    return HENKA_SUCCESS;
 }
 
 float henka_camera_clamp_pitch(float pitch_radians)
@@ -190,11 +378,10 @@ bool henka_camera_look_at(henka_camera* camera, henka_vec3 target)
 
 void henka_camera_move_relative(henka_camera* camera, henka_vec3 local_direction, float distance)
 {
-    henka_vec3 world_up;
+    henka_vec3 forward;
     henka_vec3 move_direction;
     henka_vec3 right;
     henka_vec3 up;
-    henka_vec3 forward;
 
     if (camera == NULL || distance == 0.0f)
     {
@@ -203,12 +390,7 @@ void henka_camera_move_relative(henka_camera* camera, henka_vec3 local_direction
 
     forward = henka_camera_get_forward(camera);
     right = henka_camera_get_right(camera);
-    world_up = (henka_vec3){0.0f, 1.0f, 0.0f};
-    up = henka_vec3_normalize(henka_vec3_cross(right, forward));
-    if (henka_vec3_length(up) == 0.0f)
-    {
-        up = world_up;
-    }
+    up = henka_camera_get_up(camera);
 
     move_direction = (henka_vec3){0.0f, 0.0f, 0.0f};
     move_direction = henka_vec3_add(move_direction, henka_vec3_scale(right, local_direction.x));
@@ -266,30 +448,53 @@ bool henka_camera_focus_on_bounds(henka_camera* camera, henka_bounds bounds)
 
 bool henka_camera_frame_bounds(henka_camera* camera, henka_bounds bounds, float yaw_radians, float pitch_radians)
 {
-    henka_vec3 forward;
-    float radius;
     float distance;
+    float effective_aspect;
+    float framed_height;
     float horizontal_distance;
     float horizontal_fov;
+    float radius;
     float vertical_distance;
+    henka_vec3 forward;
 
-    if (camera == NULL)
+    if (camera == NULL ||
+        !henka_vec3_is_finite(bounds.center) ||
+        !henka_vec3_is_finite(bounds.extents) ||
+        !isfinite(yaw_radians) ||
+        !isfinite(pitch_radians))
     {
         return false;
     }
 
     radius = henka_vec3_length(bounds.extents);
-    if (radius <= 0.0f)
+    if (!isfinite(radius) || radius <= 0.0f)
     {
         radius = 0.5f;
     }
 
     camera->yaw_radians = yaw_radians;
-    camera->pitch_radians = henka_clamp_pitch(pitch_radians);
+    camera->pitch_radians =
+        camera->projection_mode == HENKA_CAMERA_PROJECTION_ORTHOGRAPHIC &&
+        fabsf(fabsf(pitch_radians) - HENKA_PI * 0.5f) <= 0.0001f
+            ? pitch_radians
+            : henka_clamp_pitch(pitch_radians);
     forward = henka_camera_get_forward(camera);
+
     if (camera->projection_mode == HENKA_CAMERA_PROJECTION_ORTHOGRAPHIC)
     {
-        camera->position = henka_vec3_subtract(bounds.center, henka_vec3_scale(forward, radius + camera->near_plane + 2.0f));
+        effective_aspect =
+            isfinite(camera->aspect_ratio) && camera->aspect_ratio > 0.0f
+                ? camera->aspect_ratio
+                : 1.0f;
+        framed_height = radius * 2.4f;
+        if (effective_aspect < 1.0f)
+        {
+            framed_height /= effective_aspect;
+        }
+        camera->orthographic_height = henka_max_float(framed_height, 0.5f);
+        camera->position = henka_vec3_subtract(
+            bounds.center,
+            henka_vec3_scale(forward, radius + camera->near_plane + 2.0f));
         return true;
     }
 
@@ -337,8 +542,10 @@ bool henka_camera_pan_target(henka_camera* camera, henka_vec3* target, float del
     }
 
     right = henka_camera_get_right(camera);
-    up = henka_vec3_normalize(henka_vec3_cross(right, henka_camera_get_forward(camera)));
-    offset = henka_vec3_add(henka_vec3_scale(right, delta_right), henka_vec3_scale(up, delta_up));
+    up = henka_camera_get_up(camera);
+    offset = henka_vec3_add(
+        henka_vec3_scale(right, delta_right),
+        henka_vec3_scale(up, delta_up));
     camera->position = henka_vec3_add(camera->position, offset);
     *target = henka_vec3_add(*target, offset);
     return true;
@@ -399,7 +606,7 @@ henka_result henka_camera_screen_point_to_ray(
     ndc_y = 1.0f - (2.0f * screen_position.y / (float)framebuffer_height);
     forward = henka_camera_get_forward(camera);
     right = henka_camera_get_right(camera);
-    up = henka_vec3_normalize(henka_vec3_cross(right, forward));
+    up = henka_camera_get_up(camera);
 
     out_ray->origin = camera->position;
     if (camera->projection_mode == HENKA_CAMERA_PROJECTION_ORTHOGRAPHIC)

@@ -29,7 +29,7 @@ Henka Engine is still early, but the sandbox now renders a visible 3D scene with
 - Public math, time, camera, mesh, texture, shader, scene, and asset APIs
 - Input action foundation for named engine-level controls
 - Scene object metadata, bounds, and interaction foundation
-- Reusable camera helpers for reset, focus, and screen-ray creation
+- Reusable camera helpers for reset, focus, screen-ray creation, stable vertical view bases, orthographic zoom, and Perspective 3D, Side 2.5D, Top-down 2.5D, and Isometric 2.5D presets
 - Local action-command foundation for validated scene and object operations, including signed scale transforms for mirror workflows
 - Asset metadata and stronger material summaries
 - Local save-data foundation beyond settings
@@ -59,7 +59,7 @@ Henka Engine is still early, but the sandbox now renders a visible 3D scene with
 - Audio
 - Scripting
 - Full 2D renderer
-- 2.5D workflow tooling
+- Full 2.5D sprite, layered-depth, parallax, animation, and constrained-movement workflow
 - Additional renderer backends
 
 ## Repository layout
@@ -199,7 +199,7 @@ To validate the generic external game template against the current Henka checkou
 - The viewport transform gizmo is intentionally scoped to world-axis move, rotate, and scale behavior for the current sandbox object model. The sandbox now also exposes explicit viewport tool modes, diagnostics, and direct transform fallback controls so interaction failures can be diagnosed without assuming the gizmo is the only path.
 - Signed negative scale is preserved for mirror transforms and bounds remain usable, but advanced mirrored normal, winding, and material-authoring workflows are still early.
 - Rigid-body physics v1 supports static, dynamic, and kinematic bodies with sphere, axis-aligned box, and plane colliders; mesh collision, constraints, controllers, and advanced simulation remain future work.
-- 2D and 2.5D are part of the engine direction, but those workflows are not implemented yet.
+- The first 2.5D camera foundation is available through perspective, side, top-down, and isometric sandbox presets with orthographic zoom. Sprites, layered depth, parallax, animation, and movement-plane constraints are not implemented yet.
 - Visual and interaction checks still need manual QA on a local desktop session.
 - HenkaSandbox3D is an engine sample and QA target, not a game. Real games built with Henka should live in separate repositories.
 

@@ -10,7 +10,7 @@
 - a fallback-texture example that stays visible when a texture file is missing
 - a fallback-model example that stays visible when an OBJ file is missing
 
-The sandbox also saves a small local settings file so wireframe, grid visibility, mouse sensitivity, camera state, and panel visibility can carry across runs.
+The sandbox also saves a small local settings file so wireframe, grid visibility, mouse sensitivity, camera preset, camera pose, orthographic zoom, and panel visibility can carry across runs.
 It now also includes small in-window developer panels for inspection and settings tasks.
 The docked workspace opens in `View` mode with no selected scene object so the controls are visible while most of the scene stays open.
 
@@ -24,7 +24,7 @@ The docked workspace opens in `View` mode with no selected scene object so the c
 - `Left Mouse`: uses the active viewport tool when mouse capture is released
 - `Alt + Left Mouse`: optional orbit shortcut around the selected object or current view target
 - `Middle Mouse`: optional pan shortcut
-- `Mouse Wheel`: zoom the viewport when the cursor is over the scene view
+- `Mouse Wheel`: dolly the Perspective 3D view or change orthographic height in Side, Top-down, and Isometric views when the cursor is over Scene View
 - `F1`: toggle wireframe
 - `F2`: print the scene legend to the console again
 - `F3`: show or hide the debug grid
@@ -58,7 +58,7 @@ The docked workspace opens in `View` mode with no selected scene object so the c
 - Use `F3` to hide the grid briefly, then show it again to confirm the scene layout still reads clearly.
 - Press `F4` to open the sandbox panels, then use `F5` to compare the View, Inspect, and Full Tools layouts.
 - Release mouse capture, then use the Viewport Tool buttons to switch between Select, Orbit, Pan, Move, Rotate, and Scale.
-- Use `Orbit` and `Pan` with left drag, plus `Mouse Wheel`, `F`, and `Home`, to test orbit, pan, zoom, frame selected, and reset view.
+- Open `Camera/Status` and compare Perspective 3D, Side 2.5D, Top-down 2.5D, and Isometric 2.5D. Use `Orbit` and `Pan` with left drag, plus `Mouse Wheel`, `F`, and `Home`, to test customization, pan, projection-aware zoom, frame selected, and preset reset.
 - Use the optional `Alt + Left Mouse` orbit and `Middle Mouse` pan shortcuts if you want to compare them with the explicit tool modes.
 - Switch the Viewport Tool section between Select, Move, Rotate, and Scale, then drag the gizmo on a selected object.
 - Toggle snapping on and off to compare free movement with stepped adjustments.
@@ -101,6 +101,7 @@ The `Controls` panel currently includes:
 - a `Grid` toggle
 - a `Wire` toggle
 - visible `Frame Selected`, `Reset View`, `Zoom In`, and `Zoom Out` controls
+- a `Camera/Status` page with Perspective 3D, Side 2.5D, Top-down 2.5D, and Isometric 2.5D preset controls
 - Viewport Tool tabs for `Select`, `Orbit`, `Pan`, `Move`, `Rotate`, and `Scale`
 - a snap toggle with current move, rotate, and scale snap values
 - a `Hit Boxes` toggle for the viewport debug overlay
@@ -194,10 +195,11 @@ The runtime also reports whether it is running in `Development` or `Packaged` mo
 ## Current limitations
 
 - The sandbox uses built-in meshes plus a small early OBJ loading path.
-- OBJ support is intentionally limited to simple geometry and does not include imported materials, negative indices, or animation.
+- OBJ support includes positive and negative indices plus triangle, quad, and bounded n-gon fan triangulation, but imported materials, model hierarchies, concave-polygon correction beyond basic fan triangulation, and animation are not supported yet.
 - The current settings file is a small local key/value format. It is easy to inspect by hand, but it is not a finished save-game system.
 - A separate save-data foundation now exists for scene id, camera pose, and simple flags, but the sandbox still uses settings for its normal viewer state.
 - The UI overlay is intentionally small. It is meant for sandbox control and object inspection, not as a full editor or a complete runtime UI system.
+- The current 2.5D support is a camera foundation. Sprites, texture regions, transparent sorting, layers, parallax, animation, and movement-plane constraints remain future work.
 - Docked workspace panels can detach into separate native windows, move independently, and return to their last valid dock when closed. Detachable Scene View support remains future workspace work.
 - The transform gizmo is intentionally scoped to world-axis move, rotate, and scale for the current sandbox object model. Undo, numeric editing, saved workspace arrangements, scene authoring, and broader tool surfaces are separate future work.
 - Scale is currently uniform-only in the viewport gizmo path. Per-axis scale handles are intentionally not shown until they are reliable enough to ship.

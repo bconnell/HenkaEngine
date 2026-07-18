@@ -14,6 +14,15 @@ typedef enum henka_camera_projection_mode
     HENKA_CAMERA_PROJECTION_ORTHOGRAPHIC
 } henka_camera_projection_mode;
 
+typedef enum henka_camera_preset
+{
+    HENKA_CAMERA_PRESET_PERSPECTIVE_3D = 0,
+    HENKA_CAMERA_PRESET_SIDE_2_5D,
+    HENKA_CAMERA_PRESET_TOP_DOWN_2_5D,
+    HENKA_CAMERA_PRESET_ISOMETRIC_2_5D,
+    HENKA_CAMERA_PRESET_COUNT
+} henka_camera_preset;
+
 typedef struct henka_ray
 {
     henka_vec3 origin;
@@ -43,10 +52,18 @@ typedef struct henka_camera
 
 henka_camera henka_camera_create_perspective(float field_of_view_radians, float aspect_ratio, float near_plane, float far_plane);
 henka_camera henka_camera_create_orthographic(float orthographic_height, float aspect_ratio, float near_plane, float far_plane);
+const char* henka_camera_preset_get_label(henka_camera_preset preset);
+henka_result henka_camera_apply_preset(henka_camera* camera, henka_camera_preset preset, henka_vec3 target);
+henka_result henka_camera_zoom_orthographic(
+    henka_camera* camera,
+    float zoom_factor,
+    float minimum_height,
+    float maximum_height);
 henka_mat4 henka_camera_get_view_matrix(const henka_camera* camera);
 henka_mat4 henka_camera_get_projection_matrix(const henka_camera* camera);
 henka_vec3 henka_camera_get_forward(const henka_camera* camera);
 henka_vec3 henka_camera_get_right(const henka_camera* camera);
+henka_vec3 henka_camera_get_up(const henka_camera* camera);
 void henka_camera_set_aspect_ratio(henka_camera* camera, float aspect_ratio);
 float henka_camera_clamp_pitch(float pitch_radians);
 void henka_camera_reset(henka_camera* camera, const henka_camera* source);

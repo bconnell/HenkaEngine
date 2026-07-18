@@ -220,6 +220,7 @@ Assert-FileContains -Path $readmePath -Pattern "Close a detached tool window to 
 Assert-FileContains -Path $readmePath -Pattern "Use M or G, R, and S for action-based transforms" -Description "Packaged transform hotkey guidance"
 Assert-FileContains -Path $readmePath -Pattern "status area" -Description "Packaged status guidance"
 Assert-FileContains -Path $helpPath -Pattern "Utility panel" -Description "Packaged utility help"
+Assert-FileContains -Path $helpPath -Pattern "Perspective 3D, Side 2.5D, Top-down 2.5D, and Isometric 2.5D" -Description "Packaged camera preset help"
 
 New-Item -ItemType Directory -Path $logDir -Force | Out-Null
 Remove-Item $stdoutPath, $stderrPath -ErrorAction SilentlyContinue

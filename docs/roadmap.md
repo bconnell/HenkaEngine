@@ -89,14 +89,22 @@ Planned 2D work includes:
 5. A 2D camera.
 6. A focused 2D sample.
 
-Planned 2.5D work includes:
+The first 2.5D camera foundation includes:
 
-1. Side-scroller camera presets.
-2. Top-down camera presets.
-3. Isometric camera presets.
-4. Layered depth.
+1. Perspective 3D, side, top-down, and isometric camera presets.
+2. Stable exact-vertical top-down camera basis handling.
+3. Orthographic zoom and frame-selected sizing.
+4. Sandbox controls and local persistence for the selected camera preset.
+
+Next 2.5D work includes:
+
+1. Sprite-facing quad and texture-sampling foundations.
+2. Transparent and cutout material render states.
+3. Sprite and texture-region data.
+4. Layered depth and deterministic sorting.
 5. Parallax.
-6. Tools that make 2D-style layout in 3D space easier to manage.
+6. Movement-plane and physics-axis constraints.
+7. Tools that make 2D-style layout in 3D space easier to manage.
 
 ## Longer-term systems
 

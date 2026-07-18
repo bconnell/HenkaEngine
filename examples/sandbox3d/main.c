@@ -276,6 +276,7 @@ typedef struct sandbox3d_state
     henka_ui_context* detached_panel_ui[SANDBOX3D_WORKSPACE_PANEL_COUNT];
     henka_window_id detached_panel_window_ids[SANDBOX3D_WORKSPACE_PANEL_COUNT];
     henka_camera camera;
+    henka_camera_preset camera_preset;
     henka_mesh* cube_mesh;
     henka_mesh* ground_mesh;
     henka_mesh* grid_mesh;
@@ -344,6 +345,8 @@ static const char* g_setting_key_camera_position_y = "camera_position_y";
 static const char* g_setting_key_camera_position_z = "camera_position_z";
 static const char* g_setting_key_camera_yaw = "camera_yaw_radians";
 static const char* g_setting_key_camera_pitch = "camera_pitch_radians";
+static const char* g_setting_key_camera_preset = "camera_preset";
+static const char* g_setting_key_camera_orthographic_height = "camera_orthographic_height";
 static const char* g_setting_key_scene_panel_visible = "ui.scene_objects_panel_visible";
 static const char* g_setting_key_details_panel_visible = "ui.object_details_panel_visible";
 static const char* g_setting_key_layout_mode = "ui.layout_mode";
@@ -394,6 +397,13 @@ static henka_vec3 sandbox3d_get_default_orbit_target(void);
 static henka_vec3 sandbox3d_get_view_navigation_target(const sandbox3d_state* state);
 static void sandbox3d_set_view_navigation_target(sandbox3d_state* state, henka_vec3 target);
 static void sandbox3d_sync_view_navigation_target_to_selection(sandbox3d_state* state);
+static const char* sandbox3d_get_camera_preset_setting_value(henka_camera_preset preset);
+static henka_camera_preset sandbox3d_parse_camera_preset(const char* value);
+static bool sandbox3d_apply_camera_preset(
+    sandbox3d_state* state,
+    henka_camera_preset preset,
+    henka_vec3 target,
+    bool update_status);
 static void sandbox3d_zoom_camera_to_target(sandbox3d_state* state, float direction_scale);
 static void sandbox3d_frame_selected_object(sandbox3d_state* state, bool print_status);
 static bool sandbox3d_collect_gizmo_overlay_state(
@@ -3063,23 +3073,102 @@ static void sandbox3d_build_detached_workspace_panel_ui(henka_engine* engine, sa
         }
     }
 }
+static const char* sandbox3d_get_camera_preset_setting_value(henka_camera_preset preset)
+{
+    switch (preset)
+    {
+        case HENKA_CAMERA_PRESET_SIDE_2_5D:
+            return "side";
+        case HENKA_CAMERA_PRESET_TOP_DOWN_2_5D:
+            return "top_down";
+        case HENKA_CAMERA_PRESET_ISOMETRIC_2_5D:
+            return "isometric";
+        case HENKA_CAMERA_PRESET_PERSPECTIVE_3D:
+        case HENKA_CAMERA_PRESET_COUNT:
+        default:
+            return "perspective";
+    }
+}
+
+static henka_camera_preset sandbox3d_parse_camera_preset(const char* value)
+{
+    if (value == NULL)
+    {
+        return HENKA_CAMERA_PRESET_PERSPECTIVE_3D;
+    }
+    if (strcmp(value, "side") == 0)
+    {
+        return HENKA_CAMERA_PRESET_SIDE_2_5D;
+    }
+    if (strcmp(value, "top_down") == 0)
+    {
+        return HENKA_CAMERA_PRESET_TOP_DOWN_2_5D;
+    }
+    if (strcmp(value, "isometric") == 0)
+    {
+        return HENKA_CAMERA_PRESET_ISOMETRIC_2_5D;
+    }
+    return HENKA_CAMERA_PRESET_PERSPECTIVE_3D;
+}
+
+static bool sandbox3d_apply_camera_preset(
+    sandbox3d_state* state,
+    henka_camera_preset preset,
+    henka_vec3 target,
+    bool update_status)
+{
+    if (state == NULL ||
+        henka_camera_apply_preset(&state->camera, preset, target) != HENKA_SUCCESS)
+    {
+        return false;
+    }
+
+    state->camera_preset = preset;
+    sandbox3d_set_view_navigation_target(state, target);
+    sandbox3d_clear_gizmo_drag(state, true);
+    if (update_status)
+    {
+        sandbox3d_set_statusf(
+            state,
+            false,
+            false,
+            "Camera preset: %s.",
+            henka_camera_preset_get_label(preset));
+    }
+    return true;
+}
+
 static void sandbox3d_reset_camera_defaults(sandbox3d_state* state)
 {
-    henka_camera defaults;
+    henka_camera_preset preset;
 
     if (state == NULL)
     {
         return;
     }
 
-    defaults = state->camera;
-    defaults.position = g_camera_start_position;
-    defaults.yaw_radians = g_camera_start_yaw;
-    defaults.pitch_radians = g_camera_start_pitch;
-    defaults.movement_speed = g_default_camera_movement_speed;
-    defaults.fast_movement_multiplier = 2.5f;
-    henka_camera_reset(&state->camera, &defaults);
-    sandbox3d_set_view_navigation_target(state, sandbox3d_get_default_orbit_target());
+    preset = state->camera_preset;
+    if (preset < HENKA_CAMERA_PRESET_PERSPECTIVE_3D ||
+        preset >= HENKA_CAMERA_PRESET_COUNT)
+    {
+        preset = HENKA_CAMERA_PRESET_PERSPECTIVE_3D;
+    }
+
+    if (!sandbox3d_apply_camera_preset(
+            state,
+            preset,
+            sandbox3d_get_default_orbit_target(),
+            false))
+    {
+        state->camera_preset = HENKA_CAMERA_PRESET_PERSPECTIVE_3D;
+        state->camera.position = g_camera_start_position;
+        state->camera.yaw_radians = g_camera_start_yaw;
+        state->camera.pitch_radians = g_camera_start_pitch;
+        state->camera.projection_mode = HENKA_CAMERA_PROJECTION_PERSPECTIVE;
+    }
+
+    state->camera.movement_speed = g_default_camera_movement_speed;
+    state->camera.fast_movement_multiplier = 2.5f;
 }
 
 static void sandbox3d_adjust_mouse_sensitivity(sandbox3d_state* state, float delta)
@@ -3264,9 +3353,11 @@ static void sandbox3d_apply_loaded_settings(henka_engine* engine, sandbox3d_stat
 {
     bool grid_visible;
     const char* layout_mode_value;
-    bool wireframe_enabled;
     float movement_speed;
+    float orthographic_height;
+    henka_camera_preset camera_preset;
     henka_result result;
+    bool wireframe_enabled;
 
     if (engine == NULL || state == NULL || state->settings == NULL || state->scene == NULL)
     {
@@ -3276,12 +3367,29 @@ static void sandbox3d_apply_loaded_settings(henka_engine* engine, sandbox3d_stat
     grid_visible = henka_settings_get_bool(state->settings, g_setting_key_grid_visible, true);
     wireframe_enabled = henka_settings_get_bool(state->settings, g_setting_key_wireframe_enabled, false);
     movement_speed = henka_settings_get_float(state->settings, g_setting_key_camera_speed, g_default_camera_movement_speed);
+    camera_preset = sandbox3d_parse_camera_preset(
+        henka_settings_get_string(state->settings, g_setting_key_camera_preset, "perspective"));
 
-    state->camera.position.x = henka_settings_get_float(state->settings, g_setting_key_camera_position_x, g_camera_start_position.x);
-    state->camera.position.y = henka_settings_get_float(state->settings, g_setting_key_camera_position_y, g_camera_start_position.y);
-    state->camera.position.z = henka_settings_get_float(state->settings, g_setting_key_camera_position_z, g_camera_start_position.z);
-    state->camera.yaw_radians = henka_settings_get_float(state->settings, g_setting_key_camera_yaw, g_camera_start_yaw);
-    state->camera.pitch_radians = henka_settings_get_float(state->settings, g_setting_key_camera_pitch, g_camera_start_pitch);
+    state->camera_preset = camera_preset;
+    (void)sandbox3d_apply_camera_preset(
+        state,
+        camera_preset,
+        sandbox3d_get_default_orbit_target(),
+        false);
+
+    state->camera.position.x = henka_settings_get_float(state->settings, g_setting_key_camera_position_x, state->camera.position.x);
+    state->camera.position.y = henka_settings_get_float(state->settings, g_setting_key_camera_position_y, state->camera.position.y);
+    state->camera.position.z = henka_settings_get_float(state->settings, g_setting_key_camera_position_z, state->camera.position.z);
+    state->camera.yaw_radians = henka_settings_get_float(state->settings, g_setting_key_camera_yaw, state->camera.yaw_radians);
+    state->camera.pitch_radians = henka_settings_get_float(state->settings, g_setting_key_camera_pitch, state->camera.pitch_radians);
+    orthographic_height = henka_settings_get_float(
+        state->settings,
+        g_setting_key_camera_orthographic_height,
+        state->camera.orthographic_height);
+    if (isfinite(orthographic_height) && orthographic_height > 0.0f)
+    {
+        state->camera.orthographic_height = orthographic_height;
+    }
     state->camera.movement_speed = movement_speed > 0.0f ? movement_speed : g_default_camera_movement_speed;
     state->camera.fast_movement_multiplier = 2.5f;
 
@@ -3330,6 +3438,14 @@ static henka_result sandbox3d_save_settings(henka_engine* engine, sandbox3d_stat
     henka_settings_set_float(state->settings, g_setting_key_camera_position_z, state->camera.position.z);
     henka_settings_set_float(state->settings, g_setting_key_camera_yaw, state->camera.yaw_radians);
     henka_settings_set_float(state->settings, g_setting_key_camera_pitch, state->camera.pitch_radians);
+    henka_settings_set_string(
+        state->settings,
+        g_setting_key_camera_preset,
+        sandbox3d_get_camera_preset_setting_value(state->camera_preset));
+    henka_settings_set_float(
+        state->settings,
+        g_setting_key_camera_orthographic_height,
+        state->camera.orthographic_height);
     henka_settings_set_string(state->settings, g_setting_key_layout_mode, sandbox3d_get_layout_mode_setting_value(state->workspace.layout_mode));
     henka_settings_set_bool(state->settings, g_setting_key_scene_panel_visible, state->workspace.scene_objects_panel_visible);
     henka_settings_set_bool(state->settings, g_setting_key_details_panel_visible, state->workspace.object_details_panel_visible);
@@ -3387,6 +3503,7 @@ static henka_result sandbox3d_reset_settings(henka_engine* engine, sandbox3d_sta
         return result;
     }
 
+    state->camera_preset = HENKA_CAMERA_PRESET_PERSPECTIVE_3D;
     sandbox3d_reset_camera_defaults(state);
     sandbox3d_editor_controls_reset_all(&state->editor_controls);
     sandbox3d_editor_controls_apply(&state->editor_controls, engine);
@@ -3599,16 +3716,27 @@ static void sandbox3d_sync_view_navigation_target_to_selection(sandbox3d_state* 
 
 static void sandbox3d_zoom_camera_to_target(sandbox3d_state* state, float direction_scale)
 {
-    henka_vec3 target;
     float distance;
     float step;
+    float zoom_factor;
+    henka_vec3 target;
 
-    if (state == NULL)
+    if (state == NULL || direction_scale == 0.0f)
     {
         return;
     }
 
     target = sandbox3d_get_view_navigation_target(state);
+    if (state->camera.projection_mode == HENKA_CAMERA_PROJECTION_ORTHOGRAPHIC)
+    {
+        zoom_factor = direction_scale < 0.0f ? 0.88f : 1.14f;
+        if (henka_camera_zoom_orthographic(&state->camera, zoom_factor, 0.5f, 80.0f) == HENKA_SUCCESS)
+        {
+            sandbox3d_set_view_navigation_target(state, target);
+        }
+        return;
+    }
+
     distance = henka_vec3_length(henka_vec3_subtract(target, state->camera.position));
     step = fmaxf(0.25f, distance * 0.12f) * direction_scale;
     if (henka_camera_dolly_target(&state->camera, target, step, 0.5f))
@@ -3632,12 +3760,21 @@ static void sandbox3d_frame_selected_object(sandbox3d_state* state, bool print_s
         return;
     }
 
-    if (henka_camera_frame_bounds(&state->camera, bounds, g_camera_start_yaw, -0.32f))
+    if (henka_camera_frame_bounds(
+            &state->camera,
+            bounds,
+            state->camera.yaw_radians,
+            state->camera.pitch_radians))
     {
         sandbox3d_set_view_navigation_target(state, bounds.center);
         if (print_status)
         {
-            sandbox3d_set_statusf(state, false, false, "Framed %s.", sandbox3d_get_selected_descriptor(state)->display_name);
+            sandbox3d_set_statusf(
+                state,
+                false,
+                false,
+                "Framed %s.",
+                sandbox3d_get_selected_descriptor(state)->display_name);
         }
     }
 }
@@ -5495,6 +5632,7 @@ static void sandbox3d_draw_controls_panel(
     bool inspect_mode;
     sandbox3d_layout_mode layout_mode;
     float button_width;
+    float camera_button_width;
     float half_button_width;
     int controls_page;
     bool scene_panel_visible;
@@ -5533,6 +5671,7 @@ static void sandbox3d_draw_controls_panel(
     third_button_width = (panel_bounds.width - 36.0f) / 3.0f;
     x_right = x_left + third_button_width * 2.0f + 8.0f;
     button_width = (panel_bounds.width - 36.0f) / 3.0f;
+    camera_button_width = (panel_bounds.width - 40.0f) / 4.0f;
     scene_panel_visible = state->workspace.scene_objects_panel_visible;
     details_panel_visible = state->workspace.object_details_panel_visible;
     grid_visible = henka_scene_is_entity_visible(state->scene, state->grid_entity);
@@ -5546,7 +5685,7 @@ static void sandbox3d_draw_controls_panel(
     {
         state->paging.controls_page = 0;
     }
-    if (henka_ui_tab(state->ui, "controls_page_tools", (henka_ui_rect){x_middle, panel_bounds.y + 38.0f, half_button_width, 24.0f}, "Panels/Status", controls_page == 1))
+    if (henka_ui_tab(state->ui, "controls_page_tools", (henka_ui_rect){x_middle, panel_bounds.y + 38.0f, half_button_width, 24.0f}, "Camera/Status", controls_page == 1))
     {
         state->paging.controls_page = 1;
     }
@@ -5605,7 +5744,12 @@ static void sandbox3d_draw_controls_panel(
         if (henka_ui_button(state->ui, "reset_camera", (henka_ui_rect){x_middle, y, half_button_width, 28.0f}, "Reset View"))
         {
             sandbox3d_reset_camera_defaults(state);
-            sandbox3d_set_statusf(state, false, true, "Camera reset to the default sandbox view.");
+            sandbox3d_set_statusf(
+                state,
+                false,
+                true,
+                "Camera reset to %s.",
+                henka_camera_preset_get_label(state->camera_preset));
         }
         y += 36.0f;
         if (henka_ui_button(state->ui, "zoom_in", (henka_ui_rect){x_left, y, half_button_width, 28.0f}, "Zoom In"))
@@ -5682,6 +5826,62 @@ static void sandbox3d_draw_controls_panel(
     else
     {
         y = panel_bounds.y + 74.0f;
+        sandbox3d_draw_section_heading(state->ui, x_left, y, "Camera Preset");
+        y += 20.0f;
+        if (henka_ui_tab(
+                state->ui,
+                "camera_preset_3d",
+                (henka_ui_rect){x_left, y, camera_button_width, 28.0f},
+                "3D",
+                state->camera_preset == HENKA_CAMERA_PRESET_PERSPECTIVE_3D))
+        {
+            (void)sandbox3d_apply_camera_preset(
+                state,
+                HENKA_CAMERA_PRESET_PERSPECTIVE_3D,
+                sandbox3d_get_view_navigation_target(state),
+                true);
+        }
+        if (henka_ui_tab(
+                state->ui,
+                "camera_preset_side",
+                (henka_ui_rect){x_left + camera_button_width + 4.0f, y, camera_button_width, 28.0f},
+                "Side",
+                state->camera_preset == HENKA_CAMERA_PRESET_SIDE_2_5D))
+        {
+            (void)sandbox3d_apply_camera_preset(
+                state,
+                HENKA_CAMERA_PRESET_SIDE_2_5D,
+                sandbox3d_get_view_navigation_target(state),
+                true);
+        }
+        if (henka_ui_tab(
+                state->ui,
+                "camera_preset_top",
+                (henka_ui_rect){x_left + (camera_button_width + 4.0f) * 2.0f, y, camera_button_width, 28.0f},
+                "Top",
+                state->camera_preset == HENKA_CAMERA_PRESET_TOP_DOWN_2_5D))
+        {
+            (void)sandbox3d_apply_camera_preset(
+                state,
+                HENKA_CAMERA_PRESET_TOP_DOWN_2_5D,
+                sandbox3d_get_view_navigation_target(state),
+                true);
+        }
+        if (henka_ui_tab(
+                state->ui,
+                "camera_preset_iso",
+                (henka_ui_rect){x_left + (camera_button_width + 4.0f) * 3.0f, y, camera_button_width, 28.0f},
+                "Iso",
+                state->camera_preset == HENKA_CAMERA_PRESET_ISOMETRIC_2_5D))
+        {
+            (void)sandbox3d_apply_camera_preset(
+                state,
+                HENKA_CAMERA_PRESET_ISOMETRIC_2_5D,
+                sandbox3d_get_view_navigation_target(state),
+                true);
+        }
+        y += 44.0f;
+
         if (inspect_mode || full_mode)
         {
             sandbox3d_draw_section_heading(state->ui, x_left, y, "Panels");
