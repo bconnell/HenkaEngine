@@ -21,7 +21,12 @@ extern int g_henka_test_failures;
 #define HENKA_TEST_ASSERT_FLOAT_CLOSE(actual, expected, epsilon)                                        \
     do                                                                                                  \
     {                                                                                                   \
-        if (fabs((double)((actual) - (expected))) > (epsilon))                                         \
+        const double _henka_actual_value = (double)(actual);                                            \
+        const double _henka_expected_value = (double)(expected);                                        \
+        const double _henka_epsilon_value = (double)(epsilon);                                          \
+        if (!isfinite(_henka_actual_value) || !isfinite(_henka_expected_value) ||                       \
+            !isfinite(_henka_epsilon_value) || _henka_epsilon_value < 0.0 ||                            \
+            fabs(_henka_actual_value - _henka_expected_value) > _henka_epsilon_value)                   \
         {                                                                                               \
             fprintf(stderr, "float assertion failed at %s:%d: %s ~= %s\n", __FILE__, __LINE__, #actual, #expected); \
             ++g_henka_test_failures;                                                                    \

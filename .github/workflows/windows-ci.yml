@@ -1,0 +1,43 @@
+name: Windows CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: windows-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-test-package:
+    runs-on: windows-latest
+    timeout-minutes: 35
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Build Debug
+        shell: powershell
+        run: .\scripts\build_windows.ps1
+
+      - name: Run tests
+        shell: powershell
+        run: .\scripts\test_windows.ps1
+
+      - name: Build packaged sandbox
+        shell: powershell
+        run: .\scripts\package_sandbox3d_windows.ps1 -ResetUserData
+
+      - name: Check packaged sandbox
+        shell: powershell
+        run: .\scripts\check_packaged_sandbox3d_windows.ps1
+
+      - name: Validate external game template
+        shell: powershell
+        run: .\scripts\test_external_game_template_windows.ps1

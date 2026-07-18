@@ -1,21 +1,23 @@
+Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
-function Get-CMakePath {
-    $cmakeCommand = Get-Command cmake -ErrorAction SilentlyContinue
-    if ($cmakeCommand) {
-        return $cmakeCommand.Source
-    }
+. (Join-Path $PSScriptRoot "henka_script_common.ps1")
 
-    $fallback = "C:\Program Files\Microsoft Visual Studio\18\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe"
-    if (Test-Path $fallback) {
-        return $fallback
-    }
+$repoRoot = Get-HenkaRepoRoot -ScriptDirectory $PSScriptRoot
+$buildRoot = Join-Path $repoRoot "build"
+$cmake = Get-HenkaCMakePath
 
-    throw "CMake was not found on PATH or in the expected Visual Studio location."
-}
+Write-Host "cmake: $cmake"
+Write-Host "repo: $repoRoot"
 
-$repoRoot = Resolve-Path (Join-Path $PSScriptRoot "..")
-$cmake = Get-CMakePath
+Invoke-HenkaNative `
+    -FilePath $cmake `
+    -Arguments @("-S", $repoRoot, "-B", $buildRoot) `
+    -WorkingDirectory $repoRoot `
+    -Label "Configure Henka Engine"
 
-& $cmake -S $repoRoot -B (Join-Path $repoRoot "build")
-& $cmake --build (Join-Path $repoRoot "build") --config Debug
+Invoke-HenkaNative `
+    -FilePath $cmake `
+    -Arguments @("--build", $buildRoot, "--config", "Debug") `
+    -WorkingDirectory $repoRoot `
+    -Label "Build Henka Engine Debug"

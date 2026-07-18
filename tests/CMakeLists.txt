@@ -28,4 +28,6 @@ target_link_libraries(henka_tests
         henka
 )
 
+henka_enable_project_warnings(henka_tests)
+
 add_test(NAME henka_tests COMMAND henka_tests)

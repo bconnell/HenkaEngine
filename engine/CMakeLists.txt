@@ -36,7 +36,7 @@ if(TARGET SDL3::SDL3)
 elseif(TARGET SDL3::SDL3-static)
     set(HENKA_SDL_TARGET SDL3::SDL3-static)
 else()
-    message(FATAL_ERROR "SDL3 target was not created by FetchContent.")
+    message(FATAL_ERROR "SDL3 target was not created or supplied.")
 endif()
 
 target_link_libraries(henka
@@ -59,8 +59,4 @@ target_compile_definitions(henka
         $<$<CONFIG:Debug>:HENKA_DEBUG=1>
 )
 
-target_compile_options(henka
-    PRIVATE
-        $<$<C_COMPILER_ID:MSVC>:/W4 /permissive->
-        $<$<NOT:$<C_COMPILER_ID:MSVC>>:-Wall -Wextra -Wpedantic>
-)
+henka_enable_project_warnings(henka)

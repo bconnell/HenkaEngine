@@ -1,53 +1,50 @@
+Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
-function Get-CMakePath {
-    $cmakeCommand = Get-Command cmake -ErrorAction SilentlyContinue
-    if ($cmakeCommand) {
-        return $cmakeCommand.Source
-    }
-
-    $fallback = "C:\Program Files\Microsoft Visual Studio\18\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe"
-    if (Test-Path $fallback) {
-        return $fallback
-    }
-
-    throw "CMake was not found on PATH or in the expected Visual Studio location."
-}
+. (Join-Path $PSScriptRoot "henka_script_common.ps1")
 
 function Write-Step {
     param([string]$Message)
     Write-Host "[template] $Message"
 }
 
-$repoRoot = Resolve-Path (Join-Path $PSScriptRoot "..")
+$repoRoot = Get-HenkaRepoRoot -ScriptDirectory $PSScriptRoot
 $templateRoot = Join-Path $repoRoot "templates\external_game_minimal"
 $validationRoot = Join-Path $repoRoot ("build\template_validation\" + (Get-Date -Format "yyyyMMdd_HHmmss"))
 $validationSource = Join-Path $validationRoot "external_game_minimal_src"
 $validationBuild = Join-Path $validationRoot "external_game_minimal_build"
-$cmake = Get-CMakePath
+$cmake = Get-HenkaCMakePath
+
+Write-Host "cmake: $cmake"
+Write-Host "repo: $repoRoot"
 
 Write-Step "Preparing repo-local template validation folder"
-New-Item -ItemType Directory -Path $validationRoot | Out-Null
+[System.IO.Directory]::CreateDirectory($validationRoot) | Out-Null
 Copy-Item -LiteralPath $templateRoot -Destination $validationSource -Recurse
 
-Write-Step "Configuring the external game template"
-& $cmake -S $validationSource -B $validationBuild -DHENKA_ENGINE_DIR="$repoRoot"
+Invoke-HenkaNative `
+    -FilePath $cmake `
+    -Arguments @("-S", $validationSource, "-B", $validationBuild, "-DHENKA_ENGINE_DIR=$repoRoot") `
+    -WorkingDirectory $repoRoot `
+    -Label "Configure external game template"
 
-Write-Step "Building the external game template"
-& $cmake --build $validationBuild --config Debug
+Invoke-HenkaNative `
+    -FilePath $cmake `
+    -Arguments @("--build", $validationBuild, "--config", "Debug") `
+    -WorkingDirectory $repoRoot `
+    -Label "Build external game template"
 
 $templateExe = Join-Path $validationBuild "Debug\external_game_minimal.exe"
-if (-not (Test-Path $templateExe)) {
+if (-not (Test-Path -LiteralPath $templateExe -PathType Leaf)) {
     throw "The external game template executable was not produced: $templateExe"
 }
 
-Write-Step "Running the external game template smoke test"
-$outputLines = & $templateExe
-if ($LASTEXITCODE -ne 0) {
-    throw "The external game template executable exited with code $LASTEXITCODE."
-}
+$result = Invoke-HenkaNativeCapture `
+    -FilePath $templateExe `
+    -WorkingDirectory (Split-Path -Parent $templateExe) `
+    -Label "Run external game template smoke test"
 
-if (($outputLines -join "`n") -notmatch "External game template placeholder\.") {
+if ($result.Stdout -notmatch "External game template placeholder\.") {
     throw "The external game template smoke test did not print the expected placeholder output."
 }
 
