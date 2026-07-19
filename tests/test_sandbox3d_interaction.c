@@ -1,5 +1,7 @@
 #include "test_suite.h"
 
+#include <string.h>
+
 #include "../examples/sandbox3d/interaction_tools.h"
 
 void henka_test_sandbox3d_interaction(void)

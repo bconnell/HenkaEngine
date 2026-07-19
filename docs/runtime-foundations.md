@@ -153,7 +153,7 @@ Henka now exposes a deterministic rigid-body physics v1 API with:
 - optional links that write simulated transforms to real scene entities
 - debug-shape queries so visual overlays use the actual collider data
 
-Boxes are axis-aligned in v1; rotated box collision, mesh colliders, constraints, continuous collision detection, controllers, and advanced simulation remain future work. In the sandbox, physics playback is opt-in through `Physics QA`, leaving normal transform inspection unchanged until the demo is enabled.
+Boxes are axis-aligned in v1; rotated box collision, mesh colliders, constraints, continuous collision detection, controllers, and advanced simulation remain future work. In the sandbox, physics playback is opt-in through `Physics QA`, leaving normal transform inspection unchanged until the demo is enabled. Physics bodies, contacts, pairs, and events use bounded checked capacity growth.
 
 ### Asset metadata
 
@@ -168,7 +168,7 @@ The asset manager now tracks read-only metadata for cached assets:
 - short summary
 - short error summary
 
-This is a small inspection layer, not a content browser or hot-reload pipeline.
+This is a small inspection layer, not a content browser or hot-reload pipeline. Shader, texture, and mesh cache growth is bounded and checked before allocation. Scene entity storage also uses bounded checked growth.
 
 ### Materials
 

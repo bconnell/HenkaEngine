@@ -6,6 +6,36 @@
 #include <henka/core.h>
 #include <henka/scene.h>
 
+static void henka_test_scene_capacity_growth(void)
+{
+    enum
+    {
+        ENTITY_COUNT = 40
+    };
+    henka_entity entities[ENTITY_COUNT];
+    henka_entity replacement;
+    henka_scene* scene;
+    int index;
+
+    HENKA_TEST_ASSERT(henka_scene_create(&scene) == HENKA_SUCCESS);
+    for (index = 0; index < ENTITY_COUNT; ++index)
+    {
+        entities[index] = henka_scene_create_entity(scene);
+        HENKA_TEST_ASSERT(entities[index] != HENKA_INVALID_ENTITY);
+    }
+
+    HENKA_TEST_ASSERT(henka_scene_get_entity_count(scene) == (size_t)ENTITY_COUNT);
+    henka_scene_destroy_entity(scene, entities[7]);
+    HENKA_TEST_ASSERT(henka_scene_get_entity_count(scene) == (size_t)ENTITY_COUNT - 1U);
+
+    replacement = henka_scene_create_entity_named(scene, "Replacement");
+    HENKA_TEST_ASSERT(replacement == entities[7]);
+    HENKA_TEST_ASSERT(henka_scene_get_entity_count(scene) == (size_t)ENTITY_COUNT);
+    HENKA_TEST_ASSERT(strcmp(henka_scene_get_entity_name(scene, replacement), "Replacement") == 0);
+
+    henka_scene_destroy(scene);
+}
+
 void henka_test_scene(void)
 {
     henka_bounds bounds;
@@ -151,4 +181,6 @@ void henka_test_scene(void)
     HENKA_TEST_ASSERT(henka_scene_get_entity_at_index(scene, 1U) == helper);
 
     henka_scene_destroy(scene);
+
+    henka_test_scene_capacity_growth();
 }

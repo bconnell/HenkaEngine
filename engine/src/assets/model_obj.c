@@ -954,8 +954,8 @@ henka_result henka_model_data_load_obj_from_memory(const char* source, const cha
     char* tokens[HENKA_OBJ_MAX_LINE_TOKENS];
     char* trimmed_line;
     henka_obj_vertex_array vertices;
-    uint32_t index_count;
-    uint32_t vertex_count;
+    uint32_t index_count = 0U;
+    uint32_t vertex_count = 0U;
 
     if (source == NULL || out_model == NULL)
     {

@@ -5,6 +5,8 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "checked.h"
+
 typedef struct henka_physics_body_record
 {
     bool active;
@@ -163,22 +165,28 @@ static const henka_physics_body_record* henka_physics_find_body_const(const henk
 
 static bool henka_physics_reserve(void** values, size_t element_size, size_t* capacity, size_t required)
 {
-    void* resized;
+    size_t allocation_size;
     size_t next_capacity;
-    if (required <= *capacity)
+    void* resized;
+
+    if (values == NULL || capacity == NULL || element_size == 0U ||
+        !henka_checked_capacity(*capacity, required, 8U, HENKA_MAX_PHYSICS_ITEMS, &next_capacity) ||
+        !henka_checked_size_multiply(element_size, next_capacity, &allocation_size))
+    {
+        return false;
+    }
+
+    if (next_capacity == *capacity)
     {
         return true;
     }
-    next_capacity = *capacity == 0U ? 8U : *capacity * 2U;
-    while (next_capacity < required)
-    {
-        next_capacity *= 2U;
-    }
-    resized = realloc(*values, element_size * next_capacity);
+
+    resized = realloc(*values, allocation_size);
     if (resized == NULL)
     {
         return false;
     }
+
     *values = resized;
     *capacity = next_capacity;
     return true;
@@ -186,31 +194,46 @@ static bool henka_physics_reserve(void** values, size_t element_size, size_t* ca
 
 static bool henka_physics_push_contact(henka_physics_world* world, henka_physics_contact contact)
 {
-    if (!henka_physics_reserve((void**)&world->contacts, sizeof(*world->contacts), &world->contact_capacity, world->contact_count + 1U))
+    size_t required;
+
+    if (world == NULL || !henka_checked_size_add(world->contact_count, 1U, &required) ||
+        !henka_physics_reserve((void**)&world->contacts, sizeof(*world->contacts), &world->contact_capacity, required))
     {
         return false;
     }
-    world->contacts[world->contact_count++] = contact;
+
+    world->contacts[world->contact_count] = contact;
+    ++world->contact_count;
     return true;
 }
 
 static bool henka_physics_push_pair(henka_physics_world* world, henka_physics_contact contact)
 {
-    if (!henka_physics_reserve((void**)&world->current_pairs, sizeof(*world->current_pairs), &world->current_pair_capacity, world->current_pair_count + 1U))
+    size_t required;
+
+    if (world == NULL || !henka_checked_size_add(world->current_pair_count, 1U, &required) ||
+        !henka_physics_reserve((void**)&world->current_pairs, sizeof(*world->current_pairs), &world->current_pair_capacity, required))
     {
         return false;
     }
-    world->current_pairs[world->current_pair_count++].contact = contact;
+
+    world->current_pairs[world->current_pair_count].contact = contact;
+    ++world->current_pair_count;
     return true;
 }
 
 static bool henka_physics_push_event(henka_physics_world* world, henka_physics_event_type type, henka_physics_contact contact)
 {
-    if (!henka_physics_reserve((void**)&world->events, sizeof(*world->events), &world->event_capacity, world->event_count + 1U))
+    size_t required;
+
+    if (world == NULL || !henka_checked_size_add(world->event_count, 1U, &required) ||
+        !henka_physics_reserve((void**)&world->events, sizeof(*world->events), &world->event_capacity, required))
     {
         return false;
     }
-    world->events[world->event_count++] = (henka_physics_event){type, contact};
+
+    world->events[world->event_count] = (henka_physics_event){type, contact};
+    ++world->event_count;
     return true;
 }
 
@@ -718,21 +741,28 @@ size_t henka_physics_world_get_body_count(const henka_physics_world* world)
     return world != NULL ? world->body_count : 0U;
 }
 
-henka_result henka_physics_body_create(henka_physics_world* world, const henka_physics_body_desc* desc, henka_physics_body_id* out_body)
+henka_result henka_physics_body_create(
+    henka_physics_world* world,
+    const henka_physics_body_desc* desc,
+    henka_physics_body_id* out_body)
 {
+    henka_physics_body_record* body;
     size_t index;
     size_t old_capacity;
-    henka_physics_body_record* body;
+    size_t required;
+
     if (world == NULL || desc == NULL || out_body == NULL ||
         desc->type < HENKA_PHYSICS_BODY_STATIC || desc->type > HENKA_PHYSICS_BODY_KINEMATIC ||
         !henka_physics_transform_valid(desc->transform) || !henka_physics_is_finite_vec3(desc->linear_velocity) ||
         !henka_physics_is_finite_vec3(desc->angular_velocity) || !henka_physics_material_valid(desc->material) ||
         !henka_physics_collider_valid(desc->collider) ||
         (desc->collider.shape == HENKA_PHYSICS_SHAPE_PLANE && desc->type != HENKA_PHYSICS_BODY_STATIC) ||
-        (desc->type == HENKA_PHYSICS_BODY_DYNAMIC && (!isfinite(desc->mass) || desc->mass <= 0.0f)))
+        (desc->type == HENKA_PHYSICS_BODY_DYNAMIC && (!isfinite(desc->mass) || desc->mass <= 0.0f)) ||
+        world->next_body_id == UINT32_MAX)
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
+
     for (index = 0U; index < world->body_capacity; ++index)
     {
         if (!world->bodies[index].active)
@@ -740,20 +770,40 @@ henka_result henka_physics_body_create(henka_physics_world* world, const henka_p
             break;
         }
     }
+
     old_capacity = world->body_capacity;
-    if (index == world->body_capacity &&
-        !henka_physics_reserve((void**)&world->bodies, sizeof(*world->bodies), &world->body_capacity, world->body_capacity + 1U))
+    if (index == world->body_capacity)
     {
-        return HENKA_ERROR_OUT_OF_MEMORY;
+        if (!henka_checked_size_add(world->body_capacity, 1U, &required) ||
+            !henka_physics_reserve(
+                (void**)&world->bodies,
+                sizeof(*world->bodies),
+                &world->body_capacity,
+                required))
+        {
+            return HENKA_ERROR_OUT_OF_MEMORY;
+        }
     }
+
     if (world->body_capacity > old_capacity)
     {
-        memset(&world->bodies[old_capacity], 0, sizeof(*world->bodies) * (world->body_capacity - old_capacity));
+        size_t new_record_count;
+        size_t new_record_bytes;
+
+        new_record_count = world->body_capacity - old_capacity;
+        if (!henka_checked_size_multiply(new_record_count, sizeof(*world->bodies), &new_record_bytes))
+        {
+            return HENKA_ERROR_OUT_OF_MEMORY;
+        }
+
+        memset(&world->bodies[old_capacity], 0, new_record_bytes);
     }
+
     body = &world->bodies[index];
     memset(body, 0, sizeof(*body));
     body->active = true;
-    body->state.id = world->next_body_id++;
+    body->state.id = world->next_body_id;
+    ++world->next_body_id;
     body->state.type = desc->type;
     body->state.transform = desc->transform;
     body->state.initial_transform = desc->transform;

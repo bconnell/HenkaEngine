@@ -329,6 +329,45 @@ static void henka_test_physics_scene_link(void)
     henka_scene_destroy(scene);
 }
 
+static void henka_test_physics_capacity_growth(void)
+{
+    enum
+    {
+        BODY_COUNT = 20
+    };
+    henka_physics_body_id body;
+    henka_physics_body_desc desc;
+    const henka_physics_event* events;
+    henka_physics_world* world;
+    size_t contact_count;
+    size_t event_count;
+    int index;
+
+    HENKA_TEST_ASSERT(henka_physics_world_create(&world) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_physics_world_set_gravity(world, (henka_vec3){0.0f, 0.0f, 0.0f}) == HENKA_SUCCESS);
+
+    for (index = 0; index < BODY_COUNT; ++index)
+    {
+        desc = henka_test_physics_body(
+            HENKA_PHYSICS_BODY_DYNAMIC,
+            henka_physics_collider_sphere(1.0f),
+            (henka_vec3){0.0f, 0.0f, 0.0f});
+        desc.collider.is_trigger = true;
+        HENKA_TEST_ASSERT(henka_physics_body_create(world, &desc, &body) == HENKA_SUCCESS);
+    }
+
+    HENKA_TEST_ASSERT(henka_physics_world_get_body_count(world) == (size_t)BODY_COUNT);
+    HENKA_TEST_ASSERT(henka_physics_world_step_fixed(world) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_physics_world_get_contacts(world, &contact_count) != NULL);
+    HENKA_TEST_ASSERT(contact_count == ((size_t)BODY_COUNT * (BODY_COUNT - 1U)) / 2U);
+
+    events = henka_physics_world_get_events(world, &event_count);
+    HENKA_TEST_ASSERT(events != NULL);
+    HENKA_TEST_ASSERT(event_count == contact_count);
+
+    henka_physics_world_destroy(world);
+}
+
 void henka_test_physics(void)
 {
     HENKA_TEST_ASSERT(strcmp(henka_physics_body_type_get_label(HENKA_PHYSICS_BODY_DYNAMIC), "Dynamic") == 0);
@@ -338,4 +377,6 @@ void henka_test_physics(void)
     henka_test_physics_shape_pairs_and_raycast();
     henka_test_physics_pair_filters_and_response();
     henka_test_physics_scene_link();
+
+    henka_test_physics_capacity_growth();
 }

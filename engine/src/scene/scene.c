@@ -7,6 +7,8 @@
 
 #include <henka/memory.h>
 
+#include "../core/checked.h"
+
 henka_material henka_material_default(void)
 {
     henka_material material;
@@ -88,6 +90,7 @@ static henka_scene_entity_record* henka_scene_get_entity_record(henka_scene* sce
 
 static char* henka_scene_duplicate_string(const char* value)
 {
+    size_t allocation_size;
     char* copy;
     size_t length;
 
@@ -97,13 +100,18 @@ static char* henka_scene_duplicate_string(const char* value)
     }
 
     length = strlen(value);
-    copy = henka_malloc(length + 1U);
+    if (!henka_checked_size_add(length, 1U, &allocation_size))
+    {
+        return NULL;
+    }
+
+    copy = henka_malloc(allocation_size);
     if (copy == NULL)
     {
         return NULL;
     }
 
-    memcpy(copy, value, length + 1U);
+    memcpy(copy, value, allocation_size);
     return copy;
 }
 
@@ -253,12 +261,26 @@ static const henka_scene_entity_record* henka_scene_get_entity_record_const(cons
 
 static henka_result henka_scene_grow(henka_scene* scene)
 {
-    henka_scene_entity_record* new_entities;
-    size_t new_capacity;
+    size_t allocation_size;
     size_t index;
+    size_t new_capacity;
+    henka_scene_entity_record* new_entities;
+    size_t required;
 
-    new_capacity = scene->entity_capacity == 0U ? 8U : scene->entity_capacity * 2U;
-    new_entities = henka_realloc(scene->entities, new_capacity * sizeof(*new_entities));
+    if (scene == NULL ||
+        !henka_checked_size_add(scene->entity_capacity, 1U, &required) ||
+        !henka_checked_capacity(
+            scene->entity_capacity,
+            required,
+            8U,
+            HENKA_MAX_SCENE_ENTITIES,
+            &new_capacity) ||
+        !henka_checked_size_multiply(new_capacity, sizeof(*new_entities), &allocation_size))
+    {
+        return HENKA_ERROR_OUT_OF_MEMORY;
+    }
+
+    new_entities = henka_realloc(scene->entities, allocation_size);
     if (new_entities == NULL)
     {
         return HENKA_ERROR_OUT_OF_MEMORY;
@@ -341,7 +363,7 @@ henka_entity henka_scene_create_entity_named(henka_scene* scene, const char* nam
     size_t index;
     char* copy;
 
-    if (scene == NULL)
+    if (scene == NULL || scene->entity_count >= HENKA_MAX_SCENE_ENTITIES)
     {
         return HENKA_INVALID_ENTITY;
     }

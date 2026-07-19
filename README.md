@@ -146,6 +146,8 @@ The packaged folder also includes `PACKAGE_INFO.txt` so you can tell when the pa
 - Texture dimensions are limited to 16,384 pixels per axis and decoded RGBA8 data to 256 MiB.
 - Mesh uploads validate counts, byte sizes, primitive types, and every index before reaching OpenGL.
 - Shared checked-arithmetic helpers protect capacity growth, size multiplication, and narrowing conversions.
+- Asset caches, scene entities, physics contacts and events, and related runtime arrays use bounded checked growth.
+- Procedural grids and circle rings reject non-finite or excessive dimensions before allocation.
 
 ### Sandbox controls
 

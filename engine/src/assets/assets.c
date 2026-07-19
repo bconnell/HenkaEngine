@@ -6,8 +6,11 @@
 #include <henka/log.h>
 #include <henka/memory.h>
 
+#include "../core/checked.h"
+
 static char* henka_duplicate_string(const char* value)
 {
+    size_t allocation_size;
     char* copy;
     size_t length;
 
@@ -17,13 +20,18 @@ static char* henka_duplicate_string(const char* value)
     }
 
     length = strlen(value);
-    copy = henka_malloc(length + 1U);
+    if (!henka_checked_size_add(length, 1U, &allocation_size))
+    {
+        return NULL;
+    }
+
+    copy = henka_malloc(allocation_size);
     if (copy == NULL)
     {
         return NULL;
     }
 
-    memcpy(copy, value, length + 1U);
+    memcpy(copy, value, allocation_size);
     return copy;
 }
 
@@ -78,11 +86,25 @@ henka_result henka_assets_resolve_path(const char* base_path, const char* asset_
 
 static henka_result henka_asset_manager_grow_shaders(henka_asset_manager* manager)
 {
+    size_t allocation_size;
     henka_asset_shader_entry* entries;
     size_t new_capacity;
+    size_t required;
 
-    new_capacity = manager->shader_capacity == 0U ? 8U : manager->shader_capacity * 2U;
-    entries = henka_realloc(manager->shader_entries, new_capacity * sizeof(*entries));
+    if (manager == NULL ||
+        !henka_checked_size_add(manager->shader_count, 1U, &required) ||
+        !henka_checked_capacity(
+            manager->shader_capacity,
+            required,
+            8U,
+            HENKA_MAX_ASSET_CACHE_ENTRIES,
+            &new_capacity) ||
+        !henka_checked_size_multiply(new_capacity, sizeof(*entries), &allocation_size))
+    {
+        return HENKA_ERROR_OUT_OF_MEMORY;
+    }
+
+    entries = henka_realloc(manager->shader_entries, allocation_size);
     if (entries == NULL)
     {
         return HENKA_ERROR_OUT_OF_MEMORY;
@@ -95,11 +117,25 @@ static henka_result henka_asset_manager_grow_shaders(henka_asset_manager* manage
 
 static henka_result henka_asset_manager_grow_textures(henka_asset_manager* manager)
 {
+    size_t allocation_size;
     henka_asset_texture_entry* entries;
     size_t new_capacity;
+    size_t required;
 
-    new_capacity = manager->texture_capacity == 0U ? 8U : manager->texture_capacity * 2U;
-    entries = henka_realloc(manager->texture_entries, new_capacity * sizeof(*entries));
+    if (manager == NULL ||
+        !henka_checked_size_add(manager->texture_count, 1U, &required) ||
+        !henka_checked_capacity(
+            manager->texture_capacity,
+            required,
+            8U,
+            HENKA_MAX_ASSET_CACHE_ENTRIES,
+            &new_capacity) ||
+        !henka_checked_size_multiply(new_capacity, sizeof(*entries), &allocation_size))
+    {
+        return HENKA_ERROR_OUT_OF_MEMORY;
+    }
+
+    entries = henka_realloc(manager->texture_entries, allocation_size);
     if (entries == NULL)
     {
         return HENKA_ERROR_OUT_OF_MEMORY;
@@ -112,11 +148,25 @@ static henka_result henka_asset_manager_grow_textures(henka_asset_manager* manag
 
 static henka_result henka_asset_manager_grow_meshes(henka_asset_manager* manager)
 {
+    size_t allocation_size;
     henka_asset_mesh_entry* entries;
     size_t new_capacity;
+    size_t required;
 
-    new_capacity = manager->mesh_capacity == 0U ? 8U : manager->mesh_capacity * 2U;
-    entries = henka_realloc(manager->mesh_entries, new_capacity * sizeof(*entries));
+    if (manager == NULL ||
+        !henka_checked_size_add(manager->mesh_count, 1U, &required) ||
+        !henka_checked_capacity(
+            manager->mesh_capacity,
+            required,
+            8U,
+            HENKA_MAX_ASSET_CACHE_ENTRIES,
+            &new_capacity) ||
+        !henka_checked_size_multiply(new_capacity, sizeof(*entries), &allocation_size))
+    {
+        return HENKA_ERROR_OUT_OF_MEMORY;
+    }
+
+    entries = henka_realloc(manager->mesh_entries, allocation_size);
     if (entries == NULL)
     {
         return HENKA_ERROR_OUT_OF_MEMORY;
@@ -347,14 +397,24 @@ henka_result henka_assets_load_shader(
     char* resolved_vertex_path;
     henka_shader* shader;
     henka_result result;
+    size_t fragment_length;
     size_t key_length;
+    size_t path_length;
+    size_t vertex_length;
 
     if (manager == NULL || vertex_path == NULL || fragment_path == NULL || out_shader == NULL)
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
 
-    key_length = strlen(vertex_path) + strlen(fragment_path) + 2U;
+    vertex_length = strlen(vertex_path);
+    fragment_length = strlen(fragment_path);
+    if (!henka_checked_size_add(vertex_length, fragment_length, &path_length) ||
+        !henka_checked_size_add(path_length, 2U, &key_length))
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
     key = henka_malloc(key_length);
     if (key == NULL)
     {
