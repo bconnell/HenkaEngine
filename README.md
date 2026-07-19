@@ -36,8 +36,8 @@ Henka Engine is still early, but the sandbox now renders a visible 3D scene with
 - Package mode and engine diagnostics foundation
 - Shared overlay-handle transform gizmo foundation for selected object manipulation, with visual feel still being hardened through manual QA
 - Viewport interaction test helpers for reducing manual QA around selection, gizmo hit testing, and transform changes
-- Asset manager foundation for cached shader and texture loading through confined relative paths
-- Early OBJ model loading with cached mesh assets, negative indices, n-gon fan triangulation, degenerate-face rejection, and explicit failed-mesh retry support
+- Asset manager foundation for cached shader, texture, and OBJ loading through confined relative paths and bounded file processing
+- Early OBJ model loading with bounded source and output sizes, finite-number validation, negative indices, n-gon fan triangulation, degenerate-face rejection, and explicit failed-mesh retry support
 - Fallback white and error textures
 - Shader-based rendering of built-in primitives
 - Sandbox window titled `Henka Engine Sandbox 3D`
@@ -139,6 +139,14 @@ The packaged folder also includes `PACKAGE_INFO.txt` so you can tell when the pa
 - Settings and save-data files are fully validated before replacing existing in-memory state.
 - Writes complete in a same-directory temporary file and replace the destination only after the file is flushed and closed successfully.
 
+### Resource bounds
+
+- Shader source files are limited to 1 MiB each and must be read completely.
+- OBJ sources are limited to 16 MiB, individual lines to 4,096 bytes, and parsed arrays to fixed safe maxima.
+- Texture dimensions are limited to 16,384 pixels per axis and decoded RGBA8 data to 256 MiB.
+- Mesh uploads validate counts, byte sizes, primitive types, and every index before reaching OpenGL.
+- Shared checked-arithmetic helpers protect capacity growth, size multiplication, and narrowing conversions.
+
 ### Sandbox controls
 
 - `W A S D`: move across the scene
@@ -195,7 +203,7 @@ To validate the generic external game template against the current Henka checkou
 
 - The sandbox uses built-in primitives plus a small early OBJ loading path.
 - Missing textures fall back safely to an error texture, and missing OBJ assets fall back to a visible mesh. Failed OBJ mesh fallbacks can be retried explicitly after the source asset is fixed.
-- OBJ support is intentionally limited to comments, blank lines, positions, optional UVs, optional normals, positive and negative indices, and triangle/quad/n-gon faces through basic fan triangulation.
+- OBJ support is intentionally limited to bounded local files containing comments, blank lines, finite positions, optional finite UVs and normals, positive and negative indices, and triangle/quad/n-gon faces through basic fan triangulation.
 - OBJ material libraries, concave polygon correction beyond basic fan triangulation, model hierarchies, and animation are not supported yet.
 - The local settings format is bounded, transactionally loaded, and written through a replace-on-success temporary file.
 - The local save-data foundation validates slot names, finite camera values, complete camera records, and boolean flags before replacing existing state.

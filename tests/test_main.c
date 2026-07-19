@@ -10,6 +10,7 @@ int main(void)
     henka_test_editor_controls();
     henka_test_gizmo();
     henka_test_input();
+    henka_test_limits();
     henka_test_math();
     henka_test_material();
     henka_test_model();

@@ -1,6 +1,53 @@
 #include "test_suite.h"
 
+#include <string.h>
+
+#include <henka/memory.h>
 #include <henka/model.h>
+
+#include "../engine/src/core/checked.h"
+
+static void henka_test_model_rejects_unsafe_bounds(void)
+{
+    static const char* non_finite_obj =
+        "v nan 0.0 0.0\n"
+        "v 1.0 0.0 0.0\n"
+        "v 0.0 1.0 0.0\n"
+        "f 1 2 3\n";
+    static const char* overflow_index_obj =
+        "v 0.0 0.0 0.0\n"
+        "v 1.0 0.0 0.0\n"
+        "v 0.0 1.0 0.0\n"
+        "f 999999999999999999999 2 3\n";
+    size_t oversized_length;
+    char* oversized_source;
+    henka_model_data model;
+
+    memset(&model, 0, sizeof(model));
+    HENKA_TEST_ASSERT(
+        henka_model_data_load_obj_from_memory(non_finite_obj, "non_finite_obj", &model) != HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(model.vertices == NULL);
+    HENKA_TEST_ASSERT(model.indices == NULL);
+
+    memset(&model, 0, sizeof(model));
+    HENKA_TEST_ASSERT(
+        henka_model_data_load_obj_from_memory(overflow_index_obj, "overflow_index_obj", &model) != HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(model.vertices == NULL);
+    HENKA_TEST_ASSERT(model.indices == NULL);
+
+    oversized_length = HENKA_MAX_OBJ_SOURCE_BYTES + 1U;
+    oversized_source = henka_malloc(oversized_length + 1U);
+    HENKA_TEST_ASSERT(oversized_source != NULL);
+    memset(oversized_source, '#', oversized_length);
+    oversized_source[oversized_length] = '\0';
+
+    memset(&model, 0, sizeof(model));
+    HENKA_TEST_ASSERT(
+        henka_model_data_load_obj_from_memory(oversized_source, "oversized_obj", &model) != HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(model.vertices == NULL);
+    HENKA_TEST_ASSERT(model.indices == NULL);
+    henka_free(oversized_source);
+}
 
 void henka_test_model(void)
 {
@@ -188,4 +235,6 @@ void henka_test_model(void)
     HENKA_TEST_ASSERT(henka_model_data_load_obj_from_memory(empty_obj, "empty_obj", &model) != HENKA_SUCCESS);
     HENKA_TEST_ASSERT(model.vertices == NULL);
     HENKA_TEST_ASSERT(model.indices == NULL);
+
+    henka_test_model_rejects_unsafe_bounds();
 }

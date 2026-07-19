@@ -1,6 +1,9 @@
 #include "henka_internal.h"
 
+#include <errno.h>
 #include <limits.h>
+#include <math.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -8,6 +11,8 @@
 #include <henka/log.h>
 #include <henka/memory.h>
 #include <henka/model.h>
+
+#include "../core/checked.h"
 
 enum
 {
@@ -74,41 +79,72 @@ static const size_t g_henka_obj_max_line_length = 4096U;
 
 static char* henka_read_binary_text_file(const char* path)
 {
+    size_t allocation_size;
     char* buffer;
+    size_t bytes_read;
     FILE* file;
     long file_length;
-    size_t bytes_read;
+    size_t length;
 
     if (path == NULL)
     {
         return NULL;
     }
 
+    file = NULL;
     if (fopen_s(&file, path, "rb") != 0 || file == NULL)
     {
         return NULL;
     }
 
-    fseek(file, 0L, SEEK_END);
-    file_length = ftell(file);
-    rewind(file);
-
-    if (file_length < 0L)
+    if (fseek(file, 0L, SEEK_END) != 0)
     {
         fclose(file);
         return NULL;
     }
 
-    buffer = henka_malloc((size_t)file_length + 1U);
+    file_length = ftell(file);
+    if (file_length < 0L || (size_t)file_length > HENKA_MAX_OBJ_SOURCE_BYTES)
+    {
+        fclose(file);
+        return NULL;
+    }
+
+    if (fseek(file, 0L, SEEK_SET) != 0)
+    {
+        fclose(file);
+        return NULL;
+    }
+
+    length = (size_t)file_length;
+    if (!henka_checked_size_add(length, 1U, &allocation_size))
+    {
+        fclose(file);
+        return NULL;
+    }
+
+    buffer = henka_malloc(allocation_size);
     if (buffer == NULL)
     {
         fclose(file);
         return NULL;
     }
 
-    bytes_read = fread(buffer, 1U, (size_t)file_length, file);
-    fclose(file);
-    buffer[bytes_read] = '\0';
+    bytes_read = fread(buffer, 1U, length, file);
+    if (bytes_read != length || ferror(file))
+    {
+        fclose(file);
+        henka_free(buffer);
+        return NULL;
+    }
+
+    if (fclose(file) != 0)
+    {
+        henka_free(buffer);
+        return NULL;
+    }
+
+    buffer[length] = '\0';
     return buffer;
 }
 
@@ -152,99 +188,160 @@ static void henka_obj_index_array_destroy(henka_obj_index_array* array)
     array->capacity = 0U;
 }
 
+static henka_result henka_obj_array_reserve(
+    void** items,
+    size_t element_size,
+    size_t* capacity,
+    size_t required,
+    size_t initial_capacity,
+    size_t maximum)
+{
+    size_t allocation_size;
+    size_t next_capacity;
+    void* resized;
+
+    if (items == NULL || capacity == NULL || element_size == 0U ||
+        !henka_checked_capacity(*capacity, required, initial_capacity, maximum, &next_capacity) ||
+        !henka_checked_size_multiply(element_size, next_capacity, &allocation_size))
+    {
+        return HENKA_ERROR_UNKNOWN;
+    }
+
+    if (next_capacity == *capacity)
+    {
+        return HENKA_SUCCESS;
+    }
+
+    resized = henka_realloc(*items, allocation_size);
+    if (resized == NULL)
+    {
+        return HENKA_ERROR_OUT_OF_MEMORY;
+    }
+
+    *items = resized;
+    *capacity = next_capacity;
+    return HENKA_SUCCESS;
+}
+
 static henka_result henka_obj_vec2_array_push(henka_obj_vec2_array* array, henka_vec2 value)
 {
-    henka_vec2* items;
-    size_t new_capacity;
+    size_t required;
+    henka_result result;
 
-    if (array->count == array->capacity)
+    if (array == NULL || !henka_checked_size_add(array->count, 1U, &required) ||
+        required > HENKA_MAX_OBJ_RECORDS)
     {
-        new_capacity = array->capacity == 0U ? 16U : array->capacity * 2U;
-        items = henka_realloc(array->items, new_capacity * sizeof(*items));
-        if (items == NULL)
-        {
-            return HENKA_ERROR_OUT_OF_MEMORY;
-        }
+        return HENKA_ERROR_UNKNOWN;
+    }
 
-        array->items = items;
-        array->capacity = new_capacity;
+    result = henka_obj_array_reserve(
+        (void**)&array->items,
+        sizeof(*array->items),
+        &array->capacity,
+        required,
+        16U,
+        HENKA_MAX_OBJ_RECORDS);
+    if (result != HENKA_SUCCESS)
+    {
+        return result;
     }
 
     array->items[array->count] = value;
-    array->count += 1U;
+    ++array->count;
     return HENKA_SUCCESS;
 }
 
 static henka_result henka_obj_vec3_array_push(henka_obj_vec3_array* array, henka_vec3 value)
 {
-    henka_vec3* items;
-    size_t new_capacity;
+    size_t required;
+    henka_result result;
 
-    if (array->count == array->capacity)
+    if (array == NULL || !henka_checked_size_add(array->count, 1U, &required) ||
+        required > HENKA_MAX_OBJ_RECORDS)
     {
-        new_capacity = array->capacity == 0U ? 16U : array->capacity * 2U;
-        items = henka_realloc(array->items, new_capacity * sizeof(*items));
-        if (items == NULL)
-        {
-            return HENKA_ERROR_OUT_OF_MEMORY;
-        }
+        return HENKA_ERROR_UNKNOWN;
+    }
 
-        array->items = items;
-        array->capacity = new_capacity;
+    result = henka_obj_array_reserve(
+        (void**)&array->items,
+        sizeof(*array->items),
+        &array->capacity,
+        required,
+        16U,
+        HENKA_MAX_OBJ_RECORDS);
+    if (result != HENKA_SUCCESS)
+    {
+        return result;
     }
 
     array->items[array->count] = value;
-    array->count += 1U;
+    ++array->count;
     return HENKA_SUCCESS;
 }
 
-static henka_result henka_obj_vertex_array_push(henka_obj_vertex_array* array, henka_model_vertex value, uint32_t* out_index)
+static henka_result henka_obj_vertex_array_push(
+    henka_obj_vertex_array* array,
+    henka_model_vertex value,
+    uint32_t* out_index)
 {
-    henka_model_vertex* items;
-    size_t new_capacity;
+    size_t required;
+    henka_result result;
+    uint32_t index;
 
-    if (array->count == array->capacity)
+    if (array == NULL || !henka_checked_size_add(array->count, 1U, &required) ||
+        required > HENKA_MAX_OBJ_OUTPUT_ELEMENTS ||
+        !henka_checked_size_to_u32(array->count, &index))
     {
-        new_capacity = array->capacity == 0U ? 24U : array->capacity * 2U;
-        items = henka_realloc(array->items, new_capacity * sizeof(*items));
-        if (items == NULL)
-        {
-            return HENKA_ERROR_OUT_OF_MEMORY;
-        }
+        return HENKA_ERROR_UNKNOWN;
+    }
 
-        array->items = items;
-        array->capacity = new_capacity;
+    result = henka_obj_array_reserve(
+        (void**)&array->items,
+        sizeof(*array->items),
+        &array->capacity,
+        required,
+        24U,
+        HENKA_MAX_OBJ_OUTPUT_ELEMENTS);
+    if (result != HENKA_SUCCESS)
+    {
+        return result;
     }
 
     array->items[array->count] = value;
     if (out_index != NULL)
     {
-        *out_index = (uint32_t)array->count;
+        *out_index = index;
     }
-    array->count += 1U;
+
+    ++array->count;
     return HENKA_SUCCESS;
 }
 
 static henka_result henka_obj_index_array_push(henka_obj_index_array* array, uint32_t value)
 {
-    uint32_t* items;
-    size_t new_capacity;
+    size_t required;
+    henka_result result;
 
-    if (array->count == array->capacity)
+    if (array == NULL || !henka_checked_size_add(array->count, 1U, &required) ||
+        required > HENKA_MAX_OBJ_OUTPUT_ELEMENTS)
     {
-        new_capacity = array->capacity == 0U ? 36U : array->capacity * 2U;
-        items = henka_realloc(array->items, new_capacity * sizeof(*items));
-        if (items == NULL)
-        {
-            return HENKA_ERROR_OUT_OF_MEMORY;
-        }
+        return HENKA_ERROR_UNKNOWN;
+    }
 
-        array->items = items;
-        array->capacity = new_capacity;
+    result = henka_obj_array_reserve(
+        (void**)&array->items,
+        sizeof(*array->items),
+        &array->capacity,
+        required,
+        36U,
+        HENKA_MAX_OBJ_OUTPUT_ELEMENTS);
+    if (result != HENKA_SUCCESS)
+    {
+        return result;
     }
 
     array->items[array->count] = value;
-    array->count += 1U;
+    ++array->count;
     return HENKA_SUCCESS;
 }
 
@@ -330,8 +427,9 @@ static bool henka_parse_float_token(const char* token, float* out_value)
         return false;
     }
 
+    errno = 0;
     value = strtof(token, &end);
-    if (end == token || *end != '\0')
+    if (errno == ERANGE || end == token || *end != '\0' || !isfinite(value))
     {
         return false;
     }
@@ -345,10 +443,17 @@ static bool henka_parse_face_sub_index(const char* token, int* out_index, henka_
     char* end;
     long parsed_value;
 
-    parsed_value = strtol(token, &end, 10);
-    if (end == token || *end != '\0' || parsed_value == 0L)
+    if (token == NULL || out_index == NULL)
     {
-        henka_obj_set_error(context, "face indices must be non-zero integers");
+        henka_obj_set_error(context, "face index input is invalid");
+        return false;
+    }
+
+    errno = 0;
+    parsed_value = strtol(token, &end, 10);
+    if (errno == ERANGE || end == token || *end != '\0' || parsed_value == 0L)
+    {
+        henka_obj_set_error(context, "face indices must be non-zero integers in the supported range");
         return false;
     }
 
@@ -366,6 +471,7 @@ static bool henka_parse_face_sub_index(const char* token, int* out_index, henka_
     {
         *out_index = (int)parsed_value;
     }
+
     return true;
 }
 static bool henka_parse_face_index(const char* token, henka_obj_index* out_index, henka_obj_parse_context* context)
@@ -830,22 +936,26 @@ static henka_result henka_emit_face(
 }
 henka_result henka_model_data_load_obj_from_memory(const char* source, const char* label, henka_model_data* out_model)
 {
+    henka_obj_parse_context context;
     const char* cursor;
+    henka_obj_face face;
+    henka_obj_index_array indices;
     char* inline_comment;
     char* line;
-    char* trimmed_line;
-    char* tokens[HENKA_OBJ_MAX_LINE_TOKENS];
-    int token_count;
-    henka_obj_vec2_array texcoords;
+    size_t line_count;
     henka_obj_vec3_array normals;
     henka_obj_vec3_array positions;
-    henka_obj_vertex_array vertices;
-    henka_obj_index_array indices;
-    henka_obj_face face;
-    henka_obj_parse_context context;
     henka_result result;
     bool saw_face;
     bool saw_vertex_statement;
+    size_t source_length;
+    henka_obj_vec2_array texcoords;
+    int token_count;
+    char* tokens[HENKA_OBJ_MAX_LINE_TOKENS];
+    char* trimmed_line;
+    henka_obj_vertex_array vertices;
+    uint32_t index_count;
+    uint32_t vertex_count;
 
     if (source == NULL || out_model == NULL)
     {
@@ -853,6 +963,18 @@ henka_result henka_model_data_load_obj_from_memory(const char* source, const cha
     }
 
     memset(out_model, 0, sizeof(*out_model));
+
+    source_length = 0U;
+    while (source[source_length] != '\0')
+    {
+        if (source_length >= HENKA_MAX_OBJ_SOURCE_BYTES)
+        {
+            HENKA_LOG_ERROR("OBJ '%s' exceeds the supported source-size limit", label != NULL ? label : "<memory>");
+            return HENKA_ERROR_INVALID_ARGUMENT;
+        }
+        ++source_length;
+    }
+
     memset(&positions, 0, sizeof(positions));
     memset(&texcoords, 0, sizeof(texcoords));
     memset(&normals, 0, sizeof(normals));
@@ -863,19 +985,28 @@ henka_result henka_model_data_load_obj_from_memory(const char* source, const cha
     context.line_number = 0;
     context.error_message = NULL;
     cursor = source;
+    line_count = 0U;
     saw_face = false;
     saw_vertex_statement = false;
     result = HENKA_SUCCESS;
 
     while (*cursor != '\0')
     {
+        if (line_count >= HENKA_MAX_OBJ_RECORDS)
+        {
+            henka_obj_set_error(&context, "the file contains too many lines");
+            result = HENKA_ERROR_UNKNOWN;
+            break;
+        }
+
         result = henka_get_next_line(&cursor, &line, &context);
         if (result != HENKA_SUCCESS)
         {
             break;
         }
 
-        context.line_number += 1;
+        ++line_count;
+        context.line_number = (int)line_count;
         trimmed_line = henka_trim_whitespace(line);
         inline_comment = strchr(trimmed_line, '#');
         if (inline_comment != NULL)
@@ -924,7 +1055,7 @@ henka_result henka_model_data_load_obj_from_memory(const char* source, const cha
         }
         else if (!henka_obj_is_ignored_statement(tokens[0]))
         {
-            henka_obj_set_error(&context, "this OBJ statement is not supported yet");
+            henka_obj_set_error(&context, "this OBJ statement is not supported");
             result = HENKA_ERROR_UNKNOWN;
         }
 
@@ -959,13 +1090,20 @@ henka_result henka_model_data_load_obj_from_memory(const char* source, const cha
         HENKA_LOG_ERROR("OBJ '%s' did not produce any renderable triangles", context.label);
         result = HENKA_ERROR_UNKNOWN;
     }
+    else if (result == HENKA_SUCCESS &&
+        (!henka_checked_size_to_u32(vertices.count, &vertex_count) ||
+         !henka_checked_size_to_u32(indices.count, &index_count)))
+    {
+        HENKA_LOG_ERROR("OBJ '%s' exceeds renderer count limits", context.label);
+        result = HENKA_ERROR_UNKNOWN;
+    }
 
     if (result == HENKA_SUCCESS)
     {
         out_model->vertices = vertices.items;
-        out_model->vertex_count = (uint32_t)vertices.count;
+        out_model->vertex_count = vertex_count;
         out_model->indices = indices.items;
-        out_model->index_count = (uint32_t)indices.count;
+        out_model->index_count = index_count;
         vertices.items = NULL;
         indices.items = NULL;
     }
@@ -1017,9 +1155,16 @@ void henka_model_data_destroy(henka_model_data* model)
 
 henka_result henka_mesh_create_from_model_data(henka_engine* engine, const henka_model_data* model, henka_mesh** out_mesh)
 {
+    int index_count;
+    int vertex_count;
+
     if (engine == NULL || model == NULL || out_mesh == NULL ||
         model->vertices == NULL || model->indices == NULL ||
-        model->vertex_count == 0U || model->index_count == 0U)
+        model->vertex_count == 0U || model->index_count == 0U ||
+        model->vertex_count > HENKA_MAX_MESH_ELEMENTS ||
+        model->index_count > HENKA_MAX_MESH_ELEMENTS ||
+        !henka_checked_size_to_int((size_t)model->vertex_count, &vertex_count) ||
+        !henka_checked_size_to_int((size_t)model->index_count, &index_count))
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
@@ -1027,9 +1172,9 @@ henka_result henka_mesh_create_from_model_data(henka_engine* engine, const henka
     return henka_renderer_create_mesh_from_data(
         engine->renderer,
         (const henka_vertex*)model->vertices,
-        (int)model->vertex_count,
+        vertex_count,
         (const unsigned int*)model->indices,
-        (int)model->index_count,
+        index_count,
         HENKA_MESH_PRIMITIVE_TRIANGLES,
         out_mesh);
 }

@@ -6,12 +6,14 @@
 
 #include <math.h>
 #include <stddef.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <string.h>
 
 #include <henka/log.h>
 #include <henka/memory.h>
 
+#include "../core/checked.h"
 #include "../ui/ui_internal.h"
 
 typedef struct henka_opengl_renderer_state
@@ -222,28 +224,69 @@ static char* henka_read_text_file(const char* path)
     char* buffer;
     FILE* file;
     long file_length;
+    size_t allocation_size;
     size_t bytes_read;
+    size_t length;
 
+    if (path == NULL)
+    {
+        return NULL;
+    }
+
+    file = NULL;
     if (fopen_s(&file, path, "rb") != 0 || file == NULL)
     {
         return NULL;
     }
 
-    fseek(file, 0L, SEEK_END);
-    file_length = ftell(file);
-    rewind(file);
+    if (fseek(file, 0L, SEEK_END) != 0)
+    {
+        fclose(file);
+        return NULL;
+    }
 
-    buffer = henka_malloc((size_t)file_length + 1U);
+    file_length = ftell(file);
+    if (file_length < 0L || (size_t)file_length > HENKA_MAX_SHADER_SOURCE_BYTES)
+    {
+        fclose(file);
+        return NULL;
+    }
+
+    if (fseek(file, 0L, SEEK_SET) != 0)
+    {
+        fclose(file);
+        return NULL;
+    }
+
+    length = (size_t)file_length;
+    if (!henka_checked_size_add(length, 1U, &allocation_size))
+    {
+        fclose(file);
+        return NULL;
+    }
+
+    buffer = henka_malloc(allocation_size);
     if (buffer == NULL)
     {
         fclose(file);
         return NULL;
     }
 
-    bytes_read = fread(buffer, 1U, (size_t)file_length, file);
-    fclose(file);
+    bytes_read = fread(buffer, 1U, length, file);
+    if (bytes_read != length || ferror(file))
+    {
+        fclose(file);
+        henka_free(buffer);
+        return NULL;
+    }
 
-    buffer[bytes_read] = '\0';
+    if (fclose(file) != 0)
+    {
+        henka_free(buffer);
+        return NULL;
+    }
+
+    buffer[length] = '\0';
     return buffer;
 }
 
@@ -678,8 +721,10 @@ static henka_result henka_opengl_renderer_draw_ui_resources(
 {
     henka_ui_vertex* vertices;
     size_t index;
+    int gl_vertex_count;
     size_t line_vertex_count;
     size_t rect_vertex_count;
+    size_t vertex_bytes;
     size_t vertex_count;
 
     if (ui_context == NULL || framebuffer_width <= 0 || framebuffer_height <= 0)
@@ -694,10 +739,18 @@ static henka_result henka_opengl_renderer_draw_ui_resources(
 
     glDisable(GL_SCISSOR_TEST);
     glViewport(0, 0, framebuffer_width, framebuffer_height);
-    rect_vertex_count = ui_context->draw_rect_count * 6U;
-    line_vertex_count = ui_context->draw_line_count * 6U;
-    vertex_count = rect_vertex_count + line_vertex_count;
-    vertices = henka_malloc(vertex_count * sizeof(*vertices));
+    if (!henka_checked_size_multiply(ui_context->draw_rect_count, 6U, &rect_vertex_count) ||
+        !henka_checked_size_multiply(ui_context->draw_line_count, 6U, &line_vertex_count) ||
+        !henka_checked_size_add(rect_vertex_count, line_vertex_count, &vertex_count) ||
+        vertex_count > HENKA_MAX_MESH_ELEMENTS ||
+        !henka_checked_size_to_int(vertex_count, &gl_vertex_count) ||
+        !henka_checked_size_multiply(vertex_count, sizeof(*vertices), &vertex_bytes) ||
+        vertex_bytes > (size_t)PTRDIFF_MAX)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    vertices = henka_malloc(vertex_bytes);
     if (vertices == NULL)
     {
         return HENKA_ERROR_OUT_OF_MEMORY;
@@ -800,8 +853,8 @@ static henka_result henka_opengl_renderer_draw_ui_resources(
     }
     g_gl.BindVertexArray(ui_vertex_array);
     g_gl.BindBuffer(GL_ARRAY_BUFFER, ui_vertex_buffer);
-    g_gl.BufferData(GL_ARRAY_BUFFER, vertex_count * sizeof(*vertices), vertices, GL_DYNAMIC_DRAW);
-    glDrawArrays(GL_TRIANGLES, 0, (GLsizei)vertex_count);
+    g_gl.BufferData(GL_ARRAY_BUFFER, (GLsizeiptr)vertex_bytes, vertices, GL_DYNAMIC_DRAW);
+    glDrawArrays(GL_TRIANGLES, 0, (GLsizei)gl_vertex_count);
     g_gl.BindBuffer(GL_ARRAY_BUFFER, 0);
     g_gl.BindVertexArray(0);
     g_gl.UseProgram(0);
@@ -1027,12 +1080,48 @@ henka_result henka_opengl_renderer_create_mesh_from_data(
     henka_mesh_primitive primitive,
     struct henka_mesh** out_mesh)
 {
+    int index;
+    size_t index_bytes;
+    int vertex_index;
     henka_mesh* mesh;
     henka_opengl_mesh_data* mesh_data;
+    size_t vertex_bytes;
 
-    if (renderer == NULL || vertices == NULL || indices == NULL || out_mesh == NULL || vertex_count <= 0 || index_count <= 0)
+    if (renderer == NULL || vertices == NULL || indices == NULL || out_mesh == NULL ||
+        vertex_count <= 0 || index_count <= 0 ||
+        (primitive != HENKA_MESH_PRIMITIVE_TRIANGLES && primitive != HENKA_MESH_PRIMITIVE_LINES) ||
+        (primitive == HENKA_MESH_PRIMITIVE_TRIANGLES && (index_count % 3) != 0) ||
+        (primitive == HENKA_MESH_PRIMITIVE_LINES && (index_count % 2) != 0) ||
+        (size_t)vertex_count > HENKA_MAX_MESH_ELEMENTS ||
+        (size_t)index_count > HENKA_MAX_MESH_ELEMENTS ||
+        !henka_checked_size_multiply(sizeof(*vertices), (size_t)vertex_count, &vertex_bytes) ||
+        !henka_checked_size_multiply(sizeof(*indices), (size_t)index_count, &index_bytes) ||
+        vertex_bytes > (size_t)PTRDIFF_MAX || index_bytes > (size_t)PTRDIFF_MAX)
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    for (vertex_index = 0; vertex_index < vertex_count; ++vertex_index)
+    {
+        if (!isfinite(vertices[vertex_index].position.x) ||
+            !isfinite(vertices[vertex_index].position.y) ||
+            !isfinite(vertices[vertex_index].position.z) ||
+            !isfinite(vertices[vertex_index].normal.x) ||
+            !isfinite(vertices[vertex_index].normal.y) ||
+            !isfinite(vertices[vertex_index].normal.z) ||
+            !isfinite(vertices[vertex_index].uv.x) ||
+            !isfinite(vertices[vertex_index].uv.y))
+        {
+            return HENKA_ERROR_INVALID_ARGUMENT;
+        }
+    }
+
+    for (index = 0; index < index_count; ++index)
+    {
+        if (indices[index] >= (unsigned int)vertex_count)
+        {
+            return HENKA_ERROR_INVALID_ARGUMENT;
+        }
     }
 
     *out_mesh = NULL;
@@ -1052,9 +1141,9 @@ henka_result henka_opengl_renderer_create_mesh_from_data(
 
     g_gl.BindVertexArray(mesh_data->vao);
     g_gl.BindBuffer(GL_ARRAY_BUFFER, mesh_data->vertex_buffer);
-    g_gl.BufferData(GL_ARRAY_BUFFER, sizeof(*vertices) * (size_t)vertex_count, vertices, GL_STATIC_DRAW);
+    g_gl.BufferData(GL_ARRAY_BUFFER, (GLsizeiptr)vertex_bytes, vertices, GL_STATIC_DRAW);
     g_gl.BindBuffer(GL_ELEMENT_ARRAY_BUFFER, mesh_data->index_buffer);
-    g_gl.BufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(*indices) * (size_t)index_count, indices, GL_STATIC_DRAW);
+    g_gl.BufferData(GL_ELEMENT_ARRAY_BUFFER, (GLsizeiptr)index_bytes, indices, GL_STATIC_DRAW);
 
     g_gl.EnableVertexAttribArray(0);
     g_gl.VertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(henka_vertex), (const void*)offsetof(henka_vertex, position));
@@ -1197,14 +1286,17 @@ henka_result henka_opengl_renderer_create_texture_from_rgba8(
     const unsigned char* pixels,
     struct henka_texture** out_texture)
 {
+    size_t decoded_bytes;
     henka_texture* texture;
     henka_opengl_texture_data* texture_data;
 
-    if (renderer == NULL || pixels == NULL || out_texture == NULL || width <= 0 || height <= 0)
+    if (renderer == NULL || pixels == NULL || out_texture == NULL ||
+        !henka_checked_rgba8_size(width, height, &decoded_bytes))
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
 
+    (void)decoded_bytes;
     *out_texture = NULL;
 
     texture = henka_calloc(1U, sizeof(*texture));

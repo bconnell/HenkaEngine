@@ -24,6 +24,7 @@ typedef struct henka_model_data
     uint32_t index_count;
 } henka_model_data;
 
+/* OBJ loading enforces bounded source, record, output, numeric, and renderer-count limits. */
 henka_result henka_model_data_load_obj(const char* path, henka_model_data* out_model);
 henka_result henka_model_data_load_obj_from_memory(const char* source, const char* label, henka_model_data* out_model);
 void henka_model_data_destroy(henka_model_data* model);

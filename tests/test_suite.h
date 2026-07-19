@@ -40,6 +40,7 @@ void henka_test_assets(void);
 void henka_test_action(void);
 void henka_test_gizmo(void);
 void henka_test_input(void);
+void henka_test_limits(void);
 void henka_test_math(void);
 void henka_test_camera(void);
 void henka_test_editor_controls(void);

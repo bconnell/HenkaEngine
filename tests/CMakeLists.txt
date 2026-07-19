@@ -8,6 +8,7 @@ add_executable(henka_tests
     test_editor_controls.c
     test_gizmo.c
     test_input.c
+    test_limits.c
     test_sandbox3d_interaction.c
     test_sandbox3d_workspace.c
     test_main.c
