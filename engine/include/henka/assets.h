@@ -34,10 +34,8 @@ typedef struct henka_asset_metadata
 
 henka_asset_manager* henka_engine_get_asset_manager(henka_engine* engine);
 const henka_asset_manager* henka_engine_get_asset_manager_const(const henka_engine* engine);
-/*
- * Resolves an asset path against a base directory. The caller owns the
- * returned string and must release it with henka_free.
- */
+
+/* Resolves a safe relative asset path beneath base_path. */
 henka_result henka_assets_resolve_path(const char* base_path, const char* asset_path, char** out_path);
 henka_result henka_assets_load_shader(
     henka_asset_manager* manager,
@@ -46,10 +44,10 @@ henka_result henka_assets_load_shader(
     henka_shader** out_shader);
 henka_result henka_assets_load_texture(henka_asset_manager* manager, const char* path, henka_texture** out_texture);
 henka_result henka_assets_load_obj_mesh(henka_asset_manager* manager, const char* path, henka_mesh** out_mesh);
+
 /*
- * Retries an OBJ mesh path only when the cached entry is a fallback from a
- * previous failed load. Already-loaded real meshes are returned unchanged so
- * scenes do not lose a mesh they may still reference.
+ * Retries only cached fallback entries from a previous failed OBJ load.
+ * Already-loaded real meshes are returned unchanged.
  */
 henka_result henka_assets_retry_failed_obj_mesh(henka_asset_manager* manager, const char* path, henka_mesh** out_mesh);
 const char* henka_assets_get_type_label(henka_asset_type type);

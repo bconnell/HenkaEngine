@@ -73,7 +73,7 @@ const char* henka_assets_get_type_label(henka_asset_type type)
 
 henka_result henka_assets_resolve_path(const char* base_path, const char* asset_path, char** out_path)
 {
-    return henka_path_resolve(base_path, asset_path, out_path);
+    return henka_path_resolve_confined(base_path, asset_path, out_path);
 }
 
 static henka_result henka_asset_manager_grow_shaders(henka_asset_manager* manager)

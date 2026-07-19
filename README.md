@@ -32,18 +32,18 @@ Henka Engine is still early, but the sandbox now renders a visible 3D scene with
 - Reusable camera helpers for reset, focus, screen-ray creation, stable vertical view bases, orthographic zoom, and Perspective 3D, Side 2.5D, Top-down 2.5D, and Isometric 2.5D presets
 - Local action-command foundation for validated scene and object operations, including signed scale transforms for mirror workflows
 - Asset metadata and stronger material summaries
-- Local save-data foundation beyond settings
+- Local save-data foundation with confined slot paths, complete-file validation, and transactional state replacement
 - Package mode and engine diagnostics foundation
 - Shared overlay-handle transform gizmo foundation for selected object manipulation, with visual feel still being hardened through manual QA
 - Viewport interaction test helpers for reducing manual QA around selection, gizmo hit testing, and transform changes
-- Asset manager foundation for cached shader and texture loading
+- Asset manager foundation for cached shader and texture loading through confined relative paths
 - Early OBJ model loading with cached mesh assets, negative indices, n-gon fan triangulation, degenerate-face rejection, and explicit failed-mesh retry support
 - Fallback white and error textures
 - Shader-based rendering of built-in primitives
 - Sandbox window titled `Henka Engine Sandbox 3D`
 - Ground plane, cubes, debug grid, a loaded OBJ marker, textured materials, and visible fallback behavior for missing texture and model assets
 - Keyboard movement, mouse look when capture is active, wireframe toggle, and offline runtime help
-- Local settings persistence for the sandbox
+- Bounded local settings persistence with transactional loads and replace-on-success writes
 - Early in-window UI overlay with buttons, toggles, labels, structured rows, simple text rendering, and release-confirm control activation
 - Scene Objects, Object Details, and Utility panels for named sandbox object inspection and viewer workflows
 - Sandbox workspace panels with stacked side docks, header drag, cross-zone redocking, native detached-window panels with routed mouse input, safer tool-window renderer context recovery, dock splitter, and reset-layout recovery controls
@@ -131,6 +131,14 @@ The sandbox starts a visible 3D scene with:
 Sandbox settings are saved locally in a `user/` folder beside the executable. In a packaged run, the settings file is `out/HenkaSandbox3D/user/sandbox3d.settings`.
 The packaged folder also includes `PACKAGE_INFO.txt` so you can tell when the package was last refreshed.
 
+### Persistence safety
+
+- Engine-managed assets accept confined relative paths beneath the configured asset directory.
+- Save-slot names use a bounded portable identifier and cannot contain traversal or path separators.
+- Settings reject structural control characters and enforce bounded keys, values, entry counts, and numeric conversions.
+- Settings and save-data files are fully validated before replacing existing in-memory state.
+- Writes complete in a same-directory temporary file and replace the destination only after the file is flushed and closed successfully.
+
 ### Sandbox controls
 
 - `W A S D`: move across the scene
@@ -189,9 +197,9 @@ To validate the generic external game template against the current Henka checkou
 - Missing textures fall back safely to an error texture, and missing OBJ assets fall back to a visible mesh. Failed OBJ mesh fallbacks can be retried explicitly after the source asset is fixed.
 - OBJ support is intentionally limited to comments, blank lines, positions, optional UVs, optional normals, positive and negative indices, and triangle/quad/n-gon faces through basic fan triangulation.
 - OBJ material libraries, concave polygon correction beyond basic fan triangulation, model hierarchies, and animation are not supported yet.
-- The current settings format is a simple local key/value file. It is meant for engine samples and early projects, not for a finished save pipeline.
-- A small save-data foundation now exists for local scene id, camera pose, and simple flags, but it is still intentionally modest.
-- Remote saves, usage collection, registry storage, encryption, and network-backed persistence are not implemented.
+- The local settings format is bounded, transactionally loaded, and written through a replace-on-success temporary file.
+- The local save-data foundation validates slot names, finite camera values, complete camera records, and boolean flags before replacing existing state.
+- Remote saves, registry storage, encryption, network-backed persistence, symlink-aware confinement, migration tooling, and per-game save policy remain outside this local foundation.
 - The in-window UI overlay is intentionally small. It now supports object inspection, utility views, release-confirm controls, and short status feedback, but it is still not a full editor or a general UI toolkit yet.
 - Detached panel placement and resized dock widths are session-only; `Reset Layout` is the recovery path.
 - Production tool panels can detach into separate OS-level windows with routed mouse input and safe close-to-redock recovery. Drag-back docking from OS title bars, saved detached placement, and detachable Scene View remain future work.

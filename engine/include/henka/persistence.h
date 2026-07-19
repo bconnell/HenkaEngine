@@ -9,12 +9,21 @@
 typedef struct henka_settings henka_settings;
 typedef struct henka_save_data henka_save_data;
 
+/* Generic joining preserves absolute inputs for trusted callers. */
 henka_result henka_path_resolve(const char* base_path, const char* relative_path, char** out_path);
+
+/*
+ * Confined resolution accepts only safe relative segments and normalizes
+ * separators to '/'. It rejects absolute paths, traversal, reserved device
+ * names, control characters, and invalid Windows path characters.
+ */
+henka_result henka_path_resolve_confined(const char* base_path, const char* relative_path, char** out_path);
 henka_result henka_path_parent_directory(const char* path, char** out_parent_directory);
 
 henka_result henka_settings_create(henka_settings** out_settings);
 void henka_settings_destroy(henka_settings* settings);
 
+/* Loads are transactional. Saves replace the destination only after success. */
 henka_result henka_settings_load_file(henka_settings* settings, const char* path);
 henka_result henka_settings_save_file(const henka_settings* settings, const char* path);
 
@@ -30,6 +39,7 @@ henka_result henka_settings_set_float(henka_settings* settings, const char* key,
 henka_result henka_settings_set_bool(henka_settings* settings, const char* key, bool value);
 henka_result henka_settings_remove(henka_settings* settings, const char* key);
 
+/* Slot names use 1-64 ASCII letters, digits, '_' or '-'. */
 henka_result henka_save_data_build_slot_path(const char* user_data_base_path, const char* slot_name, char** out_path);
 henka_result henka_save_data_create(henka_save_data** out_save_data);
 void henka_save_data_destroy(henka_save_data* save_data);

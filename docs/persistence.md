@@ -1,61 +1,58 @@
 # Persistence
 
-Henka Engine now includes a small local-first persistence layer for settings and early project state.
+Henka Engine includes a small local-first persistence layer for settings and early project state.
 
-## What it is for
+## Intended use
 
-The current persistence layer is meant for:
+The current persistence layer supports sandbox preferences, camera state, simple local project settings, and early external game projects that benefit from a readable text format. It is not a complete shipped-game save system.
 
-- sandbox preferences
-- camera state
-- simple local engine or project settings
-- early external game prototypes that want a readable text format
-
-It is not a finished save-game system yet.
-
-Henka now separates two persistence concepts:
+Henka separates two persistence concepts:
 
 - `henka_settings` for preferences and workspace state
 - `henka_save_data` for local runtime or game-state snapshots
 
-## Current file format
+## File format
 
-Settings files use a simple `key=value` format.
-
-Example:
+Settings files use a bounded `key=value` format.
 
 ```text
-# Sandbox display settings
 grid_visible=true
 wireframe_enabled=false
 mouse_sensitivity=0.002500
 camera_position_x=0.000000
-camera_position_y=2.400000
-camera_position_z=8.600000
-camera_yaw_radians=-1.570796
-camera_pitch_radians=-0.220000
 ```
 
-Blank lines and comment lines that start with `#` or `;` are accepted when loading.
-Saved files are rewritten as plain `key=value` lines, so comment lines are not preserved yet.
+Blank lines and comment lines beginning with `#` or `;` are accepted when loading. Saved files are rewritten as plain records, so comments are not preserved.
 
-## Save data foundation
+Keys use ASCII letters, digits, `.`, `_`, and `-`. Values may contain ordinary printable text but not control characters, tabs, carriage returns, or newlines. These restrictions prevent one setting from adding unintended records.
 
-The save-data layer is intentionally small and local-only.
+## Transactional behavior
 
-It currently supports:
+Settings loads are transactional. The complete file is parsed into a temporary object first. An unreadable, malformed, unsafe, or overlong file returns an error and leaves the destination unchanged.
 
-- a version field
-- a scene id string
-- camera position, yaw, and pitch
-- simple boolean flags
-- slot-style file paths under `user/saves/`
+Save-data loads follow the same rule. The version, scene id, full camera pose, and every boolean flag must validate before the destination changes.
 
-The current save-data path helper produces paths such as:
+Writes use a same-directory temporary file. Henka flushes the completed temporary file and replaces the destination only after the write succeeds. A failed write does not intentionally truncate the previous destination file.
 
-- `user/saves/slot_a.save`
+## Paths and save slots
 
-This foundation is meant for future samples and external projects that want a clean split between preferences and save-state data. It is still intentionally modest and does not add cloud sync, encryption, accounts, or a complex serialization system.
+`henka_path_resolve` remains a generic path joiner for trusted callers that intentionally need absolute inputs.
+
+`henka_path_resolve_confined` accepts safe relative paths only. It rejects absolute and UNC paths, traversal segments, empty segments, Windows reserved device names, trailing spaces or dots, control characters, and invalid Windows path characters. Separators are normalized to `/`.
+
+This is lexical confinement. Applications that expose writable directories to untrusted users must also control symlinks and filesystem permissions.
+
+Asset resolution uses the confined helper, so engine-managed asset loads require paths beneath the configured asset base directory.
+
+Save slot names use 1-64 ASCII letters, digits, `_`, and `-`. Reserved device names are rejected. A valid slot produces a path such as:
+
+```text
+user/saves/slot_a.save
+```
+
+## Numeric validation
+
+Integer settings outside the C `int` range fall back to the caller-provided default. Floating-point settings must parse completely and be finite. Save-data camera positions and angles must also be finite.
 
 ## Current sandbox behavior
 
@@ -64,44 +61,9 @@ The sandbox stores local settings in:
 - packaged run: `out/HenkaSandbox3D/user/sandbox3d.settings`
 - development run: a `user/` folder beside the built sandbox executable
 
-The current sandbox saves:
+The sandbox persists display, camera, input, and workspace state. Short status messages are session-only.
 
-- debug grid visibility
-- wireframe state
-- mouse sensitivity
-- camera movement speed
-- camera position
-- camera yaw
-- camera pitch
-- UI layout mode
-- active utility panel
-- selected scene object
-- Scene Objects panel visibility
-- Object Details panel visibility
-
-Short in-window status messages are not persisted. They are only meant to confirm the most recent action during the current run.
-
-The sandbox panel can also:
-
-- save the current settings on demand
-- reset the current sandbox settings back to defaults
-- reset the camera to the default sandbox view
-- adjust mouse sensitivity and camera speed before saving
-
-## Missing or malformed settings
-
-If the settings file is missing, the sandbox starts with safe defaults.
-
-If the settings file contains invalid lines or invalid values:
-
-- the sandbox keeps running
-- valid values are still loaded when possible
-- invalid values fall back to defaults
-- a warning is printed to the console
-
-The sandbox UI reflects the loaded state after startup, so the panel stays aligned with the current grid, wireframe, and camera settings.
-
-## What is not supported yet
+## Not provided by this layer
 
 - cloud saves
 - telemetry or analytics
@@ -109,7 +71,8 @@ The sandbox UI reflects the loaded state after startup, so the panel stays align
 - registry storage
 - binary serialization
 - a general content database
-- per-game save slot workflows
+- symlink-aware filesystem sandboxing
+- per-game save-slot UI
 - autosave or background save loops
 
-External games should decide their own save policy and data layout. The current Henka layer is a small foundation, not a complete answer for shipped game persistence.
+External games should define their own save policy, migration strategy, backup behavior, and data layout. The current Henka layer is a hardened local foundation rather than a complete save system for shipped games.
