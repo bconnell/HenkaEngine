@@ -149,6 +149,12 @@ The packaged folder also includes `PACKAGE_INFO.txt` so you can tell when the pa
 - Asset caches, scene entities, physics contacts and events, and related runtime arrays use bounded checked growth.
 - Procedural grids and circle rings reject non-finite or excessive dimensions before allocation.
 
+### Physics activation safety
+
+- Sandbox samples start with static bodies so enabling one selected body cannot start unrelated samples.
+- `Make Dynamic + Drop` synchronizes the selected object's current transform, activates only that supported body, clears its velocity, and leaves other samples still.
+- `Enable` remains the explicit full-scene demonstration path and assigns the intended dynamic sample set before playback.
+- Automated coverage proves that an unrelated marker keeps its transform while the selected cube falls.
 ### Sandbox controls
 
 - `W A S D`: move across the scene

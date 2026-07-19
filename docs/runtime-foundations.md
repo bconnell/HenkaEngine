@@ -153,7 +153,7 @@ Henka now exposes a deterministic rigid-body physics v1 API with:
 - optional links that write simulated transforms to real scene entities
 - debug-shape queries so visual overlays use the actual collider data
 
-Boxes are axis-aligned in v1; rotated box collision, mesh colliders, constraints, continuous collision detection, controllers, and advanced simulation remain future work. In the sandbox, physics playback is opt-in through `Physics QA`, leaving normal transform inspection unchanged until the demo is enabled. Physics bodies, contacts, pairs, and events use bounded checked capacity growth.
+Boxes are axis-aligned in v1; rotated box collision, mesh colliders, constraints, continuous collision detection, controllers, and advanced simulation remain future work. In the sandbox, physics playback is opt-in through `Physics QA`, leaving normal transform inspection unchanged until the demo is enabled. Physics bodies, contacts, pairs, and events use bounded checked capacity growth. Sandbox bodies start static; isolated drop activates only the selected supported body, while the full demonstration assigns its intended dynamic set explicitly.
 
 ### Asset metadata
 

@@ -19,6 +19,7 @@ int main(void)
     henka_test_result();
     henka_test_memory();
     henka_test_sandbox3d_interaction();
+    henka_test_sandbox3d_physics();
     henka_test_sandbox3d_workspace();
     henka_test_scene();
     henka_test_ui();

@@ -9,6 +9,7 @@
 
 #include "editor_controls.h"
 #include "interaction_tools.h"
+#include "physics_tools.h"
 #include "workspace_tools.h"
 
 typedef enum sandbox3d_object_kind
@@ -2412,41 +2413,87 @@ static henka_result sandbox3d_initialize_physics(sandbox3d_state* state)
 {
     henka_physics_collider_desc trigger;
     henka_result result;
+
     if (state == NULL)
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
+
     result = henka_physics_world_create(&state->physics.world);
     if (result != HENKA_SUCCESS)
     {
         return result;
     }
+
+    state->physics.enabled = false;
     state->physics.paused = true;
     state->physics.gravity_enabled = true;
     state->physics.debug_colliders = false;
     state->physics.debug_contacts = false;
     snprintf(state->physics.last_action, sizeof(state->physics.last_action), "Physics ready; use Enable Physics");
-    if (sandbox3d_add_physics_body(state, SANDBOX3D_OBJECT_GROUND, HENKA_PHYSICS_BODY_STATIC, henka_physics_collider_plane((henka_vec3){0.0f, 1.0f, 0.0f}, 0.0f)) != HENKA_SUCCESS ||
-        sandbox3d_add_physics_body(state, SANDBOX3D_OBJECT_TEXTURED_CUBE, HENKA_PHYSICS_BODY_DYNAMIC, henka_physics_collider_box((henka_vec3){0.5f, 0.5f, 0.5f})) != HENKA_SUCCESS ||
-        sandbox3d_add_physics_body(state, SANDBOX3D_OBJECT_COLORED_CUBE, HENKA_PHYSICS_BODY_DYNAMIC, henka_physics_collider_box((henka_vec3){0.5f, 0.5f, 0.5f})) != HENKA_SUCCESS ||
-        sandbox3d_add_physics_body(state, SANDBOX3D_OBJECT_OBJ_MARKER, HENKA_PHYSICS_BODY_DYNAMIC, henka_physics_collider_sphere(0.65f)) != HENKA_SUCCESS ||
-        sandbox3d_add_physics_body(state, SANDBOX3D_OBJECT_MISSING_TEXTURE, HENKA_PHYSICS_BODY_STATIC, henka_physics_collider_box((henka_vec3){0.5f, 0.5f, 0.5f})) != HENKA_SUCCESS)
+
+    if (sandbox3d_add_physics_body(
+            state,
+            SANDBOX3D_OBJECT_GROUND,
+            sandbox3d_physics_initial_body_type(SANDBOX3D_PHYSICS_SAMPLE_GROUND),
+            henka_physics_collider_plane((henka_vec3){0.0f, 1.0f, 0.0f}, 0.0f)) != HENKA_SUCCESS ||
+        sandbox3d_add_physics_body(
+            state,
+            SANDBOX3D_OBJECT_TEXTURED_CUBE,
+            sandbox3d_physics_initial_body_type(SANDBOX3D_PHYSICS_SAMPLE_TEXTURED_CUBE),
+            henka_physics_collider_box((henka_vec3){0.5f, 0.5f, 0.5f})) != HENKA_SUCCESS ||
+        sandbox3d_add_physics_body(
+            state,
+            SANDBOX3D_OBJECT_COLORED_CUBE,
+            sandbox3d_physics_initial_body_type(SANDBOX3D_PHYSICS_SAMPLE_COLORED_CUBE),
+            henka_physics_collider_box((henka_vec3){0.5f, 0.5f, 0.5f})) != HENKA_SUCCESS ||
+        sandbox3d_add_physics_body(
+            state,
+            SANDBOX3D_OBJECT_OBJ_MARKER,
+            sandbox3d_physics_initial_body_type(SANDBOX3D_PHYSICS_SAMPLE_OBJ_MARKER),
+            henka_physics_collider_sphere(0.65f)) != HENKA_SUCCESS ||
+        sandbox3d_add_physics_body(
+            state,
+            SANDBOX3D_OBJECT_MISSING_TEXTURE,
+            sandbox3d_physics_initial_body_type(SANDBOX3D_PHYSICS_SAMPLE_MISSING_TEXTURE),
+            henka_physics_collider_box((henka_vec3){0.5f, 0.5f, 0.5f})) != HENKA_SUCCESS)
     {
         return HENKA_ERROR_OUT_OF_MEMORY;
     }
+
     trigger = henka_physics_collider_box((henka_vec3){1.0f, 0.8f, 1.0f});
     trigger.is_trigger = true;
-    return sandbox3d_add_physics_body(state, SANDBOX3D_OBJECT_MISSING_MODEL, HENKA_PHYSICS_BODY_STATIC, trigger);
+    return sandbox3d_add_physics_body(
+        state,
+        SANDBOX3D_OBJECT_MISSING_MODEL,
+        sandbox3d_physics_initial_body_type(SANDBOX3D_PHYSICS_SAMPLE_MISSING_MODEL),
+        trigger);
 }
 
 static void sandbox3d_prepare_physics_demo(sandbox3d_state* state)
 {
     henka_transform transform;
+    size_t index;
+
     if (state == NULL || state->physics.world == NULL)
     {
         return;
     }
+
     (void)henka_physics_world_reset(state->physics.world);
+    for (index = 0U; index < SANDBOX3D_OBJECT_COUNT; ++index)
+    {
+        const henka_physics_body_id body = state->physics.bodies[index];
+        if (body != HENKA_INVALID_PHYSICS_BODY_ID)
+        {
+            (void)henka_physics_body_set_type(
+                state->physics.world,
+                body,
+                sandbox3d_physics_demo_body_type((sandbox3d_physics_sample_slot)index));
+            (void)henka_physics_body_clear_velocity(state->physics.world, body);
+        }
+    }
+
     transform = state->descriptors[SANDBOX3D_OBJECT_TEXTURED_CUBE].default_transform;
     transform.position = (henka_vec3){-1.2f, 4.5f, 0.0f};
     (void)henka_physics_body_set_transform(state->physics.world, state->physics.bodies[SANDBOX3D_OBJECT_TEXTURED_CUBE], transform, true);
@@ -4084,7 +4131,7 @@ static void sandbox3d_refresh_interaction_diagnostics(henka_engine* engine, sand
     henka_gizmo_overlay_model overlay;
     henka_gizmo_model model;
     henka_vec2 framebuffer_mouse;
-    henka_vec2 viewport_local;
+    henka_vec2 viewport_local = {0.0f, 0.0f};
     henka_ui_rect hovered_panel_bounds;
     const sandbox3d_workspace_panel* hovered_panel;
     sandbox3d_gizmo_axis hover_axis;
@@ -6332,8 +6379,6 @@ static void sandbox3d_draw_utility_panel(
     int framebuffer_width,
     int framebuffer_height)
 {
-    char detail_text[96];
-    char diag_text[96];
     char package_text[48];
     char row_value[96];
     char binding_text[96];
@@ -6347,6 +6392,9 @@ static void sandbox3d_draw_utility_panel(
     float y_start;
     henka_transform transform;
     henka_ui_rect panel_bounds;
+
+    (void)framebuffer_width;
+    (void)framebuffer_height;
 
     if (engine == NULL || state == NULL || layout == NULL || !sandbox3d_workspace_shows_utility_panel(state))
     {
@@ -6676,7 +6724,7 @@ static void sandbox3d_draw_utility_panel(
         case SANDBOX3D_UTILITY_PHYSICS_QA:
         {
             henka_physics_body_id selected_body = sandbox3d_get_physics_body_for_entity(state, sandbox3d_get_real_selected_entity(state));
-            henka_physics_body_state body_state;
+            henka_physics_body_state body_state = {0};
             const char* mode_hint;
             bool has_body = selected_body != HENKA_INVALID_PHYSICS_BODY_ID &&
                 henka_physics_body_get_state(state->physics.world, selected_body, &body_state) == HENKA_SUCCESS;
@@ -6818,16 +6866,22 @@ static void sandbox3d_draw_utility_panel(
             }
             if (henka_ui_primary_button(state->ui, "physics_make_dynamic_drop", (henka_ui_rect){x_left + 128.0f, y_start + 296.0f, 178.0f, 24.0f}, "Make Dynamic + Drop"))
             {
+                const henka_entity selected_entity = sandbox3d_get_real_selected_entity(state);
                 if (has_body &&
-                    henka_physics_body_set_type(state->physics.world, selected_body, HENKA_PHYSICS_BODY_DYNAMIC) == HENKA_SUCCESS)
+                    sandbox3d_physics_activate_only_body(
+                        state->physics.world,
+                        state->physics.bodies,
+                        SANDBOX3D_OBJECT_COUNT,
+                        selected_body,
+                        state->scene,
+                        selected_entity) == HENKA_SUCCESS)
                 {
                     state->physics.enabled = true;
                     state->physics.paused = false;
                     state->physics.gravity_enabled = true;
                     (void)henka_physics_world_set_gravity(state->physics.world, (henka_vec3){0.0f, -9.81f, 0.0f});
-                    (void)henka_physics_body_clear_velocity(state->physics.world, selected_body);
-                    snprintf(state->physics.last_action, sizeof(state->physics.last_action), "Body %u set Dynamic; gravity running", (unsigned int)selected_body);
-                    sandbox3d_set_status(state, false, "Selected physics body is Dynamic with gravity running.");
+                    snprintf(state->physics.last_action, sizeof(state->physics.last_action), "Body %u is the only Dynamic sample; gravity running", (unsigned int)selected_body);
+                    sandbox3d_set_status(state, false, "Selected physics body is Dynamic; unrelated samples remain still.");
                 }
                 else
                 {
@@ -6842,9 +6896,15 @@ static void sandbox3d_draw_utility_panel(
             }
             if (has_body && henka_ui_tab(state->ui, "physics_dynamic", (henka_ui_rect){x_left + 100.0f, y_start + 326.0f, 92.0f, 24.0f}, "Dynamic", body_state.type == HENKA_PHYSICS_BODY_DYNAMIC))
             {
-                if (henka_physics_body_set_type(state->physics.world, selected_body, HENKA_PHYSICS_BODY_DYNAMIC) == HENKA_SUCCESS)
+                if (sandbox3d_physics_activate_only_body(
+                        state->physics.world,
+                        state->physics.bodies,
+                        SANDBOX3D_OBJECT_COUNT,
+                        selected_body,
+                        state->scene,
+                        sandbox3d_get_real_selected_entity(state)) == HENKA_SUCCESS)
                 {
-                    snprintf(state->physics.last_action, sizeof(state->physics.last_action), "Body %u set Dynamic", (unsigned int)selected_body);
+                    snprintf(state->physics.last_action, sizeof(state->physics.last_action), "Body %u set Dynamic; unrelated samples set Static", (unsigned int)selected_body);
                 }
                 else
                 {
@@ -7066,8 +7126,6 @@ static henka_result sandbox3d_initialize(henka_engine* engine, void* user_data)
     int framebuffer_width;
     int panel_index;
     sandbox3d_state* state;
-    sandbox3d_workspace_layout layout;
-
     state = (sandbox3d_state*)user_data;
     sandbox3d_editor_controls_initialize(&state->editor_controls);
     state->editor_controls_loaded_safely = true;
