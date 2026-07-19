@@ -1,3 +1,8 @@
+param(
+    [ValidateSet("Debug", "Release")]
+    [string]$Configuration = "Debug"
+)
+
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
@@ -6,9 +11,12 @@ $ErrorActionPreference = "Stop"
 $repoRoot = Get-HenkaRepoRoot -ScriptDirectory $PSScriptRoot
 $buildRoot = Join-Path $repoRoot "build"
 $cmake = Get-HenkaCMakePath
+$executablePath = Join-Path $buildRoot "examples\sandbox3d\$Configuration\henka_sandbox3d.exe"
+$provenanceScript = Join-Path $PSScriptRoot "write_build_provenance.ps1"
 
 Write-Host "cmake: $cmake"
 Write-Host "repo: $repoRoot"
+Write-Host "configuration: $Configuration"
 
 Invoke-HenkaNative `
     -FilePath $cmake `
@@ -18,6 +26,19 @@ Invoke-HenkaNative `
 
 Invoke-HenkaNative `
     -FilePath $cmake `
-    -Arguments @("--build", $buildRoot, "--config", "Debug") `
+    -Arguments @("--build", $buildRoot, "--config", $Configuration) `
     -WorkingDirectory $repoRoot `
-    -Label "Build Henka Engine Debug"
+    -Label "Build Henka Engine $Configuration"
+
+Invoke-HenkaNative `
+    -FilePath "powershell.exe" `
+    -Arguments @(
+        "-NoProfile",
+        "-ExecutionPolicy", "Bypass",
+        "-File", $provenanceScript,
+        "-RepoRoot", $repoRoot,
+        "-Configuration", $Configuration,
+        "-ExecutablePath", $executablePath,
+        "-CMakePath", $cmake) `
+    -WorkingDirectory $repoRoot `
+    -Label "Record build provenance"

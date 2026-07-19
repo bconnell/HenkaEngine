@@ -1,113 +1,128 @@
 param(
-    [switch]$ResetUserData
+    [switch]$ResetUserData,
+
+    [ValidateSet("Debug", "Release")]
+    [string]$Configuration = "Debug"
 )
 
+Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
-$repoRoot = Resolve-Path (Join-Path $PSScriptRoot "..")
+$repoRoot = [System.IO.Path]::GetFullPath((Resolve-Path (Join-Path $PSScriptRoot "..")))
 $packageRoot = Join-Path $repoRoot "out\HenkaSandbox3D"
 $packageUserDir = Join-Path $packageRoot "user"
 $preservedUserDir = Join-Path $repoRoot "out\.henka_sandbox3d_user_preserve"
-$buildDebugExe = Join-Path $repoRoot "build\examples\sandbox3d\Debug\henka_sandbox3d.exe"
-$buildReleaseExe = Join-Path $repoRoot "build\examples\sandbox3d\Release\henka_sandbox3d.exe"
-
-if (Test-Path $buildDebugExe) {
-    $sourceExe = $buildDebugExe
-}
-elseif (Test-Path $buildReleaseExe) {
-    $sourceExe = $buildReleaseExe
-}
-else {
-    throw "Sandbox build output was not found. Build the project first with .\scripts\build_windows.ps1."
-}
-
-$sourceDir = Split-Path $sourceExe
+$manifestPath = Join-Path $repoRoot "build\henka-build-info.json"
+$expectedExe = Join-Path $repoRoot "build\examples\sandbox3d\$Configuration\henka_sandbox3d.exe"
 $packagedExe = Join-Path $packageRoot "HenkaSandbox3D.exe"
 $packageDocsDir = Join-Path $packageRoot "docs"
 $packageHelpDir = Join-Path $packageRoot "docs\help"
-$packageAssetsDir = Join-Path $packageRoot "assets"
-$runGuidePath = Join-Path $packageRoot "README.txt"
 $packageInfoPath = Join-Path $packageRoot "PACKAGE_INFO.txt"
-$packageRefreshedAt = Get-Date -Format "yyyy-MM-dd HH:mm:ss zzz"
-$sourceExeTimestamp = (Get-Item $sourceExe).LastWriteTime.ToString("yyyy-MM-dd HH:mm:ss zzz")
-$gitCommit = "unknown"
+$runGuidePath = Join-Path $packageRoot "README.txt"
 $packagedProcessName = "HenkaSandbox3D"
 
-function Remove-HenkaDirectoryTree {
-    param(
-        [Parameter(Mandatory = $true)]
-        [string]$Path
-    )
-
-    if (-not (Test-Path -LiteralPath $Path)) {
-        return
-    }
-
+function Invoke-GitSingleLine {
+    param([string[]]$Arguments)
+    $previousPreference = $ErrorActionPreference
     try {
-        Remove-Item -LiteralPath $Path -Recurse -Force -ErrorAction Stop
-        return
+        $ErrorActionPreference = "SilentlyContinue"
+        $lines = @(& git.exe -C $repoRoot @Arguments 2>$null)
+        $exitCode = $LASTEXITCODE
     }
-    catch {
-        if (-not (Test-Path -LiteralPath $Path)) {
-            return
-        }
+    finally {
+        $ErrorActionPreference = $previousPreference
     }
-
-    Get-ChildItem -LiteralPath $Path -Recurse -Force -ErrorAction SilentlyContinue |
-        Sort-Object FullName -Descending |
-        ForEach-Object {
-            Remove-Item -LiteralPath $_.FullName -Force -Recurse -ErrorAction SilentlyContinue
-        }
-
-    if (Test-Path -LiteralPath $Path) {
-        Remove-Item -LiteralPath $Path -Force -Recurse -ErrorAction SilentlyContinue
+    if ($exitCode -ne 0 -or $lines.Count -ne 1) {
+        throw "Git package provenance query failed: git $($Arguments -join ' ')"
     }
+    return ([string]$lines[0]).Trim()
 }
 
-try {
-    $gitCommit = (git -C $repoRoot log -1 --format=%h 2>$null).Trim()
-    if ([string]::IsNullOrWhiteSpace($gitCommit)) {
-        $gitCommit = "unknown"
+function Get-GitSourceState {
+    $previousPreference = $ErrorActionPreference
+    try {
+        $ErrorActionPreference = "SilentlyContinue"
+        $lines = @(& git.exe -C $repoRoot status --porcelain=v1 --untracked-files=all 2>$null)
+        $exitCode = $LASTEXITCODE
     }
+    finally {
+        $ErrorActionPreference = $previousPreference
+    }
+    if ($exitCode -ne 0) {
+        throw "Git source-state query failed."
+    }
+    if ($lines.Count -eq 0) {
+        return "clean"
+    }
+    return "working-tree"
 }
-catch {
-    $gitCommit = "unknown"
+
+function Remove-HenkaDirectoryTree {
+    param([Parameter(Mandatory = $true)][string]$Path)
+    if (-not (Test-Path -LiteralPath $Path)) { return }
+    Remove-Item -LiteralPath $Path -Recurse -Force -ErrorAction Stop
+}
+
+if (-not (Test-Path -LiteralPath $manifestPath -PathType Leaf)) {
+    throw "Build provenance was not found. Run .\scripts\build_windows.ps1 -Configuration $Configuration first."
+}
+$manifest = Get-Content -LiteralPath $manifestPath -Raw | ConvertFrom-Json
+if ($manifest.schema_version -ne 1 -or $manifest.configuration -ne $Configuration) {
+    throw "Build provenance does not match configuration $Configuration."
+}
+if ([System.IO.Path]::GetFullPath((Join-Path $repoRoot $manifest.executable_relative_path)) -ne [System.IO.Path]::GetFullPath($expectedExe)) {
+    throw "Build provenance points to a different executable."
+}
+if (-not (Test-Path -LiteralPath $expectedExe -PathType Leaf)) {
+    throw "The $Configuration sandbox executable was not found."
+}
+
+$currentCommit = Invoke-GitSingleLine @("rev-parse", "HEAD")
+$currentState = Get-GitSourceState
+$currentHash = (Get-FileHash -LiteralPath $expectedExe -Algorithm SHA256).Hash.ToLowerInvariant()
+if ($manifest.commit_sha -ne $currentCommit) {
+    throw "Build provenance commit does not match current HEAD. Rebuild before packaging."
+}
+if ($manifest.source_state -ne $currentState) {
+    throw "Build provenance source state does not match the current working tree. Rebuild before packaging."
+}
+if ($manifest.executable_sha256 -ne $currentHash) {
+    throw "Built executable hash does not match build provenance. Rebuild before packaging."
 }
 
 if (Get-Process -Name $packagedProcessName -ErrorAction SilentlyContinue) {
     throw "The packaged sandbox is still running. Close HenkaSandbox3D.exe before refreshing the package."
 }
 
-if (Test-Path $packageRoot) {
-    if ((-not $ResetUserData) -and (Test-Path $packageUserDir)) {
-        if (Test-Path $preservedUserDir) {
-            Remove-HenkaDirectoryTree -Path $preservedUserDir
-        }
-
-        if (Test-Path -LiteralPath $packageUserDir) {
-            Move-Item -LiteralPath $packageUserDir -Destination $preservedUserDir
-        }
+if (Test-Path -LiteralPath $packageRoot) {
+    if ((-not $ResetUserData) -and (Test-Path -LiteralPath $packageUserDir)) {
+        if (Test-Path -LiteralPath $preservedUserDir) { Remove-HenkaDirectoryTree $preservedUserDir }
+        Move-Item -LiteralPath $packageUserDir -Destination $preservedUserDir
     }
-
-    Remove-HenkaDirectoryTree -Path $packageRoot
+    Remove-HenkaDirectoryTree $packageRoot
 }
 
 [System.IO.Directory]::CreateDirectory($packageRoot) | Out-Null
 [System.IO.Directory]::CreateDirectory($packageDocsDir) | Out-Null
 [System.IO.Directory]::CreateDirectory($packageHelpDir) | Out-Null
-
-Copy-Item -LiteralPath $sourceExe -Destination $packagedExe
+Copy-Item -LiteralPath $expectedExe -Destination $packagedExe
 Copy-Item -LiteralPath (Join-Path $repoRoot "assets") -Destination $packageRoot -Recurse
 Copy-Item -LiteralPath (Join-Path $repoRoot "docs\help\sandbox3d.md") -Destination (Join-Path $packageHelpDir "sandbox3d.md")
 
-if ((-not $ResetUserData) -and (Test-Path $preservedUserDir)) {
+if ((-not $ResetUserData) -and (Test-Path -LiteralPath $preservedUserDir)) {
     Move-Item -LiteralPath $preservedUserDir -Destination $packageUserDir
 }
 
-$runtimeDlls = Get-ChildItem -LiteralPath $sourceDir -Filter *.dll -File -ErrorAction SilentlyContinue
-foreach ($dll in $runtimeDlls) {
+$sourceDir = Split-Path $expectedExe
+foreach ($dll in @(Get-ChildItem -LiteralPath $sourceDir -Filter *.dll -File -ErrorAction SilentlyContinue)) {
     Copy-Item -LiteralPath $dll.FullName -Destination (Join-Path $packageRoot $dll.Name)
 }
+
+$packagedHash = (Get-FileHash -LiteralPath $packagedExe -Algorithm SHA256).Hash.ToLowerInvariant()
+if ($packagedHash -ne $currentHash) {
+    throw "The packaged executable does not match the validated build artifact."
+}
+$packageRefreshedUtc = [DateTime]::UtcNow.ToString("o")
 
 @"
 Henka Engine Sandbox 3D
@@ -123,14 +138,12 @@ Use M or G, R, and S for action-based transforms. X, Y, and Z constrain an activ
 Use the in-window utilities for help, legend, paths, settings, diagnostics, Transform QA, and Physics QA.
 Selected real scene objects show a viewport highlight until selection is cleared.
 Ground selection uses one bounded Scene View highlight, and viewport overlays do not draw over panels.
-Physics QA explains Static, Dynamic, and Kinematic bodies and includes Make Dynamic + Drop for quick gravity tests.
+Physics QA explains Static, Dynamic, and Kinematic bodies. Make Dynamic + Drop activates only the selected supported body; Enable starts the full arranged demonstration.
 DRAG marks a live panel header. Release over a valid left or right outline to dock there, or release away from the outlines to open a separate native tool window.
 Open Native Panel Test from Controls to exercise a separate OS-level validation window.
-Close a detached tool window to return its panel to the last valid dock. Full detached controls and detachable Scene View are not implemented yet.
-Drag dock splitters beside Scene View to resize occupied docks.
-Use Reset Layout in Controls to recover all panels and default dock sizes.
+Close a detached tool window to return its panel to the last valid dock.
+Use Reset Layout to recover panels and default dock sizes.
 Watch the small in-window status area for recent actions and warnings.
-The packaged runtime reports Packaged mode automatically when PACKAGE_INFO.txt is present.
 
 Keep these folders beside the executable:
 - assets
@@ -141,48 +154,30 @@ Offline help:
 
 Local settings:
 - user\sandbox3d.settings
-
-The package script preserves the user folder by default so local sandbox settings stay in place when you refresh the package.
-
-If the sandbox does not start, rebuild the project and package it again from the repository root.
 "@ | Set-Content -LiteralPath $runGuidePath
 
 @"
 Henka Engine Sandbox 3D package
-Package refreshed: $packageRefreshedAt
-Source executable build time: $sourceExeTimestamp
-Source commit: $gitCommit
+Package schema: 2
+Package refreshed UTC: $packageRefreshedUtc
+Build generated UTC: $($manifest.generated_utc)
+Source commit: $currentCommit
+Source state: $currentState
+Build configuration: $Configuration
+Architecture: $($manifest.architecture)
+CMake version: $($manifest.cmake_version)
+Source executable: $($manifest.executable_relative_path)
+Source executable SHA-256: $currentHash
+Packaged executable SHA-256: $packagedHash
 Executable: HenkaSandbox3D.exe
-UI: In-window panels open automatically; F4 hides or shows them.
-Layout: Press F5 to cycle View, Inspect, and Full Tools.
-Runtime mode: Packaged is detected automatically from PACKAGE_INFO.txt.
+Runtime mode: Packaged
 "@ | Set-Content -LiteralPath $packageInfoPath
 
 Write-Host "Packaged sandbox ready:"
 Write-Host "  $packagedExe"
 Write-Host "Package marker:"
 Write-Host "  $packageInfoPath"
-Write-Host ""
-if ($ResetUserData) {
-    Write-Host "Local sandbox settings were reset for this package refresh."
-}
-else {
-    Write-Host "Local sandbox settings were preserved if a user folder already existed."
-}
-Write-Host ""
-Write-Host "Next step:"
-Write-Host "  Open out\HenkaSandbox3D and double-click HenkaSandbox3D.exe."
-Write-Host "  The in-window panels open automatically; press F4 only to hide or show them."
-Write-Host "  Press F5 to cycle View, Inspect, and Full Tools."
-Write-Host "  The scene should render inside its own docked viewport when panels are visible."
-Write-Host "  Starts should have no selected scene object until you select one."
-Write-Host "  Select an object in the viewport or Scene Objects panel, then use Select, Orbit, Pan, Move, Rotate, and Scale in the Viewport Tool section."
-Write-Host "  Use M or G, R, and S for action-based transforms. X/Y/Z constrain, Enter applies, and Escape cancels."
-Write-Host "  Use the in-window utilities for help, legend, paths, settings, diagnostics, Transform QA, and Physics QA."
-Write-Host "  Watch the viewport selection highlight and use Make Dynamic + Drop in Physics QA for quick gravity tests."
-Write-Host "  Use panel header dragging, valid left or right dock outlines, native detached windows, Reset Layout, and dock splitters to arrange the workspace."
-Write-Host "  Open Native Panel Test from Controls to exercise a separate OS-level validation window."
-Write-Host "  Close a detached tool window to return its panel to the last valid dock. Full detached controls and detachable Scene View are not implemented yet."
-Write-Host "  Use Reset Layout to recover all panels and default dock sizes."
-Write-Host "  Watch the in-window status area for recent actions and warnings."
-Write-Host "  The packaged runtime should report Packaged mode at startup."
+Write-Host "Source commit: $currentCommit"
+Write-Host "Source state: $currentState"
+Write-Host "Configuration: $Configuration"
+Write-Host "Executable SHA-256: $packagedHash"

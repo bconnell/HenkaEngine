@@ -155,6 +155,15 @@ The packaged folder also includes `PACKAGE_INFO.txt` so you can tell when the pa
 - `Make Dynamic + Drop` synchronizes the selected object's current transform, activates only that supported body, clears its velocity, and leaves other samples still.
 - `Enable` remains the explicit full-scene demonstration path and assigns the intended dynamic sample set before playback.
 - Automated coverage proves that an unrelated marker keeps its transform while the selected cube falls.
+### Validated platform and package identity
+
+- The fully validated build, test, packaging, and external-project path currently targets 64-bit Windows with MSVC.
+- Other operating systems are not presented as supported until their complete path is exercised.
+- Every Windows build records the full commit, source state, configuration, architecture, CMake version, executable path, and executable SHA-256.
+- Packaging requires that build record and rejects stale, mismatched, or cross-configuration executables.
+- `PACKAGE_INFO.txt` carries the verified identity and hashes into the runnable folder.
+
+See [Platform Support](docs/platform-support.md) and [Package Provenance](docs/package-provenance.md).
 ### Sandbox controls
 
 - `W A S D`: move across the scene

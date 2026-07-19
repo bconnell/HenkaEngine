@@ -1,5 +1,17 @@
 $ErrorActionPreference = "Stop"
 
+function Get-PackageInfoValue {
+    param(
+        [string]$Path,
+        [string]$Name
+    )
+
+    $match = Select-String -LiteralPath $Path -Pattern ("^" + [Regex]::Escape($Name) + ":\s*(.+)$") | Select-Object -First 1
+    if ($null -eq $match) {
+        throw "Package field was not found: $Name"
+    }
+    return $match.Matches[0].Groups[1].Value.Trim()
+}
 function Write-Step {
     param([string]$Message)
     Write-Output "[check] $Message"
@@ -208,6 +220,24 @@ Assert-PathExists -Path $assetsDir -Description "Packaged assets folder"
 Assert-PathExists -Path $helpPath -Description "Packaged offline help"
 Assert-PathExists -Path $readmePath -Description "Packaged run guide"
 Assert-PathExists -Path $packageInfoPath -Description "Packaged build marker"
+$packageSchema = Get-PackageInfoValue -Path $packageInfoPath -Name "Package schema"
+$sourceCommit = Get-PackageInfoValue -Path $packageInfoPath -Name "Source commit"
+$sourceState = Get-PackageInfoValue -Path $packageInfoPath -Name "Source state"
+$buildConfiguration = Get-PackageInfoValue -Path $packageInfoPath -Name "Build configuration"
+$sourceHash = Get-PackageInfoValue -Path $packageInfoPath -Name "Source executable SHA-256"
+$packagedHash = Get-PackageInfoValue -Path $packageInfoPath -Name "Packaged executable SHA-256"
+$actualPackagedHash = (Get-FileHash -LiteralPath $packagedExe -Algorithm SHA256).Hash.ToLowerInvariant()
+$currentCommit = (& git.exe -C $repoRoot rev-parse HEAD 2>$null).Trim()
+if ($LASTEXITCODE -ne 0) { throw "Current commit could not be read for package verification." }
+if ($packageSchema -ne "2") { throw "Packaged build marker has an unsupported schema." }
+if ($sourceCommit -ne $currentCommit) { throw "Packaged source commit does not match current HEAD." }
+if ($sourceState -ne "clean" -and $sourceState -ne "working-tree") { throw "Packaged source state is invalid." }
+if ($buildConfiguration -ne "Debug" -and $buildConfiguration -ne "Release") { throw "Packaged build configuration is invalid." }
+if ($sourceHash -ne $packagedHash -or $packagedHash -ne $actualPackagedHash) { throw "Packaged executable provenance hash verification failed." }
+Write-Output "[pass] Package provenance schema"
+Write-Output "[pass] Package source commit"
+Write-Output "[pass] Package build configuration"
+Write-Output "[pass] Packaged executable SHA-256"
 Assert-FileContains -Path $readmePath -Pattern "Use the in-window utilities" -Description "Packaged utility guidance"
 Assert-FileContains -Path $readmePath -Pattern "panels open automatically" -Description "Packaged automatic panel guidance"
 Assert-FileContains -Path $readmePath -Pattern "no selected scene object" -Description "Packaged startup no-selection guidance"

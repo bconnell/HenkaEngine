@@ -9,6 +9,10 @@ set(CMAKE_C_EXTENSIONS OFF)
 option(HENKA_BUILD_TESTS "Build Henka Engine tests." ON)
 option(HENKA_BUILD_EXAMPLES "Build Henka Engine example applications." ON)
 
+if(NOT WIN32)
+    message(WARNING "Henka Engine currently validates its full build, runtime, packaging, and external-project path on Windows. Other platforms are not yet supported targets.")
+endif()
+
 function(henka_enable_project_warnings target_name)
     if(MSVC)
         target_compile_options(${target_name} PRIVATE /W4)
