@@ -34,9 +34,13 @@ jobs:
         shell: powershell
         run: .\scripts\test_windows.ps1
 
+      - name: Refresh Debug build provenance
+        shell: powershell
+        run: .\scripts\build_windows.ps1 -Configuration Debug
+
       - name: Build packaged sandbox
         shell: powershell
-        run: .\scripts\package_sandbox3d_windows.ps1 -ResetUserData
+        run: .\scripts\package_sandbox3d_windows.ps1 -ResetUserData -Configuration Debug
 
       - name: Check packaged sandbox
         shell: powershell
