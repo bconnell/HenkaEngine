@@ -164,7 +164,7 @@ The asset manager now tracks read-only metadata for cached assets:
 - display name
 - loaded state
 - fallback state
-- reload eligibility placeholder
+- reload eligibility state
 - short summary
 - short error summary
 
@@ -185,9 +185,9 @@ Current material types include:
 - Lit
 - Unlit
 - Vertex Color
-- Procedural Placeholder
+- Reserved Procedural
 
-The placeholder exists only as a stable enum for future work. It does not implement procedural shading yet.
+The reserved procedural type exists only as a stable enum value for future work. It does not implement procedural shading yet.
 
 ### Interactions
 

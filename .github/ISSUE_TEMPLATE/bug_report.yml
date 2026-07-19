@@ -11,20 +11,14 @@ body:
     id: summary
     attributes:
       label: Summary
-      description: What went wrong?
-      placeholder: Describe the problem clearly.
+      description: Describe what went wrong and the visible result.
     validations:
       required: true
   - type: textarea
     id: steps
     attributes:
       label: Steps to reproduce
-      description: List the exact steps needed to reproduce the issue.
-      placeholder: |
-        1. Build or package the project.
-        2. Open the sandbox.
-        3. Press or click...
-        4. Observe...
+      description: Number the exact build, launch, input, and observed-result steps needed to reproduce the issue.
     validations:
       required: true
   - type: textarea
@@ -65,14 +59,12 @@ body:
     id: commit
     attributes:
       label: Commit or branch
-      description: Include the commit hash or branch if known.
-      placeholder: "main, f538c87, etc."
+      description: Include the branch or full or short commit hash when known, such as main or f538c87.
   - type: textarea
     id: environment
     attributes:
       label: Environment
-      description: Operating system, compiler, graphics hardware, and any relevant setup details.
-      placeholder: "Windows version, Visual Studio version, GPU, CMake version, etc."
+      description: Include the operating system, compiler, graphics hardware, CMake version, and any relevant setup details.
   - type: textarea
     id: logs
     attributes:

@@ -22,7 +22,7 @@ typedef enum henka_material_type
     HENKA_MATERIAL_TYPE_LIT = 0,
     HENKA_MATERIAL_TYPE_UNLIT,
     HENKA_MATERIAL_TYPE_VERTEX_COLOR,
-    HENKA_MATERIAL_TYPE_PROCEDURAL_PLACEHOLDER
+    HENKA_MATERIAL_TYPE_PROCEDURAL_RESERVED
 } henka_material_type;
 
 typedef struct henka_material

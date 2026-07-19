@@ -57,7 +57,7 @@ Planned workspace improvements include:
 7. Undo and redo for basic scene operations.
 8. Scene save and load support.
 
-These features should not be added as placeholder UI. Each one should be wired into the engine, tested, documented, and useful before it is treated as complete.
+These features should appear only when they are wired into the engine, tested, documented, and useful.
 
 ## Asset and material workflow
 
@@ -155,6 +155,6 @@ Current limitations include:
 5. Workspace movement and sizing require desktop QA for feel. Detached placement is session-only, and full detached controls plus OS-title-bar drag-back docking still need implementation.
 6. The native test panel and compact detached production-panel surfaces use multi-window rendering and event routing, but full detached controls and detachable Scene View are not implemented yet.
 7. Asset loading is still limited.
-8. 2D and 2.5D workflows are planned, but not implemented yet.
+8. The 2D workflow and the sprite, layer, parallax, animation, and movement-constraint parts of 2.5D are not implemented yet; the first 2.5D camera presets are available.
 9. Physics v1 is intentionally limited to rigid bodies and primitive colliders; mesh collision, joints, character controllers, and advanced simulation remain future work.
 10. Audio, scripting, and release distribution are later milestones.

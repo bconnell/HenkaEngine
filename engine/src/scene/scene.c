@@ -30,8 +30,8 @@ const char* henka_material_type_get_label(henka_material_type type)
             return "Unlit";
         case HENKA_MATERIAL_TYPE_VERTEX_COLOR:
             return "Vertex Color";
-        case HENKA_MATERIAL_TYPE_PROCEDURAL_PLACEHOLDER:
-            return "Procedural Placeholder";
+        case HENKA_MATERIAL_TYPE_PROCEDURAL_RESERVED:
+            return "Reserved Procedural";
         case HENKA_MATERIAL_TYPE_LIT:
         default:
             return "Lit";

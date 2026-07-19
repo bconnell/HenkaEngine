@@ -44,8 +44,8 @@ $result = Invoke-HenkaNativeCapture `
     -WorkingDirectory (Split-Path -Parent $templateExe) `
     -Label "Run external game template smoke test"
 
-if ($result.Stdout -notmatch "External game template placeholder\.") {
-    throw "The external game template smoke test did not print the expected placeholder output."
+if ($result.Stdout -notmatch "External game template initialized\.") {
+    throw "The external game template smoke test did not print the expected initialization output."
 }
 
 Write-Host "[pass] External game template configured, built, and ran successfully."

@@ -11,8 +11,7 @@ body:
     id: summary
     attributes:
       label: Summary
-      description: What did you manually test?
-      placeholder: Describe the manual test focus.
+      description: Describe the manual test focus and the feature or workflow covered.
     validations:
       required: true
   - type: dropdown
@@ -35,12 +34,7 @@ body:
     id: steps
     attributes:
       label: Steps tested
-      description: List what you actually did.
-      placeholder: |
-        1. Packaged the sandbox.
-        2. Opened HenkaSandbox3D.exe.
-        3. Selected...
-        4. Tested...
+      description: Number the exact setup, launch, input, resize, and observation steps you performed.
     validations:
       required: true
   - type: textarea

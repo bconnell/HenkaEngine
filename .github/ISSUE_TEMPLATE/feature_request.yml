@@ -11,16 +11,14 @@ body:
     id: summary
     attributes:
       label: Summary
-      description: What would you like Henka Engine to support?
-      placeholder: Describe the feature clearly.
+      description: Describe the requested capability and where it belongs.
     validations:
       required: true
   - type: textarea
     id: problem
     attributes:
       label: Problem or use case
-      description: What problem does this solve?
-      placeholder: Explain the user or developer workflow this would improve.
+      description: Explain the user or developer workflow this would improve.
     validations:
       required: true
   - type: dropdown
@@ -53,8 +51,7 @@ body:
     id: scope
     attributes:
       label: Scope notes
-      description: What should be included or intentionally left out?
-      placeholder: Include any boundaries that would keep the feature focused.
+      description: List boundaries that keep the request focused.
   - type: checkboxes
     id: checks
     attributes:
