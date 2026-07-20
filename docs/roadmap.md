@@ -27,7 +27,7 @@ The next development work is focused on making existing systems easier to test, 
 1. Add and harden local action commands for validated scene and object operations.
 2. Keep viewport interaction test helpers aligned with the real sandbox behavior.
 3. Finish manual QA for transform gizmos and fix any remaining interaction problems.
-4. Add Windows CMake CI for public build and test checks.
+4. Keep Windows CI deterministic across build, test, package provenance, packaged startup, repository integrity, and external-project checks.
 5. Continue improving sandbox usability, help text, first-run guidance, and visual feedback.
 6. Keep object inspection, selection highlighting, transform tools, physics QA, and viewport behavior consistent.
 7. Keep external game project templates working against the current engine.

@@ -51,6 +51,8 @@ Henka Engine is still early, but the sandbox now renders a visible 3D scene with
 - Rigid-body physics v1 with fixed-step worlds, static/dynamic/kinematic bodies, sphere/AABB/plane colliders, triggers, events, raycasts, and sandbox debug controls
 - Transactional packaged-sandbox refreshes that preserve user data by default and retain the prior package until activation succeeds
 - Generic documentation and starter template for external game repositories
+- Deterministic Windows CI package startup checks that do not depend on mouse movement or desktop focus
+- Repository integrity checks for tracked artifacts, credential signatures, script parsing, dependency pins, and workflow action pins
 
 ### What does not exist yet
 
@@ -214,6 +216,8 @@ An editor controls overview is available in [docs/editor-controls.md](docs/edito
 A runtime foundation overview is available in [docs/runtime-foundations.md](docs/runtime-foundations.md).
 A UI overview is available in [docs/ui.md](docs/ui.md).
 A guide for separate game repositories is available in [docs/external-game-projects.md](docs/external-game-projects.md).
+Package identity and recovery behavior are documented in [docs/package-provenance.md](docs/package-provenance.md).
+Repository checks are documented in [docs/repository-integrity.md](docs/repository-integrity.md).
 A manual verification checklist is available in [docs/qa/sandbox3d-manual-checklist.md](docs/qa/sandbox3d-manual-checklist.md).
 [Support Henka Engine](SUPPORT.md)
 Packaged output is generated under `out/` and should not be committed.
@@ -222,9 +226,11 @@ For deterministic packaged startup checks, use `.\scripts\check_packaged_sandbox
 For the full local desktop interaction check, use `.\scripts\check_packaged_sandbox3d_windows.ps1`.
 To validate the generic external game template against the current Henka checkout, use `.\scripts\test_external_game_template_windows.ps1`.
 
-## Run tests
+## Run validation
 
 ```powershell
+.\scripts\check_public_repo_hygiene.ps1
+.\scripts\check_repository_integrity.ps1
 .\scripts\test_windows.ps1
 ```
 

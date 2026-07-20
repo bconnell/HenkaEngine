@@ -47,9 +47,14 @@ _deps/
 Thumbs.db
 Desktop.ini
 
-# Local environment files
+# Local environment and signing files
 .env
 .env.*
+*.pfx
+*.p12
+*.pem
+*.key
+*.snk
 
 # Keep public sample model assets tracked.
 !assets/models/

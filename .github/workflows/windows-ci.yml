@@ -22,13 +22,17 @@ jobs:
       - name: Check out source
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
-      - name: Check repository hygiene
+      - name: Check repository wording
         shell: powershell
         run: .\scripts\check_public_repo_hygiene.ps1
 
+      - name: Check repository integrity
+        shell: powershell
+        run: .\scripts\check_repository_integrity.ps1
+
       - name: Build Debug
         shell: powershell
-        run: .\scripts\build_windows.ps1
+        run: .\scripts\build_windows.ps1 -Configuration Debug
 
       - name: Run tests
         shell: powershell
@@ -44,7 +48,7 @@ jobs:
 
       - name: Check packaged sandbox
         shell: powershell
-        run: .\scripts\check_packaged_sandbox3d_windows.ps1
+        run: .\scripts\check_packaged_sandbox3d_windows.ps1 -NonInteractive
 
       - name: Validate external game template
         shell: powershell
