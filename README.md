@@ -49,7 +49,7 @@ Henka Engine is still early, but the sandbox now renders a visible 3D scene with
 - Sandbox workspace panels with stacked side docks, header drag, cross-zone redocking, native detached-window panels with routed mouse input, safer tool-window renderer context recovery, dock splitter, and reset-layout recovery controls
 - Multi-window platform foundation with a separate `Native Panel Test` window for close, focus, resize, and event-routing QA
 - Rigid-body physics v1 with fixed-step worlds, static/dynamic/kinematic bodies, sphere/AABB/plane colliders, triggers, events, raycasts, and sandbox debug controls
-- Packaged sandbox user data that stays in place across package refreshes by default
+- Transactional packaged-sandbox refreshes that preserve user data by default and retain the prior package until activation succeeds
 - Generic documentation and starter template for external game repositories
 
 ### What does not exist yet
@@ -80,8 +80,8 @@ third_party/         Bundled third-party source used by the engine
 On Windows, the quickest way to try the current sandbox is:
 
 ```powershell
-.\scripts\build_windows.ps1
-.\scripts\package_sandbox3d_windows.ps1
+.\scripts\build_windows.ps1 -Configuration Debug
+.\scripts\package_sandbox3d_windows.ps1 -Configuration Debug
 ```
 
 The sandbox is an engine sample and QA target. It is not a game, and real games built with Henka should live in separate repositories.
@@ -93,19 +93,19 @@ Windows build instructions are documented in [docs/building.md](docs/building.md
 Quick start from the repository root:
 
 ```powershell
-.\scripts\build_windows.ps1
+.\scripts\build_windows.ps1 -Configuration Debug
 ```
 
 To create a run-ready Windows folder that you can open in Explorer and launch by double-clicking:
 
 ```powershell
-.\scripts\package_sandbox3d_windows.ps1
+.\scripts\package_sandbox3d_windows.ps1 -Configuration Debug
 ```
 
 ## Run the sandbox
 
 ```powershell
-.\scripts\run_sandbox3d.ps1
+.\scripts\run_sandbox3d.ps1 -Configuration Debug
 ```
 
 ## Run the packaged sandbox
@@ -156,6 +156,7 @@ The packaged folder also includes `PACKAGE_INFO.txt` so you can tell when the pa
 - `Enable` remains the explicit full-scene demonstration path and assigns the intended dynamic sample set before playback.
 - Automated coverage proves that an unrelated marker keeps its transform while the selected cube falls.
 - Physics rejects non-finite and collapsed physics scales, clears stale contact data when bodies are destroyed, and keeps physics allocations in engine memory diagnostics.
+
 ### Validated platform and package identity
 
 - The fully validated build, test, packaging, and external-project path currently targets 64-bit Windows with MSVC.
@@ -165,6 +166,15 @@ The packaged folder also includes `PACKAGE_INFO.txt` so you can tell when the pa
 - `PACKAGE_INFO.txt` carries the verified identity and hashes into the runnable folder.
 
 See [Platform Support](docs/platform-support.md) and [Package Provenance](docs/package-provenance.md).
+
+### Package refresh safety
+
+- Build provenance supports branch and detached checkouts and is written transactionally.
+- Packaging assembles a complete staging directory before replacing the active package.
+- Existing user data is copied into the staged package unless `-ResetUserData` is requested.
+- A failed activation restores the prior package instead of deleting the only preserved user-data copy.
+- Package inputs containing reparse points are rejected before copying.
+
 ### Sandbox controls
 
 - `W A S D`: move across the scene
@@ -208,7 +218,8 @@ A manual verification checklist is available in [docs/qa/sandbox3d-manual-checkl
 [Support Henka Engine](SUPPORT.md)
 Packaged output is generated under `out/` and should not be committed.
 
-For repeated packaged checks on Windows, use `.\scripts\check_packaged_sandbox3d_windows.ps1`.
+For deterministic packaged startup checks, use `.\scripts\check_packaged_sandbox3d_windows.ps1 -NonInteractive`.
+For the full local desktop interaction check, use `.\scripts\check_packaged_sandbox3d_windows.ps1`.
 To validate the generic external game template against the current Henka checkout, use `.\scripts\test_external_game_template_windows.ps1`.
 
 ## Run tests

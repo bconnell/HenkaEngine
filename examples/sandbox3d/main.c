@@ -316,6 +316,7 @@ typedef struct sandbox3d_state
     sandbox3d_editor_controls editor_controls;
     sandbox3d_transform_session transform_session;
     bool editor_controls_loaded_safely;
+    bool smoke_test;
 } sandbox3d_state;
 
 static const float g_default_mouse_look_sensitivity = 0.0025f;
@@ -8020,6 +8021,12 @@ static void sandbox3d_update(henka_engine* engine, double delta_seconds, void* u
     sandbox3d_build_ui(engine, state);
     sandbox3d_build_native_panel_test_ui(engine, state);
     sandbox3d_build_detached_workspace_panel_ui(engine, state);
+    if (state->smoke_test && henka_engine_get_frame_index(engine) >= 2U)
+    {
+        printf("Sandbox smoke test completed.\n");
+        fflush(stdout);
+        henka_engine_request_exit(engine);
+    }
     state->ui_visible_last_frame = ui_visible;
 }
 
@@ -8028,7 +8035,10 @@ static void sandbox3d_shutdown(henka_engine* engine, void* user_data)
     sandbox3d_state* state;
 
     state = (sandbox3d_state*)user_data;
-    sandbox3d_save_settings(engine, state);
+    if (!state->smoke_test)
+    {
+        sandbox3d_save_settings(engine, state);
+    }
     sandbox3d_close_native_panel_test(engine, state);
     sandbox3d_close_all_detached_workspace_panels(engine, state);
     henka_engine_set_mouse_capture(engine, false);
@@ -8037,15 +8047,28 @@ static void sandbox3d_shutdown(henka_engine* engine, void* user_data)
     sandbox3d_release_owned_resources(state);
 }
 
-int main(void)
+int main(int argc, char** argv)
 {
     henka_engine* engine;
     henka_engine_config config;
     henka_result result;
     sandbox3d_state state;
     size_t index;
+    bool smoke_test;
+
+    smoke_test = false;
+    if (argc == 2 && strcmp(argv[1], "--smoke-test") == 0)
+    {
+        smoke_test = true;
+    }
+    else if (argc != 1)
+    {
+        fprintf(stderr, "Usage: %s [--smoke-test]\n", argv[0]);
+        return 2;
+    }
 
     memset(&state, 0, sizeof(state));
+    state.smoke_test = smoke_test;
     state.camera = henka_camera_create_perspective(60.0f * HENKA_DEG_TO_RAD, 16.0f / 9.0f, 0.1f, 100.0f);
     state.cube_entity = HENKA_INVALID_ENTITY;
     state.ground_entity = HENKA_INVALID_ENTITY;
@@ -8069,7 +8092,7 @@ int main(void)
     config.application_name = "Henka Engine Sandbox 3D";
     config.window_width = 1280;
     config.window_height = 720;
-    config.enable_vsync = true;
+    config.enable_vsync = !smoke_test;
     config.asset_base_path = NULL;
     config.user_data_base_path = NULL;
     config.package_mode = HENKA_PACKAGE_MODE_AUTO;

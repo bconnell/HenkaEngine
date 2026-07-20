@@ -1,29 +1,21 @@
+param(
+    [ValidateSet("Debug", "Release")]
+    [string]$Configuration = "Debug"
+)
+
+Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
-$repoRoot = Resolve-Path (Join-Path $PSScriptRoot "..")
-$debugExe = Join-Path $repoRoot "build\examples\sandbox3d\Debug\henka_sandbox3d.exe"
-$releaseExe = Join-Path $repoRoot "build\examples\sandbox3d\Release\henka_sandbox3d.exe"
+. (Join-Path $PSScriptRoot "henka_script_common.ps1")
 
-if (Test-Path $debugExe) {
-    Push-Location (Split-Path $debugExe)
-    try {
-        & ".\henka_sandbox3d.exe"
-        exit $LASTEXITCODE
-    }
-    finally {
-        Pop-Location
-    }
+$repoRoot = Get-HenkaRepoRoot -ScriptDirectory $PSScriptRoot
+$executable = Join-Path $repoRoot "build\examples\sandbox3d\$Configuration\henka_sandbox3d.exe"
+
+if (-not (Test-Path -LiteralPath $executable -PathType Leaf)) {
+    throw "The $Configuration sandbox executable was not found. Run .\scripts\build_windows.ps1 -Configuration $Configuration first."
 }
 
-if (Test-Path $releaseExe) {
-    Push-Location (Split-Path $releaseExe)
-    try {
-        & ".\henka_sandbox3d.exe"
-        exit $LASTEXITCODE
-    }
-    finally {
-        Pop-Location
-    }
-}
-
-throw "Sandbox executable not found. Build the project first."
+Invoke-HenkaNative `
+    -FilePath $executable `
+    -WorkingDirectory (Split-Path -Parent $executable) `
+    -Label "Run Henka Engine Sandbox 3D $Configuration"

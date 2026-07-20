@@ -1,4 +1,11 @@
+param(
+    [switch]$NonInteractive
+)
+
+Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
+
+. (Join-Path $PSScriptRoot "henka_script_common.ps1")
 
 function Get-PackageInfoValue {
     param(
@@ -135,7 +142,8 @@ function Click-WindowPoint {
     Start-Sleep -Milliseconds 250
 }
 
-$repoRoot = Resolve-Path (Join-Path $PSScriptRoot "..")
+$repoRoot = Get-HenkaRepoRoot -ScriptDirectory $PSScriptRoot
+$gitCommand = Get-HenkaGitPath
 $packageRoot = Join-Path $repoRoot "out\HenkaSandbox3D"
 $packagedExe = Join-Path $packageRoot "HenkaSandbox3D.exe"
 $assetsDir = Join-Path $packageRoot "assets"
@@ -147,8 +155,9 @@ $logDir = Join-Path $repoRoot "build\test_tmp"
 $stdoutPath = Join-Path $logDir "check_packaged_sandbox3d_stdout.log"
 $stderrPath = Join-Path $logDir "check_packaged_sandbox3d_stderr.log"
 
-Add-Type -AssemblyName System.Windows.Forms
-Add-Type @'
+if (-not $NonInteractive) {
+    Add-Type -AssemblyName System.Windows.Forms
+    Add-Type @'
 using System;
 using System.Runtime.InteropServices;
 using System.Text;
@@ -210,8 +219,8 @@ public static class NativeMethods {
     }
 }
 '@
-
-$shell = New-Object -ComObject WScript.Shell
+    $shell = New-Object -ComObject WScript.Shell
+}
 
 Write-Step "Checking packaged sandbox contents"
 Assert-PathExists -Path $packageRoot -Description "Packaged sandbox folder"
@@ -224,15 +233,23 @@ $packageSchema = Get-PackageInfoValue -Path $packageInfoPath -Name "Package sche
 $sourceCommit = Get-PackageInfoValue -Path $packageInfoPath -Name "Source commit"
 $sourceState = Get-PackageInfoValue -Path $packageInfoPath -Name "Source state"
 $buildConfiguration = Get-PackageInfoValue -Path $packageInfoPath -Name "Build configuration"
+$buildRef = Get-PackageInfoValue -Path $packageInfoPath -Name "Build ref"
+$detachedHead = Get-PackageInfoValue -Path $packageInfoPath -Name "Detached HEAD"
 $sourceHash = Get-PackageInfoValue -Path $packageInfoPath -Name "Source executable SHA-256"
 $packagedHash = Get-PackageInfoValue -Path $packageInfoPath -Name "Packaged executable SHA-256"
 $actualPackagedHash = (Get-FileHash -LiteralPath $packagedExe -Algorithm SHA256).Hash.ToLowerInvariant()
-$currentCommit = (& git.exe -C $repoRoot rev-parse HEAD 2>$null).Trim()
-if ($LASTEXITCODE -ne 0) { throw "Current commit could not be read for package verification." }
-if ($packageSchema -ne "2") { throw "Packaged build marker has an unsupported schema." }
+$currentCommitLines = @(& $gitCommand -C $repoRoot rev-parse HEAD 2>$null)
+if ($LASTEXITCODE -ne 0 -or $currentCommitLines.Count -ne 1) { throw "Current commit could not be read for package verification." }
+$currentCommit = ([string]$currentCommitLines[0]).Trim()
+$currentStatusLines = @(& $gitCommand -C $repoRoot status --porcelain=v1 --untracked-files=all 2>$null)
+if ($LASTEXITCODE -ne 0) { throw "Current source state could not be read for package verification." }
+$currentSourceState = if ($currentStatusLines.Count -eq 0) { "clean" } else { "working-tree" }
+if ($packageSchema -ne "3") { throw "Packaged build marker has an unsupported schema." }
 if ($sourceCommit -ne $currentCommit) { throw "Packaged source commit does not match current HEAD." }
-if ($sourceState -ne "clean" -and $sourceState -ne "working-tree") { throw "Packaged source state is invalid." }
+if ($sourceState -ne $currentSourceState) { throw "Packaged source state does not match the current working tree." }
 if ($buildConfiguration -ne "Debug" -and $buildConfiguration -ne "Release") { throw "Packaged build configuration is invalid." }
+if ([string]::IsNullOrWhiteSpace($buildRef)) { throw "Packaged build ref is missing." }
+if ($detachedHead -ne "True" -and $detachedHead -ne "False") { throw "Packaged detached-HEAD value is invalid." }
 if ($sourceHash -ne $packagedHash -or $packagedHash -ne $actualPackagedHash) { throw "Packaged executable provenance hash verification failed." }
 Write-Output "[pass] Package provenance schema"
 Write-Output "[pass] Package source commit"
@@ -252,15 +269,46 @@ Assert-FileContains -Path $readmePath -Pattern "status area" -Description "Packa
 Assert-FileContains -Path $helpPath -Pattern "Utility panel" -Description "Packaged utility help"
 Assert-FileContains -Path $helpPath -Pattern "Perspective 3D, Side 2.5D, Top-down 2.5D, and Isometric 2.5D" -Description "Packaged camera preset help"
 
+if ($NonInteractive) {
+    Write-Step "Running deterministic packaged startup smoke test"
+    $smoke = Invoke-HenkaNativeCapture `
+        -FilePath $packagedExe `
+        -Arguments @("--smoke-test") `
+        -WorkingDirectory $packageRoot `
+        -Label "Run packaged sandbox smoke test"
+
+    if ($smoke.Stdout -notmatch "Henka Engine Sandbox 3D") {
+        throw "The packaged smoke test did not print the startup heading."
+    }
+    if ($smoke.Stdout -notmatch "Runtime mode: Packaged") {
+        throw "The packaged smoke test did not report Packaged mode."
+    }
+    if ($smoke.Stdout -notmatch "Sandbox smoke test completed\.") {
+        throw "The packaged smoke test did not reach its deterministic exit."
+    }
+    if ($smoke.Stderr -notmatch "leaving engine run loop") {
+        throw "The packaged smoke test did not leave the engine run loop cleanly."
+    }
+
+    Write-Output "[pass] Deterministic packaged startup smoke test completed."
+    return
+}
+
 New-Item -ItemType Directory -Path $logDir -Force | Out-Null
 Remove-Item $stdoutPath, $stderrPath -ErrorAction SilentlyContinue
 
+$capturedProcess = $null
 $process = $null
 $mainWindowHandle = [System.IntPtr]::Zero
 $uiAutomationVerified = $false
 try {
     Write-Step "Launching the packaged sandbox"
-    $process = Start-Process -FilePath $packagedExe -WorkingDirectory $packageRoot -PassThru -RedirectStandardOutput $stdoutPath -RedirectStandardError $stderrPath
+    $capturedProcess = Start-HenkaCapturedProcess `
+        -FilePath $packagedExe `
+        -WorkingDirectory $packageRoot `
+        -StdoutPath $stdoutPath `
+        -StderrPath $stderrPath
+    $process = $capturedProcess.Process
 
     for ($index = 0; $index -lt 80 -and $mainWindowHandle -eq [System.IntPtr]::Zero; $index++) {
         Start-Sleep -Milliseconds 250
@@ -397,10 +445,10 @@ try {
     Write-Output "[pass] Packaged sandbox checks completed."
 }
 finally {
-    if ($process -ne $null) {
-        $process.Refresh()
-        if (-not $process.HasExited) {
-            Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
-        }
+    if ($null -ne $capturedProcess) {
+        Close-HenkaCapturedProcess -CapturedProcess $capturedProcess
+    }
+    elseif ($process -ne $null) {
+        $process.Dispose()
     }
 }
