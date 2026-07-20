@@ -19,6 +19,9 @@ The public physics API provides:
 - raycasts against every supported collider shape
 - optional links from physics bodies to real scene entities
 - debug-shape and contact data for truthful runtime visualization
+- transform validation that rejects non-finite and collapsed scale components
+- physics allocations included in Henka's debug memory accounting
+- immediate invalidation of stale contacts and events when a body is destroyed
 
 The broadphase currently iterates body pairs directly, which is appropriate for the small sandbox scene and deterministic tests.
 

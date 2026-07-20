@@ -2,6 +2,7 @@
 
 #include <string.h>
 
+#include <henka/memory.h>
 #include <henka/physics.h>
 
 static henka_physics_body_desc henka_test_physics_body(
@@ -329,6 +330,54 @@ static void henka_test_physics_scene_link(void)
     henka_scene_destroy(scene);
 }
 
+static void henka_test_physics_validation_and_tracking(void)
+{
+    size_t allocations_before;
+    size_t contact_count;
+    size_t event_count;
+    henka_physics_body_desc desc;
+    henka_physics_body_id first;
+    henka_physics_body_id second;
+    henka_physics_body_state state;
+    henka_physics_world* world;
+    henka_transform invalid_transform;
+
+    allocations_before = henka_memory_get_allocation_count();
+    HENKA_TEST_ASSERT(henka_physics_world_create(&world) == HENKA_SUCCESS);
+
+    desc = henka_test_physics_body(
+        HENKA_PHYSICS_BODY_DYNAMIC,
+        henka_physics_collider_sphere(1.0f),
+        (henka_vec3){0.0f, 0.0f, 0.0f});
+    desc.transform.scale.x = 0.0f;
+    HENKA_TEST_ASSERT(henka_physics_body_create(world, &desc, &first) == HENKA_ERROR_INVALID_ARGUMENT);
+
+    desc.transform = henka_transform_identity();
+    desc.collider.is_trigger = true;
+    HENKA_TEST_ASSERT(henka_physics_body_create(world, &desc, &first) == HENKA_SUCCESS);
+    desc.transform.position.x = 0.5f;
+    HENKA_TEST_ASSERT(henka_physics_body_create(world, &desc, &second) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_physics_world_step_fixed(world) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_physics_world_get_contacts(world, &contact_count) != NULL && contact_count == 1U);
+    HENKA_TEST_ASSERT(henka_physics_world_get_events(world, &event_count) != NULL && event_count == 1U);
+
+    HENKA_TEST_ASSERT(henka_physics_body_get_state(world, first, &state) == HENKA_SUCCESS);
+    invalid_transform = state.transform;
+    invalid_transform.scale.y = 0.001f;
+    HENKA_TEST_ASSERT(henka_physics_body_set_transform(world, first, invalid_transform, true) == HENKA_ERROR_INVALID_ARGUMENT);
+    HENKA_TEST_ASSERT(henka_physics_body_get_state(world, first, &state) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(state.transform.scale.y, 1.0f, 0.0001f);
+
+    HENKA_TEST_ASSERT(henka_physics_body_destroy(world, second) == HENKA_SUCCESS);
+    (void)henka_physics_world_get_contacts(world, &contact_count);
+    (void)henka_physics_world_get_events(world, &event_count);
+    HENKA_TEST_ASSERT(contact_count == 0U);
+    HENKA_TEST_ASSERT(event_count == 0U);
+
+    henka_physics_world_destroy(world);
+    HENKA_TEST_ASSERT(henka_memory_get_allocation_count() == allocations_before);
+}
+
 static void henka_test_physics_capacity_growth(void)
 {
     enum
@@ -377,6 +426,6 @@ void henka_test_physics(void)
     henka_test_physics_shape_pairs_and_raycast();
     henka_test_physics_pair_filters_and_response();
     henka_test_physics_scene_link();
-
+    henka_test_physics_validation_and_tracking();
     henka_test_physics_capacity_growth();
 }

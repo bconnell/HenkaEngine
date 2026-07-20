@@ -5,6 +5,8 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include <henka/memory.h>
+
 #include "checked.h"
 
 typedef struct henka_physics_body_record
@@ -134,11 +136,21 @@ static bool henka_physics_collider_valid(henka_physics_collider_desc collider)
     }
 }
 
+static const float g_henka_physics_minimum_scale_magnitude = 0.01f;
+
+static bool henka_scale_component_is_valid(float value)
+{
+    return isfinite(value) && henka_physics_abs(value) >= g_henka_physics_minimum_scale_magnitude;
+}
+
 static bool henka_physics_transform_valid(henka_transform transform)
 {
     return henka_physics_is_finite_vec3(transform.position) &&
-        henka_physics_is_finite_vec3(transform.scale) && isfinite(transform.rotation.x) &&
-        isfinite(transform.rotation.y) && isfinite(transform.rotation.z) && isfinite(transform.rotation.w);
+        henka_scale_component_is_valid(transform.scale.x) &&
+        henka_scale_component_is_valid(transform.scale.y) &&
+        henka_scale_component_is_valid(transform.scale.z) &&
+        isfinite(transform.rotation.x) && isfinite(transform.rotation.y) &&
+        isfinite(transform.rotation.z) && isfinite(transform.rotation.w);
 }
 
 static henka_physics_body_record* henka_physics_find_body(henka_physics_world* world, henka_physics_body_id id)
@@ -181,7 +193,7 @@ static bool henka_physics_reserve(void** values, size_t element_size, size_t* ca
         return true;
     }
 
-    resized = realloc(*values, allocation_size);
+    resized = henka_realloc(*values, allocation_size);
     if (resized == NULL)
     {
         return false;
@@ -679,7 +691,7 @@ henka_result henka_physics_world_create(henka_physics_world** out_world)
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
-    world = (henka_physics_world*)calloc(1U, sizeof(*world));
+    world = henka_calloc(1U, sizeof(*world));
     if (world == NULL)
     {
         return HENKA_ERROR_OUT_OF_MEMORY;
@@ -697,12 +709,12 @@ void henka_physics_world_destroy(henka_physics_world* world)
     {
         return;
     }
-    free(world->bodies);
-    free(world->contacts);
-    free(world->current_pairs);
-    free(world->previous_pairs);
-    free(world->events);
-    free(world);
+    henka_free(world->bodies);
+    henka_free(world->contacts);
+    henka_free(world->current_pairs);
+    henka_free(world->previous_pairs);
+    henka_free(world->events);
+    henka_free(world);
 }
 
 henka_result henka_physics_world_set_gravity(henka_physics_world* world, henka_vec3 gravity)
@@ -822,13 +834,28 @@ henka_result henka_physics_body_create(
 
 henka_result henka_physics_body_destroy(henka_physics_world* world, henka_physics_body_id body)
 {
-    henka_physics_body_record* record = henka_physics_find_body(world, body);
+    size_t index;
+    henka_physics_body_record* record;
+
+    record = henka_physics_find_body(world, body);
     if (record == NULL)
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
-    record->active = false;
+    memset(record, 0, sizeof(*record));
     --world->body_count;
+    world->contact_count = 0U;
+    world->event_count = 0U;
+    world->current_pair_count = 0U;
+    world->previous_pair_count = 0U;
+    for (index = 0U; index < world->body_capacity; ++index)
+    {
+        if (world->bodies[index].active)
+        {
+            world->bodies[index].state.colliding = false;
+            world->bodies[index].state.grounded = false;
+        }
+    }
     return HENKA_SUCCESS;
 }
 

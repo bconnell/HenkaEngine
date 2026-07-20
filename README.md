@@ -146,7 +146,7 @@ The packaged folder also includes `PACKAGE_INFO.txt` so you can tell when the pa
 - Texture dimensions are limited to 16,384 pixels per axis and decoded RGBA8 data to 256 MiB.
 - Mesh uploads validate counts, byte sizes, primitive types, and every index before reaching OpenGL.
 - Shared checked-arithmetic helpers protect capacity growth, size multiplication, and narrowing conversions.
-- Asset caches, scene entities, physics contacts and events, and related runtime arrays use bounded checked growth.
+- Asset caches, scene entities, action default transforms, physics contacts and events, and related runtime arrays use bounded checked growth.
 - Procedural grids and circle rings reject non-finite or excessive dimensions before allocation.
 
 ### Physics activation safety
@@ -155,6 +155,7 @@ The packaged folder also includes `PACKAGE_INFO.txt` so you can tell when the pa
 - `Make Dynamic + Drop` synchronizes the selected object's current transform, activates only that supported body, clears its velocity, and leaves other samples still.
 - `Enable` remains the explicit full-scene demonstration path and assigns the intended dynamic sample set before playback.
 - Automated coverage proves that an unrelated marker keeps its transform while the selected cube falls.
+- Physics rejects non-finite and collapsed physics scales, clears stale contact data when bodies are destroyed, and keeps physics allocations in engine memory diagnostics.
 ### Validated platform and package identity
 
 - The fully validated build, test, packaging, and external-project path currently targets 64-bit Windows with MSVC.

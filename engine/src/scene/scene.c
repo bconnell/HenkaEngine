@@ -43,6 +43,7 @@ const char* henka_material_type_get_label(henka_material_type type)
 henka_result henka_material_describe(const henka_material* material, char* buffer, size_t buffer_size)
 {
     const char* material_name;
+    int written;
 
     if (material == NULL || buffer == NULL || buffer_size == 0U)
     {
@@ -50,15 +51,17 @@ henka_result henka_material_describe(const henka_material* material, char* buffe
     }
 
     material_name = (material->name != NULL && material->name[0] != '\0') ? material->name : "Material";
-    if (snprintf(
+    written = snprintf(
         buffer,
         buffer_size,
         "%s | %s | %s%s",
         material_name,
         henka_material_type_get_label(material->type),
         material->use_texture ? "Texture" : "Color",
-        material->use_lighting ? " | Lit" : " | Unlit") < 0)
+        material->use_lighting ? " | Lit" : " | Unlit");
+    if (written < 0 || (size_t)written >= buffer_size)
     {
+        buffer[buffer_size - 1U] = '\0';
         return HENKA_ERROR_UNKNOWN;
     }
 

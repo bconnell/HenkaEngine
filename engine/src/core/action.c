@@ -7,6 +7,8 @@
 
 #include <henka/memory.h>
 
+#include "checked.h"
+
 typedef struct henka_action_default_transform_record
 {
     henka_entity entity;
@@ -120,8 +122,10 @@ static const henka_action_default_transform_record* henka_action_find_default_tr
 
 static henka_result henka_action_ensure_default_transform_capacity(henka_action_context* context)
 {
+    size_t allocation_size;
     henka_action_default_transform_record* records;
     size_t new_capacity;
+    size_t required;
 
     if (context == NULL)
     {
@@ -133,8 +137,19 @@ static henka_result henka_action_ensure_default_transform_capacity(henka_action_
         return HENKA_SUCCESS;
     }
 
-    new_capacity = context->default_transform_capacity == 0U ? 8U : context->default_transform_capacity * 2U;
-    records = henka_realloc(context->default_transforms, new_capacity * sizeof(*records));
+    if (!henka_checked_size_add(context->default_transform_count, 1U, &required) ||
+        !henka_checked_capacity(
+            context->default_transform_capacity,
+            required,
+            8U,
+            HENKA_MAX_SCENE_ENTITIES,
+            &new_capacity) ||
+        !henka_checked_size_multiply(new_capacity, sizeof(*records), &allocation_size))
+    {
+        return HENKA_ERROR_OUT_OF_MEMORY;
+    }
+
+    records = henka_realloc(context->default_transforms, allocation_size);
     if (records == NULL)
     {
         return HENKA_ERROR_OUT_OF_MEMORY;

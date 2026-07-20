@@ -5,8 +5,34 @@
 #include <henka/action.h>
 #include <henka/core.h>
 
+static void henka_test_action_default_transform_growth(void)
+{
+    enum { ENTITY_COUNT = 20 };
+    henka_action_context* actions;
+    henka_entity entity;
+    henka_scene* scene;
+    int index;
+
+    HENKA_TEST_ASSERT(henka_scene_create(&scene) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_action_context_create(&actions) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_action_context_set_scene(actions, scene) == HENKA_SUCCESS);
+
+    for (index = 0; index < ENTITY_COUNT; ++index)
+    {
+        entity = henka_scene_create_entity(scene);
+        HENKA_TEST_ASSERT(entity != HENKA_INVALID_ENTITY);
+        HENKA_TEST_ASSERT(
+            henka_action_context_register_default_transform(actions, entity, henka_transform_identity()) ==
+            HENKA_SUCCESS);
+    }
+
+    henka_action_context_destroy(actions);
+    henka_scene_destroy(scene);
+}
+
 void henka_test_action(void)
 {
+    henka_test_action_default_transform_growth();
     henka_action_context* actions;
     henka_action_object_details details[4];
     henka_action_request request;
