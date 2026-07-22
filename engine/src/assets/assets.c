@@ -19,8 +19,8 @@ static char* henka_duplicate_string(const char* value)
         return NULL;
     }
 
-    length = strlen(value);
-    if (!henka_checked_size_add(length, 1U, &allocation_size))
+    if (!henka_checked_c_string_length(value, HENKA_MAX_ASSET_PATH_BYTES, &length) ||
+        !henka_checked_size_add(length, 1U, &allocation_size))
     {
         return NULL;
     }
@@ -55,6 +55,11 @@ static const char* henka_asset_display_name(const char* path)
     }
 
     return last_separator;
+}
+
+char* henka_asset_copy_display_name(const char* path)
+{
+    return henka_duplicate_string(henka_asset_display_name(path));
 }
 
 static void henka_asset_set_summary(henka_asset_metadata* metadata, const char* summary, const char* error_summary)
@@ -257,6 +262,7 @@ static void henka_asset_manager_remove_mesh_entry_at(henka_asset_manager* manage
         henka_mesh_destroy(entry->mesh);
     }
     henka_free(entry->key);
+    henka_free(entry->display_name);
 
     if (index + 1U < manager->mesh_count)
     {
@@ -357,6 +363,7 @@ void henka_asset_manager_destroy(struct henka_asset_manager* manager)
     {
         henka_shader_destroy(manager->shader_entries[index].shader);
         henka_free(manager->shader_entries[index].key);
+        henka_free(manager->shader_entries[index].display_name);
     }
 
     for (index = 0U; index < manager->texture_count; ++index)
@@ -366,6 +373,7 @@ void henka_asset_manager_destroy(struct henka_asset_manager* manager)
             henka_texture_destroy(manager->texture_entries[index].texture);
         }
         henka_free(manager->texture_entries[index].key);
+        henka_free(manager->texture_entries[index].display_name);
     }
 
     for (index = 0U; index < manager->mesh_count; ++index)
@@ -375,6 +383,7 @@ void henka_asset_manager_destroy(struct henka_asset_manager* manager)
             henka_mesh_destroy(manager->mesh_entries[index].mesh);
         }
         henka_free(manager->mesh_entries[index].key);
+        henka_free(manager->mesh_entries[index].display_name);
     }
 
     henka_free(manager->shader_entries);
@@ -392,6 +401,7 @@ henka_result henka_assets_load_shader(
     const char* fragment_path,
     henka_shader** out_shader)
 {
+    char* display_name;
     char* key;
     char* resolved_fragment_path;
     char* resolved_vertex_path;
@@ -407,9 +417,9 @@ henka_result henka_assets_load_shader(
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
 
-    vertex_length = strlen(vertex_path);
-    fragment_length = strlen(fragment_path);
-    if (!henka_checked_size_add(vertex_length, fragment_length, &path_length) ||
+    if (!henka_checked_c_string_length(vertex_path, HENKA_MAX_ASSET_PATH_BYTES, &vertex_length) ||
+        !henka_checked_c_string_length(fragment_path, HENKA_MAX_ASSET_PATH_BYTES, &fragment_length) ||
+        !henka_checked_size_add(vertex_length, fragment_length, &path_length) ||
         !henka_checked_size_add(path_length, 2U, &key_length))
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
@@ -433,9 +443,17 @@ henka_result henka_assets_load_shader(
         return HENKA_SUCCESS;
     }
 
+    display_name = henka_asset_copy_display_name(vertex_path);
+    if (display_name == NULL)
+    {
+        henka_free(key);
+        return HENKA_ERROR_OUT_OF_MEMORY;
+    }
+
     result = henka_assets_resolve_path(henka_engine_get_asset_base_path(manager->engine), vertex_path, &resolved_vertex_path);
     if (result != HENKA_SUCCESS)
     {
+        henka_free(display_name);
         henka_free(key);
         return result;
     }
@@ -444,6 +462,7 @@ henka_result henka_assets_load_shader(
     if (result != HENKA_SUCCESS)
     {
         henka_free(resolved_vertex_path);
+        henka_free(display_name);
         henka_free(key);
         return result;
     }
@@ -453,6 +472,7 @@ henka_result henka_assets_load_shader(
     henka_free(resolved_fragment_path);
     if (result != HENKA_SUCCESS)
     {
+        henka_free(display_name);
         henka_free(key);
         return result;
     }
@@ -463,16 +483,19 @@ henka_result henka_assets_load_shader(
         if (result != HENKA_SUCCESS)
         {
             henka_shader_destroy(shader);
+            henka_free(display_name);
             henka_free(key);
             return result;
         }
     }
 
     manager->shader_entries[manager->shader_count].key = key;
+    manager->shader_entries[manager->shader_count].display_name = display_name;
     manager->shader_entries[manager->shader_count].shader = shader;
     manager->shader_entries[manager->shader_count].metadata.type = HENKA_ASSET_TYPE_SHADER;
     manager->shader_entries[manager->shader_count].metadata.source_path = manager->shader_entries[manager->shader_count].key;
-    manager->shader_entries[manager->shader_count].metadata.display_name = henka_asset_display_name(vertex_path);
+    manager->shader_entries[manager->shader_count].metadata.display_name =
+        manager->shader_entries[manager->shader_count].display_name;
     manager->shader_entries[manager->shader_count].metadata.loaded = true;
     manager->shader_entries[manager->shader_count].metadata.fallback = false;
     manager->shader_entries[manager->shader_count].metadata.reload_supported = true;
@@ -484,6 +507,7 @@ henka_result henka_assets_load_shader(
 
 henka_result henka_assets_load_texture(henka_asset_manager* manager, const char* path, henka_texture** out_texture)
 {
+    char* display_name;
     char* key;
     char* resolved_path;
     henka_texture* texture;
@@ -515,11 +539,26 @@ henka_result henka_assets_load_texture(henka_asset_manager* manager, const char*
         texture = manager->error_texture;
     }
 
+    key = henka_duplicate_string(path);
+    display_name = henka_asset_copy_display_name(path);
+    if (key == NULL || display_name == NULL)
+    {
+        henka_free(key);
+        henka_free(display_name);
+        if (texture != manager->error_texture)
+        {
+            henka_texture_destroy(texture);
+        }
+        return HENKA_ERROR_OUT_OF_MEMORY;
+    }
+
     if (manager->texture_count == manager->texture_capacity)
     {
         result = henka_asset_manager_grow_textures(manager);
         if (result != HENKA_SUCCESS)
         {
+            henka_free(key);
+            henka_free(display_name);
             if (texture != manager->error_texture)
             {
                 henka_texture_destroy(texture);
@@ -528,22 +567,14 @@ henka_result henka_assets_load_texture(henka_asset_manager* manager, const char*
         }
     }
 
-    key = henka_duplicate_string(path);
-    if (key == NULL)
-    {
-        if (texture != manager->error_texture)
-        {
-            henka_texture_destroy(texture);
-        }
-        return HENKA_ERROR_OUT_OF_MEMORY;
-    }
-
     manager->texture_entries[manager->texture_count].key = key;
+    manager->texture_entries[manager->texture_count].display_name = display_name;
     manager->texture_entries[manager->texture_count].texture = texture;
     manager->texture_entries[manager->texture_count].owns_texture = texture != manager->error_texture;
     manager->texture_entries[manager->texture_count].metadata.type = HENKA_ASSET_TYPE_TEXTURE;
     manager->texture_entries[manager->texture_count].metadata.source_path = manager->texture_entries[manager->texture_count].key;
-    manager->texture_entries[manager->texture_count].metadata.display_name = henka_asset_display_name(path);
+    manager->texture_entries[manager->texture_count].metadata.display_name =
+        manager->texture_entries[manager->texture_count].display_name;
     manager->texture_entries[manager->texture_count].metadata.loaded = texture != manager->error_texture;
     manager->texture_entries[manager->texture_count].metadata.fallback = texture == manager->error_texture;
     manager->texture_entries[manager->texture_count].metadata.reload_supported = true;
@@ -558,6 +589,7 @@ henka_result henka_assets_load_texture(henka_asset_manager* manager, const char*
 
 henka_result henka_assets_load_obj_mesh(henka_asset_manager* manager, const char* path, henka_mesh** out_mesh)
 {
+    char* display_name;
     char* key;
     char* resolved_path;
     henka_mesh* mesh;
@@ -589,11 +621,26 @@ henka_result henka_assets_load_obj_mesh(henka_asset_manager* manager, const char
         mesh = manager->fallback_mesh;
     }
 
+    key = henka_duplicate_string(path);
+    display_name = henka_asset_copy_display_name(path);
+    if (key == NULL || display_name == NULL)
+    {
+        henka_free(key);
+        henka_free(display_name);
+        if (mesh != manager->fallback_mesh)
+        {
+            henka_mesh_destroy(mesh);
+        }
+        return HENKA_ERROR_OUT_OF_MEMORY;
+    }
+
     if (manager->mesh_count == manager->mesh_capacity)
     {
         result = henka_asset_manager_grow_meshes(manager);
         if (result != HENKA_SUCCESS)
         {
+            henka_free(key);
+            henka_free(display_name);
             if (mesh != manager->fallback_mesh)
             {
                 henka_mesh_destroy(mesh);
@@ -602,22 +649,14 @@ henka_result henka_assets_load_obj_mesh(henka_asset_manager* manager, const char
         }
     }
 
-    key = henka_duplicate_string(path);
-    if (key == NULL)
-    {
-        if (mesh != manager->fallback_mesh)
-        {
-            henka_mesh_destroy(mesh);
-        }
-        return HENKA_ERROR_OUT_OF_MEMORY;
-    }
-
     manager->mesh_entries[manager->mesh_count].key = key;
+    manager->mesh_entries[manager->mesh_count].display_name = display_name;
     manager->mesh_entries[manager->mesh_count].mesh = mesh;
     manager->mesh_entries[manager->mesh_count].owns_mesh = mesh != manager->fallback_mesh;
     manager->mesh_entries[manager->mesh_count].metadata.type = HENKA_ASSET_TYPE_MESH;
     manager->mesh_entries[manager->mesh_count].metadata.source_path = manager->mesh_entries[manager->mesh_count].key;
-    manager->mesh_entries[manager->mesh_count].metadata.display_name = henka_asset_display_name(path);
+    manager->mesh_entries[manager->mesh_count].metadata.display_name =
+        manager->mesh_entries[manager->mesh_count].display_name;
     manager->mesh_entries[manager->mesh_count].metadata.loaded = mesh != manager->fallback_mesh;
     manager->mesh_entries[manager->mesh_count].metadata.fallback = mesh == manager->fallback_mesh;
     manager->mesh_entries[manager->mesh_count].metadata.reload_supported = true;

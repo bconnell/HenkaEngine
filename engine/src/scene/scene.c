@@ -91,31 +91,38 @@ static henka_scene_entity_record* henka_scene_get_entity_record(henka_scene* sce
     return &scene->entities[index];
 }
 
-static char* henka_scene_duplicate_string(const char* value)
+static henka_result henka_scene_duplicate_text(const char* value, char** out_copy)
 {
     size_t allocation_size;
     char* copy;
     size_t length;
 
-    if (value == NULL)
+    if (out_copy == NULL)
     {
-        return NULL;
+        return HENKA_ERROR_INVALID_ARGUMENT;
     }
 
-    length = strlen(value);
-    if (!henka_checked_size_add(length, 1U, &allocation_size))
+    *out_copy = NULL;
+    if (value == NULL)
     {
-        return NULL;
+        return HENKA_SUCCESS;
+    }
+
+    if (!henka_checked_c_string_length(value, HENKA_MAX_SCENE_TEXT_BYTES, &length) ||
+        !henka_checked_size_add(length, 1U, &allocation_size))
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
     }
 
     copy = henka_malloc(allocation_size);
     if (copy == NULL)
     {
-        return NULL;
+        return HENKA_ERROR_OUT_OF_MEMORY;
     }
 
     memcpy(copy, value, allocation_size);
-    return copy;
+    *out_copy = copy;
+    return HENKA_SUCCESS;
 }
 
 static henka_bounds henka_scene_transform_bounds(henka_bounds local_bounds, henka_transform transform)
@@ -175,6 +182,34 @@ static bool henka_scale_vector_is_valid(henka_vec3 value)
     return henka_scale_component_is_valid(value.x) &&
         henka_scale_component_is_valid(value.y) &&
         henka_scale_component_is_valid(value.z);
+}
+
+static bool henka_scene_vec3_is_finite(henka_vec3 value)
+{
+    return henka_is_finite_float(value.x) &&
+        henka_is_finite_float(value.y) &&
+        henka_is_finite_float(value.z);
+}
+
+static bool henka_scene_bounds_are_valid(henka_bounds bounds)
+{
+    return henka_scene_vec3_is_finite(bounds.center) &&
+        henka_scene_vec3_is_finite(bounds.extents) &&
+        bounds.extents.x >= 0.0f &&
+        bounds.extents.y >= 0.0f &&
+        bounds.extents.z >= 0.0f;
+}
+
+static bool henka_scene_material_is_valid(henka_material material)
+{
+    return material.shader != NULL &&
+        material.type >= HENKA_MATERIAL_TYPE_LIT &&
+        material.type <= HENKA_MATERIAL_TYPE_PROCEDURAL_RESERVED &&
+        henka_is_finite_float(material.base_color.x) &&
+        henka_is_finite_float(material.base_color.y) &&
+        henka_is_finite_float(material.base_color.z) &&
+        henka_is_finite_float(material.base_color.w) &&
+        (!material.use_texture || material.base_color_texture != NULL);
 }
 
 static bool henka_transform_is_valid(henka_transform transform)
@@ -299,9 +334,11 @@ static henka_result henka_scene_grow(henka_scene* scene)
         new_entities[index].transform = henka_transform_identity();
         new_entities[index].mesh = NULL;
         new_entities[index].material = henka_material_default();
+        new_entities[index].material_name = NULL;
         new_entities[index].has_local_bounds = false;
         new_entities[index].local_bounds = (henka_bounds){{0.0f, 0.0f, 0.0f}, {0.0f, 0.0f, 0.0f}};
         new_entities[index].interaction = (henka_interaction_desc){false, 2.0f, NULL};
+        new_entities[index].interaction_prompt = NULL;
     }
 
     scene->entities = new_entities;
@@ -350,6 +387,8 @@ void henka_scene_destroy(henka_scene* scene)
     {
         henka_free(scene->entities[index].name);
         henka_free(scene->entities[index].tag);
+        henka_free(scene->entities[index].material_name);
+        henka_free(scene->entities[index].interaction_prompt);
     }
 
     henka_free(scene->entities);
@@ -365,6 +404,7 @@ henka_entity henka_scene_create_entity_named(henka_scene* scene, const char* nam
 {
     size_t index;
     char* copy;
+    henka_result copy_result;
 
     if (scene == NULL || scene->entity_count >= HENKA_MAX_SCENE_ENTITIES)
     {
@@ -383,23 +423,24 @@ henka_entity henka_scene_create_entity_named(henka_scene* scene, const char* nam
             scene->entities[index].material = henka_material_default();
             henka_free(scene->entities[index].name);
             henka_free(scene->entities[index].tag);
+            henka_free(scene->entities[index].material_name);
+            henka_free(scene->entities[index].interaction_prompt);
             scene->entities[index].name = NULL;
             scene->entities[index].tag = NULL;
+            scene->entities[index].material_name = NULL;
+            scene->entities[index].interaction_prompt = NULL;
             scene->entities[index].has_local_bounds = false;
             scene->entities[index].local_bounds = (henka_bounds){{0.0f, 0.0f, 0.0f}, {0.5f, 0.5f, 0.5f}};
             scene->entities[index].interaction = (henka_interaction_desc){false, 2.0f, NULL};
 
-            if (name != NULL)
+            copy_result = henka_scene_duplicate_text(name, &copy);
+            if (copy_result != HENKA_SUCCESS)
             {
-                copy = henka_scene_duplicate_string(name);
-                if (copy == NULL)
-                {
-                    scene->entities[index].active = false;
-                    return HENKA_INVALID_ENTITY;
-                }
-
-                scene->entities[index].name = copy;
+                scene->entities[index].active = false;
+                return HENKA_INVALID_ENTITY;
             }
+
+            scene->entities[index].name = copy;
             scene->entity_count += 1U;
             return (henka_entity)(index + 1U);
         }
@@ -418,17 +459,14 @@ henka_entity henka_scene_create_entity_named(henka_scene* scene, const char* nam
     scene->entities[scene->entity_count].has_local_bounds = false;
     scene->entities[scene->entity_count].local_bounds = (henka_bounds){{0.0f, 0.0f, 0.0f}, {0.5f, 0.5f, 0.5f}};
     scene->entities[scene->entity_count].interaction = (henka_interaction_desc){false, 2.0f, NULL};
-    if (name != NULL)
+    copy_result = henka_scene_duplicate_text(name, &copy);
+    if (copy_result != HENKA_SUCCESS)
     {
-        copy = henka_scene_duplicate_string(name);
-        if (copy == NULL)
-        {
-            scene->entities[scene->entity_count].active = false;
-            return HENKA_INVALID_ENTITY;
-        }
-
-        scene->entities[scene->entity_count].name = copy;
+        scene->entities[scene->entity_count].active = false;
+        return HENKA_INVALID_ENTITY;
     }
+
+    scene->entities[scene->entity_count].name = copy;
     scene->entity_count += 1U;
     return (henka_entity)scene->entity_count;
 }
@@ -450,8 +488,12 @@ void henka_scene_destroy_entity(henka_scene* scene, henka_entity entity)
     record->material = henka_material_default();
     henka_free(record->name);
     henka_free(record->tag);
+    henka_free(record->material_name);
+    henka_free(record->interaction_prompt);
     record->name = NULL;
     record->tag = NULL;
+    record->material_name = NULL;
+    record->interaction_prompt = NULL;
     record->has_local_bounds = false;
     record->interaction = (henka_interaction_desc){false, 2.0f, NULL};
     if (scene->entity_count > 0U)
@@ -837,15 +879,30 @@ henka_result henka_scene_set_entity_mesh(henka_scene* scene, henka_entity entity
 
 henka_result henka_scene_set_entity_material(henka_scene* scene, henka_entity entity, henka_material material)
 {
+    char* material_name;
     henka_scene_entity_record* record;
+    henka_result result;
 
     record = henka_scene_get_entity_record(scene, entity);
-    if (record == NULL || material.shader == NULL)
+    if (record == NULL || !henka_scene_material_is_valid(material))
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
 
+    material_name = NULL;
+    if (material.name != NULL && material.name[0] != '\0')
+    {
+        result = henka_scene_duplicate_text(material.name, &material_name);
+        if (result != HENKA_SUCCESS)
+        {
+            return result;
+        }
+    }
+
+    henka_free(record->material_name);
+    record->material_name = material_name;
     record->material = material;
+    record->material.name = material_name != NULL ? material_name : "Material";
     return HENKA_SUCCESS;
 }
 
@@ -860,14 +917,9 @@ henka_result henka_scene_set_entity_name(henka_scene* scene, henka_entity entity
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
 
-    copy = NULL;
-    if (name != NULL)
+    if (henka_scene_duplicate_text(name, &copy) != HENKA_SUCCESS)
     {
-        copy = henka_scene_duplicate_string(name);
-        if (copy == NULL)
-        {
-            return HENKA_ERROR_OUT_OF_MEMORY;
-        }
+        return HENKA_ERROR_INVALID_ARGUMENT;
     }
 
     henka_free(record->name);
@@ -886,14 +938,9 @@ henka_result henka_scene_set_entity_tag(henka_scene* scene, henka_entity entity,
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
 
-    copy = NULL;
-    if (tag != NULL)
+    if (henka_scene_duplicate_text(tag, &copy) != HENKA_SUCCESS)
     {
-        copy = henka_scene_duplicate_string(tag);
-        if (copy == NULL)
-        {
-            return HENKA_ERROR_OUT_OF_MEMORY;
-        }
+        return HENKA_ERROR_INVALID_ARGUMENT;
     }
 
     henka_free(record->tag);
@@ -920,7 +967,7 @@ henka_result henka_scene_set_entity_local_bounds(henka_scene* scene, henka_entit
     henka_scene_entity_record* record;
 
     record = henka_scene_get_entity_record(scene, entity);
-    if (record == NULL)
+    if (record == NULL || !henka_scene_bounds_are_valid(bounds))
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
@@ -948,14 +995,27 @@ henka_result henka_scene_clear_entity_local_bounds(henka_scene* scene, henka_ent
 henka_result henka_scene_set_entity_interaction(henka_scene* scene, henka_entity entity, const henka_interaction_desc* interaction)
 {
     henka_scene_entity_record* record;
+    char* prompt_copy;
+    henka_result result;
 
     record = henka_scene_get_entity_record(scene, entity);
-    if (record == NULL || interaction == NULL)
+    if (record == NULL || interaction == NULL ||
+        !henka_is_finite_float(interaction->max_distance) ||
+        interaction->max_distance < 0.0f)
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
 
+    result = henka_scene_duplicate_text(interaction->prompt, &prompt_copy);
+    if (result != HENKA_SUCCESS)
+    {
+        return result;
+    }
+
+    henka_free(record->interaction_prompt);
+    record->interaction_prompt = prompt_copy;
     record->interaction = *interaction;
+    record->interaction.prompt = prompt_copy;
     return HENKA_SUCCESS;
 }
 
@@ -992,7 +1052,7 @@ henka_interaction_result henka_scene_can_interact(const henka_scene* scene, henk
     float distance;
 
     record = henka_scene_get_entity_record_const(scene, entity);
-    if (record == NULL)
+    if (record == NULL || !henka_scene_vec3_is_finite(observer_position))
     {
         return HENKA_INTERACTION_RESULT_UNAVAILABLE;
     }

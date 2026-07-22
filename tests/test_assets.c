@@ -5,8 +5,14 @@
 #include <henka/assets.h>
 #include <henka/memory.h>
 
+#include "../engine/src/core/checked.h"
+#include "../engine/src/henka_internal.h"
+
 void henka_test_assets(void)
 {
+    char* display_name;
+    char display_name_source[] = "assets/textures/cube_albedo.png";
+    char overlong_path[HENKA_MAX_ASSET_PATH_BYTES + 2U];
     char* resolved_path;
     henka_mesh* mesh;
 
@@ -14,6 +20,17 @@ void henka_test_assets(void)
     HENKA_TEST_ASSERT(strcmp(henka_assets_get_type_label(HENKA_ASSET_TYPE_TEXTURE), "Texture") == 0);
     HENKA_TEST_ASSERT(strcmp(henka_assets_get_type_label(HENKA_ASSET_TYPE_MESH), "Mesh") == 0);
     HENKA_TEST_ASSERT(henka_assets_get_metadata_count(NULL) == 0U);
+
+    display_name = henka_asset_copy_display_name(display_name_source);
+    HENKA_TEST_ASSERT(display_name != NULL);
+    HENKA_TEST_ASSERT(strcmp(display_name, "cube_albedo.png") == 0);
+    display_name_source[0] = 'X';
+    HENKA_TEST_ASSERT(strcmp(display_name, "cube_albedo.png") == 0);
+    henka_free(display_name);
+
+    memset(overlong_path, 'a', sizeof(overlong_path));
+    overlong_path[sizeof(overlong_path) - 1U] = '\0';
+    HENKA_TEST_ASSERT(henka_asset_copy_display_name(overlong_path) == NULL);
 
     mesh = NULL;
     HENKA_TEST_ASSERT(henka_assets_retry_failed_obj_mesh(NULL, "assets/models/missing.obj", &mesh) == HENKA_ERROR_INVALID_ARGUMENT);

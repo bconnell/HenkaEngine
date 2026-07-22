@@ -43,7 +43,7 @@ Scene entities now support more read-only object metadata:
 - optional local bounds
 - optional interaction metadata
 
-This keeps the current scene model lightweight while making object inspection and picking less sandbox-specific.
+This keeps the current scene model lightweight while making object inspection and picking less sandbox-specific. Names, tags, material names, and interaction prompts are copied into bounded scene-owned storage, so callers may use temporary input buffers. Returned text pointers remain valid until the corresponding value is replaced or the entity is destroyed.
 
 ### Cameras
 
@@ -168,7 +168,7 @@ The asset manager now tracks read-only metadata for cached assets:
 - short summary
 - short error summary
 
-This is a small inspection layer, not a content browser or hot-reload pipeline. Shader, texture, and mesh cache growth is bounded and checked before allocation. Scene entity storage also uses bounded checked growth.
+This is a small inspection layer, not a content browser or hot-reload pipeline. Source and display names are cache-owned strings rather than borrowed caller buffers. Shader, texture, and mesh cache growth is bounded and checked before allocation, asset paths are bounded, and scene entity storage also uses bounded checked growth.
 
 ### Materials
 
@@ -187,7 +187,7 @@ Current material types include:
 - Vertex Color
 - Reserved Procedural
 
-The reserved procedural type exists only as a stable enum value for future work. It does not implement procedural shading yet.
+The reserved procedural type exists only as a stable enum value for future work. It does not implement procedural shading yet. Material names are copied into scene-owned storage, and material assignment rejects invalid enum values, non-finite colors, and textured configurations without a texture reference.
 
 ### Interactions
 
@@ -197,7 +197,7 @@ Scene objects can now expose generic interaction metadata:
 - prompt text
 - max distance
 
-Henka also exposes a simple interaction eligibility result so samples can decide whether an object is currently available, disabled, or out of range.
+Henka also exposes a simple interaction eligibility result so samples can decide whether an object is currently available, disabled, or out of range. Prompt text is copied into scene-owned storage, ranges must be finite and non-negative, and non-finite observer positions are unavailable.
 
 ### Save data
 

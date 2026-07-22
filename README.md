@@ -31,7 +31,7 @@ Henka Engine is still early, but the sandbox now renders a visible 3D scene with
 - Scene object metadata, bounds, and interaction foundation
 - Reusable camera helpers for reset, focus, screen-ray creation, stable vertical view bases, orthographic zoom, and Perspective 3D, Side 2.5D, Top-down 2.5D, and Isometric 2.5D presets
 - Local action-command foundation for validated scene and object operations, including signed scale transforms for mirror workflows
-- Asset metadata and stronger material summaries
+- Asset metadata with cache-owned source and display strings, plus stronger material summaries
 - Local save-data foundation with confined slot paths, complete-file validation, and transactional state replacement
 - Package mode and engine diagnostics foundation
 - Shared overlay-handle transform gizmo foundation for selected object manipulation, with visual feel still being hardened through manual QA
@@ -150,6 +150,15 @@ The packaged folder also includes `PACKAGE_INFO.txt` so you can tell when the pa
 - Shared checked-arithmetic helpers protect capacity growth, size multiplication, and narrowing conversions.
 - Asset caches, scene entities, action default transforms, physics contacts and events, and related runtime arrays use bounded checked growth.
 - Procedural grids and circle rings reject non-finite or excessive dimensions before allocation.
+- Asset paths are bounded to 4,096 bytes and scene-owned names, tags, material names, and interaction prompts are bounded to 1,024 bytes.
+
+### Runtime metadata ownership
+
+- Scene names, tags, material names, and interaction prompts are copied into bounded scene-owned storage.
+- Asset metadata source and display strings use asset-manager-owned storage and do not depend on caller buffers remaining alive.
+- Local bounds reject non-finite centers, non-finite extents, and negative extents.
+- Materials reject invalid types, non-finite base colors, and textured configurations without a texture.
+- Interaction ranges reject negative and non-finite values, and eligibility checks reject non-finite observer positions.
 
 ### Physics activation safety
 

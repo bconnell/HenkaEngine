@@ -18,6 +18,32 @@
 #define HENKA_MAX_PHYSICS_ITEMS ((size_t)1048576U)
 #define HENKA_MAX_DEBUG_GRID_HALF_EXTENT 16384
 #define HENKA_MAX_CIRCLE_SEGMENTS 65536
+#define HENKA_MAX_ASSET_PATH_BYTES ((size_t)4096U)
+#define HENKA_MAX_SCENE_TEXT_BYTES ((size_t)1024U)
+
+static inline bool henka_checked_c_string_length(
+    const char* value,
+    size_t maximum_length,
+    size_t* out_length)
+{
+    size_t length;
+
+    if (value == NULL || out_length == NULL)
+    {
+        return false;
+    }
+
+    for (length = 0U; length <= maximum_length; ++length)
+    {
+        if (value[length] == '\0')
+        {
+            *out_length = length;
+            return true;
+        }
+    }
+
+    return false;
+}
 
 static inline bool henka_checked_size_add(size_t left, size_t right, size_t* out_value)
 {
