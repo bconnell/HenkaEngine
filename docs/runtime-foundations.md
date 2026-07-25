@@ -275,3 +275,11 @@ Plane physics now rotates local plane normals by the body transform for contacts
 Generic confined relative-path resolution remains valid without a base directory for asset and standalone relative-path use. Save-slot construction separately requires a non-empty user-data base path so save files cannot silently fall back to the process working directory. Save camera poses reject out-of-range pitch, failed camera-pose reads clear caller outputs, and save-flag names are bounded so every accepted flag remains serializable after the `flag.` prefix is added. Sandbox camera settings are validated as a complete camera before use, with unsafe speed, pitch, projection height, position, or sensitivity values replaced by safe defaults.
 
 Windows timing uses the monotonic high-resolution performance counter, with a monotonic tick-count fallback. Supported non-Windows builds use `CLOCK_MONOTONIC` when available.
+
+### Numeric geometry boundaries
+
+Vector and quaternion normalization now scale finite inputs before computing magnitude, so very large finite values produce valid unit directions instead of collapsing to zero or overflowing. Quaternion multiplication performs its intermediate products in double precision before normalization.
+
+Scene transforms and local bounds are treated as a paired invariant. A transform or local-bound update is rejected when the derived world center, extents, or minimum and maximum corners cannot remain finite and representable. World-bound query failures clear output deterministically. Scene picking normalizes finite ray directions internally, including very large finite directions.
+
+Physics body creation and collider or transform replacement validate derived collider centers, radii, box extents, plane normals, plane offsets, and representable shape boundaries. Individually finite inputs that would overflow persistent collision geometry are rejected before mutating the body. Physics raycasts normalize finite directions through the same scaled path, including directions whose unnormalized length exceeds the finite float range.

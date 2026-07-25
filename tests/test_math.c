@@ -1,7 +1,14 @@
 #include "test_suite.h"
 
+#include <float.h>
+
 #include <henka/core.h>
 #include <henka/math.h>
+
+static int henka_test_math_float_is_finite(float value)
+{
+    return value == value && value >= -FLT_MAX && value <= FLT_MAX;
+}
 
 void henka_test_math(void)
 {
@@ -27,6 +34,14 @@ void henka_test_math(void)
     normalized = henka_vec3_normalize((henka_vec3){0.0f, 3.0f, 4.0f});
     HENKA_TEST_ASSERT_FLOAT_CLOSE(normalized.y, 0.6f, 0.0001);
     HENKA_TEST_ASSERT_FLOAT_CLOSE(normalized.z, 0.8f, 0.0001);
+    normalized = henka_vec3_normalize((henka_vec3){FLT_MAX, FLT_MAX, 0.0f});
+    HENKA_TEST_ASSERT(henka_test_math_float_is_finite(normalized.x));
+    HENKA_TEST_ASSERT(henka_test_math_float_is_finite(normalized.y));
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(normalized.x, 0.7071067f, 0.0002f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(normalized.y, 0.7071067f, 0.0002f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(henka_vec3_length(normalized), 1.0f, 0.0002f);
+    added = (henka_vec3){FLT_MAX, FLT_MAX, 0.0f};
+    HENKA_TEST_ASSERT(henka_vec3_length(added) == INFINITY);
     HENKA_TEST_ASSERT_FLOAT_CLOSE(henka_vec3_dot((henka_vec3){1.0f, 0.0f, 0.0f}, (henka_vec3){0.0f, 1.0f, 0.0f}), 0.0f, 0.0001);
 
     crossed = henka_vec3_cross((henka_vec3){1.0f, 0.0f, 0.0f}, (henka_vec3){0.0f, 1.0f, 0.0f});
@@ -37,6 +52,28 @@ void henka_test_math(void)
     HENKA_TEST_ASSERT_FLOAT_CLOSE(rotated.z, -1.0f, 0.0002f);
     rotation = henka_quat_multiply(henka_quat_identity(), rotation);
     HENKA_TEST_ASSERT_FLOAT_CLOSE(rotation.w, henka_quat_normalize(rotation).w, 0.0001f);
+    rotation = henka_quat_normalize((henka_quat){FLT_MAX, FLT_MAX, FLT_MAX, FLT_MAX});
+    HENKA_TEST_ASSERT(henka_test_math_float_is_finite(rotation.x));
+    HENKA_TEST_ASSERT(henka_test_math_float_is_finite(rotation.y));
+    HENKA_TEST_ASSERT(henka_test_math_float_is_finite(rotation.z));
+    HENKA_TEST_ASSERT(henka_test_math_float_is_finite(rotation.w));
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(rotation.x, 0.5f, 0.0002f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(rotation.w, 0.5f, 0.0002f);
+    rotation = henka_quat_multiply(
+        (henka_quat){FLT_MAX, 0.0f, 0.0f, FLT_MAX},
+        (henka_quat){0.0f, FLT_MAX, 0.0f, FLT_MAX});
+    HENKA_TEST_ASSERT(henka_test_math_float_is_finite(rotation.x));
+    HENKA_TEST_ASSERT(henka_test_math_float_is_finite(rotation.y));
+    HENKA_TEST_ASSERT(henka_test_math_float_is_finite(rotation.z));
+    HENKA_TEST_ASSERT(henka_test_math_float_is_finite(rotation.w));
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(
+        sqrtf(
+            rotation.x * rotation.x +
+            rotation.y * rotation.y +
+            rotation.z * rotation.z +
+            rotation.w * rotation.w),
+        1.0f,
+        0.0002f);
 
     identity = henka_mat4_identity();
     HENKA_TEST_ASSERT_FLOAT_CLOSE(identity.m[0], 1.0f, 0.0001);

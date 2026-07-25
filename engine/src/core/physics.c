@@ -188,6 +188,95 @@ static bool henka_physics_transform_valid(henka_transform transform)
         isfinite(transform.rotation.z) && isfinite(transform.rotation.w);
 }
 
+static bool henka_physics_double_fits_float(double value)
+{
+    return isfinite(value) && value >= -(double)FLT_MAX && value <= (double)FLT_MAX;
+}
+
+static bool henka_physics_geometry_valid(
+    henka_transform transform,
+    henka_physics_collider_desc collider)
+{
+    double center_x;
+    double center_y;
+    double center_z;
+    double extent_x;
+    double extent_y;
+    double extent_z;
+
+    center_x = (double)transform.position.x + (double)collider.offset.x;
+    center_y = (double)transform.position.y + (double)collider.offset.y;
+    center_z = (double)transform.position.z + (double)collider.offset.z;
+    if (!henka_physics_double_fits_float(center_x) ||
+        !henka_physics_double_fits_float(center_y) ||
+        !henka_physics_double_fits_float(center_z))
+    {
+        return false;
+    }
+
+    switch (collider.shape)
+    {
+        case HENKA_PHYSICS_SHAPE_SPHERE:
+        {
+            double maximum_scale;
+
+            maximum_scale = fmax(
+                fabs((double)transform.scale.x),
+                fmax(
+                    fabs((double)transform.scale.y),
+                    fabs((double)transform.scale.z)));
+            extent_x = (double)collider.data.sphere.radius * maximum_scale;
+            extent_y = extent_x;
+            extent_z = extent_x;
+            break;
+        }
+
+        case HENKA_PHYSICS_SHAPE_BOX:
+            extent_x = (double)collider.data.box.half_extents.x *
+                fabs((double)transform.scale.x);
+            extent_y = (double)collider.data.box.half_extents.y *
+                fabs((double)transform.scale.y);
+            extent_z = (double)collider.data.box.half_extents.z *
+                fabs((double)transform.scale.z);
+            break;
+
+        case HENKA_PHYSICS_SHAPE_PLANE:
+        {
+            double world_offset;
+            henka_vec3 local_normal;
+            henka_vec3 world_normal;
+
+            local_normal = henka_vec3_normalize(collider.data.plane.normal);
+            world_normal = henka_vec3_normalize(
+                henka_quat_rotate_vec3(transform.rotation, local_normal));
+            if (henka_vec3_length(local_normal) <= 0.0001f ||
+                henka_vec3_length(world_normal) <= 0.0001f)
+            {
+                return false;
+            }
+
+            world_offset = (double)collider.data.plane.offset +
+                (double)world_normal.x * center_x +
+                (double)world_normal.y * center_y +
+                (double)world_normal.z * center_z;
+            return henka_physics_double_fits_float(world_offset);
+        }
+
+        default:
+            return false;
+    }
+
+    return henka_physics_double_fits_float(extent_x) &&
+        henka_physics_double_fits_float(extent_y) &&
+        henka_physics_double_fits_float(extent_z) &&
+        henka_physics_double_fits_float(center_x - extent_x) &&
+        henka_physics_double_fits_float(center_x + extent_x) &&
+        henka_physics_double_fits_float(center_y - extent_y) &&
+        henka_physics_double_fits_float(center_y + extent_y) &&
+        henka_physics_double_fits_float(center_z - extent_z) &&
+        henka_physics_double_fits_float(center_z + extent_z);
+}
+
 static henka_physics_body_record* henka_physics_find_body(henka_physics_world* world, henka_physics_body_id id)
 {
     size_t index;
@@ -813,6 +902,7 @@ henka_result henka_physics_body_create(
         !henka_physics_transform_valid(desc->transform) || !henka_physics_is_finite_vec3(desc->linear_velocity) ||
         !henka_physics_is_finite_vec3(desc->angular_velocity) || !henka_physics_material_valid(desc->material) ||
         !henka_physics_collider_valid(desc->collider) ||
+        !henka_physics_geometry_valid(desc->transform, desc->collider) ||
         (desc->collider.shape == HENKA_PHYSICS_SHAPE_PLANE && desc->type != HENKA_PHYSICS_BODY_STATIC) ||
         (desc->type == HENKA_PHYSICS_BODY_DYNAMIC &&
             (!isfinite(desc->mass) || desc->mass <= 0.0f || !isfinite(1.0f / desc->mass))) ||
@@ -932,7 +1022,9 @@ henka_result henka_physics_body_get_state(
 henka_result henka_physics_body_set_transform(henka_physics_world* world, henka_physics_body_id body, henka_transform transform, bool clear_velocity)
 {
     henka_physics_body_record* record = henka_physics_find_body(world, body);
-    if (record == NULL || !henka_physics_transform_valid(transform))
+    if (record == NULL ||
+        !henka_physics_transform_valid(transform) ||
+        !henka_physics_geometry_valid(transform, record->state.collider))
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
@@ -969,7 +1061,9 @@ henka_result henka_physics_body_set_type(henka_physics_world* world, henka_physi
 henka_result henka_physics_body_set_collider(henka_physics_world* world, henka_physics_body_id body, henka_physics_collider_desc collider)
 {
     henka_physics_body_record* record = henka_physics_find_body(world, body);
-    if (record == NULL || !henka_physics_collider_valid(collider) ||
+    if (record == NULL ||
+        !henka_physics_collider_valid(collider) ||
+        !henka_physics_geometry_valid(record->state.transform, collider) ||
         (collider.shape == HENKA_PHYSICS_SHAPE_PLANE && record->state.type != HENKA_PHYSICS_BODY_STATIC))
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
@@ -1354,7 +1448,7 @@ henka_result henka_physics_world_raycast(const henka_physics_world* world, henka
 {
     size_t index;
     float closest = FLT_MAX;
-    float direction_length;
+    henka_vec3 normalized_direction;
 
     if (out_hit == NULL)
     {
@@ -1367,15 +1461,22 @@ henka_result henka_physics_world_raycast(const henka_physics_world* world, henka
         {0.0f, 0.0f, 0.0f},
         {0.0f, 0.0f, 0.0f},
         0.0f};
-    direction_length = henka_vec3_length(ray.direction);
-    if (world == NULL || !henka_physics_is_finite_vec3(ray.origin) ||
-        !henka_physics_is_finite_vec3(ray.direction) || !isfinite(direction_length) ||
-        direction_length <= 0.0001f || !isfinite(max_distance) || max_distance <= 0.0f)
+    if (world == NULL ||
+        !henka_physics_is_finite_vec3(ray.origin) ||
+        !henka_physics_is_finite_vec3(ray.direction) ||
+        !isfinite(max_distance) ||
+        max_distance <= 0.0f)
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
 
-    ray.direction = henka_vec3_scale(ray.direction, 1.0f / direction_length);
+    normalized_direction = henka_vec3_normalize(ray.direction);
+    if (henka_vec3_length(normalized_direction) <= 0.0001f)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    ray.direction = normalized_direction;
     for (index = 0U; index < world->body_capacity; ++index)
     {
         const henka_physics_body_state* body;

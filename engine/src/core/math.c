@@ -1,5 +1,6 @@
 #include <henka/math.h>
 
+#include <float.h>
 #include <math.h>
 
 henka_vec3 henka_vec3_add(henka_vec3 left, henka_vec3 right)
@@ -32,22 +33,119 @@ henka_vec3 henka_vec3_scale(henka_vec3 value, float scalar)
     return result;
 }
 
+static float henka_max_abs3(float x, float y, float z)
+{
+    float maximum;
+
+    maximum = fmaxf(fabsf(x), fabsf(y));
+    return fmaxf(maximum, fabsf(z));
+}
+
+static henka_quat henka_quat_normalize_components(double x, double y, double z, double w)
+{
+    double magnitude;
+    double maximum;
+    double scaled_x;
+    double scaled_y;
+    double scaled_z;
+    double scaled_w;
+
+    maximum = fmax(fmax(fabs(x), fabs(y)), fmax(fabs(z), fabs(w)));
+    if (!isfinite(maximum) || maximum <= 0.0)
+    {
+        return henka_quat_identity();
+    }
+
+    scaled_x = x / maximum;
+    scaled_y = y / maximum;
+    scaled_z = z / maximum;
+    scaled_w = w / maximum;
+    magnitude = maximum * sqrt(
+        scaled_x * scaled_x +
+        scaled_y * scaled_y +
+        scaled_z * scaled_z +
+        scaled_w * scaled_w);
+    if (!isfinite(magnitude) || magnitude <= 0.000001)
+    {
+        return henka_quat_identity();
+    }
+
+    return (henka_quat){
+        (float)(x / magnitude),
+        (float)(y / magnitude),
+        (float)(z / magnitude),
+        (float)(w / magnitude)};
+}
+
 float henka_vec3_length(henka_vec3 value)
 {
-    return sqrtf((value.x * value.x) + (value.y * value.y) + (value.z * value.z));
+    double length;
+    double scaled_x;
+    double scaled_y;
+    double scaled_z;
+    float maximum;
+
+    if (!isfinite(value.x) || !isfinite(value.y) || !isfinite(value.z))
+    {
+        return NAN;
+    }
+
+    maximum = henka_max_abs3(value.x, value.y, value.z);
+    if (maximum <= 0.0f)
+    {
+        return 0.0f;
+    }
+
+    scaled_x = (double)value.x / (double)maximum;
+    scaled_y = (double)value.y / (double)maximum;
+    scaled_z = (double)value.z / (double)maximum;
+    length = (double)maximum * sqrt(
+        scaled_x * scaled_x +
+        scaled_y * scaled_y +
+        scaled_z * scaled_z);
+    if (!isfinite(length) || length > (double)FLT_MAX)
+    {
+        return INFINITY;
+    }
+
+    return (float)length;
 }
 
 henka_vec3 henka_vec3_normalize(henka_vec3 value)
 {
-    float length;
+    double scaled_length;
+    double scaled_x;
+    double scaled_y;
+    double scaled_z;
+    float maximum;
 
-    length = henka_vec3_length(value);
-    if (length <= 0.000001f)
+    if (!isfinite(value.x) || !isfinite(value.y) || !isfinite(value.z))
+    {
+        return (henka_vec3){0.0f, 0.0f, 0.0f};
+    }
+
+    maximum = henka_max_abs3(value.x, value.y, value.z);
+    if (maximum <= 0.000001f)
     {
         return value;
     }
 
-    return henka_vec3_scale(value, 1.0f / length);
+    scaled_x = (double)value.x / (double)maximum;
+    scaled_y = (double)value.y / (double)maximum;
+    scaled_z = (double)value.z / (double)maximum;
+    scaled_length = sqrt(
+        scaled_x * scaled_x +
+        scaled_y * scaled_y +
+        scaled_z * scaled_z);
+    if (!isfinite(scaled_length) || scaled_length <= 0.0)
+    {
+        return (henka_vec3){0.0f, 0.0f, 0.0f};
+    }
+
+    return (henka_vec3){
+        (float)(scaled_x / scaled_length),
+        (float)(scaled_y / scaled_length),
+        (float)(scaled_z / scaled_length)};
 }
 
 float henka_vec3_dot(henka_vec3 left, henka_vec3 right)
@@ -82,6 +180,11 @@ henka_quat henka_quat_from_axis_angle(henka_vec3 axis, float angle_radians)
     float half_angle;
     float sine;
 
+    if (!isfinite(angle_radians))
+    {
+        return henka_quat_identity();
+    }
+
     axis = henka_vec3_normalize(axis);
     if (henka_vec3_length(axis) <= 0.000001f)
     {
@@ -107,6 +210,11 @@ henka_quat henka_quat_from_euler(float pitch_radians, float yaw_radians, float r
     float sr;
     henka_quat result;
 
+    if (!isfinite(pitch_radians) || !isfinite(yaw_radians) || !isfinite(roll_radians))
+    {
+        return henka_quat_identity();
+    }
+
     cy = cosf(yaw_radians * 0.5f);
     sy = sinf(yaw_radians * 0.5f);
     cp = cosf(pitch_radians * 0.5f);
@@ -123,31 +231,37 @@ henka_quat henka_quat_from_euler(float pitch_radians, float yaw_radians, float r
 
 henka_quat henka_quat_multiply(henka_quat left, henka_quat right)
 {
-    henka_quat result;
+    double x;
+    double y;
+    double z;
+    double w;
 
-    result.x = (left.w * right.x) + (left.x * right.w) + (left.y * right.z) - (left.z * right.y);
-    result.y = (left.w * right.y) - (left.x * right.z) + (left.y * right.w) + (left.z * right.x);
-    result.z = (left.w * right.z) + (left.x * right.y) - (left.y * right.x) + (left.z * right.w);
-    result.w = (left.w * right.w) - (left.x * right.x) - (left.y * right.y) - (left.z * right.z);
-    return henka_quat_normalize(result);
+    x = ((double)left.w * (double)right.x) +
+        ((double)left.x * (double)right.w) +
+        ((double)left.y * (double)right.z) -
+        ((double)left.z * (double)right.y);
+    y = ((double)left.w * (double)right.y) -
+        ((double)left.x * (double)right.z) +
+        ((double)left.y * (double)right.w) +
+        ((double)left.z * (double)right.x);
+    z = ((double)left.w * (double)right.z) +
+        ((double)left.x * (double)right.y) -
+        ((double)left.y * (double)right.x) +
+        ((double)left.z * (double)right.w);
+    w = ((double)left.w * (double)right.w) -
+        ((double)left.x * (double)right.x) -
+        ((double)left.y * (double)right.y) -
+        ((double)left.z * (double)right.z);
+    return henka_quat_normalize_components(x, y, z, w);
 }
 
 henka_quat henka_quat_normalize(henka_quat value)
 {
-    float magnitude;
-    henka_quat result;
-
-    magnitude = sqrtf((value.x * value.x) + (value.y * value.y) + (value.z * value.z) + (value.w * value.w));
-    if (magnitude <= 0.000001f)
-    {
-        return henka_quat_identity();
-    }
-
-    result.x = value.x / magnitude;
-    result.y = value.y / magnitude;
-    result.z = value.z / magnitude;
-    result.w = value.w / magnitude;
-    return result;
+    return henka_quat_normalize_components(
+        (double)value.x,
+        (double)value.y,
+        (double)value.z,
+        (double)value.w);
 }
 
 henka_vec3 henka_quat_rotate_vec3(henka_quat rotation, henka_vec3 value)

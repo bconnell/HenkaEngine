@@ -152,6 +152,23 @@ void henka_test_scene(void)
     bounds = (henka_bounds){{0.0f, 0.0f, 0.0f}, {1.0f, 1.0f, 1.0f}};
     HENKA_TEST_ASSERT(henka_scene_set_entity_local_bounds(scene, helper, bounds) == HENKA_SUCCESS);
     transform = henka_transform_identity();
+    transform.rotation = (henka_quat){FLT_MAX, FLT_MAX, FLT_MAX, FLT_MAX};
+    HENKA_TEST_ASSERT(henka_scene_set_entity_transform(scene, helper, transform) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_scene_get_entity_transform(scene, helper, &read_back) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(read_back.rotation.x, 0.5f, 0.0002f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(read_back.rotation.w, 0.5f, 0.0002f);
+    transform = henka_transform_identity();
+    transform.position.x = FLT_MAX;
+    transform.scale = (henka_vec3){FLT_MAX, 1.0f, 1.0f};
+    HENKA_TEST_ASSERT(henka_scene_set_entity_transform(scene, helper, transform) == HENKA_ERROR_INVALID_ARGUMENT);
+    bounds = (henka_bounds){{9.0f, 9.0f, 9.0f}, {8.0f, 8.0f, 8.0f}};
+    HENKA_TEST_ASSERT(henka_scene_get_entity_world_bounds(
+        scene,
+        HENKA_INVALID_ENTITY,
+        &bounds) == HENKA_ERROR_INVALID_ARGUMENT);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(bounds.center.x, 0.0f, 0.0f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(bounds.extents.x, 0.0f, 0.0f);
+    transform = henka_transform_identity();
     transform.position = (henka_vec3){10.0f, 0.0f, 0.0f};
     HENKA_TEST_ASSERT(henka_scene_set_entity_transform(scene, helper, transform) == HENKA_SUCCESS);
     transform = henka_transform_identity();
@@ -204,6 +221,9 @@ void henka_test_scene(void)
 
     ray.origin = (henka_vec3){1.0f, 0.5f, 3.0f};
     ray.direction = henka_vec3_normalize((henka_vec3){0.0f, 0.0f, -1.0f});
+    HENKA_TEST_ASSERT(henka_scene_pick_entity(scene, ray, &found, NULL) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(found == second);
+    ray.direction = (henka_vec3){0.0f, 0.0f, -FLT_MAX};
     HENKA_TEST_ASSERT(henka_scene_pick_entity(scene, ray, &found, NULL) == HENKA_SUCCESS);
     HENKA_TEST_ASSERT(found == second);
     HENKA_TEST_ASSERT(henka_scene_translate_entity(scene, second, (henka_vec3){2.0f, 0.0f, -1.0f}) == HENKA_SUCCESS);

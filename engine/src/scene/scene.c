@@ -125,43 +125,94 @@ static henka_result henka_scene_duplicate_text(const char* value, char** out_cop
     return HENKA_SUCCESS;
 }
 
-static henka_bounds henka_scene_transform_bounds(henka_bounds local_bounds, henka_transform transform)
+static bool henka_scene_double_fits_float(double value)
 {
-    henka_bounds world_bounds;
+    return isfinite(value) && value >= -(double)FLT_MAX && value <= (double)FLT_MAX;
+}
+
+static bool henka_scene_try_transform_bounds(
+    henka_bounds local_bounds,
+    henka_transform transform,
+    henka_bounds* out_world_bounds)
+{
+    double center_x;
+    double center_y;
+    double center_z;
+    double extent_x;
+    double extent_y;
+    double extent_z;
+    double scaled_center_x;
+    double scaled_center_y;
+    double scaled_center_z;
+    double scaled_extent_x;
+    double scaled_extent_y;
+    double scaled_extent_z;
     henka_mat4 rotation;
-    henka_vec3 scaled_center;
-    henka_vec3 scaled_extents;
-    henka_vec3 rotated_center;
 
-    scaled_center = (henka_vec3)
+    if (out_world_bounds == NULL)
     {
-        local_bounds.center.x * transform.scale.x,
-        local_bounds.center.y * transform.scale.y,
-        local_bounds.center.z * transform.scale.z
-    };
-    scaled_extents = (henka_vec3)
-    {
-        fabsf(local_bounds.extents.x * transform.scale.x),
-        fabsf(local_bounds.extents.y * transform.scale.y),
-        fabsf(local_bounds.extents.z * transform.scale.z)
-    };
-    rotated_center = henka_quat_rotate_vec3(transform.rotation, scaled_center);
+        return false;
+    }
+
+    *out_world_bounds = (henka_bounds){{0.0f, 0.0f, 0.0f}, {0.0f, 0.0f, 0.0f}};
     rotation = henka_mat4_rotation(transform.rotation);
+    scaled_center_x = (double)local_bounds.center.x * (double)transform.scale.x;
+    scaled_center_y = (double)local_bounds.center.y * (double)transform.scale.y;
+    scaled_center_z = (double)local_bounds.center.z * (double)transform.scale.z;
+    scaled_extent_x = fabs((double)local_bounds.extents.x * (double)transform.scale.x);
+    scaled_extent_y = fabs((double)local_bounds.extents.y * (double)transform.scale.y);
+    scaled_extent_z = fabs((double)local_bounds.extents.z * (double)transform.scale.z);
 
-    world_bounds.center = henka_vec3_add(transform.position, rotated_center);
-    world_bounds.extents.x =
-        fabsf(rotation.m[0]) * scaled_extents.x +
-        fabsf(rotation.m[4]) * scaled_extents.y +
-        fabsf(rotation.m[8]) * scaled_extents.z;
-    world_bounds.extents.y =
-        fabsf(rotation.m[1]) * scaled_extents.x +
-        fabsf(rotation.m[5]) * scaled_extents.y +
-        fabsf(rotation.m[9]) * scaled_extents.z;
-    world_bounds.extents.z =
-        fabsf(rotation.m[2]) * scaled_extents.x +
-        fabsf(rotation.m[6]) * scaled_extents.y +
-        fabsf(rotation.m[10]) * scaled_extents.z;
-    return world_bounds;
+    center_x = (double)transform.position.x +
+        (double)rotation.m[0] * scaled_center_x +
+        (double)rotation.m[4] * scaled_center_y +
+        (double)rotation.m[8] * scaled_center_z;
+    center_y = (double)transform.position.y +
+        (double)rotation.m[1] * scaled_center_x +
+        (double)rotation.m[5] * scaled_center_y +
+        (double)rotation.m[9] * scaled_center_z;
+    center_z = (double)transform.position.z +
+        (double)rotation.m[2] * scaled_center_x +
+        (double)rotation.m[6] * scaled_center_y +
+        (double)rotation.m[10] * scaled_center_z;
+    extent_x =
+        fabs((double)rotation.m[0]) * scaled_extent_x +
+        fabs((double)rotation.m[4]) * scaled_extent_y +
+        fabs((double)rotation.m[8]) * scaled_extent_z;
+    extent_y =
+        fabs((double)rotation.m[1]) * scaled_extent_x +
+        fabs((double)rotation.m[5]) * scaled_extent_y +
+        fabs((double)rotation.m[9]) * scaled_extent_z;
+    extent_z =
+        fabs((double)rotation.m[2]) * scaled_extent_x +
+        fabs((double)rotation.m[6]) * scaled_extent_y +
+        fabs((double)rotation.m[10]) * scaled_extent_z;
+
+    if (!henka_scene_double_fits_float(center_x) ||
+        !henka_scene_double_fits_float(center_y) ||
+        !henka_scene_double_fits_float(center_z) ||
+        !henka_scene_double_fits_float(extent_x) ||
+        !henka_scene_double_fits_float(extent_y) ||
+        !henka_scene_double_fits_float(extent_z) ||
+        !henka_scene_double_fits_float(center_x - extent_x) ||
+        !henka_scene_double_fits_float(center_x + extent_x) ||
+        !henka_scene_double_fits_float(center_y - extent_y) ||
+        !henka_scene_double_fits_float(center_y + extent_y) ||
+        !henka_scene_double_fits_float(center_z - extent_z) ||
+        !henka_scene_double_fits_float(center_z + extent_z))
+    {
+        return false;
+    }
+
+    out_world_bounds->center = (henka_vec3){
+        (float)center_x,
+        (float)center_y,
+        (float)center_z};
+    out_world_bounds->extents = (henka_vec3){
+        (float)extent_x,
+        (float)extent_y,
+        (float)extent_z};
+    return true;
 }
 
 static const float g_henka_scene_minimum_scale_magnitude = 0.01f;
@@ -740,13 +791,14 @@ henka_result henka_scene_get_entity_world_bounds(const henka_scene* scene, henka
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
 
+    *out_bounds = (henka_bounds){{0.0f, 0.0f, 0.0f}, {0.0f, 0.0f, 0.0f}};
     record = henka_scene_get_entity_record_const(scene, entity);
-    if (record == NULL || !record->has_local_bounds)
+    if (record == NULL || !record->has_local_bounds ||
+        !henka_scene_try_transform_bounds(record->local_bounds, record->transform, out_bounds))
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
 
-    *out_bounds = henka_scene_transform_bounds(record->local_bounds, record->transform);
     return HENKA_SUCCESS;
 }
 
@@ -791,6 +843,8 @@ henka_result henka_scene_get_entity_flags(const henka_scene* scene, henka_entity
 henka_result henka_scene_set_entity_transform(henka_scene* scene, henka_entity entity, henka_transform transform)
 {
     henka_scene_entity_record* record;
+    henka_transform sanitized_transform;
+    henka_bounds world_bounds;
 
     record = henka_scene_get_entity_record(scene, entity);
     if (record == NULL || !henka_transform_is_valid(transform))
@@ -798,7 +852,14 @@ henka_result henka_scene_set_entity_transform(henka_scene* scene, henka_entity e
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
 
-    record->transform = henka_transform_sanitize(transform);
+    sanitized_transform = henka_transform_sanitize(transform);
+    if (record->has_local_bounds &&
+        !henka_scene_try_transform_bounds(record->local_bounds, sanitized_transform, &world_bounds))
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    record->transform = sanitized_transform;
     return HENKA_SUCCESS;
 }
 
@@ -969,9 +1030,11 @@ henka_result henka_scene_set_entity_visible(henka_scene* scene, henka_entity ent
 henka_result henka_scene_set_entity_local_bounds(henka_scene* scene, henka_entity entity, henka_bounds bounds)
 {
     henka_scene_entity_record* record;
+    henka_bounds world_bounds;
 
     record = henka_scene_get_entity_record(scene, entity);
-    if (record == NULL || !henka_scene_bounds_are_valid(bounds))
+    if (record == NULL || !henka_scene_bounds_are_valid(bounds) ||
+        !henka_scene_try_transform_bounds(bounds, record->transform, &world_bounds))
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
@@ -1094,9 +1157,7 @@ henka_result henka_scene_pick_entity(const henka_scene* scene, henka_ray ray, he
     size_t index;
     bool found;
 
-    if (scene == NULL || out_entity == NULL ||
-        !henka_scene_vec3_is_finite(ray.origin) || !henka_scene_vec3_is_finite(ray.direction) ||
-        henka_vec3_length(ray.direction) <= 0.000001f)
+    if (out_entity == NULL)
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
@@ -1105,6 +1166,19 @@ henka_result henka_scene_pick_entity(const henka_scene* scene, henka_ray ray, he
     if (out_distance != NULL)
     {
         *out_distance = 0.0f;
+    }
+
+    if (scene == NULL ||
+        !henka_scene_vec3_is_finite(ray.origin) ||
+        !henka_scene_vec3_is_finite(ray.direction))
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    ray.direction = henka_vec3_normalize(ray.direction);
+    if (henka_vec3_length(ray.direction) <= 0.000001f)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
     }
 
     best_distance = 1000000.0f;
@@ -1120,8 +1194,8 @@ henka_result henka_scene_pick_entity(const henka_scene* scene, henka_ray ray, he
             continue;
         }
 
-        world_bounds = henka_scene_transform_bounds(record->local_bounds, record->transform);
-        if (!henka_scene_ray_intersects_bounds(ray, world_bounds, &distance))
+        if (!henka_scene_try_transform_bounds(record->local_bounds, record->transform, &world_bounds) ||
+            !henka_scene_ray_intersects_bounds(ray, world_bounds, &distance))
         {
             continue;
         }
@@ -1161,7 +1235,7 @@ henka_result henka_scene_set_camera(henka_scene* scene, const henka_camera* came
 
 void henka_scene_set_light_direction(henka_scene* scene, henka_vec3 light_direction)
 {
-    float length;
+    henka_vec3 normalized_direction;
 
     if (scene == NULL ||
         !henka_is_finite_float(light_direction.x) ||
@@ -1171,13 +1245,13 @@ void henka_scene_set_light_direction(henka_scene* scene, henka_vec3 light_direct
         return;
     }
 
-    length = henka_vec3_length(light_direction);
-    if (!henka_is_finite_float(length) || length <= 0.000001f)
+    normalized_direction = henka_vec3_normalize(light_direction);
+    if (henka_vec3_length(normalized_direction) <= 0.000001f)
     {
         return;
     }
 
-    scene->light_direction = henka_vec3_scale(light_direction, 1.0f / length);
+    scene->light_direction = normalized_direction;
 }
 
 void henka_scene_set_ambient_color(henka_scene* scene, henka_vec3 ambient_color)

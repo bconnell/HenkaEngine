@@ -23,6 +23,11 @@ static henka_physics_body_desc henka_test_physics_body(
     return desc;
 }
 
+static bool henka_test_physics_float_is_finite(float value)
+{
+    return value == value && value >= -FLT_MAX && value <= FLT_MAX;
+}
+
 static bool henka_test_has_event(const henka_physics_world* world, henka_physics_event_type type)
 {
     size_t index;
@@ -472,6 +477,17 @@ static void henka_test_physics_query_and_accumulator_hardening(void)
     HENKA_TEST_ASSERT_FLOAT_CLOSE(hit.normal.y, 0.0f, 0.0001f);
     HENKA_TEST_ASSERT_FLOAT_CLOSE(hit.normal.z, 0.0f, 0.0001f);
 
+    HENKA_TEST_ASSERT(henka_physics_world_raycast(
+        world,
+        (henka_ray){{0.0f, 0.0f, 0.0f}, {FLT_MAX, FLT_MAX, 0.0f}},
+        10.0f,
+        HENKA_PHYSICS_ALL_LAYERS,
+        &hit) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(hit.hit && hit.body == box);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(hit.distance, 1.4142135f, 0.0002f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(hit.normal.x, 1.0f, 0.0001f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(hit.normal.y, 0.0f, 0.0001f);
+
     desc = henka_test_physics_body(
         HENKA_PHYSICS_BODY_STATIC,
         henka_physics_collider_plane((henka_vec3){0.0f, 1.0f, 0.0f}, 0.0f),
@@ -541,6 +557,50 @@ static void henka_test_physics_query_and_accumulator_hardening(void)
         &desc,
         &body) == HENKA_ERROR_INVALID_ARGUMENT);
     HENKA_TEST_ASSERT(body == HENKA_INVALID_PHYSICS_BODY_ID);
+
+    desc = henka_test_physics_body(
+        HENKA_PHYSICS_BODY_STATIC,
+        henka_physics_collider_box((henka_vec3){2.0f, 1.0f, 1.0f}),
+        (henka_vec3){0.0f, 0.0f, 0.0f});
+    desc.transform.scale.x = FLT_MAX;
+    HENKA_TEST_ASSERT(henka_physics_body_create(
+        world,
+        &desc,
+        &body) == HENKA_ERROR_INVALID_ARGUMENT);
+    HENKA_TEST_ASSERT(body == HENKA_INVALID_PHYSICS_BODY_ID);
+
+    HENKA_TEST_ASSERT(henka_physics_body_get_state(world, box, &state) == HENKA_SUCCESS);
+    state.transform.position.x = FLT_MAX;
+    state.transform.scale.x = FLT_MAX;
+    HENKA_TEST_ASSERT(henka_physics_body_set_transform(
+        world,
+        box,
+        state.transform,
+        true) == HENKA_ERROR_INVALID_ARGUMENT);
+    desc.collider = henka_physics_collider_box(
+        (henka_vec3){FLT_MAX, 1.0f, 1.0f});
+    desc.collider.offset.x = FLT_MAX;
+    HENKA_TEST_ASSERT(henka_physics_body_set_collider(
+        world,
+        box,
+        desc.collider) == HENKA_ERROR_INVALID_ARGUMENT);
+
+    desc = henka_test_physics_body(
+        HENKA_PHYSICS_BODY_STATIC,
+        henka_physics_collider_plane(
+            (henka_vec3){FLT_MAX, FLT_MAX, 0.0f},
+            0.0f),
+        (henka_vec3){0.0f, 0.0f, 0.0f});
+    HENKA_TEST_ASSERT(henka_physics_body_create(world, &desc, &plane) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_physics_world_raycast(
+        world,
+        (henka_ray){{3.0f, 3.0f, 3.0f}, {-1.0f, -1.0f, 0.0f}},
+        10.0f,
+        HENKA_PHYSICS_ALL_LAYERS,
+        &hit) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(hit.hit && hit.body == plane);
+    HENKA_TEST_ASSERT(henka_test_physics_float_is_finite(hit.normal.x));
+    HENKA_TEST_ASSERT(henka_test_physics_float_is_finite(hit.normal.y));
     henka_physics_world_destroy(world);
 
     HENKA_TEST_ASSERT(henka_physics_world_create(&world) == HENKA_SUCCESS);
