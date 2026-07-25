@@ -1050,6 +1050,19 @@ bool henka_scene_is_entity_helper(const henka_scene* scene, henka_entity entity)
     return (record->flags & HENKA_SCENE_ENTITY_FLAG_HELPER) != 0U;
 }
 
+bool henka_scene_is_entity_transform_locked(const henka_scene* scene, henka_entity entity)
+{
+    const henka_scene_entity_record* record;
+
+    record = henka_scene_get_entity_record_const(scene, entity);
+    if (record == NULL)
+    {
+        return false;
+    }
+
+    return (record->flags & HENKA_SCENE_ENTITY_FLAG_TRANSFORM_LOCKED) != 0U;
+}
+
 henka_interaction_result henka_scene_can_interact(const henka_scene* scene, henka_entity entity, henka_vec3 observer_position)
 {
     const henka_scene_entity_record* record;

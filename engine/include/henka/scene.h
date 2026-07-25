@@ -58,7 +58,8 @@ typedef struct henka_interaction_desc
 typedef enum henka_scene_entity_flags
 {
     HENKA_SCENE_ENTITY_FLAG_NONE = 0,
-    HENKA_SCENE_ENTITY_FLAG_HELPER = 1 << 0
+    HENKA_SCENE_ENTITY_FLAG_HELPER = 1 << 0,
+    HENKA_SCENE_ENTITY_FLAG_TRANSFORM_LOCKED = 1 << 1
 } henka_scene_entity_flags;
 
 typedef enum henka_interaction_result
@@ -107,6 +108,7 @@ henka_result henka_scene_clear_entity_local_bounds(henka_scene* scene, henka_ent
 henka_result henka_scene_set_entity_interaction(henka_scene* scene, henka_entity entity, const henka_interaction_desc* interaction);
 henka_result henka_scene_set_entity_flags(henka_scene* scene, henka_entity entity, uint32_t flags);
 bool henka_scene_is_entity_helper(const henka_scene* scene, henka_entity entity);
+bool henka_scene_is_entity_transform_locked(const henka_scene* scene, henka_entity entity);
 henka_interaction_result henka_scene_can_interact(const henka_scene* scene, henka_entity entity, henka_vec3 observer_position);
 henka_result henka_scene_pick_entity(const henka_scene* scene, henka_ray ray, henka_entity* out_entity, float* out_distance);
 henka_result henka_scene_set_camera(henka_scene* scene, const henka_camera* camera);

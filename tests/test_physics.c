@@ -4,6 +4,7 @@
 #include <math.h>
 #include <string.h>
 
+#include <henka/core.h>
 #include <henka/memory.h>
 #include <henka/physics.h>
 
@@ -486,6 +487,27 @@ static void henka_test_physics_query_and_accumulator_hardening(void)
     HENKA_TEST_ASSERT(hit.hit && hit.body == plane);
     HENKA_TEST_ASSERT_FLOAT_CLOSE(hit.distance, 3.0f, 0.0001f);
     HENKA_TEST_ASSERT_FLOAT_CLOSE(hit.point.y, 2.0f, 0.0001f);
+
+    HENKA_TEST_ASSERT(henka_physics_body_destroy(world, plane) == HENKA_SUCCESS);
+    desc = henka_test_physics_body(
+        HENKA_PHYSICS_BODY_STATIC,
+        henka_physics_collider_plane((henka_vec3){0.0f, 1.0f, 0.0f}, 0.0f),
+        (henka_vec3){4.0f, 4.0f, 0.0f});
+    desc.transform.rotation = henka_quat_from_axis_angle(
+        (henka_vec3){0.0f, 0.0f, 1.0f},
+        -90.0f * HENKA_DEG_TO_RAD);
+    HENKA_TEST_ASSERT(henka_physics_body_create(world, &desc, &plane) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_physics_world_raycast(
+        world,
+        (henka_ray){{8.0f, 4.0f, 0.0f}, {-1.0f, 0.0f, 0.0f}},
+        10.0f,
+        HENKA_PHYSICS_ALL_LAYERS,
+        &hit) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(hit.hit && hit.body == plane);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(hit.distance, 4.0f, 0.0001f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(hit.point.x, 4.0f, 0.0001f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(hit.normal.x, 1.0f, 0.0001f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(hit.normal.y, 0.0f, 0.0001f);
 
     debug_shape.body = box;
     debug_shape.colliding = true;

@@ -887,6 +887,18 @@ henka_result henka_action_execute(
                 break;
             }
 
+            if (transform_mutation &&
+                request->command != HENKA_ACTION_COMMAND_RESET_TRANSFORM &&
+                henka_scene_is_entity_transform_locked(context->scene, entity))
+            {
+                result.status = HENKA_ACTION_STATUS_TRANSFORM_LOCKED;
+                result.engine_result = HENKA_ERROR_INVALID_ARGUMENT;
+                result.affected_entity = entity;
+                result.selected_entity = henka_action_context_get_selected_entity(context);
+                henka_action_set_message(&result, "Object transform is locked.");
+                break;
+            }
+
             result.affected_entity = entity;
             result.selected_entity = henka_action_context_get_selected_entity(context);
 
@@ -1166,6 +1178,8 @@ const char* henka_action_status_to_string(henka_action_status status)
             return "invalid transform";
         case HENKA_ACTION_STATUS_HELPER_ENTITY:
             return "helper entity";
+        case HENKA_ACTION_STATUS_TRANSFORM_LOCKED:
+            return "transform locked";
         case HENKA_ACTION_STATUS_TARGET_HIDDEN:
             return "target hidden";
         case HENKA_ACTION_STATUS_TARGET_NOT_FOUND:

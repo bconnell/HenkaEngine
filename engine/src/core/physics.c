@@ -97,12 +97,20 @@ static henka_vec3 henka_physics_collider_center(const henka_physics_body_state* 
     return henka_vec3_add(body->transform.position, body->collider.offset);
 }
 
+static henka_vec3 henka_physics_plane_world_normal(const henka_physics_body_state* body)
+{
+    henka_vec3 local_normal;
+
+    local_normal = henka_vec3_normalize(body->collider.data.plane.normal);
+    return henka_vec3_normalize(henka_quat_rotate_vec3(body->transform.rotation, local_normal));
+}
+
 static float henka_physics_plane_world_offset(
     const henka_physics_body_state* body,
-    henka_vec3 normalized_normal)
+    henka_vec3 normalized_world_normal)
 {
     return body->collider.data.plane.offset +
-        henka_vec3_dot(normalized_normal, henka_physics_collider_center(body));
+        henka_vec3_dot(normalized_world_normal, henka_physics_collider_center(body));
 }
 
 static henka_vec3 henka_physics_box_extents(const henka_physics_body_state* body)
@@ -385,7 +393,7 @@ static bool henka_physics_sphere_box(const henka_physics_body_state* sphere, con
 
 static bool henka_physics_shape_plane(const henka_physics_body_state* shape, const henka_physics_body_state* plane, henka_physics_contact* contact)
 {
-    henka_vec3 normal = henka_vec3_normalize(plane->collider.data.plane.normal);
+    henka_vec3 normal = henka_physics_plane_world_normal(plane);
     float offset = henka_physics_plane_world_offset(plane, normal);
     float radius;
     float distance;
@@ -1324,7 +1332,7 @@ static bool henka_physics_raycast_box(
 
 static bool henka_physics_raycast_plane(const henka_physics_body_state* body, henka_ray ray, float maximum, float* distance, henka_vec3* normal)
 {
-    henka_vec3 plane_normal = henka_vec3_normalize(body->collider.data.plane.normal);
+    henka_vec3 plane_normal = henka_physics_plane_world_normal(body);
     float denominator = henka_vec3_dot(plane_normal, ray.direction);
     float offset = henka_physics_plane_world_offset(body, plane_normal);
     float result;

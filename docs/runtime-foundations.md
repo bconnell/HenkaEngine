@@ -265,3 +265,13 @@ These foundations do not add:
 - release automation
 
 They are building blocks for later work, not a complete toolchain by themselves.
+
+### Structural transform and runtime-state safety
+
+Scene entities can now carry a transform-lock flag. The Action API blocks move, rotate, and scale mutations for locked entities while still allowing selection, inspection, camera focus, visibility changes, and reset-to-default. The sandbox Ground starts locked, exposes an explicit Lock or Unlock Transform control, suppresses gizmos while locked, and keeps Reset Transform available. Clicking empty scene background clears the current selection in Select, Move, Rotate, and Scale modes, matching established editor behavior.
+
+Plane physics now rotates local plane normals by the body transform for contacts and raycasts. The sandbox collider overlay and selection highlight use the same transformed geometry instead of assuming a horizontal plane.
+
+Generic confined relative-path resolution remains valid without a base directory for asset and standalone relative-path use. Save-slot construction separately requires a non-empty user-data base path so save files cannot silently fall back to the process working directory. Save camera poses reject out-of-range pitch, failed camera-pose reads clear caller outputs, and save-flag names are bounded so every accepted flag remains serializable after the `flag.` prefix is added. Sandbox camera settings are validated as a complete camera before use, with unsafe speed, pitch, projection height, position, or sensitivity values replaced by safe defaults.
+
+Windows timing uses the monotonic high-resolution performance counter, with a monotonic tick-count fallback. Supported non-Windows builds use `CLOCK_MONOTONIC` when available.

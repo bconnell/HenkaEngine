@@ -245,6 +245,33 @@ void henka_test_action(void)
     HENKA_TEST_ASSERT_FLOAT_CLOSE(transform.position.x, 0.0f, 0.0001f);
     HENKA_TEST_ASSERT_FLOAT_CLOSE(transform.scale.x, 1.0f, 0.0001f);
 
+    HENKA_TEST_ASSERT(henka_scene_set_entity_flags(
+        scene,
+        cube,
+        HENKA_SCENE_ENTITY_FLAG_TRANSFORM_LOCKED) == HENKA_SUCCESS);
+    memset(&request, 0, sizeof(request));
+    request.command = HENKA_ACTION_COMMAND_MOVE_BY_DELTA;
+    request.params.move_by_delta.entity = cube;
+    request.params.move_by_delta.delta = (henka_vec3){1.0f, 0.0f, 0.0f};
+    HENKA_TEST_ASSERT(henka_action_validate(actions, &request, &result) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(!result.success);
+    HENKA_TEST_ASSERT(result.status == HENKA_ACTION_STATUS_TRANSFORM_LOCKED);
+    HENKA_TEST_ASSERT(strcmp(henka_action_status_to_string(result.status), "transform locked") == 0);
+    HENKA_TEST_ASSERT(henka_action_execute(actions, &request, &result) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(!result.success);
+    HENKA_TEST_ASSERT(henka_scene_get_entity_transform(scene, cube, &transform) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(transform.position.x, 0.0f, 0.0001f);
+
+    memset(&request, 0, sizeof(request));
+    request.command = HENKA_ACTION_COMMAND_RESET_TRANSFORM;
+    request.params.entity.entity = cube;
+    HENKA_TEST_ASSERT(henka_action_execute(actions, &request, &result) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(result.success);
+    HENKA_TEST_ASSERT(henka_scene_set_entity_flags(
+        scene,
+        cube,
+        HENKA_SCENE_ENTITY_FLAG_NONE) == HENKA_SUCCESS);
+
     helper = henka_scene_create_entity_named(scene, "Helper");
     HENKA_TEST_ASSERT(helper != HENKA_INVALID_ENTITY);
     HENKA_TEST_ASSERT(henka_scene_set_entity_flags(scene, helper, HENKA_SCENE_ENTITY_FLAG_HELPER) == HENKA_SUCCESS);

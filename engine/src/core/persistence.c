@@ -77,6 +77,9 @@ static bool henka_path_is_absolute(const char* path)
 #define HENKA_SETTINGS_MAX_KEY_LENGTH 127U
 #define HENKA_SETTINGS_MAX_VALUE_LENGTH 767U
 #define HENKA_SAVE_SLOT_MAX_LENGTH 64U
+#define HENKA_SAVE_FLAG_PREFIX "flag."
+#define HENKA_SAVE_FLAG_PREFIX_LENGTH 5U
+#define HENKA_SAVE_FLAG_MAX_KEY_LENGTH (HENKA_SETTINGS_MAX_KEY_LENGTH - HENKA_SAVE_FLAG_PREFIX_LENGTH)
 #define HENKA_PERSISTENCE_TEMP_SUFFIX ".henka-tmp"
 
 static bool henka_ascii_equals_ignore_case(const char* left, size_t left_length, const char* right)
@@ -181,6 +184,12 @@ static bool henka_settings_key_is_valid(const char* key)
     }
 
     return true;
+}
+
+static bool henka_save_flag_key_is_valid(const char* key)
+{
+    return henka_settings_key_is_valid(key) &&
+        strlen(key) <= HENKA_SAVE_FLAG_MAX_KEY_LENGTH;
 }
 
 static bool henka_settings_value_is_valid(const char* value)
@@ -1205,7 +1214,8 @@ henka_result henka_save_data_build_slot_path(const char* user_data_base_path, co
     }
 
     *out_path = NULL;
-    if (!henka_save_slot_name_is_valid(slot_name))
+    if (user_data_base_path == NULL || user_data_base_path[0] == '\0' ||
+        !henka_save_slot_name_is_valid(slot_name))
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
@@ -1306,7 +1316,9 @@ henka_result henka_save_data_set_camera_pose(
 {
     if (save_data == NULL ||
         !isfinite(position.x) || !isfinite(position.y) || !isfinite(position.z) ||
-        !isfinite(yaw_radians) || !isfinite(pitch_radians))
+        !isfinite(yaw_radians) || !isfinite(pitch_radians) ||
+        pitch_radians < -HENKA_PI * 0.5f ||
+        pitch_radians > HENKA_PI * 0.5f)
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
@@ -1323,7 +1335,15 @@ henka_result henka_save_data_get_camera_pose(
     float* out_yaw_radians,
     float* out_pitch_radians)
 {
-    if (save_data == NULL || out_position == NULL || out_yaw_radians == NULL || out_pitch_radians == NULL)
+    if (out_position == NULL || out_yaw_radians == NULL || out_pitch_radians == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    *out_position = (henka_vec3){0.0f, 0.0f, 0.0f};
+    *out_yaw_radians = 0.0f;
+    *out_pitch_radians = 0.0f;
+    if (save_data == NULL)
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
@@ -1336,7 +1356,8 @@ henka_result henka_save_data_get_camera_pose(
 
 henka_result henka_save_data_set_flag_bool(henka_save_data* save_data, const char* key, bool value)
 {
-    if (save_data == NULL || save_data->flags == NULL)
+    if (save_data == NULL || save_data->flags == NULL ||
+        !henka_save_flag_key_is_valid(key))
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
@@ -1446,10 +1467,13 @@ henka_result henka_save_data_load_file(henka_save_data* save_data, const char* p
 
     for (index = 0U; result == HENKA_SUCCESS && index < loaded->count; ++index)
     {
-        if (strncmp(loaded->entries[index].key, "flag.", 5U) == 0)
+        if (strncmp(
+                loaded->entries[index].key,
+                HENKA_SAVE_FLAG_PREFIX,
+                HENKA_SAVE_FLAG_PREFIX_LENGTH) == 0)
         {
-            const char* flag_key = loaded->entries[index].key + 5U;
-            if (flag_key[0] == '\0' ||
+            const char* flag_key = loaded->entries[index].key + HENKA_SAVE_FLAG_PREFIX_LENGTH;
+            if (!henka_save_flag_key_is_valid(flag_key) ||
                 !henka_parse_bool_value(loaded->entries[index].value, &flag_value))
             {
                 result = HENKA_ERROR_UNKNOWN;
@@ -1517,10 +1541,15 @@ henka_result henka_save_data_save_file(const henka_save_data* save_data, const c
         size_t index;
         for (index = 0U; index < save_data->flags->count; ++index)
         {
-            char prefixed_key[256];
-            if (sprintf_s(prefixed_key, sizeof(prefixed_key), "flag.%s", save_data->flags->entries[index].key) < 0)
+            char prefixed_key[HENKA_SETTINGS_MAX_KEY_LENGTH + 1U];
+            if (!henka_save_flag_key_is_valid(save_data->flags->entries[index].key) ||
+                sprintf_s(
+                    prefixed_key,
+                    sizeof(prefixed_key),
+                    HENKA_SAVE_FLAG_PREFIX "%s",
+                    save_data->flags->entries[index].key) < 0)
             {
-                result = HENKA_ERROR_UNKNOWN;
+                result = HENKA_ERROR_INVALID_ARGUMENT;
                 break;
             }
 

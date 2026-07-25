@@ -129,6 +129,14 @@ void henka_test_scene(void)
     HENKA_TEST_ASSERT(henka_scene_is_entity_helper(scene, helper));
     HENKA_TEST_ASSERT(henka_scene_get_entity_flags(scene, helper, &flags) == HENKA_SUCCESS);
     HENKA_TEST_ASSERT((flags & HENKA_SCENE_ENTITY_FLAG_HELPER) != 0U);
+    HENKA_TEST_ASSERT(henka_scene_set_entity_flags(
+        scene,
+        first,
+        HENKA_SCENE_ENTITY_FLAG_TRANSFORM_LOCKED) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_scene_is_entity_transform_locked(scene, first));
+    HENKA_TEST_ASSERT(henka_scene_get_entity_flags(scene, first, &flags) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT((flags & HENKA_SCENE_ENTITY_FLAG_TRANSFORM_LOCKED) != 0U);
+    HENKA_TEST_ASSERT(!henka_scene_is_entity_transform_locked(scene, second));
     bounds = (henka_bounds){{0.0f, 0.5f, 0.0f}, {0.5f, 0.5f, 0.5f}};
     HENKA_TEST_ASSERT(henka_scene_set_entity_local_bounds(scene, second, bounds) == HENKA_SUCCESS);
     HENKA_TEST_ASSERT(henka_scene_get_entity_local_bounds(scene, second, &bounds) == HENKA_SUCCESS);

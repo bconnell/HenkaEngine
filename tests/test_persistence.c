@@ -4,6 +4,7 @@
 #include <stdio.h>
 #include <string.h>
 
+#include <henka/core.h>
 #include <henka/memory.h>
 #include <henka/persistence.h>
 
@@ -27,7 +28,9 @@ static bool henka_test_write_file(const char* path, const char* content)
 
 void henka_test_persistence(void)
 {
+    char long_flag_name[124];
     char long_slot_name[66];
+    char max_flag_name[123];
     char* parent_directory;
     char* path;
     FILE* file;
@@ -85,7 +88,16 @@ void henka_test_persistence(void)
     HENKA_TEST_ASSERT(strcmp(path, "\\\\server\\share\\sandbox3d.settings") == 0);
     henka_free(path);
 
-    HENKA_TEST_ASSERT(henka_path_resolve_confined("C:/HenkaSandbox3D", "user\\sandbox3d.settings", &path) == HENKA_SUCCESS);
+    path = NULL;
+    HENKA_TEST_ASSERT(henka_path_resolve_confined(NULL, "user/sandbox3d.settings", &path) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(strcmp(path, "user/sandbox3d.settings") == 0);
+    henka_free(path);
+    path = NULL;
+    HENKA_TEST_ASSERT(henka_path_resolve_confined("", "user/sandbox3d.settings", &path) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(strcmp(path, "user/sandbox3d.settings") == 0);
+    henka_free(path);
+
+    HENKA_TEST_ASSERT(henka_path_resolve_confined("C:/HenkaSandbox3D", "user/sandbox3d.settings", &path) == HENKA_SUCCESS);
     HENKA_TEST_ASSERT(strcmp(path, "C:/HenkaSandbox3D/user/sandbox3d.settings") == 0);
     henka_free(path);
 
@@ -141,8 +153,40 @@ void henka_test_persistence(void)
     HENKA_TEST_ASSERT(henka_save_data_set_scene_id(save_data, "bad\nscene") == HENKA_ERROR_INVALID_ARGUMENT);
     HENKA_TEST_ASSERT(henka_save_data_set_camera_pose(save_data, (henka_vec3){1.0f, 2.0f, 3.0f}, -1.2f, 0.35f) == HENKA_SUCCESS);
     HENKA_TEST_ASSERT(henka_save_data_set_camera_pose(save_data, (henka_vec3){NAN, 2.0f, 3.0f}, -1.2f, 0.35f) == HENKA_ERROR_INVALID_ARGUMENT);
+    HENKA_TEST_ASSERT(henka_save_data_set_camera_pose(
+        save_data,
+        (henka_vec3){1.0f, 2.0f, 3.0f},
+        -1.2f,
+        HENKA_PI) == HENKA_ERROR_INVALID_ARGUMENT);
+
+    loaded_position = (henka_vec3){9.0f, 8.0f, 7.0f};
+    loaded_yaw = 6.0f;
+    loaded_pitch = 5.0f;
+    HENKA_TEST_ASSERT(henka_save_data_get_camera_pose(
+        NULL,
+        &loaded_position,
+        &loaded_yaw,
+        &loaded_pitch) == HENKA_ERROR_INVALID_ARGUMENT);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(loaded_position.x, 0.0f, 0.0f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(loaded_position.y, 0.0f, 0.0f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(loaded_position.z, 0.0f, 0.0f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(loaded_yaw, 0.0f, 0.0f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(loaded_pitch, 0.0f, 0.0f);
+
     HENKA_TEST_ASSERT(henka_save_data_set_flag_bool(save_data, "grid_visible", true) == HENKA_SUCCESS);
     HENKA_TEST_ASSERT(henka_save_data_set_flag_bool(save_data, "bad=flag", true) == HENKA_ERROR_INVALID_ARGUMENT);
+    memset(max_flag_name, 'm', sizeof(max_flag_name) - 1U);
+    max_flag_name[sizeof(max_flag_name) - 1U] = '\0';
+    HENKA_TEST_ASSERT(henka_save_data_set_flag_bool(save_data, max_flag_name, true) == HENKA_SUCCESS);
+    memset(long_flag_name, 'x', sizeof(long_flag_name) - 1U);
+    long_flag_name[sizeof(long_flag_name) - 1U] = '\0';
+    HENKA_TEST_ASSERT(henka_save_data_set_flag_bool(save_data, long_flag_name, true) == HENKA_ERROR_INVALID_ARGUMENT);
+
+    path = NULL;
+    HENKA_TEST_ASSERT(henka_save_data_build_slot_path(NULL, "slot_a", &path) == HENKA_ERROR_INVALID_ARGUMENT);
+    HENKA_TEST_ASSERT(path == NULL);
+    HENKA_TEST_ASSERT(henka_save_data_build_slot_path("", "slot_a", &path) == HENKA_ERROR_INVALID_ARGUMENT);
+    HENKA_TEST_ASSERT(path == NULL);
 
     HENKA_TEST_ASSERT(henka_save_data_build_slot_path("build/test_tmp", "slot_a", &path) == HENKA_SUCCESS);
     HENKA_TEST_ASSERT(strstr(path, "saves/slot_a.save") != NULL);
