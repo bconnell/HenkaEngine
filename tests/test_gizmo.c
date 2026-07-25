@@ -38,6 +38,29 @@ void henka_test_gizmo(void)
     HENKA_TEST_ASSERT_FLOAT_CLOSE(snapped, 15.0f * HENKA_DEG_TO_RAD, 0.0001f);
     HENKA_TEST_ASSERT(henka_gizmo_snap_scale(0.02f, 0.1f, 0.05f, &snapped) == HENKA_SUCCESS);
     HENKA_TEST_ASSERT_FLOAT_CLOSE(snapped, 0.1f, 0.0001f);
+    HENKA_TEST_ASSERT(henka_gizmo_snap_move(NAN, 0.25f, &snapped) == HENKA_ERROR_INVALID_ARGUMENT);
+    HENKA_TEST_ASSERT(henka_gizmo_snap_rotate(1.0f, NAN, &snapped) == HENKA_ERROR_INVALID_ARGUMENT);
+    HENKA_TEST_ASSERT(henka_gizmo_snap_scale(1.0f, 0.0f, 0.05f, &snapped) == HENKA_ERROR_INVALID_ARGUMENT);
+
+    memset(&drag, 0, sizeof(drag));
+    drag.dragging = true;
+    drag.active_mode = HENKA_GIZMO_MODE_SCALE;
+    drag.active_axis = HENKA_GIZMO_AXIS_UNIFORM;
+    drag.drag_start_transform = henka_transform_identity();
+    drag.drag_center_screen = (henka_vec2){0.0f, 0.0f};
+    drag.drag_axis_screen_direction = (henka_vec2){1.0f, 0.0f};
+    drag.drag_start_projection = 10.0f;
+    snap.enabled = true;
+    snap.scale_snap_increment = 0.0f;
+    snap.minimum_scale = 0.01f;
+    transformed = henka_transform_identity();
+    transformed.position.x = 123.0f;
+    HENKA_TEST_ASSERT(henka_gizmo_apply_drag_to_transform(
+        &drag,
+        (henka_vec2){20.0f, 0.0f},
+        &snap,
+        &transformed) == HENKA_ERROR_INVALID_ARGUMENT);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(transformed.position.x, 123.0f, 0.0001f);
 
     HENKA_TEST_ASSERT(
         henka_gizmo_hit_test_axis(

@@ -1077,7 +1077,9 @@ henka_result henka_scene_pick_entity(const henka_scene* scene, henka_ray ray, he
     size_t index;
     bool found;
 
-    if (scene == NULL || out_entity == NULL)
+    if (scene == NULL || out_entity == NULL ||
+        !henka_scene_vec3_is_finite(ray.origin) || !henka_scene_vec3_is_finite(ray.direction) ||
+        henka_vec3_length(ray.direction) <= 0.000001f)
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }

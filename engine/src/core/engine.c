@@ -1147,9 +1147,16 @@ henka_input_action henka_input_action_find_by_name(const char* name)
 
 henka_result henka_input_bind_action_key(struct henka_engine* engine, henka_input_action action, henka_key key)
 {
-    henka_result result;
-    result = henka_input_clear_action_bindings(engine, action);
-    return result == HENKA_SUCCESS ? henka_input_add_action_key_binding(engine, action, key) : result;
+    if (engine == NULL || action <= HENKA_INPUT_ACTION_UNKNOWN || action >= HENKA_INPUT_ACTION_COUNT ||
+        key <= HENKA_KEY_UNKNOWN || key >= HENKA_KEY_COUNT)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    memset(engine->action_key_bindings[action], 0, sizeof(engine->action_key_bindings[action]));
+    memset(engine->action_mouse_bindings[action], 0, sizeof(engine->action_mouse_bindings[action]));
+    engine->action_key_bindings[action][0] = key;
+    return HENKA_SUCCESS;
 }
 
 henka_result henka_input_clear_action_bindings(struct henka_engine* engine, henka_input_action action)
@@ -1165,9 +1172,16 @@ henka_result henka_input_clear_action_bindings(struct henka_engine* engine, henk
 
 henka_result henka_input_bind_action_mouse_button(struct henka_engine* engine, henka_input_action action, henka_mouse_button button)
 {
-    henka_result result;
-    result = henka_input_clear_action_bindings(engine, action);
-    return result == HENKA_SUCCESS ? henka_input_add_action_mouse_button_binding(engine, action, button) : result;
+    if (engine == NULL || action <= HENKA_INPUT_ACTION_UNKNOWN || action >= HENKA_INPUT_ACTION_COUNT ||
+        button <= HENKA_MOUSE_BUTTON_UNKNOWN || button >= HENKA_MOUSE_BUTTON_COUNT)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    memset(engine->action_key_bindings[action], 0, sizeof(engine->action_key_bindings[action]));
+    memset(engine->action_mouse_bindings[action], 0, sizeof(engine->action_mouse_bindings[action]));
+    engine->action_mouse_bindings[action][0] = button;
+    return HENKA_SUCCESS;
 }
 
 henka_result henka_input_add_action_key_binding(struct henka_engine* engine, henka_input_action action, henka_key key)

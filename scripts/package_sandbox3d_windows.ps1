@@ -96,16 +96,58 @@ function Assert-NoReparsePoints {
     }
 }
 
+function Test-HenkaPackageDirectoryComplete {
+    param([Parameter(Mandatory = $true)][string]$Path)
+
+    foreach ($requiredRelativePath in @(
+        "HenkaSandbox3D.exe",
+        "assets",
+        "docs\help\sandbox3d.md",
+        "README.txt",
+        "PACKAGE_INFO.txt"
+    )) {
+        if (-not (Test-Path -LiteralPath (Join-Path $Path $requiredRelativePath))) {
+            return $false
+        }
+    }
+
+    return $true
+}
+
 [System.IO.Directory]::CreateDirectory($outRoot) | Out-Null
-$staleTransactions = @(
+$staleStagingDirectories = @(
     Get-ChildItem -LiteralPath $outRoot -Directory -ErrorAction SilentlyContinue |
         Where-Object {
-            $_.Name.StartsWith(".HenkaSandbox3D-backup-", [System.StringComparison]::OrdinalIgnoreCase) -or
             $_.Name.StartsWith(".HenkaSandbox3D-staging-", [System.StringComparison]::OrdinalIgnoreCase)
         }
 )
-if ($staleTransactions.Count -gt 0) {
-    throw "A prior package transaction is still present. Inspect it before packaging again: $($staleTransactions[0].FullName)"
+if ($staleStagingDirectories.Count -gt 0) {
+    throw "A prior package staging transaction is still present. Inspect it before packaging again: $($staleStagingDirectories[0].FullName)"
+}
+
+$staleBackupDirectories = @(
+    Get-ChildItem -LiteralPath $outRoot -Directory -ErrorAction SilentlyContinue |
+        Where-Object {
+            $_.Name.StartsWith(".HenkaSandbox3D-backup-", [System.StringComparison]::OrdinalIgnoreCase)
+        }
+)
+if ($staleBackupDirectories.Count -gt 0) {
+    if (-not (Test-HenkaPackageDirectoryComplete -Path $packageRoot)) {
+        throw "A prior package backup exists, but the active package cannot be proven complete: $($staleBackupDirectories[0].FullName)"
+    }
+
+    Assert-NoReparsePoints -Path $packageRoot -Description "Active package recovery input"
+    foreach ($staleBackup in $staleBackupDirectories) {
+        Assert-NoReparsePoints -Path $staleBackup.FullName -Description "Stale package backup"
+        try {
+            Remove-HenkaDirectoryTree -Path $staleBackup.FullName
+        }
+        catch {
+            throw "The active package is complete, but a stale backup could not be removed safely: $($staleBackup.FullName)"
+        }
+    }
+
+    Write-Host "Recovered validated stale package backup state."
 }
 if (Get-Process -Name $packagedProcessName -ErrorAction SilentlyContinue) {
     throw "The packaged sandbox is still running. Close HenkaSandbox3D.exe before refreshing the package."
@@ -256,7 +298,7 @@ Runtime mode: Packaged
             Remove-HenkaDirectoryTree -Path $backupRoot
         }
         catch {
-            Write-Warning "The new package is active, but the old package backup could not be removed: $backupRoot"
+            throw "The new package is active, but backup cleanup failed. The next guarded run will recover this validated state: $backupRoot"
         }
     }
 }

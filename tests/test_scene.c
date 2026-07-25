@@ -177,6 +177,15 @@ void henka_test_scene(void)
     HENKA_TEST_ASSERT(info.entity == second);
     HENKA_TEST_ASSERT(strcmp(info.tag, "marker") == 0);
     ray.origin = (henka_vec3){1.0f, 0.5f, 3.0f};
+    ray.direction = (henka_vec3){0.0f, 0.0f, 0.0f};
+    HENKA_TEST_ASSERT(henka_scene_pick_entity(scene, ray, &found, NULL) == HENKA_ERROR_INVALID_ARGUMENT);
+    ray.direction = (henka_vec3){NAN, 0.0f, -1.0f};
+    HENKA_TEST_ASSERT(henka_scene_pick_entity(scene, ray, &found, NULL) == HENKA_ERROR_INVALID_ARGUMENT);
+    ray.origin = (henka_vec3){NAN, 0.5f, 3.0f};
+    ray.direction = (henka_vec3){0.0f, 0.0f, -1.0f};
+    HENKA_TEST_ASSERT(henka_scene_pick_entity(scene, ray, &found, NULL) == HENKA_ERROR_INVALID_ARGUMENT);
+
+    ray.origin = (henka_vec3){1.0f, 0.5f, 3.0f};
     ray.direction = henka_vec3_normalize((henka_vec3){0.0f, 0.0f, -1.0f});
     HENKA_TEST_ASSERT(henka_scene_pick_entity(scene, ray, &found, NULL) == HENKA_SUCCESS);
     HENKA_TEST_ASSERT(found == second);

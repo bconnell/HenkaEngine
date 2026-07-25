@@ -1,11 +1,13 @@
 #include <henka/ui.h>
 
 #include <ctype.h>
+#include <math.h>
 #include <stdio.h>
 #include <string.h>
 
 #include <henka/memory.h>
 
+#include "../core/checked.h"
 #include "ui_internal.h"
 
 typedef struct henka_ui_glyph
@@ -13,6 +15,78 @@ typedef struct henka_ui_glyph
     char character;
     unsigned char rows[7];
 } henka_ui_glyph;
+
+#define HENKA_UI_MAX_DRAW_ITEMS ((size_t)1048576U)
+#define HENKA_UI_MAX_ID_BYTES ((size_t)255U)
+#define HENKA_UI_MAX_TEXT_BYTES ((size_t)4096U)
+#define HENKA_UI_MAX_SCALE 64.0f
+
+static bool henka_ui_float_is_finite(float value)
+{
+    return isfinite(value) != 0;
+}
+
+static bool henka_ui_vec2_is_finite(henka_vec2 value)
+{
+    return henka_ui_float_is_finite(value.x) && henka_ui_float_is_finite(value.y);
+}
+
+static bool henka_ui_vec4_is_finite(henka_vec4 value)
+{
+    return henka_ui_float_is_finite(value.x) &&
+        henka_ui_float_is_finite(value.y) &&
+        henka_ui_float_is_finite(value.z) &&
+        henka_ui_float_is_finite(value.w);
+}
+
+static bool henka_ui_rect_is_finite(henka_ui_rect rect)
+{
+    return henka_ui_float_is_finite(rect.x) &&
+        henka_ui_float_is_finite(rect.y) &&
+        henka_ui_float_is_finite(rect.width) &&
+        henka_ui_float_is_finite(rect.height) &&
+        henka_ui_float_is_finite(rect.x + rect.width) &&
+        henka_ui_float_is_finite(rect.y + rect.height);
+}
+
+static void henka_ui_clear_active_id(henka_ui_context* context)
+{
+    if (context == NULL)
+    {
+        return;
+    }
+
+    context->active_id_set = false;
+    context->active_id[0] = '\0';
+}
+
+static bool henka_ui_set_active_id(henka_ui_context* context, const char* id)
+{
+    size_t length;
+
+    if (context == NULL ||
+        !henka_checked_c_string_length(id, HENKA_UI_MAX_ID_BYTES, &length))
+    {
+        return false;
+    }
+
+    memcpy(context->active_id, id, length + 1U);
+    context->active_id_set = true;
+    return true;
+}
+
+static bool henka_ui_active_id_equals(const henka_ui_context* context, const char* id)
+{
+    size_t length;
+
+    if (context == NULL || !context->active_id_set ||
+        !henka_checked_c_string_length(id, HENKA_UI_MAX_ID_BYTES, &length))
+    {
+        return false;
+    }
+
+    return strcmp(context->active_id, id) == 0;
+}
 
 static const henka_ui_glyph g_ui_glyphs[] =
 {
@@ -160,28 +234,30 @@ static const henka_ui_glyph* henka_ui_find_glyph(char character)
 
 static henka_result henka_ui_ensure_rect_capacity(henka_ui_context* context, size_t additional_rects)
 {
-    henka_ui_draw_rect* rects;
+    size_t allocation_size;
     size_t minimum_capacity;
     size_t new_capacity;
+    henka_ui_draw_rect* rects;
 
-    if (context == NULL)
+    if (context == NULL ||
+        !henka_checked_size_add(context->draw_rect_count, additional_rects, &minimum_capacity) ||
+        !henka_checked_capacity(
+            context->draw_rect_capacity,
+            minimum_capacity,
+            128U,
+            HENKA_UI_MAX_DRAW_ITEMS,
+            &new_capacity) ||
+        !henka_checked_size_multiply(new_capacity, sizeof(*rects), &allocation_size))
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
 
-    minimum_capacity = context->draw_rect_count + additional_rects;
-    if (minimum_capacity <= context->draw_rect_capacity)
+    if (new_capacity == context->draw_rect_capacity)
     {
         return HENKA_SUCCESS;
     }
 
-    new_capacity = context->draw_rect_capacity == 0U ? 128U : context->draw_rect_capacity;
-    while (new_capacity < minimum_capacity)
-    {
-        new_capacity *= 2U;
-    }
-
-    rects = henka_realloc(context->draw_rects, new_capacity * sizeof(*rects));
+    rects = henka_realloc(context->draw_rects, allocation_size);
     if (rects == NULL)
     {
         return HENKA_ERROR_OUT_OF_MEMORY;
@@ -194,28 +270,30 @@ static henka_result henka_ui_ensure_rect_capacity(henka_ui_context* context, siz
 
 static henka_result henka_ui_ensure_line_capacity(henka_ui_context* context, size_t additional_lines)
 {
-    henka_ui_draw_line* lines;
+    size_t allocation_size;
     size_t minimum_capacity;
     size_t new_capacity;
+    henka_ui_draw_line* lines;
 
-    if (context == NULL)
+    if (context == NULL ||
+        !henka_checked_size_add(context->draw_line_count, additional_lines, &minimum_capacity) ||
+        !henka_checked_capacity(
+            context->draw_line_capacity,
+            minimum_capacity,
+            128U,
+            HENKA_UI_MAX_DRAW_ITEMS,
+            &new_capacity) ||
+        !henka_checked_size_multiply(new_capacity, sizeof(*lines), &allocation_size))
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
 
-    minimum_capacity = context->draw_line_count + additional_lines;
-    if (minimum_capacity <= context->draw_line_capacity)
+    if (new_capacity == context->draw_line_capacity)
     {
         return HENKA_SUCCESS;
     }
 
-    new_capacity = context->draw_line_capacity == 0U ? 128U : context->draw_line_capacity;
-    while (new_capacity < minimum_capacity)
-    {
-        new_capacity *= 2U;
-    }
-
-    lines = henka_realloc(context->draw_lines, new_capacity * sizeof(*lines));
+    lines = henka_realloc(context->draw_lines, allocation_size);
     if (lines == NULL)
     {
         return HENKA_ERROR_OUT_OF_MEMORY;
@@ -230,7 +308,8 @@ static henka_result henka_ui_push_rect(henka_ui_context* context, henka_ui_rect 
 {
     henka_result result;
 
-    if (context == NULL || bounds.width <= 0.0f || bounds.height <= 0.0f)
+    if (context == NULL || !henka_ui_rect_is_finite(bounds) || !henka_ui_vec4_is_finite(color) ||
+        bounds.width <= 0.0f || bounds.height <= 0.0f)
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
@@ -256,7 +335,8 @@ static henka_result henka_ui_push_line(
 {
     henka_result result;
 
-    if (context == NULL || thickness <= 0.0f)
+    if (context == NULL || !henka_ui_vec2_is_finite(start) || !henka_ui_vec2_is_finite(end) ||
+        !henka_ui_float_is_finite(thickness) || !henka_ui_vec4_is_finite(color) || thickness <= 0.0f)
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
@@ -305,8 +385,13 @@ static henka_result henka_ui_draw_text(henka_ui_context* context, float x, float
     float cursor_x;
     float cursor_y;
     size_t index;
+    size_t text_length;
 
-    if (context == NULL || text == NULL || scale <= 0.0f)
+    if (context == NULL || text == NULL ||
+        !henka_ui_float_is_finite(x) || !henka_ui_float_is_finite(y) ||
+        !henka_ui_float_is_finite(scale) || scale <= 0.0f || scale > HENKA_UI_MAX_SCALE ||
+        !henka_ui_vec4_is_finite(color) ||
+        !henka_checked_c_string_length(text, HENKA_UI_MAX_TEXT_BYTES, &text_length))
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
@@ -314,7 +399,7 @@ static henka_result henka_ui_draw_text(henka_ui_context* context, float x, float
     cursor_x = x;
     cursor_y = y;
 
-    for (index = 0U; text[index] != '\0'; ++index)
+    for (index = 0U; index < text_length; ++index)
     {
         const henka_ui_glyph* glyph;
         int column;
@@ -378,16 +463,6 @@ static bool henka_ui_control_is_hot(henka_ui_context* context, henka_ui_rect bou
     return false;
 }
 
-static bool henka_ui_id_equals(const char* left, const char* right)
-{
-    if (left == NULL || right == NULL)
-    {
-        return false;
-    }
-
-    return strcmp(left, right) == 0;
-}
-
 static void henka_ui_copy_fit_text(const char* source, char* buffer, size_t buffer_size, size_t max_characters)
 {
     size_t length;
@@ -403,7 +478,12 @@ static void henka_ui_copy_fit_text(const char* source, char* buffer, size_t buff
         return;
     }
 
-    length = strlen(source);
+    if (!henka_checked_c_string_length(source, HENKA_UI_MAX_TEXT_BYTES, &length))
+    {
+        buffer[0] = '\0';
+        return;
+    }
+
     if (length <= max_characters || max_characters < 4U)
     {
         snprintf(buffer, buffer_size, "%s", source);
@@ -422,15 +502,25 @@ static henka_result henka_ui_draw_fit_text(
     const char* text,
     henka_vec4 color)
 {
+    float available_width;
     char buffer[96];
     size_t max_characters;
 
-    if (context == NULL || text == NULL || scale <= 0.0f)
+    if (context == NULL || text == NULL || !henka_ui_rect_is_finite(bounds) ||
+        !henka_ui_float_is_finite(padding_x) || !henka_ui_float_is_finite(y) ||
+        !henka_ui_float_is_finite(scale) || scale <= 0.0f || scale > HENKA_UI_MAX_SCALE ||
+        bounds.width <= 0.0f || bounds.height <= 0.0f || !henka_ui_vec4_is_finite(color))
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
 
-    max_characters = (size_t)((bounds.width - padding_x * 2.0f) / (6.0f * scale));
+    available_width = bounds.width - padding_x * 2.0f;
+    if (!henka_ui_float_is_finite(available_width) || available_width <= 0.0f)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    max_characters = (size_t)(available_width / (6.0f * scale));
     if (max_characters < 4U)
     {
         max_characters = 4U;
@@ -463,14 +553,17 @@ static bool henka_ui_button_internal(
     hot = henka_ui_control_is_hot(context, bounds);
     if (hot && context->mouse_left_pressed)
     {
-        context->active_id = id;
+        if (!henka_ui_set_active_id(context, id))
+        {
+            return false;
+        }
     }
 
-    active = context->mouse_left_down && henka_ui_id_equals(context->active_id, id);
-    clicked = hot && context->mouse_left_released && henka_ui_id_equals(context->active_id, id);
-    if (context->mouse_left_released && henka_ui_id_equals(context->active_id, id))
+    active = context->mouse_left_down && henka_ui_active_id_equals(context, id);
+    clicked = hot && context->mouse_left_released && henka_ui_active_id_equals(context, id);
+    if (context->mouse_left_released && henka_ui_active_id_equals(context, id))
     {
-        context->active_id = NULL;
+        henka_ui_clear_active_id(context);
     }
 
     result = henka_ui_push_rect(context, bounds, active ? active_fill : (hot ? hover_fill : idle_fill));
@@ -527,7 +620,8 @@ void henka_ui_destroy(henka_ui_context* context)
 
 henka_result henka_ui_begin_frame(henka_ui_context* context, const henka_ui_frame_desc* frame_desc)
 {
-    if (context == NULL || frame_desc == NULL || frame_desc->framebuffer_width <= 0 || frame_desc->framebuffer_height <= 0)
+    if (context == NULL || frame_desc == NULL || frame_desc->framebuffer_width <= 0 ||
+        frame_desc->framebuffer_height <= 0 || !henka_ui_vec2_is_finite(frame_desc->mouse_position))
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
@@ -544,7 +638,7 @@ henka_result henka_ui_begin_frame(henka_ui_context* context, const henka_ui_fram
     context->draw_line_count = 0U;
     if (!context->mouse_left_down && !context->mouse_left_released)
     {
-        context->active_id = NULL;
+        henka_ui_clear_active_id(context);
     }
     return HENKA_SUCCESS;
 }
@@ -567,7 +661,7 @@ void henka_ui_set_visible(henka_ui_context* context, bool visible)
         context->visible = visible;
         if (!visible)
         {
-            context->active_id = NULL;
+            henka_ui_clear_active_id(context);
             context->wants_mouse = false;
         }
     }
@@ -650,6 +744,12 @@ henka_result henka_ui_overlay_polyline(
 }
 bool henka_ui_rect_contains(henka_ui_rect rect, henka_vec2 point)
 {
+    if (!henka_ui_rect_is_finite(rect) || !henka_ui_vec2_is_finite(point) ||
+        rect.width <= 0.0f || rect.height <= 0.0f)
+    {
+        return false;
+    }
+
     return point.x >= rect.x &&
         point.y >= rect.y &&
         point.x < rect.x + rect.width &&
@@ -662,8 +762,11 @@ henka_result henka_ui_measure_text(const char* text, float scale, int* out_width
     int line_width;
     int lines;
     size_t index;
+    size_t text_length;
 
-    if (text == NULL || out_width == NULL || out_height == NULL || scale <= 0.0f)
+    if (text == NULL || out_width == NULL || out_height == NULL ||
+        !henka_ui_float_is_finite(scale) || scale <= 0.0f || scale > HENKA_UI_MAX_SCALE ||
+        !henka_checked_c_string_length(text, HENKA_UI_MAX_TEXT_BYTES, &text_length))
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
@@ -672,7 +775,7 @@ henka_result henka_ui_measure_text(const char* text, float scale, int* out_width
     current_width = 0;
     lines = 1;
 
-    for (index = 0U; text[index] != '\0'; ++index)
+    for (index = 0U; index < text_length; ++index)
     {
         if (text[index] == '\n')
         {
@@ -1005,14 +1108,17 @@ bool henka_ui_selectable(henka_ui_context* context, const char* id, henka_ui_rec
     hot = henka_ui_control_is_hot(context, bounds);
     if (hot && context->mouse_left_pressed)
     {
-        context->active_id = id;
+        if (!henka_ui_set_active_id(context, id))
+        {
+            return false;
+        }
     }
 
-    active = context->mouse_left_down && henka_ui_id_equals(context->active_id, id);
-    clicked = hot && context->mouse_left_released && henka_ui_id_equals(context->active_id, id);
-    if (context->mouse_left_released && henka_ui_id_equals(context->active_id, id))
+    active = context->mouse_left_down && henka_ui_active_id_equals(context, id);
+    clicked = hot && context->mouse_left_released && henka_ui_active_id_equals(context, id);
+    if (context->mouse_left_released && henka_ui_active_id_equals(context, id))
     {
-        context->active_id = NULL;
+        henka_ui_clear_active_id(context);
     }
 
     if (active)
@@ -1073,14 +1179,17 @@ bool henka_ui_tab(henka_ui_context* context, const char* id, henka_ui_rect bound
     hot = henka_ui_control_is_hot(context, bounds);
     if (hot && context->mouse_left_pressed)
     {
-        context->active_id = id;
+        if (!henka_ui_set_active_id(context, id))
+        {
+            return false;
+        }
     }
 
-    active = context->mouse_left_down && henka_ui_id_equals(context->active_id, id);
-    clicked = hot && context->mouse_left_released && henka_ui_id_equals(context->active_id, id);
-    if (context->mouse_left_released && henka_ui_id_equals(context->active_id, id))
+    active = context->mouse_left_down && henka_ui_active_id_equals(context, id);
+    clicked = hot && context->mouse_left_released && henka_ui_active_id_equals(context, id);
+    if (context->mouse_left_released && henka_ui_active_id_equals(context, id))
     {
-        context->active_id = NULL;
+        henka_ui_clear_active_id(context);
     }
 
     if (active)
@@ -1145,13 +1254,16 @@ bool henka_ui_toggle(henka_ui_context* context, const char* id, henka_ui_rect bo
     hot = henka_ui_control_is_hot(context, bounds);
     if (hot && context->mouse_left_pressed)
     {
-        context->active_id = id;
+        if (!henka_ui_set_active_id(context, id))
+        {
+            return false;
+        }
     }
 
-    clicked = hot && context->mouse_left_released && henka_ui_id_equals(context->active_id, id);
-    if (context->mouse_left_released && henka_ui_id_equals(context->active_id, id))
+    clicked = hot && context->mouse_left_released && henka_ui_active_id_equals(context, id);
+    if (context->mouse_left_released && henka_ui_active_id_equals(context, id))
     {
-        context->active_id = NULL;
+        henka_ui_clear_active_id(context);
     }
     if (clicked)
     {
@@ -1183,7 +1295,9 @@ bool henka_ui_toggle(henka_ui_context* context, const char* id, henka_ui_rect bo
         return false;
     }
 
-    label_characters = (size_t)((bounds.width - 84.0f) / 6.0f);
+    label_characters = bounds.width > 84.0f ?
+        (size_t)((bounds.width - 84.0f) / 6.0f) :
+        4U;
     if (label_characters < 4U)
     {
         label_characters = 4U;

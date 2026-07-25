@@ -5,10 +5,14 @@
 #include <henka/engine.h>
 #include <henka/input.h>
 
+#include "../engine/src/henka_internal.h"
+
 void henka_test_input(void)
 {
+    henka_engine engine;
     henka_tool_window_state tool_window_state;
 
+    memset(&engine, 0, sizeof(engine));
     memset(&tool_window_state, 0, sizeof(tool_window_state));
     tool_window_state.mouse_position = (henka_vec2){12.0f, 34.0f};
     tool_window_state.mouse_left_down = true;
@@ -35,4 +39,44 @@ void henka_test_input(void)
     HENKA_TEST_ASSERT(strcmp(henka_window_event_route_to_string(HENKA_WINDOW_EVENT_ROUTE_MAIN), "Main") == 0);
     HENKA_TEST_ASSERT(strcmp(henka_window_event_route_to_string(HENKA_WINDOW_EVENT_ROUTE_TOOL), "Tool") == 0);
     HENKA_TEST_ASSERT(strcmp(henka_window_event_route_to_string(HENKA_WINDOW_EVENT_ROUTE_UNKNOWN), "Unknown") == 0);
+
+    HENKA_TEST_ASSERT(henka_input_bind_action_key(
+        &engine,
+        HENKA_INPUT_ACTION_MOVE_FORWARD,
+        HENKA_KEY_W) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_input_get_action_key_binding_count(
+        &engine,
+        HENKA_INPUT_ACTION_MOVE_FORWARD) == 1U);
+    HENKA_TEST_ASSERT(henka_input_get_action_key_binding(
+        &engine,
+        HENKA_INPUT_ACTION_MOVE_FORWARD,
+        0U) == HENKA_KEY_W);
+
+    HENKA_TEST_ASSERT(henka_input_bind_action_key(
+        &engine,
+        HENKA_INPUT_ACTION_MOVE_FORWARD,
+        HENKA_KEY_UNKNOWN) == HENKA_ERROR_INVALID_ARGUMENT);
+    HENKA_TEST_ASSERT(henka_input_get_action_key_binding_count(
+        &engine,
+        HENKA_INPUT_ACTION_MOVE_FORWARD) == 1U);
+    HENKA_TEST_ASSERT(henka_input_get_action_key_binding(
+        &engine,
+        HENKA_INPUT_ACTION_MOVE_FORWARD,
+        0U) == HENKA_KEY_W);
+
+    HENKA_TEST_ASSERT(henka_input_bind_action_mouse_button(
+        &engine,
+        HENKA_INPUT_ACTION_SELECT_TOOL,
+        HENKA_MOUSE_BUTTON_RIGHT) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_input_bind_action_mouse_button(
+        &engine,
+        HENKA_INPUT_ACTION_SELECT_TOOL,
+        HENKA_MOUSE_BUTTON_UNKNOWN) == HENKA_ERROR_INVALID_ARGUMENT);
+    HENKA_TEST_ASSERT(henka_input_get_action_mouse_button_binding_count(
+        &engine,
+        HENKA_INPUT_ACTION_SELECT_TOOL) == 1U);
+    HENKA_TEST_ASSERT(henka_input_get_action_mouse_button_binding(
+        &engine,
+        HENKA_INPUT_ACTION_SELECT_TOOL,
+        0U) == HENKA_MOUSE_BUTTON_RIGHT);
 }

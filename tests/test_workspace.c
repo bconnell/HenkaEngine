@@ -1,5 +1,8 @@
 #include "test_suite.h"
 
+#include <limits.h>
+#include <math.h>
+
 #include <henka/workspace.h>
 
 void henka_test_workspace(void)
@@ -96,4 +99,42 @@ void henka_test_workspace(void)
     HENKA_TEST_ASSERT(layout.scene_viewport.height >= 340);
     HENKA_TEST_ASSERT(layout.scene_frame.x >= layout.left_dock.x + layout.left_dock.width);
     HENKA_TEST_ASSERT(layout.right_dock.x >= layout.scene_frame.x + layout.scene_frame.width);
+
+    HENKA_TEST_ASSERT(henka_viewport_contains_point(
+        (henka_viewport){INT_MAX - 4, 0, 16, 10},
+        (henka_vec2){0.0f, 0.0f}) == false);
+    HENKA_TEST_ASSERT(henka_viewport_contains_point(
+        (henka_viewport){0, 0, 10, 10},
+        (henka_vec2){NAN, 0.0f}) == false);
+    HENKA_TEST_ASSERT(henka_window_point_to_framebuffer_point(
+        800,
+        600,
+        1200,
+        900,
+        (henka_vec2){NAN, 10.0f},
+        &framebuffer_point) == HENKA_ERROR_INVALID_ARGUMENT);
+
+    desc.margin = NAN;
+    HENKA_TEST_ASSERT(henka_workspace_layout_docked(&desc, &layout) == HENKA_ERROR_INVALID_ARGUMENT);
+
+    desc = (henka_workspace_desc){
+        1,
+        1,
+        100.0f,
+        100.0f,
+        1000.0f,
+        1000.0f,
+        1000.0f,
+        100.0f,
+        100.0f,
+        1000,
+        1000,
+        true,
+        true,
+        true};
+    HENKA_TEST_ASSERT(henka_workspace_layout_docked(&desc, &layout) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(layout.scene_viewport.x == 0);
+    HENKA_TEST_ASSERT(layout.scene_viewport.y == 0);
+    HENKA_TEST_ASSERT(layout.scene_viewport.width == 1);
+    HENKA_TEST_ASSERT(layout.scene_viewport.height == 1);
 }

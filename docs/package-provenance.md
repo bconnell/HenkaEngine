@@ -40,6 +40,6 @@ A package is assembled in a unique staging directory before it replaces the acti
 
 The previous package remains untouched until the staged package is complete. During activation, the previous package is moved to a unique backup, the staged package becomes active, and the backup is removed only after activation succeeds. A failure before activation restores the previous package.
 
-A leftover backup is never deleted automatically. Packaging stops and reports its location so it can be inspected before another refresh.
+A leftover staging directory still stops packaging for inspection because it may represent an incomplete transaction. A leftover backup is removed automatically only when the active package is independently proven complete and both the active package and backup are free of reparse points. If that proof or cleanup fails, packaging stops with the exact retained path instead of reporting success.
 
 A package created from a working tree is identified as `working-tree`. A package created after commit and a clean rebuild is identified as `clean`.

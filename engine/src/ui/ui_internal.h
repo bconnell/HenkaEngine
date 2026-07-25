@@ -31,7 +31,8 @@ struct henka_ui_context
     bool mouse_left_down;
     bool mouse_left_pressed;
     bool mouse_left_released;
-    const char* active_id;
+    bool active_id_set;
+    char active_id[256];
     henka_ui_draw_rect* draw_rects;
     size_t draw_rect_count;
     size_t draw_rect_capacity;

@@ -235,7 +235,7 @@ const char* henka_gizmo_axis_to_string(henka_gizmo_axis axis)
 
 henka_result henka_gizmo_snap_move(float value, float increment, float* out_value)
 {
-    if (out_value == NULL || increment <= 0.0f)
+    if (out_value == NULL || !isfinite(value) || !isfinite(increment) || increment <= 0.0f)
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
@@ -246,7 +246,7 @@ henka_result henka_gizmo_snap_move(float value, float increment, float* out_valu
 
 henka_result henka_gizmo_snap_rotate(float angle_radians, float increment, float* out_angle_radians)
 {
-    if (out_angle_radians == NULL || increment <= 0.0f)
+    if (out_angle_radians == NULL || !isfinite(angle_radians) || !isfinite(increment) || increment <= 0.0f)
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
@@ -257,7 +257,8 @@ henka_result henka_gizmo_snap_rotate(float angle_radians, float increment, float
 
 henka_result henka_gizmo_snap_scale(float value, float increment, float minimum_scale, float* out_value)
 {
-    if (out_value == NULL || increment <= 0.0f || minimum_scale <= 0.0f)
+    if (out_value == NULL || !isfinite(value) || !isfinite(increment) || !isfinite(minimum_scale) ||
+        increment <= 0.0f || minimum_scale <= 0.0f)
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
@@ -1082,8 +1083,10 @@ henka_result henka_gizmo_apply_drag_to_transform(
     henka_transform transform;
     float delta;
     float snapped_value;
+    henka_result snap_result;
 
-    if (drag == NULL || out_transform == NULL || !drag->dragging)
+    if (drag == NULL || out_transform == NULL || !drag->dragging ||
+        !isfinite(current_mouse_local.x) || !isfinite(current_mouse_local.y))
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
@@ -1110,15 +1113,33 @@ henka_result henka_gizmo_apply_drag_to_transform(
             {
                 if (drag->active_axis == HENKA_GIZMO_AXIS_X)
                 {
-                    henka_gizmo_snap_move(transform.position.x, snap_settings->move_snap_increment, &transform.position.x);
+                    snap_result = henka_gizmo_snap_move(
+                        transform.position.x,
+                        snap_settings->move_snap_increment,
+                        &transform.position.x);
                 }
                 else if (drag->active_axis == HENKA_GIZMO_AXIS_Y)
                 {
-                    henka_gizmo_snap_move(transform.position.y, snap_settings->move_snap_increment, &transform.position.y);
+                    snap_result = henka_gizmo_snap_move(
+                        transform.position.y,
+                        snap_settings->move_snap_increment,
+                        &transform.position.y);
                 }
                 else if (drag->active_axis == HENKA_GIZMO_AXIS_Z)
                 {
-                    henka_gizmo_snap_move(transform.position.z, snap_settings->move_snap_increment, &transform.position.z);
+                    snap_result = henka_gizmo_snap_move(
+                        transform.position.z,
+                        snap_settings->move_snap_increment,
+                        &transform.position.z);
+                }
+                else
+                {
+                    return HENKA_ERROR_INVALID_ARGUMENT;
+                }
+
+                if (snap_result != HENKA_SUCCESS)
+                {
+                    return snap_result;
                 }
             }
             break;
@@ -1148,7 +1169,11 @@ henka_result henka_gizmo_apply_drag_to_transform(
             }
             if (snap_settings != NULL && snap_settings->enabled)
             {
-                henka_gizmo_snap_rotate(delta, snap_settings->rotate_snap_increment, &delta);
+                snap_result = henka_gizmo_snap_rotate(delta, snap_settings->rotate_snap_increment, &delta);
+                if (snap_result != HENKA_SUCCESS)
+                {
+                    return snap_result;
+                }
             }
             transform.rotation = henka_quat_multiply(henka_quat_from_axis_angle(axis_direction, delta), transform.rotation);
             break;
@@ -1180,7 +1205,16 @@ henka_result henka_gizmo_apply_drag_to_transform(
             minimum_scale = (snap_settings != NULL && snap_settings->minimum_scale > 0.0f) ? snap_settings->minimum_scale : 0.01f;
             if (snap_settings != NULL && snap_settings->enabled)
             {
-                henka_gizmo_snap_scale(transform.scale.x, snap_settings->scale_snap_increment, minimum_scale, &snapped_value);
+                snap_result = henka_gizmo_snap_scale(
+                    transform.scale.x,
+                    snap_settings->scale_snap_increment,
+                    minimum_scale,
+                    &snapped_value);
+                if (snap_result != HENKA_SUCCESS)
+                {
+                    return snap_result;
+                }
+
                 transform.scale.x = snapped_value;
                 transform.scale.y = snapped_value;
                 transform.scale.z = snapped_value;
