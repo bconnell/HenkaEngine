@@ -1,5 +1,7 @@
 #include "test_suite.h"
 
+#include <float.h>
+#include <math.h>
 #include <string.h>
 
 #include <henka/memory.h>
@@ -417,6 +419,153 @@ static void henka_test_physics_capacity_growth(void)
     henka_physics_world_destroy(world);
 }
 
+static void henka_test_physics_query_and_accumulator_hardening(void)
+{
+    henka_physics_world* world;
+    henka_physics_body_desc desc;
+    henka_physics_body_id body;
+    henka_physics_body_id box;
+    henka_physics_body_id plane;
+    henka_physics_body_state state;
+    henka_physics_debug_shape debug_shape;
+    henka_physics_raycast_hit hit;
+    float position_after_capped_step;
+
+    HENKA_TEST_ASSERT(henka_physics_world_create(&world) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_physics_world_set_gravity(
+        world,
+        (henka_vec3){0.0f, 0.0f, 0.0f}) == HENKA_SUCCESS);
+
+    desc = henka_test_physics_body(
+        HENKA_PHYSICS_BODY_STATIC,
+        henka_physics_collider_box((henka_vec3){1.0f, 1.0f, 1.0f}),
+        (henka_vec3){0.0f, 0.0f, 0.0f});
+    HENKA_TEST_ASSERT(henka_physics_body_create(world, &desc, &box) == HENKA_SUCCESS);
+
+    hit = (henka_physics_raycast_hit){
+        true,
+        box,
+        {3.0f, 3.0f, 3.0f},
+        {4.0f, 4.0f, 4.0f},
+        5.0f};
+    HENKA_TEST_ASSERT(henka_physics_world_raycast(
+        world,
+        (henka_ray){{0.0f, 0.0f, 0.0f}, {0.0f, 0.0f, 0.0f}},
+        10.0f,
+        HENKA_PHYSICS_ALL_LAYERS,
+        &hit) == HENKA_ERROR_INVALID_ARGUMENT);
+    HENKA_TEST_ASSERT(!hit.hit);
+    HENKA_TEST_ASSERT(hit.body == HENKA_INVALID_PHYSICS_BODY_ID);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(hit.distance, 0.0f, 0.0f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(hit.normal.x, 0.0f, 0.0f);
+
+    HENKA_TEST_ASSERT(henka_physics_world_raycast(
+        world,
+        (henka_ray){{0.0f, 0.0f, 0.0f}, {1.0f, 0.0f, 0.0f}},
+        10.0f,
+        HENKA_PHYSICS_ALL_LAYERS,
+        &hit) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(hit.hit && hit.body == box);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(hit.distance, 1.0f, 0.0001f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(hit.normal.x, 1.0f, 0.0001f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(hit.normal.y, 0.0f, 0.0001f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(hit.normal.z, 0.0f, 0.0001f);
+
+    desc = henka_test_physics_body(
+        HENKA_PHYSICS_BODY_STATIC,
+        henka_physics_collider_plane((henka_vec3){0.0f, 1.0f, 0.0f}, 0.0f),
+        (henka_vec3){0.0f, 0.0f, 0.0f});
+    desc.collider.offset.y = 2.0f;
+    HENKA_TEST_ASSERT(henka_physics_body_create(world, &desc, &plane) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_physics_world_raycast(
+        world,
+        (henka_ray){{3.0f, 5.0f, 0.0f}, {0.0f, -1.0f, 0.0f}},
+        10.0f,
+        HENKA_PHYSICS_ALL_LAYERS,
+        &hit) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(hit.hit && hit.body == plane);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(hit.distance, 3.0f, 0.0001f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(hit.point.y, 2.0f, 0.0001f);
+
+    debug_shape.body = box;
+    debug_shape.colliding = true;
+    debug_shape.grounded = true;
+    HENKA_TEST_ASSERT(henka_physics_world_get_debug_shape(
+        world,
+        99U,
+        &debug_shape) == HENKA_ERROR_INVALID_ARGUMENT);
+    HENKA_TEST_ASSERT(debug_shape.body == HENKA_INVALID_PHYSICS_BODY_ID);
+    HENKA_TEST_ASSERT(!debug_shape.colliding && !debug_shape.grounded);
+
+    state.id = box;
+    state.linked_scene = (henka_scene*)world;
+    state.linked_entity = 99U;
+    HENKA_TEST_ASSERT(henka_physics_body_get_state(
+        world,
+        HENKA_INVALID_PHYSICS_BODY_ID,
+        &state) == HENKA_ERROR_INVALID_ARGUMENT);
+    HENKA_TEST_ASSERT(state.id == HENKA_INVALID_PHYSICS_BODY_ID);
+    HENKA_TEST_ASSERT(state.linked_scene == NULL);
+    HENKA_TEST_ASSERT(state.linked_entity == HENKA_INVALID_ENTITY);
+
+    body = 77U;
+    desc = henka_test_physics_body(
+        HENKA_PHYSICS_BODY_DYNAMIC,
+        henka_physics_collider_sphere(0.5f),
+        (henka_vec3){6.0f, 0.0f, 0.0f});
+    desc.mass = nextafterf(0.0f, 1.0f);
+    HENKA_TEST_ASSERT(henka_physics_body_create(
+        world,
+        &desc,
+        &body) == HENKA_ERROR_INVALID_ARGUMENT);
+    HENKA_TEST_ASSERT(body == HENKA_INVALID_PHYSICS_BODY_ID);
+    henka_physics_world_destroy(world);
+
+    HENKA_TEST_ASSERT(henka_physics_world_create(&world) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_physics_world_set_gravity(
+        world,
+        (henka_vec3){0.0f, 0.0f, 0.0f}) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_physics_world_set_fixed_timestep(world, 0.001f) == HENKA_SUCCESS);
+    desc = henka_test_physics_body(
+        HENKA_PHYSICS_BODY_KINEMATIC,
+        henka_physics_collider_box((henka_vec3){0.5f, 0.5f, 0.5f}),
+        (henka_vec3){0.0f, 5.0f, 0.0f});
+    desc.linear_velocity.x = 1.0f;
+    HENKA_TEST_ASSERT(henka_physics_body_create(world, &desc, &body) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_physics_world_step(world, 0.25f) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_physics_body_get_state(world, body, &state) == HENKA_SUCCESS);
+    position_after_capped_step = state.transform.position.x;
+    HENKA_TEST_ASSERT(position_after_capped_step > 0.015f);
+    HENKA_TEST_ASSERT(position_after_capped_step < 0.017f);
+    HENKA_TEST_ASSERT(henka_physics_world_step(world, 0.0f) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_physics_body_get_state(world, body, &state) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(
+        state.transform.position.x,
+        position_after_capped_step,
+        0.000001f);
+    henka_physics_world_destroy(world);
+
+    HENKA_TEST_ASSERT(henka_physics_world_create(&world) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_physics_world_set_gravity(
+        world,
+        (henka_vec3){0.0f, 0.0f, 0.0f}) == HENKA_SUCCESS);
+    desc = henka_test_physics_body(
+        HENKA_PHYSICS_BODY_DYNAMIC,
+        henka_physics_collider_sphere(0.5f),
+        (henka_vec3){0.0f, 0.0f, 0.0f});
+    HENKA_TEST_ASSERT(henka_physics_body_create(world, &desc, &body) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_physics_body_set_linear_velocity(
+        world,
+        body,
+        (henka_vec3){FLT_MAX, 0.0f, 0.0f}) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_physics_body_apply_impulse(
+        world,
+        body,
+        (henka_vec3){FLT_MAX, 0.0f, 0.0f}) == HENKA_ERROR_INVALID_ARGUMENT);
+    HENKA_TEST_ASSERT(henka_physics_body_get_state(world, body, &state) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(state.linear_velocity.x == FLT_MAX);
+    henka_physics_world_destroy(world);
+}
 void henka_test_physics(void)
 {
     HENKA_TEST_ASSERT(strcmp(henka_physics_body_type_get_label(HENKA_PHYSICS_BODY_DYNAMIC), "Dynamic") == 0);
@@ -427,5 +576,6 @@ void henka_test_physics(void)
     henka_test_physics_pair_filters_and_response();
     henka_test_physics_scene_link();
     henka_test_physics_validation_and_tracking();
+    henka_test_physics_query_and_accumulator_hardening();
     henka_test_physics_capacity_growth();
 }

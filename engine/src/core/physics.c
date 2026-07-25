@@ -50,6 +50,25 @@ static bool henka_physics_is_finite_vec3(henka_vec3 value)
     return isfinite(value.x) && isfinite(value.y) && isfinite(value.z);
 }
 
+static bool henka_physics_try_add_vec3(henka_vec3 left, henka_vec3 right, henka_vec3* out_value)
+{
+    henka_vec3 result;
+
+    if (out_value == NULL)
+    {
+        return false;
+    }
+
+    result = henka_vec3_add(left, right);
+    if (!henka_physics_is_finite_vec3(result))
+    {
+        return false;
+    }
+
+    *out_value = result;
+    return true;
+}
+
 static float henka_physics_clamp(float value, float minimum, float maximum)
 {
     if (value < minimum)
@@ -76,6 +95,14 @@ static henka_vec3 henka_physics_abs_vec3(henka_vec3 value)
 static henka_vec3 henka_physics_collider_center(const henka_physics_body_state* body)
 {
     return henka_vec3_add(body->transform.position, body->collider.offset);
+}
+
+static float henka_physics_plane_world_offset(
+    const henka_physics_body_state* body,
+    henka_vec3 normalized_normal)
+{
+    return body->collider.data.plane.offset +
+        henka_vec3_dot(normalized_normal, henka_physics_collider_center(body));
 }
 
 static henka_vec3 henka_physics_box_extents(const henka_physics_body_state* body)
@@ -359,7 +386,7 @@ static bool henka_physics_sphere_box(const henka_physics_body_state* sphere, con
 static bool henka_physics_shape_plane(const henka_physics_body_state* shape, const henka_physics_body_state* plane, henka_physics_contact* contact)
 {
     henka_vec3 normal = henka_vec3_normalize(plane->collider.data.plane.normal);
-    float offset = plane->collider.data.plane.offset + henka_vec3_dot(normal, plane->transform.position);
+    float offset = henka_physics_plane_world_offset(plane, normal);
     float radius;
     float distance;
     if (shape->collider.shape == HENKA_PHYSICS_SHAPE_SPHERE)
@@ -687,15 +714,19 @@ henka_physics_collider_desc henka_physics_collider_plane(henka_vec3 normal, floa
 henka_result henka_physics_world_create(henka_physics_world** out_world)
 {
     henka_physics_world* world;
+
     if (out_world == NULL)
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
+
+    *out_world = NULL;
     world = henka_calloc(1U, sizeof(*world));
     if (world == NULL)
     {
         return HENKA_ERROR_OUT_OF_MEMORY;
     }
+
     world->gravity = (henka_vec3){0.0f, -9.81f, 0.0f};
     world->fixed_timestep = 1.0f / 60.0f;
     world->next_body_id = 1U;
@@ -763,13 +794,20 @@ henka_result henka_physics_body_create(
     size_t old_capacity;
     size_t required;
 
-    if (world == NULL || desc == NULL || out_body == NULL ||
+    if (out_body == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    *out_body = HENKA_INVALID_PHYSICS_BODY_ID;
+    if (world == NULL || desc == NULL ||
         desc->type < HENKA_PHYSICS_BODY_STATIC || desc->type > HENKA_PHYSICS_BODY_KINEMATIC ||
         !henka_physics_transform_valid(desc->transform) || !henka_physics_is_finite_vec3(desc->linear_velocity) ||
         !henka_physics_is_finite_vec3(desc->angular_velocity) || !henka_physics_material_valid(desc->material) ||
         !henka_physics_collider_valid(desc->collider) ||
         (desc->collider.shape == HENKA_PHYSICS_SHAPE_PLANE && desc->type != HENKA_PHYSICS_BODY_STATIC) ||
-        (desc->type == HENKA_PHYSICS_BODY_DYNAMIC && (!isfinite(desc->mass) || desc->mass <= 0.0f)) ||
+        (desc->type == HENKA_PHYSICS_BODY_DYNAMIC &&
+            (!isfinite(desc->mass) || desc->mass <= 0.0f || !isfinite(1.0f / desc->mass))) ||
         world->next_body_id == UINT32_MAX)
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
@@ -859,13 +897,26 @@ henka_result henka_physics_body_destroy(henka_physics_world* world, henka_physic
     return HENKA_SUCCESS;
 }
 
-henka_result henka_physics_body_get_state(const henka_physics_world* world, henka_physics_body_id body, henka_physics_body_state* out_state)
+henka_result henka_physics_body_get_state(
+    const henka_physics_world* world,
+    henka_physics_body_id body,
+    henka_physics_body_state* out_state)
 {
-    const henka_physics_body_record* record = henka_physics_find_body_const(world, body);
-    if (record == NULL || out_state == NULL)
+    const henka_physics_body_record* record;
+
+    if (out_state == NULL)
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
+
+    *out_state = (henka_physics_body_state){0};
+    out_state->id = HENKA_INVALID_PHYSICS_BODY_ID;
+    record = henka_physics_find_body_const(world, body);
+    if (record == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
     *out_state = record->state;
     return HENKA_SUCCESS;
 }
@@ -952,38 +1003,87 @@ henka_result henka_physics_body_set_angular_velocity(henka_physics_world* world,
     return HENKA_SUCCESS;
 }
 
-henka_result henka_physics_body_apply_force(henka_physics_world* world, henka_physics_body_id body, henka_vec3 force)
+henka_result henka_physics_body_apply_force(
+    henka_physics_world* world,
+    henka_physics_body_id body,
+    henka_vec3 force)
 {
     henka_physics_body_record* record = henka_physics_find_body(world, body);
-    if (record == NULL || !henka_physics_is_finite_vec3(force) || record->state.type != HENKA_PHYSICS_BODY_DYNAMIC)
-    {
-        return HENKA_ERROR_INVALID_ARGUMENT;
-    }
-    record->force = henka_vec3_add(record->force, force);
-    return HENKA_SUCCESS;
-}
-
-henka_result henka_physics_body_apply_impulse(henka_physics_world* world, henka_physics_body_id body, henka_vec3 impulse)
-{
-    henka_physics_body_record* record = henka_physics_find_body(world, body);
+    henka_vec3 accumulated_force;
+    henka_vec3 acceleration;
     float inverse_mass;
-    if (record == NULL || !henka_physics_is_finite_vec3(impulse) || record->state.type != HENKA_PHYSICS_BODY_DYNAMIC)
+
+    if (record == NULL || !henka_physics_is_finite_vec3(force) ||
+        record->state.type != HENKA_PHYSICS_BODY_DYNAMIC ||
+        !henka_physics_try_add_vec3(record->force, force, &accumulated_force))
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
+
     inverse_mass = henka_physics_inverse_mass(&record->state);
-    record->state.linear_velocity = henka_vec3_add(record->state.linear_velocity, henka_vec3_scale(impulse, inverse_mass));
+    acceleration = henka_vec3_scale(accumulated_force, inverse_mass);
+    if (!henka_physics_is_finite_vec3(acceleration))
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    record->force = accumulated_force;
     return HENKA_SUCCESS;
 }
 
-henka_result henka_physics_body_apply_torque(henka_physics_world* world, henka_physics_body_id body, henka_vec3 torque)
+henka_result henka_physics_body_apply_impulse(
+    henka_physics_world* world,
+    henka_physics_body_id body,
+    henka_vec3 impulse)
 {
     henka_physics_body_record* record = henka_physics_find_body(world, body);
-    if (record == NULL || !henka_physics_is_finite_vec3(torque) || record->state.type != HENKA_PHYSICS_BODY_DYNAMIC)
+    henka_vec3 delta_velocity;
+    henka_vec3 next_velocity;
+    float inverse_mass;
+
+    if (record == NULL || !henka_physics_is_finite_vec3(impulse) ||
+        record->state.type != HENKA_PHYSICS_BODY_DYNAMIC)
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
-    record->torque = henka_vec3_add(record->torque, torque);
+
+    inverse_mass = henka_physics_inverse_mass(&record->state);
+    delta_velocity = henka_vec3_scale(impulse, inverse_mass);
+    if (!henka_physics_is_finite_vec3(delta_velocity) ||
+        !henka_physics_try_add_vec3(record->state.linear_velocity, delta_velocity, &next_velocity))
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    record->state.linear_velocity = next_velocity;
+    return HENKA_SUCCESS;
+}
+
+henka_result henka_physics_body_apply_torque(
+    henka_physics_world* world,
+    henka_physics_body_id body,
+    henka_vec3 torque)
+{
+    henka_physics_body_record* record = henka_physics_find_body(world, body);
+    henka_vec3 accumulated_torque;
+    henka_vec3 angular_acceleration;
+    float inverse_mass;
+
+    if (record == NULL || !henka_physics_is_finite_vec3(torque) ||
+        record->state.type != HENKA_PHYSICS_BODY_DYNAMIC ||
+        !henka_physics_try_add_vec3(record->torque, torque, &accumulated_torque))
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    inverse_mass = henka_physics_inverse_mass(&record->state);
+    angular_acceleration = henka_vec3_scale(accumulated_torque, inverse_mass);
+    if (!henka_physics_is_finite_vec3(angular_acceleration))
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    record->torque = accumulated_torque;
     return HENKA_SUCCESS;
 }
 
@@ -1001,23 +1101,33 @@ henka_result henka_physics_body_clear_velocity(henka_physics_world* world, henka
 
 henka_result henka_physics_world_step(henka_physics_world* world, float delta_seconds)
 {
+    const unsigned int maximum_substeps = 16U;
     unsigned int substeps = 0U;
+
     if (world == NULL || !isfinite(delta_seconds) || delta_seconds < 0.0f)
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
+
     world->event_count = 0U;
     world->accumulator += delta_seconds > 0.25f ? 0.25f : delta_seconds;
-    while (world->accumulator >= world->fixed_timestep && substeps < 16U)
+    while (world->accumulator >= world->fixed_timestep && substeps < maximum_substeps)
     {
         henka_result result = henka_physics_substep(world, world->fixed_timestep);
         if (result != HENKA_SUCCESS)
         {
             return result;
         }
+
         world->accumulator -= world->fixed_timestep;
         ++substeps;
     }
+
+    if (substeps == maximum_substeps && world->accumulator >= world->fixed_timestep)
+    {
+        world->accumulator = fmodf(world->accumulator, world->fixed_timestep);
+    }
+
     return HENKA_SUCCESS;
 }
 
@@ -1103,67 +1213,120 @@ static bool henka_physics_raycast_sphere(const henka_physics_body_state* body, h
     return true;
 }
 
-static bool henka_physics_raycast_box(const henka_physics_body_state* body, henka_ray ray, float maximum, float* distance, henka_vec3* normal)
+static bool henka_physics_raycast_box(
+    const henka_physics_body_state* body,
+    henka_ray ray,
+    float maximum,
+    float* distance,
+    henka_vec3* normal)
 {
     henka_vec3 center = henka_physics_collider_center(body);
     henka_vec3 extents = henka_physics_box_extents(body);
     float minimum = 0.0f;
-    float max_value = maximum;
+    float maximum_value = FLT_MAX;
+    bool origin_inside = true;
     int axis;
-    henka_vec3 hit_normal = {0.0f, 0.0f, 0.0f};
+    henka_vec3 entry_normal = {0.0f, 0.0f, 0.0f};
+    henka_vec3 exit_normal = {0.0f, 0.0f, 0.0f};
     float origins[3] = {ray.origin.x, ray.origin.y, ray.origin.z};
     float directions[3] = {ray.direction.x, ray.direction.y, ray.direction.z};
     float centers[3] = {center.x, center.y, center.z};
     float extent_values[3] = {extents.x, extents.y, extents.z};
+
     for (axis = 0; axis < 3; ++axis)
     {
         float low;
         float high;
-        float sign = -1.0f;
+        henka_vec3 near_normal = {0.0f, 0.0f, 0.0f};
+        henka_vec3 far_normal = {0.0f, 0.0f, 0.0f};
+
+        if (origins[axis] < centers[axis] - extent_values[axis] ||
+            origins[axis] > centers[axis] + extent_values[axis])
+        {
+            origin_inside = false;
+        }
+
         if (henka_physics_abs(directions[axis]) < 0.00001f)
         {
-            if (origins[axis] < centers[axis] - extent_values[axis] || origins[axis] > centers[axis] + extent_values[axis])
+            if (origins[axis] < centers[axis] - extent_values[axis] ||
+                origins[axis] > centers[axis] + extent_values[axis])
             {
                 return false;
             }
             continue;
         }
+
         low = (centers[axis] - extent_values[axis] - origins[axis]) / directions[axis];
         high = (centers[axis] + extent_values[axis] - origins[axis]) / directions[axis];
+        if (axis == 0)
+        {
+            near_normal.x = -1.0f;
+            far_normal.x = 1.0f;
+        }
+        else if (axis == 1)
+        {
+            near_normal.y = -1.0f;
+            far_normal.y = 1.0f;
+        }
+        else
+        {
+            near_normal.z = -1.0f;
+            far_normal.z = 1.0f;
+        }
+
         if (low > high)
         {
             float temporary = low;
+            henka_vec3 temporary_normal = near_normal;
             low = high;
             high = temporary;
-            sign = 1.0f;
+            near_normal = far_normal;
+            far_normal = temporary_normal;
         }
+
         if (low > minimum)
         {
             minimum = low;
-            hit_normal = (henka_vec3){0.0f, 0.0f, 0.0f};
-            if (axis == 0) hit_normal.x = sign;
-            if (axis == 1) hit_normal.y = sign;
-            if (axis == 2) hit_normal.z = sign;
+            entry_normal = near_normal;
         }
-        if (high < max_value)
+        if (high < maximum_value)
         {
-            max_value = high;
+            maximum_value = high;
+            exit_normal = far_normal;
         }
-        if (minimum > max_value)
+        if (minimum > maximum_value)
         {
             return false;
         }
     }
+
+    if (origin_inside)
+    {
+        if (maximum_value < 0.0f || maximum_value > maximum)
+        {
+            return false;
+        }
+
+        *distance = maximum_value;
+        *normal = exit_normal;
+        return true;
+    }
+
+    if (minimum < 0.0f || minimum > maximum)
+    {
+        return false;
+    }
+
     *distance = minimum;
-    *normal = hit_normal;
-    return minimum <= maximum;
+    *normal = entry_normal;
+    return true;
 }
 
 static bool henka_physics_raycast_plane(const henka_physics_body_state* body, henka_ray ray, float maximum, float* distance, henka_vec3* normal)
 {
     henka_vec3 plane_normal = henka_vec3_normalize(body->collider.data.plane.normal);
     float denominator = henka_vec3_dot(plane_normal, ray.direction);
-    float offset = body->collider.data.plane.offset + henka_vec3_dot(plane_normal, body->transform.position);
+    float offset = henka_physics_plane_world_offset(body, plane_normal);
     float result;
     if (henka_physics_abs(denominator) < 0.00001f)
     {
@@ -1183,14 +1346,28 @@ henka_result henka_physics_world_raycast(const henka_physics_world* world, henka
 {
     size_t index;
     float closest = FLT_MAX;
-    if (world == NULL || out_hit == NULL || !henka_physics_is_finite_vec3(ray.origin) ||
-        !henka_physics_is_finite_vec3(ray.direction) || henka_vec3_length(ray.direction) <= 0.0001f ||
-        !isfinite(max_distance) || max_distance <= 0.0f)
+    float direction_length;
+
+    if (out_hit == NULL)
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
-    ray.direction = henka_vec3_normalize(ray.direction);
-    *out_hit = (henka_physics_raycast_hit){false, HENKA_INVALID_PHYSICS_BODY_ID, {0.0f, 0.0f, 0.0f}, {0.0f, 0.0f, 0.0f}, 0.0f};
+
+    *out_hit = (henka_physics_raycast_hit){
+        false,
+        HENKA_INVALID_PHYSICS_BODY_ID,
+        {0.0f, 0.0f, 0.0f},
+        {0.0f, 0.0f, 0.0f},
+        0.0f};
+    direction_length = henka_vec3_length(ray.direction);
+    if (world == NULL || !henka_physics_is_finite_vec3(ray.origin) ||
+        !henka_physics_is_finite_vec3(ray.direction) || !isfinite(direction_length) ||
+        direction_length <= 0.0001f || !isfinite(max_distance) || max_distance <= 0.0f)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    ray.direction = henka_vec3_scale(ray.direction, 1.0f / direction_length);
     for (index = 0U; index < world->body_capacity; ++index)
     {
         const henka_physics_body_state* body;
@@ -1236,7 +1413,15 @@ henka_result henka_physics_world_get_debug_shape(const henka_physics_world* worl
 {
     size_t body_index;
     size_t current = 0U;
-    if (world == NULL || out_shape == NULL)
+
+    if (out_shape == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    *out_shape = (henka_physics_debug_shape){0};
+    out_shape->body = HENKA_INVALID_PHYSICS_BODY_ID;
+    if (world == NULL)
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
