@@ -41,6 +41,7 @@ static void henka_test_scene_capacity_growth(void)
 void henka_test_scene(void)
 {
     henka_bounds bounds;
+    henka_camera camera;
     uint32_t flags;
     henka_scene* scene;
     henka_entity found;
@@ -62,6 +63,14 @@ void henka_test_scene(void)
 
     HENKA_TEST_ASSERT(henka_scene_create(&scene) == HENKA_SUCCESS);
     HENKA_TEST_ASSERT(scene != NULL);
+    camera = henka_camera_create_perspective(
+        60.0f * HENKA_DEG_TO_RAD,
+        16.0f / 9.0f,
+        0.1f,
+        100.0f);
+    HENKA_TEST_ASSERT(henka_scene_set_camera(scene, &camera) == HENKA_SUCCESS);
+    camera.aspect_ratio = 0.0f;
+    HENKA_TEST_ASSERT(henka_scene_set_camera(scene, &camera) == HENKA_ERROR_INVALID_ARGUMENT);
     HENKA_TEST_ASSERT(henka_scene_get_entity_count(scene) == 0U);
     HENKA_TEST_ASSERT(henka_scene_get_entity_at_index(scene, 0U) == HENKA_INVALID_ENTITY);
 

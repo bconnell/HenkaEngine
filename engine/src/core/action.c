@@ -47,7 +47,16 @@ static bool henka_action_scale_vector_is_valid(henka_vec3 value)
 
 static bool henka_action_name_is_valid(const char* value)
 {
-    return value != NULL && value[0] != '\0';
+    size_t length;
+
+    return henka_checked_c_string_length(value, HENKA_MAX_SCENE_TEXT_BYTES, &length) &&
+        length > 0U;
+}
+
+static bool henka_action_primitive_is_valid(henka_action_primitive primitive)
+{
+    return primitive >= HENKA_ACTION_PRIMITIVE_CUBE &&
+        primitive <= HENKA_ACTION_PRIMITIVE_MARKER;
 }
 
 static bool henka_action_transform_is_valid(henka_transform transform)
@@ -581,14 +590,24 @@ henka_result henka_action_execute(
 
         case HENKA_ACTION_COMMAND_ADD_PRIMITIVE_OBJECT:
         {
-            henka_entity entity;
+            bool default_registered;
             henka_bounds bounds;
+            henka_entity entity;
+            henka_result operation_result;
 
             if (!henka_action_name_is_valid(request->params.add_primitive.name))
             {
                 result.status = HENKA_ACTION_STATUS_INVALID_NAME;
                 result.engine_result = HENKA_ERROR_INVALID_ARGUMENT;
-                henka_action_set_message(&result, "Primitive objects need a non-empty name.");
+                henka_action_set_message(&result, "Primitive objects need a bounded non-empty name.");
+                break;
+            }
+
+            if (!henka_action_primitive_is_valid(request->params.add_primitive.primitive))
+            {
+                result.status = HENKA_ACTION_STATUS_INVALID_COMMAND;
+                result.engine_result = HENKA_ERROR_INVALID_ARGUMENT;
+                henka_action_set_message(&result, "Primitive object type is invalid.");
                 break;
             }
 
@@ -600,12 +619,12 @@ henka_result henka_action_execute(
                 break;
             }
 
-            result.status = HENKA_ACTION_STATUS_OK;
-            result.engine_result = HENKA_SUCCESS;
-            result.success = true;
-            henka_action_set_message(&result, request->dry_run ? "Validated primitive object creation." : "Primitive object created.");
             if (request->dry_run)
             {
+                result.status = HENKA_ACTION_STATUS_OK;
+                result.engine_result = HENKA_SUCCESS;
+                result.success = true;
+                henka_action_set_message(&result, "Validated primitive object creation.");
                 break;
             }
 
@@ -614,21 +633,71 @@ henka_result henka_action_execute(
             {
                 result.status = HENKA_ACTION_STATUS_OUT_OF_MEMORY;
                 result.engine_result = HENKA_ERROR_OUT_OF_MEMORY;
-                result.success = false;
                 henka_action_set_message(&result, "Primitive object could not be created.");
                 break;
             }
 
+            default_registered = false;
             bounds = henka_action_get_primitive_bounds(request->params.add_primitive.primitive);
-            henka_scene_set_entity_transform(context->scene, entity, request->params.add_primitive.transform);
-            henka_scene_set_entity_visible(context->scene, entity, request->params.add_primitive.visible);
-            henka_scene_set_entity_local_bounds(context->scene, entity, bounds);
-            henka_scene_set_entity_tag(context->scene, entity, henka_action_get_primitive_tag(request->params.add_primitive.primitive));
-            henka_action_context_register_default_transform(context, entity, request->params.add_primitive.transform);
+            operation_result = henka_scene_set_entity_transform(
+                context->scene,
+                entity,
+                request->params.add_primitive.transform);
+            if (operation_result == HENKA_SUCCESS)
+            {
+                operation_result = henka_scene_set_entity_visible(
+                    context->scene,
+                    entity,
+                    request->params.add_primitive.visible);
+            }
+            if (operation_result == HENKA_SUCCESS)
+            {
+                operation_result = henka_scene_set_entity_local_bounds(context->scene, entity, bounds);
+            }
+            if (operation_result == HENKA_SUCCESS)
+            {
+                operation_result = henka_scene_set_entity_tag(
+                    context->scene,
+                    entity,
+                    henka_action_get_primitive_tag(request->params.add_primitive.primitive));
+            }
+            if (operation_result == HENKA_SUCCESS)
+            {
+                operation_result = henka_action_context_register_default_transform(
+                    context,
+                    entity,
+                    request->params.add_primitive.transform);
+                default_registered = operation_result == HENKA_SUCCESS;
+            }
+            if (operation_result == HENKA_SUCCESS)
+            {
+                operation_result = henka_action_fill_object_details(
+                    context,
+                    entity,
+                    &result.object_details);
+            }
+
+            if (operation_result != HENKA_SUCCESS)
+            {
+                if (default_registered)
+                {
+                    henka_action_remove_default_transform(context, entity);
+                }
+                henka_scene_destroy_entity(context->scene, entity);
+                result.status = henka_action_status_from_result(operation_result);
+                result.engine_result = operation_result;
+                result.success = false;
+                henka_action_set_message(&result, "Primitive object creation was rolled back.");
+                break;
+            }
+
             result.affected_entity = entity;
             result.selected_entity = henka_action_context_get_selected_entity(context);
-            henka_action_fill_object_details(context, entity, &result.object_details);
             result.has_object_details = true;
+            result.status = HENKA_ACTION_STATUS_OK;
+            result.engine_result = HENKA_SUCCESS;
+            result.success = true;
+            henka_action_set_message(&result, "Primitive object created.");
             break;
         }
 

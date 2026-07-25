@@ -62,6 +62,8 @@ The camera module now exposes reusable helpers for:
 
 The sandbox still uses a free camera, but the math is now reusable outside the example.
 
+Camera constructors now sanitize invalid field-of-view, aspect, near-plane, far-plane, and orthographic-height inputs to documented defaults. `henka_camera_is_valid` provides one public contract for scene assignment and projection helpers. Screen-ray and world-to-screen conversion reject non-finite or degenerate state and initialize outputs deterministically on failure. Camera mutation helpers reject non-finite deltas without poisoning persistent camera state.
+
 ### Action commands
 
 Henka now includes a small local Action API for validated scene and object operations.

@@ -910,6 +910,7 @@ henka_result henka_scene_set_entity_name(henka_scene* scene, henka_entity entity
 {
     char* copy;
     henka_scene_entity_record* record;
+    henka_result result;
 
     record = henka_scene_get_entity_record(scene, entity);
     if (record == NULL)
@@ -917,9 +918,10 @@ henka_result henka_scene_set_entity_name(henka_scene* scene, henka_entity entity
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
 
-    if (henka_scene_duplicate_text(name, &copy) != HENKA_SUCCESS)
+    result = henka_scene_duplicate_text(name, &copy);
+    if (result != HENKA_SUCCESS)
     {
-        return HENKA_ERROR_INVALID_ARGUMENT;
+        return result;
     }
 
     henka_free(record->name);
@@ -931,6 +933,7 @@ henka_result henka_scene_set_entity_tag(henka_scene* scene, henka_entity entity,
 {
     char* copy;
     henka_scene_entity_record* record;
+    henka_result result;
 
     record = henka_scene_get_entity_record(scene, entity);
     if (record == NULL)
@@ -938,9 +941,10 @@ henka_result henka_scene_set_entity_tag(henka_scene* scene, henka_entity entity,
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
 
-    if (henka_scene_duplicate_text(tag, &copy) != HENKA_SUCCESS)
+    result = henka_scene_duplicate_text(tag, &copy);
+    if (result != HENKA_SUCCESS)
     {
-        return HENKA_ERROR_INVALID_ARGUMENT;
+        return result;
     }
 
     henka_free(record->tag);
@@ -1132,7 +1136,7 @@ henka_result henka_scene_pick_entity(const henka_scene* scene, henka_ray ray, he
 
 henka_result henka_scene_set_camera(henka_scene* scene, const henka_camera* camera)
 {
-    if (scene == NULL || camera == NULL)
+    if (scene == NULL || !henka_camera_is_valid(camera))
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
@@ -1144,15 +1148,31 @@ henka_result henka_scene_set_camera(henka_scene* scene, const henka_camera* came
 
 void henka_scene_set_light_direction(henka_scene* scene, henka_vec3 light_direction)
 {
-    if (scene != NULL)
+    float length;
+
+    if (scene == NULL ||
+        !henka_is_finite_float(light_direction.x) ||
+        !henka_is_finite_float(light_direction.y) ||
+        !henka_is_finite_float(light_direction.z))
     {
-        scene->light_direction = henka_vec3_normalize(light_direction);
+        return;
     }
+
+    length = henka_vec3_length(light_direction);
+    if (!henka_is_finite_float(length) || length <= 0.000001f)
+    {
+        return;
+    }
+
+    scene->light_direction = henka_vec3_scale(light_direction, 1.0f / length);
 }
 
 void henka_scene_set_ambient_color(henka_scene* scene, henka_vec3 ambient_color)
 {
-    if (scene != NULL)
+    if (scene != NULL &&
+        henka_is_finite_float(ambient_color.x) &&
+        henka_is_finite_float(ambient_color.y) &&
+        henka_is_finite_float(ambient_color.z))
     {
         scene->ambient_color = ambient_color;
     }

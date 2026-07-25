@@ -5,6 +5,8 @@
 #include <henka/action.h>
 #include <henka/core.h>
 
+#include "../engine/src/core/checked.h"
+
 static void henka_test_action_default_transform_growth(void)
 {
     enum { ENTITY_COUNT = 20 };
@@ -38,6 +40,7 @@ void henka_test_action(void)
     henka_action_request request;
     henka_action_result result;
     henka_action_scene_summary summary;
+    char overlong_name[HENKA_MAX_SCENE_TEXT_BYTES + 2U];
     henka_camera camera;
     henka_scene* scene;
     henka_transform transform;
@@ -51,6 +54,26 @@ void henka_test_action(void)
     HENKA_TEST_ASSERT(henka_action_context_get_selected_entity(actions) == HENKA_INVALID_ENTITY);
     camera = henka_camera_create_perspective(60.0f * HENKA_DEG_TO_RAD, 16.0f / 9.0f, 0.1f, 100.0f);
     HENKA_TEST_ASSERT(henka_action_context_set_camera(actions, &camera) == HENKA_SUCCESS);
+
+    memset(&request, 0, sizeof(request));
+    request.command = HENKA_ACTION_COMMAND_ADD_PRIMITIVE_OBJECT;
+    request.params.add_primitive.primitive = (henka_action_primitive)999;
+    request.params.add_primitive.name = "Invalid Primitive";
+    request.params.add_primitive.transform = henka_transform_identity();
+    request.params.add_primitive.visible = true;
+    HENKA_TEST_ASSERT(henka_action_validate(actions, &request, &result) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(!result.success);
+    HENKA_TEST_ASSERT(result.status == HENKA_ACTION_STATUS_INVALID_COMMAND);
+    HENKA_TEST_ASSERT(henka_scene_get_entity_count(scene) == 0U);
+
+    memset(overlong_name, 'N', sizeof(overlong_name));
+    overlong_name[sizeof(overlong_name) - 1U] = '\0';
+    request.params.add_primitive.primitive = HENKA_ACTION_PRIMITIVE_CUBE;
+    request.params.add_primitive.name = overlong_name;
+    HENKA_TEST_ASSERT(henka_action_validate(actions, &request, &result) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(!result.success);
+    HENKA_TEST_ASSERT(result.status == HENKA_ACTION_STATUS_INVALID_NAME);
+    HENKA_TEST_ASSERT(henka_scene_get_entity_count(scene) == 0U);
 
     memset(&request, 0, sizeof(request));
     request.command = HENKA_ACTION_COMMAND_ADD_PRIMITIVE_OBJECT;

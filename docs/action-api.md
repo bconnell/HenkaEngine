@@ -90,6 +90,10 @@ This is one of the guardrails that keeps scene tools manipulating the real selec
 - This is not undo or redo.
 - This does not add scripting, plugins, networking, or assistant runtime control.
 
+## Creation transaction safety
+
+Primitive creation validates the primitive enum, bounded object name, and transform before either dry-run or execution succeeds. Execution applies transform, visibility, bounds, tag, default-transform registration, and object-detail construction as one bounded operation. If any setup step fails, the new entity and any registered default transform are removed before the structured failure is returned.
+
 ## Viewport interaction testing
 
 The viewport interaction test helpers now work alongside the Action API:

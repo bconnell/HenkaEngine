@@ -1,5 +1,6 @@
 #include "test_suite.h"
 
+#include <math.h>
 #include <string.h>
 
 #include <henka/camera.h>
@@ -9,6 +10,7 @@ void henka_test_camera(void)
 {
     henka_bounds bounds;
     henka_camera camera;
+    henka_camera invalid_camera;
     henka_ray corner_ray;
     henka_ray ray;
     henka_vec2 screen_point;
@@ -17,8 +19,21 @@ void henka_test_camera(void)
     henka_vec3 preset_target;
     henka_vec3 right;
     henka_vec3 up;
+    float depth;
+    float previous_yaw;
 
     camera = henka_camera_create_perspective(60.0f * HENKA_DEG_TO_RAD, 16.0f / 9.0f, 0.1f, 100.0f);
+    HENKA_TEST_ASSERT(henka_camera_is_valid(&camera));
+    invalid_camera = henka_camera_create_perspective(NAN, 0.0f, -1.0f, NAN);
+    HENKA_TEST_ASSERT(henka_camera_is_valid(&invalid_camera));
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(invalid_camera.field_of_view_radians, 60.0f * HENKA_DEG_TO_RAD, 0.0001f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(invalid_camera.aspect_ratio, 1.0f, 0.0001f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(invalid_camera.near_plane, 0.1f, 0.0001f);
+    HENKA_TEST_ASSERT(invalid_camera.far_plane > invalid_camera.near_plane);
+    invalid_camera = henka_camera_create_orthographic(NAN, NAN, NAN, NAN);
+    HENKA_TEST_ASSERT(henka_camera_is_valid(&invalid_camera));
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(invalid_camera.orthographic_height, 6.0f, 0.0001f);
+
     henka_camera_apply_mouse_look(&camera, 1.25f, 99.0f);
     HENKA_TEST_ASSERT_FLOAT_CLOSE(camera.yaw_radians, (-HENKA_PI * 0.5f) + 1.25f, 0.0001);
     HENKA_TEST_ASSERT(camera.pitch_radians < 1.56f);
@@ -27,6 +42,10 @@ void henka_test_camera(void)
     HENKA_TEST_ASSERT(camera.pitch_radians > -1.56f);
     HENKA_TEST_ASSERT(henka_camera_clamp_pitch(999.0f) < 1.56f);
     HENKA_TEST_ASSERT(henka_camera_clamp_pitch(-999.0f) > -1.56f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(henka_camera_clamp_pitch(NAN), 0.0f, 0.0001f);
+    previous_yaw = camera.yaw_radians;
+    henka_camera_apply_mouse_look(&camera, NAN, 0.0f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(camera.yaw_radians, previous_yaw, 0.0001f);
 
     bounds = (henka_bounds){{0.0f, 0.5f, 0.0f}, {0.5f, 0.5f, 0.5f}};
     HENKA_TEST_ASSERT(henka_camera_focus_on_bounds(&camera, bounds));
@@ -50,6 +69,33 @@ void henka_test_camera(void)
         henka_vec3_subtract(camera.position, henka_vec3_scale(forward, 5.0f)),
         &screen_point,
         NULL) != HENKA_SUCCESS);
+
+    invalid_camera = camera;
+    invalid_camera.position.x = NAN;
+    screen_point = (henka_vec2){123.0f, 456.0f};
+    depth = 9.0f;
+    HENKA_TEST_ASSERT(!henka_camera_is_valid(&invalid_camera));
+    HENKA_TEST_ASSERT(henka_camera_world_to_screen(
+        &invalid_camera,
+        1280,
+        720,
+        (henka_vec3){0.0f, 0.0f, 0.0f},
+        &screen_point,
+        &depth) == HENKA_ERROR_INVALID_ARGUMENT);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(screen_point.x, 0.0f, 0.0001f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(screen_point.y, 0.0f, 0.0001f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(depth, 0.0f, 0.0001f);
+    HENKA_TEST_ASSERT(henka_camera_screen_point_to_ray(
+        &camera,
+        1280,
+        720,
+        (henka_vec2){NAN, 0.0f},
+        &ray) == HENKA_ERROR_INVALID_ARGUMENT);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(ray.direction.z, -1.0f, 0.0001f);
+    HENKA_TEST_ASSERT(!henka_camera_focus_on_bounds(
+        &camera,
+        (henka_bounds){{0.0f, 0.0f, 0.0f}, {NAN, 1.0f, 1.0f}}));
+    HENKA_TEST_ASSERT(!henka_camera_orbit_target(&camera, bounds.center, NAN, 0.0f));
 
     focus_target = bounds.center;
     HENKA_TEST_ASSERT(henka_camera_orbit_target(&camera, focus_target, 0.4f, 0.2f));

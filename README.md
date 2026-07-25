@@ -159,6 +159,8 @@ The packaged folder also includes `PACKAGE_INFO.txt` so you can tell when the pa
 - Local bounds reject non-finite centers, non-finite extents, and negative extents.
 - Materials reject invalid types, non-finite base colors, and textured configurations without a texture.
 - Interaction ranges reject negative and non-finite values, and eligibility checks reject non-finite observer positions.
+- Camera constructors sanitize invalid projection inputs, camera projection helpers fail closed on non-finite state, and scene camera assignment accepts only valid camera state.
+- Primitive actions validate bounded names and primitive types before dry-run success, then roll back partially created entities if any setup step fails.
 
 ### Physics activation safety
 
