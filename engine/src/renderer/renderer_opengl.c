@@ -103,6 +103,29 @@ typedef struct henka_ui_vertex
 
 static henka_opengl_functions g_gl;
 
+static henka_result henka_opengl_restore_main_context(
+    henka_opengl_renderer_state* state,
+    const char* operation)
+{
+    if (state == NULL ||
+        state->window == NULL ||
+        state->gl_context == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    if (!SDL_GL_MakeCurrent(state->window, state->gl_context))
+    {
+        HENKA_LOG_ERROR(
+            "could not restore the main OpenGL context after %s: %s",
+            operation != NULL ? operation : "tool-window work",
+            SDL_GetError());
+        return HENKA_ERROR_RENDERER;
+    }
+
+    return HENKA_SUCCESS;
+}
+
 SDL_Window* henka_platform_get_sdl_window(struct henka_platform* platform);
 
 static bool henka_compile_shader(GLuint shader, const char* source, const char* label);
@@ -994,7 +1017,8 @@ henka_result henka_opengl_renderer_draw_ui(struct henka_renderer* renderer, cons
         renderer->framebuffer_height);
 }
 
-henka_result henka_opengl_renderer_end_frame(struct henka_renderer* renderer)
+henka_result henka_opengl_renderer_end_frame(
+    struct henka_renderer* renderer)
 {
     henka_opengl_renderer_state* state;
 
@@ -1003,10 +1027,20 @@ henka_result henka_opengl_renderer_end_frame(struct henka_renderer* renderer)
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
 
-    state = (henka_opengl_renderer_state*)renderer->backend_state;
+    state =
+        (henka_opengl_renderer_state*)renderer->backend_state;
+    if (henka_opengl_restore_main_context(
+            state,
+            "main-window presentation") != HENKA_SUCCESS)
+    {
+        return HENKA_ERROR_RENDERER;
+    }
+
     if (!SDL_GL_SwapWindow(state->window))
     {
-        HENKA_LOG_ERROR("SDL_GL_SwapWindow failed: %s", SDL_GetError());
+        HENKA_LOG_ERROR(
+            "SDL_GL_SwapWindow failed for the main window: %s",
+            SDL_GetError());
         return HENKA_ERROR_RENDERER;
     }
 
@@ -1029,7 +1063,8 @@ henka_result henka_opengl_renderer_create_tool_window_target(
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
 
-    state = (henka_opengl_renderer_state*)renderer->backend_state;
+    state =
+        (henka_opengl_renderer_state*)renderer->backend_state;
     window = (SDL_Window*)henka_platform_get_native_tool_window(
         renderer->platform,
         window_id);
@@ -1042,7 +1077,8 @@ henka_result henka_opengl_renderer_create_tool_window_target(
     {
         henka_opengl_tool_window_target* target;
 
-        if (state->tool_targets[index].id != HENKA_INVALID_WINDOW_ID)
+        if (state->tool_targets[index].id !=
+            HENKA_INVALID_WINDOW_ID)
         {
             continue;
         }
@@ -1053,14 +1089,25 @@ henka_result henka_opengl_renderer_create_tool_window_target(
         target->gl_context = SDL_GL_CreateContext(window);
         if (target->gl_context == NULL)
         {
+            HENKA_LOG_ERROR(
+                "SDL_GL_CreateContext failed for a detached window: %s",
+                SDL_GetError());
             memset(target, 0, sizeof(*target));
             return HENKA_ERROR_RENDERER;
         }
+
         if (!SDL_GL_MakeCurrent(window, target->gl_context))
         {
+            HENKA_LOG_ERROR(
+                "could not make a new detached OpenGL context current: %s",
+                SDL_GetError());
             SDL_GL_DestroyContext(target->gl_context);
             memset(target, 0, sizeof(*target));
-            return HENKA_ERROR_RENDERER;
+            result = henka_opengl_restore_main_context(
+                state,
+                "detached-window context creation failure");
+            return result != HENKA_SUCCESS ?
+                result : HENKA_ERROR_RENDERER;
         }
 
         result = henka_opengl_renderer_create_ui_resources(
@@ -1069,33 +1116,58 @@ henka_result henka_opengl_renderer_create_tool_window_target(
             &target->ui_vertex_buffer);
         if (result != HENKA_SUCCESS)
         {
+            henka_result restore_result;
+
+            restore_result = henka_opengl_restore_main_context(
+                state,
+                "detached-window target resource creation failure");
             SDL_GL_DestroyContext(target->gl_context);
             memset(target, 0, sizeof(*target));
-            (void)SDL_GL_MakeCurrent(state->window, state->gl_context);
-            return result;
+            return restore_result != HENKA_SUCCESS ?
+                restore_result : result;
         }
 
-        if (!SDL_GL_MakeCurrent(state->window, state->gl_context))
+        result = henka_opengl_restore_main_context(
+            state,
+            "detached-window target creation");
+        if (result != HENKA_SUCCESS)
         {
+            henka_result cleanup_restore_result;
+
             if (SDL_GL_MakeCurrent(window, target->gl_context))
             {
                 if (target->ui_vertex_buffer != 0U)
                 {
-                    g_gl.DeleteBuffers(1, &target->ui_vertex_buffer);
+                    g_gl.DeleteBuffers(
+                        1,
+                        &target->ui_vertex_buffer);
                 }
                 if (target->ui_vertex_array != 0U)
                 {
-                    g_gl.DeleteVertexArrays(1, &target->ui_vertex_array);
+                    g_gl.DeleteVertexArrays(
+                        1,
+                        &target->ui_vertex_array);
                 }
                 if (target->ui_program != 0U)
                 {
                     g_gl.DeleteProgram(target->ui_program);
                 }
             }
+            else
+            {
+                HENKA_LOG_ERROR(
+                    "could not make the detached OpenGL context current for creation rollback: %s",
+                    SDL_GetError());
+            }
+
+            cleanup_restore_result =
+                henka_opengl_restore_main_context(
+                    state,
+                    "detached-window target creation rollback");
             SDL_GL_DestroyContext(target->gl_context);
             memset(target, 0, sizeof(*target));
-            (void)SDL_GL_MakeCurrent(state->window, state->gl_context);
-            return HENKA_ERROR_RENDERER;
+            return cleanup_restore_result != HENKA_SUCCESS ?
+                cleanup_restore_result : result;
         }
 
         return HENKA_SUCCESS;
@@ -1169,57 +1241,95 @@ henka_result henka_opengl_renderer_draw_tool_window_ui(
     const struct henka_ui_context* ui_context)
 {
     henka_opengl_renderer_state* state;
+    henka_opengl_tool_window_target* target;
+    henka_result draw_result;
+    henka_result restore_result;
     henka_tool_window_state window_state;
     size_t index;
 
-    if (renderer == NULL || renderer->backend_state == NULL || ui_context == NULL)
+    if (renderer == NULL ||
+        renderer->backend_state == NULL ||
+        ui_context == NULL)
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
-    if (!henka_platform_get_tool_window_state(renderer->platform, window_id, &window_state) || !window_state.open)
+
+    if (!henka_platform_get_tool_window_state(
+            renderer->platform,
+            window_id,
+            &window_state) ||
+        !window_state.open)
     {
         return HENKA_ERROR_PLATFORM;
     }
 
-    state = (henka_opengl_renderer_state*)renderer->backend_state;
+    state =
+        (henka_opengl_renderer_state*)renderer->backend_state;
+    target = NULL;
     for (index = 0U; index < HENKA_MAX_TOOL_WINDOWS; ++index)
     {
-        if (state->tool_targets[index].id != window_id)
+        if (state->tool_targets[index].id == window_id)
         {
-            continue;
+            target = &state->tool_targets[index];
+            break;
         }
-        if (!SDL_GL_MakeCurrent(state->tool_targets[index].window, state->tool_targets[index].gl_context))
-        {
-            return HENKA_ERROR_RENDERER;
-        }
-        glDisable(GL_SCISSOR_TEST);
-        glViewport(0, 0, window_state.width, window_state.height);
-        glClearColor(0.06f, 0.08f, 0.12f, 1.0f);
-        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-        if (henka_opengl_renderer_draw_ui_resources(
-                ui_context,
-                state->tool_targets[index].ui_program,
-                state->tool_targets[index].ui_vertex_array,
-                state->tool_targets[index].ui_vertex_buffer,
-                window_state.width,
-                window_state.height) != HENKA_SUCCESS)
-        {
-            (void)SDL_GL_MakeCurrent(state->window, state->gl_context);
-            return HENKA_ERROR_RENDERER;
-        }
-        if (!SDL_GL_SwapWindow(state->tool_targets[index].window))
-        {
-            (void)SDL_GL_MakeCurrent(state->window, state->gl_context);
-            return HENKA_ERROR_RENDERER;
-        }
-        if (!SDL_GL_MakeCurrent(state->window, state->gl_context))
-        {
-            return HENKA_ERROR_RENDERER;
-        }
-        return HENKA_SUCCESS;
     }
 
-    return HENKA_ERROR_RENDERER;
+    if (target == NULL)
+    {
+        return HENKA_ERROR_RENDERER;
+    }
+
+    if (!SDL_GL_MakeCurrent(
+            target->window,
+            target->gl_context))
+    {
+        HENKA_LOG_ERROR(
+            "could not make the detached OpenGL context current: %s",
+            SDL_GetError());
+        return HENKA_ERROR_RENDERER;
+    }
+
+    glDisable(GL_SCISSOR_TEST);
+    glViewport(
+        0,
+        0,
+        window_state.width,
+        window_state.height);
+    glClearColor(0.06f, 0.08f, 0.12f, 1.0f);
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+    draw_result = henka_opengl_renderer_draw_ui_resources(
+        ui_context,
+        target->ui_program,
+        target->ui_vertex_array,
+        target->ui_vertex_buffer,
+        window_state.width,
+        window_state.height);
+    if (draw_result != HENKA_SUCCESS)
+    {
+        restore_result = henka_opengl_restore_main_context(
+            state,
+            "detached-window UI failure");
+        return restore_result != HENKA_SUCCESS ?
+            restore_result : draw_result;
+    }
+
+    if (!SDL_GL_SwapWindow(target->window))
+    {
+        HENKA_LOG_ERROR(
+            "SDL_GL_SwapWindow failed for a detached window: %s",
+            SDL_GetError());
+        restore_result = henka_opengl_restore_main_context(
+            state,
+            "detached-window presentation failure");
+        return restore_result != HENKA_SUCCESS ?
+            restore_result : HENKA_ERROR_RENDERER;
+    }
+
+    return henka_opengl_restore_main_context(
+        state,
+        "detached-window presentation");
 }
 
 void henka_opengl_renderer_resize_viewport(struct henka_renderer* renderer, int width, int height)

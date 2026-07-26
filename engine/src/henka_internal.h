@@ -191,6 +191,14 @@ struct henka_texture
     int height;
 };
 
+typedef enum henka_engine_run_state
+{
+    HENKA_ENGINE_RUN_STATE_CREATED = 0,
+    HENKA_ENGINE_RUN_STATE_INITIALIZING,
+    HENKA_ENGINE_RUN_STATE_RUNNING,
+    HENKA_ENGINE_RUN_STATE_STOPPED
+} henka_engine_run_state;
+
 struct henka_engine
 {
     henka_engine_config config;
@@ -199,6 +207,7 @@ struct henka_engine
     struct henka_asset_manager* asset_manager;
     struct henka_scene* active_scene;
     struct henka_ui_context* active_ui;
+    char* application_name;
     char* asset_base_path;
     char* user_data_base_path;
     henka_package_mode package_mode;
@@ -207,9 +216,15 @@ struct henka_engine
     henka_key action_key_bindings[HENKA_INPUT_ACTION_COUNT][HENKA_MAX_ACTION_KEY_BINDINGS];
     henka_mouse_button action_mouse_bindings[HENKA_INPUT_ACTION_COUNT][HENKA_MAX_ACTION_MOUSE_BINDINGS];
     henka_time_state time;
+    henka_engine_run_state run_state;
     bool exit_requested;
-    bool initialized_callback_ran;
+    bool shutdown_callback_pending;
+    bool destroying;
 };
+
+henka_result henka_engine_begin_run_transition(struct henka_engine* engine);
+void henka_engine_finish_run_transition(struct henka_engine* engine);
+bool henka_engine_should_continue_run(const struct henka_engine* engine);
 
 void henka_platform_release_input_on_focus_loss(henka_input_state* input);
 bool henka_platform_choose_tool_window_id(

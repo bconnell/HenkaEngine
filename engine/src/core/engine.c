@@ -344,7 +344,167 @@ static void henka_engine_close_requested_tool_windows(henka_engine* engine)
     }
 }
 
-henka_result henka_engine_create(const henka_engine_config* config, henka_engine** out_engine)
+henka_result henka_engine_begin_run_transition(henka_engine* engine)
+{
+    if (engine == NULL ||
+        engine->run_state != HENKA_ENGINE_RUN_STATE_CREATED)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    engine->exit_requested = false;
+    engine->run_state = HENKA_ENGINE_RUN_STATE_INITIALIZING;
+    return HENKA_SUCCESS;
+}
+
+void henka_engine_finish_run_transition(henka_engine* engine)
+{
+    if (engine == NULL)
+    {
+        return;
+    }
+
+    if (engine->run_state == HENKA_ENGINE_RUN_STATE_INITIALIZING ||
+        engine->run_state == HENKA_ENGINE_RUN_STATE_RUNNING)
+    {
+        engine->run_state = HENKA_ENGINE_RUN_STATE_STOPPED;
+    }
+}
+
+bool henka_engine_should_continue_run(const henka_engine* engine)
+{
+    return engine != NULL &&
+        engine->run_state == HENKA_ENGINE_RUN_STATE_RUNNING &&
+        !engine->exit_requested;
+}
+
+static henka_result henka_engine_abort_render_frame(
+    henka_engine* engine,
+    henka_result primary_result,
+    const char* stage)
+{
+    henka_result abort_result;
+
+    if (engine == NULL ||
+        engine->renderer == NULL ||
+        !engine->renderer->frame_active)
+    {
+        return primary_result;
+    }
+
+    abort_result = henka_renderer_abort_frame(engine->renderer);
+    if (abort_result != HENKA_SUCCESS)
+    {
+        HENKA_LOG_ERROR(
+            "renderer abort failed after %s: %s",
+            stage != NULL ? stage : "render failure",
+            henka_result_to_string(abort_result));
+        if (primary_result == HENKA_SUCCESS)
+        {
+            return abort_result;
+        }
+    }
+
+    return primary_result;
+}
+
+static henka_result henka_engine_render_frame(henka_engine* engine)
+{
+    henka_result result;
+    size_t index;
+
+    if (engine == NULL || engine->renderer == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    result = henka_renderer_begin_frame(engine->renderer);
+    if (result != HENKA_SUCCESS)
+    {
+        HENKA_LOG_ERROR(
+            "renderer begin frame failed: %s",
+            henka_result_to_string(result));
+        return result;
+    }
+
+    henka_renderer_clear_frame(engine->renderer);
+
+    if (engine->active_scene != NULL)
+    {
+        result = henka_renderer_draw_scene(
+            engine->renderer,
+            engine->active_scene);
+        if (result != HENKA_SUCCESS)
+        {
+            HENKA_LOG_ERROR(
+                "renderer draw scene failed: %s",
+                henka_result_to_string(result));
+            return henka_engine_abort_render_frame(
+                engine,
+                result,
+                "scene drawing");
+        }
+    }
+
+    if (engine->active_ui != NULL)
+    {
+        result = henka_renderer_draw_ui(
+            engine->renderer,
+            engine->active_ui);
+        if (result != HENKA_SUCCESS)
+        {
+            HENKA_LOG_ERROR(
+                "renderer draw ui failed: %s",
+                henka_result_to_string(result));
+            return henka_engine_abort_render_frame(
+                engine,
+                result,
+                "main-window UI drawing");
+        }
+    }
+
+    for (index = 0U; index < HENKA_MAX_TOOL_WINDOWS; ++index)
+    {
+        if (engine->tool_windows[index].id == HENKA_INVALID_WINDOW_ID ||
+            engine->tool_windows[index].ui_context == NULL)
+        {
+            continue;
+        }
+
+        result = henka_renderer_draw_tool_window_ui(
+            engine->renderer,
+            engine->tool_windows[index].id,
+            engine->tool_windows[index].ui_context);
+        if (result != HENKA_SUCCESS)
+        {
+            HENKA_LOG_ERROR(
+                "renderer draw tool window ui failed: %s",
+                henka_result_to_string(result));
+            return henka_engine_abort_render_frame(
+                engine,
+                result,
+                "detached-window UI drawing");
+        }
+    }
+
+    result = henka_renderer_end_frame(engine->renderer);
+    if (result != HENKA_SUCCESS)
+    {
+        HENKA_LOG_ERROR(
+            "renderer end frame failed: %s",
+            henka_result_to_string(result));
+        return henka_engine_abort_render_frame(
+            engine,
+            result,
+            "main-window presentation");
+    }
+
+    return HENKA_SUCCESS;
+}
+
+henka_result henka_engine_create(
+    const henka_engine_config* config,
+    henka_engine** out_engine)
 {
     henka_engine* engine;
     henka_platform_desc platform_desc;
@@ -352,12 +512,15 @@ henka_result henka_engine_create(const henka_engine_config* config, henka_engine
     int framebuffer_height;
     int framebuffer_width;
 
+    if (out_engine != NULL)
+    {
+        *out_engine = NULL;
+    }
+
     if (!henka_engine_config_is_valid(config) || out_engine == NULL)
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
-
-    *out_engine = NULL;
 
     engine = henka_calloc(1U, sizeof(*engine));
     if (engine == NULL)
@@ -365,81 +528,125 @@ henka_result henka_engine_create(const henka_engine_config* config, henka_engine
         return HENKA_ERROR_OUT_OF_MEMORY;
     }
 
+    engine->application_name =
+        henka_duplicate_string(config->application_name);
+    if (engine->application_name == NULL)
+    {
+        henka_free(engine);
+        return HENKA_ERROR_OUT_OF_MEMORY;
+    }
+
     engine->config = *config;
+    engine->config.application_name = engine->application_name;
+    engine->run_state = HENKA_ENGINE_RUN_STATE_CREATED;
     henka_engine_initialize_action_bindings(engine);
 
-    HENKA_LOG_INFO("creating engine for '%s' (%dx%d, vsync=%s)",
+    HENKA_LOG_INFO(
+        "creating engine for '%s' (%dx%d, vsync=%s)",
         engine->config.application_name,
         engine->config.window_width,
         engine->config.window_height,
         engine->config.enable_vsync ? "on" : "off");
 
-    platform_desc.application_name = engine->config.application_name;
+    platform_desc.application_name =
+        engine->config.application_name;
     platform_desc.window_width = engine->config.window_width;
     platform_desc.window_height = engine->config.window_height;
     platform_desc.enable_vsync = engine->config.enable_vsync;
 
-    result = henka_platform_create(&platform_desc, &engine->platform);
+    result = henka_platform_create(
+        &platform_desc,
+        &engine->platform);
     if (result != HENKA_SUCCESS)
     {
-        HENKA_LOG_ERROR("platform initialization failed: %s", henka_result_to_string(result));
+        HENKA_LOG_ERROR(
+            "platform initialization failed: %s",
+            henka_result_to_string(result));
+        henka_free(engine->application_name);
         henka_free(engine);
         return result;
     }
 
-    engine->asset_base_path = henka_engine_resolve_base_path(engine->config.asset_base_path, NULL);
-
+    engine->asset_base_path = henka_engine_resolve_base_path(
+        config->asset_base_path,
+        NULL);
     if (engine->asset_base_path == NULL)
     {
         HENKA_LOG_ERROR("asset base path initialization failed");
         henka_platform_destroy(engine->platform);
+        henka_free(engine->application_name);
         henka_free(engine);
         return HENKA_ERROR_OUT_OF_MEMORY;
     }
+    engine->config.asset_base_path = engine->asset_base_path;
 
-    engine->user_data_base_path = henka_engine_resolve_base_path(engine->config.user_data_base_path, "user");
+    engine->user_data_base_path = henka_engine_resolve_base_path(
+        config->user_data_base_path,
+        "user");
     if (engine->user_data_base_path == NULL)
     {
         HENKA_LOG_ERROR("user data path initialization failed");
         henka_free(engine->asset_base_path);
         henka_platform_destroy(engine->platform);
+        henka_free(engine->application_name);
         henka_free(engine);
         return HENKA_ERROR_OUT_OF_MEMORY;
     }
+    engine->config.user_data_base_path =
+        engine->user_data_base_path;
 
-    result = henka_renderer_create(engine->platform, engine->config.enable_vsync, &engine->renderer);
+    result = henka_renderer_create(
+        engine->platform,
+        engine->config.enable_vsync,
+        &engine->renderer);
     if (result != HENKA_SUCCESS)
     {
-        HENKA_LOG_ERROR("renderer initialization failed: %s", henka_result_to_string(result));
+        HENKA_LOG_ERROR(
+            "renderer initialization failed: %s",
+            henka_result_to_string(result));
         henka_free(engine->user_data_base_path);
         henka_free(engine->asset_base_path);
         henka_platform_destroy(engine->platform);
+        henka_free(engine->application_name);
         henka_free(engine);
         return result;
     }
 
-    result = henka_asset_manager_create(engine, &engine->asset_manager);
+    result = henka_asset_manager_create(
+        engine,
+        &engine->asset_manager);
     if (result != HENKA_SUCCESS)
     {
-        HENKA_LOG_ERROR("asset manager initialization failed: %s", henka_result_to_string(result));
+        HENKA_LOG_ERROR(
+            "asset manager initialization failed: %s",
+            henka_result_to_string(result));
         henka_renderer_destroy(engine->renderer);
         henka_free(engine->user_data_base_path);
         henka_free(engine->asset_base_path);
         henka_platform_destroy(engine->platform);
+        henka_free(engine->application_name);
         henka_free(engine);
         return result;
     }
 
     henka_time_reset(&engine->time);
 
-    if (henka_platform_get_framebuffer_size(engine->platform, &framebuffer_width, &framebuffer_height))
+    if (henka_platform_get_framebuffer_size(
+            engine->platform,
+            &framebuffer_width,
+            &framebuffer_height))
     {
         engine->renderer->framebuffer_width = framebuffer_width;
         engine->renderer->framebuffer_height = framebuffer_height;
-        engine->renderer->scene_viewport = (henka_viewport){0, 0, framebuffer_width, framebuffer_height};
+        engine->renderer->scene_viewport = (henka_viewport){
+            0,
+            0,
+            framebuffer_width,
+            framebuffer_height};
     }
 
-    engine->package_mode = henka_engine_resolve_package_mode(engine);
+    engine->package_mode =
+        henka_engine_resolve_package_mode(engine);
 
     HENKA_LOG_INFO("engine startup complete");
 
@@ -456,18 +663,35 @@ void henka_engine_destroy(henka_engine* engine)
         return;
     }
 
+    if (engine->destroying ||
+        engine->run_state == HENKA_ENGINE_RUN_STATE_INITIALIZING ||
+        engine->run_state == HENKA_ENGINE_RUN_STATE_RUNNING)
+    {
+        HENKA_LOG_ERROR(
+            "engine destruction rejected during an active lifecycle");
+        return;
+    }
+
+    engine->destroying = true;
     HENKA_LOG_INFO("shutting down engine");
 
-    if (engine->initialized_callback_ran && engine->config.on_shutdown != NULL)
+    if (engine->shutdown_callback_pending &&
+        engine->config.on_shutdown != NULL)
     {
-        engine->config.on_shutdown(engine, engine->config.user_data);
+        engine->shutdown_callback_pending = false;
+        engine->config.on_shutdown(
+            engine,
+            engine->config.user_data);
     }
 
     for (index = 0U; index < HENKA_MAX_TOOL_WINDOWS; ++index)
     {
-        if (engine->tool_windows[index].id != HENKA_INVALID_WINDOW_ID)
+        if (engine->tool_windows[index].id !=
+            HENKA_INVALID_WINDOW_ID)
         {
-            henka_engine_close_tool_window(engine, engine->tool_windows[index].id);
+            henka_engine_close_tool_window(
+                engine,
+                engine->tool_windows[index].id);
         }
     }
 
@@ -476,6 +700,7 @@ void henka_engine_destroy(henka_engine* engine)
     henka_platform_destroy(engine->platform);
     henka_free(engine->user_data_base_path);
     henka_free(engine->asset_base_path);
+    henka_free(engine->application_name);
     henka_free(engine);
     henka_memory_report_leaks();
 }
@@ -484,62 +709,93 @@ henka_result henka_engine_run(henka_engine* engine)
 {
     henka_platform_frame_state frame_state;
     henka_result result;
+    henka_result run_result;
 
-    if (engine == NULL)
+    result = henka_engine_begin_run_transition(engine);
+    if (result != HENKA_SUCCESS)
     {
-        return HENKA_ERROR_INVALID_ARGUMENT;
+        return result;
     }
 
     if (engine->config.on_initialize != NULL)
     {
-        result = engine->config.on_initialize(engine, engine->config.user_data);
+        result = engine->config.on_initialize(
+            engine,
+            engine->config.user_data);
         if (result != HENKA_SUCCESS)
         {
-            HENKA_LOG_ERROR("engine initialize callback failed: %s", henka_result_to_string(result));
+            HENKA_LOG_ERROR(
+                "engine initialize callback failed: %s",
+                henka_result_to_string(result));
+            henka_engine_finish_run_transition(engine);
             return result;
         }
-
-        engine->initialized_callback_ran = true;
     }
 
+    engine->shutdown_callback_pending = true;
+    engine->run_state = HENKA_ENGINE_RUN_STATE_RUNNING;
+    run_result = HENKA_SUCCESS;
     HENKA_LOG_INFO("entering engine run loop");
 
-    while (!engine->exit_requested)
+    while (henka_engine_should_continue_run(engine))
     {
         henka_time_tick(&engine->time);
         henka_input_reset_frame_state(&engine->input);
 
-        result = henka_platform_poll_events(engine->platform, &engine->input, &frame_state);
+        result = henka_platform_poll_events(
+            engine->platform,
+            &engine->input,
+            &frame_state);
         if (result != HENKA_SUCCESS)
         {
-            HENKA_LOG_ERROR("platform event polling failed: %s", henka_result_to_string(result));
-            return result;
+            HENKA_LOG_ERROR(
+                "platform event polling failed: %s",
+                henka_result_to_string(result));
+            run_result = result;
+            break;
         }
 
         if (frame_state.close_requested)
         {
             henka_engine_request_exit(engine);
+            break;
         }
 
         henka_engine_close_requested_tool_windows(engine);
-
         henka_engine_handle_resize(engine, &frame_state);
 
         if (engine->config.on_update != NULL)
         {
-            engine->config.on_update(engine, engine->time.delta_seconds, engine->config.user_data);
+            engine->config.on_update(
+                engine,
+                engine->time.delta_seconds,
+                engine->config.user_data);
         }
 
-        if (henka_input_was_key_pressed(engine, HENKA_KEY_ESCAPE))
+        if (!henka_engine_should_continue_run(engine))
         {
-            if (engine->active_ui != NULL && henka_ui_is_visible(engine->active_ui))
+            break;
+        }
+
+        if (henka_input_was_key_pressed(
+                engine,
+                HENKA_KEY_ESCAPE))
+        {
+            if (engine->active_ui != NULL &&
+                henka_ui_is_visible(engine->active_ui))
             {
-                henka_ui_set_visible(engine->active_ui, false);
-                henka_engine_set_mouse_capture(engine, false);
+                henka_ui_set_visible(
+                    engine->active_ui,
+                    false);
+                (void)henka_engine_set_mouse_capture(
+                    engine,
+                    false);
             }
             else if (henka_engine_is_mouse_captured(engine))
             {
-                henka_engine_set_mouse_capture(engine, false);
+                (void)henka_engine_set_mouse_capture(
+                    engine,
+                    false);
             }
             else
             {
@@ -547,69 +803,22 @@ henka_result henka_engine_run(henka_engine* engine)
             }
         }
 
-        result = henka_renderer_begin_frame(engine->renderer);
+        if (!henka_engine_should_continue_run(engine))
+        {
+            break;
+        }
+
+        result = henka_engine_render_frame(engine);
         if (result != HENKA_SUCCESS)
         {
-            HENKA_LOG_ERROR("renderer begin frame failed: %s", henka_result_to_string(result));
-            return result;
-        }
-
-        henka_renderer_clear_frame(engine->renderer);
-
-        if (engine->active_scene != NULL)
-        {
-            result = henka_renderer_draw_scene(engine->renderer, engine->active_scene);
-            if (result != HENKA_SUCCESS)
-            {
-                HENKA_LOG_ERROR("renderer draw scene failed: %s", henka_result_to_string(result));
-                henka_renderer_abort_frame(engine->renderer);
-                return result;
-            }
-        }
-
-        if (engine->active_ui != NULL)
-        {
-            result = henka_renderer_draw_ui(engine->renderer, engine->active_ui);
-            if (result != HENKA_SUCCESS)
-            {
-                HENKA_LOG_ERROR("renderer draw ui failed: %s", henka_result_to_string(result));
-                henka_renderer_abort_frame(engine->renderer);
-                return result;
-            }
-        }
-
-        result = henka_renderer_end_frame(engine->renderer);
-        if (result != HENKA_SUCCESS)
-        {
-            HENKA_LOG_ERROR("renderer end frame failed: %s", henka_result_to_string(result));
-            return result;
-        }
-
-        {
-            size_t index;
-            for (index = 0U; index < HENKA_MAX_TOOL_WINDOWS; ++index)
-            {
-                if (engine->tool_windows[index].id == HENKA_INVALID_WINDOW_ID ||
-                    engine->tool_windows[index].ui_context == NULL)
-                {
-                    continue;
-                }
-
-                result = henka_renderer_draw_tool_window_ui(
-                    engine->renderer,
-                    engine->tool_windows[index].id,
-                    engine->tool_windows[index].ui_context);
-                if (result != HENKA_SUCCESS)
-                {
-                    HENKA_LOG_ERROR("renderer draw tool window ui failed: %s", henka_result_to_string(result));
-                    return result;
-                }
-            }
+            run_result = result;
+            break;
         }
     }
 
+    henka_engine_finish_run_transition(engine);
     HENKA_LOG_INFO("leaving engine run loop");
-    return HENKA_SUCCESS;
+    return run_result;
 }
 
 void henka_engine_request_exit(henka_engine* engine)

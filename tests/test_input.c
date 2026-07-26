@@ -17,10 +17,32 @@ void henka_test_input(void)
     henka_window_id chosen_id;
     henka_window_id next_candidate;
     henka_window_id occupied_ids[3];
+    henka_result lifecycle_result;
     int height;
     int width;
 
     memset(&engine, 0, sizeof(engine));
+    engine.exit_requested = true;
+    lifecycle_result = henka_engine_begin_run_transition(&engine);
+    HENKA_TEST_ASSERT(lifecycle_result == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(
+        engine.run_state ==
+        HENKA_ENGINE_RUN_STATE_INITIALIZING);
+    HENKA_TEST_ASSERT(!engine.exit_requested);
+    HENKA_TEST_ASSERT(
+        henka_engine_begin_run_transition(&engine) ==
+        HENKA_ERROR_INVALID_ARGUMENT);
+    engine.run_state = HENKA_ENGINE_RUN_STATE_RUNNING;
+    HENKA_TEST_ASSERT(henka_engine_should_continue_run(&engine));
+    engine.exit_requested = true;
+    HENKA_TEST_ASSERT(!henka_engine_should_continue_run(&engine));
+    henka_engine_finish_run_transition(&engine);
+    HENKA_TEST_ASSERT(
+        engine.run_state == HENKA_ENGINE_RUN_STATE_STOPPED);
+    HENKA_TEST_ASSERT(
+        henka_engine_begin_run_transition(&engine) ==
+        HENKA_ERROR_INVALID_ARGUMENT);
+
     memset(&diagnostics, 0x5a, sizeof(diagnostics));
     memset(&input, 0, sizeof(input));
     memset(&tool_window_state, 0, sizeof(tool_window_state));

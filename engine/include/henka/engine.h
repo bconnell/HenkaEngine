@@ -102,11 +102,18 @@ typedef struct henka_engine_config
 } henka_engine_config;
 
 /*
- * Creates and owns a new engine instance. The caller becomes responsible for
- * releasing it with henka_engine_destroy.
+ * Creates and owns a new engine instance. Configuration string values are
+ * copied during creation. Callback pointers and user_data remain caller-owned.
+ * The caller becomes responsible for releasing the instance with
+ * henka_engine_destroy.
  */
 henka_result henka_engine_create(const henka_engine_config* config, henka_engine** out_engine);
 void henka_engine_destroy(henka_engine* engine);
+
+/*
+ * Runs one engine lifecycle. Reentrant calls and later repeat calls on the same
+ * instance are rejected. Exit requests stop before another update or render.
+ */
 henka_result henka_engine_run(henka_engine* engine);
 void henka_engine_request_exit(henka_engine* engine);
 henka_result henka_engine_set_scene(henka_engine* engine, henka_scene* scene);

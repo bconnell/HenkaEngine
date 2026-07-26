@@ -81,6 +81,14 @@ Current Action API v1 coverage includes:
 
 The engine still owns authority. Tests, tools, and future workspace panels request actions through a context instead of reaching into scene state blindly.
 
+### Engine lifecycle and authoring ownership
+
+Each engine instance owns copied application, asset-base, and user-data path strings after creation. One instance admits one run lifecycle: initialization is protected against recursive entry, a completed or failed run cannot be started again, and destruction is rejected while initialization or the run loop is active. A successful lifecycle schedules at most one shutdown callback.
+
+Close and explicit exit requests stop before another update or render. The renderer retains frame ownership after a failed main swap so the engine can attempt a checked abort. Detached-window UI is drawn and presented before the main window is presented; a detached-window failure therefore aborts the still-unpresented main frame. This is a best-effort multi-window commit boundary rather than a claim of atomic operating-system presentation.
+
+These ownership and transaction boundaries also prepare future 2.5D and modeling work. Editable authoring data should retain stable identities and undoable source state, then compile into runtime rendering and physics data instead of sharing low-level GPU-resource lifetime directly.
+
 ### Workspace and viewport
 
 Henka now also includes a small docked workspace helper for viewport-first tools:

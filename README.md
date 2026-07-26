@@ -1,6 +1,6 @@
 # Henka Engine
 
-Henka Engine is an early-stage open source engine written in C. The long-term direction is first-class 3D, 2D, and 2.5D support, with the current focus on building a solid 3D runtime foundation first. The engine now also includes a small local persistence layer and guidance for keeping real games in separate repositories.
+Henka Engine is an early-stage open source engine written in C. The active order is runtime stability, production-quality 2.5D, and then integrated modeling and content-authoring tools, while retaining compatibility with external asset pipelines. The engine now also includes a small local persistence layer and guidance for keeping real games in separate repositories.
 
 ## Support Henka Engine
 
@@ -34,6 +34,7 @@ Henka Engine is still early, but the sandbox now renders a visible 3D scene with
 - Asset metadata with cache-owned source and display strings, plus stronger material summaries
 - Local save-data foundation with confined slot paths, complete-file validation, and transactional state replacement
 - Package mode and engine diagnostics foundation
+- Run-once engine lifecycle with copied configuration strings, reentrant-run rejection, exit-before-update rendering, checked frame rollback, and main-window presentation only after detached-window UI succeeds
 - Shared overlay-handle transform gizmo foundation for selected object manipulation, with visual feel still being hardened through manual QA
 - Viewport interaction test helpers for reducing manual QA around selection, gizmo hit testing, and transform changes
 - Asset manager foundation for cached shader, texture, and OBJ loading through confined relative paths and bounded file processing
@@ -67,6 +68,7 @@ Henka Engine is still early, but the sandbox now renders a visible 3D scene with
 - Scripting
 - Full 2D renderer
 - Full 2.5D sprite, layered-depth, parallax, animation, and constrained-movement workflow
+- Integrated modeling, UV, rigging, animation-authoring, and content-creation workspace
 - Additional renderer backends
 
 ## Repository layout

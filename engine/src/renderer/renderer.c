@@ -187,7 +187,10 @@ henka_result henka_renderer_end_frame(struct henka_renderer* renderer)
     }
 
     result = henka_opengl_renderer_end_frame(renderer);
-    renderer->frame_active = false;
+    if (result == HENKA_SUCCESS)
+    {
+        renderer->frame_active = false;
+    }
     return result;
 }
 
@@ -206,11 +209,18 @@ henka_result henka_renderer_draw_tool_window_ui(
     henka_window_id window_id,
     const struct henka_ui_context* ui_context)
 {
-    if (renderer == NULL || ui_context == NULL || ui_context->frame_active)
+    if (renderer == NULL ||
+        ui_context == NULL ||
+        !renderer->frame_active ||
+        ui_context->frame_active)
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
-    return henka_opengl_renderer_draw_tool_window_ui(renderer, window_id, ui_context);
+
+    return henka_opengl_renderer_draw_tool_window_ui(
+        renderer,
+        window_id,
+        ui_context);
 }
 
 void henka_renderer_resize_viewport(
