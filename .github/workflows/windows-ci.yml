@@ -46,9 +46,9 @@ jobs:
         shell: powershell
         run: .\scripts\package_sandbox3d_windows.ps1 -ResetUserData -Configuration Debug
 
-      - name: Check packaged sandbox
+      - name: Check packaged sandbox contract
         shell: powershell
-        run: .\scripts\check_packaged_sandbox3d_windows.ps1 -NonInteractive
+        run: .\scripts\check_packaged_sandbox3d_windows.ps1 -NonInteractive -ContractOnly
 
       - name: Validate external game template
         shell: powershell

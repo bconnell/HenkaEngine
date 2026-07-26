@@ -171,6 +171,10 @@ Henka now exposes a deterministic rigid-body physics v1 API with:
 
 Boxes are axis-aligned in v1; rotated box collision, mesh colliders, constraints, continuous collision detection, controllers, and advanced simulation remain future work. In the sandbox, physics playback is opt-in through `Physics QA`, leaving normal transform inspection unchanged until the demo is enabled. Physics bodies, contacts, pairs, and events use bounded checked capacity growth. Query failures clear caller-visible output structures, plane collider offsets affect both contacts and raycasts, and rays beginning inside an AABB return the exit surface with a valid normal. Fixed-step catch-up remains capped at 16 substeps and discards excess whole-step backlog after that cap so later zero-delta calls do not continue stale simulation time. Sandbox bodies start static; isolated drop activates only the selected supported body, while the full demonstration assigns its intended dynamic set explicitly.
 
+### Package validation
+
+The hosted Windows workflow uses a package contract mode that validates provenance, executable hashes, required files, run guidance, and offline help without requiring an OpenGL desktop session from the hosted runner. Local release evidence continues to require the full packaged runtime smoke test, native detached-window desktop harness, clean shutdown, and application-only screenshots. This separates infrastructure capability from engine correctness without weakening the local runtime gates.
+
 ### Asset metadata
 
 The asset manager now tracks read-only metadata for cached assets:

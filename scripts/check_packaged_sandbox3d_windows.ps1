@@ -1,9 +1,15 @@
 param(
-    [switch]$NonInteractive
+    [switch]$NonInteractive,
+
+    [switch]$ContractOnly
 )
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
+
+if ($ContractOnly -and -not $NonInteractive) {
+    throw "ContractOnly requires NonInteractive."
+}
 
 . (Join-Path $PSScriptRoot "henka_script_common.ps1")
 
@@ -272,6 +278,12 @@ Assert-FileContains -Path $helpPath -Pattern "Utility panel" -Description "Packa
 Assert-FileContains -Path $helpPath -Pattern "Perspective 3D, Side 2.5D, Top-down 2.5D, and Isometric 2.5D" -Description "Packaged camera preset help"
 
 if ($NonInteractive) {
+    if ($ContractOnly) {
+        Write-Step "Completing hosted package contract validation"
+        Write-Output "[pass] Packaged sandbox contract validation completed."
+        return
+    }
+
     Write-Step "Running deterministic packaged startup smoke test"
     $smoke = Invoke-HenkaNativeCapture `
         -FilePath $packagedExe `

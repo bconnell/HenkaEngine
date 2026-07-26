@@ -57,7 +57,7 @@ Henka Engine is still early, but the sandbox now renders a visible 3D scene with
 - Rigid-body physics v1 with fixed-step worlds, static/dynamic/kinematic bodies, sphere/AABB/plane colliders, triggers, events, raycasts, and sandbox debug controls
 - Transactional packaged-sandbox refreshes that preserve user data by default and retain the prior package until activation succeeds
 - Generic documentation and starter template for external game repositories
-- Deterministic Windows CI package startup checks that do not depend on mouse movement or desktop focus
+- Deterministic Windows CI package contract checks that avoid hosted graphics-session assumptions, while local validation still performs packaged runtime smoke, desktop interaction, and application-only screenshot checks
 - Repository integrity checks for tracked artifacts, credential signatures, script parsing, dependency pins, and workflow action pins
 
 ### What does not exist yet
