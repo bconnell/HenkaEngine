@@ -51,7 +51,8 @@ Henka Engine is still early, but the sandbox now renders a visible 3D scene with
 - Locked scene objects remain inspectable without a transform highlight or gizmo; transform hotkeys require a visible unlocked selection and stale transform-session ownership is cleared on selection, visibility, lock, and tool changes
 - Scene Objects, Object Details, and Utility panels for named sandbox object inspection and viewer workflows
 - Sandbox workspace panels with stacked side docks, header drag, cross-zone redocking, native detached-window panels with routed mouse input, safer tool-window renderer context recovery, dock splitter, and reset-layout recovery controls
-- Multi-window platform foundation with a separate `Native Panel Test` window for close, focus, resize, and event-routing QA
+- Multi-window platform foundation with focus-loss release synthesis, per-frame detached-window event state, collision-safe engine window identifiers, validated native identifiers, truthful capability diagnostics, and transactional mouse-capture changes
+- Separate `Native Panel Test` window for close, focus, resize, and event-routing QA
 - Rigid-body physics v1 with fixed-step worlds, static/dynamic/kinematic bodies, sphere/AABB/plane colliders, triggers, events, raycasts, and sandbox debug controls
 - Transactional packaged-sandbox refreshes that preserve user data by default and retain the prior package until activation succeeds
 - Generic documentation and starter template for external game repositories

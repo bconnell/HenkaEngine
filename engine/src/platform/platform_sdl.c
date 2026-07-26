@@ -2,11 +2,107 @@
 
 #include <SDL3/SDL.h>
 
+#include <limits.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <string.h>
 
 #include <henka/log.h>
 #include <henka/memory.h>
+
+void henka_platform_release_input_on_focus_loss(henka_input_state* input)
+{
+    size_t index;
+
+    if (input == NULL)
+    {
+        return;
+    }
+
+    for (index = 0U; index < HENKA_KEY_COUNT; ++index)
+    {
+        if (input->keys_down[index])
+        {
+            input->keys_released[index] = true;
+        }
+        input->keys_down[index] = false;
+        input->keys_pressed[index] = false;
+    }
+
+    for (index = 0U; index < HENKA_MOUSE_BUTTON_COUNT; ++index)
+    {
+        if (input->mouse_buttons_down[index])
+        {
+            input->mouse_buttons_released[index] = true;
+        }
+        input->mouse_buttons_down[index] = false;
+        input->mouse_buttons_pressed[index] = false;
+    }
+
+    input->mouse_delta = (henka_vec2){0.0f, 0.0f};
+    input->mouse_wheel_delta = (henka_vec2){0.0f, 0.0f};
+}
+
+bool henka_platform_choose_tool_window_id(
+    henka_window_id next_candidate,
+    const henka_window_id* occupied_ids,
+    size_t occupied_count,
+    henka_window_id* out_window_id,
+    henka_window_id* out_next_candidate)
+{
+    size_t attempt;
+    henka_window_id candidate;
+
+    if (out_window_id != NULL)
+    {
+        *out_window_id = HENKA_INVALID_WINDOW_ID;
+    }
+    if (out_next_candidate != NULL)
+    {
+        *out_next_candidate = HENKA_INVALID_WINDOW_ID;
+    }
+
+    if (out_window_id == NULL ||
+        out_next_candidate == NULL ||
+        occupied_count > HENKA_MAX_TOOL_WINDOWS ||
+        (occupied_count > 0U && occupied_ids == NULL))
+    {
+        return false;
+    }
+
+    candidate = next_candidate < 2U ? 2U : next_candidate;
+    for (attempt = 0U; attempt <= occupied_count; ++attempt)
+    {
+        size_t index;
+        bool occupied;
+
+        occupied = false;
+        for (index = 0U; index < occupied_count; ++index)
+        {
+            if (occupied_ids[index] == candidate)
+            {
+                occupied = true;
+                break;
+            }
+        }
+
+        if (!occupied)
+        {
+            *out_window_id = candidate;
+            *out_next_candidate =
+                candidate == UINT32_MAX ? 2U : candidate + 1U;
+            return true;
+        }
+
+        candidate = candidate == UINT32_MAX ? 2U : candidate + 1U;
+        if (candidate < 2U)
+        {
+            candidate = 2U;
+        }
+    }
+
+    return false;
+}
 
 typedef struct henka_platform_tool_window
 {
@@ -30,6 +126,7 @@ struct henka_platform
 {
     SDL_Window* window;
     SDL_WindowID main_window_id;
+    bool multi_window_available;
     bool main_window_focused;
     henka_window_id next_tool_window_id;
     henka_platform_tool_window tool_windows[HENKA_MAX_TOOL_WINDOWS];
@@ -109,7 +206,9 @@ static henka_platform_tool_window* henka_platform_find_tool_window_by_native_id(
 static void henka_platform_record_tool_event(
     struct henka_platform* platform,
     henka_platform_tool_window* tool_window,
-    const char* event_name)
+    const char* event_name,
+    bool close_requested,
+    bool resized)
 {
     if (platform == NULL || tool_window == NULL || event_name == NULL)
     {
@@ -117,10 +216,22 @@ static void henka_platform_record_tool_event(
     }
 
     platform->last_event_route = HENKA_WINDOW_EVENT_ROUTE_TOOL;
-    platform->last_tool_window_id = tool_window->id;
-    platform->last_tool_window_close_requested = false;
-    platform->last_tool_window_resized = false;
-    snprintf(tool_window->last_event, sizeof(tool_window->last_event), "%s", event_name);
+    if (close_requested ||
+        resized ||
+        (!platform->last_tool_window_close_requested &&
+            !platform->last_tool_window_resized))
+    {
+        platform->last_tool_window_id = tool_window->id;
+    }
+    platform->last_tool_window_close_requested =
+        platform->last_tool_window_close_requested || close_requested;
+    platform->last_tool_window_resized =
+        platform->last_tool_window_resized || resized;
+    snprintf(
+        tool_window->last_event,
+        sizeof(tool_window->last_event),
+        "%s",
+        event_name);
 }
 
 static bool henka_platform_event_is_main_window(const struct henka_platform* platform, SDL_WindowID window_id)
@@ -128,7 +239,8 @@ static bool henka_platform_event_is_main_window(const struct henka_platform* pla
     return platform != NULL && window_id != 0U && platform->main_window_id == window_id;
 }
 
-static void henka_platform_reset_tool_window_frame_input(struct henka_platform* platform)
+static void henka_platform_reset_tool_window_frame_input(
+    struct henka_platform* platform)
 {
     size_t index;
 
@@ -146,6 +258,7 @@ static void henka_platform_reset_tool_window_frame_input(struct henka_platform* 
 
         platform->tool_windows[index].mouse_left_pressed = false;
         platform->tool_windows[index].mouse_left_released = false;
+        platform->tool_windows[index].resized = false;
     }
 }
 
@@ -265,47 +378,75 @@ static henka_mouse_button henka_translate_mouse_button(Uint8 button)
     }
 }
 
-henka_result henka_platform_create(const henka_platform_desc* desc, struct henka_platform** out_platform)
+henka_result henka_platform_create(
+    const henka_platform_desc* desc,
+    struct henka_platform** out_platform)
 {
     struct henka_platform* platform;
     Uint64 window_flags;
+
+    if (out_platform != NULL)
+    {
+        *out_platform = NULL;
+    }
 
     if (desc == NULL || out_platform == NULL)
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
 
-    *out_platform = NULL;
-
-    if (!SDL_Init(SDL_INIT_VIDEO))
+    if (!SDL_InitSubSystem(SDL_INIT_VIDEO))
     {
-        HENKA_LOG_ERROR("SDL_Init failed: %s", SDL_GetError());
+        HENKA_LOG_ERROR(
+            "SDL video initialization failed: %s",
+            SDL_GetError());
         return HENKA_ERROR_PLATFORM;
     }
 
-    HENKA_LOG_INFO("platform video subsystem initialized");
+    HENKA_LOG_INFO("platform video subsystem reference acquired");
 
     platform = henka_calloc(1U, sizeof(*platform));
     if (platform == NULL)
     {
-        SDL_Quit();
+        SDL_QuitSubSystem(SDL_INIT_VIDEO);
         return HENKA_ERROR_OUT_OF_MEMORY;
     }
 
     window_flags = SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE;
-    platform->window = SDL_CreateWindow(desc->application_name, desc->window_width, desc->window_height, window_flags);
+    platform->window = SDL_CreateWindow(
+        desc->application_name,
+        desc->window_width,
+        desc->window_height,
+        window_flags);
     if (platform->window == NULL)
     {
-        HENKA_LOG_ERROR("SDL_CreateWindow failed: %s", SDL_GetError());
+        HENKA_LOG_ERROR(
+            "SDL_CreateWindow failed: %s",
+            SDL_GetError());
         henka_free(platform);
-        SDL_Quit();
+        SDL_QuitSubSystem(SDL_INIT_VIDEO);
         return HENKA_ERROR_PLATFORM;
     }
 
     platform->main_window_id = SDL_GetWindowID(platform->window);
-    platform->main_window_focused = true;
+    if (platform->main_window_id == 0U)
+    {
+        HENKA_LOG_ERROR(
+            "SDL_GetWindowID failed for the main window: %s",
+            SDL_GetError());
+        SDL_DestroyWindow(platform->window);
+        henka_free(platform);
+        SDL_QuitSubSystem(SDL_INIT_VIDEO);
+        return HENKA_ERROR_PLATFORM;
+    }
+
+    platform->multi_window_available = true;
+    platform->main_window_focused =
+        (SDL_GetWindowFlags(platform->window) &
+            SDL_WINDOW_INPUT_FOCUS) != 0U;
     platform->next_tool_window_id = 2U;
     platform->last_event_route = HENKA_WINDOW_EVENT_ROUTE_NONE;
+    platform->last_tool_window_id = HENKA_INVALID_WINDOW_ID;
     HENKA_LOG_INFO("platform window created");
 
     *out_platform = platform;
@@ -339,7 +480,17 @@ void henka_platform_destroy(struct henka_platform* platform)
     }
 
     henka_free(platform);
-    SDL_Quit();
+    SDL_QuitSubSystem(SDL_INIT_VIDEO);
+}
+
+void henka_platform_set_multi_window_available(
+    struct henka_platform* platform,
+    bool available)
+{
+    if (platform != NULL)
+    {
+        platform->multi_window_available = available;
+    }
 }
 
 henka_result henka_platform_create_tool_window(
@@ -347,8 +498,17 @@ henka_result henka_platform_create_tool_window(
     const henka_tool_window_desc* desc,
     henka_window_id* out_window_id)
 {
+    henka_window_id chosen_id;
+    henka_window_id next_candidate;
+    henka_window_id occupied_ids[HENKA_MAX_TOOL_WINDOWS];
+    size_t occupied_count;
     henka_platform_tool_window* slot;
     size_t index;
+
+    if (out_window_id != NULL)
+    {
+        *out_window_id = HENKA_INVALID_WINDOW_ID;
+    }
 
     if (platform == NULL || desc == NULL || out_window_id == NULL ||
         desc->title == NULL || desc->title[0] == '\0' ||
@@ -358,17 +518,34 @@ henka_result henka_platform_create_tool_window(
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
 
-    *out_window_id = HENKA_INVALID_WINDOW_ID;
     slot = NULL;
+    occupied_count = 0U;
     for (index = 0U; index < HENKA_MAX_TOOL_WINDOWS; ++index)
     {
-        if (!platform->tool_windows[index].open)
+        if (platform->tool_windows[index].open)
+        {
+            occupied_ids[occupied_count++] =
+                platform->tool_windows[index].id;
+            continue;
+        }
+
+        if (slot == NULL)
         {
             slot = &platform->tool_windows[index];
-            break;
         }
     }
+
     if (slot == NULL)
+    {
+        return HENKA_ERROR_PLATFORM;
+    }
+
+    if (!henka_platform_choose_tool_window_id(
+            platform->next_tool_window_id,
+            occupied_ids,
+            occupied_count,
+            &chosen_id,
+            &next_candidate))
     {
         return HENKA_ERROR_PLATFORM;
     }
@@ -381,30 +558,61 @@ henka_result henka_platform_create_tool_window(
         SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE);
     if (slot->window == NULL)
     {
-        HENKA_LOG_ERROR("SDL_CreateWindow failed for tool window: %s", SDL_GetError());
+        platform->multi_window_available = false;
+        HENKA_LOG_ERROR(
+            "SDL_CreateWindow failed for tool window: %s",
+            SDL_GetError());
         return HENKA_ERROR_PLATFORM;
     }
-    if (!SDL_SetWindowMinimumSize(slot->window, desc->minimum_width, desc->minimum_height))
+
+    slot->native_window_id = SDL_GetWindowID(slot->window);
+    if (slot->native_window_id == 0U)
     {
-        HENKA_LOG_WARN("SDL_SetWindowMinimumSize failed for tool window: %s", SDL_GetError());
+        platform->multi_window_available = false;
+        HENKA_LOG_ERROR(
+            "SDL_GetWindowID failed for tool window: %s",
+            SDL_GetError());
+        SDL_DestroyWindow(slot->window);
+        memset(slot, 0, sizeof(*slot));
+        return HENKA_ERROR_PLATFORM;
     }
 
-    slot->id = platform->next_tool_window_id++;
-    slot->native_window_id = SDL_GetWindowID(slot->window);
+    if (!SDL_SetWindowMinimumSize(
+            slot->window,
+            desc->minimum_width,
+            desc->minimum_height))
+    {
+        HENKA_LOG_WARN(
+            "SDL_SetWindowMinimumSize failed for tool window: %s",
+            SDL_GetError());
+    }
+
+    slot->id = chosen_id;
     slot->open = true;
-    slot->focused = false;
-    if (!SDL_GetWindowSizeInPixels(slot->window, &slot->width, &slot->height))
+    slot->focused =
+        (SDL_GetWindowFlags(slot->window) &
+            SDL_WINDOW_INPUT_FOCUS) != 0U;
+    if (!SDL_GetWindowSizeInPixels(
+            slot->window,
+            &slot->width,
+            &slot->height))
     {
         slot->width = desc->width;
         slot->height = desc->height;
     }
+
+    platform->next_tool_window_id = next_candidate;
+    platform->multi_window_available = true;
     snprintf(slot->last_event, sizeof(slot->last_event), "opened");
     platform->last_event_route = HENKA_WINDOW_EVENT_ROUTE_TOOL;
     platform->last_tool_window_id = slot->id;
     platform->last_tool_window_close_requested = false;
     platform->last_tool_window_resized = false;
     *out_window_id = slot->id;
-    HENKA_LOG_INFO("tool window created (engine id=%u, native id=%u)", (unsigned int)slot->id, (unsigned int)slot->native_window_id);
+    HENKA_LOG_INFO(
+        "tool window created (engine id=%u, native id=%u)",
+        (unsigned int)slot->id,
+        (unsigned int)slot->native_window_id);
     return HENKA_SUCCESS;
 }
 
@@ -438,6 +646,11 @@ bool henka_platform_get_tool_window_state(
 {
     const henka_platform_tool_window* slot;
 
+    if (out_state != NULL)
+    {
+        memset(out_state, 0, sizeof(*out_state));
+    }
+
     if (platform == NULL || out_state == NULL)
     {
         return false;
@@ -449,7 +662,6 @@ bool henka_platform_get_tool_window_state(
         return false;
     }
 
-    memset(out_state, 0, sizeof(*out_state));
     out_state->id = slot->id;
     out_state->native_window_id = (uint32_t)slot->native_window_id;
     out_state->open = slot->open;
@@ -462,25 +674,43 @@ bool henka_platform_get_tool_window_state(
     out_state->mouse_left_released = slot->mouse_left_released;
     out_state->close_requested = slot->close_requested;
     out_state->resized = slot->resized;
-    snprintf(out_state->last_event, sizeof(out_state->last_event), "%s", slot->last_event);
+    snprintf(
+        out_state->last_event,
+        sizeof(out_state->last_event),
+        "%s",
+        slot->last_event);
     return true;
 }
 
-void henka_platform_get_diagnostics(const struct henka_platform* platform, henka_platform_diagnostics* out_diagnostics)
+void henka_platform_get_diagnostics(
+    const struct henka_platform* platform,
+    henka_platform_diagnostics* out_diagnostics)
 {
     size_t index;
 
-    if (platform == NULL || out_diagnostics == NULL)
+    if (out_diagnostics == NULL)
     {
         return;
     }
 
     memset(out_diagnostics, 0, sizeof(*out_diagnostics));
-    out_diagnostics->main_window_focused = platform->main_window_focused;
-    out_diagnostics->last_event_route = platform->last_event_route;
-    out_diagnostics->last_tool_window_id = platform->last_tool_window_id;
-    out_diagnostics->last_tool_window_close_requested = platform->last_tool_window_close_requested;
-    out_diagnostics->last_tool_window_resized = platform->last_tool_window_resized;
+    if (platform == NULL)
+    {
+        return;
+    }
+
+    out_diagnostics->multi_window_available =
+        platform->multi_window_available;
+    out_diagnostics->main_window_focused =
+        platform->main_window_focused;
+    out_diagnostics->last_event_route =
+        platform->last_event_route;
+    out_diagnostics->last_tool_window_id =
+        platform->last_tool_window_id;
+    out_diagnostics->last_tool_window_close_requested =
+        platform->last_tool_window_close_requested;
+    out_diagnostics->last_tool_window_resized =
+        platform->last_tool_window_resized;
     for (index = 0U; index < HENKA_MAX_TOOL_WINDOWS; ++index)
     {
         if (platform->tool_windows[index].open)
@@ -500,15 +730,20 @@ henka_result henka_platform_poll_events(struct henka_platform* platform, henka_i
 {
     SDL_Event event;
 
+    if (out_state != NULL)
+    {
+        memset(out_state, 0, sizeof(*out_state));
+    }
+
     if (platform == NULL || input == NULL || out_state == NULL)
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
 
-    out_state->close_requested = false;
-    out_state->resized = false;
-    out_state->framebuffer_width = 0;
-    out_state->framebuffer_height = 0;
+    platform->last_event_route = HENKA_WINDOW_EVENT_ROUTE_NONE;
+    platform->last_tool_window_id = HENKA_INVALID_WINDOW_ID;
+    platform->last_tool_window_close_requested = false;
+    platform->last_tool_window_resized = false;
     henka_platform_reset_tool_window_frame_input(platform);
 
     while (SDL_PollEvent(&event))
@@ -533,9 +768,13 @@ henka_result henka_platform_poll_events(struct henka_platform* platform, henka_i
                 }
                 else if ((tool_window = henka_platform_find_tool_window_by_native_id(platform, event.window.windowID)) != NULL)
                 {
-                    henka_platform_record_tool_event(platform, tool_window, "close requested");
+                    henka_platform_record_tool_event(
+                        platform,
+                        tool_window,
+                        "close requested",
+                        true,
+                        false);
                     tool_window->close_requested = true;
-                    platform->last_tool_window_close_requested = true;
                 }
                 else
                 {
@@ -558,11 +797,15 @@ henka_result henka_platform_poll_events(struct henka_platform* platform, henka_i
                 }
                 else if ((tool_window = henka_platform_find_tool_window_by_native_id(platform, event.window.windowID)) != NULL)
                 {
-                    henka_platform_record_tool_event(platform, tool_window, "resized");
+                    henka_platform_record_tool_event(
+                        platform,
+                        tool_window,
+                        "resized",
+                        false,
+                        true);
                     tool_window->width = event.window.data1;
                     tool_window->height = event.window.data2;
                     tool_window->resized = true;
-                    platform->last_tool_window_resized = true;
                 }
                 else
                 {
@@ -580,12 +823,28 @@ henka_result henka_platform_poll_events(struct henka_platform* platform, henka_i
                 if (henka_platform_event_is_main_window(platform, event.window.windowID))
                 {
                     platform->main_window_focused = focused;
-                    platform->last_event_route = HENKA_WINDOW_EVENT_ROUTE_MAIN;
+                    platform->last_event_route =
+                        HENKA_WINDOW_EVENT_ROUTE_MAIN;
+                    if (!focused)
+                    {
+                        henka_platform_release_input_on_focus_loss(input);
+                    }
                 }
                 else if ((tool_window = henka_platform_find_tool_window_by_native_id(platform, event.window.windowID)) != NULL)
                 {
-                    henka_platform_record_tool_event(platform, tool_window, focused ? "focused" : "focus lost");
+                    henka_platform_record_tool_event(
+                        platform,
+                        tool_window,
+                        focused ? "focused" : "focus lost",
+                        false,
+                        false);
                     tool_window->focused = focused;
+                    if (!focused && tool_window->mouse_left_down)
+                    {
+                        tool_window->mouse_left_down = false;
+                        tool_window->mouse_left_pressed = false;
+                        tool_window->mouse_left_released = true;
+                    }
                 }
                 else
                 {
@@ -603,7 +862,7 @@ henka_result henka_platform_poll_events(struct henka_platform* platform, henka_i
                 }
                 else if ((tool_window = henka_platform_find_tool_window_by_native_id(platform, event.window.windowID)) != NULL)
                 {
-                    henka_platform_record_tool_event(platform, tool_window, "moved");
+                    henka_platform_record_tool_event(platform, tool_window, "moved", false, false);
                 }
                 else
                 {
@@ -622,7 +881,7 @@ henka_result henka_platform_poll_events(struct henka_platform* platform, henka_i
                     tool_window = henka_platform_find_tool_window_by_native_id(platform, event.key.windowID);
                     if (tool_window != NULL)
                     {
-                        henka_platform_record_tool_event(platform, tool_window, "key pressed");
+                        henka_platform_record_tool_event(platform, tool_window, "key pressed", false, false);
                     }
                     else
                     {
@@ -650,7 +909,7 @@ henka_result henka_platform_poll_events(struct henka_platform* platform, henka_i
                     tool_window = henka_platform_find_tool_window_by_native_id(platform, event.key.windowID);
                     if (tool_window != NULL)
                     {
-                        henka_platform_record_tool_event(platform, tool_window, "key released");
+                        henka_platform_record_tool_event(platform, tool_window, "key released", false, false);
                     }
                     else
                     {
@@ -674,7 +933,7 @@ henka_result henka_platform_poll_events(struct henka_platform* platform, henka_i
                     henka_platform_tool_window* tool_window = henka_platform_find_tool_window_by_native_id(platform, event.motion.windowID);
                     if (tool_window != NULL)
                     {
-                        henka_platform_record_tool_event(platform, tool_window, "pointer moved");
+                        henka_platform_record_tool_event(platform, tool_window, "pointer moved", false, false);
                         tool_window->mouse_position.x = event.motion.x;
                         tool_window->mouse_position.y = event.motion.y;
                     }
@@ -702,7 +961,7 @@ henka_result henka_platform_poll_events(struct henka_platform* platform, henka_i
                     if (tool_window != NULL)
                     {
                         button = henka_translate_mouse_button(event.button.button);
-                        henka_platform_record_tool_event(platform, tool_window, "button pressed");
+                        henka_platform_record_tool_event(platform, tool_window, "button pressed", false, false);
                         tool_window->mouse_position.x = event.button.x;
                         tool_window->mouse_position.y = event.button.y;
                         if (button == HENKA_MOUSE_BUTTON_LEFT)
@@ -740,7 +999,7 @@ henka_result henka_platform_poll_events(struct henka_platform* platform, henka_i
                     if (tool_window != NULL)
                     {
                         button = henka_translate_mouse_button(event.button.button);
-                        henka_platform_record_tool_event(platform, tool_window, "button released");
+                        henka_platform_record_tool_event(platform, tool_window, "button released", false, false);
                         tool_window->mouse_position.x = event.button.x;
                         tool_window->mouse_position.y = event.button.y;
                         if (button == HENKA_MOUSE_BUTTON_LEFT)
@@ -773,7 +1032,7 @@ henka_result henka_platform_poll_events(struct henka_platform* platform, henka_i
                     henka_platform_tool_window* tool_window = henka_platform_find_tool_window_by_native_id(platform, event.wheel.windowID);
                     if (tool_window != NULL)
                     {
-                        henka_platform_record_tool_event(platform, tool_window, "wheel");
+                        henka_platform_record_tool_event(platform, tool_window, "wheel", false, false);
                     }
                     else
                     {
@@ -794,7 +1053,9 @@ henka_result henka_platform_poll_events(struct henka_platform* platform, henka_i
     return HENKA_SUCCESS;
 }
 
-henka_result henka_platform_set_vsync(struct henka_platform* platform, bool enabled)
+henka_result henka_platform_set_vsync(
+    struct henka_platform* platform,
+    bool enabled)
 {
     int interval;
 
@@ -806,48 +1067,134 @@ henka_result henka_platform_set_vsync(struct henka_platform* platform, bool enab
     interval = enabled ? 1 : 0;
     if (!SDL_GL_SetSwapInterval(interval))
     {
-        HENKA_LOG_WARN("SDL_GL_SetSwapInterval failed: %s", SDL_GetError());
+        HENKA_LOG_WARN(
+            "SDL_GL_SetSwapInterval failed: %s",
+            SDL_GetError());
+        return HENKA_ERROR_PLATFORM;
     }
 
     return HENKA_SUCCESS;
 }
 
-bool henka_platform_get_framebuffer_size(struct henka_platform* platform, int* out_width, int* out_height)
+bool henka_platform_get_framebuffer_size(
+    struct henka_platform* platform,
+    int* out_width,
+    int* out_height)
 {
+    int height;
+    int width;
+
+    if (out_width != NULL)
+    {
+        *out_width = 0;
+    }
+    if (out_height != NULL)
+    {
+        *out_height = 0;
+    }
+
     if (platform == NULL || out_width == NULL || out_height == NULL)
     {
         return false;
     }
 
-    return SDL_GetWindowSizeInPixels(platform->window, out_width, out_height);
+    if (!SDL_GetWindowSizeInPixels(
+            platform->window,
+            &width,
+            &height))
+    {
+        return false;
+    }
+
+    *out_width = width;
+    *out_height = height;
+    return true;
 }
 
-bool henka_platform_get_window_size(struct henka_platform* platform, int* out_width, int* out_height)
+bool henka_platform_get_window_size(
+    struct henka_platform* platform,
+    int* out_width,
+    int* out_height)
 {
+    int height;
+    int width;
+
+    if (out_width != NULL)
+    {
+        *out_width = 0;
+    }
+    if (out_height != NULL)
+    {
+        *out_height = 0;
+    }
+
     if (platform == NULL || out_width == NULL || out_height == NULL)
     {
         return false;
     }
 
-    return SDL_GetWindowSize(platform->window, out_width, out_height);
+    if (!SDL_GetWindowSize(platform->window, &width, &height))
+    {
+        return false;
+    }
+
+    *out_width = width;
+    *out_height = height;
+    return true;
 }
 
-henka_result henka_platform_set_mouse_capture(struct henka_platform* platform, bool enabled)
+henka_result henka_platform_set_mouse_capture(
+    struct henka_platform* platform,
+    bool enabled)
 {
+    bool previous_mouse_grab;
+    bool previous_relative_mode;
+
     if (platform == NULL)
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
 
+    previous_relative_mode =
+        SDL_GetWindowRelativeMouseMode(platform->window);
+    previous_mouse_grab =
+        SDL_GetWindowMouseGrab(platform->window);
+    if (previous_relative_mode == enabled &&
+        previous_mouse_grab == enabled)
+    {
+        return HENKA_SUCCESS;
+    }
+
     if (!SDL_SetWindowRelativeMouseMode(platform->window, enabled))
     {
-        HENKA_LOG_ERROR("SDL_SetWindowRelativeMouseMode failed: %s", SDL_GetError());
+        HENKA_LOG_ERROR(
+            "SDL_SetWindowRelativeMouseMode failed: %s",
+            SDL_GetError());
         return HENKA_ERROR_PLATFORM;
     }
 
     if (!SDL_SetWindowMouseGrab(platform->window, enabled))
     {
-        HENKA_LOG_WARN("SDL_SetWindowMouseGrab failed: %s", SDL_GetError());
+        HENKA_LOG_ERROR(
+            "SDL_SetWindowMouseGrab failed: %s",
+            SDL_GetError());
+        if (!SDL_SetWindowMouseGrab(
+                platform->window,
+                previous_mouse_grab))
+        {
+            HENKA_LOG_ERROR(
+                "SDL_SetWindowMouseGrab rollback failed: %s",
+                SDL_GetError());
+        }
+        if (!SDL_SetWindowRelativeMouseMode(
+                platform->window,
+                previous_relative_mode))
+        {
+            HENKA_LOG_ERROR(
+                "SDL_SetWindowRelativeMouseMode rollback failed: %s",
+                SDL_GetError());
+        }
+        return HENKA_ERROR_PLATFORM;
     }
 
     return HENKA_SUCCESS;

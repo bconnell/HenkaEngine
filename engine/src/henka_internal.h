@@ -66,6 +66,7 @@ typedef struct henka_platform_frame_state
 
 typedef struct henka_platform_diagnostics
 {
+    bool multi_window_available;
     bool main_window_focused;
     unsigned int open_tool_window_count;
     henka_window_event_route last_event_route;
@@ -210,8 +211,18 @@ struct henka_engine
     bool initialized_callback_ran;
 };
 
+void henka_platform_release_input_on_focus_loss(henka_input_state* input);
+bool henka_platform_choose_tool_window_id(
+    henka_window_id next_candidate,
+    const henka_window_id* occupied_ids,
+    size_t occupied_count,
+    henka_window_id* out_window_id,
+    henka_window_id* out_next_candidate);
 henka_result henka_platform_create(const henka_platform_desc* desc, struct henka_platform** out_platform);
 void henka_platform_destroy(struct henka_platform* platform);
+void henka_platform_set_multi_window_available(
+    struct henka_platform* platform,
+    bool available);
 henka_result henka_platform_poll_events(struct henka_platform* platform, henka_input_state* input, henka_platform_frame_state* out_state);
 henka_result henka_platform_create_tool_window(
     struct henka_platform* platform,
