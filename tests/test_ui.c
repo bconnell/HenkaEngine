@@ -1,5 +1,6 @@
 #include "test_suite.h"
 
+#include <float.h>
 #include <math.h>
 #include <string.h>
 
@@ -14,6 +15,7 @@ void henka_test_ui(void)
     char mutable_id[32];
     int text_height;
     int text_width;
+    size_t draw_count_before;
 
     ui = NULL;
     HENKA_TEST_ASSERT(henka_ui_create(NULL) == HENKA_ERROR_INVALID_ARGUMENT);
@@ -26,7 +28,28 @@ void henka_test_ui(void)
 
     HENKA_TEST_ASSERT(henka_ui_begin_frame(NULL, NULL) == HENKA_ERROR_INVALID_ARGUMENT);
     HENKA_TEST_ASSERT(henka_ui_end_frame(NULL) == HENKA_ERROR_INVALID_ARGUMENT);
-    HENKA_TEST_ASSERT(henka_ui_measure_text(NULL, 1.0f, &text_width, &text_height) == HENKA_ERROR_INVALID_ARGUMENT);
+    HENKA_TEST_ASSERT(henka_ui_end_frame(ui) == HENKA_ERROR_INVALID_ARGUMENT);
+    HENKA_TEST_ASSERT(henka_ui_panel(
+        ui,
+        (henka_ui_rect){0.0f, 0.0f, 100.0f, 60.0f},
+        "Outside") == HENKA_ERROR_INVALID_ARGUMENT);
+    toggle_value = false;
+    HENKA_TEST_ASSERT(!henka_ui_toggle(
+        ui,
+        "outside_toggle",
+        (henka_ui_rect){0.0f, 0.0f, 100.0f, 30.0f},
+        "Outside",
+        &toggle_value));
+    HENKA_TEST_ASSERT(toggle_value == false);
+    text_width = 123;
+    text_height = 456;
+    HENKA_TEST_ASSERT(henka_ui_measure_text(
+        NULL,
+        1.0f,
+        &text_width,
+        &text_height) == HENKA_ERROR_INVALID_ARGUMENT);
+    HENKA_TEST_ASSERT(text_width == 0);
+    HENKA_TEST_ASSERT(text_height == 0);
     HENKA_TEST_ASSERT(henka_ui_measure_text("Henka", 0.0f, &text_width, &text_height) == HENKA_ERROR_INVALID_ARGUMENT);
     HENKA_TEST_ASSERT(henka_ui_measure_text("Henka", 1.0f, &text_width, &text_height) == HENKA_SUCCESS);
     HENKA_TEST_ASSERT(text_width > 0);
@@ -48,7 +71,25 @@ void henka_test_ui(void)
 
     HENKA_TEST_ASSERT(henka_ui_begin_frame(ui, &frame_desc) == HENKA_SUCCESS);
     HENKA_TEST_ASSERT(henka_ui_overlay_rect(ui, (henka_ui_rect){960.0f, 24.0f, 18.0f, 18.0f}, (henka_vec4){1.0f, 0.0f, 0.0f, 1.0f}) == HENKA_SUCCESS);
+    draw_count_before = henka_ui_get_draw_rect_count(ui);
+    HENKA_TEST_ASSERT(henka_ui_begin_frame(ui, &frame_desc) == HENKA_ERROR_INVALID_ARGUMENT);
+    HENKA_TEST_ASSERT(henka_ui_get_draw_rect_count(ui) == draw_count_before);
     HENKA_TEST_ASSERT(henka_ui_overlay_line(ui, (henka_vec2){980.0f, 40.0f}, (henka_vec2){1012.0f, 54.0f}, 3.0f, (henka_vec4){0.0f, 1.0f, 0.0f, 1.0f}) == HENKA_SUCCESS);
+    draw_count_before = henka_ui_get_draw_line_count(ui);
+    HENKA_TEST_ASSERT(henka_ui_overlay_polyline(
+        ui,
+        (henka_vec2[]){{1020.0f, 24.0f}, {1040.0f, 36.0f}, {NAN, 54.0f}},
+        3U,
+        2.0f,
+        (henka_vec4){0.0f, 0.5f, 1.0f, 1.0f}) == HENKA_ERROR_INVALID_ARGUMENT);
+    HENKA_TEST_ASSERT(henka_ui_get_draw_line_count(ui) == draw_count_before);
+    HENKA_TEST_ASSERT(henka_ui_overlay_line(
+        ui,
+        (henka_vec2){FLT_MAX, 0.0f},
+        (henka_vec2){-FLT_MAX, 0.0f},
+        1.0f,
+        (henka_vec4){1.0f, 1.0f, 1.0f, 1.0f}) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_ui_get_draw_line_count(ui) == draw_count_before + 1U);
     HENKA_TEST_ASSERT(henka_ui_overlay_polyline(
         ui,
         (henka_vec2[]){{1020.0f, 24.0f}, {1040.0f, 36.0f}, {1050.0f, 54.0f}},
@@ -63,6 +104,11 @@ void henka_test_ui(void)
     HENKA_TEST_ASSERT(henka_ui_get_draw_line_count(ui) >= 3U);
     HENKA_TEST_ASSERT(henka_ui_button(ui, "hidden_button", (henka_ui_rect){40.0f, 40.0f, 120.0f, 28.0f}, "Click") == false);
     HENKA_TEST_ASSERT(henka_ui_end_frame(ui) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_ui_end_frame(ui) == HENKA_ERROR_INVALID_ARGUMENT);
+    HENKA_TEST_ASSERT(henka_ui_panel(
+        ui,
+        (henka_ui_rect){20.0f, 20.0f, 200.0f, 100.0f},
+        "After") == HENKA_ERROR_INVALID_ARGUMENT);
 
     henka_ui_set_visible(ui, true);
     HENKA_TEST_ASSERT(henka_ui_is_visible(ui) == true);
@@ -192,7 +238,15 @@ void henka_test_ui(void)
     HENKA_TEST_ASSERT(henka_ui_rect_contains(
         (henka_ui_rect){0.0f, 0.0f, NAN, 20.0f},
         (henka_vec2){1.0f, 1.0f}) == false);
-    HENKA_TEST_ASSERT(henka_ui_measure_text("Henka", NAN, &text_width, &text_height) == HENKA_ERROR_INVALID_ARGUMENT);
+    text_width = 123;
+    text_height = 456;
+    HENKA_TEST_ASSERT(henka_ui_measure_text(
+        "Henka",
+        NAN,
+        &text_width,
+        &text_height) == HENKA_ERROR_INVALID_ARGUMENT);
+    HENKA_TEST_ASSERT(text_width == 0);
+    HENKA_TEST_ASSERT(text_height == 0);
 
     frame_desc.mouse_position = (henka_vec2){NAN, 0.0f};
     frame_desc.mouse_left_down = false;

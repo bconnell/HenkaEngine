@@ -1,3 +1,7 @@
+param(
+    [string]$CandidateCommitSubject = ""
+)
+
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
@@ -42,7 +46,14 @@ $ruleSpecs = @(
     @{ Name = "internal generation reference 6"; Token = Convert-CodePoints @(97, 114, 116, 105, 102, 105, 99, 105, 97, 108, 32, 105, 110, 116, 101, 108, 108, 105, 103, 101, 110, 99, 101); CaseSensitive = $false },
     @{ Name = "internal generation reference 7"; Token = Convert-CodePoints @(108, 97, 110, 103, 117, 97, 103, 101, 32, 109, 111, 100, 101, 108); CaseSensitive = $false },
     @{ Name = "internal generation reference 8"; Token = Convert-CodePoints @(99, 111, 100, 105, 110, 103, 32, 97, 103, 101, 110, 116); CaseSensitive = $false },
-    @{ Name = "internal generation reference 9"; Token = Convert-CodePoints @(103, 101, 110, 101, 114, 97, 116, 101, 100, 32, 98, 121); CaseSensitive = $false }
+    @{ Name = "internal generation reference 9"; Token = Convert-CodePoints @(103, 101, 110, 101, 114, 97, 116, 101, 100, 32, 98, 121); CaseSensitive = $false },
+    @{ Name = "internal workflow reference 1"; Token = Convert-CodePoints @(114, 101, 112, 97, 105, 114, 32, 98, 97, 116, 99, 104); CaseSensitive = $false },
+    @{ Name = "internal workflow reference 2"; Token = Convert-CodePoints @(99, 111, 110, 116, 105, 110, 117, 97, 116, 105, 111, 110, 32, 112, 97, 99, 107, 97, 103, 101); CaseSensitive = $false },
+    @{ Name = "internal workflow reference 3"; Token = Convert-CodePoints @(115, 111, 117, 114, 99, 101, 32, 102, 105, 110, 103, 101, 114, 112, 114, 105, 110, 116); CaseSensitive = $false },
+    @{ Name = "internal workflow reference 4"; Token = Convert-CodePoints @(99, 111, 109, 112, 108, 101, 116, 105, 111, 110, 32, 104, 97, 110, 100, 111, 102, 102); CaseSensitive = $false },
+    @{ Name = "internal workflow reference 5"; Token = Convert-CodePoints @(102, 97, 105, 108, 117, 114, 101, 32, 104, 97, 110, 100, 111, 102, 102); CaseSensitive = $false },
+    @{ Name = "internal workflow reference 6"; Token = Convert-CodePoints @(112, 114, 111, 109, 112, 116, 32, 119, 111, 114, 107, 102, 108, 111, 119); CaseSensitive = $false },
+    @{ Name = "internal workflow reference 7"; Token = Convert-CodePoints @(99, 104, 97, 105, 110, 32, 111, 102, 32, 116, 104, 111, 117, 103, 104, 116); CaseSensitive = $false }
 )
 
 $rules = @()
@@ -102,6 +113,32 @@ foreach ($rawPath in $paths) {
                     $rule.Options)) {
                 $findings.Add("${relativePath}:$($lineIndex + 1): $($rule.Name)")
             }
+        }
+    }
+}
+
+$subjectSamples = New-Object System.Collections.Generic.List[object]
+$currentSubject = @(& $gitCommand.Source -C $repoRoot log -1 --pretty=%s)
+if ($LASTEXITCODE -eq 0 -and $currentSubject.Count -gt 0) {
+    $subjectSamples.Add([pscustomobject]@{
+        Label = "current commit subject"
+        Text = ([string]$currentSubject[0]).Trim()
+    })
+}
+if (-not [string]::IsNullOrWhiteSpace($CandidateCommitSubject)) {
+    $subjectSamples.Add([pscustomobject]@{
+        Label = "candidate commit subject"
+        Text = $CandidateCommitSubject
+    })
+}
+
+foreach ($sample in $subjectSamples) {
+    foreach ($rule in $rules) {
+        if ([System.Text.RegularExpressions.Regex]::IsMatch(
+                $sample.Text,
+                $rule.Pattern,
+                $rule.Options)) {
+            $findings.Add("$($sample.Label): $($rule.Name)")
         }
     }
 }

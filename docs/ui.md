@@ -48,6 +48,14 @@ The UI overlay draws through the existing renderer after the 3D scene.
 
 This keeps the public UI-facing API small and engine-oriented instead of exposing backend types directly.
 
+## Frame and transaction contract
+
+UI construction is valid only between one successful `henka_ui_begin_frame` call and its matching `henka_ui_end_frame` call. Nested begin calls and unmatched end calls fail without discarding the current command list. Public widgets and overlays reject calls outside an active construction frame.
+
+Composite controls are transactional. Panels, borders, text, polylines, rows, hints, buttons, selectables, tabs, toggles, and status chips roll their rectangle and line counts back if any later step fails. Release-confirm controls preserve active ownership until a complete control is drawn successfully, and toggles change caller state only after successful rendering. Text fitting clamps character counts before integer conversion, failed text measurement clears caller outputs, and extreme finite line geometry is rejected or converted through bounded double-precision math before reaching the graphics backend.
+
+The renderer consumes only completed UI frames. Scene or UI draw failures after a renderer frame begins use a non-presenting abort path so backend frame state is balanced without swapping a partial frame.
+
 ## Current text limitations
 
 The built-in text path is intentionally simple:
@@ -174,7 +182,7 @@ The Transform QA view exposes direct move, rotate, scale, and reset controls tha
 The Physics QA view exposes real enable, pause/resume, fixed-step, demo reset, gravity, collider/contact debug, impulse, velocity clear, body-type, Make Dynamic + Drop, and camera-raycast controls. It explains that Static bodies do not move from physics, Dynamic bodies fall and respond to gravity, forces, impulses, and collisions, and Kinematic bodies do not fall from gravity because they move only through explicit tool or code movement. Collider overlays are generated from the same collider descriptions used for collision detection, clipped to the Scene View, and physics-linked entities are ordinary selectable scene objects rather than debug helpers.
 When Diagnostics, Transform QA, or Physics QA is open in the heavier layout, the utility view uses the right dock directly so its controls do not draw through Object Details.
 
-Selection is also visible directly in the Scene View through a non-selectable highlighted bounds outline around the selected real scene object. The highlight is clipped to the Scene View and does not draw over workspace panels or the debug strip. Ground selection uses one finite floor outline around the visible ground area instead of unbounded plane geometry. Clearing selection, clicking empty viewport space in Select mode, hiding the selected object, or deleting it removes the highlight and updates Object Details and Diagnostics.
+Editable selection is visible directly in the Scene View through a non-selectable highlighted bounds outline around the selected real scene object. The highlight is clipped to the Scene View and does not draw over workspace panels or the debug strip. Locked objects, including the default Ground, remain selectable and inspectable but do not show the yellow transform highlight or a gizmo. Clearing selection, clicking empty viewport space, hiding or locking the selected object, deleting it, or changing tools clears active transform-session ownership and updates Object Details and Diagnostics.
 
 Panel placement and dock resizing are session-only in the current sandbox. `Reset Layout` redocks the standard panels, closes detached windows, restores safe dock widths, makes panels visible, clears active workspace drag or resize state, and closes `Native Panel Test` if it is open. The Scene View remains the main center viewport. Saved detached placement, full detached controls, a richer in-window profile editor, and detachable Scene View support remain future work.
 

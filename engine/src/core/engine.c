@@ -562,6 +562,7 @@ henka_result henka_engine_run(henka_engine* engine)
             if (result != HENKA_SUCCESS)
             {
                 HENKA_LOG_ERROR("renderer draw scene failed: %s", henka_result_to_string(result));
+                henka_renderer_abort_frame(engine->renderer);
                 return result;
             }
         }
@@ -572,6 +573,7 @@ henka_result henka_engine_run(henka_engine* engine)
             if (result != HENKA_SUCCESS)
             {
                 HENKA_LOG_ERROR("renderer draw ui failed: %s", henka_result_to_string(result));
+                henka_renderer_abort_frame(engine->renderer);
                 return result;
             }
         }

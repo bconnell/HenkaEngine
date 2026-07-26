@@ -1,6 +1,7 @@
 #include "henka_internal.h"
 
 #include <henka/log.h>
+#include "../ui/ui_internal.h"
 #include <henka/memory.h>
 
 henka_result henka_renderer_create(struct henka_platform* platform, bool enable_vsync, struct henka_renderer** out_renderer)
@@ -43,23 +44,56 @@ void henka_renderer_destroy(struct henka_renderer* renderer)
     }
 
     HENKA_LOG_INFO("destroying renderer");
+    if (renderer->frame_active)
+    {
+        henka_renderer_abort_frame(renderer);
+    }
     henka_opengl_renderer_destroy(renderer);
     henka_free(renderer);
 }
 
 henka_result henka_renderer_begin_frame(struct henka_renderer* renderer)
 {
-    return henka_opengl_renderer_begin_frame(renderer);
+    henka_result result;
+
+    if (renderer == NULL || renderer->frame_active)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    result = henka_opengl_renderer_begin_frame(renderer);
+    if (result == HENKA_SUCCESS)
+    {
+        renderer->frame_active = true;
+    }
+    return result;
+}
+
+void henka_renderer_abort_frame(struct henka_renderer* renderer)
+{
+    if (renderer == NULL || !renderer->frame_active)
+    {
+        return;
+    }
+
+    henka_opengl_renderer_abort_frame(renderer);
+    renderer->frame_active = false;
 }
 
 void henka_renderer_clear_frame(struct henka_renderer* renderer)
 {
+    if (renderer == NULL || !renderer->frame_active)
+    {
+        return;
+    }
     henka_opengl_renderer_clear_frame(renderer);
 }
 
-henka_result henka_renderer_draw_scene(struct henka_renderer* renderer, const struct henka_scene* scene)
+henka_result henka_renderer_draw_scene(
+    struct henka_renderer* renderer,
+    const struct henka_scene* scene)
 {
-    if (renderer == NULL || scene == NULL)
+    if (renderer == NULL || scene == NULL || !renderer->frame_active)
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
@@ -67,9 +101,12 @@ henka_result henka_renderer_draw_scene(struct henka_renderer* renderer, const st
     return henka_opengl_renderer_draw_scene(renderer, scene);
 }
 
-henka_result henka_renderer_draw_ui(struct henka_renderer* renderer, const struct henka_ui_context* ui_context)
+henka_result henka_renderer_draw_ui(
+    struct henka_renderer* renderer,
+    const struct henka_ui_context* ui_context)
 {
-    if (renderer == NULL || ui_context == NULL)
+    if (renderer == NULL || ui_context == NULL ||
+        !renderer->frame_active || ui_context->frame_active)
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
@@ -79,7 +116,16 @@ henka_result henka_renderer_draw_ui(struct henka_renderer* renderer, const struc
 
 henka_result henka_renderer_end_frame(struct henka_renderer* renderer)
 {
-    return henka_opengl_renderer_end_frame(renderer);
+    henka_result result;
+
+    if (renderer == NULL || !renderer->frame_active)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    result = henka_opengl_renderer_end_frame(renderer);
+    renderer->frame_active = false;
+    return result;
 }
 
 henka_result henka_renderer_create_tool_window_target(struct henka_renderer* renderer, henka_window_id window_id)
@@ -97,6 +143,10 @@ henka_result henka_renderer_draw_tool_window_ui(
     henka_window_id window_id,
     const struct henka_ui_context* ui_context)
 {
+    if (renderer == NULL || ui_context == NULL || ui_context->frame_active)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
     return henka_opengl_renderer_draw_tool_window_ui(renderer, window_id, ui_context);
 }
 
