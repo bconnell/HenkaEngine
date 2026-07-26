@@ -46,6 +46,8 @@ Henka Engine is still early, but the sandbox now renders a visible 3D scene with
 - Bounded local settings persistence with transactional loads and replace-on-success writes
 - Early in-window UI overlay with buttons, toggles, labels, structured rows, simple text rendering, and release-confirm control activation
 - Transactional UI frame construction with nested-frame rejection, frame-only widget admission, all-or-nothing composite draw commands, bounded text fitting, and state changes committed only after rendering succeeds
+- Checked workspace and viewport calculations with deterministic failure outputs, framebuffer clipping, custom viewport preservation across resize, and overflow-safe OpenGL coordinate conversion
+- Deterministic per-entity texture binding, checked frame-abort context restoration, and safer main and detached-window OpenGL resource cleanup
 - Locked scene objects remain inspectable without a transform highlight or gizmo; transform hotkeys require a visible unlocked selection and stale transform-session ownership is cleared on selection, visibility, lock, and tool changes
 - Scene Objects, Object Details, and Utility panels for named sandbox object inspection and viewer workflows
 - Sandbox workspace panels with stacked side docks, header drag, cross-zone redocking, native detached-window panels with routed mouse input, safer tool-window renderer context recovery, dock splitter, and reset-layout recovery controls

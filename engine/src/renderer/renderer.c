@@ -1,8 +1,65 @@
 #include "henka_internal.h"
 
+#include <stdint.h>
+
 #include <henka/log.h>
 #include "../ui/ui_internal.h"
 #include <henka/memory.h>
+
+static henka_viewport henka_renderer_full_viewport(
+    const struct henka_renderer* renderer)
+{
+    if (renderer == NULL ||
+        renderer->framebuffer_width <= 0 ||
+        renderer->framebuffer_height <= 0)
+    {
+        return (henka_viewport){0, 0, 1, 1};
+    }
+
+    return (henka_viewport){
+        0,
+        0,
+        renderer->framebuffer_width,
+        renderer->framebuffer_height};
+}
+
+static henka_viewport henka_renderer_clip_viewport(
+    const struct henka_renderer* renderer,
+    henka_viewport viewport)
+{
+    int64_t bottom;
+    int64_t right;
+
+    if (renderer == NULL ||
+        renderer->framebuffer_width <= 0 ||
+        renderer->framebuffer_height <= 0 ||
+        !henka_viewport_is_valid(viewport) ||
+        viewport.x >= renderer->framebuffer_width ||
+        viewport.y >= renderer->framebuffer_height)
+    {
+        return henka_renderer_full_viewport(renderer);
+    }
+
+    right = (int64_t)viewport.x + (int64_t)viewport.width;
+    bottom = (int64_t)viewport.y + (int64_t)viewport.height;
+    if (right > (int64_t)renderer->framebuffer_width)
+    {
+        right = (int64_t)renderer->framebuffer_width;
+    }
+    if (bottom > (int64_t)renderer->framebuffer_height)
+    {
+        bottom = (int64_t)renderer->framebuffer_height;
+    }
+
+    viewport.width = (int)(right - (int64_t)viewport.x);
+    viewport.height = (int)(bottom - (int64_t)viewport.y);
+    if (!henka_viewport_is_valid(viewport))
+    {
+        return henka_renderer_full_viewport(renderer);
+    }
+
+    return viewport;
+}
 
 henka_result henka_renderer_create(struct henka_platform* platform, bool enable_vsync, struct henka_renderer** out_renderer)
 {
@@ -69,15 +126,21 @@ henka_result henka_renderer_begin_frame(struct henka_renderer* renderer)
     return result;
 }
 
-void henka_renderer_abort_frame(struct henka_renderer* renderer)
+henka_result henka_renderer_abort_frame(struct henka_renderer* renderer)
 {
+    henka_result result;
+
     if (renderer == NULL || !renderer->frame_active)
     {
-        return;
+        return HENKA_ERROR_INVALID_ARGUMENT;
     }
 
-    henka_opengl_renderer_abort_frame(renderer);
-    renderer->frame_active = false;
+    result = henka_opengl_renderer_abort_frame(renderer);
+    if (result == HENKA_SUCCESS)
+    {
+        renderer->frame_active = false;
+    }
+    return result;
 }
 
 void henka_renderer_clear_frame(struct henka_renderer* renderer)
@@ -150,49 +213,57 @@ henka_result henka_renderer_draw_tool_window_ui(
     return henka_opengl_renderer_draw_tool_window_ui(renderer, window_id, ui_context);
 }
 
-void henka_renderer_resize_viewport(struct henka_renderer* renderer, int width, int height)
+void henka_renderer_resize_viewport(
+    struct henka_renderer* renderer,
+    int width,
+    int height)
 {
-    if (renderer == NULL)
+    henka_viewport previous_viewport;
+
+    if (renderer == NULL || width <= 0 || height <= 0)
     {
         return;
     }
 
+    previous_viewport = renderer->scene_viewport;
     renderer->framebuffer_width = width;
     renderer->framebuffer_height = height;
-    renderer->scene_viewport = (henka_viewport){0, 0, width > 0 ? width : 1, height > 0 ? height : 1};
+    renderer->scene_viewport = renderer->scene_viewport_custom ?
+        henka_renderer_clip_viewport(renderer, previous_viewport) :
+        henka_renderer_full_viewport(renderer);
     henka_opengl_renderer_resize_viewport(renderer, width, height);
 }
 
-void henka_renderer_set_scene_viewport(struct henka_renderer* renderer, henka_viewport viewport)
+void henka_renderer_set_scene_viewport(
+    struct henka_renderer* renderer,
+    henka_viewport viewport)
 {
     if (renderer == NULL)
     {
         return;
     }
 
-    if (viewport.width <= 0 || viewport.height <= 0)
+    if (!henka_viewport_is_valid(viewport))
     {
-        renderer->scene_viewport = (henka_viewport)
-        {
-            0,
-            0,
-            renderer->framebuffer_width > 0 ? renderer->framebuffer_width : 1,
-            renderer->framebuffer_height > 0 ? renderer->framebuffer_height : 1
-        };
+        renderer->scene_viewport_custom = false;
+        renderer->scene_viewport = henka_renderer_full_viewport(renderer);
         return;
     }
 
-    renderer->scene_viewport = viewport;
+    renderer->scene_viewport_custom = true;
+    renderer->scene_viewport =
+        henka_renderer_clip_viewport(renderer, viewport);
 }
 
-henka_viewport henka_renderer_get_scene_viewport(const struct henka_renderer* renderer)
+henka_viewport henka_renderer_get_scene_viewport(
+    const struct henka_renderer* renderer)
 {
-    if (renderer == NULL || renderer->scene_viewport.width <= 0 || renderer->scene_viewport.height <= 0)
+    if (renderer == NULL)
     {
         return (henka_viewport){0, 0, 1, 1};
     }
 
-    return renderer->scene_viewport;
+    return henka_renderer_clip_viewport(renderer, renderer->scene_viewport);
 }
 
 henka_result henka_renderer_set_vsync(struct henka_renderer* renderer, bool enabled)
