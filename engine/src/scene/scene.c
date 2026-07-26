@@ -68,22 +68,101 @@ henka_result henka_material_describe(const henka_material* material, char* buffe
     return HENKA_SUCCESS;
 }
 
-static henka_scene_entity_record* henka_scene_get_entity_record(henka_scene* scene, henka_entity entity)
+#define HENKA_ENTITY_SLOT_BITS 21U
+#define HENKA_ENTITY_SLOT_MASK \
+    ((((henka_entity)1U) << HENKA_ENTITY_SLOT_BITS) - (henka_entity)1U)
+#define HENKA_ENTITY_GENERATION_SHIFT HENKA_ENTITY_SLOT_BITS
+#define HENKA_ENTITY_GENERATION_MASK \
+    (UINT64_MAX >> HENKA_ENTITY_GENERATION_SHIFT)
+
+static henka_entity henka_scene_make_entity(
+    size_t index,
+    uint64_t generation)
 {
+    const henka_entity slot = (henka_entity)index + (henka_entity)1U;
+
+    if (index >= HENKA_MAX_SCENE_ENTITIES ||
+        slot == HENKA_INVALID_ENTITY ||
+        slot > HENKA_ENTITY_SLOT_MASK ||
+        generation == 0U ||
+        generation > HENKA_ENTITY_GENERATION_MASK)
+    {
+        return HENKA_INVALID_ENTITY;
+    }
+
+    return ((henka_entity)generation <<
+            HENKA_ENTITY_GENERATION_SHIFT) |
+        slot;
+}
+
+static bool henka_scene_decode_entity(
+    henka_entity entity,
+    size_t* out_index,
+    uint64_t* out_generation)
+{
+    const henka_entity slot = entity & HENKA_ENTITY_SLOT_MASK;
+    const uint64_t generation =
+        (uint64_t)(entity >> HENKA_ENTITY_GENERATION_SHIFT);
+
+    if (out_index != NULL)
+    {
+        *out_index = 0U;
+    }
+    if (out_generation != NULL)
+    {
+        *out_generation = 0U;
+    }
+
+    if (entity == HENKA_INVALID_ENTITY ||
+        slot == HENKA_INVALID_ENTITY ||
+        generation == 0U ||
+        out_index == NULL ||
+        out_generation == NULL)
+    {
+        return false;
+    }
+
+    *out_index = (size_t)(slot - (henka_entity)1U);
+    *out_generation = generation;
+    return true;
+}
+
+static void henka_scene_advance_entity_generation(
+    henka_scene_entity_record* record)
+{
+    if (record == NULL)
+    {
+        return;
+    }
+
+    record->generation =
+        (record->generation + 1U) &
+        HENKA_ENTITY_GENERATION_MASK;
+    if (record->generation == 0U)
+    {
+        record->generation = 1U;
+    }
+}
+
+static henka_scene_entity_record* henka_scene_get_entity_record(
+    henka_scene* scene,
+    henka_entity entity)
+{
+    uint64_t generation;
     size_t index;
 
-    if (scene == NULL || entity == HENKA_INVALID_ENTITY)
+    if (scene == NULL ||
+        !henka_scene_decode_entity(
+            entity,
+            &index,
+            &generation) ||
+        index >= scene->entity_capacity)
     {
         return NULL;
     }
 
-    index = (size_t)(entity - 1U);
-    if (index >= scene->entity_capacity)
-    {
-        return NULL;
-    }
-
-    if (!scene->entities[index].active)
+    if (!scene->entities[index].active ||
+        scene->entities[index].generation != generation)
     {
         return NULL;
     }
@@ -378,6 +457,7 @@ static henka_result henka_scene_grow(henka_scene* scene)
     for (index = scene->entity_capacity; index < new_capacity; ++index)
     {
         new_entities[index].active = false;
+        new_entities[index].generation = 1U;
         new_entities[index].visible = true;
         new_entities[index].flags = HENKA_SCENE_ENTITY_FLAG_NONE;
         new_entities[index].name = NULL;
@@ -493,7 +573,9 @@ henka_entity henka_scene_create_entity_named(henka_scene* scene, const char* nam
 
             scene->entities[index].name = copy;
             scene->entity_count += 1U;
-            return (henka_entity)(index + 1U);
+            return henka_scene_make_entity(
+                index,
+                scene->entities[index].generation);
         }
     }
 
@@ -519,7 +601,9 @@ henka_entity henka_scene_create_entity_named(henka_scene* scene, const char* nam
 
     scene->entities[scene->entity_count].name = copy;
     scene->entity_count += 1U;
-    return (henka_entity)scene->entity_count;
+    return henka_scene_make_entity(
+        scene->entity_count - 1U,
+        scene->entities[scene->entity_count - 1U].generation);
 }
 
 void henka_scene_destroy_entity(henka_scene* scene, henka_entity entity)
@@ -533,6 +617,7 @@ void henka_scene_destroy_entity(henka_scene* scene, henka_entity entity)
     }
 
     record->active = false;
+    henka_scene_advance_entity_generation(record);
     record->visible = true;
     record->flags = HENKA_SCENE_ENTITY_FLAG_NONE;
     record->mesh = NULL;
@@ -596,7 +681,9 @@ henka_entity henka_scene_get_entity_at_index(const henka_scene* scene, size_t in
 
         if (active_index == index)
         {
-            return (henka_entity)(entity_index + 1U);
+            return henka_scene_make_entity(
+                entity_index,
+                scene->entities[entity_index].generation);
         }
 
         active_index += 1U;
@@ -651,7 +738,9 @@ henka_result henka_scene_find_entity_by_name(const henka_scene* scene, const cha
 
         if (strcmp(scene->entities[index].name, name) == 0)
         {
-            *out_entity = (henka_entity)(index + 1U);
+            *out_entity = henka_scene_make_entity(
+                index,
+                scene->entities[index].generation);
             return HENKA_SUCCESS;
         }
     }
@@ -678,7 +767,9 @@ henka_result henka_scene_find_entity_by_tag(const henka_scene* scene, const char
 
         if (strcmp(scene->entities[index].tag, tag) == 0)
         {
-            *out_entity = (henka_entity)(index + 1U);
+            *out_entity = henka_scene_make_entity(
+                index,
+                scene->entities[index].generation);
             return HENKA_SUCCESS;
         }
     }
@@ -1203,7 +1294,9 @@ henka_result henka_scene_pick_entity(const henka_scene* scene, henka_ray ray, he
         if (!found || distance < best_distance)
         {
             best_distance = distance;
-            *out_entity = (henka_entity)(index + 1U);
+            *out_entity = henka_scene_make_entity(
+                index,
+                scene->entities[index].generation);
             found = true;
         }
     }

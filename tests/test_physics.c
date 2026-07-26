@@ -314,9 +314,11 @@ static void henka_test_physics_scene_link(void)
 {
     henka_scene* scene;
     henka_entity entity;
+    henka_entity replacement;
     henka_physics_world* world;
     henka_physics_body_desc desc;
     henka_physics_body_id body;
+    henka_transform replacement_transform;
     henka_transform transform;
 
     HENKA_TEST_ASSERT(henka_scene_create(&scene) == HENKA_SUCCESS);
@@ -334,6 +336,40 @@ static void henka_test_physics_scene_link(void)
     HENKA_TEST_ASSERT(henka_physics_world_reset(world) == HENKA_SUCCESS);
     HENKA_TEST_ASSERT(henka_scene_get_entity_transform(scene, entity, &transform) == HENKA_SUCCESS);
     HENKA_TEST_ASSERT_FLOAT_CLOSE(transform.position.y, 2.0f, 0.0001f);
+
+    henka_scene_destroy_entity(scene, entity);
+    replacement = henka_scene_create_entity_named(
+        scene,
+        "Replacement Physics Body");
+    HENKA_TEST_ASSERT(replacement != HENKA_INVALID_ENTITY);
+    HENKA_TEST_ASSERT(replacement != entity);
+    HENKA_TEST_ASSERT(!henka_scene_is_entity_valid(scene, entity));
+
+    replacement_transform = henka_transform_identity();
+    replacement_transform.position =
+        (henka_vec3){12.0f, 34.0f, 56.0f};
+    HENKA_TEST_ASSERT(henka_scene_set_entity_transform(
+        scene,
+        replacement,
+        replacement_transform) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_physics_world_step_fixed(world) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_scene_get_entity_transform(
+        scene,
+        replacement,
+        &replacement_transform) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(
+        replacement_transform.position.x,
+        12.0f,
+        0.0001f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(
+        replacement_transform.position.y,
+        34.0f,
+        0.0001f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(
+        replacement_transform.position.z,
+        56.0f,
+        0.0001f);
+
     henka_physics_world_destroy(world);
     henka_scene_destroy(scene);
 }

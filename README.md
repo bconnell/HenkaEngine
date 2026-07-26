@@ -28,7 +28,7 @@ Henka Engine is still early, but the sandbox now renders a visible 3D scene with
 - OpenGL renderer backend isolated inside renderer implementation files
 - Public math, time, camera, mesh, texture, shader, scene, and asset APIs
 - Input action foundation for named engine-level controls
-- Scene object metadata, bounds, and interaction foundation
+- Generation-checked 64-bit scene entity identities that invalidate destroyed handles before slot reuse, protecting selection, actions, physics links, and future authoring references
 - Reusable camera helpers for reset, focus, screen-ray creation, stable vertical view bases, orthographic zoom, and Perspective 3D, Side 2.5D, Top-down 2.5D, and Isometric 2.5D presets
 - Local action-command foundation for validated scene and object operations, including signed scale transforms for mirror workflows
 - Asset metadata with cache-owned source and display strings, plus stronger material summaries

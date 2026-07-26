@@ -13,7 +13,12 @@
 #include <henka/texture.h>
 
 typedef struct henka_scene henka_scene;
-typedef uint32_t henka_entity;
+
+/*
+ * Opaque generation-checked scene identity. Numeric values are not stable
+ * array indexes and must not be decoded by callers.
+ */
+typedef uint64_t henka_entity;
 
 #define HENKA_INVALID_ENTITY ((henka_entity)0)
 

@@ -17,6 +17,7 @@ static void henka_test_scene_capacity_growth(void)
     henka_entity entities[ENTITY_COUNT];
     henka_entity replacement;
     henka_scene* scene;
+    henka_transform replacement_transform;
     int index;
 
     HENKA_TEST_ASSERT(henka_scene_create(&scene) == HENKA_SUCCESS);
@@ -31,9 +32,32 @@ static void henka_test_scene_capacity_growth(void)
     HENKA_TEST_ASSERT(henka_scene_get_entity_count(scene) == (size_t)ENTITY_COUNT - 1U);
 
     replacement = henka_scene_create_entity_named(scene, "Replacement");
-    HENKA_TEST_ASSERT(replacement == entities[7]);
+    HENKA_TEST_ASSERT(replacement != HENKA_INVALID_ENTITY);
+    HENKA_TEST_ASSERT(replacement != entities[7]);
+    HENKA_TEST_ASSERT(!henka_scene_is_entity_valid(scene, entities[7]));
+    HENKA_TEST_ASSERT(henka_scene_is_entity_valid(scene, replacement));
     HENKA_TEST_ASSERT(henka_scene_get_entity_count(scene) == (size_t)ENTITY_COUNT);
     HENKA_TEST_ASSERT(strcmp(henka_scene_get_entity_name(scene, replacement), "Replacement") == 0);
+
+    replacement_transform = henka_transform_identity();
+    replacement_transform.position.x = 8.0f;
+    HENKA_TEST_ASSERT(henka_scene_set_entity_transform(
+        scene,
+        replacement,
+        replacement_transform) == HENKA_SUCCESS);
+    replacement_transform.position.x = -12.0f;
+    HENKA_TEST_ASSERT(henka_scene_set_entity_transform(
+        scene,
+        entities[7],
+        replacement_transform) == HENKA_ERROR_INVALID_ARGUMENT);
+    HENKA_TEST_ASSERT(henka_scene_get_entity_transform(
+        scene,
+        replacement,
+        &replacement_transform) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(
+        replacement_transform.position.x,
+        8.0f,
+        0.0001f);
 
     henka_scene_destroy(scene);
 }

@@ -84,6 +84,7 @@ typedef struct henka_tool_window_slot
 typedef struct henka_scene_entity_record
 {
     bool active;
+    uint64_t generation;
     bool visible;
     uint32_t flags;
     char* name;

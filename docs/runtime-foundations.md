@@ -43,7 +43,7 @@ Scene entities now support more read-only object metadata:
 - optional local bounds
 - optional interaction metadata
 
-This keeps the current scene model lightweight while making object inspection and picking less sandbox-specific. Names, tags, material names, and interaction prompts are copied into bounded scene-owned storage, so callers may use temporary input buffers. Returned text pointers remain valid until the corresponding value is replaced or the entity is destroyed.
+This keeps the current scene model lightweight while making object inspection and picking less sandbox-specific. Scene identities are opaque 64-bit generation-checked handles rather than array indexes. Destroying an entity advances its slot generation before reuse, so a stale selection, action record, physics link, or authoring reference cannot silently target the replacement entity. Names, tags, material names, and interaction prompts are copied into bounded scene-owned storage, so callers may use temporary input buffers. Returned text pointers remain valid until the corresponding value is replaced or the entity is destroyed.
 
 ### Cameras
 
