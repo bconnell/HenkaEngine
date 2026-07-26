@@ -81,6 +81,19 @@ void henka_test_sandbox3d_interaction(void)
     gate.selected_object_valid = true;
     gate.selected_object_visible = true;
     gate.selected_object_selectable = true;
+    gate.selected_bounds_valid = true;
+    HENKA_TEST_ASSERT(sandbox3d_selection_highlight_is_allowed(&gate));
+    gate.selected_object_transform_locked = true;
+    HENKA_TEST_ASSERT(!sandbox3d_selection_highlight_is_allowed(&gate));
+    HENKA_TEST_ASSERT(
+        sandbox3d_evaluate_gizmo_reject_reason(SANDBOX3D_VIEWPORT_TOOL_MOVE, &gate) ==
+        SANDBOX3D_INTERACTION_REJECT_SELECTED_OBJECT_TRANSFORM_LOCKED);
+    HENKA_TEST_ASSERT(
+        strcmp(
+            sandbox3d_interaction_reject_reason_to_string(
+                SANDBOX3D_INTERACTION_REJECT_SELECTED_OBJECT_TRANSFORM_LOCKED),
+            "Selected object transform locked") == 0);
+    gate.selected_object_transform_locked = false;
     HENKA_TEST_ASSERT(
         sandbox3d_evaluate_gizmo_reject_reason(SANDBOX3D_VIEWPORT_TOOL_MOVE, &gate) ==
         SANDBOX3D_INTERACTION_REJECT_GIZMO_MODE_INACTIVE);

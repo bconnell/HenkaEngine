@@ -268,7 +268,7 @@ They are building blocks for later work, not a complete toolchain by themselves.
 
 ### Structural transform and runtime-state safety
 
-Scene entities can now carry a transform-lock flag. The Action API blocks move, rotate, and scale mutations for locked entities while still allowing selection, inspection, camera focus, visibility changes, and reset-to-default. The sandbox Ground starts locked, exposes an explicit Lock or Unlock Transform control, suppresses gizmos while locked, and keeps Reset Transform available. Clicking empty scene background clears the current selection in Select, Move, Rotate, and Scale modes, matching established editor behavior.
+Scene entities can carry a transform-lock flag. The Action API blocks move, rotate, and scale mutations for locked entities while still allowing selection, inspection, camera focus, visibility changes, and reset-to-default. The sandbox Ground starts locked and remains selectable for inspection, but locked selections do not display the yellow transform highlight, do not expose gizmos, and cannot start action-based transform hotkeys. Unlocking requires an explicit entity-specific control activation. Selection, visibility, tool-mode, and lock transitions cancel and clear active transform sessions so stale entity targets cannot survive into a later selection. Clicking empty scene background clears the current selection in Select, Move, Rotate, and Scale modes.
 
 Plane physics now rotates local plane normals by the body transform for contacts and raycasts. The sandbox collider overlay and selection highlight use the same transformed geometry instead of assuming a horizontal plane.
 

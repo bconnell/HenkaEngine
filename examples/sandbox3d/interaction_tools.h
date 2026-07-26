@@ -29,6 +29,7 @@ typedef enum sandbox3d_interaction_reject_reason
     SANDBOX3D_INTERACTION_REJECT_SELECTED_OBJECT_INVALID,
     SANDBOX3D_INTERACTION_REJECT_SELECTED_OBJECT_HIDDEN,
     SANDBOX3D_INTERACTION_REJECT_SELECTED_OBJECT_NOT_SELECTABLE,
+    SANDBOX3D_INTERACTION_REJECT_SELECTED_OBJECT_TRANSFORM_LOCKED,
     SANDBOX3D_INTERACTION_REJECT_SELECTED_BOUNDS_INVALID,
     SANDBOX3D_INTERACTION_REJECT_GIZMO_MODE_INACTIVE,
     SANDBOX3D_INTERACTION_REJECT_GIZMO_MODEL_INVALID,
@@ -54,6 +55,7 @@ typedef struct sandbox3d_interaction_gate
     bool selected_object_valid;
     bool selected_object_visible;
     bool selected_object_selectable;
+    bool selected_object_transform_locked;
     bool selected_bounds_valid;
     bool gizmo_mode_active;
     bool gizmo_model_valid;
@@ -88,6 +90,7 @@ sandbox3d_interaction_reject_reason sandbox3d_evaluate_gizmo_reject_reason(
     const sandbox3d_interaction_gate* gate);
 sandbox3d_interaction_reject_reason sandbox3d_evaluate_select_reject_reason(
     const sandbox3d_interaction_gate* gate);
+bool sandbox3d_selection_highlight_is_allowed(const sandbox3d_interaction_gate* gate);
 henka_vec3 sandbox3d_make_move_delta(henka_gizmo_axis axis, float magnitude);
 henka_quat sandbox3d_make_rotation_delta(henka_gizmo_axis axis, float radians);
 henka_vec3 sandbox3d_make_uniform_scale_multiplier(float delta_scale);

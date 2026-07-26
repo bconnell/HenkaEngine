@@ -232,8 +232,9 @@ Starts have no selected scene object until you select one.
 Select an object in the viewport or Scene Objects panel, then use Select, Orbit, Pan, Move, Rotate, and Scale from the Viewport Tool section.
 Use M or G, R, and S for action-based transforms. X, Y, and Z constrain an active transform; Enter applies it and Escape cancels it.
 Use the in-window utilities for help, legend, paths, settings, diagnostics, Transform QA, and Physics QA.
-Selected real scene objects show a viewport highlight until selection is cleared.
-Ground selection uses one bounded Scene View highlight, and viewport overlays do not draw over panels.
+Editable selected scene objects show a viewport transform highlight until selection is cleared.
+Locked objects remain selectable for inspection without a transform highlight or gizmo. Ground starts locked and requires an explicit Unlock Transform action before it can move.
+Clearing selection also clears active transform-session ownership, and viewport overlays do not draw over panels.
 Physics QA explains Static, Dynamic, and Kinematic bodies. Make Dynamic + Drop activates only the selected supported body; Enable starts the full arranged demonstration.
 DRAG marks a live panel header. Release over a valid left or right outline to dock there, or release away from the outlines to open a separate native tool window.
 Open Native Panel Test from Controls to exercise a separate OS-level validation window.

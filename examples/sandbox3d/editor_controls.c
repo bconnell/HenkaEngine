@@ -432,10 +432,17 @@ invalid:
     return HENKA_ERROR_INVALID_ARGUMENT;
 }
 
+void sandbox3d_transform_session_reset(sandbox3d_transform_session* session)
+{
+    if (session == NULL) return;
+    memset(session, 0, sizeof(*session));
+    session->entity = HENKA_INVALID_ENTITY;
+}
+
 bool sandbox3d_transform_session_begin(sandbox3d_transform_session* session, sandbox3d_transform_tool tool, henka_entity entity, henka_transform original)
 {
     if (session == NULL || tool <= SANDBOX3D_TRANSFORM_TOOL_NONE || tool > SANDBOX3D_TRANSFORM_TOOL_SCALE || entity == HENKA_INVALID_ENTITY) return false;
-    memset(session, 0, sizeof(*session));
+    sandbox3d_transform_session_reset(session);
     session->active = true; session->tool = tool; session->entity = entity; session->original = original; session->preview = original;
     return true;
 }
@@ -480,16 +487,22 @@ bool sandbox3d_transform_session_preview(sandbox3d_transform_session* session, f
 
 bool sandbox3d_transform_session_confirm(sandbox3d_transform_session* session, henka_transform* out_transform)
 {
+    henka_transform confirmed;
     if (session == NULL || !session->active) return false;
-    if (out_transform != NULL) *out_transform = session->preview;
-    session->active = false; return true;
+    confirmed = session->preview;
+    sandbox3d_transform_session_reset(session);
+    if (out_transform != NULL) *out_transform = confirmed;
+    return true;
 }
 
 bool sandbox3d_transform_session_cancel(sandbox3d_transform_session* session, henka_transform* out_transform)
 {
+    henka_transform original;
     if (session == NULL || !session->active) return false;
-    if (out_transform != NULL) *out_transform = session->original;
-    session->active = false; return true;
+    original = session->original;
+    sandbox3d_transform_session_reset(session);
+    if (out_transform != NULL) *out_transform = original;
+    return true;
 }
 
 const char* sandbox3d_transform_tool_name(sandbox3d_transform_tool tool)

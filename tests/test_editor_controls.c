@@ -74,10 +74,20 @@ void henka_test_editor_controls(void)
     HENKA_TEST_ASSERT_FLOAT_CLOSE(session.preview.position.y, 1.0f, 0.0001f);
     HENKA_TEST_ASSERT(sandbox3d_transform_session_cancel(&session, &output));
     HENKA_TEST_ASSERT_FLOAT_CLOSE(output.position.y, 0.0f, 0.0001f);
+    HENKA_TEST_ASSERT(!session.active);
+    HENKA_TEST_ASSERT(session.entity == HENKA_INVALID_ENTITY);
+    HENKA_TEST_ASSERT(session.tool == SANDBOX3D_TRANSFORM_TOOL_NONE);
+    HENKA_TEST_ASSERT(session.axis == SANDBOX3D_TRANSFORM_AXIS_NONE);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(session.accumulated_amount, 0.0f, 0.0f);
 
     HENKA_TEST_ASSERT(sandbox3d_transform_session_begin(&session, SANDBOX3D_TRANSFORM_TOOL_SCALE, 4U, original));
     HENKA_TEST_ASSERT(sandbox3d_transform_session_preview(&session, 0.16f, true, false));
     HENKA_TEST_ASSERT_FLOAT_CLOSE(session.preview.scale.x, 1.2f, 0.0001f);
     HENKA_TEST_ASSERT(sandbox3d_transform_session_confirm(&session, &output));
     HENKA_TEST_ASSERT_FLOAT_CLOSE(output.scale.x, 1.2f, 0.0001f);
+    HENKA_TEST_ASSERT(!session.active);
+    HENKA_TEST_ASSERT(session.entity == HENKA_INVALID_ENTITY);
+    HENKA_TEST_ASSERT(session.tool == SANDBOX3D_TRANSFORM_TOOL_NONE);
+    HENKA_TEST_ASSERT(session.axis == SANDBOX3D_TRANSFORM_AXIS_NONE);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(session.accumulated_amount, 0.0f, 0.0f);
 }

@@ -122,8 +122,10 @@ The `Scene Objects` panel lists the current sandbox examples by name.
 
 - Clicking a row selects that object.
 - Hidden objects stay listed and show a hidden state tag.
-- The selected row and the selected real scene object stay highlighted so the current object is easy to track from either the panels or the viewport.
-- Ground selection uses one bounded floor outline instead of infinite plane bounds, and selection overlays are clipped to the Scene View so they do not draw over panels or the status strip.
+- The selected row identifies the current object. Editable selected scene objects also show the yellow viewport transform highlight.
+- Locked objects, including the default Ground, remain selectable and inspectable but do not show the yellow transform highlight or a transform gizmo.
+- After moving another object and clearing selection, selecting Ground again does not inherit the prior transform session. Unlocking Ground requires an explicit Object Details action.
+- Selection overlays are clipped to the Scene View so they do not draw over panels or the status strip.
 - If the dock is too short to show the whole list at once, page buttons keep every sample object reachable.
 
 The `Object Details` panel shows the current selection.
@@ -151,7 +153,7 @@ The selected object also shows a visible transform gizmo in the scene viewport.
 - The gizmo helper pieces are internal scene tools. They remain hidden from the normal runtime path, do not become the selected object, do not appear in Scene Objects, and are ignored by normal scene picking.
 - If the selected object becomes hidden, invalid, or the viewport changes during a drag, the drag stops safely and the selected real object remains the source of truth.
 
-The viewport also supports action-based transform hotkeys. `M` and `G` start move, `R` starts rotate, and `S` starts scale for the selected visible object. While active, `X`, `Y`, and `Z` choose an axis, `Enter` or `Left Mouse` confirms, and `Escape` or `Right Mouse` restores the original transform. `Left Ctrl` enables stepped adjustment and `Left Shift` enables finer movement. The active profile and bindings appear in Help. Custom profiles are local config entries documented in [editor-controls.md](../editor-controls.md).
+The viewport also supports action-based transform hotkeys. `M` and `G` start move, `R` starts rotate, and `S` starts scale for the selected visible and unlocked object. Locked selections reject transform hotkeys. While active, `X`, `Y`, and `Z` choose an axis, `Enter` or `Left Mouse` confirms, and `Escape` or `Right Mouse` restores the original transform. Changing selection, clearing selection, hiding or locking the target, or changing tools cancels and clears the active transform session. `Left Ctrl` enables stepped adjustment and `Left Shift` enables finer movement. The active profile and bindings appear in Help. Custom profiles are local config entries documented in [editor-controls.md](../editor-controls.md).
 
 The `Utility` panel provides short in-window views for:
 

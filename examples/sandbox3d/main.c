@@ -181,6 +181,7 @@ typedef struct sandbox3d_interaction_diagnostics
     bool selected_entity_valid;
     bool selected_entity_visible;
     bool selected_entity_selectable;
+    bool selected_entity_transform_locked;
     bool selected_bounds_valid;
     bool selected_highlight_active;
     bool gizmo_model_valid;
@@ -380,6 +381,13 @@ static const char* sandbox3d_safe_entity_name(const sandbox3d_state* state, henk
 static bool sandbox3d_is_selectable_entity(const sandbox3d_state* state, henka_entity entity);
 static void sandbox3d_select_entity(sandbox3d_state* state, henka_entity entity);
 static void sandbox3d_clear_selection(sandbox3d_state* state, const char* reason);
+static void sandbox3d_cancel_active_transform_session(
+    sandbox3d_state* state,
+    bool restore_original);
+static bool sandbox3d_apply_transform_preview(
+    sandbox3d_state* state,
+    henka_entity entity,
+    henka_transform transform);
 static bool sandbox3d_execute_action(
     sandbox3d_state* state,
     const henka_action_request* request,
@@ -812,6 +820,7 @@ static void sandbox3d_set_viewport_tool_mode(
     gizmo_mode = sandbox3d_viewport_tool_mode_to_gizmo_mode(tool_mode);
     if (state->viewport_tool != tool_mode || state->gizmo.mode != (sandbox3d_gizmo_mode)gizmo_mode)
     {
+        sandbox3d_cancel_active_transform_session(state, true);
         state->viewport_tool = tool_mode;
         state->gizmo.mode = (sandbox3d_gizmo_mode)gizmo_mode;
         state->view_navigation.orbiting = false;
@@ -1563,13 +1572,36 @@ static void sandbox3d_draw_physics_overlay(sandbox3d_state* state, henka_viewpor
 static void sandbox3d_draw_selection_highlight(sandbox3d_state* state, henka_viewport viewport)
 {
     henka_bounds bounds;
+    sandbox3d_interaction_gate gate;
     sandbox3d_selection_highlight_model model;
+    henka_entity selected_entity;
     henka_vec4 outer_color;
     henka_vec4 inner_color;
     size_t edge;
 
-    if (state == NULL || state->ui == NULL || !henka_viewport_is_valid(viewport) ||
-        !sandbox3d_get_selected_bounds(state, &bounds) ||
+    if (state == NULL || state->ui == NULL || !henka_viewport_is_valid(viewport))
+    {
+        return;
+    }
+
+    selected_entity = sandbox3d_get_real_selected_entity(state);
+    memset(&gate, 0, sizeof(gate));
+    gate.selected_object_present = selected_entity != HENKA_INVALID_ENTITY;
+    gate.selected_object_valid =
+        gate.selected_object_present &&
+        state->scene != NULL &&
+        henka_scene_is_entity_valid(state->scene, selected_entity);
+    gate.selected_object_visible =
+        gate.selected_object_valid &&
+        henka_scene_is_entity_visible(state->scene, selected_entity);
+    gate.selected_object_selectable =
+        gate.selected_object_valid &&
+        sandbox3d_is_selectable_entity(state, selected_entity);
+    gate.selected_object_transform_locked =
+        gate.selected_object_valid &&
+        henka_scene_is_entity_transform_locked(state->scene, selected_entity);
+    gate.selected_bounds_valid = sandbox3d_get_selected_bounds(state, &bounds);
+    if (!sandbox3d_selection_highlight_is_allowed(&gate) ||
         !sandbox3d_build_selection_highlight_model(bounds, &model))
     {
         return;
@@ -3321,6 +3353,11 @@ static void sandbox3d_select_entity(sandbox3d_state* state, henka_entity entity)
     }
 
     previous_entity = state->selected_entity;
+    if (state->transform_session.active &&
+        state->transform_session.entity != entity)
+    {
+        sandbox3d_cancel_active_transform_session(state, true);
+    }
     memset(&request, 0, sizeof(request));
     request.command = HENKA_ACTION_COMMAND_SELECT_OBJECT;
     request.params.entity.entity = entity;
@@ -3365,6 +3402,7 @@ static void sandbox3d_clear_selection(sandbox3d_state* state, const char* reason
     }
 
     previous_entity = state->selected_entity;
+    sandbox3d_cancel_active_transform_session(state, true);
     memset(&request, 0, sizeof(request));
     request.command = HENKA_ACTION_COMMAND_CLEAR_SELECTION;
     if (sandbox3d_execute_action(state, &request, &result))
@@ -3704,6 +3742,12 @@ static bool sandbox3d_toggle_selected_transform_lock(sandbox3d_state* state)
     }
 
     transform_locked = (flags & HENKA_SCENE_ENTITY_FLAG_TRANSFORM_LOCKED) != 0U;
+    if (!transform_locked &&
+        state->transform_session.active &&
+        state->transform_session.entity == descriptor->entity)
+    {
+        sandbox3d_cancel_active_transform_session(state, true);
+    }
     if (transform_locked)
     {
         flags &= ~(uint32_t)HENKA_SCENE_ENTITY_FLAG_TRANSFORM_LOCKED;
@@ -3736,6 +3780,12 @@ static bool sandbox3d_toggle_selected_entity_visibility(sandbox3d_state* state)
     }
 
     currently_visible = henka_scene_is_entity_visible(state->scene, descriptor->entity);
+    if (currently_visible &&
+        state->transform_session.active &&
+        state->transform_session.entity == descriptor->entity)
+    {
+        sandbox3d_cancel_active_transform_session(state, true);
+    }
     memset(&request, 0, sizeof(request));
     request.command = currently_visible ? HENKA_ACTION_COMMAND_HIDE_OBJECT : HENKA_ACTION_COMMAND_SHOW_OBJECT;
     request.params.entity.entity = descriptor->entity;
@@ -4275,12 +4325,23 @@ static void sandbox3d_refresh_interaction_diagnostics(henka_engine* engine, sand
         state->diagnostics.selected_entity_valid &&
         henka_scene_is_entity_visible(state->scene, selected_entity);
     state->diagnostics.selected_entity_selectable = sandbox3d_is_selectable_entity(state, selected_entity);
-    state->diagnostics.selected_bounds_valid = sandbox3d_get_selected_bounds(state, &bounds);
-    state->diagnostics.selected_highlight_active =
+    state->diagnostics.selected_entity_transform_locked =
         state->diagnostics.selected_entity_valid &&
-        state->diagnostics.selected_entity_visible &&
-        state->diagnostics.selected_entity_selectable &&
-        state->diagnostics.selected_bounds_valid;
+        henka_scene_is_entity_transform_locked(state->scene, selected_entity);
+    state->diagnostics.selected_bounds_valid = sandbox3d_get_selected_bounds(state, &bounds);
+    {
+        sandbox3d_interaction_gate highlight_gate;
+        memset(&highlight_gate, 0, sizeof(highlight_gate));
+        highlight_gate.selected_object_present = selected_entity != HENKA_INVALID_ENTITY;
+        highlight_gate.selected_object_valid = state->diagnostics.selected_entity_valid;
+        highlight_gate.selected_object_visible = state->diagnostics.selected_entity_visible;
+        highlight_gate.selected_object_selectable = state->diagnostics.selected_entity_selectable;
+        highlight_gate.selected_object_transform_locked =
+            state->diagnostics.selected_entity_transform_locked;
+        highlight_gate.selected_bounds_valid = state->diagnostics.selected_bounds_valid;
+        state->diagnostics.selected_highlight_active =
+            sandbox3d_selection_highlight_is_allowed(&highlight_gate);
+    }
     state->diagnostics.gizmo_model_valid = false;
     state->diagnostics.overlay_primitive_count = 0U;
     state->gizmo.hover_handle_type = SANDBOX3D_GIZMO_HANDLE_NONE;
@@ -4384,25 +4445,94 @@ static bool sandbox3d_apply_transform_preview(sandbox3d_state* state, henka_enti
 {
     henka_action_request request;
     henka_action_result result;
-    if (state == NULL || entity == HENKA_INVALID_ENTITY || !sandbox3d_transform_is_finite(transform))
+    henka_transform original;
+    bool position_changed;
+    bool rotation_changed;
+
+    if (state == NULL ||
+        state->scene == NULL ||
+        entity == HENKA_INVALID_ENTITY ||
+        !sandbox3d_transform_is_finite(transform) ||
+        henka_scene_is_entity_transform_locked(state->scene, entity) ||
+        henka_scene_get_entity_transform(state->scene, entity, &original) != HENKA_SUCCESS)
     {
         return false;
     }
+
+    position_changed = false;
+    rotation_changed = false;
     memset(&request, 0, sizeof(request));
     request.command = HENKA_ACTION_COMMAND_SET_POSITION;
     request.params.set_position.entity = entity;
     request.params.set_position.position = transform.position;
     if (!sandbox3d_execute_action(state, &request, &result)) return false;
+    position_changed = true;
+
     memset(&request, 0, sizeof(request));
     request.command = HENKA_ACTION_COMMAND_SET_ROTATION;
     request.params.set_rotation.entity = entity;
     request.params.set_rotation.rotation = transform.rotation;
-    if (!sandbox3d_execute_action(state, &request, &result)) return false;
+    if (!sandbox3d_execute_action(state, &request, &result))
+    {
+        memset(&request, 0, sizeof(request));
+        request.command = HENKA_ACTION_COMMAND_SET_POSITION;
+        request.params.set_position.entity = entity;
+        request.params.set_position.position = original.position;
+        (void)sandbox3d_execute_action(state, &request, &result);
+        return false;
+    }
+    rotation_changed = true;
+
     memset(&request, 0, sizeof(request));
     request.command = HENKA_ACTION_COMMAND_SET_SCALE;
     request.params.set_scale.entity = entity;
     request.params.set_scale.scale = transform.scale;
-    return sandbox3d_execute_action(state, &request, &result);
+    if (!sandbox3d_execute_action(state, &request, &result))
+    {
+        if (rotation_changed)
+        {
+            memset(&request, 0, sizeof(request));
+            request.command = HENKA_ACTION_COMMAND_SET_ROTATION;
+            request.params.set_rotation.entity = entity;
+            request.params.set_rotation.rotation = original.rotation;
+            (void)sandbox3d_execute_action(state, &request, &result);
+        }
+        if (position_changed)
+        {
+            memset(&request, 0, sizeof(request));
+            request.command = HENKA_ACTION_COMMAND_SET_POSITION;
+            request.params.set_position.entity = entity;
+            request.params.set_position.position = original.position;
+            (void)sandbox3d_execute_action(state, &request, &result);
+        }
+        return false;
+    }
+    return true;
+}
+
+static void sandbox3d_cancel_active_transform_session(
+    sandbox3d_state* state,
+    bool restore_original)
+{
+    henka_entity entity;
+    henka_transform original;
+
+    if (state == NULL || !state->transform_session.active)
+    {
+        return;
+    }
+
+    entity = state->transform_session.entity;
+    original = state->transform_session.original;
+    sandbox3d_transform_session_reset(&state->transform_session);
+    if (restore_original &&
+        state->scene != NULL &&
+        entity != HENKA_INVALID_ENTITY &&
+        henka_scene_is_entity_valid(state->scene, entity) &&
+        !henka_scene_is_entity_transform_locked(state->scene, entity))
+    {
+        (void)sandbox3d_apply_transform_preview(state, entity, original);
+    }
 }
 
 static sandbox3d_transform_tool sandbox3d_get_requested_transform_tool(const henka_engine* engine)
@@ -4456,6 +4586,19 @@ static bool sandbox3d_handle_transform_hotkeys(henka_engine* engine, sandbox3d_s
             sandbox3d_set_status(state, true, "Select a visible object before starting a transform.");
             return true;
         }
+        if (henka_scene_is_entity_transform_locked(state->scene, entity))
+        {
+            sandbox3d_transform_session_reset(&state->transform_session);
+            sandbox3d_record_reject_reason(
+                state,
+                SANDBOX3D_INTERACTION_REJECT_SELECTED_OBJECT_TRANSFORM_LOCKED,
+                false);
+            sandbox3d_set_status(
+                state,
+                true,
+                "Selected object is transform locked. Unlock it explicitly before using transform hotkeys.");
+            return true;
+        }
         sandbox3d_clear_gizmo_drag(state, true);
         sandbox3d_set_viewport_tool_mode(state, sandbox3d_get_viewport_tool_for_transform(requested_tool), false);
         sandbox3d_transform_session_begin(&state->transform_session, requested_tool, entity, transform);
@@ -4465,22 +4608,25 @@ static bool sandbox3d_handle_transform_hotkeys(henka_engine* engine, sandbox3d_s
 
     if (sandbox3d_get_real_selected_entity(state) != state->transform_session.entity ||
         state->scene == NULL ||
+        !henka_scene_is_entity_valid(state->scene, state->transform_session.entity) ||
+        henka_scene_is_entity_transform_locked(state->scene, state->transform_session.entity) ||
         henka_scene_get_entity_transform(state->scene, state->transform_session.entity, &transform) != HENKA_SUCCESS)
     {
-        sandbox3d_transform_session_cancel(&state->transform_session, &transform);
-        sandbox3d_apply_transform_preview(state, state->transform_session.entity, transform);
-        sandbox3d_set_status(state, true, "Transform cancelled because the selected object is no longer available.");
+        sandbox3d_cancel_active_transform_session(
+            state,
+            state->scene != NULL &&
+                state->transform_session.entity != HENKA_INVALID_ENTITY &&
+                henka_scene_is_entity_valid(state->scene, state->transform_session.entity) &&
+                !henka_scene_is_entity_transform_locked(state->scene, state->transform_session.entity));
+        sandbox3d_set_status(state, true, "Transform cancelled because the selected object is no longer editable.");
         return true;
     }
 
     if (henka_input_action_was_pressed(engine, HENKA_INPUT_ACTION_CANCEL_TRANSFORM))
     {
-        if (sandbox3d_transform_session_cancel(&state->transform_session, &transform))
-        {
-            sandbox3d_apply_transform_preview(state, state->transform_session.entity, transform);
-            if (henka_input_was_key_pressed(engine, HENKA_KEY_ESCAPE)) henka_input_consume_key_press(engine, HENKA_KEY_ESCAPE);
-            sandbox3d_set_status(state, false, "Transform cancelled. Original transform restored.");
-        }
+        sandbox3d_cancel_active_transform_session(state, true);
+        if (henka_input_was_key_pressed(engine, HENKA_KEY_ESCAPE)) henka_input_consume_key_press(engine, HENKA_KEY_ESCAPE);
+        sandbox3d_set_status(state, false, "Transform cancelled. Original transform restored.");
         return true;
     }
     if (henka_input_action_was_pressed(engine, HENKA_INPUT_ACTION_CONFIRM_TRANSFORM))
@@ -4675,6 +4821,9 @@ static void sandbox3d_try_pick_object(henka_engine* engine, sandbox3d_state* sta
     gate.selected_object_valid = gate.selected_object_present;
     gate.selected_object_visible = gate.selected_object_present && henka_scene_is_entity_visible(state->scene, selected_entity);
     gate.selected_object_selectable = gate.selected_object_present && sandbox3d_is_selectable_entity(state, selected_entity);
+    gate.selected_object_transform_locked =
+        gate.selected_object_present &&
+        henka_scene_is_entity_transform_locked(state->scene, selected_entity);
     gate.gizmo_mode_active = sandbox3d_viewport_tool_mode_uses_gizmo(state->viewport_tool);
     if (state->gizmo.mode != SANDBOX3D_GIZMO_MODE_SELECT &&
         selected_entity != HENKA_INVALID_ENTITY &&
@@ -6261,6 +6410,11 @@ static void sandbox3d_draw_object_details_panel(
     bool visible;
     bool transform_locked;
     char action_label[32];
+    char visibility_action_id[64];
+    char focus_action_id[64];
+    char lock_action_id[64];
+    char reset_action_id[64];
+    char clear_action_id[64];
     char lock_action_label[32];
     char transform_heading[48];
     char detail_text[96];
@@ -6308,7 +6462,7 @@ static void sandbox3d_draw_object_details_panel(
     {
         henka_ui_label(state->ui, panel_bounds.x + 14.0f, panel_bounds.y + 38.0f, 1.0f, "No object selected.");
         henka_ui_label(state->ui, panel_bounds.x + 14.0f, panel_bounds.y + 56.0f, 1.0f, "Click a viewport object or Scene Objects row to inspect it.");
-        henka_ui_label(state->ui, panel_bounds.x + 14.0f, panel_bounds.y + 74.0f, 1.0f, "The yellow viewport highlight appears only for a real selected object.");
+        henka_ui_label(state->ui, panel_bounds.x + 14.0f, panel_bounds.y + 74.0f, 1.0f, "Editable selections show yellow; locked selections remain inspectable without transform highlight.");
         return;
     }
 
@@ -6335,6 +6489,11 @@ static void sandbox3d_draw_object_details_panel(
 
     visible = henka_scene_is_entity_visible(state->scene, descriptor->entity);
     transform_locked = henka_scene_is_entity_transform_locked(state->scene, descriptor->entity);
+    snprintf(visibility_action_id, sizeof(visibility_action_id), "toggle_selected_visibility_%u", (unsigned int)descriptor->entity);
+    snprintf(focus_action_id, sizeof(focus_action_id), "focus_selected_camera_%u", (unsigned int)descriptor->entity);
+    snprintf(lock_action_id, sizeof(lock_action_id), "toggle_transform_lock_%u", (unsigned int)descriptor->entity);
+    snprintf(reset_action_id, sizeof(reset_action_id), "reset_selected_transform_%u", (unsigned int)descriptor->entity);
+    snprintf(clear_action_id, sizeof(clear_action_id), "clear_selection_%u", (unsigned int)descriptor->entity);
     physics_body = sandbox3d_get_physics_body_for_entity(state, descriptor->entity);
     if (physics_body != HENKA_INVALID_PHYSICS_BODY_ID &&
         henka_physics_body_get_state(state->physics.world, physics_body, &body_state) == HENKA_SUCCESS)
@@ -6414,7 +6573,7 @@ static void sandbox3d_draw_object_details_panel(
 
     snprintf(action_label, sizeof(action_label), "%s", visible ? "Hide Object" : "Show Object");
     sandbox3d_draw_section_heading(state->ui, panel_bounds.x + 14.0f, compact_mode ? panel_bounds.y + 308.0f : panel_bounds.y + 356.0f, "Actions");
-    if (henka_ui_button(state->ui, "toggle_selected_visibility", (henka_ui_rect){panel_bounds.x + 14.0f, compact_mode ? panel_bounds.y + 326.0f : panel_bounds.y + 374.0f, action_button_width, 28.0f}, action_label))
+    if (henka_ui_button(state->ui, visibility_action_id, (henka_ui_rect){panel_bounds.x + 14.0f, compact_mode ? panel_bounds.y + 326.0f : panel_bounds.y + 374.0f, action_button_width, 28.0f}, action_label))
     {
         if (sandbox3d_toggle_selected_entity_visibility(state))
         {
@@ -6426,7 +6585,7 @@ static void sandbox3d_draw_object_details_panel(
         }
     }
 
-    if (henka_ui_primary_button(state->ui, "focus_selected_camera", (henka_ui_rect){panel_bounds.x + 28.0f + action_button_width, compact_mode ? panel_bounds.y + 326.0f : panel_bounds.y + 374.0f, action_button_width, 28.0f}, "Focus Camera"))
+    if (henka_ui_primary_button(state->ui, focus_action_id, (henka_ui_rect){panel_bounds.x + 28.0f + action_button_width, compact_mode ? panel_bounds.y + 326.0f : panel_bounds.y + 374.0f, action_button_width, 28.0f}, "Focus Camera"))
     {
         if (sandbox3d_focus_camera_on_selected(state))
         {
@@ -6445,7 +6604,7 @@ static void sandbox3d_draw_object_details_panel(
         transform_locked ? "Unlock" : "Lock");
     if (henka_ui_button(
             state->ui,
-            "toggle_transform_lock",
+            lock_action_id,
             (henka_ui_rect){
                 panel_bounds.x + 14.0f,
                 compact_mode ? panel_bounds.y + 360.0f : panel_bounds.y + 402.0f,
@@ -6472,7 +6631,7 @@ static void sandbox3d_draw_object_details_panel(
 
     if (henka_ui_button(
             state->ui,
-            "reset_selected_transform",
+            reset_action_id,
             (henka_ui_rect){
                 panel_bounds.x + 28.0f + transform_button_width,
                 compact_mode ? panel_bounds.y + 360.0f : panel_bounds.y + 402.0f,
@@ -6492,7 +6651,7 @@ static void sandbox3d_draw_object_details_panel(
 
     if (henka_ui_button(
             state->ui,
-            "clear_selection",
+            clear_action_id,
             (henka_ui_rect){
                 panel_bounds.x + 42.0f + transform_button_width * 2.0f,
                 compact_mode ? panel_bounds.y + 360.0f : panel_bounds.y + 402.0f,

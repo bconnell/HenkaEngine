@@ -41,6 +41,8 @@ const char* sandbox3d_interaction_reject_reason_to_string(sandbox3d_interaction_
             return "Selected object hidden";
         case SANDBOX3D_INTERACTION_REJECT_SELECTED_OBJECT_NOT_SELECTABLE:
             return "Selected object not selectable";
+        case SANDBOX3D_INTERACTION_REJECT_SELECTED_OBJECT_TRANSFORM_LOCKED:
+            return "Selected object transform locked";
         case SANDBOX3D_INTERACTION_REJECT_SELECTED_BOUNDS_INVALID:
             return "Selected bounds invalid";
         case SANDBOX3D_INTERACTION_REJECT_GIZMO_MODE_INACTIVE:
@@ -210,6 +212,10 @@ sandbox3d_interaction_reject_reason sandbox3d_evaluate_gizmo_reject_reason(
     {
         return SANDBOX3D_INTERACTION_REJECT_SELECTED_OBJECT_NOT_SELECTABLE;
     }
+    if (gate->selected_object_transform_locked)
+    {
+        return SANDBOX3D_INTERACTION_REJECT_SELECTED_OBJECT_TRANSFORM_LOCKED;
+    }
     if (!gate->gizmo_mode_active)
     {
         return SANDBOX3D_INTERACTION_REJECT_GIZMO_MODE_INACTIVE;
@@ -238,6 +244,17 @@ sandbox3d_interaction_reject_reason sandbox3d_evaluate_select_reject_reason(
     const sandbox3d_interaction_gate* gate)
 {
     return sandbox3d_evaluate_common_reject_reason(gate);
+}
+
+bool sandbox3d_selection_highlight_is_allowed(const sandbox3d_interaction_gate* gate)
+{
+    return gate != NULL &&
+        gate->selected_object_present &&
+        gate->selected_object_valid &&
+        gate->selected_object_visible &&
+        gate->selected_object_selectable &&
+        !gate->selected_object_transform_locked &&
+        gate->selected_bounds_valid;
 }
 
 henka_vec3 sandbox3d_make_move_delta(henka_gizmo_axis axis, float magnitude)

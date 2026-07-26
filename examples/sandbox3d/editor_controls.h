@@ -109,6 +109,7 @@ void sandbox3d_editor_controls_format_binding(
     char* buffer,
     size_t buffer_size);
 
+void sandbox3d_transform_session_reset(sandbox3d_transform_session* session);
 bool sandbox3d_transform_session_begin(
     sandbox3d_transform_session* session,
     sandbox3d_transform_tool tool,

@@ -46,6 +46,7 @@ void henka_test_action(void)
     henka_transform transform;
     henka_entity cube;
     henka_entity helper;
+    henka_entity movable;
     size_t object_count;
 
     HENKA_TEST_ASSERT(henka_scene_create(&scene) == HENKA_SUCCESS);
@@ -263,6 +264,47 @@ void henka_test_action(void)
     HENKA_TEST_ASSERT_FLOAT_CLOSE(transform.position.x, 0.0f, 0.0001f);
 
     memset(&request, 0, sizeof(request));
+    request.command = HENKA_ACTION_COMMAND_ADD_PRIMITIVE_OBJECT;
+    request.params.add_primitive.primitive = HENKA_ACTION_PRIMITIVE_CUBE;
+    request.params.add_primitive.name = "Movable Box";
+    request.params.add_primitive.transform = henka_transform_identity();
+    request.params.add_primitive.visible = true;
+    HENKA_TEST_ASSERT(henka_action_execute(actions, &request, &result) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(result.success);
+    movable = result.affected_entity;
+    HENKA_TEST_ASSERT(movable != HENKA_INVALID_ENTITY);
+
+    memset(&request, 0, sizeof(request));
+    request.command = HENKA_ACTION_COMMAND_SELECT_OBJECT;
+    request.params.entity.entity = movable;
+    HENKA_TEST_ASSERT(henka_action_execute(actions, &request, &result) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(result.success);
+
+    memset(&request, 0, sizeof(request));
+    request.command = HENKA_ACTION_COMMAND_MOVE_BY_DELTA;
+    request.params.move_by_delta.entity = movable;
+    request.params.move_by_delta.delta = (henka_vec3){0.5f, 0.0f, 0.0f};
+    HENKA_TEST_ASSERT(henka_action_execute(actions, &request, &result) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(result.success);
+
+    memset(&request, 0, sizeof(request));
+    request.command = HENKA_ACTION_COMMAND_CLEAR_SELECTION;
+    HENKA_TEST_ASSERT(henka_action_execute(actions, &request, &result) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(result.success);
+    HENKA_TEST_ASSERT(henka_action_context_get_selected_entity(actions) == HENKA_INVALID_ENTITY);
+    HENKA_TEST_ASSERT(henka_scene_is_entity_transform_locked(scene, cube));
+
+    memset(&request, 0, sizeof(request));
+    request.command = HENKA_ACTION_COMMAND_MOVE_BY_DELTA;
+    request.params.move_by_delta.entity = cube;
+    request.params.move_by_delta.delta = (henka_vec3){1.0f, 0.0f, 0.0f};
+    HENKA_TEST_ASSERT(henka_action_execute(actions, &request, &result) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(!result.success);
+    HENKA_TEST_ASSERT(result.status == HENKA_ACTION_STATUS_TRANSFORM_LOCKED);
+    HENKA_TEST_ASSERT(henka_scene_get_entity_transform(scene, cube, &transform) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(transform.position.x, 0.0f, 0.0001f);
+
+    memset(&request, 0, sizeof(request));
     request.command = HENKA_ACTION_COMMAND_RESET_TRANSFORM;
     request.params.entity.entity = cube;
     HENKA_TEST_ASSERT(henka_action_execute(actions, &request, &result) == HENKA_SUCCESS);
@@ -295,11 +337,11 @@ void henka_test_action(void)
     HENKA_TEST_ASSERT(henka_action_execute(actions, &request, &result) == HENKA_SUCCESS);
     HENKA_TEST_ASSERT(result.success);
     HENKA_TEST_ASSERT(result.has_scene_summary);
-    HENKA_TEST_ASSERT(result.scene_summary.user_entity_count == 1U);
+    HENKA_TEST_ASSERT(result.scene_summary.user_entity_count == 2U);
     HENKA_TEST_ASSERT(result.scene_summary.helper_entity_count == 1U);
 
     HENKA_TEST_ASSERT(henka_action_get_scene_summary(actions, &summary) == HENKA_SUCCESS);
-    HENKA_TEST_ASSERT(summary.user_entity_count == 1U);
+    HENKA_TEST_ASSERT(summary.user_entity_count == 2U);
 
     memset(&request, 0, sizeof(request));
     request.command = HENKA_ACTION_COMMAND_CLEAR_SCENE;
