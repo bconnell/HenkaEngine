@@ -100,7 +100,9 @@ typedef struct henka_scene_entity_record
 
 typedef struct henka_asset_shader_entry
 {
-    char* key;
+    char* vertex_key;
+    char* fragment_key;
+    char* source_path;
     char* display_name;
     henka_shader* shader;
     henka_asset_metadata metadata;
@@ -171,6 +173,7 @@ struct henka_renderer
 struct henka_mesh
 {
     struct henka_renderer* renderer;
+    bool asset_manager_owned;
     henka_mesh_primitive primitive;
     int vertex_count;
     int index_count;
@@ -180,12 +183,14 @@ struct henka_mesh
 struct henka_shader
 {
     struct henka_renderer* renderer;
+    bool asset_manager_owned;
     void* backend_data;
 };
 
 struct henka_texture
 {
     struct henka_renderer* renderer;
+    bool asset_manager_owned;
     void* backend_data;
     int width;
     int height;
@@ -340,6 +345,12 @@ henka_result henka_opengl_renderer_create_texture_from_rgba8(
 void henka_opengl_renderer_destroy_texture(struct henka_texture* texture);
 
 char* henka_asset_copy_display_name(const char* path);
+henka_result henka_assets_make_canonical_key(
+    const char* path,
+    char** out_key);
+void henka_mesh_destroy_owned(henka_mesh* mesh);
+void henka_shader_destroy_owned(henka_shader* shader);
+void henka_texture_destroy_owned(henka_texture* texture);
 henka_result henka_asset_manager_create(struct henka_engine* engine, struct henka_asset_manager** out_manager);
 void henka_asset_manager_destroy(struct henka_asset_manager* manager);
 

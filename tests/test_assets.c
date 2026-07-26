@@ -13,8 +13,17 @@ void henka_test_assets(void)
     char* display_name;
     char display_name_source[] = "assets/textures/cube_albedo.png";
     char overlong_path[HENKA_MAX_ASSET_PATH_BYTES + 2U];
-    char* resolved_path;
+    char* canonical_key;
+    henka_asset_manager manager;
+    henka_asset_mesh_entry mesh_entries[2];
+    henka_asset_metadata metadata;
+    henka_asset_texture_entry texture_entries[2];
+    henka_mesh fallback_mesh;
     henka_mesh* mesh;
+    char* resolved_path;
+    henka_shader managed_shader;
+    henka_texture fallback_texture;
+    henka_texture* texture;
 
     HENKA_TEST_ASSERT(strcmp(henka_assets_get_type_label(HENKA_ASSET_TYPE_SHADER), "Shader") == 0);
     HENKA_TEST_ASSERT(strcmp(henka_assets_get_type_label(HENKA_ASSET_TYPE_TEXTURE), "Texture") == 0);
@@ -32,10 +41,112 @@ void henka_test_assets(void)
     overlong_path[sizeof(overlong_path) - 1U] = '\0';
     HENKA_TEST_ASSERT(henka_asset_copy_display_name(overlong_path) == NULL);
 
-    mesh = NULL;
+    canonical_key = NULL;
+    HENKA_TEST_ASSERT(henka_assets_make_canonical_key(
+        "assets\\textures\\.\\cube_albedo.png",
+        &canonical_key) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(strcmp(
+        canonical_key,
+        "assets/textures/cube_albedo.png") == 0);
+    henka_free(canonical_key);
+
+    mesh = (henka_mesh*)1;
     HENKA_TEST_ASSERT(henka_assets_retry_failed_obj_mesh(NULL, "assets/models/missing.obj", &mesh) == HENKA_ERROR_INVALID_ARGUMENT);
+    HENKA_TEST_ASSERT(mesh == NULL);
     HENKA_TEST_ASSERT(henka_assets_retry_failed_obj_mesh(NULL, NULL, &mesh) == HENKA_ERROR_INVALID_ARGUMENT);
     HENKA_TEST_ASSERT(henka_assets_retry_failed_obj_mesh(NULL, "assets/models/missing.obj", NULL) == HENKA_ERROR_INVALID_ARGUMENT);
+
+    texture = (henka_texture*)1;
+    HENKA_TEST_ASSERT(henka_assets_retry_failed_texture(
+        NULL,
+        "assets/textures/missing.png",
+        &texture) == HENKA_ERROR_INVALID_ARGUMENT);
+    HENKA_TEST_ASSERT(texture == NULL);
+    HENKA_TEST_ASSERT(henka_assets_retry_failed_texture(
+        NULL,
+        "assets/textures/missing.png",
+        NULL) == HENKA_ERROR_INVALID_ARGUMENT);
+
+    memset(&metadata, 0x5a, sizeof(metadata));
+    HENKA_TEST_ASSERT(henka_assets_get_metadata_at_index(
+        NULL,
+        0U,
+        &metadata) == HENKA_ERROR_INVALID_ARGUMENT);
+    HENKA_TEST_ASSERT(metadata.type == HENKA_ASSET_TYPE_UNKNOWN);
+    HENKA_TEST_ASSERT(metadata.source_path == NULL);
+    HENKA_TEST_ASSERT(!metadata.loaded);
+    HENKA_TEST_ASSERT(!metadata.reload_supported);
+
+    memset(&manager, 0, sizeof(manager));
+    memset(&fallback_texture, 0, sizeof(fallback_texture));
+    memset(&fallback_mesh, 0, sizeof(fallback_mesh));
+    memset(texture_entries, 0, sizeof(texture_entries));
+    memset(mesh_entries, 0, sizeof(mesh_entries));
+    manager.error_texture = &fallback_texture;
+    manager.fallback_mesh = &fallback_mesh;
+    manager.texture_entries = texture_entries;
+    manager.texture_count = 2U;
+    manager.mesh_entries = mesh_entries;
+    manager.mesh_count = 2U;
+    texture_entries[0].key = "assets/textures/a.png";
+    texture_entries[0].texture = &fallback_texture;
+    texture_entries[0].metadata.type = HENKA_ASSET_TYPE_TEXTURE;
+    texture_entries[0].metadata.source_path = texture_entries[0].key;
+    texture_entries[0].metadata.fallback = true;
+    texture_entries[1].key = "assets/textures/b.png";
+    texture_entries[1].texture = &fallback_texture;
+    texture_entries[1].metadata.type = HENKA_ASSET_TYPE_TEXTURE;
+    texture_entries[1].metadata.source_path = texture_entries[1].key;
+    texture_entries[1].metadata.fallback = true;
+    mesh_entries[0].key = "assets/models/a.obj";
+    mesh_entries[0].mesh = &fallback_mesh;
+    mesh_entries[0].metadata.type = HENKA_ASSET_TYPE_MESH;
+    mesh_entries[0].metadata.source_path = mesh_entries[0].key;
+    mesh_entries[0].metadata.fallback = true;
+    mesh_entries[1].key = "assets/models/b.obj";
+    mesh_entries[1].mesh = &fallback_mesh;
+    mesh_entries[1].metadata.type = HENKA_ASSET_TYPE_MESH;
+    mesh_entries[1].metadata.source_path = mesh_entries[1].key;
+    mesh_entries[1].metadata.fallback = true;
+
+    memset(&metadata, 0x5a, sizeof(metadata));
+    HENKA_TEST_ASSERT(henka_assets_get_texture_metadata(
+        &manager,
+        &fallback_texture,
+        &metadata) == HENKA_ERROR_INVALID_ARGUMENT);
+    HENKA_TEST_ASSERT(metadata.source_path == NULL);
+    HENKA_TEST_ASSERT(henka_assets_get_texture_metadata_for_path(
+        &manager,
+        "assets\\textures\\.\\b.png",
+        &metadata) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(strcmp(
+        metadata.source_path,
+        "assets/textures/b.png") == 0);
+
+    memset(&metadata, 0x5a, sizeof(metadata));
+    HENKA_TEST_ASSERT(henka_assets_get_mesh_metadata(
+        &manager,
+        &fallback_mesh,
+        &metadata) == HENKA_ERROR_INVALID_ARGUMENT);
+    HENKA_TEST_ASSERT(metadata.source_path == NULL);
+    HENKA_TEST_ASSERT(henka_assets_get_mesh_metadata_for_path(
+        &manager,
+        "assets\\models\\.\\a.obj",
+        &metadata) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(strcmp(
+        metadata.source_path,
+        "assets/models/a.obj") == 0);
+
+    memset(&managed_shader, 0, sizeof(managed_shader));
+    managed_shader.asset_manager_owned = true;
+    henka_shader_destroy(&managed_shader);
+    HENKA_TEST_ASSERT(managed_shader.asset_manager_owned);
+    fallback_texture.asset_manager_owned = true;
+    henka_texture_destroy(&fallback_texture);
+    HENKA_TEST_ASSERT(fallback_texture.asset_manager_owned);
+    fallback_mesh.asset_manager_owned = true;
+    henka_mesh_destroy(&fallback_mesh);
+    HENKA_TEST_ASSERT(fallback_mesh.asset_manager_owned);
 
     resolved_path = NULL;
     HENKA_TEST_ASSERT(henka_assets_resolve_path(NULL, NULL, NULL) == HENKA_ERROR_INVALID_ARGUMENT);

@@ -78,5 +78,28 @@ henka_result henka_texture_create_from_file(henka_engine* engine, const char* pa
 
 void henka_texture_destroy(henka_texture* texture)
 {
+    if (texture == NULL)
+    {
+        return;
+    }
+
+    if (texture->asset_manager_owned)
+    {
+        HENKA_LOG_WARN(
+            "ignored an attempt to destroy a manager-owned borrowed texture");
+        return;
+    }
+
+    henka_renderer_destroy_texture(texture);
+}
+
+void henka_texture_destroy_owned(henka_texture* texture)
+{
+    if (texture == NULL)
+    {
+        return;
+    }
+
+    texture->asset_manager_owned = false;
     henka_renderer_destroy_texture(texture);
 }

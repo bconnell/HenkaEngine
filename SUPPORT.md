@@ -37,9 +37,9 @@ Use the Sponsor button on the Henka Engine GitHub repository.
 
 ## Project direction
 
-Henka Engine is still early. Current work is focused on stable engine foundations, a usable sandbox, viewport tools, transform tools, documentation, packaging, and public examples.
+Henka Engine is still early. Current work is focused on repairing and hardening existing runtime, workspace, asset, physics, packaging, and external-project behavior.
 
-Future work may include stronger asset workflows, improved workspace tools, 2D and 2.5D support, editor-style panels, and better project templates.
+After the existing integrity work, the primary feature track is production-quality 2.5D. Integrated modeling, UV, rigging, animation-authoring, and broader content-creation tools follow without removing compatibility with external asset pipelines. Docked and detached workspace panels plus the first 2.5D camera presets already exist; they are foundations rather than hypothetical future features.
 
 ## Other ways to help
 

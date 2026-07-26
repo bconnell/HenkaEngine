@@ -1,12 +1,12 @@
 # Roadmap
 
-Henka Engine is an early-stage open source C engine. The current goal is to build a stable runtime foundation first, then grow toward practical tools for 3D, 2D, and 2.5D projects.
+Henka Engine is an early-stage open source C game engine and development workspace. The active order is existing defect repair and integrity hardening, production-quality 2.5D, and then integrated modeling and content authoring while retaining external-pipeline compatibility.
 
 This roadmap is a direction guide, not a release schedule. Priorities may change as the engine matures, testing finds issues, or core systems need more hardening.
 
 ## Current focus
 
-The current work is focused on making the 3D sandbox and engine core dependable enough to build on.
+The current work is focused on finding and repairing existing runtime, workspace, renderer, platform, asset, physics, persistence, packaging, and external-project defects before expanding the feature surface.
 
 Current priorities include:
 
@@ -22,15 +22,14 @@ Current priorities include:
 
 ## Near-term priorities
 
-The next development work is focused on making existing systems easier to test, easier to use, and harder to break.
+The next development work remains bounded repair and verification.
 
-1. Add and harden local action commands for validated scene and object operations.
-2. Keep viewport interaction test helpers aligned with the real sandbox behavior.
-3. Finish manual QA for transform gizmos and fix any remaining interaction problems.
-4. Keep Windows CI deterministic across build, test, package provenance, packaged startup, repository integrity, and external-project checks.
-5. Continue improving sandbox usability, help text, first-run guidance, and visual feedback.
-6. Keep object inspection, selection highlighting, transform tools, physics QA, and viewport behavior consistent.
-7. Keep external game project templates working against the current engine.
+1. Finish asset cache ownership, identity, retry, metadata, and failure-output contracts.
+2. Continue recursive audits across rendering, platform, physics, persistence, scene, workspace, packaging, and external-project paths.
+3. Keep viewport interaction helpers aligned with the real sandbox behavior and complete remaining manual transform QA.
+4. Keep local and GitHub validation deterministic across build, tests, package provenance, packaged startup, repository integrity, and external-project checks.
+5. Keep the README, architecture, roadmap, runtime help, and repository description aligned with the implemented product.
+6. Preserve stable identities, transactional editing boundaries, versionable data, and external-tool compatibility needed by 2.5D and later modeling.
 
 ## Workspace and tools
 
@@ -106,6 +105,19 @@ Next 2.5D work includes:
 6. Movement-plane and physics-axis constraints.
 7. Tools that make 2D-style layout in 3D space easier to manage.
 
+## Integrated modeling and content authoring
+
+Integrated modeling follows the production-quality 2.5D track. Preparation begins earlier through clean authoring boundaries rather than unfinished modeling screens.
+
+Planned foundations include:
+
+1. Editable authoring data separated from compiled runtime meshes, render buffers, collision data, and animation tracks.
+2. Stable identities for objects, assets, layers, mesh elements, bones, animation targets, and undo records.
+3. Transactional operations with validation, commit, rollback, undo, and redo.
+4. Mesh, UV, material, rigging, skin-weight, and animation-authoring tools.
+5. Import, export, reimport, dependency tracking, and adapter-based interchange such as glTF or GLB.
+6. Continued compatibility with external modeling, texturing, animation, and content pipelines.
+
 ## Longer-term systems
 
 Longer-term work may include:
@@ -151,7 +163,7 @@ Current limitations include:
 1. The sandbox is an engine sample and QA target, not a game.
 2. The transform gizmo workflow still needs manual desktop QA for visual feel and mouse comfort.
 3. Scene saving and loading are not complete authoring workflows yet.
-4. The UI is useful for inspection and testing, but it is not a full editor.
+4. The docked and detached workspace is useful for inspection, testing, and early authoring behavior, but it is not yet a full production editor and project-authoring workflow.
 5. Workspace movement and sizing require desktop QA for feel. Detached placement is session-only, and full detached controls plus OS-title-bar drag-back docking still need implementation.
 6. The native test panel and compact detached production-panel surfaces use multi-window rendering and event routing, but full detached controls and detachable Scene View are not implemented yet.
 7. Asset loading is still limited.

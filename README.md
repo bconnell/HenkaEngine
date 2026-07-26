@@ -4,7 +4,7 @@ Henka Engine is an early-stage open source engine written in C. The active order
 
 ## Support Henka Engine
 
-Henka Engine is an open source C engine project focused on practical 3D, 2D, and 2.5D development foundations.
+Henka Engine is an open source C game engine and development workspace moving from runtime stability to production-quality 2.5D and then integrated modeling and content authoring.
 
 Sponsorship helps support development time, testing, documentation, examples, packaged builds, and future workspace tooling. The project will remain open source under its current license.
 
@@ -37,7 +37,7 @@ Henka Engine is still early, but the sandbox now renders a visible 3D scene with
 - Run-once engine lifecycle with copied configuration strings, reentrant-run rejection, exit-before-update rendering, checked frame rollback, and main-window presentation only after detached-window UI succeeds
 - Shared overlay-handle transform gizmo foundation for selected object manipulation, with visual feel still being hardened through manual QA
 - Viewport interaction test helpers for reducing manual QA around selection, gizmo hit testing, and transform changes
-- Asset manager foundation for cached shader, texture, and OBJ loading through confined relative paths and bounded file processing
+- Asset manager foundation with canonical confined path identities, manager-owned borrowed resources, deterministic failure outputs, path-specific fallback metadata, and transactional texture and OBJ fallback retries
 - Early OBJ model loading with bounded source and output sizes, finite-number validation, negative indices, n-gon fan triangulation, degenerate-face rejection, and explicit failed-mesh retry support
 - Fallback white and error textures
 - Shader-based rendering of built-in primitives
@@ -62,8 +62,8 @@ Henka Engine is still early, but the sandbox now renders a visible 3D scene with
 
 ### What does not exist yet
 
-- Editor UI
-- Asset browser UI
+- Full production editor and project-authoring workflow
+- Asset browser, import/reimport, dependency, and authoring workflow
 - Audio
 - Scripting
 - Full 2D renderer

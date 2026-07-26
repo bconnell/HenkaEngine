@@ -42,20 +42,44 @@ henka_result henka_assets_load_shader(
     const char* vertex_path,
     const char* fragment_path,
     henka_shader** out_shader);
+/*
+ * Assets returned by the manager are borrowed and remain owned by the manager.
+ * Do not pass them to the public mesh, shader, or texture destroy functions.
+ * Equivalent confined path spellings share one canonical cache identity.
+ */
 henka_result henka_assets_load_texture(henka_asset_manager* manager, const char* path, henka_texture** out_texture);
 henka_result henka_assets_load_obj_mesh(henka_asset_manager* manager, const char* path, henka_mesh** out_mesh);
 
 /*
- * Retries only cached fallback entries from a previous failed OBJ load.
- * Already-loaded real meshes are returned unchanged.
+ * Retries only a cached texture fallback from a previous failed load.
+ * The fallback entry remains intact when the replacement load fails.
+ */
+henka_result henka_assets_retry_failed_texture(
+    henka_asset_manager* manager,
+    const char* path,
+    henka_texture** out_texture);
+
+/*
+ * Retries only a cached fallback entry from a previous failed OBJ load.
+ * The fallback entry remains intact when the replacement load fails.
  */
 henka_result henka_assets_retry_failed_obj_mesh(henka_asset_manager* manager, const char* path, henka_mesh** out_mesh);
 const char* henka_assets_get_type_label(henka_asset_type type);
 size_t henka_assets_get_metadata_count(const henka_asset_manager* manager);
 henka_result henka_assets_get_metadata_at_index(const henka_asset_manager* manager, size_t index, henka_asset_metadata* out_metadata);
 henka_result henka_assets_get_shader_metadata(const henka_asset_manager* manager, const henka_shader* shader, henka_asset_metadata* out_metadata);
+/* Shared fallbacks are ambiguous by pointer; use the path form for them. */
 henka_result henka_assets_get_texture_metadata(const henka_asset_manager* manager, const henka_texture* texture, henka_asset_metadata* out_metadata);
 henka_result henka_assets_get_mesh_metadata(const henka_asset_manager* manager, const henka_mesh* mesh, henka_asset_metadata* out_metadata);
+henka_result henka_assets_get_texture_metadata_for_path(
+    const henka_asset_manager* manager,
+    const char* path,
+    henka_asset_metadata* out_metadata);
+henka_result henka_assets_get_mesh_metadata_for_path(
+    const henka_asset_manager* manager,
+    const char* path,
+    henka_asset_metadata* out_metadata);
+/* Borrowed manager-owned fallback assets. */
 henka_texture* henka_assets_get_white_texture(henka_asset_manager* manager);
 henka_texture* henka_assets_get_error_texture(henka_asset_manager* manager);
 henka_mesh* henka_assets_get_fallback_mesh(henka_asset_manager* manager);

@@ -89,6 +89,12 @@ Close and explicit exit requests stop before another update or render. The rende
 
 These ownership and transaction boundaries also prepare future 2.5D and modeling work. Editable authoring data should retain stable identities and undoable source state, then compile into runtime rendering and physics data instead of sharing low-level GPU-resource lifetime directly.
 
+### Asset identity and ownership
+
+Manager-loaded shaders, textures, and OBJ meshes use canonical confined cache identities. Equivalent slash and dot-segment path spellings share one entry. Returned pointers are borrowed and manager-owned; public destroy calls ignore them so a caller cannot leave a dangling cache entry or cause manager shutdown to destroy the same resource twice.
+
+Texture and OBJ fallback retries are transactional. A failed replacement leaves the existing fallback entry and its path-specific metadata intact. A successful replacement becomes manager-owned and clears retry support until a true loaded-asset reload operation exists. Shader metadata no longer claims reload support. Shared texture and mesh fallback pointers are intentionally rejected by pointer-based metadata lookup because they cannot identify one source path; path-based metadata APIs provide the unambiguous contract.
+
 ### Workspace and viewport
 
 Henka now also includes a small docked workspace helper for viewport-first tools:

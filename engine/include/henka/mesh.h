@@ -16,6 +16,7 @@ henka_result henka_mesh_create_line(henka_engine* engine, henka_vec3 start, henk
 henka_result henka_mesh_create_circle_ring(henka_engine* engine, float radius, int segments, henka_mesh** out_mesh);
 henka_result henka_mesh_create_from_model_data(henka_engine* engine, const henka_model_data* model, henka_mesh** out_mesh);
 henka_result henka_mesh_create_from_obj(henka_engine* engine, const char* path, henka_mesh** out_mesh);
+/* Releases caller-owned meshes. Manager-owned borrowed meshes are ignored. */
 void henka_mesh_destroy(henka_mesh* mesh);
 
 #endif

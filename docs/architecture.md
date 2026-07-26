@@ -1,6 +1,6 @@
 # Architecture
 
-Henka Engine is still compact, but it now has enough moving parts that the module boundaries matter. The current architecture is aimed at supporting a visible 3D rendering path without leaking SDL or OpenGL details into application code.
+Henka Engine is still compact, but it now has enough moving parts that the module boundaries matter. The architecture supports a reusable runtime, a docked and detached development workspace, first 2.5D camera foundations, external game repositories, and a future authoring layer without leaking SDL or OpenGL details into application code.
 
 ## Modules
 
@@ -35,6 +35,10 @@ The platform layer currently uses SDL3 internally. It owns:
 - close request state
 - swap interval control
 - relative mouse capture
+- native detached tool windows and routed tool-window input
+- focus-loss release synthesis
+- collision-safe engine window identifiers
+- main and detached OpenGL context transitions
 
 SDL types remain outside the public Henka headers.
 
@@ -79,7 +83,7 @@ The current camera module provides:
 
 ### Assets
 
-The current asset layer is intentionally modest. It loads and caches shaders, textures, and OBJ meshes by path, resolves relative asset paths against the engine asset base directory, owns fallback textures and a fallback mesh, caches failed path lookups against those fallbacks, and keeps asset lifetime tied to the engine runtime.
+The current asset layer is intentionally modest. It loads and caches shaders, textures, and OBJ meshes through canonical confined path identities, owns cached and fallback resources, exposes borrowed manager-owned pointers, preserves fallback entries during failed retries, and keeps asset lifetime tied to the engine runtime. Equivalent slash and dot-segment spellings resolve to one cache identity, while shared fallback metadata is retrieved by source path instead of an ambiguous pointer.
 
 It also now exposes read-only asset metadata so samples can inspect:
 
@@ -161,7 +165,7 @@ The renderer layer exposes engine-owned drawing functionality while keeping Open
 
 ### Sandbox
 
-The sandbox is a consumer of the public API only. It creates a scene, shaders, textures, meshes, materials, camera, settings object, and UI context through Henka headers, then hands those objects to the engine run loop through callbacks. It uses scene entity names and visibility state for the console legend, and it now uses the early UI layer for three small developer-facing panels without turning the sandbox into an editor:
+The sandbox is a consumer of the public API only. It creates a scene, shaders, textures, meshes, materials, camera, settings object, and UI context through Henka headers, then hands those objects to the engine run loop through callbacks. It now uses the early UI layer for docked and native detached inspection, utility, diagnostics, transform, and physics surfaces without claiming to be a full production editor. Core inspection surfaces include:
 
 - `Controls`
 - `Scene Objects`
@@ -192,7 +196,8 @@ The next steps should continue building upward from these boundaries:
 - broader model loading beyond the current OBJ subset
 - stronger asset management
 - broader persistence and external project support once the current local-first path has settled
-- early 2.5D-friendly camera and layering rules after the shared runtime is steadier
-- richer engine UI controls after the current lightweight overlay has settled
-- object inspection that can grow into broader developer tooling without requiring an editor rewrite first
-- future floating panels and resizable docks built on the current dedicated viewport foundation
+- production-quality 2.5D sprites, regions, layered depth, sorting, parallax, animation, movement constraints, physics constraints, and authoring tools after current defect repair
+- richer engine UI controls built on the existing docked and native detached workspace
+- object inspection and transactional authoring that can grow without an editor rewrite
+- saved workspace placement, full detached controls, drag-back redocking, and detachable Scene View
+- editable authoring data compiled into runtime assets for later modeling, UV, rigging, and animation workflows

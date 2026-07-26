@@ -3,6 +3,7 @@
 #include <math.h>
 
 #include <henka/core.h>
+#include <henka/log.h>
 #include <henka/memory.h>
 
 #include "../core/checked.h"
@@ -270,5 +271,28 @@ henka_result henka_mesh_create_circle_ring(henka_engine* engine, float radius, i
 
 void henka_mesh_destroy(henka_mesh* mesh)
 {
+    if (mesh == NULL)
+    {
+        return;
+    }
+
+    if (mesh->asset_manager_owned)
+    {
+        HENKA_LOG_WARN(
+            "ignored an attempt to destroy a manager-owned borrowed mesh");
+        return;
+    }
+
+    henka_renderer_destroy_mesh(mesh);
+}
+
+void henka_mesh_destroy_owned(henka_mesh* mesh)
+{
+    if (mesh == NULL)
+    {
+        return;
+    }
+
+    mesh->asset_manager_owned = false;
     henka_renderer_destroy_mesh(mesh);
 }

@@ -25,6 +25,7 @@ henka_result henka_texture_create_from_rgba8(
     const unsigned char* pixels,
     henka_texture** out_texture);
 
+/* Releases caller-owned textures. Manager-owned borrowed textures are ignored. */
 void henka_texture_destroy(henka_texture* texture);
 
 #endif
