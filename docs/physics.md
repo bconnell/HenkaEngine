@@ -21,9 +21,11 @@ The public physics API provides:
 - debug-shape and contact data for truthful runtime visualization
 - transform validation that rejects non-finite and collapsed scale components
 - physics allocations included in Henka's debug memory accounting
-- immediate invalidation of stale contacts and events when a body is destroyed
+- selective contact and pair-history removal when a body is destroyed, with one EXIT event per active removed pair and unrelated queued events preserved
 
 The broadphase currently iterates body pairs directly, which is appropriate for the small sandbox scene and deterministic tests.
+
+Body IDs are monotonic within a world. Destroying a body cannot make its stale ID refer to a later body that reuses the same storage slot. Destruction reserves space for all required EXIT events before changing live state, then removes only contacts and current/previous pairs involving that body. Existing queued events remain available until the next simulation step, including events for unrelated pairs; the appended EXIT events appear once and are not repeated by the next step. Survivor `colliding` and `grounded` flags are recomputed only when the survivor had a contact with the destroyed body.
 
 ## Sandbox Physics QA
 

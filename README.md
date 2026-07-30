@@ -175,7 +175,7 @@ The packaged folder also includes `PACKAGE_INFO.txt` so you can tell when the pa
 - `Make Dynamic + Drop` synchronizes the selected object's current transform, activates only that supported body, clears its velocity, and leaves other samples still.
 - `Enable` remains the explicit full-scene demonstration path and assigns the intended dynamic sample set before playback.
 - Automated coverage proves that an unrelated marker keeps its transform while the selected cube falls.
-- Physics rejects non-finite and collapsed physics scales, clears stale contact data when bodies are destroyed, and keeps physics allocations in engine memory diagnostics.
+- Physics rejects non-finite and collapsed physics scales. Destroying a body removes only its contacts and pair history, appends one EXIT event for each active pair, and preserves unrelated queued events and survivor contact continuity. Physics allocations remain visible in engine memory diagnostics.
 
 ### Validated platform and package identity
 

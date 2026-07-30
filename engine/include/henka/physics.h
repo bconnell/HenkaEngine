@@ -152,6 +152,10 @@ float henka_physics_world_get_fixed_timestep(const henka_physics_world* world);
 size_t henka_physics_world_get_body_count(const henka_physics_world* world);
 
 henka_result henka_physics_body_create(henka_physics_world* world, const henka_physics_body_desc* desc, henka_physics_body_id* out_body);
+/*
+ * Removes only contacts and pair history involving body. Active destroyed-body
+ * pairs append one EXIT event; unrelated queued events and pair history remain.
+ */
 henka_result henka_physics_body_destroy(henka_physics_world* world, henka_physics_body_id body);
 henka_result henka_physics_body_get_state(const henka_physics_world* world, henka_physics_body_id body, henka_physics_body_state* out_state);
 henka_result henka_physics_body_set_transform(henka_physics_world* world, henka_physics_body_id body, henka_transform transform, bool clear_velocity);

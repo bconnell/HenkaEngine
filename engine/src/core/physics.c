@@ -378,6 +378,22 @@ static bool henka_physics_pair_matches(henka_physics_contact first, henka_physic
     return first.body_a == second.body_a && first.body_b == second.body_b && first.is_trigger == second.is_trigger;
 }
 
+static bool henka_physics_contact_involves_body(
+    henka_physics_contact contact,
+    henka_physics_body_id body)
+{
+    return contact.body_a == body || contact.body_b == body;
+}
+
+static bool henka_physics_contact_involves_pair(
+    henka_physics_contact contact,
+    henka_physics_body_id first,
+    henka_physics_body_id second)
+{
+    return (contact.body_a == first && contact.body_b == second) ||
+        (contact.body_a == second && contact.body_b == first);
+}
+
 static void henka_physics_write_scene_transform(const henka_physics_body_state* state)
 {
     if (state->linked_scene != NULL && state->linked_entity != HENKA_INVALID_ENTITY &&
@@ -970,28 +986,165 @@ henka_result henka_physics_body_create(
 
 henka_result henka_physics_body_destroy(henka_physics_world* world, henka_physics_body_id body)
 {
+    size_t affected_pair_count;
     size_t index;
+    size_t read_index;
     henka_physics_body_record* record;
+    size_t required_event_count;
+    size_t write_index;
 
     record = henka_physics_find_body(world, body);
     if (record == NULL)
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
-    memset(record, 0, sizeof(*record));
-    --world->body_count;
-    world->contact_count = 0U;
-    world->event_count = 0U;
-    world->current_pair_count = 0U;
-    world->previous_pair_count = 0U;
-    for (index = 0U; index < world->body_capacity; ++index)
+
+    affected_pair_count = 0U;
+    for (index = 0U; index < world->current_pair_count; ++index)
     {
-        if (world->bodies[index].active)
+        if (henka_physics_contact_involves_body(
+                world->current_pairs[index].contact,
+                body))
         {
-            world->bodies[index].state.colliding = false;
-            world->bodies[index].state.grounded = false;
+            ++affected_pair_count;
         }
     }
+    if (!henka_checked_size_add(
+            world->event_count,
+            affected_pair_count,
+            &required_event_count) ||
+        !henka_physics_reserve(
+            (void**)&world->events,
+            sizeof(*world->events),
+            &world->event_capacity,
+            required_event_count))
+    {
+        return HENKA_ERROR_OUT_OF_MEMORY;
+    }
+
+    for (index = 0U; index < world->body_capacity; ++index)
+    {
+        henka_physics_body_record* survivor;
+        bool affected;
+
+        survivor = &world->bodies[index];
+        if (!survivor->active || survivor == record)
+        {
+            continue;
+        }
+
+        affected = false;
+        for (read_index = 0U;
+            read_index < world->contact_count;
+            ++read_index)
+        {
+            if (henka_physics_contact_involves_pair(
+                    world->contacts[read_index],
+                    body,
+                    survivor->state.id))
+            {
+                affected = true;
+                break;
+            }
+        }
+        if (!affected)
+        {
+            continue;
+        }
+
+        survivor->state.colliding = false;
+        survivor->state.grounded = false;
+        for (read_index = 0U;
+            read_index < world->contact_count;
+            ++read_index)
+        {
+            henka_physics_contact contact;
+
+            contact = world->contacts[read_index];
+            if (henka_physics_contact_involves_body(contact, body))
+            {
+                continue;
+            }
+            if (contact.body_a == survivor->state.id)
+            {
+                survivor->state.colliding = true;
+                if (!contact.is_trigger &&
+                    contact.normal.y < -0.5f &&
+                    survivor->state.type == HENKA_PHYSICS_BODY_DYNAMIC)
+                {
+                    survivor->state.grounded = true;
+                }
+            }
+            else if (contact.body_b == survivor->state.id)
+            {
+                survivor->state.colliding = true;
+                if (!contact.is_trigger &&
+                    contact.normal.y > 0.5f &&
+                    survivor->state.type == HENKA_PHYSICS_BODY_DYNAMIC)
+                {
+                    survivor->state.grounded = true;
+                }
+            }
+        }
+    }
+
+    write_index = 0U;
+    for (read_index = 0U; read_index < world->contact_count; ++read_index)
+    {
+        if (!henka_physics_contact_involves_body(
+                world->contacts[read_index],
+                body))
+        {
+            world->contacts[write_index] = world->contacts[read_index];
+            ++write_index;
+        }
+    }
+    world->contact_count = write_index;
+
+    write_index = 0U;
+    for (read_index = 0U;
+        read_index < world->current_pair_count;
+        ++read_index)
+    {
+        henka_physics_contact contact;
+
+        contact = world->current_pairs[read_index].contact;
+        if (henka_physics_contact_involves_body(contact, body))
+        {
+            world->events[world->event_count] = (henka_physics_event){
+                contact.is_trigger ?
+                    HENKA_PHYSICS_EVENT_TRIGGER_EXIT :
+                    HENKA_PHYSICS_EVENT_COLLISION_EXIT,
+                contact};
+            ++world->event_count;
+        }
+        else
+        {
+            world->current_pairs[write_index] =
+                world->current_pairs[read_index];
+            ++write_index;
+        }
+    }
+    world->current_pair_count = write_index;
+
+    write_index = 0U;
+    for (read_index = 0U;
+        read_index < world->previous_pair_count;
+        ++read_index)
+    {
+        if (!henka_physics_contact_involves_body(
+                world->previous_pairs[read_index].contact,
+                body))
+        {
+            world->previous_pairs[write_index] =
+                world->previous_pairs[read_index];
+            ++write_index;
+        }
+    }
+    world->previous_pair_count = write_index;
+
+    memset(record, 0, sizeof(*record));
+    --world->body_count;
     return HENKA_SUCCESS;
 }
 
