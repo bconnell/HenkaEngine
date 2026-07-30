@@ -5,7 +5,9 @@ param(
     [Parameter(Mandatory = $true)]
     [string]$SliceName,
 
-    [string[]]$SourceAnchor = @()
+    [string[]]$SourceAnchor = @(),
+
+    [string[]]$ExpectedChangedPath = @()
 )
 
 Set-StrictMode -Version Latest
@@ -102,6 +104,60 @@ function Assert-SourceAnchors {
             throw "Source anchor count mismatch for ${relativePath}: expected $expectedCount, found $count."
         }
     }
+}
+
+function Get-RepositoryChangedPaths {
+    $paths = @()
+    $paths += @(& git -C $repoRoot diff --name-only)
+    $paths += @(& git -C $repoRoot diff --cached --name-only)
+    $paths += @(& git -C $repoRoot ls-files --others --exclude-standard)
+    $normalizedPaths = @($paths | ForEach-Object {
+        ([string]$_).Trim().Replace("\", "/")
+    } |
+        Where-Object { -not [string]::IsNullOrWhiteSpace($_) } |
+        Sort-Object -Unique)
+    return $normalizedPaths
+}
+
+function Assert-ExpectedRepositoryChanges {
+    $expected = @($ExpectedChangedPath | ForEach-Object {
+        ([string]$_).Trim().Replace("\", "/")
+    } | Where-Object {
+        -not [string]::IsNullOrWhiteSpace($_)
+    } | Sort-Object -Unique)
+    $actual = @(Get-RepositoryChangedPaths)
+    if (($expected -join "`n") -ne ($actual -join "`n")) {
+        throw "Repository changes do not match the exact expected path set. Expected: $($expected -join ', '); actual: $($actual -join ', ')."
+    }
+}
+
+function Get-RepositoryContentDigest {
+    $paths = @(& git -C $repoRoot ls-files --cached --others --exclude-standard)
+    if ($LASTEXITCODE -ne 0) {
+        throw "Repository source enumeration failed."
+    }
+
+    $lines = New-Object System.Collections.Generic.List[string]
+    foreach ($rawPath in @($paths | Sort-Object)) {
+        $relativePath = ([string]$rawPath).Trim().Replace("\", "/")
+        if ([string]::IsNullOrWhiteSpace($relativePath)) {
+            continue
+        }
+        $absolutePath = Join-Path $repoRoot ($relativePath.Replace("/", "\"))
+        $hash = (Get-FileHash -LiteralPath $absolutePath -Algorithm SHA256).Hash.ToLowerInvariant()
+        $lines.Add("$hash  $relativePath")
+    }
+
+    $joined = ($lines -join "`n")
+    $bytes = [System.Text.Encoding]::UTF8.GetBytes($joined)
+    $sha256 = [System.Security.Cryptography.SHA256]::Create()
+    try {
+        $digest = $sha256.ComputeHash($bytes)
+    }
+    finally {
+        $sha256.Dispose()
+    }
+    return (($digest | ForEach-Object { $_.ToString("x2") }) -join "")
 }
 
 function Invoke-LoggedPowerShell {
@@ -313,6 +369,9 @@ try {
     Assert-PowerShellFileParses -Path $orchestratorPath
     Assert-WorkflowManifest
     Assert-SourceAnchors
+    Assert-ExpectedRepositoryChanges
+    $contentDigestBefore = Get-RepositoryContentDigest
+    $contentDigestBefore | Set-Content -LiteralPath (Join-Path $repositoryDirectory "Before-Content-Digest.txt")
     Write-RepositoryState -Prefix "Before"
 
     Invoke-LoggedPowerShell -Name "01-Public-Repository-Hygiene" -ScriptPath (Join-Path $PSScriptRoot "check_public_repo_hygiene.ps1") -Arguments @("-CandidateCommitSubject", $CandidateCommitSubject)
@@ -333,6 +392,12 @@ try {
     }
 
     Write-RepositoryState -Prefix "After"
+    Assert-ExpectedRepositoryChanges
+    $contentDigestAfter = Get-RepositoryContentDigest
+    $contentDigestAfter | Set-Content -LiteralPath (Join-Path $repositoryDirectory "After-Content-Digest.txt")
+    if ($contentDigestAfter -ne $contentDigestBefore) {
+        throw "Repository content digest changed during validation."
+    }
     $status = "PASS"
     $failureMessage = "None"
 }

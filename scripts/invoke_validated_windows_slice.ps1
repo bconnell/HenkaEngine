@@ -5,7 +5,9 @@ param(
     [Parameter(Mandatory = $true)]
     [string]$SliceName,
 
-    [string[]]$SourceAnchor = @()
+    [string[]]$SourceAnchor = @(),
+
+    [string[]]$ExpectedChangedPath = @()
 )
 
 Set-StrictMode -Version Latest
@@ -80,4 +82,5 @@ Assert-WorkflowManifest
 & $orchestratorPath `
     -CandidateCommitSubject $CandidateCommitSubject `
     -SliceName $SliceName `
-    -SourceAnchor $SourceAnchor
+    -SourceAnchor $SourceAnchor `
+    -ExpectedChangedPath $ExpectedChangedPath
