@@ -169,6 +169,12 @@ henka_result henka_physics_body_apply_impulse(henka_physics_world* world, henka_
 henka_result henka_physics_body_apply_torque(henka_physics_world* world, henka_physics_body_id body, henka_vec3 torque);
 henka_result henka_physics_body_clear_velocity(henka_physics_world* world, henka_physics_body_id body);
 
+/*
+ * Each fixed substep is atomic. Allocation failure returns
+ * HENKA_ERROR_OUT_OF_MEMORY without changing that substep's bodies, contacts,
+ * pair history, events, accumulator, or linked scene transforms. In a
+ * multi-substep update, earlier committed substeps remain committed.
+ */
 henka_result henka_physics_world_step(henka_physics_world* world, float delta_seconds);
 henka_result henka_physics_world_step_fixed(henka_physics_world* world);
 henka_result henka_physics_world_reset(henka_physics_world* world);

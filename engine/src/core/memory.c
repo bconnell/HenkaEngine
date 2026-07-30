@@ -1,14 +1,47 @@
 #include <henka/memory.h>
 
 #include <stdlib.h>
+#include <stdint.h>
 
 #include <henka/log.h>
 
+#include "memory_internal.h"
+
 static size_t g_allocation_count = 0;
+static size_t g_test_allocations_before_failure = SIZE_MAX;
+
+static int henka_memory_test_should_fail(void)
+{
+    if (g_test_allocations_before_failure == SIZE_MAX)
+    {
+        return 0;
+    }
+    if (g_test_allocations_before_failure == 0U)
+    {
+        return 1;
+    }
+    --g_test_allocations_before_failure;
+    return 0;
+}
+
+void henka_memory_test_fail_after(size_t successful_allocations)
+{
+    g_test_allocations_before_failure = successful_allocations;
+}
+
+void henka_memory_test_disable_failures(void)
+{
+    g_test_allocations_before_failure = SIZE_MAX;
+}
 
 void* henka_malloc(size_t size)
 {
     void* pointer;
+
+    if (henka_memory_test_should_fail())
+    {
+        return NULL;
+    }
 
     pointer = malloc(size);
     if (pointer != NULL)
@@ -23,6 +56,11 @@ void* henka_calloc(size_t count, size_t size)
 {
     void* pointer;
 
+    if (henka_memory_test_should_fail())
+    {
+        return NULL;
+    }
+
     pointer = calloc(count, size);
     if (pointer != NULL)
     {
@@ -35,6 +73,11 @@ void* henka_calloc(size_t count, size_t size)
 void* henka_realloc(void* pointer, size_t size)
 {
     void* resized;
+
+    if (size > 0U && henka_memory_test_should_fail())
+    {
+        return NULL;
+    }
 
     if (pointer == NULL)
     {

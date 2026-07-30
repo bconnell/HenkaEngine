@@ -8,6 +8,7 @@
 #include <henka/memory.h>
 
 #include "checked.h"
+#include "physics_internal.h"
 
 typedef struct henka_physics_body_record
 {
@@ -693,7 +694,110 @@ static bool henka_physics_emit_events(henka_physics_world* world)
     return true;
 }
 
-static henka_result henka_physics_substep(henka_physics_world* world, float delta_seconds)
+static void henka_physics_release_candidate(henka_physics_world* candidate)
+{
+    if (candidate == NULL)
+    {
+        return;
+    }
+    henka_free(candidate->bodies);
+    henka_free(candidate->contacts);
+    henka_free(candidate->current_pairs);
+    henka_free(candidate->previous_pairs);
+    henka_free(candidate->events);
+    candidate->bodies = NULL;
+    candidate->contacts = NULL;
+    candidate->current_pairs = NULL;
+    candidate->previous_pairs = NULL;
+    candidate->events = NULL;
+}
+
+static henka_result henka_physics_prepare_candidate(
+    const henka_physics_world* world,
+    bool preserve_events,
+    henka_physics_world* candidate)
+{
+    size_t allocation_size;
+
+    if (world == NULL || candidate == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    *candidate = *world;
+    candidate->bodies = NULL;
+    candidate->contacts = NULL;
+    candidate->contact_count = 0U;
+    candidate->contact_capacity = 0U;
+    candidate->current_pairs = NULL;
+    candidate->current_pair_count = 0U;
+    candidate->current_pair_capacity = 0U;
+    candidate->previous_pairs = NULL;
+    candidate->previous_pair_count = 0U;
+    candidate->previous_pair_capacity = 0U;
+    candidate->events = NULL;
+    candidate->event_count = 0U;
+    candidate->event_capacity = 0U;
+
+    if (world->body_capacity > 0U)
+    {
+        if (!henka_checked_size_multiply(
+                world->body_capacity,
+                sizeof(*world->bodies),
+                &allocation_size))
+        {
+            return HENKA_ERROR_OUT_OF_MEMORY;
+        }
+        candidate->bodies = henka_malloc(allocation_size);
+        if (candidate->bodies == NULL)
+        {
+            return HENKA_ERROR_OUT_OF_MEMORY;
+        }
+        memcpy(candidate->bodies, world->bodies, allocation_size);
+    }
+
+    if (world->previous_pair_count > 0U)
+    {
+        if (!henka_physics_reserve(
+                (void**)&candidate->previous_pairs,
+                sizeof(*candidate->previous_pairs),
+                &candidate->previous_pair_capacity,
+                world->previous_pair_count))
+        {
+            henka_physics_release_candidate(candidate);
+            return HENKA_ERROR_OUT_OF_MEMORY;
+        }
+        memcpy(
+            candidate->previous_pairs,
+            world->previous_pairs,
+            sizeof(*candidate->previous_pairs) * world->previous_pair_count);
+        candidate->previous_pair_count = world->previous_pair_count;
+    }
+
+    if (preserve_events && world->event_count > 0U)
+    {
+        if (!henka_physics_reserve(
+                (void**)&candidate->events,
+                sizeof(*candidate->events),
+                &candidate->event_capacity,
+                world->event_count))
+        {
+            henka_physics_release_candidate(candidate);
+            return HENKA_ERROR_OUT_OF_MEMORY;
+        }
+        memcpy(
+            candidate->events,
+            world->events,
+            sizeof(*candidate->events) * world->event_count);
+        candidate->event_count = world->event_count;
+    }
+
+    return HENKA_SUCCESS;
+}
+
+static henka_result henka_physics_simulate_candidate(
+    henka_physics_world* world,
+    float delta_seconds)
 {
     size_t index;
     size_t other_index;
@@ -778,6 +882,53 @@ static henka_result henka_physics_substep(henka_physics_world* world, float delt
     {
         return HENKA_ERROR_OUT_OF_MEMORY;
     }
+    return HENKA_SUCCESS;
+}
+
+static void henka_physics_commit_candidate(
+    henka_physics_world* world,
+    henka_physics_world* candidate)
+{
+    henka_physics_body_record* old_bodies;
+    henka_physics_contact* old_contacts;
+    henka_physics_pair* old_current_pairs;
+    henka_physics_event* old_events;
+    henka_physics_pair* old_previous_pairs;
+    size_t index;
+
+    old_bodies = world->bodies;
+    old_contacts = world->contacts;
+    old_current_pairs = world->current_pairs;
+    old_previous_pairs = world->previous_pairs;
+    old_events = world->events;
+
+    world->bodies = candidate->bodies;
+    world->body_capacity = candidate->body_capacity;
+    world->contacts = candidate->contacts;
+    world->contact_count = candidate->contact_count;
+    world->contact_capacity = candidate->contact_capacity;
+    world->current_pairs = candidate->current_pairs;
+    world->current_pair_count = candidate->current_pair_count;
+    world->current_pair_capacity = candidate->current_pair_capacity;
+    world->previous_pairs = candidate->previous_pairs;
+    world->previous_pair_count = candidate->previous_pair_count;
+    world->previous_pair_capacity = candidate->previous_pair_capacity;
+    world->events = candidate->events;
+    world->event_count = candidate->event_count;
+    world->event_capacity = candidate->event_capacity;
+
+    candidate->bodies = NULL;
+    candidate->contacts = NULL;
+    candidate->current_pairs = NULL;
+    candidate->previous_pairs = NULL;
+    candidate->events = NULL;
+
+    henka_free(old_bodies);
+    henka_free(old_contacts);
+    henka_free(old_current_pairs);
+    henka_free(old_previous_pairs);
+    henka_free(old_events);
+
     for (index = 0U; index < world->body_capacity; ++index)
     {
         if (world->bodies[index].active)
@@ -785,6 +936,36 @@ static henka_result henka_physics_substep(henka_physics_world* world, float delt
             henka_physics_write_scene_transform(&world->bodies[index].state);
         }
     }
+}
+
+static henka_result henka_physics_substep(
+    henka_physics_world* world,
+    float delta_seconds,
+    bool preserve_events)
+{
+    henka_physics_world candidate;
+    henka_result result;
+
+    memset(&candidate, 0, sizeof(candidate));
+    result = henka_physics_prepare_candidate(
+        world,
+        preserve_events,
+        &candidate);
+    if (result != HENKA_SUCCESS)
+    {
+        return result;
+    }
+
+    result = henka_physics_simulate_candidate(
+        &candidate,
+        delta_seconds);
+    if (result != HENKA_SUCCESS)
+    {
+        henka_physics_release_candidate(&candidate);
+        return result;
+    }
+
+    henka_physics_commit_candidate(world, &candidate);
     return HENKA_SUCCESS;
 }
 
@@ -1357,6 +1538,7 @@ henka_result henka_physics_body_clear_velocity(henka_physics_world* world, henka
 henka_result henka_physics_world_step(henka_physics_world* world, float delta_seconds)
 {
     const unsigned int maximum_substeps = 16U;
+    float pending_time;
     unsigned int substeps = 0U;
 
     if (world == NULL || !isfinite(delta_seconds) || delta_seconds < 0.0f)
@@ -1364,23 +1546,36 @@ henka_result henka_physics_world_step(henka_physics_world* world, float delta_se
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
 
-    world->event_count = 0U;
-    world->accumulator += delta_seconds > 0.25f ? 0.25f : delta_seconds;
-    while (world->accumulator >= world->fixed_timestep && substeps < maximum_substeps)
+    pending_time = world->accumulator +
+        (delta_seconds > 0.25f ? 0.25f : delta_seconds);
+    while (pending_time >= world->fixed_timestep &&
+        substeps < maximum_substeps)
     {
-        henka_result result = henka_physics_substep(world, world->fixed_timestep);
+        henka_result result = henka_physics_substep(
+            world,
+            world->fixed_timestep,
+            substeps > 0U);
         if (result != HENKA_SUCCESS)
         {
             return result;
         }
 
-        world->accumulator -= world->fixed_timestep;
+        pending_time -= world->fixed_timestep;
+        world->accumulator = pending_time;
         ++substeps;
     }
 
-    if (substeps == maximum_substeps && world->accumulator >= world->fixed_timestep)
+    if (substeps == 0U)
     {
-        world->accumulator = fmodf(world->accumulator, world->fixed_timestep);
+        world->event_count = 0U;
+        world->accumulator = pending_time;
+    }
+    else if (substeps == maximum_substeps &&
+        pending_time >= world->fixed_timestep)
+    {
+        world->accumulator = fmodf(
+            pending_time,
+            world->fixed_timestep);
     }
 
     return HENKA_SUCCESS;
@@ -1392,8 +1587,10 @@ henka_result henka_physics_world_step_fixed(henka_physics_world* world)
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
-    world->event_count = 0U;
-    return henka_physics_substep(world, world->fixed_timestep);
+    return henka_physics_substep(
+        world,
+        world->fixed_timestep,
+        false);
 }
 
 henka_result henka_physics_world_reset(henka_physics_world* world)
@@ -1441,6 +1638,23 @@ const henka_physics_event* henka_physics_world_get_events(const henka_physics_wo
         *out_count = world != NULL ? world->event_count : 0U;
     }
     return world != NULL ? world->events : NULL;
+}
+
+size_t henka_physics_test_get_current_pair_count(
+    const henka_physics_world* world)
+{
+    return world != NULL ? world->current_pair_count : 0U;
+}
+
+size_t henka_physics_test_get_previous_pair_count(
+    const henka_physics_world* world)
+{
+    return world != NULL ? world->previous_pair_count : 0U;
+}
+
+float henka_physics_test_get_accumulator(const henka_physics_world* world)
+{
+    return world != NULL ? world->accumulator : 0.0f;
 }
 
 static bool henka_physics_raycast_sphere(const henka_physics_body_state* body, henka_ray ray, float maximum, float* distance, henka_vec3* normal)
