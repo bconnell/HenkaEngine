@@ -10,6 +10,8 @@ const char* henka_result_to_string(henka_result result)
             return "invalid argument";
         case HENKA_ERROR_OUT_OF_MEMORY:
             return "out of memory";
+        case HENKA_ERROR_NUMERIC_RANGE:
+            return "numeric range error";
         case HENKA_ERROR_PLATFORM:
             return "platform error";
         case HENKA_ERROR_RENDERER:

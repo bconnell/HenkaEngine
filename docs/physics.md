@@ -28,7 +28,7 @@ The broadphase currently iterates body pairs directly, which is appropriate for 
 
 Body IDs are monotonic within a world. Destroying a body cannot make its stale ID refer to a later body that reuses the same storage slot. Destruction reserves space for all required EXIT events before changing live state, then removes only contacts and current/previous pairs involving that body. Existing queued events remain available until the next simulation step, including events for unrelated pairs; the appended EXIT events appear once and are not repeated by the next step. Survivor `colliding` and `grounded` flags are recomputed only when the survivor had a contact with the destroyed body.
 
-Each fixed substep builds a complete candidate using scratch body, contact, pair, and event arrays. The live world is replaced only after integration, collision response, and event classification all succeed. An allocation failure returns `HENKA_ERROR_OUT_OF_MEMORY`, releases all candidate storage, preserves the prior live arrays and accumulator, and performs no linked-scene writes. In a catch-up update, each successful substep commits independently; if a later substep fails, the earlier results remain committed and the remaining accumulated time can be retried. Linked entity transforms are synchronized best-effort after a successful physics commit, so an invalid or removed link cannot corrupt the physics world.
+Each fixed substep builds a complete candidate using scratch body, contact, pair, and event arrays. The live world is replaced only after integration, collision response, and event classification all succeed. An allocation failure returns `HENKA_ERROR_OUT_OF_MEMORY`; a finite calculation that cannot produce representable, contract-valid body, collider, contact, or response state returns `HENKA_ERROR_NUMERIC_RANGE`. Either failure releases candidate storage, preserves the prior live arrays and accumulator, and performs no linked-scene writes. Callers may correct the input state and retry. The numeric boundary follows representable engine state and collider validity rather than an arbitrary gameplay-scale limit. In a catch-up update, each successful substep commits independently; if a later substep fails, the earlier results remain committed and the remaining accumulated time can be retried. Linked entity transforms are synchronized best-effort after a successful physics commit, so an invalid or removed link cannot corrupt the physics world.
 
 ## Sandbox Physics QA
 
@@ -60,6 +60,7 @@ Physics simulation writes linked-body transforms to the real scene entities. Edi
 ## Current Limits
 
 - Box collision is axis-aligned; rotated boxes are not oriented colliders.
+- Integration validates acceleration, damping, velocity, position, angular delta, and quaternion state before commit. Collision geometry, contact normals, penetration, contact points, impulses, friction, and positional correction are likewise required to remain finite and representable.
 - There are no mesh or concave colliders.
 - There are no constraints, character controllers, vehicles, cloth, soft bodies, fluids, or ragdolls.
 - Continuous collision detection is not implemented; the demo and tests use normal fixed-step conditions.
