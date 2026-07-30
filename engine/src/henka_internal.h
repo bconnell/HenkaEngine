@@ -112,6 +112,7 @@ typedef struct henka_asset_shader_entry
 typedef struct henka_asset_texture_entry
 {
     char* key;
+    char* source_path;
     char* display_name;
     henka_texture* texture;
     bool owns_texture;
@@ -121,6 +122,7 @@ typedef struct henka_asset_texture_entry
 typedef struct henka_asset_mesh_entry
 {
     char* key;
+    char* source_path;
     char* display_name;
     henka_mesh* mesh;
     bool owns_mesh;

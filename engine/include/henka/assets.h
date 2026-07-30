@@ -35,7 +35,10 @@ typedef struct henka_asset_metadata
 henka_asset_manager* henka_engine_get_asset_manager(henka_engine* engine);
 const henka_asset_manager* henka_engine_get_asset_manager_const(const henka_engine* engine);
 
-/* Resolves a safe relative asset path beneath base_path. */
+/*
+ * Resolves a safe relative asset path beneath base_path. Rooted, UNC,
+ * device, drive-qualified, traversal, and URI-like inputs are rejected.
+ */
 henka_result henka_assets_resolve_path(const char* base_path, const char* asset_path, char** out_path);
 henka_result henka_assets_load_shader(
     henka_asset_manager* manager,
@@ -46,6 +49,8 @@ henka_result henka_assets_load_shader(
  * Assets returned by the manager are borrowed and remain owned by the manager.
  * Do not pass them to the public mesh, shader, or texture destroy functions.
  * Equivalent confined path spellings share one canonical cache identity.
+ * Windows identities are ASCII case-insensitive while metadata preserves the
+ * normalized source spelling first used to create the cache entry.
  */
 henka_result henka_assets_load_texture(henka_asset_manager* manager, const char* path, henka_texture** out_texture);
 henka_result henka_assets_load_obj_mesh(henka_asset_manager* manager, const char* path, henka_mesh** out_mesh);

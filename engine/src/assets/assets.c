@@ -57,14 +57,36 @@ static const char* henka_asset_display_name(const char* path)
     return last_separator;
 }
 
+static void henka_asset_fold_identity_case(char* path)
+{
+#if defined(_WIN32)
+    char* cursor;
+
+    if (path == NULL)
+    {
+        return;
+    }
+
+    for (cursor = path; *cursor != '\0'; ++cursor)
+    {
+        if (*cursor >= 'A' && *cursor <= 'Z')
+        {
+            *cursor = (char)(*cursor - 'A' + 'a');
+        }
+    }
+#else
+    (void)path;
+#endif
+}
+
 char* henka_asset_copy_display_name(const char* path)
 {
     return henka_duplicate_string(henka_asset_display_name(path));
 }
 
-henka_result henka_assets_make_canonical_key(
+static henka_result henka_assets_normalize_source_path(
     const char* path,
-    char** out_key)
+    char** out_path)
 {
     size_t allocation_size;
     size_t copy_index;
@@ -76,12 +98,12 @@ henka_result henka_assets_make_canonical_key(
     size_t segment_start;
     size_t write_index;
 
-    if (out_key != NULL)
+    if (out_path != NULL)
     {
-        *out_key = NULL;
+        *out_path = NULL;
     }
 
-    if (path == NULL || out_key == NULL ||
+    if (path == NULL || out_path == NULL ||
         !henka_checked_c_string_length(
             path,
             HENKA_MAX_ASSET_PATH_BYTES,
@@ -90,6 +112,11 @@ henka_result henka_assets_make_canonical_key(
             length,
             1U,
             &allocation_size))
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    if (length == 0U || path[0] == '/' || path[0] == '\\')
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
@@ -157,8 +184,23 @@ henka_result henka_assets_make_canonical_key(
     result = henka_path_resolve_confined(
         "",
         normalized,
-        out_key);
+        out_path);
     henka_free(normalized);
+    return result;
+}
+
+henka_result henka_assets_make_canonical_key(
+    const char* path,
+    char** out_key)
+{
+    henka_result result;
+
+    result = henka_assets_normalize_source_path(path, out_key);
+    if (result == HENKA_SUCCESS)
+    {
+        henka_asset_fold_identity_case(*out_key);
+    }
+
     return result;
 }
 
@@ -575,6 +617,7 @@ void henka_asset_manager_destroy(
                 manager->texture_entries[index].texture);
         }
         henka_free(manager->texture_entries[index].key);
+        henka_free(manager->texture_entries[index].source_path);
         henka_free(manager->texture_entries[index].display_name);
     }
 
@@ -586,6 +629,7 @@ void henka_asset_manager_destroy(
                 manager->mesh_entries[index].mesh);
         }
         henka_free(manager->mesh_entries[index].key);
+        henka_free(manager->mesh_entries[index].source_path);
         henka_free(manager->mesh_entries[index].display_name);
     }
 
@@ -606,6 +650,7 @@ henka_result henka_assets_load_shader(
 {
     char* display_name;
     char* fragment_key;
+    char* fragment_source_path;
     char* resolved_fragment_path;
     char* resolved_vertex_path;
     char* source_path;
@@ -613,6 +658,7 @@ henka_result henka_assets_load_shader(
     henka_shader* shader;
     henka_result result;
     char* vertex_key;
+    char* vertex_source_path;
 
     if (out_shader != NULL)
     {
@@ -629,6 +675,8 @@ henka_result henka_assets_load_shader(
 
     vertex_key = NULL;
     fragment_key = NULL;
+    vertex_source_path = NULL;
+    fragment_source_path = NULL;
     result = henka_assets_make_canonical_key(
         vertex_path,
         &vertex_key);
@@ -637,11 +685,34 @@ henka_result henka_assets_load_shader(
         return result;
     }
 
+    result = henka_assets_normalize_source_path(
+        vertex_path,
+        &vertex_source_path);
+    if (result != HENKA_SUCCESS)
+    {
+        henka_free(fragment_key);
+        henka_free(vertex_key);
+        return result;
+    }
+
+    result = henka_assets_normalize_source_path(
+        fragment_path,
+        &fragment_source_path);
+    if (result != HENKA_SUCCESS)
+    {
+        henka_free(vertex_source_path);
+        henka_free(fragment_key);
+        henka_free(vertex_key);
+        return result;
+    }
+
     result = henka_assets_make_canonical_key(
         fragment_path,
         &fragment_key);
     if (result != HENKA_SUCCESS)
     {
+        henka_free(fragment_source_path);
+        henka_free(vertex_source_path);
         henka_free(vertex_key);
         return result;
     }
@@ -653,19 +724,23 @@ henka_result henka_assets_load_shader(
     if (existing_entry != NULL)
     {
         *out_shader = existing_entry->shader;
+        henka_free(fragment_source_path);
+        henka_free(vertex_source_path);
         henka_free(fragment_key);
         henka_free(vertex_key);
         return HENKA_SUCCESS;
     }
 
-    display_name = henka_asset_copy_display_name(vertex_key);
+    display_name = henka_asset_copy_display_name(vertex_source_path);
     source_path = henka_asset_create_shader_source_path(
-        vertex_key,
-        fragment_key);
+        vertex_source_path,
+        fragment_source_path);
     if (display_name == NULL || source_path == NULL)
     {
         henka_free(source_path);
         henka_free(display_name);
+        henka_free(fragment_source_path);
+        henka_free(vertex_source_path);
         henka_free(fragment_key);
         henka_free(vertex_key);
         return HENKA_ERROR_OUT_OF_MEMORY;
@@ -675,12 +750,14 @@ henka_result henka_assets_load_shader(
     resolved_fragment_path = NULL;
     result = henka_assets_resolve_path(
         henka_engine_get_asset_base_path(manager->engine),
-        vertex_key,
+        vertex_source_path,
         &resolved_vertex_path);
     if (result != HENKA_SUCCESS)
     {
         henka_free(source_path);
         henka_free(display_name);
+        henka_free(fragment_source_path);
+        henka_free(vertex_source_path);
         henka_free(fragment_key);
         henka_free(vertex_key);
         return result;
@@ -688,13 +765,15 @@ henka_result henka_assets_load_shader(
 
     result = henka_assets_resolve_path(
         henka_engine_get_asset_base_path(manager->engine),
-        fragment_key,
+        fragment_source_path,
         &resolved_fragment_path);
     if (result != HENKA_SUCCESS)
     {
         henka_free(resolved_vertex_path);
         henka_free(source_path);
         henka_free(display_name);
+        henka_free(fragment_source_path);
+        henka_free(vertex_source_path);
         henka_free(fragment_key);
         henka_free(vertex_key);
         return result;
@@ -708,6 +787,8 @@ henka_result henka_assets_load_shader(
         &shader);
     henka_free(resolved_vertex_path);
     henka_free(resolved_fragment_path);
+    henka_free(fragment_source_path);
+    henka_free(vertex_source_path);
     if (result != HENKA_SUCCESS)
     {
         henka_free(source_path);
@@ -769,6 +850,7 @@ henka_result henka_assets_load_texture(
     henka_asset_texture_entry* existing_entry;
     char* key;
     char* resolved_path;
+    char* source_path;
     henka_texture* texture;
     henka_result result;
 
@@ -783,9 +865,17 @@ henka_result henka_assets_load_texture(
     }
 
     key = NULL;
+    source_path = NULL;
     result = henka_assets_make_canonical_key(path, &key);
     if (result != HENKA_SUCCESS)
     {
+        return result;
+    }
+
+    result = henka_assets_normalize_source_path(path, &source_path);
+    if (result != HENKA_SUCCESS)
+    {
+        henka_free(key);
         return result;
     }
 
@@ -795,6 +885,7 @@ henka_result henka_assets_load_texture(
     if (existing_entry != NULL)
     {
         *out_texture = existing_entry->texture;
+        henka_free(source_path);
         henka_free(key);
         return HENKA_SUCCESS;
     }
@@ -802,11 +893,12 @@ henka_result henka_assets_load_texture(
     resolved_path = NULL;
     result = henka_assets_resolve_path(
         henka_engine_get_asset_base_path(manager->engine),
-        key,
+        source_path,
         &resolved_path);
     if (result != HENKA_SUCCESS)
     {
         henka_free(key);
+        henka_free(source_path);
         return result;
     }
 
@@ -820,11 +912,11 @@ henka_result henka_assets_load_texture(
     {
         HENKA_LOG_ERROR(
             "Using the error texture because '%s' could not be loaded",
-            key);
+            source_path);
         texture = manager->error_texture;
     }
 
-    display_name = henka_asset_copy_display_name(key);
+    display_name = henka_asset_copy_display_name(source_path);
     if (display_name == NULL)
     {
         if (texture != manager->error_texture)
@@ -832,6 +924,7 @@ henka_result henka_assets_load_texture(
             henka_texture_destroy(texture);
         }
         henka_free(key);
+        henka_free(source_path);
         return HENKA_ERROR_OUT_OF_MEMORY;
     }
 
@@ -846,6 +939,7 @@ henka_result henka_assets_load_texture(
             }
             henka_free(display_name);
             henka_free(key);
+            henka_free(source_path);
             return result;
         }
     }
@@ -856,6 +950,8 @@ henka_result henka_assets_load_texture(
     }
 
     manager->texture_entries[manager->texture_count].key = key;
+    manager->texture_entries[manager->texture_count].source_path =
+        source_path;
     manager->texture_entries[manager->texture_count].display_name =
         display_name;
     manager->texture_entries[manager->texture_count].texture = texture;
@@ -864,7 +960,7 @@ henka_result henka_assets_load_texture(
     manager->texture_entries[manager->texture_count].metadata.type =
         HENKA_ASSET_TYPE_TEXTURE;
     manager->texture_entries[manager->texture_count].metadata.source_path =
-        key;
+        source_path;
     manager->texture_entries[manager->texture_count].metadata.display_name =
         display_name;
     manager->texture_entries[manager->texture_count].metadata.loaded =
@@ -895,6 +991,7 @@ henka_result henka_assets_load_obj_mesh(
     henka_asset_mesh_entry* existing_entry;
     char* key;
     char* resolved_path;
+    char* source_path;
     henka_mesh* mesh;
     henka_result result;
 
@@ -909,9 +1006,17 @@ henka_result henka_assets_load_obj_mesh(
     }
 
     key = NULL;
+    source_path = NULL;
     result = henka_assets_make_canonical_key(path, &key);
     if (result != HENKA_SUCCESS)
     {
+        return result;
+    }
+
+    result = henka_assets_normalize_source_path(path, &source_path);
+    if (result != HENKA_SUCCESS)
+    {
+        henka_free(key);
         return result;
     }
 
@@ -921,6 +1026,7 @@ henka_result henka_assets_load_obj_mesh(
     if (existing_entry != NULL)
     {
         *out_mesh = existing_entry->mesh;
+        henka_free(source_path);
         henka_free(key);
         return HENKA_SUCCESS;
     }
@@ -928,11 +1034,12 @@ henka_result henka_assets_load_obj_mesh(
     resolved_path = NULL;
     result = henka_assets_resolve_path(
         henka_engine_get_asset_base_path(manager->engine),
-        key,
+        source_path,
         &resolved_path);
     if (result != HENKA_SUCCESS)
     {
         henka_free(key);
+        henka_free(source_path);
         return result;
     }
 
@@ -946,11 +1053,11 @@ henka_result henka_assets_load_obj_mesh(
     {
         HENKA_LOG_ERROR(
             "Using the fallback mesh because '%s' could not be loaded",
-            key);
+            source_path);
         mesh = manager->fallback_mesh;
     }
 
-    display_name = henka_asset_copy_display_name(key);
+    display_name = henka_asset_copy_display_name(source_path);
     if (display_name == NULL)
     {
         if (mesh != manager->fallback_mesh)
@@ -958,6 +1065,7 @@ henka_result henka_assets_load_obj_mesh(
             henka_mesh_destroy(mesh);
         }
         henka_free(key);
+        henka_free(source_path);
         return HENKA_ERROR_OUT_OF_MEMORY;
     }
 
@@ -972,6 +1080,7 @@ henka_result henka_assets_load_obj_mesh(
             }
             henka_free(display_name);
             henka_free(key);
+            henka_free(source_path);
             return result;
         }
     }
@@ -982,6 +1091,8 @@ henka_result henka_assets_load_obj_mesh(
     }
 
     manager->mesh_entries[manager->mesh_count].key = key;
+    manager->mesh_entries[manager->mesh_count].source_path =
+        source_path;
     manager->mesh_entries[manager->mesh_count].display_name =
         display_name;
     manager->mesh_entries[manager->mesh_count].mesh = mesh;
@@ -990,7 +1101,7 @@ henka_result henka_assets_load_obj_mesh(
     manager->mesh_entries[manager->mesh_count].metadata.type =
         HENKA_ASSET_TYPE_MESH;
     manager->mesh_entries[manager->mesh_count].metadata.source_path =
-        key;
+        source_path;
     manager->mesh_entries[manager->mesh_count].metadata.display_name =
         display_name;
     manager->mesh_entries[manager->mesh_count].metadata.loaded =
@@ -1056,7 +1167,7 @@ henka_result henka_assets_retry_failed_texture(
     resolved_path = NULL;
     result = henka_assets_resolve_path(
         henka_engine_get_asset_base_path(manager->engine),
-        entry->key,
+        entry->source_path,
         &resolved_path);
     if (result != HENKA_SUCCESS)
     {
@@ -1134,7 +1245,7 @@ henka_result henka_assets_retry_failed_obj_mesh(
     resolved_path = NULL;
     result = henka_assets_resolve_path(
         henka_engine_get_asset_base_path(manager->engine),
-        entry->key,
+        entry->source_path,
         &resolved_path);
     if (result != HENKA_SUCCESS)
     {

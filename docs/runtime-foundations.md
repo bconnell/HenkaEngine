@@ -91,7 +91,7 @@ These ownership and transaction boundaries also prepare future 2.5D and modeling
 
 ### Asset identity and ownership
 
-Manager-loaded shaders, textures, and OBJ meshes use canonical confined cache identities. Equivalent slash and dot-segment path spellings share one entry. Returned pointers are borrowed and manager-owned; public destroy calls ignore them so a caller cannot leave a dangling cache entry or cause manager shutdown to destroy the same resource twice.
+Manager-loaded shaders, textures, and OBJ meshes use canonical confined cache identities. Rooted, UNC, device, drive-qualified, traversal, and URI-like inputs fail without producing an asset or cache entry. Equivalent slash and dot-segment path spellings share one entry. On Windows, ASCII case-only variants also share one identity, while metadata retains the normalized spelling used for the first load. Case folding is not applied on platforms with case-sensitive path identity. Returned pointers are borrowed and manager-owned; public destroy calls ignore them so a caller cannot leave a dangling cache entry or cause manager shutdown to destroy the same resource twice.
 
 Texture and OBJ fallback retries are transactional. A failed replacement leaves the existing fallback entry and its path-specific metadata intact. A successful replacement becomes manager-owned and clears retry support until a true loaded-asset reload operation exists. Shader metadata no longer claims reload support. Shared texture and mesh fallback pointers are intentionally rejected by pointer-based metadata lookup because they cannot identify one source path; path-based metadata APIs provide the unambiguous contract.
 

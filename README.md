@@ -37,7 +37,7 @@ Henka Engine is still early, but the sandbox now renders a visible 3D scene with
 - Run-once engine lifecycle with copied configuration strings, reentrant-run rejection, exit-before-update rendering, checked frame rollback, and main-window presentation only after detached-window UI succeeds
 - Shared overlay-handle transform gizmo foundation for selected object manipulation, with visual feel still being hardened through manual QA
 - Viewport interaction test helpers for reducing manual QA around selection, gizmo hit testing, and transform changes
-- Asset manager foundation with canonical confined path identities, manager-owned borrowed resources, deterministic failure outputs, path-specific fallback metadata, and transactional texture and OBJ fallback retries
+- Asset manager foundation with rooted/UNC/device/drive/URI path rejection, platform-aware canonical cache identities, preserved source spelling, manager-owned borrowed resources, deterministic failure outputs, path-specific fallback metadata, and transactional texture and OBJ fallback retries
 - Early OBJ model loading with bounded source and output sizes, finite-number validation, negative indices, n-gon fan triangulation, degenerate-face rejection, and explicit failed-mesh retry support
 - Fallback white and error textures
 - Shader-based rendering of built-in primitives

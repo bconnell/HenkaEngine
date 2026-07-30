@@ -14,6 +14,22 @@ void henka_test_assets(void)
     char display_name_source[] = "assets/textures/cube_albedo.png";
     char overlong_path[HENKA_MAX_ASSET_PATH_BYTES + 2U];
     char* canonical_key;
+    char* canonical_key_variant;
+    const char* invalid_asset_paths[] =
+    {
+        "../outside.obj",
+        "assets/../outside.obj",
+        "/assets/models/tree.obj",
+        "\\Windows\\texture.png",
+        "\\\\server\\share\\model.obj",
+        "C:/assets/model.obj",
+        "C:assets/model.obj",
+        "\\\\?\\C:\\assets\\model.obj",
+        "\\\\.\\C:\\assets\\model.obj",
+        "file://assets/model.obj",
+        "https://example.invalid/model.obj"
+    };
+    size_t invalid_path_index;
     henka_asset_manager manager;
     henka_asset_mesh_entry mesh_entries[2];
     henka_asset_metadata metadata;
@@ -49,6 +65,45 @@ void henka_test_assets(void)
         canonical_key,
         "assets/textures/cube_albedo.png") == 0);
     henka_free(canonical_key);
+
+    canonical_key = NULL;
+    canonical_key_variant = NULL;
+    HENKA_TEST_ASSERT(henka_assets_make_canonical_key(
+        "Assets//Textures///Cube_Albedo.PNG",
+        &canonical_key) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_assets_make_canonical_key(
+        "Assets\\Textures\\.\\Cube_Albedo.PNG",
+        &canonical_key_variant) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(strcmp(canonical_key, canonical_key_variant) == 0);
+    henka_free(canonical_key_variant);
+    canonical_key_variant = NULL;
+    HENKA_TEST_ASSERT(henka_assets_make_canonical_key(
+        "assets/textures/cube_albedo.png",
+        &canonical_key_variant) == HENKA_SUCCESS);
+#if defined(_WIN32)
+    HENKA_TEST_ASSERT(strcmp(
+        canonical_key,
+        "assets/textures/cube_albedo.png") == 0);
+    HENKA_TEST_ASSERT(strcmp(canonical_key, canonical_key_variant) == 0);
+#else
+    HENKA_TEST_ASSERT(strcmp(
+        canonical_key,
+        "Assets/Textures/Cube_Albedo.PNG") == 0);
+    HENKA_TEST_ASSERT(strcmp(canonical_key, canonical_key_variant) != 0);
+#endif
+    henka_free(canonical_key_variant);
+    henka_free(canonical_key);
+
+    for (invalid_path_index = 0U;
+        invalid_path_index < sizeof(invalid_asset_paths) / sizeof(invalid_asset_paths[0]);
+        ++invalid_path_index)
+    {
+        canonical_key = (char*)1;
+        HENKA_TEST_ASSERT(henka_assets_make_canonical_key(
+            invalid_asset_paths[invalid_path_index],
+            &canonical_key) == HENKA_ERROR_INVALID_ARGUMENT);
+        HENKA_TEST_ASSERT(canonical_key == NULL);
+    }
 
     mesh = (henka_mesh*)1;
     HENKA_TEST_ASSERT(henka_assets_retry_failed_obj_mesh(NULL, "assets/models/missing.obj", &mesh) == HENKA_ERROR_INVALID_ARGUMENT);
@@ -89,21 +144,25 @@ void henka_test_assets(void)
     manager.mesh_entries = mesh_entries;
     manager.mesh_count = 2U;
     texture_entries[0].key = "assets/textures/a.png";
+    texture_entries[0].source_path = "assets/textures/a.png";
     texture_entries[0].texture = &fallback_texture;
     texture_entries[0].metadata.type = HENKA_ASSET_TYPE_TEXTURE;
     texture_entries[0].metadata.source_path = texture_entries[0].key;
     texture_entries[0].metadata.fallback = true;
     texture_entries[1].key = "assets/textures/b.png";
+    texture_entries[1].source_path = "Assets/Textures/B.png";
     texture_entries[1].texture = &fallback_texture;
     texture_entries[1].metadata.type = HENKA_ASSET_TYPE_TEXTURE;
-    texture_entries[1].metadata.source_path = texture_entries[1].key;
+    texture_entries[1].metadata.source_path = texture_entries[1].source_path;
     texture_entries[1].metadata.fallback = true;
     mesh_entries[0].key = "assets/models/a.obj";
+    mesh_entries[0].source_path = "Assets/Models/A.obj";
     mesh_entries[0].mesh = &fallback_mesh;
     mesh_entries[0].metadata.type = HENKA_ASSET_TYPE_MESH;
-    mesh_entries[0].metadata.source_path = mesh_entries[0].key;
+    mesh_entries[0].metadata.source_path = mesh_entries[0].source_path;
     mesh_entries[0].metadata.fallback = true;
     mesh_entries[1].key = "assets/models/b.obj";
+    mesh_entries[1].source_path = "assets/models/b.obj";
     mesh_entries[1].mesh = &fallback_mesh;
     mesh_entries[1].metadata.type = HENKA_ASSET_TYPE_MESH;
     mesh_entries[1].metadata.source_path = mesh_entries[1].key;
@@ -115,13 +174,20 @@ void henka_test_assets(void)
         &fallback_texture,
         &metadata) == HENKA_ERROR_INVALID_ARGUMENT);
     HENKA_TEST_ASSERT(metadata.source_path == NULL);
+#if defined(_WIN32)
+    HENKA_TEST_ASSERT(henka_assets_get_texture_metadata_for_path(
+        &manager,
+        "ASSETS\\textures\\.\\B.PNG",
+        &metadata) == HENKA_SUCCESS);
+#else
     HENKA_TEST_ASSERT(henka_assets_get_texture_metadata_for_path(
         &manager,
         "assets\\textures\\.\\b.png",
         &metadata) == HENKA_SUCCESS);
+#endif
     HENKA_TEST_ASSERT(strcmp(
         metadata.source_path,
-        "assets/textures/b.png") == 0);
+        "Assets/Textures/B.png") == 0);
 
     memset(&metadata, 0x5a, sizeof(metadata));
     HENKA_TEST_ASSERT(henka_assets_get_mesh_metadata(
@@ -129,13 +195,28 @@ void henka_test_assets(void)
         &fallback_mesh,
         &metadata) == HENKA_ERROR_INVALID_ARGUMENT);
     HENKA_TEST_ASSERT(metadata.source_path == NULL);
+#if defined(_WIN32)
+    HENKA_TEST_ASSERT(henka_assets_get_mesh_metadata_for_path(
+        &manager,
+        "ASSETS\\models\\.\\A.OBJ",
+        &metadata) == HENKA_SUCCESS);
+#else
     HENKA_TEST_ASSERT(henka_assets_get_mesh_metadata_for_path(
         &manager,
         "assets\\models\\.\\a.obj",
         &metadata) == HENKA_SUCCESS);
+#endif
     HENKA_TEST_ASSERT(strcmp(
         metadata.source_path,
-        "assets/models/a.obj") == 0);
+        "Assets/Models/A.obj") == 0);
+
+    memset(&metadata, 0x5a, sizeof(metadata));
+    HENKA_TEST_ASSERT(henka_assets_get_texture_metadata_for_path(
+        &manager,
+        "/assets/textures/b.png",
+        &metadata) == HENKA_ERROR_INVALID_ARGUMENT);
+    HENKA_TEST_ASSERT(metadata.source_path == NULL);
+    HENKA_TEST_ASSERT(manager.texture_count == 2U);
 
     memset(&managed_shader, 0, sizeof(managed_shader));
     managed_shader.asset_manager_owned = true;
