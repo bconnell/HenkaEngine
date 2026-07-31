@@ -9,7 +9,8 @@ typedef enum henka_result
     HENKA_ERROR_PLATFORM,
     HENKA_ERROR_RENDERER,
     HENKA_ERROR_UNKNOWN,
-    HENKA_ERROR_NUMERIC_RANGE
+    HENKA_ERROR_NUMERIC_RANGE,
+    HENKA_ERROR_ASSET_SOURCE
 } henka_result;
 
 const char* henka_result_to_string(henka_result result);

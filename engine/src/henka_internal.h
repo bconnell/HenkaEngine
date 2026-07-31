@@ -194,6 +194,7 @@ struct henka_texture
 {
     struct henka_renderer* renderer;
     bool asset_manager_owned;
+    bool owns_backend;
     void* backend_data;
     int width;
     int height;
@@ -354,6 +355,12 @@ henka_result henka_assets_make_canonical_key(
 void henka_mesh_destroy_owned(henka_mesh* mesh);
 void henka_shader_destroy_owned(henka_shader* shader);
 void henka_texture_destroy_owned(henka_texture* texture);
+henka_result henka_texture_create_borrowed_alias(
+    const henka_texture* source,
+    henka_texture** out_texture);
+henka_result henka_texture_adopt_owned_payload(
+    henka_texture* target,
+    henka_texture* replacement);
 henka_result henka_asset_manager_create(struct henka_engine* engine, struct henka_asset_manager** out_manager);
 void henka_asset_manager_destroy(struct henka_asset_manager* manager);
 

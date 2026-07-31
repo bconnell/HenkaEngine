@@ -57,7 +57,10 @@ henka_result henka_assets_load_obj_mesh(henka_asset_manager* manager, const char
 
 /*
  * Retries only a cached texture fallback from a previous failed load.
- * The fallback entry remains intact when the replacement load fails.
+ * The fallback entry and borrowed texture pointer remain intact when the
+ * replacement load fails. Failure leaves out_texture null. Success updates the
+ * existing borrowed texture object in place, so materials do not retain a
+ * permanently stale fallback pointer.
  */
 henka_result henka_assets_retry_failed_texture(
     henka_asset_manager* manager,
@@ -73,7 +76,10 @@ const char* henka_assets_get_type_label(henka_asset_type type);
 size_t henka_assets_get_metadata_count(const henka_asset_manager* manager);
 henka_result henka_assets_get_metadata_at_index(const henka_asset_manager* manager, size_t index, henka_asset_metadata* out_metadata);
 henka_result henka_assets_get_shader_metadata(const henka_asset_manager* manager, const henka_shader* shader, henka_asset_metadata* out_metadata);
-/* Shared fallbacks are ambiguous by pointer; use the path form for them. */
+/*
+ * Path-specific fallback aliases support pointer metadata. The shared
+ * manager error texture itself has no path-specific metadata.
+ */
 henka_result henka_assets_get_texture_metadata(const henka_asset_manager* manager, const henka_texture* texture, henka_asset_metadata* out_metadata);
 henka_result henka_assets_get_mesh_metadata(const henka_asset_manager* manager, const henka_mesh* mesh, henka_asset_metadata* out_metadata);
 henka_result henka_assets_get_texture_metadata_for_path(

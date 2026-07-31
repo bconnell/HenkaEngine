@@ -848,6 +848,7 @@ henka_result henka_assets_load_texture(
 {
     char* display_name;
     henka_asset_texture_entry* existing_entry;
+    bool fallback_active;
     char* key;
     char* resolved_path;
     char* source_path;
@@ -859,29 +860,36 @@ henka_result henka_assets_load_texture(
         *out_texture = NULL;
     }
 
-    if (manager == NULL || path == NULL || out_texture == NULL)
+    if (manager == NULL ||
+        path == NULL ||
+        out_texture == NULL)
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
 
     key = NULL;
     source_path = NULL;
-    result = henka_assets_make_canonical_key(path, &key);
+    result = henka_assets_make_canonical_key(
+        path,
+        &key);
     if (result != HENKA_SUCCESS)
     {
         return result;
     }
 
-    result = henka_assets_normalize_source_path(path, &source_path);
+    result = henka_assets_normalize_source_path(
+        path,
+        &source_path);
     if (result != HENKA_SUCCESS)
     {
         henka_free(key);
         return result;
     }
 
-    existing_entry = henka_asset_manager_find_texture_entry(
-        manager,
-        key);
+    existing_entry =
+        henka_asset_manager_find_texture_entry(
+            manager,
+            key);
     if (existing_entry != NULL)
     {
         *out_texture = existing_entry->texture;
@@ -892,7 +900,8 @@ henka_result henka_assets_load_texture(
 
     resolved_path = NULL;
     result = henka_assets_resolve_path(
-        henka_engine_get_asset_base_path(manager->engine),
+        henka_engine_get_asset_base_path(
+            manager->engine),
         source_path,
         &resolved_path);
     if (result != HENKA_SUCCESS)
@@ -902,41 +911,54 @@ henka_result henka_assets_load_texture(
         return result;
     }
 
+    fallback_active = false;
     texture = NULL;
     result = henka_texture_create_from_file(
         manager->engine,
         resolved_path,
         &texture);
     henka_free(resolved_path);
-    if (result != HENKA_SUCCESS)
+    if (result == HENKA_ERROR_ASSET_SOURCE)
     {
         HENKA_LOG_ERROR(
-            "Using the error texture because '%s' could not be loaded",
+            "Using a path-specific error-texture alias because '%s' could not be loaded",
             source_path);
-        texture = manager->error_texture;
+        result = henka_texture_create_borrowed_alias(
+            manager->error_texture,
+            &texture);
+        if (result != HENKA_SUCCESS)
+        {
+            henka_free(key);
+            henka_free(source_path);
+            return result;
+        }
+        fallback_active = true;
+    }
+    else if (result != HENKA_SUCCESS)
+    {
+        henka_free(key);
+        henka_free(source_path);
+        return result;
     }
 
-    display_name = henka_asset_copy_display_name(source_path);
+    display_name =
+        henka_asset_copy_display_name(source_path);
     if (display_name == NULL)
     {
-        if (texture != manager->error_texture)
-        {
-            henka_texture_destroy(texture);
-        }
+        henka_texture_destroy(texture);
         henka_free(key);
         henka_free(source_path);
         return HENKA_ERROR_OUT_OF_MEMORY;
     }
 
-    if (manager->texture_count == manager->texture_capacity)
+    if (manager->texture_count ==
+        manager->texture_capacity)
     {
-        result = henka_asset_manager_grow_textures(manager);
+        result =
+            henka_asset_manager_grow_textures(manager);
         if (result != HENKA_SUCCESS)
         {
-            if (texture != manager->error_texture)
-            {
-                henka_texture_destroy(texture);
-            }
+            henka_texture_destroy(texture);
             henka_free(display_name);
             henka_free(key);
             henka_free(source_path);
@@ -944,38 +966,45 @@ henka_result henka_assets_load_texture(
         }
     }
 
-    if (texture != manager->error_texture)
-    {
-        texture->asset_manager_owned = true;
-    }
-
-    manager->texture_entries[manager->texture_count].key = key;
-    manager->texture_entries[manager->texture_count].source_path =
+    texture->asset_manager_owned = true;
+    manager->texture_entries[
+        manager->texture_count].key = key;
+    manager->texture_entries[
+        manager->texture_count].source_path =
         source_path;
-    manager->texture_entries[manager->texture_count].display_name =
+    manager->texture_entries[
+        manager->texture_count].display_name =
         display_name;
-    manager->texture_entries[manager->texture_count].texture = texture;
-    manager->texture_entries[manager->texture_count].owns_texture =
-        texture != manager->error_texture;
-    manager->texture_entries[manager->texture_count].metadata.type =
+    manager->texture_entries[
+        manager->texture_count].texture = texture;
+    manager->texture_entries[
+        manager->texture_count].owns_texture = true;
+    manager->texture_entries[
+        manager->texture_count].metadata.type =
         HENKA_ASSET_TYPE_TEXTURE;
-    manager->texture_entries[manager->texture_count].metadata.source_path =
+    manager->texture_entries[
+        manager->texture_count].metadata.source_path =
         source_path;
-    manager->texture_entries[manager->texture_count].metadata.display_name =
+    manager->texture_entries[
+        manager->texture_count].metadata.display_name =
         display_name;
-    manager->texture_entries[manager->texture_count].metadata.loaded =
-        texture != manager->error_texture;
-    manager->texture_entries[manager->texture_count].metadata.fallback =
-        texture == manager->error_texture;
-    manager->texture_entries[manager->texture_count].metadata.reload_supported =
-        texture == manager->error_texture;
+    manager->texture_entries[
+        manager->texture_count].metadata.loaded =
+        !fallback_active;
+    manager->texture_entries[
+        manager->texture_count].metadata.fallback =
+        fallback_active;
+    manager->texture_entries[
+        manager->texture_count].metadata.reload_supported =
+        fallback_active;
     henka_asset_set_summary(
-        &manager->texture_entries[manager->texture_count].metadata,
-        texture == manager->error_texture ?
-            "Texture fallback is active and can be retried." :
+        &manager->texture_entries[
+            manager->texture_count].metadata,
+        fallback_active ?
+            "A path-specific texture fallback is active and can be retried without changing the borrowed pointer." :
             "Texture loaded from the canonical asset path.",
-        texture == manager->error_texture ?
-            "Texture load failed and the error texture fallback was used. Retry after fixing the source asset." :
+        fallback_active ?
+            "Texture source loading failed. Retry after fixing the source asset; allocation and renderer failures are not cached as fallbacks." :
             "");
     manager->texture_count += 1U;
     *out_texture = texture;
@@ -1139,19 +1168,25 @@ henka_result henka_assets_retry_failed_texture(
         *out_texture = NULL;
     }
 
-    if (manager == NULL || path == NULL || out_texture == NULL)
+    if (manager == NULL ||
+        path == NULL ||
+        out_texture == NULL)
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
 
     key = NULL;
-    result = henka_assets_make_canonical_key(path, &key);
+    result = henka_assets_make_canonical_key(
+        path,
+        &key);
     if (result != HENKA_SUCCESS)
     {
         return result;
     }
 
-    entry = henka_asset_manager_find_texture_entry(manager, key);
+    entry = henka_asset_manager_find_texture_entry(
+        manager,
+        key);
     henka_free(key);
     if (entry == NULL)
     {
@@ -1166,12 +1201,12 @@ henka_result henka_assets_retry_failed_texture(
 
     resolved_path = NULL;
     result = henka_assets_resolve_path(
-        henka_engine_get_asset_base_path(manager->engine),
+        henka_engine_get_asset_base_path(
+            manager->engine),
         entry->source_path,
         &resolved_path);
     if (result != HENKA_SUCCESS)
     {
-        *out_texture = entry->texture;
         return result;
     }
 
@@ -1183,21 +1218,27 @@ henka_result henka_assets_retry_failed_texture(
     henka_free(resolved_path);
     if (result != HENKA_SUCCESS)
     {
-        *out_texture = entry->texture;
         return result;
     }
 
-    replacement->asset_manager_owned = true;
-    entry->texture = replacement;
+    result = henka_texture_adopt_owned_payload(
+        entry->texture,
+        replacement);
+    if (result != HENKA_SUCCESS)
+    {
+        henka_texture_destroy(replacement);
+        return result;
+    }
+
     entry->owns_texture = true;
     entry->metadata.loaded = true;
     entry->metadata.fallback = false;
     entry->metadata.reload_supported = false;
     henka_asset_set_summary(
         &entry->metadata,
-        "Texture loaded after a transactional fallback retry.",
+        "Texture loaded after a transactional fallback retry while preserving the borrowed texture identity.",
         "");
-    *out_texture = replacement;
+    *out_texture = entry->texture;
     return HENKA_SUCCESS;
 }
 

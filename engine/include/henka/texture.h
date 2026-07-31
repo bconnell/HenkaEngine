@@ -8,8 +8,10 @@ typedef struct henka_texture henka_texture;
 
 /*
  * Creates a texture from an image file after validating dimensions and the
- * decoded RGBA8 size. The caller owns the texture and must release it with
- * henka_texture_destroy.
+ * decoded RGBA8 size. Source inspection or decoding failures return
+ * HENKA_ERROR_ASSET_SOURCE, allocation failures remain distinct, and renderer
+ * upload failures are not reported as source failures. The caller owns the
+ * texture and must release it with henka_texture_destroy.
  */
 henka_result henka_texture_create_from_file(henka_engine* engine, const char* path, henka_texture** out_texture);
 

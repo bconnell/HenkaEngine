@@ -1559,6 +1559,152 @@ void henka_opengl_renderer_destroy_shader(struct henka_shader* shader)
     henka_free(shader);
 }
 
+typedef struct henka_opengl_texture_context_guard
+{
+    SDL_Window* previous_window;
+    SDL_GLContext previous_context;
+    bool restore_previous;
+} henka_opengl_texture_context_guard;
+
+static henka_result henka_opengl_begin_texture_context(
+    henka_opengl_renderer_state* state,
+    henka_opengl_texture_context_guard* guard,
+    const char* operation)
+{
+    if (state == NULL ||
+        state->window == NULL ||
+        state->gl_context == NULL ||
+        guard == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    memset(guard, 0, sizeof(*guard));
+    guard->previous_window = SDL_GL_GetCurrentWindow();
+    guard->previous_context = SDL_GL_GetCurrentContext();
+    if ((guard->previous_window == NULL) !=
+        (guard->previous_context == NULL))
+    {
+        HENKA_LOG_ERROR(
+            "OpenGL reported an incomplete current context before %s",
+            operation != NULL ? operation : "texture work");
+        return HENKA_ERROR_RENDERER;
+    }
+
+    if (guard->previous_window == state->window &&
+        guard->previous_context == state->gl_context)
+    {
+        return HENKA_SUCCESS;
+    }
+
+    guard->restore_previous =
+        guard->previous_window != NULL &&
+        guard->previous_context != NULL;
+    if (!SDL_GL_MakeCurrent(
+            state->window,
+            state->gl_context))
+    {
+        HENKA_LOG_ERROR(
+            "could not make the main OpenGL context current for %s: %s",
+            operation != NULL ? operation : "texture work",
+            SDL_GetError());
+        memset(guard, 0, sizeof(*guard));
+        return HENKA_ERROR_RENDERER;
+    }
+
+    return HENKA_SUCCESS;
+}
+
+static henka_result henka_opengl_end_texture_context(
+    henka_opengl_renderer_state* state,
+    const henka_opengl_texture_context_guard* guard,
+    const char* operation)
+{
+    if (state == NULL || guard == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    if (!guard->restore_previous)
+    {
+        return HENKA_SUCCESS;
+    }
+
+    if (SDL_GL_MakeCurrent(
+            guard->previous_window,
+            guard->previous_context))
+    {
+        return HENKA_SUCCESS;
+    }
+
+    HENKA_LOG_ERROR(
+        "could not restore the previous OpenGL context after %s: %s",
+        operation != NULL ? operation : "texture work",
+        SDL_GetError());
+    if (!SDL_GL_MakeCurrent(
+            state->window,
+            state->gl_context))
+    {
+        HENKA_LOG_ERROR(
+            "could not recover the main OpenGL context after texture context restoration failed: %s",
+            SDL_GetError());
+    }
+    return HENKA_ERROR_RENDERER;
+}
+
+static void henka_opengl_discard_prior_texture_errors(
+    const char* operation)
+{
+    GLenum error;
+
+    while ((error = glGetError()) != GL_NO_ERROR)
+    {
+        HENKA_LOG_WARN(
+            "discarding pre-existing OpenGL error 0x%04x before %s",
+            (unsigned int)error,
+            operation != NULL ? operation : "texture work");
+    }
+}
+
+static henka_result henka_opengl_collect_texture_errors(
+    const char* operation)
+{
+    GLenum error;
+    henka_result result;
+
+    result = HENKA_SUCCESS;
+    while ((error = glGetError()) != GL_NO_ERROR)
+    {
+        HENKA_LOG_ERROR(
+            "OpenGL texture operation '%s' failed with error 0x%04x",
+            operation != NULL ? operation : "unknown",
+            (unsigned int)error);
+        if (error == GL_OUT_OF_MEMORY)
+        {
+            result = HENKA_ERROR_OUT_OF_MEMORY;
+        }
+        else if (result == HENKA_SUCCESS)
+        {
+            result = HENKA_ERROR_RENDERER;
+        }
+    }
+
+    return result;
+}
+
+static henka_result henka_opengl_restore_texture_binding(
+    GLint previous_active_texture,
+    GLint previous_texture_binding)
+{
+    g_gl.ActiveTexture(GL_TEXTURE0);
+    glBindTexture(
+        GL_TEXTURE_2D,
+        (GLuint)previous_texture_binding);
+    g_gl.ActiveTexture((GLenum)previous_active_texture);
+    return henka_opengl_collect_texture_errors(
+        "texture binding restoration");
+}
+
 henka_result henka_opengl_renderer_create_texture_from_rgba8(
     struct henka_renderer* renderer,
     int width,
@@ -1566,18 +1712,69 @@ henka_result henka_opengl_renderer_create_texture_from_rgba8(
     const unsigned char* pixels,
     struct henka_texture** out_texture)
 {
+    henka_opengl_texture_context_guard context_guard;
+    henka_result context_result;
     size_t decoded_bytes;
+    henka_opengl_renderer_state* state;
+    henka_result operation_result;
+    GLint previous_active_texture;
+    GLint previous_texture_binding;
+    henka_result restore_result;
     henka_texture* texture;
     henka_opengl_texture_data* texture_data;
 
-    if (renderer == NULL || pixels == NULL || out_texture == NULL ||
-        !henka_checked_rgba8_size(width, height, &decoded_bytes))
+    if (out_texture != NULL)
+    {
+        *out_texture = NULL;
+    }
+
+    if (renderer == NULL ||
+        renderer->backend_state == NULL ||
+        pixels == NULL ||
+        out_texture == NULL ||
+        !henka_checked_rgba8_size(
+            width,
+            height,
+            &decoded_bytes))
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
 
-    (void)decoded_bytes;
-    *out_texture = NULL;
+    state = (henka_opengl_renderer_state*)renderer->backend_state;
+    operation_result = henka_opengl_begin_texture_context(
+        state,
+        &context_guard,
+        "texture creation");
+    if (operation_result != HENKA_SUCCESS)
+    {
+        return operation_result;
+    }
+
+    henka_opengl_discard_prior_texture_errors(
+        "texture creation");
+    previous_active_texture = GL_TEXTURE0;
+    previous_texture_binding = 0;
+    glGetIntegerv(
+        GL_ACTIVE_TEXTURE,
+        &previous_active_texture);
+    g_gl.ActiveTexture(GL_TEXTURE0);
+    glGetIntegerv(
+        GL_TEXTURE_BINDING_2D,
+        &previous_texture_binding);
+    operation_result = henka_opengl_collect_texture_errors(
+        "texture state capture");
+    if (operation_result != HENKA_SUCCESS)
+    {
+        (void)henka_opengl_restore_texture_binding(
+            previous_active_texture,
+            previous_texture_binding);
+        context_result = henka_opengl_end_texture_context(
+            state,
+            &context_guard,
+            "failed texture state capture");
+        return context_result != HENKA_SUCCESS ?
+            context_result : operation_result;
+    }
 
     texture = henka_calloc(1U, sizeof(*texture));
     texture_data = henka_calloc(1U, sizeof(*texture_data));
@@ -1585,22 +1782,126 @@ henka_result henka_opengl_renderer_create_texture_from_rgba8(
     {
         henka_free(texture_data);
         henka_free(texture);
-        return HENKA_ERROR_OUT_OF_MEMORY;
+        (void)henka_opengl_restore_texture_binding(
+            previous_active_texture,
+            previous_texture_binding);
+        context_result = henka_opengl_end_texture_context(
+            state,
+            &context_guard,
+            "failed texture allocation");
+        return context_result != HENKA_SUCCESS ?
+            context_result : HENKA_ERROR_OUT_OF_MEMORY;
     }
 
     glGenTextures(1, &texture_data->texture_id);
-    g_gl.ActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, texture_data->texture_id);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, pixels);
-    g_gl.GenerateMipmap(GL_TEXTURE_2D);
-    glBindTexture(GL_TEXTURE_2D, 0);
+    if (texture_data->texture_id != 0U)
+    {
+        glBindTexture(
+            GL_TEXTURE_2D,
+            texture_data->texture_id);
+        glTexParameteri(
+            GL_TEXTURE_2D,
+            GL_TEXTURE_MIN_FILTER,
+            GL_LINEAR_MIPMAP_LINEAR);
+        glTexParameteri(
+            GL_TEXTURE_2D,
+            GL_TEXTURE_MAG_FILTER,
+            GL_LINEAR);
+        glTexParameteri(
+            GL_TEXTURE_2D,
+            GL_TEXTURE_WRAP_S,
+            GL_REPEAT);
+        glTexParameteri(
+            GL_TEXTURE_2D,
+            GL_TEXTURE_WRAP_T,
+            GL_REPEAT);
+        glTexImage2D(
+            GL_TEXTURE_2D,
+            0,
+            GL_RGBA8,
+            width,
+            height,
+            0,
+            GL_RGBA,
+            GL_UNSIGNED_BYTE,
+            pixels);
+        g_gl.GenerateMipmap(GL_TEXTURE_2D);
+    }
+
+    operation_result = henka_opengl_collect_texture_errors(
+        "texture allocation and upload");
+    if (texture_data->texture_id == 0U &&
+        operation_result == HENKA_SUCCESS)
+    {
+        HENKA_LOG_ERROR(
+            "OpenGL returned texture identifier zero");
+        operation_result = HENKA_ERROR_RENDERER;
+    }
+
+    if (operation_result != HENKA_SUCCESS &&
+        texture_data->texture_id != 0U)
+    {
+        glBindTexture(GL_TEXTURE_2D, 0U);
+        glDeleteTextures(
+            1,
+            &texture_data->texture_id);
+        texture_data->texture_id = 0U;
+        (void)henka_opengl_collect_texture_errors(
+            "failed texture cleanup");
+    }
+
+    restore_result = henka_opengl_restore_texture_binding(
+        previous_active_texture,
+        previous_texture_binding);
+    if (operation_result == HENKA_SUCCESS &&
+        restore_result != HENKA_SUCCESS)
+    {
+        operation_result = restore_result;
+        g_gl.ActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_2D, 0U);
+        if (texture_data->texture_id != 0U)
+        {
+            glDeleteTextures(
+                1,
+                &texture_data->texture_id);
+            texture_data->texture_id = 0U;
+        }
+        g_gl.ActiveTexture(
+            (GLenum)previous_active_texture);
+    }
+
+    context_result = henka_opengl_end_texture_context(
+        state,
+        &context_guard,
+        "texture creation");
+    if (operation_result == HENKA_SUCCESS &&
+        context_result != HENKA_SUCCESS)
+    {
+        operation_result = context_result;
+        if (SDL_GL_MakeCurrent(
+                state->window,
+                state->gl_context))
+        {
+            if (texture_data->texture_id != 0U)
+            {
+                glDeleteTextures(
+                    1,
+                    &texture_data->texture_id);
+                texture_data->texture_id = 0U;
+            }
+        }
+    }
+
+    if (operation_result != HENKA_SUCCESS)
+    {
+        henka_free(texture_data);
+        henka_free(texture);
+        return operation_result;
+    }
 
     texture->renderer = renderer;
     texture->backend_data = texture_data;
+    texture->owns_backend = true;
     texture->width = width;
     texture->height = height;
 
@@ -1608,17 +1909,65 @@ henka_result henka_opengl_renderer_create_texture_from_rgba8(
     return HENKA_SUCCESS;
 }
 
-void henka_opengl_renderer_destroy_texture(struct henka_texture* texture)
+void henka_opengl_renderer_destroy_texture(
+    struct henka_texture* texture)
 {
+    henka_opengl_texture_context_guard context_guard;
+    henka_result context_result;
     henka_opengl_texture_data* texture_data;
+    henka_opengl_renderer_state* state;
+    henka_result result;
 
-    if (texture == NULL || texture->backend_data == NULL)
+    if (texture == NULL)
     {
         return;
     }
 
-    texture_data = (henka_opengl_texture_data*)texture->backend_data;
-    glDeleteTextures(1, &texture_data->texture_id);
-    henka_free(texture_data);
+    texture_data =
+        (henka_opengl_texture_data*)texture->backend_data;
+    if (texture->owns_backend &&
+        texture_data != NULL &&
+        texture->renderer != NULL &&
+        texture->renderer->backend_state != NULL)
+    {
+        state = (henka_opengl_renderer_state*)
+            texture->renderer->backend_state;
+        result = henka_opengl_begin_texture_context(
+            state,
+            &context_guard,
+            "texture destruction");
+        if (result == HENKA_SUCCESS)
+        {
+            henka_opengl_discard_prior_texture_errors(
+                "texture destruction");
+            glDeleteTextures(
+                1,
+                &texture_data->texture_id);
+            (void)henka_opengl_collect_texture_errors(
+                "texture destruction");
+            context_result =
+                henka_opengl_end_texture_context(
+                    state,
+                    &context_guard,
+                    "texture destruction");
+            if (context_result != HENKA_SUCCESS)
+            {
+                HENKA_LOG_ERROR(
+                    "the previous OpenGL context could not be restored after texture destruction");
+            }
+        }
+        else
+        {
+            HENKA_LOG_ERROR(
+                "texture backend could not be deleted because the main context was unavailable");
+        }
+    }
+
+    if (texture->owns_backend)
+    {
+        henka_free(texture_data);
+    }
+    texture->backend_data = NULL;
+    texture->owns_backend = false;
     henka_free(texture);
 }

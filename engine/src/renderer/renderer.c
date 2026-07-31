@@ -350,7 +350,25 @@ henka_result henka_renderer_create_texture_from_rgba8(
     const unsigned char* pixels,
     struct henka_texture** out_texture)
 {
-    return henka_opengl_renderer_create_texture_from_rgba8(renderer, width, height, pixels, out_texture);
+    if (out_texture != NULL)
+    {
+        *out_texture = NULL;
+    }
+
+    if (renderer == NULL ||
+        renderer->backend_state == NULL ||
+        pixels == NULL ||
+        out_texture == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    return henka_opengl_renderer_create_texture_from_rgba8(
+        renderer,
+        width,
+        height,
+        pixels,
+        out_texture);
 }
 
 void henka_renderer_destroy_texture(struct henka_texture* texture)

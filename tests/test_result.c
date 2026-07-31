@@ -15,6 +15,7 @@ void henka_test_result(void)
     HENKA_TEST_ASSERT(strcmp(henka_result_to_string(HENKA_ERROR_INVALID_ARGUMENT), "invalid argument") == 0);
     HENKA_TEST_ASSERT(strcmp(henka_result_to_string(HENKA_ERROR_OUT_OF_MEMORY), "out of memory") == 0);
     HENKA_TEST_ASSERT(strcmp(henka_result_to_string(HENKA_ERROR_NUMERIC_RANGE), "numeric range error") == 0);
+    HENKA_TEST_ASSERT(strcmp(henka_result_to_string(HENKA_ERROR_ASSET_SOURCE), "asset source error") == 0);
     HENKA_TEST_ASSERT(strcmp(henka_result_to_string(HENKA_ERROR_PLATFORM), "platform error") == 0);
     HENKA_TEST_ASSERT(strcmp(henka_result_to_string(HENKA_ERROR_RENDERER), "renderer error") == 0);
     HENKA_TEST_ASSERT(strcmp(henka_result_to_string(HENKA_ERROR_UNKNOWN), "unknown error") == 0);

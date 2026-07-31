@@ -40,6 +40,16 @@ void henka_test_assets(void)
     henka_shader managed_shader;
     henka_texture fallback_texture;
     henka_texture* texture;
+    henka_texture* texture_alias;
+    henka_texture* texture_replacement;
+    henka_texture* stable_texture_identity;
+    henka_engine fake_engine;
+    henka_renderer fake_renderer;
+    size_t allocations_before_alias;
+    static const unsigned char one_pixel[] =
+    {
+        255U, 255U, 255U, 255U
+    };
 
     HENKA_TEST_ASSERT(strcmp(henka_assets_get_type_label(HENKA_ASSET_TYPE_SHADER), "Shader") == 0);
     HENKA_TEST_ASSERT(strcmp(henka_assets_get_type_label(HENKA_ASSET_TYPE_TEXTURE), "Texture") == 0);
@@ -122,6 +132,74 @@ void henka_test_assets(void)
         "assets/textures/missing.png",
         NULL) == HENKA_ERROR_INVALID_ARGUMENT);
 
+    texture = (henka_texture*)1;
+    HENKA_TEST_ASSERT(henka_texture_create_from_rgba8(
+        NULL,
+        1,
+        1,
+        one_pixel,
+        &texture) == HENKA_ERROR_INVALID_ARGUMENT);
+    HENKA_TEST_ASSERT(texture == NULL);
+
+    texture = (henka_texture*)1;
+    HENKA_TEST_ASSERT(henka_renderer_create_texture_from_rgba8(
+        NULL,
+        1,
+        1,
+        one_pixel,
+        &texture) == HENKA_ERROR_INVALID_ARGUMENT);
+    HENKA_TEST_ASSERT(texture == NULL);
+
+    memset(&fake_renderer, 0, sizeof(fake_renderer));
+    memset(&fallback_texture, 0, sizeof(fallback_texture));
+    fallback_texture.renderer = &fake_renderer;
+    fallback_texture.backend_data = (void*)1;
+    fallback_texture.owns_backend = true;
+    fallback_texture.width = 2;
+    fallback_texture.height = 2;
+
+    allocations_before_alias =
+        henka_memory_get_allocation_count();
+    texture_alias = (henka_texture*)1;
+    HENKA_TEST_ASSERT(henka_texture_create_borrowed_alias(
+        &fallback_texture,
+        &texture_alias) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(texture_alias != NULL);
+    HENKA_TEST_ASSERT(texture_alias != &fallback_texture);
+    HENKA_TEST_ASSERT(texture_alias->backend_data ==
+        fallback_texture.backend_data);
+    HENKA_TEST_ASSERT(!texture_alias->owns_backend);
+    HENKA_TEST_ASSERT(texture_alias->width == 2);
+    HENKA_TEST_ASSERT(texture_alias->height == 2);
+
+    texture_replacement = henka_calloc(
+        1U,
+        sizeof(*texture_replacement));
+    HENKA_TEST_ASSERT(texture_replacement != NULL);
+    texture_replacement->renderer = &fake_renderer;
+    texture_replacement->backend_data = (void*)2;
+    texture_replacement->owns_backend = true;
+    texture_replacement->width = 8;
+    texture_replacement->height = 4;
+    stable_texture_identity = texture_alias;
+    HENKA_TEST_ASSERT(henka_texture_adopt_owned_payload(
+        texture_alias,
+        texture_replacement) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(texture_alias ==
+        stable_texture_identity);
+    HENKA_TEST_ASSERT(texture_alias->backend_data ==
+        (void*)2);
+    HENKA_TEST_ASSERT(texture_alias->owns_backend);
+    HENKA_TEST_ASSERT(texture_alias->width == 8);
+    HENKA_TEST_ASSERT(texture_alias->height == 4);
+
+    texture_alias->backend_data = NULL;
+    texture_alias->owns_backend = false;
+    henka_texture_destroy_owned(texture_alias);
+    HENKA_TEST_ASSERT(
+        henka_memory_get_allocation_count() ==
+        allocations_before_alias);
+
     memset(&metadata, 0x5a, sizeof(metadata));
     HENKA_TEST_ASSERT(henka_assets_get_metadata_at_index(
         NULL,
@@ -188,6 +266,20 @@ void henka_test_assets(void)
     HENKA_TEST_ASSERT(strcmp(
         metadata.source_path,
         "Assets/Textures/B.png") == 0);
+
+    memset(&fake_engine, 0, sizeof(fake_engine));
+    fake_engine.renderer = NULL;
+    fake_engine.asset_base_path = "";
+    manager.engine = &fake_engine;
+    texture = (henka_texture*)1;
+    HENKA_TEST_ASSERT(henka_assets_retry_failed_texture(
+        &manager,
+        "assets/textures/a.png",
+        &texture) == HENKA_ERROR_INVALID_ARGUMENT);
+    HENKA_TEST_ASSERT(texture == NULL);
+    HENKA_TEST_ASSERT(texture_entries[0].texture ==
+        &fallback_texture);
+    HENKA_TEST_ASSERT(texture_entries[0].metadata.fallback);
 
     memset(&metadata, 0x5a, sizeof(metadata));
     HENKA_TEST_ASSERT(henka_assets_get_mesh_metadata(
