@@ -73,6 +73,9 @@ typedef struct henka_opengl_renderer_state
     uint32_t scene_visible_entities;
     uint32_t scene_culled_entities;
     uint32_t transparent_sort_overflow_entities;
+    uint64_t tracked_gpu_bytes;
+    uint32_t tracked_mesh_count;
+    uint32_t tracked_texture_count;
     henka_opengl_transparent_sort_item transparent_sort_items[HENKA_OPENGL_TRANSPARENT_SORT_CAPACITY];
     size_t transparent_sort_count;
     bool transparent_sort_enabled;
@@ -131,6 +134,7 @@ typedef struct henka_opengl_mesh_data
     GLuint index_buffer;
     GLenum primitive_mode;
     GLsizei index_count;
+    uint64_t tracked_gpu_bytes;
 } henka_opengl_mesh_data;
 
 typedef struct henka_opengl_shader_data
@@ -141,6 +145,7 @@ typedef struct henka_opengl_shader_data
 typedef struct henka_opengl_texture_data
 {
     GLuint texture_id;
+    uint64_t tracked_gpu_bytes;
 } henka_opengl_texture_data;
 
 static henka_opengl_functions g_gl;
@@ -2118,6 +2123,29 @@ void henka_opengl_renderer_get_scene_diagnostics(
     }
 }
 
+void henka_opengl_renderer_get_memory_diagnostics(
+    const struct henka_renderer* renderer,
+    uint64_t* out_gpu_bytes,
+    uint32_t* out_mesh_count,
+    uint32_t* out_texture_count)
+{
+    const henka_opengl_renderer_state* state = renderer != NULL ?
+        (const henka_opengl_renderer_state*)renderer->backend_state : NULL;
+
+    if (out_gpu_bytes != NULL)
+    {
+        *out_gpu_bytes = state != NULL ? state->tracked_gpu_bytes : 0U;
+    }
+    if (out_mesh_count != NULL)
+    {
+        *out_mesh_count = state != NULL ? state->tracked_mesh_count : 0U;
+    }
+    if (out_texture_count != NULL)
+    {
+        *out_texture_count = state != NULL ? state->tracked_texture_count : 0U;
+    }
+}
+
 static henka_result henka_opengl_renderer_draw_ui_resources(
     const struct henka_ui_context* ui_context,
     GLuint ui_program,
@@ -2945,6 +2973,21 @@ henka_result henka_opengl_renderer_create_mesh_from_data(
     mesh->vertex_count = vertex_count;
     mesh->index_count = index_count;
     mesh->backend_data = mesh_data;
+    mesh_data->tracked_gpu_bytes = (uint64_t)vertex_bytes + (uint64_t)index_bytes;
+    {
+        henka_opengl_renderer_state* memory_state =
+            (henka_opengl_renderer_state*)renderer->backend_state;
+        if (memory_state != NULL)
+        {
+            memory_state->tracked_gpu_bytes = UINT64_MAX - memory_state->tracked_gpu_bytes <
+                mesh_data->tracked_gpu_bytes ? UINT64_MAX :
+                memory_state->tracked_gpu_bytes + mesh_data->tracked_gpu_bytes;
+            if (memory_state->tracked_mesh_count < UINT32_MAX)
+            {
+                ++memory_state->tracked_mesh_count;
+            }
+        }
+    }
 
     *out_mesh = mesh;
     return HENKA_SUCCESS;
@@ -2960,6 +3003,18 @@ void henka_opengl_renderer_destroy_mesh(struct henka_mesh* mesh)
     }
 
     mesh_data = (henka_opengl_mesh_data*)mesh->backend_data;
+    if (mesh->renderer != NULL && mesh->renderer->backend_state != NULL)
+    {
+        henka_opengl_renderer_state* memory_state =
+            (henka_opengl_renderer_state*)mesh->renderer->backend_state;
+        memory_state->tracked_gpu_bytes = memory_state->tracked_gpu_bytes >=
+            mesh_data->tracked_gpu_bytes ?
+            memory_state->tracked_gpu_bytes - mesh_data->tracked_gpu_bytes : 0U;
+        if (memory_state->tracked_mesh_count > 0U)
+        {
+            --memory_state->tracked_mesh_count;
+        }
+    }
     g_gl.DeleteBuffers(1, &mesh_data->index_buffer);
     g_gl.DeleteBuffers(1, &mesh_data->vertex_buffer);
     g_gl.DeleteVertexArrays(1, &mesh_data->vao);
@@ -3490,6 +3545,26 @@ henka_result henka_opengl_renderer_create_texture_from_rgba8_with_descriptor(
     texture->alpha_mode = HENKA_TEXTURE_ALPHA_OPAQUE;
     texture->last_failure = HENKA_TEXTURE_FAILURE_NONE;
     texture->content_revision = 1U;
+    texture_data->tracked_gpu_bytes = (uint64_t)decoded_bytes;
+    if (descriptor->generate_mipmaps &&
+        texture_data->tracked_gpu_bytes <= UINT64_MAX / 3U)
+    {
+        texture_data->tracked_gpu_bytes += texture_data->tracked_gpu_bytes / 3U;
+    }
+    {
+        henka_opengl_renderer_state* memory_state =
+            (henka_opengl_renderer_state*)renderer->backend_state;
+        if (memory_state != NULL)
+        {
+            memory_state->tracked_gpu_bytes = UINT64_MAX - memory_state->tracked_gpu_bytes <
+                texture_data->tracked_gpu_bytes ? UINT64_MAX :
+                memory_state->tracked_gpu_bytes + texture_data->tracked_gpu_bytes;
+            if (memory_state->tracked_texture_count < UINT32_MAX)
+            {
+                ++memory_state->tracked_texture_count;
+            }
+        }
+    }
 
     *out_texture = texture;
     return HENKA_SUCCESS;
@@ -3518,6 +3593,13 @@ void henka_opengl_renderer_destroy_texture(
     {
         state = (henka_opengl_renderer_state*)
             texture->renderer->backend_state;
+        state->tracked_gpu_bytes = state->tracked_gpu_bytes >=
+            texture_data->tracked_gpu_bytes ?
+            state->tracked_gpu_bytes - texture_data->tracked_gpu_bytes : 0U;
+        if (state->tracked_texture_count > 0U)
+        {
+            --state->tracked_texture_count;
+        }
         result = henka_opengl_begin_texture_context(
             state,
             &context_guard,

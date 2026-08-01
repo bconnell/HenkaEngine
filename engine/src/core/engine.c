@@ -1387,6 +1387,11 @@ henka_result henka_engine_get_diagnostics(
         &out_diagnostics->rendered_scene_visible_entities,
         &out_diagnostics->rendered_scene_culled_entities,
         &out_diagnostics->rendered_scene_transparent_sort_overflow_entities);
+    henka_opengl_renderer_get_memory_diagnostics(
+        engine->renderer,
+        &out_diagnostics->renderer_tracked_gpu_bytes,
+        &out_diagnostics->renderer_tracked_mesh_count,
+        &out_diagnostics->renderer_tracked_texture_count);
     out_diagnostics->wireframe_enabled =
         out_diagnostics->viewport_shading_mode ==
         HENKA_VIEWPORT_SHADING_WIREFRAME;

@@ -401,6 +401,11 @@ void henka_opengl_renderer_get_scene_diagnostics(
     uint32_t* out_visible_entities,
     uint32_t* out_culled_entities,
     uint32_t* out_transparent_sort_overflow_entities);
+void henka_opengl_renderer_get_memory_diagnostics(
+    const struct henka_renderer* renderer,
+    uint64_t* out_gpu_bytes,
+    uint32_t* out_mesh_count,
+    uint32_t* out_texture_count);
 henka_result henka_opengl_renderer_set_wireframe(struct henka_renderer* renderer, bool enabled);
 henka_result henka_opengl_renderer_create_mesh_from_data(
     struct henka_renderer* renderer,
