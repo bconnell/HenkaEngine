@@ -35,6 +35,7 @@ typedef struct henka_opengl_renderer_state
     GLuint ui_program;
     GLuint ui_vertex_array;
     GLuint ui_vertex_buffer;
+    GLuint viewport_program;
     henka_opengl_tool_window_target tool_targets[HENKA_MAX_TOOL_WINDOWS];
 } henka_opengl_renderer_state;
 
@@ -511,6 +512,74 @@ static henka_result henka_opengl_renderer_create_ui_resources(
     return HENKA_SUCCESS;
 }
 
+static henka_result
+henka_opengl_renderer_create_viewport_program(
+    GLuint* out_program)
+{
+    static const char* vertex_source =
+        "#version 330 core\n"
+        "layout(location = 0) in vec3 inPosition;\n"
+        "layout(location = 1) in vec3 inNormal;\n"
+        "layout(location = 2) in vec2 inUv;\n"
+        "uniform mat4 model;\n"
+        "uniform mat4 view;\n"
+        "uniform mat4 projection;\n"
+        "out vec3 fragNormal;\n"
+        "out vec2 fragUv;\n"
+        "void main(void)\n"
+        "{\n"
+        "    mat3 normalMatrix = transpose(inverse(mat3(model)));\n"
+        "    fragNormal = normalMatrix * inNormal;\n"
+        "    fragUv = inUv;\n"
+        "    gl_Position = projection * view * model * vec4(inPosition, 1.0);\n"
+        "}\n";
+    static const char* fragment_source =
+        "#version 330 core\n"
+        "in vec3 fragNormal;\n"
+        "in vec2 fragUv;\n"
+        "uniform vec4 baseColor;\n"
+        "uniform sampler2D baseColorTexture;\n"
+        "uniform bool useTexture;\n"
+        "uniform vec3 lightDirection;\n"
+        "uniform vec3 ambientColor;\n"
+        "uniform bool useLighting;\n"
+        "out vec4 outColor;\n"
+        "void main(void)\n"
+        "{\n"
+        "    vec4 surfaceColor = baseColor;\n"
+        "    vec3 lighting = vec3(1.0);\n"
+        "    if (useTexture)\n"
+        "    {\n"
+        "        surfaceColor *= texture(baseColorTexture, fragUv);\n"
+        "    }\n"
+        "    if (useLighting)\n"
+        "    {\n"
+        "        vec3 normal = normalize(fragNormal);\n"
+        "        vec3 lightDir = normalize(-lightDirection);\n"
+        "        float diffuse = max(dot(normal, lightDir), 0.0);\n"
+        "        lighting = ambientColor + vec3(diffuse);\n"
+        "    }\n"
+        "    outColor = vec4(surfaceColor.rgb * lighting, surfaceColor.a);\n"
+        "}\n";
+
+    if (out_program == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    *out_program = 0U;
+    if (!henka_compile_program_from_source(
+            vertex_source,
+            fragment_source,
+            "viewport editor vertex shader",
+            "viewport editor fragment shader",
+            out_program))
+    {
+        return HENKA_ERROR_RENDERER;
+    }
+
+    return HENKA_SUCCESS;
+}
 henka_result henka_opengl_renderer_create(struct henka_renderer* renderer, struct henka_platform* platform, bool enable_vsync)
 {
     henka_opengl_renderer_state* state;
@@ -596,6 +665,19 @@ henka_result henka_opengl_renderer_create(struct henka_renderer* renderer, struc
         return result;
     }
 
+    result = henka_opengl_renderer_create_viewport_program(
+        &state->viewport_program);
+    if (result != HENKA_SUCCESS)
+    {
+        g_gl.DeleteBuffers(1, &state->ui_vertex_buffer);
+        g_gl.DeleteVertexArrays(1, &state->ui_vertex_array);
+        g_gl.DeleteProgram(state->ui_program);
+        SDL_GL_DestroyContext(state->gl_context);
+        henka_free(state);
+        renderer->backend_state = NULL;
+        return result;
+    }
+
     HENKA_LOG_INFO("renderer initialized with OpenGL backend");
     return HENKA_SUCCESS;
 }
@@ -632,6 +714,10 @@ void henka_opengl_renderer_destroy(struct henka_renderer* renderer)
     }
     else
     {
+        if (state->viewport_program != 0U)
+        {
+            g_gl.DeleteProgram(state->viewport_program);
+        }
         if (state->ui_vertex_buffer != 0U)
         {
             g_gl.DeleteBuffers(1, &state->ui_vertex_buffer);
@@ -673,7 +759,7 @@ henka_result henka_opengl_renderer_begin_frame(struct henka_renderer* renderer)
 
     glEnable(GL_DEPTH_TEST);
     glEnable(GL_CULL_FACE);
-    glPolygonMode(GL_FRONT_AND_BACK, renderer->wireframe_enabled ? GL_LINE : GL_FILL);
+    glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
     return HENKA_SUCCESS;
 }
 
@@ -704,9 +790,7 @@ henka_result henka_opengl_renderer_abort_frame(
     glDisable(GL_SCISSOR_TEST);
     glEnable(GL_DEPTH_TEST);
     glEnable(GL_CULL_FACE);
-    glPolygonMode(
-        GL_FRONT_AND_BACK,
-        renderer->wireframe_enabled ? GL_LINE : GL_FILL);
+    glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
     return HENKA_SUCCESS;
 }
 
@@ -717,46 +801,161 @@ void henka_opengl_renderer_clear_frame(struct henka_renderer* renderer)
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 }
 
-henka_result henka_opengl_renderer_draw_scene(struct henka_renderer* renderer, const struct henka_scene* scene)
+henka_result henka_opengl_renderer_draw_scene(
+    struct henka_renderer* renderer,
+    const struct henka_scene* scene)
 {
+    static const henka_vec4 solid_color =
+        {0.64f, 0.68f, 0.74f, 1.0f};
+    static const henka_vec4 wire_color =
+        {0.78f, 0.82f, 0.88f, 1.0f};
+    static const henka_vec3 preview_light_direction =
+        {0.35f, -0.85f, 0.40f};
+    static const henka_vec3 preview_ambient =
+        {0.24f, 0.26f, 0.30f};
     henka_mat4 projection;
+    henka_viewport_render_policy policy;
+    henka_opengl_renderer_state* state;
     henka_mat4 view;
     size_t index;
 
-    if (renderer == NULL || scene == NULL || !scene->has_camera)
+    if (renderer == NULL ||
+        scene == NULL ||
+        !scene->has_camera)
     {
         return HENKA_SUCCESS;
     }
 
-    henka_apply_scene_viewport(renderer);
-    projection = henka_camera_get_projection_matrix(&scene->camera);
-    view = henka_camera_get_view_matrix(&scene->camera);
+    if (henka_viewport_render_policy_resolve(
+            henka_renderer_get_viewport_shading_mode(renderer),
+            &policy) != HENKA_SUCCESS)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
 
-    for (index = 0U; index < scene->entity_capacity; ++index)
+    state =
+        (henka_opengl_renderer_state*)
+            renderer->backend_state;
+    if (state == NULL ||
+        state->viewport_program == 0U)
+    {
+        return HENKA_ERROR_RENDERER;
+    }
+
+    henka_apply_scene_viewport(renderer);
+    projection =
+        henka_camera_get_projection_matrix(&scene->camera);
+    view = henka_camera_get_view_matrix(&scene->camera);
+    g_gl.ActiveTexture(GL_TEXTURE0);
+
+    for (index = 0U;
+         index < scene->entity_capacity;
+         ++index)
     {
         const henka_scene_entity_record* entity;
         const henka_opengl_mesh_data* mesh_data;
         const henka_opengl_shader_data* shader_data;
         const henka_opengl_texture_data* texture_data;
+        henka_vec3 ambient_color;
+        henka_vec4 base_color;
+        bool editor_surface;
+        bool helper_entity;
+        henka_vec3 light_direction;
+        GLuint program;
+        bool use_lighting;
         bool use_texture;
         henka_mat4 model;
 
         entity = &scene->entities[index];
-        if (!entity->active || !entity->visible || entity->mesh == NULL || entity->material.shader == NULL)
+        if (!entity->active ||
+            !entity->visible ||
+            entity->mesh == NULL ||
+            entity->material.shader == NULL)
         {
             continue;
         }
 
-        mesh_data = (const henka_opengl_mesh_data*)entity->mesh->backend_data;
-        shader_data = (const henka_opengl_shader_data*)entity->material.shader->backend_data;
+        mesh_data =
+            (const henka_opengl_mesh_data*)
+                entity->mesh->backend_data;
+        shader_data =
+            (const henka_opengl_shader_data*)
+                entity->material.shader->backend_data;
         if (mesh_data == NULL || shader_data == NULL)
         {
             continue;
         }
 
-        model = henka_transform_to_mat4(entity->transform);
+        helper_entity =
+            (entity->flags &
+                HENKA_SCENE_ENTITY_FLAG_HELPER) != 0U;
+        editor_surface =
+            !helper_entity &&
+            henka_renderer_get_viewport_shading_mode(
+                renderer) !=
+                HENKA_VIEWPORT_SHADING_RENDERED;
+        program =
+            editor_surface ?
+                state->viewport_program :
+                shader_data->program;
+        base_color = entity->material.base_color;
+        light_direction = scene->light_direction;
+        ambient_color = scene->ambient_color;
+        use_lighting = entity->material.use_lighting;
 
-        g_gl.UseProgram(shader_data->program);
+        if (!helper_entity)
+        {
+            if (!policy.use_material_base_color)
+            {
+                base_color =
+                    policy.polygon_wireframe ?
+                    wire_color :
+                    solid_color;
+            }
+            if (policy.use_preview_lighting)
+            {
+                light_direction =
+                    preview_light_direction;
+                ambient_color = preview_ambient;
+            }
+            if (policy.force_unlit)
+            {
+                use_lighting = false;
+            }
+            else if (!policy.use_scene_lighting &&
+                     !policy.use_preview_lighting)
+            {
+                use_lighting = false;
+            }
+            else if (!policy.use_material_base_color)
+            {
+                use_lighting = true;
+            }
+        }
+
+        texture_data = NULL;
+        if (entity->material.use_texture &&
+            entity->material.base_color_texture != NULL)
+        {
+            texture_data =
+                (const henka_opengl_texture_data*)
+                    entity->material
+                        .base_color_texture->backend_data;
+        }
+
+        use_texture =
+            texture_data != NULL &&
+            texture_data->texture_id != 0U &&
+            (helper_entity ||
+                policy.sample_material_texture);
+
+        glPolygonMode(
+            GL_FRONT_AND_BACK,
+            !helper_entity &&
+                policy.polygon_wireframe ?
+                GL_LINE :
+                GL_FILL);
+
         if (entity->material.depth_test)
         {
             glEnable(GL_DEPTH_TEST);
@@ -765,31 +964,34 @@ henka_result henka_opengl_renderer_draw_scene(struct henka_renderer* renderer, c
         {
             glDisable(GL_DEPTH_TEST);
         }
-        henka_set_uniform_mat4(shader_data->program, "model", model);
-        henka_set_uniform_mat4(shader_data->program, "view", view);
-        henka_set_uniform_mat4(shader_data->program, "projection", projection);
-        texture_data = NULL;
-        if (entity->material.use_texture &&
-            entity->material.base_color_texture != NULL)
-        {
-            texture_data = (const henka_opengl_texture_data*)
-                entity->material.base_color_texture->backend_data;
-        }
-        use_texture =
-            texture_data != NULL && texture_data->texture_id != 0U;
 
+        model =
+            henka_transform_to_mat4(entity->transform);
+        g_gl.UseProgram(shader_data->program);
+        henka_set_uniform_mat4(
+            shader_data->program,
+            "model",
+            model);
+        henka_set_uniform_mat4(
+            shader_data->program,
+            "view",
+            view);
+        henka_set_uniform_mat4(
+            shader_data->program,
+            "projection",
+            projection);
         henka_set_uniform_vec4(
             shader_data->program,
             "baseColor",
-            entity->material.base_color);
+            base_color);
         henka_set_uniform_vec3(
             shader_data->program,
             "lightDirection",
-            scene->light_direction);
+            light_direction);
         henka_set_uniform_vec3(
             shader_data->program,
             "ambientColor",
-            scene->ambient_color);
+            ambient_color);
         henka_set_uniform_bool(
             shader_data->program,
             "useTexture",
@@ -797,29 +999,37 @@ henka_result henka_opengl_renderer_draw_scene(struct henka_renderer* renderer, c
         henka_set_uniform_bool(
             shader_data->program,
             "useLighting",
-            entity->material.use_lighting);
+            use_lighting);
         henka_set_uniform_int(
             shader_data->program,
             "baseColorTexture",
             0);
 
-        g_gl.ActiveTexture(GL_TEXTURE0);
         glBindTexture(
             GL_TEXTURE_2D,
-            use_texture ? texture_data->texture_id : 0U);
-
+            use_texture ?
+                texture_data->texture_id :
+                0U);
         g_gl.BindVertexArray(mesh_data->vao);
-        glDrawElements(mesh_data->primitive_mode, mesh_data->index_count, GL_UNSIGNED_INT, 0);
+        glDrawElements(
+            mesh_data->primitive_mode,
+            mesh_data->index_count,
+            GL_UNSIGNED_INT,
+            0);
     }
 
+    g_gl.BindBuffer(GL_ARRAY_BUFFER, 0);
     g_gl.BindVertexArray(0);
+    g_gl.ActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, 0);
     g_gl.UseProgram(0);
-    glEnable(GL_DEPTH_TEST);
+    glDisable(GL_BLEND);
     glDisable(GL_SCISSOR_TEST);
+    glEnable(GL_DEPTH_TEST);
+    glEnable(GL_CULL_FACE);
+    glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
     return HENKA_SUCCESS;
 }
-
 static henka_result henka_opengl_renderer_draw_ui_resources(
     const struct henka_ui_context* ui_context,
     GLuint ui_program,
@@ -1344,13 +1554,14 @@ henka_result henka_opengl_renderer_set_vsync(struct henka_renderer* renderer, bo
     return henka_platform_set_vsync(renderer->platform, enabled);
 }
 
-henka_result henka_opengl_renderer_set_wireframe(struct henka_renderer* renderer, bool enabled)
+henka_result henka_opengl_renderer_set_wireframe(
+    struct henka_renderer* renderer,
+    bool enabled)
 {
     (void)renderer;
-    glPolygonMode(GL_FRONT_AND_BACK, enabled ? GL_LINE : GL_FILL);
+    (void)enabled;
     return HENKA_SUCCESS;
 }
-
 henka_result henka_opengl_renderer_create_mesh_from_data(
     struct henka_renderer* renderer,
     const henka_vertex* vertices,

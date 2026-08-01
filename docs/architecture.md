@@ -201,3 +201,8 @@ The next steps should continue building upward from these boundaries:
 - object inspection and transactional authoring that can grow without an editor rewrite
 - saved workspace placement, full detached controls, drag-back redocking, and detachable Scene View
 - editable authoring data compiled into runtime assets for later modeling, UV, rigging, and animation workflows
+## Viewport shading
+
+The Scene View owns an explicit shading mode rather than relying on a global polygon toggle. Wireframe draws neutral geometry edges without texture sampling. Solid draws neutral filled surfaces under stable editor lighting. Material Preview displays current base colors and base-color textures under editor lighting. Rendered uses the scene material and lighting policy. Helper overlays retain their own materials, mode changes do not rewrite scene materials, and the renderer restores a filled polygon baseline before UI and detached-window presentation.
+
+The legacy wireframe API remains compatible: enabling it selects Wireframe, while disabling it restores the last valid non-wireframe mode. The sandbox persists the authoritative mode under `ui.scene_view.shading_mode`; older `wireframe_enabled` settings are migrated only when the new key is absent.

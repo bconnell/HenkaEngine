@@ -148,6 +148,142 @@ function Click-WindowPoint {
     Start-Sleep -Milliseconds 250
 }
 
+function Get-LastLogRegexMatch {
+    param(
+        [Parameter(Mandatory = $true)][string]$Path,
+        [Parameter(Mandatory = $true)][string]$Pattern
+    )
+
+    if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) {
+        return $null
+    }
+
+    $deadline = (Get-Date).AddSeconds(5)
+    $lastReadError = $null
+    do {
+        $stream = $null
+        $reader = $null
+        try {
+            $shareMode = [System.IO.FileShare](
+                [int][System.IO.FileShare]::ReadWrite -bor
+                [int][System.IO.FileShare]::Delete)
+            $stream = [System.IO.FileStream]::new(
+                $Path,
+                [System.IO.FileMode]::Open,
+                [System.IO.FileAccess]::Read,
+                $shareMode)
+            $reader = [System.IO.StreamReader]::new(
+                $stream,
+                [System.Text.Encoding]::UTF8,
+                $true,
+                4096,
+                $false)
+            $text = $reader.ReadToEnd()
+            $reader.Dispose()
+            $reader = $null
+            $stream = $null
+            $lastReadError = $null
+
+            $matches = [Regex]::Matches(
+                $text,
+                $Pattern,
+                [System.Text.RegularExpressions.RegexOptions]::Multiline)
+            if ($matches.Count -gt 0) {
+                return $matches[$matches.Count - 1]
+            }
+        }
+        catch [System.IO.IOException] {
+            $lastReadError = $_.Exception
+        }
+        catch [System.UnauthorizedAccessException] {
+            $lastReadError = $_.Exception
+        }
+        finally {
+            if ($null -ne $reader) {
+                $reader.Dispose()
+            }
+            elseif ($null -ne $stream) {
+                $stream.Dispose()
+            }
+        }
+
+        if ((Get-Date) -lt $deadline) {
+            Start-Sleep -Milliseconds 100
+        }
+    } while ((Get-Date) -lt $deadline)
+
+    if ($null -ne $lastReadError) {
+        throw (
+            "The live packaged-sandbox log could not be read " +
+            "with shared read access within five seconds: " +
+            $lastReadError.Message)
+    }
+
+    return $null
+}
+function Click-FramebufferPoint {
+    param(
+        [Parameter(Mandatory = $true)][System.IntPtr]$Handle,
+        [Parameter(Mandatory = $true)][int]$FramebufferWidth,
+        [Parameter(Mandatory = $true)][int]$FramebufferHeight,
+        [Parameter(Mandatory = $true)][double]$FramebufferX,
+        [Parameter(Mandatory = $true)][double]$FramebufferY
+    )
+
+    if ($FramebufferWidth -le 0 -or $FramebufferHeight -le 0) {
+        throw "Framebuffer dimensions must be positive for UI automation."
+    }
+
+    $clientRect = New-Object NativeMethods+RECT
+    if (-not [NativeMethods]::GetClientRect(
+            $Handle,
+            [ref]$clientRect)) {
+        throw "The packaged sandbox client bounds could not be read."
+    }
+
+    $clientWidth = $clientRect.Right - $clientRect.Left
+    $clientHeight = $clientRect.Bottom - $clientRect.Top
+    if ($clientWidth -le 0 -or $clientHeight -le 0) {
+        throw "The packaged sandbox client bounds are invalid."
+    }
+
+    $point = New-Object NativeMethods+POINT
+    $point.X = [int][Math]::Round(
+        $FramebufferX *
+        [double]$clientWidth /
+        [double]$FramebufferWidth)
+    $point.Y = [int][Math]::Round(
+        $FramebufferY *
+        [double]$clientHeight /
+        [double]$FramebufferHeight)
+
+    if (-not [NativeMethods]::ClientToScreen(
+            $Handle,
+            [ref]$point)) {
+        throw "The packaged sandbox client point could not be converted to screen coordinates."
+    }
+
+    [NativeMethods]::SetForegroundWindow($Handle) | Out-Null
+    Start-Sleep -Milliseconds 150
+    [NativeMethods]::SetCursorPos(
+        $point.X,
+        $point.Y) | Out-Null
+    Start-Sleep -Milliseconds 100
+    [NativeMethods]::mouse_event(
+        [NativeMethods]::MOUSEEVENTF_LEFTDOWN,
+        0,
+        0,
+        0,
+        [System.UIntPtr]::Zero)
+    Start-Sleep -Milliseconds 80
+    [NativeMethods]::mouse_event(
+        [NativeMethods]::MOUSEEVENTF_LEFTUP,
+        0,
+        0,
+        0,
+        [System.UIntPtr]::Zero)
+    Start-Sleep -Milliseconds 250
+}
 $repoRoot = Get-HenkaRepoRoot -ScriptDirectory $PSScriptRoot
 $gitCommand = Get-HenkaGitPath
 $packageRoot = Join-Path $repoRoot "out\HenkaSandbox3D"
@@ -179,6 +315,12 @@ public static class NativeMethods {
         public int Bottom;
     }
 
+    [StructLayout(LayoutKind.Sequential)]
+    public struct POINT {
+        public int X;
+        public int Y;
+    }
+
     public const uint MOUSEEVENTF_LEFTDOWN = 0x0002;
     public const uint MOUSEEVENTF_LEFTUP = 0x0004;
 
@@ -187,6 +329,12 @@ public static class NativeMethods {
 
     [DllImport("user32.dll")]
     public static extern bool GetWindowRect(IntPtr hWnd, out RECT rect);
+
+    [DllImport("user32.dll")]
+    public static extern bool GetClientRect(IntPtr hWnd, out RECT rect);
+
+    [DllImport("user32.dll")]
+    public static extern bool ClientToScreen(IntPtr hWnd, ref POINT point);
 
     [DllImport("user32.dll")]
     public static extern bool SetCursorPos(int x, int y);
@@ -375,42 +523,220 @@ try {
 
     if ($uiAutomationVerified) {
         Write-Step "Checking packaged UI click controls"
-        Click-WindowPoint -Handle $mainWindowHandle -OffsetX 120 -OffsetY 180
-        Click-WindowPoint -Handle $mainWindowHandle -OffsetX 120 -OffsetY 180
-        Click-WindowPoint -Handle $mainWindowHandle -OffsetX 248 -OffsetY 180
-        Click-WindowPoint -Handle $mainWindowHandle -OffsetX 248 -OffsetY 180
-        Click-WindowPoint -Handle $mainWindowHandle -OffsetX 140 -OffsetY 520
-        if (-not (Wait-FileContains -Path $stdoutPath -Pattern "Native Panel Test: opened" -TimeoutMilliseconds 3000)) {
-            throw "The Native Panel Test control did not open the secondary native window."
+
+        foreach ($requiredPattern in @(
+            "Sandbox UI ready:",
+            "Grid control:",
+            "Native Panel Test control:",
+            "Viewport shading controls:")) {
+            if (-not (Wait-FileContains `
+                    -Path $stdoutPath `
+                    -Pattern $requiredPattern `
+                    -TimeoutMilliseconds 4000)) {
+                throw "Required packaged UI automation geometry was not reported: $requiredPattern"
+            }
         }
-        Assert-FileContains -Path $stdoutPath -Pattern "Native Panel Test: opened" -Description "Native test panel open output"
-        $nativeWindowHandle = [NativeMethods]::FindProcessWindow([uint32]$process.Id, "Henka Native Panel Test")
+
+        $framebufferMatch = Get-LastLogRegexMatch `
+            -Path $stdoutPath `
+            -Pattern 'Sandbox UI ready:.*framebuffer ([0-9]+)x([0-9]+)'
+        $gridMatch = Get-LastLogRegexMatch `
+            -Path $stdoutPath `
+            -Pattern 'Grid control: x=([-0-9.]+) y=([-0-9.]+) width=([-0-9.]+) height=([-0-9.]+)'
+        $nativeMatch = Get-LastLogRegexMatch `
+            -Path $stdoutPath `
+            -Pattern 'Native Panel Test control: x=([-0-9.]+) y=([-0-9.]+) width=([-0-9.]+) height=([-0-9.]+)'
+        $shadingMatch = Get-LastLogRegexMatch `
+            -Path $stdoutPath `
+            -Pattern 'Viewport shading controls: x=([-0-9.]+) y=([-0-9.]+) button=([-0-9.]+) gap=([-0-9.]+)'
+
+        if ($null -eq $framebufferMatch -or
+            $null -eq $gridMatch -or
+            $null -eq $nativeMatch -or
+            $null -eq $shadingMatch) {
+            throw "Packaged UI automation geometry could not be parsed."
+        }
+
+        $framebufferWidth =
+            [int]$framebufferMatch.Groups[1].Value
+        $framebufferHeight =
+            [int]$framebufferMatch.Groups[2].Value
+
+        $gridX =
+            [double]$gridMatch.Groups[1].Value
+        $gridY =
+            [double]$gridMatch.Groups[2].Value
+        $gridWidth =
+            [double]$gridMatch.Groups[3].Value
+        $gridHeight =
+            [double]$gridMatch.Groups[4].Value
+
+        Click-FramebufferPoint `
+            -Handle $mainWindowHandle `
+            -FramebufferWidth $framebufferWidth `
+            -FramebufferHeight $framebufferHeight `
+            -FramebufferX ($gridX + $gridWidth * 0.5) `
+            -FramebufferY ($gridY + $gridHeight * 0.5)
+        Click-FramebufferPoint `
+            -Handle $mainWindowHandle `
+            -FramebufferWidth $framebufferWidth `
+            -FramebufferHeight $framebufferHeight `
+            -FramebufferX ($gridX + $gridWidth * 0.5) `
+            -FramebufferY ($gridY + $gridHeight * 0.5)
+
+        $nativeX =
+            [double]$nativeMatch.Groups[1].Value
+        $nativeY =
+            [double]$nativeMatch.Groups[2].Value
+        $nativeWidth =
+            [double]$nativeMatch.Groups[3].Value
+        $nativeHeight =
+            [double]$nativeMatch.Groups[4].Value
+
+        $nativeOpened = $false
+        for ($attempt = 0;
+             $attempt -lt 3 -and -not $nativeOpened;
+             ++$attempt) {
+            Click-FramebufferPoint `
+                -Handle $mainWindowHandle `
+                -FramebufferWidth $framebufferWidth `
+                -FramebufferHeight $framebufferHeight `
+                -FramebufferX ($nativeX + $nativeWidth * 0.5) `
+                -FramebufferY ($nativeY + $nativeHeight * 0.5)
+            $nativeOpened = Wait-FileContains `
+                -Path $stdoutPath `
+                -Pattern "Native Panel Test: opened" `
+                -TimeoutMilliseconds 2000
+        }
+        if (-not $nativeOpened) {
+            throw "The Native Panel Test control did not open the secondary native window after three framebuffer-aware attempts."
+        }
+
+        Assert-FileContains `
+            -Path $stdoutPath `
+            -Pattern "Native Panel Test: opened" `
+            -Description "Native test panel open output"
+        $nativeWindowHandle =
+            [NativeMethods]::FindProcessWindow(
+                [uint32]$process.Id,
+                "Henka Native Panel Test")
         if ($nativeWindowHandle -eq [System.IntPtr]::Zero) {
             throw "The Native Panel Test window was not visible as a separate OS-level window."
         }
+
         Write-Output "[pass] Native test panel visible as a separate OS-level window"
-        [NativeMethods]::PostMessage($nativeWindowHandle, 0x0010, [System.IntPtr]::Zero, [System.IntPtr]::Zero) | Out-Null
+        [NativeMethods]::PostMessage(
+            $nativeWindowHandle,
+            0x0010,
+            [System.IntPtr]::Zero,
+            [System.IntPtr]::Zero) | Out-Null
         Start-Sleep -Milliseconds 500
-        Click-WindowPoint -Handle $mainWindowHandle -OffsetX 140 -OffsetY 520
+
+        Click-FramebufferPoint `
+            -Handle $mainWindowHandle `
+            -FramebufferWidth $framebufferWidth `
+            -FramebufferHeight $framebufferHeight `
+            -FramebufferX ($nativeX + $nativeWidth * 0.5) `
+            -FramebufferY ($nativeY + $nativeHeight * 0.5)
         Start-Sleep -Milliseconds 500
-        if ((Select-String -LiteralPath $stdoutPath -Pattern "Native Panel Test: opened").Count -lt 2) {
+
+        if ((Select-String `
+                -LiteralPath $stdoutPath `
+                -Pattern "Native Panel Test: opened").Count -lt 2) {
             throw "The Native Panel Test window did not reopen after being closed."
         }
         Write-Output "[pass] Native test panel closes and reopens without closing the main sandbox"
-        Click-WindowPoint -Handle $mainWindowHandle -OffsetX 230 -OffsetY 60
-        Click-WindowPoint -Handle $mainWindowHandle -OffsetX 100 -OffsetY 610
+
+        $shadingX =
+            [double]$shadingMatch.Groups[1].Value
+        $shadingY =
+            [double]$shadingMatch.Groups[2].Value
+        $shadingButtonWidth =
+            [double]$shadingMatch.Groups[3].Value
+        $shadingGap =
+            [double]$shadingMatch.Groups[4].Value
+        $shadingNames = @(
+            "Wireframe",
+            "Solid",
+            "Material Preview",
+            "Rendered")
+
+        for ($modeIndex = 0;
+             $modeIndex -lt $shadingNames.Count;
+             ++$modeIndex) {
+            $modeCenterX =
+                $shadingX +
+                ($shadingButtonWidth + $shadingGap) *
+                [double]$modeIndex +
+                $shadingButtonWidth * 0.5
+            $modeCenterY =
+                $shadingY + 11.0
+
+            Click-FramebufferPoint `
+                -Handle $mainWindowHandle `
+                -FramebufferWidth $framebufferWidth `
+                -FramebufferHeight $framebufferHeight `
+                -FramebufferX $modeCenterX `
+                -FramebufferY $modeCenterY
+
+            $expectedModePattern =
+                "Viewport shading: " +
+                [Regex]::Escape($shadingNames[$modeIndex]) +
+                "\."
+            if (-not (Wait-FileContains `
+                    -Path $stdoutPath `
+                    -Pattern $expectedModePattern `
+                    -TimeoutMilliseconds 2000)) {
+                throw "Viewport shading mode could not be confirmed: $($shadingNames[$modeIndex])"
+            }
+        }
+
+        Click-WindowPoint `
+            -Handle $mainWindowHandle `
+            -OffsetX 230 `
+            -OffsetY 60
+        Click-WindowPoint `
+            -Handle $mainWindowHandle `
+            -OffsetX 100 `
+            -OffsetY 610
 
         $uiClickChecks = @(
-            @{ Pattern = "Debug grid: hidden"; Description = "UI debug grid click output" },
-            @{ Pattern = "Debug grid: shown"; Description = "UI debug grid restore output" },
-            @{ Pattern = "Wireframe: on"; Description = "UI wireframe click output" },
-            @{ Pattern = "Wireframe: off"; Description = "UI wireframe restore output" },
-            @{ Pattern = "Sandbox settings saved."; Description = "UI save settings output" }
+            @{
+                Pattern = "Debug grid: hidden"
+                Description = "UI debug grid click output"
+            },
+            @{
+                Pattern = "Debug grid: shown"
+                Description = "UI debug grid restore output"
+            },
+            @{
+                Pattern = "Viewport shading: Wireframe\."
+                Description = "UI Wireframe mode output"
+            },
+            @{
+                Pattern = "Viewport shading: Solid\."
+                Description = "UI Solid mode output"
+            },
+            @{
+                Pattern = "Viewport shading: Material Preview\."
+                Description = "UI Material Preview mode output"
+            },
+            @{
+                Pattern = "Viewport shading: Rendered\."
+                Description = "UI Rendered mode output"
+            },
+            @{
+                Pattern = "Sandbox settings saved\."
+                Description = "UI save settings output"
+            }
         )
 
         $uiClickFailures = 0
         foreach ($check in $uiClickChecks) {
-            if (-not (Try-AssertFileContains -Path $stdoutPath -Pattern $check.Pattern -Description $check.Description)) {
+            if (-not (Try-AssertFileContains `
+                    -Path $stdoutPath `
+                    -Pattern $check.Pattern `
+                    -Description $check.Description)) {
                 $uiClickFailures++
             }
         }
@@ -418,7 +744,6 @@ try {
         if ($uiClickFailures -gt 0) {
             Write-Output "[warn] Some packaged UI click checks could not be confirmed automatically. Manual packaged UI QA is still needed."
         }
-
         if (-not (Select-String -LiteralPath $stdoutPath -Pattern "Sandbox panel: shown" -Quiet)) {
             [NativeMethods]::SetForegroundWindow($mainWindowHandle) | Out-Null
             Start-Sleep -Milliseconds 400

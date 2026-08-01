@@ -81,6 +81,11 @@ henka_result henka_renderer_create(struct henka_platform* platform, bool enable_
 
     renderer->platform = platform;
     renderer->scene_viewport = (henka_viewport){0, 0, 1, 1};
+    renderer->scene_view.viewport = renderer->scene_viewport;
+    renderer->scene_view.shading_mode = HENKA_VIEWPORT_SHADING_SOLID;
+    renderer->scene_view.overlays_visible = true;
+    renderer->scene_view.xray_enabled = false;
+    renderer->last_non_wireframe_mode = HENKA_VIEWPORT_SHADING_SOLID;
 
     result = henka_opengl_renderer_create(renderer, platform, enable_vsync);
     if (result != HENKA_SUCCESS)
@@ -241,6 +246,7 @@ void henka_renderer_resize_viewport(
     renderer->scene_viewport = renderer->scene_viewport_custom ?
         henka_renderer_clip_viewport(renderer, previous_viewport) :
         henka_renderer_full_viewport(renderer);
+    renderer->scene_view.viewport = renderer->scene_viewport;
     henka_opengl_renderer_resize_viewport(renderer, width, height);
 }
 
@@ -256,15 +262,19 @@ void henka_renderer_set_scene_viewport(
     if (!henka_viewport_is_valid(viewport))
     {
         renderer->scene_viewport_custom = false;
-        renderer->scene_viewport = henka_renderer_full_viewport(renderer);
+        renderer->scene_viewport =
+            henka_renderer_full_viewport(renderer);
+        renderer->scene_view.viewport =
+            renderer->scene_viewport;
         return;
     }
 
     renderer->scene_viewport_custom = true;
     renderer->scene_viewport =
         henka_renderer_clip_viewport(renderer, viewport);
+    renderer->scene_view.viewport =
+        renderer->scene_viewport;
 }
-
 henka_viewport henka_renderer_get_scene_viewport(
     const struct henka_renderer* renderer)
 {
@@ -294,24 +304,107 @@ henka_result henka_renderer_set_vsync(struct henka_renderer* renderer, bool enab
     return result;
 }
 
-henka_result henka_renderer_set_wireframe(struct henka_renderer* renderer, bool enabled)
+henka_result henka_viewport_render_policy_resolve(
+    henka_viewport_shading_mode mode,
+    henka_viewport_render_policy* out_policy)
 {
-    henka_result result;
+    henka_viewport_render_policy policy;
+
+    if (out_policy == NULL ||
+        !henka_viewport_shading_mode_is_valid(mode))
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    policy = (henka_viewport_render_policy){0};
+    switch (mode)
+    {
+        case HENKA_VIEWPORT_SHADING_WIREFRAME:
+            policy.polygon_wireframe = true;
+            policy.force_unlit = true;
+            break;
+        case HENKA_VIEWPORT_SHADING_SOLID:
+            policy.use_preview_lighting = true;
+            break;
+        case HENKA_VIEWPORT_SHADING_MATERIAL_PREVIEW:
+            policy.use_material_base_color = true;
+            policy.sample_material_texture = true;
+            policy.use_preview_lighting = true;
+            break;
+        case HENKA_VIEWPORT_SHADING_RENDERED:
+            policy.use_material_base_color = true;
+            policy.sample_material_texture = true;
+            policy.use_scene_lighting = true;
+            break;
+        case HENKA_VIEWPORT_SHADING_COUNT:
+        default:
+            return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    *out_policy = policy;
+    return HENKA_SUCCESS;
+}
+
+henka_result henka_renderer_set_viewport_shading_mode(
+    struct henka_renderer* renderer,
+    henka_viewport_shading_mode mode)
+{
+    if (renderer == NULL ||
+        !henka_viewport_shading_mode_is_valid(mode))
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    renderer->scene_view.shading_mode = mode;
+    if (mode != HENKA_VIEWPORT_SHADING_WIREFRAME)
+    {
+        renderer->last_non_wireframe_mode = mode;
+    }
+    return HENKA_SUCCESS;
+}
+
+henka_viewport_shading_mode henka_renderer_get_viewport_shading_mode(
+    const struct henka_renderer* renderer)
+{
+    if (renderer == NULL ||
+        !henka_viewport_shading_mode_is_valid(
+            renderer->scene_view.shading_mode))
+    {
+        return HENKA_VIEWPORT_SHADING_SOLID;
+    }
+
+    return renderer->scene_view.shading_mode;
+}
+
+henka_result henka_renderer_set_wireframe(
+    struct henka_renderer* renderer,
+    bool enabled)
+{
+    henka_viewport_shading_mode restore_mode;
 
     if (renderer == NULL)
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
 
-    result = henka_opengl_renderer_set_wireframe(renderer, enabled);
-    if (result == HENKA_SUCCESS)
+    if (enabled)
     {
-        renderer->wireframe_enabled = enabled;
+        return henka_renderer_set_viewport_shading_mode(
+            renderer,
+            HENKA_VIEWPORT_SHADING_WIREFRAME);
     }
 
-    return result;
-}
+    restore_mode = renderer->last_non_wireframe_mode;
+    if (!henka_viewport_shading_mode_is_valid(restore_mode) ||
+        restore_mode == HENKA_VIEWPORT_SHADING_WIREFRAME)
+    {
+        restore_mode = HENKA_VIEWPORT_SHADING_SOLID;
+    }
 
+    return henka_renderer_set_viewport_shading_mode(
+        renderer,
+        restore_mode);
+}
 henka_result henka_renderer_create_mesh_from_data(
     struct henka_renderer* renderer,
     const henka_vertex* vertices,

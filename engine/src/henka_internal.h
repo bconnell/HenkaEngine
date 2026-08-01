@@ -56,6 +56,15 @@ typedef struct henka_platform_desc
     bool enable_vsync;
 } henka_platform_desc;
 
+typedef struct henka_viewport_render_policy
+{
+    bool polygon_wireframe;
+    bool use_material_base_color;
+    bool sample_material_texture;
+    bool use_scene_lighting;
+    bool use_preview_lighting;
+    bool force_unlit;
+} henka_viewport_render_policy;
 typedef struct henka_platform_frame_state
 {
     bool close_requested;
@@ -164,13 +173,14 @@ struct henka_renderer
     struct henka_platform* platform;
     void* backend_state;
     bool vsync_enabled;
-    bool wireframe_enabled;
     bool mouse_captured;
     bool frame_active;
     bool scene_viewport_custom;
     int framebuffer_width;
     int framebuffer_height;
     henka_viewport scene_viewport;
+    henka_scene_view_render_desc scene_view;
+    henka_viewport_shading_mode last_non_wireframe_mode;
 };
 
 struct henka_mesh
@@ -284,6 +294,14 @@ void henka_renderer_resize_viewport(struct henka_renderer* renderer, int width, 
 void henka_renderer_set_scene_viewport(struct henka_renderer* renderer, henka_viewport viewport);
 henka_viewport henka_renderer_get_scene_viewport(const struct henka_renderer* renderer);
 henka_result henka_renderer_set_vsync(struct henka_renderer* renderer, bool enabled);
+henka_result henka_viewport_render_policy_resolve(
+    henka_viewport_shading_mode mode,
+    henka_viewport_render_policy* out_policy);
+henka_result henka_renderer_set_viewport_shading_mode(
+    struct henka_renderer* renderer,
+    henka_viewport_shading_mode mode);
+henka_viewport_shading_mode henka_renderer_get_viewport_shading_mode(
+    const struct henka_renderer* renderer);
 henka_result henka_renderer_set_wireframe(struct henka_renderer* renderer, bool enabled);
 henka_result henka_renderer_create_mesh_from_data(
     struct henka_renderer* renderer,

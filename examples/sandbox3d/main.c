@@ -308,6 +308,10 @@ typedef struct sandbox3d_state
     bool status_warning;
     char status_message[160];
     sandbox3d_workspace_layout frame_layout;
+    henka_ui_rect scene_view_header_controls;
+    bool viewport_shading_bounds_reported;
+    bool native_panel_test_bounds_reported;
+    bool grid_control_bounds_reported;
     henka_gizmo_model gizmo_model;
     sandbox3d_panel_paging_state paging;
     sandbox3d_view_navigation_state view_navigation;
@@ -341,6 +345,8 @@ static const float g_ui_debug_strip_height = 58.0f;
 
 static const char* g_setting_key_grid_visible = "grid_visible";
 static const char* g_setting_key_wireframe_enabled = "wireframe_enabled";
+static const char* g_setting_key_viewport_shading_mode =
+    "ui.scene_view.shading_mode";
 static const char* g_setting_key_mouse_sensitivity = "mouse_sensitivity";
 static const char* g_setting_key_camera_speed = "camera_movement_speed";
 static const char* g_setting_key_camera_position_x = "camera_position_x";
@@ -595,6 +601,46 @@ static sandbox3d_layout_mode sandbox3d_parse_layout_mode(const char* value)
     return SANDBOX3D_LAYOUT_VIEW;
 }
 
+static henka_viewport_shading_mode
+sandbox3d_get_saved_viewport_shading_mode(
+    const sandbox3d_state* state)
+{
+    henka_viewport_shading_mode mode;
+    const char* value;
+
+    if (state == NULL || state->settings == NULL)
+    {
+        return HENKA_VIEWPORT_SHADING_SOLID;
+    }
+
+    if (henka_settings_has_key(
+            state->settings,
+            g_setting_key_viewport_shading_mode))
+    {
+        value = henka_settings_get_string(
+            state->settings,
+            g_setting_key_viewport_shading_mode,
+            "solid");
+        if (henka_viewport_shading_mode_parse(
+                value,
+                &mode) == HENKA_SUCCESS)
+        {
+            return mode;
+        }
+
+        HENKA_LOG_WARN(
+            "Invalid viewport shading setting '%s'; Solid was restored.",
+            value);
+        return HENKA_VIEWPORT_SHADING_SOLID;
+    }
+
+    return henka_settings_get_bool(
+        state->settings,
+        g_setting_key_wireframe_enabled,
+        false) ?
+        HENKA_VIEWPORT_SHADING_WIREFRAME :
+        HENKA_VIEWPORT_SHADING_SOLID;
+}
 static const char* sandbox3d_get_utility_label(sandbox3d_utility_view utility)
 {
     switch (utility)
@@ -2262,7 +2308,7 @@ static void sandbox3d_print_help(const sandbox3d_state* state)
     printf("  Alt + Left Mouse Orbit around the selected object or current view target\n");
     printf("  Middle Mouse     Pan the viewport\n");
     printf("  Mouse Wheel      Zoom the viewport when the cursor is over the scene view\n");
-    printf("  F1               Toggle wireframe\n");
+    printf("  F1               Enter Wireframe or restore the last non-wireframe mode\n");
     printf("  F2               Print the scene legend again\n");
     printf("  F3               Show or hide the debug grid\n");
     printf("  F4               Show or hide the sandbox panels\n");
@@ -3443,7 +3489,7 @@ static void sandbox3d_apply_loaded_settings(henka_engine* engine, sandbox3d_stat
     float orthographic_height;
     henka_camera_preset camera_preset;
     henka_result result;
-    bool wireframe_enabled;
+    henka_viewport_shading_mode shading_mode;
 
     if (engine == NULL || state == NULL || state->settings == NULL || state->scene == NULL)
     {
@@ -3451,7 +3497,8 @@ static void sandbox3d_apply_loaded_settings(henka_engine* engine, sandbox3d_stat
     }
 
     grid_visible = henka_settings_get_bool(state->settings, g_setting_key_grid_visible, true);
-    wireframe_enabled = henka_settings_get_bool(state->settings, g_setting_key_wireframe_enabled, false);
+    shading_mode =
+        sandbox3d_get_saved_viewport_shading_mode(state);
     movement_speed = henka_settings_get_float(state->settings, g_setting_key_camera_speed, g_default_camera_movement_speed);
     mouse_sensitivity = henka_settings_get_float(
         state->settings,
@@ -3533,10 +3580,13 @@ static void sandbox3d_apply_loaded_settings(henka_engine* engine, sandbox3d_stat
         HENKA_LOG_WARN("Debug grid visibility could not be restored from sandbox settings.");
     }
 
-    result = henka_engine_set_wireframe(engine, wireframe_enabled);
+    result = henka_engine_set_viewport_shading_mode(
+        engine,
+        shading_mode);
     if (result != HENKA_SUCCESS)
     {
-        HENKA_LOG_WARN("Wireframe state could not be restored from sandbox settings.");
+        HENKA_LOG_WARN(
+            "Viewport shading mode could not be restored from sandbox settings.");
     }
 
     layout_mode_value = henka_settings_get_string(state->settings, g_setting_key_layout_mode, "view");
@@ -3559,6 +3609,11 @@ static henka_result sandbox3d_save_settings(henka_engine* engine, sandbox3d_stat
     }
 
     henka_settings_set_bool(state->settings, g_setting_key_grid_visible, henka_scene_is_entity_visible(state->scene, state->grid_entity));
+    henka_settings_set_string(
+        state->settings,
+        g_setting_key_viewport_shading_mode,
+        henka_viewport_shading_mode_get_setting_value(
+            henka_engine_get_viewport_shading_mode(engine)));
     henka_settings_set_bool(state->settings, g_setting_key_wireframe_enabled, henka_engine_is_wireframe_enabled(engine));
     henka_settings_set_float(state->settings, g_setting_key_mouse_sensitivity, sandbox3d_get_mouse_sensitivity(state));
     henka_settings_set_float(state->settings, g_setting_key_camera_speed, state->camera.movement_speed);
@@ -3647,7 +3702,9 @@ static henka_result sandbox3d_reset_settings(henka_engine* engine, sandbox3d_sta
         return result;
     }
 
-    result = henka_engine_set_wireframe(engine, false);
+    result = henka_engine_set_viewport_shading_mode(
+        engine,
+        HENKA_VIEWPORT_SHADING_SOLID);
     if (result != HENKA_SUCCESS)
     {
         return result;
@@ -4015,6 +4072,13 @@ static bool sandbox3d_ui_owns_mouse_at_point(const sandbox3d_state* state, henka
     if (state == NULL || state->ui == NULL || !henka_ui_is_visible(state->ui))
     {
         return false;
+    }
+
+    if (henka_ui_rect_contains(
+            state->scene_view_header_controls,
+            framebuffer_mouse))
+    {
+        return true;
     }
 
     panel_count = 0U;
@@ -5667,16 +5731,142 @@ static void sandbox3d_draw_status_block(
     }
 }
 
-static void sandbox3d_draw_scene_viewport_frame(henka_ui_context* ui, henka_ui_rect bounds)
+static void sandbox3d_draw_scene_viewport_frame(
+    henka_engine* engine,
+    sandbox3d_state* state,
+    henka_ui_rect bounds)
 {
-    if (ui == NULL || bounds.width <= 0.0f || bounds.height <= 0.0f)
+    static const henka_viewport_shading_mode modes[4] = {
+        HENKA_VIEWPORT_SHADING_WIREFRAME,
+        HENKA_VIEWPORT_SHADING_SOLID,
+        HENKA_VIEWPORT_SHADING_MATERIAL_PREVIEW,
+        HENKA_VIEWPORT_SHADING_RENDERED};
+    static const char* full_labels[4] = {
+        "Wire",
+        "Solid",
+        "Material",
+        "Rendered"};
+    static const char* compact_labels[4] = {
+        "W",
+        "S",
+        "M",
+        "R"};
+    const char** labels;
+    float button_width;
+    float gap;
+    size_t index;
+    henka_viewport_shading_mode mode;
+    float start_x;
+
+    if (engine == NULL ||
+        state == NULL ||
+        state->ui == NULL ||
+        bounds.width <= 0.0f ||
+        bounds.height <= 0.0f)
     {
         return;
     }
 
-    henka_ui_viewport_frame(ui, bounds, "Scene View");
-}
+    henka_ui_viewport_frame(
+        state->ui,
+        bounds,
+        "Scene View");
 
+    state->scene_view_header_controls =
+        (henka_ui_rect){0.0f, 0.0f, 0.0f, 0.0f};
+    gap = 3.0f;
+    labels = full_labels;
+    button_width = 68.0f;
+    if (bounds.width < 430.0f)
+    {
+        labels = compact_labels;
+        button_width = 34.0f;
+    }
+
+    start_x =
+        bounds.x + bounds.width -
+        button_width * 4.0f -
+        gap * 3.0f -
+        8.0f;
+    if (start_x < bounds.x + 104.0f)
+    {
+        return;
+    }
+
+    state->scene_view_header_controls =
+        (henka_ui_rect){
+            start_x,
+            bounds.y + 4.0f,
+            button_width * 4.0f + gap * 3.0f,
+            22.0f};
+
+    if (!state->viewport_shading_bounds_reported)
+    {
+        printf(
+            "Viewport shading controls: x=%.1f y=%.1f button=%.1f gap=%.1f\n",
+            start_x,
+            bounds.y + 4.0f,
+            button_width,
+            gap);
+        fflush(stdout);
+        state->viewport_shading_bounds_reported = true;
+    }
+
+    mode = henka_engine_get_viewport_shading_mode(engine);
+    for (index = 0U; index < 4U; ++index)
+    {
+        char id[48];
+        henka_ui_rect button_bounds;
+
+        snprintf(
+            id,
+            sizeof(id),
+            "viewport_shading_%u",
+            (unsigned int)index);
+        button_bounds =
+            (henka_ui_rect){
+                start_x +
+                    (button_width + gap) *
+                    (float)index,
+                bounds.y + 4.0f,
+                button_width,
+                22.0f};
+
+        if (henka_ui_tab(
+                state->ui,
+                id,
+                button_bounds,
+                labels[index],
+                mode == modes[index]))
+        {
+            if (henka_engine_set_viewport_shading_mode(
+                    engine,
+                    modes[index]) == HENKA_SUCCESS)
+            {
+                mode = modes[index];
+                sandbox3d_set_statusf(
+                    state,
+                    false,
+                    false,
+                    "Viewport shading: %s.",
+                    henka_viewport_shading_mode_get_label(
+                        mode));
+                printf(
+                    "Viewport shading: %s.\n",
+                    henka_viewport_shading_mode_get_label(
+                        mode));
+                fflush(stdout);
+            }
+            else
+            {
+                sandbox3d_set_status(
+                    state,
+                    true,
+                    "Viewport shading mode could not be changed.");
+            }
+        }
+    }
+}
 static henka_ui_semantic_color sandbox3d_debug_bool_color(bool value)
 {
     return value ? HENKA_UI_COLOR_SUCCESS : HENKA_UI_COLOR_DANGER;
@@ -5913,7 +6103,7 @@ static void sandbox3d_draw_controls_panel(
     int controls_page;
     bool scene_panel_visible;
     float third_button_width;
-    bool wireframe_enabled;
+
     float x_left;
     float x_middle;
     float x_right;
@@ -5951,7 +6141,7 @@ static void sandbox3d_draw_controls_panel(
     scene_panel_visible = state->workspace.scene_objects_panel_visible;
     details_panel_visible = state->workspace.object_details_panel_visible;
     grid_visible = henka_scene_is_entity_visible(state->scene, state->grid_entity);
-    wireframe_enabled = henka_engine_is_wireframe_enabled(engine);
+
     layout_mode = state->workspace.layout_mode;
     inspect_mode = layout_mode == SANDBOX3D_LAYOUT_INSPECT;
     full_mode = layout_mode == SANDBOX3D_LAYOUT_FULL;
@@ -5992,25 +6182,50 @@ static void sandbox3d_draw_controls_panel(
         y += 42.0f;
         sandbox3d_draw_section_heading(state->ui, x_left, y, "Viewer");
         y += 20.0f;
-        if (henka_ui_toggle(state->ui, "grid", (henka_ui_rect){x_left, y, half_button_width, 28.0f}, "Grid", &grid_visible))
         {
-            sandbox3d_toggle_grid_visibility(state, grid_visible, true);
-        }
-        else
-        {
-            sandbox3d_toggle_grid_visibility(state, grid_visible, false);
-        }
-        if (henka_ui_toggle(state->ui, "wireframe", (henka_ui_rect){x_middle, y, half_button_width, 28.0f}, "Wire", &wireframe_enabled))
-        {
-            sandbox3d_toggle_wireframe(engine, wireframe_enabled, true);
-            sandbox3d_set_statusf(state, false, false, "Wireframe %s.", wireframe_enabled ? "on" : "off");
-        }
-        else
-        {
-            sandbox3d_toggle_wireframe(engine, wireframe_enabled, false);
+            const henka_ui_rect grid_bounds =
+                (henka_ui_rect){
+                    x_left,
+                    y,
+                    panel_bounds.width - 28.0f,
+                    28.0f};
+
+            if (!state->grid_control_bounds_reported)
+            {
+                printf(
+                    "Grid control: x=%.1f y=%.1f width=%.1f height=%.1f\n",
+                    grid_bounds.x,
+                    grid_bounds.y,
+                    grid_bounds.width,
+                    grid_bounds.height);
+                fflush(stdout);
+                state->grid_control_bounds_reported = true;
+            }
+
+            if (henka_ui_toggle(
+                    state->ui,
+                    "grid",
+                    grid_bounds,
+                    "Grid",
+                    &grid_visible))
+            {
+                sandbox3d_toggle_grid_visibility(
+                    state,
+                    grid_visible,
+                    true);
+            }
+            else
+            {
+                sandbox3d_toggle_grid_visibility(
+                    state,
+                    grid_visible,
+                    false);
+            }
         }
 
         y += 42.0f;
+        sandbox3d_draw_section_heading(state->ui, x_left, y, "Viewport");        y += 42.0f;
+        sandbox3d_draw_section_heading(state->ui, x_left, y, "Viewport");        y += 42.0f;
         sandbox3d_draw_section_heading(state->ui, x_left, y, "Viewport");
         y += 20.0f;
         if (henka_ui_primary_button(state->ui, "frame_selected", (henka_ui_rect){x_left, y, half_button_width, 28.0f}, "Frame Selected"))
@@ -6090,13 +6305,36 @@ static void sandbox3d_draw_controls_panel(
             sandbox3d_set_statusf(state, false, false, "Physics QA is open in the Utility panel.");
         }
         y += 36.0f;
-        if (henka_ui_primary_button(
-                state->ui,
-                "native_panel_test",
-                (henka_ui_rect){x_left, y, panel_bounds.width - 28.0f, 28.0f},
-                "Open Native Panel Test"))
         {
-            sandbox3d_open_native_panel_test(engine, state);
+            const henka_ui_rect native_panel_test_bounds =
+                (henka_ui_rect){
+                    x_left,
+                    y,
+                    panel_bounds.width - 28.0f,
+                    28.0f};
+
+            if (!state->native_panel_test_bounds_reported)
+            {
+                printf(
+                    "Native Panel Test control: x=%.1f y=%.1f width=%.1f height=%.1f\n",
+                    native_panel_test_bounds.x,
+                    native_panel_test_bounds.y,
+                    native_panel_test_bounds.width,
+                    native_panel_test_bounds.height);
+                fflush(stdout);
+                state->native_panel_test_bounds_reported = true;
+            }
+
+            if (henka_ui_primary_button(
+                    state->ui,
+                    "native_panel_test",
+                    native_panel_test_bounds,
+                    "Open Native Panel Test"))
+            {
+                sandbox3d_open_native_panel_test(
+                    engine,
+                    state);
+            }
         }
     }
     else
@@ -6818,7 +7056,14 @@ static void sandbox3d_draw_utility_panel(
             sandbox3d_draw_value_row(state->ui, x_left, y_start + 18.0f, panel_bounds.width - 28.0f, "Layout", sandbox3d_get_layout_mode_label(state->workspace.layout_mode));
             sandbox3d_draw_value_row(state->ui, x_left, y_start + 44.0f, panel_bounds.width - 28.0f, "Selected", descriptor != NULL ? descriptor->display_name : "(none)");
             sandbox3d_draw_value_row(state->ui, x_left, y_start + 70.0f, panel_bounds.width - 28.0f, "Grid", henka_scene_is_entity_visible(state->scene, state->grid_entity) ? "Visible" : "Hidden");
-            sandbox3d_draw_value_row(state->ui, x_left, y_start + 96.0f, panel_bounds.width - 28.0f, "Wireframe", henka_engine_is_wireframe_enabled(engine) ? "On" : "Off");
+            sandbox3d_draw_value_row(
+                state->ui,
+                x_left,
+                y_start + 96.0f,
+                panel_bounds.width - 28.0f,
+                "Shading",
+                henka_viewport_shading_mode_get_label(
+                    henka_engine_get_viewport_shading_mode(engine)));
             snprintf(row_value, sizeof(row_value), "%.4f  /  %.1f", sandbox3d_get_mouse_sensitivity(state), state->camera.movement_speed);
             sandbox3d_draw_value_row(state->ui, x_left, y_start + 122.0f, panel_bounds.width - 28.0f, "Sense/Speed", row_value);
             sandbox3d_draw_value_row(state->ui, x_left, y_start + 148.0f, panel_bounds.width - 28.0f, "Controls", sandbox3d_editor_controls_get_active_profile_name(&state->editor_controls));
@@ -7305,7 +7550,7 @@ static void sandbox3d_build_ui(henka_engine* engine, sandbox3d_state* state)
         sandbox3d_format_display_path("Save", result == HENKA_SUCCESS ? save_path : NULL, save_path_text, sizeof(save_path_text));
         snprintf(capture_text, sizeof(capture_text), "Capture: %s", henka_engine_is_mouse_captured(engine) ? "On" : "Off");
         snprintf(fps_text, sizeof(fps_text), "Frame: %.2f ms  FPS: %.1f", milliseconds, fps);
-        sandbox3d_draw_scene_viewport_frame(state->ui, layout.scene_frame);
+        sandbox3d_draw_scene_viewport_frame(engine, state, layout.scene_frame);
         sandbox3d_draw_selection_highlight(state, layout.scene_viewport);
         sandbox3d_draw_gizmo_overlay(engine, state, layout.scene_viewport);
         sandbox3d_draw_physics_overlay(state, layout.scene_viewport);

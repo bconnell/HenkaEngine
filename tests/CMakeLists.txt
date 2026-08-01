@@ -23,6 +23,7 @@ add_executable(henka_tests
     test_memory.c
     test_scene.c
     test_ui.c
+    test_viewport_shading.c
     test_workspace.c
 )
 

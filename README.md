@@ -43,7 +43,7 @@ Henka Engine is still early, but the sandbox now renders a visible 3D scene with
 - Shader-based rendering of built-in primitives
 - Sandbox window titled `Henka Engine Sandbox 3D`
 - Ground plane, cubes, debug grid, a loaded OBJ marker, textured materials, and visible fallback behavior for missing texture and model assets
-- Keyboard movement, mouse look when capture is active, wireframe toggle, and offline runtime help
+- Keyboard movement, mouse look when capture is active, viewport-local Wireframe, Solid, Material Preview, and Rendered shading controls, and offline runtime help
 - Bounded local settings persistence with transactional loads and replace-on-success writes
 - Early in-window UI overlay with buttons, toggles, labels, structured rows, simple text rendering, and release-confirm control activation
 - Transactional UI frame construction with nested-frame rejection, frame-only widget admission, all-or-nothing composite draw commands, bounded text fitting, and state changes committed only after rendering succeeds
@@ -207,7 +207,7 @@ See [Platform Support](docs/platform-support.md) and [Package Provenance](docs/p
 - `Alt + Left Mouse`: optional orbit shortcut around the selected object or current view target
 - `Middle Mouse`: optional pan shortcut
 - `Mouse Wheel`: zoom the viewport when the cursor is over the scene view
-- `F1`: toggle wireframe
+- `F1`: enter Wireframe or return to the last non-wireframe viewport shading mode
 - `F2`: print the scene legend again
 - `F3`: show or hide the debug grid
 - `F4`: show or hide the sandbox panels
@@ -223,6 +223,8 @@ See [Platform Support](docs/platform-support.md) and [Package Provenance](docs/p
 - `Escape` or `Right Mouse`: cancel an active transform
 - `Left Ctrl` / `Left Shift`: stepped or fine transform adjustment
 - `Escape`: when no transform is active, close the UI first, then release the mouse, then exit
+
+The Scene View header provides Wireframe, Solid, Material Preview, and Rendered shading. Solid and Material Preview use predictable editor lighting; Rendered uses the scene material and lighting policy. The legacy `F1` wireframe control remains compatible and restores the last non-wireframe mode when switched off. Shading mode is saved independently from workspace geometry, so Reset Layout does not discard it.
 
 The sandbox panels open automatically on startup and reset-style launches so Controls and `Physics QA` are discoverable without knowing `F4` first. Starts have no selected scene object until the user selects one. Press `F4` to hide or show panels, and press `F5` to cycle between `View`, `Inspect`, and `Full Tools`. UI buttons, toggles, tabs, and selectable rows activate on mouse release inside the active control so press, drag-away, and release behavior is safer. Active control IDs are copied into bounded UI-owned storage instead of retaining caller stack pointers, and non-finite UI geometry is rejected before draw-list insertion. `DRAG` marks a live panel header. Release on a valid left or right dock outline to redock there, release away from the outlines to keep the panel as an in-app floating panel, or use `Pop` on a floating panel to move it into a separate native tool window. Detached workspace panels now render their matching panel content in native tool windows and route per-window mouse input for release-confirm controls. When two panels share a side, the dock stacks them vertically instead of letting one cover the other. Closing a detached tool window returns its panel to the last valid dock, and `Reset Layout` restores the default workspace. Renderer context recovery is hardened around tool-window drawing. Select a scene object, then use `M` or `G`, `R`, and `S` to start move, rotate, and scale transforms. Active transforms support `X`, `Y`, or `Z` constraints, confirm, cancel, stepped adjustment, and fine adjustment through the action-based local control profile. Negative scale is preserved as an intentional mirror transform, while zero and near-zero scale are rejected to avoid collapsed objects. Locked objects, including the default Ground, stay selectable for inspection without a yellow transform highlight or gizmo and require an explicit unlock action before movement. Selection, visibility, lock, and tool changes clear active transform-session ownership. UI draw construction is valid only between a matched begin and end call; failed composite controls roll back their draw commands and do not consume release events or mutate toggle state. Open `Physics QA` to inspect the opt-in rigid-body demo. Manual desktop QA is still required before physics feel, native window behavior, panel drag comfort, and transform workflow feel can be called fully complete.
 

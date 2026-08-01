@@ -1005,26 +1005,134 @@ bool henka_engine_is_vsync_enabled(const henka_engine* engine)
     return engine->renderer->vsync_enabled;
 }
 
-henka_result henka_engine_set_wireframe(henka_engine* engine, bool enabled)
+bool henka_viewport_shading_mode_is_valid(
+    henka_viewport_shading_mode mode)
 {
-    if (engine == NULL)
+    return mode >= HENKA_VIEWPORT_SHADING_WIREFRAME &&
+        mode < HENKA_VIEWPORT_SHADING_COUNT;
+}
+
+const char* henka_viewport_shading_mode_get_label(
+    henka_viewport_shading_mode mode)
+{
+    switch (mode)
+    {
+        case HENKA_VIEWPORT_SHADING_WIREFRAME:
+            return "Wireframe";
+        case HENKA_VIEWPORT_SHADING_SOLID:
+            return "Solid";
+        case HENKA_VIEWPORT_SHADING_MATERIAL_PREVIEW:
+            return "Material Preview";
+        case HENKA_VIEWPORT_SHADING_RENDERED:
+            return "Rendered";
+        case HENKA_VIEWPORT_SHADING_COUNT:
+        default:
+            return "Unknown";
+    }
+}
+
+const char* henka_viewport_shading_mode_get_setting_value(
+    henka_viewport_shading_mode mode)
+{
+    switch (mode)
+    {
+        case HENKA_VIEWPORT_SHADING_WIREFRAME:
+            return "wireframe";
+        case HENKA_VIEWPORT_SHADING_SOLID:
+            return "solid";
+        case HENKA_VIEWPORT_SHADING_MATERIAL_PREVIEW:
+            return "material_preview";
+        case HENKA_VIEWPORT_SHADING_RENDERED:
+            return "rendered";
+        case HENKA_VIEWPORT_SHADING_COUNT:
+        default:
+            return "solid";
+    }
+}
+
+henka_result henka_viewport_shading_mode_parse(
+    const char* value,
+    henka_viewport_shading_mode* out_mode)
+{
+    if (out_mode != NULL)
+    {
+        *out_mode = HENKA_VIEWPORT_SHADING_SOLID;
+    }
+
+    if (value == NULL || out_mode == NULL)
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
 
-    return henka_renderer_set_wireframe(engine->renderer, enabled);
+    if (strcmp(value, "wireframe") == 0)
+    {
+        *out_mode = HENKA_VIEWPORT_SHADING_WIREFRAME;
+        return HENKA_SUCCESS;
+    }
+    if (strcmp(value, "solid") == 0)
+    {
+        *out_mode = HENKA_VIEWPORT_SHADING_SOLID;
+        return HENKA_SUCCESS;
+    }
+    if (strcmp(value, "material_preview") == 0)
+    {
+        *out_mode = HENKA_VIEWPORT_SHADING_MATERIAL_PREVIEW;
+        return HENKA_SUCCESS;
+    }
+    if (strcmp(value, "rendered") == 0)
+    {
+        *out_mode = HENKA_VIEWPORT_SHADING_RENDERED;
+        return HENKA_SUCCESS;
+    }
+
+    return HENKA_ERROR_INVALID_ARGUMENT;
 }
 
-bool henka_engine_is_wireframe_enabled(const henka_engine* engine)
+henka_result henka_engine_set_viewport_shading_mode(
+    henka_engine* engine,
+    henka_viewport_shading_mode mode)
 {
     if (engine == NULL || engine->renderer == NULL)
     {
-        return false;
+        return HENKA_ERROR_INVALID_ARGUMENT;
     }
 
-    return engine->renderer->wireframe_enabled;
+    return henka_renderer_set_viewport_shading_mode(
+        engine->renderer,
+        mode);
 }
 
+henka_viewport_shading_mode henka_engine_get_viewport_shading_mode(
+    const henka_engine* engine)
+{
+    if (engine == NULL || engine->renderer == NULL)
+    {
+        return HENKA_VIEWPORT_SHADING_SOLID;
+    }
+
+    return henka_renderer_get_viewport_shading_mode(
+        engine->renderer);
+}
+henka_result henka_engine_set_wireframe(
+    henka_engine* engine,
+    bool enabled)
+{
+    if (engine == NULL || engine->renderer == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    return henka_renderer_set_wireframe(
+        engine->renderer,
+        enabled);
+}
+
+bool henka_engine_is_wireframe_enabled(
+    const henka_engine* engine)
+{
+    return henka_engine_get_viewport_shading_mode(engine) ==
+        HENKA_VIEWPORT_SHADING_WIREFRAME;
+}
 henka_result henka_engine_set_mouse_capture(henka_engine* engine, bool enabled)
 {
     henka_result result;
@@ -1233,8 +1341,11 @@ henka_result henka_engine_get_diagnostics(
     out_diagnostics->framebuffer_height =
         engine->renderer != NULL ?
         engine->renderer->framebuffer_height : 0;
+    out_diagnostics->viewport_shading_mode =
+        henka_engine_get_viewport_shading_mode(engine);
     out_diagnostics->wireframe_enabled =
-        henka_engine_is_wireframe_enabled(engine);
+        out_diagnostics->viewport_shading_mode ==
+        HENKA_VIEWPORT_SHADING_WIREFRAME;
     out_diagnostics->mouse_captured =
         henka_engine_is_mouse_captured(engine);
     out_diagnostics->ui_visible =

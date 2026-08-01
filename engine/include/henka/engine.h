@@ -59,6 +59,22 @@ typedef enum henka_package_mode
     HENKA_PACKAGE_MODE_PACKAGED
 } henka_package_mode;
 
+typedef enum henka_viewport_shading_mode
+{
+    HENKA_VIEWPORT_SHADING_WIREFRAME = 0,
+    HENKA_VIEWPORT_SHADING_SOLID,
+    HENKA_VIEWPORT_SHADING_MATERIAL_PREVIEW,
+    HENKA_VIEWPORT_SHADING_RENDERED,
+    HENKA_VIEWPORT_SHADING_COUNT
+} henka_viewport_shading_mode;
+
+typedef struct henka_scene_view_render_desc
+{
+    henka_viewport viewport;
+    henka_viewport_shading_mode shading_mode;
+    bool overlays_visible;
+    bool xray_enabled;
+} henka_scene_view_render_desc;
 typedef struct henka_engine_diagnostics
 {
     double delta_seconds;
@@ -67,6 +83,7 @@ typedef struct henka_engine_diagnostics
     uint64_t frame_index;
     int framebuffer_width;
     int framebuffer_height;
+    henka_viewport_shading_mode viewport_shading_mode;
     bool wireframe_enabled;
     bool mouse_captured;
     bool ui_visible;
@@ -107,6 +124,15 @@ typedef struct henka_engine_config
  * The caller becomes responsible for releasing the instance with
  * henka_engine_destroy.
  */
+bool henka_viewport_shading_mode_is_valid(
+    henka_viewport_shading_mode mode);
+const char* henka_viewport_shading_mode_get_label(
+    henka_viewport_shading_mode mode);
+const char* henka_viewport_shading_mode_get_setting_value(
+    henka_viewport_shading_mode mode);
+henka_result henka_viewport_shading_mode_parse(
+    const char* value,
+    henka_viewport_shading_mode* out_mode);
 henka_result henka_engine_create(const henka_engine_config* config, henka_engine** out_engine);
 void henka_engine_destroy(henka_engine* engine);
 
@@ -131,6 +157,11 @@ henka_result henka_engine_get_window_size(const henka_engine* engine, int* out_w
 henka_result henka_engine_get_framebuffer_size(const henka_engine* engine, int* out_width, int* out_height);
 henka_result henka_engine_set_scene_viewport(henka_engine* engine, henka_viewport viewport);
 henka_result henka_engine_get_scene_viewport(const henka_engine* engine, henka_viewport* out_viewport);
+henka_result henka_engine_set_viewport_shading_mode(
+    henka_engine* engine,
+    henka_viewport_shading_mode mode);
+henka_viewport_shading_mode henka_engine_get_viewport_shading_mode(
+    const henka_engine* engine);
 henka_package_mode henka_engine_get_package_mode(const henka_engine* engine);
 const char* henka_engine_get_package_mode_label(henka_package_mode package_mode);
 henka_result henka_engine_get_diagnostics(const henka_engine* engine, henka_engine_diagnostics* out_diagnostics);

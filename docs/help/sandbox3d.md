@@ -216,3 +216,8 @@ The runtime also reports whether it is running in `Development` or `Packaged` mo
 More detail about the current UI layer is available in [docs/ui.md](../ui.md).
 
 For a step-by-step manual verification flow, use [docs/qa/sandbox3d-manual-checklist.md](../qa/sandbox3d-manual-checklist.md).
+## Viewport shading
+
+The Scene View owns an explicit shading mode rather than relying on a global polygon toggle. Wireframe draws neutral geometry edges without texture sampling. Solid draws neutral filled surfaces under stable editor lighting. Material Preview displays current base colors and base-color textures under editor lighting. Rendered uses the scene material and lighting policy. Helper overlays retain their own materials, mode changes do not rewrite scene materials, and the renderer restores a filled polygon baseline before UI and detached-window presentation.
+
+The legacy wireframe API remains compatible: enabling it selects Wireframe, while disabling it restores the last valid non-wireframe mode. The sandbox persists the authoritative mode under `ui.scene_view.shading_mode`; older `wireframe_enabled` settings are migrated only when the new key is absent.
