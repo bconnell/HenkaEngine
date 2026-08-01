@@ -40,7 +40,7 @@ The docked workspace opens in `View` mode with no selected scene object so the c
 
 - `Textured Cube`: centered, shows texture material rendering.
 - `Ground`: under the scene, shows repeated local texture use.
-- `Colored Cube`: left side, shows untextured material color.
+- `Material Ball`: left side, shows untextured material color on rounded production geometry.
 - `OBJ Marker`: farther left, shows the current OBJ loading path.
 - `Missing Texture`: right side, shows the error texture fallback.
 - `Missing Model`: farther right, shows the fallback mesh.

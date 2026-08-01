@@ -43,7 +43,7 @@ Henka Engine is still early, but the sandbox now renders a visible 3D scene with
 - Bounded single-read texture decoding with truthful rejection of HDR and 16-bit sources, plus path-specific white/error fallback aliases
 - Shader-based rendering of built-in primitives
 - Sandbox window titled `Henka Engine Sandbox 3D`
-- Ground plane, cubes, debug grid, a loaded OBJ marker, textured materials, and visible fallback behavior for missing texture and model assets
+- Ground plane, UV material ball, cubes, debug grid, a loaded OBJ marker, textured materials, and visible fallback behavior for missing texture and model assets
 - Keyboard movement, mouse look when capture is active, viewport-local Wireframe, Solid, Material Preview, and Rendered shading controls, and offline runtime help
 - Bounded local settings persistence with transactional loads and replace-on-success writes
 - Early in-window UI overlay with buttons, toggles, labels, structured rows, simple text rendering, and release-confirm control activation
@@ -132,7 +132,7 @@ The sandbox starts a visible 3D scene with:
 
 - a textured cube
 - a textured ground plane
-- a colored cube
+- a rounded material ball
 - a loaded OBJ marker
 - a debug grid
 - a fallback-texture example for missing texture loads
@@ -258,7 +258,7 @@ To validate the generic external game template against the current Henka checkou
 
 ## Current limitations
 
-- The sandbox uses built-in primitives plus a small early OBJ loading path.
+- The sandbox uses built-in plane, cube, UV-sphere, and debug-grid primitives plus a small early OBJ loading path.
 - Missing textures fall back safely to an error texture, and missing OBJ assets fall back to a visible mesh. Failed OBJ mesh fallbacks can be retried explicitly after the source asset is fixed.
 - OBJ support is intentionally limited to bounded local files containing comments, blank lines, finite positions, optional finite UVs and normals, positive and negative indices, and triangle/quad/n-gon faces through basic fan triangulation.
 - OBJ material libraries, concave polygon correction beyond basic fan triangulation, model hierarchies, and animation are not supported yet.

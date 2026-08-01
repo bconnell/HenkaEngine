@@ -280,6 +280,7 @@ typedef struct sandbox3d_state
     henka_camera camera;
     henka_camera_preset camera_preset;
     henka_mesh* cube_mesh;
+    henka_mesh* sphere_mesh;
     henka_mesh* ground_mesh;
     henka_mesh* grid_mesh;
     henka_mesh* marker_mesh;
@@ -2732,6 +2733,7 @@ static void sandbox3d_release_owned_resources(sandbox3d_state* state)
     henka_mesh_destroy(state->grid_mesh);
     henka_mesh_destroy(state->ground_mesh);
     henka_mesh_destroy(state->cube_mesh);
+    henka_mesh_destroy(state->sphere_mesh);
     henka_physics_world_destroy(state->physics.world);
     henka_scene_destroy(state->scene);
     henka_action_context_destroy(state->actions);
@@ -2748,6 +2750,7 @@ static void sandbox3d_release_owned_resources(sandbox3d_state* state)
     state->grid_mesh = NULL;
     state->ground_mesh = NULL;
     state->cube_mesh = NULL;
+    state->sphere_mesh = NULL;
     state->physics.world = NULL;
     state->gizmo_render.axis_mesh = NULL;
     state->gizmo_render.ring_mesh = NULL;
@@ -7028,7 +7031,7 @@ static void sandbox3d_draw_utility_panel(
             sandbox3d_draw_section_heading(state->ui, x_left, y_start, "Scene legend");
             henka_ui_label(state->ui, x_left, y_start + 18.0f, 1.0f, "Ground: textured plane under the scene.");
             henka_ui_label(state->ui, x_left, y_start + 34.0f, 1.0f, "Textured Cube: texture material rendering.");
-            henka_ui_label(state->ui, x_left, y_start + 50.0f, 1.0f, "Colored Cube: untextured base color.");
+            henka_ui_label(state->ui, x_left, y_start + 50.0f, 1.0f, "Material Ball: rounded untextured base color.");
             henka_ui_label(state->ui, x_left, y_start + 66.0f, 1.0f, "OBJ Marker: current OBJ mesh loading path.");
             henka_ui_label(state->ui, x_left, y_start + 82.0f, 1.0f, "Missing Texture and Missing Model show fallback behavior.");
             break;
@@ -7795,6 +7798,12 @@ static henka_result sandbox3d_initialize(henka_engine* engine, void* user_data)
         goto fail;
     }
 
+    result = henka_mesh_create_uv_sphere(engine, 0.5f, 32, 16, &state->sphere_mesh);
+    if (result != HENKA_SUCCESS)
+    {
+        goto fail;
+    }
+
     result = henka_mesh_create_plane(engine, 12.0f, 12.0f, &state->ground_mesh);
     if (result != HENKA_SUCCESS)
     {
@@ -7821,7 +7830,7 @@ static henka_result sandbox3d_initialize(henka_engine* engine, void* user_data)
 
     state->ground_entity = henka_scene_create_entity_named(state->scene, "Ground");
     state->cube_entity = henka_scene_create_entity_named(state->scene, "Textured Cube");
-    state->colored_cube_entity = henka_scene_create_entity_named(state->scene, "Colored Cube");
+    state->colored_cube_entity = henka_scene_create_entity_named(state->scene, "Material Ball");
     state->marker_entity = henka_scene_create_entity_named(state->scene, "OBJ Marker");
     state->fallback_cube_entity = henka_scene_create_entity_named(state->scene, "Missing Texture");
     state->fallback_model_entity = henka_scene_create_entity_named(state->scene, "Missing Model");
@@ -7967,7 +7976,7 @@ static henka_result sandbox3d_initialize(henka_engine* engine, void* user_data)
         transform);
 
     transform = sandbox3d_make_transform(g_colored_cube_position, (henka_vec3){1.0f, 1.0f, 1.0f});
-    result = sandbox3d_configure_entity(state->scene, state->colored_cube_entity, state->cube_mesh, colored_material, transform);
+    result = sandbox3d_configure_entity(state->scene, state->colored_cube_entity, state->sphere_mesh, colored_material, transform);
     if (result != HENKA_SUCCESS)
     {
         goto fail;
@@ -7978,16 +7987,16 @@ static henka_result sandbox3d_initialize(henka_engine* engine, void* user_data)
         "colored_cube",
         sandbox3d_make_bounds((henka_vec3){0.0f, 0.0f, 0.0f}, (henka_vec3){0.5f, 0.5f, 0.5f}),
         true,
-        "Inspect colored cube");
+        "Inspect material ball");
     sandbox3d_register_object_descriptor(
         state,
         SANDBOX3D_OBJECT_COLORED_CUBE,
         state->colored_cube_entity,
-        "Colored Cube",
+        "Material Ball",
         "Left of center,",
         "shows an emissive material accent.",
-        "Uses the built-in cube mesh without a base-color texture.",
-        "Built-in cube mesh.",
+        "Uses the built-in UV sphere without a base-color texture.",
+        "Built-in UV sphere mesh.",
         "Untextured emissive material.",
         "No texture is used for this object.",
         true,

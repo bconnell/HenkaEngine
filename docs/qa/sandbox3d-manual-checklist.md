@@ -161,7 +161,7 @@ You should be able to identify these examples:
 
 - `Textured Cube`: centered in the scene.
 - `Ground`: textured plane under the scene.
-- `Colored Cube`: left side of the scene.
+- `Material Ball`: left side of the scene.
 - `OBJ Marker`: farther left, using the current OBJ loading path.
 - `Missing Texture`: right side, using the visible error-texture fallback.
 - `Missing Model`: farther right, using the fallback mesh for a missing OBJ path.
@@ -322,7 +322,7 @@ Build:
 Scene visibility:
 - Textured Cube:
 - Ground:
-- Colored Cube:
+- Material Ball:
 - OBJ Marker:
 - Missing Texture:
 - Missing Model:

@@ -67,6 +67,96 @@ static bool henka_mesh_vec3_is_finite(henka_vec3 value)
     return isfinite(value.x) && isfinite(value.y) && isfinite(value.z);
 }
 
+henka_result henka_mesh_create_uv_sphere(
+    henka_engine* engine,
+    float radius,
+    int segments,
+    int rings,
+    henka_mesh** out_mesh)
+{
+    size_t index_count_size;
+    size_t vertex_count_size;
+    unsigned int* indices;
+    henka_result result;
+    henka_vertex* vertices;
+    int index;
+    int vertex_count;
+    int index_count;
+
+    if (engine == NULL || out_mesh == NULL || !isfinite(radius) || radius <= 0.0f ||
+        segments < 12 || segments > 128 || rings < 6 || rings > 64 ||
+        !henka_checked_size_multiply((size_t)(segments + 1), (size_t)(rings + 1), &vertex_count_size) ||
+        !henka_checked_size_multiply((size_t)segments, (size_t)rings, &index_count_size) ||
+        !henka_checked_size_multiply(index_count_size, 6U, &index_count_size) ||
+        !henka_checked_size_to_int(vertex_count_size, &vertex_count) ||
+        !henka_checked_size_to_int(index_count_size, &index_count))
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    vertices = henka_calloc(vertex_count_size, sizeof(*vertices));
+    indices = henka_calloc(index_count_size, sizeof(*indices));
+    if (vertices == NULL || indices == NULL)
+    {
+        henka_free(indices);
+        henka_free(vertices);
+        return HENKA_ERROR_OUT_OF_MEMORY;
+    }
+
+    for (index = 0; index < vertex_count; ++index)
+    {
+        int ring = index / (segments + 1);
+        int segment = index % (segments + 1);
+        float v = (float)ring / (float)rings;
+        float theta = (float)segment / (float)segments * HENKA_PI * 2.0f;
+        float phi = v * HENKA_PI;
+        float sin_phi = sinf(phi);
+        float cos_phi = cosf(phi);
+        float sin_theta = sinf(theta);
+        float cos_theta = cosf(theta);
+        henka_vec3 normal = {sin_phi * cos_theta, cos_phi, sin_phi * sin_theta};
+        henka_vec3 tangent = {-sin_theta, 0.0f, cos_theta};
+
+        vertices[index] = (henka_vertex){
+            {normal.x * radius, normal.y * radius, normal.z * radius},
+            normal,
+            {(float)segment / (float)segments, 1.0f - v},
+            {tangent.x, tangent.y, tangent.z, 1.0f}};
+    }
+
+    index = 0;
+    {
+        int ring;
+        for (ring = 0; ring < rings; ++ring)
+        {
+            int segment;
+            for (segment = 0; segment < segments; ++segment)
+            {
+                unsigned int first = (unsigned int)(ring * (segments + 1) + segment);
+                unsigned int second = first + (unsigned int)(segments + 1);
+                indices[index++] = first;
+                indices[index++] = second;
+                indices[index++] = first + 1U;
+                indices[index++] = second;
+                indices[index++] = second + 1U;
+                indices[index++] = first + 1U;
+            }
+        }
+    }
+
+    result = henka_renderer_create_mesh_from_data(
+        engine->renderer,
+        vertices,
+        vertex_count,
+        indices,
+        index_count,
+        HENKA_MESH_PRIMITIVE_TRIANGLES,
+        out_mesh);
+    henka_free(indices);
+    henka_free(vertices);
+    return result;
+}
+
 henka_result henka_mesh_create_plane(henka_engine* engine, float width, float depth, henka_mesh** out_mesh)
 {
     float half_depth;
