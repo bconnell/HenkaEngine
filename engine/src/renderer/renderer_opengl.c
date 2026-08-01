@@ -150,73 +150,13 @@ typedef struct henka_opengl_texture_data
 
 static henka_opengl_functions g_gl;
 
-#define HENKA_OPENGL_UNIFORM_CACHE_CAPACITY 256U
-#define HENKA_OPENGL_UNIFORM_NAME_CAPACITY 48U
-
-typedef struct henka_opengl_uniform_cache_entry
-{
-    SDL_GLContext context;
-    GLuint program;
-    GLint location;
-    char name[HENKA_OPENGL_UNIFORM_NAME_CAPACITY];
-} henka_opengl_uniform_cache_entry;
-
-static henka_opengl_uniform_cache_entry g_uniform_cache[HENKA_OPENGL_UNIFORM_CACHE_CAPACITY];
-static size_t g_uniform_cache_count;
-
-static void henka_opengl_uniform_cache_forget(GLuint program)
-{
-    SDL_GLContext context = SDL_GL_GetCurrentContext();
-    size_t index;
-
-    if (context == NULL)
-    {
-        return;
-    }
-    for (index = 0U; index < g_uniform_cache_count; ++index)
-    {
-        if (g_uniform_cache[index].context == context &&
-            g_uniform_cache[index].program == program)
-        {
-            g_uniform_cache[index] = g_uniform_cache[g_uniform_cache_count - 1U];
-            --g_uniform_cache_count;
-            --index;
-        }
-    }
-}
-
 static GLint henka_opengl_uniform_location(GLuint program, const char* name)
 {
-    SDL_GLContext context = SDL_GL_GetCurrentContext();
-    size_t index;
-
-    if (context == NULL || program == 0U || name == NULL || name[0] == '\0')
+    if (SDL_GL_GetCurrentContext() == NULL || program == 0U || name == NULL || name[0] == '\0')
     {
         return -1;
     }
-    for (index = 0U; index < g_uniform_cache_count; ++index)
-    {
-        if (g_uniform_cache[index].context == context &&
-            g_uniform_cache[index].program == program &&
-            strncmp(g_uniform_cache[index].name, name, HENKA_OPENGL_UNIFORM_NAME_CAPACITY) == 0)
-        {
-            return g_uniform_cache[index].location;
-        }
-    }
-
-    if (g_uniform_cache_count >= HENKA_OPENGL_UNIFORM_CACHE_CAPACITY ||
-        strlen(name) >= HENKA_OPENGL_UNIFORM_NAME_CAPACITY)
-    {
-        HENKA_LOG_ERROR("uniform cache capacity exceeded for '%s'", name);
-        return -1;
-    }
-    g_uniform_cache[g_uniform_cache_count].context = context;
-    g_uniform_cache[g_uniform_cache_count].program = program;
-    g_uniform_cache[g_uniform_cache_count].location = g_gl.GetUniformLocation(program, name);
-    (void)snprintf(g_uniform_cache[g_uniform_cache_count].name,
-        sizeof(g_uniform_cache[g_uniform_cache_count].name), "%s", name);
-    ++g_uniform_cache_count;
-    return g_uniform_cache[g_uniform_cache_count - 1U].location;
+    return g_gl.GetUniformLocation(program, name);
 }
 
 bool henka_opengl_renderer_is_hdr_ready(const struct henka_renderer* renderer)
@@ -548,7 +488,6 @@ static bool henka_compile_program_from_source(
 
     g_gl.DeleteShader(vertex_shader);
     g_gl.DeleteShader(fragment_shader);
-    henka_opengl_uniform_cache_forget(program);
     *out_program = program;
     return true;
 }
@@ -3127,7 +3066,6 @@ void henka_opengl_renderer_destroy_shader(struct henka_shader* shader)
     }
 
     shader_data = (henka_opengl_shader_data*)shader->backend_data;
-    henka_opengl_uniform_cache_forget(shader_data->program);
     g_gl.DeleteProgram(shader_data->program);
     henka_free(shader_data);
     henka_free(shader);

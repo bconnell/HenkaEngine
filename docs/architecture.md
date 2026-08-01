@@ -168,7 +168,7 @@ The renderer layer exposes engine-owned drawing functionality while keeping Open
 - draw submission for scene entities
 - draw submission for simple screen-space UI rectangles
 
-External shaders are admitted only after the renderer confirms the contract it will populate. Programs that expose the material lighting markers (`useLighting` and `metallic`) must provide the complete material contract; other programs use the minimal geometry contract (`model`, `view`, `projection`, and `baseColor`) used by the debug grid. This keeps a successful file read or link from becoming a later draw-time failure. The uniform cache is a bounded transitional safety layer: entries are keyed by both context and program, but broader per-context renderer ownership remains future work as additional OpenGL backends are introduced.
+External shaders are admitted only after the renderer confirms the contract it will populate. Programs that expose the material lighting markers (`useLighting` and `metallic`) must provide the complete material contract; other programs use the minimal geometry contract (`model`, `view`, `projection`, and `baseColor`) used by the debug grid. This keeps a successful file read or link from becoming a later draw-time failure. Uniform locations are queried directly while the owning renderer/backend resource model is being completed; there is no process-global fixed-capacity cache that can silently reject new uniforms or retain stale context/program entries. This direct lookup is intentionally a correctness-first transitional choice; a future cache must be owned by the renderer context and have explicit invalidation and overflow behavior.
 
 ### Sandbox
 
