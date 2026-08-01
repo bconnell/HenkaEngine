@@ -204,8 +204,20 @@ void main()
         float visibility = visibilitySmithGGXCorrelated(nDotV, nDotL, alpha);
         vec3 specular = distribution * visibility * fresnel;
         vec3 diffuse = (1.0 - fresnel) * (1.0 - surfaceMetallic) * albedo / PI;
+        vec3 baseLayerTransmission = vec3(1.0);
+        if (surfaceClearcoat > 0.0)
+        {
+            vec3 clearcoatViewFresnel = fresnelSchlick(nDotV, vec3(0.04));
+            baseLayerTransmission *= 1.0 - clearcoatViewFresnel * surfaceClearcoat;
+        }
+        if (max(max(surfaceSheenColor.r, surfaceSheenColor.g), surfaceSheenColor.b) > 0.0)
+        {
+            vec3 sheenTransmission = vec3(1.0) -
+                surfaceSheenColor * (1.0 - surfaceMetallic) * 0.35;
+            baseLayerTransmission *= max(sheenTransmission, vec3(0.0));
+        }
         float shadow = shadowFactor(normal, lightDir);
-        color += (diffuse + specular) * radiance * nDotL * shadow;
+        color += (diffuse + specular) * baseLayerTransmission * radiance * nDotL * shadow;
 
         if (surfaceClearcoat > 0.0)
         {
@@ -229,7 +241,8 @@ void main()
 
         // Ambient remains an indirect fallback for scenes without a richer probe path.
         vec3 safeAmbient = min(max(ambientColor, vec3(0.0)), vec3(16.0));
-        color += min(safeAmbient * ((1.0 - surfaceMetallic) * albedo + fresnel * 0.5) * occlusion, vec3(65504.0));
+        color += min(safeAmbient * ((1.0 - surfaceMetallic) * albedo + fresnel * 0.5) *
+            baseLayerTransmission * occlusion, vec3(65504.0));
         if (useEnvironment)
         {
             vec3 environmentDiffuse = sampleEnvironment(normal);
@@ -239,8 +252,10 @@ void main()
                 normal);
             vec3 environmentSpecular = sampleEnvironment(blurredReflectionDirection);
             color += min(
-                environmentDiffuse * ((1.0 - surfaceMetallic) * albedo / PI) * occlusion * 0.55 +
-                environmentSpecular * fresnel * occlusion * (0.35 + 0.65 * (1.0 - surfaceRoughness)),
+                environmentDiffuse * ((1.0 - surfaceMetallic) * albedo / PI) *
+                    baseLayerTransmission * occlusion * 0.55 +
+                environmentSpecular * fresnel * baseLayerTransmission * occlusion *
+                    (0.35 + 0.65 * (1.0 - surfaceRoughness)),
                 vec3(65504.0));
         }
     }
