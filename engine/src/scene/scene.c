@@ -30,6 +30,8 @@ henka_material henka_material_default(void)
     material.normal_scale = 1.0f;
     material.occlusion_strength = 1.0f;
     material.emissive_strength = 0.0f;
+    material.clearcoat = 0.0f;
+    material.clearcoat_roughness = 0.2f;
     material.alpha_cutoff = 0.5f;
     material.use_texture = false;
     material.use_lighting = true;
@@ -93,6 +95,8 @@ henka_result henka_material_validate(const henka_material* material)
         !henka_is_finite_float(material->normal_scale) ||
         !henka_is_finite_float(material->occlusion_strength) ||
         !henka_is_finite_float(material->emissive_strength) ||
+        !henka_is_finite_float(material->clearcoat) ||
+        !henka_is_finite_float(material->clearcoat_roughness) ||
         !henka_is_finite_float(material->alpha_cutoff) ||
         material->base_color.x < 0.0f || material->base_color.x > 1.0f ||
         material->base_color.y < 0.0f || material->base_color.y > 1.0f ||
@@ -108,6 +112,8 @@ henka_result henka_material_validate(const henka_material* material)
         material->occlusion_strength > 1.0f || material->emissive_strength < 0.0f ||
         material->emissive_strength > 100.0f || material->alpha_cutoff < 0.0f ||
         material->alpha_cutoff > 1.0f ||
+        material->clearcoat < 0.0f || material->clearcoat > 1.0f ||
+        material->clearcoat_roughness < 0.045f || material->clearcoat_roughness > 1.0f ||
         material->alpha_mode > HENKA_MATERIAL_ALPHA_BLENDED ||
         (!material->use_texture && material->base_color_texture != NULL) ||
         (material->use_texture && material->base_color_texture == NULL) ||

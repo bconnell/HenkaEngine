@@ -7877,6 +7877,8 @@ static henka_result sandbox3d_initialize(henka_engine* engine, void* user_data)
     cube_material.use_texture = true;
     cube_material.base_color = (henka_vec4){1.0f, 1.0f, 1.0f, 1.0f};
     cube_material.roughness = 0.38f;
+    cube_material.clearcoat = 0.35f;
+    cube_material.clearcoat_roughness = 0.12f;
 
     colored_material = henka_material_default();
     colored_material.name = "Emissive Accent";
@@ -7896,6 +7898,8 @@ static henka_result sandbox3d_initialize(henka_engine* engine, void* user_data)
     marker_material.use_texture = false;
     marker_material.metallic = 1.0f;
     marker_material.roughness = 0.82f;
+    marker_material.clearcoat = 0.18f;
+    marker_material.clearcoat_roughness = 0.20f;
 
     fallback_material = henka_material_default();
     fallback_material.name = "Fallback Texture";

@@ -54,6 +54,8 @@ typedef struct henka_material
     float normal_scale;
     float occlusion_strength;
     float emissive_strength;
+    float clearcoat;
+    float clearcoat_roughness;
     float alpha_cutoff;
     bool use_texture;
     bool use_lighting;

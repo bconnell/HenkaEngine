@@ -22,6 +22,8 @@ void henka_test_material(void)
     HENKA_TEST_ASSERT(material.roughness == 0.5f);
     HENKA_TEST_ASSERT(material.normal_scale == 1.0f);
     HENKA_TEST_ASSERT(material.occlusion_strength == 1.0f);
+    HENKA_TEST_ASSERT(material.clearcoat == 0.0f);
+    HENKA_TEST_ASSERT(material.clearcoat_roughness == 0.2f);
     HENKA_TEST_ASSERT(material.alpha_mode == HENKA_MATERIAL_ALPHA_OPAQUE);
     HENKA_TEST_ASSERT(material.cast_shadows);
     HENKA_TEST_ASSERT(material.receive_shadows);
@@ -45,6 +47,9 @@ void henka_test_material(void)
         HENKA_TEST_ASSERT(henka_material_validate(&valid) == HENKA_ERROR_INVALID_ARGUMENT);
         valid.emissive_color.x = 0.0f;
         valid.roughness = 0.01f;
+        HENKA_TEST_ASSERT(henka_material_validate(&valid) == HENKA_ERROR_INVALID_ARGUMENT);
+        valid.roughness = 0.5f;
+        valid.clearcoat = 1.01f;
         HENKA_TEST_ASSERT(henka_material_validate(&valid) == HENKA_ERROR_INVALID_ARGUMENT);
     }
 

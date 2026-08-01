@@ -37,6 +37,8 @@ uniform float normalScale;
 uniform float occlusionStrength;
 uniform vec3 emissiveColor;
 uniform float emissiveStrength;
+uniform float clearcoat;
+uniform float clearcoatRoughness;
 uniform int alphaMode;
 uniform float alphaCutoff;
 uniform sampler2D shadowMap;
@@ -155,6 +157,8 @@ void main()
 
     float surfaceMetallic = saturate(metallic);
     float surfaceRoughness = clamp(roughness, 0.045, 1.0);
+    float surfaceClearcoat = saturate(clearcoat);
+    float surfaceClearcoatRoughness = clamp(clearcoatRoughness, 0.045, 1.0);
     if (useMetallicRoughnessTexture)
     {
         vec4 materialData = texture(metallicRoughnessTexture, fragUv);
@@ -192,6 +196,16 @@ void main()
         vec3 diffuse = (1.0 - fresnel) * (1.0 - surfaceMetallic) * albedo / PI;
         float shadow = shadowFactor(normal, lightDir);
         color += (diffuse + specular) * radiance * nDotL * shadow;
+
+        if (surfaceClearcoat > 0.0)
+        {
+            float clearcoatAlpha = surfaceClearcoatRoughness * surfaceClearcoatRoughness;
+            vec3 clearcoatFresnel = fresnelSchlick(vDotH, vec3(0.04));
+            float clearcoatDistribution = distributionGGX(nDotH, clearcoatAlpha);
+            float clearcoatVisibility = visibilitySmithGGXCorrelated(nDotV, nDotL, clearcoatAlpha);
+            color += clearcoatFresnel * clearcoatDistribution * clearcoatVisibility *
+                radiance * nDotL * shadow * surfaceClearcoat;
+        }
 
         // Ambient is an indirect fallback until the environment/probe path is active.
         vec3 safeAmbient = min(max(ambientColor, vec3(0.0)), vec3(16.0));

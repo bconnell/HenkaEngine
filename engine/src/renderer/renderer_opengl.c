@@ -1792,6 +1792,8 @@ henka_result henka_opengl_renderer_draw_scene(
         henka_set_uniform_float(program, "occlusionStrength", entity->material.occlusion_strength);
         henka_set_uniform_vec3(program, "emissiveColor", entity->material.emissive_color);
         henka_set_uniform_float(program, "emissiveStrength", entity->material.emissive_strength);
+        henka_set_uniform_float(program, "clearcoat", entity->material.clearcoat);
+        henka_set_uniform_float(program, "clearcoatRoughness", entity->material.clearcoat_roughness);
         henka_set_uniform_int(program, "alphaMode", (int)entity->material.alpha_mode);
         henka_set_uniform_float(program, "alphaCutoff", entity->material.alpha_cutoff);
         henka_set_uniform_int(program, "shadowMap", 5);
