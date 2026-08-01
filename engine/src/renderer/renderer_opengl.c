@@ -1416,6 +1416,66 @@ void henka_opengl_renderer_clear_frame(struct henka_renderer* renderer)
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 }
 
+static bool henka_opengl_bounds_in_camera(
+    const henka_camera* camera,
+    henka_mat4 view,
+    henka_bounds bounds)
+{
+    henka_vec3 center;
+    float radius;
+    float view_depth;
+    float vertical_limit;
+    float horizontal_limit;
+
+    if (camera == NULL ||
+        !isfinite(bounds.center.x) || !isfinite(bounds.center.y) || !isfinite(bounds.center.z) ||
+        !isfinite(bounds.extents.x) || !isfinite(bounds.extents.y) || !isfinite(bounds.extents.z) ||
+        bounds.extents.x < 0.0f || bounds.extents.y < 0.0f || bounds.extents.z < 0.0f)
+    {
+        return true;
+    }
+
+    center.x = view.m[0] * bounds.center.x + view.m[4] * bounds.center.y + view.m[8] * bounds.center.z + view.m[12];
+    center.y = view.m[1] * bounds.center.x + view.m[5] * bounds.center.y + view.m[9] * bounds.center.z + view.m[13];
+    center.z = view.m[2] * bounds.center.x + view.m[6] * bounds.center.y + view.m[10] * bounds.center.z + view.m[14];
+    radius = sqrtf(
+        bounds.extents.x * bounds.extents.x +
+        bounds.extents.y * bounds.extents.y +
+        bounds.extents.z * bounds.extents.z);
+    if (!isfinite(center.x) || !isfinite(center.y) || !isfinite(center.z) || !isfinite(radius))
+    {
+        return true;
+    }
+
+    view_depth = -center.z;
+    if (view_depth + radius < camera->near_plane || view_depth - radius > camera->far_plane)
+    {
+        return false;
+    }
+    if (camera->projection_mode == HENKA_CAMERA_PROJECTION_ORTHOGRAPHIC)
+    {
+        vertical_limit = camera->orthographic_height * 0.5f;
+        horizontal_limit = vertical_limit * camera->aspect_ratio;
+    }
+    else
+    {
+        float half_fov_tangent = tanf(camera->field_of_view_radians * 0.5f);
+        if (!isfinite(half_fov_tangent) || half_fov_tangent <= 0.0f)
+        {
+            return true;
+        }
+        vertical_limit = fmaxf(view_depth, camera->near_plane) * half_fov_tangent;
+        horizontal_limit = vertical_limit * camera->aspect_ratio;
+    }
+    if (!isfinite(vertical_limit) || !isfinite(horizontal_limit) ||
+        horizontal_limit <= 0.0f || vertical_limit <= 0.0f)
+    {
+        return true;
+    }
+    return fabsf(center.x) <= horizontal_limit + radius &&
+        fabsf(center.y) <= vertical_limit + radius;
+}
+
 henka_result henka_opengl_renderer_draw_scene(
     struct henka_renderer* renderer,
     const struct henka_scene* scene)
@@ -1519,6 +1579,8 @@ henka_result henka_opengl_renderer_draw_scene(
         bool use_lighting;
         bool use_texture;
         henka_mat4 model;
+        henka_bounds world_bounds;
+        henka_entity entity_id;
 
         entity = &scene->entities[index];
         if (!entity->active ||
@@ -1527,6 +1589,18 @@ henka_result henka_opengl_renderer_draw_scene(
             entity->material.shader == NULL)
         {
             continue;
+        }
+
+        if ((entity->flags & HENKA_SCENE_ENTITY_FLAG_HELPER) == 0U &&
+            entity->has_local_bounds)
+        {
+            entity_id = henka_scene_get_entity_at_index(scene, index);
+            if (entity_id != HENKA_INVALID_ENTITY &&
+                henka_scene_get_entity_world_bounds(scene, entity_id, &world_bounds) == HENKA_SUCCESS &&
+                !henka_opengl_bounds_in_camera(&scene->camera, view, world_bounds))
+            {
+                continue;
+            }
         }
 
         mesh_data =
