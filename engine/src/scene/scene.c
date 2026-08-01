@@ -585,6 +585,11 @@ henka_result henka_scene_create(henka_scene** out_scene)
     scene->ambient_color.x = 0.16f;
     scene->ambient_color.y = 0.18f;
     scene->ambient_color.z = 0.22f;
+    scene->environment = (henka_scene_environment_desc){
+        (henka_vec3){0.035f, 0.045f, 0.065f},
+        (henka_vec3){0.16f, 0.19f, 0.24f},
+        (henka_vec3){0.055f, 0.08f, 0.14f},
+        1.5f};
 
     *out_scene = scene;
     return HENKA_SUCCESS;
@@ -1462,4 +1467,50 @@ void henka_scene_set_ambient_color(henka_scene* scene, henka_vec3 ambient_color)
     {
         scene->ambient_color = ambient_color;
     }
+}
+
+henka_result henka_scene_set_environment(
+    henka_scene* scene,
+    henka_scene_environment_desc environment)
+{
+    if (scene == NULL ||
+        !henka_is_finite_float(environment.ground_color.x) ||
+        !henka_is_finite_float(environment.ground_color.y) ||
+        !henka_is_finite_float(environment.ground_color.z) ||
+        !henka_is_finite_float(environment.horizon_color.x) ||
+        !henka_is_finite_float(environment.horizon_color.y) ||
+        !henka_is_finite_float(environment.horizon_color.z) ||
+        !henka_is_finite_float(environment.zenith_color.x) ||
+        !henka_is_finite_float(environment.zenith_color.y) ||
+        !henka_is_finite_float(environment.zenith_color.z) ||
+        !henka_is_finite_float(environment.intensity) ||
+        environment.ground_color.x < 0.0f || environment.ground_color.x > 16.0f ||
+        environment.ground_color.y < 0.0f || environment.ground_color.y > 16.0f ||
+        environment.ground_color.z < 0.0f || environment.ground_color.z > 16.0f ||
+        environment.horizon_color.x < 0.0f || environment.horizon_color.x > 16.0f ||
+        environment.horizon_color.y < 0.0f || environment.horizon_color.y > 16.0f ||
+        environment.horizon_color.z < 0.0f || environment.horizon_color.z > 16.0f ||
+        environment.zenith_color.x < 0.0f || environment.zenith_color.x > 16.0f ||
+        environment.zenith_color.y < 0.0f || environment.zenith_color.y > 16.0f ||
+        environment.zenith_color.z < 0.0f || environment.zenith_color.z > 16.0f ||
+        environment.intensity < 0.0f || environment.intensity > 16.0f)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    scene->environment = environment;
+    return HENKA_SUCCESS;
+}
+
+henka_result henka_scene_get_environment(
+    const henka_scene* scene,
+    henka_scene_environment_desc* out_environment)
+{
+    if (scene == NULL || out_environment == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    *out_environment = scene->environment;
+    return HENKA_SUCCESS;
 }

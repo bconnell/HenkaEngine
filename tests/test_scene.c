@@ -84,9 +84,25 @@ void henka_test_scene(void)
     henka_material read_material;
     henka_transform transform;
     henka_transform read_back;
+    henka_scene_environment_desc environment;
+    henka_scene_environment_desc read_environment;
 
     HENKA_TEST_ASSERT(henka_scene_create(&scene) == HENKA_SUCCESS);
     HENKA_TEST_ASSERT(scene != NULL);
+    HENKA_TEST_ASSERT(henka_scene_get_environment(scene, &read_environment) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(read_environment.intensity, 1.5f, 0.0001f);
+    environment = (henka_scene_environment_desc){
+        (henka_vec3){0.02f, 0.03f, 0.05f},
+        (henka_vec3){0.14f, 0.18f, 0.24f},
+        (henka_vec3){0.06f, 0.09f, 0.16f},
+        2.0f};
+    HENKA_TEST_ASSERT(henka_scene_set_environment(scene, environment) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_scene_get_environment(scene, &read_environment) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(read_environment.horizon_color.y, 0.18f, 0.0001f);
+    environment.intensity = 17.0f;
+    HENKA_TEST_ASSERT(henka_scene_set_environment(scene, environment) == HENKA_ERROR_INVALID_ARGUMENT);
+    HENKA_TEST_ASSERT(henka_scene_get_environment(scene, &read_environment) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(read_environment.intensity, 2.0f, 0.0001f);
     camera = henka_camera_create_perspective(
         60.0f * HENKA_DEG_TO_RAD,
         16.0f / 9.0f,

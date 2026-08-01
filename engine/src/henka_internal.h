@@ -175,6 +175,7 @@ struct henka_scene
     henka_vec3 light_color;
     float light_intensity;
     henka_vec3 ambient_color;
+    henka_scene_environment_desc environment;
 };
 
 struct henka_platform;

@@ -84,6 +84,14 @@ typedef struct henka_interaction_desc
     const char* prompt;
 } henka_interaction_desc;
 
+typedef struct henka_scene_environment_desc
+{
+    henka_vec3 ground_color;
+    henka_vec3 horizon_color;
+    henka_vec3 zenith_color;
+    float intensity;
+} henka_scene_environment_desc;
+
 typedef enum henka_scene_entity_flags
 {
     HENKA_SCENE_ENTITY_FLAG_NONE = 0,
@@ -146,5 +154,11 @@ void henka_scene_set_light_direction(henka_scene* scene, henka_vec3 light_direct
 void henka_scene_set_light_color(henka_scene* scene, henka_vec3 light_color);
 void henka_scene_set_light_intensity(henka_scene* scene, float light_intensity);
 void henka_scene_set_ambient_color(henka_scene* scene, henka_vec3 ambient_color);
+henka_result henka_scene_set_environment(
+    henka_scene* scene,
+    henka_scene_environment_desc environment);
+henka_result henka_scene_get_environment(
+    const henka_scene* scene,
+    henka_scene_environment_desc* out_environment);
 
 #endif

@@ -1016,14 +1016,13 @@ static henka_result henka_opengl_create_render_programs(
 
 static void henka_opengl_draw_environment(
     henka_opengl_renderer_state* state,
-    struct henka_renderer* renderer)
+    struct henka_renderer* renderer,
+    const henka_scene* scene)
 {
-    static const henka_vec3 ground_color = {0.035f, 0.045f, 0.065f};
-    static const henka_vec3 horizon_color = {0.16f, 0.19f, 0.24f};
-    static const henka_vec3 zenith_color = {0.055f, 0.08f, 0.14f};
     henka_viewport viewport;
 
-    if (state == NULL || renderer == NULL || state->environment_program == 0U)
+    if (state == NULL || renderer == NULL || scene == NULL ||
+        state->environment_program == 0U)
     {
         return;
     }
@@ -1035,10 +1034,10 @@ static void henka_opengl_draw_environment(
     glDisable(GL_CULL_FACE);
     glDisable(GL_BLEND);
     g_gl.UseProgram(state->environment_program);
-    henka_set_uniform_vec3(state->environment_program, "groundColor", ground_color);
-    henka_set_uniform_vec3(state->environment_program, "horizonColor", horizon_color);
-    henka_set_uniform_vec3(state->environment_program, "zenithColor", zenith_color);
-    henka_set_uniform_float(state->environment_program, "intensity", 1.5f);
+    henka_set_uniform_vec3(state->environment_program, "groundColor", scene->environment.ground_color);
+    henka_set_uniform_vec3(state->environment_program, "horizonColor", scene->environment.horizon_color);
+    henka_set_uniform_vec3(state->environment_program, "zenithColor", scene->environment.zenith_color);
+    henka_set_uniform_float(state->environment_program, "intensity", scene->environment.intensity);
     g_gl.BindVertexArray(state->tone_vertex_array);
     glDrawArrays(GL_TRIANGLES, 0, 3);
     g_gl.BindVertexArray(0);
@@ -1641,7 +1640,7 @@ henka_result henka_opengl_renderer_draw_scene(
         henka_apply_scene_target_viewport(renderer);
         glClearColor(0.075f, 0.09f, 0.12f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-        henka_opengl_draw_environment(state, renderer);
+        henka_opengl_draw_environment(state, renderer, scene);
     }
     else
     {
@@ -1857,16 +1856,16 @@ henka_result henka_opengl_renderer_draw_scene(
         henka_set_uniform_vec3(
             program,
             "environmentGroundColor",
-            (henka_vec3){0.035f, 0.045f, 0.065f});
+            scene->environment.ground_color);
         henka_set_uniform_vec3(
             program,
             "environmentHorizonColor",
-            (henka_vec3){0.16f, 0.19f, 0.24f});
+            scene->environment.horizon_color);
         henka_set_uniform_vec3(
             program,
             "environmentZenithColor",
-            (henka_vec3){0.055f, 0.08f, 0.14f});
-        henka_set_uniform_float(program, "environmentIntensity", 1.5f);
+            scene->environment.zenith_color);
+        henka_set_uniform_float(program, "environmentIntensity", scene->environment.intensity);
         henka_set_uniform_bool(
             program,
             "useTexture",
