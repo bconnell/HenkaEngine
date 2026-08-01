@@ -14,6 +14,7 @@ typedef struct henka_model_vertex
     henka_vec3 position;
     henka_vec3 normal;
     henka_vec2 uv;
+    henka_vec4 color;
 } henka_model_vertex;
 
 typedef struct henka_model_data

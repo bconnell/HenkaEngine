@@ -32,6 +32,8 @@ typedef struct henka_vertex
     henka_vec3 position;
     henka_vec3 normal;
     henka_vec2 uv;
+    henka_vec4 color;
+    bool color_valid;
     henka_vec4 tangent;
 } henka_vertex;
 

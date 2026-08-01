@@ -5,11 +5,13 @@ in vec3 fragWorldPosition;
 in vec2 fragUv;
 in vec3 fragTangent;
 in float fragTangentHandedness;
+in vec4 fragVertexColor;
 in vec4 fragLightSpacePosition;
 
 uniform vec4 baseColor;
 uniform sampler2D baseColorTexture;
 uniform bool useTexture;
+uniform bool useVertexColor;
 uniform vec3 cameraPosition;
 uniform vec3 lightDirection;
 uniform vec3 lightColor;
@@ -129,6 +131,10 @@ void main()
     if (useTexture)
     {
         surfaceColor *= texture(baseColorTexture, fragUv);
+    }
+    if (useVertexColor)
+    {
+        surfaceColor *= fragVertexColor;
     }
     if (alphaMode == 1 && surfaceColor.a < alphaCutoff)
     {

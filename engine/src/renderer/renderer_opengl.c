@@ -1688,6 +1688,12 @@ henka_result henka_opengl_renderer_draw_scene(
             use_texture);
         henka_set_uniform_bool(
             program,
+            "useVertexColor",
+            !helper_entity &&
+                entity->material.type == HENKA_MATERIAL_TYPE_VERTEX_COLOR &&
+                policy.use_material_base_color);
+        henka_set_uniform_bool(
+            program,
             "useLighting",
             use_lighting);
         henka_set_uniform_int(
@@ -2464,7 +2470,20 @@ henka_result henka_opengl_renderer_create_mesh_from_data(
             !isfinite(vertices[vertex_index].normal.y) ||
             !isfinite(vertices[vertex_index].normal.z) ||
             !isfinite(vertices[vertex_index].uv.x) ||
-            !isfinite(vertices[vertex_index].uv.y))
+            !isfinite(vertices[vertex_index].uv.y) ||
+            (vertices[vertex_index].color_valid &&
+                (!isfinite(vertices[vertex_index].color.x) ||
+                 !isfinite(vertices[vertex_index].color.y) ||
+                 !isfinite(vertices[vertex_index].color.z) ||
+                 !isfinite(vertices[vertex_index].color.w) ||
+                 vertices[vertex_index].color.x < 0.0f ||
+                 vertices[vertex_index].color.x > 1.0f ||
+                 vertices[vertex_index].color.y < 0.0f ||
+                 vertices[vertex_index].color.y > 1.0f ||
+                 vertices[vertex_index].color.z < 0.0f ||
+                 vertices[vertex_index].color.z > 1.0f ||
+                 vertices[vertex_index].color.w < 0.0f ||
+                 vertices[vertex_index].color.w > 1.0f)))
         {
             return HENKA_ERROR_INVALID_ARGUMENT;
         }
@@ -2493,6 +2512,12 @@ henka_result henka_opengl_renderer_create_mesh_from_data(
     memcpy(upload_vertices, vertices, vertex_bytes);
     for (vertex_index = 0; vertex_index < vertex_count; ++vertex_index)
     {
+        if (!upload_vertices[vertex_index].color_valid)
+        {
+            upload_vertices[vertex_index].color =
+                (henka_vec4){1.0f, 1.0f, 1.0f, 1.0f};
+            upload_vertices[vertex_index].color_valid = true;
+        }
         henka_vec3 fallback_axis =
             fabsf(vertices[vertex_index].normal.y) < 0.9f ?
             (henka_vec3){0.0f, 1.0f, 0.0f} :
@@ -2594,6 +2619,8 @@ henka_result henka_opengl_renderer_create_mesh_from_data(
     g_gl.VertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, sizeof(henka_vertex), (const void*)offsetof(henka_vertex, uv));
     g_gl.EnableVertexAttribArray(3);
     g_gl.VertexAttribPointer(3, 4, GL_FLOAT, GL_FALSE, sizeof(henka_vertex), (const void*)offsetof(henka_vertex, tangent));
+    g_gl.EnableVertexAttribArray(4);
+    g_gl.VertexAttribPointer(4, 4, GL_FLOAT, GL_FALSE, sizeof(henka_vertex), (const void*)offsetof(henka_vertex, color));
     g_gl.BindVertexArray(0);
 
     henka_free(bitangents);

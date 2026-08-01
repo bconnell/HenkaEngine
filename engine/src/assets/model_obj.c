@@ -787,6 +787,7 @@ static henka_result henka_build_face_vertices(
         out_vertices[index].position = positions->items[position_index];
         out_vertices[index].uv = (henka_vec2){0.0f, 0.0f};
         out_vertices[index].normal = (henka_vec3){0.0f, 1.0f, 0.0f};
+        out_vertices[index].color = (henka_vec4){1.0f, 1.0f, 1.0f, 1.0f};
 
         if (obj_index->uv_index != HENKA_OBJ_INDEX_MISSING)
         {
@@ -1155,8 +1156,10 @@ void henka_model_data_destroy(henka_model_data* model)
 
 henka_result henka_mesh_create_from_model_data(henka_engine* engine, const henka_model_data* model, henka_mesh** out_mesh)
 {
+    henka_vertex* vertices;
     int index_count;
     int vertex_count;
+    uint32_t vertex_index;
 
     if (engine == NULL || model == NULL || out_mesh == NULL ||
         model->vertices == NULL || model->indices == NULL ||
@@ -1169,14 +1172,33 @@ henka_result henka_mesh_create_from_model_data(henka_engine* engine, const henka
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
 
-    return henka_renderer_create_mesh_from_data(
-        engine->renderer,
-        (const henka_vertex*)model->vertices,
-        vertex_count,
-        (const unsigned int*)model->indices,
-        index_count,
-        HENKA_MESH_PRIMITIVE_TRIANGLES,
-        out_mesh);
+    vertices = henka_calloc((size_t)model->vertex_count, sizeof(*vertices));
+    if (vertices == NULL)
+    {
+        return HENKA_ERROR_OUT_OF_MEMORY;
+    }
+    for (vertex_index = 0U; vertex_index < model->vertex_count; ++vertex_index)
+    {
+        vertices[vertex_index].position = model->vertices[vertex_index].position;
+        vertices[vertex_index].normal = model->vertices[vertex_index].normal;
+        vertices[vertex_index].uv = model->vertices[vertex_index].uv;
+        vertices[vertex_index].color = model->vertices[vertex_index].color;
+        vertices[vertex_index].color_valid = true;
+    }
+
+    *out_mesh = NULL;
+    {
+        henka_result result = henka_renderer_create_mesh_from_data(
+            engine->renderer,
+            vertices,
+            vertex_count,
+            (const unsigned int*)model->indices,
+            index_count,
+            HENKA_MESH_PRIMITIVE_TRIANGLES,
+            out_mesh);
+        henka_free(vertices);
+        return result;
+    }
 }
 
 henka_result henka_mesh_create_from_obj(henka_engine* engine, const char* path, henka_mesh** out_mesh)

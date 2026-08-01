@@ -206,10 +206,10 @@ Current material types include:
 
 - Lit
 - Unlit
-- Vertex Color
+- Vertex Color, which multiplies the supported material surface by the mesh's normalized RGBA vertex color
 - Reserved Procedural
 
-The reserved procedural type exists only as a stable enum value for future work. It does not implement procedural shading yet. Material names are copied into scene-owned storage, and material assignment rejects invalid enum values, non-finite colors, and textured configurations without a texture reference.
+The reserved procedural type exists only as a stable enum value for future work. It does not implement procedural shading yet. Material names are copied into scene-owned storage, and material assignment rejects invalid enum values, non-finite colors, and textured configurations without a texture reference. Model vertices expose normalized RGBA color; OBJ and generated primitives default to opaque white, while explicit model colors can include black or transparent values.
 
 ### Interactions
 
