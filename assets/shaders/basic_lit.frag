@@ -226,7 +226,7 @@ void main()
                 radiance * nDotL * shadow * (1.0 - surfaceMetallic) * 0.35;
         }
 
-        // Ambient is an indirect fallback until the environment/probe path is active.
+        // Ambient remains an indirect fallback for scenes without a richer probe path.
         vec3 safeAmbient = min(max(ambientColor, vec3(0.0)), vec3(16.0));
         color += min(safeAmbient * ((1.0 - surfaceMetallic) * albedo + fresnel * 0.5) * occlusion, vec3(65504.0));
         if (useEnvironment)

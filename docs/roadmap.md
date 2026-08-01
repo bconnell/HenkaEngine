@@ -100,7 +100,7 @@ Next 2.5D work includes:
 1. Sprite-facing quad and texture-sampling foundations.
 2. Transparent and cutout material render states.
 3. Sprite and texture-region data.
-4. Layered depth and deterministic sorting.
+4. Layered depth and deterministic sorting (the current renderer provides bounded transparent sorting; sprite/layer authoring remains future work).
 5. Parallax.
 6. Movement-plane and physics-axis constraints.
 7. Tools that make 2D-style layout in 3D space easier to manage.
