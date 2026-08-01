@@ -2518,13 +2518,7 @@ henka_result henka_opengl_renderer_create_mesh_from_data(
                 (henka_vec4){1.0f, 1.0f, 1.0f, 1.0f};
             upload_vertices[vertex_index].color_valid = true;
         }
-        henka_vec3 fallback_axis =
-            fabsf(vertices[vertex_index].normal.y) < 0.9f ?
-            (henka_vec3){0.0f, 1.0f, 0.0f} :
-            (henka_vec3){1.0f, 0.0f, 0.0f};
-        tangents[vertex_index] = henka_vec3_cross(
-            vertices[vertex_index].normal,
-            fallback_axis);
+        tangents[vertex_index] = (henka_vec3){0.0f, 0.0f, 0.0f};
     }
     if (primitive == HENKA_MESH_PRIMITIVE_TRIANGLES)
     {
