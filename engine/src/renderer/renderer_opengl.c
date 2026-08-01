@@ -764,6 +764,14 @@ henka_opengl_renderer_create_viewport_program(
 
 static void henka_opengl_delete_hdr_target(henka_opengl_renderer_state* state)
 {
+    uint64_t target_bytes = 0U;
+
+    if (state != NULL && state->hdr_width > 0 && state->hdr_height > 0)
+    {
+        target_bytes = (uint64_t)state->hdr_width * (uint64_t)state->hdr_height * 12U;
+        state->tracked_gpu_bytes = state->tracked_gpu_bytes >= target_bytes ?
+            state->tracked_gpu_bytes - target_bytes : 0U;
+    }
     if (state->hdr_depth_buffer != 0U)
     {
         g_gl.DeleteRenderbuffers(1, &state->hdr_depth_buffer);
@@ -785,6 +793,15 @@ static void henka_opengl_delete_hdr_target(henka_opengl_renderer_state* state)
 
 static void henka_opengl_delete_shadow_target(henka_opengl_renderer_state* state)
 {
+    uint64_t target_bytes = 0U;
+
+    if (state != NULL && state->shadow_resolution > 0)
+    {
+        target_bytes = (uint64_t)state->shadow_resolution *
+            (uint64_t)state->shadow_resolution * 4U;
+        state->tracked_gpu_bytes = state->tracked_gpu_bytes >= target_bytes ?
+            state->tracked_gpu_bytes - target_bytes : 0U;
+    }
     if (state->shadow_depth_texture != 0U)
     {
         glDeleteTextures(1, &state->shadow_depth_texture);
@@ -870,6 +887,11 @@ static henka_result henka_opengl_create_hdr_target(
     state->hdr_generation = state->hdr_generation == UINT64_MAX ? 1U : state->hdr_generation + 1U;
     state->hdr_framebuffer_complete = true;
     state->hdr_failure_reason[0] = '\0';
+    {
+        uint64_t target_bytes = (uint64_t)width * (uint64_t)height * 12U;
+        state->tracked_gpu_bytes = UINT64_MAX - state->tracked_gpu_bytes < target_bytes ?
+            UINT64_MAX : state->tracked_gpu_bytes + target_bytes;
+    }
     return HENKA_SUCCESS;
 }
 
@@ -942,6 +964,11 @@ static henka_result henka_opengl_create_shadow_target(
     state->shadow_generation = state->shadow_generation == UINT64_MAX ? 1U : state->shadow_generation + 1U;
     state->shadow_framebuffer_complete = true;
     state->shadow_failure_reason[0] = '\0';
+    {
+        uint64_t target_bytes = (uint64_t)resolution * (uint64_t)resolution * 4U;
+        state->tracked_gpu_bytes = UINT64_MAX - state->tracked_gpu_bytes < target_bytes ?
+            UINT64_MAX : state->tracked_gpu_bytes + target_bytes;
+    }
     return HENKA_SUCCESS;
 }
 
