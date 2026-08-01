@@ -39,6 +39,8 @@ uniform vec3 emissiveColor;
 uniform float emissiveStrength;
 uniform float clearcoat;
 uniform float clearcoatRoughness;
+uniform vec3 sheenColor;
+uniform float sheenRoughness;
 uniform int alphaMode;
 uniform float alphaCutoff;
 uniform sampler2D shadowMap;
@@ -159,6 +161,8 @@ void main()
     float surfaceRoughness = clamp(roughness, 0.045, 1.0);
     float surfaceClearcoat = saturate(clearcoat);
     float surfaceClearcoatRoughness = clamp(clearcoatRoughness, 0.045, 1.0);
+    vec3 surfaceSheenColor = clamp(sheenColor, vec3(0.0), vec3(1.0));
+    float surfaceSheenRoughness = clamp(sheenRoughness, 0.045, 1.0);
     if (useMetallicRoughnessTexture)
     {
         vec4 materialData = texture(metallicRoughnessTexture, fragUv);
@@ -205,6 +209,16 @@ void main()
             float clearcoatVisibility = visibilitySmithGGXCorrelated(nDotV, nDotL, clearcoatAlpha);
             color += clearcoatFresnel * clearcoatDistribution * clearcoatVisibility *
                 radiance * nDotL * shadow * surfaceClearcoat;
+        }
+
+        if (max(max(surfaceSheenColor.r, surfaceSheenColor.g), surfaceSheenColor.b) > 0.0)
+        {
+            float sheenAlpha = surfaceSheenRoughness * surfaceSheenRoughness;
+            vec3 sheenFresnel = fresnelSchlick(vDotH, surfaceSheenColor);
+            float sheenDistribution = distributionGGX(nDotH, sheenAlpha);
+            float sheenVisibility = visibilitySmithGGXCorrelated(nDotV, nDotL, sheenAlpha);
+            color += sheenFresnel * sheenDistribution * sheenVisibility *
+                radiance * nDotL * shadow * (1.0 - surfaceMetallic) * 0.35;
         }
 
         // Ambient is an indirect fallback until the environment/probe path is active.

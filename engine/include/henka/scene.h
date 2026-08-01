@@ -64,6 +64,8 @@ typedef struct henka_material
     bool double_sided;
     bool cast_shadows;
     bool receive_shadows;
+    henka_vec3 sheen_color;
+    float sheen_roughness;
 } henka_material;
 
 typedef struct henka_scene_object_info

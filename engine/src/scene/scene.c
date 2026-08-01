@@ -32,6 +32,8 @@ henka_material henka_material_default(void)
     material.emissive_strength = 0.0f;
     material.clearcoat = 0.0f;
     material.clearcoat_roughness = 0.2f;
+    material.sheen_color = (henka_vec3){0.0f, 0.0f, 0.0f};
+    material.sheen_roughness = 0.5f;
     material.alpha_cutoff = 0.5f;
     material.use_texture = false;
     material.use_lighting = true;
@@ -97,6 +99,10 @@ henka_result henka_material_validate(const henka_material* material)
         !henka_is_finite_float(material->emissive_strength) ||
         !henka_is_finite_float(material->clearcoat) ||
         !henka_is_finite_float(material->clearcoat_roughness) ||
+        !henka_is_finite_float(material->sheen_color.x) ||
+        !henka_is_finite_float(material->sheen_color.y) ||
+        !henka_is_finite_float(material->sheen_color.z) ||
+        !henka_is_finite_float(material->sheen_roughness) ||
         !henka_is_finite_float(material->alpha_cutoff) ||
         material->base_color.x < 0.0f || material->base_color.x > 1.0f ||
         material->base_color.y < 0.0f || material->base_color.y > 1.0f ||
@@ -114,6 +120,10 @@ henka_result henka_material_validate(const henka_material* material)
         material->alpha_cutoff > 1.0f ||
         material->clearcoat < 0.0f || material->clearcoat > 1.0f ||
         material->clearcoat_roughness < 0.045f || material->clearcoat_roughness > 1.0f ||
+        material->sheen_color.x < 0.0f || material->sheen_color.x > 1.0f ||
+        material->sheen_color.y < 0.0f || material->sheen_color.y > 1.0f ||
+        material->sheen_color.z < 0.0f || material->sheen_color.z > 1.0f ||
+        material->sheen_roughness < 0.045f || material->sheen_roughness > 1.0f ||
         material->alpha_mode > HENKA_MATERIAL_ALPHA_BLENDED ||
         (!material->use_texture && material->base_color_texture != NULL) ||
         (material->use_texture && material->base_color_texture == NULL) ||
