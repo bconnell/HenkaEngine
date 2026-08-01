@@ -393,6 +393,11 @@ void henka_opengl_renderer_get_shadow_diagnostics(
     bool* out_complete,
     char* out_failure,
     size_t failure_capacity);
+void henka_opengl_renderer_get_scene_diagnostics(
+    const struct henka_renderer* renderer,
+    uint32_t* out_draw_calls,
+    uint32_t* out_visible_entities,
+    uint32_t* out_culled_entities);
 henka_result henka_opengl_renderer_set_wireframe(struct henka_renderer* renderer, bool enabled);
 henka_result henka_opengl_renderer_create_mesh_from_data(
     struct henka_renderer* renderer,

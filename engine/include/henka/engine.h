@@ -99,6 +99,9 @@ typedef struct henka_engine_diagnostics
     uint64_t rendered_shadow_generation;
     bool rendered_shadow_framebuffer_complete;
     char rendered_shadow_failure[64];
+    uint32_t rendered_scene_draw_calls;
+    uint32_t rendered_scene_visible_entities;
+    uint32_t rendered_scene_culled_entities;
     bool wireframe_enabled;
     bool mouse_captured;
     bool ui_visible;

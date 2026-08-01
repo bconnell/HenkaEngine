@@ -61,6 +61,9 @@ typedef struct henka_opengl_renderer_state
     uint64_t shadow_generation;
     bool shadow_framebuffer_complete;
     char shadow_failure_reason[64];
+    uint32_t scene_draw_calls;
+    uint32_t scene_visible_entities;
+    uint32_t scene_culled_entities;
     henka_opengl_tool_window_target tool_targets[HENKA_MAX_TOOL_WINDOWS];
 } henka_opengl_renderer_state;
 
@@ -1520,6 +1523,9 @@ henka_result henka_opengl_renderer_draw_scene(
     {
         return HENKA_ERROR_RENDERER;
     }
+    state->scene_draw_calls = 0U;
+    state->scene_visible_entities = 0U;
+    state->scene_culled_entities = 0U;
 
     rendered = henka_renderer_get_viewport_shading_mode(renderer) ==
         HENKA_VIEWPORT_SHADING_RENDERED;
@@ -1599,6 +1605,7 @@ henka_result henka_opengl_renderer_draw_scene(
                 henka_scene_get_entity_world_bounds(scene, entity_id, &world_bounds) == HENKA_SUCCESS &&
                 !henka_opengl_bounds_in_camera(&scene->camera, view, world_bounds))
             {
+                state->scene_culled_entities += 1U;
                 continue;
             }
         }
@@ -1847,6 +1854,8 @@ henka_result henka_opengl_renderer_draw_scene(
             mesh_data->index_count,
             GL_UNSIGNED_INT,
             0);
+        state->scene_draw_calls += 1U;
+        state->scene_visible_entities += 1U;
     }
 
     if (policy.use_hdr_presentation)
@@ -1878,6 +1887,30 @@ henka_result henka_opengl_renderer_draw_scene(
     glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
     return HENKA_SUCCESS;
 }
+
+void henka_opengl_renderer_get_scene_diagnostics(
+    const struct henka_renderer* renderer,
+    uint32_t* out_draw_calls,
+    uint32_t* out_visible_entities,
+    uint32_t* out_culled_entities)
+{
+    const henka_opengl_renderer_state* state = renderer != NULL ?
+        (const henka_opengl_renderer_state*)renderer->backend_state : NULL;
+
+    if (out_draw_calls != NULL)
+    {
+        *out_draw_calls = state != NULL ? state->scene_draw_calls : 0U;
+    }
+    if (out_visible_entities != NULL)
+    {
+        *out_visible_entities = state != NULL ? state->scene_visible_entities : 0U;
+    }
+    if (out_culled_entities != NULL)
+    {
+        *out_culled_entities = state != NULL ? state->scene_culled_entities : 0U;
+    }
+}
+
 static henka_result henka_opengl_renderer_draw_ui_resources(
     const struct henka_ui_context* ui_context,
     GLuint ui_program,
