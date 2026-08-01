@@ -2766,7 +2766,17 @@ henka_result henka_opengl_renderer_create_mesh_from_data(
                  vertices[vertex_index].color.z < 0.0f ||
                  vertices[vertex_index].color.z > 1.0f ||
                  vertices[vertex_index].color.w < 0.0f ||
-                 vertices[vertex_index].color.w > 1.0f)))
+                 vertices[vertex_index].color.w > 1.0f))
+            || (vertices[vertex_index].tangent_valid &&
+                (!isfinite(vertices[vertex_index].tangent.x) ||
+                 !isfinite(vertices[vertex_index].tangent.y) ||
+                 !isfinite(vertices[vertex_index].tangent.z) ||
+                 !isfinite(vertices[vertex_index].tangent.w) ||
+                 henka_vec3_length((henka_vec3){
+                     vertices[vertex_index].tangent.x,
+                     vertices[vertex_index].tangent.y,
+                     vertices[vertex_index].tangent.z}) <= 0.000001f ||
+                 fabsf(vertices[vertex_index].tangent.w) < 0.5f)))
         {
             return HENKA_ERROR_INVALID_ARGUMENT;
         }
@@ -2845,23 +2855,38 @@ henka_result henka_opengl_renderer_create_mesh_from_data(
     for (vertex_index = 0; vertex_index < vertex_count; ++vertex_index)
     {
         henka_vec3 normal = henka_vec3_normalize(vertices[vertex_index].normal);
-        henka_vec3 tangent = tangents[vertex_index];
-        float handedness;
+        henka_vec3 tangent = vertices[vertex_index].tangent_valid ?
+            (henka_vec3){
+                vertices[vertex_index].tangent.x,
+                vertices[vertex_index].tangent.y,
+                vertices[vertex_index].tangent.z} : tangents[vertex_index];
+        float handedness = vertices[vertex_index].tangent_valid ?
+            (vertices[vertex_index].tangent.w < 0.0f ? -1.0f : 1.0f) : 1.0f;
 
         tangent = henka_vec3_subtract(
             tangent,
             henka_vec3_scale(normal, henka_vec3_dot(normal, tangent)));
         if (!isfinite(henka_vec3_length(tangent)) || henka_vec3_length(tangent) <= 0.000001f)
         {
+            if (vertices[vertex_index].tangent_valid)
+            {
+                henka_free(bitangents);
+                henka_free(tangents);
+                henka_free(upload_vertices);
+                return HENKA_ERROR_INVALID_ARGUMENT;
+            }
             henka_vec3 fallback_axis = fabsf(normal.y) < 0.9f ?
                 (henka_vec3){0.0f, 1.0f, 0.0f} :
                 (henka_vec3){1.0f, 0.0f, 0.0f};
             tangent = henka_vec3_cross(normal, fallback_axis);
         }
         tangent = henka_vec3_normalize(tangent);
-        handedness = henka_vec3_dot(
-            henka_vec3_cross(normal, tangent),
-            bitangents[vertex_index]) < 0.0f ? -1.0f : 1.0f;
+        if (!vertices[vertex_index].tangent_valid)
+        {
+            handedness = henka_vec3_dot(
+                henka_vec3_cross(normal, tangent),
+                bitangents[vertex_index]) < 0.0f ? -1.0f : 1.0f;
+        }
         upload_vertices[vertex_index].tangent =
             (henka_vec4){tangent.x, tangent.y, tangent.z, handedness};
     }

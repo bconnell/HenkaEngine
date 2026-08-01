@@ -1184,6 +1184,8 @@ henka_result henka_mesh_create_from_model_data(henka_engine* engine, const henka
         vertices[vertex_index].uv = model->vertices[vertex_index].uv;
         vertices[vertex_index].color = model->vertices[vertex_index].color;
         vertices[vertex_index].color_valid = true;
+        vertices[vertex_index].tangent = model->vertices[vertex_index].tangent;
+        vertices[vertex_index].tangent_valid = model->vertices[vertex_index].tangent_valid;
     }
 
     *out_mesh = NULL;

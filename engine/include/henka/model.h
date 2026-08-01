@@ -1,6 +1,7 @@
 #ifndef HENKA_MODEL_H
 #define HENKA_MODEL_H
 
+#include <stdbool.h>
 #include <stdint.h>
 
 #include <henka/math.h>
@@ -15,6 +16,9 @@ typedef struct henka_model_vertex
     henka_vec3 normal;
     henka_vec2 uv;
     henka_vec4 color;
+    /* Optional imported tangent frame. w is the handedness sign. */
+    henka_vec4 tangent;
+    bool tangent_valid;
 } henka_model_vertex;
 
 typedef struct henka_model_data

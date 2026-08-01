@@ -35,6 +35,7 @@ typedef struct henka_vertex
     henka_vec4 color;
     bool color_valid;
     henka_vec4 tangent;
+    bool tangent_valid;
 } henka_vertex;
 
 typedef struct henka_input_state
