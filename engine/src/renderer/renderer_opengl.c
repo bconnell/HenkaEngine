@@ -42,6 +42,7 @@ typedef struct henka_opengl_renderer_state
     GLuint ui_vertex_buffer;
     GLuint viewport_program;
     GLuint tone_program;
+    GLuint environment_program;
     GLuint tone_vertex_array;
     GLuint hdr_framebuffer;
     GLuint hdr_color_texture;
@@ -931,6 +932,10 @@ static henka_result henka_opengl_create_render_programs(
         "in vec2 uv; uniform sampler2D hdrTexture; uniform float exposure; out vec4 outColor;\n"
         "vec3 aces(vec3 x){ return clamp((x*(2.51*x+0.03))/(x*(2.43*x+0.59)+0.14),0.0,1.0); }\n"
         "void main(){ vec3 color = texture(hdrTexture, uv).rgb * exp2(exposure); color = aces(max(color, vec3(0.0))); outColor = vec4(pow(color, vec3(1.0/2.2)), 1.0); }\n";
+    static const char* environment_fragment =
+        "#version 330 core\n"
+        "in vec2 uv; uniform vec3 groundColor; uniform vec3 horizonColor; uniform vec3 zenithColor; uniform float intensity; out vec4 outColor;\n"
+        "void main(){ float height = clamp(uv.y, 0.0, 1.0); float horizon = smoothstep(0.04, 0.48, height); vec3 lower = mix(groundColor, horizonColor, horizon); vec3 color = mix(lower, zenithColor, smoothstep(0.48, 1.0, height)); outColor = vec4(max(color * max(intensity, 0.0), vec3(0.0)), 1.0); }\n";
     static const char* shadow_vertex =
         "#version 330 core\n"
         "layout(location=0) in vec3 inPosition; layout(location=2) in vec2 inUv; out vec2 fragUv; uniform mat4 model; uniform mat4 lightMatrix;\n"
@@ -942,6 +947,7 @@ static henka_result henka_opengl_create_render_programs(
 
     if (state == NULL ||
         !henka_compile_program_from_source(tone_vertex, tone_fragment, "tone-map vertex", "tone-map fragment", &state->tone_program) ||
+        !henka_compile_program_from_source(tone_vertex, environment_fragment, "environment vertex", "environment fragment", &state->environment_program) ||
         !henka_compile_program_from_source(shadow_vertex, shadow_fragment, "shadow vertex", "shadow fragment", &state->shadow_program))
     {
         return HENKA_ERROR_RENDERER;
@@ -952,6 +958,39 @@ static henka_result henka_opengl_create_render_programs(
         return HENKA_ERROR_RENDERER;
     }
     return HENKA_SUCCESS;
+}
+
+static void henka_opengl_draw_environment(
+    henka_opengl_renderer_state* state,
+    struct henka_renderer* renderer)
+{
+    static const henka_vec3 ground_color = {0.035f, 0.045f, 0.065f};
+    static const henka_vec3 horizon_color = {0.16f, 0.19f, 0.24f};
+    static const henka_vec3 zenith_color = {0.055f, 0.08f, 0.14f};
+    henka_viewport viewport;
+
+    if (state == NULL || renderer == NULL || state->environment_program == 0U)
+    {
+        return;
+    }
+
+    viewport = henka_renderer_get_scene_viewport(renderer);
+    glDisable(GL_SCISSOR_TEST);
+    glViewport(0, 0, viewport.width, viewport.height);
+    glDisable(GL_DEPTH_TEST);
+    glDisable(GL_CULL_FACE);
+    glDisable(GL_BLEND);
+    g_gl.UseProgram(state->environment_program);
+    henka_set_uniform_vec3(state->environment_program, "groundColor", ground_color);
+    henka_set_uniform_vec3(state->environment_program, "horizonColor", horizon_color);
+    henka_set_uniform_vec3(state->environment_program, "zenithColor", zenith_color);
+    henka_set_uniform_float(state->environment_program, "intensity", 1.5f);
+    g_gl.BindVertexArray(state->tone_vertex_array);
+    glDrawArrays(GL_TRIANGLES, 0, 3);
+    g_gl.BindVertexArray(0);
+    g_gl.UseProgram(0);
+    glEnable(GL_DEPTH_TEST);
+    glEnable(GL_CULL_FACE);
 }
 
 static henka_mat4 henka_opengl_get_light_matrix(const henka_scene* scene)
@@ -1183,6 +1222,7 @@ henka_result henka_opengl_renderer_create(struct henka_renderer* renderer, struc
         henka_opengl_delete_shadow_target(state);
         if (state->shadow_program != 0U) g_gl.DeleteProgram(state->shadow_program);
         if (state->tone_program != 0U) g_gl.DeleteProgram(state->tone_program);
+        if (state->environment_program != 0U) g_gl.DeleteProgram(state->environment_program);
         if (state->tone_vertex_array != 0U) g_gl.DeleteVertexArrays(1, &state->tone_vertex_array);
         g_gl.DeleteProgram(state->viewport_program);
         g_gl.DeleteBuffers(1, &state->ui_vertex_buffer);
@@ -1239,6 +1279,10 @@ void henka_opengl_renderer_destroy(struct henka_renderer* renderer)
         if (state->tone_program != 0U)
         {
             g_gl.DeleteProgram(state->tone_program);
+        }
+        if (state->environment_program != 0U)
+        {
+            g_gl.DeleteProgram(state->environment_program);
         }
         if (state->shadow_program != 0U)
         {
@@ -1401,6 +1445,7 @@ henka_result henka_opengl_renderer_draw_scene(
         henka_apply_scene_target_viewport(renderer);
         glClearColor(0.075f, 0.09f, 0.12f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+        henka_opengl_draw_environment(state, renderer);
     }
     else
     {
@@ -1580,6 +1625,23 @@ henka_result henka_opengl_renderer_draw_scene(
             program,
             "ambientColor",
             ambient_color);
+        henka_set_uniform_bool(
+            program,
+            "useEnvironment",
+            !helper_entity && policy.use_hdr_presentation);
+        henka_set_uniform_vec3(
+            program,
+            "environmentGroundColor",
+            (henka_vec3){0.035f, 0.045f, 0.065f});
+        henka_set_uniform_vec3(
+            program,
+            "environmentHorizonColor",
+            (henka_vec3){0.16f, 0.19f, 0.24f});
+        henka_set_uniform_vec3(
+            program,
+            "environmentZenithColor",
+            (henka_vec3){0.055f, 0.08f, 0.14f});
+        henka_set_uniform_float(program, "environmentIntensity", 1.5f);
         henka_set_uniform_bool(
             program,
             "useTexture",

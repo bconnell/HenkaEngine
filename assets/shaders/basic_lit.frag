@@ -16,6 +16,11 @@ uniform vec3 lightColor;
 uniform float lightIntensity;
 uniform vec3 ambientColor;
 uniform bool useLighting;
+uniform bool useEnvironment;
+uniform vec3 environmentGroundColor;
+uniform vec3 environmentHorizonColor;
+uniform vec3 environmentZenithColor;
+uniform float environmentIntensity;
 uniform sampler2D normalTexture;
 uniform sampler2D metallicRoughnessTexture;
 uniform sampler2D occlusionTexture;
@@ -109,6 +114,15 @@ float shadowFactor(vec3 normal, vec3 lightDir)
     return visible / 9.0;
 }
 
+vec3 sampleEnvironment(vec3 direction)
+{
+    float height = clamp(direction.y * 0.5 + 0.5, 0.0, 1.0);
+    float horizon = smoothstep(0.04, 0.48, height);
+    vec3 lower = mix(environmentGroundColor, environmentHorizonColor, horizon);
+    vec3 color = mix(lower, environmentZenithColor, smoothstep(0.48, 1.0, height));
+    return min(max(color, vec3(0.0)) * max(environmentIntensity, 0.0), vec3(65504.0));
+}
+
 void main()
 {
     vec4 surfaceColor = baseColor;
@@ -176,6 +190,19 @@ void main()
         // Ambient is an indirect fallback until the environment/probe path is active.
         vec3 safeAmbient = min(max(ambientColor, vec3(0.0)), vec3(16.0));
         color += min(safeAmbient * ((1.0 - surfaceMetallic) * albedo + fresnel * 0.5) * occlusion, vec3(65504.0));
+        if (useEnvironment)
+        {
+            vec3 environmentDiffuse = sampleEnvironment(normal);
+            vec3 reflectionDirection = reflect(-viewDirection, normal);
+            vec3 blurredReflectionDirection = safeNormalize(
+                mix(reflectionDirection, normal, surfaceRoughness * 0.75),
+                normal);
+            vec3 environmentSpecular = sampleEnvironment(blurredReflectionDirection);
+            color += min(
+                environmentDiffuse * ((1.0 - surfaceMetallic) * albedo / PI) * occlusion * 0.55 +
+                environmentSpecular * fresnel * occlusion * (0.35 + 0.65 * (1.0 - surfaceRoughness)),
+                vec3(65504.0));
+        }
     }
     else
     {
