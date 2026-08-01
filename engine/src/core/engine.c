@@ -1374,6 +1374,13 @@ henka_result henka_engine_get_diagnostics(
         &out_diagnostics->rendered_hdr_framebuffer_complete,
         out_diagnostics->rendered_hdr_failure,
         sizeof(out_diagnostics->rendered_hdr_failure));
+    henka_opengl_renderer_get_shadow_diagnostics(
+        engine->renderer,
+        &out_diagnostics->rendered_shadow_resolution,
+        &out_diagnostics->rendered_shadow_generation,
+        &out_diagnostics->rendered_shadow_framebuffer_complete,
+        out_diagnostics->rendered_shadow_failure,
+        sizeof(out_diagnostics->rendered_shadow_failure));
     out_diagnostics->wireframe_enabled =
         out_diagnostics->viewport_shading_mode ==
         HENKA_VIEWPORT_SHADING_WIREFRAME;

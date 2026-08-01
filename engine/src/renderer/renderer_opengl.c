@@ -57,6 +57,9 @@ typedef struct henka_opengl_renderer_state
     GLuint shadow_framebuffer;
     GLuint shadow_depth_texture;
     int shadow_resolution;
+    uint64_t shadow_generation;
+    bool shadow_framebuffer_complete;
+    char shadow_failure_reason[64];
     henka_opengl_tool_window_target tool_targets[HENKA_MAX_TOOL_WINDOWS];
 } henka_opengl_renderer_state;
 
@@ -207,7 +210,8 @@ bool henka_opengl_renderer_is_shadow_ready(const struct henka_renderer* renderer
         return false;
     }
     state = (const henka_opengl_renderer_state*)renderer->backend_state;
-    return state->shadow_framebuffer != 0U && state->shadow_depth_texture != 0U;
+    return state->shadow_framebuffer != 0U && state->shadow_depth_texture != 0U &&
+        state->shadow_framebuffer_complete && state->shadow_resolution > 0;
 }
 
 typedef struct henka_ui_vertex
@@ -766,6 +770,7 @@ static void henka_opengl_delete_shadow_target(henka_opengl_renderer_state* state
     state->shadow_depth_texture = 0U;
     state->shadow_framebuffer = 0U;
     state->shadow_resolution = 0;
+    state->shadow_framebuffer_complete = false;
 }
 
 static henka_result henka_opengl_create_hdr_target(
@@ -848,17 +853,31 @@ static henka_result henka_opengl_create_shadow_target(
 {
     GLuint depth_texture = 0U;
     GLuint framebuffer = 0U;
+    GLint previous_framebuffer = 0;
+    GLint previous_texture = 0;
+    GLint previous_draw_buffer = GL_BACK;
+    GLint previous_read_buffer = GL_BACK;
 
     if (state == NULL || resolution <= 0)
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
+    if (resolution > 4096)
+    {
+        (void)snprintf(state->shadow_failure_reason, sizeof(state->shadow_failure_reason), "shadow resolution exceeds limit");
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    glGetIntegerv(GL_FRAMEBUFFER_BINDING, &previous_framebuffer);
+    glGetIntegerv(GL_TEXTURE_BINDING_2D, &previous_texture);
+    glGetIntegerv(GL_DRAW_BUFFER, &previous_draw_buffer);
+    glGetIntegerv(GL_READ_BUFFER, &previous_read_buffer);
     g_gl.GenFramebuffers(1, &framebuffer);
     glGenTextures(1, &depth_texture);
     if (framebuffer == 0U || depth_texture == 0U)
     {
         if (depth_texture != 0U) glDeleteTextures(1, &depth_texture);
         if (framebuffer != 0U) g_gl.DeleteFramebuffers(1, &framebuffer);
+        (void)snprintf(state->shadow_failure_reason, sizeof(state->shadow_failure_reason), "GPU object allocation failed");
         return HENKA_ERROR_RENDERER;
     }
     g_gl.BindFramebuffer(GL_FRAMEBUFFER, framebuffer);
@@ -877,16 +896,26 @@ static henka_result henka_opengl_create_shadow_target(
     glReadBuffer(GL_NONE);
     if (g_gl.CheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
     {
-        g_gl.BindFramebuffer(GL_FRAMEBUFFER, 0U);
+        (void)snprintf(state->shadow_failure_reason, sizeof(state->shadow_failure_reason), "incomplete shadow framebuffer");
+        g_gl.BindFramebuffer(GL_FRAMEBUFFER, (GLuint)previous_framebuffer);
+        glBindTexture(GL_TEXTURE_2D, (GLuint)previous_texture);
+        glDrawBuffer((GLenum)previous_draw_buffer);
+        glReadBuffer((GLenum)previous_read_buffer);
         glDeleteTextures(1, &depth_texture);
         g_gl.DeleteFramebuffers(1, &framebuffer);
         return HENKA_ERROR_RENDERER;
     }
-    g_gl.BindFramebuffer(GL_FRAMEBUFFER, 0U);
+    g_gl.BindFramebuffer(GL_FRAMEBUFFER, (GLuint)previous_framebuffer);
+    glBindTexture(GL_TEXTURE_2D, (GLuint)previous_texture);
+    glDrawBuffer((GLenum)previous_draw_buffer);
+    glReadBuffer((GLenum)previous_read_buffer);
     henka_opengl_delete_shadow_target(state);
     state->shadow_framebuffer = framebuffer;
     state->shadow_depth_texture = depth_texture;
     state->shadow_resolution = resolution;
+    state->shadow_generation = state->shadow_generation == UINT64_MAX ? 1U : state->shadow_generation + 1U;
+    state->shadow_framebuffer_complete = true;
+    state->shadow_failure_reason[0] = '\0';
     return HENKA_SUCCESS;
 }
 
@@ -928,12 +957,15 @@ static henka_result henka_opengl_create_render_programs(
 static henka_mat4 henka_opengl_get_light_matrix(const henka_scene* scene)
 {
     henka_vec3 direction = henka_vec3_normalize(scene->light_direction);
+    henka_vec3 up = fabsf(direction.y) > 0.94f ?
+        (henka_vec3){1.0f, 0.0f, 0.0f} :
+        (henka_vec3){0.0f, 1.0f, 0.0f};
     henka_vec3 target = (henka_vec3){0.0f, 0.0f, 0.0f};
     henka_vec3 eye = henka_vec3_scale(direction, -12.0f);
 
     return henka_mat4_multiply(
         henka_mat4_orthographic(-12.0f, 12.0f, -12.0f, 12.0f, 0.1f, 40.0f),
-        henka_mat4_look_at(eye, target, (henka_vec3){0.0f, 1.0f, 0.0f}));
+        henka_mat4_look_at(eye, target, up));
 }
 
 static void henka_opengl_draw_shadow_pass(
@@ -943,7 +975,8 @@ static void henka_opengl_draw_shadow_pass(
 {
     size_t index;
 
-    if (state->shadow_framebuffer == 0U || state->shadow_program == 0U)
+    if (state->shadow_framebuffer == 0U || state->shadow_program == 0U ||
+        !state->shadow_framebuffer_complete)
     {
         return;
     }
@@ -971,6 +1004,15 @@ static void henka_opengl_draw_shadow_pass(
         {
             continue;
         }
+        if (entity->material.double_sided)
+        {
+            glDisable(GL_CULL_FACE);
+        }
+        else
+        {
+            glEnable(GL_CULL_FACE);
+            glCullFace(GL_FRONT);
+        }
         henka_set_uniform_mat4(
             state->shadow_program,
             "model",
@@ -993,6 +1035,7 @@ static void henka_opengl_draw_shadow_pass(
     g_gl.BindVertexArray(0);
     glBindTexture(GL_TEXTURE_2D, 0U);
     g_gl.UseProgram(0);
+    glEnable(GL_CULL_FACE);
     glCullFace(GL_BACK);
     g_gl.BindFramebuffer(GL_FRAMEBUFFER, 0U);
 }
@@ -2227,6 +2270,33 @@ void henka_opengl_renderer_get_hdr_diagnostics(
             failure_capacity,
             "%s",
             state != NULL && state->hdr_failure_reason[0] != '\0' ? state->hdr_failure_reason : "");
+    }
+}
+
+void henka_opengl_renderer_get_shadow_diagnostics(
+    const struct henka_renderer* renderer,
+    int* out_resolution,
+    uint64_t* out_generation,
+    bool* out_complete,
+    char* out_failure,
+    size_t failure_capacity)
+{
+    const henka_opengl_renderer_state* state = NULL;
+
+    if (renderer != NULL && renderer->backend_state != NULL)
+    {
+        state = (const henka_opengl_renderer_state*)renderer->backend_state;
+    }
+    if (out_resolution != NULL) *out_resolution = state != NULL ? state->shadow_resolution : 0;
+    if (out_generation != NULL) *out_generation = state != NULL ? state->shadow_generation : 0U;
+    if (out_complete != NULL) *out_complete = state != NULL && state->shadow_framebuffer_complete;
+    if (out_failure != NULL && failure_capacity > 0U)
+    {
+        (void)snprintf(
+            out_failure,
+            failure_capacity,
+            "%s",
+            state != NULL && state->shadow_failure_reason[0] != '\0' ? state->shadow_failure_reason : "");
     }
 }
 

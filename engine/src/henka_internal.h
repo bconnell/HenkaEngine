@@ -383,6 +383,13 @@ void henka_opengl_renderer_get_hdr_diagnostics(
     bool* out_complete,
     char* out_failure,
     size_t failure_capacity);
+void henka_opengl_renderer_get_shadow_diagnostics(
+    const struct henka_renderer* renderer,
+    int* out_resolution,
+    uint64_t* out_generation,
+    bool* out_complete,
+    char* out_failure,
+    size_t failure_capacity);
 henka_result henka_opengl_renderer_set_wireframe(struct henka_renderer* renderer, bool enabled);
 henka_result henka_opengl_renderer_create_mesh_from_data(
     struct henka_renderer* renderer,
