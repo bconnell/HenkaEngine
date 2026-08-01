@@ -153,7 +153,7 @@ The renderer layer exposes engine-owned drawing functionality while keeping Open
 - context creation
 - viewport resize
 - shader compilation and linking
-- post-link material shader contract validation for the transform and base-color uniforms used by the renderer; invalid external programs are rejected before publication
+- post-link shader contract validation with a minimal geometry variant and a complete material variant covering transforms, lighting, environment, fog, material factors, alpha, vertex color, textures, and shadows; invalid external programs are rejected before publication
 - a bounded uniform-location cache qualified by the active SDL OpenGL context and program identity, with explicit cache invalidation when programs are destroyed
 - mesh upload
 - descriptor-aware texture upload and binding, including sRGB versus linear internal formats, sampler policy, mip selection, and upload-state restoration
@@ -168,7 +168,7 @@ The renderer layer exposes engine-owned drawing functionality while keeping Open
 - draw submission for scene entities
 - draw submission for simple screen-space UI rectangles
 
-External material shaders are admitted only after the renderer confirms the minimum contract it will populate (`model`, `view`, `projection`, and `baseColor`). This keeps a successful file read or link from becoming a later draw-time failure. The uniform cache is a bounded transitional safety layer: entries are keyed by both context and program, but broader per-context renderer ownership remains future work as additional OpenGL backends are introduced.
+External shaders are admitted only after the renderer confirms the contract it will populate. Programs that expose the material lighting markers (`useLighting` and `metallic`) must provide the complete material contract; other programs use the minimal geometry contract (`model`, `view`, `projection`, and `baseColor`) used by the debug grid. This keeps a successful file read or link from becoming a later draw-time failure. The uniform cache is a bounded transitional safety layer: entries are keyed by both context and program, but broader per-context renderer ownership remains future work as additional OpenGL backends are introduced.
 
 ### Sandbox
 

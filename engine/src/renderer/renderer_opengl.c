@@ -277,7 +277,10 @@ SDL_Window* henka_platform_get_sdl_window(struct henka_platform* platform);
 
 static bool henka_compile_shader(GLuint shader, const char* source, const char* label);
 static bool henka_link_program(GLuint program);
-static bool henka_validate_shader_contract(GLuint program, const char* label);
+static bool henka_validate_shader_contract(
+    GLuint program,
+    const char* label,
+    bool material_contract);
 
 static void henka_apply_full_framebuffer_viewport(const struct henka_renderer* renderer)
 {
@@ -580,22 +583,45 @@ static bool henka_link_program(GLuint program)
     return true;
 }
 
-static bool henka_validate_shader_contract(GLuint program, const char* label)
+static bool henka_validate_shader_contract(
+    GLuint program,
+    const char* label,
+    bool material_contract)
 {
-    static const char* required_uniforms[] =
+    static const char* minimal_uniforms[] =
     {
         "model",
         "view",
         "projection",
         "baseColor"
     };
+    static const char* material_uniforms[] =
+    {
+        "model", "view", "projection", "lightMatrix", "baseColor",
+        "baseColorTexture", "useTexture", "useVertexColor", "cameraPosition",
+        "lightDirection", "lightColor", "lightIntensity", "ambientColor",
+        "useLighting", "useEnvironment", "environmentGroundColor",
+        "environmentHorizonColor", "environmentZenithColor", "environmentIntensity",
+        "fogEnabled", "fogMode", "fogColor", "fogStartDistance", "fogEndDistance",
+        "fogDensity", "normalTexture", "metallicRoughnessTexture", "occlusionTexture",
+        "emissiveTexture", "useNormalTexture", "useMetallicRoughnessTexture",
+        "useOcclusionTexture", "useEmissiveTexture", "metallic", "roughness",
+        "normalScale", "occlusionStrength", "emissiveColor", "emissiveStrength",
+        "clearcoat", "clearcoatRoughness", "sheenColor", "sheenRoughness",
+        "alphaMode", "alphaCutoff", "shadowMap", "useShadowMap"
+    };
+    const char* const* required_uniforms = material_contract ?
+        material_uniforms : minimal_uniforms;
+    size_t required_count = material_contract ?
+        sizeof(material_uniforms) / sizeof(material_uniforms[0]) :
+        sizeof(minimal_uniforms) / sizeof(minimal_uniforms[0]);
     size_t index;
 
     if (program == 0U)
     {
         return false;
     }
-    for (index = 0U; index < sizeof(required_uniforms) / sizeof(required_uniforms[0]); ++index)
+    for (index = 0U; index < required_count; ++index)
     {
         if (g_gl.GetUniformLocation(program, required_uniforms[index]) < 0)
         {
@@ -2999,7 +3025,11 @@ henka_result henka_opengl_renderer_create_shader_from_files(
         return HENKA_ERROR_RENDERER;
     }
 
-    if (!henka_validate_shader_contract(program, fragment_path))
+    if (!henka_validate_shader_contract(
+            program,
+            fragment_path,
+            strstr(fragment_source, "useLighting") != NULL &&
+                strstr(fragment_source, "metallic") != NULL))
     {
         g_gl.DeleteProgram(program);
         g_gl.DeleteShader(vertex_shader);
