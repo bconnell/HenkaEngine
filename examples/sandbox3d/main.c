@@ -7120,7 +7120,17 @@ static void sandbox3d_draw_utility_panel(
             sandbox3d_draw_value_row(state->ui, x_left, y_start + 18.0f, panel_bounds.width - 28.0f, "Frame", fps_text + 7);
             snprintf(row_value, sizeof(row_value), "%s / %.2f", henka_viewport_shading_mode_get_label(diagnostics.viewport_shading_mode), diagnostics.viewport_exposure);
             sandbox3d_draw_value_row(state->ui, x_left, y_start + 44.0f, panel_bounds.width - 28.0f, "Render", row_value);
-            snprintf(row_value, sizeof(row_value), "HDR:%s Shadow:%s", diagnostics.rendered_hdr_ready ? "Ready" : "Unavailable", diagnostics.rendered_shadow_ready ? "Ready" : "Unavailable");
+            snprintf(
+                row_value,
+                sizeof(row_value),
+                "HDR:%s %dx%d g%llu / Shadow:%s %d g%llu",
+                diagnostics.rendered_hdr_ready ? "Ready" : "Unavailable",
+                diagnostics.rendered_hdr_allocated_width,
+                diagnostics.rendered_hdr_allocated_height,
+                (unsigned long long)diagnostics.rendered_hdr_generation,
+                diagnostics.rendered_shadow_ready ? "Ready" : "Unavailable",
+                diagnostics.rendered_shadow_resolution,
+                (unsigned long long)diagnostics.rendered_shadow_generation);
             sandbox3d_draw_value_row(state->ui, x_left, y_start + 70.0f, panel_bounds.width - 28.0f, "Rendered", row_value);
             sandbox3d_draw_value_row(state->ui, x_left, y_start + 96.0f, panel_bounds.width - 28.0f, "Layout", sandbox3d_get_layout_mode_label(state->workspace.layout_mode));
             sandbox3d_draw_value_row(state->ui, x_left, y_start + 122.0f, panel_bounds.width - 28.0f, "Tool", sandbox3d_viewport_tool_mode_to_string(state->viewport_tool));
