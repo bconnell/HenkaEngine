@@ -33,6 +33,14 @@ typedef struct henka_opengl_tool_window_target
     GLuint ui_vertex_buffer;
 } henka_opengl_tool_window_target;
 
+#define HENKA_OPENGL_TRANSPARENT_SORT_CAPACITY 4096U
+
+typedef struct henka_opengl_transparent_sort_item
+{
+    size_t entity_index;
+    float view_depth;
+} henka_opengl_transparent_sort_item;
+
 typedef struct henka_opengl_renderer_state
 {
     SDL_Window* window;
@@ -64,6 +72,9 @@ typedef struct henka_opengl_renderer_state
     uint32_t scene_draw_calls;
     uint32_t scene_visible_entities;
     uint32_t scene_culled_entities;
+    henka_opengl_transparent_sort_item transparent_sort_items[HENKA_OPENGL_TRANSPARENT_SORT_CAPACITY];
+    size_t transparent_sort_count;
+    bool transparent_sort_enabled;
     henka_opengl_tool_window_target tool_targets[HENKA_MAX_TOOL_WINDOWS];
 } henka_opengl_renderer_state;
 
@@ -1479,6 +1490,83 @@ static bool henka_opengl_bounds_in_camera(
         fabsf(center.y) <= vertical_limit + radius;
 }
 
+static float henka_opengl_entity_view_depth(
+    const henka_scene* scene,
+    henka_mat4 view,
+    size_t index)
+{
+    const henka_scene_entity_record* entity;
+    henka_bounds bounds;
+    henka_entity entity_id;
+    henka_vec3 center;
+    float depth;
+
+    entity = &scene->entities[index];
+    center = entity->transform.position;
+    if (entity->has_local_bounds)
+    {
+        entity_id = henka_scene_get_entity_at_index(scene, index);
+        if (entity_id != HENKA_INVALID_ENTITY &&
+            henka_scene_get_entity_world_bounds(scene, entity_id, &bounds) == HENKA_SUCCESS)
+        {
+            center = bounds.center;
+        }
+    }
+    depth = -(view.m[2] * center.x +
+        view.m[6] * center.y +
+        view.m[10] * center.z +
+        view.m[14]);
+    return isfinite(depth) ? depth : 0.0f;
+}
+
+static void henka_opengl_prepare_transparent_sort(
+    henka_opengl_renderer_state* state,
+    const henka_scene* scene,
+    henka_mat4 view)
+{
+    size_t index;
+    size_t insert_index;
+    henka_opengl_transparent_sort_item item;
+
+    state->transparent_sort_count = 0U;
+    state->transparent_sort_enabled = true;
+    for (index = 0U; index < scene->entity_capacity; ++index)
+    {
+        const henka_scene_entity_record* entity = &scene->entities[index];
+
+        if (!entity->active || !entity->visible || entity->mesh == NULL ||
+            entity->material.shader == NULL ||
+            entity->material.alpha_mode != HENKA_MATERIAL_ALPHA_BLENDED)
+        {
+            continue;
+        }
+        if (state->transparent_sort_count >= HENKA_OPENGL_TRANSPARENT_SORT_CAPACITY)
+        {
+            state->transparent_sort_enabled = false;
+            state->transparent_sort_count = 0U;
+            return;
+        }
+        state->transparent_sort_items[state->transparent_sort_count++] =
+            (henka_opengl_transparent_sort_item){
+                index,
+                henka_opengl_entity_view_depth(scene, view, index)};
+    }
+
+    for (index = 1U; index < state->transparent_sort_count; ++index)
+    {
+        item = state->transparent_sort_items[index];
+        insert_index = index;
+        while (insert_index > 0U &&
+            state->transparent_sort_items[insert_index - 1U].view_depth < item.view_depth)
+        {
+            state->transparent_sort_items[insert_index] =
+                state->transparent_sort_items[insert_index - 1U];
+            --insert_index;
+        }
+        state->transparent_sort_items[insert_index] = item;
+    }
+}
+
 henka_result henka_opengl_renderer_draw_scene(
     struct henka_renderer* renderer,
     const struct henka_scene* scene)
@@ -1500,6 +1588,8 @@ henka_result henka_opengl_renderer_draw_scene(
     henka_mat4 view;
     bool rendered;
     size_t index;
+    size_t pass;
+    size_t pass_count;
 
     if (renderer == NULL ||
         scene == NULL ||
@@ -1560,12 +1650,19 @@ henka_result henka_opengl_renderer_draw_scene(
     projection =
         henka_camera_get_projection_matrix(&scene->camera);
     view = henka_camera_get_view_matrix(&scene->camera);
+    henka_opengl_prepare_transparent_sort(state, scene, view);
     g_gl.ActiveTexture(GL_TEXTURE0);
 
-    for (index = 0U;
-         index < scene->entity_capacity;
-         ++index)
+    pass_count = state->transparent_sort_enabled ? 2U : 1U;
+    for (pass = 0U; pass < pass_count; ++pass)
     {
+        const size_t pass_entity_count = pass == 0U ?
+            scene->entity_capacity : state->transparent_sort_count;
+
+        for (index = 0U; index < pass_entity_count; ++index)
+        {
+        size_t draw_index = pass == 0U ? index :
+            state->transparent_sort_items[index].entity_index;
         const henka_scene_entity_record* entity;
         const henka_opengl_mesh_data* mesh_data;
         const henka_opengl_shader_data* shader_data;
@@ -1588,7 +1685,7 @@ henka_result henka_opengl_renderer_draw_scene(
         henka_bounds world_bounds;
         henka_entity entity_id;
 
-        entity = &scene->entities[index];
+        entity = &scene->entities[draw_index];
         if (!entity->active ||
             !entity->visible ||
             entity->mesh == NULL ||
@@ -1597,10 +1694,17 @@ henka_result henka_opengl_renderer_draw_scene(
             continue;
         }
 
+        if (state->transparent_sort_enabled &&
+            ((pass == 0U && entity->material.alpha_mode == HENKA_MATERIAL_ALPHA_BLENDED) ||
+             (pass == 1U && entity->material.alpha_mode != HENKA_MATERIAL_ALPHA_BLENDED)))
+        {
+            continue;
+        }
+
         if ((entity->flags & HENKA_SCENE_ENTITY_FLAG_HELPER) == 0U &&
             entity->has_local_bounds)
         {
-            entity_id = henka_scene_get_entity_at_index(scene, index);
+            entity_id = henka_scene_get_entity_at_index(scene, draw_index);
             if (entity_id != HENKA_INVALID_ENTITY &&
                 henka_scene_get_entity_world_bounds(scene, entity_id, &world_bounds) == HENKA_SUCCESS &&
                 !henka_opengl_bounds_in_camera(&scene->camera, view, world_bounds))
@@ -1856,6 +1960,7 @@ henka_result henka_opengl_renderer_draw_scene(
             0);
         state->scene_draw_calls += 1U;
         state->scene_visible_entities += 1U;
+        }
     }
 
     if (policy.use_hdr_presentation)
