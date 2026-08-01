@@ -1380,7 +1380,7 @@ henka_result henka_opengl_renderer_draw_scene(
     rendered = henka_renderer_get_viewport_shading_mode(renderer) ==
         HENKA_VIEWPORT_SHADING_RENDERED;
     light_matrix = henka_opengl_get_light_matrix(scene);
-    if (rendered)
+    if (policy.use_hdr_presentation)
     {
         henka_viewport scene_viewport = henka_renderer_get_scene_viewport(renderer);
 
@@ -1389,14 +1389,17 @@ henka_result henka_opengl_renderer_draw_scene(
         {
             henka_opengl_renderer_sync_scene_target(renderer);
         }
-        henka_opengl_draw_shadow_pass(state, scene, light_matrix);
+        if (rendered)
+        {
+            henka_opengl_draw_shadow_pass(state, scene, light_matrix);
+        }
         if (!henka_opengl_renderer_is_hdr_ready(renderer))
         {
             return HENKA_ERROR_RENDERER;
         }
         g_gl.BindFramebuffer(GL_FRAMEBUFFER, state->hdr_framebuffer);
         henka_apply_scene_target_viewport(renderer);
-        glClearColor(0.025f, 0.03f, 0.045f, 1.0f);
+        glClearColor(0.075f, 0.09f, 0.12f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
     }
     else
@@ -1488,6 +1491,10 @@ henka_result henka_opengl_renderer_draw_scene(
                 ambient_color = preview_ambient;
             }
             if (policy.force_unlit)
+            {
+                use_lighting = false;
+            }
+            else if (entity->material.type == HENKA_MATERIAL_TYPE_UNLIT)
             {
                 use_lighting = false;
             }
@@ -1658,7 +1665,7 @@ henka_result henka_opengl_renderer_draw_scene(
             0);
     }
 
-    if (rendered)
+    if (policy.use_hdr_presentation)
     {
         g_gl.BindFramebuffer(GL_FRAMEBUFFER, 0U);
         henka_opengl_present_hdr(renderer, state);

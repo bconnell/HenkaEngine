@@ -151,7 +151,9 @@ void main()
     vec3 albedo = max(surfaceColor.rgb, vec3(0.0));
     vec3 viewDirection = safeNormalize(cameraPosition - fragWorldPosition, vec3(0.0, 0.0, 1.0));
     vec3 lightDir = safeNormalize(-lightDirection, vec3(0.0, 1.0, 0.0));
-    vec3 radiance = max(lightColor, vec3(0.0)) * max(lightIntensity, 0.0);
+    vec3 safeLightColor = clamp(lightColor, vec3(0.0), vec3(1.0));
+    float safeLightIntensity = clamp(lightIntensity, 0.0, 10000.0);
+    vec3 radiance = min(safeLightColor * safeLightIntensity, vec3(65504.0));
     vec3 f0 = mix(vec3(0.04), albedo, surfaceMetallic);
     vec3 color = vec3(0.0);
 
@@ -172,17 +174,18 @@ void main()
         color += (diffuse + specular) * radiance * nDotL * shadow;
 
         // Ambient is an indirect fallback until the environment/probe path is active.
-        color += ambientColor * ((1.0 - surfaceMetallic) * albedo + fresnel * 0.5) * occlusion;
+        vec3 safeAmbient = min(max(ambientColor, vec3(0.0)), vec3(16.0));
+        color += min(safeAmbient * ((1.0 - surfaceMetallic) * albedo + fresnel * 0.5) * occlusion, vec3(65504.0));
     }
     else
     {
         color = albedo;
     }
 
-    vec3 emissive = max(emissiveColor, vec3(0.0)) * max(emissiveStrength, 0.0);
+    vec3 emissive = min(max(emissiveColor, vec3(0.0)), vec3(1.0)) * clamp(emissiveStrength, 0.0, 100.0);
     if (useEmissiveTexture)
     {
         emissive *= max(texture(emissiveTexture, fragUv).rgb, vec3(0.0));
     }
-    outColor = vec4(max(color + emissive, vec3(0.0)), surfaceColor.a);
+    outColor = vec4(min(max(color + emissive, vec3(0.0)), vec3(65504.0)), surfaceColor.a);
 }

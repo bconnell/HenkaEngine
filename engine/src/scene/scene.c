@@ -80,7 +80,7 @@ henka_result henka_material_validate(const henka_material* material)
 {
     if (material == NULL || material->shader == NULL ||
         material->type < HENKA_MATERIAL_TYPE_LIT ||
-        material->type > HENKA_MATERIAL_TYPE_PROCEDURAL_RESERVED ||
+        material->type > HENKA_MATERIAL_TYPE_VERTEX_COLOR ||
         !henka_is_finite_float(material->base_color.x) ||
         !henka_is_finite_float(material->base_color.y) ||
         !henka_is_finite_float(material->base_color.z) ||
@@ -99,7 +99,9 @@ henka_result henka_material_validate(const henka_material* material)
         material->base_color.z < 0.0f || material->base_color.z > 1.0f ||
         material->base_color.w < 0.0f || material->base_color.w > 1.0f ||
         material->emissive_color.x < 0.0f || material->emissive_color.y < 0.0f ||
-        material->emissive_color.z < 0.0f || material->metallic < 0.0f ||
+        material->emissive_color.z < 0.0f || material->emissive_color.x > 1.0f ||
+        material->emissive_color.y > 1.0f || material->emissive_color.z > 1.0f ||
+        material->metallic < 0.0f ||
         material->metallic > 1.0f || material->roughness < 0.045f ||
         material->roughness > 1.0f || material->normal_scale < 0.0f ||
         material->normal_scale > 4.0f || material->occlusion_strength < 0.0f ||
@@ -1428,7 +1430,8 @@ void henka_scene_set_light_color(henka_scene* scene, henka_vec3 light_color)
 {
     if (scene != NULL && henka_is_finite_float(light_color.x) &&
         henka_is_finite_float(light_color.y) && henka_is_finite_float(light_color.z) &&
-        light_color.x >= 0.0f && light_color.y >= 0.0f && light_color.z >= 0.0f)
+        light_color.x >= 0.0f && light_color.y >= 0.0f && light_color.z >= 0.0f &&
+        light_color.x <= 1.0f && light_color.y <= 1.0f && light_color.z <= 1.0f)
     {
         scene->light_color = light_color;
     }
@@ -1447,7 +1450,9 @@ void henka_scene_set_ambient_color(henka_scene* scene, henka_vec3 ambient_color)
     if (scene != NULL &&
         henka_is_finite_float(ambient_color.x) &&
         henka_is_finite_float(ambient_color.y) &&
-        henka_is_finite_float(ambient_color.z))
+        henka_is_finite_float(ambient_color.z) &&
+        ambient_color.x >= 0.0f && ambient_color.y >= 0.0f && ambient_color.z >= 0.0f &&
+        ambient_color.x <= 16.0f && ambient_color.y <= 16.0f && ambient_color.z <= 16.0f)
     {
         scene->ambient_color = ambient_color;
     }

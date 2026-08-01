@@ -108,6 +108,7 @@ static void henka_test_viewport_shading_policy_matrix(void)
     HENKA_TEST_ASSERT(policy.use_material_base_color);
     HENKA_TEST_ASSERT(policy.sample_material_texture);
     HENKA_TEST_ASSERT(policy.use_preview_lighting);
+    HENKA_TEST_ASSERT(policy.use_hdr_presentation);
     HENKA_TEST_ASSERT(!policy.use_scene_lighting);
 
     HENKA_TEST_ASSERT(
@@ -117,6 +118,7 @@ static void henka_test_viewport_shading_policy_matrix(void)
     HENKA_TEST_ASSERT(policy.use_material_base_color);
     HENKA_TEST_ASSERT(policy.sample_material_texture);
     HENKA_TEST_ASSERT(policy.use_scene_lighting);
+    HENKA_TEST_ASSERT(policy.use_hdr_presentation);
     HENKA_TEST_ASSERT(!policy.use_preview_lighting);
 
     HENKA_TEST_ASSERT(

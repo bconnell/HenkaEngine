@@ -38,6 +38,12 @@ void henka_test_material(void)
         henka_material valid = henka_material_default();
         valid.shader = (henka_shader*)(uintptr_t)1U;
         HENKA_TEST_ASSERT(henka_material_validate(&valid) == HENKA_SUCCESS);
+        valid.type = HENKA_MATERIAL_TYPE_PROCEDURAL_RESERVED;
+        HENKA_TEST_ASSERT(henka_material_validate(&valid) == HENKA_ERROR_INVALID_ARGUMENT);
+        valid.type = HENKA_MATERIAL_TYPE_LIT;
+        valid.emissive_color.x = 1.01f;
+        HENKA_TEST_ASSERT(henka_material_validate(&valid) == HENKA_ERROR_INVALID_ARGUMENT);
+        valid.emissive_color.x = 0.0f;
         valid.roughness = 0.01f;
         HENKA_TEST_ASSERT(henka_material_validate(&valid) == HENKA_ERROR_INVALID_ARGUMENT);
     }

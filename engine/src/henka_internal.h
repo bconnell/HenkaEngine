@@ -64,6 +64,7 @@ typedef struct henka_viewport_render_policy
     bool sample_material_texture;
     bool use_scene_lighting;
     bool use_preview_lighting;
+    bool use_hdr_presentation;
     bool force_unlit;
 } henka_viewport_render_policy;
 typedef struct henka_platform_frame_state

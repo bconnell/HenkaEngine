@@ -334,11 +334,13 @@ henka_result henka_viewport_render_policy_resolve(
             policy.use_material_base_color = true;
             policy.sample_material_texture = true;
             policy.use_preview_lighting = true;
+            policy.use_hdr_presentation = true;
             break;
         case HENKA_VIEWPORT_SHADING_RENDERED:
             policy.use_material_base_color = true;
             policy.sample_material_texture = true;
             policy.use_scene_lighting = true;
+            policy.use_hdr_presentation = true;
             break;
         case HENKA_VIEWPORT_SHADING_COUNT:
         default:
