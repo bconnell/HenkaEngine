@@ -94,9 +94,17 @@ typedef struct henka_scene_environment_desc
     float intensity;
 } henka_scene_environment_desc;
 
+typedef enum henka_scene_fog_mode
+{
+    HENKA_SCENE_FOG_LINEAR = 0,
+    HENKA_SCENE_FOG_EXPONENTIAL,
+    HENKA_SCENE_FOG_EXPONENTIAL_SQUARED
+} henka_scene_fog_mode;
+
 typedef struct henka_scene_fog_desc
 {
     bool enabled;
+    henka_scene_fog_mode mode;
     henka_vec3 color;
     float start_distance;
     float end_distance;

@@ -109,6 +109,7 @@ void henka_test_scene(void)
     HENKA_TEST_ASSERT(!read_fog.enabled);
     fog = (henka_scene_fog_desc){
         true,
+        HENKA_SCENE_FOG_EXPONENTIAL,
         (henka_vec3){0.18f, 0.21f, 0.26f},
         6.0f,
         64.0f,
@@ -116,8 +117,12 @@ void henka_test_scene(void)
     HENKA_TEST_ASSERT(henka_scene_set_fog(scene, fog) == HENKA_SUCCESS);
     HENKA_TEST_ASSERT(henka_scene_get_fog(scene, &read_fog) == HENKA_SUCCESS);
     HENKA_TEST_ASSERT(read_fog.enabled);
+    HENKA_TEST_ASSERT(read_fog.mode == HENKA_SCENE_FOG_EXPONENTIAL);
     HENKA_TEST_ASSERT_FLOAT_CLOSE(read_fog.end_distance, 64.0f, 0.0001f);
     fog.end_distance = 5.0f;
+    HENKA_TEST_ASSERT(henka_scene_set_fog(scene, fog) == HENKA_ERROR_INVALID_ARGUMENT);
+    fog.end_distance = 64.0f;
+    fog.mode = (henka_scene_fog_mode)99;
     HENKA_TEST_ASSERT(henka_scene_set_fog(scene, fog) == HENKA_ERROR_INVALID_ARGUMENT);
     camera = henka_camera_create_perspective(
         60.0f * HENKA_DEG_TO_RAD,

@@ -602,6 +602,7 @@ henka_result henka_scene_create(henka_scene** out_scene)
         1.5f};
     scene->fog = (henka_scene_fog_desc){
         false,
+        HENKA_SCENE_FOG_LINEAR,
         (henka_vec3){0.16f, 0.19f, 0.24f},
         8.0f,
         80.0f,
@@ -1534,6 +1535,7 @@ henka_result henka_scene_get_environment(
 henka_result henka_scene_set_fog(henka_scene* scene, henka_scene_fog_desc fog)
 {
     if (scene == NULL ||
+        fog.mode > HENKA_SCENE_FOG_EXPONENTIAL_SQUARED ||
         !henka_is_finite_float(fog.color.x) ||
         !henka_is_finite_float(fog.color.y) ||
         !henka_is_finite_float(fog.color.z) ||
