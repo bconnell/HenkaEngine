@@ -135,6 +135,7 @@ static henka_opengl_functions g_gl;
 
 typedef struct henka_opengl_uniform_cache_entry
 {
+    SDL_GLContext context;
     GLuint program;
     GLint location;
     char name[HENKA_OPENGL_UNIFORM_NAME_CAPACITY];
@@ -145,11 +146,17 @@ static size_t g_uniform_cache_count;
 
 static void henka_opengl_uniform_cache_forget(GLuint program)
 {
+    SDL_GLContext context = SDL_GL_GetCurrentContext();
     size_t index;
 
+    if (context == NULL)
+    {
+        return;
+    }
     for (index = 0U; index < g_uniform_cache_count; ++index)
     {
-        if (g_uniform_cache[index].program == program)
+        if (g_uniform_cache[index].context == context &&
+            g_uniform_cache[index].program == program)
         {
             g_uniform_cache[index] = g_uniform_cache[g_uniform_cache_count - 1U];
             --g_uniform_cache_count;
@@ -160,15 +167,17 @@ static void henka_opengl_uniform_cache_forget(GLuint program)
 
 static GLint henka_opengl_uniform_location(GLuint program, const char* name)
 {
+    SDL_GLContext context = SDL_GL_GetCurrentContext();
     size_t index;
 
-    if (program == 0U || name == NULL || name[0] == '\0')
+    if (context == NULL || program == 0U || name == NULL || name[0] == '\0')
     {
         return -1;
     }
     for (index = 0U; index < g_uniform_cache_count; ++index)
     {
-        if (g_uniform_cache[index].program == program &&
+        if (g_uniform_cache[index].context == context &&
+            g_uniform_cache[index].program == program &&
             strncmp(g_uniform_cache[index].name, name, HENKA_OPENGL_UNIFORM_NAME_CAPACITY) == 0)
         {
             return g_uniform_cache[index].location;
@@ -181,6 +190,7 @@ static GLint henka_opengl_uniform_location(GLuint program, const char* name)
         HENKA_LOG_ERROR("uniform cache capacity exceeded for '%s'", name);
         return -1;
     }
+    g_uniform_cache[g_uniform_cache_count].context = context;
     g_uniform_cache[g_uniform_cache_count].program = program;
     g_uniform_cache[g_uniform_cache_count].location = g_gl.GetUniformLocation(program, name);
     (void)snprintf(g_uniform_cache[g_uniform_cache_count].name,
@@ -252,6 +262,7 @@ SDL_Window* henka_platform_get_sdl_window(struct henka_platform* platform);
 
 static bool henka_compile_shader(GLuint shader, const char* source, const char* label);
 static bool henka_link_program(GLuint program);
+static bool henka_validate_shader_contract(GLuint program, const char* label);
 
 static void henka_apply_full_framebuffer_viewport(const struct henka_renderer* renderer)
 {
@@ -551,6 +562,35 @@ static bool henka_link_program(GLuint program)
         return false;
     }
 
+    return true;
+}
+
+static bool henka_validate_shader_contract(GLuint program, const char* label)
+{
+    static const char* required_uniforms[] =
+    {
+        "model",
+        "view",
+        "projection",
+        "baseColor"
+    };
+    size_t index;
+
+    if (program == 0U)
+    {
+        return false;
+    }
+    for (index = 0U; index < sizeof(required_uniforms) / sizeof(required_uniforms[0]); ++index)
+    {
+        if (g_gl.GetUniformLocation(program, required_uniforms[index]) < 0)
+        {
+            HENKA_LOG_ERROR(
+                "shader contract rejected for '%s': required uniform '%s' is missing",
+                label != NULL ? label : "shader",
+                required_uniforms[index]);
+            return false;
+        }
+    }
     return true;
 }
 
@@ -2639,6 +2679,16 @@ henka_result henka_opengl_renderer_create_shader_from_files(
     g_gl.AttachShader(program, vertex_shader);
     g_gl.AttachShader(program, fragment_shader);
     if (!henka_link_program(program))
+    {
+        g_gl.DeleteProgram(program);
+        g_gl.DeleteShader(vertex_shader);
+        g_gl.DeleteShader(fragment_shader);
+        henka_free(vertex_source);
+        henka_free(fragment_source);
+        return HENKA_ERROR_RENDERER;
+    }
+
+    if (!henka_validate_shader_contract(program, fragment_path))
     {
         g_gl.DeleteProgram(program);
         g_gl.DeleteShader(vertex_shader);
