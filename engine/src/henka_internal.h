@@ -176,6 +176,7 @@ struct henka_scene
     float light_intensity;
     henka_vec3 ambient_color;
     henka_scene_environment_desc environment;
+    henka_scene_fog_desc fog;
 };
 
 struct henka_platform;

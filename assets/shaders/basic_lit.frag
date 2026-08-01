@@ -23,6 +23,11 @@ uniform vec3 environmentGroundColor;
 uniform vec3 environmentHorizonColor;
 uniform vec3 environmentZenithColor;
 uniform float environmentIntensity;
+uniform bool fogEnabled;
+uniform vec3 fogColor;
+uniform float fogStartDistance;
+uniform float fogEndDistance;
+uniform float fogDensity;
 uniform sampler2D normalTexture;
 uniform sampler2D metallicRoughnessTexture;
 uniform sampler2D occlusionTexture;
@@ -248,5 +253,18 @@ void main()
     {
         emissive *= max(texture(emissiveTexture, fragUv).rgb, vec3(0.0));
     }
-    outColor = vec4(min(max(color + emissive, vec3(0.0)), vec3(65504.0)), surfaceColor.a);
+    vec3 finalColor = min(max(color + emissive, vec3(0.0)), vec3(65504.0));
+    if (fogEnabled)
+    {
+        float distanceFromCamera = length(cameraPosition - fragWorldPosition);
+        float linearFog = clamp(
+            (distanceFromCamera - max(fogStartDistance, 0.0)) /
+                max(fogEndDistance - fogStartDistance, 0.0001),
+            0.0,
+            1.0);
+        float exponentialFog = 1.0 - exp(-clamp(fogDensity, 0.0, 1.0) * distanceFromCamera);
+        float fogAmount = max(linearFog, exponentialFog);
+        finalColor = mix(finalColor, max(fogColor, vec3(0.0)), fogAmount);
+    }
+    outColor = vec4(min(finalColor, vec3(65504.0)), surfaceColor.a);
 }

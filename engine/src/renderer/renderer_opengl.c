@@ -1866,6 +1866,11 @@ henka_result henka_opengl_renderer_draw_scene(
             "environmentZenithColor",
             scene->environment.zenith_color);
         henka_set_uniform_float(program, "environmentIntensity", scene->environment.intensity);
+        henka_set_uniform_bool(program, "fogEnabled", !helper_entity && scene->fog.enabled);
+        henka_set_uniform_vec3(program, "fogColor", scene->fog.color);
+        henka_set_uniform_float(program, "fogStartDistance", scene->fog.start_distance);
+        henka_set_uniform_float(program, "fogEndDistance", scene->fog.end_distance);
+        henka_set_uniform_float(program, "fogDensity", scene->fog.density);
         henka_set_uniform_bool(
             program,
             "useTexture",

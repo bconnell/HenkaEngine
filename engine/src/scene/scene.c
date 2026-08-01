@@ -600,6 +600,12 @@ henka_result henka_scene_create(henka_scene** out_scene)
         (henka_vec3){0.16f, 0.19f, 0.24f},
         (henka_vec3){0.055f, 0.08f, 0.14f},
         1.5f};
+    scene->fog = (henka_scene_fog_desc){
+        false,
+        (henka_vec3){0.16f, 0.19f, 0.24f},
+        8.0f,
+        80.0f,
+        0.0f};
 
     *out_scene = scene;
     return HENKA_SUCCESS;
@@ -1522,5 +1528,41 @@ henka_result henka_scene_get_environment(
     }
 
     *out_environment = scene->environment;
+    return HENKA_SUCCESS;
+}
+
+henka_result henka_scene_set_fog(henka_scene* scene, henka_scene_fog_desc fog)
+{
+    if (scene == NULL ||
+        !henka_is_finite_float(fog.color.x) ||
+        !henka_is_finite_float(fog.color.y) ||
+        !henka_is_finite_float(fog.color.z) ||
+        !henka_is_finite_float(fog.start_distance) ||
+        !henka_is_finite_float(fog.end_distance) ||
+        !henka_is_finite_float(fog.density) ||
+        fog.color.x < 0.0f || fog.color.x > 16.0f ||
+        fog.color.y < 0.0f || fog.color.y > 16.0f ||
+        fog.color.z < 0.0f || fog.color.z > 16.0f ||
+        fog.start_distance < 0.0f || fog.start_distance > 65536.0f ||
+        fog.end_distance <= fog.start_distance || fog.end_distance > 65536.0f ||
+        fog.density < 0.0f || fog.density > 1.0f)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    scene->fog = fog;
+    return HENKA_SUCCESS;
+}
+
+henka_result henka_scene_get_fog(
+    const henka_scene* scene,
+    henka_scene_fog_desc* out_fog)
+{
+    if (scene == NULL || out_fog == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    *out_fog = scene->fog;
     return HENKA_SUCCESS;
 }
