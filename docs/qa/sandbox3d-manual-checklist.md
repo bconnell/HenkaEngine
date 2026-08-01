@@ -237,7 +237,7 @@ Mark each item as `Pass`, `Needs Review`, or `Fail`.
 - Window title is correct
 - Textured cube is visible
 - Ground is visible
-- Colored cube is visible
+- Material ball is visible
 - OBJ marker is visible
 - Missing-texture fallback object is visible
 - Missing-model fallback object is visible

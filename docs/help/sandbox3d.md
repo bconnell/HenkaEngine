@@ -4,7 +4,7 @@
 
 - a textured cube
 - a textured ground plane with a visible floor surface and grid
-- a colored cube
+- a material ball
 - a loaded OBJ marker
 - a debug grid
 - a fallback-texture example that stays visible when a texture file is missing
@@ -54,7 +54,7 @@ The docked workspace opens in `View` mode with no selected scene object so the c
 - Toggle mouse capture and use the mouse to look around.
 - Find the fallback-texture example to confirm that missing textures fail visibly without stopping the engine.
 - Find the fallback-model example to confirm that missing OBJ assets fail visibly without stopping the engine.
-- Compare the colored cube, textured cube, and OBJ marker so it is easy to tell which material path each object is using.
+- Compare the material ball, textured cube, and OBJ marker so it is easy to tell which material path each object is using.
 - Use `F3` to hide the grid briefly, then show it again to confirm the scene layout still reads clearly.
 - Press `F4` to open the sandbox panels, then use `F5` to compare the View, Inspect, and Full Tools layouts.
 - Release mouse capture, then use the Viewport Tool buttons to switch between Select, Orbit, Pan, Move, Rotate, and Scale.
