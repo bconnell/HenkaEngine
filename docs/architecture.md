@@ -143,7 +143,7 @@ The scene layer is intentionally minimal. It is not a full ECS. Right now it pro
 - per-entity interaction metadata
 - nearest-hit picking against simple bounds
 - one active scene camera
-- one directional light direction and ambient color
+- one directional light direction, color, intensity, and ambient color
 - per-object visibility and debug labels
 
 ### Renderer
@@ -156,7 +156,7 @@ The renderer layer exposes engine-owned drawing functionality while keeping Open
 - mesh upload
 - descriptor-aware texture upload and binding, including sRGB versus linear internal formats, sampler policy, mip selection, and upload-state restoration
 - tangent-space vertex attributes generated during mesh upload with finite fallbacks for degenerate UVs
-- the current PBR-lite map bindings for base color, normal, metallic-roughness, and emissive data
+- bounded metallic-roughness material evaluation with base color, normal, metallic-roughness, occlusion, and emissive data
 - depth testing
 - backface culling
 - wireframe toggle
@@ -205,6 +205,6 @@ The next steps should continue building upward from these boundaries:
 - editable authoring data compiled into runtime assets for later modeling, UV, rigging, and animation workflows
 ## Viewport shading
 
-The Scene View owns an explicit shading mode rather than relying on a global polygon toggle. Wireframe draws neutral geometry edges without texture sampling. Solid draws neutral filled surfaces under stable editor lighting. Material Preview displays current base colors and base-color textures under editor lighting. Rendered uses the scene material and lighting policy. Helper overlays retain their own materials, mode changes do not rewrite scene materials, and the renderer restores a filled polygon baseline before UI and detached-window presentation.
+The Scene View owns an explicit shading mode rather than relying on a global polygon toggle. Wireframe draws neutral geometry edges without texture sampling. Solid draws neutral filled surfaces under a neutral editor surface policy. Material Preview uses the same bounded Cook–Torrance material evaluation as Rendered with deterministic editor lighting. Rendered uses scene light policy, a Scene View-sized linear HDR target, exposure, tone mapping, and the directional shadow path. Helper overlays retain their own materials, mode changes do not rewrite scene materials, and the renderer restores a filled polygon baseline before UI and detached-window presentation.
 
 The legacy wireframe API remains compatible: enabling it selects Wireframe, while disabling it restores the last valid non-wireframe mode. The sandbox persists the authoritative mode under `ui.scene_view.shading_mode`; older `wireframe_enabled` settings are migrated only when the new key is absent.

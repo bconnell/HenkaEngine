@@ -268,6 +268,7 @@ void henka_renderer_set_scene_viewport(
             henka_renderer_full_viewport(renderer);
         renderer->scene_view.viewport =
             renderer->scene_viewport;
+        henka_opengl_renderer_sync_scene_target(renderer);
         return;
     }
 
@@ -276,6 +277,7 @@ void henka_renderer_set_scene_viewport(
         henka_renderer_clip_viewport(renderer, viewport);
     renderer->scene_view.viewport =
         renderer->scene_viewport;
+    henka_opengl_renderer_sync_scene_target(renderer);
 }
 henka_viewport henka_renderer_get_scene_viewport(
     const struct henka_renderer* renderer)

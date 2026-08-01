@@ -9,6 +9,8 @@
 
 #include "../core/checked.h"
 
+static bool henka_is_finite_float(float value);
+
 henka_material henka_material_default(void)
 {
     henka_material material;
@@ -26,6 +28,7 @@ henka_material henka_material_default(void)
     material.metallic = 0.0f;
     material.roughness = 0.5f;
     material.normal_scale = 1.0f;
+    material.occlusion_strength = 1.0f;
     material.emissive_strength = 0.0f;
     material.alpha_cutoff = 0.5f;
     material.use_texture = false;
@@ -52,6 +55,69 @@ const char* henka_material_type_get_label(henka_material_type type)
         default:
             return "Lit";
     }
+}
+
+static bool henka_material_texture_matches(
+    const henka_texture* texture,
+    henka_texture_usage usage,
+    henka_texture_color_space color_space)
+{
+    henka_texture_info info;
+
+    if (texture == NULL)
+    {
+        return true;
+    }
+    if (henka_texture_get_info(texture, &info) != HENKA_SUCCESS ||
+        !info.backend_ready || info.usage != usage || info.color_space != color_space)
+    {
+        return false;
+    }
+    return true;
+}
+
+henka_result henka_material_validate(const henka_material* material)
+{
+    if (material == NULL || material->shader == NULL ||
+        material->type < HENKA_MATERIAL_TYPE_LIT ||
+        material->type > HENKA_MATERIAL_TYPE_PROCEDURAL_RESERVED ||
+        !henka_is_finite_float(material->base_color.x) ||
+        !henka_is_finite_float(material->base_color.y) ||
+        !henka_is_finite_float(material->base_color.z) ||
+        !henka_is_finite_float(material->base_color.w) ||
+        !henka_is_finite_float(material->emissive_color.x) ||
+        !henka_is_finite_float(material->emissive_color.y) ||
+        !henka_is_finite_float(material->emissive_color.z) ||
+        !henka_is_finite_float(material->metallic) ||
+        !henka_is_finite_float(material->roughness) ||
+        !henka_is_finite_float(material->normal_scale) ||
+        !henka_is_finite_float(material->occlusion_strength) ||
+        !henka_is_finite_float(material->emissive_strength) ||
+        !henka_is_finite_float(material->alpha_cutoff) ||
+        material->base_color.x < 0.0f || material->base_color.x > 1.0f ||
+        material->base_color.y < 0.0f || material->base_color.y > 1.0f ||
+        material->base_color.z < 0.0f || material->base_color.z > 1.0f ||
+        material->base_color.w < 0.0f || material->base_color.w > 1.0f ||
+        material->emissive_color.x < 0.0f || material->emissive_color.y < 0.0f ||
+        material->emissive_color.z < 0.0f || material->metallic < 0.0f ||
+        material->metallic > 1.0f || material->roughness < 0.045f ||
+        material->roughness > 1.0f || material->normal_scale < 0.0f ||
+        material->normal_scale > 4.0f || material->occlusion_strength < 0.0f ||
+        material->occlusion_strength > 1.0f || material->emissive_strength < 0.0f ||
+        material->emissive_strength > 100.0f || material->alpha_cutoff < 0.0f ||
+        material->alpha_cutoff > 1.0f ||
+        material->alpha_mode > HENKA_MATERIAL_ALPHA_BLENDED ||
+        (!material->use_texture && material->base_color_texture != NULL) ||
+        (material->use_texture && material->base_color_texture == NULL) ||
+        !henka_material_texture_matches(material->base_color_texture, HENKA_TEXTURE_USAGE_COLOR, HENKA_TEXTURE_COLOR_SPACE_SRGB) ||
+        !henka_material_texture_matches(material->normal_texture, HENKA_TEXTURE_USAGE_NORMAL, HENKA_TEXTURE_COLOR_SPACE_LINEAR) ||
+        !henka_material_texture_matches(material->metallic_roughness_texture, HENKA_TEXTURE_USAGE_METALLIC_ROUGHNESS, HENKA_TEXTURE_COLOR_SPACE_LINEAR) ||
+        !henka_material_texture_matches(material->occlusion_texture, HENKA_TEXTURE_USAGE_OCCLUSION, HENKA_TEXTURE_COLOR_SPACE_LINEAR) ||
+        !henka_material_texture_matches(material->emissive_texture, HENKA_TEXTURE_USAGE_EMISSIVE, HENKA_TEXTURE_COLOR_SPACE_SRGB))
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    return HENKA_SUCCESS;
 }
 
 henka_result henka_material_describe(const henka_material* material, char* buffer, size_t buffer_size)
@@ -348,38 +414,7 @@ static bool henka_scene_bounds_are_valid(henka_bounds bounds)
 
 static bool henka_scene_material_is_valid(henka_material material)
 {
-    return material.shader != NULL &&
-        material.type >= HENKA_MATERIAL_TYPE_LIT &&
-        material.type <= HENKA_MATERIAL_TYPE_PROCEDURAL_RESERVED &&
-        henka_is_finite_float(material.base_color.x) &&
-        henka_is_finite_float(material.base_color.y) &&
-        henka_is_finite_float(material.base_color.z) &&
-        henka_is_finite_float(material.base_color.w) &&
-        henka_is_finite_float(material.emissive_color.x) &&
-        henka_is_finite_float(material.emissive_color.y) &&
-        henka_is_finite_float(material.emissive_color.z) &&
-        henka_is_finite_float(material.metallic) &&
-        henka_is_finite_float(material.roughness) &&
-        henka_is_finite_float(material.normal_scale) &&
-        henka_is_finite_float(material.emissive_strength) &&
-        henka_is_finite_float(material.alpha_cutoff) &&
-        material.base_color.x >= 0.0f && material.base_color.x <= 1.0f &&
-        material.base_color.y >= 0.0f && material.base_color.y <= 1.0f &&
-        material.base_color.z >= 0.0f && material.base_color.z <= 1.0f &&
-        material.base_color.w >= 0.0f && material.base_color.w <= 1.0f &&
-        material.emissive_color.x >= 0.0f && material.emissive_color.y >= 0.0f &&
-        material.emissive_color.z >= 0.0f && material.metallic >= 0.0f &&
-        material.metallic <= 1.0f && material.roughness >= 0.045f &&
-        material.roughness <= 1.0f && material.normal_scale >= 0.0f &&
-        material.normal_scale <= 4.0f && material.emissive_strength >= 0.0f &&
-        material.emissive_strength <= 100.0f && material.alpha_cutoff >= 0.0f &&
-        material.alpha_cutoff <= 1.0f &&
-        material.alpha_mode <= HENKA_MATERIAL_ALPHA_BLENDED &&
-        (!material.use_texture || material.base_color_texture != NULL) &&
-        (material.normal_texture == NULL || material.normal_texture->backend_data != NULL) &&
-        (material.metallic_roughness_texture == NULL || material.metallic_roughness_texture->backend_data != NULL) &&
-        (material.occlusion_texture == NULL || material.occlusion_texture->backend_data != NULL) &&
-        (material.emissive_texture == NULL || material.emissive_texture->backend_data != NULL);
+    return henka_material_validate(&material) == HENKA_SUCCESS;
 }
 
 static bool henka_transform_is_valid(henka_transform transform)
@@ -537,6 +572,8 @@ henka_result henka_scene_create(henka_scene** out_scene)
     scene->light_direction.x = -0.4f;
     scene->light_direction.y = -1.0f;
     scene->light_direction.z = -0.2f;
+    scene->light_color = (henka_vec3){1.0f, 0.96f, 0.90f};
+    scene->light_intensity = 3.0f;
     scene->ambient_color.x = 0.16f;
     scene->ambient_color.y = 0.18f;
     scene->ambient_color.z = 0.22f;
@@ -1385,6 +1422,24 @@ void henka_scene_set_light_direction(henka_scene* scene, henka_vec3 light_direct
     }
 
     scene->light_direction = normalized_direction;
+}
+
+void henka_scene_set_light_color(henka_scene* scene, henka_vec3 light_color)
+{
+    if (scene != NULL && henka_is_finite_float(light_color.x) &&
+        henka_is_finite_float(light_color.y) && henka_is_finite_float(light_color.z) &&
+        light_color.x >= 0.0f && light_color.y >= 0.0f && light_color.z >= 0.0f)
+    {
+        scene->light_color = light_color;
+    }
+}
+
+void henka_scene_set_light_intensity(henka_scene* scene, float light_intensity)
+{
+    if (scene != NULL && henka_is_finite_float(light_intensity) && light_intensity >= 0.0f && light_intensity <= 10000.0f)
+    {
+        scene->light_intensity = light_intensity;
+    }
 }
 
 void henka_scene_set_ambient_color(henka_scene* scene, henka_vec3 ambient_color)

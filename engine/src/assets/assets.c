@@ -1,5 +1,6 @@
 #include "henka_internal.h"
 
+#include <math.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -275,6 +276,27 @@ static bool henka_texture_descriptors_equal(
         left->anisotropy == right->anisotropy;
 }
 
+static void henka_texture_descriptor_canonicalize(henka_texture_descriptor* descriptor)
+{
+    unsigned int anisotropy_units;
+
+    if (descriptor == NULL)
+    {
+        return;
+    }
+    if (descriptor->anisotropy == 0.0f)
+    {
+        descriptor->anisotropy = 0.0f;
+        return;
+    }
+    if (descriptor->anisotropy > 16.0f)
+    {
+        descriptor->anisotropy = 16.0f;
+    }
+    anisotropy_units = (unsigned int)floorf(descriptor->anisotropy * 1000.0f + 0.5f);
+    descriptor->anisotropy = (float)anisotropy_units / 1000.0f;
+}
+
 static henka_result henka_assets_make_texture_cache_key(
     const char* path,
     const henka_texture_descriptor* descriptor,
@@ -282,6 +304,7 @@ static henka_result henka_assets_make_texture_cache_key(
 {
     henka_texture_descriptor defaults;
     char* base_key;
+    henka_texture_descriptor canonical_descriptor;
     henka_result result;
     size_t allocation_size;
     size_t length;
@@ -296,6 +319,8 @@ static henka_result henka_assets_make_texture_cache_key(
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
+    canonical_descriptor = *descriptor;
+    henka_texture_descriptor_canonicalize(&canonical_descriptor);
     defaults = henka_texture_descriptor_default_color();
     base_key = NULL;
     result = henka_assets_make_canonical_key(path, &base_key);
@@ -303,7 +328,7 @@ static henka_result henka_assets_make_texture_cache_key(
     {
         return result;
     }
-    if (henka_texture_descriptors_equal(descriptor, &defaults))
+    if (henka_texture_descriptors_equal(&canonical_descriptor, &defaults))
     {
         *out_key = base_key;
         return HENKA_SUCCESS;
@@ -323,17 +348,17 @@ static henka_result henka_assets_make_texture_cache_key(
     written = snprintf(
         *out_key,
         allocation_size,
-        "%s|cs=%u|min=%u|mag=%u|u=%u|v=%u|mip=%u|flip=%u|use=%u|aniso=%.3f",
+        "%s|cs=%u|min=%u|mag=%u|u=%u|v=%u|mip=%u|flip=%u|use=%u|aniso=%u",
         base_key,
-        (unsigned int)descriptor->color_space,
-        (unsigned int)descriptor->min_filter,
-        (unsigned int)descriptor->mag_filter,
-        (unsigned int)descriptor->wrap_u,
-        (unsigned int)descriptor->wrap_v,
-        descriptor->generate_mipmaps ? 1U : 0U,
-        descriptor->vertical_flip ? 1U : 0U,
-        (unsigned int)descriptor->usage,
-        (double)descriptor->anisotropy);
+        (unsigned int)canonical_descriptor.color_space,
+        (unsigned int)canonical_descriptor.min_filter,
+        (unsigned int)canonical_descriptor.mag_filter,
+        (unsigned int)canonical_descriptor.wrap_u,
+        (unsigned int)canonical_descriptor.wrap_v,
+        canonical_descriptor.generate_mipmaps ? 1U : 0U,
+        canonical_descriptor.vertical_flip ? 1U : 0U,
+        (unsigned int)canonical_descriptor.usage,
+        (unsigned int)floorf(canonical_descriptor.anisotropy * 1000.0f + 0.5f));
     henka_free(base_key);
     if (written < 0 || (size_t)written >= allocation_size)
     {
@@ -1043,6 +1068,7 @@ henka_result henka_assets_load_texture_with_descriptor(
     henka_texture** out_texture)
 {
     char* display_name;
+    henka_texture_descriptor canonical_descriptor;
     henka_asset_texture_entry* existing_entry;
     bool fallback_active;
     char* key;
@@ -1064,9 +1090,12 @@ henka_result henka_assets_load_texture_with_descriptor(
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
 
+    canonical_descriptor = *descriptor;
+    henka_texture_descriptor_canonicalize(&canonical_descriptor);
+
     key = NULL;
     source_path = NULL;
-    result = henka_assets_make_texture_cache_key(path, descriptor, &key);
+    result = henka_assets_make_texture_cache_key(path, &canonical_descriptor, &key);
     if (result != HENKA_SUCCESS)
     {
         return result;
@@ -1111,7 +1140,7 @@ henka_result henka_assets_load_texture_with_descriptor(
     result = henka_texture_create_from_file_with_descriptor(
         manager->engine,
         resolved_path,
-        descriptor,
+        &canonical_descriptor,
         &texture);
     henka_free(resolved_path);
     if (result == HENKA_ERROR_ASSET_SOURCE)
@@ -1120,7 +1149,7 @@ henka_result henka_assets_load_texture_with_descriptor(
             "Using a path-specific error-texture alias because '%s' could not be loaded",
             source_path);
         result = henka_texture_create_borrowed_alias(
-            henka_asset_manager_get_texture_fallback(manager, descriptor->usage),
+            henka_asset_manager_get_texture_fallback(manager, canonical_descriptor.usage),
             &texture);
         if (result != HENKA_SUCCESS)
         {
@@ -1165,7 +1194,7 @@ henka_result henka_assets_load_texture_with_descriptor(
     texture->asset_manager_owned = true;
     texture->fallback_alias = fallback_active;
     manager->texture_entries[
-        manager->texture_count].descriptor = *descriptor;
+        manager->texture_count].descriptor = canonical_descriptor;
     manager->texture_entries[
         manager->texture_count].key = key;
     manager->texture_entries[
@@ -1199,7 +1228,7 @@ henka_result henka_assets_load_texture_with_descriptor(
     manager->texture_entries[
         manager->texture_count].metadata.has_texture_descriptor = true;
     manager->texture_entries[
-        manager->texture_count].metadata.texture_descriptor = *descriptor;
+        manager->texture_count].metadata.texture_descriptor = canonical_descriptor;
     henka_asset_set_summary(
         &manager->texture_entries[
             manager->texture_count].metadata,

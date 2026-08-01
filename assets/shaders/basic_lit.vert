@@ -21,10 +21,11 @@ void main()
 {
     vec4 worldPosition = model * vec4(inPosition, 1.0);
     fragWorldPosition = worldPosition.xyz;
-    fragNormal = mat3(transpose(inverse(model))) * inNormal;
+    mat3 normalMatrix = mat3(transpose(inverse(model)));
+    fragNormal = normalMatrix * inNormal;
     fragUv = inUv;
     fragTangent = mat3(model) * inTangent.xyz;
-    fragTangentHandedness = inTangent.w;
+    fragTangentHandedness = inTangent.w * (determinant(mat3(model)) < 0.0 ? -1.0 : 1.0);
     fragLightSpacePosition = lightMatrix * worldPosition;
     gl_Position = projection * view * worldPosition;
 }

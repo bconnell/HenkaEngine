@@ -638,11 +638,9 @@ henka_result henka_engine_create(
     {
         engine->renderer->framebuffer_width = framebuffer_width;
         engine->renderer->framebuffer_height = framebuffer_height;
-        engine->renderer->scene_viewport = (henka_viewport){
-            0,
-            0,
-            framebuffer_width,
-            framebuffer_height};
+        henka_renderer_set_scene_viewport(
+            engine->renderer,
+            (henka_viewport){0, 0, framebuffer_width, framebuffer_height});
     }
 
     engine->package_mode =
@@ -1364,6 +1362,18 @@ henka_result henka_engine_get_diagnostics(
         henka_renderer_is_hdr_ready(engine->renderer);
     out_diagnostics->rendered_shadow_ready =
         henka_renderer_is_shadow_ready(engine->renderer);
+    out_diagnostics->scene_viewport =
+        henka_renderer_get_scene_viewport(engine->renderer);
+    henka_opengl_renderer_get_hdr_diagnostics(
+        engine->renderer,
+        &out_diagnostics->rendered_hdr_requested_width,
+        &out_diagnostics->rendered_hdr_requested_height,
+        &out_diagnostics->rendered_hdr_allocated_width,
+        &out_diagnostics->rendered_hdr_allocated_height,
+        &out_diagnostics->rendered_hdr_generation,
+        &out_diagnostics->rendered_hdr_framebuffer_complete,
+        out_diagnostics->rendered_hdr_failure,
+        sizeof(out_diagnostics->rendered_hdr_failure));
     out_diagnostics->wireframe_enabled =
         out_diagnostics->viewport_shading_mode ==
         HENKA_VIEWPORT_SHADING_WIREFRAME;

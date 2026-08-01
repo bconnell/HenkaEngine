@@ -548,6 +548,11 @@ henka_result henka_texture_adopt_owned_payload(
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
+    if (target->content_revision == UINT64_MAX)
+    {
+        HENKA_LOG_ERROR("texture content revision exhausted; refusing replacement");
+        return HENKA_ERROR_RENDERER;
+    }
 
     target->backend_data = replacement->backend_data;
     target->width = replacement->width;
@@ -559,7 +564,7 @@ henka_result henka_texture_adopt_owned_payload(
     target->source_class = replacement->source_class;
     target->last_failure = replacement->last_failure;
     target->fallback_alias = false;
-    target->content_revision += 1U;
+    target->content_revision = target->content_revision == 0U ? 1U : target->content_revision + 1U;
     target->owns_backend = true;
 
     replacement->backend_data = NULL;

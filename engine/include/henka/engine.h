@@ -87,6 +87,14 @@ typedef struct henka_engine_diagnostics
     float viewport_exposure;
     bool rendered_hdr_ready;
     bool rendered_shadow_ready;
+    henka_viewport scene_viewport;
+    int rendered_hdr_requested_width;
+    int rendered_hdr_requested_height;
+    int rendered_hdr_allocated_width;
+    int rendered_hdr_allocated_height;
+    uint64_t rendered_hdr_generation;
+    bool rendered_hdr_framebuffer_complete;
+    char rendered_hdr_failure[64];
     bool wireframe_enabled;
     bool mouse_captured;
     bool ui_visible;

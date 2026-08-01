@@ -169,6 +169,8 @@ struct henka_scene
     henka_camera camera;
     bool has_camera;
     henka_vec3 light_direction;
+    henka_vec3 light_color;
+    float light_intensity;
     henka_vec3 ambient_color;
 };
 
@@ -367,9 +369,20 @@ henka_result henka_opengl_renderer_draw_tool_window_ui(
     henka_window_id window_id,
     const struct henka_ui_context* ui_context);
 void henka_opengl_renderer_resize_viewport(struct henka_renderer* renderer, int width, int height);
+void henka_opengl_renderer_sync_scene_target(struct henka_renderer* renderer);
 henka_result henka_opengl_renderer_set_vsync(struct henka_renderer* renderer, bool enabled);
 bool henka_opengl_renderer_is_hdr_ready(const struct henka_renderer* renderer);
 bool henka_opengl_renderer_is_shadow_ready(const struct henka_renderer* renderer);
+void henka_opengl_renderer_get_hdr_diagnostics(
+    const struct henka_renderer* renderer,
+    int* out_requested_width,
+    int* out_requested_height,
+    int* out_allocated_width,
+    int* out_allocated_height,
+    uint64_t* out_generation,
+    bool* out_complete,
+    char* out_failure,
+    size_t failure_capacity);
 henka_result henka_opengl_renderer_set_wireframe(struct henka_renderer* renderer, bool enabled);
 henka_result henka_opengl_renderer_create_mesh_from_data(
     struct henka_renderer* renderer,

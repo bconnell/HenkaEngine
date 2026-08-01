@@ -52,6 +52,7 @@ typedef struct henka_material
     float metallic;
     float roughness;
     float normal_scale;
+    float occlusion_strength;
     float emissive_strength;
     float alpha_cutoff;
     bool use_texture;
@@ -97,6 +98,7 @@ typedef enum henka_interaction_result
 } henka_interaction_result;
 
 const char* henka_material_type_get_label(henka_material_type type);
+henka_result henka_material_validate(const henka_material* material);
 henka_result henka_material_describe(const henka_material* material, char* buffer, size_t buffer_size);
 henka_material henka_material_default(void);
 henka_result henka_scene_create(henka_scene** out_scene);
@@ -139,6 +141,8 @@ henka_interaction_result henka_scene_can_interact(const henka_scene* scene, henk
 henka_result henka_scene_pick_entity(const henka_scene* scene, henka_ray ray, henka_entity* out_entity, float* out_distance);
 henka_result henka_scene_set_camera(henka_scene* scene, const henka_camera* camera);
 void henka_scene_set_light_direction(henka_scene* scene, henka_vec3 light_direction);
+void henka_scene_set_light_color(henka_scene* scene, henka_vec3 light_color);
+void henka_scene_set_light_intensity(henka_scene* scene, float light_intensity);
 void henka_scene_set_ambient_color(henka_scene* scene, henka_vec3 ambient_color);
 
 #endif

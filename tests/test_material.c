@@ -1,6 +1,7 @@
 #include "test_suite.h"
 
 #include <string.h>
+#include <stdint.h>
 
 #include <henka/scene.h>
 #include <henka/texture.h>
@@ -20,6 +21,7 @@ void henka_test_material(void)
     HENKA_TEST_ASSERT(material.metallic == 0.0f);
     HENKA_TEST_ASSERT(material.roughness == 0.5f);
     HENKA_TEST_ASSERT(material.normal_scale == 1.0f);
+    HENKA_TEST_ASSERT(material.occlusion_strength == 1.0f);
     HENKA_TEST_ASSERT(material.alpha_mode == HENKA_MATERIAL_ALPHA_OPAQUE);
     HENKA_TEST_ASSERT(material.cast_shadows);
     HENKA_TEST_ASSERT(material.receive_shadows);
@@ -31,6 +33,14 @@ void henka_test_material(void)
     HENKA_TEST_ASSERT(strstr(description, "Material") != NULL);
     HENKA_TEST_ASSERT(henka_material_describe(&material, tiny_description, sizeof(tiny_description)) == HENKA_ERROR_UNKNOWN);
     HENKA_TEST_ASSERT(tiny_description[sizeof(tiny_description) - 1U] == '\0');
+
+    {
+        henka_material valid = henka_material_default();
+        valid.shader = (henka_shader*)(uintptr_t)1U;
+        HENKA_TEST_ASSERT(henka_material_validate(&valid) == HENKA_SUCCESS);
+        valid.roughness = 0.01f;
+        HENKA_TEST_ASSERT(henka_material_validate(&valid) == HENKA_ERROR_INVALID_ARGUMENT);
+    }
 
     {
         henka_texture_descriptor color = henka_texture_descriptor_default_color();
