@@ -17,10 +17,24 @@ henka_material henka_material_default(void)
     material.type = HENKA_MATERIAL_TYPE_LIT;
     material.shader = NULL;
     material.base_color_texture = NULL;
+    material.normal_texture = NULL;
+    material.metallic_roughness_texture = NULL;
+    material.occlusion_texture = NULL;
+    material.emissive_texture = NULL;
     material.base_color = (henka_vec4){1.0f, 1.0f, 1.0f, 1.0f};
+    material.emissive_color = (henka_vec3){0.0f, 0.0f, 0.0f};
+    material.metallic = 0.0f;
+    material.roughness = 0.5f;
+    material.normal_scale = 1.0f;
+    material.emissive_strength = 0.0f;
+    material.alpha_cutoff = 0.5f;
     material.use_texture = false;
     material.use_lighting = true;
     material.depth_test = true;
+    material.alpha_mode = HENKA_MATERIAL_ALPHA_OPAQUE;
+    material.double_sided = false;
+    material.cast_shadows = true;
+    material.receive_shadows = true;
     return material;
 }
 
@@ -54,11 +68,13 @@ henka_result henka_material_describe(const henka_material* material, char* buffe
     written = snprintf(
         buffer,
         buffer_size,
-        "%s | %s | %s%s",
+        "%s | %s | %s%s | M %.2f R %.2f",
         material_name,
         henka_material_type_get_label(material->type),
         material->use_texture ? "Texture" : "Color",
-        material->use_lighting ? " | Lit" : " | Unlit");
+        material->use_lighting ? " | Lit" : " | Unlit",
+        material->metallic,
+        material->roughness);
     if (written < 0 || (size_t)written >= buffer_size)
     {
         buffer[buffer_size - 1U] = '\0';
@@ -339,7 +355,31 @@ static bool henka_scene_material_is_valid(henka_material material)
         henka_is_finite_float(material.base_color.y) &&
         henka_is_finite_float(material.base_color.z) &&
         henka_is_finite_float(material.base_color.w) &&
-        (!material.use_texture || material.base_color_texture != NULL);
+        henka_is_finite_float(material.emissive_color.x) &&
+        henka_is_finite_float(material.emissive_color.y) &&
+        henka_is_finite_float(material.emissive_color.z) &&
+        henka_is_finite_float(material.metallic) &&
+        henka_is_finite_float(material.roughness) &&
+        henka_is_finite_float(material.normal_scale) &&
+        henka_is_finite_float(material.emissive_strength) &&
+        henka_is_finite_float(material.alpha_cutoff) &&
+        material.base_color.x >= 0.0f && material.base_color.x <= 1.0f &&
+        material.base_color.y >= 0.0f && material.base_color.y <= 1.0f &&
+        material.base_color.z >= 0.0f && material.base_color.z <= 1.0f &&
+        material.base_color.w >= 0.0f && material.base_color.w <= 1.0f &&
+        material.emissive_color.x >= 0.0f && material.emissive_color.y >= 0.0f &&
+        material.emissive_color.z >= 0.0f && material.metallic >= 0.0f &&
+        material.metallic <= 1.0f && material.roughness >= 0.045f &&
+        material.roughness <= 1.0f && material.normal_scale >= 0.0f &&
+        material.normal_scale <= 4.0f && material.emissive_strength >= 0.0f &&
+        material.emissive_strength <= 100.0f && material.alpha_cutoff >= 0.0f &&
+        material.alpha_cutoff <= 1.0f &&
+        material.alpha_mode <= HENKA_MATERIAL_ALPHA_BLENDED &&
+        (!material.use_texture || material.base_color_texture != NULL) &&
+        (material.normal_texture == NULL || material.normal_texture->backend_data != NULL) &&
+        (material.metallic_roughness_texture == NULL || material.metallic_roughness_texture->backend_data != NULL) &&
+        (material.occlusion_texture == NULL || material.occlusion_texture->backend_data != NULL) &&
+        (material.emissive_texture == NULL || material.emissive_texture->backend_data != NULL);
 }
 
 static bool henka_transform_is_valid(henka_transform transform)

@@ -1,5 +1,6 @@
 #include "henka_internal.h"
 
+#include <math.h>
 #include <stdint.h>
 
 #include <henka/log.h>
@@ -86,6 +87,7 @@ henka_result henka_renderer_create(struct henka_platform* platform, bool enable_
     renderer->scene_view.overlays_visible = true;
     renderer->scene_view.xray_enabled = false;
     renderer->last_non_wireframe_mode = HENKA_VIEWPORT_SHADING_SOLID;
+    renderer->exposure = 0.0f;
 
     result = henka_opengl_renderer_create(renderer, platform, enable_vsync);
     if (result != HENKA_SUCCESS)
@@ -376,6 +378,33 @@ henka_viewport_shading_mode henka_renderer_get_viewport_shading_mode(
     return renderer->scene_view.shading_mode;
 }
 
+henka_result henka_renderer_set_viewport_exposure(
+    struct henka_renderer* renderer,
+    float exposure_stops)
+{
+    if (renderer == NULL || !isfinite(exposure_stops) || exposure_stops < -16.0f || exposure_stops > 16.0f)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    renderer->exposure = exposure_stops;
+    return HENKA_SUCCESS;
+}
+
+float henka_renderer_get_viewport_exposure(const struct henka_renderer* renderer)
+{
+    return renderer != NULL && isfinite(renderer->exposure) ? renderer->exposure : 0.0f;
+}
+
+bool henka_renderer_is_hdr_ready(const struct henka_renderer* renderer)
+{
+    return henka_opengl_renderer_is_hdr_ready(renderer);
+}
+
+bool henka_renderer_is_shadow_ready(const struct henka_renderer* renderer)
+{
+    return henka_opengl_renderer_is_shadow_ready(renderer);
+}
+
 henka_result henka_renderer_set_wireframe(
     struct henka_renderer* renderer,
     bool enabled)
@@ -443,6 +472,25 @@ henka_result henka_renderer_create_texture_from_rgba8(
     const unsigned char* pixels,
     struct henka_texture** out_texture)
 {
+    henka_texture_descriptor descriptor = henka_texture_descriptor_default_color();
+
+    return henka_renderer_create_texture_from_rgba8_with_descriptor(
+        renderer,
+        width,
+        height,
+        pixels,
+        &descriptor,
+        out_texture);
+}
+
+henka_result henka_renderer_create_texture_from_rgba8_with_descriptor(
+    struct henka_renderer* renderer,
+    int width,
+    int height,
+    const unsigned char* pixels,
+    const henka_texture_descriptor* descriptor,
+    struct henka_texture** out_texture)
+{
     if (out_texture != NULL)
     {
         *out_texture = NULL;
@@ -450,17 +498,18 @@ henka_result henka_renderer_create_texture_from_rgba8(
 
     if (renderer == NULL ||
         renderer->backend_state == NULL ||
-        pixels == NULL ||
-        out_texture == NULL)
+        pixels == NULL || out_texture == NULL || descriptor == NULL ||
+        henka_texture_descriptor_validate(descriptor) != HENKA_SUCCESS)
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
 
-    return henka_opengl_renderer_create_texture_from_rgba8(
+    return henka_opengl_renderer_create_texture_from_rgba8_with_descriptor(
         renderer,
         width,
         height,
         pixels,
+        descriptor,
         out_texture);
 }
 

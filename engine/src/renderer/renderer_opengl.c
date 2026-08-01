@@ -18,6 +18,11 @@
 #include "../core/checked.h"
 #include "../ui/ui_internal.h"
 
+#ifndef GL_TEXTURE_MAX_ANISOTROPY_EXT
+#define GL_TEXTURE_MAX_ANISOTROPY_EXT 0x84FE
+#define GL_MAX_TEXTURE_MAX_ANISOTROPY_EXT 0x84FF
+#endif
+
 typedef struct henka_opengl_tool_window_target
 {
     henka_window_id id;
@@ -36,6 +41,17 @@ typedef struct henka_opengl_renderer_state
     GLuint ui_vertex_array;
     GLuint ui_vertex_buffer;
     GLuint viewport_program;
+    GLuint tone_program;
+    GLuint tone_vertex_array;
+    GLuint hdr_framebuffer;
+    GLuint hdr_color_texture;
+    GLuint hdr_depth_buffer;
+    int hdr_width;
+    int hdr_height;
+    GLuint shadow_program;
+    GLuint shadow_framebuffer;
+    GLuint shadow_depth_texture;
+    int shadow_resolution;
     henka_opengl_tool_window_target tool_targets[HENKA_MAX_TOOL_WINDOWS];
 } henka_opengl_renderer_state;
 
@@ -60,6 +76,7 @@ typedef struct henka_opengl_functions
     PFNGLUNIFORM3FPROC Uniform3f;
     PFNGLUNIFORM2FPROC Uniform2f;
     PFNGLUNIFORM1IPROC Uniform1i;
+    PFNGLUNIFORM1FPROC Uniform1f;
     PFNGLGENVERTEXARRAYSPROC GenVertexArrays;
     PFNGLGENBUFFERSPROC GenBuffers;
     PFNGLBINDVERTEXARRAYPROC BindVertexArray;
@@ -71,6 +88,16 @@ typedef struct henka_opengl_functions
     PFNGLDELETEVERTEXARRAYSPROC DeleteVertexArrays;
     PFNGLACTIVETEXTUREPROC ActiveTexture;
     PFNGLGENERATEMIPMAPPROC GenerateMipmap;
+    PFNGLGENFRAMEBUFFERSPROC GenFramebuffers;
+    PFNGLBINDFRAMEBUFFERPROC BindFramebuffer;
+    PFNGLFRAMEBUFFERTEXTURE2DPROC FramebufferTexture2D;
+    PFNGLCHECKFRAMEBUFFERSTATUSPROC CheckFramebufferStatus;
+    PFNGLDELETEFRAMEBUFFERSPROC DeleteFramebuffers;
+    PFNGLGENRENDERBUFFERSPROC GenRenderbuffers;
+    PFNGLBINDRENDERBUFFERPROC BindRenderbuffer;
+    PFNGLRENDERBUFFERSTORAGEPROC RenderbufferStorage;
+    PFNGLFRAMEBUFFERRENDERBUFFERPROC FramebufferRenderbuffer;
+    PFNGLDELETERENDERBUFFERSPROC DeleteRenderbuffers;
 } henka_opengl_functions;
 
 typedef struct henka_opengl_mesh_data
@@ -91,6 +118,30 @@ typedef struct henka_opengl_texture_data
 {
     GLuint texture_id;
 } henka_opengl_texture_data;
+
+bool henka_opengl_renderer_is_hdr_ready(const struct henka_renderer* renderer)
+{
+    const henka_opengl_renderer_state* state;
+
+    if (renderer == NULL || renderer->backend_state == NULL)
+    {
+        return false;
+    }
+    state = (const henka_opengl_renderer_state*)renderer->backend_state;
+    return state->hdr_framebuffer != 0U && state->hdr_color_texture != 0U;
+}
+
+bool henka_opengl_renderer_is_shadow_ready(const struct henka_renderer* renderer)
+{
+    const henka_opengl_renderer_state* state;
+
+    if (renderer == NULL || renderer->backend_state == NULL)
+    {
+        return false;
+    }
+    state = (const henka_opengl_renderer_state*)renderer->backend_state;
+    return state->shadow_framebuffer != 0U && state->shadow_depth_texture != 0U;
+}
 
 typedef struct henka_ui_vertex
 {
@@ -229,6 +280,7 @@ static bool henka_opengl_load_functions(void)
     HENKA_GL_LOAD(Uniform3f);
     HENKA_GL_LOAD(Uniform2f);
     HENKA_GL_LOAD(Uniform1i);
+    HENKA_GL_LOAD(Uniform1f);
     HENKA_GL_LOAD(GenVertexArrays);
     HENKA_GL_LOAD(GenBuffers);
     HENKA_GL_LOAD(BindVertexArray);
@@ -240,6 +292,16 @@ static bool henka_opengl_load_functions(void)
     HENKA_GL_LOAD(DeleteVertexArrays);
     HENKA_GL_LOAD(ActiveTexture);
     HENKA_GL_LOAD(GenerateMipmap);
+    HENKA_GL_LOAD(GenFramebuffers);
+    HENKA_GL_LOAD(BindFramebuffer);
+    HENKA_GL_LOAD(FramebufferTexture2D);
+    HENKA_GL_LOAD(CheckFramebufferStatus);
+    HENKA_GL_LOAD(DeleteFramebuffers);
+    HENKA_GL_LOAD(GenRenderbuffers);
+    HENKA_GL_LOAD(BindRenderbuffer);
+    HENKA_GL_LOAD(RenderbufferStorage);
+    HENKA_GL_LOAD(FramebufferRenderbuffer);
+    HENKA_GL_LOAD(DeleteRenderbuffers);
 
 #undef HENKA_GL_LOAD
     return true;
@@ -462,6 +524,15 @@ static void henka_set_uniform_int(GLuint program, const char* name, int value)
     }
 }
 
+static void henka_set_uniform_float(GLuint program, const char* name, float value)
+{
+    GLint location = g_gl.GetUniformLocation(program, name);
+    if (location >= 0)
+    {
+        g_gl.Uniform1f(location, value);
+    }
+}
+
 static henka_result henka_opengl_renderer_create_ui_resources(
     GLuint* out_program,
     GLuint* out_vertex_array,
@@ -580,6 +651,276 @@ henka_opengl_renderer_create_viewport_program(
 
     return HENKA_SUCCESS;
 }
+
+static void henka_opengl_delete_hdr_target(henka_opengl_renderer_state* state)
+{
+    if (state->hdr_depth_buffer != 0U)
+    {
+        g_gl.DeleteRenderbuffers(1, &state->hdr_depth_buffer);
+    }
+    if (state->hdr_color_texture != 0U)
+    {
+        glDeleteTextures(1, &state->hdr_color_texture);
+    }
+    if (state->hdr_framebuffer != 0U)
+    {
+        g_gl.DeleteFramebuffers(1, &state->hdr_framebuffer);
+    }
+    state->hdr_depth_buffer = 0U;
+    state->hdr_color_texture = 0U;
+    state->hdr_framebuffer = 0U;
+    state->hdr_width = 0;
+    state->hdr_height = 0;
+}
+
+static void henka_opengl_delete_shadow_target(henka_opengl_renderer_state* state)
+{
+    if (state->shadow_depth_texture != 0U)
+    {
+        glDeleteTextures(1, &state->shadow_depth_texture);
+    }
+    if (state->shadow_framebuffer != 0U)
+    {
+        g_gl.DeleteFramebuffers(1, &state->shadow_framebuffer);
+    }
+    state->shadow_depth_texture = 0U;
+    state->shadow_framebuffer = 0U;
+    state->shadow_resolution = 0;
+}
+
+static henka_result henka_opengl_create_hdr_target(
+    henka_opengl_renderer_state* state,
+    int width,
+    int height)
+{
+    GLuint color_texture = 0U;
+    GLuint depth_buffer = 0U;
+    GLuint framebuffer = 0U;
+
+    if (state == NULL || width <= 0 || height <= 0)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    g_gl.GenFramebuffers(1, &framebuffer);
+    glGenTextures(1, &color_texture);
+    g_gl.GenRenderbuffers(1, &depth_buffer);
+    if (framebuffer == 0U || color_texture == 0U || depth_buffer == 0U)
+    {
+        if (depth_buffer != 0U) g_gl.DeleteRenderbuffers(1, &depth_buffer);
+        if (color_texture != 0U) glDeleteTextures(1, &color_texture);
+        if (framebuffer != 0U) g_gl.DeleteFramebuffers(1, &framebuffer);
+        return HENKA_ERROR_RENDERER;
+    }
+    g_gl.BindFramebuffer(GL_FRAMEBUFFER, framebuffer);
+    glBindTexture(GL_TEXTURE_2D, color_texture);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA16F, width, height, 0, GL_RGBA, GL_HALF_FLOAT, NULL);
+    g_gl.FramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, color_texture, 0);
+    g_gl.BindRenderbuffer(GL_RENDERBUFFER, depth_buffer);
+    g_gl.RenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT24, width, height);
+    g_gl.FramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, depth_buffer);
+    if (g_gl.CheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
+    {
+        g_gl.BindFramebuffer(GL_FRAMEBUFFER, 0U);
+        g_gl.DeleteRenderbuffers(1, &depth_buffer);
+        glDeleteTextures(1, &color_texture);
+        g_gl.DeleteFramebuffers(1, &framebuffer);
+        return HENKA_ERROR_RENDERER;
+    }
+    g_gl.BindFramebuffer(GL_FRAMEBUFFER, 0U);
+    henka_opengl_delete_hdr_target(state);
+    state->hdr_framebuffer = framebuffer;
+    state->hdr_color_texture = color_texture;
+    state->hdr_depth_buffer = depth_buffer;
+    state->hdr_width = width;
+    state->hdr_height = height;
+    return HENKA_SUCCESS;
+}
+
+static henka_result henka_opengl_create_shadow_target(
+    henka_opengl_renderer_state* state,
+    int resolution)
+{
+    GLuint depth_texture = 0U;
+    GLuint framebuffer = 0U;
+
+    if (state == NULL || resolution <= 0)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    g_gl.GenFramebuffers(1, &framebuffer);
+    glGenTextures(1, &depth_texture);
+    if (framebuffer == 0U || depth_texture == 0U)
+    {
+        if (depth_texture != 0U) glDeleteTextures(1, &depth_texture);
+        if (framebuffer != 0U) g_gl.DeleteFramebuffers(1, &framebuffer);
+        return HENKA_ERROR_RENDERER;
+    }
+    g_gl.BindFramebuffer(GL_FRAMEBUFFER, framebuffer);
+    glBindTexture(GL_TEXTURE_2D, depth_texture);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_BORDER);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_BORDER);
+    {
+        const float border_color[] = {1.0f, 1.0f, 1.0f, 1.0f};
+        glTexParameterfv(GL_TEXTURE_2D, GL_TEXTURE_BORDER_COLOR, border_color);
+    }
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT24, resolution, resolution, 0, GL_DEPTH_COMPONENT, GL_UNSIGNED_INT, NULL);
+    g_gl.FramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, depth_texture, 0);
+    glDrawBuffer(GL_NONE);
+    glReadBuffer(GL_NONE);
+    if (g_gl.CheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
+    {
+        g_gl.BindFramebuffer(GL_FRAMEBUFFER, 0U);
+        glDeleteTextures(1, &depth_texture);
+        g_gl.DeleteFramebuffers(1, &framebuffer);
+        return HENKA_ERROR_RENDERER;
+    }
+    g_gl.BindFramebuffer(GL_FRAMEBUFFER, 0U);
+    henka_opengl_delete_shadow_target(state);
+    state->shadow_framebuffer = framebuffer;
+    state->shadow_depth_texture = depth_texture;
+    state->shadow_resolution = resolution;
+    return HENKA_SUCCESS;
+}
+
+static henka_result henka_opengl_create_render_programs(
+    henka_opengl_renderer_state* state)
+{
+    static const char* tone_vertex =
+        "#version 330 core\n"
+        "out vec2 uv;\n"
+        "void main(){ vec2 p = vec2((gl_VertexID << 1) & 2, gl_VertexID & 2); uv = p; gl_Position = vec4(p * 2.0 - 1.0, 0.0, 1.0); }\n";
+    static const char* tone_fragment =
+        "#version 330 core\n"
+        "in vec2 uv; uniform sampler2D hdrTexture; uniform float exposure; out vec4 outColor;\n"
+        "vec3 aces(vec3 x){ return clamp((x*(2.51*x+0.03))/(x*(2.43*x+0.59)+0.14),0.0,1.0); }\n"
+        "void main(){ vec3 color = texture(hdrTexture, uv).rgb * exp2(exposure); color = aces(max(color, vec3(0.0))); outColor = vec4(pow(color, vec3(1.0/2.2)), 1.0); }\n";
+    static const char* shadow_vertex =
+        "#version 330 core\n"
+        "layout(location=0) in vec3 inPosition; layout(location=2) in vec2 inUv; out vec2 fragUv; uniform mat4 model; uniform mat4 lightMatrix;\n"
+        "void main(){ fragUv = inUv; gl_Position = lightMatrix * model * vec4(inPosition,1.0); }\n";
+    static const char* shadow_fragment =
+        "#version 330 core\n"
+        "in vec2 fragUv; uniform sampler2D baseColorTexture; uniform bool useTexture; uniform int alphaMode; uniform float alphaCutoff;\n"
+        "void main(){ if(alphaMode == 1 && useTexture && texture(baseColorTexture, fragUv).a < alphaCutoff) discard; }\n";
+
+    if (state == NULL ||
+        !henka_compile_program_from_source(tone_vertex, tone_fragment, "tone-map vertex", "tone-map fragment", &state->tone_program) ||
+        !henka_compile_program_from_source(shadow_vertex, shadow_fragment, "shadow vertex", "shadow fragment", &state->shadow_program))
+    {
+        return HENKA_ERROR_RENDERER;
+    }
+    g_gl.GenVertexArrays(1, &state->tone_vertex_array);
+    if (state->tone_vertex_array == 0U)
+    {
+        return HENKA_ERROR_RENDERER;
+    }
+    return HENKA_SUCCESS;
+}
+
+static henka_mat4 henka_opengl_get_light_matrix(const henka_scene* scene)
+{
+    henka_vec3 direction = henka_vec3_normalize(scene->light_direction);
+    henka_vec3 target = (henka_vec3){0.0f, 0.0f, 0.0f};
+    henka_vec3 eye = henka_vec3_scale(direction, -12.0f);
+
+    return henka_mat4_multiply(
+        henka_mat4_orthographic(-12.0f, 12.0f, -12.0f, 12.0f, 0.1f, 40.0f),
+        henka_mat4_look_at(eye, target, (henka_vec3){0.0f, 1.0f, 0.0f}));
+}
+
+static void henka_opengl_draw_shadow_pass(
+    henka_opengl_renderer_state* state,
+    const henka_scene* scene,
+    henka_mat4 light_matrix)
+{
+    size_t index;
+
+    if (state->shadow_framebuffer == 0U || state->shadow_program == 0U)
+    {
+        return;
+    }
+    g_gl.BindFramebuffer(GL_FRAMEBUFFER, state->shadow_framebuffer);
+    glViewport(0, 0, state->shadow_resolution, state->shadow_resolution);
+    glClear(GL_DEPTH_BUFFER_BIT);
+    glEnable(GL_DEPTH_TEST);
+    glEnable(GL_CULL_FACE);
+    glCullFace(GL_FRONT);
+    g_gl.UseProgram(state->shadow_program);
+    for (index = 0U; index < scene->entity_capacity; ++index)
+    {
+        const henka_scene_entity_record* entity = &scene->entities[index];
+        const henka_opengl_mesh_data* mesh_data;
+
+        if (!entity->active || !entity->visible || entity->mesh == NULL ||
+            !entity->material.cast_shadows ||
+            entity->material.alpha_mode == HENKA_MATERIAL_ALPHA_BLENDED ||
+            (entity->flags & HENKA_SCENE_ENTITY_FLAG_HELPER) != 0U)
+        {
+            continue;
+        }
+        mesh_data = (const henka_opengl_mesh_data*)entity->mesh->backend_data;
+        if (mesh_data == NULL)
+        {
+            continue;
+        }
+        henka_set_uniform_mat4(
+            state->shadow_program,
+            "model",
+            henka_transform_to_mat4(entity->transform));
+        henka_set_uniform_mat4(state->shadow_program, "lightMatrix", light_matrix);
+        henka_set_uniform_int(state->shadow_program, "baseColorTexture", 0);
+        henka_set_uniform_bool(state->shadow_program, "useTexture",
+            entity->material.use_texture && entity->material.base_color_texture != NULL &&
+            entity->material.base_color_texture->backend_data != NULL);
+        henka_set_uniform_int(state->shadow_program, "alphaMode", (int)entity->material.alpha_mode);
+        henka_set_uniform_float(state->shadow_program, "alphaCutoff", entity->material.alpha_cutoff);
+        g_gl.ActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_2D,
+            entity->material.base_color_texture != NULL && entity->material.base_color_texture->backend_data != NULL ?
+            ((const henka_opengl_texture_data*)entity->material.base_color_texture->backend_data)->texture_id : 0U);
+        g_gl.BindVertexArray(mesh_data->vao);
+        glDrawElements(mesh_data->primitive_mode, mesh_data->index_count, GL_UNSIGNED_INT, 0);
+    }
+    g_gl.BindVertexArray(0);
+    glBindTexture(GL_TEXTURE_2D, 0U);
+    g_gl.UseProgram(0);
+    glCullFace(GL_BACK);
+    g_gl.BindFramebuffer(GL_FRAMEBUFFER, 0U);
+}
+
+static void henka_opengl_present_hdr(
+    struct henka_renderer* renderer,
+    henka_opengl_renderer_state* state)
+{
+    henka_viewport viewport;
+
+    if (state->hdr_color_texture == 0U || state->tone_program == 0U)
+    {
+        return;
+    }
+    viewport = henka_renderer_get_scene_viewport(renderer);
+    glDisable(GL_SCISSOR_TEST);
+    glViewport(viewport.x, renderer->framebuffer_height - viewport.y - viewport.height, viewport.width, viewport.height);
+    glDisable(GL_DEPTH_TEST);
+    glDisable(GL_CULL_FACE);
+    glDisable(GL_BLEND);
+    g_gl.UseProgram(state->tone_program);
+    henka_set_uniform_int(state->tone_program, "hdrTexture", 0);
+    henka_set_uniform_float(state->tone_program, "exposure", renderer->exposure);
+    g_gl.ActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, state->hdr_color_texture);
+    g_gl.BindVertexArray(state->tone_vertex_array);
+    glDrawArrays(GL_TRIANGLES, 0, 3);
+    g_gl.BindVertexArray(0);
+    glBindTexture(GL_TEXTURE_2D, 0U);
+    g_gl.UseProgram(0);
+}
 henka_result henka_opengl_renderer_create(struct henka_renderer* renderer, struct henka_platform* platform, bool enable_vsync)
 {
     henka_opengl_renderer_state* state;
@@ -678,6 +1019,29 @@ henka_result henka_opengl_renderer_create(struct henka_renderer* renderer, struc
         return result;
     }
 
+    result = henka_opengl_create_render_programs(state);
+    if (result != HENKA_SUCCESS ||
+        henka_opengl_create_hdr_target(
+            state,
+            renderer->framebuffer_width,
+            renderer->framebuffer_height) != HENKA_SUCCESS ||
+        henka_opengl_create_shadow_target(state, 1024) != HENKA_SUCCESS)
+    {
+        henka_opengl_delete_hdr_target(state);
+        henka_opengl_delete_shadow_target(state);
+        if (state->shadow_program != 0U) g_gl.DeleteProgram(state->shadow_program);
+        if (state->tone_program != 0U) g_gl.DeleteProgram(state->tone_program);
+        if (state->tone_vertex_array != 0U) g_gl.DeleteVertexArrays(1, &state->tone_vertex_array);
+        g_gl.DeleteProgram(state->viewport_program);
+        g_gl.DeleteBuffers(1, &state->ui_vertex_buffer);
+        g_gl.DeleteVertexArrays(1, &state->ui_vertex_array);
+        g_gl.DeleteProgram(state->ui_program);
+        SDL_GL_DestroyContext(state->gl_context);
+        henka_free(state);
+        renderer->backend_state = NULL;
+        return HENKA_ERROR_RENDERER;
+    }
+
     HENKA_LOG_INFO("renderer initialized with OpenGL backend");
     return HENKA_SUCCESS;
 }
@@ -717,6 +1081,20 @@ void henka_opengl_renderer_destroy(struct henka_renderer* renderer)
         if (state->viewport_program != 0U)
         {
             g_gl.DeleteProgram(state->viewport_program);
+        }
+        henka_opengl_delete_hdr_target(state);
+        henka_opengl_delete_shadow_target(state);
+        if (state->tone_program != 0U)
+        {
+            g_gl.DeleteProgram(state->tone_program);
+        }
+        if (state->shadow_program != 0U)
+        {
+            g_gl.DeleteProgram(state->shadow_program);
+        }
+        if (state->tone_vertex_array != 0U)
+        {
+            g_gl.DeleteVertexArrays(1, &state->tone_vertex_array);
         }
         if (state->ui_vertex_buffer != 0U)
         {
@@ -787,6 +1165,7 @@ henka_result henka_opengl_renderer_abort_frame(
     glBindTexture(GL_TEXTURE_2D, 0);
     g_gl.UseProgram(0);
     glDisable(GL_BLEND);
+    glDepthMask(GL_TRUE);
     glDisable(GL_SCISSOR_TEST);
     glEnable(GL_DEPTH_TEST);
     glEnable(GL_CULL_FACE);
@@ -814,9 +1193,11 @@ henka_result henka_opengl_renderer_draw_scene(
     static const henka_vec3 preview_ambient =
         {0.24f, 0.26f, 0.30f};
     henka_mat4 projection;
+    henka_mat4 light_matrix;
     henka_viewport_render_policy policy;
     henka_opengl_renderer_state* state;
     henka_mat4 view;
+    bool rendered;
     size_t index;
 
     if (renderer == NULL ||
@@ -842,6 +1223,22 @@ henka_result henka_opengl_renderer_draw_scene(
         return HENKA_ERROR_RENDERER;
     }
 
+    rendered = henka_renderer_get_viewport_shading_mode(renderer) ==
+        HENKA_VIEWPORT_SHADING_RENDERED;
+    light_matrix = henka_opengl_get_light_matrix(scene);
+    if (rendered)
+    {
+        henka_opengl_draw_shadow_pass(state, scene, light_matrix);
+        if (state->hdr_framebuffer == 0U)
+        {
+            return HENKA_ERROR_RENDERER;
+        }
+        g_gl.BindFramebuffer(GL_FRAMEBUFFER, state->hdr_framebuffer);
+        henka_apply_scene_viewport(renderer);
+        glClearColor(0.025f, 0.03f, 0.045f, 1.0f);
+        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+    }
+
     henka_apply_scene_viewport(renderer);
     projection =
         henka_camera_get_projection_matrix(&scene->camera);
@@ -856,6 +1253,9 @@ henka_result henka_opengl_renderer_draw_scene(
         const henka_opengl_mesh_data* mesh_data;
         const henka_opengl_shader_data* shader_data;
         const henka_opengl_texture_data* texture_data;
+        const henka_opengl_texture_data* normal_texture_data;
+        const henka_opengl_texture_data* metallic_roughness_texture_data;
+        const henka_opengl_texture_data* emissive_texture_data;
         henka_vec3 ambient_color;
         henka_vec4 base_color;
         bool editor_surface;
@@ -942,6 +1342,12 @@ henka_result henka_opengl_renderer_draw_scene(
                     entity->material
                         .base_color_texture->backend_data;
         }
+        normal_texture_data = entity->material.normal_texture != NULL ?
+            (const henka_opengl_texture_data*)entity->material.normal_texture->backend_data : NULL;
+        metallic_roughness_texture_data = entity->material.metallic_roughness_texture != NULL ?
+            (const henka_opengl_texture_data*)entity->material.metallic_roughness_texture->backend_data : NULL;
+        emissive_texture_data = entity->material.emissive_texture != NULL ?
+            (const henka_opengl_texture_data*)entity->material.emissive_texture->backend_data : NULL;
 
         use_texture =
             texture_data != NULL &&
@@ -967,49 +1373,102 @@ henka_result henka_opengl_renderer_draw_scene(
 
         model =
             henka_transform_to_mat4(entity->transform);
-        g_gl.UseProgram(shader_data->program);
+        g_gl.UseProgram(program);
         henka_set_uniform_mat4(
-            shader_data->program,
+            program,
             "model",
             model);
         henka_set_uniform_mat4(
-            shader_data->program,
+            program,
             "view",
             view);
         henka_set_uniform_mat4(
-            shader_data->program,
+            program,
             "projection",
             projection);
+        henka_set_uniform_mat4(program, "lightMatrix", light_matrix);
         henka_set_uniform_vec4(
-            shader_data->program,
+            program,
             "baseColor",
             base_color);
         henka_set_uniform_vec3(
-            shader_data->program,
+            program,
             "lightDirection",
             light_direction);
         henka_set_uniform_vec3(
-            shader_data->program,
+            program,
             "ambientColor",
             ambient_color);
         henka_set_uniform_bool(
-            shader_data->program,
+            program,
             "useTexture",
             use_texture);
         henka_set_uniform_bool(
-            shader_data->program,
+            program,
             "useLighting",
             use_lighting);
         henka_set_uniform_int(
-            shader_data->program,
+            program,
             "baseColorTexture",
             0);
+        henka_set_uniform_int(program, "normalTexture", 1);
+        henka_set_uniform_int(program, "metallicRoughnessTexture", 2);
+        henka_set_uniform_int(program, "emissiveTexture", 3);
+        henka_set_uniform_bool(program, "useNormalTexture",
+            normal_texture_data != NULL && normal_texture_data->texture_id != 0U);
+        henka_set_uniform_bool(program, "useMetallicRoughnessTexture",
+            metallic_roughness_texture_data != NULL && metallic_roughness_texture_data->texture_id != 0U);
+        henka_set_uniform_bool(program, "useEmissiveTexture",
+            emissive_texture_data != NULL && emissive_texture_data->texture_id != 0U);
+        henka_set_uniform_float(program, "metallic", entity->material.metallic);
+        henka_set_uniform_float(program, "roughness", entity->material.roughness);
+        henka_set_uniform_float(program, "normalScale", entity->material.normal_scale);
+        henka_set_uniform_vec3(program, "emissiveColor", entity->material.emissive_color);
+        henka_set_uniform_float(program, "emissiveStrength", entity->material.emissive_strength);
+        henka_set_uniform_int(program, "alphaMode", (int)entity->material.alpha_mode);
+        henka_set_uniform_float(program, "alphaCutoff", entity->material.alpha_cutoff);
+        henka_set_uniform_int(program, "shadowMap", 4);
+        henka_set_uniform_bool(program, "useShadowMap",
+            rendered && state->shadow_depth_texture != 0U && entity->material.receive_shadows);
+
+        if (entity->material.double_sided)
+        {
+            glDisable(GL_CULL_FACE);
+        }
+        else
+        {
+            glEnable(GL_CULL_FACE);
+        }
+        if (entity->material.alpha_mode == HENKA_MATERIAL_ALPHA_BLENDED)
+        {
+            glEnable(GL_BLEND);
+            glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+            glDepthMask(GL_FALSE);
+        }
+        else
+        {
+            glDisable(GL_BLEND);
+            glDepthMask(GL_TRUE);
+        }
 
         glBindTexture(
             GL_TEXTURE_2D,
             use_texture ?
                 texture_data->texture_id :
                 0U);
+        g_gl.ActiveTexture(GL_TEXTURE1);
+        glBindTexture(GL_TEXTURE_2D,
+            normal_texture_data != NULL ? normal_texture_data->texture_id : 0U);
+        g_gl.ActiveTexture(GL_TEXTURE2);
+        glBindTexture(GL_TEXTURE_2D,
+            metallic_roughness_texture_data != NULL ? metallic_roughness_texture_data->texture_id : 0U);
+        g_gl.ActiveTexture(GL_TEXTURE3);
+        glBindTexture(GL_TEXTURE_2D,
+            emissive_texture_data != NULL ? emissive_texture_data->texture_id : 0U);
+        g_gl.ActiveTexture(GL_TEXTURE4);
+        glBindTexture(GL_TEXTURE_2D,
+            rendered ? state->shadow_depth_texture : 0U);
+        g_gl.ActiveTexture(GL_TEXTURE0);
         g_gl.BindVertexArray(mesh_data->vao);
         glDrawElements(
             mesh_data->primitive_mode,
@@ -1018,12 +1477,27 @@ henka_result henka_opengl_renderer_draw_scene(
             0);
     }
 
+    if (rendered)
+    {
+        g_gl.BindFramebuffer(GL_FRAMEBUFFER, 0U);
+        henka_opengl_present_hdr(renderer, state);
+    }
     g_gl.BindBuffer(GL_ARRAY_BUFFER, 0);
     g_gl.BindVertexArray(0);
     g_gl.ActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, 0);
+    g_gl.ActiveTexture(GL_TEXTURE1);
+    glBindTexture(GL_TEXTURE_2D, 0);
+    g_gl.ActiveTexture(GL_TEXTURE2);
+    glBindTexture(GL_TEXTURE_2D, 0);
+    g_gl.ActiveTexture(GL_TEXTURE3);
+    glBindTexture(GL_TEXTURE_2D, 0);
+    g_gl.ActiveTexture(GL_TEXTURE4);
+    glBindTexture(GL_TEXTURE_2D, 0);
+    g_gl.ActiveTexture(GL_TEXTURE0);
     g_gl.UseProgram(0);
     glDisable(GL_BLEND);
+    glDepthMask(GL_TRUE);
     glDisable(GL_SCISSOR_TEST);
     glEnable(GL_DEPTH_TEST);
     glEnable(GL_CULL_FACE);
@@ -1544,7 +2018,17 @@ henka_result henka_opengl_renderer_draw_tool_window_ui(
 
 void henka_opengl_renderer_resize_viewport(struct henka_renderer* renderer, int width, int height)
 {
-    (void)renderer;
+    henka_opengl_renderer_state* state;
+
+    if (renderer == NULL || renderer->backend_state == NULL || width <= 0 || height <= 0)
+    {
+        return;
+    }
+    state = (henka_opengl_renderer_state*)renderer->backend_state;
+    if (henka_opengl_create_hdr_target(state, width, height) != HENKA_SUCCESS)
+    {
+        HENKA_LOG_ERROR("HDR target resize failed; previous target remains active");
+    }
     glDisable(GL_SCISSOR_TEST);
     glViewport(0, 0, width, height);
 }
@@ -1576,6 +2060,9 @@ henka_result henka_opengl_renderer_create_mesh_from_data(
     int vertex_index;
     henka_mesh* mesh;
     henka_opengl_mesh_data* mesh_data;
+    henka_vec3* bitangents;
+    henka_vec3* tangents;
+    henka_vertex* upload_vertices;
     size_t vertex_bytes;
 
     if (renderer == NULL || vertices == NULL || indices == NULL || out_mesh == NULL ||
@@ -1617,11 +2104,98 @@ henka_result henka_opengl_renderer_create_mesh_from_data(
 
     *out_mesh = NULL;
 
+    upload_vertices = henka_malloc(vertex_bytes);
+    tangents = henka_calloc((size_t)vertex_count, sizeof(*tangents));
+    bitangents = henka_calloc((size_t)vertex_count, sizeof(*bitangents));
+    if (upload_vertices == NULL || tangents == NULL || bitangents == NULL)
+    {
+        henka_free(bitangents);
+        henka_free(tangents);
+        henka_free(upload_vertices);
+        return HENKA_ERROR_OUT_OF_MEMORY;
+    }
+    memcpy(upload_vertices, vertices, vertex_bytes);
+    for (vertex_index = 0; vertex_index < vertex_count; ++vertex_index)
+    {
+        henka_vec3 fallback_axis =
+            fabsf(vertices[vertex_index].normal.y) < 0.9f ?
+            (henka_vec3){0.0f, 1.0f, 0.0f} :
+            (henka_vec3){1.0f, 0.0f, 0.0f};
+        tangents[vertex_index] = henka_vec3_cross(
+            vertices[vertex_index].normal,
+            fallback_axis);
+    }
+    if (primitive == HENKA_MESH_PRIMITIVE_TRIANGLES)
+    {
+        for (index = 0; index < index_count; index += 3)
+        {
+            unsigned int i0 = indices[index + 0U];
+            unsigned int i1 = indices[index + 1U];
+            unsigned int i2 = indices[index + 2U];
+            henka_vec3 edge1 = henka_vec3_subtract(
+                vertices[i1].position, vertices[i0].position);
+            henka_vec3 edge2 = henka_vec3_subtract(
+                vertices[i2].position, vertices[i0].position);
+            float du1 = vertices[i1].uv.x - vertices[i0].uv.x;
+            float dv1 = vertices[i1].uv.y - vertices[i0].uv.y;
+            float du2 = vertices[i2].uv.x - vertices[i0].uv.x;
+            float dv2 = vertices[i2].uv.y - vertices[i0].uv.y;
+            float denominator = du1 * dv2 - du2 * dv1;
+
+            if (isfinite(denominator) && fabsf(denominator) > 0.000001f)
+            {
+                float inverse = 1.0f / denominator;
+                henka_vec3 tangent = henka_vec3_scale(
+                    henka_vec3_subtract(
+                        henka_vec3_scale(edge1, dv2),
+                        henka_vec3_scale(edge2, dv1)),
+                    inverse);
+                henka_vec3 bitangent = henka_vec3_scale(
+                    henka_vec3_subtract(
+                        henka_vec3_scale(edge2, du1),
+                        henka_vec3_scale(edge1, du2)),
+                    inverse);
+                tangents[i0] = henka_vec3_add(tangents[i0], tangent);
+                tangents[i1] = henka_vec3_add(tangents[i1], tangent);
+                tangents[i2] = henka_vec3_add(tangents[i2], tangent);
+                bitangents[i0] = henka_vec3_add(bitangents[i0], bitangent);
+                bitangents[i1] = henka_vec3_add(bitangents[i1], bitangent);
+                bitangents[i2] = henka_vec3_add(bitangents[i2], bitangent);
+            }
+        }
+    }
+    for (vertex_index = 0; vertex_index < vertex_count; ++vertex_index)
+    {
+        henka_vec3 normal = henka_vec3_normalize(vertices[vertex_index].normal);
+        henka_vec3 tangent = tangents[vertex_index];
+        float handedness;
+
+        tangent = henka_vec3_subtract(
+            tangent,
+            henka_vec3_scale(normal, henka_vec3_dot(normal, tangent)));
+        if (!isfinite(henka_vec3_length(tangent)) || henka_vec3_length(tangent) <= 0.000001f)
+        {
+            henka_vec3 fallback_axis = fabsf(normal.y) < 0.9f ?
+                (henka_vec3){0.0f, 1.0f, 0.0f} :
+                (henka_vec3){1.0f, 0.0f, 0.0f};
+            tangent = henka_vec3_cross(normal, fallback_axis);
+        }
+        tangent = henka_vec3_normalize(tangent);
+        handedness = henka_vec3_dot(
+            henka_vec3_cross(normal, tangent),
+            bitangents[vertex_index]) < 0.0f ? -1.0f : 1.0f;
+        upload_vertices[vertex_index].tangent =
+            (henka_vec4){tangent.x, tangent.y, tangent.z, handedness};
+    }
+
     mesh = henka_calloc(1U, sizeof(*mesh));
     mesh_data = henka_calloc(1U, sizeof(*mesh_data));
     if (mesh == NULL || mesh_data == NULL)
     {
         henka_free(mesh_data);
+        henka_free(bitangents);
+        henka_free(tangents);
+        henka_free(upload_vertices);
         henka_free(mesh);
         return HENKA_ERROR_OUT_OF_MEMORY;
     }
@@ -1632,7 +2206,7 @@ henka_result henka_opengl_renderer_create_mesh_from_data(
 
     g_gl.BindVertexArray(mesh_data->vao);
     g_gl.BindBuffer(GL_ARRAY_BUFFER, mesh_data->vertex_buffer);
-    g_gl.BufferData(GL_ARRAY_BUFFER, (GLsizeiptr)vertex_bytes, vertices, GL_STATIC_DRAW);
+    g_gl.BufferData(GL_ARRAY_BUFFER, (GLsizeiptr)vertex_bytes, upload_vertices, GL_STATIC_DRAW);
     g_gl.BindBuffer(GL_ELEMENT_ARRAY_BUFFER, mesh_data->index_buffer);
     g_gl.BufferData(GL_ELEMENT_ARRAY_BUFFER, (GLsizeiptr)index_bytes, indices, GL_STATIC_DRAW);
 
@@ -1642,7 +2216,13 @@ henka_result henka_opengl_renderer_create_mesh_from_data(
     g_gl.VertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(henka_vertex), (const void*)offsetof(henka_vertex, normal));
     g_gl.EnableVertexAttribArray(2);
     g_gl.VertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, sizeof(henka_vertex), (const void*)offsetof(henka_vertex, uv));
+    g_gl.EnableVertexAttribArray(3);
+    g_gl.VertexAttribPointer(3, 4, GL_FLOAT, GL_FALSE, sizeof(henka_vertex), (const void*)offsetof(henka_vertex, tangent));
     g_gl.BindVertexArray(0);
+
+    henka_free(bitangents);
+    henka_free(tangents);
+    henka_free(upload_vertices);
 
     mesh_data->primitive_mode = henka_mesh_primitive_to_gl(primitive);
     mesh_data->index_count = (GLsizei)index_count;
@@ -1905,12 +2485,14 @@ static henka_result henka_opengl_collect_texture_errors(
 
 static henka_result henka_opengl_restore_texture_binding(
     GLint previous_active_texture,
-    GLint previous_texture_binding)
+    GLint previous_texture_binding,
+    GLint previous_unpack_alignment)
 {
     g_gl.ActiveTexture(GL_TEXTURE0);
     glBindTexture(
         GL_TEXTURE_2D,
         (GLuint)previous_texture_binding);
+    glPixelStorei(GL_UNPACK_ALIGNMENT, previous_unpack_alignment);
     g_gl.ActiveTexture((GLenum)previous_active_texture);
     return henka_opengl_collect_texture_errors(
         "texture binding restoration");
@@ -1923,6 +2505,25 @@ henka_result henka_opengl_renderer_create_texture_from_rgba8(
     const unsigned char* pixels,
     struct henka_texture** out_texture)
 {
+    henka_texture_descriptor descriptor = henka_texture_descriptor_default_color();
+
+    return henka_opengl_renderer_create_texture_from_rgba8_with_descriptor(
+        renderer,
+        width,
+        height,
+        pixels,
+        &descriptor,
+        out_texture);
+}
+
+henka_result henka_opengl_renderer_create_texture_from_rgba8_with_descriptor(
+    struct henka_renderer* renderer,
+    int width,
+    int height,
+    const unsigned char* pixels,
+    const henka_texture_descriptor* descriptor,
+    struct henka_texture** out_texture)
+{
     henka_opengl_texture_context_guard context_guard;
     henka_result context_result;
     size_t decoded_bytes;
@@ -1930,6 +2531,7 @@ henka_result henka_opengl_renderer_create_texture_from_rgba8(
     henka_result operation_result;
     GLint previous_active_texture;
     GLint previous_texture_binding;
+    GLint previous_unpack_alignment;
     henka_result restore_result;
     henka_texture* texture;
     henka_opengl_texture_data* texture_data;
@@ -1942,7 +2544,8 @@ henka_result henka_opengl_renderer_create_texture_from_rgba8(
     if (renderer == NULL ||
         renderer->backend_state == NULL ||
         pixels == NULL ||
-        out_texture == NULL ||
+        out_texture == NULL || descriptor == NULL ||
+        henka_texture_descriptor_validate(descriptor) != HENKA_SUCCESS ||
         !henka_checked_rgba8_size(
             width,
             height,
@@ -1965,6 +2568,7 @@ henka_result henka_opengl_renderer_create_texture_from_rgba8(
         "texture creation");
     previous_active_texture = GL_TEXTURE0;
     previous_texture_binding = 0;
+    previous_unpack_alignment = 4;
     glGetIntegerv(
         GL_ACTIVE_TEXTURE,
         &previous_active_texture);
@@ -1972,13 +2576,17 @@ henka_result henka_opengl_renderer_create_texture_from_rgba8(
     glGetIntegerv(
         GL_TEXTURE_BINDING_2D,
         &previous_texture_binding);
+    glGetIntegerv(
+        GL_UNPACK_ALIGNMENT,
+        &previous_unpack_alignment);
     operation_result = henka_opengl_collect_texture_errors(
         "texture state capture");
     if (operation_result != HENKA_SUCCESS)
     {
         (void)henka_opengl_restore_texture_binding(
             previous_active_texture,
-            previous_texture_binding);
+            previous_texture_binding,
+            previous_unpack_alignment);
         context_result = henka_opengl_end_texture_context(
             state,
             &context_guard,
@@ -1995,7 +2603,8 @@ henka_result henka_opengl_renderer_create_texture_from_rgba8(
         henka_free(texture);
         (void)henka_opengl_restore_texture_binding(
             previous_active_texture,
-            previous_texture_binding);
+            previous_texture_binding,
+            previous_unpack_alignment);
         context_result = henka_opengl_end_texture_context(
             state,
             &context_guard,
@@ -2013,30 +2622,62 @@ henka_result henka_opengl_renderer_create_texture_from_rgba8(
         glTexParameteri(
             GL_TEXTURE_2D,
             GL_TEXTURE_MIN_FILTER,
-            GL_LINEAR_MIPMAP_LINEAR);
+            descriptor->min_filter == HENKA_TEXTURE_FILTER_NEAREST ?
+                GL_NEAREST :
+                descriptor->min_filter == HENKA_TEXTURE_FILTER_LINEAR ?
+                GL_LINEAR : GL_LINEAR_MIPMAP_LINEAR);
         glTexParameteri(
             GL_TEXTURE_2D,
             GL_TEXTURE_MAG_FILTER,
-            GL_LINEAR);
+            descriptor->mag_filter == HENKA_TEXTURE_FILTER_NEAREST ?
+                GL_NEAREST : GL_LINEAR);
         glTexParameteri(
             GL_TEXTURE_2D,
             GL_TEXTURE_WRAP_S,
-            GL_REPEAT);
+            descriptor->wrap_u == HENKA_TEXTURE_WRAP_CLAMP_TO_EDGE ?
+                GL_CLAMP_TO_EDGE :
+                descriptor->wrap_u == HENKA_TEXTURE_WRAP_MIRRORED_REPEAT ?
+                GL_MIRRORED_REPEAT : GL_REPEAT);
         glTexParameteri(
             GL_TEXTURE_2D,
             GL_TEXTURE_WRAP_T,
-            GL_REPEAT);
+            descriptor->wrap_v == HENKA_TEXTURE_WRAP_CLAMP_TO_EDGE ?
+                GL_CLAMP_TO_EDGE :
+                descriptor->wrap_v == HENKA_TEXTURE_WRAP_MIRRORED_REPEAT ?
+                GL_MIRRORED_REPEAT : GL_REPEAT);
+        if (descriptor->anisotropy > 0.0f &&
+            glGetString(GL_EXTENSIONS) != NULL &&
+            strstr((const char*)glGetString(GL_EXTENSIONS),
+                "GL_EXT_texture_filter_anisotropic") != NULL)
+        {
+            GLfloat maximum_anisotropy = 1.0f;
+            glGetFloatv(GL_MAX_TEXTURE_MAX_ANISOTROPY_EXT, &maximum_anisotropy);
+            if (isfinite(maximum_anisotropy) && maximum_anisotropy >= 1.0f)
+            {
+                GLfloat requested_anisotropy = descriptor->anisotropy < maximum_anisotropy ?
+                    descriptor->anisotropy : maximum_anisotropy;
+                if (requested_anisotropy >= 1.0f)
+                {
+                    glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MAX_ANISOTROPY_EXT, requested_anisotropy);
+                }
+            }
+        }
+        glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
         glTexImage2D(
             GL_TEXTURE_2D,
             0,
-            GL_RGBA8,
+            descriptor->color_space == HENKA_TEXTURE_COLOR_SPACE_SRGB ?
+                GL_SRGB8_ALPHA8 : GL_RGBA8,
             width,
             height,
             0,
             GL_RGBA,
             GL_UNSIGNED_BYTE,
             pixels);
-        g_gl.GenerateMipmap(GL_TEXTURE_2D);
+        if (descriptor->generate_mipmaps)
+        {
+            g_gl.GenerateMipmap(GL_TEXTURE_2D);
+        }
     }
 
     operation_result = henka_opengl_collect_texture_errors(
@@ -2063,7 +2704,8 @@ henka_result henka_opengl_renderer_create_texture_from_rgba8(
 
     restore_result = henka_opengl_restore_texture_binding(
         previous_active_texture,
-        previous_texture_binding);
+        previous_texture_binding,
+        previous_unpack_alignment);
     if (operation_result == HENKA_SUCCESS &&
         restore_result != HENKA_SUCCESS)
     {
@@ -2115,6 +2757,11 @@ henka_result henka_opengl_renderer_create_texture_from_rgba8(
     texture->owns_backend = true;
     texture->width = width;
     texture->height = height;
+    texture->descriptor = *descriptor;
+    texture->source_class = HENKA_TEXTURE_SOURCE_CLASS_LDR_8_BIT;
+    texture->alpha_mode = HENKA_TEXTURE_ALPHA_OPAQUE;
+    texture->last_failure = HENKA_TEXTURE_FAILURE_NONE;
+    texture->content_revision = 1U;
 
     *out_texture = texture;
     return HENKA_SUCCESS;

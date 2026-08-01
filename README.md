@@ -39,7 +39,8 @@ Henka Engine is still early, but the sandbox now renders a visible 3D scene with
 - Viewport interaction test helpers for reducing manual QA around selection, gizmo hit testing, and transform changes
 - Asset manager foundation with rooted/UNC/device/drive/URI path rejection, platform-aware canonical cache identities, preserved source spelling, checked texture uploads, path-specific stable fallback identities, deterministic hard-failure propagation, and transactional texture and OBJ fallback retries
 - Early OBJ model loading with bounded source and output sizes, finite-number validation, negative indices, n-gon fan triangulation, degenerate-face rejection, and explicit failed-mesh retry support
-- Fallback white and error textures
+- Descriptor-aware RGBA8 textures with explicit sRGB/linear, sampler, wrap, mip, flip, usage, alpha, source-class, and content-revision metadata
+- Bounded single-read texture decoding with truthful rejection of HDR and 16-bit sources, plus path-specific white/error fallback aliases
 - Shader-based rendering of built-in primitives
 - Sandbox window titled `Henka Engine Sandbox 3D`
 - Ground plane, cubes, debug grid, a loaded OBJ marker, textured materials, and visible fallback behavior for missing texture and model assets
@@ -152,7 +153,7 @@ The packaged folder also includes `PACKAGE_INFO.txt` so you can tell when the pa
 
 - Shader source files are limited to 1 MiB each and must be read completely.
 - OBJ sources are limited to 16 MiB, individual lines to 4,096 bytes, and parsed arrays to fixed safe maxima.
-- Texture dimensions are limited to 16,384 pixels per axis and decoded RGBA8 data to 256 MiB.
+- Texture sources are limited to 64 MiB encoded and 16,384 pixels per axis; decoded RGBA8 data is limited to 256 MiB.
 - Mesh uploads validate counts, byte sizes, primitive types, and every index before reaching OpenGL.
 - Shared checked-arithmetic helpers protect capacity growth, size multiplication, and narrowing conversions.
 - Asset caches, scene entities, action default transforms, physics contacts and events, and related runtime arrays use bounded checked growth.
@@ -164,7 +165,7 @@ The packaged folder also includes `PACKAGE_INFO.txt` so you can tell when the pa
 - Scene names, tags, material names, and interaction prompts are copied into bounded scene-owned storage.
 - Asset metadata source and display strings use asset-manager-owned storage and do not depend on caller buffers remaining alive.
 - Local bounds reject non-finite centers, non-finite extents, and negative extents.
-- Materials reject invalid types, non-finite base colors, and textured configurations without a texture.
+- Materials reject invalid types, non-finite or out-of-range PBR-lite values, and textured configurations without a texture.
 - Interaction ranges reject negative and non-finite values, and eligibility checks reject non-finite observer positions.
 - Camera constructors sanitize invalid projection inputs, camera projection helpers fail closed on non-finite state, and scene camera assignment accepts only valid camera state.
 - Primitive actions validate bounded names and primitive types before dry-run success, then roll back partially created entities if any setup step fails.
@@ -224,7 +225,7 @@ See [Platform Support](docs/platform-support.md) and [Package Provenance](docs/p
 - `Left Ctrl` / `Left Shift`: stepped or fine transform adjustment
 - `Escape`: when no transform is active, close the UI first, then release the mouse, then exit
 
-The Scene View header provides Wireframe, Solid, Material Preview, and Rendered shading. Solid and Material Preview use predictable editor lighting; Rendered uses the scene material and lighting policy. The legacy `F1` wireframe control remains compatible and restores the last non-wireframe mode when switched off. Shading mode is saved independently from workspace geometry, so Reset Layout does not discard it.
+The Scene View header provides Wireframe, Solid, Material Preview, and Rendered shading. Solid uses neutral filled geometry. Material Preview samples material color under stable editor lighting. Rendered uses the scene directional light and depth shadow map into a linear HDR target, then applies exposure and an ACES-fitted tone map for presentation. Exposure is independently persisted and can be adjusted from Settings. The current forward transparency path supports straight-alpha blending in entity order; it is not order-independent transparency. The legacy `F1` wireframe control remains compatible and restores the last non-wireframe mode when switched off. Shading mode is saved independently from workspace geometry, so Reset Layout does not discard it.
 
 The sandbox panels open automatically on startup and reset-style launches so Controls and `Physics QA` are discoverable without knowing `F4` first. Starts have no selected scene object until the user selects one. Press `F4` to hide or show panels, and press `F5` to cycle between `View`, `Inspect`, and `Full Tools`. UI buttons, toggles, tabs, and selectable rows activate on mouse release inside the active control so press, drag-away, and release behavior is safer. Active control IDs are copied into bounded UI-owned storage instead of retaining caller stack pointers, and non-finite UI geometry is rejected before draw-list insertion. `DRAG` marks a live panel header. Release on a valid left or right dock outline to redock there, release away from the outlines to keep the panel as an in-app floating panel, or use `Pop` on a floating panel to move it into a separate native tool window. Detached workspace panels now render their matching panel content in native tool windows and route per-window mouse input for release-confirm controls. When two panels share a side, the dock stacks them vertically instead of letting one cover the other. Closing a detached tool window returns its panel to the last valid dock, and `Reset Layout` restores the default workspace. Renderer context recovery is hardened around tool-window drawing. Select a scene object, then use `M` or `G`, `R`, and `S` to start move, rotate, and scale transforms. Active transforms support `X`, `Y`, or `Z` constraints, confirm, cancel, stepped adjustment, and fine adjustment through the action-based local control profile. Negative scale is preserved as an intentional mirror transform, while zero and near-zero scale are rejected to avoid collapsed objects. Locked objects, including the default Ground, stay selectable for inspection without a yellow transform highlight or gizmo and require an explicit unlock action before movement. Selection, visibility, lock, and tool changes clear active transform-session ownership. UI draw construction is valid only between a matched begin and end call; failed composite controls roll back their draw commands and do not consume release events or mutate toggle state. Open `Physics QA` to inspect the opt-in rigid-body demo. Manual desktop QA is still required before physics feel, native window behavior, panel drag comfort, and transform workflow feel can be called fully complete.
 

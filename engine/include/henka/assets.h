@@ -5,6 +5,7 @@
 #include <stddef.h>
 
 #include <henka/result.h>
+#include <henka/texture.h>
 
 typedef struct henka_asset_manager henka_asset_manager;
 typedef struct henka_engine henka_engine;
@@ -30,6 +31,8 @@ typedef struct henka_asset_metadata
     bool reload_supported;
     const char* summary;
     const char* error_summary;
+    bool has_texture_descriptor;
+    henka_texture_descriptor texture_descriptor;
 } henka_asset_metadata;
 
 henka_asset_manager* henka_engine_get_asset_manager(henka_engine* engine);
@@ -53,6 +56,11 @@ henka_result henka_assets_load_shader(
  * normalized source spelling first used to create the cache entry.
  */
 henka_result henka_assets_load_texture(henka_asset_manager* manager, const char* path, henka_texture** out_texture);
+henka_result henka_assets_load_texture_with_descriptor(
+    henka_asset_manager* manager,
+    const char* path,
+    const henka_texture_descriptor* descriptor,
+    henka_texture** out_texture);
 henka_result henka_assets_load_obj_mesh(henka_asset_manager* manager, const char* path, henka_mesh** out_mesh);
 
 /*

@@ -154,7 +154,9 @@ The renderer layer exposes engine-owned drawing functionality while keeping Open
 - viewport resize
 - shader compilation and linking
 - mesh upload
-- texture upload and binding
+- descriptor-aware texture upload and binding, including sRGB versus linear internal formats, sampler policy, mip selection, and upload-state restoration
+- tangent-space vertex attributes generated during mesh upload with finite fallbacks for degenerate UVs
+- the current PBR-lite map bindings for base color, normal, metallic-roughness, and emissive data
 - depth testing
 - backface culling
 - wireframe toggle

@@ -1113,6 +1113,21 @@ henka_viewport_shading_mode henka_engine_get_viewport_shading_mode(
     return henka_renderer_get_viewport_shading_mode(
         engine->renderer);
 }
+
+henka_result henka_engine_set_viewport_exposure(henka_engine* engine, float exposure_stops)
+{
+    if (engine == NULL || engine->renderer == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    return henka_renderer_set_viewport_exposure(engine->renderer, exposure_stops);
+}
+
+float henka_engine_get_viewport_exposure(const henka_engine* engine)
+{
+    return engine == NULL || engine->renderer == NULL ?
+        0.0f : henka_renderer_get_viewport_exposure(engine->renderer);
+}
 henka_result henka_engine_set_wireframe(
     henka_engine* engine,
     bool enabled)
@@ -1343,6 +1358,12 @@ henka_result henka_engine_get_diagnostics(
         engine->renderer->framebuffer_height : 0;
     out_diagnostics->viewport_shading_mode =
         henka_engine_get_viewport_shading_mode(engine);
+    out_diagnostics->viewport_exposure =
+        henka_engine_get_viewport_exposure(engine);
+    out_diagnostics->rendered_hdr_ready =
+        henka_renderer_is_hdr_ready(engine->renderer);
+    out_diagnostics->rendered_shadow_ready =
+        henka_renderer_is_shadow_ready(engine->renderer);
     out_diagnostics->wireframe_enabled =
         out_diagnostics->viewport_shading_mode ==
         HENKA_VIEWPORT_SHADING_WIREFRAME;

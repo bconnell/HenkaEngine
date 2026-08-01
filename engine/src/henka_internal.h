@@ -32,6 +32,7 @@ typedef struct henka_vertex
     henka_vec3 position;
     henka_vec3 normal;
     henka_vec2 uv;
+    henka_vec4 tangent;
 } henka_vertex;
 
 typedef struct henka_input_state
@@ -125,6 +126,7 @@ typedef struct henka_asset_texture_entry
     char* display_name;
     henka_texture* texture;
     bool owns_texture;
+    henka_texture_descriptor descriptor;
     henka_asset_metadata metadata;
 } henka_asset_texture_entry;
 
@@ -152,6 +154,10 @@ struct henka_asset_manager
     size_t mesh_capacity;
     henka_texture* white_texture;
     henka_texture* error_texture;
+    henka_texture* normal_texture;
+    henka_texture* metallic_roughness_texture;
+    henka_texture* occlusion_texture;
+    henka_texture* emissive_texture;
     henka_mesh* fallback_mesh;
 };
 
@@ -181,6 +187,7 @@ struct henka_renderer
     henka_viewport scene_viewport;
     henka_scene_view_render_desc scene_view;
     henka_viewport_shading_mode last_non_wireframe_mode;
+    float exposure;
 };
 
 struct henka_mesh
@@ -208,6 +215,14 @@ struct henka_texture
     void* backend_data;
     int width;
     int height;
+    int original_channel_count;
+    size_t source_byte_size;
+    henka_texture_descriptor descriptor;
+    henka_texture_alpha_mode alpha_mode;
+    henka_texture_source_class source_class;
+    henka_texture_failure_category last_failure;
+    bool fallback_alias;
+    uint64_t content_revision;
 };
 
 typedef enum henka_engine_run_state
@@ -294,6 +309,10 @@ void henka_renderer_resize_viewport(struct henka_renderer* renderer, int width, 
 void henka_renderer_set_scene_viewport(struct henka_renderer* renderer, henka_viewport viewport);
 henka_viewport henka_renderer_get_scene_viewport(const struct henka_renderer* renderer);
 henka_result henka_renderer_set_vsync(struct henka_renderer* renderer, bool enabled);
+henka_result henka_renderer_set_viewport_exposure(struct henka_renderer* renderer, float exposure_stops);
+float henka_renderer_get_viewport_exposure(const struct henka_renderer* renderer);
+bool henka_renderer_is_hdr_ready(const struct henka_renderer* renderer);
+bool henka_renderer_is_shadow_ready(const struct henka_renderer* renderer);
 henka_result henka_viewport_render_policy_resolve(
     henka_viewport_shading_mode mode,
     henka_viewport_render_policy* out_policy);
@@ -324,6 +343,13 @@ henka_result henka_renderer_create_texture_from_rgba8(
     int height,
     const unsigned char* pixels,
     struct henka_texture** out_texture);
+henka_result henka_renderer_create_texture_from_rgba8_with_descriptor(
+    struct henka_renderer* renderer,
+    int width,
+    int height,
+    const unsigned char* pixels,
+    const henka_texture_descriptor* descriptor,
+    struct henka_texture** out_texture);
 void henka_renderer_destroy_texture(struct henka_texture* texture);
 
 henka_result henka_opengl_renderer_create(struct henka_renderer* renderer, struct henka_platform* platform, bool enable_vsync);
@@ -342,6 +368,8 @@ henka_result henka_opengl_renderer_draw_tool_window_ui(
     const struct henka_ui_context* ui_context);
 void henka_opengl_renderer_resize_viewport(struct henka_renderer* renderer, int width, int height);
 henka_result henka_opengl_renderer_set_vsync(struct henka_renderer* renderer, bool enabled);
+bool henka_opengl_renderer_is_hdr_ready(const struct henka_renderer* renderer);
+bool henka_opengl_renderer_is_shadow_ready(const struct henka_renderer* renderer);
 henka_result henka_opengl_renderer_set_wireframe(struct henka_renderer* renderer, bool enabled);
 henka_result henka_opengl_renderer_create_mesh_from_data(
     struct henka_renderer* renderer,
@@ -363,6 +391,13 @@ henka_result henka_opengl_renderer_create_texture_from_rgba8(
     int width,
     int height,
     const unsigned char* pixels,
+    struct henka_texture** out_texture);
+henka_result henka_opengl_renderer_create_texture_from_rgba8_with_descriptor(
+    struct henka_renderer* renderer,
+    int width,
+    int height,
+    const unsigned char* pixels,
+    const henka_texture_descriptor* descriptor,
     struct henka_texture** out_texture);
 void henka_opengl_renderer_destroy_texture(struct henka_texture* texture);
 

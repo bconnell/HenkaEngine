@@ -30,16 +30,37 @@ typedef enum henka_material_type
     HENKA_MATERIAL_TYPE_PROCEDURAL_RESERVED
 } henka_material_type;
 
+typedef enum henka_material_alpha_mode
+{
+    HENKA_MATERIAL_ALPHA_OPAQUE = 0,
+    HENKA_MATERIAL_ALPHA_MASKED,
+    HENKA_MATERIAL_ALPHA_BLENDED
+} henka_material_alpha_mode;
+
 typedef struct henka_material
 {
     const char* name;
     henka_material_type type;
     henka_shader* shader;
     henka_texture* base_color_texture;
+    henka_texture* normal_texture;
+    henka_texture* metallic_roughness_texture;
+    henka_texture* occlusion_texture;
+    henka_texture* emissive_texture;
     henka_vec4 base_color;
+    henka_vec3 emissive_color;
+    float metallic;
+    float roughness;
+    float normal_scale;
+    float emissive_strength;
+    float alpha_cutoff;
     bool use_texture;
     bool use_lighting;
     bool depth_test;
+    henka_material_alpha_mode alpha_mode;
+    bool double_sided;
+    bool cast_shadows;
+    bool receive_shadows;
 } henka_material;
 
 typedef struct henka_scene_object_info

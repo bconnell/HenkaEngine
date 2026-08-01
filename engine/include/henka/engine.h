@@ -84,6 +84,9 @@ typedef struct henka_engine_diagnostics
     int framebuffer_width;
     int framebuffer_height;
     henka_viewport_shading_mode viewport_shading_mode;
+    float viewport_exposure;
+    bool rendered_hdr_ready;
+    bool rendered_shadow_ready;
     bool wireframe_enabled;
     bool mouse_captured;
     bool ui_visible;
@@ -162,6 +165,8 @@ henka_result henka_engine_set_viewport_shading_mode(
     henka_viewport_shading_mode mode);
 henka_viewport_shading_mode henka_engine_get_viewport_shading_mode(
     const henka_engine* engine);
+henka_result henka_engine_set_viewport_exposure(henka_engine* engine, float exposure_stops);
+float henka_engine_get_viewport_exposure(const henka_engine* engine);
 henka_package_mode henka_engine_get_package_mode(const henka_engine* engine);
 const char* henka_engine_get_package_mode_label(henka_package_mode package_mode);
 henka_result henka_engine_get_diagnostics(const henka_engine* engine, henka_engine_diagnostics* out_diagnostics);

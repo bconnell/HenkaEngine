@@ -347,6 +347,8 @@ static const char* g_setting_key_grid_visible = "grid_visible";
 static const char* g_setting_key_wireframe_enabled = "wireframe_enabled";
 static const char* g_setting_key_viewport_shading_mode =
     "ui.scene_view.shading_mode";
+static const char* g_setting_key_viewport_exposure =
+    "ui.scene_view.exposure_stops";
 static const char* g_setting_key_mouse_sensitivity = "mouse_sensitivity";
 static const char* g_setting_key_camera_speed = "camera_movement_speed";
 static const char* g_setting_key_camera_position_x = "camera_position_x";
@@ -3487,6 +3489,7 @@ static void sandbox3d_apply_loaded_settings(henka_engine* engine, sandbox3d_stat
     float mouse_sensitivity;
     float movement_speed;
     float orthographic_height;
+    float exposure;
     henka_camera_preset camera_preset;
     henka_result result;
     henka_viewport_shading_mode shading_mode;
@@ -3499,6 +3502,7 @@ static void sandbox3d_apply_loaded_settings(henka_engine* engine, sandbox3d_stat
     grid_visible = henka_settings_get_bool(state->settings, g_setting_key_grid_visible, true);
     shading_mode =
         sandbox3d_get_saved_viewport_shading_mode(state);
+    exposure = henka_settings_get_float(state->settings, g_setting_key_viewport_exposure, 0.0f);
     movement_speed = henka_settings_get_float(state->settings, g_setting_key_camera_speed, g_default_camera_movement_speed);
     mouse_sensitivity = henka_settings_get_float(
         state->settings,
@@ -3588,6 +3592,11 @@ static void sandbox3d_apply_loaded_settings(henka_engine* engine, sandbox3d_stat
         HENKA_LOG_WARN(
             "Viewport shading mode could not be restored from sandbox settings.");
     }
+    if (henka_engine_set_viewport_exposure(engine, exposure) != HENKA_SUCCESS)
+    {
+        HENKA_LOG_WARN("Unsafe viewport exposure was replaced with the default value.");
+        (void)henka_engine_set_viewport_exposure(engine, 0.0f);
+    }
 
     layout_mode_value = henka_settings_get_string(state->settings, g_setting_key_layout_mode, "view");
     state->workspace.layout_mode = sandbox3d_parse_layout_mode(layout_mode_value);
@@ -3615,6 +3624,7 @@ static henka_result sandbox3d_save_settings(henka_engine* engine, sandbox3d_stat
         henka_viewport_shading_mode_get_setting_value(
             henka_engine_get_viewport_shading_mode(engine)));
     henka_settings_set_bool(state->settings, g_setting_key_wireframe_enabled, henka_engine_is_wireframe_enabled(engine));
+    henka_settings_set_float(state->settings, g_setting_key_viewport_exposure, henka_engine_get_viewport_exposure(engine));
     henka_settings_set_float(state->settings, g_setting_key_mouse_sensitivity, sandbox3d_get_mouse_sensitivity(state));
     henka_settings_set_float(state->settings, g_setting_key_camera_speed, state->camera.movement_speed);
     henka_settings_set_float(state->settings, g_setting_key_camera_position_x, state->camera.position.x);
@@ -7064,22 +7074,32 @@ static void sandbox3d_draw_utility_panel(
                 "Shading",
                 henka_viewport_shading_mode_get_label(
                     henka_engine_get_viewport_shading_mode(engine)));
+            snprintf(row_value, sizeof(row_value), "%.2f stops", henka_engine_get_viewport_exposure(engine));
+            sandbox3d_draw_value_row(state->ui, x_left, y_start + 174.0f, panel_bounds.width - 28.0f, "Exposure", row_value);
+            if (henka_ui_button(state->ui, "utility_exposure_less", (henka_ui_rect){x_left, y_start + 204.0f, 88.0f, 24.0f}, "Exposure-"))
+            {
+                (void)henka_engine_set_viewport_exposure(engine, henka_engine_get_viewport_exposure(engine) - 0.5f);
+            }
+            if (henka_ui_button(state->ui, "utility_exposure_more", (henka_ui_rect){x_left + 96.0f, y_start + 204.0f, 88.0f, 24.0f}, "Exposure+"))
+            {
+                (void)henka_engine_set_viewport_exposure(engine, henka_engine_get_viewport_exposure(engine) + 0.5f);
+            }
             snprintf(row_value, sizeof(row_value), "%.4f  /  %.1f", sandbox3d_get_mouse_sensitivity(state), state->camera.movement_speed);
-            sandbox3d_draw_value_row(state->ui, x_left, y_start + 122.0f, panel_bounds.width - 28.0f, "Sense/Speed", row_value);
-            sandbox3d_draw_value_row(state->ui, x_left, y_start + 148.0f, panel_bounds.width - 28.0f, "Controls", sandbox3d_editor_controls_get_active_profile_name(&state->editor_controls));
-            if (henka_ui_button(state->ui, "utility_mouse_less", (henka_ui_rect){x_left, y_start + 178.0f, 60.0f, 24.0f}, "Sense-"))
+            sandbox3d_draw_value_row(state->ui, x_left, y_start + 234.0f, panel_bounds.width - 28.0f, "Sense/Speed", row_value);
+            sandbox3d_draw_value_row(state->ui, x_left, y_start + 260.0f, panel_bounds.width - 28.0f, "Controls", sandbox3d_editor_controls_get_active_profile_name(&state->editor_controls));
+            if (henka_ui_button(state->ui, "utility_mouse_less", (henka_ui_rect){x_left, y_start + 290.0f, 60.0f, 24.0f}, "Sense-"))
             {
                 sandbox3d_adjust_mouse_sensitivity(state, -0.0005f);
             }
-            if (henka_ui_button(state->ui, "utility_mouse_more", (henka_ui_rect){x_left + 68.0f, y_start + 178.0f, 60.0f, 24.0f}, "Sense+"))
+            if (henka_ui_button(state->ui, "utility_mouse_more", (henka_ui_rect){x_left + 68.0f, y_start + 290.0f, 60.0f, 24.0f}, "Sense+"))
             {
                 sandbox3d_adjust_mouse_sensitivity(state, 0.0005f);
             }
-            if (henka_ui_button(state->ui, "utility_speed_less", (henka_ui_rect){x_left + 146.0f, y_start + 178.0f, 60.0f, 24.0f}, "Speed-"))
+            if (henka_ui_button(state->ui, "utility_speed_less", (henka_ui_rect){x_left + 146.0f, y_start + 290.0f, 60.0f, 24.0f}, "Speed-"))
             {
                 sandbox3d_adjust_camera_speed(state, -0.5f);
             }
-            if (henka_ui_button(state->ui, "utility_speed_more", (henka_ui_rect){x_left + 214.0f, y_start + 178.0f, 60.0f, 24.0f}, "Speed+"))
+            if (henka_ui_button(state->ui, "utility_speed_more", (henka_ui_rect){x_left + 214.0f, y_start + 290.0f, 60.0f, 24.0f}, "Speed+"))
             {
                 sandbox3d_adjust_camera_speed(state, 0.5f);
             }
@@ -7095,19 +7115,23 @@ static void sandbox3d_draw_utility_panel(
             descriptor = sandbox3d_get_selected_descriptor(state);
             sandbox3d_draw_section_heading(state->ui, x_left, y_start, "Diagnostics");
             sandbox3d_draw_value_row(state->ui, x_left, y_start + 18.0f, panel_bounds.width - 28.0f, "Frame", fps_text + 7);
-            sandbox3d_draw_value_row(state->ui, x_left, y_start + 44.0f, panel_bounds.width - 28.0f, "Layout", sandbox3d_get_layout_mode_label(state->workspace.layout_mode));
-            sandbox3d_draw_value_row(state->ui, x_left, y_start + 70.0f, panel_bounds.width - 28.0f, "Tool", sandbox3d_viewport_tool_mode_to_string(state->viewport_tool));
-            sandbox3d_draw_value_row(state->ui, x_left, y_start + 96.0f, panel_bounds.width - 28.0f, "Gizmo", sandbox3d_get_gizmo_mode_label(state->gizmo.mode));
-            sandbox3d_draw_value_row(state->ui, x_left, y_start + 122.0f, panel_bounds.width - 28.0f, "Capture", capture_text + 9);
-            sandbox3d_draw_value_row(state->ui, x_left, y_start + 148.0f, panel_bounds.width - 28.0f, "UI Mouse", state->diagnostics.ui_wants_mouse ? "Yes" : "No");
-            sandbox3d_draw_value_row(state->ui, x_left, y_start + 174.0f, panel_bounds.width - 28.0f, "In View", state->diagnostics.cursor_in_viewport ? "Yes" : "No");
+            snprintf(row_value, sizeof(row_value), "%s / %.2f", henka_viewport_shading_mode_get_label(diagnostics.viewport_shading_mode), diagnostics.viewport_exposure);
+            sandbox3d_draw_value_row(state->ui, x_left, y_start + 44.0f, panel_bounds.width - 28.0f, "Render", row_value);
+            snprintf(row_value, sizeof(row_value), "HDR:%s Shadow:%s", diagnostics.rendered_hdr_ready ? "Ready" : "Unavailable", diagnostics.rendered_shadow_ready ? "Ready" : "Unavailable");
+            sandbox3d_draw_value_row(state->ui, x_left, y_start + 70.0f, panel_bounds.width - 28.0f, "Rendered", row_value);
+            sandbox3d_draw_value_row(state->ui, x_left, y_start + 96.0f, panel_bounds.width - 28.0f, "Layout", sandbox3d_get_layout_mode_label(state->workspace.layout_mode));
+            sandbox3d_draw_value_row(state->ui, x_left, y_start + 122.0f, panel_bounds.width - 28.0f, "Tool", sandbox3d_viewport_tool_mode_to_string(state->viewport_tool));
+            sandbox3d_draw_value_row(state->ui, x_left, y_start + 148.0f, panel_bounds.width - 28.0f, "Gizmo", sandbox3d_get_gizmo_mode_label(state->gizmo.mode));
+            sandbox3d_draw_value_row(state->ui, x_left, y_start + 174.0f, panel_bounds.width - 28.0f, "Capture", capture_text + 9);
+            sandbox3d_draw_value_row(state->ui, x_left, y_start + 200.0f, panel_bounds.width - 28.0f, "UI Mouse", state->diagnostics.ui_wants_mouse ? "Yes" : "No");
+            sandbox3d_draw_value_row(state->ui, x_left, y_start + 226.0f, panel_bounds.width - 28.0f, "In View", state->diagnostics.cursor_in_viewport ? "Yes" : "No");
             snprintf(row_value, sizeof(row_value), "%.0f, %.0f", state->diagnostics.window_mouse.x, state->diagnostics.window_mouse.y);
-            sandbox3d_draw_value_row(state->ui, x_left, y_start + 200.0f, panel_bounds.width - 28.0f, "Mouse W", row_value);
+            sandbox3d_draw_value_row(state->ui, x_left, y_start + 252.0f, panel_bounds.width - 28.0f, "Mouse W", row_value);
             snprintf(row_value, sizeof(row_value), "%.0f, %.0f", state->diagnostics.framebuffer_mouse.x, state->diagnostics.framebuffer_mouse.y);
-            sandbox3d_draw_value_row(state->ui, x_left, y_start + 226.0f, panel_bounds.width - 28.0f, "Mouse FB", row_value);
+            sandbox3d_draw_value_row(state->ui, x_left, y_start + 278.0f, panel_bounds.width - 28.0f, "Mouse FB", row_value);
             snprintf(row_value, sizeof(row_value), "%.0f, %.0f", state->diagnostics.viewport_local.x, state->diagnostics.viewport_local.y);
-            sandbox3d_draw_value_row(state->ui, x_left, y_start + 252.0f, panel_bounds.width - 28.0f, "View XY", state->diagnostics.viewport_local_valid ? row_value : "(out)");
-            sandbox3d_draw_value_row(state->ui, x_left, y_start + 278.0f, panel_bounds.width - 28.0f, "Selected", descriptor != NULL ? descriptor->display_name : "(none)");
+            sandbox3d_draw_value_row(state->ui, x_left, y_start + 304.0f, panel_bounds.width - 28.0f, "View XY", state->diagnostics.viewport_local_valid ? row_value : "(out)");
+            sandbox3d_draw_value_row(state->ui, x_left, y_start + 330.0f, panel_bounds.width - 28.0f, "Selected", descriptor != NULL ? descriptor->display_name : "(none)");
             snprintf(
                 row_value,
                 sizeof(row_value),
@@ -7117,11 +7141,11 @@ static void sandbox3d_draw_utility_panel(
                 state->diagnostics.selected_bounds_valid ? "Bounds" : "NoBounds",
                 state->diagnostics.selected_entity_selectable ? "Selectable" : "No",
                 state->diagnostics.selected_highlight_active ? "On" : "Off");
-            sandbox3d_draw_value_row(state->ui, x_left, y_start + 304.0f, panel_bounds.width - 28.0f, "Entity", row_value);
+            sandbox3d_draw_value_row(state->ui, x_left, y_start + 356.0f, panel_bounds.width - 28.0f, "Entity", row_value);
             snprintf(row_value, sizeof(row_value), "%s / %zu", state->diagnostics.gizmo_model_valid ? "Valid" : "Invalid", state->diagnostics.overlay_primitive_count);
-            sandbox3d_draw_value_row(state->ui, x_left, y_start + 330.0f, panel_bounds.width - 28.0f, "Gizmo", row_value);
+            sandbox3d_draw_value_row(state->ui, x_left, y_start + 382.0f, panel_bounds.width - 28.0f, "Gizmo", row_value);
             snprintf(row_value, sizeof(row_value), "%s / %s", sandbox3d_get_gizmo_axis_label(state->gizmo.hover_axis), state->gizmo.hover_handle_type == SANDBOX3D_GIZMO_HANDLE_NONE ? "None" : (state->gizmo.hover_handle_type == SANDBOX3D_GIZMO_HANDLE_ROTATE_RING ? "Ring" : (state->gizmo.hover_handle_type == SANDBOX3D_GIZMO_HANDLE_SCALE_UNIFORM ? "Scale" : "Handle")));
-            sandbox3d_draw_value_row(state->ui, x_left, y_start + 356.0f, panel_bounds.width - 28.0f, "Hover", row_value);
+            sandbox3d_draw_value_row(state->ui, x_left, y_start + 408.0f, panel_bounds.width - 28.0f, "Hover", row_value);
             snprintf(
                 row_value,
                 sizeof(row_value),
@@ -7822,7 +7846,9 @@ static henka_result sandbox3d_initialize(henka_engine* engine, void* user_data)
     ground_material.base_color_texture = state->ground_texture;
     ground_material.use_texture = true;
     ground_material.base_color = (henka_vec4){0.96f, 0.98f, 0.90f, 1.0f};
-    ground_material.use_lighting = false;
+    ground_material.use_lighting = true;
+    ground_material.roughness = 0.82f;
+    ground_material.receive_shadows = true;
 
     cube_material = henka_material_default();
     cube_material.name = "Cube Albedo";
@@ -7831,21 +7857,26 @@ static henka_result sandbox3d_initialize(henka_engine* engine, void* user_data)
     cube_material.base_color_texture = state->cube_texture;
     cube_material.use_texture = true;
     cube_material.base_color = (henka_vec4){1.0f, 1.0f, 1.0f, 1.0f};
+    cube_material.roughness = 0.38f;
 
     colored_material = henka_material_default();
-    colored_material.name = "Flat Color";
+    colored_material.name = "Emissive Accent";
     colored_material.type = HENKA_MATERIAL_TYPE_UNLIT;
     colored_material.shader = state->basic_shader;
     colored_material.base_color = (henka_vec4){0.20f, 0.72f, 0.56f, 1.0f};
     colored_material.use_texture = false;
     colored_material.use_lighting = false;
+    colored_material.emissive_color = (henka_vec3){0.10f, 0.65f, 0.34f};
+    colored_material.emissive_strength = 2.5f;
 
     marker_material = henka_material_default();
-    marker_material.name = "OBJ Marker";
+    marker_material.name = "Rough Metal OBJ Marker";
     marker_material.type = HENKA_MATERIAL_TYPE_LIT;
     marker_material.shader = state->basic_shader;
     marker_material.base_color = (henka_vec4){0.96f, 0.72f, 0.18f, 1.0f};
     marker_material.use_texture = false;
+    marker_material.metallic = 1.0f;
+    marker_material.roughness = 0.82f;
 
     fallback_material = henka_material_default();
     fallback_material.name = "Fallback Texture";
@@ -7954,10 +7985,10 @@ static henka_result sandbox3d_initialize(henka_engine* engine, void* user_data)
         state->colored_cube_entity,
         "Colored Cube",
         "Left of center,",
-        "shows an untextured material color.",
+        "shows an emissive material accent.",
         "Uses the built-in cube mesh without a base-color texture.",
         "Built-in cube mesh.",
-        "Colored lit material.",
+        "Untextured emissive material.",
         "No texture is used for this object.",
         true,
         true,
@@ -7985,7 +8016,7 @@ static henka_result sandbox3d_initialize(henka_engine* engine, void* user_data)
         "shows the current OBJ loading path.",
         "Uses an OBJ mesh loaded through the asset manager cache.",
         "OBJ mesh from assets/models/henka_marker.obj.",
-        "Colored lit material.",
+        "Rough metallic material.",
         "No texture is used for this object.",
         true,
         true,

@@ -259,6 +259,113 @@ static void henka_asset_set_summary(henka_asset_metadata* metadata, const char* 
     metadata->error_summary = error_summary;
 }
 
+static bool henka_texture_descriptors_equal(
+    const henka_texture_descriptor* left,
+    const henka_texture_descriptor* right)
+{
+    return left != NULL && right != NULL &&
+        left->color_space == right->color_space &&
+        left->min_filter == right->min_filter &&
+        left->mag_filter == right->mag_filter &&
+        left->wrap_u == right->wrap_u &&
+        left->wrap_v == right->wrap_v &&
+        left->generate_mipmaps == right->generate_mipmaps &&
+        left->vertical_flip == right->vertical_flip &&
+        left->usage == right->usage &&
+        left->anisotropy == right->anisotropy;
+}
+
+static henka_result henka_assets_make_texture_cache_key(
+    const char* path,
+    const henka_texture_descriptor* descriptor,
+    char** out_key)
+{
+    henka_texture_descriptor defaults;
+    char* base_key;
+    henka_result result;
+    size_t allocation_size;
+    size_t length;
+    int written;
+
+    if (out_key != NULL)
+    {
+        *out_key = NULL;
+    }
+    if (path == NULL || descriptor == NULL || out_key == NULL ||
+        henka_texture_descriptor_validate(descriptor) != HENKA_SUCCESS)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    defaults = henka_texture_descriptor_default_color();
+    base_key = NULL;
+    result = henka_assets_make_canonical_key(path, &base_key);
+    if (result != HENKA_SUCCESS)
+    {
+        return result;
+    }
+    if (henka_texture_descriptors_equal(descriptor, &defaults))
+    {
+        *out_key = base_key;
+        return HENKA_SUCCESS;
+    }
+    if (!henka_checked_c_string_length(base_key, HENKA_MAX_ASSET_PATH_BYTES, &length) ||
+        !henka_checked_size_add(length, 128U, &allocation_size))
+    {
+        henka_free(base_key);
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    *out_key = henka_malloc(allocation_size);
+    if (*out_key == NULL)
+    {
+        henka_free(base_key);
+        return HENKA_ERROR_OUT_OF_MEMORY;
+    }
+    written = snprintf(
+        *out_key,
+        allocation_size,
+        "%s|cs=%u|min=%u|mag=%u|u=%u|v=%u|mip=%u|flip=%u|use=%u|aniso=%.3f",
+        base_key,
+        (unsigned int)descriptor->color_space,
+        (unsigned int)descriptor->min_filter,
+        (unsigned int)descriptor->mag_filter,
+        (unsigned int)descriptor->wrap_u,
+        (unsigned int)descriptor->wrap_v,
+        descriptor->generate_mipmaps ? 1U : 0U,
+        descriptor->vertical_flip ? 1U : 0U,
+        (unsigned int)descriptor->usage,
+        (double)descriptor->anisotropy);
+    henka_free(base_key);
+    if (written < 0 || (size_t)written >= allocation_size)
+    {
+        henka_free(*out_key);
+        *out_key = NULL;
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    return HENKA_SUCCESS;
+}
+
+static henka_texture* henka_asset_manager_get_texture_fallback(
+    henka_asset_manager* manager,
+    henka_texture_usage usage)
+{
+    switch (usage)
+    {
+        case HENKA_TEXTURE_USAGE_NORMAL:
+            return manager->normal_texture;
+        case HENKA_TEXTURE_USAGE_METALLIC_ROUGHNESS:
+            return manager->metallic_roughness_texture;
+        case HENKA_TEXTURE_USAGE_OCCLUSION:
+            return manager->occlusion_texture;
+        case HENKA_TEXTURE_USAGE_EMISSIVE:
+            return manager->emissive_texture;
+        case HENKA_TEXTURE_USAGE_COLOR:
+        case HENKA_TEXTURE_USAGE_UI:
+        case HENKA_TEXTURE_USAGE_GENERIC_DATA:
+        default:
+            return manager->error_texture;
+    }
+}
+
 const char* henka_assets_get_type_label(henka_asset_type type)
 {
     switch (type)
@@ -497,6 +604,11 @@ static henka_result henka_asset_manager_create_fallback_textures(
         255U, 0U, 255U, 255U, 0U, 0U, 0U, 255U,
         0U, 0U, 0U, 255U, 255U, 0U, 255U, 255U
     };
+    static const unsigned char normal_pixels[] = {128U, 128U, 255U, 255U};
+    static const unsigned char metallic_roughness_pixels[] = {0U, 128U, 0U, 255U};
+    static const unsigned char occlusion_pixels[] = {255U, 255U, 255U, 255U};
+    static const unsigned char emissive_pixels[] = {0U, 0U, 0U, 255U};
+    henka_texture_descriptor descriptor;
     henka_result result;
 
     result = henka_texture_create_from_rgba8(
@@ -524,6 +636,72 @@ static henka_result henka_asset_manager_create_fallback_textures(
         return result;
     }
     manager->error_texture->asset_manager_owned = true;
+
+    descriptor = henka_texture_descriptor_default_normal();
+    result = henka_texture_create_from_rgba8_with_descriptor(
+        manager->engine, 1, 1, normal_pixels, &descriptor, &manager->normal_texture);
+    if (result != HENKA_SUCCESS)
+    {
+        henka_texture_destroy_owned(manager->error_texture);
+        henka_texture_destroy_owned(manager->white_texture);
+        manager->error_texture = NULL;
+        manager->white_texture = NULL;
+        return result;
+    }
+    manager->normal_texture->asset_manager_owned = true;
+
+    descriptor = henka_texture_descriptor_default_data();
+    descriptor.usage = HENKA_TEXTURE_USAGE_METALLIC_ROUGHNESS;
+    result = henka_texture_create_from_rgba8_with_descriptor(
+        manager->engine, 1, 1, metallic_roughness_pixels, &descriptor, &manager->metallic_roughness_texture);
+    if (result != HENKA_SUCCESS)
+    {
+        henka_texture_destroy_owned(manager->normal_texture);
+        henka_texture_destroy_owned(manager->error_texture);
+        henka_texture_destroy_owned(manager->white_texture);
+        manager->normal_texture = NULL;
+        manager->error_texture = NULL;
+        manager->white_texture = NULL;
+        return result;
+    }
+    manager->metallic_roughness_texture->asset_manager_owned = true;
+
+    descriptor.usage = HENKA_TEXTURE_USAGE_OCCLUSION;
+    result = henka_texture_create_from_rgba8_with_descriptor(
+        manager->engine, 1, 1, occlusion_pixels, &descriptor, &manager->occlusion_texture);
+    if (result != HENKA_SUCCESS)
+    {
+        henka_texture_destroy_owned(manager->metallic_roughness_texture);
+        henka_texture_destroy_owned(manager->normal_texture);
+        henka_texture_destroy_owned(manager->error_texture);
+        henka_texture_destroy_owned(manager->white_texture);
+        manager->metallic_roughness_texture = NULL;
+        manager->normal_texture = NULL;
+        manager->error_texture = NULL;
+        manager->white_texture = NULL;
+        return result;
+    }
+    manager->occlusion_texture->asset_manager_owned = true;
+
+    descriptor = henka_texture_descriptor_default_color();
+    descriptor.usage = HENKA_TEXTURE_USAGE_EMISSIVE;
+    result = henka_texture_create_from_rgba8_with_descriptor(
+        manager->engine, 1, 1, emissive_pixels, &descriptor, &manager->emissive_texture);
+    if (result != HENKA_SUCCESS)
+    {
+        henka_texture_destroy_owned(manager->occlusion_texture);
+        henka_texture_destroy_owned(manager->metallic_roughness_texture);
+        henka_texture_destroy_owned(manager->normal_texture);
+        henka_texture_destroy_owned(manager->error_texture);
+        henka_texture_destroy_owned(manager->white_texture);
+        manager->occlusion_texture = NULL;
+        manager->metallic_roughness_texture = NULL;
+        manager->normal_texture = NULL;
+        manager->error_texture = NULL;
+        manager->white_texture = NULL;
+        return result;
+    }
+    manager->emissive_texture->asset_manager_owned = true;
 
     return HENKA_SUCCESS;
 }
@@ -579,6 +757,10 @@ henka_result henka_asset_manager_create(
     result = henka_asset_manager_create_fallback_mesh(manager);
     if (result != HENKA_SUCCESS)
     {
+        henka_texture_destroy_owned(manager->emissive_texture);
+        henka_texture_destroy_owned(manager->occlusion_texture);
+        henka_texture_destroy_owned(manager->metallic_roughness_texture);
+        henka_texture_destroy_owned(manager->normal_texture);
         henka_texture_destroy_owned(manager->error_texture);
         henka_texture_destroy_owned(manager->white_texture);
         henka_free(manager);
@@ -639,6 +821,10 @@ void henka_asset_manager_destroy(
     henka_mesh_destroy_owned(manager->fallback_mesh);
     henka_texture_destroy_owned(manager->white_texture);
     henka_texture_destroy_owned(manager->error_texture);
+    henka_texture_destroy_owned(manager->normal_texture);
+    henka_texture_destroy_owned(manager->metallic_roughness_texture);
+    henka_texture_destroy_owned(manager->occlusion_texture);
+    henka_texture_destroy_owned(manager->emissive_texture);
     henka_free(manager);
 }
 
@@ -846,6 +1032,16 @@ henka_result henka_assets_load_texture(
     const char* path,
     henka_texture** out_texture)
 {
+    henka_texture_descriptor descriptor = henka_texture_descriptor_default_color();
+    return henka_assets_load_texture_with_descriptor(manager, path, &descriptor, out_texture);
+}
+
+henka_result henka_assets_load_texture_with_descriptor(
+    henka_asset_manager* manager,
+    const char* path,
+    const henka_texture_descriptor* descriptor,
+    henka_texture** out_texture)
+{
     char* display_name;
     henka_asset_texture_entry* existing_entry;
     bool fallback_active;
@@ -862,16 +1058,15 @@ henka_result henka_assets_load_texture(
 
     if (manager == NULL ||
         path == NULL ||
-        out_texture == NULL)
+        out_texture == NULL || descriptor == NULL ||
+        henka_texture_descriptor_validate(descriptor) != HENKA_SUCCESS)
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
 
     key = NULL;
     source_path = NULL;
-    result = henka_assets_make_canonical_key(
-        path,
-        &key);
+    result = henka_assets_make_texture_cache_key(path, descriptor, &key);
     if (result != HENKA_SUCCESS)
     {
         return result;
@@ -913,9 +1108,10 @@ henka_result henka_assets_load_texture(
 
     fallback_active = false;
     texture = NULL;
-    result = henka_texture_create_from_file(
+    result = henka_texture_create_from_file_with_descriptor(
         manager->engine,
         resolved_path,
+        descriptor,
         &texture);
     henka_free(resolved_path);
     if (result == HENKA_ERROR_ASSET_SOURCE)
@@ -924,7 +1120,7 @@ henka_result henka_assets_load_texture(
             "Using a path-specific error-texture alias because '%s' could not be loaded",
             source_path);
         result = henka_texture_create_borrowed_alias(
-            manager->error_texture,
+            henka_asset_manager_get_texture_fallback(manager, descriptor->usage),
             &texture);
         if (result != HENKA_SUCCESS)
         {
@@ -967,6 +1163,9 @@ henka_result henka_assets_load_texture(
     }
 
     texture->asset_manager_owned = true;
+    texture->fallback_alias = fallback_active;
+    manager->texture_entries[
+        manager->texture_count].descriptor = *descriptor;
     manager->texture_entries[
         manager->texture_count].key = key;
     manager->texture_entries[
@@ -997,6 +1196,10 @@ henka_result henka_assets_load_texture(
     manager->texture_entries[
         manager->texture_count].metadata.reload_supported =
         fallback_active;
+    manager->texture_entries[
+        manager->texture_count].metadata.has_texture_descriptor = true;
+    manager->texture_entries[
+        manager->texture_count].metadata.texture_descriptor = *descriptor;
     henka_asset_set_summary(
         &manager->texture_entries[
             manager->texture_count].metadata,
