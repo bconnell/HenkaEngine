@@ -1385,7 +1385,8 @@ henka_result henka_engine_get_diagnostics(
         engine->renderer,
         &out_diagnostics->rendered_scene_draw_calls,
         &out_diagnostics->rendered_scene_visible_entities,
-        &out_diagnostics->rendered_scene_culled_entities);
+        &out_diagnostics->rendered_scene_culled_entities,
+        &out_diagnostics->rendered_scene_transparent_sort_overflow_entities);
     out_diagnostics->wireframe_enabled =
         out_diagnostics->viewport_shading_mode ==
         HENKA_VIEWPORT_SHADING_WIREFRAME;

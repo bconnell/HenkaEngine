@@ -72,6 +72,7 @@ typedef struct henka_opengl_renderer_state
     uint32_t scene_draw_calls;
     uint32_t scene_visible_entities;
     uint32_t scene_culled_entities;
+    uint32_t transparent_sort_overflow_entities;
     henka_opengl_transparent_sort_item transparent_sort_items[HENKA_OPENGL_TRANSPARENT_SORT_CAPACITY];
     size_t transparent_sort_count;
     bool transparent_sort_enabled;
@@ -1518,17 +1519,86 @@ static float henka_opengl_entity_view_depth(
     return isfinite(depth) ? depth : 0.0f;
 }
 
+static bool henka_opengl_transparent_item_is_nearer(
+    henka_opengl_transparent_sort_item left,
+    henka_opengl_transparent_sort_item right)
+{
+    if (left.view_depth != right.view_depth)
+    {
+        return left.view_depth < right.view_depth;
+    }
+    return left.entity_index > right.entity_index;
+}
+
+static void henka_opengl_transparent_sift_down(
+    henka_opengl_transparent_sort_item* items,
+    size_t count,
+    size_t root)
+{
+    size_t child;
+    henka_opengl_transparent_sort_item temporary;
+
+    for (;;)
+    {
+        if (root > (SIZE_MAX - 1U) / 2U)
+        {
+            return;
+        }
+        child = root * 2U + 1U;
+        if (child >= count)
+        {
+            return;
+        }
+        if (child + 1U < count &&
+            henka_opengl_transparent_item_is_nearer(items[child + 1U], items[child]))
+        {
+            ++child;
+        }
+        if (!henka_opengl_transparent_item_is_nearer(items[child], items[root]))
+        {
+            return;
+        }
+        temporary = items[root];
+        items[root] = items[child];
+        items[child] = temporary;
+        root = child;
+    }
+}
+
+static void henka_opengl_sort_transparent_items(
+    henka_opengl_transparent_sort_item* items,
+    size_t count)
+{
+    size_t index;
+    henka_opengl_transparent_sort_item temporary;
+
+    if (items == NULL || count < 2U)
+    {
+        return;
+    }
+    for (index = count / 2U; index > 0U; --index)
+    {
+        henka_opengl_transparent_sift_down(items, count, index - 1U);
+    }
+    for (index = count; index > 1U; --index)
+    {
+        temporary = items[0U];
+        items[0U] = items[index - 1U];
+        items[index - 1U] = temporary;
+        henka_opengl_transparent_sift_down(items, index - 1U, 0U);
+    }
+}
+
 static void henka_opengl_prepare_transparent_sort(
     henka_opengl_renderer_state* state,
     const henka_scene* scene,
     henka_mat4 view)
 {
     size_t index;
-    size_t insert_index;
-    henka_opengl_transparent_sort_item item;
 
     state->transparent_sort_count = 0U;
     state->transparent_sort_enabled = true;
+    state->transparent_sort_overflow_entities = 0U;
     for (index = 0U; index < scene->entity_capacity; ++index)
     {
         const henka_scene_entity_record* entity = &scene->entities[index];
@@ -1542,8 +1612,11 @@ static void henka_opengl_prepare_transparent_sort(
         if (state->transparent_sort_count >= HENKA_OPENGL_TRANSPARENT_SORT_CAPACITY)
         {
             state->transparent_sort_enabled = false;
-            state->transparent_sort_count = 0U;
-            return;
+            if (state->transparent_sort_overflow_entities < UINT32_MAX)
+            {
+                ++state->transparent_sort_overflow_entities;
+            }
+            continue;
         }
         state->transparent_sort_items[state->transparent_sort_count++] =
             (henka_opengl_transparent_sort_item){
@@ -1551,19 +1624,9 @@ static void henka_opengl_prepare_transparent_sort(
                 henka_opengl_entity_view_depth(scene, view, index)};
     }
 
-    for (index = 1U; index < state->transparent_sort_count; ++index)
-    {
-        item = state->transparent_sort_items[index];
-        insert_index = index;
-        while (insert_index > 0U &&
-            state->transparent_sort_items[insert_index - 1U].view_depth < item.view_depth)
-        {
-            state->transparent_sort_items[insert_index] =
-                state->transparent_sort_items[insert_index - 1U];
-            --insert_index;
-        }
-        state->transparent_sort_items[insert_index] = item;
-    }
+    henka_opengl_sort_transparent_items(
+        state->transparent_sort_items,
+        state->transparent_sort_count);
 }
 
 henka_result henka_opengl_renderer_draw_scene(
@@ -1652,15 +1715,16 @@ henka_result henka_opengl_renderer_draw_scene(
     henka_opengl_prepare_transparent_sort(state, scene, view);
     g_gl.ActiveTexture(GL_TEXTURE0);
 
-    pass_count = state->transparent_sort_enabled ? 2U : 1U;
+    pass_count = 2U;
     for (pass = 0U; pass < pass_count; ++pass)
     {
-        const size_t pass_entity_count = pass == 0U ?
+        const size_t pass_entity_count = pass == 0U ||
+            !state->transparent_sort_enabled ?
             scene->entity_capacity : state->transparent_sort_count;
 
         for (index = 0U; index < pass_entity_count; ++index)
         {
-        size_t draw_index = pass == 0U ? index :
+        size_t draw_index = pass == 0U || !state->transparent_sort_enabled ? index :
             state->transparent_sort_items[index].entity_index;
         const henka_scene_entity_record* entity;
         const henka_opengl_mesh_data* mesh_data;
@@ -1693,9 +1757,8 @@ henka_result henka_opengl_renderer_draw_scene(
             continue;
         }
 
-        if (state->transparent_sort_enabled &&
-            ((pass == 0U && entity->material.alpha_mode == HENKA_MATERIAL_ALPHA_BLENDED) ||
-             (pass == 1U && entity->material.alpha_mode != HENKA_MATERIAL_ALPHA_BLENDED)))
+        if ((pass == 0U && entity->material.alpha_mode == HENKA_MATERIAL_ALPHA_BLENDED) ||
+            (pass == 1U && entity->material.alpha_mode != HENKA_MATERIAL_ALPHA_BLENDED))
         {
             continue;
         }
@@ -2003,7 +2066,8 @@ void henka_opengl_renderer_get_scene_diagnostics(
     const struct henka_renderer* renderer,
     uint32_t* out_draw_calls,
     uint32_t* out_visible_entities,
-    uint32_t* out_culled_entities)
+    uint32_t* out_culled_entities,
+    uint32_t* out_transparent_sort_overflow_entities)
 {
     const henka_opengl_renderer_state* state = renderer != NULL ?
         (const henka_opengl_renderer_state*)renderer->backend_state : NULL;
@@ -2019,6 +2083,11 @@ void henka_opengl_renderer_get_scene_diagnostics(
     if (out_culled_entities != NULL)
     {
         *out_culled_entities = state != NULL ? state->scene_culled_entities : 0U;
+    }
+    if (out_transparent_sort_overflow_entities != NULL)
+    {
+        *out_transparent_sort_overflow_entities = state != NULL ?
+            state->transparent_sort_overflow_entities : 0U;
     }
 }
 
