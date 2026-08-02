@@ -154,7 +154,7 @@ The renderer layer exposes engine-owned drawing functionality while keeping Open
 - viewport resize
 - shader compilation and linking
 - post-link shader contract validation with a minimal geometry variant and a complete material variant covering transforms, lighting, environment, fog, material factors, alpha, vertex color, textures, and shadows; invalid external programs are rejected before publication
-- a bounded uniform-location cache qualified by the active SDL OpenGL context and program identity, with explicit cache invalidation when programs are destroyed
+- immutable per-program uniform-location tables qualified by the active SDL OpenGL context, explicit contract identity/version, source hash, and generation; tables are populated after link and destroyed with their owning program
 - mesh upload
 - descriptor-aware texture upload and binding, including sRGB versus linear internal formats, sampler policy, mip selection, and upload-state restoration
 - tangent-space vertex attributes preserved from validated imported model data when present, otherwise generated during mesh upload with finite fallbacks for degenerate UVs
@@ -168,7 +168,7 @@ The renderer layer exposes engine-owned drawing functionality while keeping Open
 - draw submission for scene entities
 - draw submission for simple screen-space UI rectangles
 
-External shaders are admitted only after the renderer confirms the contract it will populate. Programs that expose the material lighting markers (`useLighting` and `metallic`) must provide the complete material contract; other programs use the minimal geometry contract (`model`, `view`, `projection`, and `baseColor`) used by the debug grid. This keeps a successful file read or link from becoming a later draw-time failure. Uniform locations are queried directly while the owning renderer/backend resource model is being completed; there is no process-global fixed-capacity cache that can silently reject new uniforms or retain stale context/program entries. This direct lookup is intentionally a correctness-first transitional choice; a future cache must be owned by the renderer context and have explicit invalidation and overflow behavior.
+External shaders are admitted through an explicit public contract type and version; source-text markers do not select the contract. The current material and minimal-geometry contracts are validated before publication, while the renderer also reserves explicit identities for future environment, IBL, shadow, post, debug, and UI programs. Required locations are queried once during admission into an owned bounded table, and draw-time required-uniform paths use that table rather than a process-global cache or repeated GL string lookup. Built-in environment, shadow, tone-map, and viewport programs use the same table mechanism.
 
 ### Sandbox
 
