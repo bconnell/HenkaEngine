@@ -1537,6 +1537,114 @@ henka_result henka_scene_get_environment(
     return HENKA_SUCCESS;
 }
 
+static henka_result henka_scene_validate_light(henka_scene_light_desc* light)
+{
+    henka_vec3 direction;
+
+    if (light == NULL || light->type > HENKA_SCENE_LIGHT_SPOT ||
+        !henka_scene_vec3_is_finite(light->position) ||
+        !henka_scene_vec3_is_finite(light->direction) ||
+        !henka_scene_vec3_is_finite(light->color) ||
+        !henka_is_finite_float(light->intensity) ||
+        !henka_is_finite_float(light->range) ||
+        !henka_is_finite_float(light->inner_cone_cosine) ||
+        !henka_is_finite_float(light->outer_cone_cosine) ||
+        light->intensity < 0.0f || light->intensity > 100000.0f ||
+        light->range <= 0.0f || light->range > 100000.0f ||
+        light->color.x < 0.0f || light->color.y < 0.0f || light->color.z < 0.0f ||
+        light->color.x > 16.0f || light->color.y > 16.0f || light->color.z > 16.0f)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    direction = henka_vec3_normalize(light->direction);
+    if (henka_vec3_length(direction) <= 0.000001f)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    light->direction = direction;
+    if (light->type == HENKA_SCENE_LIGHT_SPOT &&
+        (light->inner_cone_cosine < 0.0f || light->inner_cone_cosine > 1.0f ||
+         light->outer_cone_cosine < 0.0f || light->outer_cone_cosine > 1.0f ||
+         light->inner_cone_cosine < light->outer_cone_cosine))
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    return HENKA_SUCCESS;
+}
+
+henka_result henka_scene_add_light(
+    henka_scene* scene,
+    henka_scene_light_desc light,
+    uint32_t* out_light_index)
+{
+    uint32_t index;
+
+    if (out_light_index != NULL)
+    {
+        *out_light_index = UINT32_MAX;
+    }
+    if (scene == NULL || out_light_index == NULL ||
+        henka_scene_validate_light(&light) != HENKA_SUCCESS)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    for (index = 0U; index < HENKA_SCENE_MAX_LOCAL_LIGHTS; ++index)
+    {
+        if (!scene->local_light_active[index])
+        {
+            scene->local_lights[index] = light;
+            scene->local_light_active[index] = true;
+            *out_light_index = index;
+            return HENKA_SUCCESS;
+        }
+    }
+    return HENKA_ERROR_LIMIT;
+}
+
+henka_result henka_scene_update_light(
+    henka_scene* scene,
+    uint32_t light_index,
+    henka_scene_light_desc light)
+{
+    if (scene == NULL || light_index >= HENKA_SCENE_MAX_LOCAL_LIGHTS ||
+        !scene->local_light_active[light_index] ||
+        henka_scene_validate_light(&light) != HENKA_SUCCESS)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    scene->local_lights[light_index] = light;
+    return HENKA_SUCCESS;
+}
+
+henka_result henka_scene_remove_light(
+    henka_scene* scene,
+    uint32_t light_index)
+{
+    if (scene == NULL || light_index >= HENKA_SCENE_MAX_LOCAL_LIGHTS ||
+        !scene->local_light_active[light_index])
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    memset(&scene->local_lights[light_index], 0, sizeof(scene->local_lights[light_index]));
+    scene->local_light_active[light_index] = false;
+    return HENKA_SUCCESS;
+}
+
+henka_result henka_scene_get_light(
+    const henka_scene* scene,
+    uint32_t light_index,
+    henka_scene_light_desc* out_light)
+{
+    if (scene == NULL || out_light == NULL ||
+        light_index >= HENKA_SCENE_MAX_LOCAL_LIGHTS ||
+        !scene->local_light_active[light_index])
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    *out_light = scene->local_lights[light_index];
+    return HENKA_SUCCESS;
+}
+
 henka_result henka_scene_set_fog(henka_scene* scene, henka_scene_fog_desc fog)
 {
     if (scene == NULL ||

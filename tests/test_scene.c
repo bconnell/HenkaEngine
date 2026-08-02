@@ -88,6 +88,10 @@ void henka_test_scene(void)
     henka_scene_environment_desc read_environment;
     henka_scene_fog_desc fog;
     henka_scene_fog_desc read_fog;
+    henka_scene_light_desc light;
+    henka_scene_light_desc read_light;
+    uint32_t light_indices[HENKA_SCENE_MAX_LOCAL_LIGHTS];
+    uint32_t light_index;
 
     HENKA_TEST_ASSERT(henka_scene_create(&scene) == HENKA_SUCCESS);
     HENKA_TEST_ASSERT(scene != NULL);
@@ -105,6 +109,38 @@ void henka_test_scene(void)
     HENKA_TEST_ASSERT(henka_scene_set_environment(scene, environment) == HENKA_ERROR_INVALID_ARGUMENT);
     HENKA_TEST_ASSERT(henka_scene_get_environment(scene, &read_environment) == HENKA_SUCCESS);
     HENKA_TEST_ASSERT_FLOAT_CLOSE(read_environment.intensity, 2.0f, 0.0001f);
+    light = (henka_scene_light_desc){
+        HENKA_SCENE_LIGHT_POINT,
+        (henka_vec3){1.0f, 2.0f, 3.0f},
+        (henka_vec3){0.0f, -1.0f, 0.0f},
+        (henka_vec3){1.0f, 0.8f, 0.6f},
+        20.0f,
+        12.0f,
+        1.0f,
+        0.5f,
+        true};
+    HENKA_TEST_ASSERT(henka_scene_add_light(scene, light, &light_index) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(light_index < HENKA_SCENE_MAX_LOCAL_LIGHTS);
+    HENKA_TEST_ASSERT(henka_scene_get_light(scene, light_index, &read_light) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(read_light.position.x, 1.0f, 0.0001f);
+    light.type = HENKA_SCENE_LIGHT_SPOT;
+    light.inner_cone_cosine = 0.8f;
+    light.outer_cone_cosine = 0.9f;
+    HENKA_TEST_ASSERT(henka_scene_update_light(scene, light_index, light) == HENKA_ERROR_INVALID_ARGUMENT);
+    light.outer_cone_cosine = 0.5f;
+    HENKA_TEST_ASSERT(henka_scene_update_light(scene, light_index, light) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_scene_remove_light(scene, light_index) == HENKA_SUCCESS);
+    light.enabled = true;
+    light.type = HENKA_SCENE_LIGHT_POINT;
+    for (light_index = 0U; light_index < HENKA_SCENE_MAX_LOCAL_LIGHTS; ++light_index)
+    {
+        HENKA_TEST_ASSERT(henka_scene_add_light(scene, light, &light_indices[light_index]) == HENKA_SUCCESS);
+    }
+    HENKA_TEST_ASSERT(henka_scene_add_light(scene, light, &light_index) == HENKA_ERROR_LIMIT);
+    for (light_index = 0U; light_index < HENKA_SCENE_MAX_LOCAL_LIGHTS; ++light_index)
+    {
+        HENKA_TEST_ASSERT(henka_scene_remove_light(scene, light_indices[light_index]) == HENKA_SUCCESS);
+    }
     HENKA_TEST_ASSERT(henka_scene_get_fog(scene, &read_fog) == HENKA_SUCCESS);
     HENKA_TEST_ASSERT(!read_fog.enabled);
     fog = (henka_scene_fog_desc){

@@ -264,6 +264,7 @@ typedef struct henka_opengl_functions
     PFNGLGETUNIFORMLOCATIONPROC GetUniformLocation;
     PFNGLUNIFORMMATRIX4FVPROC UniformMatrix4fv;
     PFNGLUNIFORM4FPROC Uniform4f;
+    PFNGLUNIFORM4FVPROC Uniform4fv;
     PFNGLUNIFORM3FPROC Uniform3f;
     PFNGLUNIFORM2FPROC Uniform2f;
     PFNGLUNIFORM1IPROC Uniform1i;
@@ -496,6 +497,7 @@ static bool henka_opengl_load_functions(void)
     HENKA_GL_LOAD(GetUniformLocation);
     HENKA_GL_LOAD(UniformMatrix4fv);
     HENKA_GL_LOAD(Uniform4f);
+    HENKA_GL_LOAD(Uniform4fv);
     HENKA_GL_LOAD(Uniform3f);
     HENKA_GL_LOAD(Uniform2f);
     HENKA_GL_LOAD(Uniform1i);
@@ -821,7 +823,10 @@ static bool henka_validate_shader_contract(
         "normalScale", "occlusionStrength", "emissiveColor", "emissiveStrength",
         "clearcoat", "clearcoatRoughness", "sheenColor", "sheenRoughness",
         "alphaMode", "alphaCutoff", "shadowMap", "useShadowMap",
-        "environmentTexture", "useEnvironmentTexture", "environmentRotation"
+        "environmentTexture", "useEnvironmentTexture", "environmentRotation",
+        "localLightCount", "localLightPositionRange[0]",
+        "localLightColorIntensity[0]", "localLightDirectionInner[0]",
+        "localLightOuterType[0]"
     };
     const char* const* required_uniforms = contract_type == HENKA_SHADER_CONTRACT_MATERIAL ?
         material_uniforms : minimal_uniforms;
@@ -954,6 +959,20 @@ static void henka_set_uniform_vec4_owned(
     if (location >= 0)
     {
         g_gl.Uniform4f(location, value.x, value.y, value.z, value.w);
+    }
+}
+
+static void henka_set_uniform_vec4_array_owned(
+    GLuint program,
+    const henka_opengl_shader_data* shader_data,
+    const char* name,
+    const float* values,
+    int count)
+{
+    GLint location = henka_opengl_shader_uniform_location(program, shader_data, name);
+    if (location >= 0 && values != NULL && count > 0)
+    {
+        g_gl.Uniform4fv(location, count, values);
     }
 }
 
@@ -2095,6 +2114,11 @@ henka_result henka_opengl_renderer_draw_scene(
     size_t index;
     size_t pass;
     size_t pass_count;
+    float local_light_position_range[HENKA_SCENE_MAX_LOCAL_LIGHTS * 4U] = {0.0f};
+    float local_light_color_intensity[HENKA_SCENE_MAX_LOCAL_LIGHTS * 4U] = {0.0f};
+    float local_light_direction_inner[HENKA_SCENE_MAX_LOCAL_LIGHTS * 4U] = {0.0f};
+    float local_light_outer_type[HENKA_SCENE_MAX_LOCAL_LIGHTS * 4U] = {0.0f};
+    int local_light_count = 0;
 
     if (renderer == NULL ||
         scene == NULL ||
@@ -2121,6 +2145,29 @@ henka_result henka_opengl_renderer_draw_scene(
     state->scene_draw_calls = 0U;
     state->scene_visible_entities = 0U;
     state->scene_culled_entities = 0U;
+    for (index = 0U; index < HENKA_SCENE_MAX_LOCAL_LIGHTS; ++index)
+    {
+        const henka_scene_light_desc* light = &scene->local_lights[index];
+        if (!scene->local_light_active[index] || !light->enabled)
+        {
+            continue;
+        }
+        local_light_position_range[local_light_count * 4U + 0U] = light->position.x;
+        local_light_position_range[local_light_count * 4U + 1U] = light->position.y;
+        local_light_position_range[local_light_count * 4U + 2U] = light->position.z;
+        local_light_position_range[local_light_count * 4U + 3U] = light->range;
+        local_light_color_intensity[local_light_count * 4U + 0U] = light->color.x;
+        local_light_color_intensity[local_light_count * 4U + 1U] = light->color.y;
+        local_light_color_intensity[local_light_count * 4U + 2U] = light->color.z;
+        local_light_color_intensity[local_light_count * 4U + 3U] = light->intensity;
+        local_light_direction_inner[local_light_count * 4U + 0U] = light->direction.x;
+        local_light_direction_inner[local_light_count * 4U + 1U] = light->direction.y;
+        local_light_direction_inner[local_light_count * 4U + 2U] = light->direction.z;
+        local_light_direction_inner[local_light_count * 4U + 3U] = light->inner_cone_cosine;
+        local_light_outer_type[local_light_count * 4U + 0U] = light->outer_cone_cosine;
+        local_light_outer_type[local_light_count * 4U + 1U] = light->type == HENKA_SCENE_LIGHT_SPOT ? 1.0f : 0.0f;
+        ++local_light_count;
+    }
 
     rendered = henka_renderer_get_viewport_shading_mode(renderer) ==
         HENKA_VIEWPORT_SHADING_RENDERED;
@@ -2396,6 +2443,31 @@ henka_result henka_opengl_renderer_draw_scene(
             scene->environment.hdr_texture != NULL &&
             scene->environment.hdr_texture->backend_data != NULL);
         henka_set_uniform_float(program, "environmentRotation", scene->environment.hdr_rotation);
+        henka_set_uniform_int(program, "localLightCount", local_light_count);
+        henka_set_uniform_vec4_array_owned(
+            program,
+            shader_data,
+            "localLightPositionRange[0]",
+            local_light_position_range,
+            (int)HENKA_SCENE_MAX_LOCAL_LIGHTS);
+        henka_set_uniform_vec4_array_owned(
+            program,
+            shader_data,
+            "localLightColorIntensity[0]",
+            local_light_color_intensity,
+            (int)HENKA_SCENE_MAX_LOCAL_LIGHTS);
+        henka_set_uniform_vec4_array_owned(
+            program,
+            shader_data,
+            "localLightDirectionInner[0]",
+            local_light_direction_inner,
+            (int)HENKA_SCENE_MAX_LOCAL_LIGHTS);
+        henka_set_uniform_vec4_array_owned(
+            program,
+            shader_data,
+            "localLightOuterType[0]",
+            local_light_outer_type,
+            (int)HENKA_SCENE_MAX_LOCAL_LIGHTS);
         henka_set_uniform_bool(program, "fogEnabled", !helper_entity && scene->fog.enabled);
         henka_set_uniform_int(program, "fogMode", (int)scene->fog.mode);
         henka_set_uniform_vec3(program, "fogColor", scene->fog.color);

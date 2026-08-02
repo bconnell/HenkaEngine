@@ -97,6 +97,27 @@ typedef struct henka_scene_environment_desc
     float hdr_rotation;
 } henka_scene_environment_desc;
 
+#define HENKA_SCENE_MAX_LOCAL_LIGHTS 4U
+
+typedef enum henka_scene_light_type
+{
+    HENKA_SCENE_LIGHT_POINT = 0,
+    HENKA_SCENE_LIGHT_SPOT
+} henka_scene_light_type;
+
+typedef struct henka_scene_light_desc
+{
+    henka_scene_light_type type;
+    henka_vec3 position;
+    henka_vec3 direction;
+    henka_vec3 color;
+    float intensity;
+    float range;
+    float inner_cone_cosine;
+    float outer_cone_cosine;
+    bool enabled;
+} henka_scene_light_desc;
+
 typedef enum henka_scene_fog_mode
 {
     HENKA_SCENE_FOG_LINEAR = 0,
@@ -182,6 +203,21 @@ henka_result henka_scene_set_environment(
 henka_result henka_scene_get_environment(
     const henka_scene* scene,
     henka_scene_environment_desc* out_environment);
+henka_result henka_scene_add_light(
+    henka_scene* scene,
+    henka_scene_light_desc light,
+    uint32_t* out_light_index);
+henka_result henka_scene_update_light(
+    henka_scene* scene,
+    uint32_t light_index,
+    henka_scene_light_desc light);
+henka_result henka_scene_remove_light(
+    henka_scene* scene,
+    uint32_t light_index);
+henka_result henka_scene_get_light(
+    const henka_scene* scene,
+    uint32_t light_index,
+    henka_scene_light_desc* out_light);
 henka_result henka_scene_set_fog(henka_scene* scene, henka_scene_fog_desc fog);
 henka_result henka_scene_get_fog(
     const henka_scene* scene,

@@ -26,6 +26,11 @@ uniform float environmentIntensity;
 uniform sampler2D environmentTexture;
 uniform bool useEnvironmentTexture;
 uniform float environmentRotation;
+uniform int localLightCount;
+uniform vec4 localLightPositionRange[4];
+uniform vec4 localLightColorIntensity[4];
+uniform vec4 localLightDirectionInner[4];
+uniform vec4 localLightOuterType[4];
 uniform bool fogEnabled;
 uniform int fogMode;
 uniform vec3 fogColor;
@@ -266,6 +271,42 @@ void main()
                 environmentSpecular * fresnel * baseLayerTransmission * occlusion *
                     (0.35 + 0.65 * (1.0 - surfaceRoughness)),
                 vec3(65504.0));
+        }
+
+        for (int lightIndex = 0; lightIndex < 4; ++lightIndex)
+        {
+            if (lightIndex >= localLightCount)
+            {
+                break;
+            }
+            vec3 toLocalLight = localLightPositionRange[lightIndex].xyz - fragWorldPosition;
+            float localDistance = length(toLocalLight);
+            vec3 localLightDirection = safeNormalize(toLocalLight, normal);
+            float localRange = max(localLightPositionRange[lightIndex].w, 0.0001);
+            float rangeFade = saturate(1.0 - localDistance / localRange);
+            float attenuation = rangeFade * rangeFade / max(localDistance * localDistance, 1.0);
+            if (localLightOuterType[lightIndex].y > 0.5)
+            {
+                float cone = dot(-localLightDirection, safeNormalize(localLightDirectionInner[lightIndex].xyz, vec3(0.0, -1.0, 0.0)));
+                attenuation *= smoothstep(
+                    localLightOuterType[lightIndex].x,
+                    localLightDirectionInner[lightIndex].w,
+                    cone);
+            }
+            float localNDotL = saturate(dot(normal, localLightDirection));
+            vec3 localHalf = safeNormalize(viewDirection + localLightDirection, normal);
+            float localNDotH = saturate(dot(normal, localHalf));
+            float localVDotH = saturate(dot(viewDirection, localHalf));
+            vec3 localFresnel = fresnelSchlick(localVDotH, f0);
+            float localDistribution = distributionGGX(localNDotH, alpha);
+            float localVisibility = visibilitySmithGGXCorrelated(nDotV, localNDotL, alpha);
+            vec3 localRadiance = min(
+                clamp(localLightColorIntensity[lightIndex].rgb, vec3(0.0), vec3(16.0)) *
+                clamp(localLightColorIntensity[lightIndex].w, 0.0, 100000.0) * attenuation,
+                vec3(65504.0));
+            vec3 localSpecular = localDistribution * localVisibility * localFresnel;
+            vec3 localDiffuse = (1.0 - localFresnel) * (1.0 - surfaceMetallic) * albedo / PI;
+            color += (localDiffuse + localSpecular) * localRadiance * localNDotL;
         }
     }
     else

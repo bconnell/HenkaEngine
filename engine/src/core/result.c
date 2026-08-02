@@ -14,6 +14,8 @@ const char* henka_result_to_string(henka_result result)
             return "numeric range error";
         case HENKA_ERROR_ASSET_SOURCE:
             return "asset source error";
+        case HENKA_ERROR_LIMIT:
+            return "limit exceeded";
         case HENKA_ERROR_PLATFORM:
             return "platform error";
         case HENKA_ERROR_RENDERER:

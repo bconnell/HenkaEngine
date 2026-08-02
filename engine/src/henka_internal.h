@@ -179,6 +179,8 @@ struct henka_scene
     float light_intensity;
     henka_vec3 ambient_color;
     henka_scene_environment_desc environment;
+    henka_scene_light_desc local_lights[HENKA_SCENE_MAX_LOCAL_LIGHTS];
+    bool local_light_active[HENKA_SCENE_MAX_LOCAL_LIGHTS];
     henka_scene_fog_desc fog;
 };
 
