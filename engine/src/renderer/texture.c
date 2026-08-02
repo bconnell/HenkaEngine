@@ -422,6 +422,7 @@ henka_result henka_texture_create_from_file_with_descriptor(
     size_t decoded_bytes;
     size_t hdr_decoded_bytes;
     float* hdr_pixels;
+    henka_texture_descriptor hdr_descriptor;
     int height;
     stbi_uc* pixels;
     henka_result result;
@@ -522,12 +523,14 @@ henka_result henka_texture_create_from_file_with_descriptor(
             henka_free(source_bytes);
             return HENKA_ERROR_OUT_OF_MEMORY;
         }
+        hdr_descriptor = *descriptor;
+        hdr_descriptor.color_space = HENKA_TEXTURE_COLOR_SPACE_LINEAR;
         result = henka_texture_create_from_rgba32f_with_descriptor(
             engine,
             width,
             height,
             hdr_pixels,
-            descriptor,
+            &hdr_descriptor,
             out_texture);
         stbi_image_free(hdr_pixels);
         henka_free(source_bytes);

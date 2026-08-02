@@ -109,9 +109,10 @@ henka_result henka_texture_descriptor_validate(const henka_texture_descriptor* d
 /*
  * Creates a texture from an image file using the compatibility color-texture
  * descriptor. The source is read once into a bounded buffer and that exact
- * buffer is used for inspection and decode. The supported source class is
- * 8-bit LDR decoded to straight-alpha RGBA8; HDR and 16-bit sources are
- * rejected rather than silently quantized.
+ * buffer is used for inspection and decode. 8-bit LDR sources are decoded to
+ * straight-alpha RGBA8; Radiance HDR sources are decoded to linear RGBA32F
+ * and uploaded as RGBA16F. Other 16-bit sources are rejected rather than
+ * silently quantized.
  */
 henka_result henka_texture_create_from_file(henka_engine* engine, const char* path, henka_texture** out_texture);
 henka_result henka_texture_create_from_file_with_descriptor(
