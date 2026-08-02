@@ -414,6 +414,22 @@ function Close-HenkaCapturedProcess {
     }
 }
 
+function Stop-HenkaProcessTree {
+    param(
+        [Parameter(Mandatory = $true)]
+        [int]$ProcessId
+    )
+
+    if ($ProcessId -le 0) {
+        return
+    }
+
+    $taskkill = Join-Path $env:SystemRoot "System32\taskkill.exe"
+    if (Test-Path -LiteralPath $taskkill -PathType Leaf) {
+        & $taskkill /PID $ProcessId /T /F 2>$null | Out-Null
+    }
+}
+
 function Invoke-HenkaNative {
     param(
         [Parameter(Mandatory = $true)]
@@ -425,7 +441,9 @@ function Invoke-HenkaNative {
         [string]$WorkingDirectory,
 
         [Parameter(Mandatory = $true)]
-        [string]$Label
+        [string]$Label,
+
+        [int]$TimeoutMilliseconds = -1
     )
 
     Write-Host ""
@@ -437,12 +455,34 @@ function Invoke-HenkaNative {
 
     Push-Location $WorkingDirectory
     try {
-        $ErrorActionPreference = "Continue"
-        & $FilePath @Arguments 2>&1 |
-            ForEach-Object {
-                Write-Host ([string]$_)
+        if ($TimeoutMilliseconds -gt 0) {
+            $process = $null
+            try {
+                $process = Start-HenkaProcess `
+                    -FilePath $FilePath `
+                    -Arguments $Arguments `
+                    -WorkingDirectory $WorkingDirectory `
+                    -CreateNoWindow
+                if (-not $process.WaitForExit($TimeoutMilliseconds)) {
+                    Stop-HenkaProcessTree -ProcessId $process.Id
+                    throw "$Label exceeded timeout ${TimeoutMilliseconds}ms and its process tree was terminated."
+                }
+                $exitCode = $process.ExitCode
             }
-        $exitCode = $LASTEXITCODE
+            finally {
+                if ($null -ne $process) {
+                    $process.Dispose()
+                }
+            }
+        }
+        else {
+            $ErrorActionPreference = "Continue"
+            & $FilePath @Arguments 2>&1 |
+                ForEach-Object {
+                    Write-Host ([string]$_)
+                }
+            $exitCode = $LASTEXITCODE
+        }
     }
     finally {
         $ErrorActionPreference = $previousErrorActionPreference
@@ -500,7 +540,9 @@ function Invoke-HenkaNativeCapture {
         [string]$WorkingDirectory,
 
         [Parameter(Mandatory = $true)]
-        [string]$Label
+        [string]$Label,
+
+        [int]$TimeoutMilliseconds = -1
     )
 
     $captureRoot = Join-Path ([System.IO.Path]::GetTempPath()) ("henka-native-" + [Guid]::NewGuid().ToString("N"))
@@ -522,8 +564,9 @@ function Invoke-HenkaNativeCapture {
             -StderrPath $stderrPath `
             -CreateNoWindow
 
-        if (-not $capturedProcess.WaitForExit(-1)) {
-            throw "$Label did not exit."
+        if (-not $capturedProcess.WaitForExit($TimeoutMilliseconds)) {
+            Stop-HenkaProcessTree -ProcessId $capturedProcess.Process.Id
+            throw "$Label exceeded timeout ${TimeoutMilliseconds}ms and its process tree was terminated."
         }
 
         $exitCode = $capturedProcess.Process.ExitCode

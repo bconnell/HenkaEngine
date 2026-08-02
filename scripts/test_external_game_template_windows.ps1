@@ -8,12 +8,62 @@ function Write-Step {
     Write-Host "[template] $Message"
 }
 
+function Invoke-ExternalNativeDirect {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$FilePath,
+
+        [string[]]$Arguments = @(),
+
+        [Parameter(Mandatory = $true)]
+        [string]$WorkingDirectory,
+
+        [Parameter(Mandatory = $true)]
+        [string]$Label
+    )
+
+    Write-Host ""
+    Write-Host "==> $Label"
+    Write-Host "    $FilePath $($Arguments -join ' ')"
+    Push-Location $WorkingDirectory
+    try {
+        & $FilePath @Arguments
+        $exitCode = $LASTEXITCODE
+    }
+    finally {
+        Pop-Location
+    }
+    if ($exitCode -ne 0) {
+        throw "$Label failed with exit code $exitCode."
+    }
+}
+
 $repoRoot = Get-HenkaRepoRoot -ScriptDirectory $PSScriptRoot
 $templateRoot = Join-Path $repoRoot "templates\external_game_minimal"
 $validationRoot = Join-Path $repoRoot ("build\template_validation\" + (Get-Date -Format "yyyyMMdd_HHmmss"))
 $validationSource = Join-Path $validationRoot "external_game_minimal_src"
 $validationBuild = Join-Path $validationRoot "external_game_minimal_build"
 $cmake = Get-HenkaCMakePath
+$localSdlSource = Join-Path $repoRoot "build\_deps\sdl3-src"
+$configureArguments = @(
+    "-S", $validationSource,
+    "-B", $validationBuild,
+    "-DHENKA_ENGINE_DIR=$repoRoot"
+)
+
+if (Test-Path -LiteralPath $localSdlSource -PathType Container) {
+    $configureArguments += "-DFETCHCONTENT_SOURCE_DIR_SDL3=$localSdlSource"
+    $configureArguments += "-DFETCHCONTENT_FULLY_DISCONNECTED=ON"
+    Write-Host "SDL3 provider: repository-local populated source"
+}
+else {
+    Write-Host "SDL3 provider: FetchContent network fallback"
+}
+
+# The nested SDL project uses configure-time source globs. Suppress the
+# generated ALL_BUILD regeneration target after configure so a stable source
+# tree cannot re-enter that nested custom rule during the consumer build.
+$configureArguments += "-DCMAKE_SUPPRESS_REGENERATION=ON"
 
 Write-Host "cmake: $cmake"
 Write-Host "repo: $repoRoot"
@@ -22,15 +72,15 @@ Write-Step "Preparing repo-local template validation folder"
 [System.IO.Directory]::CreateDirectory($validationRoot) | Out-Null
 Copy-Item -LiteralPath $templateRoot -Destination $validationSource -Recurse
 
-Invoke-HenkaNative `
+Invoke-ExternalNativeDirect `
     -FilePath $cmake `
-    -Arguments @("-S", $validationSource, "-B", $validationBuild, "-DHENKA_ENGINE_DIR=$repoRoot") `
+    -Arguments $configureArguments `
     -WorkingDirectory $repoRoot `
     -Label "Configure external game template"
 
-Invoke-HenkaNative `
+Invoke-ExternalNativeDirect `
     -FilePath $cmake `
-    -Arguments @("--build", $validationBuild, "--config", "Debug") `
+    -Arguments @("--build", $validationBuild, "--config", "Debug", "--parallel", "8") `
     -WorkingDirectory $repoRoot `
     -Label "Build external game template"
 
@@ -42,7 +92,8 @@ if (-not (Test-Path -LiteralPath $templateExe -PathType Leaf)) {
 $result = Invoke-HenkaNativeCapture `
     -FilePath $templateExe `
     -WorkingDirectory (Split-Path -Parent $templateExe) `
-    -Label "Run external game template smoke test"
+    -Label "Run external game template smoke test" `
+    -TimeoutMilliseconds 30000
 
 if ($result.Stdout -notmatch "External game template initialized\.") {
     throw "The external game template smoke test did not print the expected initialization output."
