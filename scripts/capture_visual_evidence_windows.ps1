@@ -35,6 +35,9 @@ public static class HenkaVisualCaptureNativeMethods
     [DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(IntPtr handle, out uint processId);
     [DllImport("user32.dll")] public static extern int GetWindowText(IntPtr handle, System.Text.StringBuilder text, int capacity);
     [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr hWnd);
+    [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr hWnd, int command);
+    [DllImport("user32.dll")] public static extern bool BringWindowToTop(IntPtr hWnd);
+    [DllImport("user32.dll")] public static extern bool SetWindowPos(IntPtr hWnd, IntPtr insertAfter, int x, int y, int width, int height, uint flags);
     [DllImport("user32.dll")] public static extern bool IsWindow(IntPtr hWnd);
     [DllImport("user32.dll")] public static extern bool PostMessage(IntPtr hWnd, uint message, IntPtr wParam, IntPtr lParam);
     [DllImport("dwmapi.dll")] public static extern int DwmGetWindowAttribute(IntPtr handle, int attribute, out RECT rect, int size);
@@ -51,6 +54,18 @@ public static class HenkaVisualCaptureNativeMethods
             return true;
         }, IntPtr.Zero);
         return result;
+    }
+    public static void ActivateSandboxWindow(IntPtr handle) {
+        IntPtr topmost = new IntPtr(-1);
+        IntPtr notTopmost = new IntPtr(-2);
+        const uint SWP_NOSIZE = 0x0001;
+        const uint SWP_NOMOVE = 0x0002;
+        const uint SWP_SHOWWINDOW = 0x0040;
+        ShowWindow(handle, 9);
+        SetWindowPos(handle, topmost, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_SHOWWINDOW);
+        SetWindowPos(handle, notTopmost, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_SHOWWINDOW);
+        BringWindowToTop(handle);
+        SetForegroundWindow(handle);
     }
 }
 "@
@@ -84,7 +99,7 @@ foreach ($mode in $modes) {
         if ($handle -eq [IntPtr]::Zero -or -not [HenkaVisualCaptureNativeMethods]::IsWindow($handle)) {
             throw "Sandbox window did not become available for $($mode.Argument)."
         }
-        [HenkaVisualCaptureNativeMethods]::SetForegroundWindow($handle) | Out-Null
+        [HenkaVisualCaptureNativeMethods]::ActivateSandboxWindow($handle)
         Start-Sleep -Milliseconds 1500
         $rect = New-Object HenkaVisualCaptureNativeMethods+RECT
         $dwmResult = [HenkaVisualCaptureNativeMethods]::DwmGetWindowAttribute(
