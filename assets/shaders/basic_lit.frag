@@ -33,6 +33,8 @@ uniform bool useIBL;
 uniform vec3 reflectionProbePosition;
 uniform vec3 reflectionProbeExtents;
 uniform bool useReflectionProbe;
+uniform samplerCube reflectionProbeMap;
+uniform bool useReflectionProbeMap;
 uniform int localLightCount;
 uniform vec4 localLightPositionRange[4];
 uniform vec4 localLightColorIntensity[4];
@@ -299,9 +301,24 @@ void main()
                 mix(reflectionDirection, normal, surfaceRoughness * 0.75),
                 normal);
             blurredReflectionDirection = parallaxCorrectReflectionDirection(blurredReflectionDirection);
-            vec3 environmentSpecular = useIBL ?
-                textureLod(iblPrefilterMap, blurredReflectionDirection, surfaceRoughness * 4.0).rgb :
-                sampleEnvironment(blurredReflectionDirection);
+            vec3 environmentSpecular = sampleEnvironment(blurredReflectionDirection);
+            if (useIBL)
+            {
+                if (useReflectionProbeMap)
+                {
+                    environmentSpecular = textureLod(
+                        reflectionProbeMap,
+                        blurredReflectionDirection,
+                        surfaceRoughness * 4.0).rgb;
+                }
+                else
+                {
+                    environmentSpecular = textureLod(
+                        iblPrefilterMap,
+                        blurredReflectionDirection,
+                        surfaceRoughness * 4.0).rgb;
+                }
+            }
             vec2 brdf = useIBL ? texture(iblBrdfLut, vec2(nDotV, 1.0 - surfaceRoughness)).rg : vec2(1.0, 0.0);
             color += min(
                 environmentDiffuse * ((1.0 - surfaceMetallic) * albedo / PI) *
