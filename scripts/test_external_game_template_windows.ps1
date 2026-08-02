@@ -19,18 +19,32 @@ function Invoke-ExternalNativeDirect {
         [string]$WorkingDirectory,
 
         [Parameter(Mandatory = $true)]
-        [string]$Label
+        [string]$Label,
+
+        [int]$TimeoutMilliseconds = 120000
     )
 
     Write-Host ""
     Write-Host "==> $Label"
     Write-Host "    $FilePath $($Arguments -join ' ')"
+    $process = $null
     Push-Location $WorkingDirectory
     try {
-        & $FilePath @Arguments
-        $exitCode = $LASTEXITCODE
+        $process = Start-HenkaProcess `
+            -FilePath $FilePath `
+            -Arguments $Arguments `
+            -WorkingDirectory $WorkingDirectory `
+            -CreateNoWindow
+        if (-not $process.WaitForExit($TimeoutMilliseconds)) {
+            Stop-HenkaProcessTree -ProcessId $process.Id
+            throw "$Label exceeded timeout ${TimeoutMilliseconds}ms and its process tree was terminated."
+        }
+        $exitCode = $process.ExitCode
     }
     finally {
+        if ($null -ne $process) {
+            $process.Dispose()
+        }
         Pop-Location
     }
     if ($exitCode -ne 0) {
