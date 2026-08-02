@@ -50,6 +50,10 @@ jobs:
         shell: powershell
         run: .\scripts\check_packaged_sandbox3d_windows.ps1 -NonInteractive -ContractOnly
 
+      - name: Run bounded packaged soak
+        shell: powershell
+        run: .\scripts\soak_packaged_sandbox3d_windows.ps1 -Iterations 10
+
       - name: Validate external game template
         shell: powershell
         run: .\scripts\test_external_game_template_windows.ps1

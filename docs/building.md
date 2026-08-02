@@ -90,6 +90,19 @@ On a first packaged run with no local settings file yet, the sandbox opens the d
 The packaged sandbox still opens a console window at this stage, but the in-window panels, utilities, and status area are the intended normal workflow.
 At startup, the sandbox also reports whether it detected `Development` or `Packaged` runtime mode.
 
+## Run a bounded packaged soak
+
+After packaging, the repeatable smoke/closure check runs ten isolated startup
+iterations by default and requires both the normal completion marker and the
+engine's clean allocation-shutdown report on every iteration:
+
+```powershell
+.\scripts\soak_packaged_sandbox3d_windows.ps1
+```
+
+Use `-Iterations` for a longer bounded run. This check does not save sandbox
+settings or modify personal files.
+
 ## Run a packaged sandbox check
 
 ```powershell
