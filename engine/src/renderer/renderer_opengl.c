@@ -820,7 +820,8 @@ static bool henka_validate_shader_contract(
         "useOcclusionTexture", "useEmissiveTexture", "metallic", "roughness",
         "normalScale", "occlusionStrength", "emissiveColor", "emissiveStrength",
         "clearcoat", "clearcoatRoughness", "sheenColor", "sheenRoughness",
-        "alphaMode", "alphaCutoff", "shadowMap", "useShadowMap"
+        "alphaMode", "alphaCutoff", "shadowMap", "useShadowMap",
+        "environmentTexture", "useEnvironmentTexture", "environmentRotation"
     };
     const char* const* required_uniforms = contract_type == HENKA_SHADER_CONTRACT_MATERIAL ?
         material_uniforms : minimal_uniforms;
@@ -2387,6 +2388,14 @@ henka_result henka_opengl_renderer_draw_scene(
             "environmentZenithColor",
             scene->environment.zenith_color);
         henka_set_uniform_float(program, "environmentIntensity", scene->environment.intensity);
+        henka_set_uniform_int(program, "environmentTexture", 6);
+        henka_set_uniform_bool(
+            program,
+            "useEnvironmentTexture",
+            !helper_entity &&
+            scene->environment.hdr_texture != NULL &&
+            scene->environment.hdr_texture->backend_data != NULL);
+        henka_set_uniform_float(program, "environmentRotation", scene->environment.hdr_rotation);
         henka_set_uniform_bool(program, "fogEnabled", !helper_entity && scene->fog.enabled);
         henka_set_uniform_int(program, "fogMode", (int)scene->fog.mode);
         henka_set_uniform_vec3(program, "fogColor", scene->fog.color);
@@ -2485,6 +2494,12 @@ henka_result henka_opengl_renderer_draw_scene(
         g_gl.ActiveTexture(GL_TEXTURE5);
         glBindTexture(GL_TEXTURE_2D,
             rendered ? state->shadow_depth_texture : 0U);
+        g_gl.ActiveTexture(GL_TEXTURE6);
+        glBindTexture(
+            GL_TEXTURE_2D,
+            !helper_entity && scene->environment.hdr_texture != NULL &&
+            scene->environment.hdr_texture->backend_data != NULL ?
+            ((const henka_opengl_texture_data*)scene->environment.hdr_texture->backend_data)->texture_id : 0U);
         g_gl.ActiveTexture(GL_TEXTURE0);
         g_gl.BindVertexArray(mesh_data->vao);
         glDrawElements(
@@ -2515,6 +2530,8 @@ henka_result henka_opengl_renderer_draw_scene(
     g_gl.ActiveTexture(GL_TEXTURE4);
     glBindTexture(GL_TEXTURE_2D, 0);
     g_gl.ActiveTexture(GL_TEXTURE5);
+    glBindTexture(GL_TEXTURE_2D, 0);
+    g_gl.ActiveTexture(GL_TEXTURE6);
     glBindTexture(GL_TEXTURE_2D, 0);
     g_gl.ActiveTexture(GL_TEXTURE0);
     g_gl.UseProgram(0);

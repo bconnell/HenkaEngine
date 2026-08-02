@@ -23,6 +23,9 @@ uniform vec3 environmentGroundColor;
 uniform vec3 environmentHorizonColor;
 uniform vec3 environmentZenithColor;
 uniform float environmentIntensity;
+uniform sampler2D environmentTexture;
+uniform bool useEnvironmentTexture;
+uniform float environmentRotation;
 uniform bool fogEnabled;
 uniform int fogMode;
 uniform vec3 fogColor;
@@ -128,6 +131,12 @@ float shadowFactor(vec3 normal, vec3 lightDir)
 
 vec3 sampleEnvironment(vec3 direction)
 {
+    if (useEnvironmentTexture)
+    {
+        float longitude = atan(direction.z, direction.x) / (2.0 * PI) + 0.5 + environmentRotation / (2.0 * PI);
+        float latitude = acos(clamp(direction.y, -1.0, 1.0)) / PI;
+        return min(max(texture(environmentTexture, vec2(fract(longitude), latitude)).rgb, vec3(0.0)) * max(environmentIntensity, 0.0), vec3(65504.0));
+    }
     float height = clamp(direction.y * 0.5 + 0.5, 0.0, 1.0);
     float horizon = smoothstep(0.04, 0.48, height);
     vec3 lower = mix(environmentGroundColor, environmentHorizonColor, horizon);
