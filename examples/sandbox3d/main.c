@@ -292,6 +292,8 @@ typedef struct sandbox3d_state
     henka_texture* ground_texture;
     henka_texture* missing_texture;
     henka_texture* environment_texture;
+    henka_texture* detail_normal_texture;
+    henka_texture* macro_variation_texture;
     henka_entity cube_entity;
     henka_entity ground_entity;
     henka_entity grid_entity;
@@ -2828,6 +2830,8 @@ static void sandbox3d_release_owned_resources(sandbox3d_state* state)
     henka_physics_world_destroy(state->physics.world);
     henka_scene_destroy(state->scene);
     henka_texture_destroy(state->environment_texture);
+    henka_texture_destroy(state->detail_normal_texture);
+    henka_texture_destroy(state->macro_variation_texture);
     henka_action_context_destroy(state->actions);
     henka_settings_destroy(state->settings);
     henka_ui_destroy(state->ui);
@@ -7905,6 +7909,56 @@ static henka_result sandbox3d_initialize(henka_engine* engine, void* user_data)
         {
             goto fail;
         }
+        {
+            static const unsigned char detail_normal_pixels[] =
+            {
+                128U, 128U, 255U, 255U, 142U, 116U, 246U, 255U,
+                114U, 140U, 250U, 255U, 130U, 124U, 255U, 255U,
+                138U, 120U, 248U, 255U, 118U, 136U, 252U, 255U,
+                126U, 132U, 255U, 255U, 144U, 112U, 244U, 255U,
+                116U, 138U, 250U, 255U, 134U, 122U, 252U, 255U,
+                140U, 118U, 246U, 255U, 122U, 134U, 255U, 255U,
+                128U, 128U, 255U, 255U, 146U, 110U, 242U, 255U,
+                112U, 142U, 248U, 255U, 132U, 126U, 255U, 255U
+            };
+            static const unsigned char macro_variation_pixels[] =
+            {
+                118U, 72U, 38U, 255U, 156U, 98U, 48U, 255U,
+                104U, 60U, 32U, 255U, 174U, 112U, 56U, 255U,
+                168U, 106U, 52U, 255U, 112U, 66U, 34U, 255U,
+                146U, 86U, 42U, 255U, 184U, 124U, 64U, 255U,
+                110U, 64U, 34U, 255U, 162U, 100U, 48U, 255U,
+                178U, 116U, 58U, 255U, 122U, 74U, 38U, 255U,
+                136U, 80U, 40U, 255U, 186U, 126U, 66U, 255U,
+                114U, 68U, 36U, 255U, 154U, 94U, 46U, 255U
+            };
+            henka_texture_descriptor normal_descriptor = henka_texture_descriptor_default_normal();
+            henka_texture_descriptor macro_descriptor = henka_texture_descriptor_default_color();
+            normal_descriptor.generate_mipmaps = true;
+            macro_descriptor.generate_mipmaps = true;
+            result = henka_texture_create_from_rgba8_with_descriptor(
+                engine,
+                4,
+                4,
+                detail_normal_pixels,
+                &normal_descriptor,
+                &state->detail_normal_texture);
+            if (result != HENKA_SUCCESS)
+            {
+                goto fail;
+            }
+            result = henka_texture_create_from_rgba8_with_descriptor(
+                engine,
+                4,
+                4,
+                macro_variation_pixels,
+                &macro_descriptor,
+                &state->macro_variation_texture);
+            if (result != HENKA_SUCCESS)
+            {
+                goto fail;
+            }
+        }
         result = henka_scene_add_reflection_probe(
             state->scene,
             (henka_scene_reflection_probe_desc){
@@ -8222,8 +8276,17 @@ static henka_result sandbox3d_initialize(henka_engine* engine, void* user_data)
                 realism_index == 4 ? 0.72f : 0.46f;
             realism_material.clearcoat = realism_index == 2 ? 0.9f : 0.0f;
             realism_material.clearcoat_roughness = 0.12f;
+            if (realism_index == 4)
+            {
+                realism_material.base_color_texture = state->macro_variation_texture;
+                realism_material.normal_texture = state->detail_normal_texture;
+                realism_material.use_texture = true;
+                realism_material.normal_scale = 0.55f;
+            }
             if (realism_index == 5)
             {
+                realism_material.normal_texture = state->detail_normal_texture;
+                realism_material.normal_scale = 0.35f;
                 realism_material.sheen_color = (henka_vec3){0.42f, 0.08f, 0.24f};
                 realism_material.sheen_roughness = 0.82f;
             }

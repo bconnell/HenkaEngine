@@ -115,7 +115,7 @@ The Rendered presentation also keeps one bounded display-space RGBA8 history tex
 
 The directional shadow map is fitted around the active camera with a bounded orthographic coverage and texel-quantized center. This stabilizes the map during sub-texel camera motion while retaining slope-aware bias and a small PCF kernel; local point and spot shadow maps remain outside the current GL 3.3 budget.
 
-The sandbox now includes a bounded realism validation row covering rough and polished metal, painted clearcoat, plastic, stone-like roughness, and fabric sheen under the same HDR environment, direct light, shadow, IBL, and bloom paths. Transmission/glass, volumetric fog, SSR, and temporal reprojection remain explicit fallbacks or future renderer contracts rather than being represented by unsupported material fields.
+The sandbox now includes a bounded realism validation row covering rough and polished metal, painted clearcoat, plastic, stone-like roughness, and fabric sheen under the same HDR environment, direct light, shadow, IBL, and bloom paths. The stone and fabric samples also use owned procedural macro-variation and detail-normal textures with the normal semantic descriptor. Transmission/glass, volumetric fog, SSR, and temporal reprojection remain explicit fallbacks or future renderer contracts rather than being represented by unsupported material fields.
 
 Henka now also includes a small docked workspace helper for viewport-first tools:
 
