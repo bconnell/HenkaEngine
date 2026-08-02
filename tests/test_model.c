@@ -85,6 +85,17 @@ static void henka_test_gltf_scene_import(void)
         "\"nodes\":[{\"name\":\"Root\",\"mesh\":0,\"camera\":0,\"children\":[1],\"extensions\":{\"KHR_lights_punctual\":{\"light\":0}}},"
         "{\"name\":\"Child\",\"mesh\":0,\"translation\":[2.0,0.0,0.0]}],"
         "\"scenes\":[{\"nodes\":[0]}],\"scene\":0}";
+    static const char* matrix_scene_gltf =
+        "{\"asset\":{\"version\":\"2.0\"},"
+        "\"buffers\":[{\"uri\":\"data:application/octet-stream;base64,"
+        "AAAAAAAAAAAAAAAAAACAPwAAAAAAAAAAAAAAAAAAgD8AAAAA\",\"byteLength\":36}],"
+        "\"bufferViews\":[{\"buffer\":0,\"byteLength\":36}],"
+        "\"accessors\":[{\"bufferView\":0,\"componentType\":5126,\"count\":3,\"type\":\"VEC3\"}],"
+        "\"meshes\":[{\"primitives\":[{\"attributes\":{\"POSITION\":0}}]}],"
+        "\"nodes\":[{\"name\":\"Matrix Root\",\"mesh\":0,\"matrix\":["
+        "1.4142135,1.4142135,0.0,0.0,-1.0606602,1.0606602,0.0,0.0,"
+        "0.0,0.0,3.0,0.0,4.0,5.0,6.0,1.0]}],"
+        "\"scenes\":[{\"nodes\":[0]}],\"scene\":0}";
     henka_model_scene_data scene;
     char* invalid_scene;
     char* selected_roots;
@@ -109,6 +120,24 @@ static void henka_test_gltf_scene_import(void)
     HENKA_TEST_ASSERT(scene.cameras[0].camera.projection_mode == HENKA_CAMERA_PROJECTION_PERSPECTIVE);
     HENKA_TEST_ASSERT(scene.light_count == 1U);
     HENKA_TEST_ASSERT(scene.lights[0].type == HENKA_MODEL_SCENE_LIGHT_POINT);
+    henka_model_scene_data_destroy(&scene);
+
+    memset(&scene, 0, sizeof(scene));
+    HENKA_TEST_ASSERT(henka_model_scene_data_load_gltf_from_memory(
+        matrix_scene_gltf, strlen(matrix_scene_gltf), "matrix-scene.gltf", &scene) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(scene.nodes[0].local_transform.position.x, 4.0f, 0.0001f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(scene.nodes[0].local_transform.position.y, 5.0f, 0.0001f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(scene.nodes[0].local_transform.position.z, 6.0f, 0.0001f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(scene.nodes[0].local_transform.scale.x, 2.0f, 0.0001f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(scene.nodes[0].local_transform.scale.y, 1.5f, 0.0001f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(scene.nodes[0].local_transform.scale.z, 3.0f, 0.0001f);
+    {
+        henka_mat4 reconstructed = henka_transform_to_mat4(scene.nodes[0].local_transform);
+        size_t matrix_index;
+        for (matrix_index = 0U; matrix_index < 16U; ++matrix_index)
+            HENKA_TEST_ASSERT_FLOAT_CLOSE(
+                reconstructed.m[matrix_index], scene.nodes[0].local_matrix.m[matrix_index], 0.0002f);
+    }
     henka_model_scene_data_destroy(&scene);
 
     scene_length = strlen(scene_gltf);

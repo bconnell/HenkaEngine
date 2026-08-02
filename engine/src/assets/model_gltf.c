@@ -1360,57 +1360,90 @@ static bool henka_gltf_parse_scene_lights(
     return !henka_gltf_array_item(lights, lights_end, HENKA_MODEL_MAX_SCENE_ITEMS, &light, &light_end);
 }
 
-static henka_transform henka_gltf_matrix_to_transform(const henka_mat4* matrix)
+static bool henka_gltf_matrix_to_transform(
+    const henka_mat4* matrix,
+    henka_transform* out_transform)
 {
     henka_transform transform = henka_transform_identity();
+    henka_vec3 column_x;
+    henka_vec3 column_y;
+    henka_vec3 column_z;
+    henka_vec3 normalized_x;
+    henka_vec3 normalized_y;
+    henka_vec3 normalized_z;
     float sx;
     float sy;
     float sz;
+    float determinant;
     float trace;
+    int index;
 
-    if (matrix == NULL) return transform;
+    if (out_transform != NULL) *out_transform = transform;
+    if (matrix == NULL || out_transform == NULL) return false;
+    for (index = 0; index < 16; ++index)
+        if (!isfinite(matrix->m[index])) return false;
+    if (fabsf(matrix->m[3]) > 0.0001f || fabsf(matrix->m[7]) > 0.0001f ||
+        fabsf(matrix->m[11]) > 0.0001f || fabsf(matrix->m[15] - 1.0f) > 0.0001f)
+        return false;
+    column_x = (henka_vec3){matrix->m[0], matrix->m[1], matrix->m[2]};
+    column_y = (henka_vec3){matrix->m[4], matrix->m[5], matrix->m[6]};
+    column_z = (henka_vec3){matrix->m[8], matrix->m[9], matrix->m[10]};
+    sx = henka_vec3_length(column_x);
+    sy = henka_vec3_length(column_y);
+    sz = henka_vec3_length(column_z);
+    if (!isfinite(sx) || !isfinite(sy) || !isfinite(sz) ||
+        sx <= FLT_EPSILON || sy <= FLT_EPSILON || sz <= FLT_EPSILON)
+        return false;
+    determinant = henka_vec3_dot(henka_vec3_cross(column_x, column_y), column_z);
+    if (!isfinite(determinant) || fabsf(determinant) <= FLT_EPSILON) return false;
+    if (determinant < 0.0f) sx = -sx;
+    normalized_x = henka_vec3_scale(column_x, 1.0f / sx);
+    normalized_y = henka_vec3_scale(column_y, 1.0f / sy);
+    normalized_z = henka_vec3_scale(column_z, 1.0f / sz);
+    if (fabsf(henka_vec3_dot(normalized_x, normalized_y)) > 0.001f ||
+        fabsf(henka_vec3_dot(normalized_x, normalized_z)) > 0.001f ||
+        fabsf(henka_vec3_dot(normalized_y, normalized_z)) > 0.001f)
+        return false;
     transform.position = (henka_vec3){matrix->m[12], matrix->m[13], matrix->m[14]};
-    sx = sqrtf(matrix->m[0] * matrix->m[0] + matrix->m[1] * matrix->m[1] + matrix->m[2] * matrix->m[2]);
-    sy = sqrtf(matrix->m[4] * matrix->m[4] + matrix->m[5] * matrix->m[5] + matrix->m[6] * matrix->m[6]);
-    sz = sqrtf(matrix->m[8] * matrix->m[8] + matrix->m[9] * matrix->m[9] + matrix->m[10] * matrix->m[10]);
-    if (!isfinite(sx) || !isfinite(sy) || !isfinite(sz) || sx <= FLT_EPSILON || sy <= FLT_EPSILON || sz <= FLT_EPSILON)
-        return transform;
     transform.scale = (henka_vec3){sx, sy, sz};
-    trace = matrix->m[0] / sx + matrix->m[5] / sy + matrix->m[10] / sz;
+    trace = normalized_x.x + normalized_y.y + normalized_z.z;
     if (trace > 0.0f)
     {
         float s = sqrtf(trace + 1.0f) * 2.0f;
         transform.rotation.w = 0.25f * s;
-        transform.rotation.x = (matrix->m[6] / sz - matrix->m[9] / sz) / s;
-        transform.rotation.y = (matrix->m[8] / sx - matrix->m[2] / sx) / s;
-        transform.rotation.z = (matrix->m[1] / sy - matrix->m[4] / sy) / s;
+        transform.rotation.x = (normalized_y.z - normalized_z.y) / s;
+        transform.rotation.y = (normalized_z.x - normalized_x.z) / s;
+        transform.rotation.z = (normalized_x.y - normalized_y.x) / s;
     }
-    else if (matrix->m[0] / sx > matrix->m[5] / sy && matrix->m[0] / sx > matrix->m[10] / sz)
+    else if (normalized_x.x > normalized_y.y && normalized_x.x > normalized_z.z)
     {
-        float s = sqrtf(1.0f + matrix->m[0] / sx - matrix->m[5] / sy - matrix->m[10] / sz) * 2.0f;
-        transform.rotation.w = (matrix->m[6] / sz - matrix->m[9] / sz) / s;
+        float s = sqrtf(1.0f + normalized_x.x - normalized_y.y - normalized_z.z) * 2.0f;
+        transform.rotation.w = (normalized_y.z - normalized_z.y) / s;
         transform.rotation.x = 0.25f * s;
-        transform.rotation.y = (matrix->m[4] / sy + matrix->m[1] / sy) / s;
-        transform.rotation.z = (matrix->m[8] / sx + matrix->m[2] / sx) / s;
+        transform.rotation.y = (normalized_y.x + normalized_x.y) / s;
+        transform.rotation.z = (normalized_z.x + normalized_x.z) / s;
     }
-    else if (matrix->m[5] / sy > matrix->m[10] / sz)
+    else if (normalized_y.y > normalized_z.z)
     {
-        float s = sqrtf(1.0f + matrix->m[5] / sy - matrix->m[0] / sx - matrix->m[10] / sz) * 2.0f;
-        transform.rotation.w = (matrix->m[8] / sx - matrix->m[2] / sx) / s;
-        transform.rotation.x = (matrix->m[4] / sy + matrix->m[1] / sy) / s;
+        float s = sqrtf(1.0f + normalized_y.y - normalized_x.x - normalized_z.z) * 2.0f;
+        transform.rotation.w = (normalized_z.x - normalized_x.z) / s;
+        transform.rotation.x = (normalized_y.x + normalized_x.y) / s;
         transform.rotation.y = 0.25f * s;
-        transform.rotation.z = (matrix->m[9] / sz + matrix->m[6] / sz) / s;
+        transform.rotation.z = (normalized_z.y + normalized_y.z) / s;
     }
     else
     {
-        float s = sqrtf(1.0f + matrix->m[10] / sz - matrix->m[0] / sx - matrix->m[5] / sy) * 2.0f;
-        transform.rotation.w = (matrix->m[1] / sy - matrix->m[4] / sy) / s;
-        transform.rotation.x = (matrix->m[8] / sx + matrix->m[2] / sx) / s;
-        transform.rotation.y = (matrix->m[9] / sz + matrix->m[6] / sz) / s;
+        float s = sqrtf(1.0f + normalized_z.z - normalized_x.x - normalized_y.y) * 2.0f;
+        transform.rotation.w = (normalized_x.y - normalized_y.x) / s;
+        transform.rotation.x = (normalized_z.x + normalized_x.z) / s;
+        transform.rotation.y = (normalized_z.y + normalized_y.z) / s;
         transform.rotation.z = 0.25f * s;
     }
     transform.rotation = henka_quat_normalize(transform.rotation);
-    return transform;
+    if (!isfinite(transform.rotation.x) || !isfinite(transform.rotation.y) ||
+        !isfinite(transform.rotation.z) || !isfinite(transform.rotation.w)) return false;
+    *out_transform = transform;
+    return true;
 }
 
 static bool henka_gltf_compute_scene_world_matrix(
@@ -1427,7 +1460,7 @@ static bool henka_gltf_compute_scene_world_matrix(
     else if ((size_t)node->parent_index >= scene->node_count ||
         !henka_gltf_compute_scene_world_matrix(scene, (size_t)node->parent_index, state)) return false;
     else node->world_matrix = henka_mat4_multiply(scene->nodes[node->parent_index].world_matrix, node->local_matrix);
-    node->world_transform = henka_gltf_matrix_to_transform(&node->world_matrix);
+    if (!henka_gltf_matrix_to_transform(&node->world_matrix, &node->world_transform)) return false;
     state[node_index] = 2U;
     return true;
 }
@@ -1496,8 +1529,11 @@ static bool henka_gltf_parse_scene_nodes(
             output->local_transform.scale.x == 0.0f || output->local_transform.scale.y == 0.0f || output->local_transform.scale.z == 0.0f) return false;
         if (has_matrix)
         {
+            henka_mat4 matrix_value;
             if (!henka_gltf_array_float_values(matrix, matrix_end, matrix_values, 16U)) return false;
             memcpy(output->local_matrix.m, matrix_values, sizeof(matrix_values));
+            memcpy(matrix_value.m, matrix_values, sizeof(matrix_values));
+            if (!henka_gltf_matrix_to_transform(&matrix_value, &output->local_transform)) return false;
         }
         else output->local_matrix = henka_transform_to_mat4(output->local_transform);
         if (henka_gltf_find_member(node, node_end, "mesh", &value, &value_end) &&

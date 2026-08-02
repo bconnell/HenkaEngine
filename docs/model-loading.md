@@ -75,8 +75,14 @@ The loader currently supports:
   asset manager.
 - multiple triangle primitives, node hierarchies with cycle and parent checks,
   selected top-level scene roots (child nodes are rejected as malformed roots),
-  TRS or matrix node transforms, perspective and
+  TRS or finite affine non-sheared matrix node transforms, perspective and
   orthographic cameras, and bounded punctual-light records
+
+Matrix-authored nodes are validated and decomposed into the runtime TRS
+contract before scene instantiation. Affine matrices with perspective terms,
+singular axes, or shear are rejected rather than approximated or silently
+replaced with identity transforms; the original local and computed world
+matrices remain available in the CPU scene data.
 
 ## Input limits
 
