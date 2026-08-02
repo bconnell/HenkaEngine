@@ -94,6 +94,11 @@ typedef struct henka_opengl_renderer_state
     uint32_t scene_culled_entities;
     uint32_t transparent_sort_overflow_entities;
     uint64_t tracked_gpu_bytes;
+    uint64_t tracked_gpu_peak_bytes;
+    uint64_t tracked_mesh_bytes;
+    uint64_t tracked_texture_bytes;
+    uint64_t tracked_render_target_bytes;
+    bool memory_overflow;
     uint32_t tracked_mesh_count;
     uint32_t tracked_texture_count;
     henka_opengl_transparent_sort_item transparent_sort_items[HENKA_OPENGL_TRANSPARENT_SORT_CAPACITY];
@@ -101,6 +106,145 @@ typedef struct henka_opengl_renderer_state
     bool transparent_sort_enabled;
     henka_opengl_tool_window_target tool_targets[HENKA_MAX_TOOL_WINDOWS];
 } henka_opengl_renderer_state;
+
+static bool henka_opengl_memory_add(uint64_t* value, uint64_t amount)
+{
+    if (value == NULL || UINT64_MAX - *value < amount)
+    {
+        return false;
+    }
+    *value += amount;
+    return true;
+}
+
+static bool henka_opengl_memory_subtract(uint64_t* value, uint64_t amount)
+{
+    if (value == NULL || *value < amount)
+    {
+        return false;
+    }
+    *value -= amount;
+    return true;
+}
+
+static void henka_opengl_memory_refresh(
+    henka_opengl_renderer_state* state)
+{
+    uint64_t total = 0U;
+
+    if (state == NULL || state->memory_overflow ||
+        !henka_opengl_memory_add(&total, state->tracked_mesh_bytes) ||
+        !henka_opengl_memory_add(&total, state->tracked_texture_bytes) ||
+        !henka_opengl_memory_add(&total, state->tracked_render_target_bytes))
+    {
+        if (state != NULL)
+        {
+            state->memory_overflow = true;
+            state->tracked_gpu_bytes = UINT64_MAX;
+        }
+        return;
+    }
+    state->tracked_gpu_bytes = total;
+    if (state->tracked_gpu_peak_bytes < total)
+    {
+        state->tracked_gpu_peak_bytes = total;
+    }
+}
+
+static void henka_opengl_memory_add_category(
+    henka_opengl_renderer_state* state,
+    uint64_t* category,
+    uint64_t amount)
+{
+    if (state == NULL || !henka_opengl_memory_add(category, amount))
+    {
+        if (state != NULL)
+        {
+            state->memory_overflow = true;
+            state->tracked_gpu_bytes = UINT64_MAX;
+        }
+        return;
+    }
+    henka_opengl_memory_refresh(state);
+}
+
+static void henka_opengl_memory_remove_category(
+    henka_opengl_renderer_state* state,
+    uint64_t* category,
+    uint64_t amount)
+{
+    if (state == NULL || !henka_opengl_memory_subtract(category, amount))
+    {
+        if (state != NULL)
+        {
+            state->memory_overflow = true;
+            state->tracked_gpu_bytes = UINT64_MAX;
+        }
+        return;
+    }
+    henka_opengl_memory_refresh(state);
+}
+
+static bool henka_opengl_calculate_texture_bytes(
+    int width,
+    int height,
+    size_t decoded_bytes,
+    bool generate_mipmaps,
+    uint64_t* out_bytes)
+{
+    uint64_t base_pixels;
+    uint64_t bytes_per_pixel;
+    uint64_t total = 0U;
+    int mip_width;
+    int mip_height;
+
+    if (width <= 0 || height <= 0 || out_bytes == NULL)
+    {
+        return false;
+    }
+    if ((uint64_t)width > UINT64_MAX / (uint64_t)height)
+    {
+        return false;
+    }
+    base_pixels = (uint64_t)width * (uint64_t)height;
+    if (base_pixels == 0U || (uint64_t)decoded_bytes < base_pixels ||
+        (uint64_t)decoded_bytes % base_pixels != 0U)
+    {
+        return false;
+    }
+    bytes_per_pixel = (uint64_t)decoded_bytes / base_pixels;
+    mip_width = width;
+    mip_height = height;
+    do
+    {
+        uint64_t level_pixels;
+        uint64_t level_bytes;
+
+        if ((uint64_t)mip_width > UINT64_MAX / (uint64_t)mip_height)
+        {
+            return false;
+        }
+        level_pixels = (uint64_t)mip_width * (uint64_t)mip_height;
+        if (bytes_per_pixel > UINT64_MAX / level_pixels)
+        {
+            return false;
+        }
+        level_bytes = level_pixels * bytes_per_pixel;
+        if (!henka_opengl_memory_add(&total, level_bytes))
+        {
+            return false;
+        }
+        if (!generate_mipmaps || (mip_width == 1 && mip_height == 1))
+        {
+            break;
+        }
+        mip_width = mip_width > 1 ? mip_width / 2 : 1;
+        mip_height = mip_height > 1 ? mip_height / 2 : 1;
+    } while (true);
+
+    *out_bytes = total;
+    return true;
+}
 
 typedef struct henka_opengl_functions
 {
@@ -990,8 +1134,10 @@ static void henka_opengl_delete_hdr_target(henka_opengl_renderer_state* state)
     if (state != NULL && state->hdr_width > 0 && state->hdr_height > 0)
     {
         target_bytes = (uint64_t)state->hdr_width * (uint64_t)state->hdr_height * 12U;
-        state->tracked_gpu_bytes = state->tracked_gpu_bytes >= target_bytes ?
-            state->tracked_gpu_bytes - target_bytes : 0U;
+        henka_opengl_memory_remove_category(
+            state,
+            &state->tracked_render_target_bytes,
+            target_bytes);
     }
     if (state->hdr_depth_buffer != 0U)
     {
@@ -1020,8 +1166,10 @@ static void henka_opengl_delete_shadow_target(henka_opengl_renderer_state* state
     {
         target_bytes = (uint64_t)state->shadow_resolution *
             (uint64_t)state->shadow_resolution * 4U;
-        state->tracked_gpu_bytes = state->tracked_gpu_bytes >= target_bytes ?
-            state->tracked_gpu_bytes - target_bytes : 0U;
+        henka_opengl_memory_remove_category(
+            state,
+            &state->tracked_render_target_bytes,
+            target_bytes);
     }
     if (state->shadow_depth_texture != 0U)
     {
@@ -1110,8 +1258,10 @@ static henka_result henka_opengl_create_hdr_target(
     state->hdr_failure_reason[0] = '\0';
     {
         uint64_t target_bytes = (uint64_t)width * (uint64_t)height * 12U;
-        state->tracked_gpu_bytes = UINT64_MAX - state->tracked_gpu_bytes < target_bytes ?
-            UINT64_MAX : state->tracked_gpu_bytes + target_bytes;
+        henka_opengl_memory_add_category(
+            state,
+            &state->tracked_render_target_bytes,
+            target_bytes);
     }
     return HENKA_SUCCESS;
 }
@@ -1187,8 +1337,10 @@ static henka_result henka_opengl_create_shadow_target(
     state->shadow_failure_reason[0] = '\0';
     {
         uint64_t target_bytes = (uint64_t)resolution * (uint64_t)resolution * 4U;
-        state->tracked_gpu_bytes = UINT64_MAX - state->tracked_gpu_bytes < target_bytes ?
-            UINT64_MAX : state->tracked_gpu_bytes + target_bytes;
+        henka_opengl_memory_add_category(
+            state,
+            &state->tracked_render_target_bytes,
+            target_bytes);
     }
     return HENKA_SUCCESS;
 }
@@ -2387,8 +2539,13 @@ void henka_opengl_renderer_get_scene_diagnostics(
 void henka_opengl_renderer_get_memory_diagnostics(
     const struct henka_renderer* renderer,
     uint64_t* out_gpu_bytes,
+    uint64_t* out_gpu_peak_bytes,
+    uint64_t* out_mesh_bytes,
+    uint64_t* out_texture_bytes,
+    uint64_t* out_render_target_bytes,
     uint32_t* out_mesh_count,
-    uint32_t* out_texture_count)
+    uint32_t* out_texture_count,
+    bool* out_overflow)
 {
     const henka_opengl_renderer_state* state = renderer != NULL ?
         (const henka_opengl_renderer_state*)renderer->backend_state : NULL;
@@ -2397,6 +2554,22 @@ void henka_opengl_renderer_get_memory_diagnostics(
     {
         *out_gpu_bytes = state != NULL ? state->tracked_gpu_bytes : 0U;
     }
+    if (out_gpu_peak_bytes != NULL)
+    {
+        *out_gpu_peak_bytes = state != NULL ? state->tracked_gpu_peak_bytes : 0U;
+    }
+    if (out_mesh_bytes != NULL)
+    {
+        *out_mesh_bytes = state != NULL ? state->tracked_mesh_bytes : 0U;
+    }
+    if (out_texture_bytes != NULL)
+    {
+        *out_texture_bytes = state != NULL ? state->tracked_texture_bytes : 0U;
+    }
+    if (out_render_target_bytes != NULL)
+    {
+        *out_render_target_bytes = state != NULL ? state->tracked_render_target_bytes : 0U;
+    }
     if (out_mesh_count != NULL)
     {
         *out_mesh_count = state != NULL ? state->tracked_mesh_count : 0U;
@@ -2404,6 +2577,10 @@ void henka_opengl_renderer_get_memory_diagnostics(
     if (out_texture_count != NULL)
     {
         *out_texture_count = state != NULL ? state->tracked_texture_count : 0U;
+    }
+    if (out_overflow != NULL)
+    {
+        *out_overflow = state != NULL && state->memory_overflow;
     }
 }
 
@@ -3265,9 +3442,10 @@ henka_result henka_opengl_renderer_create_mesh_from_data(
             (henka_opengl_renderer_state*)renderer->backend_state;
         if (memory_state != NULL)
         {
-            memory_state->tracked_gpu_bytes = UINT64_MAX - memory_state->tracked_gpu_bytes <
-                mesh_data->tracked_gpu_bytes ? UINT64_MAX :
-                memory_state->tracked_gpu_bytes + mesh_data->tracked_gpu_bytes;
+            henka_opengl_memory_add_category(
+                memory_state,
+                &memory_state->tracked_mesh_bytes,
+                mesh_data->tracked_gpu_bytes);
             if (memory_state->tracked_mesh_count < UINT32_MAX)
             {
                 ++memory_state->tracked_mesh_count;
@@ -3293,9 +3471,10 @@ void henka_opengl_renderer_destroy_mesh(struct henka_mesh* mesh)
     {
         henka_opengl_renderer_state* memory_state =
             (henka_opengl_renderer_state*)mesh->renderer->backend_state;
-        memory_state->tracked_gpu_bytes = memory_state->tracked_gpu_bytes >=
-            mesh_data->tracked_gpu_bytes ?
-            memory_state->tracked_gpu_bytes - mesh_data->tracked_gpu_bytes : 0U;
+        henka_opengl_memory_remove_category(
+            memory_state,
+            &memory_state->tracked_mesh_bytes,
+            mesh_data->tracked_gpu_bytes);
         if (memory_state->tracked_mesh_count > 0U)
         {
             --memory_state->tracked_mesh_count;
@@ -3620,6 +3799,7 @@ henka_result henka_opengl_renderer_create_texture_from_rgba8_with_descriptor(
     henka_result context_result;
     size_t decoded_bytes;
     henka_opengl_renderer_state* state;
+    uint64_t logical_texture_bytes;
     henka_result operation_result;
     GLint previous_active_texture;
     GLint previous_texture_binding;
@@ -3642,6 +3822,15 @@ henka_result henka_opengl_renderer_create_texture_from_rgba8_with_descriptor(
             width,
             height,
             &decoded_bytes))
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    if (!henka_opengl_calculate_texture_bytes(
+            width,
+            height,
+            decoded_bytes,
+            descriptor->generate_mipmaps,
+            &logical_texture_bytes))
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
@@ -3854,20 +4043,16 @@ henka_result henka_opengl_renderer_create_texture_from_rgba8_with_descriptor(
     texture->alpha_mode = HENKA_TEXTURE_ALPHA_OPAQUE;
     texture->last_failure = HENKA_TEXTURE_FAILURE_NONE;
     texture->content_revision = 1U;
-    texture_data->tracked_gpu_bytes = (uint64_t)decoded_bytes;
-    if (descriptor->generate_mipmaps &&
-        texture_data->tracked_gpu_bytes <= UINT64_MAX / 3U)
-    {
-        texture_data->tracked_gpu_bytes += texture_data->tracked_gpu_bytes / 3U;
-    }
+    texture_data->tracked_gpu_bytes = logical_texture_bytes;
     {
         henka_opengl_renderer_state* memory_state =
             (henka_opengl_renderer_state*)renderer->backend_state;
         if (memory_state != NULL)
         {
-            memory_state->tracked_gpu_bytes = UINT64_MAX - memory_state->tracked_gpu_bytes <
-                texture_data->tracked_gpu_bytes ? UINT64_MAX :
-                memory_state->tracked_gpu_bytes + texture_data->tracked_gpu_bytes;
+            henka_opengl_memory_add_category(
+                memory_state,
+                &memory_state->tracked_texture_bytes,
+                texture_data->tracked_gpu_bytes);
             if (memory_state->tracked_texture_count < UINT32_MAX)
             {
                 ++memory_state->tracked_texture_count;
@@ -3902,9 +4087,10 @@ void henka_opengl_renderer_destroy_texture(
     {
         state = (henka_opengl_renderer_state*)
             texture->renderer->backend_state;
-        state->tracked_gpu_bytes = state->tracked_gpu_bytes >=
-            texture_data->tracked_gpu_bytes ?
-            state->tracked_gpu_bytes - texture_data->tracked_gpu_bytes : 0U;
+        henka_opengl_memory_remove_category(
+            state,
+            &state->tracked_texture_bytes,
+            texture_data->tracked_gpu_bytes);
         if (state->tracked_texture_count > 0U)
         {
             --state->tracked_texture_count;

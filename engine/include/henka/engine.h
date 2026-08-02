@@ -104,8 +104,13 @@ typedef struct henka_engine_diagnostics
     uint32_t rendered_scene_culled_entities;
     uint32_t rendered_scene_transparent_sort_overflow_entities;
     uint64_t renderer_tracked_gpu_bytes;
+    uint64_t renderer_tracked_gpu_peak_bytes;
+    uint64_t renderer_tracked_mesh_bytes;
+    uint64_t renderer_tracked_texture_bytes;
+    uint64_t renderer_tracked_render_target_bytes;
     uint32_t renderer_tracked_mesh_count;
     uint32_t renderer_tracked_texture_count;
+    bool renderer_memory_overflow;
     bool wireframe_enabled;
     bool mouse_captured;
     bool ui_visible;
