@@ -225,6 +225,7 @@ struct henka_scene
     henka_scene_environment_desc environment;
     henka_scene_reflection_probe_desc reflection_probes[HENKA_SCENE_MAX_REFLECTION_PROBES];
     bool reflection_probe_active[HENKA_SCENE_MAX_REFLECTION_PROBES];
+    uint64_t render_revision;
     henka_scene_light_desc local_lights[HENKA_SCENE_MAX_LOCAL_LIGHTS];
     bool local_light_active[HENKA_SCENE_MAX_LOCAL_LIGHTS];
     henka_scene_fog_desc fog;
