@@ -43,12 +43,14 @@ for ($iteration = 1; $iteration -le $Iterations; ++$iteration) {
         Close-HenkaCapturedProcess -CapturedProcess $capturedProcess
     }
     if ($exitCode -ne 0) {
-        $headlessUnavailable = $output -match "SDL_CreateWindow failed|platform initialization failed|Unable to start the sandbox: platform error"
+        $headlessUnavailable = $output -match "SDL_CreateWindow failed|Could not load EGL library|platform initialization failed|Unable to start the sandbox: platform error"
         if ($AllowHeadlessUnavailable -and $headlessUnavailable) {
             Write-Warning "Packaged sandbox smoke iteration $iteration could not run because the host has no OpenGL-capable desktop video driver; recording an infrastructure skip."
             continue
         }
-        throw "Packaged sandbox smoke iteration $iteration failed with exit code $exitCode."
+        $diagnostic = (($output -replace "\s+", " ").Trim())
+        if ($diagnostic.Length -gt 512) { $diagnostic = $diagnostic.Substring(0, 512) }
+        throw "Packaged sandbox smoke iteration $iteration failed with exit code $exitCode. Diagnostics: $diagnostic"
     }
     if ($output -notmatch "Sandbox smoke test completed\.") {
         throw "Packaged sandbox smoke iteration $iteration did not reach its completion marker."
