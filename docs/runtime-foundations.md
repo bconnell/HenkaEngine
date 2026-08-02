@@ -108,6 +108,8 @@ Materials now expose a bounded metallic-roughness subset: base color, metallic, 
 
 HDR presentation includes a bounded half-resolution extract and separable blur bloom pass. Its GPU targets are replaced transactionally; if allocation or framebuffer validation fails, tone mapping remains active and the renderer diagnostics expose the fallback.
 
+The directional shadow map is fitted around the active camera with a bounded orthographic coverage and texel-quantized center. This stabilizes the map during sub-texel camera motion while retaining slope-aware bias and a small PCF kernel; local point and spot shadow maps remain outside the current GL 3.3 budget.
+
 Henka now also includes a small docked workspace helper for viewport-first tools:
 
 - dock region layout math

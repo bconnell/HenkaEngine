@@ -1720,15 +1720,43 @@ static void henka_opengl_draw_bloom(
 
 static henka_mat4 henka_opengl_get_light_matrix(const henka_scene* scene)
 {
+    const float shadow_extent = 24.0f;
+    const float shadow_distance = 36.0f;
     henka_vec3 direction = henka_vec3_normalize(scene->light_direction);
     henka_vec3 up = fabsf(direction.y) > 0.94f ?
         (henka_vec3){1.0f, 0.0f, 0.0f} :
         (henka_vec3){0.0f, 1.0f, 0.0f};
-    henka_vec3 target = (henka_vec3){0.0f, 0.0f, 0.0f};
-    henka_vec3 eye = henka_vec3_scale(direction, -12.0f);
+    henka_vec3 light_right = henka_vec3_normalize(henka_vec3_cross(direction, up));
+    henka_vec3 target;
+    henka_vec3 eye;
+    float texel_size = (shadow_extent * 2.0f) / 1024.0f;
+    float target_right;
+    float target_up;
+
+    /* Fit the map to the active camera frustum and quantize its center to one
+     * shadow texel. This keeps the coverage useful while preventing camera
+     * sub-pixel movement from making the directional shadow shimmer. */
+    target = henka_vec3_add(
+        scene->camera.position,
+        henka_vec3_scale(henka_camera_get_forward(&scene->camera),
+            fminf(fmaxf(scene->camera.far_plane * 0.25f, 6.0f), 18.0f)));
+    target_right = henka_vec3_dot(target, light_right);
+    target_up = henka_vec3_dot(target, up);
+    if (texel_size > 0.0f)
+    {
+        target = henka_vec3_add(
+            target,
+            henka_vec3_scale(light_right,
+                floorf(target_right / texel_size + 0.5f) * texel_size - target_right));
+        target = henka_vec3_add(
+            target,
+            henka_vec3_scale(up,
+                floorf(target_up / texel_size + 0.5f) * texel_size - target_up));
+    }
+    eye = henka_vec3_subtract(target, henka_vec3_scale(direction, shadow_distance));
 
     return henka_mat4_multiply(
-        henka_mat4_orthographic(-12.0f, 12.0f, -12.0f, 12.0f, 0.1f, 40.0f),
+        henka_mat4_orthographic(-shadow_extent, shadow_extent, -shadow_extent, shadow_extent, 0.1f, shadow_distance * 2.0f),
         henka_mat4_look_at(eye, target, up));
 }
 
