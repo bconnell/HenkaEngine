@@ -286,6 +286,7 @@ typedef struct sandbox3d_state
     henka_mesh* grid_mesh;
     henka_mesh* marker_mesh;
     henka_mesh* missing_model_mesh;
+    henka_mesh* foliage_mesh;
     henka_shader* basic_shader;
     henka_shader* grid_shader;
     henka_texture* cube_texture;
@@ -296,6 +297,7 @@ typedef struct sandbox3d_state
     henka_texture* macro_variation_texture;
     henka_texture* wood_grain_texture;
     henka_texture* wet_dry_roughness_texture;
+    henka_texture* foliage_mask_texture;
     henka_entity cube_entity;
     henka_entity ground_entity;
     henka_entity grid_entity;
@@ -303,6 +305,7 @@ typedef struct sandbox3d_state
     henka_entity fallback_cube_entity;
     henka_entity marker_entity;
     henka_entity fallback_model_entity;
+    henka_entity foliage_entity;
     henka_entity realism_entities[8];
     sandbox3d_object_descriptor descriptors[SANDBOX3D_OBJECT_COUNT];
     sandbox3d_workspace_state workspace;
@@ -2829,6 +2832,7 @@ static void sandbox3d_release_owned_resources(sandbox3d_state* state)
     henka_mesh_destroy(state->ground_mesh);
     henka_mesh_destroy(state->cube_mesh);
     henka_mesh_destroy(state->sphere_mesh);
+    henka_mesh_destroy(state->foliage_mesh);
     henka_physics_world_destroy(state->physics.world);
     henka_scene_destroy(state->scene);
     henka_texture_destroy(state->environment_texture);
@@ -2836,6 +2840,7 @@ static void sandbox3d_release_owned_resources(sandbox3d_state* state)
     henka_texture_destroy(state->macro_variation_texture);
     henka_texture_destroy(state->wood_grain_texture);
     henka_texture_destroy(state->wet_dry_roughness_texture);
+    henka_texture_destroy(state->foliage_mask_texture);
     henka_action_context_destroy(state->actions);
     henka_settings_destroy(state->settings);
     henka_ui_destroy(state->ui);
@@ -2856,6 +2861,8 @@ static void sandbox3d_release_owned_resources(sandbox3d_state* state)
     state->macro_variation_texture = NULL;
     state->wood_grain_texture = NULL;
     state->wet_dry_roughness_texture = NULL;
+    state->foliage_mask_texture = NULL;
+    state->foliage_mesh = NULL;
     state->physics.world = NULL;
     state->gizmo_render.axis_mesh = NULL;
     state->gizmo_render.ring_mesh = NULL;
@@ -7830,6 +7837,7 @@ static henka_result sandbox3d_initialize(henka_engine* engine, void* user_data)
     henka_material grid_material;
     henka_material ground_material;
     henka_material marker_material;
+    henka_material foliage_material;
     henka_material_asset* marker_material_asset;
     henka_gltf_scene_asset* marker_scene_asset;
     henka_scene* imported_scene;
@@ -7958,6 +7966,17 @@ static henka_result sandbox3d_initialize(henka_engine* engine, void* user_data)
                 255U, 132U, 255U, 255U, 255U, 92U, 255U, 255U,
                 255U, 52U, 255U, 255U, 255U, 32U, 255U, 255U
             };
+            static const unsigned char foliage_mask_pixels[] =
+            {
+                34U, 132U, 48U, 255U, 42U, 148U, 54U, 0U,
+                52U, 164U, 60U, 0U, 38U, 142U, 48U, 255U,
+                46U, 154U, 52U, 255U, 58U, 172U, 66U, 0U,
+                36U, 138U, 44U, 0U, 48U, 158U, 56U, 255U,
+                42U, 148U, 50U, 0U, 52U, 166U, 60U, 255U,
+                34U, 136U, 44U, 255U, 46U, 156U, 54U, 0U,
+                56U, 174U, 64U, 255U, 38U, 144U, 48U, 0U,
+                44U, 152U, 52U, 0U, 54U, 168U, 62U, 255U
+            };
             henka_texture_descriptor normal_descriptor = henka_texture_descriptor_default_normal();
             henka_texture_descriptor macro_descriptor = henka_texture_descriptor_default_color();
             henka_texture_descriptor roughness_descriptor = henka_texture_descriptor_default_data();
@@ -8008,6 +8027,17 @@ static henka_result sandbox3d_initialize(henka_engine* engine, void* user_data)
                 wet_dry_roughness_pixels,
                 &roughness_descriptor,
                 &state->wet_dry_roughness_texture);
+            if (result != HENKA_SUCCESS)
+            {
+                goto fail;
+            }
+            result = henka_texture_create_from_rgba8_with_descriptor(
+                engine,
+                4,
+                4,
+                foliage_mask_pixels,
+                &macro_descriptor,
+                &state->foliage_mask_texture);
             if (result != HENKA_SUCCESS)
             {
                 goto fail;
@@ -8105,6 +8135,11 @@ static henka_result sandbox3d_initialize(henka_engine* engine, void* user_data)
     }
 
     result = henka_mesh_create_uv_sphere(engine, 0.5f, 32, 16, &state->sphere_mesh);
+    if (result != HENKA_SUCCESS)
+    {
+        goto fail;
+    }
+    result = henka_mesh_create_plane(engine, 1.8f, 1.8f, &state->foliage_mesh);
     if (result != HENKA_SUCCESS)
     {
         goto fail;
@@ -8212,6 +8247,7 @@ static henka_result sandbox3d_initialize(henka_engine* engine, void* user_data)
     state->marker_entity = henka_scene_create_entity_named(state->scene, "glTF Marker");
     state->fallback_cube_entity = henka_scene_create_entity_named(state->scene, "Missing Texture");
     state->fallback_model_entity = henka_scene_create_entity_named(state->scene, "Missing Model");
+    state->foliage_entity = henka_scene_create_entity_named(state->scene, "Masked Foliage");
     state->grid_entity = henka_scene_create_entity_named(state->scene, "Debug Grid");
 
     if (state->ground_entity == HENKA_INVALID_ENTITY ||
@@ -8220,6 +8256,7 @@ static henka_result sandbox3d_initialize(henka_engine* engine, void* user_data)
         state->marker_entity == HENKA_INVALID_ENTITY ||
         state->fallback_cube_entity == HENKA_INVALID_ENTITY ||
         state->fallback_model_entity == HENKA_INVALID_ENTITY ||
+        state->foliage_entity == HENKA_INVALID_ENTITY ||
         state->grid_entity == HENKA_INVALID_ENTITY)
     {
         result = HENKA_ERROR_OUT_OF_MEMORY;
@@ -8277,6 +8314,20 @@ static henka_result sandbox3d_initialize(henka_engine* engine, void* user_data)
     fallback_model_material.base_color_texture = state->missing_texture;
     fallback_model_material.use_texture = true;
     fallback_model_material.base_color = (henka_vec4){1.0f, 1.0f, 1.0f, 1.0f};
+
+    foliage_material = henka_material_default();
+    foliage_material.name = "Masked Foliage";
+    foliage_material.type = HENKA_MATERIAL_TYPE_LIT;
+    foliage_material.shader = state->basic_shader;
+    foliage_material.base_color_texture = state->foliage_mask_texture;
+    foliage_material.use_texture = true;
+    foliage_material.base_color = (henka_vec4){1.0f, 1.0f, 1.0f, 1.0f};
+    foliage_material.roughness = 0.72f;
+    foliage_material.alpha_mode = HENKA_MATERIAL_ALPHA_MASKED;
+    foliage_material.alpha_cutoff = 0.5f;
+    foliage_material.double_sided = true;
+    foliage_material.cast_shadows = true;
+    foliage_material.receive_shadows = true;
 
     grid_material = henka_material_default();
     grid_material.name = "Debug Grid";
@@ -8561,6 +8612,32 @@ static henka_result sandbox3d_initialize(henka_engine* engine, void* user_data)
         true,
         true,
         transform);
+
+    transform = sandbox3d_make_transform(
+        (henka_vec3){-0.2f, 0.95f, -1.25f},
+        (henka_vec3){1.0f, 1.0f, 1.0f});
+    transform.rotation = henka_quat_from_axis_angle(
+        (henka_vec3){1.0f, 0.0f, 0.0f},
+        HENKA_PI * 0.5f);
+    result = sandbox3d_configure_entity(
+        state->scene,
+        state->foliage_entity,
+        state->foliage_mesh,
+        foliage_material,
+        transform);
+    if (result != HENKA_SUCCESS)
+    {
+        goto fail;
+    }
+    sandbox3d_apply_entity_foundation(
+        state,
+        state->foliage_entity,
+        "masked_foliage",
+        sandbox3d_make_bounds(
+            (henka_vec3){0.0f, 0.0f, 0.0f},
+            (henka_vec3){0.9f, 0.9f, 0.06f}),
+        true,
+        "Inspect masked foliage alpha test");
 
     transform = sandbox3d_make_transform((henka_vec3){0.0f, 0.0f, 0.0f}, (henka_vec3){1.0f, 1.0f, 1.0f});
     result = sandbox3d_configure_entity(state->scene, state->grid_entity, state->grid_mesh, grid_material, transform);
@@ -9175,6 +9252,7 @@ int main(int argc, char** argv)
     state.fallback_cube_entity = HENKA_INVALID_ENTITY;
     state.marker_entity = HENKA_INVALID_ENTITY;
     state.fallback_model_entity = HENKA_INVALID_ENTITY;
+    state.foliage_entity = HENKA_INVALID_ENTITY;
     state.selected_entity = HENKA_INVALID_ENTITY;
     state.native_panel_window_id = HENKA_INVALID_WINDOW_ID;
     state.ui_visible_last_frame = false;
