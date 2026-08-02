@@ -24,7 +24,8 @@ henka_result henka_ktx2_decode_rgba8(
     unsigned char** out_pixels,
     size_t* out_pixel_size,
     int* out_width,
-    int* out_height)
+    int* out_height,
+    bool* out_is_srgb)
 {
     ktxTexture2* texture = NULL;
     ktxTexture* base_texture;
@@ -39,8 +40,10 @@ henka_result henka_ktx2_decode_rgba8(
     if (out_pixel_size != NULL) *out_pixel_size = 0U;
     if (out_width != NULL) *out_width = 0;
     if (out_height != NULL) *out_height = 0;
+    if (out_is_srgb != NULL) *out_is_srgb = false;
     if (data == NULL || data_size == 0U || data_size > HENKA_MAX_TEXTURE_ENCODED_BYTES ||
         out_pixels == NULL || out_pixel_size == NULL || out_width == NULL || out_height == NULL ||
+        out_is_srgb == NULL ||
         data_size > (size_t)UINT64_MAX ||
         ktxTexture2_CreateFromMemory(
             data,
@@ -91,6 +94,7 @@ henka_result henka_ktx2_decode_rgba8(
     *out_pixel_size = expected_size;
     *out_width = (int)texture->baseWidth;
     *out_height = (int)texture->baseHeight;
+    *out_is_srgb = ktxTexture2_GetOETF_e(texture) == KHR_DF_TRANSFER_SRGB;
     pixels = NULL;
     result = HENKA_SUCCESS;
 

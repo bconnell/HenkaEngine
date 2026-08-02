@@ -437,6 +437,7 @@ henka_result henka_texture_create_from_ktx2_memory(
     size_t decoded_size = 0U;
     int decoded_width = 0;
     int decoded_height = 0;
+    bool decoded_is_srgb = false;
     henka_result transcoder_result;
 
     if (out_texture != NULL) *out_texture = NULL;
@@ -444,9 +445,16 @@ henka_result henka_texture_create_from_ktx2_memory(
         henka_texture_descriptor_validate(descriptor) != HENKA_SUCCESS)
         return HENKA_ERROR_INVALID_ARGUMENT;
     transcoder_result = henka_ktx2_decode_rgba8(
-        data, data_size, &decoded_pixels, &decoded_size, &decoded_width, &decoded_height);
+        data, data_size, &decoded_pixels, &decoded_size, &decoded_width, &decoded_height,
+        &decoded_is_srgb);
     if (transcoder_result != HENKA_SUCCESS)
         return transcoder_result;
+    if ((decoded_is_srgb && descriptor->color_space != HENKA_TEXTURE_COLOR_SPACE_SRGB) ||
+        (!decoded_is_srgb && descriptor->color_space != HENKA_TEXTURE_COLOR_SPACE_LINEAR))
+    {
+        henka_free(decoded_pixels);
+        return HENKA_ERROR_ASSET_SOURCE;
+    }
     (void)decoded_size;
     transcoder_result = henka_texture_create_from_rgba8_with_descriptor(
         engine, decoded_width, decoded_height, decoded_pixels, descriptor, out_texture);

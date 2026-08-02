@@ -26,7 +26,8 @@ henka_result henka_ktx2_decode_rgba8(
     unsigned char** out_pixels,
     size_t* out_pixel_size,
     int* out_width,
-    int* out_height);
+    int* out_height,
+    bool* out_is_srgb);
 #endif
 #include <henka/time.h>
 #include <henka/ui.h>

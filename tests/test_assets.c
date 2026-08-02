@@ -18,9 +18,10 @@ void henka_test_assets(void)
     size_t decoded_ktx2_size = 0U;
     int decoded_ktx2_width = 0;
     int decoded_ktx2_height = 0;
+    bool decoded_ktx2_is_srgb = false;
     HENKA_TEST_ASSERT(henka_ktx2_decode_rgba8(
         malformed_ktx2, sizeof(malformed_ktx2), &decoded_ktx2, &decoded_ktx2_size,
-        &decoded_ktx2_width, &decoded_ktx2_height) == HENKA_ERROR_ASSET_SOURCE);
+        &decoded_ktx2_width, &decoded_ktx2_height, &decoded_ktx2_is_srgb) == HENKA_ERROR_ASSET_SOURCE);
     HENKA_TEST_ASSERT(decoded_ktx2 == NULL && decoded_ktx2_size == 0U);
 #endif
     char* display_name;

@@ -66,8 +66,10 @@ The loader currently supports:
 - `KHR_texture_basisu` source selection for external KTX2 images; the texture
   loader validates KTX2 bounds, dimensions, layers/faces, and mip ownership
   before the pinned KTX-Software boundary decodes uncompressed RGBA8 or
-  transcodes Basis payloads to RGBA8. Other GPU-native compressed formats are
-  rejected until a capability-selected upload path exists. The same checked
+  transcodes Basis payloads to RGBA8. The container transfer function is checked
+  against the requested semantic color space; a mismatch is rejected rather than
+  silently applying an sRGB/linear interpretation. Other GPU-native compressed
+  formats are rejected until a capability-selected upload path exists. The same checked
   KTX2 boundary is used for external images and embedded URI/bufferView bytes,
   so GLB and data-URI ownership does not create a second decoder or bypass the
   asset manager.
