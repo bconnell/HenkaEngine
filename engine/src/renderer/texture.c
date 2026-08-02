@@ -409,6 +409,95 @@ henka_result henka_texture_create_from_file(
         out_texture);
 }
 
+static bool henka_ktx2_read_u32(
+    const unsigned char* data, size_t data_size, size_t offset, uint32_t* out_value)
+{
+    if (data == NULL || out_value == NULL || offset > data_size || data_size - offset < sizeof(uint32_t)) return false;
+    memcpy(out_value, data + offset, sizeof(*out_value));
+    return true;
+}
+
+static bool henka_ktx2_read_u64(
+    const unsigned char* data, size_t data_size, size_t offset, uint64_t* out_value)
+{
+    if (data == NULL || out_value == NULL || offset > data_size || data_size - offset < sizeof(uint64_t)) return false;
+    memcpy(out_value, data + offset, sizeof(*out_value));
+    return true;
+}
+
+static henka_result henka_texture_create_from_ktx2_memory(
+    henka_engine* engine,
+    const unsigned char* data,
+    size_t data_size,
+    const henka_texture_descriptor* descriptor,
+    henka_texture** out_texture)
+{
+    static const unsigned char identifier[12] =
+        {0xABU, 0x4BU, 0x54U, 0x58U, 0x20U, 0x32U, 0x30U, 0xBBU, 0x0DU, 0x0AU, 0x1AU, 0x0AU};
+    uint32_t vk_format, width, height, depth, layers, faces, levels, supercompression;
+    uint64_t level_offset, level_length, level_uncompressed_length;
+    size_t expected_bytes, end_offset, level_table_bytes, level_table_end;
+    uint32_t level_index, level_width, level_height;
+    henka_result result;
+
+    if (out_texture != NULL) *out_texture = NULL;
+    if (engine == NULL || data == NULL || descriptor == NULL || out_texture == NULL || data_size < 104U ||
+        memcmp(data, identifier, sizeof(identifier)) != 0 ||
+        henka_texture_descriptor_validate(descriptor) != HENKA_SUCCESS ||
+        !henka_ktx2_read_u32(data, data_size, 12U, &vk_format) ||
+        !henka_ktx2_read_u32(data, data_size, 20U, &width) ||
+        !henka_ktx2_read_u32(data, data_size, 24U, &height) ||
+        !henka_ktx2_read_u32(data, data_size, 28U, &depth) ||
+        !henka_ktx2_read_u32(data, data_size, 32U, &layers) ||
+        !henka_ktx2_read_u32(data, data_size, 36U, &faces) ||
+        !henka_ktx2_read_u32(data, data_size, 40U, &levels) ||
+        !henka_ktx2_read_u32(data, data_size, 44U, &supercompression) ||
+        width == 0U || height == 0U || width > HENKA_MAX_TEXTURE_DIMENSION || height > HENKA_MAX_TEXTURE_DIMENSION ||
+        depth > 1U || layers > 1U || faces != 1U || levels == 0U || levels > 16U || supercompression != 0U ||
+        (vk_format != 37U && vk_format != 43U) ||
+        !henka_checked_rgba8_size((int)width, (int)height, &expected_bytes) || expected_bytes > HENKA_MAX_TEXTURE_DECODED_BYTES ||
+        !henka_ktx2_read_u64(data, data_size, 80U, &level_offset) ||
+        !henka_ktx2_read_u64(data, data_size, 88U, &level_length) ||
+        !henka_ktx2_read_u64(data, data_size, 96U, &level_uncompressed_length) ||
+        level_offset > (uint64_t)SIZE_MAX || level_length > (uint64_t)SIZE_MAX ||
+        level_uncompressed_length != (uint64_t)expected_bytes || level_length != (uint64_t)expected_bytes ||
+        !henka_checked_size_add((size_t)level_offset, (size_t)level_length, &end_offset) || end_offset > data_size)
+        return HENKA_ERROR_ASSET_SOURCE;
+    if (vk_format == 43U && descriptor->color_space != HENKA_TEXTURE_COLOR_SPACE_SRGB)
+        return HENKA_ERROR_ASSET_SOURCE;
+    if (!henka_checked_size_multiply((size_t)levels, 24U, &level_table_bytes) ||
+        !henka_checked_size_add(80U, level_table_bytes, &level_table_end) || level_table_end > data_size) return HENKA_ERROR_ASSET_SOURCE;
+    level_width = width;
+    level_height = height;
+    for (level_index = 1U; level_index < levels; ++level_index)
+    {
+        size_t level_record;
+        size_t level_expected;
+        if (!henka_checked_size_multiply((size_t)level_index, 24U, &level_record) ||
+            !henka_checked_size_add(80U, level_record, &level_record) ||
+            !henka_ktx2_read_u64(data, data_size, level_record, &level_offset) ||
+            !henka_ktx2_read_u64(data, data_size, level_record + 8U, &level_length) ||
+            !henka_ktx2_read_u64(data, data_size, level_record + 16U, &level_uncompressed_length) ||
+            !henka_checked_rgba8_size((int)level_width, (int)level_height, &level_expected) ||
+            level_uncompressed_length != (uint64_t)level_expected || level_length != (uint64_t)level_expected ||
+            level_offset > (uint64_t)SIZE_MAX || level_length > (uint64_t)SIZE_MAX ||
+            !henka_checked_size_add((size_t)level_offset, (size_t)level_length, &end_offset) || end_offset > data_size)
+            return HENKA_ERROR_ASSET_SOURCE;
+        if (level_width > 1U) level_width /= 2U;
+        if (level_height > 1U) level_height /= 2U;
+    }
+    result = henka_texture_create_from_rgba8_with_descriptor(
+        engine, (int)width, (int)height, data + (size_t)level_offset, descriptor, out_texture);
+    if (result == HENKA_SUCCESS)
+    {
+        (*out_texture)->source_byte_size = data_size;
+        (*out_texture)->original_channel_count = 4;
+        (*out_texture)->source_class = HENKA_TEXTURE_SOURCE_CLASS_LDR_8_BIT;
+        (*out_texture)->content_revision = 1U;
+    }
+    return result;
+}
+
 henka_result henka_texture_create_from_file_with_descriptor(
     henka_engine* engine,
     const char* path,
@@ -454,6 +543,15 @@ henka_result henka_texture_create_from_file_with_descriptor(
     if (result != HENKA_SUCCESS)
     {
         HENKA_LOG_ERROR("Unable to read texture '%s' (%d)", path, (int)failure);
+        return result;
+    }
+
+    if (source_byte_size >= 12U &&
+        memcmp(source_bytes, "\xAB\x4B\x54\x58\x20\x32\x30\xBB\x0D\x0A\x1A\x0A", 12U) == 0)
+    {
+        result = henka_texture_create_from_ktx2_memory(
+            engine, source_bytes, source_byte_size, descriptor, out_texture);
+        henka_free(source_bytes);
         return result;
     }
 

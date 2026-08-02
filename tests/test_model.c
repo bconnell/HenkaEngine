@@ -118,13 +118,13 @@ void henka_test_model(void)
         "\"accessors\":[{\"bufferView\":0,\"componentType\":5126,\"count\":3,\"type\":\"VEC3\"},{\"bufferView\":0,\"componentType\":5126,\"count\":3,\"type\":\"VEC2\"}],"
         "\"meshes\":[{\"primitives\":[{\"attributes\":{\"POSITION\":0,\"TEXCOORD_1\":1}}]}]}";
     static const char* valid_gltf_material =
-        "{\"asset\":{\"version\":\"2.0\"},"
+        "{\"asset\":{\"version\":\"2.0\"},\"extensionsUsed\":[\"KHR_texture_basisu\"],"
         "\"buffers\":[{\"uri\":\"data:application/octet-stream;base64,"
         "AAAAAAAAAAAAAAAAAACAPwAAAAAAAAAAAAAAAAAAgD8AAAAA\",\"byteLength\":36}],"
         "\"bufferViews\":[{\"buffer\":0,\"byteLength\":36}],"
         "\"accessors\":[{\"bufferView\":0,\"componentType\":5126,\"count\":3,\"type\":\"VEC3\"}],"
-        "\"images\":[{\"uri\":\"textures/albedo.png\"}],"
-        "\"textures\":[{\"source\":0}],"
+        "\"images\":[{\"uri\":\"textures/albedo.ktx2\"}],"
+        "\"textures\":[{\"extensions\":{\"KHR_texture_basisu\":{\"source\":0}}}],"
         "\"materials\":[{\"name\":\"Imported Gold\",\"pbrMetallicRoughness\":{"
         "\"baseColorFactor\":[0.8,0.6,0.2,1.0],\"metallicFactor\":0.8,\"roughnessFactor\":0.3,"
         "\"baseColorTexture\":{\"index\":0}},\"emissiveFactor\":[0.1,0.2,0.3],"
@@ -276,7 +276,7 @@ void henka_test_model(void)
             &model) == HENKA_SUCCESS);
     HENKA_TEST_ASSERT(model.has_material);
     HENKA_TEST_ASSERT(strcmp(model.material_source.name, "Imported Gold") == 0);
-    HENKA_TEST_ASSERT(strcmp(model.material_source.base_color_uri, "textures/albedo.png") == 0);
+    HENKA_TEST_ASSERT(strcmp(model.material_source.base_color_uri, "textures/albedo.ktx2") == 0);
     HENKA_TEST_ASSERT_FLOAT_CLOSE(model.material_source.material.base_color.x, 0.8f, 0.0001f);
     HENKA_TEST_ASSERT_FLOAT_CLOSE(model.material_source.material.metallic, 0.8f, 0.0001f);
     HENKA_TEST_ASSERT_FLOAT_CLOSE(model.material_source.material.roughness, 0.3f, 0.0001f);

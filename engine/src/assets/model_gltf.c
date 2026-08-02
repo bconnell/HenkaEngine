@@ -821,14 +821,19 @@ static bool henka_gltf_material_texture_uri(
     if (context == NULL || out_uri == NULL || out_data == NULL || out_data_size == NULL || texture_index < 0 ||
         !henka_gltf_find_member(context->json, context->json + context->json_size, "textures", &textures, &textures_end) ||
         !henka_gltf_array_item(textures, textures_end, (size_t)texture_index, &texture, &texture_end) ||
-        !henka_gltf_member_int(texture, texture_end, "source", &image_index) || image_index < 0 ||
-        !henka_gltf_find_member(context->json, context->json + context->json_size, "images", &images, &images_end) ||
-        !henka_gltf_array_item(images, images_end, (size_t)image_index, &image, &image_end) ||
-        !henka_gltf_find_member(image, image_end, "uri", &value, &value_end) &&
-        !henka_gltf_find_member(image, image_end, "bufferView", &value, &value_end))
+        !henka_gltf_find_member(context->json, context->json + context->json_size, "images", &images, &images_end))
     {
         return false;
     }
+    if (!henka_gltf_member_int(texture, texture_end, "source", &image_index))
+    {
+        if (!henka_gltf_find_member(texture, texture_end, "extensions", &value, &value_end) ||
+            !henka_gltf_find_member(value, value_end, "KHR_texture_basisu", &value, &value_end) ||
+            !henka_gltf_member_int(value, value_end, "source", &image_index)) return false;
+    }
+    if (image_index < 0 || !henka_gltf_array_item(images, images_end, (size_t)image_index, &image, &image_end) ||
+        (!henka_gltf_find_member(image, image_end, "uri", &value, &value_end) &&
+         !henka_gltf_find_member(image, image_end, "bufferView", &value, &value_end))) return false;
     if (henka_gltf_find_member(image, image_end, "uri", &value, &value_end))
     {
         const char* content = henka_gltf_skip_space(value, value_end) + 1;
@@ -1109,6 +1114,7 @@ static bool henka_gltf_extension_supported(const char* extension)
     static const char* supported[] =
     {
         "KHR_lights_punctual",
+        "KHR_texture_basisu",
         "KHR_materials_ior",
         "KHR_materials_specular",
         "KHR_materials_clearcoat",
