@@ -425,7 +425,7 @@ static bool henka_ktx2_read_u64(
     return true;
 }
 
-static henka_result henka_texture_create_from_ktx2_memory(
+henka_result henka_texture_create_from_ktx2_memory(
     henka_engine* engine,
     const unsigned char* data,
     size_t data_size,

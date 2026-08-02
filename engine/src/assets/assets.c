@@ -1653,6 +1653,8 @@ static henka_result henka_assets_create_embedded_texture(
     const henka_texture_descriptor* descriptor,
     henka_texture** out_texture)
 {
+    static const unsigned char ktx2_identifier[12] =
+        {0xABU, 0x4BU, 0x54U, 0x58U, 0x20U, 0x32U, 0x30U, 0xBBU, 0x0DU, 0x0AU, 0x1AU, 0x0AU};
     int width;
     int height;
     int source_channels;
@@ -1666,9 +1668,11 @@ static henka_result henka_assets_create_embedded_texture(
     if (out_texture != NULL) *out_texture = NULL;
     if (engine == NULL || data == NULL || data_size == 0U || data_size > HENKA_MAX_TEXTURE_ENCODED_BYTES ||
         data_size > (size_t)INT_MAX || descriptor == NULL || out_texture == NULL ||
-        henka_texture_descriptor_validate(descriptor) != HENKA_SUCCESS ||
-        !stbi_info_from_memory(data, (int)data_size, &width, &height, &source_channels) ||
-        width <= 0 || height <= 0) return HENKA_ERROR_ASSET_SOURCE;
+        henka_texture_descriptor_validate(descriptor) != HENKA_SUCCESS) return HENKA_ERROR_ASSET_SOURCE;
+    if (data_size >= sizeof(ktx2_identifier) && memcmp(data, ktx2_identifier, sizeof(ktx2_identifier)) == 0)
+        return henka_texture_create_from_ktx2_memory(engine, data, data_size, descriptor, out_texture);
+    if (!stbi_info_from_memory(data, (int)data_size, &width, &height, &source_channels) || width <= 0 || height <= 0)
+        return HENKA_ERROR_ASSET_SOURCE;
     if (stbi_is_hdr_from_memory(data, (int)data_size))
     {
         if (!henka_checked_size_multiply((size_t)width, (size_t)height, &decoded_bytes) ||

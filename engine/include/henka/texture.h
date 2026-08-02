@@ -122,6 +122,19 @@ henka_result henka_texture_create_from_file_with_descriptor(
     henka_texture** out_texture);
 
 /*
+ * Creates a texture from a bounded KTX2 byte buffer. The buffer remains
+ * caller-owned and is only read during the call. The checked compatibility
+ * path accepts uncompressed RGBA8 KTX2 levels; unsupported compressed
+ * payloads return HENKA_ERROR_ASSET_SOURCE for manager fallback handling.
+ */
+henka_result henka_texture_create_from_ktx2_memory(
+    henka_engine* engine,
+    const unsigned char* data,
+    size_t data_size,
+    const henka_texture_descriptor* descriptor,
+    henka_texture** out_texture);
+
+/*
  * Creates a texture from RGBA8 pixel data after validating dimensions and
  * byte-count limits. The caller must provide enough readable pixel data and
  * owns the texture until henka_texture_destroy is called.

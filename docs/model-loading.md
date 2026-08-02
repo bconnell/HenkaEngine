@@ -67,7 +67,9 @@ The loader currently supports:
   loader validates KTX2 bounds, mip records, dimensions, and uncompressed
   RGBA8 formats before upload. Basis-supercompressed and other compressed
   payloads remain explicit semantic fallbacks until the pinned transcoder
-  boundary is enabled.
+  boundary is enabled. The same checked KTX2 boundary is used for external
+  images and embedded URI/bufferView bytes, so GLB and data-URI ownership does
+  not create a second decoder or bypass the asset manager.
 - multiple triangle primitives, node hierarchies with cycle and parent checks,
   selected scene roots, TRS or matrix node transforms, perspective and
   orthographic cameras, and bounded punctual-light records
