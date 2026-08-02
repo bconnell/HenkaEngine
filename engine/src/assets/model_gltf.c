@@ -64,6 +64,8 @@ typedef struct henka_gltf_builder
     size_t capacity;
 } henka_gltf_builder;
 
+static bool henka_gltf_validate_extensions(const henka_gltf_context* context);
+
 static const char* henka_gltf_skip_space(const char* cursor, const char* end)
 {
     while (cursor < end && isspace((unsigned char)*cursor)) cursor += 1;
@@ -995,7 +997,8 @@ static henka_result henka_gltf_parse_context(henka_gltf_context* context, henka_
     const char* meshes; const char* meshes_end; const char* mesh; const char* mesh_end; const char* primitives; const char* primitives_end; size_t primitive_index; henka_gltf_builder builder;
     bool first_has_material; int first_material_index;
     memset(&builder, 0, sizeof(builder));
-    if (!henka_gltf_parse_buffers(context) || !henka_gltf_parse_views(context) || !henka_gltf_parse_accessors(context) ||
+    if (!henka_gltf_validate_extensions(context) || !henka_gltf_parse_buffers(context) ||
+        !henka_gltf_parse_views(context) || !henka_gltf_parse_accessors(context) ||
         !henka_gltf_find_member(context->json, context->json + context->json_size, "meshes", &meshes, &meshes_end) ||
         !henka_gltf_array_item(meshes, meshes_end, 0U, &mesh, &mesh_end) ||
         !henka_gltf_find_member(mesh, mesh_end, "primitives", &primitives, &primitives_end))
@@ -1091,6 +1094,52 @@ static bool henka_gltf_copy_optional_name(
     if (!henka_gltf_read_string(value, value_end, name, sizeof(name), NULL)) return false;
     *out_name = henka_gltf_duplicate_string(name);
     return *out_name != NULL;
+}
+
+static bool henka_gltf_extension_supported(const char* extension)
+{
+    static const char* supported[] =
+    {
+        "KHR_lights_punctual",
+        "KHR_materials_ior",
+        "KHR_materials_specular",
+        "KHR_materials_clearcoat",
+        "KHR_materials_sheen",
+        "KHR_materials_emissive_strength"
+    };
+    size_t index;
+    if (extension == NULL) return false;
+    for (index = 0U; index < sizeof(supported) / sizeof(supported[0]); ++index)
+        if (strcmp(extension, supported[index]) == 0) return true;
+    return false;
+}
+
+static bool henka_gltf_validate_extensions(const henka_gltf_context* context)
+{
+    const char* array;
+    const char* array_end;
+    const char* value;
+    const char* value_end;
+    size_t set_index;
+    size_t extension_index;
+    char extension[HENKA_MAX_ASSET_PATH_BYTES];
+
+    if (context == NULL) return false;
+    for (set_index = 0U; set_index < 2U; ++set_index)
+    {
+        const char* member = set_index == 0U ? "extensionsUsed" : "extensionsRequired";
+        if (!henka_gltf_find_member(context->json, context->json + context->json_size,
+            member, &array, &array_end)) continue;
+        for (extension_index = 0U;
+            henka_gltf_array_item(array, array_end, extension_index, &value, &value_end);
+            ++extension_index)
+        {
+            if (!henka_gltf_read_string(value, value_end, extension, sizeof(extension), NULL) ||
+                !henka_gltf_extension_supported(extension)) return false;
+        }
+        if (henka_gltf_array_item(array, array_end, extension_index, &value, &value_end)) return false;
+    }
+    return true;
 }
 
 static bool henka_gltf_parse_scene_materials(
@@ -1385,6 +1434,8 @@ static bool henka_gltf_parse_scene_nodes(
         const char* matrix;
         const char* matrix_end;
         float matrix_values[16];
+        bool has_matrix;
+        bool has_trs;
         henka_vec4 rotation_values;
         henka_quat rotation;
         float rotation_length;
@@ -1397,6 +1448,11 @@ static bool henka_gltf_parse_scene_nodes(
         output->local_transform = henka_transform_identity();
         output->local_matrix = henka_mat4_identity();
         if (!henka_gltf_copy_optional_name(node, node_end, &output->name)) return false;
+        has_matrix = henka_gltf_find_member(node, node_end, "matrix", &matrix, &matrix_end);
+        has_trs = henka_gltf_find_member(node, node_end, "translation", &value, &value_end) ||
+            henka_gltf_find_member(node, node_end, "rotation", &value, &value_end) ||
+            henka_gltf_find_member(node, node_end, "scale", &value, &value_end);
+        if (has_matrix && has_trs) return false;
         if (henka_gltf_find_member(node, node_end, "translation", &value, &value_end) &&
             !henka_gltf_member_vec3(node, node_end, "translation", &output->local_transform.position)) return false;
         if (henka_gltf_find_member(node, node_end, "rotation", &value, &value_end) &&
@@ -1412,7 +1468,7 @@ static bool henka_gltf_parse_scene_nodes(
             !isfinite(output->local_transform.position.z) || !isfinite(output->local_transform.scale.x) ||
             !isfinite(output->local_transform.scale.y) || !isfinite(output->local_transform.scale.z) ||
             output->local_transform.scale.x == 0.0f || output->local_transform.scale.y == 0.0f || output->local_transform.scale.z == 0.0f) return false;
-        if (henka_gltf_find_member(node, node_end, "matrix", &matrix, &matrix_end))
+        if (has_matrix)
         {
             if (!henka_gltf_array_float_values(matrix, matrix_end, matrix_values, 16U)) return false;
             memcpy(output->local_matrix.m, matrix_values, sizeof(matrix_values));
@@ -1522,7 +1578,8 @@ static henka_result henka_gltf_parse_scene_context(
     henka_gltf_context* context,
     henka_model_scene_data* out_scene)
 {
-    if (!henka_gltf_parse_buffers(context) || !henka_gltf_parse_views(context) || !henka_gltf_parse_accessors(context) ||
+    if (!henka_gltf_validate_extensions(context) || !henka_gltf_parse_buffers(context) ||
+        !henka_gltf_parse_views(context) || !henka_gltf_parse_accessors(context) ||
         !henka_gltf_parse_scene_cameras(context, out_scene) || !henka_gltf_parse_scene_lights(context, out_scene) ||
         !henka_gltf_parse_scene_meshes(context, out_scene) || !henka_gltf_parse_scene_nodes(context, out_scene) ||
         !henka_gltf_parse_scene_selections(context, out_scene)) return HENKA_ERROR_INVALID_ARGUMENT;

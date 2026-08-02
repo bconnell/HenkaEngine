@@ -84,6 +84,11 @@ nesting is limited, buffer views must remain inside their declared buffers,
 accessor strides and component types are checked, and output remains bounded
 by the renderer mesh-element limit. External buffer URIs are resolved beneath
 the model's directory; rooted, traversal, and URI-like paths are rejected.
+The importer accepts only the material and punctual-light extensions it maps
+to the shared renderer model. Unsupported entries in `extensionsUsed` or
+`extensionsRequired` fail the load rather than being silently treated as
+equivalent content. A node must use either a matrix or TRS transform, as
+required by glTF, and conflicting representations are rejected.
 
 ## Failure behavior
 

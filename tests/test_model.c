@@ -9,6 +9,8 @@
 
 static void henka_test_model_rejects_unsafe_bounds(void)
 {
+    static const char* unsupported_gltf_extension =
+        "{\"asset\":{\"version\":\"2.0\"},\"extensionsUsed\":[\"KHR_draco_mesh_compression\"]}";
     static const char* non_finite_obj =
         "v nan 0.0 0.0\n"
         "v 1.0 0.0 0.0\n"
@@ -22,6 +24,16 @@ static void henka_test_model_rejects_unsafe_bounds(void)
     size_t oversized_length;
     char* oversized_source;
     henka_model_data model;
+
+    memset(&model, 0, sizeof(model));
+    HENKA_TEST_ASSERT(
+        henka_model_data_load_gltf_from_memory(
+            unsupported_gltf_extension,
+            strlen(unsupported_gltf_extension),
+            "unsupported-extension.gltf",
+            &model) != HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(model.vertices == NULL);
+    HENKA_TEST_ASSERT(model.indices == NULL);
 
     memset(&model, 0, sizeof(model));
     HENKA_TEST_ASSERT(
