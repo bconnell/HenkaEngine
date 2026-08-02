@@ -46,6 +46,22 @@ The package script creates:
 - `out/HenkaSandbox3D/assets/`
 - `out/HenkaSandbox3D/docs/help/sandbox3d.md`
 - `out/HenkaSandbox3D/PACKAGE_INFO.txt`
+
+## Capture same-camera shading evidence
+
+After a Debug build, the application-only capture helper records the same
+camera in Solid, Material Preview, and Rendered mode:
+
+```powershell
+.\scripts\capture_visual_evidence_windows.ps1
+```
+
+The PNGs and `INDEX.txt` are generated under `build/visual_evidence/`. Capture
+mode runs do not save sandbox settings, so the camera and scene remain stable
+and no user-profile file is changed by this evidence path. Rendered uses scene
+lighting, the shadow path, transactional HDR/IBL presentation, bloom, and
+temporal presentation; Material Preview uses its deterministic preview-light
+policy and is not a substitute for the Rendered path.
 - `out/HenkaSandbox3D/README.txt`
 - `out/HenkaSandbox3D/user/` when local sandbox settings have already been created
 

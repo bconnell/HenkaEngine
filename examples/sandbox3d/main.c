@@ -325,6 +325,8 @@ typedef struct sandbox3d_state
     sandbox3d_transform_session transform_session;
     bool editor_controls_loaded_safely;
     bool smoke_test;
+    bool capture_mode_requested;
+    henka_viewport_shading_mode capture_mode;
 } sandbox3d_state;
 
 static const float g_default_mouse_look_sensitivity = 0.0025f;
@@ -3509,6 +3511,10 @@ static void sandbox3d_apply_loaded_settings(henka_engine* engine, sandbox3d_stat
     grid_visible = henka_settings_get_bool(state->settings, g_setting_key_grid_visible, true);
     shading_mode =
         sandbox3d_get_saved_viewport_shading_mode(state);
+    if (state->capture_mode_requested)
+    {
+        shading_mode = state->capture_mode;
+    }
     exposure = henka_settings_get_float(state->settings, g_setting_key_viewport_exposure, 0.0f);
     movement_speed = henka_settings_get_float(state->settings, g_setting_key_camera_speed, g_default_camera_movement_speed);
     mouse_sensitivity = henka_settings_get_float(
@@ -8872,7 +8878,7 @@ static void sandbox3d_shutdown(henka_engine* engine, void* user_data)
     sandbox3d_state* state;
 
     state = (sandbox3d_state*)user_data;
-    if (!state->smoke_test)
+    if (!state->smoke_test && !state->capture_mode_requested)
     {
         sandbox3d_save_settings(engine, state);
     }
@@ -8892,20 +8898,31 @@ int main(int argc, char** argv)
     sandbox3d_state state;
     size_t index;
     bool smoke_test;
+    bool capture_mode_requested;
+    henka_viewport_shading_mode capture_mode;
 
     smoke_test = false;
+    capture_mode_requested = false;
+    capture_mode = HENKA_VIEWPORT_SHADING_RENDERED;
     if (argc == 2 && strcmp(argv[1], "--smoke-test") == 0)
     {
         smoke_test = true;
     }
+    else if (argc == 3 && strcmp(argv[1], "--capture-mode") == 0 &&
+        henka_viewport_shading_mode_parse(argv[2], &capture_mode) == HENKA_SUCCESS)
+    {
+        capture_mode_requested = true;
+    }
     else if (argc != 1)
     {
-        fprintf(stderr, "Usage: %s [--smoke-test]\n", argv[0]);
+        fprintf(stderr, "Usage: %s [--smoke-test | --capture-mode solid|material_preview|rendered]\n", argv[0]);
         return 2;
     }
 
     memset(&state, 0, sizeof(state));
     state.smoke_test = smoke_test;
+    state.capture_mode_requested = capture_mode_requested;
+    state.capture_mode = capture_mode;
     state.camera = henka_camera_create_perspective(60.0f * HENKA_DEG_TO_RAD, 16.0f / 9.0f, 0.1f, 100.0f);
     state.cube_entity = HENKA_INVALID_ENTITY;
     state.ground_entity = HENKA_INVALID_ENTITY;
