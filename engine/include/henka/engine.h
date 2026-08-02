@@ -108,6 +108,7 @@ typedef struct henka_engine_diagnostics
     uint32_t rendered_scene_draw_calls;
     uint32_t rendered_scene_visible_entities;
     uint32_t rendered_scene_culled_entities;
+    uint32_t rendered_scene_budget_dropped_entities;
     uint32_t rendered_scene_transparent_sort_overflow_entities;
     double rendered_scene_cpu_time_milliseconds;
     double rendered_scene_gpu_time_milliseconds;

@@ -34,6 +34,7 @@ typedef struct henka_opengl_tool_window_target
 } henka_opengl_tool_window_target;
 
 #define HENKA_OPENGL_TRANSPARENT_SORT_CAPACITY 4096U
+#define HENKA_OPENGL_SCENE_DRAW_BUDGET 8192U
 
 typedef struct henka_opengl_transparent_sort_item
 {
@@ -136,6 +137,7 @@ typedef struct henka_opengl_renderer_state
     uint32_t scene_draw_calls;
     uint32_t scene_visible_entities;
     uint32_t scene_culled_entities;
+    uint32_t scene_budget_dropped_entities;
     uint32_t transparent_sort_overflow_entities;
     double scene_cpu_time_milliseconds;
     double scene_gpu_time_milliseconds;
@@ -3390,6 +3392,7 @@ henka_result henka_opengl_renderer_draw_scene(
     state->scene_draw_calls = 0U;
     state->scene_visible_entities = 0U;
     state->scene_culled_entities = 0U;
+    state->scene_budget_dropped_entities = 0U;
     for (index = 0U; index < HENKA_SCENE_MAX_LOCAL_LIGHTS; ++index)
     {
         const henka_scene_light_desc* light = &scene->local_lights[index];
@@ -3547,6 +3550,12 @@ henka_result henka_opengl_renderer_draw_scene(
                     break;
                 }
             }
+        }
+
+        if (state->scene_draw_calls >= HENKA_OPENGL_SCENE_DRAW_BUDGET)
+        {
+            state->scene_budget_dropped_entities += 1U;
+            continue;
         }
 
         mesh_data =
@@ -3974,6 +3983,7 @@ void henka_opengl_renderer_get_scene_diagnostics(
     uint32_t* out_draw_calls,
     uint32_t* out_visible_entities,
     uint32_t* out_culled_entities,
+    uint32_t* out_budget_dropped_entities,
     uint32_t* out_transparent_sort_overflow_entities,
     double* out_cpu_time_milliseconds,
     double* out_gpu_time_milliseconds,
@@ -3993,6 +4003,11 @@ void henka_opengl_renderer_get_scene_diagnostics(
     if (out_culled_entities != NULL)
     {
         *out_culled_entities = state != NULL ? state->scene_culled_entities : 0U;
+    }
+    if (out_budget_dropped_entities != NULL)
+    {
+        *out_budget_dropped_entities = state != NULL ?
+            state->scene_budget_dropped_entities : 0U;
     }
     if (out_transparent_sort_overflow_entities != NULL)
     {

@@ -477,6 +477,7 @@ void henka_opengl_renderer_get_scene_diagnostics(
     uint32_t* out_draw_calls,
     uint32_t* out_visible_entities,
     uint32_t* out_culled_entities,
+    uint32_t* out_budget_dropped_entities,
     uint32_t* out_transparent_sort_overflow_entities,
     double* out_cpu_time_milliseconds,
     double* out_gpu_time_milliseconds,
