@@ -1798,6 +1798,15 @@ henka_result henka_model_scene_data_load_gltf_from_memory(
     return result;
 }
 
+henka_result henka_model_scene_data_set_active_scene(
+    henka_model_scene_data* scene,
+    size_t scene_index)
+{
+    if (scene == NULL || scene_index >= scene->scene_count) return HENKA_ERROR_INVALID_ARGUMENT;
+    scene->active_scene_index = scene_index;
+    return HENKA_SUCCESS;
+}
+
 henka_result henka_model_scene_data_load_gltf(
     const char* path,
     henka_model_scene_data* out_scene)

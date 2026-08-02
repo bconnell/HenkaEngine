@@ -95,7 +95,7 @@ static void henka_test_gltf_scene_import(void)
         "\"nodes\":[{\"name\":\"Matrix Root\",\"mesh\":0,\"matrix\":["
         "1.4142135,1.4142135,0.0,0.0,-1.0606602,1.0606602,0.0,0.0,"
         "0.0,0.0,3.0,0.0,4.0,5.0,6.0,1.0]}],"
-        "\"scenes\":[{\"nodes\":[0]}],\"scene\":0}";
+        "\"scenes\":[{\"nodes\":[0]},{\"nodes\":[0]}],\"scene\":1}";
     henka_model_scene_data scene;
     char* invalid_scene;
     char* selected_roots;
@@ -125,6 +125,12 @@ static void henka_test_gltf_scene_import(void)
     memset(&scene, 0, sizeof(scene));
     HENKA_TEST_ASSERT(henka_model_scene_data_load_gltf_from_memory(
         matrix_scene_gltf, strlen(matrix_scene_gltf), "matrix-scene.gltf", &scene) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(scene.scene_count == 2U);
+    HENKA_TEST_ASSERT(scene.active_scene_index == 1U);
+    HENKA_TEST_ASSERT(henka_model_scene_data_set_active_scene(&scene, 2U) != HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(scene.active_scene_index == 1U);
+    HENKA_TEST_ASSERT(henka_model_scene_data_set_active_scene(&scene, 0U) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(scene.active_scene_index == 0U);
     HENKA_TEST_ASSERT_FLOAT_CLOSE(scene.nodes[0].local_transform.position.x, 4.0f, 0.0001f);
     HENKA_TEST_ASSERT_FLOAT_CLOSE(scene.nodes[0].local_transform.position.y, 5.0f, 0.0001f);
     HENKA_TEST_ASSERT_FLOAT_CLOSE(scene.nodes[0].local_transform.position.z, 6.0f, 0.0001f);

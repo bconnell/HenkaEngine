@@ -144,6 +144,10 @@ henka_result henka_model_scene_data_load_gltf_from_memory(
     size_t data_size,
     const char* label,
     henka_model_scene_data* out_scene);
+/* Select one of the validated glTF scenes before runtime instantiation. */
+henka_result henka_model_scene_data_set_active_scene(
+    henka_model_scene_data* scene,
+    size_t scene_index);
 void henka_model_scene_data_destroy(henka_model_scene_data* scene);
 void henka_model_data_destroy(henka_model_data* model);
 henka_result henka_mesh_create_from_model_data(henka_engine* engine, const henka_model_data* model, henka_mesh** out_mesh);
