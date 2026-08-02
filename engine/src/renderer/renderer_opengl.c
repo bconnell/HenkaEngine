@@ -101,6 +101,11 @@ typedef struct henka_opengl_renderer_state
     int bloom_height;
     bool bloom_ready;
     char bloom_failure_reason[64];
+    GLuint temporal_history_texture;
+    int temporal_history_width;
+    int temporal_history_height;
+    bool temporal_history_ready;
+    bool temporal_history_valid;
     GLuint ibl_framebuffer;
     GLuint ibl_environment_cube;
     GLuint ibl_irradiance_cube;
@@ -1303,6 +1308,70 @@ static void henka_opengl_delete_bloom_target(henka_opengl_renderer_state* state)
     }
 }
 
+static void henka_opengl_delete_temporal_history(henka_opengl_renderer_state* state)
+{
+    if (state == NULL)
+    {
+        return;
+    }
+    if (state->temporal_history_width > 0 && state->temporal_history_height > 0)
+    {
+        henka_opengl_memory_remove_category(
+            state,
+            &state->tracked_render_target_bytes,
+            (uint64_t)state->temporal_history_width *
+                (uint64_t)state->temporal_history_height * 4U);
+    }
+    if (state->temporal_history_texture != 0U)
+    {
+        glDeleteTextures(1, &state->temporal_history_texture);
+    }
+    state->temporal_history_texture = 0U;
+    state->temporal_history_width = 0;
+    state->temporal_history_height = 0;
+    state->temporal_history_ready = false;
+    state->temporal_history_valid = false;
+}
+
+static henka_result henka_opengl_create_temporal_history(
+    henka_opengl_renderer_state* state,
+    int width,
+    int height)
+{
+    GLuint texture = 0U;
+    GLint previous_texture = 0;
+
+    if (state == NULL || width <= 0 || height <= 0 || width > 8192 || height > 8192)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    glGetIntegerv(GL_TEXTURE_BINDING_2D, &previous_texture);
+    glGenTextures(1, &texture);
+    if (texture == 0U)
+    {
+        glBindTexture(GL_TEXTURE_2D, (GLuint)previous_texture);
+        return HENKA_ERROR_RENDERER;
+    }
+    glBindTexture(GL_TEXTURE_2D, texture);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
+    glBindTexture(GL_TEXTURE_2D, (GLuint)previous_texture);
+    henka_opengl_delete_temporal_history(state);
+    state->temporal_history_texture = texture;
+    state->temporal_history_width = width;
+    state->temporal_history_height = height;
+    state->temporal_history_ready = true;
+    state->temporal_history_valid = false;
+    henka_opengl_memory_add_category(
+        state,
+        &state->tracked_render_target_bytes,
+        (uint64_t)width * (uint64_t)height * 4U);
+    return HENKA_SUCCESS;
+}
+
 static henka_result henka_opengl_create_bloom_target(
     henka_opengl_renderer_state* state,
     int width,
@@ -1886,7 +1955,7 @@ static henka_result henka_opengl_create_shadow_target(
 static henka_result henka_opengl_create_render_programs(
     henka_opengl_renderer_state* state)
 {
-    static const char* tone_uniforms[] = {"hdrTexture", "bloomTexture", "exposure", "useBloom", "bloomStrength"};
+    static const char* tone_uniforms[] = {"hdrTexture", "bloomTexture", "historyTexture", "exposure", "useBloom", "bloomStrength", "useTemporalHistory", "temporalBlend"};
     static const char* bloom_extract_uniforms[] = {"hdrTexture", "threshold"};
     static const char* bloom_blur_uniforms[] = {"sourceTexture", "direction"};
     static const char* ibl_conversion_uniforms[] = {"equirectangularTexture", "rotation", "viewProjection"};
@@ -1905,9 +1974,9 @@ static henka_result henka_opengl_create_render_programs(
         "void main(){ vec2 p = vec2((gl_VertexID << 1) & 2, gl_VertexID & 2); uv = p; gl_Position = vec4(p * 2.0 - 1.0, 0.0, 1.0); }\n";
     static const char* tone_fragment =
         "#version 330 core\n"
-        "in vec2 uv; uniform sampler2D hdrTexture; uniform sampler2D bloomTexture; uniform float exposure; uniform bool useBloom; uniform float bloomStrength; out vec4 outColor;\n"
+        "in vec2 uv; uniform sampler2D hdrTexture; uniform sampler2D bloomTexture; uniform sampler2D historyTexture; uniform float exposure; uniform bool useBloom; uniform float bloomStrength; uniform bool useTemporalHistory; uniform float temporalBlend; out vec4 outColor;\n"
         "vec3 aces(vec3 x){ return clamp((x*(2.51*x+0.03))/(x*(2.43*x+0.59)+0.14),0.0,1.0); }\n"
-        "void main(){ vec3 color = texture(hdrTexture, uv).rgb; if (useBloom) color += texture(bloomTexture, uv).rgb * max(bloomStrength, 0.0); color *= exp2(exposure); color = aces(max(color, vec3(0.0))); outColor = vec4(pow(color, vec3(1.0/2.2)), 1.0); }\n";
+        "void main(){ vec3 color = texture(hdrTexture, uv).rgb; if (useBloom) color += texture(bloomTexture, uv).rgb * max(bloomStrength, 0.0); color *= exp2(exposure); color = pow(aces(max(color, vec3(0.0))), vec3(1.0/2.2)); if (useTemporalHistory) color = mix(color, texture(historyTexture, uv).rgb, clamp(temporalBlend, 0.0, 0.25)); outColor = vec4(color, 1.0); }\n";
     static const char* bloom_extract_fragment =
         "#version 330 core\n"
         "in vec2 uv; uniform sampler2D hdrTexture; uniform float threshold; out vec4 outColor;\n"
@@ -2297,21 +2366,53 @@ static void henka_opengl_present_hdr(
     g_gl.UseProgram(state->tone_program);
     henka_set_uniform_int_owned(state->tone_program, &state->tone_shader_data, "hdrTexture", 0);
     henka_set_uniform_int_owned(state->tone_program, &state->tone_shader_data, "bloomTexture", 1);
+    henka_set_uniform_int_owned(state->tone_program, &state->tone_shader_data, "historyTexture", 2);
     henka_set_uniform_float_owned(state->tone_program, &state->tone_shader_data, "exposure", renderer->exposure);
     henka_set_uniform_bool_owned(state->tone_program, &state->tone_shader_data, "useBloom", state->bloom_ready);
     henka_set_uniform_float_owned(state->tone_program, &state->tone_shader_data, "bloomStrength", 0.14f);
+    henka_set_uniform_bool_owned(
+        state->tone_program,
+        &state->tone_shader_data,
+        "useTemporalHistory",
+        state->temporal_history_ready && state->temporal_history_valid &&
+            state->temporal_history_width == viewport.width &&
+            state->temporal_history_height == viewport.height);
+    henka_set_uniform_float_owned(state->tone_program, &state->tone_shader_data, "temporalBlend", 0.08f);
     g_gl.ActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, state->hdr_color_texture);
     g_gl.ActiveTexture(GL_TEXTURE1);
     glBindTexture(GL_TEXTURE_2D, state->bloom_ready ? state->bloom_color_texture : 0U);
+    g_gl.ActiveTexture(GL_TEXTURE2);
+    glBindTexture(GL_TEXTURE_2D, state->temporal_history_ready ? state->temporal_history_texture : 0U);
     g_gl.BindVertexArray(state->tone_vertex_array);
     glDrawArrays(GL_TRIANGLES, 0, 3);
     g_gl.BindVertexArray(0);
     glBindTexture(GL_TEXTURE_2D, 0U);
     g_gl.ActiveTexture(GL_TEXTURE1);
     glBindTexture(GL_TEXTURE_2D, 0U);
+    g_gl.ActiveTexture(GL_TEXTURE2);
+    glBindTexture(GL_TEXTURE_2D, 0U);
     g_gl.ActiveTexture(GL_TEXTURE0);
     g_gl.UseProgram(0);
+    if (state->temporal_history_ready &&
+        state->temporal_history_width == viewport.width &&
+        state->temporal_history_height == viewport.height)
+    {
+        g_gl.ActiveTexture(GL_TEXTURE2);
+        glBindTexture(GL_TEXTURE_2D, state->temporal_history_texture);
+        glCopyTexSubImage2D(
+            GL_TEXTURE_2D,
+            0,
+            0,
+            0,
+            viewport.x,
+            renderer->framebuffer_height - viewport.y - viewport.height,
+            viewport.width,
+            viewport.height);
+        glBindTexture(GL_TEXTURE_2D, 0U);
+        g_gl.ActiveTexture(GL_TEXTURE0);
+        state->temporal_history_valid = true;
+    }
 }
 henka_result henka_opengl_renderer_create(struct henka_renderer* renderer, struct henka_platform* platform, bool enable_vsync)
 {
@@ -2455,6 +2556,7 @@ henka_result henka_opengl_renderer_create(struct henka_renderer* renderer, struc
     {
         henka_opengl_delete_hdr_target(state);
         henka_opengl_delete_bloom_target(state);
+        henka_opengl_delete_temporal_history(state);
         henka_opengl_delete_shadow_target(state);
         henka_opengl_delete_ibl_resources(state);
         if (state->shadow_program != 0U) g_gl.DeleteProgram(state->shadow_program);
@@ -2477,6 +2579,14 @@ henka_result henka_opengl_renderer_create(struct henka_renderer* renderer, struc
         henka_free(state);
         renderer->backend_state = NULL;
         return HENKA_ERROR_RENDERER;
+    }
+
+    if (henka_opengl_create_temporal_history(
+            state,
+            renderer->scene_viewport.width,
+            renderer->scene_viewport.height) != HENKA_SUCCESS)
+    {
+        HENKA_LOG_WARN("temporal history allocation failed; presentation will use the non-temporal path");
     }
 
     HENKA_LOG_INFO("renderer initialized with OpenGL backend");
@@ -2521,6 +2631,7 @@ void henka_opengl_renderer_destroy(struct henka_renderer* renderer)
         }
         henka_opengl_delete_hdr_target(state);
         henka_opengl_delete_bloom_target(state);
+        henka_opengl_delete_temporal_history(state);
         henka_opengl_delete_shadow_target(state);
         henka_opengl_delete_ibl_resources(state);
         if (state->tone_program != 0U)
@@ -4151,7 +4262,9 @@ void henka_opengl_renderer_sync_scene_target(struct henka_renderer* renderer)
     }
     state = (henka_opengl_renderer_state*)renderer->backend_state;
     if (state->hdr_width == viewport.width && state->hdr_height == viewport.height &&
-        state->hdr_framebuffer != 0U && state->hdr_framebuffer_complete)
+        state->hdr_framebuffer != 0U && state->hdr_framebuffer_complete &&
+        state->temporal_history_ready && state->temporal_history_width == viewport.width &&
+        state->temporal_history_height == viewport.height)
     {
         return;
     }
@@ -4171,6 +4284,13 @@ void henka_opengl_renderer_sync_scene_target(struct henka_renderer* renderer)
             viewport.width,
             viewport.height,
             state->bloom_failure_reason[0] != '\0' ? state->bloom_failure_reason : "unknown reason");
+    }
+    if (henka_opengl_create_temporal_history(state, viewport.width, viewport.height) != HENKA_SUCCESS)
+    {
+        HENKA_LOG_ERROR(
+            "Scene View temporal history resize failed for %dx%d; temporal accumulation disabled",
+            viewport.width,
+            viewport.height);
     }
 }
 
