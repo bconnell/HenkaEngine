@@ -629,6 +629,10 @@ static bool henka_gltf_parse_accessors(henka_gltf_context* context)
         size_t accessor_count;
         char type[16]; const char* type_value; const char* type_end;
         accessor->buffer_view = -1; accessor->byte_offset = 0U; accessor->normalized = false;
+        /* Sparse accessors require applying index/value patches before any
+         * attribute is read. Rejecting them is safer than rendering a valid
+         * but materially different base buffer. */
+        if (henka_gltf_find_member(item, item_end, "sparse", &type_value, &type_end)) return false;
         if (!henka_gltf_member_size(item, item_end, "count", &accessor_count) ||
             !henka_gltf_member_int(item, item_end, "componentType", &accessor->component_type) ||
             !henka_gltf_find_member(item, item_end, "type", &type_value, &type_end) ||
@@ -1432,6 +1436,8 @@ static bool henka_gltf_parse_scene_nodes(
     const henka_gltf_context* context,
     henka_model_scene_data* scene)
 {
+    const char* meshes;
+    const char* meshes_end;
     const char* nodes;
     const char* nodes_end;
     const char* node;
@@ -1439,9 +1445,14 @@ static bool henka_gltf_parse_scene_nodes(
     const char* value;
     const char* value_end;
     size_t index;
+    size_t mesh_count = 0U;
     unsigned char state[HENKA_MODEL_MAX_SCENE_ITEMS];
 
-    if (!henka_gltf_find_member(context->json, context->json + context->json_size, "nodes", &nodes, &nodes_end)) return true;
+    if (!henka_gltf_find_member(context->json, context->json + context->json_size, "meshes", &meshes, &meshes_end) ||
+        !henka_gltf_find_member(context->json, context->json + context->json_size, "nodes", &nodes, &nodes_end)) return true;
+    while (mesh_count < HENKA_MODEL_MAX_SCENE_ITEMS &&
+        henka_gltf_array_item(meshes, meshes_end, mesh_count, &value, &value_end)) ++mesh_count;
+    if (henka_gltf_array_item(meshes, meshes_end, HENKA_MODEL_MAX_SCENE_ITEMS, &value, &value_end)) return false;
     for (index = 0U; index < HENKA_MODEL_MAX_SCENE_ITEMS &&
         henka_gltf_array_item(nodes, nodes_end, index, &node, &node_end); ++index)
     {
@@ -1494,7 +1505,7 @@ static bool henka_gltf_parse_scene_nodes(
         if (henka_gltf_find_member(node, node_end, "camera", &value, &value_end) &&
             !henka_gltf_member_int(node, node_end, "camera", &output->camera_index)) return false;
         if (output->camera_index >= 0 && (size_t)output->camera_index >= scene->camera_count) return false;
-        if (output->mesh_index >= 0 && (size_t)output->mesh_index >= HENKA_MODEL_MAX_SCENE_ITEMS) return false;
+        if (output->mesh_index >= 0 && (size_t)output->mesh_index >= mesh_count) return false;
         if (henka_gltf_find_member(node, node_end, "extensions", &value, &value_end))
         {
             const char* punctual;
