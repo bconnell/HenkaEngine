@@ -106,6 +106,8 @@ Materials now expose a bounded metallic-roughness subset: base color, metallic, 
 
 ### Workspace and viewport
 
+HDR presentation includes a bounded half-resolution extract and separable blur bloom pass. Its GPU targets are replaced transactionally; if allocation or framebuffer validation fails, tone mapping remains active and the renderer diagnostics expose the fallback.
+
 Henka now also includes a small docked workspace helper for viewport-first tools:
 
 - dock region layout math

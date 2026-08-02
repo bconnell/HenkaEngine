@@ -68,6 +68,10 @@ typedef struct henka_opengl_renderer_state
     henka_opengl_shader_data viewport_shader_data;
     GLuint tone_program;
     henka_opengl_shader_data tone_shader_data;
+    GLuint bloom_extract_program;
+    henka_opengl_shader_data bloom_extract_shader_data;
+    GLuint bloom_blur_program;
+    henka_opengl_shader_data bloom_blur_shader_data;
     GLuint environment_program;
     henka_opengl_shader_data environment_shader_data;
     GLuint tone_vertex_array;
@@ -81,6 +85,14 @@ typedef struct henka_opengl_renderer_state
     uint64_t hdr_generation;
     bool hdr_framebuffer_complete;
     char hdr_failure_reason[64];
+    GLuint bloom_framebuffer;
+    GLuint bloom_blur_framebuffer;
+    GLuint bloom_color_texture;
+    GLuint bloom_blur_texture;
+    int bloom_width;
+    int bloom_height;
+    bool bloom_ready;
+    char bloom_failure_reason[64];
     GLuint shadow_program;
     henka_opengl_shader_data shadow_shader_data;
     GLuint shadow_framebuffer;
@@ -963,6 +975,19 @@ static void henka_set_uniform_vec4_owned(
     }
 }
 
+static void henka_set_uniform_vec2_owned(
+    GLuint program,
+    const henka_opengl_shader_data* shader_data,
+    const char* name,
+    henka_vec2 value)
+{
+    GLint location = henka_opengl_shader_uniform_location(program, shader_data, name);
+    if (location >= 0)
+    {
+        g_gl.Uniform2f(location, value.x, value.y);
+    }
+}
+
 static void henka_set_uniform_vec4_array_owned(
     GLuint program,
     const henka_opengl_shader_data* shader_data,
@@ -1179,6 +1204,129 @@ static void henka_opengl_delete_hdr_target(henka_opengl_renderer_state* state)
     state->hdr_height = 0;
 }
 
+static void henka_opengl_delete_bloom_target(henka_opengl_renderer_state* state)
+{
+    uint64_t target_bytes = 0U;
+
+    if (state != NULL && state->bloom_width > 0 && state->bloom_height > 0)
+    {
+        target_bytes = (uint64_t)state->bloom_width *
+            (uint64_t)state->bloom_height * 16U;
+        henka_opengl_memory_remove_category(
+            state,
+            &state->tracked_render_target_bytes,
+            target_bytes);
+    }
+    if (state != NULL)
+    {
+        if (state->bloom_color_texture != 0U)
+            glDeleteTextures(1, &state->bloom_color_texture);
+        if (state->bloom_blur_texture != 0U)
+            glDeleteTextures(1, &state->bloom_blur_texture);
+        if (state->bloom_framebuffer != 0U)
+            g_gl.DeleteFramebuffers(1, &state->bloom_framebuffer);
+        if (state->bloom_blur_framebuffer != 0U)
+            g_gl.DeleteFramebuffers(1, &state->bloom_blur_framebuffer);
+        state->bloom_color_texture = 0U;
+        state->bloom_blur_texture = 0U;
+        state->bloom_framebuffer = 0U;
+        state->bloom_blur_framebuffer = 0U;
+        state->bloom_width = 0;
+        state->bloom_height = 0;
+        state->bloom_ready = false;
+    }
+}
+
+static henka_result henka_opengl_create_bloom_target(
+    henka_opengl_renderer_state* state,
+    int width,
+    int height)
+{
+    GLuint color_texture = 0U;
+    GLuint blur_texture = 0U;
+    GLuint framebuffer = 0U;
+    GLuint blur_framebuffer = 0U;
+    GLint previous_framebuffer = 0;
+    GLint previous_texture = 0;
+    int bloom_width;
+    int bloom_height;
+
+    if (state == NULL || width <= 0 || height <= 0 || width > 8192 || height > 8192)
+    {
+        if (state != NULL)
+        {
+            state->bloom_ready = false;
+            (void)snprintf(state->bloom_failure_reason, sizeof(state->bloom_failure_reason), "invalid bloom target size");
+        }
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    bloom_width = width > 1 ? width / 2 : 1;
+    bloom_height = height > 1 ? height / 2 : 1;
+    glGetIntegerv(GL_FRAMEBUFFER_BINDING, &previous_framebuffer);
+    glGetIntegerv(GL_TEXTURE_BINDING_2D, &previous_texture);
+    g_gl.GenFramebuffers(1, &framebuffer);
+    g_gl.GenFramebuffers(1, &blur_framebuffer);
+    glGenTextures(1, &color_texture);
+    glGenTextures(1, &blur_texture);
+    if (framebuffer == 0U || blur_framebuffer == 0U || color_texture == 0U || blur_texture == 0U)
+    {
+        if (color_texture != 0U) glDeleteTextures(1, &color_texture);
+        if (blur_texture != 0U) glDeleteTextures(1, &blur_texture);
+        if (framebuffer != 0U) g_gl.DeleteFramebuffers(1, &framebuffer);
+        if (blur_framebuffer != 0U) g_gl.DeleteFramebuffers(1, &blur_framebuffer);
+        state->bloom_ready = false;
+        (void)snprintf(state->bloom_failure_reason, sizeof(state->bloom_failure_reason), "GPU object allocation failed");
+        return HENKA_ERROR_RENDERER;
+    }
+    glBindTexture(GL_TEXTURE_2D, color_texture);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA16F, bloom_width, bloom_height, 0, GL_RGBA, GL_HALF_FLOAT, NULL);
+    glBindTexture(GL_TEXTURE_2D, blur_texture);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA16F, bloom_width, bloom_height, 0, GL_RGBA, GL_HALF_FLOAT, NULL);
+    g_gl.BindFramebuffer(GL_FRAMEBUFFER, framebuffer);
+    g_gl.FramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, color_texture, 0);
+    if (g_gl.CheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
+        goto bloom_target_failure;
+    g_gl.BindFramebuffer(GL_FRAMEBUFFER, blur_framebuffer);
+    g_gl.FramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, blur_texture, 0);
+    if (g_gl.CheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
+        goto bloom_target_failure;
+    g_gl.BindFramebuffer(GL_FRAMEBUFFER, (GLuint)previous_framebuffer);
+    glBindTexture(GL_TEXTURE_2D, (GLuint)previous_texture);
+    henka_opengl_delete_bloom_target(state);
+    state->bloom_framebuffer = framebuffer;
+    state->bloom_blur_framebuffer = blur_framebuffer;
+    state->bloom_color_texture = color_texture;
+    state->bloom_blur_texture = blur_texture;
+    state->bloom_width = bloom_width;
+    state->bloom_height = bloom_height;
+    state->bloom_ready = true;
+    state->bloom_failure_reason[0] = '\0';
+    henka_opengl_memory_add_category(
+        state,
+        &state->tracked_render_target_bytes,
+        (uint64_t)bloom_width * (uint64_t)bloom_height * 16U);
+    return HENKA_SUCCESS;
+
+bloom_target_failure:
+    g_gl.BindFramebuffer(GL_FRAMEBUFFER, (GLuint)previous_framebuffer);
+    glBindTexture(GL_TEXTURE_2D, (GLuint)previous_texture);
+    glDeleteTextures(1, &color_texture);
+    glDeleteTextures(1, &blur_texture);
+    g_gl.DeleteFramebuffers(1, &framebuffer);
+    g_gl.DeleteFramebuffers(1, &blur_framebuffer);
+    state->bloom_ready = false;
+    (void)snprintf(state->bloom_failure_reason, sizeof(state->bloom_failure_reason), "incomplete bloom framebuffer");
+    return HENKA_ERROR_RENDERER;
+}
+
 static void henka_opengl_delete_shadow_target(henka_opengl_renderer_state* state)
 {
     uint64_t target_bytes = 0U;
@@ -1369,7 +1517,9 @@ static henka_result henka_opengl_create_shadow_target(
 static henka_result henka_opengl_create_render_programs(
     henka_opengl_renderer_state* state)
 {
-    static const char* tone_uniforms[] = {"hdrTexture", "exposure"};
+    static const char* tone_uniforms[] = {"hdrTexture", "bloomTexture", "exposure", "useBloom", "bloomStrength"};
+    static const char* bloom_extract_uniforms[] = {"hdrTexture", "threshold"};
+    static const char* bloom_blur_uniforms[] = {"sourceTexture", "direction"};
     static const char* environment_uniforms[] =
         {"groundColor", "horizonColor", "zenithColor", "intensity",
          "environmentTexture", "useEnvironmentTexture", "environmentRotation"};
@@ -1381,9 +1531,17 @@ static henka_result henka_opengl_create_render_programs(
         "void main(){ vec2 p = vec2((gl_VertexID << 1) & 2, gl_VertexID & 2); uv = p; gl_Position = vec4(p * 2.0 - 1.0, 0.0, 1.0); }\n";
     static const char* tone_fragment =
         "#version 330 core\n"
-        "in vec2 uv; uniform sampler2D hdrTexture; uniform float exposure; out vec4 outColor;\n"
+        "in vec2 uv; uniform sampler2D hdrTexture; uniform sampler2D bloomTexture; uniform float exposure; uniform bool useBloom; uniform float bloomStrength; out vec4 outColor;\n"
         "vec3 aces(vec3 x){ return clamp((x*(2.51*x+0.03))/(x*(2.43*x+0.59)+0.14),0.0,1.0); }\n"
-        "void main(){ vec3 color = texture(hdrTexture, uv).rgb * exp2(exposure); color = aces(max(color, vec3(0.0))); outColor = vec4(pow(color, vec3(1.0/2.2)), 1.0); }\n";
+        "void main(){ vec3 color = texture(hdrTexture, uv).rgb; if (useBloom) color += texture(bloomTexture, uv).rgb * max(bloomStrength, 0.0); color *= exp2(exposure); color = aces(max(color, vec3(0.0))); outColor = vec4(pow(color, vec3(1.0/2.2)), 1.0); }\n";
+    static const char* bloom_extract_fragment =
+        "#version 330 core\n"
+        "in vec2 uv; uniform sampler2D hdrTexture; uniform float threshold; out vec4 outColor;\n"
+        "void main(){ vec3 color = max(texture(hdrTexture, uv).rgb, vec3(0.0)); float brightness = max(max(color.r, color.g), color.b); outColor = vec4(brightness > threshold ? color - vec3(threshold) : vec3(0.0), 1.0); }\n";
+    static const char* bloom_blur_fragment =
+        "#version 330 core\n"
+        "in vec2 uv; uniform sampler2D sourceTexture; uniform vec2 direction; out vec4 outColor;\n"
+        "void main(){ vec3 color = texture(sourceTexture, uv).rgb * 0.227027; color += texture(sourceTexture, uv + direction * 1.384615).rgb * 0.316216; color += texture(sourceTexture, uv - direction * 1.384615).rgb * 0.316216; color += texture(sourceTexture, uv + direction * 3.230769).rgb * 0.070270; color += texture(sourceTexture, uv - direction * 3.230769).rgb * 0.070270; outColor = vec4(color, 1.0); }\n";
     static const char* environment_fragment =
         "#version 330 core\n"
         "in vec2 uv; uniform vec3 groundColor; uniform vec3 horizonColor; uniform vec3 zenithColor; uniform float intensity; uniform sampler2D environmentTexture; uniform bool useEnvironmentTexture; uniform float environmentRotation; out vec4 outColor;\n"
@@ -1399,9 +1557,17 @@ static henka_result henka_opengl_create_render_programs(
 
     if (state == NULL ||
         !henka_compile_program_from_source(tone_vertex, tone_fragment, "tone-map vertex", "tone-map fragment", &state->tone_program) ||
+        !henka_compile_program_from_source(tone_vertex, bloom_extract_fragment, "bloom extract vertex", "bloom extract fragment", &state->bloom_extract_program) ||
+        !henka_compile_program_from_source(tone_vertex, bloom_blur_fragment, "bloom blur vertex", "bloom blur fragment", &state->bloom_blur_program) ||
         !henka_compile_program_from_source(tone_vertex, environment_fragment, "environment vertex", "environment fragment", &state->environment_program) ||
         !henka_compile_program_from_source(shadow_vertex, shadow_fragment, "shadow vertex", "shadow fragment", &state->shadow_program))
     {
+        if (state->bloom_blur_program != 0U) g_gl.DeleteProgram(state->bloom_blur_program);
+        if (state->bloom_extract_program != 0U) g_gl.DeleteProgram(state->bloom_extract_program);
+        if (state->tone_program != 0U) g_gl.DeleteProgram(state->tone_program);
+        state->bloom_blur_program = 0U;
+        state->bloom_extract_program = 0U;
+        state->tone_program = 0U;
         return HENKA_ERROR_RENDERER;
     }
     if (!henka_populate_shader_location_table(
@@ -1412,6 +1578,22 @@ static henka_result henka_opengl_create_render_programs(
             tone_uniforms,
             sizeof(tone_uniforms) / sizeof(tone_uniforms[0]),
             &state->tone_shader_data) ||
+        !henka_populate_shader_location_table(
+            state->bloom_extract_program,
+            "bloom extract",
+            HENKA_SHADER_CONTRACT_BLOOM,
+            1U,
+            bloom_extract_uniforms,
+            sizeof(bloom_extract_uniforms) / sizeof(bloom_extract_uniforms[0]),
+            &state->bloom_extract_shader_data) ||
+        !henka_populate_shader_location_table(
+            state->bloom_blur_program,
+            "bloom blur",
+            HENKA_SHADER_CONTRACT_BLOOM,
+            1U,
+            bloom_blur_uniforms,
+            sizeof(bloom_blur_uniforms) / sizeof(bloom_blur_uniforms[0]),
+            &state->bloom_blur_shader_data) ||
         !henka_populate_shader_location_table(
             state->environment_program,
             "environment",
@@ -1486,6 +1668,52 @@ static void henka_opengl_draw_environment(
     g_gl.BindVertexArray(0);
     glBindTexture(GL_TEXTURE_2D, 0U);
     g_gl.UseProgram(0);
+    glEnable(GL_DEPTH_TEST);
+    glEnable(GL_CULL_FACE);
+}
+
+static void henka_opengl_draw_bloom(
+    henka_opengl_renderer_state* state)
+{
+    if (state == NULL || !state->bloom_ready || state->hdr_color_texture == 0U ||
+        state->bloom_framebuffer == 0U || state->bloom_blur_framebuffer == 0U ||
+        state->bloom_extract_program == 0U || state->bloom_blur_program == 0U ||
+        state->tone_vertex_array == 0U)
+    {
+        return;
+    }
+    glDisable(GL_SCISSOR_TEST);
+    glDisable(GL_DEPTH_TEST);
+    glDisable(GL_CULL_FACE);
+    glDisable(GL_BLEND);
+    glViewport(0, 0, state->bloom_width, state->bloom_height);
+
+    g_gl.BindFramebuffer(GL_FRAMEBUFFER, state->bloom_framebuffer);
+    g_gl.UseProgram(state->bloom_extract_program);
+    henka_set_uniform_int_owned(state->bloom_extract_program, &state->bloom_extract_shader_data, "hdrTexture", 0);
+    henka_set_uniform_float_owned(state->bloom_extract_program, &state->bloom_extract_shader_data, "threshold", 1.0f);
+    g_gl.ActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, state->hdr_color_texture);
+    g_gl.BindVertexArray(state->tone_vertex_array);
+    glDrawArrays(GL_TRIANGLES, 0, 3);
+
+    g_gl.BindFramebuffer(GL_FRAMEBUFFER, state->bloom_blur_framebuffer);
+    g_gl.UseProgram(state->bloom_blur_program);
+    henka_set_uniform_int_owned(state->bloom_blur_program, &state->bloom_blur_shader_data, "sourceTexture", 0);
+    henka_set_uniform_vec2_owned(state->bloom_blur_program, &state->bloom_blur_shader_data, "direction",
+        (henka_vec2){1.0f / (float)state->bloom_width, 0.0f});
+    glBindTexture(GL_TEXTURE_2D, state->bloom_color_texture);
+    glDrawArrays(GL_TRIANGLES, 0, 3);
+
+    g_gl.BindFramebuffer(GL_FRAMEBUFFER, state->bloom_framebuffer);
+    henka_set_uniform_vec2_owned(state->bloom_blur_program, &state->bloom_blur_shader_data, "direction",
+        (henka_vec2){0.0f, 1.0f / (float)state->bloom_height});
+    glBindTexture(GL_TEXTURE_2D, state->bloom_blur_texture);
+    glDrawArrays(GL_TRIANGLES, 0, 3);
+    g_gl.BindVertexArray(0);
+    glBindTexture(GL_TEXTURE_2D, 0U);
+    g_gl.UseProgram(0);
+    g_gl.BindFramebuffer(GL_FRAMEBUFFER, 0U);
     glEnable(GL_DEPTH_TEST);
     glEnable(GL_CULL_FACE);
 }
@@ -1599,13 +1827,21 @@ static void henka_opengl_present_hdr(
     glDisable(GL_BLEND);
     g_gl.UseProgram(state->tone_program);
     henka_set_uniform_int_owned(state->tone_program, &state->tone_shader_data, "hdrTexture", 0);
+    henka_set_uniform_int_owned(state->tone_program, &state->tone_shader_data, "bloomTexture", 1);
     henka_set_uniform_float_owned(state->tone_program, &state->tone_shader_data, "exposure", renderer->exposure);
+    henka_set_uniform_bool_owned(state->tone_program, &state->tone_shader_data, "useBloom", state->bloom_ready);
+    henka_set_uniform_float_owned(state->tone_program, &state->tone_shader_data, "bloomStrength", 0.14f);
     g_gl.ActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, state->hdr_color_texture);
+    g_gl.ActiveTexture(GL_TEXTURE1);
+    glBindTexture(GL_TEXTURE_2D, state->bloom_ready ? state->bloom_color_texture : 0U);
     g_gl.BindVertexArray(state->tone_vertex_array);
     glDrawArrays(GL_TRIANGLES, 0, 3);
     g_gl.BindVertexArray(0);
     glBindTexture(GL_TEXTURE_2D, 0U);
+    g_gl.ActiveTexture(GL_TEXTURE1);
+    glBindTexture(GL_TEXTURE_2D, 0U);
+    g_gl.ActiveTexture(GL_TEXTURE0);
     g_gl.UseProgram(0);
 }
 henka_result henka_opengl_renderer_create(struct henka_renderer* renderer, struct henka_platform* platform, bool enable_vsync)
@@ -1733,12 +1969,19 @@ henka_result henka_opengl_renderer_create(struct henka_renderer* renderer, struc
             state,
             renderer->scene_viewport.width,
             renderer->scene_viewport.height) != HENKA_SUCCESS ||
+        henka_opengl_create_bloom_target(
+            state,
+            renderer->scene_viewport.width,
+            renderer->scene_viewport.height) != HENKA_SUCCESS ||
         henka_opengl_create_shadow_target(state, 1024) != HENKA_SUCCESS)
     {
         henka_opengl_delete_hdr_target(state);
+        henka_opengl_delete_bloom_target(state);
         henka_opengl_delete_shadow_target(state);
         if (state->shadow_program != 0U) g_gl.DeleteProgram(state->shadow_program);
         if (state->tone_program != 0U) g_gl.DeleteProgram(state->tone_program);
+        if (state->bloom_blur_program != 0U) g_gl.DeleteProgram(state->bloom_blur_program);
+        if (state->bloom_extract_program != 0U) g_gl.DeleteProgram(state->bloom_extract_program);
         if (state->environment_program != 0U) g_gl.DeleteProgram(state->environment_program);
         if (state->tone_vertex_array != 0U) g_gl.DeleteVertexArrays(1, &state->tone_vertex_array);
         g_gl.DeleteProgram(state->viewport_program);
@@ -1792,10 +2035,19 @@ void henka_opengl_renderer_destroy(struct henka_renderer* renderer)
             g_gl.DeleteProgram(state->viewport_program);
         }
         henka_opengl_delete_hdr_target(state);
+        henka_opengl_delete_bloom_target(state);
         henka_opengl_delete_shadow_target(state);
         if (state->tone_program != 0U)
         {
             g_gl.DeleteProgram(state->tone_program);
+        }
+        if (state->bloom_blur_program != 0U)
+        {
+            g_gl.DeleteProgram(state->bloom_blur_program);
+        }
+        if (state->bloom_extract_program != 0U)
+        {
+            g_gl.DeleteProgram(state->bloom_extract_program);
         }
         if (state->environment_program != 0U)
         {
@@ -2590,6 +2842,7 @@ henka_result henka_opengl_renderer_draw_scene(
 
     if (policy.use_hdr_presentation)
     {
+        henka_opengl_draw_bloom(state);
         g_gl.BindFramebuffer(GL_FRAMEBUFFER, 0U);
         henka_opengl_present_hdr(renderer, state);
     }
@@ -3247,6 +3500,15 @@ void henka_opengl_renderer_sync_scene_target(struct henka_renderer* renderer)
             viewport.width,
             viewport.height,
             state->hdr_failure_reason[0] != '\0' ? state->hdr_failure_reason : "unknown reason");
+        return;
+    }
+    if (henka_opengl_create_bloom_target(state, viewport.width, viewport.height) != HENKA_SUCCESS)
+    {
+        HENKA_LOG_ERROR(
+            "Scene View bloom target resize failed for %dx%d; HDR presentation remains active without bloom (%s)",
+            viewport.width,
+            viewport.height,
+            state->bloom_failure_reason[0] != '\0' ? state->bloom_failure_reason : "unknown reason");
     }
 }
 
@@ -3307,6 +3569,30 @@ void henka_opengl_renderer_get_shadow_diagnostics(
             failure_capacity,
             "%s",
             state != NULL && state->shadow_failure_reason[0] != '\0' ? state->shadow_failure_reason : "");
+    }
+}
+
+void henka_opengl_renderer_get_bloom_diagnostics(
+    const struct henka_renderer* renderer,
+    int* out_width,
+    int* out_height,
+    bool* out_ready,
+    char* out_failure,
+    size_t failure_capacity)
+{
+    const henka_opengl_renderer_state* state = renderer != NULL && renderer->backend_state != NULL ?
+        (const henka_opengl_renderer_state*)renderer->backend_state : NULL;
+
+    if (out_width != NULL) *out_width = state != NULL ? state->bloom_width : 0;
+    if (out_height != NULL) *out_height = state != NULL ? state->bloom_height : 0;
+    if (out_ready != NULL) *out_ready = state != NULL && state->bloom_ready;
+    if (out_failure != NULL && failure_capacity > 0U)
+    {
+        (void)snprintf(
+            out_failure,
+            failure_capacity,
+            "%s",
+            state != NULL && state->bloom_failure_reason[0] != '\0' ? state->bloom_failure_reason : "");
     }
 }
 

@@ -1362,6 +1362,13 @@ henka_result henka_engine_get_diagnostics(
         henka_renderer_is_hdr_ready(engine->renderer);
     out_diagnostics->rendered_shadow_ready =
         henka_renderer_is_shadow_ready(engine->renderer);
+    henka_opengl_renderer_get_bloom_diagnostics(
+        engine->renderer,
+        &out_diagnostics->rendered_bloom_width,
+        &out_diagnostics->rendered_bloom_height,
+        &out_diagnostics->rendered_bloom_ready,
+        out_diagnostics->rendered_bloom_failure,
+        sizeof(out_diagnostics->rendered_bloom_failure));
     out_diagnostics->scene_viewport =
         henka_renderer_get_scene_viewport(engine->renderer);
     henka_opengl_renderer_get_hdr_diagnostics(
