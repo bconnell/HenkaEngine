@@ -3275,7 +3275,8 @@ henka_result henka_opengl_renderer_draw_scene(
             reflection_probe_center = world_bounds.center;
         }
         use_reflection_probe = !helper_entity && state->ibl_ready &&
-            henka_opengl_select_reflection_probe(scene, reflection_probe_center, &reflection_probe);
+            henka_opengl_select_reflection_probe(scene, reflection_probe_center, &reflection_probe) &&
+            reflection_probe.box_projection;
         editor_surface =
             !helper_entity &&
             henka_renderer_get_viewport_shading_mode(
