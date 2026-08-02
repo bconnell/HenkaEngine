@@ -472,6 +472,7 @@ henka_result henka_texture_create_from_ktx2_memory(
         {0xABU, 0x4BU, 0x54U, 0x58U, 0x20U, 0x32U, 0x30U, 0xBBU, 0x0DU, 0x0AU, 0x1AU, 0x0AU};
     uint32_t vk_format, width, height, depth, layers, faces, levels, supercompression;
     uint64_t level_offset, level_length, level_uncompressed_length;
+    uint64_t base_level_offset, base_level_length;
     size_t expected_bytes, end_offset, level_table_bytes, level_table_end;
     uint32_t level_index, level_width, level_height;
     henka_result result;
@@ -491,15 +492,14 @@ henka_result henka_texture_create_from_ktx2_memory(
         width == 0U || height == 0U || width > HENKA_MAX_TEXTURE_DIMENSION || height > HENKA_MAX_TEXTURE_DIMENSION ||
         depth > 1U || layers > 1U || faces != 1U || levels == 0U || levels > 16U || supercompression != 0U ||
         (vk_format != 37U && vk_format != 43U) ||
+        ((vk_format == 43U) != (descriptor->color_space == HENKA_TEXTURE_COLOR_SPACE_SRGB)) ||
         !henka_checked_rgba8_size((int)width, (int)height, &expected_bytes) || expected_bytes > HENKA_MAX_TEXTURE_DECODED_BYTES ||
-        !henka_ktx2_read_u64(data, data_size, 80U, &level_offset) ||
-        !henka_ktx2_read_u64(data, data_size, 88U, &level_length) ||
+        !henka_ktx2_read_u64(data, data_size, 80U, &base_level_offset) ||
+        !henka_ktx2_read_u64(data, data_size, 88U, &base_level_length) ||
         !henka_ktx2_read_u64(data, data_size, 96U, &level_uncompressed_length) ||
-        level_offset > (uint64_t)SIZE_MAX || level_length > (uint64_t)SIZE_MAX ||
-        level_uncompressed_length != (uint64_t)expected_bytes || level_length != (uint64_t)expected_bytes ||
-        !henka_checked_size_add((size_t)level_offset, (size_t)level_length, &end_offset) || end_offset > data_size)
-        return HENKA_ERROR_ASSET_SOURCE;
-    if (vk_format == 43U && descriptor->color_space != HENKA_TEXTURE_COLOR_SPACE_SRGB)
+        base_level_offset > (uint64_t)SIZE_MAX || base_level_length > (uint64_t)SIZE_MAX ||
+        level_uncompressed_length != (uint64_t)expected_bytes || base_level_length != (uint64_t)expected_bytes ||
+        !henka_checked_size_add((size_t)base_level_offset, (size_t)base_level_length, &end_offset) || end_offset > data_size)
         return HENKA_ERROR_ASSET_SOURCE;
     if (!henka_checked_size_multiply((size_t)levels, 24U, &level_table_bytes) ||
         !henka_checked_size_add(80U, level_table_bytes, &level_table_end) || level_table_end > data_size) return HENKA_ERROR_ASSET_SOURCE;
@@ -523,7 +523,7 @@ henka_result henka_texture_create_from_ktx2_memory(
         if (level_height > 1U) level_height /= 2U;
     }
     result = henka_texture_create_from_rgba8_with_descriptor(
-        engine, (int)width, (int)height, data + (size_t)level_offset, descriptor, out_texture);
+        engine, (int)width, (int)height, data + (size_t)base_level_offset, descriptor, out_texture);
     if (result == HENKA_SUCCESS)
     {
         (*out_texture)->source_byte_size = data_size;
