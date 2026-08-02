@@ -298,6 +298,7 @@ typedef struct sandbox3d_state
     henka_entity fallback_cube_entity;
     henka_entity marker_entity;
     henka_entity fallback_model_entity;
+    henka_entity realism_entities[6];
     sandbox3d_object_descriptor descriptors[SANDBOX3D_OBJECT_COUNT];
     sandbox3d_workspace_state workspace;
     sandbox3d_gizmo_state gizmo;
@@ -8052,6 +8053,75 @@ static henka_result sandbox3d_initialize(henka_engine* engine, void* user_data)
     grid_material.base_color = (henka_vec4){0.24f, 0.46f, 0.62f, 0.82f};
     grid_material.use_texture = false;
     grid_material.use_lighting = false;
+
+    {
+        static const char* realism_names[6] =
+        {
+            "Realism Rough Metal", "Realism Polished Metal", "Realism Painted Clearcoat",
+            "Realism Plastic", "Realism Stone", "Realism Fabric Sheen"
+        };
+        static const henka_vec3 realism_positions[6] =
+        {
+            {-4.0f, 0.65f, -2.8f}, {-2.4f, 0.65f, -2.8f}, {-0.8f, 0.65f, -2.8f},
+            {0.8f, 0.65f, -2.8f}, {2.4f, 0.65f, -2.8f}, {4.0f, 0.65f, -2.8f}
+        };
+        static const henka_vec4 realism_colors[6] =
+        {
+            {0.18f, 0.20f, 0.24f, 1.0f}, {0.72f, 0.76f, 0.82f, 1.0f},
+            {0.72f, 0.06f, 0.04f, 1.0f}, {0.04f, 0.24f, 0.72f, 1.0f},
+            {0.42f, 0.28f, 0.16f, 1.0f}, {0.38f, 0.08f, 0.22f, 1.0f}
+        };
+        int realism_index;
+        for (realism_index = 0; realism_index < 6; ++realism_index)
+        {
+            henka_material realism_material = henka_material_default();
+            henka_transform realism_transform = sandbox3d_make_transform(
+                realism_positions[realism_index],
+                (henka_vec3){1.0f, 1.0f, 1.0f});
+            state->realism_entities[realism_index] = henka_scene_create_entity_named(
+                state->scene,
+                realism_names[realism_index]);
+            if (state->realism_entities[realism_index] == HENKA_INVALID_ENTITY)
+            {
+                result = HENKA_ERROR_OUT_OF_MEMORY;
+                goto fail;
+            }
+            realism_material.name = realism_names[realism_index];
+            realism_material.type = HENKA_MATERIAL_TYPE_LIT;
+            realism_material.shader = state->basic_shader;
+            realism_material.base_color = realism_colors[realism_index];
+            realism_material.use_lighting = true;
+            realism_material.metallic = realism_index < 2 ? 1.0f : 0.0f;
+            realism_material.roughness = realism_index == 1 ? 0.08f :
+                realism_index == 0 ? 0.34f :
+                realism_index == 2 ? 0.24f :
+                realism_index == 4 ? 0.72f : 0.46f;
+            realism_material.clearcoat = realism_index == 2 ? 0.9f : 0.0f;
+            realism_material.clearcoat_roughness = 0.12f;
+            if (realism_index == 5)
+            {
+                realism_material.sheen_color = (henka_vec3){0.42f, 0.08f, 0.24f};
+                realism_material.sheen_roughness = 0.82f;
+            }
+            result = sandbox3d_configure_entity(
+                state->scene,
+                state->realism_entities[realism_index],
+                state->sphere_mesh,
+                realism_material,
+                realism_transform);
+            if (result != HENKA_SUCCESS)
+            {
+                goto fail;
+            }
+            sandbox3d_apply_entity_foundation(
+                state,
+                state->realism_entities[realism_index],
+                "realism_validation",
+                sandbox3d_make_bounds((henka_vec3){0.0f, 0.0f, 0.0f}, (henka_vec3){0.5f, 0.5f, 0.5f}),
+                true,
+                "Inspect realism validation material");
+        }
+    }
 
     transform = sandbox3d_make_transform((henka_vec3){0.0f, -0.02f, 0.0f}, (henka_vec3){1.0f, 1.0f, 1.0f});
     result = sandbox3d_configure_entity(state->scene, state->ground_entity, state->ground_mesh, ground_material, transform);
