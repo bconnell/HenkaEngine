@@ -102,6 +102,9 @@ henka_result henka_assets_reload_gltf_scene_asset(
     henka_asset_manager* manager,
     const char* path,
     henka_gltf_scene_asset** out_asset);
+henka_result henka_assets_set_gltf_scene_active_scene(
+    henka_gltf_scene_asset* asset,
+    size_t scene_index);
 henka_result henka_assets_instantiate_gltf_scene(
     henka_asset_manager* manager,
     const henka_gltf_scene_asset* asset,

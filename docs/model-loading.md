@@ -36,7 +36,10 @@ runtime's four-local-light limit remains an explicit bounded fallback. A
 failed scene parse or dependency build cannot publish partial renderer state.
 Callers can select another validated scene with
 `henka_model_scene_data_set_active_scene` before instantiation; an invalid
-index is rejected without changing the current selection.
+index is rejected without changing the current selection. Manager-owned scene
+assets expose the same operation through
+`henka_assets_set_gltf_scene_active_scene`, without transferring scene or
+dependency ownership to the caller.
 
 ## Supported input
 

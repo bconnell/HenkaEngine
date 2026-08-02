@@ -2278,6 +2278,14 @@ henka_result henka_assets_reload_gltf_scene_asset(
     return HENKA_SUCCESS;
 }
 
+henka_result henka_assets_set_gltf_scene_active_scene(
+    henka_gltf_scene_asset* asset,
+    size_t scene_index)
+{
+    if (asset == NULL) return HENKA_ERROR_INVALID_ARGUMENT;
+    return henka_model_scene_data_set_active_scene(&asset->data, scene_index);
+}
+
 static henka_result henka_assets_instantiate_gltf_scene_node(
     henka_asset_manager* manager,
     const henka_gltf_scene_asset* asset,
