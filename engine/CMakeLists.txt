@@ -2,6 +2,7 @@ add_library(henka STATIC
     src/assets/assets.c
     src/core/action.c
     src/assets/model_obj.c
+    src/assets/model_gltf.c
     src/core/math.c
     src/core/engine.c
     src/core/gizmo.c

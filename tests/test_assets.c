@@ -33,6 +33,7 @@ void henka_test_assets(void)
     henka_asset_manager manager;
     henka_asset_mesh_entry mesh_entries[2];
     henka_asset_metadata metadata;
+    henka_mesh* gltf_mesh;
     henka_asset_texture_entry texture_entries[2];
     henka_mesh fallback_mesh;
     henka_mesh* mesh;
@@ -53,6 +54,12 @@ void henka_test_assets(void)
 
     HENKA_TEST_ASSERT(strcmp(henka_assets_get_type_label(HENKA_ASSET_TYPE_SHADER), "Shader") == 0);
     HENKA_TEST_ASSERT(strcmp(henka_assets_get_type_label(HENKA_ASSET_TYPE_TEXTURE), "Texture") == 0);
+    gltf_mesh = (henka_mesh*)1;
+    HENKA_TEST_ASSERT(henka_assets_load_gltf_mesh(NULL, "assets/models/sample.gltf", &gltf_mesh) == HENKA_ERROR_INVALID_ARGUMENT);
+    HENKA_TEST_ASSERT(gltf_mesh == NULL);
+    gltf_mesh = (henka_mesh*)1;
+    HENKA_TEST_ASSERT(henka_assets_retry_failed_gltf_mesh(NULL, "assets/models/sample.gltf", &gltf_mesh) == HENKA_ERROR_INVALID_ARGUMENT);
+    HENKA_TEST_ASSERT(gltf_mesh == NULL);
     HENKA_TEST_ASSERT(strcmp(henka_assets_get_type_label(HENKA_ASSET_TYPE_MESH), "Mesh") == 0);
     HENKA_TEST_ASSERT(henka_assets_get_metadata_count(NULL) == 0U);
 

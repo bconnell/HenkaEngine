@@ -51,6 +51,13 @@ static void henka_test_model_rejects_unsafe_bounds(void)
 
 void henka_test_model(void)
 {
+    static const char* valid_gltf =
+        "{\"asset\":{\"version\":\"2.0\"},"
+        "\"buffers\":[{\"uri\":\"data:application/octet-stream;base64,"
+        "AAAAAAAAAAAAAAAAAACAPwAAAAAAAAAAAAAAAAAAgD8AAAAA\",\"byteLength\":36}],"
+        "\"bufferViews\":[{\"buffer\":0,\"byteLength\":36}],"
+        "\"accessors\":[{\"bufferView\":0,\"componentType\":5126,\"count\":3,\"type\":\"VEC3\"}],"
+        "\"meshes\":[{\"primitives\":[{\"attributes\":{\"POSITION\":0}}]}]}";
     static const char* valid_obj =
         "# simple quad\n"
         "v -0.5 0.0 -0.5\n"
@@ -115,6 +122,19 @@ void henka_test_model(void)
         "   \n"
         "\t# comment only\n";
     henka_model_data model;
+
+    memset(&model, 0, sizeof(model));
+    HENKA_TEST_ASSERT(
+        henka_model_data_load_gltf_from_memory(
+            valid_gltf,
+            strlen(valid_gltf),
+            "valid.gltf",
+            &model) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(model.vertex_count == 3U);
+    HENKA_TEST_ASSERT(model.index_count == 3U);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(model.vertices[1].position.x, 1.0f, 0.0001f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(model.vertices[0].normal.z, 1.0f, 0.0001f);
+    henka_model_data_destroy(&model);
 
     model.vertices = NULL;
     model.indices = NULL;

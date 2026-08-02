@@ -69,6 +69,7 @@ henka_result henka_assets_load_texture_with_descriptor(
     const henka_texture_descriptor* descriptor,
     henka_texture** out_texture);
 henka_result henka_assets_load_obj_mesh(henka_asset_manager* manager, const char* path, henka_mesh** out_mesh);
+henka_result henka_assets_load_gltf_mesh(henka_asset_manager* manager, const char* path, henka_mesh** out_mesh);
 
 /*
  * Retries only a cached texture fallback from a previous failed load.
@@ -87,6 +88,7 @@ henka_result henka_assets_retry_failed_texture(
  * The fallback entry remains intact when the replacement load fails.
  */
 henka_result henka_assets_retry_failed_obj_mesh(henka_asset_manager* manager, const char* path, henka_mesh** out_mesh);
+henka_result henka_assets_retry_failed_gltf_mesh(henka_asset_manager* manager, const char* path, henka_mesh** out_mesh);
 const char* henka_assets_get_type_label(henka_asset_type type);
 size_t henka_assets_get_metadata_count(const henka_asset_manager* manager);
 henka_result henka_assets_get_metadata_at_index(const henka_asset_manager* manager, size_t index, henka_asset_metadata* out_metadata);
