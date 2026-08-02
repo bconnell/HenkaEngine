@@ -100,6 +100,17 @@ typedef struct henka_scene_environment_desc
     float hdr_rotation;
 } henka_scene_environment_desc;
 
+#define HENKA_SCENE_MAX_REFLECTION_PROBES 8U
+
+typedef struct henka_scene_reflection_probe_desc
+{
+    henka_vec3 position;
+    henka_vec3 extents;
+    float influence;
+    bool enabled;
+    bool box_projection;
+} henka_scene_reflection_probe_desc;
+
 #define HENKA_SCENE_MAX_LOCAL_LIGHTS 4U
 
 typedef enum henka_scene_light_type
@@ -206,6 +217,21 @@ henka_result henka_scene_set_environment(
 henka_result henka_scene_get_environment(
     const henka_scene* scene,
     henka_scene_environment_desc* out_environment);
+henka_result henka_scene_add_reflection_probe(
+    henka_scene* scene,
+    henka_scene_reflection_probe_desc probe,
+    uint32_t* out_probe_index);
+henka_result henka_scene_update_reflection_probe(
+    henka_scene* scene,
+    uint32_t probe_index,
+    henka_scene_reflection_probe_desc probe);
+henka_result henka_scene_remove_reflection_probe(
+    henka_scene* scene,
+    uint32_t probe_index);
+henka_result henka_scene_get_reflection_probe(
+    const henka_scene* scene,
+    uint32_t probe_index,
+    henka_scene_reflection_probe_desc* out_probe);
 henka_result henka_scene_add_light(
     henka_scene* scene,
     henka_scene_light_desc light,

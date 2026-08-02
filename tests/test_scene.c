@@ -90,6 +90,10 @@ void henka_test_scene(void)
     henka_scene_fog_desc read_fog;
     henka_scene_light_desc light;
     henka_scene_light_desc read_light;
+    henka_scene_reflection_probe_desc reflection_probe;
+    henka_scene_reflection_probe_desc read_reflection_probe;
+    uint32_t reflection_probe_indices[HENKA_SCENE_MAX_REFLECTION_PROBES];
+    uint32_t reflection_probe_index;
     uint32_t light_indices[HENKA_SCENE_MAX_LOCAL_LIGHTS];
     uint32_t light_index;
 
@@ -140,6 +144,32 @@ void henka_test_scene(void)
     for (light_index = 0U; light_index < HENKA_SCENE_MAX_LOCAL_LIGHTS; ++light_index)
     {
         HENKA_TEST_ASSERT(henka_scene_remove_light(scene, light_indices[light_index]) == HENKA_SUCCESS);
+    }
+    reflection_probe = (henka_scene_reflection_probe_desc){
+        (henka_vec3){0.0f, 1.0f, -2.0f},
+        (henka_vec3){4.0f, 2.0f, 5.0f},
+        1.0f,
+        true,
+        true};
+    HENKA_TEST_ASSERT(henka_scene_add_reflection_probe(scene, reflection_probe, &reflection_probe_index) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(reflection_probe_index == 0U);
+    HENKA_TEST_ASSERT(henka_scene_get_reflection_probe(scene, reflection_probe_index, &read_reflection_probe) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(read_reflection_probe.extents.z, 5.0f, 0.0001f);
+    reflection_probe.position.x = 2.0f;
+    HENKA_TEST_ASSERT(henka_scene_update_reflection_probe(scene, reflection_probe_index, reflection_probe) == HENKA_SUCCESS);
+    reflection_probe.extents.x = 0.0f;
+    HENKA_TEST_ASSERT(henka_scene_update_reflection_probe(scene, reflection_probe_index, reflection_probe) == HENKA_ERROR_INVALID_ARGUMENT);
+    HENKA_TEST_ASSERT(henka_scene_remove_reflection_probe(scene, reflection_probe_index) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_scene_get_reflection_probe(scene, reflection_probe_index, &read_reflection_probe) == HENKA_ERROR_INVALID_ARGUMENT);
+    reflection_probe.extents.x = 4.0f;
+    for (reflection_probe_index = 0U; reflection_probe_index < HENKA_SCENE_MAX_REFLECTION_PROBES; ++reflection_probe_index)
+    {
+        HENKA_TEST_ASSERT(henka_scene_add_reflection_probe(scene, reflection_probe, &reflection_probe_indices[reflection_probe_index]) == HENKA_SUCCESS);
+    }
+    HENKA_TEST_ASSERT(henka_scene_add_reflection_probe(scene, reflection_probe, &reflection_probe_index) == HENKA_ERROR_LIMIT);
+    for (reflection_probe_index = 0U; reflection_probe_index < HENKA_SCENE_MAX_REFLECTION_PROBES; ++reflection_probe_index)
+    {
+        HENKA_TEST_ASSERT(henka_scene_remove_reflection_probe(scene, reflection_probe_indices[reflection_probe_index]) == HENKA_SUCCESS);
     }
     HENKA_TEST_ASSERT(henka_scene_get_fog(scene, &read_fog) == HENKA_SUCCESS);
     HENKA_TEST_ASSERT(!read_fog.enabled);

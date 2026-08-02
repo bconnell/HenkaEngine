@@ -7794,6 +7794,19 @@ static henka_result sandbox3d_initialize(henka_engine* engine, void* user_data)
         {
             goto fail;
         }
+        result = henka_scene_add_reflection_probe(
+            state->scene,
+            (henka_scene_reflection_probe_desc){
+                (henka_vec3){0.0f, 1.0f, -1.5f},
+                (henka_vec3){8.0f, 4.0f, 8.0f},
+                1.0f,
+                true,
+                true},
+            &(uint32_t){UINT32_MAX});
+        if (result != HENKA_SUCCESS)
+        {
+            goto fail;
+        }
         if (state->smoke_test &&
             henka_engine_set_viewport_shading_mode(
                 engine,

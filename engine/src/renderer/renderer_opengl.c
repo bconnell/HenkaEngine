@@ -887,7 +887,8 @@ static void henka_add_optional_shader_locations(
 {
     static const char* optional_names[] =
     {
-        "iblIrradianceMap", "iblPrefilterMap", "iblBrdfLut", "useIBL"
+        "iblIrradianceMap", "iblPrefilterMap", "iblBrdfLut", "useIBL",
+        "reflectionProbePosition", "reflectionProbeExtents", "useReflectionProbe"
     };
     size_t index;
 
@@ -2807,6 +2808,64 @@ static void henka_opengl_prepare_transparent_sort(
         state->transparent_sort_count);
 }
 
+static bool henka_opengl_select_reflection_probe(
+    const henka_scene* scene,
+    henka_vec3 position,
+    henka_scene_reflection_probe_desc* out_probe)
+{
+    bool found = false;
+    float best_score = FLT_MAX;
+    uint32_t best_index = UINT32_MAX;
+    uint32_t index;
+
+    if (scene == NULL || out_probe == NULL)
+    {
+        return false;
+    }
+    for (index = 0U; index < HENKA_SCENE_MAX_REFLECTION_PROBES; ++index)
+    {
+        const henka_scene_reflection_probe_desc* probe;
+        henka_vec3 offset;
+        float normalized_distance;
+        float score;
+
+        if (!scene->reflection_probe_active[index] ||
+            !scene->reflection_probes[index].enabled)
+        {
+            continue;
+        }
+        probe = &scene->reflection_probes[index];
+        offset = (henka_vec3){
+            position.x - probe->position.x,
+            position.y - probe->position.y,
+            position.z - probe->position.z};
+        if (fabsf(offset.x) > probe->extents.x ||
+            fabsf(offset.y) > probe->extents.y ||
+            fabsf(offset.z) > probe->extents.z)
+        {
+            continue;
+        }
+        normalized_distance =
+            (offset.x * offset.x) / (probe->extents.x * probe->extents.x) +
+            (offset.y * offset.y) / (probe->extents.y * probe->extents.y) +
+            (offset.z * offset.z) / (probe->extents.z * probe->extents.z);
+        score = normalized_distance / fmaxf(probe->influence, 0.0001f);
+        if (!isfinite(score))
+        {
+            continue;
+        }
+        if (!found || score < best_score - 0.000001f ||
+            (fabsf(score - best_score) <= 0.000001f && index < best_index))
+        {
+            found = true;
+            best_score = score;
+            best_index = index;
+            *out_probe = *probe;
+        }
+    }
+    return found;
+}
+
 henka_result henka_opengl_renderer_draw_scene(
     struct henka_renderer* renderer,
     const struct henka_scene* scene)
@@ -2953,7 +3012,10 @@ henka_result henka_opengl_renderer_draw_scene(
         bool use_texture;
         henka_mat4 model;
         henka_bounds world_bounds;
-        henka_entity entity_id;
+        henka_entity entity_id = HENKA_INVALID_ENTITY;
+        henka_scene_reflection_probe_desc reflection_probe;
+        henka_vec3 reflection_probe_center;
+        bool use_reflection_probe;
 
         entity = &scene->entities[draw_index];
         if (!entity->active ||
@@ -2997,6 +3059,15 @@ henka_result henka_opengl_renderer_draw_scene(
         helper_entity =
             (entity->flags &
                 HENKA_SCENE_ENTITY_FLAG_HELPER) != 0U;
+        reflection_probe_center = entity->transform.position;
+        if (entity->has_local_bounds &&
+            entity_id != HENKA_INVALID_ENTITY &&
+            henka_scene_get_entity_world_bounds(scene, entity_id, &world_bounds) == HENKA_SUCCESS)
+        {
+            reflection_probe_center = world_bounds.center;
+        }
+        use_reflection_probe = !helper_entity && state->ibl_ready &&
+            henka_opengl_select_reflection_probe(scene, reflection_probe_center, &reflection_probe);
         editor_surface =
             !helper_entity &&
             henka_renderer_get_viewport_shading_mode(
@@ -3164,6 +3235,17 @@ henka_result henka_opengl_renderer_draw_scene(
         henka_set_uniform_int_owned(program, shader_data, "iblPrefilterMap", 8);
         henka_set_uniform_int_owned(program, shader_data, "iblBrdfLut", 9);
         henka_set_uniform_bool_owned(program, shader_data, "useIBL", !helper_entity && state->ibl_ready);
+        henka_set_uniform_vec3_owned(
+            program,
+            shader_data,
+            "reflectionProbePosition",
+            use_reflection_probe ? reflection_probe.position : (henka_vec3){0.0f, 0.0f, 0.0f});
+        henka_set_uniform_vec3_owned(
+            program,
+            shader_data,
+            "reflectionProbeExtents",
+            use_reflection_probe ? reflection_probe.extents : (henka_vec3){1.0f, 1.0f, 1.0f});
+        henka_set_uniform_bool_owned(program, shader_data, "useReflectionProbe", use_reflection_probe);
         henka_set_uniform_int(program, "localLightCount", local_light_count);
         henka_set_uniform_vec4_array_owned(
             program,

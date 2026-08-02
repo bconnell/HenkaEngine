@@ -1550,6 +1550,95 @@ henka_result henka_scene_get_environment(
     return HENKA_SUCCESS;
 }
 
+static henka_result henka_scene_validate_reflection_probe(
+    const henka_scene_reflection_probe_desc* probe)
+{
+    if (probe == NULL ||
+        !henka_scene_vec3_is_finite(probe->position) ||
+        !henka_scene_vec3_is_finite(probe->extents) ||
+        !henka_is_finite_float(probe->influence) ||
+        probe->extents.x <= 0.0f || probe->extents.y <= 0.0f || probe->extents.z <= 0.0f ||
+        probe->extents.x > 65536.0f || probe->extents.y > 65536.0f || probe->extents.z > 65536.0f ||
+        probe->influence < 0.0f || probe->influence > 1000000.0f)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    return HENKA_SUCCESS;
+}
+
+henka_result henka_scene_add_reflection_probe(
+    henka_scene* scene,
+    henka_scene_reflection_probe_desc probe,
+    uint32_t* out_probe_index)
+{
+    uint32_t index;
+
+    if (out_probe_index != NULL)
+    {
+        *out_probe_index = UINT32_MAX;
+    }
+    if (scene == NULL || out_probe_index == NULL ||
+        henka_scene_validate_reflection_probe(&probe) != HENKA_SUCCESS)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    for (index = 0U; index < HENKA_SCENE_MAX_REFLECTION_PROBES; ++index)
+    {
+        if (!scene->reflection_probe_active[index])
+        {
+            scene->reflection_probes[index] = probe;
+            scene->reflection_probe_active[index] = true;
+            *out_probe_index = index;
+            return HENKA_SUCCESS;
+        }
+    }
+    return HENKA_ERROR_LIMIT;
+}
+
+henka_result henka_scene_update_reflection_probe(
+    henka_scene* scene,
+    uint32_t probe_index,
+    henka_scene_reflection_probe_desc probe)
+{
+    if (scene == NULL || probe_index >= HENKA_SCENE_MAX_REFLECTION_PROBES ||
+        !scene->reflection_probe_active[probe_index] ||
+        henka_scene_validate_reflection_probe(&probe) != HENKA_SUCCESS)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    scene->reflection_probes[probe_index] = probe;
+    return HENKA_SUCCESS;
+}
+
+henka_result henka_scene_remove_reflection_probe(
+    henka_scene* scene,
+    uint32_t probe_index)
+{
+    if (scene == NULL || probe_index >= HENKA_SCENE_MAX_REFLECTION_PROBES ||
+        !scene->reflection_probe_active[probe_index])
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    memset(&scene->reflection_probes[probe_index], 0, sizeof(scene->reflection_probes[probe_index]));
+    scene->reflection_probe_active[probe_index] = false;
+    return HENKA_SUCCESS;
+}
+
+henka_result henka_scene_get_reflection_probe(
+    const henka_scene* scene,
+    uint32_t probe_index,
+    henka_scene_reflection_probe_desc* out_probe)
+{
+    if (scene == NULL || out_probe == NULL ||
+        probe_index >= HENKA_SCENE_MAX_REFLECTION_PROBES ||
+        !scene->reflection_probe_active[probe_index])
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    *out_probe = scene->reflection_probes[probe_index];
+    return HENKA_SUCCESS;
+}
+
 static henka_result henka_scene_validate_light(henka_scene_light_desc* light)
 {
     henka_vec3 direction;

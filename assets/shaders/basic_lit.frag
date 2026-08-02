@@ -30,6 +30,9 @@ uniform samplerCube iblIrradianceMap;
 uniform samplerCube iblPrefilterMap;
 uniform sampler2D iblBrdfLut;
 uniform bool useIBL;
+uniform vec3 reflectionProbePosition;
+uniform vec3 reflectionProbeExtents;
+uniform bool useReflectionProbe;
 uniform int localLightCount;
 uniform vec4 localLightPositionRange[4];
 uniform vec4 localLightColorIntensity[4];
@@ -80,6 +83,28 @@ vec3 safeNormalize(vec3 value, vec3 fallback)
 {
     float lengthSquared = dot(value, value);
     return lengthSquared > 0.000001 ? value * inversesqrt(lengthSquared) : fallback;
+}
+
+vec3 parallaxCorrectReflectionDirection(vec3 direction)
+{
+    if (!useReflectionProbe)
+    {
+        return direction;
+    }
+    vec3 boxMin = reflectionProbePosition - reflectionProbeExtents;
+    vec3 boxMax = reflectionProbePosition + reflectionProbeExtents;
+    vec3 safeDirection = safeNormalize(direction, vec3(0.0, 0.0, 1.0));
+    vec3 firstIntersection = (boxMax - fragWorldPosition) / safeDirection;
+    vec3 secondIntersection = (boxMin - fragWorldPosition) / safeDirection;
+    vec3 furthestIntersection = max(firstIntersection, secondIntersection);
+    float distanceToBox = min(min(furthestIntersection.x, furthestIntersection.y), furthestIntersection.z);
+    if (!(distanceToBox > 0.0) || distanceToBox > 65536.0)
+    {
+        return direction;
+    }
+    return safeNormalize(
+        fragWorldPosition + safeDirection * distanceToBox - reflectionProbePosition,
+        direction);
 }
 
 vec3 fresnelSchlick(float cosTheta, vec3 f0)
@@ -273,6 +298,7 @@ void main()
             vec3 blurredReflectionDirection = safeNormalize(
                 mix(reflectionDirection, normal, surfaceRoughness * 0.75),
                 normal);
+            blurredReflectionDirection = parallaxCorrectReflectionDirection(blurredReflectionDirection);
             vec3 environmentSpecular = useIBL ?
                 textureLod(iblPrefilterMap, blurredReflectionDirection, surfaceRoughness * 4.0).rgb :
                 sampleEnvironment(blurredReflectionDirection);
