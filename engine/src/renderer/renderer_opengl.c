@@ -855,7 +855,6 @@ static bool henka_validate_shader_contract(
         "clearcoat", "clearcoatRoughness", "sheenColor", "sheenRoughness",
         "alphaMode", "alphaCutoff", "shadowMap", "useShadowMap",
         "environmentTexture", "useEnvironmentTexture", "environmentRotation",
-        "iblIrradianceMap", "iblPrefilterMap", "iblBrdfLut", "useIBL",
         "localLightCount", "localLightPositionRange[0]",
         "localLightColorIntensity[0]", "localLightDirectionInner[0]",
         "localLightOuterType[0]"
@@ -1058,6 +1057,26 @@ static void henka_set_uniform_int_owned(
     {
         g_gl.Uniform1i(location, value);
     }
+}
+
+static void henka_set_uniform_int_optional(
+    GLuint program,
+    const char* name,
+    int value)
+{
+    GLint location = henka_opengl_uniform_location(program, name);
+    if (location >= 0)
+    {
+        g_gl.Uniform1i(location, value);
+    }
+}
+
+static void henka_set_uniform_bool_optional(
+    GLuint program,
+    const char* name,
+    bool value)
+{
+    henka_set_uniform_int_optional(program, name, value ? 1 : 0);
 }
 
 static void henka_set_uniform_float_owned(
@@ -1848,7 +1867,8 @@ static henka_result henka_opengl_create_render_programs(
     static const char* ibl_brdf_uniforms[] = {"brdfScale"};
     static const char* environment_uniforms[] =
         {"groundColor", "horizonColor", "zenithColor", "intensity",
-         "environmentTexture", "useEnvironmentTexture", "environmentRotation"};
+         "environmentTexture", "useEnvironmentTexture", "environmentRotation",
+         "environmentCube", "useIBLCube"};
     static const char* shadow_uniforms[] =
         {"model", "lightMatrix", "baseColor", "baseColorTexture", "useTexture", "alphaMode", "alphaCutoff"};
     static const char* tone_vertex =
@@ -1886,8 +1906,8 @@ static henka_result henka_opengl_create_render_programs(
         "void main(){ float nDotV=clamp(uv.x,0.0,1.0); float roughness=clamp(1.0-uv.y,0.0,1.0); float fresnel=pow(1.0-nDotV,5.0); outColor=vec2((1.0-fresnel)*(1.0-0.5*roughness),fresnel)*brdfScale; }\n";
     static const char* environment_fragment =
         "#version 330 core\n"
-        "in vec2 uv; uniform vec3 groundColor; uniform vec3 horizonColor; uniform vec3 zenithColor; uniform float intensity; uniform sampler2D environmentTexture; uniform bool useEnvironmentTexture; uniform float environmentRotation; out vec4 outColor;\n"
-        "void main(){ float height = clamp(uv.y, 0.0, 1.0); float horizon = smoothstep(0.04, 0.48, height); vec3 lower = mix(groundColor, horizonColor, horizon); vec3 gradient = mix(lower, zenithColor, smoothstep(0.48, 1.0, height)); float longitude = fract(uv.x + environmentRotation / 6.28318530718); vec3 hdr = texture(environmentTexture, vec2(longitude, height)).rgb; vec3 color = useEnvironmentTexture ? hdr : gradient; outColor = vec4(max(color * max(intensity, 0.0), vec3(0.0)), 1.0); }\n";
+        "in vec2 uv; uniform vec3 groundColor; uniform vec3 horizonColor; uniform vec3 zenithColor; uniform float intensity; uniform sampler2D environmentTexture; uniform samplerCube environmentCube; uniform bool useEnvironmentTexture; uniform bool useIBLCube; uniform float environmentRotation; out vec4 outColor; const float PI=3.14159265359;\n"
+        "void main(){ float height = clamp(uv.y, 0.0, 1.0); float horizon = smoothstep(0.04, 0.48, height); vec3 lower = mix(groundColor, horizonColor, horizon); vec3 gradient = mix(lower, zenithColor, smoothstep(0.48, 1.0, height)); float longitude = fract(uv.x + environmentRotation / 6.28318530718); float latitude=height*PI; vec3 direction=vec3(sin(latitude)*cos(longitude*2.0*PI),cos(latitude),sin(latitude)*sin(longitude*2.0*PI)); vec3 hdr = useIBLCube ? texture(environmentCube,direction).rgb : texture(environmentTexture, vec2(longitude, height)).rgb; vec3 color = (useEnvironmentTexture || useIBLCube) ? hdr : gradient; outColor = vec4(max(color * max(intensity, 0.0), vec3(0.0)), 1.0); }\n";
     static const char* shadow_vertex =
         "#version 330 core\n"
         "layout(location=0) in vec3 inPosition; layout(location=2) in vec2 inUv; out vec2 fragUv; uniform mat4 model; uniform mat4 lightMatrix;\n"
@@ -2028,12 +2048,18 @@ static void henka_opengl_draw_environment(
     henka_set_uniform_vec3_owned(state->environment_program, &state->environment_shader_data, "zenithColor", scene->environment.zenith_color);
     henka_set_uniform_float_owned(state->environment_program, &state->environment_shader_data, "intensity", scene->environment.intensity);
     henka_set_uniform_int_owned(state->environment_program, &state->environment_shader_data, "environmentTexture", 6);
+    henka_set_uniform_int_owned(state->environment_program, &state->environment_shader_data, "environmentCube", 7);
     henka_set_uniform_bool_owned(
         state->environment_program,
         &state->environment_shader_data,
         "useEnvironmentTexture",
         scene->environment.hdr_texture != NULL &&
         scene->environment.hdr_texture->backend_data != NULL);
+    henka_set_uniform_bool_owned(
+        state->environment_program,
+        &state->environment_shader_data,
+        "useIBLCube",
+        state->ibl_ready);
     henka_set_uniform_float_owned(
         state->environment_program,
         &state->environment_shader_data,
@@ -2045,10 +2071,15 @@ static void henka_opengl_draw_environment(
         scene->environment.hdr_texture != NULL &&
         scene->environment.hdr_texture->backend_data != NULL ?
         ((const henka_opengl_texture_data*)scene->environment.hdr_texture->backend_data)->texture_id : 0U);
+    g_gl.ActiveTexture(GL_TEXTURE7);
+    glBindTexture(GL_TEXTURE_CUBE_MAP, state->ibl_ready ? state->ibl_environment_cube : 0U);
     g_gl.BindVertexArray(state->tone_vertex_array);
     glDrawArrays(GL_TRIANGLES, 0, 3);
     g_gl.BindVertexArray(0);
     glBindTexture(GL_TEXTURE_2D, 0U);
+    g_gl.ActiveTexture(GL_TEXTURE7);
+    glBindTexture(GL_TEXTURE_CUBE_MAP, 0U);
+    g_gl.ActiveTexture(GL_TEXTURE0);
     g_gl.UseProgram(0);
     glEnable(GL_DEPTH_TEST);
     glEnable(GL_CULL_FACE);
@@ -3129,10 +3160,10 @@ henka_result henka_opengl_renderer_draw_scene(
             scene->environment.hdr_texture != NULL &&
             scene->environment.hdr_texture->backend_data != NULL);
         henka_set_uniform_float(program, "environmentRotation", scene->environment.hdr_rotation);
-        henka_set_uniform_int(program, "iblIrradianceMap", 7);
-        henka_set_uniform_int(program, "iblPrefilterMap", 8);
-        henka_set_uniform_int(program, "iblBrdfLut", 9);
-        henka_set_uniform_bool(program, "useIBL", !helper_entity && state->ibl_ready);
+        henka_set_uniform_int_optional(program, "iblIrradianceMap", 7);
+        henka_set_uniform_int_optional(program, "iblPrefilterMap", 8);
+        henka_set_uniform_int_optional(program, "iblBrdfLut", 9);
+        henka_set_uniform_bool_optional(program, "useIBL", !helper_entity && state->ibl_ready);
         henka_set_uniform_int(program, "localLightCount", local_light_count);
         henka_set_uniform_vec4_array_owned(
             program,
