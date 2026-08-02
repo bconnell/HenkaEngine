@@ -432,6 +432,34 @@ henka_result henka_texture_create_from_ktx2_memory(
     const henka_texture_descriptor* descriptor,
     henka_texture** out_texture)
 {
+#if defined(HENKA_WITH_KTX2_TRANSCODER)
+    unsigned char* decoded_pixels = NULL;
+    size_t decoded_size = 0U;
+    int decoded_width = 0;
+    int decoded_height = 0;
+    henka_result transcoder_result;
+
+    if (out_texture != NULL) *out_texture = NULL;
+    if (engine == NULL || data == NULL || descriptor == NULL || out_texture == NULL ||
+        henka_texture_descriptor_validate(descriptor) != HENKA_SUCCESS)
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    transcoder_result = henka_ktx2_decode_rgba8(
+        data, data_size, &decoded_pixels, &decoded_size, &decoded_width, &decoded_height);
+    if (transcoder_result != HENKA_SUCCESS)
+        return transcoder_result;
+    (void)decoded_size;
+    transcoder_result = henka_texture_create_from_rgba8_with_descriptor(
+        engine, decoded_width, decoded_height, decoded_pixels, descriptor, out_texture);
+    henka_free(decoded_pixels);
+    if (transcoder_result == HENKA_SUCCESS)
+    {
+        (*out_texture)->source_byte_size = data_size;
+        (*out_texture)->original_channel_count = 4;
+        (*out_texture)->source_class = HENKA_TEXTURE_SOURCE_CLASS_LDR_8_BIT;
+        (*out_texture)->content_revision = 1U;
+    }
+    return transcoder_result;
+#else
     static const unsigned char identifier[12] =
         {0xABU, 0x4BU, 0x54U, 0x58U, 0x20U, 0x32U, 0x30U, 0xBBU, 0x0DU, 0x0AU, 0x1AU, 0x0AU};
     uint32_t vk_format, width, height, depth, layers, faces, levels, supercompression;
@@ -496,6 +524,7 @@ henka_result henka_texture_create_from_ktx2_memory(
         (*out_texture)->content_revision = 1U;
     }
     return result;
+#endif
 }
 
 henka_result henka_texture_create_from_file_with_descriptor(

@@ -43,3 +43,15 @@ The previous package remains untouched until the staged package is complete. Dur
 A leftover staging directory still stops packaging for inspection because it may represent an incomplete transaction. A leftover backup is removed automatically only when the active package is independently proven complete and both the active package and backup are free of reparse points. If that proof or cleanup fails, packaging stops with the exact retained path instead of reporting success.
 
 A package created from a working tree is identified as `working-tree`. A package created after commit and a clean rebuild is identified as `clean`.
+
+## KTX2/Basis provenance
+
+The KTX2/Basis path uses the pinned KhronosGroup KTX-Software revision
+`91ace88675ac59a97e55d0378a6602a9ae6b98bd` (the v4.3.2 release source). Henka
+builds its static library with tools, tests, Vulkan upload, and OpenGL upload
+disabled. KTX1 compatibility objects remain present because libktx's public
+stream vtable references them, but Henka accepts only KTX2 at its boundary.
+Only the internal C boundary in
+`engine/src/renderer/ktx_boundary.c` includes `ktx.h`; the public engine API
+does not expose KTX types. Downstream packages must preserve KTX-Software's
+`LICENSE.md`, `LICENSES/`, and `NOTICE.md` notices when redistributing it.

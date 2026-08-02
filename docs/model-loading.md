@@ -64,12 +64,13 @@ The loader currently supports:
   images supplied as bounded base64 data URIs or glTF image bufferViews;
   decoded textures use the same manager-owned semantic cache and fallback path
 - `KHR_texture_basisu` source selection for external KTX2 images; the texture
-  loader validates KTX2 bounds, mip records, dimensions, and uncompressed
-  RGBA8 formats before upload. Basis-supercompressed and other compressed
-  payloads remain explicit semantic fallbacks until the pinned transcoder
-  boundary is enabled. The same checked KTX2 boundary is used for external
-  images and embedded URI/bufferView bytes, so GLB and data-URI ownership does
-  not create a second decoder or bypass the asset manager.
+  loader validates KTX2 bounds, dimensions, layers/faces, and mip ownership
+  before the pinned KTX-Software boundary decodes uncompressed RGBA8 or
+  transcodes Basis payloads to RGBA8. Other GPU-native compressed formats are
+  rejected until a capability-selected upload path exists. The same checked
+  KTX2 boundary is used for external images and embedded URI/bufferView bytes,
+  so GLB and data-URI ownership does not create a second decoder or bypass the
+  asset manager.
 - multiple triangle primitives, node hierarchies with cycle and parent checks,
   selected scene roots, TRS or matrix node transforms, perspective and
   orthographic cameras, and bounded punctual-light records

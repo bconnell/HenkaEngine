@@ -8,8 +8,21 @@
 #include "../engine/src/core/checked.h"
 #include "../engine/src/henka_internal.h"
 
+
 void henka_test_assets(void)
 {
+#if defined(HENKA_WITH_KTX2_TRANSCODER)
+    static const unsigned char malformed_ktx2[] =
+        {0xABU, 0x4BU, 0x54U, 0x58U, 0x20U, 0x32U, 0x30U, 0xBBU, 0x0DU, 0x0AU, 0x1AU, 0x0AU};
+    unsigned char* decoded_ktx2 = NULL;
+    size_t decoded_ktx2_size = 0U;
+    int decoded_ktx2_width = 0;
+    int decoded_ktx2_height = 0;
+    HENKA_TEST_ASSERT(henka_ktx2_decode_rgba8(
+        malformed_ktx2, sizeof(malformed_ktx2), &decoded_ktx2, &decoded_ktx2_size,
+        &decoded_ktx2_width, &decoded_ktx2_height) == HENKA_ERROR_ASSET_SOURCE);
+    HENKA_TEST_ASSERT(decoded_ktx2 == NULL && decoded_ktx2_size == 0U);
+#endif
     char* display_name;
     char display_name_source[] = "assets/textures/cube_albedo.png";
     char overlong_path[HENKA_MAX_ASSET_PATH_BYTES + 2U];

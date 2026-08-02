@@ -19,6 +19,7 @@ add_library(henka STATIC
     src/renderer/renderer_opengl.c
     src/renderer/shader.c
     src/renderer/texture.c
+    $<$<BOOL:${HENKA_ENABLE_KTX2_TRANSCODER}>:src/renderer/ktx_boundary.c>
     src/scene/camera.c
     src/scene/scene.c
     src/ui/ui.c
@@ -44,6 +45,11 @@ target_link_libraries(henka
     PRIVATE
         ${HENKA_SDL_TARGET}
 )
+
+if(HENKA_ENABLE_KTX2_TRANSCODER)
+    target_compile_definitions(henka PRIVATE HENKA_WITH_KTX2_TRANSCODER=1)
+    target_link_libraries(henka PRIVATE ktx)
+endif()
 
 if(WIN32)
     target_link_libraries(henka PRIVATE opengl32)

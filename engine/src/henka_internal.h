@@ -18,6 +18,16 @@
 #include <henka/scene.h>
 #include <henka/shader.h>
 #include <henka/texture.h>
+
+#if defined(HENKA_WITH_KTX2_TRANSCODER)
+henka_result henka_ktx2_decode_rgba8(
+    const unsigned char* data,
+    size_t data_size,
+    unsigned char** out_pixels,
+    size_t* out_pixel_size,
+    int* out_width,
+    int* out_height);
+#endif
 #include <henka/time.h>
 #include <henka/ui.h>
 #include <henka/workspace.h>

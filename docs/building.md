@@ -6,7 +6,8 @@ These instructions are currently focused on Windows.
 
 - Visual Studio 2022 with C and C++ build tools installed
 - CMake available either on `PATH` or through the Visual Studio installation
-- Network access during the first configure step so CMake can fetch SDL3 locally
+- Network access during the first configure step so CMake can fetch the pinned
+  SDL3 and KTX-Software sources locally
 
 ## Build from the repository root
 

@@ -33,6 +33,10 @@ target_link_libraries(henka_tests
         henka
 )
 
+if(HENKA_ENABLE_KTX2_TRANSCODER)
+    target_compile_definitions(henka_tests PRIVATE HENKA_WITH_KTX2_TRANSCODER=1)
+endif()
+
 henka_enable_project_warnings(henka_tests)
 
 add_test(NAME henka_tests COMMAND henka_tests)
