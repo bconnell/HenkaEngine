@@ -120,6 +120,8 @@ typedef struct henka_asset_shader_entry
     char* source_path;
     char* display_name;
     henka_shader* shader;
+    henka_shader_contract_type contract_type;
+    uint32_t contract_version;
     henka_asset_metadata metadata;
 } henka_asset_shader_entry;
 
@@ -344,6 +346,12 @@ henka_result henka_renderer_create_shader_from_files(
     const char* vertex_path,
     const char* fragment_path,
     struct henka_shader** out_shader);
+henka_result henka_renderer_create_shader_from_files_with_contract(
+    struct henka_renderer* renderer,
+    const char* vertex_path,
+    const char* fragment_path,
+    const henka_shader_contract_desc* contract,
+    struct henka_shader** out_shader);
 void henka_renderer_destroy_shader(struct henka_shader* shader);
 henka_result henka_renderer_create_texture_from_rgba8(
     struct henka_renderer* renderer,
@@ -421,6 +429,12 @@ henka_result henka_opengl_renderer_create_shader_from_files(
     struct henka_renderer* renderer,
     const char* vertex_path,
     const char* fragment_path,
+    struct henka_shader** out_shader);
+henka_result henka_opengl_renderer_create_shader_from_files_with_contract(
+    struct henka_renderer* renderer,
+    const char* vertex_path,
+    const char* fragment_path,
+    const henka_shader_contract_desc* contract,
     struct henka_shader** out_shader);
 void henka_opengl_renderer_destroy_shader(struct henka_shader* shader);
 henka_result henka_opengl_renderer_create_texture_from_rgba8(

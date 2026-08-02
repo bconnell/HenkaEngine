@@ -461,7 +461,30 @@ henka_result henka_renderer_create_shader_from_files(
     const char* fragment_path,
     struct henka_shader** out_shader)
 {
-    return henka_opengl_renderer_create_shader_from_files(renderer, vertex_path, fragment_path, out_shader);
+    henka_shader_contract_desc contract =
+        henka_shader_contract_desc_default(HENKA_SHADER_CONTRACT_MINIMAL_GEOMETRY);
+
+    return henka_renderer_create_shader_from_files_with_contract(
+        renderer,
+        vertex_path,
+        fragment_path,
+        &contract,
+        out_shader);
+}
+
+henka_result henka_renderer_create_shader_from_files_with_contract(
+    struct henka_renderer* renderer,
+    const char* vertex_path,
+    const char* fragment_path,
+    const henka_shader_contract_desc* contract,
+    struct henka_shader** out_shader)
+{
+    return henka_opengl_renderer_create_shader_from_files_with_contract(
+        renderer,
+        vertex_path,
+        fragment_path,
+        contract,
+        out_shader);
 }
 
 void henka_renderer_destroy_shader(struct henka_shader* shader)

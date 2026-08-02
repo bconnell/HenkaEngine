@@ -509,13 +509,15 @@ static const henka_asset_shader_entry*
 henka_asset_manager_find_shader_entry_const(
     const henka_asset_manager* manager,
     const char* vertex_key,
-    const char* fragment_key)
+    const char* fragment_key,
+    const henka_shader_contract_desc* contract)
 {
     size_t index;
 
     if (manager == NULL ||
         vertex_key == NULL ||
-        fragment_key == NULL)
+        fragment_key == NULL ||
+        henka_shader_contract_desc_validate(contract) != HENKA_SUCCESS)
     {
         return NULL;
     }
@@ -527,7 +529,9 @@ henka_asset_manager_find_shader_entry_const(
                 vertex_key) == 0 &&
             strcmp(
                 manager->shader_entries[index].fragment_key,
-                fragment_key) == 0)
+                fragment_key) == 0 &&
+            manager->shader_entries[index].contract_type == contract->type &&
+            manager->shader_entries[index].contract_version == contract->version)
         {
             return &manager->shader_entries[index];
         }
@@ -540,13 +544,15 @@ static henka_asset_shader_entry*
 henka_asset_manager_find_shader_entry(
     henka_asset_manager* manager,
     const char* vertex_key,
-    const char* fragment_key)
+    const char* fragment_key,
+    const henka_shader_contract_desc* contract)
 {
     return (henka_asset_shader_entry*)
         henka_asset_manager_find_shader_entry_const(
             manager,
             vertex_key,
-            fragment_key);
+            fragment_key,
+            contract);
 }
 
 static const henka_asset_texture_entry*
@@ -859,6 +865,24 @@ henka_result henka_assets_load_shader(
     const char* fragment_path,
     henka_shader** out_shader)
 {
+    henka_shader_contract_desc contract =
+        henka_shader_contract_desc_default(HENKA_SHADER_CONTRACT_MATERIAL);
+
+    return henka_assets_load_shader_with_contract(
+        manager,
+        vertex_path,
+        fragment_path,
+        &contract,
+        out_shader);
+}
+
+henka_result henka_assets_load_shader_with_contract(
+    henka_asset_manager* manager,
+    const char* vertex_path,
+    const char* fragment_path,
+    const henka_shader_contract_desc* contract,
+    henka_shader** out_shader)
+{
     char* display_name;
     char* fragment_key;
     char* fragment_source_path;
@@ -879,6 +903,7 @@ henka_result henka_assets_load_shader(
     if (manager == NULL ||
         vertex_path == NULL ||
         fragment_path == NULL ||
+        henka_shader_contract_desc_validate(contract) != HENKA_SUCCESS ||
         out_shader == NULL)
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
@@ -931,7 +956,8 @@ henka_result henka_assets_load_shader(
     existing_entry = henka_asset_manager_find_shader_entry(
         manager,
         vertex_key,
-        fragment_key);
+        fragment_key,
+        contract);
     if (existing_entry != NULL)
     {
         *out_shader = existing_entry->shader;
@@ -991,10 +1017,11 @@ henka_result henka_assets_load_shader(
     }
 
     shader = NULL;
-    result = henka_shader_create_from_files(
+    result = henka_shader_create_from_files_with_contract(
         manager->engine,
         resolved_vertex_path,
         resolved_fragment_path,
+        contract,
         &shader);
     henka_free(resolved_vertex_path);
     henka_free(resolved_fragment_path);
@@ -1033,6 +1060,8 @@ henka_result henka_assets_load_shader(
     manager->shader_entries[manager->shader_count].display_name =
         display_name;
     manager->shader_entries[manager->shader_count].shader = shader;
+    manager->shader_entries[manager->shader_count].contract_type = contract->type;
+    manager->shader_entries[manager->shader_count].contract_version = contract->version;
     manager->shader_entries[manager->shader_count].metadata.type =
         HENKA_ASSET_TYPE_SHADER;
     manager->shader_entries[manager->shader_count].metadata.source_path =

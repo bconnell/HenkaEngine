@@ -7778,7 +7778,16 @@ static henka_result sandbox3d_initialize(henka_engine* engine, void* user_data)
         goto fail;
     }
 
-    result = henka_assets_load_shader(assets, "assets/shaders/debug_grid.vert", "assets/shaders/debug_grid.frag", &state->grid_shader);
+    {
+        const henka_shader_contract_desc grid_contract =
+            henka_shader_contract_desc_default(HENKA_SHADER_CONTRACT_MINIMAL_GEOMETRY);
+        result = henka_assets_load_shader_with_contract(
+            assets,
+            "assets/shaders/debug_grid.vert",
+            "assets/shaders/debug_grid.frag",
+            &grid_contract,
+            &state->grid_shader);
+    }
     if (result != HENKA_SUCCESS)
     {
         goto fail;

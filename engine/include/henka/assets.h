@@ -5,6 +5,7 @@
 #include <stddef.h>
 
 #include <henka/result.h>
+#include <henka/shader.h>
 #include <henka/texture.h>
 
 typedef struct henka_asset_manager henka_asset_manager;
@@ -47,6 +48,12 @@ henka_result henka_assets_load_shader(
     henka_asset_manager* manager,
     const char* vertex_path,
     const char* fragment_path,
+    henka_shader** out_shader);
+henka_result henka_assets_load_shader_with_contract(
+    henka_asset_manager* manager,
+    const char* vertex_path,
+    const char* fragment_path,
+    const henka_shader_contract_desc* contract,
     henka_shader** out_shader);
 /*
  * Assets returned by the manager are borrowed and remain owned by the manager.

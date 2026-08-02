@@ -225,7 +225,7 @@ static bool henka_link_program(GLuint program);
 static bool henka_validate_shader_contract(
     GLuint program,
     const char* label,
-    bool material_contract);
+    henka_shader_contract_type contract_type);
 
 static void henka_apply_full_framebuffer_viewport(const struct henka_renderer* renderer)
 {
@@ -530,7 +530,7 @@ static bool henka_link_program(GLuint program)
 static bool henka_validate_shader_contract(
     GLuint program,
     const char* label,
-    bool material_contract)
+    henka_shader_contract_type contract_type)
 {
     static const char* minimal_uniforms[] =
     {
@@ -554,14 +554,14 @@ static bool henka_validate_shader_contract(
         "clearcoat", "clearcoatRoughness", "sheenColor", "sheenRoughness",
         "alphaMode", "alphaCutoff", "shadowMap", "useShadowMap"
     };
-    const char* const* required_uniforms = material_contract ?
+    const char* const* required_uniforms = contract_type == HENKA_SHADER_CONTRACT_MATERIAL ?
         material_uniforms : minimal_uniforms;
-    size_t required_count = material_contract ?
+    size_t required_count = contract_type == HENKA_SHADER_CONTRACT_MATERIAL ?
         sizeof(material_uniforms) / sizeof(material_uniforms[0]) :
         sizeof(minimal_uniforms) / sizeof(minimal_uniforms[0]);
     size_t index;
 
-    if (program == 0U)
+    if (program == 0U || contract_type > HENKA_SHADER_CONTRACT_MATERIAL)
     {
         return false;
     }
@@ -3019,6 +3019,24 @@ henka_result henka_opengl_renderer_create_shader_from_files(
     const char* fragment_path,
     struct henka_shader** out_shader)
 {
+    henka_shader_contract_desc contract =
+        henka_shader_contract_desc_default(HENKA_SHADER_CONTRACT_MINIMAL_GEOMETRY);
+
+    return henka_opengl_renderer_create_shader_from_files_with_contract(
+        renderer,
+        vertex_path,
+        fragment_path,
+        &contract,
+        out_shader);
+}
+
+henka_result henka_opengl_renderer_create_shader_from_files_with_contract(
+    struct henka_renderer* renderer,
+    const char* vertex_path,
+    const char* fragment_path,
+    const henka_shader_contract_desc* contract,
+    struct henka_shader** out_shader)
+{
     char* fragment_source;
     char* vertex_source;
     GLuint fragment_shader;
@@ -3027,9 +3045,9 @@ henka_result henka_opengl_renderer_create_shader_from_files(
     henka_opengl_shader_data* shader_data;
     GLuint vertex_shader;
 
-    (void)renderer;
-
-    if (vertex_path == NULL || fragment_path == NULL || out_shader == NULL)
+    if (renderer == NULL || vertex_path == NULL || fragment_path == NULL ||
+        contract == NULL || out_shader == NULL ||
+        henka_shader_contract_desc_validate(contract) != HENKA_SUCCESS)
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
@@ -3074,8 +3092,7 @@ henka_result henka_opengl_renderer_create_shader_from_files(
     if (!henka_validate_shader_contract(
             program,
             fragment_path,
-            strstr(fragment_source, "useLighting") != NULL &&
-                strstr(fragment_source, "metallic") != NULL))
+            contract->type))
     {
         g_gl.DeleteProgram(program);
         g_gl.DeleteShader(vertex_shader);
