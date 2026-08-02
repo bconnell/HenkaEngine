@@ -8,15 +8,32 @@ $buildRoot = Join-Path $repoRoot "build"
 $cmake = Get-HenkaCMakePath
 $ctest = Get-HenkaCTestPath -CMakePath $cmake
 $localSdlSource = Join-Path $buildRoot "_deps\sdl3-src"
+$localKtxSource = Join-Path $buildRoot "_deps\ktxsoftware-src"
+$offlineProviderCount = 0
 $configureArguments = @("-S", $repoRoot, "-B", $buildRoot)
 $provenanceScript = Join-Path $PSScriptRoot "write_build_provenance.ps1"
 $executablePath = Join-Path $buildRoot "examples\sandbox3d\Debug\henka_sandbox3d.exe"
 if (Test-Path -LiteralPath (Join-Path $localSdlSource "CMakeLists.txt")) {
     $configureArguments += "-DFETCHCONTENT_SOURCE_DIR_SDL3=$localSdlSource"
-    $configureArguments += "-DFETCHCONTENT_FULLY_DISCONNECTED=ON"
+    $offlineProviderCount += 1
     Write-Host "SDL3 provider: repository-local populated source"
 } else {
+    $configureArguments += "-DFETCHCONTENT_SOURCE_DIR_SDL3="
     Write-Host "SDL3 provider: FetchContent network fallback"
+}
+if (Test-Path -LiteralPath (Join-Path $localKtxSource "CMakeLists.txt")) {
+    $configureArguments += "-DFETCHCONTENT_SOURCE_DIR_KTXSOFTWARE=$localKtxSource"
+    $offlineProviderCount += 1
+    Write-Host "KTX-Software provider: repository-local populated source"
+} else {
+    $configureArguments += "-DFETCHCONTENT_SOURCE_DIR_KTXSOFTWARE="
+    Write-Host "KTX-Software provider: FetchContent network fallback"
+}
+if ($offlineProviderCount -eq 2) {
+    $configureArguments += "-DFETCHCONTENT_FULLY_DISCONNECTED=ON"
+    Write-Host "FetchContent mode: fully disconnected because both optional local providers are present"
+} else {
+    Write-Host "FetchContent mode: normal network-capable fallback for missing providers"
 }
 
 Write-Host "cmake: $cmake"

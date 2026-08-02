@@ -73,6 +73,7 @@ if (Test-Path -LiteralPath $localSdlSource -PathType Container) {
     Write-Host "SDL3 provider: repository-local populated source"
 }
 else {
+    $configureArguments += "-DFETCHCONTENT_SOURCE_DIR_SDL3="
     Write-Host "SDL3 provider: FetchContent network fallback"
 }
 
@@ -82,6 +83,7 @@ if (Test-Path -LiteralPath $localKtxSource -PathType Container) {
     Write-Host "KTX-Software provider: repository-local populated source"
 }
 else {
+    $configureArguments += "-DFETCHCONTENT_SOURCE_DIR_KTXSOFTWARE="
     Write-Host "KTX-Software provider: FetchContent network fallback"
 }
 
