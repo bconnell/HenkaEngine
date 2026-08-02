@@ -8850,11 +8850,14 @@ static void sandbox3d_update(henka_engine* engine, double delta_seconds, void* u
         if (henka_engine_get_diagnostics(engine, &smoke_diagnostics) == HENKA_SUCCESS)
         {
             printf(
-                "Rendered smoke diagnostics: HDR=%s Bloom=%s IBL=%s (%s) GPU=%llu bytes.\n",
+                "Rendered smoke diagnostics: HDR=%s Bloom=%s IBL=%s (%s) CPU=%.2fms GPU=%.2fms(%s) VRAM=%llu bytes.\n",
                 smoke_diagnostics.rendered_hdr_ready ? "ready" : "fallback",
                 smoke_diagnostics.rendered_bloom_ready ? "ready" : "fallback",
                 smoke_diagnostics.rendered_ibl_ready ? "ready" : "fallback",
                 smoke_diagnostics.rendered_ibl_failure[0] != '\0' ? smoke_diagnostics.rendered_ibl_failure : "none",
+                smoke_diagnostics.rendered_scene_cpu_time_milliseconds,
+                smoke_diagnostics.rendered_scene_gpu_time_milliseconds,
+                smoke_diagnostics.rendered_scene_gpu_timing_available ? "available" : "unavailable",
                 (unsigned long long)smoke_diagnostics.renderer_tracked_gpu_bytes);
         }
         printf("Sandbox smoke test completed.\n");
