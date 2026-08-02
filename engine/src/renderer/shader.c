@@ -12,7 +12,8 @@ henka_result henka_shader_contract_desc_validate(
     const henka_shader_contract_desc* desc)
 {
     if (desc == NULL ||
-        desc->type > HENKA_SHADER_CONTRACT_MATERIAL ||
+        desc->type < HENKA_SHADER_CONTRACT_MINIMAL_GEOMETRY ||
+        desc->type > HENKA_SHADER_CONTRACT_UI ||
         desc->version != 1U)
     {
         return HENKA_ERROR_INVALID_ARGUMENT;

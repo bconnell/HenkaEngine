@@ -41,6 +41,22 @@ typedef struct henka_opengl_transparent_sort_item
     float view_depth;
 } henka_opengl_transparent_sort_item;
 
+typedef struct henka_opengl_shader_data
+{
+    GLuint program;
+    SDL_GLContext context;
+    henka_shader_contract_type contract_type;
+    uint32_t contract_version;
+    uint64_t source_hash;
+    uint64_t generation;
+    size_t location_count;
+    struct henka_opengl_uniform_location_entry
+    {
+        char name[64];
+        GLint location;
+    } locations[64];
+} henka_opengl_shader_data;
+
 typedef struct henka_opengl_renderer_state
 {
     SDL_Window* window;
@@ -49,8 +65,11 @@ typedef struct henka_opengl_renderer_state
     GLuint ui_vertex_array;
     GLuint ui_vertex_buffer;
     GLuint viewport_program;
+    henka_opengl_shader_data viewport_shader_data;
     GLuint tone_program;
+    henka_opengl_shader_data tone_shader_data;
     GLuint environment_program;
+    henka_opengl_shader_data environment_shader_data;
     GLuint tone_vertex_array;
     GLuint hdr_framebuffer;
     GLuint hdr_color_texture;
@@ -63,6 +82,7 @@ typedef struct henka_opengl_renderer_state
     bool hdr_framebuffer_complete;
     char hdr_failure_reason[64];
     GLuint shadow_program;
+    henka_opengl_shader_data shadow_shader_data;
     GLuint shadow_framebuffer;
     GLuint shadow_depth_texture;
     int shadow_resolution;
@@ -136,11 +156,6 @@ typedef struct henka_opengl_mesh_data
     GLsizei index_count;
     uint64_t tracked_gpu_bytes;
 } henka_opengl_mesh_data;
-
-typedef struct henka_opengl_shader_data
-{
-    GLuint program;
-} henka_opengl_shader_data;
 
 typedef struct henka_opengl_texture_data
 {
@@ -225,7 +240,9 @@ static bool henka_link_program(GLuint program);
 static bool henka_validate_shader_contract(
     GLuint program,
     const char* label,
-    henka_shader_contract_type contract_type);
+    henka_shader_contract_type contract_type,
+    uint32_t contract_version,
+    henka_opengl_shader_data* out_shader_data);
 
 static void henka_apply_full_framebuffer_viewport(const struct henka_renderer* renderer)
 {
@@ -527,10 +544,117 @@ static bool henka_link_program(GLuint program)
     return true;
 }
 
+static uint64_t henka_shader_source_hash(
+    const char* vertex_source,
+    const char* fragment_source)
+{
+    const unsigned char* bytes;
+    uint64_t hash = UINT64_C(1469598103934665603);
+
+    bytes = (const unsigned char*)vertex_source;
+    while (bytes != NULL && *bytes != 0U)
+    {
+        hash ^= (uint64_t)*bytes++;
+        hash *= UINT64_C(1099511628211);
+    }
+    hash ^= UINT64_C(0xff);
+    bytes = (const unsigned char*)fragment_source;
+    while (bytes != NULL && *bytes != 0U)
+    {
+        hash ^= (uint64_t)*bytes++;
+        hash *= UINT64_C(1099511628211);
+    }
+    return hash;
+}
+
+static bool henka_shader_location_table_add(
+    henka_opengl_shader_data* shader_data,
+    const char* name,
+    GLint location)
+{
+    size_t index;
+
+    if (shader_data == NULL || name == NULL || location < 0)
+    {
+        return false;
+    }
+    for (index = 0U; index < shader_data->location_count; ++index)
+    {
+        if (strcmp(shader_data->locations[index].name, name) == 0)
+        {
+            return shader_data->locations[index].location == location;
+        }
+    }
+    if (shader_data->location_count >=
+        sizeof(shader_data->locations) / sizeof(shader_data->locations[0]) ||
+        strlen(name) >= sizeof(shader_data->locations[0].name))
+    {
+        return false;
+    }
+    (void)snprintf(
+        shader_data->locations[shader_data->location_count].name,
+        sizeof(shader_data->locations[shader_data->location_count].name),
+        "%s",
+        name);
+    shader_data->locations[shader_data->location_count].location = location;
+    ++shader_data->location_count;
+    return true;
+}
+
+static bool henka_populate_shader_location_table(
+    GLuint program,
+    const char* label,
+    henka_shader_contract_type contract_type,
+    uint32_t contract_version,
+    const char* const* names,
+    size_t name_count,
+    henka_opengl_shader_data* out_shader_data)
+{
+    size_t index;
+
+    if (program == 0U || out_shader_data == NULL || names == NULL ||
+        SDL_GL_GetCurrentContext() == NULL || contract_version != 1U)
+    {
+        return false;
+    }
+    memset(out_shader_data, 0, sizeof(*out_shader_data));
+    out_shader_data->program = program;
+    out_shader_data->context = SDL_GL_GetCurrentContext();
+    out_shader_data->contract_type = contract_type;
+    out_shader_data->contract_version = contract_version;
+    for (index = 0U; index < name_count; ++index)
+    {
+        GLint location;
+
+        if (names[index] == NULL || names[index][0] == '\0')
+        {
+            HENKA_LOG_ERROR(
+                "shader contract rejected for '%s': empty location name",
+                label != NULL ? label : "shader");
+            return false;
+        }
+        location = g_gl.GetUniformLocation(program, names[index]);
+        if (location < 0 || !henka_shader_location_table_add(
+                out_shader_data,
+                names[index],
+                location))
+        {
+            HENKA_LOG_ERROR(
+                "shader contract rejected for '%s': required uniform '%s' is missing or location table capacity was exceeded",
+                label != NULL ? label : "shader",
+                names[index]);
+            return false;
+        }
+    }
+    return true;
+}
+
 static bool henka_validate_shader_contract(
     GLuint program,
     const char* label,
-    henka_shader_contract_type contract_type)
+    henka_shader_contract_type contract_type,
+    uint32_t contract_version,
+    henka_opengl_shader_data* out_shader_data)
 {
     static const char* minimal_uniforms[] =
     {
@@ -559,24 +683,21 @@ static bool henka_validate_shader_contract(
     size_t required_count = contract_type == HENKA_SHADER_CONTRACT_MATERIAL ?
         sizeof(material_uniforms) / sizeof(material_uniforms[0]) :
         sizeof(minimal_uniforms) / sizeof(minimal_uniforms[0]);
-    size_t index;
-
-    if (program == 0U || contract_type > HENKA_SHADER_CONTRACT_MATERIAL)
+    if (program == 0U || out_shader_data == NULL ||
+        contract_type < HENKA_SHADER_CONTRACT_MINIMAL_GEOMETRY ||
+        contract_type > HENKA_SHADER_CONTRACT_MATERIAL ||
+        contract_version != 1U)
     {
         return false;
     }
-    for (index = 0U; index < required_count; ++index)
-    {
-        if (g_gl.GetUniformLocation(program, required_uniforms[index]) < 0)
-        {
-            HENKA_LOG_ERROR(
-                "shader contract rejected for '%s': required uniform '%s' is missing",
-                label != NULL ? label : "shader",
-                required_uniforms[index]);
-            return false;
-        }
-    }
-    return true;
+    return henka_populate_shader_location_table(
+        program,
+        label,
+        contract_type,
+        contract_version,
+        required_uniforms,
+        required_count,
+        out_shader_data);
 }
 
 static void henka_set_uniform_mat4(GLuint program, const char* name, henka_mat4 value)
@@ -637,6 +758,106 @@ static void henka_set_uniform_int(GLuint program, const char* name, int value)
 static void henka_set_uniform_float(GLuint program, const char* name, float value)
 {
     GLint location = henka_opengl_uniform_location(program, name);
+    if (location >= 0)
+    {
+        g_gl.Uniform1f(location, value);
+    }
+}
+
+static GLint henka_opengl_shader_uniform_location(
+    GLuint program,
+    const henka_opengl_shader_data* shader_data,
+    const char* name)
+{
+    size_t index;
+
+    if (shader_data != NULL && shader_data->program == program &&
+        shader_data->context == SDL_GL_GetCurrentContext())
+    {
+        for (index = 0U; index < shader_data->location_count; ++index)
+        {
+            if (strcmp(shader_data->locations[index].name, name) == 0)
+            {
+                return shader_data->locations[index].location;
+            }
+        }
+        return -1;
+    }
+    return henka_opengl_uniform_location(program, name);
+}
+
+static void henka_set_uniform_mat4_owned(
+    GLuint program,
+    const henka_opengl_shader_data* shader_data,
+    const char* name,
+    henka_mat4 value)
+{
+    GLint location = henka_opengl_shader_uniform_location(program, shader_data, name);
+    if (location >= 0)
+    {
+        g_gl.UniformMatrix4fv(location, 1, GL_FALSE, value.m);
+    }
+}
+
+static void henka_set_uniform_vec4_owned(
+    GLuint program,
+    const henka_opengl_shader_data* shader_data,
+    const char* name,
+    henka_vec4 value)
+{
+    GLint location = henka_opengl_shader_uniform_location(program, shader_data, name);
+    if (location >= 0)
+    {
+        g_gl.Uniform4f(location, value.x, value.y, value.z, value.w);
+    }
+}
+
+static void henka_set_uniform_vec3_owned(
+    GLuint program,
+    const henka_opengl_shader_data* shader_data,
+    const char* name,
+    henka_vec3 value)
+{
+    GLint location = henka_opengl_shader_uniform_location(program, shader_data, name);
+    if (location >= 0)
+    {
+        g_gl.Uniform3f(location, value.x, value.y, value.z);
+    }
+}
+
+static void henka_set_uniform_bool_owned(
+    GLuint program,
+    const henka_opengl_shader_data* shader_data,
+    const char* name,
+    bool value)
+{
+    GLint location = henka_opengl_shader_uniform_location(program, shader_data, name);
+    if (location >= 0)
+    {
+        g_gl.Uniform1i(location, value ? 1 : 0);
+    }
+}
+
+static void henka_set_uniform_int_owned(
+    GLuint program,
+    const henka_opengl_shader_data* shader_data,
+    const char* name,
+    int value)
+{
+    GLint location = henka_opengl_shader_uniform_location(program, shader_data, name);
+    if (location >= 0)
+    {
+        g_gl.Uniform1i(location, value);
+    }
+}
+
+static void henka_set_uniform_float_owned(
+    GLuint program,
+    const henka_opengl_shader_data* shader_data,
+    const char* name,
+    float value)
+{
+    GLint location = henka_opengl_shader_uniform_location(program, shader_data, name);
     if (location >= 0)
     {
         g_gl.Uniform1f(location, value);
@@ -975,6 +1196,11 @@ static henka_result henka_opengl_create_shadow_target(
 static henka_result henka_opengl_create_render_programs(
     henka_opengl_renderer_state* state)
 {
+    static const char* tone_uniforms[] = {"hdrTexture", "exposure"};
+    static const char* environment_uniforms[] =
+        {"groundColor", "horizonColor", "zenithColor", "intensity"};
+    static const char* shadow_uniforms[] =
+        {"model", "lightMatrix", "baseColor", "baseColorTexture", "useTexture", "alphaMode", "alphaCutoff"};
     static const char* tone_vertex =
         "#version 330 core\n"
         "out vec2 uv;\n"
@@ -1001,6 +1227,33 @@ static henka_result henka_opengl_create_render_programs(
         !henka_compile_program_from_source(tone_vertex, tone_fragment, "tone-map vertex", "tone-map fragment", &state->tone_program) ||
         !henka_compile_program_from_source(tone_vertex, environment_fragment, "environment vertex", "environment fragment", &state->environment_program) ||
         !henka_compile_program_from_source(shadow_vertex, shadow_fragment, "shadow vertex", "shadow fragment", &state->shadow_program))
+    {
+        return HENKA_ERROR_RENDERER;
+    }
+    if (!henka_populate_shader_location_table(
+            state->tone_program,
+            "tone-map",
+            HENKA_SHADER_CONTRACT_TONE_MAP,
+            1U,
+            tone_uniforms,
+            sizeof(tone_uniforms) / sizeof(tone_uniforms[0]),
+            &state->tone_shader_data) ||
+        !henka_populate_shader_location_table(
+            state->environment_program,
+            "environment",
+            HENKA_SHADER_CONTRACT_ENVIRONMENT,
+            1U,
+            environment_uniforms,
+            sizeof(environment_uniforms) / sizeof(environment_uniforms[0]),
+            &state->environment_shader_data) ||
+        !henka_populate_shader_location_table(
+            state->shadow_program,
+            "shadow",
+            HENKA_SHADER_CONTRACT_SHADOW_MASKED,
+            1U,
+            shadow_uniforms,
+            sizeof(shadow_uniforms) / sizeof(shadow_uniforms[0]),
+            &state->shadow_shader_data))
     {
         return HENKA_ERROR_RENDERER;
     }
@@ -1032,10 +1285,10 @@ static void henka_opengl_draw_environment(
     glDisable(GL_CULL_FACE);
     glDisable(GL_BLEND);
     g_gl.UseProgram(state->environment_program);
-    henka_set_uniform_vec3(state->environment_program, "groundColor", scene->environment.ground_color);
-    henka_set_uniform_vec3(state->environment_program, "horizonColor", scene->environment.horizon_color);
-    henka_set_uniform_vec3(state->environment_program, "zenithColor", scene->environment.zenith_color);
-    henka_set_uniform_float(state->environment_program, "intensity", scene->environment.intensity);
+    henka_set_uniform_vec3_owned(state->environment_program, &state->environment_shader_data, "groundColor", scene->environment.ground_color);
+    henka_set_uniform_vec3_owned(state->environment_program, &state->environment_shader_data, "horizonColor", scene->environment.horizon_color);
+    henka_set_uniform_vec3_owned(state->environment_program, &state->environment_shader_data, "zenithColor", scene->environment.zenith_color);
+    henka_set_uniform_float_owned(state->environment_program, &state->environment_shader_data, "intensity", scene->environment.intensity);
     g_gl.BindVertexArray(state->tone_vertex_array);
     glDrawArrays(GL_TRIANGLES, 0, 3);
     g_gl.BindVertexArray(0);
@@ -1103,18 +1356,19 @@ static void henka_opengl_draw_shadow_pass(
             glEnable(GL_CULL_FACE);
             glCullFace(GL_FRONT);
         }
-        henka_set_uniform_mat4(
+        henka_set_uniform_mat4_owned(
             state->shadow_program,
+            &state->shadow_shader_data,
             "model",
             henka_transform_to_mat4(entity->transform));
-        henka_set_uniform_mat4(state->shadow_program, "lightMatrix", light_matrix);
-        henka_set_uniform_vec4(state->shadow_program, "baseColor", entity->material.base_color);
-        henka_set_uniform_int(state->shadow_program, "baseColorTexture", 0);
-        henka_set_uniform_bool(state->shadow_program, "useTexture",
+        henka_set_uniform_mat4_owned(state->shadow_program, &state->shadow_shader_data, "lightMatrix", light_matrix);
+        henka_set_uniform_vec4_owned(state->shadow_program, &state->shadow_shader_data, "baseColor", entity->material.base_color);
+        henka_set_uniform_int_owned(state->shadow_program, &state->shadow_shader_data, "baseColorTexture", 0);
+        henka_set_uniform_bool_owned(state->shadow_program, &state->shadow_shader_data, "useTexture",
             entity->material.use_texture && entity->material.base_color_texture != NULL &&
             entity->material.base_color_texture->backend_data != NULL);
-        henka_set_uniform_int(state->shadow_program, "alphaMode", (int)entity->material.alpha_mode);
-        henka_set_uniform_float(state->shadow_program, "alphaCutoff", entity->material.alpha_cutoff);
+        henka_set_uniform_int_owned(state->shadow_program, &state->shadow_shader_data, "alphaMode", (int)entity->material.alpha_mode);
+        henka_set_uniform_float_owned(state->shadow_program, &state->shadow_shader_data, "alphaCutoff", entity->material.alpha_cutoff);
         g_gl.ActiveTexture(GL_TEXTURE0);
         glBindTexture(GL_TEXTURE_2D,
             entity->material.base_color_texture != NULL && entity->material.base_color_texture->backend_data != NULL ?
@@ -1151,8 +1405,8 @@ static void henka_opengl_present_hdr(
     glDisable(GL_CULL_FACE);
     glDisable(GL_BLEND);
     g_gl.UseProgram(state->tone_program);
-    henka_set_uniform_int(state->tone_program, "hdrTexture", 0);
-    henka_set_uniform_float(state->tone_program, "exposure", renderer->exposure);
+    henka_set_uniform_int_owned(state->tone_program, &state->tone_shader_data, "hdrTexture", 0);
+    henka_set_uniform_float_owned(state->tone_program, &state->tone_shader_data, "exposure", renderer->exposure);
     g_gl.ActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, state->hdr_color_texture);
     g_gl.BindVertexArray(state->tone_vertex_array);
@@ -1250,6 +1504,25 @@ henka_result henka_opengl_renderer_create(struct henka_renderer* renderer, struc
 
     result = henka_opengl_renderer_create_viewport_program(
         &state->viewport_program);
+    if (result == HENKA_SUCCESS)
+    {
+        static const char* viewport_uniforms[] =
+        {
+            "model", "view", "projection", "baseColor", "baseColorTexture",
+            "useTexture", "lightDirection", "ambientColor", "useLighting"
+        };
+        if (!henka_populate_shader_location_table(
+                state->viewport_program,
+                "viewport",
+                HENKA_SHADER_CONTRACT_SOLID,
+                1U,
+                viewport_uniforms,
+                sizeof(viewport_uniforms) / sizeof(viewport_uniforms[0]),
+                &state->viewport_shader_data))
+        {
+            result = HENKA_ERROR_RENDERER;
+        }
+    }
     if (result != HENKA_SUCCESS)
     {
         g_gl.DeleteBuffers(1, &state->ui_vertex_buffer);
@@ -1791,6 +2064,10 @@ henka_result henka_opengl_renderer_draw_scene(
             !helper_entity &&
             henka_renderer_get_viewport_shading_mode(
                 renderer) <= HENKA_VIEWPORT_SHADING_SOLID;
+        if (editor_surface)
+        {
+            shader_data = &state->viewport_shader_data;
+        }
         program =
             editor_surface ?
                 state->viewport_program :
@@ -1881,6 +2158,18 @@ henka_result henka_opengl_renderer_draw_scene(
         model =
             henka_transform_to_mat4(entity->transform);
         g_gl.UseProgram(program);
+#define henka_set_uniform_mat4(program_value, name_value, value_value) \
+    henka_set_uniform_mat4_owned(program_value, shader_data, name_value, value_value)
+#define henka_set_uniform_vec4(program_value, name_value, value_value) \
+    henka_set_uniform_vec4_owned(program_value, shader_data, name_value, value_value)
+#define henka_set_uniform_vec3(program_value, name_value, value_value) \
+    henka_set_uniform_vec3_owned(program_value, shader_data, name_value, value_value)
+#define henka_set_uniform_bool(program_value, name_value, value_value) \
+    henka_set_uniform_bool_owned(program_value, shader_data, name_value, value_value)
+#define henka_set_uniform_int(program_value, name_value, value_value) \
+    henka_set_uniform_int_owned(program_value, shader_data, name_value, value_value)
+#define henka_set_uniform_float(program_value, name_value, value_value) \
+    henka_set_uniform_float_owned(program_value, shader_data, name_value, value_value)
         henka_set_uniform_mat4(
             program,
             "model",
@@ -1977,6 +2266,12 @@ henka_result henka_opengl_renderer_draw_scene(
         henka_set_uniform_int(program, "shadowMap", 5);
         henka_set_uniform_bool(program, "useShadowMap",
             rendered && state->shadow_depth_texture != 0U && entity->material.receive_shadows);
+#undef henka_set_uniform_mat4
+#undef henka_set_uniform_vec4
+#undef henka_set_uniform_vec3
+#undef henka_set_uniform_bool
+#undef henka_set_uniform_int
+#undef henka_set_uniform_float
 
         if (entity->material.double_sided)
         {
@@ -3043,6 +3338,8 @@ henka_result henka_opengl_renderer_create_shader_from_files_with_contract(
     GLuint program;
     henka_shader* shader;
     henka_opengl_shader_data* shader_data;
+    henka_opengl_shader_data location_data;
+    uint64_t source_hash;
     GLuint vertex_shader;
 
     if (renderer == NULL || vertex_path == NULL || fragment_path == NULL ||
@@ -3092,7 +3389,9 @@ henka_result henka_opengl_renderer_create_shader_from_files_with_contract(
     if (!henka_validate_shader_contract(
             program,
             fragment_path,
-            contract->type))
+            contract->type,
+            contract->version,
+            &location_data))
     {
         g_gl.DeleteProgram(program);
         g_gl.DeleteShader(vertex_shader);
@@ -3101,6 +3400,7 @@ henka_result henka_opengl_renderer_create_shader_from_files_with_contract(
         henka_free(fragment_source);
         return HENKA_ERROR_RENDERER;
     }
+    source_hash = henka_shader_source_hash(vertex_source, fragment_source);
 
     g_gl.DeleteShader(vertex_shader);
     g_gl.DeleteShader(fragment_shader);
@@ -3117,7 +3417,9 @@ henka_result henka_opengl_renderer_create_shader_from_files_with_contract(
         return HENKA_ERROR_OUT_OF_MEMORY;
     }
 
-    shader_data->program = program;
+    *shader_data = location_data;
+    shader_data->source_hash = source_hash;
+    shader_data->generation = 1U;
     shader->renderer = renderer;
     shader->backend_data = shader_data;
 

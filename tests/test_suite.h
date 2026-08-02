@@ -52,6 +52,7 @@ void henka_test_sandbox3d_interaction(void);
 void henka_test_sandbox3d_physics(void);
 void henka_test_sandbox3d_workspace(void);
 void henka_test_scene(void);
+void henka_test_shader(void);
 void henka_test_ui(void);
 void henka_test_viewport_shading(void);
 void henka_test_workspace(void);
