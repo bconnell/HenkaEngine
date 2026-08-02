@@ -17,6 +17,8 @@ typedef struct henka_model_vertex
     henka_vec3 position;
     henka_vec3 normal;
     henka_vec2 uv;
+    henka_vec2 uv1;
+    bool uv1_valid;
     henka_vec4 color;
     /* Optional imported tangent frame. w is the handedness sign. */
     henka_vec4 tangent;

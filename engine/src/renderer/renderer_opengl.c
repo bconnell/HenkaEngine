@@ -3366,6 +3366,8 @@ henka_result henka_opengl_renderer_create_mesh_from_data(
             !isfinite(vertices[vertex_index].normal.z) ||
             !isfinite(vertices[vertex_index].uv.x) ||
             !isfinite(vertices[vertex_index].uv.y) ||
+            !isfinite(vertices[vertex_index].uv1.x) ||
+            !isfinite(vertices[vertex_index].uv1.y) ||
             (vertices[vertex_index].color_valid &&
                 (!isfinite(vertices[vertex_index].color.x) ||
                  !isfinite(vertices[vertex_index].color.y) ||
@@ -3535,6 +3537,8 @@ henka_result henka_opengl_renderer_create_mesh_from_data(
     g_gl.VertexAttribPointer(3, 4, GL_FLOAT, GL_FALSE, sizeof(henka_vertex), (const void*)offsetof(henka_vertex, tangent));
     g_gl.EnableVertexAttribArray(4);
     g_gl.VertexAttribPointer(4, 4, GL_FLOAT, GL_FALSE, sizeof(henka_vertex), (const void*)offsetof(henka_vertex, color));
+    g_gl.EnableVertexAttribArray(5);
+    g_gl.VertexAttribPointer(5, 2, GL_FLOAT, GL_FALSE, sizeof(henka_vertex), (const void*)offsetof(henka_vertex, uv1));
     g_gl.BindVertexArray(0);
 
     henka_free(bitangents);

@@ -117,7 +117,11 @@ henka_result henka_mesh_create_uv_sphere(
                 {0.0f, radius, 0.0f},
                 {0.0f, 1.0f, 0.0f},
                 {u, 1.0f},
-                {tangent.x, tangent.y, tangent.z, 1.0f}};
+                {0.0f, 0.0f},
+                {1.0f, 1.0f, 1.0f, 1.0f},
+                true,
+                {tangent.x, tangent.y, tangent.z, 1.0f},
+                true};
         }
         for (index = 0; index < (int)interior_vertex_count; ++index)
         {
@@ -137,7 +141,11 @@ henka_result henka_mesh_create_uv_sphere(
                 {normal.x * radius, normal.y * radius, normal.z * radius},
                 normal,
                 {(float)interior_segment / (float)segments, 1.0f - v},
-                {tangent.x, tangent.y, tangent.z, 1.0f}};
+                {0.0f, 0.0f},
+                {1.0f, 1.0f, 1.0f, 1.0f},
+                true,
+                {tangent.x, tangent.y, tangent.z, 1.0f},
+                true};
         }
         for (segment = 0; segment < segments; ++segment)
         {
@@ -150,7 +158,11 @@ henka_result henka_mesh_create_uv_sphere(
                 {0.0f, -radius, 0.0f},
                 {0.0f, -1.0f, 0.0f},
                 {u, 0.0f},
-                {tangent.x, tangent.y, tangent.z, 1.0f}};
+                {0.0f, 0.0f},
+                {1.0f, 1.0f, 1.0f, 1.0f},
+                true,
+                {tangent.x, tangent.y, tangent.z, 1.0f},
+                true};
         }
     }
 
