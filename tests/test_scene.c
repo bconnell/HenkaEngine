@@ -90,6 +90,8 @@ void henka_test_scene(void)
     henka_scene_fog_desc read_fog;
     henka_scene_light_desc light;
     henka_scene_light_desc read_light;
+    henka_scene_lod_desc lod;
+    henka_scene_lod_desc read_lod;
     henka_scene_reflection_probe_desc reflection_probe;
     henka_scene_reflection_probe_desc read_reflection_probe;
     uint32_t reflection_probe_indices[HENKA_SCENE_MAX_REFLECTION_PROBES];
@@ -208,6 +210,13 @@ void henka_test_scene(void)
     HENKA_TEST_ASSERT(henka_scene_is_entity_valid(scene, first));
     HENKA_TEST_ASSERT(henka_scene_is_entity_valid(scene, second));
     HENKA_TEST_ASSERT(henka_scene_get_entity_count(scene) == 2U);
+    lod = (henka_scene_lod_desc){0};
+    HENKA_TEST_ASSERT(henka_scene_set_entity_lod(scene, first, lod) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_scene_get_entity_lod(scene, first, &read_lod) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(read_lod.level_count == 0U);
+    lod.level_count = 1U;
+    lod.max_distances[0] = 32.0f;
+    HENKA_TEST_ASSERT(henka_scene_set_entity_lod(scene, first, lod) == HENKA_ERROR_INVALID_ARGUMENT);
     listed = henka_scene_get_entity_at_index(scene, 0U);
     HENKA_TEST_ASSERT(listed == first);
     listed = henka_scene_get_entity_at_index(scene, 1U);

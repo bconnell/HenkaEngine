@@ -118,6 +118,7 @@ typedef struct henka_scene_entity_record
     char* tag;
     henka_transform transform;
     henka_mesh* mesh;
+    henka_scene_lod_desc lod;
     henka_material material;
     char* material_name;
     bool has_local_bounds;

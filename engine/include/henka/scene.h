@@ -111,6 +111,15 @@ typedef struct henka_scene_reflection_probe_desc
     bool box_projection;
 } henka_scene_reflection_probe_desc;
 
+#define HENKA_SCENE_MAX_LOD_LEVELS 3U
+
+typedef struct henka_scene_lod_desc
+{
+    uint32_t level_count;
+    henka_mesh* meshes[HENKA_SCENE_MAX_LOD_LEVELS];
+    float max_distances[HENKA_SCENE_MAX_LOD_LEVELS];
+} henka_scene_lod_desc;
+
 #define HENKA_SCENE_MAX_LOCAL_LIGHTS 4U
 
 typedef enum henka_scene_light_type
@@ -232,6 +241,14 @@ henka_result henka_scene_get_reflection_probe(
     const henka_scene* scene,
     uint32_t probe_index,
     henka_scene_reflection_probe_desc* out_probe);
+henka_result henka_scene_set_entity_lod(
+    henka_scene* scene,
+    henka_entity entity,
+    henka_scene_lod_desc lod);
+henka_result henka_scene_get_entity_lod(
+    const henka_scene* scene,
+    henka_entity entity,
+    henka_scene_lod_desc* out_lod);
 henka_result henka_scene_add_light(
     henka_scene* scene,
     henka_scene_light_desc light,

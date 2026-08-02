@@ -3195,6 +3195,10 @@ henka_result henka_opengl_renderer_draw_scene(
         henka_mat4 model;
         henka_bounds world_bounds;
         henka_entity entity_id = HENKA_INVALID_ENTITY;
+        henka_mesh* selected_mesh;
+        henka_vec3 lod_center;
+        float lod_distance;
+        uint32_t lod_index;
         henka_scene_reflection_probe_desc reflection_probe;
         henka_vec3 reflection_probe_center;
         bool use_reflection_probe;
@@ -3227,9 +3231,31 @@ henka_result henka_opengl_renderer_draw_scene(
             }
         }
 
+        selected_mesh = entity->mesh;
+        lod_center = entity->transform.position;
+        if (entity->has_local_bounds &&
+            entity_id != HENKA_INVALID_ENTITY &&
+            henka_scene_get_entity_world_bounds(scene, entity_id, &world_bounds) == HENKA_SUCCESS)
+        {
+            lod_center = world_bounds.center;
+        }
+        lod_distance = henka_vec3_length(henka_vec3_subtract(lod_center, scene->camera.position));
+        if (entity->lod.level_count > 0U && isfinite(lod_distance))
+        {
+            selected_mesh = entity->lod.meshes[entity->lod.level_count - 1U];
+            for (lod_index = 0U; lod_index < entity->lod.level_count; ++lod_index)
+            {
+                if (lod_distance <= entity->lod.max_distances[lod_index])
+                {
+                    selected_mesh = entity->lod.meshes[lod_index];
+                    break;
+                }
+            }
+        }
+
         mesh_data =
             (const henka_opengl_mesh_data*)
-                entity->mesh->backend_data;
+                selected_mesh->backend_data;
         shader_data =
             (const henka_opengl_shader_data*)
                 entity->material.shader->backend_data;

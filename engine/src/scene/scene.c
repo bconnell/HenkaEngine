@@ -673,6 +673,7 @@ henka_entity henka_scene_create_entity_named(henka_scene* scene, const char* nam
             scene->entities[index].flags = HENKA_SCENE_ENTITY_FLAG_NONE;
             scene->entities[index].transform = henka_transform_identity();
             scene->entities[index].mesh = NULL;
+            scene->entities[index].lod = (henka_scene_lod_desc){0};
             scene->entities[index].material = henka_material_default();
             henka_free(scene->entities[index].name);
             henka_free(scene->entities[index].tag);
@@ -710,6 +711,7 @@ henka_entity henka_scene_create_entity_named(henka_scene* scene, const char* nam
     scene->entities[scene->entity_count].visible = true;
     scene->entities[scene->entity_count].flags = HENKA_SCENE_ENTITY_FLAG_NONE;
     scene->entities[scene->entity_count].transform = henka_transform_identity();
+    scene->entities[scene->entity_count].lod = (henka_scene_lod_desc){0};
     scene->entities[scene->entity_count].material = henka_material_default();
     scene->entities[scene->entity_count].has_local_bounds = false;
     scene->entities[scene->entity_count].local_bounds = (henka_bounds){{0.0f, 0.0f, 0.0f}, {0.5f, 0.5f, 0.5f}};
@@ -1636,6 +1638,73 @@ henka_result henka_scene_get_reflection_probe(
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
     *out_probe = scene->reflection_probes[probe_index];
+    return HENKA_SUCCESS;
+}
+
+static henka_result henka_scene_validate_lod(const henka_scene_lod_desc* lod)
+{
+    uint32_t index;
+    float previous_distance = 0.0f;
+
+    if (lod == NULL || lod->level_count > HENKA_SCENE_MAX_LOD_LEVELS)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    if (lod->level_count == 0U)
+    {
+        return HENKA_SUCCESS;
+    }
+    for (index = 0U; index < lod->level_count; ++index)
+    {
+        if (lod->meshes[index] == NULL ||
+            !henka_is_finite_float(lod->max_distances[index]) ||
+            lod->max_distances[index] <= previous_distance ||
+            lod->max_distances[index] > 65536.0f)
+        {
+            return HENKA_ERROR_INVALID_ARGUMENT;
+        }
+        previous_distance = lod->max_distances[index];
+    }
+    return HENKA_SUCCESS;
+}
+
+henka_result henka_scene_set_entity_lod(
+    henka_scene* scene,
+    henka_entity entity,
+    henka_scene_lod_desc lod)
+{
+    henka_scene_entity_record* record;
+
+    if (scene == NULL || henka_scene_validate_lod(&lod) != HENKA_SUCCESS)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    record = henka_scene_get_entity_record(scene, entity);
+    if (record == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    record->lod = lod;
+    return HENKA_SUCCESS;
+}
+
+henka_result henka_scene_get_entity_lod(
+    const henka_scene* scene,
+    henka_entity entity,
+    henka_scene_lod_desc* out_lod)
+{
+    const henka_scene_entity_record* record;
+
+    if (scene == NULL || out_lod == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    record = henka_scene_get_entity_record_const(scene, entity);
+    if (record == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    *out_lod = record->lod;
     return HENKA_SUCCESS;
 }
 
