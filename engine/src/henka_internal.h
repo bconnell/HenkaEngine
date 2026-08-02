@@ -10,6 +10,7 @@
 #include <henka/input.h>
 #include <henka/math.h>
 #include <henka/mesh.h>
+#include <henka/model.h>
 #include <henka/persistence.h>
 #include <henka/platform.h>
 #include <henka/renderer.h>
@@ -156,6 +157,20 @@ struct henka_material_asset
     uint64_t revision;
 };
 
+struct henka_gltf_scene_asset
+{
+    char* key;
+    char* source_path;
+    char* display_name;
+    henka_shader* shader;
+    henka_model_scene_data data;
+    henka_mesh* primitive_meshes[HENKA_MODEL_MAX_SCENE_ITEMS];
+    henka_material materials[HENKA_MODEL_MAX_SCENE_ITEMS];
+    bool material_ready[HENKA_MODEL_MAX_SCENE_ITEMS];
+    henka_asset_metadata metadata;
+    uint64_t revision;
+};
+
 struct henka_asset_manager
 {
     struct henka_engine* engine;
@@ -171,6 +186,9 @@ struct henka_asset_manager
     henka_material_asset** material_entries;
     size_t material_count;
     size_t material_capacity;
+    henka_gltf_scene_asset** gltf_scene_entries;
+    size_t gltf_scene_count;
+    size_t gltf_scene_capacity;
     henka_texture* white_texture;
     henka_texture* error_texture;
     henka_texture* normal_texture;

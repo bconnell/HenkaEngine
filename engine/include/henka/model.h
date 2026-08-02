@@ -56,6 +56,7 @@ typedef struct henka_model_scene_node
     int camera_index;
     int light_index;
     henka_transform local_transform;
+    henka_transform world_transform;
     henka_mat4 local_matrix;
     henka_mat4 world_matrix;
 } henka_model_scene_node;

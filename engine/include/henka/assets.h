@@ -15,6 +15,7 @@ typedef struct henka_mesh henka_mesh;
 typedef struct henka_shader henka_shader;
 typedef struct henka_texture henka_texture;
 typedef struct henka_material_asset henka_material_asset;
+typedef struct henka_gltf_scene_asset henka_gltf_scene_asset;
 
 typedef enum henka_asset_type
 {
@@ -22,7 +23,8 @@ typedef enum henka_asset_type
     HENKA_ASSET_TYPE_SHADER,
     HENKA_ASSET_TYPE_TEXTURE,
     HENKA_ASSET_TYPE_MESH,
-    HENKA_ASSET_TYPE_MATERIAL
+    HENKA_ASSET_TYPE_MATERIAL,
+    HENKA_ASSET_TYPE_GLTF_SCENE
 } henka_asset_type;
 
 typedef struct henka_asset_metadata
@@ -91,6 +93,21 @@ henka_result henka_assets_reload_gltf_material_asset(
     henka_asset_manager* manager,
     const char* path,
     henka_material_asset** out_asset);
+henka_result henka_assets_load_gltf_scene_asset(
+    henka_asset_manager* manager,
+    const char* path,
+    henka_shader* shader,
+    henka_gltf_scene_asset** out_asset);
+henka_result henka_assets_reload_gltf_scene_asset(
+    henka_asset_manager* manager,
+    const char* path,
+    henka_gltf_scene_asset** out_asset);
+henka_result henka_assets_instantiate_gltf_scene(
+    henka_asset_manager* manager,
+    const henka_gltf_scene_asset* asset,
+    henka_scene* target_scene,
+    const char* name_prefix,
+    size_t* out_entity_count);
 
 /*
  * Retries only a cached texture fallback from a previous failed load.

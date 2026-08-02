@@ -21,5 +21,8 @@
     "alphaMode": "OPAQUE",
     "doubleSided": false
   }],
-  "meshes": [{ "primitives": [{ "attributes": { "POSITION": 0 }, "material": 0 }] }]
+  "meshes": [{ "primitives": [{ "attributes": { "POSITION": 0 }, "material": 0 }] }],
+  "nodes": [{ "name": "Marker", "mesh": 0 }],
+  "scenes": [{ "nodes": [0] }],
+  "scene": 0
 }

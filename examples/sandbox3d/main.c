@@ -7701,6 +7701,9 @@ static henka_result sandbox3d_initialize(henka_engine* engine, void* user_data)
     henka_material ground_material;
     henka_material marker_material;
     henka_material_asset* marker_material_asset;
+    henka_gltf_scene_asset* marker_scene_asset;
+    henka_scene* imported_scene;
+    size_t imported_entity_count;
     henka_result result;
     henka_transform transform;
     int framebuffer_height;
@@ -7865,6 +7868,45 @@ static henka_result sandbox3d_initialize(henka_engine* engine, void* user_data)
         {
             goto fail;
         }
+    }
+    result = henka_assets_load_gltf_scene_asset(
+        assets,
+        "assets/models/henka_marker.gltf",
+        state->basic_shader,
+        &marker_scene_asset);
+    if (result != HENKA_SUCCESS)
+    {
+        goto fail;
+    }
+    {
+        henka_gltf_scene_asset* stable_marker_scene_asset = marker_scene_asset;
+        result = henka_assets_reload_gltf_scene_asset(
+            assets,
+            "assets/models/henka_marker.gltf",
+            &marker_scene_asset);
+        if (result != HENKA_SUCCESS || marker_scene_asset != stable_marker_scene_asset)
+        {
+            goto fail;
+        }
+    }
+    imported_scene = NULL;
+    result = henka_scene_create(&imported_scene);
+    if (result != HENKA_SUCCESS)
+    {
+        goto fail;
+    }
+    imported_entity_count = 0U;
+    result = henka_assets_instantiate_gltf_scene(
+        assets,
+        marker_scene_asset,
+        imported_scene,
+        "Imported ",
+        &imported_entity_count);
+    henka_scene_destroy(imported_scene);
+    imported_scene = NULL;
+    if (result != HENKA_SUCCESS || imported_entity_count != 1U)
+    {
+        goto fail;
     }
 
     result = henka_assets_load_obj_mesh(assets, "assets/models/missing_marker.obj", &state->missing_model_mesh);

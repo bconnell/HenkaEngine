@@ -1237,6 +1237,59 @@ static bool henka_gltf_parse_scene_lights(
     return !henka_gltf_array_item(lights, lights_end, HENKA_MODEL_MAX_SCENE_ITEMS, &light, &light_end);
 }
 
+static henka_transform henka_gltf_matrix_to_transform(const henka_mat4* matrix)
+{
+    henka_transform transform = henka_transform_identity();
+    float sx;
+    float sy;
+    float sz;
+    float trace;
+
+    if (matrix == NULL) return transform;
+    transform.position = (henka_vec3){matrix->m[12], matrix->m[13], matrix->m[14]};
+    sx = sqrtf(matrix->m[0] * matrix->m[0] + matrix->m[1] * matrix->m[1] + matrix->m[2] * matrix->m[2]);
+    sy = sqrtf(matrix->m[4] * matrix->m[4] + matrix->m[5] * matrix->m[5] + matrix->m[6] * matrix->m[6]);
+    sz = sqrtf(matrix->m[8] * matrix->m[8] + matrix->m[9] * matrix->m[9] + matrix->m[10] * matrix->m[10]);
+    if (!isfinite(sx) || !isfinite(sy) || !isfinite(sz) || sx <= FLT_EPSILON || sy <= FLT_EPSILON || sz <= FLT_EPSILON)
+        return transform;
+    transform.scale = (henka_vec3){sx, sy, sz};
+    trace = matrix->m[0] / sx + matrix->m[5] / sy + matrix->m[10] / sz;
+    if (trace > 0.0f)
+    {
+        float s = sqrtf(trace + 1.0f) * 2.0f;
+        transform.rotation.w = 0.25f * s;
+        transform.rotation.x = (matrix->m[6] / sz - matrix->m[9] / sz) / s;
+        transform.rotation.y = (matrix->m[8] / sx - matrix->m[2] / sx) / s;
+        transform.rotation.z = (matrix->m[1] / sy - matrix->m[4] / sy) / s;
+    }
+    else if (matrix->m[0] / sx > matrix->m[5] / sy && matrix->m[0] / sx > matrix->m[10] / sz)
+    {
+        float s = sqrtf(1.0f + matrix->m[0] / sx - matrix->m[5] / sy - matrix->m[10] / sz) * 2.0f;
+        transform.rotation.w = (matrix->m[6] / sz - matrix->m[9] / sz) / s;
+        transform.rotation.x = 0.25f * s;
+        transform.rotation.y = (matrix->m[4] / sy + matrix->m[1] / sy) / s;
+        transform.rotation.z = (matrix->m[8] / sx + matrix->m[2] / sx) / s;
+    }
+    else if (matrix->m[5] / sy > matrix->m[10] / sz)
+    {
+        float s = sqrtf(1.0f + matrix->m[5] / sy - matrix->m[0] / sx - matrix->m[10] / sz) * 2.0f;
+        transform.rotation.w = (matrix->m[8] / sx - matrix->m[2] / sx) / s;
+        transform.rotation.x = (matrix->m[4] / sy + matrix->m[1] / sy) / s;
+        transform.rotation.y = 0.25f * s;
+        transform.rotation.z = (matrix->m[9] / sz + matrix->m[6] / sz) / s;
+    }
+    else
+    {
+        float s = sqrtf(1.0f + matrix->m[10] / sz - matrix->m[0] / sx - matrix->m[5] / sy) * 2.0f;
+        transform.rotation.w = (matrix->m[1] / sy - matrix->m[4] / sy) / s;
+        transform.rotation.x = (matrix->m[8] / sx + matrix->m[2] / sx) / s;
+        transform.rotation.y = (matrix->m[9] / sz + matrix->m[6] / sz) / s;
+        transform.rotation.z = 0.25f * s;
+    }
+    transform.rotation = henka_quat_normalize(transform.rotation);
+    return transform;
+}
+
 static bool henka_gltf_compute_scene_world_matrix(
     henka_model_scene_data* scene,
     size_t node_index,
@@ -1251,6 +1304,7 @@ static bool henka_gltf_compute_scene_world_matrix(
     else if ((size_t)node->parent_index >= scene->node_count ||
         !henka_gltf_compute_scene_world_matrix(scene, (size_t)node->parent_index, state)) return false;
     else node->world_matrix = henka_mat4_multiply(scene->nodes[node->parent_index].world_matrix, node->local_matrix);
+    node->world_transform = henka_gltf_matrix_to_transform(&node->world_matrix);
     state[node_index] = 2U;
     return true;
 }
