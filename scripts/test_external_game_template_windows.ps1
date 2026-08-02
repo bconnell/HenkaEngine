@@ -21,7 +21,7 @@ function Invoke-ExternalNativeDirect {
         [Parameter(Mandatory = $true)]
         [string]$Label,
 
-        [int]$TimeoutMilliseconds = 120000
+        [int]$TimeoutMilliseconds = 600000
     )
 
     Write-Host ""
@@ -59,6 +59,8 @@ $validationSource = Join-Path $validationRoot "external_game_minimal_src"
 $validationBuild = Join-Path $validationRoot "external_game_minimal_build"
 $cmake = Get-HenkaCMakePath
 $localSdlSource = Join-Path $repoRoot "build\_deps\sdl3-src"
+$localKtxSource = Join-Path $repoRoot "build\_deps\ktxsoftware-src"
+$offlineProviderCount = 0
 $configureArguments = @(
     "-S", $validationSource,
     "-B", $validationBuild,
@@ -67,11 +69,28 @@ $configureArguments = @(
 
 if (Test-Path -LiteralPath $localSdlSource -PathType Container) {
     $configureArguments += "-DFETCHCONTENT_SOURCE_DIR_SDL3=$localSdlSource"
-    $configureArguments += "-DFETCHCONTENT_FULLY_DISCONNECTED=ON"
+    $offlineProviderCount += 1
     Write-Host "SDL3 provider: repository-local populated source"
 }
 else {
     Write-Host "SDL3 provider: FetchContent network fallback"
+}
+
+if (Test-Path -LiteralPath $localKtxSource -PathType Container) {
+    $configureArguments += "-DFETCHCONTENT_SOURCE_DIR_KTXSOFTWARE=$localKtxSource"
+    $offlineProviderCount += 1
+    Write-Host "KTX-Software provider: repository-local populated source"
+}
+else {
+    Write-Host "KTX-Software provider: FetchContent network fallback"
+}
+
+if ($offlineProviderCount -eq 2) {
+    $configureArguments += "-DFETCHCONTENT_FULLY_DISCONNECTED=ON"
+    Write-Host "FetchContent mode: fully disconnected because both optional local providers are present"
+}
+else {
+    Write-Host "FetchContent mode: normal network-capable fallback for missing providers"
 }
 
 # The nested SDL project uses configure-time source globs. Suppress the

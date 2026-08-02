@@ -61,6 +61,8 @@ if(HENKA_ENABLE_KTX2_TRANSCODER)
         KTXSoftware
         GIT_REPOSITORY https://github.com/KhronosGroup/KTX-Software.git
         GIT_TAG 91ace88675ac59a97e55d0378a6602a9ae6b98bd
+        GIT_SUBMODULES ""
+        GIT_SUBMODULES_RECURSE FALSE
     )
     FetchContent_MakeAvailable(KTXSoftware)
 endif()
