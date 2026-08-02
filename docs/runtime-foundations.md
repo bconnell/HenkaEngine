@@ -106,6 +106,9 @@ Materials now expose a bounded metallic-roughness subset: base color, metallic, 
 
 The HDR environment path now derives irradiance, prefiltered specular, and BRDF-LUT resources transactionally from the validated scene-owned texture; the analytical gradient remains the truthful fallback when derivation cannot complete. Optional local reflection probes own bounded 64x64 RGBA16F cubemaps in the OpenGL backend. One changed probe is captured at a time from six deterministic camera directions, candidate faces are committed only after the complete capture succeeds, and probe sampling is disabled during capture to prevent recursion. Enabled probes are selected deterministically; box projection is applied only when requested, while an uncaptured or invalid probe falls back to the shared IBL resources. The sandbox editor can visualize enabled probe volumes and their box-projection mode without changing scene data.
 
+Double-sided material draws disable face culling and orient backface geometric
+normals toward the viewer for consistent lighting.
+
 ### Workspace and viewport
 
 HDR presentation includes a bounded half-resolution extract and separable blur bloom pass. Its GPU targets are replaced transactionally; if allocation or framebuffer validation fails, tone mapping remains active and the renderer diagnostics expose the fallback.

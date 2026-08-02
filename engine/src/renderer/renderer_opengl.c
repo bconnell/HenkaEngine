@@ -932,7 +932,7 @@ static void henka_add_optional_shader_locations(
     {
         "iblIrradianceMap", "iblPrefilterMap", "iblBrdfLut", "useIBL",
         "reflectionProbePosition", "reflectionProbeExtents", "useReflectionProbe",
-        "reflectionProbeMap", "useReflectionProbeMap"
+        "reflectionProbeMap", "useReflectionProbeMap", "doubleSided"
     };
     size_t index;
 
@@ -3846,6 +3846,7 @@ henka_result henka_opengl_renderer_draw_scene(
         henka_set_uniform_float(program, "sheenRoughness", entity->material.sheen_roughness);
         henka_set_uniform_int(program, "alphaMode", (int)entity->material.alpha_mode);
         henka_set_uniform_float(program, "alphaCutoff", entity->material.alpha_cutoff);
+        henka_set_uniform_bool(program, "doubleSided", entity->material.double_sided);
         henka_set_uniform_int(program, "shadowMap", 5);
         henka_set_uniform_bool(program, "useShadowMap",
             rendered && state->shadow_depth_texture != 0U && entity->material.receive_shadows);

@@ -35,6 +35,7 @@ uniform vec3 reflectionProbeExtents;
 uniform bool useReflectionProbe;
 uniform samplerCube reflectionProbeMap;
 uniform bool useReflectionProbeMap;
+uniform bool doubleSided;
 uniform int localLightCount;
 uniform vec4 localLightPositionRange[4];
 uniform vec4 localLightColorIntensity[4];
@@ -200,6 +201,10 @@ void main()
     }
 
     vec3 geometricNormal = safeNormalize(fragNormal, vec3(0.0, 1.0, 0.0));
+    if (doubleSided && !gl_FrontFacing)
+    {
+        geometricNormal = -geometricNormal;
+    }
     vec3 normal = geometricNormal;
     if (useNormalTexture)
     {
