@@ -91,6 +91,13 @@ These ownership and transaction boundaries also prepare future 2.5D and modeling
 
 ### Asset identity and ownership
 
+glTF-backed material assets now use the same canonical source identity as the
+mesh import path. They retain the shared `henka_material` model, borrow only
+manager-owned semantic textures, and expose a copied material instance for
+scene assignment. Reload builds a complete candidate through bounded parsing,
+confined dependency resolution, and semantic validation before replacing the
+stable asset value; failures leave the previous value and identity intact.
+
 Manager-loaded shaders, textures, and OBJ meshes use canonical confined cache identities. Rooted, UNC, device, drive-qualified, traversal, and URI-like inputs fail without producing an asset or cache entry. Equivalent slash and dot-segment path spellings share one entry. On Windows, ASCII case-only variants also share one identity, while metadata retains the normalized spelling used for the first load. Case folding is not applied on platforms with case-sensitive path identity. Returned pointers are borrowed and manager-owned; public destroy calls ignore them so a caller cannot leave a dangling cache entry or cause manager shutdown to destroy the same resource twice.
 
 Texture and OBJ fallback retries are transactional. Texture source failures create path-specific lightweight aliases of the shared error texture rather than storing the shared pointer directly. A failed texture retry leaves the alias, metadata, and caller output unchanged; a successful retry moves the new owned backend into that same alias, so existing materials immediately observe the real texture without pointer rebinding. Allocation failures, invalid API state, and OpenGL upload failures are propagated and are not cached as ordinary source fallbacks. Texture creation reads an encoded source once into a bounded buffer, uses that exact buffer for stb_image inspection and decode, supports Radiance HDR as finite linear RGBA32F uploaded to RGBA16F, rejects unsupported 16-bit sources rather than quantizing them silently, clears outputs before validation, temporarily uses the main OpenGL context, restores the previous context, texture-unit, binding, and unpack state, checks upload errors, and destroys only backends it owns. Descriptor semantics select sRGB or linear GPU storage and are immutable on the texture object. Mesh fallback metadata remains path-based because mesh retries do not yet use stable per-path aliases.
