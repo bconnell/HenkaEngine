@@ -10,9 +10,11 @@ These instructions are currently focused on Windows.
   SDL3 and KTX-Software sources. A populated `build/_deps/sdl3-src` or
   `build/_deps/ktxsoftware-src` directory is optional offline acceleration;
   clean builds clear absent local-source overrides and use the pinned network
-  fallback instead. The clean KTX clone enables Git long-path handling
-  locally for Windows, so the normal external-template build does not require
-  a machine-wide Git setting or a populated dependency folder.
+fallback instead. The clean KTX clone enables Git long-path handling
+locally for Windows, so the normal external-template build does not require
+a machine-wide Git or MSBuild setting or a populated dependency folder. The
+top-level project applies the same bounded Visual Studio path hardening to
+ordinary clean-clone builds.
 
 ## Build from the repository root
 

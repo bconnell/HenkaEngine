@@ -6,6 +6,13 @@ set(CMAKE_C_STANDARD 17)
 set(CMAKE_C_STANDARD_REQUIRED ON)
 set(CMAKE_C_EXTENSIONS OFF)
 
+if(MSVC)
+    # Keep clean Windows FetchContent builds independent of machine-wide
+    # MSBuild file tracking and resilient to KTX-Software's nested paths.
+    set(CMAKE_VS_GLOBALS "TrackFileAccess=false" CACHE STRING "" FORCE)
+    set(CMAKE_OBJECT_PATH_MAX 128 CACHE STRING "" FORCE)
+endif()
+
 option(HENKA_BUILD_TESTS "Build Henka Engine tests." ON)
 option(HENKA_BUILD_EXAMPLES "Build Henka Engine example applications." ON)
 option(HENKA_ENABLE_KTX2_TRANSCODER "Use pinned KTX-Software for checked KTX2/Basis transcoding." ON)
