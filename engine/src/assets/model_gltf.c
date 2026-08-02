@@ -1618,13 +1618,18 @@ static bool henka_gltf_prepare_json(
         json_data = data;
         json_size = data_size;
     }
+    while (json_size > 0U && isspace(json_data[json_size - 1U])) json_size -= 1U;
     context->json = henka_malloc(json_size + 1U);
     if (context->json == NULL) return false;
     memcpy(context->json, json_data, json_size);
     context->json[json_size] = '\0';
     context->json_size = json_size;
-    return henka_gltf_skip_space(context->json, context->json + json_size) < context->json + json_size &&
-        *henka_gltf_skip_space(context->json, context->json + json_size) == '{';
+    if (henka_gltf_skip_space(context->json, context->json + json_size) >= context->json + json_size ||
+        *henka_gltf_skip_space(context->json, context->json + json_size) != '{')
+    {
+        return false;
+    }
+    return true;
 }
 
 henka_result henka_model_data_load_gltf_from_memory(

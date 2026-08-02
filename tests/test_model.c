@@ -7,6 +7,14 @@
 
 #include "../engine/src/core/checked.h"
 
+static void henka_test_write_u32(unsigned char* destination, uint32_t value)
+{
+    destination[0] = (unsigned char)(value & 0xffU);
+    destination[1] = (unsigned char)((value >> 8U) & 0xffU);
+    destination[2] = (unsigned char)((value >> 16U) & 0xffU);
+    destination[3] = (unsigned char)((value >> 24U) & 0xffU);
+}
+
 static void henka_test_model_rejects_unsafe_bounds(void)
 {
     static const char* unsupported_gltf_extension =
@@ -142,6 +150,11 @@ void henka_test_model(void)
         "\"textures\":[{\"source\":0}],"
         "\"materials\":[{\"pbrMetallicRoughness\":{\"baseColorTexture\":{\"index\":0}}}],"
         "\"meshes\":[{\"primitives\":[{\"attributes\":{\"POSITION\":0},\"material\":0}]}]}";
+    static const char* valid_glb_json =
+        "{\"asset\":{\"version\":\"2.0\"},\"buffers\":[{\"byteLength\":36}],"
+        "\"bufferViews\":[{\"buffer\":0,\"byteLength\":36}],"
+        "\"accessors\":[{\"bufferView\":0,\"componentType\":5126,\"count\":3,\"type\":\"VEC3\"}],"
+        "\"meshes\":[{\"primitives\":[{\"attributes\":{\"POSITION\":0}}]}]}";
     static const char* valid_obj =
         "# simple quad\n"
         "v -0.5 0.0 -0.5\n"
@@ -206,6 +219,16 @@ void henka_test_model(void)
         "   \n"
         "\t# comment only\n";
     henka_model_data model;
+    unsigned char* glb = NULL;
+    size_t glb_json_size;
+    size_t glb_json_padded_size;
+    size_t glb_size;
+    static const unsigned char glb_triangle[36] =
+    {
+        0U, 0U, 0U, 0U, 0U, 0U, 0U, 0U, 0U, 0U, 0U, 0U,
+        0U, 0U, 128U, 63U, 0U, 0U, 0U, 0U, 0U, 0U, 0U, 0U,
+        0U, 0U, 0U, 0U, 0U, 0U, 128U, 63U, 0U, 0U, 0U, 0U
+    };
 
     memset(&model, 0, sizeof(model));
     HENKA_TEST_ASSERT(
@@ -219,6 +242,29 @@ void henka_test_model(void)
     HENKA_TEST_ASSERT_FLOAT_CLOSE(model.vertices[1].position.x, 1.0f, 0.0001f);
     HENKA_TEST_ASSERT_FLOAT_CLOSE(model.vertices[0].normal.z, 1.0f, 0.0001f);
     henka_model_data_destroy(&model);
+
+    glb_json_size = strlen(valid_glb_json);
+    glb_json_padded_size = (glb_json_size + 3U) & ~((size_t)3U);
+    glb_size = 12U + 8U + glb_json_padded_size + 8U + sizeof(glb_triangle);
+    glb = henka_calloc(1U, glb_size);
+    HENKA_TEST_ASSERT(glb != NULL);
+    memcpy(glb, "glTF", 4U);
+    henka_test_write_u32(glb + 4U, 2U);
+    henka_test_write_u32(glb + 8U, (uint32_t)glb_size);
+    henka_test_write_u32(glb + 12U, (uint32_t)glb_json_padded_size);
+    henka_test_write_u32(glb + 16U, 0x4E4F534AU);
+    memset(glb + 20U, ' ', glb_json_padded_size);
+    memcpy(glb + 20U, valid_glb_json, glb_json_size);
+    henka_test_write_u32(glb + 20U + glb_json_padded_size, (uint32_t)sizeof(glb_triangle));
+    henka_test_write_u32(glb + 24U + glb_json_padded_size, 0x004E4942U);
+    memcpy(glb + 28U + glb_json_padded_size, glb_triangle, sizeof(glb_triangle));
+    memset(&model, 0, sizeof(model));
+    HENKA_TEST_ASSERT(
+        henka_model_data_load_gltf_from_memory(glb, glb_size, "valid.glb", &model) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(model.vertex_count == 3U);
+    HENKA_TEST_ASSERT(model.index_count == 3U);
+    henka_model_data_destroy(&model);
+    henka_free(glb);
 
     memset(&model, 0, sizeof(model));
     HENKA_TEST_ASSERT(
