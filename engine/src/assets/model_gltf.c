@@ -1667,19 +1667,37 @@ static bool henka_gltf_prepare_json(
     if (data_size >= 12U && memcmp(data, "glTF", 4U) == 0)
     {
         uint32_t version; uint32_t total_length;
+        bool json_seen = false;
+        bool binary_seen = false;
+        size_t chunk_index = 0U;
         memcpy(&version, data + 4U, sizeof(version)); memcpy(&total_length, data + 8U, sizeof(total_length));
-        if (version != 2U || total_length > data_size || total_length < 12U) return false;
+        if (version != 2U || total_length != data_size || total_length < 12U) return false;
         offset = 12U;
-        while (offset + 8U <= total_length)
+        while (offset < total_length)
         {
             uint32_t chunk_length; uint32_t chunk_type;
+            if (total_length - offset < 8U) return false;
             memcpy(&chunk_length, data + offset, sizeof(chunk_length)); memcpy(&chunk_type, data + offset + 4U, sizeof(chunk_type)); offset += 8U;
-            if (chunk_length > total_length - offset) return false;
-            if (chunk_type == 0x4E4F534AU && json_data == NULL) { json_data = data + offset; json_size = chunk_length; }
-            else if (chunk_type == 0x004E4942U) { context->glb_binary = data + offset; context->glb_binary_size = chunk_length; }
+            if ((chunk_length & 3U) != 0U || chunk_length > total_length - offset) return false;
+            if (chunk_index == 0U && chunk_type != 0x4E4F534AU) return false;
+            if (chunk_type == 0x4E4F534AU)
+            {
+                if (json_seen || chunk_length == 0U) return false;
+                json_seen = true;
+                json_data = data + offset;
+                json_size = chunk_length;
+            }
+            else if (chunk_type == 0x004E4942U)
+            {
+                if (binary_seen) return false;
+                binary_seen = true;
+                context->glb_binary = data + offset;
+                context->glb_binary_size = chunk_length;
+            }
             offset += chunk_length;
+            ++chunk_index;
         }
-        if (json_data == NULL) return false;
+        if (offset != total_length || !json_seen || json_data == NULL) return false;
     }
     else
     {

@@ -320,6 +320,11 @@ void henka_test_model(void)
     HENKA_TEST_ASSERT(model.vertex_count == 3U);
     HENKA_TEST_ASSERT(model.index_count == 3U);
     henka_model_data_destroy(&model);
+    henka_test_write_u32(glb + 8U, (uint32_t)(glb_size - 4U));
+    memset(&model, 0, sizeof(model));
+    HENKA_TEST_ASSERT(
+        henka_model_data_load_gltf_from_memory(glb, glb_size, "trailing-glb-bytes.glb", &model) != HENKA_SUCCESS);
+    henka_model_data_destroy(&model);
     henka_free(glb);
 
     memset(&model, 0, sizeof(model));
