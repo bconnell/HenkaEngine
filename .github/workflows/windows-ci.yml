@@ -52,7 +52,7 @@ jobs:
 
       - name: Run bounded packaged soak
         shell: powershell
-        run: .\scripts\soak_packaged_sandbox3d_windows.ps1 -Iterations 10
+        run: .\scripts\soak_packaged_sandbox3d_windows.ps1 -Iterations 10 -AllowHeadlessUnavailable
 
       - name: Validate external game template
         shell: powershell

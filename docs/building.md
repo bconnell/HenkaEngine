@@ -101,7 +101,10 @@ engine's clean allocation-shutdown report on every iteration:
 ```
 
 Use `-Iterations` for a longer bounded run. This check does not save sandbox
-settings or modify personal files.
+settings or modify personal files. Hosted Windows CI passes
+`-AllowHeadlessUnavailable`: if the runner has no OpenGL-capable desktop video
+driver, that specific infrastructure limitation is recorded as a skip; other
+process failures remain fatal. Local runs remain strict by default.
 
 ## Run a packaged sandbox check
 
