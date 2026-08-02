@@ -85,4 +85,6 @@ The current loader does not provide:
 
 ## Sample asset
 
-`assets/models/henka_marker.obj` is a small self-authored sample used by the sandbox and tests.
+`assets/models/henka_marker.obj` remains the OBJ sample used by loader tests;
+`assets/models/henka_marker.gltf` is the embedded-buffer glTF sample used by
+the sandbox.

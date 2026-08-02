@@ -162,7 +162,7 @@ You should be able to identify these examples:
 - `Textured Cube`: centered in the scene.
 - `Ground`: textured plane under the scene.
 - `Material Ball`: left side of the scene.
-- `OBJ Marker`: farther left, using the current OBJ loading path.
+- `glTF Marker`: farther left, using the current glTF loading path.
 - `Missing Texture`: right side, using the visible error-texture fallback.
 - `Missing Model`: farther right, using the fallback mesh for a missing OBJ path.
 - `Debug Grid`: floor reference for depth, scale, and movement.

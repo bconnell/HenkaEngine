@@ -2300,7 +2300,7 @@ static void sandbox3d_print_help(const sandbox3d_state* state)
 {
     printf("Henka Engine Sandbox 3D\n");
     printf("Build: local %s %s %s\n", sandbox3d_get_build_configuration_label(), __DATE__, __TIME__);
-    printf("This scene shows texture rendering, untextured material color, early OBJ loading, visible fallback behavior, and the first developer-facing scene inspection panels.\n");
+    printf("This scene shows texture rendering, untextured material color, OBJ and glTF loading, visible fallback behavior, and the first developer-facing scene inspection panels.\n");
     printf("Controls:\n");
     printf("  W A S D          Move across the scene\n");
     printf("  Q / E            Move down / up\n");
@@ -2342,7 +2342,7 @@ static void sandbox3d_print_help(const sandbox3d_state* state)
     printf("Manual QA focus:\n");
     printf("  Confirm each scene example is visible, object selection updates the details panel, and camera focus and reset actions stay predictable.\n");
     printf("Current limitations:\n");
-    printf("  OBJ loading is still early and currently limited to a small, documented subset.\n");
+    printf("  OBJ and glTF loading remain bounded to the documented interchange subsets.\n");
     printf("  OBJ material libraries, negative indices, animation, hierarchy tools, scene saving, and broader 2D or 2.5D workflows are not available yet.\n");
     printf("  The UI overlay is intentionally small and is not a full editor.\n");
     printf("  Detached panel windows currently show compact state surfaces, and Scene View does not detach yet.\n");
@@ -7032,7 +7032,7 @@ static void sandbox3d_draw_utility_panel(
             henka_ui_label(state->ui, x_left, y_start + 18.0f, 1.0f, "Ground: textured plane under the scene.");
             henka_ui_label(state->ui, x_left, y_start + 34.0f, 1.0f, "Textured Cube: texture material rendering.");
             henka_ui_label(state->ui, x_left, y_start + 50.0f, 1.0f, "Material Ball: rounded untextured base color.");
-            henka_ui_label(state->ui, x_left, y_start + 66.0f, 1.0f, "OBJ Marker: current OBJ mesh loading path.");
+            henka_ui_label(state->ui, x_left, y_start + 66.0f, 1.0f, "glTF Marker: current glTF mesh loading path.");
             henka_ui_label(state->ui, x_left, y_start + 82.0f, 1.0f, "Missing Texture and Missing Model show fallback behavior.");
             break;
 
@@ -7835,7 +7835,7 @@ static henka_result sandbox3d_initialize(henka_engine* engine, void* user_data)
         goto fail;
     }
 
-    result = henka_assets_load_obj_mesh(assets, "assets/models/henka_marker.obj", &state->marker_mesh);
+    result = henka_assets_load_gltf_mesh(assets, "assets/models/henka_marker.gltf", &state->marker_mesh);
     if (result != HENKA_SUCCESS)
     {
         goto fail;
@@ -7850,7 +7850,7 @@ static henka_result sandbox3d_initialize(henka_engine* engine, void* user_data)
     state->ground_entity = henka_scene_create_entity_named(state->scene, "Ground");
     state->cube_entity = henka_scene_create_entity_named(state->scene, "Textured Cube");
     state->colored_cube_entity = henka_scene_create_entity_named(state->scene, "Material Ball");
-    state->marker_entity = henka_scene_create_entity_named(state->scene, "OBJ Marker");
+    state->marker_entity = henka_scene_create_entity_named(state->scene, "glTF Marker");
     state->fallback_cube_entity = henka_scene_create_entity_named(state->scene, "Missing Texture");
     state->fallback_model_entity = henka_scene_create_entity_named(state->scene, "Missing Model");
     state->grid_entity = henka_scene_create_entity_named(state->scene, "Debug Grid");
@@ -7900,7 +7900,7 @@ static henka_result sandbox3d_initialize(henka_engine* engine, void* user_data)
     colored_material.emissive_strength = 2.5f;
 
     marker_material = henka_material_default();
-    marker_material.name = "Rough Metal OBJ Marker";
+    marker_material.name = "Rough Metal glTF Marker";
     marker_material.type = HENKA_MATERIAL_TYPE_LIT;
     marker_material.shader = state->basic_shader;
     marker_material.base_color = (henka_vec4){0.96f, 0.72f, 0.18f, 1.0f};
@@ -8035,19 +8035,19 @@ static henka_result sandbox3d_initialize(henka_engine* engine, void* user_data)
     sandbox3d_apply_entity_foundation(
         state,
         state->marker_entity,
-        "obj_marker",
+        "gltf_marker",
         sandbox3d_make_bounds((henka_vec3){0.0f, 0.35f, 0.0f}, (henka_vec3){0.65f, 0.7f, 0.65f}),
         true,
-        "Inspect OBJ sample");
+        "Inspect glTF sample");
     sandbox3d_register_object_descriptor(
         state,
         SANDBOX3D_OBJECT_OBJ_MARKER,
         state->marker_entity,
-        "OBJ Marker",
+        "glTF Marker",
         "Farther left,",
-        "shows the current OBJ loading path.",
-        "Uses an OBJ mesh loaded through the asset manager cache.",
-        "OBJ mesh from assets/models/henka_marker.obj.",
+        "shows the current glTF loading path.",
+        "Uses a glTF mesh loaded through the asset manager cache.",
+        "glTF mesh from assets/models/henka_marker.gltf.",
         "Rough metallic material.",
         "No texture is used for this object.",
         true,

@@ -258,7 +258,7 @@ To validate the generic external game template against the current Henka checkou
 
 ## Current limitations
 
-- The sandbox uses built-in plane, cube, UV-sphere, and debug-grid primitives plus a small early OBJ loading path.
+- The sandbox uses built-in plane, cube, UV-sphere, and debug-grid primitives plus bounded OBJ and glTF loading paths.
 - Missing textures fall back safely to an error texture, and missing OBJ assets fall back to a visible mesh. Failed OBJ mesh fallbacks can be retried explicitly after the source asset is fixed.
 - OBJ support is intentionally limited to bounded local files containing comments, blank lines, finite positions, optional finite UVs and normals, positive and negative indices, and triangle/quad/n-gon faces through basic fan triangulation.
 - OBJ material libraries, concave polygon correction beyond basic fan triangulation, model hierarchies, and animation are not supported yet.
