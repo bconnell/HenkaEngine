@@ -28,8 +28,10 @@ The bounded scene importer is exposed separately through
 bindings, selected scene roots, node parentage, local/world matrices, cameras,
 and `KHR_lights_punctual` point, spot, and directional records. Scene data is
 CPU-owned until a manager/renderer instantiation path publishes its dependent
-meshes and material instances, so a failed scene parse cannot publish partial
-renderer state.
+meshes and material instances. Instantiation also applies the first active
+glTF camera and publishes active punctual lights into the runtime scene; the
+runtime's four-local-light limit remains an explicit bounded fallback. A
+failed scene parse or dependency build cannot publish partial renderer state.
 
 ## Supported input
 

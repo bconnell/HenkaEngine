@@ -7902,6 +7902,14 @@ static henka_result sandbox3d_initialize(henka_engine* engine, void* user_data)
         imported_scene,
         "Imported ",
         &imported_entity_count);
+    {
+        henka_scene_light_desc imported_light;
+        if (result == HENKA_SUCCESS &&
+            henka_scene_get_light(imported_scene, 0U, &imported_light) != HENKA_SUCCESS)
+        {
+            result = HENKA_ERROR_UNKNOWN;
+        }
+    }
     henka_scene_destroy(imported_scene);
     imported_scene = NULL;
     if (result != HENKA_SUCCESS || imported_entity_count != 1U)

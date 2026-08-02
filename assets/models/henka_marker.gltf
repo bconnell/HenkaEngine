@@ -15,6 +15,16 @@
     "uri": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII="
   }],
   "textures": [{ "source": 0 }],
+  "cameras": [{
+    "name": "Marker Camera",
+    "type": "perspective",
+    "perspective": { "yfov": 1.0472, "znear": 0.1, "zfar": 100.0 }
+  }],
+  "extensions": {
+    "KHR_lights_punctual": {
+      "lights": [{ "name": "Marker Key", "type": "point", "intensity": 4.0, "range": 12.0 }]
+    }
+  },
   "materials": [{
     "name": "Marker Gold",
     "pbrMetallicRoughness": {
@@ -27,7 +37,12 @@
     "doubleSided": false
   }],
   "meshes": [{ "primitives": [{ "attributes": { "POSITION": 0 }, "material": 0 }] }],
-  "nodes": [{ "name": "Marker", "mesh": 0 }],
+  "nodes": [{
+    "name": "Marker",
+    "mesh": 0,
+    "camera": 0,
+    "extensions": { "KHR_lights_punctual": { "light": 0 } }
+  }],
   "scenes": [{ "nodes": [0] }],
   "scene": 0
 }

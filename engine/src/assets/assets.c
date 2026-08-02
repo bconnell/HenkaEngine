@@ -2288,6 +2288,7 @@ static henka_result henka_assets_instantiate_gltf_scene_node(
     size_t child_index;
     char name[HENKA_MAX_SCENE_TEXT_BYTES];
 
+    (void)manager;
     if (asset == NULL || target_scene == NULL || inout_count == NULL || node_index < 0 ||
         (size_t)node_index >= asset->data.node_count) return HENKA_ERROR_INVALID_ARGUMENT;
     node = &asset->data.nodes[node_index];
@@ -2322,6 +2323,96 @@ static henka_result henka_assets_instantiate_gltf_scene_node(
     return HENKA_SUCCESS;
 }
 
+static bool henka_assets_gltf_node_is_active(
+    const henka_gltf_scene_asset* asset,
+    int node_index)
+{
+    size_t root_index;
+    size_t guard;
+    int current;
+
+    if (asset == NULL || node_index < 0 || (size_t)node_index >= asset->data.node_count ||
+        asset->data.active_scene_index >= asset->data.scene_count) return false;
+    current = node_index;
+    for (guard = 0U; guard < asset->data.node_count; ++guard)
+    {
+        int parent = asset->data.nodes[current].parent_index;
+        if (parent < 0)
+        {
+            for (root_index = 0U; root_index < asset->data.scene_root_counts[asset->data.active_scene_index]; ++root_index)
+                if (asset->data.scene_root_nodes[asset->data.scene_root_offsets[asset->data.active_scene_index] + root_index] == current)
+                    return true;
+            return false;
+        }
+        if ((size_t)parent >= asset->data.node_count) return false;
+        current = parent;
+    }
+    return false;
+}
+
+static void henka_assets_apply_gltf_scene_bindings(
+    const henka_gltf_scene_asset* asset,
+    henka_scene* target_scene)
+{
+    bool camera_applied = false;
+    size_t node_index;
+
+    if (asset == NULL || target_scene == NULL) return;
+    for (node_index = 0U; node_index < asset->data.node_count; ++node_index)
+    {
+        const henka_model_scene_node* node = &asset->data.nodes[node_index];
+        if (!henka_assets_gltf_node_is_active(asset, (int)node_index)) continue;
+        if (!camera_applied && node->camera_index >= 0 &&
+            (size_t)node->camera_index < asset->data.camera_count)
+        {
+            henka_camera camera = asset->data.cameras[node->camera_index].camera;
+            henka_vec3 forward = {
+                -node->world_matrix.m[8],
+                -node->world_matrix.m[9],
+                -node->world_matrix.m[10]};
+            float length = henka_vec3_length(forward);
+            if (isfinite(length) && length > 0.000001f)
+            {
+                forward = henka_vec3_scale(forward, 1.0f / length);
+                camera.position = (henka_vec3){
+                    node->world_matrix.m[12], node->world_matrix.m[13], node->world_matrix.m[14]};
+                camera.yaw_radians = atan2f(forward.z, forward.x);
+                camera.pitch_radians = asinf(fmaxf(-1.0f, fminf(1.0f, forward.y)));
+                if (henka_scene_set_camera(target_scene, &camera) == HENKA_SUCCESS) camera_applied = true;
+            }
+        }
+        if (node->light_index >= 0 && (size_t)node->light_index < asset->data.light_count)
+        {
+            const henka_model_scene_light* source = &asset->data.lights[node->light_index];
+            henka_vec3 direction = {
+                -node->world_matrix.m[8],
+                -node->world_matrix.m[9],
+                -node->world_matrix.m[10]};
+            henka_scene_light_desc light = {
+                source->type == HENKA_MODEL_SCENE_LIGHT_SPOT ? HENKA_SCENE_LIGHT_SPOT : HENKA_SCENE_LIGHT_POINT,
+                {node->world_matrix.m[12], node->world_matrix.m[13], node->world_matrix.m[14]},
+                direction,
+                source->color,
+                source->intensity,
+                source->range > 0.0f ? source->range : 10000.0f,
+                source->inner_cone_cosine,
+                source->outer_cone_cosine,
+                true};
+            if (source->type == HENKA_MODEL_SCENE_LIGHT_DIRECTIONAL)
+            {
+                henka_scene_set_light_color(target_scene, source->color);
+                henka_scene_set_light_intensity(target_scene, source->intensity);
+                henka_scene_set_light_direction(target_scene, direction);
+            }
+            else
+            {
+                /* The scene contract is intentionally bounded; excess local lights are ignored safely. */
+                (void)henka_scene_add_light(target_scene, light, &(uint32_t){UINT32_MAX});
+            }
+        }
+    }
+}
+
 henka_result henka_assets_instantiate_gltf_scene(
     henka_asset_manager* manager,
     const henka_gltf_scene_asset* asset,
@@ -2350,6 +2441,7 @@ henka_result henka_assets_instantiate_gltf_scene(
         while (created_count > 0U) henka_scene_destroy_entity(target_scene, created[--created_count]);
         return result;
     }
+    henka_assets_apply_gltf_scene_bindings(asset, target_scene);
     *out_entity_count = created_count;
     return HENKA_SUCCESS;
 }

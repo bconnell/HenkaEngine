@@ -1301,7 +1301,8 @@ static bool henka_gltf_parse_scene_lights(
         henka_model_scene_light* output = &scene->lights[index];
         henka_vec3 color = {1.0f, 1.0f, 1.0f};
         float intensity = 1.0f;
-        float range = 0.0f;
+        /* Henka local lights are bounded; glTF's omitted range maps to a large finite range. */
+        float range = 10000.0f;
         float inner = 0.0f;
         float outer = HENKA_PI * 0.25f;
         const char* spot;
