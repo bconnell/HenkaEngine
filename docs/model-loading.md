@@ -125,7 +125,7 @@ The current loader does not provide:
 
 - MTL material import
 - concave polygon correction beyond fan triangulation
-- model hierarchies
+- skeletal animation, skinning, morph targets, and editor hierarchy authoring
 - skeletal animation
 - editor import workflows
 - live replacement of an already-loaded mesh that scenes may still reference

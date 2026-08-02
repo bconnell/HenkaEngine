@@ -881,6 +881,26 @@ static bool henka_validate_shader_contract(
         out_shader_data);
 }
 
+static void henka_add_optional_shader_locations(
+    GLuint program,
+    henka_opengl_shader_data* shader_data)
+{
+    static const char* optional_names[] =
+    {
+        "iblIrradianceMap", "iblPrefilterMap", "iblBrdfLut", "useIBL"
+    };
+    size_t index;
+
+    if (program == 0U || shader_data == NULL)
+        return;
+    for (index = 0U; index < sizeof(optional_names) / sizeof(optional_names[0]); ++index)
+    {
+        GLint location = g_gl.GetUniformLocation(program, optional_names[index]);
+        if (location >= 0)
+            (void)henka_shader_location_table_add(shader_data, optional_names[index], location);
+    }
+}
+
 static void henka_set_uniform_mat4(GLuint program, const char* name, henka_mat4 value)
 {
     GLint location;
@@ -1057,26 +1077,6 @@ static void henka_set_uniform_int_owned(
     {
         g_gl.Uniform1i(location, value);
     }
-}
-
-static void henka_set_uniform_int_optional(
-    GLuint program,
-    const char* name,
-    int value)
-{
-    GLint location = henka_opengl_uniform_location(program, name);
-    if (location >= 0)
-    {
-        g_gl.Uniform1i(location, value);
-    }
-}
-
-static void henka_set_uniform_bool_optional(
-    GLuint program,
-    const char* name,
-    bool value)
-{
-    henka_set_uniform_int_optional(program, name, value ? 1 : 0);
 }
 
 static void henka_set_uniform_float_owned(
@@ -3160,10 +3160,10 @@ henka_result henka_opengl_renderer_draw_scene(
             scene->environment.hdr_texture != NULL &&
             scene->environment.hdr_texture->backend_data != NULL);
         henka_set_uniform_float(program, "environmentRotation", scene->environment.hdr_rotation);
-        henka_set_uniform_int_optional(program, "iblIrradianceMap", 7);
-        henka_set_uniform_int_optional(program, "iblPrefilterMap", 8);
-        henka_set_uniform_int_optional(program, "iblBrdfLut", 9);
-        henka_set_uniform_bool_optional(program, "useIBL", !helper_entity && state->ibl_ready);
+        henka_set_uniform_int_owned(program, shader_data, "iblIrradianceMap", 7);
+        henka_set_uniform_int_owned(program, shader_data, "iblPrefilterMap", 8);
+        henka_set_uniform_int_owned(program, shader_data, "iblBrdfLut", 9);
+        henka_set_uniform_bool_owned(program, shader_data, "useIBL", !helper_entity && state->ibl_ready);
         henka_set_uniform_int(program, "localLightCount", local_light_count);
         henka_set_uniform_vec4_array_owned(
             program,
@@ -4485,6 +4485,7 @@ henka_result henka_opengl_renderer_create_shader_from_files_with_contract(
         henka_free(fragment_source);
         return HENKA_ERROR_RENDERER;
     }
+    henka_add_optional_shader_locations(program, &location_data);
     source_hash = henka_shader_source_hash(vertex_source, fragment_source);
 
     g_gl.DeleteShader(vertex_shader);
