@@ -540,6 +540,33 @@ henka_result henka_renderer_create_texture_from_rgba8_with_descriptor(
         out_texture);
 }
 
+henka_result henka_renderer_create_texture_from_rgba32f_with_descriptor(
+    struct henka_renderer* renderer,
+    int width,
+    int height,
+    const float* pixels,
+    const henka_texture_descriptor* descriptor,
+    struct henka_texture** out_texture)
+{
+    if (out_texture != NULL)
+    {
+        *out_texture = NULL;
+    }
+    if (renderer == NULL || renderer->backend_state == NULL ||
+        pixels == NULL || out_texture == NULL || descriptor == NULL ||
+        henka_texture_descriptor_validate(descriptor) != HENKA_SUCCESS)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    return henka_opengl_renderer_create_texture_from_rgba32f_with_descriptor(
+        renderer,
+        width,
+        height,
+        pixels,
+        descriptor,
+        out_texture);
+}
+
 void henka_renderer_destroy_texture(struct henka_texture* texture)
 {
     henka_opengl_renderer_destroy_texture(texture);

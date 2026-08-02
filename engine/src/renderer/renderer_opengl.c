@@ -1350,7 +1350,8 @@ static henka_result henka_opengl_create_render_programs(
 {
     static const char* tone_uniforms[] = {"hdrTexture", "exposure"};
     static const char* environment_uniforms[] =
-        {"groundColor", "horizonColor", "zenithColor", "intensity"};
+        {"groundColor", "horizonColor", "zenithColor", "intensity",
+         "environmentTexture", "useEnvironmentTexture", "environmentRotation"};
     static const char* shadow_uniforms[] =
         {"model", "lightMatrix", "baseColor", "baseColorTexture", "useTexture", "alphaMode", "alphaCutoff"};
     static const char* tone_vertex =
@@ -1364,8 +1365,8 @@ static henka_result henka_opengl_create_render_programs(
         "void main(){ vec3 color = texture(hdrTexture, uv).rgb * exp2(exposure); color = aces(max(color, vec3(0.0))); outColor = vec4(pow(color, vec3(1.0/2.2)), 1.0); }\n";
     static const char* environment_fragment =
         "#version 330 core\n"
-        "in vec2 uv; uniform vec3 groundColor; uniform vec3 horizonColor; uniform vec3 zenithColor; uniform float intensity; out vec4 outColor;\n"
-        "void main(){ float height = clamp(uv.y, 0.0, 1.0); float horizon = smoothstep(0.04, 0.48, height); vec3 lower = mix(groundColor, horizonColor, horizon); vec3 color = mix(lower, zenithColor, smoothstep(0.48, 1.0, height)); outColor = vec4(max(color * max(intensity, 0.0), vec3(0.0)), 1.0); }\n";
+        "in vec2 uv; uniform vec3 groundColor; uniform vec3 horizonColor; uniform vec3 zenithColor; uniform float intensity; uniform sampler2D environmentTexture; uniform bool useEnvironmentTexture; uniform float environmentRotation; out vec4 outColor;\n"
+        "void main(){ float height = clamp(uv.y, 0.0, 1.0); float horizon = smoothstep(0.04, 0.48, height); vec3 lower = mix(groundColor, horizonColor, horizon); vec3 gradient = mix(lower, zenithColor, smoothstep(0.48, 1.0, height)); float longitude = fract(uv.x + environmentRotation / 6.28318530718); vec3 hdr = texture(environmentTexture, vec2(longitude, height)).rgb; vec3 color = useEnvironmentTexture ? hdr : gradient; outColor = vec4(max(color * max(intensity, 0.0), vec3(0.0)), 1.0); }\n";
     static const char* shadow_vertex =
         "#version 330 core\n"
         "layout(location=0) in vec3 inPosition; layout(location=2) in vec2 inUv; out vec2 fragUv; uniform mat4 model; uniform mat4 lightMatrix;\n"
@@ -1441,9 +1442,28 @@ static void henka_opengl_draw_environment(
     henka_set_uniform_vec3_owned(state->environment_program, &state->environment_shader_data, "horizonColor", scene->environment.horizon_color);
     henka_set_uniform_vec3_owned(state->environment_program, &state->environment_shader_data, "zenithColor", scene->environment.zenith_color);
     henka_set_uniform_float_owned(state->environment_program, &state->environment_shader_data, "intensity", scene->environment.intensity);
+    henka_set_uniform_int_owned(state->environment_program, &state->environment_shader_data, "environmentTexture", 6);
+    henka_set_uniform_bool_owned(
+        state->environment_program,
+        &state->environment_shader_data,
+        "useEnvironmentTexture",
+        scene->environment.hdr_texture != NULL &&
+        scene->environment.hdr_texture->backend_data != NULL);
+    henka_set_uniform_float_owned(
+        state->environment_program,
+        &state->environment_shader_data,
+        "environmentRotation",
+        scene->environment.hdr_rotation);
+    g_gl.ActiveTexture(GL_TEXTURE6);
+    glBindTexture(
+        GL_TEXTURE_2D,
+        scene->environment.hdr_texture != NULL &&
+        scene->environment.hdr_texture->backend_data != NULL ?
+        ((const henka_opengl_texture_data*)scene->environment.hdr_texture->backend_data)->texture_id : 0U);
     g_gl.BindVertexArray(state->tone_vertex_array);
     glDrawArrays(GL_TRIANGLES, 0, 3);
     g_gl.BindVertexArray(0);
+    glBindTexture(GL_TEXTURE_2D, 0U);
     g_gl.UseProgram(0);
     glEnable(GL_DEPTH_TEST);
     glEnable(GL_CULL_FACE);
@@ -3769,6 +3789,18 @@ static henka_result henka_opengl_restore_texture_binding(
         "texture binding restoration");
 }
 
+static henka_result henka_opengl_create_texture_from_pixels(
+    struct henka_renderer* renderer,
+    int width,
+    int height,
+    const void* pixels,
+    size_t decoded_bytes,
+    GLint internal_format,
+    GLenum pixel_type,
+    henka_texture_source_class source_class,
+    const henka_texture_descriptor* descriptor,
+    struct henka_texture** out_texture);
+
 henka_result henka_opengl_renderer_create_texture_from_rgba8(
     struct henka_renderer* renderer,
     int width,
@@ -3795,9 +3827,96 @@ henka_result henka_opengl_renderer_create_texture_from_rgba8_with_descriptor(
     const henka_texture_descriptor* descriptor,
     struct henka_texture** out_texture)
 {
+    size_t decoded_bytes;
+
+    if (!henka_checked_rgba8_size(width, height, &decoded_bytes))
+    {
+        if (out_texture != NULL)
+        {
+            *out_texture = NULL;
+        }
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    return henka_opengl_create_texture_from_pixels(
+        renderer,
+        width,
+        height,
+        pixels,
+        decoded_bytes,
+        descriptor != NULL &&
+            descriptor->color_space == HENKA_TEXTURE_COLOR_SPACE_SRGB ?
+            GL_SRGB8_ALPHA8 : GL_RGBA8,
+        GL_UNSIGNED_BYTE,
+        HENKA_TEXTURE_SOURCE_CLASS_LDR_8_BIT,
+        descriptor,
+        out_texture);
+}
+
+henka_result henka_opengl_renderer_create_texture_from_rgba32f_with_descriptor(
+    struct henka_renderer* renderer,
+    int width,
+    int height,
+    const float* pixels,
+    const henka_texture_descriptor* descriptor,
+    struct henka_texture** out_texture)
+{
+    uint64_t pixel_count;
+    uint64_t decoded_bytes;
+    uint64_t logical_bytes;
+
+    if (out_texture != NULL)
+    {
+        *out_texture = NULL;
+    }
+    if (width <= 0 || height <= 0 ||
+        (uint64_t)width > UINT64_MAX / (uint64_t)height)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    pixel_count = (uint64_t)width * (uint64_t)height;
+    if (pixel_count > UINT64_MAX / 4U ||
+        pixel_count * 4U > UINT64_MAX / sizeof(float))
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    decoded_bytes = pixel_count * 4U * sizeof(float);
+    if (decoded_bytes > (uint64_t)SIZE_MAX)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    if (pixel_count > UINT64_MAX / 4U ||
+        pixel_count * 4U > UINT64_MAX / 2U)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    logical_bytes = pixel_count * 4U * 2U;
+    return henka_opengl_create_texture_from_pixels(
+        renderer,
+        width,
+        height,
+        pixels,
+        (size_t)logical_bytes,
+        GL_RGBA16F,
+        GL_FLOAT,
+        HENKA_TEXTURE_SOURCE_CLASS_HDR,
+        descriptor,
+        out_texture);
+}
+
+static henka_result henka_opengl_create_texture_from_pixels(
+    struct henka_renderer* renderer,
+    int width,
+    int height,
+    const void* pixels,
+    size_t decoded_bytes,
+    GLint internal_format,
+    GLenum pixel_type,
+    henka_texture_source_class source_class,
+    const henka_texture_descriptor* descriptor,
+    struct henka_texture** out_texture)
+{
     henka_opengl_texture_context_guard context_guard;
     henka_result context_result;
-    size_t decoded_bytes;
     henka_opengl_renderer_state* state;
     uint64_t logical_texture_bytes;
     henka_result operation_result;
@@ -3817,11 +3936,11 @@ henka_result henka_opengl_renderer_create_texture_from_rgba8_with_descriptor(
         renderer->backend_state == NULL ||
         pixels == NULL ||
         out_texture == NULL || descriptor == NULL ||
-        henka_texture_descriptor_validate(descriptor) != HENKA_SUCCESS ||
-        !henka_checked_rgba8_size(
-            width,
-            height,
-            &decoded_bytes))
+        decoded_bytes == 0U ||
+        internal_format == 0 ||
+        (pixel_type != GL_UNSIGNED_BYTE && pixel_type != GL_FLOAT) ||
+        source_class == HENKA_TEXTURE_SOURCE_CLASS_UNKNOWN ||
+        henka_texture_descriptor_validate(descriptor) != HENKA_SUCCESS)
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
@@ -3947,13 +4066,12 @@ henka_result henka_opengl_renderer_create_texture_from_rgba8_with_descriptor(
         glTexImage2D(
             GL_TEXTURE_2D,
             0,
-            descriptor->color_space == HENKA_TEXTURE_COLOR_SPACE_SRGB ?
-                GL_SRGB8_ALPHA8 : GL_RGBA8,
+            internal_format,
             width,
             height,
             0,
             GL_RGBA,
-            GL_UNSIGNED_BYTE,
+            pixel_type,
             pixels);
         if (descriptor->generate_mipmaps)
         {
@@ -4039,7 +4157,7 @@ henka_result henka_opengl_renderer_create_texture_from_rgba8_with_descriptor(
     texture->width = width;
     texture->height = height;
     texture->descriptor = *descriptor;
-    texture->source_class = HENKA_TEXTURE_SOURCE_CLASS_LDR_8_BIT;
+    texture->source_class = source_class;
     texture->alpha_mode = HENKA_TEXTURE_ALPHA_OPAQUE;
     texture->last_failure = HENKA_TEXTURE_FAILURE_NONE;
     texture->content_revision = 1U;

@@ -138,6 +138,13 @@ henka_result henka_texture_create_from_rgba8_with_descriptor(
     const unsigned char* pixels,
     const henka_texture_descriptor* descriptor,
     henka_texture** out_texture);
+henka_result henka_texture_create_from_rgba32f_with_descriptor(
+    henka_engine* engine,
+    int width,
+    int height,
+    const float* pixels,
+    const henka_texture_descriptor* descriptor,
+    henka_texture** out_texture);
 
 henka_result henka_texture_get_info(
     const henka_texture* texture,

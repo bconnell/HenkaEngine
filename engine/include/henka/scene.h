@@ -92,6 +92,9 @@ typedef struct henka_scene_environment_desc
     henka_vec3 horizon_color;
     henka_vec3 zenith_color;
     float intensity;
+    /* Borrowed linear HDR equirectangular texture; the scene does not own it. */
+    henka_texture* hdr_texture;
+    float hdr_rotation;
 } henka_scene_environment_desc;
 
 typedef enum henka_scene_fog_mode

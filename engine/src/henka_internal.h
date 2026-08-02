@@ -366,6 +366,13 @@ henka_result henka_renderer_create_texture_from_rgba8_with_descriptor(
     const unsigned char* pixels,
     const henka_texture_descriptor* descriptor,
     struct henka_texture** out_texture);
+henka_result henka_renderer_create_texture_from_rgba32f_with_descriptor(
+    struct henka_renderer* renderer,
+    int width,
+    int height,
+    const float* pixels,
+    const henka_texture_descriptor* descriptor,
+    struct henka_texture** out_texture);
 void henka_renderer_destroy_texture(struct henka_texture* texture);
 
 henka_result henka_opengl_renderer_create(struct henka_renderer* renderer, struct henka_platform* platform, bool enable_vsync);
@@ -453,6 +460,13 @@ henka_result henka_opengl_renderer_create_texture_from_rgba8_with_descriptor(
     int width,
     int height,
     const unsigned char* pixels,
+    const henka_texture_descriptor* descriptor,
+    struct henka_texture** out_texture);
+henka_result henka_opengl_renderer_create_texture_from_rgba32f_with_descriptor(
+    struct henka_renderer* renderer,
+    int width,
+    int height,
+    const float* pixels,
     const henka_texture_descriptor* descriptor,
     struct henka_texture** out_texture);
 void henka_opengl_renderer_destroy_texture(struct henka_texture* texture);

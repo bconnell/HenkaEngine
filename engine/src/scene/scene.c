@@ -599,7 +599,9 @@ henka_result henka_scene_create(henka_scene** out_scene)
         (henka_vec3){0.035f, 0.045f, 0.065f},
         (henka_vec3){0.16f, 0.19f, 0.24f},
         (henka_vec3){0.055f, 0.08f, 0.14f},
-        1.5f};
+        1.5f,
+        NULL,
+        0.0f};
     scene->fog = (henka_scene_fog_desc){
         false,
         HENKA_SCENE_FOG_LINEAR,
@@ -1501,6 +1503,7 @@ henka_result henka_scene_set_environment(
         !henka_is_finite_float(environment.zenith_color.y) ||
         !henka_is_finite_float(environment.zenith_color.z) ||
         !henka_is_finite_float(environment.intensity) ||
+        !henka_is_finite_float(environment.hdr_rotation) ||
         environment.ground_color.x < 0.0f || environment.ground_color.x > 16.0f ||
         environment.ground_color.y < 0.0f || environment.ground_color.y > 16.0f ||
         environment.ground_color.z < 0.0f || environment.ground_color.z > 16.0f ||
@@ -1510,7 +1513,9 @@ henka_result henka_scene_set_environment(
         environment.zenith_color.x < 0.0f || environment.zenith_color.x > 16.0f ||
         environment.zenith_color.y < 0.0f || environment.zenith_color.y > 16.0f ||
         environment.zenith_color.z < 0.0f || environment.zenith_color.z > 16.0f ||
-        environment.intensity < 0.0f || environment.intensity > 16.0f)
+        environment.intensity < 0.0f || environment.intensity > 16.0f ||
+        environment.hdr_rotation < -1000000.0f ||
+        environment.hdr_rotation > 1000000.0f)
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }

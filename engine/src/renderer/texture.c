@@ -125,6 +125,65 @@ static henka_texture_alpha_mode henka_texture_classify_alpha(
     return has_fractional ? HENKA_TEXTURE_ALPHA_BLEND : HENKA_TEXTURE_ALPHA_MASKED;
 }
 
+static bool henka_texture_checked_rgba32f_size(
+    int width,
+    int height,
+    size_t* out_size)
+{
+    uint64_t pixels;
+    uint64_t bytes;
+
+    if (width <= 0 || height <= 0 || out_size == NULL ||
+        (uint64_t)width > UINT64_MAX / (uint64_t)height)
+    {
+        return false;
+    }
+    pixels = (uint64_t)width * (uint64_t)height;
+    if (pixels > UINT64_MAX / 4U ||
+        pixels * 4U > UINT64_MAX / sizeof(float))
+    {
+        return false;
+    }
+    bytes = pixels * 4U * sizeof(float);
+    if (bytes > (uint64_t)SIZE_MAX)
+    {
+        return false;
+    }
+    *out_size = (size_t)bytes;
+    return true;
+}
+
+static bool henka_texture_flip_vertical_float(
+    float* pixels,
+    int width,
+    int height)
+{
+    size_t row_bytes;
+    float* row;
+    float* opposite;
+
+    if (pixels == NULL || width <= 0 || height <= 0 ||
+        (size_t)width > SIZE_MAX / (4U * sizeof(float)))
+    {
+        return false;
+    }
+    row_bytes = (size_t)width * 4U * sizeof(float);
+    row = henka_malloc(row_bytes);
+    if (row == NULL)
+    {
+        return false;
+    }
+    for (int y = 0; y < height / 2; ++y)
+    {
+        opposite = pixels + (size_t)(height - y - 1) * (size_t)width * 4U;
+        memcpy(row, pixels + (size_t)y * (size_t)width * 4U, row_bytes);
+        memcpy(pixels + (size_t)y * (size_t)width * 4U, opposite, row_bytes);
+        memcpy(opposite, row, row_bytes);
+    }
+    henka_free(row);
+    return true;
+}
+
 static henka_result henka_texture_read_source(
     const char* path,
     unsigned char** out_bytes,
@@ -309,6 +368,33 @@ henka_result henka_texture_create_from_rgba8_with_descriptor(
     return result;
 }
 
+henka_result henka_texture_create_from_rgba32f_with_descriptor(
+    henka_engine* engine,
+    int width,
+    int height,
+    const float* pixels,
+    const henka_texture_descriptor* descriptor,
+    henka_texture** out_texture)
+{
+    if (out_texture != NULL)
+    {
+        *out_texture = NULL;
+    }
+    if (engine == NULL || engine->renderer == NULL || pixels == NULL ||
+        out_texture == NULL || descriptor == NULL ||
+        henka_texture_descriptor_validate(descriptor) != HENKA_SUCCESS)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    return henka_renderer_create_texture_from_rgba32f_with_descriptor(
+        engine->renderer,
+        width,
+        height,
+        pixels,
+        descriptor,
+        out_texture);
+}
+
 henka_result henka_texture_create_from_file(
     henka_engine* engine,
     const char* path,
@@ -334,6 +420,8 @@ henka_result henka_texture_create_from_file_with_descriptor(
     henka_texture_failure_category failure;
     int channel_count;
     size_t decoded_bytes;
+    size_t hdr_decoded_bytes;
+    float* hdr_pixels;
     int height;
     stbi_uc* pixels;
     henka_result result;
@@ -388,8 +476,70 @@ henka_result henka_texture_create_from_file_with_descriptor(
         henka_free(source_bytes);
         return HENKA_ERROR_ASSET_SOURCE;
     }
-    if (stbi_is_hdr_from_memory(source_bytes, (int)source_byte_size) ||
-        stbi_is_16_bit_from_memory(source_bytes, (int)source_byte_size))
+    if (stbi_is_hdr_from_memory(source_bytes, (int)source_byte_size))
+    {
+        if (!henka_texture_checked_rgba32f_size(
+                width,
+                height,
+                &hdr_decoded_bytes))
+        {
+            henka_free(source_bytes);
+            return HENKA_ERROR_ASSET_SOURCE;
+        }
+        hdr_pixels = stbi_loadf_from_memory(
+            source_bytes,
+            (int)source_byte_size,
+            &width,
+            &height,
+            &channel_count,
+            STBI_rgb_alpha);
+        if (hdr_pixels == NULL || channel_count != source_channel_count ||
+            !henka_texture_checked_rgba32f_size(
+                width,
+                height,
+                &hdr_decoded_bytes))
+        {
+            stbi_image_free(hdr_pixels);
+            henka_free(source_bytes);
+            return henka_texture_source_failure_result();
+        }
+        for (size_t index = 0U;
+             index < hdr_decoded_bytes / sizeof(float);
+             ++index)
+        {
+            if (!isfinite(hdr_pixels[index]) || hdr_pixels[index] < 0.0f)
+            {
+                stbi_image_free(hdr_pixels);
+                henka_free(source_bytes);
+                HENKA_LOG_ERROR("HDR texture '%s' contains a non-finite or negative sample", path);
+                return HENKA_ERROR_ASSET_SOURCE;
+            }
+        }
+        if (descriptor->vertical_flip &&
+            !henka_texture_flip_vertical_float(hdr_pixels, width, height))
+        {
+            stbi_image_free(hdr_pixels);
+            henka_free(source_bytes);
+            return HENKA_ERROR_OUT_OF_MEMORY;
+        }
+        result = henka_texture_create_from_rgba32f_with_descriptor(
+            engine,
+            width,
+            height,
+            hdr_pixels,
+            descriptor,
+            out_texture);
+        stbi_image_free(hdr_pixels);
+        henka_free(source_bytes);
+        if (result == HENKA_SUCCESS)
+        {
+            (*out_texture)->source_byte_size = source_byte_size;
+            (*out_texture)->original_channel_count = source_channel_count;
+            (*out_texture)->source_class = HENKA_TEXTURE_SOURCE_CLASS_HDR;
+        }
+        return result;
+    }
+    if (stbi_is_16_bit_from_memory(source_bytes, (int)source_byte_size))
     {
         henka_free(source_bytes);
         HENKA_LOG_ERROR("Texture '%s' is HDR or 16-bit and is not supported by the RGBA8 path", path);
