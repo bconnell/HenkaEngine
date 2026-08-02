@@ -23,6 +23,14 @@ candidate first; only a fully valid candidate replaces the asset value, so a
 parse, path, dependency, or semantic-validation failure leaves the previous
 material and its stable identity intact.
 
+The bounded scene importer is exposed separately through
+`henka_model_scene_data_load_gltf`. It preserves per-primitive material
+bindings, selected scene roots, node parentage, local/world matrices, cameras,
+and `KHR_lights_punctual` point, spot, and directional records. Scene data is
+CPU-owned until a manager/renderer instantiation path publishes its dependent
+meshes and material instances, so a failed scene parse cannot publish partial
+renderer state.
+
 ## Supported input
 
 The loader currently supports:
@@ -48,6 +56,9 @@ The loader currently supports:
   scalar extensions
 - source-relative external image URIs resolved as manager-owned texture
   dependencies with color-space/semantic descriptors
+- multiple triangle primitives, node hierarchies with cycle and parent checks,
+  selected scene roots, TRS or matrix node transforms, perspective and
+  orthographic cameras, and bounded punctual-light records
 
 ## Input limits
 
@@ -98,7 +109,7 @@ The current loader does not provide:
 - live replacement of an already-loaded mesh that scenes may still reference
 - glTF scene hierarchies, skins, animations, morph targets, multiple named
   material bindings, image bufferViews/data-URI images, and compressed buffer
-  extensions
+  extensions in the existing manager renderer path
 - a second Henka-only material JSON authority; an editor material format will
   only be introduced if it adds instance/editor behavior beyond glTF and will
   reuse this same material and dependency path

@@ -49,6 +49,45 @@ static void henka_test_model_rejects_unsafe_bounds(void)
     henka_free(oversized_source);
 }
 
+static void henka_test_gltf_scene_import(void)
+{
+    static const char* scene_gltf =
+        "{\"asset\":{\"version\":\"2.0\"},"
+        "\"buffers\":[{\"uri\":\"data:application/octet-stream;base64,"
+        "AAAAAAAAAAAAAAAAAACAPwAAAAAAAAAAAAAAAAAAgD8AAAAA\",\"byteLength\":36}],"
+        "\"bufferViews\":[{\"buffer\":0,\"byteLength\":36}],"
+        "\"accessors\":[{\"bufferView\":0,\"componentType\":5126,\"count\":3,\"type\":\"VEC3\"}],"
+        "\"materials\":[{\"name\":\"Scene Material\",\"pbrMetallicRoughness\":{\"metallicFactor\":0.7}}],"
+        "\"meshes\":[{\"primitives\":[{\"attributes\":{\"POSITION\":0},\"material\":0},"
+        "{\"attributes\":{\"POSITION\":0},\"material\":0}]}],"
+        "\"cameras\":[{\"name\":\"Main Camera\",\"type\":\"perspective\",\"perspective\":{\"yfov\":1.0,\"znear\":0.1,\"zfar\":100.0}}],"
+        "\"extensions\":{\"KHR_lights_punctual\":{\"lights\":[{\"name\":\"Key\",\"type\":\"point\",\"intensity\":2.0}]}},"
+        "\"nodes\":[{\"name\":\"Root\",\"mesh\":0,\"camera\":0,\"children\":[1],\"extensions\":{\"KHR_lights_punctual\":{\"light\":0}}},"
+        "{\"name\":\"Child\",\"mesh\":0,\"translation\":[2.0,0.0,0.0]}],"
+        "\"scenes\":[{\"nodes\":[0]}],\"scene\":0}";
+    henka_model_scene_data scene;
+
+    memset(&scene, 0, sizeof(scene));
+    HENKA_TEST_ASSERT(henka_model_scene_data_load_gltf_from_memory(
+        scene_gltf, strlen(scene_gltf), "scene.gltf", &scene) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(scene.primitive_count == 2U);
+    HENKA_TEST_ASSERT(scene.primitives[0].material_index == 0);
+    HENKA_TEST_ASSERT(scene.primitives[1].material_index == 0);
+    HENKA_TEST_ASSERT(scene.material_count == 1U);
+    HENKA_TEST_ASSERT(scene.material_present[0]);
+    HENKA_TEST_ASSERT(scene.node_count == 2U);
+    HENKA_TEST_ASSERT(scene.nodes[1].parent_index == 0);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(scene.nodes[1].world_matrix.m[12], 2.0f, 0.0001f);
+    HENKA_TEST_ASSERT(scene.scene_count == 1U);
+    HENKA_TEST_ASSERT(scene.active_scene_index == 0U);
+    HENKA_TEST_ASSERT(scene.scene_root_counts[0] == 1U);
+    HENKA_TEST_ASSERT(scene.camera_count == 1U);
+    HENKA_TEST_ASSERT(scene.cameras[0].camera.projection_mode == HENKA_CAMERA_PROJECTION_PERSPECTIVE);
+    HENKA_TEST_ASSERT(scene.light_count == 1U);
+    HENKA_TEST_ASSERT(scene.lights[0].type == HENKA_MODEL_SCENE_LIGHT_POINT);
+    henka_model_scene_data_destroy(&scene);
+}
+
 void henka_test_model(void)
 {
     static const char* valid_gltf =
@@ -289,4 +328,5 @@ void henka_test_model(void)
     HENKA_TEST_ASSERT(model.indices == NULL);
 
     henka_test_model_rejects_unsafe_bounds();
+    henka_test_gltf_scene_import();
 }

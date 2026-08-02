@@ -9,6 +9,7 @@
 
 #include <henka/memory.h>
 #include <henka/persistence.h>
+#include <henka/core.h>
 
 #include "../core/checked.h"
 
@@ -996,6 +997,429 @@ static henka_result henka_gltf_parse_context(henka_gltf_context* context, henka_
     return HENKA_SUCCESS;
 }
 
+static bool henka_gltf_array_float_values(
+    const char* array,
+    const char* array_end,
+    float* output,
+    size_t value_count)
+{
+    const char* value;
+    const char* value_end;
+    double number;
+    size_t index;
+
+    if (array == NULL || array_end == NULL || output == NULL || value_count == 0U) return false;
+    for (index = 0U; index < value_count; ++index)
+    {
+        if (!henka_gltf_array_item(array, array_end, index, &value, &value_end) ||
+            !henka_gltf_number(value, value_end, &number) || number < -(double)FLT_MAX || number > (double)FLT_MAX)
+        {
+            return false;
+        }
+        output[index] = (float)number;
+    }
+    return true;
+}
+
+static bool henka_gltf_copy_optional_name(
+    const char* object,
+    const char* object_end,
+    char** out_name)
+{
+    const char* value;
+    const char* value_end;
+    char name[HENKA_MAX_ASSET_PATH_BYTES];
+
+    if (out_name != NULL) *out_name = NULL;
+    if (object == NULL || object_end == NULL || out_name == NULL) return false;
+    if (!henka_gltf_find_member(object, object_end, "name", &value, &value_end)) return true;
+    if (!henka_gltf_read_string(value, value_end, name, sizeof(name), NULL)) return false;
+    *out_name = henka_gltf_duplicate_string(name);
+    return *out_name != NULL;
+}
+
+static bool henka_gltf_parse_scene_materials(
+    const henka_gltf_context* context,
+    henka_model_scene_data* scene,
+    const char* primitive,
+    const char* primitive_end,
+    int material_index)
+{
+    if (material_index < 0) return true;
+    if ((size_t)material_index >= HENKA_MODEL_MAX_SCENE_ITEMS) return false;
+    scene->material_present[material_index] = true;
+    if ((size_t)(material_index + 1) > scene->material_count) scene->material_count = (size_t)material_index + 1U;
+    if (!henka_gltf_parse_material(context, primitive, primitive_end, &scene->materials[material_index])) return false;
+    return true;
+}
+
+static bool henka_gltf_parse_scene_meshes(
+    const henka_gltf_context* context,
+    henka_model_scene_data* scene)
+{
+    const char* meshes;
+    const char* meshes_end;
+    const char* mesh;
+    const char* mesh_end;
+    const char* primitives;
+    const char* primitives_end;
+    size_t mesh_index;
+
+    if (!henka_gltf_find_member(context->json, context->json + context->json_size, "meshes", &meshes, &meshes_end)) return false;
+    for (mesh_index = 0U; mesh_index < HENKA_MODEL_MAX_SCENE_ITEMS &&
+        henka_gltf_array_item(meshes, meshes_end, mesh_index, &mesh, &mesh_end); ++mesh_index)
+    {
+        size_t primitive_index;
+        if (!henka_gltf_find_member(mesh, mesh_end, "primitives", &primitives, &primitives_end)) return false;
+        for (primitive_index = 0U; primitive_index < HENKA_MODEL_MAX_SCENE_ITEMS &&
+            henka_gltf_array_item(primitives, primitives_end, primitive_index, &mesh, &mesh_end); ++primitive_index)
+        {
+            henka_gltf_builder builder;
+            henka_model_scene_primitive* output;
+            bool has_material;
+            int material_index;
+            size_t vertex_index;
+
+            if (scene->primitive_count >= HENKA_MODEL_MAX_SCENE_ITEMS ||
+                !henka_gltf_primitive_material_index(mesh, mesh_end, &has_material, &material_index))
+            {
+                return false;
+            }
+            memset(&builder, 0, sizeof(builder));
+            if (!henka_gltf_parse_primitive(context, mesh, mesh_end, &builder))
+            {
+                henka_free(builder.vertices);
+                return false;
+            }
+            output = &scene->primitives[scene->primitive_count];
+            output->vertices = builder.vertices;
+            output->vertex_count = (uint32_t)builder.count;
+            output->indices = henka_malloc(builder.count * sizeof(*output->indices));
+            if (output->indices == NULL)
+            {
+                henka_free(builder.vertices);
+                return false;
+            }
+            for (vertex_index = 0U; vertex_index < builder.count; ++vertex_index)
+                output->indices[vertex_index] = (uint32_t)vertex_index;
+            output->index_count = (uint32_t)builder.count;
+            output->mesh_index = (uint32_t)mesh_index;
+            output->material_index = has_material ? material_index : -1;
+            scene->primitive_count += 1U;
+            if (!henka_gltf_parse_scene_materials(context, scene, mesh, mesh_end, output->material_index)) return false;
+        }
+        if (henka_gltf_array_item(primitives, primitives_end, HENKA_MODEL_MAX_SCENE_ITEMS, &mesh, &mesh_end)) return false;
+    }
+    return mesh_index > 0U && !henka_gltf_array_item(meshes, meshes_end, HENKA_MODEL_MAX_SCENE_ITEMS, &mesh, &mesh_end);
+}
+
+static bool henka_gltf_parse_scene_cameras(
+    const henka_gltf_context* context,
+    henka_model_scene_data* scene)
+{
+    const char* cameras;
+    const char* cameras_end;
+    const char* camera;
+    const char* camera_end;
+    size_t index;
+
+    if (!henka_gltf_find_member(context->json, context->json + context->json_size, "cameras", &cameras, &cameras_end)) return true;
+    for (index = 0U; index < HENKA_MODEL_MAX_SCENE_ITEMS &&
+        henka_gltf_array_item(cameras, cameras_end, index, &camera, &camera_end); ++index)
+    {
+        const char* type_value;
+        const char* type_end;
+        char type[24];
+        const char* projection;
+        const char* projection_end;
+        float yfov = 60.0f * HENKA_DEG_TO_RAD;
+        float aspect = 1.0f;
+        float znear = 0.1f;
+        float zfar = 10000.0f;
+        float xmag = 1.0f;
+        float ymag = 1.0f;
+        float number;
+
+        if (scene->camera_count != index || !henka_gltf_copy_optional_name(camera, camera_end, &scene->cameras[index].name) ||
+            !henka_gltf_find_member(camera, camera_end, "type", &type_value, &type_end) ||
+            !henka_gltf_read_string(type_value, type_end, type, sizeof(type), NULL)) return false;
+        if (strcmp(type, "perspective") == 0)
+        {
+            if (!henka_gltf_find_member(camera, camera_end, "perspective", &projection, &projection_end) ||
+                !henka_gltf_member_float(projection, projection_end, "yfov", &yfov) ||
+                !henka_gltf_member_float(projection, projection_end, "znear", &znear)) return false;
+            if (henka_gltf_find_member(projection, projection_end, "aspectRatio", &type_value, &type_end) &&
+                !henka_gltf_member_float(projection, projection_end, "aspectRatio", &aspect)) return false;
+            if (henka_gltf_find_member(projection, projection_end, "zfar", &type_value, &type_end) &&
+                !henka_gltf_member_float(projection, projection_end, "zfar", &zfar)) return false;
+            scene->cameras[index].camera = henka_camera_create_perspective(yfov, aspect, znear, zfar);
+        }
+        else if (strcmp(type, "orthographic") == 0)
+        {
+            if (!henka_gltf_find_member(camera, camera_end, "orthographic", &projection, &projection_end) ||
+                !henka_gltf_member_float(projection, projection_end, "xmag", &xmag) ||
+                !henka_gltf_member_float(projection, projection_end, "ymag", &ymag) ||
+                !henka_gltf_member_float(projection, projection_end, "znear", &znear) ||
+                !henka_gltf_member_float(projection, projection_end, "zfar", &zfar)) return false;
+            number = ymag * 2.0f;
+            if (!isfinite(xmag) || !isfinite(ymag) || xmag <= 0.0f || ymag <= 0.0f) return false;
+            scene->cameras[index].camera = henka_camera_create_orthographic(number, xmag / ymag, znear, zfar);
+        }
+        else return false;
+        scene->camera_count += 1U;
+    }
+    return !henka_gltf_array_item(cameras, cameras_end, HENKA_MODEL_MAX_SCENE_ITEMS, &camera, &camera_end);
+}
+
+static bool henka_gltf_parse_scene_lights(
+    const henka_gltf_context* context,
+    henka_model_scene_data* scene)
+{
+    const char* root_extensions;
+    const char* root_extensions_end;
+    const char* punctual;
+    const char* punctual_end;
+    const char* lights;
+    const char* lights_end;
+    const char* light;
+    const char* light_end;
+    size_t index;
+
+    if (!henka_gltf_find_member(context->json, context->json + context->json_size, "extensions", &root_extensions, &root_extensions_end) ||
+        !henka_gltf_find_member(root_extensions, root_extensions_end, "KHR_lights_punctual", &punctual, &punctual_end) ||
+        !henka_gltf_find_member(punctual, punctual_end, "lights", &lights, &lights_end)) return true;
+    for (index = 0U; index < HENKA_MODEL_MAX_SCENE_ITEMS &&
+        henka_gltf_array_item(lights, lights_end, index, &light, &light_end); ++index)
+    {
+        const char* value;
+        const char* value_end;
+        char type[20];
+        henka_model_scene_light* output = &scene->lights[index];
+        henka_vec3 color = {1.0f, 1.0f, 1.0f};
+        float intensity = 1.0f;
+        float range = 0.0f;
+        float inner = 0.0f;
+        float outer = HENKA_PI * 0.25f;
+        const char* spot;
+        const char* spot_end;
+
+        if (scene->light_count != index || !henka_gltf_copy_optional_name(light, light_end, &output->name) ||
+            !henka_gltf_find_member(light, light_end, "type", &value, &value_end) ||
+            !henka_gltf_read_string(value, value_end, type, sizeof(type), NULL)) return false;
+        if (henka_gltf_find_member(light, light_end, "color", &value, &value_end) &&
+            !henka_gltf_member_vec3(light, light_end, "color", &color)) return false;
+        if (henka_gltf_find_member(light, light_end, "intensity", &value, &value_end) &&
+            !henka_gltf_member_float(light, light_end, "intensity", &intensity)) return false;
+        if (henka_gltf_find_member(light, light_end, "range", &value, &value_end) &&
+            !henka_gltf_member_float(light, light_end, "range", &range)) return false;
+        if (strcmp(type, "point") == 0) output->type = HENKA_MODEL_SCENE_LIGHT_POINT;
+        else if (strcmp(type, "spot") == 0)
+        {
+            output->type = HENKA_MODEL_SCENE_LIGHT_SPOT;
+            if (!henka_gltf_find_member(light, light_end, "spot", &spot, &spot_end)) return false;
+            if (henka_gltf_find_member(spot, spot_end, "innerConeAngle", &value, &value_end) &&
+                !henka_gltf_member_float(spot, spot_end, "innerConeAngle", &inner)) return false;
+            if (henka_gltf_find_member(spot, spot_end, "outerConeAngle", &value, &value_end) &&
+                !henka_gltf_member_float(spot, spot_end, "outerConeAngle", &outer)) return false;
+        }
+        else if (strcmp(type, "directional") == 0) output->type = HENKA_MODEL_SCENE_LIGHT_DIRECTIONAL;
+        else return false;
+        if (!isfinite(color.x) || !isfinite(color.y) || !isfinite(color.z) || color.x < 0.0f || color.y < 0.0f || color.z < 0.0f ||
+            !isfinite(intensity) || intensity < 0.0f || !isfinite(range) || range < 0.0f ||
+            !isfinite(inner) || !isfinite(outer) || inner < 0.0f || outer <= inner || outer > HENKA_PI * 0.5f) return false;
+        output->color = color;
+        output->intensity = intensity;
+        output->range = range;
+        output->inner_cone_cosine = cosf(inner);
+        output->outer_cone_cosine = cosf(outer);
+        scene->light_count += 1U;
+    }
+    return !henka_gltf_array_item(lights, lights_end, HENKA_MODEL_MAX_SCENE_ITEMS, &light, &light_end);
+}
+
+static bool henka_gltf_compute_scene_world_matrix(
+    henka_model_scene_data* scene,
+    size_t node_index,
+    unsigned char* state)
+{
+    henka_model_scene_node* node;
+    if (node_index >= scene->node_count || state[node_index] == 1U) return false;
+    if (state[node_index] == 2U) return true;
+    state[node_index] = 1U;
+    node = &scene->nodes[node_index];
+    if (node->parent_index < 0) node->world_matrix = node->local_matrix;
+    else if ((size_t)node->parent_index >= scene->node_count ||
+        !henka_gltf_compute_scene_world_matrix(scene, (size_t)node->parent_index, state)) return false;
+    else node->world_matrix = henka_mat4_multiply(scene->nodes[node->parent_index].world_matrix, node->local_matrix);
+    state[node_index] = 2U;
+    return true;
+}
+
+static bool henka_gltf_parse_scene_nodes(
+    const henka_gltf_context* context,
+    henka_model_scene_data* scene)
+{
+    const char* nodes;
+    const char* nodes_end;
+    const char* node;
+    const char* node_end;
+    const char* value;
+    const char* value_end;
+    size_t index;
+    unsigned char state[HENKA_MODEL_MAX_SCENE_ITEMS];
+
+    if (!henka_gltf_find_member(context->json, context->json + context->json_size, "nodes", &nodes, &nodes_end)) return true;
+    for (index = 0U; index < HENKA_MODEL_MAX_SCENE_ITEMS &&
+        henka_gltf_array_item(nodes, nodes_end, index, &node, &node_end); ++index)
+    {
+        henka_model_scene_node* output = &scene->nodes[index];
+        const char* matrix;
+        const char* matrix_end;
+        float matrix_values[16];
+        henka_vec4 rotation_values;
+        henka_quat rotation;
+        float rotation_length;
+
+        memset(output, 0, sizeof(*output));
+        output->parent_index = -1;
+        output->mesh_index = -1;
+        output->camera_index = -1;
+        output->light_index = -1;
+        output->local_transform = henka_transform_identity();
+        output->local_matrix = henka_mat4_identity();
+        if (!henka_gltf_copy_optional_name(node, node_end, &output->name)) return false;
+        if (henka_gltf_find_member(node, node_end, "translation", &value, &value_end) &&
+            !henka_gltf_member_vec3(node, node_end, "translation", &output->local_transform.position)) return false;
+        if (henka_gltf_find_member(node, node_end, "rotation", &value, &value_end) &&
+            !henka_gltf_member_vec4(node, node_end, "rotation", &rotation_values)) return false;
+        else rotation_values = (henka_vec4){0.0f, 0.0f, 0.0f, 1.0f};
+        rotation = (henka_quat){rotation_values.x, rotation_values.y, rotation_values.z, rotation_values.w};
+        rotation_length = sqrtf(rotation.x * rotation.x + rotation.y * rotation.y + rotation.z * rotation.z + rotation.w * rotation.w);
+        if (!isfinite(rotation_length) || rotation_length <= FLT_EPSILON) return false;
+        output->local_transform.rotation = henka_quat_normalize(rotation);
+        if (henka_gltf_find_member(node, node_end, "scale", &value, &value_end) &&
+            !henka_gltf_member_vec3(node, node_end, "scale", &output->local_transform.scale)) return false;
+        if (!isfinite(output->local_transform.position.x) || !isfinite(output->local_transform.position.y) ||
+            !isfinite(output->local_transform.position.z) || !isfinite(output->local_transform.scale.x) ||
+            !isfinite(output->local_transform.scale.y) || !isfinite(output->local_transform.scale.z) ||
+            output->local_transform.scale.x == 0.0f || output->local_transform.scale.y == 0.0f || output->local_transform.scale.z == 0.0f) return false;
+        if (henka_gltf_find_member(node, node_end, "matrix", &matrix, &matrix_end))
+        {
+            if (!henka_gltf_array_float_values(matrix, matrix_end, matrix_values, 16U)) return false;
+            memcpy(output->local_matrix.m, matrix_values, sizeof(matrix_values));
+        }
+        else output->local_matrix = henka_transform_to_mat4(output->local_transform);
+        if (henka_gltf_find_member(node, node_end, "mesh", &value, &value_end) &&
+            !henka_gltf_member_int(node, node_end, "mesh", &output->mesh_index)) return false;
+        if (henka_gltf_find_member(node, node_end, "camera", &value, &value_end) &&
+            !henka_gltf_member_int(node, node_end, "camera", &output->camera_index)) return false;
+        if (output->camera_index >= 0 && (size_t)output->camera_index >= scene->camera_count) return false;
+        if (output->mesh_index >= 0 && (size_t)output->mesh_index >= HENKA_MODEL_MAX_SCENE_ITEMS) return false;
+        if (henka_gltf_find_member(node, node_end, "extensions", &value, &value_end))
+        {
+            const char* punctual;
+            const char* punctual_end;
+            if (henka_gltf_find_member(value, value_end, "KHR_lights_punctual", &punctual, &punctual_end))
+            {
+                if (!henka_gltf_member_int(punctual, punctual_end, "light", &output->light_index) ||
+                    output->light_index < 0 || (size_t)output->light_index >= scene->light_count) return false;
+            }
+        }
+        scene->node_count += 1U;
+    }
+    if (henka_gltf_array_item(nodes, nodes_end, HENKA_MODEL_MAX_SCENE_ITEMS, &node, &node_end)) return false;
+    for (index = 0U; index < scene->node_count; ++index)
+    {
+        const char* children;
+        const char* children_end;
+        size_t child_index;
+        if (!henka_gltf_array_item(nodes, nodes_end, index, &node, &node_end)) return false;
+        if (!henka_gltf_find_member(node, node_end, "children", &children, &children_end)) continue;
+        for (child_index = 0U; child_index < HENKA_MODEL_MAX_SCENE_ITEMS &&
+            henka_gltf_array_item(children, children_end, child_index, &value, &value_end); ++child_index)
+        {
+            int child;
+            if (!henka_gltf_integer(value, value_end, &child) || child < 0 || (size_t)child >= scene->node_count ||
+                scene->nodes[child].parent_index >= 0) return false;
+            scene->nodes[child].parent_index = (int)index;
+        }
+        if (henka_gltf_array_item(children, children_end, HENKA_MODEL_MAX_SCENE_ITEMS, &value, &value_end)) return false;
+    }
+    memset(state, 0, sizeof(state));
+    for (index = 0U; index < scene->node_count; ++index)
+        if (!henka_gltf_compute_scene_world_matrix(scene, index, state)) return false;
+    return true;
+}
+
+static bool henka_gltf_parse_scene_selections(
+    const henka_gltf_context* context,
+    henka_model_scene_data* scene)
+{
+    const char* scenes;
+    const char* scenes_end;
+    const char* scene_object;
+    const char* scene_end;
+    const char* value;
+    const char* value_end;
+    size_t index;
+    int default_scene = 0;
+
+    if (henka_gltf_find_member(context->json, context->json + context->json_size, "scene", &value, &value_end) &&
+        !henka_gltf_integer(value, value_end, &default_scene)) return false;
+    if (!henka_gltf_find_member(context->json, context->json + context->json_size, "scenes", &scenes, &scenes_end))
+    {
+        if (default_scene != 0) return false;
+        scene->scene_count = 1U;
+        scene->active_scene_index = 0U;
+        scene->scene_root_offsets[0] = 0U;
+        for (index = 0U; index < scene->node_count; ++index)
+            if (scene->nodes[index].parent_index < 0)
+            {
+                if (scene->scene_root_node_count >= HENKA_MODEL_MAX_SCENE_ITEMS) return false;
+                scene->scene_root_nodes[scene->scene_root_node_count++] = (int)index;
+            }
+        scene->scene_root_counts[0] = scene->scene_root_node_count;
+        return true;
+    }
+    for (index = 0U; index < HENKA_MODEL_MAX_SCENE_ITEMS &&
+        henka_gltf_array_item(scenes, scenes_end, index, &scene_object, &scene_end); ++index)
+    {
+        const char* roots;
+        const char* roots_end;
+        size_t root_index;
+        scene->scene_root_offsets[index] = scene->scene_root_node_count;
+        if (henka_gltf_find_member(scene_object, scene_end, "nodes", &roots, &roots_end))
+        {
+            for (root_index = 0U; root_index < HENKA_MODEL_MAX_SCENE_ITEMS &&
+                henka_gltf_array_item(roots, roots_end, root_index, &value, &value_end); ++root_index)
+            {
+                int root;
+                if (scene->scene_root_node_count >= HENKA_MODEL_MAX_SCENE_ITEMS ||
+                    !henka_gltf_integer(value, value_end, &root) || root < 0 || (size_t)root >= scene->node_count) return false;
+                scene->scene_root_nodes[scene->scene_root_node_count++] = root;
+            }
+            if (henka_gltf_array_item(roots, roots_end, HENKA_MODEL_MAX_SCENE_ITEMS, &value, &value_end)) return false;
+        }
+        scene->scene_root_counts[index] = scene->scene_root_node_count - scene->scene_root_offsets[index];
+        scene->scene_count += 1U;
+    }
+    if (henka_gltf_array_item(scenes, scenes_end, HENKA_MODEL_MAX_SCENE_ITEMS, &scene_object, &scene_end) ||
+        scene->scene_count == 0U || default_scene < 0 || (size_t)default_scene >= scene->scene_count) return false;
+    scene->active_scene_index = (size_t)default_scene;
+    return true;
+}
+
+static henka_result henka_gltf_parse_scene_context(
+    henka_gltf_context* context,
+    henka_model_scene_data* out_scene)
+{
+    if (!henka_gltf_parse_buffers(context) || !henka_gltf_parse_views(context) || !henka_gltf_parse_accessors(context) ||
+        !henka_gltf_parse_scene_cameras(context, out_scene) || !henka_gltf_parse_scene_lights(context, out_scene) ||
+        !henka_gltf_parse_scene_meshes(context, out_scene) || !henka_gltf_parse_scene_nodes(context, out_scene) ||
+        !henka_gltf_parse_scene_selections(context, out_scene)) return HENKA_ERROR_INVALID_ARGUMENT;
+    return HENKA_SUCCESS;
+}
+
 static bool henka_gltf_prepare_json(
     const unsigned char* data,
     size_t data_size,
@@ -1076,6 +1500,94 @@ henka_result henka_model_data_load_gltf(const char* path, henka_model_data* out_
     else result = henka_gltf_parse_context(&context, out_model);
     henka_gltf_context_destroy(&context);
     henka_free(data);
+    return result;
+}
+
+void henka_model_scene_data_destroy(henka_model_scene_data* scene)
+{
+    size_t index;
+
+    if (scene == NULL) return;
+    for (index = 0U; index < scene->primitive_count; ++index)
+    {
+        henka_free(scene->primitives[index].vertices);
+        henka_free(scene->primitives[index].indices);
+    }
+    for (index = 0U; index < scene->material_count; ++index)
+    {
+        if (!scene->material_present[index]) continue;
+        henka_free(scene->materials[index].name);
+        henka_free(scene->materials[index].base_color_uri);
+        henka_free(scene->materials[index].normal_uri);
+        henka_free(scene->materials[index].metallic_roughness_uri);
+        henka_free(scene->materials[index].occlusion_uri);
+        henka_free(scene->materials[index].emissive_uri);
+    }
+    for (index = 0U; index < scene->node_count; ++index) henka_free(scene->nodes[index].name);
+    for (index = 0U; index < scene->camera_count; ++index) henka_free(scene->cameras[index].name);
+    for (index = 0U; index < scene->light_count; ++index) henka_free(scene->lights[index].name);
+    memset(scene, 0, sizeof(*scene));
+}
+
+henka_result henka_model_scene_data_load_gltf_from_memory(
+    const void* data,
+    size_t data_size,
+    const char* label,
+    henka_model_scene_data* out_scene)
+{
+    henka_gltf_context context;
+    henka_result result;
+    (void)label;
+
+    if (out_scene != NULL) memset(out_scene, 0, sizeof(*out_scene));
+    if (data == NULL || out_scene == NULL) return HENKA_ERROR_INVALID_ARGUMENT;
+    memset(&context, 0, sizeof(context));
+    if (!henka_gltf_prepare_json((const unsigned char*)data, data_size, &context))
+    {
+        henka_gltf_context_destroy(&context);
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    result = henka_gltf_parse_scene_context(&context, out_scene);
+    henka_gltf_context_destroy(&context);
+    if (result != HENKA_SUCCESS) henka_model_scene_data_destroy(out_scene);
+    return result;
+}
+
+henka_result henka_model_scene_data_load_gltf(
+    const char* path,
+    henka_model_scene_data* out_scene)
+{
+    char* data;
+    size_t data_size;
+    henka_gltf_context context;
+    henka_result result;
+    const char* separator;
+    size_t directory_length;
+
+    if (out_scene != NULL) memset(out_scene, 0, sizeof(*out_scene));
+    if (path == NULL || out_scene == NULL) return HENKA_ERROR_INVALID_ARGUMENT;
+    data = henka_gltf_read_file(path, &data_size);
+    if (data == NULL) return HENKA_ERROR_PLATFORM;
+    memset(&context, 0, sizeof(context));
+    separator = strrchr(path, '/');
+    {
+        const char* backslash = strrchr(path, '\\');
+        if (backslash != NULL && (separator == NULL || backslash > separator)) separator = backslash;
+    }
+    directory_length = separator == NULL ? 0U : (size_t)(separator - path);
+    context.base_directory = henka_malloc(directory_length + 1U);
+    if (context.base_directory == NULL)
+    {
+        henka_free(data);
+        return HENKA_ERROR_OUT_OF_MEMORY;
+    }
+    memcpy(context.base_directory, path, directory_length);
+    context.base_directory[directory_length] = '\0';
+    if (!henka_gltf_prepare_json((const unsigned char*)data, data_size, &context)) result = HENKA_ERROR_INVALID_ARGUMENT;
+    else result = henka_gltf_parse_scene_context(&context, out_scene);
+    henka_gltf_context_destroy(&context);
+    henka_free(data);
+    if (result != HENKA_SUCCESS) henka_model_scene_data_destroy(out_scene);
     return result;
 }
 
