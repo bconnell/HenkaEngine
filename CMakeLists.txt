@@ -61,6 +61,11 @@ if(HENKA_ENABLE_KTX2_TRANSCODER)
         KTXSoftware
         GIT_REPOSITORY https://github.com/KhronosGroup/KTX-Software.git
         GIT_TAG 91ace88675ac59a97e55d0378a6602a9ae6b98bd
+        # KTX-Software contains legitimate long iOS resource names. Keep
+        # the clean FetchContent clone reproducible on Windows without
+        # requiring a pre-populated local source tree or machine-wide Git
+        # configuration.
+        GIT_CONFIG core.longpaths=true
         GIT_SUBMODULES ""
         GIT_SUBMODULES_RECURSE FALSE
     )

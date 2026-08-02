@@ -86,3 +86,9 @@ That API is intentionally local-only:
 - no arbitrary code execution
 
 It is useful for deterministic local testing, basic scene-object workflows, and future editor-style tool surfaces that need validated requests instead of direct unchecked mutation.
+
+On Windows, the template also applies local Visual Studio path-hardening for
+nested FetchContent builds. It does not require machine-wide Git long-path or
+MSBuild file-tracking settings; the engine's pinned KTX-Software source still
+comes from the normal network-capable FetchContent path when no local source
+override is supplied.

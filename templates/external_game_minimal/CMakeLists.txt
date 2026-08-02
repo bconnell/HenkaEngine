@@ -14,6 +14,15 @@ if(NOT EXISTS "${HENKA_ENGINE_DIR}/CMakeLists.txt")
     message(FATAL_ERROR "HENKA_ENGINE_DIR does not point to a valid Henka Engine checkout.")
 endif()
 
+# KTX-Software contains long but valid source names, and Visual Studio's
+# per-target file-tracking logs add another long path layer in nested
+# FetchContent builds. Keep the consumer project reproducible on Windows
+# without requiring global Git or MSBuild settings.
+if(MSVC)
+    set(CMAKE_VS_GLOBALS "TrackFileAccess=false" CACHE STRING "" FORCE)
+    set(CMAKE_OBJECT_PATH_MAX 128 CACHE STRING "" FORCE)
+endif()
+
 set(HENKA_BUILD_EXAMPLES OFF CACHE BOOL "Build Henka Engine example applications." FORCE)
 set(HENKA_BUILD_TESTS OFF CACHE BOOL "Build Henka Engine tests." FORCE)
 
