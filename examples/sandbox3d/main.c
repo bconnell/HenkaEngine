@@ -294,6 +294,8 @@ typedef struct sandbox3d_state
     henka_texture* environment_texture;
     henka_texture* detail_normal_texture;
     henka_texture* macro_variation_texture;
+    henka_texture* wood_grain_texture;
+    henka_texture* wet_dry_roughness_texture;
     henka_entity cube_entity;
     henka_entity ground_entity;
     henka_entity grid_entity;
@@ -301,7 +303,7 @@ typedef struct sandbox3d_state
     henka_entity fallback_cube_entity;
     henka_entity marker_entity;
     henka_entity fallback_model_entity;
-    henka_entity realism_entities[6];
+    henka_entity realism_entities[8];
     sandbox3d_object_descriptor descriptors[SANDBOX3D_OBJECT_COUNT];
     sandbox3d_workspace_state workspace;
     sandbox3d_gizmo_state gizmo;
@@ -2832,6 +2834,8 @@ static void sandbox3d_release_owned_resources(sandbox3d_state* state)
     henka_texture_destroy(state->environment_texture);
     henka_texture_destroy(state->detail_normal_texture);
     henka_texture_destroy(state->macro_variation_texture);
+    henka_texture_destroy(state->wood_grain_texture);
+    henka_texture_destroy(state->wet_dry_roughness_texture);
     henka_action_context_destroy(state->actions);
     henka_settings_destroy(state->settings);
     henka_ui_destroy(state->ui);
@@ -2848,6 +2852,10 @@ static void sandbox3d_release_owned_resources(sandbox3d_state* state)
     state->cube_mesh = NULL;
     state->sphere_mesh = NULL;
     state->environment_texture = NULL;
+    state->detail_normal_texture = NULL;
+    state->macro_variation_texture = NULL;
+    state->wood_grain_texture = NULL;
+    state->wet_dry_roughness_texture = NULL;
     state->physics.world = NULL;
     state->gizmo_render.axis_mesh = NULL;
     state->gizmo_render.ring_mesh = NULL;
@@ -7932,10 +7940,34 @@ static henka_result sandbox3d_initialize(henka_engine* engine, void* user_data)
                 136U, 80U, 40U, 255U, 186U, 126U, 66U, 255U,
                 114U, 68U, 36U, 255U, 154U, 94U, 46U, 255U
             };
+            static const unsigned char wood_grain_pixels[] =
+            {
+                88U, 38U, 18U, 255U, 142U, 70U, 26U, 255U,
+                104U, 46U, 20U, 255U, 176U, 94U, 34U, 255U,
+                122U, 56U, 22U, 255U, 94U, 40U, 18U, 255U,
+                188U, 104U, 38U, 255U, 132U, 62U, 24U, 255U,
+                98U, 42U, 18U, 255U, 164U, 82U, 28U, 255U,
+                116U, 52U, 22U, 255U, 196U, 112U, 42U, 255U,
+                146U, 68U, 26U, 255U, 108U, 48U, 20U, 255U,
+                174U, 88U, 30U, 255U, 126U, 58U, 22U, 255U
+            };
+            static const unsigned char wet_dry_roughness_pixels[] =
+            {
+                255U, 236U, 255U, 255U, 255U, 224U, 255U, 255U,
+                255U, 204U, 255U, 255U, 255U, 176U, 255U, 255U,
+                255U, 132U, 255U, 255U, 255U, 92U, 255U, 255U,
+                255U, 52U, 255U, 255U, 255U, 32U, 255U, 255U
+            };
             henka_texture_descriptor normal_descriptor = henka_texture_descriptor_default_normal();
             henka_texture_descriptor macro_descriptor = henka_texture_descriptor_default_color();
+            henka_texture_descriptor roughness_descriptor = henka_texture_descriptor_default_data();
             normal_descriptor.generate_mipmaps = true;
             macro_descriptor.generate_mipmaps = true;
+            macro_descriptor.wrap_u = HENKA_TEXTURE_WRAP_REPEAT;
+            macro_descriptor.wrap_v = HENKA_TEXTURE_WRAP_REPEAT;
+            roughness_descriptor.generate_mipmaps = true;
+            roughness_descriptor.min_filter = HENKA_TEXTURE_FILTER_LINEAR_MIPMAP_LINEAR;
+            roughness_descriptor.usage = HENKA_TEXTURE_USAGE_METALLIC_ROUGHNESS;
             result = henka_texture_create_from_rgba8_with_descriptor(
                 engine,
                 4,
@@ -7954,6 +7986,28 @@ static henka_result sandbox3d_initialize(henka_engine* engine, void* user_data)
                 macro_variation_pixels,
                 &macro_descriptor,
                 &state->macro_variation_texture);
+            if (result != HENKA_SUCCESS)
+            {
+                goto fail;
+            }
+            result = henka_texture_create_from_rgba8_with_descriptor(
+                engine,
+                4,
+                4,
+                wood_grain_pixels,
+                &macro_descriptor,
+                &state->wood_grain_texture);
+            if (result != HENKA_SUCCESS)
+            {
+                goto fail;
+            }
+            result = henka_texture_create_from_rgba8_with_descriptor(
+                engine,
+                4,
+                4,
+                wet_dry_roughness_pixels,
+                &roughness_descriptor,
+                &state->wet_dry_roughness_texture);
             if (result != HENKA_SUCCESS)
             {
                 goto fail;
@@ -8233,24 +8287,27 @@ static henka_result sandbox3d_initialize(henka_engine* engine, void* user_data)
     grid_material.use_lighting = false;
 
     {
-        static const char* realism_names[6] =
+        static const char* realism_names[8] =
         {
             "Realism Rough Metal", "Realism Polished Metal", "Realism Painted Clearcoat",
-            "Realism Plastic", "Realism Stone", "Realism Fabric Sheen"
+            "Realism Plastic", "Realism Stone", "Realism Fabric Sheen",
+            "Realism Wood Dry", "Realism Stone Wet Dry"
         };
-        static const henka_vec3 realism_positions[6] =
+        static const henka_vec3 realism_positions[8] =
         {
-            {-4.0f, 0.65f, -2.8f}, {-2.4f, 0.65f, -2.8f}, {-0.8f, 0.65f, -2.8f},
-            {0.8f, 0.65f, -2.8f}, {2.4f, 0.65f, -2.8f}, {4.0f, 0.65f, -2.8f}
+            {-5.6f, 0.65f, -2.8f}, {-4.0f, 0.65f, -2.8f}, {-2.4f, 0.65f, -2.8f},
+            {-0.8f, 0.65f, -2.8f}, {0.8f, 0.65f, -2.8f}, {2.4f, 0.65f, -2.8f},
+            {4.0f, 0.65f, -2.8f}, {5.6f, 0.65f, -2.8f}
         };
-        static const henka_vec4 realism_colors[6] =
+        static const henka_vec4 realism_colors[8] =
         {
             {0.18f, 0.20f, 0.24f, 1.0f}, {0.72f, 0.76f, 0.82f, 1.0f},
             {0.72f, 0.06f, 0.04f, 1.0f}, {0.04f, 0.24f, 0.72f, 1.0f},
-            {0.42f, 0.28f, 0.16f, 1.0f}, {0.38f, 0.08f, 0.22f, 1.0f}
+            {0.42f, 0.28f, 0.16f, 1.0f}, {0.38f, 0.08f, 0.22f, 1.0f},
+            {0.72f, 0.34f, 0.10f, 1.0f}, {0.24f, 0.30f, 0.34f, 1.0f}
         };
         int realism_index;
-        for (realism_index = 0; realism_index < 6; ++realism_index)
+        for (realism_index = 0; realism_index < 8; ++realism_index)
         {
             henka_material realism_material = henka_material_default();
             henka_transform realism_transform = sandbox3d_make_transform(
@@ -8273,7 +8330,9 @@ static henka_result sandbox3d_initialize(henka_engine* engine, void* user_data)
             realism_material.roughness = realism_index == 1 ? 0.08f :
                 realism_index == 0 ? 0.34f :
                 realism_index == 2 ? 0.24f :
-                realism_index == 4 ? 0.72f : 0.46f;
+                realism_index == 4 ? 0.72f :
+                realism_index == 6 ? 0.68f :
+                realism_index == 7 ? 0.82f : 0.46f;
             realism_material.clearcoat = realism_index == 2 ? 0.9f : 0.0f;
             realism_material.clearcoat_roughness = 0.12f;
             if (realism_index == 4)
@@ -8289,6 +8348,23 @@ static henka_result sandbox3d_initialize(henka_engine* engine, void* user_data)
                 realism_material.normal_scale = 0.35f;
                 realism_material.sheen_color = (henka_vec3){0.42f, 0.08f, 0.24f};
                 realism_material.sheen_roughness = 0.82f;
+            }
+            if (realism_index == 6)
+            {
+                realism_material.base_color_texture = state->wood_grain_texture;
+                realism_material.normal_texture = state->detail_normal_texture;
+                realism_material.use_texture = true;
+                realism_material.normal_scale = 0.42f;
+            }
+            if (realism_index == 7)
+            {
+                realism_material.base_color_texture = state->macro_variation_texture;
+                realism_material.normal_texture = state->detail_normal_texture;
+                realism_material.metallic_roughness_texture = state->wet_dry_roughness_texture;
+                realism_material.use_texture = true;
+                realism_material.normal_scale = 0.48f;
+                realism_material.clearcoat = 0.22f;
+                realism_material.clearcoat_roughness = 0.09f;
             }
             result = sandbox3d_configure_entity(
                 state->scene,
