@@ -34,6 +34,16 @@ typedef struct henka_model_material_source
     char* metallic_roughness_uri;
     char* occlusion_uri;
     char* emissive_uri;
+    unsigned char* base_color_embedded_data;
+    size_t base_color_embedded_size;
+    unsigned char* normal_embedded_data;
+    size_t normal_embedded_size;
+    unsigned char* metallic_roughness_embedded_data;
+    size_t metallic_roughness_embedded_size;
+    unsigned char* occlusion_embedded_data;
+    size_t occlusion_embedded_size;
+    unsigned char* emissive_embedded_data;
+    size_t emissive_embedded_size;
 } henka_model_material_source;
 
 #define HENKA_MODEL_MAX_SCENE_ITEMS 256U

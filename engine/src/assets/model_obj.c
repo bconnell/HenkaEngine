@@ -1154,6 +1154,11 @@ void henka_model_data_destroy(henka_model_data* model)
     henka_free(model->material_source.metallic_roughness_uri);
     henka_free(model->material_source.occlusion_uri);
     henka_free(model->material_source.emissive_uri);
+    henka_free(model->material_source.base_color_embedded_data);
+    henka_free(model->material_source.normal_embedded_data);
+    henka_free(model->material_source.metallic_roughness_embedded_data);
+    henka_free(model->material_source.occlusion_embedded_data);
+    henka_free(model->material_source.emissive_embedded_data);
     memset(&model->material_source, 0, sizeof(model->material_source));
     model->has_material = false;
     model->vertices = NULL;

@@ -2,12 +2,15 @@
 
 #include <henka/model.h>
 
+#include <limits.h>
 #include <math.h>
 #include <stdio.h>
 #include <string.h>
 
 #include <henka/log.h>
 #include <henka/memory.h>
+
+#include <stb_image.h>
 
 #include "../core/checked.h"
 
@@ -1643,6 +1646,203 @@ static henka_result henka_assets_resolve_gltf_material_texture(
     return result;
 }
 
+static henka_result henka_assets_create_embedded_texture(
+    henka_engine* engine,
+    const unsigned char* data,
+    size_t data_size,
+    const henka_texture_descriptor* descriptor,
+    henka_texture** out_texture)
+{
+    int width;
+    int height;
+    int source_channels;
+    int channels;
+    size_t decoded_bytes;
+    float* hdr_pixels;
+    stbi_uc* pixels;
+    henka_texture_descriptor hdr_descriptor;
+    henka_result result;
+
+    if (out_texture != NULL) *out_texture = NULL;
+    if (engine == NULL || data == NULL || data_size == 0U || data_size > HENKA_MAX_TEXTURE_ENCODED_BYTES ||
+        data_size > (size_t)INT_MAX || descriptor == NULL || out_texture == NULL ||
+        henka_texture_descriptor_validate(descriptor) != HENKA_SUCCESS ||
+        !stbi_info_from_memory(data, (int)data_size, &width, &height, &source_channels) ||
+        width <= 0 || height <= 0) return HENKA_ERROR_ASSET_SOURCE;
+    if (stbi_is_hdr_from_memory(data, (int)data_size))
+    {
+        if (!henka_checked_size_multiply((size_t)width, (size_t)height, &decoded_bytes) ||
+            !henka_checked_size_multiply(decoded_bytes, 4U * sizeof(float), &decoded_bytes)) return HENKA_ERROR_ASSET_SOURCE;
+        hdr_pixels = stbi_loadf_from_memory(data, (int)data_size, &width, &height, &channels, STBI_rgb_alpha);
+        if (hdr_pixels == NULL || channels != source_channels ||
+            !henka_checked_size_multiply((size_t)width, (size_t)height, &decoded_bytes) ||
+            !henka_checked_size_multiply(decoded_bytes, 4U * sizeof(float), &decoded_bytes))
+        {
+            stbi_image_free(hdr_pixels);
+            return HENKA_ERROR_ASSET_SOURCE;
+        }
+        for (size_t index = 0U; index < decoded_bytes / sizeof(float); ++index)
+            if (!isfinite(hdr_pixels[index]) || hdr_pixels[index] < 0.0f)
+            {
+                stbi_image_free(hdr_pixels);
+                return HENKA_ERROR_ASSET_SOURCE;
+            }
+        hdr_descriptor = *descriptor;
+        hdr_descriptor.color_space = HENKA_TEXTURE_COLOR_SPACE_LINEAR;
+        result = henka_texture_create_from_rgba32f_with_descriptor(
+            engine, width, height, hdr_pixels, &hdr_descriptor, out_texture);
+        stbi_image_free(hdr_pixels);
+        if (result == HENKA_SUCCESS)
+        {
+            (*out_texture)->source_byte_size = data_size;
+            (*out_texture)->original_channel_count = source_channels;
+            (*out_texture)->source_class = HENKA_TEXTURE_SOURCE_CLASS_HDR;
+            (*out_texture)->descriptor = hdr_descriptor;
+            (*out_texture)->content_revision = 1U;
+        }
+        return result;
+    }
+    if (stbi_is_16_bit_from_memory(data, (int)data_size) || !henka_checked_rgba8_size(width, height, &decoded_bytes))
+        return HENKA_ERROR_ASSET_SOURCE;
+    pixels = stbi_load_from_memory(data, (int)data_size, &width, &height, &channels, STBI_rgb_alpha);
+    if (pixels == NULL || channels != source_channels || !henka_checked_rgba8_size(width, height, &decoded_bytes))
+    {
+        stbi_image_free(pixels);
+        return HENKA_ERROR_ASSET_SOURCE;
+    }
+    result = henka_texture_create_from_rgba8_with_descriptor(
+        engine, width, height, pixels, descriptor, out_texture);
+    stbi_image_free(pixels);
+    if (result == HENKA_SUCCESS)
+    {
+        (*out_texture)->source_byte_size = data_size;
+        (*out_texture)->original_channel_count = source_channels;
+    }
+    return result;
+}
+
+static uint32_t henka_assets_embedded_texture_hash(
+    const unsigned char* data,
+    size_t data_size)
+{
+    uint32_t hash = 2166136261U;
+    size_t index;
+    for (index = 0U; index < data_size; ++index)
+    {
+        hash ^= data[index];
+        hash *= 16777619U;
+    }
+    return hash;
+}
+
+static henka_result henka_assets_load_embedded_texture(
+    henka_asset_manager* manager,
+    const char* source_path,
+    const unsigned char* data,
+    size_t data_size,
+    const henka_texture_descriptor* descriptor,
+    henka_texture** out_texture)
+{
+    char identity[HENKA_MAX_ASSET_PATH_BYTES];
+    char* key = NULL;
+    char* normalized_source = NULL;
+    char* display_name = NULL;
+    henka_asset_texture_entry* existing;
+    henka_texture* texture = NULL;
+    bool fallback = false;
+    int written;
+    henka_result result;
+
+    if (out_texture != NULL) *out_texture = NULL;
+    if (manager == NULL || source_path == NULL || data == NULL || data_size == 0U || descriptor == NULL || out_texture == NULL)
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    written = snprintf(identity, sizeof(identity), "%s#embedded-%08x", source_path,
+        (unsigned int)henka_assets_embedded_texture_hash(data, data_size));
+    if (written < 0 || (size_t)written >= sizeof(identity)) return HENKA_ERROR_INVALID_ARGUMENT;
+    result = henka_assets_make_texture_cache_key(identity, descriptor, &key);
+    if (result != HENKA_SUCCESS) return result;
+    existing = henka_asset_manager_find_texture_entry(manager, key);
+    if (existing != NULL)
+    {
+        *out_texture = existing->texture;
+        henka_free(key);
+        return HENKA_SUCCESS;
+    }
+    result = henka_assets_normalize_source_path(identity, &normalized_source);
+    if (result != HENKA_SUCCESS) { henka_free(key); return result; }
+    result = henka_assets_create_embedded_texture(manager->engine, data, data_size, descriptor, &texture);
+    if (result == HENKA_ERROR_ASSET_SOURCE)
+    {
+        result = henka_texture_create_borrowed_alias(
+            henka_asset_manager_get_texture_fallback(manager, descriptor->usage), &texture);
+        fallback = true;
+    }
+    if (result != HENKA_SUCCESS)
+    {
+        henka_free(key);
+        henka_free(normalized_source);
+        return result;
+    }
+    display_name = henka_asset_copy_display_name(normalized_source);
+    if (display_name == NULL)
+    {
+        henka_texture_destroy(texture);
+        henka_free(key);
+        henka_free(normalized_source);
+        return HENKA_ERROR_OUT_OF_MEMORY;
+    }
+    if (manager->texture_count == manager->texture_capacity)
+    {
+        result = henka_asset_manager_grow_textures(manager);
+        if (result != HENKA_SUCCESS)
+        {
+            henka_texture_destroy(texture);
+            henka_free(display_name);
+            henka_free(key);
+            henka_free(normalized_source);
+            return result;
+        }
+    }
+    texture->asset_manager_owned = true;
+    texture->fallback_alias = fallback;
+    manager->texture_entries[manager->texture_count].key = key;
+    manager->texture_entries[manager->texture_count].source_path = normalized_source;
+    manager->texture_entries[manager->texture_count].display_name = display_name;
+    manager->texture_entries[manager->texture_count].texture = texture;
+    manager->texture_entries[manager->texture_count].owns_texture = true;
+    manager->texture_entries[manager->texture_count].descriptor = *descriptor;
+    manager->texture_entries[manager->texture_count].metadata.type = HENKA_ASSET_TYPE_TEXTURE;
+    manager->texture_entries[manager->texture_count].metadata.source_path = normalized_source;
+    manager->texture_entries[manager->texture_count].metadata.display_name = display_name;
+    manager->texture_entries[manager->texture_count].metadata.loaded = !fallback;
+    manager->texture_entries[manager->texture_count].metadata.fallback = fallback;
+    manager->texture_entries[manager->texture_count].metadata.reload_supported = fallback;
+    manager->texture_entries[manager->texture_count].metadata.has_texture_descriptor = true;
+    manager->texture_entries[manager->texture_count].metadata.texture_descriptor = *descriptor;
+    henka_asset_set_summary(&manager->texture_entries[manager->texture_count].metadata,
+        fallback ? "Embedded image fallback is active." : "Embedded glTF image is manager-owned and cached by content identity.",
+        fallback ? "Embedded image decode failed; the semantic fallback remains active." : "");
+    manager->texture_count += 1U;
+    *out_texture = texture;
+    return HENKA_SUCCESS;
+}
+
+static henka_result henka_assets_resolve_gltf_material_texture_source(
+    henka_asset_manager* manager,
+    const char* source_path,
+    const char* uri,
+    const unsigned char* embedded_data,
+    size_t embedded_size,
+    henka_texture_descriptor descriptor,
+    henka_texture** out_texture)
+{
+    if (embedded_data != NULL && embedded_size > 0U)
+        return henka_assets_load_embedded_texture(
+            manager, source_path, embedded_data, embedded_size, &descriptor, out_texture);
+    return henka_assets_resolve_gltf_material_texture(
+        manager, source_path, uri, descriptor, out_texture);
+}
+
 static henka_result henka_assets_resolve_gltf_material_source(
     henka_asset_manager* manager,
     const char* source_path,
@@ -1668,24 +1868,29 @@ static henka_result henka_assets_resolve_gltf_material_source(
     candidate.use_texture = false;
 
     descriptor = henka_texture_descriptor_default_color();
-    result = henka_assets_resolve_gltf_material_texture(
-        manager, source_path, source->base_color_uri, descriptor, &candidate.base_color_texture);
+    result = henka_assets_resolve_gltf_material_texture_source(
+        manager, source_path, source->base_color_uri, source->base_color_embedded_data,
+        source->base_color_embedded_size, descriptor, &candidate.base_color_texture);
     if (result == HENKA_SUCCESS && candidate.base_color_texture != NULL) candidate.use_texture = true;
     descriptor = henka_texture_descriptor_default_normal();
-    if (result == HENKA_SUCCESS) result = henka_assets_resolve_gltf_material_texture(
-        manager, source_path, source->normal_uri, descriptor, &candidate.normal_texture);
+    if (result == HENKA_SUCCESS) result = henka_assets_resolve_gltf_material_texture_source(
+        manager, source_path, source->normal_uri, source->normal_embedded_data,
+        source->normal_embedded_size, descriptor, &candidate.normal_texture);
     descriptor = henka_texture_descriptor_default_data();
     descriptor.usage = HENKA_TEXTURE_USAGE_METALLIC_ROUGHNESS;
-    if (result == HENKA_SUCCESS) result = henka_assets_resolve_gltf_material_texture(
-        manager, source_path, source->metallic_roughness_uri, descriptor, &candidate.metallic_roughness_texture);
+    if (result == HENKA_SUCCESS) result = henka_assets_resolve_gltf_material_texture_source(
+        manager, source_path, source->metallic_roughness_uri, source->metallic_roughness_embedded_data,
+        source->metallic_roughness_embedded_size, descriptor, &candidate.metallic_roughness_texture);
     descriptor = henka_texture_descriptor_default_data();
     descriptor.usage = HENKA_TEXTURE_USAGE_OCCLUSION;
-    if (result == HENKA_SUCCESS) result = henka_assets_resolve_gltf_material_texture(
-        manager, source_path, source->occlusion_uri, descriptor, &candidate.occlusion_texture);
+    if (result == HENKA_SUCCESS) result = henka_assets_resolve_gltf_material_texture_source(
+        manager, source_path, source->occlusion_uri, source->occlusion_embedded_data,
+        source->occlusion_embedded_size, descriptor, &candidate.occlusion_texture);
     descriptor = henka_texture_descriptor_default_color();
     descriptor.usage = HENKA_TEXTURE_USAGE_EMISSIVE;
-    if (result == HENKA_SUCCESS) result = henka_assets_resolve_gltf_material_texture(
-        manager, source_path, source->emissive_uri, descriptor, &candidate.emissive_texture);
+    if (result == HENKA_SUCCESS) result = henka_assets_resolve_gltf_material_texture_source(
+        manager, source_path, source->emissive_uri, source->emissive_embedded_data,
+        source->emissive_embedded_size, descriptor, &candidate.emissive_texture);
     if (result == HENKA_SUCCESS) result = henka_material_validate(&candidate);
     if (result == HENKA_SUCCESS) *out_material = candidate;
     return result;

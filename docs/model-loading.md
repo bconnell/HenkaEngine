@@ -56,6 +56,9 @@ The loader currently supports:
   scalar extensions
 - source-relative external image URIs resolved as manager-owned texture
   dependencies with color-space/semantic descriptors
+- embedded base-color, normal, metallic-roughness, occlusion, and emissive
+  images supplied as bounded base64 data URIs or glTF image bufferViews;
+  decoded textures use the same manager-owned semantic cache and fallback path
 - multiple triangle primitives, node hierarchies with cycle and parent checks,
   selected scene roots, TRS or matrix node transforms, perspective and
   orthographic cameras, and bounded punctual-light records
@@ -107,9 +110,8 @@ The current loader does not provide:
 - skeletal animation
 - editor import workflows
 - live replacement of an already-loaded mesh that scenes may still reference
-- glTF scene hierarchies, skins, animations, morph targets, multiple named
-  material bindings, image bufferViews/data-URI images, and compressed buffer
-  extensions in the existing manager renderer path
+- glTF skins, animations, morph targets, and compressed buffer extensions in
+  the existing manager renderer path
 - a second Henka-only material JSON authority; an editor material format will
   only be introduced if it adds instance/editor behavior beyond glTF and will
   reuse this same material and dependency path

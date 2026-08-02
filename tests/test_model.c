@@ -110,6 +110,16 @@ void henka_test_model(void)
         "\"baseColorTexture\":{\"index\":0}},\"emissiveFactor\":[0.1,0.2,0.3],"
         "\"alphaMode\":\"MASK\",\"alphaCutoff\":0.4,\"doubleSided\":true}],"
         "\"meshes\":[{\"primitives\":[{\"attributes\":{\"POSITION\":0},\"material\":0}]}]}";
+    static const char* valid_gltf_embedded_material =
+        "{\"asset\":{\"version\":\"2.0\"},"
+        "\"buffers\":[{\"uri\":\"data:application/octet-stream;base64,"
+        "AAAAAAAAAAAAAAAAAACAPwAAAAAAAAAAAAAAAAAAgD8AAAAA\",\"byteLength\":36}],"
+        "\"bufferViews\":[{\"buffer\":0,\"byteLength\":36}],"
+        "\"accessors\":[{\"bufferView\":0,\"componentType\":5126,\"count\":3,\"type\":\"VEC3\"}],"
+        "\"images\":[{\"uri\":\"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=\"}],"
+        "\"textures\":[{\"source\":0}],"
+        "\"materials\":[{\"pbrMetallicRoughness\":{\"baseColorTexture\":{\"index\":0}}}],"
+        "\"meshes\":[{\"primitives\":[{\"attributes\":{\"POSITION\":0},\"material\":0}]}]}";
     static const char* valid_obj =
         "# simple quad\n"
         "v -0.5 0.0 -0.5\n"
@@ -203,6 +213,19 @@ void henka_test_model(void)
     HENKA_TEST_ASSERT_FLOAT_CLOSE(model.material_source.material.roughness, 0.3f, 0.0001f);
     HENKA_TEST_ASSERT(model.material_source.material.alpha_mode == HENKA_MATERIAL_ALPHA_MASKED);
     HENKA_TEST_ASSERT(model.material_source.material.double_sided);
+    henka_model_data_destroy(&model);
+
+    memset(&model, 0, sizeof(model));
+    HENKA_TEST_ASSERT(
+        henka_model_data_load_gltf_from_memory(
+            valid_gltf_embedded_material,
+            strlen(valid_gltf_embedded_material),
+            "embedded-material.gltf",
+            &model) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(model.has_material);
+    HENKA_TEST_ASSERT(model.material_source.base_color_uri == NULL);
+    HENKA_TEST_ASSERT(model.material_source.base_color_embedded_data != NULL);
+    HENKA_TEST_ASSERT(model.material_source.base_color_embedded_size > 0U);
     henka_model_data_destroy(&model);
 
     model.vertices = NULL;

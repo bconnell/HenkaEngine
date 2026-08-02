@@ -11,12 +11,17 @@
     "count": 3,
     "type": "VEC3"
   }],
+  "images": [{
+    "uri": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII="
+  }],
+  "textures": [{ "source": 0 }],
   "materials": [{
     "name": "Marker Gold",
     "pbrMetallicRoughness": {
       "baseColorFactor": [0.96, 0.72, 0.18, 1.0],
       "metallicFactor": 1.0,
-      "roughnessFactor": 0.82
+      "roughnessFactor": 0.82,
+      "baseColorTexture": { "index": 0 }
     },
     "alphaMode": "OPAQUE",
     "doubleSided": false
