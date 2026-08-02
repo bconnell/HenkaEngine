@@ -174,6 +174,7 @@ typedef struct sandbox3d_view_navigation_state
 typedef struct sandbox3d_interaction_diagnostics
 {
     bool show_handle_hit_boxes;
+    bool show_reflection_probes;
     bool ui_wants_mouse;
     bool cursor_in_viewport;
     bool mouse_framebuffer_valid;
@@ -544,6 +545,7 @@ static henka_result sandbox3d_initialize_physics(sandbox3d_state* state);
 static void sandbox3d_update_physics(sandbox3d_state* state, double delta_seconds);
 static void sandbox3d_draw_physics_overlay(sandbox3d_state* state, henka_viewport viewport);
 static void sandbox3d_draw_selection_highlight(sandbox3d_state* state, henka_viewport viewport);
+static void sandbox3d_draw_reflection_probe_overlay(sandbox3d_state* state, henka_viewport viewport);
 static void sandbox3d_prepare_physics_demo(sandbox3d_state* state);
 
 static const char* sandbox3d_get_build_configuration_label(void)
@@ -1674,6 +1676,91 @@ static void sandbox3d_draw_selection_highlight(sandbox3d_state* state, henka_vie
 
         sandbox3d_draw_viewport_clipped_overlay_line(state->ui, viewport, start, end, 4.0f, outer_color);
         sandbox3d_draw_viewport_clipped_overlay_line(state->ui, viewport, start, end, 2.0f, inner_color);
+    }
+}
+
+static void sandbox3d_draw_reflection_probe_overlay(sandbox3d_state* state, henka_viewport viewport)
+{
+    static const uint8_t edges[12][2] =
+    {
+        {0U, 1U}, {1U, 2U}, {2U, 3U}, {3U, 0U},
+        {4U, 5U}, {5U, 6U}, {6U, 7U}, {7U, 4U},
+        {0U, 4U}, {1U, 5U}, {2U, 6U}, {3U, 7U}
+    };
+    uint32_t probe_index;
+
+    if (state == NULL || state->scene == NULL || state->ui == NULL ||
+        !state->diagnostics.show_reflection_probes || !henka_viewport_is_valid(viewport))
+    {
+        return;
+    }
+
+    for (probe_index = 0U; probe_index < HENKA_SCENE_MAX_REFLECTION_PROBES; ++probe_index)
+    {
+        henka_scene_reflection_probe_desc probe;
+        henka_vec2 points[8];
+        henka_vec3 corners[8];
+        uint32_t corner_index;
+        bool projected;
+
+        if (henka_scene_get_reflection_probe(state->scene, probe_index, &probe) != HENKA_SUCCESS ||
+            !probe.enabled)
+        {
+            continue;
+        }
+
+        corners[0] = (henka_vec3){probe.position.x - probe.extents.x, probe.position.y - probe.extents.y, probe.position.z - probe.extents.z};
+        corners[1] = (henka_vec3){probe.position.x + probe.extents.x, probe.position.y - probe.extents.y, probe.position.z - probe.extents.z};
+        corners[2] = (henka_vec3){probe.position.x + probe.extents.x, probe.position.y + probe.extents.y, probe.position.z - probe.extents.z};
+        corners[3] = (henka_vec3){probe.position.x - probe.extents.x, probe.position.y + probe.extents.y, probe.position.z - probe.extents.z};
+        corners[4] = (henka_vec3){probe.position.x - probe.extents.x, probe.position.y - probe.extents.y, probe.position.z + probe.extents.z};
+        corners[5] = (henka_vec3){probe.position.x + probe.extents.x, probe.position.y - probe.extents.y, probe.position.z + probe.extents.z};
+        corners[6] = (henka_vec3){probe.position.x + probe.extents.x, probe.position.y + probe.extents.y, probe.position.z + probe.extents.z};
+        corners[7] = (henka_vec3){probe.position.x - probe.extents.x, probe.position.y + probe.extents.y, probe.position.z + probe.extents.z};
+        projected = true;
+        for (corner_index = 0U; corner_index < 8U; ++corner_index)
+        {
+            if (!sandbox3d_project_handle_point(state, viewport, corners[corner_index], &points[corner_index]))
+            {
+                projected = false;
+                break;
+            }
+        }
+        if (!projected)
+        {
+            continue;
+        }
+        for (corner_index = 0U; corner_index < 12U; ++corner_index)
+        {
+            (void)sandbox3d_draw_viewport_clipped_overlay_line(
+                state->ui,
+                viewport,
+                points[edges[corner_index][0U]],
+                points[edges[corner_index][1U]],
+                1.5f,
+                probe.box_projection
+                    ? (henka_vec4){0.18f, 0.78f, 1.0f, 0.82f}
+                    : (henka_vec4){0.84f, 0.62f, 0.20f, 0.82f});
+        }
+        {
+            henka_vec2 center;
+            if (sandbox3d_project_handle_point(state, viewport, probe.position, &center))
+            {
+                const float marker = 5.0f;
+                (void)sandbox3d_draw_viewport_clipped_overlay_line(
+                    state->ui, viewport,
+                    (henka_vec2){center.x - marker, center.y},
+                    (henka_vec2){center.x + marker, center.y},
+                    2.0f,
+                    (henka_vec4){1.0f, 0.92f, 0.32f, 0.95f});
+                (void)sandbox3d_draw_viewport_clipped_overlay_line(
+                    state->ui, viewport,
+                    (henka_vec2){center.x, center.y - marker},
+                    (henka_vec2){center.x, center.y + marker},
+                    2.0f,
+                    (henka_vec4){1.0f, 0.92f, 0.32f, 0.95f});
+            }
+        }
     }
 }
 
@@ -6312,6 +6399,21 @@ static void sandbox3d_draw_controls_panel(
             sandbox3d_set_statusf(state, false, false, "Handle hit boxes %s.", state->diagnostics.show_handle_hit_boxes ? "shown" : "hidden");
         }
         y += 36.0f;
+        if (henka_ui_toggle(
+                state->ui,
+                "debug_reflection_probes",
+                (henka_ui_rect){x_left, y, panel_bounds.width - 28.0f, 28.0f},
+                "Reflection Probe Volumes",
+                &state->diagnostics.show_reflection_probes))
+        {
+            sandbox3d_set_statusf(
+                state,
+                false,
+                false,
+                "Reflection probe editor volumes %s.",
+                state->diagnostics.show_reflection_probes ? "shown" : "hidden");
+        }
+        y += 36.0f;
         if (henka_ui_primary_button(state->ui, "quick_diagnostics", (henka_ui_rect){x_left, y, third_button_width, 28.0f}, "Diagnostics"))
         {
             sandbox3d_set_active_utility(state, SANDBOX3D_UTILITY_DIAGNOSTICS);
@@ -7602,6 +7704,7 @@ static void sandbox3d_build_ui(henka_engine* engine, sandbox3d_state* state)
         snprintf(capture_text, sizeof(capture_text), "Capture: %s", henka_engine_is_mouse_captured(engine) ? "On" : "Off");
         snprintf(fps_text, sizeof(fps_text), "Frame: %.2f ms  FPS: %.1f", milliseconds, fps);
         sandbox3d_draw_scene_viewport_frame(engine, state, layout.scene_frame);
+        sandbox3d_draw_reflection_probe_overlay(state, layout.scene_viewport);
         sandbox3d_draw_selection_highlight(state, layout.scene_viewport);
         sandbox3d_draw_gizmo_overlay(engine, state, layout.scene_viewport);
         sandbox3d_draw_physics_overlay(state, layout.scene_viewport);
@@ -7695,6 +7798,7 @@ static void sandbox3d_build_ui(henka_engine* engine, sandbox3d_state* state)
     }
     else
     {
+        sandbox3d_draw_reflection_probe_overlay(state, layout.scene_viewport);
         sandbox3d_draw_selection_highlight(state, layout.scene_viewport);
         sandbox3d_draw_gizmo_overlay(engine, state, layout.scene_viewport);
         sandbox3d_draw_physics_overlay(state, layout.scene_viewport);
@@ -7725,6 +7829,7 @@ static henka_result sandbox3d_initialize(henka_engine* engine, void* user_data)
     int panel_index;
     sandbox3d_state* state;
     state = (sandbox3d_state*)user_data;
+    state->diagnostics.show_reflection_probes = true;
     sandbox3d_editor_controls_initialize(&state->editor_controls);
     state->editor_controls_loaded_safely = true;
 
