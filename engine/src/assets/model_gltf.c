@@ -1586,7 +1586,14 @@ static bool henka_gltf_parse_scene_selections(
             {
                 int root;
                 if (scene->scene_root_node_count >= HENKA_MODEL_MAX_SCENE_ITEMS ||
-                    !henka_gltf_integer(value, value_end, &root) || root < 0 || (size_t)root >= scene->node_count) return false;
+                    !henka_gltf_integer(value, value_end, &root) || root < 0 || (size_t)root >= scene->node_count ||
+                    scene->nodes[root].parent_index >= 0) return false;
+                {
+                    size_t previous_root;
+                    for (previous_root = scene->scene_root_offsets[index];
+                        previous_root < scene->scene_root_node_count; ++previous_root)
+                        if (scene->scene_root_nodes[previous_root] == root) return false;
+                }
                 scene->scene_root_nodes[scene->scene_root_node_count++] = root;
             }
             if (henka_gltf_array_item(roots, roots_end, HENKA_MODEL_MAX_SCENE_ITEMS, &value, &value_end)) return false;

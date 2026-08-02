@@ -86,6 +86,10 @@ static void henka_test_gltf_scene_import(void)
         "{\"name\":\"Child\",\"mesh\":0,\"translation\":[2.0,0.0,0.0]}],"
         "\"scenes\":[{\"nodes\":[0]}],\"scene\":0}";
     henka_model_scene_data scene;
+    char* invalid_scene;
+    char* selected_roots;
+    char* root_value;
+    size_t scene_length;
 
     memset(&scene, 0, sizeof(scene));
     HENKA_TEST_ASSERT(henka_model_scene_data_load_gltf_from_memory(
@@ -106,6 +110,22 @@ static void henka_test_gltf_scene_import(void)
     HENKA_TEST_ASSERT(scene.light_count == 1U);
     HENKA_TEST_ASSERT(scene.lights[0].type == HENKA_MODEL_SCENE_LIGHT_POINT);
     henka_model_scene_data_destroy(&scene);
+
+    scene_length = strlen(scene_gltf);
+    invalid_scene = henka_malloc(scene_length + 1U);
+    HENKA_TEST_ASSERT(invalid_scene != NULL);
+    memcpy(invalid_scene, scene_gltf, scene_length + 1U);
+    selected_roots = strstr(invalid_scene, "\"scenes\":[{\"nodes\":[0]}");
+    HENKA_TEST_ASSERT(selected_roots != NULL);
+    root_value = strstr(selected_roots, "[0]");
+    HENKA_TEST_ASSERT(root_value != NULL);
+    root_value[1] = '1';
+    memset(&scene, 0, sizeof(scene));
+    HENKA_TEST_ASSERT(henka_model_scene_data_load_gltf_from_memory(
+        invalid_scene, scene_length, "scene-child-root.gltf", &scene) != HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(scene.node_count == 0U);
+    henka_model_scene_data_destroy(&scene);
+    henka_free(invalid_scene);
 }
 
 void henka_test_model(void)
