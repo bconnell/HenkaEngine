@@ -32,8 +32,12 @@ void henka_test_assets(void)
     size_t invalid_path_index;
     henka_asset_manager manager;
     henka_asset_mesh_entry mesh_entries[2];
+    henka_material_asset material_entry;
+    henka_material_asset* material_entry_array[1];
     henka_asset_metadata metadata;
     henka_mesh* gltf_mesh;
+    henka_material_asset* material_asset;
+    henka_material material;
     henka_asset_texture_entry texture_entries[2];
     henka_mesh fallback_mesh;
     henka_mesh* mesh;
@@ -61,6 +65,18 @@ void henka_test_assets(void)
     HENKA_TEST_ASSERT(henka_assets_retry_failed_gltf_mesh(NULL, "assets/models/sample.gltf", &gltf_mesh) == HENKA_ERROR_INVALID_ARGUMENT);
     HENKA_TEST_ASSERT(gltf_mesh == NULL);
     HENKA_TEST_ASSERT(strcmp(henka_assets_get_type_label(HENKA_ASSET_TYPE_MESH), "Mesh") == 0);
+    HENKA_TEST_ASSERT(strcmp(henka_assets_get_type_label(HENKA_ASSET_TYPE_MATERIAL), "Material") == 0);
+    material_asset = (henka_material_asset*)1;
+    HENKA_TEST_ASSERT(henka_assets_load_gltf_material_asset(
+        NULL, "assets/models/sample.gltf", NULL, &material_asset) == HENKA_ERROR_INVALID_ARGUMENT);
+    HENKA_TEST_ASSERT(material_asset == NULL);
+    material_asset = (henka_material_asset*)1;
+    HENKA_TEST_ASSERT(henka_assets_reload_gltf_material_asset(
+        NULL, "assets/models/sample.gltf", &material_asset) == HENKA_ERROR_INVALID_ARGUMENT);
+    HENKA_TEST_ASSERT(material_asset == NULL);
+    material = henka_material_default();
+    HENKA_TEST_ASSERT(henka_assets_get_material_asset_material(NULL, &material) == HENKA_ERROR_INVALID_ARGUMENT);
+    HENKA_TEST_ASSERT(material.shader == NULL);
     HENKA_TEST_ASSERT(henka_assets_get_metadata_count(NULL) == 0U);
 
     display_name = henka_asset_copy_display_name(display_name_source);
@@ -278,6 +294,23 @@ void henka_test_assets(void)
     fake_engine.renderer = NULL;
     fake_engine.asset_base_path = "";
     manager.engine = &fake_engine;
+    memset(&material_entry, 0, sizeof(material_entry));
+    material_entry.key = "assets/models/reload.gltf";
+    material_entry.source_path = "assets/models/reload.gltf";
+    material_entry.material = henka_material_default();
+    material_entry.material.shader = &managed_shader;
+    material_entry_array[0] = &material_entry;
+    manager.material_entries = material_entry_array;
+    manager.material_count = 1U;
+    manager.material_capacity = 1U;
+    material_asset = (henka_material_asset*)1;
+    HENKA_TEST_ASSERT(henka_assets_reload_gltf_material_asset(
+        &manager,
+        "assets/models/reload.gltf",
+        &material_asset) != HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(material_asset == NULL);
+    HENKA_TEST_ASSERT(manager.material_entries[0] == &material_entry);
+    HENKA_TEST_ASSERT(material_entry.material.shader == &managed_shader);
     texture = (henka_texture*)1;
     HENKA_TEST_ASSERT(henka_assets_retry_failed_texture(
         &manager,

@@ -5,6 +5,7 @@
 #include <stddef.h>
 
 #include <henka/result.h>
+#include <henka/scene.h>
 #include <henka/shader.h>
 #include <henka/texture.h>
 
@@ -13,13 +14,15 @@ typedef struct henka_engine henka_engine;
 typedef struct henka_mesh henka_mesh;
 typedef struct henka_shader henka_shader;
 typedef struct henka_texture henka_texture;
+typedef struct henka_material_asset henka_material_asset;
 
 typedef enum henka_asset_type
 {
     HENKA_ASSET_TYPE_UNKNOWN = 0,
     HENKA_ASSET_TYPE_SHADER,
     HENKA_ASSET_TYPE_TEXTURE,
-    HENKA_ASSET_TYPE_MESH
+    HENKA_ASSET_TYPE_MESH,
+    HENKA_ASSET_TYPE_MATERIAL
 } henka_asset_type;
 
 typedef struct henka_asset_metadata
@@ -70,6 +73,24 @@ henka_result henka_assets_load_texture_with_descriptor(
     henka_texture** out_texture);
 henka_result henka_assets_load_obj_mesh(henka_asset_manager* manager, const char* path, henka_mesh** out_mesh);
 henka_result henka_assets_load_gltf_mesh(henka_asset_manager* manager, const char* path, henka_mesh** out_mesh);
+henka_result henka_assets_load_gltf_mesh_with_material(
+    henka_asset_manager* manager,
+    const char* path,
+    henka_shader* shader,
+    henka_mesh** out_mesh,
+    henka_material* out_material);
+henka_result henka_assets_load_gltf_material_asset(
+    henka_asset_manager* manager,
+    const char* path,
+    henka_shader* shader,
+    henka_material_asset** out_asset);
+henka_result henka_assets_get_material_asset_material(
+    const henka_material_asset* asset,
+    henka_material* out_material);
+henka_result henka_assets_reload_gltf_material_asset(
+    henka_asset_manager* manager,
+    const char* path,
+    henka_material_asset** out_asset);
 
 /*
  * Retries only a cached texture fallback from a previous failed load.

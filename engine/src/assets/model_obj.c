@@ -1148,6 +1148,14 @@ void henka_model_data_destroy(henka_model_data* model)
 
     henka_free(model->vertices);
     henka_free(model->indices);
+    henka_free(model->material_source.name);
+    henka_free(model->material_source.base_color_uri);
+    henka_free(model->material_source.normal_uri);
+    henka_free(model->material_source.metallic_roughness_uri);
+    henka_free(model->material_source.occlusion_uri);
+    henka_free(model->material_source.emissive_uri);
+    memset(&model->material_source, 0, sizeof(model->material_source));
+    model->has_material = false;
     model->vertices = NULL;
     model->indices = NULL;
     model->vertex_count = 0U;

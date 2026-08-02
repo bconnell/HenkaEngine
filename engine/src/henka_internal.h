@@ -146,6 +146,16 @@ typedef struct henka_asset_mesh_entry
     henka_asset_metadata metadata;
 } henka_asset_mesh_entry;
 
+struct henka_material_asset
+{
+    char* key;
+    char* source_path;
+    char* display_name;
+    henka_material material;
+    henka_asset_metadata metadata;
+    uint64_t revision;
+};
+
 struct henka_asset_manager
 {
     struct henka_engine* engine;
@@ -158,6 +168,9 @@ struct henka_asset_manager
     henka_asset_mesh_entry* mesh_entries;
     size_t mesh_count;
     size_t mesh_capacity;
+    henka_material_asset** material_entries;
+    size_t material_count;
+    size_t material_capacity;
     henka_texture* white_texture;
     henka_texture* error_texture;
     henka_texture* normal_texture;

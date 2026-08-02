@@ -11,5 +11,15 @@
     "count": 3,
     "type": "VEC3"
   }],
-  "meshes": [{ "primitives": [{ "attributes": { "POSITION": 0 } }] }]
+  "materials": [{
+    "name": "Marker Gold",
+    "pbrMetallicRoughness": {
+      "baseColorFactor": [0.96, 0.72, 0.18, 1.0],
+      "metallicFactor": 1.0,
+      "roughnessFactor": 0.82
+    },
+    "alphaMode": "OPAQUE",
+    "doubleSided": false
+  }],
+  "meshes": [{ "primitives": [{ "attributes": { "POSITION": 0 }, "material": 0 }] }]
 }

@@ -58,6 +58,19 @@ void henka_test_model(void)
         "\"bufferViews\":[{\"buffer\":0,\"byteLength\":36}],"
         "\"accessors\":[{\"bufferView\":0,\"componentType\":5126,\"count\":3,\"type\":\"VEC3\"}],"
         "\"meshes\":[{\"primitives\":[{\"attributes\":{\"POSITION\":0}}]}]}";
+    static const char* valid_gltf_material =
+        "{\"asset\":{\"version\":\"2.0\"},"
+        "\"buffers\":[{\"uri\":\"data:application/octet-stream;base64,"
+        "AAAAAAAAAAAAAAAAAACAPwAAAAAAAAAAAAAAAAAAgD8AAAAA\",\"byteLength\":36}],"
+        "\"bufferViews\":[{\"buffer\":0,\"byteLength\":36}],"
+        "\"accessors\":[{\"bufferView\":0,\"componentType\":5126,\"count\":3,\"type\":\"VEC3\"}],"
+        "\"images\":[{\"uri\":\"textures/albedo.png\"}],"
+        "\"textures\":[{\"source\":0}],"
+        "\"materials\":[{\"name\":\"Imported Gold\",\"pbrMetallicRoughness\":{"
+        "\"baseColorFactor\":[0.8,0.6,0.2,1.0],\"metallicFactor\":0.8,\"roughnessFactor\":0.3,"
+        "\"baseColorTexture\":{\"index\":0}},\"emissiveFactor\":[0.1,0.2,0.3],"
+        "\"alphaMode\":\"MASK\",\"alphaCutoff\":0.4,\"doubleSided\":true}],"
+        "\"meshes\":[{\"primitives\":[{\"attributes\":{\"POSITION\":0},\"material\":0}]}]}";
     static const char* valid_obj =
         "# simple quad\n"
         "v -0.5 0.0 -0.5\n"
@@ -134,6 +147,23 @@ void henka_test_model(void)
     HENKA_TEST_ASSERT(model.index_count == 3U);
     HENKA_TEST_ASSERT_FLOAT_CLOSE(model.vertices[1].position.x, 1.0f, 0.0001f);
     HENKA_TEST_ASSERT_FLOAT_CLOSE(model.vertices[0].normal.z, 1.0f, 0.0001f);
+    henka_model_data_destroy(&model);
+
+    memset(&model, 0, sizeof(model));
+    HENKA_TEST_ASSERT(
+        henka_model_data_load_gltf_from_memory(
+            valid_gltf_material,
+            strlen(valid_gltf_material),
+            "material.gltf",
+            &model) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(model.has_material);
+    HENKA_TEST_ASSERT(strcmp(model.material_source.name, "Imported Gold") == 0);
+    HENKA_TEST_ASSERT(strcmp(model.material_source.base_color_uri, "textures/albedo.png") == 0);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(model.material_source.material.base_color.x, 0.8f, 0.0001f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(model.material_source.material.metallic, 0.8f, 0.0001f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(model.material_source.material.roughness, 0.3f, 0.0001f);
+    HENKA_TEST_ASSERT(model.material_source.material.alpha_mode == HENKA_MATERIAL_ALPHA_MASKED);
+    HENKA_TEST_ASSERT(model.material_source.material.double_sided);
     henka_model_data_destroy(&model);
 
     model.vertices = NULL;

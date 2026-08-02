@@ -7,6 +7,7 @@
 
 #include <henka/math.h>
 #include <henka/result.h>
+#include <henka/scene.h>
 
 typedef struct henka_engine henka_engine;
 typedef struct henka_mesh henka_mesh;
@@ -22,12 +23,27 @@ typedef struct henka_model_vertex
     bool tangent_valid;
 } henka_model_vertex;
 
+typedef struct henka_model_material_source
+{
+    /* Scalar values use the same authoritative material model as scenes. */
+    henka_material material;
+    char* name;
+    /* Source-relative image URIs; GPU texture ownership stays with the asset manager. */
+    char* base_color_uri;
+    char* normal_uri;
+    char* metallic_roughness_uri;
+    char* occlusion_uri;
+    char* emissive_uri;
+} henka_model_material_source;
+
 typedef struct henka_model_data
 {
     henka_model_vertex* vertices;
     uint32_t vertex_count;
     uint32_t* indices;
     uint32_t index_count;
+    bool has_material;
+    henka_model_material_source material_source;
 } henka_model_data;
 
 /* OBJ loading enforces bounded source, record, output, numeric, and renderer-count limits. */

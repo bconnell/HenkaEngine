@@ -1,5 +1,7 @@
 #include "henka_internal.h"
 
+#include <henka/model.h>
+
 #include <math.h>
 #include <stdio.h>
 #include <string.h>
@@ -401,6 +403,8 @@ const char* henka_assets_get_type_label(henka_asset_type type)
             return "Texture";
         case HENKA_ASSET_TYPE_MESH:
             return "Mesh";
+        case HENKA_ASSET_TYPE_MATERIAL:
+            return "Material";
         case HENKA_ASSET_TYPE_UNKNOWN:
         default:
             return "Unknown";
@@ -502,6 +506,28 @@ static henka_result henka_asset_manager_grow_meshes(henka_asset_manager* manager
 
     manager->mesh_entries = entries;
     manager->mesh_capacity = new_capacity;
+    return HENKA_SUCCESS;
+}
+
+static henka_result henka_asset_manager_grow_materials(henka_asset_manager* manager)
+{
+    size_t allocation_size;
+    size_t new_capacity;
+    size_t required;
+    henka_material_asset** entries;
+
+    if (manager == NULL ||
+        !henka_checked_size_add(manager->material_count, 1U, &required) ||
+        !henka_checked_capacity(manager->material_capacity, required, 8U,
+            HENKA_MAX_ASSET_CACHE_ENTRIES, &new_capacity) ||
+        !henka_checked_size_multiply(new_capacity, sizeof(*entries), &allocation_size))
+    {
+        return HENKA_ERROR_OUT_OF_MEMORY;
+    }
+    entries = henka_realloc(manager->material_entries, allocation_size);
+    if (entries == NULL) return HENKA_ERROR_OUT_OF_MEMORY;
+    manager->material_entries = entries;
+    manager->material_capacity = new_capacity;
     return HENKA_SUCCESS;
 }
 
@@ -617,6 +643,20 @@ henka_asset_manager_find_mesh_entry(
 {
     return (henka_asset_mesh_entry*)
         henka_asset_manager_find_mesh_entry_const(manager, key);
+}
+
+static henka_material_asset* henka_asset_manager_find_material_entry(
+    henka_asset_manager* manager,
+    const char* key)
+{
+    size_t index;
+    if (manager == NULL || key == NULL) return NULL;
+    for (index = 0U; index < manager->material_count; ++index)
+    {
+        if (strcmp(manager->material_entries[index]->key, key) == 0)
+            return manager->material_entries[index];
+    }
+    return NULL;
 }
 
 /* Mesh cache lookups use entries so fallback metadata remains path-specific. */
@@ -846,9 +886,18 @@ void henka_asset_manager_destroy(
         henka_free(manager->mesh_entries[index].display_name);
     }
 
+    for (index = 0U; index < manager->material_count; ++index)
+    {
+        henka_free(manager->material_entries[index]->key);
+        henka_free(manager->material_entries[index]->source_path);
+        henka_free(manager->material_entries[index]->display_name);
+        henka_free(manager->material_entries[index]);
+    }
+
     henka_free(manager->shader_entries);
     henka_free(manager->texture_entries);
     henka_free(manager->mesh_entries);
+    henka_free(manager->material_entries);
     henka_mesh_destroy_owned(manager->fallback_mesh);
     henka_texture_destroy_owned(manager->white_texture);
     henka_texture_destroy_owned(manager->error_texture);
@@ -1484,6 +1533,286 @@ henka_result henka_assets_load_gltf_mesh(
     return HENKA_SUCCESS;
 }
 
+static henka_result henka_assets_resolve_material_uri(
+    const char* material_path,
+    const char* uri,
+    char** out_path)
+{
+    const char* separator;
+    size_t directory_length;
+    char* directory;
+    henka_result result;
+
+    if (out_path != NULL) *out_path = NULL;
+    if (material_path == NULL || uri == NULL || out_path == NULL || uri[0] == '\0')
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    separator = strrchr(material_path, '/');
+    directory_length = separator == NULL ? 0U : (size_t)(separator - material_path);
+    directory = henka_malloc(directory_length + 1U);
+    if (directory == NULL) return HENKA_ERROR_OUT_OF_MEMORY;
+    if (directory_length > 0U) memcpy(directory, material_path, directory_length);
+    directory[directory_length] = '\0';
+    result = henka_assets_resolve_path(directory, uri, out_path);
+    henka_free(directory);
+    return result;
+}
+
+static henka_result henka_assets_resolve_gltf_material_texture(
+    henka_asset_manager* manager,
+    const char* material_path,
+    const char* uri,
+    henka_texture_descriptor descriptor,
+    henka_texture** out_texture)
+{
+    char* resolved_path = NULL;
+    henka_result result;
+
+    if (out_texture != NULL) *out_texture = NULL;
+    if (uri == NULL) return HENKA_SUCCESS;
+    result = henka_assets_resolve_material_uri(material_path, uri, &resolved_path);
+    if (result == HENKA_SUCCESS)
+    {
+        result = henka_assets_load_texture_with_descriptor(manager, resolved_path, &descriptor, out_texture);
+    }
+    henka_free(resolved_path);
+    return result;
+}
+
+static henka_result henka_assets_build_gltf_material_instance(
+    henka_asset_manager* manager,
+    const char* path,
+    henka_shader* shader,
+    henka_mesh** out_mesh,
+    henka_material* out_material)
+{
+    char* source_path = NULL;
+    char* resolved_path = NULL;
+    henka_model_data model;
+    henka_material candidate;
+    henka_texture_descriptor descriptor;
+    henka_result result;
+
+    if (out_mesh != NULL) *out_mesh = NULL;
+    if (out_material != NULL) *out_material = henka_material_default();
+    if (manager == NULL || path == NULL || shader == NULL || out_mesh == NULL || out_material == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    memset(&model, 0, sizeof(model));
+    result = henka_assets_normalize_source_path(path, &source_path);
+    if (result != HENKA_SUCCESS) return result;
+    result = henka_assets_resolve_path(
+        henka_engine_get_asset_base_path(manager->engine), source_path, &resolved_path);
+    if (result == HENKA_SUCCESS) result = henka_model_data_load_gltf(resolved_path, &model);
+    henka_free(resolved_path);
+    if (result != HENKA_SUCCESS)
+    {
+        henka_free(source_path);
+        return result;
+    }
+
+    result = henka_assets_load_gltf_mesh(manager, source_path, out_mesh);
+    if (result != HENKA_SUCCESS)
+    {
+        henka_model_data_destroy(&model);
+        henka_free(source_path);
+        return result;
+    }
+
+    candidate = model.has_material ? model.material_source.material : henka_material_default();
+    candidate.shader = shader;
+    /* Material instances do not borrow the temporary parser name. */
+    candidate.name = "glTF Material";
+    candidate.base_color_texture = NULL;
+    candidate.normal_texture = NULL;
+    candidate.metallic_roughness_texture = NULL;
+    candidate.occlusion_texture = NULL;
+    candidate.emissive_texture = NULL;
+    candidate.use_texture = false;
+
+    descriptor = henka_texture_descriptor_default_color();
+    result = henka_assets_resolve_gltf_material_texture(
+        manager, source_path, model.material_source.base_color_uri, descriptor, &candidate.base_color_texture);
+    if (result == HENKA_SUCCESS && candidate.base_color_texture != NULL) candidate.use_texture = true;
+
+    descriptor = henka_texture_descriptor_default_normal();
+    if (result == HENKA_SUCCESS) result = henka_assets_resolve_gltf_material_texture(
+        manager, source_path, model.material_source.normal_uri, descriptor, &candidate.normal_texture);
+
+    descriptor = henka_texture_descriptor_default_data();
+    descriptor.usage = HENKA_TEXTURE_USAGE_METALLIC_ROUGHNESS;
+    if (result == HENKA_SUCCESS) result = henka_assets_resolve_gltf_material_texture(
+        manager, source_path, model.material_source.metallic_roughness_uri, descriptor, &candidate.metallic_roughness_texture);
+
+    descriptor = henka_texture_descriptor_default_data();
+    descriptor.usage = HENKA_TEXTURE_USAGE_OCCLUSION;
+    if (result == HENKA_SUCCESS) result = henka_assets_resolve_gltf_material_texture(
+        manager, source_path, model.material_source.occlusion_uri, descriptor, &candidate.occlusion_texture);
+
+    descriptor = henka_texture_descriptor_default_color();
+    descriptor.usage = HENKA_TEXTURE_USAGE_EMISSIVE;
+    if (result == HENKA_SUCCESS) result = henka_assets_resolve_gltf_material_texture(
+        manager, source_path, model.material_source.emissive_uri, descriptor, &candidate.emissive_texture);
+
+    if (result == HENKA_SUCCESS) result = henka_material_validate(&candidate);
+    if (result == HENKA_SUCCESS) *out_material = candidate;
+    else *out_mesh = NULL;
+    henka_model_data_destroy(&model);
+    henka_free(source_path);
+    return result;
+}
+
+henka_result henka_assets_load_gltf_material_asset(
+    henka_asset_manager* manager,
+    const char* path,
+    henka_shader* shader,
+    henka_material_asset** out_asset)
+{
+    char* key = NULL;
+    char* source_path = NULL;
+    char* display_name = NULL;
+    henka_material_asset* asset = NULL;
+    henka_material candidate;
+    henka_mesh* mesh = NULL;
+    henka_result result;
+
+    if (out_asset != NULL) *out_asset = NULL;
+    if (manager == NULL || path == NULL || shader == NULL || out_asset == NULL)
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    result = henka_assets_make_canonical_key(path, &key);
+    if (result != HENKA_SUCCESS) return result;
+    result = henka_assets_normalize_source_path(path, &source_path);
+    if (result != HENKA_SUCCESS) { henka_free(key); return result; }
+    asset = henka_asset_manager_find_material_entry(manager, key);
+    if (asset != NULL)
+    {
+        *out_asset = asset;
+        henka_free(key);
+        henka_free(source_path);
+        return HENKA_SUCCESS;
+    }
+
+    result = henka_assets_build_gltf_material_instance(manager, source_path, shader, &mesh, &candidate);
+    if (result != HENKA_SUCCESS)
+    {
+        henka_free(key);
+        henka_free(source_path);
+        return result;
+    }
+    display_name = henka_asset_copy_display_name(source_path);
+    if (display_name == NULL)
+    {
+        henka_free(key);
+        henka_free(source_path);
+        return HENKA_ERROR_OUT_OF_MEMORY;
+    }
+    asset = henka_calloc(1U, sizeof(*asset));
+    if (asset == NULL)
+    {
+        henka_free(display_name);
+        henka_free(key);
+        henka_free(source_path);
+        return HENKA_ERROR_OUT_OF_MEMORY;
+    }
+    if (manager->material_count == manager->material_capacity)
+    {
+        result = henka_asset_manager_grow_materials(manager);
+        if (result != HENKA_SUCCESS)
+        {
+            henka_free(asset);
+            henka_free(display_name);
+            henka_free(key);
+            henka_free(source_path);
+            return result;
+        }
+    }
+    asset->key = key;
+    asset->source_path = source_path;
+    asset->display_name = display_name;
+    asset->material = candidate;
+    asset->revision = 1U;
+    asset->metadata.type = HENKA_ASSET_TYPE_MATERIAL;
+    asset->metadata.source_path = asset->source_path;
+    asset->metadata.display_name = asset->display_name;
+    asset->metadata.loaded = true;
+    asset->metadata.fallback = false;
+    asset->metadata.reload_supported = true;
+    henka_asset_set_summary(&asset->metadata,
+        "glTF material asset loaded through the shared material and texture dependency path.",
+        "");
+    manager->material_entries[manager->material_count++] = asset;
+    *out_asset = asset;
+    return HENKA_SUCCESS;
+}
+
+henka_result henka_assets_get_material_asset_material(
+    const henka_material_asset* asset,
+    henka_material* out_material)
+{
+    if (out_material != NULL) *out_material = henka_material_default();
+    if (asset == NULL || out_material == NULL) return HENKA_ERROR_INVALID_ARGUMENT;
+    *out_material = asset->material;
+    return HENKA_SUCCESS;
+}
+
+henka_result henka_assets_reload_gltf_material_asset(
+    henka_asset_manager* manager,
+    const char* path,
+    henka_material_asset** out_asset)
+{
+    char* key = NULL;
+    henka_material_asset* asset;
+    henka_material candidate;
+    henka_mesh* mesh = NULL;
+    henka_result result;
+
+    if (out_asset != NULL) *out_asset = NULL;
+    if (manager == NULL || path == NULL || out_asset == NULL) return HENKA_ERROR_INVALID_ARGUMENT;
+    result = henka_assets_make_canonical_key(path, &key);
+    if (result != HENKA_SUCCESS) return result;
+    asset = henka_asset_manager_find_material_entry(manager, key);
+    henka_free(key);
+    if (asset == NULL) return HENKA_ERROR_INVALID_ARGUMENT;
+
+    result = henka_assets_build_gltf_material_instance(
+        manager, asset->source_path, asset->material.shader, &mesh, &candidate);
+    if (result != HENKA_SUCCESS) return result;
+    asset->material = candidate;
+    asset->revision += 1U;
+    asset->metadata.loaded = true;
+    asset->metadata.fallback = false;
+    henka_asset_set_summary(&asset->metadata,
+        "glTF material asset reloaded transactionally while preserving the stable asset identity.",
+        "");
+    *out_asset = asset;
+    return HENKA_SUCCESS;
+}
+
+henka_result henka_assets_load_gltf_mesh_with_material(
+    henka_asset_manager* manager,
+    const char* path,
+    henka_shader* shader,
+    henka_mesh** out_mesh,
+    henka_material* out_material)
+{
+    henka_material_asset* asset = NULL;
+    henka_result result;
+
+    if (out_mesh != NULL) *out_mesh = NULL;
+    if (out_material != NULL) *out_material = henka_material_default();
+    if (manager == NULL || path == NULL || shader == NULL || out_mesh == NULL || out_material == NULL)
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    result = henka_assets_load_gltf_material_asset(manager, path, shader, &asset);
+    if (result != HENKA_SUCCESS) return result;
+    result = henka_assets_load_gltf_mesh(manager, path, out_mesh);
+    if (result == HENKA_SUCCESS) result = henka_assets_get_material_asset_material(asset, out_material);
+    if (result != HENKA_SUCCESS) *out_mesh = NULL;
+    return result;
+}
+
 henka_result henka_assets_retry_failed_texture(
     henka_asset_manager* manager,
     const char* path,
@@ -1694,7 +2023,7 @@ size_t henka_assets_get_metadata_count(const henka_asset_manager* manager)
         return 0U;
     }
 
-    return manager->shader_count + manager->texture_count + manager->mesh_count;
+    return manager->shader_count + manager->texture_count + manager->mesh_count + manager->material_count;
 }
 
 henka_result henka_assets_get_metadata_at_index(
@@ -1729,6 +2058,13 @@ henka_result henka_assets_get_metadata_at_index(
     if (index < manager->mesh_count)
     {
         *out_metadata = manager->mesh_entries[index].metadata;
+        return HENKA_SUCCESS;
+    }
+
+    index -= manager->mesh_count;
+    if (index < manager->material_count)
+    {
+        *out_metadata = manager->material_entries[index]->metadata;
         return HENKA_SUCCESS;
     }
 

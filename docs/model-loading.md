@@ -8,9 +8,20 @@ create a parallel renderer representation. The current bounded geometry subset
 supports triangle primitives, embedded data-URI buffers, GLB JSON/BIN chunks,
 confined external `.bin` buffers for file loads, positions, normals, UV0,
 vertex colors, tangents, indexed or non-indexed accessors, and generated
-triangle normals when normals are absent. Material mapping is intentionally
-being built on the shared scene material and asset-manager contracts rather
-than through a separate Henka-only material schema.
+triangle normals when normals are absent. Material mapping is resolved through
+the shared scene material and asset-manager contracts rather than through a
+separate Henka-only material schema. `henka_assets_load_gltf_mesh_with_material`
+returns a material instance using imported glTF scalar controls and resolves
+source-relative images through the descriptor-aware texture cache. Texture
+semantic validation remains centralized in `henka_material_validate`.
+
+`henka_assets_load_gltf_material_asset` caches the material by canonical glTF
+source identity and returns a stable manager-owned asset object. Scenes may copy
+its current `henka_material` instance through
+`henka_assets_get_material_asset_material`. Reload parses and resolves a new
+candidate first; only a fully valid candidate replaces the asset value, so a
+parse, path, dependency, or semantic-validation failure leaves the previous
+material and its stable identity intact.
 
 ## Supported input
 
@@ -32,6 +43,11 @@ The loader currently supports:
   `henka_model_data_load_gltf_from_memory`
 - GLB version 2 JSON/BIN containers and glTF data-URI buffers
 - indexed and non-indexed glTF accessors with checked component conversion
+- glTF PBR material factors, alpha mode, double-sided state, and supported
+  `KHR_materials_ior`, `specular`, `clearcoat`, `sheen`, and emissive-strength
+  scalar extensions
+- source-relative external image URIs resolved as manager-owned texture
+  dependencies with color-space/semantic descriptors
 
 ## Input limits
 
@@ -81,7 +97,11 @@ The current loader does not provide:
 - editor import workflows
 - live replacement of an already-loaded mesh that scenes may still reference
 - glTF scene hierarchies, skins, animations, morph targets, multiple named
-  material bindings, and compressed buffer extensions
+  material bindings, image bufferViews/data-URI images, and compressed buffer
+  extensions
+- a second Henka-only material JSON authority; an editor material format will
+  only be introduced if it adds instance/editor behavior beyond glTF and will
+  reuse this same material and dependency path
 
 ## Sample asset
 

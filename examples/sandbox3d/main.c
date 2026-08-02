@@ -7700,6 +7700,7 @@ static henka_result sandbox3d_initialize(henka_engine* engine, void* user_data)
     henka_material grid_material;
     henka_material ground_material;
     henka_material marker_material;
+    henka_material_asset* marker_material_asset;
     henka_result result;
     henka_transform transform;
     int framebuffer_height;
@@ -7835,10 +7836,35 @@ static henka_result sandbox3d_initialize(henka_engine* engine, void* user_data)
         goto fail;
     }
 
-    result = henka_assets_load_gltf_mesh(assets, "assets/models/henka_marker.gltf", &state->marker_mesh);
+    result = henka_assets_load_gltf_mesh_with_material(
+        assets,
+        "assets/models/henka_marker.gltf",
+        state->basic_shader,
+        &state->marker_mesh,
+        &marker_material);
     if (result != HENKA_SUCCESS)
     {
         goto fail;
+    }
+    result = henka_assets_load_gltf_material_asset(
+        assets,
+        "assets/models/henka_marker.gltf",
+        state->basic_shader,
+        &marker_material_asset);
+    if (result != HENKA_SUCCESS)
+    {
+        goto fail;
+    }
+    {
+        henka_material_asset* stable_marker_material_asset = marker_material_asset;
+        result = henka_assets_reload_gltf_material_asset(
+            assets,
+            "assets/models/henka_marker.gltf",
+            &marker_material_asset);
+        if (result != HENKA_SUCCESS || marker_material_asset != stable_marker_material_asset)
+        {
+            goto fail;
+        }
     }
 
     result = henka_assets_load_obj_mesh(assets, "assets/models/missing_marker.obj", &state->missing_model_mesh);
@@ -7899,14 +7925,7 @@ static henka_result sandbox3d_initialize(henka_engine* engine, void* user_data)
     colored_material.emissive_color = (henka_vec3){0.10f, 0.65f, 0.34f};
     colored_material.emissive_strength = 2.5f;
 
-    marker_material = henka_material_default();
     marker_material.name = "Rough Metal glTF Marker";
-    marker_material.type = HENKA_MATERIAL_TYPE_LIT;
-    marker_material.shader = state->basic_shader;
-    marker_material.base_color = (henka_vec4){0.96f, 0.72f, 0.18f, 1.0f};
-    marker_material.use_texture = false;
-    marker_material.metallic = 1.0f;
-    marker_material.roughness = 0.82f;
     marker_material.clearcoat = 0.18f;
     marker_material.clearcoat_roughness = 0.20f;
 

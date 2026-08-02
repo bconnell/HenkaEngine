@@ -332,6 +332,104 @@ static bool henka_gltf_member_int(const char* object, const char* object_end, co
         henka_gltf_integer(value, value_end, out_value);
 }
 
+static bool henka_gltf_member_float(const char* object, const char* object_end, const char* key, float* out_value)
+{
+    const char* value;
+    const char* value_end;
+    double number;
+
+    if (out_value != NULL && henka_gltf_find_member(object, object_end, key, &value, &value_end) &&
+        henka_gltf_number(value, value_end, &number) && isfinite(number) &&
+        number >= -(double)FLT_MAX && number <= (double)FLT_MAX)
+    {
+        *out_value = (float)number;
+        return true;
+    }
+    return false;
+}
+
+static bool henka_gltf_member_bool(const char* object, const char* object_end, const char* key, bool* out_value)
+{
+    const char* value;
+    const char* value_end;
+    const char* cursor;
+
+    if (out_value != NULL) *out_value = false;
+    if (object == NULL || object_end == NULL || key == NULL || out_value == NULL ||
+        !henka_gltf_find_member(object, object_end, key, &value, &value_end)) return false;
+    cursor = henka_gltf_skip_space(value, value_end);
+    if ((size_t)(value_end - cursor) == 4U && strncmp(cursor, "true", 4U) == 0)
+    {
+        *out_value = true;
+        return true;
+    }
+    return (size_t)(value_end - cursor) == 5U && strncmp(cursor, "false", 5U) == 0;
+}
+
+static bool henka_gltf_member_vec3(
+    const char* object,
+    const char* object_end,
+    const char* key,
+    henka_vec3* out_value)
+{
+    const char* array;
+    const char* array_end;
+    const char* value;
+    const char* value_end;
+    double number;
+    size_t index;
+
+    if (out_value == NULL || !henka_gltf_find_member(object, object_end, key, &array, &array_end)) return false;
+    for (index = 0U; index < 3U; ++index)
+    {
+        if (!henka_gltf_array_item(array, array_end, index, &value, &value_end) ||
+            !henka_gltf_number(value, value_end, &number) || number < -(double)FLT_MAX || number > (double)FLT_MAX)
+        {
+            return false;
+        }
+        ((float*)&out_value->x)[index] = (float)number;
+    }
+    return true;
+}
+
+static bool henka_gltf_member_vec4(
+    const char* object,
+    const char* object_end,
+    const char* key,
+    henka_vec4* out_value)
+{
+    const char* array;
+    const char* array_end;
+    const char* value;
+    const char* value_end;
+    double number;
+    size_t index;
+
+    if (out_value == NULL || !henka_gltf_find_member(object, object_end, key, &array, &array_end)) return false;
+    for (index = 0U; index < 4U; ++index)
+    {
+        if (!henka_gltf_array_item(array, array_end, index, &value, &value_end) ||
+            !henka_gltf_number(value, value_end, &number) || number < -(double)FLT_MAX || number > (double)FLT_MAX)
+        {
+            return false;
+        }
+        ((float*)&out_value->x)[index] = (float)number;
+    }
+    return true;
+}
+
+static char* henka_gltf_duplicate_string(const char* value)
+{
+    size_t length;
+    char* copy;
+
+    if (value == NULL || !henka_checked_c_string_length(value, HENKA_MAX_ASSET_PATH_BYTES, &length)) return NULL;
+    copy = henka_malloc(length + 1U);
+    if (copy == NULL) return NULL;
+    memcpy(copy, value, length + 1U);
+    return copy;
+}
+
 static int henka_gltf_component_count(const char* type, const char* type_end)
 {
     size_t length = (size_t)(type_end - type);
@@ -654,9 +752,192 @@ static bool henka_gltf_parse_primitive(const henka_gltf_context* context, const 
     return true;
 }
 
+static bool henka_gltf_primitive_material_index(
+    const char* primitive,
+    const char* primitive_end,
+    bool* out_has_material,
+    int* out_material_index)
+{
+    const char* value;
+    const char* value_end;
+
+    if (out_has_material != NULL) *out_has_material = false;
+    if (out_material_index != NULL) *out_material_index = -1;
+    if (primitive == NULL || primitive_end == NULL || out_has_material == NULL || out_material_index == NULL) return false;
+    if (!henka_gltf_find_member(primitive, primitive_end, "material", &value, &value_end)) return true;
+    if (!henka_gltf_integer(value, value_end, out_material_index) || *out_material_index < 0) return false;
+    *out_has_material = true;
+    return true;
+}
+
+static bool henka_gltf_material_texture_uri(
+    const henka_gltf_context* context,
+    int texture_index,
+    char** out_uri)
+{
+    const char* textures;
+    const char* textures_end;
+    const char* texture;
+    const char* texture_end;
+    const char* images;
+    const char* images_end;
+    const char* image;
+    const char* image_end;
+    const char* value;
+    const char* value_end;
+    char uri[HENKA_MAX_ASSET_PATH_BYTES];
+    int image_index;
+
+    if (out_uri != NULL) *out_uri = NULL;
+    if (context == NULL || out_uri == NULL || texture_index < 0 ||
+        !henka_gltf_find_member(context->json, context->json + context->json_size, "textures", &textures, &textures_end) ||
+        !henka_gltf_array_item(textures, textures_end, (size_t)texture_index, &texture, &texture_end) ||
+        !henka_gltf_member_int(texture, texture_end, "source", &image_index) || image_index < 0 ||
+        !henka_gltf_find_member(context->json, context->json + context->json_size, "images", &images, &images_end) ||
+        !henka_gltf_array_item(images, images_end, (size_t)image_index, &image, &image_end) ||
+        !henka_gltf_find_member(image, image_end, "uri", &value, &value_end) ||
+        !henka_gltf_read_string(value, value_end, uri, sizeof(uri), NULL) ||
+        strncmp(uri, "data:", 5U) == 0)
+    {
+        return false;
+    }
+    *out_uri = henka_gltf_duplicate_string(uri);
+    return *out_uri != NULL;
+}
+
+static bool henka_gltf_material_texture(
+    const henka_gltf_context* context,
+    const char* object,
+    const char* object_end,
+    const char* key,
+    char** out_uri)
+{
+    const char* texture_info;
+    const char* texture_info_end;
+    int texture_index;
+
+    if (out_uri != NULL) *out_uri = NULL;
+    if (context == NULL || object == NULL || out_uri == NULL) return false;
+    if (!henka_gltf_find_member(object, object_end, key, &texture_info, &texture_info_end)) return true;
+    if (!henka_gltf_member_int(texture_info, texture_info_end, "index", &texture_index)) return false;
+    return henka_gltf_material_texture_uri(context, texture_index, out_uri);
+}
+
+static bool henka_gltf_parse_material(
+    const henka_gltf_context* context,
+    const char* primitive,
+    const char* primitive_end,
+    henka_model_material_source* out_source)
+{
+    const char* materials;
+    const char* materials_end;
+    const char* material_object;
+    const char* material_end;
+    const char* pbr;
+    const char* pbr_end;
+    const char* value;
+    const char* value_end;
+    char name[HENKA_MAX_ASSET_PATH_BYTES];
+    char alpha_mode[16];
+    int material_index;
+
+    if (context == NULL || primitive == NULL || primitive_end == NULL || out_source == NULL ||
+        !henka_gltf_primitive_material_index(primitive, primitive_end, &(bool){false}, &material_index) ||
+        !henka_gltf_find_member(context->json, context->json + context->json_size, "materials", &materials, &materials_end) ||
+        !henka_gltf_array_item(materials, materials_end, (size_t)material_index, &material_object, &material_end))
+    {
+        return false;
+    }
+
+    out_source->material = henka_material_default();
+    if (henka_gltf_find_member(material_object, material_end, "name", &value, &value_end))
+    {
+        if (!henka_gltf_read_string(value, value_end, name, sizeof(name), NULL)) return false;
+        out_source->name = henka_gltf_duplicate_string(name);
+        if (out_source->name == NULL) return false;
+        out_source->material.name = out_source->name;
+    }
+
+    if (henka_gltf_find_member(material_object, material_end, "pbrMetallicRoughness", &pbr, &pbr_end))
+    {
+        if (henka_gltf_find_member(pbr, pbr_end, "baseColorFactor", &value, &value_end) &&
+            !henka_gltf_member_vec4(pbr, pbr_end, "baseColorFactor", &out_source->material.base_color)) return false;
+        if (henka_gltf_find_member(pbr, pbr_end, "metallicFactor", &value, &value_end) &&
+            !henka_gltf_member_float(pbr, pbr_end, "metallicFactor", &out_source->material.metallic)) return false;
+        if (henka_gltf_find_member(pbr, pbr_end, "roughnessFactor", &value, &value_end) &&
+            !henka_gltf_member_float(pbr, pbr_end, "roughnessFactor", &out_source->material.roughness)) return false;
+        if (!henka_gltf_material_texture(context, pbr, pbr_end, "baseColorTexture", &out_source->base_color_uri) ||
+            !henka_gltf_material_texture(context, pbr, pbr_end, "metallicRoughnessTexture", &out_source->metallic_roughness_uri)) return false;
+    }
+    if (!henka_gltf_material_texture(context, material_object, material_end, "normalTexture", &out_source->normal_uri) ||
+        !henka_gltf_material_texture(context, material_object, material_end, "occlusionTexture", &out_source->occlusion_uri) ||
+        !henka_gltf_material_texture(context, material_object, material_end, "emissiveTexture", &out_source->emissive_uri)) return false;
+
+    if (henka_gltf_find_member(material_object, material_end, "normalTexture", &value, &value_end) &&
+        henka_gltf_member_float(value, value_end, "scale", &out_source->material.normal_scale) == false &&
+        henka_gltf_find_member(value, value_end, "scale", &value, &value_end)) return false;
+    if (henka_gltf_find_member(material_object, material_end, "occlusionTexture", &value, &value_end) &&
+        henka_gltf_member_float(value, value_end, "strength", &out_source->material.occlusion_strength) == false &&
+        henka_gltf_find_member(value, value_end, "strength", &value, &value_end)) return false;
+    if (henka_gltf_find_member(material_object, material_end, "emissiveFactor", &value, &value_end) &&
+        !henka_gltf_member_vec3(material_object, material_end, "emissiveFactor", &out_source->material.emissive_color)) return false;
+    if (henka_gltf_find_member(material_object, material_end, "alphaMode", &value, &value_end))
+    {
+        if (!henka_gltf_read_string(value, value_end, alpha_mode, sizeof(alpha_mode), NULL)) return false;
+        if (strcmp(alpha_mode, "MASK") == 0) out_source->material.alpha_mode = HENKA_MATERIAL_ALPHA_MASKED;
+        else if (strcmp(alpha_mode, "BLEND") == 0) out_source->material.alpha_mode = HENKA_MATERIAL_ALPHA_BLENDED;
+        else if (strcmp(alpha_mode, "OPAQUE") != 0) return false;
+    }
+    if (henka_gltf_find_member(material_object, material_end, "alphaCutoff", &value, &value_end) &&
+        !henka_gltf_member_float(material_object, material_end, "alphaCutoff", &out_source->material.alpha_cutoff)) return false;
+    if (henka_gltf_find_member(material_object, material_end, "doubleSided", &value, &value_end))
+    {
+        if (!henka_gltf_member_bool(material_object, material_end, "doubleSided", &out_source->material.double_sided)) return false;
+    }
+
+    /* KHR_materials_* values map into the existing renderer-facing controls. */
+    if (henka_gltf_find_member(material_object, material_end, "extensions", &value, &value_end))
+    {
+        const char* extension;
+        const char* extension_end;
+        const char* extensions = value;
+        const char* extensions_end = value_end;
+        if (henka_gltf_find_member(extensions, extensions_end, "KHR_materials_ior", &extension, &extension_end) &&
+            henka_gltf_find_member(extension, extension_end, "ior", &value, &value_end) &&
+            !henka_gltf_member_float(extension, extension_end, "ior", &out_source->material.ior)) return false;
+        if (henka_gltf_find_member(extensions, extensions_end, "KHR_materials_specular", &extension, &extension_end))
+        {
+            if (henka_gltf_find_member(extension, extension_end, "specularFactor", &value, &value_end) &&
+                !henka_gltf_member_float(extension, extension_end, "specularFactor", &out_source->material.specular_factor)) return false;
+            if (henka_gltf_find_member(extension, extension_end, "specularColorFactor", &value, &value_end) &&
+                !henka_gltf_member_vec3(extension, extension_end, "specularColorFactor", &out_source->material.specular_color)) return false;
+        }
+        if (henka_gltf_find_member(extensions, extensions_end, "KHR_materials_clearcoat", &extension, &extension_end))
+        {
+            if (henka_gltf_find_member(extension, extension_end, "clearcoatFactor", &value, &value_end) &&
+                !henka_gltf_member_float(extension, extension_end, "clearcoatFactor", &out_source->material.clearcoat)) return false;
+            if (henka_gltf_find_member(extension, extension_end, "clearcoatRoughnessFactor", &value, &value_end) &&
+                !henka_gltf_member_float(extension, extension_end, "clearcoatRoughnessFactor", &out_source->material.clearcoat_roughness)) return false;
+        }
+        if (henka_gltf_find_member(extensions, extensions_end, "KHR_materials_sheen", &extension, &extension_end))
+        {
+            if (henka_gltf_find_member(extension, extension_end, "sheenColorFactor", &value, &value_end) &&
+                !henka_gltf_member_vec3(extension, extension_end, "sheenColorFactor", &out_source->material.sheen_color)) return false;
+            if (henka_gltf_find_member(extension, extension_end, "sheenRoughnessFactor", &value, &value_end) &&
+                !henka_gltf_member_float(extension, extension_end, "sheenRoughnessFactor", &out_source->material.sheen_roughness)) return false;
+        }
+        if (henka_gltf_find_member(extensions, extensions_end, "KHR_materials_emissive_strength", &extension, &extension_end) &&
+            henka_gltf_find_member(extension, extension_end, "emissiveStrength", &value, &value_end) &&
+            !henka_gltf_member_float(extension, extension_end, "emissiveStrength", &out_source->material.emissive_strength)) return false;
+    }
+
+    return true;
+}
+
 static henka_result henka_gltf_parse_context(henka_gltf_context* context, henka_model_data* out_model)
 {
     const char* meshes; const char* meshes_end; const char* mesh; const char* mesh_end; const char* primitives; const char* primitives_end; size_t primitive_index; henka_gltf_builder builder;
+    bool first_has_material; int first_material_index;
     memset(&builder, 0, sizeof(builder));
     if (!henka_gltf_parse_buffers(context) || !henka_gltf_parse_views(context) || !henka_gltf_parse_accessors(context) ||
         !henka_gltf_find_member(context->json, context->json + context->json_size, "meshes", &meshes, &meshes_end) ||
@@ -665,17 +946,41 @@ static henka_result henka_gltf_parse_context(henka_gltf_context* context, henka_
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
+    if (!henka_gltf_array_item(primitives, primitives_end, 0U, &mesh, &mesh_end) ||
+        !henka_gltf_primitive_material_index(mesh, mesh_end, &first_has_material, &first_material_index))
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    if (first_has_material)
+    {
+        if (!henka_gltf_parse_material(context, mesh, mesh_end, &out_model->material_source))
+        {
+            henka_model_data_destroy(out_model);
+            return HENKA_ERROR_INVALID_ARGUMENT;
+        }
+        out_model->has_material = true;
+    }
     for (primitive_index = 0U; primitive_index < HENKA_MAX_GLTF_ARRAY_ITEMS && henka_gltf_array_item(primitives, primitives_end, primitive_index, &mesh, &mesh_end); ++primitive_index)
     {
+        bool has_material; int material_index;
+        if (!henka_gltf_primitive_material_index(mesh, mesh_end, &has_material, &material_index) ||
+            has_material != first_has_material || (has_material && material_index != first_material_index))
+        {
+            henka_free(builder.vertices);
+            henka_model_data_destroy(out_model);
+            return HENKA_ERROR_INVALID_ARGUMENT;
+        }
         if (!henka_gltf_parse_primitive(context, mesh, mesh_end, &builder))
         {
             henka_free(builder.vertices);
+            henka_model_data_destroy(out_model);
             return HENKA_ERROR_INVALID_ARGUMENT;
         }
     }
     if (builder.count == 0U || builder.count > HENKA_MAX_MESH_ELEMENTS || builder.count % 3U != 0U)
     {
         henka_free(builder.vertices);
+        henka_model_data_destroy(out_model);
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
     out_model->vertices = builder.vertices;

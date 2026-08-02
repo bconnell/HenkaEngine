@@ -39,11 +39,12 @@ Henka Engine is still early, but the sandbox now renders a visible 3D scene with
 - Viewport interaction test helpers for reducing manual QA around selection, gizmo hit testing, and transform changes
 - Asset manager foundation with rooted/UNC/device/drive/URI path rejection, platform-aware canonical cache identities, preserved source spelling, checked texture uploads, path-specific stable fallback identities, deterministic hard-failure propagation, and transactional texture and OBJ fallback retries
 - Early OBJ model loading with bounded source and output sizes, finite-number validation, negative indices, n-gon fan triangulation, degenerate-face rejection, and explicit failed-mesh retry support
+- Bounded glTF/GLB geometry and shared PBR material import with manager-owned texture dependencies and transactional material-asset reload
 - Descriptor-aware RGBA8 textures with explicit sRGB/linear, sampler, wrap, mip, flip, usage, alpha, source-class, and content-revision metadata
 - Bounded single-read texture decoding with truthful rejection of HDR and 16-bit sources, plus path-specific white/error fallback aliases
 - Shader-based rendering of built-in primitives
 - Sandbox window titled `Henka Engine Sandbox 3D`
-- Ground plane, UV material ball, cubes, debug grid, a loaded OBJ marker, textured materials, and visible fallback behavior for missing texture and model assets
+- Ground plane, UV material ball, cubes, debug grid, a loaded glTF PBR marker, textured materials, and visible fallback behavior for missing texture and model assets
 - Keyboard movement, mouse look when capture is active, viewport-local Wireframe, Solid, Material Preview, and Rendered shading controls, and offline runtime help
 - Bounded local settings persistence with transactional loads and replace-on-success writes
 - Early in-window UI overlay with buttons, toggles, labels, structured rows, simple text rendering, and release-confirm control activation
