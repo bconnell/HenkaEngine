@@ -51,6 +51,9 @@ typedef struct henka_material
     henka_vec3 emissive_color;
     float metallic;
     float roughness;
+    float specular_factor;
+    henka_vec3 specular_color;
+    float ior;
     float normal_scale;
     float occlusion_strength;
     float emissive_strength;

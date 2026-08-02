@@ -159,7 +159,7 @@ The renderer layer exposes engine-owned drawing functionality while keeping Open
 - descriptor-aware texture upload and binding, including sRGB versus linear internal formats, sampler policy, mip selection, and upload-state restoration
 - tangent-space vertex attributes preserved from validated imported model data when present, otherwise generated during mesh upload with finite fallbacks for degenerate UVs
 - normalized RGBA vertex-color attributes, defaulting generated and OBJ geometry to opaque white
-- bounded metallic-roughness material evaluation with base color, normal, metallic-roughness, occlusion, emissive data, and a clearcoat lobe
+- bounded metallic-roughness material evaluation with base color, normal, metallic-roughness, validated dielectric specular factor/color and IOR, occlusion, emissive data, and a clearcoat lobe
 - depth testing
 - backface culling
 - wireframe toggle

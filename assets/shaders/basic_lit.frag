@@ -47,6 +47,9 @@ uniform bool useOcclusionTexture;
 uniform bool useEmissiveTexture;
 uniform float metallic;
 uniform float roughness;
+uniform float specularFactor;
+uniform vec3 specularColor;
+uniform float ior;
 uniform float normalScale;
 uniform float occlusionStrength;
 uniform vec3 emissiveColor;
@@ -202,7 +205,9 @@ void main()
     vec3 safeLightColor = clamp(lightColor, vec3(0.0), vec3(1.0));
     float safeLightIntensity = clamp(lightIntensity, 0.0, 10000.0);
     vec3 radiance = min(safeLightColor * safeLightIntensity, vec3(65504.0));
-    vec3 f0 = mix(vec3(0.04), albedo, surfaceMetallic);
+    float dielectricF0 = pow((max(ior, 1.0) - 1.0) / (max(ior, 1.0) + 1.0), 2.0);
+    vec3 f0 = mix(clamp(specularColor, vec3(0.0), vec3(1.0)) *
+        dielectricF0 * saturate(specularFactor), albedo, surfaceMetallic);
     vec3 color = vec3(0.0);
 
     if (useLighting)

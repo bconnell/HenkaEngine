@@ -821,6 +821,7 @@ static bool henka_validate_shader_contract(
         "emissiveTexture", "useNormalTexture", "useMetallicRoughnessTexture",
         "useOcclusionTexture", "useEmissiveTexture", "metallic", "roughness",
         "normalScale", "occlusionStrength", "emissiveColor", "emissiveStrength",
+        "specularFactor", "specularColor", "ior",
         "clearcoat", "clearcoatRoughness", "sheenColor", "sheenRoughness",
         "alphaMode", "alphaCutoff", "shadowMap", "useShadowMap",
         "environmentTexture", "useEnvironmentTexture", "environmentRotation",
@@ -2506,6 +2507,9 @@ henka_result henka_opengl_renderer_draw_scene(
             emissive_texture_data != NULL && emissive_texture_data->texture_id != 0U);
         henka_set_uniform_float(program, "metallic", entity->material.metallic);
         henka_set_uniform_float(program, "roughness", entity->material.roughness);
+        henka_set_uniform_float(program, "specularFactor", entity->material.specular_factor);
+        henka_set_uniform_vec3(program, "specularColor", entity->material.specular_color);
+        henka_set_uniform_float(program, "ior", entity->material.ior);
         henka_set_uniform_float(program, "normalScale", entity->material.normal_scale);
         henka_set_uniform_float(program, "occlusionStrength", entity->material.occlusion_strength);
         henka_set_uniform_vec3(program, "emissiveColor", entity->material.emissive_color);
