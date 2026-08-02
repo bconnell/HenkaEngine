@@ -91,4 +91,7 @@ On Windows, the template also applies local Visual Studio path-hardening for
 nested FetchContent builds. It does not require machine-wide Git long-path or
 MSBuild file-tracking settings; the engine's pinned KTX-Software source still
 comes from the normal network-capable FetchContent path when no local source
-override is supplied.
+override is supplied. The repository validation script uses a fresh short
+ignored build folder and accepts `-NoLocalProviders` to force this clean-clone
+path; Windows CI uses that switch. Without it, populated repository-local
+sources remain optional offline acceleration only.

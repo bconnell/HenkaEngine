@@ -1,3 +1,7 @@
+param(
+    [switch]$NoLocalProviders
+)
+
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
@@ -54,7 +58,7 @@ function Invoke-ExternalNativeDirect {
 
 $repoRoot = Get-HenkaRepoRoot -ScriptDirectory $PSScriptRoot
 $templateRoot = Join-Path $repoRoot "templates\external_game_minimal"
-$validationRoot = Join-Path $repoRoot ("build\template_validation\" + (Get-Date -Format "yyyyMMdd_HHmmss"))
+$validationRoot = Join-Path $repoRoot ("build\tv\ext_" + (Get-Date -Format "yyyyMMdd_HHmmss"))
 $validationSource = Join-Path $validationRoot "external_game_minimal_src"
 $validationBuild = Join-Path $validationRoot "external_game_minimal_build"
 $cmake = Get-HenkaCMakePath
@@ -67,7 +71,7 @@ $configureArguments = @(
     "-DHENKA_ENGINE_DIR=$repoRoot"
 )
 
-if (Test-Path -LiteralPath $localSdlSource -PathType Container) {
+if (-not $NoLocalProviders -and (Test-Path -LiteralPath $localSdlSource -PathType Container)) {
     $configureArguments += "-DFETCHCONTENT_SOURCE_DIR_SDL3=$localSdlSource"
     $offlineProviderCount += 1
     Write-Host "SDL3 provider: repository-local populated source"
@@ -78,7 +82,7 @@ else {
     Write-Host "SDL3 provider: FetchContent network fallback"
 }
 
-if (Test-Path -LiteralPath $localKtxSource -PathType Container) {
+if (-not $NoLocalProviders -and (Test-Path -LiteralPath $localKtxSource -PathType Container)) {
     $configureArguments += "-DFETCHCONTENT_SOURCE_DIR_KTXSOFTWARE=$localKtxSource"
     $offlineProviderCount += 1
     Write-Host "KTX-Software provider: repository-local populated source"

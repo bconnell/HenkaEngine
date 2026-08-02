@@ -56,4 +56,4 @@ jobs:
 
       - name: Validate external game template
         shell: powershell
-        run: .\scripts\test_external_game_template_windows.ps1
+        run: .\scripts\test_external_game_template_windows.ps1 -NoLocalProviders
