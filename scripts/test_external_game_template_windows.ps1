@@ -74,6 +74,7 @@ if (Test-Path -LiteralPath $localSdlSource -PathType Container) {
 }
 else {
     $configureArguments += "-DFETCHCONTENT_SOURCE_DIR_SDL3="
+    $configureArguments += "-DFETCHCONTENT_FULLY_DISCONNECTED=OFF"
     Write-Host "SDL3 provider: FetchContent network fallback"
 }
 
@@ -84,6 +85,7 @@ if (Test-Path -LiteralPath $localKtxSource -PathType Container) {
 }
 else {
     $configureArguments += "-DFETCHCONTENT_SOURCE_DIR_KTXSOFTWARE="
+    $configureArguments += "-DFETCHCONTENT_FULLY_DISCONNECTED=OFF"
     Write-Host "KTX-Software provider: FetchContent network fallback"
 }
 

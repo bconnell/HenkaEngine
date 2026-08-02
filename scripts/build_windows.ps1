@@ -23,6 +23,7 @@ if (Test-Path -LiteralPath (Join-Path $localSdlSource "CMakeLists.txt")) {
     Write-Host "SDL3 provider: repository-local populated source"
 } else {
     $configureArguments += "-DFETCHCONTENT_SOURCE_DIR_SDL3="
+    $configureArguments += "-DFETCHCONTENT_FULLY_DISCONNECTED=OFF"
     Write-Host "SDL3 provider: FetchContent network fallback"
 }
 if (Test-Path -LiteralPath (Join-Path $localKtxSource "CMakeLists.txt")) {
@@ -31,6 +32,7 @@ if (Test-Path -LiteralPath (Join-Path $localKtxSource "CMakeLists.txt")) {
     Write-Host "KTX-Software provider: repository-local populated source"
 } else {
     $configureArguments += "-DFETCHCONTENT_SOURCE_DIR_KTXSOFTWARE="
+    $configureArguments += "-DFETCHCONTENT_FULLY_DISCONNECTED=OFF"
     Write-Host "KTX-Software provider: FetchContent network fallback"
 }
 if ($offlineProviderCount -eq 2) {
