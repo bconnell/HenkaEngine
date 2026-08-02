@@ -72,6 +72,14 @@ typedef struct henka_opengl_renderer_state
     henka_opengl_shader_data bloom_extract_shader_data;
     GLuint bloom_blur_program;
     henka_opengl_shader_data bloom_blur_shader_data;
+    GLuint ibl_conversion_program;
+    henka_opengl_shader_data ibl_conversion_shader_data;
+    GLuint ibl_irradiance_program;
+    henka_opengl_shader_data ibl_irradiance_shader_data;
+    GLuint ibl_prefilter_program;
+    henka_opengl_shader_data ibl_prefilter_shader_data;
+    GLuint ibl_brdf_program;
+    henka_opengl_shader_data ibl_brdf_shader_data;
     GLuint environment_program;
     henka_opengl_shader_data environment_shader_data;
     GLuint tone_vertex_array;
@@ -93,6 +101,16 @@ typedef struct henka_opengl_renderer_state
     int bloom_height;
     bool bloom_ready;
     char bloom_failure_reason[64];
+    GLuint ibl_framebuffer;
+    GLuint ibl_environment_cube;
+    GLuint ibl_irradiance_cube;
+    GLuint ibl_prefilter_cube;
+    GLuint ibl_brdf_lut;
+    bool ibl_ready;
+    char ibl_failure_reason[64];
+    const henka_texture* ibl_source_texture;
+    uint64_t ibl_source_revision;
+    float ibl_source_rotation;
     GLuint shadow_program;
     henka_opengl_shader_data shadow_shader_data;
     GLuint shadow_framebuffer;
@@ -837,6 +855,7 @@ static bool henka_validate_shader_contract(
         "clearcoat", "clearcoatRoughness", "sheenColor", "sheenRoughness",
         "alphaMode", "alphaCutoff", "shadowMap", "useShadowMap",
         "environmentTexture", "useEnvironmentTexture", "environmentRotation",
+        "iblIrradianceMap", "iblPrefilterMap", "iblBrdfLut", "useIBL",
         "localLightCount", "localLightPositionRange[0]",
         "localLightColorIntensity[0]", "localLightDirectionInner[0]",
         "localLightOuterType[0]"
@@ -1327,6 +1346,309 @@ bloom_target_failure:
     return HENKA_ERROR_RENDERER;
 }
 
+#define HENKA_IBL_ENVIRONMENT_RESOLUTION 128
+#define HENKA_IBL_IRRADIANCE_RESOLUTION 32
+#define HENKA_IBL_PREFILTER_LEVELS 5
+#define HENKA_IBL_BRDF_RESOLUTION 128
+
+static void henka_opengl_delete_ibl_resources(henka_opengl_renderer_state* state)
+{
+    uint64_t bytes = 0U;
+    int mip;
+
+    if (state == NULL)
+        return;
+    for (mip = 0; mip < HENKA_IBL_PREFILTER_LEVELS; ++mip)
+    {
+        int size = HENKA_IBL_ENVIRONMENT_RESOLUTION >> mip;
+        bytes += (uint64_t)size * (uint64_t)size * 6U * 8U;
+    }
+    bytes += (uint64_t)HENKA_IBL_ENVIRONMENT_RESOLUTION * HENKA_IBL_ENVIRONMENT_RESOLUTION * 6U * 8U;
+    bytes += (uint64_t)HENKA_IBL_IRRADIANCE_RESOLUTION * HENKA_IBL_IRRADIANCE_RESOLUTION * 6U * 8U;
+    bytes += (uint64_t)HENKA_IBL_BRDF_RESOLUTION * HENKA_IBL_BRDF_RESOLUTION * 4U;
+    if (state->ibl_environment_cube != 0U || state->ibl_irradiance_cube != 0U ||
+        state->ibl_prefilter_cube != 0U || state->ibl_brdf_lut != 0U)
+    {
+        henka_opengl_memory_remove_category(
+            state,
+            &state->tracked_render_target_bytes,
+            bytes);
+    }
+    if (state->ibl_environment_cube != 0U) glDeleteTextures(1, &state->ibl_environment_cube);
+    if (state->ibl_irradiance_cube != 0U) glDeleteTextures(1, &state->ibl_irradiance_cube);
+    if (state->ibl_prefilter_cube != 0U) glDeleteTextures(1, &state->ibl_prefilter_cube);
+    if (state->ibl_brdf_lut != 0U) glDeleteTextures(1, &state->ibl_brdf_lut);
+    if (state->ibl_framebuffer != 0U) g_gl.DeleteFramebuffers(1, &state->ibl_framebuffer);
+    state->ibl_environment_cube = 0U;
+    state->ibl_irradiance_cube = 0U;
+    state->ibl_prefilter_cube = 0U;
+    state->ibl_brdf_lut = 0U;
+    state->ibl_framebuffer = 0U;
+    state->ibl_ready = false;
+}
+
+static bool henka_opengl_allocate_ibl_cube(GLuint* out_texture, int resolution, int levels)
+{
+    GLuint texture = 0U;
+    int face;
+    int mip;
+
+    if (out_texture == NULL || resolution <= 0 || levels <= 0)
+        return false;
+    glGenTextures(1, &texture);
+    if (texture == 0U)
+        return false;
+    glBindTexture(GL_TEXTURE_CUBE_MAP, texture);
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MIN_FILTER,
+        levels > 1 ? GL_LINEAR_MIPMAP_LINEAR : GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_BASE_LEVEL, 0);
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MAX_LEVEL, levels - 1);
+    for (mip = 0; mip < levels; ++mip)
+    {
+        int mip_resolution = resolution >> mip;
+        if (mip_resolution < 1) mip_resolution = 1;
+        for (face = 0; face < 6; ++face)
+        {
+            glTexImage2D(
+                GL_TEXTURE_CUBE_MAP_POSITIVE_X + face,
+                mip,
+                GL_RGBA16F,
+                mip_resolution,
+                mip_resolution,
+                0,
+                GL_RGBA,
+                GL_HALF_FLOAT,
+                NULL);
+        }
+    }
+    glBindTexture(GL_TEXTURE_CUBE_MAP, 0U);
+    *out_texture = texture;
+    return true;
+}
+
+static henka_result henka_opengl_build_ibl_resources(
+    henka_opengl_renderer_state* state,
+    const henka_scene* scene)
+{
+    static const henka_vec3 face_directions[6] =
+    {
+        {1.0f, 0.0f, 0.0f}, {-1.0f, 0.0f, 0.0f},
+        {0.0f, 1.0f, 0.0f}, {0.0f, -1.0f, 0.0f},
+        {0.0f, 0.0f, 1.0f}, {0.0f, 0.0f, -1.0f}
+    };
+    static const henka_vec3 face_ups[6] =
+    {
+        {0.0f, -1.0f, 0.0f}, {0.0f, -1.0f, 0.0f},
+        {0.0f, 0.0f, 1.0f}, {0.0f, 0.0f, -1.0f},
+        {0.0f, -1.0f, 0.0f}, {0.0f, -1.0f, 0.0f}
+    };
+    GLuint framebuffer = 0U;
+    GLuint environment_cube = 0U;
+    GLuint irradiance_cube = 0U;
+    GLuint prefilter_cube = 0U;
+    GLuint brdf_lut = 0U;
+    GLint previous_framebuffer = 0;
+    GLint previous_texture = 0;
+    const henka_opengl_texture_data* source_data;
+    henka_mat4 projection;
+    int face;
+    int mip;
+
+    if (state == NULL || scene == NULL || scene->environment.hdr_texture == NULL ||
+        scene->environment.hdr_texture->backend_data == NULL ||
+        state->ibl_conversion_program == 0U || state->ibl_irradiance_program == 0U ||
+        state->ibl_prefilter_program == 0U || state->ibl_brdf_program == 0U)
+        return HENKA_ERROR_RENDERER;
+    source_data = (const henka_opengl_texture_data*)scene->environment.hdr_texture->backend_data;
+    if (source_data->texture_id == 0U)
+        return HENKA_ERROR_RENDERER;
+    glGetIntegerv(GL_FRAMEBUFFER_BINDING, &previous_framebuffer);
+    glGetIntegerv(GL_TEXTURE_BINDING_2D, &previous_texture);
+    g_gl.GenFramebuffers(1, &framebuffer);
+    if (framebuffer == 0U ||
+        !henka_opengl_allocate_ibl_cube(&environment_cube, HENKA_IBL_ENVIRONMENT_RESOLUTION, 1) ||
+        !henka_opengl_allocate_ibl_cube(&irradiance_cube, HENKA_IBL_IRRADIANCE_RESOLUTION, 1) ||
+        !henka_opengl_allocate_ibl_cube(&prefilter_cube, HENKA_IBL_ENVIRONMENT_RESOLUTION, HENKA_IBL_PREFILTER_LEVELS))
+        goto ibl_failure;
+    glGenTextures(1, &brdf_lut);
+    if (brdf_lut == 0U)
+        goto ibl_failure;
+    glBindTexture(GL_TEXTURE_2D, brdf_lut);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RG16F, HENKA_IBL_BRDF_RESOLUTION, HENKA_IBL_BRDF_RESOLUTION, 0, GL_RG, GL_HALF_FLOAT, NULL);
+    projection = henka_mat4_perspective(3.14159265359f * 0.5f, 1.0f, 0.1f, 10.0f);
+    g_gl.BindFramebuffer(GL_FRAMEBUFFER, framebuffer);
+    glViewport(0, 0, HENKA_IBL_ENVIRONMENT_RESOLUTION, HENKA_IBL_ENVIRONMENT_RESOLUTION);
+    g_gl.UseProgram(state->ibl_conversion_program);
+    henka_set_uniform_int_owned(state->ibl_conversion_program, &state->ibl_conversion_shader_data, "equirectangularTexture", 0);
+    henka_set_uniform_float_owned(state->ibl_conversion_program, &state->ibl_conversion_shader_data, "rotation", scene->environment.hdr_rotation);
+    g_gl.ActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, source_data->texture_id);
+    for (face = 0; face < 6; ++face)
+    {
+        henka_mat4 view_projection = henka_mat4_multiply(
+            projection,
+            henka_mat4_look_at((henka_vec3){0.0f, 0.0f, 0.0f}, face_directions[face], face_ups[face]));
+        g_gl.FramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
+            GL_TEXTURE_CUBE_MAP_POSITIVE_X + face, environment_cube, 0);
+        if (g_gl.CheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
+        {
+            (void)snprintf(state->ibl_failure_reason, sizeof(state->ibl_failure_reason), "environment cube framebuffer incomplete");
+            goto ibl_failure;
+        }
+        henka_set_uniform_mat4_owned(state->ibl_conversion_program, &state->ibl_conversion_shader_data, "viewProjection", view_projection);
+        g_gl.BindVertexArray(state->tone_vertex_array);
+        glDrawArrays(GL_TRIANGLES, 0, 3);
+    }
+    g_gl.UseProgram(state->ibl_irradiance_program);
+    henka_set_uniform_int_owned(state->ibl_irradiance_program, &state->ibl_irradiance_shader_data, "environmentCube", 0);
+    glBindTexture(GL_TEXTURE_CUBE_MAP, environment_cube);
+    glViewport(0, 0, HENKA_IBL_IRRADIANCE_RESOLUTION, HENKA_IBL_IRRADIANCE_RESOLUTION);
+    for (face = 0; face < 6; ++face)
+    {
+        henka_mat4 view_projection = henka_mat4_multiply(
+            projection,
+            henka_mat4_look_at((henka_vec3){0.0f, 0.0f, 0.0f}, face_directions[face], face_ups[face]));
+        g_gl.FramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
+            GL_TEXTURE_CUBE_MAP_POSITIVE_X + face, irradiance_cube, 0);
+        if (g_gl.CheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
+        {
+            (void)snprintf(state->ibl_failure_reason, sizeof(state->ibl_failure_reason), "irradiance cube framebuffer incomplete");
+            goto ibl_failure;
+        }
+        henka_set_uniform_mat4_owned(state->ibl_irradiance_program, &state->ibl_irradiance_shader_data, "viewProjection", view_projection);
+        g_gl.BindVertexArray(state->tone_vertex_array);
+        glDrawArrays(GL_TRIANGLES, 0, 3);
+    }
+    g_gl.UseProgram(state->ibl_prefilter_program);
+    henka_set_uniform_int_owned(state->ibl_prefilter_program, &state->ibl_prefilter_shader_data, "environmentCube", 0);
+    for (mip = 0; mip < HENKA_IBL_PREFILTER_LEVELS; ++mip)
+    {
+        int resolution = HENKA_IBL_ENVIRONMENT_RESOLUTION >> mip;
+        float roughness = (float)mip / (float)(HENKA_IBL_PREFILTER_LEVELS - 1);
+        if (resolution < 1) resolution = 1;
+        glViewport(0, 0, resolution, resolution);
+        henka_set_uniform_float_owned(state->ibl_prefilter_program, &state->ibl_prefilter_shader_data, "roughness", roughness);
+        for (face = 0; face < 6; ++face)
+        {
+            henka_mat4 view_projection = henka_mat4_multiply(
+                projection,
+                henka_mat4_look_at((henka_vec3){0.0f, 0.0f, 0.0f}, face_directions[face], face_ups[face]));
+            g_gl.FramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
+                GL_TEXTURE_CUBE_MAP_POSITIVE_X + face, prefilter_cube, mip);
+            if (g_gl.CheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
+            {
+                (void)snprintf(state->ibl_failure_reason, sizeof(state->ibl_failure_reason), "prefilter cube framebuffer incomplete");
+                goto ibl_failure;
+            }
+            henka_set_uniform_mat4_owned(state->ibl_prefilter_program, &state->ibl_prefilter_shader_data, "viewProjection", view_projection);
+            g_gl.BindVertexArray(state->tone_vertex_array);
+            glDrawArrays(GL_TRIANGLES, 0, 3);
+        }
+    }
+    g_gl.BindFramebuffer(GL_FRAMEBUFFER, framebuffer);
+    g_gl.FramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, brdf_lut, 0);
+    if (g_gl.CheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
+    {
+        (void)snprintf(state->ibl_failure_reason, sizeof(state->ibl_failure_reason), "BRDF LUT framebuffer incomplete");
+        goto ibl_failure;
+    }
+    glViewport(0, 0, HENKA_IBL_BRDF_RESOLUTION, HENKA_IBL_BRDF_RESOLUTION);
+    g_gl.UseProgram(state->ibl_brdf_program);
+    g_gl.BindVertexArray(state->tone_vertex_array);
+    glDrawArrays(GL_TRIANGLES, 0, 3);
+    g_gl.BindVertexArray(0);
+    g_gl.UseProgram(0);
+    g_gl.BindFramebuffer(GL_FRAMEBUFFER, (GLuint)previous_framebuffer);
+    glBindTexture(GL_TEXTURE_2D, (GLuint)previous_texture);
+    glBindTexture(GL_TEXTURE_CUBE_MAP, 0U);
+    henka_opengl_delete_ibl_resources(state);
+    state->ibl_framebuffer = framebuffer;
+    state->ibl_environment_cube = environment_cube;
+    state->ibl_irradiance_cube = irradiance_cube;
+    state->ibl_prefilter_cube = prefilter_cube;
+    state->ibl_brdf_lut = brdf_lut;
+    state->ibl_ready = true;
+    {
+        uint64_t bytes = 0U;
+        for (mip = 0; mip < HENKA_IBL_PREFILTER_LEVELS; ++mip)
+        {
+            int size = HENKA_IBL_ENVIRONMENT_RESOLUTION >> mip;
+            bytes += (uint64_t)size * (uint64_t)size * 6U * 8U;
+        }
+        bytes += (uint64_t)HENKA_IBL_ENVIRONMENT_RESOLUTION * HENKA_IBL_ENVIRONMENT_RESOLUTION * 6U * 8U;
+        bytes += (uint64_t)HENKA_IBL_IRRADIANCE_RESOLUTION * HENKA_IBL_IRRADIANCE_RESOLUTION * 6U * 8U;
+        bytes += (uint64_t)HENKA_IBL_BRDF_RESOLUTION * HENKA_IBL_BRDF_RESOLUTION * 4U;
+        henka_opengl_memory_add_category(state, &state->tracked_render_target_bytes, bytes);
+    }
+    return HENKA_SUCCESS;
+
+ibl_failure:
+    g_gl.BindFramebuffer(GL_FRAMEBUFFER, (GLuint)previous_framebuffer);
+    glBindTexture(GL_TEXTURE_2D, (GLuint)previous_texture);
+    if (environment_cube != 0U) glDeleteTextures(1, &environment_cube);
+    if (irradiance_cube != 0U) glDeleteTextures(1, &irradiance_cube);
+    if (prefilter_cube != 0U) glDeleteTextures(1, &prefilter_cube);
+    if (brdf_lut != 0U) glDeleteTextures(1, &brdf_lut);
+    if (framebuffer != 0U) g_gl.DeleteFramebuffers(1, &framebuffer);
+    g_gl.BindVertexArray(0);
+    g_gl.UseProgram(0);
+    if (state->ibl_failure_reason[0] == '\0')
+        (void)snprintf(state->ibl_failure_reason, sizeof(state->ibl_failure_reason), "derived IBL allocation or render failed");
+    return HENKA_ERROR_RENDERER;
+}
+
+static void henka_opengl_sync_ibl_resources(
+    henka_opengl_renderer_state* state,
+    const henka_scene* scene)
+{
+    const henka_texture* source;
+    uint64_t revision;
+    float rotation;
+
+    if (state == NULL || scene == NULL)
+        return;
+    source = scene->environment.hdr_texture;
+    revision = source != NULL ? source->content_revision : 0U;
+    rotation = scene->environment.hdr_rotation;
+    if (source == NULL || source->backend_data == NULL)
+    {
+        if (state->ibl_ready || state->ibl_environment_cube != 0U)
+            henka_opengl_delete_ibl_resources(state);
+        state->ibl_source_texture = NULL;
+        state->ibl_source_revision = 0U;
+        state->ibl_source_rotation = 0.0f;
+        state->ibl_failure_reason[0] = '\0';
+        return;
+    }
+    if (state->ibl_source_texture == source && state->ibl_source_revision == revision &&
+        state->ibl_source_rotation == rotation &&
+        (state->ibl_ready || state->ibl_failure_reason[0] != '\0'))
+        return;
+    state->ibl_source_texture = source;
+    state->ibl_source_revision = revision;
+    state->ibl_source_rotation = rotation;
+    state->ibl_failure_reason[0] = '\0';
+    state->ibl_ready = false;
+    if (henka_opengl_build_ibl_resources(state, scene) != HENKA_SUCCESS)
+    {
+        state->ibl_ready = false;
+        if (state->ibl_failure_reason[0] == '\0')
+            (void)snprintf(state->ibl_failure_reason, sizeof(state->ibl_failure_reason), "derived IBL target unavailable");
+    }
+    else
+    {
+        state->ibl_failure_reason[0] = '\0';
+    }
+}
+
 static void henka_opengl_delete_shadow_target(henka_opengl_renderer_state* state)
 {
     uint64_t target_bytes = 0U;
@@ -1520,6 +1842,10 @@ static henka_result henka_opengl_create_render_programs(
     static const char* tone_uniforms[] = {"hdrTexture", "bloomTexture", "exposure", "useBloom", "bloomStrength"};
     static const char* bloom_extract_uniforms[] = {"hdrTexture", "threshold"};
     static const char* bloom_blur_uniforms[] = {"sourceTexture", "direction"};
+    static const char* ibl_conversion_uniforms[] = {"equirectangularTexture", "rotation", "viewProjection"};
+    static const char* ibl_cube_uniforms[] = {"environmentCube", "viewProjection"};
+    static const char* ibl_prefilter_uniforms[] = {"environmentCube", "roughness", "viewProjection"};
+    static const char* ibl_brdf_uniforms[] = {"brdfScale"};
     static const char* environment_uniforms[] =
         {"groundColor", "horizonColor", "zenithColor", "intensity",
          "environmentTexture", "useEnvironmentTexture", "environmentRotation"};
@@ -1542,6 +1868,22 @@ static henka_result henka_opengl_create_render_programs(
         "#version 330 core\n"
         "in vec2 uv; uniform sampler2D sourceTexture; uniform vec2 direction; out vec4 outColor;\n"
         "void main(){ vec3 color = texture(sourceTexture, uv).rgb * 0.227027; color += texture(sourceTexture, uv + direction * 1.384615).rgb * 0.316216; color += texture(sourceTexture, uv - direction * 1.384615).rgb * 0.316216; color += texture(sourceTexture, uv + direction * 3.230769).rgb * 0.070270; color += texture(sourceTexture, uv - direction * 3.230769).rgb * 0.070270; outColor = vec4(color, 1.0); }\n";
+    static const char* ibl_conversion_fragment =
+        "#version 330 core\n"
+        "in vec2 uv; uniform sampler2D equirectangularTexture; uniform float rotation; uniform mat4 viewProjection; out vec4 outColor; const float PI=3.14159265359;\n"
+        "void main(){ vec2 ndc=uv*2.0-1.0; vec4 world=inverse(viewProjection)*vec4(ndc,1.0,1.0); vec3 direction=normalize(world.xyz/world.w); float longitude=atan(direction.z,direction.x)/(2.0*PI)+0.5+rotation/(2.0*PI); float latitude=acos(clamp(direction.y,-1.0,1.0))/PI; outColor=vec4(texture(equirectangularTexture,vec2(fract(longitude),latitude)).rgb,1.0); }\n";
+    static const char* ibl_irradiance_fragment =
+        "#version 330 core\n"
+        "in vec2 uv; uniform samplerCube environmentCube; uniform mat4 viewProjection; out vec4 outColor;\n"
+        "void main(){ vec2 ndc=uv*2.0-1.0; vec4 world=inverse(viewProjection)*vec4(ndc,1.0,1.0); vec3 n=normalize(world.xyz/world.w); vec3 up=abs(n.y)<0.95?vec3(0.0,1.0,0.0):vec3(1.0,0.0,0.0); vec3 t=normalize(cross(up,n)); vec3 b=cross(n,t); vec3 color=texture(environmentCube,n).rgb; color+=texture(environmentCube,normalize(n+t*0.5)).rgb; color+=texture(environmentCube,normalize(n-t*0.5)).rgb; color+=texture(environmentCube,normalize(n+b*0.5)).rgb; color+=texture(environmentCube,normalize(n-b*0.5)).rgb; outColor=vec4(color/5.0,1.0); }\n";
+    static const char* ibl_prefilter_fragment =
+        "#version 330 core\n"
+        "in vec2 uv; uniform samplerCube environmentCube; uniform float roughness; uniform mat4 viewProjection; out vec4 outColor;\n"
+        "void main(){ vec2 ndc=uv*2.0-1.0; vec4 world=inverse(viewProjection)*vec4(ndc,1.0,1.0); vec3 n=normalize(world.xyz/world.w); vec3 color=texture(environmentCube,n).rgb; vec3 up=abs(n.y)<0.95?vec3(0.0,1.0,0.0):vec3(1.0,0.0,0.0); vec3 t=normalize(cross(up,n)); vec3 b=cross(n,t); color+=texture(environmentCube,normalize(n+t*roughness)).rgb; color+=texture(environmentCube,normalize(n-t*roughness)).rgb; color+=texture(environmentCube,normalize(n+b*roughness)).rgb; color+=texture(environmentCube,normalize(n-b*roughness)).rgb; outColor=vec4(color/5.0,1.0); }\n";
+    static const char* ibl_brdf_fragment =
+        "#version 330 core\n"
+        "in vec2 uv; uniform float brdfScale; out vec2 outColor;\n"
+        "void main(){ float nDotV=clamp(uv.x,0.0,1.0); float roughness=clamp(1.0-uv.y,0.0,1.0); float fresnel=pow(1.0-nDotV,5.0); outColor=vec2((1.0-fresnel)*(1.0-0.5*roughness),fresnel)*brdfScale; }\n";
     static const char* environment_fragment =
         "#version 330 core\n"
         "in vec2 uv; uniform vec3 groundColor; uniform vec3 horizonColor; uniform vec3 zenithColor; uniform float intensity; uniform sampler2D environmentTexture; uniform bool useEnvironmentTexture; uniform float environmentRotation; out vec4 outColor;\n"
@@ -1559,12 +1901,20 @@ static henka_result henka_opengl_create_render_programs(
         !henka_compile_program_from_source(tone_vertex, tone_fragment, "tone-map vertex", "tone-map fragment", &state->tone_program) ||
         !henka_compile_program_from_source(tone_vertex, bloom_extract_fragment, "bloom extract vertex", "bloom extract fragment", &state->bloom_extract_program) ||
         !henka_compile_program_from_source(tone_vertex, bloom_blur_fragment, "bloom blur vertex", "bloom blur fragment", &state->bloom_blur_program) ||
+        !henka_compile_program_from_source(tone_vertex, ibl_conversion_fragment, "IBL conversion vertex", "IBL conversion fragment", &state->ibl_conversion_program) ||
+        !henka_compile_program_from_source(tone_vertex, ibl_irradiance_fragment, "IBL irradiance vertex", "IBL irradiance fragment", &state->ibl_irradiance_program) ||
+        !henka_compile_program_from_source(tone_vertex, ibl_prefilter_fragment, "IBL prefilter vertex", "IBL prefilter fragment", &state->ibl_prefilter_program) ||
+        !henka_compile_program_from_source(tone_vertex, ibl_brdf_fragment, "BRDF LUT vertex", "BRDF LUT fragment", &state->ibl_brdf_program) ||
         !henka_compile_program_from_source(tone_vertex, environment_fragment, "environment vertex", "environment fragment", &state->environment_program) ||
         !henka_compile_program_from_source(shadow_vertex, shadow_fragment, "shadow vertex", "shadow fragment", &state->shadow_program))
     {
         if (state->bloom_blur_program != 0U) g_gl.DeleteProgram(state->bloom_blur_program);
         if (state->bloom_extract_program != 0U) g_gl.DeleteProgram(state->bloom_extract_program);
         if (state->tone_program != 0U) g_gl.DeleteProgram(state->tone_program);
+        if (state->ibl_brdf_program != 0U) g_gl.DeleteProgram(state->ibl_brdf_program);
+        if (state->ibl_prefilter_program != 0U) g_gl.DeleteProgram(state->ibl_prefilter_program);
+        if (state->ibl_irradiance_program != 0U) g_gl.DeleteProgram(state->ibl_irradiance_program);
+        if (state->ibl_conversion_program != 0U) g_gl.DeleteProgram(state->ibl_conversion_program);
         state->bloom_blur_program = 0U;
         state->bloom_extract_program = 0U;
         state->tone_program = 0U;
@@ -1594,6 +1944,38 @@ static henka_result henka_opengl_create_render_programs(
             bloom_blur_uniforms,
             sizeof(bloom_blur_uniforms) / sizeof(bloom_blur_uniforms[0]),
             &state->bloom_blur_shader_data) ||
+        !henka_populate_shader_location_table(
+            state->ibl_conversion_program,
+            "IBL conversion",
+            HENKA_SHADER_CONTRACT_IBL_CONVERSION,
+            1U,
+            ibl_conversion_uniforms,
+            sizeof(ibl_conversion_uniforms) / sizeof(ibl_conversion_uniforms[0]),
+            &state->ibl_conversion_shader_data) ||
+        !henka_populate_shader_location_table(
+            state->ibl_irradiance_program,
+            "IBL irradiance",
+            HENKA_SHADER_CONTRACT_IBL_IRRADIANCE,
+            1U,
+            ibl_cube_uniforms,
+            sizeof(ibl_cube_uniforms) / sizeof(ibl_cube_uniforms[0]),
+            &state->ibl_irradiance_shader_data) ||
+        !henka_populate_shader_location_table(
+            state->ibl_prefilter_program,
+            "IBL prefilter",
+            HENKA_SHADER_CONTRACT_IBL_PREFILTER,
+            1U,
+            ibl_prefilter_uniforms,
+            sizeof(ibl_prefilter_uniforms) / sizeof(ibl_prefilter_uniforms[0]),
+            &state->ibl_prefilter_shader_data) ||
+        !henka_populate_shader_location_table(
+            state->ibl_brdf_program,
+            "BRDF LUT",
+            HENKA_SHADER_CONTRACT_BRDF_LUT,
+            1U,
+            ibl_brdf_uniforms,
+            sizeof(ibl_brdf_uniforms) / sizeof(ibl_brdf_uniforms[0]),
+            &state->ibl_brdf_shader_data) ||
         !henka_populate_shader_location_table(
             state->environment_program,
             "environment",
@@ -2006,10 +2388,15 @@ henka_result henka_opengl_renderer_create(struct henka_renderer* renderer, struc
         henka_opengl_delete_hdr_target(state);
         henka_opengl_delete_bloom_target(state);
         henka_opengl_delete_shadow_target(state);
+        henka_opengl_delete_ibl_resources(state);
         if (state->shadow_program != 0U) g_gl.DeleteProgram(state->shadow_program);
         if (state->tone_program != 0U) g_gl.DeleteProgram(state->tone_program);
         if (state->bloom_blur_program != 0U) g_gl.DeleteProgram(state->bloom_blur_program);
         if (state->bloom_extract_program != 0U) g_gl.DeleteProgram(state->bloom_extract_program);
+        if (state->ibl_brdf_program != 0U) g_gl.DeleteProgram(state->ibl_brdf_program);
+        if (state->ibl_prefilter_program != 0U) g_gl.DeleteProgram(state->ibl_prefilter_program);
+        if (state->ibl_irradiance_program != 0U) g_gl.DeleteProgram(state->ibl_irradiance_program);
+        if (state->ibl_conversion_program != 0U) g_gl.DeleteProgram(state->ibl_conversion_program);
         if (state->environment_program != 0U) g_gl.DeleteProgram(state->environment_program);
         if (state->tone_vertex_array != 0U) g_gl.DeleteVertexArrays(1, &state->tone_vertex_array);
         g_gl.DeleteProgram(state->viewport_program);
@@ -2065,6 +2452,7 @@ void henka_opengl_renderer_destroy(struct henka_renderer* renderer)
         henka_opengl_delete_hdr_target(state);
         henka_opengl_delete_bloom_target(state);
         henka_opengl_delete_shadow_target(state);
+        henka_opengl_delete_ibl_resources(state);
         if (state->tone_program != 0U)
         {
             g_gl.DeleteProgram(state->tone_program);
@@ -2076,6 +2464,22 @@ void henka_opengl_renderer_destroy(struct henka_renderer* renderer)
         if (state->bloom_extract_program != 0U)
         {
             g_gl.DeleteProgram(state->bloom_extract_program);
+        }
+        if (state->ibl_brdf_program != 0U)
+        {
+            g_gl.DeleteProgram(state->ibl_brdf_program);
+        }
+        if (state->ibl_prefilter_program != 0U)
+        {
+            g_gl.DeleteProgram(state->ibl_prefilter_program);
+        }
+        if (state->ibl_irradiance_program != 0U)
+        {
+            g_gl.DeleteProgram(state->ibl_irradiance_program);
+        }
+        if (state->ibl_conversion_program != 0U)
+        {
+            g_gl.DeleteProgram(state->ibl_conversion_program);
         }
         if (state->environment_program != 0U)
         {
@@ -2474,6 +2878,7 @@ henka_result henka_opengl_renderer_draw_scene(
         henka_apply_scene_target_viewport(renderer);
         glClearColor(0.075f, 0.09f, 0.12f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+        henka_opengl_sync_ibl_resources(state, scene);
         henka_opengl_draw_environment(state, renderer, scene);
     }
     else
@@ -2724,6 +3129,10 @@ henka_result henka_opengl_renderer_draw_scene(
             scene->environment.hdr_texture != NULL &&
             scene->environment.hdr_texture->backend_data != NULL);
         henka_set_uniform_float(program, "environmentRotation", scene->environment.hdr_rotation);
+        henka_set_uniform_int(program, "iblIrradianceMap", 7);
+        henka_set_uniform_int(program, "iblPrefilterMap", 8);
+        henka_set_uniform_int(program, "iblBrdfLut", 9);
+        henka_set_uniform_bool(program, "useIBL", !helper_entity && state->ibl_ready);
         henka_set_uniform_int(program, "localLightCount", local_light_count);
         henka_set_uniform_vec4_array_owned(
             program,
@@ -2856,6 +3265,15 @@ henka_result henka_opengl_renderer_draw_scene(
             !helper_entity && scene->environment.hdr_texture != NULL &&
             scene->environment.hdr_texture->backend_data != NULL ?
             ((const henka_opengl_texture_data*)scene->environment.hdr_texture->backend_data)->texture_id : 0U);
+        g_gl.ActiveTexture(GL_TEXTURE7);
+        glBindTexture(GL_TEXTURE_CUBE_MAP,
+            !helper_entity && state->ibl_ready ? state->ibl_irradiance_cube : 0U);
+        g_gl.ActiveTexture(GL_TEXTURE8);
+        glBindTexture(GL_TEXTURE_CUBE_MAP,
+            !helper_entity && state->ibl_ready ? state->ibl_prefilter_cube : 0U);
+        g_gl.ActiveTexture(GL_TEXTURE9);
+        glBindTexture(GL_TEXTURE_2D,
+            !helper_entity && state->ibl_ready ? state->ibl_brdf_lut : 0U);
         g_gl.ActiveTexture(GL_TEXTURE0);
         g_gl.BindVertexArray(mesh_data->vao);
         glDrawElements(
@@ -2889,6 +3307,12 @@ henka_result henka_opengl_renderer_draw_scene(
     g_gl.ActiveTexture(GL_TEXTURE5);
     glBindTexture(GL_TEXTURE_2D, 0);
     g_gl.ActiveTexture(GL_TEXTURE6);
+    glBindTexture(GL_TEXTURE_2D, 0);
+    g_gl.ActiveTexture(GL_TEXTURE7);
+    glBindTexture(GL_TEXTURE_CUBE_MAP, 0);
+    g_gl.ActiveTexture(GL_TEXTURE8);
+    glBindTexture(GL_TEXTURE_CUBE_MAP, 0);
+    g_gl.ActiveTexture(GL_TEXTURE9);
     glBindTexture(GL_TEXTURE_2D, 0);
     g_gl.ActiveTexture(GL_TEXTURE0);
     g_gl.UseProgram(0);
@@ -3621,6 +4045,26 @@ void henka_opengl_renderer_get_bloom_diagnostics(
             failure_capacity,
             "%s",
             state != NULL && state->bloom_failure_reason[0] != '\0' ? state->bloom_failure_reason : "");
+    }
+}
+
+void henka_opengl_renderer_get_ibl_diagnostics(
+    const struct henka_renderer* renderer,
+    bool* out_ready,
+    char* out_failure,
+    size_t failure_capacity)
+{
+    const henka_opengl_renderer_state* state = renderer != NULL && renderer->backend_state != NULL ?
+        (const henka_opengl_renderer_state*)renderer->backend_state : NULL;
+
+    if (out_ready != NULL) *out_ready = state != NULL && state->ibl_ready;
+    if (out_failure != NULL && failure_capacity > 0U)
+    {
+        (void)snprintf(
+            out_failure,
+            failure_capacity,
+            "%s",
+            state != NULL && state->ibl_failure_reason[0] != '\0' ? state->ibl_failure_reason : "");
     }
 }
 

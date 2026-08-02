@@ -88,6 +88,7 @@ typedef struct henka_engine_diagnostics
     bool rendered_hdr_ready;
     bool rendered_shadow_ready;
     bool rendered_bloom_ready;
+    bool rendered_ibl_ready;
     henka_viewport scene_viewport;
     int rendered_hdr_requested_width;
     int rendered_hdr_requested_height;
@@ -103,6 +104,7 @@ typedef struct henka_engine_diagnostics
     int rendered_bloom_width;
     int rendered_bloom_height;
     char rendered_bloom_failure[64];
+    char rendered_ibl_failure[64];
     uint32_t rendered_scene_draw_calls;
     uint32_t rendered_scene_visible_entities;
     uint32_t rendered_scene_culled_entities;

@@ -26,6 +26,10 @@ uniform float environmentIntensity;
 uniform sampler2D environmentTexture;
 uniform bool useEnvironmentTexture;
 uniform float environmentRotation;
+uniform samplerCube iblIrradianceMap;
+uniform samplerCube iblPrefilterMap;
+uniform sampler2D iblBrdfLut;
+uniform bool useIBL;
 uniform int localLightCount;
 uniform vec4 localLightPositionRange[4];
 uniform vec4 localLightColorIntensity[4];
@@ -264,16 +268,19 @@ void main()
             baseLayerTransmission * occlusion, vec3(65504.0));
         if (useEnvironment)
         {
-            vec3 environmentDiffuse = sampleEnvironment(normal);
+            vec3 environmentDiffuse = useIBL ? texture(iblIrradianceMap, normal).rgb : sampleEnvironment(normal);
             vec3 reflectionDirection = reflect(-viewDirection, normal);
             vec3 blurredReflectionDirection = safeNormalize(
                 mix(reflectionDirection, normal, surfaceRoughness * 0.75),
                 normal);
-            vec3 environmentSpecular = sampleEnvironment(blurredReflectionDirection);
+            vec3 environmentSpecular = useIBL ?
+                textureLod(iblPrefilterMap, blurredReflectionDirection, surfaceRoughness * 4.0).rgb :
+                sampleEnvironment(blurredReflectionDirection);
+            vec2 brdf = useIBL ? texture(iblBrdfLut, vec2(nDotV, 1.0 - surfaceRoughness)).rg : vec2(1.0, 0.0);
             color += min(
                 environmentDiffuse * ((1.0 - surfaceMetallic) * albedo / PI) *
                     baseLayerTransmission * occlusion * 0.55 +
-                environmentSpecular * fresnel * baseLayerTransmission * occlusion *
+                environmentSpecular * (fresnel * brdf.x + brdf.y) * baseLayerTransmission * occlusion *
                     (0.35 + 0.65 * (1.0 - surfaceRoughness)),
                 vec3(65504.0));
         }

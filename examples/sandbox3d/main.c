@@ -290,6 +290,7 @@ typedef struct sandbox3d_state
     henka_texture* cube_texture;
     henka_texture* ground_texture;
     henka_texture* missing_texture;
+    henka_texture* environment_texture;
     henka_entity cube_entity;
     henka_entity ground_entity;
     henka_entity grid_entity;
@@ -2736,6 +2737,7 @@ static void sandbox3d_release_owned_resources(sandbox3d_state* state)
     henka_mesh_destroy(state->sphere_mesh);
     henka_physics_world_destroy(state->physics.world);
     henka_scene_destroy(state->scene);
+    henka_texture_destroy(state->environment_texture);
     henka_action_context_destroy(state->actions);
     henka_settings_destroy(state->settings);
     henka_ui_destroy(state->ui);
@@ -2751,6 +2753,7 @@ static void sandbox3d_release_owned_resources(sandbox3d_state* state)
     state->ground_mesh = NULL;
     state->cube_mesh = NULL;
     state->sphere_mesh = NULL;
+    state->environment_texture = NULL;
     state->physics.world = NULL;
     state->gizmo_render.axis_mesh = NULL;
     state->gizmo_render.ring_mesh = NULL;
@@ -7123,7 +7126,7 @@ static void sandbox3d_draw_utility_panel(
             snprintf(
                 row_value,
                 sizeof(row_value),
-                "HDR:%s %dx%d g%llu / Shadow:%s %d g%llu / Bloom:%s %dx%d",
+                "HDR:%s %dx%d g%llu / Shadow:%s %d g%llu / Bloom:%s %dx%d / IBL:%s",
                 diagnostics.rendered_hdr_ready ? "Ready" : "Unavailable",
                 diagnostics.rendered_hdr_allocated_width,
                 diagnostics.rendered_hdr_allocated_height,
@@ -7133,7 +7136,8 @@ static void sandbox3d_draw_utility_panel(
                 (unsigned long long)diagnostics.rendered_shadow_generation,
                 diagnostics.rendered_bloom_ready ? "Ready" : "Unavailable",
                 diagnostics.rendered_bloom_width,
-                diagnostics.rendered_bloom_height);
+                diagnostics.rendered_bloom_height,
+                diagnostics.rendered_ibl_ready ? "Ready" : "Fallback");
             sandbox3d_draw_value_row(state->ui, x_left, y_start + 70.0f, panel_bounds.width - 28.0f, "Rendered", row_value);
             sandbox3d_draw_value_row(state->ui, x_left, y_start + 96.0f, panel_bounds.width - 28.0f, "Layout", sandbox3d_get_layout_mode_label(state->workspace.layout_mode));
             sandbox3d_draw_value_row(state->ui, x_left, y_start + 122.0f, panel_bounds.width - 28.0f, "Tool", sandbox3d_viewport_tool_mode_to_string(state->viewport_tool));
@@ -7756,6 +7760,49 @@ static henka_result sandbox3d_initialize(henka_engine* engine, void* user_data)
         goto fail;
     }
 
+    {
+        static const float studio_environment_pixels[] =
+        {
+            0.08f, 0.11f, 0.18f, 1.0f,  0.22f, 0.30f, 0.52f, 1.0f,
+            1.5f,  1.2f,  0.85f, 1.0f,  0.35f, 0.48f, 0.78f, 1.0f,
+            0.06f, 0.08f, 0.12f, 1.0f,  0.12f, 0.16f, 0.24f, 1.0f,
+            0.04f, 0.05f, 0.07f, 1.0f,  0.07f, 0.09f, 0.14f, 1.0f
+        };
+        henka_texture_descriptor environment_descriptor = henka_texture_descriptor_default_data();
+        result = henka_texture_create_from_rgba32f_with_descriptor(
+            engine,
+            4,
+            2,
+            studio_environment_pixels,
+            &environment_descriptor,
+            &state->environment_texture);
+        if (result != HENKA_SUCCESS)
+        {
+            goto fail;
+        }
+        result = henka_scene_set_environment(
+            state->scene,
+            (henka_scene_environment_desc){
+                (henka_vec3){0.04f, 0.05f, 0.08f},
+                (henka_vec3){0.12f, 0.18f, 0.30f},
+                (henka_vec3){0.18f, 0.24f, 0.42f},
+                1.0f,
+                state->environment_texture,
+                0.0f});
+        if (result != HENKA_SUCCESS)
+        {
+            goto fail;
+        }
+        if (state->smoke_test &&
+            henka_engine_set_viewport_shading_mode(
+                engine,
+                HENKA_VIEWPORT_SHADING_RENDERED) != HENKA_SUCCESS)
+        {
+            result = HENKA_ERROR_RENDERER;
+            goto fail;
+        }
+    }
+
     result = henka_action_context_create(&state->actions);
     if (result != HENKA_SUCCESS)
     {
@@ -8288,6 +8335,14 @@ static henka_result sandbox3d_initialize(henka_engine* engine, void* user_data)
     }
 
     sandbox3d_apply_loaded_settings(engine, state);
+    if (state->smoke_test &&
+        henka_engine_set_viewport_shading_mode(
+            engine,
+            HENKA_VIEWPORT_SHADING_RENDERED) != HENKA_SUCCESS)
+    {
+        result = HENKA_ERROR_RENDERER;
+        goto fail;
+    }
     if (sandbox3d_editor_controls_load(&state->editor_controls, state->settings) != HENKA_SUCCESS)
     {
         state->editor_controls_loaded_safely = false;
@@ -8708,6 +8763,17 @@ static void sandbox3d_update(henka_engine* engine, double delta_seconds, void* u
     sandbox3d_build_detached_workspace_panel_ui(engine, state);
     if (state->smoke_test && henka_engine_get_frame_index(engine) >= 2U)
     {
+        henka_engine_diagnostics smoke_diagnostics;
+        if (henka_engine_get_diagnostics(engine, &smoke_diagnostics) == HENKA_SUCCESS)
+        {
+            printf(
+                "Rendered smoke diagnostics: HDR=%s Bloom=%s IBL=%s (%s) GPU=%llu bytes.\n",
+                smoke_diagnostics.rendered_hdr_ready ? "ready" : "fallback",
+                smoke_diagnostics.rendered_bloom_ready ? "ready" : "fallback",
+                smoke_diagnostics.rendered_ibl_ready ? "ready" : "fallback",
+                smoke_diagnostics.rendered_ibl_failure[0] != '\0' ? smoke_diagnostics.rendered_ibl_failure : "none",
+                (unsigned long long)smoke_diagnostics.renderer_tracked_gpu_bytes);
+        }
         printf("Sandbox smoke test completed.\n");
         fflush(stdout);
         henka_engine_request_exit(engine);

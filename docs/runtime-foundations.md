@@ -107,6 +107,7 @@ Materials now expose a bounded metallic-roughness subset: base color, metallic, 
 ### Workspace and viewport
 
 HDR presentation includes a bounded half-resolution extract and separable blur bloom pass. Its GPU targets are replaced transactionally; if allocation or framebuffer validation fails, tone mapping remains active and the renderer diagnostics expose the fallback.
+When a scene supplies a linear HDR equirectangular texture, the renderer derives bounded environment, irradiance, prefiltered-specular, and BRDF-LUT resources through one framebuffer-owned build transaction. The material shader samples those resources for diffuse and roughness-aware specular response; a failed derivation retains the source equirectangular path and reports IBL fallback diagnostics.
 
 The directional shadow map is fitted around the active camera with a bounded orthographic coverage and texel-quantized center. This stabilizes the map during sub-texel camera motion while retaining slope-aware bias and a small PCF kernel; local point and spot shadow maps remain outside the current GL 3.3 budget.
 
