@@ -123,6 +123,11 @@ typedef struct henka_opengl_renderer_state
     uint32_t scene_visible_entities;
     uint32_t scene_culled_entities;
     uint32_t transparent_sort_overflow_entities;
+    double scene_cpu_time_milliseconds;
+    double scene_gpu_time_milliseconds;
+    bool gpu_timing_available;
+    GLuint scene_gpu_query;
+    bool scene_gpu_query_pending;
     uint64_t tracked_gpu_bytes;
     uint64_t tracked_gpu_peak_bytes;
     uint64_t tracked_mesh_bytes;
@@ -320,6 +325,12 @@ typedef struct henka_opengl_functions
     PFNGLRENDERBUFFERSTORAGEPROC RenderbufferStorage;
     PFNGLFRAMEBUFFERRENDERBUFFERPROC FramebufferRenderbuffer;
     PFNGLDELETERENDERBUFFERSPROC DeleteRenderbuffers;
+    PFNGLGENQUERIESPROC GenQueries;
+    PFNGLDELETEQUERIESPROC DeleteQueries;
+    PFNGLBEGINQUERYPROC BeginQuery;
+    PFNGLENDQUERYPROC EndQuery;
+    PFNGLGETQUERYOBJECTIVPROC GetQueryObjectiv;
+    PFNGLGETQUERYOBJECTUI64VPROC GetQueryObjectui64v;
 } henka_opengl_functions;
 
 typedef struct henka_opengl_mesh_data
@@ -553,6 +564,22 @@ static bool henka_opengl_load_functions(void)
     HENKA_GL_LOAD(RenderbufferStorage);
     HENKA_GL_LOAD(FramebufferRenderbuffer);
     HENKA_GL_LOAD(DeleteRenderbuffers);
+
+    {
+        SDL_FunctionPointer proc_address;
+        proc_address = SDL_GL_GetProcAddress("glGenQueries");
+        memcpy(&g_gl.GenQueries, &proc_address, sizeof(proc_address));
+        proc_address = SDL_GL_GetProcAddress("glDeleteQueries");
+        memcpy(&g_gl.DeleteQueries, &proc_address, sizeof(proc_address));
+        proc_address = SDL_GL_GetProcAddress("glBeginQuery");
+        memcpy(&g_gl.BeginQuery, &proc_address, sizeof(proc_address));
+        proc_address = SDL_GL_GetProcAddress("glEndQuery");
+        memcpy(&g_gl.EndQuery, &proc_address, sizeof(proc_address));
+        proc_address = SDL_GL_GetProcAddress("glGetQueryObjectiv");
+        memcpy(&g_gl.GetQueryObjectiv, &proc_address, sizeof(proc_address));
+        proc_address = SDL_GL_GetProcAddress("glGetQueryObjectui64v");
+        memcpy(&g_gl.GetQueryObjectui64v, &proc_address, sizeof(proc_address));
+    }
 
 #undef HENKA_GL_LOAD
     return true;
@@ -2337,6 +2364,13 @@ henka_result henka_opengl_renderer_create(struct henka_renderer* renderer, struc
         renderer->backend_state = NULL;
         return HENKA_ERROR_RENDERER;
     }
+    if (g_gl.GenQueries != NULL && g_gl.DeleteQueries != NULL &&
+        g_gl.BeginQuery != NULL && g_gl.EndQuery != NULL &&
+        g_gl.GetQueryObjectiv != NULL && g_gl.GetQueryObjectui64v != NULL)
+    {
+        g_gl.GenQueries(1, &state->scene_gpu_query);
+        state->gpu_timing_available = state->scene_gpu_query != 0U;
+    }
 
     if (henka_platform_get_framebuffer_size(platform, &framebuffer_width, &framebuffer_height))
     {
@@ -2399,6 +2433,8 @@ henka_result henka_opengl_renderer_create(struct henka_renderer* renderer, struc
         g_gl.DeleteBuffers(1, &state->ui_vertex_buffer);
         g_gl.DeleteVertexArrays(1, &state->ui_vertex_array);
         g_gl.DeleteProgram(state->ui_program);
+        if (state->scene_gpu_query != 0U)
+            g_gl.DeleteQueries(1, &state->scene_gpu_query);
         SDL_GL_DestroyContext(state->gl_context);
         henka_free(state);
         renderer->backend_state = NULL;
@@ -2435,6 +2471,8 @@ henka_result henka_opengl_renderer_create(struct henka_renderer* renderer, struc
         g_gl.DeleteBuffers(1, &state->ui_vertex_buffer);
         g_gl.DeleteVertexArrays(1, &state->ui_vertex_array);
         g_gl.DeleteProgram(state->ui_program);
+        if (state->scene_gpu_query != 0U)
+            g_gl.DeleteQueries(1, &state->scene_gpu_query);
         SDL_GL_DestroyContext(state->gl_context);
         henka_free(state);
         renderer->backend_state = NULL;
@@ -2536,6 +2574,10 @@ void henka_opengl_renderer_destroy(struct henka_renderer* renderer)
         if (state->ui_program != 0U)
         {
             g_gl.DeleteProgram(state->ui_program);
+        }
+        if (state->scene_gpu_query != 0U)
+        {
+            g_gl.DeleteQueries(1, &state->scene_gpu_query);
         }
     }
 
@@ -2894,6 +2936,8 @@ henka_result henka_opengl_renderer_draw_scene(
     float local_light_direction_inner[HENKA_SCENE_MAX_LOCAL_LIGHTS * 4U] = {0.0f};
     float local_light_outer_type[HENKA_SCENE_MAX_LOCAL_LIGHTS * 4U] = {0.0f};
     int local_light_count = 0;
+    Uint64 cpu_start_ticks;
+    bool gpu_query_active = false;
 
     if (renderer == NULL ||
         scene == NULL ||
@@ -2916,6 +2960,28 @@ henka_result henka_opengl_renderer_draw_scene(
         state->viewport_program == 0U)
     {
         return HENKA_ERROR_RENDERER;
+    }
+    cpu_start_ticks = SDL_GetPerformanceCounter();
+    if (state->gpu_timing_available && state->scene_gpu_query_pending)
+    {
+        GLint query_available = GL_FALSE;
+        state->gpu_timing_available = state->gpu_timing_available &&
+            state->scene_gpu_query != 0U;
+        g_gl.GetQueryObjectiv(
+            state->scene_gpu_query,
+            GL_QUERY_RESULT_AVAILABLE,
+            &query_available);
+        if (query_available == GL_TRUE)
+        {
+            GLuint64 elapsed_nanoseconds = 0U;
+            g_gl.GetQueryObjectui64v(
+                state->scene_gpu_query,
+                GL_QUERY_RESULT,
+                &elapsed_nanoseconds);
+            state->scene_gpu_time_milliseconds =
+                (double)elapsed_nanoseconds / 1000000.0;
+            state->scene_gpu_query_pending = false;
+        }
     }
     state->scene_draw_calls = 0U;
     state->scene_visible_entities = 0U;
@@ -2974,6 +3040,11 @@ henka_result henka_opengl_renderer_draw_scene(
     else
     {
         henka_apply_scene_viewport(renderer);
+    }
+    if (state->gpu_timing_available && !state->scene_gpu_query_pending)
+    {
+        g_gl.BeginQuery(GL_TIME_ELAPSED, state->scene_gpu_query);
+        gpu_query_active = true;
     }
     projection =
         henka_camera_get_projection_matrix(&scene->camera);
@@ -3405,6 +3476,17 @@ henka_result henka_opengl_renderer_draw_scene(
         g_gl.BindFramebuffer(GL_FRAMEBUFFER, 0U);
         henka_opengl_present_hdr(renderer, state);
     }
+    if (gpu_query_active)
+    {
+        g_gl.EndQuery(GL_TIME_ELAPSED);
+        state->scene_gpu_query_pending = true;
+    }
+    {
+        Uint64 cpu_end_ticks = SDL_GetPerformanceCounter();
+        Uint64 frequency = SDL_GetPerformanceFrequency();
+        state->scene_cpu_time_milliseconds = frequency > 0U ?
+            (double)(cpu_end_ticks - cpu_start_ticks) * 1000.0 / (double)frequency : 0.0;
+    }
     g_gl.BindBuffer(GL_ARRAY_BUFFER, 0);
     g_gl.BindVertexArray(0);
     g_gl.ActiveTexture(GL_TEXTURE0);
@@ -3443,7 +3525,10 @@ void henka_opengl_renderer_get_scene_diagnostics(
     uint32_t* out_draw_calls,
     uint32_t* out_visible_entities,
     uint32_t* out_culled_entities,
-    uint32_t* out_transparent_sort_overflow_entities)
+    uint32_t* out_transparent_sort_overflow_entities,
+    double* out_cpu_time_milliseconds,
+    double* out_gpu_time_milliseconds,
+    bool* out_gpu_timing_available)
 {
     const henka_opengl_renderer_state* state = renderer != NULL ?
         (const henka_opengl_renderer_state*)renderer->backend_state : NULL;
@@ -3464,6 +3549,18 @@ void henka_opengl_renderer_get_scene_diagnostics(
     {
         *out_transparent_sort_overflow_entities = state != NULL ?
             state->transparent_sort_overflow_entities : 0U;
+    }
+    if (out_cpu_time_milliseconds != NULL)
+    {
+        *out_cpu_time_milliseconds = state != NULL ? state->scene_cpu_time_milliseconds : 0.0;
+    }
+    if (out_gpu_time_milliseconds != NULL)
+    {
+        *out_gpu_time_milliseconds = state != NULL ? state->scene_gpu_time_milliseconds : 0.0;
+    }
+    if (out_gpu_timing_available != NULL)
+    {
+        *out_gpu_timing_available = state != NULL && state->gpu_timing_available;
     }
 }
 
