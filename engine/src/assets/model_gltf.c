@@ -678,6 +678,23 @@ static bool henka_gltf_accessor_address(
     return true;
 }
 
+static bool henka_gltf_uv_accessor_is_valid(const henka_gltf_accessor* accessor)
+{
+    return accessor != NULL && accessor->component_count == 2 &&
+        (accessor->component_type == 5126 ||
+         (accessor->normalized &&
+          (accessor->component_type == 5121 || accessor->component_type == 5123)));
+}
+
+static bool henka_gltf_color_accessor_is_valid(const henka_gltf_accessor* accessor)
+{
+    return accessor != NULL &&
+        (accessor->component_count == 3 || accessor->component_count == 4) &&
+        (accessor->component_type == 5126 ||
+         (accessor->normalized &&
+          (accessor->component_type == 5121 || accessor->component_type == 5123)));
+}
+
 static bool henka_gltf_read_component(const henka_gltf_context* context, int accessor_index, size_t element_index, size_t component_index, float* out_value)
 {
     const unsigned char* address; const henka_gltf_accessor* accessor; double value = 0.0;
@@ -741,6 +758,23 @@ static bool henka_gltf_parse_primitive(const henka_gltf_context* context, const 
         (uv1_accessor >= 0 && (size_t)uv1_accessor >= context->accessor_count) ||
         (color_accessor >= 0 && (size_t)color_accessor >= context->accessor_count) ||
         (tangent_accessor >= 0 && (size_t)tangent_accessor >= context->accessor_count)) return false;
+    if (normal_accessor >= 0 &&
+        (context->accessors[normal_accessor].component_count != 3 ||
+         context->accessors[normal_accessor].component_type != 5126 ||
+         context->accessors[normal_accessor].normalized)) return false;
+    if (tangent_accessor >= 0 &&
+        (context->accessors[tangent_accessor].component_count != 4 ||
+         context->accessors[tangent_accessor].component_type != 5126 ||
+         context->accessors[tangent_accessor].normalized)) return false;
+    if ((uv_accessor >= 0 && !henka_gltf_uv_accessor_is_valid(&context->accessors[uv_accessor])) ||
+        (uv1_accessor >= 0 && !henka_gltf_uv_accessor_is_valid(&context->accessors[uv1_accessor])) ||
+        (color_accessor >= 0 && !henka_gltf_color_accessor_is_valid(&context->accessors[color_accessor]))) return false;
+    if (index_accessor >= 0 &&
+        (context->accessors[index_accessor].component_count != 1 ||
+         context->accessors[index_accessor].normalized ||
+         (context->accessors[index_accessor].component_type != 5121 &&
+          context->accessors[index_accessor].component_type != 5123 &&
+          context->accessors[index_accessor].component_type != 5125))) return false;
     index_count = index_accessor >= 0 ? context->accessors[index_accessor].count : context->accessors[position_accessor].count;
     if (index_count == 0U || index_count % 3U != 0U || (index_accessor >= 0 && (size_t)index_accessor >= context->accessor_count)) return false;
     for (index = 0U; index < index_count; ++index)
