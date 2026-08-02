@@ -74,7 +74,8 @@ The loader currently supports:
   so GLB and data-URI ownership does not create a second decoder or bypass the
   asset manager.
 - multiple triangle primitives, node hierarchies with cycle and parent checks,
-  selected scene roots, TRS or matrix node transforms, perspective and
+  selected top-level scene roots (child nodes are rejected as malformed roots),
+  TRS or matrix node transforms, perspective and
   orthographic cameras, and bounded punctual-light records
 
 ## Input limits
