@@ -224,6 +224,9 @@ public static class HenkaEvidenceNativeMethods {
     [DllImport("user32.dll")] public static extern int GetWindowText(IntPtr handle, StringBuilder text, int capacity);
     [DllImport("user32.dll")] public static extern bool PostMessage(IntPtr handle, uint message, IntPtr wParam, IntPtr lParam);
     [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr handle);
+    [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr handle, int command);
+    [DllImport("user32.dll")] public static extern bool BringWindowToTop(IntPtr handle);
+    [DllImport("user32.dll")] public static extern bool SetWindowPos(IntPtr handle, IntPtr insertAfter, int x, int y, int width, int height, uint flags);
     [DllImport("dwmapi.dll")] public static extern int DwmGetWindowAttribute(IntPtr handle, int attribute, out RECT rect, int size);
     public static IntPtr FindWindow(uint processId, string title) {
         IntPtr result = IntPtr.Zero;
@@ -238,6 +241,18 @@ public static class HenkaEvidenceNativeMethods {
             return true;
         }, IntPtr.Zero);
         return result;
+    }
+    public static void ActivateWindow(IntPtr handle) {
+        IntPtr topmost = new IntPtr(-1);
+        IntPtr notTopmost = new IntPtr(-2);
+        const uint SWP_NOSIZE = 0x0001;
+        const uint SWP_NOMOVE = 0x0002;
+        const uint SWP_SHOWWINDOW = 0x0040;
+        ShowWindow(handle, 9);
+        SetWindowPos(handle, topmost, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_SHOWWINDOW);
+        SetWindowPos(handle, notTopmost, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_SHOWWINDOW);
+        BringWindowToTop(handle);
+        SetForegroundWindow(handle);
     }
 }
 '@
@@ -256,7 +271,7 @@ public static class HenkaEvidenceNativeMethods {
         if ($handle -eq [System.IntPtr]::Zero) {
             throw "The sandbox window was not available for application-only capture."
         }
-        [HenkaEvidenceNativeMethods]::SetForegroundWindow($handle) | Out-Null
+        [HenkaEvidenceNativeMethods]::ActivateWindow($handle)
         $readyDeadline = (Get-Date).AddSeconds(10)
         while ((Get-Date) -lt $readyDeadline) {
             if ((Test-Path -LiteralPath $stdoutPath) -and
