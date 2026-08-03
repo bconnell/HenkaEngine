@@ -56,6 +56,23 @@ typedef enum henka_texture_source_class
     HENKA_TEXTURE_SOURCE_CLASS_16_BIT
 } henka_texture_source_class;
 
+/* The backend format currently resident on the GPU. RGBA8 is also the
+ * truthful fallback for compressed sources when no compatible block format
+ * is available. */
+typedef enum henka_texture_gpu_format
+{
+    HENKA_TEXTURE_GPU_FORMAT_UNKNOWN = 0,
+    HENKA_TEXTURE_GPU_FORMAT_RGBA8,
+    HENKA_TEXTURE_GPU_FORMAT_BC1,
+    HENKA_TEXTURE_GPU_FORMAT_BC3,
+    HENKA_TEXTURE_GPU_FORMAT_BC5,
+    HENKA_TEXTURE_GPU_FORMAT_BC7,
+    HENKA_TEXTURE_GPU_FORMAT_ETC2_RGB,
+    HENKA_TEXTURE_GPU_FORMAT_ETC2_RGBA,
+    HENKA_TEXTURE_GPU_FORMAT_ETC2_RG,
+    HENKA_TEXTURE_GPU_FORMAT_ASTC_4X4
+} henka_texture_gpu_format;
+
 typedef enum henka_texture_failure_category
 {
     HENKA_TEXTURE_FAILURE_NONE = 0,
@@ -99,6 +116,7 @@ typedef struct henka_texture_info
     bool fallback_alias;
     bool backend_ready;
     bool gpu_compressed;
+    henka_texture_gpu_format gpu_format;
     uint64_t resident_gpu_bytes;
     uint32_t resident_mip_count;
     uint32_t mip_count;

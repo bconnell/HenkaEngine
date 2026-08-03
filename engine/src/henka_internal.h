@@ -353,6 +353,7 @@ struct henka_texture
     henka_texture_failure_category last_failure;
     bool fallback_alias;
     bool gpu_compressed;
+    henka_texture_gpu_format gpu_format;
     uint64_t resident_gpu_bytes;
     uint32_t resident_mip_count;
     uint32_t mip_count;

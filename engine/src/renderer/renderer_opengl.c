@@ -7174,6 +7174,7 @@ static henka_result henka_opengl_create_texture_from_pixels(
     texture->last_failure = HENKA_TEXTURE_FAILURE_NONE;
     texture->content_revision = 1U;
     texture->gpu_compressed = false;
+    texture->gpu_format = HENKA_TEXTURE_GPU_FORMAT_RGBA8;
     texture->resident_gpu_bytes = logical_texture_bytes;
     texture->resident_mip_count = 1U;
     texture->mip_count = 1U;
@@ -7398,6 +7399,7 @@ henka_result henka_opengl_renderer_create_texture_from_ktx2_memory_with_mip_limi
     texture->source_byte_size = data_size;
     texture->original_channel_count = 4;
     texture->gpu_compressed = upload.compressed;
+    texture->gpu_format = (henka_texture_gpu_format)upload.format + 1;
     texture->resident_gpu_bytes = logical_texture_bytes;
     texture->resident_mip_count = upload.level_count;
     texture->mip_count = upload.total_level_count;

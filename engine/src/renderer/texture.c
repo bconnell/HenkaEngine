@@ -791,6 +791,7 @@ henka_result henka_texture_get_info(
     out_info->fallback_alias = texture->fallback_alias;
     out_info->backend_ready = texture->backend_data != NULL;
     out_info->gpu_compressed = texture->gpu_compressed;
+    out_info->gpu_format = texture->gpu_format;
     out_info->resident_gpu_bytes = texture->resident_gpu_bytes;
     out_info->resident_mip_count = texture->resident_mip_count;
     out_info->mip_count = texture->mip_count;
@@ -837,6 +838,7 @@ henka_result henka_texture_create_borrowed_alias(
     alias->last_failure = source->last_failure;
     alias->fallback_alias = true;
     alias->gpu_compressed = source->gpu_compressed;
+    alias->gpu_format = source->gpu_format;
     alias->resident_gpu_bytes = source->resident_gpu_bytes;
     alias->resident_mip_count = source->resident_mip_count;
     alias->mip_count = source->mip_count;
@@ -883,6 +885,7 @@ henka_result henka_texture_adopt_owned_payload(
     target->last_failure = replacement->last_failure;
     target->fallback_alias = false;
     target->gpu_compressed = replacement->gpu_compressed;
+    target->gpu_format = replacement->gpu_format;
     target->resident_gpu_bytes = replacement->resident_gpu_bytes;
     target->resident_mip_count = replacement->resident_mip_count;
     target->mip_count = replacement->mip_count;
@@ -931,6 +934,7 @@ henka_result henka_texture_replace_owned_payload(
     target->last_failure = replacement->last_failure;
     target->fallback_alias = false;
     target->gpu_compressed = replacement->gpu_compressed;
+    target->gpu_format = replacement->gpu_format;
     target->resident_gpu_bytes = replacement->resident_gpu_bytes;
     target->resident_mip_count = replacement->resident_mip_count;
     target->mip_count = replacement->mip_count;

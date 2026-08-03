@@ -103,7 +103,8 @@ Manager-loaded shaders, textures, and OBJ meshes use canonical confined cache id
 Texture and OBJ fallback retries are transactional. Texture source failures create path-specific lightweight aliases of the shared error texture rather than storing the shared pointer directly. A failed texture retry leaves the alias, metadata, and caller output unchanged; a successful retry moves the new owned backend into that same alias, so existing materials immediately observe the real texture without pointer rebinding. Allocation failures, invalid API state, and OpenGL upload failures are propagated and are not cached as ordinary source fallbacks. Texture creation reads an encoded source once into a bounded buffer, uses that exact buffer for stb_image inspection and decode, supports Radiance HDR as finite linear RGBA32F uploaded to RGBA16F, rejects unsupported 16-bit sources rather than quantizing them silently, clears outputs before validation, temporarily uses the main OpenGL context, restores the previous context, texture-unit, binding, and unpack state, checks upload errors, and destroys only backends it owns. Descriptor semantics select sRGB or linear GPU storage and are immutable on the texture object. Mesh fallback metadata remains path-based because mesh retries do not yet use stable per-path aliases.
 
 Texture info now reports the exact logical resident GPU byte count, total and
-resident mip counts, and whether the backend chose a compressed GPU format.
+resident mip counts, whether the backend chose a compressed GPU format, and
+the selected BC, ETC2, ASTC, or RGBA8 resident format.
 The asset manager can enforce a configured texture residency budget before a
 new source load is published and exposes rejection, resident-byte, managed
 count, and fallback-count diagnostics. Manager-owned KTX2 textures also
@@ -115,7 +116,9 @@ API. Manager-owned KTX2 requests can be coalesced into a bounded queue and
 processed with completion/failure counters; visible active scene materials
 enqueue distance-bounded KTX2 mip targets, and the engine frame lifecycle
 services at most one queued request while the renderer context is active, but
-the upload itself remains synchronous. A deterministic trim operation can reduce the
+the upload itself remains synchronous. Repeated requests for one texture retain
+the strongest target so a farther reference cannot demote a nearer one; broader
+request prioritization remains unfinished. A deterministic trim operation can reduce the
 largest eligible KTX2 textures to one resident mip until a caller-provided
 target is met, with eviction diagnostics and transactional rollback on
 failure. Callers can apply the configured non-zero budget through a bounded
