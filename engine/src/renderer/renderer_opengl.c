@@ -885,13 +885,13 @@ static bool henka_validate_shader_contract(
     static const char* material_uniforms[] =
     {
         "model", "view", "projection", "lightMatrix", "baseColor",
-        "baseColorTexture", "baseColorUvSet", "useTexture", "useVertexColor", "cameraPosition",
+        "baseColorTexture", "useTexture", "useVertexColor", "cameraPosition",
         "lightDirection", "lightColor", "lightIntensity", "ambientColor",
         "useLighting", "useEnvironment", "environmentGroundColor",
         "environmentHorizonColor", "environmentZenithColor", "environmentIntensity",
         "fogEnabled", "fogMode", "fogColor", "fogStartDistance", "fogEndDistance",
         "fogDensity", "normalTexture", "metallicRoughnessTexture", "occlusionTexture",
-        "emissiveTexture", "normalUvSet", "metallicRoughnessUvSet", "occlusionUvSet", "emissiveUvSet",
+        "emissiveTexture",
         "useNormalTexture", "useMetallicRoughnessTexture",
         "useOcclusionTexture", "useEmissiveTexture", "metallic", "roughness",
         "normalScale", "occlusionStrength", "emissiveColor", "emissiveStrength",

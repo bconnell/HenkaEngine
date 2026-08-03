@@ -9,8 +9,8 @@ supports triangle primitives, embedded data-URI buffers, GLB JSON/BIN chunks,
 confined external `.bin` buffers for file loads, positions, normals, UV0/UV1,
 vertex colors, tangents, indexed or non-indexed accessors, and generated
 triangle normals when normals are absent. UV1 is preserved through imported
-model data and the renderer vertex stream for later lightmap/detail-material
-use; current material shaders continue to sample UV0. Material mapping is resolved through
+model data and the renderer vertex stream; the built-in material shader selects
+UV0 or UV1 per mapped texture semantic. Material mapping is resolved through
 the shared scene material and asset-manager contracts rather than through a
 separate Henka-only material schema. `henka_assets_load_gltf_mesh_with_material`
 returns a material instance using imported glTF scalar controls and resolves
