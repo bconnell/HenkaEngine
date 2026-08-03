@@ -1492,7 +1492,11 @@ henka_result henka_assets_queue_texture_residency_request(
     {
         if (manager->texture_residency_request_textures[index] == texture)
         {
-            manager->texture_residency_request_mips[index] = resident_mip_count;
+            /* A texture can be referenced by several visible materials. Keep
+             * the strongest request so a later, farther reference cannot
+             * demote a nearer reference before the request is serviced. */
+            if (manager->texture_residency_request_mips[index] < resident_mip_count)
+                manager->texture_residency_request_mips[index] = resident_mip_count;
             return HENKA_SUCCESS;
         }
     }

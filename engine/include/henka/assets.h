@@ -163,8 +163,9 @@ henka_result henka_assets_set_texture_residency_budget(
 henka_result henka_assets_get_texture_residency_diagnostics(
     const henka_asset_manager* manager,
     henka_texture_residency_diagnostics* out_diagnostics);
-/* Coalesces a bounded manager-owned KTX2 mip request. Processing is explicit
- * and synchronous; background I/O remains unfinished. */
+/* Coalesces a bounded manager-owned KTX2 mip request. Repeated requests for
+ * one texture retain the strongest resident-mip target. Processing is
+ * explicit and synchronous; background I/O remains unfinished. */
 henka_result henka_assets_queue_texture_residency_request(
     henka_asset_manager* manager,
     henka_texture* texture,
