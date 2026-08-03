@@ -7254,7 +7254,7 @@ static void sandbox3d_draw_utility_panel(
             snprintf(
                 row_value,
                 sizeof(row_value),
-                "HDR:%s %dx%d g%llu / Shadow:%s %d g%llu / Point:%s %d g%llu / Bloom:%s %dx%d / IBL:%s",
+                "HDR:%s %dx%d g%llu / Shadow:%s %d g%llu / Point:%s %d g%llu / Bloom:%s %dx%d / IBL:%s / Probe:%u/%u g%llu f%u",
                 diagnostics.rendered_hdr_ready ? "Ready" : "Unavailable",
                 diagnostics.rendered_hdr_allocated_width,
                 diagnostics.rendered_hdr_allocated_height,
@@ -7268,7 +7268,11 @@ static void sandbox3d_draw_utility_panel(
                 diagnostics.rendered_bloom_ready ? "Ready" : "Unavailable",
                 diagnostics.rendered_bloom_width,
                 diagnostics.rendered_bloom_height,
-                diagnostics.rendered_ibl_ready ? "Ready" : "Fallback");
+                diagnostics.rendered_ibl_ready ? "Ready" : "Fallback",
+                (unsigned int)diagnostics.rendered_reflection_probe_captured_count,
+                (unsigned int)diagnostics.rendered_reflection_probe_enabled_count,
+                (unsigned long long)diagnostics.rendered_reflection_probe_capture_generation,
+                (unsigned int)diagnostics.rendered_reflection_probe_capture_failure_count);
             sandbox3d_draw_value_row(state->ui, x_left, y_start + 70.0f, panel_bounds.width - 28.0f, "Rendered", row_value);
             sandbox3d_draw_value_row(state->ui, x_left, y_start + 96.0f, panel_bounds.width - 28.0f, "Layout", sandbox3d_get_layout_mode_label(state->workspace.layout_mode));
             sandbox3d_draw_value_row(state->ui, x_left, y_start + 122.0f, panel_bounds.width - 28.0f, "Tool", sandbox3d_viewport_tool_mode_to_string(state->viewport_tool));

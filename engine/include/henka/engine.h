@@ -92,6 +92,12 @@ typedef struct henka_engine_diagnostics
     bool rendered_temporal_history_ready;
     bool rendered_temporal_history_valid;
     bool rendered_motion_vectors_ready;
+    uint32_t rendered_reflection_probe_enabled_count;
+    uint32_t rendered_reflection_probe_captured_count;
+    bool rendered_reflection_probe_capture_active;
+    uint32_t rendered_reflection_probe_capture_index;
+    uint64_t rendered_reflection_probe_capture_generation;
+    uint32_t rendered_reflection_probe_capture_failure_count;
     henka_viewport scene_viewport;
     int rendered_hdr_requested_width;
     int rendered_hdr_requested_height;

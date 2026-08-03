@@ -584,6 +584,14 @@ void henka_opengl_renderer_get_temporal_diagnostics(
     bool* out_history_ready,
     bool* out_history_valid,
     bool* out_motion_vectors_ready);
+void henka_opengl_renderer_get_reflection_probe_diagnostics(
+    const struct henka_renderer* renderer,
+    uint32_t* out_enabled_count,
+    uint32_t* out_captured_count,
+    bool* out_capture_active,
+    uint32_t* out_capture_index,
+    uint64_t* out_capture_generation,
+    uint32_t* out_capture_failure_count);
 void henka_opengl_renderer_get_scene_diagnostics(
     const struct henka_renderer* renderer,
     uint32_t* out_draw_calls,

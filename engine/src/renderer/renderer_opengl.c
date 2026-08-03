@@ -169,6 +169,10 @@ typedef struct henka_opengl_renderer_state
     uint32_t reflection_probe_capture_cursor;
     bool reflection_probe_capture_active;
     uint32_t reflection_probe_capture_index;
+    uint32_t reflection_probe_enabled_count;
+    uint32_t reflection_probe_captured_count;
+    uint64_t reflection_probe_capture_generation;
+    uint32_t reflection_probe_capture_failure_count;
     GLuint shadow_program;
     henka_opengl_shader_data shadow_shader_data;
     GLuint shadow_framebuffer;
@@ -1671,6 +1675,10 @@ static void henka_opengl_delete_reflection_probe_resources(
     state->reflection_probe_capture_cursor = 0U;
     state->reflection_probe_capture_active = false;
     state->reflection_probe_capture_index = UINT32_MAX;
+    state->reflection_probe_enabled_count = 0U;
+    state->reflection_probe_captured_count = 0U;
+    state->reflection_probe_capture_generation = 0U;
+    state->reflection_probe_capture_failure_count = 0U;
 }
 
 static void henka_opengl_delete_ibl_resources(henka_opengl_renderer_state* state)
@@ -3869,10 +3877,15 @@ static void henka_opengl_capture_next_reflection_probe(
     state->reflection_probe_capture_cursor =
         (probe_index == UINT32_MAX) ? 0U :
         (probe_index + 1U) % HENKA_SCENE_MAX_REFLECTION_PROBES;
-    if (probe_index == UINT32_MAX ||
-        !henka_opengl_ensure_reflection_probe_target(state) ||
+    if (probe_index == UINT32_MAX)
+    {
+        return;
+    }
+    if (!henka_opengl_ensure_reflection_probe_target(state) ||
         !henka_opengl_allocate_reflection_probe_cube(&candidate))
     {
+        if (state->reflection_probe_capture_failure_count < UINT32_MAX)
+            ++state->reflection_probe_capture_failure_count;
         return;
     }
 
@@ -3946,6 +3959,8 @@ static void henka_opengl_capture_next_reflection_probe(
         state->reflection_probe_capture_ready[probe_index] = true;
         state->reflection_probe_captured_scene_revision[probe_index] = scene->render_revision;
         state->reflection_probe_captured_desc[probe_index] = probe;
+        if (state->reflection_probe_capture_generation < UINT64_MAX)
+            ++state->reflection_probe_capture_generation;
         henka_opengl_memory_add_category(
             state,
             &state->tracked_render_target_bytes,
@@ -3955,6 +3970,8 @@ static void henka_opengl_capture_next_reflection_probe(
     else if (candidate != 0U)
     {
         glDeleteTextures(1, &candidate);
+        if (state->reflection_probe_capture_failure_count < UINT32_MAX)
+            ++state->reflection_probe_capture_failure_count;
     }
 }
 
@@ -4015,6 +4032,23 @@ henka_result henka_opengl_renderer_draw_scene(
         state->viewport_program == 0U)
     {
         return HENKA_ERROR_RENDERER;
+    }
+    state->reflection_probe_enabled_count = 0U;
+    state->reflection_probe_captured_count = 0U;
+    for (index = 0U; index < HENKA_SCENE_MAX_REFLECTION_PROBES; ++index)
+    {
+        if (scene->reflection_probe_active[index] && scene->reflection_probes[index].enabled)
+        {
+            if (state->reflection_probe_enabled_count < UINT32_MAX)
+                ++state->reflection_probe_enabled_count;
+            if (state->reflection_probe_capture_ready[index] &&
+                state->reflection_probe_cubes[index] != 0U &&
+                state->reflection_probe_captured_scene_revision[index] == scene->render_revision)
+            {
+                if (state->reflection_probe_captured_count < UINT32_MAX)
+                    ++state->reflection_probe_captured_count;
+            }
+        }
     }
     cpu_start_ticks = SDL_GetPerformanceCounter();
     if (state->gpu_timing_available && state->scene_gpu_query_pending)
@@ -5641,6 +5675,32 @@ void henka_opengl_renderer_get_temporal_diagnostics(
         *out_history_valid = state != NULL && state->temporal_history_valid;
     if (out_motion_vectors_ready != NULL)
         *out_motion_vectors_ready = state != NULL && state->hdr_motion_texture != 0U;
+}
+
+void henka_opengl_renderer_get_reflection_probe_diagnostics(
+    const struct henka_renderer* renderer,
+    uint32_t* out_enabled_count,
+    uint32_t* out_captured_count,
+    bool* out_capture_active,
+    uint32_t* out_capture_index,
+    uint64_t* out_capture_generation,
+    uint32_t* out_capture_failure_count)
+{
+    const henka_opengl_renderer_state* state = renderer != NULL && renderer->backend_state != NULL ?
+        (const henka_opengl_renderer_state*)renderer->backend_state : NULL;
+
+    if (out_enabled_count != NULL)
+        *out_enabled_count = state != NULL ? state->reflection_probe_enabled_count : 0U;
+    if (out_captured_count != NULL)
+        *out_captured_count = state != NULL ? state->reflection_probe_captured_count : 0U;
+    if (out_capture_active != NULL)
+        *out_capture_active = state != NULL && state->reflection_probe_capture_active;
+    if (out_capture_index != NULL)
+        *out_capture_index = state != NULL ? state->reflection_probe_capture_index : UINT32_MAX;
+    if (out_capture_generation != NULL)
+        *out_capture_generation = state != NULL ? state->reflection_probe_capture_generation : 0U;
+    if (out_capture_failure_count != NULL)
+        *out_capture_failure_count = state != NULL ? state->reflection_probe_capture_failure_count : 0U;
 }
 
 henka_result henka_opengl_renderer_set_vsync(struct henka_renderer* renderer, bool enabled)

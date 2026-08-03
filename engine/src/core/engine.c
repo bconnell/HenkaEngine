@@ -1379,6 +1379,14 @@ henka_result henka_engine_get_diagnostics(
         &out_diagnostics->rendered_temporal_history_ready,
         &out_diagnostics->rendered_temporal_history_valid,
         &out_diagnostics->rendered_motion_vectors_ready);
+    henka_opengl_renderer_get_reflection_probe_diagnostics(
+        engine->renderer,
+        &out_diagnostics->rendered_reflection_probe_enabled_count,
+        &out_diagnostics->rendered_reflection_probe_captured_count,
+        &out_diagnostics->rendered_reflection_probe_capture_active,
+        &out_diagnostics->rendered_reflection_probe_capture_index,
+        &out_diagnostics->rendered_reflection_probe_capture_generation,
+        &out_diagnostics->rendered_reflection_probe_capture_failure_count);
     out_diagnostics->scene_viewport =
         henka_renderer_get_scene_viewport(engine->renderer);
     henka_opengl_renderer_get_hdr_diagnostics(
