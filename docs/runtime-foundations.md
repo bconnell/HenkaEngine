@@ -104,7 +104,10 @@ Texture and OBJ fallback retries are transactional. Texture source failures crea
 
 Texture info now reports the exact logical resident GPU byte count, total and
 resident mip counts, whether the backend chose a compressed GPU format, and
-the selected BC, ETC2, ASTC, or RGBA8 resident format.
+the selected BC, ETC2, ASTC, or RGBA8 resident format. Uncompressed and Basis
+sources can fall back to RGBA8 when compressed upload is unavailable; native
+compressed payloads without a matching GPU capability fail closed because the
+bounded KTX boundary does not reinterpret compressed blocks as RGBA8.
 The asset manager can enforce a configured texture residency budget before a
 new source load is published and exposes rejection, resident-byte, managed
 count, and fallback-count diagnostics. Manager-owned KTX2 textures also
