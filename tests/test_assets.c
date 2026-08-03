@@ -181,7 +181,8 @@ void henka_test_assets(void)
     henka_material applied_material;
     uint64_t material_revision;
     size_t processed_residency_requests;
-    henka_asset_texture_entry texture_entries[2];
+    henka_asset_texture_entry texture_entries[HENKA_MAX_TEXTURE_RESIDENCY_REQUESTS + 1U];
+    henka_texture stress_textures[HENKA_MAX_TEXTURE_RESIDENCY_REQUESTS + 1U];
     henka_mesh fallback_mesh;
     henka_mesh* mesh;
     char* resolved_path;
@@ -553,6 +554,43 @@ void henka_test_assets(void)
             &manager, &residency) == HENKA_SUCCESS);
         HENKA_TEST_ASSERT(residency.failed_request_count == 3U);
     }
+    manager.texture_residency_request_count = 0U;
+    manager.texture_count = HENKA_MAX_TEXTURE_RESIDENCY_REQUESTS + 1U;
+    memset(stress_textures, 0, sizeof(stress_textures));
+    for (size_t stress_index = 2U;
+         stress_index < HENKA_MAX_TEXTURE_RESIDENCY_REQUESTS + 1U;
+         ++stress_index)
+    {
+        texture_entries[stress_index].texture = &stress_textures[stress_index];
+        texture_entries[stress_index].owns_texture = true;
+        texture_entries[stress_index].metadata.fallback = false;
+    }
+    for (size_t stress_index = 0U;
+         stress_index < HENKA_MAX_TEXTURE_RESIDENCY_REQUESTS;
+         ++stress_index)
+    {
+        HENKA_TEST_ASSERT(henka_assets_queue_texture_residency_request_with_priority(
+            &manager,
+            texture_entries[stress_index].texture,
+            2U,
+            (uint32_t)stress_index) == HENKA_SUCCESS);
+    }
+    HENKA_TEST_ASSERT(manager.texture_residency_request_count ==
+        HENKA_MAX_TEXTURE_RESIDENCY_REQUESTS);
+    HENKA_TEST_ASSERT(henka_assets_queue_texture_residency_request_with_priority(
+        &manager,
+        texture_entries[HENKA_MAX_TEXTURE_RESIDENCY_REQUESTS].texture,
+        2U,
+        UINT32_MAX) == HENKA_ERROR_LIMIT);
+    HENKA_TEST_ASSERT(henka_assets_queue_texture_residency_request_with_priority(
+        &manager,
+        texture_entries[HENKA_MAX_TEXTURE_RESIDENCY_REQUESTS - 1U].texture,
+        3U,
+        UINT32_MAX) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(manager.texture_residency_request_count ==
+        HENKA_MAX_TEXTURE_RESIDENCY_REQUESTS);
+    manager.texture_residency_request_count = 0U;
+    manager.texture_count = 2U;
     texture_entries[0].metadata.fallback = true;
     texture_entries[0].owns_texture = false;
     texture_entries[0].resident_gpu_bytes = 0U;
