@@ -122,8 +122,9 @@ The importer accepts only the material and punctual-light extensions it maps
 to the shared renderer model. Unsupported entries in `extensionsUsed` or
 `extensionsRequired` fail the load rather than being silently treated as
 equivalent content. Node mesh, camera, and punctual-light references must be
-nonnegative in-range indices. A node must use either a matrix or TRS transform,
-as required by glTF, and conflicting representations are rejected.
+nonnegative in-range indices. Camera fields must have finite, positive ranges
+with far planes beyond near planes. A node must use either a matrix or TRS
+transform, as required by glTF, and conflicting representations are rejected.
 
 ## Failure behavior
 

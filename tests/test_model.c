@@ -100,6 +100,7 @@ static void henka_test_gltf_scene_import(void)
     char* invalid_scene;
     char* selected_roots;
     char* root_value;
+    char* zfar_value;
     size_t scene_length;
     size_t allocations_before_scene;
 
@@ -124,6 +125,20 @@ static void henka_test_gltf_scene_import(void)
     HENKA_TEST_ASSERT(scene.lights[0].type == HENKA_MODEL_SCENE_LIGHT_POINT);
     henka_model_scene_data_destroy(&scene);
     HENKA_TEST_ASSERT(henka_memory_get_allocation_count() == allocations_before_scene);
+
+    scene_length = strlen(scene_gltf);
+    invalid_scene = henka_malloc(scene_length + 1U);
+    HENKA_TEST_ASSERT(invalid_scene != NULL);
+    memcpy(invalid_scene, scene_gltf, scene_length + 1U);
+    zfar_value = strstr(invalid_scene, "\"zfar\":100.0");
+    HENKA_TEST_ASSERT(zfar_value != NULL);
+    zfar_value[strlen("\"zfar\":")] = '0';
+    memset(&scene, 0, sizeof(scene));
+    HENKA_TEST_ASSERT(henka_model_scene_data_load_gltf_from_memory(
+        invalid_scene, scene_length, "invalid-camera.gltf", &scene) != HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(scene.node_count == 0U);
+    henka_model_scene_data_destroy(&scene);
+    henka_free(invalid_scene);
 
     memset(&scene, 0, sizeof(scene));
     HENKA_TEST_ASSERT(henka_model_scene_data_load_gltf_from_memory(
