@@ -1,6 +1,7 @@
 #include "henka_internal.h"
 
 #include <ctype.h>
+#include <math.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -430,6 +431,57 @@ static bool henka_engine_is_ktx2_texture(
     return false;
 }
 
+static float henka_engine_visible_texture_projected_radius(
+    const henka_engine* engine,
+    const henka_scene_entity_record* entity,
+    float distance)
+{
+    henka_viewport viewport;
+    float radius = 1.0f;
+    float projected_radius;
+
+    if (engine == NULL || engine->active_scene == NULL || entity == NULL ||
+        engine->renderer == NULL || !isfinite(distance) || distance <= 0.0f)
+        return 0.0f;
+    if (entity->has_local_bounds)
+    {
+        const float scale_x = fabsf(entity->transform.scale.x);
+        const float scale_y = fabsf(entity->transform.scale.y);
+        const float scale_z = fabsf(entity->transform.scale.z);
+        const float extent_x = entity->local_bounds.extents.x * scale_x;
+        const float extent_y = entity->local_bounds.extents.y * scale_y;
+        const float extent_z = entity->local_bounds.extents.z * scale_z;
+        const float measured_radius = sqrtf(
+            extent_x * extent_x + extent_y * extent_y + extent_z * extent_z);
+
+        if (isfinite(measured_radius) && measured_radius > 0.0f)
+            radius = measured_radius;
+    }
+    viewport = henka_renderer_get_scene_viewport(engine->renderer);
+    if (viewport.height <= 0)
+        return 0.0f;
+    if (engine->active_scene->camera.projection_mode ==
+        HENKA_CAMERA_PROJECTION_ORTHOGRAPHIC)
+    {
+        if (!isfinite(engine->active_scene->camera.orthographic_height) ||
+            engine->active_scene->camera.orthographic_height <= 0.0f)
+            return 0.0f;
+        projected_radius = radius * (float)viewport.height /
+            engine->active_scene->camera.orthographic_height;
+    }
+    else
+    {
+        const float tangent = tanf(
+            engine->active_scene->camera.field_of_view_radians * 0.5f);
+        if (!isfinite(tangent) || tangent <= 0.0f)
+            return 0.0f;
+        projected_radius = radius * (float)viewport.height /
+            (2.0f * distance * tangent);
+    }
+    return isfinite(projected_radius) && projected_radius > 0.0f ?
+        projected_radius : 0.0f;
+}
+
 static void henka_engine_queue_visible_texture_residency(
     henka_engine* engine)
 {
@@ -444,6 +496,7 @@ static void henka_engine_queue_visible_texture_residency(
         uint32_t requested_mips;
         uint32_t request_priority;
         float distance;
+        float projected_radius;
         size_t texture_index;
 
         if (!entity->active || !entity->visible)
@@ -451,8 +504,25 @@ static void henka_engine_queue_visible_texture_residency(
         distance = henka_vec3_length(henka_vec3_subtract(
             entity->transform.position,
             engine->active_scene->camera.position));
-        requested_mips = distance <= 12.0f ? 4U : distance <= 36.0f ? 3U : 2U;
-        request_priority = distance <= 12.0f ? 3U : distance <= 36.0f ? 2U : 1U;
+        projected_radius = henka_engine_visible_texture_projected_radius(
+            engine,
+            entity,
+            distance);
+        if (projected_radius > 180.0f)
+        {
+            requested_mips = 4U;
+            request_priority = 3U;
+        }
+        else if (projected_radius > 60.0f)
+        {
+            requested_mips = 3U;
+            request_priority = 2U;
+        }
+        else
+        {
+            requested_mips = distance <= 12.0f ? 3U : 2U;
+            request_priority = distance <= 12.0f ? 2U : 1U;
+        }
         textures[0] = entity->material.base_color_texture;
         textures[1] = entity->material.normal_texture;
         textures[2] = entity->material.metallic_roughness_texture;

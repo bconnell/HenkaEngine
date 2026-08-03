@@ -102,7 +102,7 @@ The loader currently supports:
   manager. Manager-owned KTX2 textures additionally support a synchronous
   bounded top-mip residency request with deterministic distance and semantic-slot
   priority, active-frame pinning, and deterministic trim-to-budget; background
-  streaming, projected-size selection, and automatic policy eviction remain future work, as
+  streaming and automatic policy eviction remain future work, as
   do cross-backend capability coverage and the final visual stress matrix.
 - multiple triangle primitives, node hierarchies with cycle and parent checks,
   selected top-level scene roots (child nodes are rejected as malformed roots),
