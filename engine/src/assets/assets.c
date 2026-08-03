@@ -2,6 +2,7 @@
 
 #include <henka/model.h>
 
+#include <ctype.h>
 #include <limits.h>
 #include <math.h>
 #include <stdio.h>
@@ -39,6 +40,21 @@ static char* henka_duplicate_string(const char* value)
 
     memcpy(copy, value, allocation_size);
     return copy;
+}
+
+static bool henka_asset_texture_path_is_ktx2(const char* path)
+{
+    size_t length;
+
+    if (path == NULL)
+        return false;
+    length = strlen(path);
+    return length >= 5U &&
+        tolower((unsigned char)path[length - 5U]) == '.' &&
+        tolower((unsigned char)path[length - 4U]) == 'k' &&
+        tolower((unsigned char)path[length - 3U]) == 't' &&
+        tolower((unsigned char)path[length - 2U]) == 'x' &&
+        path[length - 1U] == '2';
 }
 
 static const char* henka_asset_display_name(const char* path)
@@ -1438,6 +1454,8 @@ henka_result henka_assets_get_texture_residency_diagnostics(
     out_diagnostics->queued_request_count = manager->texture_residency_request_count;
     out_diagnostics->completed_request_count = manager->texture_residency_completed_requests;
     out_diagnostics->failed_request_count = manager->texture_residency_failed_requests;
+    out_diagnostics->eviction_count = manager->texture_residency_eviction_count;
+    out_diagnostics->eviction_failure_count = manager->texture_residency_eviction_failure_count;
     for (index = 0U; index < manager->texture_count; ++index)
     {
         if (manager->texture_entries[index].metadata.fallback)
@@ -1606,10 +1624,79 @@ henka_result henka_assets_set_texture_resident_mips(
     henka_asset_set_summary(
         &entry->metadata,
         "KTX2 texture residency changed transactionally by bounded top-mip upload.",
-        "Background streaming and eviction are not enabled.");
+        "Background streaming and automatic policy eviction are not enabled.");
     if (out_info != NULL)
         *out_info = replacement_info;
     return HENKA_SUCCESS;
+}
+
+henka_result henka_assets_trim_texture_residency(
+    henka_asset_manager* manager,
+    uint64_t target_bytes,
+    size_t max_evictions,
+    size_t* out_evicted_textures)
+{
+    size_t evicted = 0U;
+
+    if (out_evicted_textures != NULL)
+        *out_evicted_textures = 0U;
+    if (manager == NULL || target_bytes == 0U)
+        return HENKA_ERROR_INVALID_ARGUMENT;
+
+    while (manager->texture_resident_bytes > target_bytes &&
+        (max_evictions == 0U || evicted < max_evictions))
+    {
+        size_t candidate = SIZE_MAX;
+        uint64_t candidate_bytes = 0U;
+        size_t index;
+        henka_texture_info candidate_info;
+        henka_result result;
+
+        for (index = 0U; index < manager->texture_count; ++index)
+        {
+            henka_asset_texture_entry* entry = &manager->texture_entries[index];
+            henka_texture_info info;
+
+            if (!entry->owns_texture || entry->metadata.fallback ||
+                !henka_asset_texture_path_is_ktx2(entry->source_path) ||
+                entry->resident_gpu_bytes <= candidate_bytes ||
+                henka_texture_get_info(entry->texture, &info) != HENKA_SUCCESS ||
+                info.resident_mip_count <= 1U)
+            {
+                continue;
+            }
+            candidate = index;
+            candidate_bytes = entry->resident_gpu_bytes;
+        }
+        if (candidate == SIZE_MAX)
+            break;
+
+        memset(&candidate_info, 0, sizeof(candidate_info));
+        result = henka_texture_get_info(
+            manager->texture_entries[candidate].texture,
+            &candidate_info);
+        if (result == HENKA_SUCCESS)
+        {
+            result = henka_assets_set_texture_resident_mips(
+                manager,
+                manager->texture_entries[candidate].texture,
+                1U,
+                NULL);
+        }
+        if (result != HENKA_SUCCESS)
+        {
+            if (manager->texture_residency_eviction_failure_count < UINT64_MAX)
+                ++manager->texture_residency_eviction_failure_count;
+            break;
+        }
+        if (manager->texture_residency_eviction_count < UINT64_MAX)
+            ++manager->texture_residency_eviction_count;
+        ++evicted;
+    }
+
+    if (out_evicted_textures != NULL)
+        *out_evicted_textures = evicted;
+    return manager->texture_resident_bytes <= target_bytes ? HENKA_SUCCESS : HENKA_ERROR_LIMIT;
 }
 
 henka_result henka_assets_load_obj_mesh(

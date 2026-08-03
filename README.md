@@ -45,7 +45,7 @@ Henka Engine is still early, but the sandbox now renders a visible 3D scene with
 - Transactional HDR environment lighting with derived IBL resources, fitted directional shadows with bounded receiver-aware contact tightening and far-cascade diagnostics, one deterministic bounded spot-light shadow map, bloom, tone mapping, fog, bounded local probe capture, and explicit Material Preview versus Rendered shading policies
 - Rendered presentation includes bounded RG camera-motion history reprojection and depth-neighborhood ambient occlusion; object-motion vectors, disocclusion rejection, normal-aware GTAO, and production TAA remain unfinished
 - Checked KTX2/Basis texture loading with active-OpenGL capability-selected BC/ETC2/ASTC mip uploads and truthful RGBA8 fallback when compressed upload is unavailable
-- Texture objects report exact resident GPU bytes and mip counts; manager-owned KTX2 textures support synchronous transactional top-mip replacement, a bounded coalescing residency request queue, and fail-closed budget diagnostics, while background I/O streaming/eviction remains unfinished
+- Texture objects report exact resident GPU bytes and mip counts; manager-owned KTX2 textures support synchronous transactional top-mip replacement, a bounded coalescing residency request queue, deterministic largest-texture trim-to-budget, and fail-closed residency/eviction diagnostics, while background I/O streaming remains unfinished
 - Scene rendering exposes bounded distance-based LOD selection, frustum culling, draw budgets, and LOD fallback diagnostics; LOD selection does not claim texture residency or streaming
 - Bounded realism validation materials and scene samples covering metal, clearcoat, plastic, stone, sheen, wood, wet/dry variation, detail normals, and masked foliage
 - Descriptor-aware RGBA8 textures with explicit sRGB/linear, sampler, wrap, mip, flip, usage, alpha, source-class, and content-revision metadata
@@ -80,7 +80,7 @@ Henka Engine is still early, but the sandbox now renders a visible 3D scene with
 - Full 2.5D sprite, layered-depth, parallax, animation, and constrained-movement workflow
 - Integrated modeling, UV, rigging, animation-authoring, and content-creation workspace
 - Additional renderer backends
-- Complete cross-backend KTX2/Basis production coverage and GPU-native stress validation, background texture streaming/eviction, production instancing, SSR, motion-vector TAA, and full refraction/volume/glass rendering remain unfinished; the current glTF transmission factor uses a bounded environment response. Current paths expose truthful fallbacks or bounded foundations
+- Complete cross-backend KTX2/Basis production coverage and GPU-native stress validation, background texture streaming and automatic policy eviction, production instancing, SSR, motion-vector TAA, and full refraction/volume/glass rendering remain unfinished; the current glTF transmission factor uses a bounded environment response. Current paths expose truthful fallbacks or bounded foundations
 
 ## Repository layout
 

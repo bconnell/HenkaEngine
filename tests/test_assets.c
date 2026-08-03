@@ -427,6 +427,14 @@ void henka_test_assets(void)
         HENKA_TEST_ASSERT(henka_assets_set_texture_residency_budget(
             &manager, 0U) == HENKA_SUCCESS);
         manager.texture_resident_bytes = 0U;
+        {
+            size_t evicted_texture_count = 123U;
+            HENKA_TEST_ASSERT(henka_assets_trim_texture_residency(
+                NULL, 1024U, 0U, &evicted_texture_count) == HENKA_ERROR_INVALID_ARGUMENT);
+            HENKA_TEST_ASSERT(henka_assets_trim_texture_residency(
+                &manager, 1024U, 0U, &evicted_texture_count) == HENKA_SUCCESS);
+            HENKA_TEST_ASSERT(evicted_texture_count == 0U);
+        }
     }
     mesh_entries[0].key = "assets/models/a.obj";
     mesh_entries[0].source_path = "Assets/Models/A.obj";

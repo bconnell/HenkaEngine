@@ -277,6 +277,8 @@ struct henka_asset_manager
     size_t texture_residency_request_count;
     uint64_t texture_residency_completed_requests;
     uint64_t texture_residency_failed_requests;
+    uint64_t texture_residency_eviction_count;
+    uint64_t texture_residency_eviction_failure_count;
 };
 
 struct henka_scene

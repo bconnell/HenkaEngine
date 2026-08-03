@@ -52,6 +52,8 @@ typedef struct henka_texture_residency_diagnostics
     size_t queued_request_count;
     uint64_t completed_request_count;
     uint64_t failed_request_count;
+    uint64_t eviction_count;
+    uint64_t eviction_failure_count;
     bool budget_exceeded;
 } henka_texture_residency_diagnostics;
 
@@ -150,8 +152,8 @@ henka_result henka_assets_load_texture_with_descriptor(
     const char* path,
     const henka_texture_descriptor* descriptor,
     henka_texture** out_texture);
-/* A zero budget disables the limit. This foundation rejects a new load that
- * would exceed the budget; it does not pretend to stream or evict mips. */
+/* A zero budget disables the limit. New loads and replacements that would
+ * exceed a non-zero budget are rejected until the caller trims residency. */
 henka_result henka_assets_set_texture_residency_budget(
     henka_asset_manager* manager,
     uint64_t budget_bytes);
@@ -159,8 +161,7 @@ henka_result henka_assets_get_texture_residency_diagnostics(
     const henka_asset_manager* manager,
     henka_texture_residency_diagnostics* out_diagnostics);
 /* Coalesces a bounded manager-owned KTX2 mip request. Processing is explicit
- * and synchronous; this is a request-queue foundation, not background I/O or
- * eviction. */
+ * and synchronous; background I/O remains unfinished. */
 henka_result henka_assets_queue_texture_residency_request(
     henka_asset_manager* manager,
     henka_texture* texture,
@@ -177,6 +178,15 @@ henka_result henka_assets_set_texture_resident_mips(
     henka_texture* texture,
     uint32_t resident_mip_count,
     henka_texture_info* out_info);
+/* Synchronously trims the largest eligible manager-owned KTX2 textures to
+ * their smallest valid resident prefix until target_bytes is met. A zero
+ * max_evictions means no operation-count limit. Non-KTX2 sources are not
+ * candidates, and failure leaves each texture's prior payload intact. */
+henka_result henka_assets_trim_texture_residency(
+    henka_asset_manager* manager,
+    uint64_t target_bytes,
+    size_t max_evictions,
+    size_t* out_evicted_textures);
 henka_result henka_assets_load_obj_mesh(henka_asset_manager* manager, const char* path, henka_mesh** out_mesh);
 henka_result henka_assets_load_gltf_mesh(henka_asset_manager* manager, const char* path, henka_mesh** out_mesh);
 henka_result henka_assets_load_gltf_mesh_with_material(
