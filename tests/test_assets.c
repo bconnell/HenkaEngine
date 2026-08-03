@@ -174,6 +174,9 @@ void henka_test_assets(void)
     henka_gltf_scene_asset scene_entry;
     henka_gltf_scene_asset* scene_entry_array[1];
     henka_material material;
+    henka_material_instance material_instance;
+    henka_material_dependency_info material_dependencies;
+    uint64_t material_revision;
     henka_asset_texture_entry texture_entries[2];
     henka_mesh fallback_mesh;
     henka_mesh* mesh;
@@ -383,6 +386,9 @@ void henka_test_assets(void)
     memset(&manager, 0, sizeof(manager));
     memset(&fallback_texture, 0, sizeof(fallback_texture));
     memset(&fallback_mesh, 0, sizeof(fallback_mesh));
+    fallback_texture.backend_data = (void*)1;
+    fallback_texture.width = 2;
+    fallback_texture.height = 2;
     memset(texture_entries, 0, sizeof(texture_entries));
     memset(mesh_entries, 0, sizeof(mesh_entries));
     manager.error_texture = &fallback_texture;
@@ -464,6 +470,10 @@ void henka_test_assets(void)
     material_entry.source_path = "assets/models/reload.gltf";
     material_entry.material = henka_material_default();
     material_entry.material.shader = &managed_shader;
+    material_entry.material.use_texture = true;
+    material_entry.material.base_color_texture = &fallback_texture;
+    fallback_texture.descriptor = henka_texture_descriptor_default_color();
+    material_entry.revision = 4U;
     material_entry_array[0] = &material_entry;
     manager.material_entries = material_entry_array;
     manager.material_count = 1U;
@@ -476,6 +486,31 @@ void henka_test_assets(void)
     HENKA_TEST_ASSERT(material_asset == NULL);
     HENKA_TEST_ASSERT(manager.material_entries[0] == &material_entry);
     HENKA_TEST_ASSERT(material_entry.material.shader == &managed_shader);
+    HENKA_TEST_ASSERT(henka_assets_get_material_asset_revision(
+        &material_entry, &material_revision) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(material_revision == 4U);
+    HENKA_TEST_ASSERT(henka_assets_get_material_asset_dependencies(
+        &material_entry, &material_dependencies) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(material_dependencies.definition_revision == 4U);
+    HENKA_TEST_ASSERT(material_dependencies.dependency_count == 1U);
+    HENKA_TEST_ASSERT(material_dependencies.dependencies[0].slot ==
+        HENKA_MATERIAL_TEXTURE_SLOT_BASE_COLOR);
+    HENKA_TEST_ASSERT(henka_assets_create_material_instance(
+        &material_entry, &material_instance) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_assets_material_instance_set_float(
+        &material_instance, HENKA_MATERIAL_INSTANCE_METALLIC, 0.8f) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_assets_material_instance_set_bool(
+        &material_instance, HENKA_MATERIAL_INSTANCE_DOUBLE_SIDED, true) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_assets_material_instance_set_alpha_mode(
+        &material_instance, HENKA_MATERIAL_ALPHA_MASKED) == HENKA_SUCCESS);
+    material_entry.material.roughness = 0.8f;
+    material_entry.revision = 5U;
+    HENKA_TEST_ASSERT(henka_assets_refresh_material_instance(&material_instance) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(material_instance.definition_revision == 5U);
+    HENKA_TEST_ASSERT(material_instance.material.metallic == 0.8f);
+    HENKA_TEST_ASSERT(material_instance.material.roughness == 0.8f);
+    HENKA_TEST_ASSERT(material_instance.material.double_sided);
+    HENKA_TEST_ASSERT(material_instance.material.alpha_mode == HENKA_MATERIAL_ALPHA_MASKED);
     memset(&scene_entry, 0, sizeof(scene_entry));
     scene_entry.key = "assets/models/reload-scene.gltf";
     scene_entry.source_path = "assets/models/reload-scene.gltf";

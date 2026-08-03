@@ -2191,6 +2191,271 @@ henka_result henka_assets_get_material_asset_material(
     return HENKA_SUCCESS;
 }
 
+enum
+{
+    HENKA_MATERIAL_OVERRIDE_METALLIC = 1U << 0,
+    HENKA_MATERIAL_OVERRIDE_ROUGHNESS = 1U << 1,
+    HENKA_MATERIAL_OVERRIDE_SPECULAR_FACTOR = 1U << 2,
+    HENKA_MATERIAL_OVERRIDE_IOR = 1U << 3,
+    HENKA_MATERIAL_OVERRIDE_NORMAL_SCALE = 1U << 4,
+    HENKA_MATERIAL_OVERRIDE_OCCLUSION_STRENGTH = 1U << 5,
+    HENKA_MATERIAL_OVERRIDE_EMISSIVE_STRENGTH = 1U << 6,
+    HENKA_MATERIAL_OVERRIDE_CLEARCOAT = 1U << 7,
+    HENKA_MATERIAL_OVERRIDE_CLEARCOAT_ROUGHNESS = 1U << 8,
+    HENKA_MATERIAL_OVERRIDE_ALPHA_CUTOFF = 1U << 9,
+    HENKA_MATERIAL_OVERRIDE_SHEEN_ROUGHNESS = 1U << 10,
+    HENKA_MATERIAL_OVERRIDE_BASE_COLOR = 1U << 11,
+    HENKA_MATERIAL_OVERRIDE_EMISSIVE_COLOR = 1U << 12,
+    HENKA_MATERIAL_OVERRIDE_SPECULAR_COLOR = 1U << 13,
+    HENKA_MATERIAL_OVERRIDE_SHEEN_COLOR = 1U << 14,
+    HENKA_MATERIAL_OVERRIDE_USE_LIGHTING = 1U << 15,
+    HENKA_MATERIAL_OVERRIDE_DEPTH_TEST = 1U << 16,
+    HENKA_MATERIAL_OVERRIDE_DOUBLE_SIDED = 1U << 17,
+    HENKA_MATERIAL_OVERRIDE_CAST_SHADOWS = 1U << 18,
+    HENKA_MATERIAL_OVERRIDE_RECEIVE_SHADOWS = 1U << 19,
+    HENKA_MATERIAL_OVERRIDE_ALPHA_MODE = 1U << 20
+};
+
+static uint32_t henka_material_instance_override_bit(
+    henka_material_instance_parameter parameter)
+{
+    static const uint32_t bits[] =
+    {
+        HENKA_MATERIAL_OVERRIDE_METALLIC,
+        HENKA_MATERIAL_OVERRIDE_ROUGHNESS,
+        HENKA_MATERIAL_OVERRIDE_SPECULAR_FACTOR,
+        HENKA_MATERIAL_OVERRIDE_IOR,
+        HENKA_MATERIAL_OVERRIDE_NORMAL_SCALE,
+        HENKA_MATERIAL_OVERRIDE_OCCLUSION_STRENGTH,
+        HENKA_MATERIAL_OVERRIDE_EMISSIVE_STRENGTH,
+        HENKA_MATERIAL_OVERRIDE_CLEARCOAT,
+        HENKA_MATERIAL_OVERRIDE_CLEARCOAT_ROUGHNESS,
+        HENKA_MATERIAL_OVERRIDE_ALPHA_CUTOFF,
+        HENKA_MATERIAL_OVERRIDE_SHEEN_ROUGHNESS,
+        HENKA_MATERIAL_OVERRIDE_BASE_COLOR,
+        HENKA_MATERIAL_OVERRIDE_EMISSIVE_COLOR,
+        HENKA_MATERIAL_OVERRIDE_SPECULAR_COLOR,
+        HENKA_MATERIAL_OVERRIDE_SHEEN_COLOR,
+        HENKA_MATERIAL_OVERRIDE_USE_LIGHTING,
+        HENKA_MATERIAL_OVERRIDE_DEPTH_TEST,
+        HENKA_MATERIAL_OVERRIDE_DOUBLE_SIDED,
+        HENKA_MATERIAL_OVERRIDE_CAST_SHADOWS,
+        HENKA_MATERIAL_OVERRIDE_RECEIVE_SHADOWS,
+        HENKA_MATERIAL_OVERRIDE_ALPHA_MODE
+    };
+    return parameter >= 0 &&
+        (size_t)parameter < sizeof(bits) / sizeof(bits[0]) ? bits[parameter] : 0U;
+}
+
+henka_result henka_assets_get_material_asset_revision(
+    const henka_material_asset* asset,
+    uint64_t* out_revision)
+{
+    if (out_revision != NULL) *out_revision = 0U;
+    if (asset == NULL || out_revision == NULL) return HENKA_ERROR_INVALID_ARGUMENT;
+    *out_revision = asset->revision;
+    return HENKA_SUCCESS;
+}
+
+henka_result henka_assets_get_material_asset_dependencies(
+    const henka_material_asset* asset,
+    henka_material_dependency_info* out_dependencies)
+{
+    const henka_material* material;
+
+    if (out_dependencies != NULL) memset(out_dependencies, 0, sizeof(*out_dependencies));
+    if (asset == NULL || out_dependencies == NULL) return HENKA_ERROR_INVALID_ARGUMENT;
+    material = &asset->material;
+    out_dependencies->definition_revision = asset->revision;
+#define HENKA_ADD_MATERIAL_DEPENDENCY(slot_value, usage_value, texture_value) \
+    do { \
+        if ((texture_value) != NULL && out_dependencies->dependency_count < HENKA_MATERIAL_MAX_TEXTURE_DEPENDENCIES) { \
+            henka_material_dependency* dependency = &out_dependencies->dependencies[out_dependencies->dependency_count++]; \
+            dependency->slot = (slot_value); \
+            dependency->usage = (usage_value); \
+            dependency->texture = (texture_value); \
+        } \
+    } while (0)
+    HENKA_ADD_MATERIAL_DEPENDENCY(HENKA_MATERIAL_TEXTURE_SLOT_BASE_COLOR, HENKA_TEXTURE_USAGE_COLOR, material->base_color_texture);
+    HENKA_ADD_MATERIAL_DEPENDENCY(HENKA_MATERIAL_TEXTURE_SLOT_NORMAL, HENKA_TEXTURE_USAGE_NORMAL, material->normal_texture);
+    HENKA_ADD_MATERIAL_DEPENDENCY(HENKA_MATERIAL_TEXTURE_SLOT_METALLIC_ROUGHNESS, HENKA_TEXTURE_USAGE_METALLIC_ROUGHNESS, material->metallic_roughness_texture);
+    HENKA_ADD_MATERIAL_DEPENDENCY(HENKA_MATERIAL_TEXTURE_SLOT_OCCLUSION, HENKA_TEXTURE_USAGE_OCCLUSION, material->occlusion_texture);
+    HENKA_ADD_MATERIAL_DEPENDENCY(HENKA_MATERIAL_TEXTURE_SLOT_EMISSIVE, HENKA_TEXTURE_USAGE_EMISSIVE, material->emissive_texture);
+#undef HENKA_ADD_MATERIAL_DEPENDENCY
+    return HENKA_SUCCESS;
+}
+
+henka_result henka_assets_create_material_instance(
+    const henka_material_asset* asset,
+    henka_material_instance* out_instance)
+{
+    if (out_instance != NULL) memset(out_instance, 0, sizeof(*out_instance));
+    if (asset == NULL || out_instance == NULL ||
+        henka_material_validate(&asset->material) != HENKA_SUCCESS)
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    out_instance->definition = asset;
+    out_instance->material = asset->material;
+    out_instance->definition_revision = asset->revision;
+    return HENKA_SUCCESS;
+}
+
+henka_result henka_assets_refresh_material_instance(
+    henka_material_instance* instance)
+{
+    henka_material candidate;
+    const henka_material* previous;
+
+    if (instance == NULL || instance->definition == NULL) return HENKA_ERROR_INVALID_ARGUMENT;
+    candidate = instance->definition->material;
+    previous = &instance->material;
+#define HENKA_PRESERVE_MATERIAL_OVERRIDE(bit, field) \
+    do { if ((instance->override_mask & (bit)) != 0U) candidate.field = previous->field; } while (0)
+    HENKA_PRESERVE_MATERIAL_OVERRIDE(HENKA_MATERIAL_OVERRIDE_METALLIC, metallic);
+    HENKA_PRESERVE_MATERIAL_OVERRIDE(HENKA_MATERIAL_OVERRIDE_ROUGHNESS, roughness);
+    HENKA_PRESERVE_MATERIAL_OVERRIDE(HENKA_MATERIAL_OVERRIDE_SPECULAR_FACTOR, specular_factor);
+    HENKA_PRESERVE_MATERIAL_OVERRIDE(HENKA_MATERIAL_OVERRIDE_IOR, ior);
+    HENKA_PRESERVE_MATERIAL_OVERRIDE(HENKA_MATERIAL_OVERRIDE_NORMAL_SCALE, normal_scale);
+    HENKA_PRESERVE_MATERIAL_OVERRIDE(HENKA_MATERIAL_OVERRIDE_OCCLUSION_STRENGTH, occlusion_strength);
+    HENKA_PRESERVE_MATERIAL_OVERRIDE(HENKA_MATERIAL_OVERRIDE_EMISSIVE_STRENGTH, emissive_strength);
+    HENKA_PRESERVE_MATERIAL_OVERRIDE(HENKA_MATERIAL_OVERRIDE_CLEARCOAT, clearcoat);
+    HENKA_PRESERVE_MATERIAL_OVERRIDE(HENKA_MATERIAL_OVERRIDE_CLEARCOAT_ROUGHNESS, clearcoat_roughness);
+    HENKA_PRESERVE_MATERIAL_OVERRIDE(HENKA_MATERIAL_OVERRIDE_ALPHA_CUTOFF, alpha_cutoff);
+    HENKA_PRESERVE_MATERIAL_OVERRIDE(HENKA_MATERIAL_OVERRIDE_SHEEN_ROUGHNESS, sheen_roughness);
+    HENKA_PRESERVE_MATERIAL_OVERRIDE(HENKA_MATERIAL_OVERRIDE_BASE_COLOR, base_color);
+    HENKA_PRESERVE_MATERIAL_OVERRIDE(HENKA_MATERIAL_OVERRIDE_EMISSIVE_COLOR, emissive_color);
+    HENKA_PRESERVE_MATERIAL_OVERRIDE(HENKA_MATERIAL_OVERRIDE_SPECULAR_COLOR, specular_color);
+    HENKA_PRESERVE_MATERIAL_OVERRIDE(HENKA_MATERIAL_OVERRIDE_SHEEN_COLOR, sheen_color);
+    HENKA_PRESERVE_MATERIAL_OVERRIDE(HENKA_MATERIAL_OVERRIDE_USE_LIGHTING, use_lighting);
+    HENKA_PRESERVE_MATERIAL_OVERRIDE(HENKA_MATERIAL_OVERRIDE_DEPTH_TEST, depth_test);
+    HENKA_PRESERVE_MATERIAL_OVERRIDE(HENKA_MATERIAL_OVERRIDE_DOUBLE_SIDED, double_sided);
+    HENKA_PRESERVE_MATERIAL_OVERRIDE(HENKA_MATERIAL_OVERRIDE_CAST_SHADOWS, cast_shadows);
+    HENKA_PRESERVE_MATERIAL_OVERRIDE(HENKA_MATERIAL_OVERRIDE_RECEIVE_SHADOWS, receive_shadows);
+    HENKA_PRESERVE_MATERIAL_OVERRIDE(HENKA_MATERIAL_OVERRIDE_ALPHA_MODE, alpha_mode);
+#undef HENKA_PRESERVE_MATERIAL_OVERRIDE
+    if (henka_material_validate(&candidate) != HENKA_SUCCESS) return HENKA_ERROR_ASSET_SOURCE;
+    instance->material = candidate;
+    instance->definition_revision = instance->definition->revision;
+    return HENKA_SUCCESS;
+}
+
+henka_result henka_assets_get_material_instance_material(
+    const henka_material_instance* instance,
+    henka_material* out_material)
+{
+    if (out_material != NULL) *out_material = henka_material_default();
+    if (instance == NULL || out_material == NULL ||
+        henka_material_validate(&instance->material) != HENKA_SUCCESS)
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    *out_material = instance->material;
+    return HENKA_SUCCESS;
+}
+
+static henka_result henka_material_instance_commit(
+    henka_material_instance* instance,
+    henka_material candidate,
+    henka_material_instance_parameter parameter)
+{
+    uint32_t bit;
+
+    if (instance == NULL || instance->definition == NULL) return HENKA_ERROR_INVALID_ARGUMENT;
+    if (henka_material_validate(&candidate) != HENKA_SUCCESS) return HENKA_ERROR_INVALID_ARGUMENT;
+    bit = henka_material_instance_override_bit(parameter);
+    if (bit == 0U) return HENKA_ERROR_INVALID_ARGUMENT;
+    instance->material = candidate;
+    instance->override_mask |= bit;
+    instance->definition_revision = instance->definition->revision;
+    return HENKA_SUCCESS;
+}
+
+henka_result henka_assets_material_instance_set_float(
+    henka_material_instance* instance,
+    henka_material_instance_parameter parameter,
+    float value)
+{
+    henka_material candidate;
+    if (instance == NULL || instance->definition == NULL || !isfinite(value)) return HENKA_ERROR_INVALID_ARGUMENT;
+    candidate = instance->material;
+    switch (parameter)
+    {
+        case HENKA_MATERIAL_INSTANCE_METALLIC: candidate.metallic = value; break;
+        case HENKA_MATERIAL_INSTANCE_ROUGHNESS: candidate.roughness = value; break;
+        case HENKA_MATERIAL_INSTANCE_SPECULAR_FACTOR: candidate.specular_factor = value; break;
+        case HENKA_MATERIAL_INSTANCE_IOR: candidate.ior = value; break;
+        case HENKA_MATERIAL_INSTANCE_NORMAL_SCALE: candidate.normal_scale = value; break;
+        case HENKA_MATERIAL_INSTANCE_OCCLUSION_STRENGTH: candidate.occlusion_strength = value; break;
+        case HENKA_MATERIAL_INSTANCE_EMISSIVE_STRENGTH: candidate.emissive_strength = value; break;
+        case HENKA_MATERIAL_INSTANCE_CLEARCOAT: candidate.clearcoat = value; break;
+        case HENKA_MATERIAL_INSTANCE_CLEARCOAT_ROUGHNESS: candidate.clearcoat_roughness = value; break;
+        case HENKA_MATERIAL_INSTANCE_ALPHA_CUTOFF: candidate.alpha_cutoff = value; break;
+        case HENKA_MATERIAL_INSTANCE_SHEEN_ROUGHNESS: candidate.sheen_roughness = value; break;
+        default: return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    return henka_material_instance_commit(instance, candidate, parameter);
+}
+
+henka_result henka_assets_material_instance_set_vec3(
+    henka_material_instance* instance,
+    henka_material_instance_parameter parameter,
+    henka_vec3 value)
+{
+    henka_material candidate;
+    if (instance == NULL || instance->definition == NULL) return HENKA_ERROR_INVALID_ARGUMENT;
+    candidate = instance->material;
+    switch (parameter)
+    {
+        case HENKA_MATERIAL_INSTANCE_EMISSIVE_COLOR: candidate.emissive_color = value; break;
+        case HENKA_MATERIAL_INSTANCE_SPECULAR_COLOR: candidate.specular_color = value; break;
+        case HENKA_MATERIAL_INSTANCE_SHEEN_COLOR: candidate.sheen_color = value; break;
+        default: return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    return henka_material_instance_commit(instance, candidate, parameter);
+}
+
+henka_result henka_assets_material_instance_set_vec4(
+    henka_material_instance* instance,
+    henka_material_instance_parameter parameter,
+    henka_vec4 value)
+{
+    henka_material candidate;
+    if (instance == NULL || instance->definition == NULL) return HENKA_ERROR_INVALID_ARGUMENT;
+    candidate = instance->material;
+    if (parameter != HENKA_MATERIAL_INSTANCE_BASE_COLOR) return HENKA_ERROR_INVALID_ARGUMENT;
+    candidate.base_color = value;
+    return henka_material_instance_commit(instance, candidate, parameter);
+}
+
+henka_result henka_assets_material_instance_set_bool(
+    henka_material_instance* instance,
+    henka_material_instance_parameter parameter,
+    bool value)
+{
+    henka_material candidate;
+    if (instance == NULL || instance->definition == NULL) return HENKA_ERROR_INVALID_ARGUMENT;
+    candidate = instance->material;
+    switch (parameter)
+    {
+        case HENKA_MATERIAL_INSTANCE_USE_LIGHTING: candidate.use_lighting = value; break;
+        case HENKA_MATERIAL_INSTANCE_DEPTH_TEST: candidate.depth_test = value; break;
+        case HENKA_MATERIAL_INSTANCE_DOUBLE_SIDED: candidate.double_sided = value; break;
+        case HENKA_MATERIAL_INSTANCE_CAST_SHADOWS: candidate.cast_shadows = value; break;
+        case HENKA_MATERIAL_INSTANCE_RECEIVE_SHADOWS: candidate.receive_shadows = value; break;
+        default: return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    return henka_material_instance_commit(instance, candidate, parameter);
+}
+
+henka_result henka_assets_material_instance_set_alpha_mode(
+    henka_material_instance* instance,
+    henka_material_alpha_mode mode)
+{
+    henka_material candidate;
+    if (instance == NULL || instance->definition == NULL || mode > HENKA_MATERIAL_ALPHA_BLENDED)
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    candidate = instance->material;
+    candidate.alpha_mode = mode;
+    return henka_material_instance_commit(instance, candidate, HENKA_MATERIAL_INSTANCE_ALPHA_MODE);
+}
+
 henka_result henka_assets_reload_gltf_material_asset(
     henka_asset_manager* manager,
     const char* path,

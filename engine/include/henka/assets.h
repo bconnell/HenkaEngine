@@ -52,6 +52,66 @@ typedef struct henka_texture_residency_diagnostics
     bool budget_exceeded;
 } henka_texture_residency_diagnostics;
 
+#define HENKA_MATERIAL_MAX_TEXTURE_DEPENDENCIES 5U
+
+typedef enum henka_material_instance_parameter
+{
+    HENKA_MATERIAL_INSTANCE_METALLIC = 0,
+    HENKA_MATERIAL_INSTANCE_ROUGHNESS,
+    HENKA_MATERIAL_INSTANCE_SPECULAR_FACTOR,
+    HENKA_MATERIAL_INSTANCE_IOR,
+    HENKA_MATERIAL_INSTANCE_NORMAL_SCALE,
+    HENKA_MATERIAL_INSTANCE_OCCLUSION_STRENGTH,
+    HENKA_MATERIAL_INSTANCE_EMISSIVE_STRENGTH,
+    HENKA_MATERIAL_INSTANCE_CLEARCOAT,
+    HENKA_MATERIAL_INSTANCE_CLEARCOAT_ROUGHNESS,
+    HENKA_MATERIAL_INSTANCE_ALPHA_CUTOFF,
+    HENKA_MATERIAL_INSTANCE_SHEEN_ROUGHNESS,
+    HENKA_MATERIAL_INSTANCE_BASE_COLOR,
+    HENKA_MATERIAL_INSTANCE_EMISSIVE_COLOR,
+    HENKA_MATERIAL_INSTANCE_SPECULAR_COLOR,
+    HENKA_MATERIAL_INSTANCE_SHEEN_COLOR,
+    HENKA_MATERIAL_INSTANCE_USE_LIGHTING,
+    HENKA_MATERIAL_INSTANCE_DEPTH_TEST,
+    HENKA_MATERIAL_INSTANCE_DOUBLE_SIDED,
+    HENKA_MATERIAL_INSTANCE_CAST_SHADOWS,
+    HENKA_MATERIAL_INSTANCE_RECEIVE_SHADOWS,
+    HENKA_MATERIAL_INSTANCE_ALPHA_MODE
+} henka_material_instance_parameter;
+
+typedef enum henka_material_texture_slot
+{
+    HENKA_MATERIAL_TEXTURE_SLOT_BASE_COLOR = 0,
+    HENKA_MATERIAL_TEXTURE_SLOT_NORMAL,
+    HENKA_MATERIAL_TEXTURE_SLOT_METALLIC_ROUGHNESS,
+    HENKA_MATERIAL_TEXTURE_SLOT_OCCLUSION,
+    HENKA_MATERIAL_TEXTURE_SLOT_EMISSIVE
+} henka_material_texture_slot;
+
+typedef struct henka_material_dependency
+{
+    henka_material_texture_slot slot;
+    henka_texture_usage usage;
+    const henka_texture* texture;
+} henka_material_dependency;
+
+typedef struct henka_material_dependency_info
+{
+    uint64_t definition_revision;
+    size_t dependency_count;
+    henka_material_dependency dependencies[HENKA_MATERIAL_MAX_TEXTURE_DEPENDENCIES];
+} henka_material_dependency_info;
+
+/* A stack-owned effective material view. Texture and shader pointers remain
+ * borrowed from the manager and the definition identity is not owned. */
+typedef struct henka_material_instance
+{
+    const henka_material_asset* definition;
+    henka_material material;
+    uint64_t definition_revision;
+    uint32_t override_mask;
+} henka_material_instance;
+
 henka_asset_manager* henka_engine_get_asset_manager(henka_engine* engine);
 const henka_asset_manager* henka_engine_get_asset_manager_const(const henka_engine* engine);
 
@@ -116,6 +176,39 @@ henka_result henka_assets_load_gltf_material_asset(
 henka_result henka_assets_get_material_asset_material(
     const henka_material_asset* asset,
     henka_material* out_material);
+henka_result henka_assets_get_material_asset_revision(
+    const henka_material_asset* asset,
+    uint64_t* out_revision);
+henka_result henka_assets_get_material_asset_dependencies(
+    const henka_material_asset* asset,
+    henka_material_dependency_info* out_dependencies);
+henka_result henka_assets_create_material_instance(
+    const henka_material_asset* asset,
+    henka_material_instance* out_instance);
+henka_result henka_assets_refresh_material_instance(
+    henka_material_instance* instance);
+henka_result henka_assets_get_material_instance_material(
+    const henka_material_instance* instance,
+    henka_material* out_material);
+henka_result henka_assets_material_instance_set_float(
+    henka_material_instance* instance,
+    henka_material_instance_parameter parameter,
+    float value);
+henka_result henka_assets_material_instance_set_vec3(
+    henka_material_instance* instance,
+    henka_material_instance_parameter parameter,
+    henka_vec3 value);
+henka_result henka_assets_material_instance_set_vec4(
+    henka_material_instance* instance,
+    henka_material_instance_parameter parameter,
+    henka_vec4 value);
+henka_result henka_assets_material_instance_set_bool(
+    henka_material_instance* instance,
+    henka_material_instance_parameter parameter,
+    bool value);
+henka_result henka_assets_material_instance_set_alpha_mode(
+    henka_material_instance* instance,
+    henka_material_alpha_mode mode);
 henka_result henka_assets_reload_gltf_material_asset(
     henka_asset_manager* manager,
     const char* path,

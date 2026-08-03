@@ -25,6 +25,17 @@ candidate first; only a fully valid candidate replaces the asset value, so a
 parse, path, dependency, or semantic-validation failure leaves the previous
 material and its stable identity intact.
 
+The manager-owned definition can create a stack-owned
+`henka_material_instance`. An instance keeps the definition's shader and
+semantic texture dependencies, while validated scalar, color, alpha, and
+render-state overrides are applied locally. `henka_assets_refresh_material_instance`
+pulls the latest definition revision transactionally and preserves only those
+explicit overrides. `henka_assets_get_material_asset_dependencies` exposes the
+semantic texture edges without transferring ownership; callers can resolve
+each texture's source metadata through the asset manager. This is an instance
+and inspection layer over the shared glTF material model, not a second JSON
+material authority.
+
 The bounded scene importer is exposed separately through
 `henka_model_scene_data_load_gltf`. It preserves per-primitive material
 bindings, selected scene roots, node parentage, local/world matrices, cameras,
