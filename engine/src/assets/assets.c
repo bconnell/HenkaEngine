@@ -57,6 +57,14 @@ static bool henka_asset_texture_path_is_ktx2(const char* path)
         path[length - 1U] == '2';
 }
 
+static void henka_assets_add_failed_texture_bytes(
+    henka_asset_manager* manager,
+    uint64_t bytes)
+{
+    if (manager != NULL && UINT64_MAX - manager->texture_failed_bytes >= bytes)
+        manager->texture_failed_bytes += bytes;
+}
+
 static const char* henka_asset_display_name(const char* path)
 {
     const char* cursor;
@@ -1338,6 +1346,9 @@ henka_result henka_assets_load_texture_with_descriptor(
     {
         if (manager->texture_budget_rejection_count < UINT32_MAX)
             ++manager->texture_budget_rejection_count;
+        henka_assets_add_failed_texture_bytes(
+            manager,
+            texture_info.resident_gpu_bytes);
         henka_texture_destroy(texture);
         henka_free(key);
         henka_free(source_path);
@@ -1456,6 +1467,7 @@ henka_result henka_assets_get_texture_residency_diagnostics(
     out_diagnostics->resident_bytes = manager->texture_resident_bytes;
     out_diagnostics->uploaded_bytes = manager->texture_uploaded_bytes;
     out_diagnostics->evicted_bytes = manager->texture_evicted_bytes;
+    out_diagnostics->failed_bytes = manager->texture_failed_bytes;
     out_diagnostics->budget_rejection_count = manager->texture_budget_rejection_count;
     out_diagnostics->managed_texture_count = manager->texture_count;
     out_diagnostics->queued_request_count = manager->texture_residency_request_count;
@@ -1694,12 +1706,18 @@ henka_result henka_assets_set_texture_resident_mips(
     {
         if (manager->texture_budget_rejection_count < UINT32_MAX)
             ++manager->texture_budget_rejection_count;
+        henka_assets_add_failed_texture_bytes(
+            manager,
+            replacement_info.resident_gpu_bytes);
         henka_texture_destroy(replacement);
         return HENKA_ERROR_LIMIT;
     }
     result = henka_texture_replace_owned_payload(entry->texture, replacement);
     if (result != HENKA_SUCCESS)
     {
+        henka_assets_add_failed_texture_bytes(
+            manager,
+            replacement_info.resident_gpu_bytes);
         henka_texture_destroy(replacement);
         return result;
     }

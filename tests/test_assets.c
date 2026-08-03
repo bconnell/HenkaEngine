@@ -434,6 +434,7 @@ void henka_test_assets(void)
         HENKA_TEST_ASSERT(residency.fallback_texture_count == 2U);
         HENKA_TEST_ASSERT(residency.pinned_texture_count == 1U);
         HENKA_TEST_ASSERT(residency.resident_bytes == 0U);
+        HENKA_TEST_ASSERT(residency.failed_bytes == 0U);
         HENKA_TEST_ASSERT(henka_assets_set_texture_residency_budget(
             &manager, 1024U) == HENKA_SUCCESS);
         manager.texture_resident_bytes = 2048U;

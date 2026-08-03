@@ -1575,6 +1575,7 @@ henka_result henka_engine_get_diagnostics(
     out_diagnostics->texture_residency_resident_bytes = texture_residency.resident_bytes;
     out_diagnostics->texture_residency_uploaded_bytes = texture_residency.uploaded_bytes;
     out_diagnostics->texture_residency_evicted_bytes = texture_residency.evicted_bytes;
+    out_diagnostics->texture_residency_failed_bytes = texture_residency.failed_bytes;
     out_diagnostics->texture_residency_managed_count =
         texture_residency.managed_texture_count > UINT32_MAX ?
         UINT32_MAX : (uint32_t)texture_residency.managed_texture_count;

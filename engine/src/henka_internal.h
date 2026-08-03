@@ -275,6 +275,7 @@ struct henka_asset_manager
     uint64_t texture_resident_bytes;
     uint64_t texture_uploaded_bytes;
     uint64_t texture_evicted_bytes;
+    uint64_t texture_failed_bytes;
     uint32_t texture_budget_rejection_count;
     henka_texture* texture_residency_request_textures[HENKA_MAX_TEXTURE_RESIDENCY_REQUESTS];
     uint32_t texture_residency_request_mips[HENKA_MAX_TEXTURE_RESIDENCY_REQUESTS];
