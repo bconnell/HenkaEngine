@@ -33,7 +33,7 @@ Henka Engine is still early, but the sandbox now renders a visible 3D scene with
 - Local action-command foundation for validated scene and object operations, including signed scale transforms for mirror workflows
 - Asset metadata with cache-owned source and display strings, plus stronger material summaries
 - Local save-data foundation with confined slot paths, complete-file validation, and transactional state replacement
-- Package mode and engine diagnostics foundation
+- Package mode and engine diagnostics foundation, including Release resource-closure reporting for bounded packaged soaks
 - Run-once engine lifecycle with copied configuration strings, reentrant-run rejection, exit-before-update rendering, checked frame rollback, and main-window presentation only after detached-window UI succeeds
 - Shared overlay-handle transform gizmo foundation for selected object manipulation, with visual feel still being hardened through manual QA
 - Viewport interaction test helpers for reducing manual QA around selection, gizmo hit testing, and transform changes

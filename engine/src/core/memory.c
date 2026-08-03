@@ -122,7 +122,6 @@ size_t henka_memory_get_allocation_count(void)
 
 void henka_memory_report_leaks(void)
 {
-#if defined(HENKA_DEBUG)
     if (g_allocation_count > 0U)
     {
         HENKA_LOG_WARN("possible memory leak detected: %zu allocation(s) still active", g_allocation_count);
@@ -131,5 +130,4 @@ void henka_memory_report_leaks(void)
     {
         HENKA_LOG_INFO("memory shutdown clean: no active allocations tracked");
     }
-#endif
 }
