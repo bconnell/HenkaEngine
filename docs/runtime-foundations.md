@@ -121,16 +121,16 @@ processed with completion/failure counters; visible active scene materials
 enqueue distance-bounded KTX2 mip targets, and the engine frame lifecycle
 services at most one queued request while the renderer context is active, but
 the upload itself remains synchronous. Repeated requests for one texture retain
-the strongest target so a farther reference cannot demote a nearer one; broader
-request prioritization remains unfinished. A deterministic trim operation can reduce the
+the strongest target and priority so a farther reference cannot demote a nearer one;
+visible requests use deterministic distance and semantic-slot priority. A deterministic trim operation can reduce the
 largest eligible KTX2 textures to one resident mip until a caller-provided
 target is met, with eviction diagnostics and transactional rollback on
 failure. Callers can apply the configured non-zero budget through a bounded
 enforcement API; a zero budget remains a no-op and a capped eviction count
 returns `HENKA_ERROR_LIMIT` if the target cannot be reached. This is explicit
 policy enforcement, and the frame lifecycle applies at most one configured-
-budget eviction per frame. Background I/O, request prioritization, and broader
-automatic frame policy remain unfinished.
+budget eviction per frame. Background I/O, projected-size selection, active-frame
+pinning, and broader automatic frame policy remain unfinished.
 
 Residency diagnostics also retain cumulative bytes successfully uploaded through
 manager-owned texture creation or replacement and bytes removed by successful

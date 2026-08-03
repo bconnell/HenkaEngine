@@ -100,8 +100,9 @@ The loader currently supports:
   is used for external images and embedded URI/bufferView bytes, so GLB and
   data-URI ownership does not create a second decoder or bypass the asset
   manager. Manager-owned KTX2 textures additionally support a synchronous
-  bounded top-mip residency request and deterministic trim-to-budget;
-  background streaming and automatic policy eviction remain future work, as
+  bounded top-mip residency request with deterministic distance and semantic-slot
+  priority and deterministic trim-to-budget; background streaming, projected-size
+  selection, active-frame pinning, and automatic policy eviction remain future work, as
   do cross-backend capability coverage and the final visual stress matrix.
 - multiple triangle primitives, node hierarchies with cycle and parent checks,
   selected top-level scene roots (child nodes are rejected as malformed roots),
