@@ -6930,7 +6930,7 @@ static void sandbox3d_draw_object_details_panel(
     sandbox3d_draw_value_row(state->ui, panel_bounds.x + 14.0f, compact_mode ? panel_bounds.y + 252.0f : panel_bounds.y + 304.0f, panel_bounds.width - 28.0f, "Velocity", velocity_text);
     if (!compact_mode)
     {
-        sandbox3d_draw_value_row(state->ui, panel_bounds.x + 14.0f, panel_bounds.y + 330.0f, panel_bounds.width - 28.0f, "Texture", texture_text);
+        sandbox3d_draw_value_row(state->ui, panel_bounds.x + 14.0f, panel_bounds.y + 330.0f, panel_bounds.width - 28.0f, "Material", material_text);
     }
 
     if (!interaction.enabled)

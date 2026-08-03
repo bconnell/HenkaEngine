@@ -137,6 +137,7 @@ The `Object Details` panel shows the current selection.
 - scale
 - what the object demonstrates
 - mesh, material, texture or fallback summary, and interaction availability
+- full Object Details mode also shows the bounded effective material description for the selected object; definition identity, instance override values, and dependency graphs remain API/documentation workflows rather than a complete authoring panel
 - safe actions for visibility, camera focus, transform reset, and console info output
 
 The selected object also shows a visible transform gizmo in the scene viewport.
