@@ -72,10 +72,24 @@ void henka_test_assets(void)
             &upload) == HENKA_SUCCESS);
         HENKA_TEST_ASSERT(!upload.compressed);
         HENKA_TEST_ASSERT(upload.level_count == 2U);
+        HENKA_TEST_ASSERT(upload.total_level_count == 2U);
         HENKA_TEST_ASSERT(upload.width == 4 && upload.height == 4);
         HENKA_TEST_ASSERT(upload.levels[0].size == sizeof(level_zero));
         HENKA_TEST_ASSERT(upload.levels[1].size == sizeof(level_one));
         HENKA_TEST_ASSERT(upload.levels[1].width == 2 && upload.levels[1].height == 2);
+        henka_ktx2_upload_dispose(&upload);
+        memset(&upload, 0, sizeof(upload));
+        HENKA_TEST_ASSERT(henka_ktx2_prepare_upload_with_mip_limit(
+            generated_bytes,
+            (size_t)generated_size,
+            HENKA_TEXTURE_USAGE_COLOR,
+            HENKA_TEXTURE_COLOR_SPACE_SRGB,
+            0U,
+            1U,
+            &upload) == HENKA_SUCCESS);
+        HENKA_TEST_ASSERT(upload.level_count == 1U && upload.total_level_count == 2U);
+        HENKA_TEST_ASSERT(upload.data_size == sizeof(level_zero));
+        HENKA_TEST_ASSERT(upload.levels[0].size == sizeof(level_zero));
         henka_ktx2_upload_dispose(&upload);
         free(generated_bytes);
 

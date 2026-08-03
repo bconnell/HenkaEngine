@@ -567,11 +567,12 @@ henka_result henka_renderer_create_texture_from_rgba32f_with_descriptor(
         out_texture);
 }
 
-henka_result henka_renderer_create_texture_from_ktx2_memory(
+henka_result henka_renderer_create_texture_from_ktx2_memory_with_mip_limit(
     struct henka_renderer* renderer,
     const unsigned char* data,
     size_t data_size,
     const henka_texture_descriptor* descriptor,
+    uint32_t max_resident_mips,
     struct henka_texture** out_texture)
 {
     if (out_texture != NULL)
@@ -585,13 +586,29 @@ henka_result henka_renderer_create_texture_from_ktx2_memory(
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
 #if defined(HENKA_WITH_KTX2_TRANSCODER)
-    return henka_opengl_renderer_create_texture_from_ktx2_memory(
-        renderer, data, data_size, descriptor, out_texture);
+    return henka_opengl_renderer_create_texture_from_ktx2_memory_with_mip_limit(
+        renderer, data, data_size, descriptor, max_resident_mips, out_texture);
 #else
     (void)data;
     (void)data_size;
     return HENKA_ERROR_ASSET_SOURCE;
 #endif
+}
+
+henka_result henka_renderer_create_texture_from_ktx2_memory(
+    struct henka_renderer* renderer,
+    const unsigned char* data,
+    size_t data_size,
+    const henka_texture_descriptor* descriptor,
+    struct henka_texture** out_texture)
+{
+    return henka_renderer_create_texture_from_ktx2_memory_with_mip_limit(
+        renderer,
+        data,
+        data_size,
+        descriptor,
+        0U,
+        out_texture);
 }
 
 void henka_renderer_destroy_texture(struct henka_texture* texture)

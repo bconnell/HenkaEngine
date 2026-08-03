@@ -87,8 +87,10 @@ The loader currently supports:
   are included in renderer memory accounting. The same checked KTX2 boundary
   is used for external images and embedded URI/bufferView bytes, so GLB and
   data-URI ownership does not create a second decoder or bypass the asset
-  manager. Cross-backend capability coverage, residency/streaming, and the
-  final visual stress matrix remain future work.
+  manager. Manager-owned KTX2 textures additionally support a synchronous
+  bounded top-mip residency request; background streaming and eviction remain
+  future work, as do cross-backend capability coverage and the final visual
+  stress matrix.
 - multiple triangle primitives, node hierarchies with cycle and parent checks,
   selected top-level scene roots (child nodes are rejected as malformed roots),
   TRS or finite affine non-sheared matrix node transforms, perspective and

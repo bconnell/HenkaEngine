@@ -161,12 +161,13 @@ void henka_ktx2_upload_dispose(henka_ktx2_upload* upload)
     memset(upload, 0, sizeof(*upload));
 }
 
-henka_result henka_ktx2_prepare_upload(
+henka_result henka_ktx2_prepare_upload_with_mip_limit(
     const unsigned char* data,
     size_t data_size,
     henka_texture_usage usage,
     henka_texture_color_space color_space,
     uint32_t capabilities,
+    uint32_t max_resident_mips,
     henka_ktx2_upload* out_upload)
 {
     ktxTexture2* texture = NULL;
@@ -176,6 +177,8 @@ henka_result henka_ktx2_prepare_upload(
     ktx_transcode_fmt_e transcode_target;
     uint32_t level;
     size_t total_size = 0U;
+    size_t selected_size = 0U;
+    uint32_t resident_level_count;
     bool is_srgb;
     bool compressed;
     henka_result result = HENKA_ERROR_ASSET_SOURCE;
@@ -232,9 +235,14 @@ henka_result henka_ktx2_prepare_upload(
         compressed = false;
     }
 
+    resident_level_count = max_resident_mips == 0U ||
+        max_resident_mips > texture->numLevels ? texture->numLevels : max_resident_mips;
+    if (resident_level_count == 0U)
+        goto cleanup;
     upload.width = (int)texture->baseWidth;
     upload.height = (int)texture->baseHeight;
-    upload.level_count = texture->numLevels;
+    upload.level_count = resident_level_count;
+    upload.total_level_count = texture->numLevels;
     upload.compressed = compressed;
     upload.is_srgb = is_srgb;
     upload.format = format;
@@ -256,18 +264,26 @@ henka_result henka_ktx2_prepare_upload(
         {
             goto cleanup;
         }
-        upload.levels[level].offset = total_size - (size_t)image_size;
-        upload.levels[level].size = (size_t)image_size;
-        upload.levels[level].width = level_width;
-        upload.levels[level].height = level_height;
+        if (level < resident_level_count)
+        {
+            if (!henka_checked_size_add(selected_size, (size_t)image_size, &selected_size) ||
+                selected_size > HENKA_MAX_TEXTURE_DECODED_BYTES)
+            {
+                goto cleanup;
+            }
+            upload.levels[level].offset = selected_size - (size_t)image_size;
+            upload.levels[level].size = (size_t)image_size;
+            upload.levels[level].width = level_width;
+            upload.levels[level].height = level_height;
+        }
     }
-    upload.data = henka_malloc(total_size);
+    upload.data = henka_malloc(selected_size);
     if (upload.data == NULL)
     {
         result = HENKA_ERROR_OUT_OF_MEMORY;
         goto cleanup;
     }
-    upload.data_size = total_size;
+    upload.data_size = selected_size;
     for (level = 0U; level < upload.level_count; ++level)
     {
         ktx_size_t image_offset = 0U;
@@ -288,6 +304,24 @@ cleanup:
     henka_ktx2_upload_dispose(&upload);
     ktxTexture_Destroy(base_texture);
     return result;
+}
+
+henka_result henka_ktx2_prepare_upload(
+    const unsigned char* data,
+    size_t data_size,
+    henka_texture_usage usage,
+    henka_texture_color_space color_space,
+    uint32_t capabilities,
+    henka_ktx2_upload* out_upload)
+{
+    return henka_ktx2_prepare_upload_with_mip_limit(
+        data,
+        data_size,
+        usage,
+        color_space,
+        capabilities,
+        0U,
+        out_upload);
 }
 
 henka_result henka_ktx2_decode_rgba8(

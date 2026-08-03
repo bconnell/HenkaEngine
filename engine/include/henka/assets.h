@@ -92,6 +92,14 @@ henka_result henka_assets_set_texture_residency_budget(
 henka_result henka_assets_get_texture_residency_diagnostics(
     const henka_asset_manager* manager,
     henka_texture_residency_diagnostics* out_diagnostics);
+/* Synchronously replaces a manager-owned KTX2 texture with a bounded prefix
+ * of its mip chain. The source is reread transactionally; zero is not a
+ * valid request, and non-KTX2 sources remain non-streamable. */
+henka_result henka_assets_set_texture_resident_mips(
+    henka_asset_manager* manager,
+    henka_texture* texture,
+    uint32_t resident_mip_count,
+    henka_texture_info* out_info);
 henka_result henka_assets_load_obj_mesh(henka_asset_manager* manager, const char* path, henka_mesh** out_mesh);
 henka_result henka_assets_load_gltf_mesh(henka_asset_manager* manager, const char* path, henka_mesh** out_mesh);
 henka_result henka_assets_load_gltf_mesh_with_material(

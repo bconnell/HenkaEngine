@@ -106,10 +106,13 @@ Texture info now reports the exact logical resident GPU byte count, total and
 resident mip counts, and whether the backend chose a compressed GPU format.
 The asset manager can enforce a configured texture residency budget before a
 new source load is published and exposes rejection, resident-byte, managed
-count, and fallback-count diagnostics. Budget failure is returned as a limit
-error and leaves the cache unchanged. This is a lifecycle and accounting
-foundation only: it does not claim background streaming, partial-mip upload,
-or eviction yet.
+count, and fallback-count diagnostics. Manager-owned KTX2 textures also
+support a synchronous request for a bounded top-mip prefix: the source is
+reread, validated, and uploaded into a replacement backend before the existing
+texture identity is changed; budget or source failure leaves the old backend
+and cache entry unchanged. PNG/HDR sources are not streamable through this
+API. This is an on-demand residency foundation, not background streaming,
+partial asynchronous queues, or eviction.
 
 Materials now expose a bounded metallic-roughness subset: base color, metallic, roughness, tangent-space normal scale, occlusion strength, emissive color and strength, bounded clearcoat and optional sheen color and roughness, alpha mode, double-sided state, and cast/receive-shadow intent. Material assignment validates texture semantic usage and color space. The OpenGL path uses GGX distribution, correlated Smith visibility, Schlick Fresnel, a dielectric F0, energy-conserving diffuse/specular separation, and bounded clearcoat and sheen lobes whose base-layer transmission is attenuated before the secondary response is added. Scene environments can now borrow a validated linear HDR equirectangular texture for the background and material environment response while retaining the analytical gradient fallback; irradiance, prefiltered specular, and BRDF-LUT resources are derived transactionally when the GPU path is available. HDR target and shadow diagnostics report dimensions, generations, completeness, and bounded failure text. Generated UV spheres use nondegenerate fan caps, and mesh-upload tangent accumulation starts from zero so valid UV derivatives are not biased by fallback axes; degenerate UVs still receive finite orthogonal fallbacks. Model data can now carry a finite imported tangent frame and its handedness, which the upload path preserves after normal orthogonalization; legacy and procedural data continue to use generated tangents. Full MikkTSpace conformance remains future work. Blended entities always render after opaque and masked entities. Up to 4,096 blended entities use an allocation-free O(n log n) back-to-front sort with explicit depth/index tie-breaking; overflow falls back to deterministic entity order while preserving the opaque-first pass, and overflow count is exposed in diagnostics. Scenes support a bounded four-light point/spot list with normalized directions, inverse-square/range falloff, and spot cones in the GL 3.3 path; local-light shadow maps remain future work. Distance fog is explicitly selected as linear, exponential, or exponential-squared, is disabled by default, and remains a distance effect rather than volumetric fog. Reusable material files and other advanced lobes remain future work.
 

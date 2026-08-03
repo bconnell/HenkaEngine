@@ -1446,6 +1446,89 @@ henka_result henka_assets_get_texture_residency_diagnostics(
     return HENKA_SUCCESS;
 }
 
+henka_result henka_assets_set_texture_resident_mips(
+    henka_asset_manager* manager,
+    henka_texture* texture,
+    uint32_t resident_mip_count,
+    henka_texture_info* out_info)
+{
+    henka_asset_texture_entry* entry = NULL;
+    henka_texture* replacement = NULL;
+    henka_texture_info replacement_info;
+    char* resolved_path = NULL;
+    uint64_t resident_without_old;
+    size_t index;
+    henka_result result;
+
+    if (out_info != NULL)
+        memset(out_info, 0, sizeof(*out_info));
+    if (manager == NULL || texture == NULL || resident_mip_count == 0U)
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    for (index = 0U; index < manager->texture_count; ++index)
+    {
+        if (manager->texture_entries[index].texture == texture)
+        {
+            entry = &manager->texture_entries[index];
+            break;
+        }
+    }
+    if (entry == NULL || !entry->owns_texture || entry->metadata.fallback)
+        return HENKA_ERROR_ASSET_SOURCE;
+    if (entry->resident_gpu_bytes == 0U ||
+        manager->texture_resident_bytes < entry->resident_gpu_bytes)
+        return HENKA_ERROR_RENDERER;
+
+    result = henka_assets_resolve_path(
+        henka_engine_get_asset_base_path(manager->engine),
+        entry->source_path,
+        &resolved_path);
+    if (result != HENKA_SUCCESS)
+        return result;
+    result = henka_texture_create_from_file_with_descriptor_and_mip_limit(
+        manager->engine,
+        resolved_path,
+        &entry->descriptor,
+        resident_mip_count,
+        &replacement);
+    henka_free(resolved_path);
+    if (result != HENKA_SUCCESS)
+        return result;
+
+    memset(&replacement_info, 0, sizeof(replacement_info));
+    if (henka_texture_get_info(replacement, &replacement_info) != HENKA_SUCCESS)
+    {
+        henka_texture_destroy(replacement);
+        return HENKA_ERROR_RENDERER;
+    }
+    resident_without_old = manager->texture_resident_bytes - entry->resident_gpu_bytes;
+    if ((manager->texture_residency_budget_bytes != 0U &&
+            (replacement_info.resident_gpu_bytes > manager->texture_residency_budget_bytes ||
+                resident_without_old >
+                    manager->texture_residency_budget_bytes - replacement_info.resident_gpu_bytes)) ||
+        resident_without_old > UINT64_MAX - replacement_info.resident_gpu_bytes)
+    {
+        if (manager->texture_budget_rejection_count < UINT32_MAX)
+            ++manager->texture_budget_rejection_count;
+        henka_texture_destroy(replacement);
+        return HENKA_ERROR_LIMIT;
+    }
+    result = henka_texture_replace_owned_payload(entry->texture, replacement);
+    if (result != HENKA_SUCCESS)
+    {
+        henka_texture_destroy(replacement);
+        return result;
+    }
+    manager->texture_resident_bytes = resident_without_old + replacement_info.resident_gpu_bytes;
+    entry->resident_gpu_bytes = replacement_info.resident_gpu_bytes;
+    henka_asset_set_summary(
+        &entry->metadata,
+        "KTX2 texture residency changed transactionally by bounded top-mip upload.",
+        "Background streaming and eviction are not enabled.");
+    if (out_info != NULL)
+        *out_info = replacement_info;
+    return HENKA_SUCCESS;
+}
+
 henka_result henka_assets_load_obj_mesh(
     henka_asset_manager* manager,
     const char* path,

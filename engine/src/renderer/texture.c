@@ -425,11 +425,12 @@ static bool henka_ktx2_read_u64(
     return true;
 }
 
-henka_result henka_texture_create_from_ktx2_memory(
+static henka_result henka_texture_create_from_ktx2_memory_with_mip_limit(
     henka_engine* engine,
     const unsigned char* data,
     size_t data_size,
     const henka_texture_descriptor* descriptor,
+    uint32_t max_resident_mips,
     henka_texture** out_texture)
 {
 #if defined(HENKA_WITH_KTX2_TRANSCODER)
@@ -439,8 +440,8 @@ henka_result henka_texture_create_from_ktx2_memory(
     if (engine == NULL || data == NULL || descriptor == NULL || out_texture == NULL ||
         henka_texture_descriptor_validate(descriptor) != HENKA_SUCCESS)
         return HENKA_ERROR_INVALID_ARGUMENT;
-    transcoder_result = henka_renderer_create_texture_from_ktx2_memory(
-        engine->renderer, data, data_size, descriptor, out_texture);
+    transcoder_result = henka_renderer_create_texture_from_ktx2_memory_with_mip_limit(
+        engine->renderer, data, data_size, descriptor, max_resident_mips, out_texture);
     if (transcoder_result == HENKA_SUCCESS)
     {
         (*out_texture)->source_byte_size = data_size;
@@ -460,6 +461,8 @@ henka_result henka_texture_create_from_ktx2_memory(
     henka_result result;
 
     if (out_texture != NULL) *out_texture = NULL;
+    if (max_resident_mips != 0U)
+        return HENKA_ERROR_ASSET_SOURCE;
     if (engine == NULL || data == NULL || descriptor == NULL || out_texture == NULL || data_size < 104U ||
         memcmp(data, identifier, sizeof(identifier)) != 0 ||
         henka_texture_descriptor_validate(descriptor) != HENKA_SUCCESS ||
@@ -517,10 +520,27 @@ henka_result henka_texture_create_from_ktx2_memory(
 #endif
 }
 
-henka_result henka_texture_create_from_file_with_descriptor(
+henka_result henka_texture_create_from_ktx2_memory(
+    henka_engine* engine,
+    const unsigned char* data,
+    size_t data_size,
+    const henka_texture_descriptor* descriptor,
+    henka_texture** out_texture)
+{
+    return henka_texture_create_from_ktx2_memory_with_mip_limit(
+        engine,
+        data,
+        data_size,
+        descriptor,
+        0U,
+        out_texture);
+}
+
+henka_result henka_texture_create_from_file_with_descriptor_and_mip_limit(
     henka_engine* engine,
     const char* path,
     const henka_texture_descriptor* descriptor,
+    uint32_t max_resident_mips,
     henka_texture** out_texture)
 {
     unsigned char* source_bytes;
@@ -568,10 +588,16 @@ henka_result henka_texture_create_from_file_with_descriptor(
     if (source_byte_size >= 12U &&
         memcmp(source_bytes, "\xAB\x4B\x54\x58\x20\x32\x30\xBB\x0D\x0A\x1A\x0A", 12U) == 0)
     {
-        result = henka_texture_create_from_ktx2_memory(
-            engine, source_bytes, source_byte_size, descriptor, out_texture);
+        result = henka_texture_create_from_ktx2_memory_with_mip_limit(
+            engine, source_bytes, source_byte_size, descriptor, max_resident_mips, out_texture);
         henka_free(source_bytes);
         return result;
+    }
+
+    if (max_resident_mips != 0U)
+    {
+        henka_free(source_bytes);
+        return HENKA_ERROR_ASSET_SOURCE;
     }
 
     if (!stbi_info_from_memory(
@@ -729,6 +755,20 @@ henka_result henka_texture_create_from_file_with_descriptor(
     return result;
 }
 
+henka_result henka_texture_create_from_file_with_descriptor(
+    henka_engine* engine,
+    const char* path,
+    const henka_texture_descriptor* descriptor,
+    henka_texture** out_texture)
+{
+    return henka_texture_create_from_file_with_descriptor_and_mip_limit(
+        engine,
+        path,
+        descriptor,
+        0U,
+        out_texture);
+}
+
 henka_result henka_texture_get_info(
     const henka_texture* texture,
     henka_texture_info* out_info)
@@ -852,6 +892,54 @@ henka_result henka_texture_adopt_owned_payload(
     replacement->backend_data = NULL;
     replacement->owns_backend = false;
     henka_free(replacement);
+    return HENKA_SUCCESS;
+}
+
+henka_result henka_texture_replace_owned_payload(
+    henka_texture* target,
+    henka_texture* replacement)
+{
+    henka_texture* old_payload;
+
+    if (target == NULL || replacement == NULL || target == replacement ||
+        target->renderer == NULL || target->renderer != replacement->renderer ||
+        !target->owns_backend || target->backend_data == NULL ||
+        !replacement->owns_backend || replacement->backend_data == NULL ||
+        replacement->width <= 0 || replacement->height <= 0)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    if (target->content_revision == UINT64_MAX)
+    {
+        HENKA_LOG_ERROR("texture content revision exhausted; refusing residency replacement");
+        return HENKA_ERROR_RENDERER;
+    }
+    old_payload = henka_calloc(1U, sizeof(*old_payload));
+    if (old_payload == NULL)
+        return HENKA_ERROR_OUT_OF_MEMORY;
+    *old_payload = *target;
+    old_payload->asset_manager_owned = false;
+
+    target->backend_data = replacement->backend_data;
+    target->width = replacement->width;
+    target->height = replacement->height;
+    target->original_channel_count = replacement->original_channel_count;
+    target->source_byte_size = replacement->source_byte_size;
+    target->descriptor = replacement->descriptor;
+    target->alpha_mode = replacement->alpha_mode;
+    target->source_class = replacement->source_class;
+    target->last_failure = replacement->last_failure;
+    target->fallback_alias = false;
+    target->gpu_compressed = replacement->gpu_compressed;
+    target->resident_gpu_bytes = replacement->resident_gpu_bytes;
+    target->resident_mip_count = replacement->resident_mip_count;
+    target->mip_count = replacement->mip_count;
+    target->content_revision += 1U;
+    target->owns_backend = true;
+    replacement->backend_data = NULL;
+    replacement->owns_backend = false;
+    henka_free(replacement);
+    henka_renderer_destroy_texture(old_payload);
     return HENKA_SUCCESS;
 }
 

@@ -5857,11 +5857,12 @@ static henka_result henka_opengl_create_texture_from_pixels(
     return HENKA_SUCCESS;
 }
 
-henka_result henka_opengl_renderer_create_texture_from_ktx2_memory(
+henka_result henka_opengl_renderer_create_texture_from_ktx2_memory_with_mip_limit(
     struct henka_renderer* renderer,
     const unsigned char* data,
     size_t data_size,
     const henka_texture_descriptor* descriptor,
+    uint32_t max_resident_mips,
     struct henka_texture** out_texture)
 {
 #if defined(HENKA_WITH_KTX2_TRANSCODER)
@@ -5893,12 +5894,13 @@ henka_result henka_opengl_renderer_create_texture_from_ktx2_memory(
         state, &context_guard, "KTX2 texture creation");
     if (operation_result != HENKA_SUCCESS)
         return operation_result;
-    operation_result = henka_ktx2_prepare_upload(
+    operation_result = henka_ktx2_prepare_upload_with_mip_limit(
         data,
         data_size,
         descriptor->usage,
         descriptor->color_space,
         henka_opengl_ktx2_capabilities(),
+        max_resident_mips,
         &upload);
     if (operation_result != HENKA_SUCCESS)
     {
@@ -5943,9 +5945,12 @@ henka_result henka_opengl_renderer_create_texture_from_ktx2_memory(
         glTexParameteri(
             GL_TEXTURE_2D,
             GL_TEXTURE_MIN_FILTER,
-            descriptor->min_filter == HENKA_TEXTURE_FILTER_NEAREST ? GL_NEAREST :
-                descriptor->min_filter == HENKA_TEXTURE_FILTER_LINEAR ? GL_LINEAR :
-                GL_LINEAR_MIPMAP_LINEAR);
+            upload.level_count <= 1U ?
+                (descriptor->min_filter == HENKA_TEXTURE_FILTER_NEAREST ? GL_NEAREST : GL_LINEAR) :
+                (descriptor->min_filter == HENKA_TEXTURE_FILTER_NEAREST ? GL_NEAREST :
+                    descriptor->min_filter == HENKA_TEXTURE_FILTER_LINEAR ? GL_LINEAR :
+                    GL_LINEAR_MIPMAP_LINEAR));
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, (GLint)upload.level_count - 1);
         glTexParameteri(
             GL_TEXTURE_2D,
             GL_TEXTURE_MAG_FILTER,
@@ -6041,7 +6046,7 @@ henka_result henka_opengl_renderer_create_texture_from_ktx2_memory(
     texture->gpu_compressed = upload.compressed;
     texture->resident_gpu_bytes = logical_texture_bytes;
     texture->resident_mip_count = upload.level_count;
-    texture->mip_count = upload.level_count;
+    texture->mip_count = upload.total_level_count;
     texture_data->tracked_gpu_bytes = logical_texture_bytes;
     henka_opengl_memory_add_category(
         state, &state->tracked_texture_bytes, texture_data->tracked_gpu_bytes);
@@ -6059,6 +6064,22 @@ henka_result henka_opengl_renderer_create_texture_from_ktx2_memory(
         *out_texture = NULL;
     return HENKA_ERROR_ASSET_SOURCE;
 #endif
+}
+
+henka_result henka_opengl_renderer_create_texture_from_ktx2_memory(
+    struct henka_renderer* renderer,
+    const unsigned char* data,
+    size_t data_size,
+    const henka_texture_descriptor* descriptor,
+    struct henka_texture** out_texture)
+{
+    return henka_opengl_renderer_create_texture_from_ktx2_memory_with_mip_limit(
+        renderer,
+        data,
+        data_size,
+        descriptor,
+        0U,
+        out_texture);
 }
 
 void henka_opengl_renderer_destroy_texture(

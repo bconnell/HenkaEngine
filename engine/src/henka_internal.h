@@ -54,6 +54,7 @@ typedef struct henka_ktx2_upload
     int width;
     int height;
     uint32_t level_count;
+    uint32_t total_level_count;
     bool compressed;
     bool is_srgb;
     henka_ktx2_gpu_format format;
@@ -67,6 +68,14 @@ henka_result henka_ktx2_prepare_upload(
     henka_texture_usage usage,
     henka_texture_color_space color_space,
     uint32_t capabilities,
+    henka_ktx2_upload* out_upload);
+henka_result henka_ktx2_prepare_upload_with_mip_limit(
+    const unsigned char* data,
+    size_t data_size,
+    henka_texture_usage usage,
+    henka_texture_color_space color_space,
+    uint32_t capabilities,
+    uint32_t max_resident_mips,
     henka_ktx2_upload* out_upload);
 henka_result henka_ktx2_decode_rgba8(
     const unsigned char* data,
@@ -458,6 +467,12 @@ henka_result henka_renderer_create_shader_from_files_with_contract(
     const henka_shader_contract_desc* contract,
     struct henka_shader** out_shader);
 void henka_renderer_destroy_shader(struct henka_shader* shader);
+henka_result henka_texture_create_from_file_with_descriptor_and_mip_limit(
+    henka_engine* engine,
+    const char* path,
+    const henka_texture_descriptor* descriptor,
+    uint32_t max_resident_mips,
+    henka_texture** out_texture);
 henka_result henka_renderer_create_texture_from_rgba8(
     struct henka_renderer* renderer,
     int width,
@@ -483,6 +498,13 @@ henka_result henka_renderer_create_texture_from_ktx2_memory(
     const unsigned char* data,
     size_t data_size,
     const henka_texture_descriptor* descriptor,
+    struct henka_texture** out_texture);
+henka_result henka_renderer_create_texture_from_ktx2_memory_with_mip_limit(
+    struct henka_renderer* renderer,
+    const unsigned char* data,
+    size_t data_size,
+    const henka_texture_descriptor* descriptor,
+    uint32_t max_resident_mips,
     struct henka_texture** out_texture);
 void henka_renderer_destroy_texture(struct henka_texture* texture);
 
@@ -602,6 +624,13 @@ henka_result henka_opengl_renderer_create_texture_from_ktx2_memory(
     size_t data_size,
     const henka_texture_descriptor* descriptor,
     struct henka_texture** out_texture);
+henka_result henka_opengl_renderer_create_texture_from_ktx2_memory_with_mip_limit(
+    struct henka_renderer* renderer,
+    const unsigned char* data,
+    size_t data_size,
+    const henka_texture_descriptor* descriptor,
+    uint32_t max_resident_mips,
+    struct henka_texture** out_texture);
 void henka_opengl_renderer_destroy_texture(struct henka_texture* texture);
 
 char* henka_asset_copy_display_name(const char* path);
@@ -615,6 +644,9 @@ henka_result henka_texture_create_borrowed_alias(
     const henka_texture* source,
     henka_texture** out_texture);
 henka_result henka_texture_adopt_owned_payload(
+    henka_texture* target,
+    henka_texture* replacement);
+henka_result henka_texture_replace_owned_payload(
     henka_texture* target,
     henka_texture* replacement);
 henka_result henka_asset_manager_create(struct henka_engine* engine, struct henka_asset_manager** out_manager);
