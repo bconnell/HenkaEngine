@@ -3088,7 +3088,8 @@ static void henka_opengl_draw_point_shadow_pass(
 
 static void henka_opengl_present_hdr(
     struct henka_renderer* renderer,
-    henka_opengl_renderer_state* state)
+    henka_opengl_renderer_state* state,
+    bool use_rendered_post_processing)
 {
     henka_viewport viewport;
 
@@ -3113,13 +3114,17 @@ static void henka_opengl_present_hdr(
     henka_set_uniform_int_owned(state->tone_program, &state->tone_shader_data, "motionTexture", 3);
     henka_set_uniform_int_owned(state->tone_program, &state->tone_shader_data, "depthTexture", 4);
     henka_set_uniform_float_owned(state->tone_program, &state->tone_shader_data, "exposure", renderer->exposure);
-    henka_set_uniform_bool_owned(state->tone_program, &state->tone_shader_data, "useBloom", state->bloom_ready);
+    henka_set_uniform_bool_owned(
+        state->tone_program,
+        &state->tone_shader_data,
+        "useBloom",
+        use_rendered_post_processing && state->bloom_ready);
     henka_set_uniform_float_owned(state->tone_program, &state->tone_shader_data, "bloomStrength", 0.14f);
     henka_set_uniform_bool_owned(
         state->tone_program,
         &state->tone_shader_data,
         "useTemporalHistory",
-        state->temporal_history_ready && state->temporal_history_valid &&
+        use_rendered_post_processing && state->temporal_history_ready && state->temporal_history_valid &&
             state->temporal_history_width == viewport.width &&
             state->temporal_history_height == viewport.height);
     henka_set_uniform_float_owned(state->tone_program, &state->tone_shader_data, "temporalBlend", 0.08f);
@@ -3127,18 +3132,20 @@ static void henka_opengl_present_hdr(
         state->tone_program,
         &state->tone_shader_data,
         "useMotionVectors",
-        state->hdr_motion_texture != 0U && state->previous_view_projection_valid);
+        use_rendered_post_processing && state->hdr_motion_texture != 0U && state->previous_view_projection_valid);
     henka_set_uniform_bool_owned(
         state->tone_program,
         &state->tone_shader_data,
         "useAmbientOcclusion",
-        state->hdr_depth_buffer != 0U);
+        use_rendered_post_processing && state->hdr_depth_buffer != 0U);
     g_gl.ActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, state->hdr_color_texture);
     g_gl.ActiveTexture(GL_TEXTURE1);
-    glBindTexture(GL_TEXTURE_2D, state->bloom_ready ? state->bloom_color_texture : 0U);
+    glBindTexture(GL_TEXTURE_2D,
+        use_rendered_post_processing && state->bloom_ready ? state->bloom_color_texture : 0U);
     g_gl.ActiveTexture(GL_TEXTURE2);
-    glBindTexture(GL_TEXTURE_2D, state->temporal_history_ready ? state->temporal_history_texture : 0U);
+    glBindTexture(GL_TEXTURE_2D,
+        use_rendered_post_processing && state->temporal_history_ready ? state->temporal_history_texture : 0U);
     g_gl.ActiveTexture(GL_TEXTURE3);
     glBindTexture(GL_TEXTURE_2D, state->hdr_motion_texture);
     g_gl.ActiveTexture(GL_TEXTURE4);
@@ -5212,9 +5219,12 @@ henka_result henka_opengl_renderer_draw_scene(
     }
     if (policy.use_hdr_presentation && !state->reflection_probe_capture_active)
     {
-        henka_opengl_draw_bloom(state);
+        if (policy.use_rendered_post_processing)
+        {
+            henka_opengl_draw_bloom(state);
+        }
         g_gl.BindFramebuffer(GL_FRAMEBUFFER, 0U);
-        henka_opengl_present_hdr(renderer, state);
+        henka_opengl_present_hdr(renderer, state, policy.use_rendered_post_processing);
     }
     if (gpu_query_active)
     {
