@@ -126,6 +126,7 @@ typedef struct henka_opengl_renderer_state
     GLuint tone_vertex_array;
     GLuint hdr_framebuffer;
     GLuint hdr_color_texture;
+    GLuint hdr_motion_texture;
     GLuint hdr_depth_buffer;
     int hdr_width;
     int hdr_height;
@@ -147,6 +148,8 @@ typedef struct henka_opengl_renderer_state
     int temporal_history_height;
     bool temporal_history_ready;
     bool temporal_history_valid;
+    henka_mat4 previous_view_projection;
+    bool previous_view_projection_valid;
     GLuint ibl_framebuffer;
     GLuint ibl_environment_cube;
     GLuint ibl_irradiance_cube;
@@ -375,6 +378,7 @@ typedef struct henka_opengl_functions
     PFNGLGENFRAMEBUFFERSPROC GenFramebuffers;
     PFNGLBINDFRAMEBUFFERPROC BindFramebuffer;
     PFNGLFRAMEBUFFERTEXTURE2DPROC FramebufferTexture2D;
+    PFNGLDRAWBUFFERSPROC DrawBuffers;
     PFNGLCHECKFRAMEBUFFERSTATUSPROC CheckFramebufferStatus;
     PFNGLDELETEFRAMEBUFFERSPROC DeleteFramebuffers;
     PFNGLGENRENDERBUFFERSPROC GenRenderbuffers;
@@ -684,6 +688,7 @@ static bool henka_opengl_load_functions(void)
     HENKA_GL_LOAD(GenFramebuffers);
     HENKA_GL_LOAD(BindFramebuffer);
     HENKA_GL_LOAD(FramebufferTexture2D);
+    HENKA_GL_LOAD(DrawBuffers);
     HENKA_GL_LOAD(CheckFramebufferStatus);
     HENKA_GL_LOAD(DeleteFramebuffers);
     HENKA_GL_LOAD(GenRenderbuffers);
@@ -1044,7 +1049,8 @@ static void henka_add_optional_shader_locations(
     {
         "iblIrradianceMap", "iblPrefilterMap", "iblBrdfLut", "useIBL",
         "reflectionProbePosition", "reflectionProbeExtents", "useReflectionProbe",
-        "reflectionProbeMap", "useReflectionProbeMap", "doubleSided"
+        "reflectionProbeMap", "useReflectionProbeMap", "doubleSided",
+        "previousViewProjection", "useMotionVectors"
     };
     size_t index;
 
@@ -1374,7 +1380,7 @@ static void henka_opengl_delete_hdr_target(henka_opengl_renderer_state* state)
 
     if (state != NULL && state->hdr_width > 0 && state->hdr_height > 0)
     {
-        target_bytes = (uint64_t)state->hdr_width * (uint64_t)state->hdr_height * 12U;
+        target_bytes = (uint64_t)state->hdr_width * (uint64_t)state->hdr_height * 16U;
         henka_opengl_memory_remove_category(
             state,
             &state->tracked_render_target_bytes,
@@ -1388,12 +1394,17 @@ static void henka_opengl_delete_hdr_target(henka_opengl_renderer_state* state)
     {
         glDeleteTextures(1, &state->hdr_color_texture);
     }
+    if (state->hdr_motion_texture != 0U)
+    {
+        glDeleteTextures(1, &state->hdr_motion_texture);
+    }
     if (state->hdr_framebuffer != 0U)
     {
         g_gl.DeleteFramebuffers(1, &state->hdr_framebuffer);
     }
     state->hdr_depth_buffer = 0U;
     state->hdr_color_texture = 0U;
+    state->hdr_motion_texture = 0U;
     state->hdr_framebuffer = 0U;
     state->hdr_width = 0;
     state->hdr_height = 0;
@@ -1455,6 +1466,7 @@ static void henka_opengl_delete_temporal_history(henka_opengl_renderer_state* st
     state->temporal_history_height = 0;
     state->temporal_history_ready = false;
     state->temporal_history_valid = false;
+    state->previous_view_projection_valid = false;
 }
 
 static henka_result henka_opengl_create_temporal_history(
@@ -1969,6 +1981,7 @@ static henka_result henka_opengl_create_hdr_target(
     int height)
 {
     GLuint color_texture = 0U;
+    GLuint motion_texture = 0U;
     GLuint depth_buffer = 0U;
     GLuint framebuffer = 0U;
     GLint previous_framebuffer = 0;
@@ -1991,11 +2004,13 @@ static henka_result henka_opengl_create_hdr_target(
     glGetIntegerv(GL_RENDERBUFFER_BINDING, &previous_renderbuffer);
     g_gl.GenFramebuffers(1, &framebuffer);
     glGenTextures(1, &color_texture);
+    glGenTextures(1, &motion_texture);
     g_gl.GenRenderbuffers(1, &depth_buffer);
-    if (framebuffer == 0U || color_texture == 0U || depth_buffer == 0U)
+    if (framebuffer == 0U || color_texture == 0U || motion_texture == 0U || depth_buffer == 0U)
     {
         if (depth_buffer != 0U) g_gl.DeleteRenderbuffers(1, &depth_buffer);
         if (color_texture != 0U) glDeleteTextures(1, &color_texture);
+        if (motion_texture != 0U) glDeleteTextures(1, &motion_texture);
         if (framebuffer != 0U) g_gl.DeleteFramebuffers(1, &framebuffer);
         (void)snprintf(state->hdr_failure_reason, sizeof(state->hdr_failure_reason), "GPU object allocation failed");
         return HENKA_ERROR_RENDERER;
@@ -2008,6 +2023,18 @@ static henka_result henka_opengl_create_hdr_target(
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA16F, width, height, 0, GL_RGBA, GL_HALF_FLOAT, NULL);
     g_gl.FramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, color_texture, 0);
+    glBindTexture(GL_TEXTURE_2D, motion_texture);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RG16F, width, height, 0, GL_RG, GL_HALF_FLOAT, NULL);
+    g_gl.FramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT1, GL_TEXTURE_2D, motion_texture, 0);
+    {
+        static const GLenum draw_buffers[] = {GL_COLOR_ATTACHMENT0, GL_COLOR_ATTACHMENT1};
+        if (g_gl.DrawBuffers != NULL)
+            g_gl.DrawBuffers(2, draw_buffers);
+    }
     g_gl.BindRenderbuffer(GL_RENDERBUFFER, depth_buffer);
     g_gl.RenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT24, width, height);
     g_gl.FramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, depth_buffer);
@@ -2019,6 +2046,7 @@ static henka_result henka_opengl_create_hdr_target(
         g_gl.BindRenderbuffer(GL_RENDERBUFFER, (GLuint)previous_renderbuffer);
         g_gl.DeleteRenderbuffers(1, &depth_buffer);
         glDeleteTextures(1, &color_texture);
+        glDeleteTextures(1, &motion_texture);
         g_gl.DeleteFramebuffers(1, &framebuffer);
         return HENKA_ERROR_RENDERER;
     }
@@ -2028,6 +2056,7 @@ static henka_result henka_opengl_create_hdr_target(
     henka_opengl_delete_hdr_target(state);
     state->hdr_framebuffer = framebuffer;
     state->hdr_color_texture = color_texture;
+    state->hdr_motion_texture = motion_texture;
     state->hdr_depth_buffer = depth_buffer;
     state->hdr_width = width;
     state->hdr_height = height;
@@ -2035,7 +2064,7 @@ static henka_result henka_opengl_create_hdr_target(
     state->hdr_framebuffer_complete = true;
     state->hdr_failure_reason[0] = '\0';
     {
-        uint64_t target_bytes = (uint64_t)width * (uint64_t)height * 12U;
+        uint64_t target_bytes = (uint64_t)width * (uint64_t)height * 16U;
         henka_opengl_memory_add_category(
             state,
             &state->tracked_render_target_bytes,
@@ -2126,7 +2155,7 @@ static henka_result henka_opengl_create_shadow_target(
 static henka_result henka_opengl_create_render_programs(
     henka_opengl_renderer_state* state)
 {
-    static const char* tone_uniforms[] = {"hdrTexture", "bloomTexture", "historyTexture", "exposure", "useBloom", "bloomStrength", "useTemporalHistory", "temporalBlend"};
+    static const char* tone_uniforms[] = {"hdrTexture", "bloomTexture", "historyTexture", "motionTexture", "exposure", "useBloom", "bloomStrength", "useTemporalHistory", "useMotionVectors", "temporalBlend"};
     static const char* bloom_extract_uniforms[] = {"hdrTexture", "threshold"};
     static const char* bloom_blur_uniforms[] = {"sourceTexture", "direction"};
     static const char* ibl_conversion_uniforms[] = {"equirectangularTexture", "rotation", "viewProjection"};
@@ -2145,9 +2174,9 @@ static henka_result henka_opengl_create_render_programs(
         "void main(){ vec2 p = vec2((gl_VertexID << 1) & 2, gl_VertexID & 2); uv = p; gl_Position = vec4(p * 2.0 - 1.0, 0.0, 1.0); }\n";
     static const char* tone_fragment =
         "#version 330 core\n"
-        "in vec2 uv; uniform sampler2D hdrTexture; uniform sampler2D bloomTexture; uniform sampler2D historyTexture; uniform float exposure; uniform bool useBloom; uniform float bloomStrength; uniform bool useTemporalHistory; uniform float temporalBlend; out vec4 outColor;\n"
+        "in vec2 uv; uniform sampler2D hdrTexture; uniform sampler2D bloomTexture; uniform sampler2D historyTexture; uniform sampler2D motionTexture; uniform float exposure; uniform bool useBloom; uniform float bloomStrength; uniform bool useTemporalHistory; uniform bool useMotionVectors; uniform float temporalBlend; out vec4 outColor;\n"
         "vec3 aces(vec3 x){ return clamp((x*(2.51*x+0.03))/(x*(2.43*x+0.59)+0.14),0.0,1.0); }\n"
-        "void main(){ vec3 color = texture(hdrTexture, uv).rgb; if (useBloom) color += texture(bloomTexture, uv).rgb * max(bloomStrength, 0.0); color *= exp2(exposure); color = pow(aces(max(color, vec3(0.0))), vec3(1.0/2.2)); if (useTemporalHistory) color = mix(color, texture(historyTexture, uv).rgb, clamp(temporalBlend, 0.0, 0.25)); outColor = vec4(color, 1.0); }\n";
+        "void main(){ vec3 color = texture(hdrTexture, uv).rgb; if (useBloom) color += texture(bloomTexture, uv).rgb * max(bloomStrength, 0.0); color *= exp2(exposure); color = pow(aces(max(color, vec3(0.0))), vec3(1.0/2.2)); if (useTemporalHistory) { vec2 historyUv = uv; if (useMotionVectors) historyUv = clamp(uv - texture(motionTexture, uv).rg, vec2(0.001), vec2(0.999)); color = mix(color, texture(historyTexture, historyUv).rgb, clamp(temporalBlend, 0.0, 0.25)); } outColor = vec4(color, 1.0); }\n";
     static const char* bloom_extract_fragment =
         "#version 330 core\n"
         "in vec2 uv; uniform sampler2D hdrTexture; uniform float threshold; out vec4 outColor;\n"
@@ -2539,6 +2568,7 @@ static void henka_opengl_present_hdr(
     henka_set_uniform_int_owned(state->tone_program, &state->tone_shader_data, "hdrTexture", 0);
     henka_set_uniform_int_owned(state->tone_program, &state->tone_shader_data, "bloomTexture", 1);
     henka_set_uniform_int_owned(state->tone_program, &state->tone_shader_data, "historyTexture", 2);
+    henka_set_uniform_int_owned(state->tone_program, &state->tone_shader_data, "motionTexture", 3);
     henka_set_uniform_float_owned(state->tone_program, &state->tone_shader_data, "exposure", renderer->exposure);
     henka_set_uniform_bool_owned(state->tone_program, &state->tone_shader_data, "useBloom", state->bloom_ready);
     henka_set_uniform_float_owned(state->tone_program, &state->tone_shader_data, "bloomStrength", 0.14f);
@@ -2550,12 +2580,19 @@ static void henka_opengl_present_hdr(
             state->temporal_history_width == viewport.width &&
             state->temporal_history_height == viewport.height);
     henka_set_uniform_float_owned(state->tone_program, &state->tone_shader_data, "temporalBlend", 0.08f);
+    henka_set_uniform_bool_owned(
+        state->tone_program,
+        &state->tone_shader_data,
+        "useMotionVectors",
+        state->hdr_motion_texture != 0U && state->previous_view_projection_valid);
     g_gl.ActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, state->hdr_color_texture);
     g_gl.ActiveTexture(GL_TEXTURE1);
     glBindTexture(GL_TEXTURE_2D, state->bloom_ready ? state->bloom_color_texture : 0U);
     g_gl.ActiveTexture(GL_TEXTURE2);
     glBindTexture(GL_TEXTURE_2D, state->temporal_history_ready ? state->temporal_history_texture : 0U);
+    g_gl.ActiveTexture(GL_TEXTURE3);
+    glBindTexture(GL_TEXTURE_2D, state->hdr_motion_texture);
     g_gl.BindVertexArray(state->tone_vertex_array);
     glDrawArrays(GL_TRIANGLES, 0, 3);
     g_gl.BindVertexArray(0);
@@ -2563,6 +2600,8 @@ static void henka_opengl_present_hdr(
     g_gl.ActiveTexture(GL_TEXTURE1);
     glBindTexture(GL_TEXTURE_2D, 0U);
     g_gl.ActiveTexture(GL_TEXTURE2);
+    glBindTexture(GL_TEXTURE_2D, 0U);
+    g_gl.ActiveTexture(GL_TEXTURE3);
     glBindTexture(GL_TEXTURE_2D, 0U);
     g_gl.ActiveTexture(GL_TEXTURE0);
     g_gl.UseProgram(0);
@@ -3443,6 +3482,7 @@ henka_result henka_opengl_renderer_draw_scene(
         {0.24f, 0.26f, 0.30f};
     henka_mat4 projection;
     henka_mat4 light_matrix;
+    henka_mat4 current_view_projection;
     henka_viewport_render_policy policy;
     henka_opengl_renderer_state* state;
     henka_mat4 view;
@@ -3570,6 +3610,9 @@ henka_result henka_opengl_renderer_draw_scene(
     projection =
         henka_camera_get_projection_matrix(&scene->camera);
     view = henka_camera_get_view_matrix(&scene->camera);
+    current_view_projection = henka_mat4_multiply(projection, view);
+    if (!state->previous_view_projection_valid)
+        state->previous_view_projection = current_view_projection;
     henka_opengl_prepare_transparent_sort(state, scene, view);
     g_gl.ActiveTexture(GL_TEXTURE0);
 
@@ -3825,6 +3868,16 @@ henka_result henka_opengl_renderer_draw_scene(
             program,
             "projection",
             projection);
+        henka_set_uniform_mat4_owned(
+            program,
+            shader_data,
+            "previousViewProjection",
+            state->previous_view_projection);
+        henka_set_uniform_bool_owned(
+            program,
+            shader_data,
+            "useMotionVectors",
+            rendered && !helper_entity && state->previous_view_projection_valid);
         henka_set_uniform_mat4(program, "lightMatrix", light_matrix);
         henka_set_uniform_vec4(
             program,
@@ -4094,6 +4147,11 @@ henka_result henka_opengl_renderer_draw_scene(
     glEnable(GL_DEPTH_TEST);
     glEnable(GL_CULL_FACE);
     glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
+    if (!state->reflection_probe_capture_active)
+    {
+        state->previous_view_projection = current_view_projection;
+        state->previous_view_projection_valid = true;
+    }
     return HENKA_SUCCESS;
 }
 

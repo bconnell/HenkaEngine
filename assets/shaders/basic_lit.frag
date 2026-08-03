@@ -8,6 +8,8 @@ in vec3 fragTangent;
 in float fragTangentHandedness;
 in vec4 fragVertexColor;
 in vec4 fragLightSpacePosition;
+in vec4 fragCurrentClipPosition;
+in vec4 fragPreviousClipPosition;
 
 uniform vec4 baseColor;
 uniform sampler2D baseColorTexture;
@@ -78,8 +80,10 @@ uniform int alphaMode;
 uniform float alphaCutoff;
 uniform sampler2D shadowMap;
 uniform bool useShadowMap;
+uniform bool useMotionVectors;
 
 out vec4 outColor;
+layout(location = 1) out vec2 outMotion;
 
 const float PI = 3.14159265359;
 
@@ -415,4 +419,15 @@ void main()
         finalColor = mix(finalColor, max(fogColor, vec3(0.0)), fogAmount);
     }
     outColor = vec4(min(finalColor, vec3(65504.0)), surfaceColor.a);
+    if (useMotionVectors && abs(fragCurrentClipPosition.w) > 0.0001 &&
+        abs(fragPreviousClipPosition.w) > 0.0001)
+    {
+        vec2 currentNdc = fragCurrentClipPosition.xy / fragCurrentClipPosition.w;
+        vec2 previousNdc = fragPreviousClipPosition.xy / fragPreviousClipPosition.w;
+        outMotion = (currentNdc - previousNdc) * 0.5;
+    }
+    else
+    {
+        outMotion = vec2(0.0);
+    }
 }
