@@ -240,6 +240,13 @@ henka_result henka_assets_refresh_material_instance(
 henka_result henka_assets_get_material_instance_material(
     const henka_material_instance* instance,
     henka_material* out_material);
+/* Applies the validated effective instance view to a scene entity. The scene
+ * receives its own material value; the definition and instance remain
+ * caller-owned, so callers can refresh/reimport and apply again transactionally. */
+henka_result henka_assets_apply_material_instance_to_entity(
+    const henka_material_instance* instance,
+    henka_scene* scene,
+    henka_entity entity);
 henka_result henka_assets_material_instance_set_float(
     henka_material_instance* instance,
     henka_material_instance_parameter parameter,

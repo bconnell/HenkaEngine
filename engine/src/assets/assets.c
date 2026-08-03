@@ -2623,6 +2623,21 @@ henka_result henka_assets_get_material_instance_material(
     return HENKA_SUCCESS;
 }
 
+henka_result henka_assets_apply_material_instance_to_entity(
+    const henka_material_instance* instance,
+    henka_scene* scene,
+    henka_entity entity)
+{
+    henka_material material;
+
+    if (instance == NULL || scene == NULL || entity == HENKA_INVALID_ENTITY ||
+        henka_assets_get_material_instance_material(instance, &material) != HENKA_SUCCESS)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    return henka_scene_set_entity_material(scene, entity, material);
+}
+
 static henka_result henka_material_instance_commit(
     henka_material_instance* instance,
     henka_material candidate,

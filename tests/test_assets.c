@@ -176,6 +176,9 @@ void henka_test_assets(void)
     henka_material material;
     henka_material_instance material_instance;
     henka_material_dependency_info material_dependencies;
+    henka_scene* material_scene;
+    henka_entity material_entity;
+    henka_material applied_material;
     uint64_t material_revision;
     size_t processed_residency_requests;
     henka_asset_texture_entry texture_entries[2];
@@ -584,6 +587,20 @@ void henka_test_assets(void)
     HENKA_TEST_ASSERT(material_instance.material.use_texture);
     HENKA_TEST_ASSERT(material_instance.material.base_color_texture ==
         material_entry.material.base_color_texture);
+    material_scene = NULL;
+    material_entity = HENKA_INVALID_ENTITY;
+    HENKA_TEST_ASSERT(henka_scene_create(&material_scene) == HENKA_SUCCESS);
+    material_entity = henka_scene_create_entity_named(material_scene, "Material Instance Target");
+    HENKA_TEST_ASSERT(material_entity != HENKA_INVALID_ENTITY);
+    HENKA_TEST_ASSERT(henka_assets_apply_material_instance_to_entity(
+        &material_instance, material_scene, material_entity) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_scene_get_entity_material(
+        material_scene, material_entity, &applied_material) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(applied_material.roughness == material_entry.material.roughness);
+    henka_scene_destroy(material_scene);
+    material_scene = NULL;
+    HENKA_TEST_ASSERT(henka_assets_apply_material_instance_to_entity(
+        NULL, NULL, HENKA_INVALID_ENTITY) == HENKA_ERROR_INVALID_ARGUMENT);
     memset(&scene_entry, 0, sizeof(scene_entry));
     scene_entry.key = "assets/models/reload-scene.gltf";
     scene_entry.source_path = "assets/models/reload-scene.gltf";
