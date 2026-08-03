@@ -574,6 +574,16 @@ void henka_test_assets(void)
     HENKA_TEST_ASSERT(material_instance.material.double_sided);
     HENKA_TEST_ASSERT(material_instance.material.alpha_mode == HENKA_MATERIAL_ALPHA_MASKED);
     HENKA_TEST_ASSERT(!material_instance.material.use_texture);
+    HENKA_TEST_ASSERT(henka_assets_material_instance_reset_override(
+        &material_instance, HENKA_MATERIAL_INSTANCE_METALLIC) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(material_instance.material.metallic == material_entry.material.metallic);
+    HENKA_TEST_ASSERT(henka_assets_material_instance_reset_overrides(
+        &material_instance) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(material_instance.override_mask == 0U);
+    HENKA_TEST_ASSERT(material_instance.material.alpha_mode == material_entry.material.alpha_mode);
+    HENKA_TEST_ASSERT(material_instance.material.use_texture);
+    HENKA_TEST_ASSERT(material_instance.material.base_color_texture ==
+        material_entry.material.base_color_texture);
     memset(&scene_entry, 0, sizeof(scene_entry));
     scene_entry.key = "assets/models/reload-scene.gltf";
     scene_entry.source_path = "assets/models/reload-scene.gltf";

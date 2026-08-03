@@ -94,7 +94,8 @@ typedef enum henka_material_instance_parameter
     HENKA_MATERIAL_INSTANCE_NORMAL_TEXTURE,
     HENKA_MATERIAL_INSTANCE_METALLIC_ROUGHNESS_TEXTURE,
     HENKA_MATERIAL_INSTANCE_OCCLUSION_TEXTURE,
-    HENKA_MATERIAL_INSTANCE_EMISSIVE_TEXTURE
+    HENKA_MATERIAL_INSTANCE_EMISSIVE_TEXTURE,
+    HENKA_MATERIAL_INSTANCE_PARAMETER_COUNT
 } henka_material_instance_parameter;
 
 typedef enum henka_material_texture_slot
@@ -265,6 +266,13 @@ henka_result henka_assets_material_instance_set_texture(
     henka_material_instance* instance,
     henka_material_texture_slot slot,
     henka_texture* texture);
+/* Clears one validated override or all overrides, restoring definition values
+ * transactionally while preserving the stable definition identity. */
+henka_result henka_assets_material_instance_reset_override(
+    henka_material_instance* instance,
+    henka_material_instance_parameter parameter);
+henka_result henka_assets_material_instance_reset_overrides(
+    henka_material_instance* instance);
 henka_result henka_assets_reload_gltf_material_asset(
     henka_asset_manager* manager,
     const char* path,

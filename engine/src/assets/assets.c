@@ -2640,6 +2640,97 @@ static henka_result henka_material_instance_commit(
     return HENKA_SUCCESS;
 }
 
+static bool henka_material_instance_restore_definition_field(
+    henka_material* candidate,
+    const henka_material* definition,
+    henka_material_instance_parameter parameter)
+{
+    if (candidate == NULL || definition == NULL)
+        return false;
+#define HENKA_RESTORE_MATERIAL_FIELD(parameter_value, field_value) \
+    case parameter_value: candidate->field_value = definition->field_value; break
+    switch (parameter)
+    {
+        HENKA_RESTORE_MATERIAL_FIELD(HENKA_MATERIAL_INSTANCE_METALLIC, metallic);
+        HENKA_RESTORE_MATERIAL_FIELD(HENKA_MATERIAL_INSTANCE_ROUGHNESS, roughness);
+        HENKA_RESTORE_MATERIAL_FIELD(HENKA_MATERIAL_INSTANCE_SPECULAR_FACTOR, specular_factor);
+        HENKA_RESTORE_MATERIAL_FIELD(HENKA_MATERIAL_INSTANCE_IOR, ior);
+        HENKA_RESTORE_MATERIAL_FIELD(HENKA_MATERIAL_INSTANCE_TRANSMISSION, transmission);
+        HENKA_RESTORE_MATERIAL_FIELD(HENKA_MATERIAL_INSTANCE_NORMAL_SCALE, normal_scale);
+        HENKA_RESTORE_MATERIAL_FIELD(HENKA_MATERIAL_INSTANCE_OCCLUSION_STRENGTH, occlusion_strength);
+        HENKA_RESTORE_MATERIAL_FIELD(HENKA_MATERIAL_INSTANCE_EMISSIVE_STRENGTH, emissive_strength);
+        HENKA_RESTORE_MATERIAL_FIELD(HENKA_MATERIAL_INSTANCE_CLEARCOAT, clearcoat);
+        HENKA_RESTORE_MATERIAL_FIELD(HENKA_MATERIAL_INSTANCE_CLEARCOAT_ROUGHNESS, clearcoat_roughness);
+        HENKA_RESTORE_MATERIAL_FIELD(HENKA_MATERIAL_INSTANCE_ALPHA_CUTOFF, alpha_cutoff);
+        HENKA_RESTORE_MATERIAL_FIELD(HENKA_MATERIAL_INSTANCE_SHEEN_ROUGHNESS, sheen_roughness);
+        HENKA_RESTORE_MATERIAL_FIELD(HENKA_MATERIAL_INSTANCE_BASE_COLOR, base_color);
+        HENKA_RESTORE_MATERIAL_FIELD(HENKA_MATERIAL_INSTANCE_EMISSIVE_COLOR, emissive_color);
+        HENKA_RESTORE_MATERIAL_FIELD(HENKA_MATERIAL_INSTANCE_SPECULAR_COLOR, specular_color);
+        HENKA_RESTORE_MATERIAL_FIELD(HENKA_MATERIAL_INSTANCE_SHEEN_COLOR, sheen_color);
+        HENKA_RESTORE_MATERIAL_FIELD(HENKA_MATERIAL_INSTANCE_USE_LIGHTING, use_lighting);
+        HENKA_RESTORE_MATERIAL_FIELD(HENKA_MATERIAL_INSTANCE_DEPTH_TEST, depth_test);
+        HENKA_RESTORE_MATERIAL_FIELD(HENKA_MATERIAL_INSTANCE_DOUBLE_SIDED, double_sided);
+        HENKA_RESTORE_MATERIAL_FIELD(HENKA_MATERIAL_INSTANCE_CAST_SHADOWS, cast_shadows);
+        HENKA_RESTORE_MATERIAL_FIELD(HENKA_MATERIAL_INSTANCE_RECEIVE_SHADOWS, receive_shadows);
+        HENKA_RESTORE_MATERIAL_FIELD(HENKA_MATERIAL_INSTANCE_ALPHA_MODE, alpha_mode);
+        HENKA_RESTORE_MATERIAL_FIELD(HENKA_MATERIAL_INSTANCE_THICKNESS, thickness);
+        HENKA_RESTORE_MATERIAL_FIELD(HENKA_MATERIAL_INSTANCE_ATTENUATION_DISTANCE, attenuation_distance);
+        HENKA_RESTORE_MATERIAL_FIELD(HENKA_MATERIAL_INSTANCE_ATTENUATION_COLOR, attenuation_color);
+        case HENKA_MATERIAL_INSTANCE_BASE_COLOR_TEXTURE:
+            candidate->base_color_texture = definition->base_color_texture;
+            candidate->use_texture = definition->use_texture;
+            break;
+        HENKA_RESTORE_MATERIAL_FIELD(HENKA_MATERIAL_INSTANCE_NORMAL_TEXTURE, normal_texture);
+        HENKA_RESTORE_MATERIAL_FIELD(HENKA_MATERIAL_INSTANCE_METALLIC_ROUGHNESS_TEXTURE, metallic_roughness_texture);
+        HENKA_RESTORE_MATERIAL_FIELD(HENKA_MATERIAL_INSTANCE_OCCLUSION_TEXTURE, occlusion_texture);
+        HENKA_RESTORE_MATERIAL_FIELD(HENKA_MATERIAL_INSTANCE_EMISSIVE_TEXTURE, emissive_texture);
+        default:
+            return false;
+    }
+#undef HENKA_RESTORE_MATERIAL_FIELD
+    return true;
+}
+
+henka_result henka_assets_material_instance_reset_override(
+    henka_material_instance* instance,
+    henka_material_instance_parameter parameter)
+{
+    henka_material candidate;
+    uint32_t bit;
+
+    if (instance == NULL || instance->definition == NULL ||
+        parameter < 0 || parameter >= HENKA_MATERIAL_INSTANCE_PARAMETER_COUNT)
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    bit = henka_material_instance_override_bit(parameter);
+    if (bit == 0U || (instance->override_mask & bit) == 0U)
+        return HENKA_SUCCESS;
+    candidate = instance->material;
+    if (!henka_material_instance_restore_definition_field(
+            &candidate, &instance->definition->material, parameter) ||
+        henka_material_validate(&candidate) != HENKA_SUCCESS)
+        return HENKA_ERROR_ASSET_SOURCE;
+    instance->material = candidate;
+    instance->override_mask &= ~bit;
+    instance->definition_revision = instance->definition->revision;
+    return HENKA_SUCCESS;
+}
+
+henka_result henka_assets_material_instance_reset_overrides(
+    henka_material_instance* instance)
+{
+    henka_material candidate;
+
+    if (instance == NULL || instance->definition == NULL)
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    candidate = instance->definition->material;
+    if (henka_material_validate(&candidate) != HENKA_SUCCESS)
+        return HENKA_ERROR_ASSET_SOURCE;
+    instance->material = candidate;
+    instance->override_mask = 0U;
+    instance->definition_revision = instance->definition->revision;
+    return HENKA_SUCCESS;
+}
+
 henka_result henka_assets_material_instance_set_float(
     henka_material_instance* instance,
     henka_material_instance_parameter parameter,
