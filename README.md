@@ -82,7 +82,7 @@ Henka Engine is still early, but the sandbox now renders a visible 3D scene with
 - Full 2.5D sprite, layered-depth, parallax, animation, and constrained-movement workflow
 - Integrated modeling, UV, rigging, animation-authoring, and content-creation workspace
 - Additional renderer backends
-- Complete cross-backend KTX2/Basis production coverage and GPU-native stress validation, background texture streaming and automatic policy eviction, broader instancing/batching/occlusion scale work, production motion-vector TAA, and full refraction/layered-volume/glass rendering remain unfinished. Rendered now has a bounded depth-derived screen-space reflection attempt that falls back to the existing environment/IBL response on misses; glTF transmission and volume attenuation use bounded environment responses. Current paths expose truthful fallbacks or bounded foundations
+- Complete cross-backend KTX2/Basis production coverage and GPU-native stress validation, background texture streaming and automatic policy eviction, broader instancing/batching/occlusion scale work, production motion-vector TAA, and full refraction/layered-volume/glass rendering remain unfinished. Rendered now has a bounded depth-derived screen-space reflection attempt when derived IBL resources are ready; scenes without IBL, missed rays, and out-of-view rays use the existing environment/analytical fallback. glTF transmission and volume attenuation use bounded environment responses. Current paths expose truthful fallbacks or bounded foundations
 
 ## Repository layout
 
