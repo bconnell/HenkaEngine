@@ -1596,9 +1596,9 @@ static bool henka_gltf_parse_scene_nodes(
         }
         else output->local_matrix = henka_transform_to_mat4(output->local_transform);
         if (henka_gltf_find_member(node, node_end, "mesh", &value, &value_end) &&
-            !henka_gltf_member_int(node, node_end, "mesh", &output->mesh_index)) return false;
+            (!henka_gltf_member_int(node, node_end, "mesh", &output->mesh_index) || output->mesh_index < 0)) return false;
         if (henka_gltf_find_member(node, node_end, "camera", &value, &value_end) &&
-            !henka_gltf_member_int(node, node_end, "camera", &output->camera_index)) return false;
+            (!henka_gltf_member_int(node, node_end, "camera", &output->camera_index) || output->camera_index < 0)) return false;
         if (output->camera_index >= 0 && (size_t)output->camera_index >= scene->camera_count) return false;
         if (output->mesh_index >= 0 && (size_t)output->mesh_index >= mesh_count) return false;
         if (henka_gltf_find_member(node, node_end, "extensions", &value, &value_end))
