@@ -757,12 +757,18 @@ static bool henka_gltf_parse_primitive(const henka_gltf_context* context, const 
     if (henka_gltf_find_member(primitive, primitive_end, "mode", &value, &value_end) && !henka_gltf_integer(value, value_end, &mode)) return false;
     if (mode != 4 || !henka_gltf_find_member(primitive, primitive_end, "attributes", &attributes, &attributes_end) ||
         !henka_gltf_member_int(attributes, attributes_end, "POSITION", &position_accessor)) return false;
-    (void)henka_gltf_member_int(attributes, attributes_end, "NORMAL", &normal_accessor);
-    (void)henka_gltf_member_int(attributes, attributes_end, "TEXCOORD_0", &uv_accessor);
-    (void)henka_gltf_member_int(attributes, attributes_end, "TEXCOORD_1", &uv1_accessor);
-    (void)henka_gltf_member_int(attributes, attributes_end, "COLOR_0", &color_accessor);
-    (void)henka_gltf_member_int(attributes, attributes_end, "TANGENT", &tangent_accessor);
-    if (henka_gltf_find_member(primitive, primitive_end, "indices", &value, &value_end) && !henka_gltf_integer(value, value_end, &index_accessor)) return false;
+    if (henka_gltf_find_member(attributes, attributes_end, "NORMAL", &value, &value_end) &&
+        (!henka_gltf_member_int(attributes, attributes_end, "NORMAL", &normal_accessor) || normal_accessor < 0)) return false;
+    if (henka_gltf_find_member(attributes, attributes_end, "TEXCOORD_0", &value, &value_end) &&
+        (!henka_gltf_member_int(attributes, attributes_end, "TEXCOORD_0", &uv_accessor) || uv_accessor < 0)) return false;
+    if (henka_gltf_find_member(attributes, attributes_end, "TEXCOORD_1", &value, &value_end) &&
+        (!henka_gltf_member_int(attributes, attributes_end, "TEXCOORD_1", &uv1_accessor) || uv1_accessor < 0)) return false;
+    if (henka_gltf_find_member(attributes, attributes_end, "COLOR_0", &value, &value_end) &&
+        (!henka_gltf_member_int(attributes, attributes_end, "COLOR_0", &color_accessor) || color_accessor < 0)) return false;
+    if (henka_gltf_find_member(attributes, attributes_end, "TANGENT", &value, &value_end) &&
+        (!henka_gltf_member_int(attributes, attributes_end, "TANGENT", &tangent_accessor) || tangent_accessor < 0)) return false;
+    if (henka_gltf_find_member(primitive, primitive_end, "indices", &value, &value_end) &&
+        (!henka_gltf_integer(value, value_end, &index_accessor) || index_accessor < 0)) return false;
     if (position_accessor < 0 || (size_t)position_accessor >= context->accessor_count || context->accessors[position_accessor].component_count != 3 || context->accessors[position_accessor].component_type != 5126) return false;
     if ((normal_accessor >= 0 && (size_t)normal_accessor >= context->accessor_count) ||
         (uv_accessor >= 0 && (size_t)uv_accessor >= context->accessor_count) ||

@@ -40,6 +40,7 @@ Henka Engine is still early, but the sandbox now renders a visible 3D scene with
 - Asset manager foundation with rooted/UNC/device/drive/URI path rejection, platform-aware canonical cache identities, preserved source spelling, checked texture uploads, path-specific stable fallback identities, deterministic hard-failure propagation, and transactional texture and OBJ fallback retries
 - Early OBJ model loading with bounded source and output sizes, finite-number validation, negative indices, n-gon fan triangulation, degenerate-face rejection, and explicit failed-mesh retry support
 - Bounded glTF/GLB geometry and shared PBR material import with manager-owned texture dependencies and transactional material-asset reload
+- Bounded glTF/GLB scene import with selected scene roots, node hierarchy transforms, cameras, punctual lights, meshless camera/light scenes, and fail-closed accessor-reference validation
 - Descriptor-aware RGBA8 textures with explicit sRGB/linear, sampler, wrap, mip, flip, usage, alpha, source-class, and content-revision metadata
 - Bounded single-read texture decoding with truthful rejection of HDR and 16-bit sources, plus path-specific white/error fallback aliases
 - Shader-based rendering of built-in primitives

@@ -86,6 +86,9 @@ The loader currently supports:
   selected top-level scene roots (child nodes are rejected as malformed roots),
   TRS or finite affine non-sheared matrix node transforms, perspective and
   orthographic cameras, and bounded punctual-light records
+- optional vertex attributes and index references are validated as nonnegative
+  accessor indexes; malformed negative references fail instead of being
+  silently treated as omitted data
 
 Matrix-authored nodes are validated and decomposed into the runtime TRS
 contract before scene instantiation. Affine matrices with perspective terms,
