@@ -1435,6 +1435,9 @@ henka_result henka_assets_get_texture_residency_diagnostics(
     out_diagnostics->resident_bytes = manager->texture_resident_bytes;
     out_diagnostics->budget_rejection_count = manager->texture_budget_rejection_count;
     out_diagnostics->managed_texture_count = manager->texture_count;
+    out_diagnostics->queued_request_count = manager->texture_residency_request_count;
+    out_diagnostics->completed_request_count = manager->texture_residency_completed_requests;
+    out_diagnostics->failed_request_count = manager->texture_residency_failed_requests;
     for (index = 0U; index < manager->texture_count; ++index)
     {
         if (manager->texture_entries[index].metadata.fallback)
@@ -1443,6 +1446,86 @@ henka_result henka_assets_get_texture_residency_diagnostics(
     out_diagnostics->budget_exceeded =
         manager->texture_residency_budget_bytes != 0U &&
         manager->texture_resident_bytes > manager->texture_residency_budget_bytes;
+    return HENKA_SUCCESS;
+}
+
+henka_result henka_assets_queue_texture_residency_request(
+    henka_asset_manager* manager,
+    henka_texture* texture,
+    uint32_t resident_mip_count)
+{
+    size_t index;
+
+    if (manager == NULL || texture == NULL || resident_mip_count == 0U)
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    for (index = 0U; index < manager->texture_count; ++index)
+    {
+        if (manager->texture_entries[index].texture == texture)
+        {
+            if (manager->texture_entries[index].metadata.fallback ||
+                !manager->texture_entries[index].owns_texture)
+                return HENKA_ERROR_ASSET_SOURCE;
+            break;
+        }
+    }
+    if (index == manager->texture_count)
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    for (index = 0U; index < manager->texture_residency_request_count; ++index)
+    {
+        if (manager->texture_residency_request_textures[index] == texture)
+        {
+            manager->texture_residency_request_mips[index] = resident_mip_count;
+            return HENKA_SUCCESS;
+        }
+    }
+    if (manager->texture_residency_request_count >= HENKA_MAX_TEXTURE_RESIDENCY_REQUESTS)
+        return HENKA_ERROR_LIMIT;
+    index = manager->texture_residency_request_count++;
+    manager->texture_residency_request_textures[index] = texture;
+    manager->texture_residency_request_mips[index] = resident_mip_count;
+    return HENKA_SUCCESS;
+}
+
+henka_result henka_assets_process_texture_residency_requests(
+    henka_asset_manager* manager,
+    size_t max_requests,
+    size_t* out_processed_requests)
+{
+    size_t processed = 0U;
+
+    if (out_processed_requests != NULL) *out_processed_requests = 0U;
+    if (manager == NULL) return HENKA_ERROR_INVALID_ARGUMENT;
+    while (manager->texture_residency_request_count > 0U &&
+        (max_requests == 0U || processed < max_requests))
+    {
+        henka_texture* texture = manager->texture_residency_request_textures[0];
+        uint32_t resident_mips = manager->texture_residency_request_mips[0];
+        henka_texture_info info;
+        henka_result result;
+
+        memmove(
+            &manager->texture_residency_request_textures[0],
+            &manager->texture_residency_request_textures[1],
+            (manager->texture_residency_request_count - 1U) * sizeof(manager->texture_residency_request_textures[0]));
+        memmove(
+            &manager->texture_residency_request_mips[0],
+            &manager->texture_residency_request_mips[1],
+            (manager->texture_residency_request_count - 1U) * sizeof(manager->texture_residency_request_mips[0]));
+        --manager->texture_residency_request_count;
+        memset(&info, 0, sizeof(info));
+        result = henka_assets_set_texture_resident_mips(manager, texture, resident_mips, &info);
+        if (result == HENKA_SUCCESS)
+        {
+            if (manager->texture_residency_completed_requests < UINT64_MAX)
+                ++manager->texture_residency_completed_requests;
+        }
+        else if (manager->texture_residency_failed_requests < UINT64_MAX)
+        {
+            ++manager->texture_residency_failed_requests;
+        }
+        ++processed;
+    }
+    if (out_processed_requests != NULL) *out_processed_requests = processed;
     return HENKA_SUCCESS;
 }
 

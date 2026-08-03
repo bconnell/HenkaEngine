@@ -177,6 +177,7 @@ void henka_test_assets(void)
     henka_material_instance material_instance;
     henka_material_dependency_info material_dependencies;
     uint64_t material_revision;
+    size_t processed_residency_requests;
     henka_asset_texture_entry texture_entries[2];
     henka_mesh fallback_mesh;
     henka_mesh* mesh;
@@ -465,6 +466,31 @@ void henka_test_assets(void)
     fake_engine.renderer = NULL;
     fake_engine.asset_base_path = "";
     manager.engine = &fake_engine;
+    texture_entries[0].metadata.fallback = false;
+    texture_entries[0].owns_texture = true;
+    texture_entries[0].resident_gpu_bytes = 1U;
+    manager.texture_resident_bytes = 1U;
+    HENKA_TEST_ASSERT(henka_assets_queue_texture_residency_request(
+        &manager, &fallback_texture, 1U) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_assets_queue_texture_residency_request(
+        &manager, &fallback_texture, 2U) == HENKA_SUCCESS);
+    {
+        henka_texture_residency_diagnostics residency;
+        HENKA_TEST_ASSERT(henka_assets_get_texture_residency_diagnostics(
+            &manager, &residency) == HENKA_SUCCESS);
+        HENKA_TEST_ASSERT(residency.queued_request_count == 1U);
+        HENKA_TEST_ASSERT(henka_assets_process_texture_residency_requests(
+            &manager, 1U, &processed_residency_requests) == HENKA_SUCCESS);
+        HENKA_TEST_ASSERT(processed_residency_requests == 1U);
+        HENKA_TEST_ASSERT(henka_assets_get_texture_residency_diagnostics(
+            &manager, &residency) == HENKA_SUCCESS);
+        HENKA_TEST_ASSERT(residency.queued_request_count == 0U);
+        HENKA_TEST_ASSERT(residency.failed_request_count == 1U);
+    }
+    texture_entries[0].metadata.fallback = true;
+    texture_entries[0].owns_texture = false;
+    texture_entries[0].resident_gpu_bytes = 0U;
+    manager.texture_resident_bytes = 0U;
     memset(&material_entry, 0, sizeof(material_entry));
     material_entry.key = "assets/models/reload.gltf";
     material_entry.source_path = "assets/models/reload.gltf";

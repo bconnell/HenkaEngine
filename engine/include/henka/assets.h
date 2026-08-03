@@ -49,8 +49,13 @@ typedef struct henka_texture_residency_diagnostics
     uint32_t budget_rejection_count;
     size_t managed_texture_count;
     size_t fallback_texture_count;
+    size_t queued_request_count;
+    uint64_t completed_request_count;
+    uint64_t failed_request_count;
     bool budget_exceeded;
 } henka_texture_residency_diagnostics;
+
+#define HENKA_MAX_TEXTURE_RESIDENCY_REQUESTS 64U
 
 #define HENKA_MATERIAL_MAX_TEXTURE_DEPENDENCIES 5U
 
@@ -152,6 +157,17 @@ henka_result henka_assets_set_texture_residency_budget(
 henka_result henka_assets_get_texture_residency_diagnostics(
     const henka_asset_manager* manager,
     henka_texture_residency_diagnostics* out_diagnostics);
+/* Coalesces a bounded manager-owned KTX2 mip request. Processing is explicit
+ * and synchronous; this is a request-queue foundation, not background I/O or
+ * eviction. */
+henka_result henka_assets_queue_texture_residency_request(
+    henka_asset_manager* manager,
+    henka_texture* texture,
+    uint32_t resident_mip_count);
+henka_result henka_assets_process_texture_residency_requests(
+    henka_asset_manager* manager,
+    size_t max_requests,
+    size_t* out_processed_requests);
 /* Synchronously replaces a manager-owned KTX2 texture with a bounded prefix
  * of its mip chain. The source is reread transactionally; zero is not a
  * valid request, and non-KTX2 sources remain non-streamable. */
