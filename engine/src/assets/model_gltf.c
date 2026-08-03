@@ -1051,6 +1051,16 @@ static bool henka_gltf_parse_material(
             if (henka_gltf_find_member(extension, extension_end, "transmissionFactor", &value, &value_end) &&
                 !henka_gltf_member_float(extension, extension_end, "transmissionFactor", &out_source->material.transmission)) return false;
         }
+        if (henka_gltf_find_member(extensions, extensions_end, "KHR_materials_volume", &extension, &extension_end))
+        {
+            if (henka_gltf_find_member(extension, extension_end, "thicknessTexture", &value, &value_end)) return false;
+            if (henka_gltf_find_member(extension, extension_end, "thicknessFactor", &value, &value_end) &&
+                !henka_gltf_member_float(extension, extension_end, "thicknessFactor", &out_source->material.thickness)) return false;
+            if (henka_gltf_find_member(extension, extension_end, "attenuationDistance", &value, &value_end) &&
+                !henka_gltf_member_float(extension, extension_end, "attenuationDistance", &out_source->material.attenuation_distance)) return false;
+            if (henka_gltf_find_member(extension, extension_end, "attenuationColor", &value, &value_end) &&
+                !henka_gltf_member_vec3(extension, extension_end, "attenuationColor", &out_source->material.attenuation_color)) return false;
+        }
         if (henka_gltf_find_member(extensions, extensions_end, "KHR_materials_specular", &extension, &extension_end))
         {
             if (henka_gltf_find_member(extension, extension_end, "specularFactor", &value, &value_end) &&
@@ -1195,7 +1205,8 @@ static bool henka_gltf_extension_supported(const char* extension)
         "KHR_materials_specular",
         "KHR_materials_clearcoat",
         "KHR_materials_sheen",
-        "KHR_materials_emissive_strength"
+        "KHR_materials_emissive_strength",
+        "KHR_materials_volume"
     };
     size_t index;
     if (extension == NULL) return false;

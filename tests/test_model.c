@@ -89,7 +89,8 @@ static void henka_test_gltf_scene_import(void)
         "AAAAAAAAAAAAAAAAAACAPwAAAAAAAAAAAAAAAAAAgD8AAAAA\",\"byteLength\":36}],"
         "\"bufferViews\":[{\"buffer\":0,\"byteLength\":36}],"
         "\"accessors\":[{\"bufferView\":0,\"componentType\":5126,\"count\":3,\"type\":\"VEC3\"}],"
-        "\"materials\":[{\"name\":\"Scene Material\",\"pbrMetallicRoughness\":{\"metallicFactor\":0.7}}],"
+        "\"materials\":[{\"name\":\"Scene Material\",\"pbrMetallicRoughness\":{\"metallicFactor\":0.7},"
+        "\"extensions\":{\"KHR_materials_volume\":{\"thicknessFactor\":0.6,\"attenuationDistance\":2.5,\"attenuationColor\":[0.7,0.8,0.9]}}}],"
         "\"meshes\":[{\"primitives\":[{\"attributes\":{\"POSITION\":0},\"material\":0},"
         "{\"attributes\":{\"POSITION\":0},\"material\":0}]}],"
         "\"cameras\":[{\"name\":\"Main Camera\",\"type\":\"perspective\",\"perspective\":{\"yfov\":1.0,\"znear\":0.1,\"zfar\":100.0}}],"
@@ -131,6 +132,9 @@ static void henka_test_gltf_scene_import(void)
     HENKA_TEST_ASSERT(scene.primitives[1].material_index == 0);
     HENKA_TEST_ASSERT(scene.material_count == 1U);
     HENKA_TEST_ASSERT(scene.material_present[0]);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(scene.materials[0].material.thickness, 0.6f, 0.0001f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(scene.materials[0].material.attenuation_distance, 2.5f, 0.0001f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(scene.materials[0].material.attenuation_color.z, 0.9f, 0.0001f);
     HENKA_TEST_ASSERT(scene.node_count == 2U);
     HENKA_TEST_ASSERT(scene.nodes[1].parent_index == 0);
     HENKA_TEST_ASSERT_FLOAT_CLOSE(scene.nodes[1].world_matrix.m[12], 2.0f, 0.0001f);

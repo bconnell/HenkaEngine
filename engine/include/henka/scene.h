@@ -60,8 +60,12 @@ typedef struct henka_material
     float specular_factor;
     henka_vec3 specular_color;
     float ior;
-    /* Bounded environment-based transmission factor; refraction/volume remain renderer work. */
+    /* Bounded environment-based transmission factor; refraction/layered volume remain renderer work. */
     float transmission;
+    /* Bounded glTF volume attenuation controls; refraction and layered volume remain renderer work. */
+    float thickness;
+    float attenuation_distance;
+    henka_vec3 attenuation_color;
     float normal_scale;
     float occlusion_strength;
     float emissive_strength;

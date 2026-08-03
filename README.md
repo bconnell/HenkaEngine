@@ -39,7 +39,7 @@ Henka Engine is still early, but the sandbox now renders a visible 3D scene with
 - Viewport interaction test helpers for reducing manual QA around selection, gizmo hit testing, and transform changes
 - Asset manager foundation with rooted/UNC/device/drive/URI path rejection, platform-aware canonical cache identities, preserved source spelling, checked texture uploads, path-specific stable fallback identities, deterministic hard-failure propagation, and transactional texture and OBJ fallback retries
 - Early OBJ model loading with bounded source and output sizes, finite-number validation, negative indices, n-gon fan triangulation, degenerate-face rejection, and explicit failed-mesh retry support
-- Bounded glTF/GLB geometry and shared PBR material import with manager-owned texture dependencies, transactional material-asset reload, and strict bounded JSON/accessor validation
+- Bounded glTF/GLB geometry and shared PBR material import with manager-owned texture dependencies, transactional material-asset reload, strict bounded JSON/accessor validation, IOR/transmission controls, and bounded KHR volume attenuation
 - glTF-derived material definitions expose stack-owned instances with validated parameter overrides, revision-aware refresh, and semantic dependency inspection; a separate Henka-only material file authority is still not present
 - Bounded glTF/GLB scene import with selected scene roots, node hierarchy transforms, cameras, punctual lights, meshless camera/light scenes, and fail-closed accessor-reference validation
 - Transactional HDR environment lighting with derived IBL resources, fitted directional shadows with bounded receiver-aware contact tightening and far-cascade diagnostics, one deterministic bounded spot-light shadow map, bloom, tone mapping, fog, bounded local probe capture, and explicit Material Preview versus Rendered shading policies
@@ -82,7 +82,7 @@ Henka Engine is still early, but the sandbox now renders a visible 3D scene with
 - Full 2.5D sprite, layered-depth, parallax, animation, and constrained-movement workflow
 - Integrated modeling, UV, rigging, animation-authoring, and content-creation workspace
 - Additional renderer backends
-- Complete cross-backend KTX2/Basis production coverage and GPU-native stress validation, background texture streaming and automatic policy eviction, broader instancing/batching/occlusion scale work, SSR, motion-vector TAA, and full refraction/volume/glass rendering remain unfinished; the current glTF transmission factor uses a bounded environment response. Current paths expose truthful fallbacks or bounded foundations
+- Complete cross-backend KTX2/Basis production coverage and GPU-native stress validation, background texture streaming and automatic policy eviction, broader instancing/batching/occlusion scale work, SSR, motion-vector TAA, and full refraction/layered-volume/glass rendering remain unfinished; glTF transmission and volume attenuation use bounded environment responses. Current paths expose truthful fallbacks or bounded foundations
 
 ## Repository layout
 

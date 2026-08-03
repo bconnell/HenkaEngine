@@ -2384,7 +2384,10 @@ enum
     HENKA_MATERIAL_OVERRIDE_DOUBLE_SIDED = 1U << 18,
     HENKA_MATERIAL_OVERRIDE_CAST_SHADOWS = 1U << 19,
     HENKA_MATERIAL_OVERRIDE_RECEIVE_SHADOWS = 1U << 20,
-    HENKA_MATERIAL_OVERRIDE_ALPHA_MODE = 1U << 21
+    HENKA_MATERIAL_OVERRIDE_ALPHA_MODE = 1U << 21,
+    HENKA_MATERIAL_OVERRIDE_THICKNESS = 1U << 22,
+    HENKA_MATERIAL_OVERRIDE_ATTENUATION_DISTANCE = 1U << 23,
+    HENKA_MATERIAL_OVERRIDE_ATTENUATION_COLOR = 1U << 24
 };
 
 static uint32_t henka_material_instance_override_bit(
@@ -2413,7 +2416,10 @@ static uint32_t henka_material_instance_override_bit(
         HENKA_MATERIAL_OVERRIDE_DOUBLE_SIDED,
         HENKA_MATERIAL_OVERRIDE_CAST_SHADOWS,
         HENKA_MATERIAL_OVERRIDE_RECEIVE_SHADOWS,
-        HENKA_MATERIAL_OVERRIDE_ALPHA_MODE
+        HENKA_MATERIAL_OVERRIDE_ALPHA_MODE,
+        HENKA_MATERIAL_OVERRIDE_THICKNESS,
+        HENKA_MATERIAL_OVERRIDE_ATTENUATION_DISTANCE,
+        HENKA_MATERIAL_OVERRIDE_ATTENUATION_COLOR
     };
     return parameter >= 0 &&
         (size_t)parameter < sizeof(bits) / sizeof(bits[0]) ? bits[parameter] : 0U;
@@ -2504,6 +2510,9 @@ henka_result henka_assets_refresh_material_instance(
     HENKA_PRESERVE_MATERIAL_OVERRIDE(HENKA_MATERIAL_OVERRIDE_CAST_SHADOWS, cast_shadows);
     HENKA_PRESERVE_MATERIAL_OVERRIDE(HENKA_MATERIAL_OVERRIDE_RECEIVE_SHADOWS, receive_shadows);
     HENKA_PRESERVE_MATERIAL_OVERRIDE(HENKA_MATERIAL_OVERRIDE_ALPHA_MODE, alpha_mode);
+    HENKA_PRESERVE_MATERIAL_OVERRIDE(HENKA_MATERIAL_OVERRIDE_THICKNESS, thickness);
+    HENKA_PRESERVE_MATERIAL_OVERRIDE(HENKA_MATERIAL_OVERRIDE_ATTENUATION_DISTANCE, attenuation_distance);
+    HENKA_PRESERVE_MATERIAL_OVERRIDE(HENKA_MATERIAL_OVERRIDE_ATTENUATION_COLOR, attenuation_color);
 #undef HENKA_PRESERVE_MATERIAL_OVERRIDE
     if (henka_material_validate(&candidate) != HENKA_SUCCESS) return HENKA_ERROR_ASSET_SOURCE;
     instance->material = candidate;
@@ -2562,6 +2571,8 @@ henka_result henka_assets_material_instance_set_float(
         case HENKA_MATERIAL_INSTANCE_CLEARCOAT_ROUGHNESS: candidate.clearcoat_roughness = value; break;
         case HENKA_MATERIAL_INSTANCE_ALPHA_CUTOFF: candidate.alpha_cutoff = value; break;
         case HENKA_MATERIAL_INSTANCE_SHEEN_ROUGHNESS: candidate.sheen_roughness = value; break;
+        case HENKA_MATERIAL_INSTANCE_THICKNESS: candidate.thickness = value; break;
+        case HENKA_MATERIAL_INSTANCE_ATTENUATION_DISTANCE: candidate.attenuation_distance = value; break;
         default: return HENKA_ERROR_INVALID_ARGUMENT;
     }
     return henka_material_instance_commit(instance, candidate, parameter);
@@ -2580,6 +2591,7 @@ henka_result henka_assets_material_instance_set_vec3(
         case HENKA_MATERIAL_INSTANCE_EMISSIVE_COLOR: candidate.emissive_color = value; break;
         case HENKA_MATERIAL_INSTANCE_SPECULAR_COLOR: candidate.specular_color = value; break;
         case HENKA_MATERIAL_INSTANCE_SHEEN_COLOR: candidate.sheen_color = value; break;
+        case HENKA_MATERIAL_INSTANCE_ATTENUATION_COLOR: candidate.attenuation_color = value; break;
         default: return HENKA_ERROR_INVALID_ARGUMENT;
     }
     return henka_material_instance_commit(instance, candidate, parameter);

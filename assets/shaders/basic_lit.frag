@@ -71,6 +71,9 @@ uniform float specularFactor;
 uniform vec3 specularColor;
 uniform float ior;
 uniform float transmission;
+uniform float thickness;
+uniform float attenuationDistance;
+uniform vec3 attenuationColor;
 uniform float normalScale;
 uniform float occlusionStrength;
 uniform vec3 emissiveColor;
@@ -352,6 +355,11 @@ void main()
     float surfaceMetallic = saturate(metallic);
     float surfaceRoughness = clamp(roughness, 0.045, 1.0);
     float surfaceTransmission = saturate(transmission);
+    float surfaceThickness = saturate(thickness);
+    float safeAttenuationDistance = max(attenuationDistance, 0.0001);
+    vec3 volumeTransmittance = pow(
+        clamp(attenuationColor, vec3(0.0001), vec3(1.0)),
+        vec3(surfaceThickness / safeAttenuationDistance));
     float surfaceClearcoat = saturate(clearcoat);
     float surfaceClearcoatRoughness = clamp(clearcoatRoughness, 0.045, 1.0);
     vec3 surfaceSheenColor = clamp(sheenColor, vec3(0.0), vec3(1.0));
@@ -464,7 +472,7 @@ void main()
                     baseLayerTransmission * occlusion * 0.55 +
                 environmentSpecular * (fresnel * brdf.x + brdf.y) * baseLayerTransmission * occlusion *
                     (0.35 + 0.65 * (1.0 - surfaceRoughness)) +
-                sampleEnvironment(-normal) * albedo * surfaceTransmission * (1.0 - fresnel) * 0.55,
+                sampleEnvironment(-normal) * albedo * surfaceTransmission * volumeTransmittance * (1.0 - fresnel) * 0.55,
                 vec3(65504.0));
         }
 

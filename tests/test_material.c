@@ -29,6 +29,9 @@ void henka_test_material(void)
     HENKA_TEST_ASSERT_FLOAT_CLOSE(material.specular_color.x, 1.0f, 0.0001f);
     HENKA_TEST_ASSERT(material.ior == 1.5f);
     HENKA_TEST_ASSERT(material.transmission == 0.0f);
+    HENKA_TEST_ASSERT(material.thickness == 0.0f);
+    HENKA_TEST_ASSERT(material.attenuation_distance == 10000.0f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(material.attenuation_color.z, 1.0f, 0.0001f);
     HENKA_TEST_ASSERT(material.normal_scale == 1.0f);
     HENKA_TEST_ASSERT(material.occlusion_strength == 1.0f);
     HENKA_TEST_ASSERT(material.clearcoat == 0.0f);
@@ -72,6 +75,9 @@ void henka_test_material(void)
         valid.transmission = 1.01f;
         HENKA_TEST_ASSERT(henka_material_validate(&valid) == HENKA_ERROR_INVALID_ARGUMENT);
         valid.transmission = 0.0f;
+        valid.thickness = 1.01f;
+        HENKA_TEST_ASSERT(henka_material_validate(&valid) == HENKA_ERROR_INVALID_ARGUMENT);
+        valid.thickness = 0.0f;
         valid.sheen_color.x = 1.01f;
         HENKA_TEST_ASSERT(henka_material_validate(&valid) == HENKA_ERROR_INVALID_ARGUMENT);
         valid.sheen_color.x = 0.0f;

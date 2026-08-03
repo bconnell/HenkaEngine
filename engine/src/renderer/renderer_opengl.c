@@ -1114,7 +1114,7 @@ static void henka_add_optional_shader_locations(
         "reflectionProbePosition", "reflectionProbeExtents", "useReflectionProbe",
         "reflectionProbeMap", "useReflectionProbeMap", "doubleSided",
         "previousViewProjection", "previousModel", "useMotionVectors",
-        "useInstancing"
+        "useInstancing", "thickness", "attenuationDistance", "attenuationColor"
     };
     size_t index;
 
@@ -4096,6 +4096,11 @@ static bool henka_opengl_material_batch_compatible(
         a->specular_color.z == b->specular_color.z &&
         a->ior == b->ior &&
         a->transmission == b->transmission &&
+        a->thickness == b->thickness &&
+        a->attenuation_distance == b->attenuation_distance &&
+        a->attenuation_color.x == b->attenuation_color.x &&
+        a->attenuation_color.y == b->attenuation_color.y &&
+        a->attenuation_color.z == b->attenuation_color.z &&
         a->normal_scale == b->normal_scale &&
         a->occlusion_strength == b->occlusion_strength &&
         a->emissive_strength == b->emissive_strength &&
@@ -4966,6 +4971,9 @@ henka_result henka_opengl_renderer_draw_scene(
         henka_set_uniform_vec3(program, "specularColor", entity->material.specular_color);
         henka_set_uniform_float(program, "ior", entity->material.ior);
         henka_set_uniform_float(program, "transmission", entity->material.transmission);
+        henka_set_uniform_float(program, "thickness", entity->material.thickness);
+        henka_set_uniform_float(program, "attenuationDistance", entity->material.attenuation_distance);
+        henka_set_uniform_vec3(program, "attenuationColor", entity->material.attenuation_color);
         henka_set_uniform_float(program, "normalScale", entity->material.normal_scale);
         henka_set_uniform_float(program, "occlusionStrength", entity->material.occlusion_strength);
         henka_set_uniform_vec3(program, "emissiveColor", entity->material.emissive_color);

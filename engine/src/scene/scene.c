@@ -46,6 +46,9 @@ henka_material henka_material_default(void)
     material.specular_color = (henka_vec3){1.0f, 1.0f, 1.0f};
     material.ior = 1.5f;
     material.transmission = 0.0f;
+    material.thickness = 0.0f;
+    material.attenuation_distance = 10000.0f;
+    material.attenuation_color = (henka_vec3){1.0f, 1.0f, 1.0f};
     material.normal_scale = 1.0f;
     material.occlusion_strength = 1.0f;
     material.emissive_strength = 0.0f;
@@ -119,6 +122,11 @@ henka_result henka_material_validate(const henka_material* material)
         !henka_is_finite_float(material->specular_color.z) ||
         !henka_is_finite_float(material->ior) ||
         !henka_is_finite_float(material->transmission) ||
+        !henka_is_finite_float(material->thickness) ||
+        !henka_is_finite_float(material->attenuation_distance) ||
+        !henka_is_finite_float(material->attenuation_color.x) ||
+        !henka_is_finite_float(material->attenuation_color.y) ||
+        !henka_is_finite_float(material->attenuation_color.z) ||
         !henka_is_finite_float(material->normal_scale) ||
         !henka_is_finite_float(material->occlusion_strength) ||
         !henka_is_finite_float(material->emissive_strength) ||
@@ -145,6 +153,11 @@ henka_result henka_material_validate(const henka_material* material)
         material->specular_color.z < 0.0f || material->specular_color.z > 1.0f ||
         material->ior < 1.0f || material->ior > 3.0f ||
         material->transmission < 0.0f || material->transmission > 1.0f ||
+        material->thickness < 0.0f || material->thickness > 1.0f ||
+        material->attenuation_distance <= 0.0f || material->attenuation_distance > 1000000.0f ||
+        material->attenuation_color.x < 0.0f || material->attenuation_color.x > 1.0f ||
+        material->attenuation_color.y < 0.0f || material->attenuation_color.y > 1.0f ||
+        material->attenuation_color.z < 0.0f || material->attenuation_color.z > 1.0f ||
         material->normal_scale > 4.0f || material->occlusion_strength < 0.0f ||
         material->occlusion_strength > 1.0f || material->emissive_strength < 0.0f ||
         material->emissive_strength > 100.0f || material->alpha_cutoff < 0.0f ||
