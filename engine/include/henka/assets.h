@@ -87,7 +87,12 @@ typedef enum henka_material_instance_parameter
     HENKA_MATERIAL_INSTANCE_ALPHA_MODE,
     HENKA_MATERIAL_INSTANCE_THICKNESS,
     HENKA_MATERIAL_INSTANCE_ATTENUATION_DISTANCE,
-    HENKA_MATERIAL_INSTANCE_ATTENUATION_COLOR
+    HENKA_MATERIAL_INSTANCE_ATTENUATION_COLOR,
+    HENKA_MATERIAL_INSTANCE_BASE_COLOR_TEXTURE,
+    HENKA_MATERIAL_INSTANCE_NORMAL_TEXTURE,
+    HENKA_MATERIAL_INSTANCE_METALLIC_ROUGHNESS_TEXTURE,
+    HENKA_MATERIAL_INSTANCE_OCCLUSION_TEXTURE,
+    HENKA_MATERIAL_INSTANCE_EMISSIVE_TEXTURE
 } henka_material_instance_parameter;
 
 typedef enum henka_material_texture_slot
@@ -219,6 +224,11 @@ henka_result henka_assets_get_material_asset_revision(
 henka_result henka_assets_get_material_asset_dependencies(
     const henka_material_asset* asset,
     henka_material_dependency_info* out_dependencies);
+/* Reports the effective borrowed texture dependencies after instance
+ * overrides. The definition revision remains available for refresh checks. */
+henka_result henka_assets_get_material_instance_dependencies(
+    const henka_material_instance* instance,
+    henka_material_dependency_info* out_dependencies);
 henka_result henka_assets_create_material_instance(
     const henka_material_asset* asset,
     henka_material_instance* out_instance);
@@ -246,6 +256,13 @@ henka_result henka_assets_material_instance_set_bool(
 henka_result henka_assets_material_instance_set_alpha_mode(
     henka_material_instance* instance,
     henka_material_alpha_mode mode);
+/* Assigns a borrowed semantic texture to an instance without changing the
+ * shared definition. A null base-color texture disables texture sampling for
+ * the effective instance; all other null values clear only that slot. */
+henka_result henka_assets_material_instance_set_texture(
+    henka_material_instance* instance,
+    henka_material_texture_slot slot,
+    henka_texture* texture);
 henka_result henka_assets_reload_gltf_material_asset(
     henka_asset_manager* manager,
     const char* path,

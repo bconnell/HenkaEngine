@@ -554,6 +554,13 @@ void henka_test_assets(void)
         &material_instance, HENKA_MATERIAL_INSTANCE_DOUBLE_SIDED, true) == HENKA_SUCCESS);
     HENKA_TEST_ASSERT(henka_assets_material_instance_set_alpha_mode(
         &material_instance, HENKA_MATERIAL_ALPHA_MASKED) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_assets_material_instance_set_texture(
+        &material_instance, HENKA_MATERIAL_TEXTURE_SLOT_BASE_COLOR, NULL) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(!material_instance.material.use_texture);
+    HENKA_TEST_ASSERT(henka_assets_get_material_instance_dependencies(
+        &material_instance, &material_dependencies) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(material_dependencies.definition_revision == 4U);
+    HENKA_TEST_ASSERT(material_dependencies.dependency_count == 0U);
     material_entry.material.roughness = 0.8f;
     material_entry.revision = 5U;
     HENKA_TEST_ASSERT(henka_assets_refresh_material_instance(&material_instance) == HENKA_SUCCESS);
@@ -566,6 +573,7 @@ void henka_test_assets(void)
     HENKA_TEST_ASSERT(material_instance.material.roughness == 0.8f);
     HENKA_TEST_ASSERT(material_instance.material.double_sided);
     HENKA_TEST_ASSERT(material_instance.material.alpha_mode == HENKA_MATERIAL_ALPHA_MASKED);
+    HENKA_TEST_ASSERT(!material_instance.material.use_texture);
     memset(&scene_entry, 0, sizeof(scene_entry));
     scene_entry.key = "assets/models/reload-scene.gltf";
     scene_entry.source_path = "assets/models/reload-scene.gltf";

@@ -2409,7 +2409,12 @@ enum
     HENKA_MATERIAL_OVERRIDE_ALPHA_MODE = 1U << 21,
     HENKA_MATERIAL_OVERRIDE_THICKNESS = 1U << 22,
     HENKA_MATERIAL_OVERRIDE_ATTENUATION_DISTANCE = 1U << 23,
-    HENKA_MATERIAL_OVERRIDE_ATTENUATION_COLOR = 1U << 24
+    HENKA_MATERIAL_OVERRIDE_ATTENUATION_COLOR = 1U << 24,
+    HENKA_MATERIAL_OVERRIDE_BASE_COLOR_TEXTURE = 1U << 25,
+    HENKA_MATERIAL_OVERRIDE_NORMAL_TEXTURE = 1U << 26,
+    HENKA_MATERIAL_OVERRIDE_METALLIC_ROUGHNESS_TEXTURE = 1U << 27,
+    HENKA_MATERIAL_OVERRIDE_OCCLUSION_TEXTURE = 1U << 28,
+    HENKA_MATERIAL_OVERRIDE_EMISSIVE_TEXTURE = 1U << 29
 };
 
 static uint32_t henka_material_instance_override_bit(
@@ -2441,7 +2446,12 @@ static uint32_t henka_material_instance_override_bit(
         HENKA_MATERIAL_OVERRIDE_ALPHA_MODE,
         HENKA_MATERIAL_OVERRIDE_THICKNESS,
         HENKA_MATERIAL_OVERRIDE_ATTENUATION_DISTANCE,
-        HENKA_MATERIAL_OVERRIDE_ATTENUATION_COLOR
+        HENKA_MATERIAL_OVERRIDE_ATTENUATION_COLOR,
+        HENKA_MATERIAL_OVERRIDE_BASE_COLOR_TEXTURE,
+        HENKA_MATERIAL_OVERRIDE_NORMAL_TEXTURE,
+        HENKA_MATERIAL_OVERRIDE_METALLIC_ROUGHNESS_TEXTURE,
+        HENKA_MATERIAL_OVERRIDE_OCCLUSION_TEXTURE,
+        HENKA_MATERIAL_OVERRIDE_EMISSIVE_TEXTURE
     };
     return parameter >= 0 &&
         (size_t)parameter < sizeof(bits) / sizeof(bits[0]) ? bits[parameter] : 0U;
@@ -2482,6 +2492,36 @@ henka_result henka_assets_get_material_asset_dependencies(
     HENKA_ADD_MATERIAL_DEPENDENCY(HENKA_MATERIAL_TEXTURE_SLOT_OCCLUSION, HENKA_TEXTURE_USAGE_OCCLUSION, material->occlusion_texture);
     HENKA_ADD_MATERIAL_DEPENDENCY(HENKA_MATERIAL_TEXTURE_SLOT_EMISSIVE, HENKA_TEXTURE_USAGE_EMISSIVE, material->emissive_texture);
 #undef HENKA_ADD_MATERIAL_DEPENDENCY
+    return HENKA_SUCCESS;
+}
+
+henka_result henka_assets_get_material_instance_dependencies(
+    const henka_material_instance* instance,
+    henka_material_dependency_info* out_dependencies)
+{
+    const henka_material* material;
+
+    if (out_dependencies != NULL) memset(out_dependencies, 0, sizeof(*out_dependencies));
+    if (instance == NULL || instance->definition == NULL || out_dependencies == NULL ||
+        henka_material_validate(&instance->material) != HENKA_SUCCESS)
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    material = &instance->material;
+    out_dependencies->definition_revision = instance->definition_revision;
+#define HENKA_ADD_INSTANCE_DEPENDENCY(slot_value, usage_value, texture_value) \
+    do { \
+        if ((texture_value) != NULL && out_dependencies->dependency_count < HENKA_MATERIAL_MAX_TEXTURE_DEPENDENCIES) { \
+            henka_material_dependency* dependency = &out_dependencies->dependencies[out_dependencies->dependency_count++]; \
+            dependency->slot = (slot_value); \
+            dependency->usage = (usage_value); \
+            dependency->texture = (texture_value); \
+        } \
+    } while (0)
+    HENKA_ADD_INSTANCE_DEPENDENCY(HENKA_MATERIAL_TEXTURE_SLOT_BASE_COLOR, HENKA_TEXTURE_USAGE_COLOR, material->base_color_texture);
+    HENKA_ADD_INSTANCE_DEPENDENCY(HENKA_MATERIAL_TEXTURE_SLOT_NORMAL, HENKA_TEXTURE_USAGE_NORMAL, material->normal_texture);
+    HENKA_ADD_INSTANCE_DEPENDENCY(HENKA_MATERIAL_TEXTURE_SLOT_METALLIC_ROUGHNESS, HENKA_TEXTURE_USAGE_METALLIC_ROUGHNESS, material->metallic_roughness_texture);
+    HENKA_ADD_INSTANCE_DEPENDENCY(HENKA_MATERIAL_TEXTURE_SLOT_OCCLUSION, HENKA_TEXTURE_USAGE_OCCLUSION, material->occlusion_texture);
+    HENKA_ADD_INSTANCE_DEPENDENCY(HENKA_MATERIAL_TEXTURE_SLOT_EMISSIVE, HENKA_TEXTURE_USAGE_EMISSIVE, material->emissive_texture);
+#undef HENKA_ADD_INSTANCE_DEPENDENCY
     return HENKA_SUCCESS;
 }
 
@@ -2535,6 +2575,15 @@ henka_result henka_assets_refresh_material_instance(
     HENKA_PRESERVE_MATERIAL_OVERRIDE(HENKA_MATERIAL_OVERRIDE_THICKNESS, thickness);
     HENKA_PRESERVE_MATERIAL_OVERRIDE(HENKA_MATERIAL_OVERRIDE_ATTENUATION_DISTANCE, attenuation_distance);
     HENKA_PRESERVE_MATERIAL_OVERRIDE(HENKA_MATERIAL_OVERRIDE_ATTENUATION_COLOR, attenuation_color);
+    HENKA_PRESERVE_MATERIAL_OVERRIDE(HENKA_MATERIAL_OVERRIDE_NORMAL_TEXTURE, normal_texture);
+    HENKA_PRESERVE_MATERIAL_OVERRIDE(HENKA_MATERIAL_OVERRIDE_METALLIC_ROUGHNESS_TEXTURE, metallic_roughness_texture);
+    HENKA_PRESERVE_MATERIAL_OVERRIDE(HENKA_MATERIAL_OVERRIDE_OCCLUSION_TEXTURE, occlusion_texture);
+    HENKA_PRESERVE_MATERIAL_OVERRIDE(HENKA_MATERIAL_OVERRIDE_EMISSIVE_TEXTURE, emissive_texture);
+    if ((instance->override_mask & HENKA_MATERIAL_OVERRIDE_BASE_COLOR_TEXTURE) != 0U)
+    {
+        candidate.base_color_texture = previous->base_color_texture;
+        candidate.use_texture = previous->use_texture;
+    }
 #undef HENKA_PRESERVE_MATERIAL_OVERRIDE
     if (henka_material_validate(&candidate) != HENKA_SUCCESS) return HENKA_ERROR_ASSET_SOURCE;
     instance->material = candidate;
@@ -2662,6 +2711,46 @@ henka_result henka_assets_material_instance_set_alpha_mode(
     candidate = instance->material;
     candidate.alpha_mode = mode;
     return henka_material_instance_commit(instance, candidate, HENKA_MATERIAL_INSTANCE_ALPHA_MODE);
+}
+
+henka_result henka_assets_material_instance_set_texture(
+    henka_material_instance* instance,
+    henka_material_texture_slot slot,
+    henka_texture* texture)
+{
+    henka_material candidate;
+    henka_material_instance_parameter parameter;
+
+    if (instance == NULL || instance->definition == NULL || slot > HENKA_MATERIAL_TEXTURE_SLOT_EMISSIVE)
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    candidate = instance->material;
+    switch (slot)
+    {
+        case HENKA_MATERIAL_TEXTURE_SLOT_BASE_COLOR:
+            candidate.base_color_texture = texture;
+            candidate.use_texture = texture != NULL;
+            parameter = HENKA_MATERIAL_INSTANCE_BASE_COLOR_TEXTURE;
+            break;
+        case HENKA_MATERIAL_TEXTURE_SLOT_NORMAL:
+            candidate.normal_texture = texture;
+            parameter = HENKA_MATERIAL_INSTANCE_NORMAL_TEXTURE;
+            break;
+        case HENKA_MATERIAL_TEXTURE_SLOT_METALLIC_ROUGHNESS:
+            candidate.metallic_roughness_texture = texture;
+            parameter = HENKA_MATERIAL_INSTANCE_METALLIC_ROUGHNESS_TEXTURE;
+            break;
+        case HENKA_MATERIAL_TEXTURE_SLOT_OCCLUSION:
+            candidate.occlusion_texture = texture;
+            parameter = HENKA_MATERIAL_INSTANCE_OCCLUSION_TEXTURE;
+            break;
+        case HENKA_MATERIAL_TEXTURE_SLOT_EMISSIVE:
+            candidate.emissive_texture = texture;
+            parameter = HENKA_MATERIAL_INSTANCE_EMISSIVE_TEXTURE;
+            break;
+        default:
+            return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    return henka_material_instance_commit(instance, candidate, parameter);
 }
 
 henka_result henka_assets_reload_gltf_material_asset(
