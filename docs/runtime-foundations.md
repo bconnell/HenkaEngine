@@ -374,3 +374,5 @@ Material instances layer validated scalar, vector, alpha-mode, and semantic-text
 Temporal history allocation validates the replacement texture before retiring the previous object. If a resize or texture allocation fails, the previous GPU object remains owned, accumulation is marked invalid for the requested viewport, and diagnostics report the fallback instead of presenting stale history as valid.
 
 The bounded AO horizon search now applies a depth-agreement edge confidence to suppress haloing across discontinuities while retaining the existing radius, thickness, falloff, bias, and intensity controls. Temporal AO history, multi-frame denoise, and production GTAO validation remain unfinished.
+
+KTX2 residency requests now retain a bounded priority alongside their strongest mip target. Visible scene references assign deterministic distance and semantic-slot priorities, and the manager services the highest-priority request first with mip-count tie breaking and stable queue order. This remains synchronous and does not claim projected-size selection, active-frame pinning, background I/O, or automatic residency policy.

@@ -277,6 +277,7 @@ struct henka_asset_manager
     uint32_t texture_budget_rejection_count;
     henka_texture* texture_residency_request_textures[HENKA_MAX_TEXTURE_RESIDENCY_REQUESTS];
     uint32_t texture_residency_request_mips[HENKA_MAX_TEXTURE_RESIDENCY_REQUESTS];
+    uint32_t texture_residency_request_priorities[HENKA_MAX_TEXTURE_RESIDENCY_REQUESTS];
     size_t texture_residency_request_count;
     uint64_t texture_residency_completed_requests;
     uint64_t texture_residency_failed_requests;

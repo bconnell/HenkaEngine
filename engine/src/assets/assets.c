@@ -1478,6 +1478,16 @@ henka_result henka_assets_queue_texture_residency_request(
     henka_texture* texture,
     uint32_t resident_mip_count)
 {
+    return henka_assets_queue_texture_residency_request_with_priority(
+        manager, texture, resident_mip_count, 0U);
+}
+
+henka_result henka_assets_queue_texture_residency_request_with_priority(
+    henka_asset_manager* manager,
+    henka_texture* texture,
+    uint32_t resident_mip_count,
+    uint32_t priority)
+{
     size_t index;
 
     if (manager == NULL || texture == NULL || resident_mip_count == 0U)
@@ -1503,6 +1513,8 @@ henka_result henka_assets_queue_texture_residency_request(
              * demote a nearer reference before the request is serviced. */
             if (manager->texture_residency_request_mips[index] < resident_mip_count)
                 manager->texture_residency_request_mips[index] = resident_mip_count;
+            if (manager->texture_residency_request_priorities[index] < priority)
+                manager->texture_residency_request_priorities[index] = priority;
             return HENKA_SUCCESS;
         }
     }
@@ -1511,6 +1523,7 @@ henka_result henka_assets_queue_texture_residency_request(
     index = manager->texture_residency_request_count++;
     manager->texture_residency_request_textures[index] = texture;
     manager->texture_residency_request_mips[index] = resident_mip_count;
+    manager->texture_residency_request_priorities[index] = priority;
     return HENKA_SUCCESS;
 }
 
@@ -1526,19 +1539,43 @@ henka_result henka_assets_process_texture_residency_requests(
     while (manager->texture_residency_request_count > 0U &&
         (max_requests == 0U || processed < max_requests))
     {
-        henka_texture* texture = manager->texture_residency_request_textures[0];
-        uint32_t resident_mips = manager->texture_residency_request_mips[0];
+        size_t request_index = 0U;
+        size_t index;
+        henka_texture* texture;
+        uint32_t resident_mips;
         henka_texture_info info;
         henka_result result;
 
-        memmove(
-            &manager->texture_residency_request_textures[0],
-            &manager->texture_residency_request_textures[1],
-            (manager->texture_residency_request_count - 1U) * sizeof(manager->texture_residency_request_textures[0]));
-        memmove(
-            &manager->texture_residency_request_mips[0],
-            &manager->texture_residency_request_mips[1],
-            (manager->texture_residency_request_count - 1U) * sizeof(manager->texture_residency_request_mips[0]));
+        for (index = 1U; index < manager->texture_residency_request_count; ++index)
+        {
+            if (manager->texture_residency_request_priorities[index] >
+                    manager->texture_residency_request_priorities[request_index] ||
+                (manager->texture_residency_request_priorities[index] ==
+                        manager->texture_residency_request_priorities[request_index] &&
+                    manager->texture_residency_request_mips[index] >
+                        manager->texture_residency_request_mips[request_index]))
+            {
+                request_index = index;
+            }
+        }
+        texture = manager->texture_residency_request_textures[request_index];
+        resident_mips = manager->texture_residency_request_mips[request_index];
+
+        if (request_index + 1U < manager->texture_residency_request_count)
+        {
+            memmove(
+                &manager->texture_residency_request_textures[request_index],
+                &manager->texture_residency_request_textures[request_index + 1U],
+                (manager->texture_residency_request_count - request_index - 1U) * sizeof(manager->texture_residency_request_textures[0]));
+            memmove(
+                &manager->texture_residency_request_mips[request_index],
+                &manager->texture_residency_request_mips[request_index + 1U],
+                (manager->texture_residency_request_count - request_index - 1U) * sizeof(manager->texture_residency_request_mips[0]));
+            memmove(
+                &manager->texture_residency_request_priorities[request_index],
+                &manager->texture_residency_request_priorities[request_index + 1U],
+                (manager->texture_residency_request_count - request_index - 1U) * sizeof(manager->texture_residency_request_priorities[0]));
+        }
         --manager->texture_residency_request_count;
         memset(&info, 0, sizeof(info));
         result = henka_assets_set_texture_resident_mips(manager, texture, resident_mips, &info);

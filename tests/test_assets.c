@@ -491,6 +491,9 @@ void henka_test_assets(void)
     HENKA_TEST_ASSERT(henka_assets_queue_texture_residency_request(
         &manager, &fallback_texture, 2U) == HENKA_SUCCESS);
     HENKA_TEST_ASSERT(manager.texture_residency_request_mips[0] == 2U);
+    HENKA_TEST_ASSERT(henka_assets_queue_texture_residency_request_with_priority(
+        &manager, &fallback_texture, 2U, 7U) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(manager.texture_residency_request_priorities[0] == 7U);
     HENKA_TEST_ASSERT(henka_assets_queue_texture_residency_request(
         &manager, &fallback_texture, 1U) == HENKA_SUCCESS);
     {

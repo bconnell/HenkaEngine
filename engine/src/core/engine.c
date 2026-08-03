@@ -442,6 +442,7 @@ static void henka_engine_queue_visible_texture_residency(
         const henka_scene_entity_record* entity = &engine->active_scene->entities[entity_index];
         henka_texture* textures[5];
         uint32_t requested_mips;
+        uint32_t request_priority;
         float distance;
         size_t texture_index;
 
@@ -451,6 +452,7 @@ static void henka_engine_queue_visible_texture_residency(
             entity->transform.position,
             engine->active_scene->camera.position));
         requested_mips = distance <= 12.0f ? 4U : distance <= 36.0f ? 3U : 2U;
+        request_priority = distance <= 12.0f ? 3U : distance <= 36.0f ? 2U : 1U;
         textures[0] = entity->material.base_color_texture;
         textures[1] = entity->material.normal_texture;
         textures[2] = entity->material.metallic_roughness_texture;
@@ -463,10 +465,12 @@ static void henka_engine_queue_visible_texture_residency(
                 henka_texture_get_info(textures[texture_index], &info) != HENKA_SUCCESS ||
                 info.resident_mip_count >= requested_mips || info.mip_count < requested_mips)
                 continue;
-            (void)henka_assets_queue_texture_residency_request(
+            (void)henka_assets_queue_texture_residency_request_with_priority(
                 engine->asset_manager,
                 textures[texture_index],
-                requested_mips);
+                requested_mips,
+                request_priority + (texture_index == 0U ? 2U :
+                    (texture_index == 1U || texture_index == 2U ? 1U : 0U)));
         }
     }
 }
