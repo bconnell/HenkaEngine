@@ -6797,12 +6797,12 @@ static void sandbox3d_draw_object_details_panel(
     char lock_action_id[64];
     char reset_action_id[64];
     char clear_action_id[64];
+    char material_text[96];
     char lock_action_label[32];
     char transform_heading[48];
     char detail_text[96];
     char developer_text[96];
     char interaction_text[64];
-    char material_text[96];
     char physics_text[96];
     char position_text[64];
     char rotation_text[64];
@@ -7071,6 +7071,9 @@ static void sandbox3d_draw_utility_panel(
     float x_left;
     float y_start;
     henka_transform transform;
+    char material_text[96];
+    henka_material selected_material;
+    size_t material_dependency_count;
     henka_ui_rect panel_bounds;
 
     (void)framebuffer_width;
@@ -7175,14 +7178,32 @@ static void sandbox3d_draw_utility_panel(
                 break;
             }
 
+            if (henka_scene_get_entity_material(state->scene, descriptor->entity, &selected_material) != HENKA_SUCCESS)
+            {
+                selected_material = henka_material_default();
+            }
+            if (henka_material_describe(&selected_material, material_text, sizeof(material_text)) != HENKA_SUCCESS)
+            {
+                snprintf(material_text, sizeof(material_text), "(unavailable)");
+            }
+            material_dependency_count = 0U;
+            material_dependency_count += selected_material.base_color_texture != NULL ? 1U : 0U;
+            material_dependency_count += selected_material.normal_texture != NULL ? 1U : 0U;
+            material_dependency_count += selected_material.metallic_roughness_texture != NULL ? 1U : 0U;
+            material_dependency_count += selected_material.occlusion_texture != NULL ? 1U : 0U;
+            material_dependency_count += selected_material.emissive_texture != NULL ? 1U : 0U;
+
             sandbox3d_draw_section_heading(state->ui, x_left, y_start, descriptor->display_name);
             sandbox3d_draw_value_row(state->ui, x_left, y_start + 18.0f, panel_bounds.width - 28.0f, "Visible", henka_scene_is_entity_visible(state->scene, descriptor->entity) ? "Yes" : "No");
             sandbox3d_draw_value_row(state->ui, x_left, y_start + 44.0f, panel_bounds.width - 28.0f, "Shows", descriptor->short_explanation);
             sandbox3d_draw_value_row(state->ui, x_left, y_start + 70.0f, panel_bounds.width - 28.0f, "Detail", descriptor->developer_detail);
-            sandbox3d_draw_value_row(state->ui, x_left, y_start + 96.0f, panel_bounds.width - 28.0f, "Mesh", descriptor->mesh_summary);
+            sandbox3d_draw_value_row(state->ui, x_left, y_start + 96.0f, panel_bounds.width - 28.0f, "Material", material_text);
+            snprintf(row_value, sizeof(row_value), "%zu semantic texture(s)", material_dependency_count);
+            sandbox3d_draw_value_row(state->ui, x_left, y_start + 122.0f, panel_bounds.width - 28.0f, "Dependencies", row_value);
+            sandbox3d_draw_value_row(state->ui, x_left, y_start + 148.0f, panel_bounds.width - 28.0f, "Mesh", descriptor->mesh_summary);
             snprintf(row_value, sizeof(row_value), "%.2f %.2f %.2f", transform.position.x, transform.position.y, transform.position.z);
-            sandbox3d_draw_value_row(state->ui, x_left, y_start + 122.0f, panel_bounds.width - 28.0f, "Position", row_value);
-            sandbox3d_draw_value_row(state->ui, x_left, y_start + 148.0f, panel_bounds.width - 28.0f, "Tag", henka_scene_get_entity_tag(state->scene, descriptor->entity) != NULL ? henka_scene_get_entity_tag(state->scene, descriptor->entity) : "(none)");
+            sandbox3d_draw_value_row(state->ui, x_left, y_start + 174.0f, panel_bounds.width - 28.0f, "Position", row_value);
+            sandbox3d_draw_value_row(state->ui, x_left, y_start + 200.0f, panel_bounds.width - 28.0f, "Tag", henka_scene_get_entity_tag(state->scene, descriptor->entity) != NULL ? henka_scene_get_entity_tag(state->scene, descriptor->entity) : "(none)");
             break;
 
         case SANDBOX3D_UTILITY_PATHS:

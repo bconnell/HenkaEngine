@@ -205,6 +205,7 @@ You should be able to identify these examples:
 - The `Transform QA` utility can move, rotate, scale, and reset the selected object through direct controls.
 - Clicking an object updates the `Object Details` panel.
 - The `Object Details` panel can toggle visibility, focus the camera, reset the selected transform, and print object info.
+- The `Object Info` utility shows the selected effective material description and the count of borrowed semantic texture dependencies; full in-panel material authoring remains outside this checklist.
 - The `Object Details` panel shows tag and interaction state when those foundations are available.
 - A selected object shows a visible transform gizmo in the viewport, and the visible handle matches the clickable region.
 - Move, Rotate, and Scale mode handles should drag only inside the viewport.
