@@ -1400,6 +1400,13 @@ henka_result henka_engine_get_diagnostics(
         &out_diagnostics->rendered_cascade_shadow_framebuffer_complete,
         out_diagnostics->rendered_cascade_shadow_failure,
         sizeof(out_diagnostics->rendered_cascade_shadow_failure));
+    henka_opengl_renderer_get_point_shadow_diagnostics(
+        engine->renderer,
+        &out_diagnostics->rendered_point_shadow_resolution,
+        &out_diagnostics->rendered_point_shadow_generation,
+        &out_diagnostics->rendered_point_shadow_framebuffer_complete,
+        out_diagnostics->rendered_point_shadow_failure,
+        sizeof(out_diagnostics->rendered_point_shadow_failure));
     henka_opengl_renderer_get_scene_diagnostics(
         engine->renderer,
         &out_diagnostics->rendered_scene_draw_calls,

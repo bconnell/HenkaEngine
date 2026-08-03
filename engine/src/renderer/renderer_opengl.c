@@ -5537,6 +5537,34 @@ void henka_opengl_renderer_get_cascade_shadow_diagnostics(
     }
 }
 
+void henka_opengl_renderer_get_point_shadow_diagnostics(
+    const struct henka_renderer* renderer,
+    int* out_resolution,
+    uint64_t* out_generation,
+    bool* out_complete,
+    char* out_failure,
+    size_t failure_capacity)
+{
+    const henka_opengl_renderer_state* state = NULL;
+
+    if (renderer != NULL && renderer->backend_state != NULL)
+    {
+        state = (const henka_opengl_renderer_state*)renderer->backend_state;
+    }
+    if (out_resolution != NULL) *out_resolution = state != NULL ? state->point_shadow_resolution : 0;
+    if (out_generation != NULL) *out_generation = state != NULL ? state->point_shadow_generation : 0U;
+    if (out_complete != NULL) *out_complete = state != NULL && state->point_shadow_framebuffer_complete;
+    if (out_failure != NULL && failure_capacity > 0U)
+    {
+        (void)snprintf(
+            out_failure,
+            failure_capacity,
+            "%s",
+            state != NULL && state->point_shadow_failure_reason[0] != '\0' ?
+                state->point_shadow_failure_reason : "");
+    }
+}
+
 void henka_opengl_renderer_get_bloom_diagnostics(
     const struct henka_renderer* renderer,
     int* out_width,

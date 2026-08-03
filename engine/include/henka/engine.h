@@ -105,6 +105,10 @@ typedef struct henka_engine_diagnostics
     uint64_t rendered_cascade_shadow_generation;
     bool rendered_cascade_shadow_framebuffer_complete;
     char rendered_cascade_shadow_failure[64];
+    int rendered_point_shadow_resolution;
+    uint64_t rendered_point_shadow_generation;
+    bool rendered_point_shadow_framebuffer_complete;
+    char rendered_point_shadow_failure[64];
     int rendered_bloom_width;
     int rendered_bloom_height;
     char rendered_bloom_failure[64];

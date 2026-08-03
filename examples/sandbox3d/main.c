@@ -7254,7 +7254,7 @@ static void sandbox3d_draw_utility_panel(
             snprintf(
                 row_value,
                 sizeof(row_value),
-                "HDR:%s %dx%d g%llu / Shadow:%s %d g%llu / Bloom:%s %dx%d / IBL:%s",
+                "HDR:%s %dx%d g%llu / Shadow:%s %d g%llu / Point:%s %d g%llu / Bloom:%s %dx%d / IBL:%s",
                 diagnostics.rendered_hdr_ready ? "Ready" : "Unavailable",
                 diagnostics.rendered_hdr_allocated_width,
                 diagnostics.rendered_hdr_allocated_height,
@@ -7262,6 +7262,9 @@ static void sandbox3d_draw_utility_panel(
                 diagnostics.rendered_shadow_ready ? "Ready" : "Unavailable",
                 diagnostics.rendered_shadow_resolution,
                 (unsigned long long)diagnostics.rendered_shadow_generation,
+                diagnostics.rendered_point_shadow_framebuffer_complete ? "Ready" : "Unavailable",
+                diagnostics.rendered_point_shadow_resolution,
+                (unsigned long long)diagnostics.rendered_point_shadow_generation,
                 diagnostics.rendered_bloom_ready ? "Ready" : "Unavailable",
                 diagnostics.rendered_bloom_width,
                 diagnostics.rendered_bloom_height,
