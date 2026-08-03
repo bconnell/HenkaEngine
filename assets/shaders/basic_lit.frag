@@ -8,6 +8,7 @@ in vec3 fragTangent;
 in float fragTangentHandedness;
 in vec4 fragVertexColor;
 in vec4 fragLightSpacePosition;
+in vec4 fragCascadeShadowPosition;
 in vec4 fragLocalShadowPosition;
 in vec4 fragCurrentClipPosition;
 in vec4 fragPreviousClipPosition;
@@ -82,6 +83,9 @@ uniform int alphaMode;
 uniform float alphaCutoff;
 uniform sampler2D shadowMap;
 uniform bool useShadowMap;
+uniform sampler2D cascadeShadowMap;
+uniform bool useCascadeShadowMap;
+uniform float cascadeSplitDistance;
 uniform sampler2D localShadowMap;
 uniform bool useLocalShadowMap;
 uniform mat4 localShadowMatrix;
@@ -153,6 +157,37 @@ float visibilitySmithGGXCorrelated(float nDotV, float nDotL, float alpha)
 
 float shadowFactor(vec3 normal, vec3 lightDir)
 {
+    bool useFarCascade = useCascadeShadowMap &&
+        distance(fragWorldPosition, cameraPosition) > cascadeSplitDistance;
+    if (useFarCascade)
+    {
+        float lightSpaceW = fragCascadeShadowPosition.w;
+        if (abs(lightSpaceW) <= 0.0001)
+        {
+            return 1.0;
+        }
+        vec3 shadowCoordinate = fragCascadeShadowPosition.xyz / lightSpaceW;
+        shadowCoordinate = shadowCoordinate * 0.5 + 0.5;
+        if (shadowCoordinate.x < 0.0 || shadowCoordinate.x > 1.0 ||
+            shadowCoordinate.y < 0.0 || shadowCoordinate.y > 1.0 ||
+            shadowCoordinate.z < 0.0 || shadowCoordinate.z > 1.0)
+        {
+            return 1.0;
+        }
+        float nDotL = saturate(dot(normal, lightDir));
+        float currentDepth = shadowCoordinate.z - max(0.0007 * (1.0 - nDotL), 0.0003);
+        vec2 texelSize = 1.0 / vec2(textureSize(cascadeShadowMap, 0));
+        float visible = 0.0;
+        for (int x = -1; x <= 1; ++x)
+        {
+            for (int y = -1; y <= 1; ++y)
+            {
+                float sampleDepth = texture(cascadeShadowMap, shadowCoordinate.xy + vec2(x, y) * texelSize).r;
+                visible += sampleDepth >= currentDepth ? 1.0 : 0.0;
+            }
+        }
+        return visible / 9.0;
+    }
     if (!useShadowMap)
     {
         return 1.0;
