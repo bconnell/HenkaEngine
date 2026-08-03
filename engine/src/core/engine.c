@@ -1399,6 +1399,8 @@ henka_result henka_engine_get_diagnostics(
         &out_diagnostics->rendered_scene_visible_entities,
         &out_diagnostics->rendered_scene_culled_entities,
         &out_diagnostics->rendered_scene_budget_dropped_entities,
+        &out_diagnostics->rendered_scene_lod_entities,
+        &out_diagnostics->rendered_scene_lod_fallback_entities,
         &out_diagnostics->rendered_scene_transparent_sort_overflow_entities,
         &out_diagnostics->rendered_scene_cpu_time_milliseconds,
         &out_diagnostics->rendered_scene_gpu_time_milliseconds,

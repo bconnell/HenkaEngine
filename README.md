@@ -46,6 +46,7 @@ Henka Engine is still early, but the sandbox now renders a visible 3D scene with
 - Rendered presentation includes bounded RG camera-motion history reprojection and depth-neighborhood ambient occlusion; object-motion vectors, disocclusion rejection, normal-aware GTAO, and production TAA remain unfinished
 - Checked KTX2/Basis texture loading with active-OpenGL capability-selected BC/ETC2/ASTC mip uploads and truthful RGBA8 fallback when compressed upload is unavailable
 - Texture objects report exact resident GPU bytes and mip counts; manager-owned KTX2 textures support synchronous transactional top-mip replacement, a bounded coalescing residency request queue, and fail-closed budget diagnostics, while background I/O streaming/eviction remains unfinished
+- Scene rendering exposes bounded distance-based LOD selection, frustum culling, draw budgets, and LOD fallback diagnostics; LOD selection does not claim texture residency or streaming
 - Bounded realism validation materials and scene samples covering metal, clearcoat, plastic, stone, sheen, wood, wet/dry variation, detail normals, and masked foliage
 - Descriptor-aware RGBA8 textures with explicit sRGB/linear, sampler, wrap, mip, flip, usage, alpha, source-class, and content-revision metadata
 - Bounded single-read texture decoding with truthful rejection of HDR and 16-bit sources, plus path-specific white/error fallback aliases

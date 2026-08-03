@@ -187,6 +187,8 @@ typedef struct henka_opengl_renderer_state
     uint32_t scene_visible_entities;
     uint32_t scene_culled_entities;
     uint32_t scene_budget_dropped_entities;
+    uint32_t scene_lod_entities;
+    uint32_t scene_lod_fallback_entities;
     uint32_t transparent_sort_overflow_entities;
     double scene_cpu_time_milliseconds;
     double scene_gpu_time_milliseconds;
@@ -3705,6 +3707,8 @@ henka_result henka_opengl_renderer_draw_scene(
     state->scene_visible_entities = 0U;
     state->scene_culled_entities = 0U;
     state->scene_budget_dropped_entities = 0U;
+    state->scene_lod_entities = 0U;
+    state->scene_lod_fallback_entities = 0U;
     for (index = 0U; index < HENKA_SCENE_MAX_LOCAL_LIGHTS; ++index)
     {
         const henka_scene_light_desc* light = &scene->local_lights[index];
@@ -3887,6 +3891,7 @@ henka_result henka_opengl_renderer_draw_scene(
         lod_distance = henka_vec3_length(henka_vec3_subtract(lod_center, scene->camera.position));
         if (entity->lod.level_count > 0U && isfinite(lod_distance))
         {
+            state->scene_lod_entities += 1U;
             selected_mesh = entity->lod.meshes[entity->lod.level_count - 1U];
             for (lod_index = 0U; lod_index < entity->lod.level_count; ++lod_index)
             {
@@ -3895,6 +3900,11 @@ henka_result henka_opengl_renderer_draw_scene(
                     selected_mesh = entity->lod.meshes[lod_index];
                     break;
                 }
+            }
+            if (selected_mesh == NULL || selected_mesh->backend_data == NULL)
+            {
+                state->scene_lod_fallback_entities += 1U;
+                selected_mesh = entity->mesh;
             }
         }
 
@@ -4361,6 +4371,8 @@ void henka_opengl_renderer_get_scene_diagnostics(
     uint32_t* out_visible_entities,
     uint32_t* out_culled_entities,
     uint32_t* out_budget_dropped_entities,
+    uint32_t* out_lod_entities,
+    uint32_t* out_lod_fallback_entities,
     uint32_t* out_transparent_sort_overflow_entities,
     double* out_cpu_time_milliseconds,
     double* out_gpu_time_milliseconds,
@@ -4385,6 +4397,14 @@ void henka_opengl_renderer_get_scene_diagnostics(
     {
         *out_budget_dropped_entities = state != NULL ?
             state->scene_budget_dropped_entities : 0U;
+    }
+    if (out_lod_entities != NULL)
+    {
+        *out_lod_entities = state != NULL ? state->scene_lod_entities : 0U;
+    }
+    if (out_lod_fallback_entities != NULL)
+    {
+        *out_lod_fallback_entities = state != NULL ? state->scene_lod_fallback_entities : 0U;
     }
     if (out_transparent_sort_overflow_entities != NULL)
     {
