@@ -62,6 +62,11 @@
 #ifndef GL_COMPRESSED_SRGB8_ALPHA8_ASTC_4x4_KHR
 #define GL_COMPRESSED_SRGB8_ALPHA8_ASTC_4x4_KHR 0x93D0
 #endif
+#ifndef GL_ANY_SAMPLES_PASSED
+#define GL_ANY_SAMPLES_PASSED 0x8C2F
+#endif
+
+#define HENKA_OPENGL_OCCLUSION_QUERY_CAPACITY 256U
 
 typedef struct henka_opengl_tool_window_target
 {
@@ -214,6 +219,8 @@ typedef struct henka_opengl_renderer_state
     uint32_t scene_lod_fallback_entities;
     uint32_t scene_instanced_draw_calls;
     uint32_t scene_instanced_entities;
+    uint32_t scene_occlusion_tested_entities;
+    uint32_t scene_occlusion_culled_entities;
     uint32_t transparent_sort_overflow_entities;
     double scene_cpu_time_milliseconds;
     double scene_gpu_time_milliseconds;
@@ -234,6 +241,11 @@ typedef struct henka_opengl_renderer_state
     GLuint instance_buffer;
     bool instancing_available;
     henka_opengl_instance_data instance_data[HENKA_OPENGL_INSTANCE_CAPACITY];
+    GLuint occlusion_queries[HENKA_OPENGL_OCCLUSION_QUERY_CAPACITY];
+    bool occlusion_query_valid[HENKA_OPENGL_OCCLUSION_QUERY_CAPACITY];
+    uint64_t occlusion_query_scene_revision[HENKA_OPENGL_OCCLUSION_QUERY_CAPACITY];
+    henka_mat4 occlusion_query_view_projection;
+    bool occlusion_history_valid;
     henka_opengl_tool_window_target tool_targets[HENKA_MAX_TOOL_WINDOWS];
 } henka_opengl_renderer_state;
 
@@ -3349,6 +3361,14 @@ henka_result henka_opengl_renderer_create(struct henka_renderer* renderer, struc
             state->instancing_available = false;
         }
     }
+    if (g_gl.GenQueries != NULL && g_gl.DeleteQueries != NULL &&
+        g_gl.BeginQuery != NULL && g_gl.EndQuery != NULL &&
+        g_gl.GetQueryObjectiv != NULL)
+    {
+        g_gl.GenQueries(
+            HENKA_OPENGL_OCCLUSION_QUERY_CAPACITY,
+            state->occlusion_queries);
+    }
 
     HENKA_LOG_INFO("renderer initialized with OpenGL backend");
     return HENKA_SUCCESS;
@@ -3462,6 +3482,12 @@ void henka_opengl_renderer_destroy(struct henka_renderer* renderer)
                 &state->tracked_render_target_bytes,
                 (uint64_t)sizeof(state->instance_data));
             g_gl.DeleteBuffers(1, &state->instance_buffer);
+        }
+        if (state->occlusion_queries[0] != 0U && g_gl.DeleteQueries != NULL)
+        {
+            g_gl.DeleteQueries(
+                HENKA_OPENGL_OCCLUSION_QUERY_CAPACITY,
+                state->occlusion_queries);
         }
     }
 
@@ -4108,6 +4134,45 @@ static bool henka_opengl_scene_has_active_reflection_probe(const henka_scene* sc
     return false;
 }
 
+static bool henka_opengl_mat4_nearly_equal(henka_mat4 a, henka_mat4 b)
+{
+    size_t index;
+    for (index = 0U; index < 16U; ++index)
+    {
+        if (fabsf(a.m[index] - b.m[index]) > 0.0001f)
+        {
+            return false;
+        }
+    }
+    return true;
+}
+
+static bool henka_opengl_can_reuse_occlusion_result(
+    const henka_opengl_renderer_state* state,
+    const henka_scene* scene,
+    size_t entity_index,
+    const henka_scene_entity_record* entity,
+    henka_mat4 current_view_projection)
+{
+    if (state == NULL || scene == NULL || entity == NULL ||
+        entity_index >= HENKA_OPENGL_OCCLUSION_QUERY_CAPACITY ||
+        state->occlusion_queries[entity_index] == 0U ||
+        !state->occlusion_history_valid ||
+        !state->occlusion_query_valid[entity_index] ||
+        state->occlusion_query_scene_revision[entity_index] != scene->render_revision ||
+        !entity->previous_transform_valid ||
+        !henka_opengl_mat4_nearly_equal(
+            henka_transform_to_mat4(entity->transform),
+            henka_transform_to_mat4(entity->previous_transform)) ||
+        !henka_opengl_mat4_nearly_equal(
+            current_view_projection,
+            state->occlusion_query_view_projection))
+    {
+        return false;
+    }
+    return true;
+}
+
 static bool henka_opengl_entity_can_join_instance_batch(
     const henka_scene* scene,
     const henka_scene_entity_record* current,
@@ -4296,6 +4361,8 @@ henka_result henka_opengl_renderer_draw_scene(
     state->scene_lod_fallback_entities = 0U;
     state->scene_instanced_draw_calls = 0U;
     state->scene_instanced_entities = 0U;
+    state->scene_occlusion_tested_entities = 0U;
+    state->scene_occlusion_culled_entities = 0U;
     for (index = 0U; index < HENKA_SCENE_MAX_LOCAL_LIGHTS; ++index)
     {
         const henka_scene_light_desc* light = &scene->local_lights[index];
@@ -4469,6 +4536,7 @@ henka_result henka_opengl_renderer_draw_scene(
         uint32_t reflection_probe_index = UINT32_MAX;
         bool use_reflection_probe_map;
         size_t instance_count = 1U;
+        bool occlusion_query_active = false;
 
         entity = &scene->entities[draw_index];
         if (!entity->active ||
@@ -4523,6 +4591,37 @@ henka_result henka_opengl_renderer_draw_scene(
             {
                 state->scene_lod_fallback_entities += 1U;
                 selected_mesh = entity->mesh;
+            }
+        }
+
+        if (pass == 0U && entity->lod.level_count == 0U &&
+            (entity->flags & HENKA_SCENE_ENTITY_FLAG_HELPER) == 0U &&
+            draw_index < HENKA_OPENGL_OCCLUSION_QUERY_CAPACITY &&
+            henka_opengl_can_reuse_occlusion_result(
+                state,
+                scene,
+                draw_index,
+                entity,
+                current_view_projection))
+        {
+            GLint query_available = GL_FALSE;
+            g_gl.GetQueryObjectiv(
+                state->occlusion_queries[draw_index],
+                GL_QUERY_RESULT_AVAILABLE,
+                &query_available);
+            if (query_available == GL_TRUE)
+            {
+                GLint samples_passed = GL_TRUE;
+                g_gl.GetQueryObjectiv(
+                    state->occlusion_queries[draw_index],
+                    GL_QUERY_RESULT,
+                    &samples_passed);
+                state->scene_occlusion_tested_entities += 1U;
+                if (samples_passed == GL_FALSE)
+                {
+                    state->scene_occlusion_culled_entities += 1U;
+                    continue;
+                }
             }
         }
 
@@ -4989,6 +5088,15 @@ henka_result henka_opengl_renderer_draw_scene(
         glBindTexture(GL_TEXTURE_CUBE_MAP,
             rendered && point_shadow_light_index >= 0 ? state->point_shadow_depth_texture : 0U);
         g_gl.ActiveTexture(GL_TEXTURE0);
+        if (instance_count == 1U && pass == 0U && !helper_entity &&
+            draw_index < HENKA_OPENGL_OCCLUSION_QUERY_CAPACITY &&
+            state->occlusion_queries[draw_index] != 0U)
+        {
+            g_gl.BeginQuery(
+                GL_ANY_SAMPLES_PASSED,
+                state->occlusion_queries[draw_index]);
+            occlusion_query_active = true;
+        }
         if (instance_count > 1U)
         {
             g_gl.BindBuffer(GL_ARRAY_BUFFER, state->instance_buffer);
@@ -5018,6 +5126,12 @@ henka_result henka_opengl_renderer_draw_scene(
                 GL_UNSIGNED_INT,
                 0);
         }
+        if (occlusion_query_active)
+        {
+            g_gl.EndQuery(GL_ANY_SAMPLES_PASSED);
+            state->occlusion_query_valid[draw_index] = true;
+            state->occlusion_query_scene_revision[draw_index] = scene->render_revision;
+        }
         state->scene_draw_calls += 1U;
         state->scene_visible_entities += (uint32_t)instance_count;
         if (pass == 0U && instance_count > 1U)
@@ -5027,6 +5141,11 @@ henka_result henka_opengl_renderer_draw_scene(
         }
     }
 
+    if (state->occlusion_queries[0] != 0U)
+    {
+        state->occlusion_query_view_projection = current_view_projection;
+        state->occlusion_history_valid = true;
+    }
     if (policy.use_hdr_presentation && !state->reflection_probe_capture_active)
     {
         henka_opengl_draw_bloom(state);
@@ -5109,6 +5228,8 @@ void henka_opengl_renderer_get_scene_diagnostics(
     uint32_t* out_lod_fallback_entities,
     uint32_t* out_instanced_draw_calls,
     uint32_t* out_instanced_entities,
+    uint32_t* out_occlusion_tested_entities,
+    uint32_t* out_occlusion_culled_entities,
     uint32_t* out_transparent_sort_overflow_entities,
     double* out_cpu_time_milliseconds,
     double* out_gpu_time_milliseconds,
@@ -5149,6 +5270,14 @@ void henka_opengl_renderer_get_scene_diagnostics(
     if (out_instanced_entities != NULL)
     {
         *out_instanced_entities = state != NULL ? state->scene_instanced_entities : 0U;
+    }
+    if (out_occlusion_tested_entities != NULL)
+    {
+        *out_occlusion_tested_entities = state != NULL ? state->scene_occlusion_tested_entities : 0U;
+    }
+    if (out_occlusion_culled_entities != NULL)
+    {
+        *out_occlusion_culled_entities = state != NULL ? state->scene_occlusion_culled_entities : 0U;
     }
     if (out_transparent_sort_overflow_entities != NULL)
     {
