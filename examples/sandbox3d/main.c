@@ -298,6 +298,11 @@ typedef struct sandbox3d_state
     henka_texture* wood_grain_texture;
     henka_texture* wet_dry_roughness_texture;
     henka_texture* foliage_mask_texture;
+    henka_material_asset* marker_material_asset;
+    henka_material_instance marker_material_instance;
+    henka_material_instance_parameter material_editor_parameter;
+    unsigned int material_editor_component;
+    bool marker_material_instance_valid;
     henka_entity cube_entity;
     henka_entity ground_entity;
     henka_entity grid_entity;
@@ -479,6 +484,363 @@ static void sandbox3d_draw_scene_objects_panel(
     henka_engine* engine,
     sandbox3d_state* state,
     const sandbox3d_workspace_layout* layout);
+static const char* sandbox3d_material_editor_parameter_label(
+    henka_material_instance_parameter parameter)
+{
+    static const char* labels[] =
+    {
+        "Metallic", "Roughness", "Specular Factor", "IOR", "Transmission",
+        "Normal Scale", "Occlusion Strength", "Emissive Strength", "Clearcoat",
+        "Clearcoat Roughness", "Alpha Cutoff", "Sheen Roughness", "Base Color",
+        "Emissive Color", "Specular Color", "Sheen Color", "Use Lighting",
+        "Depth Test", "Double Sided", "Cast Shadows", "Receive Shadows", "Alpha Mode",
+        "Thickness", "Attenuation Distance", "Attenuation Color", "Base Color Texture",
+        "Normal Texture", "Metallic-Roughness Texture", "Occlusion Texture", "Emissive Texture"
+    };
+    if (parameter < 0 || parameter >= HENKA_MATERIAL_INSTANCE_PARAMETER_COUNT)
+    {
+        return "Unknown";
+    }
+    return labels[parameter];
+}
+
+static const char* sandbox3d_material_editor_alpha_label(henka_material_alpha_mode mode)
+{
+    switch (mode)
+    {
+        case HENKA_MATERIAL_ALPHA_MASKED: return "Masked";
+        case HENKA_MATERIAL_ALPHA_BLENDED: return "Blended";
+        case HENKA_MATERIAL_ALPHA_OPAQUE:
+        default: return "Opaque";
+    }
+}
+
+static const char* sandbox3d_material_editor_usage_label(henka_texture_usage usage)
+{
+    switch (usage)
+    {
+        case HENKA_TEXTURE_USAGE_COLOR: return "Color/sRGB";
+        case HENKA_TEXTURE_USAGE_NORMAL: return "Normal/linear";
+        case HENKA_TEXTURE_USAGE_METALLIC_ROUGHNESS: return "Metal-rough/linear";
+        case HENKA_TEXTURE_USAGE_OCCLUSION: return "Occlusion/linear";
+        case HENKA_TEXTURE_USAGE_EMISSIVE: return "Emissive/sRGB";
+        default: return "Other";
+    }
+}
+
+static bool sandbox3d_material_editor_is_float(henka_material_instance_parameter parameter)
+{
+    return parameter == HENKA_MATERIAL_INSTANCE_METALLIC ||
+        parameter == HENKA_MATERIAL_INSTANCE_ROUGHNESS ||
+        parameter == HENKA_MATERIAL_INSTANCE_SPECULAR_FACTOR ||
+        parameter == HENKA_MATERIAL_INSTANCE_IOR ||
+        parameter == HENKA_MATERIAL_INSTANCE_TRANSMISSION ||
+        parameter == HENKA_MATERIAL_INSTANCE_NORMAL_SCALE ||
+        parameter == HENKA_MATERIAL_INSTANCE_OCCLUSION_STRENGTH ||
+        parameter == HENKA_MATERIAL_INSTANCE_EMISSIVE_STRENGTH ||
+        parameter == HENKA_MATERIAL_INSTANCE_CLEARCOAT ||
+        parameter == HENKA_MATERIAL_INSTANCE_CLEARCOAT_ROUGHNESS ||
+        parameter == HENKA_MATERIAL_INSTANCE_ALPHA_CUTOFF ||
+        parameter == HENKA_MATERIAL_INSTANCE_SHEEN_ROUGHNESS ||
+        parameter == HENKA_MATERIAL_INSTANCE_THICKNESS ||
+        parameter == HENKA_MATERIAL_INSTANCE_ATTENUATION_DISTANCE;
+}
+
+static bool sandbox3d_material_editor_is_bool(henka_material_instance_parameter parameter)
+{
+    return parameter == HENKA_MATERIAL_INSTANCE_USE_LIGHTING ||
+        parameter == HENKA_MATERIAL_INSTANCE_DEPTH_TEST ||
+        parameter == HENKA_MATERIAL_INSTANCE_DOUBLE_SIDED ||
+        parameter == HENKA_MATERIAL_INSTANCE_CAST_SHADOWS ||
+        parameter == HENKA_MATERIAL_INSTANCE_RECEIVE_SHADOWS;
+}
+
+static bool sandbox3d_material_editor_is_texture(henka_material_instance_parameter parameter)
+{
+    return parameter >= HENKA_MATERIAL_INSTANCE_BASE_COLOR_TEXTURE &&
+        parameter <= HENKA_MATERIAL_INSTANCE_EMISSIVE_TEXTURE;
+}
+
+static float sandbox3d_material_editor_float_value(
+    const henka_material* material,
+    henka_material_instance_parameter parameter)
+{
+    switch (parameter)
+    {
+        case HENKA_MATERIAL_INSTANCE_METALLIC: return material->metallic;
+        case HENKA_MATERIAL_INSTANCE_ROUGHNESS: return material->roughness;
+        case HENKA_MATERIAL_INSTANCE_SPECULAR_FACTOR: return material->specular_factor;
+        case HENKA_MATERIAL_INSTANCE_IOR: return material->ior;
+        case HENKA_MATERIAL_INSTANCE_TRANSMISSION: return material->transmission;
+        case HENKA_MATERIAL_INSTANCE_NORMAL_SCALE: return material->normal_scale;
+        case HENKA_MATERIAL_INSTANCE_OCCLUSION_STRENGTH: return material->occlusion_strength;
+        case HENKA_MATERIAL_INSTANCE_EMISSIVE_STRENGTH: return material->emissive_strength;
+        case HENKA_MATERIAL_INSTANCE_CLEARCOAT: return material->clearcoat;
+        case HENKA_MATERIAL_INSTANCE_CLEARCOAT_ROUGHNESS: return material->clearcoat_roughness;
+        case HENKA_MATERIAL_INSTANCE_ALPHA_CUTOFF: return material->alpha_cutoff;
+        case HENKA_MATERIAL_INSTANCE_SHEEN_ROUGHNESS: return material->sheen_roughness;
+        case HENKA_MATERIAL_INSTANCE_THICKNESS: return material->thickness;
+        case HENKA_MATERIAL_INSTANCE_ATTENUATION_DISTANCE: return material->attenuation_distance;
+        default: return 0.0f;
+    }
+}
+
+static float sandbox3d_material_editor_step(henka_material_instance_parameter parameter)
+{
+    switch (parameter)
+    {
+        case HENKA_MATERIAL_INSTANCE_IOR: return 0.05f;
+        case HENKA_MATERIAL_INSTANCE_NORMAL_SCALE: return 0.1f;
+        case HENKA_MATERIAL_INSTANCE_EMISSIVE_STRENGTH: return 0.1f;
+        case HENKA_MATERIAL_INSTANCE_THICKNESS: return 0.05f;
+        case HENKA_MATERIAL_INSTANCE_ATTENUATION_DISTANCE: return 0.25f;
+        default: return 0.05f;
+    }
+}
+
+static float sandbox3d_material_editor_clamp(float value, float minimum, float maximum)
+{
+    return value < minimum ? minimum : (value > maximum ? maximum : value);
+}
+
+static henka_result sandbox3d_material_editor_apply_delta(
+    sandbox3d_state* state,
+    int direction)
+{
+    henka_material_instance previous;
+    henka_material material;
+    henka_material_instance_parameter parameter;
+    henka_result result;
+    float value;
+
+    if (state == NULL || !state->marker_material_instance_valid || state->scene == NULL || direction == 0)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    previous = state->marker_material_instance;
+    parameter = state->material_editor_parameter;
+    result = henka_assets_get_material_instance_material(&state->marker_material_instance, &material);
+    if (result != HENKA_SUCCESS)
+    {
+        return result;
+    }
+    if (sandbox3d_material_editor_is_float(parameter))
+    {
+        value = sandbox3d_material_editor_float_value(&material, parameter) +
+            sandbox3d_material_editor_step(parameter) * (float)direction;
+        if (parameter == HENKA_MATERIAL_INSTANCE_IOR)
+        {
+            value = sandbox3d_material_editor_clamp(value, 1.0f, 3.0f);
+        }
+        else if (parameter == HENKA_MATERIAL_INSTANCE_NORMAL_SCALE ||
+            parameter == HENKA_MATERIAL_INSTANCE_EMISSIVE_STRENGTH ||
+            parameter == HENKA_MATERIAL_INSTANCE_THICKNESS ||
+            parameter == HENKA_MATERIAL_INSTANCE_ATTENUATION_DISTANCE)
+        {
+            value = fmaxf(0.0f, value);
+        }
+        else
+        {
+            value = sandbox3d_material_editor_clamp(value, 0.0f, 1.0f);
+        }
+        result = henka_assets_material_instance_set_float(
+            &state->marker_material_instance, parameter, value);
+    }
+    else if (parameter == HENKA_MATERIAL_INSTANCE_BASE_COLOR ||
+        parameter == HENKA_MATERIAL_INSTANCE_EMISSIVE_COLOR ||
+        parameter == HENKA_MATERIAL_INSTANCE_SPECULAR_COLOR ||
+        parameter == HENKA_MATERIAL_INSTANCE_SHEEN_COLOR ||
+        parameter == HENKA_MATERIAL_INSTANCE_ATTENUATION_COLOR)
+    {
+        float delta = 0.05f * (float)direction;
+        if (parameter == HENKA_MATERIAL_INSTANCE_BASE_COLOR)
+        {
+            henka_vec4 value4 = material.base_color;
+            float* component = ((float*)&value4) + (state->material_editor_component % 4U);
+            *component = sandbox3d_material_editor_clamp(*component + delta, 0.0f, 1.0f);
+            result = henka_assets_material_instance_set_vec4(&state->marker_material_instance, parameter, value4);
+        }
+        else
+        {
+            henka_vec3 value3;
+            if (parameter == HENKA_MATERIAL_INSTANCE_EMISSIVE_COLOR) value3 = material.emissive_color;
+            else if (parameter == HENKA_MATERIAL_INSTANCE_SPECULAR_COLOR) value3 = material.specular_color;
+            else if (parameter == HENKA_MATERIAL_INSTANCE_SHEEN_COLOR) value3 = material.sheen_color;
+            else value3 = material.attenuation_color;
+            {
+                float* component = ((float*)&value3) + (state->material_editor_component % 3U);
+                *component = sandbox3d_material_editor_clamp(*component + delta, 0.0f, 1.0f);
+            }
+            result = henka_assets_material_instance_set_vec3(&state->marker_material_instance, parameter, value3);
+        }
+    }
+    else if (sandbox3d_material_editor_is_bool(parameter))
+    {
+        bool current_value = false;
+        switch (parameter)
+        {
+            case HENKA_MATERIAL_INSTANCE_USE_LIGHTING: current_value = material.use_lighting; break;
+            case HENKA_MATERIAL_INSTANCE_DEPTH_TEST: current_value = material.depth_test; break;
+            case HENKA_MATERIAL_INSTANCE_DOUBLE_SIDED: current_value = material.double_sided; break;
+            case HENKA_MATERIAL_INSTANCE_CAST_SHADOWS: current_value = material.cast_shadows; break;
+            case HENKA_MATERIAL_INSTANCE_RECEIVE_SHADOWS: current_value = material.receive_shadows; break;
+            default: break;
+        }
+        result = henka_assets_material_instance_set_bool(&state->marker_material_instance, parameter, !current_value);
+    }
+    else if (parameter == HENKA_MATERIAL_INSTANCE_ALPHA_MODE)
+    {
+        int mode = (int)material.alpha_mode + (direction > 0 ? 1 : -1);
+        if (mode < 0) mode = 2;
+        if (mode > 2) mode = 0;
+        result = henka_assets_material_instance_set_alpha_mode(
+            &state->marker_material_instance, (henka_material_alpha_mode)mode);
+    }
+    else if (sandbox3d_material_editor_is_texture(parameter))
+    {
+        if (direction > 0)
+        {
+            result = henka_assets_material_instance_set_texture(
+                &state->marker_material_instance,
+                (henka_material_texture_slot)(parameter - HENKA_MATERIAL_INSTANCE_BASE_COLOR_TEXTURE),
+                NULL);
+        }
+        else
+        {
+            result = henka_assets_material_instance_reset_override(&state->marker_material_instance, parameter);
+        }
+    }
+    else
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    if (result != HENKA_SUCCESS)
+    {
+        state->marker_material_instance = previous;
+        return result;
+    }
+    result = henka_assets_apply_material_instance_to_entity(
+        &state->marker_material_instance, state->scene, state->marker_entity);
+    if (result != HENKA_SUCCESS)
+    {
+        state->marker_material_instance = previous;
+    }
+    return result;
+}
+
+static void sandbox3d_draw_material_authoring_panel(
+    henka_engine* engine,
+    sandbox3d_state* state,
+    henka_ui_rect panel_bounds,
+    const sandbox3d_object_descriptor* descriptor)
+{
+    char value_text[128];
+    char dependency_text[160];
+    henka_material material;
+    henka_material_dependency_info dependencies;
+    uint64_t revision;
+    float x;
+    float y;
+    bool can_edit;
+
+    if (engine == NULL || state == NULL || descriptor == NULL)
+    {
+        return;
+    }
+    y = panel_bounds.y + 432.0f;
+    henka_ui_heading(state->ui, panel_bounds.x + 14.0f, y, 1.0f, "Material Authoring");
+    can_edit = state->marker_material_instance_valid && descriptor->entity == state->marker_entity;
+    if (!can_edit)
+    {
+        henka_ui_label_colored(state->ui, panel_bounds.x + 14.0f, y + 18.0f, 1.0f,
+            "Select glTF Marker for instance editing.", HENKA_UI_COLOR_MUTED);
+        return;
+    }
+    if (henka_assets_get_material_instance_material(&state->marker_material_instance, &material) != HENKA_SUCCESS ||
+        henka_assets_get_material_asset_revision(state->marker_material_asset, &revision) != HENKA_SUCCESS ||
+        henka_assets_get_material_instance_dependencies(&state->marker_material_instance, &dependencies) != HENKA_SUCCESS)
+    {
+        henka_ui_label_colored(state->ui, panel_bounds.x + 14.0f, y + 18.0f, 1.0f,
+            "Material instance is unavailable.", HENKA_UI_COLOR_DANGER);
+        return;
+    }
+    snprintf(value_text, sizeof(value_text), "%s %.3f", sandbox3d_material_editor_parameter_label(state->material_editor_parameter),
+        sandbox3d_material_editor_is_float(state->material_editor_parameter) ?
+            sandbox3d_material_editor_float_value(&material, state->material_editor_parameter) : 0.0f);
+    snprintf(dependency_text, sizeof(dependency_text), "Definition r%llu | overrides 0x%08X | deps %zu",
+        (unsigned long long)revision, state->marker_material_instance.override_mask, dependencies.dependency_count);
+    henka_ui_label(state->ui, panel_bounds.x + 14.0f, y + 18.0f, 1.0f, value_text);
+    henka_ui_label_colored(state->ui, panel_bounds.x + 14.0f, y + 36.0f, 1.0f, dependency_text, HENKA_UI_COLOR_INFO);
+    x = panel_bounds.x + 14.0f;
+    if (henka_ui_button(state->ui, "material_parameter_prev", (henka_ui_rect){x, y + 56.0f, 58.0f, 24.0f}, "Prev"))
+    {
+        state->material_editor_parameter = state->material_editor_parameter == 0 ?
+            HENKA_MATERIAL_INSTANCE_PARAMETER_COUNT - 1 : state->material_editor_parameter - 1;
+    }
+    if (henka_ui_button(state->ui, "material_parameter_next", (henka_ui_rect){x + 64.0f, y + 56.0f, 58.0f, 24.0f}, "Next"))
+    {
+        state->material_editor_parameter = (state->material_editor_parameter + 1) % HENKA_MATERIAL_INSTANCE_PARAMETER_COUNT;
+    }
+    if (henka_ui_button(state->ui, "material_parameter_component", (henka_ui_rect){x + 128.0f, y + 56.0f, 86.0f, 24.0f}, "Channel"))
+    {
+        state->material_editor_component = (state->material_editor_component + 1U) % 4U;
+    }
+    if (henka_ui_button(state->ui, "material_parameter_less", (henka_ui_rect){x + 220.0f, y + 56.0f, 48.0f, 24.0f},
+        sandbox3d_material_editor_is_texture(state->material_editor_parameter) ? "Restore" : "-") )
+    {
+        (void)sandbox3d_material_editor_apply_delta(state, -1);
+    }
+    if (henka_ui_button(state->ui, "material_parameter_more", (henka_ui_rect){x + 274.0f, y + 56.0f, 48.0f, 24.0f},
+        sandbox3d_material_editor_is_texture(state->material_editor_parameter) ? "Clear" : "+"))
+    {
+        (void)sandbox3d_material_editor_apply_delta(state, 1);
+    }
+    snprintf(value_text, sizeof(value_text), "Alpha %s | Base %.2f %.2f %.2f %.2f",
+        sandbox3d_material_editor_alpha_label(material.alpha_mode), material.base_color.x, material.base_color.y,
+        material.base_color.z, material.base_color.w);
+    henka_ui_label(state->ui, panel_bounds.x + 14.0f, y + 86.0f, 1.0f, value_text);
+    snprintf(value_text, sizeof(value_text), "Metal %.2f Rough %.2f IOR %.2f Tx %.2f",
+        material.metallic, material.roughness, material.ior, material.transmission);
+    henka_ui_label(state->ui, panel_bounds.x + 14.0f, y + 104.0f, 1.0f, value_text);
+    if (dependencies.dependency_count > 0U)
+    {
+        snprintf(value_text, sizeof(value_text), "First dependency: %s", sandbox3d_material_editor_usage_label(dependencies.dependencies[0].usage));
+        henka_ui_label_colored(state->ui, panel_bounds.x + 14.0f, y + 122.0f, 1.0f, value_text, HENKA_UI_COLOR_INFO);
+    }
+    if (henka_ui_button(state->ui, "material_instance_reset", (henka_ui_rect){panel_bounds.x + 14.0f, y + 146.0f, 104.0f, 24.0f}, "Reset Overrides"))
+    {
+        henka_material_instance previous = state->marker_material_instance;
+        if (henka_assets_material_instance_reset_overrides(&state->marker_material_instance) == HENKA_SUCCESS &&
+            henka_assets_apply_material_instance_to_entity(&state->marker_material_instance, state->scene, state->marker_entity) == HENKA_SUCCESS)
+        {
+            sandbox3d_set_statusf(state, false, true, "%s", "glTF material instance overrides reset.");
+        }
+        else
+        {
+            state->marker_material_instance = previous;
+            sandbox3d_set_statusf(state, true, true, "%s", "Material reset was rejected transactionally.");
+        }
+    }
+    if (henka_ui_button(state->ui, "material_asset_reimport", (henka_ui_rect){panel_bounds.x + 126.0f, y + 146.0f, 104.0f, 24.0f}, "Reimport"))
+    {
+        henka_material_instance previous = state->marker_material_instance;
+        henka_material_asset* reloaded_asset = state->marker_material_asset;
+        if (henka_assets_reload_gltf_material_asset(
+                henka_engine_get_asset_manager(engine), "assets/models/henka_marker.gltf", &reloaded_asset) == HENKA_SUCCESS &&
+            henka_assets_refresh_material_instance(&state->marker_material_instance) == HENKA_SUCCESS &&
+            henka_assets_apply_material_instance_to_entity(&state->marker_material_instance, state->scene, state->marker_entity) == HENKA_SUCCESS)
+        {
+            state->marker_material_asset = reloaded_asset;
+            sandbox3d_set_statusf(state, false, true, "%s", "glTF material definition reimported and instance refreshed.");
+        }
+        else
+        {
+            state->marker_material_instance = previous;
+            sandbox3d_set_statusf(state, true, true, "%s", "glTF material reimport failed; instance preserved.");
+        }
+    }
+}
+
 static void sandbox3d_draw_object_details_panel(
     henka_engine* engine,
     sandbox3d_state* state,
@@ -2431,6 +2793,7 @@ static void sandbox3d_print_help(const sandbox3d_state* state)
     printf("  Drag the narrow bars beside Scene View to resize occupied docks. Reset Layout restores safe defaults.\n");
     printf("  Open Native Panel Test from Controls to validate a separate OS-level tool window.\n");
     printf("  Use the panels to inspect named scene objects, clear selection, switch gizmo modes, focus the camera, reset object transforms, toggle visibility, and open in-window Help, Scene Legend, Object Info, Paths, Settings, Diagnostics, Transform QA, and Physics QA utilities.\n");
+    printf("  Select glTF Marker to edit its shared material instance in Object Details; scalar/vector, flags, alpha, and semantic texture overrides apply transactionally.\n");
     printf("  Physics QA enables an opt-in fixed-step rigid-body demo with collider/contact debug drawing, impulses, body modes, and camera raycasts.\n");
     printf("  The Controls panel uses readable pages, and Scene Objects supports paging when the dock is tighter than the full list.\n");
     printf("  Select an object from the list or with Left Mouse in the viewport, then use Move, Rotate, or Scale in the Transform section.\n");
@@ -2867,6 +3230,9 @@ static void sandbox3d_release_owned_resources(sandbox3d_state* state)
     state->gizmo_render.axis_mesh = NULL;
     state->gizmo_render.ring_mesh = NULL;
     state->marker_mesh = NULL;
+    state->marker_material_asset = NULL;
+    memset(&state->marker_material_instance, 0, sizeof(state->marker_material_instance));
+    state->marker_material_instance_valid = false;
     state->missing_model_mesh = NULL;
     state->scene = NULL;
     state->actions = NULL;
@@ -7044,6 +7410,8 @@ static void sandbox3d_draw_object_details_panel(
         sandbox3d_clear_selection(state, "Selection cleared from Object Details.");
     }
 
+    sandbox3d_draw_material_authoring_panel(engine, state, panel_bounds, descriptor);
+
 }
 
 static void sandbox3d_draw_utility_panel(
@@ -8223,6 +8591,16 @@ static henka_result sandbox3d_initialize(henka_engine* engine, void* user_data)
             goto fail;
         }
     }
+    state->marker_material_asset = marker_material_asset;
+    result = henka_assets_create_material_instance(
+        state->marker_material_asset, &state->marker_material_instance);
+    if (result != HENKA_SUCCESS)
+    {
+        goto fail;
+    }
+    state->marker_material_instance_valid = true;
+    state->material_editor_parameter = HENKA_MATERIAL_INSTANCE_METALLIC;
+    state->material_editor_component = 0U;
     result = henka_assets_load_gltf_scene_asset(
         assets,
         "assets/models/henka_marker.gltf",
@@ -8567,6 +8945,12 @@ static henka_result sandbox3d_initialize(henka_engine* engine, void* user_data)
 
     transform = sandbox3d_make_transform(g_marker_position, (henka_vec3){1.35f, 1.35f, 1.35f});
     result = sandbox3d_configure_entity(state->scene, state->marker_entity, state->marker_mesh, marker_material, transform);
+    if (result != HENKA_SUCCESS)
+    {
+        goto fail;
+    }
+    result = henka_assets_apply_material_instance_to_entity(
+        &state->marker_material_instance, state->scene, state->marker_entity);
     if (result != HENKA_SUCCESS)
     {
         goto fail;
