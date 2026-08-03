@@ -96,6 +96,12 @@ static void henka_test_gltf_scene_import(void)
         "1.4142135,1.4142135,0.0,0.0,-1.0606602,1.0606602,0.0,0.0,"
         "0.0,0.0,3.0,0.0,4.0,5.0,6.0,1.0]}],"
         "\"scenes\":[{\"nodes\":[0]},{\"nodes\":[0]}],\"scene\":1}";
+    static const char* camera_only_scene_gltf =
+        "{\"asset\":{\"version\":\"2.0\"},"
+        "\"cameras\":[{\"name\":\"Preview Camera\",\"type\":\"perspective\","
+        "\"perspective\":{\"yfov\":0.8,\"aspectRatio\":1.5,\"znear\":0.1,\"zfar\":50.0}}],"
+        "\"nodes\":[{\"name\":\"Camera Node\",\"camera\":0}],"
+        "\"scenes\":[{\"nodes\":[0]}]}";
     henka_model_scene_data scene;
     char* invalid_scene;
     char* selected_roots;
@@ -162,6 +168,17 @@ static void henka_test_gltf_scene_import(void)
             HENKA_TEST_ASSERT_FLOAT_CLOSE(
                 reconstructed.m[matrix_index], scene.nodes[0].local_matrix.m[matrix_index], 0.0002f);
     }
+    henka_model_scene_data_destroy(&scene);
+
+    memset(&scene, 0, sizeof(scene));
+    HENKA_TEST_ASSERT(henka_model_scene_data_load_gltf_from_memory(
+        camera_only_scene_gltf, strlen(camera_only_scene_gltf), "camera-only.gltf", &scene) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(scene.primitive_count == 0U);
+    HENKA_TEST_ASSERT(scene.camera_count == 1U);
+    HENKA_TEST_ASSERT(scene.node_count == 1U);
+    HENKA_TEST_ASSERT(scene.nodes[0].camera_index == 0);
+    HENKA_TEST_ASSERT(scene.scene_count == 1U);
+    HENKA_TEST_ASSERT(scene.scene_root_counts[0] == 1U);
     henka_model_scene_data_destroy(&scene);
 
     scene_length = strlen(scene_gltf);

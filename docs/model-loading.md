@@ -33,7 +33,10 @@ CPU-owned until a manager/renderer instantiation path publishes its dependent
 meshes and material instances. Instantiation also applies the first active
 glTF camera and publishes active punctual lights into the runtime scene; the
 runtime's four-local-light limit remains an explicit bounded fallback. A
-failed scene parse or dependency build cannot publish partial renderer state.
+valid scene may contain cameras, lights, and nodes without any mesh buffers;
+mesh-bearing scenes still require bounded buffers, accessors, and triangle
+primitives. A failed scene parse or dependency build cannot publish partial
+renderer state.
 Callers can select another validated scene with
 `henka_model_scene_data_set_active_scene` before instantiation; an invalid
 index is rejected without changing the current selection. Manager-owned scene
