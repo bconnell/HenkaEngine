@@ -223,3 +223,5 @@ The Scene View owns an explicit shading mode rather than relying on a global pol
 The legacy wireframe API remains compatible: enabling it selects Wireframe, while disabling it restores the last valid non-wireframe mode. The sandbox persists the authoritative mode under `ui.scene_view.shading_mode`; older `wireframe_enabled` settings are migrated only when the new key is absent.
 
 The current AO term is a normal-aware depth-neighborhood approximation; horizon-search GTAO, AO history, full disocclusion handling, and production TAA remain unfinished.
+
+The Utility Diagnostics panel includes the active shading/exposure row plus current texture-residency bytes, configured budget, and queued request count from the engine diagnostics snapshot.

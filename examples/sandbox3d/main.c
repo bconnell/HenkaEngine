@@ -7249,7 +7249,15 @@ static void sandbox3d_draw_utility_panel(
             descriptor = sandbox3d_get_selected_descriptor(state);
             sandbox3d_draw_section_heading(state->ui, x_left, y_start, "Diagnostics");
             sandbox3d_draw_value_row(state->ui, x_left, y_start + 18.0f, panel_bounds.width - 28.0f, "Frame", fps_text + 7);
-            snprintf(row_value, sizeof(row_value), "%s / %.2f", henka_viewport_shading_mode_get_label(diagnostics.viewport_shading_mode), diagnostics.viewport_exposure);
+            snprintf(
+                row_value,
+                sizeof(row_value),
+                "%s / %.2f Tex:%llu/%llu q%u",
+                henka_viewport_shading_mode_get_label(diagnostics.viewport_shading_mode),
+                diagnostics.viewport_exposure,
+                (unsigned long long)diagnostics.texture_residency_resident_bytes,
+                (unsigned long long)diagnostics.texture_residency_budget_bytes,
+                (unsigned int)diagnostics.texture_residency_queued_request_count);
             sandbox3d_draw_value_row(state->ui, x_left, y_start + 44.0f, panel_bounds.width - 28.0f, "Render", row_value);
             snprintf(
                 row_value,
