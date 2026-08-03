@@ -92,6 +92,9 @@ typedef struct henka_engine_diagnostics
     bool rendered_temporal_history_ready;
     bool rendered_temporal_history_valid;
     bool rendered_motion_vectors_ready;
+    bool rendered_temporal_jitter_enabled;
+    float rendered_temporal_jitter_x;
+    float rendered_temporal_jitter_y;
     uint32_t rendered_reflection_probe_enabled_count;
     uint32_t rendered_reflection_probe_captured_count;
     bool rendered_reflection_probe_capture_active;

@@ -583,7 +583,10 @@ void henka_opengl_renderer_get_temporal_diagnostics(
     const struct henka_renderer* renderer,
     bool* out_history_ready,
     bool* out_history_valid,
-    bool* out_motion_vectors_ready);
+    bool* out_motion_vectors_ready,
+    bool* out_jitter_enabled,
+    float* out_jitter_x,
+    float* out_jitter_y);
 void henka_opengl_renderer_get_reflection_probe_diagnostics(
     const struct henka_renderer* renderer,
     uint32_t* out_enabled_count,

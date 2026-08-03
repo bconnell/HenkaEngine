@@ -1378,7 +1378,10 @@ henka_result henka_engine_get_diagnostics(
         engine->renderer,
         &out_diagnostics->rendered_temporal_history_ready,
         &out_diagnostics->rendered_temporal_history_valid,
-        &out_diagnostics->rendered_motion_vectors_ready);
+        &out_diagnostics->rendered_motion_vectors_ready,
+        &out_diagnostics->rendered_temporal_jitter_enabled,
+        &out_diagnostics->rendered_temporal_jitter_x,
+        &out_diagnostics->rendered_temporal_jitter_y);
     henka_opengl_renderer_get_reflection_probe_diagnostics(
         engine->renderer,
         &out_diagnostics->rendered_reflection_probe_enabled_count,

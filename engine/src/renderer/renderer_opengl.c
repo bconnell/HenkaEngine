@@ -160,6 +160,10 @@ typedef struct henka_opengl_renderer_state
     int temporal_history_height;
     bool temporal_history_ready;
     bool temporal_history_valid;
+    bool temporal_jitter_enabled;
+    uint64_t temporal_jitter_index;
+    float temporal_jitter_x;
+    float temporal_jitter_y;
     henka_mat4 previous_view_projection;
     bool previous_view_projection_valid;
     GLuint ibl_framebuffer;
@@ -267,6 +271,20 @@ static bool henka_opengl_memory_subtract(uint64_t* value, uint64_t amount)
     }
     *value -= amount;
     return true;
+}
+
+static float henka_opengl_temporal_halton(uint64_t index, uint32_t base)
+{
+    float fraction = 1.0f;
+    float result = 0.0f;
+
+    while (index > 0U)
+    {
+        fraction /= (float)base;
+        result += fraction * (float)(index % (uint64_t)base);
+        index /= (uint64_t)base;
+    }
+    return result;
 }
 
 static void henka_opengl_memory_refresh(
@@ -1530,6 +1548,10 @@ static void henka_opengl_delete_temporal_history(henka_opengl_renderer_state* st
     state->temporal_history_height = 0;
     state->temporal_history_ready = false;
     state->temporal_history_valid = false;
+    state->temporal_jitter_enabled = false;
+    state->temporal_jitter_index = 0U;
+    state->temporal_jitter_x = 0.0f;
+    state->temporal_jitter_y = 0.0f;
     state->previous_view_projection_valid = false;
 }
 
@@ -4492,6 +4514,38 @@ henka_result henka_opengl_renderer_draw_scene(
     projection =
         henka_camera_get_projection_matrix(&scene->camera);
     view = henka_camera_get_view_matrix(&scene->camera);
+    {
+        bool use_temporal_jitter = rendered &&
+            policy.use_hdr_presentation && state->temporal_history_ready;
+        if (state->temporal_jitter_enabled != use_temporal_jitter)
+        {
+            state->temporal_history_valid = false;
+            state->previous_view_projection_valid = false;
+        }
+        state->temporal_jitter_enabled = use_temporal_jitter;
+        if (use_temporal_jitter)
+        {
+            henka_viewport temporal_viewport = henka_renderer_get_scene_viewport(renderer);
+            uint64_t sample_index = (state->temporal_jitter_index % 8U) + 1U;
+            state->temporal_jitter_index = (state->temporal_jitter_index + 1U) % 8U;
+            state->temporal_jitter_x = temporal_viewport.width > 0 ?
+                (henka_opengl_temporal_halton(sample_index, 2U) - 0.5f) /
+                    (float)temporal_viewport.width : 0.0f;
+            state->temporal_jitter_y = temporal_viewport.height > 0 ?
+                (henka_opengl_temporal_halton(sample_index, 3U) - 0.5f) /
+                    (float)temporal_viewport.height : 0.0f;
+            /* The perspective projection stores the clip-space offset in
+             * the z-column entries; this shifts the sample without changing
+             * the camera's logical transform or scene materials. */
+            projection.m[8] += 2.0f * state->temporal_jitter_x;
+            projection.m[9] += 2.0f * state->temporal_jitter_y;
+        }
+        else
+        {
+            state->temporal_jitter_x = 0.0f;
+            state->temporal_jitter_y = 0.0f;
+        }
+    }
     current_view_projection = henka_mat4_multiply(projection, view);
     if (!state->previous_view_projection_valid)
         state->previous_view_projection = current_view_projection;
@@ -6089,7 +6143,10 @@ void henka_opengl_renderer_get_temporal_diagnostics(
     const struct henka_renderer* renderer,
     bool* out_history_ready,
     bool* out_history_valid,
-    bool* out_motion_vectors_ready)
+    bool* out_motion_vectors_ready,
+    bool* out_jitter_enabled,
+    float* out_jitter_x,
+    float* out_jitter_y)
 {
     const henka_opengl_renderer_state* state = renderer != NULL && renderer->backend_state != NULL ?
         (const henka_opengl_renderer_state*)renderer->backend_state : NULL;
@@ -6100,6 +6157,12 @@ void henka_opengl_renderer_get_temporal_diagnostics(
         *out_history_valid = state != NULL && state->temporal_history_valid;
     if (out_motion_vectors_ready != NULL)
         *out_motion_vectors_ready = state != NULL && state->hdr_motion_texture != 0U;
+    if (out_jitter_enabled != NULL)
+        *out_jitter_enabled = state != NULL && state->temporal_jitter_enabled;
+    if (out_jitter_x != NULL)
+        *out_jitter_x = state != NULL ? state->temporal_jitter_x : 0.0f;
+    if (out_jitter_y != NULL)
+        *out_jitter_y = state != NULL ? state->temporal_jitter_y : 0.0f;
 }
 
 void henka_opengl_renderer_get_reflection_probe_diagnostics(
