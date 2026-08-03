@@ -180,6 +180,13 @@ void henka_test_model(void)
         "\"accessors\":[{\"bufferView\":0,\"componentType\":5126,\"count\":3,\"type\":\"VEC3\"},"
         "{\"bufferView\":0,\"componentType\":5126,\"count\":3,\"type\":\"VEC2\"}],"
         "\"meshes\":[{\"primitives\":[{\"attributes\":{\"POSITION\":0},\"indices\":1}]}]}";
+    static const char* invalid_gltf_empty_mesh =
+        "{\"asset\":{\"version\":\"2.0\"},"
+        "\"buffers\":[{\"uri\":\"data:application/octet-stream;base64,"
+        "AAAAAAAAAAAAAAAAAACAPwAAAAAAAAAAAAAAAAAAgD8AAAAA\",\"byteLength\":36}],"
+        "\"bufferViews\":[{\"buffer\":0,\"byteLength\":36}],"
+        "\"accessors\":[{\"bufferView\":0,\"componentType\":5126,\"count\":3,\"type\":\"VEC3\"}],"
+        "\"meshes\":[{\"primitives\":[]}]}";
     static const char* valid_gltf_material =
         "{\"asset\":{\"version\":\"2.0\"},\"extensionsUsed\":[\"KHR_texture_basisu\"],"
         "\"buffers\":[{\"uri\":\"data:application/octet-stream;base64,"
@@ -311,6 +318,13 @@ void henka_test_model(void)
     HENKA_TEST_ASSERT(henka_model_data_load_gltf_from_memory(
         invalid_gltf_index_accessor, strlen(invalid_gltf_index_accessor),
         "invalid-index-accessor.gltf", &model) != HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(model.vertices == NULL && model.indices == NULL);
+    henka_model_data_destroy(&model);
+
+    memset(&model, 0, sizeof(model));
+    HENKA_TEST_ASSERT(henka_model_data_load_gltf_from_memory(
+        invalid_gltf_empty_mesh, strlen(invalid_gltf_empty_mesh),
+        "empty-mesh.gltf", &model) != HENKA_SUCCESS);
     HENKA_TEST_ASSERT(model.vertices == NULL && model.indices == NULL);
     henka_model_data_destroy(&model);
 

@@ -135,7 +135,7 @@ When an OBJ or glTF file is missing, malformed, truncated, oversized, or outside
   ownership, and transactional retry contract as OBJ mesh assets
 - a successfully loaded mesh is not destroyed by the retry path
 
-Malformed faces, invalid indices, non-finite values, degenerate triangles, and unsafe allocation requests are rejected before renderer upload.
+Malformed faces, empty meshes, invalid indices, non-finite values, degenerate triangles, and unsafe allocation requests are rejected before renderer upload.
 
 ## Not supported
 

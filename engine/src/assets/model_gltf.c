@@ -1264,6 +1264,7 @@ static bool henka_gltf_parse_scene_meshes(
             scene->primitive_count += 1U;
             if (!henka_gltf_parse_scene_materials(context, scene, mesh, mesh_end, output->material_index)) return false;
         }
+        if (primitive_index == 0U) return false;
         if (henka_gltf_array_item(primitives, primitives_end, HENKA_MODEL_MAX_SCENE_ITEMS, &mesh, &mesh_end)) return false;
     }
     return mesh_index > 0U && !henka_gltf_array_item(meshes, meshes_end, HENKA_MODEL_MAX_SCENE_ITEMS, &mesh, &mesh_end);
