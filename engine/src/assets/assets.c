@@ -1420,7 +1420,11 @@ henka_result henka_assets_load_texture_with_descriptor(
             "");
     manager->texture_count += 1U;
     if (!fallback_active)
+    {
         manager->texture_resident_bytes += texture_info.resident_gpu_bytes;
+        if (UINT64_MAX - manager->texture_uploaded_bytes >= texture_info.resident_gpu_bytes)
+            manager->texture_uploaded_bytes += texture_info.resident_gpu_bytes;
+    }
     *out_texture = texture;
     return HENKA_SUCCESS;
 }
@@ -1449,6 +1453,8 @@ henka_result henka_assets_get_texture_residency_diagnostics(
         return HENKA_ERROR_INVALID_ARGUMENT;
     out_diagnostics->budget_bytes = manager->texture_residency_budget_bytes;
     out_diagnostics->resident_bytes = manager->texture_resident_bytes;
+    out_diagnostics->uploaded_bytes = manager->texture_uploaded_bytes;
+    out_diagnostics->evicted_bytes = manager->texture_evicted_bytes;
     out_diagnostics->budget_rejection_count = manager->texture_budget_rejection_count;
     out_diagnostics->managed_texture_count = manager->texture_count;
     out_diagnostics->queued_request_count = manager->texture_residency_request_count;
@@ -1624,6 +1630,8 @@ henka_result henka_assets_set_texture_resident_mips(
         return result;
     }
     manager->texture_resident_bytes = resident_without_old + replacement_info.resident_gpu_bytes;
+    if (UINT64_MAX - manager->texture_uploaded_bytes >= replacement_info.resident_gpu_bytes)
+        manager->texture_uploaded_bytes += replacement_info.resident_gpu_bytes;
     entry->resident_gpu_bytes = replacement_info.resident_gpu_bytes;
     henka_asset_set_summary(
         &entry->metadata,
@@ -1654,6 +1662,7 @@ henka_result henka_assets_trim_texture_residency(
         uint64_t candidate_bytes = 0U;
         size_t index;
         henka_texture_info candidate_info;
+        henka_texture_info resident_info;
         henka_result result;
 
         for (index = 0U; index < manager->texture_count; ++index)
@@ -1692,6 +1701,17 @@ henka_result henka_assets_trim_texture_residency(
             if (manager->texture_residency_eviction_failure_count < UINT64_MAX)
                 ++manager->texture_residency_eviction_failure_count;
             break;
+        }
+        memset(&resident_info, 0, sizeof(resident_info));
+        if (henka_texture_get_info(
+                manager->texture_entries[candidate].texture,
+                &resident_info) == HENKA_SUCCESS &&
+            candidate_info.resident_gpu_bytes > resident_info.resident_gpu_bytes &&
+            UINT64_MAX - manager->texture_evicted_bytes >=
+                candidate_info.resident_gpu_bytes - resident_info.resident_gpu_bytes)
+        {
+            manager->texture_evicted_bytes +=
+                candidate_info.resident_gpu_bytes - resident_info.resident_gpu_bytes;
         }
         if (manager->texture_residency_eviction_count < UINT64_MAX)
             ++manager->texture_residency_eviction_count;
