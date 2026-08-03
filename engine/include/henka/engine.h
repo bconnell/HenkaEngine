@@ -147,6 +147,16 @@ typedef struct henka_engine_diagnostics
     uint32_t renderer_tracked_mesh_count;
     uint32_t renderer_tracked_texture_count;
     bool renderer_memory_overflow;
+    uint64_t texture_residency_budget_bytes;
+    uint64_t texture_residency_resident_bytes;
+    uint32_t texture_residency_managed_count;
+    uint32_t texture_residency_fallback_count;
+    uint32_t texture_residency_queued_request_count;
+    uint64_t texture_residency_completed_request_count;
+    uint64_t texture_residency_failed_request_count;
+    uint64_t texture_residency_eviction_count;
+    uint64_t texture_residency_eviction_failure_count;
+    bool texture_residency_budget_exceeded;
     bool wireframe_enabled;
     bool mouse_captured;
     bool ui_visible;

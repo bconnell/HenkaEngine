@@ -1427,6 +1427,7 @@ henka_result henka_engine_get_diagnostics(
     henka_engine_diagnostics* out_diagnostics)
 {
     henka_platform_diagnostics platform_diagnostics;
+    henka_texture_residency_diagnostics texture_residency;
 
     if (out_diagnostics != NULL)
     {
@@ -1436,6 +1437,14 @@ henka_result henka_engine_get_diagnostics(
     if (engine == NULL || out_diagnostics == NULL)
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    memset(&texture_residency, 0, sizeof(texture_residency));
+    if (engine->asset_manager != NULL)
+    {
+        (void)henka_assets_get_texture_residency_diagnostics(
+            engine->asset_manager,
+            &texture_residency);
     }
 
     out_diagnostics->delta_seconds = engine->time.delta_seconds;
@@ -1546,6 +1555,22 @@ henka_result henka_engine_get_diagnostics(
         &out_diagnostics->renderer_tracked_mesh_count,
         &out_diagnostics->renderer_tracked_texture_count,
         &out_diagnostics->renderer_memory_overflow);
+    out_diagnostics->texture_residency_budget_bytes = texture_residency.budget_bytes;
+    out_diagnostics->texture_residency_resident_bytes = texture_residency.resident_bytes;
+    out_diagnostics->texture_residency_managed_count =
+        texture_residency.managed_texture_count > UINT32_MAX ?
+        UINT32_MAX : (uint32_t)texture_residency.managed_texture_count;
+    out_diagnostics->texture_residency_fallback_count =
+        texture_residency.fallback_texture_count > UINT32_MAX ?
+        UINT32_MAX : (uint32_t)texture_residency.fallback_texture_count;
+    out_diagnostics->texture_residency_queued_request_count =
+        texture_residency.queued_request_count > UINT32_MAX ?
+        UINT32_MAX : (uint32_t)texture_residency.queued_request_count;
+    out_diagnostics->texture_residency_completed_request_count = texture_residency.completed_request_count;
+    out_diagnostics->texture_residency_failed_request_count = texture_residency.failed_request_count;
+    out_diagnostics->texture_residency_eviction_count = texture_residency.eviction_count;
+    out_diagnostics->texture_residency_eviction_failure_count = texture_residency.eviction_failure_count;
+    out_diagnostics->texture_residency_budget_exceeded = texture_residency.budget_exceeded;
     out_diagnostics->wireframe_enabled =
         out_diagnostics->viewport_shading_mode ==
         HENKA_VIEWPORT_SHADING_WIREFRAME;
