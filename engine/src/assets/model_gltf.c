@@ -1748,6 +1748,7 @@ static bool henka_gltf_prepare_json(
     size_t offset = 0U;
     size_t json_size = 0U;
     const unsigned char* json_data = NULL;
+    const char* parsed_end;
     if (data == NULL || data_size == 0U || data_size > HENKA_MAX_GLTF_SOURCE_BYTES || context == NULL) return false;
     if (data_size >= 12U && memcmp(data, "glTF", 4U) == 0)
     {
@@ -1796,7 +1797,9 @@ static bool henka_gltf_prepare_json(
     context->json[json_size] = '\0';
     context->json_size = json_size;
     if (henka_gltf_skip_space(context->json, context->json + json_size) >= context->json + json_size ||
-        *henka_gltf_skip_space(context->json, context->json + json_size) != '{')
+        *henka_gltf_skip_space(context->json, context->json + json_size) != '{' ||
+        !henka_gltf_value_end(context->json, context->json + json_size, &parsed_end) ||
+        henka_gltf_skip_space(parsed_end, context->json + json_size) != context->json + json_size)
     {
         return false;
     }
