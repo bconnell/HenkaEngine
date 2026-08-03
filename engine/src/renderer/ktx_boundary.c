@@ -116,6 +116,54 @@ static bool henka_ktx_vk_format_to_gpu_format(
     return true;
 }
 
+static bool henka_ktx_expected_level_size(
+    henka_ktx2_gpu_format format,
+    int width,
+    int height,
+    size_t* out_size)
+{
+    size_t blocks_x;
+    size_t blocks_y;
+    size_t block_count;
+    size_t bytes_per_block;
+
+    if (out_size == NULL || width <= 0 || height <= 0)
+        return false;
+    if (format == HENKA_KTX2_GPU_FORMAT_RGBA8)
+    {
+        return henka_checked_size_multiply((size_t)width, (size_t)height, out_size) &&
+            henka_checked_size_multiply(*out_size, 4U, out_size);
+    }
+
+    if (format == HENKA_KTX2_GPU_FORMAT_BC1 ||
+        format == HENKA_KTX2_GPU_FORMAT_ETC2_RGB)
+    {
+        bytes_per_block = 8U;
+    }
+    else if (format == HENKA_KTX2_GPU_FORMAT_BC3 ||
+        format == HENKA_KTX2_GPU_FORMAT_BC5 ||
+        format == HENKA_KTX2_GPU_FORMAT_BC7 ||
+        format == HENKA_KTX2_GPU_FORMAT_ETC2_RGBA ||
+        format == HENKA_KTX2_GPU_FORMAT_ETC2_RG ||
+        format == HENKA_KTX2_GPU_FORMAT_ASTC_4X4)
+    {
+        bytes_per_block = 16U;
+    }
+    else
+    {
+        return false;
+    }
+
+    blocks_x = ((size_t)width + 3U) / 4U;
+    blocks_y = ((size_t)height + 3U) / 4U;
+    if (!henka_checked_size_multiply(blocks_x, blocks_y, &block_count) ||
+        !henka_checked_size_multiply(block_count, bytes_per_block, out_size))
+    {
+        return false;
+    }
+    return true;
+}
+
 static bool henka_ktx_select_transcode_target(
     henka_texture_usage usage,
     uint32_t capabilities,
@@ -250,11 +298,14 @@ henka_result henka_ktx2_prepare_upload_with_mip_limit(
     {
         ktx_size_t image_offset = 0U;
         ktx_size_t image_size = ktxTexture_GetImageSize(base_texture, level);
+        size_t expected_level_size;
         int level_width = upload.width >> level;
         int level_height = upload.height >> level;
         if (level_width < 1) level_width = 1;
         if (level_height < 1) level_height = 1;
         if (image_size == 0U ||
+            !henka_ktx_expected_level_size(format, level_width, level_height, &expected_level_size) ||
+            image_size != (ktx_size_t)expected_level_size ||
             ktxTexture_GetImageOffset(base_texture, level, 0U, 0U, &image_offset) != KTX_SUCCESS ||
             image_offset > base_texture->dataSize ||
             image_size > base_texture->dataSize - image_offset ||

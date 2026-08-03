@@ -102,7 +102,8 @@ Manager-loaded shaders, textures, and OBJ meshes use canonical confined cache id
 
 Texture and OBJ fallback retries are transactional. Texture source failures create path-specific lightweight aliases of the shared error texture rather than storing the shared pointer directly. A failed texture retry leaves the alias, metadata, and caller output unchanged; a successful retry moves the new owned backend into that same alias, so existing materials immediately observe the real texture without pointer rebinding. Allocation failures, invalid API state, and OpenGL upload failures are propagated and are not cached as ordinary source fallbacks. Texture creation reads an encoded source once into a bounded buffer, uses that exact buffer for stb_image inspection and decode, supports Radiance HDR as finite linear RGBA32F uploaded to RGBA16F, rejects unsupported 16-bit sources rather than quantizing them silently, clears outputs before validation, temporarily uses the main OpenGL context, restores the previous context, texture-unit, binding, and unpack state, checks upload errors, and destroys only backends it owns. Descriptor semantics select sRGB or linear GPU storage and are immutable on the texture object. Mesh fallback metadata remains path-based because mesh retries do not yet use stable per-path aliases.
 
-Texture info now reports the exact logical resident GPU byte count, total and
+The KTX boundary also validates every bounded mip's dimensions and expected
+pixel/block byte count before a payload is published. Texture info now reports the exact logical resident GPU byte count, total and
 resident mip counts, whether the backend chose a compressed GPU format, and
 the selected BC, ETC2, ASTC, or RGBA8 resident format. Uncompressed and Basis
 sources can fall back to RGBA8 when compressed upload is unavailable; native
