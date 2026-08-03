@@ -112,9 +112,10 @@ reread, validated, and uploaded into a replacement backend before the existing
 texture identity is changed; budget or source failure leaves the old backend
 and cache entry unchanged. PNG/HDR sources are not streamable through this
 API. Manager-owned KTX2 requests can be coalesced into a bounded queue and
-processed with completion/failure counters; the engine frame lifecycle services
-at most one queued request while the renderer context is active, but the upload
-itself remains synchronous. A deterministic trim operation can reduce the
+processed with completion/failure counters; visible active scene materials
+enqueue distance-bounded KTX2 mip targets, and the engine frame lifecycle
+services at most one queued request while the renderer context is active, but
+the upload itself remains synchronous. A deterministic trim operation can reduce the
 largest eligible KTX2 textures to one resident mip until a caller-provided
 target is met, with eviction diagnostics and transactional rollback on
 failure. Callers can apply the configured non-zero budget through a bounded

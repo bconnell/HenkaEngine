@@ -408,6 +408,69 @@ static henka_result henka_engine_abort_render_frame(
     return primary_result;
 }
 
+static bool henka_engine_is_ktx2_texture(
+    const henka_asset_manager* manager,
+    const henka_texture* texture)
+{
+    size_t index;
+    const char* source_path;
+    const char* extension;
+
+    if (manager == NULL || texture == NULL)
+        return false;
+    for (index = 0U; index < manager->texture_count; ++index)
+    {
+        if (manager->texture_entries[index].texture != texture)
+            continue;
+        source_path = manager->texture_entries[index].metadata.source_path;
+        extension = source_path != NULL ? strrchr(source_path, '.') : NULL;
+        return extension != NULL &&
+            (strcmp(extension, ".ktx2") == 0 || strcmp(extension, ".KTX2") == 0);
+    }
+    return false;
+}
+
+static void henka_engine_queue_visible_texture_residency(
+    henka_engine* engine)
+{
+    size_t entity_index;
+
+    if (engine == NULL || engine->asset_manager == NULL || engine->active_scene == NULL)
+        return;
+    for (entity_index = 0U; entity_index < engine->active_scene->entity_count; ++entity_index)
+    {
+        const henka_scene_entity_record* entity = &engine->active_scene->entities[entity_index];
+        henka_texture* textures[5];
+        uint32_t requested_mips;
+        float distance;
+        size_t texture_index;
+
+        if (!entity->active || !entity->visible)
+            continue;
+        distance = henka_vec3_length(henka_vec3_subtract(
+            entity->transform.position,
+            engine->active_scene->camera.position));
+        requested_mips = distance <= 12.0f ? 4U : distance <= 36.0f ? 3U : 2U;
+        textures[0] = entity->material.base_color_texture;
+        textures[1] = entity->material.normal_texture;
+        textures[2] = entity->material.metallic_roughness_texture;
+        textures[3] = entity->material.occlusion_texture;
+        textures[4] = entity->material.emissive_texture;
+        for (texture_index = 0U; texture_index < sizeof(textures) / sizeof(textures[0]); ++texture_index)
+        {
+            henka_texture_info info;
+            if (!henka_engine_is_ktx2_texture(engine->asset_manager, textures[texture_index]) ||
+                henka_texture_get_info(textures[texture_index], &info) != HENKA_SUCCESS ||
+                info.resident_mip_count >= requested_mips || info.mip_count < requested_mips)
+                continue;
+            (void)henka_assets_queue_texture_residency_request(
+                engine->asset_manager,
+                textures[texture_index],
+                requested_mips);
+        }
+    }
+}
+
 static henka_result henka_engine_render_frame(henka_engine* engine)
 {
     henka_result result;
@@ -440,6 +503,7 @@ static henka_result henka_engine_render_frame(henka_engine* engine)
      */
     if (engine->asset_manager != NULL)
     {
+        henka_engine_queue_visible_texture_residency(engine);
         result = henka_assets_process_texture_residency_requests(
             engine->asset_manager,
             1U,
