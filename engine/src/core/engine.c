@@ -412,6 +412,7 @@ static henka_result henka_engine_render_frame(henka_engine* engine)
 {
     henka_result result;
     size_t index;
+    size_t processed_texture_requests = 0U;
 
     if (engine == NULL || engine->renderer == NULL)
     {
@@ -428,6 +429,38 @@ static henka_result henka_engine_render_frame(henka_engine* engine)
     }
 
     henka_renderer_clear_frame(engine->renderer);
+
+    /*
+     * Service residency work only while the renderer owns the active frame
+     * context.  The queue and replacement path are bounded and transactional;
+     * one request and one budget eviction per frame keep ordinary rendering
+     * responsive while making the public residency contract useful without a
+     * background worker.  Individual failures remain diagnostics rather than
+     * invalidating an otherwise healthy frame.
+     */
+    if (engine->asset_manager != NULL)
+    {
+        result = henka_assets_process_texture_residency_requests(
+            engine->asset_manager,
+            1U,
+            &processed_texture_requests);
+        if (result != HENKA_SUCCESS)
+        {
+            HENKA_LOG_WARN(
+                "texture residency request service failed: %s",
+                henka_result_to_string(result));
+        }
+        result = henka_assets_enforce_texture_residency_budget(
+            engine->asset_manager,
+            1U,
+            NULL);
+        if (result != HENKA_SUCCESS && result != HENKA_ERROR_LIMIT)
+        {
+            HENKA_LOG_WARN(
+                "texture residency budget service failed: %s",
+                henka_result_to_string(result));
+        }
+    }
 
     if (engine->active_scene != NULL)
     {
