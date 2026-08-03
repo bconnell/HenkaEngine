@@ -42,7 +42,7 @@ Henka Engine is still early, but the sandbox now renders a visible 3D scene with
 - Bounded glTF/GLB geometry and shared PBR material import with manager-owned texture dependencies, transactional material-asset reload, and strict bounded JSON/accessor validation
 - Bounded glTF/GLB scene import with selected scene roots, node hierarchy transforms, cameras, punctual lights, meshless camera/light scenes, and fail-closed accessor-reference validation
 - Transactional HDR environment lighting with derived IBL resources, fitted directional shadows, bloom, tone mapping, fog, bounded local probe capture, and explicit Material Preview versus Rendered shading policies
-- Rendered presentation includes a bounded RG motion attachment and camera-motion history reprojection; object-motion vectors, disocclusion rejection, and production TAA remain unfinished
+- Rendered presentation includes bounded RG camera-motion history reprojection and depth-neighborhood ambient occlusion; object-motion vectors, disocclusion rejection, normal-aware GTAO, and production TAA remain unfinished
 - Checked KTX2/Basis texture loading with active-OpenGL capability-selected BC/ETC2/ASTC mip uploads and truthful RGBA8 fallback when compressed upload is unavailable
 - Texture objects report exact resident GPU bytes and mip counts; manager-owned KTX2 textures support synchronous transactional top-mip residency requests with a fail-closed budget, while background streaming/eviction remains unfinished
 - Bounded realism validation materials and scene samples covering metal, clearcoat, plastic, stone, sheen, wood, wet/dry variation, detail normals, and masked foliage
