@@ -391,6 +391,8 @@ henka_result henka_ktx2_decode_rgba8(
     ktx_uint8_t* source_pixels;
     unsigned char* pixels = NULL;
     size_t expected_size;
+    size_t total_level_bytes = 0U;
+    uint32_t level;
     henka_result result = HENKA_ERROR_ASSET_SOURCE;
 
     if (out_pixels != NULL) *out_pixels = NULL;
@@ -430,6 +432,25 @@ henka_result henka_ktx2_decode_rgba8(
      * formats rather than silently treating block data as pixels. */
     if (texture->vkFormat != 37U && texture->vkFormat != 43U)
         goto cleanup;
+    for (level = 0U; level < texture->numLevels; ++level)
+    {
+        size_t level_size;
+        int level_width = (int)texture->baseWidth >> level;
+        int level_height = (int)texture->baseHeight >> level;
+        if (level_width < 1) level_width = 1;
+        if (level_height < 1) level_height = 1;
+        if (!henka_ktx_checked_rgba8_size(level_width, level_height, &level_size) ||
+            level_size > HENKA_MAX_TEXTURE_DECODED_BYTES ||
+            ktxTexture_GetImageOffset(base_texture, level, 0U, 0U, &image_offset) != KTX_SUCCESS ||
+            ktxTexture_GetImageSize(base_texture, level) != (ktx_size_t)level_size ||
+            image_offset > base_texture->dataSize ||
+            level_size > base_texture->dataSize - image_offset ||
+            !henka_checked_size_add(total_level_bytes, level_size, &total_level_bytes) ||
+            total_level_bytes > HENKA_MAX_TEXTURE_DECODED_BYTES)
+        {
+            goto cleanup;
+        }
+    }
     if (!henka_ktx_checked_rgba8_size((int)texture->baseWidth, (int)texture->baseHeight, &expected_size) ||
         expected_size > HENKA_MAX_TEXTURE_DECODED_BYTES ||
         ktxTexture_GetImageOffset(base_texture, 0U, 0U, 0U, &image_offset) != KTX_SUCCESS ||
