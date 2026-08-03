@@ -1219,6 +1219,7 @@ henka_result henka_assets_load_texture_with_descriptor(
     char* resolved_path;
     char* source_path;
     henka_texture* texture;
+    henka_texture_info texture_info;
     henka_result result;
 
     if (out_texture != NULL)
@@ -1310,6 +1311,23 @@ henka_result henka_assets_load_texture_with_descriptor(
         return result;
     }
 
+    memset(&texture_info, 0, sizeof(texture_info));
+    if (!fallback_active &&
+        henka_texture_get_info(texture, &texture_info) == HENKA_SUCCESS &&
+        ((manager->texture_residency_budget_bytes != 0U &&
+            (texture_info.resident_gpu_bytes > manager->texture_residency_budget_bytes ||
+                manager->texture_resident_bytes >
+                    manager->texture_residency_budget_bytes - texture_info.resident_gpu_bytes)) ||
+            manager->texture_resident_bytes > UINT64_MAX - texture_info.resident_gpu_bytes))
+    {
+        if (manager->texture_budget_rejection_count < UINT32_MAX)
+            ++manager->texture_budget_rejection_count;
+        henka_texture_destroy(texture);
+        henka_free(key);
+        henka_free(source_path);
+        return HENKA_ERROR_LIMIT;
+    }
+
     display_name =
         henka_asset_copy_display_name(source_path);
     if (display_name == NULL)
@@ -1339,6 +1357,8 @@ henka_result henka_assets_load_texture_with_descriptor(
     texture->fallback_alias = fallback_active;
     manager->texture_entries[
         manager->texture_count].descriptor = canonical_descriptor;
+    manager->texture_entries[
+        manager->texture_count].resident_gpu_bytes = fallback_active ? 0U : texture_info.resident_gpu_bytes;
     manager->texture_entries[
         manager->texture_count].key = key;
     manager->texture_entries[
@@ -1383,7 +1403,46 @@ henka_result henka_assets_load_texture_with_descriptor(
             "Texture source loading failed. Retry after fixing the source asset; allocation and renderer failures are not cached as fallbacks." :
             "");
     manager->texture_count += 1U;
+    if (!fallback_active)
+        manager->texture_resident_bytes += texture_info.resident_gpu_bytes;
     *out_texture = texture;
+    return HENKA_SUCCESS;
+}
+
+henka_result henka_assets_set_texture_residency_budget(
+    henka_asset_manager* manager,
+    uint64_t budget_bytes)
+{
+    if (manager == NULL)
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    if (budget_bytes != 0U && manager->texture_resident_bytes > budget_bytes)
+        return HENKA_ERROR_LIMIT;
+    manager->texture_residency_budget_bytes = budget_bytes;
+    return HENKA_SUCCESS;
+}
+
+henka_result henka_assets_get_texture_residency_diagnostics(
+    const henka_asset_manager* manager,
+    henka_texture_residency_diagnostics* out_diagnostics)
+{
+    size_t index;
+
+    if (out_diagnostics != NULL)
+        memset(out_diagnostics, 0, sizeof(*out_diagnostics));
+    if (manager == NULL || out_diagnostics == NULL)
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    out_diagnostics->budget_bytes = manager->texture_residency_budget_bytes;
+    out_diagnostics->resident_bytes = manager->texture_resident_bytes;
+    out_diagnostics->budget_rejection_count = manager->texture_budget_rejection_count;
+    out_diagnostics->managed_texture_count = manager->texture_count;
+    for (index = 0U; index < manager->texture_count; ++index)
+    {
+        if (manager->texture_entries[index].metadata.fallback)
+            ++out_diagnostics->fallback_texture_count;
+    }
+    out_diagnostics->budget_exceeded =
+        manager->texture_residency_budget_bytes != 0U &&
+        manager->texture_resident_bytes > manager->texture_residency_budget_bytes;
     return HENKA_SUCCESS;
 }
 
@@ -2467,6 +2526,7 @@ henka_result henka_assets_retry_failed_texture(
     char* key;
     char* resolved_path;
     henka_texture* replacement;
+    henka_texture_info replacement_info;
     henka_result result;
 
     if (out_texture != NULL)
@@ -2527,6 +2587,20 @@ henka_result henka_assets_retry_failed_texture(
         return result;
     }
 
+    memset(&replacement_info, 0, sizeof(replacement_info));
+    if (henka_texture_get_info(replacement, &replacement_info) != HENKA_SUCCESS ||
+        ((manager->texture_residency_budget_bytes != 0U &&
+            (replacement_info.resident_gpu_bytes > manager->texture_residency_budget_bytes ||
+                manager->texture_resident_bytes >
+                    manager->texture_residency_budget_bytes - replacement_info.resident_gpu_bytes)) ||
+            manager->texture_resident_bytes > UINT64_MAX - replacement_info.resident_gpu_bytes))
+    {
+        if (manager->texture_budget_rejection_count < UINT32_MAX)
+            ++manager->texture_budget_rejection_count;
+        henka_texture_destroy(replacement);
+        return HENKA_ERROR_LIMIT;
+    }
+
     result = henka_texture_adopt_owned_payload(
         entry->texture,
         replacement);
@@ -2537,6 +2611,8 @@ henka_result henka_assets_retry_failed_texture(
     }
 
     entry->owns_texture = true;
+    manager->texture_resident_bytes += replacement_info.resident_gpu_bytes;
+    entry->resident_gpu_bytes = replacement_info.resident_gpu_bytes;
     entry->metadata.loaded = true;
     entry->metadata.fallback = false;
     entry->metadata.reload_supported = false;

@@ -750,6 +750,10 @@ henka_result henka_texture_get_info(
     out_info->last_failure = texture->last_failure;
     out_info->fallback_alias = texture->fallback_alias;
     out_info->backend_ready = texture->backend_data != NULL;
+    out_info->gpu_compressed = texture->gpu_compressed;
+    out_info->resident_gpu_bytes = texture->resident_gpu_bytes;
+    out_info->resident_mip_count = texture->resident_mip_count;
+    out_info->mip_count = texture->mip_count;
     out_info->content_revision = texture->content_revision;
     return HENKA_SUCCESS;
 }
@@ -792,6 +796,10 @@ henka_result henka_texture_create_borrowed_alias(
     alias->source_class = source->source_class;
     alias->last_failure = source->last_failure;
     alias->fallback_alias = true;
+    alias->gpu_compressed = source->gpu_compressed;
+    alias->resident_gpu_bytes = source->resident_gpu_bytes;
+    alias->resident_mip_count = source->resident_mip_count;
+    alias->mip_count = source->mip_count;
     alias->content_revision = source->content_revision;
     alias->owns_backend = false;
     alias->asset_manager_owned = false;
@@ -834,6 +842,10 @@ henka_result henka_texture_adopt_owned_payload(
     target->source_class = replacement->source_class;
     target->last_failure = replacement->last_failure;
     target->fallback_alias = false;
+    target->gpu_compressed = replacement->gpu_compressed;
+    target->resident_gpu_bytes = replacement->resident_gpu_bytes;
+    target->resident_mip_count = replacement->resident_mip_count;
+    target->mip_count = replacement->mip_count;
     target->content_revision = target->content_revision == 0U ? 1U : target->content_revision + 1U;
     target->owns_backend = true;
 

@@ -43,6 +43,7 @@ Henka Engine is still early, but the sandbox now renders a visible 3D scene with
 - Bounded glTF/GLB scene import with selected scene roots, node hierarchy transforms, cameras, punctual lights, meshless camera/light scenes, and fail-closed accessor-reference validation
 - Transactional HDR environment lighting with derived IBL resources, fitted directional shadows, bloom, tone mapping, fog, bounded local probe capture, and explicit Material Preview versus Rendered shading policies
 - Checked KTX2/Basis texture loading with active-OpenGL capability-selected BC/ETC2/ASTC mip uploads and truthful RGBA8 fallback when compressed upload is unavailable
+- Texture objects report exact resident GPU bytes and mip counts; the asset manager has a fail-closed residency budget and rejection diagnostics while streaming/eviction remains unfinished
 - Bounded realism validation materials and scene samples covering metal, clearcoat, plastic, stone, sheen, wood, wet/dry variation, detail normals, and masked foliage
 - Descriptor-aware RGBA8 textures with explicit sRGB/linear, sampler, wrap, mip, flip, usage, alpha, source-class, and content-revision metadata
 - Bounded single-read texture decoding with truthful rejection of HDR and 16-bit sources, plus path-specific white/error fallback aliases

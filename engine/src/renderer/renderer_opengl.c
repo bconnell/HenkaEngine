@@ -5819,6 +5819,23 @@ static henka_result henka_opengl_create_texture_from_pixels(
     texture->alpha_mode = HENKA_TEXTURE_ALPHA_OPAQUE;
     texture->last_failure = HENKA_TEXTURE_FAILURE_NONE;
     texture->content_revision = 1U;
+    texture->gpu_compressed = false;
+    texture->resident_gpu_bytes = logical_texture_bytes;
+    texture->resident_mip_count = 1U;
+    texture->mip_count = 1U;
+    if (descriptor->generate_mipmaps)
+    {
+        int mip_width = width;
+        int mip_height = height;
+        while (mip_width > 1 || mip_height > 1)
+        {
+            mip_width = mip_width > 1 ? mip_width / 2 : 1;
+            mip_height = mip_height > 1 ? mip_height / 2 : 1;
+            if (texture->mip_count < UINT32_MAX)
+                ++texture->mip_count;
+        }
+        texture->resident_mip_count = texture->mip_count;
+    }
     texture_data->tracked_gpu_bytes = logical_texture_bytes;
     {
         henka_opengl_renderer_state* memory_state =
@@ -6021,6 +6038,10 @@ henka_result henka_opengl_renderer_create_texture_from_ktx2_memory(
     texture->content_revision = 1U;
     texture->source_byte_size = data_size;
     texture->original_channel_count = 4;
+    texture->gpu_compressed = upload.compressed;
+    texture->resident_gpu_bytes = logical_texture_bytes;
+    texture->resident_mip_count = upload.level_count;
+    texture->mip_count = upload.level_count;
     texture_data->tracked_gpu_bytes = logical_texture_bytes;
     henka_opengl_memory_add_category(
         state, &state->tracked_texture_bytes, texture_data->tracked_gpu_bytes);

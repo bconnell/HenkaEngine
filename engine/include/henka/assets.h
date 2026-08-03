@@ -3,6 +3,7 @@
 
 #include <stdbool.h>
 #include <stddef.h>
+#include <stdint.h>
 
 #include <henka/result.h>
 #include <henka/scene.h>
@@ -41,6 +42,16 @@ typedef struct henka_asset_metadata
     henka_texture_descriptor texture_descriptor;
 } henka_asset_metadata;
 
+typedef struct henka_texture_residency_diagnostics
+{
+    uint64_t budget_bytes;
+    uint64_t resident_bytes;
+    uint32_t budget_rejection_count;
+    size_t managed_texture_count;
+    size_t fallback_texture_count;
+    bool budget_exceeded;
+} henka_texture_residency_diagnostics;
+
 henka_asset_manager* henka_engine_get_asset_manager(henka_engine* engine);
 const henka_asset_manager* henka_engine_get_asset_manager_const(const henka_engine* engine);
 
@@ -73,6 +84,14 @@ henka_result henka_assets_load_texture_with_descriptor(
     const char* path,
     const henka_texture_descriptor* descriptor,
     henka_texture** out_texture);
+/* A zero budget disables the limit. This foundation rejects a new load that
+ * would exceed the budget; it does not pretend to stream or evict mips. */
+henka_result henka_assets_set_texture_residency_budget(
+    henka_asset_manager* manager,
+    uint64_t budget_bytes);
+henka_result henka_assets_get_texture_residency_diagnostics(
+    const henka_asset_manager* manager,
+    henka_texture_residency_diagnostics* out_diagnostics);
 henka_result henka_assets_load_obj_mesh(henka_asset_manager* manager, const char* path, henka_mesh** out_mesh);
 henka_result henka_assets_load_gltf_mesh(henka_asset_manager* manager, const char* path, henka_mesh** out_mesh);
 henka_result henka_assets_load_gltf_mesh_with_material(

@@ -195,6 +195,7 @@ typedef struct henka_asset_texture_entry
     henka_texture* texture;
     bool owns_texture;
     henka_texture_descriptor descriptor;
+    uint64_t resident_gpu_bytes;
     henka_asset_metadata metadata;
 } henka_asset_texture_entry;
 
@@ -257,6 +258,9 @@ struct henka_asset_manager
     henka_texture* occlusion_texture;
     henka_texture* emissive_texture;
     henka_mesh* fallback_mesh;
+    uint64_t texture_residency_budget_bytes;
+    uint64_t texture_resident_bytes;
+    uint32_t texture_budget_rejection_count;
 };
 
 struct henka_scene
@@ -329,6 +333,10 @@ struct henka_texture
     henka_texture_source_class source_class;
     henka_texture_failure_category last_failure;
     bool fallback_alias;
+    bool gpu_compressed;
+    uint64_t resident_gpu_bytes;
+    uint32_t resident_mip_count;
+    uint32_t mip_count;
     uint64_t content_revision;
 };
 

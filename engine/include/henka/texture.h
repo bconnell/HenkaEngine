@@ -98,6 +98,10 @@ typedef struct henka_texture_info
     henka_texture_failure_category last_failure;
     bool fallback_alias;
     bool backend_ready;
+    bool gpu_compressed;
+    uint64_t resident_gpu_bytes;
+    uint32_t resident_mip_count;
+    uint32_t mip_count;
     uint64_t content_revision;
 } henka_texture_info;
 

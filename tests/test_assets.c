@@ -389,6 +389,24 @@ void henka_test_assets(void)
     texture_entries[1].metadata.type = HENKA_ASSET_TYPE_TEXTURE;
     texture_entries[1].metadata.source_path = texture_entries[1].source_path;
     texture_entries[1].metadata.fallback = true;
+    {
+        henka_texture_residency_diagnostics residency;
+        HENKA_TEST_ASSERT(henka_assets_set_texture_residency_budget(
+            NULL, 1024U) == HENKA_ERROR_INVALID_ARGUMENT);
+        HENKA_TEST_ASSERT(henka_assets_get_texture_residency_diagnostics(
+            &manager, &residency) == HENKA_SUCCESS);
+        HENKA_TEST_ASSERT(residency.managed_texture_count == 2U);
+        HENKA_TEST_ASSERT(residency.fallback_texture_count == 2U);
+        HENKA_TEST_ASSERT(residency.resident_bytes == 0U);
+        HENKA_TEST_ASSERT(henka_assets_set_texture_residency_budget(
+            &manager, 1024U) == HENKA_SUCCESS);
+        manager.texture_resident_bytes = 2048U;
+        HENKA_TEST_ASSERT(henka_assets_set_texture_residency_budget(
+            &manager, 1024U) == HENKA_ERROR_LIMIT);
+        HENKA_TEST_ASSERT(henka_assets_set_texture_residency_budget(
+            &manager, 0U) == HENKA_SUCCESS);
+        manager.texture_resident_bytes = 0U;
+    }
     mesh_entries[0].key = "assets/models/a.obj";
     mesh_entries[0].source_path = "Assets/Models/A.obj";
     mesh_entries[0].mesh = &fallback_mesh;
