@@ -6,6 +6,14 @@ layout (location = 2) in vec2 inUv;
 layout (location = 3) in vec4 inTangent;
 layout (location = 4) in vec4 inColor;
 layout (location = 5) in vec2 inUv1;
+layout (location = 6) in vec4 instanceModel0;
+layout (location = 7) in vec4 instanceModel1;
+layout (location = 8) in vec4 instanceModel2;
+layout (location = 9) in vec4 instanceModel3;
+layout (location = 10) in vec4 instancePreviousModel0;
+layout (location = 11) in vec4 instancePreviousModel1;
+layout (location = 12) in vec4 instancePreviousModel2;
+layout (location = 13) in vec4 instancePreviousModel3;
 
 uniform mat4 model;
 uniform mat4 view;
@@ -15,6 +23,7 @@ uniform mat4 cascadeShadowMatrix;
 uniform mat4 localShadowMatrix;
 uniform mat4 previousViewProjection;
 uniform mat4 previousModel;
+uniform bool useInstancing;
 
 out vec3 fragNormal;
 out vec3 fragWorldPosition;
@@ -31,19 +40,23 @@ out vec4 fragPreviousClipPosition;
 
 void main()
 {
-    vec4 worldPosition = model * vec4(inPosition, 1.0);
+    mat4 activeModel = useInstancing ?
+        mat4(instanceModel0, instanceModel1, instanceModel2, instanceModel3) : model;
+    mat4 activePreviousModel = useInstancing ?
+        mat4(instancePreviousModel0, instancePreviousModel1, instancePreviousModel2, instancePreviousModel3) : previousModel;
+    vec4 worldPosition = activeModel * vec4(inPosition, 1.0);
     fragWorldPosition = worldPosition.xyz;
-    mat3 normalMatrix = mat3(transpose(inverse(model)));
+    mat3 normalMatrix = mat3(transpose(inverse(activeModel)));
     fragNormal = normalMatrix * inNormal;
     fragUv = inUv;
     fragUv1 = inUv1;
-    fragTangent = mat3(model) * inTangent.xyz;
-    fragTangentHandedness = inTangent.w * (determinant(mat3(model)) < 0.0 ? -1.0 : 1.0);
+    fragTangent = mat3(activeModel) * inTangent.xyz;
+    fragTangentHandedness = inTangent.w * (determinant(mat3(activeModel)) < 0.0 ? -1.0 : 1.0);
     fragVertexColor = inColor;
     fragLightSpacePosition = lightMatrix * worldPosition;
     fragCascadeShadowPosition = cascadeShadowMatrix * worldPosition;
     fragLocalShadowPosition = localShadowMatrix * worldPosition;
     fragCurrentClipPosition = projection * view * worldPosition;
-    fragPreviousClipPosition = previousViewProjection * previousModel * vec4(inPosition, 1.0);
+    fragPreviousClipPosition = previousViewProjection * activePreviousModel * vec4(inPosition, 1.0);
     gl_Position = fragCurrentClipPosition;
 }

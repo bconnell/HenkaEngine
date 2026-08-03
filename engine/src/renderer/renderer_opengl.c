@@ -75,12 +75,19 @@ typedef struct henka_opengl_tool_window_target
 
 #define HENKA_OPENGL_TRANSPARENT_SORT_CAPACITY 4096U
 #define HENKA_OPENGL_SCENE_DRAW_BUDGET 8192U
+#define HENKA_OPENGL_INSTANCE_CAPACITY 256U
 
 typedef struct henka_opengl_transparent_sort_item
 {
     size_t entity_index;
     float view_depth;
 } henka_opengl_transparent_sort_item;
+
+typedef struct henka_opengl_instance_data
+{
+    henka_mat4 model;
+    henka_mat4 previous_model;
+} henka_opengl_instance_data;
 
 typedef struct henka_opengl_shader_data
 {
@@ -205,6 +212,8 @@ typedef struct henka_opengl_renderer_state
     uint32_t scene_budget_dropped_entities;
     uint32_t scene_lod_entities;
     uint32_t scene_lod_fallback_entities;
+    uint32_t scene_instanced_draw_calls;
+    uint32_t scene_instanced_entities;
     uint32_t transparent_sort_overflow_entities;
     double scene_cpu_time_milliseconds;
     double scene_gpu_time_milliseconds;
@@ -222,6 +231,9 @@ typedef struct henka_opengl_renderer_state
     henka_opengl_transparent_sort_item transparent_sort_items[HENKA_OPENGL_TRANSPARENT_SORT_CAPACITY];
     size_t transparent_sort_count;
     bool transparent_sort_enabled;
+    GLuint instance_buffer;
+    bool instancing_available;
+    henka_opengl_instance_data instance_data[HENKA_OPENGL_INSTANCE_CAPACITY];
     henka_opengl_tool_window_target tool_targets[HENKA_MAX_TOOL_WINDOWS];
 } henka_opengl_renderer_state;
 
@@ -393,7 +405,10 @@ typedef struct henka_opengl_functions
     PFNGLBINDBUFFERPROC BindBuffer;
     PFNGLBUFFERDATAPROC BufferData;
     PFNGLENABLEVERTEXATTRIBARRAYPROC EnableVertexAttribArray;
+    PFNGLDISABLEVERTEXATTRIBARRAYPROC DisableVertexAttribArray;
     PFNGLVERTEXATTRIBPOINTERPROC VertexAttribPointer;
+    PFNGLVERTEXATTRIBDIVISORPROC VertexAttribDivisor;
+    PFNGLDRAWELEMENTSINSTANCEDPROC DrawElementsInstanced;
     PFNGLDELETEBUFFERSPROC DeleteBuffers;
     PFNGLDELETEVERTEXARRAYSPROC DeleteVertexArrays;
     PFNGLACTIVETEXTUREPROC ActiveTexture;
@@ -703,6 +718,15 @@ static bool henka_opengl_load_functions(void)
     HENKA_GL_LOAD(BindBuffer);
     HENKA_GL_LOAD(BufferData);
     HENKA_GL_LOAD(EnableVertexAttribArray);
+    {
+        SDL_FunctionPointer proc_address;
+        proc_address = SDL_GL_GetProcAddress("glDisableVertexAttribArray");
+        memcpy(&g_gl.DisableVertexAttribArray, &proc_address, sizeof(proc_address));
+        proc_address = SDL_GL_GetProcAddress("glVertexAttribDivisor");
+        memcpy(&g_gl.VertexAttribDivisor, &proc_address, sizeof(proc_address));
+        proc_address = SDL_GL_GetProcAddress("glDrawElementsInstanced");
+        memcpy(&g_gl.DrawElementsInstanced, &proc_address, sizeof(proc_address));
+    }
     HENKA_GL_LOAD(VertexAttribPointer);
     HENKA_GL_LOAD(DeleteBuffers);
     HENKA_GL_LOAD(DeleteVertexArrays);
@@ -1077,7 +1101,8 @@ static void henka_add_optional_shader_locations(
         "iblIrradianceMap", "iblPrefilterMap", "iblBrdfLut", "useIBL",
         "reflectionProbePosition", "reflectionProbeExtents", "useReflectionProbe",
         "reflectionProbeMap", "useReflectionProbeMap", "doubleSided",
-        "previousViewProjection", "previousModel", "useMotionVectors"
+        "previousViewProjection", "previousModel", "useMotionVectors",
+        "useInstancing"
     };
     size_t index;
 
@@ -3298,6 +3323,33 @@ henka_result henka_opengl_renderer_create(struct henka_renderer* renderer, struc
         HENKA_LOG_WARN("temporal history allocation failed; presentation will use the non-temporal path");
     }
 
+    state->instancing_available =
+        g_gl.DisableVertexAttribArray != NULL &&
+        g_gl.VertexAttribDivisor != NULL &&
+        g_gl.DrawElementsInstanced != NULL;
+    if (state->instancing_available)
+    {
+        g_gl.GenBuffers(1, &state->instance_buffer);
+        if (state->instance_buffer != 0U)
+        {
+            g_gl.BindBuffer(GL_ARRAY_BUFFER, state->instance_buffer);
+            g_gl.BufferData(
+                GL_ARRAY_BUFFER,
+                (GLsizeiptr)sizeof(state->instance_data),
+                NULL,
+                GL_STREAM_DRAW);
+            g_gl.BindBuffer(GL_ARRAY_BUFFER, 0U);
+            henka_opengl_memory_add_category(
+                state,
+                &state->tracked_render_target_bytes,
+                (uint64_t)sizeof(state->instance_data));
+        }
+        else
+        {
+            state->instancing_available = false;
+        }
+    }
+
     HENKA_LOG_INFO("renderer initialized with OpenGL backend");
     return HENKA_SUCCESS;
 }
@@ -3402,6 +3454,14 @@ void henka_opengl_renderer_destroy(struct henka_renderer* renderer)
         if (state->scene_gpu_query != 0U)
         {
             g_gl.DeleteQueries(1, &state->scene_gpu_query);
+        }
+        if (state->instance_buffer != 0U)
+        {
+            henka_opengl_memory_remove_category(
+                state,
+                &state->tracked_render_target_bytes,
+                (uint64_t)sizeof(state->instance_data));
+            g_gl.DeleteBuffers(1, &state->instance_buffer);
         }
     }
 
@@ -3975,6 +4035,162 @@ static void henka_opengl_capture_next_reflection_probe(
     }
 }
 
+static bool henka_opengl_material_batch_compatible(
+    const henka_material* a,
+    const henka_material* b)
+{
+    if (a == NULL || b == NULL)
+    {
+        return false;
+    }
+    return a->type == b->type &&
+        a->shader == b->shader &&
+        a->base_color_texture == b->base_color_texture &&
+        a->normal_texture == b->normal_texture &&
+        a->metallic_roughness_texture == b->metallic_roughness_texture &&
+        a->occlusion_texture == b->occlusion_texture &&
+        a->emissive_texture == b->emissive_texture &&
+        a->base_color_uv_set == b->base_color_uv_set &&
+        a->normal_uv_set == b->normal_uv_set &&
+        a->metallic_roughness_uv_set == b->metallic_roughness_uv_set &&
+        a->occlusion_uv_set == b->occlusion_uv_set &&
+        a->emissive_uv_set == b->emissive_uv_set &&
+        a->base_color.x == b->base_color.x &&
+        a->base_color.y == b->base_color.y &&
+        a->base_color.z == b->base_color.z &&
+        a->base_color.w == b->base_color.w &&
+        a->emissive_color.x == b->emissive_color.x &&
+        a->emissive_color.y == b->emissive_color.y &&
+        a->emissive_color.z == b->emissive_color.z &&
+        a->metallic == b->metallic &&
+        a->roughness == b->roughness &&
+        a->specular_factor == b->specular_factor &&
+        a->specular_color.x == b->specular_color.x &&
+        a->specular_color.y == b->specular_color.y &&
+        a->specular_color.z == b->specular_color.z &&
+        a->ior == b->ior &&
+        a->transmission == b->transmission &&
+        a->normal_scale == b->normal_scale &&
+        a->occlusion_strength == b->occlusion_strength &&
+        a->emissive_strength == b->emissive_strength &&
+        a->clearcoat == b->clearcoat &&
+        a->clearcoat_roughness == b->clearcoat_roughness &&
+        a->alpha_cutoff == b->alpha_cutoff &&
+        a->use_texture == b->use_texture &&
+        a->use_lighting == b->use_lighting &&
+        a->depth_test == b->depth_test &&
+        a->alpha_mode == b->alpha_mode &&
+        a->double_sided == b->double_sided &&
+        a->cast_shadows == b->cast_shadows &&
+        a->receive_shadows == b->receive_shadows &&
+        a->sheen_color.x == b->sheen_color.x &&
+        a->sheen_color.y == b->sheen_color.y &&
+        a->sheen_color.z == b->sheen_color.z &&
+        a->sheen_roughness == b->sheen_roughness;
+}
+
+static bool henka_opengl_scene_has_active_reflection_probe(const henka_scene* scene)
+{
+    size_t index;
+
+    if (scene == NULL)
+    {
+        return false;
+    }
+    for (index = 0U; index < HENKA_SCENE_MAX_REFLECTION_PROBES; ++index)
+    {
+        if (scene->reflection_probe_active[index] &&
+            scene->reflection_probes[index].enabled)
+        {
+            return true;
+        }
+    }
+    return false;
+}
+
+static bool henka_opengl_entity_can_join_instance_batch(
+    const henka_scene* scene,
+    const henka_scene_entity_record* current,
+    const henka_scene_entity_record* candidate,
+    size_t candidate_index,
+    henka_mesh* selected_mesh,
+    henka_mat4 view)
+{
+    if (scene == NULL || current == NULL || candidate == NULL ||
+        selected_mesh == NULL || !candidate->active || !candidate->visible ||
+        candidate->mesh != selected_mesh || candidate->lod.level_count != 0U ||
+        (candidate->flags & HENKA_SCENE_ENTITY_FLAG_HELPER) != 0U ||
+        candidate->material.alpha_mode == HENKA_MATERIAL_ALPHA_BLENDED ||
+        !henka_opengl_material_batch_compatible(&current->material, &candidate->material))
+    {
+        return false;
+    }
+    if (candidate->has_local_bounds)
+    {
+        henka_entity entity_id = henka_scene_get_entity_at_index(scene, candidate_index);
+        henka_bounds world_bounds;
+        if (entity_id != HENKA_INVALID_ENTITY &&
+            henka_scene_get_entity_world_bounds(scene, entity_id, &world_bounds) == HENKA_SUCCESS &&
+            !henka_opengl_bounds_in_camera(&scene->camera, view, world_bounds))
+        {
+            return false;
+        }
+    }
+    return true;
+}
+
+static void henka_opengl_prepare_instance_attributes(
+    henka_opengl_renderer_state* state,
+    const henka_opengl_mesh_data* mesh_data)
+{
+    unsigned int column;
+    if (state == NULL || mesh_data == NULL || state->instance_buffer == 0U)
+    {
+        return;
+    }
+    g_gl.BindVertexArray(mesh_data->vao);
+    g_gl.BindBuffer(GL_ARRAY_BUFFER, state->instance_buffer);
+    for (column = 0U; column < 4U; ++column)
+    {
+        GLuint model_location = 6U + column;
+        GLuint previous_location = 10U + column;
+        g_gl.EnableVertexAttribArray(model_location);
+        g_gl.VertexAttribPointer(
+            model_location,
+            4,
+            GL_FLOAT,
+            GL_FALSE,
+            (GLsizei)sizeof(henka_opengl_instance_data),
+            (const void*)(offsetof(henka_opengl_instance_data, model) + sizeof(float) * 4U * column));
+        g_gl.VertexAttribDivisor(model_location, 1U);
+        g_gl.EnableVertexAttribArray(previous_location);
+        g_gl.VertexAttribPointer(
+            previous_location,
+            4,
+            GL_FLOAT,
+            GL_FALSE,
+            (GLsizei)sizeof(henka_opengl_instance_data),
+            (const void*)(offsetof(henka_opengl_instance_data, previous_model) + sizeof(float) * 4U * column));
+        g_gl.VertexAttribDivisor(previous_location, 1U);
+    }
+}
+
+static void henka_opengl_reset_instance_attributes(
+    const henka_opengl_mesh_data* mesh_data)
+{
+    unsigned int location;
+    if (mesh_data == NULL)
+    {
+        return;
+    }
+    g_gl.BindVertexArray(mesh_data->vao);
+    for (location = 6U; location < 14U; ++location)
+    {
+        g_gl.VertexAttribDivisor(location, 0U);
+        g_gl.DisableVertexAttribArray(location);
+    }
+}
+
 henka_result henka_opengl_renderer_draw_scene(
     struct henka_renderer* renderer,
     const struct henka_scene* scene)
@@ -4078,6 +4294,8 @@ henka_result henka_opengl_renderer_draw_scene(
     state->scene_budget_dropped_entities = 0U;
     state->scene_lod_entities = 0U;
     state->scene_lod_fallback_entities = 0U;
+    state->scene_instanced_draw_calls = 0U;
+    state->scene_instanced_entities = 0U;
     for (index = 0U; index < HENKA_SCENE_MAX_LOCAL_LIGHTS; ++index)
     {
         const henka_scene_light_desc* light = &scene->local_lights[index];
@@ -4250,6 +4468,7 @@ henka_result henka_opengl_renderer_draw_scene(
         bool use_reflection_probe;
         uint32_t reflection_probe_index = UINT32_MAX;
         bool use_reflection_probe_map;
+        size_t instance_count = 1U;
 
         entity = &scene->entities[draw_index];
         if (!entity->active ||
@@ -4444,6 +4663,37 @@ henka_result henka_opengl_renderer_draw_scene(
             henka_transform_to_mat4(entity->transform);
         previous_model = entity->previous_transform_valid ?
             henka_transform_to_mat4(entity->previous_transform) : model;
+        if (state->instancing_available &&
+            pass == 0U &&
+            entity->lod.level_count == 0U &&
+            (entity->flags & HENKA_SCENE_ENTITY_FLAG_HELPER) == 0U &&
+            entity->material.alpha_mode != HENKA_MATERIAL_ALPHA_BLENDED &&
+            !henka_opengl_scene_has_active_reflection_probe(scene) &&
+            henka_opengl_shader_uniform_location(program, shader_data, "useInstancing") >= 0)
+        {
+            state->instance_data[0U].model = model;
+            state->instance_data[0U].previous_model = previous_model;
+            while (instance_count < HENKA_OPENGL_INSTANCE_CAPACITY &&
+                   instance_count < scene->entity_capacity - draw_index &&
+                   henka_opengl_entity_can_join_instance_batch(
+                       scene,
+                       entity,
+                       &scene->entities[draw_index + instance_count],
+                       draw_index + instance_count,
+                       selected_mesh,
+                       view))
+            {
+                const henka_scene_entity_record* candidate =
+                    &scene->entities[draw_index + instance_count];
+                state->instance_data[instance_count].model =
+                    henka_transform_to_mat4(candidate->transform);
+                state->instance_data[instance_count].previous_model =
+                    candidate->previous_transform_valid ?
+                    henka_transform_to_mat4(candidate->previous_transform) :
+                    state->instance_data[instance_count].model;
+                ++instance_count;
+            }
+        }
         g_gl.UseProgram(program);
 #define henka_set_uniform_mat4(program_value, name_value, value_value) \
     henka_set_uniform_mat4_owned(program_value, shader_data, name_value, value_value)
@@ -4484,6 +4734,7 @@ henka_result henka_opengl_renderer_draw_scene(
             shader_data,
             "useMotionVectors",
             rendered && !helper_entity && state->previous_view_projection_valid);
+        henka_set_uniform_bool_owned(program, shader_data, "useInstancing", false);
         henka_set_uniform_mat4(program, "lightMatrix", light_matrix);
         henka_set_uniform_mat4(program, "cascadeShadowMatrix", cascade_shadow_matrix);
         henka_set_uniform_mat4(program, "localShadowMatrix", local_shadow_matrix);
@@ -4738,14 +4989,41 @@ henka_result henka_opengl_renderer_draw_scene(
         glBindTexture(GL_TEXTURE_CUBE_MAP,
             rendered && point_shadow_light_index >= 0 ? state->point_shadow_depth_texture : 0U);
         g_gl.ActiveTexture(GL_TEXTURE0);
-        g_gl.BindVertexArray(mesh_data->vao);
-        glDrawElements(
-            mesh_data->primitive_mode,
-            mesh_data->index_count,
-            GL_UNSIGNED_INT,
-            0);
+        if (instance_count > 1U)
+        {
+            g_gl.BindBuffer(GL_ARRAY_BUFFER, state->instance_buffer);
+            g_gl.BufferData(
+                GL_ARRAY_BUFFER,
+                (GLsizeiptr)(instance_count * sizeof(state->instance_data[0])),
+                state->instance_data,
+                GL_STREAM_DRAW);
+            henka_opengl_prepare_instance_attributes(state, mesh_data);
+            henka_set_uniform_bool_owned(program, shader_data, "useInstancing", true);
+            g_gl.DrawElementsInstanced(
+                mesh_data->primitive_mode,
+                mesh_data->index_count,
+                GL_UNSIGNED_INT,
+                0,
+                (GLsizei)instance_count);
+            henka_opengl_reset_instance_attributes(mesh_data);
+            state->scene_instanced_draw_calls += 1U;
+            state->scene_instanced_entities += (uint32_t)instance_count;
+        }
+        else
+        {
+            g_gl.BindVertexArray(mesh_data->vao);
+            glDrawElements(
+                mesh_data->primitive_mode,
+                mesh_data->index_count,
+                GL_UNSIGNED_INT,
+                0);
+        }
         state->scene_draw_calls += 1U;
-        state->scene_visible_entities += 1U;
+        state->scene_visible_entities += (uint32_t)instance_count;
+        if (pass == 0U && instance_count > 1U)
+        {
+            index += instance_count - 1U;
+        }
         }
     }
 
@@ -4829,6 +5107,8 @@ void henka_opengl_renderer_get_scene_diagnostics(
     uint32_t* out_budget_dropped_entities,
     uint32_t* out_lod_entities,
     uint32_t* out_lod_fallback_entities,
+    uint32_t* out_instanced_draw_calls,
+    uint32_t* out_instanced_entities,
     uint32_t* out_transparent_sort_overflow_entities,
     double* out_cpu_time_milliseconds,
     double* out_gpu_time_milliseconds,
@@ -4861,6 +5141,14 @@ void henka_opengl_renderer_get_scene_diagnostics(
     if (out_lod_fallback_entities != NULL)
     {
         *out_lod_fallback_entities = state != NULL ? state->scene_lod_fallback_entities : 0U;
+    }
+    if (out_instanced_draw_calls != NULL)
+    {
+        *out_instanced_draw_calls = state != NULL ? state->scene_instanced_draw_calls : 0U;
+    }
+    if (out_instanced_entities != NULL)
+    {
+        *out_instanced_entities = state != NULL ? state->scene_instanced_entities : 0U;
     }
     if (out_transparent_sort_overflow_entities != NULL)
     {

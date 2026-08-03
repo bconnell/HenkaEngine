@@ -47,6 +47,7 @@ Henka Engine is still early, but the sandbox now renders a visible 3D scene with
 - Checked KTX2/Basis texture loading with active-OpenGL capability-selected BC/ETC2/ASTC mip uploads and truthful RGBA8 fallback when compressed upload is unavailable
 - Texture objects report exact resident GPU bytes and mip counts; manager-owned KTX2 textures support synchronous transactional top-mip replacement, a bounded coalescing residency request queue, deterministic largest-texture trim-to-budget, and fail-closed residency/eviction diagnostics, while background I/O streaming remains unfinished
 - Scene rendering exposes bounded distance-based LOD selection, frustum culling, draw budgets, and LOD fallback diagnostics; LOD selection does not claim texture residency or streaming
+- Scene rendering batches contiguous opaque or masked entities with identical mesh and material state through a fixed 256-instance OpenGL upload buffer when the optional instancing contract is available; probe-bearing, LOD-bearing, blended, incompatible, and unsupported-shader submissions fall back to ordinary draws, with instance counts exposed in diagnostics
 - Bounded realism validation materials and scene samples covering metal, clearcoat, plastic, stone, sheen, wood, wet/dry variation, detail normals, and masked foliage
 - Descriptor-aware RGBA8 textures with explicit sRGB/linear, sampler, wrap, mip, flip, usage, alpha, source-class, and content-revision metadata
 - Bounded single-read texture decoding with truthful rejection of HDR and 16-bit sources, plus path-specific white/error fallback aliases
@@ -80,7 +81,7 @@ Henka Engine is still early, but the sandbox now renders a visible 3D scene with
 - Full 2.5D sprite, layered-depth, parallax, animation, and constrained-movement workflow
 - Integrated modeling, UV, rigging, animation-authoring, and content-creation workspace
 - Additional renderer backends
-- Complete cross-backend KTX2/Basis production coverage and GPU-native stress validation, background texture streaming and automatic policy eviction, production instancing, SSR, motion-vector TAA, and full refraction/volume/glass rendering remain unfinished; the current glTF transmission factor uses a bounded environment response. Current paths expose truthful fallbacks or bounded foundations
+- Complete cross-backend KTX2/Basis production coverage and GPU-native stress validation, background texture streaming and automatic policy eviction, broader instancing/batching/occlusion scale work, SSR, motion-vector TAA, and full refraction/volume/glass rendering remain unfinished; the current glTF transmission factor uses a bounded environment response. Current paths expose truthful fallbacks or bounded foundations
 
 ## Repository layout
 
