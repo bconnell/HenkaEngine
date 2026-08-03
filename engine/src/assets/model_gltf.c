@@ -1214,6 +1214,7 @@ static bool henka_gltf_parse_scene_materials(
 {
     if (material_index < 0) return true;
     if ((size_t)material_index >= HENKA_MODEL_MAX_SCENE_ITEMS) return false;
+    if (scene->material_present[material_index]) return true;
     scene->material_present[material_index] = true;
     if ((size_t)(material_index + 1) > scene->material_count) scene->material_count = (size_t)material_index + 1U;
     if (!henka_gltf_parse_material(context, primitive, primitive_end, &scene->materials[material_index])) return false;

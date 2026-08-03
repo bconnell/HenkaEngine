@@ -101,7 +101,9 @@ static void henka_test_gltf_scene_import(void)
     char* selected_roots;
     char* root_value;
     size_t scene_length;
+    size_t allocations_before_scene;
 
+    allocations_before_scene = henka_memory_get_allocation_count();
     memset(&scene, 0, sizeof(scene));
     HENKA_TEST_ASSERT(henka_model_scene_data_load_gltf_from_memory(
         scene_gltf, strlen(scene_gltf), "scene.gltf", &scene) == HENKA_SUCCESS);
@@ -121,6 +123,7 @@ static void henka_test_gltf_scene_import(void)
     HENKA_TEST_ASSERT(scene.light_count == 1U);
     HENKA_TEST_ASSERT(scene.lights[0].type == HENKA_MODEL_SCENE_LIGHT_POINT);
     henka_model_scene_data_destroy(&scene);
+    HENKA_TEST_ASSERT(henka_memory_get_allocation_count() == allocations_before_scene);
 
     memset(&scene, 0, sizeof(scene));
     HENKA_TEST_ASSERT(henka_model_scene_data_load_gltf_from_memory(
