@@ -372,3 +372,5 @@ The legacy wireframe API remains compatible: enabling it selects Wireframe, whil
 Material instances layer validated scalar, vector, alpha-mode, and semantic-texture overrides over the shared glTF material definition. Effective dependency inspection reports the borrowed texture slots after those overrides, while revision-aware refresh preserves explicit instance choices across transactional definition reimport.
 
 Temporal history allocation validates the replacement texture before retiring the previous object. If a resize or texture allocation fails, the previous GPU object remains owned, accumulation is marked invalid for the requested viewport, and diagnostics report the fallback instead of presenting stale history as valid.
+
+The bounded AO horizon search now applies a depth-agreement edge confidence to suppress haloing across discontinuities while retaining the existing radius, thickness, falloff, bias, and intensity controls. Temporal AO history, multi-frame denoise, and production GTAO validation remain unfinished.
