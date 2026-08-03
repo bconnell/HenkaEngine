@@ -1073,7 +1073,7 @@ static void henka_add_optional_shader_locations(
         "iblIrradianceMap", "iblPrefilterMap", "iblBrdfLut", "useIBL",
         "reflectionProbePosition", "reflectionProbeExtents", "useReflectionProbe",
         "reflectionProbeMap", "useReflectionProbeMap", "doubleSided",
-        "previousViewProjection", "useMotionVectors"
+        "previousViewProjection", "previousModel", "useMotionVectors"
     };
     size_t index;
 
@@ -4204,6 +4204,7 @@ henka_result henka_opengl_renderer_draw_scene(
         bool use_lighting;
         bool use_texture;
         henka_mat4 model;
+        henka_mat4 previous_model;
         henka_bounds world_bounds;
         henka_entity entity_id = HENKA_INVALID_ENTITY;
         henka_mesh* selected_mesh;
@@ -4407,6 +4408,8 @@ henka_result henka_opengl_renderer_draw_scene(
 
         model =
             henka_transform_to_mat4(entity->transform);
+        previous_model = entity->previous_transform_valid ?
+            henka_transform_to_mat4(entity->previous_transform) : model;
         g_gl.UseProgram(program);
 #define henka_set_uniform_mat4(program_value, name_value, value_value) \
     henka_set_uniform_mat4_owned(program_value, shader_data, name_value, value_value)
@@ -4437,6 +4440,11 @@ henka_result henka_opengl_renderer_draw_scene(
             shader_data,
             "previousViewProjection",
             state->previous_view_projection);
+        henka_set_uniform_mat4_owned(
+            program,
+            shader_data,
+            "previousModel",
+            previous_model);
         henka_set_uniform_bool_owned(
             program,
             shader_data,
@@ -4764,6 +4772,15 @@ henka_result henka_opengl_renderer_draw_scene(
     glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
     if (!state->reflection_probe_capture_active)
     {
+        for (index = 0U; index < scene->entity_capacity; ++index)
+        {
+            henka_scene_entity_record* entity = &scene->entities[index];
+            if (entity->active)
+            {
+                entity->previous_transform = entity->transform;
+                entity->previous_transform_valid = true;
+            }
+        }
         state->previous_view_projection = current_view_projection;
         state->previous_view_projection_valid = true;
     }

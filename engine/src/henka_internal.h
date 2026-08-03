@@ -174,6 +174,8 @@ typedef struct henka_scene_entity_record
     char* name;
     char* tag;
     henka_transform transform;
+    henka_transform previous_transform;
+    bool previous_transform_valid;
     henka_mesh* mesh;
     henka_scene_lod_desc lod;
     henka_material material;

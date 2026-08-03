@@ -14,6 +14,7 @@ uniform mat4 lightMatrix;
 uniform mat4 cascadeShadowMatrix;
 uniform mat4 localShadowMatrix;
 uniform mat4 previousViewProjection;
+uniform mat4 previousModel;
 
 out vec3 fragNormal;
 out vec3 fragWorldPosition;
@@ -43,6 +44,6 @@ void main()
     fragCascadeShadowPosition = cascadeShadowMatrix * worldPosition;
     fragLocalShadowPosition = localShadowMatrix * worldPosition;
     fragCurrentClipPosition = projection * view * worldPosition;
-    fragPreviousClipPosition = previousViewProjection * worldPosition;
+    fragPreviousClipPosition = previousViewProjection * previousModel * vec4(inPosition, 1.0);
     gl_Position = fragCurrentClipPosition;
 }

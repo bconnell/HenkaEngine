@@ -592,6 +592,8 @@ static henka_result henka_scene_grow(henka_scene* scene)
         new_entities[index].name = NULL;
         new_entities[index].tag = NULL;
         new_entities[index].transform = henka_transform_identity();
+        new_entities[index].previous_transform = henka_transform_identity();
+        new_entities[index].previous_transform_valid = false;
         new_entities[index].mesh = NULL;
         new_entities[index].material = henka_material_default();
         new_entities[index].material_name = NULL;
@@ -696,6 +698,8 @@ henka_entity henka_scene_create_entity_named(henka_scene* scene, const char* nam
             scene->entities[index].visible = true;
             scene->entities[index].flags = HENKA_SCENE_ENTITY_FLAG_NONE;
             scene->entities[index].transform = henka_transform_identity();
+            scene->entities[index].previous_transform = henka_transform_identity();
+            scene->entities[index].previous_transform_valid = false;
             scene->entities[index].mesh = NULL;
             scene->entities[index].lod = (henka_scene_lod_desc){0};
             scene->entities[index].material = henka_material_default();
@@ -736,6 +740,8 @@ henka_entity henka_scene_create_entity_named(henka_scene* scene, const char* nam
     scene->entities[scene->entity_count].visible = true;
     scene->entities[scene->entity_count].flags = HENKA_SCENE_ENTITY_FLAG_NONE;
     scene->entities[scene->entity_count].transform = henka_transform_identity();
+    scene->entities[scene->entity_count].previous_transform = henka_transform_identity();
+    scene->entities[scene->entity_count].previous_transform_valid = false;
     scene->entities[scene->entity_count].lod = (henka_scene_lod_desc){0};
     scene->entities[scene->entity_count].material = henka_material_default();
     scene->entities[scene->entity_count].has_local_bounds = false;
