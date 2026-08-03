@@ -1636,6 +1636,7 @@ static henka_result henka_opengl_create_temporal_history(
 {
     GLuint texture = 0U;
     GLint previous_texture = 0;
+    GLenum texture_error;
 
     if (state == NULL || width <= 0 || height <= 0 || width > 8192 || height > 8192)
     {
@@ -1653,8 +1654,21 @@ static henka_result henka_opengl_create_temporal_history(
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    while (glGetError() != GL_NO_ERROR) {}
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
+    texture_error = glGetError();
     glBindTexture(GL_TEXTURE_2D, (GLuint)previous_texture);
+    if (texture_error != GL_NO_ERROR)
+    {
+        glDeleteTextures(1, &texture);
+        state->temporal_history_valid = false;
+        state->temporal_fallback_active = true;
+        (void)snprintf(
+            state->temporal_invalidation_reason,
+            sizeof(state->temporal_invalidation_reason),
+            "history allocation failed");
+        return HENKA_ERROR_RENDERER;
+    }
     henka_opengl_delete_temporal_history(state);
     state->temporal_history_texture = texture;
     state->temporal_history_width = width;

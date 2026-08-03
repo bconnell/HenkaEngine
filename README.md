@@ -84,6 +84,7 @@ Henka Engine is still early, but the sandbox now renders a visible 3D scene with
 - Integrated modeling, UV, rigging, animation-authoring, and content-creation workspace
 - Additional renderer backends
 - Complete cross-backend KTX2/Basis production coverage and GPU-native stress validation, background texture streaming and automatic policy eviction, broader instancing/batching/occlusion scale work, and full refraction/layered-volume/glass rendering remain unfinished. Rendered now has a bounded depth-derived screen-space reflection attempt with thickness, maximum-distance, roughness, confidence, edge-fade, and miss handling when derived IBL resources are ready; scenes without IBL, unsupported materials, missed rays, and out-of-view rays use the existing environment/analytical fallback. glTF transmission and volume attenuation use bounded environment responses. Temporal fallback state, invalidation count/reason, reactive-mask support, and bounded sharpening are exposed, but production TAA still requires the documented visual validation cases. Current paths expose truthful fallbacks or bounded foundations
+- Temporal history replacement is fail-closed: a failed new history allocation retains the previous GPU object but disables accumulation for the requested viewport and reports the fallback state. Production temporal visual validation remains unfinished.
 
 ## Repository layout
 
