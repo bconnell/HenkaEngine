@@ -187,6 +187,14 @@ void henka_test_model(void)
         "\"bufferViews\":[{\"buffer\":0,\"byteLength\":36}],"
         "\"accessors\":[{\"bufferView\":0,\"componentType\":5126,\"count\":3,\"type\":\"VEC3\"}],"
         "\"meshes\":[{\"primitives\":[]}]}";
+    static const char* invalid_gltf_unused_bad_stride =
+        "{\"asset\":{\"version\":\"2.0\"},"
+        "\"buffers\":[{\"uri\":\"data:application/octet-stream;base64,"
+        "AAAAAAAAAAAAAAAAAACAPwAAAAAAAAAAAAAAAAAAgD8AAAAA\",\"byteLength\":36}],"
+        "\"bufferViews\":[{\"buffer\":0,\"byteLength\":36},{\"buffer\":0,\"byteLength\":36,\"byteStride\":2}],"
+        "\"accessors\":[{\"bufferView\":0,\"componentType\":5126,\"count\":3,\"type\":\"VEC3\"},"
+        "{\"bufferView\":1,\"componentType\":5126,\"count\":3,\"type\":\"VEC3\"}],"
+        "\"meshes\":[{\"primitives\":[{\"attributes\":{\"POSITION\":0}}]}]}";
     static const char* valid_gltf_material =
         "{\"asset\":{\"version\":\"2.0\"},\"extensionsUsed\":[\"KHR_texture_basisu\"],"
         "\"buffers\":[{\"uri\":\"data:application/octet-stream;base64,"
@@ -325,6 +333,13 @@ void henka_test_model(void)
     HENKA_TEST_ASSERT(henka_model_data_load_gltf_from_memory(
         invalid_gltf_empty_mesh, strlen(invalid_gltf_empty_mesh),
         "empty-mesh.gltf", &model) != HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(model.vertices == NULL && model.indices == NULL);
+    henka_model_data_destroy(&model);
+
+    memset(&model, 0, sizeof(model));
+    HENKA_TEST_ASSERT(henka_model_data_load_gltf_from_memory(
+        invalid_gltf_unused_bad_stride, strlen(invalid_gltf_unused_bad_stride),
+        "unused-bad-stride.gltf", &model) != HENKA_SUCCESS);
     HENKA_TEST_ASSERT(model.vertices == NULL && model.indices == NULL);
     henka_model_data_destroy(&model);
 

@@ -642,7 +642,18 @@ static bool henka_gltf_parse_accessors(henka_gltf_context* context)
         { const char* value; const char* value_end; if (henka_gltf_find_member(item, item_end, "bufferView", &value, &value_end) && !henka_gltf_member_int(item, item_end, "bufferView", &accessor->buffer_view)) return false; }
         { const char* value; const char* value_end; if (henka_gltf_find_member(item, item_end, "byteOffset", &value, &value_end) && !henka_gltf_size_number(value, value_end, &accessor->byte_offset)) return false; }
         { const char* value; const char* value_end; if (henka_gltf_find_member(item, item_end, "normalized", &value, &value_end)) accessor->normalized = strncmp(henka_gltf_skip_space(value, value_end), "true", 4U) == 0; }
-        if (accessor->buffer_view >= 0 && (size_t)accessor->buffer_view >= context->view_count) return false;
+        if (accessor->buffer_view >= 0)
+        {
+            size_t component_size = henka_gltf_component_size(accessor->component_type);
+            size_t element_size;
+            const henka_gltf_buffer_view* view;
+            if ((size_t)accessor->buffer_view >= context->view_count ||
+                !henka_checked_size_multiply(component_size, (size_t)accessor->component_count, &element_size)) return false;
+            view = &context->views[accessor->buffer_view];
+            if (accessor->byte_offset % component_size != 0U ||
+                (view->byte_stride != 0U && (view->byte_stride < element_size ||
+                    view->byte_stride > 252U || view->byte_stride % 4U != 0U))) return false;
+        }
     }
     context->accessor_count = index;
     return index > 0U && index < HENKA_MAX_GLTF_ARRAY_ITEMS;

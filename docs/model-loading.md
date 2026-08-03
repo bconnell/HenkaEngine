@@ -108,7 +108,8 @@ Inputs outside these limits fail without returning a partial model.
 glTF/GLB input is also bounded: the aggregate source or container is limited
 to 64 MiB, JSON arrays are limited to 256 entries per supported table, JSON
 nesting is limited, buffer views must remain inside their declared buffers,
-accessor strides and component types are checked, and output remains bounded
+accessor alignment, strides, and component types are checked against the
+accessor element size, and output remains bounded
 by the renderer mesh-element limit. Position, normal, and tangent accessors
 must use their required float shapes; UV and color integer accessors must be
 normalized; and index accessors must be scalar unsigned byte, unsigned short,
