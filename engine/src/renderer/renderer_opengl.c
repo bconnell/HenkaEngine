@@ -177,6 +177,12 @@ typedef struct henka_opengl_renderer_state
     uint64_t shadow_generation;
     bool shadow_framebuffer_complete;
     char shadow_failure_reason[64];
+    GLuint local_shadow_framebuffer;
+    GLuint local_shadow_depth_texture;
+    int local_shadow_resolution;
+    uint64_t local_shadow_generation;
+    bool local_shadow_framebuffer_complete;
+    char local_shadow_failure_reason[64];
     uint32_t scene_draw_calls;
     uint32_t scene_visible_entities;
     uint32_t scene_culled_entities;
@@ -1014,6 +1020,7 @@ static bool henka_validate_shader_contract(
         "specularFactor", "specularColor", "ior",
         "clearcoat", "clearcoatRoughness", "sheenColor", "sheenRoughness",
         "alphaMode", "alphaCutoff", "shadowMap", "useShadowMap",
+        "localShadowMap", "useLocalShadowMap", "localShadowMatrix",
         "environmentTexture", "useEnvironmentTexture", "environmentRotation",
         "localLightCount", "localLightPositionRange[0]",
         "localLightColorIntensity[0]", "localLightDirectionInner[0]",
@@ -1975,6 +1982,36 @@ static void henka_opengl_delete_shadow_target(henka_opengl_renderer_state* state
     state->shadow_framebuffer_complete = false;
 }
 
+static void henka_opengl_delete_local_shadow_target(henka_opengl_renderer_state* state)
+{
+    uint64_t target_bytes = 0U;
+
+    if (state != NULL && state->local_shadow_resolution > 0)
+    {
+        target_bytes = (uint64_t)state->local_shadow_resolution *
+            (uint64_t)state->local_shadow_resolution * 4U;
+        henka_opengl_memory_remove_category(
+            state,
+            &state->tracked_render_target_bytes,
+            target_bytes);
+    }
+    if (state != NULL && state->local_shadow_depth_texture != 0U)
+    {
+        glDeleteTextures(1, &state->local_shadow_depth_texture);
+    }
+    if (state != NULL && state->local_shadow_framebuffer != 0U)
+    {
+        g_gl.DeleteFramebuffers(1, &state->local_shadow_framebuffer);
+    }
+    if (state != NULL)
+    {
+        state->local_shadow_depth_texture = 0U;
+        state->local_shadow_framebuffer = 0U;
+        state->local_shadow_resolution = 0;
+        state->local_shadow_framebuffer_complete = false;
+    }
+}
+
 static henka_result henka_opengl_create_hdr_target(
     henka_opengl_renderer_state* state,
     int width,
@@ -2149,6 +2186,85 @@ static henka_result henka_opengl_create_shadow_target(
             &state->tracked_render_target_bytes,
             target_bytes);
     }
+    return HENKA_SUCCESS;
+}
+
+static henka_result henka_opengl_create_local_shadow_target(
+    henka_opengl_renderer_state* state,
+    int resolution)
+{
+    GLuint depth_texture = 0U;
+    GLuint framebuffer = 0U;
+    GLint previous_framebuffer = 0;
+    GLint previous_texture = 0;
+    GLint previous_draw_buffer = 0;
+    GLint previous_read_buffer = 0;
+
+    if (state == NULL || resolution <= 0 || resolution > 2048)
+    {
+        if (state != NULL)
+        {
+            (void)snprintf(state->local_shadow_failure_reason,
+                sizeof(state->local_shadow_failure_reason),
+                "local shadow resolution exceeds limit");
+        }
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    glGetIntegerv(GL_FRAMEBUFFER_BINDING, &previous_framebuffer);
+    glGetIntegerv(GL_TEXTURE_BINDING_2D, &previous_texture);
+    glGetIntegerv(GL_DRAW_BUFFER, &previous_draw_buffer);
+    glGetIntegerv(GL_READ_BUFFER, &previous_read_buffer);
+    g_gl.GenFramebuffers(1, &framebuffer);
+    glGenTextures(1, &depth_texture);
+    if (framebuffer == 0U || depth_texture == 0U)
+    {
+        if (depth_texture != 0U) glDeleteTextures(1, &depth_texture);
+        if (framebuffer != 0U) g_gl.DeleteFramebuffers(1, &framebuffer);
+        (void)snprintf(state->local_shadow_failure_reason,
+            sizeof(state->local_shadow_failure_reason),
+            "local shadow GPU allocation failed");
+        return HENKA_ERROR_RENDERER;
+    }
+    g_gl.BindFramebuffer(GL_FRAMEBUFFER, framebuffer);
+    glBindTexture(GL_TEXTURE_2D, depth_texture);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT24, resolution, resolution, 0,
+        GL_DEPTH_COMPONENT, GL_UNSIGNED_INT, NULL);
+    g_gl.FramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, depth_texture, 0);
+    glDrawBuffer(GL_NONE);
+    glReadBuffer(GL_NONE);
+    if (g_gl.CheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
+    {
+        (void)snprintf(state->local_shadow_failure_reason,
+            sizeof(state->local_shadow_failure_reason),
+            "incomplete local shadow framebuffer");
+        g_gl.BindFramebuffer(GL_FRAMEBUFFER, (GLuint)previous_framebuffer);
+        glBindTexture(GL_TEXTURE_2D, (GLuint)previous_texture);
+        glDrawBuffer((GLenum)previous_draw_buffer);
+        glReadBuffer((GLenum)previous_read_buffer);
+        glDeleteTextures(1, &depth_texture);
+        g_gl.DeleteFramebuffers(1, &framebuffer);
+        return HENKA_ERROR_RENDERER;
+    }
+    g_gl.BindFramebuffer(GL_FRAMEBUFFER, (GLuint)previous_framebuffer);
+    glBindTexture(GL_TEXTURE_2D, (GLuint)previous_texture);
+    glDrawBuffer((GLenum)previous_draw_buffer);
+    glReadBuffer((GLenum)previous_read_buffer);
+    henka_opengl_delete_local_shadow_target(state);
+    state->local_shadow_framebuffer = framebuffer;
+    state->local_shadow_depth_texture = depth_texture;
+    state->local_shadow_resolution = resolution;
+    state->local_shadow_generation = state->local_shadow_generation == UINT64_MAX ?
+        1U : state->local_shadow_generation + 1U;
+    state->local_shadow_framebuffer_complete = true;
+    state->local_shadow_failure_reason[0] = '\0';
+    henka_opengl_memory_add_category(
+        state,
+        &state->tracked_render_target_bytes,
+        (uint64_t)resolution * (uint64_t)resolution * 4U);
     return HENKA_SUCCESS;
 }
 
@@ -2470,20 +2586,48 @@ static henka_mat4 henka_opengl_get_light_matrix(const henka_scene* scene)
         henka_mat4_look_at(eye, target, up));
 }
 
+static henka_mat4 henka_opengl_get_spot_light_matrix(const henka_scene_light_desc* light)
+{
+    henka_vec3 direction;
+    henka_vec3 up;
+    float outer_cosine;
+    float field_of_view;
+    float range;
+
+    if (light == NULL)
+    {
+        return henka_mat4_identity();
+    }
+    direction = henka_vec3_normalize(light->direction);
+    up = fabsf(direction.y) > 0.94f ?
+        (henka_vec3){1.0f, 0.0f, 0.0f} :
+        (henka_vec3){0.0f, 1.0f, 0.0f};
+    outer_cosine = fmaxf(-0.999f, fminf(0.999f, light->outer_cone_cosine));
+    field_of_view = fmaxf(0.35f, fminf(2.4f, 2.0f * acosf(outer_cosine) + 0.08f));
+    range = fmaxf(0.1f, fminf(light->range, 10000.0f));
+    return henka_mat4_multiply(
+        henka_mat4_perspective(field_of_view, 1.0f, 0.1f, range),
+        henka_mat4_look_at(
+            light->position,
+            henka_vec3_add(light->position, direction),
+            up));
+}
+
 static void henka_opengl_draw_shadow_pass(
     henka_opengl_renderer_state* state,
     const henka_scene* scene,
-    henka_mat4 light_matrix)
+    henka_mat4 light_matrix,
+    GLuint framebuffer,
+    int resolution)
 {
     size_t index;
 
-    if (state->shadow_framebuffer == 0U || state->shadow_program == 0U ||
-        !state->shadow_framebuffer_complete)
+    if (framebuffer == 0U || resolution <= 0 || state->shadow_program == 0U)
     {
         return;
     }
-    g_gl.BindFramebuffer(GL_FRAMEBUFFER, state->shadow_framebuffer);
-    glViewport(0, 0, state->shadow_resolution, state->shadow_resolution);
+    g_gl.BindFramebuffer(GL_FRAMEBUFFER, framebuffer);
+    glViewport(0, 0, resolution, resolution);
     glClear(GL_DEPTH_BUFFER_BIT);
     glEnable(GL_DEPTH_TEST);
     glEnable(GL_CULL_FACE);
@@ -2773,12 +2917,14 @@ henka_result henka_opengl_renderer_create(struct henka_renderer* renderer, struc
             state,
             renderer->scene_viewport.width,
             renderer->scene_viewport.height) != HENKA_SUCCESS ||
-        henka_opengl_create_shadow_target(state, 1024) != HENKA_SUCCESS)
+        henka_opengl_create_shadow_target(state, 1024) != HENKA_SUCCESS ||
+        henka_opengl_create_local_shadow_target(state, 512) != HENKA_SUCCESS)
     {
         henka_opengl_delete_hdr_target(state);
         henka_opengl_delete_bloom_target(state);
         henka_opengl_delete_temporal_history(state);
         henka_opengl_delete_shadow_target(state);
+        henka_opengl_delete_local_shadow_target(state);
         henka_opengl_delete_ibl_resources(state);
         henka_opengl_delete_reflection_probe_resources(state);
         if (state->shadow_program != 0U) g_gl.DeleteProgram(state->shadow_program);
@@ -2855,6 +3001,7 @@ void henka_opengl_renderer_destroy(struct henka_renderer* renderer)
         henka_opengl_delete_bloom_target(state);
         henka_opengl_delete_temporal_history(state);
         henka_opengl_delete_shadow_target(state);
+        henka_opengl_delete_local_shadow_target(state);
         henka_opengl_delete_ibl_resources(state);
         henka_opengl_delete_reflection_probe_resources(state);
         if (state->tone_program != 0U)
@@ -3492,6 +3639,7 @@ henka_result henka_opengl_renderer_draw_scene(
         {0.24f, 0.26f, 0.30f};
     henka_mat4 projection;
     henka_mat4 light_matrix;
+    henka_mat4 local_shadow_matrix;
     henka_mat4 current_view_projection;
     henka_viewport_render_policy policy;
     henka_opengl_renderer_state* state;
@@ -3505,6 +3653,7 @@ henka_result henka_opengl_renderer_draw_scene(
     float local_light_direction_inner[HENKA_SCENE_MAX_LOCAL_LIGHTS * 4U] = {0.0f};
     float local_light_outer_type[HENKA_SCENE_MAX_LOCAL_LIGHTS * 4U] = {0.0f};
     int local_light_count = 0;
+    int local_shadow_light_index = -1;
     Uint64 cpu_start_ticks;
     bool gpu_query_active = false;
 
@@ -3577,12 +3726,35 @@ henka_result henka_opengl_renderer_draw_scene(
         local_light_direction_inner[local_light_count * 4U + 3U] = light->inner_cone_cosine;
         local_light_outer_type[local_light_count * 4U + 0U] = light->outer_cone_cosine;
         local_light_outer_type[local_light_count * 4U + 1U] = light->type == HENKA_SCENE_LIGHT_SPOT ? 1.0f : 0.0f;
+        if (local_shadow_light_index < 0 && light->type == HENKA_SCENE_LIGHT_SPOT)
+        {
+            local_shadow_light_index = local_light_count;
+        }
         ++local_light_count;
     }
 
     rendered = henka_renderer_get_viewport_shading_mode(renderer) ==
         HENKA_VIEWPORT_SHADING_RENDERED;
     light_matrix = henka_opengl_get_light_matrix(scene);
+    local_shadow_matrix = henka_mat4_identity();
+    if (local_shadow_light_index >= 0)
+    {
+        size_t shadow_index = 0U;
+        for (; shadow_index < HENKA_SCENE_MAX_LOCAL_LIGHTS; ++shadow_index)
+        {
+            const henka_scene_light_desc* light = &scene->local_lights[shadow_index];
+            if (scene->local_light_active[shadow_index] && light->enabled &&
+                light->type == HENKA_SCENE_LIGHT_SPOT)
+            {
+                local_shadow_matrix = henka_opengl_get_spot_light_matrix(light);
+                break;
+            }
+        }
+    }
+    if (local_shadow_light_index >= 0)
+    {
+        local_light_outer_type[local_shadow_light_index * 4U + 2U] = 1.0f;
+    }
     if (policy.use_hdr_presentation && !state->reflection_probe_capture_active)
     {
         henka_viewport scene_viewport = henka_renderer_get_scene_viewport(renderer);
@@ -3594,7 +3766,15 @@ henka_result henka_opengl_renderer_draw_scene(
         }
         if (rendered)
         {
-            henka_opengl_draw_shadow_pass(state, scene, light_matrix);
+            henka_opengl_draw_shadow_pass(
+                state, scene, light_matrix,
+                state->shadow_framebuffer, state->shadow_resolution);
+            if (local_shadow_light_index >= 0 && state->local_shadow_framebuffer_complete)
+            {
+                henka_opengl_draw_shadow_pass(
+                    state, scene, local_shadow_matrix,
+                    state->local_shadow_framebuffer, state->local_shadow_resolution);
+            }
         }
         if (!henka_opengl_renderer_is_hdr_ready(renderer))
         {
@@ -3889,6 +4069,7 @@ henka_result henka_opengl_renderer_draw_scene(
             "useMotionVectors",
             rendered && !helper_entity && state->previous_view_projection_valid);
         henka_set_uniform_mat4(program, "lightMatrix", light_matrix);
+        henka_set_uniform_mat4(program, "localShadowMatrix", local_shadow_matrix);
         henka_set_uniform_vec4(
             program,
             "baseColor",
@@ -4031,6 +4212,10 @@ henka_result henka_opengl_renderer_draw_scene(
         henka_set_uniform_int(program, "shadowMap", 5);
         henka_set_uniform_bool(program, "useShadowMap",
             rendered && state->shadow_depth_texture != 0U && entity->material.receive_shadows);
+        henka_set_uniform_int(program, "localShadowMap", 11);
+        henka_set_uniform_bool(program, "useLocalShadowMap",
+            rendered && local_shadow_light_index >= 0 &&
+            state->local_shadow_depth_texture != 0U && entity->material.receive_shadows);
 #undef henka_set_uniform_mat4
 #undef henka_set_uniform_vec4
 #undef henka_set_uniform_vec3
@@ -4096,6 +4281,9 @@ henka_result henka_opengl_renderer_draw_scene(
         g_gl.ActiveTexture(GL_TEXTURE10);
         glBindTexture(GL_TEXTURE_CUBE_MAP,
             use_reflection_probe_map ? state->reflection_probe_cubes[reflection_probe_index] : 0U);
+        g_gl.ActiveTexture(GL_TEXTURE11);
+        glBindTexture(GL_TEXTURE_2D,
+            rendered && local_shadow_light_index >= 0 ? state->local_shadow_depth_texture : 0U);
         g_gl.ActiveTexture(GL_TEXTURE0);
         g_gl.BindVertexArray(mesh_data->vao);
         glDrawElements(
@@ -4149,6 +4337,8 @@ henka_result henka_opengl_renderer_draw_scene(
     glBindTexture(GL_TEXTURE_2D, 0);
     g_gl.ActiveTexture(GL_TEXTURE10);
     glBindTexture(GL_TEXTURE_CUBE_MAP, 0);
+    g_gl.ActiveTexture(GL_TEXTURE11);
+    glBindTexture(GL_TEXTURE_2D, 0);
     g_gl.ActiveTexture(GL_TEXTURE0);
     g_gl.UseProgram(0);
     glDisable(GL_BLEND);

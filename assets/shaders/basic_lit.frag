@@ -8,6 +8,7 @@ in vec3 fragTangent;
 in float fragTangentHandedness;
 in vec4 fragVertexColor;
 in vec4 fragLightSpacePosition;
+in vec4 fragLocalShadowPosition;
 in vec4 fragCurrentClipPosition;
 in vec4 fragPreviousClipPosition;
 
@@ -80,6 +81,9 @@ uniform int alphaMode;
 uniform float alphaCutoff;
 uniform sampler2D shadowMap;
 uniform bool useShadowMap;
+uniform sampler2D localShadowMap;
+uniform bool useLocalShadowMap;
+uniform mat4 localShadowMatrix;
 uniform bool useMotionVectors;
 
 out vec4 outColor;
@@ -194,6 +198,40 @@ float shadowFactor(vec3 normal, vec3 lightDir)
         for (int y = -1; y <= 1; ++y)
         {
             float sampleDepth = texture(shadowMap, shadowCoordinate.xy + vec2(x, y) * texelSize).r;
+            visible += sampleDepth >= currentDepth ? 1.0 : 0.0;
+        }
+    }
+    return visible / 9.0;
+}
+
+float localShadowFactor(vec3 normal, vec3 lightDir)
+{
+    if (!useLocalShadowMap)
+    {
+        return 1.0;
+    }
+    float lightSpaceW = fragLocalShadowPosition.w;
+    if (abs(lightSpaceW) <= 0.0001)
+    {
+        return 1.0;
+    }
+    vec3 shadowCoordinate = fragLocalShadowPosition.xyz / lightSpaceW;
+    shadowCoordinate = shadowCoordinate * 0.5 + 0.5;
+    if (shadowCoordinate.x < 0.0 || shadowCoordinate.x > 1.0 ||
+        shadowCoordinate.y < 0.0 || shadowCoordinate.y > 1.0 ||
+        shadowCoordinate.z < 0.0 || shadowCoordinate.z > 1.0)
+    {
+        return 1.0;
+    }
+    float nDotL = saturate(dot(normal, lightDir));
+    float currentDepth = shadowCoordinate.z - max(0.0015 * (1.0 - nDotL), 0.0005);
+    vec2 texelSize = 1.0 / vec2(textureSize(localShadowMap, 0));
+    float visible = 0.0;
+    for (int x = -1; x <= 1; ++x)
+    {
+        for (int y = -1; y <= 1; ++y)
+        {
+            float sampleDepth = texture(localShadowMap, shadowCoordinate.xy + vec2(x, y) * texelSize).r;
             visible += sampleDepth >= currentDepth ? 1.0 : 0.0;
         }
     }
@@ -395,9 +433,11 @@ void main()
                 clamp(localLightColorIntensity[lightIndex].rgb, vec3(0.0), vec3(16.0)) *
                 clamp(localLightColorIntensity[lightIndex].w, 0.0, 100000.0) * attenuation,
                 vec3(65504.0));
+            float localShadow = localLightOuterType[lightIndex].z > 0.5 ?
+                localShadowFactor(normal, localLightDirection) : 1.0;
             vec3 localSpecular = localDistribution * localVisibility * localFresnel;
             vec3 localDiffuse = (1.0 - localFresnel) * (1.0 - surfaceMetallic) * albedo / PI;
-            color += (localDiffuse + localSpecular) * localRadiance * localNDotL;
+            color += (localDiffuse + localSpecular) * localRadiance * localNDotL * localShadow;
         }
     }
     else
