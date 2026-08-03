@@ -172,7 +172,23 @@ float shadowFactor(vec3 normal, vec3 lightDir)
     float slopeBias = max(0.0005 * (1.0 - nDotL), 0.00025);
     float currentDepth = shadowCoordinate.z - slopeBias;
     vec2 texelSize = 1.0 / vec2(textureSize(shadowMap, 0));
+    float centerDepth = texture(shadowMap, shadowCoordinate.xy).r;
+    float centerVisible = centerDepth >= currentDepth ? 1.0 : 0.0;
     float visible = 0.0;
+    if (centerVisible < 0.5)
+    {
+        /* A bounded wider kernel only near a blocker tightens contact edges
+         * without paying the wider sample cost across the whole surface. */
+        for (int x = -2; x <= 2; ++x)
+        {
+            for (int y = -2; y <= 2; ++y)
+            {
+                float sampleDepth = texture(shadowMap, shadowCoordinate.xy + vec2(x, y) * texelSize).r;
+                visible += sampleDepth >= currentDepth ? 1.0 : 0.0;
+            }
+        }
+        return min(visible / 25.0, 0.75);
+    }
     for (int x = -1; x <= 1; ++x)
     {
         for (int y = -1; y <= 1; ++y)
