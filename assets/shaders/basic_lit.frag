@@ -100,6 +100,7 @@ uniform bool useMotionVectors;
 
 out vec4 outColor;
 layout(location = 1) out vec2 outMotion;
+layout(location = 2) out float outReactive;
 
 const float PI = 3.14159265359;
 
@@ -551,6 +552,14 @@ void main()
         finalColor = mix(finalColor, max(fogColor, vec3(0.0)), fogAmount);
     }
     outColor = vec4(min(finalColor, vec3(65504.0)), surfaceColor.a);
+    /* Reactive pixels must not drag stale history across transparency,
+     * transmission, or rapidly changing emissive highlights. */
+    outReactive = clamp(
+        max(
+            surfaceColor.a < 0.999 ? 1.0 : 0.0,
+            max(surfaceTransmission * 0.65, max(emissive.r, max(emissive.g, emissive.b)) * 0.08)),
+        0.0,
+        1.0);
     if (useMotionVectors && abs(fragCurrentClipPosition.w) > 0.0001 &&
         abs(fragPreviousClipPosition.w) > 0.0001)
     {
