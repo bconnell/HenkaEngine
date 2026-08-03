@@ -89,6 +89,9 @@ typedef struct henka_engine_diagnostics
     bool rendered_shadow_ready;
     bool rendered_bloom_ready;
     bool rendered_ibl_ready;
+    bool rendered_temporal_history_ready;
+    bool rendered_temporal_history_valid;
+    bool rendered_motion_vectors_ready;
     henka_viewport scene_viewport;
     int rendered_hdr_requested_width;
     int rendered_hdr_requested_height;

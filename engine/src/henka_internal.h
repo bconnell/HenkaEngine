@@ -579,6 +579,11 @@ void henka_opengl_renderer_get_ibl_diagnostics(
     bool* out_ready,
     char* out_failure,
     size_t failure_capacity);
+void henka_opengl_renderer_get_temporal_diagnostics(
+    const struct henka_renderer* renderer,
+    bool* out_history_ready,
+    bool* out_history_valid,
+    bool* out_motion_vectors_ready);
 void henka_opengl_renderer_get_scene_diagnostics(
     const struct henka_renderer* renderer,
     uint32_t* out_draw_calls,

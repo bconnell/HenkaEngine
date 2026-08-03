@@ -5626,6 +5626,23 @@ void henka_opengl_renderer_get_ibl_diagnostics(
     }
 }
 
+void henka_opengl_renderer_get_temporal_diagnostics(
+    const struct henka_renderer* renderer,
+    bool* out_history_ready,
+    bool* out_history_valid,
+    bool* out_motion_vectors_ready)
+{
+    const henka_opengl_renderer_state* state = renderer != NULL && renderer->backend_state != NULL ?
+        (const henka_opengl_renderer_state*)renderer->backend_state : NULL;
+
+    if (out_history_ready != NULL)
+        *out_history_ready = state != NULL && state->temporal_history_ready;
+    if (out_history_valid != NULL)
+        *out_history_valid = state != NULL && state->temporal_history_valid;
+    if (out_motion_vectors_ready != NULL)
+        *out_motion_vectors_ready = state != NULL && state->hdr_motion_texture != 0U;
+}
+
 henka_result henka_opengl_renderer_set_vsync(struct henka_renderer* renderer, bool enabled)
 {
     return henka_platform_set_vsync(renderer->platform, enabled);
