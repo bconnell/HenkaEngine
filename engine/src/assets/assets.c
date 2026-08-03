@@ -1699,6 +1699,24 @@ henka_result henka_assets_trim_texture_residency(
     return manager->texture_resident_bytes <= target_bytes ? HENKA_SUCCESS : HENKA_ERROR_LIMIT;
 }
 
+henka_result henka_assets_enforce_texture_residency_budget(
+    henka_asset_manager* manager,
+    size_t max_evictions,
+    size_t* out_evicted_textures)
+{
+    if (out_evicted_textures != NULL)
+        *out_evicted_textures = 0U;
+    if (manager == NULL)
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    if (manager->texture_residency_budget_bytes == 0U)
+        return HENKA_SUCCESS;
+    return henka_assets_trim_texture_residency(
+        manager,
+        manager->texture_residency_budget_bytes,
+        max_evictions,
+        out_evicted_textures);
+}
+
 henka_result henka_assets_load_obj_mesh(
     henka_asset_manager* manager,
     const char* path,

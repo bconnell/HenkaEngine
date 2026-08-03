@@ -190,6 +190,12 @@ henka_result henka_assets_trim_texture_residency(
     uint64_t target_bytes,
     size_t max_evictions,
     size_t* out_evicted_textures);
+/* Applies the manager's configured non-zero budget using the same bounded,
+ * transactional trim policy. A zero configured budget is a successful no-op. */
+henka_result henka_assets_enforce_texture_residency_budget(
+    henka_asset_manager* manager,
+    size_t max_evictions,
+    size_t* out_evicted_textures);
 henka_result henka_assets_load_obj_mesh(henka_asset_manager* manager, const char* path, henka_mesh** out_mesh);
 henka_result henka_assets_load_gltf_mesh(henka_asset_manager* manager, const char* path, henka_mesh** out_mesh);
 henka_result henka_assets_load_gltf_mesh_with_material(
