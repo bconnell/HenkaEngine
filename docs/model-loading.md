@@ -112,8 +112,9 @@ accessor alignment, strides, and component types are checked against the
 accessor element size, and output remains bounded
 by the renderer mesh-element limit. Position, normal, and tangent accessors
 must use their required float shapes; UV and color integer accessors must be
-normalized; and index accessors must be scalar unsigned byte, unsigned short,
-or unsigned int values. GLB headers must declare the exact input
+normalized; index accessors must be scalar unsigned byte, unsigned short, or
+unsigned int values; and mapped material texture `texCoord` values select the
+preserved UV0 or UV1 set. GLB headers must declare the exact input
 length, the first chunk must be one aligned JSON chunk, and duplicate JSON or
 BIN chunks are rejected. External buffer URIs are resolved beneath
 the model's directory; rooted, traversal, and URI-like paths are rejected.

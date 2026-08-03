@@ -33,6 +33,11 @@ henka_material henka_material_default(void)
     material.metallic_roughness_texture = NULL;
     material.occlusion_texture = NULL;
     material.emissive_texture = NULL;
+    material.base_color_uv_set = 0;
+    material.normal_uv_set = 0;
+    material.metallic_roughness_uv_set = 0;
+    material.occlusion_uv_set = 0;
+    material.emissive_uv_set = 0;
     material.base_color = (henka_vec4){1.0f, 1.0f, 1.0f, 1.0f};
     material.emissive_color = (henka_vec3){0.0f, 0.0f, 0.0f};
     material.metallic = 0.0f;
@@ -141,6 +146,11 @@ henka_result henka_material_validate(const henka_material* material)
         material->occlusion_strength > 1.0f || material->emissive_strength < 0.0f ||
         material->emissive_strength > 100.0f || material->alpha_cutoff < 0.0f ||
         material->alpha_cutoff > 1.0f ||
+        material->base_color_uv_set < 0 || material->base_color_uv_set > 1 ||
+        material->normal_uv_set < 0 || material->normal_uv_set > 1 ||
+        material->metallic_roughness_uv_set < 0 || material->metallic_roughness_uv_set > 1 ||
+        material->occlusion_uv_set < 0 || material->occlusion_uv_set > 1 ||
+        material->emissive_uv_set < 0 || material->emissive_uv_set > 1 ||
         material->clearcoat < 0.0f || material->clearcoat > 1.0f ||
         material->clearcoat_roughness < 0.045f || material->clearcoat_roughness > 1.0f ||
         material->sheen_color.x < 0.0f || material->sheen_color.x > 1.0f ||

@@ -885,13 +885,14 @@ static bool henka_validate_shader_contract(
     static const char* material_uniforms[] =
     {
         "model", "view", "projection", "lightMatrix", "baseColor",
-        "baseColorTexture", "useTexture", "useVertexColor", "cameraPosition",
+        "baseColorTexture", "baseColorUvSet", "useTexture", "useVertexColor", "cameraPosition",
         "lightDirection", "lightColor", "lightIntensity", "ambientColor",
         "useLighting", "useEnvironment", "environmentGroundColor",
         "environmentHorizonColor", "environmentZenithColor", "environmentIntensity",
         "fogEnabled", "fogMode", "fogColor", "fogStartDistance", "fogEndDistance",
         "fogDensity", "normalTexture", "metallicRoughnessTexture", "occlusionTexture",
-        "emissiveTexture", "useNormalTexture", "useMetallicRoughnessTexture",
+        "emissiveTexture", "normalUvSet", "metallicRoughnessUvSet", "occlusionUvSet", "emissiveUvSet",
+        "useNormalTexture", "useMetallicRoughnessTexture",
         "useOcclusionTexture", "useEmissiveTexture", "metallic", "roughness",
         "normalScale", "occlusionStrength", "emissiveColor", "emissiveStrength",
         "specularFactor", "specularColor", "ior",
@@ -2026,7 +2027,7 @@ static henka_result henka_opengl_create_render_programs(
          "environmentTexture", "useEnvironmentTexture", "environmentRotation",
          "environmentCube", "useIBLCube"};
     static const char* shadow_uniforms[] =
-        {"model", "lightMatrix", "baseColor", "baseColorTexture", "useTexture", "alphaMode", "alphaCutoff"};
+        {"model", "lightMatrix", "baseColor", "baseColorTexture", "baseColorUvSet", "useTexture", "alphaMode", "alphaCutoff"};
     static const char* tone_vertex =
         "#version 330 core\n"
         "out vec2 uv;\n"
@@ -2066,12 +2067,12 @@ static henka_result henka_opengl_create_render_programs(
         "void main(){ float height = clamp(uv.y, 0.0, 1.0); float horizon = smoothstep(0.04, 0.48, height); vec3 lower = mix(groundColor, horizonColor, horizon); vec3 gradient = mix(lower, zenithColor, smoothstep(0.48, 1.0, height)); float longitude = fract(uv.x + environmentRotation / 6.28318530718); float latitude=height*PI; vec3 direction=vec3(sin(latitude)*cos(longitude*2.0*PI),cos(latitude),sin(latitude)*sin(longitude*2.0*PI)); vec3 hdr = useIBLCube ? texture(environmentCube,direction).rgb : texture(environmentTexture, vec2(longitude, height)).rgb; vec3 color = (useEnvironmentTexture || useIBLCube) ? hdr : gradient; outColor = vec4(max(color * max(intensity, 0.0), vec3(0.0)), 1.0); }\n";
     static const char* shadow_vertex =
         "#version 330 core\n"
-        "layout(location=0) in vec3 inPosition; layout(location=2) in vec2 inUv; out vec2 fragUv; uniform mat4 model; uniform mat4 lightMatrix;\n"
-        "void main(){ fragUv = inUv; gl_Position = lightMatrix * model * vec4(inPosition,1.0); }\n";
+        "layout(location=0) in vec3 inPosition; layout(location=2) in vec2 inUv; layout(location=5) in vec2 inUv1; out vec2 fragUv; out vec2 fragUv1; uniform mat4 model; uniform mat4 lightMatrix;\n"
+        "void main(){ fragUv = inUv; fragUv1 = inUv1; gl_Position = lightMatrix * model * vec4(inPosition,1.0); }\n";
     static const char* shadow_fragment =
         "#version 330 core\n"
-        "in vec2 fragUv; uniform vec4 baseColor; uniform sampler2D baseColorTexture; uniform bool useTexture; uniform int alphaMode; uniform float alphaCutoff;\n"
-        "void main(){ if(alphaMode == 1 && baseColor.a * (useTexture ? texture(baseColorTexture, fragUv).a : 1.0) < alphaCutoff) discard; }\n";
+        "in vec2 fragUv; in vec2 fragUv1; uniform vec4 baseColor; uniform sampler2D baseColorTexture; uniform int baseColorUvSet; uniform bool useTexture; uniform int alphaMode; uniform float alphaCutoff;\n"
+        "void main(){ vec2 uv = baseColorUvSet == 1 ? fragUv1 : fragUv; if(alphaMode == 1 && baseColor.a * (useTexture ? texture(baseColorTexture, uv).a : 1.0) < alphaCutoff) discard; }\n";
 
     if (state == NULL ||
         !henka_compile_program_from_source(tone_vertex, tone_fragment, "tone-map vertex", "tone-map fragment", &state->tone_program) ||
@@ -2382,6 +2383,7 @@ static void henka_opengl_draw_shadow_pass(
         henka_set_uniform_mat4_owned(state->shadow_program, &state->shadow_shader_data, "lightMatrix", light_matrix);
         henka_set_uniform_vec4_owned(state->shadow_program, &state->shadow_shader_data, "baseColor", entity->material.base_color);
         henka_set_uniform_int_owned(state->shadow_program, &state->shadow_shader_data, "baseColorTexture", 0);
+        henka_set_uniform_int_owned(state->shadow_program, &state->shadow_shader_data, "baseColorUvSet", entity->material.base_color_uv_set);
         henka_set_uniform_bool_owned(state->shadow_program, &state->shadow_shader_data, "useTexture",
             entity->material.use_texture && entity->material.base_color_texture != NULL &&
             entity->material.base_color_texture->backend_data != NULL);
@@ -3819,10 +3821,15 @@ henka_result henka_opengl_renderer_draw_scene(
             program,
             "baseColorTexture",
             0);
+        henka_set_uniform_int(program, "baseColorUvSet", entity->material.base_color_uv_set);
         henka_set_uniform_int(program, "normalTexture", 1);
+        henka_set_uniform_int(program, "normalUvSet", entity->material.normal_uv_set);
         henka_set_uniform_int(program, "metallicRoughnessTexture", 2);
+        henka_set_uniform_int(program, "metallicRoughnessUvSet", entity->material.metallic_roughness_uv_set);
         henka_set_uniform_int(program, "occlusionTexture", 3);
+        henka_set_uniform_int(program, "occlusionUvSet", entity->material.occlusion_uv_set);
         henka_set_uniform_int(program, "emissiveTexture", 4);
+        henka_set_uniform_int(program, "emissiveUvSet", entity->material.emissive_uv_set);
         henka_set_uniform_bool(program, "useNormalTexture",
             normal_texture_data != NULL && normal_texture_data->texture_id != 0U);
         henka_set_uniform_bool(program, "useMetallicRoughnessTexture",

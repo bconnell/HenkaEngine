@@ -923,7 +923,8 @@ static bool henka_gltf_material_texture(
     const char* key,
     char** out_uri,
     unsigned char** out_data,
-    size_t* out_data_size)
+    size_t* out_data_size,
+    int* out_texcoord)
 {
     const char* texture_info;
     const char* texture_info_end;
@@ -932,9 +933,15 @@ static bool henka_gltf_material_texture(
     if (out_uri != NULL) *out_uri = NULL;
     if (out_data != NULL) *out_data = NULL;
     if (out_data_size != NULL) *out_data_size = 0U;
+    if (out_texcoord != NULL) *out_texcoord = 0;
     if (context == NULL || object == NULL || out_uri == NULL || out_data == NULL || out_data_size == NULL) return false;
     if (!henka_gltf_find_member(object, object_end, key, &texture_info, &texture_info_end)) return true;
     if (!henka_gltf_member_int(texture_info, texture_info_end, "index", &texture_index)) return false;
+    if (henka_gltf_find_member(texture_info, texture_info_end, "texCoord", &texture_info, &texture_info_end))
+    {
+        if (out_texcoord == NULL || !henka_gltf_integer(texture_info, texture_info_end, out_texcoord) ||
+            *out_texcoord < 0 || *out_texcoord > 1) return false;
+    }
     return henka_gltf_material_texture_uri(context, texture_index, out_uri, out_data, out_data_size);
 }
 
@@ -982,16 +989,21 @@ static bool henka_gltf_parse_material(
         if (henka_gltf_find_member(pbr, pbr_end, "roughnessFactor", &value, &value_end) &&
             !henka_gltf_member_float(pbr, pbr_end, "roughnessFactor", &out_source->material.roughness)) return false;
         if (!henka_gltf_material_texture(context, pbr, pbr_end, "baseColorTexture", &out_source->base_color_uri,
-                &out_source->base_color_embedded_data, &out_source->base_color_embedded_size) ||
+                &out_source->base_color_embedded_data, &out_source->base_color_embedded_size,
+                &out_source->material.base_color_uv_set) ||
             !henka_gltf_material_texture(context, pbr, pbr_end, "metallicRoughnessTexture", &out_source->metallic_roughness_uri,
-                &out_source->metallic_roughness_embedded_data, &out_source->metallic_roughness_embedded_size)) return false;
+                &out_source->metallic_roughness_embedded_data, &out_source->metallic_roughness_embedded_size,
+                &out_source->material.metallic_roughness_uv_set)) return false;
     }
     if (!henka_gltf_material_texture(context, material_object, material_end, "normalTexture", &out_source->normal_uri,
-            &out_source->normal_embedded_data, &out_source->normal_embedded_size) ||
+            &out_source->normal_embedded_data, &out_source->normal_embedded_size,
+            &out_source->material.normal_uv_set) ||
         !henka_gltf_material_texture(context, material_object, material_end, "occlusionTexture", &out_source->occlusion_uri,
-            &out_source->occlusion_embedded_data, &out_source->occlusion_embedded_size) ||
+            &out_source->occlusion_embedded_data, &out_source->occlusion_embedded_size,
+            &out_source->material.occlusion_uv_set) ||
         !henka_gltf_material_texture(context, material_object, material_end, "emissiveTexture", &out_source->emissive_uri,
-            &out_source->emissive_embedded_data, &out_source->emissive_embedded_size)) return false;
+            &out_source->emissive_embedded_data, &out_source->emissive_embedded_size,
+            &out_source->material.emissive_uv_set)) return false;
 
     if (henka_gltf_find_member(material_object, material_end, "normalTexture", &value, &value_end) &&
         henka_gltf_member_float(value, value_end, "scale", &out_source->material.normal_scale) == false &&

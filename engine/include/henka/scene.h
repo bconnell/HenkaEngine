@@ -47,6 +47,12 @@ typedef struct henka_material
     henka_texture* metallic_roughness_texture;
     henka_texture* occlusion_texture;
     henka_texture* emissive_texture;
+    /* glTF texture coordinate set selection; the bounded runtime supports UV0 and UV1. */
+    int base_color_uv_set;
+    int normal_uv_set;
+    int metallic_roughness_uv_set;
+    int occlusion_uv_set;
+    int emissive_uv_set;
     henka_vec4 base_color;
     henka_vec3 emissive_color;
     float metallic;

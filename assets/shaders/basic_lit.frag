@@ -3,6 +3,7 @@
 in vec3 fragNormal;
 in vec3 fragWorldPosition;
 in vec2 fragUv;
+in vec2 fragUv1;
 in vec3 fragTangent;
 in float fragTangentHandedness;
 in vec4 fragVertexColor;
@@ -10,6 +11,7 @@ in vec4 fragLightSpacePosition;
 
 uniform vec4 baseColor;
 uniform sampler2D baseColorTexture;
+uniform int baseColorUvSet;
 uniform bool useTexture;
 uniform bool useVertexColor;
 uniform vec3 cameraPosition;
@@ -48,9 +50,13 @@ uniform float fogStartDistance;
 uniform float fogEndDistance;
 uniform float fogDensity;
 uniform sampler2D normalTexture;
+uniform int normalUvSet;
 uniform sampler2D metallicRoughnessTexture;
+uniform int metallicRoughnessUvSet;
 uniform sampler2D occlusionTexture;
+uniform int occlusionUvSet;
 uniform sampler2D emissiveTexture;
+uniform int emissiveUvSet;
 uniform bool useNormalTexture;
 uniform bool useMetallicRoughnessTexture;
 uniform bool useOcclusionTexture;
@@ -80,6 +86,11 @@ const float PI = 3.14159265359;
 float saturate(float value)
 {
     return clamp(value, 0.0, 1.0);
+}
+
+vec2 materialUv(int uvSet)
+{
+    return uvSet == 1 ? fragUv1 : fragUv;
 }
 
 vec3 safeNormalize(vec3 value, vec3 fallback)
@@ -189,7 +200,7 @@ void main()
     vec4 surfaceColor = baseColor;
     if (useTexture)
     {
-        surfaceColor *= texture(baseColorTexture, fragUv);
+        surfaceColor *= texture(baseColorTexture, materialUv(baseColorUvSet));
     }
     if (useVertexColor)
     {
@@ -211,7 +222,7 @@ void main()
         vec3 tangent = fragTangent - geometricNormal * dot(geometricNormal, fragTangent);
         tangent = safeNormalize(tangent, vec3(1.0, 0.0, 0.0));
         vec3 bitangent = safeNormalize(cross(geometricNormal, tangent), vec3(0.0, 0.0, 1.0)) * fragTangentHandedness;
-        vec3 mappedNormal = texture(normalTexture, fragUv).xyz * 2.0 - 1.0;
+        vec3 mappedNormal = texture(normalTexture, materialUv(normalUvSet)).xyz * 2.0 - 1.0;
         mappedNormal.xy *= normalScale;
         normal = safeNormalize(mat3(tangent, bitangent, geometricNormal) * safeNormalize(mappedNormal, vec3(0.0, 0.0, 1.0)), geometricNormal);
     }
@@ -224,7 +235,7 @@ void main()
     float surfaceSheenRoughness = clamp(sheenRoughness, 0.045, 1.0);
     if (useMetallicRoughnessTexture)
     {
-        vec4 materialData = texture(metallicRoughnessTexture, fragUv);
+        vec4 materialData = texture(metallicRoughnessTexture, materialUv(metallicRoughnessUvSet));
         surfaceMetallic = saturate(surfaceMetallic * materialData.b);
         surfaceRoughness = clamp(surfaceRoughness * materialData.g, 0.045, 1.0);
     }
@@ -232,7 +243,7 @@ void main()
     float occlusion = 1.0;
     if (useOcclusionTexture)
     {
-        occlusion = mix(1.0, texture(occlusionTexture, fragUv).r, saturate(occlusionStrength));
+        occlusion = mix(1.0, texture(occlusionTexture, materialUv(occlusionUvSet)).r, saturate(occlusionStrength));
     }
 
     vec3 albedo = max(surfaceColor.rgb, vec3(0.0));
@@ -377,7 +388,7 @@ void main()
     vec3 emissive = min(max(emissiveColor, vec3(0.0)), vec3(1.0)) * clamp(emissiveStrength, 0.0, 100.0);
     if (useEmissiveTexture)
     {
-        emissive *= max(texture(emissiveTexture, fragUv).rgb, vec3(0.0));
+        emissive *= max(texture(emissiveTexture, materialUv(emissiveUvSet)).rgb, vec3(0.0));
     }
     vec3 finalColor = min(max(color + emissive, vec3(0.0)), vec3(65504.0));
     if (fogEnabled)

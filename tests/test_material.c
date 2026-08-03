@@ -16,6 +16,11 @@ void henka_test_material(void)
     HENKA_TEST_ASSERT(strcmp(henka_material_type_get_label(material.type), "Lit") == 0);
     HENKA_TEST_ASSERT(material.shader == NULL);
     HENKA_TEST_ASSERT(material.base_color_texture == NULL);
+    HENKA_TEST_ASSERT(material.base_color_uv_set == 0);
+    HENKA_TEST_ASSERT(material.normal_uv_set == 0);
+    HENKA_TEST_ASSERT(material.metallic_roughness_uv_set == 0);
+    HENKA_TEST_ASSERT(material.occlusion_uv_set == 0);
+    HENKA_TEST_ASSERT(material.emissive_uv_set == 0);
     HENKA_TEST_ASSERT(!material.use_texture);
     HENKA_TEST_ASSERT(material.use_lighting);
     HENKA_TEST_ASSERT(material.metallic == 0.0f);
@@ -64,6 +69,9 @@ void henka_test_material(void)
         HENKA_TEST_ASSERT(henka_material_validate(&valid) == HENKA_ERROR_INVALID_ARGUMENT);
         valid.ior = 1.5f;
         valid.sheen_color.x = 1.01f;
+        HENKA_TEST_ASSERT(henka_material_validate(&valid) == HENKA_ERROR_INVALID_ARGUMENT);
+        valid.sheen_color.x = 0.0f;
+        valid.base_color_uv_set = 2;
         HENKA_TEST_ASSERT(henka_material_validate(&valid) == HENKA_ERROR_INVALID_ARGUMENT);
     }
 

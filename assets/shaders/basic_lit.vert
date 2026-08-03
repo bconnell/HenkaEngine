@@ -5,6 +5,7 @@ layout (location = 1) in vec3 inNormal;
 layout (location = 2) in vec2 inUv;
 layout (location = 3) in vec4 inTangent;
 layout (location = 4) in vec4 inColor;
+layout (location = 5) in vec2 inUv1;
 
 uniform mat4 model;
 uniform mat4 view;
@@ -14,6 +15,7 @@ uniform mat4 lightMatrix;
 out vec3 fragNormal;
 out vec3 fragWorldPosition;
 out vec2 fragUv;
+out vec2 fragUv1;
 out vec3 fragTangent;
 out float fragTangentHandedness;
 out vec4 fragVertexColor;
@@ -26,6 +28,7 @@ void main()
     mat3 normalMatrix = mat3(transpose(inverse(model)));
     fragNormal = normalMatrix * inNormal;
     fragUv = inUv;
+    fragUv1 = inUv1;
     fragTangent = mat3(model) * inTangent.xyz;
     fragTangentHandedness = inTangent.w * (determinant(mat3(model)) < 0.0 ? -1.0 : 1.0);
     fragVertexColor = inColor;

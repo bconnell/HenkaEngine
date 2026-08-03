@@ -208,7 +208,7 @@ void henka_test_model(void)
         "\"textures\":[{\"extensions\":{\"KHR_texture_basisu\":{\"source\":0}}}],"
         "\"materials\":[{\"name\":\"Imported Gold\",\"pbrMetallicRoughness\":{"
         "\"baseColorFactor\":[0.8,0.6,0.2,1.0],\"metallicFactor\":0.8,\"roughnessFactor\":0.3,"
-        "\"baseColorTexture\":{\"index\":0}},\"emissiveFactor\":[0.1,0.2,0.3],"
+        "\"baseColorTexture\":{\"index\":0,\"texCoord\":1}},\"emissiveFactor\":[0.1,0.2,0.3],"
         "\"alphaMode\":\"MASK\",\"alphaCutoff\":0.4,\"doubleSided\":true}],"
         "\"meshes\":[{\"primitives\":[{\"attributes\":{\"POSITION\":0},\"material\":0}]}]}";
     static const char* valid_gltf_embedded_material =
@@ -384,6 +384,7 @@ void henka_test_model(void)
     HENKA_TEST_ASSERT(model.has_material);
     HENKA_TEST_ASSERT(strcmp(model.material_source.name, "Imported Gold") == 0);
     HENKA_TEST_ASSERT(strcmp(model.material_source.base_color_uri, "textures/albedo.ktx2") == 0);
+    HENKA_TEST_ASSERT(model.material_source.material.base_color_uv_set == 1);
     HENKA_TEST_ASSERT_FLOAT_CLOSE(model.material_source.material.base_color.x, 0.8f, 0.0001f);
     HENKA_TEST_ASSERT_FLOAT_CLOSE(model.material_source.material.metallic, 0.8f, 0.0001f);
     HENKA_TEST_ASSERT_FLOAT_CLOSE(model.material_source.material.roughness, 0.3f, 0.0001f);
