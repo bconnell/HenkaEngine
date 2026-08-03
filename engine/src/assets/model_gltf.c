@@ -148,6 +148,8 @@ static bool henka_gltf_value_end_depth(
         if (cursor < end && *cursor == ',')
         {
             cursor += 1;
+            if (henka_gltf_skip_space(cursor, end) >= end ||
+                *henka_gltf_skip_space(cursor, end) == closing) return false;
             continue;
         }
         if (cursor < end && *cursor == closing)

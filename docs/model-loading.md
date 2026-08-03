@@ -72,8 +72,9 @@ The loader currently supports:
 - embedded base-color, normal, metallic-roughness, occlusion, and emissive
   images supplied as bounded base64 data URIs or glTF image bufferViews;
   decoded textures use the same manager-owned semantic cache and fallback path
-- the bounded JSON reader consumes exactly one complete root value and rejects
-  trailing non-whitespace content before any scene or mesh data is published
+- the bounded JSON reader consumes exactly one complete root value, rejects
+  malformed trailing separators, and rejects trailing non-whitespace content
+  before any scene or mesh data is published
 - `KHR_texture_basisu` source selection for external KTX2 images; the texture
   loader validates KTX2 bounds, dimensions, layers/faces, and mip ownership
   before the pinned KTX-Software boundary decodes uncompressed RGBA8 or

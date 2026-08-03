@@ -19,6 +19,8 @@ static void henka_test_model_rejects_unsafe_bounds(void)
 {
     static const char* unsupported_gltf_extension =
         "{\"asset\":{\"version\":\"2.0\"},\"extensionsUsed\":[\"KHR_draco_mesh_compression\"]}";
+    static const char* malformed_gltf_trailing_comma =
+        "{\"asset\":{\"version\":\"2.0\",},\"buffers\":[]}";
     static const char* non_finite_obj =
         "v nan 0.0 0.0\n"
         "v 1.0 0.0 0.0\n"
@@ -39,6 +41,16 @@ static void henka_test_model_rejects_unsafe_bounds(void)
             unsupported_gltf_extension,
             strlen(unsupported_gltf_extension),
             "unsupported-extension.gltf",
+            &model) != HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(model.vertices == NULL);
+    HENKA_TEST_ASSERT(model.indices == NULL);
+
+    memset(&model, 0, sizeof(model));
+    HENKA_TEST_ASSERT(
+        henka_model_data_load_gltf_from_memory(
+            malformed_gltf_trailing_comma,
+            strlen(malformed_gltf_trailing_comma),
+            "malformed-trailing-comma.gltf",
             &model) != HENKA_SUCCESS);
     HENKA_TEST_ASSERT(model.vertices == NULL);
     HENKA_TEST_ASSERT(model.indices == NULL);
