@@ -2573,7 +2573,7 @@ static henka_result henka_opengl_create_point_shadow_target(
 static henka_result henka_opengl_create_render_programs(
     henka_opengl_renderer_state* state)
 {
-    static const char* tone_uniforms[] = {"hdrTexture", "bloomTexture", "historyTexture", "motionTexture", "depthTexture", "exposure", "useBloom", "bloomStrength", "useTemporalHistory", "useMotionVectors", "useAmbientOcclusion", "temporalBlend"};
+    static const char* tone_uniforms[] = {"hdrTexture", "bloomTexture", "historyTexture", "motionTexture", "depthTexture", "exposure", "useBloom", "bloomStrength", "useTemporalHistory", "useMotionVectors", "useAmbientOcclusion", "temporalBlend", "useRenderedGrade"};
     static const char* bloom_extract_uniforms[] = {"hdrTexture", "threshold"};
     static const char* bloom_blur_uniforms[] = {"sourceTexture", "direction"};
     static const char* ibl_conversion_uniforms[] = {"equirectangularTexture", "rotation", "viewProjection"};
@@ -2592,12 +2592,12 @@ static henka_result henka_opengl_create_render_programs(
         "void main(){ vec2 p = vec2((gl_VertexID << 1) & 2, gl_VertexID & 2); uv = p; gl_Position = vec4(p * 2.0 - 1.0, 0.0, 1.0); }\n";
     static const char* tone_fragment =
         "#version 330 core\n"
-        "in vec2 uv; uniform sampler2D hdrTexture; uniform sampler2D bloomTexture; uniform sampler2D historyTexture; uniform sampler2D motionTexture; uniform sampler2D depthTexture; uniform float exposure; uniform bool useBloom; uniform float bloomStrength; uniform bool useTemporalHistory; uniform bool useMotionVectors; uniform bool useAmbientOcclusion; uniform float temporalBlend; out vec4 outColor;\n"
+        "in vec2 uv; uniform sampler2D hdrTexture; uniform sampler2D bloomTexture; uniform sampler2D historyTexture; uniform sampler2D motionTexture; uniform sampler2D depthTexture; uniform float exposure; uniform bool useBloom; uniform float bloomStrength; uniform bool useTemporalHistory; uniform bool useMotionVectors; uniform bool useAmbientOcclusion; uniform float temporalBlend; uniform bool useRenderedGrade; out vec4 outColor;\n"
         "vec3 aces(vec3 x){ return clamp((x*(2.51*x+0.03))/(x*(2.43*x+0.59)+0.14),0.0,1.0); }\n"
         "vec3 presentColor(vec3 hdr){ return pow(aces(max(hdr * exp2(exposure), vec3(0.0))), vec3(1.0/2.2)); }\n"
         "vec3 clampHistory(vec3 history, vec2 at, vec2 texel){ vec3 lower=vec3(1e6); vec3 upper=vec3(-1e6); for(int y=-1;y<=1;++y){ for(int x=-1;x<=1;++x){ vec2 sampleUv=clamp(at+vec2(x,y)*texel,vec2(0.001),vec2(0.999)); vec3 sampleColor=presentColor(texture(hdrTexture,sampleUv).rgb); lower=min(lower,sampleColor); upper=max(upper,sampleColor); } } return clamp(history,lower,upper); }\n"
         "float depthNeighborhoodConfidence(vec2 at, vec2 texel, float depth){ float lower=1.0; float upper=0.0; for(int y=-1;y<=1;++y){ for(int x=-1;x<=1;++x){ float sampleDepth=texture(depthTexture,clamp(at+vec2(x,y)*texel,vec2(0.001),vec2(0.999))).r; lower=min(lower,sampleDepth); upper=max(upper,sampleDepth); } } float tolerance=0.012+0.04*max(abs(depth-0.5),0.0); return depth >= lower-tolerance && depth <= upper+tolerance ? 1.0 : 0.0; }\n"
-        "void main(){ vec3 hdrColor = texture(hdrTexture, uv).rgb; if (useBloom) hdrColor += texture(bloomTexture, uv).rgb * max(bloomStrength, 0.0); vec3 color = presentColor(hdrColor); if (useAmbientOcclusion) { float depth = texture(depthTexture, uv).r; if (depth < 0.9999) { vec2 texel = 1.0 / vec2(textureSize(depthTexture, 0)); float occluded = 0.0; const vec2 offsets[8] = vec2[8](vec2(-2.0, 0.0), vec2(2.0, 0.0), vec2(0.0, -2.0), vec2(0.0, 2.0), vec2(-1.0, -1.0), vec2(1.0, -1.0), vec2(-1.0, 1.0), vec2(1.0, 1.0)); for (int i = 0; i < 8; ++i) { float neighbor = texture(depthTexture, clamp(uv + offsets[i] * texel, vec2(0.001), vec2(0.999))).r; occluded += neighbor < depth - 0.002 ? 1.0 : 0.0; } color *= mix(1.0, 0.68, occluded / 8.0); } } if (useTemporalHistory) { vec2 historyUv = uv; if (useMotionVectors) historyUv = clamp(uv - texture(motionTexture, uv).rg, vec2(0.001), vec2(0.999)); vec2 texel = 1.0 / vec2(textureSize(depthTexture, 0)); float currentDepth = texture(depthTexture, uv).r; float reprojectedDepth = texture(depthTexture, historyUv).r; float historyWeight = abs(currentDepth - reprojectedDepth) > 0.02 ? 0.0 : clamp(temporalBlend, 0.0, 0.25); historyWeight *= depthNeighborhoodConfidence(historyUv, texel, reprojectedDepth); vec3 historyColor = clampHistory(texture(historyTexture, historyUv).rgb, uv, 1.0 / vec2(textureSize(hdrTexture, 0))); color = mix(color, historyColor, historyWeight); } outColor = vec4(color, 1.0); }\n";
+        "void main(){ vec3 hdrColor = texture(hdrTexture, uv).rgb; if (useBloom) hdrColor += texture(bloomTexture, uv).rgb * max(bloomStrength, 0.0); vec3 color = presentColor(hdrColor); if (useRenderedGrade) color = clamp(pow(max(color, vec3(0.0)), vec3(0.92)) * vec3(1.02, 1.0, 0.98), vec3(0.0), vec3(1.0)); if (useAmbientOcclusion) { float depth = texture(depthTexture, uv).r; if (depth < 0.9999) { vec2 texel = 1.0 / vec2(textureSize(depthTexture, 0)); float occluded = 0.0; const vec2 offsets[8] = vec2[8](vec2(-2.0, 0.0), vec2(2.0, 0.0), vec2(0.0, -2.0), vec2(0.0, 2.0), vec2(-1.0, -1.0), vec2(1.0, -1.0), vec2(-1.0, 1.0), vec2(1.0, 1.0)); for (int i = 0; i < 8; ++i) { float neighbor = texture(depthTexture, clamp(uv + offsets[i] * texel, vec2(0.001), vec2(0.999))).r; occluded += neighbor < depth - 0.002 ? 1.0 : 0.0; } color *= mix(1.0, 0.68, occluded / 8.0); } } if (useTemporalHistory) { vec2 historyUv = uv; if (useMotionVectors) historyUv = clamp(uv - texture(motionTexture, uv).rg, vec2(0.001), vec2(0.999)); vec2 texel = 1.0 / vec2(textureSize(depthTexture, 0)); float currentDepth = texture(depthTexture, uv).r; float reprojectedDepth = texture(depthTexture, historyUv).r; float historyWeight = abs(currentDepth - reprojectedDepth) > 0.02 ? 0.0 : clamp(temporalBlend, 0.0, 0.25); historyWeight *= depthNeighborhoodConfidence(historyUv, texel, reprojectedDepth); vec3 historyColor = clampHistory(texture(historyTexture, historyUv).rgb, uv, 1.0 / vec2(textureSize(hdrTexture, 0))); color = mix(color, historyColor, historyWeight); } outColor = vec4(color, 1.0); }\n";
     static const char* bloom_extract_fragment =
         "#version 330 core\n"
         "in vec2 uv; uniform sampler2D hdrTexture; uniform float threshold; out vec4 outColor;\n"
@@ -3121,6 +3121,11 @@ static void henka_opengl_present_hdr(
         "useBloom",
         use_rendered_post_processing && state->bloom_ready);
     henka_set_uniform_float_owned(state->tone_program, &state->tone_shader_data, "bloomStrength", 0.14f);
+    henka_set_uniform_bool_owned(
+        state->tone_program,
+        &state->tone_shader_data,
+        "useRenderedGrade",
+        use_rendered_post_processing);
     henka_set_uniform_bool_owned(
         state->tone_program,
         &state->tone_shader_data,
