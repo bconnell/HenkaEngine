@@ -86,6 +86,10 @@ uniform bool useShadowMap;
 uniform sampler2D cascadeShadowMap;
 uniform bool useCascadeShadowMap;
 uniform float cascadeSplitDistance;
+uniform samplerCube pointShadowMap;
+uniform bool usePointShadowMap;
+uniform vec3 pointShadowLightPosition;
+uniform float pointShadowFarPlane;
 uniform sampler2D localShadowMap;
 uniform bool useLocalShadowMap;
 uniform mat4 localShadowMatrix;
@@ -238,6 +242,30 @@ float shadowFactor(vec3 normal, vec3 lightDir)
         }
     }
     return visible / 9.0;
+}
+
+float pointShadowFactor(vec3 normal, vec3 lightDir)
+{
+    if (!usePointShadowMap)
+    {
+        return 1.0;
+    }
+    vec3 direction = fragWorldPosition - pointShadowLightPosition;
+    float distanceToLight = length(direction);
+    if (distanceToLight <= 0.0001 || distanceToLight > pointShadowFarPlane)
+    {
+        return 1.0;
+    }
+    float currentDepth = distanceToLight / max(pointShadowFarPlane, 0.0001) -
+        max(0.002 * (1.0 - saturate(dot(normal, lightDir))), 0.0005);
+    vec3 sampleDirection = direction / distanceToLight;
+    vec3 offsets[4] = vec3[4](vec3(0.0), vec3(0.02, 0.0, 0.0), vec3(0.0, 0.02, 0.0), vec3(0.0, 0.0, 0.02));
+    float visible = 0.0;
+    for (int i = 0; i < 4; ++i)
+    {
+        visible += texture(pointShadowMap, normalize(sampleDirection + offsets[i])).r >= currentDepth ? 1.0 : 0.0;
+    }
+    return visible / 4.0;
 }
 
 float localShadowFactor(vec3 normal, vec3 lightDir)
@@ -471,8 +499,10 @@ void main()
                 clamp(localLightColorIntensity[lightIndex].rgb, vec3(0.0), vec3(16.0)) *
                 clamp(localLightColorIntensity[lightIndex].w, 0.0, 100000.0) * attenuation,
                 vec3(65504.0));
-            float localShadow = localLightOuterType[lightIndex].z > 0.5 ?
-                localShadowFactor(normal, localLightDirection) : 1.0;
+            float localShadow = localLightOuterType[lightIndex].z > 1.5 ?
+                pointShadowFactor(normal, localLightDirection) :
+                (localLightOuterType[lightIndex].z > 0.5 ?
+                    localShadowFactor(normal, localLightDirection) : 1.0);
             vec3 localSpecular = localDistribution * localVisibility * localFresnel;
             vec3 localDiffuse = (1.0 - surfaceTransmission) * (1.0 - localFresnel) * (1.0 - surfaceMetallic) * albedo / PI;
             color += (localDiffuse + localSpecular) * localRadiance * localNDotL * localShadow;
