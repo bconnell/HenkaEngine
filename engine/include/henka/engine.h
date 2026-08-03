@@ -163,6 +163,7 @@ typedef struct henka_engine_diagnostics
     uint64_t texture_residency_failed_request_count;
     uint64_t texture_residency_eviction_count;
     uint64_t texture_residency_eviction_failure_count;
+    uint32_t texture_residency_pinned_count;
     bool texture_residency_budget_exceeded;
     bool wireframe_enabled;
     bool mouse_captured;

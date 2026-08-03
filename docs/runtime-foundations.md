@@ -129,8 +129,10 @@ failure. Callers can apply the configured non-zero budget through a bounded
 enforcement API; a zero budget remains a no-op and a capped eviction count
 returns `HENKA_ERROR_LIMIT` if the target cannot be reached. This is explicit
 policy enforcement, and the frame lifecycle applies at most one configured-
-budget eviction per frame. Background I/O, projected-size selection, active-frame
-pinning, and broader automatic frame policy remain unfinished.
+budget eviction per frame. Visible manager-owned textures are pinned for the
+active frame before this trim step, and diagnostics report the bounded pin count.
+Background I/O, projected-size selection, and broader automatic frame policy remain
+unfinished.
 
 Residency diagnostics also retain cumulative bytes successfully uploaded through
 manager-owned texture creation or replacement and bytes removed by successful
@@ -375,4 +377,4 @@ Temporal history allocation validates the replacement texture before retiring th
 
 The bounded AO horizon search now applies a depth-agreement edge confidence to suppress haloing across discontinuities while retaining the existing radius, thickness, falloff, bias, and intensity controls. Temporal AO history, multi-frame denoise, and production GTAO validation remain unfinished.
 
-KTX2 residency requests now retain a bounded priority alongside their strongest mip target. Visible scene references assign deterministic distance and semantic-slot priorities, and the manager services the highest-priority request first with mip-count tie breaking and stable queue order. This remains synchronous and does not claim projected-size selection, active-frame pinning, background I/O, or automatic residency policy.
+KTX2 residency requests now retain a bounded priority alongside their strongest mip target. Visible scene references assign deterministic distance and semantic-slot priorities, and the manager services the highest-priority request first with mip-count tie breaking and stable queue order. The active-frame API clears and records bounded pins on manager-owned texture entries; visible references use it so trim cannot evict a texture needed by the current frame. This remains synchronous and does not claim projected-size selection, background I/O, or automatic residency policy.

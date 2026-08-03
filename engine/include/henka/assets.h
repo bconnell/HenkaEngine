@@ -56,6 +56,7 @@ typedef struct henka_texture_residency_diagnostics
     uint64_t failed_request_count;
     uint64_t eviction_count;
     uint64_t eviction_failure_count;
+    size_t pinned_texture_count;
     bool budget_exceeded;
 } henka_texture_residency_diagnostics;
 
@@ -171,6 +172,15 @@ henka_result henka_assets_set_texture_residency_budget(
 henka_result henka_assets_get_texture_residency_diagnostics(
     const henka_asset_manager* manager,
     henka_texture_residency_diagnostics* out_diagnostics);
+/* Starts the bounded active-frame residency scope. Pins made after this call
+ * are retained until the next frame scope begins and are not trim candidates. */
+henka_result henka_assets_begin_texture_residency_frame(
+    henka_asset_manager* manager,
+    uint64_t frame_index);
+/* Pins one manager-owned texture for the active residency frame. */
+henka_result henka_assets_pin_texture_for_residency_frame(
+    henka_asset_manager* manager,
+    henka_texture* texture);
 /* Coalesces a bounded manager-owned KTX2 mip request. Repeated requests for
  * one texture retain the strongest resident-mip target. Processing is
  * explicit and synchronous; background I/O remains unfinished. */

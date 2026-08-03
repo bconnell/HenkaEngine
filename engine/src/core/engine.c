@@ -461,6 +461,9 @@ static void henka_engine_queue_visible_texture_residency(
         for (texture_index = 0U; texture_index < sizeof(textures) / sizeof(textures[0]); ++texture_index)
         {
             henka_texture_info info;
+            (void)henka_assets_pin_texture_for_residency_frame(
+                engine->asset_manager,
+                textures[texture_index]);
             if (!henka_engine_is_ktx2_texture(engine->asset_manager, textures[texture_index]) ||
                 henka_texture_get_info(textures[texture_index], &info) != HENKA_SUCCESS ||
                 info.resident_mip_count >= requested_mips || info.mip_count < requested_mips)
@@ -507,6 +510,9 @@ static henka_result henka_engine_render_frame(henka_engine* engine)
      */
     if (engine->asset_manager != NULL)
     {
+        (void)henka_assets_begin_texture_residency_frame(
+            engine->asset_manager,
+            engine->time.frame_index);
         henka_engine_queue_visible_texture_residency(engine);
         result = henka_assets_process_texture_residency_requests(
             engine->asset_manager,
@@ -1582,6 +1588,9 @@ henka_result henka_engine_get_diagnostics(
     out_diagnostics->texture_residency_failed_request_count = texture_residency.failed_request_count;
     out_diagnostics->texture_residency_eviction_count = texture_residency.eviction_count;
     out_diagnostics->texture_residency_eviction_failure_count = texture_residency.eviction_failure_count;
+    out_diagnostics->texture_residency_pinned_count =
+        texture_residency.pinned_texture_count > UINT32_MAX ?
+        UINT32_MAX : (uint32_t)texture_residency.pinned_texture_count;
     out_diagnostics->texture_residency_budget_exceeded = texture_residency.budget_exceeded;
     out_diagnostics->wireframe_enabled =
         out_diagnostics->viewport_shading_mode ==

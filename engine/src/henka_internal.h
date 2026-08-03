@@ -208,6 +208,7 @@ typedef struct henka_asset_texture_entry
     bool owns_texture;
     henka_texture_descriptor descriptor;
     uint64_t resident_gpu_bytes;
+    bool residency_pinned;
     henka_asset_metadata metadata;
 } henka_asset_texture_entry;
 
@@ -283,6 +284,8 @@ struct henka_asset_manager
     uint64_t texture_residency_failed_requests;
     uint64_t texture_residency_eviction_count;
     uint64_t texture_residency_eviction_failure_count;
+    uint64_t texture_residency_frame_index;
+    bool texture_residency_frame_active;
 };
 
 struct henka_scene

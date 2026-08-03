@@ -1446,6 +1446,7 @@ henka_result henka_assets_get_texture_residency_diagnostics(
     henka_texture_residency_diagnostics* out_diagnostics)
 {
     size_t index;
+    size_t pinned_texture_count = 0U;
 
     if (out_diagnostics != NULL)
         memset(out_diagnostics, 0, sizeof(*out_diagnostics));
@@ -1466,11 +1467,47 @@ henka_result henka_assets_get_texture_residency_diagnostics(
     {
         if (manager->texture_entries[index].metadata.fallback)
             ++out_diagnostics->fallback_texture_count;
+        if (manager->texture_residency_frame_active &&
+            manager->texture_entries[index].residency_pinned)
+            ++pinned_texture_count;
     }
+    out_diagnostics->pinned_texture_count = pinned_texture_count;
     out_diagnostics->budget_exceeded =
         manager->texture_residency_budget_bytes != 0U &&
         manager->texture_resident_bytes > manager->texture_residency_budget_bytes;
     return HENKA_SUCCESS;
+}
+
+henka_result henka_assets_begin_texture_residency_frame(
+    henka_asset_manager* manager,
+    uint64_t frame_index)
+{
+    if (manager == NULL)
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    manager->texture_residency_frame_index = frame_index;
+    manager->texture_residency_frame_active = true;
+    for (size_t index = 0U; index < manager->texture_count; ++index)
+        manager->texture_entries[index].residency_pinned = false;
+    return HENKA_SUCCESS;
+}
+
+henka_result henka_assets_pin_texture_for_residency_frame(
+    henka_asset_manager* manager,
+    henka_texture* texture)
+{
+    size_t index;
+
+    if (manager == NULL || texture == NULL || !manager->texture_residency_frame_active)
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    for (index = 0U; index < manager->texture_count; ++index)
+    {
+        if (manager->texture_entries[index].texture == texture)
+        {
+            manager->texture_entries[index].residency_pinned = true;
+            return HENKA_SUCCESS;
+        }
+    }
+    return HENKA_ERROR_ASSET_SOURCE;
 }
 
 henka_result henka_assets_queue_texture_residency_request(
@@ -1711,7 +1748,8 @@ henka_result henka_assets_trim_texture_residency(
                 !henka_asset_texture_path_is_ktx2(entry->source_path) ||
                 entry->resident_gpu_bytes <= candidate_bytes ||
                 henka_texture_get_info(entry->texture, &info) != HENKA_SUCCESS ||
-                info.resident_mip_count <= 1U)
+                info.resident_mip_count <= 1U ||
+                (manager->texture_residency_frame_active && entry->residency_pinned))
             {
                 continue;
             }
