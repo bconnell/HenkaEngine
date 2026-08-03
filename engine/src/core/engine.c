@@ -1488,6 +1488,8 @@ henka_result henka_engine_get_diagnostics(
         &out_diagnostics->rendered_temporal_invalidation_count,
         out_diagnostics->rendered_temporal_invalidation_reason,
         sizeof(out_diagnostics->rendered_temporal_invalidation_reason),
+        &out_diagnostics->rendered_temporal_resolve_count,
+        &out_diagnostics->rendered_temporal_fallback_frame_count,
         &out_diagnostics->rendered_motion_vectors_ready,
         &out_diagnostics->rendered_temporal_jitter_enabled,
         &out_diagnostics->rendered_temporal_jitter_x,

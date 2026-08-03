@@ -94,6 +94,8 @@ typedef struct henka_engine_diagnostics
     bool rendered_temporal_fallback_active;
     uint32_t rendered_temporal_invalidation_count;
     char rendered_temporal_invalidation_reason[64];
+    uint64_t rendered_temporal_resolve_count;
+    uint64_t rendered_temporal_fallback_frame_count;
     bool rendered_motion_vectors_ready;
     bool rendered_temporal_jitter_enabled;
     float rendered_temporal_jitter_x;

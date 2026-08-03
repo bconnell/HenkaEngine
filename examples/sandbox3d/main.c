@@ -9207,17 +9207,21 @@ static void sandbox3d_update(henka_engine* engine, double delta_seconds, void* u
     sandbox3d_build_ui(engine, state);
     sandbox3d_build_native_panel_test_ui(engine, state);
     sandbox3d_build_detached_workspace_panel_ui(engine, state);
-    if (state->smoke_test && henka_engine_get_frame_index(engine) >= 2U)
+    if (state->smoke_test && henka_engine_get_frame_index(engine) >= 8U)
     {
         henka_engine_diagnostics smoke_diagnostics;
         if (henka_engine_get_diagnostics(engine, &smoke_diagnostics) == HENKA_SUCCESS)
         {
             printf(
-                "Rendered smoke diagnostics: HDR=%s Bloom=%s IBL=%s (%s) CPU=%.2fms GPU=%.2fms(%s) VRAM=%llu bytes.\n",
+                "Rendered smoke diagnostics: HDR=%s Bloom=%s IBL=%s (%s) TAA=R%llu/F%llu/I%u(%s) CPU=%.2fms GPU=%.2fms(%s) VRAM=%llu bytes.\n",
                 smoke_diagnostics.rendered_hdr_ready ? "ready" : "fallback",
                 smoke_diagnostics.rendered_bloom_ready ? "ready" : "fallback",
                 smoke_diagnostics.rendered_ibl_ready ? "ready" : "fallback",
                 smoke_diagnostics.rendered_ibl_failure[0] != '\0' ? smoke_diagnostics.rendered_ibl_failure : "none",
+                (unsigned long long)smoke_diagnostics.rendered_temporal_resolve_count,
+                (unsigned long long)smoke_diagnostics.rendered_temporal_fallback_frame_count,
+                (unsigned int)smoke_diagnostics.rendered_temporal_invalidation_count,
+                smoke_diagnostics.rendered_temporal_invalidation_reason,
                 smoke_diagnostics.rendered_scene_cpu_time_milliseconds,
                 smoke_diagnostics.rendered_scene_gpu_time_milliseconds,
                 smoke_diagnostics.rendered_scene_gpu_timing_available ? "available" : "unavailable",
