@@ -549,6 +549,13 @@ void henka_opengl_renderer_get_shadow_diagnostics(
     bool* out_complete,
     char* out_failure,
     size_t failure_capacity);
+void henka_opengl_renderer_get_cascade_shadow_diagnostics(
+    const struct henka_renderer* renderer,
+    int* out_resolution,
+    uint64_t* out_generation,
+    bool* out_complete,
+    char* out_failure,
+    size_t failure_capacity);
 void henka_opengl_renderer_get_bloom_diagnostics(
     const struct henka_renderer* renderer,
     int* out_width,
