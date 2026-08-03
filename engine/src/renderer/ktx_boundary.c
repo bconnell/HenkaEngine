@@ -18,6 +18,278 @@ static bool henka_ktx_checked_rgba8_size(int width, int height, size_t* out_size
     return true;
 }
 
+static bool henka_ktx_vk_format_is_srgb(uint32_t vk_format, bool* out_is_srgb)
+{
+    if (out_is_srgb == NULL)
+        return false;
+    switch (vk_format)
+    {
+        case 37U:  /* VK_FORMAT_R8G8B8A8_UNORM */
+        case 131U: /* VK_FORMAT_BC1_RGB_UNORM_BLOCK */
+        case 137U: /* VK_FORMAT_BC3_UNORM_BLOCK */
+        case 141U: /* VK_FORMAT_BC5_UNORM_BLOCK */
+        case 145U: /* VK_FORMAT_BC7_UNORM_BLOCK */
+        case 147U: /* VK_FORMAT_ETC2_R8G8B8_UNORM_BLOCK */
+        case 151U: /* VK_FORMAT_ETC2_R8G8B8A8_UNORM_BLOCK */
+        case 153U: /* VK_FORMAT_EAC_R11_UNORM_BLOCK */
+        case 154U: /* VK_FORMAT_EAC_R11G11_UNORM_BLOCK */
+        case 157U: /* VK_FORMAT_ASTC_4x4_UNORM_BLOCK */
+            *out_is_srgb = false;
+            return true;
+        case 43U:  /* VK_FORMAT_R8G8B8A8_SRGB */
+        case 132U: /* VK_FORMAT_BC1_RGB_SRGB_BLOCK */
+        case 138U: /* VK_FORMAT_BC3_SRGB_BLOCK */
+        case 146U: /* VK_FORMAT_BC7_SRGB_BLOCK */
+        case 148U: /* VK_FORMAT_ETC2_R8G8B8_SRGB_BLOCK */
+        case 152U: /* VK_FORMAT_ETC2_R8G8B8A8_SRGB_BLOCK */
+        case 158U: /* VK_FORMAT_ASTC_4x4_SRGB_BLOCK */
+            *out_is_srgb = true;
+            return true;
+        default:
+            return false;
+    }
+}
+
+static bool henka_ktx_vk_format_to_gpu_format(
+    uint32_t vk_format,
+    uint32_t capabilities,
+    henka_ktx2_gpu_format* out_format,
+    bool* out_compressed)
+{
+    bool supported;
+
+    if (out_format == NULL || out_compressed == NULL)
+        return false;
+    *out_compressed = false;
+    supported = false;
+    switch (vk_format)
+    {
+        case 37U:
+        case 43U:
+            *out_format = HENKA_KTX2_GPU_FORMAT_RGBA8;
+            return true;
+        case 131U:
+        case 132U:
+            *out_format = HENKA_KTX2_GPU_FORMAT_BC1;
+            supported = (capabilities & HENKA_KTX2_CAPABILITY_BC1_3) != 0U;
+            break;
+        case 137U:
+        case 138U:
+            *out_format = HENKA_KTX2_GPU_FORMAT_BC3;
+            supported = (capabilities & HENKA_KTX2_CAPABILITY_BC1_3) != 0U;
+            break;
+        case 141U:
+            *out_format = HENKA_KTX2_GPU_FORMAT_BC5;
+            supported = (capabilities & HENKA_KTX2_CAPABILITY_BC5) != 0U;
+            break;
+        case 145U:
+        case 146U:
+            *out_format = HENKA_KTX2_GPU_FORMAT_BC7;
+            supported = (capabilities & HENKA_KTX2_CAPABILITY_BC7) != 0U;
+            break;
+        case 147U:
+        case 148U:
+            *out_format = HENKA_KTX2_GPU_FORMAT_ETC2_RGB;
+            supported = (capabilities & HENKA_KTX2_CAPABILITY_ETC2) != 0U;
+            break;
+        case 151U:
+        case 152U:
+            *out_format = HENKA_KTX2_GPU_FORMAT_ETC2_RGBA;
+            supported = (capabilities & HENKA_KTX2_CAPABILITY_ETC2) != 0U;
+            break;
+        case 153U:
+        case 154U:
+            *out_format = HENKA_KTX2_GPU_FORMAT_ETC2_RG;
+            supported = (capabilities & HENKA_KTX2_CAPABILITY_ETC2) != 0U;
+            break;
+        case 157U:
+        case 158U:
+            *out_format = HENKA_KTX2_GPU_FORMAT_ASTC_4X4;
+            supported = (capabilities & HENKA_KTX2_CAPABILITY_ASTC_4X4) != 0U;
+            break;
+        default:
+            return false;
+    }
+    if (!supported)
+        return false;
+    *out_compressed = true;
+    return true;
+}
+
+static bool henka_ktx_select_transcode_target(
+    henka_texture_usage usage,
+    uint32_t capabilities,
+    ktx_transcode_fmt_e* out_target)
+{
+    if (out_target == NULL)
+        return false;
+    if (usage == HENKA_TEXTURE_USAGE_NORMAL &&
+        (capabilities & HENKA_KTX2_CAPABILITY_BC5) != 0U)
+    {
+        *out_target = KTX_TTF_BC5_RG;
+        return true;
+    }
+    if ((capabilities & HENKA_KTX2_CAPABILITY_BC7) != 0U)
+    {
+        *out_target = KTX_TTF_BC7_RGBA;
+        return true;
+    }
+    if ((capabilities & HENKA_KTX2_CAPABILITY_BC1_3) != 0U)
+    {
+        *out_target = KTX_TTF_BC1_OR_3;
+        return true;
+    }
+    if ((capabilities & HENKA_KTX2_CAPABILITY_ETC2) != 0U)
+    {
+        *out_target = usage == HENKA_TEXTURE_USAGE_NORMAL ?
+            KTX_TTF_ETC2_EAC_RG11 : KTX_TTF_ETC2_RGBA;
+        return true;
+    }
+    if ((capabilities & HENKA_KTX2_CAPABILITY_ASTC_4X4) != 0U)
+    {
+        *out_target = KTX_TTF_ASTC_4x4_RGBA;
+        return true;
+    }
+    return false;
+}
+
+void henka_ktx2_upload_dispose(henka_ktx2_upload* upload)
+{
+    if (upload == NULL)
+        return;
+    henka_free(upload->data);
+    memset(upload, 0, sizeof(*upload));
+}
+
+henka_result henka_ktx2_prepare_upload(
+    const unsigned char* data,
+    size_t data_size,
+    henka_texture_usage usage,
+    henka_texture_color_space color_space,
+    uint32_t capabilities,
+    henka_ktx2_upload* out_upload)
+{
+    ktxTexture2* texture = NULL;
+    ktxTexture* base_texture;
+    henka_ktx2_upload upload;
+    henka_ktx2_gpu_format format;
+    ktx_transcode_fmt_e transcode_target;
+    uint32_t level;
+    size_t total_size = 0U;
+    bool is_srgb;
+    bool compressed;
+    henka_result result = HENKA_ERROR_ASSET_SOURCE;
+
+    if (out_upload != NULL)
+        memset(out_upload, 0, sizeof(*out_upload));
+    memset(&upload, 0, sizeof(upload));
+    if (data == NULL || data_size == 0U || data_size > HENKA_MAX_TEXTURE_ENCODED_BYTES ||
+        out_upload == NULL || usage > HENKA_TEXTURE_USAGE_UI ||
+        color_space > HENKA_TEXTURE_COLOR_SPACE_LINEAR ||
+        ktxTexture2_CreateFromMemory(
+            data,
+            (ktx_size_t)data_size,
+            KTX_TEXTURE_CREATE_LOAD_IMAGE_DATA_BIT | KTX_TEXTURE_CREATE_SKIP_KVDATA_BIT,
+            &texture) != KTX_SUCCESS || texture == NULL)
+    {
+        return HENKA_ERROR_ASSET_SOURCE;
+    }
+
+    base_texture = ktxTexture(texture);
+    if (texture->baseWidth == 0U || texture->baseHeight == 0U ||
+        texture->baseWidth > HENKA_MAX_TEXTURE_DIMENSION ||
+        texture->baseHeight > HENKA_MAX_TEXTURE_DIMENSION ||
+        texture->baseDepth > 1U || texture->numDimensions != 2U ||
+        texture->numLayers != 1U || texture->numFaces != 1U ||
+        texture->numLevels == 0U || texture->numLevels > 16U)
+    {
+        goto cleanup;
+    }
+
+    if (ktxTexture2_NeedsTranscoding(texture))
+    {
+        if (henka_ktx_select_transcode_target(usage, capabilities, &transcode_target))
+        {
+            if (ktxTexture2_TranscodeBasis(texture, transcode_target, 0U) != KTX_SUCCESS)
+                goto cleanup;
+        }
+        else if (ktxTexture2_TranscodeBasis(texture, KTX_TTF_RGBA32, 0U) != KTX_SUCCESS)
+        {
+            goto cleanup;
+        }
+    }
+
+    if (!henka_ktx_vk_format_is_srgb(texture->vkFormat, &is_srgb) ||
+        is_srgb != (color_space == HENKA_TEXTURE_COLOR_SPACE_SRGB) ||
+        !henka_ktx_vk_format_to_gpu_format(
+            texture->vkFormat, capabilities, &format, &compressed))
+    {
+        /* RGBA8 is the only universally supported fallback. A native
+         * compressed payload cannot be safely decoded by libktx here. */
+        if (texture->vkFormat != 37U && texture->vkFormat != 43U)
+            goto cleanup;
+        format = HENKA_KTX2_GPU_FORMAT_RGBA8;
+        compressed = false;
+    }
+
+    upload.width = (int)texture->baseWidth;
+    upload.height = (int)texture->baseHeight;
+    upload.level_count = texture->numLevels;
+    upload.compressed = compressed;
+    upload.is_srgb = is_srgb;
+    upload.format = format;
+    for (level = 0U; level < texture->numLevels; ++level)
+    {
+        ktx_size_t image_offset = 0U;
+        ktx_size_t image_size = ktxTexture_GetImageSize(base_texture, level);
+        int level_width = upload.width >> level;
+        int level_height = upload.height >> level;
+        if (level_width < 1) level_width = 1;
+        if (level_height < 1) level_height = 1;
+        if (image_size == 0U ||
+            ktxTexture_GetImageOffset(base_texture, level, 0U, 0U, &image_offset) != KTX_SUCCESS ||
+            image_offset > base_texture->dataSize ||
+            image_size > base_texture->dataSize - image_offset ||
+            image_size > (ktx_size_t)SIZE_MAX ||
+            !henka_checked_size_add(total_size, (size_t)image_size, &total_size) ||
+            total_size > HENKA_MAX_TEXTURE_DECODED_BYTES)
+        {
+            goto cleanup;
+        }
+        upload.levels[level].offset = total_size - (size_t)image_size;
+        upload.levels[level].size = (size_t)image_size;
+        upload.levels[level].width = level_width;
+        upload.levels[level].height = level_height;
+    }
+    upload.data = henka_malloc(total_size);
+    if (upload.data == NULL)
+    {
+        result = HENKA_ERROR_OUT_OF_MEMORY;
+        goto cleanup;
+    }
+    upload.data_size = total_size;
+    for (level = 0U; level < upload.level_count; ++level)
+    {
+        ktx_size_t image_offset = 0U;
+        ktx_uint8_t* source_data = ktxTexture_GetData(base_texture);
+        if (source_data == NULL ||
+            ktxTexture_GetImageOffset(base_texture, level, 0U, 0U, &image_offset) != KTX_SUCCESS)
+            goto cleanup;
+        memcpy(
+            upload.data + upload.levels[level].offset,
+            source_data + image_offset,
+            upload.levels[level].size);
+    }
+    *out_upload = upload;
+    memset(&upload, 0, sizeof(upload));
+    result = HENKA_SUCCESS;
+
+cleanup:
+    henka_ktx2_upload_dispose(&upload);
+    ktxTexture_Destroy(base_texture);
+    return result;
+}
+
 henka_result henka_ktx2_decode_rgba8(
     const unsigned char* data,
     size_t data_size,

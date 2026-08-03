@@ -35,6 +35,7 @@ target_link_libraries(henka_tests
 
 if(HENKA_ENABLE_KTX2_TRANSCODER)
     target_compile_definitions(henka_tests PRIVATE HENKA_WITH_KTX2_TRANSCODER=1)
+    target_include_directories(henka_tests PRIVATE ${ktxsoftware_SOURCE_DIR}/include)
 endif()
 
 henka_enable_project_warnings(henka_tests)

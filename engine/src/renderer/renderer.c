@@ -567,6 +567,33 @@ henka_result henka_renderer_create_texture_from_rgba32f_with_descriptor(
         out_texture);
 }
 
+henka_result henka_renderer_create_texture_from_ktx2_memory(
+    struct henka_renderer* renderer,
+    const unsigned char* data,
+    size_t data_size,
+    const henka_texture_descriptor* descriptor,
+    struct henka_texture** out_texture)
+{
+    if (out_texture != NULL)
+    {
+        *out_texture = NULL;
+    }
+    if (renderer == NULL || renderer->backend_state == NULL || data == NULL ||
+        data_size == 0U || descriptor == NULL || out_texture == NULL ||
+        henka_texture_descriptor_validate(descriptor) != HENKA_SUCCESS)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+#if defined(HENKA_WITH_KTX2_TRANSCODER)
+    return henka_opengl_renderer_create_texture_from_ktx2_memory(
+        renderer, data, data_size, descriptor, out_texture);
+#else
+    (void)data;
+    (void)data_size;
+    return HENKA_ERROR_ASSET_SOURCE;
+#endif
+}
+
 void henka_renderer_destroy_texture(struct henka_texture* texture)
 {
     henka_opengl_renderer_destroy_texture(texture);

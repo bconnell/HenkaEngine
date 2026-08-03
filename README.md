@@ -42,6 +42,7 @@ Henka Engine is still early, but the sandbox now renders a visible 3D scene with
 - Bounded glTF/GLB geometry and shared PBR material import with manager-owned texture dependencies, transactional material-asset reload, and strict bounded JSON/accessor validation
 - Bounded glTF/GLB scene import with selected scene roots, node hierarchy transforms, cameras, punctual lights, meshless camera/light scenes, and fail-closed accessor-reference validation
 - Transactional HDR environment lighting with derived IBL resources, fitted directional shadows, bloom, tone mapping, fog, bounded local probe capture, and explicit Material Preview versus Rendered shading policies
+- Checked KTX2/Basis texture loading with active-OpenGL capability-selected BC/ETC2/ASTC mip uploads and truthful RGBA8 fallback when compressed upload is unavailable
 - Bounded realism validation materials and scene samples covering metal, clearcoat, plastic, stone, sheen, wood, wet/dry variation, detail normals, and masked foliage
 - Descriptor-aware RGBA8 textures with explicit sRGB/linear, sampler, wrap, mip, flip, usage, alpha, source-class, and content-revision metadata
 - Bounded single-read texture decoding with truthful rejection of HDR and 16-bit sources, plus path-specific white/error fallback aliases
@@ -75,7 +76,7 @@ Henka Engine is still early, but the sandbox now renders a visible 3D scene with
 - Full 2.5D sprite, layered-depth, parallax, animation, and constrained-movement workflow
 - Integrated modeling, UV, rigging, animation-authoring, and content-creation workspace
 - Additional renderer backends
-- Native GPU-compressed KTX2/Basis upload, texture residency/streaming, production instancing, SSR, motion-vector TAA, and transmission/glass rendering remain unfinished; current paths expose truthful fallbacks or bounded foundations
+- Complete cross-backend KTX2/Basis production coverage and GPU-native stress validation, texture residency/streaming, production instancing, SSR, motion-vector TAA, and transmission/glass rendering remain unfinished; current paths expose truthful fallbacks or bounded foundations
 
 ## Repository layout
 

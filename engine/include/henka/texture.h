@@ -123,9 +123,11 @@ henka_result henka_texture_create_from_file_with_descriptor(
 
 /*
  * Creates a texture from a bounded KTX2 byte buffer. The buffer remains
- * caller-owned and is only read during the call. The checked compatibility
- * path accepts uncompressed RGBA8 KTX2 levels; unsupported compressed
- * payloads return HENKA_ERROR_ASSET_SOURCE for manager fallback handling.
+ * caller-owned and is only read during the call. The renderer selects a
+ * supported GPU-compressed format for Basis payloads when available,
+ * preserves checked KTX2 mip levels, and falls back to bounded RGBA8 upload
+ * only when the source can be safely transcoded. Unsupported native payloads
+ * return HENKA_ERROR_ASSET_SOURCE for manager fallback handling.
  */
 henka_result henka_texture_create_from_ktx2_memory(
     henka_engine* engine,

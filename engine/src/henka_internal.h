@@ -20,6 +20,54 @@
 #include <henka/texture.h>
 
 #if defined(HENKA_WITH_KTX2_TRANSCODER)
+typedef enum henka_ktx2_gpu_format
+{
+    HENKA_KTX2_GPU_FORMAT_RGBA8 = 0,
+    HENKA_KTX2_GPU_FORMAT_BC1,
+    HENKA_KTX2_GPU_FORMAT_BC3,
+    HENKA_KTX2_GPU_FORMAT_BC5,
+    HENKA_KTX2_GPU_FORMAT_BC7,
+    HENKA_KTX2_GPU_FORMAT_ETC2_RGB,
+    HENKA_KTX2_GPU_FORMAT_ETC2_RGBA,
+    HENKA_KTX2_GPU_FORMAT_ETC2_RG,
+    HENKA_KTX2_GPU_FORMAT_ASTC_4X4
+} henka_ktx2_gpu_format;
+
+#define HENKA_KTX2_CAPABILITY_BC1_3 (1U << 0)
+#define HENKA_KTX2_CAPABILITY_BC5 (1U << 1)
+#define HENKA_KTX2_CAPABILITY_BC7 (1U << 2)
+#define HENKA_KTX2_CAPABILITY_ETC2 (1U << 3)
+#define HENKA_KTX2_CAPABILITY_ASTC_4X4 (1U << 4)
+
+typedef struct henka_ktx2_upload_level
+{
+    size_t offset;
+    size_t size;
+    int width;
+    int height;
+} henka_ktx2_upload_level;
+
+typedef struct henka_ktx2_upload
+{
+    unsigned char* data;
+    size_t data_size;
+    int width;
+    int height;
+    uint32_t level_count;
+    bool compressed;
+    bool is_srgb;
+    henka_ktx2_gpu_format format;
+    henka_ktx2_upload_level levels[16];
+} henka_ktx2_upload;
+
+void henka_ktx2_upload_dispose(henka_ktx2_upload* upload);
+henka_result henka_ktx2_prepare_upload(
+    const unsigned char* data,
+    size_t data_size,
+    henka_texture_usage usage,
+    henka_texture_color_space color_space,
+    uint32_t capabilities,
+    henka_ktx2_upload* out_upload);
 henka_result henka_ktx2_decode_rgba8(
     const unsigned char* data,
     size_t data_size,
@@ -422,6 +470,12 @@ henka_result henka_renderer_create_texture_from_rgba32f_with_descriptor(
     const float* pixels,
     const henka_texture_descriptor* descriptor,
     struct henka_texture** out_texture);
+henka_result henka_renderer_create_texture_from_ktx2_memory(
+    struct henka_renderer* renderer,
+    const unsigned char* data,
+    size_t data_size,
+    const henka_texture_descriptor* descriptor,
+    struct henka_texture** out_texture);
 void henka_renderer_destroy_texture(struct henka_texture* texture);
 
 henka_result henka_opengl_renderer_create(struct henka_renderer* renderer, struct henka_platform* platform, bool enable_vsync);
@@ -532,6 +586,12 @@ henka_result henka_opengl_renderer_create_texture_from_rgba32f_with_descriptor(
     int width,
     int height,
     const float* pixels,
+    const henka_texture_descriptor* descriptor,
+    struct henka_texture** out_texture);
+henka_result henka_opengl_renderer_create_texture_from_ktx2_memory(
+    struct henka_renderer* renderer,
+    const unsigned char* data,
+    size_t data_size,
     const henka_texture_descriptor* descriptor,
     struct henka_texture** out_texture);
 void henka_opengl_renderer_destroy_texture(struct henka_texture* texture);

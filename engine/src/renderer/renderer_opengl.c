@@ -23,6 +23,46 @@
 #define GL_MAX_TEXTURE_MAX_ANISOTROPY_EXT 0x84FF
 #endif
 
+#ifndef GL_COMPRESSED_RGB_S3TC_DXT1_EXT
+#define GL_COMPRESSED_RGB_S3TC_DXT1_EXT 0x83F0
+#endif
+#ifndef GL_COMPRESSED_RGBA_S3TC_DXT5_EXT
+#define GL_COMPRESSED_RGBA_S3TC_DXT5_EXT 0x83F3
+#endif
+#ifndef GL_COMPRESSED_RED_RGTC1
+#define GL_COMPRESSED_RED_RGTC1 0x8DBB
+#endif
+#ifndef GL_COMPRESSED_RG_RGTC2
+#define GL_COMPRESSED_RG_RGTC2 0x8DBD
+#endif
+#ifndef GL_COMPRESSED_RGBA_BPTC_UNORM
+#define GL_COMPRESSED_RGBA_BPTC_UNORM 0x8E8C
+#endif
+#ifndef GL_COMPRESSED_SRGB_ALPHA_BPTC_UNORM
+#define GL_COMPRESSED_SRGB_ALPHA_BPTC_UNORM 0x8E8D
+#endif
+#ifndef GL_COMPRESSED_RGB8_ETC2
+#define GL_COMPRESSED_RGB8_ETC2 0x9274
+#endif
+#ifndef GL_COMPRESSED_SRGB8_ETC2
+#define GL_COMPRESSED_SRGB8_ETC2 0x9275
+#endif
+#ifndef GL_COMPRESSED_RGBA8_ETC2_EAC
+#define GL_COMPRESSED_RGBA8_ETC2_EAC 0x9278
+#endif
+#ifndef GL_COMPRESSED_RG11_EAC
+#define GL_COMPRESSED_RG11_EAC 0x9272
+#endif
+#ifndef GL_COMPRESSED_SRGB8_ALPHA8_ETC2_EAC
+#define GL_COMPRESSED_SRGB8_ALPHA8_ETC2_EAC 0x9279
+#endif
+#ifndef GL_COMPRESSED_RGBA_ASTC_4x4_KHR
+#define GL_COMPRESSED_RGBA_ASTC_4x4_KHR 0x93B0
+#endif
+#ifndef GL_COMPRESSED_SRGB8_ALPHA8_ASTC_4x4_KHR
+#define GL_COMPRESSED_SRGB8_ALPHA8_ASTC_4x4_KHR 0x93D0
+#endif
+
 typedef struct henka_opengl_tool_window_target
 {
     henka_window_id id;
@@ -331,6 +371,7 @@ typedef struct henka_opengl_functions
     PFNGLDELETEVERTEXARRAYSPROC DeleteVertexArrays;
     PFNGLACTIVETEXTUREPROC ActiveTexture;
     PFNGLGENERATEMIPMAPPROC GenerateMipmap;
+    PFNGLCOMPRESSEDTEXIMAGE2DPROC CompressedTexImage2D;
     PFNGLGENFRAMEBUFFERSPROC GenFramebuffers;
     PFNGLBINDFRAMEBUFFERPROC BindFramebuffer;
     PFNGLFRAMEBUFFERTEXTURE2DPROC FramebufferTexture2D;
@@ -366,6 +407,75 @@ typedef struct henka_opengl_texture_data
 } henka_opengl_texture_data;
 
 static henka_opengl_functions g_gl;
+
+#if defined(HENKA_WITH_KTX2_TRANSCODER)
+static bool henka_opengl_has_extension(const char* extensions, const char* name)
+{
+    const char* cursor;
+    size_t name_length;
+
+    if (extensions == NULL || name == NULL || name[0] == '\0')
+        return false;
+    name_length = strlen(name);
+    cursor = extensions;
+    while ((cursor = strstr(cursor, name)) != NULL)
+    {
+        if ((cursor == extensions || cursor[-1] == ' ') &&
+            (cursor[name_length] == '\0' || cursor[name_length] == ' '))
+            return true;
+        cursor += name_length;
+    }
+    return false;
+}
+
+static uint32_t henka_opengl_ktx2_capabilities(void)
+{
+    const char* extensions = (const char*)glGetString(GL_EXTENSIONS);
+    uint32_t capabilities = 0U;
+
+    if (henka_opengl_has_extension(extensions, "GL_EXT_texture_compression_s3tc") ||
+        henka_opengl_has_extension(extensions, "GL_EXT_texture_compression_dxt1"))
+        capabilities |= HENKA_KTX2_CAPABILITY_BC1_3;
+    if (henka_opengl_has_extension(extensions, "GL_EXT_texture_compression_rgtc") ||
+        henka_opengl_has_extension(extensions, "GL_ARB_texture_compression_rgtc"))
+        capabilities |= HENKA_KTX2_CAPABILITY_BC5;
+    if (henka_opengl_has_extension(extensions, "GL_ARB_texture_compression_bptc"))
+        capabilities |= HENKA_KTX2_CAPABILITY_BC7;
+    if (henka_opengl_has_extension(extensions, "GL_ARB_ES3_compatibility") ||
+        henka_opengl_has_extension(extensions, "GL_OES_compressed_ETC2_RGB8_texture"))
+        capabilities |= HENKA_KTX2_CAPABILITY_ETC2;
+    if (henka_opengl_has_extension(extensions, "GL_KHR_texture_compression_astc_ldr"))
+        capabilities |= HENKA_KTX2_CAPABILITY_ASTC_4X4;
+    return capabilities;
+}
+
+static GLenum henka_opengl_ktx2_internal_format(
+    henka_ktx2_gpu_format format,
+    bool is_srgb)
+{
+    switch (format)
+    {
+        case HENKA_KTX2_GPU_FORMAT_BC1:
+            return is_srgb ? 0x8C4C : GL_COMPRESSED_RGB_S3TC_DXT1_EXT;
+        case HENKA_KTX2_GPU_FORMAT_BC3:
+            return is_srgb ? 0x8C4F : GL_COMPRESSED_RGBA_S3TC_DXT5_EXT;
+        case HENKA_KTX2_GPU_FORMAT_BC5:
+            return GL_COMPRESSED_RG_RGTC2;
+        case HENKA_KTX2_GPU_FORMAT_BC7:
+            return is_srgb ? GL_COMPRESSED_SRGB_ALPHA_BPTC_UNORM : GL_COMPRESSED_RGBA_BPTC_UNORM;
+        case HENKA_KTX2_GPU_FORMAT_ETC2_RGB:
+            return is_srgb ? GL_COMPRESSED_SRGB8_ETC2 : GL_COMPRESSED_RGB8_ETC2;
+        case HENKA_KTX2_GPU_FORMAT_ETC2_RGBA:
+            return is_srgb ? GL_COMPRESSED_SRGB8_ALPHA8_ETC2_EAC : GL_COMPRESSED_RGBA8_ETC2_EAC;
+        case HENKA_KTX2_GPU_FORMAT_ETC2_RG:
+            return GL_COMPRESSED_RG11_EAC;
+        case HENKA_KTX2_GPU_FORMAT_ASTC_4X4:
+            return is_srgb ? GL_COMPRESSED_SRGB8_ALPHA8_ASTC_4x4_KHR : GL_COMPRESSED_RGBA_ASTC_4x4_KHR;
+        default:
+            return 0U;
+    }
+}
+#endif
 
 static GLint henka_opengl_uniform_location(GLuint program, const char* name)
 {
@@ -570,6 +680,7 @@ static bool henka_opengl_load_functions(void)
     HENKA_GL_LOAD(DeleteVertexArrays);
     HENKA_GL_LOAD(ActiveTexture);
     HENKA_GL_LOAD(GenerateMipmap);
+    HENKA_GL_LOAD(CompressedTexImage2D);
     HENKA_GL_LOAD(GenFramebuffers);
     HENKA_GL_LOAD(BindFramebuffer);
     HENKA_GL_LOAD(FramebufferTexture2D);
@@ -5727,6 +5838,206 @@ static henka_result henka_opengl_create_texture_from_pixels(
 
     *out_texture = texture;
     return HENKA_SUCCESS;
+}
+
+henka_result henka_opengl_renderer_create_texture_from_ktx2_memory(
+    struct henka_renderer* renderer,
+    const unsigned char* data,
+    size_t data_size,
+    const henka_texture_descriptor* descriptor,
+    struct henka_texture** out_texture)
+{
+#if defined(HENKA_WITH_KTX2_TRANSCODER)
+    henka_opengl_texture_context_guard context_guard;
+    henka_ktx2_upload upload;
+    henka_opengl_renderer_state* state;
+    henka_opengl_texture_data* texture_data = NULL;
+    henka_texture* texture = NULL;
+    henka_result operation_result;
+    henka_result context_result;
+    henka_result restore_result;
+    GLint previous_active_texture = GL_TEXTURE0;
+    GLint previous_texture_binding = 0;
+    GLint previous_unpack_alignment = 4;
+    uint32_t level;
+    GLenum internal_format;
+    uint64_t logical_texture_bytes;
+
+    memset(&upload, 0, sizeof(upload));
+    if (out_texture != NULL)
+        *out_texture = NULL;
+    if (renderer == NULL || renderer->backend_state == NULL || data == NULL ||
+        data_size == 0U || descriptor == NULL || out_texture == NULL ||
+        henka_texture_descriptor_validate(descriptor) != HENKA_SUCCESS)
+        return HENKA_ERROR_INVALID_ARGUMENT;
+
+    state = (henka_opengl_renderer_state*)renderer->backend_state;
+    operation_result = henka_opengl_begin_texture_context(
+        state, &context_guard, "KTX2 texture creation");
+    if (operation_result != HENKA_SUCCESS)
+        return operation_result;
+    operation_result = henka_ktx2_prepare_upload(
+        data,
+        data_size,
+        descriptor->usage,
+        descriptor->color_space,
+        henka_opengl_ktx2_capabilities(),
+        &upload);
+    if (operation_result != HENKA_SUCCESS)
+    {
+        context_result = henka_opengl_end_texture_context(
+            state, &context_guard, "failed KTX2 preparation");
+        return context_result != HENKA_SUCCESS ? context_result : operation_result;
+    }
+    logical_texture_bytes = (uint64_t)upload.data_size;
+    internal_format = upload.compressed ?
+        henka_opengl_ktx2_internal_format(upload.format, upload.is_srgb) :
+        (upload.is_srgb ? GL_SRGB8_ALPHA8 : GL_RGBA8);
+    if (internal_format == 0U)
+    {
+        henka_ktx2_upload_dispose(&upload);
+        context_result = henka_opengl_end_texture_context(
+            state, &context_guard, "unsupported KTX2 format");
+        return context_result != HENKA_SUCCESS ? context_result : HENKA_ERROR_ASSET_SOURCE;
+    }
+
+    henka_opengl_discard_prior_texture_errors("KTX2 texture creation");
+    glGetIntegerv(GL_ACTIVE_TEXTURE, &previous_active_texture);
+    g_gl.ActiveTexture(GL_TEXTURE0);
+    glGetIntegerv(GL_TEXTURE_BINDING_2D, &previous_texture_binding);
+    glGetIntegerv(GL_UNPACK_ALIGNMENT, &previous_unpack_alignment);
+    operation_result = henka_opengl_collect_texture_errors("KTX2 texture state capture");
+    if (operation_result == HENKA_SUCCESS)
+    {
+        texture = henka_calloc(1U, sizeof(*texture));
+        texture_data = henka_calloc(1U, sizeof(*texture_data));
+        if (texture == NULL || texture_data == NULL)
+            operation_result = HENKA_ERROR_OUT_OF_MEMORY;
+    }
+    if (operation_result == HENKA_SUCCESS)
+    {
+        glGenTextures(1, &texture_data->texture_id);
+        if (texture_data->texture_id == 0U)
+            operation_result = HENKA_ERROR_RENDERER;
+    }
+    if (operation_result == HENKA_SUCCESS)
+    {
+        glBindTexture(GL_TEXTURE_2D, texture_data->texture_id);
+        glTexParameteri(
+            GL_TEXTURE_2D,
+            GL_TEXTURE_MIN_FILTER,
+            descriptor->min_filter == HENKA_TEXTURE_FILTER_NEAREST ? GL_NEAREST :
+                descriptor->min_filter == HENKA_TEXTURE_FILTER_LINEAR ? GL_LINEAR :
+                GL_LINEAR_MIPMAP_LINEAR);
+        glTexParameteri(
+            GL_TEXTURE_2D,
+            GL_TEXTURE_MAG_FILTER,
+            descriptor->mag_filter == HENKA_TEXTURE_FILTER_NEAREST ? GL_NEAREST : GL_LINEAR);
+        glTexParameteri(
+            GL_TEXTURE_2D,
+            GL_TEXTURE_WRAP_S,
+            descriptor->wrap_u == HENKA_TEXTURE_WRAP_CLAMP_TO_EDGE ? GL_CLAMP_TO_EDGE :
+                descriptor->wrap_u == HENKA_TEXTURE_WRAP_MIRRORED_REPEAT ? GL_MIRRORED_REPEAT : GL_REPEAT);
+        glTexParameteri(
+            GL_TEXTURE_2D,
+            GL_TEXTURE_WRAP_T,
+            descriptor->wrap_v == HENKA_TEXTURE_WRAP_CLAMP_TO_EDGE ? GL_CLAMP_TO_EDGE :
+                descriptor->wrap_v == HENKA_TEXTURE_WRAP_MIRRORED_REPEAT ? GL_MIRRORED_REPEAT : GL_REPEAT);
+        glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+        for (level = 0U; level < upload.level_count; ++level)
+        {
+            const henka_ktx2_upload_level* upload_level = &upload.levels[level];
+            const unsigned char* level_data = upload.data + upload_level->offset;
+            if (upload.compressed)
+            {
+                g_gl.CompressedTexImage2D(
+                    GL_TEXTURE_2D,
+                    (GLint)level,
+                    internal_format,
+                    upload_level->width,
+                    upload_level->height,
+                    0,
+                    (GLsizei)upload_level->size,
+                    level_data);
+            }
+            else
+            {
+                glTexImage2D(
+                    GL_TEXTURE_2D,
+                    (GLint)level,
+                    (GLint)internal_format,
+                    upload_level->width,
+                    upload_level->height,
+                    0,
+                    GL_RGBA,
+                    GL_UNSIGNED_BYTE,
+                    level_data);
+            }
+        }
+        operation_result = henka_opengl_collect_texture_errors(
+            "KTX2 texture upload");
+    }
+    restore_result = henka_opengl_restore_texture_binding(
+        previous_active_texture, previous_texture_binding, previous_unpack_alignment);
+    if (operation_result == HENKA_SUCCESS && restore_result != HENKA_SUCCESS)
+        operation_result = restore_result;
+    if (operation_result != HENKA_SUCCESS && texture_data != NULL && texture_data->texture_id != 0U)
+    {
+        g_gl.ActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_2D, 0U);
+        glDeleteTextures(1, &texture_data->texture_id);
+        texture_data->texture_id = 0U;
+        (void)henka_opengl_collect_texture_errors("failed KTX2 texture cleanup");
+    }
+    context_result = henka_opengl_end_texture_context(
+        state, &context_guard, "KTX2 texture creation");
+    if (operation_result == HENKA_SUCCESS && context_result != HENKA_SUCCESS)
+    {
+        operation_result = context_result;
+        if (SDL_GL_MakeCurrent(state->window, state->gl_context) &&
+            texture_data != NULL && texture_data->texture_id != 0U)
+        {
+            glDeleteTextures(1, &texture_data->texture_id);
+            texture_data->texture_id = 0U;
+        }
+    }
+    if (operation_result != HENKA_SUCCESS)
+    {
+        henka_free(texture_data);
+        henka_free(texture);
+        henka_ktx2_upload_dispose(&upload);
+        return operation_result;
+    }
+
+    texture->renderer = renderer;
+    texture->backend_data = texture_data;
+    texture->owns_backend = true;
+    texture->width = upload.width;
+    texture->height = upload.height;
+    texture->descriptor = *descriptor;
+    texture->source_class = HENKA_TEXTURE_SOURCE_CLASS_LDR_8_BIT;
+    texture->alpha_mode = HENKA_TEXTURE_ALPHA_OPAQUE;
+    texture->last_failure = HENKA_TEXTURE_FAILURE_NONE;
+    texture->content_revision = 1U;
+    texture->source_byte_size = data_size;
+    texture->original_channel_count = 4;
+    texture_data->tracked_gpu_bytes = logical_texture_bytes;
+    henka_opengl_memory_add_category(
+        state, &state->tracked_texture_bytes, texture_data->tracked_gpu_bytes);
+    if (state->tracked_texture_count < UINT32_MAX)
+        ++state->tracked_texture_count;
+    *out_texture = texture;
+    henka_ktx2_upload_dispose(&upload);
+    return HENKA_SUCCESS;
+#else
+    (void)renderer;
+    (void)data;
+    (void)data_size;
+    (void)descriptor;
+    if (out_texture != NULL)
+        *out_texture = NULL;
+    return HENKA_ERROR_ASSET_SOURCE;
+#endif
 }
 
 void henka_opengl_renderer_destroy_texture(

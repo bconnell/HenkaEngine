@@ -76,15 +76,19 @@ The loader currently supports:
   malformed trailing separators, and rejects trailing non-whitespace content
   before any scene or mesh data is published
 - `KHR_texture_basisu` source selection for external KTX2 images; the texture
-  loader validates KTX2 bounds, dimensions, layers/faces, and mip ownership
-  before the pinned KTX-Software boundary decodes uncompressed RGBA8 or
-  transcodes Basis payloads to RGBA8. The container transfer function is checked
-  against the requested semantic color space; a mismatch is rejected rather than
-  silently applying an sRGB/linear interpretation. Other GPU-native compressed
-  formats are rejected until a capability-selected upload path exists. The same checked
-  KTX2 boundary is used for external images and embedded URI/bufferView bytes,
-  so GLB and data-URI ownership does not create a second decoder or bypass the
-  asset manager.
+  loader validates KTX2 bounds, dimensions, layers/faces, and the complete
+  bounded mip chain before the pinned KTX-Software boundary selects an OpenGL
+  BC1/3, BC5, BC7, ETC2, or ASTC 4x4 upload when the active context advertises
+  that capability. Uncompressed RGBA8 levels and Basis payloads without a
+  supported compressed target use a checked RGBA8 upload; native compressed
+  payloads without a matching capability are rejected rather than decoded as
+  arbitrary bytes. The container transfer function is checked against the
+  requested semantic color space, and the selected payload's exact mip bytes
+  are included in renderer memory accounting. The same checked KTX2 boundary
+  is used for external images and embedded URI/bufferView bytes, so GLB and
+  data-URI ownership does not create a second decoder or bypass the asset
+  manager. Cross-backend capability coverage, residency/streaming, and the
+  final visual stress matrix remain future work.
 - multiple triangle primitives, node hierarchies with cycle and parent checks,
   selected top-level scene roots (child nodes are rejected as malformed roots),
   TRS or finite affine non-sheared matrix node transforms, perspective and
