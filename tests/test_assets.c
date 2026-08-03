@@ -187,6 +187,7 @@ void henka_test_assets(void)
     char* resolved_path;
     henka_shader managed_shader;
     henka_texture fallback_texture;
+    henka_texture priority_texture;
     henka_texture* texture;
     henka_texture* texture_alias;
     henka_texture* texture_replacement;
@@ -389,10 +390,14 @@ void henka_test_assets(void)
 
     memset(&manager, 0, sizeof(manager));
     memset(&fallback_texture, 0, sizeof(fallback_texture));
+    memset(&priority_texture, 0, sizeof(priority_texture));
     memset(&fallback_mesh, 0, sizeof(fallback_mesh));
     fallback_texture.backend_data = (void*)1;
     fallback_texture.width = 2;
     fallback_texture.height = 2;
+    priority_texture.backend_data = (void*)2;
+    priority_texture.width = 2;
+    priority_texture.height = 2;
     memset(texture_entries, 0, sizeof(texture_entries));
     memset(mesh_entries, 0, sizeof(mesh_entries));
     manager.error_texture = &fallback_texture;
@@ -409,7 +414,7 @@ void henka_test_assets(void)
     texture_entries[0].metadata.fallback = true;
     texture_entries[1].key = "assets/textures/b.png";
     texture_entries[1].source_path = "Assets/Textures/B.png";
-    texture_entries[1].texture = &fallback_texture;
+    texture_entries[1].texture = &priority_texture;
     texture_entries[1].metadata.type = HENKA_ASSET_TYPE_TEXTURE;
     texture_entries[1].metadata.source_path = texture_entries[1].source_path;
     texture_entries[1].metadata.fallback = true;
@@ -508,6 +513,29 @@ void henka_test_assets(void)
             &manager, &residency) == HENKA_SUCCESS);
         HENKA_TEST_ASSERT(residency.queued_request_count == 0U);
         HENKA_TEST_ASSERT(residency.failed_request_count == 1U);
+    }
+    texture_entries[1].metadata.fallback = false;
+    texture_entries[1].owns_texture = true;
+    texture_entries[1].resident_gpu_bytes = 1U;
+    manager.texture_resident_bytes = 2U;
+    HENKA_TEST_ASSERT(henka_assets_queue_texture_residency_request_with_priority(
+        &manager, &fallback_texture, 2U, 1U) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_assets_queue_texture_residency_request_with_priority(
+        &manager, &priority_texture, 1U, 8U) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_assets_process_texture_residency_requests(
+        &manager, 1U, &processed_residency_requests) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(processed_residency_requests == 1U);
+    HENKA_TEST_ASSERT(manager.texture_residency_request_count == 1U);
+    HENKA_TEST_ASSERT(manager.texture_residency_request_textures[0] == &fallback_texture);
+    HENKA_TEST_ASSERT(henka_assets_process_texture_residency_requests(
+        &manager, 1U, &processed_residency_requests) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(processed_residency_requests == 1U);
+    HENKA_TEST_ASSERT(manager.texture_residency_request_count == 0U);
+    {
+        henka_texture_residency_diagnostics residency;
+        HENKA_TEST_ASSERT(henka_assets_get_texture_residency_diagnostics(
+            &manager, &residency) == HENKA_SUCCESS);
+        HENKA_TEST_ASSERT(residency.failed_request_count == 3U);
     }
     texture_entries[0].metadata.fallback = true;
     texture_entries[0].owns_texture = false;
