@@ -76,7 +76,7 @@ The loader currently supports:
 - GLB version 2 JSON/BIN containers and glTF data-URI buffers
 - indexed and non-indexed glTF accessors with checked component conversion
 - glTF PBR material factors, alpha mode, double-sided state, and supported
-  `KHR_materials_ior`, `specular`, `clearcoat`, `sheen`, and emissive-strength
+  `KHR_materials_ior`, transmission factor, `specular`, `clearcoat`, `sheen`, and emissive-strength
   scalar extensions
 - source-relative external image URIs resolved as manager-owned texture
   dependencies with color-space/semantic descriptors
@@ -177,7 +177,7 @@ The current loader does not provide:
 - skeletal animation
 - editor import workflows
 - live replacement of an already-loaded mesh that scenes may still reference
-- glTF skins, animations, morph targets, and compressed buffer extensions in
+- glTF transmission textures, refraction/volume attenuation, skins, animations, morph targets, and compressed buffer extensions in
   the existing manager renderer path
 - a second Henka-only material JSON authority; an editor material format will
   only be introduced if it adds instance/editor behavior beyond glTF and will

@@ -69,6 +69,7 @@ uniform float roughness;
 uniform float specularFactor;
 uniform vec3 specularColor;
 uniform float ior;
+uniform float transmission;
 uniform float normalScale;
 uniform float occlusionStrength;
 uniform vec3 emissiveColor;
@@ -287,6 +288,7 @@ void main()
 
     float surfaceMetallic = saturate(metallic);
     float surfaceRoughness = clamp(roughness, 0.045, 1.0);
+    float surfaceTransmission = saturate(transmission);
     float surfaceClearcoat = saturate(clearcoat);
     float surfaceClearcoatRoughness = clamp(clearcoatRoughness, 0.045, 1.0);
     vec3 surfaceSheenColor = clamp(sheenColor, vec3(0.0), vec3(1.0));
@@ -327,7 +329,7 @@ void main()
         float distribution = distributionGGX(nDotH, alpha);
         float visibility = visibilitySmithGGXCorrelated(nDotV, nDotL, alpha);
         vec3 specular = distribution * visibility * fresnel;
-        vec3 diffuse = (1.0 - fresnel) * (1.0 - surfaceMetallic) * albedo / PI;
+        vec3 diffuse = (1.0 - surfaceTransmission) * (1.0 - fresnel) * (1.0 - surfaceMetallic) * albedo / PI;
         vec3 baseLayerTransmission = vec3(1.0);
         if (surfaceClearcoat > 0.0)
         {
@@ -365,7 +367,7 @@ void main()
 
         // Ambient remains an indirect fallback for scenes without a richer probe path.
         vec3 safeAmbient = min(max(ambientColor, vec3(0.0)), vec3(16.0));
-        color += min(safeAmbient * ((1.0 - surfaceMetallic) * albedo + fresnel * 0.5) *
+        color += min(safeAmbient * ((1.0 - surfaceTransmission) * (1.0 - surfaceMetallic) * albedo + fresnel * 0.5) *
             baseLayerTransmission * occlusion, vec3(65504.0));
         if (useEnvironment)
         {
@@ -395,10 +397,11 @@ void main()
             }
             vec2 brdf = useIBL ? texture(iblBrdfLut, vec2(nDotV, 1.0 - surfaceRoughness)).rg : vec2(1.0, 0.0);
             color += min(
-                environmentDiffuse * ((1.0 - surfaceMetallic) * albedo / PI) *
+                environmentDiffuse * ((1.0 - surfaceTransmission) * (1.0 - surfaceMetallic) * albedo / PI) *
                     baseLayerTransmission * occlusion * 0.55 +
                 environmentSpecular * (fresnel * brdf.x + brdf.y) * baseLayerTransmission * occlusion *
-                    (0.35 + 0.65 * (1.0 - surfaceRoughness)),
+                    (0.35 + 0.65 * (1.0 - surfaceRoughness)) +
+                sampleEnvironment(-normal) * albedo * surfaceTransmission * (1.0 - fresnel) * 0.55,
                 vec3(65504.0));
         }
 
@@ -436,7 +439,7 @@ void main()
             float localShadow = localLightOuterType[lightIndex].z > 0.5 ?
                 localShadowFactor(normal, localLightDirection) : 1.0;
             vec3 localSpecular = localDistribution * localVisibility * localFresnel;
-            vec3 localDiffuse = (1.0 - localFresnel) * (1.0 - surfaceMetallic) * albedo / PI;
+            vec3 localDiffuse = (1.0 - surfaceTransmission) * (1.0 - localFresnel) * (1.0 - surfaceMetallic) * albedo / PI;
             color += (localDiffuse + localSpecular) * localRadiance * localNDotL * localShadow;
         }
     }

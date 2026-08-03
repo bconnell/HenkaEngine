@@ -1045,6 +1045,12 @@ static bool henka_gltf_parse_material(
         if (henka_gltf_find_member(extensions, extensions_end, "KHR_materials_ior", &extension, &extension_end) &&
             henka_gltf_find_member(extension, extension_end, "ior", &value, &value_end) &&
             !henka_gltf_member_float(extension, extension_end, "ior", &out_source->material.ior)) return false;
+        if (henka_gltf_find_member(extensions, extensions_end, "KHR_materials_transmission", &extension, &extension_end))
+        {
+            if (henka_gltf_find_member(extension, extension_end, "transmissionTexture", &value, &value_end)) return false;
+            if (henka_gltf_find_member(extension, extension_end, "transmissionFactor", &value, &value_end) &&
+                !henka_gltf_member_float(extension, extension_end, "transmissionFactor", &out_source->material.transmission)) return false;
+        }
         if (henka_gltf_find_member(extensions, extensions_end, "KHR_materials_specular", &extension, &extension_end))
         {
             if (henka_gltf_find_member(extension, extension_end, "specularFactor", &value, &value_end) &&
@@ -1185,6 +1191,7 @@ static bool henka_gltf_extension_supported(const char* extension)
         "KHR_lights_punctual",
         "KHR_texture_basisu",
         "KHR_materials_ior",
+        "KHR_materials_transmission",
         "KHR_materials_specular",
         "KHR_materials_clearcoat",
         "KHR_materials_sheen",
