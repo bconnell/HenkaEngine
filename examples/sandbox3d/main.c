@@ -10537,10 +10537,12 @@ static void sandbox3d_update(henka_engine* engine, double delta_seconds, void* u
                     smoke_diagnostics.rendered_temporal_invalidation_count >= 3U;
 
                 printf(
-                    "Temporal stress: resize=resize/restore projection=changed camera=translated entity=hidden/restored recovery=%s invalidations=%u fallback-frames=%llu.\n",
+                    "Temporal stress: resize=resize/restore projection=changed camera=translated entity=hidden/restored recovery=%s invalidations=%u fallback-frames=%llu history-alloc-failures=%u previous-retained=%s.\n",
                     temporal_recovery_valid ? "valid" : "invalid",
                     (unsigned int)smoke_diagnostics.rendered_temporal_invalidation_count,
-                    (unsigned long long)smoke_diagnostics.rendered_temporal_fallback_frame_count);
+                    (unsigned long long)smoke_diagnostics.rendered_temporal_fallback_frame_count,
+                    (unsigned int)smoke_diagnostics.rendered_temporal_history_allocation_failure_count,
+                    smoke_diagnostics.rendered_temporal_previous_history_retained ? "yes" : "no");
                 if (!temporal_recovery_valid)
                     state->smoke_validation_failed = true;
             }
