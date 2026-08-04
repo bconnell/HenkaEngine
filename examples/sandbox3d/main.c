@@ -351,6 +351,7 @@ typedef struct sandbox3d_state
     bool residency_stress;
     bool residency_stress_ran;
     bool residency_stress_scene_material_active;
+    bool temporal_stress;
     bool capture_mode_requested;
     henka_viewport_shading_mode capture_mode;
 } sandbox3d_state;
@@ -9658,6 +9659,47 @@ static void sandbox3d_update(henka_engine* engine, double delta_seconds, void* u
         else if (stress_frame == 6U)
             state->camera.position.z = 8.6f;
     }
+    if (state->temporal_stress)
+    {
+        const uint64_t temporal_frame = henka_engine_get_frame_index(engine);
+
+        if (temporal_frame == 2U)
+        {
+            (void)henka_engine_set_scene_viewport(
+                engine,
+                (henka_viewport){0, 0, 900, 500});
+        }
+        else if (temporal_frame == 3U)
+        {
+            (void)henka_engine_set_scene_viewport(
+                engine,
+                (henka_viewport){0, 0, 1280, 720});
+        }
+        else if (temporal_frame == 4U)
+        {
+            state->camera.position.z = 3.1f;
+        }
+        else if (temporal_frame == 5U)
+        {
+            state->camera.field_of_view_radians = 48.0f * HENKA_DEG_TO_RAD;
+        }
+        else if (temporal_frame == 6U)
+        {
+            (void)henka_scene_set_entity_visible(
+                state->scene,
+                state->cube_entity,
+                false);
+        }
+        else if (temporal_frame == 7U)
+        {
+            (void)henka_scene_set_entity_visible(
+                state->scene,
+                state->cube_entity,
+                true);
+            state->camera.position.z = 8.6f;
+            state->camera.field_of_view_radians = 60.0f * HENKA_DEG_TO_RAD;
+        }
+    }
     framebuffer_width = 1280;
     framebuffer_height = 720;
     ui_toggled_with_f4 = false;
@@ -10083,11 +10125,13 @@ int main(int argc, char** argv)
     size_t index;
     bool smoke_test;
     bool residency_stress;
+    bool temporal_stress;
     bool capture_mode_requested;
     henka_viewport_shading_mode capture_mode;
 
     smoke_test = false;
     residency_stress = false;
+    temporal_stress = false;
     capture_mode_requested = false;
     capture_mode = HENKA_VIEWPORT_SHADING_RENDERED;
     if (argc == 2 && strcmp(argv[1], "--smoke-test") == 0)
@@ -10099,6 +10143,11 @@ int main(int argc, char** argv)
         smoke_test = true;
         residency_stress = true;
     }
+    else if (argc == 2 && strcmp(argv[1], "--temporal-stress") == 0)
+    {
+        smoke_test = true;
+        temporal_stress = true;
+    }
     else if (argc == 3 && strcmp(argv[1], "--capture-mode") == 0 &&
         henka_viewport_shading_mode_parse(argv[2], &capture_mode) == HENKA_SUCCESS)
     {
@@ -10106,13 +10155,14 @@ int main(int argc, char** argv)
     }
     else if (argc != 1)
     {
-        fprintf(stderr, "Usage: %s [--smoke-test | --residency-stress | --capture-mode solid|material_preview|rendered]\n", argv[0]);
+        fprintf(stderr, "Usage: %s [--smoke-test | --residency-stress | --temporal-stress | --capture-mode solid|material_preview|rendered]\n", argv[0]);
         return 2;
     }
 
     memset(&state, 0, sizeof(state));
     state.smoke_test = smoke_test;
     state.residency_stress = residency_stress;
+    state.temporal_stress = temporal_stress;
     state.capture_mode_requested = capture_mode_requested;
     state.capture_mode = capture_mode;
     state.camera = henka_camera_create_perspective(60.0f * HENKA_DEG_TO_RAD, 16.0f / 9.0f, 0.1f, 100.0f);
