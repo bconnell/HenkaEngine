@@ -157,6 +157,8 @@ typedef struct henka_opengl_renderer_state
     bool bloom_ready;
     char bloom_failure_reason[64];
     GLuint temporal_history_texture;
+    GLuint temporal_history_depth_texture;
+    GLuint temporal_history_depth_framebuffer;
     int temporal_history_width;
     int temporal_history_height;
     bool temporal_history_ready;
@@ -513,6 +515,7 @@ typedef struct henka_opengl_functions
     PFNGLGENFRAMEBUFFERSPROC GenFramebuffers;
     PFNGLBINDFRAMEBUFFERPROC BindFramebuffer;
     PFNGLFRAMEBUFFERTEXTURE2DPROC FramebufferTexture2D;
+    PFNGLBLITFRAMEBUFFERPROC BlitFramebuffer;
     PFNGLDRAWBUFFERSPROC DrawBuffers;
     PFNGLCHECKFRAMEBUFFERSTATUSPROC CheckFramebufferStatus;
     PFNGLDELETEFRAMEBUFFERSPROC DeleteFramebuffers;
@@ -832,6 +835,7 @@ static bool henka_opengl_load_functions(void)
     HENKA_GL_LOAD(GenFramebuffers);
     HENKA_GL_LOAD(BindFramebuffer);
     HENKA_GL_LOAD(FramebufferTexture2D);
+    HENKA_GL_LOAD(BlitFramebuffer);
     HENKA_GL_LOAD(DrawBuffers);
     HENKA_GL_LOAD(CheckFramebufferStatus);
     HENKA_GL_LOAD(DeleteFramebuffers);
@@ -1608,13 +1612,23 @@ static void henka_opengl_delete_temporal_history(henka_opengl_renderer_state* st
             state,
             &state->tracked_render_target_bytes,
             (uint64_t)state->temporal_history_width *
-                (uint64_t)state->temporal_history_height * 4U);
+                (uint64_t)state->temporal_history_height * 8U);
     }
     if (state->temporal_history_texture != 0U)
     {
         glDeleteTextures(1, &state->temporal_history_texture);
     }
+    if (state->temporal_history_depth_texture != 0U)
+    {
+        glDeleteTextures(1, &state->temporal_history_depth_texture);
+    }
+    if (state->temporal_history_depth_framebuffer != 0U)
+    {
+        g_gl.DeleteFramebuffers(1, &state->temporal_history_depth_framebuffer);
+    }
     state->temporal_history_texture = 0U;
+    state->temporal_history_depth_texture = 0U;
+    state->temporal_history_depth_framebuffer = 0U;
     state->temporal_history_width = 0;
     state->temporal_history_height = 0;
     state->temporal_history_ready = false;
@@ -1638,6 +1652,9 @@ static henka_result henka_opengl_create_temporal_history(
     int height)
 {
     GLuint texture = 0U;
+    GLuint depth_texture = 0U;
+    GLuint depth_framebuffer = 0U;
+    GLint previous_framebuffer = 0;
     GLint previous_texture = 0;
     bool previous_history_ready;
     GLenum texture_error;
@@ -1646,11 +1663,20 @@ static henka_result henka_opengl_create_temporal_history(
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
-    previous_history_ready = state->temporal_history_ready && state->temporal_history_texture != 0U;
+    previous_history_ready = state->temporal_history_ready &&
+        state->temporal_history_texture != 0U &&
+        state->temporal_history_depth_texture != 0U &&
+        state->temporal_history_depth_framebuffer != 0U;
+    glGetIntegerv(GL_FRAMEBUFFER_BINDING, &previous_framebuffer);
     glGetIntegerv(GL_TEXTURE_BINDING_2D, &previous_texture);
     glGenTextures(1, &texture);
-    if (texture == 0U)
+    glGenTextures(1, &depth_texture);
+    g_gl.GenFramebuffers(1, &depth_framebuffer);
+    if (texture == 0U || depth_texture == 0U || depth_framebuffer == 0U)
     {
+        if (depth_framebuffer != 0U) g_gl.DeleteFramebuffers(1, &depth_framebuffer);
+        if (depth_texture != 0U) glDeleteTextures(1, &depth_texture);
+        if (texture != 0U) glDeleteTextures(1, &texture);
         if (state->temporal_history_allocation_failure_count < UINT32_MAX)
             ++state->temporal_history_allocation_failure_count;
         state->temporal_previous_history_retained = previous_history_ready;
@@ -1665,10 +1691,26 @@ static henka_result henka_opengl_create_temporal_history(
     while (glGetError() != GL_NO_ERROR) {}
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
     texture_error = glGetError();
+    glBindTexture(GL_TEXTURE_2D, depth_texture);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT24, width, height, 0, GL_DEPTH_COMPONENT, GL_UNSIGNED_INT, NULL);
+    texture_error = texture_error == GL_NO_ERROR ? glGetError() : texture_error;
+    g_gl.BindFramebuffer(GL_FRAMEBUFFER, depth_framebuffer);
+    g_gl.FramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, depth_texture, 0);
+    glDrawBuffer(GL_NONE);
+    glReadBuffer(GL_NONE);
+    if (texture_error == GL_NO_ERROR && g_gl.CheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
+        texture_error = GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT;
+    g_gl.BindFramebuffer(GL_FRAMEBUFFER, (GLuint)previous_framebuffer);
     glBindTexture(GL_TEXTURE_2D, (GLuint)previous_texture);
     if (texture_error != GL_NO_ERROR)
     {
         glDeleteTextures(1, &texture);
+        glDeleteTextures(1, &depth_texture);
+        g_gl.DeleteFramebuffers(1, &depth_framebuffer);
         if (state->temporal_history_allocation_failure_count < UINT32_MAX)
             ++state->temporal_history_allocation_failure_count;
         state->temporal_previous_history_retained = previous_history_ready;
@@ -1682,6 +1724,8 @@ static henka_result henka_opengl_create_temporal_history(
     }
     henka_opengl_delete_temporal_history(state);
     state->temporal_history_texture = texture;
+    state->temporal_history_depth_texture = depth_texture;
+    state->temporal_history_depth_framebuffer = depth_framebuffer;
     state->temporal_history_width = width;
     state->temporal_history_height = height;
     state->temporal_history_ready = true;
@@ -1695,7 +1739,7 @@ static henka_result henka_opengl_create_temporal_history(
     henka_opengl_memory_add_category(
         state,
         &state->tracked_render_target_bytes,
-        (uint64_t)width * (uint64_t)height * 4U);
+        (uint64_t)width * (uint64_t)height * 8U);
     return HENKA_SUCCESS;
 }
 
@@ -2692,7 +2736,7 @@ static henka_result henka_opengl_create_point_shadow_target(
 static henka_result henka_opengl_create_render_programs(
     henka_opengl_renderer_state* state)
 {
-    static const char* tone_uniforms[] = {"hdrTexture", "bloomTexture", "historyTexture", "motionTexture", "reactiveTexture", "depthTexture", "projection", "exposure", "useBloom", "bloomStrength", "useTemporalHistory", "useMotionVectors", "useReactiveMask", "useAmbientOcclusion", "aoRadius", "aoThickness", "aoFalloff", "aoBias", "aoIntensity", "ssrThickness", "ssrMaxDistance", "ssrRoughness", "ssrEdgeFade", "temporalBlend", "sharpenStrength", "useRenderedGrade", "useScreenSpaceReflections"};
+    static const char* tone_uniforms[] = {"hdrTexture", "bloomTexture", "historyTexture", "historyDepthTexture", "motionTexture", "reactiveTexture", "depthTexture", "projection", "exposure", "useBloom", "bloomStrength", "useTemporalHistory", "useMotionVectors", "useReactiveMask", "useAmbientOcclusion", "aoRadius", "aoThickness", "aoFalloff", "aoBias", "aoIntensity", "ssrThickness", "ssrMaxDistance", "ssrRoughness", "ssrEdgeFade", "temporalBlend", "sharpenStrength", "useRenderedGrade", "useScreenSpaceReflections"};
     static const char* bloom_extract_uniforms[] = {"hdrTexture", "threshold"};
     static const char* bloom_blur_uniforms[] = {"sourceTexture", "direction"};
     static const char* ibl_conversion_uniforms[] = {"equirectangularTexture", "rotation", "viewProjection"};
@@ -2711,7 +2755,7 @@ static henka_result henka_opengl_create_render_programs(
         "void main(){ vec2 p = vec2((gl_VertexID << 1) & 2, gl_VertexID & 2); uv = p; gl_Position = vec4(p * 2.0 - 1.0, 0.0, 1.0); }\n";
     static const char* tone_fragment =
         "#version 330 core\n"
-        "in vec2 uv; uniform sampler2D hdrTexture; uniform sampler2D bloomTexture; uniform sampler2D historyTexture; uniform sampler2D motionTexture; uniform sampler2D reactiveTexture; uniform sampler2D depthTexture; uniform mat4 projection; uniform float exposure; uniform bool useBloom; uniform float bloomStrength; uniform bool useTemporalHistory; uniform bool useMotionVectors; uniform bool useReactiveMask; uniform bool useAmbientOcclusion; uniform float aoRadius; uniform float aoThickness; uniform float aoFalloff; uniform float aoBias; uniform float aoIntensity; uniform float ssrThickness; uniform float ssrMaxDistance; uniform float ssrRoughness; uniform float ssrEdgeFade; uniform float temporalBlend; uniform float sharpenStrength; uniform bool useRenderedGrade; uniform bool useScreenSpaceReflections; out vec4 outColor;\n"
+        "in vec2 uv; uniform sampler2D hdrTexture; uniform sampler2D bloomTexture; uniform sampler2D historyTexture; uniform sampler2D historyDepthTexture; uniform sampler2D motionTexture; uniform sampler2D reactiveTexture; uniform sampler2D depthTexture; uniform mat4 projection; uniform float exposure; uniform bool useBloom; uniform float bloomStrength; uniform bool useTemporalHistory; uniform bool useMotionVectors; uniform bool useReactiveMask; uniform bool useAmbientOcclusion; uniform float aoRadius; uniform float aoThickness; uniform float aoFalloff; uniform float aoBias; uniform float aoIntensity; uniform float ssrThickness; uniform float ssrMaxDistance; uniform float ssrRoughness; uniform float ssrEdgeFade; uniform float temporalBlend; uniform float sharpenStrength; uniform bool useRenderedGrade; uniform bool useScreenSpaceReflections; out vec4 outColor;\n"
         "vec3 aces(vec3 x){ return clamp((x*(2.51*x+0.03))/(x*(2.43*x+0.59)+0.14),0.0,1.0); }\n"
         "vec3 presentColor(vec3 hdr){ return pow(aces(max(hdr * exp2(exposure), vec3(0.0))), vec3(1.0/2.2)); }\n"
         "vec3 clampHistory(vec3 history, vec2 at, vec2 texel){ vec3 lower=vec3(1e6); vec3 upper=vec3(-1e6); for(int y=-1;y<=1;++y){ for(int x=-1;x<=1;++x){ vec2 sampleUv=clamp(at+vec2(x,y)*texel,vec2(0.001),vec2(0.999)); vec3 sampleColor=presentColor(texture(hdrTexture,sampleUv).rgb); lower=min(lower,sampleColor); upper=max(upper,sampleColor); } } return clamp(history,lower,upper); }\n"
@@ -2720,7 +2764,7 @@ static henka_result henka_opengl_create_render_programs(
         "float normalAwareOcclusion(vec2 at, vec2 texel, float depth){ if(depth>=0.9999) return 0.0; vec3 position=viewPosition(at,depth); vec2 xUv=clamp(at+vec2(texel.x,0.0),vec2(0.001),vec2(0.999)); vec2 yUv=clamp(at+vec2(0.0,texel.y),vec2(0.001),vec2(0.999)); vec3 px=viewPosition(xUv,texture(depthTexture,xUv).r); vec3 py=viewPosition(yUv,texture(depthTexture,yUv).r); vec3 normal=normalize(cross(py-position,px-position)); const vec2 directions[4]=vec2[4](vec2(1.0,0.0),vec2(0.0,1.0),vec2(0.7071,0.7071),vec2(-0.7071,0.7071)); float occluded=0.0; for(int directionIndex=0;directionIndex<4;++directionIndex){ float directionOcclusion=0.0; for(int side=0;side<2;++side){ vec2 direction=directions[directionIndex]*(side==0?1.0:-1.0); float horizon=0.0; for(int step=1;step<=4;++step){ vec2 sampleUv=clamp(at+direction*texel*(2.0*float(step)),vec2(0.001),vec2(0.999)); float sampleDepth=texture(depthTexture,sampleUv).r; if(sampleDepth>=0.9999||sampleDepth>depth-aoBias) continue; vec3 delta=viewPosition(sampleUv,sampleDepth)-position; float distanceToSample=length(delta); float thicknessWeight=1.0-clamp(abs(delta.z)/max(aoThickness,0.001),0.0,1.0); float radiusWeight=pow(1.0-clamp(distanceToSample/max(aoRadius,0.001),0.0,1.0),max(aoFalloff,0.1)); float horizonAngle=max(dot(normal,normalize(delta)),0.0); horizon=max(horizon,horizonAngle*thicknessWeight*radiusWeight); } directionOcclusion+=horizon; } occluded+=directionOcclusion*0.5; } float rawOcclusion=clamp(occluded*0.25*clamp(aoIntensity,0.0,2.0),0.0,1.0); float depthAgreement=0.0; const vec2 denoiseDirections[4]=vec2[4](vec2(1.0,0.0),vec2(-1.0,0.0),vec2(0.0,1.0),vec2(0.0,-1.0)); for(int denoiseIndex=0;denoiseIndex<4;++denoiseIndex){ float neighbourDepth=texture(depthTexture,clamp(at+denoiseDirections[denoiseIndex]*texel*1.5,vec2(0.001),vec2(0.999))).r; depthAgreement+=1.0-clamp(abs(neighbourDepth-depth)/0.04,0.0,1.0); } float edgeConfidence=depthAgreement*0.25; return rawOcclusion*mix(0.55,1.0,edgeConfidence); }\n"
         "vec3 screenReflection(vec2 at, vec2 texel, float depth, vec3 base){ if(depth>=0.9999) return base; vec3 position=viewPosition(at,depth); vec3 px=viewPosition(clamp(at+vec2(texel.x,0.0),vec2(0.001),vec2(0.999)),texture(depthTexture,clamp(at+vec2(texel.x,0.0),vec2(0.001),vec2(0.999))).r); vec3 py=viewPosition(clamp(at+vec2(0.0,texel.y),vec2(0.001),vec2(0.999)),texture(depthTexture,clamp(at+vec2(0.0,texel.y),vec2(0.001),vec2(0.999))).r); vec3 normal=normalize(cross(py-position,px-position)); vec3 direction=normalize(reflect(normalize(-position),normal)); vec3 reflected=base; float confidence=0.0; float hitDistance=0.0; float maxDistance=clamp(ssrMaxDistance,0.25,32.0); for(int step=1;step<=16;++step){ float distanceAlongRay=maxDistance*(float(step)/16.0); vec3 rayPosition=position+direction*distanceAlongRay; vec4 clip=projection*vec4(rayPosition,1.0); if(clip.w<=0.0) break; vec2 sampleUv=clip.xy/clip.w*0.5+0.5; if(sampleUv.x<0.002||sampleUv.x>0.998||sampleUv.y<0.002||sampleUv.y>0.998) break; float sceneDepth=texture(depthTexture,sampleUv).r; if(sceneDepth>=0.9999) continue; vec3 scenePosition=viewPosition(sampleUv,sceneDepth); float depthDelta=abs(scenePosition.z-rayPosition.z); if(depthDelta<=max(ssrThickness,0.001)){ reflected=presentColor(texture(hdrTexture,sampleUv).rgb); hitDistance=distanceAlongRay; float edgeDistance=min(min(sampleUv.x,1.0-sampleUv.x),min(sampleUv.y,1.0-sampleUv.y)); float edgeConfidence=clamp(edgeDistance/max(ssrEdgeFade,0.001),0.0,1.0); float roughnessConfidence=1.0-clamp(ssrRoughness,0.0,1.0)*0.65; confidence=0.45*edgeConfidence*roughnessConfidence*(1.0-clamp(hitDistance/maxDistance,0.0,1.0)*0.5); break; } } return mix(base,reflected,clamp(confidence,0.0,0.45)); }\n"
         "vec3 sharpen(vec2 at, vec2 texel, vec3 color, float strength){ vec3 crossNeighborhood = (presentColor(texture(hdrTexture, clamp(at+vec2(texel.x,0.0),vec2(0.001),vec2(0.999))).rgb) + presentColor(texture(hdrTexture, clamp(at-vec2(texel.x,0.0),vec2(0.001),vec2(0.999))).rgb) + presentColor(texture(hdrTexture, clamp(at+vec2(0.0,texel.y),vec2(0.001),vec2(0.999))).rgb) + presentColor(texture(hdrTexture, clamp(at-vec2(0.0,texel.y),vec2(0.001),vec2(0.999))).rgb)) * 0.25; return clamp(color + (color-crossNeighborhood)*clamp(strength,0.0,0.2),vec3(0.0),vec3(1.0)); }\n"
-        "void main(){ vec3 hdrColor = texture(hdrTexture, uv).rgb; if (useBloom) hdrColor += texture(bloomTexture, uv).rgb * max(bloomStrength, 0.0); vec3 color = presentColor(hdrColor); vec2 texel = 1.0 / vec2(textureSize(depthTexture, 0)); float currentDepth = texture(depthTexture, uv).r; if (useScreenSpaceReflections) color = screenReflection(uv, texel, currentDepth, color); if (useRenderedGrade) color = clamp(pow(max(color, vec3(0.0)), vec3(0.92)) * vec3(1.02, 1.0, 0.98), vec3(0.0), vec3(1.0)); if (useAmbientOcclusion) color *= mix(1.0, 0.92, normalAwareOcclusion(uv, texel, currentDepth)); if (useTemporalHistory && currentDepth < 0.9999) { vec2 historyUv = uv; vec2 motion = useMotionVectors ? texture(motionTexture, uv).rg : vec2(0.0); if (useMotionVectors) historyUv = clamp(uv - motion, vec2(0.001), vec2(0.999)); float reprojectedDepth = texture(depthTexture, historyUv).r; float depthTolerance = 0.012 + 0.04 * max(abs(currentDepth-0.5),0.0); float depthConfidence = reprojectedDepth < 0.9999 && abs(currentDepth - reprojectedDepth) <= depthTolerance ? depthNeighborhoodConfidence(historyUv, texel, reprojectedDepth) : 0.0; float reactive = useReactiveMask ? texture(reactiveTexture, uv).r : 0.0; float motionResponsiveness = useMotionVectors ? clamp(length(motion) * 12.0, 0.0, 0.75) : 0.0; float historyWeight = clamp(temporalBlend, 0.0, 0.25) * depthConfidence * (1.0-reactive) * (1.0-motionResponsiveness); vec3 historyColor = clampHistory(texture(historyTexture, historyUv).rgb, uv, 1.0 / vec2(textureSize(hdrTexture, 0))); color = mix(color, historyColor, historyWeight); } color = sharpen(uv, texel, color, useTemporalHistory ? sharpenStrength : 0.0); outColor = vec4(color, 1.0); }\n";
+        "void main(){ vec3 hdrColor = texture(hdrTexture, uv).rgb; if (useBloom) hdrColor += texture(bloomTexture, uv).rgb * max(bloomStrength, 0.0); vec3 color = presentColor(hdrColor); vec2 texel = 1.0 / vec2(textureSize(depthTexture, 0)); float currentDepth = texture(depthTexture, uv).r; if (useScreenSpaceReflections) color = screenReflection(uv, texel, currentDepth, color); if (useRenderedGrade) color = clamp(pow(max(color, vec3(0.0)), vec3(0.92)) * vec3(1.02, 1.0, 0.98), vec3(0.0), vec3(1.0)); if (useAmbientOcclusion) color *= mix(1.0, 0.92, normalAwareOcclusion(uv, texel, currentDepth)); if (useTemporalHistory && currentDepth < 0.9999) { vec2 historyUv = uv; vec2 motion = useMotionVectors ? texture(motionTexture, uv).rg : vec2(0.0); if (useMotionVectors) historyUv = clamp(uv - motion, vec2(0.001), vec2(0.999)); float reprojectedDepth = texture(historyDepthTexture, historyUv).r; float depthTolerance = 0.012 + 0.04 * max(abs(currentDepth-0.5),0.0); float depthConfidence = reprojectedDepth < 0.9999 && abs(currentDepth - reprojectedDepth) <= depthTolerance ? depthNeighborhoodConfidence(historyUv, texel, reprojectedDepth) : 0.0; float reactive = useReactiveMask ? texture(reactiveTexture, uv).r : 0.0; float motionResponsiveness = useMotionVectors ? clamp(length(motion) * 12.0, 0.0, 0.75) : 0.0; float historyWeight = clamp(temporalBlend, 0.0, 0.25) * depthConfidence * (1.0-reactive) * (1.0-motionResponsiveness); vec3 historyColor = clampHistory(texture(historyTexture, historyUv).rgb, uv, 1.0 / vec2(textureSize(hdrTexture, 0))); color = mix(color, historyColor, historyWeight); } color = sharpen(uv, texel, color, useTemporalHistory ? sharpenStrength : 0.0); outColor = vec4(color, 1.0); }\n";
     static const char* bloom_extract_fragment =
         "#version 330 core\n"
         "in vec2 uv; uniform sampler2D hdrTexture; uniform float threshold; out vec4 outColor;\n"
@@ -3249,6 +3293,7 @@ static void henka_opengl_present_hdr(
     henka_set_uniform_int_owned(state->tone_program, &state->tone_shader_data, "hdrTexture", 0);
     henka_set_uniform_int_owned(state->tone_program, &state->tone_shader_data, "bloomTexture", 1);
     henka_set_uniform_int_owned(state->tone_program, &state->tone_shader_data, "historyTexture", 2);
+    henka_set_uniform_int_owned(state->tone_program, &state->tone_shader_data, "historyDepthTexture", 6);
     henka_set_uniform_int_owned(state->tone_program, &state->tone_shader_data, "motionTexture", 3);
     henka_set_uniform_int_owned(state->tone_program, &state->tone_shader_data, "reactiveTexture", 5);
     henka_set_uniform_int_owned(state->tone_program, &state->tone_shader_data, "depthTexture", 4);
@@ -3321,6 +3366,10 @@ static void henka_opengl_present_hdr(
     glBindTexture(GL_TEXTURE_2D,
         use_rendered_post_processing && state->hdr_reactive_texture != 0U ?
         state->hdr_reactive_texture : 0U);
+    g_gl.ActiveTexture(GL_TEXTURE6);
+    glBindTexture(GL_TEXTURE_2D,
+        use_rendered_post_processing && state->temporal_history_ready ?
+        state->temporal_history_depth_texture : 0U);
     g_gl.BindVertexArray(state->tone_vertex_array);
     glDrawArrays(GL_TRIANGLES, 0, 3);
     g_gl.BindVertexArray(0);
@@ -3335,12 +3384,15 @@ static void henka_opengl_present_hdr(
     glBindTexture(GL_TEXTURE_2D, 0U);
     g_gl.ActiveTexture(GL_TEXTURE5);
     glBindTexture(GL_TEXTURE_2D, 0U);
+    g_gl.ActiveTexture(GL_TEXTURE6);
+    glBindTexture(GL_TEXTURE_2D, 0U);
     g_gl.ActiveTexture(GL_TEXTURE0);
     g_gl.UseProgram(0);
     if (state->temporal_history_ready &&
         state->temporal_history_width == viewport.width &&
         state->temporal_history_height == viewport.height)
     {
+        GLint previous_framebuffer = 0;
         g_gl.ActiveTexture(GL_TEXTURE2);
         glBindTexture(GL_TEXTURE_2D, state->temporal_history_texture);
         glCopyTexSubImage2D(
@@ -3354,6 +3406,18 @@ static void henka_opengl_present_hdr(
             viewport.height);
         glBindTexture(GL_TEXTURE_2D, 0U);
         g_gl.ActiveTexture(GL_TEXTURE0);
+        if (g_gl.BlitFramebuffer != NULL && state->temporal_history_depth_framebuffer != 0U)
+        {
+            glGetIntegerv(GL_FRAMEBUFFER_BINDING, &previous_framebuffer);
+            g_gl.BindFramebuffer(GL_READ_FRAMEBUFFER, state->hdr_framebuffer);
+            g_gl.BindFramebuffer(GL_DRAW_FRAMEBUFFER, state->temporal_history_depth_framebuffer);
+            g_gl.BlitFramebuffer(
+                0, 0, viewport.width, viewport.height,
+                0, 0, viewport.width, viewport.height,
+                GL_DEPTH_BUFFER_BIT,
+                GL_NEAREST);
+            g_gl.BindFramebuffer(GL_FRAMEBUFFER, (GLuint)previous_framebuffer);
+        }
         state->temporal_history_valid = true;
         state->temporal_fallback_active = false;
     }
