@@ -166,6 +166,8 @@ typedef struct henka_opengl_renderer_state
     char temporal_invalidation_reason[64];
     uint64_t temporal_resolve_count;
     uint64_t temporal_fallback_frame_count;
+    uint32_t temporal_history_allocation_failure_count;
+    bool temporal_previous_history_retained;
     bool temporal_jitter_enabled;
     uint64_t temporal_jitter_index;
     float temporal_jitter_x;
@@ -1618,6 +1620,7 @@ static void henka_opengl_delete_temporal_history(henka_opengl_renderer_state* st
     state->temporal_history_ready = false;
     state->temporal_history_valid = false;
     state->temporal_fallback_active = true;
+    state->temporal_previous_history_retained = false;
     state->temporal_jitter_enabled = false;
     state->temporal_jitter_index = 0U;
     state->temporal_jitter_x = 0.0f;
@@ -1636,16 +1639,21 @@ static henka_result henka_opengl_create_temporal_history(
 {
     GLuint texture = 0U;
     GLint previous_texture = 0;
+    bool previous_history_ready;
     GLenum texture_error;
 
     if (state == NULL || width <= 0 || height <= 0 || width > 8192 || height > 8192)
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
+    previous_history_ready = state->temporal_history_ready && state->temporal_history_texture != 0U;
     glGetIntegerv(GL_TEXTURE_BINDING_2D, &previous_texture);
     glGenTextures(1, &texture);
     if (texture == 0U)
     {
+        if (state->temporal_history_allocation_failure_count < UINT32_MAX)
+            ++state->temporal_history_allocation_failure_count;
+        state->temporal_previous_history_retained = previous_history_ready;
         glBindTexture(GL_TEXTURE_2D, (GLuint)previous_texture);
         return HENKA_ERROR_RENDERER;
     }
@@ -1661,6 +1669,9 @@ static henka_result henka_opengl_create_temporal_history(
     if (texture_error != GL_NO_ERROR)
     {
         glDeleteTextures(1, &texture);
+        if (state->temporal_history_allocation_failure_count < UINT32_MAX)
+            ++state->temporal_history_allocation_failure_count;
+        state->temporal_previous_history_retained = previous_history_ready;
         state->temporal_history_valid = false;
         state->temporal_fallback_active = true;
         (void)snprintf(
@@ -1676,6 +1687,7 @@ static henka_result henka_opengl_create_temporal_history(
     state->temporal_history_ready = true;
     state->temporal_history_valid = false;
     state->temporal_fallback_active = true;
+    state->temporal_previous_history_retained = false;
     (void)snprintf(
         state->temporal_invalidation_reason,
         sizeof(state->temporal_invalidation_reason),
@@ -6343,6 +6355,8 @@ void henka_opengl_renderer_get_temporal_diagnostics(
     size_t invalidation_reason_capacity,
     uint64_t* out_resolve_count,
     uint64_t* out_fallback_frame_count,
+    uint32_t* out_history_allocation_failure_count,
+    bool* out_previous_history_retained,
     bool* out_motion_vectors_ready,
     bool* out_jitter_enabled,
     float* out_jitter_x,
@@ -6363,6 +6377,11 @@ void henka_opengl_renderer_get_temporal_diagnostics(
         *out_resolve_count = state != NULL ? state->temporal_resolve_count : 0U;
     if (out_fallback_frame_count != NULL)
         *out_fallback_frame_count = state != NULL ? state->temporal_fallback_frame_count : 0U;
+    if (out_history_allocation_failure_count != NULL)
+        *out_history_allocation_failure_count = state != NULL ?
+            state->temporal_history_allocation_failure_count : 0U;
+    if (out_previous_history_retained != NULL)
+        *out_previous_history_retained = state != NULL && state->temporal_previous_history_retained;
     if (out_invalidation_reason != NULL && invalidation_reason_capacity > 0U)
     {
         (void)snprintf(

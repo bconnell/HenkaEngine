@@ -607,6 +607,8 @@ void henka_opengl_renderer_get_temporal_diagnostics(
     size_t invalidation_reason_capacity,
     uint64_t* out_resolve_count,
     uint64_t* out_fallback_frame_count,
+    uint32_t* out_history_allocation_failure_count,
+    bool* out_previous_history_retained,
     bool* out_motion_vectors_ready,
     bool* out_jitter_enabled,
     float* out_jitter_x,
