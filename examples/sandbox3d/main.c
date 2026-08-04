@@ -355,6 +355,7 @@ typedef struct sandbox3d_state
     uint32_t residency_visibility_near_mips;
     uint32_t residency_visibility_return_mips;
     bool temporal_stress;
+    bool smoke_validation_failed;
     bool capture_mode_requested;
     henka_viewport_shading_mode capture_mode;
 } sandbox3d_state;
@@ -9838,6 +9839,7 @@ static void sandbox3d_update(henka_engine* engine, double delta_seconds, void* u
             sandbox3d_run_residency_stress(engine, state);
         if (residency_result != HENKA_SUCCESS)
         {
+            state->smoke_validation_failed = true;
             HENKA_LOG_ERROR(
                 "Residency stress scenario failed (%d)",
                 (int)residency_result);
@@ -10300,6 +10302,8 @@ static void sandbox3d_update(henka_engine* engine, double delta_seconds, void* u
                     temporal_recovery_valid ? "valid" : "invalid",
                     (unsigned int)smoke_diagnostics.rendered_temporal_invalidation_count,
                     (unsigned long long)smoke_diagnostics.rendered_temporal_fallback_frame_count);
+                if (!temporal_recovery_valid)
+                    state->smoke_validation_failed = true;
             }
             printf(
                 "Rendered smoke diagnostics: HDR=%s Bloom=%s IBL=%s (%s) TAA=R%llu/F%llu/I%u(%s) CPU=%.2fms GPU=%.2fms(%s) VRAM=%llu bytes Residency=%llu/%llu KTX-mips=%u Visibility-mips=%u->%u->%u source-failed=%llu unknown-source=%llu.\n",
@@ -10446,5 +10450,5 @@ int main(int argc, char** argv)
     }
 
     henka_engine_destroy(engine);
-    return 0;
+    return state.smoke_validation_failed ? 1 : 0;
 }
