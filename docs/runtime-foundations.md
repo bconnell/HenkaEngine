@@ -133,8 +133,9 @@ budget trim per frame. Visible manager-owned textures are pinned for the
 active frame before this trim step, and diagnostics report the bounded pin count.
 Visible KTX2 targets use projected texture radius from validated entity bounds,
 camera projection, and scene viewport, with deterministic distance fallback when
-those inputs are invalid. Background I/O and broader automatic frame policy remain
-unfinished.
+those inputs are invalid. A small threshold hysteresis band suppresses repeated
+promotion/demotion when a reference remains near a target boundary. Background I/O
+and broader automatic frame policy remain unfinished.
 
 The Windows sandbox `--residency-stress` mode uses only public asset APIs to load
 65 path-distinct manager-owned PNG textures (alternating the two packaged source

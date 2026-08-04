@@ -546,17 +546,34 @@ static void henka_engine_queue_visible_texture_residency(
         for (texture_index = 0U; texture_index < sizeof(textures) / sizeof(textures[0]); ++texture_index)
         {
             henka_texture_info info;
+            uint32_t target_mips;
+            float target_threshold;
+            float target_hysteresis;
             (void)henka_assets_pin_texture_for_residency_frame(
                 engine->asset_manager,
                 textures[texture_index]);
             if (!henka_engine_is_ktx2_texture(engine->asset_manager, textures[texture_index]) ||
                 henka_texture_get_info(textures[texture_index], &info) != HENKA_SUCCESS ||
-                info.resident_mip_count == requested_mips || info.mip_count < requested_mips)
+                info.mip_count < requested_mips)
+                continue;
+            if (info.resident_mip_count == requested_mips)
+                continue;
+            target_mips = requested_mips;
+            target_threshold = target_mips >= 4U || info.resident_mip_count >= 4U ?
+                180.0f : 60.0f;
+            target_hysteresis = target_threshold * 0.10f;
+            if (info.resident_mip_count >= 2U &&
+                ((target_mips > info.resident_mip_count &&
+                    projected_radius < target_threshold + target_hysteresis) ||
+                (target_mips < info.resident_mip_count &&
+                    projected_radius > target_threshold - target_hysteresis)))
+                target_mips = info.resident_mip_count;
+            if (target_mips == info.resident_mip_count)
                 continue;
             (void)henka_assets_queue_texture_residency_request_with_priority(
                 engine->asset_manager,
                 textures[texture_index],
-                requested_mips,
+                target_mips,
                 request_priority + (texture_index == 0U ? 2U :
                     (texture_index == 1U || texture_index == 2U ? 1U : 0U)));
         }
