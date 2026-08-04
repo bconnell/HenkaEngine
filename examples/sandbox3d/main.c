@@ -306,6 +306,8 @@ typedef struct sandbox3d_state
     henka_texture* wet_dry_roughness_texture;
     henka_texture* foliage_mask_texture;
     henka_texture* residency_stress_textures[SANDBOX3D_RESIDENCY_STRESS_TEXTURE_COUNT];
+    henka_texture* residency_stress_ktx_texture;
+    henka_material residency_stress_original_material;
     henka_material_asset* marker_material_asset;
     henka_material_instance marker_material_instance;
     henka_material_instance_parameter material_editor_parameter;
@@ -348,6 +350,7 @@ typedef struct sandbox3d_state
     bool smoke_test;
     bool residency_stress;
     bool residency_stress_ran;
+    bool residency_stress_scene_material_active;
     bool capture_mode_requested;
     henka_viewport_shading_mode capture_mode;
 } sandbox3d_state;
@@ -9455,6 +9458,24 @@ static henka_result sandbox3d_run_residency_stress(
     if (henka_texture_get_info(ktx_texture, &ktx_after_promotion) != HENKA_SUCCESS ||
         ktx_after_promotion.resident_mip_count != 3U)
         return HENKA_ERROR_UNKNOWN;
+    if (state->cube_entity != HENKA_INVALID_ENTITY &&
+        henka_scene_get_entity_material(
+            state->scene,
+            state->cube_entity,
+            &state->residency_stress_original_material) == HENKA_SUCCESS)
+    {
+        henka_material stress_material = state->residency_stress_original_material;
+        stress_material.base_color_texture = ktx_texture;
+        stress_material.use_texture = true;
+        result = henka_scene_set_entity_material(
+            state->scene,
+            state->cube_entity,
+            stress_material);
+        if (result != HENKA_SUCCESS)
+            return result;
+        state->residency_stress_ktx_texture = ktx_texture;
+        state->residency_stress_scene_material_active = true;
+    }
 
     shared_texture = NULL;
     result = henka_assets_load_texture(
@@ -9576,6 +9597,17 @@ static void sandbox3d_update(henka_engine* engine, double delta_seconds, void* u
             henka_engine_request_exit(engine);
         }
         state->residency_stress_ran = true;
+    }
+    if (state->residency_stress_ran)
+    {
+        const uint64_t stress_frame = henka_engine_get_frame_index(engine);
+
+        if (stress_frame == 2U)
+            state->camera.position.z = 25.0f;
+        else if (stress_frame == 4U)
+            state->camera.position.z = 2.8f;
+        else if (stress_frame == 6U)
+            state->camera.position.z = 8.6f;
     }
     framebuffer_width = 1280;
     framebuffer_height = 720;
@@ -9941,10 +9973,16 @@ static void sandbox3d_update(henka_engine* engine, double delta_seconds, void* u
     if (state->smoke_test && henka_engine_get_frame_index(engine) >= 8U)
     {
         henka_engine_diagnostics smoke_diagnostics;
+        henka_texture_info stress_texture_info;
+        memset(&stress_texture_info, 0, sizeof(stress_texture_info));
+        if (state->residency_stress_ktx_texture != NULL)
+            (void)henka_texture_get_info(
+                state->residency_stress_ktx_texture,
+                &stress_texture_info);
         if (henka_engine_get_diagnostics(engine, &smoke_diagnostics) == HENKA_SUCCESS)
         {
             printf(
-                "Rendered smoke diagnostics: HDR=%s Bloom=%s IBL=%s (%s) TAA=R%llu/F%llu/I%u(%s) CPU=%.2fms GPU=%.2fms(%s) VRAM=%llu bytes Residency=%llu/%llu source-failed=%llu unknown-source=%llu.\n",
+                "Rendered smoke diagnostics: HDR=%s Bloom=%s IBL=%s (%s) TAA=R%llu/F%llu/I%u(%s) CPU=%.2fms GPU=%.2fms(%s) VRAM=%llu bytes Residency=%llu/%llu KTX-mips=%u source-failed=%llu unknown-source=%llu.\n",
                 smoke_diagnostics.rendered_hdr_ready ? "ready" : "fallback",
                 smoke_diagnostics.rendered_bloom_ready ? "ready" : "fallback",
                 smoke_diagnostics.rendered_ibl_ready ? "ready" : "fallback",
@@ -9959,6 +9997,7 @@ static void sandbox3d_update(henka_engine* engine, double delta_seconds, void* u
                 (unsigned long long)smoke_diagnostics.renderer_tracked_gpu_bytes,
                 (unsigned long long)smoke_diagnostics.texture_residency_resident_bytes,
                 (unsigned long long)smoke_diagnostics.texture_residency_budget_bytes,
+                (unsigned int)stress_texture_info.resident_mip_count,
                 (unsigned long long)smoke_diagnostics.texture_residency_source_failed_bytes,
                 (unsigned long long)smoke_diagnostics.texture_residency_unknown_source_failure_count);
         }

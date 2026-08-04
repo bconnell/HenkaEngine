@@ -145,8 +145,9 @@ dependency enabled, it also generates a build-local uncompressed three-level KTX
 fixture, loads it through the manager, promotes it from one to two and three
 resident mips, trims it back to one, and checks the transactional diagnostics before
 shutdown. This proves ownership, queue, budget, mip, and lifetime behavior at
-application runtime; compressed-format pressure, visibility-threshold transitions,
-and background I/O streaming remain separate unfinished tracks.
+application runtime and exercises a live-scene far/near/return camera phase;
+compressed-format pressure, full visibility-threshold convergence proof, and
+background I/O streaming remain separate unfinished tracks.
 
 Residency diagnostics also retain cumulative bytes successfully uploaded through
 manager-owned texture creation or replacement, bytes removed by successful trim
