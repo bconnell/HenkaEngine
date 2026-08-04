@@ -188,8 +188,9 @@ The Windows sandbox `--temporal-stress` mode provides an application-only
 diagnostic sequence through the public scene API: it resizes and restores the
 Scene View, moves the camera, changes projection, hides and restores a visible
 entity, and returns to the baseline camera while the normal Rendered loop reports
-resolve, fallback, and invalidation state. This is deterministic runtime coverage
-for the invalidation paths, not a claim that production TAA visual QA is closed.
+resolve, fallback, and invalidation state, and checks that history is valid again
+after the sequence. This is deterministic runtime coverage for the invalidation
+paths, not a claim that production TAA visual QA is closed.
 
 The directional shadow path uses two fitted orthographic cascades around the active camera: a 24-unit near coverage and a 72-unit far coverage, each with a texel-stabilized center and bounded PCF. This stabilizes the map during sub-texel camera motion while retaining slope-aware bias and an adaptive near-cascade kernel that widens only near a receiver blocker to tighten directional shadow contacts. The first enabled spot light has a deterministic bounded 512² perspective depth map with a separate PCF path, and the first enabled point light has a bounded 256² six-face cubemap with linearized depth comparison. This is not a screen-space contact-ray pass.
 

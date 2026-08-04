@@ -10287,6 +10287,20 @@ static void sandbox3d_update(henka_engine* engine, double delta_seconds, void* u
                 &stress_texture_info);
         if (henka_engine_get_diagnostics(engine, &smoke_diagnostics) == HENKA_SUCCESS)
         {
+            if (state->temporal_stress)
+            {
+                const bool temporal_recovery_valid =
+                    smoke_diagnostics.rendered_temporal_history_ready &&
+                    smoke_diagnostics.rendered_temporal_history_valid &&
+                    !smoke_diagnostics.rendered_temporal_fallback_active &&
+                    smoke_diagnostics.rendered_temporal_invalidation_count >= 3U;
+
+                printf(
+                    "Temporal stress: resize=resize/restore projection=changed camera=translated entity=hidden/restored recovery=%s invalidations=%u fallback-frames=%llu.\n",
+                    temporal_recovery_valid ? "valid" : "invalid",
+                    (unsigned int)smoke_diagnostics.rendered_temporal_invalidation_count,
+                    (unsigned long long)smoke_diagnostics.rendered_temporal_fallback_frame_count);
+            }
             printf(
                 "Rendered smoke diagnostics: HDR=%s Bloom=%s IBL=%s (%s) TAA=R%llu/F%llu/I%u(%s) CPU=%.2fms GPU=%.2fms(%s) VRAM=%llu bytes Residency=%llu/%llu KTX-mips=%u Visibility-mips=%u->%u->%u source-failed=%llu unknown-source=%llu.\n",
                 smoke_diagnostics.rendered_hdr_ready ? "ready" : "fallback",
