@@ -144,7 +144,9 @@ failed non-KTX2 residency requests, and cancels pending work. With the pinned KT
 dependency enabled, it also generates a build-local uncompressed three-level KTX2
 fixture, loads it through the manager, promotes it from one to two and three
 resident mips, trims it back to one, and checks the transactional diagnostics before
-shutdown. This proves ownership, queue, budget, mip, and lifetime behavior at
+shutdown. A separate readable corrupt fixture proves known source-failure bytes
+while the normal missing texture proves the unknown-source count. This proves
+ownership, queue, budget, mip, failure accounting, and lifetime behavior at
 application runtime and exercises a live-scene far/near/return camera phase;
 compressed-format pressure, full visibility-threshold convergence proof, and
 background I/O streaming remain separate unfinished tracks.

@@ -9316,6 +9316,40 @@ static henka_result sandbox3d_write_residency_ktx2_fixture(
 }
 #endif
 
+static henka_result sandbox3d_write_invalid_residency_fixture(
+    henka_engine* engine)
+{
+    static const unsigned char invalid_bytes[] =
+        {0x48U, 0x65U, 0x6EU, 0x6BU, 0x61U, 0x2DU, 0x51U, 0x41U};
+    char* resolved_path = NULL;
+    FILE* file = NULL;
+    henka_result result;
+
+    result = henka_assets_resolve_path(
+        henka_engine_get_asset_base_path(engine),
+        "assets/textures/residency/generated_invalid.png",
+        &resolved_path);
+    if (result != HENKA_SUCCESS)
+        return result;
+#if defined(_WIN32)
+    if (fopen_s(&file, resolved_path, "wb") != 0)
+        file = NULL;
+#else
+    file = fopen(resolved_path, "wb");
+#endif
+    if (file == NULL ||
+        fwrite(invalid_bytes, 1U, sizeof(invalid_bytes), file) != sizeof(invalid_bytes))
+    {
+        if (file != NULL)
+            fclose(file);
+        henka_free(resolved_path);
+        return HENKA_ERROR_ASSET_SOURCE;
+    }
+    fclose(file);
+    henka_free(resolved_path);
+    return HENKA_SUCCESS;
+}
+
 static henka_result sandbox3d_run_residency_stress(
     henka_engine* engine,
     sandbox3d_state* state)
@@ -9324,6 +9358,7 @@ static henka_result sandbox3d_run_residency_stress(
     henka_texture_residency_diagnostics before;
     henka_texture_residency_diagnostics after;
     henka_texture* shared_texture;
+    henka_texture* invalid_texture;
     henka_texture* ktx_texture;
     henka_texture_info ktx_info;
     henka_texture_info ktx_after_demote;
@@ -9356,6 +9391,19 @@ static henka_result sandbox3d_run_residency_stress(
 #else
     return HENKA_ERROR_ASSET_SOURCE;
 #endif
+    result = sandbox3d_write_invalid_residency_fixture(engine);
+    if (result != HENKA_SUCCESS)
+        return result;
+    invalid_texture = NULL;
+    result = henka_assets_load_texture(
+        assets,
+        "assets/textures/residency/generated_invalid.png",
+        &invalid_texture);
+    if (result != HENKA_SUCCESS || invalid_texture == NULL)
+        return result == HENKA_SUCCESS ? HENKA_ERROR_UNKNOWN : result;
+    if (henka_assets_get_texture_residency_diagnostics(assets, &after) != HENKA_SUCCESS ||
+        after.source_failed_bytes < 8U || after.unknown_source_failure_count == 0U)
+        return HENKA_ERROR_UNKNOWN;
 
     for (index = 0U; index < SANDBOX3D_RESIDENCY_STRESS_TEXTURE_COUNT; ++index)
     {
@@ -9549,7 +9597,7 @@ static henka_result sandbox3d_run_residency_stress(
     if (result != HENKA_SUCCESS)
         return result;
     printf(
-        "Residency stress: managed=%zu resident=%llu budget-rejections=%u KTX:mips%u->%u->%u trim=%zu queued=%zu processed=%zu failed=%llu cancelled=%llu pinned=%zu source-unknown=%llu.\n",
+        "Residency stress: managed=%zu resident=%llu budget-rejections=%u KTX:mips%u->%u->%u trim=%zu queued=%zu processed=%zu failed=%llu cancelled=%llu pinned=%zu source-failed=%llu source-unknown=%llu.\n",
         after.managed_texture_count,
         (unsigned long long)after.resident_bytes,
         (unsigned int)after.budget_rejection_count,
@@ -9562,6 +9610,7 @@ static henka_result sandbox3d_run_residency_stress(
         (unsigned long long)after.failed_request_count,
         (unsigned long long)after.cancelled_request_count,
         after.pinned_texture_count,
+        (unsigned long long)after.source_failed_bytes,
         (unsigned long long)after.unknown_source_failure_count);
     if (after.managed_texture_count < SANDBOX3D_RESIDENCY_STRESS_TEXTURE_COUNT ||
         after.budget_rejection_count == 0U ||
