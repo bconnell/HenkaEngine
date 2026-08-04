@@ -149,15 +149,15 @@ while the normal missing texture proves the unknown-source count. This proves
 ownership, queue, budget, mip, failure accounting, and lifetime behavior at
 application runtime. Before the live-scene pass, the KTX2 fixture is returned
 to one resident mip; the rendered far/near/return camera phase reports its
-observed resident-mip trace in the smoke diagnostics. This is bounded visibility
-threshold evidence, not a claim of automatic demotion or complete convergence;
+observed resident-mip trace in the smoke diagnostics, including far-camera
+demotion after near-camera promotion. This is bounded visibility threshold
+evidence, not a claim of background streaming or complete budget convergence;
 The same scenario also writes a larger native BC1 KTX2 chain. If the active
 device exposes BC1, it verifies compressed resident-mip trim and promotion;
 without that capability, the native-compressed source fails closed and the
 output records `BC1=unsupported`. This is capability-pressure coverage,
-not asynchronous streaming or a complete budget-convergence policy. Full
-visibility-threshold convergence proof and background I/O streaming remain
-separate unfinished tracks.
+not asynchronous streaming or a complete budget-convergence policy. Background
+I/O streaming remains a separate unfinished track.
 
 Residency diagnostics also retain cumulative bytes successfully uploaded through
 manager-owned texture creation or replacement, bytes removed by successful trim

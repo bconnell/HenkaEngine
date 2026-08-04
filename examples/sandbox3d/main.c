@@ -10100,7 +10100,7 @@ static void sandbox3d_update(henka_engine* engine, double delta_seconds, void* u
         else if (stress_frame == 4U)
             state->camera.position.z = 2.8f;
         else if (stress_frame == 6U)
-            state->camera.position.z = 8.6f;
+            state->camera.position.z = 25.0f;
         if (state->residency_stress_scene_material_active &&
             (stress_frame == 3U || stress_frame == 5U || stress_frame == 7U) &&
             henka_texture_get_info(

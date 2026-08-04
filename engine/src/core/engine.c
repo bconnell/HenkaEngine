@@ -551,7 +551,7 @@ static void henka_engine_queue_visible_texture_residency(
                 textures[texture_index]);
             if (!henka_engine_is_ktx2_texture(engine->asset_manager, textures[texture_index]) ||
                 henka_texture_get_info(textures[texture_index], &info) != HENKA_SUCCESS ||
-                info.resident_mip_count >= requested_mips || info.mip_count < requested_mips)
+                info.resident_mip_count == requested_mips || info.mip_count < requested_mips)
                 continue;
             (void)henka_assets_queue_texture_residency_request_with_priority(
                 engine->asset_manager,
