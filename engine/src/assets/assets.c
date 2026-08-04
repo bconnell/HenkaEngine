@@ -1519,6 +1519,17 @@ henka_result henka_assets_begin_texture_residency_frame(
     return HENKA_SUCCESS;
 }
 
+henka_result henka_assets_end_texture_residency_frame(
+    henka_asset_manager* manager)
+{
+    if (manager == NULL)
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    manager->texture_residency_frame_active = false;
+    for (size_t index = 0U; index < manager->texture_count; ++index)
+        manager->texture_entries[index].residency_pinned = false;
+    return HENKA_SUCCESS;
+}
+
 henka_result henka_assets_pin_texture_for_residency_frame(
     henka_asset_manager* manager,
     henka_texture* texture)

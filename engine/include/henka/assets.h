@@ -191,6 +191,9 @@ henka_result henka_assets_get_texture_residency_diagnostics(
 henka_result henka_assets_begin_texture_residency_frame(
     henka_asset_manager* manager,
     uint64_t frame_index);
+/* Ends the active residency scope immediately and releases all frame pins. */
+henka_result henka_assets_end_texture_residency_frame(
+    henka_asset_manager* manager);
 /* Pins one manager-owned texture for the active residency frame. */
 henka_result henka_assets_pin_texture_for_residency_frame(
     henka_asset_manager* manager,

@@ -1033,8 +1033,12 @@ henka_result henka_engine_set_scene(henka_engine* engine, henka_scene* scene)
     }
 
     if (engine->active_scene != scene && engine->asset_manager != NULL)
+    {
+        (void)henka_assets_end_texture_residency_frame(
+            engine->asset_manager);
         (void)henka_assets_cancel_texture_residency_requests(
             engine->asset_manager, NULL);
+    }
     engine->active_scene = scene;
     return HENKA_SUCCESS;
 }

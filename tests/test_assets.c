@@ -471,6 +471,18 @@ void henka_test_assets(void)
             &manager, &residency) == HENKA_SUCCESS);
         HENKA_TEST_ASSERT(residency.pinned_texture_count == 0U);
     }
+    HENKA_TEST_ASSERT(henka_assets_begin_texture_residency_frame(
+        &manager, 9U) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_assets_pin_texture_for_residency_frame(
+        &manager, &fallback_texture) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_assets_end_texture_residency_frame(
+        &manager) == HENKA_SUCCESS);
+    {
+        henka_texture_residency_diagnostics residency;
+        HENKA_TEST_ASSERT(henka_assets_get_texture_residency_diagnostics(
+            &manager, &residency) == HENKA_SUCCESS);
+        HENKA_TEST_ASSERT(residency.pinned_texture_count == 0U);
+    }
     mesh_entries[0].key = "assets/models/a.obj";
     mesh_entries[0].source_path = "Assets/Models/A.obj";
     mesh_entries[0].mesh = &fallback_mesh;
