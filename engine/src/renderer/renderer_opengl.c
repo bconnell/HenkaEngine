@@ -3392,7 +3392,32 @@ static void henka_opengl_present_hdr(
         state->temporal_history_width == viewport.width &&
         state->temporal_history_height == viewport.height)
     {
+        bool depth_history_copied = false;
         GLint previous_framebuffer = 0;
+        if (g_gl.BlitFramebuffer != NULL && state->temporal_history_depth_framebuffer != 0U)
+        {
+            while (glGetError() != GL_NO_ERROR) {}
+            glGetIntegerv(GL_FRAMEBUFFER_BINDING, &previous_framebuffer);
+            g_gl.BindFramebuffer(GL_READ_FRAMEBUFFER, state->hdr_framebuffer);
+            g_gl.BindFramebuffer(GL_DRAW_FRAMEBUFFER, state->temporal_history_depth_framebuffer);
+            g_gl.BlitFramebuffer(
+                0, 0, viewport.width, viewport.height,
+                0, 0, viewport.width, viewport.height,
+                GL_DEPTH_BUFFER_BIT,
+                GL_NEAREST);
+            g_gl.BindFramebuffer(GL_FRAMEBUFFER, (GLuint)previous_framebuffer);
+            depth_history_copied = glGetError() == GL_NO_ERROR;
+        }
+        if (!depth_history_copied)
+        {
+            state->temporal_history_valid = false;
+            state->temporal_fallback_active = true;
+            (void)snprintf(
+                state->temporal_invalidation_reason,
+                sizeof(state->temporal_invalidation_reason),
+                "previous depth copy failed");
+            return;
+        }
         g_gl.ActiveTexture(GL_TEXTURE2);
         glBindTexture(GL_TEXTURE_2D, state->temporal_history_texture);
         glCopyTexSubImage2D(
@@ -3406,17 +3431,15 @@ static void henka_opengl_present_hdr(
             viewport.height);
         glBindTexture(GL_TEXTURE_2D, 0U);
         g_gl.ActiveTexture(GL_TEXTURE0);
-        if (g_gl.BlitFramebuffer != NULL && state->temporal_history_depth_framebuffer != 0U)
+        if (glGetError() != GL_NO_ERROR)
         {
-            glGetIntegerv(GL_FRAMEBUFFER_BINDING, &previous_framebuffer);
-            g_gl.BindFramebuffer(GL_READ_FRAMEBUFFER, state->hdr_framebuffer);
-            g_gl.BindFramebuffer(GL_DRAW_FRAMEBUFFER, state->temporal_history_depth_framebuffer);
-            g_gl.BlitFramebuffer(
-                0, 0, viewport.width, viewport.height,
-                0, 0, viewport.width, viewport.height,
-                GL_DEPTH_BUFFER_BIT,
-                GL_NEAREST);
-            g_gl.BindFramebuffer(GL_FRAMEBUFFER, (GLuint)previous_framebuffer);
+            state->temporal_history_valid = false;
+            state->temporal_fallback_active = true;
+            (void)snprintf(
+                state->temporal_invalidation_reason,
+                sizeof(state->temporal_invalidation_reason),
+                "history color copy failed");
+            return;
         }
         state->temporal_history_valid = true;
         state->temporal_fallback_active = false;
