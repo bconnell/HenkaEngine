@@ -434,8 +434,12 @@ void henka_test_assets(void)
         HENKA_TEST_ASSERT(residency.managed_texture_count == 2U);
         HENKA_TEST_ASSERT(residency.fallback_texture_count == 2U);
         HENKA_TEST_ASSERT(residency.pinned_texture_count == 1U);
+        HENKA_TEST_ASSERT(residency.pinned_bytes == 0U);
         HENKA_TEST_ASSERT(residency.resident_bytes == 0U);
         HENKA_TEST_ASSERT(residency.failed_bytes == 0U);
+        HENKA_TEST_ASSERT(residency.unknown_failed_request_count == 0U);
+        HENKA_TEST_ASSERT(residency.progression_mode ==
+            HENKA_TEXTURE_RESIDENCY_PROGRESS_SYNCHRONOUS_MAIN_THREAD);
         HENKA_TEST_ASSERT(henka_assets_set_texture_residency_budget(
             &manager, 1024U) == HENKA_SUCCESS);
         manager.texture_resident_bytes = 2048U;
@@ -530,6 +534,7 @@ void henka_test_assets(void)
             &manager, &residency) == HENKA_SUCCESS);
         HENKA_TEST_ASSERT(residency.queued_request_count == 0U);
         HENKA_TEST_ASSERT(residency.failed_request_count == 1U);
+        HENKA_TEST_ASSERT(residency.unknown_failed_request_count == 1U);
     }
     texture_entries[1].metadata.fallback = false;
     texture_entries[1].owns_texture = true;
@@ -568,6 +573,7 @@ void henka_test_assets(void)
         HENKA_TEST_ASSERT(henka_assets_get_texture_residency_diagnostics(
             &manager, &residency) == HENKA_SUCCESS);
         HENKA_TEST_ASSERT(residency.failed_request_count == 3U);
+        HENKA_TEST_ASSERT(residency.unknown_failed_request_count == 3U);
     }
     manager.texture_residency_request_count = 0U;
     manager.texture_count = HENKA_MAX_TEXTURE_RESIDENCY_REQUESTS + 1U;

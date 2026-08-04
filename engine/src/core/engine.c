@@ -1667,6 +1667,8 @@ henka_result henka_engine_get_diagnostics(
     out_diagnostics->texture_residency_uploaded_bytes = texture_residency.uploaded_bytes;
     out_diagnostics->texture_residency_evicted_bytes = texture_residency.evicted_bytes;
     out_diagnostics->texture_residency_failed_bytes = texture_residency.failed_bytes;
+    out_diagnostics->texture_residency_unknown_failed_request_count =
+        texture_residency.unknown_failed_request_count;
     out_diagnostics->texture_residency_managed_count =
         texture_residency.managed_texture_count > UINT32_MAX ?
         UINT32_MAX : (uint32_t)texture_residency.managed_texture_count;
@@ -1684,6 +1686,9 @@ henka_result henka_engine_get_diagnostics(
     out_diagnostics->texture_residency_pinned_count =
         texture_residency.pinned_texture_count > UINT32_MAX ?
         UINT32_MAX : (uint32_t)texture_residency.pinned_texture_count;
+    out_diagnostics->texture_residency_pinned_bytes = texture_residency.pinned_bytes;
+    out_diagnostics->texture_residency_progression_mode =
+        texture_residency.progression_mode;
     out_diagnostics->texture_residency_budget_exceeded = texture_residency.budget_exceeded;
     out_diagnostics->wireframe_enabled =
         out_diagnostics->viewport_shading_mode ==

@@ -42,6 +42,11 @@ typedef struct henka_asset_metadata
     henka_texture_descriptor texture_descriptor;
 } henka_asset_metadata;
 
+typedef enum henka_texture_residency_progression_mode
+{
+    HENKA_TEXTURE_RESIDENCY_PROGRESS_SYNCHRONOUS_MAIN_THREAD = 0
+} henka_texture_residency_progression_mode;
+
 typedef struct henka_texture_residency_diagnostics
 {
     uint64_t budget_bytes;
@@ -50,6 +55,7 @@ typedef struct henka_texture_residency_diagnostics
     uint64_t evicted_bytes;
     uint64_t failed_bytes;
     uint32_t budget_rejection_count;
+    uint64_t unknown_failed_request_count;
     size_t managed_texture_count;
     size_t fallback_texture_count;
     size_t queued_request_count;
@@ -58,7 +64,9 @@ typedef struct henka_texture_residency_diagnostics
     uint64_t cancelled_request_count;
     uint64_t eviction_count;
     uint64_t eviction_failure_count;
+    uint64_t pinned_bytes;
     size_t pinned_texture_count;
+    henka_texture_residency_progression_mode progression_mode;
     bool budget_exceeded;
 } henka_texture_residency_diagnostics;
 
