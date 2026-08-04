@@ -6,6 +6,7 @@
 #include <henka/memory.h>
 
 #include "../engine/src/core/checked.h"
+#include "../engine/src/core/memory_internal.h"
 #include "../engine/src/henka_internal.h"
 
 #if defined(HENKA_WITH_KTX2_TRANSCODER)
@@ -730,6 +731,19 @@ void henka_test_assets(void)
     HENKA_TEST_ASSERT(material_entity != HENKA_INVALID_ENTITY);
     HENKA_TEST_ASSERT(henka_assets_apply_material_instance_to_entity(
         &material_instance, material_scene, material_entity) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_scene_get_entity_material(
+        material_scene, material_entity, &applied_material) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(applied_material.roughness == material_entry.material.roughness);
+    HENKA_TEST_ASSERT(henka_assets_material_instance_set_float(
+        &material_instance, HENKA_MATERIAL_INSTANCE_IOR, 0.5f) ==
+        HENKA_ERROR_INVALID_ARGUMENT);
+    HENKA_TEST_ASSERT(henka_assets_get_material_instance_material(
+        &material_instance, &applied_material) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(applied_material.ior, material_entry.material.ior, 0.0001f);
+    henka_memory_test_fail_after(0U);
+    HENKA_TEST_ASSERT(henka_assets_apply_material_instance_to_entity(
+        &material_instance, material_scene, material_entity) == HENKA_ERROR_OUT_OF_MEMORY);
+    henka_memory_test_disable_failures();
     HENKA_TEST_ASSERT(henka_scene_get_entity_material(
         material_scene, material_entity, &applied_material) == HENKA_SUCCESS);
     HENKA_TEST_ASSERT(applied_material.roughness == material_entry.material.roughness);
