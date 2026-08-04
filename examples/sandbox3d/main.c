@@ -355,6 +355,8 @@ typedef struct sandbox3d_state
     uint32_t residency_visibility_near_mips;
     uint32_t residency_visibility_return_mips;
     bool temporal_stress;
+    bool material_stress;
+    bool material_stress_ran;
     bool smoke_validation_failed;
     bool capture_mode_requested;
     henka_viewport_shading_mode capture_mode;
@@ -9439,6 +9441,86 @@ static henka_result sandbox3d_write_invalid_residency_fixture(
     return HENKA_SUCCESS;
 }
 
+static henka_result sandbox3d_run_material_stress(
+    sandbox3d_state* state)
+{
+    henka_material_instance previous_instance;
+    henka_material applied_material;
+    henka_material entity_material;
+    henka_result result;
+
+    memset(&applied_material, 0, sizeof(applied_material));
+    memset(&entity_material, 0, sizeof(entity_material));
+    if (state == NULL || !state->marker_material_instance_valid ||
+        state->scene == NULL || state->marker_entity == HENKA_INVALID_ENTITY)
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    previous_instance = state->marker_material_instance;
+    result = henka_assets_material_instance_set_float(
+        &state->marker_material_instance,
+        HENKA_MATERIAL_INSTANCE_METALLIC,
+        0.82f);
+    if (result == HENKA_SUCCESS)
+        result = henka_assets_material_instance_set_float(
+            &state->marker_material_instance,
+            HENKA_MATERIAL_INSTANCE_TRANSMISSION,
+            0.4f);
+    if (result == HENKA_SUCCESS)
+        result = henka_assets_material_instance_set_bool(
+            &state->marker_material_instance,
+            HENKA_MATERIAL_INSTANCE_DOUBLE_SIDED,
+            true);
+    if (result == HENKA_SUCCESS)
+        result = henka_assets_material_instance_set_alpha_mode(
+            &state->marker_material_instance,
+            HENKA_MATERIAL_ALPHA_MASKED);
+    if (result == HENKA_SUCCESS)
+        result = henka_assets_get_material_instance_material(
+            &state->marker_material_instance,
+            &applied_material);
+    if (result == HENKA_SUCCESS &&
+        (fabsf(applied_material.metallic - 0.82f) > 0.0001f ||
+            fabsf(applied_material.transmission - 0.4f) > 0.0001f ||
+            !applied_material.double_sided ||
+            applied_material.alpha_mode != HENKA_MATERIAL_ALPHA_MASKED))
+        result = HENKA_ERROR_UNKNOWN;
+    if (result == HENKA_SUCCESS)
+        result = henka_assets_apply_material_instance_to_entity(
+            &state->marker_material_instance,
+            state->scene,
+            state->marker_entity);
+    if (result == HENKA_SUCCESS)
+        result = henka_scene_get_entity_material(
+            state->scene,
+            state->marker_entity,
+            &entity_material);
+    if (result == HENKA_SUCCESS &&
+        (fabsf(entity_material.metallic - 0.82f) > 0.0001f ||
+            fabsf(entity_material.transmission - 0.4f) > 0.0001f ||
+            !entity_material.double_sided ||
+            entity_material.alpha_mode != HENKA_MATERIAL_ALPHA_MASKED))
+        result = HENKA_ERROR_UNKNOWN;
+    if (result == HENKA_SUCCESS)
+        result = henka_assets_refresh_material_instance(
+            &state->marker_material_instance);
+    if (result == HENKA_SUCCESS)
+        result = henka_assets_material_instance_reset_overrides(
+            &state->marker_material_instance);
+    if (result == HENKA_SUCCESS)
+        result = henka_assets_apply_material_instance_to_entity(
+            &state->marker_material_instance,
+            state->scene,
+            state->marker_entity);
+    if (result != HENKA_SUCCESS)
+    {
+        state->marker_material_instance = previous_instance;
+        (void)henka_assets_apply_material_instance_to_entity(
+            &state->marker_material_instance,
+            state->scene,
+            state->marker_entity);
+    }
+    return result;
+}
+
 static henka_result sandbox3d_run_residency_stress(
     henka_engine* engine,
     sandbox3d_state* state)
@@ -9850,6 +9932,23 @@ static void sandbox3d_update(henka_engine* engine, double delta_seconds, void* u
             state->camera.position.z = 25.0f;
         }
         state->residency_stress_ran = true;
+    }
+    if (state->material_stress && !state->material_stress_ran)
+    {
+        const henka_result material_result = sandbox3d_run_material_stress(state);
+        if (material_result != HENKA_SUCCESS)
+        {
+            state->smoke_validation_failed = true;
+            HENKA_LOG_ERROR(
+                "Material stress scenario failed (%d)",
+                (int)material_result);
+            henka_engine_request_exit(engine);
+        }
+        else
+        {
+            printf("Material stress: typed-overrides=applied entity-commit=valid refresh=valid reset=valid.\n");
+        }
+        state->material_stress_ran = true;
     }
     if (state->residency_stress_ran)
     {
@@ -10362,12 +10461,14 @@ int main(int argc, char** argv)
     bool smoke_test;
     bool residency_stress;
     bool temporal_stress;
+    bool material_stress;
     bool capture_mode_requested;
     henka_viewport_shading_mode capture_mode;
 
     smoke_test = false;
     residency_stress = false;
     temporal_stress = false;
+    material_stress = false;
     capture_mode_requested = false;
     capture_mode = HENKA_VIEWPORT_SHADING_RENDERED;
     if (argc == 2 && strcmp(argv[1], "--smoke-test") == 0)
@@ -10384,6 +10485,11 @@ int main(int argc, char** argv)
         smoke_test = true;
         temporal_stress = true;
     }
+    else if (argc == 2 && strcmp(argv[1], "--material-stress") == 0)
+    {
+        smoke_test = true;
+        material_stress = true;
+    }
     else if (argc == 3 && strcmp(argv[1], "--capture-mode") == 0 &&
         henka_viewport_shading_mode_parse(argv[2], &capture_mode) == HENKA_SUCCESS)
     {
@@ -10391,7 +10497,7 @@ int main(int argc, char** argv)
     }
     else if (argc != 1)
     {
-        fprintf(stderr, "Usage: %s [--smoke-test | --residency-stress | --temporal-stress | --capture-mode solid|material_preview|rendered]\n", argv[0]);
+        fprintf(stderr, "Usage: %s [--smoke-test | --residency-stress | --temporal-stress | --material-stress | --capture-mode solid|material_preview|rendered]\n", argv[0]);
         return 2;
     }
 
@@ -10399,6 +10505,7 @@ int main(int argc, char** argv)
     state.smoke_test = smoke_test;
     state.residency_stress = residency_stress;
     state.temporal_stress = temporal_stress;
+    state.material_stress = material_stress;
     state.capture_mode_requested = capture_mode_requested;
     state.capture_mode = capture_mode;
     state.camera = henka_camera_create_perspective(60.0f * HENKA_DEG_TO_RAD, 16.0f / 9.0f, 0.1f, 100.0f);
