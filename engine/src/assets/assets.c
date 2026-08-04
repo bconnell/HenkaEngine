@@ -932,6 +932,9 @@ void henka_asset_manager_destroy(
         return;
     }
 
+    (void)henka_assets_end_texture_residency_frame(manager);
+    (void)henka_assets_cancel_texture_residency_requests(manager, NULL);
+
     for (index = 0U; index < manager->shader_count; ++index)
     {
         henka_shader_destroy_owned(
