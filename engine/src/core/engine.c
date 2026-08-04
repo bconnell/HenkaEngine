@@ -574,6 +574,15 @@ static henka_result henka_engine_render_frame(henka_engine* engine)
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
 
+    /* Begin the residency scope before renderer acquisition so a failed or
+     * early frame cannot retain pins from the previous frame forever. */
+    if (engine->asset_manager != NULL)
+    {
+        (void)henka_assets_begin_texture_residency_frame(
+            engine->asset_manager,
+            engine->time.frame_index);
+    }
+
     result = henka_renderer_begin_frame(engine->renderer);
     if (result != HENKA_SUCCESS)
     {
@@ -595,9 +604,6 @@ static henka_result henka_engine_render_frame(henka_engine* engine)
      */
     if (engine->asset_manager != NULL)
     {
-        (void)henka_assets_begin_texture_residency_frame(
-            engine->asset_manager,
-            engine->time.frame_index);
         henka_engine_queue_visible_texture_residency(engine);
         result = henka_assets_process_texture_residency_requests(
             engine->asset_manager,
