@@ -9447,6 +9447,53 @@ static henka_result sandbox3d_run_material_stress(
     henka_material_instance previous_instance;
     henka_material applied_material;
     henka_material entity_material;
+    static const henka_material_instance_parameter float_parameters[] =
+    {
+        HENKA_MATERIAL_INSTANCE_METALLIC,
+        HENKA_MATERIAL_INSTANCE_ROUGHNESS,
+        HENKA_MATERIAL_INSTANCE_SPECULAR_FACTOR,
+        HENKA_MATERIAL_INSTANCE_IOR,
+        HENKA_MATERIAL_INSTANCE_TRANSMISSION,
+        HENKA_MATERIAL_INSTANCE_NORMAL_SCALE,
+        HENKA_MATERIAL_INSTANCE_OCCLUSION_STRENGTH,
+        HENKA_MATERIAL_INSTANCE_EMISSIVE_STRENGTH,
+        HENKA_MATERIAL_INSTANCE_CLEARCOAT,
+        HENKA_MATERIAL_INSTANCE_CLEARCOAT_ROUGHNESS,
+        HENKA_MATERIAL_INSTANCE_ALPHA_CUTOFF,
+        HENKA_MATERIAL_INSTANCE_SHEEN_ROUGHNESS,
+        HENKA_MATERIAL_INSTANCE_THICKNESS,
+        HENKA_MATERIAL_INSTANCE_ATTENUATION_DISTANCE
+    };
+    static const float float_values[] =
+    {
+        0.82f, 0.31f, 0.65f, 1.45f, 0.40f, 0.90f, 0.75f,
+        2.0f, 0.55f, 0.25f, 0.42f, 0.35f, 0.40f, 4.0f
+    };
+    static const henka_material_instance_parameter vec3_parameters[] =
+    {
+        HENKA_MATERIAL_INSTANCE_EMISSIVE_COLOR,
+        HENKA_MATERIAL_INSTANCE_SPECULAR_COLOR,
+        HENKA_MATERIAL_INSTANCE_SHEEN_COLOR,
+        HENKA_MATERIAL_INSTANCE_ATTENUATION_COLOR
+    };
+    static const henka_vec3 vec3_values[] =
+    {
+        {0.12f, 0.08f, 0.04f},
+        {0.82f, 0.86f, 0.90f},
+        {0.16f, 0.20f, 0.24f},
+        {0.70f, 0.82f, 0.94f}
+    };
+    static const henka_material_instance_parameter bool_parameters[] =
+    {
+        HENKA_MATERIAL_INSTANCE_USE_LIGHTING,
+        HENKA_MATERIAL_INSTANCE_DEPTH_TEST,
+        HENKA_MATERIAL_INSTANCE_DOUBLE_SIDED,
+        HENKA_MATERIAL_INSTANCE_CAST_SHADOWS,
+        HENKA_MATERIAL_INSTANCE_RECEIVE_SHADOWS
+    };
+    henka_material texture_source;
+    const char* stage;
+    size_t index;
     henka_result result;
 
     memset(&applied_material, 0, sizeof(applied_material));
@@ -9455,34 +9502,122 @@ static henka_result sandbox3d_run_material_stress(
         state->scene == NULL || state->marker_entity == HENKA_INVALID_ENTITY)
         return HENKA_ERROR_INVALID_ARGUMENT;
     previous_instance = state->marker_material_instance;
-    result = henka_assets_material_instance_set_float(
-        &state->marker_material_instance,
-        HENKA_MATERIAL_INSTANCE_METALLIC,
-        0.82f);
-    if (result == HENKA_SUCCESS)
+    stage = "float overrides";
+    result = HENKA_SUCCESS;
+    for (index = 0U; result == HENKA_SUCCESS &&
+        index < sizeof(float_parameters) / sizeof(float_parameters[0]); ++index)
+    {
         result = henka_assets_material_instance_set_float(
+            &state->marker_material_instance, float_parameters[index], float_values[index]);
+    }
+    stage = "vector overrides";
+    for (index = 0U; result == HENKA_SUCCESS &&
+        index < sizeof(vec3_parameters) / sizeof(vec3_parameters[0]); ++index)
+    {
+        result = henka_assets_material_instance_set_vec3(
+            &state->marker_material_instance, vec3_parameters[index], vec3_values[index]);
+    }
+    stage = "base color override";
+    if (result == HENKA_SUCCESS)
+        result = henka_assets_material_instance_set_vec4(
             &state->marker_material_instance,
-            HENKA_MATERIAL_INSTANCE_TRANSMISSION,
-            0.4f);
+            HENKA_MATERIAL_INSTANCE_BASE_COLOR,
+            (henka_vec4){0.72f, 0.42f, 0.18f, 0.88f});
+    stage = "semantic texture overrides";
+    texture_source = state->marker_material_instance.material;
+    if (result == HENKA_SUCCESS)
+        result = henka_assets_material_instance_set_texture(
+            &state->marker_material_instance,
+            HENKA_MATERIAL_TEXTURE_SLOT_BASE_COLOR,
+            texture_source.base_color_texture);
+    if (result == HENKA_SUCCESS)
+        result = henka_assets_material_instance_set_texture(
+            &state->marker_material_instance,
+            HENKA_MATERIAL_TEXTURE_SLOT_NORMAL,
+            texture_source.normal_texture);
+    if (result == HENKA_SUCCESS)
+        result = henka_assets_material_instance_set_texture(
+            &state->marker_material_instance,
+            HENKA_MATERIAL_TEXTURE_SLOT_METALLIC_ROUGHNESS,
+            texture_source.metallic_roughness_texture);
+    if (result == HENKA_SUCCESS)
+        result = henka_assets_material_instance_set_texture(
+            &state->marker_material_instance,
+            HENKA_MATERIAL_TEXTURE_SLOT_OCCLUSION,
+            texture_source.occlusion_texture);
+    if (result == HENKA_SUCCESS)
+        result = henka_assets_material_instance_set_texture(
+            &state->marker_material_instance,
+            HENKA_MATERIAL_TEXTURE_SLOT_EMISSIVE,
+            texture_source.emissive_texture);
+    stage = "boolean overrides";
+    for (index = 0U; result == HENKA_SUCCESS &&
+        index < sizeof(bool_parameters) / sizeof(bool_parameters[0]); ++index)
+    {
+        result = henka_assets_material_instance_set_bool(
+            &state->marker_material_instance, bool_parameters[index], false);
+    }
+    if (result == HENKA_SUCCESS)
+        result = henka_assets_material_instance_set_bool(
+            &state->marker_material_instance,
+            HENKA_MATERIAL_INSTANCE_USE_LIGHTING,
+            true);
+    if (result == HENKA_SUCCESS)
+        result = henka_assets_material_instance_set_bool(
+            &state->marker_material_instance,
+            HENKA_MATERIAL_INSTANCE_DEPTH_TEST,
+            true);
     if (result == HENKA_SUCCESS)
         result = henka_assets_material_instance_set_bool(
             &state->marker_material_instance,
             HENKA_MATERIAL_INSTANCE_DOUBLE_SIDED,
             true);
+    stage = "alpha mode override";
     if (result == HENKA_SUCCESS)
         result = henka_assets_material_instance_set_alpha_mode(
             &state->marker_material_instance,
             HENKA_MATERIAL_ALPHA_MASKED);
+    stage = "effective material validation";
     if (result == HENKA_SUCCESS)
         result = henka_assets_get_material_instance_material(
             &state->marker_material_instance,
             &applied_material);
     if (result == HENKA_SUCCESS &&
         (fabsf(applied_material.metallic - 0.82f) > 0.0001f ||
+            fabsf(applied_material.roughness - 0.31f) > 0.0001f ||
+            fabsf(applied_material.ior - 1.45f) > 0.0001f ||
             fabsf(applied_material.transmission - 0.4f) > 0.0001f ||
-            !applied_material.double_sided ||
+            fabsf(applied_material.base_color.w - 0.88f) > 0.0001f ||
+            applied_material.base_color.x < 0.71f ||
+            applied_material.base_color.x > 0.73f ||
+            !applied_material.use_lighting || !applied_material.depth_test ||
+            !applied_material.double_sided || applied_material.cast_shadows ||
+            applied_material.receive_shadows ||
             applied_material.alpha_mode != HENKA_MATERIAL_ALPHA_MASKED))
         result = HENKA_ERROR_UNKNOWN;
+    stage = "invalid edit rollback";
+    if (result == HENKA_SUCCESS)
+    {
+        /* An invalid edit must leave the last valid effective value untouched. */
+        result = henka_assets_material_instance_set_float(
+            &state->marker_material_instance,
+            HENKA_MATERIAL_INSTANCE_IOR,
+            0.5f);
+        if (result == HENKA_ERROR_INVALID_ARGUMENT)
+            result = HENKA_SUCCESS;
+        else
+            result = HENKA_ERROR_UNKNOWN;
+    }
+    if (result == HENKA_SUCCESS)
+    {
+        henka_material rollback_check;
+        memset(&rollback_check, 0, sizeof(rollback_check));
+        result = henka_assets_get_material_instance_material(
+            &state->marker_material_instance, &rollback_check);
+        if (result == HENKA_SUCCESS && fabsf(rollback_check.ior - 1.45f) > 0.0001f)
+            result = HENKA_ERROR_UNKNOWN;
+    }
+    stage = "entity apply";
     if (result == HENKA_SUCCESS)
         result = henka_assets_apply_material_instance_to_entity(
             &state->marker_material_instance,
@@ -9493,18 +9628,22 @@ static henka_result sandbox3d_run_material_stress(
             state->scene,
             state->marker_entity,
             &entity_material);
+    stage = "entity validation";
     if (result == HENKA_SUCCESS &&
         (fabsf(entity_material.metallic - 0.82f) > 0.0001f ||
             fabsf(entity_material.transmission - 0.4f) > 0.0001f ||
             !entity_material.double_sided ||
             entity_material.alpha_mode != HENKA_MATERIAL_ALPHA_MASKED))
         result = HENKA_ERROR_UNKNOWN;
+    stage = "definition refresh";
     if (result == HENKA_SUCCESS)
         result = henka_assets_refresh_material_instance(
             &state->marker_material_instance);
+    stage = "reset overrides";
     if (result == HENKA_SUCCESS)
         result = henka_assets_material_instance_reset_overrides(
             &state->marker_material_instance);
+    stage = "reset apply";
     if (result == HENKA_SUCCESS)
         result = henka_assets_apply_material_instance_to_entity(
             &state->marker_material_instance,
@@ -9512,6 +9651,7 @@ static henka_result sandbox3d_run_material_stress(
             state->marker_entity);
     if (result != HENKA_SUCCESS)
     {
+        HENKA_LOG_ERROR("Material stress failed during %s (%d)", stage, (int)result);
         state->marker_material_instance = previous_instance;
         (void)henka_assets_apply_material_instance_to_entity(
             &state->marker_material_instance,
@@ -9946,7 +10086,7 @@ static void sandbox3d_update(henka_engine* engine, double delta_seconds, void* u
         }
         else
         {
-            printf("Material stress: typed-overrides=applied entity-commit=valid refresh=valid reset=valid.\n");
+            printf("Material stress: typed-overrides=all-supported invalid-edit=retained entity-commit=valid refresh=valid reset=valid.\n");
         }
         state->material_stress_ran = true;
     }
