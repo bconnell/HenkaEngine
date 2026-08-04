@@ -148,8 +148,13 @@ shutdown. A separate readable corrupt fixture proves known source-failure bytes
 while the normal missing texture proves the unknown-source count. This proves
 ownership, queue, budget, mip, failure accounting, and lifetime behavior at
 application runtime and exercises a live-scene far/near/return camera phase;
-compressed-format pressure, full visibility-threshold convergence proof, and
-background I/O streaming remain separate unfinished tracks.
+The same scenario also writes a larger native BC1 KTX2 chain. If the active
+device exposes BC1, it verifies compressed resident-mip trim and promotion;
+without that capability, the native-compressed source fails closed and the
+output records `BC1=unsupported`. This is capability-pressure coverage,
+not asynchronous streaming or a complete budget-convergence policy. Full
+visibility-threshold convergence proof and background I/O streaming remain
+separate unfinished tracks.
 
 Residency diagnostics also retain cumulative bytes successfully uploaded through
 manager-owned texture creation or replacement, bytes removed by successful trim

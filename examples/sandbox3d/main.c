@@ -9315,6 +9315,90 @@ static henka_result sandbox3d_write_residency_ktx2_fixture(
     henka_free(resolved_path);
     return HENKA_SUCCESS;
 }
+
+static henka_result sandbox3d_write_compressed_residency_fixture(
+    henka_engine* engine)
+{
+    static const char* fixture_path =
+        "assets/textures/residency/generated_bc1_residency.ktx2";
+    unsigned char level_zero[512U];
+    unsigned char level_one[128U];
+    unsigned char level_two[32U];
+    ktxTextureCreateInfo create_info;
+    ktxTexture2* generated_texture = NULL;
+    ktx_uint8_t* generated_bytes = NULL;
+    ktx_size_t generated_size = 0U;
+    char* resolved_path = NULL;
+    FILE* file = NULL;
+    henka_result result;
+
+    result = henka_assets_resolve_path(
+        henka_engine_get_asset_base_path(engine),
+        fixture_path,
+        &resolved_path);
+    if (result != HENKA_SUCCESS)
+        return result;
+    memset(&create_info, 0, sizeof(create_info));
+    create_info.vkFormat = 132U; /* VK_FORMAT_BC1_RGB_SRGB_BLOCK */
+    create_info.baseWidth = 32U;
+    create_info.baseHeight = 32U;
+    create_info.baseDepth = 1U;
+    create_info.numDimensions = 2U;
+    create_info.numLevels = 3U;
+    create_info.numLayers = 1U;
+    create_info.numFaces = 1U;
+    if (ktxTexture2_Create(
+            &create_info,
+            KTX_TEXTURE_CREATE_ALLOC_STORAGE,
+            &generated_texture) != KTX_SUCCESS ||
+        generated_texture == NULL)
+    {
+        henka_free(resolved_path);
+        return HENKA_ERROR_ASSET_SOURCE;
+    }
+    memset(level_zero, 0x12, sizeof(level_zero));
+    memset(level_one, 0x34, sizeof(level_one));
+    memset(level_two, 0x56, sizeof(level_two));
+    if (ktxTexture_SetImageFromMemory(
+            ktxTexture(generated_texture),
+            0U, 0U, 0U, level_zero, sizeof(level_zero)) != KTX_SUCCESS ||
+        ktxTexture_SetImageFromMemory(
+            ktxTexture(generated_texture),
+            1U, 0U, 0U, level_one, sizeof(level_one)) != KTX_SUCCESS ||
+        ktxTexture_SetImageFromMemory(
+            ktxTexture(generated_texture),
+            2U, 0U, 0U, level_two, sizeof(level_two)) != KTX_SUCCESS ||
+        ktxTexture_WriteToMemory(
+            ktxTexture(generated_texture),
+            &generated_bytes,
+            &generated_size) != KTX_SUCCESS)
+    {
+        ktxTexture_Destroy(ktxTexture(generated_texture));
+        henka_free(resolved_path);
+        return HENKA_ERROR_ASSET_SOURCE;
+    }
+    ktxTexture_Destroy(ktxTexture(generated_texture));
+#if defined(_WIN32)
+    if (fopen_s(&file, resolved_path, "wb") != 0)
+        file = NULL;
+#else
+    file = fopen(resolved_path, "wb");
+#endif
+    if (file == NULL ||
+        fwrite(generated_bytes, 1U, (size_t)generated_size, file) !=
+            (size_t)generated_size)
+    {
+        if (file != NULL)
+            fclose(file);
+        free(generated_bytes);
+        henka_free(resolved_path);
+        return HENKA_ERROR_ASSET_SOURCE;
+    }
+    fclose(file);
+    free(generated_bytes);
+    henka_free(resolved_path);
+    return HENKA_SUCCESS;
+}
 #endif
 
 static henka_result sandbox3d_write_invalid_residency_fixture(
@@ -9361,15 +9445,20 @@ static henka_result sandbox3d_run_residency_stress(
     henka_texture* shared_texture;
     henka_texture* invalid_texture;
     henka_texture* ktx_texture;
+    henka_texture* compressed_texture;
     henka_texture_info ktx_info;
     henka_texture_info ktx_after_demote;
     henka_texture_info ktx_after_promotion;
+    henka_texture_info compressed_info;
+    henka_texture_info compressed_after_demote;
+    henka_texture_info compressed_after_promotion;
     henka_texture_residency_diagnostics before_trim;
     size_t processed;
     size_t ktx_processed;
     size_t trimmed;
     size_t cancelled;
     uint32_t ktx_initial_mip_count;
+    const char* compressed_status;
     size_t index;
     henka_result result;
 
@@ -9387,6 +9476,9 @@ static henka_result sandbox3d_run_residency_stress(
         return result;
 #if defined(HENKA_WITH_KTX2_TRANSCODER)
     result = sandbox3d_write_residency_ktx2_fixture(engine);
+    if (result != HENKA_SUCCESS)
+        return result;
+    result = sandbox3d_write_compressed_residency_fixture(engine);
     if (result != HENKA_SUCCESS)
         return result;
 #else
@@ -9507,6 +9599,88 @@ static henka_result sandbox3d_run_residency_stress(
     if (henka_texture_get_info(ktx_texture, &ktx_after_promotion) != HENKA_SUCCESS ||
         ktx_after_promotion.resident_mip_count != 3U)
         return HENKA_ERROR_UNKNOWN;
+
+    compressed_texture = NULL;
+    compressed_status = "unsupported";
+    result = henka_assets_load_texture(
+        assets,
+        "assets/textures/residency/generated_bc1_residency.ktx2",
+        &compressed_texture);
+    if (result != HENKA_SUCCESS)
+    {
+        if (result != HENKA_ERROR_RENDERER && result != HENKA_ERROR_ASSET_SOURCE)
+            return result;
+    }
+    if (result == HENKA_SUCCESS && compressed_texture == NULL)
+        return HENKA_ERROR_UNKNOWN;
+    if (result != HENKA_SUCCESS)
+        compressed_texture = NULL;
+    if (compressed_texture == NULL)
+        goto compressed_fixture_complete;
+    memset(&compressed_info, 0, sizeof(compressed_info));
+    if (henka_texture_get_info(compressed_texture, &compressed_info) != HENKA_SUCCESS)
+        return HENKA_ERROR_UNKNOWN;
+    if (compressed_info.gpu_compressed &&
+        compressed_info.gpu_format == HENKA_TEXTURE_GPU_FORMAT_BC1)
+    {
+        size_t compressed_processed;
+        size_t compressed_trimmed;
+        henka_texture_residency_diagnostics compressed_diagnostics;
+
+        compressed_status = "native-bc1";
+        if (compressed_info.mip_count != 3U || compressed_info.resident_mip_count != 3U)
+            return HENKA_ERROR_UNKNOWN;
+        result = henka_assets_queue_texture_residency_request_with_priority(
+            assets,
+            compressed_texture,
+            2U,
+            UINT32_MAX);
+        if (result != HENKA_SUCCESS)
+            return result;
+        result = henka_assets_process_texture_residency_requests(
+            assets,
+            1U,
+            &compressed_processed);
+        if (result != HENKA_SUCCESS || compressed_processed != 1U)
+            return result == HENKA_SUCCESS ? HENKA_ERROR_UNKNOWN : result;
+        result = henka_assets_get_texture_residency_diagnostics(
+            assets,
+            &compressed_diagnostics);
+        if (result != HENKA_SUCCESS || compressed_diagnostics.resident_bytes == 0U)
+            return result == HENKA_SUCCESS ? HENKA_ERROR_UNKNOWN : result;
+        result = henka_assets_trim_texture_residency(
+            assets,
+            compressed_diagnostics.resident_bytes - 1U,
+            1U,
+            &compressed_trimmed);
+        if (result != HENKA_SUCCESS || compressed_trimmed == 0U)
+            return result == HENKA_SUCCESS ? HENKA_ERROR_UNKNOWN : result;
+        if (henka_texture_get_info(compressed_texture, &compressed_after_demote) != HENKA_SUCCESS ||
+            compressed_after_demote.resident_mip_count != 1U)
+            return HENKA_ERROR_UNKNOWN;
+        result = henka_assets_queue_texture_residency_request_with_priority(
+            assets,
+            compressed_texture,
+            3U,
+            UINT32_MAX);
+        if (result != HENKA_SUCCESS)
+            return result;
+        result = henka_assets_process_texture_residency_requests(
+            assets,
+            1U,
+            &compressed_processed);
+        if (result != HENKA_SUCCESS || compressed_processed != 1U)
+            return result == HENKA_SUCCESS ? HENKA_ERROR_UNKNOWN : result;
+        if (henka_texture_get_info(compressed_texture, &compressed_after_promotion) != HENKA_SUCCESS ||
+            compressed_after_promotion.resident_mip_count != 3U)
+            return HENKA_ERROR_UNKNOWN;
+    }
+    else if (!compressed_info.fallback_alias)
+    {
+        return HENKA_ERROR_UNKNOWN;
+    }
+
+compressed_fixture_complete:
     if (state->cube_entity != HENKA_INVALID_ENTITY &&
         henka_scene_get_entity_material(
             state->scene,
@@ -9598,13 +9772,14 @@ static henka_result sandbox3d_run_residency_stress(
     if (result != HENKA_SUCCESS)
         return result;
     printf(
-        "Residency stress: managed=%zu resident=%llu budget-rejections=%u KTX:mips%u->%u->%u trim=%zu queued=%zu processed=%zu failed=%llu cancelled=%llu pinned=%zu source-failed=%llu source-unknown=%llu.\n",
+        "Residency stress: managed=%zu resident=%llu budget-rejections=%u KTX:mips%u->%u->%u BC1=%s trim=%zu queued=%zu processed=%zu failed=%llu cancelled=%llu pinned=%zu source-failed=%llu source-unknown=%llu.\n",
         after.managed_texture_count,
         (unsigned long long)after.resident_bytes,
         (unsigned int)after.budget_rejection_count,
         (unsigned int)ktx_initial_mip_count,
         (unsigned int)ktx_after_demote.resident_mip_count,
         (unsigned int)ktx_after_promotion.resident_mip_count,
+        compressed_status,
         trimmed,
         after.queued_request_count,
         processed,
@@ -9641,9 +9816,13 @@ static void sandbox3d_update(henka_engine* engine, double delta_seconds, void* u
     state = (sandbox3d_state*)user_data;
     if (state->residency_stress && !state->residency_stress_ran)
     {
-        if (sandbox3d_run_residency_stress(engine, state) != HENKA_SUCCESS)
+        const henka_result residency_result =
+            sandbox3d_run_residency_stress(engine, state);
+        if (residency_result != HENKA_SUCCESS)
         {
-            HENKA_LOG_ERROR("Residency stress scenario failed");
+            HENKA_LOG_ERROR(
+                "Residency stress scenario failed (%d)",
+                (int)residency_result);
             henka_engine_request_exit(engine);
         }
         state->residency_stress_ran = true;
