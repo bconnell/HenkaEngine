@@ -278,7 +278,9 @@ struct henka_asset_manager
     uint64_t texture_trimmed_bytes;
     uint64_t texture_demoted_bytes;
     uint64_t texture_failed_bytes;
+    uint64_t texture_source_failed_bytes;
     uint64_t texture_unknown_failed_request_count;
+    uint64_t texture_unknown_source_failure_count;
     uint32_t texture_budget_rejection_count;
     henka_texture* texture_residency_request_textures[HENKA_MAX_TEXTURE_RESIDENCY_REQUESTS];
     uint32_t texture_residency_request_mips[HENKA_MAX_TEXTURE_RESIDENCY_REQUESTS];

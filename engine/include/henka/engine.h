@@ -160,7 +160,9 @@ typedef struct henka_engine_diagnostics
     uint64_t texture_residency_trimmed_bytes;
     uint64_t texture_residency_demoted_bytes;
     uint64_t texture_residency_failed_bytes;
+    uint64_t texture_residency_source_failed_bytes;
     uint64_t texture_residency_unknown_failed_request_count;
+    uint64_t texture_residency_unknown_source_failure_count;
     uint32_t texture_residency_managed_count;
     uint32_t texture_residency_fallback_count;
     uint32_t texture_residency_queued_request_count;

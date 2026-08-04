@@ -56,8 +56,10 @@ typedef struct henka_texture_residency_diagnostics
     uint64_t trimmed_bytes;
     uint64_t demoted_bytes;
     uint64_t failed_bytes;
+    uint64_t source_failed_bytes;
     uint32_t budget_rejection_count;
     uint64_t unknown_failed_request_count;
+    uint64_t unknown_source_failure_count;
     size_t managed_texture_count;
     size_t fallback_texture_count;
     size_t queued_request_count;

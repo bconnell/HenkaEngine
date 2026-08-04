@@ -61,8 +61,56 @@ static void henka_assets_add_failed_texture_bytes(
     henka_asset_manager* manager,
     uint64_t bytes)
 {
-    if (manager != NULL && UINT64_MAX - manager->texture_failed_bytes >= bytes)
+    if (manager == NULL)
+        return;
+    if (UINT64_MAX - manager->texture_failed_bytes < bytes)
+        manager->texture_failed_bytes = UINT64_MAX;
+    else
         manager->texture_failed_bytes += bytes;
+}
+
+static void henka_assets_add_source_failed_texture_bytes(
+    henka_asset_manager* manager,
+    uint64_t bytes)
+{
+    if (manager == NULL)
+        return;
+    if (UINT64_MAX - manager->texture_source_failed_bytes < bytes)
+        manager->texture_source_failed_bytes = UINT64_MAX;
+    else
+        manager->texture_source_failed_bytes += bytes;
+}
+
+static bool henka_assets_get_file_size(
+    const char* path,
+    uint64_t* out_size)
+{
+    FILE* file;
+    long size;
+
+    if (out_size != NULL)
+        *out_size = 0U;
+    if (path == NULL || out_size == NULL)
+        return false;
+#if defined(_WIN32)
+    if (fopen_s(&file, path, "rb") != 0)
+        file = NULL;
+#else
+    file = fopen(path, "rb");
+#endif
+    if (file == NULL)
+        return false;
+    if (fseek(file, 0L, SEEK_END) != 0)
+    {
+        fclose(file);
+        return false;
+    }
+    size = ftell(file);
+    fclose(file);
+    if (size < 0L)
+        return false;
+    *out_size = (uint64_t)size;
+    return true;
 }
 
 static const char* henka_asset_display_name(const char* path)
@@ -1247,6 +1295,8 @@ henka_result henka_assets_load_texture_with_descriptor(
     char* source_path;
     henka_texture* texture;
     henka_texture_info texture_info;
+    uint64_t source_size;
+    bool source_size_known;
     henka_result result;
 
     if (out_texture != NULL)
@@ -1314,9 +1364,14 @@ henka_result henka_assets_load_texture_with_descriptor(
         resolved_path,
         &canonical_descriptor,
         &texture);
+    source_size_known = henka_assets_get_file_size(resolved_path, &source_size);
     henka_free(resolved_path);
     if (result == HENKA_ERROR_ASSET_SOURCE)
     {
+        if (source_size_known)
+            henka_assets_add_source_failed_texture_bytes(manager, source_size);
+        else if (manager->texture_unknown_source_failure_count < UINT64_MAX)
+            ++manager->texture_unknown_source_failure_count;
         HENKA_LOG_ERROR(
             "Using a path-specific error-texture alias because '%s' could not be loaded",
             source_path);
@@ -1473,8 +1528,10 @@ henka_result henka_assets_get_texture_residency_diagnostics(
     out_diagnostics->trimmed_bytes = manager->texture_trimmed_bytes;
     out_diagnostics->demoted_bytes = manager->texture_demoted_bytes;
     out_diagnostics->failed_bytes = manager->texture_failed_bytes;
+    out_diagnostics->source_failed_bytes = manager->texture_source_failed_bytes;
     out_diagnostics->budget_rejection_count = manager->texture_budget_rejection_count;
     out_diagnostics->unknown_failed_request_count = manager->texture_unknown_failed_request_count;
+    out_diagnostics->unknown_source_failure_count = manager->texture_unknown_source_failure_count;
     out_diagnostics->managed_texture_count = manager->texture_count;
     out_diagnostics->queued_request_count = manager->texture_residency_request_count;
     out_diagnostics->completed_request_count = manager->texture_residency_completed_requests;

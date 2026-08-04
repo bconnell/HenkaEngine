@@ -1676,8 +1676,12 @@ henka_result henka_engine_get_diagnostics(
     out_diagnostics->texture_residency_trimmed_bytes = texture_residency.trimmed_bytes;
     out_diagnostics->texture_residency_demoted_bytes = texture_residency.demoted_bytes;
     out_diagnostics->texture_residency_failed_bytes = texture_residency.failed_bytes;
+    out_diagnostics->texture_residency_source_failed_bytes =
+        texture_residency.source_failed_bytes;
     out_diagnostics->texture_residency_unknown_failed_request_count =
         texture_residency.unknown_failed_request_count;
+    out_diagnostics->texture_residency_unknown_source_failure_count =
+        texture_residency.unknown_source_failure_count;
     out_diagnostics->texture_residency_managed_count =
         texture_residency.managed_texture_count > UINT32_MAX ?
         UINT32_MAX : (uint32_t)texture_residency.managed_texture_count;
