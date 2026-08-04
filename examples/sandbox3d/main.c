@@ -7641,12 +7641,15 @@ static void sandbox3d_draw_utility_panel(
             snprintf(
                 row_value,
                 sizeof(row_value),
-                "%s / %.2f Tex:%llu/%llu q%u",
+                "%s / %.2f Tex:%llu/%llu q%u p%u c%llu u%llu",
                 henka_viewport_shading_mode_get_label(diagnostics.viewport_shading_mode),
                 diagnostics.viewport_exposure,
                 (unsigned long long)diagnostics.texture_residency_resident_bytes,
                 (unsigned long long)diagnostics.texture_residency_budget_bytes,
-                (unsigned int)diagnostics.texture_residency_queued_request_count);
+                (unsigned int)diagnostics.texture_residency_queued_request_count,
+                (unsigned int)diagnostics.texture_residency_pinned_count,
+                (unsigned long long)diagnostics.texture_residency_cancelled_request_count,
+                (unsigned long long)diagnostics.texture_residency_unknown_failed_request_count);
             sandbox3d_draw_value_row(state->ui, x_left, y_start + 44.0f, panel_bounds.width - 28.0f, "Render", row_value);
             snprintf(
                 row_value,
