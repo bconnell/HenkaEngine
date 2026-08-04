@@ -147,7 +147,10 @@ resident mips, trims it back to one, and checks the transactional diagnostics be
 shutdown. A separate readable corrupt fixture proves known source-failure bytes
 while the normal missing texture proves the unknown-source count. This proves
 ownership, queue, budget, mip, failure accounting, and lifetime behavior at
-application runtime and exercises a live-scene far/near/return camera phase;
+application runtime. Before the live-scene pass, the KTX2 fixture is returned
+to one resident mip; the rendered far/near/return camera phase reports its
+observed resident-mip trace in the smoke diagnostics. This is bounded visibility
+threshold evidence, not a claim of automatic demotion or complete convergence;
 The same scenario also writes a larger native BC1 KTX2 chain. If the active
 device exposes BC1, it verifies compressed resident-mip trim and promotion;
 without that capability, the native-compressed source fails closed and the

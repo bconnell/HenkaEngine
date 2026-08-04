@@ -351,6 +351,9 @@ typedef struct sandbox3d_state
     bool residency_stress;
     bool residency_stress_ran;
     bool residency_stress_scene_material_active;
+    uint32_t residency_visibility_far_mips;
+    uint32_t residency_visibility_near_mips;
+    uint32_t residency_visibility_return_mips;
     bool temporal_stress;
     bool capture_mode_requested;
     henka_viewport_shading_mode capture_mode;
@@ -9456,6 +9459,7 @@ static henka_result sandbox3d_run_residency_stress(
     size_t processed;
     size_t ktx_processed;
     size_t trimmed;
+    size_t visibility_trimmed;
     size_t cancelled;
     uint32_t ktx_initial_mip_count;
     const char* compressed_status;
@@ -9598,6 +9602,20 @@ static henka_result sandbox3d_run_residency_stress(
     memset(&ktx_after_promotion, 0, sizeof(ktx_after_promotion));
     if (henka_texture_get_info(ktx_texture, &ktx_after_promotion) != HENKA_SUCCESS ||
         ktx_after_promotion.resident_mip_count != 3U)
+        return HENKA_ERROR_UNKNOWN;
+    if (henka_assets_get_texture_residency_diagnostics(
+            assets, &before_trim) != HENKA_SUCCESS ||
+        before_trim.resident_bytes <= 1U)
+        return HENKA_ERROR_UNKNOWN;
+    result = henka_assets_trim_texture_residency(
+        assets,
+        before_trim.resident_bytes - 1U,
+        1U,
+        &visibility_trimmed);
+    if (result != HENKA_SUCCESS || visibility_trimmed != 1U)
+        return result == HENKA_SUCCESS ? HENKA_ERROR_UNKNOWN : result;
+    if (henka_texture_get_info(ktx_texture, &ktx_info) != HENKA_SUCCESS ||
+        ktx_info.resident_mip_count != 1U)
         return HENKA_ERROR_UNKNOWN;
 
     compressed_texture = NULL;
@@ -9825,11 +9843,16 @@ static void sandbox3d_update(henka_engine* engine, double delta_seconds, void* u
                 (int)residency_result);
             henka_engine_request_exit(engine);
         }
+        else
+        {
+            state->camera.position.z = 25.0f;
+        }
         state->residency_stress_ran = true;
     }
     if (state->residency_stress_ran)
     {
         const uint64_t stress_frame = henka_engine_get_frame_index(engine);
+        henka_texture_info visibility_info;
 
         if (stress_frame == 2U)
             state->camera.position.z = 25.0f;
@@ -9837,6 +9860,19 @@ static void sandbox3d_update(henka_engine* engine, double delta_seconds, void* u
             state->camera.position.z = 2.8f;
         else if (stress_frame == 6U)
             state->camera.position.z = 8.6f;
+        if (state->residency_stress_scene_material_active &&
+            (stress_frame == 3U || stress_frame == 5U || stress_frame == 7U) &&
+            henka_texture_get_info(
+                state->residency_stress_ktx_texture,
+                &visibility_info) == HENKA_SUCCESS)
+        {
+            if (stress_frame == 3U)
+                state->residency_visibility_far_mips = visibility_info.resident_mip_count;
+            else if (stress_frame == 5U)
+                state->residency_visibility_near_mips = visibility_info.resident_mip_count;
+            else
+                state->residency_visibility_return_mips = visibility_info.resident_mip_count;
+        }
     }
     if (state->temporal_stress)
     {
@@ -10252,7 +10288,7 @@ static void sandbox3d_update(henka_engine* engine, double delta_seconds, void* u
         if (henka_engine_get_diagnostics(engine, &smoke_diagnostics) == HENKA_SUCCESS)
         {
             printf(
-                "Rendered smoke diagnostics: HDR=%s Bloom=%s IBL=%s (%s) TAA=R%llu/F%llu/I%u(%s) CPU=%.2fms GPU=%.2fms(%s) VRAM=%llu bytes Residency=%llu/%llu KTX-mips=%u source-failed=%llu unknown-source=%llu.\n",
+                "Rendered smoke diagnostics: HDR=%s Bloom=%s IBL=%s (%s) TAA=R%llu/F%llu/I%u(%s) CPU=%.2fms GPU=%.2fms(%s) VRAM=%llu bytes Residency=%llu/%llu KTX-mips=%u Visibility-mips=%u->%u->%u source-failed=%llu unknown-source=%llu.\n",
                 smoke_diagnostics.rendered_hdr_ready ? "ready" : "fallback",
                 smoke_diagnostics.rendered_bloom_ready ? "ready" : "fallback",
                 smoke_diagnostics.rendered_ibl_ready ? "ready" : "fallback",
@@ -10268,6 +10304,9 @@ static void sandbox3d_update(henka_engine* engine, double delta_seconds, void* u
                 (unsigned long long)smoke_diagnostics.texture_residency_resident_bytes,
                 (unsigned long long)smoke_diagnostics.texture_residency_budget_bytes,
                 (unsigned int)stress_texture_info.resident_mip_count,
+                (unsigned int)state->residency_visibility_far_mips,
+                (unsigned int)state->residency_visibility_near_mips,
+                (unsigned int)state->residency_visibility_return_mips,
                 (unsigned long long)smoke_diagnostics.texture_residency_source_failed_bytes,
                 (unsigned long long)smoke_diagnostics.texture_residency_unknown_source_failure_count);
         }
