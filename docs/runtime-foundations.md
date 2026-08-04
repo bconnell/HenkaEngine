@@ -136,6 +136,16 @@ camera projection, and scene viewport, with deterministic distance fallback when
 those inputs are invalid. Background I/O and broader automatic frame policy remain
 unfinished.
 
+The Windows sandbox `--residency-stress` mode uses only public asset APIs to load
+65 path-distinct manager-owned PNG textures (alternating the two packaged source
+images), verifies shared-path cache identity, applies a configured-budget rejection
+pass, pins two active references, fills and recovers the bounded queue, processes
+failed non-KTX2 residency requests, cancels pending work, and checks the pin and
+queue diagnostics before shutdown. This proves ownership, queue, budget, and
+lifetime behavior at application runtime; it does not claim KTX2 promotion or
+demotion, compressed-format pressure, visibility-threshold transitions, or
+background I/O streaming.
+
 Residency diagnostics also retain cumulative bytes successfully uploaded through
 manager-owned texture creation or replacement, bytes removed by successful trim
 demotions, resident payload bytes known to have been rejected after a successful

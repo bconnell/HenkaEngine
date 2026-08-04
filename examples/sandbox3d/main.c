@@ -268,6 +268,8 @@ typedef struct sandbox3d_physics_state
     char last_action[128];
 } sandbox3d_physics_state;
 
+#define SANDBOX3D_RESIDENCY_STRESS_TEXTURE_COUNT 65U
+
 typedef struct sandbox3d_state
 {
     henka_scene* scene;
@@ -298,6 +300,7 @@ typedef struct sandbox3d_state
     henka_texture* wood_grain_texture;
     henka_texture* wet_dry_roughness_texture;
     henka_texture* foliage_mask_texture;
+    henka_texture* residency_stress_textures[SANDBOX3D_RESIDENCY_STRESS_TEXTURE_COUNT];
     henka_material_asset* marker_material_asset;
     henka_material_instance marker_material_instance;
     henka_material_instance_parameter material_editor_parameter;
@@ -338,6 +341,8 @@ typedef struct sandbox3d_state
     sandbox3d_transform_session transform_session;
     bool editor_controls_loaded_safely;
     bool smoke_test;
+    bool residency_stress;
+    bool residency_stress_ran;
     bool capture_mode_requested;
     henka_viewport_shading_mode capture_mode;
 } sandbox3d_state;
@@ -916,6 +921,7 @@ static void sandbox3d_draw_physics_overlay(sandbox3d_state* state, henka_viewpor
 static void sandbox3d_draw_selection_highlight(sandbox3d_state* state, henka_viewport viewport);
 static void sandbox3d_draw_reflection_probe_overlay(sandbox3d_state* state, henka_viewport viewport);
 static void sandbox3d_prepare_physics_demo(sandbox3d_state* state);
+static henka_result sandbox3d_run_residency_stress(henka_engine* engine, sandbox3d_state* state);
 
 static const char* sandbox3d_get_build_configuration_label(void)
 {
@@ -9216,6 +9222,163 @@ fail:
     return result;
 }
 
+static henka_result sandbox3d_run_residency_stress(
+    henka_engine* engine,
+    sandbox3d_state* state)
+{
+    henka_asset_manager* assets;
+    henka_texture_residency_diagnostics before;
+    henka_texture_residency_diagnostics after;
+    henka_texture* shared_texture;
+    size_t processed;
+    size_t cancelled;
+    size_t index;
+    henka_result result;
+
+    assets = henka_engine_get_asset_manager(engine);
+    if (assets == NULL || state == NULL)
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    memset(&before, 0, sizeof(before));
+    result = henka_assets_get_texture_residency_diagnostics(assets, &before);
+    if (result != HENKA_SUCCESS)
+        return result;
+    result = henka_assets_set_texture_residency_budget(
+        assets,
+        before.resident_bytes);
+    if (result != HENKA_SUCCESS)
+        return result;
+
+    for (index = 0U; index < SANDBOX3D_RESIDENCY_STRESS_TEXTURE_COUNT; ++index)
+    {
+        char path[96];
+        henka_texture* texture = NULL;
+
+        snprintf(
+            path,
+            sizeof(path),
+            "assets/textures/residency/residency_%zu.png",
+            index);
+        result = henka_assets_load_texture(assets, path, &texture);
+        if (result == HENKA_ERROR_LIMIT)
+            continue;
+        if (result != HENKA_SUCCESS || texture == NULL)
+            return result == HENKA_SUCCESS ? HENKA_ERROR_UNKNOWN : result;
+        state->residency_stress_textures[index] = texture;
+    }
+    result = henka_assets_set_texture_residency_budget(assets, 0U);
+    if (result != HENKA_SUCCESS)
+        return result;
+    for (index = 0U; index < SANDBOX3D_RESIDENCY_STRESS_TEXTURE_COUNT; ++index)
+    {
+        if (state->residency_stress_textures[index] == NULL)
+        {
+            char path[96];
+
+            snprintf(
+                path,
+                sizeof(path),
+                "assets/textures/residency/residency_%zu.png",
+                index);
+            result = henka_assets_load_texture(
+                assets,
+                path,
+                &state->residency_stress_textures[index]);
+            if (result != HENKA_SUCCESS)
+                return result;
+        }
+    }
+
+    shared_texture = NULL;
+    result = henka_assets_load_texture(
+        assets,
+        "assets/textures/residency/residency_0.png",
+        &shared_texture);
+    if (result != HENKA_SUCCESS || shared_texture != state->residency_stress_textures[0])
+        return result == HENKA_SUCCESS ? HENKA_ERROR_UNKNOWN : result;
+    result = henka_assets_begin_texture_residency_frame(assets, 1001U);
+    if (result != HENKA_SUCCESS)
+        return result;
+    result = henka_assets_pin_texture_for_residency_frame(
+        assets,
+        state->residency_stress_textures[0]);
+    if (result != HENKA_SUCCESS)
+        return result;
+    result = henka_assets_pin_texture_for_residency_frame(
+        assets,
+        state->residency_stress_textures[1]);
+    if (result != HENKA_SUCCESS)
+        return result;
+
+    result = henka_assets_queue_texture_residency_request_with_priority(
+        assets,
+        state->residency_stress_textures[0],
+        1U,
+        1U);
+    if (result != HENKA_SUCCESS)
+        return result;
+    result = henka_assets_queue_texture_residency_request_with_priority(
+        assets,
+        state->residency_stress_textures[0],
+        2U,
+        99U);
+    if (result != HENKA_SUCCESS)
+        return result;
+    for (index = 1U; index < SANDBOX3D_RESIDENCY_STRESS_TEXTURE_COUNT; ++index)
+    {
+        result = henka_assets_queue_texture_residency_request_with_priority(
+            assets,
+            state->residency_stress_textures[index],
+            1U,
+            (uint32_t)index);
+        if (result != HENKA_SUCCESS)
+            return result;
+    }
+    result = henka_assets_process_texture_residency_requests(
+        assets,
+        0U,
+        &processed);
+    if (result != HENKA_SUCCESS)
+        return result;
+    result = henka_assets_queue_texture_residency_request(
+        assets,
+        state->residency_stress_textures[0],
+        1U);
+    if (result != HENKA_SUCCESS)
+        return result;
+    result = henka_assets_queue_texture_residency_request(
+        assets,
+        state->residency_stress_textures[1],
+        1U);
+    if (result != HENKA_SUCCESS)
+        return result;
+    result = henka_assets_cancel_texture_residency_requests(
+        assets,
+        &cancelled);
+    if (result != HENKA_SUCCESS)
+        return result;
+    result = henka_assets_get_texture_residency_diagnostics(assets, &after);
+    if (result != HENKA_SUCCESS)
+        return result;
+    printf(
+        "Residency stress: managed=%zu resident=%llu budget-rejections=%u queued=%zu processed=%zu failed=%llu cancelled=%llu pinned=%zu source-unknown=%llu.\n",
+        after.managed_texture_count,
+        (unsigned long long)after.resident_bytes,
+        (unsigned int)after.budget_rejection_count,
+        after.queued_request_count,
+        processed,
+        (unsigned long long)after.failed_request_count,
+        (unsigned long long)after.cancelled_request_count,
+        after.pinned_texture_count,
+        (unsigned long long)after.unknown_source_failure_count);
+    if (after.managed_texture_count < SANDBOX3D_RESIDENCY_STRESS_TEXTURE_COUNT ||
+        after.budget_rejection_count == 0U ||
+        processed != HENKA_MAX_TEXTURE_RESIDENCY_REQUESTS ||
+        after.failed_request_count < HENKA_MAX_TEXTURE_RESIDENCY_REQUESTS ||
+        cancelled != 2U || after.queued_request_count != 0U || after.pinned_texture_count != 2U)
+        return HENKA_ERROR_UNKNOWN;
+    return henka_assets_end_texture_residency_frame(assets);
+}
+
 static void sandbox3d_update(henka_engine* engine, double delta_seconds, void* user_data)
 {
     henka_vec2 framebuffer_mouse_position;
@@ -9233,6 +9396,15 @@ static void sandbox3d_update(henka_engine* engine, double delta_seconds, void* u
     sandbox3d_state* state;
 
     state = (sandbox3d_state*)user_data;
+    if (state->residency_stress && !state->residency_stress_ran)
+    {
+        if (sandbox3d_run_residency_stress(engine, state) != HENKA_SUCCESS)
+        {
+            HENKA_LOG_ERROR("Residency stress scenario failed");
+            henka_engine_request_exit(engine);
+        }
+        state->residency_stress_ran = true;
+    }
     framebuffer_width = 1280;
     framebuffer_height = 720;
     ui_toggled_with_f4 = false;
@@ -9650,15 +9822,22 @@ int main(int argc, char** argv)
     sandbox3d_state state;
     size_t index;
     bool smoke_test;
+    bool residency_stress;
     bool capture_mode_requested;
     henka_viewport_shading_mode capture_mode;
 
     smoke_test = false;
+    residency_stress = false;
     capture_mode_requested = false;
     capture_mode = HENKA_VIEWPORT_SHADING_RENDERED;
     if (argc == 2 && strcmp(argv[1], "--smoke-test") == 0)
     {
         smoke_test = true;
+    }
+    else if (argc == 2 && strcmp(argv[1], "--residency-stress") == 0)
+    {
+        smoke_test = true;
+        residency_stress = true;
     }
     else if (argc == 3 && strcmp(argv[1], "--capture-mode") == 0 &&
         henka_viewport_shading_mode_parse(argv[2], &capture_mode) == HENKA_SUCCESS)
@@ -9667,12 +9846,13 @@ int main(int argc, char** argv)
     }
     else if (argc != 1)
     {
-        fprintf(stderr, "Usage: %s [--smoke-test | --capture-mode solid|material_preview|rendered]\n", argv[0]);
+        fprintf(stderr, "Usage: %s [--smoke-test | --residency-stress | --capture-mode solid|material_preview|rendered]\n", argv[0]);
         return 2;
     }
 
     memset(&state, 0, sizeof(state));
     state.smoke_test = smoke_test;
+    state.residency_stress = residency_stress;
     state.capture_mode_requested = capture_mode_requested;
     state.capture_mode = capture_mode;
     state.camera = henka_camera_create_perspective(60.0f * HENKA_DEG_TO_RAD, 16.0f / 9.0f, 0.1f, 100.0f);

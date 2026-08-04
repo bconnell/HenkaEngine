@@ -18,3 +18,22 @@ add_custom_command(TARGET henka_sandbox3d POST_BUILD
         ${CMAKE_SOURCE_DIR}/assets
         $<TARGET_FILE_DIR:henka_sandbox3d>/assets
 )
+
+# The opt-in residency stress run uses distinct package paths backed by the
+# checked-in texture fixtures. They exercise manager ownership and cache
+# identity without making the normal sandbox scene larger or noisier.
+foreach(residency_index RANGE 0 64)
+    math(EXPR residency_parity "${residency_index} % 2")
+    if(residency_parity EQUAL 0)
+        set(residency_source cube_albedo.png)
+    else()
+        set(residency_source ground_checker.png)
+    endif()
+    add_custom_command(TARGET henka_sandbox3d POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E make_directory
+            $<TARGET_FILE_DIR:henka_sandbox3d>/assets/textures/residency
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            ${CMAKE_SOURCE_DIR}/assets/textures/${residency_source}
+            $<TARGET_FILE_DIR:henka_sandbox3d>/assets/textures/residency/residency_${residency_index}.png
+    )
+endforeach()
