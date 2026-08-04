@@ -40,6 +40,7 @@ typedef struct henka_camera
     henka_vec3 position;
     float yaw_radians;
     float pitch_radians;
+    float roll_radians;
     henka_camera_projection_mode projection_mode;
     float field_of_view_radians;
     float orthographic_height;
@@ -69,6 +70,10 @@ void henka_camera_set_aspect_ratio(henka_camera* camera, float aspect_ratio);
 float henka_camera_clamp_pitch(float pitch_radians);
 void henka_camera_reset(henka_camera* camera, const henka_camera* source);
 bool henka_camera_look_at(henka_camera* camera, henka_vec3 target);
+bool henka_camera_look_at_with_up(
+    henka_camera* camera,
+    henka_vec3 target,
+    henka_vec3 up);
 void henka_camera_move_relative(henka_camera* camera, henka_vec3 local_direction, float distance);
 bool henka_camera_focus_on_bounds(henka_camera* camera, henka_bounds bounds);
 bool henka_camera_frame_bounds(henka_camera* camera, henka_bounds bounds, float yaw_radians, float pitch_radians);

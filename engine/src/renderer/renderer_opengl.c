@@ -4209,9 +4209,10 @@ static void henka_opengl_capture_next_reflection_probe(
             candidate,
             0);
         if (g_gl.CheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE ||
-            !henka_camera_look_at(
+            !henka_camera_look_at_with_up(
                 &capture_scene.camera,
-                henka_vec3_add(probe.position, face_directions[face])))
+                henka_vec3_add(probe.position, face_directions[face]),
+                face_ups[face]))
         {
             break;
         }

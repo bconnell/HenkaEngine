@@ -100,6 +100,18 @@ void henka_test_camera(void)
     focus_target = bounds.center;
     HENKA_TEST_ASSERT(henka_camera_orbit_target(&camera, focus_target, 0.4f, 0.2f));
     HENKA_TEST_ASSERT(henka_camera_look_at(&camera, focus_target));
+    HENKA_TEST_ASSERT(henka_camera_look_at_with_up(
+        &camera,
+        henka_vec3_add(camera.position, (henka_vec3){1.0f, 0.0f, 0.0f}),
+        (henka_vec3){0.0f, -1.0f, 0.0f}));
+    forward = henka_camera_get_forward(&camera);
+    up = henka_camera_get_up(&camera);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(forward.x, 1.0f, 0.0001f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(henka_vec3_dot(up, (henka_vec3){0.0f, -1.0f, 0.0f}), 1.0f, 0.0001f);
+    HENKA_TEST_ASSERT(!henka_camera_look_at_with_up(
+        &camera,
+        henka_vec3_add(camera.position, forward),
+        forward));
     HENKA_TEST_ASSERT(henka_camera_pan_target(&camera, &focus_target, 0.5f, 0.25f));
     HENKA_TEST_ASSERT(henka_camera_dolly_target(&camera, focus_target, -0.75f, 0.5f));
     HENKA_TEST_ASSERT(henka_camera_look_at(&camera, focus_target));
@@ -127,6 +139,7 @@ void henka_test_camera(void)
     camera = henka_camera_create_perspective(60.0f * HENKA_DEG_TO_RAD, 16.0f / 9.0f, 0.1f, 100.0f);
     HENKA_TEST_ASSERT(henka_camera_apply_preset(&camera, HENKA_CAMERA_PRESET_SIDE_2_5D, preset_target) == HENKA_SUCCESS);
     HENKA_TEST_ASSERT(camera.projection_mode == HENKA_CAMERA_PROJECTION_ORTHOGRAPHIC);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(camera.roll_radians, 0.0f, 0.0001f);
     HENKA_TEST_ASSERT_FLOAT_CLOSE(camera.pitch_radians, 0.0f, 0.0001f);
     HENKA_TEST_ASSERT(henka_camera_world_to_screen(&camera, 1280, 720, preset_target, &screen_point, NULL) == HENKA_SUCCESS);
     HENKA_TEST_ASSERT_FLOAT_CLOSE(screen_point.x, 640.0f, 0.5f);

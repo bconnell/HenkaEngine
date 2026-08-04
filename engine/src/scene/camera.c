@@ -86,6 +86,7 @@ static bool henka_camera_pose_is_valid(const henka_camera* camera)
         henka_vec3_is_finite(camera->position) &&
         isfinite(camera->yaw_radians) &&
         isfinite(camera->pitch_radians) &&
+        isfinite(camera->roll_radians) &&
         camera->pitch_radians >= -HENKA_PI * 0.5f - 0.0001f &&
         camera->pitch_radians <= HENKA_PI * 0.5f + 0.0001f;
 }
@@ -154,6 +155,7 @@ henka_camera henka_camera_create_perspective(float field_of_view_radians, float 
     camera.position.z = 4.5f;
     camera.yaw_radians = -HENKA_PI * 0.5f;
     camera.pitch_radians = -0.25f;
+    camera.roll_radians = 0.0f;
     camera.projection_mode = HENKA_CAMERA_PROJECTION_PERSPECTIVE;
     camera.field_of_view_radians = field_of_view_radians;
     camera.orthographic_height = g_henka_camera_default_orthographic_height;
@@ -237,6 +239,7 @@ henka_result henka_camera_apply_preset(henka_camera* camera, henka_camera_preset
     {
         camera->fast_movement_multiplier = 2.5f;
     }
+    camera->roll_radians = 0.0f;
 
     switch (preset)
     {
@@ -311,7 +314,10 @@ henka_vec3 henka_camera_get_right(const henka_camera* camera)
 {
     henka_vec3 forward;
     henka_vec3 right;
+    henka_vec3 base_up;
     henka_vec3 world_up;
+    float roll_cosine;
+    float roll_sine;
 
     world_up = (henka_vec3){0.0f, 1.0f, 0.0f};
     if (camera == NULL)
@@ -336,7 +342,17 @@ henka_vec3 henka_camera_get_right(const henka_camera* camera)
         return (henka_vec3){1.0f, 0.0f, 0.0f};
     }
 
-    return henka_vec3_normalize(right);
+    right = henka_vec3_normalize(right);
+    base_up = henka_vec3_normalize(henka_vec3_cross(right, forward));
+    if (!henka_vec3_is_finite(base_up) || henka_vec3_length(base_up) <= 0.0001f)
+    {
+        return right;
+    }
+    roll_cosine = cosf(camera->roll_radians);
+    roll_sine = sinf(camera->roll_radians);
+    return henka_vec3_normalize(henka_vec3_subtract(
+        henka_vec3_scale(right, roll_cosine),
+        henka_vec3_scale(base_up, roll_sine)));
 }
 
 henka_vec3 henka_camera_get_up(const henka_camera* camera)
@@ -475,7 +491,64 @@ bool henka_camera_look_at(henka_camera* camera, henka_vec3 target)
     horizontal_length = sqrtf(direction.x * direction.x + direction.z * direction.z);
     camera->yaw_radians = atan2f(direction.z, direction.x);
     camera->pitch_radians = henka_clamp_pitch(atan2f(direction.y, horizontal_length));
+    camera->roll_radians = 0.0f;
     return true;
+}
+
+bool henka_camera_look_at_with_up(
+    henka_camera* camera,
+    henka_vec3 target,
+    henka_vec3 up)
+{
+    henka_vec3 direction;
+    henka_vec3 base_right;
+    henka_vec3 base_up;
+    henka_vec3 desired_up;
+    float horizontal_length;
+    float up_length;
+
+    if (!henka_camera_is_valid(camera) ||
+        !henka_vec3_is_finite(target) ||
+        !henka_vec3_is_finite(up))
+    {
+        return false;
+    }
+    direction = henka_vec3_subtract(target, camera->position);
+    if (henka_vec3_length(direction) <= 0.0001f)
+    {
+        return false;
+    }
+    direction = henka_vec3_normalize(direction);
+    up_length = henka_vec3_length(up);
+    if (!isfinite(up_length) || up_length <= 0.0001f)
+    {
+        return false;
+    }
+    desired_up = henka_vec3_normalize(up);
+    desired_up = henka_vec3_subtract(
+        desired_up,
+        henka_vec3_scale(direction, henka_vec3_dot(desired_up, direction)));
+    if (!henka_vec3_is_finite(desired_up) || henka_vec3_length(desired_up) <= 0.0001f)
+    {
+        return false;
+    }
+    desired_up = henka_vec3_normalize(desired_up);
+    horizontal_length = sqrtf(direction.x * direction.x + direction.z * direction.z);
+    camera->yaw_radians = atan2f(direction.z, direction.x);
+    camera->pitch_radians = atan2f(direction.y, horizontal_length);
+    /* Derive the new basis without inheriting a previous camera roll. */
+    camera->roll_radians = 0.0f;
+    base_right = henka_camera_get_right(camera);
+    base_up = henka_vec3_normalize(henka_vec3_cross(base_right, direction));
+    if (!henka_vec3_is_finite(base_up) || henka_vec3_length(base_up) <= 0.0001f)
+    {
+        camera->roll_radians = 0.0f;
+        return false;
+    }
+    camera->roll_radians = atan2f(
+        henka_vec3_dot(desired_up, base_right),
+        henka_vec3_dot(desired_up, base_up));
+    return henka_camera_is_valid(camera);
 }
 
 void henka_camera_move_relative(henka_camera* camera, henka_vec3 local_direction, float distance)
