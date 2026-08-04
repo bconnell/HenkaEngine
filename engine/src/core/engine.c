@@ -439,6 +439,8 @@ static float henka_engine_visible_texture_projected_radius(
     henka_viewport viewport;
     float radius = 1.0f;
     float projected_radius;
+    float depth_distance;
+    float facing;
 
     if (engine == NULL || engine->active_scene == NULL || entity == NULL ||
         engine->renderer == NULL || !isfinite(distance) || distance <= 0.0f)
@@ -457,6 +459,17 @@ static float henka_engine_visible_texture_projected_radius(
         if (isfinite(measured_radius) && measured_radius > 0.0f)
             radius = measured_radius;
     }
+    facing = henka_vec3_dot(
+        henka_camera_get_forward(&engine->active_scene->camera),
+        henka_vec3_normalize(henka_vec3_subtract(
+            entity->transform.position,
+            engine->active_scene->camera.position)));
+    if (isfinite(facing) && facing <= 0.0f && distance > radius)
+        return -1.0f;
+    depth_distance = fmaxf(distance, radius * 0.5f);
+    depth_distance = fmaxf(
+        depth_distance,
+        engine->active_scene->camera.near_plane);
     viewport = henka_renderer_get_scene_viewport(engine->renderer);
     if (viewport.height <= 0)
         return 0.0f;
@@ -476,7 +489,7 @@ static float henka_engine_visible_texture_projected_radius(
         if (!isfinite(tangent) || tangent <= 0.0f)
             return 0.0f;
         projected_radius = radius * (float)viewport.height /
-            (2.0f * distance * tangent);
+            (2.0f * depth_distance * tangent);
     }
     return isfinite(projected_radius) && projected_radius > 0.0f ?
         projected_radius : 0.0f;
@@ -508,6 +521,8 @@ static void henka_engine_queue_visible_texture_residency(
             engine,
             entity,
             distance);
+        if (projected_radius < 0.0f)
+            continue;
         if (projected_radius > 180.0f)
         {
             requested_mips = 4U;
