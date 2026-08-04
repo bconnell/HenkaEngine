@@ -4,8 +4,13 @@
 #include <stdarg.h>
 #include <string.h>
 #include <float.h>
+#include <stdlib.h>
 
 #include <henka/henka.h>
+
+#if defined(HENKA_WITH_KTX2_TRANSCODER)
+#include <ktx.h>
+#endif
 
 #include "editor_controls.h"
 #include "interaction_tools.h"
@@ -9222,6 +9227,92 @@ fail:
     return result;
 }
 
+#if defined(HENKA_WITH_KTX2_TRANSCODER)
+static henka_result sandbox3d_write_residency_ktx2_fixture(
+    henka_engine* engine)
+{
+    static const char* fixture_path =
+        "assets/textures/residency/generated_residency.ktx2";
+    unsigned char level_zero[8U * 8U * 4U];
+    unsigned char level_one[4U * 4U * 4U];
+    unsigned char level_two[2U * 2U * 4U];
+    ktxTextureCreateInfo create_info;
+    ktxTexture2* generated_texture = NULL;
+    ktx_uint8_t* generated_bytes = NULL;
+    ktx_size_t generated_size = 0U;
+    char* resolved_path = NULL;
+    FILE* file = NULL;
+    henka_result result;
+
+    result = henka_assets_resolve_path(
+        henka_engine_get_asset_base_path(engine),
+        fixture_path,
+        &resolved_path);
+    if (result != HENKA_SUCCESS)
+        return result;
+    memset(&create_info, 0, sizeof(create_info));
+    create_info.vkFormat = 43U;
+    create_info.baseWidth = 8U;
+    create_info.baseHeight = 8U;
+    create_info.baseDepth = 1U;
+    create_info.numDimensions = 2U;
+    create_info.numLevels = 3U;
+    create_info.numLayers = 1U;
+    create_info.numFaces = 1U;
+    if (ktxTexture2_Create(
+            &create_info,
+            KTX_TEXTURE_CREATE_ALLOC_STORAGE,
+            &generated_texture) != KTX_SUCCESS ||
+        generated_texture == NULL)
+    {
+        henka_free(resolved_path);
+        return HENKA_ERROR_ASSET_SOURCE;
+    }
+    memset(level_zero, 0x24, sizeof(level_zero));
+    memset(level_one, 0x68, sizeof(level_one));
+    memset(level_two, 0xB4, sizeof(level_two));
+    if (ktxTexture_SetImageFromMemory(
+            ktxTexture(generated_texture),
+            0U, 0U, 0U, level_zero, sizeof(level_zero)) != KTX_SUCCESS ||
+        ktxTexture_SetImageFromMemory(
+            ktxTexture(generated_texture),
+            1U, 0U, 0U, level_one, sizeof(level_one)) != KTX_SUCCESS ||
+        ktxTexture_SetImageFromMemory(
+            ktxTexture(generated_texture),
+            2U, 0U, 0U, level_two, sizeof(level_two)) != KTX_SUCCESS ||
+        ktxTexture_WriteToMemory(
+            ktxTexture(generated_texture),
+            &generated_bytes,
+            &generated_size) != KTX_SUCCESS)
+    {
+        ktxTexture_Destroy(ktxTexture(generated_texture));
+        henka_free(resolved_path);
+        return HENKA_ERROR_ASSET_SOURCE;
+    }
+    ktxTexture_Destroy(ktxTexture(generated_texture));
+#if defined(_WIN32)
+    if (fopen_s(&file, resolved_path, "wb") != 0)
+        file = NULL;
+#else
+    file = fopen(resolved_path, "wb");
+#endif
+    if (file == NULL ||
+        fwrite(generated_bytes, 1U, (size_t)generated_size, file) !=
+            (size_t)generated_size)
+    {
+        if (file != NULL)
+            fclose(file);
+        free(generated_bytes);
+        henka_free(resolved_path);
+        return HENKA_ERROR_ASSET_SOURCE;
+    }
+    fclose(file);
+    free(generated_bytes);
+    henka_free(resolved_path);
+    return HENKA_SUCCESS;
+}
+#endif
+
 static henka_result sandbox3d_run_residency_stress(
     henka_engine* engine,
     sandbox3d_state* state)
@@ -9230,8 +9321,16 @@ static henka_result sandbox3d_run_residency_stress(
     henka_texture_residency_diagnostics before;
     henka_texture_residency_diagnostics after;
     henka_texture* shared_texture;
+    henka_texture* ktx_texture;
+    henka_texture_info ktx_info;
+    henka_texture_info ktx_after_demote;
+    henka_texture_info ktx_after_promotion;
+    henka_texture_residency_diagnostics before_trim;
     size_t processed;
+    size_t ktx_processed;
+    size_t trimmed;
     size_t cancelled;
+    uint32_t ktx_initial_mip_count;
     size_t index;
     henka_result result;
 
@@ -9247,6 +9346,13 @@ static henka_result sandbox3d_run_residency_stress(
         before.resident_bytes);
     if (result != HENKA_SUCCESS)
         return result;
+#if defined(HENKA_WITH_KTX2_TRANSCODER)
+    result = sandbox3d_write_residency_ktx2_fixture(engine);
+    if (result != HENKA_SUCCESS)
+        return result;
+#else
+    return HENKA_ERROR_ASSET_SOURCE;
+#endif
 
     for (index = 0U; index < SANDBOX3D_RESIDENCY_STRESS_TEXTURE_COUNT; ++index)
     {
@@ -9287,6 +9393,68 @@ static henka_result sandbox3d_run_residency_stress(
                 return result;
         }
     }
+
+    ktx_texture = NULL;
+    result = henka_assets_load_texture(
+        assets,
+        "assets/textures/residency/generated_residency.ktx2",
+        &ktx_texture);
+    if (result != HENKA_SUCCESS || ktx_texture == NULL)
+        return result == HENKA_SUCCESS ? HENKA_ERROR_UNKNOWN : result;
+    memset(&ktx_info, 0, sizeof(ktx_info));
+    result = henka_texture_get_info(ktx_texture, &ktx_info);
+    if (result != HENKA_SUCCESS || ktx_info.mip_count < 3U)
+        return result == HENKA_SUCCESS ? HENKA_ERROR_UNKNOWN : result;
+    ktx_initial_mip_count = ktx_info.resident_mip_count;
+    result = henka_assets_queue_texture_residency_request_with_priority(
+        assets,
+        ktx_texture,
+        2U,
+        UINT32_MAX);
+    if (result != HENKA_SUCCESS)
+        return result;
+    result = henka_assets_process_texture_residency_requests(
+        assets,
+        1U,
+        &ktx_processed);
+    if (result != HENKA_SUCCESS || ktx_processed != 1U)
+        return result == HENKA_SUCCESS ? HENKA_ERROR_UNKNOWN : result;
+    memset(&ktx_info, 0, sizeof(ktx_info));
+    if (henka_texture_get_info(ktx_texture, &ktx_info) != HENKA_SUCCESS ||
+        ktx_info.resident_mip_count != 2U)
+        return HENKA_ERROR_UNKNOWN;
+    if (henka_assets_get_texture_residency_diagnostics(
+            assets, &before_trim) != HENKA_SUCCESS ||
+        before_trim.resident_bytes <= 1U)
+        return HENKA_ERROR_UNKNOWN;
+    result = henka_assets_trim_texture_residency(
+        assets,
+        before_trim.resident_bytes - 1U,
+        1U,
+        &trimmed);
+    if (result != HENKA_SUCCESS || trimmed != 1U)
+        return result == HENKA_SUCCESS ? HENKA_ERROR_UNKNOWN : result;
+    memset(&ktx_after_demote, 0, sizeof(ktx_after_demote));
+    if (henka_texture_get_info(ktx_texture, &ktx_after_demote) != HENKA_SUCCESS ||
+        ktx_after_demote.resident_mip_count != 1U)
+        return HENKA_ERROR_UNKNOWN;
+    result = henka_assets_queue_texture_residency_request_with_priority(
+        assets,
+        ktx_texture,
+        3U,
+        UINT32_MAX);
+    if (result != HENKA_SUCCESS)
+        return result;
+    result = henka_assets_process_texture_residency_requests(
+        assets,
+        1U,
+        &ktx_processed);
+    if (result != HENKA_SUCCESS || ktx_processed != 1U)
+        return result == HENKA_SUCCESS ? HENKA_ERROR_UNKNOWN : result;
+    memset(&ktx_after_promotion, 0, sizeof(ktx_after_promotion));
+    if (henka_texture_get_info(ktx_texture, &ktx_after_promotion) != HENKA_SUCCESS ||
+        ktx_after_promotion.resident_mip_count != 3U)
+        return HENKA_ERROR_UNKNOWN;
 
     shared_texture = NULL;
     result = henka_assets_load_texture(
@@ -9360,10 +9528,14 @@ static henka_result sandbox3d_run_residency_stress(
     if (result != HENKA_SUCCESS)
         return result;
     printf(
-        "Residency stress: managed=%zu resident=%llu budget-rejections=%u queued=%zu processed=%zu failed=%llu cancelled=%llu pinned=%zu source-unknown=%llu.\n",
+        "Residency stress: managed=%zu resident=%llu budget-rejections=%u KTX:mips%u->%u->%u trim=%zu queued=%zu processed=%zu failed=%llu cancelled=%llu pinned=%zu source-unknown=%llu.\n",
         after.managed_texture_count,
         (unsigned long long)after.resident_bytes,
         (unsigned int)after.budget_rejection_count,
+        (unsigned int)ktx_initial_mip_count,
+        (unsigned int)ktx_after_demote.resident_mip_count,
+        (unsigned int)ktx_after_promotion.resident_mip_count,
+        trimmed,
         after.queued_request_count,
         processed,
         (unsigned long long)after.failed_request_count,

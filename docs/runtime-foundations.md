@@ -140,11 +140,13 @@ The Windows sandbox `--residency-stress` mode uses only public asset APIs to loa
 65 path-distinct manager-owned PNG textures (alternating the two packaged source
 images), verifies shared-path cache identity, applies a configured-budget rejection
 pass, pins two active references, fills and recovers the bounded queue, processes
-failed non-KTX2 residency requests, cancels pending work, and checks the pin and
-queue diagnostics before shutdown. This proves ownership, queue, budget, and
-lifetime behavior at application runtime; it does not claim KTX2 promotion or
-demotion, compressed-format pressure, visibility-threshold transitions, or
-background I/O streaming.
+failed non-KTX2 residency requests, and cancels pending work. With the pinned KTX
+dependency enabled, it also generates a build-local uncompressed three-level KTX2
+fixture, loads it through the manager, promotes it from one to two and three
+resident mips, trims it back to one, and checks the transactional diagnostics before
+shutdown. This proves ownership, queue, budget, mip, and lifetime behavior at
+application runtime; compressed-format pressure, visibility-threshold transitions,
+and background I/O streaming remain separate unfinished tracks.
 
 Residency diagnostics also retain cumulative bytes successfully uploaded through
 manager-owned texture creation or replacement, bytes removed by successful trim

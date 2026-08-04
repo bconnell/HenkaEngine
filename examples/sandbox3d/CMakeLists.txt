@@ -11,6 +11,12 @@ target_link_libraries(henka_sandbox3d
         henka
 )
 
+if(HENKA_ENABLE_KTX2_TRANSCODER)
+    target_compile_definitions(henka_sandbox3d PRIVATE HENKA_WITH_KTX2_TRANSCODER=1)
+    target_include_directories(henka_sandbox3d PRIVATE ${ktxsoftware_SOURCE_DIR}/include)
+    target_link_libraries(henka_sandbox3d PRIVATE ktx)
+endif()
+
 henka_enable_project_warnings(henka_sandbox3d)
 
 add_custom_command(TARGET henka_sandbox3d POST_BUILD
