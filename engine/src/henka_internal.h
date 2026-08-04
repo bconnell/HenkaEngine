@@ -275,6 +275,8 @@ struct henka_asset_manager
     uint64_t texture_resident_bytes;
     uint64_t texture_uploaded_bytes;
     uint64_t texture_evicted_bytes;
+    uint64_t texture_trimmed_bytes;
+    uint64_t texture_demoted_bytes;
     uint64_t texture_failed_bytes;
     uint64_t texture_unknown_failed_request_count;
     uint32_t texture_budget_rejection_count;
@@ -288,6 +290,8 @@ struct henka_asset_manager
     uint64_t texture_residency_cancelled_requests;
     uint64_t texture_residency_eviction_count;
     uint64_t texture_residency_eviction_failure_count;
+    uint64_t texture_residency_trim_count;
+    uint64_t texture_residency_trim_failure_count;
     uint64_t texture_residency_frame_index;
     bool texture_residency_frame_active;
 };

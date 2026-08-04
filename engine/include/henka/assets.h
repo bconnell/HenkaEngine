@@ -53,6 +53,8 @@ typedef struct henka_texture_residency_diagnostics
     uint64_t resident_bytes;
     uint64_t uploaded_bytes;
     uint64_t evicted_bytes;
+    uint64_t trimmed_bytes;
+    uint64_t demoted_bytes;
     uint64_t failed_bytes;
     uint32_t budget_rejection_count;
     uint64_t unknown_failed_request_count;
@@ -64,6 +66,8 @@ typedef struct henka_texture_residency_diagnostics
     uint64_t cancelled_request_count;
     uint64_t eviction_count;
     uint64_t eviction_failure_count;
+    uint64_t trim_count;
+    uint64_t trim_failure_count;
     uint64_t pinned_bytes;
     size_t pinned_texture_count;
     henka_texture_residency_progression_mode progression_mode;
@@ -224,10 +228,11 @@ henka_result henka_assets_set_texture_resident_mips(
     henka_texture* texture,
     uint32_t resident_mip_count,
     henka_texture_info* out_info);
-/* Synchronously trims the largest eligible manager-owned KTX2 textures to
- * their smallest valid resident prefix until target_bytes is met. A zero
- * max_evictions means no operation-count limit. Non-KTX2 sources are not
- * candidates, and failure leaves each texture's prior payload intact. */
+/* Synchronously trims the largest eligible manager-owned KTX2 textures by
+ * demoting them to their smallest valid resident prefix until target_bytes is
+ * met. This does not claim whole-resource eviction. A zero max_evictions means
+ * no operation-count limit. Non-KTX2 sources are not candidates, and failure
+ * leaves each texture's prior payload intact. */
 henka_result henka_assets_trim_texture_residency(
     henka_asset_manager* manager,
     uint64_t target_bytes,

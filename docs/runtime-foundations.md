@@ -124,12 +124,12 @@ the upload itself remains synchronous. Repeated requests for one texture retain
 the strongest target and priority so a farther reference cannot demote a nearer one;
 visible requests use deterministic distance and semantic-slot priority. A deterministic trim operation can reduce the
 largest eligible KTX2 textures to one resident mip until a caller-provided
-target is met, with eviction diagnostics and transactional rollback on
-failure. Callers can apply the configured non-zero budget through a bounded
-enforcement API; a zero budget remains a no-op and a capped eviction count
+target is met, with separate trimmed/demoted-byte diagnostics and transactional rollback on
+failure. This path does not claim whole-resource eviction. Callers can apply the configured non-zero budget through a bounded
+enforcement API; a zero budget remains a no-op and a capped trim count
 returns `HENKA_ERROR_LIMIT` if the target cannot be reached. This is explicit
 policy enforcement, and the frame lifecycle applies at most one configured-
-budget eviction per frame. Visible manager-owned textures are pinned for the
+budget trim per frame. Visible manager-owned textures are pinned for the
 active frame before this trim step, and diagnostics report the bounded pin count.
 Visible KTX2 targets use projected texture radius from validated entity bounds,
 camera projection, and scene viewport, with deterministic distance fallback when

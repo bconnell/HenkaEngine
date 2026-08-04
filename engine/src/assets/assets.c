@@ -1467,6 +1467,8 @@ henka_result henka_assets_get_texture_residency_diagnostics(
     out_diagnostics->resident_bytes = manager->texture_resident_bytes;
     out_diagnostics->uploaded_bytes = manager->texture_uploaded_bytes;
     out_diagnostics->evicted_bytes = manager->texture_evicted_bytes;
+    out_diagnostics->trimmed_bytes = manager->texture_trimmed_bytes;
+    out_diagnostics->demoted_bytes = manager->texture_demoted_bytes;
     out_diagnostics->failed_bytes = manager->texture_failed_bytes;
     out_diagnostics->budget_rejection_count = manager->texture_budget_rejection_count;
     out_diagnostics->unknown_failed_request_count = manager->texture_unknown_failed_request_count;
@@ -1477,6 +1479,8 @@ henka_result henka_assets_get_texture_residency_diagnostics(
     out_diagnostics->cancelled_request_count = manager->texture_residency_cancelled_requests;
     out_diagnostics->eviction_count = manager->texture_residency_eviction_count;
     out_diagnostics->eviction_failure_count = manager->texture_residency_eviction_failure_count;
+    out_diagnostics->trim_count = manager->texture_residency_trim_count;
+    out_diagnostics->trim_failure_count = manager->texture_residency_trim_failure_count;
     out_diagnostics->progression_mode =
         HENKA_TEXTURE_RESIDENCY_PROGRESS_SYNCHRONOUS_MAIN_THREAD;
     for (index = 0U; index < manager->texture_count; ++index)
@@ -1878,23 +1882,31 @@ henka_result henka_assets_trim_texture_residency(
         }
         if (result != HENKA_SUCCESS)
         {
-            if (manager->texture_residency_eviction_failure_count < UINT64_MAX)
-                ++manager->texture_residency_eviction_failure_count;
+            if (manager->texture_residency_trim_failure_count < UINT64_MAX)
+                ++manager->texture_residency_trim_failure_count;
             break;
         }
         memset(&resident_info, 0, sizeof(resident_info));
         if (henka_texture_get_info(
                 manager->texture_entries[candidate].texture,
                 &resident_info) == HENKA_SUCCESS &&
-            candidate_info.resident_gpu_bytes > resident_info.resident_gpu_bytes &&
-            UINT64_MAX - manager->texture_evicted_bytes >=
-                candidate_info.resident_gpu_bytes - resident_info.resident_gpu_bytes)
+            candidate_info.resident_gpu_bytes > resident_info.resident_gpu_bytes)
         {
-            manager->texture_evicted_bytes +=
+            const uint64_t demoted_bytes =
                 candidate_info.resident_gpu_bytes - resident_info.resident_gpu_bytes;
+            if (UINT64_MAX - manager->texture_trimmed_bytes >= demoted_bytes)
+                manager->texture_trimmed_bytes +=
+                    demoted_bytes;
+            else
+                manager->texture_trimmed_bytes = UINT64_MAX;
+            if (UINT64_MAX - manager->texture_demoted_bytes >= demoted_bytes)
+                manager->texture_demoted_bytes +=
+                    demoted_bytes;
+            else
+                manager->texture_demoted_bytes = UINT64_MAX;
         }
-        if (manager->texture_residency_eviction_count < UINT64_MAX)
-            ++manager->texture_residency_eviction_count;
+        if (manager->texture_residency_trim_count < UINT64_MAX)
+            ++manager->texture_residency_trim_count;
         ++evicted;
     }
 

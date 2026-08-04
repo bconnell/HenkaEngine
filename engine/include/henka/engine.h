@@ -157,6 +157,8 @@ typedef struct henka_engine_diagnostics
     uint64_t texture_residency_resident_bytes;
     uint64_t texture_residency_uploaded_bytes;
     uint64_t texture_residency_evicted_bytes;
+    uint64_t texture_residency_trimmed_bytes;
+    uint64_t texture_residency_demoted_bytes;
     uint64_t texture_residency_failed_bytes;
     uint64_t texture_residency_unknown_failed_request_count;
     uint32_t texture_residency_managed_count;
@@ -167,6 +169,8 @@ typedef struct henka_engine_diagnostics
     uint64_t texture_residency_cancelled_request_count;
     uint64_t texture_residency_eviction_count;
     uint64_t texture_residency_eviction_failure_count;
+    uint64_t texture_residency_trim_count;
+    uint64_t texture_residency_trim_failure_count;
     uint32_t texture_residency_pinned_count;
     uint64_t texture_residency_pinned_bytes;
     henka_texture_residency_progression_mode texture_residency_progression_mode;

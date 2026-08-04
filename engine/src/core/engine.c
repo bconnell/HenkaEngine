@@ -1669,6 +1669,8 @@ henka_result henka_engine_get_diagnostics(
     out_diagnostics->texture_residency_resident_bytes = texture_residency.resident_bytes;
     out_diagnostics->texture_residency_uploaded_bytes = texture_residency.uploaded_bytes;
     out_diagnostics->texture_residency_evicted_bytes = texture_residency.evicted_bytes;
+    out_diagnostics->texture_residency_trimmed_bytes = texture_residency.trimmed_bytes;
+    out_diagnostics->texture_residency_demoted_bytes = texture_residency.demoted_bytes;
     out_diagnostics->texture_residency_failed_bytes = texture_residency.failed_bytes;
     out_diagnostics->texture_residency_unknown_failed_request_count =
         texture_residency.unknown_failed_request_count;
@@ -1686,6 +1688,8 @@ henka_result henka_engine_get_diagnostics(
     out_diagnostics->texture_residency_cancelled_request_count = texture_residency.cancelled_request_count;
     out_diagnostics->texture_residency_eviction_count = texture_residency.eviction_count;
     out_diagnostics->texture_residency_eviction_failure_count = texture_residency.eviction_failure_count;
+    out_diagnostics->texture_residency_trim_count = texture_residency.trim_count;
+    out_diagnostics->texture_residency_trim_failure_count = texture_residency.trim_failure_count;
     out_diagnostics->texture_residency_pinned_count =
         texture_residency.pinned_texture_count > UINT32_MAX ?
         UINT32_MAX : (uint32_t)texture_residency.pinned_texture_count;
