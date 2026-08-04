@@ -191,7 +191,8 @@ henka_result henka_assets_queue_texture_residency_request(
     uint32_t resident_mip_count);
 /* Queues a bounded request with a deterministic priority. Higher priorities
  * are serviced first; equal priorities use mip demand and then request order. Repeated
- * references coalesce to the strongest mip target and priority. */
+ * references coalesce to the strongest mip target and priority. A full queue
+ * admits a strictly stronger request by replacing its deterministic weakest entry. */
 henka_result henka_assets_queue_texture_residency_request_with_priority(
     henka_asset_manager* manager,
     henka_texture* texture,

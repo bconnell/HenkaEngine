@@ -580,8 +580,16 @@ void henka_test_assets(void)
     HENKA_TEST_ASSERT(henka_assets_queue_texture_residency_request_with_priority(
         &manager,
         texture_entries[HENKA_MAX_TEXTURE_RESIDENCY_REQUESTS].texture,
+        1U,
+        0U) == HENKA_ERROR_LIMIT);
+    HENKA_TEST_ASSERT(henka_assets_queue_texture_residency_request_with_priority(
+        &manager,
+        texture_entries[HENKA_MAX_TEXTURE_RESIDENCY_REQUESTS].texture,
         2U,
-        UINT32_MAX) == HENKA_ERROR_LIMIT);
+        UINT32_MAX) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(manager.texture_residency_request_textures[0] ==
+        texture_entries[HENKA_MAX_TEXTURE_RESIDENCY_REQUESTS].texture);
+    HENKA_TEST_ASSERT(manager.texture_residency_request_priorities[0] == UINT32_MAX);
     HENKA_TEST_ASSERT(henka_assets_queue_texture_residency_request_with_priority(
         &manager,
         texture_entries[HENKA_MAX_TEXTURE_RESIDENCY_REQUESTS - 1U].texture,
