@@ -162,6 +162,7 @@ typedef struct henka_engine_diagnostics
     uint32_t texture_residency_queued_request_count;
     uint64_t texture_residency_completed_request_count;
     uint64_t texture_residency_failed_request_count;
+    uint64_t texture_residency_cancelled_request_count;
     uint64_t texture_residency_eviction_count;
     uint64_t texture_residency_eviction_failure_count;
     uint32_t texture_residency_pinned_count;

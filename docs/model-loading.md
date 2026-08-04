@@ -101,7 +101,7 @@ The loader currently supports:
   data-URI ownership does not create a second decoder or bypass the asset
   manager. Manager-owned KTX2 textures additionally support a synchronous
   bounded top-mip residency request with deterministic distance and semantic-slot
-  priority, active-frame pinning, and deterministic trim-to-budget; background
+  priority, active-frame pinning, revision-checked stale-request cancellation, and deterministic trim-to-budget; background
   streaming and automatic policy eviction remain future work, as
   do cross-backend capability coverage and the final visual stress matrix.
 - multiple triangle primitives, node hierarchies with cycle and parent checks,

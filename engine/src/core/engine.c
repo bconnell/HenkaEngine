@@ -1678,6 +1678,7 @@ henka_result henka_engine_get_diagnostics(
         UINT32_MAX : (uint32_t)texture_residency.queued_request_count;
     out_diagnostics->texture_residency_completed_request_count = texture_residency.completed_request_count;
     out_diagnostics->texture_residency_failed_request_count = texture_residency.failed_request_count;
+    out_diagnostics->texture_residency_cancelled_request_count = texture_residency.cancelled_request_count;
     out_diagnostics->texture_residency_eviction_count = texture_residency.eviction_count;
     out_diagnostics->texture_residency_eviction_failure_count = texture_residency.eviction_failure_count;
     out_diagnostics->texture_residency_pinned_count =

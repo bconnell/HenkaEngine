@@ -533,6 +533,21 @@ void henka_test_assets(void)
     }
     texture_entries[1].metadata.fallback = false;
     texture_entries[1].owns_texture = true;
+    priority_texture.content_revision = 4U;
+    HENKA_TEST_ASSERT(henka_assets_queue_texture_residency_request_with_priority(
+        &manager, &priority_texture, 2U, 9U) == HENKA_SUCCESS);
+    priority_texture.content_revision = 5U;
+    HENKA_TEST_ASSERT(henka_assets_process_texture_residency_requests(
+        &manager, 1U, &processed_residency_requests) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(processed_residency_requests == 1U);
+    {
+        henka_texture_residency_diagnostics residency;
+        HENKA_TEST_ASSERT(henka_assets_get_texture_residency_diagnostics(
+            &manager, &residency) == HENKA_SUCCESS);
+        HENKA_TEST_ASSERT(residency.failed_request_count == 1U);
+        HENKA_TEST_ASSERT(residency.cancelled_request_count == 1U);
+    }
+    priority_texture.content_revision = 0U;
     texture_entries[1].resident_gpu_bytes = 1U;
     manager.texture_resident_bytes = 2U;
     HENKA_TEST_ASSERT(henka_assets_queue_texture_residency_request_with_priority(

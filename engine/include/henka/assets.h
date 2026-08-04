@@ -55,6 +55,7 @@ typedef struct henka_texture_residency_diagnostics
     size_t queued_request_count;
     uint64_t completed_request_count;
     uint64_t failed_request_count;
+    uint64_t cancelled_request_count;
     uint64_t eviction_count;
     uint64_t eviction_failure_count;
     size_t pinned_texture_count;

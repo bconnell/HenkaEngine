@@ -1473,6 +1473,7 @@ henka_result henka_assets_get_texture_residency_diagnostics(
     out_diagnostics->queued_request_count = manager->texture_residency_request_count;
     out_diagnostics->completed_request_count = manager->texture_residency_completed_requests;
     out_diagnostics->failed_request_count = manager->texture_residency_failed_requests;
+    out_diagnostics->cancelled_request_count = manager->texture_residency_cancelled_requests;
     out_diagnostics->eviction_count = manager->texture_residency_eviction_count;
     out_diagnostics->eviction_failure_count = manager->texture_residency_eviction_failure_count;
     for (index = 0U; index < manager->texture_count; ++index)
@@ -1565,6 +1566,7 @@ henka_result henka_assets_queue_texture_residency_request_with_priority(
                 manager->texture_residency_request_mips[index] = resident_mip_count;
             if (manager->texture_residency_request_priorities[index] < priority)
                 manager->texture_residency_request_priorities[index] = priority;
+            manager->texture_residency_request_revisions[index] = texture->content_revision;
             return HENKA_SUCCESS;
         }
     }
@@ -1591,12 +1593,14 @@ henka_result henka_assets_queue_texture_residency_request_with_priority(
         manager->texture_residency_request_textures[weakest_index] = texture;
         manager->texture_residency_request_mips[weakest_index] = resident_mip_count;
         manager->texture_residency_request_priorities[weakest_index] = priority;
+        manager->texture_residency_request_revisions[weakest_index] = texture->content_revision;
         return HENKA_SUCCESS;
     }
     index = manager->texture_residency_request_count++;
     manager->texture_residency_request_textures[index] = texture;
     manager->texture_residency_request_mips[index] = resident_mip_count;
     manager->texture_residency_request_priorities[index] = priority;
+    manager->texture_residency_request_revisions[index] = texture->content_revision;
     return HENKA_SUCCESS;
 }
 
@@ -1616,6 +1620,7 @@ henka_result henka_assets_process_texture_residency_requests(
         size_t index;
         henka_texture* texture;
         uint32_t resident_mips;
+        uint64_t request_revision;
         henka_texture_info info;
         henka_result result;
 
@@ -1633,6 +1638,7 @@ henka_result henka_assets_process_texture_residency_requests(
         }
         texture = manager->texture_residency_request_textures[request_index];
         resident_mips = manager->texture_residency_request_mips[request_index];
+        request_revision = manager->texture_residency_request_revisions[request_index];
 
         if (request_index + 1U < manager->texture_residency_request_count)
         {
@@ -1648,8 +1654,19 @@ henka_result henka_assets_process_texture_residency_requests(
                 &manager->texture_residency_request_priorities[request_index],
                 &manager->texture_residency_request_priorities[request_index + 1U],
                 (manager->texture_residency_request_count - request_index - 1U) * sizeof(manager->texture_residency_request_priorities[0]));
+            memmove(
+                &manager->texture_residency_request_revisions[request_index],
+                &manager->texture_residency_request_revisions[request_index + 1U],
+                (manager->texture_residency_request_count - request_index - 1U) * sizeof(manager->texture_residency_request_revisions[0]));
         }
         --manager->texture_residency_request_count;
+        if (texture == NULL || texture->content_revision != request_revision)
+        {
+            if (manager->texture_residency_cancelled_requests < UINT64_MAX)
+                ++manager->texture_residency_cancelled_requests;
+            ++processed;
+            continue;
+        }
         memset(&info, 0, sizeof(info));
         result = henka_assets_set_texture_resident_mips(manager, texture, resident_mips, &info);
         if (result == HENKA_SUCCESS)
