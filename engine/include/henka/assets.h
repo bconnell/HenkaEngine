@@ -211,6 +211,11 @@ henka_result henka_assets_process_texture_residency_requests(
     henka_asset_manager* manager,
     size_t max_requests,
     size_t* out_processed_requests);
+/* Cancels all queued residency work, for example before replacing the active
+ * scene. No GPU payload is touched; cancellation is cumulative diagnostics. */
+henka_result henka_assets_cancel_texture_residency_requests(
+    henka_asset_manager* manager,
+    size_t* out_cancelled_requests);
 /* Synchronously replaces a manager-owned KTX2 texture with a bounded prefix
  * of its mip chain. The source is reread transactionally; zero is not a
  * valid request, and non-KTX2 sources remain non-streamable. */

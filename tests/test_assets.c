@@ -181,6 +181,7 @@ void henka_test_assets(void)
     henka_material applied_material;
     uint64_t material_revision;
     size_t processed_residency_requests;
+    size_t cancelled_residency_requests;
     henka_asset_texture_entry texture_entries[HENKA_MAX_TEXTURE_RESIDENCY_REQUESTS + 1U];
     henka_texture stress_textures[HENKA_MAX_TEXTURE_RESIDENCY_REQUESTS + 1U];
     henka_mesh fallback_mesh;
@@ -574,6 +575,15 @@ void henka_test_assets(void)
             &manager, &residency) == HENKA_SUCCESS);
         HENKA_TEST_ASSERT(residency.failed_request_count == 3U);
         HENKA_TEST_ASSERT(residency.unknown_failed_request_count == 3U);
+        HENKA_TEST_ASSERT(henka_assets_queue_texture_residency_request(
+            &manager, &fallback_texture, 2U) == HENKA_SUCCESS);
+        HENKA_TEST_ASSERT(henka_assets_cancel_texture_residency_requests(
+            &manager, &cancelled_residency_requests) == HENKA_SUCCESS);
+        HENKA_TEST_ASSERT(cancelled_residency_requests == 1U);
+        HENKA_TEST_ASSERT(henka_assets_get_texture_residency_diagnostics(
+            &manager, &residency) == HENKA_SUCCESS);
+        HENKA_TEST_ASSERT(residency.queued_request_count == 0U);
+        HENKA_TEST_ASSERT(residency.cancelled_request_count == 2U);
     }
     manager.texture_residency_request_count = 0U;
     manager.texture_count = HENKA_MAX_TEXTURE_RESIDENCY_REQUESTS + 1U;

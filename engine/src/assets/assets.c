@@ -1700,6 +1700,36 @@ henka_result henka_assets_process_texture_residency_requests(
     return HENKA_SUCCESS;
 }
 
+henka_result henka_assets_cancel_texture_residency_requests(
+    henka_asset_manager* manager,
+    size_t* out_cancelled_requests)
+{
+    size_t cancelled;
+
+    if (out_cancelled_requests != NULL)
+        *out_cancelled_requests = 0U;
+    if (manager == NULL)
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    cancelled = manager->texture_residency_request_count;
+    if (UINT64_MAX - manager->texture_residency_cancelled_requests <
+        (uint64_t)cancelled)
+        manager->texture_residency_cancelled_requests = UINT64_MAX;
+    else
+        manager->texture_residency_cancelled_requests += (uint64_t)cancelled;
+    manager->texture_residency_request_count = 0U;
+    memset(manager->texture_residency_request_textures, 0,
+        sizeof(manager->texture_residency_request_textures));
+    memset(manager->texture_residency_request_mips, 0,
+        sizeof(manager->texture_residency_request_mips));
+    memset(manager->texture_residency_request_priorities, 0,
+        sizeof(manager->texture_residency_request_priorities));
+    memset(manager->texture_residency_request_revisions, 0,
+        sizeof(manager->texture_residency_request_revisions));
+    if (out_cancelled_requests != NULL)
+        *out_cancelled_requests = cancelled;
+    return HENKA_SUCCESS;
+}
+
 henka_result henka_assets_set_texture_resident_mips(
     henka_asset_manager* manager,
     henka_texture* texture,
