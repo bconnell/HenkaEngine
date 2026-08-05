@@ -400,10 +400,18 @@ static const char* g_setting_key_scene_panel_visible = "ui.scene_objects_panel_v
 static const char* g_setting_key_details_panel_visible = "ui.object_details_panel_visible";
 static const char* g_setting_key_layout_mode = "ui.layout_mode";
 static const char* g_setting_key_active_utility = "ui.active_utility";
+static const char* g_setting_key_workspace_topology_version = "ui.workspace.topology.version";
+static const int g_workspace_topology_settings_version = 1;
 
 static float sandbox3d_get_mouse_sensitivity(const sandbox3d_state* state);
 static void sandbox3d_set_status(sandbox3d_state* state, bool warning, const char* message);
 static void sandbox3d_set_statusf(sandbox3d_state* state, bool warning, bool print_console, const char* format, ...);
+static bool sandbox3d_load_workspace_topology_settings(
+    sandbox3d_workspace_model* model,
+    const henka_settings* settings);
+static void sandbox3d_save_workspace_topology_settings(
+    const sandbox3d_workspace_model* model,
+    henka_settings* settings);
 static void sandbox3d_record_reject_reason(
     sandbox3d_state* state,
     sandbox3d_interaction_reject_reason reason,
@@ -3989,6 +3997,212 @@ static void sandbox3d_restore_selected_object(sandbox3d_state* state)
     sandbox3d_clear_selection(state, "No object selected.");
 }
 
+static bool sandbox3d_load_workspace_topology_settings(
+    sandbox3d_workspace_model* model,
+    const henka_settings* settings)
+{
+    sandbox3d_workspace_model candidate;
+    char key[96];
+    size_t index;
+    int value;
+
+    if (model == NULL || settings == NULL ||
+        !henka_settings_has_key(settings, g_setting_key_workspace_topology_version))
+    {
+        return true;
+    }
+    if (henka_settings_get_int(settings, g_setting_key_workspace_topology_version, 0) !=
+        g_workspace_topology_settings_version)
+    {
+        return false;
+    }
+
+    candidate = *model;
+    value = henka_settings_get_int(
+        settings,
+        "ui.workspace.topology.root",
+        (int)candidate.topology_root);
+    if (value < 0 || value >= (int)SANDBOX3D_WORKSPACE_TOPOLOGY_MAX_NODES)
+    {
+        return false;
+    }
+    candidate.topology_root = (uint16_t)value;
+    value = henka_settings_get_int(
+        settings,
+        "ui.workspace.topology.closed_mask",
+        (int)candidate.closed_sections_mask);
+    if (value < 0 || value >= (1 << SANDBOX3D_WORKSPACE_PANEL_COUNT))
+    {
+        return false;
+    }
+    candidate.closed_sections_mask = (uint32_t)value;
+    value = henka_settings_get_int(
+        settings,
+        "ui.workspace.topology.maximized_section",
+        (int)candidate.maximized_section);
+    if (value < SANDBOX3D_WORKSPACE_PANEL_NONE || value >= SANDBOX3D_WORKSPACE_PANEL_COUNT)
+    {
+        return false;
+    }
+    candidate.maximized_section = (sandbox3d_workspace_panel_id)value;
+    for (index = 0U; index < SANDBOX3D_WORKSPACE_TOPOLOGY_MAX_NODES; ++index)
+    {
+        sandbox3d_workspace_topology_node* node = &candidate.topology_nodes[index];
+        int parent;
+        int type;
+
+        snprintf(key, sizeof(key), "ui.workspace.topology.node.%zu.type", index);
+        type = henka_settings_get_int(settings, key, (int)node->type);
+        snprintf(key, sizeof(key), "ui.workspace.topology.node.%zu.parent", index);
+        parent = henka_settings_get_int(settings, key, (int)node->parent);
+        if (type < SANDBOX3D_WORKSPACE_TOPOLOGY_NODE_UNUSED ||
+            type > SANDBOX3D_WORKSPACE_TOPOLOGY_NODE_SECTION ||
+            (parent != (int)UINT16_MAX &&
+             (parent < 0 || parent >= (int)SANDBOX3D_WORKSPACE_TOPOLOGY_MAX_NODES)))
+        {
+            return false;
+        }
+        node->type = (sandbox3d_workspace_topology_node_type)type;
+        node->parent = (uint16_t)parent;
+        if (node->type == SANDBOX3D_WORKSPACE_TOPOLOGY_NODE_SPLIT)
+        {
+            int first_child;
+            int second_child;
+            int orientation;
+
+            snprintf(key, sizeof(key), "ui.workspace.topology.node.%zu.first", index);
+            first_child = henka_settings_get_int(settings, key, (int)node->data.split.first_child);
+            snprintf(key, sizeof(key), "ui.workspace.topology.node.%zu.second", index);
+            second_child = henka_settings_get_int(settings, key, (int)node->data.split.second_child);
+            snprintf(key, sizeof(key), "ui.workspace.topology.node.%zu.orientation", index);
+            orientation = henka_settings_get_int(settings, key, (int)node->data.split.orientation);
+            if (first_child < 0 || first_child >= (int)SANDBOX3D_WORKSPACE_TOPOLOGY_MAX_NODES ||
+                second_child < 0 || second_child >= (int)SANDBOX3D_WORKSPACE_TOPOLOGY_MAX_NODES ||
+                orientation < SANDBOX3D_WORKSPACE_SPLIT_HORIZONTAL ||
+                orientation > SANDBOX3D_WORKSPACE_SPLIT_VERTICAL)
+            {
+                return false;
+            }
+            node->data.split.first_child = (uint16_t)first_child;
+            node->data.split.second_child = (uint16_t)second_child;
+            node->data.split.orientation = (sandbox3d_workspace_split_orientation)orientation;
+            snprintf(key, sizeof(key), "ui.workspace.topology.node.%zu.ratio", index);
+            node->data.split.ratio = henka_settings_get_float(settings, key, node->data.split.ratio);
+            snprintf(key, sizeof(key), "ui.workspace.topology.node.%zu.minimum_first", index);
+            node->data.split.minimum_first = henka_settings_get_float(settings, key, node->data.split.minimum_first);
+            snprintf(key, sizeof(key), "ui.workspace.topology.node.%zu.minimum_second", index);
+            node->data.split.minimum_second = henka_settings_get_float(settings, key, node->data.split.minimum_second);
+        }
+        else if (node->type == SANDBOX3D_WORKSPACE_TOPOLOGY_NODE_SECTION)
+        {
+            int section_id;
+            int tab_count;
+            int active_tab;
+            size_t tab_index;
+
+            snprintf(key, sizeof(key), "ui.workspace.topology.node.%zu.section", index);
+            section_id = henka_settings_get_int(settings, key, (int)node->data.section.section_id);
+            snprintf(key, sizeof(key), "ui.workspace.topology.node.%zu.tab_count", index);
+            tab_count = henka_settings_get_int(settings, key, (int)node->data.section.tab_count);
+            snprintf(key, sizeof(key), "ui.workspace.topology.node.%zu.active_tab", index);
+            active_tab = henka_settings_get_int(settings, key, (int)node->data.section.active_tab);
+            if (section_id < 0 || section_id >= SANDBOX3D_WORKSPACE_PANEL_COUNT ||
+                tab_count <= 0 || tab_count > (int)SANDBOX3D_WORKSPACE_TOPOLOGY_MAX_TABS ||
+                active_tab < 0 || active_tab >= tab_count)
+            {
+                return false;
+            }
+            node->data.section.section_id = (sandbox3d_workspace_panel_id)section_id;
+            node->data.section.tab_count = (uint8_t)tab_count;
+            node->data.section.active_tab = (uint8_t)active_tab;
+            for (tab_index = 0U; tab_index < SANDBOX3D_WORKSPACE_TOPOLOGY_MAX_TABS; ++tab_index)
+            {
+                snprintf(key, sizeof(key), "ui.workspace.topology.node.%zu.tab.%zu", index, tab_index);
+                value = henka_settings_get_int(settings, key, (int)node->data.section.tabs[tab_index]);
+                if (value < 0 || value >= SANDBOX3D_WORKSPACE_PANEL_COUNT)
+                {
+                    return false;
+                }
+                node->data.section.tabs[tab_index] = (sandbox3d_workspace_panel_id)value;
+            }
+        }
+    }
+    candidate.topology_transaction_active = false;
+    candidate.topology_transaction_root = UINT16_MAX;
+    candidate.active_divider_node = UINT16_MAX;
+    candidate.divider_close_preview = false;
+    candidate.divider_close_section = SANDBOX3D_WORKSPACE_PANEL_NONE;
+    candidate.closed_snapshot_valid = false;
+    if (!sandbox3d_workspace_topology_is_valid(&candidate))
+    {
+        return false;
+    }
+    memcpy(model->topology_nodes, candidate.topology_nodes, sizeof(model->topology_nodes));
+    model->topology_root = candidate.topology_root;
+    model->closed_sections_mask = candidate.closed_sections_mask;
+    model->maximized_section = candidate.maximized_section;
+    snprintf(model->last_action, sizeof(model->last_action), "Saved workspace topology restored");
+    return true;
+}
+
+static void sandbox3d_save_workspace_topology_settings(
+    const sandbox3d_workspace_model* model,
+    henka_settings* settings)
+{
+    char key[96];
+    size_t index;
+
+    if (model == NULL || settings == NULL || !sandbox3d_workspace_topology_is_valid(model))
+    {
+        return;
+    }
+    (void)henka_settings_set_int(
+        settings,
+        g_setting_key_workspace_topology_version,
+        g_workspace_topology_settings_version);
+    (void)henka_settings_set_int(settings, "ui.workspace.topology.root", (int)model->topology_root);
+    (void)henka_settings_set_int(settings, "ui.workspace.topology.closed_mask", (int)model->closed_sections_mask);
+    (void)henka_settings_set_int(settings, "ui.workspace.topology.maximized_section", (int)model->maximized_section);
+    for (index = 0U; index < SANDBOX3D_WORKSPACE_TOPOLOGY_MAX_NODES; ++index)
+    {
+        const sandbox3d_workspace_topology_node* node = &model->topology_nodes[index];
+        snprintf(key, sizeof(key), "ui.workspace.topology.node.%zu.type", index);
+        (void)henka_settings_set_int(settings, key, (int)node->type);
+        snprintf(key, sizeof(key), "ui.workspace.topology.node.%zu.parent", index);
+        (void)henka_settings_set_int(settings, key, (int)node->parent);
+        if (node->type == SANDBOX3D_WORKSPACE_TOPOLOGY_NODE_SPLIT)
+        {
+            snprintf(key, sizeof(key), "ui.workspace.topology.node.%zu.first", index);
+            (void)henka_settings_set_int(settings, key, (int)node->data.split.first_child);
+            snprintf(key, sizeof(key), "ui.workspace.topology.node.%zu.second", index);
+            (void)henka_settings_set_int(settings, key, (int)node->data.split.second_child);
+            snprintf(key, sizeof(key), "ui.workspace.topology.node.%zu.orientation", index);
+            (void)henka_settings_set_int(settings, key, (int)node->data.split.orientation);
+            snprintf(key, sizeof(key), "ui.workspace.topology.node.%zu.ratio", index);
+            (void)henka_settings_set_float(settings, key, node->data.split.ratio);
+            snprintf(key, sizeof(key), "ui.workspace.topology.node.%zu.minimum_first", index);
+            (void)henka_settings_set_float(settings, key, node->data.split.minimum_first);
+            snprintf(key, sizeof(key), "ui.workspace.topology.node.%zu.minimum_second", index);
+            (void)henka_settings_set_float(settings, key, node->data.split.minimum_second);
+        }
+        else if (node->type == SANDBOX3D_WORKSPACE_TOPOLOGY_NODE_SECTION)
+        {
+            size_t tab_index;
+            snprintf(key, sizeof(key), "ui.workspace.topology.node.%zu.section", index);
+            (void)henka_settings_set_int(settings, key, (int)node->data.section.section_id);
+            snprintf(key, sizeof(key), "ui.workspace.topology.node.%zu.tab_count", index);
+            (void)henka_settings_set_int(settings, key, (int)node->data.section.tab_count);
+            snprintf(key, sizeof(key), "ui.workspace.topology.node.%zu.active_tab", index);
+            (void)henka_settings_set_int(settings, key, (int)node->data.section.active_tab);
+            for (tab_index = 0U; tab_index < SANDBOX3D_WORKSPACE_TOPOLOGY_MAX_TABS; ++tab_index)
+            {
+                snprintf(key, sizeof(key), "ui.workspace.topology.node.%zu.tab.%zu", index, tab_index);
+                (void)henka_settings_set_int(settings, key, (int)node->data.section.tabs[tab_index]);
+            }
+        }
+    }
+}
+
 static void sandbox3d_apply_loaded_settings(henka_engine* engine, sandbox3d_state* state)
 {
     henka_camera candidate_camera;
@@ -4117,6 +4331,10 @@ static void sandbox3d_apply_loaded_settings(henka_engine* engine, sandbox3d_stat
     state->workspace.object_details_panel_visible = henka_settings_get_bool(state->settings, g_setting_key_details_panel_visible, true);
     state->workspace.active_utility = sandbox3d_parse_utility_view(
         henka_settings_get_string(state->settings, g_setting_key_active_utility, "none"));
+    if (!sandbox3d_load_workspace_topology_settings(&state->workspace.model, state->settings))
+    {
+        HENKA_LOG_WARN("Unsafe or incompatible workspace topology settings were ignored.");
+    }
     sandbox3d_restore_selected_object(state);
 }
 
@@ -4157,6 +4375,7 @@ static henka_result sandbox3d_save_settings(henka_engine* engine, sandbox3d_stat
     henka_settings_set_bool(state->settings, g_setting_key_scene_panel_visible, state->workspace.scene_objects_panel_visible);
     henka_settings_set_bool(state->settings, g_setting_key_details_panel_visible, state->workspace.object_details_panel_visible);
     henka_settings_set_string(state->settings, g_setting_key_active_utility, sandbox3d_get_utility_setting_value(state->workspace.active_utility));
+    sandbox3d_save_workspace_topology_settings(&state->workspace.model, state->settings);
     if (state->editor_controls_loaded_safely)
     {
         sandbox3d_editor_controls_save(&state->editor_controls, state->settings);
