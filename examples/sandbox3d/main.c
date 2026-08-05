@@ -8158,6 +8158,9 @@ static void sandbox3d_draw_workspace_hover_hint(
     float hint_width = 0.0f;
     henka_ui_rect hint_rect;
     henka_vec2 mouse;
+    sandbox3d_workspace_panel_id tab_section;
+    sandbox3d_workspace_panel_id tab_id;
+    size_t tab_index;
     size_t topology_index;
     size_t divider_index;
 
@@ -8205,6 +8208,21 @@ static void sandbox3d_draw_workspace_hover_hint(
     {
         hint = "Drag to resize the right dock.";
         hint_width = 230.0f;
+    }
+    if (hint == NULL && sandbox3d_find_workspace_tab_at_point(
+            state,
+            mouse,
+            &tab_section,
+            &tab_id,
+            &tab_index) &&
+        sandbox3d_workspace_get_topology_section_tab_count(
+            &state->workspace.model,
+            tab_section) > 1U)
+    {
+        (void)tab_id;
+        (void)tab_index;
+        hint = "Click to activate; drag to reorder; drop at center to join tabs.";
+        hint_width = 378.0f;
     }
     if (hint == NULL && state->workspace.model.hovered_panel != SANDBOX3D_WORKSPACE_PANEL_NONE &&
         state->diagnostics.cursor_in_panel_header)
