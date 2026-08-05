@@ -1901,6 +1901,7 @@ void sandbox3d_workspace_commit_topology_transaction(sandbox3d_workspace_model* 
     }
     if (model->topology_transaction_active)
     {
+        model->named_layout = model->topology_transaction_result_named_layout;
         if (model->undo_history_count >= SANDBOX3D_WORKSPACE_LAYOUT_HISTORY_MAX)
         {
             memmove(
@@ -1921,7 +1922,6 @@ void sandbox3d_workspace_commit_topology_transaction(sandbox3d_workspace_model* 
     }
     model->topology_transaction_active = false;
     model->topology_transaction_root = UINT16_MAX;
-    model->named_layout = model->topology_transaction_result_named_layout;
 }
 
 void sandbox3d_workspace_rollback_topology_transaction(sandbox3d_workspace_model* model)
