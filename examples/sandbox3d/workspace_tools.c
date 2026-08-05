@@ -544,6 +544,7 @@ void sandbox3d_workspace_model_reset(sandbox3d_workspace_model* model)
     model->active_resize_panel = SANDBOX3D_WORKSPACE_PANEL_NONE;
     model->resize_target = SANDBOX3D_WORKSPACE_RESIZE_NONE;
     model->active_dock_target = SANDBOX3D_WORKSPACE_DOCK_FLOATING;
+    model->context_menu_selected_command = 0U;
     model->next_z_order = 5U;
     sandbox3d_workspace_topology_initialize(model);
     snprintf(model->last_action, sizeof(model->last_action), "Layout reset");

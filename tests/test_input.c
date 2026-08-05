@@ -145,6 +145,8 @@ void henka_test_input(void)
     HENKA_TEST_ASSERT(henka_input_action_find_by_name("toggle-mouse-capture") == HENKA_INPUT_ACTION_TOGGLE_MOUSE_CAPTURE);
     HENKA_TEST_ASSERT(HENKA_KEY_F != HENKA_KEY_UNKNOWN);
     HENKA_TEST_ASSERT(HENKA_KEY_HOME != HENKA_KEY_UNKNOWN);
+    HENKA_TEST_ASSERT(HENKA_KEY_UP != HENKA_KEY_UNKNOWN);
+    HENKA_TEST_ASSERT(henka_input_key_find_by_name("down") == HENKA_KEY_DOWN);
     HENKA_TEST_ASSERT(HENKA_KEY_LEFT_ALT != HENKA_KEY_UNKNOWN);
     HENKA_TEST_ASSERT(strcmp(henka_input_key_get_name(HENKA_KEY_M), "M") == 0);
     HENKA_TEST_ASSERT(henka_input_key_find_by_name("left_ctrl") == HENKA_KEY_LEFT_CTRL);

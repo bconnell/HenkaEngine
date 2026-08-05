@@ -153,6 +153,7 @@ typedef struct sandbox3d_workspace_model
     uint32_t closed_snapshot_mask;
     bool context_menu_open;
     sandbox3d_workspace_panel_id context_menu_section;
+    size_t context_menu_selected_command;
     henka_ui_rect context_menu_rect;
     bool section_chooser_open;
     sandbox3d_workspace_panel_id section_chooser_source;

@@ -1887,7 +1887,8 @@ const char* henka_input_key_get_name(henka_key key)
 {
     static const char* names[HENKA_KEY_COUNT] = {
         "Unknown", "Escape", "F", "W", "A", "S", "D", "Q", "E", "G", "R", "M", "X", "Y", "Z",
-        "Enter", "Left Ctrl", "Left Alt", "Left Shift", "Home", "Tab", "F1", "F2", "F3", "F4", "F5", "H"};
+        "Enter", "Left Ctrl", "Left Alt", "Left Shift", "Home", "Up", "Down", "Left", "Right",
+        "Tab", "F1", "F2", "F3", "F4", "F5", "H"};
     return key >= HENKA_KEY_UNKNOWN && key < HENKA_KEY_COUNT ? names[key] : "Unknown";
 }
 

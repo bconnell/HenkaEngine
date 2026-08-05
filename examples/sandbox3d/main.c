@@ -459,6 +459,14 @@ static bool sandbox3d_load_workspace_panel_settings(
         panel->detached_window_id = 0U;
 
         floating_rect = panel->floating_rect;
+        if (floating_rect.width < panel->minimum_width)
+        {
+            floating_rect.width = panel->minimum_width;
+        }
+        if (floating_rect.height < panel->minimum_height)
+        {
+            floating_rect.height = panel->minimum_height;
+        }
         snprintf(key, sizeof(key), "ui.workspace.panel.%zu.floating.x", index);
         floating_rect.x = henka_settings_get_float(settings, key, floating_rect.x);
         snprintf(key, sizeof(key), "ui.workspace.panel.%zu.floating.y", index);
@@ -605,6 +613,10 @@ static void sandbox3d_draw_workspace_affordances(
 static void sandbox3d_draw_workspace_context_menu(
     henka_engine* engine,
     sandbox3d_state* state);
+static void sandbox3d_apply_workspace_context_command(
+    henka_engine* engine,
+    sandbox3d_state* state,
+    sandbox3d_workspace_context_command command);
 static void sandbox3d_draw_workspace_section_chooser(
     henka_engine* engine,
     sandbox3d_state* state);
@@ -2964,6 +2976,7 @@ static void sandbox3d_print_help(const sandbox3d_state* state)
     printf("  View keeps the largest dedicated scene viewport. Inspect adds object panels. Full Tools shows the complete workspace.\n");
     printf("  Drag any panel header to a left or right outline to redock, or release away to open a native detached window.\n");
     printf("  Drag the narrow bars beside Scene View to resize occupied docks. Reset Layout restores safe defaults.\n");
+    printf("  Workspace context menus support Up / Down to select, Enter to activate, and Escape to cancel.\n");
     printf("  Open Native Panel Test from Controls to validate a separate OS-level tool window.\n");
     printf("  Use the panels to inspect named scene objects, clear selection, switch gizmo modes, focus the camera, reset object transforms, toggle visibility, and open in-window Help, Scene Legend, Object Info, Paths, Settings, Diagnostics, Transform QA, and Physics QA utilities.\n");
     printf("  Select glTF Marker to edit its shared material instance in Object Details; scalar/vector, flags, alpha, and semantic texture overrides apply transactionally.\n");
@@ -5072,9 +5085,40 @@ static bool sandbox3d_handle_workspace_input(
     {
         state->workspace.model.context_menu_open = false;
         state->workspace.model.context_menu_section = SANDBOX3D_WORKSPACE_PANEL_NONE;
+        state->workspace.model.context_menu_selected_command = 0U;
         henka_input_consume_key_press(engine, HENKA_KEY_ESCAPE);
         sandbox3d_set_status(state, false, "Workspace menu closed.");
         return true;
+    }
+
+    if (state->workspace.model.context_menu_open)
+    {
+        size_t selected_command = state->workspace.model.context_menu_selected_command;
+        if (henka_input_was_key_pressed(engine, HENKA_KEY_UP))
+        {
+            selected_command = selected_command == 0U
+                ? (size_t)SANDBOX3D_WORKSPACE_CONTEXT_COMMAND_COUNT - 1U
+                : selected_command - 1U;
+            state->workspace.model.context_menu_selected_command = selected_command;
+            henka_input_consume_key_press(engine, HENKA_KEY_UP);
+            return true;
+        }
+        if (henka_input_was_key_pressed(engine, HENKA_KEY_DOWN))
+        {
+            selected_command = (selected_command + 1U) % (size_t)SANDBOX3D_WORKSPACE_CONTEXT_COMMAND_COUNT;
+            state->workspace.model.context_menu_selected_command = selected_command;
+            henka_input_consume_key_press(engine, HENKA_KEY_DOWN);
+            return true;
+        }
+        if (henka_input_was_key_pressed(engine, HENKA_KEY_ENTER))
+        {
+            henka_input_consume_key_press(engine, HENKA_KEY_ENTER);
+            sandbox3d_apply_workspace_context_command(
+                engine,
+                state,
+                (sandbox3d_workspace_context_command)selected_command);
+            return true;
+        }
     }
 
     if (right_pressed)
@@ -5091,6 +5135,7 @@ static bool sandbox3d_handle_workspace_input(
                 : framebuffer_mouse.y + 4.0f;
             state->workspace.model.context_menu_open = true;
             state->workspace.model.context_menu_section = top_panel;
+            state->workspace.model.context_menu_selected_command = 0U;
             state->workspace.model.context_menu_rect =
                 (henka_ui_rect){menu_x > 4.0f ? menu_x : 4.0f, menu_y > 4.0f ? menu_y : 4.0f, menu_width, menu_height};
             sandbox3d_set_statusf(state, false, false, "Workspace menu opened for %s.", sandbox3d_workspace_panel_name(top_panel));
@@ -5100,6 +5145,7 @@ static bool sandbox3d_handle_workspace_input(
         {
             state->workspace.model.context_menu_open = false;
             state->workspace.model.context_menu_section = SANDBOX3D_WORKSPACE_PANEL_NONE;
+            state->workspace.model.context_menu_selected_command = 0U;
             return true;
         }
         return false;
@@ -5130,6 +5176,7 @@ static bool sandbox3d_handle_workspace_input(
         {
             state->workspace.model.context_menu_open = false;
             state->workspace.model.context_menu_section = SANDBOX3D_WORKSPACE_PANEL_NONE;
+            state->workspace.model.context_menu_selected_command = 0U;
         }
         return true;
     }
@@ -6758,6 +6805,7 @@ static void sandbox3d_apply_workspace_context_command(
     (void)changed;
     state->workspace.model.context_menu_open = false;
     state->workspace.model.context_menu_section = SANDBOX3D_WORKSPACE_PANEL_NONE;
+    state->workspace.model.context_menu_selected_command = 0U;
 }
 
 static void sandbox3d_draw_workspace_context_menu(
@@ -6787,6 +6835,13 @@ static void sandbox3d_draw_workspace_context_menu(
                 model->context_menu_rect.width - 12.0f,
                 24.0f};
         snprintf(button_id, sizeof(button_id), "workspace_context_%zu", command_index);
+        if (command_index == model->context_menu_selected_command)
+        {
+            henka_ui_overlay_rect(
+                state->ui,
+                button_rect,
+                (henka_vec4){0.16f, 0.28f, 0.42f, 0.72f});
+        }
         if (henka_ui_button(
                 state->ui,
                 button_id,

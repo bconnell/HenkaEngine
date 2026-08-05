@@ -344,6 +344,14 @@ static henka_key henka_translate_key(SDL_Keycode keycode)
             return HENKA_KEY_LEFT_SHIFT;
         case SDLK_HOME:
             return HENKA_KEY_HOME;
+        case SDLK_UP:
+            return HENKA_KEY_UP;
+        case SDLK_DOWN:
+            return HENKA_KEY_DOWN;
+        case SDLK_LEFT:
+            return HENKA_KEY_LEFT;
+        case SDLK_RIGHT:
+            return HENKA_KEY_RIGHT;
         case SDLK_TAB:
             return HENKA_KEY_TAB;
         case SDLK_F1:
