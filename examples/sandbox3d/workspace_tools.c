@@ -697,6 +697,27 @@ void sandbox3d_workspace_dock_panel(
         sandbox3d_workspace_dock_name(dock_zone));
 }
 
+void sandbox3d_workspace_rebuild_dock_lists(sandbox3d_workspace_model* model)
+{
+    size_t index;
+
+    if (model == NULL)
+    {
+        return;
+    }
+    model->left_dock_panel_count = 0U;
+    model->right_dock_panel_count = 0U;
+    for (index = 0U; index < SANDBOX3D_WORKSPACE_PANEL_COUNT; ++index)
+    {
+        const sandbox3d_workspace_dock_zone dock = model->panels[index].dock;
+        if (dock == SANDBOX3D_WORKSPACE_DOCK_LEFT || dock == SANDBOX3D_WORKSPACE_DOCK_RIGHT)
+        {
+            sandbox3d_workspace_append_panel_to_dock(
+                model, dock, (sandbox3d_workspace_panel_id)index);
+        }
+    }
+}
+
 henka_ui_rect sandbox3d_workspace_title_drag_rect(henka_ui_rect panel_rect)
 {
     return (henka_ui_rect){panel_rect.x + 4.0f, panel_rect.y + 2.0f, panel_rect.width - 170.0f, 26.0f};

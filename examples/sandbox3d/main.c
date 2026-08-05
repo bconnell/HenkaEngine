@@ -401,11 +401,121 @@ static const char* g_setting_key_details_panel_visible = "ui.object_details_pane
 static const char* g_setting_key_layout_mode = "ui.layout_mode";
 static const char* g_setting_key_active_utility = "ui.active_utility";
 static const char* g_setting_key_workspace_topology_version = "ui.workspace.topology.version";
+static const char* g_setting_key_workspace_left_dock_width = "ui.workspace.left_dock_width";
+static const char* g_setting_key_workspace_right_dock_width = "ui.workspace.right_dock_width";
 static const int g_workspace_topology_settings_version = 1;
 
 static float sandbox3d_get_mouse_sensitivity(const sandbox3d_state* state);
 static void sandbox3d_set_status(sandbox3d_state* state, bool warning, const char* message);
 static void sandbox3d_set_statusf(sandbox3d_state* state, bool warning, bool print_console, const char* format, ...);
+static bool sandbox3d_load_workspace_panel_settings(
+    sandbox3d_workspace_model* model,
+    const henka_settings* settings)
+{
+    sandbox3d_workspace_model candidate;
+    size_t index;
+
+    if (model == NULL || settings == NULL)
+    {
+        return false;
+    }
+    candidate = *model;
+    candidate.left_dock_width = henka_settings_get_float(
+        settings, g_setting_key_workspace_left_dock_width, candidate.left_dock_width);
+    candidate.right_dock_width = henka_settings_get_float(
+        settings, g_setting_key_workspace_right_dock_width, candidate.right_dock_width);
+    if (!isfinite(candidate.left_dock_width) ||
+        candidate.left_dock_width < 280.0f || candidate.left_dock_width > 720.0f ||
+        !isfinite(candidate.right_dock_width) ||
+        candidate.right_dock_width < 300.0f || candidate.right_dock_width > 720.0f)
+    {
+        return false;
+    }
+
+    for (index = 0U; index < SANDBOX3D_WORKSPACE_PANEL_COUNT; ++index)
+    {
+        char key[96];
+        sandbox3d_workspace_panel* panel = &candidate.panels[index];
+        int dock;
+        int last_docked_zone;
+        henka_ui_rect floating_rect;
+
+        snprintf(key, sizeof(key), "ui.workspace.panel.%zu.dock", index);
+        dock = henka_settings_get_int(settings, key, (int)panel->dock);
+        snprintf(key, sizeof(key), "ui.workspace.panel.%zu.last_docked", index);
+        last_docked_zone = henka_settings_get_int(settings, key, (int)panel->last_docked_zone);
+        if (dock < SANDBOX3D_WORKSPACE_DOCK_LEFT || dock > SANDBOX3D_WORKSPACE_DOCK_DETACHED ||
+            last_docked_zone < SANDBOX3D_WORKSPACE_DOCK_LEFT ||
+            last_docked_zone > SANDBOX3D_WORKSPACE_DOCK_RIGHT)
+        {
+            return false;
+        }
+        panel->last_docked_zone = (sandbox3d_workspace_dock_zone)last_docked_zone;
+        panel->dock = (sandbox3d_workspace_dock_zone)dock;
+        if (panel->dock == SANDBOX3D_WORKSPACE_DOCK_DETACHED)
+        {
+            panel->dock = panel->last_docked_zone;
+        }
+        panel->detached_window_id = 0U;
+
+        floating_rect = panel->floating_rect;
+        snprintf(key, sizeof(key), "ui.workspace.panel.%zu.floating.x", index);
+        floating_rect.x = henka_settings_get_float(settings, key, floating_rect.x);
+        snprintf(key, sizeof(key), "ui.workspace.panel.%zu.floating.y", index);
+        floating_rect.y = henka_settings_get_float(settings, key, floating_rect.y);
+        snprintf(key, sizeof(key), "ui.workspace.panel.%zu.floating.width", index);
+        floating_rect.width = henka_settings_get_float(settings, key, floating_rect.width);
+        snprintf(key, sizeof(key), "ui.workspace.panel.%zu.floating.height", index);
+        floating_rect.height = henka_settings_get_float(settings, key, floating_rect.height);
+        if (!isfinite(floating_rect.x) ||
+            !isfinite(floating_rect.y) ||
+            !isfinite(floating_rect.width) ||
+            !isfinite(floating_rect.height) ||
+            floating_rect.x < -4096.0f || floating_rect.x > 16384.0f ||
+            floating_rect.y < -4096.0f || floating_rect.y > 16384.0f ||
+            floating_rect.width < panel->minimum_width || floating_rect.width > 4096.0f ||
+            floating_rect.height < panel->minimum_height || floating_rect.height > 4096.0f)
+        {
+            return false;
+        }
+        panel->floating_rect = floating_rect;
+    }
+    sandbox3d_workspace_rebuild_dock_lists(&candidate);
+    *model = candidate;
+    return true;
+}
+
+static void sandbox3d_save_workspace_panel_settings(
+    const sandbox3d_workspace_model* model,
+    henka_settings* settings)
+{
+    size_t index;
+
+    if (model == NULL || settings == NULL)
+    {
+        return;
+    }
+    (void)henka_settings_set_float(settings, g_setting_key_workspace_left_dock_width, model->left_dock_width);
+    (void)henka_settings_set_float(settings, g_setting_key_workspace_right_dock_width, model->right_dock_width);
+    for (index = 0U; index < SANDBOX3D_WORKSPACE_PANEL_COUNT; ++index)
+    {
+        char key[96];
+        const sandbox3d_workspace_panel* panel = &model->panels[index];
+        snprintf(key, sizeof(key), "ui.workspace.panel.%zu.dock", index);
+        (void)henka_settings_set_int(settings, key, (int)panel->dock);
+        snprintf(key, sizeof(key), "ui.workspace.panel.%zu.last_docked", index);
+        (void)henka_settings_set_int(settings, key, (int)panel->last_docked_zone);
+        snprintf(key, sizeof(key), "ui.workspace.panel.%zu.floating.x", index);
+        (void)henka_settings_set_float(settings, key, panel->floating_rect.x);
+        snprintf(key, sizeof(key), "ui.workspace.panel.%zu.floating.y", index);
+        (void)henka_settings_set_float(settings, key, panel->floating_rect.y);
+        snprintf(key, sizeof(key), "ui.workspace.panel.%zu.floating.width", index);
+        (void)henka_settings_set_float(settings, key, panel->floating_rect.width);
+        snprintf(key, sizeof(key), "ui.workspace.panel.%zu.floating.height", index);
+        (void)henka_settings_set_float(settings, key, panel->floating_rect.height);
+    }
+}
+
 static bool sandbox3d_load_workspace_topology_settings(
     sandbox3d_workspace_model* model,
     const henka_settings* settings);
@@ -4372,6 +4482,10 @@ static void sandbox3d_apply_loaded_settings(henka_engine* engine, sandbox3d_stat
     state->workspace.object_details_panel_visible = henka_settings_get_bool(state->settings, g_setting_key_details_panel_visible, true);
     state->workspace.active_utility = sandbox3d_parse_utility_view(
         henka_settings_get_string(state->settings, g_setting_key_active_utility, "none"));
+    if (!sandbox3d_load_workspace_panel_settings(&state->workspace.model, state->settings))
+    {
+        HENKA_LOG_WARN("Unsafe or incompatible workspace panel settings were ignored.");
+    }
     if (!sandbox3d_load_workspace_topology_settings(&state->workspace.model, state->settings))
     {
         HENKA_LOG_WARN("Unsafe or incompatible workspace topology settings were ignored.");
@@ -4416,6 +4530,7 @@ static henka_result sandbox3d_save_settings(henka_engine* engine, sandbox3d_stat
     henka_settings_set_bool(state->settings, g_setting_key_scene_panel_visible, state->workspace.scene_objects_panel_visible);
     henka_settings_set_bool(state->settings, g_setting_key_details_panel_visible, state->workspace.object_details_panel_visible);
     henka_settings_set_string(state->settings, g_setting_key_active_utility, sandbox3d_get_utility_setting_value(state->workspace.active_utility));
+    sandbox3d_save_workspace_panel_settings(&state->workspace.model, state->settings);
     sandbox3d_save_workspace_topology_settings(&state->workspace.model, state->settings);
     if (state->editor_controls_loaded_safely)
     {
