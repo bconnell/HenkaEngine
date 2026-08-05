@@ -27,6 +27,13 @@ typedef enum henka_window_event_route
     HENKA_WINDOW_EVENT_ROUTE_UNKNOWN
 } henka_window_event_route;
 
+typedef enum henka_cursor_shape
+{
+    HENKA_CURSOR_DEFAULT = 0,
+    HENKA_CURSOR_RESIZE_HORIZONTAL,
+    HENKA_CURSOR_RESIZE_VERTICAL
+} henka_cursor_shape;
+
 typedef struct henka_tool_window_desc
 {
     const char* title;
@@ -247,6 +254,7 @@ henka_result henka_engine_set_wireframe(henka_engine* engine, bool enabled);
 bool henka_engine_is_wireframe_enabled(const henka_engine* engine);
 henka_result henka_engine_set_mouse_capture(henka_engine* engine, bool enabled);
 bool henka_engine_is_mouse_captured(const henka_engine* engine);
+henka_result henka_engine_set_cursor(henka_engine* engine, henka_cursor_shape shape);
 double henka_engine_get_delta_time(const henka_engine* engine);
 double henka_engine_get_total_time(const henka_engine* engine);
 uint64_t henka_engine_get_frame_index(const henka_engine* engine);

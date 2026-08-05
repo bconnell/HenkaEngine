@@ -132,6 +132,9 @@ struct henka_platform
     bool main_window_focused;
     henka_window_id next_tool_window_id;
     henka_platform_tool_window tool_windows[HENKA_MAX_TOOL_WINDOWS];
+    SDL_Cursor* horizontal_resize_cursor;
+    SDL_Cursor* vertical_resize_cursor;
+    henka_cursor_shape cursor_shape;
     henka_window_event_route last_event_route;
     henka_window_id last_tool_window_id;
     bool last_tool_window_close_requested;
@@ -451,6 +454,13 @@ henka_result henka_platform_create(
     }
 
     platform->multi_window_available = true;
+    platform->horizontal_resize_cursor = SDL_CreateSystemCursor(SDL_SYSTEM_CURSOR_EW_RESIZE);
+    platform->vertical_resize_cursor = SDL_CreateSystemCursor(SDL_SYSTEM_CURSOR_NS_RESIZE);
+    platform->cursor_shape = HENKA_CURSOR_DEFAULT;
+    if (platform->horizontal_resize_cursor == NULL || platform->vertical_resize_cursor == NULL)
+    {
+        HENKA_LOG_WARN("system resize cursor creation failed; resize cursor feedback may use the default cursor");
+    }
     platform->main_window_focused =
         (SDL_GetWindowFlags(platform->window) &
             SDL_WINDOW_INPUT_FOCUS) != 0U;
@@ -487,6 +497,15 @@ void henka_platform_destroy(struct henka_platform* platform)
     if (platform->window != NULL)
     {
         SDL_DestroyWindow(platform->window);
+    }
+
+    if (platform->horizontal_resize_cursor != NULL)
+    {
+        SDL_DestroyCursor(platform->horizontal_resize_cursor);
+    }
+    if (platform->vertical_resize_cursor != NULL)
+    {
+        SDL_DestroyCursor(platform->vertical_resize_cursor);
     }
 
     henka_free(platform);
@@ -713,6 +732,32 @@ bool henka_platform_set_tool_window_position(
     slot->position_x = position_x;
     slot->position_y = position_y;
     return true;
+}
+
+henka_result henka_platform_set_cursor(struct henka_platform* platform, henka_cursor_shape shape)
+{
+    SDL_Cursor* cursor;
+
+    if (platform == NULL || shape < HENKA_CURSOR_DEFAULT || shape > HENKA_CURSOR_RESIZE_VERTICAL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    if (platform->cursor_shape == shape)
+    {
+        return HENKA_SUCCESS;
+    }
+
+    cursor = shape == HENKA_CURSOR_RESIZE_HORIZONTAL
+        ? platform->horizontal_resize_cursor
+        : shape == HENKA_CURSOR_RESIZE_VERTICAL
+            ? platform->vertical_resize_cursor
+            : SDL_GetDefaultCursor();
+    if (cursor == NULL || !SDL_SetCursor(cursor))
+    {
+        return HENKA_ERROR_PLATFORM;
+    }
+    platform->cursor_shape = shape;
+    return HENKA_SUCCESS;
 }
 
 void henka_platform_get_diagnostics(

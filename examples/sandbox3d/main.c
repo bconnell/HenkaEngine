@@ -647,6 +647,9 @@ static bool sandbox3d_begin_workspace_topology_divider_drag(
 static bool sandbox3d_get_active_workspace_divider_bounds(
     const sandbox3d_state* state,
     henka_ui_rect* out_bounds);
+static henka_cursor_shape sandbox3d_get_workspace_cursor_shape(
+    const sandbox3d_state* state,
+    henka_vec2 framebuffer_mouse);
 static void sandbox3d_dock_workspace_panel(
     sandbox3d_state* state,
     sandbox3d_workspace_panel_id panel_id,
@@ -6857,6 +6860,47 @@ static bool sandbox3d_get_active_workspace_divider_bounds(
     return false;
 }
 
+static henka_cursor_shape sandbox3d_get_workspace_cursor_shape(
+    const sandbox3d_state* state,
+    henka_vec2 framebuffer_mouse)
+{
+    const sandbox3d_workspace_topology_layout* topology_layouts[2];
+    size_t topology_layout_index;
+
+    if (state == NULL || state->ui == NULL || !henka_ui_is_visible(state->ui))
+    {
+        return HENKA_CURSOR_DEFAULT;
+    }
+
+    topology_layouts[0] = &state->frame_layout.left_topology;
+    topology_layouts[1] = &state->frame_layout.right_topology;
+    for (topology_layout_index = 0U; topology_layout_index < 2U; ++topology_layout_index)
+    {
+        const sandbox3d_workspace_topology_layout* topology = topology_layouts[topology_layout_index];
+        size_t divider_index;
+        for (divider_index = 0U; divider_index < topology->divider_count; ++divider_index)
+        {
+            if (henka_ui_rect_contains(topology->divider_hit_rects[divider_index], framebuffer_mouse))
+            {
+                const henka_ui_rect divider = topology->divider_visual_rects[divider_index];
+                return divider.width <= divider.height
+                    ? HENKA_CURSOR_RESIZE_HORIZONTAL
+                    : HENKA_CURSOR_RESIZE_VERTICAL;
+            }
+        }
+    }
+
+    if ((state->frame_layout.left_splitter.width > 0.0f &&
+         henka_ui_rect_contains(state->frame_layout.left_splitter, framebuffer_mouse)) ||
+        (state->frame_layout.right_splitter.width > 0.0f &&
+         henka_ui_rect_contains(state->frame_layout.right_splitter, framebuffer_mouse)))
+    {
+        return HENKA_CURSOR_RESIZE_HORIZONTAL;
+    }
+
+    return HENKA_CURSOR_DEFAULT;
+}
+
 static henka_ui_rect sandbox3d_get_panel_rect(
     const sandbox3d_workspace_layout* layout,
     sandbox3d_workspace_panel_id panel_id)
@@ -11884,6 +11928,7 @@ static void sandbox3d_update(henka_engine* engine, double delta_seconds, void* u
     sandbox3d_state* state;
 
     state = (sandbox3d_state*)user_data;
+    memset(&engine_diagnostics, 0, sizeof(engine_diagnostics));
     if (henka_engine_get_diagnostics(engine, &engine_diagnostics) == HENKA_SUCCESS &&
         !engine_diagnostics.main_window_focused &&
         (state->workspace.model.active_drag_panel != SANDBOX3D_WORKSPACE_PANEL_NONE ||
@@ -12148,6 +12193,13 @@ static void sandbox3d_update(henka_engine* engine, double delta_seconds, void* u
             henka_camera_set_aspect_ratio(&state->camera, henka_viewport_get_aspect_ratio(layout.scene_viewport));
         }
     }
+
+    (void)henka_engine_set_cursor(
+        engine,
+        engine_diagnostics.main_window_focused &&
+        ui_visible && !henka_engine_is_mouse_captured(engine) && !transform_input_active
+            ? sandbox3d_get_workspace_cursor_shape(state, framebuffer_mouse_position)
+            : HENKA_CURSOR_DEFAULT);
 
     if (!ui_visible && henka_engine_is_mouse_captured(engine))
     {

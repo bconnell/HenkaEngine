@@ -1415,6 +1415,15 @@ bool henka_engine_is_mouse_captured(const henka_engine* engine)
     return engine->renderer->mouse_captured;
 }
 
+henka_result henka_engine_set_cursor(henka_engine* engine, henka_cursor_shape shape)
+{
+    if (engine == NULL || shape < HENKA_CURSOR_DEFAULT || shape > HENKA_CURSOR_RESIZE_VERTICAL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    return henka_platform_set_cursor(engine->platform, shape);
+}
+
 double henka_engine_get_delta_time(const henka_engine* engine)
 {
     if (engine == NULL)

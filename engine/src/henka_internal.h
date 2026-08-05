@@ -444,6 +444,7 @@ henka_result henka_platform_set_vsync(struct henka_platform* platform, bool enab
 bool henka_platform_get_framebuffer_size(struct henka_platform* platform, int* out_width, int* out_height);
 bool henka_platform_get_window_size(struct henka_platform* platform, int* out_width, int* out_height);
 henka_result henka_platform_set_mouse_capture(struct henka_platform* platform, bool enabled);
+henka_result henka_platform_set_cursor(struct henka_platform* platform, henka_cursor_shape shape);
 char* henka_platform_get_base_path_copy(void);
 henka_result henka_platform_create_directory_tree(const char* path);
 
