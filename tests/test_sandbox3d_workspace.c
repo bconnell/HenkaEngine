@@ -111,6 +111,14 @@ void henka_test_sandbox3d_workspace(void)
         SANDBOX3D_WORKSPACE_PANEL_SCENE_OBJECTS));
     HENKA_TEST_ASSERT(sandbox3d_workspace_get_topology_section_tab_count(
         &tab_model, SANDBOX3D_WORKSPACE_PANEL_CONTROLS) == 2U);
+    HENKA_TEST_ASSERT(sandbox3d_workspace_cycle_topology_section_tab(
+        &tab_model, SANDBOX3D_WORKSPACE_PANEL_CONTROLS, 1));
+    HENKA_TEST_ASSERT(sandbox3d_workspace_get_topology_section_active_tab(
+        &tab_model, SANDBOX3D_WORKSPACE_PANEL_CONTROLS) == SANDBOX3D_WORKSPACE_PANEL_SCENE_OBJECTS);
+    HENKA_TEST_ASSERT(sandbox3d_workspace_cycle_topology_section_tab(
+        &tab_model, SANDBOX3D_WORKSPACE_PANEL_CONTROLS, 1));
+    HENKA_TEST_ASSERT(sandbox3d_workspace_get_topology_section_active_tab(
+        &tab_model, SANDBOX3D_WORKSPACE_PANEL_CONTROLS) == SANDBOX3D_WORKSPACE_PANEL_CONTROLS);
     HENKA_TEST_ASSERT(sandbox3d_workspace_close_active_tab(
         &tab_model, SANDBOX3D_WORKSPACE_PANEL_CONTROLS));
     HENKA_TEST_ASSERT(sandbox3d_workspace_get_topology_section_tab_count(

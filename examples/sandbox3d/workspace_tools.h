@@ -350,6 +350,10 @@ bool sandbox3d_workspace_set_topology_section_active_tab(
     sandbox3d_workspace_model* model,
     sandbox3d_workspace_panel_id section_id,
     sandbox3d_workspace_panel_id tab_id);
+bool sandbox3d_workspace_cycle_topology_section_tab(
+    sandbox3d_workspace_model* model,
+    sandbox3d_workspace_panel_id section_id,
+    int direction);
 bool sandbox3d_workspace_close_section(
     sandbox3d_workspace_model* model,
     sandbox3d_workspace_panel_id section_id);

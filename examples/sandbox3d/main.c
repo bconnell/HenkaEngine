@@ -5240,6 +5240,24 @@ static bool sandbox3d_handle_workspace_input(
         }
     }
 
+    if (top_panel != SANDBOX3D_WORKSPACE_PANEL_NONE && top_panel_is_chrome)
+    {
+        const int direction = henka_input_was_key_pressed(engine, HENKA_KEY_LEFT)
+            ? -1
+            : henka_input_was_key_pressed(engine, HENKA_KEY_RIGHT) ? 1 : 0;
+        if (direction != 0 && sandbox3d_workspace_cycle_topology_section_tab(
+                &state->workspace.model,
+                top_panel,
+                direction))
+        {
+            henka_input_consume_key_press(
+                engine,
+                direction < 0 ? HENKA_KEY_LEFT : HENKA_KEY_RIGHT);
+            sandbox3d_set_status(state, false, "Workspace tab changed from the keyboard.");
+            return true;
+        }
+    }
+
     if (right_pressed)
     {
         if (top_panel != SANDBOX3D_WORKSPACE_PANEL_NONE && top_panel_is_chrome)

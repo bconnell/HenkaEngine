@@ -88,6 +88,7 @@ The sandbox now uses a movable workspace layout with a more neutral graphite and
 - idle hover hints near dividers, dock splitters, panel headers, and floating resize handles; hints are suppressed while menus or interaction transactions own the pointer
 - bounded divider drag transactions with minimum section extents, a restrained close-threshold preview, transactional drag-to-close for direct leaf children, and rollback support
 - tab-strip drag reordering within a merged section, with a live insertion marker, click-preserving selection, stable active-tab identity, and transactional cancellation
+- Left/Right keyboard cycling for a hovered merged tab strip, with wraparound and no viewport ownership when the header is not hovered
 
 Docked panels stay outside the scene. While dragging a docked panel, valid left and right dock targets show a thin outline over the final stack slot. Releasing on an outline redocks there, including across the workspace. Releasing away from the outlines opens a separate native tool window, so the detached panel can move outside the main sandbox frame without clipping. Detached production panels render their matching controls and route their release-confirm input in the native surface; a compact return bar provides Dock L, Dock R, and Home actions. Closing that native window returns the panel to its last valid dock. OS-title-bar drag-back docking, saved detached placement, and detachable Scene View remain future work. `Reset Layout` closes detached windows and restores the default workspace.
 
