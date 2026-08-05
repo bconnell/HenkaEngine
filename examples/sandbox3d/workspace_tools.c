@@ -1349,6 +1349,86 @@ bool sandbox3d_workspace_topology_section_has_tab(
     return false;
 }
 
+static void sandbox3d_workspace_collect_topology_dock_sections(
+    const sandbox3d_workspace_model* model,
+    uint16_t node_index,
+    sandbox3d_workspace_dock_zone dock_zone,
+    sandbox3d_workspace_panel_id* out_sections,
+    size_t* in_out_count)
+{
+    const sandbox3d_workspace_topology_node* node;
+
+    if (model == NULL || out_sections == NULL || in_out_count == NULL ||
+        *in_out_count >= SANDBOX3D_WORKSPACE_PANEL_COUNT ||
+        node_index >= SANDBOX3D_WORKSPACE_TOPOLOGY_MAX_NODES)
+    {
+        return;
+    }
+    node = sandbox3d_workspace_topology_get_node_const(model, node_index);
+    if (node == NULL)
+    {
+        return;
+    }
+    if (node->type == SANDBOX3D_WORKSPACE_TOPOLOGY_NODE_SECTION)
+    {
+        const sandbox3d_workspace_panel* panel =
+            sandbox3d_workspace_get_panel_const(model, node->data.section.section_id);
+        if (panel != NULL && panel->dock == dock_zone)
+        {
+            out_sections[*in_out_count] = node->data.section.section_id;
+            *in_out_count += 1U;
+        }
+        return;
+    }
+    if (node->type != SANDBOX3D_WORKSPACE_TOPOLOGY_NODE_SPLIT)
+    {
+        return;
+    }
+    sandbox3d_workspace_collect_topology_dock_sections(
+        model, node->data.split.first_child, dock_zone, out_sections, in_out_count);
+    sandbox3d_workspace_collect_topology_dock_sections(
+        model, node->data.split.second_child, dock_zone, out_sections, in_out_count);
+}
+
+size_t sandbox3d_workspace_get_topology_dock_section_count(
+    const sandbox3d_workspace_model* model,
+    sandbox3d_workspace_dock_zone dock_zone)
+{
+    sandbox3d_workspace_panel_id sections[SANDBOX3D_WORKSPACE_PANEL_COUNT];
+    size_t count = 0U;
+
+    if (model == NULL ||
+        (dock_zone != SANDBOX3D_WORKSPACE_DOCK_LEFT &&
+         dock_zone != SANDBOX3D_WORKSPACE_DOCK_RIGHT) ||
+        !sandbox3d_workspace_topology_is_valid(model))
+    {
+        return 0U;
+    }
+    sandbox3d_workspace_collect_topology_dock_sections(
+        model, model->topology_root, dock_zone, sections, &count);
+    return count;
+}
+
+sandbox3d_workspace_panel_id sandbox3d_workspace_get_topology_dock_section_at(
+    const sandbox3d_workspace_model* model,
+    sandbox3d_workspace_dock_zone dock_zone,
+    size_t index)
+{
+    sandbox3d_workspace_panel_id sections[SANDBOX3D_WORKSPACE_PANEL_COUNT];
+    size_t count = 0U;
+
+    if (model == NULL ||
+        (dock_zone != SANDBOX3D_WORKSPACE_DOCK_LEFT &&
+         dock_zone != SANDBOX3D_WORKSPACE_DOCK_RIGHT) ||
+        !sandbox3d_workspace_topology_is_valid(model))
+    {
+        return SANDBOX3D_WORKSPACE_PANEL_NONE;
+    }
+    sandbox3d_workspace_collect_topology_dock_sections(
+        model, model->topology_root, dock_zone, sections, &count);
+    return index < count ? sections[index] : SANDBOX3D_WORKSPACE_PANEL_NONE;
+}
+
 bool sandbox3d_workspace_section_is_closed(
     const sandbox3d_workspace_model* model,
     sandbox3d_workspace_panel_id section_id)
@@ -1511,6 +1591,23 @@ bool sandbox3d_workspace_split_section(
         return false;
     }
     sandbox3d_workspace_begin_topology_transaction(model);
+    {
+        sandbox3d_workspace_panel* new_panel = sandbox3d_workspace_get_panel(model, new_section);
+        const sandbox3d_workspace_panel* target_panel =
+            sandbox3d_workspace_get_panel_const(model, target_section);
+        if (new_panel == NULL || target_panel == NULL ||
+            (target_panel->dock != SANDBOX3D_WORKSPACE_DOCK_LEFT &&
+             target_panel->dock != SANDBOX3D_WORKSPACE_DOCK_RIGHT))
+        {
+            sandbox3d_workspace_rollback_topology_transaction(model);
+            return false;
+        }
+        sandbox3d_workspace_remove_panel_from_docks(model, new_section);
+        new_panel->dock = target_panel->dock;
+        new_panel->last_docked_zone = target_panel->dock;
+        new_panel->detached_window_id = 0U;
+        sandbox3d_workspace_append_panel_to_dock(model, target_panel->dock, new_section);
+    }
     model->topology_nodes[target_leaf_index] = target_leaf;
     model->topology_nodes[target_leaf_index].parent = (uint16_t)target_index;
     sandbox3d_workspace_topology_make_section(

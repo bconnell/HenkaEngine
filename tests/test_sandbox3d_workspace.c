@@ -22,6 +22,14 @@ void henka_test_sandbox3d_workspace(void)
     HENKA_TEST_ASSERT(topology_root->data.split.first_child != topology_root->data.split.second_child);
     HENKA_TEST_ASSERT(sandbox3d_workspace_topology_section_has_tab(
         &model, SANDBOX3D_WORKSPACE_PANEL_CONTROLS, SANDBOX3D_WORKSPACE_PANEL_CONTROLS));
+    HENKA_TEST_ASSERT(sandbox3d_workspace_get_topology_dock_section_count(
+        &model, SANDBOX3D_WORKSPACE_DOCK_LEFT) == 2U);
+    HENKA_TEST_ASSERT(sandbox3d_workspace_get_topology_dock_section_at(
+        &model, SANDBOX3D_WORKSPACE_DOCK_LEFT, 0U) == SANDBOX3D_WORKSPACE_PANEL_CONTROLS);
+    HENKA_TEST_ASSERT(sandbox3d_workspace_get_topology_dock_section_at(
+        &model, SANDBOX3D_WORKSPACE_DOCK_LEFT, 1U) == SANDBOX3D_WORKSPACE_PANEL_SCENE_OBJECTS);
+    HENKA_TEST_ASSERT(sandbox3d_workspace_get_topology_dock_section_count(
+        &model, SANDBOX3D_WORKSPACE_DOCK_RIGHT) == 2U);
     sandbox3d_workspace_build_topology_layout(
         &model,
         (henka_ui_rect){0.0f, 0.0f, 1280.0f, 720.0f},
@@ -64,6 +72,10 @@ void henka_test_sandbox3d_workspace(void)
         SANDBOX3D_WORKSPACE_PANEL_UTILITY));
     HENKA_TEST_ASSERT(!sandbox3d_workspace_section_is_closed(&model, SANDBOX3D_WORKSPACE_PANEL_UTILITY));
     HENKA_TEST_ASSERT(sandbox3d_workspace_topology_is_valid(&model));
+    HENKA_TEST_ASSERT(sandbox3d_workspace_get_topology_dock_section_count(
+        &model, SANDBOX3D_WORKSPACE_DOCK_LEFT) == 3U);
+    HENKA_TEST_ASSERT(sandbox3d_workspace_get_topology_dock_section_at(
+        &model, SANDBOX3D_WORKSPACE_DOCK_LEFT, 1U) == SANDBOX3D_WORKSPACE_PANEL_UTILITY);
     HENKA_TEST_ASSERT(!sandbox3d_workspace_split_section(
         &model,
         SANDBOX3D_WORKSPACE_PANEL_CONTROLS,
@@ -110,6 +122,12 @@ void henka_test_sandbox3d_workspace(void)
         &model,
         SANDBOX3D_WORKSPACE_PANEL_CONTROLS,
         SANDBOX3D_WORKSPACE_PANEL_SCENE_OBJECTS));
+    HENKA_TEST_ASSERT(sandbox3d_workspace_get_topology_dock_section_count(
+        &model, SANDBOX3D_WORKSPACE_DOCK_LEFT) == 2U);
+    HENKA_TEST_ASSERT(sandbox3d_workspace_get_topology_dock_section_at(
+        &model, SANDBOX3D_WORKSPACE_DOCK_LEFT, 0U) == SANDBOX3D_WORKSPACE_PANEL_CONTROLS);
+    HENKA_TEST_ASSERT(sandbox3d_workspace_get_topology_dock_section_at(
+        &model, SANDBOX3D_WORKSPACE_DOCK_LEFT, 2U) == SANDBOX3D_WORKSPACE_PANEL_NONE);
     sandbox3d_workspace_set_maximized_section(&model, SANDBOX3D_WORKSPACE_PANEL_CONTROLS);
     sandbox3d_workspace_build_topology_layout(
         &model,

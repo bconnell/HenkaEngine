@@ -6084,17 +6084,28 @@ static void sandbox3d_assign_workspace_dock_stack(
     size_t panel_count;
     float panel_height;
     float y;
+    bool topology_valid;
+    size_t topology_count;
+    size_t legacy_count;
 
     if (state == NULL || layout == NULL || dock_bounds.width <= 0.0f || dock_bounds.height <= 0.0f)
     {
         return;
     }
 
+    topology_valid = sandbox3d_workspace_topology_is_valid(&state->workspace.model);
+    topology_count = topology_valid
+        ? sandbox3d_workspace_get_topology_dock_section_count(&state->workspace.model, dock_zone)
+        : 0U;
+    legacy_count = sandbox3d_workspace_get_dock_panel_count(&state->workspace.model, dock_zone);
+
     panel_count = 0U;
-    for (index = 0U; index < sandbox3d_workspace_get_dock_panel_count(&state->workspace.model, dock_zone); ++index)
+    for (index = 0U; index < (topology_valid ? topology_count : legacy_count); ++index)
     {
         const sandbox3d_workspace_panel_id panel_id =
-            sandbox3d_workspace_get_dock_panel_at(&state->workspace.model, dock_zone, index);
+            topology_valid
+                ? sandbox3d_workspace_get_topology_dock_section_at(&state->workspace.model, dock_zone, index)
+                : sandbox3d_workspace_get_dock_panel_at(&state->workspace.model, dock_zone, index);
         const sandbox3d_workspace_panel* panel = sandbox3d_workspace_get_panel_const(&state->workspace.model, panel_id);
         if (panel != NULL && panel->dock == dock_zone && sandbox3d_workspace_panel_visible(state, panel_id))
         {
@@ -6108,10 +6119,12 @@ static void sandbox3d_assign_workspace_dock_stack(
 
     panel_height = (dock_bounds.height - g_ui_panel_gap * (float)(panel_count - 1U)) / (float)panel_count;
     y = dock_bounds.y;
-    for (index = 0U; index < sandbox3d_workspace_get_dock_panel_count(&state->workspace.model, dock_zone); ++index)
+    for (index = 0U; index < (topology_valid ? topology_count : legacy_count); ++index)
     {
         const sandbox3d_workspace_panel_id panel_id =
-            sandbox3d_workspace_get_dock_panel_at(&state->workspace.model, dock_zone, index);
+            topology_valid
+                ? sandbox3d_workspace_get_topology_dock_section_at(&state->workspace.model, dock_zone, index)
+                : sandbox3d_workspace_get_dock_panel_at(&state->workspace.model, dock_zone, index);
         const sandbox3d_workspace_panel* panel = sandbox3d_workspace_get_panel_const(&state->workspace.model, panel_id);
         henka_ui_rect* panel_rect;
         if (panel == NULL || panel->dock != dock_zone || !sandbox3d_workspace_panel_visible(state, panel_id))
