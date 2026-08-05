@@ -41,6 +41,11 @@ void henka_test_sandbox3d_workspace(void)
     HENKA_TEST_ASSERT(sandbox3d_workspace_apply_custom_layout(&model));
     HENKA_TEST_ASSERT(sandbox3d_workspace_get_named_layout(&model) == SANDBOX3D_WORKSPACE_LAYOUT_CUSTOM);
     HENKA_TEST_ASSERT(sandbox3d_workspace_apply_named_layout(&model, SANDBOX3D_WORKSPACE_LAYOUT_MODELING));
+    HENKA_TEST_ASSERT(sandbox3d_workspace_can_undo(&model));
+    HENKA_TEST_ASSERT(sandbox3d_workspace_undo(&model));
+    HENKA_TEST_ASSERT(sandbox3d_workspace_get_named_layout(&model) == SANDBOX3D_WORKSPACE_LAYOUT_CUSTOM);
+    HENKA_TEST_ASSERT(sandbox3d_workspace_redo(&model));
+    HENKA_TEST_ASSERT(sandbox3d_workspace_get_named_layout(&model) == SANDBOX3D_WORKSPACE_LAYOUT_MODELING);
     HENKA_TEST_ASSERT(sandbox3d_workspace_get_panel_const(
         &model, SANDBOX3D_WORKSPACE_PANEL_SCENE_OBJECTS)->dock == SANDBOX3D_WORKSPACE_DOCK_LEFT);
     HENKA_TEST_ASSERT(sandbox3d_workspace_get_panel_const(
@@ -55,8 +60,10 @@ void henka_test_sandbox3d_workspace(void)
         model.topology_root)->data.split.ratio;
     HENKA_TEST_ASSERT(history_ratio > 0.50f);
     HENKA_TEST_ASSERT(sandbox3d_workspace_get_named_layout(&model) == SANDBOX3D_WORKSPACE_LAYOUT_CUSTOM);
-    sandbox3d_workspace_model_reset(&model);
+    sandbox3d_workspace_reset_layout(&model);
     HENKA_TEST_ASSERT(sandbox3d_workspace_topology_is_valid(&model));
+    HENKA_TEST_ASSERT(sandbox3d_workspace_has_custom_layout(&model));
+    HENKA_TEST_ASSERT(strcmp(sandbox3d_workspace_custom_layout_name(&model), "Studio") == 0);
     initial_ratio = sandbox3d_workspace_topology_get_node_const(
         &model, model.topology_root)->data.split.ratio;
     sandbox3d_workspace_begin_divider_drag(&model, model.topology_root, (henka_vec2){640.0f, 360.0f});

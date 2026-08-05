@@ -859,6 +859,8 @@ bool sandbox3d_workspace_apply_named_layout(
         return false;
     }
 
+    sandbox3d_workspace_begin_topology_transaction(model);
+    model->topology_transaction_result_named_layout = layout;
     memcpy(model->panels, candidate.panels, sizeof(model->panels));
     memcpy(model->left_dock_panels, candidate.left_dock_panels, sizeof(model->left_dock_panels));
     memcpy(model->right_dock_panels, candidate.right_dock_panels, sizeof(model->right_dock_panels));
@@ -870,8 +872,7 @@ bool sandbox3d_workspace_apply_named_layout(
     model->maximized_section = candidate.maximized_section;
     model->closed_snapshot_valid = candidate.closed_snapshot_valid;
     model->named_layout = candidate.named_layout;
-    model->topology_transaction_active = false;
-    model->topology_transaction_root = UINT16_MAX;
+    sandbox3d_workspace_commit_topology_transaction(model);
     model->active_divider_node = UINT16_MAX;
     model->divider_close_preview = false;
     model->divider_close_section = SANDBOX3D_WORKSPACE_PANEL_NONE;
@@ -1003,6 +1004,7 @@ bool sandbox3d_workspace_apply_custom_layout(
         return false;
     }
 
+    sandbox3d_workspace_begin_topology_transaction(model);
     memcpy(model->panels, candidate.panels, sizeof(model->panels));
     memcpy(model->left_dock_panels, candidate.left_dock_panels, sizeof(model->left_dock_panels));
     memcpy(model->right_dock_panels, candidate.right_dock_panels, sizeof(model->right_dock_panels));
@@ -1016,8 +1018,7 @@ bool sandbox3d_workspace_apply_custom_layout(
     model->right_dock_width = candidate.right_dock_width;
     model->ui_scale = candidate.ui_scale;
     model->named_layout = candidate.named_layout;
-    model->topology_transaction_active = false;
-    model->topology_transaction_root = UINT16_MAX;
+    sandbox3d_workspace_commit_topology_transaction(model);
     model->active_divider_node = UINT16_MAX;
     model->divider_close_preview = false;
     model->divider_close_section = SANDBOX3D_WORKSPACE_PANEL_NONE;
@@ -1116,6 +1117,60 @@ void sandbox3d_workspace_model_reset(sandbox3d_workspace_model* model)
     model->next_z_order = 5U;
     sandbox3d_workspace_topology_initialize(model);
     snprintf(model->last_action, sizeof(model->last_action), "Layout reset");
+}
+
+void sandbox3d_workspace_reset_layout(sandbox3d_workspace_model* model)
+{
+    bool saved_custom_layout_valid;
+    char saved_custom_layout_name[SANDBOX3D_WORKSPACE_CUSTOM_LAYOUT_NAME_MAX];
+    sandbox3d_workspace_topology_node saved_custom_layout_nodes[SANDBOX3D_WORKSPACE_TOPOLOGY_MAX_NODES];
+    uint16_t saved_custom_layout_root;
+    uint32_t saved_custom_layout_closed_sections_mask;
+    sandbox3d_workspace_panel_id saved_custom_layout_maximized_section;
+    sandbox3d_workspace_dock_zone saved_custom_layout_docks[SANDBOX3D_WORKSPACE_PANEL_COUNT];
+    sandbox3d_workspace_dock_zone saved_custom_layout_last_docked_zones[SANDBOX3D_WORKSPACE_PANEL_COUNT];
+    float saved_custom_layout_left_dock_width;
+    float saved_custom_layout_right_dock_width;
+    float saved_custom_layout_ui_scale;
+
+    if (model == NULL)
+    {
+        return;
+    }
+    saved_custom_layout_valid = model->custom_layout_valid;
+    memcpy(saved_custom_layout_name, model->custom_layout_name, sizeof(saved_custom_layout_name));
+    memcpy(saved_custom_layout_nodes, model->custom_layout_nodes, sizeof(saved_custom_layout_nodes));
+    saved_custom_layout_root = model->custom_layout_root;
+    saved_custom_layout_closed_sections_mask = model->custom_layout_closed_sections_mask;
+    saved_custom_layout_maximized_section = model->custom_layout_maximized_section;
+    memcpy(saved_custom_layout_docks, model->custom_layout_docks, sizeof(saved_custom_layout_docks));
+    memcpy(
+        saved_custom_layout_last_docked_zones,
+        model->custom_layout_last_docked_zones,
+        sizeof(saved_custom_layout_last_docked_zones));
+    saved_custom_layout_left_dock_width = model->custom_layout_left_dock_width;
+    saved_custom_layout_right_dock_width = model->custom_layout_right_dock_width;
+    saved_custom_layout_ui_scale = model->custom_layout_ui_scale;
+
+    sandbox3d_workspace_model_reset(model);
+    if (!saved_custom_layout_valid)
+    {
+        return;
+    }
+    model->custom_layout_valid = true;
+    memcpy(model->custom_layout_name, saved_custom_layout_name, sizeof(model->custom_layout_name));
+    memcpy(model->custom_layout_nodes, saved_custom_layout_nodes, sizeof(model->custom_layout_nodes));
+    model->custom_layout_root = saved_custom_layout_root;
+    model->custom_layout_closed_sections_mask = saved_custom_layout_closed_sections_mask;
+    model->custom_layout_maximized_section = saved_custom_layout_maximized_section;
+    memcpy(model->custom_layout_docks, saved_custom_layout_docks, sizeof(model->custom_layout_docks));
+    memcpy(
+        model->custom_layout_last_docked_zones,
+        saved_custom_layout_last_docked_zones,
+        sizeof(model->custom_layout_last_docked_zones));
+    model->custom_layout_left_dock_width = saved_custom_layout_left_dock_width;
+    model->custom_layout_right_dock_width = saved_custom_layout_right_dock_width;
+    model->custom_layout_ui_scale = saved_custom_layout_ui_scale;
 }
 
 bool sandbox3d_workspace_should_start_panels_visible(bool settings_file_found)
@@ -1834,6 +1889,7 @@ void sandbox3d_workspace_begin_topology_transaction(sandbox3d_workspace_model* m
     sandbox3d_workspace_capture_history_state(model, &model->topology_transaction_state);
     model->topology_transaction_root = model->topology_root;
     model->topology_transaction_named_layout = model->named_layout;
+    model->topology_transaction_result_named_layout = SANDBOX3D_WORKSPACE_LAYOUT_CUSTOM;
     model->topology_transaction_active = true;
 }
 
@@ -1865,7 +1921,7 @@ void sandbox3d_workspace_commit_topology_transaction(sandbox3d_workspace_model* 
     }
     model->topology_transaction_active = false;
     model->topology_transaction_root = UINT16_MAX;
-    model->named_layout = SANDBOX3D_WORKSPACE_LAYOUT_CUSTOM;
+    model->named_layout = model->topology_transaction_result_named_layout;
 }
 
 void sandbox3d_workspace_rollback_topology_transaction(sandbox3d_workspace_model* model)
@@ -1899,6 +1955,7 @@ void sandbox3d_workspace_rollback_topology_transaction(sandbox3d_workspace_model
     model->closed_snapshot_mask = model->topology_transaction_state.closed_snapshot_mask;
     model->topology_transaction_active = false;
     model->topology_transaction_root = UINT16_MAX;
+    model->topology_transaction_result_named_layout = SANDBOX3D_WORKSPACE_LAYOUT_CUSTOM;
     model->active_divider_node = UINT16_MAX;
     model->active_divider_dock = SANDBOX3D_WORKSPACE_DOCK_FLOATING;
 }

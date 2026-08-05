@@ -188,6 +188,7 @@ typedef struct sandbox3d_workspace_model
     uint16_t topology_transaction_root;
     sandbox3d_workspace_named_layout named_layout;
     sandbox3d_workspace_named_layout topology_transaction_named_layout;
+    sandbox3d_workspace_named_layout topology_transaction_result_named_layout;
     sandbox3d_workspace_layout_history_state topology_transaction_state;
     sandbox3d_workspace_layout_history_state undo_history[SANDBOX3D_WORKSPACE_LAYOUT_HISTORY_MAX];
     sandbox3d_workspace_layout_history_state undo_after_history[SANDBOX3D_WORKSPACE_LAYOUT_HISTORY_MAX];
@@ -229,6 +230,7 @@ typedef struct sandbox3d_workspace_model
 } sandbox3d_workspace_model;
 
 void sandbox3d_workspace_model_reset(sandbox3d_workspace_model* model);
+void sandbox3d_workspace_reset_layout(sandbox3d_workspace_model* model);
 void sandbox3d_workspace_set_ui_scale(
     sandbox3d_workspace_model* model,
     float ui_scale);
