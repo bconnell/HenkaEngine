@@ -405,7 +405,7 @@ static const char* g_setting_key_active_utility = "ui.active_utility";
 static const char* g_setting_key_workspace_topology_version = "ui.workspace.topology.version";
 static const char* g_setting_key_workspace_left_dock_width = "ui.workspace.left_dock_width";
 static const char* g_setting_key_workspace_right_dock_width = "ui.workspace.right_dock_width";
-static const int g_workspace_topology_settings_version = 1;
+static const int g_workspace_topology_settings_version = 2;
 
 static float sandbox3d_get_mouse_sensitivity(const sandbox3d_state* state);
 static void sandbox3d_set_status(sandbox3d_state* state, bool warning, const char* message);
@@ -4194,14 +4194,16 @@ static bool sandbox3d_load_workspace_topology_settings(
     char key[96];
     size_t index;
     int value;
+    int stored_version;
 
     if (model == NULL || settings == NULL ||
         !henka_settings_has_key(settings, g_setting_key_workspace_topology_version))
     {
         return true;
     }
-    if (henka_settings_get_int(settings, g_setting_key_workspace_topology_version, 0) !=
-        g_workspace_topology_settings_version)
+    stored_version = henka_settings_get_int(
+        settings, g_setting_key_workspace_topology_version, 0);
+    if (stored_version < 1 || stored_version > g_workspace_topology_settings_version)
     {
         return false;
     }
@@ -4327,6 +4329,10 @@ static bool sandbox3d_load_workspace_topology_settings(
     candidate.drag_start_dock = SANDBOX3D_WORKSPACE_DOCK_FLOATING;
     candidate.tab_drop_target = SANDBOX3D_WORKSPACE_PANEL_NONE;
     candidate.drag_origin_valid = false;
+    candidate.active_tab_drag_section = SANDBOX3D_WORKSPACE_PANEL_NONE;
+    candidate.active_tab_drag_tab = SANDBOX3D_WORKSPACE_PANEL_NONE;
+    candidate.active_tab_drag_target_index = 0U;
+    candidate.tab_drag_active = false;
     if (!sandbox3d_workspace_topology_is_valid(&candidate))
     {
         return false;
@@ -4335,7 +4341,12 @@ static bool sandbox3d_load_workspace_topology_settings(
     model->topology_root = candidate.topology_root;
     model->closed_sections_mask = candidate.closed_sections_mask;
     model->maximized_section = candidate.maximized_section;
-    snprintf(model->last_action, sizeof(model->last_action), "Saved workspace topology restored");
+    snprintf(
+        model->last_action,
+        sizeof(model->last_action),
+        stored_version < g_workspace_topology_settings_version
+            ? "Saved workspace topology migrated"
+            : "Saved workspace topology restored");
     return true;
 }
 
