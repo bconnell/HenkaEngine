@@ -8194,11 +8194,6 @@ static void sandbox3d_draw_workspace_context_menu(
                 button_rect,
                 (henka_vec4){0.16f, 0.28f, 0.42f, 0.72f});
         }
-        if (command_index == SANDBOX3D_WORKSPACE_CONTEXT_CLOSE_SECTION &&
-            sandbox3d_workspace_get_topology_section_tab_count(model, model->context_menu_section) > 1U)
-        {
-            command_label = "Close active tab";
-        }
         if (henka_ui_button(
                 state->ui,
                 button_id,
