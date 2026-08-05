@@ -1429,6 +1429,130 @@ sandbox3d_workspace_panel_id sandbox3d_workspace_get_topology_dock_section_at(
     return index < count ? sections[index] : SANDBOX3D_WORKSPACE_PANEL_NONE;
 }
 
+sandbox3d_workspace_panel_id sandbox3d_workspace_get_topology_section_for_tab(
+    const sandbox3d_workspace_model* model,
+    sandbox3d_workspace_panel_id tab_id)
+{
+    size_t node_index;
+
+    if (model == NULL || tab_id < 0 || tab_id >= SANDBOX3D_WORKSPACE_PANEL_COUNT ||
+        !sandbox3d_workspace_topology_is_valid(model))
+    {
+        return SANDBOX3D_WORKSPACE_PANEL_NONE;
+    }
+    for (node_index = 0U; node_index < SANDBOX3D_WORKSPACE_TOPOLOGY_MAX_NODES; ++node_index)
+    {
+        const sandbox3d_workspace_topology_node* node =
+            sandbox3d_workspace_topology_get_node_const(model, (uint16_t)node_index);
+        size_t tab_index;
+        if (node == NULL || node->type != SANDBOX3D_WORKSPACE_TOPOLOGY_NODE_SECTION)
+        {
+            continue;
+        }
+        for (tab_index = 0U; tab_index < node->data.section.tab_count; ++tab_index)
+        {
+            if (node->data.section.tabs[tab_index] == tab_id)
+            {
+                return node->data.section.section_id;
+            }
+        }
+    }
+    return SANDBOX3D_WORKSPACE_PANEL_NONE;
+}
+
+size_t sandbox3d_workspace_get_topology_section_tab_count(
+    const sandbox3d_workspace_model* model,
+    sandbox3d_workspace_panel_id section_id)
+{
+    const int node_index = sandbox3d_workspace_find_section_node(model, section_id);
+    const sandbox3d_workspace_topology_node* node;
+
+    if (node_index < 0 || !sandbox3d_workspace_topology_is_valid(model))
+    {
+        return 0U;
+    }
+    node = sandbox3d_workspace_topology_get_node_const(model, (uint16_t)node_index);
+    return node != NULL && node->type == SANDBOX3D_WORKSPACE_TOPOLOGY_NODE_SECTION
+        ? node->data.section.tab_count
+        : 0U;
+}
+
+sandbox3d_workspace_panel_id sandbox3d_workspace_get_topology_section_tab_at(
+    const sandbox3d_workspace_model* model,
+    sandbox3d_workspace_panel_id section_id,
+    size_t index)
+{
+    const int node_index = sandbox3d_workspace_find_section_node(model, section_id);
+    const sandbox3d_workspace_topology_node* node;
+
+    if (node_index < 0 || !sandbox3d_workspace_topology_is_valid(model))
+    {
+        return SANDBOX3D_WORKSPACE_PANEL_NONE;
+    }
+    node = sandbox3d_workspace_topology_get_node_const(model, (uint16_t)node_index);
+    if (node == NULL || node->type != SANDBOX3D_WORKSPACE_TOPOLOGY_NODE_SECTION ||
+        index >= node->data.section.tab_count)
+    {
+        return SANDBOX3D_WORKSPACE_PANEL_NONE;
+    }
+    return node->data.section.tabs[index];
+}
+
+sandbox3d_workspace_panel_id sandbox3d_workspace_get_topology_section_active_tab(
+    const sandbox3d_workspace_model* model,
+    sandbox3d_workspace_panel_id section_id)
+{
+    const int node_index = sandbox3d_workspace_find_section_node(model, section_id);
+    const sandbox3d_workspace_topology_node* node;
+
+    if (node_index < 0 || !sandbox3d_workspace_topology_is_valid(model))
+    {
+        return SANDBOX3D_WORKSPACE_PANEL_NONE;
+    }
+    node = sandbox3d_workspace_topology_get_node_const(model, (uint16_t)node_index);
+    if (node == NULL || node->type != SANDBOX3D_WORKSPACE_TOPOLOGY_NODE_SECTION ||
+        node->data.section.active_tab >= node->data.section.tab_count)
+    {
+        return SANDBOX3D_WORKSPACE_PANEL_NONE;
+    }
+    return node->data.section.tabs[node->data.section.active_tab];
+}
+
+bool sandbox3d_workspace_set_topology_section_active_tab(
+    sandbox3d_workspace_model* model,
+    sandbox3d_workspace_panel_id section_id,
+    sandbox3d_workspace_panel_id tab_id)
+{
+    const int node_index = sandbox3d_workspace_find_section_node(model, section_id);
+    sandbox3d_workspace_topology_node* node;
+    size_t tab_index;
+
+    if (node_index < 0 || model == NULL ||
+        !sandbox3d_workspace_topology_is_valid(model))
+    {
+        return false;
+    }
+    node = sandbox3d_workspace_topology_get_node(model, (uint16_t)node_index);
+    if (node == NULL || node->type != SANDBOX3D_WORKSPACE_TOPOLOGY_NODE_SECTION)
+    {
+        return false;
+    }
+    for (tab_index = 0U; tab_index < node->data.section.tab_count; ++tab_index)
+    {
+        if (node->data.section.tabs[tab_index] == tab_id)
+        {
+            node->data.section.active_tab = (uint8_t)tab_index;
+            snprintf(
+                model->last_action,
+                sizeof(model->last_action),
+                "%s tab selected",
+                sandbox3d_workspace_panel_name(tab_id));
+            return true;
+        }
+    }
+    return false;
+}
+
 bool sandbox3d_workspace_section_is_closed(
     const sandbox3d_workspace_model* model,
     sandbox3d_workspace_panel_id section_id)

@@ -279,6 +279,23 @@ sandbox3d_workspace_panel_id sandbox3d_workspace_get_topology_dock_section_at(
     const sandbox3d_workspace_model* model,
     sandbox3d_workspace_dock_zone dock_zone,
     size_t index);
+sandbox3d_workspace_panel_id sandbox3d_workspace_get_topology_section_for_tab(
+    const sandbox3d_workspace_model* model,
+    sandbox3d_workspace_panel_id tab_id);
+size_t sandbox3d_workspace_get_topology_section_tab_count(
+    const sandbox3d_workspace_model* model,
+    sandbox3d_workspace_panel_id section_id);
+sandbox3d_workspace_panel_id sandbox3d_workspace_get_topology_section_tab_at(
+    const sandbox3d_workspace_model* model,
+    sandbox3d_workspace_panel_id section_id,
+    size_t index);
+sandbox3d_workspace_panel_id sandbox3d_workspace_get_topology_section_active_tab(
+    const sandbox3d_workspace_model* model,
+    sandbox3d_workspace_panel_id section_id);
+bool sandbox3d_workspace_set_topology_section_active_tab(
+    sandbox3d_workspace_model* model,
+    sandbox3d_workspace_panel_id section_id,
+    sandbox3d_workspace_panel_id tab_id);
 bool sandbox3d_workspace_close_section(
     sandbox3d_workspace_model* model,
     sandbox3d_workspace_panel_id section_id);
