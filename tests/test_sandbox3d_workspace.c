@@ -80,6 +80,9 @@ void henka_test_sandbox3d_workspace(void)
     HENKA_TEST_ASSERT(strcmp(
         sandbox3d_workspace_context_command_label(SANDBOX3D_WORKSPACE_CONTEXT_MOVE_TO_TAB_GROUP),
         "Move to tab group") == 0);
+    HENKA_TEST_ASSERT(strcmp(
+        sandbox3d_workspace_context_command_label(SANDBOX3D_WORKSPACE_CONTEXT_RESTORE_LAST_CLOSED),
+        "Restore last closed section") == 0);
     HENKA_TEST_ASSERT(sandbox3d_workspace_close_section(&model, SANDBOX3D_WORKSPACE_PANEL_UTILITY));
     HENKA_TEST_ASSERT(sandbox3d_workspace_section_is_closed(&model, SANDBOX3D_WORKSPACE_PANEL_UTILITY));
     HENKA_TEST_ASSERT(sandbox3d_workspace_topology_is_valid(&model));

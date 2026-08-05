@@ -1489,7 +1489,8 @@ const char* sandbox3d_workspace_context_command_label(
         "Equalize sections",
         "Maximize / Restore section",
         "Detach section",
-        "Move to tab group"
+        "Move to tab group",
+        "Restore last closed section"
     };
     if (command < 0 || command >= SANDBOX3D_WORKSPACE_CONTEXT_COMMAND_COUNT)
     {

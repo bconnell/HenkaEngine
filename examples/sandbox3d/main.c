@@ -4928,7 +4928,7 @@ static bool sandbox3d_handle_workspace_input(
         if (top_panel != SANDBOX3D_WORKSPACE_PANEL_NONE)
         {
             const float menu_width = 292.0f;
-            const float menu_height = 228.0f;
+            const float menu_height = 255.0f;
             const float menu_x = framebuffer_mouse.x + menu_width > (float)framebuffer_width
                 ? (float)framebuffer_width - menu_width - 4.0f
                 : framebuffer_mouse.x + 4.0f;
@@ -6453,6 +6453,10 @@ static void sandbox3d_apply_workspace_context_command(
                 command == SANDBOX3D_WORKSPACE_CONTEXT_OPEN_HORIZONTAL ? "Horizontal" : "Vertical");
             sandbox3d_set_status(state, false, "The bounded topology recorded the split request; dynamic section creation remains in progress.");
             changed = true;
+            break;
+        case SANDBOX3D_WORKSPACE_CONTEXT_RESTORE_LAST_CLOSED:
+            changed = sandbox3d_workspace_restore_last_closed_section(&state->workspace.model);
+            sandbox3d_set_status(state, !changed, changed ? "Last closed section restored." : "No closed section is available to restore.");
             break;
         case SANDBOX3D_WORKSPACE_CONTEXT_COMMAND_COUNT:
         default:
