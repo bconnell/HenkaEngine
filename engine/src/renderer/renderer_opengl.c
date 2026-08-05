@@ -3393,11 +3393,13 @@ static void henka_opengl_present_hdr(
         state->temporal_history_height == viewport.height)
     {
         bool depth_history_copied = false;
-        GLint previous_framebuffer = 0;
+        GLint previous_read_framebuffer = 0;
+        GLint previous_draw_framebuffer = 0;
         if (g_gl.BlitFramebuffer != NULL && state->temporal_history_depth_framebuffer != 0U)
         {
             while (glGetError() != GL_NO_ERROR) {}
-            glGetIntegerv(GL_FRAMEBUFFER_BINDING, &previous_framebuffer);
+            glGetIntegerv(GL_READ_FRAMEBUFFER_BINDING, &previous_read_framebuffer);
+            glGetIntegerv(GL_DRAW_FRAMEBUFFER_BINDING, &previous_draw_framebuffer);
             g_gl.BindFramebuffer(GL_READ_FRAMEBUFFER, state->hdr_framebuffer);
             g_gl.BindFramebuffer(GL_DRAW_FRAMEBUFFER, state->temporal_history_depth_framebuffer);
             g_gl.BlitFramebuffer(
@@ -3405,7 +3407,8 @@ static void henka_opengl_present_hdr(
                 0, 0, viewport.width, viewport.height,
                 GL_DEPTH_BUFFER_BIT,
                 GL_NEAREST);
-            g_gl.BindFramebuffer(GL_FRAMEBUFFER, (GLuint)previous_framebuffer);
+            g_gl.BindFramebuffer(GL_READ_FRAMEBUFFER, (GLuint)previous_read_framebuffer);
+            g_gl.BindFramebuffer(GL_DRAW_FRAMEBUFFER, (GLuint)previous_draw_framebuffer);
             depth_history_copied = glGetError() == GL_NO_ERROR;
         }
         if (!depth_history_copied)
@@ -3443,6 +3446,10 @@ static void henka_opengl_present_hdr(
         }
         state->temporal_history_valid = true;
         state->temporal_fallback_active = false;
+        (void)snprintf(
+            state->temporal_invalidation_reason,
+            sizeof(state->temporal_invalidation_reason),
+            "history valid");
     }
 }
 henka_result henka_opengl_renderer_create(struct henka_renderer* renderer, struct henka_platform* platform, bool enable_vsync)

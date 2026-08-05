@@ -10534,6 +10534,7 @@ static void sandbox3d_update(henka_engine* engine, double delta_seconds, void* u
                     smoke_diagnostics.rendered_temporal_history_ready &&
                     smoke_diagnostics.rendered_temporal_history_valid &&
                     !smoke_diagnostics.rendered_temporal_fallback_active &&
+                    strcmp(smoke_diagnostics.rendered_temporal_invalidation_reason, "history valid") == 0 &&
                     smoke_diagnostics.rendered_temporal_invalidation_count >= 3U;
 
                 printf(
