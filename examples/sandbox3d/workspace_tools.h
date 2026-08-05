@@ -244,6 +244,7 @@ typedef struct sandbox3d_workspace_model
     bool section_chooser_open;
     sandbox3d_workspace_panel_id section_chooser_source;
     sandbox3d_workspace_split_orientation section_chooser_orientation;
+    size_t section_chooser_selected_index;
     henka_ui_rect section_chooser_rect;
     char last_action[128];
 } sandbox3d_workspace_model;
@@ -486,6 +487,14 @@ void sandbox3d_workspace_restore_maximized_section(sandbox3d_workspace_model* mo
 bool sandbox3d_workspace_section_is_closed(
     const sandbox3d_workspace_model* model,
     sandbox3d_workspace_panel_id section_id);
+size_t sandbox3d_workspace_get_closed_section_count(
+    const sandbox3d_workspace_model* model);
+sandbox3d_workspace_panel_id sandbox3d_workspace_get_closed_section_at(
+    const sandbox3d_workspace_model* model,
+    size_t closed_index);
+bool sandbox3d_workspace_cycle_section_chooser_selection(
+    sandbox3d_workspace_model* model,
+    int direction);
 const char* sandbox3d_workspace_context_command_label(
     sandbox3d_workspace_context_command command);
 sandbox3d_workspace_dock_zone sandbox3d_workspace_evaluate_dock_zone(

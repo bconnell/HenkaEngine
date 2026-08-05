@@ -90,6 +90,7 @@ The sandbox now uses a movable workspace layout with a more neutral graphite and
 - bounded divider drag transactions with minimum section extents, a restrained close-threshold preview, transactional drag-to-close for direct leaf children, and rollback support
 - tab-strip drag reordering within a merged section, with a live insertion marker, click-preserving selection, stable active-tab identity, and transactional cancellation
 - Left/Right keyboard cycling for a hovered merged tab strip, with wraparound and no viewport ownership when the header is not hovered
+- Up/Down/Enter/Escape keyboard navigation for the bounded horizontal/vertical section chooser; the selected available panel has a visible row highlight and cancellation leaves the topology unchanged
 - Tab/Shift+Tab cycles focus across visible workspace panels with wraparound; the focused panel header receives a visible accent and focus does not enter hidden or detached-stale panels. Hovering a merged tab now explains activation, same-section reordering, and center-drop tab grouping. Controls exposes a bounded eight-entry workspace layout undo/redo history; undo and redo reconcile detached panels before restoring a validated snapshot.
 - Preset changes participate in the bounded layout history. `Reset Layout` restores the default topology while preserving valid saved named layout slots.
 - With the workspace visible, `Ctrl+Z`, `Ctrl+Y`, and `Ctrl+Shift+Z` provide keyboard undo/redo; detached panels are reconciled before the snapshot is applied.

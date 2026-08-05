@@ -25,6 +25,8 @@ void henka_test_sandbox3d_workspace(void)
     sandbox3d_workspace_model_reset(&model);
     HENKA_TEST_ASSERT(sandbox3d_workspace_get_named_layout(&model) == SANDBOX3D_WORKSPACE_LAYOUT_DEFAULT);
     HENKA_TEST_ASSERT(!sandbox3d_workspace_has_custom_layout(&model));
+    HENKA_TEST_ASSERT(sandbox3d_workspace_get_closed_section_count(&model) == 0U);
+    HENKA_TEST_ASSERT(sandbox3d_workspace_get_closed_section_at(&model, 0U) == SANDBOX3D_WORKSPACE_PANEL_NONE);
     HENKA_TEST_ASSERT(strcmp(
         sandbox3d_workspace_named_layout_label(SANDBOX3D_WORKSPACE_LAYOUT_MODELING),
         "Modeling") == 0);
@@ -230,6 +232,12 @@ void henka_test_sandbox3d_workspace(void)
     HENKA_TEST_ASSERT(sandbox3d_workspace_get_topology_section_tab_count(
         &tab_model, SANDBOX3D_WORKSPACE_PANEL_CONTROLS) == 2U);
     HENKA_TEST_ASSERT(sandbox3d_workspace_close_section(&model, SANDBOX3D_WORKSPACE_PANEL_UTILITY));
+    HENKA_TEST_ASSERT(sandbox3d_workspace_get_closed_section_count(&model) == 1U);
+    HENKA_TEST_ASSERT(sandbox3d_workspace_get_closed_section_at(&model, 0U) == SANDBOX3D_WORKSPACE_PANEL_UTILITY);
+    model.section_chooser_selected_index = 0U;
+    HENKA_TEST_ASSERT(sandbox3d_workspace_cycle_section_chooser_selection(&model, 1));
+    HENKA_TEST_ASSERT(model.section_chooser_selected_index == 0U);
+    HENKA_TEST_ASSERT(!sandbox3d_workspace_cycle_section_chooser_selection(&model, 0));
     HENKA_TEST_ASSERT(sandbox3d_workspace_split_section(
         &model,
         SANDBOX3D_WORKSPACE_PANEL_CONTROLS,

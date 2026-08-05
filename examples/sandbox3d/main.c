@@ -3193,7 +3193,7 @@ static void sandbox3d_print_help(const sandbox3d_state* state)
     printf("  Drag any panel header to a left or right outline to redock, or release away to open a native detached window.\n");
     printf("  Drag a panel into another docked section body to preview and join its bounded tab group.\n");
     printf("  Drag the narrow bars beside Scene View to resize occupied docks. Reset Layout restores safe defaults.\n");
-    printf("  Workspace context menus support Up / Down to select, Enter to activate, and Escape to cancel.\n");
+    printf("  Workspace context menus support Up / Down to select, Enter to activate, and Escape to cancel; section choosers support the same keyboard path.\n");
     printf("  Tab / Shift+Tab cycles keyboard focus across visible workspace panels; the focused header gets a visible accent.\n");
     printf("  Open Native Panel Test from Controls to validate a separate OS-level tool window.\n");
     printf("  Use the panels to inspect named scene objects, clear selection, switch gizmo modes, focus the camera, reset object transforms, toggle visibility, and open in-window Help, Scene Legend, Object Info, Paths, Settings, Diagnostics, Transform QA, and Physics QA utilities.\n");
@@ -6077,18 +6077,70 @@ static bool sandbox3d_handle_workspace_input(
 
     if (state->workspace.model.section_chooser_open)
     {
+        const size_t available_count =
+            sandbox3d_workspace_get_closed_section_count(&state->workspace.model);
+        if (available_count > 0U && state->workspace.model.section_chooser_selected_index >= available_count)
+        {
+            state->workspace.model.section_chooser_selected_index = available_count - 1U;
+        }
         if (henka_input_was_key_pressed(engine, HENKA_KEY_ESCAPE))
         {
             state->workspace.model.section_chooser_open = false;
             state->workspace.model.section_chooser_source = SANDBOX3D_WORKSPACE_PANEL_NONE;
+            state->workspace.model.section_chooser_selected_index = 0U;
             henka_input_consume_key_press(engine, HENKA_KEY_ESCAPE);
             sandbox3d_set_status(state, false, "Section creation cancelled.");
+            return true;
+        }
+        if (available_count > 0U && henka_input_was_key_pressed(engine, HENKA_KEY_UP))
+        {
+            (void)sandbox3d_workspace_cycle_section_chooser_selection(&state->workspace.model, -1);
+            henka_input_consume_key_press(engine, HENKA_KEY_UP);
+            sandbox3d_set_status(state, false, "Section chooser selection moved up.");
+            return true;
+        }
+        if (available_count > 0U && henka_input_was_key_pressed(engine, HENKA_KEY_DOWN))
+        {
+            (void)sandbox3d_workspace_cycle_section_chooser_selection(&state->workspace.model, 1);
+            henka_input_consume_key_press(engine, HENKA_KEY_DOWN);
+            sandbox3d_set_status(state, false, "Section chooser selection moved down.");
+            return true;
+        }
+        if (henka_input_was_key_pressed(engine, HENKA_KEY_ENTER))
+        {
+            const sandbox3d_workspace_panel_id selected_panel =
+                sandbox3d_workspace_get_closed_section_at(
+                    &state->workspace.model,
+                    state->workspace.model.section_chooser_selected_index);
+            henka_input_consume_key_press(engine, HENKA_KEY_ENTER);
+            if (selected_panel != SANDBOX3D_WORKSPACE_PANEL_NONE)
+            {
+                const bool changed = sandbox3d_workspace_split_section(
+                    &state->workspace.model,
+                    state->workspace.model.section_chooser_source,
+                    state->workspace.model.section_chooser_orientation,
+                    selected_panel);
+                state->workspace.model.section_chooser_open = false;
+                state->workspace.model.section_chooser_source = SANDBOX3D_WORKSPACE_PANEL_NONE;
+                state->workspace.model.section_chooser_selected_index = 0U;
+                sandbox3d_set_statusf(
+                    state,
+                    !changed,
+                    false,
+                    changed ? "%s section created." : "Section creation was rejected safely.",
+                    sandbox3d_workspace_panel_name(selected_panel));
+            }
+            else
+            {
+                sandbox3d_set_status(state, true, "No available section can be created.");
+            }
             return true;
         }
         if (left_pressed && !henka_ui_rect_contains(state->workspace.model.section_chooser_rect, framebuffer_mouse))
         {
             state->workspace.model.section_chooser_open = false;
             state->workspace.model.section_chooser_source = SANDBOX3D_WORKSPACE_PANEL_NONE;
+            state->workspace.model.section_chooser_selected_index = 0U;
             sandbox3d_set_status(state, false, "Section creation cancelled.");
         }
         return true;
@@ -8134,6 +8186,7 @@ static void sandbox3d_apply_workspace_context_command(
                 command == SANDBOX3D_WORKSPACE_CONTEXT_OPEN_HORIZONTAL
                     ? SANDBOX3D_WORKSPACE_SPLIT_VERTICAL
                     : SANDBOX3D_WORKSPACE_SPLIT_HORIZONTAL;
+            state->workspace.model.section_chooser_selected_index = 0U;
             state->workspace.model.section_chooser_rect = state->workspace.model.context_menu_rect;
             state->workspace.model.section_chooser_rect.width = 340.0f;
             state->workspace.model.section_chooser_rect.height = 220.0f;
@@ -8266,6 +8319,13 @@ static void sandbox3d_draw_workspace_section_chooser(
             rect.width - 16.0f,
             24.0f};
         snprintf(button_id, sizeof(button_id), "workspace_chooser_%zu", panel_index);
+        if (available_count == model->section_chooser_selected_index)
+        {
+            henka_ui_overlay_rect(
+                state->ui,
+                button_rect,
+                (henka_vec4){0.16f, 0.28f, 0.42f, 0.72f});
+        }
         if (henka_ui_button(
                 state->ui,
                 button_id,
@@ -8279,6 +8339,7 @@ static void sandbox3d_draw_workspace_section_chooser(
                 panel_id);
             model->section_chooser_open = false;
             model->section_chooser_source = SANDBOX3D_WORKSPACE_PANEL_NONE;
+            model->section_chooser_selected_index = 0U;
             sandbox3d_set_statusf(
                 state,
                 !changed,
@@ -8304,7 +8365,7 @@ static void sandbox3d_draw_workspace_section_chooser(
         rect.x + 10.0f,
         rect.y + rect.height - 18.0f,
         1.0f,
-        "Escape cancels",
+        "Up/Down select  Enter apply  Escape cancel",
         HENKA_UI_COLOR_MUTED);
 }
 

@@ -217,6 +217,7 @@ static void sandbox3d_workspace_topology_clear(
     model->section_chooser_open = false;
     model->section_chooser_source = SANDBOX3D_WORKSPACE_PANEL_NONE;
     model->section_chooser_orientation = SANDBOX3D_WORKSPACE_SPLIT_HORIZONTAL;
+    model->section_chooser_selected_index = 0U;
     model->section_chooser_rect = (henka_ui_rect){0.0f, 0.0f, 0.0f, 0.0f};
 }
 
@@ -1748,6 +1749,7 @@ void sandbox3d_workspace_end_interaction(sandbox3d_workspace_model* model)
     model->context_menu_section = SANDBOX3D_WORKSPACE_PANEL_NONE;
     model->section_chooser_open = false;
     model->section_chooser_source = SANDBOX3D_WORKSPACE_PANEL_NONE;
+    model->section_chooser_selected_index = 0U;
     if (model->topology_transaction_active)
     {
         if (close_preview && close_section != SANDBOX3D_WORKSPACE_PANEL_NONE)
@@ -2752,6 +2754,83 @@ bool sandbox3d_workspace_section_is_closed(
 {
     return model != NULL && section_id >= 0 && section_id < SANDBOX3D_WORKSPACE_PANEL_COUNT &&
         (model->closed_sections_mask & (1U << section_id)) != 0U;
+}
+
+size_t sandbox3d_workspace_get_closed_section_count(
+    const sandbox3d_workspace_model* model)
+{
+    size_t count = 0U;
+    sandbox3d_workspace_panel_id section_id;
+
+    if (model == NULL)
+    {
+        return 0U;
+    }
+    for (section_id = SANDBOX3D_WORKSPACE_PANEL_CONTROLS;
+         section_id < SANDBOX3D_WORKSPACE_PANEL_COUNT;
+         section_id = (sandbox3d_workspace_panel_id)(section_id + 1))
+    {
+        if (sandbox3d_workspace_section_is_closed(model, section_id))
+        {
+            count += 1U;
+        }
+    }
+    return count;
+}
+
+sandbox3d_workspace_panel_id sandbox3d_workspace_get_closed_section_at(
+    const sandbox3d_workspace_model* model,
+    size_t closed_index)
+{
+    sandbox3d_workspace_panel_id section_id;
+
+    if (model == NULL)
+    {
+        return SANDBOX3D_WORKSPACE_PANEL_NONE;
+    }
+    for (section_id = SANDBOX3D_WORKSPACE_PANEL_CONTROLS;
+         section_id < SANDBOX3D_WORKSPACE_PANEL_COUNT;
+         section_id = (sandbox3d_workspace_panel_id)(section_id + 1))
+    {
+        if (sandbox3d_workspace_section_is_closed(model, section_id))
+        {
+            if (closed_index == 0U)
+            {
+                return section_id;
+            }
+            closed_index -= 1U;
+        }
+    }
+    return SANDBOX3D_WORKSPACE_PANEL_NONE;
+}
+
+bool sandbox3d_workspace_cycle_section_chooser_selection(
+    sandbox3d_workspace_model* model,
+    int direction)
+{
+    const size_t count = sandbox3d_workspace_get_closed_section_count(model);
+
+    if (model == NULL || count == 0U || direction == 0)
+    {
+        return false;
+    }
+    if (model->section_chooser_selected_index >= count)
+    {
+        model->section_chooser_selected_index = 0U;
+    }
+    if (direction < 0)
+    {
+        model->section_chooser_selected_index =
+            model->section_chooser_selected_index == 0U
+                ? count - 1U
+                : model->section_chooser_selected_index - 1U;
+    }
+    else
+    {
+        model->section_chooser_selected_index =
+            (model->section_chooser_selected_index + 1U) % count;
+    }
+    return true;
 }
 
 bool sandbox3d_workspace_close_section(
