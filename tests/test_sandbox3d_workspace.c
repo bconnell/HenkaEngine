@@ -16,6 +16,26 @@ void henka_test_sandbox3d_workspace(void)
     sandbox3d_workspace_model model;
 
     sandbox3d_workspace_model_reset(&model);
+    HENKA_TEST_ASSERT(sandbox3d_workspace_get_named_layout(&model) == SANDBOX3D_WORKSPACE_LAYOUT_DEFAULT);
+    HENKA_TEST_ASSERT(strcmp(
+        sandbox3d_workspace_named_layout_label(SANDBOX3D_WORKSPACE_LAYOUT_MODELING),
+        "Modeling") == 0);
+    HENKA_TEST_ASSERT(sandbox3d_workspace_parse_named_layout("materials") == SANDBOX3D_WORKSPACE_LAYOUT_MATERIALS);
+    HENKA_TEST_ASSERT(sandbox3d_workspace_apply_named_layout(
+        &model, SANDBOX3D_WORKSPACE_LAYOUT_MODELING));
+    HENKA_TEST_ASSERT(sandbox3d_workspace_get_named_layout(&model) == SANDBOX3D_WORKSPACE_LAYOUT_MODELING);
+    HENKA_TEST_ASSERT(sandbox3d_workspace_topology_is_valid(&model));
+    HENKA_TEST_ASSERT(sandbox3d_workspace_get_panel_const(
+        &model, SANDBOX3D_WORKSPACE_PANEL_SCENE_OBJECTS)->dock == SANDBOX3D_WORKSPACE_DOCK_LEFT);
+    HENKA_TEST_ASSERT(sandbox3d_workspace_get_panel_const(
+        &model, SANDBOX3D_WORKSPACE_PANEL_CONTROLS)->dock == SANDBOX3D_WORKSPACE_DOCK_RIGHT);
+    sandbox3d_workspace_begin_topology_transaction(&model);
+    sandbox3d_workspace_rollback_topology_transaction(&model);
+    HENKA_TEST_ASSERT(sandbox3d_workspace_get_named_layout(&model) == SANDBOX3D_WORKSPACE_LAYOUT_MODELING);
+    sandbox3d_workspace_begin_topology_transaction(&model);
+    sandbox3d_workspace_commit_topology_transaction(&model);
+    HENKA_TEST_ASSERT(sandbox3d_workspace_get_named_layout(&model) == SANDBOX3D_WORKSPACE_LAYOUT_CUSTOM);
+    sandbox3d_workspace_model_reset(&model);
     HENKA_TEST_ASSERT(sandbox3d_workspace_topology_is_valid(&model));
     topology_root = sandbox3d_workspace_topology_get_node_const(&model, model.topology_root);
     HENKA_TEST_ASSERT(topology_root != NULL);

@@ -405,6 +405,7 @@ static const char* g_setting_key_active_utility = "ui.active_utility";
 static const char* g_setting_key_workspace_topology_version = "ui.workspace.topology.version";
 static const char* g_setting_key_workspace_left_dock_width = "ui.workspace.left_dock_width";
 static const char* g_setting_key_workspace_right_dock_width = "ui.workspace.right_dock_width";
+static const char* g_setting_key_workspace_named_layout = "ui.workspace.named_layout";
 static const int g_workspace_topology_settings_version = 2;
 
 static float sandbox3d_get_mouse_sensitivity(const sandbox3d_state* state);
@@ -1105,6 +1106,7 @@ static void sandbox3d_close_detached_workspace_panel(
     sandbox3d_workspace_panel_id panel_id,
     sandbox3d_workspace_dock_zone dock_zone);
 static void sandbox3d_close_all_detached_workspace_panels(henka_engine* engine, sandbox3d_state* state);
+static void sandbox3d_cancel_workspace_interaction(sandbox3d_state* state);
 static void sandbox3d_draw_detached_workspace_panel_content(
     henka_engine* engine,
     sandbox3d_state* state,
@@ -2389,6 +2391,34 @@ static void sandbox3d_reset_workspace_layout(sandbox3d_state* state)
     sandbox3d_set_status(state, false, "Layout reset. Panels are visible, redocked, and dock sizes restored.");
 }
 
+static bool sandbox3d_apply_named_workspace_layout(
+    henka_engine* engine,
+    sandbox3d_state* state,
+    sandbox3d_workspace_named_layout layout)
+{
+    if (engine == NULL || state == NULL)
+    {
+        return false;
+    }
+    sandbox3d_cancel_workspace_interaction(state);
+    sandbox3d_close_all_detached_workspace_panels(engine, state);
+    if (!sandbox3d_workspace_apply_named_layout(&state->workspace.model, layout))
+    {
+        sandbox3d_set_status(state, true, "Workspace preset was rejected; the current layout was preserved.");
+        return false;
+    }
+    state->workspace.scene_objects_panel_visible = true;
+    state->workspace.object_details_panel_visible = true;
+    state->workspace.active_utility = SANDBOX3D_UTILITY_NONE;
+    sandbox3d_set_statusf(
+        state,
+        false,
+        false,
+        "Workspace preset set to %s.",
+        sandbox3d_workspace_named_layout_label(layout));
+    return true;
+}
+
 static bool sandbox3d_workspace_shows_scene_panel(const sandbox3d_state* state)
 {
     return state != NULL &&
@@ -3005,6 +3035,7 @@ static void sandbox3d_print_help(const sandbox3d_state* state)
     printf("  Select glTF Marker to edit its shared material instance in Object Details; scalar/vector, flags, alpha, and semantic texture overrides apply transactionally.\n");
     printf("  Physics QA enables an opt-in fixed-step rigid-body demo with collider/contact debug drawing, impulses, body modes, and camera raycasts.\n");
     printf("  The Controls panel uses readable pages, and Scene Objects supports paging when the dock is tighter than the full list.\n");
+    printf("  Controls also provides Default, Modeling, Materials, and Debugging workspace presets; topology edits mark the workspace Custom.\n");
     printf("  Select an object from the list or with Left Mouse in the viewport, then use Move, Rotate, or Scale in the Transform section.\n");
     printf("  Common actions also report short in-window status messages. Console output stays available for fallback logs.\n");
     printf("  Mouse look and camera movement pause while the UI is open.\n");
@@ -4209,6 +4240,11 @@ static bool sandbox3d_load_workspace_topology_settings(
     }
 
     candidate = *model;
+    candidate.named_layout = henka_settings_has_key(
+            settings, g_setting_key_workspace_named_layout)
+        ? sandbox3d_workspace_parse_named_layout(henka_settings_get_string(
+            settings, g_setting_key_workspace_named_layout, "custom"))
+        : SANDBOX3D_WORKSPACE_LAYOUT_CUSTOM;
     value = henka_settings_get_int(
         settings,
         "ui.workspace.topology.root",
@@ -4341,6 +4377,7 @@ static bool sandbox3d_load_workspace_topology_settings(
     model->topology_root = candidate.topology_root;
     model->closed_sections_mask = candidate.closed_sections_mask;
     model->maximized_section = candidate.maximized_section;
+    model->named_layout = candidate.named_layout;
     snprintf(
         model->last_action,
         sizeof(model->last_action),
@@ -4365,6 +4402,10 @@ static void sandbox3d_save_workspace_topology_settings(
         settings,
         g_setting_key_workspace_topology_version,
         g_workspace_topology_settings_version);
+    (void)henka_settings_set_string(
+        settings,
+        g_setting_key_workspace_named_layout,
+        sandbox3d_workspace_named_layout_setting_value(model->named_layout));
     (void)henka_settings_set_int(settings, "ui.workspace.topology.root", (int)model->topology_root);
     (void)henka_settings_set_int(settings, "ui.workspace.topology.closed_mask", (int)model->closed_sections_mask);
     (void)henka_settings_set_int(settings, "ui.workspace.topology.maximized_section", (int)model->maximized_section);
@@ -8163,6 +8204,35 @@ static void sandbox3d_draw_controls_panel(
             state->workspace.layout_mode = SANDBOX3D_LAYOUT_FULL;
             sandbox3d_set_statusf(state, false, false, "Layout set to %s.", sandbox3d_get_layout_mode_label(state->workspace.layout_mode));
             sandbox3d_print_layout_mode(state, false);
+        }
+        y += 34.0f;
+        {
+            const float preset_width = (panel_bounds.width - 40.0f) * 0.25f;
+            const sandbox3d_workspace_named_layout presets[] = {
+                SANDBOX3D_WORKSPACE_LAYOUT_DEFAULT,
+                SANDBOX3D_WORKSPACE_LAYOUT_MODELING,
+                SANDBOX3D_WORKSPACE_LAYOUT_MATERIALS,
+                SANDBOX3D_WORKSPACE_LAYOUT_DEBUGGING};
+            size_t preset_index;
+            for (preset_index = 0U; preset_index < sizeof(presets) / sizeof(presets[0]); ++preset_index)
+            {
+                char preset_id[48];
+                const float preset_x = x_left + (preset_width + 4.0f) * (float)preset_index;
+                snprintf(
+                    preset_id,
+                    sizeof(preset_id),
+                    "workspace_preset_%zu",
+                    preset_index);
+                if (henka_ui_tab(
+                        state->ui,
+                        preset_id,
+                        (henka_ui_rect){preset_x, y, preset_width, 28.0f},
+                        sandbox3d_workspace_named_layout_label(presets[preset_index]),
+                        sandbox3d_workspace_get_named_layout(&state->workspace.model) == presets[preset_index]))
+                {
+                    (void)sandbox3d_apply_named_workspace_layout(engine, state, presets[preset_index]);
+                }
+            }
         }
         y += 42.0f;
         sandbox3d_draw_section_heading(state->ui, x_left, y, "Viewer");

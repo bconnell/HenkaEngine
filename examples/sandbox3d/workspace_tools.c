@@ -643,6 +643,210 @@ static void sandbox3d_workspace_enforce_minimum_floating_size(
     }
 }
 
+const char* sandbox3d_workspace_named_layout_label(
+    sandbox3d_workspace_named_layout layout)
+{
+    switch (layout)
+    {
+        case SANDBOX3D_WORKSPACE_LAYOUT_DEFAULT:
+            return "Default";
+        case SANDBOX3D_WORKSPACE_LAYOUT_MODELING:
+            return "Modeling";
+        case SANDBOX3D_WORKSPACE_LAYOUT_MATERIALS:
+            return "Materials";
+        case SANDBOX3D_WORKSPACE_LAYOUT_DEBUGGING:
+            return "Debugging";
+        case SANDBOX3D_WORKSPACE_LAYOUT_CUSTOM:
+            return "Custom";
+        case SANDBOX3D_WORKSPACE_LAYOUT_COUNT:
+        default:
+            return "Unknown";
+    }
+}
+
+const char* sandbox3d_workspace_named_layout_setting_value(
+    sandbox3d_workspace_named_layout layout)
+{
+    switch (layout)
+    {
+        case SANDBOX3D_WORKSPACE_LAYOUT_DEFAULT:
+            return "default";
+        case SANDBOX3D_WORKSPACE_LAYOUT_MODELING:
+            return "modeling";
+        case SANDBOX3D_WORKSPACE_LAYOUT_MATERIALS:
+            return "materials";
+        case SANDBOX3D_WORKSPACE_LAYOUT_DEBUGGING:
+            return "debugging";
+        case SANDBOX3D_WORKSPACE_LAYOUT_CUSTOM:
+            return "custom";
+        case SANDBOX3D_WORKSPACE_LAYOUT_COUNT:
+        default:
+            return "custom";
+    }
+}
+
+sandbox3d_workspace_named_layout sandbox3d_workspace_parse_named_layout(
+    const char* value)
+{
+    if (value == NULL)
+    {
+        return SANDBOX3D_WORKSPACE_LAYOUT_CUSTOM;
+    }
+    if (strcmp(value, "default") == 0)
+    {
+        return SANDBOX3D_WORKSPACE_LAYOUT_DEFAULT;
+    }
+    if (strcmp(value, "modeling") == 0)
+    {
+        return SANDBOX3D_WORKSPACE_LAYOUT_MODELING;
+    }
+    if (strcmp(value, "materials") == 0)
+    {
+        return SANDBOX3D_WORKSPACE_LAYOUT_MATERIALS;
+    }
+    if (strcmp(value, "debugging") == 0)
+    {
+        return SANDBOX3D_WORKSPACE_LAYOUT_DEBUGGING;
+    }
+    return SANDBOX3D_WORKSPACE_LAYOUT_CUSTOM;
+}
+
+sandbox3d_workspace_named_layout sandbox3d_workspace_get_named_layout(
+    const sandbox3d_workspace_model* model)
+{
+    return model != NULL ? model->named_layout : SANDBOX3D_WORKSPACE_LAYOUT_CUSTOM;
+}
+
+static void sandbox3d_workspace_named_layout_set_dock(
+    sandbox3d_workspace_model* model,
+    sandbox3d_workspace_panel_id panel_id,
+    sandbox3d_workspace_dock_zone dock_zone)
+{
+    sandbox3d_workspace_panel* panel =
+        sandbox3d_workspace_get_panel(model, panel_id);
+    if (panel == NULL)
+    {
+        return;
+    }
+    panel->dock = dock_zone;
+    panel->last_docked_zone = dock_zone;
+}
+
+bool sandbox3d_workspace_apply_named_layout(
+    sandbox3d_workspace_model* model,
+    sandbox3d_workspace_named_layout layout)
+{
+    sandbox3d_workspace_model candidate;
+    sandbox3d_workspace_panel_id first_left;
+    sandbox3d_workspace_panel_id second_left;
+    sandbox3d_workspace_panel_id first_right;
+    sandbox3d_workspace_panel_id second_right;
+
+    if (model == NULL || layout < SANDBOX3D_WORKSPACE_LAYOUT_DEFAULT ||
+        layout >= SANDBOX3D_WORKSPACE_LAYOUT_CUSTOM ||
+        model->active_drag_panel != SANDBOX3D_WORKSPACE_PANEL_NONE ||
+        model->resize_target != SANDBOX3D_WORKSPACE_RESIZE_NONE ||
+        model->topology_transaction_active || model->tab_drag_active)
+    {
+        return false;
+    }
+
+    candidate = *model;
+    sandbox3d_workspace_topology_initialize(&candidate);
+    candidate.closed_sections_mask = 0U;
+    candidate.maximized_section = SANDBOX3D_WORKSPACE_PANEL_NONE;
+    candidate.closed_snapshot_valid = false;
+    candidate.named_layout = layout;
+
+    first_left = SANDBOX3D_WORKSPACE_PANEL_CONTROLS;
+    second_left = SANDBOX3D_WORKSPACE_PANEL_SCENE_OBJECTS;
+    first_right = SANDBOX3D_WORKSPACE_PANEL_OBJECT_DETAILS;
+    second_right = SANDBOX3D_WORKSPACE_PANEL_UTILITY;
+    switch (layout)
+    {
+        case SANDBOX3D_WORKSPACE_LAYOUT_MODELING:
+            first_left = SANDBOX3D_WORKSPACE_PANEL_SCENE_OBJECTS;
+            second_left = SANDBOX3D_WORKSPACE_PANEL_OBJECT_DETAILS;
+            first_right = SANDBOX3D_WORKSPACE_PANEL_CONTROLS;
+            break;
+        case SANDBOX3D_WORKSPACE_LAYOUT_MATERIALS:
+            first_left = SANDBOX3D_WORKSPACE_PANEL_CONTROLS;
+            second_left = SANDBOX3D_WORKSPACE_PANEL_OBJECT_DETAILS;
+            first_right = SANDBOX3D_WORKSPACE_PANEL_SCENE_OBJECTS;
+            break;
+        case SANDBOX3D_WORKSPACE_LAYOUT_DEBUGGING:
+            first_left = SANDBOX3D_WORKSPACE_PANEL_UTILITY;
+            second_left = SANDBOX3D_WORKSPACE_PANEL_SCENE_OBJECTS;
+            first_right = SANDBOX3D_WORKSPACE_PANEL_CONTROLS;
+            second_right = SANDBOX3D_WORKSPACE_PANEL_OBJECT_DETAILS;
+            break;
+        case SANDBOX3D_WORKSPACE_LAYOUT_DEFAULT:
+        case SANDBOX3D_WORKSPACE_LAYOUT_COUNT:
+        case SANDBOX3D_WORKSPACE_LAYOUT_CUSTOM:
+        default:
+            break;
+    }
+
+    sandbox3d_workspace_topology_make_section(
+        &candidate.topology_nodes[2], first_left);
+    sandbox3d_workspace_topology_make_section(
+        &candidate.topology_nodes[3], second_left);
+    sandbox3d_workspace_topology_make_section(
+        &candidate.topology_nodes[5], first_right);
+    sandbox3d_workspace_topology_make_section(
+        &candidate.topology_nodes[6], second_right);
+    candidate.topology_nodes[2].parent = 1U;
+    candidate.topology_nodes[3].parent = 1U;
+    candidate.topology_nodes[5].parent = 4U;
+    candidate.topology_nodes[6].parent = 4U;
+    candidate.topology_nodes[0].data.split.ratio =
+        layout == SANDBOX3D_WORKSPACE_LAYOUT_MODELING ? 0.60f :
+        layout == SANDBOX3D_WORKSPACE_LAYOUT_MATERIALS ? 0.46f :
+        layout == SANDBOX3D_WORKSPACE_LAYOUT_DEBUGGING ? 0.54f : 0.50f;
+    candidate.topology_nodes[1].data.split.ratio =
+        layout == SANDBOX3D_WORKSPACE_LAYOUT_DEBUGGING ? 0.62f : 0.50f;
+    candidate.topology_nodes[4].data.split.ratio =
+        layout == SANDBOX3D_WORKSPACE_LAYOUT_MODELING ? 0.42f :
+        layout == SANDBOX3D_WORKSPACE_LAYOUT_MATERIALS ? 0.58f : 0.50f;
+
+    sandbox3d_workspace_named_layout_set_dock(
+        &candidate, first_left, SANDBOX3D_WORKSPACE_DOCK_LEFT);
+    sandbox3d_workspace_named_layout_set_dock(
+        &candidate, second_left, SANDBOX3D_WORKSPACE_DOCK_LEFT);
+    sandbox3d_workspace_named_layout_set_dock(
+        &candidate, first_right, SANDBOX3D_WORKSPACE_DOCK_RIGHT);
+    sandbox3d_workspace_named_layout_set_dock(
+        &candidate, second_right, SANDBOX3D_WORKSPACE_DOCK_RIGHT);
+    sandbox3d_workspace_rebuild_dock_lists(&candidate);
+    if (!sandbox3d_workspace_topology_is_valid(&candidate))
+    {
+        return false;
+    }
+
+    memcpy(model->panels, candidate.panels, sizeof(model->panels));
+    memcpy(model->left_dock_panels, candidate.left_dock_panels, sizeof(model->left_dock_panels));
+    memcpy(model->right_dock_panels, candidate.right_dock_panels, sizeof(model->right_dock_panels));
+    model->left_dock_panel_count = candidate.left_dock_panel_count;
+    model->right_dock_panel_count = candidate.right_dock_panel_count;
+    memcpy(model->topology_nodes, candidate.topology_nodes, sizeof(model->topology_nodes));
+    model->topology_root = candidate.topology_root;
+    model->closed_sections_mask = candidate.closed_sections_mask;
+    model->maximized_section = candidate.maximized_section;
+    model->closed_snapshot_valid = candidate.closed_snapshot_valid;
+    model->named_layout = candidate.named_layout;
+    model->topology_transaction_active = false;
+    model->topology_transaction_root = UINT16_MAX;
+    model->active_divider_node = UINT16_MAX;
+    model->divider_close_preview = false;
+    model->divider_close_section = SANDBOX3D_WORKSPACE_PANEL_NONE;
+    snprintf(
+        model->last_action,
+        sizeof(model->last_action),
+        "%s workspace restored",
+        sandbox3d_workspace_named_layout_label(layout));
+    return true;
+}
+
 void sandbox3d_workspace_model_reset(sandbox3d_workspace_model* model)
 {
     if (model == NULL)
@@ -725,6 +929,8 @@ void sandbox3d_workspace_model_reset(sandbox3d_workspace_model* model)
     model->resize_target = SANDBOX3D_WORKSPACE_RESIZE_NONE;
     model->active_dock_target = SANDBOX3D_WORKSPACE_DOCK_FLOATING;
     model->active_divider_dock = SANDBOX3D_WORKSPACE_DOCK_FLOATING;
+    model->named_layout = SANDBOX3D_WORKSPACE_LAYOUT_DEFAULT;
+    model->topology_transaction_named_layout = SANDBOX3D_WORKSPACE_LAYOUT_DEFAULT;
     model->context_menu_selected_command = 0U;
     model->next_z_order = 5U;
     sandbox3d_workspace_topology_initialize(model);
@@ -1404,6 +1610,7 @@ void sandbox3d_workspace_begin_topology_transaction(sandbox3d_workspace_model* m
         model->topology_nodes,
         sizeof(model->topology_nodes));
     model->topology_transaction_root = model->topology_root;
+    model->topology_transaction_named_layout = model->named_layout;
     model->topology_transaction_active = true;
 }
 
@@ -1415,6 +1622,7 @@ void sandbox3d_workspace_commit_topology_transaction(sandbox3d_workspace_model* 
     }
     model->topology_transaction_active = false;
     model->topology_transaction_root = UINT16_MAX;
+    model->named_layout = SANDBOX3D_WORKSPACE_LAYOUT_CUSTOM;
 }
 
 void sandbox3d_workspace_rollback_topology_transaction(sandbox3d_workspace_model* model)
@@ -1428,7 +1636,12 @@ void sandbox3d_workspace_rollback_topology_transaction(sandbox3d_workspace_model
         model->topology_transaction_nodes,
         sizeof(model->topology_nodes));
     model->topology_root = model->topology_transaction_root;
-    sandbox3d_workspace_commit_topology_transaction(model);
+    {
+        const sandbox3d_workspace_named_layout transaction_layout =
+            model->topology_transaction_named_layout;
+        sandbox3d_workspace_commit_topology_transaction(model);
+        model->named_layout = transaction_layout;
+    }
     model->active_divider_node = UINT16_MAX;
     model->active_divider_dock = SANDBOX3D_WORKSPACE_DOCK_FLOATING;
 }
