@@ -36,6 +36,7 @@ typedef enum sandbox3d_workspace_dock_zone
 #define SANDBOX3D_WORKSPACE_UI_SCALE_MIN 0.75f
 #define SANDBOX3D_WORKSPACE_UI_SCALE_MAX 4.0f
 #define SANDBOX3D_WORKSPACE_CUSTOM_LAYOUT_NAME_MAX 32U
+#define SANDBOX3D_WORKSPACE_LAYOUT_HISTORY_MAX 8U
 
 typedef enum sandbox3d_workspace_split_orientation
 {
@@ -130,6 +131,27 @@ typedef struct sandbox3d_workspace_panel
     unsigned int z_order;
 } sandbox3d_workspace_panel;
 
+typedef struct sandbox3d_workspace_layout_history_state
+{
+    sandbox3d_workspace_panel panels[SANDBOX3D_WORKSPACE_PANEL_COUNT];
+    sandbox3d_workspace_panel_id left_dock_panels[SANDBOX3D_WORKSPACE_PANEL_COUNT];
+    sandbox3d_workspace_panel_id right_dock_panels[SANDBOX3D_WORKSPACE_PANEL_COUNT];
+    size_t left_dock_panel_count;
+    size_t right_dock_panel_count;
+    float left_dock_width;
+    float right_dock_width;
+    float ui_scale;
+    sandbox3d_workspace_topology_node topology_nodes[SANDBOX3D_WORKSPACE_TOPOLOGY_MAX_NODES];
+    uint16_t topology_root;
+    sandbox3d_workspace_named_layout named_layout;
+    uint32_t closed_sections_mask;
+    sandbox3d_workspace_panel_id maximized_section;
+    bool closed_snapshot_valid;
+    sandbox3d_workspace_topology_node closed_snapshot_nodes[SANDBOX3D_WORKSPACE_TOPOLOGY_MAX_NODES];
+    uint16_t closed_snapshot_root;
+    uint32_t closed_snapshot_mask;
+} sandbox3d_workspace_layout_history_state;
+
 typedef struct sandbox3d_workspace_model
 {
     sandbox3d_workspace_panel panels[SANDBOX3D_WORKSPACE_PANEL_COUNT];
@@ -166,6 +188,12 @@ typedef struct sandbox3d_workspace_model
     uint16_t topology_transaction_root;
     sandbox3d_workspace_named_layout named_layout;
     sandbox3d_workspace_named_layout topology_transaction_named_layout;
+    sandbox3d_workspace_layout_history_state topology_transaction_state;
+    sandbox3d_workspace_layout_history_state undo_history[SANDBOX3D_WORKSPACE_LAYOUT_HISTORY_MAX];
+    sandbox3d_workspace_layout_history_state undo_after_history[SANDBOX3D_WORKSPACE_LAYOUT_HISTORY_MAX];
+    sandbox3d_workspace_layout_history_state redo_history[SANDBOX3D_WORKSPACE_LAYOUT_HISTORY_MAX];
+    size_t undo_history_count;
+    size_t redo_history_count;
     bool custom_layout_valid;
     char custom_layout_name[SANDBOX3D_WORKSPACE_CUSTOM_LAYOUT_NAME_MAX];
     sandbox3d_workspace_topology_node custom_layout_nodes[SANDBOX3D_WORKSPACE_TOPOLOGY_MAX_NODES];
@@ -344,6 +372,10 @@ sandbox3d_workspace_panel_id sandbox3d_workspace_divider_close_section(
 void sandbox3d_workspace_begin_topology_transaction(sandbox3d_workspace_model* model);
 void sandbox3d_workspace_commit_topology_transaction(sandbox3d_workspace_model* model);
 void sandbox3d_workspace_rollback_topology_transaction(sandbox3d_workspace_model* model);
+bool sandbox3d_workspace_can_undo(const sandbox3d_workspace_model* model);
+bool sandbox3d_workspace_can_redo(const sandbox3d_workspace_model* model);
+bool sandbox3d_workspace_undo(sandbox3d_workspace_model* model);
+bool sandbox3d_workspace_redo(sandbox3d_workspace_model* model);
 bool sandbox3d_workspace_topology_section_has_tab(
     const sandbox3d_workspace_model* model,
     sandbox3d_workspace_panel_id section_id,

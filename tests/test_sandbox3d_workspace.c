@@ -19,6 +19,8 @@ void henka_test_sandbox3d_workspace(void)
     uint32_t stress_seed;
     size_t stress_iteration;
     sandbox3d_workspace_panel_id stress_closed_panel;
+    float initial_ratio;
+    float history_ratio;
 
     sandbox3d_workspace_model_reset(&model);
     HENKA_TEST_ASSERT(sandbox3d_workspace_get_named_layout(&model) == SANDBOX3D_WORKSPACE_LAYOUT_DEFAULT);
@@ -48,9 +50,39 @@ void henka_test_sandbox3d_workspace(void)
     HENKA_TEST_ASSERT(sandbox3d_workspace_get_named_layout(&model) == SANDBOX3D_WORKSPACE_LAYOUT_MODELING);
     sandbox3d_workspace_begin_topology_transaction(&model);
     sandbox3d_workspace_commit_topology_transaction(&model);
+    history_ratio = sandbox3d_workspace_topology_get_node_const(
+        &model,
+        model.topology_root)->data.split.ratio;
+    HENKA_TEST_ASSERT(history_ratio > 0.50f);
     HENKA_TEST_ASSERT(sandbox3d_workspace_get_named_layout(&model) == SANDBOX3D_WORKSPACE_LAYOUT_CUSTOM);
     sandbox3d_workspace_model_reset(&model);
     HENKA_TEST_ASSERT(sandbox3d_workspace_topology_is_valid(&model));
+    initial_ratio = sandbox3d_workspace_topology_get_node_const(
+        &model, model.topology_root)->data.split.ratio;
+    sandbox3d_workspace_begin_divider_drag(&model, model.topology_root, (henka_vec2){640.0f, 360.0f});
+    sandbox3d_workspace_update_divider_drag(
+        &model,
+        (henka_vec2){760.0f, 360.0f},
+        (henka_ui_rect){0.0f, 0.0f, 1280.0f, 720.0f});
+    sandbox3d_workspace_commit_topology_transaction(&model);
+    history_ratio = sandbox3d_workspace_topology_get_node_const(
+        &model, model.topology_root)->data.split.ratio;
+    HENKA_TEST_ASSERT(sandbox3d_workspace_can_undo(&model));
+    HENKA_TEST_ASSERT(!sandbox3d_workspace_can_redo(&model));
+    HENKA_TEST_ASSERT(sandbox3d_workspace_undo(&model));
+    HENKA_TEST_ASSERT(!sandbox3d_workspace_can_undo(&model));
+    HENKA_TEST_ASSERT(sandbox3d_workspace_can_redo(&model));
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(
+        sandbox3d_workspace_topology_get_node_const(&model, model.topology_root)->data.split.ratio,
+        initial_ratio,
+        0.0001f);
+    HENKA_TEST_ASSERT(sandbox3d_workspace_redo(&model));
+    HENKA_TEST_ASSERT(sandbox3d_workspace_can_undo(&model));
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(
+        sandbox3d_workspace_topology_get_node_const(&model, model.topology_root)->data.split.ratio,
+        history_ratio,
+        0.0001f);
+    sandbox3d_workspace_model_reset(&model);
     topology_root = sandbox3d_workspace_topology_get_node_const(&model, model.topology_root);
     HENKA_TEST_ASSERT(topology_root != NULL);
     HENKA_TEST_ASSERT(topology_root->type == SANDBOX3D_WORKSPACE_TOPOLOGY_NODE_SPLIT);

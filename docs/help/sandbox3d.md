@@ -78,6 +78,7 @@ The docked workspace opens in `View` mode with no selected scene object so the c
 - Use `Save Custom` and `Restore Custom` in Controls to persist and restore one bounded named workspace snapshot; restoring redocks detached panels first.
 - Press `Tab` or `Shift+Tab` to cycle focus across visible workspace panels; the focused header is marked with a green accent.
 - Hover a merged workspace tab for a compact guide: click to activate, drag to reorder within the group, or drop a panel at the center to join tabs.
+- Use Controls > Undo Layout and Redo Layout for the bounded workspace layout history; detached panels are redocked before a snapshot is restored.
 - Hover a topology divider or dock splitter to see the matching horizontal or vertical system resize cursor; the cursor returns to normal when the viewport or a tool owns the pointer.
 - Confirm the small in-window status area reports common actions such as layout changes, camera reset, saved settings, or object focus.
 - Select each scene object and confirm the Object Details panel updates.

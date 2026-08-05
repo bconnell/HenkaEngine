@@ -1793,6 +1793,34 @@ void sandbox3d_workspace_build_topology_layout(
     }
 }
 
+static void sandbox3d_workspace_capture_history_state(
+    const sandbox3d_workspace_model* model,
+    sandbox3d_workspace_layout_history_state* state)
+{
+    if (model == NULL || state == NULL)
+    {
+        return;
+    }
+    *state = (sandbox3d_workspace_layout_history_state){0};
+    memcpy(state->panels, model->panels, sizeof(model->panels));
+    memcpy(state->left_dock_panels, model->left_dock_panels, sizeof(model->left_dock_panels));
+    memcpy(state->right_dock_panels, model->right_dock_panels, sizeof(model->right_dock_panels));
+    state->left_dock_panel_count = model->left_dock_panel_count;
+    state->right_dock_panel_count = model->right_dock_panel_count;
+    state->left_dock_width = model->left_dock_width;
+    state->right_dock_width = model->right_dock_width;
+    state->ui_scale = model->ui_scale;
+    memcpy(state->topology_nodes, model->topology_nodes, sizeof(model->topology_nodes));
+    state->topology_root = model->topology_root;
+    state->named_layout = model->named_layout;
+    state->closed_sections_mask = model->closed_sections_mask;
+    state->maximized_section = model->maximized_section;
+    state->closed_snapshot_valid = model->closed_snapshot_valid;
+    memcpy(state->closed_snapshot_nodes, model->closed_snapshot_nodes, sizeof(model->closed_snapshot_nodes));
+    state->closed_snapshot_root = model->closed_snapshot_root;
+    state->closed_snapshot_mask = model->closed_snapshot_mask;
+}
+
 void sandbox3d_workspace_begin_topology_transaction(sandbox3d_workspace_model* model)
 {
     if (model == NULL || model->topology_transaction_active)
@@ -1803,6 +1831,7 @@ void sandbox3d_workspace_begin_topology_transaction(sandbox3d_workspace_model* m
         model->topology_transaction_nodes,
         model->topology_nodes,
         sizeof(model->topology_nodes));
+    sandbox3d_workspace_capture_history_state(model, &model->topology_transaction_state);
     model->topology_transaction_root = model->topology_root;
     model->topology_transaction_named_layout = model->named_layout;
     model->topology_transaction_active = true;
@@ -1813,6 +1842,26 @@ void sandbox3d_workspace_commit_topology_transaction(sandbox3d_workspace_model* 
     if (model == NULL)
     {
         return;
+    }
+    if (model->topology_transaction_active)
+    {
+        if (model->undo_history_count >= SANDBOX3D_WORKSPACE_LAYOUT_HISTORY_MAX)
+        {
+            memmove(
+                &model->undo_history[0],
+                &model->undo_history[1],
+                (SANDBOX3D_WORKSPACE_LAYOUT_HISTORY_MAX - 1U) * sizeof(model->undo_history[0]));
+            memmove(
+                &model->undo_after_history[0],
+                &model->undo_after_history[1],
+                (SANDBOX3D_WORKSPACE_LAYOUT_HISTORY_MAX - 1U) * sizeof(model->undo_after_history[0]));
+            model->undo_history_count = SANDBOX3D_WORKSPACE_LAYOUT_HISTORY_MAX - 1U;
+        }
+        model->undo_history[model->undo_history_count] = model->topology_transaction_state;
+        sandbox3d_workspace_capture_history_state(
+            model, &model->undo_after_history[model->undo_history_count]);
+        ++model->undo_history_count;
+        model->redo_history_count = 0U;
     }
     model->topology_transaction_active = false;
     model->topology_transaction_root = UINT16_MAX;
@@ -1825,19 +1874,128 @@ void sandbox3d_workspace_rollback_topology_transaction(sandbox3d_workspace_model
     {
         return;
     }
+    memcpy(model->panels, model->topology_transaction_state.panels, sizeof(model->panels));
     memcpy(
-        model->topology_nodes,
-        model->topology_transaction_nodes,
-        sizeof(model->topology_nodes));
-    model->topology_root = model->topology_transaction_root;
-    {
-        const sandbox3d_workspace_named_layout transaction_layout =
-            model->topology_transaction_named_layout;
-        sandbox3d_workspace_commit_topology_transaction(model);
-        model->named_layout = transaction_layout;
-    }
+        model->left_dock_panels,
+        model->topology_transaction_state.left_dock_panels,
+        sizeof(model->left_dock_panels));
+    memcpy(
+        model->right_dock_panels,
+        model->topology_transaction_state.right_dock_panels,
+        sizeof(model->right_dock_panels));
+    model->left_dock_panel_count = model->topology_transaction_state.left_dock_panel_count;
+    model->right_dock_panel_count = model->topology_transaction_state.right_dock_panel_count;
+    model->left_dock_width = model->topology_transaction_state.left_dock_width;
+    model->right_dock_width = model->topology_transaction_state.right_dock_width;
+    model->ui_scale = model->topology_transaction_state.ui_scale;
+    memcpy(model->topology_nodes, model->topology_transaction_state.topology_nodes, sizeof(model->topology_nodes));
+    model->topology_root = model->topology_transaction_state.topology_root;
+    model->named_layout = model->topology_transaction_state.named_layout;
+    model->closed_sections_mask = model->topology_transaction_state.closed_sections_mask;
+    model->maximized_section = model->topology_transaction_state.maximized_section;
+    model->closed_snapshot_valid = model->topology_transaction_state.closed_snapshot_valid;
+    memcpy(model->closed_snapshot_nodes, model->topology_transaction_state.closed_snapshot_nodes, sizeof(model->closed_snapshot_nodes));
+    model->closed_snapshot_root = model->topology_transaction_state.closed_snapshot_root;
+    model->closed_snapshot_mask = model->topology_transaction_state.closed_snapshot_mask;
+    model->topology_transaction_active = false;
+    model->topology_transaction_root = UINT16_MAX;
     model->active_divider_node = UINT16_MAX;
     model->active_divider_dock = SANDBOX3D_WORKSPACE_DOCK_FLOATING;
+}
+
+static void sandbox3d_workspace_restore_history_state(
+    sandbox3d_workspace_model* model,
+    const sandbox3d_workspace_layout_history_state* state)
+{
+    if (model == NULL || state == NULL)
+    {
+        return;
+    }
+    memcpy(model->panels, state->panels, sizeof(model->panels));
+    memcpy(model->left_dock_panels, state->left_dock_panels, sizeof(model->left_dock_panels));
+    memcpy(model->right_dock_panels, state->right_dock_panels, sizeof(model->right_dock_panels));
+    model->left_dock_panel_count = state->left_dock_panel_count;
+    model->right_dock_panel_count = state->right_dock_panel_count;
+    model->left_dock_width = state->left_dock_width;
+    model->right_dock_width = state->right_dock_width;
+    model->ui_scale = state->ui_scale;
+    memcpy(model->topology_nodes, state->topology_nodes, sizeof(model->topology_nodes));
+    model->topology_root = state->topology_root;
+    model->named_layout = state->named_layout;
+    model->closed_sections_mask = state->closed_sections_mask;
+    model->maximized_section = state->maximized_section;
+    model->closed_snapshot_valid = state->closed_snapshot_valid;
+    memcpy(model->closed_snapshot_nodes, state->closed_snapshot_nodes, sizeof(model->closed_snapshot_nodes));
+    model->closed_snapshot_root = state->closed_snapshot_root;
+    model->closed_snapshot_mask = state->closed_snapshot_mask;
+    model->topology_transaction_active = false;
+    model->topology_transaction_root = UINT16_MAX;
+    model->active_drag_panel = SANDBOX3D_WORKSPACE_PANEL_NONE;
+    model->active_tab_drag_section = SANDBOX3D_WORKSPACE_PANEL_NONE;
+    model->active_tab_drag_tab = SANDBOX3D_WORKSPACE_PANEL_NONE;
+    model->tab_drag_active = false;
+    model->active_resize_panel = SANDBOX3D_WORKSPACE_PANEL_NONE;
+    model->resize_target = SANDBOX3D_WORKSPACE_RESIZE_NONE;
+    model->active_divider_node = UINT16_MAX;
+    model->divider_close_preview = false;
+    model->divider_close_section = SANDBOX3D_WORKSPACE_PANEL_NONE;
+}
+
+bool sandbox3d_workspace_can_undo(const sandbox3d_workspace_model* model)
+{
+    return model != NULL && model->undo_history_count > 0U;
+}
+
+bool sandbox3d_workspace_can_redo(const sandbox3d_workspace_model* model)
+{
+    return model != NULL && model->redo_history_count > 0U;
+}
+
+bool sandbox3d_workspace_undo(sandbox3d_workspace_model* model)
+{
+    sandbox3d_workspace_layout_history_state post_state;
+    if (model == NULL || model->undo_history_count == 0U ||
+        !sandbox3d_workspace_topology_is_valid(model))
+    {
+        return false;
+    }
+    post_state = model->undo_after_history[model->undo_history_count - 1U];
+    sandbox3d_workspace_restore_history_state(model, &model->undo_history[model->undo_history_count - 1U]);
+    --model->undo_history_count;
+    if (model->redo_history_count >= SANDBOX3D_WORKSPACE_LAYOUT_HISTORY_MAX)
+    {
+        memmove(&model->redo_history[0], &model->redo_history[1],
+            (SANDBOX3D_WORKSPACE_LAYOUT_HISTORY_MAX - 1U) * sizeof(model->redo_history[0]));
+        model->redo_history_count = SANDBOX3D_WORKSPACE_LAYOUT_HISTORY_MAX - 1U;
+    }
+    model->redo_history[model->redo_history_count++] = post_state;
+    snprintf(model->last_action, sizeof(model->last_action), "Layout undo");
+    return sandbox3d_workspace_topology_is_valid(model);
+}
+
+bool sandbox3d_workspace_redo(sandbox3d_workspace_model* model)
+{
+    sandbox3d_workspace_layout_history_state current;
+    sandbox3d_workspace_layout_history_state post_state;
+    if (model == NULL || model->redo_history_count == 0U ||
+        !sandbox3d_workspace_topology_is_valid(model))
+    {
+        return false;
+    }
+    sandbox3d_workspace_capture_history_state(model, &current);
+    post_state = model->redo_history[model->redo_history_count - 1U];
+    sandbox3d_workspace_restore_history_state(model, &post_state);
+    --model->redo_history_count;
+    if (model->undo_history_count >= SANDBOX3D_WORKSPACE_LAYOUT_HISTORY_MAX)
+    {
+        memmove(&model->undo_history[0], &model->undo_history[1],
+            (SANDBOX3D_WORKSPACE_LAYOUT_HISTORY_MAX - 1U) * sizeof(model->undo_history[0]));
+        model->undo_history_count = SANDBOX3D_WORKSPACE_LAYOUT_HISTORY_MAX - 1U;
+    }
+    model->undo_history[model->undo_history_count++] = current;
+    model->undo_after_history[model->undo_history_count - 1U] = post_state;
+    snprintf(model->last_action, sizeof(model->last_action), "Layout redo");
+    return sandbox3d_workspace_topology_is_valid(model);
 }
 
 void sandbox3d_workspace_begin_divider_drag(
@@ -2378,6 +2536,7 @@ bool sandbox3d_workspace_close_section(
     {
         return false;
     }
+    sandbox3d_workspace_begin_topology_transaction(model);
     sandbox3d_workspace_copy_topology(
         model->closed_snapshot_nodes,
         &model->closed_snapshot_root,
@@ -2387,7 +2546,7 @@ bool sandbox3d_workspace_close_section(
     model->closed_snapshot_valid = true;
     if (!sandbox3d_workspace_remove_section_node(model, section_id))
     {
-        model->closed_snapshot_valid = false;
+        sandbox3d_workspace_rollback_topology_transaction(model);
         return false;
     }
     model->closed_sections_mask |= 1U << section_id;
@@ -2396,7 +2555,13 @@ bool sandbox3d_workspace_close_section(
         model->maximized_section = SANDBOX3D_WORKSPACE_PANEL_NONE;
     }
     snprintf(model->last_action, sizeof(model->last_action), "%s closed", sandbox3d_workspace_panel_name(section_id));
-    return sandbox3d_workspace_topology_is_valid(model);
+    if (!sandbox3d_workspace_topology_is_valid(model))
+    {
+        sandbox3d_workspace_rollback_topology_transaction(model);
+        return false;
+    }
+    sandbox3d_workspace_commit_topology_transaction(model);
+    return true;
 }
 
 bool sandbox3d_workspace_close_active_tab(
@@ -2418,6 +2583,7 @@ bool sandbox3d_workspace_close_active_tab(
     {
         return false;
     }
+    sandbox3d_workspace_begin_topology_transaction(model);
     if (section->data.section.tab_count == 1U)
     {
         return sandbox3d_workspace_close_section(model, section_id);
@@ -2444,7 +2610,7 @@ bool sandbox3d_workspace_close_active_tab(
     section->data.section.active_tab = (uint8_t)active_tab;
     if (!sandbox3d_workspace_topology_is_valid(model))
     {
-        sandbox3d_workspace_restore_last_closed_section(model);
+        sandbox3d_workspace_rollback_topology_transaction(model);
         return false;
     }
     snprintf(
@@ -2454,6 +2620,7 @@ bool sandbox3d_workspace_close_active_tab(
         sandbox3d_workspace_panel_name(closed_tab),
         (unsigned int)section->data.section.tab_count,
         section->data.section.tab_count == 1U ? "" : "s");
+    sandbox3d_workspace_commit_topology_transaction(model);
     return true;
 }
 

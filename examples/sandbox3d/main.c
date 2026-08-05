@@ -2480,6 +2480,42 @@ static bool sandbox3d_restore_custom_workspace_layout(
     return true;
 }
 
+static bool sandbox3d_undo_workspace_layout(henka_engine* engine, sandbox3d_state* state)
+{
+    if (engine == NULL || state == NULL || !sandbox3d_workspace_can_undo(&state->workspace.model))
+    {
+        sandbox3d_set_status(state, true, "No workspace layout undo is available.");
+        return false;
+    }
+    sandbox3d_cancel_workspace_interaction(state);
+    sandbox3d_close_all_detached_workspace_panels(engine, state);
+    if (!sandbox3d_workspace_undo(&state->workspace.model))
+    {
+        sandbox3d_set_status(state, true, "Workspace undo was rejected; the current layout was preserved.");
+        return false;
+    }
+    sandbox3d_set_status(state, false, "Workspace layout undone.");
+    return true;
+}
+
+static bool sandbox3d_redo_workspace_layout(henka_engine* engine, sandbox3d_state* state)
+{
+    if (engine == NULL || state == NULL || !sandbox3d_workspace_can_redo(&state->workspace.model))
+    {
+        sandbox3d_set_status(state, true, "No workspace layout redo is available.");
+        return false;
+    }
+    sandbox3d_cancel_workspace_interaction(state);
+    sandbox3d_close_all_detached_workspace_panels(engine, state);
+    if (!sandbox3d_workspace_redo(&state->workspace.model))
+    {
+        sandbox3d_set_status(state, true, "Workspace redo was rejected; the current layout was preserved.");
+        return false;
+    }
+    sandbox3d_set_status(state, false, "Workspace layout redone.");
+    return true;
+}
+
 static bool sandbox3d_workspace_shows_scene_panel(const sandbox3d_state* state)
 {
     return state != NULL &&
@@ -8831,6 +8867,26 @@ static void sandbox3d_draw_controls_panel(
                     has_custom_layout ? "Restore Custom" : "No Custom Saved"))
             {
                 (void)sandbox3d_restore_custom_workspace_layout(engine, state);
+            }
+        }
+        y += 34.0f;
+        {
+            const float history_button_width = (panel_bounds.width - 38.0f) * 0.5f;
+            if (henka_ui_primary_button(
+                    state->ui,
+                    "workspace_undo",
+                    (henka_ui_rect){x_left, y, history_button_width, 28.0f},
+                    sandbox3d_workspace_can_undo(&state->workspace.model) ? "Undo Layout" : "No Undo"))
+            {
+                (void)sandbox3d_undo_workspace_layout(engine, state);
+            }
+            if (henka_ui_primary_button(
+                    state->ui,
+                    "workspace_redo",
+                    (henka_ui_rect){x_left + history_button_width + 10.0f, y, history_button_width, 28.0f},
+                    sandbox3d_workspace_can_redo(&state->workspace.model) ? "Redo Layout" : "No Redo"))
+            {
+                (void)sandbox3d_redo_workspace_layout(engine, state);
             }
         }
         y += 42.0f;
