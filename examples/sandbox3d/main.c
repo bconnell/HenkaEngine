@@ -495,6 +495,9 @@ static void sandbox3d_draw_workspace_affordances(
 static void sandbox3d_draw_workspace_context_menu(
     henka_engine* engine,
     sandbox3d_state* state);
+static void sandbox3d_draw_workspace_section_chooser(
+    henka_engine* engine,
+    sandbox3d_state* state);
 static bool sandbox3d_workspace_can_dock_panel(
     const sandbox3d_state* state,
     sandbox3d_workspace_panel_id panel_id,
@@ -4964,6 +4967,25 @@ static bool sandbox3d_handle_workspace_input(
         return false;
     }
 
+    if (state->workspace.model.section_chooser_open)
+    {
+        if (henka_input_was_key_pressed(engine, HENKA_KEY_ESCAPE))
+        {
+            state->workspace.model.section_chooser_open = false;
+            state->workspace.model.section_chooser_source = SANDBOX3D_WORKSPACE_PANEL_NONE;
+            henka_input_consume_key_press(engine, HENKA_KEY_ESCAPE);
+            sandbox3d_set_status(state, false, "Section creation cancelled.");
+            return true;
+        }
+        if (left_pressed && !henka_ui_rect_contains(state->workspace.model.section_chooser_rect, framebuffer_mouse))
+        {
+            state->workspace.model.section_chooser_open = false;
+            state->workspace.model.section_chooser_source = SANDBOX3D_WORKSPACE_PANEL_NONE;
+            sandbox3d_set_status(state, false, "Section creation cancelled.");
+        }
+        return true;
+    }
+
     if (state->workspace.model.context_menu_open)
     {
         if (left_pressed && !henka_ui_rect_contains(state->workspace.model.context_menu_rect, framebuffer_mouse))
@@ -6461,13 +6483,21 @@ static void sandbox3d_apply_workspace_context_command(
             break;
         case SANDBOX3D_WORKSPACE_CONTEXT_OPEN_HORIZONTAL:
         case SANDBOX3D_WORKSPACE_CONTEXT_OPEN_VERTICAL:
-            snprintf(
-                state->workspace.model.last_action,
-                sizeof(state->workspace.model.last_action),
-                "%s split request recorded",
-                command == SANDBOX3D_WORKSPACE_CONTEXT_OPEN_HORIZONTAL ? "Horizontal" : "Vertical");
-            sandbox3d_set_status(state, false, "The bounded topology recorded the split request; dynamic section creation remains in progress.");
-            changed = true;
+            state->workspace.model.section_chooser_open = true;
+            state->workspace.model.section_chooser_source = section;
+            state->workspace.model.section_chooser_orientation =
+                command == SANDBOX3D_WORKSPACE_CONTEXT_OPEN_HORIZONTAL
+                    ? SANDBOX3D_WORKSPACE_SPLIT_VERTICAL
+                    : SANDBOX3D_WORKSPACE_SPLIT_HORIZONTAL;
+            state->workspace.model.section_chooser_rect = state->workspace.model.context_menu_rect;
+            state->workspace.model.section_chooser_rect.width = 340.0f;
+            state->workspace.model.section_chooser_rect.height = 220.0f;
+            sandbox3d_set_status(
+                state,
+                false,
+                command == SANDBOX3D_WORKSPACE_CONTEXT_OPEN_HORIZONTAL
+                    ? "Choose a tool for the new top/bottom section."
+                    : "Choose a tool for the new left/right section.");
             break;
         case SANDBOX3D_WORKSPACE_CONTEXT_RESTORE_LAST_CLOSED:
             changed = sandbox3d_workspace_restore_last_closed_section(&state->workspace.model);
@@ -6523,6 +6553,105 @@ static void sandbox3d_draw_workspace_context_menu(
             break;
         }
     }
+}
+
+static void sandbox3d_draw_workspace_section_chooser(
+    henka_engine* engine,
+    sandbox3d_state* state)
+{
+    sandbox3d_workspace_model* model;
+    henka_ui_rect rect;
+    size_t panel_index;
+    size_t available_count = 0U;
+
+    if (engine == NULL || state == NULL || state->ui == NULL ||
+        !state->workspace.model.section_chooser_open)
+    {
+        return;
+    }
+    model = &state->workspace.model;
+    rect = model->section_chooser_rect;
+    if (state->frame_layout.scene_viewport.width > 0 && state->frame_layout.scene_viewport.height > 0)
+    {
+        const float framebuffer_width = (float)state->frame_layout.scene_viewport.x +
+            (float)state->frame_layout.scene_viewport.width;
+        const float framebuffer_height = (float)state->frame_layout.scene_viewport.y +
+            (float)state->frame_layout.scene_viewport.height;
+        if (rect.x + rect.width > framebuffer_width)
+        {
+            rect.x = fmaxf(4.0f, framebuffer_width - rect.width - 4.0f);
+        }
+        if (rect.y + rect.height > framebuffer_height)
+        {
+            rect.y = fmaxf(4.0f, framebuffer_height - rect.height - 4.0f);
+        }
+    }
+    model->section_chooser_rect = rect;
+    henka_ui_overlay_rect(state->ui, rect, (henka_vec4){0.05f, 0.07f, 0.10f, 0.98f});
+    henka_ui_label_colored(
+        state->ui,
+        rect.x + 10.0f,
+        rect.y + 8.0f,
+        1.0f,
+        model->section_chooser_orientation == SANDBOX3D_WORKSPACE_SPLIT_VERTICAL
+            ? "NEW TOP / BOTTOM SECTION"
+            : "NEW LEFT / RIGHT SECTION",
+        HENKA_UI_COLOR_INFO);
+    for (panel_index = 0U; panel_index < SANDBOX3D_WORKSPACE_PANEL_COUNT; ++panel_index)
+    {
+        const sandbox3d_workspace_panel_id panel_id = (sandbox3d_workspace_panel_id)panel_index;
+        char button_id[48];
+        henka_ui_rect button_rect;
+        if (!sandbox3d_workspace_section_is_closed(model, panel_id))
+        {
+            continue;
+        }
+        button_rect = (henka_ui_rect){
+            rect.x + 8.0f,
+            rect.y + 32.0f + (float)available_count * 28.0f,
+            rect.width - 16.0f,
+            24.0f};
+        snprintf(button_id, sizeof(button_id), "workspace_chooser_%zu", panel_index);
+        if (henka_ui_button(
+                state->ui,
+                button_id,
+                button_rect,
+                sandbox3d_workspace_panel_name(panel_id)))
+        {
+            const bool changed = sandbox3d_workspace_split_section(
+                model,
+                model->section_chooser_source,
+                model->section_chooser_orientation,
+                panel_id);
+            model->section_chooser_open = false;
+            model->section_chooser_source = SANDBOX3D_WORKSPACE_PANEL_NONE;
+            sandbox3d_set_statusf(
+                state,
+                !changed,
+                false,
+                changed ? "%s section created." : "Section creation was rejected safely.",
+                sandbox3d_workspace_panel_name(panel_id));
+            break;
+        }
+        available_count += 1U;
+    }
+    if (available_count == 0U)
+    {
+        henka_ui_label_colored(
+            state->ui,
+            rect.x + 10.0f,
+            rect.y + 42.0f,
+            1.0f,
+            "No available singleton section.",
+            HENKA_UI_COLOR_WARNING);
+    }
+    henka_ui_label_colored(
+        state->ui,
+        rect.x + 10.0f,
+        rect.y + rect.height - 18.0f,
+        1.0f,
+        "Escape cancels",
+        HENKA_UI_COLOR_MUTED);
 }
 
 static void sandbox3d_draw_panel_workspace_controls(
@@ -8696,6 +8825,7 @@ static void sandbox3d_build_ui(henka_engine* engine, sandbox3d_state* state)
             frame_desc.framebuffer_width,
             frame_desc.framebuffer_height);
         sandbox3d_draw_workspace_context_menu(engine, state);
+        sandbox3d_draw_workspace_section_chooser(engine, state);
 
         if (state->ui_visibility_report_pending)
         {

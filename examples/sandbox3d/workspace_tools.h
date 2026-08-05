@@ -154,6 +154,10 @@ typedef struct sandbox3d_workspace_model
     bool context_menu_open;
     sandbox3d_workspace_panel_id context_menu_section;
     henka_ui_rect context_menu_rect;
+    bool section_chooser_open;
+    sandbox3d_workspace_panel_id section_chooser_source;
+    sandbox3d_workspace_split_orientation section_chooser_orientation;
+    henka_ui_rect section_chooser_rect;
     char last_action[128];
 } sandbox3d_workspace_model;
 
@@ -276,6 +280,11 @@ bool sandbox3d_workspace_merge_sections(
     sandbox3d_workspace_model* model,
     sandbox3d_workspace_panel_id target_section,
     sandbox3d_workspace_panel_id source_section);
+bool sandbox3d_workspace_split_section(
+    sandbox3d_workspace_model* model,
+    sandbox3d_workspace_panel_id target_section,
+    sandbox3d_workspace_split_orientation orientation,
+    sandbox3d_workspace_panel_id new_section);
 void sandbox3d_workspace_equalize_sections(sandbox3d_workspace_model* model);
 void sandbox3d_workspace_set_maximized_section(
     sandbox3d_workspace_model* model,

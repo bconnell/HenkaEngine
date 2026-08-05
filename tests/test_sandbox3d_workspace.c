@@ -56,6 +56,19 @@ void henka_test_sandbox3d_workspace(void)
         HENKA_TEST_ASSERT(sandbox3d_workspace_topology_is_valid(&model));
         HENKA_TEST_ASSERT(sandbox3d_workspace_restore_last_closed_section(&model));
     }
+    HENKA_TEST_ASSERT(sandbox3d_workspace_close_section(&model, SANDBOX3D_WORKSPACE_PANEL_UTILITY));
+    HENKA_TEST_ASSERT(sandbox3d_workspace_split_section(
+        &model,
+        SANDBOX3D_WORKSPACE_PANEL_CONTROLS,
+        SANDBOX3D_WORKSPACE_SPLIT_VERTICAL,
+        SANDBOX3D_WORKSPACE_PANEL_UTILITY));
+    HENKA_TEST_ASSERT(!sandbox3d_workspace_section_is_closed(&model, SANDBOX3D_WORKSPACE_PANEL_UTILITY));
+    HENKA_TEST_ASSERT(sandbox3d_workspace_topology_is_valid(&model));
+    HENKA_TEST_ASSERT(!sandbox3d_workspace_split_section(
+        &model,
+        SANDBOX3D_WORKSPACE_PANEL_CONTROLS,
+        SANDBOX3D_WORKSPACE_SPLIT_HORIZONTAL,
+        SANDBOX3D_WORKSPACE_PANEL_UTILITY));
     HENKA_TEST_ASSERT(strcmp(
         sandbox3d_workspace_context_command_label(SANDBOX3D_WORKSPACE_CONTEXT_OPEN_HORIZONTAL),
         "Open a horizontal window") == 0);
