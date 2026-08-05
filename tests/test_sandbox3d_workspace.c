@@ -1,5 +1,7 @@
 #include "test_suite.h"
 
+#include <string.h>
+
 #include "../examples/sandbox3d/interaction_tools.h"
 #include "../examples/sandbox3d/workspace_tools.h"
 
@@ -8,8 +10,56 @@ void henka_test_sandbox3d_workspace(void)
     const sandbox3d_workspace_panel* panel;
     henka_ui_rect ownership[2];
     henka_ui_rect rect;
+    sandbox3d_workspace_topology_layout topology_layout;
+    const sandbox3d_workspace_topology_node* topology_root;
     sandbox3d_workspace_model model;
 
+    sandbox3d_workspace_model_reset(&model);
+    HENKA_TEST_ASSERT(sandbox3d_workspace_topology_is_valid(&model));
+    topology_root = sandbox3d_workspace_topology_get_node_const(&model, model.topology_root);
+    HENKA_TEST_ASSERT(topology_root != NULL);
+    HENKA_TEST_ASSERT(topology_root->type == SANDBOX3D_WORKSPACE_TOPOLOGY_NODE_SPLIT);
+    HENKA_TEST_ASSERT(topology_root->data.split.first_child != topology_root->data.split.second_child);
+    HENKA_TEST_ASSERT(sandbox3d_workspace_topology_section_has_tab(
+        &model, SANDBOX3D_WORKSPACE_PANEL_CONTROLS, SANDBOX3D_WORKSPACE_PANEL_CONTROLS));
+    sandbox3d_workspace_build_topology_layout(
+        &model,
+        (henka_ui_rect){0.0f, 0.0f, 1280.0f, 720.0f},
+        &topology_layout);
+    HENKA_TEST_ASSERT(topology_layout.divider_count == 3U);
+    HENKA_TEST_ASSERT(topology_layout.section_rects[SANDBOX3D_WORKSPACE_PANEL_CONTROLS].width >= 180.0f);
+    HENKA_TEST_ASSERT(topology_layout.section_rects[SANDBOX3D_WORKSPACE_PANEL_UTILITY].height >= 180.0f);
+    HENKA_TEST_ASSERT(topology_layout.divider_hit_rects[0].width == 10.0f);
+    sandbox3d_workspace_begin_divider_drag(&model, model.topology_root, (henka_vec2){640.0f, 360.0f});
+    sandbox3d_workspace_update_divider_drag(&model, (henka_vec2){760.0f, 360.0f}, (henka_ui_rect){0.0f, 0.0f, 1280.0f, 720.0f});
+    HENKA_TEST_ASSERT(topology_root->data.split.ratio > 0.5f);
+    sandbox3d_workspace_rollback_topology_transaction(&model);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(topology_root->data.split.ratio, 0.5f, 0.0001f);
+    HENKA_TEST_ASSERT(strcmp(
+        sandbox3d_workspace_context_command_label(SANDBOX3D_WORKSPACE_CONTEXT_DETACH),
+        "Detach section") == 0);
+    HENKA_TEST_ASSERT(sandbox3d_workspace_close_section(&model, SANDBOX3D_WORKSPACE_PANEL_UTILITY));
+    HENKA_TEST_ASSERT(sandbox3d_workspace_section_is_closed(&model, SANDBOX3D_WORKSPACE_PANEL_UTILITY));
+    HENKA_TEST_ASSERT(sandbox3d_workspace_topology_is_valid(&model));
+    HENKA_TEST_ASSERT(sandbox3d_workspace_restore_last_closed_section(&model));
+    HENKA_TEST_ASSERT(!sandbox3d_workspace_section_is_closed(&model, SANDBOX3D_WORKSPACE_PANEL_UTILITY));
+    HENKA_TEST_ASSERT(sandbox3d_workspace_merge_sections(
+        &model,
+        SANDBOX3D_WORKSPACE_PANEL_CONTROLS,
+        SANDBOX3D_WORKSPACE_PANEL_SCENE_OBJECTS));
+    HENKA_TEST_ASSERT(sandbox3d_workspace_section_is_closed(&model, SANDBOX3D_WORKSPACE_PANEL_SCENE_OBJECTS));
+    HENKA_TEST_ASSERT(sandbox3d_workspace_topology_section_has_tab(
+        &model,
+        SANDBOX3D_WORKSPACE_PANEL_CONTROLS,
+        SANDBOX3D_WORKSPACE_PANEL_SCENE_OBJECTS));
+    sandbox3d_workspace_set_maximized_section(&model, SANDBOX3D_WORKSPACE_PANEL_CONTROLS);
+    sandbox3d_workspace_build_topology_layout(
+        &model,
+        (henka_ui_rect){0.0f, 0.0f, 640.0f, 360.0f},
+        &topology_layout);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(topology_layout.section_rects[SANDBOX3D_WORKSPACE_PANEL_CONTROLS].width, 640.0f, 0.0001f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(topology_layout.section_rects[SANDBOX3D_WORKSPACE_PANEL_CONTROLS].height, 360.0f, 0.0001f);
+    sandbox3d_workspace_restore_maximized_section(&model);
     sandbox3d_workspace_model_reset(&model);
     HENKA_TEST_ASSERT(sandbox3d_workspace_should_start_panels_visible(false));
     HENKA_TEST_ASSERT(sandbox3d_workspace_should_start_panels_visible(true));

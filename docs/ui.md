@@ -75,7 +75,7 @@ In `henka_sandbox3d`, press `F4` to open the panels.
 On startup, the UI opens in `View` mode with no selected scene object so the controls are immediately visible without covering most of the scene.
 If you hide the panels, a small in-window recall hint stays visible so the viewport can stay clean without losing the `F4` and `F5` cues.
 
-The sandbox now uses a movable workspace layout with a more neutral graphite and slate shell:
+The sandbox now uses a movable workspace layout with a more neutral graphite and slate shell. The workspace model also has a bounded, validated single-root split topology: internal split nodes own their divider and ratio, leaf sections retain stable panel identity, and divider edits can be committed or rolled back transactionally. The current renderer keeps its compatible side-dock projection while the richer topology editor workflow is completed:
 
 - left and right dock regions for panels
 - stacked multi-panel side docks that share space instead of covering each other
@@ -84,6 +84,8 @@ The sandbox now uses a movable workspace layout with a more neutral graphite and
 - header dragging that redocks across valid zones or opens native detached windows
 - native OS frame movement and resizing for detached windows
 - visible splitter bars for occupied dock width resizing
+- one topology-owned divider per internal split, with a 1 px visual wire and 10 px logical hit target
+- bounded divider drag transactions with minimum section extents and rollback support
 
 Docked panels stay outside the scene. While dragging a docked panel, valid left and right dock targets show a thin outline over the final stack slot. Releasing on an outline redocks there, including across the workspace. Releasing away from the outlines opens a separate native tool window, so the detached panel can move outside the main sandbox frame without clipping. Closing that native window returns the panel to its last valid dock. Detached windows currently present a compact panel-state surface while full detached controls and OS-title-bar drag-back docking remain future work. `Reset Layout` closes detached windows and restores the default workspace.
 
@@ -184,7 +186,7 @@ When Diagnostics, Transform QA, or Physics QA is open in the heavier layout, the
 
 Editable selection is visible directly in the Scene View through a non-selectable highlighted bounds outline around the selected real scene object. The highlight is clipped to the Scene View and does not draw over workspace panels or the debug strip. Locked objects, including the default Ground, remain selectable and inspectable but do not show the yellow transform highlight or a gizmo. Clearing selection, clicking empty viewport space, hiding or locking the selected object, deleting it, or changing tools clears active transform-session ownership and updates Object Details and Diagnostics.
 
-Panel placement and dock resizing are session-only in the current sandbox. `Reset Layout` redocks the standard panels, closes detached windows, restores safe dock widths, makes panels visible, clears active workspace drag or resize state, and closes `Native Panel Test` if it is open. The Scene View remains the main center viewport. Saved detached placement, full detached controls, a richer in-window profile editor, and detachable Scene View support remain future work.
+Panel placement and dock resizing are session-only in the current sandbox. `Reset Layout` redocks the standard panels, closes detached windows, restores safe dock widths, makes panels visible, clears active workspace drag or resize state, and closes `Native Panel Test` if it is open. The Scene View remains the main center viewport. The topology API exposes the required section context-command vocabulary and transactional divider foundation, but full context-menu execution, tab groups, close/restore, named layouts, saved detached placement, full detached controls, a richer in-window profile editor, and detachable Scene View support remain future work.
 
 When the UI is open:
 

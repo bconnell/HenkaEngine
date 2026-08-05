@@ -44,7 +44,8 @@ $repoPrefix = $repoPath + [System.IO.Path]::DirectorySeparatorChar
 $exePath = [System.IO.Path]::GetFullPath($ExecutablePath)
 $cmakePath = [System.IO.Path]::GetFullPath($CMakePath)
 
-if (-not (Test-Path -LiteralPath (Join-Path $repoPath ".git") -PathType Container) -or
+if ((-not (Test-Path -LiteralPath (Join-Path $repoPath ".git") -PathType Leaf) -and
+     -not (Test-Path -LiteralPath (Join-Path $repoPath ".git") -PathType Container)) -or
     -not (Test-Path -LiteralPath (Join-Path $repoPath "CMakeLists.txt") -PathType Leaf)) {
     throw "The provenance repository root is not a Henka checkout."
 }

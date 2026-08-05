@@ -29,6 +29,69 @@ typedef enum sandbox3d_workspace_dock_zone
 #define SANDBOX3D_WORKSPACE_DOCK_MASK_LEFT (1U << SANDBOX3D_WORKSPACE_DOCK_LEFT)
 #define SANDBOX3D_WORKSPACE_DOCK_MASK_RIGHT (1U << SANDBOX3D_WORKSPACE_DOCK_RIGHT)
 
+#define SANDBOX3D_WORKSPACE_TOPOLOGY_MAX_NODES 16U
+#define SANDBOX3D_WORKSPACE_TOPOLOGY_MAX_TABS SANDBOX3D_WORKSPACE_PANEL_COUNT
+#define SANDBOX3D_WORKSPACE_DIVIDER_HIT_WIDTH 10.0f
+
+typedef enum sandbox3d_workspace_split_orientation
+{
+    SANDBOX3D_WORKSPACE_SPLIT_HORIZONTAL = 0,
+    SANDBOX3D_WORKSPACE_SPLIT_VERTICAL
+} sandbox3d_workspace_split_orientation;
+
+typedef enum sandbox3d_workspace_topology_node_type
+{
+    SANDBOX3D_WORKSPACE_TOPOLOGY_NODE_UNUSED = 0,
+    SANDBOX3D_WORKSPACE_TOPOLOGY_NODE_SPLIT,
+    SANDBOX3D_WORKSPACE_TOPOLOGY_NODE_SECTION
+} sandbox3d_workspace_topology_node_type;
+
+typedef struct sandbox3d_workspace_topology_node
+{
+    sandbox3d_workspace_topology_node_type type;
+    uint16_t parent;
+    union
+    {
+        struct
+        {
+            uint16_t first_child;
+            uint16_t second_child;
+            sandbox3d_workspace_split_orientation orientation;
+            float ratio;
+            float minimum_first;
+            float minimum_second;
+        } split;
+        struct
+        {
+            sandbox3d_workspace_panel_id section_id;
+            sandbox3d_workspace_panel_id tabs[SANDBOX3D_WORKSPACE_TOPOLOGY_MAX_TABS];
+            uint8_t tab_count;
+            uint8_t active_tab;
+        } section;
+    } data;
+} sandbox3d_workspace_topology_node;
+
+typedef struct sandbox3d_workspace_topology_layout
+{
+    henka_ui_rect section_rects[SANDBOX3D_WORKSPACE_PANEL_COUNT];
+    henka_ui_rect divider_visual_rects[SANDBOX3D_WORKSPACE_TOPOLOGY_MAX_NODES];
+    henka_ui_rect divider_hit_rects[SANDBOX3D_WORKSPACE_TOPOLOGY_MAX_NODES];
+    size_t divider_count;
+} sandbox3d_workspace_topology_layout;
+
+typedef enum sandbox3d_workspace_context_command
+{
+    SANDBOX3D_WORKSPACE_CONTEXT_OPEN_HORIZONTAL = 0,
+    SANDBOX3D_WORKSPACE_CONTEXT_OPEN_VERTICAL,
+    SANDBOX3D_WORKSPACE_CONTEXT_CLOSE_SECTION,
+    SANDBOX3D_WORKSPACE_CONTEXT_MERGE_ADJACENT,
+    SANDBOX3D_WORKSPACE_CONTEXT_EQUALIZE,
+    SANDBOX3D_WORKSPACE_CONTEXT_MAXIMIZE,
+    SANDBOX3D_WORKSPACE_CONTEXT_DETACH,
+    SANDBOX3D_WORKSPACE_CONTEXT_MOVE_TO_TAB_GROUP,
+    SANDBOX3D_WORKSPACE_CONTEXT_COMMAND_COUNT
+} sandbox3d_workspace_context_command;
+
 typedef enum sandbox3d_workspace_resize_target
 {
     SANDBOX3D_WORKSPACE_RESIZE_NONE = 0,
@@ -70,6 +133,20 @@ typedef struct sandbox3d_workspace_model
     henka_ui_rect resize_start_rect;
     float resize_start_width;
     unsigned int next_z_order;
+    uint16_t topology_root;
+    sandbox3d_workspace_topology_node topology_nodes[SANDBOX3D_WORKSPACE_TOPOLOGY_MAX_NODES];
+    bool topology_transaction_active;
+    sandbox3d_workspace_topology_node topology_transaction_nodes[SANDBOX3D_WORKSPACE_TOPOLOGY_MAX_NODES];
+    uint16_t topology_transaction_root;
+    uint16_t active_divider_node;
+    float active_divider_start_ratio;
+    henka_vec2 active_divider_start_pointer;
+    uint32_t closed_sections_mask;
+    sandbox3d_workspace_panel_id maximized_section;
+    bool closed_snapshot_valid;
+    sandbox3d_workspace_topology_node closed_snapshot_nodes[SANDBOX3D_WORKSPACE_TOPOLOGY_MAX_NODES];
+    uint16_t closed_snapshot_root;
+    uint32_t closed_snapshot_mask;
     char last_action[128];
 } sandbox3d_workspace_model;
 
@@ -151,6 +228,53 @@ void sandbox3d_workspace_update_dock_resize(
     float minimum_dock_width,
     float reserved_other_dock_width);
 void sandbox3d_workspace_end_interaction(sandbox3d_workspace_model* model);
+sandbox3d_workspace_topology_node* sandbox3d_workspace_topology_get_node(
+    sandbox3d_workspace_model* model,
+    uint16_t node_index);
+const sandbox3d_workspace_topology_node* sandbox3d_workspace_topology_get_node_const(
+    const sandbox3d_workspace_model* model,
+    uint16_t node_index);
+bool sandbox3d_workspace_topology_is_valid(const sandbox3d_workspace_model* model);
+void sandbox3d_workspace_build_topology_layout(
+    const sandbox3d_workspace_model* model,
+    henka_ui_rect bounds,
+    sandbox3d_workspace_topology_layout* out_layout);
+henka_ui_rect sandbox3d_workspace_topology_divider_hit_rect(
+    henka_ui_rect divider_rect,
+    sandbox3d_workspace_split_orientation orientation);
+void sandbox3d_workspace_begin_divider_drag(
+    sandbox3d_workspace_model* model,
+    uint16_t node_index,
+    henka_vec2 pointer);
+void sandbox3d_workspace_update_divider_drag(
+    sandbox3d_workspace_model* model,
+    henka_vec2 pointer,
+    henka_ui_rect bounds);
+void sandbox3d_workspace_begin_topology_transaction(sandbox3d_workspace_model* model);
+void sandbox3d_workspace_commit_topology_transaction(sandbox3d_workspace_model* model);
+void sandbox3d_workspace_rollback_topology_transaction(sandbox3d_workspace_model* model);
+bool sandbox3d_workspace_topology_section_has_tab(
+    const sandbox3d_workspace_model* model,
+    sandbox3d_workspace_panel_id section_id,
+    sandbox3d_workspace_panel_id tab_id);
+bool sandbox3d_workspace_close_section(
+    sandbox3d_workspace_model* model,
+    sandbox3d_workspace_panel_id section_id);
+bool sandbox3d_workspace_restore_last_closed_section(sandbox3d_workspace_model* model);
+bool sandbox3d_workspace_merge_sections(
+    sandbox3d_workspace_model* model,
+    sandbox3d_workspace_panel_id target_section,
+    sandbox3d_workspace_panel_id source_section);
+void sandbox3d_workspace_equalize_sections(sandbox3d_workspace_model* model);
+void sandbox3d_workspace_set_maximized_section(
+    sandbox3d_workspace_model* model,
+    sandbox3d_workspace_panel_id section_id);
+void sandbox3d_workspace_restore_maximized_section(sandbox3d_workspace_model* model);
+bool sandbox3d_workspace_section_is_closed(
+    const sandbox3d_workspace_model* model,
+    sandbox3d_workspace_panel_id section_id);
+const char* sandbox3d_workspace_context_command_label(
+    sandbox3d_workspace_context_command command);
 sandbox3d_workspace_dock_zone sandbox3d_workspace_evaluate_dock_zone(
     henka_vec2 pointer,
     henka_ui_rect left_dock,

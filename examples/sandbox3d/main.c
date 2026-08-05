@@ -2232,6 +2232,10 @@ static bool sandbox3d_workspace_panel_visible(
     const sandbox3d_state* state,
     sandbox3d_workspace_panel_id panel_id)
 {
+    if (state == NULL || sandbox3d_workspace_section_is_closed(&state->workspace.model, panel_id))
+    {
+        return false;
+    }
     switch (panel_id)
     {
         case SANDBOX3D_WORKSPACE_PANEL_CONTROLS:
@@ -6128,11 +6132,25 @@ static void sandbox3d_draw_workspace_affordances(
 
     if (layout->left_splitter.width > 0.0f)
     {
-        henka_ui_overlay_rect(state->ui, layout->left_splitter, (henka_vec4){0.24f, 0.27f, 0.31f, 0.92f});
+        henka_ui_overlay_rect(
+            state->ui,
+            (henka_ui_rect){
+                layout->left_splitter.x + (layout->left_splitter.width - 1.0f) * 0.5f,
+                layout->left_splitter.y,
+                1.0f,
+                layout->left_splitter.height},
+            (henka_vec4){0.48f, 0.57f, 0.68f, 0.90f});
     }
     if (layout->right_splitter.width > 0.0f)
     {
-        henka_ui_overlay_rect(state->ui, layout->right_splitter, (henka_vec4){0.24f, 0.27f, 0.31f, 0.92f});
+        henka_ui_overlay_rect(
+            state->ui,
+            (henka_ui_rect){
+                layout->right_splitter.x + (layout->right_splitter.width - 1.0f) * 0.5f,
+                layout->right_splitter.y,
+                1.0f,
+                layout->right_splitter.height},
+            (henka_vec4){0.48f, 0.57f, 0.68f, 0.90f});
     }
 
     if (state->workspace.model.active_drag_panel != SANDBOX3D_WORKSPACE_PANEL_NONE)
