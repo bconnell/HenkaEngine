@@ -44,6 +44,8 @@ typedef struct henka_tool_window_state
     bool focused;
     int width;
     int height;
+    int position_x;
+    int position_y;
     henka_vec2 mouse_position;
     bool mouse_left_down;
     bool mouse_left_pressed;
@@ -272,6 +274,11 @@ henka_result henka_engine_get_tool_window_state(
     const henka_engine* engine,
     henka_window_id window_id,
     henka_tool_window_state* out_state);
+henka_result henka_engine_set_tool_window_position(
+    henka_engine* engine,
+    henka_window_id window_id,
+    int position_x,
+    int position_y);
 const char* henka_window_event_route_to_string(henka_window_event_route route);
 const char* henka_engine_get_asset_base_path(const henka_engine* engine);
 const char* henka_engine_get_user_data_base_path(const henka_engine* engine);

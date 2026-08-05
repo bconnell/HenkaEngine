@@ -1189,6 +1189,25 @@ henka_result henka_engine_get_tool_window_state(
     return HENKA_SUCCESS;
 }
 
+henka_result henka_engine_set_tool_window_position(
+    henka_engine* engine,
+    henka_window_id window_id,
+    int position_x,
+    int position_y)
+{
+    if (engine == NULL || window_id == HENKA_INVALID_WINDOW_ID)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    return henka_platform_set_tool_window_position(
+               engine->platform,
+               window_id,
+               position_x,
+               position_y)
+        ? HENKA_SUCCESS
+        : HENKA_ERROR_PLATFORM;
+}
+
 const char* henka_window_event_route_to_string(henka_window_event_route route)
 {
     switch (route)

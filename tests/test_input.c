@@ -54,6 +54,7 @@ void henka_test_input(void)
     HENKA_TEST_ASSERT(tool_window_state.mouse_left_down);
     HENKA_TEST_ASSERT(tool_window_state.mouse_left_pressed);
     HENKA_TEST_ASSERT(!tool_window_state.mouse_left_released);
+    HENKA_TEST_ASSERT(henka_engine_set_tool_window_position(NULL, 1U, 0, 0) == HENKA_ERROR_INVALID_ARGUMENT);
 
     input.keys_down[HENKA_KEY_W] = true;
     input.keys_pressed[HENKA_KEY_W] = true;

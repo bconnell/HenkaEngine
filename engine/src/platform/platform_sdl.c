@@ -115,6 +115,8 @@ typedef struct henka_platform_tool_window
     bool resized;
     int width;
     int height;
+    int position_x;
+    int position_y;
     henka_vec2 mouse_position;
     bool mouse_left_down;
     bool mouse_left_pressed;
@@ -608,6 +610,11 @@ henka_result henka_platform_create_tool_window(
         slot->width = desc->width;
         slot->height = desc->height;
     }
+    if (!SDL_GetWindowPosition(slot->window, &slot->position_x, &slot->position_y))
+    {
+        slot->position_x = 0;
+        slot->position_y = 0;
+    }
 
     platform->next_tool_window_id = next_candidate;
     platform->multi_window_available = true;
@@ -676,6 +683,8 @@ bool henka_platform_get_tool_window_state(
     out_state->focused = slot->focused;
     out_state->width = slot->width;
     out_state->height = slot->height;
+    out_state->position_x = slot->position_x;
+    out_state->position_y = slot->position_y;
     out_state->mouse_position = slot->mouse_position;
     out_state->mouse_left_down = slot->mouse_left_down;
     out_state->mouse_left_pressed = slot->mouse_left_pressed;
@@ -687,6 +696,22 @@ bool henka_platform_get_tool_window_state(
         sizeof(out_state->last_event),
         "%s",
         slot->last_event);
+    return true;
+}
+
+bool henka_platform_set_tool_window_position(
+    struct henka_platform* platform,
+    henka_window_id window_id,
+    int position_x,
+    int position_y)
+{
+    henka_platform_tool_window* slot = henka_platform_find_tool_window(platform, window_id);
+    if (slot == NULL || !SDL_SetWindowPosition(slot->window, position_x, position_y))
+    {
+        return false;
+    }
+    slot->position_x = position_x;
+    slot->position_y = position_y;
     return true;
 }
 
@@ -871,6 +896,8 @@ henka_result henka_platform_poll_events(struct henka_platform* platform, henka_i
                 else if ((tool_window = henka_platform_find_tool_window_by_native_id(platform, event.window.windowID)) != NULL)
                 {
                     henka_platform_record_tool_event(platform, tool_window, "moved", false, false);
+                    tool_window->position_x = event.window.data1;
+                    tool_window->position_y = event.window.data2;
                 }
                 else
                 {

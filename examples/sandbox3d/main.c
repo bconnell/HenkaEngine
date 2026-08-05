@@ -3623,6 +3623,23 @@ static bool sandbox3d_open_detached_workspace_panel(
         return false;
     }
 
+    {
+        char key[96];
+        const int invalid_position = -2147483647;
+        int position_x;
+        int position_y;
+        snprintf(key, sizeof(key), "ui.workspace.panel.%d.detached.x", (int)panel_id);
+        position_x = henka_settings_get_int(state->settings, key, invalid_position);
+        snprintf(key, sizeof(key), "ui.workspace.panel.%d.detached.y", (int)panel_id);
+        position_y = henka_settings_get_int(state->settings, key, invalid_position);
+        if (position_x != invalid_position && position_y != invalid_position &&
+            position_x >= -16384 && position_x <= 16384 &&
+            position_y >= -16384 && position_y <= 16384)
+        {
+            (void)henka_engine_set_tool_window_position(engine, window_id, position_x, position_y);
+        }
+    }
+
     state->detached_panel_window_ids[panel_id] = window_id;
     sandbox3d_workspace_detach_panel(&state->workspace.model, panel_id, window_id);
     sandbox3d_set_statusf(state, false, false, "%s detached into a separate window.", sandbox3d_workspace_panel_name(panel_id));
@@ -3644,6 +3661,17 @@ static void sandbox3d_close_detached_workspace_panel(
     window_id = state->detached_panel_window_ids[panel_id];
     if (window_id != HENKA_INVALID_WINDOW_ID)
     {
+        henka_tool_window_state window_state;
+        if (state->settings != NULL &&
+            henka_engine_get_tool_window_state(engine, window_id, &window_state) == HENKA_SUCCESS &&
+            window_state.open)
+        {
+            char key[96];
+            snprintf(key, sizeof(key), "ui.workspace.panel.%d.detached.x", (int)panel_id);
+            (void)henka_settings_set_int(state->settings, key, window_state.position_x);
+            snprintf(key, sizeof(key), "ui.workspace.panel.%d.detached.y", (int)panel_id);
+            (void)henka_settings_set_int(state->settings, key, window_state.position_y);
+        }
         (void)henka_engine_close_tool_window(engine, window_id);
     }
     state->detached_panel_window_ids[panel_id] = HENKA_INVALID_WINDOW_ID;
@@ -3891,6 +3919,15 @@ static void sandbox3d_build_detached_workspace_panel_ui(henka_engine* engine, sa
         frame_desc.mouse_left_down = window_state.mouse_left_down;
         frame_desc.mouse_left_pressed = window_state.mouse_left_pressed;
         frame_desc.mouse_left_released = window_state.mouse_left_released;
+
+        if (state->settings != NULL)
+        {
+            char key[96];
+            snprintf(key, sizeof(key), "ui.workspace.panel.%d.detached.x", (int)panel_id);
+            (void)henka_settings_set_int(state->settings, key, window_state.position_x);
+            snprintf(key, sizeof(key), "ui.workspace.panel.%d.detached.y", (int)panel_id);
+            (void)henka_settings_set_int(state->settings, key, window_state.position_y);
+        }
 
         if (henka_ui_begin_frame(ui, &frame_desc) != HENKA_SUCCESS)
         {

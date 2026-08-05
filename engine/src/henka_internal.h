@@ -433,6 +433,11 @@ bool henka_platform_get_tool_window_state(
     const struct henka_platform* platform,
     henka_window_id window_id,
     henka_tool_window_state* out_state);
+bool henka_platform_set_tool_window_position(
+    struct henka_platform* platform,
+    henka_window_id window_id,
+    int position_x,
+    int position_y);
 void henka_platform_get_diagnostics(const struct henka_platform* platform, henka_platform_diagnostics* out_diagnostics);
 void* henka_platform_get_native_tool_window(struct henka_platform* platform, henka_window_id window_id);
 henka_result henka_platform_set_vsync(struct henka_platform* platform, bool enabled);
