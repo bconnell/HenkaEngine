@@ -11,6 +11,7 @@ void henka_test_sandbox3d_workspace(void)
     henka_ui_rect ownership[2];
     henka_ui_rect rect;
     sandbox3d_workspace_topology_layout topology_layout;
+    sandbox3d_workspace_topology_layout dock_topology_layout;
     const sandbox3d_workspace_topology_node* topology_root;
     sandbox3d_workspace_model model;
 
@@ -38,6 +39,16 @@ void henka_test_sandbox3d_workspace(void)
     HENKA_TEST_ASSERT(topology_layout.section_rects[SANDBOX3D_WORKSPACE_PANEL_CONTROLS].width >= 180.0f);
     HENKA_TEST_ASSERT(topology_layout.section_rects[SANDBOX3D_WORKSPACE_PANEL_UTILITY].height >= 180.0f);
     HENKA_TEST_ASSERT(topology_layout.divider_hit_rects[0].width == 10.0f);
+    sandbox3d_workspace_build_dock_topology_layout(
+        &model,
+        SANDBOX3D_WORKSPACE_DOCK_LEFT,
+        (henka_ui_rect){0.0f, 0.0f, 320.0f, 680.0f},
+        &dock_topology_layout);
+    HENKA_TEST_ASSERT(dock_topology_layout.divider_count == 1U);
+    HENKA_TEST_ASSERT(dock_topology_layout.section_rects[SANDBOX3D_WORKSPACE_PANEL_CONTROLS].height >= 180.0f);
+    HENKA_TEST_ASSERT(dock_topology_layout.section_rects[SANDBOX3D_WORKSPACE_PANEL_SCENE_OBJECTS].height >= 180.0f);
+    HENKA_TEST_ASSERT(dock_topology_layout.divider_node_indices[0] == topology_root->data.split.first_child);
+    HENKA_TEST_ASSERT(dock_topology_layout.divider_hit_rects[0].height == 10.0f);
     sandbox3d_workspace_begin_divider_drag(&model, model.topology_root, (henka_vec2){640.0f, 360.0f});
     sandbox3d_workspace_update_divider_drag(&model, (henka_vec2){760.0f, 360.0f}, (henka_ui_rect){0.0f, 0.0f, 1280.0f, 720.0f});
     HENKA_TEST_ASSERT(topology_root->data.split.ratio > 0.5f);

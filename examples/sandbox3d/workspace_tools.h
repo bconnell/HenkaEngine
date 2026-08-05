@@ -77,6 +77,7 @@ typedef struct sandbox3d_workspace_topology_layout
     henka_ui_rect section_rects[SANDBOX3D_WORKSPACE_PANEL_COUNT];
     henka_ui_rect divider_visual_rects[SANDBOX3D_WORKSPACE_TOPOLOGY_MAX_NODES];
     henka_ui_rect divider_hit_rects[SANDBOX3D_WORKSPACE_TOPOLOGY_MAX_NODES];
+    uint16_t divider_node_indices[SANDBOX3D_WORKSPACE_TOPOLOGY_MAX_NODES];
     size_t divider_count;
 } sandbox3d_workspace_topology_layout;
 
@@ -145,6 +146,7 @@ typedef struct sandbox3d_workspace_model
     sandbox3d_workspace_topology_node topology_transaction_nodes[SANDBOX3D_WORKSPACE_TOPOLOGY_MAX_NODES];
     uint16_t topology_transaction_root;
     uint16_t active_divider_node;
+    sandbox3d_workspace_dock_zone active_divider_dock;
     float active_divider_start_ratio;
     henka_vec2 active_divider_start_pointer;
     bool divider_close_preview;
@@ -257,6 +259,11 @@ void sandbox3d_workspace_build_topology_layout(
     const sandbox3d_workspace_model* model,
     henka_ui_rect bounds,
     sandbox3d_workspace_topology_layout* out_layout);
+void sandbox3d_workspace_build_dock_topology_layout(
+    const sandbox3d_workspace_model* model,
+    sandbox3d_workspace_dock_zone dock_zone,
+    henka_ui_rect bounds,
+    sandbox3d_workspace_topology_layout* out_layout);
 henka_ui_rect sandbox3d_workspace_topology_divider_hit_rect(
     henka_ui_rect divider_rect,
     sandbox3d_workspace_split_orientation orientation);
@@ -264,6 +271,11 @@ void sandbox3d_workspace_begin_divider_drag(
     sandbox3d_workspace_model* model,
     uint16_t node_index,
     henka_vec2 pointer);
+void sandbox3d_workspace_begin_dock_divider_drag(
+    sandbox3d_workspace_model* model,
+    uint16_t node_index,
+    henka_vec2 pointer,
+    sandbox3d_workspace_dock_zone dock_zone);
 void sandbox3d_workspace_update_divider_drag(
     sandbox3d_workspace_model* model,
     henka_vec2 pointer,
