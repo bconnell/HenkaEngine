@@ -4882,6 +4882,7 @@ static bool sandbox3d_handle_workspace_input(
     sandbox3d_workspace_panel_id top_panel;
     sandbox3d_workspace_panel_id header_drag_panel;
     bool top_panel_is_floating;
+    bool top_panel_is_chrome;
     unsigned int top_z;
     int index;
 
@@ -4893,6 +4894,7 @@ static bool sandbox3d_handle_workspace_input(
     state->workspace.model.hovered_panel = SANDBOX3D_WORKSPACE_PANEL_NONE;
     top_panel = SANDBOX3D_WORKSPACE_PANEL_NONE;
     top_panel_is_floating = false;
+    top_panel_is_chrome = false;
     top_z = 0U;
     for (index = 0; index < SANDBOX3D_WORKSPACE_PANEL_COUNT; ++index)
     {
@@ -4913,6 +4915,17 @@ static bool sandbox3d_handle_workspace_input(
         }
     }
     state->workspace.model.hovered_panel = top_panel;
+    if (top_panel != SANDBOX3D_WORKSPACE_PANEL_NONE)
+    {
+        panel = sandbox3d_workspace_get_panel_const(&state->workspace.model, top_panel);
+        bounds = sandbox3d_get_panel_rect(&state->frame_layout, top_panel);
+        top_panel_is_chrome = panel != NULL &&
+            henka_ui_rect_contains(
+                panel->dock == SANDBOX3D_WORKSPACE_DOCK_FLOATING
+                    ? sandbox3d_workspace_title_drag_rect(bounds)
+                    : sandbox3d_workspace_docked_title_drag_rect(bounds),
+                framebuffer_mouse);
+    }
 
     if (state->workspace.model.context_menu_open && henka_input_was_key_pressed(engine, HENKA_KEY_ESCAPE))
     {
@@ -4925,7 +4938,7 @@ static bool sandbox3d_handle_workspace_input(
 
     if (right_pressed)
     {
-        if (top_panel != SANDBOX3D_WORKSPACE_PANEL_NONE)
+        if (top_panel != SANDBOX3D_WORKSPACE_PANEL_NONE && top_panel_is_chrome)
         {
             const float menu_width = 292.0f;
             const float menu_height = 255.0f;
@@ -4940,13 +4953,15 @@ static bool sandbox3d_handle_workspace_input(
             state->workspace.model.context_menu_rect =
                 (henka_ui_rect){menu_x > 4.0f ? menu_x : 4.0f, menu_y > 4.0f ? menu_y : 4.0f, menu_width, menu_height};
             sandbox3d_set_statusf(state, false, false, "Workspace menu opened for %s.", sandbox3d_workspace_panel_name(top_panel));
+            return true;
         }
-        else
+        if (state->workspace.model.context_menu_open)
         {
             state->workspace.model.context_menu_open = false;
             state->workspace.model.context_menu_section = SANDBOX3D_WORKSPACE_PANEL_NONE;
+            return true;
         }
-        return true;
+        return false;
     }
 
     if (state->workspace.model.context_menu_open)
