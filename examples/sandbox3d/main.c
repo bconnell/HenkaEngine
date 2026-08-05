@@ -8086,12 +8086,12 @@ static void sandbox3d_apply_workspace_context_command(
     switch (command)
     {
         case SANDBOX3D_WORKSPACE_CONTEXT_CLOSE_SECTION:
-            changed = sandbox3d_workspace_close_active_tab(&state->workspace.model, section);
+            changed = sandbox3d_workspace_close_section(&state->workspace.model, section);
             sandbox3d_set_statusf(
                 state,
                 !changed,
                 false,
-                changed ? "%s closed; the last tab removes its section." : "%s could not be closed.",
+                changed ? "%s section closed; use Restore last closed section to bring the tab group back." : "%s section could not be closed.",
                 sandbox3d_workspace_panel_name(section));
             break;
         case SANDBOX3D_WORKSPACE_CONTEXT_MERGE_ADJACENT:

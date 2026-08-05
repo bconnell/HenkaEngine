@@ -2762,12 +2762,7 @@ bool sandbox3d_workspace_close_section(
     const sandbox3d_workspace_topology_node* section_node = section_index >= 0
         ? sandbox3d_workspace_topology_get_node_const(model, (uint16_t)section_index)
         : NULL;
-
-    if (section_node != NULL && section_node->type == SANDBOX3D_WORKSPACE_TOPOLOGY_NODE_SECTION &&
-        section_node->data.section.tab_count > 1U)
-    {
-        return sandbox3d_workspace_close_active_tab(model, section_id);
-    }
+    size_t tab_index;
     if (model == NULL || section_id < 0 || section_id >= SANDBOX3D_WORKSPACE_PANEL_COUNT ||
         sandbox3d_workspace_section_is_closed(model, section_id) ||
         !sandbox3d_workspace_topology_is_valid(model))
@@ -2782,12 +2777,22 @@ bool sandbox3d_workspace_close_section(
         model->topology_root);
     model->closed_snapshot_mask = model->closed_sections_mask;
     model->closed_snapshot_valid = true;
+    if (section_node != NULL && section_node->type == SANDBOX3D_WORKSPACE_TOPOLOGY_NODE_SECTION)
+    {
+        for (tab_index = 0U; tab_index < section_node->data.section.tab_count; ++tab_index)
+        {
+            model->closed_sections_mask |= 1U << section_node->data.section.tabs[tab_index];
+        }
+    }
+    else
+    {
+        model->closed_sections_mask |= 1U << section_id;
+    }
     if (!sandbox3d_workspace_remove_section_node(model, section_id))
     {
         sandbox3d_workspace_rollback_topology_transaction(model);
         return false;
     }
-    model->closed_sections_mask |= 1U << section_id;
     if (model->maximized_section == section_id)
     {
         model->maximized_section = SANDBOX3D_WORKSPACE_PANEL_NONE;
