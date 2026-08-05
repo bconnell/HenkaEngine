@@ -6435,7 +6435,31 @@ static bool sandbox3d_handle_workspace_input(
 
     if (sandbox3d_begin_workspace_topology_divider_drag(state, framebuffer_mouse))
     {
+        const double now = henka_engine_get_total_time(engine);
+        const bool double_click =
+            state->workspace.model.last_divider_click_node == state->workspace.model.active_divider_node &&
+            state->workspace.model.last_divider_click_dock == state->workspace.model.active_divider_dock &&
+            isfinite(now) &&
+            state->workspace.model.last_divider_click_time >= 0.0 &&
+            now - state->workspace.model.last_divider_click_time <= 0.35;
         sandbox3d_clear_gizmo_drag(state, true);
+        if (double_click)
+        {
+            const uint16_t node_index = state->workspace.model.active_divider_node;
+            sandbox3d_workspace_equalize_divider(&state->workspace.model, node_index);
+            sandbox3d_workspace_commit_topology_transaction(&state->workspace.model);
+            sandbox3d_workspace_end_interaction(&state->workspace.model);
+            state->workspace.model.last_divider_click_node = UINT16_MAX;
+            state->workspace.model.last_divider_click_dock = SANDBOX3D_WORKSPACE_DOCK_FLOATING;
+            state->workspace.model.last_divider_click_time = -1.0;
+            sandbox3d_set_status(state, false, "Workspace divider equalized.");
+        }
+        else
+        {
+            state->workspace.model.last_divider_click_node = state->workspace.model.active_divider_node;
+            state->workspace.model.last_divider_click_dock = state->workspace.model.active_divider_dock;
+            state->workspace.model.last_divider_click_time = now;
+        }
         return true;
     }
 

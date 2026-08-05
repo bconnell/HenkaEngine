@@ -227,6 +227,9 @@ typedef struct sandbox3d_workspace_model
     sandbox3d_workspace_custom_layout_slot custom_layout_slots[SANDBOX3D_WORKSPACE_CUSTOM_LAYOUT_SLOT_COUNT - 1U];
     uint16_t active_divider_node;
     sandbox3d_workspace_dock_zone active_divider_dock;
+    uint16_t last_divider_click_node;
+    sandbox3d_workspace_dock_zone last_divider_click_dock;
+    double last_divider_click_time;
     float active_divider_start_ratio;
     henka_vec2 active_divider_start_pointer;
     bool divider_close_preview;
@@ -480,6 +483,9 @@ bool sandbox3d_workspace_split_section(
     sandbox3d_workspace_split_orientation orientation,
     sandbox3d_workspace_panel_id new_section);
 void sandbox3d_workspace_equalize_sections(sandbox3d_workspace_model* model);
+void sandbox3d_workspace_equalize_divider(
+    sandbox3d_workspace_model* model,
+    uint16_t node_index);
 void sandbox3d_workspace_set_maximized_section(
     sandbox3d_workspace_model* model,
     sandbox3d_workspace_panel_id section_id);

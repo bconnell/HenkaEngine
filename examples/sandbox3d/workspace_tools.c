@@ -1289,7 +1289,11 @@ void sandbox3d_workspace_model_reset(sandbox3d_workspace_model* model)
     model->active_resize_panel = SANDBOX3D_WORKSPACE_PANEL_NONE;
     model->resize_target = SANDBOX3D_WORKSPACE_RESIZE_NONE;
     model->active_dock_target = SANDBOX3D_WORKSPACE_DOCK_FLOATING;
+    model->active_divider_node = UINT16_MAX;
     model->active_divider_dock = SANDBOX3D_WORKSPACE_DOCK_FLOATING;
+    model->last_divider_click_node = UINT16_MAX;
+    model->last_divider_click_dock = SANDBOX3D_WORKSPACE_DOCK_FLOATING;
+    model->last_divider_click_time = -1.0;
     model->named_layout = SANDBOX3D_WORKSPACE_LAYOUT_DEFAULT;
     model->topology_transaction_named_layout = SANDBOX3D_WORKSPACE_LAYOUT_DEFAULT;
     model->context_menu_selected_command = 0U;
@@ -3448,6 +3452,25 @@ void sandbox3d_workspace_equalize_sections(sandbox3d_workspace_model* model)
     }
     sandbox3d_workspace_equalize_node(model, model->topology_root);
     snprintf(model->last_action, sizeof(model->last_action), "Sections equalized");
+}
+
+void sandbox3d_workspace_equalize_divider(
+    sandbox3d_workspace_model* model,
+    uint16_t node_index)
+{
+    sandbox3d_workspace_topology_node* node;
+
+    if (model == NULL || !sandbox3d_workspace_topology_is_valid(model))
+    {
+        return;
+    }
+    node = sandbox3d_workspace_topology_get_node(model, node_index);
+    if (node == NULL || node->type != SANDBOX3D_WORKSPACE_TOPOLOGY_NODE_SPLIT)
+    {
+        return;
+    }
+    node->data.split.ratio = 0.5f;
+    snprintf(model->last_action, sizeof(model->last_action), "Divider %u equalized", (unsigned int)node_index);
 }
 
 void sandbox3d_workspace_set_maximized_section(

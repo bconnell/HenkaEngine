@@ -188,6 +188,14 @@ void henka_test_sandbox3d_workspace(void)
     HENKA_TEST_ASSERT(topology_root->data.split.ratio > 0.5f);
     sandbox3d_workspace_rollback_topology_transaction(&model);
     HENKA_TEST_ASSERT_FLOAT_CLOSE(topology_root->data.split.ratio, 0.5f, 0.0001f);
+    sandbox3d_workspace_begin_divider_drag(&model, model.topology_root, (henka_vec2){640.0f, 360.0f});
+    sandbox3d_workspace_update_divider_drag(
+        &model,
+        (henka_vec2){760.0f, 360.0f},
+        (henka_ui_rect){0.0f, 0.0f, 1280.0f, 720.0f});
+    sandbox3d_workspace_equalize_divider(&model, model.topology_root);
+    sandbox3d_workspace_commit_topology_transaction(&model);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(topology_root->data.split.ratio, 0.5f, 0.0001f);
     {
         const sandbox3d_workspace_topology_node* left_split = sandbox3d_workspace_topology_get_node_const(
             &model,
