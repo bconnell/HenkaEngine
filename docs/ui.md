@@ -85,7 +85,7 @@ The sandbox now uses a movable workspace layout with a more neutral graphite and
 - native OS frame movement and resizing for detached windows
 - visible splitter bars for occupied dock width resizing
 - one topology-owned divider per internal split, with a 1 px visual wire and 10 px logical hit target
-- bounded divider drag transactions with minimum section extents and rollback support
+- bounded divider drag transactions with minimum section extents, a restrained close-threshold preview, transactional drag-to-close for direct leaf children, and rollback support
 
 Docked panels stay outside the scene. While dragging a docked panel, valid left and right dock targets show a thin outline over the final stack slot. Releasing on an outline redocks there, including across the workspace. Releasing away from the outlines opens a separate native tool window, so the detached panel can move outside the main sandbox frame without clipping. Closing that native window returns the panel to its last valid dock. Detached windows currently present a compact panel-state surface while full detached controls and OS-title-bar drag-back docking remain future work. `Reset Layout` closes detached windows and restores the default workspace.
 

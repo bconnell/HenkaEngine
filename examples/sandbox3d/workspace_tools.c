@@ -173,6 +173,8 @@ static void sandbox3d_workspace_topology_clear(
     model->topology_transaction_root = UINT16_MAX;
     model->active_divider_node = UINT16_MAX;
     model->active_divider_start_ratio = 0.0f;
+    model->divider_close_preview = false;
+    model->divider_close_section = SANDBOX3D_WORKSPACE_PANEL_NONE;
     model->closed_sections_mask = 0U;
     model->maximized_section = SANDBOX3D_WORKSPACE_PANEL_NONE;
     model->closed_snapshot_valid = false;
@@ -878,6 +880,10 @@ void sandbox3d_workspace_update_dock_resize(
 
 void sandbox3d_workspace_end_interaction(sandbox3d_workspace_model* model)
 {
+    const sandbox3d_workspace_panel_id close_section =
+        model != NULL ? model->divider_close_section : SANDBOX3D_WORKSPACE_PANEL_NONE;
+    const bool close_preview = model != NULL && model->divider_close_preview;
+
     if (model == NULL)
     {
         return;
@@ -887,11 +893,27 @@ void sandbox3d_workspace_end_interaction(sandbox3d_workspace_model* model)
     model->resize_target = SANDBOX3D_WORKSPACE_RESIZE_NONE;
     model->active_dock_target = SANDBOX3D_WORKSPACE_DOCK_FLOATING;
     model->active_divider_node = UINT16_MAX;
+    model->divider_close_preview = false;
+    model->divider_close_section = SANDBOX3D_WORKSPACE_PANEL_NONE;
     model->context_menu_open = false;
     model->context_menu_section = SANDBOX3D_WORKSPACE_PANEL_NONE;
     if (model->topology_transaction_active)
     {
-        sandbox3d_workspace_commit_topology_transaction(model);
+        if (close_preview && close_section != SANDBOX3D_WORKSPACE_PANEL_NONE)
+        {
+            if (sandbox3d_workspace_close_section(model, close_section))
+            {
+                sandbox3d_workspace_commit_topology_transaction(model);
+            }
+            else
+            {
+                sandbox3d_workspace_rollback_topology_transaction(model);
+            }
+        }
+        else
+        {
+            sandbox3d_workspace_commit_topology_transaction(model);
+        }
     }
 }
 
@@ -1178,7 +1200,22 @@ void sandbox3d_workspace_begin_divider_drag(
     model->active_divider_node = node_index;
     model->active_divider_start_ratio = node->data.split.ratio;
     model->active_divider_start_pointer = pointer;
+    model->divider_close_preview = false;
+    model->divider_close_section = SANDBOX3D_WORKSPACE_PANEL_NONE;
     snprintf(model->last_action, sizeof(model->last_action), "Divider %u moving", (unsigned int)node_index);
+}
+
+static sandbox3d_workspace_panel_id sandbox3d_workspace_direct_section_child(
+    const sandbox3d_workspace_model* model,
+    uint16_t node_index)
+{
+    const sandbox3d_workspace_topology_node* node =
+        sandbox3d_workspace_topology_get_node_const(model, node_index);
+    if (node == NULL || node->type != SANDBOX3D_WORKSPACE_TOPOLOGY_NODE_SECTION)
+    {
+        return SANDBOX3D_WORKSPACE_PANEL_NONE;
+    }
+    return node->data.section.section_id;
 }
 
 void sandbox3d_workspace_update_divider_drag(
@@ -1191,6 +1228,9 @@ void sandbox3d_workspace_update_divider_drag(
     float available;
     float delta;
     float ratio;
+    float raw_ratio;
+    const sandbox3d_workspace_topology_node* first_child;
+    const sandbox3d_workspace_topology_node* second_child;
 
     if (model == NULL || model->active_divider_node == UINT16_MAX ||
         !sandbox3d_workspace_topology_find_node_rect(
@@ -1214,11 +1254,61 @@ void sandbox3d_workspace_update_divider_drag(
         ? pointer.x - model->active_divider_start_pointer.x
         : pointer.y - model->active_divider_start_pointer.y);
     ratio = model->active_divider_start_ratio + delta / available;
+    raw_ratio = ratio;
+    model->divider_close_preview = false;
+    model->divider_close_section = SANDBOX3D_WORKSPACE_PANEL_NONE;
+    first_child = sandbox3d_workspace_topology_get_node_const(
+        model,
+        node->data.split.first_child);
+    second_child = sandbox3d_workspace_topology_get_node_const(
+        model,
+        node->data.split.second_child);
+    if (first_child != NULL && first_child->type == SANDBOX3D_WORKSPACE_TOPOLOGY_NODE_SECTION &&
+        raw_ratio < (node->data.split.minimum_first - SANDBOX3D_WORKSPACE_DIVIDER_CLOSE_THRESHOLD) / available)
+    {
+        model->divider_close_preview = true;
+        model->divider_close_section = sandbox3d_workspace_direct_section_child(
+            model,
+            node->data.split.first_child);
+        snprintf(
+            model->last_action,
+            sizeof(model->last_action),
+            "Release to close %s",
+            sandbox3d_workspace_panel_name(model->divider_close_section));
+    }
+    else if (second_child != NULL && second_child->type == SANDBOX3D_WORKSPACE_TOPOLOGY_NODE_SECTION &&
+        raw_ratio > 1.0f - (node->data.split.minimum_second - SANDBOX3D_WORKSPACE_DIVIDER_CLOSE_THRESHOLD) / available)
+    {
+        model->divider_close_preview = true;
+        model->divider_close_section = sandbox3d_workspace_direct_section_child(
+            model,
+            node->data.split.second_child);
+        snprintf(
+            model->last_action,
+            sizeof(model->last_action),
+            "Release to close %s",
+            sandbox3d_workspace_panel_name(model->divider_close_section));
+    }
     ratio = sandbox3d_workspace_clamp_float(
         ratio,
         node->data.split.minimum_first / available,
         1.0f - node->data.split.minimum_second / available);
     node->data.split.ratio = ratio;
+}
+
+bool sandbox3d_workspace_divider_close_preview(
+    const sandbox3d_workspace_model* model)
+{
+    return model != NULL && model->divider_close_preview &&
+        model->divider_close_section != SANDBOX3D_WORKSPACE_PANEL_NONE;
+}
+
+sandbox3d_workspace_panel_id sandbox3d_workspace_divider_close_section(
+    const sandbox3d_workspace_model* model)
+{
+    return sandbox3d_workspace_divider_close_preview(model)
+        ? model->divider_close_section
+        : SANDBOX3D_WORKSPACE_PANEL_NONE;
 }
 
 bool sandbox3d_workspace_topology_section_has_tab(

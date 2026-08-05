@@ -32,6 +32,7 @@ typedef enum sandbox3d_workspace_dock_zone
 #define SANDBOX3D_WORKSPACE_TOPOLOGY_MAX_NODES 16U
 #define SANDBOX3D_WORKSPACE_TOPOLOGY_MAX_TABS SANDBOX3D_WORKSPACE_PANEL_COUNT
 #define SANDBOX3D_WORKSPACE_DIVIDER_HIT_WIDTH 10.0f
+#define SANDBOX3D_WORKSPACE_DIVIDER_CLOSE_THRESHOLD 32.0f
 
 typedef enum sandbox3d_workspace_split_orientation
 {
@@ -141,6 +142,8 @@ typedef struct sandbox3d_workspace_model
     uint16_t active_divider_node;
     float active_divider_start_ratio;
     henka_vec2 active_divider_start_pointer;
+    bool divider_close_preview;
+    sandbox3d_workspace_panel_id divider_close_section;
     uint32_t closed_sections_mask;
     sandbox3d_workspace_panel_id maximized_section;
     bool closed_snapshot_valid;
@@ -253,6 +256,10 @@ void sandbox3d_workspace_update_divider_drag(
     sandbox3d_workspace_model* model,
     henka_vec2 pointer,
     henka_ui_rect bounds);
+bool sandbox3d_workspace_divider_close_preview(
+    const sandbox3d_workspace_model* model);
+sandbox3d_workspace_panel_id sandbox3d_workspace_divider_close_section(
+    const sandbox3d_workspace_model* model);
 void sandbox3d_workspace_begin_topology_transaction(sandbox3d_workspace_model* model);
 void sandbox3d_workspace_commit_topology_transaction(sandbox3d_workspace_model* model);
 void sandbox3d_workspace_rollback_topology_transaction(sandbox3d_workspace_model* model);

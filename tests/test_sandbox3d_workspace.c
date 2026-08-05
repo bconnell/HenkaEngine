@@ -35,6 +35,27 @@ void henka_test_sandbox3d_workspace(void)
     HENKA_TEST_ASSERT(topology_root->data.split.ratio > 0.5f);
     sandbox3d_workspace_rollback_topology_transaction(&model);
     HENKA_TEST_ASSERT_FLOAT_CLOSE(topology_root->data.split.ratio, 0.5f, 0.0001f);
+    {
+        const sandbox3d_workspace_topology_node* left_split = sandbox3d_workspace_topology_get_node_const(
+            &model,
+            topology_root->data.split.first_child);
+        HENKA_TEST_ASSERT(left_split != NULL);
+        HENKA_TEST_ASSERT(left_split->type == SANDBOX3D_WORKSPACE_TOPOLOGY_NODE_SPLIT);
+        sandbox3d_workspace_begin_divider_drag(
+            &model,
+            topology_root->data.split.first_child,
+            (henka_vec2){320.0f, 360.0f});
+        sandbox3d_workspace_update_divider_drag(
+            &model,
+            (henka_vec2){320.0f, 0.0f},
+            (henka_ui_rect){0.0f, 0.0f, 1280.0f, 720.0f});
+        HENKA_TEST_ASSERT(sandbox3d_workspace_divider_close_preview(&model));
+        HENKA_TEST_ASSERT(sandbox3d_workspace_divider_close_section(&model) == SANDBOX3D_WORKSPACE_PANEL_CONTROLS);
+        sandbox3d_workspace_end_interaction(&model);
+        HENKA_TEST_ASSERT(sandbox3d_workspace_section_is_closed(&model, SANDBOX3D_WORKSPACE_PANEL_CONTROLS));
+        HENKA_TEST_ASSERT(sandbox3d_workspace_topology_is_valid(&model));
+        HENKA_TEST_ASSERT(sandbox3d_workspace_restore_last_closed_section(&model));
+    }
     HENKA_TEST_ASSERT(strcmp(
         sandbox3d_workspace_context_command_label(SANDBOX3D_WORKSPACE_CONTEXT_OPEN_HORIZONTAL),
         "Open a horizontal window") == 0);
