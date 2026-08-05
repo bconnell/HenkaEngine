@@ -309,7 +309,7 @@ Do not commit screenshots unless that is an intentional, reviewed part of the re
 
 - OBJ loading is still early and limited to the documented subset in [docs/model-loading.md](../model-loading.md).
 - The UI overlay is still intentionally small and is not an editor.
-- Production panels can detach into separate OS-level windows with close-to-redock recovery. Detached windows currently show compact panel state; full detached controls, OS-title-bar drag-back docking, saved placement, and detachable Scene View behavior are not implemented yet.
+- Production panels can detach into separate OS-level windows with close-to-redock recovery, matching controls, saved placement, and bounded title-bar drag-back recognition when a focused detached window enters the main-window envelope. Detachable Scene View remains open and requires separate manual validation if implemented later.
 - Local action and viewport interaction tests now prove more basic selection and transform outcomes, but manual QA is still required for visual feel and drag comfort.
 - Manual visual inspection is still the best way to confirm scene readability and interaction feel.
 - The packaged Windows folder is meant for local manual testing, not as a full installer or release pipeline.

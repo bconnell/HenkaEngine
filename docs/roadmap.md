@@ -164,8 +164,8 @@ Current limitations include:
 2. The transform gizmo workflow still needs manual desktop QA for visual feel and mouse comfort.
 3. Scene saving and loading are not complete authoring workflows yet.
 4. The docked and detached workspace is useful for inspection, testing, and early authoring behavior, but it is not yet a full production editor and project-authoring workflow.
-5. Workspace movement and sizing require desktop QA for feel. Detached placement is session-only, and full detached controls plus OS-title-bar drag-back docking still need implementation.
-6. The native test panel and compact detached production-panel surfaces use multi-window rendering and event routing, but full detached controls and detachable Scene View are not implemented yet.
+5. Workspace movement and sizing require desktop QA for feel. Detached placement, matching detached controls, and bounded title-bar drag-back recognition are implemented; native desktop feel and detachable Scene View remain manual-QA/open items.
+6. The native test panel and compact detached production-panel surfaces use multi-window rendering and event routing; bounded detached controls and title-bar drag-back recognition are implemented, while detachable Scene View remains open.
 7. Asset loading is still limited.
 8. The 2D workflow and the sprite, layer, parallax, animation, and movement-constraint parts of 2.5D are not implemented yet; the first 2.5D camera presets are available.
 9. Physics v1 is intentionally limited to rigid bodies and primitive colliders; mesh collision, joints, character controllers, and advanced simulation remain future work.

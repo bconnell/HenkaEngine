@@ -73,7 +73,7 @@ The docked workspace opens in `View` mode with no selected scene object so the c
 - `DRAG` marks a live panel header. Drag a docked panel header and release over a valid left or right outline to dock there.
 - If a side dock already contains a panel, the incoming panel stacks into the same side instead of covering it.
 - Release away from the dock outlines to open a separate native tool window. Move or resize that window with the operating-system frame.
-- Close a detached tool window to return its panel to its last valid dock. Detached windows currently show panel state while full detached controls are integrated. `Reset Layout` recovers defaults.
+- Close a detached tool window to return its panel to its last valid dock. Detached windows show matching controls, and a focused title-bar move into the main-window envelope requests bounded drag-back docking. `Reset Layout` recovers defaults.
 - Drag the narrow bars beside Scene View to resize occupied docks.
 - Use `Save Custom` and `Restore Custom` in Controls for the primary named workspace. The adjacent Studio and Assembly slot buttons provide two additional bounded local snapshots; restoring any slot redocks detached panels first.
 - Press `Tab` or `Shift+Tab` to cycle focus across visible workspace panels; the focused header is marked with a green accent.

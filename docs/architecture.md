@@ -206,7 +206,7 @@ The next steps should continue building upward from these boundaries:
 - production-quality 2.5D sprites, regions, layered depth, sorting, parallax, animation, movement constraints, physics constraints, and authoring tools after current defect repair
 - richer engine UI controls built on the existing docked and native detached workspace
 - object inspection and transactional authoring that can grow without an editor rewrite
-- saved workspace placement, full detached controls, drag-back redocking, and detachable Scene View
+- saved workspace placement, full detached controls, bounded title-bar drag-back recognition, and detachable Scene View
 - editable authoring data compiled into runtime assets for later modeling, UV, rigging, and animation workflows
 ## Viewport shading
 
