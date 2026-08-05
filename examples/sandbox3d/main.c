@@ -7203,8 +7203,13 @@ static void sandbox3d_apply_workspace_context_command(
     switch (command)
     {
         case SANDBOX3D_WORKSPACE_CONTEXT_CLOSE_SECTION:
-            changed = sandbox3d_workspace_close_section(&state->workspace.model, section);
-            sandbox3d_set_statusf(state, !changed, false, changed ? "%s closed." : "%s could not be closed.", sandbox3d_workspace_panel_name(section));
+            changed = sandbox3d_workspace_close_active_tab(&state->workspace.model, section);
+            sandbox3d_set_statusf(
+                state,
+                !changed,
+                false,
+                changed ? "%s closed; the last tab removes its section." : "%s could not be closed.",
+                sandbox3d_workspace_panel_name(section));
             break;
         case SANDBOX3D_WORKSPACE_CONTEXT_MERGE_ADJACENT:
         case SANDBOX3D_WORKSPACE_CONTEXT_MOVE_TO_TAB_GROUP:
@@ -7290,6 +7295,8 @@ static void sandbox3d_draw_workspace_context_menu(
     for (command_index = 0U; command_index < SANDBOX3D_WORKSPACE_CONTEXT_COMMAND_COUNT; ++command_index)
     {
         char button_id[48];
+        const char* command_label = sandbox3d_workspace_context_command_label(
+            (sandbox3d_workspace_context_command)command_index);
         const henka_ui_rect button_rect =
             (henka_ui_rect){
                 model->context_menu_rect.x + 6.0f,
@@ -7304,12 +7311,16 @@ static void sandbox3d_draw_workspace_context_menu(
                 button_rect,
                 (henka_vec4){0.16f, 0.28f, 0.42f, 0.72f});
         }
+        if (command_index == SANDBOX3D_WORKSPACE_CONTEXT_CLOSE_SECTION &&
+            sandbox3d_workspace_get_topology_section_tab_count(model, model->context_menu_section) > 1U)
+        {
+            command_label = "Close active tab";
+        }
         if (henka_ui_button(
                 state->ui,
                 button_id,
                 button_rect,
-                sandbox3d_workspace_context_command_label(
-                    (sandbox3d_workspace_context_command)command_index)))
+                command_label))
         {
             sandbox3d_apply_workspace_context_command(
                 engine,
@@ -8279,8 +8290,6 @@ static void sandbox3d_draw_controls_panel(
         }
 
         y += 42.0f;
-        sandbox3d_draw_section_heading(state->ui, x_left, y, "Viewport");        y += 42.0f;
-        sandbox3d_draw_section_heading(state->ui, x_left, y, "Viewport");        y += 42.0f;
         sandbox3d_draw_section_heading(state->ui, x_left, y, "Viewport");
         y += 20.0f;
         if (henka_ui_primary_button(state->ui, "frame_selected", (henka_ui_rect){x_left, y, half_button_width, 28.0f}, "Frame Selected"))

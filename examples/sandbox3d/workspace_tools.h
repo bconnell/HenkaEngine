@@ -353,6 +353,11 @@ bool sandbox3d_workspace_set_topology_section_active_tab(
 bool sandbox3d_workspace_close_section(
     sandbox3d_workspace_model* model,
     sandbox3d_workspace_panel_id section_id);
+
+/* Closes the active tab; closing the final tab removes the containing section. */
+bool sandbox3d_workspace_close_active_tab(
+    sandbox3d_workspace_model* model,
+    sandbox3d_workspace_panel_id section_id);
 bool sandbox3d_workspace_restore_last_closed_section(sandbox3d_workspace_model* model);
 bool sandbox3d_workspace_merge_sections(
     sandbox3d_workspace_model* model,
