@@ -3195,6 +3195,7 @@ static void sandbox3d_print_help(const sandbox3d_state* state)
     printf("  Drag the narrow bars beside Scene View to resize occupied docks. Reset Layout restores safe defaults.\n");
     printf("  Workspace context menus support Up / Down to select, Enter to activate, and Escape to cancel; section choosers support the same keyboard path.\n");
     printf("  Tab / Shift+Tab cycles keyboard focus across visible workspace panels; the focused header gets a visible accent.\n");
+    printf("  Ctrl+M maximizes the focused or hovered workspace section; press it again to restore the section.\n");
     printf("  Open Native Panel Test from Controls to validate a separate OS-level tool window.\n");
     printf("  Use the panels to inspect named scene objects, clear selection, switch gizmo modes, focus the camera, reset object transforms, toggle visibility, and open in-window Help, Scene Legend, Object Info, Paths, Settings, Diagnostics, Transform QA, and Physics QA utilities.\n");
     printf("  Select glTF Marker to edit its shared material instance in Object Details; scalar/vector, flags, alpha, and semantic texture overrides apply transactionally.\n");
@@ -5985,6 +5986,51 @@ static bool sandbox3d_handle_workspace_input(
                 engine,
                 state,
                 (sandbox3d_workspace_context_command)selected_command);
+            return true;
+        }
+    }
+
+    if (henka_input_is_key_down(engine, HENKA_KEY_LEFT_CTRL) &&
+        henka_input_was_key_pressed(engine, HENKA_KEY_M))
+    {
+        sandbox3d_workspace_panel_id maximize_section = state->workspace.model.keyboard_focus_panel;
+        const sandbox3d_workspace_panel* maximize_panel;
+        if (maximize_section == SANDBOX3D_WORKSPACE_PANEL_NONE ||
+            !sandbox3d_workspace_panel_visible(state, maximize_section))
+        {
+            maximize_section = top_panel;
+        }
+        maximize_section = sandbox3d_workspace_get_topology_section_for_tab(
+            &state->workspace.model,
+            maximize_section);
+        maximize_panel = sandbox3d_workspace_get_panel_const(
+            &state->workspace.model,
+            maximize_section);
+        if (maximize_panel != NULL &&
+            maximize_panel->dock != SANDBOX3D_WORKSPACE_DOCK_DETACHED &&
+            sandbox3d_workspace_topology_section_has_tab(
+                &state->workspace.model,
+                maximize_section,
+                maximize_section))
+        {
+            if (state->workspace.model.maximized_section == maximize_section)
+            {
+                sandbox3d_workspace_restore_maximized_section(&state->workspace.model);
+                sandbox3d_set_status(state, false, "Workspace section restored from the keyboard.");
+            }
+            else
+            {
+                sandbox3d_workspace_set_maximized_section(
+                    &state->workspace.model,
+                    maximize_section);
+                sandbox3d_set_statusf(
+                    state,
+                    false,
+                    false,
+                    "%s maximized from the keyboard.",
+                    sandbox3d_workspace_panel_name(maximize_section));
+            }
+            henka_input_consume_key_press(engine, HENKA_KEY_M);
             return true;
         }
     }
