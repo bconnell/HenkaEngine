@@ -690,8 +690,12 @@ const char* sandbox3d_workspace_named_layout_label(
             return "Modeling";
         case SANDBOX3D_WORKSPACE_LAYOUT_MATERIALS:
             return "Materials";
+        case SANDBOX3D_WORKSPACE_LAYOUT_SCENE_ASSEMBLY:
+            return "Scene Assembly";
         case SANDBOX3D_WORKSPACE_LAYOUT_DEBUGGING:
             return "Debugging";
+        case SANDBOX3D_WORKSPACE_LAYOUT_MINIMAL_VIEWPORT:
+            return "Minimal Viewport";
         case SANDBOX3D_WORKSPACE_LAYOUT_CUSTOM:
             return "Custom";
         case SANDBOX3D_WORKSPACE_LAYOUT_COUNT:
@@ -711,8 +715,12 @@ const char* sandbox3d_workspace_named_layout_setting_value(
             return "modeling";
         case SANDBOX3D_WORKSPACE_LAYOUT_MATERIALS:
             return "materials";
+        case SANDBOX3D_WORKSPACE_LAYOUT_SCENE_ASSEMBLY:
+            return "scene_assembly";
         case SANDBOX3D_WORKSPACE_LAYOUT_DEBUGGING:
             return "debugging";
+        case SANDBOX3D_WORKSPACE_LAYOUT_MINIMAL_VIEWPORT:
+            return "minimal_viewport";
         case SANDBOX3D_WORKSPACE_LAYOUT_CUSTOM:
             return "custom";
         case SANDBOX3D_WORKSPACE_LAYOUT_COUNT:
@@ -740,9 +748,17 @@ sandbox3d_workspace_named_layout sandbox3d_workspace_parse_named_layout(
     {
         return SANDBOX3D_WORKSPACE_LAYOUT_MATERIALS;
     }
+    if (strcmp(value, "scene_assembly") == 0)
+    {
+        return SANDBOX3D_WORKSPACE_LAYOUT_SCENE_ASSEMBLY;
+    }
     if (strcmp(value, "debugging") == 0)
     {
         return SANDBOX3D_WORKSPACE_LAYOUT_DEBUGGING;
+    }
+    if (strcmp(value, "minimal_viewport") == 0)
+    {
+        return SANDBOX3D_WORKSPACE_LAYOUT_MINIMAL_VIEWPORT;
     }
     return SANDBOX3D_WORKSPACE_LAYOUT_CUSTOM;
 }
@@ -810,10 +826,22 @@ bool sandbox3d_workspace_apply_named_layout(
             second_left = SANDBOX3D_WORKSPACE_PANEL_OBJECT_DETAILS;
             first_right = SANDBOX3D_WORKSPACE_PANEL_SCENE_OBJECTS;
             break;
+        case SANDBOX3D_WORKSPACE_LAYOUT_SCENE_ASSEMBLY:
+            first_left = SANDBOX3D_WORKSPACE_PANEL_SCENE_OBJECTS;
+            second_left = SANDBOX3D_WORKSPACE_PANEL_CONTROLS;
+            first_right = SANDBOX3D_WORKSPACE_PANEL_OBJECT_DETAILS;
+            second_right = SANDBOX3D_WORKSPACE_PANEL_UTILITY;
+            break;
         case SANDBOX3D_WORKSPACE_LAYOUT_DEBUGGING:
             first_left = SANDBOX3D_WORKSPACE_PANEL_UTILITY;
             second_left = SANDBOX3D_WORKSPACE_PANEL_SCENE_OBJECTS;
             first_right = SANDBOX3D_WORKSPACE_PANEL_CONTROLS;
+            second_right = SANDBOX3D_WORKSPACE_PANEL_OBJECT_DETAILS;
+            break;
+        case SANDBOX3D_WORKSPACE_LAYOUT_MINIMAL_VIEWPORT:
+            first_left = SANDBOX3D_WORKSPACE_PANEL_CONTROLS;
+            second_left = SANDBOX3D_WORKSPACE_PANEL_SCENE_OBJECTS;
+            first_right = SANDBOX3D_WORKSPACE_PANEL_UTILITY;
             second_right = SANDBOX3D_WORKSPACE_PANEL_OBJECT_DETAILS;
             break;
         case SANDBOX3D_WORKSPACE_LAYOUT_DEFAULT:
@@ -838,12 +866,19 @@ bool sandbox3d_workspace_apply_named_layout(
     candidate.topology_nodes[0].data.split.ratio =
         layout == SANDBOX3D_WORKSPACE_LAYOUT_MODELING ? 0.60f :
         layout == SANDBOX3D_WORKSPACE_LAYOUT_MATERIALS ? 0.46f :
+        layout == SANDBOX3D_WORKSPACE_LAYOUT_SCENE_ASSEMBLY ? 0.42f :
         layout == SANDBOX3D_WORKSPACE_LAYOUT_DEBUGGING ? 0.54f : 0.50f;
     candidate.topology_nodes[1].data.split.ratio =
-        layout == SANDBOX3D_WORKSPACE_LAYOUT_DEBUGGING ? 0.62f : 0.50f;
+        layout == SANDBOX3D_WORKSPACE_LAYOUT_DEBUGGING ? 0.62f :
+        layout == SANDBOX3D_WORKSPACE_LAYOUT_MINIMAL_VIEWPORT ? 0.38f : 0.50f;
     candidate.topology_nodes[4].data.split.ratio =
         layout == SANDBOX3D_WORKSPACE_LAYOUT_MODELING ? 0.42f :
         layout == SANDBOX3D_WORKSPACE_LAYOUT_MATERIALS ? 0.58f : 0.50f;
+    if (layout == SANDBOX3D_WORKSPACE_LAYOUT_MINIMAL_VIEWPORT)
+    {
+        candidate.left_dock_width = 260.0f;
+        candidate.right_dock_width = 280.0f;
+    }
 
     sandbox3d_workspace_named_layout_set_dock(
         &candidate, first_left, SANDBOX3D_WORKSPACE_DOCK_LEFT);

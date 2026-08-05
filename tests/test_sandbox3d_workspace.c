@@ -29,9 +29,17 @@ void henka_test_sandbox3d_workspace(void)
         sandbox3d_workspace_named_layout_label(SANDBOX3D_WORKSPACE_LAYOUT_MODELING),
         "Modeling") == 0);
     HENKA_TEST_ASSERT(sandbox3d_workspace_parse_named_layout("materials") == SANDBOX3D_WORKSPACE_LAYOUT_MATERIALS);
+    HENKA_TEST_ASSERT(sandbox3d_workspace_parse_named_layout("scene_assembly") == SANDBOX3D_WORKSPACE_LAYOUT_SCENE_ASSEMBLY);
+    HENKA_TEST_ASSERT(sandbox3d_workspace_parse_named_layout("minimal_viewport") == SANDBOX3D_WORKSPACE_LAYOUT_MINIMAL_VIEWPORT);
     HENKA_TEST_ASSERT(sandbox3d_workspace_apply_named_layout(
         &model, SANDBOX3D_WORKSPACE_LAYOUT_MODELING));
     HENKA_TEST_ASSERT(sandbox3d_workspace_get_named_layout(&model) == SANDBOX3D_WORKSPACE_LAYOUT_MODELING);
+    HENKA_TEST_ASSERT(sandbox3d_workspace_topology_is_valid(&model));
+    HENKA_TEST_ASSERT(sandbox3d_workspace_apply_named_layout(
+        &model, SANDBOX3D_WORKSPACE_LAYOUT_SCENE_ASSEMBLY));
+    HENKA_TEST_ASSERT(sandbox3d_workspace_topology_is_valid(&model));
+    HENKA_TEST_ASSERT(sandbox3d_workspace_apply_named_layout(
+        &model, SANDBOX3D_WORKSPACE_LAYOUT_MINIMAL_VIEWPORT));
     HENKA_TEST_ASSERT(sandbox3d_workspace_topology_is_valid(&model));
     HENKA_TEST_ASSERT(sandbox3d_workspace_save_custom_layout(&model, "Studio"));
     HENKA_TEST_ASSERT(sandbox3d_workspace_has_custom_layout(&model));

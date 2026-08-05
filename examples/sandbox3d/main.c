@@ -3133,7 +3133,7 @@ static void sandbox3d_print_help(const sandbox3d_state* state)
     printf("  Select glTF Marker to edit its shared material instance in Object Details; scalar/vector, flags, alpha, and semantic texture overrides apply transactionally.\n");
     printf("  Physics QA enables an opt-in fixed-step rigid-body demo with collider/contact debug drawing, impulses, body modes, and camera raycasts.\n");
     printf("  The Controls panel uses readable pages, and Scene Objects supports paging when the dock is tighter than the full list.\n");
-    printf("  Controls also provides Default, Modeling, Materials, and Debugging workspace presets; topology edits mark the workspace Custom.\n");
+    printf("  Controls also provides Default, Modeling, Materials, Scene Assembly, Debugging, and Minimal Viewport workspace presets; topology edits mark the workspace Custom.\n");
     printf("  Save Custom and Restore Custom persist one bounded named layout snapshot; restore redocks detached panels before applying it.\n");
     printf("  With panels visible, Ctrl+Z undoes and Ctrl+Y or Ctrl+Shift+Z redoes the bounded workspace layout history.\n");
     printf("  Select an object from the list or with Left Mouse in the viewport, then use Move, Rotate, or Scale in the Transform section.\n");
@@ -8822,17 +8822,20 @@ static void sandbox3d_draw_controls_panel(
         }
         y += 34.0f;
         {
-            const float preset_width = (panel_bounds.width - 40.0f) * 0.25f;
+            const float preset_width = (panel_bounds.width - 36.0f) / 3.0f;
             const sandbox3d_workspace_named_layout presets[] = {
                 SANDBOX3D_WORKSPACE_LAYOUT_DEFAULT,
                 SANDBOX3D_WORKSPACE_LAYOUT_MODELING,
                 SANDBOX3D_WORKSPACE_LAYOUT_MATERIALS,
-                SANDBOX3D_WORKSPACE_LAYOUT_DEBUGGING};
+                SANDBOX3D_WORKSPACE_LAYOUT_SCENE_ASSEMBLY,
+                SANDBOX3D_WORKSPACE_LAYOUT_DEBUGGING,
+                SANDBOX3D_WORKSPACE_LAYOUT_MINIMAL_VIEWPORT};
             size_t preset_index;
             for (preset_index = 0U; preset_index < sizeof(presets) / sizeof(presets[0]); ++preset_index)
             {
                 char preset_id[48];
-                const float preset_x = x_left + (preset_width + 4.0f) * (float)preset_index;
+                const float preset_x = x_left + (preset_width + 4.0f) * (float)(preset_index % 3U);
+                const float preset_y = y + 32.0f * (float)(preset_index / 3U);
                 snprintf(
                     preset_id,
                     sizeof(preset_id),
@@ -8841,7 +8844,7 @@ static void sandbox3d_draw_controls_panel(
                 if (henka_ui_tab(
                         state->ui,
                         preset_id,
-                        (henka_ui_rect){preset_x, y, preset_width, 28.0f},
+                        (henka_ui_rect){preset_x, preset_y, preset_width, 28.0f},
                         sandbox3d_workspace_named_layout_label(presets[preset_index]),
                         sandbox3d_workspace_get_named_layout(&state->workspace.model) == presets[preset_index]))
                 {
@@ -8849,7 +8852,7 @@ static void sandbox3d_draw_controls_panel(
                 }
             }
         }
-        y += 38.0f;
+        y += 70.0f;
         {
             const float custom_button_width = (panel_bounds.width - 38.0f) * 0.5f;
             const bool has_custom_layout = sandbox3d_workspace_has_custom_layout(&state->workspace.model);
