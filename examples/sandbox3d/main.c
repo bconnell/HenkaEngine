@@ -3091,6 +3091,7 @@ static void sandbox3d_print_help(const sandbox3d_state* state)
     printf("  Drag a panel into another docked section body to preview and join its bounded tab group.\n");
     printf("  Drag the narrow bars beside Scene View to resize occupied docks. Reset Layout restores safe defaults.\n");
     printf("  Workspace context menus support Up / Down to select, Enter to activate, and Escape to cancel.\n");
+    printf("  Tab / Shift+Tab cycles keyboard focus across visible workspace panels; the focused header gets a visible accent.\n");
     printf("  Open Native Panel Test from Controls to validate a separate OS-level tool window.\n");
     printf("  Use the panels to inspect named scene objects, clear selection, switch gizmo modes, focus the camera, reset object transforms, toggle visibility, and open in-window Help, Scene Legend, Object Info, Paths, Settings, Diagnostics, Transform QA, and Physics QA utilities.\n");
     printf("  Select glTF Marker to edit its shared material instance in Object Details; scalar/vector, flags, alpha, and semantic texture overrides apply transactionally.\n");
@@ -5545,6 +5546,44 @@ static bool sandbox3d_handle_workspace_input(
                 state,
                 (sandbox3d_workspace_context_command)selected_command);
             return true;
+        }
+    }
+
+    if (henka_input_was_key_pressed(engine, HENKA_KEY_TAB))
+    {
+        const int direction = henka_input_is_key_down(engine, HENKA_KEY_LEFT_SHIFT) ? -1 : 1;
+        sandbox3d_workspace_panel_id candidate = state->workspace.model.keyboard_focus_panel;
+        int attempts;
+
+        if (candidate == SANDBOX3D_WORKSPACE_PANEL_NONE)
+        {
+            candidate = direction > 0
+                ? (sandbox3d_workspace_panel_id)-1
+                : SANDBOX3D_WORKSPACE_PANEL_COUNT;
+        }
+        for (attempts = 0; attempts < SANDBOX3D_WORKSPACE_PANEL_COUNT; ++attempts)
+        {
+            candidate = (sandbox3d_workspace_panel_id)(
+                ((int)candidate + direction + SANDBOX3D_WORKSPACE_PANEL_COUNT) %
+                SANDBOX3D_WORKSPACE_PANEL_COUNT);
+            {
+                const sandbox3d_workspace_panel* focus_panel =
+                    sandbox3d_workspace_get_panel_const(&state->workspace.model, candidate);
+                if (focus_panel == NULL || focus_panel->dock == SANDBOX3D_WORKSPACE_DOCK_DETACHED ||
+                    !sandbox3d_workspace_panel_visible(state, candidate))
+                {
+                    continue;
+                }
+                state->workspace.model.keyboard_focus_panel = candidate;
+                henka_input_consume_key_press(engine, HENKA_KEY_TAB);
+                sandbox3d_set_statusf(
+                    state,
+                    false,
+                    false,
+                    "Workspace keyboard focus: %s.",
+                sandbox3d_workspace_panel_name(candidate));
+                return true;
+            }
         }
     }
 
@@ -10407,6 +10446,28 @@ static void sandbox3d_build_ui(henka_engine* engine, sandbox3d_state* state)
             &layout,
             frame_desc.framebuffer_width,
             frame_desc.framebuffer_height);
+        if (state->workspace.model.keyboard_focus_panel != SANDBOX3D_WORKSPACE_PANEL_NONE &&
+            sandbox3d_workspace_panel_visible(state, state->workspace.model.keyboard_focus_panel))
+        {
+            const henka_ui_rect focus_bounds = sandbox3d_get_panel_rect(
+                &layout,
+                state->workspace.model.keyboard_focus_panel);
+            const henka_ui_rect focus_header =
+                sandbox3d_workspace_panel_is_floating(
+                    &state->workspace.model,
+                    state->workspace.model.keyboard_focus_panel)
+                ? sandbox3d_workspace_title_drag_rect(focus_bounds)
+                : sandbox3d_workspace_docked_title_drag_rect(focus_bounds);
+            if (focus_header.width > 0.0f && focus_header.height > 0.0f)
+            {
+                (void)henka_ui_overlay_line(
+                    state->ui,
+                    (henka_vec2){focus_header.x, focus_header.y + focus_header.height - 1.0f},
+                    (henka_vec2){focus_header.x + focus_header.width, focus_header.y + focus_header.height - 1.0f},
+                    2.0f,
+                    (henka_vec4){0.30f, 0.95f, 0.74f, 1.0f});
+            }
+        }
         sandbox3d_draw_workspace_hover_hint(
             state,
             &layout,

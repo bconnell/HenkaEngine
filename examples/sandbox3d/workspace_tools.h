@@ -141,6 +141,7 @@ typedef struct sandbox3d_workspace_model
     float right_dock_width;
     float ui_scale;
     sandbox3d_workspace_panel_id hovered_panel;
+    sandbox3d_workspace_panel_id keyboard_focus_panel;
     sandbox3d_workspace_panel_id active_drag_panel;
     sandbox3d_workspace_panel_id drag_start_section;
     sandbox3d_workspace_dock_zone drag_start_dock;

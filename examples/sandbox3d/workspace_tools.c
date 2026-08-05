@@ -1096,6 +1096,7 @@ void sandbox3d_workspace_model_reset(sandbox3d_workspace_model* model)
     model->right_dock_width = 356.0f;
     model->ui_scale = 1.0f;
     model->hovered_panel = SANDBOX3D_WORKSPACE_PANEL_NONE;
+    model->keyboard_focus_panel = SANDBOX3D_WORKSPACE_PANEL_NONE;
     model->active_drag_panel = SANDBOX3D_WORKSPACE_PANEL_NONE;
     model->drag_start_section = SANDBOX3D_WORKSPACE_PANEL_NONE;
     model->drag_start_dock = SANDBOX3D_WORKSPACE_DOCK_FLOATING;
