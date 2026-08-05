@@ -85,6 +85,7 @@ The sandbox now uses a movable workspace layout with a more neutral graphite and
 - native OS frame movement and resizing for detached windows
 - visible splitter bars for occupied dock width resizing
 - one topology-owned divider per internal split, with a 1 px visual wire and 10 px logical hit target
+- idle hover hints near dividers, dock splitters, panel headers, and floating resize handles; hints are suppressed while menus or interaction transactions own the pointer
 - bounded divider drag transactions with minimum section extents, a restrained close-threshold preview, transactional drag-to-close for direct leaf children, and rollback support
 - tab-strip drag reordering within a merged section, with a live insertion marker, click-preserving selection, stable active-tab identity, and transactional cancellation
 

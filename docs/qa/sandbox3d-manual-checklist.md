@@ -82,6 +82,7 @@ Use this checklist when you want to confirm that `henka_sandbox3d` is visually r
 35. Repeat native detach and close-to-redock recovery for Controls, Scene Objects, and Object Details wherever `DRAG` is shown.
 36. Drag each visible dock splitter and confirm the Scene View resizes without becoming unusable.
 37. Confirm the debug strip reports hovered panel, panel header hover, panel move or resize state, dock target, and last workspace action.
+38. Hover a divider, dock splitter, panel header, and floating resize corner; confirm the nearby hint identifies the available action and disappears while dragging or while a menu is open.
 38. Confirm panel drag, resize, and splitter drag do not select objects or begin viewport tools behind the panel.
 39. Confirm `Reset Layout` redocks panels and restores safe dock widths after moving and resizing them.
 40. Confirm window resize keeps a valid viewport and workspace layout.

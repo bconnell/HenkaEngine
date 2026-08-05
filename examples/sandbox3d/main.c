@@ -7705,6 +7705,112 @@ static void sandbox3d_draw_workspace_affordances(
     }
 }
 
+static void sandbox3d_draw_workspace_hover_hint(
+    sandbox3d_state* state,
+    const sandbox3d_workspace_layout* layout,
+    int framebuffer_width,
+    int framebuffer_height)
+{
+    const char* hint = NULL;
+    float hint_width = 0.0f;
+    henka_ui_rect hint_rect;
+    henka_vec2 mouse;
+    size_t topology_index;
+    size_t divider_index;
+
+    if (state == NULL || layout == NULL || state->ui == NULL ||
+        !state->diagnostics.mouse_framebuffer_valid ||
+        state->workspace.model.context_menu_open ||
+        state->workspace.model.section_chooser_open ||
+        state->workspace.model.active_drag_panel != SANDBOX3D_WORKSPACE_PANEL_NONE ||
+        state->workspace.model.active_divider_node != UINT16_MAX ||
+        state->workspace.model.resize_target != SANDBOX3D_WORKSPACE_RESIZE_NONE)
+    {
+        return;
+    }
+
+    mouse = state->diagnostics.framebuffer_mouse;
+    {
+        const sandbox3d_workspace_topology_layout* topologies[2] = {
+            &layout->left_topology,
+            &layout->right_topology};
+        for (topology_index = 0U; topology_index < 2U && hint == NULL; ++topology_index)
+        {
+            for (divider_index = 0U;
+                 divider_index < topologies[topology_index]->divider_count;
+                 ++divider_index)
+            {
+                if (henka_ui_rect_contains(
+                        topologies[topology_index]->divider_hit_rects[divider_index],
+                        mouse))
+                {
+                    hint = "Drag divider to resize; pull to the edge to close.";
+                    hint_width = 300.0f;
+                    break;
+                }
+            }
+        }
+    }
+    if (hint == NULL && layout->left_splitter.width > 0.0f &&
+        henka_ui_rect_contains(layout->left_splitter, mouse))
+    {
+        hint = "Drag to resize the left dock.";
+        hint_width = 220.0f;
+    }
+    if (hint == NULL && layout->right_splitter.width > 0.0f &&
+        henka_ui_rect_contains(layout->right_splitter, mouse))
+    {
+        hint = "Drag to resize the right dock.";
+        hint_width = 230.0f;
+    }
+    if (hint == NULL && state->workspace.model.hovered_panel != SANDBOX3D_WORKSPACE_PANEL_NONE &&
+        state->diagnostics.cursor_in_panel_header)
+    {
+        const sandbox3d_workspace_panel* panel = sandbox3d_workspace_get_panel_const(
+            &state->workspace.model,
+            state->workspace.model.hovered_panel);
+        hint = panel != NULL && panel->dock == SANDBOX3D_WORKSPACE_DOCK_FLOATING
+            ? "Drag header to move; right-click for workspace actions."
+            : "Drag header to undock or redock; right-click for workspace actions.";
+        hint_width = 352.0f;
+    }
+    if (hint == NULL && state->workspace.model.hovered_panel != SANDBOX3D_WORKSPACE_PANEL_NONE)
+    {
+        const henka_ui_rect panel_bounds = sandbox3d_get_panel_rect(
+            layout,
+            state->workspace.model.hovered_panel);
+        if (henka_ui_rect_contains(sandbox3d_workspace_resize_rect(panel_bounds), mouse))
+        {
+            hint = "Drag the corner to resize this floating panel.";
+            hint_width = 286.0f;
+        }
+    }
+    if (hint == NULL)
+    {
+        return;
+    }
+
+    hint_rect = (henka_ui_rect){mouse.x + 14.0f, mouse.y + 18.0f, hint_width, 28.0f};
+    if (hint_rect.x + hint_rect.width > (float)framebuffer_width)
+    {
+        hint_rect.x = (float)framebuffer_width - hint_rect.width - 6.0f;
+    }
+    if (hint_rect.y + hint_rect.height > (float)framebuffer_height)
+    {
+        hint_rect.y = mouse.y - hint_rect.height - 8.0f;
+    }
+    hint_rect.x = fmaxf(4.0f, hint_rect.x);
+    hint_rect.y = fmaxf(4.0f, hint_rect.y);
+    henka_ui_overlay_rect(state->ui, hint_rect, (henka_vec4){0.04f, 0.06f, 0.09f, 0.96f});
+    henka_ui_label_colored(
+        state->ui,
+        hint_rect.x + 8.0f,
+        hint_rect.y + 7.0f,
+        1.0f,
+        hint,
+        HENKA_UI_COLOR_INFO);
+}
+
 static void sandbox3d_draw_section_heading(henka_ui_context* ui, float x, float y, const char* title)
 {
     if (ui == NULL || title == NULL)
@@ -9872,6 +9978,11 @@ static void sandbox3d_build_ui(henka_engine* engine, sandbox3d_state* state)
             }
         }
         sandbox3d_draw_workspace_affordances(
+            state,
+            &layout,
+            frame_desc.framebuffer_width,
+            frame_desc.framebuffer_height);
+        sandbox3d_draw_workspace_hover_hint(
             state,
             &layout,
             frame_desc.framebuffer_width,
