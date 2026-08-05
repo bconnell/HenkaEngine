@@ -425,6 +425,7 @@ static void sandbox3d_record_success_result(sandbox3d_state* state, const char* 
 static const sandbox3d_object_descriptor* sandbox3d_get_descriptor_by_entity(const sandbox3d_state* state, henka_entity entity);
 static bool sandbox3d_is_drag_target_valid(const sandbox3d_state* state, henka_entity entity);
 static void sandbox3d_clear_gizmo_drag(sandbox3d_state* state, bool clear_hover_axis);
+static void sandbox3d_cancel_workspace_interaction(sandbox3d_state* state);
 static void sandbox3d_set_viewport_tool_mode(
     sandbox3d_state* state,
     sandbox3d_viewport_tool_mode tool_mode,
@@ -3987,6 +3988,20 @@ static void sandbox3d_clear_selection(sandbox3d_state* state, const char* reason
     }
 }
 
+static void sandbox3d_cancel_workspace_interaction(sandbox3d_state* state)
+{
+    if (state == NULL)
+    {
+        return;
+    }
+    if (state->workspace.model.topology_transaction_active)
+    {
+        sandbox3d_workspace_rollback_topology_transaction(&state->workspace.model);
+    }
+    sandbox3d_workspace_end_interaction(&state->workspace.model);
+    sandbox3d_clear_gizmo_drag(state, true);
+}
+
 static void sandbox3d_restore_selected_object(sandbox3d_state* state)
 {
     if (state == NULL)
@@ -4941,6 +4956,17 @@ static bool sandbox3d_handle_workspace_input(
             state->workspace.model.context_menu_open = false;
             state->workspace.model.context_menu_section = SANDBOX3D_WORKSPACE_PANEL_NONE;
         }
+        return true;
+    }
+
+    if (henka_input_was_key_pressed(engine, HENKA_KEY_ESCAPE) &&
+        (state->workspace.model.active_drag_panel != SANDBOX3D_WORKSPACE_PANEL_NONE ||
+         state->workspace.model.resize_target != SANDBOX3D_WORKSPACE_RESIZE_NONE ||
+         state->workspace.model.topology_transaction_active))
+    {
+        sandbox3d_cancel_workspace_interaction(state);
+        henka_input_consume_key_press(engine, HENKA_KEY_ESCAPE);
+        sandbox3d_set_status(state, false, "Workspace interaction cancelled.");
         return true;
     }
 
@@ -10482,12 +10508,22 @@ static void sandbox3d_update(henka_engine* engine, double delta_seconds, void* u
     bool ui_toggled_with_f4;
     bool ui_visible;
     bool workspace_input_active;
+    henka_engine_diagnostics engine_diagnostics;
     int framebuffer_height;
     int framebuffer_width;
     sandbox3d_workspace_layout layout;
     sandbox3d_state* state;
 
     state = (sandbox3d_state*)user_data;
+    if (henka_engine_get_diagnostics(engine, &engine_diagnostics) == HENKA_SUCCESS &&
+        !engine_diagnostics.main_window_focused &&
+        (state->workspace.model.active_drag_panel != SANDBOX3D_WORKSPACE_PANEL_NONE ||
+         state->workspace.model.resize_target != SANDBOX3D_WORKSPACE_RESIZE_NONE ||
+         state->workspace.model.topology_transaction_active))
+    {
+        sandbox3d_cancel_workspace_interaction(state);
+        sandbox3d_set_status(state, false, "Workspace interaction cancelled after focus loss.");
+    }
     if (state->residency_stress && !state->residency_stress_ran)
     {
         const henka_result residency_result =
@@ -10609,8 +10645,7 @@ static void sandbox3d_update(henka_engine* engine, double delta_seconds, void* u
     if (henka_input_action_was_pressed(engine, HENKA_INPUT_ACTION_OPEN_PANELS) && state->ui != NULL)
     {
         ui_visible = !henka_ui_is_visible(state->ui);
-        sandbox3d_clear_gizmo_drag(state, true);
-        sandbox3d_workspace_end_interaction(&state->workspace.model);
+        sandbox3d_cancel_workspace_interaction(state);
         henka_ui_set_visible(state->ui, ui_visible);
         if (ui_visible)
         {
@@ -10629,8 +10664,7 @@ static void sandbox3d_update(henka_engine* engine, double delta_seconds, void* u
 
     if (henka_input_action_was_pressed(engine, HENKA_INPUT_ACTION_CHANGE_LAYOUT) && state->ui != NULL)
     {
-        sandbox3d_clear_gizmo_drag(state, true);
-        sandbox3d_workspace_end_interaction(&state->workspace.model);
+        sandbox3d_cancel_workspace_interaction(state);
         state->workspace.layout_mode = sandbox3d_cycle_layout_mode(state->workspace.layout_mode);
         if (!henka_ui_is_visible(state->ui))
         {

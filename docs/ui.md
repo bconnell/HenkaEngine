@@ -194,6 +194,7 @@ When the UI is open:
 - mouse look pauses
 - camera movement pauses
 - you can click the UI with the left mouse button
+- `Escape` cancels an active workspace drag or resize transaction and restores any topology transaction before closing the panel
 - `Escape` closes the panel before it returns to the usual mouse-capture and exit flow
 
 `F5` cycles the current layout mode:
