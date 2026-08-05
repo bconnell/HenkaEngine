@@ -3135,6 +3135,7 @@ static void sandbox3d_print_help(const sandbox3d_state* state)
     printf("  The Controls panel uses readable pages, and Scene Objects supports paging when the dock is tighter than the full list.\n");
     printf("  Controls also provides Default, Modeling, Materials, and Debugging workspace presets; topology edits mark the workspace Custom.\n");
     printf("  Save Custom and Restore Custom persist one bounded named layout snapshot; restore redocks detached panels before applying it.\n");
+    printf("  With panels visible, Ctrl+Z undoes and Ctrl+Y or Ctrl+Shift+Z redoes the bounded workspace layout history.\n");
     printf("  Select an object from the list or with Left Mouse in the viewport, then use Move, Rotate, or Scale in the Transform section.\n");
     printf("  Common actions also report short in-window status messages. Console output stays available for fallback logs.\n");
     printf("  Mouse look and camera movement pause while the UI is open.\n");
