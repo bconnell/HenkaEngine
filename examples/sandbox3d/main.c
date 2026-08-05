@@ -408,6 +408,7 @@ static const char* g_setting_key_workspace_right_dock_width = "ui.workspace.righ
 static const char* g_setting_key_workspace_named_layout = "ui.workspace.named_layout";
 static const int g_workspace_topology_settings_version = 2;
 static const int g_workspace_custom_layout_settings_version = 1;
+static const int g_workspace_custom_layout_slots_settings_version = 1;
 
 static float sandbox3d_get_mouse_sensitivity(const sandbox3d_state* state);
 static void sandbox3d_set_status(sandbox3d_state* state, bool warning, const char* message);
@@ -538,6 +539,12 @@ static bool sandbox3d_load_custom_workspace_layout_settings(
     sandbox3d_workspace_model* model,
     const henka_settings* settings);
 static void sandbox3d_save_custom_workspace_layout_settings(
+    const sandbox3d_workspace_model* model,
+    henka_settings* settings);
+static bool sandbox3d_load_custom_workspace_layout_slots_settings(
+    sandbox3d_workspace_model* model,
+    const henka_settings* settings);
+static void sandbox3d_save_custom_workspace_layout_slots_settings(
     const sandbox3d_workspace_model* model,
     henka_settings* settings);
 static void sandbox3d_record_reject_reason(
@@ -2480,6 +2487,65 @@ static bool sandbox3d_restore_custom_workspace_layout(
     return true;
 }
 
+static const char* sandbox3d_workspace_slot_default_name(size_t slot_index)
+{
+    static const char* names[] = {"Studio", "Assembly"};
+    return slot_index >= 1U && slot_index <= 2U ? names[slot_index - 1U] : "Slot";
+}
+
+static bool sandbox3d_save_workspace_layout_slot(
+    henka_engine* engine,
+    sandbox3d_state* state,
+    size_t slot_index)
+{
+    const char* name;
+
+    if (engine == NULL || state == NULL || slot_index == 0U ||
+        slot_index >= SANDBOX3D_WORKSPACE_CUSTOM_LAYOUT_SLOT_COUNT)
+    {
+        return false;
+    }
+    sandbox3d_cancel_workspace_interaction(state);
+    sandbox3d_close_all_detached_workspace_panels(engine, state);
+    name = sandbox3d_workspace_slot_default_name(slot_index);
+    if (!sandbox3d_workspace_save_custom_layout_slot(&state->workspace.model, slot_index, name))
+    {
+        sandbox3d_set_status(state, true, "Named workspace slot could not be saved; the current layout was preserved.");
+        return false;
+    }
+    sandbox3d_set_statusf(state, false, false, "Saved workspace slot: %s.", name);
+    return true;
+}
+
+static bool sandbox3d_restore_workspace_layout_slot(
+    henka_engine* engine,
+    sandbox3d_state* state,
+    size_t slot_index)
+{
+    const char* name;
+
+    if (engine == NULL || state == NULL || slot_index == 0U ||
+        slot_index >= SANDBOX3D_WORKSPACE_CUSTOM_LAYOUT_SLOT_COUNT ||
+        !sandbox3d_workspace_has_custom_layout_slot(&state->workspace.model, slot_index))
+    {
+        sandbox3d_set_status(state, true, "No saved named workspace is available in that slot.");
+        return false;
+    }
+    sandbox3d_cancel_workspace_interaction(state);
+    sandbox3d_close_all_detached_workspace_panels(engine, state);
+    if (!sandbox3d_workspace_apply_custom_layout_slot(&state->workspace.model, slot_index))
+    {
+        sandbox3d_set_status(state, true, "Saved named workspace was rejected; the current layout was preserved.");
+        return false;
+    }
+    state->workspace.scene_objects_panel_visible = true;
+    state->workspace.object_details_panel_visible = true;
+    state->workspace.active_utility = SANDBOX3D_UTILITY_NONE;
+    name = sandbox3d_workspace_custom_layout_slot_name(&state->workspace.model, slot_index);
+    sandbox3d_set_statusf(state, false, false, "Restored workspace slot: %s.", name);
+    return true;
+}
+
 static bool sandbox3d_undo_workspace_layout(henka_engine* engine, sandbox3d_state* state)
 {
     if (engine == NULL || state == NULL || !sandbox3d_workspace_can_undo(&state->workspace.model))
@@ -3134,7 +3200,7 @@ static void sandbox3d_print_help(const sandbox3d_state* state)
     printf("  Physics QA enables an opt-in fixed-step rigid-body demo with collider/contact debug drawing, impulses, body modes, and camera raycasts.\n");
     printf("  The Controls panel uses readable pages, and Scene Objects supports paging when the dock is tighter than the full list.\n");
     printf("  Controls also provides Default, Modeling, Materials, Scene Assembly, Debugging, and Minimal Viewport workspace presets; topology edits mark the workspace Custom.\n");
-    printf("  Save Custom and Restore Custom persist one bounded named layout snapshot; restore redocks detached panels before applying it.\n");
+    printf("  Save Custom and Restore Custom persist the primary named layout; Studio and Assembly slots provide two additional bounded local snapshots.\n");
     printf("  With panels visible, Ctrl+Z undoes and Ctrl+Y or Ctrl+Shift+Z redoes the bounded workspace layout history.\n");
     printf("  Select an object from the list or with Left Mouse in the viewport, then use Move, Rotate, or Scale in the Transform section.\n");
     printf("  Common actions also report short in-window status messages. Console output stays available for fallback logs.\n");
@@ -4827,6 +4893,287 @@ static void sandbox3d_save_custom_workspace_layout_settings(
     }
 }
 
+static bool sandbox3d_load_custom_workspace_layout_slots_settings(
+    sandbox3d_workspace_model* model,
+    const henka_settings* settings)
+{
+    size_t slot_index;
+
+    if (model == NULL || settings == NULL)
+    {
+        return false;
+    }
+    for (slot_index = 1U; slot_index < SANDBOX3D_WORKSPACE_CUSTOM_LAYOUT_SLOT_COUNT; ++slot_index)
+    {
+        sandbox3d_workspace_custom_layout_slot slot;
+        sandbox3d_workspace_model candidate;
+        char prefix[96];
+        char key[160];
+        const char* name;
+        size_t name_length;
+        size_t panel_index;
+        size_t node_index;
+        int value;
+        int version;
+        bool name_valid;
+
+        snprintf(prefix, sizeof(prefix), "ui.workspace.custom_layout.slot.%zu", slot_index);
+        snprintf(key, sizeof(key), "%s.version", prefix);
+        if (!henka_settings_has_key(settings, key))
+        {
+            continue;
+        }
+        version = henka_settings_get_int(settings, key, 0);
+        if (version != g_workspace_custom_layout_slots_settings_version)
+        {
+            continue;
+        }
+
+        memset(&slot, 0, sizeof(slot));
+        snprintf(key, sizeof(key), "%s.name", prefix);
+        name = henka_settings_get_string(settings, key, "Slot");
+        name_length = name != NULL ? strlen(name) : 0U;
+        name_valid = name != NULL && name_length > 0U &&
+            name_length < SANDBOX3D_WORKSPACE_CUSTOM_LAYOUT_NAME_MAX;
+        for (size_t name_index = 0U; name_valid && name_index < name_length; ++name_index)
+        {
+            const unsigned char character = (unsigned char)name[name_index];
+            if (character < 0x20U || character == 0x7fU)
+            {
+                name_valid = false;
+            }
+        }
+        if (!name_valid)
+        {
+            continue;
+        }
+        snprintf(slot.name, sizeof(slot.name), "%s", name);
+        slot.root = 0U;
+        snprintf(key, sizeof(key), "%s.root", prefix);
+        value = henka_settings_get_int(settings, key, (int)slot.root);
+        if (value < 0 || value >= (int)SANDBOX3D_WORKSPACE_TOPOLOGY_MAX_NODES)
+        {
+            continue;
+        }
+        slot.root = (uint16_t)value;
+        snprintf(key, sizeof(key), "%s.closed_mask", prefix);
+        value = henka_settings_get_int(settings, key, 0);
+        if (value < 0 || value >= (1 << SANDBOX3D_WORKSPACE_PANEL_COUNT))
+        {
+            continue;
+        }
+        slot.closed_sections_mask = (uint32_t)value;
+        snprintf(key, sizeof(key), "%s.maximized_section", prefix);
+        value = henka_settings_get_int(settings, key, SANDBOX3D_WORKSPACE_PANEL_NONE);
+        if (value < SANDBOX3D_WORKSPACE_PANEL_NONE || value >= SANDBOX3D_WORKSPACE_PANEL_COUNT)
+        {
+            continue;
+        }
+        slot.maximized_section = (sandbox3d_workspace_panel_id)value;
+        snprintf(key, sizeof(key), "%s.left_dock_width", prefix);
+        slot.left_dock_width = henka_settings_get_float(settings, key, 320.0f);
+        snprintf(key, sizeof(key), "%s.right_dock_width", prefix);
+        slot.right_dock_width = henka_settings_get_float(settings, key, 356.0f);
+        snprintf(key, sizeof(key), "%s.ui_scale", prefix);
+        slot.ui_scale = henka_settings_get_float(settings, key, 1.0f);
+        if (!isfinite(slot.left_dock_width) || slot.left_dock_width < 280.0f || slot.left_dock_width > 720.0f ||
+            !isfinite(slot.right_dock_width) || slot.right_dock_width < 300.0f || slot.right_dock_width > 720.0f ||
+            !isfinite(slot.ui_scale) || slot.ui_scale < SANDBOX3D_WORKSPACE_UI_SCALE_MIN ||
+            slot.ui_scale > SANDBOX3D_WORKSPACE_UI_SCALE_MAX)
+        {
+            continue;
+        }
+        for (panel_index = 0U; panel_index < SANDBOX3D_WORKSPACE_PANEL_COUNT; ++panel_index)
+        {
+            snprintf(key, sizeof(key), "%s.panel.%zu.dock", prefix, panel_index);
+            value = henka_settings_get_int(settings, key, SANDBOX3D_WORKSPACE_DOCK_LEFT);
+            if (value < SANDBOX3D_WORKSPACE_DOCK_LEFT || value > SANDBOX3D_WORKSPACE_DOCK_DETACHED)
+            {
+                name_valid = false;
+                break;
+            }
+            slot.docks[panel_index] = (sandbox3d_workspace_dock_zone)value;
+            snprintf(key, sizeof(key), "%s.panel.%zu.last_docked", prefix, panel_index);
+            value = henka_settings_get_int(settings, key, SANDBOX3D_WORKSPACE_DOCK_LEFT);
+            if (value < SANDBOX3D_WORKSPACE_DOCK_LEFT || value > SANDBOX3D_WORKSPACE_DOCK_RIGHT)
+            {
+                name_valid = false;
+                break;
+            }
+            slot.last_docked_zones[panel_index] = (sandbox3d_workspace_dock_zone)value;
+        }
+        if (!name_valid)
+        {
+            continue;
+        }
+        for (node_index = 0U; node_index < SANDBOX3D_WORKSPACE_TOPOLOGY_MAX_NODES; ++node_index)
+        {
+            sandbox3d_workspace_topology_node* node = &slot.nodes[node_index];
+            int parent;
+            int type;
+
+            snprintf(key, sizeof(key), "%s.node.%zu.type", prefix, node_index);
+            type = henka_settings_get_int(settings, key, SANDBOX3D_WORKSPACE_TOPOLOGY_NODE_UNUSED);
+            snprintf(key, sizeof(key), "%s.node.%zu.parent", prefix, node_index);
+            parent = henka_settings_get_int(settings, key, (int)UINT16_MAX);
+            if (type < SANDBOX3D_WORKSPACE_TOPOLOGY_NODE_UNUSED ||
+                type > SANDBOX3D_WORKSPACE_TOPOLOGY_NODE_SECTION ||
+                (parent != (int)UINT16_MAX && (parent < 0 || parent >= (int)SANDBOX3D_WORKSPACE_TOPOLOGY_MAX_NODES)))
+            {
+                name_valid = false;
+                break;
+            }
+            node->type = (sandbox3d_workspace_topology_node_type)type;
+            node->parent = (uint16_t)parent;
+            if (node->type == SANDBOX3D_WORKSPACE_TOPOLOGY_NODE_SPLIT)
+            {
+                int orientation;
+                snprintf(key, sizeof(key), "%s.node.%zu.first", prefix, node_index);
+                value = henka_settings_get_int(settings, key, 0);
+                if (value < 0 || value >= (int)SANDBOX3D_WORKSPACE_TOPOLOGY_MAX_NODES) { name_valid = false; break; }
+                node->data.split.first_child = (uint16_t)value;
+                snprintf(key, sizeof(key), "%s.node.%zu.second", prefix, node_index);
+                value = henka_settings_get_int(settings, key, 0);
+                if (value < 0 || value >= (int)SANDBOX3D_WORKSPACE_TOPOLOGY_MAX_NODES) { name_valid = false; break; }
+                node->data.split.second_child = (uint16_t)value;
+                snprintf(key, sizeof(key), "%s.node.%zu.orientation", prefix, node_index);
+                orientation = henka_settings_get_int(settings, key, 0);
+                if (orientation < SANDBOX3D_WORKSPACE_SPLIT_HORIZONTAL || orientation > SANDBOX3D_WORKSPACE_SPLIT_VERTICAL) { name_valid = false; break; }
+                node->data.split.orientation = (sandbox3d_workspace_split_orientation)orientation;
+                snprintf(key, sizeof(key), "%s.node.%zu.ratio", prefix, node_index);
+                node->data.split.ratio = henka_settings_get_float(settings, key, 0.5f);
+                snprintf(key, sizeof(key), "%s.node.%zu.minimum_first", prefix, node_index);
+                node->data.split.minimum_first = henka_settings_get_float(settings, key, 1.0f);
+                snprintf(key, sizeof(key), "%s.node.%zu.minimum_second", prefix, node_index);
+                node->data.split.minimum_second = henka_settings_get_float(settings, key, 1.0f);
+            }
+            else if (node->type == SANDBOX3D_WORKSPACE_TOPOLOGY_NODE_SECTION)
+            {
+                size_t tab_index;
+                snprintf(key, sizeof(key), "%s.node.%zu.section", prefix, node_index);
+                value = henka_settings_get_int(settings, key, SANDBOX3D_WORKSPACE_PANEL_NONE);
+                if (value < 0 || value >= SANDBOX3D_WORKSPACE_PANEL_COUNT) { name_valid = false; break; }
+                node->data.section.section_id = (sandbox3d_workspace_panel_id)value;
+                snprintf(key, sizeof(key), "%s.node.%zu.tab_count", prefix, node_index);
+                value = henka_settings_get_int(settings, key, 0);
+                if (value <= 0 || value > (int)SANDBOX3D_WORKSPACE_TOPOLOGY_MAX_TABS) { name_valid = false; break; }
+                node->data.section.tab_count = (uint8_t)value;
+                snprintf(key, sizeof(key), "%s.node.%zu.active_tab", prefix, node_index);
+                value = henka_settings_get_int(settings, key, 0);
+                if (value < 0 || value >= (int)node->data.section.tab_count) { name_valid = false; break; }
+                node->data.section.active_tab = (uint8_t)value;
+                for (tab_index = 0U; tab_index < SANDBOX3D_WORKSPACE_TOPOLOGY_MAX_TABS; ++tab_index)
+                {
+                    snprintf(key, sizeof(key), "%s.node.%zu.tab.%zu", prefix, node_index, tab_index);
+                    value = henka_settings_get_int(settings, key, SANDBOX3D_WORKSPACE_PANEL_NONE);
+                    if (value < 0 || value >= SANDBOX3D_WORKSPACE_PANEL_COUNT) { name_valid = false; break; }
+                    node->data.section.tabs[tab_index] = (sandbox3d_workspace_panel_id)value;
+                }
+                if (!name_valid) { break; }
+            }
+        }
+        if (!name_valid)
+        {
+            continue;
+        }
+        slot.valid = true;
+        candidate = *model;
+        candidate.custom_layout_slots[slot_index - 1U] = slot;
+        if (sandbox3d_workspace_apply_custom_layout_slot(&candidate, slot_index))
+        {
+            model->custom_layout_slots[slot_index - 1U] = slot;
+        }
+    }
+    return true;
+}
+
+static void sandbox3d_save_custom_workspace_layout_slots_settings(
+    const sandbox3d_workspace_model* model,
+    henka_settings* settings)
+{
+    size_t slot_index;
+
+    if (model == NULL || settings == NULL)
+    {
+        return;
+    }
+    for (slot_index = 1U; slot_index < SANDBOX3D_WORKSPACE_CUSTOM_LAYOUT_SLOT_COUNT; ++slot_index)
+    {
+        const sandbox3d_workspace_custom_layout_slot* slot = &model->custom_layout_slots[slot_index - 1U];
+        char prefix[96];
+        char key[160];
+        size_t panel_index;
+        size_t node_index;
+
+        if (!slot->valid)
+        {
+            continue;
+        }
+        snprintf(prefix, sizeof(prefix), "ui.workspace.custom_layout.slot.%zu", slot_index);
+        snprintf(key, sizeof(key), "%s.version", prefix);
+        (void)henka_settings_set_int(settings, key, g_workspace_custom_layout_slots_settings_version);
+        snprintf(key, sizeof(key), "%s.name", prefix);
+        (void)henka_settings_set_string(settings, key, slot->name);
+        snprintf(key, sizeof(key), "%s.root", prefix);
+        (void)henka_settings_set_int(settings, key, (int)slot->root);
+        snprintf(key, sizeof(key), "%s.closed_mask", prefix);
+        (void)henka_settings_set_int(settings, key, (int)slot->closed_sections_mask);
+        snprintf(key, sizeof(key), "%s.maximized_section", prefix);
+        (void)henka_settings_set_int(settings, key, (int)slot->maximized_section);
+        snprintf(key, sizeof(key), "%s.left_dock_width", prefix);
+        (void)henka_settings_set_float(settings, key, slot->left_dock_width);
+        snprintf(key, sizeof(key), "%s.right_dock_width", prefix);
+        (void)henka_settings_set_float(settings, key, slot->right_dock_width);
+        snprintf(key, sizeof(key), "%s.ui_scale", prefix);
+        (void)henka_settings_set_float(settings, key, slot->ui_scale);
+        for (panel_index = 0U; panel_index < SANDBOX3D_WORKSPACE_PANEL_COUNT; ++panel_index)
+        {
+            snprintf(key, sizeof(key), "%s.panel.%zu.dock", prefix, panel_index);
+            (void)henka_settings_set_int(settings, key, (int)slot->docks[panel_index]);
+            snprintf(key, sizeof(key), "%s.panel.%zu.last_docked", prefix, panel_index);
+            (void)henka_settings_set_int(settings, key, (int)slot->last_docked_zones[panel_index]);
+        }
+        for (node_index = 0U; node_index < SANDBOX3D_WORKSPACE_TOPOLOGY_MAX_NODES; ++node_index)
+        {
+            const sandbox3d_workspace_topology_node* node = &slot->nodes[node_index];
+            snprintf(key, sizeof(key), "%s.node.%zu.type", prefix, node_index);
+            (void)henka_settings_set_int(settings, key, (int)node->type);
+            snprintf(key, sizeof(key), "%s.node.%zu.parent", prefix, node_index);
+            (void)henka_settings_set_int(settings, key, (int)node->parent);
+            if (node->type == SANDBOX3D_WORKSPACE_TOPOLOGY_NODE_SPLIT)
+            {
+                snprintf(key, sizeof(key), "%s.node.%zu.first", prefix, node_index);
+                (void)henka_settings_set_int(settings, key, (int)node->data.split.first_child);
+                snprintf(key, sizeof(key), "%s.node.%zu.second", prefix, node_index);
+                (void)henka_settings_set_int(settings, key, (int)node->data.split.second_child);
+                snprintf(key, sizeof(key), "%s.node.%zu.orientation", prefix, node_index);
+                (void)henka_settings_set_int(settings, key, (int)node->data.split.orientation);
+                snprintf(key, sizeof(key), "%s.node.%zu.ratio", prefix, node_index);
+                (void)henka_settings_set_float(settings, key, node->data.split.ratio);
+                snprintf(key, sizeof(key), "%s.node.%zu.minimum_first", prefix, node_index);
+                (void)henka_settings_set_float(settings, key, node->data.split.minimum_first);
+                snprintf(key, sizeof(key), "%s.node.%zu.minimum_second", prefix, node_index);
+                (void)henka_settings_set_float(settings, key, node->data.split.minimum_second);
+            }
+            else if (node->type == SANDBOX3D_WORKSPACE_TOPOLOGY_NODE_SECTION)
+            {
+                size_t tab_index;
+                snprintf(key, sizeof(key), "%s.node.%zu.section", prefix, node_index);
+                (void)henka_settings_set_int(settings, key, (int)node->data.section.section_id);
+                snprintf(key, sizeof(key), "%s.node.%zu.tab_count", prefix, node_index);
+                (void)henka_settings_set_int(settings, key, (int)node->data.section.tab_count);
+                snprintf(key, sizeof(key), "%s.node.%zu.active_tab", prefix, node_index);
+                (void)henka_settings_set_int(settings, key, (int)node->data.section.active_tab);
+                for (tab_index = 0U; tab_index < SANDBOX3D_WORKSPACE_TOPOLOGY_MAX_TABS; ++tab_index)
+                {
+                    snprintf(key, sizeof(key), "%s.node.%zu.tab.%zu", prefix, node_index, tab_index);
+                    (void)henka_settings_set_int(settings, key, (int)node->data.section.tabs[tab_index]);
+                }
+            }
+        }
+    }
+}
+
 static void sandbox3d_apply_loaded_settings(henka_engine* engine, sandbox3d_state* state)
 {
     henka_camera candidate_camera;
@@ -4967,6 +5314,10 @@ static void sandbox3d_apply_loaded_settings(henka_engine* engine, sandbox3d_stat
     {
         HENKA_LOG_WARN("Unsafe or incompatible custom workspace layout settings were ignored.");
     }
+    if (!sandbox3d_load_custom_workspace_layout_slots_settings(&state->workspace.model, state->settings))
+    {
+        HENKA_LOG_WARN("Unsafe or incompatible named workspace slot settings were ignored.");
+    }
     sandbox3d_restore_selected_object(state);
 }
 
@@ -5010,6 +5361,7 @@ static henka_result sandbox3d_save_settings(henka_engine* engine, sandbox3d_stat
     sandbox3d_save_workspace_panel_settings(&state->workspace.model, state->settings);
     sandbox3d_save_workspace_topology_settings(&state->workspace.model, state->settings);
     sandbox3d_save_custom_workspace_layout_settings(&state->workspace.model, state->settings);
+    sandbox3d_save_custom_workspace_layout_slots_settings(&state->workspace.model, state->settings);
     if (state->editor_controls_loaded_safely)
     {
         sandbox3d_editor_controls_save(&state->editor_controls, state->settings);
@@ -8871,6 +9223,53 @@ static void sandbox3d_draw_controls_panel(
                     has_custom_layout ? "Restore Custom" : "No Custom Saved"))
             {
                 (void)sandbox3d_restore_custom_workspace_layout(engine, state);
+            }
+        }
+        y += 34.0f;
+        {
+            const float slot_button_width = (panel_bounds.width - 44.0f) / 3.0f;
+            size_t slot_index;
+            for (slot_index = 1U; slot_index < SANDBOX3D_WORKSPACE_CUSTOM_LAYOUT_SLOT_COUNT; ++slot_index)
+            {
+                char button_id[48];
+                char button_label[48];
+                const char* name = sandbox3d_workspace_slot_default_name(slot_index);
+                snprintf(button_id, sizeof(button_id), "workspace_slot_save_%zu", slot_index);
+                snprintf(button_label, sizeof(button_label), "Save %s", name);
+                if (henka_ui_primary_button(
+                        state->ui,
+                        button_id,
+                        (henka_ui_rect){x_left + (slot_button_width + 4.0f) * (float)(slot_index - 1U), y, slot_button_width, 28.0f},
+                        button_label))
+                {
+                    (void)sandbox3d_save_workspace_layout_slot(engine, state, slot_index);
+                }
+            }
+        }
+        y += 32.0f;
+        {
+            const float slot_button_width = (panel_bounds.width - 44.0f) / 3.0f;
+            size_t slot_index;
+            for (slot_index = 1U; slot_index < SANDBOX3D_WORKSPACE_CUSTOM_LAYOUT_SLOT_COUNT; ++slot_index)
+            {
+                char button_id[48];
+                char button_label[48];
+                const char* name = sandbox3d_workspace_slot_default_name(slot_index);
+                snprintf(button_id, sizeof(button_id), "workspace_slot_restore_%zu", slot_index);
+                snprintf(
+                    button_label,
+                    sizeof(button_label),
+                    "%s %s",
+                    sandbox3d_workspace_has_custom_layout_slot(&state->workspace.model, slot_index) ? "Restore" : "Empty",
+                    name);
+                if (henka_ui_primary_button(
+                        state->ui,
+                        button_id,
+                        (henka_ui_rect){x_left + (slot_button_width + 4.0f) * (float)(slot_index - 1U), y, slot_button_width, 28.0f},
+                        button_label))
+                {
+                    (void)sandbox3d_restore_workspace_layout_slot(engine, state, slot_index);
+                }
             }
         }
         y += 34.0f;
