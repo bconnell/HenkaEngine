@@ -11703,6 +11703,8 @@ static void sandbox3d_update(henka_engine* engine, double delta_seconds, void* u
     henka_engine_diagnostics engine_diagnostics;
     int framebuffer_height;
     int framebuffer_width;
+    int window_height;
+    int window_width;
     sandbox3d_workspace_layout layout;
     sandbox3d_state* state;
 
@@ -11905,6 +11907,19 @@ static void sandbox3d_update(henka_engine* engine, double delta_seconds, void* u
 
     if (henka_engine_get_framebuffer_size(engine, &framebuffer_width, &framebuffer_height) == HENKA_SUCCESS && framebuffer_height > 0)
     {
+        if (henka_engine_get_window_size(engine, &window_width, &window_height) == HENKA_SUCCESS &&
+            window_width > 0 && window_height > 0)
+        {
+            const float scale_x = (float)framebuffer_width / (float)window_width;
+            const float scale_y = (float)framebuffer_height / (float)window_height;
+            sandbox3d_workspace_set_ui_scale(
+                &state->workspace.model,
+                scale_x > scale_y ? scale_x : scale_y);
+        }
+        else
+        {
+            sandbox3d_workspace_set_ui_scale(&state->workspace.model, 1.0f);
+        }
         layout = sandbox3d_get_workspace_layout(state, framebuffer_width, framebuffer_height);
         if (state->gizmo.drag.dragging &&
             !sandbox3d_viewports_match(layout.scene_viewport, state->gizmo.drag.drag_start_viewport))
@@ -11918,6 +11933,7 @@ static void sandbox3d_update(henka_engine* engine, double delta_seconds, void* u
     }
     else
     {
+        sandbox3d_workspace_set_ui_scale(&state->workspace.model, 1.0f);
         state->frame_layout = sandbox3d_get_workspace_layout(state, 1280, 720);
         henka_engine_set_scene_viewport(engine, state->frame_layout.scene_viewport);
     }

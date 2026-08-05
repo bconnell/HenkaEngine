@@ -59,6 +59,14 @@ void henka_test_sandbox3d_workspace(void)
     HENKA_TEST_ASSERT(topology_layout.section_rects[SANDBOX3D_WORKSPACE_PANEL_CONTROLS].width >= 180.0f);
     HENKA_TEST_ASSERT(topology_layout.section_rects[SANDBOX3D_WORKSPACE_PANEL_UTILITY].height >= 180.0f);
     HENKA_TEST_ASSERT(topology_layout.divider_hit_rects[0].width == 10.0f);
+    sandbox3d_workspace_set_ui_scale(&model, 2.0f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(sandbox3d_workspace_get_ui_scale(&model), 2.0f, 0.0001f);
+    sandbox3d_workspace_build_topology_layout(
+        &model,
+        (henka_ui_rect){0.0f, 0.0f, 1280.0f, 720.0f},
+        &topology_layout);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(topology_layout.divider_hit_rects[0].width, 20.0f, 0.0001f);
+    sandbox3d_workspace_set_ui_scale(&model, 1.0f);
     sandbox3d_workspace_build_dock_topology_layout(
         &model,
         SANDBOX3D_WORKSPACE_DOCK_LEFT,

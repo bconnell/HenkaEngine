@@ -33,6 +33,8 @@ typedef enum sandbox3d_workspace_dock_zone
 #define SANDBOX3D_WORKSPACE_TOPOLOGY_MAX_TABS SANDBOX3D_WORKSPACE_PANEL_COUNT
 #define SANDBOX3D_WORKSPACE_DIVIDER_HIT_WIDTH 10.0f
 #define SANDBOX3D_WORKSPACE_DIVIDER_CLOSE_THRESHOLD 32.0f
+#define SANDBOX3D_WORKSPACE_UI_SCALE_MIN 0.75f
+#define SANDBOX3D_WORKSPACE_UI_SCALE_MAX 4.0f
 
 typedef enum sandbox3d_workspace_split_orientation
 {
@@ -136,6 +138,7 @@ typedef struct sandbox3d_workspace_model
     size_t right_dock_panel_count;
     float left_dock_width;
     float right_dock_width;
+    float ui_scale;
     sandbox3d_workspace_panel_id hovered_panel;
     sandbox3d_workspace_panel_id active_drag_panel;
     sandbox3d_workspace_panel_id drag_start_section;
@@ -185,6 +188,11 @@ typedef struct sandbox3d_workspace_model
 } sandbox3d_workspace_model;
 
 void sandbox3d_workspace_model_reset(sandbox3d_workspace_model* model);
+void sandbox3d_workspace_set_ui_scale(
+    sandbox3d_workspace_model* model,
+    float ui_scale);
+float sandbox3d_workspace_get_ui_scale(
+    const sandbox3d_workspace_model* model);
 const char* sandbox3d_workspace_named_layout_label(
     sandbox3d_workspace_named_layout layout);
 const char* sandbox3d_workspace_named_layout_setting_value(

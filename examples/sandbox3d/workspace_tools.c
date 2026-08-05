@@ -2,6 +2,12 @@
 
 #include <stdio.h>
 #include <string.h>
+#include <math.h>
+
+static henka_ui_rect sandbox3d_workspace_topology_divider_hit_rect_scaled(
+    henka_ui_rect divider_rect,
+    sandbox3d_workspace_split_orientation orientation,
+    float ui_scale);
 
 static sandbox3d_workspace_panel_id* sandbox3d_workspace_get_dock_list(
     sandbox3d_workspace_model* model,
@@ -156,6 +162,30 @@ static float sandbox3d_workspace_clamp_float(float value, float minimum, float m
         return maximum;
     }
     return value;
+}
+
+void sandbox3d_workspace_set_ui_scale(
+    sandbox3d_workspace_model* model,
+    float ui_scale)
+{
+    if (model == NULL || !isfinite(ui_scale))
+    {
+        return;
+    }
+    model->ui_scale = sandbox3d_workspace_clamp_float(
+        ui_scale,
+        SANDBOX3D_WORKSPACE_UI_SCALE_MIN,
+        SANDBOX3D_WORKSPACE_UI_SCALE_MAX);
+}
+
+float sandbox3d_workspace_get_ui_scale(
+    const sandbox3d_workspace_model* model)
+{
+    if (model == NULL || !isfinite(model->ui_scale) || model->ui_scale <= 0.0f)
+    {
+        return 1.0f;
+    }
+    return model->ui_scale;
 }
 
 static void sandbox3d_workspace_topology_clear(
@@ -393,7 +423,10 @@ static bool sandbox3d_workspace_topology_layout_node(
         }
         out_layout->divider_visual_rects[divider_index] = visual;
         out_layout->divider_hit_rects[divider_index] =
-            sandbox3d_workspace_topology_divider_hit_rect(visual, node->data.split.orientation);
+            sandbox3d_workspace_topology_divider_hit_rect_scaled(
+                visual,
+                node->data.split.orientation,
+                sandbox3d_workspace_get_ui_scale(model));
         out_layout->divider_node_indices[divider_index] = node_index;
         out_layout->divider_count += 1U;
         return sandbox3d_workspace_topology_layout_node(
@@ -518,7 +551,10 @@ static bool sandbox3d_workspace_topology_layout_dock_node(
         }
         out_layout->divider_visual_rects[divider_index] = visual;
         out_layout->divider_hit_rects[divider_index] =
-            sandbox3d_workspace_topology_divider_hit_rect(visual, node->data.split.orientation);
+            sandbox3d_workspace_topology_divider_hit_rect_scaled(
+                visual,
+                node->data.split.orientation,
+                sandbox3d_workspace_get_ui_scale(model));
         out_layout->divider_node_indices[divider_index] = node_index;
         ++out_layout->divider_count;
         return sandbox3d_workspace_topology_layout_dock_node(
@@ -915,6 +951,7 @@ void sandbox3d_workspace_model_reset(sandbox3d_workspace_model* model)
     model->right_dock_panel_count = 2U;
     model->left_dock_width = 320.0f;
     model->right_dock_width = 356.0f;
+    model->ui_scale = 1.0f;
     model->hovered_panel = SANDBOX3D_WORKSPACE_PANEL_NONE;
     model->active_drag_panel = SANDBOX3D_WORKSPACE_PANEL_NONE;
     model->drag_start_section = SANDBOX3D_WORKSPACE_PANEL_NONE;
@@ -1536,11 +1573,16 @@ bool sandbox3d_workspace_topology_is_valid(const sandbox3d_workspace_model* mode
     return true;
 }
 
-henka_ui_rect sandbox3d_workspace_topology_divider_hit_rect(
+static henka_ui_rect sandbox3d_workspace_topology_divider_hit_rect_scaled(
     henka_ui_rect divider_rect,
-    sandbox3d_workspace_split_orientation orientation)
+    sandbox3d_workspace_split_orientation orientation,
+    float ui_scale)
 {
-    const float hit_width = SANDBOX3D_WORKSPACE_DIVIDER_HIT_WIDTH;
+    const float hit_width = SANDBOX3D_WORKSPACE_DIVIDER_HIT_WIDTH *
+        sandbox3d_workspace_clamp_float(
+            ui_scale,
+            SANDBOX3D_WORKSPACE_UI_SCALE_MIN,
+            SANDBOX3D_WORKSPACE_UI_SCALE_MAX);
     if (orientation == SANDBOX3D_WORKSPACE_SPLIT_HORIZONTAL)
     {
         return (henka_ui_rect){
@@ -1554,6 +1596,14 @@ henka_ui_rect sandbox3d_workspace_topology_divider_hit_rect(
         divider_rect.y - (hit_width - divider_rect.height) * 0.5f,
         divider_rect.width,
         hit_width};
+}
+
+henka_ui_rect sandbox3d_workspace_topology_divider_hit_rect(
+    henka_ui_rect divider_rect,
+    sandbox3d_workspace_split_orientation orientation)
+{
+    return sandbox3d_workspace_topology_divider_hit_rect_scaled(
+        divider_rect, orientation, 1.0f);
 }
 
 void sandbox3d_workspace_build_topology_layout(
