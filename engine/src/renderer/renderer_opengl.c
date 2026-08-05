@@ -2664,6 +2664,7 @@ static henka_result henka_opengl_create_point_shadow_target(
     GLuint depth_texture = 0U;
     GLuint framebuffer = 0U;
     GLint previous_framebuffer = 0;
+    GLint previous_active_texture = GL_TEXTURE0;
     GLint previous_texture = 0;
 
     if (state == NULL || resolution <= 0 || resolution > 1024)
@@ -2677,6 +2678,8 @@ static henka_result henka_opengl_create_point_shadow_target(
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
     glGetIntegerv(GL_FRAMEBUFFER_BINDING, &previous_framebuffer);
+    glGetIntegerv(GL_ACTIVE_TEXTURE, &previous_active_texture);
+    g_gl.ActiveTexture(GL_TEXTURE0);
     glGetIntegerv(GL_TEXTURE_BINDING_CUBE_MAP, &previous_texture);
     g_gl.GenFramebuffers(1, &framebuffer);
     glGenTextures(1, &depth_texture);
@@ -2687,6 +2690,7 @@ static henka_result henka_opengl_create_point_shadow_target(
         (void)snprintf(state->point_shadow_failure_reason,
             sizeof(state->point_shadow_failure_reason),
             "point shadow GPU allocation failed");
+        g_gl.ActiveTexture((GLenum)previous_active_texture);
         return HENKA_ERROR_RENDERER;
     }
     glBindTexture(GL_TEXTURE_CUBE_MAP, depth_texture);
@@ -2712,12 +2716,14 @@ static henka_result henka_opengl_create_point_shadow_target(
             "incomplete point shadow framebuffer");
         g_gl.BindFramebuffer(GL_FRAMEBUFFER, (GLuint)previous_framebuffer);
         glBindTexture(GL_TEXTURE_CUBE_MAP, (GLuint)previous_texture);
+        g_gl.ActiveTexture((GLenum)previous_active_texture);
         glDeleteTextures(1, &depth_texture);
         g_gl.DeleteFramebuffers(1, &framebuffer);
         return HENKA_ERROR_RENDERER;
     }
     g_gl.BindFramebuffer(GL_FRAMEBUFFER, (GLuint)previous_framebuffer);
     glBindTexture(GL_TEXTURE_CUBE_MAP, (GLuint)previous_texture);
+    g_gl.ActiveTexture((GLenum)previous_active_texture);
     henka_opengl_delete_point_shadow_target(state);
     state->point_shadow_framebuffer = framebuffer;
     state->point_shadow_depth_texture = depth_texture;
@@ -4130,10 +4136,13 @@ static bool henka_opengl_reflection_probe_desc_equal(
 static bool henka_opengl_ensure_reflection_probe_target(
     henka_opengl_renderer_state* state)
 {
+    GLint previous_renderbuffer = 0;
+
     if (state == NULL)
     {
         return false;
     }
+    glGetIntegerv(GL_RENDERBUFFER_BINDING, &previous_renderbuffer);
     if (state->reflection_probe_framebuffer == 0U)
     {
         g_gl.GenFramebuffers(1, &state->reflection_probe_framebuffer);
@@ -4154,9 +4163,9 @@ static bool henka_opengl_ensure_reflection_probe_target(
                 &state->tracked_render_target_bytes,
                 (uint64_t)HENKA_REFLECTION_PROBE_RESOLUTION *
                     (uint64_t)HENKA_REFLECTION_PROBE_RESOLUTION * 4U);
-            g_gl.BindRenderbuffer(GL_RENDERBUFFER, 0U);
         }
     }
+    g_gl.BindRenderbuffer(GL_RENDERBUFFER, (GLuint)previous_renderbuffer);
     return state->reflection_probe_framebuffer != 0U &&
         state->reflection_probe_depth_buffer != 0U;
 }
