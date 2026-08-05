@@ -443,6 +443,7 @@ void* henka_platform_get_native_tool_window(struct henka_platform* platform, hen
 henka_result henka_platform_set_vsync(struct henka_platform* platform, bool enabled);
 bool henka_platform_get_framebuffer_size(struct henka_platform* platform, int* out_width, int* out_height);
 bool henka_platform_get_window_size(struct henka_platform* platform, int* out_width, int* out_height);
+bool henka_platform_get_window_position(struct henka_platform* platform, int* out_x, int* out_y);
 henka_result henka_platform_set_mouse_capture(struct henka_platform* platform, bool enabled);
 henka_result henka_platform_set_cursor(struct henka_platform* platform, henka_cursor_shape shape);
 char* henka_platform_get_base_path_copy(void);

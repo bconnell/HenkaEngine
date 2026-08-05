@@ -1223,6 +1223,27 @@ bool henka_platform_get_window_size(
     return true;
 }
 
+bool henka_platform_get_window_position(
+    struct henka_platform* platform,
+    int* out_x,
+    int* out_y)
+{
+    if (out_x != NULL)
+    {
+        *out_x = 0;
+    }
+    if (out_y != NULL)
+    {
+        *out_y = 0;
+    }
+    if (platform == NULL || platform->window == NULL || out_x == NULL || out_y == NULL)
+    {
+        return false;
+    }
+    SDL_GetWindowPosition(platform->window, out_x, out_y);
+    return true;
+}
+
 henka_result henka_platform_set_mouse_capture(
     struct henka_platform* platform,
     bool enabled)

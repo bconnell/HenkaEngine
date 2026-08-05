@@ -1514,6 +1514,28 @@ henka_result henka_engine_get_window_size(
     return HENKA_SUCCESS;
 }
 
+henka_result henka_engine_get_window_position(
+    const henka_engine* engine,
+    int* out_x,
+    int* out_y)
+{
+    if (out_x != NULL)
+    {
+        *out_x = 0;
+    }
+    if (out_y != NULL)
+    {
+        *out_y = 0;
+    }
+    if (engine == NULL || engine->platform == NULL || out_x == NULL || out_y == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    return henka_platform_get_window_position(engine->platform, out_x, out_y)
+        ? HENKA_SUCCESS
+        : HENKA_ERROR_PLATFORM;
+}
+
 henka_result henka_engine_set_scene_viewport(henka_engine* engine, henka_viewport viewport)
 {
     if (engine == NULL || engine->renderer == NULL)

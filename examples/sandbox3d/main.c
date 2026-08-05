@@ -1123,6 +1123,7 @@ static void sandbox3d_close_detached_workspace_panel(
     sandbox3d_workspace_panel_id panel_id,
     sandbox3d_workspace_dock_zone dock_zone);
 static void sandbox3d_close_all_detached_workspace_panels(henka_engine* engine, sandbox3d_state* state);
+static void sandbox3d_reconcile_title_bar_drag_back(henka_engine* engine, sandbox3d_state* state);
 static void sandbox3d_cancel_workspace_interaction(sandbox3d_state* state);
 static void sandbox3d_draw_detached_workspace_panel_content(
     henka_engine* engine,
@@ -3212,7 +3213,7 @@ static void sandbox3d_print_help(const sandbox3d_state* state)
     printf("  OBJ and glTF loading remain bounded to the documented interchange subsets.\n");
     printf("  OBJ material libraries, negative indices, animation, hierarchy tools, scene saving, and broader 2D or 2.5D workflows are not available yet.\n");
     printf("  The UI overlay is intentionally small and is not a full editor.\n");
-    printf("  Detached production panels show matching controls with Dock L, Dock R, and Home return actions; Scene View does not detach yet.\n");
+    printf("  Detached production panels show matching controls with Dock L, Dock R, and Home return actions; moving a focused detached title bar into the main-window envelope redocks it. Scene View does not detach yet.\n");
     printf("  Rigid-body physics v1 uses sphere, axis-aligned box, and plane colliders; advanced physics features remain future work.\n");
     printf("  Sandbox settings are saved locally beside the executable in the user folder.\n");
     fflush(stdout);
@@ -3857,6 +3858,56 @@ static void sandbox3d_close_all_detached_workspace_panels(henka_engine* engine, 
         if (panel != NULL && panel->dock == SANDBOX3D_WORKSPACE_DOCK_DETACHED)
         {
             sandbox3d_close_detached_workspace_panel(engine, state, (sandbox3d_workspace_panel_id)index, panel->last_docked_zone);
+        }
+    }
+}
+
+static void sandbox3d_reconcile_title_bar_drag_back(henka_engine* engine, sandbox3d_state* state)
+{
+    int main_x;
+    int main_y;
+    int main_width;
+    int main_height;
+    int panel_index;
+
+    if (engine == NULL || state == NULL ||
+        henka_engine_get_window_position(engine, &main_x, &main_y) != HENKA_SUCCESS ||
+        henka_engine_get_window_size(engine, &main_width, &main_height) != HENKA_SUCCESS ||
+        main_width <= 0 || main_height <= 0)
+    {
+        return;
+    }
+    for (panel_index = 0; panel_index < SANDBOX3D_WORKSPACE_PANEL_COUNT; ++panel_index)
+    {
+        const sandbox3d_workspace_panel_id panel_id = (sandbox3d_workspace_panel_id)panel_index;
+        const sandbox3d_workspace_panel* panel = sandbox3d_workspace_get_panel_const(&state->workspace.model, panel_id);
+        henka_tool_window_state window_state;
+
+        if (panel == NULL || panel->dock != SANDBOX3D_WORKSPACE_DOCK_DETACHED ||
+            state->detached_panel_window_ids[panel_id] == HENKA_INVALID_WINDOW_ID ||
+            henka_engine_get_tool_window_state(engine, state->detached_panel_window_ids[panel_id], &window_state) != HENKA_SUCCESS ||
+            !window_state.open || !window_state.focused || strcmp(window_state.last_event, "moved") != 0)
+        {
+            continue;
+        }
+
+        /* A title-bar drop is intentional when the focused native window's top-left
+         * enters the main window's title/content envelope. Edge grazing remains a
+         * normal detached move and does not silently redock. */
+        if (window_state.position_x >= main_x &&
+            window_state.position_x <= main_x + main_width - 96 &&
+            window_state.position_y >= main_y &&
+            window_state.position_y <= main_y + 96)
+        {
+            const sandbox3d_workspace_dock_zone dock_zone = panel->last_docked_zone;
+            sandbox3d_close_detached_workspace_panel(engine, state, panel_id, dock_zone);
+            sandbox3d_set_statusf(
+                state,
+                false,
+                false,
+                "%s returned by OS title-bar drag.",
+                sandbox3d_workspace_panel_name(panel_id));
+            break;
         }
     }
 }
@@ -12802,6 +12853,7 @@ static void sandbox3d_update(henka_engine* engine, double delta_seconds, void* u
         sandbox3d_cancel_workspace_interaction(state);
         sandbox3d_set_status(state, false, "Workspace interaction cancelled after focus loss.");
     }
+    sandbox3d_reconcile_title_bar_drag_back(engine, state);
     if (state->residency_stress && !state->residency_stress_ran)
     {
         const henka_result residency_result =
