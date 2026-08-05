@@ -127,6 +127,10 @@ typedef struct sandbox3d_workspace_model
     float right_dock_width;
     sandbox3d_workspace_panel_id hovered_panel;
     sandbox3d_workspace_panel_id active_drag_panel;
+    sandbox3d_workspace_panel_id drag_start_section;
+    sandbox3d_workspace_dock_zone drag_start_dock;
+    sandbox3d_workspace_panel_id tab_drop_target;
+    bool drag_origin_valid;
     sandbox3d_workspace_panel_id active_resize_panel;
     sandbox3d_workspace_resize_target resize_target;
     sandbox3d_workspace_dock_zone active_dock_target;
@@ -241,6 +245,7 @@ void sandbox3d_workspace_update_dock_resize(
     float minimum_dock_width,
     float reserved_other_dock_width);
 void sandbox3d_workspace_end_interaction(sandbox3d_workspace_model* model);
+void sandbox3d_workspace_cancel_panel_drag(sandbox3d_workspace_model* model);
 sandbox3d_workspace_topology_node* sandbox3d_workspace_topology_get_node(
     sandbox3d_workspace_model* model,
     uint16_t node_index);
@@ -306,6 +311,10 @@ bool sandbox3d_workspace_merge_sections(
     sandbox3d_workspace_model* model,
     sandbox3d_workspace_panel_id target_section,
     sandbox3d_workspace_panel_id source_section);
+bool sandbox3d_workspace_move_tab(
+    sandbox3d_workspace_model* model,
+    sandbox3d_workspace_panel_id target_section,
+    sandbox3d_workspace_panel_id tab_id);
 bool sandbox3d_workspace_split_section(
     sandbox3d_workspace_model* model,
     sandbox3d_workspace_panel_id target_section,
