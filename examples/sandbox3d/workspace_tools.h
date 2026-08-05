@@ -132,6 +132,10 @@ typedef struct sandbox3d_workspace_model
     sandbox3d_workspace_dock_zone drag_start_dock;
     sandbox3d_workspace_panel_id tab_drop_target;
     bool drag_origin_valid;
+    sandbox3d_workspace_panel_id active_tab_drag_section;
+    sandbox3d_workspace_panel_id active_tab_drag_tab;
+    size_t active_tab_drag_target_index;
+    bool tab_drag_active;
     sandbox3d_workspace_panel_id active_resize_panel;
     sandbox3d_workspace_resize_target resize_target;
     sandbox3d_workspace_dock_zone active_dock_target;
@@ -327,6 +331,20 @@ bool sandbox3d_workspace_move_tab(
     sandbox3d_workspace_model* model,
     sandbox3d_workspace_panel_id target_section,
     sandbox3d_workspace_panel_id tab_id);
+bool sandbox3d_workspace_begin_tab_drag(
+    sandbox3d_workspace_model* model,
+    sandbox3d_workspace_panel_id section_id,
+    sandbox3d_workspace_panel_id tab_id);
+void sandbox3d_workspace_update_tab_drag(
+    sandbox3d_workspace_model* model,
+    size_t target_index);
+bool sandbox3d_workspace_commit_tab_drag(sandbox3d_workspace_model* model);
+void sandbox3d_workspace_cancel_tab_drag(sandbox3d_workspace_model* model);
+bool sandbox3d_workspace_reorder_tab(
+    sandbox3d_workspace_model* model,
+    sandbox3d_workspace_panel_id section_id,
+    sandbox3d_workspace_panel_id tab_id,
+    size_t target_index);
 bool sandbox3d_workspace_split_section(
     sandbox3d_workspace_model* model,
     sandbox3d_workspace_panel_id target_section,

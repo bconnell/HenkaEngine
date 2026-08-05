@@ -155,6 +155,33 @@ void henka_test_sandbox3d_workspace(void)
         &model, SANDBOX3D_WORKSPACE_DOCK_LEFT, 0U) == SANDBOX3D_WORKSPACE_PANEL_CONTROLS);
     HENKA_TEST_ASSERT(sandbox3d_workspace_get_topology_dock_section_at(
         &model, SANDBOX3D_WORKSPACE_DOCK_LEFT, 2U) == SANDBOX3D_WORKSPACE_PANEL_NONE);
+    HENKA_TEST_ASSERT(sandbox3d_workspace_reorder_tab(
+        &model,
+        SANDBOX3D_WORKSPACE_PANEL_CONTROLS,
+        SANDBOX3D_WORKSPACE_PANEL_SCENE_OBJECTS,
+        0U));
+    HENKA_TEST_ASSERT(sandbox3d_workspace_get_topology_section_tab_at(
+        &model, SANDBOX3D_WORKSPACE_PANEL_CONTROLS, 0U) == SANDBOX3D_WORKSPACE_PANEL_SCENE_OBJECTS);
+    HENKA_TEST_ASSERT(sandbox3d_workspace_get_topology_section_active_tab(
+        &model, SANDBOX3D_WORKSPACE_PANEL_CONTROLS) == SANDBOX3D_WORKSPACE_PANEL_SCENE_OBJECTS);
+    HENKA_TEST_ASSERT(sandbox3d_workspace_begin_tab_drag(
+        &model,
+        SANDBOX3D_WORKSPACE_PANEL_CONTROLS,
+        SANDBOX3D_WORKSPACE_PANEL_SCENE_OBJECTS));
+    sandbox3d_workspace_update_tab_drag(&model, 1U);
+    HENKA_TEST_ASSERT(sandbox3d_workspace_commit_tab_drag(&model));
+    sandbox3d_workspace_end_interaction(&model);
+    HENKA_TEST_ASSERT(sandbox3d_workspace_get_topology_section_tab_at(
+        &model, SANDBOX3D_WORKSPACE_PANEL_CONTROLS, 1U) == SANDBOX3D_WORKSPACE_PANEL_SCENE_OBJECTS);
+    HENKA_TEST_ASSERT(sandbox3d_workspace_begin_tab_drag(
+        &model,
+        SANDBOX3D_WORKSPACE_PANEL_CONTROLS,
+        SANDBOX3D_WORKSPACE_PANEL_SCENE_OBJECTS));
+    sandbox3d_workspace_update_tab_drag(&model, 0U);
+    sandbox3d_workspace_cancel_tab_drag(&model);
+    HENKA_TEST_ASSERT(sandbox3d_workspace_get_topology_section_tab_at(
+        &model, SANDBOX3D_WORKSPACE_PANEL_CONTROLS, 1U) == SANDBOX3D_WORKSPACE_PANEL_SCENE_OBJECTS);
+    HENKA_TEST_ASSERT(sandbox3d_workspace_topology_is_valid(&model));
     sandbox3d_workspace_model_reset(&model);
     HENKA_TEST_ASSERT(sandbox3d_workspace_merge_sections(
         &model,

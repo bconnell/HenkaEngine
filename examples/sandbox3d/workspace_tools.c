@@ -717,6 +717,10 @@ void sandbox3d_workspace_model_reset(sandbox3d_workspace_model* model)
     model->drag_start_dock = SANDBOX3D_WORKSPACE_DOCK_FLOATING;
     model->tab_drop_target = SANDBOX3D_WORKSPACE_PANEL_NONE;
     model->drag_origin_valid = false;
+    model->active_tab_drag_section = SANDBOX3D_WORKSPACE_PANEL_NONE;
+    model->active_tab_drag_tab = SANDBOX3D_WORKSPACE_PANEL_NONE;
+    model->active_tab_drag_target_index = 0U;
+    model->tab_drag_active = false;
     model->active_resize_panel = SANDBOX3D_WORKSPACE_PANEL_NONE;
     model->resize_target = SANDBOX3D_WORKSPACE_RESIZE_NONE;
     model->active_dock_target = SANDBOX3D_WORKSPACE_DOCK_FLOATING;
@@ -1106,6 +1110,10 @@ void sandbox3d_workspace_end_interaction(sandbox3d_workspace_model* model)
     model->drag_start_dock = SANDBOX3D_WORKSPACE_DOCK_FLOATING;
     model->tab_drop_target = SANDBOX3D_WORKSPACE_PANEL_NONE;
     model->drag_origin_valid = false;
+    model->active_tab_drag_section = SANDBOX3D_WORKSPACE_PANEL_NONE;
+    model->active_tab_drag_tab = SANDBOX3D_WORKSPACE_PANEL_NONE;
+    model->active_tab_drag_target_index = 0U;
+    model->tab_drag_active = false;
     model->active_resize_panel = SANDBOX3D_WORKSPACE_PANEL_NONE;
     model->resize_target = SANDBOX3D_WORKSPACE_RESIZE_NONE;
     model->active_dock_target = SANDBOX3D_WORKSPACE_DOCK_FLOATING;
@@ -2123,6 +2131,193 @@ bool sandbox3d_workspace_move_tab(
         sandbox3d_workspace_panel_name(tab_id),
         sandbox3d_workspace_panel_name(target_section));
     return true;
+}
+
+bool sandbox3d_workspace_begin_tab_drag(
+    sandbox3d_workspace_model* model,
+    sandbox3d_workspace_panel_id section_id,
+    sandbox3d_workspace_panel_id tab_id)
+{
+    const int node_index = sandbox3d_workspace_find_section_node(model, section_id);
+    const sandbox3d_workspace_topology_node* node;
+    size_t tab_index;
+
+    if (model == NULL || model->tab_drag_active || node_index < 0 ||
+        !sandbox3d_workspace_topology_is_valid(model))
+    {
+        return false;
+    }
+    node = sandbox3d_workspace_topology_get_node_const(model, (uint16_t)node_index);
+    if (node == NULL || node->type != SANDBOX3D_WORKSPACE_TOPOLOGY_NODE_SECTION)
+    {
+        return false;
+    }
+    for (tab_index = 0U; tab_index < node->data.section.tab_count; ++tab_index)
+    {
+        if (node->data.section.tabs[tab_index] == tab_id)
+        {
+            sandbox3d_workspace_begin_topology_transaction(model);
+            model->active_tab_drag_section = section_id;
+            model->active_tab_drag_tab = tab_id;
+            model->active_tab_drag_target_index = tab_index;
+            model->tab_drag_active = true;
+            snprintf(
+                model->last_action,
+                sizeof(model->last_action),
+                "%s tab moving",
+                sandbox3d_workspace_panel_name(tab_id));
+            return true;
+        }
+    }
+    return false;
+}
+
+void sandbox3d_workspace_update_tab_drag(
+    sandbox3d_workspace_model* model,
+    size_t target_index)
+{
+    const size_t tab_count = model != NULL
+        ? sandbox3d_workspace_get_topology_section_tab_count(
+            model, model->active_tab_drag_section)
+        : 0U;
+    if (model == NULL || !model->tab_drag_active || tab_count == 0U)
+    {
+        return;
+    }
+    model->active_tab_drag_target_index = target_index < tab_count
+        ? target_index
+        : tab_count - 1U;
+}
+
+bool sandbox3d_workspace_reorder_tab(
+    sandbox3d_workspace_model* model,
+    sandbox3d_workspace_panel_id section_id,
+    sandbox3d_workspace_panel_id tab_id,
+    size_t target_index)
+{
+    const int node_index = sandbox3d_workspace_find_section_node(model, section_id);
+    sandbox3d_workspace_topology_node* node;
+    sandbox3d_workspace_panel_id active_tab;
+    size_t source_index = 0U;
+    size_t tab_index;
+    bool found = false;
+    bool owns_transaction;
+
+    if (model == NULL || node_index < 0 ||
+        !sandbox3d_workspace_topology_is_valid(model))
+    {
+        return false;
+    }
+    node = sandbox3d_workspace_topology_get_node(model, (uint16_t)node_index);
+    if (node == NULL || node->type != SANDBOX3D_WORKSPACE_TOPOLOGY_NODE_SECTION)
+    {
+        return false;
+    }
+    for (tab_index = 0U; tab_index < node->data.section.tab_count; ++tab_index)
+    {
+        if (node->data.section.tabs[tab_index] == tab_id)
+        {
+            source_index = tab_index;
+            found = true;
+            break;
+        }
+    }
+    if (!found || node->data.section.tab_count == 0U)
+    {
+        return false;
+    }
+    if (target_index >= node->data.section.tab_count)
+    {
+        target_index = node->data.section.tab_count - 1U;
+    }
+    active_tab = node->data.section.tabs[node->data.section.active_tab];
+    owns_transaction = !model->topology_transaction_active;
+    if (owns_transaction)
+    {
+        sandbox3d_workspace_begin_topology_transaction(model);
+    }
+    if (source_index != target_index)
+    {
+        const sandbox3d_workspace_panel_id moved_tab = node->data.section.tabs[source_index];
+        if (source_index < target_index)
+        {
+            memmove(
+                &node->data.section.tabs[source_index],
+                &node->data.section.tabs[source_index + 1U],
+                sizeof(node->data.section.tabs[0]) * (target_index - source_index));
+        }
+        else
+        {
+            memmove(
+                &node->data.section.tabs[target_index + 1U],
+                &node->data.section.tabs[target_index],
+                sizeof(node->data.section.tabs[0]) * (source_index - target_index));
+        }
+        node->data.section.tabs[target_index] = moved_tab;
+    }
+    for (tab_index = 0U; tab_index < node->data.section.tab_count; ++tab_index)
+    {
+        if (node->data.section.tabs[tab_index] == active_tab)
+        {
+            node->data.section.active_tab = (uint8_t)tab_index;
+            break;
+        }
+    }
+    if (!sandbox3d_workspace_topology_is_valid(model))
+    {
+        if (owns_transaction)
+        {
+            sandbox3d_workspace_rollback_topology_transaction(model);
+        }
+        return false;
+    }
+    if (owns_transaction)
+    {
+        sandbox3d_workspace_commit_topology_transaction(model);
+    }
+    snprintf(
+        model->last_action,
+        sizeof(model->last_action),
+        "%s tab moved to position %u",
+        sandbox3d_workspace_panel_name(tab_id),
+        (unsigned int)(target_index + 1U));
+    return true;
+}
+
+bool sandbox3d_workspace_commit_tab_drag(sandbox3d_workspace_model* model)
+{
+    if (model == NULL || !model->tab_drag_active)
+    {
+        return false;
+    }
+    if (!sandbox3d_workspace_reorder_tab(
+            model,
+            model->active_tab_drag_section,
+            model->active_tab_drag_tab,
+            model->active_tab_drag_target_index))
+    {
+        sandbox3d_workspace_rollback_topology_transaction(model);
+        return false;
+    }
+    (void)sandbox3d_workspace_set_topology_section_active_tab(
+        model,
+        model->active_tab_drag_section,
+        model->active_tab_drag_tab);
+    sandbox3d_workspace_commit_topology_transaction(model);
+    return true;
+}
+
+void sandbox3d_workspace_cancel_tab_drag(sandbox3d_workspace_model* model)
+{
+    if (model == NULL || !model->tab_drag_active)
+    {
+        return;
+    }
+    sandbox3d_workspace_rollback_topology_transaction(model);
+    model->active_tab_drag_section = SANDBOX3D_WORKSPACE_PANEL_NONE;
+    model->active_tab_drag_tab = SANDBOX3D_WORKSPACE_PANEL_NONE;
+    model->active_tab_drag_target_index = 0U;
+    model->tab_drag_active = false;
 }
 
 static int sandbox3d_workspace_find_unused_node(const sandbox3d_workspace_model* model)
