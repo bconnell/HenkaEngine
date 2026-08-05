@@ -1,5 +1,6 @@
 #include "test_suite.h"
 
+#include <stdint.h>
 #include <string.h>
 
 #include "../examples/sandbox3d/interaction_tools.h"
@@ -15,6 +16,9 @@ void henka_test_sandbox3d_workspace(void)
     const sandbox3d_workspace_topology_node* topology_root;
     sandbox3d_workspace_model model;
     sandbox3d_workspace_model tab_model;
+    uint32_t stress_seed;
+    size_t stress_iteration;
+    sandbox3d_workspace_panel_id stress_closed_panel;
 
     sandbox3d_workspace_model_reset(&model);
     HENKA_TEST_ASSERT(sandbox3d_workspace_get_named_layout(&model) == SANDBOX3D_WORKSPACE_LAYOUT_DEFAULT);
@@ -546,4 +550,75 @@ void henka_test_sandbox3d_workspace(void)
     HENKA_TEST_ASSERT(sandbox3d_workspace_get_panel_const(&model, SANDBOX3D_WORKSPACE_PANEL_OBJECT_DETAILS)->dock == SANDBOX3D_WORKSPACE_DOCK_RIGHT);
     HENKA_TEST_ASSERT(model.active_drag_panel == SANDBOX3D_WORKSPACE_PANEL_NONE);
     HENKA_TEST_ASSERT(model.resize_target == SANDBOX3D_WORKSPACE_RESIZE_NONE);
+
+    stress_seed = UINT32_C(0x4E4B4155);
+    for (stress_iteration = 0U; stress_iteration < 32U; ++stress_iteration)
+    {
+        sandbox3d_workspace_model_reset(&model);
+        HENKA_TEST_ASSERT(sandbox3d_workspace_topology_is_valid(&model));
+        HENKA_TEST_ASSERT(model.keyboard_focus_panel == SANDBOX3D_WORKSPACE_PANEL_NONE);
+
+        stress_seed = stress_seed * UINT32_C(1664525) + UINT32_C(1013904223);
+        stress_closed_panel =
+            (sandbox3d_workspace_panel_id)(stress_seed % SANDBOX3D_WORKSPACE_PANEL_COUNT);
+        HENKA_TEST_ASSERT(sandbox3d_workspace_close_section(
+            &model,
+            stress_closed_panel));
+        HENKA_TEST_ASSERT(sandbox3d_workspace_topology_is_valid(&model));
+        HENKA_TEST_ASSERT(sandbox3d_workspace_restore_last_closed_section(&model));
+        HENKA_TEST_ASSERT(sandbox3d_workspace_topology_is_valid(&model));
+        HENKA_TEST_ASSERT(sandbox3d_workspace_close_section(
+            &model,
+            stress_closed_panel));
+        HENKA_TEST_ASSERT(sandbox3d_workspace_topology_is_valid(&model));
+
+        stress_seed = stress_seed * UINT32_C(1664525) + UINT32_C(1013904223);
+        {
+            const sandbox3d_workspace_panel_id split_source =
+                stress_closed_panel == SANDBOX3D_WORKSPACE_PANEL_CONTROLS
+                    ? SANDBOX3D_WORKSPACE_PANEL_SCENE_OBJECTS
+                    : SANDBOX3D_WORKSPACE_PANEL_CONTROLS;
+            HENKA_TEST_ASSERT(sandbox3d_workspace_split_section(
+                &model,
+                split_source,
+                stress_seed & 1U
+                    ? SANDBOX3D_WORKSPACE_SPLIT_HORIZONTAL
+                    : SANDBOX3D_WORKSPACE_SPLIT_VERTICAL,
+                stress_closed_panel));
+            HENKA_TEST_ASSERT(sandbox3d_workspace_topology_is_valid(&model));
+        }
+
+        sandbox3d_workspace_begin_topology_transaction(&model);
+        sandbox3d_workspace_begin_divider_drag(&model, model.topology_root, (henka_vec2){640.0f, 360.0f});
+        sandbox3d_workspace_update_divider_drag(
+            &model,
+            (henka_vec2){480.0f + (float)(stress_iteration % 7U) * 24.0f, 360.0f},
+            (henka_ui_rect){0.0f, 0.0f, 1280.0f, 720.0f});
+        HENKA_TEST_ASSERT(sandbox3d_workspace_topology_is_valid(&model));
+        sandbox3d_workspace_rollback_topology_transaction(&model);
+        HENKA_TEST_ASSERT(sandbox3d_workspace_topology_is_valid(&model));
+
+        HENKA_TEST_ASSERT(sandbox3d_workspace_merge_sections(
+            &model,
+            SANDBOX3D_WORKSPACE_PANEL_CONTROLS,
+            SANDBOX3D_WORKSPACE_PANEL_SCENE_OBJECTS));
+        HENKA_TEST_ASSERT(sandbox3d_workspace_topology_is_valid(&model));
+        HENKA_TEST_ASSERT(sandbox3d_workspace_cycle_topology_section_tab(
+            &model,
+            SANDBOX3D_WORKSPACE_PANEL_CONTROLS,
+            stress_iteration & 1U ? -1 : 1));
+        HENKA_TEST_ASSERT(sandbox3d_workspace_topology_is_valid(&model));
+
+        sandbox3d_workspace_set_maximized_section(&model, SANDBOX3D_WORKSPACE_PANEL_CONTROLS);
+        HENKA_TEST_ASSERT(sandbox3d_workspace_topology_is_valid(&model));
+        sandbox3d_workspace_restore_maximized_section(&model);
+        HENKA_TEST_ASSERT(sandbox3d_workspace_topology_is_valid(&model));
+        HENKA_TEST_ASSERT(sandbox3d_workspace_apply_named_layout(
+            &model,
+            (sandbox3d_workspace_named_layout)(stress_iteration % SANDBOX3D_WORKSPACE_LAYOUT_CUSTOM)));
+        HENKA_TEST_ASSERT(sandbox3d_workspace_topology_is_valid(&model));
+        HENKA_TEST_ASSERT(sandbox3d_workspace_save_custom_layout(&model, "Stress"));
+        HENKA_TEST_ASSERT(sandbox3d_workspace_apply_custom_layout(&model));
+        HENKA_TEST_ASSERT(sandbox3d_workspace_topology_is_valid(&model));
+    }
 }
