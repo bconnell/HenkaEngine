@@ -145,6 +145,32 @@ void henka_test_sandbox3d_workspace(void)
         &topology_layout);
     HENKA_TEST_ASSERT_FLOAT_CLOSE(topology_layout.divider_hit_rects[0].width, 20.0f, 0.0001f);
     sandbox3d_workspace_set_ui_scale(&model, 1.0f);
+    {
+        const float dpi_scales[] = {0.5f, 0.75f, 1.25f, 1.5f, 3.0f, 5.0f};
+        size_t dpi_index;
+        for (dpi_index = 0U; dpi_index < sizeof(dpi_scales) / sizeof(dpi_scales[0]); ++dpi_index)
+        {
+            const float expected_scale = dpi_scales[dpi_index] < SANDBOX3D_WORKSPACE_UI_SCALE_MIN
+                ? SANDBOX3D_WORKSPACE_UI_SCALE_MIN
+                : (dpi_scales[dpi_index] > SANDBOX3D_WORKSPACE_UI_SCALE_MAX
+                    ? SANDBOX3D_WORKSPACE_UI_SCALE_MAX
+                    : dpi_scales[dpi_index]);
+            sandbox3d_workspace_set_ui_scale(&model, dpi_scales[dpi_index]);
+            sandbox3d_workspace_build_topology_layout(
+                &model,
+                (henka_ui_rect){0.0f, 0.0f, 1280.0f, 720.0f},
+                &topology_layout);
+            HENKA_TEST_ASSERT_FLOAT_CLOSE(
+                sandbox3d_workspace_get_ui_scale(&model),
+                expected_scale,
+                0.0001f);
+            HENKA_TEST_ASSERT(topology_layout.divider_count == 3U);
+            HENKA_TEST_ASSERT(topology_layout.divider_hit_rects[0].width >= 10.0f * expected_scale);
+            HENKA_TEST_ASSERT(topology_layout.section_rects[SANDBOX3D_WORKSPACE_PANEL_CONTROLS].width >= 180.0f);
+            HENKA_TEST_ASSERT(topology_layout.section_rects[SANDBOX3D_WORKSPACE_PANEL_UTILITY].height >= 180.0f);
+        }
+    }
+    sandbox3d_workspace_set_ui_scale(&model, 1.0f);
     sandbox3d_workspace_build_dock_topology_layout(
         &model,
         SANDBOX3D_WORKSPACE_DOCK_LEFT,
