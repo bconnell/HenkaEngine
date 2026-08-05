@@ -1681,6 +1681,7 @@ bool sandbox3d_workspace_split_section(
     int new_leaf_index;
     sandbox3d_workspace_topology_node target_leaf;
     sandbox3d_workspace_topology_node* split;
+    sandbox3d_workspace_dock_zone target_dock;
 
     if (model == NULL || target_index < 0 || target_section == new_section ||
         new_section < 0 || new_section >= SANDBOX3D_WORKSPACE_PANEL_COUNT ||
@@ -1714,24 +1715,20 @@ bool sandbox3d_workspace_split_section(
     {
         return false;
     }
-    sandbox3d_workspace_begin_topology_transaction(model);
     {
-        sandbox3d_workspace_panel* new_panel = sandbox3d_workspace_get_panel(model, new_section);
+        const sandbox3d_workspace_panel* new_panel =
+            sandbox3d_workspace_get_panel_const(model, new_section);
         const sandbox3d_workspace_panel* target_panel =
             sandbox3d_workspace_get_panel_const(model, target_section);
         if (new_panel == NULL || target_panel == NULL ||
             (target_panel->dock != SANDBOX3D_WORKSPACE_DOCK_LEFT &&
              target_panel->dock != SANDBOX3D_WORKSPACE_DOCK_RIGHT))
         {
-            sandbox3d_workspace_rollback_topology_transaction(model);
             return false;
         }
-        sandbox3d_workspace_remove_panel_from_docks(model, new_section);
-        new_panel->dock = target_panel->dock;
-        new_panel->last_docked_zone = target_panel->dock;
-        new_panel->detached_window_id = 0U;
-        sandbox3d_workspace_append_panel_to_dock(model, target_panel->dock, new_section);
+        target_dock = target_panel->dock;
     }
+    sandbox3d_workspace_begin_topology_transaction(model);
     model->topology_nodes[target_leaf_index] = target_leaf;
     model->topology_nodes[target_leaf_index].parent = (uint16_t)target_index;
     sandbox3d_workspace_topology_make_section(
@@ -1756,6 +1753,14 @@ bool sandbox3d_workspace_split_section(
         return false;
     }
     sandbox3d_workspace_commit_topology_transaction(model);
+    {
+        sandbox3d_workspace_panel* new_panel = sandbox3d_workspace_get_panel(model, new_section);
+        sandbox3d_workspace_remove_panel_from_docks(model, new_section);
+        new_panel->dock = target_dock;
+        new_panel->last_docked_zone = target_dock;
+        new_panel->detached_window_id = 0U;
+        sandbox3d_workspace_append_panel_to_dock(model, target_dock, new_section);
+    }
     snprintf(
         model->last_action,
         sizeof(model->last_action),
