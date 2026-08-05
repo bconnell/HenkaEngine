@@ -12573,6 +12573,25 @@ static void sandbox3d_update(henka_engine* engine, double delta_seconds, void* u
     }
 
     ui_visible = state->ui != NULL && henka_ui_is_visible(state->ui);
+    if (ui_visible && !transform_input_active && henka_input_is_key_down(engine, HENKA_KEY_LEFT_CTRL))
+    {
+        const bool undo_shortcut = henka_input_was_key_pressed(engine, HENKA_KEY_Z) &&
+            !henka_input_is_key_down(engine, HENKA_KEY_LEFT_SHIFT);
+        const bool redo_shortcut = henka_input_was_key_pressed(engine, HENKA_KEY_Y) ||
+            (henka_input_was_key_pressed(engine, HENKA_KEY_Z) &&
+             henka_input_is_key_down(engine, HENKA_KEY_LEFT_SHIFT));
+        if (undo_shortcut)
+        {
+            henka_input_consume_key_press(engine, HENKA_KEY_Z);
+            (void)sandbox3d_undo_workspace_layout(engine, state);
+        }
+        else if (redo_shortcut)
+        {
+            henka_input_consume_key_press(engine, HENKA_KEY_Y);
+            henka_input_consume_key_press(engine, HENKA_KEY_Z);
+            (void)sandbox3d_redo_workspace_layout(engine, state);
+        }
+    }
     if (!ui_toggled_with_f4 && state->ui_visible_last_frame && !ui_visible)
     {
         sandbox3d_print_ui_state(false);
