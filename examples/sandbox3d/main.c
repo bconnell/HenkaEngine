@@ -6478,6 +6478,45 @@ static sandbox3d_workspace_layout sandbox3d_get_workspace_layout(
     layout.object_details_panel = (henka_ui_rect){0.0f, 0.0f, 0.0f, 0.0f};
     layout.utility_panel = (henka_ui_rect){0.0f, 0.0f, 0.0f, 0.0f};
 
+    if (state->workspace.model.maximized_section != SANDBOX3D_WORKSPACE_PANEL_NONE &&
+        sandbox3d_workspace_panel_visible(state, state->workspace.model.maximized_section))
+    {
+        const sandbox3d_workspace_panel* maximized_panel = sandbox3d_workspace_get_panel_const(
+            &state->workspace.model,
+            state->workspace.model.maximized_section);
+        if (maximized_panel != NULL &&
+            (maximized_panel->dock == SANDBOX3D_WORKSPACE_DOCK_LEFT ||
+             maximized_panel->dock == SANDBOX3D_WORKSPACE_DOCK_RIGHT))
+        {
+            const henka_ui_rect maximized_bounds = {
+                16.0f,
+                16.0f,
+                fmaxf(1.0f, (float)framebuffer_width - 32.0f),
+                fmaxf(1.0f, (float)framebuffer_height - 32.0f)};
+            layout.left_dock = (henka_ui_rect){0.0f, 0.0f, 0.0f, 0.0f};
+            layout.right_dock = (henka_ui_rect){0.0f, 0.0f, 0.0f, 0.0f};
+            layout.left_splitter = (henka_ui_rect){0.0f, 0.0f, 0.0f, 0.0f};
+            layout.right_splitter = (henka_ui_rect){0.0f, 0.0f, 0.0f, 0.0f};
+            layout.scene_frame = maximized_bounds;
+            layout.scene_viewport = (henka_viewport){0, 0, framebuffer_width, framebuffer_height};
+            layout.debug_strip = (henka_ui_rect){0.0f, 0.0f, 0.0f, 0.0f};
+            layout.controls_panel = (henka_ui_rect){0.0f, 0.0f, 0.0f, 0.0f};
+            layout.scene_objects_panel = (henka_ui_rect){0.0f, 0.0f, 0.0f, 0.0f};
+            layout.object_details_panel = (henka_ui_rect){0.0f, 0.0f, 0.0f, 0.0f};
+            layout.utility_panel = (henka_ui_rect){0.0f, 0.0f, 0.0f, 0.0f};
+            {
+                henka_ui_rect* maximized_slot = sandbox3d_get_panel_rect_slot(
+                    &layout,
+                    state->workspace.model.maximized_section);
+                if (maximized_slot != NULL)
+                {
+                    *maximized_slot = maximized_bounds;
+                }
+            }
+            return layout;
+        }
+    }
+
     sandbox3d_assign_workspace_dock_stack(state, SANDBOX3D_WORKSPACE_DOCK_LEFT, layout.left_dock, &layout);
     sandbox3d_assign_workspace_dock_stack(state, SANDBOX3D_WORKSPACE_DOCK_RIGHT, layout.right_dock, &layout);
 
