@@ -147,6 +147,9 @@ typedef struct sandbox3d_workspace_model
     sandbox3d_workspace_topology_node closed_snapshot_nodes[SANDBOX3D_WORKSPACE_TOPOLOGY_MAX_NODES];
     uint16_t closed_snapshot_root;
     uint32_t closed_snapshot_mask;
+    bool context_menu_open;
+    sandbox3d_workspace_panel_id context_menu_section;
+    henka_ui_rect context_menu_rect;
     char last_action[128];
 } sandbox3d_workspace_model;
 

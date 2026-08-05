@@ -178,6 +178,9 @@ static void sandbox3d_workspace_topology_clear(
     model->closed_snapshot_valid = false;
     model->closed_snapshot_root = UINT16_MAX;
     model->closed_snapshot_mask = 0U;
+    model->context_menu_open = false;
+    model->context_menu_section = SANDBOX3D_WORKSPACE_PANEL_NONE;
+    model->context_menu_rect = (henka_ui_rect){0.0f, 0.0f, 0.0f, 0.0f};
 }
 
 static void sandbox3d_workspace_topology_make_section(
@@ -884,6 +887,8 @@ void sandbox3d_workspace_end_interaction(sandbox3d_workspace_model* model)
     model->resize_target = SANDBOX3D_WORKSPACE_RESIZE_NONE;
     model->active_dock_target = SANDBOX3D_WORKSPACE_DOCK_FLOATING;
     model->active_divider_node = UINT16_MAX;
+    model->context_menu_open = false;
+    model->context_menu_section = SANDBOX3D_WORKSPACE_PANEL_NONE;
     if (model->topology_transaction_active)
     {
         sandbox3d_workspace_commit_topology_transaction(model);

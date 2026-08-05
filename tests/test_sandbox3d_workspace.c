@@ -36,8 +36,29 @@ void henka_test_sandbox3d_workspace(void)
     sandbox3d_workspace_rollback_topology_transaction(&model);
     HENKA_TEST_ASSERT_FLOAT_CLOSE(topology_root->data.split.ratio, 0.5f, 0.0001f);
     HENKA_TEST_ASSERT(strcmp(
+        sandbox3d_workspace_context_command_label(SANDBOX3D_WORKSPACE_CONTEXT_OPEN_HORIZONTAL),
+        "Open a horizontal window") == 0);
+    HENKA_TEST_ASSERT(strcmp(
+        sandbox3d_workspace_context_command_label(SANDBOX3D_WORKSPACE_CONTEXT_OPEN_VERTICAL),
+        "Open a vertical window") == 0);
+    HENKA_TEST_ASSERT(strcmp(
+        sandbox3d_workspace_context_command_label(SANDBOX3D_WORKSPACE_CONTEXT_CLOSE_SECTION),
+        "Close this section") == 0);
+    HENKA_TEST_ASSERT(strcmp(
+        sandbox3d_workspace_context_command_label(SANDBOX3D_WORKSPACE_CONTEXT_MERGE_ADJACENT),
+        "Merge with adjacent section") == 0);
+    HENKA_TEST_ASSERT(strcmp(
+        sandbox3d_workspace_context_command_label(SANDBOX3D_WORKSPACE_CONTEXT_EQUALIZE),
+        "Equalize sections") == 0);
+    HENKA_TEST_ASSERT(strcmp(
+        sandbox3d_workspace_context_command_label(SANDBOX3D_WORKSPACE_CONTEXT_MAXIMIZE),
+        "Maximize / Restore section") == 0);
+    HENKA_TEST_ASSERT(strcmp(
         sandbox3d_workspace_context_command_label(SANDBOX3D_WORKSPACE_CONTEXT_DETACH),
         "Detach section") == 0);
+    HENKA_TEST_ASSERT(strcmp(
+        sandbox3d_workspace_context_command_label(SANDBOX3D_WORKSPACE_CONTEXT_MOVE_TO_TAB_GROUP),
+        "Move to tab group") == 0);
     HENKA_TEST_ASSERT(sandbox3d_workspace_close_section(&model, SANDBOX3D_WORKSPACE_PANEL_UTILITY));
     HENKA_TEST_ASSERT(sandbox3d_workspace_section_is_closed(&model, SANDBOX3D_WORKSPACE_PANEL_UTILITY));
     HENKA_TEST_ASSERT(sandbox3d_workspace_topology_is_valid(&model));
