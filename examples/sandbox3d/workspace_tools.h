@@ -35,6 +35,7 @@ typedef enum sandbox3d_workspace_dock_zone
 #define SANDBOX3D_WORKSPACE_DIVIDER_CLOSE_THRESHOLD 32.0f
 #define SANDBOX3D_WORKSPACE_UI_SCALE_MIN 0.75f
 #define SANDBOX3D_WORKSPACE_UI_SCALE_MAX 4.0f
+#define SANDBOX3D_WORKSPACE_CUSTOM_LAYOUT_NAME_MAX 32U
 
 typedef enum sandbox3d_workspace_split_orientation
 {
@@ -164,6 +165,17 @@ typedef struct sandbox3d_workspace_model
     uint16_t topology_transaction_root;
     sandbox3d_workspace_named_layout named_layout;
     sandbox3d_workspace_named_layout topology_transaction_named_layout;
+    bool custom_layout_valid;
+    char custom_layout_name[SANDBOX3D_WORKSPACE_CUSTOM_LAYOUT_NAME_MAX];
+    sandbox3d_workspace_topology_node custom_layout_nodes[SANDBOX3D_WORKSPACE_TOPOLOGY_MAX_NODES];
+    uint16_t custom_layout_root;
+    uint32_t custom_layout_closed_sections_mask;
+    sandbox3d_workspace_panel_id custom_layout_maximized_section;
+    sandbox3d_workspace_dock_zone custom_layout_docks[SANDBOX3D_WORKSPACE_PANEL_COUNT];
+    sandbox3d_workspace_dock_zone custom_layout_last_docked_zones[SANDBOX3D_WORKSPACE_PANEL_COUNT];
+    float custom_layout_left_dock_width;
+    float custom_layout_right_dock_width;
+    float custom_layout_ui_scale;
     uint16_t active_divider_node;
     sandbox3d_workspace_dock_zone active_divider_dock;
     float active_divider_start_ratio;
@@ -204,6 +216,15 @@ sandbox3d_workspace_named_layout sandbox3d_workspace_get_named_layout(
 bool sandbox3d_workspace_apply_named_layout(
     sandbox3d_workspace_model* model,
     sandbox3d_workspace_named_layout layout);
+bool sandbox3d_workspace_save_custom_layout(
+    sandbox3d_workspace_model* model,
+    const char* name);
+bool sandbox3d_workspace_has_custom_layout(
+    const sandbox3d_workspace_model* model);
+const char* sandbox3d_workspace_custom_layout_name(
+    const sandbox3d_workspace_model* model);
+bool sandbox3d_workspace_apply_custom_layout(
+    sandbox3d_workspace_model* model);
 bool sandbox3d_workspace_should_start_panels_visible(bool settings_file_found);
 sandbox3d_workspace_panel* sandbox3d_workspace_get_panel(
     sandbox3d_workspace_model* model,

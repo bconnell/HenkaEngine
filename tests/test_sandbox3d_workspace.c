@@ -18,6 +18,7 @@ void henka_test_sandbox3d_workspace(void)
 
     sandbox3d_workspace_model_reset(&model);
     HENKA_TEST_ASSERT(sandbox3d_workspace_get_named_layout(&model) == SANDBOX3D_WORKSPACE_LAYOUT_DEFAULT);
+    HENKA_TEST_ASSERT(!sandbox3d_workspace_has_custom_layout(&model));
     HENKA_TEST_ASSERT(strcmp(
         sandbox3d_workspace_named_layout_label(SANDBOX3D_WORKSPACE_LAYOUT_MODELING),
         "Modeling") == 0);
@@ -26,6 +27,14 @@ void henka_test_sandbox3d_workspace(void)
         &model, SANDBOX3D_WORKSPACE_LAYOUT_MODELING));
     HENKA_TEST_ASSERT(sandbox3d_workspace_get_named_layout(&model) == SANDBOX3D_WORKSPACE_LAYOUT_MODELING);
     HENKA_TEST_ASSERT(sandbox3d_workspace_topology_is_valid(&model));
+    HENKA_TEST_ASSERT(sandbox3d_workspace_save_custom_layout(&model, "Studio"));
+    HENKA_TEST_ASSERT(sandbox3d_workspace_has_custom_layout(&model));
+    HENKA_TEST_ASSERT(strcmp(sandbox3d_workspace_custom_layout_name(&model), "Studio") == 0);
+    HENKA_TEST_ASSERT(!sandbox3d_workspace_save_custom_layout(&model, "bad\nname"));
+    HENKA_TEST_ASSERT(sandbox3d_workspace_apply_named_layout(&model, SANDBOX3D_WORKSPACE_LAYOUT_MATERIALS));
+    HENKA_TEST_ASSERT(sandbox3d_workspace_apply_custom_layout(&model));
+    HENKA_TEST_ASSERT(sandbox3d_workspace_get_named_layout(&model) == SANDBOX3D_WORKSPACE_LAYOUT_CUSTOM);
+    HENKA_TEST_ASSERT(sandbox3d_workspace_apply_named_layout(&model, SANDBOX3D_WORKSPACE_LAYOUT_MODELING));
     HENKA_TEST_ASSERT(sandbox3d_workspace_get_panel_const(
         &model, SANDBOX3D_WORKSPACE_PANEL_SCENE_OBJECTS)->dock == SANDBOX3D_WORKSPACE_DOCK_LEFT);
     HENKA_TEST_ASSERT(sandbox3d_workspace_get_panel_const(

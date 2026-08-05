@@ -65,6 +65,7 @@ Use this checklist when you want to confirm that `henka_sandbox3d` is visually r
 18. Confirm `Inspect` keeps Scene Objects and Object Details docked beside the viewport.
 19. Confirm `Full Tools` still leaves a dedicated viewport.
 20. Confirm `Reset Layout` restores a usable default.
+20a. Save a Custom workspace after changing tabs, dock widths, or a divider; change to another preset, then restore Custom and confirm the validated topology returns.
 21. Click `Open Native Panel Test` and confirm a separate OS-level window opens with visible ID, focus, size, and last-event content.
 22. Move and resize the native test window, then confirm its displayed state updates and the main Scene View remains unaffected.
 23. Click inside the native test window and confirm it does not select an object, start a gizmo drag, orbit, or pan the main Scene View.

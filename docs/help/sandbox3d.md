@@ -75,6 +75,7 @@ The docked workspace opens in `View` mode with no selected scene object so the c
 - Release away from the dock outlines to open a separate native tool window. Move or resize that window with the operating-system frame.
 - Close a detached tool window to return its panel to its last valid dock. Detached windows currently show panel state while full detached controls are integrated. `Reset Layout` recovers defaults.
 - Drag the narrow bars beside Scene View to resize occupied docks.
+- Use `Save Custom` and `Restore Custom` in Controls to persist and restore one bounded named workspace snapshot; restoring redocks detached panels first.
 - Hover a topology divider or dock splitter to see the matching horizontal or vertical system resize cursor; the cursor returns to normal when the viewport or a tool owns the pointer.
 - Confirm the small in-window status area reports common actions such as layout changes, camera reset, saved settings, or object focus.
 - Select each scene object and confirm the Object Details panel updates.
