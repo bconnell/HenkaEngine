@@ -3272,6 +3272,9 @@ bool sandbox3d_workspace_move_tab(
     return true;
 }
 
+static int sandbox3d_workspace_find_unused_node(
+    const sandbox3d_workspace_model* model);
+
 bool sandbox3d_workspace_begin_tab_drag(
     sandbox3d_workspace_model* model,
     sandbox3d_workspace_panel_id section_id,
@@ -3309,6 +3312,271 @@ bool sandbox3d_workspace_begin_tab_drag(
         }
     }
     return false;
+}
+
+bool sandbox3d_workspace_extract_tab_for_drag(
+    sandbox3d_workspace_model* model,
+    sandbox3d_workspace_panel_id section_id,
+    sandbox3d_workspace_panel_id tab_id,
+    henka_ui_rect current_rect,
+    henka_vec2 pointer,
+    int framebuffer_width,
+    int framebuffer_height)
+{
+    const int section_index = sandbox3d_workspace_find_section_node(model, section_id);
+    int remaining_leaf_index;
+    int extracted_leaf_index;
+    sandbox3d_workspace_topology_node* section;
+    sandbox3d_workspace_topology_node remaining_leaf;
+    sandbox3d_workspace_topology_node* split;
+    sandbox3d_workspace_panel* panel;
+    sandbox3d_workspace_dock_zone original_dock;
+    sandbox3d_workspace_panel_id active_tab;
+    size_t source_index;
+    size_t tab_index;
+    bool found;
+
+    if (model == NULL || !model->tab_drag_active || section_index < 0 ||
+        model->active_tab_drag_section != section_id ||
+        model->active_tab_drag_tab != tab_id ||
+        !model->topology_transaction_active ||
+        !sandbox3d_workspace_topology_is_valid(model))
+    {
+        return false;
+    }
+
+    section = &model->topology_nodes[section_index];
+    if (section->type != SANDBOX3D_WORKSPACE_TOPOLOGY_NODE_SECTION ||
+        section->data.section.tab_count <= 1U)
+    {
+        return false;
+    }
+
+    found = false;
+    source_index = 0U;
+    for (tab_index = 0U; tab_index < section->data.section.tab_count; ++tab_index)
+    {
+        if (section->data.section.tabs[tab_index] == tab_id)
+        {
+            source_index = tab_index;
+            found = true;
+            break;
+        }
+    }
+    if (!found)
+    {
+        return false;
+    }
+
+    remaining_leaf_index = sandbox3d_workspace_find_unused_node(model);
+    extracted_leaf_index = -1;
+    if (remaining_leaf_index >= 0)
+    {
+        for (tab_index = 0U;
+             tab_index < SANDBOX3D_WORKSPACE_TOPOLOGY_MAX_NODES;
+             ++tab_index)
+        {
+            if ((int)tab_index != remaining_leaf_index &&
+                model->topology_nodes[tab_index].type ==
+                    SANDBOX3D_WORKSPACE_TOPOLOGY_NODE_UNUSED)
+            {
+                extracted_leaf_index = (int)tab_index;
+                break;
+            }
+        }
+    }
+    panel = sandbox3d_workspace_get_panel(model, tab_id);
+    if (remaining_leaf_index < 0 || extracted_leaf_index < 0 || panel == NULL ||
+        (panel->dock != SANDBOX3D_WORKSPACE_DOCK_LEFT &&
+         panel->dock != SANDBOX3D_WORKSPACE_DOCK_RIGHT))
+    {
+        return false;
+    }
+
+    original_dock = panel->dock;
+    active_tab = section->data.section.tabs[section->data.section.active_tab];
+    memmove(
+        &section->data.section.tabs[source_index],
+        &section->data.section.tabs[source_index + 1U],
+        sizeof(section->data.section.tabs[0]) *
+            (section->data.section.tab_count - source_index - 1U));
+    --section->data.section.tab_count;
+    section->data.section.tabs[section->data.section.tab_count] =
+        SANDBOX3D_WORKSPACE_PANEL_NONE;
+    if (section->data.section.section_id == tab_id)
+    {
+        section->data.section.section_id = section->data.section.tabs[0];
+    }
+    section->data.section.active_tab = 0U;
+    for (tab_index = 0U; tab_index < section->data.section.tab_count; ++tab_index)
+    {
+        if (section->data.section.tabs[tab_index] == active_tab)
+        {
+            section->data.section.active_tab = (uint8_t)tab_index;
+            break;
+        }
+    }
+
+    remaining_leaf = *section;
+    model->topology_nodes[remaining_leaf_index] = remaining_leaf;
+    model->topology_nodes[remaining_leaf_index].parent = (uint16_t)section_index;
+    sandbox3d_workspace_topology_make_section(
+        &model->topology_nodes[extracted_leaf_index],
+        tab_id);
+    model->topology_nodes[extracted_leaf_index].parent = (uint16_t)section_index;
+    split = &model->topology_nodes[section_index];
+    sandbox3d_workspace_topology_make_split(
+        split,
+        remaining_leaf.parent,
+        (uint16_t)remaining_leaf_index,
+        (uint16_t)extracted_leaf_index,
+        SANDBOX3D_WORKSPACE_SPLIT_HORIZONTAL,
+        0.72f);
+
+    panel->floating_rect = current_rect;
+    (void)framebuffer_width;
+    (void)framebuffer_height;
+    sandbox3d_workspace_enforce_minimum_floating_size(panel);
+    sandbox3d_workspace_remove_panel_from_docks(model, tab_id);
+    panel->dock = SANDBOX3D_WORKSPACE_DOCK_FLOATING;
+    panel->last_docked_zone = original_dock;
+    sandbox3d_workspace_bring_to_front(model, tab_id);
+    model->active_drag_panel = tab_id;
+    model->drag_start_section = section_id;
+    model->drag_start_dock = original_dock;
+    model->tab_drop_target = SANDBOX3D_WORKSPACE_PANEL_NONE;
+    model->drag_origin_valid = true;
+    model->drag_offset.x = pointer.x - panel->floating_rect.x;
+    model->drag_offset.y = pointer.y - panel->floating_rect.y;
+    model->active_tab_drag_section = SANDBOX3D_WORKSPACE_PANEL_NONE;
+    model->active_tab_drag_tab = SANDBOX3D_WORKSPACE_PANEL_NONE;
+    model->active_tab_drag_target_index = 0U;
+    model->tab_drag_active = false;
+
+    if (!sandbox3d_workspace_topology_is_valid(model))
+    {
+        sandbox3d_workspace_rollback_topology_transaction(model);
+        model->active_drag_panel = SANDBOX3D_WORKSPACE_PANEL_NONE;
+        model->drag_origin_valid = false;
+        return false;
+    }
+
+    snprintf(
+        model->last_action,
+        sizeof(model->last_action),
+        "%s tab extracted for redocking",
+        sandbox3d_workspace_panel_name(tab_id));
+    return true;
+}
+
+bool sandbox3d_workspace_split_active_tab(
+    sandbox3d_workspace_model* model,
+    sandbox3d_workspace_panel_id section_id,
+    sandbox3d_workspace_split_orientation orientation)
+{
+    const int section_index = sandbox3d_workspace_find_section_node(model, section_id);
+    int remaining_leaf_index;
+    int split_leaf_index;
+    sandbox3d_workspace_topology_node* section;
+    sandbox3d_workspace_topology_node remaining_leaf;
+    sandbox3d_workspace_panel_id tab_id;
+    sandbox3d_workspace_panel_id next_active;
+    size_t source_index;
+    size_t tab_index;
+
+    if (model == NULL || section_index < 0 ||
+        (orientation != SANDBOX3D_WORKSPACE_SPLIT_HORIZONTAL &&
+         orientation != SANDBOX3D_WORKSPACE_SPLIT_VERTICAL) ||
+        !sandbox3d_workspace_topology_is_valid(model))
+    {
+        return false;
+    }
+    section = &model->topology_nodes[section_index];
+    if (section->type != SANDBOX3D_WORKSPACE_TOPOLOGY_NODE_SECTION ||
+        section->data.section.tab_count <= 1U)
+    {
+        return false;
+    }
+
+    tab_id = section->data.section.tabs[section->data.section.active_tab];
+    source_index = section->data.section.active_tab;
+    next_active = section->data.section.tabs[source_index == 0U ? 1U : 0U];
+    remaining_leaf_index = sandbox3d_workspace_find_unused_node(model);
+    split_leaf_index = -1;
+    if (remaining_leaf_index >= 0)
+    {
+        for (tab_index = 0U;
+             tab_index < SANDBOX3D_WORKSPACE_TOPOLOGY_MAX_NODES;
+             ++tab_index)
+        {
+            if ((int)tab_index != remaining_leaf_index &&
+                model->topology_nodes[tab_index].type ==
+                    SANDBOX3D_WORKSPACE_TOPOLOGY_NODE_UNUSED)
+            {
+                split_leaf_index = (int)tab_index;
+                break;
+            }
+        }
+    }
+    if (remaining_leaf_index < 0 || split_leaf_index < 0)
+    {
+        return false;
+    }
+
+    sandbox3d_workspace_begin_topology_transaction(model);
+    section = &model->topology_nodes[section_index];
+    memmove(
+        &section->data.section.tabs[source_index],
+        &section->data.section.tabs[source_index + 1U],
+        sizeof(section->data.section.tabs[0]) *
+            (section->data.section.tab_count - source_index - 1U));
+    --section->data.section.tab_count;
+    section->data.section.tabs[section->data.section.tab_count] =
+        SANDBOX3D_WORKSPACE_PANEL_NONE;
+    if (section->data.section.section_id == tab_id)
+    {
+        section->data.section.section_id = next_active;
+    }
+    section->data.section.active_tab = 0U;
+    for (tab_index = 0U; tab_index < section->data.section.tab_count; ++tab_index)
+    {
+        if (section->data.section.tabs[tab_index] == next_active)
+        {
+            section->data.section.active_tab = (uint8_t)tab_index;
+            break;
+        }
+    }
+
+    remaining_leaf = *section;
+    model->topology_nodes[remaining_leaf_index] = remaining_leaf;
+    model->topology_nodes[remaining_leaf_index].parent = (uint16_t)section_index;
+    sandbox3d_workspace_topology_make_section(
+        &model->topology_nodes[split_leaf_index],
+        tab_id);
+    model->topology_nodes[split_leaf_index].parent = (uint16_t)section_index;
+    sandbox3d_workspace_topology_make_split(
+        &model->topology_nodes[section_index],
+        remaining_leaf.parent,
+        (uint16_t)remaining_leaf_index,
+        (uint16_t)split_leaf_index,
+        orientation,
+        0.5f);
+
+    if (!sandbox3d_workspace_topology_is_valid(model))
+    {
+        sandbox3d_workspace_rollback_topology_transaction(model);
+        return false;
+    }
+    sandbox3d_workspace_commit_topology_transaction(model);
+    snprintf(
+        model->last_action,
+        sizeof(model->last_action),
+        "%s split into a %s section",
+        sandbox3d_workspace_panel_name(tab_id),
+        orientation == SANDBOX3D_WORKSPACE_SPLIT_HORIZONTAL
+            ? "left/right"
+            : "top/bottom");
+    return true;
 }
 
 void sandbox3d_workspace_update_tab_drag(

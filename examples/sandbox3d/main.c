@@ -3876,28 +3876,54 @@ static void sandbox3d_reconcile_title_bar_drag_back(henka_engine* engine, sandbo
         if (panel == NULL || panel->dock != SANDBOX3D_WORKSPACE_DOCK_DETACHED ||
             state->detached_panel_window_ids[panel_id] == HENKA_INVALID_WINDOW_ID ||
             henka_engine_get_tool_window_state(engine, state->detached_panel_window_ids[panel_id], &window_state) != HENKA_SUCCESS ||
-            !window_state.open || !window_state.focused || strcmp(window_state.last_event, "moved") != 0)
+            !window_state.open || !window_state.focused ||
+            strcmp(window_state.last_event, "moved") != 0 ||
+            window_state.width <= 0 || window_state.height <= 0)
         {
             continue;
         }
 
-        /* A title-bar drop is intentional when the focused native window's top-left
-         * enters the main window's title/content envelope. Edge grazing remains a
-         * normal detached move and does not silently redock. */
-        if (window_state.position_x >= main_x &&
-            window_state.position_x <= main_x + main_width - 96 &&
-            window_state.position_y >= main_y &&
-            window_state.position_y <= main_y + 96)
         {
-            const sandbox3d_workspace_dock_zone dock_zone = panel->last_docked_zone;
-            sandbox3d_close_detached_workspace_panel(engine, state, panel_id, dock_zone);
-            sandbox3d_set_statusf(
-                state,
-                false,
-                false,
-                "%s returned by OS title-bar drag.",
-                sandbox3d_workspace_panel_name(panel_id));
-            break;
+            const int center_x = window_state.position_x + window_state.width / 2;
+            const int center_y = window_state.position_y + window_state.height / 2;
+            const int overlap_left = window_state.position_x > main_x
+                ? window_state.position_x : main_x;
+            const int overlap_top = window_state.position_y > main_y
+                ? window_state.position_y : main_y;
+            const int overlap_right =
+                window_state.position_x + window_state.width < main_x + main_width
+                    ? window_state.position_x + window_state.width
+                    : main_x + main_width;
+            const int overlap_bottom =
+                window_state.position_y + window_state.height < main_y + main_height
+                    ? window_state.position_y + window_state.height
+                    : main_y + main_height;
+            const bool overlaps_main = overlap_right - overlap_left >= 96 &&
+                overlap_bottom - overlap_top >= 48;
+            const bool center_inside_main = center_x >= main_x &&
+                center_x <= main_x + main_width &&
+                center_y >= main_y && center_y <= main_y + main_height;
+
+            if (overlaps_main && center_inside_main)
+            {
+                const sandbox3d_workspace_dock_zone dock_zone =
+                    center_x < main_x + main_width / 2
+                        ? SANDBOX3D_WORKSPACE_DOCK_LEFT
+                        : SANDBOX3D_WORKSPACE_DOCK_RIGHT;
+                sandbox3d_close_detached_workspace_panel(
+                    engine,
+                    state,
+                    panel_id,
+                    dock_zone);
+                sandbox3d_set_statusf(
+                    state,
+                    false,
+                    false,
+                    "%s redocked on the %s by native title-bar drag.",
+                    sandbox3d_workspace_panel_name(panel_id),
+                    dock_zone == SANDBOX3D_WORKSPACE_DOCK_LEFT ? "left" : "right");
+                break;
+            }
         }
     }
 }
@@ -6168,8 +6194,16 @@ static bool sandbox3d_handle_workspace_input(
     {
         if (top_panel != SANDBOX3D_WORKSPACE_PANEL_NONE && top_panel_is_chrome)
         {
+            sandbox3d_workspace_panel_id context_section =
+                sandbox3d_workspace_get_topology_section_for_tab(
+                    &state->workspace.model,
+                    top_panel);
             const float menu_width = 292.0f;
             const float menu_height = 255.0f;
+            if (context_section == SANDBOX3D_WORKSPACE_PANEL_NONE)
+            {
+                context_section = top_panel;
+            }
             const float menu_x = framebuffer_mouse.x + menu_width > (float)framebuffer_width
                 ? (float)framebuffer_width - menu_width - 4.0f
                 : framebuffer_mouse.x + 4.0f;
@@ -6177,11 +6211,15 @@ static bool sandbox3d_handle_workspace_input(
                 ? (float)framebuffer_height - menu_height - 4.0f
                 : framebuffer_mouse.y + 4.0f;
             state->workspace.model.context_menu_open = true;
-            state->workspace.model.context_menu_section = top_panel;
+            state->workspace.model.context_menu_section = context_section;
             state->workspace.model.context_menu_selected_command = 0U;
             state->workspace.model.context_menu_rect =
                 (henka_ui_rect){menu_x > 4.0f ? menu_x : 4.0f, menu_y > 4.0f ? menu_y : 4.0f, menu_width, menu_height};
-            sandbox3d_set_statusf(state, false, false, "Workspace menu opened for %s.", sandbox3d_workspace_panel_name(top_panel));
+            printf(
+                "Workspace context menu: section=%s horizontal=available vertical=available.\n",
+                sandbox3d_workspace_panel_name(context_section));
+            fflush(stdout);
+            sandbox3d_set_statusf(state, false, false, "Workspace menu opened for %s.", sandbox3d_workspace_panel_name(context_section));
             return true;
         }
         if (state->workspace.model.context_menu_open)
@@ -6311,14 +6349,52 @@ static bool sandbox3d_handle_workspace_input(
     {
         if (left_down)
         {
-            sandbox3d_workspace_update_tab_drag(
-                &state->workspace.model,
-                sandbox3d_workspace_tab_drop_index(
+            const sandbox3d_workspace_panel_id drag_section =
+                state->workspace.model.active_tab_drag_section;
+            const sandbox3d_workspace_panel_id drag_tab =
+                state->workspace.model.active_tab_drag_tab;
+            const size_t drag_tab_count =
+                sandbox3d_workspace_get_topology_section_tab_count(
+                    &state->workspace.model,
+                    drag_section);
+            const henka_ui_rect drag_bounds =
+                sandbox3d_get_panel_rect(&state->frame_layout, drag_section);
+            const henka_ui_rect extraction_guard =
+                (henka_ui_rect){
+                    drag_bounds.x - 14.0f,
+                    drag_bounds.y - 14.0f,
+                    drag_bounds.width + 28.0f,
+                    58.0f};
+
+            if (drag_tab_count > 1U &&
+                !henka_ui_rect_contains(extraction_guard, framebuffer_mouse) &&
+                sandbox3d_workspace_extract_tab_for_drag(
+                    &state->workspace.model,
+                    drag_section,
+                    drag_tab,
+                    drag_bounds,
+                    framebuffer_mouse,
+                    framebuffer_width,
+                    framebuffer_height))
+            {
+                sandbox3d_set_statusf(
                     state,
-                    state->workspace.model.active_tab_drag_section,
-                    framebuffer_mouse));
+                    false,
+                    false,
+                    "%s extracted; drop on another header, dock edge, or open space.",
+                    sandbox3d_workspace_panel_name(drag_tab));
+            }
+            else
+            {
+                sandbox3d_workspace_update_tab_drag(
+                    &state->workspace.model,
+                    sandbox3d_workspace_tab_drop_index(
+                        state,
+                        drag_section,
+                        framebuffer_mouse));
+            }
         }
-        if (left_released)
+        if (state->workspace.model.tab_drag_active && left_released)
         {
             const sandbox3d_workspace_panel_id tab_id =
                 state->workspace.model.active_tab_drag_tab;
@@ -6331,7 +6407,10 @@ static bool sandbox3d_handle_workspace_input(
                 committed ? "%s tab order updated." : "Tab order change was rejected safely.",
                 sandbox3d_workspace_panel_name(tab_id));
         }
-        return true;
+        if (state->workspace.model.tab_drag_active)
+        {
+            return true;
+        }
     }
 
     if (left_pressed && !top_panel_is_floating)
@@ -8406,23 +8485,49 @@ static void sandbox3d_apply_workspace_context_command(
             break;
         case SANDBOX3D_WORKSPACE_CONTEXT_OPEN_HORIZONTAL:
         case SANDBOX3D_WORKSPACE_CONTEXT_OPEN_VERTICAL:
-            state->workspace.model.section_chooser_open = true;
-            state->workspace.model.section_chooser_source = section;
-            state->workspace.model.section_chooser_orientation =
+        {
+            const sandbox3d_workspace_split_orientation orientation =
                 command == SANDBOX3D_WORKSPACE_CONTEXT_OPEN_HORIZONTAL
                     ? SANDBOX3D_WORKSPACE_SPLIT_VERTICAL
                     : SANDBOX3D_WORKSPACE_SPLIT_HORIZONTAL;
-            state->workspace.model.section_chooser_selected_index = 0U;
-            state->workspace.model.section_chooser_rect = state->workspace.model.context_menu_rect;
-            state->workspace.model.section_chooser_rect.width = 340.0f;
-            state->workspace.model.section_chooser_rect.height = 220.0f;
-            sandbox3d_set_status(
-                state,
-                false,
-                command == SANDBOX3D_WORKSPACE_CONTEXT_OPEN_HORIZONTAL
-                    ? "Choose a tool for the new top/bottom section."
-                    : "Choose a tool for the new left/right section.");
+            const size_t tab_count =
+                sandbox3d_workspace_get_topology_section_tab_count(
+                    &state->workspace.model,
+                    section);
+            if (tab_count > 1U)
+            {
+                changed = sandbox3d_workspace_split_active_tab(
+                    &state->workspace.model,
+                    section,
+                    orientation);
+                sandbox3d_set_status(
+                    state,
+                    !changed,
+                    changed
+                        ? (orientation == SANDBOX3D_WORKSPACE_SPLIT_VERTICAL
+                            ? "Active tab opened in a new top/bottom section."
+                            : "Active tab opened in a new left/right section.")
+                        : "The active tab could not be split safely.");
+            }
+            else
+            {
+                state->workspace.model.section_chooser_open = true;
+                state->workspace.model.section_chooser_source = section;
+                state->workspace.model.section_chooser_orientation = orientation;
+                state->workspace.model.section_chooser_selected_index = 0U;
+                state->workspace.model.section_chooser_rect =
+                    state->workspace.model.context_menu_rect;
+                state->workspace.model.section_chooser_rect.width = 340.0f;
+                state->workspace.model.section_chooser_rect.height = 220.0f;
+                sandbox3d_set_status(
+                    state,
+                    false,
+                    orientation == SANDBOX3D_WORKSPACE_SPLIT_VERTICAL
+                        ? "Choose a tool for the new top/bottom section."
+                        : "Choose a tool for the new left/right section.");
+            }
             break;
+        }
         case SANDBOX3D_WORKSPACE_CONTEXT_RESTORE_LAST_CLOSED:
             changed = sandbox3d_workspace_restore_last_closed_section(&state->workspace.model);
             sandbox3d_set_status(state, !changed, changed ? "Last closed section restored." : "No closed section is available to restore.");
@@ -11566,7 +11671,9 @@ static void sandbox3d_build_ui(henka_engine* engine, sandbox3d_state* state)
                 "left=%.1f,%.1f,%.1f,%.1f "
                 "right=%.1f,%.1f,%.1f,%.1f "
                 "controls=%.1f,%.1f,%.1f,%.1f "
-                "utility=%.1f,%.1f,%.1f,%.1f.\n",
+                "utility=%.1f,%.1f,%.1f,%.1f "
+                "scene_objects=%.1f,%.1f,%.1f,%.1f "
+                "details=%.1f,%.1f,%.1f,%.1f.\n",
                 layout.left_dock.x,
                 layout.left_dock.y,
                 layout.left_dock.width,
@@ -11582,7 +11689,15 @@ static void sandbox3d_build_ui(henka_engine* engine, sandbox3d_state* state)
                 layout.utility_panel.x,
                 layout.utility_panel.y,
                 layout.utility_panel.width,
-                layout.utility_panel.height);
+                layout.utility_panel.height,
+                layout.scene_objects_panel.x,
+                layout.scene_objects_panel.y,
+                layout.scene_objects_panel.width,
+                layout.scene_objects_panel.height,
+                layout.object_details_panel.x,
+                layout.object_details_panel.y,
+                layout.object_details_panel.width,
+                layout.object_details_panel.height);
             {
                 const sandbox3d_workspace_panel_id controls_section =
                     sandbox3d_workspace_get_topology_section_for_tab(
@@ -11606,15 +11721,18 @@ static void sandbox3d_build_ui(henka_engine* engine, sandbox3d_state* state)
                             utility_section);
 
                 printf(
-                    "Workspace header chrome: controls=%s utility=%s.\n",
+                    "Workspace header chrome: "
+                    "controls=%s:%zu utility=%s:%zu.\n",
                     sandbox3d_workspace_should_draw_section_tabs(
                         controls_tab_count)
                         ? "tabs"
                         : "compact",
+                    controls_tab_count,
                     sandbox3d_workspace_should_draw_section_tabs(
                         utility_tab_count)
                         ? "tabs"
-                        : "compact");
+                        : "compact",
+                    utility_tab_count);
             }
             fflush(stdout);
             state->ui_visibility_report_pending = false;

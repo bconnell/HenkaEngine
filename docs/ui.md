@@ -226,3 +226,11 @@ The packaged QA script can confirm startup logs and UI state output, and the loc
 ## Future direction
 
 This layer is a foundation for better engine-side inspection and sample controls. It is not yet meant to replace planned editor work, hierarchy tooling, numeric property editing, saved workspace layouts, or a broader UI toolkit.
+
+## Modernization closure
+
+The workspace closure pass makes tab movement reversible: a tab can be pulled out of a merged section, floated, moved to another tab group, or redocked at either side. Escape restores the exact pre-drag layout. Native detached panels redock by overlapping the main editor and choose the left or right side from the window center. Right-clicking section header chrome opens the horizontal and vertical section menu for the actual topology section, including when the visible panel is a merged tab.
+
+The final chrome uses compact single-panel headers, grip marks instead of DRAG text, flat secondary controls, underline tabs, and switch-style toggles. The built-in bitmap font remains a lightweight engine fallback rather than the long-term typography system.
+
+A stationary rendered camera no longer advances temporal projection jitter. The packaged harness captures two settled scene frames and rejects visible frame-to-frame vibration above its bounded tolerance.

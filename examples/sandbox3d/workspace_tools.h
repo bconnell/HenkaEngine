@@ -477,6 +477,18 @@ bool sandbox3d_workspace_begin_tab_drag(
     sandbox3d_workspace_model* model,
     sandbox3d_workspace_panel_id section_id,
     sandbox3d_workspace_panel_id tab_id);
+bool sandbox3d_workspace_extract_tab_for_drag(
+    sandbox3d_workspace_model* model,
+    sandbox3d_workspace_panel_id section_id,
+    sandbox3d_workspace_panel_id tab_id,
+    henka_ui_rect current_rect,
+    henka_vec2 pointer,
+    int framebuffer_width,
+    int framebuffer_height);
+bool sandbox3d_workspace_split_active_tab(
+    sandbox3d_workspace_model* model,
+    sandbox3d_workspace_panel_id section_id,
+    sandbox3d_workspace_split_orientation orientation);
 void sandbox3d_workspace_update_tab_drag(
     sandbox3d_workspace_model* model,
     size_t target_index);

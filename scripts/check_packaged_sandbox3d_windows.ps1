@@ -372,6 +372,118 @@ function Click-FramebufferPoint {
         [System.UIntPtr]::Zero)
     Start-Sleep -Milliseconds 250
 }
+function Click-FramebufferPointRight {
+    param(
+        [Parameter(Mandatory = $true)][System.IntPtr]$Handle,
+        [Parameter(Mandatory = $true)][int]$FramebufferWidth,
+        [Parameter(Mandatory = $true)][int]$FramebufferHeight,
+        [Parameter(Mandatory = $true)][double]$FramebufferX,
+        [Parameter(Mandatory = $true)][double]$FramebufferY
+    )
+
+    $clientRect = New-Object NativeMethods+RECT
+    if (-not [NativeMethods]::GetClientRect($Handle, [ref]$clientRect)) {
+        throw "The packaged sandbox client bounds could not be read for right click."
+    }
+    $clientWidth = $clientRect.Right - $clientRect.Left
+    $clientHeight = $clientRect.Bottom - $clientRect.Top
+    if ($FramebufferWidth -le 0 -or $FramebufferHeight -le 0 -or
+        $clientWidth -le 0 -or $clientHeight -le 0) {
+        throw "Invalid framebuffer or client dimensions for right click."
+    }
+    $point = New-Object NativeMethods+POINT
+    $point.X = [int][Math]::Round($FramebufferX * [double]$clientWidth / [double]$FramebufferWidth)
+    $point.Y = [int][Math]::Round($FramebufferY * [double]$clientHeight / [double]$FramebufferHeight)
+    if (-not [NativeMethods]::ClientToScreen($Handle, [ref]$point)) {
+        throw "The packaged sandbox right-click point could not be converted to screen coordinates."
+    }
+    [NativeMethods]::SetForegroundWindow($Handle) | Out-Null
+    Start-Sleep -Milliseconds 150
+    [NativeMethods]::SetCursorPos($point.X, $point.Y) | Out-Null
+    Start-Sleep -Milliseconds 100
+    [NativeMethods]::mouse_event(0x0008, 0, 0, 0, [System.UIntPtr]::Zero)
+    Start-Sleep -Milliseconds 80
+    [NativeMethods]::mouse_event(0x0010, 0, 0, 0, [System.UIntPtr]::Zero)
+    Start-Sleep -Milliseconds 300
+}
+
+function Save-FramebufferRegionScreenshot {
+    param(
+        [Parameter(Mandatory = $true)][System.IntPtr]$Handle,
+        [Parameter(Mandatory = $true)][int]$FramebufferWidth,
+        [Parameter(Mandatory = $true)][int]$FramebufferHeight,
+        [Parameter(Mandatory = $true)][double]$X,
+        [Parameter(Mandatory = $true)][double]$Y,
+        [Parameter(Mandatory = $true)][double]$Width,
+        [Parameter(Mandatory = $true)][double]$Height,
+        [Parameter(Mandatory = $true)][string]$Path
+    )
+    $clientRect = New-Object NativeMethods+RECT
+    if (-not [NativeMethods]::GetClientRect($Handle, [ref]$clientRect)) {
+        throw "The packaged sandbox client bounds could not be read for scene capture."
+    }
+    $clientWidth = $clientRect.Right - $clientRect.Left
+    $clientHeight = $clientRect.Bottom - $clientRect.Top
+    $origin = New-Object NativeMethods+POINT
+    $origin.X = 0
+    $origin.Y = 0
+    if (-not [NativeMethods]::ClientToScreen($Handle, [ref]$origin)) {
+        throw "The packaged sandbox client origin could not be converted to screen coordinates."
+    }
+    $screenX = $origin.X + [int][Math]::Round($X * $clientWidth / $FramebufferWidth)
+    $screenY = $origin.Y + [int][Math]::Round($Y * $clientHeight / $FramebufferHeight)
+    $screenWidth = [Math]::Max(1, [int][Math]::Round($Width * $clientWidth / $FramebufferWidth))
+    $screenHeight = [Math]::Max(1, [int][Math]::Round($Height * $clientHeight / $FramebufferHeight))
+    $bitmap = New-Object System.Drawing.Bitmap -ArgumentList $screenWidth, $screenHeight
+    $graphics = [System.Drawing.Graphics]::FromImage($bitmap)
+    try {
+        $graphics.CopyFromScreen($screenX,$screenY,0,0,
+            (New-Object System.Drawing.Size -ArgumentList $screenWidth,$screenHeight))
+        $bitmap.Save($Path,[System.Drawing.Imaging.ImageFormat]::Png)
+    }
+    finally {
+        $graphics.Dispose()
+        $bitmap.Dispose()
+    }
+    Assert-PathExists -Path $Path -Description "Static scene stability frame"
+}
+
+function Assert-SceneFramesStable {
+    param([string]$First,[string]$Second)
+    $a = New-Object System.Drawing.Bitmap -ArgumentList $First
+    $b = New-Object System.Drawing.Bitmap -ArgumentList $Second
+    try {
+        if ($a.Width -ne $b.Width -or $a.Height -ne $b.Height) {
+            throw "Static scene captures have different dimensions."
+        }
+        [long]$difference = 0
+        [long]$samples = 0
+        [long]$changed = 0
+        for ($y = 0; $y -lt $a.Height; $y += 4) {
+            for ($x = 0; $x -lt $a.Width; $x += 4) {
+                $ca = $a.GetPixel($x,$y)
+                $cb = $b.GetPixel($x,$y)
+                $delta = [Math]::Abs([int]$ca.R-[int]$cb.R) +
+                    [Math]::Abs([int]$ca.G-[int]$cb.G) +
+                    [Math]::Abs([int]$ca.B-[int]$cb.B)
+                $difference += $delta
+                $samples++
+                if ($delta -gt 9) { $changed++ }
+            }
+        }
+        $mean = if ($samples -gt 0) { [double]$difference / (3.0 * $samples) } else { 999.0 }
+        $ratio = if ($samples -gt 0) { [double]$changed / $samples } else { 1.0 }
+        if ($mean -gt 0.85 -or $ratio -gt 0.02) {
+            throw ("Stationary rendered viewport is not stable: mean channel delta={0:N3}, changed sample ratio={1:P2}." -f $mean,$ratio)
+        }
+        Write-Output ("[pass] Stationary rendered viewport is stable: mean channel delta={0:N3}, changed sample ratio={1:P2}" -f $mean,$ratio)
+    }
+    finally {
+        $a.Dispose()
+        $b.Dispose()
+    }
+}
+
 $repoRoot = Get-HenkaRepoRoot -ScriptDirectory $PSScriptRoot
 $gitCommand = Get-HenkaGitPath
 $packageRoot = Join-Path $repoRoot "out\HenkaSandbox3D"
@@ -387,6 +499,9 @@ $stderrPath = Join-Path $logDir "check_packaged_sandbox3d_stderr.log"
 $startupScreenshotPath = Join-Path $logDir "check_packaged_sandbox3d_startup.png"
 $qaScreenshotPath = Join-Path $logDir "check_packaged_sandbox3d_controls_qa.png"
 $nativeScreenshotPath = Join-Path $logDir "check_packaged_sandbox3d_native_panel.png"
+$contextMenuScreenshotPath = Join-Path $logDir "check_packaged_sandbox3d_context_menu.png"
+$stabilityFirstPath = Join-Path $logDir "check_packaged_sandbox3d_stability_a.png"
+$stabilitySecondPath = Join-Path $logDir "check_packaged_sandbox3d_stability_b.png"
 $persistenceStdoutPath = Join-Path $logDir "check_packaged_sandbox3d_persistence_stdout.log"
 $persistenceStderrPath = Join-Path $logDir "check_packaged_sandbox3d_persistence_stderr.log"
 
@@ -638,6 +753,7 @@ try {
 
         foreach ($requiredPattern in @(
             "Sandbox UI ready:",
+            "Sandbox viewport:",
             "Workspace UI geometry:",
             "Workspace header chrome:",
             "Grid control:",
@@ -654,9 +770,12 @@ try {
         $framebufferMatch = Get-LastLogRegexMatch `
             -Path $stdoutPath `
             -Pattern 'Sandbox UI ready:.*framebuffer ([0-9]+)x([0-9]+)'
+        $viewportMatch = Get-LastLogRegexMatch `
+            -Path $stdoutPath `
+            -Pattern 'Sandbox viewport: origin ([0-9]+),([0-9]+) size ([0-9]+)x([0-9]+)\.'
         $workspaceGeometryMatch = Get-LastLogRegexMatch `
             -Path $stdoutPath `
-            -Pattern 'Workspace UI geometry: left=([-0-9.]+),([-0-9.]+),([-0-9.]+),([-0-9.]+) right=([-0-9.]+),([-0-9.]+),([-0-9.]+),([-0-9.]+) controls=([-0-9.]+),([-0-9.]+),([-0-9.]+),([-0-9.]+) utility=([-0-9.]+),([-0-9.]+),([-0-9.]+),([-0-9.]+)\.'
+            -Pattern 'Workspace UI geometry: left=([-0-9.]+),([-0-9.]+),([-0-9.]+),([-0-9.]+) right=([-0-9.]+),([-0-9.]+),([-0-9.]+),([-0-9.]+) controls=([-0-9.]+),([-0-9.]+),([-0-9.]+),([-0-9.]+) utility=([-0-9.]+),([-0-9.]+),([-0-9.]+),([-0-9.]+) scene_objects=([-0-9.]+),([-0-9.]+),([-0-9.]+),([-0-9.]+) details=([-0-9.]+),([-0-9.]+),([-0-9.]+),([-0-9.]+)\.'
         $gridMatch = Get-LastLogRegexMatch `
             -Path $stdoutPath `
             -Pattern 'Grid control: x=([-0-9.]+) y=([-0-9.]+) width=([-0-9.]+) height=([-0-9.]+)'
@@ -668,6 +787,7 @@ try {
             -Pattern 'Viewport shading controls: x=([-0-9.]+) y=([-0-9.]+) button=([-0-9.]+) gap=([-0-9.]+)'
 
         if ($null -eq $framebufferMatch -or
+            $null -eq $viewportMatch -or
             $null -eq $workspaceGeometryMatch -or
             $null -eq $gridMatch -or
             $null -eq $qaTabMatch -or
@@ -679,6 +799,11 @@ try {
             [int]$framebufferMatch.Groups[1].Value
         $framebufferHeight =
             [int]$framebufferMatch.Groups[2].Value
+
+        $viewportX = [double]$viewportMatch.Groups[1].Value
+        $viewportY = [double]$viewportMatch.Groups[2].Value
+        $viewportWidth = [double]$viewportMatch.Groups[3].Value
+        $viewportHeight = [double]$viewportMatch.Groups[4].Value
 
         $leftDockX =
             [double]$workspaceGeometryMatch.Groups[1].Value
@@ -712,6 +837,22 @@ try {
             [double]$workspaceGeometryMatch.Groups[15].Value
         $utilityHeight =
             [double]$workspaceGeometryMatch.Groups[16].Value
+        $sceneObjectsX =
+            [double]$workspaceGeometryMatch.Groups[17].Value
+        $sceneObjectsY =
+            [double]$workspaceGeometryMatch.Groups[18].Value
+        $sceneObjectsWidth =
+            [double]$workspaceGeometryMatch.Groups[19].Value
+        $sceneObjectsHeight =
+            [double]$workspaceGeometryMatch.Groups[20].Value
+        $detailsX =
+            [double]$workspaceGeometryMatch.Groups[21].Value
+        $detailsY =
+            [double]$workspaceGeometryMatch.Groups[22].Value
+        $detailsWidth =
+            [double]$workspaceGeometryMatch.Groups[23].Value
+        $detailsHeight =
+            [double]$workspaceGeometryMatch.Groups[24].Value
 
         $gridX =
             [double]$gridMatch.Groups[1].Value
@@ -759,55 +900,183 @@ try {
             -Y $rightDockY `
             -Width $rightDockWidth `
             -Height $rightDockHeight
-        Assert-FramebufferRect `
-            -Name "Controls panel" `
-            -FramebufferWidth $framebufferWidth `
-            -FramebufferHeight $framebufferHeight `
-            -X $controlsX `
-            -Y $controlsY `
-            -Width $controlsWidth `
-            -Height $controlsHeight
-        Assert-FramebufferRect `
-            -Name "Utility panel" `
-            -FramebufferWidth $framebufferWidth `
-            -FramebufferHeight $framebufferHeight `
-            -X $utilityX `
-            -Y $utilityY `
-            -Width $utilityWidth `
-            -Height $utilityHeight
 
-        $geometryTolerance = 1.1
-        if ([Math]::Abs($controlsX - $leftDockX) -gt $geometryTolerance -or
-            [Math]::Abs($controlsY - $leftDockY) -gt $geometryTolerance -or
-            [Math]::Abs($controlsWidth - $leftDockWidth) -gt $geometryTolerance -or
-            [Math]::Abs($controlsHeight - $leftDockHeight) -gt $geometryTolerance) {
-            throw (
-                "The single visible Controls section does not fill the left dock. " +
-                "Hidden topology sections still reserve visual space.")
+        $panelRects = @(
+            [pscustomobject]@{
+                Name = "Controls panel"
+                X = $controlsX
+                Y = $controlsY
+                Width = $controlsWidth
+                Height = $controlsHeight
+            },
+            [pscustomobject]@{
+                Name = "Utility panel"
+                X = $utilityX
+                Y = $utilityY
+                Width = $utilityWidth
+                Height = $utilityHeight
+            },
+            [pscustomobject]@{
+                Name = "Scene Objects panel"
+                X = $sceneObjectsX
+                Y = $sceneObjectsY
+                Width = $sceneObjectsWidth
+                Height = $sceneObjectsHeight
+            },
+            [pscustomobject]@{
+                Name = "Object Details panel"
+                X = $detailsX
+                Y = $detailsY
+                Width = $detailsWidth
+                Height = $detailsHeight
+            }
+        )
+        $visiblePanelRects = @(
+            $panelRects |
+                Where-Object {
+                    $_.Width -gt 0.0 -and $_.Height -gt 0.0
+                }
+        )
+        if ($visiblePanelRects.Count -lt 2) {
+            throw "Too few active workspace panel rectangles were reported."
         }
-        if ([Math]::Abs($utilityX - $rightDockX) -gt $geometryTolerance -or
-            [Math]::Abs($utilityY - $rightDockY) -gt $geometryTolerance -or
-            [Math]::Abs($utilityWidth - $rightDockWidth) -gt $geometryTolerance -or
-            [Math]::Abs($utilityHeight - $rightDockHeight) -gt $geometryTolerance) {
-            throw (
-                "The single visible Utility section does not fill the right dock. " +
-                "Hidden topology sections still reserve visual space.")
+        foreach ($panelRect in $visiblePanelRects) {
+            Assert-FramebufferRect `
+                -Name $panelRect.Name `
+                -FramebufferWidth $framebufferWidth `
+                -FramebufferHeight $framebufferHeight `
+                -X $panelRect.X `
+                -Y $panelRect.Y `
+                -Width $panelRect.Width `
+                -Height $panelRect.Height
         }
-        Write-Output "[pass] Hidden workspace sections do not leave empty dock voids"
+
+        function Assert-DockCoverage {
+            param(
+                [Parameter(Mandatory = $true)][string]$Name,
+                [Parameter(Mandatory = $true)][double]$X,
+                [Parameter(Mandatory = $true)][double]$Y,
+                [Parameter(Mandatory = $true)][double]$Width,
+                [Parameter(Mandatory = $true)][double]$Height,
+                [Parameter(Mandatory = $true)][object[]]$Rectangles
+            )
+
+            $geometryTolerance = 1.1
+            $gapTolerance = 6.1
+            $matching = @(
+                $Rectangles |
+                    Where-Object {
+                        [Math]::Abs($_.X - $X) -le $geometryTolerance -and
+                        [Math]::Abs($_.Width - $Width) -le $geometryTolerance -and
+                        $_.Y + $_.Height -gt $Y -and
+                        $_.Y -lt $Y + $Height
+                    } |
+                    Sort-Object Y
+            )
+            if ($matching.Count -eq 0) {
+                throw "$Name has no active section content."
+            }
+            if ([Math]::Abs($matching[0].Y - $Y) -gt $geometryTolerance) {
+                throw "$Name has unused space above its first active section."
+            }
+
+            $coveredBottom = $Y
+            foreach ($rect in $matching) {
+                if ($rect.Y - $coveredBottom -gt $gapTolerance) {
+                    throw "$Name contains an unexpected empty vertical region."
+                }
+                $rectBottom = $rect.Y + $rect.Height
+                if ($rectBottom -gt $coveredBottom) {
+                    $coveredBottom = $rectBottom
+                }
+            }
+            if ([Math]::Abs(($Y + $Height) - $coveredBottom) -gt $geometryTolerance) {
+                throw "$Name has unused space below its last active section."
+            }
+            Write-Output "[pass] $Name active sections cover the dock without empty voids"
+        }
+
+        Assert-DockCoverage `
+            -Name "Left dock" `
+            -X $leftDockX `
+            -Y $leftDockY `
+            -Width $leftDockWidth `
+            -Height $leftDockHeight `
+            -Rectangles $visiblePanelRects
+        Assert-DockCoverage `
+            -Name "Right dock" `
+            -X $rightDockX `
+            -Y $rightDockY `
+            -Width $rightDockWidth `
+            -Height $rightDockHeight `
+            -Rectangles $visiblePanelRects
+        Write-Output "[pass] Inactive merged tabs may report zero content rectangles safely"
+
+        Write-Step "Checking section-header context menu"
+        Click-FramebufferPointRight `
+            -Handle $mainWindowHandle `
+            -FramebufferWidth $framebufferWidth `
+            -FramebufferHeight $framebufferHeight `
+            -FramebufferX ($controlsX + 18.0) `
+            -FramebufferY ($controlsY + 13.0)
+        if (-not (Wait-FileContains `
+                -Path $stdoutPath `
+                -Pattern "Workspace context menu: section=Controls horizontal=available vertical=available" `
+                -TimeoutMilliseconds 4000)) {
+            throw "Right-clicking the Controls header did not open the horizontal/vertical section context menu."
+        }
+        Save-WindowScreenshot `
+            -Handle $mainWindowHandle `
+            -Path $contextMenuScreenshotPath `
+            -Description "Workspace context-menu screenshot"
+        [System.Windows.Forms.SendKeys]::SendWait('{ESC}')
+        Start-Sleep -Milliseconds 350
+
+        Write-Step "Checking stationary rendered viewport stability"
+        Start-Sleep -Milliseconds 1800
+        $stableX = $viewportX + 8.0
+        $stableY = $viewportY + 38.0
+        $stableWidth = [Math]::Max(1.0, $viewportWidth - 16.0)
+        $stableHeight = [Math]::Max(1.0, $viewportHeight - 82.0)
+        Save-FramebufferRegionScreenshot `
+            -Handle $mainWindowHandle `
+            -FramebufferWidth $framebufferWidth `
+            -FramebufferHeight $framebufferHeight `
+            -X $stableX -Y $stableY -Width $stableWidth -Height $stableHeight `
+            -Path $stabilityFirstPath
+        Start-Sleep -Milliseconds 700
+        Save-FramebufferRegionScreenshot `
+            -Handle $mainWindowHandle `
+            -FramebufferWidth $framebufferWidth `
+            -FramebufferHeight $framebufferHeight `
+            -X $stableX -Y $stableY -Width $stableWidth -Height $stableHeight `
+            -Path $stabilitySecondPath
+        Assert-SceneFramesStable -First $stabilityFirstPath -Second $stabilitySecondPath
 
         $headerChromeMatch = Get-LastLogRegexMatch `
             -Path $stdoutPath `
-            -Pattern 'Workspace header chrome: controls=([a-z]+) utility=([a-z]+)\.'
+            -Pattern 'Workspace header chrome: controls=([a-z]+):([0-9]+) utility=([a-z]+):([0-9]+)\.'
         if ($null -eq $headerChromeMatch) {
             throw "Workspace header chrome state could not be parsed."
         }
-        if ($headerChromeMatch.Groups[1].Value -ne "compact" -or
-            $headerChromeMatch.Groups[2].Value -ne "compact") {
+        $controlsChrome = $headerChromeMatch.Groups[1].Value
+        $controlsTabCount = [int]$headerChromeMatch.Groups[2].Value
+        $utilityChrome = $headerChromeMatch.Groups[3].Value
+        $utilityTabCount = [int]$headerChromeMatch.Groups[4].Value
+        $expectedControlsChrome =
+            if ($controlsTabCount -gt 1) { "tabs" } else { "compact" }
+        $expectedUtilityChrome =
+            if ($utilityTabCount -gt 1) { "tabs" } else { "compact" }
+        if ($controlsChrome -ne $expectedControlsChrome -or
+            $utilityChrome -ne $expectedUtilityChrome) {
             throw (
-                "Single-tab Controls and Utility sections still render " +
-                "redundant tab controls.")
+                "Workspace header chrome does not match the live topology " +
+                "tab counts.")
         }
-        Write-Output "[pass] Single-tab workspace headers use compact chrome"
+        Write-Output (
+            "[pass] Workspace headers match live topology: " +
+            "Controls=$controlsChrome/$controlsTabCount, " +
+            "Utility=$utilityChrome/$utilityTabCount")
 
         Assert-FramebufferRect `
             -Name "Grid control" `

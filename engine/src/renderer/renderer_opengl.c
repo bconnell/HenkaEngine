@@ -4838,8 +4838,18 @@ henka_result henka_opengl_renderer_draw_scene(
         henka_camera_get_projection_matrix(&scene->camera);
     view = henka_camera_get_view_matrix(&scene->camera);
     {
+        const bool temporal_camera_static =
+            state->previous_cut_camera_valid &&
+            henka_opengl_temporal_camera_delta(
+                &state->previous_cut_camera,
+                &scene->camera,
+                NULL,
+                NULL,
+                NULL) <= 0.000001f;
         bool use_temporal_jitter = rendered &&
-            policy.use_hdr_presentation && state->temporal_history_ready;
+            policy.use_hdr_presentation &&
+            state->temporal_history_ready &&
+            !temporal_camera_static;
         if (state->temporal_jitter_enabled != use_temporal_jitter)
         {
             henka_opengl_invalidate_temporal_history(
