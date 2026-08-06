@@ -233,4 +233,4 @@ The workspace closure pass makes tab movement reversible: a tab can be pulled ou
 
 The final chrome uses compact single-panel headers, grip marks instead of DRAG text, flat secondary controls, underline tabs, and switch-style toggles. The built-in bitmap font remains a lightweight engine fallback rather than the long-term typography system.
 
-A stationary rendered camera no longer advances temporal projection jitter. The packaged harness captures two settled scene frames and rejects visible frame-to-frame vibration above its bounded tolerance.
+A stationary rendered camera no longer advances temporal projection jitter or blends a changing temporal history into settled presentation. Camera movement re-enables the temporal path transactionally; stopping returns to the deterministic current frame. The packaged harness captures two settled scene frames and rejects visible frame-to-frame vibration above its bounded tolerance.

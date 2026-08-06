@@ -3277,8 +3277,12 @@ static void henka_opengl_present_hdr(
     {
         return;
     }
-    use_temporal_history = use_rendered_post_processing && state->temporal_history_ready &&
-        state->temporal_history_valid && state->temporal_history_width == viewport.width &&
+    use_temporal_history =
+        use_rendered_post_processing &&
+        state->temporal_jitter_enabled &&
+        state->temporal_history_ready &&
+        state->temporal_history_valid &&
+        state->temporal_history_width == viewport.width &&
         state->temporal_history_height == viewport.height;
     if (use_temporal_history)
     {
@@ -3331,12 +3335,15 @@ static void henka_opengl_present_hdr(
         state->tone_program,
         &state->tone_shader_data,
         "useMotionVectors",
-        use_rendered_post_processing && state->hdr_motion_texture != 0U && state->previous_view_projection_valid);
+        use_temporal_history &&
+            state->hdr_motion_texture != 0U &&
+            state->previous_view_projection_valid);
     henka_set_uniform_bool_owned(
         state->tone_program,
         &state->tone_shader_data,
         "useReactiveMask",
-        use_rendered_post_processing && state->hdr_reactive_texture != 0U);
+        use_temporal_history &&
+            state->hdr_reactive_texture != 0U);
     henka_set_uniform_bool_owned(
         state->tone_program,
         &state->tone_shader_data,
@@ -3362,8 +3369,11 @@ static void henka_opengl_present_hdr(
     glBindTexture(GL_TEXTURE_2D,
         use_rendered_post_processing && state->bloom_ready ? state->bloom_color_texture : 0U);
     g_gl.ActiveTexture(GL_TEXTURE2);
-    glBindTexture(GL_TEXTURE_2D,
-        use_rendered_post_processing && state->temporal_history_ready ? state->temporal_history_texture : 0U);
+    glBindTexture(
+        GL_TEXTURE_2D,
+        use_temporal_history ?
+            state->temporal_history_texture :
+            0U);
     g_gl.ActiveTexture(GL_TEXTURE3);
     glBindTexture(GL_TEXTURE_2D, state->hdr_motion_texture);
     g_gl.ActiveTexture(GL_TEXTURE4);
@@ -3373,9 +3383,11 @@ static void henka_opengl_present_hdr(
         use_rendered_post_processing && state->hdr_reactive_texture != 0U ?
         state->hdr_reactive_texture : 0U);
     g_gl.ActiveTexture(GL_TEXTURE6);
-    glBindTexture(GL_TEXTURE_2D,
-        use_rendered_post_processing && state->temporal_history_ready ?
-        state->temporal_history_depth_texture : 0U);
+    glBindTexture(
+        GL_TEXTURE_2D,
+        use_temporal_history ?
+            state->temporal_history_depth_texture :
+            0U);
     g_gl.BindVertexArray(state->tone_vertex_array);
     glDrawArrays(GL_TRIANGLES, 0, 3);
     g_gl.BindVertexArray(0);
