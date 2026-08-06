@@ -529,6 +529,10 @@ henka_ui_rect sandbox3d_workspace_controls_qa_action_rect(
 bool sandbox3d_workspace_rect_contains_rect(
     henka_ui_rect outer,
     henka_ui_rect inner);
+bool sandbox3d_workspace_sanitize_floating_rect(
+    const sandbox3d_workspace_panel* panel,
+    henka_ui_rect candidate,
+    henka_ui_rect* out_rect);
 const char* sandbox3d_workspace_panel_name(sandbox3d_workspace_panel_id panel_id);
 const char* sandbox3d_workspace_dock_name(sandbox3d_workspace_dock_zone dock_zone);
 

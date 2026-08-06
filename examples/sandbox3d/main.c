@@ -465,14 +465,6 @@ static bool sandbox3d_load_workspace_panel_settings(
         panel->detached_window_id = 0U;
 
         floating_rect = panel->floating_rect;
-        if (floating_rect.width < panel->minimum_width)
-        {
-            floating_rect.width = panel->minimum_width;
-        }
-        if (floating_rect.height < panel->minimum_height)
-        {
-            floating_rect.height = panel->minimum_height;
-        }
         snprintf(key, sizeof(key), "ui.workspace.panel.%zu.floating.x", index);
         floating_rect.x = henka_settings_get_float(settings, key, floating_rect.x);
         snprintf(key, sizeof(key), "ui.workspace.panel.%zu.floating.y", index);
@@ -481,14 +473,10 @@ static bool sandbox3d_load_workspace_panel_settings(
         floating_rect.width = henka_settings_get_float(settings, key, floating_rect.width);
         snprintf(key, sizeof(key), "ui.workspace.panel.%zu.floating.height", index);
         floating_rect.height = henka_settings_get_float(settings, key, floating_rect.height);
-        if (!isfinite(floating_rect.x) ||
-            !isfinite(floating_rect.y) ||
-            !isfinite(floating_rect.width) ||
-            !isfinite(floating_rect.height) ||
-            floating_rect.x < -4096.0f || floating_rect.x > 16384.0f ||
-            floating_rect.y < -4096.0f || floating_rect.y > 16384.0f ||
-            floating_rect.width < panel->minimum_width || floating_rect.width > 4096.0f ||
-            floating_rect.height < panel->minimum_height || floating_rect.height > 4096.0f)
+        if (!sandbox3d_workspace_sanitize_floating_rect(
+                panel,
+                floating_rect,
+                &floating_rect))
         {
             return false;
         }

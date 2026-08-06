@@ -94,6 +94,48 @@ bool sandbox3d_workspace_rect_contains_rect(
         inner.y + inner.height <= outer.y + outer.height;
 }
 
+bool sandbox3d_workspace_sanitize_floating_rect(
+    const sandbox3d_workspace_panel* panel,
+    henka_ui_rect candidate,
+    henka_ui_rect* out_rect)
+{
+    if (panel == NULL ||
+        out_rect == NULL ||
+        !isfinite(candidate.x) ||
+        !isfinite(candidate.y) ||
+        !isfinite(candidate.width) ||
+        !isfinite(candidate.height) ||
+        candidate.x < -4096.0f ||
+        candidate.x > 16384.0f ||
+        candidate.y < -4096.0f ||
+        candidate.y > 16384.0f ||
+        candidate.width <= 0.0f ||
+        candidate.width > 4096.0f ||
+        candidate.height <= 0.0f ||
+        candidate.height > 4096.0f ||
+        !isfinite(panel->minimum_width) ||
+        !isfinite(panel->minimum_height) ||
+        panel->minimum_width <= 0.0f ||
+        panel->minimum_width > 4096.0f ||
+        panel->minimum_height <= 0.0f ||
+        panel->minimum_height > 4096.0f)
+    {
+        return false;
+    }
+
+    if (candidate.width < panel->minimum_width)
+    {
+        candidate.width = panel->minimum_width;
+    }
+    if (candidate.height < panel->minimum_height)
+    {
+        candidate.height = panel->minimum_height;
+    }
+
+    *out_rect = candidate;
+    return true;
+}
+
 static sandbox3d_workspace_panel_id* sandbox3d_workspace_get_dock_list(
     sandbox3d_workspace_model* model,
     sandbox3d_workspace_dock_zone dock_zone,
@@ -1346,7 +1388,7 @@ void sandbox3d_workspace_model_reset(sandbox3d_workspace_model* model)
         SANDBOX3D_WORKSPACE_DOCK_RIGHT,
         SANDBOX3D_WORKSPACE_DOCK_MASK_LEFT | SANDBOX3D_WORKSPACE_DOCK_MASK_RIGHT,
         0U,
-        {820.0f, 94.0f, 396.0f, 560.0f},
+        {820.0f, 94.0f, 396.0f, 672.0f},
         332.0f,
         672.0f,
         4U

@@ -1,5 +1,6 @@
 #include "test_suite.h"
 
+#include <math.h>
 #include <stdint.h>
 #include <string.h>
 
@@ -13,7 +14,10 @@ void henka_test_sandbox3d_workspace(void)
     henka_ui_rect rect;
     henka_ui_rect controls_panel_bounds;
     henka_ui_rect controls_rect;
+    henka_ui_rect floating_rect;
+    henka_ui_rect sanitized_floating_rect;
     size_t controls_index;
+    size_t panel_index;
     sandbox3d_workspace_topology_layout topology_layout;
     sandbox3d_workspace_topology_layout dock_topology_layout;
     const sandbox3d_workspace_topology_node* topology_root;
@@ -26,6 +30,63 @@ void henka_test_sandbox3d_workspace(void)
     float history_ratio;
 
     sandbox3d_workspace_model_reset(&model);
+    for (panel_index = 0U;
+         panel_index < SANDBOX3D_WORKSPACE_PANEL_COUNT;
+         ++panel_index)
+    {
+        panel = sandbox3d_workspace_get_panel_const(
+            &model,
+            (sandbox3d_workspace_panel_id)panel_index);
+        HENKA_TEST_ASSERT(panel != NULL);
+        HENKA_TEST_ASSERT(
+            panel->floating_rect.width >= panel->minimum_width);
+        HENKA_TEST_ASSERT(
+            panel->floating_rect.height >= panel->minimum_height);
+        HENKA_TEST_ASSERT(
+            sandbox3d_workspace_sanitize_floating_rect(
+                panel,
+                panel->floating_rect,
+                &sanitized_floating_rect));
+        HENKA_TEST_ASSERT_FLOAT_CLOSE(
+            sanitized_floating_rect.width,
+            panel->floating_rect.width,
+            0.0001f);
+        HENKA_TEST_ASSERT_FLOAT_CLOSE(
+            sanitized_floating_rect.height,
+            panel->floating_rect.height,
+            0.0001f);
+    }
+
+    panel = sandbox3d_workspace_get_panel_const(
+        &model,
+        SANDBOX3D_WORKSPACE_PANEL_UTILITY);
+    HENKA_TEST_ASSERT(panel != NULL);
+    floating_rect = panel->floating_rect;
+    floating_rect.height = 560.0f;
+    HENKA_TEST_ASSERT(
+        sandbox3d_workspace_sanitize_floating_rect(
+            panel,
+            floating_rect,
+            &sanitized_floating_rect));
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(
+        sanitized_floating_rect.height,
+        panel->minimum_height,
+        0.0001f);
+    floating_rect = panel->floating_rect;
+    floating_rect.width = NAN;
+    HENKA_TEST_ASSERT(
+        !sandbox3d_workspace_sanitize_floating_rect(
+            panel,
+            floating_rect,
+            &sanitized_floating_rect));
+    floating_rect = panel->floating_rect;
+    floating_rect.height = 5000.0f;
+    HENKA_TEST_ASSERT(
+        !sandbox3d_workspace_sanitize_floating_rect(
+            panel,
+            floating_rect,
+            &sanitized_floating_rect));
+
     HENKA_TEST_ASSERT(
         sandbox3d_workspace_clamp_controls_page(-1) ==
         SANDBOX3D_CONTROLS_PAGE_MAIN);
