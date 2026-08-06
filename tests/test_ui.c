@@ -16,6 +16,8 @@ void henka_test_ui(void)
     int text_height;
     int text_width;
     size_t draw_count_before;
+    size_t lowercase_draw_count;
+    size_t uppercase_draw_count;
 
     ui = NULL;
     HENKA_TEST_ASSERT(henka_ui_create(NULL) == HENKA_ERROR_INVALID_ARGUMENT);
@@ -112,6 +114,22 @@ void henka_test_ui(void)
 
     henka_ui_set_visible(ui, true);
     HENKA_TEST_ASSERT(henka_ui_is_visible(ui) == true);
+
+    HENKA_TEST_ASSERT(henka_ui_begin_frame(ui, &frame_desc) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(
+        henka_ui_label(ui, 8.0f, 8.0f, 1.0f, "A") ==
+        HENKA_SUCCESS);
+    uppercase_draw_count = henka_ui_get_draw_rect_count(ui);
+    HENKA_TEST_ASSERT(henka_ui_end_frame(ui) == HENKA_SUCCESS);
+
+    HENKA_TEST_ASSERT(henka_ui_begin_frame(ui, &frame_desc) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(
+        henka_ui_label(ui, 8.0f, 8.0f, 1.0f, "a") ==
+        HENKA_SUCCESS);
+    lowercase_draw_count = henka_ui_get_draw_rect_count(ui);
+    HENKA_TEST_ASSERT(lowercase_draw_count > 0U);
+    HENKA_TEST_ASSERT(lowercase_draw_count != uppercase_draw_count);
+    HENKA_TEST_ASSERT(henka_ui_end_frame(ui) == HENKA_SUCCESS);
 
     HENKA_TEST_ASSERT(henka_ui_begin_frame(ui, &frame_desc) == HENKA_SUCCESS);
     HENKA_TEST_ASSERT(henka_ui_panel(ui, (henka_ui_rect){20.0f, 20.0f, 200.0f, 100.0f}, "Panel") == HENKA_SUCCESS);

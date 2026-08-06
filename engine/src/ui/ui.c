@@ -136,42 +136,72 @@ static const henka_ui_glyph g_ui_glyphs[] =
     { 'X', {0x11, 0x11, 0x0A, 0x04, 0x0A, 0x11, 0x11} },
     { 'Y', {0x11, 0x11, 0x0A, 0x04, 0x04, 0x04, 0x04} },
     { 'Z', {0x1F, 0x01, 0x02, 0x04, 0x08, 0x10, 0x1F} },
+    { 'a', {0, 0, 0x0E, 0x01, 0x0F, 0x11, 0x0F} },
+    { 'b', {0x10, 0x10, 0x1E, 0x11, 0x11, 0x11, 0x1E} },
+    { 'c', {0, 0, 0x0E, 0x10, 0x10, 0x11, 0x0E} },
+    { 'd', {0x01, 0x01, 0x0F, 0x11, 0x11, 0x11, 0x0F} },
+    { 'e', {0, 0, 0x0E, 0x11, 0x1F, 0x10, 0x0E} },
+    { 'f', {0x06, 0x08, 0x1E, 0x08, 0x08, 0x08, 0x08} },
+    { 'g', {0, 0, 0x0F, 0x11, 0x0F, 0x01, 0x0E} },
+    { 'h', {0x10, 0x10, 0x1E, 0x11, 0x11, 0x11, 0x11} },
+    { 'i', {0x04, 0, 0x0C, 0x04, 0x04, 0x04, 0x0E} },
+    { 'j', {0x02, 0, 0x06, 0x02, 0x02, 0x12, 0x0C} },
+    { 'k', {0x10, 0x10, 0x12, 0x14, 0x18, 0x14, 0x12} },
+    { 'l', {0x0C, 0x04, 0x04, 0x04, 0x04, 0x04, 0x0E} },
+    { 'm', {0, 0, 0x1A, 0x15, 0x15, 0x15, 0x15} },
+    { 'n', {0, 0, 0x1E, 0x11, 0x11, 0x11, 0x11} },
+    { 'o', {0, 0, 0x0E, 0x11, 0x11, 0x11, 0x0E} },
+    { 'p', {0, 0, 0x1E, 0x11, 0x1E, 0x10, 0x10} },
+    { 'q', {0, 0, 0x0F, 0x11, 0x0F, 0x01, 0x01} },
+    { 'r', {0, 0, 0x16, 0x19, 0x10, 0x10, 0x10} },
+    { 's', {0, 0, 0x0F, 0x10, 0x0E, 0x01, 0x1E} },
+    { 't', {0x08, 0x08, 0x1E, 0x08, 0x08, 0x09, 0x06} },
+    { 'u', {0, 0, 0x11, 0x11, 0x11, 0x13, 0x0D} },
+    { 'v', {0, 0, 0x11, 0x11, 0x11, 0x0A, 0x04} },
+    { 'w', {0, 0, 0x11, 0x11, 0x15, 0x15, 0x0A} },
+    { 'x', {0, 0, 0x11, 0x0A, 0x04, 0x0A, 0x11} },
+    { 'y', {0, 0, 0x11, 0x11, 0x0F, 0x01, 0x0E} },
+    { 'z', {0, 0, 0x1F, 0x02, 0x04, 0x08, 0x1F} },
+    { ',', {0, 0, 0, 0, 0, 0x04, 0x08} },
+    { '+', {0, 0x04, 0x04, 0x1F, 0x04, 0x04, 0} },
+    { '=', {0, 0, 0x1F, 0, 0x1F, 0, 0} },
+    { '!', {0x04, 0x04, 0x04, 0x04, 0x04, 0, 0x04} },
     { '?', {0x0E, 0x11, 0x01, 0x02, 0x04, 0, 0x04} }
 };
 
-static const henka_vec4 g_ui_panel_fill = {0.075f, 0.085f, 0.105f, 0.98f};
-static const henka_vec4 g_ui_panel_header_fill = {0.12f, 0.14f, 0.18f, 0.99f};
-static const henka_vec4 g_ui_panel_border = {0.38f, 0.47f, 0.58f, 1.0f};
-static const henka_vec4 g_ui_panel_separator = {0.28f, 0.34f, 0.42f, 1.0f};
-static const henka_vec4 g_ui_text_color = {0.96f, 0.98f, 1.0f, 1.0f};
-static const henka_vec4 g_ui_heading_color = {0.70f, 0.88f, 1.0f, 1.0f};
-static const henka_vec4 g_ui_button_fill = {0.17f, 0.20f, 0.25f, 0.99f};
-static const henka_vec4 g_ui_button_hover = {0.27f, 0.35f, 0.44f, 1.0f};
-static const henka_vec4 g_ui_button_active = {0.12f, 0.23f, 0.31f, 1.0f};
-static const henka_vec4 g_ui_primary_fill = {0.24f, 0.39f, 0.51f, 1.0f};
-static const henka_vec4 g_ui_primary_hover = {0.31f, 0.52f, 0.68f, 1.0f};
-static const henka_vec4 g_ui_primary_active = {0.18f, 0.32f, 0.43f, 1.0f};
-static const henka_vec4 g_ui_tab_fill = {0.14f, 0.17f, 0.22f, 0.99f};
-static const henka_vec4 g_ui_tab_hover = {0.24f, 0.32f, 0.41f, 1.0f};
-static const henka_vec4 g_ui_tab_active = {0.25f, 0.43f, 0.58f, 1.0f};
-static const henka_vec4 g_ui_selected_fill = {0.22f, 0.38f, 0.50f, 1.0f};
-static const henka_vec4 g_ui_selected_hover = {0.31f, 0.52f, 0.67f, 1.0f};
-static const henka_vec4 g_ui_toggle_on = {0.23f, 0.66f, 0.43f, 1.0f};
-static const henka_vec4 g_ui_toggle_off = {0.66f, 0.24f, 0.27f, 1.0f};
-static const henka_vec4 g_ui_value_fill = {0.11f, 0.14f, 0.18f, 1.0f};
-static const henka_vec4 g_ui_row_fill = {0.105f, 0.13f, 0.17f, 0.99f};
-static const henka_vec4 g_ui_status_fill = {0.18f, 0.48f, 0.33f, 1.0f};
-static const henka_vec4 g_ui_status_warning_fill = {0.72f, 0.46f, 0.16f, 1.0f};
-static const henka_vec4 g_ui_muted_text_color = {0.60f, 0.68f, 0.76f, 1.0f};
-static const henka_vec4 g_ui_hint_fill = {0.07f, 0.08f, 0.10f, 0.90f};
-static const henka_vec4 g_ui_hint_border = {0.38f, 0.47f, 0.58f, 0.96f};
-static const henka_vec4 g_ui_semantic_info = {0.53f, 0.80f, 1.0f, 1.0f};
-static const henka_vec4 g_ui_semantic_accent = {0.26f, 0.90f, 1.0f, 1.0f};
-static const henka_vec4 g_ui_semantic_success = {0.38f, 0.94f, 0.58f, 1.0f};
-static const henka_vec4 g_ui_semantic_warning = {1.0f, 0.84f, 0.28f, 1.0f};
-static const henka_vec4 g_ui_semantic_orange = {1.0f, 0.56f, 0.22f, 1.0f};
-static const henka_vec4 g_ui_semantic_danger = {1.0f, 0.34f, 0.38f, 1.0f};
-static const henka_vec4 g_ui_semantic_disabled = {0.48f, 0.54f, 0.61f, 1.0f};
+static const henka_vec4 g_ui_panel_fill = {0.050f, 0.056f, 0.066f, 0.985f};
+static const henka_vec4 g_ui_panel_header_fill = {0.072f, 0.080f, 0.094f, 0.995f};
+static const henka_vec4 g_ui_panel_border = {0.19f, 0.22f, 0.27f, 1.0f};
+static const henka_vec4 g_ui_panel_separator = {0.14f, 0.17f, 0.21f, 1.0f};
+static const henka_vec4 g_ui_text_color = {0.88f, 0.91f, 0.94f, 1.0f};
+static const henka_vec4 g_ui_heading_color = {0.66f, 0.78f, 0.89f, 1.0f};
+static const henka_vec4 g_ui_button_fill = {0.095f, 0.108f, 0.128f, 0.995f};
+static const henka_vec4 g_ui_button_hover = {0.15f, 0.18f, 0.22f, 1.0f};
+static const henka_vec4 g_ui_button_active = {0.10f, 0.145f, 0.185f, 1.0f};
+static const henka_vec4 g_ui_primary_fill = {0.16f, 0.285f, 0.365f, 1.0f};
+static const henka_vec4 g_ui_primary_hover = {0.22f, 0.39f, 0.50f, 1.0f};
+static const henka_vec4 g_ui_primary_active = {0.12f, 0.235f, 0.315f, 1.0f};
+static const henka_vec4 g_ui_tab_fill = {0.072f, 0.082f, 0.098f, 1.0f};
+static const henka_vec4 g_ui_tab_hover = {0.13f, 0.16f, 0.20f, 1.0f};
+static const henka_vec4 g_ui_tab_active = {0.17f, 0.31f, 0.40f, 1.0f};
+static const henka_vec4 g_ui_selected_fill = {0.14f, 0.265f, 0.345f, 1.0f};
+static const henka_vec4 g_ui_selected_hover = {0.21f, 0.37f, 0.47f, 1.0f};
+static const henka_vec4 g_ui_toggle_on = {0.20f, 0.57f, 0.39f, 1.0f};
+static const henka_vec4 g_ui_toggle_off = {0.47f, 0.24f, 0.27f, 1.0f};
+static const henka_vec4 g_ui_value_fill = {0.068f, 0.078f, 0.093f, 1.0f};
+static const henka_vec4 g_ui_row_fill = {0.064f, 0.074f, 0.088f, 0.995f};
+static const henka_vec4 g_ui_status_fill = {0.15f, 0.39f, 0.28f, 1.0f};
+static const henka_vec4 g_ui_status_warning_fill = {0.56f, 0.36f, 0.14f, 1.0f};
+static const henka_vec4 g_ui_muted_text_color = {0.53f, 0.59f, 0.66f, 1.0f};
+static const henka_vec4 g_ui_hint_fill = {0.045f, 0.050f, 0.060f, 0.94f};
+static const henka_vec4 g_ui_hint_border = {0.20f, 0.24f, 0.29f, 0.98f};
+static const henka_vec4 g_ui_semantic_info = {0.48f, 0.69f, 0.87f, 1.0f};
+static const henka_vec4 g_ui_semantic_accent = {0.30f, 0.66f, 0.84f, 1.0f};
+static const henka_vec4 g_ui_semantic_success = {0.37f, 0.78f, 0.51f, 1.0f};
+static const henka_vec4 g_ui_semantic_warning = {0.92f, 0.75f, 0.28f, 1.0f};
+static const henka_vec4 g_ui_semantic_orange = {0.92f, 0.49f, 0.22f, 1.0f};
+static const henka_vec4 g_ui_semantic_danger = {0.88f, 0.34f, 0.38f, 1.0f};
+static const henka_vec4 g_ui_semantic_disabled = {0.40f, 0.45f, 0.51f, 1.0f};
 
 static henka_vec4 henka_ui_semantic_color_to_vec4(henka_ui_semantic_color color)
 {
@@ -200,11 +230,6 @@ static henka_vec4 henka_ui_semantic_color_to_vec4(henka_ui_semantic_color color)
 }
 static char henka_ui_normalize_character(char character)
 {
-    if (character >= 'a' && character <= 'z')
-    {
-        return (char)(character - 'a' + 'A');
-    }
-
     return character;
 }
 
@@ -1051,15 +1076,15 @@ henka_result henka_ui_panel(
     }
     if (result == HENKA_SUCCESS)
     {
-        result = henka_ui_push_border(context, bounds, 2.0f, g_ui_panel_border);
+        result = henka_ui_push_border(context, bounds, 1.0f, g_ui_panel_border);
     }
     if (result == HENKA_SUCCESS)
     {
         result = henka_ui_draw_text(
             context,
             bounds.x + 12.0f,
-            bounds.y + 8.0f,
-            1.5f,
+            bounds.y + 9.0f,
+            1.25f,
             title,
             g_ui_heading_color);
     }
@@ -1100,15 +1125,15 @@ henka_result henka_ui_viewport_frame(
     }
     if (result == HENKA_SUCCESS)
     {
-        result = henka_ui_push_border(context, bounds, 2.0f, g_ui_panel_border);
+        result = henka_ui_push_border(context, bounds, 1.0f, g_ui_panel_border);
     }
     if (result == HENKA_SUCCESS)
     {
         result = henka_ui_draw_text(
             context,
             bounds.x + 12.0f,
-            bounds.y + 8.0f,
-            1.5f,
+            bounds.y + 9.0f,
+            1.25f,
             title,
             g_ui_heading_color);
     }
@@ -1196,7 +1221,14 @@ henka_result henka_ui_value_row_colored(
     result = henka_ui_push_rect(context, bounds, g_ui_row_fill);
     if (result == HENKA_SUCCESS)
     {
-        result = henka_ui_push_border(context, bounds, 1.0f, g_ui_panel_separator);
+        result = henka_ui_push_rect(
+            context,
+            (henka_ui_rect){
+                bounds.x,
+                bounds.y + bounds.height - 1.0f,
+                bounds.width,
+                1.0f},
+            g_ui_panel_separator);
     }
     if (result != HENKA_SUCCESS)
     {

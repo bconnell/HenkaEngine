@@ -7499,6 +7499,58 @@ static henka_ui_rect* sandbox3d_get_panel_rect_slot(
     }
 }
 
+static size_t sandbox3d_count_visible_workspace_dock_sections(
+    const sandbox3d_state* state,
+    sandbox3d_workspace_dock_zone dock_zone)
+{
+    size_t section_count;
+    size_t section_index;
+    size_t visible_count;
+
+    if (state == NULL)
+    {
+        return 0U;
+    }
+
+    section_count =
+        sandbox3d_workspace_get_topology_dock_section_count(
+            &state->workspace.model,
+            dock_zone);
+    visible_count = 0U;
+
+    for (section_index = 0U;
+         section_index < section_count;
+         ++section_index)
+    {
+        const sandbox3d_workspace_panel_id section_id =
+            sandbox3d_workspace_get_topology_dock_section_at(
+                &state->workspace.model,
+                dock_zone,
+                section_index);
+        const size_t tab_count =
+            sandbox3d_workspace_get_topology_section_tab_count(
+                &state->workspace.model,
+                section_id);
+        size_t tab_index;
+
+        for (tab_index = 0U; tab_index < tab_count; ++tab_index)
+        {
+            const sandbox3d_workspace_panel_id tab_id =
+                sandbox3d_workspace_get_topology_section_tab_at(
+                    &state->workspace.model,
+                    section_id,
+                    tab_index);
+            if (sandbox3d_workspace_tab_content_visible(state, tab_id))
+            {
+                visible_count += 1U;
+                break;
+            }
+        }
+    }
+
+    return visible_count;
+}
+
 static void sandbox3d_assign_workspace_dock_stack(
     const sandbox3d_state* state,
     sandbox3d_workspace_dock_zone dock_zone,
@@ -7585,11 +7637,15 @@ static sandbox3d_workspace_layout sandbox3d_get_workspace_layout(
     bool controls_left;
     bool controls_right;
     bool details_visible;
+    size_t left_topology_count;
+    size_t left_visible_topology_count;
     bool details_left;
     bool details_right;
     bool left_visible;
     const sandbox3d_workspace_panel* panel;
     bool right_visible;
+    size_t right_topology_count;
+    size_t right_visible_topology_count;
     bool scene_left;
     bool scene_right;
     bool scene_visible;
@@ -7716,6 +7772,33 @@ static sandbox3d_workspace_layout sandbox3d_get_workspace_layout(
         SANDBOX3D_WORKSPACE_DOCK_RIGHT,
         layout.right_dock,
         &layout.right_topology);
+
+    left_topology_count =
+        sandbox3d_workspace_get_topology_dock_section_count(
+            &state->workspace.model,
+            SANDBOX3D_WORKSPACE_DOCK_LEFT);
+    left_visible_topology_count =
+        sandbox3d_count_visible_workspace_dock_sections(
+            state,
+            SANDBOX3D_WORKSPACE_DOCK_LEFT);
+    right_topology_count =
+        sandbox3d_workspace_get_topology_dock_section_count(
+            &state->workspace.model,
+            SANDBOX3D_WORKSPACE_DOCK_RIGHT);
+    right_visible_topology_count =
+        sandbox3d_count_visible_workspace_dock_sections(
+            state,
+            SANDBOX3D_WORKSPACE_DOCK_RIGHT);
+
+    if (left_visible_topology_count < left_topology_count)
+    {
+        memset(&layout.left_topology, 0, sizeof(layout.left_topology));
+    }
+    if (right_visible_topology_count < right_topology_count)
+    {
+        memset(&layout.right_topology, 0, sizeof(layout.right_topology));
+    }
+
     {
         int topology_panel_index;
         for (topology_panel_index = 0;
@@ -11317,6 +11400,28 @@ static void sandbox3d_build_ui(henka_engine* engine, sandbox3d_state* state)
                 layout.scene_viewport.y,
                 layout.scene_viewport.width,
                 layout.scene_viewport.height);
+            printf(
+                "Workspace UI geometry: "
+                "left=%.1f,%.1f,%.1f,%.1f "
+                "right=%.1f,%.1f,%.1f,%.1f "
+                "controls=%.1f,%.1f,%.1f,%.1f "
+                "utility=%.1f,%.1f,%.1f,%.1f.\n",
+                layout.left_dock.x,
+                layout.left_dock.y,
+                layout.left_dock.width,
+                layout.left_dock.height,
+                layout.right_dock.x,
+                layout.right_dock.y,
+                layout.right_dock.width,
+                layout.right_dock.height,
+                layout.controls_panel.x,
+                layout.controls_panel.y,
+                layout.controls_panel.width,
+                layout.controls_panel.height,
+                layout.utility_panel.x,
+                layout.utility_panel.y,
+                layout.utility_panel.width,
+                layout.utility_panel.height);
             fflush(stdout);
             state->ui_visibility_report_pending = false;
         }

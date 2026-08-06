@@ -638,6 +638,7 @@ try {
 
         foreach ($requiredPattern in @(
             "Sandbox UI ready:",
+            "Workspace UI geometry:",
             "Grid control:",
             "Controls QA tab:",
             "Viewport shading controls:")) {
@@ -652,6 +653,9 @@ try {
         $framebufferMatch = Get-LastLogRegexMatch `
             -Path $stdoutPath `
             -Pattern 'Sandbox UI ready:.*framebuffer ([0-9]+)x([0-9]+)'
+        $workspaceGeometryMatch = Get-LastLogRegexMatch `
+            -Path $stdoutPath `
+            -Pattern 'Workspace UI geometry: left=([-0-9.]+),([-0-9.]+),([-0-9.]+),([-0-9.]+) right=([-0-9.]+),([-0-9.]+),([-0-9.]+),([-0-9.]+) controls=([-0-9.]+),([-0-9.]+),([-0-9.]+),([-0-9.]+) utility=([-0-9.]+),([-0-9.]+),([-0-9.]+),([-0-9.]+)\.'
         $gridMatch = Get-LastLogRegexMatch `
             -Path $stdoutPath `
             -Pattern 'Grid control: x=([-0-9.]+) y=([-0-9.]+) width=([-0-9.]+) height=([-0-9.]+)'
@@ -663,6 +667,7 @@ try {
             -Pattern 'Viewport shading controls: x=([-0-9.]+) y=([-0-9.]+) button=([-0-9.]+) gap=([-0-9.]+)'
 
         if ($null -eq $framebufferMatch -or
+            $null -eq $workspaceGeometryMatch -or
             $null -eq $gridMatch -or
             $null -eq $qaTabMatch -or
             $null -eq $shadingMatch) {
@@ -673,6 +678,39 @@ try {
             [int]$framebufferMatch.Groups[1].Value
         $framebufferHeight =
             [int]$framebufferMatch.Groups[2].Value
+
+        $leftDockX =
+            [double]$workspaceGeometryMatch.Groups[1].Value
+        $leftDockY =
+            [double]$workspaceGeometryMatch.Groups[2].Value
+        $leftDockWidth =
+            [double]$workspaceGeometryMatch.Groups[3].Value
+        $leftDockHeight =
+            [double]$workspaceGeometryMatch.Groups[4].Value
+        $rightDockX =
+            [double]$workspaceGeometryMatch.Groups[5].Value
+        $rightDockY =
+            [double]$workspaceGeometryMatch.Groups[6].Value
+        $rightDockWidth =
+            [double]$workspaceGeometryMatch.Groups[7].Value
+        $rightDockHeight =
+            [double]$workspaceGeometryMatch.Groups[8].Value
+        $controlsX =
+            [double]$workspaceGeometryMatch.Groups[9].Value
+        $controlsY =
+            [double]$workspaceGeometryMatch.Groups[10].Value
+        $controlsWidth =
+            [double]$workspaceGeometryMatch.Groups[11].Value
+        $controlsHeight =
+            [double]$workspaceGeometryMatch.Groups[12].Value
+        $utilityX =
+            [double]$workspaceGeometryMatch.Groups[13].Value
+        $utilityY =
+            [double]$workspaceGeometryMatch.Groups[14].Value
+        $utilityWidth =
+            [double]$workspaceGeometryMatch.Groups[15].Value
+        $utilityHeight =
+            [double]$workspaceGeometryMatch.Groups[16].Value
 
         $gridX =
             [double]$gridMatch.Groups[1].Value
@@ -703,6 +741,58 @@ try {
         $shadingGroupWidth =
             $shadingButtonWidth * 4.0 +
             $shadingGap * 3.0
+
+        Assert-FramebufferRect `
+            -Name "Left dock" `
+            -FramebufferWidth $framebufferWidth `
+            -FramebufferHeight $framebufferHeight `
+            -X $leftDockX `
+            -Y $leftDockY `
+            -Width $leftDockWidth `
+            -Height $leftDockHeight
+        Assert-FramebufferRect `
+            -Name "Right dock" `
+            -FramebufferWidth $framebufferWidth `
+            -FramebufferHeight $framebufferHeight `
+            -X $rightDockX `
+            -Y $rightDockY `
+            -Width $rightDockWidth `
+            -Height $rightDockHeight
+        Assert-FramebufferRect `
+            -Name "Controls panel" `
+            -FramebufferWidth $framebufferWidth `
+            -FramebufferHeight $framebufferHeight `
+            -X $controlsX `
+            -Y $controlsY `
+            -Width $controlsWidth `
+            -Height $controlsHeight
+        Assert-FramebufferRect `
+            -Name "Utility panel" `
+            -FramebufferWidth $framebufferWidth `
+            -FramebufferHeight $framebufferHeight `
+            -X $utilityX `
+            -Y $utilityY `
+            -Width $utilityWidth `
+            -Height $utilityHeight
+
+        $geometryTolerance = 1.1
+        if ([Math]::Abs($controlsX - $leftDockX) -gt $geometryTolerance -or
+            [Math]::Abs($controlsY - $leftDockY) -gt $geometryTolerance -or
+            [Math]::Abs($controlsWidth - $leftDockWidth) -gt $geometryTolerance -or
+            [Math]::Abs($controlsHeight - $leftDockHeight) -gt $geometryTolerance) {
+            throw (
+                "The single visible Controls section does not fill the left dock. " +
+                "Hidden topology sections still reserve visual space.")
+        }
+        if ([Math]::Abs($utilityX - $rightDockX) -gt $geometryTolerance -or
+            [Math]::Abs($utilityY - $rightDockY) -gt $geometryTolerance -or
+            [Math]::Abs($utilityWidth - $rightDockWidth) -gt $geometryTolerance -or
+            [Math]::Abs($utilityHeight - $rightDockHeight) -gt $geometryTolerance) {
+            throw (
+                "The single visible Utility section does not fill the right dock. " +
+                "Hidden topology sections still reserve visual space.")
+        }
+        Write-Output "[pass] Hidden workspace sections do not leave empty dock voids"
 
         Assert-FramebufferRect `
             -Name "Grid control" `
