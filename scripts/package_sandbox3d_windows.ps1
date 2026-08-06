@@ -240,6 +240,7 @@ DRAG marks a live panel header. Release over a valid left or right outline to do
 Open Native Panel Test from the Controls QA page to exercise a separate OS-level validation window.
 Close a detached tool window to return its panel to the last valid dock.
 Use Reset Layout to recover panels and default dock sizes.
+If saved live workspace geometry is incompatible, Henka restores current safe defaults and rewrites them after a clean shutdown.
 Watch the small in-window status area for recent actions and warnings.
 
 Keep these folders beside the executable:

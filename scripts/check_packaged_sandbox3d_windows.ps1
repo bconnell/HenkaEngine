@@ -127,6 +127,57 @@ function Get-WindowRect {
     return $rect
 }
 
+function Write-Utf8NoBom {
+    param(
+        [Parameter(Mandatory = $true)][string]$Path,
+        [Parameter(Mandatory = $true)][AllowEmptyString()][string]$Content
+    )
+
+    $parent = Split-Path -Parent $Path
+    if (-not [string]::IsNullOrWhiteSpace($parent)) {
+        [System.IO.Directory]::CreateDirectory($parent) | Out-Null
+    }
+
+    $encoding = New-Object System.Text.UTF8Encoding($false)
+    [System.IO.File]::WriteAllText($Path, $Content, $encoding)
+}
+
+function Save-WindowScreenshot {
+    param(
+        [Parameter(Mandatory = $true)][System.IntPtr]$Handle,
+        [Parameter(Mandatory = $true)][string]$Path,
+        [Parameter(Mandatory = $true)][string]$Description
+    )
+
+    $rect = Get-WindowRect -Handle $Handle
+    $width = $rect.Right - $rect.Left
+    $height = $rect.Bottom - $rect.Top
+    if ($width -le 0 -or $height -le 0) {
+        throw "$Description window bounds are invalid for screenshot capture."
+    }
+
+    $bitmap = New-Object System.Drawing.Bitmap -ArgumentList $width, $height
+    $graphics = [System.Drawing.Graphics]::FromImage($bitmap)
+    try {
+        $size = New-Object System.Drawing.Size -ArgumentList $width, $height
+        $graphics.CopyFromScreen(
+            $rect.Left,
+            $rect.Top,
+            0,
+            0,
+            $size)
+        $bitmap.Save(
+            $Path,
+            [System.Drawing.Imaging.ImageFormat]::Png)
+    }
+    finally {
+        $graphics.Dispose()
+        $bitmap.Dispose()
+    }
+
+    Assert-PathExists -Path $Path -Description $Description
+}
+
 function Click-WindowPoint {
     param(
         [System.IntPtr]$Handle,
@@ -333,9 +384,15 @@ $settingsPath = Join-Path $packageRoot "user\sandbox3d.settings"
 $logDir = Join-Path $repoRoot "build\test_tmp"
 $stdoutPath = Join-Path $logDir "check_packaged_sandbox3d_stdout.log"
 $stderrPath = Join-Path $logDir "check_packaged_sandbox3d_stderr.log"
+$startupScreenshotPath = Join-Path $logDir "check_packaged_sandbox3d_startup.png"
+$qaScreenshotPath = Join-Path $logDir "check_packaged_sandbox3d_controls_qa.png"
+$nativeScreenshotPath = Join-Path $logDir "check_packaged_sandbox3d_native_panel.png"
+$persistenceStdoutPath = Join-Path $logDir "check_packaged_sandbox3d_persistence_stdout.log"
+$persistenceStderrPath = Join-Path $logDir "check_packaged_sandbox3d_persistence_stderr.log"
 
 if (-not $NonInteractive) {
     Add-Type -AssemblyName System.Windows.Forms
+    Add-Type -AssemblyName System.Drawing
     Add-Type @'
 using System;
 using System.Runtime.InteropServices;
@@ -456,6 +513,7 @@ Assert-FileContains -Path $readmePath -Pattern "Ground starts locked and require
 Assert-FileContains -Path $readmePath -Pattern "Clearing selection also clears active transform-session ownership" -Description "Packaged transform-session ownership guidance"
 Assert-FileContains -Path $readmePath -Pattern "release away from the outlines to open a separate native tool window" -Description "Packaged workspace guidance"
 Assert-FileContains -Path $readmePath -Pattern "Open Native Panel Test from the Controls QA page to exercise a separate OS-level validation window" -Description "Packaged native test panel guidance"
+Assert-FileContains -Path $readmePath -Pattern "If saved live workspace geometry is incompatible, Henka restores current safe defaults and rewrites them after a clean shutdown" -Description "Packaged workspace recovery guidance"
 Assert-FileContains -Path $readmePath -Pattern "Close a detached tool window to return its panel to the last valid dock" -Description "Packaged workspace limitation guidance"
 Assert-FileContains -Path $readmePath -Pattern "Use M or G, R, and S for action-based transforms" -Description "Packaged transform hotkey guidance"
 Assert-FileContains -Path $readmePath -Pattern "status area" -Description "Packaged status guidance"
@@ -494,7 +552,16 @@ if ($NonInteractive) {
 }
 
 New-Item -ItemType Directory -Path $logDir -Force | Out-Null
-Remove-Item $stdoutPath, $stderrPath -ErrorAction SilentlyContinue
+Remove-Item `
+    -LiteralPath @(
+        $stdoutPath,
+        $stderrPath,
+        $startupScreenshotPath,
+        $qaScreenshotPath,
+        $nativeScreenshotPath,
+        $persistenceStdoutPath,
+        $persistenceStderrPath) `
+    -ErrorAction SilentlyContinue
 
 $capturedProcess = $null
 $process = $null
@@ -559,6 +626,14 @@ try {
     }
 
     if ($uiAutomationVerified) {
+        Write-Step "Capturing packaged startup workspace visual proof"
+        [NativeMethods]::SetForegroundWindow($mainWindowHandle) | Out-Null
+        Start-Sleep -Milliseconds 350
+        Save-WindowScreenshot `
+            -Handle $mainWindowHandle `
+            -Path $startupScreenshotPath `
+            -Description "Packaged startup workspace screenshot"
+
         Write-Step "Checking packaged UI click controls"
 
         foreach ($requiredPattern in @(
@@ -674,6 +749,14 @@ try {
             -FramebufferX ($qaTabX + $qaTabWidth * 0.5) `
             -FramebufferY ($qaTabY + $qaTabHeight * 0.5)
 
+        Write-Step "Capturing Controls QA page visual proof"
+        [NativeMethods]::SetForegroundWindow($mainWindowHandle) | Out-Null
+        Start-Sleep -Milliseconds 350
+        Save-WindowScreenshot `
+            -Handle $mainWindowHandle `
+            -Path $qaScreenshotPath `
+            -Description "Packaged Controls QA screenshot"
+
         if (-not (Wait-FileContains `
                 -Path $stdoutPath `
                 -Pattern "Native Panel Test control:" `
@@ -739,6 +822,16 @@ try {
         }
 
         Write-Output "[pass] Native test panel visible as a separate OS-level window"
+        Write-Step "Capturing native panel visual proof"
+        [NativeMethods]::SetForegroundWindow($nativeWindowHandle) | Out-Null
+        Start-Sleep -Milliseconds 350
+        Save-WindowScreenshot `
+            -Handle $nativeWindowHandle `
+            -Path $nativeScreenshotPath `
+            -Description "Packaged native panel screenshot"
+        [NativeMethods]::SetForegroundWindow($mainWindowHandle) | Out-Null
+        Start-Sleep -Milliseconds 250
+
         [NativeMethods]::PostMessage(
             $nativeWindowHandle,
             0x0010,
@@ -895,6 +988,40 @@ try {
         Write-Output "[warn] Automated packaged close did not leave behind a settings file in this run. Manual packaged persistence QA is still needed."
     }
 
+    Write-Step "Checking persisted live workspace settings recovery"
+    $persistenceSmoke = Invoke-HenkaNativeCapture `
+        -FilePath $packagedExe `
+        -Arguments @("--smoke-test") `
+        -WorkingDirectory $packageRoot `
+        -Label "Run post-interactive packaged persistence smoke test"
+
+    Write-Utf8NoBom `
+        -Path $persistenceStdoutPath `
+        -Content $persistenceSmoke.Stdout
+    Write-Utf8NoBom `
+        -Path $persistenceStderrPath `
+        -Content $persistenceSmoke.Stderr
+
+    if ($persistenceSmoke.Stdout -notmatch "Sandbox smoke test completed\.") {
+        throw "The post-interactive packaged persistence smoke test did not complete."
+    }
+    if ($persistenceSmoke.Stderr -match
+        "Unsafe or incompatible (workspace panel|workspace topology|live workspace) settings") {
+        throw (
+            "Unsafe or incompatible live workspace settings were reported " +
+            "again after a clean interactive shutdown.")
+    }
+
+    Assert-PathExists `
+        -Path $startupScreenshotPath `
+        -Description "Packaged startup workspace visual proof"
+    Assert-PathExists `
+        -Path $qaScreenshotPath `
+        -Description "Packaged Controls QA visual proof"
+    Assert-PathExists `
+        -Path $nativeScreenshotPath `
+        -Description "Packaged native panel visual proof"
+    Write-Output "[pass] Live workspace settings recovery persisted across relaunch"
     Write-Output "[pass] Packaged sandbox checks completed."
 }
 finally {

@@ -5355,13 +5355,31 @@ static void sandbox3d_apply_loaded_settings(henka_engine* engine, sandbox3d_stat
     state->workspace.object_details_panel_visible = henka_settings_get_bool(state->settings, g_setting_key_details_panel_visible, true);
     state->workspace.active_utility = sandbox3d_parse_utility_view(
         henka_settings_get_string(state->settings, g_setting_key_active_utility, "none"));
-    if (!sandbox3d_load_workspace_panel_settings(&state->workspace.model, state->settings))
     {
-        HENKA_LOG_WARN("Unsafe or incompatible workspace panel settings were ignored.");
-    }
-    if (!sandbox3d_load_workspace_topology_settings(&state->workspace.model, state->settings))
-    {
-        HENKA_LOG_WARN("Unsafe or incompatible workspace topology settings were ignored.");
+        const bool panel_settings_valid =
+            sandbox3d_load_workspace_panel_settings(
+                &state->workspace.model,
+                state->settings);
+        const bool topology_settings_valid =
+            panel_settings_valid &&
+            sandbox3d_load_workspace_topology_settings(
+                &state->workspace.model,
+                state->settings);
+
+        if (!panel_settings_valid || !topology_settings_valid)
+        {
+            sandbox3d_workspace_reset_layout(
+                &state->workspace.model);
+            sandbox3d_save_workspace_panel_settings(
+                &state->workspace.model,
+                state->settings);
+            sandbox3d_save_workspace_topology_settings(
+                &state->workspace.model,
+                state->settings);
+            HENKA_LOG_WARN(
+                "Unsafe or incompatible live workspace settings were "
+                "replaced with current safe defaults.");
+        }
     }
     if (!sandbox3d_load_custom_workspace_layout_settings(&state->workspace.model, state->settings))
     {
