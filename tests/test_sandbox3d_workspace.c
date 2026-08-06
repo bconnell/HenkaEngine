@@ -11,6 +11,9 @@ void henka_test_sandbox3d_workspace(void)
     const sandbox3d_workspace_panel* panel;
     henka_ui_rect ownership[2];
     henka_ui_rect rect;
+    henka_ui_rect controls_panel_bounds;
+    henka_ui_rect controls_rect;
+    size_t controls_index;
     sandbox3d_workspace_topology_layout topology_layout;
     sandbox3d_workspace_topology_layout dock_topology_layout;
     const sandbox3d_workspace_topology_node* topology_root;
@@ -23,6 +26,59 @@ void henka_test_sandbox3d_workspace(void)
     float history_ratio;
 
     sandbox3d_workspace_model_reset(&model);
+    HENKA_TEST_ASSERT(
+        sandbox3d_workspace_clamp_controls_page(-1) ==
+        SANDBOX3D_CONTROLS_PAGE_MAIN);
+    HENKA_TEST_ASSERT(
+        sandbox3d_workspace_clamp_controls_page(
+            SANDBOX3D_CONTROLS_PAGE_MAIN) ==
+        SANDBOX3D_CONTROLS_PAGE_MAIN);
+    HENKA_TEST_ASSERT(
+        sandbox3d_workspace_clamp_controls_page(
+            SANDBOX3D_CONTROLS_PAGE_CAMERA_STATUS) ==
+        SANDBOX3D_CONTROLS_PAGE_CAMERA_STATUS);
+    HENKA_TEST_ASSERT(
+        sandbox3d_workspace_clamp_controls_page(
+            SANDBOX3D_CONTROLS_PAGE_QA) ==
+        SANDBOX3D_CONTROLS_PAGE_QA);
+    HENKA_TEST_ASSERT(
+        sandbox3d_workspace_clamp_controls_page(99) ==
+        SANDBOX3D_CONTROLS_PAGE_QA);
+
+    controls_panel_bounds =
+        (henka_ui_rect){16.0f, 16.0f, 320.0f, 180.0f};
+    for (controls_index = 0U;
+         controls_index < SANDBOX3D_WORKSPACE_CONTROLS_PAGE_COUNT;
+         ++controls_index)
+    {
+        controls_rect =
+            sandbox3d_workspace_controls_page_tab_rect(
+                controls_panel_bounds,
+                controls_index);
+        HENKA_TEST_ASSERT(
+            sandbox3d_workspace_rect_contains_rect(
+                controls_panel_bounds,
+                controls_rect));
+    }
+    for (controls_index = 0U;
+         controls_index <
+            SANDBOX3D_WORKSPACE_CONTROLS_QA_ACTION_COUNT;
+         ++controls_index)
+    {
+        controls_rect =
+            sandbox3d_workspace_controls_qa_action_rect(
+                controls_panel_bounds,
+                controls_index);
+        HENKA_TEST_ASSERT(
+            sandbox3d_workspace_rect_contains_rect(
+                controls_panel_bounds,
+                controls_rect));
+    }
+    HENKA_TEST_ASSERT(
+        !sandbox3d_workspace_rect_contains_rect(
+            controls_panel_bounds,
+            (henka_ui_rect){30.0f, 196.0f, 292.0f, 28.0f}));
+
     HENKA_TEST_ASSERT(sandbox3d_workspace_get_named_layout(&model) == SANDBOX3D_WORKSPACE_LAYOUT_DEFAULT);
     HENKA_TEST_ASSERT(!sandbox3d_workspace_has_custom_layout(&model));
     HENKA_TEST_ASSERT(sandbox3d_workspace_get_closed_section_count(&model) == 0U);

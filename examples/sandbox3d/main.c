@@ -338,6 +338,7 @@ typedef struct sandbox3d_state
     sandbox3d_workspace_layout frame_layout;
     henka_ui_rect scene_view_header_controls;
     bool viewport_shading_bounds_reported;
+    bool controls_qa_tab_bounds_reported;
     bool native_panel_test_bounds_reported;
     bool grid_control_bounds_reported;
     henka_gizmo_model gizmo_model;
@@ -3196,11 +3197,11 @@ static void sandbox3d_print_help(const sandbox3d_state* state)
     printf("  Workspace context menus support Up / Down to select, Enter to activate, and Escape to cancel; section choosers support the same keyboard path.\n");
     printf("  Tab / Shift+Tab cycles keyboard focus across visible workspace panels; the focused header gets a visible accent.\n");
     printf("  Ctrl+M maximizes the focused or hovered workspace section; press it again to restore the section.\n");
-    printf("  Open Native Panel Test from Controls to validate a separate OS-level tool window.\n");
+    printf("  Open Native Panel Test from the Controls QA page to validate a separate OS-level tool window.\n");
     printf("  Use the panels to inspect named scene objects, clear selection, switch gizmo modes, focus the camera, reset object transforms, toggle visibility, and open in-window Help, Scene Legend, Object Info, Paths, Settings, Diagnostics, Transform QA, and Physics QA utilities.\n");
     printf("  Select glTF Marker to edit its shared material instance in Object Details; scalar/vector, flags, alpha, and semantic texture overrides apply transactionally.\n");
     printf("  Physics QA enables an opt-in fixed-step rigid-body demo with collider/contact debug drawing, impulses, body modes, and camera raycasts.\n");
-    printf("  The Controls panel uses readable pages, and Scene Objects supports paging when the dock is tighter than the full list.\n");
+    printf("  The Controls panel uses Main, Camera/Status, and QA pages, and Scene Objects supports paging when the dock is tighter than the full list.\n");
     printf("  Controls also provides Default, Modeling, Materials, Scene Assembly, Debugging, and Minimal Viewport workspace presets; topology edits mark the workspace Custom.\n");
     printf("  Save Custom and Restore Custom persist the primary named layout; Studio and Assembly slots provide two additional bounded local snapshots.\n");
     printf("  With panels visible, Ctrl+Z undoes and Ctrl+Y or Ctrl+Shift+Z redoes the bounded workspace layout history.\n");
@@ -9287,15 +9288,8 @@ static void sandbox3d_draw_controls_panel(
         return;
     }
 
-    controls_page = state->paging.controls_page;
-    if (controls_page < 0)
-    {
-        controls_page = 0;
-    }
-    if (controls_page > 1)
-    {
-        controls_page = 1;
-    }
+    controls_page = sandbox3d_workspace_clamp_controls_page(
+        state->paging.controls_page);
     state->paging.controls_page = controls_page;
     x_left = panel_bounds.x + 14.0f;
     half_button_width = (panel_bounds.width - 38.0f) * 0.5f;
@@ -9317,16 +9311,63 @@ static void sandbox3d_draw_controls_panel(
         sandbox3d_workspace_panel_name(sandbox3d_workspace_display_tab_for_panel(
             state, SANDBOX3D_WORKSPACE_PANEL_CONTROLS)));
     sandbox3d_draw_panel_workspace_controls(engine, state, layout, SANDBOX3D_WORKSPACE_PANEL_CONTROLS);
-    if (henka_ui_tab(state->ui, "controls_page_main", (henka_ui_rect){x_left, panel_bounds.y + 38.0f, half_button_width, 24.0f}, "Main", controls_page == 0))
     {
-        state->paging.controls_page = 0;
-    }
-    if (henka_ui_tab(state->ui, "controls_page_tools", (henka_ui_rect){x_middle, panel_bounds.y + 38.0f, half_button_width, 24.0f}, "Camera/Status", controls_page == 1))
-    {
-        state->paging.controls_page = 1;
+        const henka_ui_rect main_page_bounds =
+            sandbox3d_workspace_controls_page_tab_rect(
+                panel_bounds,
+                SANDBOX3D_CONTROLS_PAGE_MAIN);
+        const henka_ui_rect camera_page_bounds =
+            sandbox3d_workspace_controls_page_tab_rect(
+                panel_bounds,
+                SANDBOX3D_CONTROLS_PAGE_CAMERA_STATUS);
+        const henka_ui_rect qa_page_bounds =
+            sandbox3d_workspace_controls_page_tab_rect(
+                panel_bounds,
+                SANDBOX3D_CONTROLS_PAGE_QA);
+
+        if (!state->controls_qa_tab_bounds_reported)
+        {
+            printf(
+                "Controls QA tab: x=%.1f y=%.1f width=%.1f height=%.1f\n",
+                qa_page_bounds.x,
+                qa_page_bounds.y,
+                qa_page_bounds.width,
+                qa_page_bounds.height);
+            fflush(stdout);
+            state->controls_qa_tab_bounds_reported = true;
+        }
+
+        if (henka_ui_tab(
+                state->ui,
+                "controls_page_main",
+                main_page_bounds,
+                "Main",
+                controls_page == SANDBOX3D_CONTROLS_PAGE_MAIN))
+        {
+            state->paging.controls_page = SANDBOX3D_CONTROLS_PAGE_MAIN;
+        }
+        if (henka_ui_tab(
+                state->ui,
+                "controls_page_tools",
+                camera_page_bounds,
+                "Camera/Status",
+                controls_page == SANDBOX3D_CONTROLS_PAGE_CAMERA_STATUS))
+        {
+            state->paging.controls_page =
+                SANDBOX3D_CONTROLS_PAGE_CAMERA_STATUS;
+        }
+        if (henka_ui_tab(
+                state->ui,
+                "controls_page_qa",
+                qa_page_bounds,
+                "QA",
+                controls_page == SANDBOX3D_CONTROLS_PAGE_QA))
+        {
+            state->paging.controls_page = SANDBOX3D_CONTROLS_PAGE_QA;
+        }
     }
 
-    if (controls_page == 0)
+    if (controls_page == SANDBOX3D_CONTROLS_PAGE_MAIN)
     {
         y = panel_bounds.y + 74.0f;
         sandbox3d_draw_section_heading(state->ui, x_left, y, "Workspace");
@@ -9591,56 +9632,9 @@ static void sandbox3d_draw_controls_panel(
                 "Reflection probe editor volumes %s.",
                 state->diagnostics.show_reflection_probes ? "shown" : "hidden");
         }
-        y += 36.0f;
-        if (henka_ui_primary_button(state->ui, "quick_diagnostics", (henka_ui_rect){x_left, y, third_button_width, 28.0f}, "Diagnostics"))
-        {
-            sandbox3d_set_active_utility(state, SANDBOX3D_UTILITY_DIAGNOSTICS);
-            sandbox3d_set_statusf(state, false, false, "Diagnostics are open in the Utility panel.");
-        }
-        if (henka_ui_primary_button(state->ui, "quick_transform_qa", (henka_ui_rect){x_left + third_button_width + 4.0f, y, third_button_width, 28.0f}, "Transform QA"))
-        {
-            sandbox3d_set_active_utility(state, SANDBOX3D_UTILITY_TRANSFORM_QA);
-            sandbox3d_set_statusf(state, false, false, "Transform QA is open in the Utility panel.");
-        }
-        if (henka_ui_primary_button(state->ui, "quick_physics_qa", (henka_ui_rect){x_right, y, third_button_width, 28.0f}, "Physics QA"))
-        {
-            sandbox3d_set_active_utility(state, SANDBOX3D_UTILITY_PHYSICS_QA);
-            sandbox3d_set_statusf(state, false, false, "Physics QA is open in the Utility panel.");
-        }
-        y += 36.0f;
-        {
-            const henka_ui_rect native_panel_test_bounds =
-                (henka_ui_rect){
-                    x_left,
-                    y,
-                    panel_bounds.width - 28.0f,
-                    28.0f};
 
-            if (!state->native_panel_test_bounds_reported)
-            {
-                printf(
-                    "Native Panel Test control: x=%.1f y=%.1f width=%.1f height=%.1f\n",
-                    native_panel_test_bounds.x,
-                    native_panel_test_bounds.y,
-                    native_panel_test_bounds.width,
-                    native_panel_test_bounds.height);
-                fflush(stdout);
-                state->native_panel_test_bounds_reported = true;
-            }
-
-            if (henka_ui_primary_button(
-                    state->ui,
-                    "native_panel_test",
-                    native_panel_test_bounds,
-                    "Open Native Panel Test"))
-            {
-                sandbox3d_open_native_panel_test(
-                    engine,
-                    state);
-            }
-        }
     }
-    else
+    else if (controls_page == SANDBOX3D_CONTROLS_PAGE_CAMERA_STATUS)
     {
         y = panel_bounds.y + 74.0f;
         sandbox3d_draw_section_heading(state->ui, x_left, y, "Camera Preset");
@@ -9812,6 +9806,110 @@ static void sandbox3d_draw_controls_panel(
             fflush(stdout);
         }
     }
+    else
+    {
+        const henka_ui_rect diagnostics_bounds =
+            sandbox3d_workspace_controls_qa_action_rect(
+                panel_bounds,
+                0U);
+        const henka_ui_rect transform_qa_bounds =
+            sandbox3d_workspace_controls_qa_action_rect(
+                panel_bounds,
+                1U);
+        const henka_ui_rect physics_qa_bounds =
+            sandbox3d_workspace_controls_qa_action_rect(
+                panel_bounds,
+                2U);
+        const henka_ui_rect native_panel_test_bounds =
+            sandbox3d_workspace_controls_qa_action_rect(
+                panel_bounds,
+                3U);
+
+        y = panel_bounds.y + 74.0f;
+        sandbox3d_draw_section_heading(
+            state->ui,
+            x_left,
+            y,
+            "Quality Assurance");
+
+        if (henka_ui_primary_button(
+                state->ui,
+                "quick_diagnostics",
+                diagnostics_bounds,
+                "Diagnostics"))
+        {
+            sandbox3d_set_active_utility(
+                state,
+                SANDBOX3D_UTILITY_DIAGNOSTICS);
+            sandbox3d_set_statusf(
+                state,
+                false,
+                false,
+                "Diagnostics are open in the Utility panel.");
+        }
+        if (henka_ui_primary_button(
+                state->ui,
+                "quick_transform_qa",
+                transform_qa_bounds,
+                "Transform QA"))
+        {
+            sandbox3d_set_active_utility(
+                state,
+                SANDBOX3D_UTILITY_TRANSFORM_QA);
+            sandbox3d_set_statusf(
+                state,
+                false,
+                false,
+                "Transform QA is open in the Utility panel.");
+        }
+        if (henka_ui_primary_button(
+                state->ui,
+                "quick_physics_qa",
+                physics_qa_bounds,
+                "Physics QA"))
+        {
+            sandbox3d_set_active_utility(
+                state,
+                SANDBOX3D_UTILITY_PHYSICS_QA);
+            sandbox3d_set_statusf(
+                state,
+                false,
+                false,
+                "Physics QA is open in the Utility panel.");
+        }
+
+        if (!state->native_panel_test_bounds_reported)
+        {
+            printf(
+                "Native Panel Test control: x=%.1f y=%.1f width=%.1f height=%.1f\n",
+                native_panel_test_bounds.x,
+                native_panel_test_bounds.y,
+                native_panel_test_bounds.width,
+                native_panel_test_bounds.height);
+            fflush(stdout);
+            state->native_panel_test_bounds_reported = true;
+        }
+
+        if (henka_ui_primary_button(
+                state->ui,
+                "native_panel_test",
+                native_panel_test_bounds,
+                "Open Native Panel Test"))
+        {
+            sandbox3d_open_native_panel_test(
+                engine,
+                state);
+        }
+
+        henka_ui_label_colored(
+            state->ui,
+            x_left,
+            native_panel_test_bounds.y +
+                native_panel_test_bounds.height +
+                14.0f,
+            1.0f,
+            "Native-window and editor validation tools.",
+            HENKA_UI_COLOR_MUTED);    }
 }
 
 static void sandbox3d_draw_scene_objects_panel(

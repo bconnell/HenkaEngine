@@ -38,6 +38,16 @@ typedef enum sandbox3d_workspace_dock_zone
 #define SANDBOX3D_WORKSPACE_CUSTOM_LAYOUT_NAME_MAX 32U
 #define SANDBOX3D_WORKSPACE_LAYOUT_HISTORY_MAX 8U
 #define SANDBOX3D_WORKSPACE_CUSTOM_LAYOUT_SLOT_COUNT 3U
+#define SANDBOX3D_WORKSPACE_CONTROLS_PAGE_COUNT 3U
+#define SANDBOX3D_WORKSPACE_CONTROLS_QA_ACTION_COUNT 4U
+
+typedef enum sandbox3d_controls_page
+{
+    SANDBOX3D_CONTROLS_PAGE_MAIN = 0,
+    SANDBOX3D_CONTROLS_PAGE_CAMERA_STATUS,
+    SANDBOX3D_CONTROLS_PAGE_QA,
+    SANDBOX3D_CONTROLS_PAGE_COUNT
+} sandbox3d_controls_page;
 
 typedef enum sandbox3d_workspace_split_orientation
 {
@@ -509,6 +519,16 @@ sandbox3d_workspace_dock_zone sandbox3d_workspace_evaluate_dock_zone(
     henka_ui_rect scene_frame,
     henka_ui_rect right_dock,
     float dock_margin);
+int sandbox3d_workspace_clamp_controls_page(int page);
+henka_ui_rect sandbox3d_workspace_controls_page_tab_rect(
+    henka_ui_rect panel_bounds,
+    size_t page_index);
+henka_ui_rect sandbox3d_workspace_controls_qa_action_rect(
+    henka_ui_rect panel_bounds,
+    size_t action_index);
+bool sandbox3d_workspace_rect_contains_rect(
+    henka_ui_rect outer,
+    henka_ui_rect inner);
 const char* sandbox3d_workspace_panel_name(sandbox3d_workspace_panel_id panel_id);
 const char* sandbox3d_workspace_dock_name(sandbox3d_workspace_dock_zone dock_zone);
 

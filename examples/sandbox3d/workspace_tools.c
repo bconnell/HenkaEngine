@@ -9,6 +9,91 @@ static henka_ui_rect sandbox3d_workspace_topology_divider_hit_rect_scaled(
     sandbox3d_workspace_split_orientation orientation,
     float ui_scale);
 
+int sandbox3d_workspace_clamp_controls_page(int page)
+{
+    if (page < SANDBOX3D_CONTROLS_PAGE_MAIN)
+    {
+        return SANDBOX3D_CONTROLS_PAGE_MAIN;
+    }
+    if (page >= SANDBOX3D_CONTROLS_PAGE_COUNT)
+    {
+        return SANDBOX3D_CONTROLS_PAGE_QA;
+    }
+    return page;
+}
+
+henka_ui_rect sandbox3d_workspace_controls_page_tab_rect(
+    henka_ui_rect panel_bounds,
+    size_t page_index)
+{
+    henka_ui_rect rect = {0};
+    const float width = (panel_bounds.width - 36.0f) / 3.0f;
+
+    if (page_index >= SANDBOX3D_WORKSPACE_CONTROLS_PAGE_COUNT ||
+        panel_bounds.width <= 36.0f ||
+        panel_bounds.height <= 62.0f ||
+        width <= 0.0f)
+    {
+        return rect;
+    }
+
+    rect.x = panel_bounds.x + 14.0f +
+        (width + 4.0f) * (float)page_index;
+    rect.y = panel_bounds.y + 38.0f;
+    rect.width = width;
+    rect.height = 24.0f;
+    return rect;
+}
+
+henka_ui_rect sandbox3d_workspace_controls_qa_action_rect(
+    henka_ui_rect panel_bounds,
+    size_t action_index)
+{
+    henka_ui_rect rect = {0};
+    const float x_left = panel_bounds.x + 14.0f;
+    const float width = (panel_bounds.width - 36.0f) / 3.0f;
+
+    if (action_index >= SANDBOX3D_WORKSPACE_CONTROLS_QA_ACTION_COUNT ||
+        panel_bounds.width <= 36.0f ||
+        panel_bounds.height <= 158.0f ||
+        width <= 0.0f)
+    {
+        return rect;
+    }
+
+    rect.y = panel_bounds.y + 94.0f;
+    rect.height = 28.0f;
+
+    if (action_index < 3U)
+    {
+        rect.x = x_left +
+            (width + 4.0f) * (float)action_index;
+        rect.width = width;
+    }
+    else
+    {
+        rect.x = x_left;
+        rect.y += 36.0f;
+        rect.width = panel_bounds.width - 28.0f;
+    }
+
+    return rect;
+}
+
+bool sandbox3d_workspace_rect_contains_rect(
+    henka_ui_rect outer,
+    henka_ui_rect inner)
+{
+    return outer.width > 0.0f &&
+        outer.height > 0.0f &&
+        inner.width > 0.0f &&
+        inner.height > 0.0f &&
+        inner.x >= outer.x &&
+        inner.y >= outer.y &&
+        inner.x + inner.width <= outer.x + outer.width &&
+        inner.y + inner.height <= outer.y + outer.height;
+}
+
 static sandbox3d_workspace_panel_id* sandbox3d_workspace_get_dock_list(
     sandbox3d_workspace_model* model,
     sandbox3d_workspace_dock_zone dock_zone,

@@ -221,6 +221,43 @@ function Get-LastLogRegexMatch {
 
     return $null
 }
+function Assert-FramebufferRect {
+    param(
+        [Parameter(Mandatory = $true)][string]$Name,
+        [Parameter(Mandatory = $true)][int]$FramebufferWidth,
+        [Parameter(Mandatory = $true)][int]$FramebufferHeight,
+        [Parameter(Mandatory = $true)][double]$X,
+        [Parameter(Mandatory = $true)][double]$Y,
+        [Parameter(Mandatory = $true)][double]$Width,
+        [Parameter(Mandatory = $true)][double]$Height
+    )
+
+    foreach ($value in @($X, $Y, $Width, $Height)) {
+        if ([double]::IsNaN($value) -or
+            [double]::IsInfinity($value)) {
+            throw "$Name reported a non-finite framebuffer rectangle."
+        }
+    }
+
+    if ($FramebufferWidth -le 0 -or $FramebufferHeight -le 0) {
+        throw "Framebuffer dimensions must be positive for geometry validation."
+    }
+    if ($Width -le 0.0 -or $Height -le 0.0) {
+        throw "$Name reported a non-positive framebuffer rectangle."
+    }
+    if ($X -lt 0.0 -or
+        $Y -lt 0.0 -or
+        $X + $Width -gt [double]$FramebufferWidth -or
+        $Y + $Height -gt [double]$FramebufferHeight) {
+        throw (
+            "$Name is outside the reported framebuffer: " +
+            "rect=($X,$Y,$Width,$Height), " +
+            "framebuffer=$($FramebufferWidth)x$($FramebufferHeight).")
+    }
+
+    Write-Output "[pass] $Name is inside the reported framebuffer"
+}
+
 function Click-FramebufferPoint {
     param(
         [Parameter(Mandatory = $true)][System.IntPtr]$Handle,
@@ -418,7 +455,7 @@ Assert-FileContains -Path $readmePath -Pattern "Locked objects remain selectable
 Assert-FileContains -Path $readmePath -Pattern "Ground starts locked and requires an explicit Unlock Transform action before it can move" -Description "Packaged ground lock guidance"
 Assert-FileContains -Path $readmePath -Pattern "Clearing selection also clears active transform-session ownership" -Description "Packaged transform-session ownership guidance"
 Assert-FileContains -Path $readmePath -Pattern "release away from the outlines to open a separate native tool window" -Description "Packaged workspace guidance"
-Assert-FileContains -Path $readmePath -Pattern "Open Native Panel Test from Controls to exercise a separate OS-level validation window" -Description "Packaged native test panel guidance"
+Assert-FileContains -Path $readmePath -Pattern "Open Native Panel Test from the Controls QA page to exercise a separate OS-level validation window" -Description "Packaged native test panel guidance"
 Assert-FileContains -Path $readmePath -Pattern "Close a detached tool window to return its panel to the last valid dock" -Description "Packaged workspace limitation guidance"
 Assert-FileContains -Path $readmePath -Pattern "Use M or G, R, and S for action-based transforms" -Description "Packaged transform hotkey guidance"
 Assert-FileContains -Path $readmePath -Pattern "status area" -Description "Packaged status guidance"
@@ -527,7 +564,7 @@ try {
         foreach ($requiredPattern in @(
             "Sandbox UI ready:",
             "Grid control:",
-            "Native Panel Test control:",
+            "Controls QA tab:",
             "Viewport shading controls:")) {
             if (-not (Wait-FileContains `
                     -Path $stdoutPath `
@@ -543,16 +580,16 @@ try {
         $gridMatch = Get-LastLogRegexMatch `
             -Path $stdoutPath `
             -Pattern 'Grid control: x=([-0-9.]+) y=([-0-9.]+) width=([-0-9.]+) height=([-0-9.]+)'
-        $nativeMatch = Get-LastLogRegexMatch `
+        $qaTabMatch = Get-LastLogRegexMatch `
             -Path $stdoutPath `
-            -Pattern 'Native Panel Test control: x=([-0-9.]+) y=([-0-9.]+) width=([-0-9.]+) height=([-0-9.]+)'
+            -Pattern 'Controls QA tab: x=([-0-9.]+) y=([-0-9.]+) width=([-0-9.]+) height=([-0-9.]+)'
         $shadingMatch = Get-LastLogRegexMatch `
             -Path $stdoutPath `
             -Pattern 'Viewport shading controls: x=([-0-9.]+) y=([-0-9.]+) button=([-0-9.]+) gap=([-0-9.]+)'
 
         if ($null -eq $framebufferMatch -or
             $null -eq $gridMatch -or
-            $null -eq $nativeMatch -or
+            $null -eq $qaTabMatch -or
             $null -eq $shadingMatch) {
             throw "Packaged UI automation geometry could not be parsed."
         }
@@ -571,6 +608,52 @@ try {
         $gridHeight =
             [double]$gridMatch.Groups[4].Value
 
+        $qaTabX =
+            [double]$qaTabMatch.Groups[1].Value
+        $qaTabY =
+            [double]$qaTabMatch.Groups[2].Value
+        $qaTabWidth =
+            [double]$qaTabMatch.Groups[3].Value
+        $qaTabHeight =
+            [double]$qaTabMatch.Groups[4].Value
+
+        $shadingX =
+            [double]$shadingMatch.Groups[1].Value
+        $shadingY =
+            [double]$shadingMatch.Groups[2].Value
+        $shadingButtonWidth =
+            [double]$shadingMatch.Groups[3].Value
+        $shadingGap =
+            [double]$shadingMatch.Groups[4].Value
+        $shadingGroupWidth =
+            $shadingButtonWidth * 4.0 +
+            $shadingGap * 3.0
+
+        Assert-FramebufferRect `
+            -Name "Grid control" `
+            -FramebufferWidth $framebufferWidth `
+            -FramebufferHeight $framebufferHeight `
+            -X $gridX `
+            -Y $gridY `
+            -Width $gridWidth `
+            -Height $gridHeight
+        Assert-FramebufferRect `
+            -Name "Controls QA tab" `
+            -FramebufferWidth $framebufferWidth `
+            -FramebufferHeight $framebufferHeight `
+            -X $qaTabX `
+            -Y $qaTabY `
+            -Width $qaTabWidth `
+            -Height $qaTabHeight
+        Assert-FramebufferRect `
+            -Name "Viewport shading controls" `
+            -FramebufferWidth $framebufferWidth `
+            -FramebufferHeight $framebufferHeight `
+            -X $shadingX `
+            -Y $shadingY `
+            -Width $shadingGroupWidth `
+            -Height 22.0
+
         Click-FramebufferPoint `
             -Handle $mainWindowHandle `
             -FramebufferWidth $framebufferWidth `
@@ -583,6 +666,29 @@ try {
             -FramebufferHeight $framebufferHeight `
             -FramebufferX ($gridX + $gridWidth * 0.5) `
             -FramebufferY ($gridY + $gridHeight * 0.5)
+
+        Click-FramebufferPoint `
+            -Handle $mainWindowHandle `
+            -FramebufferWidth $framebufferWidth `
+            -FramebufferHeight $framebufferHeight `
+            -FramebufferX ($qaTabX + $qaTabWidth * 0.5) `
+            -FramebufferY ($qaTabY + $qaTabHeight * 0.5)
+
+        if (-not (Wait-FileContains `
+                -Path $stdoutPath `
+                -Pattern "Native Panel Test control:" `
+                -TimeoutMilliseconds 4000)) {
+            throw (
+                "The Controls QA page did not report the Native Panel Test " +
+                "control after the QA tab was activated.")
+        }
+
+        $nativeMatch = Get-LastLogRegexMatch `
+            -Path $stdoutPath `
+            -Pattern 'Native Panel Test control: x=([-0-9.]+) y=([-0-9.]+) width=([-0-9.]+) height=([-0-9.]+)'
+        if ($null -eq $nativeMatch) {
+            throw "The Native Panel Test control geometry could not be parsed."
+        }
 
         $nativeX =
             [double]$nativeMatch.Groups[1].Value
@@ -593,6 +699,14 @@ try {
         $nativeHeight =
             [double]$nativeMatch.Groups[4].Value
 
+        Assert-FramebufferRect `
+            -Name "Native Panel Test control" `
+            -FramebufferWidth $framebufferWidth `
+            -FramebufferHeight $framebufferHeight `
+            -X $nativeX `
+            -Y $nativeY `
+            -Width $nativeWidth `
+            -Height $nativeHeight
         $nativeOpened = $false
         for ($attempt = 0;
              $attempt -lt 3 -and -not $nativeOpened;
