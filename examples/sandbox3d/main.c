@@ -4598,15 +4598,34 @@ static bool sandbox3d_load_workspace_topology_settings(
             node->data.section.section_id = (sandbox3d_workspace_panel_id)section_id;
             node->data.section.tab_count = (uint8_t)tab_count;
             node->data.section.active_tab = (uint8_t)active_tab;
-            for (tab_index = 0U; tab_index < SANDBOX3D_WORKSPACE_TOPOLOGY_MAX_TABS; ++tab_index)
+            for (tab_index = 0U;
+                 tab_index < SANDBOX3D_WORKSPACE_TOPOLOGY_MAX_TABS;
+                 ++tab_index)
             {
-                snprintf(key, sizeof(key), "ui.workspace.topology.node.%zu.tab.%zu", index, tab_index);
-                value = henka_settings_get_int(settings, key, (int)node->data.section.tabs[tab_index]);
-                if (value < 0 || value >= SANDBOX3D_WORKSPACE_PANEL_COUNT)
+                if (tab_index >= (size_t)tab_count)
+                {
+                    node->data.section.tabs[tab_index] =
+                        SANDBOX3D_WORKSPACE_PANEL_NONE;
+                    continue;
+                }
+
+                snprintf(
+                    key,
+                    sizeof(key),
+                    "ui.workspace.topology.node.%zu.tab.%zu",
+                    index,
+                    tab_index);
+                value = henka_settings_get_int(
+                    settings,
+                    key,
+                    (int)node->data.section.tabs[tab_index]);
+                if (value < 0 ||
+                    value >= SANDBOX3D_WORKSPACE_PANEL_COUNT)
                 {
                     return false;
                 }
-                node->data.section.tabs[tab_index] = (sandbox3d_workspace_panel_id)value;
+                node->data.section.tabs[tab_index] =
+                    (sandbox3d_workspace_panel_id)value;
             }
         }
     }
@@ -4857,12 +4876,34 @@ static bool sandbox3d_load_custom_workspace_layout_settings(
             value = henka_settings_get_int(settings, key, (int)node->data.section.active_tab);
             if (value < 0 || value >= (int)node->data.section.tab_count) return false;
             node->data.section.active_tab = (uint8_t)value;
-            for (tab_index = 0U; tab_index < SANDBOX3D_WORKSPACE_TOPOLOGY_MAX_TABS; ++tab_index)
+            for (tab_index = 0U;
+                 tab_index < SANDBOX3D_WORKSPACE_TOPOLOGY_MAX_TABS;
+                 ++tab_index)
             {
-                snprintf(key, sizeof(key), "ui.workspace.custom_layout.node.%zu.tab.%zu", index, tab_index);
-                value = henka_settings_get_int(settings, key, (int)node->data.section.tabs[tab_index]);
-                if (value < 0 || value >= SANDBOX3D_WORKSPACE_PANEL_COUNT) return false;
-                node->data.section.tabs[tab_index] = (sandbox3d_workspace_panel_id)value;
+                if (tab_index >= (size_t)node->data.section.tab_count)
+                {
+                    node->data.section.tabs[tab_index] =
+                        SANDBOX3D_WORKSPACE_PANEL_NONE;
+                    continue;
+                }
+
+                snprintf(
+                    key,
+                    sizeof(key),
+                    "ui.workspace.custom_layout.node.%zu.tab.%zu",
+                    index,
+                    tab_index);
+                value = henka_settings_get_int(
+                    settings,
+                    key,
+                    (int)node->data.section.tabs[tab_index]);
+                if (value < 0 ||
+                    value >= SANDBOX3D_WORKSPACE_PANEL_COUNT)
+                {
+                    return false;
+                }
+                node->data.section.tabs[tab_index] =
+                    (sandbox3d_workspace_panel_id)value;
             }
         }
     }
@@ -5115,12 +5156,37 @@ static bool sandbox3d_load_custom_workspace_layout_slots_settings(
                 value = henka_settings_get_int(settings, key, 0);
                 if (value < 0 || value >= (int)node->data.section.tab_count) { name_valid = false; break; }
                 node->data.section.active_tab = (uint8_t)value;
-                for (tab_index = 0U; tab_index < SANDBOX3D_WORKSPACE_TOPOLOGY_MAX_TABS; ++tab_index)
+                for (tab_index = 0U;
+                     tab_index < SANDBOX3D_WORKSPACE_TOPOLOGY_MAX_TABS;
+                     ++tab_index)
                 {
-                    snprintf(key, sizeof(key), "%s.node.%zu.tab.%zu", prefix, node_index, tab_index);
-                    value = henka_settings_get_int(settings, key, SANDBOX3D_WORKSPACE_PANEL_NONE);
-                    if (value < 0 || value >= SANDBOX3D_WORKSPACE_PANEL_COUNT) { name_valid = false; break; }
-                    node->data.section.tabs[tab_index] = (sandbox3d_workspace_panel_id)value;
+                    if (tab_index >=
+                        (size_t)node->data.section.tab_count)
+                    {
+                        node->data.section.tabs[tab_index] =
+                            SANDBOX3D_WORKSPACE_PANEL_NONE;
+                        continue;
+                    }
+
+                    snprintf(
+                        key,
+                        sizeof(key),
+                        "%s.node.%zu.tab.%zu",
+                        prefix,
+                        node_index,
+                        tab_index);
+                    value = henka_settings_get_int(
+                        settings,
+                        key,
+                        SANDBOX3D_WORKSPACE_PANEL_NONE);
+                    if (value < 0 ||
+                        value >= SANDBOX3D_WORKSPACE_PANEL_COUNT)
+                    {
+                        name_valid = false;
+                        break;
+                    }
+                    node->data.section.tabs[tab_index] =
+                        (sandbox3d_workspace_panel_id)value;
                 }
                 if (!name_valid) { break; }
             }
