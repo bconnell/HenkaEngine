@@ -639,6 +639,7 @@ try {
         foreach ($requiredPattern in @(
             "Sandbox UI ready:",
             "Workspace UI geometry:",
+            "Workspace header chrome:",
             "Grid control:",
             "Controls QA tab:",
             "Viewport shading controls:")) {
@@ -793,6 +794,20 @@ try {
                 "Hidden topology sections still reserve visual space.")
         }
         Write-Output "[pass] Hidden workspace sections do not leave empty dock voids"
+
+        $headerChromeMatch = Get-LastLogRegexMatch `
+            -Path $stdoutPath `
+            -Pattern 'Workspace header chrome: controls=([a-z]+) utility=([a-z]+)\.'
+        if ($null -eq $headerChromeMatch) {
+            throw "Workspace header chrome state could not be parsed."
+        }
+        if ($headerChromeMatch.Groups[1].Value -ne "compact" -or
+            $headerChromeMatch.Groups[2].Value -ne "compact") {
+            throw (
+                "Single-tab Controls and Utility sections still render " +
+                "redundant tab controls.")
+        }
+        Write-Output "[pass] Single-tab workspace headers use compact chrome"
 
         Assert-FramebufferRect `
             -Name "Grid control" `

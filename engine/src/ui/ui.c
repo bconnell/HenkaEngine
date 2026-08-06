@@ -721,7 +721,8 @@ static bool henka_ui_button_internal(
     henka_vec4 idle_fill,
     henka_vec4 hover_fill,
     henka_vec4 active_fill,
-    henka_vec4 border_color)
+    henka_vec4 accent_color,
+    bool emphasized)
 {
     bool active;
     bool clicked;
@@ -754,18 +755,44 @@ static bool henka_ui_button_internal(
         context,
         bounds,
         active ? active_fill : (hot ? hover_fill : idle_fill));
-    if (result != HENKA_SUCCESS)
+    if (result == HENKA_SUCCESS)
     {
-        henka_ui_restore_checkpoint(context, &checkpoint);
-        return false;
+        if (emphasized)
+        {
+            result = henka_ui_push_border(
+                context,
+                bounds,
+                1.0f,
+                accent_color);
+        }
+        else
+        {
+            result = henka_ui_push_rect(
+                context,
+                (henka_ui_rect){
+                    bounds.x,
+                    bounds.y + bounds.height - 1.0f,
+                    bounds.width,
+                    1.0f},
+                g_ui_panel_separator);
+        }
     }
-
-    result = henka_ui_push_border(context, bounds, 1.0f, border_color);
+    if (result == HENKA_SUCCESS && !emphasized && (hot || active))
+    {
+        result = henka_ui_push_rect(
+            context,
+            (henka_ui_rect){
+                bounds.x,
+                bounds.y + 2.0f,
+                2.0f,
+                bounds.height - 4.0f},
+            accent_color);
+    }
     if (result != HENKA_SUCCESS ||
         henka_ui_draw_fit_text(
             context,
             bounds,
-            10.0f,
+            emphasized ? 11.0f : 10.0f,
             bounds.y + 9.0f,
             1.0f,
             label,
@@ -1345,7 +1372,8 @@ bool henka_ui_button(henka_ui_context* context, const char* id, henka_ui_rect bo
         g_ui_button_fill,
         g_ui_button_hover,
         g_ui_button_active,
-        g_ui_panel_border);
+        g_ui_heading_color,
+        false);
 }
 
 bool henka_ui_primary_button(henka_ui_context* context, const char* id, henka_ui_rect bounds, const char* label)
@@ -1358,7 +1386,8 @@ bool henka_ui_primary_button(henka_ui_context* context, const char* id, henka_ui
         g_ui_primary_fill,
         g_ui_primary_hover,
         g_ui_primary_active,
-        g_ui_heading_color);
+        g_ui_heading_color,
+        true);
 }
 
 bool henka_ui_selectable(
@@ -1398,21 +1427,28 @@ bool henka_ui_selectable(
 
     fill_color = active ? g_ui_button_active :
         (selected ? (hot ? g_ui_selected_hover : g_ui_selected_fill) :
-            (hot ? g_ui_button_hover : g_ui_button_fill));
+            (hot ? g_ui_button_hover : g_ui_row_fill));
     result = henka_ui_push_rect(context, bounds, fill_color);
     if (result == HENKA_SUCCESS)
     {
-        result = henka_ui_push_border(
+        result = henka_ui_push_rect(
             context,
-            bounds,
-            1.0f,
-            selected ? g_ui_heading_color : g_ui_panel_border);
+            (henka_ui_rect){
+                bounds.x,
+                bounds.y + bounds.height - 1.0f,
+                bounds.width,
+                1.0f},
+            g_ui_panel_separator);
     }
     if (result == HENKA_SUCCESS && selected)
     {
         result = henka_ui_push_rect(
             context,
-            (henka_ui_rect){bounds.x + 2.0f, bounds.y + 2.0f, 3.0f, bounds.height - 4.0f},
+            (henka_ui_rect){
+                bounds.x,
+                bounds.y + 2.0f,
+                3.0f,
+                bounds.height - 4.0f},
             g_ui_heading_color);
     }
     if (result == HENKA_SUCCESS)
@@ -1420,11 +1456,11 @@ bool henka_ui_selectable(
         result = henka_ui_draw_fit_text(
             context,
             bounds,
-            12.0f,
+            selected ? 12.0f : 10.0f,
             bounds.y + 9.0f,
             1.0f,
             label,
-            g_ui_text_color);
+            selected ? g_ui_text_color : g_ui_muted_text_color);
     }
     if (result != HENKA_SUCCESS)
     {
@@ -1480,25 +1516,28 @@ bool henka_ui_tab(
     clicked = hot && context->mouse_left_released && owns_active;
 
     fill_color = active ? g_ui_primary_active :
-        (selected ? (hot ? g_ui_primary_hover : g_ui_primary_fill) :
-            (hot ? g_ui_tab_hover : g_ui_tab_fill));
+        (selected ? g_ui_tab_active :
+            (hot ? g_ui_tab_hover : g_ui_panel_header_fill));
     result = henka_ui_push_rect(context, bounds, fill_color);
     if (result == HENKA_SUCCESS)
     {
-        result = henka_ui_push_border(
+        result = henka_ui_push_rect(
             context,
-            bounds,
-            1.0f,
-            selected ? g_ui_heading_color : g_ui_panel_border);
+            (henka_ui_rect){
+                bounds.x,
+                bounds.y + bounds.height - 1.0f,
+                bounds.width,
+                1.0f},
+            g_ui_panel_separator);
     }
     if (result == HENKA_SUCCESS && selected)
     {
         result = henka_ui_push_rect(
             context,
             (henka_ui_rect){
-                bounds.x + 2.0f,
+                bounds.x + 4.0f,
                 bounds.y + bounds.height - 3.0f,
-                bounds.width - 4.0f,
+                bounds.width - 8.0f,
                 2.0f},
             g_ui_heading_color);
     }
@@ -1547,7 +1586,8 @@ bool henka_ui_toggle(
     char label_buffer[48];
     henka_ui_draw_checkpoint checkpoint;
     henka_result result;
-    henka_ui_rect state_bounds;
+    henka_ui_rect knob_bounds;
+    henka_ui_rect track_bounds;
     size_t label_characters;
 
     if (context == NULL || id == NULL || label == NULL || value == NULL ||
@@ -1571,66 +1611,67 @@ bool henka_ui_toggle(
     result = henka_ui_push_rect(
         context,
         bounds,
-        hot ? g_ui_button_hover : g_ui_button_fill);
-    if (result == HENKA_SUCCESS)
-    {
-        result = henka_ui_push_border(context, bounds, 1.0f, g_ui_panel_border);
-    }
-
-    state_bounds = (henka_ui_rect){
-        bounds.x + bounds.width - 60.0f,
-        bounds.y + 4.0f,
-        50.0f,
-        20.0f};
+        hot ? g_ui_button_hover : g_ui_row_fill);
     if (result == HENKA_SUCCESS)
     {
         result = henka_ui_push_rect(
             context,
-            state_bounds,
-            displayed_value ? g_ui_toggle_on : g_ui_toggle_off);
+            (henka_ui_rect){
+                bounds.x,
+                bounds.y + bounds.height - 1.0f,
+                bounds.width,
+                1.0f},
+            g_ui_panel_separator);
+    }
+
+    track_bounds = (henka_ui_rect){
+        bounds.x + bounds.width - 42.0f,
+        bounds.y + (bounds.height - 16.0f) * 0.5f,
+        32.0f,
+        16.0f};
+    knob_bounds = (henka_ui_rect){
+        displayed_value
+            ? track_bounds.x + track_bounds.width - 14.0f
+            : track_bounds.x + 2.0f,
+        track_bounds.y + 2.0f,
+        12.0f,
+        12.0f};
+
+    if (result == HENKA_SUCCESS)
+    {
+        result = henka_ui_push_rect(
+            context,
+            track_bounds,
+            displayed_value ? g_ui_toggle_on : g_ui_panel_separator);
     }
     if (result == HENKA_SUCCESS)
     {
-        result = henka_ui_push_border(
+        result = henka_ui_push_rect(
             context,
-            state_bounds,
-            1.0f,
-            displayed_value ? g_ui_heading_color : g_ui_panel_border);
+            knob_bounds,
+            displayed_value ? g_ui_text_color : g_ui_muted_text_color);
     }
 
     label_characters = henka_ui_clamped_character_count(
-        bounds.width > 84.0f ? bounds.width - 84.0f : 24.0f,
+        bounds.width > 64.0f ? bounds.width - 64.0f : 24.0f,
         6.0f,
         4U,
         sizeof(label_buffer) - 1U);
-    henka_ui_copy_fit_text(label, label_buffer, sizeof(label_buffer), label_characters);
+    henka_ui_copy_fit_text(
+        label,
+        label_buffer,
+        sizeof(label_buffer),
+        label_characters);
 
     if (result == HENKA_SUCCESS)
     {
-        result = henka_ui_push_rect(
-            context,
-            (henka_ui_rect){bounds.x + 8.0f, bounds.y + 7.0f, 8.0f, bounds.height - 14.0f},
-            displayed_value ? g_ui_toggle_on : g_ui_toggle_off);
-    }
-    if (result == HENKA_SUCCESS)
-    {
         result = henka_ui_draw_text(
             context,
-            bounds.x + 24.0f,
+            bounds.x + 10.0f,
             bounds.y + 9.0f,
             1.0f,
             label_buffer,
-            g_ui_text_color);
-    }
-    if (result == HENKA_SUCCESS)
-    {
-        result = henka_ui_draw_text(
-            context,
-            state_bounds.x + (displayed_value ? 14.0f : 11.0f),
-            state_bounds.y + 6.0f,
-            1.0f,
-            displayed_value ? "ON" : "OFF",
-            g_ui_text_color);
+            displayed_value ? g_ui_text_color : g_ui_muted_text_color);
     }
     if (result != HENKA_SUCCESS)
     {
@@ -1679,18 +1720,21 @@ henka_result henka_ui_status_chip(
         warning ? g_ui_status_warning_fill : g_ui_status_fill);
     if (result == HENKA_SUCCESS)
     {
-        result = henka_ui_push_border(
+        result = henka_ui_push_rect(
             context,
-            bounds,
-            1.0f,
-            warning ? g_ui_toggle_off : g_ui_toggle_on);
+            (henka_ui_rect){
+                bounds.x,
+                bounds.y,
+                3.0f,
+                bounds.height},
+            warning ? g_ui_semantic_warning : g_ui_semantic_success);
     }
     if (result == HENKA_SUCCESS)
     {
         result = henka_ui_draw_fit_text(
             context,
             bounds,
-            8.0f,
+            9.0f,
             bounds.y + 5.0f,
             1.0f,
             label,

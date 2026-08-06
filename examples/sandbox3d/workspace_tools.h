@@ -533,6 +533,7 @@ bool sandbox3d_workspace_sanitize_floating_rect(
     const sandbox3d_workspace_panel* panel,
     henka_ui_rect candidate,
     henka_ui_rect* out_rect);
+bool sandbox3d_workspace_should_draw_section_tabs(size_t tab_count);
 const char* sandbox3d_workspace_panel_name(sandbox3d_workspace_panel_id panel_id);
 const char* sandbox3d_workspace_dock_name(sandbox3d_workspace_dock_zone dock_zone);
 

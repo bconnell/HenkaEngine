@@ -88,6 +88,19 @@ void henka_test_sandbox3d_workspace(void)
             &sanitized_floating_rect));
 
     HENKA_TEST_ASSERT(
+        !sandbox3d_workspace_should_draw_section_tabs(0U));
+    HENKA_TEST_ASSERT(
+        !sandbox3d_workspace_should_draw_section_tabs(1U));
+    HENKA_TEST_ASSERT(
+        sandbox3d_workspace_should_draw_section_tabs(2U));
+    HENKA_TEST_ASSERT(
+        sandbox3d_workspace_should_draw_section_tabs(
+            SANDBOX3D_WORKSPACE_TOPOLOGY_MAX_TABS));
+    HENKA_TEST_ASSERT(
+        !sandbox3d_workspace_should_draw_section_tabs(
+            SANDBOX3D_WORKSPACE_TOPOLOGY_MAX_TABS + 1U));
+
+    HENKA_TEST_ASSERT(
         sandbox3d_workspace_clamp_controls_page(-1) ==
         SANDBOX3D_CONTROLS_PAGE_MAIN);
     HENKA_TEST_ASSERT(

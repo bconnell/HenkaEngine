@@ -136,6 +136,12 @@ bool sandbox3d_workspace_sanitize_floating_rect(
     return true;
 }
 
+bool sandbox3d_workspace_should_draw_section_tabs(size_t tab_count)
+{
+    return tab_count > 1U &&
+        tab_count <= SANDBOX3D_WORKSPACE_TOPOLOGY_MAX_TABS;
+}
+
 static sandbox3d_workspace_panel_id* sandbox3d_workspace_get_dock_list(
     sandbox3d_workspace_model* model,
     sandbox3d_workspace_dock_zone dock_zone,
