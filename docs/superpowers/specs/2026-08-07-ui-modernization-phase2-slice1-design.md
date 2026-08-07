@@ -1,4 +1,4 @@
-# Henka Engine UI Modernization Phase 2 â€” Slice 1 Design
+# Henka Engine UI Modernization Phase 2 - Slice 1 Design
 
 Date: 2026-08-07
 Status: Approved design, implementation not started
