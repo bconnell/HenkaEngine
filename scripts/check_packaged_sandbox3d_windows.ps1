@@ -13,6 +13,87 @@ if ($ContractOnly -and -not $NonInteractive) {
 
 . (Join-Path $PSScriptRoot "henka_script_common.ps1")
 
+if (-not ("HenkaUiAutomationNative" -as [type])) {
+    Add-Type -TypeDefinition @"
+using System;
+using System.Runtime.InteropServices;
+
+public static class HenkaUiAutomationNative
+{
+    public const uint WM_MOUSEMOVE = 0x0200;
+    public const uint WM_RBUTTONDOWN = 0x0204;
+    public const uint WM_RBUTTONUP = 0x0205;
+    public const uint MK_RBUTTON = 0x0002;
+    public const int SW_RESTORE = 9;
+
+    [DllImport("user32.dll")]
+    public static extern IntPtr GetForegroundWindow();
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static extern bool SetForegroundWindow(IntPtr hWnd);
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static extern bool BringWindowToTop(IntPtr hWnd);
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static extern bool ShowWindowAsync(IntPtr hWnd, int nCmdShow);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static extern bool PostMessage(
+        IntPtr hWnd,
+        uint msg,
+        UIntPtr wParam,
+        IntPtr lParam);
+}
+"@
+}
+
+function Set-HenkaAutomationForeground {
+    param([Parameter(Mandatory = $true)][System.IntPtr]$Handle)
+
+    if ($Handle -eq [System.IntPtr]::Zero) {
+        throw "The Henka automation target handle is invalid."
+    }
+
+    [HenkaUiAutomationNative]::ShowWindowAsync(
+        $Handle,
+        [HenkaUiAutomationNative]::SW_RESTORE) | Out-Null
+    [HenkaUiAutomationNative]::BringWindowToTop($Handle) | Out-Null
+
+    $deadline = (Get-Date).AddSeconds(3)
+    do {
+        [HenkaUiAutomationNative]::SetForegroundWindow($Handle) | Out-Null
+        if ([HenkaUiAutomationNative]::GetForegroundWindow() -eq $Handle) {
+            Start-Sleep -Milliseconds 150
+            return
+        }
+        Start-Sleep -Milliseconds 100
+    } while ((Get-Date) -lt $deadline)
+
+    throw (
+        "The packaged UI harness could not acquire the Henka window as " +
+        "foreground within three seconds. This is an automation-environment " +
+        "failure; no engine UI assertion was made.")
+}
+
+function New-HenkaMouseLParam {
+    param(
+        [Parameter(Mandatory = $true)][int]$X,
+        [Parameter(Mandatory = $true)][int]$Y
+    )
+
+    if ($X -lt 0 -or $Y -lt 0 -or $X -gt 65535 -or $Y -gt 65535) {
+        throw "The Henka client mouse coordinate is outside the Win32 message range."
+    }
+
+    $packed = (($Y -band 0xFFFF) -shl 16) -bor ($X -band 0xFFFF)
+    return [System.IntPtr][int]$packed
+}
+
 function Get-PackageInfoValue {
     param(
         [string]$Path,
@@ -149,6 +230,7 @@ function Save-WindowScreenshot {
         [Parameter(Mandatory = $true)][string]$Description
     )
 
+    Set-HenkaAutomationForeground -Handle $Handle
     $rect = Get-WindowRect -Handle $Handle
     $width = $rect.Right - $rect.Left
     $height = $rect.Bottom - $rect.Top
@@ -189,8 +271,7 @@ function Click-WindowPoint {
     $x = $rect.Left + $OffsetX
     $y = $rect.Top + $OffsetY
 
-    [NativeMethods]::SetForegroundWindow($Handle) | Out-Null
-    Start-Sleep -Milliseconds 150
+    Set-HenkaAutomationForeground -Handle $Handle
     [NativeMethods]::SetCursorPos($x, $y) | Out-Null
     Start-Sleep -Milliseconds 100
     [NativeMethods]::mouse_event([NativeMethods]::MOUSEEVENTF_LEFTDOWN, 0, 0, 0, [System.UIntPtr]::Zero)
@@ -351,8 +432,7 @@ function Click-FramebufferPoint {
         throw "The packaged sandbox client point could not be converted to screen coordinates."
     }
 
-    [NativeMethods]::SetForegroundWindow($Handle) | Out-Null
-    Start-Sleep -Milliseconds 150
+    Set-HenkaAutomationForeground -Handle $Handle
     [NativeMethods]::SetCursorPos(
         $point.X,
         $point.Y) | Out-Null
@@ -385,25 +465,57 @@ function Click-FramebufferPointRight {
     if (-not [NativeMethods]::GetClientRect($Handle, [ref]$clientRect)) {
         throw "The packaged sandbox client bounds could not be read for right click."
     }
+
     $clientWidth = $clientRect.Right - $clientRect.Left
     $clientHeight = $clientRect.Bottom - $clientRect.Top
     if ($FramebufferWidth -le 0 -or $FramebufferHeight -le 0 -or
         $clientWidth -le 0 -or $clientHeight -le 0) {
         throw "Invalid framebuffer or client dimensions for right click."
     }
-    $point = New-Object NativeMethods+POINT
-    $point.X = [int][Math]::Round($FramebufferX * [double]$clientWidth / [double]$FramebufferWidth)
-    $point.Y = [int][Math]::Round($FramebufferY * [double]$clientHeight / [double]$FramebufferHeight)
-    if (-not [NativeMethods]::ClientToScreen($Handle, [ref]$point)) {
-        throw "The packaged sandbox right-click point could not be converted to screen coordinates."
+
+    $clientX = [int][Math]::Round(
+        $FramebufferX *
+        [double]$clientWidth /
+        [double]$FramebufferWidth)
+    $clientY = [int][Math]::Round(
+        $FramebufferY *
+        [double]$clientHeight /
+        [double]$FramebufferHeight)
+
+    if ($clientX -lt 0 -or $clientY -lt 0 -or
+        $clientX -ge $clientWidth -or $clientY -ge $clientHeight) {
+        throw "The packaged sandbox right-click coordinate is outside the client area."
     }
-    [NativeMethods]::SetForegroundWindow($Handle) | Out-Null
-    Start-Sleep -Milliseconds 150
-    [NativeMethods]::SetCursorPos($point.X, $point.Y) | Out-Null
+
+    Set-HenkaAutomationForeground -Handle $Handle
+    $lParam = New-HenkaMouseLParam -X $clientX -Y $clientY
+
+    if (-not [HenkaUiAutomationNative]::PostMessage(
+            $Handle,
+            [HenkaUiAutomationNative]::WM_MOUSEMOVE,
+            [System.UIntPtr]::Zero,
+            $lParam)) {
+        throw "Posting the packaged sandbox mouse-move message failed."
+    }
     Start-Sleep -Milliseconds 100
-    [NativeMethods]::mouse_event(0x0008, 0, 0, 0, [System.UIntPtr]::Zero)
+
+    if (-not [HenkaUiAutomationNative]::PostMessage(
+            $Handle,
+            [HenkaUiAutomationNative]::WM_RBUTTONDOWN,
+            [System.UIntPtr][HenkaUiAutomationNative]::MK_RBUTTON,
+            $lParam)) {
+        throw "Posting the packaged sandbox right-button-down message failed."
+    }
     Start-Sleep -Milliseconds 80
-    [NativeMethods]::mouse_event(0x0010, 0, 0, 0, [System.UIntPtr]::Zero)
+
+    if (-not [HenkaUiAutomationNative]::PostMessage(
+            $Handle,
+            [HenkaUiAutomationNative]::WM_RBUTTONUP,
+            [System.UIntPtr]::Zero,
+            $lParam)) {
+        throw "Posting the packaged sandbox right-button-up message failed."
+    }
+
     Start-Sleep -Milliseconds 300
 }
 
@@ -418,6 +530,7 @@ function Save-FramebufferRegionScreenshot {
         [Parameter(Mandatory = $true)][double]$Height,
         [Parameter(Mandatory = $true)][string]$Path
     )
+    Set-HenkaAutomationForeground -Handle $Handle
     $clientRect = New-Object NativeMethods+RECT
     if (-not [NativeMethods]::GetClientRect($Handle, [ref]$clientRect)) {
         throw "The packaged sandbox client bounds could not be read for scene capture."
@@ -715,7 +828,7 @@ try {
     Assert-FileContains -Path $stdoutPath -Pattern "recent actions and warnings appear" -Description "Startup status cue"
 
     Write-Step "Checking packaged UI open and close"
-    [NativeMethods]::SetForegroundWindow($mainWindowHandle) | Out-Null
+    Set-HenkaAutomationForeground -Handle $mainWindowHandle
     $null = $shell.AppActivate($process.Id)
     Start-Sleep -Milliseconds 600
     if (Wait-FileContains -Path $stdoutPath -Pattern "Sandbox UI ready:" -TimeoutMilliseconds 1500) {
@@ -727,7 +840,7 @@ try {
     else {
         [System.Windows.Forms.SendKeys]::SendWait('{F4}')
         if (-not (Wait-FileContains -Path $stdoutPath -Pattern "Sandbox panel: shown" -TimeoutMilliseconds 2000)) {
-            [NativeMethods]::SetForegroundWindow($mainWindowHandle) | Out-Null
+            Set-HenkaAutomationForeground -Handle $mainWindowHandle
             Start-Sleep -Milliseconds 250
             [System.Windows.Forms.SendKeys]::SendWait('{F4}')
         }
@@ -742,7 +855,7 @@ try {
 
     if ($uiAutomationVerified) {
         Write-Step "Capturing packaged startup workspace visual proof"
-        [NativeMethods]::SetForegroundWindow($mainWindowHandle) | Out-Null
+        Set-HenkaAutomationForeground -Handle $mainWindowHandle
         Start-Sleep -Milliseconds 350
         Save-WindowScreenshot `
             -Handle $mainWindowHandle `
@@ -1124,7 +1237,7 @@ try {
             -FramebufferY ($qaTabY + $qaTabHeight * 0.5)
 
         Write-Step "Capturing Controls QA page visual proof"
-        [NativeMethods]::SetForegroundWindow($mainWindowHandle) | Out-Null
+        Set-HenkaAutomationForeground -Handle $mainWindowHandle
         Start-Sleep -Milliseconds 350
         Save-WindowScreenshot `
             -Handle $mainWindowHandle `
@@ -1197,13 +1310,13 @@ try {
 
         Write-Output "[pass] Native test panel visible as a separate OS-level window"
         Write-Step "Capturing native panel visual proof"
-        [NativeMethods]::SetForegroundWindow($nativeWindowHandle) | Out-Null
+        Set-HenkaAutomationForeground -Handle $nativeWindowHandle
         Start-Sleep -Milliseconds 350
         Save-WindowScreenshot `
             -Handle $nativeWindowHandle `
             -Path $nativeScreenshotPath `
             -Description "Packaged native panel screenshot"
-        [NativeMethods]::SetForegroundWindow($mainWindowHandle) | Out-Null
+        Set-HenkaAutomationForeground -Handle $mainWindowHandle
         Start-Sleep -Milliseconds 250
 
         [NativeMethods]::PostMessage(
@@ -1326,11 +1439,11 @@ try {
             Write-Output "[warn] Some packaged UI click checks could not be confirmed automatically. Manual packaged UI QA is still needed."
         }
         if (-not (Select-String -LiteralPath $stdoutPath -Pattern "Sandbox panel: shown" -Quiet)) {
-            [NativeMethods]::SetForegroundWindow($mainWindowHandle) | Out-Null
+            Set-HenkaAutomationForeground -Handle $mainWindowHandle
             Start-Sleep -Milliseconds 400
             [System.Windows.Forms.SendKeys]::SendWait('{F4}')
             if (-not (Wait-FileContains -Path $stdoutPath -Pattern "Sandbox panel: hidden" -TimeoutMilliseconds 2000)) {
-                [NativeMethods]::SetForegroundWindow($mainWindowHandle) | Out-Null
+                Set-HenkaAutomationForeground -Handle $mainWindowHandle
                 Start-Sleep -Milliseconds 250
                 [System.Windows.Forms.SendKeys]::SendWait('{F4}')
             }
