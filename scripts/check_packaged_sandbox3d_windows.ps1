@@ -462,61 +462,70 @@ function Click-FramebufferPointRight {
     )
 
     $clientRect = New-Object NativeMethods+RECT
+
     if (-not [NativeMethods]::GetClientRect($Handle, [ref]$clientRect)) {
         throw "The packaged sandbox client bounds could not be read for right click."
     }
 
     $clientWidth = $clientRect.Right - $clientRect.Left
     $clientHeight = $clientRect.Bottom - $clientRect.Top
-    if ($FramebufferWidth -le 0 -or $FramebufferHeight -le 0 -or
-        $clientWidth -le 0 -or $clientHeight -le 0) {
+
+    if ($FramebufferWidth -le 0 -or
+        $FramebufferHeight -le 0 -or
+        $clientWidth -le 0 -or
+        $clientHeight -le 0) {
         throw "Invalid framebuffer or client dimensions for right click."
     }
 
-    $clientX = [int][Math]::Round(
+    $point = New-Object NativeMethods+POINT
+    $point.X = [int][Math]::Round(
         $FramebufferX *
         [double]$clientWidth /
         [double]$FramebufferWidth)
-    $clientY = [int][Math]::Round(
+    $point.Y = [int][Math]::Round(
         $FramebufferY *
         [double]$clientHeight /
         [double]$FramebufferHeight)
 
-    if ($clientX -lt 0 -or $clientY -lt 0 -or
-        $clientX -ge $clientWidth -or $clientY -ge $clientHeight) {
+    if ($point.X -lt 0 -or
+        $point.Y -lt 0 -or
+        $point.X -ge $clientWidth -or
+        $point.Y -ge $clientHeight) {
         throw "The packaged sandbox right-click coordinate is outside the client area."
     }
 
+    if (-not [NativeMethods]::ClientToScreen($Handle, [ref]$point)) {
+        throw "The packaged sandbox right-click point could not be converted to screen coordinates."
+    }
+
     Set-HenkaAutomationForeground -Handle $Handle
-    $lParam = New-HenkaMouseLParam -X $clientX -Y $clientY
 
-    if (-not [HenkaUiAutomationNative]::PostMessage(
-            $Handle,
-            [HenkaUiAutomationNative]::WM_MOUSEMOVE,
-            [System.UIntPtr]::Zero,
-            $lParam)) {
-        throw "Posting the packaged sandbox mouse-move message failed."
-    }
-    Start-Sleep -Milliseconds 100
-
-    if (-not [HenkaUiAutomationNative]::PostMessage(
-            $Handle,
-            [HenkaUiAutomationNative]::WM_RBUTTONDOWN,
-            [System.UIntPtr][HenkaUiAutomationNative]::MK_RBUTTON,
-            $lParam)) {
-        throw "Posting the packaged sandbox right-button-down message failed."
-    }
-    Start-Sleep -Milliseconds 80
-
-    if (-not [HenkaUiAutomationNative]::PostMessage(
-            $Handle,
-            [HenkaUiAutomationNative]::WM_RBUTTONUP,
-            [System.UIntPtr]::Zero,
-            $lParam)) {
-        throw "Posting the packaged sandbox right-button-up message failed."
+    if (-not [NativeMethods]::SetCursorPos($point.X, $point.Y)) {
+        throw "The packaged sandbox cursor could not be positioned for right click."
     }
 
-    Start-Sleep -Milliseconds 300
+    Start-Sleep -Milliseconds 125
+
+    if ([HenkaUiAutomationNative]::GetForegroundWindow() -ne $Handle) {
+        throw (
+            "Henka lost foreground ownership after positioning the context-menu " +
+            "cursor and before the right-click input was sent.")
+    }
+
+    [NativeMethods]::mouse_event(
+        0x0008,
+        0,
+        0,
+        0,
+        [System.UIntPtr]::Zero)
+    Start-Sleep -Milliseconds 90
+    [NativeMethods]::mouse_event(
+        0x0010,
+        0,
+        0,
+        0,
+        [System.UIntPtr]::Zero)
+    Start-Sleep -Milliseconds 350
 }
 
 function Save-FramebufferRegionScreenshot {
@@ -1126,25 +1135,54 @@ try {
         Write-Output "[pass] Inactive merged tabs may report zero content rectangles safely"
 
         Write-Step "Checking section-header context menu"
+        $contextMenuPattern = "Workspace context menu: section=Controls horizontal=available vertical=available"
+
         Click-FramebufferPointRight `
             -Handle $mainWindowHandle `
             -FramebufferWidth $framebufferWidth `
             -FramebufferHeight $framebufferHeight `
             -FramebufferX ($controlsX + 18.0) `
             -FramebufferY ($controlsY + 13.0)
-        if (-not (Wait-FileContains `
+
+        $contextMenuObserved = Wait-FileContains `
+            -Path $stdoutPath `
+            -Pattern $contextMenuPattern `
+            -TimeoutMilliseconds 4000
+
+        if (-not $contextMenuObserved) {
+            Write-Output "[retry] Controls context menu was not observed after the first verified right click; retrying once."
+
+            Set-HenkaAutomationForeground -Handle $mainWindowHandle
+            Start-Sleep -Milliseconds 250
+
+            Click-FramebufferPointRight `
+                -Handle $mainWindowHandle `
+                -FramebufferWidth $framebufferWidth `
+                -FramebufferHeight $framebufferHeight `
+                -FramebufferX ($controlsX + 18.0) `
+                -FramebufferY ($controlsY + 13.0)
+
+            $contextMenuObserved = Wait-FileContains `
                 -Path $stdoutPath `
-                -Pattern "Workspace context menu: section=Controls horizontal=available vertical=available" `
-                -TimeoutMilliseconds 4000)) {
-            throw "Right-clicking the Controls header did not open the horizontal/vertical section context menu."
+                -Pattern $contextMenuPattern `
+                -TimeoutMilliseconds 4000
         }
+
+        if (-not $contextMenuObserved) {
+            throw (
+                "Right-clicking the Controls header did not open the horizontal/vertical " +
+                "section context menu after two verified real-input attempts.")
+        }
+
+        Write-Output "[pass] Controls section-header context menu opened from verified real mouse input"
+
         Save-WindowScreenshot `
             -Handle $mainWindowHandle `
             -Path $contextMenuScreenshotPath `
             -Description "Workspace context-menu screenshot"
+
         [System.Windows.Forms.SendKeys]::SendWait('{ESC}')
         Start-Sleep -Milliseconds 350
-
         Write-Step "Checking stationary rendered viewport stability"
         Start-Sleep -Milliseconds 1800
         $stableX = $viewportX + 8.0
