@@ -59,18 +59,25 @@ function Set-HenkaAutomationForeground {
         throw "The Henka automation target handle is invalid."
     }
 
+    if ([HenkaUiAutomationNative]::GetForegroundWindow() -eq $Handle) {
+        return
+    }
+
     [HenkaUiAutomationNative]::ShowWindowAsync(
         $Handle,
         [HenkaUiAutomationNative]::SW_RESTORE) | Out-Null
     [HenkaUiAutomationNative]::BringWindowToTop($Handle) | Out-Null
 
     $deadline = (Get-Date).AddSeconds(3)
+
     do {
         [HenkaUiAutomationNative]::SetForegroundWindow($Handle) | Out-Null
+
         if ([HenkaUiAutomationNative]::GetForegroundWindow() -eq $Handle) {
             Start-Sleep -Milliseconds 150
             return
         }
+
         Start-Sleep -Milliseconds 100
     } while ((Get-Date) -lt $deadline)
 
