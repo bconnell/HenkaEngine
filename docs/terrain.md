@@ -60,7 +60,8 @@ synchronously through the storage transaction described below.
 
 Terrain network payloads in `<henka/terrain_network.h>` use explicit bounded
 little-endian encoding for edit requests, authoritative acceptance revisions,
-and rejection reasons. Requests carry world/base identity, client nonce,
+rejection reasons, and deterministic edit deltas. Requests carry world/base
+identity, client nonce,
 algorithm-versioned command fields, and the expected revision for each affected
 region. Payload codecs reject unsupported command fields, negative region IDs,
 oversized region lists, and trailing/truncated bytes; transport framing and
@@ -84,6 +85,13 @@ encodes the response. It also echoes control pings and disconnects malformed
 edit payloads as protocol errors. Replication deltas and snapshots,
 reconnect/late-join recovery, client prediction, and editor controls remain
 subsequent integration work.
+
+Accepted edits also produce a bounded delta in the same terrain channel. The
+delta repeats world/base identity, client nonce, server command identity, the
+algorithm-versioned command, and the resulting revision for each affected
+region. The server broadcasts that event reliably after sending the requester
+acceptance; client-side delta application, snapshot transfer, reconnect and
+late-join recovery, and prediction/reconciliation remain subsequent work.
 
 The descriptor stores the format version, world and base identities, all
 world/region/chunk relationships, and bounded residency limits. Creating a

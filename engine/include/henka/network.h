@@ -128,6 +128,12 @@ henka_result henka_network_server_send(
     henka_network_message_type type,
     const void* payload,
     size_t payload_size);
+henka_result henka_network_server_broadcast(
+    henka_network_server* server,
+    henka_network_channel channel,
+    henka_network_message_type type,
+    const void* payload,
+    size_t payload_size);
 henka_result henka_network_client_send(
     henka_network_client* client,
     henka_network_channel channel,

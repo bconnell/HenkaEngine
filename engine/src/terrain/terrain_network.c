@@ -5,6 +5,7 @@
 #define HENKA_TERRAIN_REQUEST_FIXED_BYTES 49U
 #define HENKA_TERRAIN_RESPONSE_FIXED_BYTES 17U
 #define HENKA_TERRAIN_REJECTION_BYTES 9U
+#define HENKA_TERRAIN_DELTA_FIXED_BYTES 57U
 
 static void henka_terrain_network_write_u32(uint8_t* destination, uint32_t value)
 {
@@ -285,5 +286,90 @@ henka_result henka_terrain_edit_rejection_decode(
     }
     out_rejection->client_nonce = henka_terrain_network_read_u64(buffer);
     out_rejection->reason = (henka_terrain_edit_rejection_reason)buffer[8];
+    return HENKA_SUCCESS;
+}
+
+henka_result henka_terrain_edit_delta_encode(
+    const henka_terrain_edit_delta* delta,
+    uint8_t* buffer,
+    size_t buffer_capacity,
+    size_t* out_size)
+{
+    size_t size;
+    uint32_t index;
+    if (delta == NULL || buffer == NULL || out_size == NULL || delta->server_command_id == 0U ||
+        !henka_terrain_network_command_fields_valid(&delta->command) ||
+        !henka_terrain_network_region_list_valid(delta->affected_region_count, delta->affected_regions))
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    size = HENKA_TERRAIN_DELTA_FIXED_BYTES + (size_t)delta->affected_region_count * 16U;
+    if (buffer_capacity < size)
+    {
+        return HENKA_ERROR_LIMIT;
+    }
+    henka_terrain_network_write_u64(buffer + 0U, delta->world_identity);
+    henka_terrain_network_write_u64(buffer + 8U, delta->base_asset_identity);
+    henka_terrain_network_write_u64(buffer + 16U, delta->client_nonce);
+    henka_terrain_network_write_u64(buffer + 24U, delta->server_command_id);
+    henka_terrain_network_write_command(buffer + 32U, &delta->command);
+    buffer[56] = (uint8_t)delta->affected_region_count;
+    for (index = 0U; index < delta->affected_region_count; ++index)
+    {
+        size_t offset = HENKA_TERRAIN_DELTA_FIXED_BYTES + (size_t)index * 16U;
+        henka_terrain_network_write_u32(buffer + offset, (uint32_t)delta->affected_regions[index].region_id.x);
+        henka_terrain_network_write_u32(buffer + offset + 4U, (uint32_t)delta->affected_regions[index].region_id.z);
+        henka_terrain_network_write_u64(buffer + offset + 8U, delta->affected_regions[index].revision);
+    }
+    *out_size = size;
+    return HENKA_SUCCESS;
+}
+
+henka_result henka_terrain_edit_delta_decode(
+    const uint8_t* buffer,
+    size_t buffer_size,
+    henka_terrain_edit_delta* out_delta)
+{
+    size_t expected_size;
+    uint32_t index;
+    if (buffer == NULL || out_delta == NULL || buffer_size < HENKA_TERRAIN_DELTA_FIXED_BYTES)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    memset(out_delta, 0, sizeof(*out_delta));
+    out_delta->world_identity = henka_terrain_network_read_u64(buffer + 0U);
+    out_delta->base_asset_identity = henka_terrain_network_read_u64(buffer + 8U);
+    out_delta->client_nonce = henka_terrain_network_read_u64(buffer + 16U);
+    out_delta->server_command_id = henka_terrain_network_read_u64(buffer + 24U);
+    if (!henka_terrain_network_read_command(buffer + 32U, &out_delta->command))
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    out_delta->command.client_nonce = out_delta->client_nonce;
+    out_delta->affected_region_count = buffer[56];
+    expected_size = HENKA_TERRAIN_DELTA_FIXED_BYTES +
+        (size_t)out_delta->affected_region_count * 16U;
+    if (out_delta->server_command_id == 0U ||
+        !henka_terrain_network_region_list_valid(
+            out_delta->affected_region_count, out_delta->affected_regions) ||
+        buffer_size != expected_size)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    for (index = 0U; index < out_delta->affected_region_count; ++index)
+    {
+        size_t offset = HENKA_TERRAIN_DELTA_FIXED_BYTES + (size_t)index * 16U;
+        out_delta->affected_regions[index].region_id.x =
+            (int32_t)henka_terrain_network_read_u32(buffer + offset);
+        out_delta->affected_regions[index].region_id.z =
+            (int32_t)henka_terrain_network_read_u32(buffer + offset + 4U);
+        out_delta->affected_regions[index].revision =
+            henka_terrain_network_read_u64(buffer + offset + 8U);
+        if (out_delta->affected_regions[index].region_id.x < 0 ||
+            out_delta->affected_regions[index].region_id.z < 0)
+        {
+            return HENKA_ERROR_INVALID_ARGUMENT;
+        }
+    }
     return HENKA_SUCCESS;
 }

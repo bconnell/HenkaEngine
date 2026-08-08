@@ -389,6 +389,34 @@ henka_result henka_network_transport_send(
     return HENKA_SUCCESS;
 }
 
+henka_result henka_network_transport_broadcast(
+    henka_network_transport* transport,
+    henka_network_channel channel,
+    henka_network_message_type type,
+    const void* payload,
+    size_t payload_size)
+{
+    uint32_t index;
+    henka_result result = HENKA_SUCCESS;
+    if (transport == NULL || !transport->server_mode)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    for (index = 0U; index < transport->peer_capacity; ++index)
+    {
+        if (transport->peers[index].peer != NULL)
+        {
+            result = henka_network_transport_send(
+                transport, transport->peers[index].id, channel, type, payload, payload_size);
+            if (result != HENKA_SUCCESS)
+            {
+                return result;
+            }
+        }
+    }
+    return result;
+}
+
 henka_result henka_network_transport_disconnect(
     henka_network_transport* transport,
     henka_network_peer_id peer_id,

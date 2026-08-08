@@ -9,6 +9,7 @@
 #define HENKA_TERRAIN_NETWORK_MAX_AFFECTED_REGIONS 16U
 #define HENKA_TERRAIN_NETWORK_MAX_EDIT_REQUEST_BYTES 512U
 #define HENKA_TERRAIN_NETWORK_MAX_EDIT_RESPONSE_BYTES 320U
+#define HENKA_TERRAIN_NETWORK_MAX_DELTA_BYTES 512U
 
 typedef struct henka_terrain_network_region_revision
 {
@@ -33,6 +34,17 @@ typedef struct henka_terrain_edit_acceptance
     uint32_t affected_region_count;
     henka_terrain_network_region_revision affected_regions[HENKA_TERRAIN_NETWORK_MAX_AFFECTED_REGIONS];
 } henka_terrain_edit_acceptance;
+
+typedef struct henka_terrain_edit_delta
+{
+    henka_terrain_world_identity world_identity;
+    henka_terrain_base_asset_identity base_asset_identity;
+    uint64_t client_nonce;
+    uint64_t server_command_id;
+    henka_terrain_edit_command command;
+    uint32_t affected_region_count;
+    henka_terrain_network_region_revision affected_regions[HENKA_TERRAIN_NETWORK_MAX_AFFECTED_REGIONS];
+} henka_terrain_edit_delta;
 
 typedef enum henka_terrain_edit_rejection_reason
 {
@@ -78,5 +90,14 @@ henka_result henka_terrain_edit_rejection_decode(
     const uint8_t* buffer,
     size_t buffer_size,
     henka_terrain_edit_rejection* out_rejection);
+henka_result henka_terrain_edit_delta_encode(
+    const henka_terrain_edit_delta* delta,
+    uint8_t* buffer,
+    size_t buffer_capacity,
+    size_t* out_size);
+henka_result henka_terrain_edit_delta_decode(
+    const uint8_t* buffer,
+    size_t buffer_size,
+    henka_terrain_edit_delta* out_delta);
 
 #endif

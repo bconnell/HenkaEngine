@@ -176,6 +176,37 @@ int main(void)
         henka_network_server_destroy(server);
         return 5;
     }
+    {
+        const uint8_t broadcast_payload[] = {7U};
+        if (henka_network_server_broadcast(
+                server, HENKA_NETWORK_CHANNEL_CONTROL, HENKA_NETWORK_MESSAGE_PING,
+                broadcast_payload, sizeof(broadcast_payload)) != HENKA_SUCCESS)
+        {
+            henka_network_client_destroy(client);
+            henka_network_server_destroy(server);
+            return 11;
+        }
+    }
+    for (index = 0; index < 200; ++index)
+    {
+        if (henka_network_client_poll(client, 5U, &client_event) != HENKA_SUCCESS)
+        {
+            henka_network_client_destroy(client);
+            henka_network_server_destroy(server);
+            return 12;
+        }
+        if (client_event.type == HENKA_NETWORK_EVENT_MESSAGE &&
+            client_event.message.payload_size == 1U && client_event.message.payload[0] == 7U)
+        {
+            break;
+        }
+    }
+    if (index == 200)
+    {
+        henka_network_client_destroy(client);
+        henka_network_server_destroy(server);
+        return 13;
+    }
     for (index = 0; index < 200 && second_received == 0; ++index)
     {
         if (henka_network_server_poll(server, 5U, &server_event) != HENKA_SUCCESS)

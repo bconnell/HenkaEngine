@@ -10,6 +10,8 @@ static int test_request_and_response_codecs(void)
     henka_terrain_edit_acceptance decoded_acceptance;
     henka_terrain_edit_rejection rejection = {42U, HENKA_TERRAIN_EDIT_REJECT_STALE_REVISION};
     henka_terrain_edit_rejection decoded_rejection;
+    henka_terrain_edit_delta delta = {0};
+    henka_terrain_edit_delta decoded_delta;
     uint8_t buffer[HENKA_TERRAIN_NETWORK_MAX_EDIT_REQUEST_BYTES];
     size_t size = 0U;
 
@@ -49,6 +51,21 @@ static int test_request_and_response_codecs(void)
     if (henka_terrain_edit_rejection_encode(&rejection, buffer, sizeof(buffer), &size) != HENKA_SUCCESS ||
         henka_terrain_edit_rejection_decode(buffer, size, &decoded_rejection) != HENKA_SUCCESS ||
         decoded_rejection.reason != HENKA_TERRAIN_EDIT_REJECT_STALE_REVISION)
+    {
+        return 0;
+    }
+    delta.world_identity = 11U;
+    delta.base_asset_identity = 22U;
+    delta.client_nonce = 33U;
+    delta.server_command_id = 99U;
+    delta.command = request.command;
+    delta.affected_region_count = 1U;
+    delta.affected_regions[0] = (henka_terrain_network_region_revision){{2, 3}, 8U};
+    if (henka_terrain_edit_delta_encode(
+            &delta, buffer, HENKA_TERRAIN_NETWORK_MAX_DELTA_BYTES, &size) != HENKA_SUCCESS ||
+        henka_terrain_edit_delta_decode(buffer, size, &decoded_delta) != HENKA_SUCCESS ||
+        decoded_delta.server_command_id != 99U || decoded_delta.client_nonce != 33U ||
+        decoded_delta.affected_regions[0].revision != 8U)
     {
         return 0;
     }

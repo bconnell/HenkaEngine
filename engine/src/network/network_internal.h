@@ -31,6 +31,12 @@ henka_result henka_network_transport_send(
     henka_network_message_type type,
     const void* payload,
     size_t payload_size);
+henka_result henka_network_transport_broadcast(
+    henka_network_transport* transport,
+    henka_network_channel channel,
+    henka_network_message_type type,
+    const void* payload,
+    size_t payload_size);
 henka_result henka_network_transport_disconnect(
     henka_network_transport* transport,
     henka_network_peer_id peer_id,

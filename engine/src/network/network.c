@@ -184,6 +184,21 @@ henka_result henka_network_server_send(
     return henka_network_transport_send(server->transport, peer_id, channel, type, payload, payload_size);
 }
 
+henka_result henka_network_server_broadcast(
+    henka_network_server* server,
+    henka_network_channel channel,
+    henka_network_message_type type,
+    const void* payload,
+    size_t payload_size)
+{
+    if (server == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    return henka_network_transport_broadcast(
+        server->transport, channel, type, payload, payload_size);
+}
+
 henka_result henka_network_client_send(
     henka_network_client* client,
     henka_network_channel channel,

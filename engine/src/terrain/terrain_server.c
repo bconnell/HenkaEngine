@@ -75,7 +75,7 @@ static henka_result henka_terrain_server_send_rejection(
     henka_network_peer_id peer_id,
     const henka_terrain_edit_rejection* rejection)
 {
-    uint8_t payload[HENKA_TERRAIN_NETWORK_MAX_EDIT_RESPONSE_BYTES];
+    uint8_t payload[HENKA_TERRAIN_NETWORK_MAX_DELTA_BYTES];
     size_t payload_size;
     henka_result result = henka_terrain_edit_rejection_encode(
         rejection, payload, sizeof(payload), &payload_size);
@@ -149,9 +149,34 @@ henka_result henka_terrain_server_handle_event(
     {
         return result;
     }
-    return henka_network_server_send(
+    result = henka_network_server_send(
         server->network, event->peer_id, HENKA_NETWORK_CHANNEL_TERRAIN,
         HENKA_NETWORK_MESSAGE_TERRAIN_EDIT_ACCEPTED, payload, payload_size);
+    if (result != HENKA_SUCCESS)
+    {
+        return result;
+    }
+    {
+        henka_terrain_edit_delta delta = {0};
+        delta.world_identity = request.world_identity;
+        delta.base_asset_identity = request.base_asset_identity;
+        delta.client_nonce = request.client_nonce;
+        delta.server_command_id = response.acceptance.server_command_id;
+        delta.command = request.command;
+        delta.affected_region_count = response.acceptance.affected_region_count;
+        memcpy(
+            delta.affected_regions, response.acceptance.affected_regions,
+            (size_t)delta.affected_region_count * sizeof(delta.affected_regions[0]));
+        result = henka_terrain_edit_delta_encode(
+            &delta, payload, sizeof(payload), &payload_size);
+        if (result == HENKA_SUCCESS)
+        {
+            result = henka_network_server_broadcast(
+                server->network, HENKA_NETWORK_CHANNEL_TERRAIN,
+                HENKA_NETWORK_MESSAGE_TERRAIN_DELTA, payload, payload_size);
+        }
+    }
+    return result;
 }
 
 henka_result henka_terrain_server_poll(

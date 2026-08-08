@@ -23,7 +23,9 @@ static int test_loopback_authoritative_edit(void)
     uint8_t response_payload[HENKA_TERRAIN_NETWORK_MAX_EDIT_RESPONSE_BYTES];
     size_t payload_size = 0U;
     henka_terrain_edit_acceptance acceptance;
+    henka_terrain_edit_delta delta;
     int result = 0;
+    int acceptance_received = 0;
     uint32_t index;
     uint32_t iteration;
 
@@ -128,8 +130,23 @@ static int test_loopback_authoritative_edit(void)
             {
                 goto cleanup;
             }
-            result = 1;
-            break;
+            acceptance_received = 1;
+        }
+        if (event.type == HENKA_NETWORK_EVENT_MESSAGE &&
+            event.message.type == HENKA_NETWORK_MESSAGE_TERRAIN_DELTA)
+        {
+            if (event.message.payload_size > sizeof(response_payload) ||
+                henka_terrain_edit_delta_decode(
+                    event.message.payload, event.message.payload_size, &delta) != HENKA_SUCCESS ||
+                delta.server_command_id != 1U || delta.affected_regions[0].revision != 1U)
+            {
+                goto cleanup;
+            }
+            if (acceptance_received)
+            {
+                result = 1;
+                break;
+            }
         }
     }
 
