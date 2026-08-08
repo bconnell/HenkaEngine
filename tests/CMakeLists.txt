@@ -1,6 +1,7 @@
 add_executable(henka_tests
     ../examples/sandbox3d/editor_controls.c
     ../examples/sandbox3d/editor_ui_state.c
+    ../examples/sandbox3d/object_details_tools.c
     ../examples/sandbox3d/interaction_tools.c
     ../examples/sandbox3d/physics_tools.c
     ../examples/sandbox3d/workspace_tools.c
@@ -15,6 +16,7 @@ add_executable(henka_tests
     test_sandbox3d_physics.c
     test_sandbox3d_workspace.c
     test_sandbox3d_editor_ui.c
+    test_sandbox3d_object_details.c
     test_main.c
     test_math.c
     test_material.c
