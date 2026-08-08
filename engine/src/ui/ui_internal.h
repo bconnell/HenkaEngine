@@ -48,6 +48,14 @@ struct henka_ui_context
     henka_ui_flow_state flow;
     char disclosure_ids[HENKA_UI_MAX_DISCLOSURE_ROWS][256];
     size_t disclosure_id_count;
+    bool focused_disclosure_id_set;
+    char focused_disclosure_id[256];
+    bool navigation_up_pressed;
+    bool navigation_down_pressed;
+    bool navigation_left_pressed;
+    bool navigation_right_pressed;
+    bool navigation_enter_pressed;
+    unsigned int consumed_navigation_mask;
     henka_ui_draw_rect* draw_rects;
     size_t draw_rect_count;
     size_t draw_rect_capacity;

@@ -3693,7 +3693,7 @@ static void sandbox3d_build_native_panel_test_ui(henka_engine* engine, sandbox3d
     char value[96];
     henka_engine_diagnostics diagnostics;
     henka_tool_window_state window_state;
-    henka_ui_frame_desc frame_desc;
+    henka_ui_frame_desc frame_desc = {0};
 
     if (engine == NULL || state == NULL || state->native_panel_ui == NULL ||
         state->native_panel_window_id == HENKA_INVALID_WINDOW_ID)
@@ -4124,7 +4124,7 @@ static void sandbox3d_build_detached_workspace_panel_ui(henka_engine* engine, sa
     {
         henka_tool_window_state window_state;
         henka_ui_context* ui;
-        henka_ui_frame_desc frame_desc;
+        henka_ui_frame_desc frame_desc = {0};
         sandbox3d_workspace_panel_id panel_id;
 
         panel_id = (sandbox3d_workspace_panel_id)panel_index;
@@ -11515,7 +11515,7 @@ static void sandbox3d_build_ui(henka_engine* engine, sandbox3d_state* state)
     float milliseconds;
     int panel_index;
     henka_result result;
-    henka_ui_frame_desc frame_desc;
+    henka_ui_frame_desc frame_desc = {0};
     sandbox3d_workspace_layout layout;
     const sandbox3d_workspace_panel* workspace_panel;
     unsigned int z_order;
@@ -11537,6 +11537,16 @@ static void sandbox3d_build_ui(henka_engine* engine, sandbox3d_state* state)
     frame_desc.mouse_left_down = henka_input_is_mouse_button_down(engine, HENKA_MOUSE_BUTTON_LEFT);
     frame_desc.mouse_left_pressed = henka_input_was_mouse_button_pressed(engine, HENKA_MOUSE_BUTTON_LEFT);
     frame_desc.mouse_left_released = henka_input_was_mouse_button_released(engine, HENKA_MOUSE_BUTTON_LEFT);
+    frame_desc.navigation_up_pressed =
+        henka_input_was_key_pressed(engine, HENKA_KEY_UP);
+    frame_desc.navigation_down_pressed =
+        henka_input_was_key_pressed(engine, HENKA_KEY_DOWN);
+    frame_desc.navigation_left_pressed =
+        henka_input_was_key_pressed(engine, HENKA_KEY_LEFT);
+    frame_desc.navigation_right_pressed =
+        henka_input_was_key_pressed(engine, HENKA_KEY_RIGHT);
+    frame_desc.navigation_enter_pressed =
+        henka_input_was_key_pressed(engine, HENKA_KEY_ENTER);
 
     if (henka_ui_begin_frame(state->ui, &frame_desc) != HENKA_SUCCESS)
     {
@@ -11750,7 +11760,32 @@ static void sandbox3d_build_ui(henka_engine* engine, sandbox3d_state* state)
         sandbox3d_draw_panel_recall_hint(state->ui, layout.scene_viewport);
     }
 
-    henka_ui_end_frame(state->ui);
+    if (henka_ui_end_frame(state->ui) == HENKA_SUCCESS)
+    {
+        const unsigned int navigation_mask =
+            henka_ui_get_consumed_navigation_mask(state->ui);
+
+        if ((navigation_mask & HENKA_UI_NAVIGATION_UP) != 0U)
+        {
+            henka_input_consume_key_press(engine, HENKA_KEY_UP);
+        }
+        if ((navigation_mask & HENKA_UI_NAVIGATION_DOWN) != 0U)
+        {
+            henka_input_consume_key_press(engine, HENKA_KEY_DOWN);
+        }
+        if ((navigation_mask & HENKA_UI_NAVIGATION_LEFT) != 0U)
+        {
+            henka_input_consume_key_press(engine, HENKA_KEY_LEFT);
+        }
+        if ((navigation_mask & HENKA_UI_NAVIGATION_RIGHT) != 0U)
+        {
+            henka_input_consume_key_press(engine, HENKA_KEY_RIGHT);
+        }
+        if ((navigation_mask & HENKA_UI_NAVIGATION_ENTER) != 0U)
+        {
+            henka_input_consume_key_press(engine, HENKA_KEY_ENTER);
+        }
+    }
 }
 
 static henka_result sandbox3d_initialize(henka_engine* engine, void* user_data)

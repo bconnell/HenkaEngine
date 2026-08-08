@@ -37,6 +37,15 @@ typedef enum henka_ui_semantic_color
     HENKA_UI_COLOR_DISABLED
 } henka_ui_semantic_color;
 
+typedef enum henka_ui_navigation_mask
+{
+    HENKA_UI_NAVIGATION_NONE = 0,
+    HENKA_UI_NAVIGATION_UP = 1U << 0,
+    HENKA_UI_NAVIGATION_DOWN = 1U << 1,
+    HENKA_UI_NAVIGATION_LEFT = 1U << 2,
+    HENKA_UI_NAVIGATION_RIGHT = 1U << 3,
+    HENKA_UI_NAVIGATION_ENTER = 1U << 4
+} henka_ui_navigation_mask;
 typedef struct henka_ui_frame_desc
 {
     int framebuffer_width;
@@ -45,6 +54,11 @@ typedef struct henka_ui_frame_desc
     bool mouse_left_down;
     bool mouse_left_pressed;
     bool mouse_left_released;
+    bool navigation_up_pressed;
+    bool navigation_down_pressed;
+    bool navigation_left_pressed;
+    bool navigation_right_pressed;
+    bool navigation_enter_pressed;
 } henka_ui_frame_desc;
 
 henka_result henka_ui_flow_begin(
@@ -73,6 +87,8 @@ henka_result henka_ui_end_frame(henka_ui_context* context);
 void henka_ui_set_visible(henka_ui_context* context, bool visible);
 bool henka_ui_is_visible(const henka_ui_context* context);
 bool henka_ui_get_wants_mouse(const henka_ui_context* context);
+unsigned int henka_ui_get_consumed_navigation_mask(
+    const henka_ui_context* context);
 size_t henka_ui_get_draw_rect_count(const henka_ui_context* context);
 size_t henka_ui_get_draw_line_count(const henka_ui_context* context);
 bool henka_ui_rect_contains(henka_ui_rect rect, henka_vec2 point);

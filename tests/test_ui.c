@@ -11,7 +11,7 @@ void henka_test_ui(void)
     bool toggle_value;
     henka_result result;
     henka_ui_context* ui;
-    henka_ui_frame_desc frame_desc;
+    henka_ui_frame_desc frame_desc = {0};
     char mutable_id[32];
     int text_height;
     int text_width;
@@ -567,6 +567,290 @@ void henka_test_ui(void)
         HENKA_TEST_ASSERT(!duplicate_changed);
         HENKA_TEST_ASSERT(
             henka_ui_end_frame(ui) == HENKA_SUCCESS);
+    }
+
+    {
+        bool nav_a_expanded;
+        bool nav_b_expanded;
+        bool nav_c_expanded;
+        bool nav_a_changed;
+        bool nav_b_changed;
+        bool nav_c_changed;
+        unsigned int consumed_navigation;
+
+        nav_a_expanded = false;
+        nav_b_expanded = false;
+        nav_c_expanded = false;
+        nav_a_changed = false;
+        nav_b_changed = false;
+        nav_c_changed = false;
+
+        frame_desc.navigation_up_pressed = false;
+        frame_desc.navigation_down_pressed = false;
+        frame_desc.navigation_left_pressed = false;
+        frame_desc.navigation_right_pressed = false;
+        frame_desc.navigation_enter_pressed = false;
+
+        frame_desc.mouse_position = (henka_vec2){60.0f, 60.0f};
+        frame_desc.mouse_left_down = true;
+        frame_desc.mouse_left_pressed = true;
+        frame_desc.mouse_left_released = false;
+        HENKA_TEST_ASSERT(
+            henka_ui_begin_frame(ui, &frame_desc) == HENKA_SUCCESS);
+        HENKA_TEST_ASSERT(
+            henka_ui_disclosure_row(
+                ui,
+                "nav.a",
+                (henka_ui_rect){40.0f, 48.0f, 160.0f, 24.0f},
+                "A",
+                &nav_a_expanded,
+                &nav_a_changed) == HENKA_SUCCESS);
+        HENKA_TEST_ASSERT(
+            henka_ui_disclosure_row(
+                ui,
+                "nav.b",
+                (henka_ui_rect){40.0f, 76.0f, 160.0f, 24.0f},
+                "B",
+                &nav_b_expanded,
+                &nav_b_changed) == HENKA_SUCCESS);
+        HENKA_TEST_ASSERT(
+            henka_ui_disclosure_row(
+                ui,
+                "nav.c",
+                (henka_ui_rect){40.0f, 104.0f, 160.0f, 24.0f},
+                "C",
+                &nav_c_expanded,
+                &nav_c_changed) == HENKA_SUCCESS);
+        HENKA_TEST_ASSERT(
+            henka_ui_end_frame(ui) == HENKA_SUCCESS);
+
+        frame_desc.mouse_left_down = false;
+        frame_desc.mouse_left_pressed = false;
+        frame_desc.mouse_left_released = true;
+        HENKA_TEST_ASSERT(
+            henka_ui_begin_frame(ui, &frame_desc) == HENKA_SUCCESS);
+        HENKA_TEST_ASSERT(
+            henka_ui_disclosure_row(
+                ui,
+                "nav.a",
+                (henka_ui_rect){40.0f, 48.0f, 160.0f, 24.0f},
+                "A",
+                &nav_a_expanded,
+                &nav_a_changed) == HENKA_SUCCESS);
+        HENKA_TEST_ASSERT(
+            henka_ui_disclosure_row(
+                ui,
+                "nav.b",
+                (henka_ui_rect){40.0f, 76.0f, 160.0f, 24.0f},
+                "B",
+                &nav_b_expanded,
+                &nav_b_changed) == HENKA_SUCCESS);
+        HENKA_TEST_ASSERT(
+            henka_ui_disclosure_row(
+                ui,
+                "nav.c",
+                (henka_ui_rect){40.0f, 104.0f, 160.0f, 24.0f},
+                "C",
+                &nav_c_expanded,
+                &nav_c_changed) == HENKA_SUCCESS);
+        HENKA_TEST_ASSERT(nav_a_expanded);
+        HENKA_TEST_ASSERT(
+            henka_ui_end_frame(ui) == HENKA_SUCCESS);
+
+        frame_desc.mouse_position = (henka_vec2){300.0f, 300.0f};
+        frame_desc.mouse_left_released = false;
+        frame_desc.navigation_down_pressed = true;
+        HENKA_TEST_ASSERT(
+            henka_ui_begin_frame(ui, &frame_desc) == HENKA_SUCCESS);
+        HENKA_TEST_ASSERT(
+            henka_ui_disclosure_row(
+                ui, "nav.a",
+                (henka_ui_rect){40.0f, 48.0f, 160.0f, 24.0f},
+                "A", &nav_a_expanded, &nav_a_changed) == HENKA_SUCCESS);
+        HENKA_TEST_ASSERT(
+            henka_ui_disclosure_row(
+                ui, "nav.b",
+                (henka_ui_rect){40.0f, 76.0f, 160.0f, 24.0f},
+                "B", &nav_b_expanded, &nav_b_changed) == HENKA_SUCCESS);
+        HENKA_TEST_ASSERT(
+            henka_ui_disclosure_row(
+                ui, "nav.c",
+                (henka_ui_rect){40.0f, 104.0f, 160.0f, 24.0f},
+                "C", &nav_c_expanded, &nav_c_changed) == HENKA_SUCCESS);
+        HENKA_TEST_ASSERT(
+            henka_ui_end_frame(ui) == HENKA_SUCCESS);
+        consumed_navigation =
+            henka_ui_get_consumed_navigation_mask(ui);
+        HENKA_TEST_ASSERT(
+            (consumed_navigation &
+             HENKA_UI_NAVIGATION_DOWN) != 0U);
+
+        frame_desc.navigation_down_pressed = false;
+        frame_desc.navigation_enter_pressed = true;
+        HENKA_TEST_ASSERT(
+            henka_ui_begin_frame(ui, &frame_desc) == HENKA_SUCCESS);
+        HENKA_TEST_ASSERT(
+            henka_ui_disclosure_row(
+                ui, "nav.a",
+                (henka_ui_rect){40.0f, 48.0f, 160.0f, 24.0f},
+                "A", &nav_a_expanded, &nav_a_changed) == HENKA_SUCCESS);
+        HENKA_TEST_ASSERT(
+            henka_ui_disclosure_row(
+                ui, "nav.b",
+                (henka_ui_rect){40.0f, 76.0f, 160.0f, 24.0f},
+                "B", &nav_b_expanded, &nav_b_changed) == HENKA_SUCCESS);
+        HENKA_TEST_ASSERT(nav_b_expanded);
+        HENKA_TEST_ASSERT(nav_b_changed);
+        HENKA_TEST_ASSERT(
+            henka_ui_disclosure_row(
+                ui, "nav.c",
+                (henka_ui_rect){40.0f, 104.0f, 160.0f, 24.0f},
+                "C", &nav_c_expanded, &nav_c_changed) == HENKA_SUCCESS);
+        HENKA_TEST_ASSERT(
+            henka_ui_end_frame(ui) == HENKA_SUCCESS);
+        HENKA_TEST_ASSERT(
+            (henka_ui_get_consumed_navigation_mask(ui) &
+             HENKA_UI_NAVIGATION_ENTER) != 0U);
+
+        frame_desc.navigation_enter_pressed = false;
+        frame_desc.navigation_left_pressed = true;
+        HENKA_TEST_ASSERT(
+            henka_ui_begin_frame(ui, &frame_desc) == HENKA_SUCCESS);
+        HENKA_TEST_ASSERT(
+            henka_ui_disclosure_row(
+                ui, "nav.a",
+                (henka_ui_rect){40.0f, 48.0f, 160.0f, 24.0f},
+                "A", &nav_a_expanded, &nav_a_changed) == HENKA_SUCCESS);
+        HENKA_TEST_ASSERT(
+            henka_ui_disclosure_row(
+                ui, "nav.b",
+                (henka_ui_rect){40.0f, 76.0f, 160.0f, 24.0f},
+                "B", &nav_b_expanded, &nav_b_changed) == HENKA_SUCCESS);
+        HENKA_TEST_ASSERT(!nav_b_expanded);
+        HENKA_TEST_ASSERT(
+            henka_ui_disclosure_row(
+                ui, "nav.c",
+                (henka_ui_rect){40.0f, 104.0f, 160.0f, 24.0f},
+                "C", &nav_c_expanded, &nav_c_changed) == HENKA_SUCCESS);
+        HENKA_TEST_ASSERT(
+            henka_ui_end_frame(ui) == HENKA_SUCCESS);
+        HENKA_TEST_ASSERT(
+            (henka_ui_get_consumed_navigation_mask(ui) &
+             HENKA_UI_NAVIGATION_LEFT) != 0U);
+
+        frame_desc.navigation_left_pressed = false;
+        frame_desc.navigation_right_pressed = true;
+        HENKA_TEST_ASSERT(
+            henka_ui_begin_frame(ui, &frame_desc) == HENKA_SUCCESS);
+        HENKA_TEST_ASSERT(
+            henka_ui_disclosure_row(
+                ui, "nav.a",
+                (henka_ui_rect){40.0f, 48.0f, 160.0f, 24.0f},
+                "A", &nav_a_expanded, &nav_a_changed) == HENKA_SUCCESS);
+        HENKA_TEST_ASSERT(
+            henka_ui_disclosure_row(
+                ui, "nav.b",
+                (henka_ui_rect){40.0f, 76.0f, 160.0f, 24.0f},
+                "B", &nav_b_expanded, &nav_b_changed) == HENKA_SUCCESS);
+        HENKA_TEST_ASSERT(nav_b_expanded);
+        HENKA_TEST_ASSERT(
+            henka_ui_disclosure_row(
+                ui, "nav.c",
+                (henka_ui_rect){40.0f, 104.0f, 160.0f, 24.0f},
+                "C", &nav_c_expanded, &nav_c_changed) == HENKA_SUCCESS);
+        HENKA_TEST_ASSERT(
+            henka_ui_end_frame(ui) == HENKA_SUCCESS);
+        HENKA_TEST_ASSERT(
+            (henka_ui_get_consumed_navigation_mask(ui) &
+             HENKA_UI_NAVIGATION_RIGHT) != 0U);
+
+        frame_desc.navigation_right_pressed = false;
+        frame_desc.navigation_up_pressed = true;
+        HENKA_TEST_ASSERT(
+            henka_ui_begin_frame(ui, &frame_desc) == HENKA_SUCCESS);
+        HENKA_TEST_ASSERT(
+            henka_ui_disclosure_row(
+                ui, "nav.a",
+                (henka_ui_rect){40.0f, 48.0f, 160.0f, 24.0f},
+                "A", &nav_a_expanded, &nav_a_changed) == HENKA_SUCCESS);
+        HENKA_TEST_ASSERT(
+            henka_ui_disclosure_row(
+                ui, "nav.b",
+                (henka_ui_rect){40.0f, 76.0f, 160.0f, 24.0f},
+                "B", &nav_b_expanded, &nav_b_changed) == HENKA_SUCCESS);
+        HENKA_TEST_ASSERT(
+            henka_ui_disclosure_row(
+                ui, "nav.c",
+                (henka_ui_rect){40.0f, 104.0f, 160.0f, 24.0f},
+                "C", &nav_c_expanded, &nav_c_changed) == HENKA_SUCCESS);
+        HENKA_TEST_ASSERT(
+            henka_ui_end_frame(ui) == HENKA_SUCCESS);
+        HENKA_TEST_ASSERT(
+            (henka_ui_get_consumed_navigation_mask(ui) &
+             HENKA_UI_NAVIGATION_UP) != 0U);
+
+        frame_desc.navigation_up_pressed = false;
+        frame_desc.navigation_down_pressed = true;
+        HENKA_TEST_ASSERT(
+            henka_ui_begin_frame(ui, &frame_desc) == HENKA_SUCCESS);
+        HENKA_TEST_ASSERT(
+            henka_ui_disclosure_row(
+                ui, "nav.a",
+                (henka_ui_rect){40.0f, 48.0f, 160.0f, 24.0f},
+                "A", &nav_a_expanded, &nav_a_changed) == HENKA_SUCCESS);
+        HENKA_TEST_ASSERT(
+            henka_ui_disclosure_row(
+                ui, "nav.b",
+                (henka_ui_rect){40.0f, 76.0f, 160.0f, 24.0f},
+                "B", &nav_b_expanded, &nav_b_changed) == HENKA_SUCCESS);
+        HENKA_TEST_ASSERT(
+            henka_ui_disclosure_row(
+                ui, "nav.c",
+                (henka_ui_rect){40.0f, 104.0f, 160.0f, 24.0f},
+                "C", &nav_c_expanded, &nav_c_changed) == HENKA_SUCCESS);
+        HENKA_TEST_ASSERT(
+            henka_ui_end_frame(ui) == HENKA_SUCCESS);
+
+        frame_desc.navigation_down_pressed = false;
+        HENKA_TEST_ASSERT(
+            henka_ui_begin_frame(ui, &frame_desc) == HENKA_SUCCESS);
+        HENKA_TEST_ASSERT(
+            henka_ui_disclosure_row(
+                ui, "nav.a",
+                (henka_ui_rect){40.0f, 48.0f, 160.0f, 24.0f},
+                "A", &nav_a_expanded, &nav_a_changed) == HENKA_SUCCESS);
+        HENKA_TEST_ASSERT(
+            henka_ui_disclosure_row(
+                ui, "nav.c",
+                (henka_ui_rect){40.0f, 104.0f, 160.0f, 24.0f},
+                "C", &nav_c_expanded, &nav_c_changed) == HENKA_SUCCESS);
+        HENKA_TEST_ASSERT(
+            henka_ui_end_frame(ui) == HENKA_SUCCESS);
+
+        frame_desc.navigation_enter_pressed = true;
+        nav_a_changed = false;
+        nav_c_changed = false;
+        HENKA_TEST_ASSERT(
+            henka_ui_begin_frame(ui, &frame_desc) == HENKA_SUCCESS);
+        HENKA_TEST_ASSERT(
+            henka_ui_disclosure_row(
+                ui, "nav.a",
+                (henka_ui_rect){40.0f, 48.0f, 160.0f, 24.0f},
+                "A", &nav_a_expanded, &nav_a_changed) == HENKA_SUCCESS);
+        HENKA_TEST_ASSERT(
+            henka_ui_disclosure_row(
+                ui, "nav.c",
+                (henka_ui_rect){40.0f, 104.0f, 160.0f, 24.0f},
+                "C", &nav_c_expanded, &nav_c_changed) == HENKA_SUCCESS);
+        HENKA_TEST_ASSERT(
+            henka_ui_end_frame(ui) == HENKA_SUCCESS);
+        HENKA_TEST_ASSERT(!nav_a_changed);
+        HENKA_TEST_ASSERT(!nav_c_changed);
+        HENKA_TEST_ASSERT(
+            (henka_ui_get_consumed_navigation_mask(ui) &
+             HENKA_UI_NAVIGATION_ENTER) == 0U);
+
+        frame_desc.navigation_enter_pressed = false;
     }
     henka_ui_destroy(ui);
 }

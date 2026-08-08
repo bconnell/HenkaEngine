@@ -126,6 +126,142 @@ static bool henka_ui_register_disclosure_id(
     return true;
 }
 
+static void henka_ui_clear_focused_disclosure_id(
+    henka_ui_context* context)
+{
+    if (context == NULL)
+    {
+        return;
+    }
+
+    context->focused_disclosure_id_set = false;
+    context->focused_disclosure_id[0] = '\0';
+}
+
+static bool henka_ui_set_focused_disclosure_id(
+    henka_ui_context* context,
+    const char* id)
+{
+    size_t length;
+
+    if (context == NULL ||
+        !henka_checked_c_string_length(
+            id,
+            HENKA_UI_MAX_ID_BYTES,
+            &length) ||
+        length == 0U)
+    {
+        return false;
+    }
+
+    memcpy(
+        context->focused_disclosure_id,
+        id,
+        length + 1U);
+    context->focused_disclosure_id_set = true;
+    return true;
+}
+
+static bool henka_ui_focused_disclosure_id_equals(
+    const henka_ui_context* context,
+    const char* id)
+{
+    size_t length;
+
+    if (context == NULL ||
+        !context->focused_disclosure_id_set ||
+        !henka_checked_c_string_length(
+            id,
+            HENKA_UI_MAX_ID_BYTES,
+            &length) ||
+        length == 0U)
+    {
+        return false;
+    }
+
+    return strcmp(context->focused_disclosure_id, id) == 0;
+}
+
+static bool henka_ui_find_focused_disclosure_index(
+    const henka_ui_context* context,
+    size_t* out_index)
+{
+    size_t index;
+
+    if (out_index != NULL)
+    {
+        *out_index = 0U;
+    }
+
+    if (context == NULL ||
+        out_index == NULL ||
+        !context->focused_disclosure_id_set)
+    {
+        return false;
+    }
+
+    for (index = 0U;
+         index < context->disclosure_id_count;
+         ++index)
+    {
+        if (strcmp(
+                context->disclosure_ids[index],
+                context->focused_disclosure_id) == 0)
+        {
+            *out_index = index;
+            return true;
+        }
+    }
+
+    return false;
+}
+
+static void henka_ui_finalize_disclosure_navigation(
+    henka_ui_context* context)
+{
+    size_t focused_index;
+
+    if (context == NULL ||
+        !context->focused_disclosure_id_set)
+    {
+        return;
+    }
+
+    if (!henka_ui_find_focused_disclosure_index(
+            context,
+            &focused_index))
+    {
+        henka_ui_clear_focused_disclosure_id(context);
+        return;
+    }
+
+    if (context->navigation_up_pressed)
+    {
+        context->consumed_navigation_mask |=
+            HENKA_UI_NAVIGATION_UP;
+        if (focused_index > 0U)
+        {
+            focused_index -= 1U;
+            (void)henka_ui_set_focused_disclosure_id(
+                context,
+                context->disclosure_ids[focused_index]);
+        }
+    }
+
+    if (context->navigation_down_pressed)
+    {
+        context->consumed_navigation_mask |=
+            HENKA_UI_NAVIGATION_DOWN;
+        if (focused_index + 1U <
+            context->disclosure_id_count)
+        {
+            focused_index += 1U;
+            (void)henka_ui_set_focused_disclosure_id(
+                context,
+                context->disclosure_ids[focused_index]);
+        }
+    }
+}
 static const henka_ui_glyph g_ui_glyphs[] =
 {
     { ' ', {0, 0, 0, 0, 0, 0, 0} },
@@ -911,6 +1047,17 @@ henka_result henka_ui_begin_frame(
     context->draw_rect_count = 0U;
     context->draw_line_count = 0U;
     context->disclosure_id_count = 0U;
+    context->navigation_up_pressed =
+        frame_desc->navigation_up_pressed;
+    context->navigation_down_pressed =
+        frame_desc->navigation_down_pressed;
+    context->navigation_left_pressed =
+        frame_desc->navigation_left_pressed;
+    context->navigation_right_pressed =
+        frame_desc->navigation_right_pressed;
+    context->navigation_enter_pressed =
+        frame_desc->navigation_enter_pressed;
+    context->consumed_navigation_mask = 0U;
     if (!context->mouse_left_down && !context->mouse_left_released)
     {
         henka_ui_clear_active_id(context);
@@ -927,6 +1074,8 @@ henka_result henka_ui_end_frame(henka_ui_context* context)
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
 
+    henka_ui_finalize_disclosure_navigation(context);
+
     context->frame_active = false;
     context->mouse_left_pressed = false;
     context->mouse_left_released = false;
@@ -941,6 +1090,8 @@ void henka_ui_set_visible(henka_ui_context* context, bool visible)
         if (!visible)
         {
             henka_ui_clear_active_id(context);
+            henka_ui_clear_focused_disclosure_id(context);
+            context->consumed_navigation_mask = 0U;
             context->wants_mouse = false;
         }
     }
@@ -954,6 +1105,16 @@ bool henka_ui_is_visible(const henka_ui_context* context)
 bool henka_ui_get_wants_mouse(const henka_ui_context* context)
 {
     return context != NULL && context->wants_mouse;
+}
+unsigned int henka_ui_get_consumed_navigation_mask(
+    const henka_ui_context* context)
+{
+    if (context == NULL)
+    {
+        return 0U;
+    }
+
+    return context->consumed_navigation_mask;
 }
 
 size_t henka_ui_get_draw_rect_count(const henka_ui_context* context)
@@ -1227,10 +1388,14 @@ henka_result henka_ui_disclosure_row(
 {
     bool active;
     bool clicked;
+    bool focused;
     bool had_active;
     bool hot;
     bool owns_active;
     bool pressed;
+    bool requested_expanded;
+    bool original_expanded;
+    unsigned int keyboard_consumed_mask;
     henka_ui_draw_checkpoint checkpoint;
     henka_result result;
     henka_vec4 fill;
@@ -1268,12 +1433,39 @@ henka_result henka_ui_disclosure_row(
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
 
+    original_expanded = *expanded;
+    requested_expanded = original_expanded;
+    keyboard_consumed_mask = 0U;
+    focused =
+        henka_ui_focused_disclosure_id_equals(context, id);
+
+    if (focused && context->navigation_enter_pressed)
+    {
+        requested_expanded = !requested_expanded;
+        keyboard_consumed_mask |= HENKA_UI_NAVIGATION_ENTER;
+    }
+    if (focused && context->navigation_left_pressed)
+    {
+        requested_expanded = false;
+        keyboard_consumed_mask |= HENKA_UI_NAVIGATION_LEFT;
+    }
+    if (focused && context->navigation_right_pressed)
+    {
+        requested_expanded = true;
+        keyboard_consumed_mask |= HENKA_UI_NAVIGATION_RIGHT;
+    }
+
     hot = henka_ui_control_is_hot(context, bounds);
     pressed = hot && context->mouse_left_pressed;
     had_active = henka_ui_active_id_equals(context, id);
     owns_active = had_active || pressed;
     active = context->mouse_left_down && owns_active;
     clicked = hot && context->mouse_left_released && owns_active;
+
+    if (clicked)
+    {
+        requested_expanded = !requested_expanded;
+    }
 
     fill = active
         ? g_ui_button_active
@@ -1292,11 +1484,23 @@ henka_result henka_ui_disclosure_row(
             g_ui_panel_separator);
     }
 
+    if (result == HENKA_SUCCESS && focused)
+    {
+        result = henka_ui_push_rect(
+            context,
+            (henka_ui_rect){
+                bounds.x,
+                bounds.y + 2.0f,
+                2.0f,
+                bounds.height - 4.0f},
+            g_ui_heading_color);
+    }
+
     center_y = bounds.y + bounds.height * 0.5f;
     arrow_x = bounds.x + 10.0f;
     if (result == HENKA_SUCCESS)
     {
-        if (*expanded)
+        if (requested_expanded)
         {
             result = henka_ui_push_line(
                 context,
@@ -1352,10 +1556,14 @@ henka_result henka_ui_disclosure_row(
         return result;
     }
 
-    if (pressed && !henka_ui_set_active_id(context, id))
+    if (pressed)
     {
-        henka_ui_restore_checkpoint(context, &checkpoint);
-        return HENKA_ERROR_INVALID_ARGUMENT;
+        if (!henka_ui_set_active_id(context, id) ||
+            !henka_ui_set_focused_disclosure_id(context, id))
+        {
+            henka_ui_restore_checkpoint(context, &checkpoint);
+            return HENKA_ERROR_INVALID_ARGUMENT;
+        }
     }
 
     if (context->mouse_left_released && owns_active)
@@ -1363,12 +1571,11 @@ henka_result henka_ui_disclosure_row(
         henka_ui_clear_active_id(context);
     }
 
-    if (clicked)
-    {
-        *expanded = !*expanded;
-        *out_changed = true;
-    }
-
+    *expanded = requested_expanded;
+    *out_changed =
+        requested_expanded != original_expanded;
+    context->consumed_navigation_mask |=
+        keyboard_consumed_mask;
     return HENKA_SUCCESS;
 }
 henka_result henka_ui_measure_text(
