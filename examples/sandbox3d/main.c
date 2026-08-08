@@ -14,6 +14,7 @@
 
 #include "editor_controls.h"
 #include "editor_ui_state.h"
+#include "asset_browser_tools.h"
 #include "object_authoring_tools.h"
 #include "object_details_tools.h"
 #include "interaction_tools.h"
@@ -62,6 +63,7 @@ typedef enum sandbox3d_utility_view
     SANDBOX3D_UTILITY_HELP,
     SANDBOX3D_UTILITY_SCENE_LEGEND,
     SANDBOX3D_UTILITY_OBJECT_INFO,
+    SANDBOX3D_UTILITY_ASSETS,
     SANDBOX3D_UTILITY_PATHS,
     SANDBOX3D_UTILITY_SETTINGS,
     SANDBOX3D_UTILITY_DIAGNOSTICS,
@@ -315,6 +317,10 @@ typedef struct sandbox3d_state
     henka_material residency_stress_original_material;
     henka_material_asset* marker_material_asset;
     henka_material_instance marker_material_instance;
+    henka_asset_type asset_browser_type;
+    size_t asset_browser_selected_metadata_index;
+    henka_texture* asset_browser_selected_texture;
+    bool asset_browser_selection_valid;
     henka_material_instance_parameter material_editor_parameter;
     unsigned int material_editor_component;
     bool marker_material_instance_valid;
@@ -1057,6 +1063,44 @@ static henka_result sandbox3d_material_editor_apply_delta(
     return result;
 }
 
+static henka_result sandbox3d_apply_texture_to_material_binding(
+    henka_engine* engine,
+    sandbox3d_state* state,
+    sandbox3d_material_editor_binding* binding,
+    henka_material_texture_slot slot,
+    henka_texture* texture)
+{
+    henka_material_instance previous;
+    henka_material_instance candidate;
+    henka_result result;
+
+    if (engine == NULL || state == NULL || binding == NULL || !binding->valid ||
+        binding->instance == NULL || binding->asset == NULL ||
+        binding->instance->definition != binding->asset || state->scene == NULL ||
+        binding->entity == HENKA_INVALID_ENTITY)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    previous = *binding->instance;
+    candidate = previous;
+    result = sandbox3d_assign_material_instance_texture(
+        henka_engine_get_asset_manager(engine), &candidate, slot, texture);
+    if (result != HENKA_SUCCESS)
+    {
+        return result;
+    }
+    result = henka_assets_apply_material_instance_to_entity(
+        &candidate, state->scene, binding->entity);
+    if (result != HENKA_SUCCESS)
+    {
+        *binding->instance = previous;
+        return result;
+    }
+    *binding->instance = candidate;
+    return HENKA_SUCCESS;
+}
+
 static void sandbox3d_draw_material_instance_editor(
     henka_engine* engine,
     sandbox3d_state* state,
@@ -1572,6 +1616,8 @@ static const char* sandbox3d_get_utility_label(sandbox3d_utility_view utility)
             return "Scene Legend";
         case SANDBOX3D_UTILITY_OBJECT_INFO:
             return "Object Info";
+        case SANDBOX3D_UTILITY_ASSETS:
+            return "Assets";
         case SANDBOX3D_UTILITY_PATHS:
             return "Paths";
         case SANDBOX3D_UTILITY_SETTINGS:
@@ -1598,6 +1644,8 @@ static const char* sandbox3d_get_utility_setting_value(sandbox3d_utility_view ut
             return "scene_legend";
         case SANDBOX3D_UTILITY_OBJECT_INFO:
             return "object_info";
+        case SANDBOX3D_UTILITY_ASSETS:
+            return "assets";
         case SANDBOX3D_UTILITY_PATHS:
             return "paths";
         case SANDBOX3D_UTILITY_SETTINGS:
@@ -1632,6 +1680,10 @@ static sandbox3d_utility_view sandbox3d_parse_utility_view(const char* value)
     if (strcmp(value, "object_info") == 0)
     {
         return SANDBOX3D_UTILITY_OBJECT_INFO;
+    }
+    if (strcmp(value, "assets") == 0)
+    {
+        return SANDBOX3D_UTILITY_ASSETS;
     }
     if (strcmp(value, "paths") == 0)
     {
@@ -3456,13 +3508,13 @@ static void sandbox3d_print_startup_ui_cue(const sandbox3d_state* state)
     {
         printf("Startup UI: the docked workspace starts open so Controls and Physics QA are discoverable immediately.\n");
         printf("Startup UI: press F4 to hide or show the panels and press F5 to switch View, Inspect, or Full Tools.\n");
-        printf("Startup UI: use the in-window Help, Legend, Paths, Settings, Diagnostics, Transform QA, and Physics QA utilities for inspection.\n");
+        printf("Startup UI: use the in-window Help, Legend, Assets, Paths, Settings, Diagnostics, Transform QA, and Physics QA utilities for inspection.\n");
         printf("Startup UI: recent actions and warnings appear in the Controls panel so normal use does not depend on the console.\n");
     }
     else
     {
         printf("Startup UI: press F4 to show or hide the docked panels and press F5 to cycle layout modes.\n");
-        printf("Startup UI: use the in-window utilities for help, scene legend, paths, settings, and diagnostics.\n");
+        printf("Startup UI: use the in-window utilities for help, scene legend, assets, paths, settings, and diagnostics.\n");
         printf("Startup UI: recent actions and warnings appear in-window while the console stays available for fallback logs.\n");
     }
 
@@ -3509,8 +3561,8 @@ static void sandbox3d_print_help(const sandbox3d_state* state)
     printf("  Tab / Shift+Tab cycles keyboard focus across visible workspace panels; the focused header gets a visible accent.\n");
     printf("  Ctrl+M maximizes the focused or hovered workspace section; press it again to restore the section.\n");
     printf("  Open Native Panel Test from the Controls QA page to validate a separate OS-level tool window.\n");
-    printf("  Use the panels to inspect named scene objects, clear selection, switch gizmo modes, focus the camera, reset object transforms, toggle visibility, and open in-window Help, Scene Legend, Object Info, Paths, Settings, Diagnostics, Transform QA, and Physics QA utilities.\n");
-    printf("  Select glTF Marker to edit its shared material instance in Object Details; scalar/vector, flags, alpha, and semantic texture overrides apply transactionally.\n");
+    printf("  Use the panels to inspect named scene objects, clear selection, switch gizmo modes, focus the camera, reset object transforms, toggle visibility, and open in-window Help, Scene Legend, Object Info, Assets, Paths, Settings, Diagnostics, Transform QA, and Physics QA utilities.\n");
+    printf("  Select glTF Marker to edit its shared material instance in Object Details; scalar/vector, flags, alpha, and semantic texture overrides apply transactionally. Use Utility > Assets to choose manager-owned textures for editable slots.\n");
     printf("  Physics QA enables an opt-in fixed-step rigid-body demo with collider/contact debug drawing, impulses, body modes, and camera raycasts.\n");
     printf("  The Controls panel uses Main, Camera/Status, and QA pages, and Scene Objects supports paging when the dock is tighter than the full list.\n");
     printf("  Controls also provides Default, Modeling, Materials, Scene Assembly, Debugging, and Minimal Viewport workspace presets; topology edits mark the workspace Custom.\n");
@@ -12319,6 +12371,96 @@ static void sandbox3d_draw_object_details_panel(
                 }
             }
 
+            {
+                static const char* texture_slot_labels[] =
+                {
+                    "Base Color", "Normal", "Metal/Rough", "Occlusion", "Emissive"
+                };
+                size_t texture_slot_index;
+                for (texture_slot_index = 0U; texture_slot_index < 5U; ++texture_slot_index)
+                {
+                    sandbox3d_texture_slot_display slot_display;
+                    char slot_value[160];
+                    char assign_id[64];
+                    char clear_id[64];
+                    const bool editable =
+                        material_view.access == SANDBOX3D_MATERIAL_ACCESS_EDITABLE_INSTANCE &&
+                        material_view.editor_binding != NULL;
+
+                    memset(&slot_display, 0, sizeof(slot_display));
+                    if (sandbox3d_format_material_texture_slot(
+                            henka_engine_get_asset_manager_const(engine),
+                            &material_view.material,
+                            (henka_material_texture_slot)texture_slot_index,
+                            &slot_display) != HENKA_SUCCESS)
+                    {
+                        snprintf(slot_value, sizeof(slot_value), "Unavailable");
+                    }
+                    else
+                    {
+                        snprintf(
+                            slot_value,
+                            sizeof(slot_value),
+                            "%s | %s | %s",
+                            slot_display.asset_identity,
+                            slot_display.mip_state,
+                            slot_display.state);
+                    }
+
+                    if (!sandbox3d_details_flow_next_row(
+                            state, flow_desc.bounds, 28.0f, 1U, &row))
+                    {
+                        continue;
+                    }
+                    sandbox3d_draw_value_row(
+                        state->ui, row.x, row.y, row.width, texture_slot_labels[texture_slot_index], slot_value);
+                    snprintf(assign_id, sizeof(assign_id), "material_slot_assign_%zu", texture_slot_index);
+                    snprintf(clear_id, sizeof(clear_id), "material_slot_clear_%zu", texture_slot_index);
+                    if (editable && state->asset_browser_selected_texture != NULL &&
+                        henka_ui_button(
+                            state->ui,
+                            assign_id,
+                            (henka_ui_rect){row.x + row.width - 172.0f, row.y, 80.0f, 24.0f},
+                            "Assign"))
+                    {
+                        if (sandbox3d_apply_texture_to_material_binding(
+                                engine,
+                                state,
+                                material_view.editor_binding,
+                                (henka_material_texture_slot)texture_slot_index,
+                                state->asset_browser_selected_texture) == HENKA_SUCCESS)
+                        {
+                            sandbox3d_set_status(state, false, "Texture assigned to the editable material instance.");
+                        }
+                        else
+                        {
+                            sandbox3d_set_status(state, true, "Texture assignment rejected; the instance was preserved.");
+                        }
+                    }
+                    if (editable && slot_display.assigned &&
+                        henka_ui_button(
+                            state->ui,
+                            clear_id,
+                            (henka_ui_rect){row.x + row.width - 84.0f, row.y, 80.0f, 24.0f},
+                            "Clear"))
+                    {
+                        if (sandbox3d_apply_texture_to_material_binding(
+                                engine,
+                                state,
+                                material_view.editor_binding,
+                                (henka_material_texture_slot)texture_slot_index,
+                                NULL) == HENKA_SUCCESS)
+                        {
+                            sandbox3d_set_status(state, false, "Texture cleared from the editable material instance.");
+                        }
+                        else
+                        {
+                            sandbox3d_set_status(state, true, "Texture clear rejected; the instance was preserved.");
+                        }
+                    }
+                }
+            }
+
             if (material_view.access ==
                     SANDBOX3D_MATERIAL_ACCESS_EDITABLE_INSTANCE &&
                 material_view.editor_binding != NULL &&
@@ -12693,6 +12835,10 @@ static void sandbox3d_draw_utility_panel(
     {
         sandbox3d_set_active_utility(state, SANDBOX3D_UTILITY_OBJECT_INFO);
     }
+    if (henka_ui_tab(state->ui, "utility_tab_assets", (henka_ui_rect){x_left + (button_width + 8.0f) * 2.0f, y_start + 60.0f, button_width, 24.0f}, "Assets", state->workspace.active_utility == SANDBOX3D_UTILITY_ASSETS))
+    {
+        sandbox3d_set_active_utility(state, SANDBOX3D_UTILITY_ASSETS);
+    }
     if (henka_ui_tab(state->ui, "utility_tab_paths", (henka_ui_rect){x_left, y_start + 30.0f, button_width, 24.0f}, "Paths", state->workspace.active_utility == SANDBOX3D_UTILITY_PATHS))
     {
         sandbox3d_set_active_utility(state, SANDBOX3D_UTILITY_PATHS);
@@ -12838,6 +12984,102 @@ static void sandbox3d_draw_utility_panel(
                         sandbox3d_get_real_selected_entity(state))
                     : "(none)");
             break;
+
+        case SANDBOX3D_UTILITY_ASSETS:
+        {
+            sandbox3d_asset_browser_item items[32];
+            const char* type_label;
+            size_t item_count;
+            size_t item_index;
+            size_t visible_count;
+
+            if (state->asset_browser_type == HENKA_ASSET_TYPE_MATERIAL)
+            {
+                type_label = "Materials";
+            }
+            else if (state->asset_browser_type == HENKA_ASSET_TYPE_MESH)
+            {
+                type_label = "Meshes";
+            }
+            else
+            {
+                type_label = "Textures";
+            }
+            sandbox3d_draw_section_heading(state->ui, x_left, y_start, "Manager asset browser");
+            if (henka_ui_tab(state->ui, "asset_browser_textures", (henka_ui_rect){x_left, y_start + 20.0f, 82.0f, 24.0f}, "Textures", state->asset_browser_type == HENKA_ASSET_TYPE_TEXTURE))
+            {
+                state->asset_browser_type = HENKA_ASSET_TYPE_TEXTURE;
+                state->asset_browser_selection_valid = false;
+                state->asset_browser_selected_texture = NULL;
+            }
+            if (henka_ui_tab(state->ui, "asset_browser_materials", (henka_ui_rect){x_left + 88.0f, y_start + 20.0f, 88.0f, 24.0f}, "Materials", state->asset_browser_type == HENKA_ASSET_TYPE_MATERIAL))
+            {
+                state->asset_browser_type = HENKA_ASSET_TYPE_MATERIAL;
+                state->asset_browser_selection_valid = false;
+                state->asset_browser_selected_texture = NULL;
+            }
+            if (henka_ui_tab(state->ui, "asset_browser_meshes", (henka_ui_rect){x_left + 182.0f, y_start + 20.0f, 76.0f, 24.0f}, "Meshes", state->asset_browser_type == HENKA_ASSET_TYPE_MESH))
+            {
+                state->asset_browser_type = HENKA_ASSET_TYPE_MESH;
+                state->asset_browser_selection_valid = false;
+                state->asset_browser_selected_texture = NULL;
+            }
+            item_count = sandbox3d_asset_browser_collect(assets, state->asset_browser_type, items, 32U);
+            snprintf(row_value, sizeof(row_value), "%s | %zu known", type_label, item_count);
+            sandbox3d_draw_value_row(state->ui, x_left, y_start + 50.0f, panel_bounds.width - 28.0f, "Source", row_value);
+            visible_count = item_count < 6U ? item_count : 6U;
+            for (item_index = 0U; item_index < visible_count; ++item_index)
+            {
+                char item_id[64];
+                const char* display_name = items[item_index].metadata.display_name != NULL
+                    ? items[item_index].metadata.display_name
+                    : items[item_index].metadata.source_path;
+                snprintf(item_id, sizeof(item_id), "asset_browser_item_%zu", items[item_index].metadata_index);
+                if (henka_ui_selectable(
+                        state->ui,
+                        item_id,
+                        (henka_ui_rect){x_left, y_start + 78.0f + (float)item_index * 30.0f, panel_bounds.width - 28.0f, 26.0f},
+                        display_name != NULL ? display_name : "(unnamed asset)",
+                        state->asset_browser_selection_valid && state->asset_browser_selected_metadata_index == items[item_index].metadata_index))
+                {
+                    state->asset_browser_selection_valid = true;
+                    state->asset_browser_selected_metadata_index = items[item_index].metadata_index;
+                    state->asset_browser_selected_texture = NULL;
+                    if (state->asset_browser_type == HENKA_ASSET_TYPE_TEXTURE && items[item_index].metadata.source_path != NULL)
+                    {
+                        henka_texture* selected_texture = NULL;
+                        if (henka_assets_load_texture(henka_engine_get_asset_manager(engine), items[item_index].metadata.source_path, &selected_texture) == HENKA_SUCCESS)
+                        {
+                            state->asset_browser_selected_texture = selected_texture;
+                            sandbox3d_set_statusf(state, false, false, "Selected manager texture: %s", items[item_index].metadata.source_path);
+                        }
+                        else
+                        {
+                            sandbox3d_set_statusf(state, true, false, "Texture load rejected: %s", items[item_index].metadata.source_path);
+                        }
+                    }
+                }
+            }
+            if (item_count > visible_count)
+            {
+                henka_ui_label_colored(state->ui, x_left, y_start + 258.0f, 1.0f, "List bounded to six visible assets.", HENKA_UI_COLOR_INFO);
+            }
+            if (state->asset_browser_selection_valid)
+            {
+                henka_asset_metadata selected_metadata;
+                if (henka_assets_get_metadata_at_index(assets, state->asset_browser_selected_metadata_index, &selected_metadata) == HENKA_SUCCESS)
+                {
+                    sandbox3d_draw_value_row(state->ui, x_left, y_start + 278.0f, panel_bounds.width - 28.0f, "Selected", selected_metadata.source_path != NULL ? selected_metadata.source_path : "(unnamed asset)");
+                    snprintf(row_value, sizeof(row_value), "%s%s", selected_metadata.loaded ? "Loaded" : "Unavailable", selected_metadata.fallback ? " / fallback" : "");
+                    sandbox3d_draw_value_row(state->ui, x_left, y_start + 304.0f, panel_bounds.width - 28.0f, "State", row_value);
+                }
+            }
+            else
+            {
+                henka_ui_label(state->ui, x_left, y_start + 278.0f, 1.0f, "Select a manager-known asset.");
+            }
+            break;
+        }
 
         case SANDBOX3D_UTILITY_PATHS:
             sandbox3d_draw_section_heading(state->ui, x_left, y_start, "Runtime paths");
@@ -16190,6 +16432,7 @@ int main(int argc, char** argv)
     state.material_stress = material_stress;
     state.capture_mode_requested = capture_mode_requested;
     state.capture_mode = capture_mode;
+    state.asset_browser_type = HENKA_ASSET_TYPE_TEXTURE;
     state.camera = henka_camera_create_perspective(60.0f * HENKA_DEG_TO_RAD, 16.0f / 9.0f, 0.1f, 100.0f);
     state.cube_entity = HENKA_INVALID_ENTITY;
     state.ground_entity = HENKA_INVALID_ENTITY;
