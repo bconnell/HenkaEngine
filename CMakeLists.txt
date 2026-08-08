@@ -36,7 +36,7 @@ if(HENKA_BUILD_CLIENT AND HENKA_ENABLE_KTX2_TRANSCODER)
     enable_language(CXX)
 endif()
 
-if(HENKA_BUILD_CLIENT)
+if(HENKA_BUILD_CLIENT OR HENKA_ENABLE_NETWORK)
     include(FetchContent)
 endif()
 
@@ -86,6 +86,43 @@ if(HENKA_BUILD_CLIENT AND HENKA_ENABLE_KTX2_TRANSCODER)
         GIT_SUBMODULES_RECURSE FALSE
     )
     FetchContent_MakeAvailable(KTXSoftware)
+endif()
+
+if(HENKA_ENABLE_NETWORK)
+    set(BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
+    FetchContent_Declare(
+        ENet
+        GIT_REPOSITORY https://github.com/lsalzman/enet.git
+        GIT_TAG 5a9c537fd464b3c6d3c55e1d3bd47588faf71b42
+        GIT_SUBMODULES ""
+        GIT_SUBMODULES_RECURSE FALSE
+    )
+    FetchContent_GetProperties(ENet)
+    if(NOT enet_POPULATED)
+        if(POLICY CMP0169)
+            cmake_policy(PUSH)
+            cmake_policy(SET CMP0169 OLD)
+        endif()
+        FetchContent_Populate(ENet)
+        if(POLICY CMP0169)
+            cmake_policy(POP)
+        endif()
+    endif()
+    add_library(henka_enet STATIC
+        ${enet_SOURCE_DIR}/callbacks.c
+        ${enet_SOURCE_DIR}/compress.c
+        ${enet_SOURCE_DIR}/host.c
+        ${enet_SOURCE_DIR}/list.c
+        ${enet_SOURCE_DIR}/packet.c
+        ${enet_SOURCE_DIR}/peer.c
+        ${enet_SOURCE_DIR}/protocol.c
+        ${enet_SOURCE_DIR}/unix.c
+        ${enet_SOURCE_DIR}/win32.c
+    )
+    target_include_directories(henka_enet PRIVATE ${enet_SOURCE_DIR}/include)
+    if(WIN32)
+        target_link_libraries(henka_enet PRIVATE winmm ws2_32)
+    endif()
 endif()
 
 add_subdirectory(engine)

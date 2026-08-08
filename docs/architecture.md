@@ -17,8 +17,12 @@ foundation for the server and terrain work that follows.
 The public network header defines Henka-owned protocol values and views only;
 wire packets use a fixed little-endian header and bounded payloads rather than
 native C layouts. Control, terrain, and snapshot traffic have separate logical
-channels. The codec is available to the shared runtime, while the ENet socket
-transport and multiplayer authority layer remain subsequent runtime work.
+channels. The shared runtime privately pins ENet commit
+`5a9c537fd464b3c6d3c55e1d3bd47588faf71b42` under its MIT license and exposes
+only Henka host, peer, event, message, send, poll, disconnect, and diagnostic
+types. The transport foundation provides bounded reliable ordered localhost
+delivery; terrain authority, revision recovery, and multiplayer state remain
+subsequent work.
 
 ## Modules
 

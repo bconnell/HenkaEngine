@@ -11,9 +11,13 @@ add_library(henka_runtime STATIC
 )
 
 if(HENKA_ENABLE_NETWORK)
+    target_include_directories(henka_runtime PRIVATE ${enet_SOURCE_DIR}/include)
     target_sources(henka_runtime PRIVATE
+        src/network/network.c
         src/network/network_codec.c
+        src/network/network_enet.c
     )
+    target_link_libraries(henka_runtime PRIVATE henka_enet)
 endif()
 
 target_include_directories(henka_runtime

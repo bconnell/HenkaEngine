@@ -64,6 +64,7 @@ $validationBuild = Join-Path $validationRoot "external_game_minimal_build"
 $cmake = Get-HenkaCMakePath
 $localSdlSource = Join-Path $repoRoot "build\_deps\sdl3-src"
 $localKtxSource = Join-Path $repoRoot "build\_deps\ktxsoftware-src"
+$localEnetSource = Join-Path $repoRoot "build\_deps\enet-src"
 $offlineProviderCount = 0
 $configureArguments = @(
     "-S", $validationSource,
@@ -92,10 +93,20 @@ else {
     $configureArguments += "-DFETCHCONTENT_FULLY_DISCONNECTED=OFF"
     Write-Host "KTX-Software provider: FetchContent network fallback"
 }
+if (-not $NoLocalProviders -and (Test-Path -LiteralPath $localEnetSource -PathType Container)) {
+    $configureArguments += "-DFETCHCONTENT_SOURCE_DIR_ENET=$localEnetSource"
+    $offlineProviderCount += 1
+    Write-Host "ENet provider: repository-local populated source"
+}
+else {
+    $configureArguments += "-DFETCHCONTENT_SOURCE_DIR_ENET="
+    $configureArguments += "-DFETCHCONTENT_FULLY_DISCONNECTED=OFF"
+    Write-Host "ENet provider: FetchContent network fallback"
+}
 
-if ($offlineProviderCount -eq 2) {
+if ($offlineProviderCount -eq 3) {
     $configureArguments += "-DFETCHCONTENT_FULLY_DISCONNECTED=ON"
-    Write-Host "FetchContent mode: fully disconnected because both optional local providers are present"
+    Write-Host "FetchContent mode: fully disconnected because all repository-local providers are present"
 }
 else {
     Write-Host "FetchContent mode: normal network-capable fallback for missing providers"

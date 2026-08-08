@@ -81,7 +81,7 @@ Henka Engine is still early, but the sandbox now renders a visible 3D scene with
 - Transactional packaged-sandbox refreshes that preserve user data by default and retain the prior package until activation succeeds
 - Generic documentation and starter template for external game repositories
 - Headless-only CMake configuration with `HENKA_BUILD_CLIENT=OFF`, `HENKA_BUILD_DEDICATED_SERVER=OFF`, and `HENKA_ENABLE_KTX2_TRANSCODER=OFF`; the resulting runtime target does not configure SDL, OpenGL, or KTX
-- Version-1 bounded Henka network packet codec with explicit little-endian headers, three logical channels, a 64 KiB packet ceiling, and 32 KiB snapshot fragments; socket transport, server authority, and multiplayer synchronization remain unfinished
+- Version-1 bounded Henka network packet codec and localhost ENet transport with explicit little-endian headers, three logical channels, reliable ordered delivery, a 64 KiB packet ceiling, and 32 KiB snapshot fragments; server authority and multiplayer synchronization remain unfinished
 - Deterministic Windows CI package contract checks that avoid hosted graphics-session assumptions, while local validation still performs packaged runtime smoke, desktop interaction, and application-only screenshot checks
 - Repository integrity checks for tracked artifacts, credential signatures, script parsing, dependency pins, and workflow action pins
 
@@ -91,7 +91,7 @@ Henka Engine is still early, but the sandbox now renders a visible 3D scene with
 - Dedicated-server networking, terrain hosting, persistence, and deployment workflow
 - Full asset browser, import/reimport, dependency-graph, and project authoring workflow (the sandbox has only a bounded manager-known asset view and editable-instance texture-slot assignment)
 - Audio
-- Network transport and multiplayer runtime
+- Terrain authority and multiplayer synchronization beyond the transport foundation
 - Scripting
 - Full 2D renderer
 - Full 2.5D sprite, layered-depth, parallax, animation, and constrained-movement workflow

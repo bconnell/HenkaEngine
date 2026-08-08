@@ -15,6 +15,7 @@ $executablePath = Join-Path $buildRoot "examples\sandbox3d\$Configuration\henka_
 $provenanceScript = Join-Path $PSScriptRoot "write_build_provenance.ps1"
 $localSdlSource = Join-Path $buildRoot "_deps\sdl3-src"
 $localKtxSource = Join-Path $buildRoot "_deps\ktxsoftware-src"
+$localEnetSource = Join-Path $buildRoot "_deps\enet-src"
 $offlineProviderCount = 0
 $configureArguments = @("-S", $repoRoot, "-B", $buildRoot)
 if (Test-Path -LiteralPath (Join-Path $localSdlSource "CMakeLists.txt")) {
@@ -35,7 +36,16 @@ if (Test-Path -LiteralPath (Join-Path $localKtxSource "CMakeLists.txt")) {
     $configureArguments += "-DFETCHCONTENT_FULLY_DISCONNECTED=OFF"
     Write-Host "KTX-Software provider: FetchContent network fallback"
 }
-if ($offlineProviderCount -eq 2) {
+if (Test-Path -LiteralPath (Join-Path $localEnetSource "CMakeLists.txt")) {
+    $configureArguments += "-DFETCHCONTENT_SOURCE_DIR_ENET=$localEnetSource"
+    $offlineProviderCount += 1
+    Write-Host "ENet provider: repository-local populated source"
+} else {
+    $configureArguments += "-DFETCHCONTENT_SOURCE_DIR_ENET="
+    $configureArguments += "-DFETCHCONTENT_FULLY_DISCONNECTED=OFF"
+    Write-Host "ENet provider: FetchContent network fallback"
+}
+if ($offlineProviderCount -eq 3) {
     $configureArguments += "-DFETCHCONTENT_FULLY_DISCONNECTED=ON"
     Write-Host "FetchContent mode: fully disconnected because both optional local providers are present"
 } else {

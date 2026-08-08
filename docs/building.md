@@ -37,8 +37,10 @@ ctest --test-dir out/headless -C Debug -R henka_headless_runtime_tests --output-
 `henka_runtime` is the public static library for renderer-independent
 consumers. `henka` links it underneath the existing graphical API. The
 dedicated-server executable is currently a headless host foundation; its
-network and Terrain v1 responsibilities are being added in later runtime
-slices.
+network transport is now a bounded private-ENet foundation, while its Terrain
+v1 authority and persistence responsibilities are being added in later runtime
+slices. ENet is fetched at the pinned commit recorded in
+`docs/architecture.md`; its license is included in `third_party/licenses/enet.txt`.
 
 ## Run tests
 
