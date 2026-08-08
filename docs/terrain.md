@@ -127,6 +127,15 @@ owner can reject stale regeneration work. The current physics API exposes
 planes, boxes, and spheres rather than a heightfield shape; body creation,
 replacement, and asynchronous regeneration therefore remain subsequent work.
 
+`<henka/terrain_mesh.h>` provides the corresponding renderer-independent
+geometry boundary. `henka_terrain_mesh_build_chunk` requires a render-resident
+chunk and fills caller-owned buffers for LOD 0 through LOD 3. It derives finite
+central-difference normals, world-normalized UVs, and copies the four
+normalized material weights without allocating. The result carries the source
+revision and generation, so a graphics owner can discard a stale upload. GPU
+mesh ownership, seam stitching, render eviction, and visual scene integration
+remain subsequent work.
+
 The descriptor stores the format version, world and base identities, all
 world/region/chunk relationships, and bounded residency limits. Creating a
 world allocates only the configured region and chunk residency tables; it does
@@ -136,8 +145,8 @@ physics, render, pending-I/O, dirty, revision, and generation state.
 ## Current boundary
 
 This slice establishes the shared data model and bounded ownership contract.
-World manifest integration, journal compaction, collision regeneration, terrain
-mesh/GPU rendering, replication and snapshot recovery, and client prediction
+World manifest integration, journal compaction, collision regeneration, GPU
+terrain rendering, replication and snapshot recovery, and client prediction
 are subsequent validated runtime slices.
 They must use this
 same world identity, region/chunk mapping, revision, and residency ownership;
