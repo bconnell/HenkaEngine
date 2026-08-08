@@ -41,8 +41,13 @@ objects. The runtime thread pumps bounded completions and performs the
 authoritative sample/revision swap. Duplicate requests coalesce, queued or
 active requests can be cancelled, observer records are bounded, and queue,
 completion, failure, cancellation, and dropped-completion diagnostics are
-available. Hysteresis, deterministic eviction, and automatic residency policy
-remain subsequent work.
+available. Observer updates request a bounded CPU-radius square and reconcile
+resident regions against the union of observer unload-radius squares. Regions
+outside that union are released deterministically in row-major order only when
+they have no physics/render residency, pending I/O, or dirty edits. A zero
+unload radius preserves the CPU radius; a larger unload radius provides bounded
+movement hysteresis. Physics/render radius ownership and asynchronous
+regeneration remain separate work.
 
 ## Deterministic edits
 
@@ -131,10 +136,9 @@ physics, render, pending-I/O, dirty, revision, and generation state.
 ## Current boundary
 
 This slice establishes the shared data model and bounded ownership contract.
-World manifest integration, journal compaction, streaming hysteresis and
-eviction, collision regeneration, terrain mesh/GPU rendering, replication and
-snapshot recovery, and client prediction are subsequent validated runtime
-slices.
+World manifest integration, journal compaction, collision regeneration, terrain
+mesh/GPU rendering, replication and snapshot recovery, and client prediction
+are subsequent validated runtime slices.
 They must use this
 same world identity, region/chunk mapping, revision, and residency ownership;
 they must not introduce a second world-sized representation.

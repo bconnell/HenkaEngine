@@ -25,6 +25,8 @@ typedef struct henka_terrain_stream_observer
     uint32_t cpu_radius_regions;
     uint32_t physics_radius_regions;
     uint32_t render_radius_regions;
+    /* Zero preserves the non-hysteretic policy and uses cpu_radius_regions. */
+    uint32_t cpu_unload_radius_regions;
 } henka_terrain_stream_observer;
 
 typedef struct henka_terrain_stream_stats
@@ -38,6 +40,7 @@ typedef struct henka_terrain_stream_stats
     uint64_t failed_request_count;
     uint64_t cancelled_request_count;
     uint64_t dropped_completion_count;
+    uint64_t evicted_region_count;
 } henka_terrain_stream_stats;
 
 henka_terrain_stream_desc henka_terrain_stream_desc_default(void);

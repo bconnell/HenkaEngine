@@ -16,7 +16,8 @@ static int test_streaming(void)
     henka_terrain_streamer* streamer = NULL;
     henka_terrain_stream_desc stream_desc = henka_terrain_stream_desc_default();
     henka_terrain_sample* samples = NULL;
-    henka_terrain_stream_observer observer = {1U, {2, 3}, 0U, 0U, 0U};
+    henka_terrain_stream_observer observer = {1U, {2, 3}, 0U, 0U, 0U, 0U};
+    henka_terrain_stream_observer moved_observer = {1U, {4, 3}, 0U, 0U, 0U, 0U};
     henka_terrain_stream_stats stats;
     henka_terrain_region_state region_state;
     uint32_t index;
@@ -41,6 +42,7 @@ static int test_streaming(void)
     }
     if (henka_terrain_storage_begin(storage, 1U) != HENKA_SUCCESS ||
         henka_terrain_storage_write_region(storage, observer.center_region, 8U, 2U, samples, layout.samples_per_region) != HENKA_SUCCESS ||
+        henka_terrain_storage_write_region(storage, moved_observer.center_region, 9U, 3U, samples, layout.samples_per_region) != HENKA_SUCCESS ||
         henka_terrain_storage_commit(storage, 1U) != HENKA_SUCCESS ||
         henka_terrain_streamer_create(world, storage, &stream_desc, &streamer) != HENKA_SUCCESS ||
         henka_terrain_streamer_add_observer(streamer, &observer) != HENKA_SUCCESS ||
@@ -73,6 +75,32 @@ static int test_streaming(void)
         henka_terrain_world_get_region_state(world, observer.center_region, &region_state) != HENKA_SUCCESS ||
         region_state.revision != 8U || region_state.generation != 2U ||
         !region_state.cpu_resident)
+    {
+        goto cleanup;
+    }
+    if (henka_terrain_streamer_update_observer(streamer, &moved_observer) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    for (index = 0U; index < 200U; ++index)
+    {
+        if (henka_terrain_streamer_pump(streamer, 1U) != HENKA_SUCCESS)
+        {
+            goto cleanup;
+        }
+        henka_terrain_streamer_get_stats(streamer, &stats);
+        if (stats.completed_request_count == 2U)
+        {
+            break;
+        }
+#if defined(_WIN32)
+        Sleep(1U);
+#endif
+    }
+    if (stats.completed_request_count != 2U || stats.evicted_region_count != 1U ||
+        henka_terrain_world_get_region_state(world, observer.center_region, &region_state) == HENKA_SUCCESS ||
+        henka_terrain_world_get_region_state(world, moved_observer.center_region, &region_state) != HENKA_SUCCESS ||
+        region_state.revision != 9U || region_state.generation != 3U)
     {
         goto cleanup;
     }
