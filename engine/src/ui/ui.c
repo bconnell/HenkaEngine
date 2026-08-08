@@ -89,6 +89,43 @@ static bool henka_ui_active_id_equals(const henka_ui_context* context, const cha
     return strcmp(context->active_id, id) == 0;
 }
 
+static bool henka_ui_register_disclosure_id(
+    henka_ui_context* context,
+    const char* id)
+{
+    size_t index;
+    size_t length;
+
+    if (context == NULL ||
+        !henka_checked_c_string_length(
+            id,
+            HENKA_UI_MAX_ID_BYTES,
+            &length) ||
+        length == 0U ||
+        context->disclosure_id_count >=
+            HENKA_UI_MAX_DISCLOSURE_ROWS)
+    {
+        return false;
+    }
+
+    for (index = 0U;
+         index < context->disclosure_id_count;
+         ++index)
+    {
+        if (strcmp(context->disclosure_ids[index], id) == 0)
+        {
+            return false;
+        }
+    }
+
+    memcpy(
+        context->disclosure_ids[context->disclosure_id_count],
+        id,
+        length + 1U);
+    context->disclosure_id_count += 1U;
+    return true;
+}
+
 static const henka_ui_glyph g_ui_glyphs[] =
 {
     { ' ', {0, 0, 0, 0, 0, 0, 0} },
@@ -262,6 +299,7 @@ typedef struct henka_ui_draw_checkpoint
 {
     size_t draw_rect_count;
     size_t draw_line_count;
+    size_t disclosure_id_count;
     bool wants_mouse;
     bool active_id_set;
     char active_id[HENKA_UI_MAX_ID_BYTES + 1U];
@@ -278,6 +316,7 @@ static void henka_ui_capture_checkpoint(
 
     checkpoint->draw_rect_count = context->draw_rect_count;
     checkpoint->draw_line_count = context->draw_line_count;
+    checkpoint->disclosure_id_count = context->disclosure_id_count;
     checkpoint->wants_mouse = context->wants_mouse;
     checkpoint->active_id_set = context->active_id_set;
     memcpy(checkpoint->active_id, context->active_id, sizeof(checkpoint->active_id));
@@ -294,6 +333,7 @@ static void henka_ui_restore_checkpoint(
 
     context->draw_rect_count = checkpoint->draw_rect_count;
     context->draw_line_count = checkpoint->draw_line_count;
+    context->disclosure_id_count = checkpoint->disclosure_id_count;
     context->wants_mouse = checkpoint->wants_mouse;
     context->active_id_set = checkpoint->active_id_set;
     memcpy(context->active_id, checkpoint->active_id, sizeof(context->active_id));
@@ -870,6 +910,7 @@ henka_result henka_ui_begin_frame(
     context->mouse_left_released = frame_desc->mouse_left_released;
     context->draw_rect_count = 0U;
     context->draw_line_count = 0U;
+    context->disclosure_id_count = 0U;
     if (!context->mouse_left_down && !context->mouse_left_released)
     {
         henka_ui_clear_active_id(context);
@@ -1012,6 +1053,8 @@ henka_result henka_ui_flow_begin(
     henka_ui_context* context,
     const henka_ui_flow_desc* desc)
 {
+    double cursor_y;
+
     if (context == NULL ||
         desc == NULL ||
         !context->frame_active ||
@@ -1029,12 +1072,21 @@ henka_result henka_ui_flow_begin(
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
 
+    cursor_y = (double)desc->bounds.y -
+        (double)desc->scroll_offset;
+    if (!isfinite(cursor_y) ||
+        cursor_y < -(double)FLT_MAX ||
+        cursor_y > (double)FLT_MAX)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
     context->flow.active = true;
     context->flow.bounds = desc->bounds;
     context->flow.scroll_offset = desc->scroll_offset;
     context->flow.row_spacing = desc->row_spacing;
     context->flow.indent_width = desc->indent_width;
-    context->flow.cursor_y = desc->bounds.y - desc->scroll_offset;
+    context->flow.cursor_y = (float)cursor_y;
     context->flow.content_height = 0.0f;
     return HENKA_SUCCESS;
 }
@@ -1053,6 +1105,7 @@ henka_result henka_ui_flow_next_row(
     double row_width;
     double row_bottom;
     double clip_bottom;
+    double next_content_height;
 
     if (out_bounds != NULL)
     {
@@ -1090,6 +1143,8 @@ henka_result henka_ui_flow_next_row(
     row_bottom = row_y + (double)row_height;
     clip_bottom = (double)context->flow.bounds.y +
         (double)context->flow.bounds.height;
+    next_content_height =
+        content_offset + (double)row_height;
 
     if (!isfinite(indent) ||
         !isfinite(content_offset) ||
@@ -1098,12 +1153,17 @@ henka_result henka_ui_flow_next_row(
         !isfinite(row_width) ||
         !isfinite(row_bottom) ||
         !isfinite(clip_bottom) ||
+        !isfinite(next_content_height) ||
         row_width <= 0.0 ||
         row_x < -(double)FLT_MAX ||
         row_x > (double)FLT_MAX ||
         row_y < -(double)FLT_MAX ||
         row_y > (double)FLT_MAX ||
-        row_width > (double)FLT_MAX)
+        row_bottom < -(double)FLT_MAX ||
+        row_bottom > (double)FLT_MAX ||
+        row_width > (double)FLT_MAX ||
+        next_content_height < 0.0 ||
+        next_content_height > (double)FLT_MAX)
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
@@ -1119,9 +1179,9 @@ henka_result henka_ui_flow_next_row(
         row_y < clip_bottom;
 
     context->flow.content_height =
-        (float)(content_offset + (double)row_height);
+        (float)next_content_height;
     context->flow.cursor_y =
-        (float)(row_y + (double)row_height);
+        (float)row_bottom;
     return HENKA_SUCCESS;
 }
 
@@ -1202,6 +1262,12 @@ henka_result henka_ui_disclosure_row(
     }
 
     henka_ui_capture_checkpoint(context, &checkpoint);
+    if (!henka_ui_register_disclosure_id(context, id))
+    {
+        henka_ui_restore_checkpoint(context, &checkpoint);
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
     hot = henka_ui_control_is_hot(context, bounds);
     pressed = hot && context->mouse_left_pressed;
     had_active = henka_ui_active_id_equals(context, id);

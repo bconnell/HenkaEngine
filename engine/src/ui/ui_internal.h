@@ -6,6 +6,8 @@
 
 #include <henka/ui.h>
 
+#define HENKA_UI_MAX_DISCLOSURE_ROWS 256U
+
 typedef struct henka_ui_flow_state
 {
     bool active;
@@ -44,6 +46,8 @@ struct henka_ui_context
     bool active_id_set;
     char active_id[256];
     henka_ui_flow_state flow;
+    char disclosure_ids[HENKA_UI_MAX_DISCLOSURE_ROWS][256];
+    size_t disclosure_id_count;
     henka_ui_draw_rect* draw_rects;
     size_t draw_rect_count;
     size_t draw_rect_capacity;

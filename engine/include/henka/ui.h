@@ -65,7 +65,8 @@ henka_result henka_ui_disclosure_row(
     henka_ui_rect bounds,
     const char* label,
     bool* expanded,
-    bool* out_changed);henka_result henka_ui_create(henka_ui_context** out_context);
+    bool* out_changed);
+henka_result henka_ui_create(henka_ui_context** out_context);
 void henka_ui_destroy(henka_ui_context* context);
 henka_result henka_ui_begin_frame(henka_ui_context* context, const henka_ui_frame_desc* frame_desc);
 henka_result henka_ui_end_frame(henka_ui_context* context);

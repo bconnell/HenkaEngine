@@ -436,5 +436,137 @@ void henka_test_ui(void)
                 &changed) ==
             HENKA_ERROR_INVALID_ARGUMENT);
     }
+
+    {
+        bool duplicate_expanded;
+        bool duplicate_changed;
+        size_t duplicate_rect_count;
+        size_t duplicate_line_count;
+        henka_ui_flow_desc hardening_flow_desc;
+        henka_ui_rect hardening_row;
+        bool hardening_row_visible;
+        float hardening_content_height;
+
+        duplicate_expanded = false;
+        duplicate_changed = false;
+        frame_desc.mouse_position = (henka_vec2){300.0f, 300.0f};
+        frame_desc.mouse_left_down = false;
+        frame_desc.mouse_left_pressed = false;
+        frame_desc.mouse_left_released = false;
+
+        HENKA_TEST_ASSERT(
+            henka_ui_begin_frame(ui, &frame_desc) == HENKA_SUCCESS);
+        HENKA_TEST_ASSERT(
+            henka_ui_disclosure_row(
+                ui,
+                "duplicate.group",
+                (henka_ui_rect){40.0f, 48.0f, 160.0f, 24.0f},
+                "First",
+                &duplicate_expanded,
+                &duplicate_changed) == HENKA_SUCCESS);
+        duplicate_rect_count = henka_ui_get_draw_rect_count(ui);
+        duplicate_line_count = henka_ui_get_draw_line_count(ui);
+        HENKA_TEST_ASSERT(
+            henka_ui_disclosure_row(
+                ui,
+                "duplicate.group",
+                (henka_ui_rect){40.0f, 76.0f, 160.0f, 24.0f},
+                "Second",
+                &duplicate_expanded,
+                &duplicate_changed) ==
+            HENKA_ERROR_INVALID_ARGUMENT);
+        HENKA_TEST_ASSERT(
+            henka_ui_get_draw_rect_count(ui) == duplicate_rect_count);
+        HENKA_TEST_ASSERT(
+            henka_ui_get_draw_line_count(ui) == duplicate_line_count);
+        HENKA_TEST_ASSERT(
+            henka_ui_end_frame(ui) == HENKA_SUCCESS);
+
+        hardening_flow_desc.bounds =
+            (henka_ui_rect){0.0f, -FLT_MAX, 100.0f, 10.0f};
+        hardening_flow_desc.scroll_offset = FLT_MAX;
+        hardening_flow_desc.row_spacing = 0.0f;
+        hardening_flow_desc.indent_width = 0.0f;
+        HENKA_TEST_ASSERT(
+            henka_ui_begin_frame(ui, &frame_desc) == HENKA_SUCCESS);
+        HENKA_TEST_ASSERT(
+            henka_ui_flow_begin(ui, &hardening_flow_desc) ==
+            HENKA_ERROR_INVALID_ARGUMENT);
+        HENKA_TEST_ASSERT(
+            henka_ui_end_frame(ui) == HENKA_SUCCESS);
+
+        hardening_flow_desc.bounds =
+            (henka_ui_rect){0.0f, 0.0f, 100.0f, 100.0f};
+        hardening_flow_desc.scroll_offset = 0.0f;
+        hardening_flow_desc.row_spacing = 0.0f;
+        HENKA_TEST_ASSERT(
+            henka_ui_begin_frame(ui, &frame_desc) == HENKA_SUCCESS);
+        HENKA_TEST_ASSERT(
+            henka_ui_flow_begin(ui, &hardening_flow_desc) ==
+            HENKA_SUCCESS);
+        HENKA_TEST_ASSERT(
+            henka_ui_flow_next_row(
+                ui,
+                FLT_MAX,
+                0U,
+                &hardening_row,
+                &hardening_row_visible) == HENKA_SUCCESS);
+        HENKA_TEST_ASSERT(
+            henka_ui_flow_next_row(
+                ui,
+                FLT_MAX,
+                0U,
+                &hardening_row,
+                &hardening_row_visible) ==
+            HENKA_ERROR_INVALID_ARGUMENT);
+        HENKA_TEST_ASSERT(
+            henka_ui_flow_end(
+                ui,
+                &hardening_content_height) == HENKA_SUCCESS);
+        HENKA_TEST_ASSERT_FLOAT_CLOSE(
+            hardening_content_height,
+            FLT_MAX,
+            FLT_MAX * 0.0001f);
+        HENKA_TEST_ASSERT(
+            henka_ui_end_frame(ui) == HENKA_SUCCESS);
+
+        duplicate_expanded = false;
+        duplicate_changed = false;
+        frame_desc.mouse_position = (henka_vec2){60.0f, 60.0f};
+        frame_desc.mouse_left_down = true;
+        frame_desc.mouse_left_pressed = true;
+        frame_desc.mouse_left_released = false;
+        HENKA_TEST_ASSERT(
+            henka_ui_begin_frame(ui, &frame_desc) == HENKA_SUCCESS);
+        HENKA_TEST_ASSERT(
+            henka_ui_disclosure_row(
+                ui,
+                "drag.away.group",
+                (henka_ui_rect){40.0f, 48.0f, 160.0f, 24.0f},
+                "Drag Away",
+                &duplicate_expanded,
+                &duplicate_changed) == HENKA_SUCCESS);
+        HENKA_TEST_ASSERT(
+            henka_ui_end_frame(ui) == HENKA_SUCCESS);
+
+        frame_desc.mouse_position = (henka_vec2){300.0f, 300.0f};
+        frame_desc.mouse_left_down = false;
+        frame_desc.mouse_left_pressed = false;
+        frame_desc.mouse_left_released = true;
+        HENKA_TEST_ASSERT(
+            henka_ui_begin_frame(ui, &frame_desc) == HENKA_SUCCESS);
+        HENKA_TEST_ASSERT(
+            henka_ui_disclosure_row(
+                ui,
+                "drag.away.group",
+                (henka_ui_rect){40.0f, 48.0f, 160.0f, 24.0f},
+                "Drag Away",
+                &duplicate_expanded,
+                &duplicate_changed) == HENKA_SUCCESS);
+        HENKA_TEST_ASSERT(!duplicate_expanded);
+        HENKA_TEST_ASSERT(!duplicate_changed);
+        HENKA_TEST_ASSERT(
+            henka_ui_end_frame(ui) == HENKA_SUCCESS);
+    }
     henka_ui_destroy(ui);
 }
