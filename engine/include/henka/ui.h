@@ -17,6 +17,20 @@ typedef struct henka_ui_rect
     float height;
 } henka_ui_rect;
 
+typedef enum henka_ui_border_mask
+{
+    HENKA_UI_BORDER_NONE = 0,
+    HENKA_UI_BORDER_LEFT = 1U << 0,
+    HENKA_UI_BORDER_TOP = 1U << 1,
+    HENKA_UI_BORDER_RIGHT = 1U << 2,
+    HENKA_UI_BORDER_BOTTOM = 1U << 3,
+    HENKA_UI_BORDER_ALL =
+        HENKA_UI_BORDER_LEFT |
+        HENKA_UI_BORDER_TOP |
+        HENKA_UI_BORDER_RIGHT |
+        HENKA_UI_BORDER_BOTTOM
+} henka_ui_border_mask;
+
 typedef struct henka_ui_flow_desc
 {
     henka_ui_rect bounds;
@@ -101,7 +115,17 @@ henka_result henka_ui_overlay_polyline(
     size_t point_count,
     float thickness,
     henka_vec4 color);
+henka_result henka_ui_panel_with_border_mask(
+    henka_ui_context* context,
+    henka_ui_rect bounds,
+    const char* title,
+    unsigned int border_mask);
 henka_result henka_ui_panel(henka_ui_context* context, henka_ui_rect bounds, const char* title);
+henka_result henka_ui_viewport_frame_with_border_mask(
+    henka_ui_context* context,
+    henka_ui_rect bounds,
+    const char* title,
+    unsigned int border_mask);
 henka_result henka_ui_viewport_frame(henka_ui_context* context, henka_ui_rect bounds, const char* title);
 henka_result henka_ui_heading(henka_ui_context* context, float x, float y, float scale, const char* text);
 henka_result henka_ui_label(henka_ui_context* context, float x, float y, float scale, const char* text);

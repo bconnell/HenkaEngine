@@ -116,6 +116,94 @@ void henka_test_ui(void)
     HENKA_TEST_ASSERT(henka_ui_is_visible(ui) == true);
 
     HENKA_TEST_ASSERT(henka_ui_begin_frame(ui, &frame_desc) == HENKA_SUCCESS);
+    draw_count_before = henka_ui_get_draw_rect_count(ui);
+    HENKA_TEST_ASSERT(henka_ui_panel(
+        ui,
+        (henka_ui_rect){20.0f, 20.0f, 200.0f, 100.0f},
+        "Panel") == HENKA_SUCCESS);
+    uppercase_draw_count = henka_ui_get_draw_rect_count(ui) - draw_count_before;
+    HENKA_TEST_ASSERT(henka_ui_end_frame(ui) == HENKA_SUCCESS);
+
+    HENKA_TEST_ASSERT(henka_ui_begin_frame(ui, &frame_desc) == HENKA_SUCCESS);
+    draw_count_before = henka_ui_get_draw_rect_count(ui);
+    HENKA_TEST_ASSERT(henka_ui_panel_with_border_mask(
+        ui,
+        (henka_ui_rect){20.0f, 20.0f, 200.0f, 100.0f},
+        "Panel",
+        HENKA_UI_BORDER_ALL) == HENKA_SUCCESS);
+    lowercase_draw_count = henka_ui_get_draw_rect_count(ui) - draw_count_before;
+    HENKA_TEST_ASSERT(lowercase_draw_count == uppercase_draw_count);
+    HENKA_TEST_ASSERT(henka_ui_end_frame(ui) == HENKA_SUCCESS);
+
+    HENKA_TEST_ASSERT(henka_ui_begin_frame(ui, &frame_desc) == HENKA_SUCCESS);
+    draw_count_before = henka_ui_get_draw_rect_count(ui);
+    HENKA_TEST_ASSERT(henka_ui_panel_with_border_mask(
+        ui,
+        (henka_ui_rect){20.0f, 20.0f, 200.0f, 100.0f},
+        "Panel",
+        HENKA_UI_BORDER_NONE) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(
+        henka_ui_get_draw_rect_count(ui) - draw_count_before ==
+        uppercase_draw_count - 4U);
+    HENKA_TEST_ASSERT(henka_ui_get_wants_mouse(ui) == true);
+    HENKA_TEST_ASSERT(henka_ui_end_frame(ui) == HENKA_SUCCESS);
+
+    HENKA_TEST_ASSERT(henka_ui_begin_frame(ui, &frame_desc) == HENKA_SUCCESS);
+    draw_count_before = henka_ui_get_draw_rect_count(ui);
+    HENKA_TEST_ASSERT(henka_ui_panel_with_border_mask(
+        ui,
+        (henka_ui_rect){20.0f, 20.0f, 200.0f, 100.0f},
+        "Panel",
+        HENKA_UI_BORDER_ALL & ~HENKA_UI_BORDER_LEFT) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(
+        henka_ui_get_draw_rect_count(ui) - draw_count_before ==
+        uppercase_draw_count - 1U);
+    HENKA_TEST_ASSERT(henka_ui_end_frame(ui) == HENKA_SUCCESS);
+
+    HENKA_TEST_ASSERT(henka_ui_begin_frame(ui, &frame_desc) == HENKA_SUCCESS);
+    draw_count_before = henka_ui_get_draw_rect_count(ui);
+    HENKA_TEST_ASSERT(henka_ui_panel_with_border_mask(
+        ui,
+        (henka_ui_rect){20.0f, 20.0f, 200.0f, 100.0f},
+        "Panel",
+        HENKA_UI_BORDER_ALL | (1U << 4)) == HENKA_ERROR_INVALID_ARGUMENT);
+    HENKA_TEST_ASSERT(henka_ui_get_draw_rect_count(ui) == draw_count_before);
+    HENKA_TEST_ASSERT(henka_ui_end_frame(ui) == HENKA_SUCCESS);
+
+    HENKA_TEST_ASSERT(henka_ui_begin_frame(ui, &frame_desc) == HENKA_SUCCESS);
+    draw_count_before = henka_ui_get_draw_rect_count(ui);
+    HENKA_TEST_ASSERT(henka_ui_viewport_frame(
+        ui,
+        (henka_ui_rect){240.0f, 20.0f, 320.0f, 220.0f},
+        "Scene View") == HENKA_SUCCESS);
+    uppercase_draw_count = henka_ui_get_draw_rect_count(ui) - draw_count_before;
+    HENKA_TEST_ASSERT(henka_ui_end_frame(ui) == HENKA_SUCCESS);
+
+    HENKA_TEST_ASSERT(henka_ui_begin_frame(ui, &frame_desc) == HENKA_SUCCESS);
+    draw_count_before = henka_ui_get_draw_rect_count(ui);
+    HENKA_TEST_ASSERT(henka_ui_viewport_frame_with_border_mask(
+        ui,
+        (henka_ui_rect){240.0f, 20.0f, 320.0f, 220.0f},
+        "Scene View",
+        HENKA_UI_BORDER_ALL) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(
+        henka_ui_get_draw_rect_count(ui) - draw_count_before ==
+        uppercase_draw_count);
+    HENKA_TEST_ASSERT(henka_ui_end_frame(ui) == HENKA_SUCCESS);
+
+    HENKA_TEST_ASSERT(henka_ui_begin_frame(ui, &frame_desc) == HENKA_SUCCESS);
+    draw_count_before = henka_ui_get_draw_rect_count(ui);
+    HENKA_TEST_ASSERT(henka_ui_viewport_frame_with_border_mask(
+        ui,
+        (henka_ui_rect){240.0f, 20.0f, 320.0f, 220.0f},
+        "Scene View",
+        HENKA_UI_BORDER_NONE) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(
+        henka_ui_get_draw_rect_count(ui) - draw_count_before ==
+        uppercase_draw_count - 4U);
+    HENKA_TEST_ASSERT(henka_ui_end_frame(ui) == HENKA_SUCCESS);
+
+    HENKA_TEST_ASSERT(henka_ui_begin_frame(ui, &frame_desc) == HENKA_SUCCESS);
     HENKA_TEST_ASSERT(
         henka_ui_label(ui, 8.0f, 8.0f, 1.0f, "A") ==
         HENKA_SUCCESS);

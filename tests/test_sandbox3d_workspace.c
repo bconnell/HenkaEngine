@@ -28,6 +28,64 @@ void henka_test_sandbox3d_workspace(void)
     sandbox3d_workspace_panel_id stress_closed_panel;
     float initial_ratio;
     float history_ratio;
+    henka_ui_rect left_splitter;
+    henka_ui_rect right_splitter;
+    henka_ui_rect visual_splitter;
+
+    left_splitter = sandbox3d_workspace_left_splitter_rect(
+        (henka_ui_rect){0.0f, 0.0f, 200.0f, 720.0f},
+        (henka_ui_rect){220.0f, 0.0f, 760.0f, 720.0f});
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(
+        left_splitter.width,
+        SANDBOX3D_WORKSPACE_DIVIDER_HIT_WIDTH,
+        0.0001f);
+    visual_splitter = sandbox3d_workspace_splitter_visual_rect(left_splitter);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(visual_splitter.width, 1.0f, 0.0001f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(
+        visual_splitter.x,
+        left_splitter.x + (left_splitter.width - visual_splitter.width) * 0.5f,
+        0.0001f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(visual_splitter.y, left_splitter.y, 0.0001f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(visual_splitter.height, left_splitter.height, 0.0001f);
+
+    right_splitter = sandbox3d_workspace_right_splitter_rect(
+        (henka_ui_rect){220.0f, 0.0f, 760.0f, 720.0f},
+        (henka_ui_rect){1000.0f, 0.0f, 240.0f, 720.0f});
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(
+        right_splitter.width,
+        SANDBOX3D_WORKSPACE_DIVIDER_HIT_WIDTH,
+        0.0001f);
+    visual_splitter = sandbox3d_workspace_splitter_visual_rect(right_splitter);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(visual_splitter.width, 1.0f, 0.0001f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(
+        visual_splitter.x,
+        right_splitter.x + (right_splitter.width - visual_splitter.width) * 0.5f,
+        0.0001f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(visual_splitter.y, right_splitter.y, 0.0001f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(visual_splitter.height, right_splitter.height, 0.0001f);
+
+    visual_splitter = sandbox3d_workspace_splitter_visual_rect(
+        (henka_ui_rect){100.0f, 40.0f, 320.0f, 10.0f});
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(visual_splitter.x, 100.0f, 0.0001f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(visual_splitter.width, 320.0f, 0.0001f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(visual_splitter.y, 44.5f, 0.0001f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(visual_splitter.height, 1.0f, 0.0001f);
+
+    visual_splitter = sandbox3d_workspace_splitter_visual_rect(
+        (henka_ui_rect){NAN, 0.0f, 10.0f, 100.0f});
+    HENKA_TEST_ASSERT(
+        visual_splitter.x == 0.0f && visual_splitter.y == 0.0f &&
+        visual_splitter.width == 0.0f && visual_splitter.height == 0.0f);
+    visual_splitter = sandbox3d_workspace_splitter_visual_rect(
+        (henka_ui_rect){0.0f, 0.0f, 0.5f, 100.0f});
+    HENKA_TEST_ASSERT(
+        visual_splitter.x == 0.0f && visual_splitter.y == 0.0f &&
+        visual_splitter.width == 0.0f && visual_splitter.height == 0.0f);
+    visual_splitter = sandbox3d_workspace_splitter_visual_rect(
+        (henka_ui_rect){0.0f, 0.0f, 100.0f, 0.5f});
+    HENKA_TEST_ASSERT(
+        visual_splitter.x == 0.0f && visual_splitter.y == 0.0f &&
+        visual_splitter.width == 0.0f && visual_splitter.height == 0.0f);
 
     sandbox3d_workspace_model_reset(&model);
     for (panel_index = 0U;

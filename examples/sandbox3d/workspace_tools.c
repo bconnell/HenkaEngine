@@ -1,5 +1,6 @@
 #include "workspace_tools.h"
 
+#include <float.h>
 #include <stdio.h>
 #include <string.h>
 #include <math.h>
@@ -1686,6 +1687,46 @@ henka_ui_rect sandbox3d_workspace_right_splitter_rect(henka_ui_rect scene_frame,
 {
     const float x = scene_frame.x + scene_frame.width + (right_dock.x - (scene_frame.x + scene_frame.width) - SANDBOX3D_WORKSPACE_DIVIDER_HIT_WIDTH) * 0.5f;
     return (henka_ui_rect){x, scene_frame.y, SANDBOX3D_WORKSPACE_DIVIDER_HIT_WIDTH, scene_frame.height};
+}
+
+henka_ui_rect sandbox3d_workspace_splitter_visual_rect(henka_ui_rect hit_rect)
+{
+    henka_ui_rect visual = {0};
+    const double visual_x = (double)hit_rect.x + ((double)hit_rect.width - 1.0) * 0.5;
+    const double visual_y = (double)hit_rect.y + ((double)hit_rect.height - 1.0) * 0.5;
+
+    if (!isfinite(hit_rect.x) || !isfinite(hit_rect.y) ||
+        !isfinite(hit_rect.width) || !isfinite(hit_rect.height) ||
+        hit_rect.width < 1.0f || hit_rect.height < 1.0f)
+    {
+        return visual;
+    }
+
+    if (hit_rect.height >= hit_rect.width)
+    {
+        if (!isfinite(visual_x) || visual_x > (double)FLT_MAX ||
+            visual_x < -(double)FLT_MAX)
+        {
+            return (henka_ui_rect){0};
+        }
+        visual.x = (float)visual_x;
+        visual.y = hit_rect.y;
+        visual.width = 1.0f;
+        visual.height = hit_rect.height;
+    }
+    else
+    {
+        if (!isfinite(visual_y) || visual_y > (double)FLT_MAX ||
+            visual_y < -(double)FLT_MAX)
+        {
+            return (henka_ui_rect){0};
+        }
+        visual.x = hit_rect.x;
+        visual.y = (float)visual_y;
+        visual.width = hit_rect.width;
+        visual.height = 1.0f;
+    }
+    return visual;
 }
 
 void sandbox3d_workspace_begin_panel_drag(

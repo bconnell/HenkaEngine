@@ -649,16 +649,18 @@ static henka_result henka_ui_push_line(
     return HENKA_SUCCESS;
 }
 
-static henka_result henka_ui_push_border(
+static henka_result henka_ui_push_masked_border(
     henka_ui_context* context,
     henka_ui_rect bounds,
     float thickness,
-    henka_vec4 color)
+    henka_vec4 color,
+    unsigned int border_mask)
 {
     henka_ui_draw_checkpoint checkpoint;
     henka_result result;
 
-    if (context == NULL ||
+    if ((border_mask & ~(unsigned int)HENKA_UI_BORDER_ALL) != 0U ||
+        context == NULL ||
         !henka_ui_rect_is_finite(bounds) ||
         !henka_ui_float_is_finite(thickness) ||
         !henka_ui_vec4_is_finite(color) ||
@@ -673,45 +675,54 @@ static henka_result henka_ui_push_border(
 
     henka_ui_capture_checkpoint(context, &checkpoint);
 
-    result = henka_ui_push_rect(
-        context,
-        (henka_ui_rect){bounds.x, bounds.y, bounds.width, thickness},
-        color);
-    if (result != HENKA_SUCCESS)
+    result = HENKA_SUCCESS;
+    if ((border_mask & HENKA_UI_BORDER_TOP) != 0U)
     {
-        henka_ui_restore_checkpoint(context, &checkpoint);
-        return result;
+        result = henka_ui_push_rect(
+            context,
+            (henka_ui_rect){bounds.x, bounds.y, bounds.width, thickness},
+            color);
     }
-
-    result = henka_ui_push_rect(
-        context,
-        (henka_ui_rect){bounds.x, bounds.y + bounds.height - thickness, bounds.width, thickness},
-        color);
-    if (result != HENKA_SUCCESS)
+    if (result == HENKA_SUCCESS && (border_mask & HENKA_UI_BORDER_BOTTOM) != 0U)
     {
-        henka_ui_restore_checkpoint(context, &checkpoint);
-        return result;
+        result = henka_ui_push_rect(
+            context,
+            (henka_ui_rect){bounds.x, bounds.y + bounds.height - thickness, bounds.width, thickness},
+            color);
     }
-
-    result = henka_ui_push_rect(
-        context,
-        (henka_ui_rect){bounds.x, bounds.y, thickness, bounds.height},
-        color);
-    if (result != HENKA_SUCCESS)
+    if (result == HENKA_SUCCESS && (border_mask & HENKA_UI_BORDER_LEFT) != 0U)
     {
-        henka_ui_restore_checkpoint(context, &checkpoint);
-        return result;
+        result = henka_ui_push_rect(
+            context,
+            (henka_ui_rect){bounds.x, bounds.y, thickness, bounds.height},
+            color);
     }
-
-    result = henka_ui_push_rect(
-        context,
-        (henka_ui_rect){bounds.x + bounds.width - thickness, bounds.y, thickness, bounds.height},
-        color);
+    if (result == HENKA_SUCCESS && (border_mask & HENKA_UI_BORDER_RIGHT) != 0U)
+    {
+        result = henka_ui_push_rect(
+            context,
+            (henka_ui_rect){bounds.x + bounds.width - thickness, bounds.y, thickness, bounds.height},
+            color);
+    }
     if (result != HENKA_SUCCESS)
     {
         henka_ui_restore_checkpoint(context, &checkpoint);
     }
     return result;
+}
+
+static henka_result henka_ui_push_border(
+    henka_ui_context* context,
+    henka_ui_rect bounds,
+    float thickness,
+    henka_vec4 color)
+{
+    return henka_ui_push_masked_border(
+        context,
+        bounds,
+        thickness,
+        color,
+        HENKA_UI_BORDER_ALL);
 }
 
 static henka_result henka_ui_draw_text(
@@ -1636,16 +1647,18 @@ henka_result henka_ui_measure_text(
     return HENKA_SUCCESS;
 }
 
-henka_result henka_ui_panel(
+henka_result henka_ui_panel_with_border_mask(
     henka_ui_context* context,
     henka_ui_rect bounds,
-    const char* title)
+    const char* title,
+    unsigned int border_mask)
 {
     henka_ui_draw_checkpoint checkpoint;
     henka_ui_rect header_bounds = {0};
     henka_result result;
 
-    if (context == NULL || title == NULL || !context->frame_active)
+    if ((border_mask & ~(unsigned int)HENKA_UI_BORDER_ALL) != 0U ||
+        context == NULL || title == NULL || !context->frame_active)
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
@@ -1675,7 +1688,80 @@ henka_result henka_ui_panel(
     }
     if (result == HENKA_SUCCESS)
     {
-        result = henka_ui_push_border(context, bounds, 1.0f, g_ui_panel_border);
+        result = henka_ui_push_masked_border(
+            context,
+            bounds,
+            1.0f,
+            g_ui_panel_border,
+            border_mask);
+    }
+    if (result == HENKA_SUCCESS)
+    {
+        result = henka_ui_draw_text(
+            context,
+            bounds.x + 12.0f,
+            bounds.y + 9.0f,
+            1.25f,
+            title,
+            g_ui_heading_color);
+    }
+    if (result != HENKA_SUCCESS)
+    {
+        henka_ui_restore_checkpoint(context, &checkpoint);
+    }
+    return result;
+}
+
+henka_result henka_ui_panel(
+    henka_ui_context* context,
+    henka_ui_rect bounds,
+    const char* title)
+{
+    return henka_ui_panel_with_border_mask(
+        context,
+        bounds,
+        title,
+        HENKA_UI_BORDER_ALL);
+}
+
+henka_result henka_ui_viewport_frame_with_border_mask(
+    henka_ui_context* context,
+    henka_ui_rect bounds,
+    const char* title,
+    unsigned int border_mask)
+{
+    henka_ui_draw_checkpoint checkpoint;
+    henka_ui_rect header_bounds = {0};
+    henka_result result;
+
+    if ((border_mask & ~(unsigned int)HENKA_UI_BORDER_ALL) != 0U ||
+        context == NULL || title == NULL || !context->frame_active)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    if (!context->visible)
+    {
+        return HENKA_SUCCESS;
+    }
+
+    henka_ui_capture_checkpoint(context, &checkpoint);
+    header_bounds = (henka_ui_rect){bounds.x, bounds.y, bounds.width, 30.0f};
+    result = henka_ui_push_rect(context, header_bounds, g_ui_panel_header_fill);
+    if (result == HENKA_SUCCESS)
+    {
+        result = henka_ui_push_rect(
+            context,
+            (henka_ui_rect){bounds.x, bounds.y + header_bounds.height, bounds.width, 1.0f},
+            g_ui_panel_separator);
+    }
+    if (result == HENKA_SUCCESS)
+    {
+        result = henka_ui_push_masked_border(
+            context,
+            bounds,
+            1.0f,
+            g_ui_panel_border,
+            border_mask);
     }
     if (result == HENKA_SUCCESS)
     {
@@ -1699,48 +1785,11 @@ henka_result henka_ui_viewport_frame(
     henka_ui_rect bounds,
     const char* title)
 {
-    henka_ui_draw_checkpoint checkpoint;
-    henka_ui_rect header_bounds = {0};
-    henka_result result;
-
-    if (context == NULL || title == NULL || !context->frame_active)
-    {
-        return HENKA_ERROR_INVALID_ARGUMENT;
-    }
-    if (!context->visible)
-    {
-        return HENKA_SUCCESS;
-    }
-
-    henka_ui_capture_checkpoint(context, &checkpoint);
-    header_bounds = (henka_ui_rect){bounds.x, bounds.y, bounds.width, 30.0f};
-    result = henka_ui_push_rect(context, header_bounds, g_ui_panel_header_fill);
-    if (result == HENKA_SUCCESS)
-    {
-        result = henka_ui_push_rect(
-            context,
-            (henka_ui_rect){bounds.x, bounds.y + header_bounds.height, bounds.width, 1.0f},
-            g_ui_panel_separator);
-    }
-    if (result == HENKA_SUCCESS)
-    {
-        result = henka_ui_push_border(context, bounds, 1.0f, g_ui_panel_border);
-    }
-    if (result == HENKA_SUCCESS)
-    {
-        result = henka_ui_draw_text(
-            context,
-            bounds.x + 12.0f,
-            bounds.y + 9.0f,
-            1.25f,
-            title,
-            g_ui_heading_color);
-    }
-    if (result != HENKA_SUCCESS)
-    {
-        henka_ui_restore_checkpoint(context, &checkpoint);
-    }
-    return result;
+    return henka_ui_viewport_frame_with_border_mask(
+        context,
+        bounds,
+        title,
+        HENKA_UI_BORDER_ALL);
 }
 
 henka_result henka_ui_heading(
