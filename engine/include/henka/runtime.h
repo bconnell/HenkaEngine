@@ -9,6 +9,7 @@
 #include <henka/physics.h>
 #include <henka/result.h>
 #include <henka/scene.h>
+#include <henka/terrain.h>
 #include <henka/time.h>
 
 #endif

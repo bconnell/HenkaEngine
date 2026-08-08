@@ -8,6 +8,7 @@ add_library(henka_runtime STATIC
     src/core/time.c
     src/scene/camera.c
     src/scene/scene.c
+    src/terrain/terrain.c
 )
 
 if(HENKA_ENABLE_NETWORK)

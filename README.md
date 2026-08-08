@@ -83,6 +83,7 @@ Henka Engine is still early, but the sandbox now renders a visible 3D scene with
 - C17 external server template and Windows validation path that links only `henka_runtime` plus its private network implementation
 - Headless-only CMake configuration with `HENKA_BUILD_CLIENT=OFF`, `HENKA_BUILD_DEDICATED_SERVER=OFF`, and `HENKA_ENABLE_KTX2_TRANSCODER=OFF`; the resulting runtime target does not configure SDL, OpenGL, or KTX
 - Version-1 bounded Henka network packet codec and localhost ENet transport with explicit little-endian headers, three logical channels, reliable ordered delivery, a 64 KiB packet ceiling, and 32 KiB snapshot fragments; server authority and multiplayer synchronization remain unfinished
+- Terrain v1 core contract with an 8192 m x 8192 m default descriptor, 512 m regions, 64 m chunks, 65 x 65 full-resolution chunk samples, signed millimeter heights, deterministic four-layer weight normalization, integer region/chunk identities, and separately bounded CPU/physics/render residency state; region files, mutation, persistence, streaming, collision regeneration, rendering LOD, and authority remain unfinished
 - Deterministic Windows CI package contract checks that avoid hosted graphics-session assumptions, while local validation still performs packaged runtime smoke, desktop interaction, and application-only screenshot checks
 - Repository integrity checks for tracked artifacts, credential signatures, script parsing, dependency pins, and workflow action pins
 
