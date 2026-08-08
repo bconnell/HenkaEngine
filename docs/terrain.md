@@ -88,8 +88,9 @@ The authority object does not own the world or storage. The
 public ENet server, decodes edit messages, routes them through authority, and
 encodes the response. It also echoes control pings and disconnects malformed
 edit payloads as protocol errors. The server-side delta broadcast and
-snapshot-fragment response are described below; client-side application,
-reconnect/late-join recovery, prediction, and editor controls remain
+snapshot-fragment response are described below; the client session adapter
+applies those messages through the replica and owns bounded recovery requests.
+Reconnect/late-join orchestration, prediction, and editor controls remain
 subsequent integration work.
 
 For edit requests, the session lazily materializes missing persisted regions
@@ -101,24 +102,29 @@ Accepted edits also produce a bounded delta in the same terrain channel. The
 delta repeats world/base identity, client nonce, server command identity, the
 algorithm-versioned command, and the resulting revision for each affected
 region. The server broadcasts that event reliably after sending the requester
-acceptance; client-side delta application, reconnect and late-join recovery,
-and prediction/reconciliation remain subsequent work.
+acceptance; the client session adapter applies it only across exact revision
+steps and requests bounded region snapshots when the replica reports a gap.
+Reconnect and late-join orchestration, prediction/reconciliation, and editor
+controls remain subsequent work.
 
 Snapshot requests identify the world, packaged base, region, and expected
 revision. The server reads the validated region record from storage and emits
 transfer-identified fragments with the record revision, generation, total
 size, index, count, and payload bytes. The transport keeps each fragment under
-the existing 32 KiB snapshot payload limit. The client assembly owner and
-reconnect policy are not yet implemented.
+the existing 32 KiB snapshot payload limit. The client session adapter owns the
+bounded fragment assembly through `<henka/terrain_replica.h>` and requests a
+snapshot when a delta cannot be applied. Reconnect and late-join policy are
+not yet implemented.
 
-`<henka/terrain_replica.h>` is the bounded client-side consumer for those
-messages. It applies a delta only when every affected resident region advances
+`<henka/terrain_replica.h>` is the bounded client-side state owner consumed by
+`<henka/terrain_client.h>`. It applies a delta only when every affected region advances
 by exactly one revision, accepts an all-duplicate delta idempotently, and
 rejects gaps or mixed duplicate/new multi-region states before changing live
 samples. Snapshot fragments are accumulated under a configured byte budget;
 the validated record is decoded and atomically swapped into the world only
-after every fragment arrives. The replica does not own networking, reconnect
-state, prediction history, or render/physics residency policy.
+after every fragment arrives. The replica does not own network transport,
+reconnect state, prediction history, or render/physics residency policy; the
+client adapter does not invent those missing policies.
 
 `<henka/terrain_collision.h>` extracts a physics-resident chunk into a
 caller-owned 65×65 signed-millimeter patch without allocating or mutating the
@@ -146,7 +152,7 @@ physics, render, pending-I/O, dirty, revision, and generation state.
 
 This slice establishes the shared data model and bounded ownership contract.
 World manifest integration, journal compaction, collision regeneration, scene
-ownership and GPU residency, replication and snapshot recovery, and client
+ownership and GPU residency, reconnect/late-join orchestration, and client
 prediction are subsequent validated runtime slices.
 They must use this
 same world identity, region/chunk mapping, revision, and residency ownership;
