@@ -57,6 +57,14 @@ byte-identical authoritative samples across runtimes. Persistence enqueue,
 server permissions/revision checks, client prediction, and editor controls are
 not yet integrated.
 
+Terrain network payloads in `<henka/terrain_network.h>` use explicit bounded
+little-endian encoding for edit requests, authoritative acceptance revisions,
+and rejection reasons. Requests carry world/base identity, client nonce,
+algorithm-versioned command fields, and the expected revision for each affected
+region. Payload codecs reject unsupported command fields, negative region IDs,
+oversized region lists, and trailing/truncated bytes; transport framing and
+authority policy remain separate layers.
+
 The descriptor stores the format version, world and base identities, all
 world/region/chunk relationships, and bounded residency limits. Creating a
 world allocates only the configured region and chunk residency tables; it does
