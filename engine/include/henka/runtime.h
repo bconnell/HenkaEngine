@@ -10,6 +10,7 @@
 #include <henka/result.h>
 #include <henka/scene.h>
 #include <henka/terrain.h>
+#include <henka/terrain_edit.h>
 #include <henka/terrain_storage.h>
 #include <henka/terrain_streaming.h>
 #include <henka/time.h>

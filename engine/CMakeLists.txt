@@ -9,6 +9,7 @@ add_library(henka_runtime STATIC
     src/scene/camera.c
     src/scene/scene.c
     src/terrain/terrain.c
+    src/terrain/terrain_edit.c
     src/terrain/terrain_storage.c
     src/terrain/terrain_streaming.c
 )

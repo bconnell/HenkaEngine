@@ -44,6 +44,19 @@ completion, failure, cancellation, and dropped-completion diagnostics are
 available. Hysteresis, deterministic eviction, and automatic residency policy
 remain subsequent work.
 
+## Deterministic edits
+
+`<henka/terrain_edit.h>` is the single command path for raise, lower, flatten,
+smooth, and paint operations. Commands carry an algorithm version, client
+nonce, integer sample center, bounded sample radius, falloff, and operation
+values. Linear and smooth falloffs use fixed-point integer weighting. The
+runtime determines every affected resident region before allocating candidate
+copies; all candidate regions pass validation before any live sample or
+revision is swapped. The same ordered command stream therefore produces
+byte-identical authoritative samples across runtimes. Persistence enqueue,
+server permissions/revision checks, client prediction, and editor controls are
+not yet integrated.
+
 The descriptor stores the format version, world and base identities, all
 world/region/chunk relationships, and bounded residency limits. Creating a
 world allocates only the configured region and chunk residency tables; it does
