@@ -9827,7 +9827,9 @@ static void sandbox3d_handle_panel_scroll(
     }
 
     sandbox3d_advance_panel_paging(state, target, delta);
-}static void sandbox3d_draw_controls_panel(
+}
+
+static void sandbox3d_draw_controls_panel(
     henka_engine* engine,
     sandbox3d_state* state,
     const sandbox3d_workspace_layout* layout)
