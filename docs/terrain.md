@@ -110,6 +110,13 @@ the validated record is decoded and atomically swapped into the world only
 after every fragment arrives. The replica does not own networking, reconnect
 state, prediction history, or render/physics residency policy.
 
+`<henka/terrain_collision.h>` extracts a physics-resident chunk into a
+caller-owned 65×65 signed-millimeter patch without allocating or mutating the
+world. The patch carries the source revision and generation so a later physics
+owner can reject stale regeneration work. The current physics API exposes
+planes, boxes, and spheres rather than a heightfield shape; body creation,
+replacement, and asynchronous regeneration therefore remain subsequent work.
+
 The descriptor stores the format version, world and base identities, all
 world/region/chunk relationships, and bounded residency limits. Creating a
 world allocates only the configured region and chunk residency tables; it does

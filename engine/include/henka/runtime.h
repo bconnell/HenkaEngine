@@ -16,6 +16,7 @@
 #include <henka/terrain_server.h>
 #include <henka/terrain_replica.h>
 #include <henka/terrain_lod.h>
+#include <henka/terrain_collision.h>
 #include <henka/terrain_storage.h>
 #include <henka/terrain_streaming.h>
 #include <henka/time.h>
