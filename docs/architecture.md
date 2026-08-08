@@ -12,6 +12,14 @@ renderer, asset, UI, and editor-facing implementation. A dedicated server
 consumer is therefore able to link only `henka_runtime`; this boundary is the
 foundation for the server and terrain work that follows.
 
+### Network boundary
+
+The public network header defines Henka-owned protocol values and views only;
+wire packets use a fixed little-endian header and bounded payloads rather than
+native C layouts. Control, terrain, and snapshot traffic have separate logical
+channels. The codec is available to the shared runtime, while the ENet socket
+transport and multiplayer authority layer remain subsequent runtime work.
+
 ## Modules
 
 ### Core

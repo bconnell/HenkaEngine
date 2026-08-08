@@ -10,6 +10,12 @@ add_library(henka_runtime STATIC
     src/scene/scene.c
 )
 
+if(HENKA_ENABLE_NETWORK)
+    target_sources(henka_runtime PRIVATE
+        src/network/network_codec.c
+    )
+endif()
+
 target_include_directories(henka_runtime
     PUBLIC
         ${CMAKE_CURRENT_SOURCE_DIR}/include

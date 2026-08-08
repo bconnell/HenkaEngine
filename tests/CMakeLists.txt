@@ -11,6 +11,21 @@ henka_enable_project_warnings(henka_headless_runtime_tests)
 
 add_test(NAME henka_headless_runtime_tests COMMAND henka_headless_runtime_tests)
 
+if(HENKA_ENABLE_NETWORK)
+add_executable(henka_network_tests
+    test_network.c
+)
+
+target_link_libraries(henka_network_tests
+    PRIVATE
+        henka_runtime
+)
+
+henka_enable_project_warnings(henka_network_tests)
+
+add_test(NAME henka_network_tests COMMAND henka_network_tests)
+endif()
+
 if(HENKA_BUILD_CLIENT)
 add_executable(henka_tests
     ../examples/sandbox3d/editor_controls.c

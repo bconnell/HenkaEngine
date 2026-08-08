@@ -13,6 +13,7 @@
 #include <henka/memory.h>
 #include <henka/mesh.h>
 #include <henka/model.h>
+#include <henka/network.h>
 #include <henka/persistence.h>
 #include <henka/physics.h>
 #include <henka/platform.h>
