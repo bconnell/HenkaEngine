@@ -120,7 +120,7 @@ physics, render, pending-I/O, dirty, revision, and generation state.
 
 This slice establishes the shared data model and bounded ownership contract.
 World manifest integration, journal compaction, streaming hysteresis and
-eviction, collision regeneration, client LOD/rendering, replication and
+eviction, collision regeneration, terrain mesh/GPU rendering, replication and
 snapshot recovery, and client prediction are subsequent validated runtime
 slices.
 They must use this
