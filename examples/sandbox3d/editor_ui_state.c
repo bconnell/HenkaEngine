@@ -180,3 +180,53 @@ float sandbox3d_editor_ui_clamp_scroll(
         ? maximum_offset
         : requested_offset;
 }
+
+bool sandbox3d_editor_ui_scroll_controls(
+    sandbox3d_editor_ui_state* state,
+    float viewport_height,
+    int direction)
+{
+    float requested_offset;
+    float step_direction;
+
+    if (state == NULL ||
+        !isfinite(viewport_height) ||
+        viewport_height <= 0.0f ||
+        direction == 0)
+    {
+        if (state != NULL)
+        {
+            state->controls_scroll_offset = 0.0f;
+        }
+        return false;
+    }
+
+    state->controls_scroll_offset =
+        sandbox3d_editor_ui_clamp_scroll(
+            state->controls_scroll_offset,
+            state->controls_content_height,
+            viewport_height);
+
+    if (!isfinite(state->controls_content_height) ||
+        state->controls_content_height <= viewport_height)
+    {
+        state->controls_scroll_offset = 0.0f;
+        return false;
+    }
+
+    step_direction = (float)direction;
+    requested_offset =
+        state->controls_scroll_offset +
+        step_direction * 48.0f;
+    if (requested_offset < 0.0f)
+    {
+        requested_offset = 0.0f;
+    }
+
+    state->controls_scroll_offset =
+        sandbox3d_editor_ui_clamp_scroll(
+            requested_offset,
+            state->controls_content_height,
+            viewport_height);
+    return true;
+}

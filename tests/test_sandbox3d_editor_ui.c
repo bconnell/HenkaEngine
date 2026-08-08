@@ -190,5 +190,83 @@ void henka_test_sandbox3d_editor_ui(void)
             settings,
             NULL) == HENKA_ERROR_INVALID_ARGUMENT);
 
+
+    state.controls_scroll_offset = 0.0f;
+    state.controls_content_height = 300.0f;
+    HENKA_TEST_ASSERT(
+        sandbox3d_editor_ui_scroll_controls(
+            &state,
+            100.0f,
+            1));
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(
+        state.controls_scroll_offset,
+        48.0f,
+        0.0001f);
+
+    HENKA_TEST_ASSERT(
+        sandbox3d_editor_ui_scroll_controls(
+            &state,
+            100.0f,
+            10));
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(
+        state.controls_scroll_offset,
+        200.0f,
+        0.0001f);
+
+    HENKA_TEST_ASSERT(
+        sandbox3d_editor_ui_scroll_controls(
+            &state,
+            100.0f,
+            -1));
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(
+        state.controls_scroll_offset,
+        152.0f,
+        0.0001f);
+
+    state.controls_scroll_offset = 0.0f;
+    HENKA_TEST_ASSERT(
+        sandbox3d_editor_ui_scroll_controls(
+            &state,
+            100.0f,
+            -1));
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(
+        state.controls_scroll_offset,
+        0.0f,
+        0.0001f);
+
+    state.controls_scroll_offset = 20.0f;
+    state.controls_content_height = 80.0f;
+    HENKA_TEST_ASSERT(
+        !sandbox3d_editor_ui_scroll_controls(
+            &state,
+            100.0f,
+            1));
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(
+        state.controls_scroll_offset,
+        0.0f,
+        0.0001f);
+
+    state.controls_scroll_offset = 20.0f;
+    state.controls_content_height = 300.0f;
+    HENKA_TEST_ASSERT(
+        !sandbox3d_editor_ui_scroll_controls(
+            &state,
+            NAN,
+            1));
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(
+        state.controls_scroll_offset,
+        0.0f,
+        0.0001f);
+
+    HENKA_TEST_ASSERT(
+        !sandbox3d_editor_ui_scroll_controls(
+            NULL,
+            100.0f,
+            1));
+    HENKA_TEST_ASSERT(
+        !sandbox3d_editor_ui_scroll_controls(
+            &state,
+            100.0f,
+            0));
     henka_settings_destroy(settings);
 }

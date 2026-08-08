@@ -42,4 +42,8 @@ float sandbox3d_editor_ui_clamp_scroll(
     float content_height,
     float viewport_height);
 
+bool sandbox3d_editor_ui_scroll_controls(
+    sandbox3d_editor_ui_state* state,
+    float viewport_height,
+    int direction);
 #endif
