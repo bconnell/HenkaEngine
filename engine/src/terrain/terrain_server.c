@@ -5,6 +5,8 @@
 
 #include <henka/memory.h>
 
+#include "terrain_internal.h"
+
 struct henka_terrain_server
 {
     henka_network_server* network;
@@ -210,6 +212,46 @@ cleanup:
         ? HENKA_SUCCESS : result;
 }
 
+static void henka_terrain_server_materialize_request_regions(
+    henka_terrain_server* server,
+    const henka_terrain_edit_request* request)
+{
+    henka_terrain_world_desc desc;
+    henka_terrain_layout layout;
+    henka_terrain_region_id regions[HENKA_TERRAIN_EDIT_MAX_AFFECTED_REGIONS];
+    uint32_t region_count = HENKA_TERRAIN_EDIT_MAX_AFFECTED_REGIONS;
+    uint32_t index;
+    if (henka_terrain_world_get_desc(server->world, &desc) != HENKA_SUCCESS ||
+        henka_terrain_world_desc_get_layout(&desc, &layout) != HENKA_SUCCESS ||
+        henka_terrain_edit_get_affected_regions(
+            server->world, &request->command, regions, &region_count) != HENKA_SUCCESS)
+    {
+        return;
+    }
+    for (index = 0U; index < region_count; ++index)
+    {
+        henka_terrain_region_state state;
+        henka_terrain_region_storage_info info;
+        henka_terrain_sample* samples;
+        if (henka_terrain_world_get_region_state(server->world, regions[index], &state) == HENKA_SUCCESS)
+        {
+            continue;
+        }
+        samples = henka_calloc(layout.samples_per_region, sizeof(*samples));
+        if (samples == NULL)
+        {
+            continue;
+        }
+        if (henka_terrain_storage_load_region(
+                server->storage, regions[index], &info, samples, layout.samples_per_region) == HENKA_SUCCESS)
+        {
+            (void)henka_terrain_world_apply_region_snapshot(
+                server->world, info, samples, layout.samples_per_region);
+        }
+        henka_free(samples);
+    }
+}
+
 henka_result henka_terrain_server_handle_event(
     henka_terrain_server* server,
     const henka_network_event* event,
@@ -268,6 +310,7 @@ henka_result henka_terrain_server_handle_event(
             server->network, event->peer_id, HENKA_NETWORK_DISCONNECT_REASON_PROTOCOL);
         return HENKA_SUCCESS;
     }
+    henka_terrain_server_materialize_request_regions(server, &request);
     result = henka_terrain_authority_process_request(
         server->authority, event->peer_id, &request, now_milliseconds, &response);
     if (result != HENKA_SUCCESS)

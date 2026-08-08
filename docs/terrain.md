@@ -87,6 +87,11 @@ snapshot-fragment response are described below; client-side application,
 reconnect/late-join recovery, prediction, and editor controls remain
 subsequent integration work.
 
+For edit requests, the session lazily materializes missing persisted regions
+before authority validation, subject to the world's resident-region limit. It
+does not preload the 8 km height field; eviction and asynchronous physics or
+render regeneration remain separate work.
+
 Accepted edits also produce a bounded delta in the same terrain channel. The
 delta repeats world/base identity, client nonce, server command identity, the
 algorithm-versioned command, and the resulting revision for each affected

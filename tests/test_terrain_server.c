@@ -52,7 +52,6 @@ static int test_loopback_authoritative_edit(void)
     client_desc.remote_endpoint = server_desc.bind_endpoint;
     if (henka_terrain_world_desc_get_layout(&world_desc, &layout) != HENKA_SUCCESS ||
         henka_terrain_world_create(&world_desc, &world) != HENKA_SUCCESS ||
-        henka_terrain_world_reserve_region(world, (henka_terrain_region_id){0, 0}) != HENKA_SUCCESS ||
         henka_terrain_storage_create(&world_desc, "build/test_tmp/terrain_server_v1", &storage) != HENKA_SUCCESS)
     {
         goto cleanup;
