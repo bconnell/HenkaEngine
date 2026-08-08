@@ -6,6 +6,16 @@
 
 #include <henka/ui.h>
 
+typedef struct henka_ui_flow_state
+{
+    bool active;
+    henka_ui_rect bounds;
+    float scroll_offset;
+    float row_spacing;
+    float indent_width;
+    float cursor_y;
+    float content_height;
+} henka_ui_flow_state;
 typedef struct henka_ui_draw_rect
 {
     henka_ui_rect bounds;
@@ -33,6 +43,7 @@ struct henka_ui_context
     bool mouse_left_released;
     bool active_id_set;
     char active_id[256];
+    henka_ui_flow_state flow;
     henka_ui_draw_rect* draw_rects;
     size_t draw_rect_count;
     size_t draw_rect_capacity;

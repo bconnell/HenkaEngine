@@ -17,6 +17,13 @@ typedef struct henka_ui_rect
     float height;
 } henka_ui_rect;
 
+typedef struct henka_ui_flow_desc
+{
+    henka_ui_rect bounds;
+    float scroll_offset;
+    float row_spacing;
+    float indent_width;
+} henka_ui_flow_desc;
 typedef enum henka_ui_semantic_color
 {
     HENKA_UI_COLOR_NORMAL = 0,
@@ -40,7 +47,25 @@ typedef struct henka_ui_frame_desc
     bool mouse_left_released;
 } henka_ui_frame_desc;
 
-henka_result henka_ui_create(henka_ui_context** out_context);
+henka_result henka_ui_flow_begin(
+    henka_ui_context* context,
+    const henka_ui_flow_desc* desc);
+henka_result henka_ui_flow_next_row(
+    henka_ui_context* context,
+    float row_height,
+    size_t indent_level,
+    henka_ui_rect* out_bounds,
+    bool* out_visible);
+henka_result henka_ui_flow_end(
+    henka_ui_context* context,
+    float* out_content_height);
+henka_result henka_ui_disclosure_row(
+    henka_ui_context* context,
+    const char* id,
+    henka_ui_rect bounds,
+    const char* label,
+    bool* expanded,
+    bool* out_changed);henka_result henka_ui_create(henka_ui_context** out_context);
 void henka_ui_destroy(henka_ui_context* context);
 henka_result henka_ui_begin_frame(henka_ui_context* context, const henka_ui_frame_desc* frame_desc);
 henka_result henka_ui_end_frame(henka_ui_context* context);

@@ -879,7 +879,9 @@ henka_result henka_ui_begin_frame(
 
 henka_result henka_ui_end_frame(henka_ui_context* context)
 {
-    if (context == NULL || !context->frame_active)
+    if (context == NULL ||
+        !context->frame_active ||
+        context->flow.active)
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
@@ -1006,6 +1008,303 @@ bool henka_ui_rect_contains(henka_ui_rect rect, henka_vec2 point)
         point.y < rect.y + rect.height;
 }
 
+henka_result henka_ui_flow_begin(
+    henka_ui_context* context,
+    const henka_ui_flow_desc* desc)
+{
+    if (context == NULL ||
+        desc == NULL ||
+        !context->frame_active ||
+        context->flow.active ||
+        !henka_ui_rect_is_finite(desc->bounds) ||
+        !henka_ui_float_is_finite(desc->scroll_offset) ||
+        !henka_ui_float_is_finite(desc->row_spacing) ||
+        !henka_ui_float_is_finite(desc->indent_width) ||
+        desc->bounds.width <= 0.0f ||
+        desc->bounds.height <= 0.0f ||
+        desc->scroll_offset < 0.0f ||
+        desc->row_spacing < 0.0f ||
+        desc->indent_width < 0.0f)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    context->flow.active = true;
+    context->flow.bounds = desc->bounds;
+    context->flow.scroll_offset = desc->scroll_offset;
+    context->flow.row_spacing = desc->row_spacing;
+    context->flow.indent_width = desc->indent_width;
+    context->flow.cursor_y = desc->bounds.y - desc->scroll_offset;
+    context->flow.content_height = 0.0f;
+    return HENKA_SUCCESS;
+}
+
+henka_result henka_ui_flow_next_row(
+    henka_ui_context* context,
+    float row_height,
+    size_t indent_level,
+    henka_ui_rect* out_bounds,
+    bool* out_visible)
+{
+    double content_offset;
+    double indent;
+    double row_x;
+    double row_y;
+    double row_width;
+    double row_bottom;
+    double clip_bottom;
+
+    if (out_bounds != NULL)
+    {
+        *out_bounds = (henka_ui_rect){0.0f, 0.0f, 0.0f, 0.0f};
+    }
+    if (out_visible != NULL)
+    {
+        *out_visible = false;
+    }
+
+    if (context == NULL ||
+        !context->frame_active ||
+        !context->flow.active ||
+        out_bounds == NULL ||
+        out_visible == NULL ||
+        !henka_ui_float_is_finite(row_height) ||
+        row_height <= 0.0f)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    indent = (double)context->flow.indent_width *
+        (double)indent_level;
+    content_offset = (double)context->flow.content_height;
+    if (context->flow.content_height > 0.0f)
+    {
+        content_offset += (double)context->flow.row_spacing;
+    }
+
+    row_x = (double)context->flow.bounds.x + indent;
+    row_y = (double)context->flow.bounds.y -
+        (double)context->flow.scroll_offset +
+        content_offset;
+    row_width = (double)context->flow.bounds.width - indent;
+    row_bottom = row_y + (double)row_height;
+    clip_bottom = (double)context->flow.bounds.y +
+        (double)context->flow.bounds.height;
+
+    if (!isfinite(indent) ||
+        !isfinite(content_offset) ||
+        !isfinite(row_x) ||
+        !isfinite(row_y) ||
+        !isfinite(row_width) ||
+        !isfinite(row_bottom) ||
+        !isfinite(clip_bottom) ||
+        row_width <= 0.0 ||
+        row_x < -(double)FLT_MAX ||
+        row_x > (double)FLT_MAX ||
+        row_y < -(double)FLT_MAX ||
+        row_y > (double)FLT_MAX ||
+        row_width > (double)FLT_MAX)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    *out_bounds = (henka_ui_rect){
+        (float)row_x,
+        (float)row_y,
+        (float)row_width,
+        row_height};
+
+    *out_visible =
+        row_bottom > (double)context->flow.bounds.y &&
+        row_y < clip_bottom;
+
+    context->flow.content_height =
+        (float)(content_offset + (double)row_height);
+    context->flow.cursor_y =
+        (float)(row_y + (double)row_height);
+    return HENKA_SUCCESS;
+}
+
+henka_result henka_ui_flow_end(
+    henka_ui_context* context,
+    float* out_content_height)
+{
+    float content_height;
+
+    if (out_content_height != NULL)
+    {
+        *out_content_height = 0.0f;
+    }
+
+    if (context == NULL ||
+        !context->frame_active ||
+        !context->flow.active ||
+        out_content_height == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    content_height = context->flow.content_height;
+    context->flow.active = false;
+    context->flow.bounds =
+        (henka_ui_rect){0.0f, 0.0f, 0.0f, 0.0f};
+    context->flow.scroll_offset = 0.0f;
+    context->flow.row_spacing = 0.0f;
+    context->flow.indent_width = 0.0f;
+    context->flow.cursor_y = 0.0f;
+    context->flow.content_height = 0.0f;
+    *out_content_height = content_height;
+    return HENKA_SUCCESS;
+}
+
+henka_result henka_ui_disclosure_row(
+    henka_ui_context* context,
+    const char* id,
+    henka_ui_rect bounds,
+    const char* label,
+    bool* expanded,
+    bool* out_changed)
+{
+    bool active;
+    bool clicked;
+    bool had_active;
+    bool hot;
+    bool owns_active;
+    bool pressed;
+    henka_ui_draw_checkpoint checkpoint;
+    henka_result result;
+    henka_vec4 fill;
+    float center_y;
+    float arrow_x;
+
+    if (out_changed != NULL)
+    {
+        *out_changed = false;
+    }
+
+    if (context == NULL ||
+        id == NULL ||
+        label == NULL ||
+        expanded == NULL ||
+        out_changed == NULL ||
+        !context->frame_active ||
+        !henka_ui_id_is_valid(id) ||
+        !henka_ui_rect_is_finite(bounds) ||
+        bounds.width <= 0.0f ||
+        bounds.height <= 0.0f)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    if (!context->visible)
+    {
+        return HENKA_SUCCESS;
+    }
+
+    henka_ui_capture_checkpoint(context, &checkpoint);
+    hot = henka_ui_control_is_hot(context, bounds);
+    pressed = hot && context->mouse_left_pressed;
+    had_active = henka_ui_active_id_equals(context, id);
+    owns_active = had_active || pressed;
+    active = context->mouse_left_down && owns_active;
+    clicked = hot && context->mouse_left_released && owns_active;
+
+    fill = active
+        ? g_ui_button_active
+        : (hot ? g_ui_button_hover : g_ui_row_fill);
+
+    result = henka_ui_push_rect(context, bounds, fill);
+    if (result == HENKA_SUCCESS)
+    {
+        result = henka_ui_push_rect(
+            context,
+            (henka_ui_rect){
+                bounds.x,
+                bounds.y + bounds.height - 1.0f,
+                bounds.width,
+                1.0f},
+            g_ui_panel_separator);
+    }
+
+    center_y = bounds.y + bounds.height * 0.5f;
+    arrow_x = bounds.x + 10.0f;
+    if (result == HENKA_SUCCESS)
+    {
+        if (*expanded)
+        {
+            result = henka_ui_push_line(
+                context,
+                (henka_vec2){arrow_x - 3.0f, center_y - 2.0f},
+                (henka_vec2){arrow_x, center_y + 2.0f},
+                1.0f,
+                g_ui_heading_color);
+            if (result == HENKA_SUCCESS)
+            {
+                result = henka_ui_push_line(
+                    context,
+                    (henka_vec2){arrow_x, center_y + 2.0f},
+                    (henka_vec2){arrow_x + 3.0f, center_y - 2.0f},
+                    1.0f,
+                    g_ui_heading_color);
+            }
+        }
+        else
+        {
+            result = henka_ui_push_line(
+                context,
+                (henka_vec2){arrow_x - 2.0f, center_y - 3.0f},
+                (henka_vec2){arrow_x + 2.0f, center_y},
+                1.0f,
+                g_ui_heading_color);
+            if (result == HENKA_SUCCESS)
+            {
+                result = henka_ui_push_line(
+                    context,
+                    (henka_vec2){arrow_x + 2.0f, center_y},
+                    (henka_vec2){arrow_x - 2.0f, center_y + 3.0f},
+                    1.0f,
+                    g_ui_heading_color);
+            }
+        }
+    }
+
+    if (result == HENKA_SUCCESS)
+    {
+        result = henka_ui_draw_fit_text(
+            context,
+            bounds,
+            24.0f,
+            bounds.y + (bounds.height - 7.0f) * 0.5f,
+            1.0f,
+            label,
+            g_ui_text_color);
+    }
+
+    if (result != HENKA_SUCCESS)
+    {
+        henka_ui_restore_checkpoint(context, &checkpoint);
+        return result;
+    }
+
+    if (pressed && !henka_ui_set_active_id(context, id))
+    {
+        henka_ui_restore_checkpoint(context, &checkpoint);
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    if (context->mouse_left_released && owns_active)
+    {
+        henka_ui_clear_active_id(context);
+    }
+
+    if (clicked)
+    {
+        *expanded = !*expanded;
+        *out_changed = true;
+    }
+
+    return HENKA_SUCCESS;
+}
 henka_result henka_ui_measure_text(
     const char* text,
     float scale,
