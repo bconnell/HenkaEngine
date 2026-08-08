@@ -1,5 +1,6 @@
 #include "object_details_tools.h"
 
+#include <stdio.h>
 #include <string.h>
 
 henka_result sandbox3d_resolve_selected_material(
@@ -100,5 +101,129 @@ henka_result sandbox3d_resolve_selected_material(
         }
     }
 
+    return HENKA_SUCCESS;
+}
+
+static const char* sandbox3d_material_alpha_mode_label(
+    henka_material_alpha_mode mode)
+{
+    switch (mode)
+    {
+        case HENKA_MATERIAL_ALPHA_MASKED:
+            return "Masked";
+        case HENKA_MATERIAL_ALPHA_BLENDED:
+            return "Blended";
+        case HENKA_MATERIAL_ALPHA_OPAQUE:
+        default:
+            return "Opaque";
+    }
+}
+
+henka_result sandbox3d_format_selected_material_view(
+    const sandbox3d_selected_material_view* view,
+    sandbox3d_selected_material_display* out_display)
+{
+    const henka_material* material;
+
+    if (view == NULL || out_display == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    memset(out_display, 0, sizeof(*out_display));
+    snprintf(
+        out_display->material_slot,
+        sizeof(out_display->material_slot),
+        "%s",
+        view->access == SANDBOX3D_MATERIAL_ACCESS_NONE ?
+            "None" :
+            "Present");
+    snprintf(
+        out_display->mode,
+        sizeof(out_display->mode),
+        "%s",
+        view->access == SANDBOX3D_MATERIAL_ACCESS_EDITABLE_INSTANCE ?
+            "Editable instance" :
+            (view->access == SANDBOX3D_MATERIAL_ACCESS_READ_ONLY ?
+                "Read-only" :
+                "None"));
+
+    if (view->access == SANDBOX3D_MATERIAL_ACCESS_NONE)
+    {
+        snprintf(out_display->name, sizeof(out_display->name), "%s", "(none)");
+        snprintf(out_display->base_color, sizeof(out_display->base_color), "%s", "(none)");
+        snprintf(out_display->metallic, sizeof(out_display->metallic), "%s", "(none)");
+        snprintf(out_display->roughness, sizeof(out_display->roughness), "%s", "(none)");
+        snprintf(out_display->normal_map, sizeof(out_display->normal_map), "%s", "None");
+        snprintf(out_display->emissive, sizeof(out_display->emissive), "%s", "(none)");
+        snprintf(out_display->alpha_mode, sizeof(out_display->alpha_mode), "%s", "(none)");
+        snprintf(out_display->double_sided, sizeof(out_display->double_sided), "%s", "(none)");
+        snprintf(out_display->ior, sizeof(out_display->ior), "%s", "(none)");
+        snprintf(out_display->transmission, sizeof(out_display->transmission), "%s", "(none)");
+        return HENKA_SUCCESS;
+    }
+
+    material = &view->material;
+    snprintf(
+        out_display->name,
+        sizeof(out_display->name),
+        "%s",
+        material->name != NULL && material->name[0] != '\0' ?
+            material->name :
+            "Material");
+    snprintf(
+        out_display->base_color,
+        sizeof(out_display->base_color),
+        "%.2f %.2f %.2f %.2f",
+        material->base_color.x,
+        material->base_color.y,
+        material->base_color.z,
+        material->base_color.w);
+    snprintf(
+        out_display->metallic,
+        sizeof(out_display->metallic),
+        "%.2f",
+        material->metallic);
+    snprintf(
+        out_display->roughness,
+        sizeof(out_display->roughness),
+        "%.2f",
+        material->roughness);
+    snprintf(
+        out_display->normal_map,
+        sizeof(out_display->normal_map),
+        "%s",
+        material->normal_texture != NULL ?
+            "Assigned" :
+            "None");
+    snprintf(
+        out_display->emissive,
+        sizeof(out_display->emissive),
+        "%.2f %.2f %.2f x%.2f",
+        material->emissive_color.x,
+        material->emissive_color.y,
+        material->emissive_color.z,
+        material->emissive_strength);
+    snprintf(
+        out_display->alpha_mode,
+        sizeof(out_display->alpha_mode),
+        "%s",
+        sandbox3d_material_alpha_mode_label(
+            material->alpha_mode));
+    snprintf(
+        out_display->double_sided,
+        sizeof(out_display->double_sided),
+        "%s",
+        material->double_sided ? "Yes" : "No");
+    snprintf(
+        out_display->ior,
+        sizeof(out_display->ior),
+        "%.2f",
+        material->ior);
+    snprintf(
+        out_display->transmission,
+        sizeof(out_display->transmission),
+        "%.2f",
+        material->transmission);
     return HENKA_SUCCESS;
 }

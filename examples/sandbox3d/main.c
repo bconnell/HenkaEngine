@@ -14,6 +14,7 @@
 
 #include "editor_controls.h"
 #include "editor_ui_state.h"
+#include "object_details_tools.h"
 #include "interaction_tools.h"
 #include "physics_tools.h"
 #include "workspace_tools.h"
@@ -816,6 +817,7 @@ static float sandbox3d_material_editor_clamp(float value, float minimum, float m
 
 static henka_result sandbox3d_material_editor_apply_delta(
     sandbox3d_state* state,
+    sandbox3d_material_editor_binding* binding,
     int direction)
 {
     henka_material_instance previous;
@@ -824,26 +826,49 @@ static henka_result sandbox3d_material_editor_apply_delta(
     henka_result result;
     float value;
 
-    if (state == NULL || !state->marker_material_instance_valid || state->scene == NULL || direction == 0)
+    if (state == NULL ||
+        binding == NULL ||
+        !binding->valid ||
+        binding->instance == NULL ||
+        binding->asset == NULL ||
+        binding->instance->definition != binding->asset ||
+        state->scene == NULL ||
+        binding->entity == HENKA_INVALID_ENTITY ||
+        direction == 0)
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
-    previous = state->marker_material_instance;
+
+    previous = *binding->instance;
     parameter = state->material_editor_parameter;
-    result = henka_assets_get_material_instance_material(&state->marker_material_instance, &material);
+    result =
+        henka_assets_get_material_instance_material(
+            binding->instance,
+            &material);
     if (result != HENKA_SUCCESS)
     {
         return result;
     }
+
     if (sandbox3d_material_editor_is_float(parameter))
     {
-        value = sandbox3d_material_editor_float_value(&material, parameter) +
-            sandbox3d_material_editor_step(parameter) * (float)direction;
+        value =
+            sandbox3d_material_editor_float_value(
+                &material,
+                parameter) +
+            sandbox3d_material_editor_step(parameter) *
+                (float)direction;
+
         if (parameter == HENKA_MATERIAL_INSTANCE_IOR)
         {
-            value = sandbox3d_material_editor_clamp(value, 1.0f, 3.0f);
+            value =
+                sandbox3d_material_editor_clamp(
+                    value,
+                    1.0f,
+                    3.0f);
         }
-        else if (parameter == HENKA_MATERIAL_INSTANCE_NORMAL_SCALE ||
+        else if (
+            parameter == HENKA_MATERIAL_INSTANCE_NORMAL_SCALE ||
             parameter == HENKA_MATERIAL_INSTANCE_EMISSIVE_STRENGTH ||
             parameter == HENKA_MATERIAL_INSTANCE_THICKNESS ||
             parameter == HENKA_MATERIAL_INSTANCE_ATTENUATION_DISTANCE)
@@ -852,202 +877,502 @@ static henka_result sandbox3d_material_editor_apply_delta(
         }
         else
         {
-            value = sandbox3d_material_editor_clamp(value, 0.0f, 1.0f);
+            value =
+                sandbox3d_material_editor_clamp(
+                    value,
+                    0.0f,
+                    1.0f);
         }
-        result = henka_assets_material_instance_set_float(
-            &state->marker_material_instance, parameter, value);
+
+        result =
+            henka_assets_material_instance_set_float(
+                binding->instance,
+                parameter,
+                value);
     }
-    else if (parameter == HENKA_MATERIAL_INSTANCE_BASE_COLOR ||
+    else if (
+        parameter == HENKA_MATERIAL_INSTANCE_BASE_COLOR ||
         parameter == HENKA_MATERIAL_INSTANCE_EMISSIVE_COLOR ||
         parameter == HENKA_MATERIAL_INSTANCE_SPECULAR_COLOR ||
         parameter == HENKA_MATERIAL_INSTANCE_SHEEN_COLOR ||
         parameter == HENKA_MATERIAL_INSTANCE_ATTENUATION_COLOR)
     {
-        float delta = 0.05f * (float)direction;
+        const float delta = 0.05f * (float)direction;
+
         if (parameter == HENKA_MATERIAL_INSTANCE_BASE_COLOR)
         {
             henka_vec4 value4 = material.base_color;
-            float* component = ((float*)&value4) + (state->material_editor_component % 4U);
-            *component = sandbox3d_material_editor_clamp(*component + delta, 0.0f, 1.0f);
-            result = henka_assets_material_instance_set_vec4(&state->marker_material_instance, parameter, value4);
+            float* component =
+                ((float*)&value4) +
+                (state->material_editor_component % 4U);
+            *component =
+                sandbox3d_material_editor_clamp(
+                    *component + delta,
+                    0.0f,
+                    1.0f);
+            result =
+                henka_assets_material_instance_set_vec4(
+                    binding->instance,
+                    parameter,
+                    value4);
         }
         else
         {
             henka_vec3 value3;
-            if (parameter == HENKA_MATERIAL_INSTANCE_EMISSIVE_COLOR) value3 = material.emissive_color;
-            else if (parameter == HENKA_MATERIAL_INSTANCE_SPECULAR_COLOR) value3 = material.specular_color;
-            else if (parameter == HENKA_MATERIAL_INSTANCE_SHEEN_COLOR) value3 = material.sheen_color;
-            else value3 = material.attenuation_color;
+
+            if (parameter ==
+                HENKA_MATERIAL_INSTANCE_EMISSIVE_COLOR)
             {
-                float* component = ((float*)&value3) + (state->material_editor_component % 3U);
-                *component = sandbox3d_material_editor_clamp(*component + delta, 0.0f, 1.0f);
+                value3 = material.emissive_color;
             }
-            result = henka_assets_material_instance_set_vec3(&state->marker_material_instance, parameter, value3);
+            else if (parameter ==
+                HENKA_MATERIAL_INSTANCE_SPECULAR_COLOR)
+            {
+                value3 = material.specular_color;
+            }
+            else if (parameter ==
+                HENKA_MATERIAL_INSTANCE_SHEEN_COLOR)
+            {
+                value3 = material.sheen_color;
+            }
+            else
+            {
+                value3 = material.attenuation_color;
+            }
+
+            {
+                float* component =
+                    ((float*)&value3) +
+                    (state->material_editor_component % 3U);
+                *component =
+                    sandbox3d_material_editor_clamp(
+                        *component + delta,
+                        0.0f,
+                        1.0f);
+            }
+
+            result =
+                henka_assets_material_instance_set_vec3(
+                    binding->instance,
+                    parameter,
+                    value3);
         }
     }
     else if (sandbox3d_material_editor_is_bool(parameter))
     {
         bool current_value = false;
+
         switch (parameter)
         {
-            case HENKA_MATERIAL_INSTANCE_USE_LIGHTING: current_value = material.use_lighting; break;
-            case HENKA_MATERIAL_INSTANCE_DEPTH_TEST: current_value = material.depth_test; break;
-            case HENKA_MATERIAL_INSTANCE_DOUBLE_SIDED: current_value = material.double_sided; break;
-            case HENKA_MATERIAL_INSTANCE_CAST_SHADOWS: current_value = material.cast_shadows; break;
-            case HENKA_MATERIAL_INSTANCE_RECEIVE_SHADOWS: current_value = material.receive_shadows; break;
-            default: break;
+            case HENKA_MATERIAL_INSTANCE_USE_LIGHTING:
+                current_value = material.use_lighting;
+                break;
+            case HENKA_MATERIAL_INSTANCE_DEPTH_TEST:
+                current_value = material.depth_test;
+                break;
+            case HENKA_MATERIAL_INSTANCE_DOUBLE_SIDED:
+                current_value = material.double_sided;
+                break;
+            case HENKA_MATERIAL_INSTANCE_CAST_SHADOWS:
+                current_value = material.cast_shadows;
+                break;
+            case HENKA_MATERIAL_INSTANCE_RECEIVE_SHADOWS:
+                current_value = material.receive_shadows;
+                break;
+            default:
+                break;
         }
-        result = henka_assets_material_instance_set_bool(&state->marker_material_instance, parameter, !current_value);
+
+        result =
+            henka_assets_material_instance_set_bool(
+                binding->instance,
+                parameter,
+                !current_value);
     }
     else if (parameter == HENKA_MATERIAL_INSTANCE_ALPHA_MODE)
     {
-        int mode = (int)material.alpha_mode + (direction > 0 ? 1 : -1);
-        if (mode < 0) mode = 2;
-        if (mode > 2) mode = 0;
-        result = henka_assets_material_instance_set_alpha_mode(
-            &state->marker_material_instance, (henka_material_alpha_mode)mode);
+        int mode =
+            (int)material.alpha_mode +
+            (direction > 0 ? 1 : -1);
+
+        if (mode < 0)
+        {
+            mode = 2;
+        }
+        if (mode > 2)
+        {
+            mode = 0;
+        }
+
+        result =
+            henka_assets_material_instance_set_alpha_mode(
+                binding->instance,
+                (henka_material_alpha_mode)mode);
     }
     else if (sandbox3d_material_editor_is_texture(parameter))
     {
         if (direction > 0)
         {
-            result = henka_assets_material_instance_set_texture(
-                &state->marker_material_instance,
-                (henka_material_texture_slot)(parameter - HENKA_MATERIAL_INSTANCE_BASE_COLOR_TEXTURE),
-                NULL);
+            result =
+                henka_assets_material_instance_set_texture(
+                    binding->instance,
+                    (henka_material_texture_slot)(
+                        parameter -
+                        HENKA_MATERIAL_INSTANCE_BASE_COLOR_TEXTURE),
+                    NULL);
         }
         else
         {
-            result = henka_assets_material_instance_reset_override(&state->marker_material_instance, parameter);
+            result =
+                henka_assets_material_instance_reset_override(
+                    binding->instance,
+                    parameter);
         }
     }
     else
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
+
     if (result != HENKA_SUCCESS)
     {
-        state->marker_material_instance = previous;
+        *binding->instance = previous;
         return result;
     }
-    result = henka_assets_apply_material_instance_to_entity(
-        &state->marker_material_instance, state->scene, state->marker_entity);
+
+    result =
+        henka_assets_apply_material_instance_to_entity(
+            binding->instance,
+            state->scene,
+            binding->entity);
     if (result != HENKA_SUCCESS)
     {
-        state->marker_material_instance = previous;
+        *binding->instance = previous;
     }
+
     return result;
 }
 
-static void sandbox3d_draw_material_authoring_panel(
+static void sandbox3d_draw_material_instance_editor(
     henka_engine* engine,
     sandbox3d_state* state,
-    henka_ui_rect panel_bounds,
-    const sandbox3d_object_descriptor* descriptor)
+    sandbox3d_material_editor_binding* binding,
+    henka_ui_rect content_bounds)
 {
+    char dependency_text[96];
     char value_text[128];
-    char dependency_text[160];
     henka_material material;
     henka_material_dependency_info dependencies;
     uint64_t revision;
+    float button_gap;
+    float button_width;
     float x;
     float y;
-    bool can_edit;
 
-    if (engine == NULL || state == NULL || descriptor == NULL)
+    if (engine == NULL ||
+        state == NULL ||
+        binding == NULL ||
+        !binding->valid ||
+        binding->instance == NULL ||
+        binding->asset == NULL ||
+        binding->instance->definition != binding->asset ||
+        state->scene == NULL ||
+        binding->entity == HENKA_INVALID_ENTITY ||
+        content_bounds.width <= 0.0f ||
+        content_bounds.height <= 0.0f)
     {
         return;
     }
-    y = panel_bounds.y + 432.0f;
-    henka_ui_heading(state->ui, panel_bounds.x + 14.0f, y, 1.0f, "Material Authoring");
-    can_edit = state->marker_material_instance_valid && descriptor->entity == state->marker_entity;
-    if (!can_edit)
+
+    if (henka_assets_get_material_instance_material(
+            binding->instance,
+            &material) != HENKA_SUCCESS ||
+        henka_assets_get_material_asset_revision(
+            binding->asset,
+            &revision) != HENKA_SUCCESS ||
+        henka_assets_get_material_instance_dependencies(
+            binding->instance,
+            &dependencies) != HENKA_SUCCESS)
     {
-        henka_ui_label_colored(state->ui, panel_bounds.x + 14.0f, y + 18.0f, 1.0f,
-            "Select glTF Marker for instance editing.", HENKA_UI_COLOR_MUTED);
+        henka_ui_label_colored(
+            state->ui,
+            content_bounds.x,
+            content_bounds.y,
+            1.0f,
+            "Material instance is unavailable.",
+            HENKA_UI_COLOR_DANGER);
         return;
     }
-    if (henka_assets_get_material_instance_material(&state->marker_material_instance, &material) != HENKA_SUCCESS ||
-        henka_assets_get_material_asset_revision(state->marker_material_asset, &revision) != HENKA_SUCCESS ||
-        henka_assets_get_material_instance_dependencies(&state->marker_material_instance, &dependencies) != HENKA_SUCCESS)
+
+    x = content_bounds.x;
+    y = content_bounds.y;
+    button_gap = 4.0f;
+    button_width =
+        (content_bounds.width - button_gap * 4.0f) / 5.0f;
+
+    snprintf(
+        value_text,
+        sizeof(value_text),
+        "%s %.3f",
+        sandbox3d_material_editor_parameter_label(
+            state->material_editor_parameter),
+        sandbox3d_material_editor_is_float(
+            state->material_editor_parameter) ?
+            sandbox3d_material_editor_float_value(
+                &material,
+                state->material_editor_parameter) :
+            0.0f);
+    henka_ui_label(
+        state->ui,
+        x,
+        y,
+        1.0f,
+        value_text);
+
+    snprintf(
+        dependency_text,
+        sizeof(dependency_text),
+        "Definition r%llu | overrides 0x%08X | deps %zu",
+        (unsigned long long)revision,
+        binding->instance->override_mask,
+        dependencies.dependency_count);
+    henka_ui_label_colored(
+        state->ui,
+        x,
+        y + 18.0f,
+        1.0f,
+        dependency_text,
+        HENKA_UI_COLOR_INFO);
+
+    if (button_width > 0.0f)
     {
-        henka_ui_label_colored(state->ui, panel_bounds.x + 14.0f, y + 18.0f, 1.0f,
-            "Material instance is unavailable.", HENKA_UI_COLOR_DANGER);
-        return;
+        if (henka_ui_button(
+                state->ui,
+                "material_parameter_prev",
+                (henka_ui_rect){
+                    x,
+                    y + 40.0f,
+                    button_width,
+                    24.0f},
+                "Prev"))
+        {
+            state->material_editor_parameter =
+                state->material_editor_parameter == 0 ?
+                    HENKA_MATERIAL_INSTANCE_PARAMETER_COUNT - 1 :
+                    state->material_editor_parameter - 1;
+        }
+
+        if (henka_ui_button(
+                state->ui,
+                "material_parameter_next",
+                (henka_ui_rect){
+                    x + (button_width + button_gap),
+                    y + 40.0f,
+                    button_width,
+                    24.0f},
+                "Next"))
+        {
+            state->material_editor_parameter =
+                (state->material_editor_parameter + 1) %
+                HENKA_MATERIAL_INSTANCE_PARAMETER_COUNT;
+        }
+
+        if (henka_ui_button(
+                state->ui,
+                "material_parameter_component",
+                (henka_ui_rect){
+                    x + (button_width + button_gap) * 2.0f,
+                    y + 40.0f,
+                    button_width,
+                    24.0f},
+                "Channel"))
+        {
+            state->material_editor_component =
+                (state->material_editor_component + 1U) % 4U;
+        }
+
+        if (henka_ui_button(
+                state->ui,
+                "material_parameter_less",
+                (henka_ui_rect){
+                    x + (button_width + button_gap) * 3.0f,
+                    y + 40.0f,
+                    button_width,
+                    24.0f},
+                sandbox3d_material_editor_is_texture(
+                    state->material_editor_parameter) ?
+                    "Restore" :
+                    "-"))
+        {
+            (void)sandbox3d_material_editor_apply_delta(
+                state,
+                binding,
+                -1);
+        }
+
+        if (henka_ui_button(
+                state->ui,
+                "material_parameter_more",
+                (henka_ui_rect){
+                    x + (button_width + button_gap) * 4.0f,
+                    y + 40.0f,
+                    button_width,
+                    24.0f},
+                sandbox3d_material_editor_is_texture(
+                    state->material_editor_parameter) ?
+                    "Clear" :
+                    "+"))
+        {
+            (void)sandbox3d_material_editor_apply_delta(
+                state,
+                binding,
+                1);
+        }
     }
-    snprintf(value_text, sizeof(value_text), "%s %.3f", sandbox3d_material_editor_parameter_label(state->material_editor_parameter),
-        sandbox3d_material_editor_is_float(state->material_editor_parameter) ?
-            sandbox3d_material_editor_float_value(&material, state->material_editor_parameter) : 0.0f);
-    snprintf(dependency_text, sizeof(dependency_text), "Definition r%llu | overrides 0x%08X | deps %zu",
-        (unsigned long long)revision, state->marker_material_instance.override_mask, dependencies.dependency_count);
-    henka_ui_label(state->ui, panel_bounds.x + 14.0f, y + 18.0f, 1.0f, value_text);
-    henka_ui_label_colored(state->ui, panel_bounds.x + 14.0f, y + 36.0f, 1.0f, dependency_text, HENKA_UI_COLOR_INFO);
-    x = panel_bounds.x + 14.0f;
-    if (henka_ui_button(state->ui, "material_parameter_prev", (henka_ui_rect){x, y + 56.0f, 58.0f, 24.0f}, "Prev"))
-    {
-        state->material_editor_parameter = state->material_editor_parameter == 0 ?
-            HENKA_MATERIAL_INSTANCE_PARAMETER_COUNT - 1 : state->material_editor_parameter - 1;
-    }
-    if (henka_ui_button(state->ui, "material_parameter_next", (henka_ui_rect){x + 64.0f, y + 56.0f, 58.0f, 24.0f}, "Next"))
-    {
-        state->material_editor_parameter = (state->material_editor_parameter + 1) % HENKA_MATERIAL_INSTANCE_PARAMETER_COUNT;
-    }
-    if (henka_ui_button(state->ui, "material_parameter_component", (henka_ui_rect){x + 128.0f, y + 56.0f, 86.0f, 24.0f}, "Channel"))
-    {
-        state->material_editor_component = (state->material_editor_component + 1U) % 4U;
-    }
-    if (henka_ui_button(state->ui, "material_parameter_less", (henka_ui_rect){x + 220.0f, y + 56.0f, 48.0f, 24.0f},
-        sandbox3d_material_editor_is_texture(state->material_editor_parameter) ? "Restore" : "-") )
-    {
-        (void)sandbox3d_material_editor_apply_delta(state, -1);
-    }
-    if (henka_ui_button(state->ui, "material_parameter_more", (henka_ui_rect){x + 274.0f, y + 56.0f, 48.0f, 24.0f},
-        sandbox3d_material_editor_is_texture(state->material_editor_parameter) ? "Clear" : "+"))
-    {
-        (void)sandbox3d_material_editor_apply_delta(state, 1);
-    }
-    snprintf(value_text, sizeof(value_text), "Alpha %s | Base %.2f %.2f %.2f %.2f",
-        sandbox3d_material_editor_alpha_label(material.alpha_mode), material.base_color.x, material.base_color.y,
-        material.base_color.z, material.base_color.w);
-    henka_ui_label(state->ui, panel_bounds.x + 14.0f, y + 86.0f, 1.0f, value_text);
-    snprintf(value_text, sizeof(value_text), "Metal %.2f Rough %.2f IOR %.2f Tx %.2f",
-        material.metallic, material.roughness, material.ior, material.transmission);
-    henka_ui_label(state->ui, panel_bounds.x + 14.0f, y + 104.0f, 1.0f, value_text);
+
+    snprintf(
+        value_text,
+        sizeof(value_text),
+        "Alpha %s | Base %.2f %.2f %.2f %.2f",
+        sandbox3d_material_editor_alpha_label(
+            material.alpha_mode),
+        material.base_color.x,
+        material.base_color.y,
+        material.base_color.z,
+        material.base_color.w);
+    henka_ui_label(
+        state->ui,
+        x,
+        y + 70.0f,
+        1.0f,
+        value_text);
+
+    snprintf(
+        value_text,
+        sizeof(value_text),
+        "Metal %.2f Rough %.2f IOR %.2f Tx %.2f",
+        material.metallic,
+        material.roughness,
+        material.ior,
+        material.transmission);
+    henka_ui_label(
+        state->ui,
+        x,
+        y + 88.0f,
+        1.0f,
+        value_text);
+
     if (dependencies.dependency_count > 0U)
     {
-        snprintf(value_text, sizeof(value_text), "First dependency: %s", sandbox3d_material_editor_usage_label(dependencies.dependencies[0].usage));
-        henka_ui_label_colored(state->ui, panel_bounds.x + 14.0f, y + 122.0f, 1.0f, value_text, HENKA_UI_COLOR_INFO);
+        snprintf(
+            value_text,
+            sizeof(value_text),
+            "First dependency: %s",
+            sandbox3d_material_editor_usage_label(
+                dependencies.dependencies[0].usage));
+        henka_ui_label_colored(
+            state->ui,
+            x,
+            y + 106.0f,
+            1.0f,
+            value_text,
+            HENKA_UI_COLOR_INFO);
     }
-    if (henka_ui_button(state->ui, "material_instance_reset", (henka_ui_rect){panel_bounds.x + 14.0f, y + 146.0f, 104.0f, 24.0f}, "Reset Overrides"))
+
     {
-        henka_material_instance previous = state->marker_material_instance;
-        if (henka_assets_material_instance_reset_overrides(&state->marker_material_instance) == HENKA_SUCCESS &&
-            henka_assets_apply_material_instance_to_entity(&state->marker_material_instance, state->scene, state->marker_entity) == HENKA_SUCCESS)
+        const float gap = 6.0f;
+        const float action_width =
+            (content_bounds.width - gap) * 0.5f;
+
+        if (henka_ui_button(
+                state->ui,
+                "material_instance_reset",
+                (henka_ui_rect){
+                    x,
+                    y + 132.0f,
+                    action_width,
+                    24.0f},
+                "Reset Overrides"))
         {
-            sandbox3d_set_statusf(state, false, true, "%s", "glTF material instance overrides reset.");
+            const henka_material_instance previous =
+                *binding->instance;
+
+            if (henka_assets_material_instance_reset_overrides(
+                    binding->instance) == HENKA_SUCCESS &&
+                henka_assets_apply_material_instance_to_entity(
+                    binding->instance,
+                    state->scene,
+                    binding->entity) == HENKA_SUCCESS)
+            {
+                sandbox3d_set_statusf(
+                    state,
+                    false,
+                    true,
+                    "%s",
+                    "Material instance overrides reset.");
+            }
+            else
+            {
+                *binding->instance = previous;
+                sandbox3d_set_statusf(
+                    state,
+                    true,
+                    true,
+                    "%s",
+                    "Material reset was rejected transactionally.");
+            }
         }
-        else
+
+        if (binding->entity == state->marker_entity &&
+            binding->instance ==
+                &state->marker_material_instance &&
+            binding->asset ==
+                state->marker_material_asset &&
+            henka_ui_button(
+                state->ui,
+                "material_asset_reimport",
+                (henka_ui_rect){
+                    x + action_width + gap,
+                    y + 132.0f,
+                    action_width,
+                    24.0f},
+                "Reimport"))
         {
-            state->marker_material_instance = previous;
-            sandbox3d_set_statusf(state, true, true, "%s", "Material reset was rejected transactionally.");
-        }
-    }
-    if (henka_ui_button(state->ui, "material_asset_reimport", (henka_ui_rect){panel_bounds.x + 126.0f, y + 146.0f, 104.0f, 24.0f}, "Reimport"))
-    {
-        henka_material_instance previous = state->marker_material_instance;
-        henka_material_asset* reloaded_asset = state->marker_material_asset;
-        if (henka_assets_reload_gltf_material_asset(
-                henka_engine_get_asset_manager(engine), "assets/models/henka_marker.gltf", &reloaded_asset) == HENKA_SUCCESS &&
-            henka_assets_refresh_material_instance(&state->marker_material_instance) == HENKA_SUCCESS &&
-            henka_assets_apply_material_instance_to_entity(&state->marker_material_instance, state->scene, state->marker_entity) == HENKA_SUCCESS)
-        {
-            state->marker_material_asset = reloaded_asset;
-            sandbox3d_set_statusf(state, false, true, "%s", "glTF material definition reimported and instance refreshed.");
-        }
-        else
-        {
-            state->marker_material_instance = previous;
-            sandbox3d_set_statusf(state, true, true, "%s", "glTF material reimport failed; instance preserved.");
+            const henka_material_instance previous =
+                state->marker_material_instance;
+            henka_material_asset* reloaded_asset =
+                state->marker_material_asset;
+
+            if (henka_assets_reload_gltf_material_asset(
+                    henka_engine_get_asset_manager(engine),
+                    "assets/models/henka_marker.gltf",
+                    &reloaded_asset) == HENKA_SUCCESS &&
+                henka_assets_refresh_material_instance(
+                    &state->marker_material_instance) ==
+                    HENKA_SUCCESS &&
+                henka_assets_apply_material_instance_to_entity(
+                    &state->marker_material_instance,
+                    state->scene,
+                    state->marker_entity) == HENKA_SUCCESS)
+            {
+                state->marker_material_asset = reloaded_asset;
+                sandbox3d_set_statusf(
+                    state,
+                    false,
+                    true,
+                    "%s",
+                    "glTF material definition reimported and instance refreshed.");
+            }
+            else
+            {
+                state->marker_material_instance = previous;
+                sandbox3d_set_statusf(
+                    state,
+                    true,
+                    true,
+                    "%s",
+                    "Material reimport was rejected transactionally.");
+            }
         }
     }
 }
@@ -9826,7 +10151,32 @@ static void sandbox3d_handle_panel_scroll(
         }
     }
 
-    sandbox3d_advance_panel_paging(state, target, delta);
+    if (target == SANDBOX3D_PANEL_SCROLL_DETAILS)
+    {
+        henka_ui_rect content_bounds =
+            state->frame_layout.object_details_panel;
+
+        content_bounds.x += 14.0f;
+        content_bounds.y += 38.0f;
+        content_bounds.width -= 28.0f;
+        content_bounds.height -= 52.0f;
+
+        if (content_bounds.width > 0.0f &&
+            content_bounds.height > 0.0f &&
+            henka_ui_rect_contains(content_bounds, point) &&
+            sandbox3d_editor_ui_scroll_details(
+                &state->editor_ui,
+                content_bounds.height,
+                delta))
+        {
+            return;
+        }
+    }
+
+    sandbox3d_advance_panel_paging(
+        state,
+        target,
+        delta);
 }
 
 static void sandbox3d_draw_controls_panel(
@@ -11091,112 +11441,261 @@ static void sandbox3d_draw_scene_objects_panel(
     }
 }
 
+static bool sandbox3d_details_row_fully_visible(
+    henka_ui_rect viewport,
+    henka_ui_rect row)
+{
+    return
+        row.x >= viewport.x &&
+        row.y >= viewport.y &&
+        row.x + row.width <= viewport.x + viewport.width &&
+        row.y + row.height <= viewport.y + viewport.height;
+}
+
+static bool sandbox3d_details_flow_next_row(
+    sandbox3d_state* state,
+    henka_ui_rect viewport,
+    float row_height,
+    size_t indent_level,
+    henka_ui_rect* out_bounds)
+{
+    bool visible;
+
+    if (state == NULL ||
+        state->ui == NULL ||
+        out_bounds == NULL)
+    {
+        return false;
+    }
+
+    visible = false;
+    if (henka_ui_flow_next_row(
+            state->ui,
+            row_height,
+            indent_level,
+            out_bounds,
+            &visible) != HENKA_SUCCESS)
+    {
+        return false;
+    }
+
+    return
+        visible &&
+        sandbox3d_details_row_fully_visible(
+            viewport,
+            *out_bounds);
+}
+
+static bool sandbox3d_details_flow_disclosure(
+    sandbox3d_state* state,
+    henka_ui_rect viewport,
+    const char* id,
+    const char* label,
+    bool* expanded,
+    bool* any_changed)
+{
+    bool changed;
+    bool visible;
+    henka_ui_rect bounds;
+
+    if (state == NULL ||
+        state->ui == NULL ||
+        id == NULL ||
+        label == NULL ||
+        expanded == NULL)
+    {
+        return false;
+    }
+
+    visible = false;
+    if (henka_ui_flow_next_row(
+            state->ui,
+            28.0f,
+            0U,
+            &bounds,
+            &visible) != HENKA_SUCCESS)
+    {
+        return false;
+    }
+
+    if (!visible ||
+        !sandbox3d_details_row_fully_visible(
+            viewport,
+            bounds))
+    {
+        return true;
+    }
+
+    changed = false;
+    if (henka_ui_disclosure_row(
+            state->ui,
+            id,
+            bounds,
+            label,
+            expanded,
+            &changed) != HENKA_SUCCESS)
+    {
+        return false;
+    }
+
+    if (changed && any_changed != NULL)
+    {
+        *any_changed = true;
+    }
+
+    return true;
+}
+
 static void sandbox3d_draw_object_details_panel(
     henka_engine* engine,
     sandbox3d_state* state,
     const sandbox3d_workspace_layout* layout)
 {
-    bool visible;
+    bool disclosure_changed;
     bool transform_locked;
+    bool visible;
     char action_label[32];
-    char visibility_action_id[64];
-    char focus_action_id[64];
-    char lock_action_id[64];
-    char reset_action_id[64];
     char clear_action_id[64];
-    char material_text[96];
-    char lock_action_label[32];
-    char transform_heading[48];
-    char detail_text[96];
-    char developer_text[96];
+    char focus_action_id[64];
     char interaction_text[64];
+    char lock_action_id[64];
+    char lock_action_label[32];
     char physics_text[96];
     char position_text[64];
+    char reset_action_id[64];
     char rotation_text[64];
-    char texture_text[96];
-    char velocity_text[64];
     char scale_text[64];
+    char velocity_text[64];
+    char visibility_action_id[64];
     const sandbox3d_object_descriptor* descriptor;
-    henka_physics_body_id physics_body;
-    henka_physics_body_state body_state;
+    float content_height;
     henka_interaction_desc interaction;
     henka_interaction_result interaction_result;
-    henka_material material;
-    henka_scene_object_info object_info;
+    sandbox3d_material_editor_binding marker_binding;
+    sandbox3d_selected_material_display material_display;
+    sandbox3d_selected_material_view material_view;
+    henka_physics_body_id physics_body;
+    henka_physics_body_state body_state;
     henka_result result;
+    henka_scene_object_info object_info;
     henka_transform transform;
+    henka_ui_flow_desc flow_desc;
     henka_ui_rect panel_bounds;
-    float action_button_width;
-    float transform_button_width;
+    henka_ui_rect row;
 
-    bool compact_mode;
-    if (engine == NULL || state == NULL || layout == NULL || !sandbox3d_workspace_shows_details_panel(state))
+    if (engine == NULL ||
+        state == NULL ||
+        layout == NULL ||
+        !sandbox3d_workspace_shows_details_panel(state))
     {
         return;
     }
 
     panel_bounds = layout->object_details_panel;
-    if (panel_bounds.width <= 0.0f || panel_bounds.height <= 0.0f)
+    if (panel_bounds.width <= 0.0f ||
+        panel_bounds.height <= 0.0f)
     {
         return;
     }
+
     henka_ui_panel(
         state->ui,
         panel_bounds,
-        sandbox3d_workspace_panel_name(sandbox3d_workspace_display_tab_for_panel(
-            state, SANDBOX3D_WORKSPACE_PANEL_OBJECT_DETAILS)));
-    sandbox3d_draw_panel_workspace_controls(engine, state, layout, SANDBOX3D_WORKSPACE_PANEL_OBJECT_DETAILS);
-    compact_mode = true;
-    action_button_width = (panel_bounds.width - 42.0f) * 0.5f;
-    transform_button_width = (panel_bounds.width - 56.0f) / 3.0f;
+        sandbox3d_workspace_panel_name(
+            sandbox3d_workspace_display_tab_for_panel(
+                state,
+                SANDBOX3D_WORKSPACE_PANEL_OBJECT_DETAILS)));
+    sandbox3d_draw_panel_workspace_controls(
+        engine,
+        state,
+        layout,
+        SANDBOX3D_WORKSPACE_PANEL_OBJECT_DETAILS);
 
     descriptor = sandbox3d_get_selected_descriptor(state);
     if (state->scene == NULL || descriptor == NULL)
     {
-        henka_ui_label(state->ui, panel_bounds.x + 14.0f, panel_bounds.y + 38.0f, 1.0f, "No object selected.");
-        henka_ui_label(state->ui, panel_bounds.x + 14.0f, panel_bounds.y + 56.0f, 1.0f, "Click a viewport object or Scene Objects row to inspect it.");
-        henka_ui_label(state->ui, panel_bounds.x + 14.0f, panel_bounds.y + 74.0f, 1.0f, "Editable selections show yellow; locked selections remain inspectable without transform highlight.");
+        state->editor_ui.details_content_height = 0.0f;
+        state->editor_ui.details_scroll_offset = 0.0f;
+        henka_ui_label(
+            state->ui,
+            panel_bounds.x + 14.0f,
+            panel_bounds.y + 38.0f,
+            1.0f,
+            "No object selected.");
+        henka_ui_label(
+            state->ui,
+            panel_bounds.x + 14.0f,
+            panel_bounds.y + 56.0f,
+            1.0f,
+            "Click a viewport object or Scene Objects row to inspect it.");
         return;
     }
 
-    result = henka_scene_get_entity_transform(state->scene, descriptor->entity, &transform);
-    if (result != HENKA_SUCCESS)
+    result =
+        henka_scene_get_entity_transform(
+            state->scene,
+            descriptor->entity,
+            &transform);
+    if (result != HENKA_SUCCESS ||
+        henka_scene_get_entity_info(
+            state->scene,
+            descriptor->entity,
+            &object_info) != HENKA_SUCCESS)
     {
-        henka_ui_label(state->ui, panel_bounds.x + 14.0f, panel_bounds.y + 38.0f, 1.0f, "Selected object details could not be read.");
+        state->editor_ui.details_content_height = 0.0f;
+        state->editor_ui.details_scroll_offset = 0.0f;
+        henka_ui_label(
+            state->ui,
+            panel_bounds.x + 14.0f,
+            panel_bounds.y + 38.0f,
+            1.0f,
+            "Selected object details could not be read.");
         return;
     }
-    henka_scene_get_entity_info(state->scene, descriptor->entity, &object_info);
-    if (henka_scene_get_entity_material(state->scene, descriptor->entity, &material) != HENKA_SUCCESS)
-    {
-        material = henka_material_default();
-    }
-    if (henka_material_describe(&material, material_text, sizeof(material_text)) != HENKA_SUCCESS)
-    {
-        snprintf(material_text, sizeof(material_text), "%s", descriptor->material_summary);
-    }
-    if (henka_scene_get_entity_interaction(state->scene, descriptor->entity, &interaction) != HENKA_SUCCESS)
-    {
-        interaction = (henka_interaction_desc){false, 0.0f, NULL};
-    }
-    interaction_result = henka_scene_can_interact(state->scene, descriptor->entity, state->camera.position);
 
-    visible = henka_scene_is_entity_visible(state->scene, descriptor->entity);
-    transform_locked = henka_scene_is_entity_transform_locked(state->scene, descriptor->entity);
-    snprintf(visibility_action_id, sizeof(visibility_action_id), "toggle_selected_visibility_%u", (unsigned int)descriptor->entity);
-    snprintf(focus_action_id, sizeof(focus_action_id), "focus_selected_camera_%u", (unsigned int)descriptor->entity);
-    snprintf(lock_action_id, sizeof(lock_action_id), "toggle_transform_lock_%u", (unsigned int)descriptor->entity);
-    snprintf(reset_action_id, sizeof(reset_action_id), "reset_selected_transform_%u", (unsigned int)descriptor->entity);
-    snprintf(clear_action_id, sizeof(clear_action_id), "clear_selection_%u", (unsigned int)descriptor->entity);
-    physics_body = sandbox3d_get_physics_body_for_entity(state, descriptor->entity);
+    if (henka_scene_get_entity_interaction(
+            state->scene,
+            descriptor->entity,
+            &interaction) != HENKA_SUCCESS)
+    {
+        interaction =
+            (henka_interaction_desc){
+                false,
+                0.0f,
+                NULL};
+    }
+
+    interaction_result =
+        henka_scene_can_interact(
+            state->scene,
+            descriptor->entity,
+            state->camera.position);
+    visible =
+        henka_scene_is_entity_visible(
+            state->scene,
+            descriptor->entity);
+    transform_locked =
+        henka_scene_is_entity_transform_locked(
+            state->scene,
+            descriptor->entity);
+
+    physics_body =
+        sandbox3d_get_physics_body_for_entity(
+            state,
+            descriptor->entity);
     if (physics_body != HENKA_INVALID_PHYSICS_BODY_ID &&
-        henka_physics_body_get_state(state->physics.world, physics_body, &body_state) == HENKA_SUCCESS)
+        henka_physics_body_get_state(
+            state->physics.world,
+            physics_body,
+            &body_state) == HENKA_SUCCESS)
     {
         snprintf(
             physics_text,
             sizeof(physics_text),
             "%s %s m%.1f",
             henka_physics_body_type_get_label(body_state.type),
-            henka_physics_shape_type_get_label(body_state.collider.shape),
+            henka_physics_shape_type_get_label(
+                body_state.collider.shape),
             body_state.mass);
         snprintf(
             velocity_text,
@@ -11208,155 +11707,701 @@ static void sandbox3d_draw_object_details_panel(
     }
     else
     {
-        snprintf(physics_text, sizeof(physics_text), "No physics body");
-        snprintf(velocity_text, sizeof(velocity_text), "(none)");
+        snprintf(
+            physics_text,
+            sizeof(physics_text),
+            "%s",
+            "No physics body");
+        snprintf(
+            velocity_text,
+            sizeof(velocity_text),
+            "%s",
+            "(none)");
     }
-    snprintf(position_text, sizeof(position_text), "%.2f %.2f %.2f", transform.position.x, transform.position.y, transform.position.z);
-    snprintf(rotation_text, sizeof(rotation_text), "%.2f %.2f %.2f %.2f", transform.rotation.x, transform.rotation.y, transform.rotation.z, transform.rotation.w);
-    snprintf(scale_text, sizeof(scale_text), "%.2f %.2f %.2f", transform.scale.x, transform.scale.y, transform.scale.z);
-    sandbox3d_truncate_text(descriptor->short_explanation, detail_text, sizeof(detail_text), compact_mode ? 42U : 54U);
-    sandbox3d_truncate_text(descriptor->developer_detail, developer_text, sizeof(developer_text), compact_mode ? 42U : 54U);
-    sandbox3d_truncate_text(descriptor->texture_summary, texture_text, sizeof(texture_text), compact_mode ? 42U : 54U);
 
     snprintf(
-        transform_heading,
-        sizeof(transform_heading),
-        "Transform - %s",
-        transform_locked ? "Locked" : "Editable");
-    henka_ui_heading(state->ui, panel_bounds.x + 14.0f, panel_bounds.y + 38.0f, 1.0f, descriptor->display_name);
-    sandbox3d_draw_section_heading(state->ui, panel_bounds.x + 14.0f, panel_bounds.y + 58.0f, "Overview");
-    sandbox3d_draw_value_row(state->ui, panel_bounds.x + 14.0f, panel_bounds.y + 76.0f, panel_bounds.width - 28.0f, "Visible", visible ? "Yes" : "No");
-    sandbox3d_draw_value_row(state->ui, panel_bounds.x + 14.0f, panel_bounds.y + 102.0f, panel_bounds.width - 28.0f, "Shows", detail_text);
-    sandbox3d_draw_section_heading(state->ui, panel_bounds.x + 14.0f, panel_bounds.y + 132.0f, transform_heading);
-    sandbox3d_draw_value_row(state->ui, panel_bounds.x + 14.0f, panel_bounds.y + 150.0f, panel_bounds.width - 28.0f, "Position", position_text);
-    sandbox3d_draw_value_row(state->ui, panel_bounds.x + 14.0f, panel_bounds.y + 176.0f, panel_bounds.width - 28.0f, "Scale", scale_text);
-    if (!compact_mode)
-    {
-        sandbox3d_draw_value_row(state->ui, panel_bounds.x + 14.0f, panel_bounds.y + 202.0f, panel_bounds.width - 28.0f, "Rotation", rotation_text);
-        sandbox3d_draw_value_row(state->ui, panel_bounds.x + 14.0f, panel_bounds.y + 228.0f, panel_bounds.width - 28.0f, "Tag", object_info.tag != NULL ? object_info.tag : "(none)");
-    }
-
-    sandbox3d_draw_section_heading(state->ui, panel_bounds.x + 14.0f, compact_mode ? panel_bounds.y + 208.0f : panel_bounds.y + 260.0f, "Physics");
-    sandbox3d_draw_value_row(state->ui, panel_bounds.x + 14.0f, compact_mode ? panel_bounds.y + 226.0f : panel_bounds.y + 278.0f, panel_bounds.width - 28.0f, "Body", physics_text);
-    sandbox3d_draw_value_row(state->ui, panel_bounds.x + 14.0f, compact_mode ? panel_bounds.y + 252.0f : panel_bounds.y + 304.0f, panel_bounds.width - 28.0f, "Velocity", velocity_text);
-    if (!compact_mode)
-    {
-        sandbox3d_draw_value_row(state->ui, panel_bounds.x + 14.0f, panel_bounds.y + 330.0f, panel_bounds.width - 28.0f, "Material", material_text);
-    }
+        position_text,
+        sizeof(position_text),
+        "%.2f %.2f %.2f",
+        transform.position.x,
+        transform.position.y,
+        transform.position.z);
+    snprintf(
+        rotation_text,
+        sizeof(rotation_text),
+        "%.2f %.2f %.2f %.2f",
+        transform.rotation.x,
+        transform.rotation.y,
+        transform.rotation.z,
+        transform.rotation.w);
+    snprintf(
+        scale_text,
+        sizeof(scale_text),
+        "%.2f %.2f %.2f",
+        transform.scale.x,
+        transform.scale.y,
+        transform.scale.z);
 
     if (!interaction.enabled)
     {
-        snprintf(interaction_text, sizeof(interaction_text), "%s", "Disabled");
+        snprintf(
+            interaction_text,
+            sizeof(interaction_text),
+            "%s",
+            "Disabled");
     }
-    else if (interaction_result == HENKA_INTERACTION_RESULT_OUT_OF_RANGE)
+    else if (
+        interaction_result ==
+        HENKA_INTERACTION_RESULT_OUT_OF_RANGE)
     {
-        snprintf(interaction_text, sizeof(interaction_text), "Out of range");
+        snprintf(
+            interaction_text,
+            sizeof(interaction_text),
+            "%s",
+            "Out of range");
     }
     else
     {
-        snprintf(interaction_text, sizeof(interaction_text), "%s", interaction.prompt != NULL ? interaction.prompt : "Available");
-    }
-    sandbox3d_draw_value_row(
-        state->ui,
-        panel_bounds.x + 14.0f,
-        compact_mode ? panel_bounds.y + 278.0f : panel_bounds.y + 332.0f,
-        panel_bounds.width - 28.0f,
-        "Object Use",
-        interaction_text);
-
-    snprintf(action_label, sizeof(action_label), "%s", visible ? "Hide Object" : "Show Object");
-    sandbox3d_draw_section_heading(state->ui, panel_bounds.x + 14.0f, compact_mode ? panel_bounds.y + 308.0f : panel_bounds.y + 356.0f, "Actions");
-    if (henka_ui_button(state->ui, visibility_action_id, (henka_ui_rect){panel_bounds.x + 14.0f, compact_mode ? panel_bounds.y + 326.0f : panel_bounds.y + 374.0f, action_button_width, 28.0f}, action_label))
-    {
-        if (sandbox3d_toggle_selected_entity_visibility(state))
-        {
-            sandbox3d_set_statusf(state, false, true, "%s visibility updated.", descriptor->display_name);
-        }
-        else
-        {
-            sandbox3d_set_statusf(state, true, true, "%s visibility could not be changed.", descriptor->display_name);
-        }
+        snprintf(
+            interaction_text,
+            sizeof(interaction_text),
+            "%s",
+            interaction.prompt != NULL ?
+                interaction.prompt :
+                "Available");
     }
 
-    if (henka_ui_primary_button(state->ui, focus_action_id, (henka_ui_rect){panel_bounds.x + 28.0f + action_button_width, compact_mode ? panel_bounds.y + 326.0f : panel_bounds.y + 374.0f, action_button_width, 28.0f}, "Focus Camera"))
+    marker_binding.entity = state->marker_entity;
+    marker_binding.instance =
+        &state->marker_material_instance;
+    marker_binding.asset = state->marker_material_asset;
+    marker_binding.valid =
+        state->marker_material_instance_valid;
+
+    memset(&material_view, 0, sizeof(material_view));
+    if (sandbox3d_resolve_selected_material(
+            state->scene,
+            descriptor->entity,
+            &marker_binding,
+            1U,
+            &material_view) != HENKA_SUCCESS)
     {
-        if (sandbox3d_focus_camera_on_selected(state))
-        {
-            sandbox3d_set_statusf(state, false, true, "Focused camera on %s.", descriptor->display_name);
-        }
-        else
-        {
-            sandbox3d_set_statusf(state, true, true, "Camera could not focus on %s.", descriptor->display_name);
-        }
+        material_view.access =
+            SANDBOX3D_MATERIAL_ACCESS_NONE;
+        material_view.material =
+            henka_material_default();
+        material_view.editor_binding = NULL;
+    }
+
+    if (sandbox3d_format_selected_material_view(
+            &material_view,
+            &material_display) != HENKA_SUCCESS)
+    {
+        memset(&material_display, 0, sizeof(material_display));
+        snprintf(
+            material_display.material_slot,
+            sizeof(material_display.material_slot),
+            "%s",
+            "None");
+        snprintf(
+            material_display.mode,
+            sizeof(material_display.mode),
+            "%s",
+            "None");
     }
 
     snprintf(
-        lock_action_label,
-        sizeof(lock_action_label),
-        "%s Transform",
-        transform_locked ? "Unlock" : "Lock");
-    if (henka_ui_button(
+        visibility_action_id,
+        sizeof(visibility_action_id),
+        "toggle_selected_visibility_%u",
+        (unsigned int)descriptor->entity);
+    snprintf(
+        focus_action_id,
+        sizeof(focus_action_id),
+        "focus_selected_camera_%u",
+        (unsigned int)descriptor->entity);
+    snprintf(
+        lock_action_id,
+        sizeof(lock_action_id),
+        "toggle_transform_lock_%u",
+        (unsigned int)descriptor->entity);
+    snprintf(
+        reset_action_id,
+        sizeof(reset_action_id),
+        "reset_selected_transform_%u",
+        (unsigned int)descriptor->entity);
+    snprintf(
+        clear_action_id,
+        sizeof(clear_action_id),
+        "clear_selection_%u",
+        (unsigned int)descriptor->entity);
+
+    flow_desc.bounds =
+        (henka_ui_rect){
+            panel_bounds.x + 14.0f,
+            panel_bounds.y + 38.0f,
+            panel_bounds.width - 28.0f,
+            panel_bounds.height - 52.0f};
+    flow_desc.row_spacing = 6.0f;
+    flow_desc.indent_width = 10.0f;
+
+    state->editor_ui.details_scroll_offset =
+        sandbox3d_editor_ui_clamp_scroll(
+            state->editor_ui.details_scroll_offset,
+            state->editor_ui.details_content_height,
+            flow_desc.bounds.height);
+    flow_desc.scroll_offset =
+        state->editor_ui.details_scroll_offset;
+    disclosure_changed = false;
+    content_height = 0.0f;
+
+    if (flow_desc.bounds.width <= 0.0f ||
+        flow_desc.bounds.height <= 0.0f ||
+        henka_ui_flow_begin(
             state->ui,
-            lock_action_id,
-            (henka_ui_rect){
-                panel_bounds.x + 14.0f,
-                compact_mode ? panel_bounds.y + 360.0f : panel_bounds.y + 402.0f,
-                transform_button_width,
-                28.0f},
-            lock_action_label))
+            &flow_desc) != HENKA_SUCCESS)
     {
-        if (sandbox3d_toggle_selected_transform_lock(state))
-        {
-            transform_locked = !transform_locked;
-            sandbox3d_set_statusf(
+        return;
+    }
+
+    if (sandbox3d_details_flow_next_row(
+            state,
+            flow_desc.bounds,
+            24.0f,
+            0U,
+            &row))
+    {
+        henka_ui_heading(
+            state->ui,
+            row.x,
+            row.y,
+            1.0f,
+            descriptor->display_name);
+    }
+
+    (void)sandbox3d_details_flow_disclosure(
+        state,
+        flow_desc.bounds,
+        "object_details.overview",
+        "Overview",
+        &state->editor_ui.details_overview_expanded,
+        &disclosure_changed);
+    if (state->editor_ui.details_overview_expanded)
+    {
+        if (sandbox3d_details_flow_next_row(
                 state,
-                false,
-                true,
-                "%s transform %s.",
-                descriptor->display_name,
-                transform_locked ? "locked" : "unlocked");
-        }
-        else
+                flow_desc.bounds,
+                22.0f,
+                1U,
+                &row))
         {
-            sandbox3d_set_statusf(state, true, true, "%s transform lock could not be changed.", descriptor->display_name);
+            sandbox3d_draw_value_row(
+                state->ui,
+                row.x,
+                row.y,
+                row.width,
+                "Visible",
+                visible ? "Yes" : "No");
+        }
+        if (sandbox3d_details_flow_next_row(
+                state,
+                flow_desc.bounds,
+                22.0f,
+                1U,
+                &row))
+        {
+            sandbox3d_draw_value_row(
+                state->ui,
+                row.x,
+                row.y,
+                row.width,
+                "Shows",
+                descriptor->short_explanation);
+        }
+        if (sandbox3d_details_flow_next_row(
+                state,
+                flow_desc.bounds,
+                22.0f,
+                1U,
+                &row))
+        {
+            sandbox3d_draw_value_row(
+                state->ui,
+                row.x,
+                row.y,
+                row.width,
+                "Detail",
+                descriptor->developer_detail);
+        }
+        if (sandbox3d_details_flow_next_row(
+                state,
+                flow_desc.bounds,
+                22.0f,
+                1U,
+                &row))
+        {
+            sandbox3d_draw_value_row(
+                state->ui,
+                row.x,
+                row.y,
+                row.width,
+                "Tag",
+                object_info.tag != NULL ?
+                    object_info.tag :
+                    "(none)");
         }
     }
 
-    if (henka_ui_button(
-            state->ui,
-            reset_action_id,
-            (henka_ui_rect){
-                panel_bounds.x + 28.0f + transform_button_width,
-                compact_mode ? panel_bounds.y + 360.0f : panel_bounds.y + 402.0f,
-                transform_button_width,
-                28.0f},
-            "Reset Transform"))
+    (void)sandbox3d_details_flow_disclosure(
+        state,
+        flow_desc.bounds,
+        "object_details.transform",
+        "Transform",
+        &state->editor_ui.details_transform_expanded,
+        &disclosure_changed);
+    if (state->editor_ui.details_transform_expanded)
     {
-        if (sandbox3d_reset_selected_entity_transform(state))
+        if (sandbox3d_details_flow_next_row(
+                state,
+                flow_desc.bounds,
+                22.0f,
+                1U,
+                &row))
         {
-            sandbox3d_set_statusf(state, false, true, "%s reset to its default transform.", descriptor->display_name);
+            sandbox3d_draw_value_row(
+                state->ui,
+                row.x,
+                row.y,
+                row.width,
+                "Position",
+                position_text);
         }
-        else
+        if (sandbox3d_details_flow_next_row(
+                state,
+                flow_desc.bounds,
+                22.0f,
+                1U,
+                &row))
         {
-            sandbox3d_set_statusf(state, true, true, "%s could not be reset.", descriptor->display_name);
+            sandbox3d_draw_value_row(
+                state->ui,
+                row.x,
+                row.y,
+                row.width,
+                "Rotation",
+                rotation_text);
+        }
+        if (sandbox3d_details_flow_next_row(
+                state,
+                flow_desc.bounds,
+                22.0f,
+                1U,
+                &row))
+        {
+            sandbox3d_draw_value_row(
+                state->ui,
+                row.x,
+                row.y,
+                row.width,
+                "Scale",
+                scale_text);
+        }
+        if (sandbox3d_details_flow_next_row(
+                state,
+                flow_desc.bounds,
+                22.0f,
+                1U,
+                &row))
+        {
+            sandbox3d_draw_value_row(
+                state->ui,
+                row.x,
+                row.y,
+                row.width,
+                "Edit",
+                transform_locked ?
+                    "Locked" :
+                    "Editable");
         }
     }
 
-    if (henka_ui_button(
-            state->ui,
-            clear_action_id,
-            (henka_ui_rect){
-                panel_bounds.x + 42.0f + transform_button_width * 2.0f,
-                compact_mode ? panel_bounds.y + 360.0f : panel_bounds.y + 402.0f,
-                transform_button_width,
-                28.0f},
-            "Clear Selection"))
+    (void)sandbox3d_details_flow_disclosure(
+        state,
+        flow_desc.bounds,
+        "object_details.materials",
+        "Materials",
+        &state->editor_ui.details_materials_expanded,
+        &disclosure_changed);
+    if (state->editor_ui.details_materials_expanded)
     {
-        sandbox3d_clear_selection(state, "Selection cleared from Object Details.");
+        if (sandbox3d_details_flow_next_row(
+                state,
+                flow_desc.bounds,
+                22.0f,
+                1U,
+                &row))
+        {
+            sandbox3d_draw_value_row(
+                state->ui,
+                row.x,
+                row.y,
+                row.width,
+                "Material 0",
+                material_display.material_slot);
+        }
+
+        if (material_view.access !=
+            SANDBOX3D_MATERIAL_ACCESS_NONE)
+        {
+            const char* labels[] =
+            {
+                "Name",
+                "Base Color",
+                "Metallic",
+                "Roughness",
+                "Normal Map",
+                "Emissive",
+                "Alpha Mode",
+                "Double Sided",
+                "IOR",
+                "Transmission",
+                "Mode"
+            };
+            const char* values[] =
+            {
+                material_display.name,
+                material_display.base_color,
+                material_display.metallic,
+                material_display.roughness,
+                material_display.normal_map,
+                material_display.emissive,
+                material_display.alpha_mode,
+                material_display.double_sided,
+                material_display.ior,
+                material_display.transmission,
+                material_display.mode
+            };
+            size_t material_row_index;
+
+            for (material_row_index = 0U;
+                 material_row_index <
+                    sizeof(labels) / sizeof(labels[0]);
+                 ++material_row_index)
+            {
+                if (sandbox3d_details_flow_next_row(
+                        state,
+                        flow_desc.bounds,
+                        22.0f,
+                        1U,
+                        &row))
+                {
+                    sandbox3d_draw_value_row(
+                        state->ui,
+                        row.x,
+                        row.y,
+                        row.width,
+                        labels[material_row_index],
+                        values[material_row_index]);
+                }
+            }
+
+            if (material_view.access ==
+                    SANDBOX3D_MATERIAL_ACCESS_EDITABLE_INSTANCE &&
+                material_view.editor_binding != NULL &&
+                sandbox3d_details_flow_next_row(
+                    state,
+                    flow_desc.bounds,
+                    164.0f,
+                    1U,
+                    &row))
+            {
+                sandbox3d_draw_material_instance_editor(
+                    engine,
+                    state,
+                    material_view.editor_binding,
+                    row);
+            }
+        }
     }
 
-    sandbox3d_draw_material_authoring_panel(engine, state, panel_bounds, descriptor);
+    (void)sandbox3d_details_flow_disclosure(
+        state,
+        flow_desc.bounds,
+        "object_details.physics",
+        "Physics",
+        &state->editor_ui.details_physics_expanded,
+        &disclosure_changed);
+    if (state->editor_ui.details_physics_expanded)
+    {
+        if (sandbox3d_details_flow_next_row(
+                state,
+                flow_desc.bounds,
+                22.0f,
+                1U,
+                &row))
+        {
+            sandbox3d_draw_value_row(
+                state->ui,
+                row.x,
+                row.y,
+                row.width,
+                "Body",
+                physics_text);
+        }
+        if (sandbox3d_details_flow_next_row(
+                state,
+                flow_desc.bounds,
+                22.0f,
+                1U,
+                &row))
+        {
+            sandbox3d_draw_value_row(
+                state->ui,
+                row.x,
+                row.y,
+                row.width,
+                "Velocity",
+                velocity_text);
+        }
+    }
 
+    (void)sandbox3d_details_flow_disclosure(
+        state,
+        flow_desc.bounds,
+        "object_details.interaction",
+        "Interaction",
+        &state->editor_ui.details_interaction_expanded,
+        &disclosure_changed);
+    if (state->editor_ui.details_interaction_expanded &&
+        sandbox3d_details_flow_next_row(
+            state,
+            flow_desc.bounds,
+            22.0f,
+            1U,
+            &row))
+    {
+        sandbox3d_draw_value_row(
+            state->ui,
+            row.x,
+            row.y,
+            row.width,
+            "Object Use",
+            interaction_text);
+    }
+
+    (void)sandbox3d_details_flow_disclosure(
+        state,
+        flow_desc.bounds,
+        "object_details.actions",
+        "Actions",
+        &state->editor_ui.details_actions_expanded,
+        &disclosure_changed);
+    if (state->editor_ui.details_actions_expanded)
+    {
+        snprintf(
+            action_label,
+            sizeof(action_label),
+            "%s",
+            visible ?
+                "Hide Object" :
+                "Show Object");
+
+        if (sandbox3d_details_flow_next_row(
+                state,
+                flow_desc.bounds,
+                28.0f,
+                1U,
+                &row))
+        {
+            const float gap = 6.0f;
+            const float item_width =
+                (row.width - gap) * 0.5f;
+
+            if (henka_ui_button(
+                    state->ui,
+                    visibility_action_id,
+                    (henka_ui_rect){
+                        row.x,
+                        row.y,
+                        item_width,
+                        row.height},
+                    action_label))
+            {
+                if (sandbox3d_toggle_selected_entity_visibility(
+                        state))
+                {
+                    sandbox3d_set_statusf(
+                        state,
+                        false,
+                        true,
+                        "%s visibility updated.",
+                        descriptor->display_name);
+                }
+                else
+                {
+                    sandbox3d_set_statusf(
+                        state,
+                        true,
+                        true,
+                        "%s visibility could not be changed.",
+                        descriptor->display_name);
+                }
+            }
+
+            if (henka_ui_primary_button(
+                    state->ui,
+                    focus_action_id,
+                    (henka_ui_rect){
+                        row.x + item_width + gap,
+                        row.y,
+                        item_width,
+                        row.height},
+                    "Focus Camera"))
+            {
+                if (sandbox3d_focus_camera_on_selected(state))
+                {
+                    sandbox3d_set_statusf(
+                        state,
+                        false,
+                        true,
+                        "Focused camera on %s.",
+                        descriptor->display_name);
+                }
+                else
+                {
+                    sandbox3d_set_statusf(
+                        state,
+                        true,
+                        true,
+                        "Camera could not focus on %s.",
+                        descriptor->display_name);
+                }
+            }
+        }
+
+        snprintf(
+            lock_action_label,
+            sizeof(lock_action_label),
+            "%s Transform",
+            transform_locked ?
+                "Unlock" :
+                "Lock");
+
+        if (sandbox3d_details_flow_next_row(
+                state,
+                flow_desc.bounds,
+                28.0f,
+                1U,
+                &row))
+        {
+            const float gap = 4.0f;
+            const float item_width =
+                (row.width - gap * 2.0f) / 3.0f;
+
+            if (henka_ui_button(
+                    state->ui,
+                    lock_action_id,
+                    (henka_ui_rect){
+                        row.x,
+                        row.y,
+                        item_width,
+                        row.height},
+                    lock_action_label))
+            {
+                if (sandbox3d_toggle_selected_transform_lock(
+                        state))
+                {
+                    transform_locked = !transform_locked;
+                    sandbox3d_set_statusf(
+                        state,
+                        false,
+                        true,
+                        "%s transform %s.",
+                        descriptor->display_name,
+                        transform_locked ?
+                            "locked" :
+                            "unlocked");
+                }
+                else
+                {
+                    sandbox3d_set_statusf(
+                        state,
+                        true,
+                        true,
+                        "%s transform lock could not be changed.",
+                        descriptor->display_name);
+                }
+            }
+
+            if (henka_ui_button(
+                    state->ui,
+                    reset_action_id,
+                    (henka_ui_rect){
+                        row.x + item_width + gap,
+                        row.y,
+                        item_width,
+                        row.height},
+                    "Reset Transform"))
+            {
+                if (sandbox3d_reset_selected_entity_transform(
+                        state))
+                {
+                    sandbox3d_set_statusf(
+                        state,
+                        false,
+                        true,
+                        "%s reset to its default transform.",
+                        descriptor->display_name);
+                }
+                else
+                {
+                    sandbox3d_set_statusf(
+                        state,
+                        true,
+                        true,
+                        "%s could not be reset.",
+                        descriptor->display_name);
+                }
+            }
+
+            if (henka_ui_button(
+                    state->ui,
+                    clear_action_id,
+                    (henka_ui_rect){
+                        row.x +
+                            (item_width + gap) * 2.0f,
+                        row.y,
+                        item_width,
+                        row.height},
+                    "Clear Selection"))
+            {
+                sandbox3d_clear_selection(
+                    state,
+                    "Selection cleared from Object Details.");
+            }
+        }
+    }
+
+    if (henka_ui_flow_end(
+            state->ui,
+            &content_height) == HENKA_SUCCESS)
+    {
+        state->editor_ui.details_content_height =
+            content_height;
+        state->editor_ui.details_scroll_offset =
+            sandbox3d_editor_ui_clamp_scroll(
+                state->editor_ui.details_scroll_offset,
+                state->editor_ui.details_content_height,
+                flow_desc.bounds.height);
+    }
+
+    if (disclosure_changed &&
+        state->settings != NULL)
+    {
+        (void)sandbox3d_editor_ui_state_store(
+            state->settings,
+            &state->editor_ui);
+    }
 }
 
 static void sandbox3d_draw_utility_panel(

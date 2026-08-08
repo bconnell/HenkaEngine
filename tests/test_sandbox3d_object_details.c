@@ -1,6 +1,7 @@
 #include "test_suite.h"
 
 #include <stdint.h>
+#include <string.h>
 
 #include <henka/assets.h>
 #include <henka/scene.h>
@@ -200,5 +201,87 @@ void henka_test_sandbox3d_object_details(void)
             0U,
             NULL) == HENKA_ERROR_INVALID_ARGUMENT);
 
+
+    {
+        sandbox3d_selected_material_display display;
+        sandbox3d_selected_material_view display_view;
+
+        display_view = (sandbox3d_selected_material_view){0};
+        display_view.access = SANDBOX3D_MATERIAL_ACCESS_NONE;
+        HENKA_TEST_ASSERT(
+            sandbox3d_format_selected_material_view(
+                &display_view,
+                &display) == HENKA_SUCCESS);
+        HENKA_TEST_ASSERT(
+            strcmp(display.material_slot, "None") == 0);
+        HENKA_TEST_ASSERT(
+            strcmp(display.mode, "None") == 0);
+
+        display_view.access =
+            SANDBOX3D_MATERIAL_ACCESS_READ_ONLY;
+        display_view.material = henka_material_default();
+        display_view.material.name = "Ground";
+        display_view.material.base_color =
+            (henka_vec4){0.10f, 0.20f, 0.30f, 1.0f};
+        display_view.material.metallic = 0.25f;
+        display_view.material.roughness = 0.75f;
+        display_view.material.emissive_color =
+            (henka_vec3){0.40f, 0.50f, 0.60f};
+        display_view.material.emissive_strength = 2.0f;
+        display_view.material.alpha_mode =
+            HENKA_MATERIAL_ALPHA_MASKED;
+        display_view.material.double_sided = true;
+        display_view.material.ior = 1.45f;
+        display_view.material.transmission = 0.35f;
+        display_view.material.normal_texture =
+            (henka_texture*)(uintptr_t)5U;
+
+        HENKA_TEST_ASSERT(
+            sandbox3d_format_selected_material_view(
+                &display_view,
+                &display) == HENKA_SUCCESS);
+        HENKA_TEST_ASSERT(
+            strcmp(display.material_slot, "Present") == 0);
+        HENKA_TEST_ASSERT(
+            strcmp(display.name, "Ground") == 0);
+        HENKA_TEST_ASSERT(
+            strcmp(display.base_color, "0.10 0.20 0.30 1.00") == 0);
+        HENKA_TEST_ASSERT(
+            strcmp(display.metallic, "0.25") == 0);
+        HENKA_TEST_ASSERT(
+            strcmp(display.roughness, "0.75") == 0);
+        HENKA_TEST_ASSERT(
+            strcmp(display.normal_map, "Assigned") == 0);
+        HENKA_TEST_ASSERT(
+            strcmp(display.emissive, "0.40 0.50 0.60 x2.00") == 0);
+        HENKA_TEST_ASSERT(
+            strcmp(display.alpha_mode, "Masked") == 0);
+        HENKA_TEST_ASSERT(
+            strcmp(display.double_sided, "Yes") == 0);
+        HENKA_TEST_ASSERT(
+            strcmp(display.ior, "1.45") == 0);
+        HENKA_TEST_ASSERT(
+            strcmp(display.transmission, "0.35") == 0);
+        HENKA_TEST_ASSERT(
+            strcmp(display.mode, "Read-only") == 0);
+
+        display_view.access =
+            SANDBOX3D_MATERIAL_ACCESS_EDITABLE_INSTANCE;
+        HENKA_TEST_ASSERT(
+            sandbox3d_format_selected_material_view(
+                &display_view,
+                &display) == HENKA_SUCCESS);
+        HENKA_TEST_ASSERT(
+            strcmp(display.mode, "Editable instance") == 0);
+
+        HENKA_TEST_ASSERT(
+            sandbox3d_format_selected_material_view(
+                NULL,
+                &display) == HENKA_ERROR_INVALID_ARGUMENT);
+        HENKA_TEST_ASSERT(
+            sandbox3d_format_selected_material_view(
+                &display_view,
+                NULL) == HENKA_ERROR_INVALID_ARGUMENT);
+    }
     henka_scene_destroy(scene);
 }
