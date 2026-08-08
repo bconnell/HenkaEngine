@@ -318,6 +318,7 @@ typedef struct sandbox3d_state
     henka_material_asset* marker_material_asset;
     henka_material_instance marker_material_instance;
     henka_asset_type asset_browser_type;
+    size_t asset_browser_page;
     size_t asset_browser_selected_metadata_index;
     henka_texture* asset_browser_selected_texture;
     bool asset_browser_selection_valid;
@@ -12989,9 +12990,10 @@ static void sandbox3d_draw_utility_panel(
         {
             sandbox3d_asset_browser_item items[32];
             const char* type_label;
+            const size_t asset_page_size = 6U;
             size_t item_count;
             size_t item_index;
-            size_t visible_count;
+            size_t page_count;
 
             if (state->asset_browser_type == HENKA_ASSET_TYPE_MATERIAL)
             {
@@ -13009,26 +13011,43 @@ static void sandbox3d_draw_utility_panel(
             if (henka_ui_tab(state->ui, "asset_browser_textures", (henka_ui_rect){x_left, y_start + 20.0f, 82.0f, 24.0f}, "Textures", state->asset_browser_type == HENKA_ASSET_TYPE_TEXTURE))
             {
                 state->asset_browser_type = HENKA_ASSET_TYPE_TEXTURE;
+                state->asset_browser_page = 0U;
                 state->asset_browser_selection_valid = false;
                 state->asset_browser_selected_texture = NULL;
             }
             if (henka_ui_tab(state->ui, "asset_browser_materials", (henka_ui_rect){x_left + 88.0f, y_start + 20.0f, 88.0f, 24.0f}, "Materials", state->asset_browser_type == HENKA_ASSET_TYPE_MATERIAL))
             {
                 state->asset_browser_type = HENKA_ASSET_TYPE_MATERIAL;
+                state->asset_browser_page = 0U;
                 state->asset_browser_selection_valid = false;
                 state->asset_browser_selected_texture = NULL;
             }
             if (henka_ui_tab(state->ui, "asset_browser_meshes", (henka_ui_rect){x_left + 182.0f, y_start + 20.0f, 76.0f, 24.0f}, "Meshes", state->asset_browser_type == HENKA_ASSET_TYPE_MESH))
             {
                 state->asset_browser_type = HENKA_ASSET_TYPE_MESH;
+                state->asset_browser_page = 0U;
                 state->asset_browser_selection_valid = false;
                 state->asset_browser_selected_texture = NULL;
             }
-            item_count = sandbox3d_asset_browser_collect(assets, state->asset_browser_type, items, 32U);
-            snprintf(row_value, sizeof(row_value), "%s | %zu known", type_label, item_count);
+            page_count = sandbox3d_asset_browser_page_count(assets, state->asset_browser_type, asset_page_size);
+            if (page_count == 0U)
+            {
+                state->asset_browser_page = 0U;
+            }
+            else if (state->asset_browser_page >= page_count)
+            {
+                state->asset_browser_page = page_count - 1U;
+            }
+            item_count = sandbox3d_asset_browser_collect_page(
+                assets,
+                state->asset_browser_type,
+                state->asset_browser_page,
+                asset_page_size,
+                items,
+                32U);
+            snprintf(row_value, sizeof(row_value), "%s | %zu known | page %zu/%zu", type_label, sandbox3d_asset_browser_collect(assets, state->asset_browser_type, NULL, 0U), page_count == 0U ? 0U : state->asset_browser_page + 1U, page_count);
             sandbox3d_draw_value_row(state->ui, x_left, y_start + 50.0f, panel_bounds.width - 28.0f, "Source", row_value);
-            visible_count = item_count < 6U ? item_count : 6U;
-            for (item_index = 0U; item_index < visible_count; ++item_index)
+            for (item_index = 0U; item_index < item_count; ++item_index)
             {
                 char item_id[64];
                 const char* display_name = items[item_index].metadata.display_name != NULL
@@ -13060,9 +13079,15 @@ static void sandbox3d_draw_utility_panel(
                     }
                 }
             }
-            if (item_count > visible_count)
+            if (henka_ui_button(state->ui, "asset_browser_prev", (henka_ui_rect){x_left, y_start + 252.0f, 82.0f, 24.0f}, "Prev") &&
+                state->asset_browser_page > 0U)
             {
-                henka_ui_label_colored(state->ui, x_left, y_start + 258.0f, 1.0f, "List bounded to six visible assets.", HENKA_UI_COLOR_INFO);
+                --state->asset_browser_page;
+            }
+            if (henka_ui_button(state->ui, "asset_browser_next", (henka_ui_rect){x_left + 88.0f, y_start + 252.0f, 82.0f, 24.0f}, "Next") &&
+                state->asset_browser_page + 1U < page_count)
+            {
+                ++state->asset_browser_page;
             }
             if (state->asset_browser_selection_valid)
             {

@@ -18,6 +18,19 @@ size_t sandbox3d_asset_browser_collect(
     sandbox3d_asset_browser_item* out_items,
     size_t capacity);
 
+size_t sandbox3d_asset_browser_page_count(
+    const henka_asset_manager* manager,
+    henka_asset_type type,
+    size_t page_size);
+
+size_t sandbox3d_asset_browser_collect_page(
+    const henka_asset_manager* manager,
+    henka_asset_type type,
+    size_t page_index,
+    size_t page_size,
+    sandbox3d_asset_browser_item* out_items,
+    size_t capacity);
+
 typedef struct sandbox3d_texture_slot_display
 {
     bool assigned;

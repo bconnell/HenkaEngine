@@ -37,6 +37,36 @@ static void henka_test_sandbox3d_asset_browser_collection(void)
     HENKA_TEST_ASSERT(sandbox3d_asset_browser_collect(&manager, HENKA_ASSET_TYPE_MATERIAL, items, 2U) == 0U);
 }
 
+static void henka_test_sandbox3d_asset_browser_paging(void)
+{
+    henka_asset_manager manager;
+    henka_asset_texture_entry textures[7];
+    sandbox3d_asset_browser_item items[3];
+    size_t index;
+
+    memset(&manager, 0, sizeof(manager));
+    memset(textures, 0, sizeof(textures));
+    for (index = 0U; index < 7U; ++index)
+    {
+        textures[index].metadata.type = HENKA_ASSET_TYPE_TEXTURE;
+        textures[index].metadata.source_path = "assets/textures/paged.png";
+    }
+    manager.texture_entries = textures;
+    manager.texture_count = 7U;
+
+    HENKA_TEST_ASSERT(sandbox3d_asset_browser_page_count(&manager, HENKA_ASSET_TYPE_TEXTURE, 3U) == 3U);
+    HENKA_TEST_ASSERT(sandbox3d_asset_browser_page_count(&manager, HENKA_ASSET_TYPE_TEXTURE, 0U) == 0U);
+    HENKA_TEST_ASSERT(sandbox3d_asset_browser_collect_page(
+        &manager, HENKA_ASSET_TYPE_TEXTURE, 1U, 3U, items, 3U) == 3U);
+    HENKA_TEST_ASSERT(items[0].metadata_index == 3U);
+    HENKA_TEST_ASSERT(items[2].metadata_index == 5U);
+    HENKA_TEST_ASSERT(sandbox3d_asset_browser_collect_page(
+        &manager, HENKA_ASSET_TYPE_TEXTURE, 2U, 3U, items, 1U) == 1U);
+    HENKA_TEST_ASSERT(items[0].metadata_index == 6U);
+    HENKA_TEST_ASSERT(sandbox3d_asset_browser_collect_page(
+        &manager, HENKA_ASSET_TYPE_TEXTURE, 3U, 3U, items, 3U) == 0U);
+}
+
 static void henka_test_sandbox3d_asset_browser_texture_and_assignment(void)
 {
     henka_asset_manager manager;
@@ -107,5 +137,6 @@ static void henka_test_sandbox3d_asset_browser_texture_and_assignment(void)
 void henka_test_sandbox3d_asset_browser(void)
 {
     henka_test_sandbox3d_asset_browser_collection();
+    henka_test_sandbox3d_asset_browser_paging();
     henka_test_sandbox3d_asset_browser_texture_and_assignment();
 }

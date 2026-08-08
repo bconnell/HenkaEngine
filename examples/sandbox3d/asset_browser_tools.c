@@ -100,6 +100,15 @@ static henka_texture_usage sandbox3d_material_texture_slot_usage(
     }
 }
 
+static bool sandbox3d_asset_browser_type_matches(
+    henka_asset_type requested_type,
+    henka_asset_type metadata_type)
+{
+    return requested_type != HENKA_ASSET_TYPE_UNKNOWN
+        ? metadata_type == requested_type
+        : metadata_type != HENKA_ASSET_TYPE_UNKNOWN;
+}
+
 size_t sandbox3d_asset_browser_collect(
     const henka_asset_manager* manager,
     henka_asset_type type,
@@ -122,8 +131,7 @@ size_t sandbox3d_asset_browser_collect(
         henka_asset_metadata metadata;
 
         if (henka_assets_get_metadata_at_index(manager, index, &metadata) != HENKA_SUCCESS ||
-            (type != HENKA_ASSET_TYPE_UNKNOWN && metadata.type != type) ||
-            (type == HENKA_ASSET_TYPE_UNKNOWN && metadata.type == HENKA_ASSET_TYPE_UNKNOWN))
+            !sandbox3d_asset_browser_type_matches(type, metadata.type))
         {
             continue;
         }
@@ -136,6 +144,80 @@ size_t sandbox3d_asset_browser_collect(
         ++count;
     }
 
+    return count;
+}
+
+size_t sandbox3d_asset_browser_page_count(
+    const henka_asset_manager* manager,
+    henka_asset_type type,
+    size_t page_size)
+{
+    const size_t total = sandbox3d_asset_browser_collect(manager, type, NULL, 0U);
+    if (page_size == 0U)
+    {
+        return 0U;
+    }
+    return total / page_size + (total % page_size != 0U ? 1U : 0U);
+}
+
+size_t sandbox3d_asset_browser_collect_page(
+    const henka_asset_manager* manager,
+    henka_asset_type type,
+    size_t page_index,
+    size_t page_size,
+    sandbox3d_asset_browser_item* out_items,
+    size_t capacity)
+{
+    size_t total;
+    size_t start;
+    size_t end;
+    size_t count;
+    size_t ordinal;
+    size_t index;
+
+    if (manager == NULL || page_size == 0U ||
+        (page_index > (size_t)-1 / page_size))
+    {
+        return 0U;
+    }
+
+    total = sandbox3d_asset_browser_collect(manager, type, NULL, 0U);
+    start = page_index * page_size;
+    if (start >= total)
+    {
+        return 0U;
+    }
+    end = start + page_size;
+    if (end < start || end > total)
+    {
+        end = total;
+    }
+
+    count = 0U;
+    ordinal = 0U;
+    for (index = 0U; index < henka_assets_get_metadata_count(manager); ++index)
+    {
+        henka_asset_metadata metadata;
+        if (henka_assets_get_metadata_at_index(manager, index, &metadata) != HENKA_SUCCESS ||
+            !sandbox3d_asset_browser_type_matches(type, metadata.type))
+        {
+            continue;
+        }
+        if (ordinal >= start && ordinal < end)
+        {
+            if (out_items != NULL && count < capacity)
+            {
+                out_items[count].metadata_index = index;
+                out_items[count].metadata = metadata;
+            }
+            ++count;
+        }
+        ++ordinal;
+        if (ordinal >= end)
+        {
+            break;
+        }
+    }
     return count;
 }
 
