@@ -82,16 +82,24 @@ The authority object does not own the world or storage. The
 `<henka/terrain_server.h>` session adapter owns neither: it borrows the
 public ENet server, decodes edit messages, routes them through authority, and
 encodes the response. It also echoes control pings and disconnects malformed
-edit payloads as protocol errors. Replication deltas and snapshots,
-reconnect/late-join recovery, client prediction, and editor controls remain
+edit payloads as protocol errors. The server-side delta broadcast and
+snapshot-fragment response are described below; client-side application,
+reconnect/late-join recovery, prediction, and editor controls remain
 subsequent integration work.
 
 Accepted edits also produce a bounded delta in the same terrain channel. The
 delta repeats world/base identity, client nonce, server command identity, the
 algorithm-versioned command, and the resulting revision for each affected
 region. The server broadcasts that event reliably after sending the requester
-acceptance; client-side delta application, snapshot transfer, reconnect and
-late-join recovery, and prediction/reconciliation remain subsequent work.
+acceptance; client-side delta application, reconnect and late-join recovery,
+and prediction/reconciliation remain subsequent work.
+
+Snapshot requests identify the world, packaged base, region, and expected
+revision. The server reads the validated region record from storage and emits
+transfer-identified fragments with the record revision, generation, total
+size, index, count, and payload bytes. The transport keeps each fragment under
+the existing 32 KiB snapshot payload limit. The client assembly owner and
+reconnect policy are not yet implemented.
 
 The descriptor stores the format version, world and base identities, all
 world/region/chunk relationships, and bounded residency limits. Creating a

@@ -12,6 +12,10 @@ static int test_request_and_response_codecs(void)
     henka_terrain_edit_rejection decoded_rejection;
     henka_terrain_edit_delta delta = {0};
     henka_terrain_edit_delta decoded_delta;
+    henka_terrain_snapshot_request snapshot_request = {0};
+    henka_terrain_snapshot_request decoded_snapshot_request;
+    henka_terrain_snapshot_fragment snapshot_fragment = {0};
+    henka_terrain_snapshot_fragment decoded_snapshot_fragment;
     uint8_t buffer[HENKA_TERRAIN_NETWORK_MAX_EDIT_REQUEST_BYTES];
     size_t size = 0U;
 
@@ -68,6 +72,39 @@ static int test_request_and_response_codecs(void)
         decoded_delta.affected_regions[0].revision != 8U)
     {
         return 0;
+    }
+    snapshot_request.world_identity = 11U;
+    snapshot_request.base_asset_identity = 22U;
+    snapshot_request.region_id = (henka_terrain_region_id){2, 3};
+    snapshot_request.expected_revision = 8U;
+    if (henka_terrain_snapshot_request_encode(
+            &snapshot_request, buffer, sizeof(buffer), &size) != HENKA_SUCCESS ||
+        henka_terrain_snapshot_request_decode(buffer, size, &decoded_snapshot_request) != HENKA_SUCCESS ||
+        decoded_snapshot_request.region_id.z != 3 || decoded_snapshot_request.expected_revision != 8U)
+    {
+        return 0;
+    }
+    {
+        const uint8_t fragment_data[] = {1U, 2U, 3U};
+        snapshot_fragment.world_identity = 11U;
+        snapshot_fragment.base_asset_identity = 22U;
+        snapshot_fragment.transfer_id = 44U;
+        snapshot_fragment.region_id = snapshot_request.region_id;
+        snapshot_fragment.revision = 8U;
+        snapshot_fragment.generation = 9U;
+        snapshot_fragment.fragment_index = 0U;
+        snapshot_fragment.fragment_count = 2U;
+        snapshot_fragment.total_bytes = 5U;
+        snapshot_fragment.data_size = (uint32_t)sizeof(fragment_data);
+        snapshot_fragment.data = fragment_data;
+        if (henka_terrain_snapshot_fragment_encode(
+                &snapshot_fragment, buffer, HENKA_NETWORK_MAX_SNAPSHOT_FRAGMENT_PAYLOAD, &size) != HENKA_SUCCESS ||
+            henka_terrain_snapshot_fragment_decode(buffer, size, &decoded_snapshot_fragment) != HENKA_SUCCESS ||
+            decoded_snapshot_fragment.transfer_id != 44U || decoded_snapshot_fragment.data_size != 3U ||
+            decoded_snapshot_fragment.data[2] != 3U)
+        {
+            return 0;
+        }
     }
     return 1;
 }

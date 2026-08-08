@@ -26,6 +26,9 @@ typedef struct henka_terrain_server_diagnostics
     uint64_t rejected_edit_count;
     uint64_t malformed_edit_count;
     uint64_t protocol_disconnect_count;
+    uint64_t snapshot_request_count;
+    uint64_t snapshot_fragment_count;
+    uint64_t snapshot_failure_count;
 } henka_terrain_server_diagnostics;
 
 henka_terrain_server_desc henka_terrain_server_desc_default(void);

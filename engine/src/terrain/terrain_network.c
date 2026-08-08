@@ -373,3 +373,119 @@ henka_result henka_terrain_edit_delta_decode(
     }
     return HENKA_SUCCESS;
 }
+
+henka_result henka_terrain_snapshot_request_encode(
+    const henka_terrain_snapshot_request* request,
+    uint8_t* buffer,
+    size_t buffer_capacity,
+    size_t* out_size)
+{
+    if (request == NULL || buffer == NULL || out_size == NULL ||
+        request->region_id.x < 0 || request->region_id.z < 0 ||
+        buffer_capacity < HENKA_TERRAIN_NETWORK_MAX_SNAPSHOT_REQUEST_BYTES)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    henka_terrain_network_write_u64(buffer + 0U, request->world_identity);
+    henka_terrain_network_write_u64(buffer + 8U, request->base_asset_identity);
+    henka_terrain_network_write_u32(buffer + 16U, (uint32_t)request->region_id.x);
+    henka_terrain_network_write_u32(buffer + 20U, (uint32_t)request->region_id.z);
+    henka_terrain_network_write_u64(buffer + 24U, request->expected_revision);
+    *out_size = HENKA_TERRAIN_NETWORK_MAX_SNAPSHOT_REQUEST_BYTES;
+    return HENKA_SUCCESS;
+}
+
+henka_result henka_terrain_snapshot_request_decode(
+    const uint8_t* buffer,
+    size_t buffer_size,
+    henka_terrain_snapshot_request* out_request)
+{
+    if (buffer == NULL || out_request == NULL ||
+        buffer_size != HENKA_TERRAIN_NETWORK_MAX_SNAPSHOT_REQUEST_BYTES)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    out_request->world_identity = henka_terrain_network_read_u64(buffer + 0U);
+    out_request->base_asset_identity = henka_terrain_network_read_u64(buffer + 8U);
+    out_request->region_id.x = (int32_t)henka_terrain_network_read_u32(buffer + 16U);
+    out_request->region_id.z = (int32_t)henka_terrain_network_read_u32(buffer + 20U);
+    out_request->expected_revision = henka_terrain_network_read_u64(buffer + 24U);
+    return out_request->region_id.x < 0 || out_request->region_id.z < 0
+        ? HENKA_ERROR_INVALID_ARGUMENT : HENKA_SUCCESS;
+}
+
+henka_result henka_terrain_snapshot_fragment_encode(
+    const henka_terrain_snapshot_fragment* fragment,
+    uint8_t* buffer,
+    size_t buffer_capacity,
+    size_t* out_size)
+{
+    size_t size;
+    if (fragment == NULL || buffer == NULL || out_size == NULL || fragment->data == NULL ||
+        fragment->transfer_id == 0U || fragment->region_id.x < 0 || fragment->region_id.z < 0 ||
+        fragment->fragment_count == 0U || fragment->fragment_count > HENKA_TERRAIN_NETWORK_MAX_SNAPSHOT_FRAGMENTS ||
+        fragment->fragment_index >= fragment->fragment_count || fragment->total_bytes == 0U ||
+        fragment->data_size == 0U || fragment->data_size > HENKA_TERRAIN_NETWORK_MAX_SNAPSHOT_FRAGMENT_DATA_BYTES ||
+        fragment->data_size > fragment->total_bytes)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    size = HENKA_TERRAIN_NETWORK_MAX_SNAPSHOT_FRAGMENT_HEADER_BYTES + fragment->data_size;
+    if (buffer_capacity < size)
+    {
+        return HENKA_ERROR_LIMIT;
+    }
+    henka_terrain_network_write_u64(buffer + 0U, fragment->world_identity);
+    henka_terrain_network_write_u64(buffer + 8U, fragment->base_asset_identity);
+    henka_terrain_network_write_u64(buffer + 16U, fragment->transfer_id);
+    henka_terrain_network_write_u32(buffer + 24U, (uint32_t)fragment->region_id.x);
+    henka_terrain_network_write_u32(buffer + 28U, (uint32_t)fragment->region_id.z);
+    henka_terrain_network_write_u64(buffer + 32U, fragment->revision);
+    henka_terrain_network_write_u64(buffer + 40U, fragment->generation);
+    henka_terrain_network_write_u32(buffer + 48U, fragment->fragment_index);
+    henka_terrain_network_write_u32(buffer + 52U, fragment->fragment_count);
+    henka_terrain_network_write_u32(buffer + 56U, fragment->total_bytes);
+    henka_terrain_network_write_u32(buffer + 60U, fragment->data_size);
+    memcpy(buffer + HENKA_TERRAIN_NETWORK_MAX_SNAPSHOT_FRAGMENT_HEADER_BYTES,
+        fragment->data, fragment->data_size);
+    *out_size = size;
+    return HENKA_SUCCESS;
+}
+
+henka_result henka_terrain_snapshot_fragment_decode(
+    const uint8_t* buffer,
+    size_t buffer_size,
+    henka_terrain_snapshot_fragment* out_fragment)
+{
+    uint32_t data_size;
+    if (buffer == NULL || out_fragment == NULL ||
+        buffer_size < HENKA_TERRAIN_NETWORK_MAX_SNAPSHOT_FRAGMENT_HEADER_BYTES)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    memset(out_fragment, 0, sizeof(*out_fragment));
+    out_fragment->world_identity = henka_terrain_network_read_u64(buffer + 0U);
+    out_fragment->base_asset_identity = henka_terrain_network_read_u64(buffer + 8U);
+    out_fragment->transfer_id = henka_terrain_network_read_u64(buffer + 16U);
+    out_fragment->region_id.x = (int32_t)henka_terrain_network_read_u32(buffer + 24U);
+    out_fragment->region_id.z = (int32_t)henka_terrain_network_read_u32(buffer + 28U);
+    out_fragment->revision = henka_terrain_network_read_u64(buffer + 32U);
+    out_fragment->generation = henka_terrain_network_read_u64(buffer + 40U);
+    out_fragment->fragment_index = henka_terrain_network_read_u32(buffer + 48U);
+    out_fragment->fragment_count = henka_terrain_network_read_u32(buffer + 52U);
+    out_fragment->total_bytes = henka_terrain_network_read_u32(buffer + 56U);
+    data_size = henka_terrain_network_read_u32(buffer + 60U);
+    if (out_fragment->region_id.x < 0 || out_fragment->region_id.z < 0 ||
+        out_fragment->transfer_id == 0U || out_fragment->fragment_count == 0U ||
+        out_fragment->fragment_count > HENKA_TERRAIN_NETWORK_MAX_SNAPSHOT_FRAGMENTS ||
+        out_fragment->fragment_index >= out_fragment->fragment_count || out_fragment->total_bytes == 0U ||
+        data_size == 0U || data_size > HENKA_TERRAIN_NETWORK_MAX_SNAPSHOT_FRAGMENT_DATA_BYTES ||
+        data_size > out_fragment->total_bytes ||
+        buffer_size != HENKA_TERRAIN_NETWORK_MAX_SNAPSHOT_FRAGMENT_HEADER_BYTES + data_size)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    out_fragment->data_size = data_size;
+    out_fragment->data = buffer + HENKA_TERRAIN_NETWORK_MAX_SNAPSHOT_FRAGMENT_HEADER_BYTES;
+    return HENKA_SUCCESS;
+}
