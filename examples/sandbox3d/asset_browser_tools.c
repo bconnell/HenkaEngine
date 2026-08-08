@@ -389,3 +389,31 @@ henka_result sandbox3d_assign_material_instance_texture(
     *instance = candidate;
     return HENKA_SUCCESS;
 }
+
+henka_result sandbox3d_restore_material_instance_texture(
+    const henka_asset_manager* manager,
+    henka_material_instance* instance,
+    henka_material_texture_slot slot)
+{
+    henka_material_instance candidate;
+    henka_material_instance_parameter parameter;
+    henka_result result;
+
+    if (manager == NULL || instance == NULL ||
+        slot < HENKA_MATERIAL_TEXTURE_SLOT_BASE_COLOR ||
+        slot > HENKA_MATERIAL_TEXTURE_SLOT_EMISSIVE)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    parameter = (henka_material_instance_parameter)(
+        HENKA_MATERIAL_INSTANCE_BASE_COLOR_TEXTURE + slot);
+    candidate = *instance;
+    result = henka_assets_material_instance_reset_override(&candidate, parameter);
+    if (result != HENKA_SUCCESS)
+    {
+        return result;
+    }
+    *instance = candidate;
+    return HENKA_SUCCESS;
+}

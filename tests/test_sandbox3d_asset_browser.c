@@ -142,6 +142,13 @@ static void henka_test_sandbox3d_asset_browser_texture_and_assignment(void)
         (henka_texture*)(uintptr_t)2U) != HENKA_SUCCESS);
     HENKA_TEST_ASSERT(instance.material.base_color_texture == NULL);
     HENKA_TEST_ASSERT(before.base_color_texture == &texture);
+    HENKA_TEST_ASSERT(sandbox3d_restore_material_instance_texture(
+        &manager,
+        &instance,
+        HENKA_MATERIAL_TEXTURE_SLOT_BASE_COLOR) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(instance.material.base_color_texture == &texture);
+    HENKA_TEST_ASSERT(instance.material.use_texture);
+    HENKA_TEST_ASSERT(instance.override_mask == 0U);
 }
 
 void henka_test_sandbox3d_asset_browser(void)

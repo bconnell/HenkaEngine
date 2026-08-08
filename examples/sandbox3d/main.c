@@ -1102,6 +1102,43 @@ static henka_result sandbox3d_apply_texture_to_material_binding(
     return HENKA_SUCCESS;
 }
 
+static henka_result sandbox3d_restore_texture_material_binding(
+    henka_engine* engine,
+    sandbox3d_state* state,
+    sandbox3d_material_editor_binding* binding,
+    henka_material_texture_slot slot)
+{
+    henka_material_instance previous;
+    henka_material_instance candidate;
+    henka_result result;
+
+    if (engine == NULL || state == NULL || binding == NULL || !binding->valid ||
+        binding->instance == NULL || binding->asset == NULL ||
+        binding->instance->definition != binding->asset || state->scene == NULL ||
+        binding->entity == HENKA_INVALID_ENTITY)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    previous = *binding->instance;
+    candidate = previous;
+    result = sandbox3d_restore_material_instance_texture(
+        henka_engine_get_asset_manager(engine), &candidate, slot);
+    if (result != HENKA_SUCCESS)
+    {
+        return result;
+    }
+    result = henka_assets_apply_material_instance_to_entity(
+        &candidate, state->scene, binding->entity);
+    if (result != HENKA_SUCCESS)
+    {
+        *binding->instance = previous;
+        return result;
+    }
+    *binding->instance = candidate;
+    return HENKA_SUCCESS;
+}
+
 static void sandbox3d_draw_material_instance_editor(
     henka_engine* engine,
     sandbox3d_state* state,
@@ -12384,9 +12421,16 @@ static void sandbox3d_draw_object_details_panel(
                     char slot_value[160];
                     char assign_id[64];
                     char clear_id[64];
+                    char restore_id[64];
                     const bool editable =
                         material_view.access == SANDBOX3D_MATERIAL_ACCESS_EDITABLE_INSTANCE &&
                         material_view.editor_binding != NULL;
+                    const unsigned int texture_parameter =
+                        (unsigned int)HENKA_MATERIAL_INSTANCE_BASE_COLOR_TEXTURE +
+                        (unsigned int)texture_slot_index;
+                    const bool overridden = editable && texture_parameter < 32U &&
+                        (material_view.editor_binding->instance->override_mask &
+                         (uint32_t)(1U << texture_parameter)) != 0U;
 
                     memset(&slot_display, 0, sizeof(slot_display));
                     if (sandbox3d_format_material_texture_slot(
@@ -12417,11 +12461,12 @@ static void sandbox3d_draw_object_details_panel(
                         state->ui, row.x, row.y, row.width, texture_slot_labels[texture_slot_index], slot_value);
                     snprintf(assign_id, sizeof(assign_id), "material_slot_assign_%zu", texture_slot_index);
                     snprintf(clear_id, sizeof(clear_id), "material_slot_clear_%zu", texture_slot_index);
-                    if (editable && state->asset_browser_selected_texture != NULL &&
+                    snprintf(restore_id, sizeof(restore_id), "material_slot_restore_%zu", texture_slot_index);
+                    if (row.width >= 220.0f && editable && state->asset_browser_selected_texture != NULL &&
                         henka_ui_button(
                             state->ui,
                             assign_id,
-                            (henka_ui_rect){row.x + row.width - 172.0f, row.y, 80.0f, 24.0f},
+                            (henka_ui_rect){row.x + row.width - 228.0f, row.y, 70.0f, 24.0f},
                             "Assign"))
                     {
                         if (sandbox3d_apply_texture_to_material_binding(
@@ -12438,11 +12483,31 @@ static void sandbox3d_draw_object_details_panel(
                             sandbox3d_set_status(state, true, "Texture assignment rejected; the instance was preserved.");
                         }
                     }
-                    if (editable && slot_display.assigned &&
+                    if (row.width >= 220.0f && editable && overridden &&
+                        henka_ui_button(
+                            state->ui,
+                            restore_id,
+                            (henka_ui_rect){row.x + row.width - 152.0f, row.y, 70.0f, 24.0f},
+                            "Inherit"))
+                    {
+                        if (sandbox3d_restore_texture_material_binding(
+                                engine,
+                                state,
+                                material_view.editor_binding,
+                                (henka_material_texture_slot)texture_slot_index) == HENKA_SUCCESS)
+                        {
+                            sandbox3d_set_status(state, false, "Texture slot restored from the material definition.");
+                        }
+                        else
+                        {
+                            sandbox3d_set_status(state, true, "Texture restore rejected; the instance was preserved.");
+                        }
+                    }
+                    if (row.width >= 220.0f && editable && slot_display.assigned &&
                         henka_ui_button(
                             state->ui,
                             clear_id,
-                            (henka_ui_rect){row.x + row.width - 84.0f, row.y, 80.0f, 24.0f},
+                            (henka_ui_rect){row.x + row.width - 76.0f, row.y, 70.0f, 24.0f},
                             "Clear"))
                     {
                         if (sandbox3d_apply_texture_to_material_binding(

@@ -55,4 +55,9 @@ henka_result sandbox3d_assign_material_instance_texture(
     henka_material_texture_slot slot,
     henka_texture* texture);
 
+henka_result sandbox3d_restore_material_instance_texture(
+    const henka_asset_manager* manager,
+    henka_material_instance* instance,
+    henka_material_texture_slot slot);
+
 #endif
