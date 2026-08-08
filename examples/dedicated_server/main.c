@@ -401,6 +401,11 @@ int main(int argc, char** argv)
     henka_server_options options;
     henka_scene* scene = NULL;
     henka_physics_world* physics = NULL;
+    henka_terrain_world* terrain_world = NULL;
+    henka_terrain_storage* terrain_storage = NULL;
+    henka_terrain_server* terrain_server = NULL;
+    henka_terrain_world_desc terrain_world_desc;
+    henka_terrain_server_desc terrain_server_desc;
     henka_network_server* network = NULL;
     henka_network_server_desc network_desc;
     henka_network_event event;
@@ -425,11 +430,24 @@ int main(int argc, char** argv)
         fprintf(stderr, "headless runtime initialization failed\n");
         return 3;
     }
+    terrain_world_desc = henka_terrain_world_desc_default();
+    terrain_world_desc.max_resident_regions = options.max_clients;
+    if (henka_terrain_world_create(&terrain_world_desc, &terrain_world) != HENKA_SUCCESS ||
+        henka_terrain_world_reserve_region(terrain_world, (henka_terrain_region_id){0, 0}) != HENKA_SUCCESS ||
+        henka_terrain_storage_create(
+            &terrain_world_desc,
+            options.has_save_root ? options.save_root : "build/server-save",
+            &terrain_storage) != HENKA_SUCCESS)
+    {
+        fprintf(stderr, "terrain runtime initialization failed\n");
+        exit_code = 4;
+        goto shutdown;
+    }
     fixed_timestep = 1.0 / (double)options.tick_rate;
     if (henka_physics_world_set_fixed_timestep(physics, (float)fixed_timestep) != HENKA_SUCCESS)
     {
         fprintf(stderr, "fixed timestep configuration failed\n");
-        exit_code = 4;
+        exit_code = 5;
         goto shutdown;
     }
     network_desc = henka_network_server_desc_default();
@@ -439,7 +457,7 @@ int main(int argc, char** argv)
             options.bind_address))
     {
         fprintf(stderr, "bind address exceeds the bounded endpoint limit\n");
-        exit_code = 5;
+        exit_code = 6;
         goto shutdown;
     }
     network_desc.bind_endpoint.port = options.port;
@@ -447,7 +465,18 @@ int main(int argc, char** argv)
     if (henka_network_server_create(&network_desc, &network) != HENKA_SUCCESS)
     {
         fprintf(stderr, "network server initialization failed\n");
-        exit_code = 6;
+        exit_code = 7;
+        goto shutdown;
+    }
+    terrain_server_desc = henka_terrain_server_desc_default();
+    terrain_server_desc.network = network;
+    terrain_server_desc.world = terrain_world;
+    terrain_server_desc.storage = terrain_storage;
+    terrain_server_desc.max_clients = options.max_clients;
+    if (henka_terrain_server_create(&terrain_server_desc, &terrain_server) != HENKA_SUCCESS)
+    {
+        fprintf(stderr, "terrain server initialization failed\n");
+        exit_code = 8;
         goto shutdown;
     }
     (void)signal(SIGINT, henka_server_request_shutdown);
@@ -477,7 +506,7 @@ int main(int argc, char** argv)
         if (henka_physics_world_step_fixed(physics) != HENKA_SUCCESS)
         {
             fprintf(stderr, "headless simulation step failed\n");
-            exit_code = 7;
+            exit_code = 9;
         }
         puts("Dedicated server smoke initialized.");
         g_henka_server_running = 0;
@@ -501,16 +530,13 @@ int main(int argc, char** argv)
             {
                 henka_server_untrack_peer(peers, &peer_count, event.peer_id);
             }
-            else if (event.type == HENKA_NETWORK_EVENT_MESSAGE &&
-                event.message.type == HENKA_NETWORK_MESSAGE_PING)
+            if (henka_terrain_server_handle_event(
+                    terrain_server, &event,
+                    (uint64_t)(time_state.total_seconds * 1000.0)) != HENKA_SUCCESS)
             {
-                (void)henka_network_server_send(
-                    network,
-                    event.peer_id,
-                    event.message.channel,
-                    HENKA_NETWORK_MESSAGE_PING,
-                    event.message.payload,
-                    event.message.payload_size);
+                fprintf(stderr, "terrain network dispatch failed\n");
+                exit_code = 10;
+                g_henka_server_running = 0;
             }
         }
         henka_time_tick(&time_state);
@@ -524,7 +550,7 @@ int main(int argc, char** argv)
             if (henka_physics_world_step_fixed(physics) != HENKA_SUCCESS)
             {
                 fprintf(stderr, "headless simulation step failed\n");
-                exit_code = 9;
+                exit_code = 11;
                 g_henka_server_running = 0;
                 break;
             }
@@ -534,7 +560,10 @@ int main(int argc, char** argv)
     henka_server_disconnect_peers(network, peers, &peer_count);
 
 shutdown:
+    henka_terrain_server_destroy(terrain_server);
     henka_network_server_destroy(network);
+    henka_terrain_storage_destroy(terrain_storage);
+    henka_terrain_world_destroy(terrain_world);
     henka_physics_world_destroy(physics);
     henka_scene_destroy(scene);
     return exit_code;

@@ -1,0 +1,149 @@
+#include <stdint.h>
+#include <string.h>
+
+#include <henka/memory.h>
+#include <henka/terrain_server.h>
+
+static int test_loopback_authoritative_edit(void)
+{
+    henka_terrain_world_desc world_desc = henka_terrain_world_desc_default();
+    henka_terrain_layout layout;
+    henka_terrain_world* world = NULL;
+    henka_terrain_storage* storage = NULL;
+    henka_network_server* network = NULL;
+    henka_network_client* client = NULL;
+    henka_terrain_server* server = NULL;
+    henka_network_server_desc server_desc = henka_network_server_desc_default();
+    henka_network_client_desc client_desc = henka_network_client_desc_default();
+    henka_terrain_server_desc terrain_server_desc;
+    henka_terrain_sample* samples = NULL;
+    henka_terrain_edit_request request = {0};
+    henka_network_event event;
+    uint8_t payload[HENKA_TERRAIN_NETWORK_MAX_EDIT_REQUEST_BYTES];
+    uint8_t response_payload[HENKA_TERRAIN_NETWORK_MAX_EDIT_RESPONSE_BYTES];
+    size_t payload_size = 0U;
+    henka_terrain_edit_acceptance acceptance;
+    int result = 0;
+    uint32_t index;
+    uint32_t iteration;
+
+    world_desc.max_resident_regions = 1U;
+    server_desc.bind_endpoint.host[0] = '1';
+    server_desc.bind_endpoint.host[1] = '2';
+    server_desc.bind_endpoint.host[2] = '7';
+    server_desc.bind_endpoint.host[3] = '.';
+    server_desc.bind_endpoint.host[4] = '0';
+    server_desc.bind_endpoint.host[5] = '.';
+    server_desc.bind_endpoint.host[6] = '0';
+    server_desc.bind_endpoint.host[7] = '.';
+    server_desc.bind_endpoint.host[8] = '1';
+    server_desc.bind_endpoint.port = 7799U;
+    client_desc.remote_endpoint = server_desc.bind_endpoint;
+    if (henka_terrain_world_desc_get_layout(&world_desc, &layout) != HENKA_SUCCESS ||
+        henka_terrain_world_create(&world_desc, &world) != HENKA_SUCCESS ||
+        henka_terrain_world_reserve_region(world, (henka_terrain_region_id){0, 0}) != HENKA_SUCCESS ||
+        henka_terrain_storage_create(&world_desc, "build/test_tmp/terrain_server_v1", &storage) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    samples = henka_calloc(layout.samples_per_region, sizeof(*samples));
+    if (samples == NULL)
+    {
+        goto cleanup;
+    }
+    for (index = 0U; index < layout.samples_per_region; ++index)
+    {
+        samples[index].material_weights[0] = 255U;
+    }
+    if (henka_terrain_storage_begin(storage, 1U) != HENKA_SUCCESS ||
+        henka_terrain_storage_write_region(
+            storage, (henka_terrain_region_id){0, 0}, 0U, 0U, samples, layout.samples_per_region) != HENKA_SUCCESS ||
+        henka_terrain_storage_commit(storage, 1U) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    if (henka_network_server_create(&server_desc, &network) != HENKA_SUCCESS ||
+        henka_network_client_create(&client_desc, &client) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    terrain_server_desc = henka_terrain_server_desc_default();
+    terrain_server_desc.network = network;
+    terrain_server_desc.world = world;
+    terrain_server_desc.storage = storage;
+    if (henka_terrain_server_create(&terrain_server_desc, &server) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    for (iteration = 0U; iteration < 400U; ++iteration)
+    {
+        if (henka_terrain_server_poll(server, 2U, 1000U + iteration) != HENKA_SUCCESS ||
+            henka_network_client_poll(client, 2U, &event) != HENKA_SUCCESS)
+        {
+            goto cleanup;
+        }
+        if (event.type == HENKA_NETWORK_EVENT_CONNECTED)
+        {
+            break;
+        }
+    }
+    if (iteration == 400U)
+    {
+        goto cleanup;
+    }
+    request.world_identity = world_desc.world_identity;
+    request.base_asset_identity = world_desc.base_asset_identity;
+    request.client_nonce = 991U;
+    request.command = henka_terrain_edit_command_default();
+    request.command.center_sample_x = 100;
+    request.command.center_sample_z = 100;
+    request.command.radius_samples = 4U;
+    request.affected_region_count = 1U;
+    request.affected_regions[0] = (henka_terrain_network_region_revision){{0, 0}, 0U};
+    if (henka_terrain_edit_request_encode(&request, payload, sizeof(payload), &payload_size) != HENKA_SUCCESS ||
+        henka_network_client_send(
+            client, HENKA_NETWORK_CHANNEL_TERRAIN, HENKA_NETWORK_MESSAGE_TERRAIN_EDIT_REQUEST,
+            payload, payload_size) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    for (iteration = 0U; iteration < 400U; ++iteration)
+    {
+        if (henka_terrain_server_poll(server, 2U, 2000U + iteration) != HENKA_SUCCESS ||
+            henka_network_client_poll(client, 2U, &event) != HENKA_SUCCESS)
+        {
+            goto cleanup;
+        }
+        if (event.type == HENKA_NETWORK_EVENT_MESSAGE &&
+            event.message.type == HENKA_NETWORK_MESSAGE_TERRAIN_EDIT_ACCEPTED)
+        {
+            if (event.message.payload_size > sizeof(response_payload))
+            {
+                goto cleanup;
+            }
+            memcpy(response_payload, event.message.payload, event.message.payload_size);
+            if (henka_terrain_edit_acceptance_decode(
+                    response_payload, event.message.payload_size, &acceptance) != HENKA_SUCCESS ||
+                acceptance.client_nonce != request.client_nonce || acceptance.server_command_id != 1U)
+            {
+                goto cleanup;
+            }
+            result = 1;
+            break;
+        }
+    }
+
+cleanup:
+    henka_terrain_server_destroy(server);
+    henka_network_client_destroy(client);
+    henka_network_server_destroy(network);
+    henka_terrain_storage_destroy(storage);
+    henka_terrain_world_destroy(world);
+    henka_free(samples);
+    return result;
+}
+
+int main(void)
+{
+    return test_loopback_authoritative_edit() ? 0 : 1;
+}

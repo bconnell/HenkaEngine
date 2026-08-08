@@ -77,9 +77,13 @@ affected region in one storage transaction, and acknowledged only after the
 transaction commits. If the edit or persistence path fails, the live samples
 and revisions are restored and the incomplete transaction is abandoned.
 
-The authority object does not own the world or storage. ENet session routing,
-replication deltas and snapshots, reconnect/late-join recovery, client
-prediction, and editor controls remain subsequent integration work.
+The authority object does not own the world or storage. The
+`<henka/terrain_server.h>` session adapter owns neither: it borrows the
+public ENet server, decodes edit messages, routes them through authority, and
+encodes the response. It also echoes control pings and disconnects malformed
+edit payloads as protocol errors. Replication deltas and snapshots,
+reconnect/late-join recovery, client prediction, and editor controls remain
+subsequent integration work.
 
 The descriptor stores the format version, world and base identities, all
 world/region/chunk relationships, and bounded residency limits. Creating a
@@ -91,8 +95,9 @@ physics, render, pending-I/O, dirty, revision, and generation state.
 
 This slice establishes the shared data model and bounded ownership contract.
 World manifest integration, journal compaction, streaming hysteresis and
-eviction, collision regeneration, client LOD/rendering, transport/session
-integration, and client prediction are subsequent validated runtime slices.
+eviction, collision regeneration, client LOD/rendering, replication and
+snapshot recovery, and client prediction are subsequent validated runtime
+slices.
 They must use this
 same world identity, region/chunk mapping, revision, and residency ownership;
 they must not introduce a second world-sized representation.
