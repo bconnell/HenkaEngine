@@ -601,6 +601,50 @@ henka_result henka_terrain_storage_recover(henka_terrain_storage* storage)
     return result;
 }
 
+henka_result henka_terrain_storage_compact(henka_terrain_storage* storage)
+{
+    char* path = NULL;
+    char* temporary_path = NULL;
+    FILE* file = NULL;
+    henka_result result;
+    if (storage == NULL || storage->active_transaction_id != 0U ||
+        henka_terrain_storage_journal_path(storage, &path) != HENKA_SUCCESS ||
+        henka_terrain_storage_resolve(storage, "terrain.journal.compact", &temporary_path) != HENKA_SUCCESS)
+    {
+        henka_free(path);
+        henka_free(temporary_path);
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    result = henka_terrain_storage_recover(storage);
+    if (result != HENKA_SUCCESS)
+    {
+        henka_free(path);
+        henka_free(temporary_path);
+        return result;
+    }
+    file = henka_terrain_open_file(temporary_path, "wb");
+    if (file == NULL)
+    {
+        henka_free(path);
+        henka_free(temporary_path);
+        return HENKA_ERROR_PLATFORM;
+    }
+    result = henka_terrain_flush(file);
+    fclose(file);
+    if (result == HENKA_SUCCESS)
+    {
+#if defined(_WIN32)
+        result = MoveFileExA(temporary_path, path, MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH) != 0
+            ? HENKA_SUCCESS : HENKA_ERROR_PLATFORM;
+#else
+        result = rename(temporary_path, path) == 0 ? HENKA_SUCCESS : HENKA_ERROR_PLATFORM;
+#endif
+    }
+    henka_free(path);
+    henka_free(temporary_path);
+    return result;
+}
+
 henka_result henka_terrain_storage_begin(
     henka_terrain_storage* storage,
     uint64_t transaction_id)

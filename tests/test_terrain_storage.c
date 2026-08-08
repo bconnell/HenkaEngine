@@ -89,6 +89,20 @@ static int test_codec_and_transaction_recovery(void)
     {
         goto cleanup;
     }
+    if (henka_terrain_storage_compact(storage) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    henka_terrain_storage_destroy(storage);
+    storage = NULL;
+    if (henka_terrain_storage_create(&desc, "build/test_tmp/terrain_storage_v1", &storage) != HENKA_SUCCESS ||
+        henka_terrain_storage_recover(storage) != HENKA_SUCCESS ||
+        henka_terrain_storage_load_region(
+            storage, region, &info, decoded, layout.samples_per_region) != HENKA_SUCCESS ||
+        info.revision != 5U || decoded[0].height_millimeters != 7777)
+    {
+        goto cleanup;
+    }
     result = 1;
 
 cleanup:

@@ -41,6 +41,8 @@ henka_result henka_terrain_storage_create(
     henka_terrain_storage** out_storage);
 void henka_terrain_storage_destroy(henka_terrain_storage* storage);
 henka_result henka_terrain_storage_recover(henka_terrain_storage* storage);
+/* Reclaims committed journal history without changing region snapshots. */
+henka_result henka_terrain_storage_compact(henka_terrain_storage* storage);
 henka_result henka_terrain_storage_begin(
     henka_terrain_storage* storage,
     uint64_t transaction_id);

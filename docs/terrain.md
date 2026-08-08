@@ -32,6 +32,11 @@ atomic replacement, so an interrupted write retains the previous valid
 snapshot. Uncommitted records remain harmless journal history and are ignored
 by subsequent recovery.
 
+`henka_terrain_storage_compact` first recovers complete transactions, rejects
+an active transaction, then atomically replaces the journal with an empty
+durable file. Region snapshots remain the source of truth, so compaction does
+not require loading the world-sized terrain or rewriting every region.
+
 ## Streaming boundary
 
 The Windows runtime provides a bounded worker-backed stream queue through
@@ -151,7 +156,7 @@ physics, render, pending-I/O, dirty, revision, and generation state.
 ## Current boundary
 
 This slice establishes the shared data model and bounded ownership contract.
-World manifest integration, journal compaction, collision regeneration, scene
+World manifest integration, collision regeneration, scene
 ownership and GPU residency, reconnect/late-join orchestration, and client
 prediction are subsequent validated runtime slices.
 They must use this
