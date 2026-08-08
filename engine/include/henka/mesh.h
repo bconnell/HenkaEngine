@@ -3,6 +3,7 @@
 
 #include <henka/math.h>
 #include <henka/result.h>
+#include <henka/terrain_mesh.h>
 
 typedef struct henka_engine henka_engine;
 typedef struct henka_mesh henka_mesh;
@@ -23,6 +24,15 @@ henka_result henka_mesh_create_circle_ring(henka_engine* engine, float radius, i
 henka_result henka_mesh_create_from_model_data(henka_engine* engine, const henka_model_data* model, henka_mesh** out_mesh);
 henka_result henka_mesh_create_from_obj(henka_engine* engine, const char* path, henka_mesh** out_mesh);
 henka_result henka_mesh_create_from_gltf(henka_engine* engine, const char* path, henka_mesh** out_mesh);
+/* Creates a graphical mesh from one render-resident Terrain chunk. */
+henka_result henka_mesh_create_from_terrain_chunk(
+    henka_engine* engine,
+    const henka_terrain_world* world,
+    henka_terrain_chunk_id chunk_id,
+    uint32_t lod_level,
+    henka_mesh** out_mesh,
+    henka_terrain_revision* out_revision,
+    henka_terrain_generation* out_generation);
 /* Releases caller-owned meshes. Manager-owned borrowed meshes are ignored. */
 void henka_mesh_destroy(henka_mesh* mesh);
 

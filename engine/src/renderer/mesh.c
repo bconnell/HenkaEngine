@@ -418,6 +418,116 @@ henka_result henka_mesh_create_circle_ring(henka_engine* engine, float radius, i
     return result;
 }
 
+henka_result henka_mesh_create_from_terrain_chunk(
+    henka_engine* engine,
+    const henka_terrain_world* world,
+    henka_terrain_chunk_id chunk_id,
+    uint32_t lod_level,
+    henka_mesh** out_mesh,
+    henka_terrain_revision* out_revision,
+    henka_terrain_generation* out_generation)
+{
+    henka_terrain_mesh_data terrain_mesh = {0};
+    henka_terrain_mesh_vertex* terrain_vertices = NULL;
+    henka_vertex* render_vertices = NULL;
+    unsigned int* indices = NULL;
+    henka_result result;
+    int vertex_count;
+    int index_count;
+    uint32_t index;
+
+    if (out_mesh == NULL || engine == NULL || world == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    *out_mesh = NULL;
+    if (out_revision != NULL)
+    {
+        *out_revision = 0U;
+    }
+    if (out_generation != NULL)
+    {
+        *out_generation = 0U;
+    }
+
+    terrain_mesh.vertex_capacity = 0U;
+    terrain_mesh.index_capacity = 0U;
+    result = henka_terrain_mesh_build_chunk(world, chunk_id, lod_level, &terrain_mesh);
+    if (result != HENKA_ERROR_LIMIT || terrain_mesh.vertex_count == 0U || terrain_mesh.index_count == 0U)
+    {
+        return result == HENKA_SUCCESS ? HENKA_ERROR_INVALID_ARGUMENT : result;
+    }
+    terrain_vertices = henka_calloc(terrain_mesh.vertex_count, sizeof(*terrain_vertices));
+    render_vertices = henka_calloc(terrain_mesh.vertex_count, sizeof(*render_vertices));
+    indices = henka_calloc(terrain_mesh.index_count, sizeof(*indices));
+    if (terrain_vertices == NULL || render_vertices == NULL || indices == NULL)
+    {
+        henka_free(indices);
+        henka_free(render_vertices);
+        henka_free(terrain_vertices);
+        return HENKA_ERROR_OUT_OF_MEMORY;
+    }
+    terrain_mesh.vertices = terrain_vertices;
+    terrain_mesh.vertex_capacity = terrain_mesh.vertex_count;
+    terrain_mesh.indices = indices;
+    terrain_mesh.index_capacity = terrain_mesh.index_count;
+    result = henka_terrain_mesh_build_chunk(world, chunk_id, lod_level, &terrain_mesh);
+    if (result != HENKA_SUCCESS)
+    {
+        henka_free(indices);
+        henka_free(render_vertices);
+        henka_free(terrain_vertices);
+        return result;
+    }
+    if (!henka_checked_size_to_int((size_t)terrain_mesh.vertex_count, &vertex_count) ||
+        !henka_checked_size_to_int((size_t)terrain_mesh.index_count, &index_count))
+    {
+        henka_free(indices);
+        henka_free(render_vertices);
+        henka_free(terrain_vertices);
+        return HENKA_ERROR_NUMERIC_RANGE;
+    }
+    for (index = 0U; index < terrain_mesh.vertex_count; ++index)
+    {
+        const henka_terrain_mesh_vertex* source = &terrain_vertices[index];
+        render_vertices[index] = (henka_vertex){
+            {source->position[0], source->position[1], source->position[2]},
+            {source->normal[0], source->normal[1], source->normal[2]},
+            {source->uv[0], source->uv[1]},
+            {0.0f, 0.0f},
+            {(float)source->material_weights[0] / 255.0f,
+             (float)source->material_weights[1] / 255.0f,
+             (float)source->material_weights[2] / 255.0f,
+             (float)source->material_weights[3] / 255.0f},
+            true,
+            {1.0f, 0.0f, 0.0f, 1.0f},
+            true};
+    }
+    result = henka_renderer_create_mesh_from_data(
+        engine->renderer,
+        render_vertices,
+        vertex_count,
+        indices,
+        index_count,
+        HENKA_MESH_PRIMITIVE_TRIANGLES,
+        out_mesh);
+    if (result == HENKA_SUCCESS)
+    {
+        if (out_revision != NULL)
+        {
+            *out_revision = terrain_mesh.revision;
+        }
+        if (out_generation != NULL)
+        {
+            *out_generation = terrain_mesh.generation;
+        }
+    }
+    henka_free(indices);
+    henka_free(render_vertices);
+    henka_free(terrain_vertices);
+    return result;
+}
+
 void henka_mesh_destroy(henka_mesh* mesh)
 {
     if (mesh == NULL)
