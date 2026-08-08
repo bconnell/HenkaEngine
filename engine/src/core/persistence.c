@@ -15,15 +15,16 @@
 #define WIN32_LEAN_AND_MEAN
 #endif
 #include <io.h>
+#include <direct.h>
 #include <windows.h>
 #else
+#include <sys/stat.h>
 #include <unistd.h>
 #endif
 
 #include <henka/log.h>
 #include <henka/memory.h>
-
-#include "../henka_internal.h"
+#include <henka/core.h>
 
 typedef struct henka_settings_entry
 {
@@ -47,6 +48,61 @@ struct henka_save_data
     float camera_pitch_radians;
     henka_settings* flags;
 };
+
+static henka_result henka_persistence_create_directory_tree(const char* path)
+{
+    char* mutable_path;
+    size_t length;
+    size_t index;
+
+    if (path == NULL || path[0] == '\0')
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    length = strlen(path);
+    mutable_path = henka_malloc(length + 1U);
+    if (mutable_path == NULL)
+    {
+        return HENKA_ERROR_OUT_OF_MEMORY;
+    }
+    memcpy(mutable_path, path, length + 1U);
+
+    for (index = 1U; index <= length; ++index)
+    {
+        if (mutable_path[index] != '\0' && mutable_path[index] != '/' && mutable_path[index] != '\\')
+        {
+            continue;
+        }
+        mutable_path[index] = '\0';
+        if (mutable_path[0] != '\0' &&
+#ifdef _WIN32
+            !(length >= 2U && index == 2U && mutable_path[1] == ':') &&
+            _mkdir(mutable_path) != 0 && errno != EEXIST
+#else
+            mkdir(mutable_path, 0777) != 0 && errno != EEXIST
+#endif
+            )
+        {
+            henka_free(mutable_path);
+            return HENKA_ERROR_PLATFORM;
+        }
+        mutable_path[index] = path[index];
+    }
+
+#ifdef _WIN32
+    if (_mkdir(mutable_path) != 0 && errno != EEXIST)
+#else
+    if (mkdir(mutable_path, 0777) != 0 && errno != EEXIST)
+#endif
+    {
+        henka_free(mutable_path);
+        return HENKA_ERROR_PLATFORM;
+    }
+
+    henka_free(mutable_path);
+    return HENKA_SUCCESS;
+}
 
 static bool henka_path_is_separator(char character)
 {
@@ -964,7 +1020,7 @@ henka_result henka_settings_save_file(const henka_settings* settings, const char
     result = henka_path_parent_directory(path, &directory_path);
     if (result == HENKA_SUCCESS)
     {
-        result = henka_platform_create_directory_tree(directory_path);
+        result = henka_persistence_create_directory_tree(directory_path);
         henka_free(directory_path);
         if (result != HENKA_SUCCESS)
         {

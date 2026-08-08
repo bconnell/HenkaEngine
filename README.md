@@ -22,7 +22,9 @@ Henka Engine is still early, but the sandbox now renders a visible 3D scene with
 
 - C17 build through CMake
 - `henka` static library target
+- renderer-independent `henka_runtime` static library target for headless consumers
 - `henka_sandbox3d` example target
+- renderer-free `henka_dedicated_server` host foundation target; networking and terrain hosting remain unfinished
 - `henka_tests` unit test target with CTest integration
 - SDL3-backed platform layer hidden behind Henka headers
 - OpenGL renderer backend isolated inside renderer implementation files
@@ -78,12 +80,14 @@ Henka Engine is still early, but the sandbox now renders a visible 3D scene with
 - Rigid-body physics v1 with atomic fixed substeps, allocation-safe rollback, static/dynamic/kinematic bodies, sphere/AABB/plane colliders, triggers, events, raycasts, and sandbox debug controls
 - Transactional packaged-sandbox refreshes that preserve user data by default and retain the prior package until activation succeeds
 - Generic documentation and starter template for external game repositories
+- Headless-only CMake configuration with `HENKA_BUILD_CLIENT=OFF`, `HENKA_BUILD_DEDICATED_SERVER=OFF`, and `HENKA_ENABLE_KTX2_TRANSCODER=OFF`; the resulting runtime target does not configure SDL, OpenGL, or KTX
 - Deterministic Windows CI package contract checks that avoid hosted graphics-session assumptions, while local validation still performs packaged runtime smoke, desktop interaction, and application-only screenshot checks
 - Repository integrity checks for tracked artifacts, credential signatures, script parsing, dependency pins, and workflow action pins
 
 ### What does not exist yet
 
 - Full production editor and project-authoring workflow
+- Dedicated-server networking, terrain hosting, persistence, and deployment workflow
 - Full asset browser, import/reimport, dependency-graph, and project authoring workflow (the sandbox has only a bounded manager-known asset view and editable-instance texture-slot assignment)
 - Audio
 - Scripting

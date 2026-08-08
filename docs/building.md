@@ -24,6 +24,22 @@ ordinary clean-clone builds.
 
 The script configures and builds the project in `build/`.
 
+The normal client build keeps the graphical compatibility target `henka` and
+the sandbox enabled. A renderer-free runtime-only configuration is also
+validated independently:
+
+```powershell
+cmake -S . -B out/headless -DHENKA_BUILD_CLIENT=OFF -DHENKA_BUILD_DEDICATED_SERVER=OFF -DHENKA_BUILD_EXAMPLES=OFF -DHENKA_ENABLE_KTX2_TRANSCODER=OFF
+cmake --build out/headless --config Debug --target henka_headless_runtime_tests
+ctest --test-dir out/headless -C Debug -R henka_headless_runtime_tests --output-on-failure
+```
+
+`henka_runtime` is the public static library for renderer-independent
+consumers. `henka` links it underneath the existing graphical API. The
+dedicated-server executable is currently a headless host foundation; its
+network and Terrain v1 responsibilities are being added in later runtime
+slices.
+
 ## Run tests
 
 ```powershell

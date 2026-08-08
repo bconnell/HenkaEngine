@@ -1,4 +1,8 @@
+#if defined(HENKA_RUNTIME_HEADLESS)
+#include "../runtime_internal.h"
+#else
 #include "henka_internal.h"
+#endif
 
 #include <float.h>
 #include <math.h>
@@ -83,6 +87,18 @@ const char* henka_material_type_get_label(henka_material_type type)
     }
 }
 
+#if defined(HENKA_RUNTIME_HEADLESS)
+static bool henka_material_texture_matches(
+    const henka_texture* texture,
+    henka_texture_usage usage,
+    henka_texture_color_space color_space)
+{
+    (void)texture;
+    (void)usage;
+    (void)color_space;
+    return true;
+}
+#else
 static bool henka_material_texture_matches(
     const henka_texture* texture,
     henka_texture_usage usage,
@@ -101,10 +117,14 @@ static bool henka_material_texture_matches(
     }
     return true;
 }
+#endif
 
 henka_result henka_material_validate(const henka_material* material)
 {
-    if (material == NULL || material->shader == NULL ||
+    if (material == NULL ||
+#if !defined(HENKA_RUNTIME_HEADLESS)
+        material->shader == NULL ||
+#endif
         material->type < HENKA_MATERIAL_TYPE_LIT ||
         material->type > HENKA_MATERIAL_TYPE_VERTEX_COLOR ||
         !henka_is_finite_float(material->base_color.x) ||

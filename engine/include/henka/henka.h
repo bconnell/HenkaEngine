@@ -18,6 +18,7 @@
 #include <henka/platform.h>
 #include <henka/renderer.h>
 #include <henka/result.h>
+#include <henka/runtime.h>
 #include <henka/scene.h>
 #include <henka/shader.h>
 #include <henka/time.h>

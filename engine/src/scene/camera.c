@@ -3,8 +3,10 @@
 #include <math.h>
 
 #include <henka/core.h>
+#if !defined(HENKA_RUNTIME_HEADLESS)
 #include <henka/engine.h>
 #include <henka/input.h>
+#endif
 
 static float henka_clamp_pitch(float pitch_radians)
 {
@@ -1088,6 +1090,12 @@ void henka_camera_apply_mouse_look(henka_camera* camera, float delta_yaw_radians
 
 void henka_camera_move_fly(henka_camera* camera, const struct henka_engine* engine, double delta_seconds)
 {
+#if defined(HENKA_RUNTIME_HEADLESS)
+    (void)camera;
+    (void)engine;
+    (void)delta_seconds;
+    return;
+#else
     float speed;
     float distance;
     henka_vec3 move_direction;
@@ -1167,4 +1175,5 @@ void henka_camera_move_fly(henka_camera* camera, const struct henka_engine* engi
             camera->position = next_position;
         }
     }
+#endif
 }

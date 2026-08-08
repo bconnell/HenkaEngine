@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.25)
 
-project(HenkaEngine VERSION 0.1.0 LANGUAGES C CXX)
+project(HenkaEngine VERSION 0.1.0 LANGUAGES C)
 
 set(CMAKE_C_STANDARD 17)
 set(CMAKE_C_STANDARD_REQUIRED ON)
@@ -15,6 +15,9 @@ endif()
 
 option(HENKA_BUILD_TESTS "Build Henka Engine tests." ON)
 option(HENKA_BUILD_EXAMPLES "Build Henka Engine example applications." ON)
+option(HENKA_BUILD_CLIENT "Build the graphical Henka client and compatibility target." ON)
+option(HENKA_BUILD_DEDICATED_SERVER "Build the renderer-free dedicated server." ON)
+option(HENKA_ENABLE_NETWORK "Build Henka networking support." ON)
 option(HENKA_ENABLE_KTX2_TRANSCODER "Use pinned KTX-Software for checked KTX2/Basis transcoding." ON)
 
 if(NOT WIN32)
@@ -29,11 +32,17 @@ function(henka_enable_project_warnings target_name)
     endif()
 endfunction()
 
-include(FetchContent)
+if(HENKA_BUILD_CLIENT AND HENKA_ENABLE_KTX2_TRANSCODER)
+    enable_language(CXX)
+endif()
 
-if(TARGET SDL3::SDL3 OR TARGET SDL3::SDL3-static)
+if(HENKA_BUILD_CLIENT)
+    include(FetchContent)
+endif()
+
+if(HENKA_BUILD_CLIENT AND (TARGET SDL3::SDL3 OR TARGET SDL3::SDL3-static))
     message(STATUS "Using an SDL3 target supplied by the parent project.")
-else()
+elseif(HENKA_BUILD_CLIENT)
     set(SDL_SHARED OFF CACHE BOOL "" FORCE)
     set(SDL_STATIC ON CACHE BOOL "" FORCE)
     set(SDL_TEST_LIBRARY OFF CACHE BOOL "" FORCE)
@@ -48,7 +57,7 @@ else()
     FetchContent_MakeAvailable(SDL3)
 endif()
 
-if(HENKA_ENABLE_KTX2_TRANSCODER)
+if(HENKA_BUILD_CLIENT AND HENKA_ENABLE_KTX2_TRANSCODER)
     set(KTX_FEATURE_TOOLS OFF CACHE BOOL "" FORCE)
     set(KTX_FEATURE_DOC OFF CACHE BOOL "" FORCE)
     set(KTX_FEATURE_STATIC_LIBRARY ON CACHE BOOL "" FORCE)
@@ -81,8 +90,12 @@ endif()
 
 add_subdirectory(engine)
 
-if(HENKA_BUILD_EXAMPLES)
+if(HENKA_BUILD_CLIENT AND HENKA_BUILD_EXAMPLES)
     add_subdirectory(examples/sandbox3d)
+endif()
+
+if(HENKA_BUILD_DEDICATED_SERVER)
+    add_subdirectory(examples/dedicated_server)
 endif()
 
 if(HENKA_BUILD_TESTS)

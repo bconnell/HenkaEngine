@@ -1,3 +1,17 @@
+add_executable(henka_headless_runtime_tests
+    test_headless_runtime.c
+)
+
+target_link_libraries(henka_headless_runtime_tests
+    PRIVATE
+        henka_runtime
+)
+
+henka_enable_project_warnings(henka_headless_runtime_tests)
+
+add_test(NAME henka_headless_runtime_tests COMMAND henka_headless_runtime_tests)
+
+if(HENKA_BUILD_CLIENT)
 add_executable(henka_tests
     ../examples/sandbox3d/editor_controls.c
     ../examples/sandbox3d/editor_ui_state.c
@@ -49,3 +63,4 @@ endif()
 henka_enable_project_warnings(henka_tests)
 
 add_test(NAME henka_tests COMMAND henka_tests)
+endif()

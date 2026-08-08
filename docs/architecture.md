@@ -2,6 +2,16 @@
 
 Henka Engine is still compact, but it now has enough moving parts that the module boundaries matter. The architecture supports a reusable runtime, a docked and detached development workspace, first 2.5D camera foundations, external game repositories, and a future authoring layer without leaking SDL or OpenGL details into application code.
 
+### Shared runtime and graphical client
+
+The renderer-independent `henka_runtime` static library owns the current
+math, logging, memory, persistence, physics, result, time, camera, and scene
+foundations. It has no SDL, OpenGL, or KTX link dependencies. The graphical
+`henka` compatibility target links that runtime and adds the existing SDL,
+renderer, asset, UI, and editor-facing implementation. A dedicated server
+consumer is therefore able to link only `henka_runtime`; this boundary is the
+foundation for the server and terrain work that follows.
+
 ## Modules
 
 ### Core
