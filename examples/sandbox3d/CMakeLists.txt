@@ -1,5 +1,6 @@
 add_executable(henka_sandbox3d
     editor_controls.c
+    editor_ui_state.c
     interaction_tools.c
     physics_tools.c
     workspace_tools.c

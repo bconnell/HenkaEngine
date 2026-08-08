@@ -21,6 +21,7 @@ int main(void)
     henka_test_sandbox3d_interaction();
     henka_test_sandbox3d_physics();
     henka_test_sandbox3d_workspace();
+    henka_test_sandbox3d_editor_ui();
     henka_test_scene();
     henka_test_shader();
     henka_test_ui();
