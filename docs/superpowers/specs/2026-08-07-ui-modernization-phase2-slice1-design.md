@@ -1,69 +1,85 @@
-# Henka Engine UI Modernization Phase 2 - Slice 1 Design
+# Henka Engine UI Modernization Phase 2 - Slice 1 Revised Design
 
 Date: 2026-08-07
-Status: Approved design, implementation not started
-Authoritative starting commit: `993d7667f36b47438322fd27a219e3551ea0092d`
+Status: Revised design, awaiting written-spec approval
+Authoritative implementation parent: `39650cc3449387a9313ecf50c28f678a70c30623`
 
 ## 1. Objective
 
-Replace the most button-dense part of the current editor UI with reusable progressive-disclosure infrastructure without reopening Phase 1 docking behavior.
+Modernize the first high-value editor surfaces with reusable progressive-disclosure and property-group infrastructure.
 
-Slice 1 introduces a core Henka UI disclosure/tree/property-group primitive and converts only the Controls panel Main page. The Camera/Status page, QA page, Scene Objects panel, Object Details panel, detached-window behavior, workspace docking/topology, renderer behavior, and GI behavior remain outside this implementation slice except where regression validation proves they are unchanged.
+Slice 1 covers two consumers of the new core UI primitive:
 
-## 2. Why Controls/Main Is the First Conversion
+1. Controls/Main, which currently presents too many permanently visible buttons.
+2. Object Details, which currently hides useful material information in compact layouts and exposes editable material authoring only through a special imported-marker path.
 
-The current Controls/Main page combines workspace layout selection, named layouts, custom layout save/restore, layout history, grid state, viewport commands, viewport tool selection, snapping, and developer/debug toggles in one vertically dense flat surface.
+The slice also corrects the visible Scene View separator so it presents as one thin line while preserving the existing drag target and docking behavior.
 
-That makes it a better first proving ground than Scene Objects because it exercises the interaction types future editor panels need: collapsible categories, property/state rows, mutually exclusive selectors, command buttons, persistent expansion state, focus and keyboard navigation, clipping/scrolling inside a constrained panel, and separation of normal editor controls from QA/developer controls.
+## 2. Current Product Problems
 
-The QA page is already segregated and remains unchanged.
+### 2.1 Controls/Main
+
+Controls/Main uses a dense fixed button matrix. At the packaged default layout, several labels lose important text because the available width is too small. The panel exposes workspace, viewer, viewport, tool, and debug state at the same visual level.
+
+The updated layout must reduce first-glance density and preserve full command identity at the validated default panel width.
+
+### 2.2 Object Details and Materials
+
+Object Details currently forces a compact layout. That compact path suppresses the normal Material value row. A separate material-authoring block is placed at a fixed vertical offset near the bottom of the panel.
+
+The material-authoring block also uses a special capability gate tied to the imported glTF Marker. Other selected objects can have real scene materials while the inspector still tells the user to select the marker.
+
+Selection and material inspection must follow the selected scene entity.
+
+### 2.3 Scene View Separator
+
+The current vertical separator can read as a wide or doubled gutter because visible borders and the splitter presentation occupy the same area.
+
+The drag target is useful and must remain easy to hit. The visible chrome must be reduced to one thin separator line.
 
 ## 3. Scope
 
 ### 3.1 In Scope
 
-1. Add reusable disclosure/tree/property-group support to the core `henka_ui` layer.
-2. Extend UI frame input so the UI can react to navigation keys deliberately instead of consulting sandbox-specific input ad hoc.
-3. Add persistent keyboard focus for disclosure rows.
-4. Add visible-row keyboard navigation:
-   - Up/Down: move focus among visible disclosure rows.
-   - Left: collapse the focused expanded group.
-   - Right: expand the focused collapsed group.
-   - Enter: toggle the focused disclosure group.
-5. Mouse behavior:
-   - clicking a disclosure header focuses it;
-   - clicking the header toggles expanded/collapsed state;
-   - child rows are interactive only while their parent group is expanded.
-6. Add indentation and a bounded content region suitable for nested rows.
-7. Convert Controls/Main into four groups:
+1. Add reusable disclosure, tree-row, and property-group support to core `henka_ui`.
+2. Add deterministic keyboard focus and disclosure navigation.
+3. Extend the UI frame descriptor with Up, Down, Left, Right, and Enter pressed state.
+4. Add bounded flowing content support for disclosure/property consumers.
+5. Convert Controls/Main into four persistent disclosure groups:
    - Workspace
    - Viewer
    - Viewport
    - Viewport Tool
-8. Persist group expansion state using sandbox settings.
-9. Extend unit and packaged desktop-harness coverage for disclosure behavior and persistence.
-10. Update user-facing help/documentation only where the collapsible workflow materially changes the user experience.
+6. Convert Object Details to flowing disclosure/property groups.
+7. Make the selected entity's material visible through Object Details whenever the selected entity has a scene material.
+8. Preserve editable material-instance controls when the selected material path supports safe editing.
+9. Present unsupported or read-only material paths clearly without hiding their material information.
+10. Remove fixed-position material-authoring layout from Object Details.
+11. Correct the Scene View separator's visible presentation without changing its docking or drag behavior.
+12. Extend unit, sandbox, and packaged desktop validation for these behaviors.
+13. Update user-facing documentation when the interaction workflow changes.
 
 ### 3.2 Explicitly Out of Scope
 
-- Docking, redocking, detached-window topology, splitter behavior, workspace presets, or Phase 1 layout semantics.
+- Docking topology, redocking rules, detached-window ownership, workspace preset semantics, or splitter geometry.
 - Scene Objects hierarchy conversion.
-- Object Details/Inspector conversion.
-- Asset browser/tree work.
+- New runtime support for multiple materials per mesh or submesh.
+- A new material-file format or second material authority.
+- General asset-browser conversion.
 - Renderer settings conversion.
 - Search/filter UI.
-- Drag-and-drop tree reparenting.
-- Multi-select tree behavior.
-- Full icon system redesign.
-- New renderer or GI work.
-- General visual redesign unrelated to disclosure hierarchy.
-- Replacing all buttons globally.
+- Drag-and-drop hierarchy editing.
+- Multi-select hierarchy behavior.
+- Full icon-system redesign.
+- New renderer, lighting, or GI behavior.
+- Global replacement of every existing button.
+- Broad material-authoring support that exceeds existing safe material-instance contracts.
 
 ## 4. Core UI Architecture
 
-The primitive belongs in the core Henka UI layer. Sandbox code consumes the core primitive. It must be reusable by future Scene Objects, Assets, Inspector, renderer settings, diagnostics, rig hierarchies, project files, modeling tools, and agent/LLM workspace surfaces.
+The disclosure/property primitive belongs in the core Henka UI layer. Sandbox panels consume that primitive through stable public or internal UI contracts that match existing Henka naming conventions.
 
-Conceptual API responsibilities:
+Conceptual responsibilities:
 
 ```text
 tree_begin()
@@ -74,32 +90,36 @@ property_row()
 tree_end()
 ```
 
-The exact C public API names may follow existing Henka naming conventions. The names shown above describe responsibilities, not required identifiers.
+The implementation may use different C function names. The behavior and ownership rules in this design are binding.
 
-### 4.1 State Ownership
+### 4.1 Transient UI State
 
-The UI context owns transient interaction state:
+The UI context owns:
 
-- focused row ID;
-- active mouse row ID;
-- visible disclosure row ordering for the current frame;
-- current indentation depth;
-- active bounded content/clip region;
-- per-frame keyboard-navigation intent.
+- focused disclosure-row ID;
+- active mouse-row ID;
+- visible disclosure-row order for the current frame;
+- indentation depth;
+- bounded content/clip state;
+- per-frame keyboard navigation intent;
+- flowing content cursor state required by the consumer currently being drawn.
 
-The application owns durable semantic state:
+### 4.2 Application-Owned State
 
-- whether each top-level Controls/Main group is expanded;
-- persisted user preference values;
-- application actions invoked by child controls.
+The sandbox owns:
 
-Expansion state is not hidden inside the UI context because the sandbox must persist it across process restarts.
+- Controls/Main expansion values;
+- Object Details expansion values;
+- user settings;
+- selected scene entity;
+- material edit capability for the selected entity;
+- application actions triggered by child controls.
 
-### 4.2 Stable IDs
+Expansion state remains explicit application data so it can persist across process restarts.
 
-Every disclosure header and interactive child requires a stable ID.
+### 4.3 Stable IDs
 
-IDs must remain stable across frames and must not depend on array addresses, transient stack storage, visible row index, or layout position.
+Disclosure headers and interactive child rows require stable IDs. IDs cannot depend on visible row index, transient addresses, stack buffers, or changing layout positions.
 
 Controls/Main group IDs:
 
@@ -110,6 +130,28 @@ controls.main.viewport
 controls.main.viewport_tool
 ```
 
+Object Details group IDs:
+
+```text
+object_details.overview
+object_details.transform
+object_details.materials
+object_details.physics
+object_details.interaction
+object_details.actions
+```
+
+## 5. Controls/Main Information Architecture
+
+Default expansion state:
+
+| Group | Default |
+|---|---|
+| Workspace | Collapsed |
+| Viewer | Expanded |
+| Viewport | Expanded |
+| Viewport Tool | Collapsed |
+
 Persisted setting keys:
 
 ```text
@@ -119,262 +161,432 @@ ui.controls.main.viewport.expanded
 ui.controls.main.viewport_tool.expanded
 ```
 
-## 5. Default Expansion State
+### 5.1 Workspace
 
-On first run, or when no saved preference exists:
+Contains:
+
+- View / Inspect / Full Tools workspace selection;
+- named workspace presets;
+- Save Custom / Restore Custom;
+- custom layout slot save/restore;
+- Undo Layout / Redo Layout.
+
+Workspace is collapsed by default.
+
+Commands use full-width or width-safe rows. The UI must not shorten a command label until its meaning becomes unclear.
+
+### 5.2 Viewer
+
+Contains Grid visibility.
+
+Grid remains a state control. Viewer is expanded by default.
+
+### 5.3 Viewport
+
+Contains:
+
+- Frame Selected;
+- Reset View;
+- Zoom In;
+- Zoom Out.
+
+These remain command controls. Viewport is expanded by default.
+
+### 5.4 Viewport Tool
+
+Contains:
+
+- Select / Orbit / Pan;
+- Move / Rotate / Scale;
+- Snap;
+- Handle hit-box visibility;
+- Reflection Probe Volume visibility.
+
+Exclusive tool choices use selector-style controls. Boolean state uses switches or toggles. QA-only controls stay on the QA page.
+
+Viewport Tool is collapsed by default.
+
+## 6. Object Details Information Architecture
+
+Object Details becomes the second consumer of the same disclosure/property infrastructure.
+
+Default expansion state:
 
 | Group | Default |
 |---|---|
-| Workspace | Collapsed |
-| Viewer | Expanded |
-| Viewport | Expanded |
-| Viewport Tool | Collapsed |
+| Overview | Expanded |
+| Transform | Expanded |
+| Materials | Expanded |
+| Physics | Collapsed |
+| Interaction | Collapsed |
+| Actions | Collapsed |
 
-A saved valid preference overrides the default on later launches.
+Persisted setting keys:
 
-## 6. Controls/Main Information Architecture
+```text
+ui.object_details.overview.expanded
+ui.object_details.transform.expanded
+ui.object_details.materials.expanded
+ui.object_details.physics.expanded
+ui.object_details.interaction.expanded
+ui.object_details.actions.expanded
+```
 
-### 6.1 Workspace
+The expansion state is global inspector preference state. It does not need a separate copy for every entity.
 
-Contains the existing View / Inspect / Full Tools layout selector, named workspace presets, Save Custom / Restore Custom, custom layout slot save/restore commands, and Undo Layout / Redo Layout.
+### 6.1 Selection Contract
 
-These remain functionally identical. The category is collapsed by default because workspace topology is not an every-frame adjustment.
+Viewport selection and Scene Objects selection feed the same selected-entity state.
 
-### 6.2 Viewer
+When the selected entity changes, Object Details reads the new entity on the next frame. Stale material, transform, physics, or interaction data from the previous entity must not remain visible.
 
-Contains Grid visibility. This is expanded by default.
+An invalid or cleared selection shows the existing no-selection guidance and no interactive material editor.
 
-Grid remains a state control, not a command button.
+### 6.2 Overview
 
-### 6.3 Viewport
+Shows the selected object's display name and high-level state such as visibility and the short explanation already exposed by the sandbox.
 
-Contains Frame Selected, Reset View, Zoom In, and Zoom Out. These remain command controls.
+### 6.3 Transform
 
-This group is expanded by default.
+Shows Position, Rotation, and Scale.
 
-### 6.4 Viewport Tool
+Transform lock state remains visible. Existing safe transform actions remain available under Actions.
 
-Contains Select / Orbit / Pan, Move / Rotate / Scale, Snap state, Handle hit-box visibility, and Reflection Probe Volume visibility.
+### 6.4 Materials
 
-Tool-mode choices remain mutually exclusive selector-style controls. State flags remain toggles. QA-only controls stay on the QA page.
+Materials is always present for a valid selection.
 
-This group is collapsed by default.
+The current scene model exposes one effective material per selected entity. Slice 1 presents that material as `Material 0`. The UI shape may support future material slots, but this slice does not add a new runtime multi-material model.
 
-## 7. Interaction Model
+For a selected entity with a material, the Materials group shows:
 
-### 7.1 Mouse
+- material identity or descriptive name when available;
+- effective base color;
+- metallic;
+- roughness;
+- normal-map state or dependency when available;
+- emissive state;
+- alpha mode;
+- double-sided state;
+- other currently supported material properties that can be represented truthfully;
+- material dependency/revision information when the existing asset path exposes it.
 
-A disclosure row has one primary hit target covering its header row. Releasing the left mouse button on the same active disclosure row toggles it, following the existing Henka UI press/release activation model.
+If the selected entity has no material, the group shows `None`.
 
-Clicking a disclosure row also assigns keyboard focus.
+### 6.5 Material Edit Capability
 
-Child controls keep their existing mouse behavior.
+Material visibility is based on the selected scene entity. It is not gated by a specific hard-coded marker entity.
 
-Collapsed children are not drawn, registered as interactive, permitted to request mouse ownership, or included in keyboard row ordering.
+A small sandbox-side material adapter determines whether the selected material is:
 
-### 7.2 Keyboard
+1. inspectable and editable through an existing safe material-instance contract;
+2. inspectable but read-only;
+3. unavailable.
 
-Keyboard navigation applies only while the UI is visible and a disclosure row owns UI focus.
+Editable paths expose the existing transactional controls in the Materials group.
 
-Up and Down move among currently visible disclosure headers in deterministic draw order.
+Read-only paths still show the effective material values and a clear `Read-only` state. Built-in procedural materials may remain read-only in this slice if no safe instance-edit contract exists for them.
 
-Left collapses the focused row when expanded. If already collapsed, it is a no-op in Slice 1.
+The imported glTF Marker keeps its existing material-instance functionality, but its editor appears because the selected material reports edit capability. The panel does not use marker identity as its visibility rule.
 
-Right expands the focused row when collapsed. If already expanded, it is a no-op in Slice 1.
+Material edits keep existing transactional behavior. A rejected edit leaves the previous effective material intact and reports the failure through the established status path.
 
-Enter toggles the focused row.
+### 6.6 Physics
 
-Keyboard events used by the UI must be consumed or otherwise prevented from simultaneously triggering sandbox editor actions when the UI has acted on them.
+Shows current physics body type and velocity when the selected entity has a linked body. Entities without a physics body show the existing truthful empty state.
 
-Tab-order navigation between arbitrary controls is not introduced in this slice.
+### 6.7 Interaction
 
-### 7.3 Focus
+Shows the current interaction availability, prompt, and range state already exposed by the sandbox.
 
-The focused disclosure row receives a visible focus treatment distinct from hover and active-click state.
+### 6.8 Actions
 
-If the currently focused row is not drawn in the next frame, focus is cleared safely.
+Contains existing selected-object commands such as:
 
-A collapsed parent never leaves focus on one of its hidden children because Slice 1 assigns keyboard focus only to disclosure headers.
+- Hide / Show Object;
+- Focus Camera;
+- Lock / Unlock Transform;
+- Reset Transform;
+- Clear Selection.
 
-## 8. Bounded Content, Clipping, and Scrolling
+These are commands and remain buttons.
 
-The primitive must support a bounded panel-content region.
+## 7. Flowing Content, Clipping, and Scrolling
+
+Controls/Main and Object Details must stop relying on fixed absolute vertical offsets for expanding content.
+
+Each group advances a local content cursor by the height it actually consumes. Child controls are positioned from that cursor. Expansion and collapse update content height deterministically.
 
 Requirements:
 
-- child rows outside the visible content rectangle are not interactive;
-- drawing is clipped or skipped outside the bounded region according to existing Henka capabilities;
-- disclosure expansion changes content height deterministically;
-- existing panel scrolling/paging behavior must not regress;
-- the primitive must not change dock or panel geometry.
+- no fixed `panel_bounds.y + constant` position for the material editor;
+- material rows stay reachable at the validated packaged default layout;
+- rows outside the visible content rectangle are not interactive;
+- clipped content cannot claim mouse input;
+- content can scroll when the expanded groups exceed panel height;
+- adjacent dock geometry does not change because a group expands;
+- important command and property labels remain readable at the validated default panel width.
 
-Slice 1 should implement the smallest reusable bounded-region mechanism required by Controls/Main and must not introduce a competing layout system.
+The implementation should reuse existing panel clipping and scrolling behavior where it is already correct. New support must stay inside the UI layer and cannot create a second panel-layout system.
 
-## 9. Input Plumbing
+## 8. Mouse and Keyboard Interaction
 
-The current UI frame descriptor carries mouse state but not navigation-key state.
+### 8.1 Mouse
 
-Slice 1 extends the frame descriptor with only the key information required for disclosure navigation:
+A disclosure header has one primary hit target covering its row.
 
-- Up pressed
-- Down pressed
-- Left pressed
-- Right pressed
-- Enter pressed
+A completed left-click on that row:
 
-The sandbox populates those fields from Henka input before `henka_ui_begin_frame`.
+1. focuses the row;
+2. toggles its expanded state.
 
-This keeps core UI deterministic and testable without making its implementation depend directly on the engine or sandbox.
+Collapsed children are not drawn as interactive rows and cannot request mouse ownership.
 
-## 10. Persistence Flow
+Existing buttons, switches, selectors, and material controls keep their established press/release behavior.
+
+### 8.2 Keyboard
+
+Keyboard disclosure navigation is active only when the UI is visible and a disclosure row owns UI focus.
+
+- Up: move to the previous visible disclosure header.
+- Down: move to the next visible disclosure header.
+- Left: collapse the focused expanded group.
+- Right: expand the focused collapsed group.
+- Enter: toggle the focused group.
+
+Keys consumed by the UI cannot also trigger sandbox editor actions in the same frame.
+
+Tab navigation across arbitrary controls remains outside Slice 1.
+
+### 8.3 Focus
+
+Focused disclosure rows receive a visible focus treatment.
+
+If a focused row is not drawn in the next frame, focus clears safely.
+
+Focus IDs cannot point to transient caller memory.
+
+## 9. UI Frame Input
+
+The UI frame descriptor gains only the pressed-key state required by this slice:
+
+- Up;
+- Down;
+- Left;
+- Right;
+- Enter.
+
+The sandbox fills those fields before `henka_ui_begin_frame`.
+
+Detached-panel frame descriptors initialize the new fields safely even when no navigation key is active.
+
+Core UI code does not query sandbox input directly.
+
+## 10. Persistence
+
+Controls/Main and Object Details expansion state use the existing sandbox settings path.
 
 Startup:
 
-1. Initialize group defaults.
-2. Load settings.
-3. For each known expansion key, apply a saved valid boolean value when present.
-4. Render with the resulting state.
+1. initialize documented defaults;
+2. load settings;
+3. apply each valid saved boolean;
+4. render the resulting state.
 
 Interaction:
 
-1. User changes disclosure state.
-2. Application state changes immediately.
-3. The corresponding setting value is updated through the existing settings mechanism.
-4. Existing settings persistence writes the preference using the established sandbox workflow.
+1. update application expansion state immediately;
+2. update the associated settings value;
+3. let the established settings workflow persist it.
 
-Restart:
+Missing or malformed values fall back to documented defaults.
 
-1. Settings reload.
-2. The same disclosure state is restored before the first normal Controls/Main interaction.
+Selection, current material values, and temporary material-edit state are not stored as disclosure preferences.
 
-Missing or malformed settings fall back to the documented defaults without making the UI unusable.
+## 11. Scene View Separator Presentation
 
-## 11. Error Handling and Invariants
+This slice treats the wide/doubled separator as a bounded visual defect.
 
-Core primitive behavior must fail closed for invalid arguments.
+The existing splitter interaction zone remains intact. Docking calculations, drag thresholds, redocking, panel ordering, and detached-window behavior do not change.
+
+Presentation requirements:
+
+- draw one thin visible separator centered in the existing splitter interaction zone;
+- avoid a second parallel border from adjacent panel chrome inside the separator zone;
+- keep the larger invisible drag target so resize remains easy;
+- preserve current cursor/drag behavior;
+- preserve the current panel bounds on both sides.
+
+The packaged desktop check must prove both appearance and interaction. A separator that looks correct but becomes hard to drag is not acceptable.
+
+## 12. Error Handling and Invariants
+
+Core UI behavior must fail closed.
 
 Required invariants:
 
-- null UI context returns an invalid-argument result or false according to existing API convention;
-- zero/negative row bounds never create a clickable area;
-- null/empty IDs are rejected;
+- null UI context returns the established invalid result;
+- null or empty stable IDs are rejected;
+- zero or negative row bounds do not create hit targets;
 - nesting depth cannot underflow;
-- tree/property end calls cannot silently corrupt UI state;
-- hidden/clipped rows cannot capture input;
-- duplicate visible IDs in the same frame must not produce ambiguous activation;
-- focus must never reference transient caller memory;
-- expansion state remains application-owned and survives UI context recreation only through explicit persistence.
+- unmatched tree/property end calls cannot corrupt later UI state;
+- hidden or clipped rows cannot activate;
+- duplicate visible IDs cannot create ambiguous activation;
+- allocation failure cannot leave partial interaction state;
+- expansion values remain application-owned;
+- selected-entity material reads fail safely;
+- failed material edits preserve the previous effective material;
+- clearing or invalidating selection clears inspector material-edit capability immediately.
 
-No allocation failure may leave the UI frame in partially mutated interaction state.
+## 13. Test-Driven Implementation Strategy
 
-## 12. Testing Strategy
+Production behavior changes start with focused failing tests.
 
-### 12.1 Core Unit Tests
+### 13.1 Core UI Unit Tests
 
-Extend existing UI tests to cover:
+Add tests for:
 
-- disclosure row renders while UI is visible;
-- mouse press/release toggles a disclosure row;
-- click assigns focus;
-- expanded state draws/registers children;
-- collapsed state suppresses child interaction;
-- indentation changes child-row position deterministically;
-- Up/Down traverses visible disclosure rows;
-- Left collapses;
-- Right expands;
-- Enter toggles;
-- hidden/clipped disclosure rows do not activate;
-- focus clears safely when a focused row disappears;
-- invalid arguments fail safely;
-- existing button, toggle, selectable, tab, overlay, and text behavior remains unchanged.
+- disclosure-row rendering;
+- mouse toggle and focus;
+- child visibility while expanded;
+- child suppression while collapsed;
+- deterministic indentation;
+- flowing cursor advancement;
+- Up/Down traversal;
+- Left collapse;
+- Right expand;
+- Enter toggle;
+- clipping and hidden-row input suppression;
+- focus clearing when a row disappears;
+- invalid arguments;
+- duplicate-ID handling;
+- existing button, toggle, selectable, tab, overlay, and text regressions.
 
-### 12.2 Sandbox/Workspace Tests
+### 13.2 Sandbox Tests
 
 Add focused tests for:
 
-- default expansion state;
-- settings load/save round-trip;
-- malformed/missing settings fallback;
-- Controls/Main group state remains independent of docking/topology state.
+- Controls/Main defaults;
+- Object Details defaults;
+- settings round-trip;
+- malformed setting fallback;
+- expansion state independent of docking state;
+- selected entity drives material inspection;
+- entity change cannot retain the previous material view;
+- entity without a material reports `None`;
+- read-only material remains inspectable;
+- editable material-instance path retains transactional failure behavior.
 
-### 12.3 Packaged Desktop Harness
+### 13.3 Separator Tests
 
-Extend the existing packaged UI harness to prove:
+Add the narrowest useful test around separator presentation data or geometry if the current UI layer exposes it deterministically.
 
-1. Controls/Main starts with expected visible group headers.
-2. A collapsed default group can be expanded by mouse.
-3. A child control becomes visible/interactable only after expansion.
-4. The group can be collapsed again.
-5. Expansion preference is persisted.
-6. After a clean app restart, the saved expansion state is restored.
-7. Existing Controls header context menu still works.
-8. Existing QA tab remains reachable.
-9. Existing grid workflow remains valid.
-10. Stationary rendered viewport stability remains within the established gate.
-11. Native/detached panel validation still passes.
+Do not duplicate the desktop harness with a second visual-testing framework.
 
-The existing stability threshold must not be relaxed for this UI work.
+## 14. Packaged Desktop Validation
 
-## 13. Validation and Publication
+Extend the existing packaged desktop harness.
 
-Before commit:
+Required interaction coverage:
 
-- verify exact repository identity and expected parent SHA;
-- verify clean tree;
-- inspect source before editing;
-- run relevant unit tests;
+1. Controls/Main shows all four group headers.
+2. Workspace and Viewport Tool start collapsed on a clean preference state.
+3. Viewer and Viewport start expanded.
+4. A group can expand and collapse by mouse.
+5. Saved group state survives a clean restart.
+6. Controls/Main command labels remain understandable at the validated default panel width.
+7. Selecting Ground exposes its Materials group and effective material state.
+8. Selecting Textured Cube exposes its Materials group and effective material state.
+9. Selecting Material Ball exposes its Materials group and effective material state.
+10. Selecting glTF Marker exposes its Materials group and editable material-instance controls.
+11. The same material-inspection result is reachable from viewport selection and Scene Objects selection.
+12. Clearing selection removes selected-object material controls.
+13. A read-only material is clearly identified and remains inspectable.
+14. An editable marker material change follows the existing transactional behavior.
+15. Object Details remains usable when its groups exceed the visible panel height.
+16. The Scene View separator presents as one thin visible line.
+17. The separator remains draggable through its existing larger hit target.
+18. Existing Controls context menu still works.
+19. Existing QA tab remains reachable.
+20. Existing Grid workflow remains valid.
+21. Native/detached panel validation still passes.
+22. Stationary Rendered viewport stability remains inside the established threshold.
+
+The existing viewport stability threshold cannot be relaxed for this UI work.
+
+## 15. Validation and Publication
+
+Before implementation commit:
+
+- verify exact repository identity and expected parent;
+- verify clean or exact known-safe state;
+- inspect current source before editing;
+- follow red-green-refactor for behavior changes;
+- run focused unit tests while developing;
 - run Release build;
-- run working-tree package/startup or contract validation as appropriate;
-- inspect staged scope and `git diff --check`.
+- run working-tree package/startup or contract checks that apply;
+- inspect staged scope;
+- run `git diff --check`.
 
-After commit at exact HEAD:
+After implementation commit at exact HEAD:
 
 - clean-tree gate;
-- unit tests;
+- complete unit tests;
 - Release build;
-- Release package with exact provenance;
+- exact-HEAD Release package;
 - package contract;
 - full packaged interactive desktop harness;
 - external C-template validation;
-- public-hygiene/integrity checks already required by repository workflow when applicable.
+- required public-hygiene and integrity checks.
 
-Push only after every required exact-HEAD gate passes and `origin/main` has not changed.
+Push only when every required exact-HEAD gate passes and `origin/main` has not moved.
 
-## 14. Expected Implementation Surface
+## 16. Expected Implementation Surface
 
-Discovery indicates a bounded implementation surface similar to:
+Discovery indicates a bounded surface similar to:
 
-- public/core UI header for new primitive/frame-input declarations;
-- core UI context/internal implementation;
-- core UI implementation source;
+- public/core UI header for disclosure/property and frame-input declarations;
+- internal UI context state;
+- core UI implementation;
 - UI unit tests;
-- `examples/sandbox3d/main.c` for Controls/Main conversion, state, settings, and frame input;
-- packaged UI harness;
-- user-facing sandbox/help documentation if the interaction workflow materially changes.
+- `examples/sandbox3d/main.c` for Controls/Main, Object Details, material capability adaptation, settings, and frame input;
+- the existing workspace/splitter presentation code required for the single-line separator;
+- packaged desktop harness;
+- user-facing help or UI documentation when the workflow changes.
 
-Exact paths and names are determined from the current repository at implementation time. No unrelated refactor is authorized.
+Exact files are confirmed from the current repository during implementation planning.
 
-## 15. Success Criteria
+No unrelated refactor is authorized.
+
+## 17. Success Criteria
 
 Slice 1 is complete when:
 
-1. Controls/Main is materially less button-dense at first glance.
-2. Four disclosure groups exist with the approved defaults.
-3. Group state persists across restart.
-4. Mouse and required keyboard semantics work.
-5. The primitive is reusable and is not sandbox-specific.
-6. No docking/Phase-1 behavior is reopened or regressed.
-7. QA remains segregated.
-8. Existing renderer/GI behavior and stationary stability remain valid.
-9. Unit, package, desktop-interaction, external-template, and repository safety gates pass.
-10. The exact validated commit is published to `main`.
+1. Controls/Main is materially less dense at first glance.
+2. Its four groups use the approved defaults and persist across restart.
+3. Important Controls labels remain understandable at the validated default width.
+4. Object Details uses flowing disclosure/property groups.
+5. Selecting a material-bearing object exposes its material in Object Details.
+6. Ground, Textured Cube, Material Ball, and glTF Marker all expose truthful material state.
+7. Material visibility follows selected-entity capability and is not tied to marker identity.
+8. Existing safe editable material-instance behavior remains transactional.
+9. Read-only materials remain visible and are clearly identified.
+10. Material content stays reachable in constrained panel height.
+11. Mouse and required keyboard disclosure semantics work.
+12. The Scene View separator presents as one thin line and remains easy to drag.
+13. Docking and Phase 1 workspace semantics are unchanged.
+14. QA remains segregated.
+15. Renderer/GI behavior and stationary stability remain valid.
+16. Unit, package, desktop-interaction, external-template, and repository safety gates pass.
+17. The exact validated implementation commit is published to `main`.
 
-## 16. Deferred Phase-2 Work
+## 18. Deferred Phase 2 Work
 
 After this slice is proven:
 
-1. Convert Scene Objects to a true hierarchy using the same primitive.
-2. Convert Object Details into collapsible property groups.
-3. Add search/filter where it provides real value.
-4. Migrate renderer/lighting/GI/reflection/shadow/AO/post settings.
-5. Extend the primitive for deeper hierarchy, richer selection, drag/reparenting, and other editor workflows only when required by a concrete consumer.
+1. Convert Scene Objects to a true hierarchy using the same core primitive.
+2. Extend Object Details with richer editor property controls where existing engine contracts support them safely.
+3. Add search/filter where it provides clear value.
+4. Migrate renderer, lighting, GI, reflection, shadow, AO, and post settings.
+5. Add deeper hierarchy selection and drag/reparent behavior when a concrete consumer requires it.
+6. Add runtime multi-material or submesh material-slot support only through a separate engine design when the scene and mesh contracts are ready for it.
