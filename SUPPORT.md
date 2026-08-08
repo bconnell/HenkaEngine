@@ -39,7 +39,7 @@ Use the Sponsor button on the Henka Engine GitHub repository.
 
 Henka Engine is still early. Current work is focused on repairing and hardening existing runtime, workspace, asset, physics, packaging, and external-project behavior.
 
-After the existing integrity work, the primary feature track is production-quality 2.5D. Integrated modeling, UV, rigging, animation-authoring, and broader content-creation tools follow without removing compatibility with external asset pipelines. Docked and detached workspace panels plus the first 2.5D camera presets already exist; they are foundations rather than hypothetical future features.
+After the existing integrity work, the primary feature track is production-quality 2.5D. Integrated modeling, UV, rigging, animation-authoring, and broader content-creation tools follow without removing compatibility with external asset pipelines. Docked and detached workspace panels plus the first 2.5D camera presets already exist; they are implemented foundations, not hypothetical future features.
 
 ## Other ways to help
 

@@ -157,7 +157,7 @@ The selected object also shows a transform gizmo inside the dedicated scene view
 - The gizmo helper pieces remain internal to the viewport tool path and do not appear as normal sandbox objects in selection, object details, persisted selection state, or normal scene picking.
 - Dragging cancels safely if the selected object becomes invalid, hidden, or the active viewport changes during manipulation.
 - The current sandbox path shares its projected handle model, overlay conversion, and drag math with automated tests, which helps catch real selection and transform regressions earlier.
-- If the direct transform QA buttons work but gizmo dragging does not, the current failure is likely in viewport input routing or handle hit testing rather than the selected-object mutation path.
+- If the direct transform QA buttons work but gizmo dragging does not, the current failure is likely in viewport input routing or handle hit testing. The selected-object mutation path is not the primary suspect.
 
 The viewport now also supports direct navigation while mouse capture is released:
 
@@ -185,12 +185,12 @@ The current `Utility` panel can show:
 - Physics QA
 
 That keeps normal viewer use in the window while the console remains available for fallback logs and automation.
-The packaged sandbox still opens a console window at this stage, but normal viewer interaction is meant to stay inside the viewport and panels rather than depending on console output.
+The packaged sandbox still opens a console window at this stage, but normal viewer interaction is meant to stay inside the viewport and panels. Console output is not required for normal interaction.
 
 The sandbox also uses the current engine diagnostics snapshot in the Utility panel, and object picking can update selection when mouse capture is released. Picking and gizmo dragging use viewport-relative coordinates, so docked panel clicks do not trigger scene picks or transform drags.
 The diagnostics view now surfaces the current viewport tool, gizmo mode, mouse capture state, UI mouse ownership, cursor position, selected object, gizmo validity, overlay primitive count, hovered handle, active drag state, last rejected interaction reason, last Action API command, last Action API result, and compact native test-window state.
 The Transform QA view exposes direct move, rotate, scale, and reset controls that use the same local Action API path as normal object manipulation, which makes it easier to separate Action API failures from gizmo or input failures during packaged QA.
-The Physics QA view exposes real enable, pause/resume, fixed-step, demo reset, gravity, collider/contact debug, impulse, velocity clear, body-type, Make Dynamic + Drop, and camera-raycast controls. It explains that Static bodies do not move from physics, Dynamic bodies fall and respond to gravity, forces, impulses, and collisions, and Kinematic bodies do not fall from gravity because they move only through explicit tool or code movement. Collider overlays are generated from the same collider descriptions used for collision detection, clipped to the Scene View, and physics-linked entities are ordinary selectable scene objects rather than debug helpers.
+The Physics QA view exposes real enable, pause/resume, fixed-step, demo reset, gravity, collider/contact debug, impulse, velocity clear, body-type, Make Dynamic + Drop, and camera-raycast controls. It explains that Static bodies do not move from physics, Dynamic bodies fall and respond to gravity, forces, impulses, and collisions, and Kinematic bodies do not fall from gravity because they move only through explicit tool or code movement. Collider overlays are generated from the same collider descriptions used for collision detection, clipped to the Scene View, and physics-linked entities are ordinary selectable scene objects, not debug helpers.
 When Diagnostics, Transform QA, or Physics QA is open in the heavier layout, the utility view uses the right dock directly so its controls do not draw through Object Details.
 
 Editable selection is visible directly in the Scene View through a non-selectable highlighted bounds outline around the selected real scene object. The highlight is clipped to the Scene View and does not draw over workspace panels or the debug strip. Locked objects, including the default Ground, remain selectable and inspectable but do not show the yellow transform highlight or a gizmo. Clearing selection, clicking empty viewport space, hiding or locking the selected object, deleting it, or changing tools clears active transform-session ownership and updates Object Details and Diagnostics.
@@ -231,6 +231,6 @@ This layer is a foundation for better engine-side inspection and sample controls
 
 The workspace closure pass makes tab movement reversible: a tab can be pulled out of a merged section, floated, moved to another tab group, or redocked at either side. Escape restores the exact pre-drag layout. Native detached panels redock by overlapping the main editor and choose the left or right side from the window center. Right-clicking section header chrome opens the horizontal and vertical section menu for the actual topology section, including when the visible panel is a merged tab.
 
-The final chrome uses compact single-panel headers, grip marks instead of DRAG text, flat secondary controls, underline tabs, and switch-style toggles. The built-in bitmap font remains a lightweight engine fallback rather than the long-term typography system.
+The final chrome uses compact single-panel headers, grip marks instead of DRAG text, flat secondary controls, underline tabs, and switch-style toggles. The built-in bitmap font remains a lightweight engine fallback. It is not the long-term typography system.
 
 A stationary rendered camera no longer advances temporal projection jitter or blends a changing temporal history into settled presentation. Camera movement re-enables the temporal path transactionally; stopping returns to the deterministic current frame. The packaged harness captures two settled scene frames and rejects visible frame-to-frame vibration above its bounded tolerance.

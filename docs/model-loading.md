@@ -11,7 +11,7 @@ vertex colors, tangents, indexed or non-indexed accessors, and generated
 triangle normals when normals are absent. UV1 is preserved through imported
 model data and the renderer vertex stream; the built-in material shader selects
 UV0 or UV1 per mapped texture semantic. Material mapping is resolved through
-the shared scene material and asset-manager contracts rather than through a
+the shared scene material and asset-manager contracts. Henka does not use a
 separate Henka-only material schema. `henka_assets_load_gltf_mesh_with_material`
 returns a material instance using imported glTF scalar controls and resolves
 source-relative images through the descriptor-aware texture cache. Texture
@@ -93,7 +93,7 @@ The loader currently supports:
   BC1/3, BC5, BC7, ETC2, or ASTC 4x4 upload when the active context advertises
   that capability. Uncompressed RGBA8 levels and Basis payloads without a
   supported compressed target use a checked RGBA8 upload; native compressed
-  payloads without a matching capability are rejected rather than decoded as
+  payloads without a matching capability are rejected. They are not decoded as
   arbitrary bytes. The container transfer function is checked against the
   requested semantic color space, and the selected payload's exact mip bytes
   are included in renderer memory accounting. The same checked KTX2 boundary
@@ -114,7 +114,7 @@ The loader currently supports:
 
 Matrix-authored nodes are validated and decomposed into the runtime TRS
 contract before scene instantiation. Affine matrices with perspective terms,
-singular axes, or shear are rejected rather than approximated or silently
+singular axes, or shear are rejected. They are not approximated or silently
 replaced with identity transforms; the original local and computed world
 matrices remain available in the CPU scene data.
 
@@ -148,7 +148,7 @@ BIN chunks are rejected. External buffer URIs are resolved beneath
 the model's directory; rooted, traversal, and URI-like paths are rejected.
 The importer accepts only the material and punctual-light extensions it maps
 to the shared renderer model. Unsupported entries in `extensionsUsed` or
-`extensionsRequired` fail the load rather than being silently treated as
+`extensionsRequired` fail the load. They are not silently treated as
 equivalent content. Node mesh, camera, and punctual-light references must be
 nonnegative in-range indices. Camera fields must have finite, positive ranges
 with far planes beyond near planes. A node must use either a matrix or TRS

@@ -26,7 +26,7 @@ This is not full global illumination. The screen-space method cannot see geometr
 
 ## Direction
 
-The next realism work should build from reference scenes rather than adding unrelated effects. Important follow-up tracks are:
+The next realism work should build from reference scenes. Effects outside those scenes should wait until a concrete visual need is identified. Important follow-up tracks are:
 
 1. validate PBR energy response, texture color-space handling, normal-map behavior, roughness/metallic response, IBL calibration, and exposure against reference materials;
 2. validate the screen-space indirect diffuse result for leaks, halos, over-brightening, camera-motion instability, and performance;

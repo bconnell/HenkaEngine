@@ -75,4 +75,4 @@ The sandbox persists display, camera, input, and workspace state. Short status m
 - per-game save-slot UI
 - autosave or background save loops
 
-External games should define their own save policy, migration strategy, backup behavior, and data layout. The current Henka layer is a hardened local foundation rather than a complete save system for shipped games.
+External games should define their own save policy, migration strategy, backup behavior, and data layout. The current Henka layer is a hardened local foundation. It is not a complete save system for shipped games.

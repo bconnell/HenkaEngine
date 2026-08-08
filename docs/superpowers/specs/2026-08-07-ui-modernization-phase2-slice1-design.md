@@ -61,7 +61,7 @@ The QA page is already segregated and remains unchanged.
 
 ## 4. Core UI Architecture
 
-The primitive belongs in the core Henka UI layer rather than the sandbox. It must be reusable by future Scene Objects, Assets, Inspector, renderer settings, diagnostics, rig hierarchies, project files, modeling tools, and agent/LLM workspace surfaces.
+The primitive belongs in the core Henka UI layer. Sandbox code consumes the core primitive. It must be reusable by future Scene Objects, Assets, Inspector, renderer settings, diagnostics, rig hierarchies, project files, modeling tools, and agent/LLM workspace surfaces.
 
 Conceptual API responsibilities:
 
@@ -74,7 +74,7 @@ property_row()
 tree_end()
 ```
 
-The exact C public API names may follow existing Henka naming conventions rather than these conceptual names.
+The exact C public API names may follow existing Henka naming conventions. The names shown above describe responsibilities, not required identifiers.
 
 ### 4.1 State Ownership
 

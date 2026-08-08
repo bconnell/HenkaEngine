@@ -25,5 +25,5 @@ Henka Engine is in an early foundation phase. Contributions should favor clarity
 
 - Confirm generated files and local build output are not staged.
 - Make sure README and docs still describe the current state accurately.
-- Call out known limitations rather than glossing over them.
+- Call out known limitations clearly. Do not gloss over them.
 - Check runtime help and visible error messages for clarity and tone.

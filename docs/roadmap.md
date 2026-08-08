@@ -107,7 +107,7 @@ Next 2.5D work includes:
 
 ## Integrated modeling and content authoring
 
-Integrated modeling follows the production-quality 2.5D track. Preparation begins earlier through clean authoring boundaries rather than unfinished modeling screens.
+Integrated modeling follows the production-quality 2.5D track. Preparation begins earlier through clean authoring boundaries. Unfinished modeling screens are not part of this preparation.
 
 Planned foundations include:
 
