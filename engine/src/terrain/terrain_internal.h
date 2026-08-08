@@ -6,11 +6,14 @@
 #include <stdint.h>
 
 #include <henka/terrain.h>
+#include <henka/terrain_storage.h>
 
 typedef struct henka_terrain_region_record
 {
     bool active;
     henka_terrain_region_state state;
+    henka_terrain_sample* samples;
+    size_t sample_count;
 } henka_terrain_region_record;
 
 typedef struct henka_terrain_chunk_record
@@ -39,5 +42,10 @@ const henka_terrain_region_record* henka_terrain_find_region_record_const(
 henka_terrain_chunk_record* henka_terrain_find_chunk_record(
     henka_terrain_world* world,
     henka_terrain_chunk_id id);
+henka_result henka_terrain_world_apply_region_snapshot(
+    henka_terrain_world* world,
+    henka_terrain_region_storage_info info,
+    const henka_terrain_sample* samples,
+    size_t sample_count);
 
 #endif

@@ -1,0 +1,92 @@
+#include <stdint.h>
+
+#if defined(_WIN32)
+#include <windows.h>
+#endif
+
+#include <henka/memory.h>
+#include <henka/terrain_streaming.h>
+
+static int test_streaming(void)
+{
+    henka_terrain_world_desc world_desc = henka_terrain_world_desc_default();
+    henka_terrain_layout layout;
+    henka_terrain_world* world = NULL;
+    henka_terrain_storage* storage = NULL;
+    henka_terrain_streamer* streamer = NULL;
+    henka_terrain_stream_desc stream_desc = henka_terrain_stream_desc_default();
+    henka_terrain_sample* samples = NULL;
+    henka_terrain_stream_observer observer = {1U, {2, 3}, 0U, 0U, 0U};
+    henka_terrain_stream_stats stats;
+    henka_terrain_region_state region_state;
+    uint32_t index;
+    int result = 0;
+
+    world_desc.max_resident_regions = 2U;
+    if (henka_terrain_world_desc_get_layout(&world_desc, &layout) != HENKA_SUCCESS ||
+        henka_terrain_world_create(&world_desc, &world) != HENKA_SUCCESS ||
+        henka_terrain_storage_create(&world_desc, "build/test_tmp/terrain_streaming_v1", &storage) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    samples = henka_calloc(layout.samples_per_region, sizeof(*samples));
+    if (samples == NULL)
+    {
+        goto cleanup;
+    }
+    for (index = 0U; index < layout.samples_per_region; ++index)
+    {
+        samples[index].height_millimeters = 1234;
+        samples[index].material_weights[0] = 255U;
+    }
+    if (henka_terrain_storage_begin(storage, 1U) != HENKA_SUCCESS ||
+        henka_terrain_storage_write_region(storage, observer.center_region, 8U, 2U, samples, layout.samples_per_region) != HENKA_SUCCESS ||
+        henka_terrain_storage_commit(storage, 1U) != HENKA_SUCCESS ||
+        henka_terrain_streamer_create(world, storage, &stream_desc, &streamer) != HENKA_SUCCESS ||
+        henka_terrain_streamer_add_observer(streamer, &observer) != HENKA_SUCCESS ||
+        henka_terrain_streamer_request_region(streamer, observer.center_region) != HENKA_SUCCESS ||
+        henka_terrain_streamer_request_region(streamer, observer.center_region) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    henka_terrain_streamer_get_stats(streamer, &stats);
+    if (stats.queued_request_count != 1U || stats.coalesced_request_count == 0U)
+    {
+        goto cleanup;
+    }
+    for (index = 0U; index < 200U; ++index)
+    {
+        if (henka_terrain_streamer_pump(streamer, 1U) != HENKA_SUCCESS)
+        {
+            goto cleanup;
+        }
+        henka_terrain_streamer_get_stats(streamer, &stats);
+        if (stats.completed_request_count == 1U)
+        {
+            break;
+        }
+#if defined(_WIN32)
+        Sleep(1U);
+#endif
+    }
+    if (stats.completed_request_count != 1U || stats.active_request_count != 0U ||
+        henka_terrain_world_get_region_state(world, observer.center_region, &region_state) != HENKA_SUCCESS ||
+        region_state.revision != 8U || region_state.generation != 2U ||
+        !region_state.cpu_resident)
+    {
+        goto cleanup;
+    }
+    result = 1;
+
+cleanup:
+    henka_terrain_streamer_destroy(streamer);
+    henka_terrain_storage_destroy(storage);
+    henka_terrain_world_destroy(world);
+    henka_free(samples);
+    return result;
+}
+
+int main(void)
+{
+    return test_streaming() ? 0 : 1;
+}

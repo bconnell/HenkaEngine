@@ -339,9 +339,14 @@ henka_result henka_terrain_world_create(
 
 void henka_terrain_world_destroy(henka_terrain_world* world)
 {
+    uint32_t index;
     if (world == NULL)
     {
         return;
+    }
+    for (index = 0U; index < world->desc.max_resident_regions; ++index)
+    {
+        henka_free(world->regions[index].samples);
     }
     henka_free(world->chunks);
     henka_free(world->regions);
@@ -380,6 +385,16 @@ henka_result henka_terrain_world_reserve_region(
         {
             record = &world->regions[index];
             memset(record, 0, sizeof(*record));
+            record->samples = henka_calloc(world->layout.samples_per_region, sizeof(*record->samples));
+            if (record->samples == NULL)
+            {
+                return HENKA_ERROR_OUT_OF_MEMORY;
+            }
+            record->sample_count = world->layout.samples_per_region;
+            for (uint32_t sample_index = 0U; sample_index < record->sample_count; ++sample_index)
+            {
+                record->samples[sample_index].material_weights[0] = 255U;
+            }
             record->active = true;
             record->state.id = region_id;
             record->state.cpu_resident = true;
@@ -403,6 +418,7 @@ henka_result henka_terrain_world_release_region(
     {
         return HENKA_ERROR_LIMIT;
     }
+    henka_free(record->samples);
     memset(record, 0, sizeof(*record));
     if (world->resident_region_count > 0U)
     {
@@ -549,5 +565,39 @@ henka_result henka_terrain_world_get_stats(
         world->desc.max_resident_regions,
         world->desc.max_resident_chunks,
         world->desc.max_pending_io};
+    return HENKA_SUCCESS;
+}
+
+henka_result henka_terrain_world_apply_region_snapshot(
+    henka_terrain_world* world,
+    henka_terrain_region_storage_info info,
+    const henka_terrain_sample* samples,
+    size_t sample_count)
+{
+    henka_terrain_region_record* record;
+    if (world == NULL || samples == NULL || sample_count != world->layout.samples_per_region ||
+        !henka_terrain_region_id_is_valid(&world->desc, info.id))
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    record = henka_terrain_find_region_record(world, info.id);
+    if (record == NULL)
+    {
+        if (henka_terrain_world_reserve_region(world, info.id) != HENKA_SUCCESS)
+        {
+            return HENKA_ERROR_LIMIT;
+        }
+        record = henka_terrain_find_region_record(world, info.id);
+    }
+    if (record == NULL || record->samples == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    memcpy(record->samples, samples, sample_count * sizeof(*samples));
+    record->state.revision = info.revision;
+    record->state.generation = info.generation;
+    record->state.dirty = false;
+    record->state.pending_io = false;
+    record->state.cpu_resident = true;
     return HENKA_SUCCESS;
 }

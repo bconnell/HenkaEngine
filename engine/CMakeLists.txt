@@ -10,6 +10,7 @@ add_library(henka_runtime STATIC
     src/scene/scene.c
     src/terrain/terrain.c
     src/terrain/terrain_storage.c
+    src/terrain/terrain_streaming.c
 )
 
 if(HENKA_ENABLE_NETWORK)

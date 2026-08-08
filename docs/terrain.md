@@ -32,6 +32,18 @@ atomic replacement, so an interrupted write retains the previous valid
 snapshot. Uncommitted records remain harmless journal history and are ignored
 by subsequent recovery.
 
+## Streaming boundary
+
+The Windows runtime provides a bounded worker-backed stream queue through
+`<henka/terrain_streaming.h>`. Workers borrow storage, load and validate one
+immutable region candidate at a time, and never touch renderer or live world
+objects. The runtime thread pumps bounded completions and performs the
+authoritative sample/revision swap. Duplicate requests coalesce, queued or
+active requests can be cancelled, observer records are bounded, and queue,
+completion, failure, cancellation, and dropped-completion diagnostics are
+available. Hysteresis, deterministic eviction, and automatic residency policy
+remain subsequent work.
+
 The descriptor stores the format version, world and base identities, all
 world/region/chunk relationships, and bounded residency limits. Creating a
 world allocates only the configured region and chunk residency tables; it does
@@ -41,8 +53,9 @@ physics, render, pending-I/O, dirty, revision, and generation state.
 ## Current boundary
 
 This slice establishes the shared data model and bounded ownership contract.
-World manifest integration, journal compaction, asynchronous streaming,
-integer mutation commands, collision regeneration, client LOD/rendering, and
-server authority are subsequent validated runtime slices. They must use this
+World manifest integration, journal compaction, streaming hysteresis and
+eviction, integer mutation commands, collision regeneration, client
+LOD/rendering, and server authority are subsequent validated runtime slices.
+They must use this
 same world identity, region/chunk mapping, revision, and residency ownership;
 they must not introduce a second world-sized representation.
