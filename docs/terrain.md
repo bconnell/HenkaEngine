@@ -134,9 +134,12 @@ client adapter does not invent those missing policies.
 `<henka/terrain_collision.h>` extracts a physics-resident chunk into a
 caller-owned 65×65 signed-millimeter patch without allocating or mutating the
 world. The patch carries the source revision and generation so a later physics
-owner can reject stale regeneration work. The current physics API exposes
-planes, boxes, and spheres rather than a heightfield shape; body creation,
-replacement, and asynchronous regeneration therefore remain subsequent work.
+owner can reject stale regeneration work. `<henka/terrain_physics.h>` provides
+that bounded owner: it copies each patch transactionally, retains at most the
+configured patch count, chooses overlapping patches in stable slot order, and
+answers bilinear height and finite normal queries with source identity. It is
+not yet a rigid-body collider; body contact integration, replacement
+scheduling, and asynchronous regeneration remain subsequent work.
 
 `<henka/terrain_mesh.h>` provides the corresponding renderer-independent
 geometry boundary. `henka_terrain_mesh_build_chunk` requires a render-resident
@@ -156,7 +159,7 @@ physics, render, pending-I/O, dirty, revision, and generation state.
 ## Current boundary
 
 This slice establishes the shared data model and bounded ownership contract.
-World manifest integration, collision regeneration, scene
+World manifest integration, rigid-body collision regeneration, scene
 ownership and GPU residency, reconnect/late-join orchestration, and client
 prediction are subsequent validated runtime slices.
 They must use this

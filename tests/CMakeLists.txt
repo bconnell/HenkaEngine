@@ -151,6 +151,16 @@ henka_enable_project_warnings(henka_terrain_collision_tests)
 
 add_test(NAME henka_terrain_collision_tests COMMAND henka_terrain_collision_tests)
 
+add_executable(henka_terrain_physics_tests
+    test_terrain_physics.c
+)
+target_link_libraries(henka_terrain_physics_tests
+    PRIVATE
+        henka_runtime
+)
+henka_enable_project_warnings(henka_terrain_physics_tests)
+add_test(NAME henka_terrain_physics_tests COMMAND henka_terrain_physics_tests)
+
 add_executable(henka_terrain_mesh_tests
     test_terrain_mesh.c
 )
