@@ -14,6 +14,7 @@
 
 #include "editor_controls.h"
 #include "editor_ui_state.h"
+#include "object_authoring_tools.h"
 #include "object_details_tools.h"
 #include "interaction_tools.h"
 #include "physics_tools.h"
@@ -563,6 +564,9 @@ static const char* sandbox3d_safe_entity_name(const sandbox3d_state* state, henk
 static bool sandbox3d_is_selectable_entity(const sandbox3d_state* state, henka_entity entity);
 static void sandbox3d_select_entity(sandbox3d_state* state, henka_entity entity);
 static void sandbox3d_clear_selection(sandbox3d_state* state, const char* reason);
+static bool sandbox3d_add_primitive_object(sandbox3d_state* state);
+static bool sandbox3d_duplicate_selected_object(sandbox3d_state* state);
+static bool sandbox3d_delete_selected_object(sandbox3d_state* state);
 static void sandbox3d_cancel_active_transform_session(
     sandbox3d_state* state,
     bool restore_original);
@@ -3289,16 +3293,17 @@ static henka_entity sandbox3d_get_first_selectable_entity(const sandbox3d_state*
 {
     size_t index;
 
-    if (state == NULL)
+    if (state == NULL || state->scene == NULL)
     {
         return HENKA_INVALID_ENTITY;
     }
 
-    for (index = 0U; index < SANDBOX3D_OBJECT_COUNT; ++index)
+    for (index = 0U; index < henka_scene_get_entity_count(state->scene); ++index)
     {
-        if (state->descriptors[index].entity != HENKA_INVALID_ENTITY)
+        henka_entity entity = henka_scene_get_entity_at_index(state->scene, index);
+        if (sandbox3d_is_selectable_entity(state, entity))
         {
-            return state->descriptors[index].entity;
+            return entity;
         }
     }
 
@@ -3307,17 +3312,8 @@ static henka_entity sandbox3d_get_first_selectable_entity(const sandbox3d_state*
 
 static bool sandbox3d_is_selectable_entity(const sandbox3d_state* state, henka_entity entity)
 {
-    if (state == NULL || state->scene == NULL || entity == HENKA_INVALID_ENTITY)
-    {
-        return false;
-    }
-
-    if (!henka_scene_is_entity_valid(state->scene, entity) || henka_scene_is_entity_helper(state->scene, entity))
-    {
-        return false;
-    }
-
-    return sandbox3d_get_descriptor_by_entity(state, entity) != NULL;
+    return state != NULL &&
+        sandbox3d_object_authoring_can_edit_entity(state->scene, entity);
 }
 
 static const char* sandbox3d_get_descriptor_role_label(const sandbox3d_object_descriptor* descriptor)
@@ -4710,7 +4706,7 @@ static void sandbox3d_select_entity(sandbox3d_state* state, henka_entity entity)
 {
     henka_action_request request;
     henka_action_result action_result;
-    const sandbox3d_object_descriptor* descriptor;
+    const char* entity_name;
     henka_entity previous_entity;
 
     if (state == NULL || state->scene == NULL || state->actions == NULL)
@@ -4737,23 +4733,118 @@ static void sandbox3d_select_entity(sandbox3d_state* state, henka_entity entity)
         state->selected_entity = HENKA_INVALID_ENTITY;
     }
 
-    descriptor = sandbox3d_get_selected_descriptor(state);
-    if (descriptor != NULL)
+    entity_name = sandbox3d_safe_entity_name(state, state->selected_entity, "object");
+    if (state->selected_entity != HENKA_INVALID_ENTITY)
     {
         if (previous_entity != state->selected_entity)
         {
             sandbox3d_clear_gizmo_drag(state, true);
             sandbox3d_sync_view_navigation_target_to_selection(state);
         }
-        sandbox3d_record_success_result(state, "Selected %s", descriptor->display_name);
-        sandbox3d_set_statusf(state, false, false, "Selected %s.", descriptor->display_name);
-        snprintf(state->diagnostics.last_selection_action, sizeof(state->diagnostics.last_selection_action), "Selected %s", descriptor->display_name);
+        sandbox3d_record_success_result(state, "Selected %s", entity_name);
+        sandbox3d_set_statusf(state, false, false, "Selected %s.", entity_name);
+        snprintf(state->diagnostics.last_selection_action, sizeof(state->diagnostics.last_selection_action), "Selected %s", entity_name);
     }
     else if (previous_entity != state->selected_entity)
     {
         sandbox3d_clear_gizmo_drag(state, true);
         snprintf(state->diagnostics.last_selection_action, sizeof(state->diagnostics.last_selection_action), "Selection cleared");
     }
+}
+
+static bool sandbox3d_add_primitive_object(sandbox3d_state* state)
+{
+    henka_action_request request;
+    henka_action_result result;
+
+    if (state == NULL || state->actions == NULL)
+    {
+        return false;
+    }
+
+    memset(&request, 0, sizeof(request));
+    request.command = HENKA_ACTION_COMMAND_ADD_PRIMITIVE_OBJECT;
+    request.params.add_primitive.primitive = HENKA_ACTION_PRIMITIVE_CUBE;
+    request.params.add_primitive.name = "New Cube";
+    request.params.add_primitive.transform = henka_transform_identity();
+    request.params.add_primitive.visible = true;
+    if (!sandbox3d_execute_action(state, &request, &result))
+    {
+        return false;
+    }
+
+    sandbox3d_select_entity(state, result.affected_entity);
+    return true;
+}
+
+static bool sandbox3d_duplicate_selected_object(sandbox3d_state* state)
+{
+    char duplicate_name[128];
+    henka_entity selected_entity;
+    henka_entity duplicate;
+
+    if (state == NULL || state->scene == NULL)
+    {
+        return false;
+    }
+
+    selected_entity = sandbox3d_get_real_selected_entity(state);
+    if (selected_entity == HENKA_INVALID_ENTITY)
+    {
+        return false;
+    }
+
+    snprintf(
+        duplicate_name,
+        sizeof(duplicate_name),
+        "Copy of %s",
+        sandbox3d_safe_entity_name(state, selected_entity, "Object"));
+    if (sandbox3d_object_authoring_duplicate_entity(
+            state->scene,
+            selected_entity,
+            duplicate_name,
+            &duplicate) != HENKA_SUCCESS)
+    {
+        return false;
+    }
+
+    sandbox3d_select_entity(state, duplicate);
+    return true;
+}
+
+static bool sandbox3d_delete_selected_object(sandbox3d_state* state)
+{
+    henka_action_request request;
+    henka_action_result result;
+    henka_entity selected_entity;
+
+    if (state == NULL || state->actions == NULL)
+    {
+        return false;
+    }
+
+    selected_entity = sandbox3d_get_real_selected_entity(state);
+    if (selected_entity == HENKA_INVALID_ENTITY)
+    {
+        return false;
+    }
+
+    if (state->transform_session.active && state->transform_session.entity == selected_entity)
+    {
+        sandbox3d_cancel_active_transform_session(state, true);
+    }
+    memset(&request, 0, sizeof(request));
+    request.command = HENKA_ACTION_COMMAND_DELETE_OBJECT;
+    request.params.entity.entity = selected_entity;
+    if (!sandbox3d_execute_action(state, &request, &result))
+    {
+        return false;
+    }
+
+    state->selected_entity = HENKA_INVALID_ENTITY;
+    sandbox3d_clear_gizmo_drag(state, true);
+    sandbox3d_sync_view_navigation_target_to_selection(state);
+    return true;
 }
 
 static void sandbox3d_clear_selection(sandbox3d_state* state, const char* reason)
@@ -5985,29 +6076,43 @@ static bool sandbox3d_reset_selected_entity_transform(sandbox3d_state* state)
     henka_action_request request;
     henka_action_result result;
     const sandbox3d_object_descriptor* descriptor;
+    henka_entity entity;
+    henka_transform identity;
 
+    entity = sandbox3d_get_real_selected_entity(state);
     descriptor = sandbox3d_get_selected_descriptor(state);
-    if (state == NULL || state->scene == NULL || state->actions == NULL || descriptor == NULL || !descriptor->can_reset)
+    if (state == NULL || state->scene == NULL || entity == HENKA_INVALID_ENTITY ||
+        henka_scene_is_entity_transform_locked(state->scene, entity))
     {
         return false;
     }
 
     sandbox3d_clear_gizmo_drag(state, true);
+    if (descriptor == NULL || !descriptor->can_reset)
+    {
+        identity = henka_transform_identity();
+        return henka_scene_set_entity_transform(state->scene, entity, identity) == HENKA_SUCCESS;
+    }
+
+    if (state->actions == NULL)
+    {
+        return false;
+    }
     memset(&request, 0, sizeof(request));
     request.command = HENKA_ACTION_COMMAND_RESET_TRANSFORM;
-    request.params.entity.entity = descriptor->entity;
+    request.params.entity.entity = entity;
     return sandbox3d_execute_action(state, &request, &result);
 }
 
 static bool sandbox3d_toggle_selected_transform_lock(sandbox3d_state* state)
 {
-    const sandbox3d_object_descriptor* descriptor;
+    henka_entity entity;
     uint32_t flags;
     bool transform_locked;
 
-    descriptor = sandbox3d_get_selected_descriptor(state);
-    if (state == NULL || state->scene == NULL || descriptor == NULL ||
-        henka_scene_get_entity_flags(state->scene, descriptor->entity, &flags) != HENKA_SUCCESS)
+    entity = sandbox3d_get_real_selected_entity(state);
+    if (state == NULL || state->scene == NULL || entity == HENKA_INVALID_ENTITY ||
+        henka_scene_get_entity_flags(state->scene, entity, &flags) != HENKA_SUCCESS)
     {
         return false;
     }
@@ -6015,7 +6120,7 @@ static bool sandbox3d_toggle_selected_transform_lock(sandbox3d_state* state)
     transform_locked = (flags & HENKA_SCENE_ENTITY_FLAG_TRANSFORM_LOCKED) != 0U;
     if (!transform_locked &&
         state->transform_session.active &&
-        state->transform_session.entity == descriptor->entity)
+        state->transform_session.entity == entity)
     {
         sandbox3d_cancel_active_transform_session(state, true);
     }
@@ -6028,7 +6133,7 @@ static bool sandbox3d_toggle_selected_transform_lock(sandbox3d_state* state)
         flags |= (uint32_t)HENKA_SCENE_ENTITY_FLAG_TRANSFORM_LOCKED;
     }
 
-    if (henka_scene_set_entity_flags(state->scene, descriptor->entity, flags) != HENKA_SUCCESS)
+    if (henka_scene_set_entity_flags(state->scene, entity, flags) != HENKA_SUCCESS)
     {
         return false;
     }
@@ -6042,24 +6147,24 @@ static bool sandbox3d_toggle_selected_entity_visibility(sandbox3d_state* state)
     henka_action_request request;
     henka_action_result result;
     bool currently_visible;
-    const sandbox3d_object_descriptor* descriptor;
+    henka_entity entity;
 
-    descriptor = sandbox3d_get_selected_descriptor(state);
-    if (state == NULL || state->scene == NULL || state->actions == NULL || descriptor == NULL || !descriptor->can_hide)
+    entity = sandbox3d_get_real_selected_entity(state);
+    if (state == NULL || state->scene == NULL || state->actions == NULL || entity == HENKA_INVALID_ENTITY)
     {
         return false;
     }
 
-    currently_visible = henka_scene_is_entity_visible(state->scene, descriptor->entity);
+    currently_visible = henka_scene_is_entity_visible(state->scene, entity);
     if (currently_visible &&
         state->transform_session.active &&
-        state->transform_session.entity == descriptor->entity)
+        state->transform_session.entity == entity)
     {
         sandbox3d_cancel_active_transform_session(state, true);
     }
     memset(&request, 0, sizeof(request));
     request.command = currently_visible ? HENKA_ACTION_COMMAND_HIDE_OBJECT : HENKA_ACTION_COMMAND_SHOW_OBJECT;
-    request.params.entity.entity = descriptor->entity;
+    request.params.entity.entity = entity;
     if (!sandbox3d_execute_action(state, &request, &result))
     {
         return false;
@@ -6077,22 +6182,22 @@ static bool sandbox3d_focus_camera_on_selected(sandbox3d_state* state)
     henka_action_request request;
     henka_action_result result;
     henka_bounds bounds;
-    const sandbox3d_object_descriptor* descriptor;
+    henka_entity entity;
 
     if (state == NULL || state->scene == NULL || state->actions == NULL)
     {
         return false;
     }
 
-    descriptor = sandbox3d_get_selected_descriptor(state);
-    if (descriptor == NULL)
+    entity = sandbox3d_get_real_selected_entity(state);
+    if (entity == HENKA_INVALID_ENTITY)
     {
         return false;
     }
 
     memset(&request, 0, sizeof(request));
     request.command = HENKA_ACTION_COMMAND_FOCUS_CAMERA_ON_OBJECT;
-    request.params.entity.entity = descriptor->entity;
+    request.params.entity.entity = entity;
     if (!sandbox3d_execute_action(state, &request, &result))
     {
         return false;
@@ -6108,16 +6213,16 @@ static bool sandbox3d_focus_camera_on_selected(sandbox3d_state* state)
 
 static bool sandbox3d_get_selected_bounds(const sandbox3d_state* state, henka_bounds* out_bounds)
 {
-    const sandbox3d_object_descriptor* descriptor;
+    henka_entity entity;
 
     if (state == NULL || state->scene == NULL || out_bounds == NULL)
     {
         return false;
     }
 
-    descriptor = sandbox3d_get_selected_descriptor(state);
-    return descriptor != NULL &&
-        henka_scene_get_entity_world_bounds(state->scene, descriptor->entity, out_bounds) == HENKA_SUCCESS;
+    entity = sandbox3d_get_real_selected_entity(state);
+    return entity != HENKA_INVALID_ENTITY &&
+        henka_scene_get_entity_world_bounds(state->scene, entity, out_bounds) == HENKA_SUCCESS;
 }
 
 static henka_vec3 sandbox3d_get_view_navigation_target(const sandbox3d_state* state)
@@ -6218,7 +6323,7 @@ static void sandbox3d_frame_selected_object(sandbox3d_state* state, bool print_s
                 false,
                 false,
                 "Framed %s.",
-                sandbox3d_get_selected_descriptor(state)->display_name);
+                sandbox3d_safe_entity_name(state, sandbox3d_get_real_selected_entity(state), "object"));
         }
     }
 }
@@ -7542,7 +7647,6 @@ static void sandbox3d_try_pick_object(henka_engine* engine, sandbox3d_state* sta
     henka_entity picked_entity;
     henka_ray ray;
     float distance;
-    const sandbox3d_object_descriptor* selected_descriptor;
     henka_entity selected_entity;
     henka_viewport scene_viewport;
 
@@ -7568,7 +7672,6 @@ static void sandbox3d_try_pick_object(henka_engine* engine, sandbox3d_state* sta
     }
 
     selected_entity = sandbox3d_get_real_selected_entity(state);
-    selected_descriptor = sandbox3d_get_selected_descriptor(state);
     gate.supported_mouse_button = true;
     gate.cursor_in_viewport = true;
     gate.selected_object_present = selected_entity != HENKA_INVALID_ENTITY;
@@ -7581,7 +7684,6 @@ static void sandbox3d_try_pick_object(henka_engine* engine, sandbox3d_state* sta
     gate.gizmo_mode_active = sandbox3d_viewport_tool_mode_uses_gizmo(state->viewport_tool);
     if (state->gizmo.mode != SANDBOX3D_GIZMO_MODE_SELECT &&
         selected_entity != HENKA_INVALID_ENTITY &&
-        selected_descriptor != NULL &&
         sandbox3d_try_build_gizmo_model(engine, state, &state->gizmo_model))
     {
         gate.gizmo_model_valid = state->gizmo_model.valid;
@@ -7610,14 +7712,14 @@ static void sandbox3d_try_pick_object(henka_engine* engine, sandbox3d_state* sta
             sandbox3d_record_success_result(
                 state,
                 "Drag started: %s on %s",
-                selected_descriptor->display_name,
+                sandbox3d_safe_entity_name(state, selected_entity, "object"),
                 sandbox3d_get_gizmo_axis_label(gizmo_axis));
             sandbox3d_set_statusf(
                 state,
                 false,
                 false,
                 "Gizmo drag started for %s on %s.",
-                selected_descriptor->display_name,
+                sandbox3d_safe_entity_name(state, selected_entity, "object"),
                 sandbox3d_get_gizmo_axis_label(gizmo_axis));
             return;
         }
@@ -7812,6 +7914,7 @@ static void sandbox3d_print_selected_object_info(const sandbox3d_state* state)
     char material_summary[128];
     bool visible;
     const sandbox3d_object_descriptor* descriptor;
+    henka_entity entity;
     henka_interaction_desc interaction;
     henka_material material;
     henka_transform transform;
@@ -7821,48 +7924,49 @@ static void sandbox3d_print_selected_object_info(const sandbox3d_state* state)
         return;
     }
 
+    entity = sandbox3d_get_real_selected_entity(state);
     descriptor = sandbox3d_get_selected_descriptor(state);
-    if (descriptor == NULL)
+    if (entity == HENKA_INVALID_ENTITY)
     {
         printf("No sandbox object is currently selected.\n");
         fflush(stdout);
         return;
     }
 
-    if (henka_scene_get_entity_transform(state->scene, descriptor->entity, &transform) != HENKA_SUCCESS)
+    if (henka_scene_get_entity_transform(state->scene, entity, &transform) != HENKA_SUCCESS)
     {
         printf("Selected object info could not be read.\n");
         fflush(stdout);
         return;
     }
 
-    visible = henka_scene_is_entity_visible(state->scene, descriptor->entity);
-    if (henka_scene_get_entity_material(state->scene, descriptor->entity, &material) != HENKA_SUCCESS)
+    visible = henka_scene_is_entity_visible(state->scene, entity);
+    if (henka_scene_get_entity_material(state->scene, entity, &material) != HENKA_SUCCESS)
     {
         material = henka_material_default();
     }
     if (henka_material_describe(&material, material_summary, sizeof(material_summary)) != HENKA_SUCCESS)
     {
-        snprintf(material_summary, sizeof(material_summary), "%s", descriptor->material_summary);
+        snprintf(material_summary, sizeof(material_summary), "%s", descriptor != NULL ? descriptor->material_summary : "(unavailable)");
     }
-    if (henka_scene_get_entity_interaction(state->scene, descriptor->entity, &interaction) != HENKA_SUCCESS)
+    if (henka_scene_get_entity_interaction(state->scene, entity, &interaction) != HENKA_SUCCESS)
     {
         interaction = (henka_interaction_desc){false, 0.0f, NULL};
     }
 
     printf("Object Info\n");
-    printf("  Name: %s\n", descriptor->display_name);
-    printf("  Entity: %u\n", (unsigned int)descriptor->entity);
-    printf("  Tag: %s\n", henka_scene_get_entity_tag(state->scene, descriptor->entity) != NULL ? henka_scene_get_entity_tag(state->scene, descriptor->entity) : "(none)");
+    printf("  Name: %s\n", sandbox3d_safe_entity_name(state, entity, "Object"));
+    printf("  Entity: %u\n", (unsigned int)entity);
+    printf("  Tag: %s\n", henka_scene_get_entity_tag(state->scene, entity) != NULL ? henka_scene_get_entity_tag(state->scene, entity) : "(none)");
     printf("  Visible: %s\n", visible ? "Yes" : "No");
     printf("  Position: %.2f %.2f %.2f\n", transform.position.x, transform.position.y, transform.position.z);
     printf("  Rotation: %.2f %.2f %.2f %.2f\n", transform.rotation.x, transform.rotation.y, transform.rotation.z, transform.rotation.w);
     printf("  Scale: %.2f %.2f %.2f\n", transform.scale.x, transform.scale.y, transform.scale.z);
-    printf("  Demonstrates: %s\n", descriptor->short_explanation);
-    printf("  Detail: %s\n", descriptor->developer_detail);
-    printf("  Mesh: %s\n", descriptor->mesh_summary);
+    printf("  Demonstrates: %s\n", descriptor != NULL ? descriptor->short_explanation : "General scene entity authoring");
+    printf("  Detail: %s\n", descriptor != NULL ? descriptor->developer_detail : "Scene-owned entity");
+    printf("  Mesh: %s\n", descriptor != NULL ? descriptor->mesh_summary : "Scene mesh reference");
     printf("  Material: %s\n", material_summary);
-    printf("  Texture: %s\n", descriptor->texture_summary);
+    printf("  Texture: %s\n", descriptor != NULL ? descriptor->texture_summary : "Material texture state");
     printf("  Interaction: %s\n", interaction.enabled ? (interaction.prompt != NULL ? interaction.prompt : "Available") : "Disabled");
     fflush(stdout);
 }
@@ -9642,7 +9746,15 @@ static void sandbox3d_draw_status_block(
     sandbox3d_draw_value_row(state->ui, x, y + 54.0f, width, "Mode", layout_row);
     if (!compact)
     {
-        sandbox3d_draw_value_row(state->ui, x, y + 80.0f, width, "Selected", descriptor != NULL ? descriptor->display_name : "(none)");
+        sandbox3d_draw_value_row(
+            state->ui,
+            x,
+            y + 80.0f,
+            width,
+            "Selected",
+            sandbox3d_get_real_selected_entity(state) != HENKA_INVALID_ENTITY
+                ? sandbox3d_safe_entity_name(state, sandbox3d_get_real_selected_entity(state), "Object")
+                : "(none)");
     }
 }
 
@@ -11352,11 +11464,14 @@ static void sandbox3d_draw_scene_objects_panel(
     const char* entity_name;
     float footer_y;
     float row_y;
+    float action_y;
+    float action_width;
     henka_entity entity;
     henka_ui_rect panel_bounds;
     size_t selectable_count;
-    size_t descriptor_index;
+    size_t scene_index;
     size_t visible_index;
+    bool has_selection;
 
     if (engine == NULL || state == NULL || layout == NULL || state->scene == NULL || !sandbox3d_workspace_shows_scene_panel(state))
     {
@@ -11378,18 +11493,69 @@ static void sandbox3d_draw_scene_objects_panel(
             layout,
             SANDBOX3D_WORKSPACE_PANEL_SCENE_OBJECTS));
     sandbox3d_draw_panel_workspace_controls(engine, state, layout, SANDBOX3D_WORKSPACE_PANEL_SCENE_OBJECTS);
-    henka_ui_label(state->ui, panel_bounds.x + 14.0f, panel_bounds.y + 38.0f, 1.0f, "Current scene examples");
+    henka_ui_label(state->ui, panel_bounds.x + 14.0f, panel_bounds.y + 38.0f, 1.0f, "Scene objects");
+
+    action_y = panel_bounds.y + 60.0f;
+    action_width = fmaxf(56.0f, (panel_bounds.width - 40.0f) / 3.0f);
+    has_selection = sandbox3d_get_real_selected_entity(state) != HENKA_INVALID_ENTITY;
+    if (henka_ui_primary_button(
+            state->ui,
+            "scene_object_add_cube",
+            (henka_ui_rect){panel_bounds.x + 14.0f, action_y, action_width, 24.0f},
+            "Add Cube"))
+    {
+        if (sandbox3d_add_primitive_object(state))
+        {
+            sandbox3d_set_status(state, false, "Created and selected a new cube.");
+        }
+        else
+        {
+            sandbox3d_set_status(state, true, "The new cube could not be created.");
+        }
+    }
+    if (has_selection && henka_ui_button(
+            state->ui,
+            "scene_object_duplicate",
+            (henka_ui_rect){panel_bounds.x + 14.0f + action_width + 6.0f, action_y, action_width, 24.0f},
+            "Duplicate"))
+    {
+        if (sandbox3d_duplicate_selected_object(state))
+        {
+            sandbox3d_set_status(state, false, "Duplicated and selected the object.");
+        }
+        else
+        {
+            sandbox3d_set_status(state, true, "The selected object could not be duplicated.");
+        }
+    }
+    if (has_selection && henka_ui_button(
+            state->ui,
+            "scene_object_delete",
+            (henka_ui_rect){panel_bounds.x + 14.0f + (action_width + 6.0f) * 2.0f, action_y, action_width, 24.0f},
+            "Delete"))
+    {
+        if (sandbox3d_delete_selected_object(state))
+        {
+            sandbox3d_set_status(state, false, "Deleted the selected object.");
+        }
+        else
+        {
+            sandbox3d_set_status(state, true, "The selected object could not be deleted.");
+        }
+    }
 
     selectable_count = 0U;
-    for (descriptor_index = 0U; descriptor_index < SANDBOX3D_OBJECT_COUNT; ++descriptor_index)
+    for (scene_index = 0U; scene_index < henka_scene_get_entity_count(state->scene); ++scene_index)
     {
-        if (sandbox3d_is_selectable_entity(state, state->descriptors[descriptor_index].entity))
+        if (sandbox3d_is_selectable_entity(
+                state,
+                henka_scene_get_entity_at_index(state->scene, scene_index)))
         {
             ++selectable_count;
         }
     }
 
-    items_per_page = (int)((panel_bounds.height - 106.0f) / 34.0f);
+    items_per_page = (int)((panel_bounds.height - 132.0f) / 34.0f);
     if (items_per_page < 1)
     {
         items_per_page = 1;
@@ -11405,16 +11571,17 @@ static void sandbox3d_draw_scene_objects_panel(
     }
     page_index = state->paging.scene_objects_page;
 
-    row_y = panel_bounds.y + 64.0f;
+    row_y = panel_bounds.y + 94.0f;
     visible_index = 0U;
-    for (descriptor_index = 0U; descriptor_index < SANDBOX3D_OBJECT_COUNT; ++descriptor_index)
+    for (scene_index = 0U; scene_index < henka_scene_get_entity_count(state->scene); ++scene_index)
     {
-        descriptor = &state->descriptors[descriptor_index];
-        entity = descriptor->entity;
+        entity = henka_scene_get_entity_at_index(state->scene, scene_index);
         if (!sandbox3d_is_selectable_entity(state, entity))
         {
             continue;
         }
+
+        descriptor = sandbox3d_get_descriptor_by_entity(state, entity);
 
         if ((int)(visible_index / (size_t)items_per_page) != page_index)
         {
@@ -11433,7 +11600,7 @@ static void sandbox3d_draw_scene_objects_panel(
             subtitle_text,
             sizeof(subtitle_text),
             "%s - %s",
-            entity_name != NULL ? entity_name : descriptor->display_name,
+            entity_name != NULL ? entity_name : "Object",
             sandbox3d_get_descriptor_role_label(descriptor));
         sandbox3d_truncate_text(subtitle_text, row_label, sizeof(row_label), 30U);
 
@@ -11602,6 +11769,9 @@ static void sandbox3d_draw_object_details_panel(
     char velocity_text[64];
     char visibility_action_id[64];
     const sandbox3d_object_descriptor* descriptor;
+    const char* display_name;
+    const char* description;
+    const char* detail;
     float content_height;
     henka_interaction_desc interaction;
     henka_interaction_result interaction_result;
@@ -11611,6 +11781,7 @@ static void sandbox3d_draw_object_details_panel(
     henka_physics_body_id physics_body;
     henka_physics_body_state body_state;
     henka_result result;
+    henka_entity entity;
     henka_scene_object_info object_info;
     henka_transform transform;
     henka_ui_flow_desc flow_desc;
@@ -11649,8 +11820,9 @@ static void sandbox3d_draw_object_details_panel(
         layout,
         SANDBOX3D_WORKSPACE_PANEL_OBJECT_DETAILS);
 
+    entity = sandbox3d_get_real_selected_entity(state);
     descriptor = sandbox3d_get_selected_descriptor(state);
-    if (state->scene == NULL || descriptor == NULL)
+    if (state->scene == NULL || entity == HENKA_INVALID_ENTITY)
     {
         state->editor_ui.details_content_height = 0.0f;
         state->editor_ui.details_scroll_offset = 0.0f;
@@ -11669,15 +11841,19 @@ static void sandbox3d_draw_object_details_panel(
         return;
     }
 
+    display_name = sandbox3d_safe_entity_name(state, entity, "Object");
+    description = descriptor != NULL ? descriptor->short_explanation : "General scene entity";
+    detail = descriptor != NULL ? descriptor->developer_detail : "Scene-owned object available for authoring.";
+
     result =
         henka_scene_get_entity_transform(
             state->scene,
-            descriptor->entity,
+            entity,
             &transform);
     if (result != HENKA_SUCCESS ||
         henka_scene_get_entity_info(
             state->scene,
-            descriptor->entity,
+            entity,
             &object_info) != HENKA_SUCCESS)
     {
         state->editor_ui.details_content_height = 0.0f;
@@ -11693,7 +11869,7 @@ static void sandbox3d_draw_object_details_panel(
 
     if (henka_scene_get_entity_interaction(
             state->scene,
-            descriptor->entity,
+            entity,
             &interaction) != HENKA_SUCCESS)
     {
         interaction =
@@ -11706,21 +11882,21 @@ static void sandbox3d_draw_object_details_panel(
     interaction_result =
         henka_scene_can_interact(
             state->scene,
-            descriptor->entity,
+            entity,
             state->camera.position);
     visible =
         henka_scene_is_entity_visible(
             state->scene,
-            descriptor->entity);
+            entity);
     transform_locked =
         henka_scene_is_entity_transform_locked(
             state->scene,
-            descriptor->entity);
+            entity);
 
     physics_body =
         sandbox3d_get_physics_body_for_entity(
             state,
-            descriptor->entity);
+            entity);
     if (physics_body != HENKA_INVALID_PHYSICS_BODY_ID &&
         henka_physics_body_get_state(
             state->physics.world,
@@ -11819,7 +11995,7 @@ static void sandbox3d_draw_object_details_panel(
     memset(&material_view, 0, sizeof(material_view));
     if (sandbox3d_resolve_selected_material(
             state->scene,
-            descriptor->entity,
+            entity,
             &marker_binding,
             1U,
             &material_view) != HENKA_SUCCESS)
@@ -11852,27 +12028,27 @@ static void sandbox3d_draw_object_details_panel(
         visibility_action_id,
         sizeof(visibility_action_id),
         "toggle_selected_visibility_%u",
-        (unsigned int)descriptor->entity);
+        (unsigned int)entity);
     snprintf(
         focus_action_id,
         sizeof(focus_action_id),
         "focus_selected_camera_%u",
-        (unsigned int)descriptor->entity);
+        (unsigned int)entity);
     snprintf(
         lock_action_id,
         sizeof(lock_action_id),
         "toggle_transform_lock_%u",
-        (unsigned int)descriptor->entity);
+        (unsigned int)entity);
     snprintf(
         reset_action_id,
         sizeof(reset_action_id),
         "reset_selected_transform_%u",
-        (unsigned int)descriptor->entity);
+        (unsigned int)entity);
     snprintf(
         clear_action_id,
         sizeof(clear_action_id),
         "clear_selection_%u",
-        (unsigned int)descriptor->entity);
+        (unsigned int)entity);
 
     flow_desc.bounds =
         (henka_ui_rect){
@@ -11914,7 +12090,7 @@ static void sandbox3d_draw_object_details_panel(
             row.x,
             row.y,
             1.0f,
-            descriptor->display_name);
+            display_name);
     }
 
     (void)sandbox3d_details_flow_disclosure(
@@ -11954,7 +12130,7 @@ static void sandbox3d_draw_object_details_panel(
                 row.y,
                 row.width,
                 "Shows",
-                descriptor->short_explanation);
+                description);
         }
         if (sandbox3d_details_flow_next_row(
                 state,
@@ -11969,7 +12145,7 @@ static void sandbox3d_draw_object_details_panel(
                 row.y,
                 row.width,
                 "Detail",
-                descriptor->developer_detail);
+                detail);
         }
         if (sandbox3d_details_flow_next_row(
                 state,
@@ -12273,7 +12449,7 @@ static void sandbox3d_draw_object_details_panel(
                         false,
                         true,
                         "%s visibility updated.",
-                        descriptor->display_name);
+                        display_name);
                 }
                 else
                 {
@@ -12282,7 +12458,7 @@ static void sandbox3d_draw_object_details_panel(
                         true,
                         true,
                         "%s visibility could not be changed.",
-                        descriptor->display_name);
+                        display_name);
                 }
             }
 
@@ -12303,7 +12479,7 @@ static void sandbox3d_draw_object_details_panel(
                         false,
                         true,
                         "Focused camera on %s.",
-                        descriptor->display_name);
+                        display_name);
                 }
                 else
                 {
@@ -12312,7 +12488,7 @@ static void sandbox3d_draw_object_details_panel(
                         true,
                         true,
                         "Camera could not focus on %s.",
-                        descriptor->display_name);
+                        display_name);
                 }
             }
         }
@@ -12355,7 +12531,7 @@ static void sandbox3d_draw_object_details_panel(
                         false,
                         true,
                         "%s transform %s.",
-                        descriptor->display_name,
+                        display_name,
                         transform_locked ?
                             "locked" :
                             "unlocked");
@@ -12367,7 +12543,7 @@ static void sandbox3d_draw_object_details_panel(
                         true,
                         true,
                         "%s transform lock could not be changed.",
-                        descriptor->display_name);
+                        display_name);
                 }
             }
 
@@ -12389,7 +12565,7 @@ static void sandbox3d_draw_object_details_panel(
                         false,
                         true,
                         "%s reset to its default transform.",
-                        descriptor->display_name);
+                        display_name);
                 }
                 else
                 {
@@ -12398,7 +12574,7 @@ static void sandbox3d_draw_object_details_panel(
                         true,
                         true,
                         "%s could not be reset.",
-                        descriptor->display_name);
+                        display_name);
                 }
             }
 
@@ -12576,13 +12752,21 @@ static void sandbox3d_draw_utility_panel(
 
         case SANDBOX3D_UTILITY_OBJECT_INFO:
             descriptor = sandbox3d_get_selected_descriptor(state);
-            if (descriptor == NULL || state->scene == NULL || henka_scene_get_entity_transform(state->scene, descriptor->entity, &transform) != HENKA_SUCCESS)
+            if (state->scene == NULL ||
+                sandbox3d_get_real_selected_entity(state) == HENKA_INVALID_ENTITY ||
+                henka_scene_get_entity_transform(
+                    state->scene,
+                    sandbox3d_get_real_selected_entity(state),
+                    &transform) != HENKA_SUCCESS)
             {
                 henka_ui_label(state->ui, x_left, y_start, 1.0f, "Select an object to inspect it here.");
                 break;
             }
 
-            if (henka_scene_get_entity_material(state->scene, descriptor->entity, &selected_material) != HENKA_SUCCESS)
+            if (henka_scene_get_entity_material(
+                    state->scene,
+                    sandbox3d_get_real_selected_entity(state),
+                    &selected_material) != HENKA_SUCCESS)
             {
                 selected_material = henka_material_default();
             }
@@ -12597,17 +12781,62 @@ static void sandbox3d_draw_utility_panel(
             material_dependency_count += selected_material.occlusion_texture != NULL ? 1U : 0U;
             material_dependency_count += selected_material.emissive_texture != NULL ? 1U : 0U;
 
-            sandbox3d_draw_section_heading(state->ui, x_left, y_start, descriptor->display_name);
-            sandbox3d_draw_value_row(state->ui, x_left, y_start + 18.0f, panel_bounds.width - 28.0f, "Visible", henka_scene_is_entity_visible(state->scene, descriptor->entity) ? "Yes" : "No");
-            sandbox3d_draw_value_row(state->ui, x_left, y_start + 44.0f, panel_bounds.width - 28.0f, "Shows", descriptor->short_explanation);
-            sandbox3d_draw_value_row(state->ui, x_left, y_start + 70.0f, panel_bounds.width - 28.0f, "Detail", descriptor->developer_detail);
+            sandbox3d_draw_section_heading(
+                state->ui,
+                x_left,
+                y_start,
+                sandbox3d_safe_entity_name(
+                    state,
+                    sandbox3d_get_real_selected_entity(state),
+                    "Object"));
+            sandbox3d_draw_value_row(
+                state->ui,
+                x_left,
+                y_start + 18.0f,
+                panel_bounds.width - 28.0f,
+                "Visible",
+                henka_scene_is_entity_visible(
+                    state->scene,
+                    sandbox3d_get_real_selected_entity(state)) ? "Yes" : "No");
+            sandbox3d_draw_value_row(
+                state->ui,
+                x_left,
+                y_start + 44.0f,
+                panel_bounds.width - 28.0f,
+                "Shows",
+                descriptor != NULL ? descriptor->short_explanation : "General scene entity");
+            sandbox3d_draw_value_row(
+                state->ui,
+                x_left,
+                y_start + 70.0f,
+                panel_bounds.width - 28.0f,
+                "Detail",
+                descriptor != NULL ? descriptor->developer_detail : "Scene-owned object authoring");
             sandbox3d_draw_value_row(state->ui, x_left, y_start + 96.0f, panel_bounds.width - 28.0f, "Material", material_text);
             snprintf(row_value, sizeof(row_value), "%zu semantic texture(s)", material_dependency_count);
             sandbox3d_draw_value_row(state->ui, x_left, y_start + 122.0f, panel_bounds.width - 28.0f, "Dependencies", row_value);
-            sandbox3d_draw_value_row(state->ui, x_left, y_start + 148.0f, panel_bounds.width - 28.0f, "Mesh", descriptor->mesh_summary);
+            sandbox3d_draw_value_row(
+                state->ui,
+                x_left,
+                y_start + 148.0f,
+                panel_bounds.width - 28.0f,
+                "Mesh",
+                descriptor != NULL ? descriptor->mesh_summary : "Scene mesh reference");
             snprintf(row_value, sizeof(row_value), "%.2f %.2f %.2f", transform.position.x, transform.position.y, transform.position.z);
             sandbox3d_draw_value_row(state->ui, x_left, y_start + 174.0f, panel_bounds.width - 28.0f, "Position", row_value);
-            sandbox3d_draw_value_row(state->ui, x_left, y_start + 200.0f, panel_bounds.width - 28.0f, "Tag", henka_scene_get_entity_tag(state->scene, descriptor->entity) != NULL ? henka_scene_get_entity_tag(state->scene, descriptor->entity) : "(none)");
+            sandbox3d_draw_value_row(
+                state->ui,
+                x_left,
+                y_start + 200.0f,
+                panel_bounds.width - 28.0f,
+                "Tag",
+                henka_scene_get_entity_tag(
+                    state->scene,
+                    sandbox3d_get_real_selected_entity(state)) != NULL
+                    ? henka_scene_get_entity_tag(
+                        state->scene,
+                        sandbox3d_get_real_selected_entity(state))
+                    : "(none)");
             break;
 
         case SANDBOX3D_UTILITY_PATHS:
