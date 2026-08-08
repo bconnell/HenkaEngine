@@ -1729,6 +1729,23 @@ henka_ui_rect sandbox3d_workspace_splitter_visual_rect(henka_ui_rect hit_rect)
     return visual;
 }
 
+unsigned int sandbox3d_workspace_splitter_border_mask(
+    bool touches_left_splitter,
+    bool touches_right_splitter)
+{
+    unsigned int border_mask = HENKA_UI_BORDER_ALL;
+
+    if (touches_left_splitter)
+    {
+        border_mask &= ~(unsigned int)HENKA_UI_BORDER_LEFT;
+    }
+    if (touches_right_splitter)
+    {
+        border_mask &= ~(unsigned int)HENKA_UI_BORDER_RIGHT;
+    }
+    return border_mask;
+}
+
 void sandbox3d_workspace_begin_panel_drag(
     sandbox3d_workspace_model* model,
     sandbox3d_workspace_panel_id panel_id,

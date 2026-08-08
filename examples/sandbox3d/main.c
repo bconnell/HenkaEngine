@@ -9309,22 +9309,14 @@ static void sandbox3d_draw_workspace_affordances(
     {
         henka_ui_overlay_rect(
             state->ui,
-            (henka_ui_rect){
-                layout->left_splitter.x + (layout->left_splitter.width - 1.0f) * 0.5f,
-                layout->left_splitter.y,
-                1.0f,
-                layout->left_splitter.height},
+            sandbox3d_workspace_splitter_visual_rect(layout->left_splitter),
             (henka_vec4){0.48f, 0.57f, 0.68f, 0.90f});
     }
     if (layout->right_splitter.width > 0.0f)
     {
         henka_ui_overlay_rect(
             state->ui,
-            (henka_ui_rect){
-                layout->right_splitter.x + (layout->right_splitter.width - 1.0f) * 0.5f,
-                layout->right_splitter.y,
-                1.0f,
-                layout->right_splitter.height},
+            sandbox3d_workspace_splitter_visual_rect(layout->right_splitter),
             (henka_vec4){0.48f, 0.57f, 0.68f, 0.90f});
     }
     {
@@ -9654,10 +9646,43 @@ static void sandbox3d_draw_status_block(
     }
 }
 
+static unsigned int sandbox3d_workspace_panel_border_mask(
+    const sandbox3d_state* state,
+    const sandbox3d_workspace_layout* layout,
+    sandbox3d_workspace_panel_id panel_id)
+{
+    const sandbox3d_workspace_panel* panel;
+    bool touches_left_splitter = false;
+    bool touches_right_splitter = false;
+
+    if (state == NULL || layout == NULL)
+    {
+        return HENKA_UI_BORDER_ALL;
+    }
+
+    panel = sandbox3d_workspace_get_panel_const(
+        &state->workspace.model,
+        panel_id);
+    if (panel != NULL)
+    {
+        touches_left_splitter =
+            panel->dock == SANDBOX3D_WORKSPACE_DOCK_LEFT &&
+            layout->left_splitter.width > 0.0f;
+        touches_right_splitter =
+            panel->dock == SANDBOX3D_WORKSPACE_DOCK_RIGHT &&
+            layout->right_splitter.width > 0.0f;
+    }
+
+    return sandbox3d_workspace_splitter_border_mask(
+        touches_left_splitter,
+        touches_right_splitter);
+}
+
 static void sandbox3d_draw_scene_viewport_frame(
     henka_engine* engine,
     sandbox3d_state* state,
-    henka_ui_rect bounds)
+    henka_ui_rect bounds,
+    unsigned int border_mask)
 {
     static const henka_viewport_shading_mode modes[4] = {
         HENKA_VIEWPORT_SHADING_WIREFRAME,
@@ -9690,10 +9715,11 @@ static void sandbox3d_draw_scene_viewport_frame(
         return;
     }
 
-    henka_ui_viewport_frame(
+    henka_ui_viewport_frame_with_border_mask(
         state->ui,
         bounds,
-        "Scene View");
+        "Scene View",
+        border_mask);
 
     state->scene_view_header_controls =
         (henka_ui_rect){0.0f, 0.0f, 0.0f, 0.0f};
@@ -10230,11 +10256,15 @@ static void sandbox3d_draw_controls_panel(
     layout_mode = state->workspace.layout_mode;
     inspect_mode = layout_mode == SANDBOX3D_LAYOUT_INSPECT;
     full_mode = layout_mode == SANDBOX3D_LAYOUT_FULL;
-    henka_ui_panel(
+    henka_ui_panel_with_border_mask(
         state->ui,
         panel_bounds,
         sandbox3d_workspace_panel_name(sandbox3d_workspace_display_tab_for_panel(
-            state, SANDBOX3D_WORKSPACE_PANEL_CONTROLS)));
+            state, SANDBOX3D_WORKSPACE_PANEL_CONTROLS)),
+        sandbox3d_workspace_panel_border_mask(
+            state,
+            layout,
+            SANDBOX3D_WORKSPACE_PANEL_CONTROLS));
     sandbox3d_draw_panel_workspace_controls(engine, state, layout, SANDBOX3D_WORKSPACE_PANEL_CONTROLS);
     {
         const henka_ui_rect main_page_bounds =
@@ -11338,11 +11368,15 @@ static void sandbox3d_draw_scene_objects_panel(
     {
         return;
     }
-    henka_ui_panel(
+    henka_ui_panel_with_border_mask(
         state->ui,
         panel_bounds,
         sandbox3d_workspace_panel_name(sandbox3d_workspace_display_tab_for_panel(
-            state, SANDBOX3D_WORKSPACE_PANEL_SCENE_OBJECTS)));
+            state, SANDBOX3D_WORKSPACE_PANEL_SCENE_OBJECTS)),
+        sandbox3d_workspace_panel_border_mask(
+            state,
+            layout,
+            SANDBOX3D_WORKSPACE_PANEL_SCENE_OBJECTS));
     sandbox3d_draw_panel_workspace_controls(engine, state, layout, SANDBOX3D_WORKSPACE_PANEL_SCENE_OBJECTS);
     henka_ui_label(state->ui, panel_bounds.x + 14.0f, panel_bounds.y + 38.0f, 1.0f, "Current scene examples");
 
@@ -11598,13 +11632,17 @@ static void sandbox3d_draw_object_details_panel(
         return;
     }
 
-    henka_ui_panel(
+    henka_ui_panel_with_border_mask(
         state->ui,
         panel_bounds,
         sandbox3d_workspace_panel_name(
             sandbox3d_workspace_display_tab_for_panel(
                 state,
-                SANDBOX3D_WORKSPACE_PANEL_OBJECT_DETAILS)));
+                SANDBOX3D_WORKSPACE_PANEL_OBJECT_DETAILS)),
+        sandbox3d_workspace_panel_border_mask(
+            state,
+            layout,
+            SANDBOX3D_WORKSPACE_PANEL_OBJECT_DETAILS));
     sandbox3d_draw_panel_workspace_controls(
         engine,
         state,
@@ -12457,11 +12495,15 @@ static void sandbox3d_draw_utility_panel(
     }
     snprintf(package_text, sizeof(package_text), "%s", henka_engine_get_package_mode_label(diagnostics.package_mode));
 
-    henka_ui_panel(
+    henka_ui_panel_with_border_mask(
         state->ui,
         panel_bounds,
         sandbox3d_workspace_panel_name(sandbox3d_workspace_display_tab_for_panel(
-            state, SANDBOX3D_WORKSPACE_PANEL_UTILITY)));
+            state, SANDBOX3D_WORKSPACE_PANEL_UTILITY)),
+        sandbox3d_workspace_panel_border_mask(
+            state,
+            layout,
+            SANDBOX3D_WORKSPACE_PANEL_UTILITY));
     sandbox3d_draw_panel_workspace_controls(engine, state, layout, SANDBOX3D_WORKSPACE_PANEL_UTILITY);
     if (henka_ui_tab(state->ui, "utility_tab_help", (henka_ui_rect){x_left, y_start, button_width, 24.0f}, "Help", state->workspace.active_utility == SANDBOX3D_UTILITY_HELP))
     {
@@ -13241,7 +13283,13 @@ static void sandbox3d_build_ui(henka_engine* engine, sandbox3d_state* state)
         sandbox3d_format_display_path("Save", result == HENKA_SUCCESS ? save_path : NULL, save_path_text, sizeof(save_path_text));
         snprintf(capture_text, sizeof(capture_text), "Capture: %s", henka_engine_is_mouse_captured(engine) ? "On" : "Off");
         snprintf(fps_text, sizeof(fps_text), "Frame: %.2f ms  FPS: %.1f", milliseconds, fps);
-        sandbox3d_draw_scene_viewport_frame(engine, state, layout.scene_frame);
+        sandbox3d_draw_scene_viewport_frame(
+            engine,
+            state,
+            layout.scene_frame,
+            sandbox3d_workspace_splitter_border_mask(
+                layout.left_splitter.width > 0.0f,
+                layout.right_splitter.width > 0.0f));
         sandbox3d_draw_reflection_probe_overlay(state, layout.scene_viewport);
         sandbox3d_draw_selection_highlight(state, layout.scene_viewport);
         sandbox3d_draw_gizmo_overlay(engine, state, layout.scene_viewport);

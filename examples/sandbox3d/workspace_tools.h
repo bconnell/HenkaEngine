@@ -344,6 +344,9 @@ henka_ui_rect sandbox3d_workspace_resize_rect(henka_ui_rect panel_rect);
 henka_ui_rect sandbox3d_workspace_left_splitter_rect(henka_ui_rect left_dock, henka_ui_rect scene_frame);
 henka_ui_rect sandbox3d_workspace_right_splitter_rect(henka_ui_rect scene_frame, henka_ui_rect right_dock);
 henka_ui_rect sandbox3d_workspace_splitter_visual_rect(henka_ui_rect hit_rect);
+unsigned int sandbox3d_workspace_splitter_border_mask(
+    bool touches_left_splitter,
+    bool touches_right_splitter);
 void sandbox3d_workspace_begin_panel_drag(
     sandbox3d_workspace_model* model,
     sandbox3d_workspace_panel_id panel_id,

@@ -87,6 +87,21 @@ void henka_test_sandbox3d_workspace(void)
         visual_splitter.x == 0.0f && visual_splitter.y == 0.0f &&
         visual_splitter.width == 0.0f && visual_splitter.height == 0.0f);
 
+    HENKA_TEST_ASSERT(
+        sandbox3d_workspace_splitter_border_mask(false, false) ==
+        HENKA_UI_BORDER_ALL);
+    HENKA_TEST_ASSERT(
+        sandbox3d_workspace_splitter_border_mask(true, false) ==
+        (HENKA_UI_BORDER_ALL & ~HENKA_UI_BORDER_LEFT));
+    HENKA_TEST_ASSERT(
+        sandbox3d_workspace_splitter_border_mask(false, true) ==
+        (HENKA_UI_BORDER_ALL & ~HENKA_UI_BORDER_RIGHT));
+    HENKA_TEST_ASSERT(
+        sandbox3d_workspace_splitter_border_mask(true, true) ==
+        (HENKA_UI_BORDER_ALL &
+         ~HENKA_UI_BORDER_LEFT &
+         ~HENKA_UI_BORDER_RIGHT));
+
     sandbox3d_workspace_model_reset(&model);
     for (panel_index = 0U;
          panel_index < SANDBOX3D_WORKSPACE_PANEL_COUNT;
