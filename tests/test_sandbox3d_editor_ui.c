@@ -268,5 +268,67 @@ void henka_test_sandbox3d_editor_ui(void)
             &state,
             100.0f,
             0));
+
+    state.details_scroll_offset = 0.0f;
+    state.details_content_height = 260.0f;
+    HENKA_TEST_ASSERT(
+        sandbox3d_editor_ui_scroll_details(
+            &state,
+            100.0f,
+            1));
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(
+        state.details_scroll_offset,
+        48.0f,
+        0.0001f);
+
+    HENKA_TEST_ASSERT(
+        sandbox3d_editor_ui_scroll_details(
+            &state,
+            100.0f,
+            10));
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(
+        state.details_scroll_offset,
+        160.0f,
+        0.0001f);
+
+    HENKA_TEST_ASSERT(
+        sandbox3d_editor_ui_scroll_details(
+            &state,
+            100.0f,
+            -1));
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(
+        state.details_scroll_offset,
+        112.0f,
+        0.0001f);
+
+    state.details_scroll_offset = 20.0f;
+    state.details_content_height = 80.0f;
+    HENKA_TEST_ASSERT(
+        !sandbox3d_editor_ui_scroll_details(
+            &state,
+            100.0f,
+            1));
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(
+        state.details_scroll_offset,
+        0.0f,
+        0.0001f);
+
+    state.details_scroll_offset = 20.0f;
+    state.details_content_height = 260.0f;
+    HENKA_TEST_ASSERT(
+        !sandbox3d_editor_ui_scroll_details(
+            &state,
+            NAN,
+            1));
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(
+        state.details_scroll_offset,
+        0.0f,
+        0.0001f);
+
+    HENKA_TEST_ASSERT(
+        !sandbox3d_editor_ui_scroll_details(
+            NULL,
+            100.0f,
+            1));
     henka_settings_destroy(settings);
 }

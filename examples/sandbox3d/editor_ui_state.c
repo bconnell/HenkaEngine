@@ -230,3 +230,51 @@ bool sandbox3d_editor_ui_scroll_controls(
             viewport_height);
     return true;
 }
+
+bool sandbox3d_editor_ui_scroll_details(
+    sandbox3d_editor_ui_state* state,
+    float viewport_height,
+    int direction)
+{
+    float requested_offset;
+
+    if (state == NULL ||
+        !isfinite(viewport_height) ||
+        viewport_height <= 0.0f ||
+        direction == 0)
+    {
+        if (state != NULL)
+        {
+            state->details_scroll_offset = 0.0f;
+        }
+        return false;
+    }
+
+    state->details_scroll_offset =
+        sandbox3d_editor_ui_clamp_scroll(
+            state->details_scroll_offset,
+            state->details_content_height,
+            viewport_height);
+
+    if (!isfinite(state->details_content_height) ||
+        state->details_content_height <= viewport_height)
+    {
+        state->details_scroll_offset = 0.0f;
+        return false;
+    }
+
+    requested_offset =
+        state->details_scroll_offset +
+        (float)direction * 48.0f;
+    if (requested_offset < 0.0f)
+    {
+        requested_offset = 0.0f;
+    }
+
+    state->details_scroll_offset =
+        sandbox3d_editor_ui_clamp_scroll(
+            requested_offset,
+            state->details_content_height,
+            viewport_height);
+    return true;
+}

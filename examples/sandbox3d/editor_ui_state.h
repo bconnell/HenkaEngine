@@ -47,4 +47,9 @@ bool sandbox3d_editor_ui_scroll_controls(
     float viewport_height,
     int direction);
 
+
+bool sandbox3d_editor_ui_scroll_details(
+    sandbox3d_editor_ui_state* state,
+    float viewport_height,
+    int direction);
 #endif
