@@ -11,6 +11,7 @@
 #include <henka/scene.h>
 #include <henka/terrain.h>
 #include <henka/terrain_edit.h>
+#include <henka/terrain_authority.h>
 #include <henka/terrain_network.h>
 #include <henka/terrain_storage.h>
 #include <henka/terrain_streaming.h>

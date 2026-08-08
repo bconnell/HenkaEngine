@@ -53,9 +53,10 @@ values. Linear and smooth falloffs use fixed-point integer weighting. The
 runtime determines every affected resident region before allocating candidate
 copies; all candidate regions pass validation before any live sample or
 revision is swapped. The same ordered command stream therefore produces
-byte-identical authoritative samples across runtimes. Persistence enqueue,
-server permissions/revision checks, client prediction, and editor controls are
-not yet integrated.
+byte-identical authoritative samples across runtimes. General editor/runtime
+tool integration, client prediction, and asynchronous persistence scheduling
+are not yet integrated; the server authority path persists accepted commands
+synchronously through the storage transaction described below.
 
 Terrain network payloads in `<henka/terrain_network.h>` use explicit bounded
 little-endian encoding for edit requests, authoritative acceptance revisions,
@@ -64,6 +65,21 @@ algorithm-versioned command fields, and the expected revision for each affected
 region. Payload codecs reject unsupported command fields, negative region IDs,
 oversized region lists, and trailing/truncated bytes; transport framing and
 authority policy remain separate layers.
+
+## Authority contract
+
+`<henka/terrain_authority.h>` provides the renderer-independent server-side
+validation boundary. It bounds per-peer edit requests, optionally invokes a
+permission callback, verifies the world and packaged-base identities, requires
+the exact deterministic affected-region set, and rejects stale region
+revisions. An accepted command is applied to the live world, written to every
+affected region in one storage transaction, and acknowledged only after the
+transaction commits. If the edit or persistence path fails, the live samples
+and revisions are restored and the incomplete transaction is abandoned.
+
+The authority object does not own the world or storage. ENet session routing,
+replication deltas and snapshots, reconnect/late-join recovery, client
+prediction, and editor controls remain subsequent integration work.
 
 The descriptor stores the format version, world and base identities, all
 world/region/chunk relationships, and bounded residency limits. Creating a
@@ -75,8 +91,8 @@ physics, render, pending-I/O, dirty, revision, and generation state.
 
 This slice establishes the shared data model and bounded ownership contract.
 World manifest integration, journal compaction, streaming hysteresis and
-eviction, integer mutation commands, collision regeneration, client
-LOD/rendering, and server authority are subsequent validated runtime slices.
+eviction, collision regeneration, client LOD/rendering, transport/session
+integration, and client prediction are subsequent validated runtime slices.
 They must use this
 same world identity, region/chunk mapping, revision, and residency ownership;
 they must not introduce a second world-sized representation.

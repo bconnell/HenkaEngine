@@ -7,6 +7,7 @@
 
 #define HENKA_TERRAIN_EDIT_ALGORITHM_VERSION UINT32_C(1)
 #define HENKA_TERRAIN_EDIT_MAX_RADIUS_METERS 128U
+#define HENKA_TERRAIN_EDIT_MAX_AFFECTED_REGIONS 16U
 
 typedef enum henka_terrain_edit_operation
 {
@@ -41,6 +42,11 @@ henka_terrain_edit_command henka_terrain_edit_command_default(void);
 henka_result henka_terrain_edit_command_validate(
     const henka_terrain_world* world,
     const henka_terrain_edit_command* command);
+henka_result henka_terrain_edit_get_affected_regions(
+    const henka_terrain_world* world,
+    const henka_terrain_edit_command* command,
+    henka_terrain_region_id* out_regions,
+    uint32_t* in_out_region_count);
 henka_result henka_terrain_world_apply_edit(
     henka_terrain_world* world,
     const henka_terrain_edit_command* command,

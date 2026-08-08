@@ -176,6 +176,76 @@ henka_result henka_terrain_edit_command_validate(
     return HENKA_SUCCESS;
 }
 
+henka_result henka_terrain_edit_get_affected_regions(
+    const henka_terrain_world* world,
+    const henka_terrain_edit_command* command,
+    henka_terrain_region_id* out_regions,
+    uint32_t* in_out_region_count)
+{
+    uint32_t region_sample_span;
+    uint32_t min_x;
+    uint32_t max_x;
+    uint32_t min_z;
+    uint32_t max_z;
+    int32_t min_region_x;
+    int32_t max_region_x;
+    int32_t min_region_z;
+    int32_t max_region_z;
+    uint32_t required = 0U;
+    int32_t region_z;
+    int32_t region_x;
+    henka_result result;
+
+    if (in_out_region_count == NULL || out_regions == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    result = henka_terrain_edit_command_validate(world, command);
+    if (result != HENKA_SUCCESS)
+    {
+        return result;
+    }
+    region_sample_span = world->desc.region_edge_meters / world->desc.base_sample_spacing_meters;
+    min_x = command->center_sample_x > (int32_t)command->radius_samples
+        ? (uint32_t)(command->center_sample_x - (int32_t)command->radius_samples) : 0U;
+    min_z = command->center_sample_z > (int32_t)command->radius_samples
+        ? (uint32_t)(command->center_sample_z - (int32_t)command->radius_samples) : 0U;
+    max_x = (uint32_t)command->center_sample_x + command->radius_samples;
+    max_z = (uint32_t)command->center_sample_z + command->radius_samples;
+    {
+        uint32_t samples_across = world->desc.world_width_meters / world->desc.base_sample_spacing_meters + 1U;
+        uint32_t samples_down = world->desc.world_depth_meters / world->desc.base_sample_spacing_meters + 1U;
+        if (max_x >= samples_across) { max_x = samples_across - 1U; }
+        if (max_z >= samples_down) { max_z = samples_down - 1U; }
+    }
+    min_region_x = (int32_t)(min_x / region_sample_span);
+    max_region_x = (int32_t)(max_x / region_sample_span);
+    min_region_z = (int32_t)(min_z / region_sample_span);
+    max_region_z = (int32_t)(max_z / region_sample_span);
+    for (region_z = min_region_z; region_z <= max_region_z; ++region_z)
+    {
+        for (region_x = min_region_x; region_x <= max_region_x; ++region_x)
+        {
+            if (required >= HENKA_TERRAIN_EDIT_MAX_AFFECTED_REGIONS)
+            {
+                return HENKA_ERROR_LIMIT;
+            }
+            if (required < *in_out_region_count)
+            {
+                out_regions[required] = (henka_terrain_region_id){region_x, region_z};
+            }
+            ++required;
+        }
+    }
+    if (*in_out_region_count < required)
+    {
+        *in_out_region_count = required;
+        return HENKA_ERROR_LIMIT;
+    }
+    *in_out_region_count = required;
+    return HENKA_SUCCESS;
+}
+
 static void henka_terrain_edit_apply_paint(
     henka_terrain_sample* sample,
     const henka_terrain_edit_command* command,

@@ -671,6 +671,18 @@ henka_result henka_terrain_storage_commit(
     return henka_terrain_storage_recover(storage);
 }
 
+henka_result henka_terrain_storage_abort(
+    henka_terrain_storage* storage,
+    uint64_t transaction_id)
+{
+    if (storage == NULL || transaction_id == 0U || storage->active_transaction_id != transaction_id)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    storage->active_transaction_id = 0U;
+    return HENKA_SUCCESS;
+}
+
 henka_result henka_terrain_storage_load_region(
     henka_terrain_storage* storage,
     henka_terrain_region_id region_id,

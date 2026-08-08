@@ -82,22 +82,23 @@ Henka Engine is still early, but the sandbox now renders a visible 3D scene with
 - Generic documentation and starter template for external game repositories
 - C17 external server template and Windows validation path that links only `henka_runtime` plus its private network implementation
 - Headless-only CMake configuration with `HENKA_BUILD_CLIENT=OFF`, `HENKA_BUILD_DEDICATED_SERVER=OFF`, and `HENKA_ENABLE_KTX2_TRANSCODER=OFF`; the resulting runtime target does not configure SDL, OpenGL, or KTX
-- Version-1 bounded Henka network packet codec and localhost ENet transport with explicit little-endian headers, three logical channels, reliable ordered delivery, a 64 KiB packet ceiling, and 32 KiB snapshot fragments; server authority and multiplayer synchronization remain unfinished
-- Terrain v1 core contract with an 8192 m x 8192 m default descriptor, 512 m regions, 64 m chunks, 65 x 65 full-resolution chunk samples, signed millimeter heights, deterministic four-layer weight normalization, integer region/chunk identities, and separately bounded CPU/physics/render residency state; region files, mutation, persistence, streaming, collision regeneration, rendering LOD, and authority remain unfinished
+- Version-1 bounded Henka network packet codec and localhost ENet transport with explicit little-endian headers, three logical channels, reliable ordered delivery, a 64 KiB packet ceiling, and 32 KiB snapshot fragments; bounded Terrain authority validation is available, while session replication and multiplayer synchronization remain unfinished
+- Terrain v1 core contract with an 8192 m x 8192 m default descriptor, 512 m regions, 64 m chunks, 65 x 65 full-resolution chunk samples, signed millimeter heights, deterministic four-layer weight normalization, integer region/chunk identities, and separately bounded CPU/physics/render residency state; collision regeneration, rendering LOD, and transport integration remain unfinished
 - Bounded Terrain v1 region records with explicit little-endian world/base identity, region, generation, revision, sample, and checksum fields; append-only BEGIN/REGION/COMMIT journaling atomically replaces validated region snapshots and ignores incomplete transactions during recovery, while compaction and world-level mutation integration remain unfinished
 - Bounded Windows Terrain streaming foundation with a renderer-free worker, coalesced region requests, fixed request/completion queues, observer records, cancellation, candidate validation, main-thread region swaps, and stream diagnostics; hysteresis/eviction policy, terrain-aware observer integration, and full residency automation remain unfinished
-- Shared deterministic Terrain edit commands for raise/lower, flatten, smooth, and paint use algorithm version 1, integer sample centers/radii, fixed-point falloffs, candidate-region preflight, atomic multi-region swaps, revisions, and dirty state; persistence enqueue, server validation, prediction, and editor tool integration remain unfinished
+- Shared deterministic Terrain edit commands for raise/lower, flatten, smooth, and paint use algorithm version 1, integer sample centers/radii, fixed-point falloffs, candidate-region preflight, atomic multi-region swaps, revisions, and dirty state; editor tool integration and client prediction remain unfinished
 - Explicit bounded Terrain edit request, acceptance, and rejection codecs carry world/base identity, client nonce, versioned command fields, affected-region expected revisions, server command identity, and fail-closed rejection reasons without transmitting native C layouts
+- Bounded Terrain authority validation checks peer rate limits, permissions, world/base identity, exact affected-region sets, and expected revisions, applies deterministic edits, commits all affected region snapshots before returning acceptance, and restores live samples/revisions on persistence failure; transport session integration, replication, reconnect recovery, and client prediction remain unfinished
 - Deterministic Windows CI package contract checks that avoid hosted graphics-session assumptions, while local validation still performs packaged runtime smoke, desktop interaction, and application-only screenshot checks
 - Repository integrity checks for tracked artifacts, credential signatures, script parsing, dependency pins, and workflow action pins
 
 ### What does not exist yet
 
 - Full production editor and project-authoring workflow
-- Terrain hosting, persistence, authoritative multiplayer, and dedicated-server packaging/deployment workflow
+- Terrain hosting and dedicated-server packaging/deployment workflow
 - Full asset browser, import/reimport, dependency-graph, and project authoring workflow (the sandbox has only a bounded manager-known asset view and editable-instance texture-slot assignment)
 - Audio
-- Terrain authority and multiplayer synchronization beyond the transport foundation
+- Terrain multiplayer synchronization beyond bounded authority validation and payload codecs
 - Scripting
 - Full 2D renderer
 - Full 2.5D sprite, layered-depth, parallax, animation, and constrained-movement workflow

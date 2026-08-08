@@ -54,6 +54,9 @@ henka_result henka_terrain_storage_write_region(
 henka_result henka_terrain_storage_commit(
     henka_terrain_storage* storage,
     uint64_t transaction_id);
+henka_result henka_terrain_storage_abort(
+    henka_terrain_storage* storage,
+    uint64_t transaction_id);
 henka_result henka_terrain_storage_load_region(
     henka_terrain_storage* storage,
     henka_terrain_region_id region_id,
