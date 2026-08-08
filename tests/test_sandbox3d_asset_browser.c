@@ -40,19 +40,29 @@ static void henka_test_sandbox3d_asset_browser_collection(void)
 static void henka_test_sandbox3d_asset_browser_paging(void)
 {
     henka_asset_manager manager;
-    henka_asset_texture_entry textures[7];
+    static const char* paths[7] =
+    {
+        "assets/textures/page0.png",
+        "assets/textures/page1.png",
+        "assets/textures/page2.png",
+        "assets/textures/page3.png",
+        "assets/textures/page4.png",
+        "assets/textures/page5.png",
+        "assets/textures/page6.png"
+    };
+    henka_asset_texture_entry textures[8];
     sandbox3d_asset_browser_item items[3];
     size_t index;
 
     memset(&manager, 0, sizeof(manager));
     memset(textures, 0, sizeof(textures));
-    for (index = 0U; index < 7U; ++index)
+    for (index = 0U; index < 8U; ++index)
     {
         textures[index].metadata.type = HENKA_ASSET_TYPE_TEXTURE;
-        textures[index].metadata.source_path = "assets/textures/paged.png";
+        textures[index].metadata.source_path = paths[index < 7U ? index : 0U];
     }
     manager.texture_entries = textures;
-    manager.texture_count = 7U;
+    manager.texture_count = 8U;
 
     HENKA_TEST_ASSERT(sandbox3d_asset_browser_page_count(&manager, HENKA_ASSET_TYPE_TEXTURE, 3U) == 3U);
     HENKA_TEST_ASSERT(sandbox3d_asset_browser_page_count(&manager, HENKA_ASSET_TYPE_TEXTURE, 0U) == 0U);

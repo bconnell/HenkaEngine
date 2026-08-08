@@ -109,6 +109,58 @@ static bool sandbox3d_asset_browser_type_matches(
         : metadata_type != HENKA_ASSET_TYPE_UNKNOWN;
 }
 
+static char sandbox3d_asset_browser_ascii_lower(char value)
+{
+    return value >= 'A' && value <= 'Z' ? (char)(value + ('a' - 'A')) : value;
+}
+
+static bool sandbox3d_asset_browser_source_identity_equal(
+    const char* left,
+    const char* right)
+{
+    size_t index;
+
+    if (left == NULL || right == NULL || left[0] == '\0' || right[0] == '\0')
+    {
+        return false;
+    }
+    for (index = 0U; left[index] != '\0' && right[index] != '\0'; ++index)
+    {
+        if (sandbox3d_asset_browser_ascii_lower(left[index]) !=
+            sandbox3d_asset_browser_ascii_lower(right[index]))
+        {
+            return false;
+        }
+    }
+    return left[index] == '\0' && right[index] == '\0';
+}
+
+static bool sandbox3d_asset_browser_is_first_identity(
+    const henka_asset_manager* manager,
+    size_t metadata_index,
+    const henka_asset_metadata* metadata)
+{
+    size_t index;
+
+    if (manager == NULL || metadata == NULL || metadata->source_path == NULL ||
+        metadata->source_path[0] == '\0')
+    {
+        return true;
+    }
+    for (index = 0U; index < metadata_index; ++index)
+    {
+        henka_asset_metadata previous;
+        if (henka_assets_get_metadata_at_index(manager, index, &previous) == HENKA_SUCCESS &&
+            previous.type == metadata->type &&
+            sandbox3d_asset_browser_source_identity_equal(
+                previous.source_path, metadata->source_path))
+        {
+            return false;
+        }
+    }
+    return true;
+}
+
 size_t sandbox3d_asset_browser_collect(
     const henka_asset_manager* manager,
     henka_asset_type type,
@@ -132,6 +184,10 @@ size_t sandbox3d_asset_browser_collect(
 
         if (henka_assets_get_metadata_at_index(manager, index, &metadata) != HENKA_SUCCESS ||
             !sandbox3d_asset_browser_type_matches(type, metadata.type))
+        {
+            continue;
+        }
+        if (!sandbox3d_asset_browser_is_first_identity(manager, index, &metadata))
         {
             continue;
         }
@@ -200,6 +256,10 @@ size_t sandbox3d_asset_browser_collect_page(
         henka_asset_metadata metadata;
         if (henka_assets_get_metadata_at_index(manager, index, &metadata) != HENKA_SUCCESS ||
             !sandbox3d_asset_browser_type_matches(type, metadata.type))
+        {
+            continue;
+        }
+        if (!sandbox3d_asset_browser_is_first_identity(manager, index, &metadata))
         {
             continue;
         }
