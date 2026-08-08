@@ -13,6 +13,7 @@ add_library(henka_runtime STATIC
     src/terrain/terrain_authority.c
     src/terrain/terrain_network.c
     src/terrain/terrain_server.c
+    src/terrain/terrain_replica.c
     src/terrain/terrain_storage.c
     src/terrain/terrain_streaming.c
 )

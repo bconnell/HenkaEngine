@@ -101,6 +101,15 @@ size, index, count, and payload bytes. The transport keeps each fragment under
 the existing 32 KiB snapshot payload limit. The client assembly owner and
 reconnect policy are not yet implemented.
 
+`<henka/terrain_replica.h>` is the bounded client-side consumer for those
+messages. It applies a delta only when every affected resident region advances
+by exactly one revision, accepts an all-duplicate delta idempotently, and
+rejects gaps or mixed duplicate/new multi-region states before changing live
+samples. Snapshot fragments are accumulated under a configured byte budget;
+the validated record is decoded and atomically swapped into the world only
+after every fragment arrives. The replica does not own networking, reconnect
+state, prediction history, or render/physics residency policy.
+
 The descriptor stores the format version, world and base identities, all
 world/region/chunk relationships, and bounded residency limits. Creating a
 world allocates only the configured region and chunk residency tables; it does

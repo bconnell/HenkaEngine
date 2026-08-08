@@ -102,6 +102,19 @@ henka_enable_project_warnings(henka_terrain_server_tests)
 
 add_test(NAME henka_terrain_server_tests COMMAND henka_terrain_server_tests)
 
+add_executable(henka_terrain_replica_tests
+    test_terrain_replica.c
+)
+
+target_link_libraries(henka_terrain_replica_tests
+    PRIVATE
+        henka_runtime
+)
+
+henka_enable_project_warnings(henka_terrain_replica_tests)
+
+add_test(NAME henka_terrain_replica_tests COMMAND henka_terrain_replica_tests)
+
 if(HENKA_ENABLE_NETWORK)
 add_executable(henka_network_tests
     test_network.c

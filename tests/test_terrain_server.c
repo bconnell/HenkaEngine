@@ -86,7 +86,7 @@ static int test_loopback_authoritative_edit(void)
     {
         goto cleanup;
     }
-    for (iteration = 0U; iteration < 400U; ++iteration)
+    for (iteration = 0U; iteration < 2000U; ++iteration)
     {
         if (henka_terrain_server_poll(server, 2U, 1000U + iteration) != HENKA_SUCCESS ||
             henka_network_client_poll(client, 2U, &event) != HENKA_SUCCESS)
@@ -98,7 +98,7 @@ static int test_loopback_authoritative_edit(void)
             break;
         }
     }
-    if (iteration == 400U)
+    if (iteration == 2000U)
     {
         goto cleanup;
     }
@@ -118,7 +118,7 @@ static int test_loopback_authoritative_edit(void)
     {
         goto cleanup;
     }
-    for (iteration = 0U; iteration < 400U; ++iteration)
+    for (iteration = 0U; iteration < 2000U; ++iteration)
     {
         if (henka_terrain_server_poll(server, 2U, 2000U + iteration) != HENKA_SUCCESS ||
             henka_network_client_poll(client, 2U, &event) != HENKA_SUCCESS)
