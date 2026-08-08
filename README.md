@@ -24,7 +24,7 @@ Henka Engine is still early, but the sandbox now renders a visible 3D scene with
 - `henka` static library target
 - renderer-independent `henka_runtime` static library target for headless consumers
 - `henka_sandbox3d` example target
-- renderer-free `henka_dedicated_server` host foundation target; networking and terrain hosting remain unfinished
+- renderer-free `henka_dedicated_server` host target with bounded config-file loading, fixed-tick simulation, loopback transport servicing, and graceful client shutdown; terrain hosting and persistence remain unfinished
 - `henka_tests` unit test target with CTest integration
 - SDL3-backed platform layer hidden behind Henka headers
 - OpenGL renderer backend isolated inside renderer implementation files
@@ -80,6 +80,7 @@ Henka Engine is still early, but the sandbox now renders a visible 3D scene with
 - Rigid-body physics v1 with atomic fixed substeps, allocation-safe rollback, static/dynamic/kinematic bodies, sphere/AABB/plane colliders, triggers, events, raycasts, and sandbox debug controls
 - Transactional packaged-sandbox refreshes that preserve user data by default and retain the prior package until activation succeeds
 - Generic documentation and starter template for external game repositories
+- C17 external server template and Windows validation path that links only `henka_runtime` plus its private network implementation
 - Headless-only CMake configuration with `HENKA_BUILD_CLIENT=OFF`, `HENKA_BUILD_DEDICATED_SERVER=OFF`, and `HENKA_ENABLE_KTX2_TRANSCODER=OFF`; the resulting runtime target does not configure SDL, OpenGL, or KTX
 - Version-1 bounded Henka network packet codec and localhost ENet transport with explicit little-endian headers, three logical channels, reliable ordered delivery, a 64 KiB packet ceiling, and 32 KiB snapshot fragments; server authority and multiplayer synchronization remain unfinished
 - Deterministic Windows CI package contract checks that avoid hosted graphics-session assumptions, while local validation still performs packaged runtime smoke, desktop interaction, and application-only screenshot checks
@@ -88,7 +89,7 @@ Henka Engine is still early, but the sandbox now renders a visible 3D scene with
 ### What does not exist yet
 
 - Full production editor and project-authoring workflow
-- Dedicated-server networking, terrain hosting, persistence, and deployment workflow
+- Terrain hosting, persistence, authoritative multiplayer, and dedicated-server packaging/deployment workflow
 - Full asset browser, import/reimport, dependency-graph, and project authoring workflow (the sandbox has only a bounded manager-known asset view and editable-instance texture-slot assignment)
 - Audio
 - Terrain authority and multiplayer synchronization beyond the transport foundation

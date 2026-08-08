@@ -49,6 +49,16 @@ To validate that template against the current Henka checkout from this repositor
 .\scripts\test_external_game_template_windows.ps1
 ```
 
+## Using the external server template
+
+`templates/external_server_minimal/` is the renderer-free C17 counterpart. It
+disables the graphical client, KTX, bundled examples, and tests, then links
+only `henka_runtime`. It still enables the private Henka network transport so
+the consumer validates the same headless server dependency boundary. Run
+`scripts/test_external_server_template_windows.ps1` for a fresh configure,
+build, and initialization smoke test; `-NoLocalProviders` forces the pinned
+ENet FetchContent fallback when repository-local dependency sources are absent.
+
 ## Suggested external project layout
 
 ```text
