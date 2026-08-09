@@ -14,6 +14,16 @@ Use this checklist when you want to confirm that `henka_sandbox3d` is visually r
 .\scripts\run_sandbox3d.ps1
 ```
 
+For application-only evidence of the normal model showcase plus the existing
+same-camera shading comparison, run:
+
+```powershell
+.\scripts\capture_visual_evidence_windows.ps1 -IncludeStartupShowcase
+```
+
+This writes generated images under `build/visual_evidence/`; it does not add
+them to the repository.
+
 ## Packaged executable test
 
 1. Run:
@@ -159,10 +169,15 @@ Use this checklist when you want to confirm that `henka_sandbox3d` is visually r
 
 ## Expected scene examples
 
-You should be able to identify these examples:
+The normal startup should show these showcase assets:
+
+- `Showcase Giraffe`: the Cheeky Giraffe mascot, loaded from the packaged glTF scene/material path.
+- `Showcase Rocket`: the Original Realistic Rocket, loaded from the packaged glTF scene/material path.
+- `Ground`: the textured plane beneath the showcase and the restrained debug grid.
+
+Use `--primitive-gallery` when the engineering samples are specifically under test. In that opt-in mode you should be able to identify these additional examples:
 
 - `Textured Cube`: centered in the scene.
-- `Ground`: textured plane under the scene.
 - `Material Ball`: left side of the scene.
 - `glTF Marker`: farther left, using the current glTF loading path.
 - `Missing Texture`: right side, using the visible error-texture fallback.

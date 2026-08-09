@@ -2,7 +2,9 @@ param(
     [ValidateSet("Debug", "Release")]
     [string]$Configuration = "Debug",
 
-    [string]$OutputDirectory = ""
+    [string]$OutputDirectory = "",
+
+    [switch]$IncludeStartupShowcase
 )
 
 Set-StrictMode -Version Latest
@@ -73,21 +75,27 @@ public static class HenkaVisualCaptureNativeMethods
 [System.IO.Directory]::CreateDirectory($OutputDirectory) | Out-Null
 Add-Type -AssemblyName System.Drawing
 $modes = @(
-    @{ Argument = "solid"; File = "same-camera-solid.png" },
-    @{ Argument = "material_preview"; File = "same-camera-material-preview.png" },
-    @{ Argument = "rendered"; File = "same-camera-rendered.png" }
+    @{ Label = "solid"; Arguments = @("--capture-mode", "solid"); File = "same-camera-solid.png" },
+    @{ Label = "material_preview"; Arguments = @("--capture-mode", "material_preview"); File = "same-camera-material-preview.png" },
+    @{ Label = "rendered"; Arguments = @("--capture-mode", "rendered"); File = "same-camera-rendered.png" }
 )
+if ($IncludeStartupShowcase) {
+    $modes = @(
+        @{ Label = "startup"; Arguments = @(); File = "startup-showcase.png" }
+    ) + $modes
+}
 $records = New-Object System.Collections.Generic.List[string]
 $records.Add("Same-camera viewport evidence")
 $records.Add("Source: $executable")
 $records.Add("Camera policy: capture-mode runs use the same deterministic Terrain showcase camera and never save capture-mode settings")
 $records.Add("Modes: Solid, Material Preview, Rendered")
+$records.Add("Startup evidence: optional ordinary startup camera with the default showcase models")
 $records.Add("Capture: application window bounds copied from the desktop into repo-local generated output")
 
 foreach ($mode in $modes) {
     $process = Start-HenkaProcess `
         -FilePath $executable `
-        -Arguments @("--capture-mode", $mode.Argument) `
+        -Arguments $mode.Arguments `
         -WorkingDirectory (Split-Path -Parent $executable)
     $handle = [IntPtr]::Zero
     try {
@@ -97,7 +105,7 @@ foreach ($mode in $modes) {
             $handle = [HenkaVisualCaptureNativeMethods]::FindSandboxWindow([uint32]$process.Id)
         }
         if ($handle -eq [IntPtr]::Zero -or -not [HenkaVisualCaptureNativeMethods]::IsWindow($handle)) {
-            throw "Sandbox window did not become available for $($mode.Argument)."
+            throw "Sandbox window did not become available for $($mode.Label)."
         }
         [HenkaVisualCaptureNativeMethods]::ActivateSandboxWindow($handle)
         Start-Sleep -Milliseconds 1500
@@ -108,12 +116,12 @@ foreach ($mode in $modes) {
             [ref]$rect,
             [System.Runtime.InteropServices.Marshal]::SizeOf($rect))
         if ($dwmResult -ne 0) {
-            throw "Window bounds could not be read for $($mode.Argument): $dwmResult"
+            throw "Window bounds could not be read for $($mode.Label): $dwmResult"
         }
         $width = $rect.Right - $rect.Left
         $height = $rect.Bottom - $rect.Top
         if ($width -le 0 -or $height -le 0) {
-            throw "Window bounds were invalid for $($mode.Argument)."
+            throw "Window bounds were invalid for $($mode.Label)."
         }
         $bitmap = New-Object System.Drawing.Bitmap($width, $height)
         try {
@@ -127,7 +135,7 @@ foreach ($mode in $modes) {
             $path = Join-Path $OutputDirectory $mode.File
             $bitmap.Save($path, [System.Drawing.Imaging.ImageFormat]::Png)
             $hash = (Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash.ToLowerInvariant()
-            $records.Add("$($mode.Argument): $($mode.File) SHA-256=$hash bounds=$width`x$height")
+            $records.Add("$($mode.Label): $($mode.File) SHA-256=$hash bounds=$width`x$height")
         }
         finally {
             $bitmap.Dispose()
