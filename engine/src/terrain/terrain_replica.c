@@ -193,6 +193,8 @@ henka_result henka_terrain_replica_apply_snapshot_fragment(
     henka_terrain_sample* samples = NULL;
     henka_terrain_region_storage_info info;
     henka_result result;
+    uint32_t expected_fragment_count;
+    uint32_t expected_data_size;
     if (out_complete == NULL || replica == NULL || fragment == NULL || fragment->data == NULL)
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
@@ -206,6 +208,18 @@ henka_result henka_terrain_replica_apply_snapshot_fragment(
         fragment->fragment_index >= fragment->fragment_count || fragment->total_bytes == 0U ||
         fragment->total_bytes > replica->max_snapshot_bytes || fragment->data_size == 0U ||
         fragment->data_size > HENKA_TERRAIN_NETWORK_MAX_SNAPSHOT_FRAGMENT_DATA_BYTES)
+    {
+        ++replica->diagnostics.rejected_snapshot_count;
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    expected_fragment_count =
+        (fragment->total_bytes + HENKA_TERRAIN_NETWORK_MAX_SNAPSHOT_FRAGMENT_DATA_BYTES - 1U) /
+        HENKA_TERRAIN_NETWORK_MAX_SNAPSHOT_FRAGMENT_DATA_BYTES;
+    expected_data_size = fragment->fragment_index + 1U == fragment->fragment_count
+        ? fragment->total_bytes - fragment->fragment_index * HENKA_TERRAIN_NETWORK_MAX_SNAPSHOT_FRAGMENT_DATA_BYTES
+        : HENKA_TERRAIN_NETWORK_MAX_SNAPSHOT_FRAGMENT_DATA_BYTES;
+    if (fragment->fragment_count != expected_fragment_count ||
+        fragment->data_size != expected_data_size)
     {
         ++replica->diagnostics.rejected_snapshot_count;
         return HENKA_ERROR_INVALID_ARGUMENT;

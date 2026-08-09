@@ -157,7 +157,10 @@ Snapshot requests identify the world, packaged base, region, and expected
 revision. The server reads the validated region record from storage and emits
 transfer-identified fragments with the record revision, generation, total
 size, index, count, and payload bytes. The transport keeps each fragment under
-the existing 32 KiB snapshot payload limit. The client session adapter owns the
+the existing 32 KiB snapshot payload limit, and the replica requires the exact
+ceil(total-size / payload-limit) fragment count plus full-size non-final
+fragments so malformed transfers fail closed instead of hanging assembly. The
+client session adapter owns the
 bounded fragment assembly through `<henka/terrain_replica.h>`; a delta gap
 first requests the retained revision range and uses a snapshot when that
 range is unavailable. Connect-time session info can request the same bounded
@@ -169,8 +172,10 @@ reconnect and late-join selection remain outside this bounded policy.
 by exactly one revision, accepts an all-duplicate delta idempotently, and
 rejects gaps or mixed duplicate/new multi-region states before changing live
 samples. Snapshot fragments are accumulated under a configured byte budget;
-the validated record is decoded and atomically swapped into the world only
-after every fragment arrives. The replica does not own network transport,
+duplicate fragments, malformed sizing, and checksum/decode failures are
+rejected without publishing partial samples; a new transfer can retry and the
+validated record is decoded and atomically swapped into the world only after
+every fragment arrives. The replica does not own network transport,
 reconnect state or render/physics residency policy; the
 client adapter does not invent those missing policies.
 
