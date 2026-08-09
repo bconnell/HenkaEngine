@@ -170,8 +170,15 @@ chunk and fills caller-owned buffers for LOD 0 through LOD 3. It derives finite
 central-difference normals, world-normalized UVs, and copies the four
 normalized material weights without allocating. The result carries the source
 revision and generation, so a graphics owner can discard a stale upload. GPU
-mesh ownership, seam stitching, render eviction, and visual scene integration
-remain subsequent work.
+mesh ownership is provided by `<henka/terrain_render.h>` in the graphical
+client: it borrows the engine, scene, and world, keeps fixed-capacity chunk
+slots and request queues, creates scene entities with bounds for renderer
+culling, and replaces meshes transactionally only after a candidate upload
+succeeds. Four LOD bands use hysteresis and deterministic adjacent-chunk
+selection; render visibility is bounded by the configured outer band. The
+owner destroys its entities and meshes without destroying the borrowed world.
+Cross-LOD seam stitching, automatic world-residency scheduling, and manual
+visual validation remain subsequent work.
 
 The descriptor stores the format version, world and base identities, all
 world/region/chunk relationships, and bounded residency limits. Creating a
@@ -183,8 +190,8 @@ physics, render, pending-I/O, dirty, revision, and generation state.
 
 This slice establishes the shared data model and bounded ownership contract.
 World manifest integration, full residency-wide dirty-neighbor scheduling,
-scene ownership and GPU residency, and reconnect/late-join orchestration are
-subsequent validated runtime slices. Accepted edits can now derive one-chunk
+automatic render residency, cross-LOD seam stitching, and reconnect/late-join
+orchestration are subsequent validated runtime slices. Accepted edits can now derive one-chunk
 physics-neighbor coverage through the bounded collision queue, and client
 prediction is available through the separate presentation-world owner.
 They must use this

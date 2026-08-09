@@ -56,6 +56,7 @@ if(HENKA_BUILD_CLIENT)
         src/core/workspace.c
         src/platform/platform_sdl.c
         src/renderer/mesh.c
+        src/renderer/terrain_render.c
         src/renderer/renderer.c
         src/renderer/renderer_opengl.c
         src/renderer/shader.c

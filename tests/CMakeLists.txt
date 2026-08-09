@@ -225,6 +225,18 @@ target_link_libraries(henka_terrain_mesh_tests
 henka_enable_project_warnings(henka_terrain_mesh_tests)
 add_test(NAME henka_terrain_mesh_tests COMMAND henka_terrain_mesh_tests)
 
+if(HENKA_BUILD_CLIENT)
+add_executable(henka_terrain_render_tests
+    test_terrain_render.c
+)
+target_link_libraries(henka_terrain_render_tests
+    PRIVATE
+        henka
+)
+henka_enable_project_warnings(henka_terrain_render_tests)
+add_test(NAME henka_terrain_render_tests COMMAND henka_terrain_render_tests)
+endif()
+
 if(HENKA_ENABLE_NETWORK)
 add_executable(henka_network_tests
     test_network.c
