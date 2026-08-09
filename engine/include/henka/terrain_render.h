@@ -41,6 +41,11 @@ typedef struct henka_terrain_render_stats
     uint64_t fallback_skirt_chunks;
     uint64_t failed_rebuilds;
     uint64_t dropped_requests;
+    /* Exact owner allocations and uploaded Terrain resources. */
+    uint64_t runtime_cpu_bytes;
+    uint64_t gpu_vertex_bytes;
+    uint64_t gpu_index_bytes;
+    uint64_t material_gpu_bytes;
 } henka_terrain_render_stats;
 
 typedef struct henka_terrain_render_chunk_info

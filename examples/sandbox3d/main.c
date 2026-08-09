@@ -14026,9 +14026,12 @@ static void sandbox3d_draw_utility_panel(
             snprintf(
                 row_value,
                 sizeof(row_value),
-                "%u visible / %u queued",
+                "%u visible / %u queued / %llu KB GPU",
                 terrain_render_stats.visible_chunks,
-                terrain_render_stats.pending_requests);
+                terrain_render_stats.pending_requests,
+                (unsigned long long)((terrain_render_stats.gpu_vertex_bytes +
+                    terrain_render_stats.gpu_index_bytes +
+                    terrain_render_stats.material_gpu_bytes) / 1024U));
             sandbox3d_draw_value_row(state->ui, x_left, y_start + 44.0f, panel_bounds.width - 28.0f, "Render", row_value);
             snprintf(
                 row_value,
@@ -17673,6 +17676,28 @@ static void sandbox3d_update(henka_engine* engine, double delta_seconds, void* u
                 &stress_texture_info);
         if (henka_engine_get_diagnostics(engine, &smoke_diagnostics) == HENKA_SUCCESS)
         {
+            henka_terrain_render_stats terrain_render_stats;
+            henka_terrain_world_stats terrain_world_stats;
+            memset(&terrain_render_stats, 0, sizeof(terrain_render_stats));
+            memset(&terrain_world_stats, 0, sizeof(terrain_world_stats));
+            if (henka_terrain_render_runtime_get_stats(state->terrain_render, &terrain_render_stats) != HENKA_SUCCESS ||
+                henka_terrain_world_get_stats(state->terrain_world, &terrain_world_stats) != HENKA_SUCCESS ||
+                terrain_world_stats.cpu_bytes == 0U ||
+                terrain_render_stats.gpu_vertex_bytes == 0U ||
+                terrain_render_stats.gpu_index_bytes == 0U ||
+                terrain_render_stats.material_gpu_bytes == 0U)
+            {
+                state->smoke_validation_failed = true;
+            }
+            else
+            {
+                printf(
+                    "Terrain resource diagnostics: cpu=%llu bytes vertex-gpu=%llu index-gpu=%llu material-gpu=%llu.\n",
+                    (unsigned long long)terrain_world_stats.cpu_bytes,
+                    (unsigned long long)terrain_render_stats.gpu_vertex_bytes,
+                    (unsigned long long)terrain_render_stats.gpu_index_bytes,
+                    (unsigned long long)terrain_render_stats.material_gpu_bytes);
+            }
             if (smoke_diagnostics.viewport_shading_mode == HENKA_VIEWPORT_SHADING_RENDERED &&
                 (smoke_diagnostics.rendered_scene_terrain_draw_calls == 0U ||
                  smoke_diagnostics.rendered_scene_terrain_shadow_draw_calls == 0U))

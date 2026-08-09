@@ -202,6 +202,7 @@
 - [x] Add graphical mesh-candidate failure injection with previous mesh/revision retention and successful residency recovery in the Sandbox smoke path.
 - [ ] Add camera-crossing, LOD, rapid edit/paint, boundary, mode-switch, resize, context, multiplayer, restart, and shutdown soak scenarios.
 - [ ] Record CPU/GPU/Terrain memory, queue high-water, culling, draw, recovery, GL-error, thread, and clean-shutdown diagnostics.
+- [x] Record exact world-owned CPU and resident graphical-owner vertex/index/material GPU bytes in public Terrain stats and the Rendered Sandbox smoke.
 - [ ] Commit `test: add Terrain realism and bounded stress coverage`.
 
 ### Task 10: Recursive audits, final validation, documentation, and publication

@@ -12,6 +12,20 @@
 
 #define HENKA_TERRAIN_RENDER_DEPENDENCY_COUNT 9U
 
+static void henka_terrain_render_add_bytes(uint64_t* total, uint64_t amount)
+{
+    if (total == NULL || *total == UINT64_MAX)
+    {
+        return;
+    }
+    if (UINT64_MAX - *total < amount)
+    {
+        *total = UINT64_MAX;
+        return;
+    }
+    *total += amount;
+}
+
 typedef struct henka_terrain_render_request
 {
     uint32_t slot_index;
@@ -1153,6 +1167,8 @@ henka_result henka_terrain_render_runtime_get_stats(
     henka_terrain_render_stats* out_stats)
 {
     uint32_t index;
+    const henka_texture* material_textures[HENKA_MATERIAL_TERRAIN_LAYER_COUNT * 3U] = {0};
+    uint32_t material_texture_count = 0U;
     henka_terrain_render_stats* mutable_stats;
     if (runtime == NULL || out_stats == NULL)
     {
@@ -1162,7 +1178,50 @@ henka_result henka_terrain_render_runtime_get_stats(
     out_stats->pending_requests = runtime->request_count;
     out_stats->resident_chunks = 0U;
     out_stats->visible_chunks = 0U;
+    out_stats->runtime_cpu_bytes =
+        (uint64_t)sizeof(*runtime) +
+        (uint64_t)runtime->desc.max_resident_chunks * sizeof(*runtime->slots) +
+        (uint64_t)runtime->desc.max_pending_requests * sizeof(*runtime->requests);
+    out_stats->gpu_vertex_bytes = 0U;
+    out_stats->gpu_index_bytes = 0U;
+    out_stats->material_gpu_bytes = 0U;
     memset(out_stats->lod_counts, 0, sizeof(out_stats->lod_counts));
+    for (index = 0U; index < HENKA_MATERIAL_TERRAIN_LAYER_COUNT; ++index)
+    {
+        const henka_material_layer* layer = &runtime->desc.material.terrain_layers[index];
+        const henka_texture* textures[3] = {
+            layer->base_color_texture,
+            layer->normal_texture,
+            layer->metallic_roughness_texture};
+        uint32_t texture_index;
+        for (texture_index = 0U; texture_index < 3U; ++texture_index)
+        {
+            henka_texture_info texture_info;
+            uint32_t prior_index;
+            bool duplicate = false;
+            if (textures[texture_index] == NULL)
+            {
+                continue;
+            }
+            for (prior_index = 0U; prior_index < material_texture_count; ++prior_index)
+            {
+                if (material_textures[prior_index] == textures[texture_index])
+                {
+                    duplicate = true;
+                    break;
+                }
+            }
+            if (duplicate || material_texture_count >= sizeof(material_textures) / sizeof(material_textures[0]))
+            {
+                continue;
+            }
+            material_textures[material_texture_count++] = textures[texture_index];
+            if (henka_texture_get_info(textures[texture_index], &texture_info) == HENKA_SUCCESS)
+            {
+                henka_terrain_render_add_bytes(&out_stats->material_gpu_bytes, texture_info.resident_gpu_bytes);
+            }
+        }
+    }
     for (index = 0U; index < runtime->desc.max_resident_chunks; ++index)
     {
         const henka_terrain_render_slot* slot = &runtime->slots[index];
@@ -1174,6 +1233,15 @@ henka_result henka_terrain_render_runtime_get_stats(
                 out_stats->visible_chunks += 1U;
             }
             out_stats->lod_counts[slot->selected_lod] += 1U;
+            if (slot->mesh != NULL)
+            {
+                henka_terrain_render_add_bytes(
+                    &out_stats->gpu_vertex_bytes,
+                    (uint64_t)slot->mesh->vertex_count * sizeof(henka_vertex));
+                henka_terrain_render_add_bytes(
+                    &out_stats->gpu_index_bytes,
+                    (uint64_t)slot->mesh->index_count * sizeof(unsigned int));
+            }
         }
     }
     mutable_stats = (henka_terrain_render_stats*)&runtime->stats;

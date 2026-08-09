@@ -581,9 +581,43 @@ henka_result henka_terrain_world_get_stats(
     const henka_terrain_world* world,
     henka_terrain_world_stats* out_stats)
 {
+    uint64_t cpu_bytes;
+    uint32_t index;
+
     if (world == NULL || out_stats == NULL)
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    cpu_bytes = (uint64_t)sizeof(*world);
+    if (world->desc.max_resident_regions > UINT64_MAX / sizeof(*world->regions) ||
+        world->desc.max_resident_chunks > UINT64_MAX / sizeof(*world->chunks) ||
+        cpu_bytes > UINT64_MAX -
+            (uint64_t)world->desc.max_resident_regions * sizeof(*world->regions) ||
+        cpu_bytes + (uint64_t)world->desc.max_resident_regions * sizeof(*world->regions) >
+            UINT64_MAX - (uint64_t)world->desc.max_resident_chunks * sizeof(*world->chunks))
+    {
+        cpu_bytes = UINT64_MAX;
+    }
+    else
+    {
+        cpu_bytes += (uint64_t)world->desc.max_resident_regions * sizeof(*world->regions);
+        cpu_bytes += (uint64_t)world->desc.max_resident_chunks * sizeof(*world->chunks);
+        for (index = 0U; index < world->desc.max_resident_regions; ++index)
+        {
+            const henka_terrain_region_record* region = &world->regions[index];
+            uint64_t sample_bytes = region->sample_count > UINT64_MAX / sizeof(*region->samples)
+                ? UINT64_MAX : (uint64_t)region->sample_count * sizeof(*region->samples);
+            if (!region->active || cpu_bytes > UINT64_MAX - sample_bytes)
+            {
+                if (region->active)
+                {
+                    cpu_bytes = UINT64_MAX;
+                    break;
+                }
+                continue;
+            }
+            cpu_bytes += sample_bytes;
+        }
     }
     *out_stats = (henka_terrain_world_stats){
         world->resident_region_count,
@@ -591,7 +625,8 @@ henka_result henka_terrain_world_get_stats(
         world->pending_io_count,
         world->desc.max_resident_regions,
         world->desc.max_resident_chunks,
-        world->desc.max_pending_io};
+        world->desc.max_pending_io,
+        cpu_bytes};
     return HENKA_SUCCESS;
 }
 

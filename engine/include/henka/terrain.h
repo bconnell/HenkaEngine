@@ -104,6 +104,9 @@ typedef struct henka_terrain_world_stats
     uint32_t max_resident_regions;
     uint32_t max_resident_chunks;
     uint32_t max_pending_io;
+    /* Exact bytes owned by the world object, resident sample buffers, and
+     * bounded region/chunk tables. */
+    uint64_t cpu_bytes;
 } henka_terrain_world_stats;
 
 henka_terrain_world_desc henka_terrain_world_desc_default(void);

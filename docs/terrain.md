@@ -262,6 +262,9 @@ revision advance, and leaves collision untouched for that paint-only mutation.
 Sandbox smoke also checks the per-frame Terrain color and shadow submission
 diagnostics while the viewport is Rendered; generic depth, AO, reflection,
 temporal, fog, and HDR processing consume the same scene submission path.
+The Terrain utility reports exact world-owned CPU bytes and graphical-owner
+vertex/index/material GPU bytes for resident resources; these values exclude
+borrowed renderer resources outside the Terrain owner.
 The same graphical
 smoke revokes render residency after the upload, forces a candidate mesh
 failure, verifies the previous mesh and revision remain resident, then restores
