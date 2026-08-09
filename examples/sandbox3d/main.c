@@ -16898,9 +16898,16 @@ static void sandbox3d_update(henka_engine* engine, double delta_seconds, void* u
         henka_engine_get_frame_index(engine) >= 2U)
     {
         henka_terrain_edit_command command = henka_terrain_edit_command_default();
+        henka_terrain_world_desc terrain_world_desc = {0};
+        henka_terrain_layout terrain_layout = {0};
         henka_terrain_render_chunk_info chunk_info = {0};
         henka_terrain_physics_hit terrain_hit = {0};
         henka_bounds terrain_bounds = {0};
+        const henka_terrain_sample* terrain_samples = NULL;
+        size_t terrain_sample_count = 0U;
+        henka_terrain_revision paint_revision_before = 0U;
+        uint8_t paint_weight_before = 0U;
+        uint8_t paint_layer = 0U;
         henka_mesh* previous_terrain_mesh = NULL;
         henka_terrain_revision previous_terrain_revision = 0U;
         henka_terrain_render_stats terrain_render_stats = {0};
@@ -16955,6 +16962,79 @@ static void sandbox3d_update(henka_engine* engine, double delta_seconds, void* u
                  !isfinite(terrain_bounds.extents.y) ||
                  terrain_bounds.extents.y <= 0.0f ||
                  terrain_bounds.extents.y >= 1000.0f))
+            {
+                terrain_result = HENKA_ERROR_UNKNOWN;
+            }
+        }
+        if (terrain_result == HENKA_SUCCESS)
+        {
+            if (henka_terrain_world_get_desc(state->terrain_world, &terrain_world_desc) != HENKA_SUCCESS ||
+                henka_terrain_world_desc_get_layout(&terrain_world_desc, &terrain_layout) != HENKA_SUCCESS ||
+                henka_terrain_world_get_region_samples(
+                    state->terrain_world,
+                    (henka_terrain_region_id){0, 0},
+                    &terrain_samples,
+                    &terrain_sample_count) != HENKA_SUCCESS ||
+                terrain_sample_count != terrain_layout.samples_per_region)
+            {
+                terrain_result = HENKA_ERROR_UNKNOWN;
+            }
+            else
+            {
+                const henka_terrain_sample* paint_sample = &terrain_samples[
+                    32U * terrain_layout.samples_per_region_edge + 32U];
+                uint8_t layer_index;
+                paint_layer = 0U;
+                for (layer_index = 1U; layer_index < HENKA_TERRAIN_ACTIVE_MATERIAL_COUNT; ++layer_index)
+                {
+                    if (paint_sample->material_weights[layer_index] < paint_sample->material_weights[paint_layer])
+                    {
+                        paint_layer = layer_index;
+                    }
+                }
+                paint_weight_before = paint_sample->material_weights[paint_layer];
+                paint_revision_before = chunk_info.revision;
+                command.client_nonce = 2U;
+                command.operation = HENKA_TERRAIN_EDIT_PAINT;
+                command.paint_layer = paint_layer;
+                command.paint_strength = 200U;
+                terrain_result = henka_terrain_world_apply_edit(
+                    state->terrain_world,
+                    &command,
+                    3U);
+            }
+        }
+        if (terrain_result == HENKA_SUCCESS)
+        {
+            if (henka_terrain_world_get_region_samples(
+                    state->terrain_world,
+                    (henka_terrain_region_id){0, 0},
+                    &terrain_samples,
+                    &terrain_sample_count) != HENKA_SUCCESS ||
+                terrain_sample_count != terrain_layout.samples_per_region ||
+                terrain_samples[32U * terrain_layout.samples_per_region_edge + 32U].material_weights[paint_layer] <=
+                    paint_weight_before)
+            {
+                terrain_result = HENKA_ERROR_UNKNOWN;
+            }
+        }
+        if (terrain_result == HENKA_SUCCESS)
+        {
+            terrain_result = henka_terrain_render_runtime_update_observer(
+                state->terrain_render,
+                state->smoke_test ? (henka_vec3){32.0f, 2.4f, 32.0f} : state->camera.position);
+        }
+        if (terrain_result == HENKA_SUCCESS)
+        {
+            terrain_result = henka_terrain_render_runtime_pump(state->terrain_render, 16U);
+        }
+        if (terrain_result == HENKA_SUCCESS)
+        {
+            terrain_result = henka_terrain_render_runtime_get_chunk(
+                state->terrain_render,
+                (henka_terrain_chunk_id){0, 0},
+                &chunk_info);
+            if (terrain_result == HENKA_SUCCESS && chunk_info.revision <= paint_revision_before)
             {
                 terrain_result = HENKA_ERROR_UNKNOWN;
             }
@@ -17024,7 +17104,8 @@ static void sandbox3d_update(henka_engine* engine, double delta_seconds, void* u
         }
         else
         {
-            printf("Terrain edit: shared raise command rebuilt render revision %llu, collision patch, height bounds %.3fm +/- %.3fm, and preserved the prior mesh across a failed replacement.\n",
+            printf("Terrain edit: shared raise plus adaptive layer-%u paint rebuilt render revision %llu, collision patch, height bounds %.3fm +/- %.3fm, and preserved the prior mesh across a failed replacement.\n",
+                (unsigned int)paint_layer,
                 (unsigned long long)chunk_info.revision,
                 terrain_bounds.center.y,
                 terrain_bounds.extents.y);
