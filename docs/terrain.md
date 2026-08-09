@@ -291,7 +291,12 @@ lets this owner discover its bounded chunk working set from the active camera.
 The fixture contains rolling ground, a valley, a steep ridge/cliff, and
 continuous grass/dirt/rock/wet four-layer weights; existing committed samples
 are retained. The same camera feeds the public streaming observer under a
-four-region CPU budget. The opt-in Windows `--terrain-stream-stress` path
+four-region CPU budget. Stream requests are admitted in deterministic priority
+order: render-radius regions first, then physics-radius regions, then the
+remaining CPU-radius regions by Chebyshev distance, with stable request
+sequence tie breaking. Updating or removing an observer re-scores queued
+requests while holding the stream lock, so a moving camera cannot leave stale
+admission priorities. The opt-in Windows `--terrain-stream-stress` path
 crosses `(0,0) -> (1,0) -> (1,1) -> (0,0)`, waits only through bounded
 worker/render queues, checks rendered and collision chunk return at both axes,
 and reports the resident-region bound. Normal movement remains

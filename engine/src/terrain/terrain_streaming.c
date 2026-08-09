@@ -14,6 +14,7 @@ typedef struct henka_terrain_stream_request
 {
     bool active;
     henka_terrain_region_id region_id;
+    uint32_t priority;
     uint64_t sequence;
 } henka_terrain_stream_request;
 
@@ -63,6 +64,52 @@ static bool henka_terrain_stream_region_equal(
     henka_terrain_region_id right)
 {
     return left.x == right.x && left.z == right.z;
+}
+
+static uint32_t henka_terrain_stream_region_priority(
+    const henka_terrain_streamer* streamer,
+    henka_terrain_region_id region_id)
+{
+    uint32_t best_priority = UINT32_MAX;
+    uint32_t index;
+    for (index = 0U; index < streamer->observer_capacity; ++index)
+    {
+        const henka_terrain_stream_observer* observer = &streamer->observers[index];
+        uint64_t dx;
+        uint64_t dz;
+        uint64_t distance;
+        uint32_t band;
+        uint32_t priority;
+        if (observer->id == 0U)
+        {
+            continue;
+        }
+        dx = region_id.x >= observer->center_region.x
+            ? (uint64_t)((int64_t)region_id.x - (int64_t)observer->center_region.x)
+            : (uint64_t)((int64_t)observer->center_region.x - (int64_t)region_id.x);
+        dz = region_id.z >= observer->center_region.z
+            ? (uint64_t)((int64_t)region_id.z - (int64_t)observer->center_region.z)
+            : (uint64_t)((int64_t)observer->center_region.z - (int64_t)region_id.z);
+        distance = dx > dz ? dx : dz;
+        band = distance <= observer->render_radius_regions
+            ? 0U
+            : distance <= observer->physics_radius_regions
+                ? 1U
+                : 2U;
+        if (distance > observer->cpu_radius_regions)
+        {
+            band = 3U;
+        }
+        priority = band > UINT32_MAX / (streamer->world->desc.regions_across + 1U)
+            ? UINT32_MAX
+            : band * (streamer->world->desc.regions_across + 1U) +
+                (distance > UINT32_MAX ? UINT32_MAX : (uint32_t)distance);
+        if (priority < best_priority)
+        {
+            best_priority = priority;
+        }
+    }
+    return best_priority;
 }
 
 static uint32_t henka_terrain_stream_find_free_request(const henka_terrain_streamer* streamer)
@@ -254,10 +301,25 @@ static DWORD WINAPI henka_terrain_stream_worker(void* argument)
             LeaveCriticalSection(&streamer->lock);
             return 0U;
         }
-        request_index = 0U;
-        while (request_index < streamer->desc.max_requests && !streamer->requests[request_index].active)
+        request_index = streamer->desc.max_requests;
         {
-            ++request_index;
+            uint32_t candidate_index;
+            uint32_t best_priority = UINT32_MAX;
+            uint64_t best_sequence = UINT64_MAX;
+            for (candidate_index = 0U;
+                 candidate_index < streamer->desc.max_requests;
+                 ++candidate_index)
+            {
+                const henka_terrain_stream_request* candidate = &streamer->requests[candidate_index];
+                if (candidate->active &&
+                    (candidate->priority < best_priority ||
+                        (candidate->priority == best_priority && candidate->sequence < best_sequence)))
+                {
+                    request_index = candidate_index;
+                    best_priority = candidate->priority;
+                    best_sequence = candidate->sequence;
+                }
+            }
         }
         if (request_index >= streamer->desc.max_requests)
         {
@@ -441,7 +503,11 @@ henka_result henka_terrain_streamer_request_region(
         LeaveCriticalSection(&streamer->lock);
         return HENKA_ERROR_LIMIT;
     }
-    streamer->requests[index] = (henka_terrain_stream_request){true, region_id, streamer->next_sequence++};
+    streamer->requests[index] = (henka_terrain_stream_request){
+        true,
+        region_id,
+        henka_terrain_stream_region_priority(streamer, region_id),
+        streamer->next_sequence++};
     ++streamer->queued_request_count;
     if (streamer->queued_request_count > streamer->max_queued_request_count)
     {
@@ -507,6 +573,17 @@ static henka_result henka_terrain_streamer_store_observer(
         if (streamer->observers[index].id == observer->id)
         {
             streamer->observers[index] = *observer;
+            for (uint32_t request_index = 0U;
+                 request_index < streamer->desc.max_requests;
+                 ++request_index)
+            {
+                if (streamer->requests[request_index].active)
+                {
+                    streamer->requests[request_index].priority =
+                        henka_terrain_stream_region_priority(
+                            streamer, streamer->requests[request_index].region_id);
+                }
+            }
             LeaveCriticalSection(&streamer->lock);
             return HENKA_SUCCESS;
         }
@@ -560,6 +637,7 @@ henka_result henka_terrain_streamer_update_observer(
     }
     henka_terrain_stream_reconcile_residency(streamer);
     henka_terrain_stream_sync_presentation_residency(streamer);
+    EnterCriticalSection(&streamer->lock);
     radius = (int32_t)observer->cpu_radius_regions;
     for (z = observer->center_region.z - radius; z <= observer->center_region.z + radius; ++z)
     {
@@ -567,19 +645,49 @@ henka_result henka_terrain_streamer_update_observer(
         {
             henka_terrain_region_state state;
             henka_terrain_region_id region_id = {x, z};
+            if (!henka_terrain_region_id_is_valid(&streamer->world->desc, region_id))
+            {
+                continue;
+            }
             if (henka_terrain_world_get_region_state(streamer->world, region_id, &state) == HENKA_SUCCESS &&
                 state.cpu_resident)
             {
                 continue;
             }
-            henka_result request_result = henka_terrain_streamer_request_region(
-                streamer, region_id);
+            if (henka_terrain_stream_request_exists(streamer, region_id))
+            {
+                ++streamer->coalesced_request_count;
+                continue;
+            }
+            uint32_t request_index = henka_terrain_stream_find_free_request(streamer);
+            henka_result request_result;
+            if (request_index >= streamer->desc.max_requests)
+            {
+                request_result = HENKA_ERROR_LIMIT;
+            }
+            else
+            {
+                streamer->requests[request_index] = (henka_terrain_stream_request){
+                    true,
+                    region_id,
+                    henka_terrain_stream_region_priority(streamer, region_id),
+                    streamer->next_sequence++};
+                ++streamer->queued_request_count;
+                if (streamer->queued_request_count > streamer->max_queued_request_count)
+                {
+                    streamer->max_queued_request_count = streamer->queued_request_count;
+                }
+                request_result = HENKA_SUCCESS;
+            }
             if (request_result != HENKA_SUCCESS && request_result != HENKA_ERROR_INVALID_ARGUMENT)
             {
+                LeaveCriticalSection(&streamer->lock);
                 return request_result;
             }
         }
     }
+    WakeConditionVariable(&streamer->condition);
+    LeaveCriticalSection(&streamer->lock);
     return HENKA_SUCCESS;
 }
 
@@ -599,6 +707,17 @@ henka_result henka_terrain_streamer_remove_observer(
         {
             streamer->observers[index].id = 0U;
             --streamer->observer_count;
+            for (uint32_t request_index = 0U;
+                 request_index < streamer->desc.max_requests;
+                 ++request_index)
+            {
+                if (streamer->requests[request_index].active)
+                {
+                    streamer->requests[request_index].priority =
+                        henka_terrain_stream_region_priority(
+                            streamer, streamer->requests[request_index].region_id);
+                }
+            }
             henka_terrain_stream_reconcile_residency(streamer);
             LeaveCriticalSection(&streamer->lock);
             return HENKA_SUCCESS;
