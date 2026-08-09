@@ -16,7 +16,7 @@ See SUPPORT.md for what sponsorship supports and what it does not promise.
 
 ## Current status
 
-Henka Engine is still early, but the sandbox now renders a visible 3D scene with textured and untextured materials through Henka systems.
+Henka Engine is still early, but the sandbox now presents a deterministic two-model showcase through Henka's normal glTF scene, material, texture, lighting, and packaging paths.
 
 ### What currently exists
 
@@ -46,6 +46,7 @@ Henka Engine is still early, but the sandbox now renders a visible 3D scene with
 - Sandbox Object Details and the Object Info utility expose the selected object's effective material description; Object Info also reports the count of borrowed semantic texture dependencies. The imported glTF Marker now has a bounded in-panel material-instance editor covering the shared scalar/vector, boolean, alpha-mode, and semantic-texture override contracts, plus dependency/revision inspection, reset, and transactional reimport. The Utility Assets view enumerates manager-known textures, materials, and meshes without a filesystem scan, uses deterministic bounded paging, and preserves stable metadata-index selection; a selected manager-owned texture can be assigned, cleared, or restored to its material definition on the editable instance only, with semantic validation and rollback. External C consumers can use the same validated instance APIs. Text-entry import, drag/drop, material-file authoring, and dedicated dependency-graph panels remain unfinished
 - The sandbox editor now treats valid non-helper scene entities as authoring targets rather than requiring demo descriptors: Scene Objects enumerates the live scene, selection and Object Details share generation-checked entity identity, and the panel exposes validated Add Cube, Duplicate, and Delete operations. Transform hotkeys/gizmo edits, visibility, transform locks, reset, material inspection, and scene-object details remain session-only; text-entry rename and durable scene serialization are not yet editor workflows
 - Bounded glTF/GLB scene import with selected scene roots, node hierarchy transforms, cameras, punctual lights, meshless camera/light scenes, and fail-closed accessor-reference validation
+- The normal Sandbox startup presents the original repo-owned Cheeky Giraffe mascot and Original Realistic Rocket glTF scenes with multiple PBR materials; deterministic build-time generation and provenance are documented in [docs/showcase-assets.md](docs/showcase-assets.md). The previous primitive and realism samples remain available through `--primitive-gallery` for diagnostics and automated QA
 - Terrain now has a shared built-in four-layer Lit material contract: painted uint8 weights are normalized and consumed as base color, normal, metallic, and roughness blends with validated semantic texture slots and world-space meter tiling. The Sandbox binds four deterministic 16x16 Sandbox-owned procedural grass, dirt, rock, and wet base-color tiles to the reference fixture, while factor fallbacks remain valid when optional normal or metallic/roughness textures are absent. The graphical owner transports finite tangent vec4 bases with handedness into the normal Rendered shader, mesh generation uses available neighboring authoritative regions for border-normal continuity, and resident one-level LOD differences use non-degenerate bounded edge morphing with per-edge fallback skirts for missing neighbors; automated all-edge corner topology is covered, while four-way corner visual approval remains unfinished
 - Transactional HDR environment lighting with derived IBL resources, fitted directional shadows with bounded receiver-aware contact tightening and far-cascade diagnostics, one deterministic bounded spot-light shadow map, bloom, tone mapping, fog, bounded local probe capture, and explicit Material Preview versus Rendered shading policies
 - Rendered presentation now includes a bounded screen-space indirect diffuse lighting approximation that reconstructs receiver geometry from depth and gathers nearby visible HDR radiance before bloom and tone mapping. It can provide local diffuse color bleeding from visible surfaces, but it is intentionally described as SSGI. It is not full-scene global illumination: off-screen, hidden, and multi-bounce transport remain future work, and hardware ray tracing/path tracing are not claimed.
@@ -65,7 +66,7 @@ Henka Engine is still early, but the sandbox now renders a visible 3D scene with
 - Bounded single-read texture decoding with truthful rejection of HDR and 16-bit sources, plus path-specific white/error fallback aliases
 - Shader-based rendering of built-in primitives
 - Sandbox window titled `Henka Engine Sandbox 3D`
-- Ground plane, UV material ball, cubes, debug grid, a loaded glTF PBR marker, textured materials, and visible fallback behavior for missing texture and model assets
+- Ground plane, restrained debug grid, Cheeky Giraffe mascot, Original Realistic Rocket, textured materials, and visible fallback behavior for missing texture and model assets
 - The editor grid is an explicitly unlit, restrained graphite/slate line surface; its studio environment source is periodic and validated so Rendered presentation does not introduce a center seam. The procedural ground plane uses front-face winding consistent with its +Y normals.
 - Keyboard movement, mouse look when capture is active, viewport-local Wireframe, Solid, Material Preview, and Rendered shading controls, and offline runtime help
 - Bounded local settings persistence with transactional loads and replace-on-success writes
@@ -179,13 +180,11 @@ You can also launch it from PowerShell:
 
 The sandbox starts a visible 3D scene with:
 
-- a textured cube
-- a textured ground plane
-- a rounded material ball
-- a loaded OBJ marker
-- a debug grid
-- a fallback-texture example for missing texture loads
-- a fallback-model example for missing OBJ loads
+- the Cheeky Giraffe mascot
+- the Original Realistic Rocket
+- a textured ground plane and restrained debug grid
+
+Both showcase models are generated deterministically during the Windows build and loaded as ordinary packaged glTF scene/material assets. Use `--primitive-gallery` to make the engineering primitives, fallback samples, and realism material row visible again.
 
 Sandbox settings are saved locally in a `user/` folder beside the executable. In a packaged run, the settings file is `out/HenkaSandbox3D/user/sandbox3d.settings`.
 The packaged folder also includes `PACKAGE_INFO.txt` so you can tell when the package was last refreshed.
@@ -308,6 +307,7 @@ To validate the generic external game template against the current Henka checkou
 ## Current limitations
 
 - The sandbox uses built-in plane, cube, UV-sphere, and debug-grid primitives plus bounded OBJ and glTF loading paths.
+- The default showcase assets are intentionally sample-quality procedural glTF models, not movie-production assets; detailed manual visual QA across Solid, Material Preview, and Rendered remains required.
 - Missing textures fall back safely to an error texture, and missing OBJ assets fall back to a visible mesh. Failed OBJ mesh fallbacks can be retried explicitly after the source asset is fixed.
 - OBJ support is intentionally limited to bounded local files containing comments, blank lines, finite positions, optional finite UVs and normals, positive and negative indices, and triangle/quad/n-gon faces through basic fan triangulation.
 - OBJ material libraries, concave polygon correction beyond basic fan triangulation, model hierarchies, and animation are not supported yet.

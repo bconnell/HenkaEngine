@@ -1,14 +1,13 @@
 # Sandbox 3D Help
 
-`henka_sandbox3d` is the current visible Henka Engine example. It opens a small 3D scene with:
+`henka_sandbox3d` is the current visible Henka Engine example. It opens a small 3D showcase with:
 
-- a textured cube
+- the original Cheeky Giraffe mascot
+- the original realistic rocket sample
 - a textured ground plane with a visible floor surface and grid
-- a material ball
-- a loaded OBJ marker
 - a debug grid
-- a fallback-texture example that stays visible when a texture file is missing
-- a fallback-model example that stays visible when an OBJ file is missing
+
+The showcase models are deterministic repo-owned glTF assets generated during the Windows build and packaged beside their binary buffers and texture dependency. Use `henka_sandbox3d.exe --primitive-gallery` to show the engineering primitives, OBJ marker, fallback samples, foliage, and realism material row again.
 
 The sandbox also saves a small local settings file so wireframe, grid visibility, mouse sensitivity, camera preset, camera pose, orthographic zoom, and panel visibility can carry across runs.
 It now also includes small in-window developer panels for inspection and settings tasks.

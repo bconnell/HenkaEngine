@@ -25,9 +25,18 @@ endif()
 henka_enable_project_warnings(henka_sandbox3d)
 
 add_custom_command(TARGET henka_sandbox3d POST_BUILD
+    COMMAND powershell.exe -NoProfile -ExecutionPolicy Bypass -File
+        ${CMAKE_SOURCE_DIR}/scripts/generate_showcase_assets.ps1
+        -OutputDirectory $<TARGET_FILE_DIR:henka_sandbox3d>/assets/models
+)
+
+add_custom_command(TARGET henka_sandbox3d POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy_directory
         ${CMAKE_SOURCE_DIR}/assets
         $<TARGET_FILE_DIR:henka_sandbox3d>/assets
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        ${CMAKE_SOURCE_DIR}/assets/textures/cube_albedo.png
+        $<TARGET_FILE_DIR:henka_sandbox3d>/assets/models/cube_albedo.png
 )
 
 # The opt-in residency stress run uses distinct package paths backed by the

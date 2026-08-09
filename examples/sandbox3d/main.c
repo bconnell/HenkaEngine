@@ -383,6 +383,7 @@ typedef struct sandbox3d_state
     sandbox3d_transform_session transform_session;
     bool editor_controls_loaded_safely;
     bool smoke_test;
+    bool primitive_gallery;
     bool residency_stress;
     bool residency_stress_ran;
     bool terrain_edit_smoke_ran;
@@ -3877,7 +3878,7 @@ static void sandbox3d_print_help(const sandbox3d_state* state)
 {
     printf("Henka Engine Sandbox 3D\n");
     printf("Build: local %s %s %s\n", sandbox3d_get_build_configuration_label(), __DATE__, __TIME__);
-    printf("This scene shows texture rendering, untextured material color, OBJ and glTF loading, visible fallback behavior, and the first developer-facing scene inspection panels.\n");
+    printf("This scene presents the Cheeky Giraffe and Original Realistic Rocket through the packaged glTF scene/material path; use --primitive-gallery for the primitive and fallback QA samples.\n");
     printf("Controls:\n");
     printf("  W A S D          Move across the scene\n");
     printf("  Q / E            Move down / up\n");
@@ -4319,6 +4320,7 @@ static henka_result sandbox3d_initialize_terrain_rendering(
     char* storage_path = NULL;
     henka_material terrain_material;
     henka_texture_descriptor terrain_texture_descriptor;
+    henka_terrain_stream_observer stream_observer;
     unsigned char terrain_layer_pixels[HENKA_MATERIAL_TERRAIN_LAYER_COUNT][16U * 16U * 4U];
     henka_result result;
 
@@ -4463,10 +4465,11 @@ static henka_result sandbox3d_initialize_terrain_rendering(
             &state->terrain_streamer);
         if (result == HENKA_SUCCESS)
         {
-            henka_terrain_stream_observer observer = {
+            stream_observer = (henka_terrain_stream_observer){
                 1U, (henka_terrain_region_id){0, 0}, 0U, 0U, 0U, 1U};
-            result = henka_terrain_streamer_add_observer(
-                state->terrain_streamer, &observer);
+            /* The bootstrap region is installed synchronously below. Register
+             * the observer after that authoritative snapshot exists so the
+             * streamer does not retain a duplicate asynchronous demand for it. */
         }
         if (result != HENKA_SUCCESS)
         {
@@ -4523,6 +4526,14 @@ static henka_result sandbox3d_initialize_terrain_rendering(
             false) != HENKA_SUCCESS)
     {
         result = result == HENKA_SUCCESS ? HENKA_ERROR_UNKNOWN : result;
+        goto fail;
+    }
+
+    result = henka_terrain_streamer_add_observer(
+        state->terrain_streamer,
+        &stream_observer);
+    if (result != HENKA_SUCCESS)
+    {
         goto fail;
     }
 
@@ -15316,8 +15327,12 @@ static henka_result sandbox3d_initialize(henka_engine* engine, void* user_data)
     henka_material foliage_material;
     henka_material_asset* marker_material_asset;
     henka_gltf_scene_asset* marker_scene_asset;
+    henka_gltf_scene_asset* giraffe_scene_asset;
+    henka_gltf_scene_asset* rocket_scene_asset;
     henka_scene* imported_scene;
     size_t imported_entity_count;
+    size_t giraffe_entity_count;
+    size_t rocket_entity_count;
     henka_result result;
     henka_transform transform;
     int framebuffer_height;
@@ -15731,6 +15746,58 @@ static henka_result sandbox3d_initialize(henka_engine* engine, void* user_data)
     {
         goto fail;
     }
+
+    giraffe_scene_asset = NULL;
+    result = henka_assets_load_gltf_scene_asset(
+        assets,
+        "assets/models/cheeky_giraffe.gltf",
+        state->basic_shader,
+        &giraffe_scene_asset);
+    if (result != HENKA_SUCCESS)
+    {
+        HENKA_LOG_ERROR("Showcase giraffe load failed: %s", henka_result_to_string(result));
+        goto fail;
+    }
+    giraffe_entity_count = 0U;
+    result = henka_assets_instantiate_gltf_scene(
+        assets,
+        giraffe_scene_asset,
+        state->scene,
+        "Showcase Giraffe ",
+        &giraffe_entity_count);
+    if (result != HENKA_SUCCESS || giraffe_entity_count == 0U)
+    {
+        HENKA_LOG_ERROR("Showcase giraffe instantiation failed: %s (parts=%zu)", henka_result_to_string(result), giraffe_entity_count);
+        goto fail;
+    }
+
+    rocket_scene_asset = NULL;
+    result = henka_assets_load_gltf_scene_asset(
+        assets,
+        "assets/models/original_realistic_rocket.gltf",
+        state->basic_shader,
+        &rocket_scene_asset);
+    if (result != HENKA_SUCCESS)
+    {
+        HENKA_LOG_ERROR("Showcase rocket load failed: %s", henka_result_to_string(result));
+        goto fail;
+    }
+    rocket_entity_count = 0U;
+    result = henka_assets_instantiate_gltf_scene(
+        assets,
+        rocket_scene_asset,
+        state->scene,
+        "Showcase Rocket ",
+        &rocket_entity_count);
+    if (result != HENKA_SUCCESS || rocket_entity_count == 0U)
+    {
+        HENKA_LOG_ERROR("Showcase rocket instantiation failed: %s (parts=%zu)", henka_result_to_string(result), rocket_entity_count);
+        goto fail;
+    }
+    printf(
+        "Showcase assets: Cheeky Giraffe (%zu parts), Original Realistic Rocket (%zu parts), loaded through glTF scene/material assets.\n",
+        giraffe_entity_count,
+        rocket_entity_count);
 
     result = henka_assets_load_obj_mesh(assets, "assets/models/missing_marker.obj", &state->missing_model_mesh);
     if (result != HENKA_SUCCESS)
@@ -16169,6 +16236,44 @@ static henka_result sandbox3d_initialize(henka_engine* engine, void* user_data)
         true,
         true,
         transform);
+
+    if (!state->primitive_gallery)
+    {
+        const henka_entity diagnostic_entities[] =
+        {
+            state->cube_entity,
+            state->colored_cube_entity,
+            state->marker_entity,
+            state->fallback_cube_entity,
+            state->fallback_model_entity,
+            state->foliage_entity
+        };
+        size_t diagnostic_index;
+        for (diagnostic_index = 0U;
+             diagnostic_index < sizeof(diagnostic_entities) / sizeof(diagnostic_entities[0]);
+             ++diagnostic_index)
+        {
+            result = henka_scene_set_entity_visible(
+                state->scene,
+                diagnostic_entities[diagnostic_index],
+                false);
+            if (result != HENKA_SUCCESS)
+            {
+                goto fail;
+            }
+        }
+        for (diagnostic_index = 0U; diagnostic_index < sizeof(state->realism_entities) / sizeof(state->realism_entities[0]); ++diagnostic_index)
+        {
+            result = henka_scene_set_entity_visible(
+                state->scene,
+                state->realism_entities[diagnostic_index],
+                false);
+            if (result != HENKA_SUCCESS)
+            {
+                goto fail;
+            }
+        }
+    }
 
     result = sandbox3d_initialize_physics(state);
     if (result != HENKA_SUCCESS)
@@ -17214,7 +17319,10 @@ static henka_result sandbox3d_run_terrain_stream_stress(
         (float)world_desc.region_edge_meters + 32.0f,
         2.4f,
         (float)world_desc.region_edge_meters + 32.0f};
-    for (index = 0U; index < 128U; ++index)
+    /* A diagonal transition can be waiting for a bounded cancellation and
+     * disk-to-world handoff from the previous region; keep the stress wait
+     * finite while allowing that normal asynchronous ownership transfer. */
+    for (index = 0U; index < 512U; ++index)
     {
         stream_result = sandbox3d_update_terrain_streaming(state);
         render_result = stream_result == HENKA_SUCCESS
@@ -18370,6 +18478,7 @@ int main(int argc, char** argv)
     sandbox3d_state state;
     size_t index;
     bool smoke_test;
+    bool primitive_gallery;
     bool residency_stress;
     bool temporal_stress;
     bool material_stress;
@@ -18378,6 +18487,7 @@ int main(int argc, char** argv)
     henka_viewport_shading_mode capture_mode;
 
     smoke_test = false;
+    primitive_gallery = false;
     residency_stress = false;
     temporal_stress = false;
     material_stress = false;
@@ -18387,6 +18497,10 @@ int main(int argc, char** argv)
     if (argc == 2 && strcmp(argv[1], "--smoke-test") == 0)
     {
         smoke_test = true;
+    }
+    else if (argc == 2 && strcmp(argv[1], "--primitive-gallery") == 0)
+    {
+        primitive_gallery = true;
     }
     else if (argc == 2 && strcmp(argv[1], "--residency-stress") == 0)
     {
@@ -18415,12 +18529,13 @@ int main(int argc, char** argv)
     }
     else if (argc != 1)
     {
-        fprintf(stderr, "Usage: %s [--smoke-test | --residency-stress | --temporal-stress | --material-stress | --terrain-stream-stress | --capture-mode solid|material_preview|rendered]\n", argv[0]);
+        fprintf(stderr, "Usage: %s [--primitive-gallery | --smoke-test | --residency-stress | --temporal-stress | --material-stress | --terrain-stream-stress | --capture-mode solid|material_preview|rendered]\n", argv[0]);
         return 2;
     }
 
     memset(&state, 0, sizeof(state));
     state.smoke_test = smoke_test;
+    state.primitive_gallery = primitive_gallery;
     state.residency_stress = residency_stress;
     state.temporal_stress = temporal_stress;
     state.material_stress = material_stress;

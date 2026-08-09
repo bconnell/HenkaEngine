@@ -186,9 +186,14 @@ if ($manifest.executable_sha256 -ne $currentHash) {
 $assetsSource = Join-Path $repoRoot "assets"
 $helpSource = Join-Path $repoRoot "docs\help\sandbox3d.md"
 $residencyFixtureSource = Join-Path $repoRoot "build\examples\sandbox3d\$Configuration\assets\textures\residency"
+$showcaseModelSource = Join-Path $repoRoot "build\examples\sandbox3d\$Configuration\assets\models"
 Assert-NoReparsePoints -Path $expectedExeFull -Description "Sandbox executable input"
 Assert-NoReparsePoints -Path $assetsSource -Description "Asset input"
 Assert-NoReparsePoints -Path $helpSource -Description "Offline help input"
+if (-not (Test-Path -LiteralPath $showcaseModelSource -PathType Container)) {
+    throw "The $Configuration sandbox showcase model output was not found beside the validated executable. Rebuild before packaging."
+}
+Assert-NoReparsePoints -Path $showcaseModelSource -Description "Sandbox showcase model input"
 if (-not (Test-Path -LiteralPath $residencyFixtureSource -PathType Container)) {
     throw "The $Configuration sandbox residency fixtures were not found beside the validated executable. Rebuild before packaging."
 }
@@ -208,6 +213,22 @@ try {
 
     Copy-Item -LiteralPath $expectedExeFull -Destination $stagingExe
     Copy-Item -LiteralPath $assetsSource -Destination $stagingRoot -Recurse
+    $stagingModelsDir = Join-Path $stagingRoot "assets\models"
+    [System.IO.Directory]::CreateDirectory($stagingModelsDir) | Out-Null
+    foreach ($showcaseFile in @(
+        "cheeky_giraffe.gltf",
+        "cheeky_giraffe.bin",
+        "original_realistic_rocket.gltf",
+        "original_realistic_rocket.bin",
+        "cube_albedo.png"
+    )) {
+        $showcaseSourceFile = Join-Path $showcaseModelSource $showcaseFile
+        if (-not (Test-Path -LiteralPath $showcaseSourceFile -PathType Leaf)) {
+            throw "The validated Sandbox showcase output is missing $showcaseFile. Rebuild before packaging."
+        }
+        Assert-NoReparsePoints -Path $showcaseSourceFile -Description "Sandbox showcase asset input"
+        Copy-Item -LiteralPath $showcaseSourceFile -Destination $stagingModelsDir
+    }
     Copy-Item -LiteralPath $helpSource -Destination (Join-Path $stagingHelpDir "sandbox3d.md")
 
     if ((-not $ResetUserData) -and (Test-Path -LiteralPath $packageUserDir)) {
