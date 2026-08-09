@@ -58,6 +58,10 @@ regeneration remain caller-owned asynchronous presentation work. The graphical
 render owner reports high-water pending-request, resident-chunk, and
 visible-chunk counts; the collision queue reports its high-water pending chunk
 count so callers can distinguish a bounded budget from a transient drain state.
+Observer-driven requests are marked separately from explicit
+`henka_terrain_streamer_request_region` calls: shrinking or removing an
+observer cancels only stale observer demands, so an explicit caller request
+remains queued or active until it completes or is explicitly canceled.
 
 ## Deterministic edits
 
