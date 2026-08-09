@@ -179,6 +179,12 @@ every fragment arrives. The replica does not own network transport,
 reconnect state or render/physics residency policy; the
 client adapter does not invent those missing policies.
 
+When a decoded fragment is rejected, the public Terrain client requests a new
+snapshot for the same region and target revision, once per transfer and up to
+four times per connection. Undecodable messages remain hard errors because
+their identity cannot be trusted for a retry; the bounded retry count is
+reported through `recovery_snapshot_request_count`.
+
 `<henka/terrain_collision.h>` extracts a physics-resident chunk into a
 caller-owned 65×65 signed-millimeter patch without allocating or mutating the
 world. The patch carries the source revision and generation so a later physics

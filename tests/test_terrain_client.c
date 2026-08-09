@@ -62,6 +62,14 @@ static int test_client_snapshot_and_delta_path(void)
     henka_terrain_client_desc client_config;
     henka_terrain_client_diagnostics client_diagnostics;
     henka_terrain_edit_request edit_request = {0};
+    henka_terrain_snapshot_fragment snapshot_fragment;
+    henka_network_event snapshot_event;
+    uint8_t* encoded_record = NULL;
+    uint8_t* corrupted_record = NULL;
+    uint8_t* fragment_payload = NULL;
+    size_t encoded_record_size = 0U;
+    uint32_t snapshot_fragment_count;
+    size_t snapshot_offset;
     henka_terrain_region_state state;
     uint32_t event_count;
     uint32_t index;
@@ -168,6 +176,93 @@ static int test_client_snapshot_and_delta_path(void)
     if (iteration == 2000U ||
         henka_terrain_world_get_region_state(client_world, (henka_terrain_region_id){0, 0}, &state) != HENKA_SUCCESS ||
         state.revision != 7U)
+    {
+        goto cleanup;
+    }
+    encoded_record = henka_malloc(HENKA_TERRAIN_MAX_REGION_RECORD_BYTES);
+    corrupted_record = henka_malloc(HENKA_TERRAIN_MAX_REGION_RECORD_BYTES);
+    fragment_payload = henka_malloc(HENKA_NETWORK_MAX_SNAPSHOT_FRAGMENT_PAYLOAD);
+    if (encoded_record == NULL || corrupted_record == NULL || fragment_payload == NULL ||
+        henka_terrain_region_encode(
+            &world_desc,
+            (henka_terrain_region_id){0, 0},
+            7U,
+            3U,
+            samples,
+            layout.samples_per_region,
+            encoded_record,
+            HENKA_TERRAIN_MAX_REGION_RECORD_BYTES,
+            &encoded_record_size) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    memcpy(corrupted_record, encoded_record, encoded_record_size);
+    corrupted_record[0] ^= 0x5AU;
+    snapshot_fragment_count = (uint32_t)((encoded_record_size + HENKA_TERRAIN_NETWORK_MAX_SNAPSHOT_FRAGMENT_DATA_BYTES - 1U) /
+        HENKA_TERRAIN_NETWORK_MAX_SNAPSHOT_FRAGMENT_DATA_BYTES);
+    snapshot_offset = 0U;
+    for (index = 0U; index < snapshot_fragment_count; ++index)
+    {
+        size_t remaining = encoded_record_size - snapshot_offset;
+        size_t data_size = remaining > HENKA_TERRAIN_NETWORK_MAX_SNAPSHOT_FRAGMENT_DATA_BYTES
+            ? HENKA_TERRAIN_NETWORK_MAX_SNAPSHOT_FRAGMENT_DATA_BYTES : remaining;
+        size_t payload_size = 0U;
+        snapshot_fragment = (henka_terrain_snapshot_fragment){
+            world_desc.world_identity,
+            world_desc.base_asset_identity,
+            500U,
+            {0, 0},
+            7U,
+            3U,
+            index,
+            snapshot_fragment_count,
+            (uint32_t)encoded_record_size,
+            (uint32_t)data_size,
+            corrupted_record + snapshot_offset};
+        snapshot_event = (henka_network_event){
+            HENKA_NETWORK_EVENT_MESSAGE,
+            HENKA_NETWORK_INVALID_PEER_ID,
+            HENKA_NETWORK_DISCONNECT_REASON_NONE,
+            {HENKA_NETWORK_CHANNEL_SNAPSHOT,
+             HENKA_NETWORK_MESSAGE_SNAPSHOT_FRAGMENT,
+             fragment_payload,
+             0U}};
+        if (henka_terrain_snapshot_fragment_encode(
+                &snapshot_fragment,
+                fragment_payload,
+                HENKA_NETWORK_MAX_SNAPSHOT_FRAGMENT_PAYLOAD,
+                &payload_size) != HENKA_SUCCESS)
+        {
+            goto cleanup;
+        }
+        snapshot_event.message.payload_size = (uint32_t)payload_size;
+        if (henka_terrain_client_handle_event(terrain_client, &snapshot_event) != HENKA_SUCCESS)
+        {
+            goto cleanup;
+        }
+        snapshot_offset += data_size;
+    }
+    henka_terrain_client_get_diagnostics(terrain_client, &client_diagnostics);
+    if (client_diagnostics.recovery_snapshot_request_count != 1U ||
+        client_diagnostics.completed_snapshot_count != 1U)
+    {
+        goto cleanup;
+    }
+    for (iteration = 0U; iteration < 2000U; ++iteration)
+    {
+        if (poll_terrain_server_capture_peer(
+                terrain_server, network_server, 2U, 4000U + iteration, &server_peer_id) != HENKA_SUCCESS ||
+            henka_terrain_client_poll(terrain_client, 2U, 8U, &event_count) != HENKA_SUCCESS)
+        {
+            goto cleanup;
+        }
+        henka_terrain_client_get_diagnostics(terrain_client, &client_diagnostics);
+        if (client_diagnostics.completed_snapshot_count >= 2U)
+        {
+            break;
+        }
+    }
+    if (iteration == 2000U)
     {
         goto cleanup;
     }
@@ -299,6 +394,9 @@ cleanup:
     henka_terrain_storage_destroy(storage);
     henka_terrain_world_destroy(client_world);
     henka_terrain_world_destroy(server_world);
+    henka_free(fragment_payload);
+    henka_free(corrupted_record);
+    henka_free(encoded_record);
     henka_free(samples);
     return result;
 }

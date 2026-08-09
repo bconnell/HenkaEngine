@@ -4,6 +4,8 @@
 
 #include <henka/memory.h>
 
+#define HENKA_TERRAIN_CLIENT_MAX_SNAPSHOT_RETRIES 4U
+
 struct henka_terrain_client
 {
     henka_network_client* network;
@@ -11,6 +13,8 @@ struct henka_terrain_client
     henka_terrain_replica* replica;
     henka_terrain_prediction* prediction;
     henka_terrain_client_diagnostics diagnostics;
+    uint64_t last_snapshot_retry_transfer_id;
+    uint32_t snapshot_retry_count;
 };
 
 henka_terrain_client_desc henka_terrain_client_desc_default(void)
@@ -135,6 +139,45 @@ henka_result henka_terrain_client_request_snapshot(
         HENKA_NETWORK_MESSAGE_SNAPSHOT_REQUEST, payload, payload_size);
 }
 
+static henka_result henka_terrain_client_retry_snapshot(
+    henka_terrain_client* client,
+    const henka_terrain_snapshot_fragment* fragment,
+    bool* out_requested)
+{
+    henka_terrain_world_desc desc;
+    henka_terrain_snapshot_request request;
+
+    if (out_requested == NULL || client == NULL || fragment == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    *out_requested = false;
+    if (client->snapshot_retry_count >= HENKA_TERRAIN_CLIENT_MAX_SNAPSHOT_RETRIES ||
+        fragment->transfer_id == 0U ||
+        fragment->transfer_id == client->last_snapshot_retry_transfer_id ||
+        fragment->revision == 0U ||
+        henka_terrain_world_get_desc(client->world, &desc) != HENKA_SUCCESS ||
+        desc.world_identity != fragment->world_identity ||
+        desc.base_asset_identity != fragment->base_asset_identity)
+    {
+        return HENKA_SUCCESS;
+    }
+    request = (henka_terrain_snapshot_request){
+        desc.world_identity,
+        desc.base_asset_identity,
+        fragment->region_id,
+        fragment->revision};
+    if (henka_terrain_client_request_snapshot(client, request) != HENKA_SUCCESS)
+    {
+        return HENKA_ERROR_PLATFORM;
+    }
+    client->last_snapshot_retry_transfer_id = fragment->transfer_id;
+    ++client->snapshot_retry_count;
+    ++client->diagnostics.recovery_snapshot_request_count;
+    *out_requested = true;
+    return HENKA_SUCCESS;
+}
+
 static henka_result henka_terrain_client_request_delta_recovery(
     henka_terrain_client* client,
     const henka_terrain_edit_delta* delta)
@@ -252,6 +295,8 @@ henka_result henka_terrain_client_handle_event(
     if (event->type == HENKA_NETWORK_EVENT_CONNECTED)
     {
         ++client->diagnostics.connected_event_count;
+        client->last_snapshot_retry_transfer_id = 0U;
+        client->snapshot_retry_count = 0U;
         return HENKA_SUCCESS;
     }
     if (event->type == HENKA_NETWORK_EVENT_DISCONNECTED)
@@ -351,21 +396,40 @@ henka_result henka_terrain_client_handle_event(
     {
         henka_terrain_snapshot_fragment fragment;
         bool complete = false;
+        bool decoded = false;
+        bool retry_requested = false;
         result = henka_terrain_snapshot_fragment_decode(
             event->message.payload, event->message.payload_size, &fragment);
         if (result == HENKA_SUCCESS)
         {
+            decoded = true;
             result = henka_terrain_replica_apply_snapshot_fragment(
                 client->replica, &fragment, &complete);
         }
         if (result != HENKA_SUCCESS)
         {
+            if (decoded &&
+                henka_terrain_client_retry_snapshot(
+                    client, &fragment, &retry_requested) != HENKA_SUCCESS)
+            {
+                return HENKA_ERROR_PLATFORM;
+            }
+            henka_terrain_client_sync_replica_diagnostics(client);
+            if (retry_requested)
+            {
+                return HENKA_SUCCESS;
+            }
             ++client->diagnostics.rejected_snapshot_count;
             return result;
         }
         if (complete && henka_terrain_prediction_refresh(client->prediction) != HENKA_SUCCESS)
         {
             return HENKA_ERROR_ASSET_SOURCE;
+        }
+        if (complete)
+        {
+            client->last_snapshot_retry_transfer_id = 0U;
+            client->snapshot_retry_count = 0U;
         }
         (void)complete;
         henka_terrain_client_sync_replica_diagnostics(client);
