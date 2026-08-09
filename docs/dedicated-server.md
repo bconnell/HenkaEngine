@@ -37,6 +37,11 @@ Command-line values override the optional `key=value` configuration file.
 Paths are confined by the Terrain storage layer and should normally be kept
 relative to the server working directory or package directory.
 
+The shipped `server.conf.example` intentionally omits the optional `world`
+setting, so the packaged smoke command works with only its operator-owned
+`save/` directory. Supply `--world PATH` (or add `world=PATH` to a copied
+configuration) when deploying a validated read-only base Terrain world.
+
 When `--world` is supplied, it is a read-only base Terrain storage root using
 the Terrain v1 manifest and region format. Startup validates
 `terrain.manifest`, recovers that root, and requires a valid `region_0_0.htr`

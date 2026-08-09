@@ -5,4 +5,3 @@ port=7777
 max_clients=32
 tick_rate=60
 save_root=save
-world=world
