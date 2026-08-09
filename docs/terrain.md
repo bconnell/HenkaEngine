@@ -227,13 +227,14 @@ physics, render, pending-I/O, dirty, revision, and generation state.
 
 ## Current boundary
 
-This slice establishes the shared data model and bounded ownership contract.
-Full residency-wide dirty-neighbor scheduling beyond the bounded physics patch
-capacity, cross-LOD seam stitching,
-relevance-driven late-join selection, and multi-process soak remain subsequent
-validated runtime slices. Accepted edits can now derive one-chunk
-physics-neighbor coverage through the bounded collision queue, and client
-prediction is available through the separate presentation-world owner.
+The current validated boundary includes bounded observer-driven render working
+set discovery, stale render identity refresh, and physics patch synchronization
+with deterministic capacity-based admission and removal. Full residency-wide
+dirty-neighbor scheduling beyond the bounded physics patch capacity, cross-LOD
+seam stitching, relevance-driven late-join selection, and multiplayer soak
+remain subsequent validated runtime slices. Accepted edits can now derive
+one-chunk physics-neighbor coverage through the bounded collision queue, and
+client prediction is available through the separate presentation-world owner.
 They must use this
 same world identity, region/chunk mapping, revision, and residency ownership;
 they must not introduce a second world-sized representation.
