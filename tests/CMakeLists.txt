@@ -112,6 +112,15 @@ target_link_libraries(henka_terrain_client_tests
 henka_enable_project_warnings(henka_terrain_client_tests)
 add_test(NAME henka_terrain_client_tests COMMAND henka_terrain_client_tests)
 
+add_executable(henka_terrain_process_client
+    terrain_process_client.c
+)
+target_link_libraries(henka_terrain_process_client
+    PRIVATE
+        henka_runtime
+)
+henka_enable_project_warnings(henka_terrain_process_client)
+
 add_executable(henka_terrain_replica_tests
     test_terrain_replica.c
 )

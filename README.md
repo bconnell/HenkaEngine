@@ -24,7 +24,7 @@ Henka Engine is still early, but the sandbox now renders a visible 3D scene with
 - `henka` static library target
 - renderer-independent `henka_runtime` static library target for headless consumers
 - `henka_sandbox3d` example target
-- renderer-free `henka_dedicated_server` host target with bounded config-file loading, validated optional Terrain base-world loading, fixed-tick simulation, Terrain snapshot recovery, loopback smoke connectivity, transactional edit persistence, and graceful client shutdown; a headless deployment package and restart-persistence check are available, while reconnect/late-join orchestration and two-process multiplayer soak remain unfinished
+- renderer-free `henka_dedicated_server` host target with bounded config-file loading, validated optional Terrain base-world loading, fixed-tick simulation, Terrain snapshot recovery, loopback smoke connectivity, transactional edit persistence, graceful client shutdown, and a bounded `--run-for-ms` integration mode; a headless deployment package and restart-persistence check are available, while broader relevance-driven late-join orchestration and full multiplayer soak remain unfinished
 - `henka_tests` unit test target with CTest integration
 - SDL3-backed platform layer hidden behind Henka headers
 - OpenGL renderer backend isolated inside renderer implementation files
@@ -106,7 +106,7 @@ Henka Engine is still early, but the sandbox now renders a visible 3D scene with
 ### What does not exist yet
 
 - Full production editor and project-authoring workflow
-- Two-process dedicated-server multiplayer convergence and restart integration workflow
+- Bounded two-process dedicated-server Terrain authority convergence and restart integration workflow through `scripts/test_terrain_process_integration_windows.ps1`
 - Full asset browser, import/reimport, dependency-graph, and project authoring workflow (the sandbox has only a bounded manager-known asset view and editable-instance texture-slot assignment)
 - Audio
 - Reconnect/late-join Terrain recovery orchestration and dedicated-server multiplayer soak tooling

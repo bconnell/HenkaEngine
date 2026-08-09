@@ -41,7 +41,7 @@ command-line/configuration input, fixed-tick physics servicing, Terrain
 snapshot recovery, a bounded physics-resident Terrain collision rebuild path,
 loopback message handling, transactional smoke persistence, and graceful
 client shutdown. A headless deployment package and restart-persistence check
-are available; reconnect/late-join orchestration and two-process multiplayer
+are available; relevance-driven late-join orchestration and broad multiplayer
 soak remain future work. ENet is fetched at the pinned commit recorded in
 `docs/architecture.md`; its license is included in `third_party/licenses/enet.txt`.
 
@@ -65,6 +65,12 @@ The C17 `templates/external_server_minimal` project links only
 `henka_runtime`. Validate it with
 `scripts/test_external_server_template_windows.ps1`; pass
 `-NoLocalProviders` to verify the normal network-capable pinned ENet fallback.
+
+Run `scripts/test_terrain_process_integration_windows.ps1` for the bounded
+two-process Terrain authority check. It launches the dedicated server and two
+independent runtime-only clients, proves one accepted and one stale edit,
+waits for clean duration shutdown, and restarts the server against the same
+save root to verify the next committed revision.
 
 ## Run tests
 

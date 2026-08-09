@@ -27,6 +27,7 @@ typedef struct henka_server_options
     int has_save_root;
     int has_config_path;
     int smoke;
+    unsigned int run_for_milliseconds;
 } henka_server_options;
 
 static volatile sig_atomic_t g_henka_server_running = 1;
@@ -48,6 +49,7 @@ static void henka_server_print_usage(void)
     puts("  --save-root PATH     Runtime save root");
     puts("  --config PATH        Optional key=value server configuration");
     puts("  --smoke              Initialize, tick, and shut down");
+    puts("  --run-for-ms COUNT   Run for a bounded duration, then shut down cleanly");
     puts("  --help               Show this help");
 }
 
@@ -292,6 +294,15 @@ static int henka_server_parse_options(int argc, char** argv, henka_server_option
         if (strcmp(argument, "--smoke") == 0)
         {
             out_options->smoke = 1;
+        }
+        else if (strcmp(argument, "--run-for-ms") == 0)
+        {
+            if (index + 1 >= argc ||
+                !henka_server_parse_uint(argv[++index], 3600000UL, &out_options->run_for_milliseconds))
+            {
+                fprintf(stderr, "invalid --run-for-ms\n");
+                return 0;
+            }
         }
         else if (strcmp(argument, "--config") == 0)
         {
@@ -877,6 +888,11 @@ int main(int argc, char** argv)
         }
         (void)henka_terrain_collision_runtime_pump(terrain_collision_runtime, 4U);
         accumulator += time_state.delta_seconds;
+        if (options.run_for_milliseconds != 0U &&
+            time_state.total_seconds * 1000.0 >= (double)options.run_for_milliseconds)
+        {
+            g_henka_server_running = 0;
+        }
         if (accumulator > fixed_timestep * HENKA_SERVER_MAX_SUBSTEPS_PER_LOOP)
         {
             accumulator = fixed_timestep * HENKA_SERVER_MAX_SUBSTEPS_PER_LOOP;

@@ -89,3 +89,8 @@ range after detecting a gap; the server sends the complete retained range or
 falls back to a transactional regional snapshot when history is unavailable.
 The history is in-memory recovery state and is not a replacement for the
 durable Terrain journal.
+
+For deterministic local integration checks, `--run-for-ms COUNT` runs the
+normal server loop for a bounded duration and then uses the same peer
+disconnect and resource-flush shutdown path as a signal-triggered stop. The
+default without this option remains an indefinite server process.
