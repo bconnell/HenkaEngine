@@ -79,7 +79,7 @@
 - [ ] Implement validation tests for layer factors, texture pointers, UV sets, and default material semantics.
 - [ ] Implement the default contract and validation without changing existing glTF material behavior.
 - [ ] Add shader uniforms and bounded layer blending: normalized weights, linear-space color blending, roughness/metallic blending, and stable normal blending in tangent space.
-- [ ] Use world-space terrain UVs with per-layer meter-scale tiling and deterministic factor fallback when a texture is absent.
+- [x] Use world-space terrain UVs with per-layer meter-scale tiling and deterministic factor fallback when a texture is absent; the Sandbox smoke now asserts all four layers carry manager-owned base-color textures.
 - [ ] Load or generate only small documented reference textures for grass, dirt, rock, and a contrasting fourth layer; keep resource ownership in the existing asset manager.
 - [ ] Route Sandbox Terrain through the new material constructor and preserve existing external material consumers.
 - [ ] Run focused render/material tests, shader/package smoke, and inspect the diff for accidental public ABI or generated-file changes.

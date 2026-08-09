@@ -4121,6 +4121,9 @@ static henka_result sandbox3d_initialize_terrain_rendering(
     bool loaded_from_storage = false;
     char* storage_path = NULL;
     henka_material terrain_material;
+    henka_texture* terrain_ground_texture = NULL;
+    henka_texture* terrain_cube_texture = NULL;
+    henka_asset_manager* assets;
     uint32_t sample_z;
     uint32_t sample_x;
     henka_result result;
@@ -4128,6 +4131,13 @@ static henka_result sandbox3d_initialize_terrain_rendering(
     if (engine == NULL || state == NULL || state->scene == NULL || state->basic_shader == NULL)
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    assets = henka_engine_get_asset_manager(engine);
+    if (assets == NULL ||
+        henka_assets_load_texture(assets, "assets/textures/ground_checker.png", &terrain_ground_texture) != HENKA_SUCCESS ||
+        henka_assets_load_texture(assets, "assets/textures/cube_albedo.png", &terrain_cube_texture) != HENKA_SUCCESS)
+    {
+        return HENKA_ERROR_ASSET_SOURCE;
     }
     world_desc.max_resident_regions = 1U;
     world_desc.max_resident_chunks = 64U;
@@ -4278,6 +4288,10 @@ static henka_result sandbox3d_initialize_terrain_rendering(
     terrain_material.shader = state->basic_shader;
     terrain_material.base_color = (henka_vec4){0.62f, 0.72f, 0.46f, 1.0f};
     terrain_material.roughness = 0.88f;
+    terrain_material.terrain_layers[0].base_color_texture = terrain_ground_texture;
+    terrain_material.terrain_layers[1].base_color_texture = terrain_ground_texture;
+    terrain_material.terrain_layers[2].base_color_texture = terrain_cube_texture;
+    terrain_material.terrain_layers[3].base_color_texture = terrain_cube_texture;
     render_desc.max_resident_chunks = 16U;
     render_desc.max_pending_requests = 16U;
     render_desc.material = terrain_material;
@@ -4312,7 +4326,7 @@ static henka_result sandbox3d_initialize_terrain_rendering(
             goto fail;
         }
     }
-    printf("Terrain render: 16 bounded chunks resident; automatic observer scheduling and transactional mesh uploads ready.\n");
+    printf("Terrain render: 16 bounded chunks resident; four-layer manager-owned textures, automatic observer scheduling, and transactional mesh uploads ready.\n");
     fflush(stdout);
     return HENKA_SUCCESS;
 
@@ -17359,6 +17373,8 @@ static void sandbox3d_update(henka_engine* engine, double delta_seconds, void* u
     {
         henka_engine_diagnostics smoke_diagnostics;
         henka_terrain_stream_stats terrain_stream_stats;
+        henka_terrain_render_chunk_info terrain_chunk_info;
+        henka_material terrain_scene_material;
         henka_texture_info stress_texture_info;
         memset(&terrain_stream_stats, 0, sizeof(terrain_stream_stats));
         memset(&stress_texture_info, 0, sizeof(stress_texture_info));
@@ -17376,6 +17392,22 @@ static void sandbox3d_update(henka_engine* engine, double delta_seconds, void* u
                 terrain_stream_stats.queued_request_count,
                 (unsigned long long)terrain_stream_stats.completed_request_count,
                 (unsigned long long)terrain_stream_stats.failed_request_count);
+        }
+        if (henka_terrain_render_runtime_get_chunk(
+                state->terrain_render, (henka_terrain_chunk_id){0, 0}, &terrain_chunk_info) != HENKA_SUCCESS ||
+            henka_scene_get_entity_material(
+                state->scene, terrain_chunk_info.entity, &terrain_scene_material) != HENKA_SUCCESS ||
+            !terrain_scene_material.terrain_layers_enabled ||
+            terrain_scene_material.terrain_layers[0].base_color_texture == NULL ||
+            terrain_scene_material.terrain_layers[1].base_color_texture == NULL ||
+            terrain_scene_material.terrain_layers[2].base_color_texture == NULL ||
+            terrain_scene_material.terrain_layers[3].base_color_texture == NULL)
+        {
+            state->smoke_validation_failed = true;
+        }
+        else
+        {
+            printf("Terrain material diagnostics: four normalized layers use manager-owned base-color textures.\n");
         }
         if (state->residency_stress_ktx_texture != NULL)
             (void)henka_texture_get_info(
