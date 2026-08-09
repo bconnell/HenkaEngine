@@ -68,10 +68,11 @@ values. Linear and smooth falloffs use fixed-point integer weighting. The
 runtime determines every affected resident region before allocating candidate
 copies; all candidate regions pass validation before any live sample or
 revision is swapped. The same ordered command stream therefore produces
-byte-identical authoritative samples across runtimes. General editor/runtime
-tool integration and asynchronous persistence scheduling are not yet
-integrated; the server authority path persists accepted commands
-synchronously through the storage transaction described below.
+byte-identical authoritative samples across runtimes. The Sandbox editor and
+runtime callers use this same command path; saved brush state and asynchronous
+persistence scheduling are not yet integrated. The server authority path
+persists accepted commands synchronously through the storage transaction
+described below.
 
 Terrain network payloads in `<henka/terrain_network.h>` use explicit bounded
 little-endian encoding for edit requests, authoritative acceptance revisions,
@@ -104,7 +105,7 @@ those identities and requests snapshots for the advertised regions, so an
 empty client can enter through the same replica snapshot path used for
 recovery. This is a bounded late-join bootstrap, not a full application
 handshake, authentication layer, or relevance-based region selection; those
-and editor controls remain subsequent integration work. The public client
+remain subsequent integration work. The public client
 adapter can request a new transport connection; the connect-time session-info
 comparison then refreshes only missing or stale advertised regions. This is
 bounded reconnect recovery, not application authentication or
@@ -134,8 +135,8 @@ bounded recovery request for the missing regional revision range. Complete
 retained history is sent as deltas, while an exhausted or incomplete range
 uses the existing transactional regional snapshot path.
 The connect-time session-info bootstrap covers only the bounded advertised
-resident set; broader reconnect and late-join orchestration and editor
-controls remain subsequent work. `<henka/terrain_prediction.h>` owns a separate bounded presentation
+resident set; broader reconnect and late-join orchestration remain subsequent
+work. `<henka/terrain_prediction.h>` owns a separate bounded presentation
 world for local commands: it copies CPU-resident authoritative regions, applies
 pending commands in submission order, and rebuilds from authoritative state
 when a command is accepted or rejected. The authoritative replica is never
@@ -219,8 +220,8 @@ runtime smoke path, not persistence or network authority.
 The Sandbox reference scene now creates one deterministic bounded region,
 marks it render-resident, and lets this owner discover its bounded chunk
 working set from the active camera. It pumps at most two replacements per frame.
-This is runtime integration coverage, not a claim that editor
-sculpt/paint tools or visual human approval are complete. The Utility Terrain
+This is runtime integration coverage, not a claim of human visual approval.
+The Utility Terrain
 tab now exposes bounded resident/render/collision statistics and raise, lower,
 flatten, smooth, and paint controls with radius, strength, layer, and falloff
 settings. It uses the same deterministic command API as runtime callers; a
