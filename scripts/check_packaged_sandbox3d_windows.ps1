@@ -799,6 +799,13 @@ if ($NonInteractive) {
     if ($smoke.Stdout -notmatch "Showcase assets: Cheeky Giraffe \(5 parts\), Original Realistic Rocket \(4 parts\)") {
         throw "The packaged smoke test did not load both showcase glTF scenes."
     }
+    $terrainPassMatch = [regex]::Match($smoke.Stdout, "Terrain Rendered pass diagnostics: mask=0x([0-9a-fA-F]+) required=0x([0-9a-fA-F]+)")
+    if (-not $terrainPassMatch.Success -or
+        (([Convert]::ToUInt32($terrainPassMatch.Groups[1].Value, 16) -band
+          [Convert]::ToUInt32($terrainPassMatch.Groups[2].Value, 16)) -ne
+         [Convert]::ToUInt32($terrainPassMatch.Groups[2].Value, 16))) {
+        throw "The packaged smoke test did not prove the required Terrain Rendered pass participation mask."
+    }
     if ($smoke.Stdout -notmatch "Sandbox smoke test completed\.") {
         throw "The packaged smoke test did not reach its deterministic exit."
     }

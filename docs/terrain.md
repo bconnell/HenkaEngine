@@ -298,7 +298,11 @@ shared paint command, verifies the authoritative layer weight and rendered
 revision advance, and leaves collision untouched for that paint-only mutation.
 Sandbox smoke also checks the per-frame Terrain color and shadow submission
 diagnostics while the viewport is Rendered; generic depth, AO, reflection,
-temporal, fog, and HDR processing consume the same scene submission path.
+temporal, fog, and HDR processing consume the same scene submission path. The
+engine diagnostics bitmask identifies Terrain participation in those consumers
+for the current frame, including probe capture only when a Terrain entity is
+actually submitted to that capture. It is a path diagnostic, not a claim of
+production visual validation for every effect.
 The Terrain utility reports exact world-owned CPU bytes and graphical-owner
 vertex/index/material GPU bytes for resident resources; these values exclude
 borrowed renderer resources outside the Terrain owner.

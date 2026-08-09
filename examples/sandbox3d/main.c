@@ -15463,6 +15463,20 @@ static henka_result sandbox3d_initialize(henka_engine* engine, void* user_data)
         goto fail;
     }
 
+    result = henka_scene_set_fog(
+        state->scene,
+        (henka_scene_fog_desc){
+            true,
+            HENKA_SCENE_FOG_LINEAR,
+            (henka_vec3){0.16f, 0.19f, 0.24f},
+            48.0f,
+            220.0f,
+            0.0f});
+    if (result != HENKA_SUCCESS)
+    {
+        goto fail;
+    }
+
     {
         float studio_environment_pixels[SANDBOX3D_STUDIO_ENVIRONMENT_PIXEL_COUNT];
         henka_texture_descriptor environment_descriptor = henka_texture_descriptor_default_data();
@@ -18493,18 +18507,31 @@ static void sandbox3d_update(henka_engine* engine, double delta_seconds, void* u
                     (unsigned long long)terrain_render_stats.material_gpu_bytes,
                     terrain_render_stats.material_texture_count);
             }
-            if (smoke_diagnostics.viewport_shading_mode == HENKA_VIEWPORT_SHADING_RENDERED &&
-                (smoke_diagnostics.rendered_scene_terrain_draw_calls == 0U ||
-                 smoke_diagnostics.rendered_scene_terrain_shadow_draw_calls == 0U))
             {
-                state->smoke_validation_failed = true;
-            }
-            else
-            {
+                const uint32_t required_terrain_pass_flags =
+                    HENKA_RENDERED_TERRAIN_PASS_COLOR |
+                    HENKA_RENDERED_TERRAIN_PASS_SHADOW |
+                    HENKA_RENDERED_TERRAIN_PASS_DEPTH |
+                    HENKA_RENDERED_TERRAIN_PASS_AO |
+                    HENKA_RENDERED_TERRAIN_PASS_SSGI |
+                    HENKA_RENDERED_TERRAIN_PASS_SSR |
+                    HENKA_RENDERED_TERRAIN_PASS_FOG |
+                    HENKA_RENDERED_TERRAIN_PASS_HDR;
+                const uint32_t required_flags = required_terrain_pass_flags;
+
                 printf(
-                    "Terrain Rendered pass diagnostics: color-draws=%u shadow-draws=%u.\n",
+                    "Terrain Rendered pass diagnostics: mask=0x%03x required=0x%03x color-draws=%u shadow-draws=%u.\n",
+                    smoke_diagnostics.rendered_scene_terrain_pass_flags,
+                    required_flags,
                     smoke_diagnostics.rendered_scene_terrain_draw_calls,
                     smoke_diagnostics.rendered_scene_terrain_shadow_draw_calls);
+                if (smoke_diagnostics.viewport_shading_mode == HENKA_VIEWPORT_SHADING_RENDERED &&
+                    (smoke_diagnostics.rendered_scene_terrain_draw_calls == 0U ||
+                     smoke_diagnostics.rendered_scene_terrain_shadow_draw_calls == 0U ||
+                     (smoke_diagnostics.rendered_scene_terrain_pass_flags & required_flags) != required_flags))
+                {
+                    state->smoke_validation_failed = true;
+                }
             }
             if (state->temporal_stress)
             {

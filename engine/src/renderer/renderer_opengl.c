@@ -231,6 +231,7 @@ typedef struct henka_opengl_renderer_state
     uint32_t scene_draw_calls;
     uint32_t scene_terrain_draw_calls;
     uint32_t scene_terrain_shadow_draw_calls;
+    uint32_t scene_terrain_pass_flags;
     uint32_t scene_visible_entities;
     uint32_t scene_culled_entities;
     uint32_t scene_budget_dropped_entities;
@@ -3203,6 +3204,7 @@ static void henka_opengl_draw_shadow_pass(
         if (!state->reflection_probe_capture_active && entity->material.terrain_layers_enabled)
         {
             state->scene_terrain_shadow_draw_calls += 1U;
+            state->scene_terrain_pass_flags |= HENKA_RENDERED_TERRAIN_PASS_SHADOW;
         }
     }
     g_gl.BindVertexArray(0);
@@ -3339,6 +3341,20 @@ static void henka_opengl_present_hdr(
         state->temporal_fallback_frame_count < UINT64_MAX)
     {
         ++state->temporal_fallback_frame_count;
+    }
+    if (state->scene_terrain_draw_calls > 0U)
+    {
+        state->scene_terrain_pass_flags |= HENKA_RENDERED_TERRAIN_PASS_HDR;
+        if (use_rendered_post_processing && state->hdr_depth_buffer != 0U)
+        {
+            state->scene_terrain_pass_flags |=
+                HENKA_RENDERED_TERRAIN_PASS_AO |
+                HENKA_RENDERED_TERRAIN_PASS_SSGI;
+            if (state->ibl_ready)
+                state->scene_terrain_pass_flags |= HENKA_RENDERED_TERRAIN_PASS_SSR;
+        }
+        if (use_temporal_history)
+            state->scene_terrain_pass_flags |= HENKA_RENDERED_TERRAIN_PASS_TEMPORAL;
     }
     glDisable(GL_SCISSOR_TEST);
     glViewport(viewport.x, renderer->framebuffer_height - viewport.y - viewport.height, viewport.width, viewport.height);
@@ -4800,6 +4816,7 @@ henka_result henka_opengl_renderer_draw_scene(
         state->scene_draw_calls = 0U;
         state->scene_terrain_draw_calls = 0U;
         state->scene_terrain_shadow_draw_calls = 0U;
+        state->scene_terrain_pass_flags = 0U;
         state->scene_visible_entities = 0U;
         state->scene_culled_entities = 0U;
         state->scene_budget_dropped_entities = 0U;
@@ -5712,9 +5729,21 @@ henka_result henka_opengl_renderer_draw_scene(
             state->occlusion_query_scene_revision[draw_index] = scene->render_revision;
         }
         state->scene_draw_calls += 1U;
-        if (!state->reflection_probe_capture_active && entity->material.terrain_layers_enabled)
+        if (entity->material.terrain_layers_enabled)
         {
-            state->scene_terrain_draw_calls += 1U;
+            if (state->reflection_probe_capture_active)
+            {
+                state->scene_terrain_pass_flags |= HENKA_RENDERED_TERRAIN_PASS_PROBE_CAPTURE;
+            }
+            else
+            {
+                state->scene_terrain_draw_calls += 1U;
+                state->scene_terrain_pass_flags |= HENKA_RENDERED_TERRAIN_PASS_COLOR;
+                if (policy.use_hdr_presentation && state->hdr_depth_buffer != 0U)
+                    state->scene_terrain_pass_flags |= HENKA_RENDERED_TERRAIN_PASS_DEPTH;
+                if (scene->fog.enabled)
+                    state->scene_terrain_pass_flags |= HENKA_RENDERED_TERRAIN_PASS_FOG;
+            }
         }
         state->scene_visible_entities += (uint32_t)instance_count;
         if (pass == 0U && instance_count > 1U)
@@ -5835,7 +5864,8 @@ void henka_opengl_renderer_get_scene_diagnostics(
     uint32_t* out_transparent_sort_overflow_entities,
     double* out_cpu_time_milliseconds,
     double* out_gpu_time_milliseconds,
-    bool* out_gpu_timing_available)
+    bool* out_gpu_timing_available,
+    uint32_t* out_terrain_pass_flags)
 {
     const henka_opengl_renderer_state* state = renderer != NULL ?
         (const henka_opengl_renderer_state*)renderer->backend_state : NULL;
@@ -5905,6 +5935,10 @@ void henka_opengl_renderer_get_scene_diagnostics(
     if (out_gpu_timing_available != NULL)
     {
         *out_gpu_timing_available = state != NULL && state->gpu_timing_available;
+    }
+    if (out_terrain_pass_flags != NULL)
+    {
+        *out_terrain_pass_flags = state != NULL ? state->scene_terrain_pass_flags : 0U;
     }
 }
 

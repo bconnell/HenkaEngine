@@ -645,7 +645,8 @@ void henka_opengl_renderer_get_scene_diagnostics(
     uint32_t* out_transparent_sort_overflow_entities,
     double* out_cpu_time_milliseconds,
     double* out_gpu_time_milliseconds,
-    bool* out_gpu_timing_available);
+    bool* out_gpu_timing_available,
+    uint32_t* out_terrain_pass_flags);
 void henka_opengl_renderer_get_memory_diagnostics(
     const struct henka_renderer* renderer,
     uint64_t* out_gpu_bytes,

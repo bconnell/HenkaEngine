@@ -1729,7 +1729,8 @@ henka_result henka_engine_get_diagnostics(
         &out_diagnostics->rendered_scene_transparent_sort_overflow_entities,
         &out_diagnostics->rendered_scene_cpu_time_milliseconds,
         &out_diagnostics->rendered_scene_gpu_time_milliseconds,
-        &out_diagnostics->rendered_scene_gpu_timing_available);
+        &out_diagnostics->rendered_scene_gpu_timing_available,
+        &out_diagnostics->rendered_scene_terrain_pass_flags);
     henka_opengl_renderer_get_memory_diagnostics(
         engine->renderer,
         &out_diagnostics->renderer_tracked_gpu_bytes,

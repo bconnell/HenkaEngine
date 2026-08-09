@@ -85,6 +85,21 @@ typedef struct henka_scene_view_render_desc
     bool overlays_visible;
     bool xray_enabled;
 } henka_scene_view_render_desc;
+
+typedef enum henka_rendered_terrain_pass_flags
+{
+    HENKA_RENDERED_TERRAIN_PASS_COLOR = 1U << 0,
+    HENKA_RENDERED_TERRAIN_PASS_SHADOW = 1U << 1,
+    HENKA_RENDERED_TERRAIN_PASS_DEPTH = 1U << 2,
+    HENKA_RENDERED_TERRAIN_PASS_AO = 1U << 3,
+    HENKA_RENDERED_TERRAIN_PASS_SSGI = 1U << 4,
+    HENKA_RENDERED_TERRAIN_PASS_SSR = 1U << 5,
+    HENKA_RENDERED_TERRAIN_PASS_PROBE_CAPTURE = 1U << 6,
+    HENKA_RENDERED_TERRAIN_PASS_TEMPORAL = 1U << 7,
+    HENKA_RENDERED_TERRAIN_PASS_FOG = 1U << 8,
+    HENKA_RENDERED_TERRAIN_PASS_HDR = 1U << 9
+} henka_rendered_terrain_pass_flags;
+
 typedef struct henka_engine_diagnostics
 {
     double delta_seconds;
@@ -201,6 +216,8 @@ typedef struct henka_engine_diagnostics
     henka_window_id last_tool_window_id;
     bool last_tool_window_close_requested;
     bool last_tool_window_resized;
+    /* Rendered-frame Terrain submissions and post-process consumers. */
+    uint32_t rendered_scene_terrain_pass_flags;
 } henka_engine_diagnostics;
 
 typedef henka_result (*henka_engine_initialize_fn)(henka_engine* engine, void* user_data);
