@@ -198,6 +198,7 @@
 - Modify: `README.md`, `docs/terrain.md`, realism, building, and package docs
 
 - [ ] Add deterministic bounded rolling, cliff, valley, four-layer, wet/roughness, shadow, AO/SSGI, reflection, and distant-LOD fixtures.
+- [x] Seed new Sandbox Terrain storage with deterministic rolling, valley, ridge/cliff, and continuous four-layer material-weight fixtures while preserving persisted worlds.
 - [ ] Add failure injection for region/mesh/GPU/material/queue/collision/snapshot/persistence paths with previous-state assertions.
 - [x] Add graphical mesh-candidate failure injection with previous mesh/revision retention and successful residency recovery in the Sandbox smoke path.
 - [ ] Add camera-crossing, LOD, rapid edit/paint, boundary, mode-switch, resize, context, multiplayer, restart, and shutdown soak scenarios.

@@ -658,9 +658,26 @@ henka_result henka_mesh_create_from_terrain_chunk_with_edge_mask(
     for (index = 0U; index < terrain_mesh.vertex_count; ++index)
     {
         const henka_terrain_mesh_vertex* source = &terrain_vertices[index];
+        const henka_vec3 terrain_normal = {
+            source->normal[0], source->normal[1], source->normal[2]};
+        const henka_vec3 terrain_tangent = {
+            source->tangent[0], source->tangent[1], source->tangent[2]};
+        const henka_vec3 normalized_normal = henka_vec3_normalize(terrain_normal);
+        const henka_vec3 projected_tangent = henka_vec3_subtract(
+            terrain_tangent,
+            henka_vec3_scale(
+                normalized_normal,
+                henka_vec3_dot(normalized_normal, terrain_tangent)));
+        const float projected_tangent_length = henka_vec3_length(projected_tangent);
+        const bool terrain_tangent_valid =
+            isfinite(projected_tangent_length) &&
+            projected_tangent_length > 0.000001f &&
+            isfinite(source->tangent[3]) &&
+            fabsf(source->tangent[3]) >= 0.5f;
+
         render_vertices[index] = (henka_vertex){
             {source->position[0], source->position[1], source->position[2]},
-            {source->normal[0], source->normal[1], source->normal[2]},
+            terrain_normal,
             {source->uv[0], source->uv[1]},
             {0.0f, 0.0f},
             {(float)source->material_weights[0] / 255.0f,
@@ -668,8 +685,8 @@ henka_result henka_mesh_create_from_terrain_chunk_with_edge_mask(
              (float)source->material_weights[2] / 255.0f,
              (float)source->material_weights[3] / 255.0f},
             true,
-            {source->tangent[0], source->tangent[1], source->tangent[2], source->tangent[3]},
-            true};
+            {terrain_tangent.x, terrain_tangent.y, terrain_tangent.z, source->tangent[3]},
+            terrain_tangent_valid};
     }
     for (index = 0U; index < terrain_mesh.index_count; ++index)
     {

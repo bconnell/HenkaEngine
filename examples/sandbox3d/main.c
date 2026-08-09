@@ -4282,21 +4282,34 @@ static henka_result sandbox3d_initialize_terrain_rendering(
         {
             henka_terrain_sample* sample = &samples[
                 (size_t)sample_z * layout.samples_per_region_edge + sample_x];
-            sample->height_millimeters = 900 +
-                (int32_t)((sample_x * 17U + sample_z * 29U) % 1200U);
-            if (((sample_x / 32U) + (sample_z / 32U)) % 2U == 0U)
             {
-                sample->material_weights[0] = 180U;
-                sample->material_weights[1] = 40U;
-                sample->material_weights[2] = 25U;
-                sample->material_weights[3] = 10U;
-            }
-            else
-            {
-                sample->material_weights[0] = 120U;
-                sample->material_weights[1] = 90U;
-                sample->material_weights[2] = 30U;
-                sample->material_weights[3] = 15U;
+                const float x = (float)sample_x;
+                const float z = (float)sample_z;
+                const float rolling = 420.0f * sinf(x * 0.045f) * cosf(z * 0.037f);
+                const float valley_distance_x = (x - 256.0f) / 126.0f;
+                const float valley_distance_z = (z - 320.0f) / 154.0f;
+                const float valley = expf(-0.5f *
+                    (valley_distance_x * valley_distance_x + valley_distance_z * valley_distance_z));
+                const float ridge_distance = (x - 410.0f) / 54.0f;
+                const float ridge = expf(-0.5f * ridge_distance * ridge_distance);
+                const float cliff = tanhf((x - 372.0f) / 15.0f);
+                const float height_millimeters = 1500.0f + rolling -
+                    valley * 900.0f + ridge * 1100.0f + cliff * 650.0f;
+                const float slope_signal = fminf(
+                    1.0f,
+                    fabsf(sinf(x * 0.045f) * cosf(z * 0.037f)) +
+                    fabsf(cliff) * 0.45f + ridge * 0.35f);
+                const int rock_weight = 20 + (int)lroundf(slope_signal * 130.0f + ridge * 55.0f);
+                const int wet_weight = 10 + (int)lroundf(valley * 120.0f);
+                const int dirt_weight = 35 + (int)lroundf(slope_signal * 42.0f);
+                const int grass_weight = 255 - rock_weight - wet_weight - dirt_weight;
+
+                sample->height_millimeters = (int32_t)lroundf(height_millimeters);
+                sample->material_weights[0] = (uint8_t)(grass_weight > 1 ? grass_weight : 1);
+                sample->material_weights[1] = (uint8_t)(dirt_weight > 1 ? dirt_weight : 1);
+                sample->material_weights[2] = (uint8_t)(rock_weight > 1 ? rock_weight : 1);
+                sample->material_weights[3] = (uint8_t)(wet_weight > 1 ? wet_weight : 1);
+                (void)henka_terrain_normalize_weights(sample->material_weights);
             }
         }
     }
@@ -4393,7 +4406,7 @@ static henka_result sandbox3d_initialize_terrain_rendering(
             goto fail;
         }
     }
-    printf("Terrain render: 16 bounded chunks resident; four-layer manager-owned textures, automatic observer scheduling, and transactional mesh uploads ready.\n");
+    printf("Terrain render: 16 bounded chunks resident; deterministic rolling valley/cliff fixture, four-layer manager-owned textures, automatic observer scheduling, and transactional mesh uploads ready.\n");
     fflush(stdout);
     return HENKA_SUCCESS;
 
