@@ -4285,7 +4285,7 @@ static henka_result sandbox3d_initialize_terrain_rendering(
             {
                 const float x = (float)sample_x;
                 const float z = (float)sample_z;
-                const float rolling = 420.0f * sinf(x * 0.045f) * cosf(z * 0.037f);
+                const float rolling = 650.0f * sinf(x * 0.045f) * cosf(z * 0.037f);
                 const float valley_distance_x = (x - 256.0f) / 126.0f;
                 const float valley_distance_z = (z - 320.0f) / 154.0f;
                 const float valley = expf(-0.5f *
@@ -4293,8 +4293,8 @@ static henka_result sandbox3d_initialize_terrain_rendering(
                 const float ridge_distance = (x - 410.0f) / 54.0f;
                 const float ridge = expf(-0.5f * ridge_distance * ridge_distance);
                 const float cliff = tanhf((x - 372.0f) / 15.0f);
-                const float height_millimeters = 1500.0f + rolling -
-                    valley * 900.0f + ridge * 1100.0f + cliff * 650.0f;
+                const float height_millimeters = 1200.0f + rolling -
+                    valley * 1700.0f + ridge * 2800.0f + cliff * 2400.0f;
                 const float slope_signal = fminf(
                     1.0f,
                     fabsf(sinf(x * 0.045f) * cosf(z * 0.037f)) +
@@ -5424,6 +5424,27 @@ static void sandbox3d_reset_camera_defaults(sandbox3d_state* state)
 
     state->camera.movement_speed = g_default_camera_movement_speed;
     state->camera.fast_movement_multiplier = 2.5f;
+}
+
+static void sandbox3d_apply_capture_camera(sandbox3d_state* state)
+{
+    if (state == NULL || !state->capture_mode_requested)
+    {
+        return;
+    }
+
+    /* Capture evidence is a fixed Terrain showcase, while normal editor
+     * startup continues to honor the persisted user camera. */
+    {
+        const henka_vec3 target = {350.0f, 1.0f, 275.0f};
+        const henka_vec3 direction = henka_vec3_normalize(
+            henka_vec3_subtract(target, (henka_vec3){430.0f, 18.0f, 410.0f}));
+        state->camera.position = (henka_vec3){430.0f, 18.0f, 410.0f};
+        state->camera.yaw_radians = atan2f(direction.z, direction.x);
+        state->camera.pitch_radians = asinf(direction.y);
+    }
+    state->camera.far_plane = 800.0f;
+    state->camera_preset = HENKA_CAMERA_PRESET_PERSPECTIVE_3D;
 }
 
 static void sandbox3d_adjust_mouse_sensitivity(sandbox3d_state* state, float delta)
@@ -6630,6 +6651,7 @@ static void sandbox3d_apply_loaded_settings(henka_engine* engine, sandbox3d_stat
         sandbox3d_reset_camera_defaults(state);
         HENKA_LOG_WARN("Unsafe sandbox camera settings were ignored and replaced with safe defaults.");
     }
+    sandbox3d_apply_capture_camera(state);
 
     if (!isfinite(mouse_sensitivity) ||
         mouse_sensitivity < 0.0005f ||
