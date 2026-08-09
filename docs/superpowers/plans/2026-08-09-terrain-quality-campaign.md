@@ -182,7 +182,7 @@
 
 - [ ] Add RED cases for corrupt snapshot, missing/duplicate fragments, late join, retry, world/base mismatch, and stale smooth/flatten; the client regression now covers a forced server disconnect and explicit reconnect with exact resident-sample comparison.
 - [ ] Implement bounded retry/recovery state machines with truthful diagnostics and no partial publication.
-- [ ] Extend the two-client process harness to assert identity, revisions, paint weights, command IDs, disconnect/reconnect, late join, and restart byte convergence; the single-client session regression now covers same-endpoint authoritative server-wrapper restart and exact resident-sample convergence.
+- [x] Extend the two-client client-session regression to assert identity, revisions, edits from each peer, and byte-identical resident samples; the single-client session regression covers same-endpoint authoritative server-wrapper restart and exact resident-sample convergence. Multi-process late-join/reconnect soak remains open.
 - [ ] Validate both packages and the remaining multiplayer harness; external game/server templates, full Debug build, CTest, Sandbox smoke, hygiene, and integrity passed in the published recovery slice.
 
 ### Task 9: Build the realism reference scene and bounded stress/failure matrix

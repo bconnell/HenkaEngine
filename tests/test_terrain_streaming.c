@@ -20,6 +20,7 @@ static int test_streaming(void)
     henka_terrain_stream_observer moved_observer = {1U, {4, 3}, 0U, 1U, 1U, 0U};
     henka_terrain_stream_stats stats;
     henka_terrain_region_state region_state;
+    size_t allocations_before_failed_request;
     uint32_t index;
     int result = 0;
 
@@ -80,6 +81,32 @@ static int test_streaming(void)
         region_state.revision != 8U || region_state.generation != 2U ||
         !region_state.cpu_resident || !region_state.physics_resident ||
         !region_state.render_resident)
+    {
+        goto cleanup;
+    }
+    allocations_before_failed_request = henka_memory_get_allocation_count();
+    if (henka_terrain_streamer_request_region(
+            streamer, (henka_terrain_region_id){3, 3}) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    for (index = 0U; index < 200U; ++index)
+    {
+        if (henka_terrain_streamer_pump(streamer, 1U) != HENKA_SUCCESS)
+        {
+            goto cleanup;
+        }
+        henka_terrain_streamer_get_stats(streamer, &stats);
+        if (stats.failed_request_count == 1U)
+        {
+            break;
+        }
+#if defined(_WIN32)
+        Sleep(1U);
+#endif
+    }
+    if (stats.failed_request_count != 1U ||
+        henka_memory_get_allocation_count() != allocations_before_failed_request)
     {
         goto cleanup;
     }

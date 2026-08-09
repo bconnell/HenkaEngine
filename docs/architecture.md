@@ -23,7 +23,8 @@ only Henka host, peer, event, message, send, poll, disconnect, and diagnostic
 types. The transport foundation provides bounded reliable ordered localhost
 delivery, server-directed disconnect, and client reconnect. Terrain authority
 and revision recovery are exercised through the bounded Terrain session
-adapter; relevance-driven multiplayer state and soak remain subsequent work.
+adapter, including a two-client replica convergence regression after edits from
+both peers; relevance-driven multiplayer state and soak remain subsequent work.
 
 ## Modules
 

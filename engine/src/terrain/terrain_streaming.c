@@ -307,6 +307,11 @@ static DWORD WINAPI henka_terrain_stream_worker(void* argument)
             }
             else
             {
+                if (result != HENKA_SUCCESS)
+                {
+                    henka_free(samples);
+                    samples = NULL;
+                }
                 streamer->completions[completion_index].active = true;
                 streamer->completions[completion_index].result = result;
                 streamer->completions[completion_index].info = info;

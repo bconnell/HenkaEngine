@@ -303,7 +303,233 @@ cleanup:
     return result;
 }
 
+static int test_two_client_authoritative_convergence(void)
+{
+    henka_terrain_world_desc world_desc = henka_terrain_world_desc_default();
+    henka_terrain_layout layout;
+    henka_terrain_world* server_world = NULL;
+    henka_terrain_world* client_world_a = NULL;
+    henka_terrain_world* client_world_b = NULL;
+    henka_terrain_storage* storage = NULL;
+    henka_network_server* network_server = NULL;
+    henka_network_client* network_client_a = NULL;
+    henka_network_client* network_client_b = NULL;
+    henka_terrain_server* terrain_server = NULL;
+    henka_terrain_client* terrain_client_a = NULL;
+    henka_terrain_client* terrain_client_b = NULL;
+    henka_terrain_sample* samples = NULL;
+    henka_network_server_desc server_desc = henka_network_server_desc_default();
+    henka_network_client_desc client_desc = henka_network_client_desc_default();
+    henka_terrain_server_desc server_config;
+    henka_terrain_client_desc client_config;
+    henka_terrain_client_diagnostics diagnostics_a;
+    henka_terrain_client_diagnostics diagnostics_b;
+    henka_terrain_edit_request request;
+    henka_terrain_region_state state_a;
+    henka_terrain_region_state state_b;
+    uint32_t event_count;
+    uint32_t index;
+    uint32_t iteration;
+    int result = 0;
+
+    world_desc.max_resident_regions = 1U;
+    server_desc.bind_endpoint.host[0] = '1';
+    server_desc.bind_endpoint.host[1] = '2';
+    server_desc.bind_endpoint.host[2] = '7';
+    server_desc.bind_endpoint.host[3] = '.';
+    server_desc.bind_endpoint.host[4] = '0';
+    server_desc.bind_endpoint.host[5] = '.';
+    server_desc.bind_endpoint.host[6] = '0';
+    server_desc.bind_endpoint.host[7] = '.';
+    server_desc.bind_endpoint.host[8] = '1';
+    server_desc.bind_endpoint.port = 7802U;
+    client_desc.remote_endpoint = server_desc.bind_endpoint;
+    if (henka_terrain_world_desc_get_layout(&world_desc, &layout) != HENKA_SUCCESS ||
+        henka_terrain_world_create(&world_desc, &server_world) != HENKA_SUCCESS ||
+        henka_terrain_world_create(&world_desc, &client_world_a) != HENKA_SUCCESS ||
+        henka_terrain_world_create(&world_desc, &client_world_b) != HENKA_SUCCESS ||
+        henka_terrain_storage_create(&world_desc, "build/test_tmp/terrain_two_client_v1", &storage) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    samples = henka_calloc(layout.samples_per_region, sizeof(*samples));
+    if (samples == NULL)
+    {
+        goto cleanup;
+    }
+    for (index = 0U; index < layout.samples_per_region; ++index)
+    {
+        samples[index].material_weights[0] = 255U;
+    }
+    if (henka_terrain_storage_begin(storage, 1U) != HENKA_SUCCESS ||
+        henka_terrain_storage_write_region(
+            storage, (henka_terrain_region_id){0, 0}, 0U, 0U,
+            samples, layout.samples_per_region) != HENKA_SUCCESS ||
+        henka_terrain_storage_commit(storage, 1U) != HENKA_SUCCESS ||
+        henka_terrain_world_apply_region_snapshot(
+            server_world,
+            (henka_terrain_region_storage_info){{0, 0}, 7U, 3U},
+            samples,
+            layout.samples_per_region) != HENKA_SUCCESS ||
+        henka_terrain_world_apply_region_snapshot(
+            client_world_a,
+            (henka_terrain_region_storage_info){{0, 0}, 0U, 0U},
+            samples,
+            layout.samples_per_region) != HENKA_SUCCESS ||
+        henka_terrain_world_apply_region_snapshot(
+            client_world_b,
+            (henka_terrain_region_storage_info){{0, 0}, 0U, 0U},
+            samples,
+            layout.samples_per_region) != HENKA_SUCCESS ||
+        henka_network_server_create(&server_desc, &network_server) != HENKA_SUCCESS ||
+        henka_network_client_create(&client_desc, &network_client_a) != HENKA_SUCCESS ||
+        henka_network_client_create(&client_desc, &network_client_b) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    server_config = henka_terrain_server_desc_default();
+    server_config.network = network_server;
+    server_config.world = server_world;
+    server_config.storage = storage;
+    client_config = henka_terrain_client_desc_default();
+    client_config.world = client_world_a;
+    client_config.network = network_client_a;
+    if (henka_terrain_server_create(&server_config, &terrain_server) != HENKA_SUCCESS ||
+        henka_terrain_client_create(&client_config, &terrain_client_a) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    client_config.world = client_world_b;
+    client_config.network = network_client_b;
+    if (henka_terrain_client_create(&client_config, &terrain_client_b) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+
+    for (iteration = 0U; iteration < 3000U; ++iteration)
+    {
+        if (henka_terrain_server_poll(terrain_server, 2U, 11000U + iteration) != HENKA_SUCCESS ||
+            henka_terrain_client_poll(terrain_client_a, 2U, 8U, &event_count) != HENKA_SUCCESS ||
+            henka_terrain_client_poll(terrain_client_b, 2U, 8U, &event_count) != HENKA_SUCCESS)
+        {
+            goto cleanup;
+        }
+        henka_terrain_client_get_diagnostics(terrain_client_a, &diagnostics_a);
+        henka_terrain_client_get_diagnostics(terrain_client_b, &diagnostics_b);
+        if (diagnostics_a.connected_event_count >= 1U &&
+            diagnostics_b.connected_event_count >= 1U &&
+            diagnostics_a.completed_snapshot_count >= 1U &&
+            diagnostics_b.completed_snapshot_count >= 1U &&
+            henka_terrain_world_get_region_state(
+                client_world_a, (henka_terrain_region_id){0, 0}, &state_a) == HENKA_SUCCESS &&
+            henka_terrain_world_get_region_state(
+                client_world_b, (henka_terrain_region_id){0, 0}, &state_b) == HENKA_SUCCESS &&
+            state_a.revision == 7U && state_b.revision == 7U)
+        {
+            break;
+        }
+    }
+    if (iteration == 3000U)
+    {
+        goto cleanup;
+    }
+
+    request.world_identity = world_desc.world_identity;
+    request.base_asset_identity = world_desc.base_asset_identity;
+    request.client_nonce = 1201U;
+    request.command = henka_terrain_edit_command_default();
+    request.command.center_sample_x = 100;
+    request.command.center_sample_z = 100;
+    request.command.radius_samples = 4U;
+    request.affected_region_count = 1U;
+    request.affected_regions[0] =
+        (henka_terrain_network_region_revision){{0, 0}, 7U};
+    if (henka_terrain_client_send_edit_request(terrain_client_a, &request) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    for (iteration = 0U; iteration < 3000U; ++iteration)
+    {
+        if (henka_terrain_server_poll(terrain_server, 2U, 15000U + iteration) != HENKA_SUCCESS ||
+            henka_terrain_client_poll(terrain_client_a, 2U, 8U, &event_count) != HENKA_SUCCESS ||
+            henka_terrain_client_poll(terrain_client_b, 2U, 8U, &event_count) != HENKA_SUCCESS)
+        {
+            goto cleanup;
+        }
+        henka_terrain_client_get_diagnostics(terrain_client_a, &diagnostics_a);
+        henka_terrain_client_get_diagnostics(terrain_client_b, &diagnostics_b);
+        if (diagnostics_a.applied_delta_count >= 1U &&
+            diagnostics_b.applied_delta_count >= 1U &&
+            henka_terrain_world_get_region_state(
+                client_world_a, (henka_terrain_region_id){0, 0}, &state_a) == HENKA_SUCCESS &&
+            henka_terrain_world_get_region_state(
+                client_world_b, (henka_terrain_region_id){0, 0}, &state_b) == HENKA_SUCCESS &&
+            state_a.revision == 8U && state_b.revision == 8U)
+        {
+            break;
+        }
+    }
+    if (iteration == 3000U ||
+        !terrain_region_samples_equal(server_world, client_world_a, (henka_terrain_region_id){0, 0}) ||
+        !terrain_region_samples_equal(server_world, client_world_b, (henka_terrain_region_id){0, 0}))
+    {
+        goto cleanup;
+    }
+
+    request.client_nonce = 1202U;
+    request.command.center_sample_x = 112;
+    request.command.center_sample_z = 112;
+    request.affected_regions[0].revision = 8U;
+    if (henka_terrain_client_send_edit_request(terrain_client_b, &request) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    for (iteration = 0U; iteration < 3000U; ++iteration)
+    {
+        if (henka_terrain_server_poll(terrain_server, 2U, 19000U + iteration) != HENKA_SUCCESS ||
+            henka_terrain_client_poll(terrain_client_a, 2U, 8U, &event_count) != HENKA_SUCCESS ||
+            henka_terrain_client_poll(terrain_client_b, 2U, 8U, &event_count) != HENKA_SUCCESS)
+        {
+            goto cleanup;
+        }
+        henka_terrain_client_get_diagnostics(terrain_client_a, &diagnostics_a);
+        henka_terrain_client_get_diagnostics(terrain_client_b, &diagnostics_b);
+        if (diagnostics_a.applied_delta_count >= 2U &&
+            diagnostics_b.applied_delta_count >= 2U &&
+            henka_terrain_world_get_region_state(
+                client_world_a, (henka_terrain_region_id){0, 0}, &state_a) == HENKA_SUCCESS &&
+            henka_terrain_world_get_region_state(
+                client_world_b, (henka_terrain_region_id){0, 0}, &state_b) == HENKA_SUCCESS &&
+            state_a.revision == 9U && state_b.revision == 9U)
+        {
+            break;
+        }
+    }
+    if (iteration == 3000U ||
+        !terrain_region_samples_equal(server_world, client_world_a, (henka_terrain_region_id){0, 0}) ||
+        !terrain_region_samples_equal(server_world, client_world_b, (henka_terrain_region_id){0, 0}))
+    {
+        goto cleanup;
+    }
+    result = 1;
+
+cleanup:
+    henka_terrain_client_destroy(terrain_client_b);
+    henka_terrain_client_destroy(terrain_client_a);
+    henka_terrain_server_destroy(terrain_server);
+    henka_network_client_destroy(network_client_b);
+    henka_network_client_destroy(network_client_a);
+    henka_network_server_destroy(network_server);
+    henka_terrain_storage_destroy(storage);
+    henka_terrain_world_destroy(client_world_b);
+    henka_terrain_world_destroy(client_world_a);
+    henka_terrain_world_destroy(server_world);
+    henka_free(samples);
+    return result;
+}
+
 int main(void)
 {
-    return test_client_snapshot_and_delta_path() ? 0 : 1;
+    return test_client_snapshot_and_delta_path() &&
+        test_two_client_authoritative_convergence() ? 0 : 1;
 }

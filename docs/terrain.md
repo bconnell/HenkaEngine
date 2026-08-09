@@ -140,7 +140,12 @@ The connect-time session-info bootstrap covers only the bounded advertised
 resident set; broader reconnect and late-join orchestration remain subsequent
 work. The recovery test covers one bounded resident set through forced
 disconnect, reconnect, and server-wrapper restart, but does not claim
-relevance-driven multi-region orchestration or multiplayer soak.
+relevance-driven multi-region orchestration or multiplayer soak. A separate
+public client-session regression connects two replicas to the same authoritative
+server, bootstraps the advertised region, sends one edit from each peer, and
+compares the complete resident sample arrays against the server after both
+revisions. This proves bounded two-client convergence; it is not a multi-process
+soak or application-level authentication test.
 `<henka/terrain_prediction.h>` owns a separate bounded presentation
 world for local commands: it copies CPU-resident authoritative regions, applies
 pending commands in submission order, and rebuilds from authoritative state
