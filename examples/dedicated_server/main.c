@@ -403,6 +403,7 @@ static int henka_server_run_loopback_smoke(
     henka_terrain_server* terrain_server,
     const henka_terrain_world_desc* world_desc,
     henka_terrain_world* terrain_world,
+    henka_terrain_collision_runtime* collision_runtime,
     unsigned short port,
     uint64_t* out_revision)
 {
@@ -441,11 +442,19 @@ static int henka_server_run_loopback_smoke(
             henka_network_client_destroy(client);
             return 0;
         }
+        if (collision_runtime != NULL)
+        {
+            (void)henka_terrain_collision_runtime_pump(collision_runtime, 8U);
+        }
         if (server_event.type == HENKA_NETWORK_EVENT_MESSAGE &&
             henka_terrain_server_handle_event(terrain_server, &server_event, iteration) != HENKA_SUCCESS)
         {
             henka_network_client_destroy(client);
             return 0;
+        }
+        if (collision_runtime != NULL)
+        {
+            (void)henka_terrain_collision_runtime_pump(collision_runtime, 8U);
         }
         if (client_event.type == HENKA_NETWORK_EVENT_CONNECTED)
         {
@@ -522,11 +531,19 @@ static int henka_server_run_loopback_smoke(
                 henka_network_client_destroy(client);
                 return 0;
             }
+            if (collision_runtime != NULL)
+            {
+                (void)henka_terrain_collision_runtime_pump(collision_runtime, 16U);
+            }
             if (server_event.type == HENKA_NETWORK_EVENT_MESSAGE &&
                 henka_terrain_server_handle_event(terrain_server, &server_event, 400U + iteration) != HENKA_SUCCESS)
             {
                 henka_network_client_destroy(client);
                 return 0;
+            }
+            if (collision_runtime != NULL)
+            {
+                (void)henka_terrain_collision_runtime_pump(collision_runtime, 16U);
             }
             if (client_event.type == HENKA_NETWORK_EVENT_MESSAGE &&
                 client_event.message.type == HENKA_NETWORK_MESSAGE_TERRAIN_EDIT_ACCEPTED &&
@@ -685,6 +702,7 @@ int main(int argc, char** argv)
     terrain_server_desc.network = network;
     terrain_server_desc.world = terrain_world;
     terrain_server_desc.storage = terrain_storage;
+    terrain_server_desc.collision_runtime = terrain_collision_runtime;
     terrain_server_desc.max_clients = options.max_clients;
     if (henka_terrain_server_create(&terrain_server_desc, &terrain_server) != HENKA_SUCCESS)
     {
@@ -729,7 +747,7 @@ int main(int argc, char** argv)
         if (exit_code == 0 &&
             !henka_server_run_loopback_smoke(
                 network, terrain_server, &terrain_world_desc, terrain_world,
-                options.port, &smoke_revision))
+                terrain_collision_runtime, options.port, &smoke_revision))
         {
             fprintf(stderr, "dedicated server loopback smoke failed\n");
             exit_code = 12;

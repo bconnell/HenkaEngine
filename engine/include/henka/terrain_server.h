@@ -5,6 +5,7 @@
 
 #include <henka/network.h>
 #include <henka/terrain_authority.h>
+#include <henka/terrain_collision_runtime.h>
 
 typedef struct henka_terrain_server henka_terrain_server;
 
@@ -13,6 +14,7 @@ typedef struct henka_terrain_server_desc
     henka_network_server* network;
     henka_terrain_world* world;
     henka_terrain_storage* storage;
+    henka_terrain_collision_runtime* collision_runtime;
     uint32_t max_clients;
     uint32_t edit_rate_per_second;
     henka_terrain_edit_permission_callback permission_callback;

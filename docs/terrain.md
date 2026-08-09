@@ -158,8 +158,11 @@ and transactional replacement are implemented. The renderer-free
 coalescing rebuild queue: the runtime thread builds full-resolution patches for
 physics-resident chunks and replaces the durable physics representation only
 after the candidate succeeds. A failed rebuild leaves the last valid patch in
-place. It does not yet infer every dirty neighbor or perform background
-regeneration automatically; callers enqueue the affected chunks explicitly.
+place. `henka_terrain_collision_runtime_request_edit` derives the accepted
+edit footprint plus one chunk of physics-neighbor coverage, and the Terrain
+server session can borrow that queue to schedule it after authority acceptance.
+Callers still own the pump cadence and may enqueue individual chunks when
+residency changes.
 
 `<henka/terrain_mesh.h>` provides the corresponding renderer-independent
 geometry boundary. `henka_terrain_mesh_build_chunk` requires a render-resident
@@ -179,11 +182,11 @@ physics, render, pending-I/O, dirty, revision, and generation state.
 ## Current boundary
 
 This slice establishes the shared data model and bounded ownership contract.
-World manifest integration, automatic dirty-neighbor discovery, scene
-ownership and GPU residency, and reconnect/late-join orchestration are
-subsequent validated runtime slices. Collision replacement is available
-through the bounded runtime queue, and client prediction is available through
-the separate presentation-world owner.
+World manifest integration, full residency-wide dirty-neighbor scheduling,
+scene ownership and GPU residency, and reconnect/late-join orchestration are
+subsequent validated runtime slices. Accepted edits can now derive one-chunk
+physics-neighbor coverage through the bounded collision queue, and client
+prediction is available through the separate presentation-world owner.
 They must use this
 same world identity, region/chunk mapping, revision, and residency ownership;
 they must not introduce a second world-sized representation.

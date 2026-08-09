@@ -12,6 +12,7 @@ struct henka_terrain_server
     henka_network_server* network;
     henka_terrain_world* world;
     henka_terrain_storage* storage;
+    henka_terrain_collision_runtime* collision_runtime;
     henka_terrain_authority* authority;
     henka_terrain_server_diagnostics diagnostics;
     uint64_t next_snapshot_transfer_id;
@@ -20,6 +21,7 @@ struct henka_terrain_server
 henka_terrain_server_desc henka_terrain_server_desc_default(void)
 {
     return (henka_terrain_server_desc){
+        NULL,
         NULL,
         NULL,
         NULL,
@@ -64,6 +66,7 @@ henka_result henka_terrain_server_create(
     server->network = desc->network;
     server->world = desc->world;
     server->storage = desc->storage;
+    server->collision_runtime = desc->collision_runtime;
     server->next_snapshot_transfer_id = 1U;
     *out_server = server;
     return HENKA_SUCCESS;
@@ -323,6 +326,11 @@ henka_result henka_terrain_server_handle_event(
         return henka_terrain_server_send_rejection(server, event->peer_id, &response.rejection);
     }
     ++server->diagnostics.accepted_edit_count;
+    if (server->collision_runtime != NULL)
+    {
+        (void)henka_terrain_collision_runtime_request_edit(
+            server->collision_runtime, &request.command);
+    }
     result = henka_terrain_edit_acceptance_encode(
         &response.acceptance, payload, sizeof(payload), &payload_size);
     if (result != HENKA_SUCCESS)

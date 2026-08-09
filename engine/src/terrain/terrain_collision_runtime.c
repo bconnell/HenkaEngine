@@ -128,6 +128,75 @@ henka_result henka_terrain_collision_runtime_request_chunk(
     return HENKA_ERROR_LIMIT;
 }
 
+henka_result henka_terrain_collision_runtime_request_edit(
+    henka_terrain_collision_runtime* runtime,
+    const henka_terrain_edit_command* command)
+{
+    henka_terrain_world_desc world_desc;
+    uint32_t chunk_sample_span;
+    uint32_t samples_across;
+    uint32_t samples_down;
+    int64_t min_sample_x;
+    int64_t max_sample_x;
+    int64_t min_sample_z;
+    int64_t max_sample_z;
+    int32_t min_chunk_x;
+    int32_t max_chunk_x;
+    int32_t min_chunk_z;
+    int32_t max_chunk_z;
+    int32_t chunk_z;
+    int32_t chunk_x;
+
+    if (runtime == NULL || command == NULL ||
+        henka_terrain_world_get_desc(runtime->world, &world_desc) != HENKA_SUCCESS ||
+        henka_terrain_edit_command_validate(runtime->world, command) != HENKA_SUCCESS)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    chunk_sample_span = world_desc.chunk_edge_meters / world_desc.base_sample_spacing_meters;
+    samples_across = world_desc.world_width_meters / world_desc.base_sample_spacing_meters + 1U;
+    samples_down = world_desc.world_depth_meters / world_desc.base_sample_spacing_meters + 1U;
+    if (chunk_sample_span == 0U)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    min_sample_x = (int64_t)command->center_sample_x - command->radius_samples - chunk_sample_span;
+    max_sample_x = (int64_t)command->center_sample_x + command->radius_samples + chunk_sample_span;
+    min_sample_z = (int64_t)command->center_sample_z - command->radius_samples - chunk_sample_span;
+    max_sample_z = (int64_t)command->center_sample_z + command->radius_samples + chunk_sample_span;
+    if (min_sample_x < 0) { min_sample_x = 0; }
+    if (min_sample_z < 0) { min_sample_z = 0; }
+    if (max_sample_x >= samples_across) { max_sample_x = samples_across - 1U; }
+    if (max_sample_z >= samples_down) { max_sample_z = samples_down - 1U; }
+    min_chunk_x = (int32_t)(min_sample_x / chunk_sample_span);
+    max_chunk_x = (int32_t)(max_sample_x / chunk_sample_span);
+    min_chunk_z = (int32_t)(min_sample_z / chunk_sample_span);
+    max_chunk_z = (int32_t)(max_sample_z / chunk_sample_span);
+    for (chunk_z = min_chunk_z; chunk_z <= max_chunk_z; ++chunk_z)
+    {
+        for (chunk_x = min_chunk_x; chunk_x <= max_chunk_x; ++chunk_x)
+        {
+            henka_terrain_region_id region_id;
+            henka_terrain_region_state state;
+            henka_result result;
+            if (henka_terrain_region_id_from_chunk(
+                    &world_desc, (henka_terrain_chunk_id){chunk_x, chunk_z}, &region_id) != HENKA_SUCCESS ||
+                henka_terrain_world_get_region_state(runtime->world, region_id, &state) != HENKA_SUCCESS ||
+                !state.physics_resident)
+            {
+                continue;
+            }
+            result = henka_terrain_collision_runtime_request_chunk(
+                runtime, (henka_terrain_chunk_id){chunk_x, chunk_z});
+            if (result != HENKA_SUCCESS)
+            {
+                return result;
+            }
+        }
+    }
+    return HENKA_SUCCESS;
+}
+
 henka_result henka_terrain_collision_runtime_remove_chunk(
     henka_terrain_collision_runtime* runtime,
     henka_terrain_chunk_id chunk_id)

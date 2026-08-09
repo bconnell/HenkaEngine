@@ -3,6 +3,7 @@
 
 #include <stdint.h>
 
+#include <henka/terrain_edit.h>
 #include <henka/terrain_physics.h>
 
 #define HENKA_TERRAIN_COLLISION_RUNTIME_MAX_PENDING 256U
@@ -34,6 +35,10 @@ void henka_terrain_collision_runtime_destroy(henka_terrain_collision_runtime* ru
 henka_result henka_terrain_collision_runtime_request_chunk(
     henka_terrain_collision_runtime* runtime,
     henka_terrain_chunk_id chunk_id);
+/* Queues the edit footprint plus one chunk of physics-neighbor coverage. */
+henka_result henka_terrain_collision_runtime_request_edit(
+    henka_terrain_collision_runtime* runtime,
+    const henka_terrain_edit_command* command);
 henka_result henka_terrain_collision_runtime_remove_chunk(
     henka_terrain_collision_runtime* runtime,
     henka_terrain_chunk_id chunk_id);
