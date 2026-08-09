@@ -178,7 +178,10 @@ succeeds. Four LOD bands use hysteresis and deterministic adjacent-chunk
 selection; render visibility is bounded by the configured outer band. The
 owner destroys its entities and meshes without destroying the borrowed world.
 Cross-LOD seam stitching, automatic world-residency scheduling, and manual
-visual validation remain subsequent work.
+visual validation remain subsequent work. The Sandbox also routes one shared
+raise command through authoritative integer mutation, refreshes the
+transactional physics patch, and refreshes the affected GPU mesh; this is a
+runtime smoke path, not persistence or network authority.
 
 The Sandbox reference scene now creates one deterministic bounded region,
 marks it render-resident, and attaches four chunks through this owner. It
