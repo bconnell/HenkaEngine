@@ -301,6 +301,44 @@ static int test_transition_topology(void)
             goto cleanup;
         }
     }
+    if (henka_terrain_mesh_build_chunk_with_edge_mask(
+            world,
+            (henka_terrain_chunk_id){0, 0},
+            0U,
+            HENKA_TERRAIN_MESH_EDGE_NORTH |
+                HENKA_TERRAIN_MESH_EDGE_SOUTH |
+                HENKA_TERRAIN_MESH_EDGE_EAST |
+                HENKA_TERRAIN_MESH_EDGE_WEST,
+            &mesh) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    for (index = 0U; index < mesh.index_count; index += 3U)
+    {
+        if (mesh.indices[index] == mesh.indices[index + 1U] ||
+            mesh.indices[index] == mesh.indices[index + 2U] ||
+            mesh.indices[index + 1U] == mesh.indices[index + 2U])
+        {
+            goto cleanup;
+        }
+    }
+    for (index = 0U; index < mesh.vertex_count; ++index)
+    {
+        if (!isfinite(mesh.vertices[index].position[0]) ||
+            !isfinite(mesh.vertices[index].position[1]) ||
+            !isfinite(mesh.vertices[index].position[2]) ||
+            !isfinite(mesh.vertices[index].normal[0]) ||
+            !isfinite(mesh.vertices[index].normal[1]) ||
+            !isfinite(mesh.vertices[index].normal[2]) ||
+            !isfinite(mesh.vertices[index].tangent[0]) ||
+            !isfinite(mesh.vertices[index].tangent[1]) ||
+            !isfinite(mesh.vertices[index].tangent[2]) ||
+            !isfinite(mesh.vertices[index].tangent[3]) ||
+            fabsf(mesh.vertices[index].tangent[3]) < 0.5f)
+        {
+            goto cleanup;
+        }
+    }
     result = 1;
 
 cleanup:

@@ -256,7 +256,9 @@ falls back to the resident edge until a neighbor streams in. Uploaded chunks
 track the bounded 3x3 region revision/generation identities used by that border
 sampling, so a neighbor edit queues dependent chunks as well; height-derived
 scene bounds are replaced with the candidate mesh and restored on failure.
-Manual visual validation remains subsequent work. The Sandbox also routes one shared
+The mesh regression suite also builds an all-four-edge transition and rejects
+degenerate triangles or non-finite tangent bases at the corners. Manual visual
+corner validation remains subsequent work. The Sandbox also routes one shared
 raise command through authoritative integer mutation, refreshes the
 transactional physics patch, and refreshes the affected GPU mesh; this is a
 runtime smoke path, not persistence or network authority. It also applies a
