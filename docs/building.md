@@ -75,6 +75,18 @@ server against the same save root to verify the committed revision and checksum
 are restored exactly. The check remains bounded session-info/relevance coverage;
 it is not application authentication or a production multiplayer soak.
 
+Repeat that complete bounded scenario for a finite number of isolated sessions
+with:
+
+```powershell
+.\scripts\soak_terrain_process_integration_windows.ps1 -Iterations 3
+```
+
+Each iteration starts fresh server/client processes and a fresh save root. This
+proves repeatable cleanup and restart recovery for the advertised resident
+region contract; it does not claim relevance-driven multi-region orchestration
+or production-scale multiplayer capacity.
+
 ## Run tests
 
 ```powershell

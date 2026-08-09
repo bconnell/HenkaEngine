@@ -126,6 +126,9 @@ loaded afterward so committed runtime edits override the base region. Its bounde
 deterministic edit when the save root is empty, allowing the packaged restart
 check to verify that the same revision is restored. This does not replace a
 multi-process multiplayer soak or relevance-driven reconnect/late-join policy.
+The bounded Windows process integration soak repeats that complete scenario
+for a finite session count with isolated save roots; production-scale capacity
+is not claimed.
 
 Accepted edits also produce a bounded delta in the same terrain channel. The
 delta repeats world/base identity, client nonce, server command identity, the
@@ -140,12 +143,14 @@ The connect-time session-info bootstrap covers only the bounded advertised
 resident set; broader reconnect and late-join orchestration remain subsequent
 work. The recovery test covers one bounded resident set through forced
 disconnect, reconnect, and server-wrapper restart, but does not claim
-relevance-driven multi-region orchestration or multiplayer soak. A separate
+relevance-driven multi-region orchestration or production-scale multiplayer
+soak. A separate
 public client-session regression connects two replicas to the same authoritative
 server, bootstraps the advertised region, sends one edit from each peer, and
 compares the complete resident sample arrays against the server after both
-revisions. This proves bounded two-client convergence; it is not a multi-process
-soak or application-level authentication test.
+revisions. This proves bounded two-client convergence; the finite process soak
+repeats the multi-process scenario, but neither is application-level
+authentication or production-scale capacity coverage.
 `<henka/terrain_prediction.h>` owns a separate bounded presentation
 world for local commands: it copies CPU-resident authoritative regions, applies
 pending commands in submission order, and rebuilds from authoritative state
@@ -166,8 +171,9 @@ first requests the retained revision range and uses a snapshot when that
 range is unavailable. Connect-time session info can request the same bounded
 snapshot path for up to 16 advertised resident regions. The Windows process
 harness exercises that bounded late-observer path, explicit client reconnect,
-and restart checksum convergence; relevance-driven reconnect and late-join
-selection remain outside this bounded policy.
+and restart checksum convergence; the finite process soak repeats this bounded
+policy, while relevance-driven reconnect and late-join selection remain
+outside it.
 
 `<henka/terrain_replica.h>` is the bounded client-side state owner consumed by
 `<henka/terrain_client.h>`. It applies a delta only when every affected region advances
@@ -327,7 +333,9 @@ set discovery, stale render identity refresh, one-level cross-LOD edge morphing,
 and physics patch synchronization with deterministic capacity-based admission
 and removal. Full residency-wide dirty-neighbor scheduling beyond the bounded
 physics patch capacity, four-way corner visual QA, relevance-driven late-join
-selection, and multiplayer soak remain subsequent validated runtime slices.
+selection, and production-scale multiplayer soak remain subsequent validated
+runtime slices; the bounded process integration soak now repeats the advertised
+resident-region scenario for a finite session count.
 Accepted edits can now derive
 one-chunk physics-neighbor coverage through the bounded collision queue, and
 client prediction is available through the separate presentation-world owner.

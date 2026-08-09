@@ -24,7 +24,8 @@ types. The transport foundation provides bounded reliable ordered localhost
 delivery, server-directed disconnect, and client reconnect. Terrain authority
 and revision recovery are exercised through the bounded Terrain session
 adapter, including a two-client replica convergence regression after edits from
-both peers; relevance-driven multiplayer state and soak remain subsequent work.
+both peers and a finite repeated process integration soak; relevance-driven
+multiplayer state and production-scale soak remain subsequent work.
 
 ## Modules
 

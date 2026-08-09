@@ -187,7 +187,7 @@
 - [x] Reject malformed fragment sizing and duplicate/corrupt transfers without partial publication; the replica test proves a valid transfer can retry afterward.
 - [x] Add a bounded client retry for decoded-but-rejected snapshots, with per-transfer deduplication, a four-attempt connection budget, and diagnostics; undecodable messages remain hard errors.
 - [ ] Complete bounded retry/recovery state machines across late join, reconnect, and multi-process recovery with truthful diagnostics and no partial publication.
-- [x] Extend the two-client client-session regression to assert identity, revisions, edits from each peer, and byte-identical resident samples; the single-client session regression covers same-endpoint authoritative server-wrapper restart and exact resident-sample convergence. Multi-process late-join/reconnect soak remains open.
+- [x] Extend the two-client client-session regression to assert identity, revisions, edits from each peer, and byte-identical resident samples; the single-client session regression covers same-endpoint authoritative server-wrapper restart and exact resident-sample convergence. The bounded multi-process late-join/reconnect process soak now repeats that scenario for a finite session count; production-scale capacity remains open.
 - [ ] Validate both packages and the remaining multiplayer harness; external game/server templates, full Debug build, CTest, Sandbox smoke, hygiene, and integrity passed in the published recovery slice.
 
 ### Task 9: Build the realism reference scene and bounded stress/failure matrix

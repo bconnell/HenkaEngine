@@ -55,7 +55,11 @@ Terrain snapshots, binds a local ENet endpoint, connects an in-process client,
 round-trips a ping, commits one deterministic Terrain edit when the save root
 is empty, and exits cleanly. A later smoke run loads the committed region and
 reports the same revision. It is a deployment check, not a substitute for a
-two-process multiplayer soak.
+two-process multiplayer soak. For a finite repeated process check, run
+`scripts/soak_terrain_process_integration_windows.ps1 -Iterations 3`; it
+repeats the complete bounded two-client, late-join, reconnect, and restart
+scenario with isolated save roots. This is repeatability and cleanup coverage,
+not production-scale multiplayer capacity.
 
 ## Package
 
@@ -88,8 +92,9 @@ snapshot bootstrap. The runtime client recovery test additionally covers a
 forced disconnect, explicit reconnect, replacement of the authoritative server
 wrapper on the same endpoint, a late observer, and exact resident-sample
 checksum convergence. This does not claim application authentication,
-relevance-driven reconnect or late-join selection, or production multiplayer
-soak coverage.
+relevance-driven reconnect or late-join selection, or production-scale
+multiplayer soak coverage. The finite process soak repeats this bounded
+scenario but does not expand its relevance policy or capacity.
 
 The server retains a fixed 64-entry authoritative Terrain delta history per
 server process. A connected client may request a bounded regional revision
