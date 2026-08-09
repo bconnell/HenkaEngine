@@ -237,8 +237,13 @@ runtime smoke path, not persistence or network authority.
 
 The Sandbox reference scene now creates one deterministic bounded region,
 marks it render-resident, and lets this owner discover its bounded chunk
-working set from the active camera. It pumps at most two replacements per frame.
-This is runtime integration coverage, not a claim of human visual approval.
+working set from the active camera. The same camera feeds the public streaming
+observer; under the existing one-region user-data policy, crossing a region
+releases the old clean region and requests the new current region with a
+bounded one-region unload hysteresis. It pumps at most two render replacements
+per frame and reports the stream queue in the Terrain utility. This is runtime
+integration coverage, not a claim of human visual approval or a claim that
+background physics/render regeneration is complete.
 The Utility Terrain
 tab now exposes bounded resident/render/collision statistics and raise, lower,
 flatten, smooth, and paint controls with radius, strength, layer, and falloff

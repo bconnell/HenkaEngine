@@ -322,6 +322,7 @@ typedef struct sandbox3d_state
     henka_material_instance marker_material_instance;
     henka_terrain_world* terrain_world;
     henka_terrain_storage* terrain_storage;
+    henka_terrain_streamer* terrain_streamer;
     henka_terrain_render_runtime* terrain_render;
     henka_terrain_physics* terrain_physics;
     uint32_t terrain_tool_radius_samples;
@@ -1554,6 +1555,64 @@ static void sandbox3d_draw_detached_workspace_panel_content(
 static void sandbox3d_build_detached_workspace_panel_ui(henka_engine* engine, sandbox3d_state* state);
 static henka_result sandbox3d_initialize_physics(sandbox3d_state* state);
 static void sandbox3d_update_physics(sandbox3d_state* state, double delta_seconds);
+static henka_terrain_region_id sandbox3d_terrain_region_at_position(
+    const henka_terrain_world_desc* world_desc,
+    henka_vec3 position)
+{
+    int32_t region_x;
+    int32_t region_z;
+    if (world_desc == NULL || world_desc->region_edge_meters == 0U)
+    {
+        return (henka_terrain_region_id){0, 0};
+    }
+    region_x = (int32_t)floorf(position.x / (float)world_desc->region_edge_meters);
+    region_z = (int32_t)floorf(position.z / (float)world_desc->region_edge_meters);
+    if (region_x < 0)
+    {
+        region_x = 0;
+    }
+    if (region_z < 0)
+    {
+        region_z = 0;
+    }
+    if ((uint32_t)region_x >= world_desc->regions_across)
+    {
+        region_x = (int32_t)world_desc->regions_across - 1;
+    }
+    if ((uint32_t)region_z >= world_desc->regions_down)
+    {
+        region_z = (int32_t)world_desc->regions_down - 1;
+    }
+    return (henka_terrain_region_id){region_x, region_z};
+}
+
+static henka_result sandbox3d_update_terrain_streaming(sandbox3d_state* state)
+{
+    henka_terrain_world_desc world_desc;
+    henka_terrain_stream_observer observer;
+    if (state == NULL || state->terrain_streamer == NULL || state->terrain_world == NULL)
+    {
+        return HENKA_SUCCESS;
+    }
+    if (henka_terrain_world_get_desc(state->terrain_world, &world_desc) != HENKA_SUCCESS)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    observer = (henka_terrain_stream_observer){
+        1U,
+        sandbox3d_terrain_region_at_position(&world_desc, state->camera.position),
+        0U,
+        0U,
+        0U,
+        1U};
+    if (henka_terrain_streamer_update_observer(state->terrain_streamer, &observer) != HENKA_SUCCESS ||
+        henka_terrain_streamer_pump(state->terrain_streamer, 2U) != HENKA_SUCCESS)
+    {
+        return HENKA_ERROR_UNKNOWN;
+    }
+    return HENKA_SUCCESS;
+}
+
 static henka_result sandbox3d_initialize_terrain_rendering(
     henka_engine* engine,
     sandbox3d_state* state);
@@ -4107,6 +4166,27 @@ static henka_result sandbox3d_initialize_terrain_rendering(
     {
         goto fail;
     }
+    {
+        henka_terrain_stream_desc stream_desc = henka_terrain_stream_desc_default();
+        stream_desc.max_requests = 8U;
+        stream_desc.max_completions = 8U;
+        result = henka_terrain_streamer_create(
+            state->terrain_world,
+            state->terrain_storage,
+            &stream_desc,
+            &state->terrain_streamer);
+        if (result == HENKA_SUCCESS)
+        {
+            henka_terrain_stream_observer observer = {
+                1U, (henka_terrain_region_id){0, 0}, 0U, 0U, 0U, 1U};
+            result = henka_terrain_streamer_add_observer(
+                state->terrain_streamer, &observer);
+        }
+        if (result != HENKA_SUCCESS)
+        {
+            goto fail;
+        }
+    }
     state->terrain_tool_radius_samples = 8U;
     state->terrain_tool_strength = 64U;
     state->terrain_tool_layer = 0U;
@@ -4240,6 +4320,8 @@ fail:
     henka_free(samples);
     henka_terrain_render_runtime_destroy(state->terrain_render);
     state->terrain_render = NULL;
+    henka_terrain_streamer_destroy(state->terrain_streamer);
+    state->terrain_streamer = NULL;
     henka_terrain_physics_destroy(state->terrain_physics);
     state->terrain_physics = NULL;
     henka_terrain_storage_destroy(state->terrain_storage);
@@ -4541,6 +4623,7 @@ static void sandbox3d_release_owned_resources(sandbox3d_state* state)
     }
 
     henka_terrain_render_runtime_destroy(state->terrain_render);
+    henka_terrain_streamer_destroy(state->terrain_streamer);
     henka_terrain_storage_destroy(state->terrain_storage);
     henka_terrain_physics_destroy(state->terrain_physics);
     henka_terrain_world_destroy(state->terrain_world);
@@ -4585,6 +4668,7 @@ static void sandbox3d_release_owned_resources(sandbox3d_state* state)
     state->gizmo_render.axis_mesh = NULL;
     state->gizmo_render.ring_mesh = NULL;
     state->terrain_render = NULL;
+    state->terrain_streamer = NULL;
     state->terrain_physics = NULL;
     state->terrain_world = NULL;
     state->marker_mesh = NULL;
@@ -13446,6 +13530,7 @@ static void sandbox3d_draw_utility_panel(
     size_t material_dependency_count;
     henka_ui_rect panel_bounds;
     henka_terrain_world_stats terrain_world_stats;
+    henka_terrain_stream_stats terrain_stream_stats;
     henka_terrain_render_stats terrain_render_stats;
     henka_terrain_physics_stats terrain_physics_stats;
 
@@ -13779,6 +13864,7 @@ static void sandbox3d_draw_utility_panel(
 
         case SANDBOX3D_UTILITY_TERRAIN:
             memset(&terrain_world_stats, 0, sizeof(terrain_world_stats));
+            memset(&terrain_stream_stats, 0, sizeof(terrain_stream_stats));
             memset(&terrain_render_stats, 0, sizeof(terrain_render_stats));
             memset(&terrain_physics_stats, 0, sizeof(terrain_physics_stats));
             if (state->terrain_world != NULL)
@@ -13789,6 +13875,10 @@ static void sandbox3d_draw_utility_panel(
             {
                 (void)henka_terrain_render_runtime_get_stats(state->terrain_render, &terrain_render_stats);
             }
+            if (state->terrain_streamer != NULL)
+            {
+                henka_terrain_streamer_get_stats(state->terrain_streamer, &terrain_stream_stats);
+            }
             if (state->terrain_physics != NULL)
             {
                 henka_terrain_physics_get_stats(state->terrain_physics, &terrain_physics_stats);
@@ -13797,9 +13887,10 @@ static void sandbox3d_draw_utility_panel(
             snprintf(
                 row_value,
                 sizeof(row_value),
-                "%u regions / %u chunks",
+                "%u regions / %u chunks / q%u",
                 terrain_world_stats.resident_region_count,
-                terrain_world_stats.resident_chunk_count);
+                terrain_world_stats.resident_chunk_count,
+                terrain_stream_stats.queued_request_count);
             sandbox3d_draw_value_row(state->ui, x_left, y_start + 18.0f, panel_bounds.width - 28.0f, "Resident", row_value);
             snprintf(
                 row_value,
@@ -16634,6 +16725,21 @@ static void sandbox3d_update(henka_engine* engine, double delta_seconds, void* u
     sandbox3d_state* state;
 
     state = (sandbox3d_state*)user_data;
+    if (state->terrain_streamer != NULL)
+    {
+        const henka_result stream_result = sandbox3d_update_terrain_streaming(state);
+        if (stream_result != HENKA_SUCCESS)
+        {
+            HENKA_LOG_ERROR(
+                "Terrain streaming update failed (%s)",
+                henka_result_to_string(stream_result));
+            if (state->smoke_test)
+            {
+                state->smoke_validation_failed = true;
+                henka_engine_request_exit(engine);
+            }
+        }
+    }
     if (state->terrain_render != NULL)
     {
         henka_result terrain_result = henka_terrain_render_runtime_update_observer(
@@ -17252,8 +17358,25 @@ static void sandbox3d_update(henka_engine* engine, double delta_seconds, void* u
     if (state->smoke_test && henka_engine_get_frame_index(engine) >= 8U)
     {
         henka_engine_diagnostics smoke_diagnostics;
+        henka_terrain_stream_stats terrain_stream_stats;
         henka_texture_info stress_texture_info;
+        memset(&terrain_stream_stats, 0, sizeof(terrain_stream_stats));
         memset(&stress_texture_info, 0, sizeof(stress_texture_info));
+        if (state->terrain_streamer == NULL ||
+            (henka_terrain_streamer_get_stats(state->terrain_streamer, &terrain_stream_stats),
+             terrain_stream_stats.observer_count != 1U))
+        {
+            state->smoke_validation_failed = true;
+        }
+        else
+        {
+            printf(
+                "Terrain streaming diagnostics: observers=%u queued=%u completed=%llu failed=%llu.\n",
+                terrain_stream_stats.observer_count,
+                terrain_stream_stats.queued_request_count,
+                (unsigned long long)terrain_stream_stats.completed_request_count,
+                (unsigned long long)terrain_stream_stats.failed_request_count);
+        }
         if (state->residency_stress_ktx_texture != NULL)
             (void)henka_texture_get_info(
                 state->residency_stress_ktx_texture,
