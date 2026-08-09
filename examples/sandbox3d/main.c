@@ -314,6 +314,8 @@ typedef struct sandbox3d_state
     henka_texture* cube_texture;
     henka_texture* ground_texture;
     henka_texture* terrain_layer_textures[HENKA_MATERIAL_TERRAIN_LAYER_COUNT];
+    henka_texture* terrain_layer_normal_textures[HENKA_MATERIAL_TERRAIN_LAYER_COUNT];
+    henka_texture* terrain_layer_metallic_roughness_textures[HENKA_MATERIAL_TERRAIN_LAYER_COUNT];
     henka_texture* missing_texture;
     henka_texture* environment_texture;
     henka_texture* detail_normal_texture;
@@ -4329,8 +4331,12 @@ static henka_result sandbox3d_initialize_terrain_rendering(
     char* storage_path = NULL;
     henka_material terrain_material;
     henka_texture_descriptor terrain_texture_descriptor;
+    henka_texture_descriptor terrain_normal_descriptor;
+    henka_texture_descriptor terrain_metallic_roughness_descriptor;
     henka_terrain_stream_observer stream_observer;
     unsigned char terrain_layer_pixels[HENKA_MATERIAL_TERRAIN_LAYER_COUNT][16U * 16U * 4U];
+    unsigned char terrain_layer_normal_pixels[HENKA_MATERIAL_TERRAIN_LAYER_COUNT][16U * 16U * 4U];
+    unsigned char terrain_layer_metallic_roughness_pixels[HENKA_MATERIAL_TERRAIN_LAYER_COUNT][16U * 16U * 4U];
     henka_result result;
 
     if (engine == NULL || state == NULL || state->scene == NULL || state->basic_shader == NULL)
@@ -4342,6 +4348,17 @@ static henka_result sandbox3d_initialize_terrain_rendering(
     terrain_texture_descriptor.wrap_u = HENKA_TEXTURE_WRAP_REPEAT;
     terrain_texture_descriptor.wrap_v = HENKA_TEXTURE_WRAP_REPEAT;
     terrain_texture_descriptor.min_filter = HENKA_TEXTURE_FILTER_LINEAR_MIPMAP_LINEAR;
+    terrain_normal_descriptor = henka_texture_descriptor_default_normal();
+    terrain_normal_descriptor.generate_mipmaps = true;
+    terrain_normal_descriptor.wrap_u = HENKA_TEXTURE_WRAP_REPEAT;
+    terrain_normal_descriptor.wrap_v = HENKA_TEXTURE_WRAP_REPEAT;
+    terrain_normal_descriptor.min_filter = HENKA_TEXTURE_FILTER_LINEAR_MIPMAP_LINEAR;
+    terrain_metallic_roughness_descriptor = henka_texture_descriptor_default_data();
+    terrain_metallic_roughness_descriptor.usage = HENKA_TEXTURE_USAGE_METALLIC_ROUGHNESS;
+    terrain_metallic_roughness_descriptor.generate_mipmaps = true;
+    terrain_metallic_roughness_descriptor.wrap_u = HENKA_TEXTURE_WRAP_REPEAT;
+    terrain_metallic_roughness_descriptor.wrap_v = HENKA_TEXTURE_WRAP_REPEAT;
+    terrain_metallic_roughness_descriptor.min_filter = HENKA_TEXTURE_FILTER_LINEAR_MIPMAP_LINEAR;
     for (size_t layer_index = 0U;
          layer_index < HENKA_MATERIAL_TERRAIN_LAYER_COUNT;
          ++layer_index)
@@ -4383,6 +4400,25 @@ static henka_result sandbox3d_initialize_terrain_rendering(
                     terrain_layer_pixels[layer_index][pixel_offset + 2U] = (unsigned char)(64 + variation);
                 }
                 terrain_layer_pixels[layer_index][pixel_offset + 3U] = 255U;
+                terrain_layer_normal_pixels[layer_index][pixel_offset + 0U] = (unsigned char)(128 + variation / 4);
+                terrain_layer_normal_pixels[layer_index][pixel_offset + 1U] = (unsigned char)(128 - variation / 5);
+                terrain_layer_normal_pixels[layer_index][pixel_offset + 2U] = (unsigned char)(255 - (unsigned char)(layer_index * 2U));
+                terrain_layer_normal_pixels[layer_index][pixel_offset + 3U] = 255U;
+                terrain_layer_metallic_roughness_pixels[layer_index][pixel_offset + 0U] = 255U;
+                {
+                    int roughness_value = (int)(layer_index == 0U ? 218U :
+                        layer_index == 1U ? 235U :
+                        layer_index == 2U ? 158U : 92U) + variation / 4;
+                    if (roughness_value < 0)
+                        roughness_value = 0;
+                    if (roughness_value > 255)
+                        roughness_value = 255;
+                    terrain_layer_metallic_roughness_pixels[layer_index][pixel_offset + 1U] =
+                        (unsigned char)roughness_value;
+                }
+                terrain_layer_metallic_roughness_pixels[layer_index][pixel_offset + 2U] =
+                    layer_index == 2U ? (unsigned char)(18 + variation / 4) : 0U;
+                terrain_layer_metallic_roughness_pixels[layer_index][pixel_offset + 3U] = 255U;
             }
         }
         result = henka_texture_create_from_rgba8_with_descriptor(
@@ -4392,6 +4428,28 @@ static henka_result sandbox3d_initialize_terrain_rendering(
             &terrain_layer_pixels[layer_index][0],
             &terrain_texture_descriptor,
             &state->terrain_layer_textures[layer_index]);
+        if (result != HENKA_SUCCESS)
+        {
+            goto fail;
+        }
+        result = henka_texture_create_from_rgba8_with_descriptor(
+            engine,
+            16,
+            16,
+            &terrain_layer_normal_pixels[layer_index][0],
+            &terrain_normal_descriptor,
+            &state->terrain_layer_normal_textures[layer_index]);
+        if (result != HENKA_SUCCESS)
+        {
+            goto fail;
+        }
+        result = henka_texture_create_from_rgba8_with_descriptor(
+            engine,
+            16,
+            16,
+            &terrain_layer_metallic_roughness_pixels[layer_index][0],
+            &terrain_metallic_roughness_descriptor,
+            &state->terrain_layer_metallic_roughness_textures[layer_index]);
         if (result != HENKA_SUCCESS)
         {
             goto fail;
@@ -4579,6 +4637,14 @@ static henka_result sandbox3d_initialize_terrain_rendering(
     {
         terrain_material.terrain_layers[layer_index].base_color_texture =
             state->terrain_layer_textures[layer_index];
+        terrain_material.terrain_layers[layer_index].normal_texture =
+            state->terrain_layer_normal_textures[layer_index];
+        terrain_material.terrain_layers[layer_index].metallic_roughness_texture =
+            state->terrain_layer_metallic_roughness_textures[layer_index];
+        terrain_material.terrain_layers[layer_index].texture_scale_meters =
+            layer_index == 0U ? 6.0f : layer_index == 1U ? 8.0f : layer_index == 2U ? 4.0f : 3.0f;
+        terrain_material.terrain_layers[layer_index].normal_scale =
+            layer_index == 2U ? 0.42f : layer_index == 3U ? 0.28f : 0.34f;
     }
     render_desc.max_resident_chunks = 16U;
     render_desc.max_pending_requests = 16U;
@@ -4614,7 +4680,7 @@ static henka_result sandbox3d_initialize_terrain_rendering(
             goto fail;
         }
     }
-    printf("Terrain render: 16 bounded chunks resident; deterministic rolling valley/cliff fixture, four-layer procedural textures, automatic observer scheduling, and transactional mesh uploads ready.\n");
+    printf("Terrain render: 16 bounded chunks resident; deterministic rolling valley/cliff fixture, four-layer procedural PBR textures, automatic observer scheduling, and transactional mesh uploads ready.\n");
     fflush(stdout);
     return HENKA_SUCCESS;
 
@@ -4965,6 +5031,10 @@ static void sandbox3d_release_owned_resources(sandbox3d_state* state)
     {
         henka_texture_destroy(state->terrain_layer_textures[terrain_layer_index]);
         state->terrain_layer_textures[terrain_layer_index] = NULL;
+        henka_texture_destroy(state->terrain_layer_normal_textures[terrain_layer_index]);
+        state->terrain_layer_normal_textures[terrain_layer_index] = NULL;
+        henka_texture_destroy(state->terrain_layer_metallic_roughness_textures[terrain_layer_index]);
+        state->terrain_layer_metallic_roughness_textures[terrain_layer_index] = NULL;
     }
     henka_texture_destroy(state->detail_normal_texture);
     henka_texture_destroy(state->macro_variation_texture);
@@ -18337,8 +18407,10 @@ static void sandbox3d_update(henka_engine* engine, double delta_seconds, void* u
         henka_terrain_render_chunk_info terrain_chunk_info;
         henka_material terrain_scene_material;
         henka_texture_info stress_texture_info;
+        henka_texture_info terrain_texture_info;
         memset(&terrain_stream_stats, 0, sizeof(terrain_stream_stats));
         memset(&stress_texture_info, 0, sizeof(stress_texture_info));
+        memset(&terrain_texture_info, 0, sizeof(terrain_texture_info));
         if (state->terrain_streamer == NULL ||
             (henka_terrain_streamer_get_stats(state->terrain_streamer, &terrain_stream_stats),
              terrain_stream_stats.observer_count != 1U))
@@ -18370,7 +18442,26 @@ static void sandbox3d_update(henka_engine* engine, double delta_seconds, void* u
         }
         else
         {
-            printf("Terrain material diagnostics: four normalized layers use Sandbox-owned procedural base-color textures.\n");
+            for (size_t layer_index = 0U;
+                 layer_index < HENKA_MATERIAL_TERRAIN_LAYER_COUNT;
+                 ++layer_index)
+            {
+                const henka_material_layer* layer = &terrain_scene_material.terrain_layers[layer_index];
+                if (layer->normal_texture == NULL ||
+                    layer->metallic_roughness_texture == NULL ||
+                    henka_texture_get_info(layer->normal_texture, &terrain_texture_info) != HENKA_SUCCESS ||
+                    terrain_texture_info.usage != HENKA_TEXTURE_USAGE_NORMAL ||
+                    terrain_texture_info.color_space != HENKA_TEXTURE_COLOR_SPACE_LINEAR ||
+                    henka_texture_get_info(layer->metallic_roughness_texture, &terrain_texture_info) != HENKA_SUCCESS ||
+                    terrain_texture_info.usage != HENKA_TEXTURE_USAGE_METALLIC_ROUGHNESS ||
+                    terrain_texture_info.color_space != HENKA_TEXTURE_COLOR_SPACE_LINEAR)
+                {
+                    state->smoke_validation_failed = true;
+                    break;
+                }
+            }
+            if (!state->smoke_validation_failed)
+                printf("Terrain material diagnostics: four normalized layers use Sandbox-owned procedural base-color, normal, and metallic/roughness textures.\n");
         }
         if (state->residency_stress_ktx_texture != NULL)
             (void)henka_texture_get_info(
