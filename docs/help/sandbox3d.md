@@ -233,3 +233,10 @@ The legacy wireframe API remains compatible: enabling it selects Wireframe, whil
 The current AO term is a bounded four-direction, two-sided, multi-step view-space horizon-search approximation with safe radius, thickness, falloff, bias, and intensity controls; temporal AO history, denoise filtering, and production GTAO validation remain unfinished. Rendered temporal presentation now includes camera/object reprojection, depth-neighborhood rejection, reactive handling for transparency/transmission/emissive pixels, history clamping, bounded sharpening, and fallback/invalidation diagnostics. Production TAA visual validation across camera cuts, resize, disocclusion, and moving-object cases remains unfinished.
 
 The Utility Diagnostics panel includes the active shading/exposure row plus current texture-residency bytes, configured budget, queue depth, active pin count, stale-request cancellations, readable source-failure bytes, and unknown-size request/source failure counts from the engine diagnostics snapshot. Full Tools Object Details and the Object Info utility show the selected effective material description; Object Info also reports the count of borrowed semantic texture dependencies. Material-instance edits, dependency inspection, refresh, and per-override or all-override reset are available through the typed C asset API, not yet as a complete in-panel authoring workflow.
+
+The Utility Terrain tab reports bounded resident/render/collision statistics and
+provides raise, lower, flatten, smooth, and paint buttons. Brush radius,
+strength, material layer, and falloff controls feed the same deterministic
+Terrain command API used by runtime edits. The current reference controls use
+a fixed repeatable sample center; viewport ray-picking, saved brush state, and
+complete material-layer preview are not yet claimed.

@@ -190,7 +190,12 @@ The Sandbox reference scene now creates one deterministic bounded region,
 marks it render-resident, and attaches four chunks through this owner. It
 updates selection from the active camera and pumps at most two replacements
 per frame. This is runtime integration coverage, not a claim that editor
-sculpt/paint tools or visual human approval are complete.
+sculpt/paint tools or visual human approval are complete. The Utility Terrain
+tab now exposes bounded resident/render/collision statistics and raise, lower,
+flatten, smooth, and paint controls with radius, strength, layer, and falloff
+settings. It uses the same deterministic command API as runtime callers; the
+reference controls use a fixed `(32,32)` sample center, so viewport ray-pick,
+saved brush state, and complete paint/material preview remain unfinished.
 
 The descriptor stores the format version, world and base identities, all
 world/region/chunk relationships, and bounded residency limits. Creating a
