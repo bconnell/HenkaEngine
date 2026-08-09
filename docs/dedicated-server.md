@@ -76,6 +76,9 @@ policy; accepted Terrain edits are committed transactionally before the
 server acknowledges them.
 
 The package check proves startup, local bind, loopback connection, clean
-shutdown, and two consecutive save-root runs with revision recovery. It does
-not claim reconnect, late-join orchestration, or production multiplayer soak
-coverage.
+shutdown, and two consecutive save-root runs with revision recovery. The
+runtime also sends a bounded connect-time Terrain session-info message that
+identifies the world/base and advertises up to 16 resident regions for client
+snapshot bootstrap. This does not claim application authentication,
+relevance-driven reconnect or late-join orchestration, or production
+multiplayer soak coverage.

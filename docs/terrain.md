@@ -92,15 +92,15 @@ and revisions are restored and the incomplete transaction is abandoned.
 The authority object does not own the world or storage. The
 `<henka/terrain_server.h>` session adapter owns neither: it borrows the
 public ENet server, decodes edit messages, routes them through authority, and
-encodes the response. It also echoes control pings and disconnects malformed
-edit payloads as protocol errors. The server-side delta broadcast and
-snapshot-fragment response are described below; the client session adapter
-applies those messages through the replica and owns bounded recovery requests.
-When a client receives a connected event, it requests bounded snapshots for
-its resident regions, allowing the same replica path to refresh after a
-transport reconnect. Full handshake identity exchange, late-join region
-selection, and editor controls remain
-subsequent integration work.
+encodes the response. It also echoes control pings, sends a bounded control
+session-info message on connect, and disconnects malformed edit payloads as
+protocol errors. Session info carries the world/base identities plus up to 16
+current resident regions with revision and generation. The client validates
+those identities and requests snapshots for the advertised regions, so an
+empty client can enter through the same replica snapshot path used for
+recovery. This is a bounded late-join bootstrap, not a full application
+handshake, authentication layer, or relevance-based region selection; those
+and editor controls remain subsequent integration work.
 
 For edit requests, the session lazily materializes missing persisted regions
 before authority validation, subject to the world's resident-region limit. It
@@ -114,7 +114,7 @@ Terrain storage root and requires `region_0_0.htr`; the runtime save root is
 loaded afterward so committed runtime edits override the base region. Its bounded smoke mode also exercises a loopback client and commits a
 deterministic edit when the save root is empty, allowing the packaged restart
 check to verify that the same revision is restored. This does not replace a
-multi-process multiplayer soak or reconnect/late-join policy.
+multi-process multiplayer soak or relevance-driven reconnect/late-join policy.
 
 Accepted edits also produce a bounded delta in the same terrain channel. The
 delta repeats world/base identity, client nonce, server command identity, the
@@ -122,8 +122,9 @@ algorithm-versioned command, and the resulting revision for each affected
 region. The server broadcasts that event reliably after sending the requester
 acceptance; the client session adapter applies it only across exact revision
 steps and requests bounded region snapshots when the replica reports a gap.
-Reconnect and late-join orchestration and editor controls remain subsequent
-work. `<henka/terrain_prediction.h>` owns a separate bounded presentation
+The connect-time session-info bootstrap covers only the bounded advertised
+resident set; broader reconnect and late-join orchestration and editor
+controls remain subsequent work. `<henka/terrain_prediction.h>` owns a separate bounded presentation
 world for local commands: it copies CPU-resident authoritative regions, applies
 pending commands in submission order, and rebuilds from authoritative state
 when a command is accepted or rejected. The authoritative replica is never
@@ -136,8 +137,9 @@ transfer-identified fragments with the record revision, generation, total
 size, index, count, and payload bytes. The transport keeps each fragment under
 the existing 32 KiB snapshot payload limit. The client session adapter owns the
 bounded fragment assembly through `<henka/terrain_replica.h>` and requests a
-snapshot when a delta cannot be applied. Reconnect and late-join policy are
-not yet implemented.
+snapshot when a delta cannot be applied. Connect-time session info can request
+the same bounded snapshot path for up to 16 advertised resident regions;
+relevance-driven reconnect and late-join policy are not yet implemented.
 
 `<henka/terrain_replica.h>` is the bounded client-side state owner consumed by
 `<henka/terrain_client.h>`. It applies a delta only when every affected region advances

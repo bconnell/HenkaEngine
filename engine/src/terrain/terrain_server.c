@@ -100,6 +100,45 @@ static henka_result henka_terrain_server_send_rejection(
         HENKA_NETWORK_MESSAGE_TERRAIN_EDIT_REJECTED, payload, payload_size);
 }
 
+static henka_result henka_terrain_server_send_session_info(
+    henka_terrain_server* server,
+    henka_network_peer_id peer_id)
+{
+    henka_terrain_world_desc world_desc;
+    henka_terrain_world_stats stats;
+    henka_terrain_session_info info = {0};
+    uint8_t payload[512U];
+    size_t payload_size;
+    uint32_t index;
+    if (henka_terrain_world_get_desc(server->world, &world_desc) != HENKA_SUCCESS ||
+        henka_terrain_world_get_stats(server->world, &stats) != HENKA_SUCCESS)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    info.world_identity = world_desc.world_identity;
+    info.base_asset_identity = world_desc.base_asset_identity;
+    info.region_count = stats.resident_region_count > HENKA_TERRAIN_NETWORK_MAX_SESSION_REGIONS
+        ? HENKA_TERRAIN_NETWORK_MAX_SESSION_REGIONS : stats.resident_region_count;
+    for (index = 0U; index < info.region_count; ++index)
+    {
+        henka_terrain_region_state state;
+        if (henka_terrain_world_get_resident_region_at(server->world, index, &state) != HENKA_SUCCESS)
+        {
+            return HENKA_ERROR_UNKNOWN;
+        }
+        info.regions[index] = (henka_terrain_session_region){
+            state.id, state.revision, state.generation};
+    }
+    if (henka_terrain_session_info_encode(
+            &info, payload, sizeof(payload), &payload_size) != HENKA_SUCCESS)
+    {
+        return HENKA_ERROR_LIMIT;
+    }
+    return henka_network_server_send(
+        server->network, peer_id, HENKA_NETWORK_CHANNEL_CONTROL,
+        HENKA_NETWORK_MESSAGE_CONNECT, payload, payload_size);
+}
+
 static henka_result henka_terrain_server_send_snapshot(
     henka_terrain_server* server,
     henka_network_peer_id peer_id,
@@ -292,6 +331,10 @@ henka_result henka_terrain_server_handle_event(
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
+    if (event->type == HENKA_NETWORK_EVENT_CONNECTED)
+    {
+        return henka_terrain_server_send_session_info(server, event->peer_id);
+    }
     if (event->type != HENKA_NETWORK_EVENT_MESSAGE)
     {
         return HENKA_SUCCESS;
@@ -401,7 +444,7 @@ henka_result henka_terrain_server_poll(
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
     result = henka_network_server_poll(server->network, timeout_milliseconds, &event);
-    if (result != HENKA_SUCCESS || event.type != HENKA_NETWORK_EVENT_MESSAGE)
+    if (result != HENKA_SUCCESS)
     {
         return result;
     }

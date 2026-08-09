@@ -16,6 +16,7 @@
 #define HENKA_TERRAIN_NETWORK_MAX_SNAPSHOT_FRAGMENT_DATA_BYTES \
     (HENKA_NETWORK_MAX_SNAPSHOT_FRAGMENT_PAYLOAD - HENKA_TERRAIN_NETWORK_MAX_SNAPSHOT_FRAGMENT_HEADER_BYTES)
 #define HENKA_TERRAIN_NETWORK_MAX_SNAPSHOT_FRAGMENTS 1024U
+#define HENKA_TERRAIN_NETWORK_MAX_SESSION_REGIONS 16U
 
 typedef struct henka_terrain_network_region_revision
 {
@@ -59,6 +60,23 @@ typedef struct henka_terrain_snapshot_request
     henka_terrain_region_id region_id;
     henka_terrain_revision expected_revision;
 } henka_terrain_snapshot_request;
+
+/* Bounded connect-time summary; it is not a world-sized manifest or an
+ * application authentication handshake. */
+typedef struct henka_terrain_session_region
+{
+    henka_terrain_region_id region_id;
+    henka_terrain_revision revision;
+    henka_terrain_generation generation;
+} henka_terrain_session_region;
+
+typedef struct henka_terrain_session_info
+{
+    henka_terrain_world_identity world_identity;
+    henka_terrain_base_asset_identity base_asset_identity;
+    uint32_t region_count;
+    henka_terrain_session_region regions[HENKA_TERRAIN_NETWORK_MAX_SESSION_REGIONS];
+} henka_terrain_session_info;
 
 typedef struct henka_terrain_snapshot_fragment
 {
@@ -137,6 +155,15 @@ henka_result henka_terrain_snapshot_request_decode(
     const uint8_t* buffer,
     size_t buffer_size,
     henka_terrain_snapshot_request* out_request);
+henka_result henka_terrain_session_info_encode(
+    const henka_terrain_session_info* info,
+    uint8_t* buffer,
+    size_t buffer_capacity,
+    size_t* out_size);
+henka_result henka_terrain_session_info_decode(
+    const uint8_t* buffer,
+    size_t buffer_size,
+    henka_terrain_session_info* out_info);
 henka_result henka_terrain_snapshot_fragment_encode(
     const henka_terrain_snapshot_fragment* fragment,
     uint8_t* buffer,
