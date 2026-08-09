@@ -87,6 +87,28 @@ static int henka_server_parse_uint(const char* text, unsigned long maximum, unsi
     return 1;
 }
 
+static int henka_server_world_desc_equal(
+    const henka_terrain_world_desc* left,
+    const henka_terrain_world_desc* right)
+{
+    return left->format_version == right->format_version &&
+        left->world_identity == right->world_identity &&
+        left->base_asset_identity == right->base_asset_identity &&
+        left->world_width_meters == right->world_width_meters &&
+        left->world_depth_meters == right->world_depth_meters &&
+        left->region_edge_meters == right->region_edge_meters &&
+        left->chunk_edge_meters == right->chunk_edge_meters &&
+        left->samples_per_chunk == right->samples_per_chunk &&
+        left->base_sample_spacing_meters == right->base_sample_spacing_meters &&
+        left->chunks_per_region_edge == right->chunks_per_region_edge &&
+        left->regions_across == right->regions_across &&
+        left->regions_down == right->regions_down &&
+        left->max_resident_regions == right->max_resident_regions &&
+        left->max_resident_chunks == right->max_resident_chunks &&
+        left->max_pending_io == right->max_pending_io &&
+        left->max_stream_observers == right->max_stream_observers;
+}
+
 static char* henka_server_trim(char* text)
 {
     char* end;
@@ -655,7 +677,7 @@ int main(int argc, char** argv)
                 &terrain_world_desc, options.world_path, &base_terrain_storage) != HENKA_SUCCESS ||
             henka_terrain_storage_recover(base_terrain_storage) != HENKA_SUCCESS ||
             henka_terrain_storage_load_manifest(base_terrain_storage, &base_desc) != HENKA_SUCCESS ||
-            memcmp(&base_desc, &terrain_world_desc, sizeof(base_desc)) != 0 ||
+            !henka_server_world_desc_equal(&base_desc, &terrain_world_desc) ||
             henka_terrain_world_desc_get_layout(&terrain_world_desc, &layout) != HENKA_SUCCESS)
         {
             fprintf(stderr, "base Terrain world could not be opened or recovered\n");

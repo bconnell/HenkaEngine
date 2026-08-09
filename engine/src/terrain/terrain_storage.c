@@ -457,6 +457,28 @@ static henka_result henka_terrain_manifest_decode(
     return henka_terrain_world_desc_validate(out_desc);
 }
 
+static bool henka_terrain_storage_desc_equal(
+    const henka_terrain_world_desc* left,
+    const henka_terrain_world_desc* right)
+{
+    return left->format_version == right->format_version &&
+        left->world_identity == right->world_identity &&
+        left->base_asset_identity == right->base_asset_identity &&
+        left->world_width_meters == right->world_width_meters &&
+        left->world_depth_meters == right->world_depth_meters &&
+        left->region_edge_meters == right->region_edge_meters &&
+        left->chunk_edge_meters == right->chunk_edge_meters &&
+        left->samples_per_chunk == right->samples_per_chunk &&
+        left->base_sample_spacing_meters == right->base_sample_spacing_meters &&
+        left->chunks_per_region_edge == right->chunks_per_region_edge &&
+        left->regions_across == right->regions_across &&
+        left->regions_down == right->regions_down &&
+        left->max_resident_regions == right->max_resident_regions &&
+        left->max_resident_chunks == right->max_resident_chunks &&
+        left->max_pending_io == right->max_pending_io &&
+        left->max_stream_observers == right->max_stream_observers;
+}
+
 static henka_result henka_terrain_flush(FILE* file)
 {
     if (fflush(file) != 0)
@@ -811,7 +833,7 @@ henka_result henka_terrain_storage_ensure_manifest(henka_terrain_storage* storag
     {
         return result;
     }
-    return memcmp(&manifest_desc, &storage->desc, sizeof(manifest_desc)) == 0
+    return henka_terrain_storage_desc_equal(&manifest_desc, &storage->desc)
         ? HENKA_SUCCESS : HENKA_ERROR_INVALID_ARGUMENT;
 }
 
