@@ -1683,6 +1683,25 @@ static void sandbox3d_generate_terrain_fixture(
     }
 }
 
+static henka_result sandbox3d_generate_stream_region(
+    void* user_data,
+    henka_terrain_region_id region_id,
+    const henka_terrain_world_desc* world_desc,
+    const henka_terrain_layout* layout,
+    henka_terrain_sample* samples,
+    size_t sample_count)
+{
+    (void)user_data;
+    if (world_desc == NULL || layout == NULL || samples == NULL ||
+        sample_count != layout->samples_per_region ||
+        !henka_terrain_region_id_is_valid(world_desc, region_id))
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    sandbox3d_generate_terrain_fixture(layout, region_id, samples);
+    return HENKA_SUCCESS;
+}
+
 static henka_result sandbox3d_seed_terrain_fixture_region(
     henka_terrain_storage* storage,
     const henka_terrain_layout* layout,
@@ -4434,6 +4453,7 @@ static henka_result sandbox3d_initialize_terrain_rendering(
         henka_terrain_stream_desc stream_desc = henka_terrain_stream_desc_default();
         stream_desc.max_requests = 8U;
         stream_desc.max_completions = 8U;
+        stream_desc.generate_region = sandbox3d_generate_stream_region;
         result = henka_terrain_streamer_create(
             state->terrain_world,
             state->terrain_storage,

@@ -53,8 +53,14 @@ outside that union are released deterministically in row-major order only when
 they have no physics/render residency, pending I/O, or dirty edits. A zero
 unload radius preserves the CPU radius; a larger unload radius provides bounded
 movement hysteresis. Loaded regions now synchronize physics/render residency
-flags from the observer radius union; renderer mesh and physics patch
-regeneration remain caller-owned asynchronous presentation work. The graphical
+flags from the observer radius union. A stream descriptor may also provide a
+bounded region generator for missing (but not corrupt) snapshots; it runs on
+the worker, receives only the immutable world/layout description and one
+caller-owned sample buffer, and publishes revision/generation one only after
+the main-thread snapshot swap. Persisted regions always win over the
+generator, and generator failures remain failed requests. Renderer mesh and
+physics patch regeneration remain caller-owned asynchronous presentation work.
+The graphical
 render owner reports high-water pending-request, resident-chunk, and
 visible-chunk counts; the collision queue reports its high-water pending chunk
 count so callers can distinguish a bounded budget from a transient drain state.
@@ -315,10 +321,13 @@ capacity on obsolete requests. The opt-in Windows `--terrain-stream-stress` path
 crosses `(0,0) -> (1,0) -> (1,1) -> (0,0)`, waits only through bounded
 worker/render queues, checks rendered and collision chunk return at both axes,
 and reports the resident-region bound. Normal movement remains
-observer-driven and pumps at most two render replacements per frame. This
-proves a small persistent camera crossing fixture, not broad-world
-regeneration, asynchronous background physics/render regeneration, or human
-visual approval.
+observer-driven and pumps at most two render replacements per frame. The
+Sandbox also supplies the same deterministic generator to the stream worker,
+so a camera can move into a valid unpersisted region without manual region
+priming; edits become persistent only through the normal transactional storage
+path. This proves bounded procedural broad-world regeneration and a small
+persistent camera crossing fixture, not asynchronous background physics/render
+regeneration or human visual approval.
 The Utility Terrain
 tab now exposes bounded resident/render/collision statistics and raise, lower,
 flatten, smooth, and paint controls with radius, strength, layer, and falloff

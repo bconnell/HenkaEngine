@@ -12,10 +12,27 @@
 typedef struct henka_terrain_streamer henka_terrain_streamer;
 typedef uint32_t henka_terrain_stream_observer_id;
 
+/*
+ * Optional bounded fallback for a region that has no persisted snapshot.
+ * The callback runs on the stream worker and must not touch renderer or
+ * engine objects. It must initialize every sample and may only use the
+ * supplied bounded region buffer. The user data is borrowed until the
+ * streamer is destroyed and must remain thread-safe for the worker.
+ */
+typedef henka_result (*henka_terrain_stream_region_generator)(
+    void* user_data,
+    henka_terrain_region_id region_id,
+    const henka_terrain_world_desc* world_desc,
+    const henka_terrain_layout* layout,
+    henka_terrain_sample* samples,
+    size_t sample_count);
+
 typedef struct henka_terrain_stream_desc
 {
     uint32_t max_requests;
     uint32_t max_completions;
+    henka_terrain_stream_region_generator generate_region;
+    void* generate_region_user_data;
 } henka_terrain_stream_desc;
 
 typedef struct henka_terrain_stream_observer
@@ -45,6 +62,8 @@ typedef struct henka_terrain_stream_stats
     uint64_t cancelled_request_count;
     uint64_t dropped_completion_count;
     uint64_t evicted_region_count;
+    uint64_t generated_region_count;
+    uint64_t generator_failure_count;
 } henka_terrain_stream_stats;
 
 henka_terrain_stream_desc henka_terrain_stream_desc_default(void);

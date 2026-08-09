@@ -23,6 +23,7 @@ typedef struct henka_terrain_stream_completion
 {
     bool active;
     henka_result result;
+    bool generated;
     henka_terrain_region_storage_info info;
     henka_terrain_sample* samples;
 } henka_terrain_stream_completion;
@@ -51,6 +52,8 @@ struct henka_terrain_streamer
     uint64_t cancelled_request_count;
     uint64_t dropped_completion_count;
     uint64_t evicted_region_count;
+    uint64_t generated_region_count;
+    uint64_t generator_failure_count;
     henka_terrain_region_id active_region;
     bool active_region_valid;
     bool active_observer_demand;
@@ -333,6 +336,8 @@ static DWORD WINAPI henka_terrain_stream_worker(void* argument)
         uint32_t request_index;
         uint32_t completion_index;
         bool cancelled;
+        bool generated = false;
+        bool generator_attempted = false;
 
         EnterCriticalSection(&streamer->lock);
         while (!streamer->stop && streamer->queued_request_count == 0U)
@@ -392,8 +397,28 @@ static DWORD WINAPI henka_terrain_stream_worker(void* argument)
                 &info,
                 samples,
                 streamer->world->layout.samples_per_region);
+        if (result == HENKA_ERROR_ASSET_SOURCE && streamer->desc.generate_region != NULL)
+        {
+            generator_attempted = true;
+            result = streamer->desc.generate_region(
+                streamer->desc.generate_region_user_data,
+                request.region_id,
+                &streamer->world->desc,
+                &streamer->world->layout,
+                samples,
+                streamer->world->layout.samples_per_region);
+            if (result == HENKA_SUCCESS)
+            {
+                info = (henka_terrain_region_storage_info){request.region_id, 1U, 1U};
+                generated = true;
+            }
+        }
 
         EnterCriticalSection(&streamer->lock);
+        if (generator_attempted && !generated)
+        {
+            ++streamer->generator_failure_count;
+        }
         cancelled = streamer->cancel_active;
         streamer->active_request_count = 0U;
         streamer->active_region_valid = false;
@@ -421,6 +446,7 @@ static DWORD WINAPI henka_terrain_stream_worker(void* argument)
                 }
                 streamer->completions[completion_index].active = true;
                 streamer->completions[completion_index].result = result;
+                streamer->completions[completion_index].generated = generated;
                 streamer->completions[completion_index].info = info;
                 streamer->completions[completion_index].samples = result == HENKA_SUCCESS ? samples : NULL;
                 ++streamer->completion_count;
@@ -437,7 +463,7 @@ static DWORD WINAPI henka_terrain_stream_worker(void* argument)
 
 henka_terrain_stream_desc henka_terrain_stream_desc_default(void)
 {
-    return (henka_terrain_stream_desc){16U, 16U};
+    return (henka_terrain_stream_desc){16U, 16U, NULL, NULL};
 }
 
 henka_result henka_terrain_streamer_create(
@@ -827,6 +853,10 @@ henka_result henka_terrain_streamer_pump(
             henka_terrain_stream_sync_presentation_residency(streamer);
             EnterCriticalSection(&streamer->lock);
             ++streamer->completed_request_count;
+            if (completion.generated)
+            {
+                ++streamer->generated_region_count;
+            }
             LeaveCriticalSection(&streamer->lock);
         }
         else
@@ -868,6 +898,8 @@ void henka_terrain_streamer_get_stats(
         out_stats->cancelled_request_count = streamer->cancelled_request_count;
         out_stats->dropped_completion_count = streamer->dropped_completion_count;
         out_stats->evicted_region_count = streamer->evicted_region_count;
+        out_stats->generated_region_count = streamer->generated_region_count;
+        out_stats->generator_failure_count = streamer->generator_failure_count;
         LeaveCriticalSection((CRITICAL_SECTION*)&streamer->lock);
     }
 }
@@ -876,7 +908,7 @@ void henka_terrain_streamer_get_stats(
 
 henka_terrain_stream_desc henka_terrain_stream_desc_default(void)
 {
-    return (henka_terrain_stream_desc){16U, 16U};
+    return (henka_terrain_stream_desc){16U, 16U, NULL, NULL};
 }
 
 henka_result henka_terrain_streamer_create(

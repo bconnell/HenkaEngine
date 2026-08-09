@@ -5,7 +5,43 @@
 #endif
 
 #include <henka/memory.h>
+#include <henka/terrain_edit.h>
 #include <henka/terrain_streaming.h>
+
+typedef struct test_region_generator_state
+{
+    uint32_t calls;
+    size_t sample_count;
+    bool contract_valid;
+} test_region_generator_state;
+
+static henka_result test_generate_region(
+    void* user_data,
+    henka_terrain_region_id region_id,
+    const henka_terrain_world_desc* world_desc,
+    const henka_terrain_layout* layout,
+    henka_terrain_sample* samples,
+    size_t sample_count)
+{
+    test_region_generator_state* state = (test_region_generator_state*)user_data;
+    size_t index;
+    if (state == NULL || world_desc == NULL || layout == NULL || samples == NULL ||
+        sample_count != layout->samples_per_region ||
+        !henka_terrain_region_id_is_valid(world_desc, region_id))
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    ++state->calls;
+    state->sample_count = sample_count;
+    state->contract_valid = true;
+    for (index = 0U; index < sample_count; ++index)
+    {
+        samples[index] = (henka_terrain_sample){
+            1000 + region_id.x * 10 + region_id.z,
+            {255U, 0U, 0U, 0U}};
+    }
+    return HENKA_SUCCESS;
+}
 
 static int test_streaming(void)
 {
@@ -443,11 +479,82 @@ cleanup:
     return result;
 }
 
+static int test_missing_region_uses_bounded_generator(void)
+{
+    henka_terrain_world_desc world_desc = henka_terrain_world_desc_default();
+    henka_terrain_layout layout;
+    henka_terrain_world* world = NULL;
+    henka_terrain_storage* storage = NULL;
+    henka_terrain_streamer* streamer = NULL;
+    henka_terrain_stream_desc stream_desc = henka_terrain_stream_desc_default();
+    henka_terrain_stream_stats stats;
+    henka_terrain_region_state region_state;
+    const henka_terrain_sample* samples = NULL;
+    size_t sample_count = 0U;
+    test_region_generator_state generator_state = {0};
+    uint32_t index;
+    int result = 0;
+
+    world_desc.max_resident_regions = 1U;
+    if (henka_terrain_world_desc_get_layout(&world_desc, &layout) != HENKA_SUCCESS ||
+        henka_terrain_world_create(&world_desc, &world) != HENKA_SUCCESS ||
+        henka_terrain_storage_create(
+            &world_desc, "build/test_tmp/terrain_streaming_generated_v1", &storage) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    stream_desc.generate_region = test_generate_region;
+    stream_desc.generate_region_user_data = &generator_state;
+    if (henka_terrain_streamer_create(world, storage, &stream_desc, &streamer) != HENKA_SUCCESS ||
+        henka_terrain_streamer_request_region(streamer, (henka_terrain_region_id){5, 6}) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    for (index = 0U; index < 400U; ++index)
+    {
+        if (henka_terrain_streamer_pump(streamer, 1U) != HENKA_SUCCESS)
+        {
+            goto cleanup;
+        }
+        henka_terrain_streamer_get_stats(streamer, &stats);
+        if (stats.completed_request_count == 1U || stats.failed_request_count != 0U)
+        {
+            break;
+        }
+#if defined(_WIN32)
+        Sleep(1U);
+#endif
+    }
+    if (generator_state.calls != 1U || !generator_state.contract_valid ||
+        generator_state.sample_count != layout.samples_per_region ||
+        stats.completed_request_count != 1U || stats.generated_region_count != 1U ||
+        stats.generator_failure_count != 0U ||
+        henka_terrain_world_get_region_state(
+            world, (henka_terrain_region_id){5, 6}, &region_state) != HENKA_SUCCESS ||
+        region_state.revision != 1U || region_state.generation != 1U ||
+        !region_state.cpu_resident ||
+        henka_terrain_world_get_region_samples(
+            world, (henka_terrain_region_id){5, 6}, &samples, &sample_count) != HENKA_SUCCESS ||
+        sample_count != layout.samples_per_region || samples[0].height_millimeters != 1056 ||
+        samples[0].material_weights[0] != 255U)
+    {
+        goto cleanup;
+    }
+    result = 1;
+
+cleanup:
+    henka_terrain_streamer_destroy(streamer);
+    henka_terrain_storage_destroy(storage);
+    henka_terrain_world_destroy(world);
+    return result;
+}
+
 int main(void)
 {
     return test_streaming() &&
         test_observer_center_is_loaded_before_distant_regions() &&
         test_observer_update_cancels_stale_requests() &&
         test_explicit_request_survives_observer_cancellation() &&
-        test_observer_union_preserves_other_observer_demand() ? 0 : 1;
+        test_observer_union_preserves_other_observer_demand() &&
+        test_missing_region_uses_bounded_generator() ? 0 : 1;
 }
