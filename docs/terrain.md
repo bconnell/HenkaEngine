@@ -95,7 +95,10 @@ encodes the response. It also echoes control pings and disconnects malformed
 edit payloads as protocol errors. The server-side delta broadcast and
 snapshot-fragment response are described below; the client session adapter
 applies those messages through the replica and owns bounded recovery requests.
-Reconnect/late-join orchestration and editor controls remain
+When a client receives a connected event, it requests bounded snapshots for
+its resident regions, allowing the same replica path to refresh after a
+transport reconnect. Full handshake identity exchange, late-join region
+selection, and editor controls remain
 subsequent integration work.
 
 For edit requests, the session lazily materializes missing persisted regions

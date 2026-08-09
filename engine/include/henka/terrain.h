@@ -163,6 +163,11 @@ henka_result henka_terrain_world_get_region_state(
     const henka_terrain_world* world,
     henka_terrain_region_id region_id,
     henka_terrain_region_state* out_state);
+/* Returns active resident regions in stable storage order. */
+henka_result henka_terrain_world_get_resident_region_at(
+    const henka_terrain_world* world,
+    uint32_t resident_index,
+    henka_terrain_region_state* out_state);
 henka_result henka_terrain_world_get_stats(
     const henka_terrain_world* world,
     henka_terrain_world_stats* out_stats);

@@ -108,11 +108,11 @@ static henka_result henka_terrain_server_send_snapshot(
     henka_terrain_world_desc world_desc;
     henka_terrain_layout layout;
     henka_terrain_region_storage_info info;
-    henka_terrain_sample* samples = NULL;
+    const henka_terrain_sample* source_samples = NULL;
     uint8_t* record = NULL;
     uint8_t payload[HENKA_NETWORK_MAX_SNAPSHOT_FRAGMENT_PAYLOAD];
     size_t record_size = 0U;
-    size_t sample_bytes;
+    size_t source_sample_count = 0U;
     size_t offset;
     uint32_t fragment_count;
     uint32_t fragment_index;
@@ -130,28 +130,51 @@ static henka_result henka_terrain_server_send_snapshot(
             server->network, peer_id, HENKA_NETWORK_DISCONNECT_REASON_PROTOCOL);
         return HENKA_SUCCESS;
     }
-    if (layout.samples_per_region > SIZE_MAX / sizeof(*samples))
+    if (henka_terrain_world_get_region_state(
+            server->world, request->region_id, &(henka_terrain_region_state){0}) != HENKA_SUCCESS)
     {
-        ++server->diagnostics.snapshot_failure_count;
-        return HENKA_SUCCESS;
+        henka_terrain_sample* samples = NULL;
+        samples = henka_calloc(layout.samples_per_region, sizeof(*samples));
+        if (samples == NULL ||
+            henka_terrain_storage_load_region(
+                server->storage, request->region_id, &info,
+                samples, layout.samples_per_region) != HENKA_SUCCESS ||
+            henka_terrain_world_apply_region_snapshot(
+                server->world, info, samples, layout.samples_per_region) != HENKA_SUCCESS)
+        {
+            henka_free(samples);
+            ++server->diagnostics.snapshot_failure_count;
+            return HENKA_SUCCESS;
+        }
+        henka_free(samples);
     }
-    sample_bytes = layout.samples_per_region * sizeof(*samples);
-    samples = henka_malloc(sample_bytes);
     record = henka_malloc(HENKA_TERRAIN_MAX_REGION_RECORD_BYTES);
-    if (samples == NULL || record == NULL)
+    if (record == NULL)
     {
         result = HENKA_ERROR_OUT_OF_MEMORY;
         goto cleanup;
     }
-    result = henka_terrain_storage_load_region(
-        server->storage, request->region_id, &info, samples, layout.samples_per_region);
-    if (result != HENKA_SUCCESS)
+    if (henka_terrain_world_get_region_state(
+            server->world, request->region_id, &(henka_terrain_region_state){0}) != HENKA_SUCCESS ||
+        henka_terrain_world_get_region_samples(
+            server->world, request->region_id, &source_samples, &source_sample_count) != HENKA_SUCCESS)
     {
+        result = HENKA_ERROR_INVALID_ARGUMENT;
         goto cleanup;
+    }
+    {
+        henka_terrain_region_state state;
+        if (henka_terrain_world_get_region_state(
+                server->world, request->region_id, &state) != HENKA_SUCCESS)
+        {
+            result = HENKA_ERROR_INVALID_ARGUMENT;
+            goto cleanup;
+        }
+        info = (henka_terrain_region_storage_info){state.id, state.revision, state.generation};
     }
     result = henka_terrain_region_encode(
         &world_desc, request->region_id, info.revision, info.generation,
-        samples, layout.samples_per_region, record,
+        source_samples, source_sample_count, record,
         HENKA_TERRAIN_MAX_REGION_RECORD_BYTES, &record_size);
     if (result != HENKA_SUCCESS || record_size == 0U)
     {
@@ -204,7 +227,6 @@ static henka_result henka_terrain_server_send_snapshot(
 
 cleanup:
     henka_free(record);
-    henka_free(samples);
     if (result != HENKA_SUCCESS)
     {
         ++server->diagnostics.snapshot_failure_count;

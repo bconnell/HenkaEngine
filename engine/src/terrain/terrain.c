@@ -550,6 +550,33 @@ henka_result henka_terrain_world_get_region_state(
     return HENKA_SUCCESS;
 }
 
+henka_result henka_terrain_world_get_resident_region_at(
+    const henka_terrain_world* world,
+    uint32_t resident_index,
+    henka_terrain_region_state* out_state)
+{
+    uint32_t index;
+    uint32_t seen = 0U;
+
+    if (world == NULL || out_state == NULL || resident_index >= world->resident_region_count)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    for (index = 0U; index < world->desc.max_resident_regions; ++index)
+    {
+        if (world->regions[index].active)
+        {
+            if (seen == resident_index)
+            {
+                *out_state = world->regions[index].state;
+                return HENKA_SUCCESS;
+            }
+            ++seen;
+        }
+    }
+    return HENKA_ERROR_INVALID_ARGUMENT;
+}
+
 henka_result henka_terrain_world_get_stats(
     const henka_terrain_world* world,
     henka_terrain_world_stats* out_stats)

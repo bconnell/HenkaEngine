@@ -70,6 +70,9 @@ static int test_bounded_residency(void)
         henka_terrain_world_reserve_region(world, region) != HENKA_SUCCESS ||
         henka_terrain_world_reserve_chunk(world, chunk) != HENKA_SUCCESS ||
         henka_terrain_world_reserve_chunk(world, (henka_terrain_chunk_id){1, 0}) == HENKA_SUCCESS ||
+        henka_terrain_world_get_resident_region_at(world, 0U, &region_state) != HENKA_SUCCESS ||
+        !henka_terrain_region_id_equal(region_state.id, region) ||
+        henka_terrain_world_get_resident_region_at(world, 1U, &region_state) == HENKA_SUCCESS ||
         henka_terrain_world_get_region_state(world, region, &region_state) != HENKA_SUCCESS ||
         !region_state.cpu_resident || region_state.revision != 0U ||
         henka_terrain_world_get_stats(world, &stats) != HENKA_SUCCESS ||
