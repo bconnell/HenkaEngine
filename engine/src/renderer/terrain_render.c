@@ -7,6 +7,7 @@
 #include "../henka_internal.h"
 #include <henka/log.h>
 #include <henka/memory.h>
+#include <henka/terrain_render.h>
 
 typedef struct henka_terrain_render_request
 {
@@ -163,6 +164,28 @@ static henka_result henka_terrain_render_queue_slot(
     return HENKA_SUCCESS;
 }
 
+static void henka_terrain_render_cancel_slot_requests(
+    henka_terrain_render_runtime* runtime,
+    uint32_t slot_index,
+    uint32_t serial)
+{
+    uint32_t index;
+    uint32_t kept = 0U;
+    uint32_t original_count = runtime->request_count;
+    for (index = 0U; index < original_count; ++index)
+    {
+        uint32_t source_index = (runtime->request_head + index) % runtime->desc.max_pending_requests;
+        henka_terrain_render_request request = runtime->requests[source_index];
+        if (request.slot_index == slot_index && request.serial == serial)
+        {
+            continue;
+        }
+        runtime->requests[(runtime->request_head + kept) % runtime->desc.max_pending_requests] = request;
+        ++kept;
+    }
+    runtime->request_count = kept;
+}
+
 static henka_vec3 henka_terrain_render_chunk_center(
     const henka_terrain_render_runtime* runtime,
     henka_terrain_chunk_id chunk_id)
@@ -228,6 +251,168 @@ static bool henka_terrain_render_are_neighbors(
         (dz == 0 && (dx == 1 || dx == -1));
 }
 
+static float henka_terrain_render_distance_squared(
+    const henka_terrain_render_runtime* runtime,
+    henka_terrain_chunk_id chunk_id,
+    henka_vec3 observer_position)
+{
+    henka_vec3 center = henka_terrain_render_chunk_center(runtime, chunk_id);
+    float dx = observer_position.x - center.x;
+    float dz = observer_position.z - center.z;
+    return dx * dx + dz * dz;
+}
+
+static bool henka_terrain_render_chunk_is_render_resident(
+    const henka_terrain_render_runtime* runtime,
+    henka_terrain_chunk_id chunk_id)
+{
+    henka_terrain_world_desc desc;
+    henka_terrain_region_id region_id;
+    henka_terrain_region_state state;
+    return henka_terrain_world_get_desc(runtime->world, &desc) == HENKA_SUCCESS &&
+        henka_terrain_region_id_from_chunk(&desc, chunk_id, &region_id) == HENKA_SUCCESS &&
+        henka_terrain_world_get_region_state(runtime->world, region_id, &state) == HENKA_SUCCESS &&
+        state.render_resident;
+}
+
+static int32_t henka_terrain_render_find_farthest_slot(
+    const henka_terrain_render_runtime* runtime,
+    henka_vec3 observer_position,
+    float* out_distance_squared)
+{
+    int32_t farthest = -1;
+    uint32_t index;
+    float distance_squared = -1.0f;
+    for (index = 0U; index < runtime->desc.max_resident_chunks; ++index)
+    {
+        const henka_terrain_render_slot* slot = &runtime->slots[index];
+        float candidate_distance;
+        if (!slot->occupied)
+        {
+            continue;
+        }
+        candidate_distance = henka_terrain_render_distance_squared(
+            runtime, slot->chunk_id, observer_position);
+        if (farthest < 0 || candidate_distance > distance_squared ||
+            (candidate_distance == distance_squared && (uint32_t)farthest < index))
+        {
+            farthest = (int32_t)index;
+            distance_squared = candidate_distance;
+        }
+    }
+    if (out_distance_squared != NULL)
+    {
+        *out_distance_squared = distance_squared;
+    }
+    return farthest;
+}
+
+static void henka_terrain_render_schedule_resident_chunks(
+    henka_terrain_render_runtime* runtime,
+    henka_vec3 observer_position)
+{
+    henka_terrain_world_desc desc;
+    henka_terrain_world_stats stats;
+    uint32_t index;
+    float far_distance_squared;
+
+    if (henka_terrain_world_get_desc(runtime->world, &desc) != HENKA_SUCCESS ||
+        henka_terrain_world_get_stats(runtime->world, &stats) != HENKA_SUCCESS)
+    {
+        return;
+    }
+    far_distance_squared = runtime->desc.lod_max_distances[HENKA_TERRAIN_MESH_MAX_LOD_LEVEL];
+    far_distance_squared *= far_distance_squared;
+
+    /* Drop presentation slots whose source region is no longer render resident
+     * or whose chunk is outside the bounded outer LOD band. */
+    for (index = 0U; index < runtime->desc.max_resident_chunks; ++index)
+    {
+        henka_terrain_render_slot* slot = &runtime->slots[index];
+        if (slot->occupied &&
+            (!henka_terrain_render_chunk_is_render_resident(runtime, slot->chunk_id) ||
+             henka_terrain_render_distance_squared(runtime, slot->chunk_id, observer_position) >
+                 far_distance_squared))
+        {
+            (void)henka_terrain_render_runtime_remove_chunk(runtime, slot->chunk_id);
+        }
+    }
+
+    /* The world may expose more render-resident chunks than the graphical
+     * owner can retain. Scan stable region/chunk order and replace only a
+     * farther slot, producing a deterministic nearest bounded working set. */
+    for (index = 0U; index < stats.resident_region_count; ++index)
+    {
+        henka_terrain_region_state region_state;
+        uint32_t local_z;
+        uint32_t local_x;
+        if (henka_terrain_world_get_resident_region_at(
+                runtime->world, index, &region_state) != HENKA_SUCCESS ||
+            !region_state.render_resident)
+        {
+            continue;
+        }
+        for (local_z = 0U; local_z < desc.chunks_per_region_edge; ++local_z)
+        {
+            for (local_x = 0U; local_x < desc.chunks_per_region_edge; ++local_x)
+            {
+                henka_terrain_chunk_id chunk_id = {
+                    region_state.id.x * (int32_t)desc.chunks_per_region_edge + (int32_t)local_x,
+                    region_state.id.z * (int32_t)desc.chunks_per_region_edge + (int32_t)local_z};
+                int32_t farthest_slot;
+                int32_t existing_slot;
+                float candidate_distance_squared;
+                float farthest_distance_squared;
+
+                if (!henka_terrain_chunk_id_is_valid(&desc, chunk_id))
+                {
+                    continue;
+                }
+                candidate_distance_squared = henka_terrain_render_distance_squared(
+                    runtime, chunk_id, observer_position);
+                if (!isfinite(candidate_distance_squared) ||
+                    candidate_distance_squared > far_distance_squared)
+                {
+                    continue;
+                }
+                existing_slot = henka_terrain_render_find_slot(runtime, chunk_id);
+                if (existing_slot >= 0)
+                {
+                    continue;
+                }
+                if (henka_terrain_render_find_free_slot(runtime) >= 0)
+                {
+                    if (runtime->request_count >= runtime->desc.max_pending_requests)
+                    {
+                        continue;
+                    }
+                    farthest_slot = -1;
+                }
+                else
+                {
+                    farthest_slot = henka_terrain_render_find_farthest_slot(
+                        runtime, observer_position, &farthest_distance_squared);
+                    if (farthest_slot >= 0 && candidate_distance_squared >= farthest_distance_squared)
+                    {
+                        continue;
+                    }
+                    if (runtime->request_count >= runtime->desc.max_pending_requests &&
+                        !runtime->slots[farthest_slot].queued)
+                    {
+                        continue;
+                    }
+                }
+                if (farthest_slot >= 0)
+                {
+                    (void)henka_terrain_render_runtime_remove_chunk(
+                        runtime, runtime->slots[farthest_slot].chunk_id);
+                }
+                (void)henka_terrain_render_runtime_request_chunk(runtime, chunk_id, 0U);
+            }
+        }
+    }
+}
+
 static void henka_terrain_render_set_visibility(
     henka_terrain_render_runtime* runtime,
     henka_terrain_render_slot* slot,
@@ -282,6 +467,13 @@ henka_result henka_terrain_render_runtime_create(
     runtime->scene = scene;
     runtime->world = world;
     runtime->desc = resolved;
+    {
+        uint32_t index;
+        for (index = 0U; index < resolved.max_resident_chunks; ++index)
+        {
+            runtime->slots[index].entity = HENKA_INVALID_ENTITY;
+        }
+    }
     if (resolved.material.name != NULL && resolved.material.name[0] != '\0')
     {
         if (strlen(resolved.material.name) >= sizeof(runtime->material_name))
@@ -354,9 +546,17 @@ henka_result henka_terrain_render_runtime_request_chunk(
             return HENKA_ERROR_LIMIT;
         }
         slot = &runtime->slots[slot_index];
-        *slot = (henka_terrain_render_slot){0};
+        {
+            uint32_t next_serial = slot->serial + 1U;
+            if (next_serial == 0U)
+            {
+                next_serial = 1U;
+            }
+            *slot = (henka_terrain_render_slot){0};
+            slot->serial = next_serial;
+        }
         slot->occupied = true;
-        slot->serial += 1U;
+        slot->entity = HENKA_INVALID_ENTITY;
         slot->chunk_id = chunk_id;
         slot->selected_lod = lod_level;
     }
@@ -387,6 +587,8 @@ henka_result henka_terrain_render_runtime_remove_chunk(
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
     slot = &runtime->slots[slot_index];
+    henka_terrain_render_cancel_slot_requests(
+        runtime, (uint32_t)slot_index, slot->serial);
     if (slot->entity != HENKA_INVALID_ENTITY && henka_scene_is_entity_valid(runtime->scene, slot->entity))
     {
         henka_scene_destroy_entity(runtime->scene, slot->entity);
@@ -394,8 +596,13 @@ henka_result henka_terrain_render_runtime_remove_chunk(
     henka_mesh_destroy(slot->mesh);
     {
         uint32_t next_serial = slot->serial + 1U;
+        if (next_serial == 0U)
+        {
+            next_serial = 1U;
+        }
         *slot = (henka_terrain_render_slot){0};
         slot->serial = next_serial;
+        slot->entity = HENKA_INVALID_ENTITY;
     }
     return HENKA_SUCCESS;
 }
@@ -411,6 +618,7 @@ henka_result henka_terrain_render_runtime_update_observer(
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
+    henka_terrain_render_schedule_resident_chunks(runtime, observer_position);
     for (first = 0U; first < runtime->desc.max_resident_chunks; ++first)
     {
         henka_terrain_render_slot* slot = &runtime->slots[first];

@@ -76,7 +76,11 @@ henka_result henka_terrain_render_runtime_remove_chunk(
     henka_terrain_render_runtime* runtime,
     henka_terrain_chunk_id chunk_id);
 
-/* Selects LOD for resident chunks. The renderer performs frustum culling from the scene bounds. */
+/*
+ * Synchronizes the bounded graphical working set from render-resident world
+ * regions, selects LOD, and applies deterministic adjacent-chunk clamping.
+ * The renderer performs frustum culling from the scene bounds.
+ */
 henka_result henka_terrain_render_runtime_update_observer(
     henka_terrain_render_runtime* runtime,
     henka_vec3 observer_position);

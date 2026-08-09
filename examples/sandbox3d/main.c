@@ -4133,21 +4133,14 @@ static henka_result sandbox3d_initialize_terrain_rendering(
     {
         goto fail;
     }
-    for (sample_z = 0U; sample_z < 2U; ++sample_z)
+    result = henka_terrain_render_runtime_update_observer(
+        state->terrain_render,
+        state->smoke_test ? (henka_vec3){32.0f, 2.4f, 32.0f} : state->camera.position);
+    if (result != HENKA_SUCCESS)
     {
-        for (sample_x = 0U; sample_x < 2U; ++sample_x)
-        {
-            result = henka_terrain_render_runtime_request_chunk(
-                state->terrain_render,
-                (henka_terrain_chunk_id){(int32_t)sample_x, (int32_t)sample_z},
-                0U);
-            if (result != HENKA_SUCCESS)
-            {
-                goto fail;
-            }
-        }
+        goto fail;
     }
-    result = henka_terrain_render_runtime_pump(state->terrain_render, 4U);
+    result = henka_terrain_render_runtime_pump(state->terrain_render, 16U);
     if (result != HENKA_SUCCESS)
     {
         goto fail;
@@ -4155,13 +4148,13 @@ static henka_result sandbox3d_initialize_terrain_rendering(
     {
         henka_terrain_render_stats stats;
         if (henka_terrain_render_runtime_get_stats(state->terrain_render, &stats) != HENKA_SUCCESS ||
-            stats.resident_chunks != 4U || stats.rebuilt_chunks != 4U)
+            stats.resident_chunks != 16U || stats.rebuilt_chunks != 16U)
         {
             result = HENKA_ERROR_UNKNOWN;
             goto fail;
         }
     }
-    printf("Terrain render: 4 bounded chunks resident; transactional mesh uploads ready.\n");
+    printf("Terrain render: 16 bounded chunks resident; automatic observer scheduling and transactional mesh uploads ready.\n");
     fflush(stdout);
     return HENKA_SUCCESS;
 
@@ -16343,7 +16336,7 @@ static void sandbox3d_update(henka_engine* engine, double delta_seconds, void* u
         }
         if (terrain_result == HENKA_SUCCESS)
         {
-            terrain_result = henka_terrain_render_runtime_pump(state->terrain_render, 1U);
+            terrain_result = henka_terrain_render_runtime_pump(state->terrain_render, 16U);
         }
         if (terrain_result == HENKA_SUCCESS)
         {

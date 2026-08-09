@@ -194,16 +194,20 @@ succeeds. Four LOD bands use hysteresis and deterministic adjacent-chunk
 selection; render visibility is bounded by the configured outer band. The
 owner destroys its entities and meshes without destroying the borrowed world.
 Uploaded GPU meshes add bounded downward edge skirts to cover finite LOD
-transitions; full neighbor-aware stitching, automatic world-residency
-scheduling, and manual visual validation remain subsequent work. The Sandbox also routes one shared
+transitions. On each observer update the owner now derives a deterministic
+nearest working set from render-resident regions, removes slots whose regions
+leave render residency or the outer LOD band, and queues only bounded missing
+chunks; it does not mutate the borrowed world or allocate per-frame working
+arrays. Full neighbor-aware stitching and manual visual validation remain
+subsequent work. The Sandbox also routes one shared
 raise command through authoritative integer mutation, refreshes the
 transactional physics patch, and refreshes the affected GPU mesh; this is a
 runtime smoke path, not persistence or network authority.
 
 The Sandbox reference scene now creates one deterministic bounded region,
-marks it render-resident, and attaches four chunks through this owner. It
-updates selection from the active camera and pumps at most two replacements
-per frame. This is runtime integration coverage, not a claim that editor
+marks it render-resident, and lets this owner discover its bounded chunk
+working set from the active camera. It pumps at most two replacements per frame.
+This is runtime integration coverage, not a claim that editor
 sculpt/paint tools or visual human approval are complete. The Utility Terrain
 tab now exposes bounded resident/render/collision statistics and raise, lower,
 flatten, smooth, and paint controls with radius, strength, layer, and falloff
@@ -220,9 +224,9 @@ physics, render, pending-I/O, dirty, revision, and generation state.
 ## Current boundary
 
 This slice establishes the shared data model and bounded ownership contract.
-Full residency-wide dirty-neighbor scheduling, automatic render mesh
-residency, cross-LOD seam stitching, relevance-driven late-join selection, and
-multi-process soak remain subsequent validated runtime slices. Accepted edits can now derive one-chunk
+Full residency-wide dirty-neighbor scheduling, cross-LOD seam stitching,
+relevance-driven late-join selection, and multi-process soak remain subsequent
+validated runtime slices. Accepted edits can now derive one-chunk
 physics-neighbor coverage through the bounded collision queue, and client
 prediction is available through the separate presentation-world owner.
 They must use this
