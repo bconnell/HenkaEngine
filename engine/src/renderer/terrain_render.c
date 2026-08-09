@@ -7,7 +7,10 @@
 #include "../henka_internal.h"
 #include <henka/log.h>
 #include <henka/memory.h>
+#include <henka/terrain_edit.h>
 #include <henka/terrain_render.h>
+
+#define HENKA_TERRAIN_RENDER_DEPENDENCY_COUNT 9U
 
 typedef struct henka_terrain_render_request
 {
@@ -39,6 +42,8 @@ typedef struct henka_terrain_render_slot
     henka_mesh* mesh;
     henka_terrain_revision revision;
     henka_terrain_generation generation;
+    henka_terrain_revision dependency_revisions[HENKA_TERRAIN_RENDER_DEPENDENCY_COUNT];
+    henka_terrain_generation dependency_generations[HENKA_TERRAIN_RENDER_DEPENDENCY_COUNT];
 } henka_terrain_render_slot;
 
 struct henka_terrain_render_runtime
@@ -211,6 +216,150 @@ static henka_vec3 henka_terrain_render_chunk_center(
         (float)chunk_id.x * (float)desc.chunk_edge_meters + (float)desc.chunk_edge_meters * 0.5f,
         0.0f,
         (float)chunk_id.z * (float)desc.chunk_edge_meters + (float)desc.chunk_edge_meters * 0.5f};
+}
+
+static void henka_terrain_render_get_dependency_identity(
+    const henka_terrain_render_runtime* runtime,
+    henka_terrain_chunk_id chunk_id,
+    henka_terrain_revision out_revisions[HENKA_TERRAIN_RENDER_DEPENDENCY_COUNT],
+    henka_terrain_generation out_generations[HENKA_TERRAIN_RENDER_DEPENDENCY_COUNT])
+{
+    static const int32_t offsets[HENKA_TERRAIN_RENDER_DEPENDENCY_COUNT][2] = {
+        {-1, -1}, {0, -1}, {1, -1},
+        {-1, 0}, {0, 0}, {1, 0},
+        {-1, 1}, {0, 1}, {1, 1}};
+    henka_terrain_world_desc desc;
+    henka_terrain_region_id center_region;
+    uint32_t index;
+
+    memset(out_revisions, 0, sizeof(henka_terrain_revision) * HENKA_TERRAIN_RENDER_DEPENDENCY_COUNT);
+    memset(out_generations, 0, sizeof(henka_terrain_generation) * HENKA_TERRAIN_RENDER_DEPENDENCY_COUNT);
+    if (runtime == NULL ||
+        henka_terrain_world_get_desc(runtime->world, &desc) != HENKA_SUCCESS ||
+        henka_terrain_region_id_from_chunk(&desc, chunk_id, &center_region) != HENKA_SUCCESS)
+    {
+        return;
+    }
+    for (index = 0U; index < HENKA_TERRAIN_RENDER_DEPENDENCY_COUNT; ++index)
+    {
+        henka_terrain_region_state state;
+        henka_terrain_region_id region_id = {
+            center_region.x + offsets[index][0],
+            center_region.z + offsets[index][1]};
+        if (!henka_terrain_region_id_is_valid(&desc, region_id) ||
+            henka_terrain_world_get_region_state(runtime->world, region_id, &state) != HENKA_SUCCESS ||
+            !state.render_resident)
+        {
+            continue;
+        }
+        out_revisions[index] = state.revision;
+        out_generations[index] = state.generation;
+    }
+}
+
+static bool henka_terrain_render_dependencies_match(
+    const henka_terrain_render_runtime* runtime,
+    const henka_terrain_render_slot* slot)
+{
+    henka_terrain_revision revisions[HENKA_TERRAIN_RENDER_DEPENDENCY_COUNT];
+    henka_terrain_generation generations[HENKA_TERRAIN_RENDER_DEPENDENCY_COUNT];
+    uint32_t index;
+    henka_terrain_render_get_dependency_identity(runtime, slot->chunk_id, revisions, generations);
+    for (index = 0U; index < HENKA_TERRAIN_RENDER_DEPENDENCY_COUNT; ++index)
+    {
+        if (revisions[index] != slot->dependency_revisions[index] ||
+            generations[index] != slot->dependency_generations[index])
+        {
+            return false;
+        }
+    }
+    return true;
+}
+
+static void henka_terrain_render_capture_dependencies(
+    const henka_terrain_render_runtime* runtime,
+    henka_terrain_render_slot* slot)
+{
+    henka_terrain_render_get_dependency_identity(
+        runtime,
+        slot->chunk_id,
+        slot->dependency_revisions,
+        slot->dependency_generations);
+}
+
+static bool henka_terrain_render_get_chunk_bounds(
+    const henka_terrain_render_runtime* runtime,
+    henka_terrain_chunk_id chunk_id,
+    uint32_t fallback_skirt_mask,
+    henka_bounds* out_bounds)
+{
+    henka_terrain_world_desc desc;
+    henka_terrain_layout layout;
+    henka_terrain_region_id region_id;
+    const henka_terrain_sample* samples;
+    size_t sample_count;
+    uint32_t chunk_span;
+    uint32_t region_span;
+    uint32_t local_chunk_x;
+    uint32_t local_chunk_z;
+    uint32_t base_x;
+    uint32_t base_z;
+    uint32_t local_z;
+    int32_t min_height = INT32_MAX;
+    int32_t max_height = INT32_MIN;
+    float skirt_depth = 0.0f;
+
+    if (runtime == NULL || out_bounds == NULL ||
+        henka_terrain_world_get_desc(runtime->world, &desc) != HENKA_SUCCESS ||
+        henka_terrain_world_desc_get_layout(&desc, &layout) != HENKA_SUCCESS ||
+        henka_terrain_region_id_from_chunk(&desc, chunk_id, &region_id) != HENKA_SUCCESS ||
+        henka_terrain_world_get_region_samples(
+            runtime->world, region_id, &samples, &sample_count) != HENKA_SUCCESS ||
+        sample_count != layout.samples_per_region)
+    {
+        return false;
+    }
+    chunk_span = desc.samples_per_chunk - 1U;
+    region_span = layout.samples_per_region_edge - 1U;
+    local_chunk_x = (uint32_t)(chunk_id.x - region_id.x * (int32_t)desc.chunks_per_region_edge);
+    local_chunk_z = (uint32_t)(chunk_id.z - region_id.z * (int32_t)desc.chunks_per_region_edge);
+    base_x = local_chunk_x * chunk_span;
+    base_z = local_chunk_z * chunk_span;
+    if (base_x > region_span || base_z > region_span ||
+        chunk_span > region_span - base_x || chunk_span > region_span - base_z)
+    {
+        return false;
+    }
+    for (local_z = 0U; local_z <= chunk_span; ++local_z)
+    {
+        uint32_t local_x;
+        for (local_x = 0U; local_x <= chunk_span; ++local_x)
+        {
+            const henka_terrain_sample* sample = &samples[
+                (base_z + local_z) * layout.samples_per_region_edge + base_x + local_x];
+            if (sample->height_millimeters < min_height) min_height = sample->height_millimeters;
+            if (sample->height_millimeters > max_height) max_height = sample->height_millimeters;
+        }
+    }
+    if (min_height == INT32_MAX || max_height == INT32_MIN)
+    {
+        return false;
+    }
+    if (fallback_skirt_mask != 0U)
+    {
+        skirt_depth = fmaxf(8.0f, (float)desc.chunk_edge_meters * 0.25f);
+    }
+    out_bounds->center = (henka_vec3){
+        (float)chunk_id.x * (float)desc.chunk_edge_meters + (float)desc.chunk_edge_meters * 0.5f,
+        ((float)min_height + (float)max_height) * 0.0005f - skirt_depth * 0.5f,
+        (float)chunk_id.z * (float)desc.chunk_edge_meters + (float)desc.chunk_edge_meters * 0.5f};
+    out_bounds->extents = (henka_vec3){
+        (float)desc.chunk_edge_meters * 0.5f,
+        ((float)max_height - (float)min_height) * 0.0005f + skirt_depth * 0.5f + 0.01f,
+        (float)desc.chunk_edge_meters * 0.5f};
+    return isfinite(out_bounds->center.x) && isfinite(out_bounds->center.y) &&
+        isfinite(out_bounds->center.z) && isfinite(out_bounds->extents.x) &&
+        isfinite(out_bounds->extents.y) && isfinite(out_bounds->extents.z);
 }
 
 static uint32_t henka_terrain_render_select_lod(
@@ -433,7 +582,8 @@ static void henka_terrain_render_schedule_resident_chunks(
             henka_terrain_world_get_region_state(
                 runtime->world, region_id, &region_state) != HENKA_SUCCESS ||
             (slot->revision == region_state.revision &&
-             slot->generation == region_state.generation))
+             slot->generation == region_state.generation &&
+             henka_terrain_render_dependencies_match(runtime, slot)))
         {
             continue;
         }
@@ -868,8 +1018,7 @@ henka_result henka_terrain_render_runtime_pump(
         henka_result result;
         char name[64];
         henka_bounds bounds;
-        henka_vec3 center;
-        henka_terrain_world_desc desc;
+        henka_bounds old_bounds;
 
         runtime->request_head = (runtime->request_head + 1U) % runtime->desc.max_pending_requests;
         runtime->request_count -= 1U;
@@ -904,6 +1053,13 @@ henka_result henka_terrain_render_runtime_pump(
                 henka_result_to_string(result));
             continue;
         }
+        if (!henka_terrain_render_get_chunk_bounds(
+                runtime, slot->chunk_id, request.fallback_skirt_mask, &bounds))
+        {
+            henka_mesh_destroy(candidate);
+            runtime->stats.failed_rebuilds += 1U;
+            continue;
+        }
         if (!slot->resident)
         {
             (void)snprintf(name, sizeof(name), "TerrainChunk_%d_%d", slot->chunk_id.x, slot->chunk_id.z);
@@ -912,7 +1068,7 @@ henka_result henka_terrain_render_runtime_pump(
                 henka_scene_set_entity_material(runtime->scene, slot->entity, runtime->desc.material) != HENKA_SUCCESS ||
                 henka_scene_set_entity_mesh(runtime->scene, slot->entity, candidate) != HENKA_SUCCESS ||
                 henka_scene_set_entity_transform(runtime->scene, slot->entity, henka_transform_identity()) != HENKA_SUCCESS ||
-                henka_terrain_world_get_desc(runtime->world, &desc) != HENKA_SUCCESS)
+                henka_scene_set_entity_local_bounds(runtime->scene, slot->entity, bounds) != HENKA_SUCCESS)
             {
                 if (slot->entity != HENKA_INVALID_ENTITY)
                 {
@@ -923,24 +1079,19 @@ henka_result henka_terrain_render_runtime_pump(
                 runtime->stats.failed_rebuilds += 1U;
                 continue;
             }
-            center = henka_terrain_render_chunk_center(runtime, slot->chunk_id);
-            bounds = (henka_bounds){
-                center,
-                {(float)desc.chunk_edge_meters * 0.5f,
-                 2147483.648f,
-                 (float)desc.chunk_edge_meters * 0.5f}};
-            if (henka_scene_set_entity_local_bounds(runtime->scene, slot->entity, bounds) != HENKA_SUCCESS)
-            {
-                henka_scene_destroy_entity(runtime->scene, slot->entity);
-                slot->entity = HENKA_INVALID_ENTITY;
-                henka_mesh_destroy(candidate);
-                runtime->stats.failed_rebuilds += 1U;
-                continue;
-            }
             slot->visible = true;
         }
-        else if (henka_scene_set_entity_mesh(runtime->scene, slot->entity, candidate) != HENKA_SUCCESS)
+        else if (henka_scene_get_entity_local_bounds(runtime->scene, slot->entity, &old_bounds) != HENKA_SUCCESS ||
+            henka_scene_set_entity_mesh(runtime->scene, slot->entity, candidate) != HENKA_SUCCESS)
         {
+            henka_mesh_destroy(candidate);
+            runtime->stats.failed_rebuilds += 1U;
+            continue;
+        }
+        else if (henka_scene_set_entity_local_bounds(runtime->scene, slot->entity, bounds) != HENKA_SUCCESS)
+        {
+            (void)henka_scene_set_entity_mesh(runtime->scene, slot->entity, slot->mesh);
+            (void)henka_scene_set_entity_local_bounds(runtime->scene, slot->entity, old_bounds);
             henka_mesh_destroy(candidate);
             runtime->stats.failed_rebuilds += 1U;
             continue;
@@ -956,6 +1107,7 @@ henka_result henka_terrain_render_runtime_pump(
         slot->requested_fallback_skirt_mask = request.fallback_skirt_mask;
         slot->revision = revision;
         slot->generation = generation;
+        henka_terrain_render_capture_dependencies(runtime, slot);
         runtime->stats.rebuilt_chunks += 1U;
         if (request.edge_transition_mask != 0U)
         {

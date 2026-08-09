@@ -16661,6 +16661,7 @@ static void sandbox3d_update(henka_engine* engine, double delta_seconds, void* u
         henka_terrain_edit_command command = henka_terrain_edit_command_default();
         henka_terrain_render_chunk_info chunk_info = {0};
         henka_terrain_physics_hit terrain_hit = {0};
+        henka_bounds terrain_bounds = {0};
         henka_result terrain_result;
 
         command.client_nonce = 1U;
@@ -16696,13 +16697,22 @@ static void sandbox3d_update(henka_engine* engine, double delta_seconds, void* u
         }
         if (terrain_result == HENKA_SUCCESS)
         {
+            terrain_result = henka_scene_get_entity_local_bounds(
+                state->scene, chunk_info.entity, &terrain_bounds);
+        }
+        if (terrain_result == HENKA_SUCCESS)
+        {
             terrain_result = henka_terrain_physics_sample(
                 state->terrain_physics,
                 32.0f,
                 32.0f,
                 &terrain_hit);
             if (terrain_result == HENKA_SUCCESS &&
-                (!terrain_hit.hit || chunk_info.revision < 2U))
+                (!terrain_hit.hit || chunk_info.revision < 2U ||
+                 !isfinite(terrain_bounds.center.y) ||
+                 !isfinite(terrain_bounds.extents.y) ||
+                 terrain_bounds.extents.y <= 0.0f ||
+                 terrain_bounds.extents.y >= 1000.0f))
             {
                 terrain_result = HENKA_ERROR_UNKNOWN;
             }
@@ -16717,8 +16727,10 @@ static void sandbox3d_update(henka_engine* engine, double delta_seconds, void* u
         }
         else
         {
-            printf("Terrain edit: shared raise command rebuilt render revision %llu and collision patch.\n",
-                (unsigned long long)chunk_info.revision);
+            printf("Terrain edit: shared raise command rebuilt render revision %llu, collision patch, and height bounds %.3fm +/- %.3fm.\n",
+                (unsigned long long)chunk_info.revision,
+                terrain_bounds.center.y,
+                terrain_bounds.extents.y);
             fflush(stdout);
         }
         state->terrain_edit_smoke_ran = true;

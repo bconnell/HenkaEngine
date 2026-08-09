@@ -26,7 +26,7 @@
 | Area | Current state | Required closure |
 | --- | --- | --- |
 | Headless runtime, dedicated server, Terrain storage, streaming, authority, prediction, replica, snapshots, physics | COMPLETE for the prior Terrain campaign | Preserve; add only connected fixes and fresh regression coverage |
-| Graphical Terrain owner, bounded slots/queue, revision-aware mesh replacement, camera observer scheduling | PARTIAL | Add complete material, bounds, dirty propagation, resource diagnostics, and packaged visual proof |
+| Graphical Terrain owner, bounded slots/queue, revision-aware mesh replacement, camera observer scheduling | PARTIAL | Add resource diagnostics and packaged visual proof; material, bounds, and dirty propagation are implemented |
 | Terrain material authority | PARTIAL | Four-layer PBR factors/textures, stable linear/sRGB semantics, normal/roughness/metallic blending, truthful fallback |
 | Terrain tangent basis and border normals | PARTIAL | Finite handed tangents, neighbor-aware normals, world-stable mapping, tests |
 | Crack-free LOD | PARTIAL | Reusable transition topology or justified watertight equivalent; topology tests |
@@ -121,7 +121,7 @@
 - [x] Add RED topology tests for equal LOD, one-level edge transitions, and four-way corners.
 - [x] Implement reusable transition index variants using shared edge samples; reject unsupported differences rather than creating holes.
 - [x] Keep skirts only as a documented last-resort fallback for invalid/nonresident neighbor state, with diagnostics.
-- [ ] Validate mesh bounds and GPU upload replacement under each topology variant.
+- [x] Validate mesh bounds and GPU upload replacement under each topology variant.
 - [ ] Commit `feat: stitch Terrain LOD boundaries`.
 
 ### Task 5: Integrate automatic dirty propagation and dynamic bounds
