@@ -169,7 +169,7 @@
 - [ ] Add RED workflow assertions for status, load/create, sculpt, paint, layer, radius, strength, falloff, diagnostics, and ray-pick.
 - [ ] Implement the UI using the existing workspace/disclosure/property system and shared command API.
 - [ ] Add a bounded brush preview using existing helper rendering if it does not alter normal ownership.
-- [ ] Add a public external C17 runtime harness for raycast, edit, collision/render refresh, save, and reload.
+- [x] Add a public external C17 runtime harness for raycast, edit, collision/render refresh, save, and reload; the template now also runs a public graphical engine/scene/Terrain Rendered smoke with visible-draw and HDR/shadow diagnostics.
 - [ ] Validate packaged Sandbox behavior and commit `feat: complete Terrain editor and runtime tools`.
 
 ### Task 8: Close multiplayer recovery and package closure

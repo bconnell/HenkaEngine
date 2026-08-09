@@ -36,3 +36,9 @@ target_link_libraries(external_game_minimal
     PRIVATE
         henka
 )
+
+add_custom_command(TARGET external_game_minimal POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_directory
+        "${HENKA_ENGINE_DIR}/assets"
+        "$<TARGET_FILE_DIR:external_game_minimal>/assets"
+)

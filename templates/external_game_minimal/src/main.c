@@ -4,6 +4,173 @@
 
 #include <henka/henka.h>
 
+typedef struct external_graphical_terrain_state
+{
+    henka_scene* scene;
+    henka_terrain_world* world;
+    henka_terrain_render_runtime* render;
+    henka_terrain_sample* samples;
+    uint64_t start_frame;
+    bool success;
+} external_graphical_terrain_state;
+
+static void external_graphical_terrain_destroy(external_graphical_terrain_state* state)
+{
+    if (state == NULL)
+    {
+        return;
+    }
+    henka_terrain_render_runtime_destroy(state->render);
+    henka_scene_destroy(state->scene);
+    henka_terrain_world_destroy(state->world);
+    henka_free(state->samples);
+    state->render = NULL;
+    state->scene = NULL;
+    state->world = NULL;
+    state->samples = NULL;
+}
+
+static henka_result external_graphical_terrain_initialize(
+    henka_engine* engine,
+    void* user_data)
+{
+    external_graphical_terrain_state* state = (external_graphical_terrain_state*)user_data;
+    henka_terrain_world_desc world_desc = henka_terrain_world_desc_default();
+    henka_terrain_layout layout = {0};
+    henka_camera camera;
+    henka_terrain_render_desc render_desc;
+    size_t index;
+    if (engine == NULL || state == NULL ||
+        henka_terrain_world_desc_get_layout(&world_desc, &layout) != HENKA_SUCCESS ||
+        henka_scene_create(&state->scene) != HENKA_SUCCESS)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    world_desc.max_resident_regions = 1U;
+    world_desc.max_resident_chunks = 1U;
+    if (henka_terrain_world_create(&world_desc, &state->world) != HENKA_SUCCESS)
+    {
+        external_graphical_terrain_destroy(state);
+        return HENKA_ERROR_OUT_OF_MEMORY;
+    }
+    state->samples = henka_calloc(layout.samples_per_region, sizeof(*state->samples));
+    if (state->samples == NULL)
+    {
+        external_graphical_terrain_destroy(state);
+        return HENKA_ERROR_OUT_OF_MEMORY;
+    }
+    for (index = 0U; index < layout.samples_per_region; ++index)
+    {
+        state->samples[index].height_millimeters = 900 + (int32_t)((index * 17U) % 300U);
+        state->samples[index].material_weights[0] = 180U;
+        state->samples[index].material_weights[1] = 40U;
+        state->samples[index].material_weights[2] = 25U;
+        state->samples[index].material_weights[3] = 10U;
+        (void)henka_terrain_normalize_weights(state->samples[index].material_weights);
+    }
+    if (henka_terrain_world_apply_region_snapshot(
+            state->world,
+            (henka_terrain_region_storage_info){{0, 0}, 1U, 1U},
+            state->samples,
+            layout.samples_per_region) != HENKA_SUCCESS ||
+        henka_terrain_world_set_region_residency(
+            state->world, (henka_terrain_region_id){0, 0}, false, true, false) != HENKA_SUCCESS)
+    {
+        external_graphical_terrain_destroy(state);
+        return HENKA_ERROR_UNKNOWN;
+    }
+    camera = henka_camera_create_perspective(1.0f, 4.0f / 3.0f, 0.1f, 500.0f);
+    camera.position = (henka_vec3){32.0f, 28.0f, 72.0f};
+    if (!henka_camera_look_at(&camera, (henka_vec3){32.0f, 1.5f, 32.0f}) ||
+        henka_scene_set_camera(state->scene, &camera) != HENKA_SUCCESS)
+    {
+        external_graphical_terrain_destroy(state);
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    henka_scene_set_light_direction(state->scene, (henka_vec3){-0.4f, -1.0f, -0.2f});
+    henka_scene_set_light_intensity(state->scene, 3.0f);
+    render_desc = henka_terrain_render_desc_default();
+    render_desc.max_resident_chunks = 1U;
+    render_desc.max_pending_requests = 2U;
+    if (henka_terrain_render_runtime_create(
+            engine, state->scene, state->world, &render_desc, &state->render) != HENKA_SUCCESS ||
+        henka_terrain_render_runtime_update_observer(state->render, camera.position) != HENKA_SUCCESS ||
+        henka_terrain_render_runtime_pump(state->render, 1U) != HENKA_SUCCESS ||
+        henka_engine_set_scene(engine, state->scene) != HENKA_SUCCESS ||
+        henka_engine_set_viewport_shading_mode(engine, HENKA_VIEWPORT_SHADING_RENDERED) != HENKA_SUCCESS)
+    {
+        external_graphical_terrain_destroy(state);
+        return HENKA_ERROR_RENDERER;
+    }
+    state->start_frame = henka_engine_get_frame_index(engine);
+    return HENKA_SUCCESS;
+}
+
+static void external_graphical_terrain_update(
+    henka_engine* engine,
+    double delta_seconds,
+    void* user_data)
+{
+    external_graphical_terrain_state* state = (external_graphical_terrain_state*)user_data;
+    henka_terrain_render_stats render_stats;
+    henka_engine_diagnostics diagnostics;
+    (void)delta_seconds;
+    if (engine == NULL || state == NULL || state->render == NULL ||
+        henka_terrain_render_runtime_update_observer(
+            state->render, (henka_vec3){32.0f, 28.0f, 72.0f}) != HENKA_SUCCESS ||
+        henka_terrain_render_runtime_pump(state->render, 1U) != HENKA_SUCCESS)
+    {
+        henka_engine_request_exit(engine);
+        return;
+    }
+    if (henka_engine_get_frame_index(engine) < state->start_frame + 4U)
+    {
+        return;
+    }
+    state->success =
+        henka_terrain_render_runtime_get_stats(state->render, &render_stats) == HENKA_SUCCESS &&
+        henka_engine_get_diagnostics(engine, &diagnostics) == HENKA_SUCCESS &&
+        render_stats.resident_chunks == 1U &&
+        render_stats.rebuilt_chunks >= 1U &&
+        diagnostics.rendered_hdr_ready &&
+        diagnostics.rendered_shadow_ready &&
+        diagnostics.rendered_scene_draw_calls > 0U &&
+        diagnostics.rendered_scene_visible_entities > 0U;
+    henka_engine_request_exit(engine);
+}
+
+static void external_graphical_terrain_shutdown(
+    henka_engine* engine,
+    void* user_data)
+{
+    (void)engine;
+    external_graphical_terrain_destroy((external_graphical_terrain_state*)user_data);
+}
+
+static bool external_graphical_terrain_workflow(void)
+{
+    external_graphical_terrain_state state = {0};
+    henka_engine_config config = {0};
+    henka_engine* engine = NULL;
+    henka_result result;
+    config.application_name = "Henka External Terrain Consumer";
+    config.window_width = 640;
+    config.window_height = 480;
+    config.user_data_base_path = "external_graphical_user_data";
+    config.package_mode = HENKA_PACKAGE_MODE_DEVELOPMENT;
+    config.on_initialize = external_graphical_terrain_initialize;
+    config.on_update = external_graphical_terrain_update;
+    config.on_shutdown = external_graphical_terrain_shutdown;
+    config.user_data = &state;
+    result = henka_engine_create(&config, &engine);
+    if (result == HENKA_SUCCESS)
+    {
+        result = henka_engine_run(engine);
+    }
+    henka_engine_destroy(engine);
+    return result == HENKA_SUCCESS && state.success;
+}
+
 static bool external_terrain_workflow(void)
 {
     const henka_terrain_region_id region_id = {0, 0};
@@ -189,5 +356,10 @@ cleanup:
 
 int main(void)
 {
-    return external_terrain_workflow() ? 0 : 1;
+    if (!external_terrain_workflow() || !external_graphical_terrain_workflow())
+    {
+        return 1;
+    }
+    printf("External Terrain graphical Rendered path passed.\n");
+    return 0;
 }

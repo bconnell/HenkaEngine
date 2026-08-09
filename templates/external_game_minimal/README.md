@@ -31,8 +31,10 @@ cmake --build build --config Debug
 The executable is also a bounded Terrain consumer smoke test. It uses only
 public C17 APIs to validate the shared four-layer Terrain material contract,
 deterministic raise and paint commands, collision raycast, CPU render-mesh
-rebuild, transactional region save, and restart reload. A passing run prints
-the Terrain workflow marker; it does not depend on Sandbox source.
+rebuild, transactional region save, and restart reload. It then creates an
+engine/scene/camera and public Terrain render owner, runs the normal Rendered
+path, and requires a visible draw with HDR and shadow diagnostics. A passing
+run prints both Terrain workflow markers; it does not depend on Sandbox source.
 
 ## Template notes
 
@@ -42,7 +44,7 @@ the Terrain workflow marker; it does not depend on Sandbox source.
 - `.gitignore` ignores local build and user data output.
 - The template turns off Henka example and test targets so your game build stays focused on the engine library plus your own project.
 - This template is generic on purpose. It does not include story, characters, or game-specific content.
-- The smoke path validates CPU render data. A graphical game should create its
-  own `henka_engine`/`henka_scene` and pass its validated material to the public
+- The graphical smoke uses only `henka_engine`, `henka_scene`, and the public
   Terrain render owner; renderer-private types are not part of this template's
-  contract.
+  contract. CMake copies the generic shader fixtures from the selected engine
+  checkout beside the validation executable so the smoke is self-contained.

@@ -45,9 +45,11 @@ The template under `templates/external_game_minimal/` shows one way to do that.
 Its executable is a bounded public-API Terrain consumer smoke test: it
 validates the shared four-layer material contract, deterministic raise/paint,
 collision raycast, CPU render-mesh rebuild, transactional save, and restart
-reload without including Sandbox source. This proves the reusable runtime
-path; an actual graphical game still owns its engine window, scene, camera,
-and Rendered presentation.
+reload without including Sandbox source. It then creates a real engine window,
+scene, camera, and Terrain render owner through public APIs, runs the normal
+Rendered path, and requires a visible draw plus HDR/shadow diagnostics. The
+consuming game still owns its window, scene, camera, and presentation policy;
+the template proves that Terrain can cross that public graphical boundary.
 
 To validate that template against the current Henka checkout from this repository, run:
 
