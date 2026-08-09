@@ -14,6 +14,13 @@ The sandbox also saves a small local settings file so wireframe, grid visibility
 It now also includes small in-window developer panels for inspection and settings tasks.
 The docked workspace opens in `View` mode with no selected scene object so the controls are visible while most of the scene stays open.
 
+For a bounded non-interactive streaming check, run
+`henka_sandbox3d.exe --terrain-stream-stress`. It seeds or reuses four
+procedural regions in the local `terrain-sandbox-v2` data root, crosses from
+region `(0,0)` to `(1,0)` and back, verifies the returned rendered chunk, and
+reports request failures and resident-region capacity. This is a small runtime
+foundation check, not broad-world streaming or human visual approval.
+
 ## Controls
 
 - `W A S D`: move across the scene

@@ -793,6 +793,21 @@ if ($NonInteractive) {
     }
 
     Write-Output "[pass] Deterministic packaged startup smoke test completed."
+
+    Write-Step "Running bounded packaged Terrain stream stress"
+    $terrainStreamStress = Invoke-HenkaNativeCapture `
+        -FilePath $packagedExe `
+        -Arguments @("--terrain-stream-stress") `
+        -WorkingDirectory $packageRoot `
+        -Label "Run packaged Terrain stream stress"
+
+    if ($terrainStreamStress.Stdout -notmatch "Terrain stream stress: seeded=2x2 crossed=\(0,0\)->\(1,0\)->\(0,0\)" -or
+        $terrainStreamStress.Stdout -notmatch "failed=0" -or
+        $terrainStreamStress.Stdout -notmatch "render-return=valid" -or
+        $terrainStreamStress.Stdout -notmatch "Sandbox smoke test completed\.") {
+        throw "The packaged Terrain stream stress did not prove the bounded camera crossing contract."
+    }
+    Write-Output "[pass] Bounded packaged Terrain stream stress completed."
     return
 }
 

@@ -325,11 +325,14 @@ henka_enable_project_warnings(henka_tests)
 add_test(NAME henka_tests COMMAND henka_tests)
 endif()
 
-# Tests use repository-relative bounded fixtures under build/test_tmp. Keep
-# CTest's working directory stable across single-test and full-suite runs;
-# otherwise CTest's default per-target directory creates a second fixture tree
-# and can make persistent network/storage tests depend on stale generated data.
+# Tests use bounded fixtures under build/test_tmp relative to this test
+# working directory. Keep
+# CTest's working directory stable across single-test and full-suite runs, but
+# isolate it from the repository root so repeated validation does not reuse a
+# stale generated journal from an unrelated invocation.
 get_property(HENKA_TEST_NAMES DIRECTORY PROPERTY TESTS)
 if(HENKA_TEST_NAMES)
-    set_tests_properties(${HENKA_TEST_NAMES} PROPERTIES WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}")
+    set(HENKA_TEST_WORKING_DIRECTORY "${CMAKE_BINARY_DIR}/test-runtime")
+    file(MAKE_DIRECTORY "${HENKA_TEST_WORKING_DIRECTORY}")
+    set_tests_properties(${HENKA_TEST_NAMES} PROPERTIES WORKING_DIRECTORY "${HENKA_TEST_WORKING_DIRECTORY}")
 endif()

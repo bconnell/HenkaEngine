@@ -104,6 +104,12 @@ The package script creates:
 - `out/HenkaSandbox3D/docs/help/sandbox3d.md`
 - `out/HenkaSandbox3D/PACKAGE_INFO.txt`
 
+The packaged executable also accepts `--terrain-stream-stress`. It uses the
+same public Sandbox path to seed and cross the bounded 2x2 Terrain fixture,
+then returns to the original rendered region and reports request failures and
+resident-region capacity. This is a runtime streaming foundation check, not a
+claim of broad-world streaming or automatic background regeneration.
+
 ## Capture same-camera shading evidence
 
 After a Debug build, the application-only capture helper records the same

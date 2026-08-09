@@ -274,18 +274,19 @@ failure, verifies the previous mesh and revision remain resident, then restores
 residency and proves replacement recovery; this is bounded failure-injection
 coverage, not complete stress or visual QA.
 
-The Sandbox reference scene now creates one deterministic bounded region,
-marks it render-resident, and lets this owner discover its bounded chunk
-working set from the active camera. On a new storage root, the fixture contains
-rolling ground, a valley, a steep ridge/cliff, and continuous grass/dirt/rock/
-wet four-layer weights; persisted worlds retain their committed samples. The
-same camera feeds the public streaming observer; under the existing one-region
-user-data policy, crossing a region releases the old clean region and requests
-the new current region with a bounded one-region unload hysteresis. It pumps at
-most two render replacements per frame and reports the stream queue in the
-Terrain utility. This is runtime integration coverage, not a claim of human
-visual approval or a claim that background physics/render regeneration is
-complete.
+The Sandbox reference scene seeds four deterministic regions in a persistent
+`terrain-sandbox-v2` storage root, marks the initial region render-resident, and
+lets this owner discover its bounded chunk working set from the active camera.
+The fixture contains rolling ground, a valley, a steep ridge/cliff, and
+continuous grass/dirt/rock/wet four-layer weights; existing committed samples
+are retained. The same camera feeds the public streaming observer under a
+four-region CPU budget. The opt-in Windows `--terrain-stream-stress` path
+crosses `(0,0) -> (1,0) -> (0,0)`, waits only through bounded worker/render
+queues, checks rendered chunk return and zero failed requests, and reports the
+resident-region bound. Normal movement remains observer-driven and pumps at
+most two render replacements per frame. This proves a small persistent camera
+crossing fixture, not broad-world regeneration, asynchronous background
+physics/render regeneration, or human visual approval.
 The Utility Terrain
 tab now exposes bounded resident/render/collision statistics and raise, lower,
 flatten, smooth, and paint controls with radius, strength, layer, and falloff
@@ -304,7 +305,7 @@ sample center for the next raise, lower, flatten, smooth, or paint command;
 nonresident terrain is not invented and a miss leaves the previous command
 center unchanged. This is an editor/runtime command bridge, not network
 authority. The same utility opens a user-data-local
-`terrain-sandbox` storage root, recovers or loads region `(0,0)` at startup,
+`terrain-sandbox-v2` storage root, recovers or loads region `(0,0)` at startup,
 and exposes transactional Save and committed-journal Compact actions; failed
 saves leave the live world unchanged because storage owns the transaction.
 Reload uses a bounded temporary decode, then rebuilds the physics patch and
