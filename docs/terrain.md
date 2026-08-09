@@ -141,9 +141,13 @@ answers bilinear height and finite normal queries with source identity. The
 rigid-body API additionally exposes a static heightfield collider whose signed
 millimeter source is copied into the body. Sphere and axis-aligned box
 contacts, terrain normals, layer/mask filtering, bounded heightfield raycasts,
-and transactional replacement are implemented. Terrain edits still need an
-owner-level regeneration scheduler to turn dirty resident chunks into collision
-replacements automatically.
+and transactional replacement are implemented. The renderer-free
+`<henka/terrain_collision_runtime.h>` owner provides a fixed-capacity,
+coalescing rebuild queue: the runtime thread builds full-resolution patches for
+physics-resident chunks and replaces the durable physics representation only
+after the candidate succeeds. A failed rebuild leaves the last valid patch in
+place. It does not yet infer every dirty neighbor or perform background
+regeneration automatically; callers enqueue the affected chunks explicitly.
 
 `<henka/terrain_mesh.h>` provides the corresponding renderer-independent
 geometry boundary. `henka_terrain_mesh_build_chunk` requires a render-resident
