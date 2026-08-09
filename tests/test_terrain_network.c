@@ -41,6 +41,18 @@ static int test_request_and_response_codecs(void)
     {
         return 0;
     }
+    for (size_t truncated_size = 0U; truncated_size < size; ++truncated_size)
+    {
+        if (henka_terrain_edit_request_decode(
+                buffer, truncated_size, &decoded_request) == HENKA_SUCCESS)
+        {
+            return 0;
+        }
+    }
+    if (henka_terrain_edit_request_encode(&request, buffer, sizeof(buffer), &size) != HENKA_SUCCESS)
+    {
+        return 0;
+    }
     buffer[48] = 255U;
     if (henka_terrain_edit_request_decode(buffer, size, &decoded_request) == HENKA_SUCCESS)
     {
@@ -109,6 +121,14 @@ static int test_request_and_response_codecs(void)
         {
             return 0;
         }
+        for (size_t truncated_size = 0U; truncated_size < size; ++truncated_size)
+        {
+            if (henka_terrain_snapshot_fragment_decode(
+                    buffer, truncated_size, &decoded_snapshot_fragment) == HENKA_SUCCESS)
+            {
+                return 0;
+            }
+        }
     }
     session_info.world_identity = 11U;
     session_info.base_asset_identity = 22U;
@@ -122,6 +142,18 @@ static int test_request_and_response_codecs(void)
         decoded_session_info.regions[0].region_id.z != 3 ||
         decoded_session_info.regions[0].revision != 8U ||
         decoded_session_info.regions[0].generation != 9U)
+    {
+        return 0;
+    }
+    for (size_t truncated_size = 0U; truncated_size < size; ++truncated_size)
+    {
+        if (henka_terrain_session_info_decode(
+                buffer, truncated_size, &decoded_session_info) == HENKA_SUCCESS)
+        {
+            return 0;
+        }
+    }
+    if (henka_terrain_session_info_encode(&session_info, buffer, sizeof(buffer), &size) != HENKA_SUCCESS)
     {
         return 0;
     }
@@ -151,6 +183,14 @@ static int test_request_and_response_codecs(void)
         decoded_recovery_request.target_revision != 8U)
     {
         return 0;
+    }
+    for (size_t truncated_size = 0U; truncated_size < size; ++truncated_size)
+    {
+        if (henka_terrain_delta_recovery_request_decode(
+                buffer, truncated_size, &decoded_recovery_request) == HENKA_SUCCESS)
+        {
+            return 0;
+        }
     }
     buffer[40U] = 1U;
     if (henka_terrain_delta_recovery_request_decode(
