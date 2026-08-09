@@ -67,10 +67,13 @@ The C17 `templates/external_server_minimal` project links only
 `-NoLocalProviders` to verify the normal network-capable pinned ENet fallback.
 
 Run `scripts/test_terrain_process_integration_windows.ps1` for the bounded
-two-process Terrain authority check. It launches the dedicated server and two
-independent runtime-only clients, proves one accepted and one stale edit,
-waits for clean duration shutdown, and restarts the server against the same
-save root to verify the next committed revision.
+multi-process Terrain authority check. It launches the dedicated server and two
+independent runtime-only clients, proves one accepted and one stale edit, adds
+a late observer and compares its resident-region checksum with the accepted
+client, reconnects another client after an accepted edit, and restarts the
+server against the same save root to verify the committed revision and checksum
+are restored exactly. The check remains bounded session-info/relevance coverage;
+it is not application authentication or a production multiplayer soak.
 
 ## Run tests
 

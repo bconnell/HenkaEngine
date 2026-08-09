@@ -85,10 +85,11 @@ shutdown, and two consecutive save-root runs with revision recovery. The
 runtime also sends a bounded connect-time Terrain session-info message that
 identifies the world/base and advertises up to 16 resident regions for client
 snapshot bootstrap. The runtime client recovery test additionally covers a
-forced disconnect, explicit reconnect, and replacement of the authoritative
-server wrapper on the same endpoint with exact resident-sample convergence.
-This does not claim application authentication, relevance-driven reconnect or
-late-join orchestration, or production multiplayer soak coverage.
+forced disconnect, explicit reconnect, replacement of the authoritative server
+wrapper on the same endpoint, a late observer, and exact resident-sample
+checksum convergence. This does not claim application authentication,
+relevance-driven reconnect or late-join selection, or production multiplayer
+soak coverage.
 
 The server retains a fixed 64-entry authoritative Terrain delta history per
 server process. A connected client may request a bounded regional revision

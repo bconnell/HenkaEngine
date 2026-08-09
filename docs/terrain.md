@@ -164,8 +164,10 @@ client session adapter owns the
 bounded fragment assembly through `<henka/terrain_replica.h>`; a delta gap
 first requests the retained revision range and uses a snapshot when that
 range is unavailable. Connect-time session info can request the same bounded
-snapshot path for up to 16 advertised resident regions; relevance-driven
-reconnect and late-join selection remain outside this bounded policy.
+snapshot path for up to 16 advertised resident regions. The Windows process
+harness exercises that bounded late-observer path, explicit client reconnect,
+and restart checksum convergence; relevance-driven reconnect and late-join
+selection remain outside this bounded policy.
 
 `<henka/terrain_replica.h>` is the bounded client-side state owner consumed by
 `<henka/terrain_client.h>`. It applies a delta only when every affected region advances

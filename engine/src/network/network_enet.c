@@ -206,29 +206,46 @@ henka_result henka_network_transport_reconnect(
     henka_network_transport* transport)
 {
     ENetAddress address;
-    ENetPeer* peer;
+    ENetHost* replacement_host;
+    ENetPeer* replacement_peer;
     uint32_t index;
     if (transport == NULL || transport->server_mode || transport->host == NULL)
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
-    for (index = 0U; index < transport->peer_capacity; ++index)
+
+    /*
+     * Rebuild the bounded client host before retiring the old one. Reusing the
+     * old host can leave a queued disconnect event referring to the old peer;
+     * if the peer record is reused first, that stale event can clear the new
+     * connection. Destroying the old host also discards its event queue.
+     */
+    replacement_host = enet_host_create(NULL, transport->peer_capacity, 3U, 0U, 0U);
+    if (replacement_host == NULL)
     {
-        if (transport->peers[index].peer != NULL)
-        {
-            enet_peer_disconnect_now(transport->peers[index].peer, 0U);
-        }
-        transport->peers[index] = (henka_network_peer_record){0};
+        return HENKA_ERROR_PLATFORM;
     }
-    transport->diagnostics.connected_peer_count = 0U;
     address = (ENetAddress){0};
     address.port = transport->endpoint.port;
     if (enet_address_set_host(&address, transport->endpoint.host) != 0)
     {
+        enet_host_destroy(replacement_host);
         return HENKA_ERROR_PLATFORM;
     }
-    peer = enet_host_connect(transport->host, &address, 3U, 0U);
-    return peer == NULL ? HENKA_ERROR_PLATFORM : HENKA_SUCCESS;
+    replacement_peer = enet_host_connect(replacement_host, &address, 3U, 0U);
+    if (replacement_peer == NULL)
+    {
+        enet_host_destroy(replacement_host);
+        return HENKA_ERROR_PLATFORM;
+    }
+    enet_host_destroy(transport->host);
+    transport->host = replacement_host;
+    for (index = 0U; index < transport->peer_capacity; ++index)
+    {
+        transport->peers[index] = (henka_network_peer_record){0};
+    }
+    transport->diagnostics.connected_peer_count = 0U;
+    return HENKA_SUCCESS;
 }
 
 henka_result henka_network_transport_poll(
