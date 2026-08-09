@@ -59,6 +59,26 @@ static int test_transactional_patch_ownership_and_sampling(void)
             goto cleanup;
         }
     }
+    if (henka_terrain_physics_raycast(
+            physics,
+            (henka_ray){{0.0F, 10.0F, 0.0F}, {0.0F, -1.0F, 0.0F}},
+            20.0F,
+            &hit) != HENKA_SUCCESS ||
+        !hit.hit || fabsf(hit.distance - 8.0F) > 0.01F ||
+        fabsf(hit.position.y - 2.0F) > 0.01F || hit.revision != 5U ||
+        henka_terrain_physics_raycast(
+            physics,
+            (henka_ray){{100.0F, 10.0F, 3.5F}, {0.0F, -1.0F, 0.0F}},
+            20.0F,
+            &hit) != HENKA_SUCCESS || hit.hit ||
+        henka_terrain_physics_raycast(
+            physics,
+            (henka_ray){{0.0F, 10.0F, 0.0F}, {0.0F, 0.0F, 0.0F}},
+            20.0F,
+            &hit) != HENKA_ERROR_INVALID_ARGUMENT)
+    {
+        goto cleanup;
+    }
     result = 1;
 
 cleanup:

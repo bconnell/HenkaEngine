@@ -166,6 +166,10 @@ owner can reject stale regeneration work. `<henka/terrain_physics.h>` provides
 that bounded owner: it copies each patch transactionally, retains at most the
 configured patch count, chooses overlapping patches in stable slot order, and
 answers bilinear height and finite normal queries with source identity. The
+`henka_terrain_physics_raycast` API adds a bounded allocation-free traversal
+over those resident patches, with normalized ray distance, hit position, and
+source identity; a miss is reported without inventing terrain outside the
+resident physics set. The
 rigid-body API additionally exposes a static heightfield collider whose signed
 millimeter source is copied into the body. Sphere and axis-aligned box
 contacts, terrain normals, layer/mask filtering, bounded heightfield raycasts,

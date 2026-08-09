@@ -4,10 +4,12 @@
 #include <stdbool.h>
 #include <stdint.h>
 
+#include <henka/camera.h>
 #include <henka/math.h>
 #include <henka/terrain_collision.h>
 
 #define HENKA_TERRAIN_PHYSICS_MAX_PATCHES 64U
+#define HENKA_TERRAIN_PHYSICS_MAX_RAY_STEPS 32768U
 
 typedef struct henka_terrain_physics henka_terrain_physics;
 
@@ -30,6 +32,8 @@ typedef struct henka_terrain_physics_hit
     henka_terrain_chunk_id chunk_id;
     henka_terrain_revision revision;
     henka_terrain_generation generation;
+    float distance;
+    henka_vec3 position;
     float height_meters;
     henka_vec3 normal;
 } henka_terrain_physics_hit;
@@ -59,6 +63,12 @@ henka_result henka_terrain_physics_sample(
     henka_terrain_physics* physics,
     float world_x_meters,
     float world_z_meters,
+    henka_terrain_physics_hit* out_hit);
+/* Bounded ray query over currently resident physics patches. */
+henka_result henka_terrain_physics_raycast(
+    henka_terrain_physics* physics,
+    henka_ray ray,
+    float max_distance,
     henka_terrain_physics_hit* out_hit);
 void henka_terrain_physics_get_stats(
     const henka_terrain_physics* physics,

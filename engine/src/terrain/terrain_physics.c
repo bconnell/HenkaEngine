@@ -257,6 +257,125 @@ henka_result henka_terrain_physics_sample(
     return HENKA_SUCCESS;
 }
 
+henka_result henka_terrain_physics_raycast(
+    henka_terrain_physics* physics,
+    henka_ray ray,
+    float max_distance,
+    henka_terrain_physics_hit* out_hit)
+{
+    float direction_length;
+    henka_vec3 direction;
+    float step_distance = 0.5F;
+    bool previous_valid = false;
+    float previous_distance = 0.0F;
+    uint32_t step;
+
+    if (physics == NULL || out_hit == NULL || !isfinite(max_distance) ||
+        max_distance <= 0.0F || !isfinite(ray.origin.x) || !isfinite(ray.origin.y) ||
+        !isfinite(ray.origin.z) || !isfinite(ray.direction.x) ||
+        !isfinite(ray.direction.y) || !isfinite(ray.direction.z))
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    direction_length = sqrtf(
+        ray.direction.x * ray.direction.x +
+        ray.direction.y * ray.direction.y +
+        ray.direction.z * ray.direction.z);
+    if (!isfinite(direction_length) || direction_length <= 0.0F)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    direction = (henka_vec3){
+        ray.direction.x / direction_length,
+        ray.direction.y / direction_length,
+        ray.direction.z / direction_length};
+    *out_hit = (henka_terrain_physics_hit){0};
+
+    for (step = 0U; step <= HENKA_TERRAIN_PHYSICS_MAX_RAY_STEPS; ++step)
+    {
+        float distance = (float)step * step_distance;
+        henka_vec3 position;
+        henka_terrain_physics_hit sample_hit;
+        henka_result result;
+        if (distance > max_distance)
+        {
+            distance = max_distance;
+        }
+        position = (henka_vec3){
+            ray.origin.x + direction.x * distance,
+            ray.origin.y + direction.y * distance,
+            ray.origin.z + direction.z * distance};
+        result = henka_terrain_physics_sample(physics, position.x, position.z, &sample_hit);
+        if (result != HENKA_SUCCESS)
+        {
+            return result;
+        }
+        if (!sample_hit.hit)
+        {
+            previous_valid = false;
+        }
+        else if (position.y <= sample_hit.height_meters)
+        {
+            float low = previous_valid ? previous_distance : distance;
+            float high = distance;
+            uint32_t refinement;
+            if (!previous_valid)
+            {
+                *out_hit = sample_hit;
+                out_hit->distance = distance;
+                out_hit->position = position;
+                return HENKA_SUCCESS;
+            }
+            for (refinement = 0U; refinement < 8U; ++refinement)
+            {
+                float middle = (low + high) * 0.5F;
+                henka_vec3 middle_position = {
+                    ray.origin.x + direction.x * middle,
+                    ray.origin.y + direction.y * middle,
+                    ray.origin.z + direction.z * middle};
+                henka_terrain_physics_hit middle_hit;
+                result = henka_terrain_physics_sample(
+                    physics, middle_position.x, middle_position.z, &middle_hit);
+                if (result != HENKA_SUCCESS)
+                {
+                    return result;
+                }
+                if (middle_hit.hit && middle_position.y > middle_hit.height_meters)
+                {
+                    low = middle;
+                }
+                else
+                {
+                    high = middle;
+                }
+            }
+            position = (henka_vec3){
+                ray.origin.x + direction.x * high,
+                ray.origin.y + direction.y * high,
+                ray.origin.z + direction.z * high};
+            result = henka_terrain_physics_sample(physics, position.x, position.z, out_hit);
+            if (result != HENKA_SUCCESS)
+            {
+                return result;
+            }
+            if (!out_hit->hit)
+            {
+                *out_hit = sample_hit;
+            }
+            out_hit->distance = high;
+            out_hit->position = position;
+            return HENKA_SUCCESS;
+        }
+        previous_valid = true;
+        previous_distance = distance;
+        if (distance >= max_distance)
+        {
+            break;
+        }
+    }
+    return HENKA_SUCCESS;
+}
+
 void henka_terrain_physics_get_stats(
     const henka_terrain_physics* physics,
     henka_terrain_physics_stats* out_stats)
