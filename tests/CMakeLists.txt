@@ -280,6 +280,7 @@ add_executable(henka_tests
     ../examples/sandbox3d/asset_browser_tools.c
     ../examples/sandbox3d/interaction_tools.c
     ../examples/sandbox3d/physics_tools.c
+    ../examples/sandbox3d/studio_environment.c
     ../examples/sandbox3d/workspace_tools.c
     test_action.c
     test_assets.c

@@ -6,6 +6,7 @@ add_executable(henka_sandbox3d
     object_details_tools.c
     interaction_tools.c
     physics_tools.c
+    studio_environment.c
     workspace_tools.c
     main.c
 )

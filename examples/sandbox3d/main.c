@@ -23,6 +23,7 @@
 #include "object_details_tools.h"
 #include "interaction_tools.h"
 #include "physics_tools.h"
+#include "studio_environment.h"
 #include "workspace_tools.h"
 
 typedef enum sandbox3d_object_kind
@@ -15375,18 +15376,22 @@ static henka_result sandbox3d_initialize(henka_engine* engine, void* user_data)
     }
 
     {
-        static const float studio_environment_pixels[] =
-        {
-            0.08f, 0.11f, 0.18f, 1.0f,  0.22f, 0.30f, 0.52f, 1.0f,
-            1.5f,  1.2f,  0.85f, 1.0f,  0.35f, 0.48f, 0.78f, 1.0f,
-            0.06f, 0.08f, 0.12f, 1.0f,  0.12f, 0.16f, 0.24f, 1.0f,
-            0.04f, 0.05f, 0.07f, 1.0f,  0.07f, 0.09f, 0.14f, 1.0f
-        };
+        float studio_environment_pixels[SANDBOX3D_STUDIO_ENVIRONMENT_PIXEL_COUNT];
         henka_texture_descriptor environment_descriptor = henka_texture_descriptor_default_data();
+        sandbox3d_generate_studio_environment(
+            studio_environment_pixels,
+            SANDBOX3D_STUDIO_ENVIRONMENT_PIXEL_COUNT);
+        if (!sandbox3d_studio_environment_is_valid(
+                studio_environment_pixels,
+                SANDBOX3D_STUDIO_ENVIRONMENT_PIXEL_COUNT))
+        {
+            result = HENKA_ERROR_INVALID_ARGUMENT;
+            goto fail;
+        }
         result = henka_texture_create_from_rgba32f_with_descriptor(
             engine,
-            4,
-            2,
+            SANDBOX3D_STUDIO_ENVIRONMENT_WIDTH,
+            SANDBOX3D_STUDIO_ENVIRONMENT_HEIGHT,
             studio_environment_pixels,
             &environment_descriptor,
             &state->environment_texture);
@@ -15831,7 +15836,7 @@ static henka_result sandbox3d_initialize(henka_engine* engine, void* user_data)
     grid_material.name = "Debug Grid";
     grid_material.type = HENKA_MATERIAL_TYPE_UNLIT;
     grid_material.shader = state->grid_shader;
-    grid_material.base_color = (henka_vec4){0.24f, 0.46f, 0.62f, 0.82f};
+    grid_material.base_color = (henka_vec4){0.10f, 0.14f, 0.19f, 1.0f};
     grid_material.use_texture = false;
     grid_material.use_lighting = false;
 

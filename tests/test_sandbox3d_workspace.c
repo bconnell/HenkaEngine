@@ -5,10 +5,12 @@
 #include <string.h>
 
 #include "../examples/sandbox3d/interaction_tools.h"
+#include "../examples/sandbox3d/studio_environment.h"
 #include "../examples/sandbox3d/workspace_tools.h"
 
 void henka_test_sandbox3d_workspace(void)
 {
+    float studio_environment[SANDBOX3D_STUDIO_ENVIRONMENT_PIXEL_COUNT];
     const sandbox3d_workspace_panel* panel;
     henka_ui_rect ownership[2];
     henka_ui_rect rect;
@@ -31,6 +33,16 @@ void henka_test_sandbox3d_workspace(void)
     henka_ui_rect left_splitter;
     henka_ui_rect right_splitter;
     henka_ui_rect visual_splitter;
+
+    sandbox3d_generate_studio_environment(
+        studio_environment,
+        SANDBOX3D_STUDIO_ENVIRONMENT_PIXEL_COUNT);
+    HENKA_TEST_ASSERT(sandbox3d_studio_environment_is_valid(
+        studio_environment,
+        SANDBOX3D_STUDIO_ENVIRONMENT_PIXEL_COUNT));
+    HENKA_TEST_ASSERT(!sandbox3d_studio_environment_is_valid(
+        studio_environment,
+        SANDBOX3D_STUDIO_ENVIRONMENT_PIXEL_COUNT - 1U));
 
     left_splitter = sandbox3d_workspace_left_splitter_rect(
         (henka_ui_rect){0.0f, 0.0f, 200.0f, 720.0f},

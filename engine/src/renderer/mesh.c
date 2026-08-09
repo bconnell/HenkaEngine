@@ -362,11 +362,12 @@ henka_result henka_mesh_create_plane(henka_engine* engine, float width, float de
     vertices[2] = (henka_vertex){{ half_width, 0.0f,  half_depth}, {0.0f, 1.0f, 0.0f}, {1.0f, 1.0f}};
     vertices[3] = (henka_vertex){{-half_width, 0.0f,  half_depth}, {0.0f, 1.0f, 0.0f}, {0.0f, 1.0f}};
 
+    /* Keep the front face above the plane aligned with the +Y normals. */
     indices[0] = 0U;
-    indices[1] = 1U;
+    indices[1] = 3U;
     indices[2] = 2U;
     indices[3] = 2U;
-    indices[4] = 3U;
+    indices[4] = 1U;
     indices[5] = 0U;
 
     return henka_renderer_create_mesh_from_data(

@@ -5169,7 +5169,8 @@ henka_result henka_opengl_renderer_draw_scene(
         editor_surface =
             !helper_entity &&
             henka_renderer_get_viewport_shading_mode(
-                renderer) <= HENKA_VIEWPORT_SHADING_SOLID;
+                renderer) <= HENKA_VIEWPORT_SHADING_SOLID &&
+            mesh_data->primitive_mode != GL_LINES;
         if (editor_surface)
         {
             shader_data = &state->viewport_shader_data;
