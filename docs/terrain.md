@@ -56,9 +56,10 @@ movement hysteresis. Loaded regions now synchronize physics/render residency
 flags from the observer radius union. A stream descriptor may also provide a
 bounded region generator for missing (but not corrupt) snapshots; it runs on
 the worker, receives only the immutable world/layout description and one
-caller-owned sample buffer, and publishes revision/generation one only after
-the main-thread snapshot swap. Persisted regions always win over the
-generator, and generator failures remain failed requests. Renderer mesh and
+caller-owned sample buffer, validates every generated sample's normalized
+255-weight invariant, and publishes revision/generation one only after the
+main-thread snapshot swap. Persisted regions always win over the generator,
+and callback or validation failures remain failed requests. Renderer mesh and
 physics patch regeneration remain caller-owned asynchronous presentation work.
 The graphical
 render owner reports high-water pending-request, resident-chunk, and

@@ -64,6 +64,33 @@ struct henka_terrain_streamer
     HANDLE worker;
 };
 
+static bool henka_terrain_stream_generated_samples_valid(
+    const henka_terrain_sample* samples,
+    size_t sample_count)
+{
+    size_t index;
+    if (samples == NULL || sample_count == 0U)
+    {
+        return false;
+    }
+    for (index = 0U; index < sample_count; ++index)
+    {
+        uint32_t total = 0U;
+        uint32_t material_index;
+        for (material_index = 0U;
+             material_index < HENKA_TERRAIN_ACTIVE_MATERIAL_COUNT;
+             ++material_index)
+        {
+            total += samples[index].material_weights[material_index];
+        }
+        if (total != 255U)
+        {
+            return false;
+        }
+    }
+    return true;
+}
+
 static bool henka_terrain_stream_region_equal(
     henka_terrain_region_id left,
     henka_terrain_region_id right)
@@ -409,8 +436,16 @@ static DWORD WINAPI henka_terrain_stream_worker(void* argument)
                 streamer->world->layout.samples_per_region);
             if (result == HENKA_SUCCESS)
             {
-                info = (henka_terrain_region_storage_info){request.region_id, 1U, 1U};
-                generated = true;
+                if (!henka_terrain_stream_generated_samples_valid(
+                        samples, streamer->world->layout.samples_per_region))
+                {
+                    result = HENKA_ERROR_INVALID_ARGUMENT;
+                }
+                else
+                {
+                    info = (henka_terrain_region_storage_info){request.region_id, 1U, 1U};
+                    generated = true;
+                }
             }
         }
 

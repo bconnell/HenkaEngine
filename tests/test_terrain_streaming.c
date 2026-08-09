@@ -1,4 +1,5 @@
 #include <stdint.h>
+#include <string.h>
 
 #if defined(_WIN32)
 #include <windows.h>
@@ -13,6 +14,7 @@ typedef struct test_region_generator_state
     uint32_t calls;
     size_t sample_count;
     bool contract_valid;
+    bool emit_invalid_weights;
 } test_region_generator_state;
 
 static henka_result test_generate_region(
@@ -36,9 +38,13 @@ static henka_result test_generate_region(
     state->contract_valid = true;
     for (index = 0U; index < sample_count; ++index)
     {
-        samples[index] = (henka_terrain_sample){
-            1000 + region_id.x * 10 + region_id.z,
-            {255U, 0U, 0U, 0U}};
+        samples[index].height_millimeters = 1000 + region_id.x * 10 + region_id.z;
+        memset(samples[index].material_weights, 0, sizeof(samples[index].material_weights));
+        samples[index].material_weights[0] = state->emit_invalid_weights ? 1U : 255U;
+        if (state->emit_invalid_weights)
+        {
+            samples[index].material_weights[1] = 1U;
+        }
     }
     return HENKA_SUCCESS;
 }
@@ -537,6 +543,34 @@ static int test_missing_region_uses_bounded_generator(void)
             world, (henka_terrain_region_id){5, 6}, &samples, &sample_count) != HENKA_SUCCESS ||
         sample_count != layout.samples_per_region || samples[0].height_millimeters != 1056 ||
         samples[0].material_weights[0] != 255U)
+    {
+        goto cleanup;
+    }
+    generator_state.emit_invalid_weights = true;
+    if (henka_terrain_streamer_request_region(
+            streamer, (henka_terrain_region_id){7, 7}) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    for (index = 0U; index < 400U; ++index)
+    {
+        henka_terrain_streamer_get_stats(streamer, &stats);
+        if (stats.failed_request_count == 1U)
+        {
+            break;
+        }
+        if (henka_terrain_streamer_pump(streamer, 1U) != HENKA_SUCCESS)
+        {
+            goto cleanup;
+        }
+#if defined(_WIN32)
+        Sleep(1U);
+#endif
+    }
+    if (stats.failed_request_count != 1U || stats.generator_failure_count != 1U ||
+        stats.generated_region_count != 1U ||
+        henka_terrain_world_get_region_state(
+            world, (henka_terrain_region_id){7, 7}, &region_state) == HENKA_SUCCESS)
     {
         goto cleanup;
     }
