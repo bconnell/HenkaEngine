@@ -14299,10 +14299,12 @@ static void sandbox3d_draw_utility_panel(
             snprintf(
                 row_value,
                 sizeof(row_value),
-                "%u regions / %u chunks / q%u",
+                "%u regions / %u chunks / q%u g%llu f%llu",
                 terrain_world_stats.resident_region_count,
                 terrain_world_stats.resident_chunk_count,
-                terrain_stream_stats.queued_request_count);
+                terrain_stream_stats.queued_request_count,
+                (unsigned long long)terrain_stream_stats.generated_region_count,
+                (unsigned long long)terrain_stream_stats.generator_failure_count);
             sandbox3d_draw_value_row(state->ui, x_left, y_start + 18.0f, panel_bounds.width - 28.0f, "Resident", row_value);
             snprintf(
                 row_value,
@@ -18257,11 +18259,13 @@ static void sandbox3d_update(henka_engine* engine, double delta_seconds, void* u
         else
         {
             printf(
-                "Terrain streaming diagnostics: observers=%u queued=%u completed=%llu failed=%llu.\n",
+                "Terrain streaming diagnostics: observers=%u queued=%u completed=%llu failed=%llu generated=%llu generator-failed=%llu.\n",
                 terrain_stream_stats.observer_count,
                 terrain_stream_stats.queued_request_count,
                 (unsigned long long)terrain_stream_stats.completed_request_count,
-                (unsigned long long)terrain_stream_stats.failed_request_count);
+                (unsigned long long)terrain_stream_stats.failed_request_count,
+                (unsigned long long)terrain_stream_stats.generated_region_count,
+                (unsigned long long)terrain_stream_stats.generator_failure_count);
         }
         if (henka_terrain_render_runtime_get_chunk(
                 state->terrain_render, (henka_terrain_chunk_id){0, 0}, &terrain_chunk_info) != HENKA_SUCCESS ||
