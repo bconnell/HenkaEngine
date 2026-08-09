@@ -173,7 +173,15 @@ static henka_result henka_terrain_client_handle_session_info(
     }
     for (index = 0U; index < info.region_count; ++index)
     {
+        henka_terrain_region_state state;
         henka_terrain_snapshot_request request;
+        if (henka_terrain_world_get_region_state(
+                client->world, info.regions[index].region_id, &state) == HENKA_SUCCESS &&
+            state.revision == info.regions[index].revision &&
+            state.generation == info.regions[index].generation)
+        {
+            continue;
+        }
         request = (henka_terrain_snapshot_request){
             desc.world_identity,
             desc.base_asset_identity,
