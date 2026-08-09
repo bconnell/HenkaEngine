@@ -290,12 +290,13 @@ The fixture contains rolling ground, a valley, a steep ridge/cliff, and
 continuous grass/dirt/rock/wet four-layer weights; existing committed samples
 are retained. The same camera feeds the public streaming observer under a
 four-region CPU budget. The opt-in Windows `--terrain-stream-stress` path
-crosses `(0,0) -> (1,0) -> (0,0)`, waits only through bounded worker/render
-queues, checks rendered chunk return and zero failed requests, and reports the
-resident-region bound. Normal movement remains observer-driven and pumps at
-most two render replacements per frame. This proves a small persistent camera
-crossing fixture, not broad-world regeneration, asynchronous background
-physics/render regeneration, or human visual approval.
+crosses `(0,0) -> (1,0) -> (1,1) -> (0,0)`, waits only through bounded
+worker/render queues, checks rendered and collision chunk return at both axes,
+and reports the resident-region bound. Normal movement remains
+observer-driven and pumps at most two render replacements per frame. This
+proves a small persistent camera crossing fixture, not broad-world
+regeneration, asynchronous background physics/render regeneration, or human
+visual approval.
 The Utility Terrain
 tab now exposes bounded resident/render/collision statistics and raise, lower,
 flatten, smooth, and paint controls with radius, strength, layer, and falloff

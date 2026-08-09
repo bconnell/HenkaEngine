@@ -17059,7 +17059,9 @@ static henka_result sandbox3d_run_terrain_stream_stress(
     henka_result render_result;
     uint32_t index;
     bool crossed = false;
+    bool diagonal_crossed = false;
     bool collision_crossed = false;
+    bool collision_diagonal = false;
     bool collision_returned = false;
 
     if (state == NULL || state->terrain_world == NULL ||
@@ -17153,6 +17155,68 @@ static henka_result sandbox3d_run_terrain_stream_stress(
         return HENKA_ERROR_UNKNOWN;
     }
 
+    state->camera.position = (henka_vec3){
+        (float)world_desc.region_edge_meters + 32.0f,
+        2.4f,
+        (float)world_desc.region_edge_meters + 32.0f};
+    for (index = 0U; index < 128U; ++index)
+    {
+        stream_result = sandbox3d_update_terrain_streaming(state);
+        render_result = stream_result == HENKA_SUCCESS
+            ? henka_terrain_render_runtime_update_observer(
+                state->terrain_render, state->camera.position)
+            : stream_result;
+        if (stream_result != HENKA_SUCCESS || render_result != HENKA_SUCCESS ||
+            henka_terrain_render_runtime_pump(state->terrain_render, 16U) != HENKA_SUCCESS)
+        {
+            printf(
+                "Terrain stream stress diagonal update failed: stream=%s render=%s.\n",
+                henka_result_to_string(stream_result),
+                henka_result_to_string(render_result));
+            fflush(stdout);
+            return HENKA_ERROR_UNKNOWN;
+        }
+        if (henka_terrain_world_get_region_state(
+                state->terrain_world, (henka_terrain_region_id){1, 1}, &region_state) == HENKA_SUCCESS &&
+            region_state.cpu_resident && region_state.render_resident &&
+            henka_terrain_render_runtime_get_chunk(
+                state->terrain_render, (henka_terrain_chunk_id){8, 8}, &chunk_info) == HENKA_SUCCESS)
+        {
+            diagonal_crossed = true;
+            break;
+        }
+#if defined(_WIN32)
+        Sleep(1U);
+#endif
+    }
+    if (!diagonal_crossed || region_state.revision != 1U || region_state.generation != 1U)
+    {
+        printf(
+            "Terrain stream stress diagonal rejected: crossed=%s rev=%llu gen=%llu.\n",
+            diagonal_crossed ? "yes" : "no",
+            (unsigned long long)region_state.revision,
+            (unsigned long long)region_state.generation);
+        fflush(stdout);
+        return HENKA_ERROR_UNKNOWN;
+    }
+    if (sandbox3d_refresh_terrain_collision_chunk(
+            state, (henka_terrain_chunk_id){8, 8}) == HENKA_SUCCESS)
+    {
+        henka_terrain_physics_hit collision_hit = {0};
+        collision_diagonal = henka_terrain_physics_sample(
+            state->terrain_physics,
+            (float)world_desc.region_edge_meters + 32.0f,
+            (float)world_desc.region_edge_meters + 32.0f,
+            &collision_hit) == HENKA_SUCCESS &&
+            collision_hit.hit && isfinite(collision_hit.position.y);
+    }
+    if (!collision_diagonal)
+    {
+        printf("Terrain stream stress diagonal collision was not resident.\n");
+        fflush(stdout);
+        return HENKA_ERROR_UNKNOWN;
+    }
+
     state->camera.position = (henka_vec3){32.0f, 2.4f, 32.0f};
     for (index = 0U; index < 64U; ++index)
     {
@@ -17236,6 +17300,7 @@ static henka_result sandbox3d_run_terrain_stream_stress(
         world_stats.resident_region_count > world_stats.max_resident_regions ||
         world_stats.max_resident_regions != 4U ||
         !region_state.cpu_resident || !region_state.render_resident ||
+        !diagonal_crossed || !collision_diagonal ||
         !collision_crossed || !collision_returned)
     {
         printf(
@@ -17251,7 +17316,7 @@ static henka_result sandbox3d_run_terrain_stream_stress(
         return HENKA_ERROR_UNKNOWN;
     }
     printf(
-        "Terrain stream stress: seeded=2x2 crossed=(0,0)->(1,0)->(0,0) completed=%llu failed=%llu resident-regions=%u/%u render-return=valid collision-return=valid.\n",
+        "Terrain stream stress: seeded=2x2 crossed=(0,0)->(1,0)->(1,1)->(0,0) completed=%llu failed=%llu resident-regions=%u/%u render-return=valid diagonal-render-return=valid collision-return=valid diagonal-collision-return=valid.\n",
         (unsigned long long)stream_stats.completed_request_count,
         (unsigned long long)stream_stats.failed_request_count,
         world_stats.resident_region_count,
