@@ -105,7 +105,9 @@ render regeneration remain separate work.
 
 The dedicated server recovers complete journal transactions before opening its
 network endpoint and loads an existing reserved region snapshot into the live
-world. Its bounded smoke mode also exercises a loopback client and commits a
+world. When `--world` is supplied, the path is opened as a validated read-only
+Terrain storage root and requires `region_0_0.htr`; the runtime save root is
+loaded afterward so committed runtime edits override the base region. Its bounded smoke mode also exercises a loopback client and commits a
 deterministic edit when the save root is empty, allowing the packaged restart
 check to verify that the same revision is restored. This does not replace a
 multi-process multiplayer soak or reconnect/late-join policy.

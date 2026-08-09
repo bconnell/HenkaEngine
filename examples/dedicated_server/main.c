@@ -567,6 +567,7 @@ int main(int argc, char** argv)
     henka_scene* scene = NULL;
     henka_physics_world* physics = NULL;
     henka_terrain_world* terrain_world = NULL;
+    henka_terrain_storage* base_terrain_storage = NULL;
     henka_terrain_storage* terrain_storage = NULL;
     henka_terrain_server* terrain_server = NULL;
     henka_terrain_streamer* terrain_streamer = NULL;
@@ -615,6 +616,62 @@ int main(int argc, char** argv)
         fprintf(stderr, "terrain runtime initialization failed\n");
         exit_code = 4;
         goto shutdown;
+    }
+    {
+        henka_terrain_layout layout;
+        henka_terrain_sample* samples = NULL;
+        henka_terrain_region_storage_info info;
+        if (henka_terrain_world_desc_get_layout(&terrain_world_desc, &layout) != HENKA_SUCCESS)
+        {
+            exit_code = 4;
+            goto shutdown;
+        }
+        samples = henka_calloc(layout.samples_per_region, sizeof(*samples));
+        if (samples == NULL)
+        {
+            exit_code = 4;
+            goto shutdown;
+        }
+        if (henka_terrain_storage_load_region(
+                terrain_storage, (henka_terrain_region_id){0, 0}, &info,
+                samples, layout.samples_per_region) == HENKA_SUCCESS &&
+            henka_terrain_world_apply_region_snapshot(
+                terrain_world, info, samples, layout.samples_per_region) != HENKA_SUCCESS)
+        {
+            henka_free(samples);
+            exit_code = 4;
+            goto shutdown;
+        }
+        henka_free(samples);
+    }
+    if (options.has_world_path)
+    {
+        henka_terrain_layout layout;
+        henka_terrain_sample* samples = NULL;
+        henka_terrain_region_storage_info info;
+        if (henka_terrain_storage_create(
+                &terrain_world_desc, options.world_path, &base_terrain_storage) != HENKA_SUCCESS ||
+            henka_terrain_storage_recover(base_terrain_storage) != HENKA_SUCCESS ||
+            henka_terrain_world_desc_get_layout(&terrain_world_desc, &layout) != HENKA_SUCCESS)
+        {
+            fprintf(stderr, "base Terrain world could not be opened or recovered\n");
+            exit_code = 4;
+            goto shutdown;
+        }
+        samples = henka_calloc(layout.samples_per_region, sizeof(*samples));
+        if (samples == NULL ||
+            henka_terrain_storage_load_region(
+                base_terrain_storage, (henka_terrain_region_id){0, 0}, &info,
+                samples, layout.samples_per_region) != HENKA_SUCCESS ||
+            henka_terrain_world_apply_region_snapshot(
+                terrain_world, info, samples, layout.samples_per_region) != HENKA_SUCCESS)
+        {
+            henka_free(samples);
+            fprintf(stderr, "base Terrain world has no valid region (0,0)\n");
+            exit_code = 4;
+            goto shutdown;
+        }
+        henka_free(samples);
     }
     {
         henka_terrain_layout layout;
@@ -818,6 +875,7 @@ shutdown:
     henka_terrain_streamer_destroy(terrain_streamer);
     henka_terrain_physics_destroy(terrain_physics);
     henka_network_server_destroy(network);
+    henka_terrain_storage_destroy(base_terrain_storage);
     henka_terrain_storage_destroy(terrain_storage);
     henka_terrain_world_destroy(terrain_world);
     henka_physics_world_destroy(physics);

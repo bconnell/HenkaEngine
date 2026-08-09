@@ -37,6 +37,12 @@ Command-line values override the optional `key=value` configuration file.
 Paths are confined by the Terrain storage layer and should normally be kept
 relative to the server working directory or package directory.
 
+When `--world` is supplied, it is a read-only base Terrain storage root using
+the Terrain v1 region format. Startup recovers that root and requires a valid
+`region_0_0.htr` before binding the server. The loaded base region is copied
+into the runtime world; accepted edits are written to `--save-root`. The base
+root and save root should be separate directories.
+
 The bounded `--smoke` mode initializes the shared runtime, recovers committed
 Terrain snapshots, binds a local ENet endpoint, connects an in-process client,
 round-trips a ping, commits one deterministic Terrain edit when the save root
