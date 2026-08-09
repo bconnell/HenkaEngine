@@ -224,7 +224,11 @@ removes patches when their regions leave physics residency; the physics owner's
 patch capacity is the hard admission bound. `henka_terrain_collision_runtime_request_edit`
 derives the accepted edit footprint plus one chunk of physics-neighbor coverage,
 and the Terrain server session can borrow that queue to schedule it after
-authority acceptance. Callers still own the pump cadence.
+authority acceptance. The Sandbox graphical path owns this runtime beside the
+physics world: camera residency sync, local sculpt/paint edits, and region
+reloads use the queue and bounded pump, so edits crossing chunk boundaries do
+not silently refresh only the fixture's first chunk. Callers still own the pump
+cadence.
 
 `<henka/terrain_mesh.h>` provides the corresponding renderer-independent
 geometry boundary. `henka_terrain_mesh_build_chunk` requires a render-resident

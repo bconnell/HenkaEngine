@@ -245,6 +245,9 @@ The Utility Diagnostics panel includes the active shading/exposure row plus curr
 The Utility Terrain tab reports bounded resident/render/collision statistics and
 provides raise, lower, flatten, smooth, and paint buttons. Brush radius,
 strength, material layer, and falloff controls feed the same deterministic
-Terrain command API used by runtime edits. The current reference controls use
-a fixed repeatable sample center; viewport ray-picking, saved brush state, and
-complete material-layer preview are not yet claimed.
+Terrain command API used by runtime edits. Height edits use the bounded
+collision-runtime queue for the full edit footprint plus neighbor coverage;
+paint-only edits do not rebuild collision. The automated smoke path uses a fixed
+repeatable sample center; normal editor use can place the brush from viewport
+Terrain ray-picking. Saved brush state is available, while complete
+material-layer preview is not yet claimed.

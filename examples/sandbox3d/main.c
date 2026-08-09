@@ -330,6 +330,7 @@ typedef struct sandbox3d_state
     henka_terrain_streamer* terrain_streamer;
     henka_terrain_render_runtime* terrain_render;
     henka_terrain_physics* terrain_physics;
+    henka_terrain_collision_runtime* terrain_collision_runtime;
     uint32_t terrain_tool_radius_samples;
     uint8_t terrain_tool_strength;
     uint8_t terrain_tool_layer;
@@ -1621,6 +1622,16 @@ static henka_result sandbox3d_update_terrain_streaming(sandbox3d_state* state)
         henka_terrain_streamer_pump(state->terrain_streamer, 2U) != HENKA_SUCCESS)
     {
         return HENKA_ERROR_UNKNOWN;
+    }
+    if (state->terrain_collision_runtime != NULL)
+    {
+        if (henka_terrain_collision_runtime_sync_residency(
+                state->terrain_collision_runtime) != HENKA_SUCCESS ||
+            henka_terrain_collision_runtime_pump(
+                state->terrain_collision_runtime, 2U) != HENKA_SUCCESS)
+        {
+            return HENKA_ERROR_UNKNOWN;
+        }
     }
     return HENKA_SUCCESS;
 }
@@ -4494,8 +4505,19 @@ static henka_result sandbox3d_initialize_terrain_rendering(
 
     {
         henka_terrain_physics_desc physics_desc = henka_terrain_physics_desc_default();
+        henka_terrain_collision_runtime_desc collision_runtime_desc =
+            henka_terrain_collision_runtime_desc_default();
         physics_desc.max_patches = 4U;
         result = henka_terrain_physics_create(&physics_desc, &state->terrain_physics);
+        if (result == HENKA_SUCCESS)
+        {
+            collision_runtime_desc.max_pending_chunks = 16U;
+            result = henka_terrain_collision_runtime_create(
+                state->terrain_world,
+                state->terrain_physics,
+                &collision_runtime_desc,
+                &state->terrain_collision_runtime);
+        }
         if (result != HENKA_SUCCESS || sandbox3d_refresh_terrain_collision(state) != HENKA_SUCCESS)
         {
             result = result == HENKA_SUCCESS ? HENKA_ERROR_UNKNOWN : result;
@@ -4582,6 +4604,14 @@ static henka_result sandbox3d_refresh_terrain_collision_chunk(
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
+    if (state->terrain_collision_runtime != NULL)
+    {
+        result = henka_terrain_collision_runtime_request_chunk(
+            state->terrain_collision_runtime, chunk_id);
+        return result == HENKA_SUCCESS
+            ? henka_terrain_collision_runtime_pump(state->terrain_collision_runtime, 1U)
+            : result;
+    }
     result = henka_terrain_world_get_desc(state->terrain_world, &world_desc);
     if (result != HENKA_SUCCESS)
     {
@@ -4608,6 +4638,18 @@ static henka_result sandbox3d_refresh_terrain_collision_chunk(
 
 static henka_result sandbox3d_refresh_terrain_collision(sandbox3d_state* state)
 {
+    henka_result result;
+    if (state != NULL && state->terrain_collision_runtime != NULL)
+    {
+        result = henka_terrain_collision_runtime_sync_residency(
+            state->terrain_collision_runtime);
+        if (result == HENKA_SUCCESS)
+        {
+            result = henka_terrain_collision_runtime_pump(
+                state->terrain_collision_runtime, 16U);
+        }
+        return result;
+    }
     return sandbox3d_refresh_terrain_collision_chunk(
         state, (henka_terrain_chunk_id){0, 0});
 }
@@ -4835,7 +4877,20 @@ static henka_result sandbox3d_apply_terrain_tool_command(
         state->terrain_world, &command, region_state.revision + 1U);
     if (result == HENKA_SUCCESS)
     {
-        result = sandbox3d_refresh_terrain_collision(state);
+        if (state->terrain_collision_runtime != NULL)
+        {
+            result = henka_terrain_collision_runtime_request_edit(
+                state->terrain_collision_runtime, &command);
+            if (result == HENKA_SUCCESS)
+            {
+                result = henka_terrain_collision_runtime_pump(
+                    state->terrain_collision_runtime, 16U);
+            }
+        }
+        else
+        {
+            result = sandbox3d_refresh_terrain_collision(state);
+        }
     }
     if (result == HENKA_SUCCESS)
     {
@@ -4881,6 +4936,7 @@ static void sandbox3d_release_owned_resources(sandbox3d_state* state)
     henka_terrain_render_runtime_destroy(state->terrain_render);
     henka_terrain_streamer_destroy(state->terrain_streamer);
     henka_terrain_storage_destroy(state->terrain_storage);
+    henka_terrain_collision_runtime_destroy(state->terrain_collision_runtime);
     henka_terrain_physics_destroy(state->terrain_physics);
     henka_terrain_world_destroy(state->terrain_world);
     henka_mesh_destroy(state->gizmo_render.axis_mesh);
@@ -17398,6 +17454,7 @@ static void sandbox3d_update(henka_engine* engine, double delta_seconds, void* u
         henka_mesh* previous_terrain_mesh = NULL;
         henka_terrain_revision previous_terrain_revision = 0U;
         henka_terrain_render_stats terrain_render_stats = {0};
+        henka_terrain_collision_runtime_stats collision_runtime_stats = {0};
         henka_result terrain_result;
 
         command.client_nonce = 1U;
@@ -17412,7 +17469,20 @@ static void sandbox3d_update(henka_engine* engine, double delta_seconds, void* u
             2U);
         if (terrain_result == HENKA_SUCCESS)
         {
-            terrain_result = sandbox3d_refresh_terrain_collision(state);
+            if (state->terrain_collision_runtime != NULL)
+            {
+                terrain_result = henka_terrain_collision_runtime_request_edit(
+                    state->terrain_collision_runtime, &command);
+                if (terrain_result == HENKA_SUCCESS)
+                {
+                    terrain_result = henka_terrain_collision_runtime_pump(
+                        state->terrain_collision_runtime, 16U);
+                }
+            }
+            else
+            {
+                terrain_result = sandbox3d_refresh_terrain_collision(state);
+            }
         }
         if (terrain_result == HENKA_SUCCESS)
         {
@@ -17449,6 +17519,15 @@ static void sandbox3d_update(henka_engine* engine, double delta_seconds, void* u
                  !isfinite(terrain_bounds.extents.y) ||
                  terrain_bounds.extents.y <= 0.0f ||
                  terrain_bounds.extents.y >= 1000.0f))
+            {
+                terrain_result = HENKA_ERROR_UNKNOWN;
+            }
+        }
+        if (terrain_result == HENKA_SUCCESS && state->terrain_collision_runtime != NULL)
+        {
+            henka_terrain_collision_runtime_get_stats(
+                state->terrain_collision_runtime, &collision_runtime_stats);
+            if (collision_runtime_stats.rebuilt_count < 2U)
             {
                 terrain_result = HENKA_ERROR_UNKNOWN;
             }
@@ -17591,9 +17670,11 @@ static void sandbox3d_update(henka_engine* engine, double delta_seconds, void* u
         }
         else
         {
-            printf("Terrain edit: shared raise plus adaptive layer-%u paint rebuilt render revision %llu, collision patch, height bounds %.3fm +/- %.3fm, and preserved the prior mesh across a failed replacement.\n",
+            printf("Terrain edit: shared raise plus adaptive layer-%u paint rebuilt render revision %llu, collision queue rebuilt %llu patches (failed=%llu), height bounds %.3fm +/- %.3fm, and preserved the prior mesh across a failed replacement.\n",
                 (unsigned int)paint_layer,
                 (unsigned long long)chunk_info.revision,
+                (unsigned long long)collision_runtime_stats.rebuilt_count,
+                (unsigned long long)collision_runtime_stats.failed_count,
                 terrain_bounds.center.y,
                 terrain_bounds.extents.y);
             fflush(stdout);
