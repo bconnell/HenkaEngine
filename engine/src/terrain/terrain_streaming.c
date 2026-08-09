@@ -142,6 +142,60 @@ static bool henka_terrain_stream_region_retained(
     return false;
 }
 
+static bool henka_terrain_stream_region_within_any_observer_radius(
+    const henka_terrain_streamer* streamer,
+    henka_terrain_region_id region_id,
+    bool physics)
+{
+    uint32_t index;
+    for (index = 0U; index < streamer->observer_capacity; ++index)
+    {
+        const henka_terrain_stream_observer* observer = &streamer->observers[index];
+        uint32_t radius;
+        if (observer->id == 0U)
+        {
+            continue;
+        }
+        radius = physics ? observer->physics_radius_regions : observer->render_radius_regions;
+        if (henka_terrain_stream_region_within_observer(region_id, observer, radius))
+        {
+            return true;
+        }
+    }
+    return false;
+}
+
+static void henka_terrain_stream_sync_presentation_residency(
+    henka_terrain_streamer* streamer)
+{
+    uint32_t index;
+    for (index = 0U; index < streamer->world->desc.max_resident_regions; ++index)
+    {
+        henka_terrain_region_state state;
+        bool physics_resident;
+        bool render_resident;
+        if (!streamer->world->regions[index].active ||
+            henka_terrain_world_get_region_state(
+                streamer->world,
+                streamer->world->regions[index].state.id,
+                &state) != HENKA_SUCCESS)
+        {
+            continue;
+        }
+        physics_resident = henka_terrain_stream_region_within_any_observer_radius(
+            streamer, state.id, true);
+        render_resident = henka_terrain_stream_region_within_any_observer_radius(
+            streamer, state.id, false);
+        if (state.physics_resident != physics_resident ||
+            state.render_resident != render_resident)
+        {
+            (void)henka_terrain_world_set_region_residency(
+                streamer->world, state.id, physics_resident, render_resident,
+                state.pending_io);
+        }
+    }
+}
+
 static void henka_terrain_stream_reconcile_residency(henka_terrain_streamer* streamer)
 {
     henka_terrain_world_desc world_desc;
@@ -151,6 +205,7 @@ static void henka_terrain_stream_reconcile_residency(henka_terrain_streamer* str
     {
         return;
     }
+    henka_terrain_stream_sync_presentation_residency(streamer);
     for (z = 0U; z < world_desc.regions_down; ++z)
     {
         for (x = 0U; x < world_desc.regions_across; ++x)
@@ -458,7 +513,12 @@ henka_result henka_terrain_streamer_add_observer(
     henka_terrain_streamer* streamer,
     const henka_terrain_stream_observer* observer)
 {
-    return henka_terrain_streamer_store_observer(streamer, observer, false);
+    henka_result result = henka_terrain_streamer_store_observer(streamer, observer, false);
+    if (result != HENKA_SUCCESS)
+    {
+        return result;
+    }
+    return henka_terrain_streamer_update_observer(streamer, observer);
 }
 
 henka_result henka_terrain_streamer_update_observer(
@@ -474,6 +534,7 @@ henka_result henka_terrain_streamer_update_observer(
         return result;
     }
     henka_terrain_stream_reconcile_residency(streamer);
+    henka_terrain_stream_sync_presentation_residency(streamer);
     radius = (int32_t)observer->cpu_radius_regions;
     for (z = observer->center_region.z - radius; z <= observer->center_region.z + radius; ++z)
     {
@@ -556,6 +617,7 @@ henka_result henka_terrain_streamer_pump(
                 streamer->world, completion.info, completion.samples,
                 streamer->world->layout.samples_per_region) == HENKA_SUCCESS)
         {
+            henka_terrain_stream_sync_presentation_residency(streamer);
             EnterCriticalSection(&streamer->lock);
             ++streamer->completed_request_count;
             LeaveCriticalSection(&streamer->lock);

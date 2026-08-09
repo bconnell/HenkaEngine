@@ -16,8 +16,8 @@ static int test_streaming(void)
     henka_terrain_streamer* streamer = NULL;
     henka_terrain_stream_desc stream_desc = henka_terrain_stream_desc_default();
     henka_terrain_sample* samples = NULL;
-    henka_terrain_stream_observer observer = {1U, {2, 3}, 0U, 0U, 0U, 0U};
-    henka_terrain_stream_observer moved_observer = {1U, {4, 3}, 0U, 0U, 0U, 0U};
+    henka_terrain_stream_observer observer = {1U, {2, 3}, 0U, 1U, 1U, 0U};
+    henka_terrain_stream_observer moved_observer = {1U, {4, 3}, 0U, 1U, 1U, 0U};
     henka_terrain_stream_stats stats;
     henka_terrain_region_state region_state;
     uint32_t index;
@@ -74,7 +74,8 @@ static int test_streaming(void)
     if (stats.completed_request_count != 1U || stats.active_request_count != 0U ||
         henka_terrain_world_get_region_state(world, observer.center_region, &region_state) != HENKA_SUCCESS ||
         region_state.revision != 8U || region_state.generation != 2U ||
-        !region_state.cpu_resident)
+        !region_state.cpu_resident || !region_state.physics_resident ||
+        !region_state.render_resident)
     {
         goto cleanup;
     }

@@ -51,8 +51,9 @@ resident regions against the union of observer unload-radius squares. Regions
 outside that union are released deterministically in row-major order only when
 they have no physics/render residency, pending I/O, or dirty edits. A zero
 unload radius preserves the CPU radius; a larger unload radius provides bounded
-movement hysteresis. Physics/render radius ownership and asynchronous
-regeneration remain separate work.
+movement hysteresis. Loaded regions now synchronize physics/render residency
+flags from the observer radius union; renderer mesh and physics patch
+regeneration remain caller-owned asynchronous presentation work.
 
 ## Deterministic edits
 
