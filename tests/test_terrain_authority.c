@@ -68,6 +68,20 @@ static int test_authoritative_acceptance_and_stale_rejection(void)
         goto cleanup;
     }
     request.client_nonce = 78U;
+    request.world_identity ^= UINT64_C(1);
+    if (henka_terrain_authority_process_request(authority, 2U, &request, 1001U, &response) != HENKA_SUCCESS ||
+        response.accepted || response.rejection.reason != HENKA_TERRAIN_EDIT_REJECT_WORLD_MISMATCH)
+    {
+        goto cleanup;
+    }
+    request.world_identity = world_desc.world_identity;
+    request.base_asset_identity ^= UINT64_C(1);
+    if (henka_terrain_authority_process_request(authority, 2U, &request, 1001U, &response) != HENKA_SUCCESS ||
+        response.accepted || response.rejection.reason != HENKA_TERRAIN_EDIT_REJECT_BASE_MISMATCH)
+    {
+        goto cleanup;
+    }
+    request.base_asset_identity = world_desc.base_asset_identity;
     request.command.operation = HENKA_TERRAIN_EDIT_FLATTEN;
     if (henka_terrain_authority_process_request(authority, 2U, &request, 1001U, &response) != HENKA_SUCCESS ||
         response.accepted || response.rejection.reason != HENKA_TERRAIN_EDIT_REJECT_STALE_REVISION)
