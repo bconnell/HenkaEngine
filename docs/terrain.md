@@ -335,6 +335,14 @@ They must use this
 same world identity, region/chunk mapping, revision, and residency ownership;
 they must not introduce a second world-sized representation.
 
+The collision-runtime regression target also fills a deliberately undersized
+rebuild queue, verifies a rejected request is counted and can be admitted after
+capacity is reused, and verifies that a failed rebuild retains the last valid
+physics patch until a later retry succeeds. This is bounded queue-pressure and
+transactional-failure coverage; it does not claim broad runtime collision
+stress across an unbounded world or physics capacity beyond the configured
+patch limit.
+
 The headless `henka_terrain_workflow_tests` target exercises the runtime path
 without renderer dependencies: deterministic raise and paint commands change
 the authoritative region, a full-resolution collision patch follows the edit,

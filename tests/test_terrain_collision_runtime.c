@@ -95,6 +95,134 @@ cleanup:
     return result;
 }
 
+static int test_runtime_queue_saturation_recovers(void)
+{
+    henka_terrain_world_desc world_desc = henka_terrain_world_desc_default();
+    henka_terrain_world* world = NULL;
+    henka_terrain_physics* physics = NULL;
+    henka_terrain_collision_runtime* runtime = NULL;
+    henka_terrain_physics_desc physics_desc = {4U};
+    henka_terrain_collision_runtime_desc runtime_desc = {3U};
+    henka_terrain_collision_runtime_stats stats;
+    int result = 1;
+
+    world_desc.max_resident_regions = 1U;
+    if (henka_terrain_world_create(&world_desc, &world) != HENKA_SUCCESS ||
+        henka_terrain_world_reserve_region(world, (henka_terrain_region_id){0, 0}) != HENKA_SUCCESS ||
+        henka_terrain_world_set_region_residency(
+            world, (henka_terrain_region_id){0, 0}, true, true, false) != HENKA_SUCCESS ||
+        henka_terrain_physics_create(&physics_desc, &physics) != HENKA_SUCCESS ||
+        henka_terrain_collision_runtime_create(
+            world, physics, &runtime_desc, &runtime) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    if (henka_terrain_collision_runtime_request_chunk(
+            runtime, (henka_terrain_chunk_id){0, 0}) != HENKA_SUCCESS ||
+        henka_terrain_collision_runtime_request_chunk(
+            runtime, (henka_terrain_chunk_id){1, 0}) != HENKA_SUCCESS ||
+        henka_terrain_collision_runtime_request_chunk(
+            runtime, (henka_terrain_chunk_id){2, 0}) != HENKA_SUCCESS ||
+        henka_terrain_collision_runtime_request_chunk(
+            runtime, (henka_terrain_chunk_id){3, 0}) != HENKA_ERROR_LIMIT)
+    {
+        goto cleanup;
+    }
+    henka_terrain_collision_runtime_get_stats(runtime, &stats);
+    if (stats.pending_chunk_count != 3U || stats.max_pending_chunk_count != 3U ||
+        stats.queued_count != 3U || stats.dropped_count != 1U)
+    {
+        goto cleanup;
+    }
+    if (henka_terrain_collision_runtime_pump(runtime, 1U) != HENKA_SUCCESS ||
+        henka_terrain_collision_runtime_remove_chunk(
+            runtime, (henka_terrain_chunk_id){0, 0}) != HENKA_SUCCESS ||
+        henka_terrain_collision_runtime_request_chunk(
+            runtime, (henka_terrain_chunk_id){3, 0}) != HENKA_SUCCESS ||
+        henka_terrain_collision_runtime_pump(runtime, 3U) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    henka_terrain_collision_runtime_get_stats(runtime, &stats);
+    if (stats.pending_chunk_count != 0U || stats.queued_count != 4U ||
+        stats.rebuilt_count != 4U || stats.dropped_count != 1U)
+    {
+        goto cleanup;
+    }
+    result = 0;
+
+cleanup:
+    henka_terrain_collision_runtime_destroy(runtime);
+    henka_terrain_physics_destroy(physics);
+    henka_terrain_world_destroy(world);
+    return result;
+}
+
+static int test_runtime_failed_rebuild_retains_previous_patch(void)
+{
+    henka_terrain_world_desc world_desc = henka_terrain_world_desc_default();
+    henka_terrain_world* world = NULL;
+    henka_terrain_physics* physics = NULL;
+    henka_terrain_collision_runtime* runtime = NULL;
+    henka_terrain_physics_desc physics_desc = henka_terrain_physics_desc_default();
+    henka_terrain_collision_runtime_stats stats;
+    henka_terrain_physics_hit hit;
+    int result = 1;
+
+    world_desc.max_resident_regions = 1U;
+    if (henka_terrain_world_create(&world_desc, &world) != HENKA_SUCCESS ||
+        henka_terrain_world_reserve_region(world, (henka_terrain_region_id){0, 0}) != HENKA_SUCCESS ||
+        henka_terrain_world_set_region_residency(
+            world, (henka_terrain_region_id){0, 0}, true, true, false) != HENKA_SUCCESS ||
+        henka_terrain_physics_create(&physics_desc, &physics) != HENKA_SUCCESS ||
+        henka_terrain_collision_runtime_create(
+            world, physics, NULL, &runtime) != HENKA_SUCCESS ||
+        henka_terrain_collision_runtime_request_chunk(
+            runtime, (henka_terrain_chunk_id){0, 0}) != HENKA_SUCCESS ||
+        henka_terrain_collision_runtime_pump(runtime, 1U) != HENKA_SUCCESS ||
+        henka_terrain_physics_sample(physics, 1.0f, 1.0f, &hit) != HENKA_SUCCESS ||
+        !hit.hit || hit.height_meters != 0.0f)
+    {
+        goto cleanup;
+    }
+    if (henka_terrain_world_set_region_residency(
+            world, (henka_terrain_region_id){0, 0}, false, false, false) != HENKA_SUCCESS ||
+        henka_terrain_collision_runtime_request_chunk(
+            runtime, (henka_terrain_chunk_id){0, 0}) != HENKA_SUCCESS ||
+        henka_terrain_collision_runtime_pump(runtime, 1U) != HENKA_SUCCESS ||
+        henka_terrain_physics_sample(physics, 1.0f, 1.0f, &hit) != HENKA_SUCCESS ||
+        !hit.hit || hit.height_meters != 0.0f)
+    {
+        goto cleanup;
+    }
+    henka_terrain_collision_runtime_get_stats(runtime, &stats);
+    if (stats.failed_count != 1U || stats.rebuilt_count != 1U ||
+        stats.pending_chunk_count != 0U)
+    {
+        goto cleanup;
+    }
+    if (henka_terrain_world_set_region_residency(
+            world, (henka_terrain_region_id){0, 0}, true, true, false) != HENKA_SUCCESS ||
+        henka_terrain_collision_runtime_request_chunk(
+            runtime, (henka_terrain_chunk_id){0, 0}) != HENKA_SUCCESS ||
+        henka_terrain_collision_runtime_pump(runtime, 1U) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    henka_terrain_collision_runtime_get_stats(runtime, &stats);
+    if (stats.failed_count != 1U || stats.rebuilt_count != 2U)
+    {
+        goto cleanup;
+    }
+    result = 0;
+
+cleanup:
+    henka_terrain_collision_runtime_destroy(runtime);
+    henka_terrain_physics_destroy(physics);
+    henka_terrain_world_destroy(world);
+    return result;
+}
+
 int main(void)
 {
     henka_terrain_world_desc world_desc = henka_terrain_world_desc_default();
@@ -149,5 +277,7 @@ cleanup:
     henka_terrain_physics_destroy(physics);
     henka_terrain_world_destroy(world);
     return result || test_runtime_edit_discovers_neighbor_chunks() ||
-        test_runtime_syncs_physics_residency();
+        test_runtime_syncs_physics_residency() ||
+        test_runtime_queue_saturation_recovers() ||
+        test_runtime_failed_rebuild_retains_previous_patch();
 }
