@@ -105,11 +105,13 @@ those identities and requests snapshots for the advertised regions, so an
 empty client can enter through the same replica snapshot path used for
 recovery. This is a bounded late-join bootstrap, not a full application
 handshake, authentication layer, or relevance-based region selection; those
-remain subsequent integration work. The public client
-adapter can request a new transport connection; the connect-time session-info
-comparison then refreshes only missing or stale advertised regions. This is
-bounded reconnect recovery, not application authentication or
-relevance-driven world streaming.
+remain subsequent integration work. The public client adapter can request a
+new transport connection; the connect-time session-info comparison then
+refreshes only missing or stale advertised regions. The client recovery
+coverage also forces a server-directed disconnect and validates reconnect
+after replacing the authoritative server wrapper on the same endpoint, with
+exact resident sample convergence. This is bounded reconnect recovery, not
+application authentication or relevance-driven world streaming.
 
 For edit requests, the session lazily materializes missing persisted regions
 before authority validation, subject to the world's resident-region limit. It
@@ -136,7 +138,10 @@ retained history is sent as deltas, while an exhausted or incomplete range
 uses the existing transactional regional snapshot path.
 The connect-time session-info bootstrap covers only the bounded advertised
 resident set; broader reconnect and late-join orchestration remain subsequent
-work. `<henka/terrain_prediction.h>` owns a separate bounded presentation
+work. The recovery test covers one bounded resident set through forced
+disconnect, reconnect, and server-wrapper restart, but does not claim
+relevance-driven multi-region orchestration or multiplayer soak.
+`<henka/terrain_prediction.h>` owns a separate bounded presentation
 world for local commands: it copies CPU-resident authoritative regions, applies
 pending commands in submission order, and rebuilds from authoritative state
 when a command is accepted or rejected. The authoritative replica is never

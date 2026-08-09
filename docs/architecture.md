@@ -21,8 +21,9 @@ channels. The shared runtime privately pins ENet commit
 `5a9c537fd464b3c6d3c55e1d3bd47588faf71b42` under its MIT license and exposes
 only Henka host, peer, event, message, send, poll, disconnect, and diagnostic
 types. The transport foundation provides bounded reliable ordered localhost
-delivery; terrain authority, revision recovery, and multiplayer state remain
-subsequent work.
+delivery, server-directed disconnect, and client reconnect. Terrain authority
+and revision recovery are exercised through the bounded Terrain session
+adapter; relevance-driven multiplayer state and soak remain subsequent work.
 
 ## Modules
 

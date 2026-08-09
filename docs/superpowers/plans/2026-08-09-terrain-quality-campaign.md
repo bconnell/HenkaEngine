@@ -180,10 +180,10 @@
 - Modify: `scripts/test_terrain_process_integration_windows.ps1`
 - Modify: dedicated/server and external template docs
 
-- [ ] Add RED cases for corrupt snapshot, missing/duplicate fragments, disconnect/reconnect, late join, retry, world/base mismatch, and stale smooth/flatten.
+- [ ] Add RED cases for corrupt snapshot, missing/duplicate fragments, late join, retry, world/base mismatch, and stale smooth/flatten; the client regression now covers a forced server disconnect and explicit reconnect with exact resident-sample comparison.
 - [ ] Implement bounded retry/recovery state machines with truthful diagnostics and no partial publication.
-- [ ] Extend the two-client process harness to assert identity, revisions, paint weights, command IDs, disconnect/reconnect, late join, and restart byte convergence.
-- [ ] Validate external game/server templates and both packages; commit `feat: complete Terrain reconnect recovery`.
+- [ ] Extend the two-client process harness to assert identity, revisions, paint weights, command IDs, disconnect/reconnect, late join, and restart byte convergence; the single-client session regression now covers same-endpoint authoritative server-wrapper restart and exact resident-sample convergence.
+- [ ] Validate both packages and the remaining multiplayer harness; external game/server templates, full Debug build, CTest, Sandbox smoke, hygiene, and integrity passed in the published recovery slice.
 
 ### Task 9: Build the realism reference scene and bounded stress/failure matrix
 
