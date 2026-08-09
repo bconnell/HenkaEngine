@@ -312,6 +312,7 @@ typedef struct sandbox3d_state
     henka_shader* grid_shader;
     henka_texture* cube_texture;
     henka_texture* ground_texture;
+    henka_texture* terrain_layer_textures[HENKA_MATERIAL_TERRAIN_LAYER_COUNT];
     henka_texture* missing_texture;
     henka_texture* environment_texture;
     henka_texture* detail_normal_texture;
@@ -4284,21 +4285,73 @@ static henka_result sandbox3d_initialize_terrain_rendering(
     bool loaded_from_storage = false;
     char* storage_path = NULL;
     henka_material terrain_material;
-    henka_texture* terrain_ground_texture = NULL;
-    henka_texture* terrain_cube_texture = NULL;
-    henka_asset_manager* assets;
+    henka_texture_descriptor terrain_texture_descriptor;
+    unsigned char terrain_layer_pixels[HENKA_MATERIAL_TERRAIN_LAYER_COUNT][16U * 16U * 4U];
     henka_result result;
 
     if (engine == NULL || state == NULL || state->scene == NULL || state->basic_shader == NULL)
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
-    assets = henka_engine_get_asset_manager(engine);
-    if (assets == NULL ||
-        henka_assets_load_texture(assets, "assets/textures/ground_checker.png", &terrain_ground_texture) != HENKA_SUCCESS ||
-        henka_assets_load_texture(assets, "assets/textures/cube_albedo.png", &terrain_cube_texture) != HENKA_SUCCESS)
+    terrain_texture_descriptor = henka_texture_descriptor_default_color();
+    terrain_texture_descriptor.generate_mipmaps = true;
+    terrain_texture_descriptor.wrap_u = HENKA_TEXTURE_WRAP_REPEAT;
+    terrain_texture_descriptor.wrap_v = HENKA_TEXTURE_WRAP_REPEAT;
+    terrain_texture_descriptor.min_filter = HENKA_TEXTURE_FILTER_LINEAR_MIPMAP_LINEAR;
+    for (size_t layer_index = 0U;
+         layer_index < HENKA_MATERIAL_TERRAIN_LAYER_COUNT;
+         ++layer_index)
     {
-        return HENKA_ERROR_ASSET_SOURCE;
+        for (size_t tex_z = 0U; tex_z < 16U; ++tex_z)
+        {
+            for (size_t tex_x = 0U; tex_x < 16U; ++tex_x)
+            {
+                uint32_t noise = (uint32_t)(tex_x * 374761393U +
+                    tex_z * 668265263U + layer_index * 2246822519U);
+                int variation;
+                size_t pixel_offset = (tex_z * 16U + tex_x) * 4U;
+                noise ^= noise >> 13U;
+                noise *= 1274126177U;
+                noise ^= noise >> 16U;
+                variation = (int)(noise & 31U) - 16;
+                if (layer_index == 0U)
+                {
+                    terrain_layer_pixels[layer_index][pixel_offset + 0U] = (unsigned char)(68 + variation);
+                    terrain_layer_pixels[layer_index][pixel_offset + 1U] = (unsigned char)(102 + variation);
+                    terrain_layer_pixels[layer_index][pixel_offset + 2U] = (unsigned char)(38 + variation / 2);
+                }
+                else if (layer_index == 1U)
+                {
+                    terrain_layer_pixels[layer_index][pixel_offset + 0U] = (unsigned char)(116 + variation * 2);
+                    terrain_layer_pixels[layer_index][pixel_offset + 1U] = (unsigned char)(70 + variation);
+                    terrain_layer_pixels[layer_index][pixel_offset + 2U] = (unsigned char)(36 + variation / 2);
+                }
+                else if (layer_index == 2U)
+                {
+                    terrain_layer_pixels[layer_index][pixel_offset + 0U] = (unsigned char)(108 + variation * 2);
+                    terrain_layer_pixels[layer_index][pixel_offset + 1U] = (unsigned char)(112 + variation * 2);
+                    terrain_layer_pixels[layer_index][pixel_offset + 2U] = (unsigned char)(106 + variation * 2);
+                }
+                else
+                {
+                    terrain_layer_pixels[layer_index][pixel_offset + 0U] = (unsigned char)(42 + variation);
+                    terrain_layer_pixels[layer_index][pixel_offset + 1U] = (unsigned char)(72 + variation);
+                    terrain_layer_pixels[layer_index][pixel_offset + 2U] = (unsigned char)(64 + variation);
+                }
+                terrain_layer_pixels[layer_index][pixel_offset + 3U] = 255U;
+            }
+        }
+        result = henka_texture_create_from_rgba8_with_descriptor(
+            engine,
+            16,
+            16,
+            &terrain_layer_pixels[layer_index][0],
+            &terrain_texture_descriptor,
+            &state->terrain_layer_textures[layer_index]);
+        if (result != HENKA_SUCCESS)
+        {
+            goto fail;
+        }
     }
     world_desc.max_resident_regions = 4U;
     world_desc.max_resident_chunks = 256U;
@@ -4455,10 +4508,13 @@ static henka_result sandbox3d_initialize_terrain_rendering(
     terrain_material.shader = state->basic_shader;
     terrain_material.base_color = (henka_vec4){0.62f, 0.72f, 0.46f, 1.0f};
     terrain_material.roughness = 0.88f;
-    terrain_material.terrain_layers[0].base_color_texture = terrain_ground_texture;
-    terrain_material.terrain_layers[1].base_color_texture = terrain_ground_texture;
-    terrain_material.terrain_layers[2].base_color_texture = terrain_cube_texture;
-    terrain_material.terrain_layers[3].base_color_texture = terrain_cube_texture;
+    for (size_t layer_index = 0U;
+         layer_index < HENKA_MATERIAL_TERRAIN_LAYER_COUNT;
+         ++layer_index)
+    {
+        terrain_material.terrain_layers[layer_index].base_color_texture =
+            state->terrain_layer_textures[layer_index];
+    }
     render_desc.max_resident_chunks = 16U;
     render_desc.max_pending_requests = 16U;
     render_desc.material = terrain_material;
@@ -4837,6 +4893,13 @@ static void sandbox3d_release_owned_resources(sandbox3d_state* state)
     henka_physics_world_destroy(state->physics.world);
     henka_scene_destroy(state->scene);
     henka_texture_destroy(state->environment_texture);
+    for (int terrain_layer_index = 0;
+         terrain_layer_index < (int)HENKA_MATERIAL_TERRAIN_LAYER_COUNT;
+         ++terrain_layer_index)
+    {
+        henka_texture_destroy(state->terrain_layer_textures[terrain_layer_index]);
+        state->terrain_layer_textures[terrain_layer_index] = NULL;
+    }
     henka_texture_destroy(state->detail_normal_texture);
     henka_texture_destroy(state->macro_variation_texture);
     henka_texture_destroy(state->wood_grain_texture);
