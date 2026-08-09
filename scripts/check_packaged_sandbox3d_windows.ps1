@@ -723,8 +723,7 @@ foreach ($showcaseFile in @(
     "cheeky_giraffe.gltf",
     "cheeky_giraffe.bin",
     "original_realistic_rocket.gltf",
-    "original_realistic_rocket.bin",
-    "cube_albedo.png"
+    "original_realistic_rocket.bin"
 )) {
     Assert-PathExists -Path (Join-Path $showcaseModelsDir $showcaseFile) -Description "Packaged showcase asset $showcaseFile"
 }
