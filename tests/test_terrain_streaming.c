@@ -52,7 +52,10 @@ static int test_streaming(void)
         goto cleanup;
     }
     henka_terrain_streamer_get_stats(streamer, &stats);
-    if (stats.queued_request_count != 1U || stats.coalesced_request_count == 0U)
+    if (stats.queued_request_count != 1U ||
+        stats.max_queued_request_count < 1U ||
+        stats.max_observer_count < 1U ||
+        stats.coalesced_request_count == 0U)
     {
         goto cleanup;
     }
@@ -72,6 +75,7 @@ static int test_streaming(void)
 #endif
     }
     if (stats.completed_request_count != 1U || stats.active_request_count != 0U ||
+        stats.max_active_request_count > 1U || stats.max_completion_count == 0U ||
         henka_terrain_world_get_region_state(world, observer.center_region, &region_state) != HENKA_SUCCESS ||
         region_state.revision != 8U || region_state.generation != 2U ||
         !region_state.cpu_resident || !region_state.physics_resident ||

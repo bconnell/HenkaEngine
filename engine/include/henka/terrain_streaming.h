@@ -35,6 +35,10 @@ typedef struct henka_terrain_stream_stats
     uint32_t active_request_count;
     uint32_t completion_count;
     uint32_t observer_count;
+    uint32_t max_queued_request_count;
+    uint32_t max_active_request_count;
+    uint32_t max_completion_count;
+    uint32_t max_observer_count;
     uint64_t coalesced_request_count;
     uint64_t completed_request_count;
     uint64_t failed_request_count;

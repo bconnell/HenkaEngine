@@ -38,6 +38,10 @@ struct henka_terrain_streamer
     uint32_t active_request_count;
     uint32_t completion_count;
     uint32_t observer_count;
+    uint32_t max_queued_request_count;
+    uint32_t max_active_request_count;
+    uint32_t max_completion_count;
+    uint32_t max_observer_count;
     uint64_t next_sequence;
     uint64_t coalesced_request_count;
     uint64_t completed_request_count;
@@ -264,6 +268,10 @@ static DWORD WINAPI henka_terrain_stream_worker(void* argument)
         streamer->requests[request_index].active = false;
         --streamer->queued_request_count;
         streamer->active_request_count = 1U;
+        if (streamer->active_request_count > streamer->max_active_request_count)
+        {
+            streamer->max_active_request_count = streamer->active_request_count;
+        }
         streamer->active_region = request.region_id;
         streamer->active_region_valid = true;
         streamer->cancel_active = false;
@@ -304,6 +312,10 @@ static DWORD WINAPI henka_terrain_stream_worker(void* argument)
                 streamer->completions[completion_index].info = info;
                 streamer->completions[completion_index].samples = result == HENKA_SUCCESS ? samples : NULL;
                 ++streamer->completion_count;
+                if (streamer->completion_count > streamer->max_completion_count)
+                {
+                    streamer->max_completion_count = streamer->completion_count;
+                }
             }
         }
         WakeAllConditionVariable(&streamer->condition);
@@ -426,6 +438,10 @@ henka_result henka_terrain_streamer_request_region(
     }
     streamer->requests[index] = (henka_terrain_stream_request){true, region_id, streamer->next_sequence++};
     ++streamer->queued_request_count;
+    if (streamer->queued_request_count > streamer->max_queued_request_count)
+    {
+        streamer->max_queued_request_count = streamer->queued_request_count;
+    }
     WakeConditionVariable(&streamer->condition);
     LeaveCriticalSection(&streamer->lock);
     return HENKA_SUCCESS;
@@ -501,6 +517,10 @@ static henka_result henka_terrain_streamer_store_observer(
         {
             streamer->observers[index] = *observer;
             ++streamer->observer_count;
+            if (streamer->observer_count > streamer->max_observer_count)
+            {
+                streamer->max_observer_count = streamer->observer_count;
+            }
             LeaveCriticalSection(&streamer->lock);
             return HENKA_SUCCESS;
         }
@@ -646,17 +666,21 @@ void henka_terrain_streamer_get_stats(
     if (streamer != NULL)
     {
         EnterCriticalSection((CRITICAL_SECTION*)&streamer->lock);
-        *out_stats = (henka_terrain_stream_stats){
-            streamer->queued_request_count,
-            streamer->active_request_count,
-            streamer->completion_count,
-            streamer->observer_count,
-            streamer->coalesced_request_count,
-            streamer->completed_request_count,
-            streamer->failed_request_count,
-            streamer->cancelled_request_count,
-            streamer->dropped_completion_count,
-            streamer->evicted_region_count};
+        *out_stats = (henka_terrain_stream_stats){0};
+        out_stats->queued_request_count = streamer->queued_request_count;
+        out_stats->active_request_count = streamer->active_request_count;
+        out_stats->completion_count = streamer->completion_count;
+        out_stats->observer_count = streamer->observer_count;
+        out_stats->max_queued_request_count = streamer->max_queued_request_count;
+        out_stats->max_active_request_count = streamer->max_active_request_count;
+        out_stats->max_completion_count = streamer->max_completion_count;
+        out_stats->max_observer_count = streamer->max_observer_count;
+        out_stats->coalesced_request_count = streamer->coalesced_request_count;
+        out_stats->completed_request_count = streamer->completed_request_count;
+        out_stats->failed_request_count = streamer->failed_request_count;
+        out_stats->cancelled_request_count = streamer->cancelled_request_count;
+        out_stats->dropped_completion_count = streamer->dropped_completion_count;
+        out_stats->evicted_region_count = streamer->evicted_region_count;
         LeaveCriticalSection((CRITICAL_SECTION*)&streamer->lock);
     }
 }

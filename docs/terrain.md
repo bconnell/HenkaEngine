@@ -46,7 +46,8 @@ objects. The runtime thread pumps bounded completions and performs the
 authoritative sample/revision swap. Duplicate requests coalesce, queued or
 active requests can be cancelled, observer records are bounded, and queue,
 completion, failure, cancellation, and dropped-completion diagnostics are
-available. Observer updates request a bounded CPU-radius square and reconcile
+available, including current and high-water counts for queued requests,
+active work, completions, and observers. Observer updates request a bounded CPU-radius square and reconcile
 resident regions against the union of observer unload-radius squares. Regions
 outside that union are released deterministically in row-major order only when
 they have no physics/render residency, pending I/O, or dirty edits. A zero
