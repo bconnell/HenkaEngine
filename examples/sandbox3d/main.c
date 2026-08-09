@@ -198,11 +198,13 @@ typedef struct sandbox3d_interaction_diagnostics
     bool selected_entity_transform_locked;
     bool selected_bounds_valid;
     bool selected_highlight_active;
+    bool terrain_pick_valid;
     bool gizmo_model_valid;
     bool dragging;
     henka_vec2 window_mouse;
     henka_vec2 framebuffer_mouse;
     henka_vec2 viewport_local;
+    henka_terrain_physics_hit terrain_pick;
     henka_entity selected_entity;
     henka_entity drag_target_entity;
     size_t overlay_primitive_count;
@@ -606,6 +608,10 @@ static bool sandbox3d_try_get_mouse_viewport_local(
     henka_viewport viewport,
     henka_vec2* out_mouse_framebuffer,
     henka_vec2* out_mouse_local);
+static bool sandbox3d_try_pick_terrain(
+    const sandbox3d_state* state,
+    henka_ray ray,
+    henka_terrain_physics_hit* out_hit);
 static bool sandbox3d_get_selected_bounds(const sandbox3d_state* state, henka_bounds* out_bounds);
 static henka_vec3 sandbox3d_get_default_orbit_target(void);
 static henka_vec3 sandbox3d_get_view_navigation_target(const sandbox3d_state* state);
@@ -2115,6 +2121,30 @@ static bool sandbox3d_try_get_mouse_viewport_local(
 
     *out_mouse_framebuffer = mouse_framebuffer;
     return true;
+}
+
+static bool sandbox3d_try_pick_terrain(
+    const sandbox3d_state* state,
+    henka_ray ray,
+    henka_terrain_physics_hit* out_hit)
+{
+    float max_distance;
+
+    if (state == NULL || state->terrain_physics == NULL || out_hit == NULL)
+    {
+        return false;
+    }
+    max_distance = state->camera.far_plane;
+    if (!isfinite(max_distance) || max_distance <= 0.0f)
+    {
+        max_distance = 16384.0f;
+    }
+    return henka_terrain_physics_raycast(
+               state->terrain_physics,
+               ray,
+               max_distance,
+               out_hit) == HENKA_SUCCESS &&
+        out_hit->hit;
 }
 
 static bool sandbox3d_project_handle_point(
@@ -4200,6 +4230,9 @@ static henka_result sandbox3d_apply_terrain_tool_command(
 {
     henka_terrain_edit_command command;
     henka_terrain_region_state region_state;
+    henka_terrain_world_desc terrain_desc;
+    int32_t center_sample_x = 32;
+    int32_t center_sample_z = 32;
     henka_result result;
 
     if (state == NULL || state->terrain_world == NULL ||
@@ -4228,8 +4261,26 @@ static henka_result sandbox3d_apply_terrain_tool_command(
     command = henka_terrain_edit_command_default();
     command.client_nonce = ++state->terrain_tool_nonce;
     command.operation = operation;
-    command.center_sample_x = 32;
-    command.center_sample_z = 32;
+    if (state->diagnostics.terrain_pick_valid &&
+        henka_terrain_world_get_desc(state->terrain_world, &terrain_desc) == HENKA_SUCCESS &&
+        terrain_desc.base_sample_spacing_meters > 0U)
+    {
+        const float spacing = (float)terrain_desc.base_sample_spacing_meters;
+        center_sample_x = (int32_t)lroundf(state->diagnostics.terrain_pick.position.x / spacing);
+        center_sample_z = (int32_t)lroundf(state->diagnostics.terrain_pick.position.z / spacing);
+        center_sample_x = center_sample_x < 0 ? 0 : center_sample_x;
+        center_sample_z = center_sample_z < 0 ? 0 : center_sample_z;
+        if ((uint32_t)center_sample_x >= terrain_desc.world_width_meters / terrain_desc.base_sample_spacing_meters + 1U)
+        {
+            center_sample_x = (int32_t)(terrain_desc.world_width_meters / terrain_desc.base_sample_spacing_meters);
+        }
+        if ((uint32_t)center_sample_z >= terrain_desc.world_depth_meters / terrain_desc.base_sample_spacing_meters + 1U)
+        {
+            center_sample_z = (int32_t)(terrain_desc.world_depth_meters / terrain_desc.base_sample_spacing_meters);
+        }
+    }
+    command.center_sample_x = center_sample_x;
+    command.center_sample_z = center_sample_z;
     command.radius_samples = state->terrain_tool_radius_samples;
     command.falloff = state->terrain_tool_falloff;
     command.value_millimeters = operation == HENKA_TERRAIN_EDIT_FLATTEN
@@ -7505,6 +7556,7 @@ static void sandbox3d_refresh_interaction_diagnostics(henka_engine* engine, sand
     bool in_dead_zone;
     henka_entity selected_entity;
     henka_viewport viewport;
+    henka_ray terrain_ray;
 
     if (engine == NULL || state == NULL)
     {
@@ -7554,6 +7606,21 @@ static void sandbox3d_refresh_interaction_diagnostics(henka_engine* engine, sand
     if (state->diagnostics.viewport_local_valid)
     {
         state->diagnostics.viewport_local = viewport_local;
+    }
+    state->diagnostics.terrain_pick_valid = false;
+    memset(&state->diagnostics.terrain_pick, 0, sizeof(state->diagnostics.terrain_pick));
+    if (state->diagnostics.viewport_local_valid &&
+        henka_camera_screen_point_to_ray(
+            &state->camera,
+            viewport.width,
+            viewport.height,
+            viewport_local,
+            &terrain_ray) == HENKA_SUCCESS)
+    {
+        state->diagnostics.terrain_pick_valid = sandbox3d_try_pick_terrain(
+            state,
+            terrain_ray,
+            &state->diagnostics.terrain_pick);
     }
 
     selected_entity = state->diagnostics.selected_entity;
@@ -8030,6 +8097,7 @@ static void sandbox3d_try_pick_object(henka_engine* engine, sandbox3d_state* sta
     float distance;
     henka_entity selected_entity;
     henka_viewport scene_viewport;
+    henka_terrain_physics_hit terrain_hit;
 
     if (engine == NULL || state == NULL || state->scene == NULL)
     {
@@ -8144,6 +8212,26 @@ static void sandbox3d_try_pick_object(henka_engine* engine, sandbox3d_state* sta
     }
     else
     {
+        if (sandbox3d_try_pick_terrain(state, ray, &terrain_hit))
+        {
+            state->diagnostics.terrain_pick = terrain_hit;
+            state->diagnostics.terrain_pick_valid = true;
+            sandbox3d_record_reject_reason(state, SANDBOX3D_INTERACTION_REJECT_NONE, false);
+            sandbox3d_record_success_result(
+                state,
+                "Picked Terrain chunk (%d, %d)",
+                terrain_hit.chunk_id.x,
+                terrain_hit.chunk_id.z);
+            sandbox3d_set_statusf(
+                state,
+                false,
+                false,
+                "Picked Terrain at %.1f, %.1f, %.1f.",
+                terrain_hit.position.x,
+                terrain_hit.position.y,
+                terrain_hit.position.z);
+            return;
+        }
         sandbox3d_clear_selection(state, "No viewport object hit. Selection cleared.");
         sandbox3d_record_drag_result(state, "No viewport object hit");
     }
@@ -13580,8 +13668,26 @@ static void sandbox3d_draw_utility_panel(
                 state->terrain_tool_falloff = state->terrain_tool_falloff == HENKA_TERRAIN_EDIT_FALLOFF_LINEAR
                     ? HENKA_TERRAIN_EDIT_FALLOFF_SMOOTH : HENKA_TERRAIN_EDIT_FALLOFF_LINEAR;
             }
-            henka_ui_label(state->ui, x_left, y_start + 246.0f, 1.0f, "Commands use the same deterministic API as runtime edits.");
-            henka_ui_label(state->ui, x_left, y_start + 262.0f, 1.0f, "Viewport ray-pick and persistence controls remain limited.");
+            if (state->diagnostics.terrain_pick_valid)
+            {
+                snprintf(
+                    row_value,
+                    sizeof(row_value),
+                    "%.1f, %.1f, %.1f (chunk %d,%d)",
+                    state->diagnostics.terrain_pick.position.x,
+                    state->diagnostics.terrain_pick.position.y,
+                    state->diagnostics.terrain_pick.position.z,
+                    state->diagnostics.terrain_pick.chunk_id.x,
+                    state->diagnostics.terrain_pick.chunk_id.z);
+            }
+            else
+            {
+                snprintf(row_value, sizeof(row_value), "Move cursor over resident terrain");
+            }
+            sandbox3d_draw_value_row(state->ui, x_left, y_start + 246.0f, panel_bounds.width - 28.0f, "Pick", row_value);
+            henka_ui_label(state->ui, x_left, y_start + 270.0f, 1.0f, "Commands use the same deterministic API as runtime edits.");
+            henka_ui_label(state->ui, x_left, y_start + 286.0f, 1.0f, "Click the viewport to pick; buttons edit the picked sample.");
+            henka_ui_label(state->ui, x_left, y_start + 302.0f, 1.0f, "Persistence and network authority remain separate workflows.");
             break;
 
         case SANDBOX3D_UTILITY_SETTINGS:
