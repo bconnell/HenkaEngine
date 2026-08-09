@@ -295,8 +295,10 @@ four-region CPU budget. Stream requests are admitted in deterministic priority
 order: render-radius regions first, then physics-radius regions, then the
 remaining CPU-radius regions by Chebyshev distance, with stable request
 sequence tie breaking. Updating or removing an observer re-scores queued
-requests while holding the stream lock, so a moving camera cannot leave stale
-admission priorities. The opt-in Windows `--terrain-stream-stress` path
+requests while holding the stream lock and cancels observer-demand work that
+leaves every observer's CPU radius; an active stale observer load is canceled
+at its next worker boundary as well, so a moving camera cannot spend bounded
+capacity on obsolete requests. The opt-in Windows `--terrain-stream-stress` path
 crosses `(0,0) -> (1,0) -> (1,1) -> (0,0)`, waits only through bounded
 worker/render queues, checks rendered and collision chunk return at both axes,
 and reports the resident-region bound. Normal movement remains
