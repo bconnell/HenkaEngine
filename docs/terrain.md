@@ -230,7 +230,10 @@ resident hit is shown with chunk/source identity and becomes the integer
 sample center for the next raise, lower, flatten, smooth, or paint command;
 nonresident terrain is not invented and a miss leaves the previous command
 center unchanged. This is an editor/runtime command bridge, not saved brush
-state or network authority.
+state or network authority. The same utility opens a user-data-local
+`terrain-sandbox` storage root, recovers or loads region `(0,0)` at startup,
+and exposes transactional Save and committed-journal Compact actions; failed
+saves leave the live world unchanged because storage owns the transaction.
 
 The descriptor stores the format version, world and base identities, all
 world/region/chunk relationships, and bounded residency limits. Creating a

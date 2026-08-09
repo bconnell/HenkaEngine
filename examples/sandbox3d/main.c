@@ -321,6 +321,7 @@ typedef struct sandbox3d_state
     henka_material_asset* marker_material_asset;
     henka_material_instance marker_material_instance;
     henka_terrain_world* terrain_world;
+    henka_terrain_storage* terrain_storage;
     henka_terrain_render_runtime* terrain_render;
     henka_terrain_physics* terrain_physics;
     uint32_t terrain_tool_radius_samples;
@@ -1557,6 +1558,7 @@ static henka_result sandbox3d_initialize_terrain_rendering(
     henka_engine* engine,
     sandbox3d_state* state);
 static henka_result sandbox3d_refresh_terrain_collision(sandbox3d_state* state);
+static henka_result sandbox3d_save_terrain_region(sandbox3d_state* state);
 static henka_result sandbox3d_apply_terrain_tool_command(
     sandbox3d_state* state,
     henka_terrain_edit_operation operation);
@@ -4055,6 +4057,9 @@ static henka_result sandbox3d_initialize_terrain_rendering(
     henka_terrain_render_desc render_desc = henka_terrain_render_desc_default();
     henka_terrain_layout layout;
     henka_terrain_sample* samples = NULL;
+    henka_terrain_region_storage_info loaded_info;
+    bool loaded_from_storage = false;
+    char* storage_path = NULL;
     henka_material terrain_material;
     uint32_t sample_z;
     uint32_t sample_x;
@@ -4077,6 +4082,29 @@ static henka_result sandbox3d_initialize_terrain_rendering(
     if (result != HENKA_SUCCESS)
     {
         return result;
+    }
+    result = henka_path_resolve(
+        henka_engine_get_user_data_base_path(engine),
+        "terrain-sandbox",
+        &storage_path);
+    if (result == HENKA_SUCCESS)
+    {
+        result = henka_terrain_storage_create(
+            &world_desc, storage_path, &state->terrain_storage);
+    }
+    henka_free(storage_path);
+    storage_path = NULL;
+    if (result == HENKA_SUCCESS)
+    {
+        result = henka_terrain_storage_recover(state->terrain_storage);
+    }
+    if (result == HENKA_SUCCESS)
+    {
+        result = henka_terrain_storage_ensure_manifest(state->terrain_storage);
+    }
+    if (result != HENKA_SUCCESS)
+    {
+        goto fail;
     }
     state->terrain_tool_radius_samples = 8U;
     state->terrain_tool_strength = 64U;
@@ -4114,9 +4142,29 @@ static henka_result sandbox3d_initialize_terrain_rendering(
             }
         }
     }
+    result = henka_terrain_storage_load_region(
+        state->terrain_storage,
+        (henka_terrain_region_id){0, 0},
+        &loaded_info,
+        samples,
+        layout.samples_per_region);
+    if (result == HENKA_SUCCESS)
+    {
+        loaded_from_storage = true;
+    }
+    else if (result == HENKA_ERROR_ASSET_SOURCE)
+    {
+        result = HENKA_SUCCESS;
+    }
+    else
+    {
+        goto fail;
+    }
     result = henka_terrain_world_apply_region_snapshot(
         state->terrain_world,
-        (henka_terrain_region_storage_info){(henka_terrain_region_id){0, 0}, 1U, 1U},
+        loaded_from_storage
+            ? loaded_info
+            : (henka_terrain_region_storage_info){(henka_terrain_region_id){0, 0}, 1U, 1U},
         samples,
         layout.samples_per_region);
     henka_free(samples);
@@ -4194,6 +4242,8 @@ fail:
     state->terrain_render = NULL;
     henka_terrain_physics_destroy(state->terrain_physics);
     state->terrain_physics = NULL;
+    henka_terrain_storage_destroy(state->terrain_storage);
+    state->terrain_storage = NULL;
     henka_terrain_world_destroy(state->terrain_world);
     state->terrain_world = NULL;
     return result;
@@ -4222,6 +4272,62 @@ static henka_result sandbox3d_refresh_terrain_collision(sandbox3d_state* state)
     return henka_terrain_physics_replace_patch(
         state->terrain_physics,
         &(henka_terrain_physics_patch_desc){patch, 1.0f, 0.0f, 0.0f});
+}
+
+static henka_result sandbox3d_save_terrain_region(sandbox3d_state* state)
+{
+    const henka_terrain_sample* samples;
+    henka_terrain_region_state region_state;
+    size_t sample_count;
+    uint64_t transaction_id;
+    henka_result result;
+
+    if (state == NULL || state->terrain_world == NULL || state->terrain_storage == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    result = henka_terrain_world_get_region_samples(
+        state->terrain_world,
+        (henka_terrain_region_id){0, 0},
+        &samples,
+        &sample_count);
+    if (result != HENKA_SUCCESS)
+    {
+        return result;
+    }
+    result = henka_terrain_world_get_region_state(
+        state->terrain_world,
+        (henka_terrain_region_id){0, 0},
+        &region_state);
+    if (result != HENKA_SUCCESS)
+    {
+        return result;
+    }
+    transaction_id = ++state->terrain_tool_nonce;
+    if (transaction_id == 0U)
+    {
+        transaction_id = ++state->terrain_tool_nonce;
+    }
+    result = henka_terrain_storage_begin(state->terrain_storage, transaction_id);
+    if (result == HENKA_SUCCESS)
+    {
+        result = henka_terrain_storage_write_region(
+            state->terrain_storage,
+            (henka_terrain_region_id){0, 0},
+            region_state.revision,
+            region_state.generation,
+            samples,
+            sample_count);
+    }
+    if (result == HENKA_SUCCESS)
+    {
+        result = henka_terrain_storage_commit(state->terrain_storage, transaction_id);
+    }
+    if (result != HENKA_SUCCESS)
+    {
+        (void)henka_terrain_storage_abort(state->terrain_storage, transaction_id);
+    }
+    return result;
 }
 
 static henka_result sandbox3d_apply_terrain_tool_command(
@@ -4336,6 +4442,7 @@ static void sandbox3d_release_owned_resources(sandbox3d_state* state)
     }
 
     henka_terrain_render_runtime_destroy(state->terrain_render);
+    henka_terrain_storage_destroy(state->terrain_storage);
     henka_terrain_physics_destroy(state->terrain_physics);
     henka_terrain_world_destroy(state->terrain_world);
     henka_mesh_destroy(state->gizmo_render.axis_mesh);
@@ -13668,6 +13775,32 @@ static void sandbox3d_draw_utility_panel(
                 state->terrain_tool_falloff = state->terrain_tool_falloff == HENKA_TERRAIN_EDIT_FALLOFF_LINEAR
                     ? HENKA_TERRAIN_EDIT_FALLOFF_SMOOTH : HENKA_TERRAIN_EDIT_FALLOFF_LINEAR;
             }
+            if (henka_ui_primary_button(state->ui, "terrain_save", (henka_ui_rect){x_left, y_start + 240.0f, 86.0f, 24.0f}, "Save"))
+            {
+                const henka_result save_result = sandbox3d_save_terrain_region(state);
+                sandbox3d_set_statusf(
+                    state,
+                    save_result != HENKA_SUCCESS,
+                    true,
+                    save_result == HENKA_SUCCESS
+                        ? "Terrain region saved transactionally."
+                        : "Terrain save failed: %s.",
+                    henka_result_to_string(save_result));
+            }
+            if (henka_ui_button(state->ui, "terrain_compact", (henka_ui_rect){x_left + 92.0f, y_start + 240.0f, 104.0f, 24.0f}, "Compact"))
+            {
+                const henka_result compact_result = state->terrain_storage == NULL
+                    ? HENKA_ERROR_INVALID_ARGUMENT
+                    : henka_terrain_storage_compact(state->terrain_storage);
+                sandbox3d_set_statusf(
+                    state,
+                    compact_result != HENKA_SUCCESS,
+                    true,
+                    compact_result == HENKA_SUCCESS
+                        ? "Terrain journal compacted."
+                        : "Terrain compact failed: %s.",
+                    henka_result_to_string(compact_result));
+            }
             if (state->diagnostics.terrain_pick_valid)
             {
                 snprintf(
@@ -13684,10 +13817,10 @@ static void sandbox3d_draw_utility_panel(
             {
                 snprintf(row_value, sizeof(row_value), "Move cursor over resident terrain");
             }
-            sandbox3d_draw_value_row(state->ui, x_left, y_start + 246.0f, panel_bounds.width - 28.0f, "Pick", row_value);
-            henka_ui_label(state->ui, x_left, y_start + 270.0f, 1.0f, "Commands use the same deterministic API as runtime edits.");
-            henka_ui_label(state->ui, x_left, y_start + 286.0f, 1.0f, "Click the viewport to pick; buttons edit the picked sample.");
-            henka_ui_label(state->ui, x_left, y_start + 302.0f, 1.0f, "Persistence and network authority remain separate workflows.");
+            sandbox3d_draw_value_row(state->ui, x_left, y_start + 270.0f, panel_bounds.width - 28.0f, "Pick", row_value);
+            henka_ui_label(state->ui, x_left, y_start + 294.0f, 1.0f, "Commands use the same deterministic API as runtime edits.");
+            henka_ui_label(state->ui, x_left, y_start + 310.0f, 1.0f, "Click the viewport to pick; buttons edit the picked sample.");
+            henka_ui_label(state->ui, x_left, y_start + 326.0f, 1.0f, "Persistence and network authority remain separate workflows.");
             break;
 
         case SANDBOX3D_UTILITY_SETTINGS:
