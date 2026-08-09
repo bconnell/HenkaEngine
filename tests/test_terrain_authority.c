@@ -68,8 +68,19 @@ static int test_authoritative_acceptance_and_stale_rejection(void)
         goto cleanup;
     }
     request.client_nonce = 78U;
+    request.command.operation = HENKA_TERRAIN_EDIT_FLATTEN;
     if (henka_terrain_authority_process_request(authority, 2U, &request, 1001U, &response) != HENKA_SUCCESS ||
         response.accepted || response.rejection.reason != HENKA_TERRAIN_EDIT_REJECT_STALE_REVISION)
+    {
+        goto cleanup;
+    }
+    request.client_nonce = 79U;
+    request.command.operation = HENKA_TERRAIN_EDIT_SMOOTH;
+    request.affected_regions[0].revision = 1U;
+    if (henka_terrain_authority_process_request(authority, 2U, &request, 1002U, &response) != HENKA_SUCCESS ||
+        !response.accepted || response.acceptance.server_command_id != 2U ||
+        henka_terrain_world_get_region_state(world, (henka_terrain_region_id){0, 0}, &state) != HENKA_SUCCESS ||
+        state.revision != 2U)
     {
         goto cleanup;
     }
