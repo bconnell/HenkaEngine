@@ -4549,7 +4549,7 @@ static henka_result sandbox3d_initialize_terrain_rendering(
             goto fail;
         }
     }
-    printf("Terrain render: 16 bounded chunks resident; deterministic rolling valley/cliff fixture, four-layer manager-owned textures, automatic observer scheduling, and transactional mesh uploads ready.\n");
+    printf("Terrain render: 16 bounded chunks resident; deterministic rolling valley/cliff fixture, four-layer procedural textures, automatic observer scheduling, and transactional mesh uploads ready.\n");
     fflush(stdout);
     return HENKA_SUCCESS;
 
@@ -18101,7 +18101,7 @@ static void sandbox3d_update(henka_engine* engine, double delta_seconds, void* u
         }
         else
         {
-            printf("Terrain material diagnostics: four normalized layers use manager-owned base-color textures.\n");
+            printf("Terrain material diagnostics: four normalized layers use Sandbox-owned procedural base-color textures.\n");
         }
         if (state->residency_stress_ktx_texture != NULL)
             (void)henka_texture_get_info(
