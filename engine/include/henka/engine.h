@@ -143,6 +143,8 @@ typedef struct henka_engine_diagnostics
     char rendered_bloom_failure[64];
     char rendered_ibl_failure[64];
     uint32_t rendered_scene_draw_calls;
+    uint32_t rendered_scene_terrain_draw_calls;
+    uint32_t rendered_scene_terrain_shadow_draw_calls;
     uint32_t rendered_scene_visible_entities;
     uint32_t rendered_scene_culled_entities;
     uint32_t rendered_scene_budget_dropped_entities;

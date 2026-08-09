@@ -259,6 +259,9 @@ transactional physics patch, and refreshes the affected GPU mesh; this is a
 runtime smoke path, not persistence or network authority. It also applies a
 shared paint command, verifies the authoritative layer weight and rendered
 revision advance, and leaves collision untouched for that paint-only mutation.
+Sandbox smoke also checks the per-frame Terrain color and shadow submission
+diagnostics while the viewport is Rendered; generic depth, AO, reflection,
+temporal, fog, and HDR processing consume the same scene submission path.
 The same graphical
 smoke revokes render residency after the upload, forces a candidate mesh
 failure, verifies the previous mesh and revision remain resident, then restores

@@ -229,6 +229,8 @@ typedef struct henka_opengl_renderer_state
     bool point_shadow_framebuffer_complete;
     char point_shadow_failure_reason[64];
     uint32_t scene_draw_calls;
+    uint32_t scene_terrain_draw_calls;
+    uint32_t scene_terrain_shadow_draw_calls;
     uint32_t scene_visible_entities;
     uint32_t scene_culled_entities;
     uint32_t scene_budget_dropped_entities;
@@ -3198,6 +3200,10 @@ static void henka_opengl_draw_shadow_pass(
             ((const henka_opengl_texture_data*)entity->material.base_color_texture->backend_data)->texture_id : 0U);
         g_gl.BindVertexArray(mesh_data->vao);
         glDrawElements(mesh_data->primitive_mode, mesh_data->index_count, GL_UNSIGNED_INT, 0);
+        if (!state->reflection_probe_capture_active && entity->material.terrain_layers_enabled)
+        {
+            state->scene_terrain_shadow_draw_calls += 1U;
+        }
     }
     g_gl.BindVertexArray(0);
     glBindTexture(GL_TEXTURE_2D, 0U);
@@ -4789,16 +4795,21 @@ henka_result henka_opengl_renderer_draw_scene(
             state->scene_gpu_query_pending = false;
         }
     }
-    state->scene_draw_calls = 0U;
-    state->scene_visible_entities = 0U;
-    state->scene_culled_entities = 0U;
-    state->scene_budget_dropped_entities = 0U;
-    state->scene_lod_entities = 0U;
-    state->scene_lod_fallback_entities = 0U;
-    state->scene_instanced_draw_calls = 0U;
-    state->scene_instanced_entities = 0U;
-    state->scene_occlusion_tested_entities = 0U;
-    state->scene_occlusion_culled_entities = 0U;
+    if (!state->reflection_probe_capture_active)
+    {
+        state->scene_draw_calls = 0U;
+        state->scene_terrain_draw_calls = 0U;
+        state->scene_terrain_shadow_draw_calls = 0U;
+        state->scene_visible_entities = 0U;
+        state->scene_culled_entities = 0U;
+        state->scene_budget_dropped_entities = 0U;
+        state->scene_lod_entities = 0U;
+        state->scene_lod_fallback_entities = 0U;
+        state->scene_instanced_draw_calls = 0U;
+        state->scene_instanced_entities = 0U;
+        state->scene_occlusion_tested_entities = 0U;
+        state->scene_occlusion_culled_entities = 0U;
+    }
     for (index = 0U; index < HENKA_SCENE_MAX_LOCAL_LIGHTS; ++index)
     {
         const henka_scene_light_desc* light = &scene->local_lights[index];
@@ -5700,6 +5711,10 @@ henka_result henka_opengl_renderer_draw_scene(
             state->occlusion_query_scene_revision[draw_index] = scene->render_revision;
         }
         state->scene_draw_calls += 1U;
+        if (!state->reflection_probe_capture_active && entity->material.terrain_layers_enabled)
+        {
+            state->scene_terrain_draw_calls += 1U;
+        }
         state->scene_visible_entities += (uint32_t)instance_count;
         if (pass == 0U && instance_count > 1U)
         {
@@ -5805,6 +5820,8 @@ henka_result henka_opengl_renderer_draw_scene(
 void henka_opengl_renderer_get_scene_diagnostics(
     const struct henka_renderer* renderer,
     uint32_t* out_draw_calls,
+    uint32_t* out_terrain_draw_calls,
+    uint32_t* out_terrain_shadow_draw_calls,
     uint32_t* out_visible_entities,
     uint32_t* out_culled_entities,
     uint32_t* out_budget_dropped_entities,
@@ -5825,6 +5842,14 @@ void henka_opengl_renderer_get_scene_diagnostics(
     if (out_draw_calls != NULL)
     {
         *out_draw_calls = state != NULL ? state->scene_draw_calls : 0U;
+    }
+    if (out_terrain_draw_calls != NULL)
+    {
+        *out_terrain_draw_calls = state != NULL ? state->scene_terrain_draw_calls : 0U;
+    }
+    if (out_terrain_shadow_draw_calls != NULL)
+    {
+        *out_terrain_shadow_draw_calls = state != NULL ? state->scene_terrain_shadow_draw_calls : 0U;
     }
     if (out_visible_entities != NULL)
     {

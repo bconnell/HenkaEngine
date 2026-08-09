@@ -631,6 +631,8 @@ void henka_opengl_renderer_get_reflection_probe_diagnostics(
 void henka_opengl_renderer_get_scene_diagnostics(
     const struct henka_renderer* renderer,
     uint32_t* out_draw_calls,
+    uint32_t* out_terrain_draw_calls,
+    uint32_t* out_terrain_shadow_draw_calls,
     uint32_t* out_visible_entities,
     uint32_t* out_culled_entities,
     uint32_t* out_budget_dropped_entities,

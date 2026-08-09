@@ -17673,6 +17673,19 @@ static void sandbox3d_update(henka_engine* engine, double delta_seconds, void* u
                 &stress_texture_info);
         if (henka_engine_get_diagnostics(engine, &smoke_diagnostics) == HENKA_SUCCESS)
         {
+            if (smoke_diagnostics.viewport_shading_mode == HENKA_VIEWPORT_SHADING_RENDERED &&
+                (smoke_diagnostics.rendered_scene_terrain_draw_calls == 0U ||
+                 smoke_diagnostics.rendered_scene_terrain_shadow_draw_calls == 0U))
+            {
+                state->smoke_validation_failed = true;
+            }
+            else
+            {
+                printf(
+                    "Terrain Rendered pass diagnostics: color-draws=%u shadow-draws=%u.\n",
+                    smoke_diagnostics.rendered_scene_terrain_draw_calls,
+                    smoke_diagnostics.rendered_scene_terrain_shadow_draw_calls);
+            }
             if (state->temporal_stress)
             {
                 const bool temporal_recovery_valid =

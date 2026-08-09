@@ -1715,6 +1715,8 @@ henka_result henka_engine_get_diagnostics(
     henka_opengl_renderer_get_scene_diagnostics(
         engine->renderer,
         &out_diagnostics->rendered_scene_draw_calls,
+        &out_diagnostics->rendered_scene_terrain_draw_calls,
+        &out_diagnostics->rendered_scene_terrain_shadow_draw_calls,
         &out_diagnostics->rendered_scene_visible_entities,
         &out_diagnostics->rendered_scene_culled_entities,
         &out_diagnostics->rendered_scene_budget_dropped_entities,
