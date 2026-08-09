@@ -1628,6 +1628,7 @@ static henka_result sandbox3d_apply_terrain_tool_command(
     sandbox3d_state* state,
     henka_terrain_edit_operation operation);
 static void sandbox3d_draw_physics_overlay(sandbox3d_state* state, henka_viewport viewport);
+static void sandbox3d_draw_terrain_brush_preview(sandbox3d_state* state, henka_viewport viewport);
 static void sandbox3d_draw_selection_highlight(sandbox3d_state* state, henka_viewport viewport);
 static void sandbox3d_draw_reflection_probe_overlay(sandbox3d_state* state, henka_viewport viewport);
 static void sandbox3d_prepare_physics_demo(sandbox3d_state* state);
@@ -2747,6 +2748,67 @@ static void sandbox3d_draw_physics_overlay(sandbox3d_state* state, henka_viewpor
                 color);
         }
     }
+}
+
+static void sandbox3d_draw_terrain_brush_preview(sandbox3d_state* state, henka_viewport viewport)
+{
+    const int segments = 32;
+    float radius;
+    float y;
+    int segment;
+    henka_vec4 color;
+
+    if (state == NULL || state->ui == NULL ||
+        state->workspace.active_utility != SANDBOX3D_UTILITY_TERRAIN ||
+        !state->diagnostics.terrain_pick_valid ||
+        !henka_viewport_is_valid(viewport))
+    {
+        return;
+    }
+
+    radius = (float)state->terrain_tool_radius_samples;
+    if (state->terrain_world != NULL)
+    {
+        henka_terrain_world_desc terrain_desc;
+        if (henka_terrain_world_get_desc(state->terrain_world, &terrain_desc) == HENKA_SUCCESS &&
+            terrain_desc.base_sample_spacing_meters > 0U)
+        {
+            radius *= (float)terrain_desc.base_sample_spacing_meters;
+        }
+    }
+    y = state->diagnostics.terrain_pick.position.y + 0.04f;
+    color = state->terrain_tool_operation == HENKA_TERRAIN_EDIT_PAINT
+        ? (henka_vec4){0.20f, 0.92f, 1.0f, 0.95f}
+        : (henka_vec4){1.0f, 0.72f, 0.18f, 0.95f};
+    for (segment = 0; segment < segments; ++segment)
+    {
+        const float first = HENKA_PI * 2.0f * (float)segment / (float)segments;
+        const float second = HENKA_PI * 2.0f * (float)(segment + 1) / (float)segments;
+        const henka_vec3 center = state->diagnostics.terrain_pick.position;
+        const henka_vec3 start = {
+            center.x + cosf(first) * radius,
+            y,
+            center.z + sinf(first) * radius};
+        const henka_vec3 end = {
+            center.x + cosf(second) * radius,
+            y,
+            center.z + sinf(second) * radius};
+        sandbox3d_physics_overlay_line(state, viewport, start, end, 2.0f, color);
+    }
+    sandbox3d_physics_overlay_line(
+        state,
+        viewport,
+        (henka_vec3){state->diagnostics.terrain_pick.position.x - 0.35f, y, state->diagnostics.terrain_pick.position.z},
+        (henka_vec3){state->diagnostics.terrain_pick.position.x + 0.35f, y, state->diagnostics.terrain_pick.position.z},
+        2.0f,
+        color);
+    sandbox3d_physics_overlay_line(
+        state,
+        viewport,
+        (henka_vec3){state->diagnostics.terrain_pick.position.x, y, state->diagnostics.terrain_pick.position.z - 0.35f},
+        (henka_vec3){state->diagnostics.terrain_pick.position.x, y, state->diagnostics.terrain_pick.position.z + 0.35f},
+        2.0f,
+        color);
 }
 
 static void sandbox3d_draw_selection_highlight(sandbox3d_state* state, henka_viewport viewport)
@@ -14766,6 +14828,7 @@ static void sandbox3d_build_ui(henka_engine* engine, sandbox3d_state* state)
                 layout.left_splitter.width > 0.0f,
                 layout.right_splitter.width > 0.0f));
         sandbox3d_draw_reflection_probe_overlay(state, layout.scene_viewport);
+        sandbox3d_draw_terrain_brush_preview(state, layout.scene_viewport);
         sandbox3d_draw_selection_highlight(state, layout.scene_viewport);
         sandbox3d_draw_gizmo_overlay(engine, state, layout.scene_viewport);
         sandbox3d_draw_physics_overlay(state, layout.scene_viewport);
@@ -14947,6 +15010,7 @@ static void sandbox3d_build_ui(henka_engine* engine, sandbox3d_state* state)
     else
     {
         sandbox3d_draw_reflection_probe_overlay(state, layout.scene_viewport);
+        sandbox3d_draw_terrain_brush_preview(state, layout.scene_viewport);
         sandbox3d_draw_selection_highlight(state, layout.scene_viewport);
         sandbox3d_draw_gizmo_overlay(engine, state, layout.scene_viewport);
         sandbox3d_draw_physics_overlay(state, layout.scene_viewport);

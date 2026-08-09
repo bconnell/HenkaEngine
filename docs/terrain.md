@@ -261,9 +261,11 @@ tab now exposes bounded resident/render/collision statistics and raise, lower,
 flatten, smooth, and paint controls with radius, strength, layer, and falloff
 settings. It uses the same deterministic command API as runtime callers; a
 resident physics hit now supplies the integer sample center for the next
-command. Brush radius, strength, active layer, falloff, and operation are
-persisted through the normal Sandbox settings file with range validation on
-load, while complete paint/material preview remains unfinished.
+command. A bounded horizontal brush preview follows a successful resident
+physics hit while the Terrain utility is active. Brush radius, strength, active
+layer, falloff, and operation are persisted through the normal Sandbox settings
+file with range validation on load, while complete material preview remains
+unfinished.
 
 The Terrain utility also projects the scene-view cursor through the shared
 camera ray API and queries the resident physics patch owner. A successful
