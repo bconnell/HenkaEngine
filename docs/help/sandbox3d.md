@@ -45,23 +45,24 @@ or human visual approval.
 
 ## Scene legend
 
-- `Textured Cube`: centered, shows texture material rendering.
-- `Ground`: under the scene, shows repeated local texture use.
-- `Material Ball`: left side, shows untextured material color on rounded production geometry.
-- `glTF Marker`: farther left, shows the current glTF loading path.
-- `Missing Texture`: right side, shows the error texture fallback.
-- `Missing Model`: farther right, shows the fallback mesh.
+- `Showcase Giraffe`: the Cheeky Giraffe mascot loaded through the packaged glTF scene/material path.
+- `Showcase Rocket`: the Original Realistic Rocket loaded through the packaged glTF scene/material path.
+- `Ground`: under the showcase, shows repeated local texture use.
 - `Debug Grid`: spans the floor so you can judge position, depth, and movement.
+
+The engineering sample legend is available with `--primitive-gallery`:
+
+- `Textured Cube`, `Material Ball`, `glTF Marker`, `Missing Texture`, and `Missing Model` retain their diagnostic roles.
 
 ## What to try
 
-- Walk around the cube and the grid.
-- Walk around the OBJ marker to confirm model loading is active.
+- Walk around the giraffe, rocket, and grid to confirm the normal showcase is active.
+- Run `--primitive-gallery` and walk around the OBJ marker to confirm the diagnostic model path is active.
 - Toggle wireframe to inspect the scene layout.
 - Toggle mouse capture and use the mouse to look around.
-- Find the fallback-texture example to confirm that missing textures fail visibly without stopping the engine.
-- Find the fallback-model example to confirm that missing OBJ assets fail visibly without stopping the engine.
-- Compare the material ball, textured cube, and OBJ marker so it is easy to tell which material path each object is using.
+- In `--primitive-gallery`, find the fallback-texture example to confirm that missing textures fail visibly without stopping the engine.
+- In `--primitive-gallery`, find the fallback-model example to confirm that missing OBJ assets fail visibly without stopping the engine.
+- In `--primitive-gallery`, compare the material ball, textured cube, and OBJ marker so it is easy to tell which material path each object is using.
 - Use `F3` to hide the grid briefly, then show it again to confirm the scene layout still reads clearly.
 - Press `F4` to open the sandbox panels, then use `F5` to compare the View, Inspect, and Full Tools layouts.
 - Release mouse capture, then use the Viewport Tool buttons to switch between Select, Orbit, Pan, Move, Rotate, and Scale.

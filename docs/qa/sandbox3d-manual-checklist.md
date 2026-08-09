@@ -338,13 +338,16 @@ Tester:
 Build:
 
 Scene visibility:
-- Textured Cube:
+- Showcase Giraffe:
+- Showcase Rocket:
 - Ground:
+- Debug Grid:
+- Primitive gallery (if selected):
+- Textured Cube:
 - Material Ball:
 - OBJ Marker:
 - Missing Texture:
 - Missing Model:
-- Debug Grid:
 
 Controls:
 - W/A/S/D:
