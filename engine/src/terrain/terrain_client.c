@@ -111,6 +111,13 @@ henka_result henka_terrain_client_send_edit_request(
     }
 }
 
+henka_result henka_terrain_client_reconnect(henka_terrain_client* client)
+{
+    return client == NULL
+        ? HENKA_ERROR_INVALID_ARGUMENT
+        : henka_network_client_reconnect(client->network);
+}
+
 henka_result henka_terrain_client_request_snapshot(
     henka_terrain_client* client,
     henka_terrain_snapshot_request request)

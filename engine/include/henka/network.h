@@ -112,6 +112,8 @@ henka_result henka_network_client_create(
     const henka_network_client_desc* desc,
     henka_network_client** out_client);
 void henka_network_client_destroy(henka_network_client* client);
+/* Starts a new bounded ENet connection using the endpoint supplied at create. */
+henka_result henka_network_client_reconnect(henka_network_client* client);
 
 /* Polling produces one event. Message payload memory remains valid until the next poll. */
 henka_result henka_network_server_poll(

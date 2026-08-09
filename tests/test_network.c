@@ -303,6 +303,38 @@ int main(void)
         henka_network_server_destroy(server);
         return 13;
     }
+    if (henka_network_client_reconnect(client) != HENKA_SUCCESS)
+    {
+        henka_network_client_destroy(client);
+        henka_network_server_destroy(server);
+        return 14;
+    }
+    client_connected = 0;
+    server_connected = 0;
+    for (index = 0; index < 200 && (!server_connected || !client_connected); ++index)
+    {
+        if (henka_network_server_poll(server, 5U, &server_event) != HENKA_SUCCESS ||
+            henka_network_client_poll(client, 5U, &client_event) != HENKA_SUCCESS)
+        {
+            henka_network_client_destroy(client);
+            henka_network_server_destroy(server);
+            return 15;
+        }
+        if (server_event.type == HENKA_NETWORK_EVENT_CONNECTED)
+        {
+            server_connected = 1;
+        }
+        if (client_event.type == HENKA_NETWORK_EVENT_CONNECTED)
+        {
+            client_connected = 1;
+        }
+    }
+    if (!server_connected || !client_connected)
+    {
+        henka_network_client_destroy(client);
+        henka_network_server_destroy(server);
+        return 16;
+    }
     henka_network_client_destroy(client);
     henka_network_server_destroy(server);
     return 0;

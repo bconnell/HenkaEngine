@@ -100,7 +100,11 @@ those identities and requests snapshots for the advertised regions, so an
 empty client can enter through the same replica snapshot path used for
 recovery. This is a bounded late-join bootstrap, not a full application
 handshake, authentication layer, or relevance-based region selection; those
-and editor controls remain subsequent integration work.
+and editor controls remain subsequent integration work. The public client
+adapter can request a new transport connection; the connect-time session-info
+comparison then refreshes only missing or stale advertised regions. This is
+bounded reconnect recovery, not application authentication or
+relevance-driven world streaming.
 
 For edit requests, the session lazily materializes missing persisted regions
 before authority validation, subject to the world's resident-region limit. It

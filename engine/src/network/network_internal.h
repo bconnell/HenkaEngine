@@ -24,6 +24,8 @@ henka_result henka_network_transport_poll(
     henka_network_transport* transport,
     uint32_t timeout_milliseconds,
     henka_network_event* out_event);
+henka_result henka_network_transport_reconnect(
+    henka_network_transport* transport);
 henka_result henka_network_transport_send(
     henka_network_transport* transport,
     henka_network_peer_id peer_id,

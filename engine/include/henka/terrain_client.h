@@ -50,6 +50,7 @@ void henka_terrain_client_destroy(henka_terrain_client* client);
 henka_result henka_terrain_client_send_edit_request(
     henka_terrain_client* client,
     const henka_terrain_edit_request* request);
+henka_result henka_terrain_client_reconnect(henka_terrain_client* client);
 henka_result henka_terrain_client_request_snapshot(
     henka_terrain_client* client,
     henka_terrain_snapshot_request request);

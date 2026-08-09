@@ -145,6 +145,13 @@ void henka_network_client_destroy(henka_network_client* client)
     henka_free(client);
 }
 
+henka_result henka_network_client_reconnect(henka_network_client* client)
+{
+    return client == NULL
+        ? HENKA_ERROR_INVALID_ARGUMENT
+        : henka_network_transport_reconnect(client->transport);
+}
+
 henka_result henka_network_server_poll(
     henka_network_server* server,
     uint32_t timeout_milliseconds,

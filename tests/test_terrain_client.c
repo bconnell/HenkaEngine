@@ -160,6 +160,30 @@ static int test_client_snapshot_and_delta_path(void)
     {
         goto cleanup;
     }
+    if (henka_terrain_client_reconnect(terrain_client) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    for (iteration = 0U; iteration < 2000U; ++iteration)
+    {
+        if (henka_terrain_server_poll(terrain_server, 2U, 6000U + iteration) != HENKA_SUCCESS ||
+            henka_terrain_client_poll(terrain_client, 2U, 8U, &event_count) != HENKA_SUCCESS)
+        {
+            goto cleanup;
+        }
+        henka_terrain_client_get_diagnostics(terrain_client, &client_diagnostics);
+        if (client_diagnostics.connected_event_count >= 2U &&
+            client_diagnostics.session_snapshot_request_count == 1U)
+        {
+            break;
+        }
+    }
+    if (iteration == 2000U ||
+        henka_terrain_world_get_region_state(client_world, (henka_terrain_region_id){0, 0}, &state) != HENKA_SUCCESS ||
+        state.revision != 8U)
+    {
+        goto cleanup;
+    }
     result = 1;
 
 cleanup:

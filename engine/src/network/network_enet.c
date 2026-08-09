@@ -20,6 +20,7 @@ typedef struct henka_network_peer_record
 struct henka_network_transport
 {
     bool server_mode;
+    henka_network_endpoint endpoint;
     ENetHost* host;
     henka_network_peer_record peers[256];
     uint32_t peer_capacity;
@@ -148,6 +149,7 @@ henka_result henka_network_transport_create(
         return HENKA_ERROR_OUT_OF_MEMORY;
     }
     transport->server_mode = server_mode;
+    transport->endpoint = *endpoint;
     transport->peer_capacity = max_peers;
     transport->next_peer_id = 1U;
     address = (ENetAddress){0};
@@ -198,6 +200,35 @@ void henka_network_transport_destroy(henka_network_transport* transport)
     enet_host_destroy(transport->host);
     henka_free(transport);
     henka_enet_release();
+}
+
+henka_result henka_network_transport_reconnect(
+    henka_network_transport* transport)
+{
+    ENetAddress address;
+    ENetPeer* peer;
+    uint32_t index;
+    if (transport == NULL || transport->server_mode || transport->host == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    for (index = 0U; index < transport->peer_capacity; ++index)
+    {
+        if (transport->peers[index].peer != NULL)
+        {
+            enet_peer_disconnect_now(transport->peers[index].peer, 0U);
+        }
+        transport->peers[index] = (henka_network_peer_record){0};
+    }
+    transport->diagnostics.connected_peer_count = 0U;
+    address = (ENetAddress){0};
+    address.port = transport->endpoint.port;
+    if (enet_address_set_host(&address, transport->endpoint.host) != 0)
+    {
+        return HENKA_ERROR_PLATFORM;
+    }
+    peer = enet_host_connect(transport->host, &address, 3U, 0U);
+    return peer == NULL ? HENKA_ERROR_PLATFORM : HENKA_SUCCESS;
 }
 
 henka_result henka_network_transport_poll(
