@@ -1,4 +1,5 @@
 #include <stdint.h>
+#include <stdio.h>
 #include <string.h>
 
 #include <henka/memory.h>
@@ -12,6 +13,7 @@ static int test_loopback_authoritative_edit(void)
     henka_terrain_storage* storage = NULL;
     henka_network_server* network = NULL;
     henka_network_client* client = NULL;
+    henka_network_client* client_b = NULL;
     henka_terrain_server* server = NULL;
     henka_network_server_desc server_desc = henka_network_server_desc_default();
     henka_network_client_desc client_desc = henka_network_client_desc_default();
@@ -19,6 +21,7 @@ static int test_loopback_authoritative_edit(void)
     henka_terrain_sample* samples = NULL;
     henka_terrain_edit_request request = {0};
     henka_network_event event;
+    henka_network_event event_b;
     uint8_t payload[HENKA_TERRAIN_NETWORK_MAX_EDIT_REQUEST_BYTES];
     uint8_t response_payload[HENKA_TERRAIN_NETWORK_MAX_EDIT_RESPONSE_BYTES];
     uint8_t snapshot_request_payload[HENKA_TERRAIN_NETWORK_MAX_SNAPSHOT_REQUEST_BYTES];
@@ -32,6 +35,11 @@ static int test_loopback_authoritative_edit(void)
     int acceptance_received = 0;
     int delta_received = 0;
     int snapshot_requested = 0;
+    int client_connected = 0;
+    int client_b_connected = 0;
+    int client_b_delta_received = 0;
+    int stale_request_sent = 0;
+    int stale_rejection_received = 0;
     uint32_t snapshot_fragment_count = 0U;
     uint32_t snapshot_received = 0U;
     uint32_t snapshot_total_bytes = 0U;
@@ -73,7 +81,8 @@ static int test_loopback_authoritative_edit(void)
         goto cleanup;
     }
     if (henka_network_server_create(&server_desc, &network) != HENKA_SUCCESS ||
-        henka_network_client_create(&client_desc, &client) != HENKA_SUCCESS)
+        henka_network_client_create(&client_desc, &client) != HENKA_SUCCESS ||
+        henka_network_client_create(&client_desc, &client_b) != HENKA_SUCCESS)
     {
         goto cleanup;
     }
@@ -85,19 +94,55 @@ static int test_loopback_authoritative_edit(void)
     {
         goto cleanup;
     }
-    for (iteration = 0U; iteration < 2000U; ++iteration)
+    for (iteration = 0U; iteration < 2000U && (!client_connected || !client_b_connected); ++iteration)
     {
         if (henka_terrain_server_poll(server, 2U, 1000U + iteration) != HENKA_SUCCESS ||
-            henka_network_client_poll(client, 2U, &event) != HENKA_SUCCESS)
+            henka_network_client_poll(client, 2U, &event) != HENKA_SUCCESS ||
+            henka_network_client_poll(client_b, 2U, &event_b) != HENKA_SUCCESS)
         {
             goto cleanup;
         }
         if (event.type == HENKA_NETWORK_EVENT_CONNECTED)
         {
-            break;
+            client_connected = 1;
+        }
+        if (event_b.type == HENKA_NETWORK_EVENT_CONNECTED)
+        {
+            client_b_connected = 1;
         }
     }
-    if (iteration == 2000U)
+    if (!client_connected || !client_b_connected)
+    {
+        goto cleanup;
+    }
+    for (iteration = 0U; iteration < 2000U; ++iteration)
+    {
+        henka_network_diagnostics server_diagnostics;
+        henka_network_server_get_diagnostics(network, &server_diagnostics);
+        if (server_diagnostics.connected_peer_count == 2U)
+        {
+            break;
+        }
+        if (henka_network_server_poll(network, 2U, &event) != HENKA_SUCCESS)
+        {
+            goto cleanup;
+        }
+        if (henka_network_client_poll(client, 0U, &event) != HENKA_SUCCESS ||
+            henka_network_client_poll(client_b, 0U, &event_b) != HENKA_SUCCESS)
+        {
+            goto cleanup;
+        }
+    }
+    {
+        henka_network_diagnostics server_diagnostics;
+        henka_network_server_get_diagnostics(network, &server_diagnostics);
+        if (server_diagnostics.connected_peer_count != 2U)
+        {
+            goto cleanup;
+        }
+    }
+    if (henka_network_client_poll(client, 0U, &event) != HENKA_SUCCESS ||
+        henka_network_client_poll(client_b, 0U, &event_b) != HENKA_SUCCESS)
     {
         goto cleanup;
     }
@@ -117,10 +162,11 @@ static int test_loopback_authoritative_edit(void)
     {
         goto cleanup;
     }
-    for (iteration = 0U; iteration < 2000U; ++iteration)
+    for (iteration = 0U; iteration < 2000U && (!stale_rejection_received || snapshot_received != snapshot_fragment_count || snapshot_fragment_count == 0U); ++iteration)
     {
         if (henka_terrain_server_poll(server, 2U, 2000U + iteration) != HENKA_SUCCESS ||
-            henka_network_client_poll(client, 2U, &event) != HENKA_SUCCESS)
+            henka_network_client_poll(client, 2U, &event) != HENKA_SUCCESS ||
+            henka_network_client_poll(client_b, 2U, &event_b) != HENKA_SUCCESS)
         {
             goto cleanup;
         }
@@ -170,6 +216,47 @@ static int test_loopback_authoritative_edit(void)
                 }
             }
         }
+        if (event_b.type == HENKA_NETWORK_EVENT_MESSAGE &&
+            event_b.message.type == HENKA_NETWORK_MESSAGE_TERRAIN_DELTA)
+        {
+            if (henka_terrain_edit_delta_decode(
+                    event_b.message.payload, event_b.message.payload_size, &delta) != HENKA_SUCCESS ||
+                delta.server_command_id != 1U || delta.affected_regions[0].revision != 1U)
+            {
+                goto cleanup;
+            }
+            client_b_delta_received = 1;
+        }
+        if (client_b_delta_received && !stale_request_sent)
+        {
+            henka_terrain_edit_request stale_request = request;
+            stale_request.client_nonce = 992U;
+            stale_request.command.center_sample_x = 104;
+            stale_request.affected_regions[0].revision = 0U;
+            if (henka_terrain_edit_request_encode(
+                    &stale_request, payload, sizeof(payload), &payload_size) != HENKA_SUCCESS ||
+                henka_network_client_send(
+                    client_b, HENKA_NETWORK_CHANNEL_TERRAIN,
+                    HENKA_NETWORK_MESSAGE_TERRAIN_EDIT_REQUEST,
+                    payload, payload_size) != HENKA_SUCCESS)
+            {
+                goto cleanup;
+            }
+            stale_request_sent = 1;
+        }
+        if (event_b.type == HENKA_NETWORK_EVENT_MESSAGE &&
+            event_b.message.type == HENKA_NETWORK_MESSAGE_TERRAIN_EDIT_REJECTED)
+        {
+            henka_terrain_edit_rejection rejection;
+            if (henka_terrain_edit_rejection_decode(
+                    event_b.message.payload, event_b.message.payload_size, &rejection) != HENKA_SUCCESS ||
+                rejection.client_nonce != 992U ||
+                rejection.reason != HENKA_TERRAIN_EDIT_REJECT_STALE_REVISION)
+            {
+                goto cleanup;
+            }
+            stale_rejection_received = 1;
+        }
         if (event.type == HENKA_NETWORK_EVENT_MESSAGE &&
             event.message.type == HENKA_NETWORK_MESSAGE_SNAPSHOT_FRAGMENT)
         {
@@ -195,7 +282,7 @@ static int test_loopback_authoritative_edit(void)
             }
             seen_fragments[snapshot_fragment.fragment_index] = 1U;
             ++snapshot_received;
-            if (snapshot_received == snapshot_fragment_count)
+            if (snapshot_received == snapshot_fragment_count && stale_rejection_received)
             {
                 result = 1;
                 break;
@@ -204,7 +291,28 @@ static int test_loopback_authoritative_edit(void)
     }
 
 cleanup:
+    if (!result)
+    {
+        henka_terrain_server_diagnostics server_diagnostics;
+        henka_terrain_server_get_diagnostics(server, &server_diagnostics);
+        fprintf(
+            stderr,
+            "terrain server two-client test state: A-connected=%d B-connected=%d A-accept=%d A-delta=%d B-delta=%d snapshot=%u/%u stale-sent=%d stale-rejected=%d processed=%llu accepted=%llu rejected=%llu\n",
+            client_connected,
+            client_b_connected,
+            acceptance_received,
+            delta_received,
+            client_b_delta_received,
+            snapshot_received,
+            snapshot_fragment_count,
+            stale_request_sent,
+            stale_rejection_received,
+            (unsigned long long)server_diagnostics.processed_edit_request_count,
+            (unsigned long long)server_diagnostics.accepted_edit_count,
+            (unsigned long long)server_diagnostics.rejected_edit_count);
+    }
     henka_terrain_server_destroy(server);
+    henka_network_client_destroy(client_b);
     henka_network_client_destroy(client);
     henka_network_server_destroy(network);
     henka_terrain_storage_destroy(storage);
