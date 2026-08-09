@@ -99,6 +99,8 @@ The package script creates:
 
 - `out/HenkaSandbox3D/HenkaSandbox3D.exe`
 - `out/HenkaSandbox3D/assets/`
+- `out/HenkaSandbox3D/assets/textures/residency/` with the bounded residency
+  stress fixtures used by `--residency-stress`
 - `out/HenkaSandbox3D/docs/help/sandbox3d.md`
 - `out/HenkaSandbox3D/PACKAGE_INFO.txt`
 

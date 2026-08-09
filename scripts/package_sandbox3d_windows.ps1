@@ -185,9 +185,14 @@ if ($manifest.executable_sha256 -ne $currentHash) {
 
 $assetsSource = Join-Path $repoRoot "assets"
 $helpSource = Join-Path $repoRoot "docs\help\sandbox3d.md"
+$residencyFixtureSource = Join-Path $repoRoot "build\examples\sandbox3d\$Configuration\assets\textures\residency"
 Assert-NoReparsePoints -Path $expectedExeFull -Description "Sandbox executable input"
 Assert-NoReparsePoints -Path $assetsSource -Description "Asset input"
 Assert-NoReparsePoints -Path $helpSource -Description "Offline help input"
+if (-not (Test-Path -LiteralPath $residencyFixtureSource -PathType Container)) {
+    throw "The $Configuration sandbox residency fixtures were not found beside the validated executable. Rebuild before packaging."
+}
+Assert-NoReparsePoints -Path $residencyFixtureSource -Description "Sandbox residency fixture input"
 if ((-not $ResetUserData) -and (Test-Path -LiteralPath $packageUserDir)) {
     Assert-NoReparsePoints -Path $packageUserDir -Description "Packaged user data"
 }
@@ -210,6 +215,11 @@ try {
     }
 
     $sourceDir = Split-Path $expectedExeFull
+    $stagingResidencyDir = Join-Path $stagingRoot "assets\textures\residency"
+    Copy-Item -LiteralPath $residencyFixtureSource -Destination (Join-Path $stagingRoot "assets\textures") -Recurse
+    if (-not (Test-Path -LiteralPath $stagingResidencyDir -PathType Container)) {
+        throw "The staged package is missing the bounded sandbox residency fixtures."
+    }
     foreach ($dll in @(Get-ChildItem -LiteralPath $sourceDir -Filter *.dll -File -ErrorAction SilentlyContinue)) {
         Assert-NoReparsePoints -Path $dll.FullName -Description "Runtime library input"
         Copy-Item -LiteralPath $dll.FullName -Destination (Join-Path $stagingRoot $dll.Name)
