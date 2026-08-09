@@ -16329,10 +16329,9 @@ static void sandbox3d_update(henka_engine* engine, double delta_seconds, void* u
         }
         if (terrain_result == HENKA_SUCCESS)
         {
-            terrain_result = henka_terrain_render_runtime_request_chunk(
+            terrain_result = henka_terrain_render_runtime_update_observer(
                 state->terrain_render,
-                (henka_terrain_chunk_id){0, 0},
-                0U);
+                state->smoke_test ? (henka_vec3){32.0f, 2.4f, 32.0f} : state->camera.position);
         }
         if (terrain_result == HENKA_SUCCESS)
         {

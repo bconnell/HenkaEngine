@@ -199,8 +199,10 @@ Uploaded GPU meshes add bounded downward edge skirts to cover finite LOD
 transitions. On each observer update the owner now derives a deterministic
 nearest working set from render-resident regions, removes slots whose regions
 leave render residency or the outer LOD band, and queues only bounded missing
-chunks; it does not mutate the borrowed world or allocate per-frame working
-arrays. Full neighbor-aware stitching and manual visual validation remain
+chunks. It also compares uploaded revision/generation identity with the
+borrowed world and queues stale resident chunks for transactional replacement;
+it does not mutate the borrowed world or allocate per-frame working arrays.
+Full neighbor-aware stitching and manual visual validation remain
 subsequent work. The Sandbox also routes one shared
 raise command through authoritative integer mutation, refreshes the
 transactional physics patch, and refreshes the affected GPU mesh; this is a

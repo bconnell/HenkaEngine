@@ -338,6 +338,30 @@ static void henka_terrain_render_schedule_resident_chunks(
         }
     }
 
+    /* A committed world edit changes the source identity without changing the
+     * chunk's residency. Queue a transactional replacement for stale uploads;
+     * the existing bounded queue coalesces repeated observations. */
+    for (index = 0U; index < runtime->desc.max_resident_chunks; ++index)
+    {
+        henka_terrain_render_slot* slot = &runtime->slots[index];
+        henka_terrain_world_desc slot_desc;
+        henka_terrain_region_id region_id;
+        henka_terrain_region_state region_state;
+        if (!slot->occupied || !slot->resident ||
+            henka_terrain_world_get_desc(runtime->world, &slot_desc) != HENKA_SUCCESS ||
+            henka_terrain_region_id_from_chunk(
+                &slot_desc, slot->chunk_id, &region_id) != HENKA_SUCCESS ||
+            henka_terrain_world_get_region_state(
+                runtime->world, region_id, &region_state) != HENKA_SUCCESS ||
+            (slot->revision == region_state.revision &&
+             slot->generation == region_state.generation))
+        {
+            continue;
+        }
+        (void)henka_terrain_render_runtime_request_chunk(
+            runtime, slot->chunk_id, slot->requested_lod);
+    }
+
     /* The world may expose more render-resident chunks than the graphical
      * owner can retain. Scan stable region/chunk order and replace only a
      * farther slot, producing a deterministic nearest bounded working set. */
