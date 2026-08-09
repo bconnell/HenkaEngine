@@ -27,7 +27,7 @@
 | --- | --- | --- |
 | Headless runtime, dedicated server, Terrain storage, streaming, authority, prediction, replica, snapshots, physics | COMPLETE for the prior Terrain campaign | Preserve; add only connected fixes and fresh regression coverage |
 | Graphical Terrain owner, bounded slots/queue, revision-aware mesh replacement, camera observer scheduling | PARTIAL | Add resource diagnostics and packaged visual proof; material, bounds, and dirty propagation are implemented |
-| Terrain material authority | PARTIAL | Four-layer PBR factors/textures, stable linear/sRGB semantics, normal/roughness/metallic blending, truthful fallback |
+| Terrain material authority | PARTIAL | Four-layer PBR factors/textures, stable linear/sRGB semantics, normal/roughness/metallic blending, truthful fallback; shared dependency inspection includes all twelve optional layer texture slots |
 | Terrain tangent basis and border normals | PARTIAL | Finite handed tangents, neighbor-aware normals, world-stable mapping, tests |
 | Crack-free LOD | PARTIAL | Reusable transition topology or justified watertight equivalent; topology tests |
 | Render-pass participation | PARTIAL | Verify and close color, shadow, depth, AO/SSGI/SSR, probe, temporal, fog, and presentation paths |

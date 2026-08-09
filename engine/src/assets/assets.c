@@ -2774,6 +2774,36 @@ henka_result henka_assets_get_material_asset_dependencies(
     HENKA_ADD_MATERIAL_DEPENDENCY(HENKA_MATERIAL_TEXTURE_SLOT_METALLIC_ROUGHNESS, HENKA_TEXTURE_USAGE_METALLIC_ROUGHNESS, material->metallic_roughness_texture);
     HENKA_ADD_MATERIAL_DEPENDENCY(HENKA_MATERIAL_TEXTURE_SLOT_OCCLUSION, HENKA_TEXTURE_USAGE_OCCLUSION, material->occlusion_texture);
     HENKA_ADD_MATERIAL_DEPENDENCY(HENKA_MATERIAL_TEXTURE_SLOT_EMISSIVE, HENKA_TEXTURE_USAGE_EMISSIVE, material->emissive_texture);
+    {
+        static const henka_material_texture_slot base_color_slots[HENKA_MATERIAL_TERRAIN_LAYER_COUNT] = {
+            HENKA_MATERIAL_TEXTURE_SLOT_TERRAIN_LAYER0_BASE_COLOR,
+            HENKA_MATERIAL_TEXTURE_SLOT_TERRAIN_LAYER1_BASE_COLOR,
+            HENKA_MATERIAL_TEXTURE_SLOT_TERRAIN_LAYER2_BASE_COLOR,
+            HENKA_MATERIAL_TEXTURE_SLOT_TERRAIN_LAYER3_BASE_COLOR};
+        static const henka_material_texture_slot normal_slots[HENKA_MATERIAL_TERRAIN_LAYER_COUNT] = {
+            HENKA_MATERIAL_TEXTURE_SLOT_TERRAIN_LAYER0_NORMAL,
+            HENKA_MATERIAL_TEXTURE_SLOT_TERRAIN_LAYER1_NORMAL,
+            HENKA_MATERIAL_TEXTURE_SLOT_TERRAIN_LAYER2_NORMAL,
+            HENKA_MATERIAL_TEXTURE_SLOT_TERRAIN_LAYER3_NORMAL};
+        static const henka_material_texture_slot metallic_roughness_slots[HENKA_MATERIAL_TERRAIN_LAYER_COUNT] = {
+            HENKA_MATERIAL_TEXTURE_SLOT_TERRAIN_LAYER0_METALLIC_ROUGHNESS,
+            HENKA_MATERIAL_TEXTURE_SLOT_TERRAIN_LAYER1_METALLIC_ROUGHNESS,
+            HENKA_MATERIAL_TEXTURE_SLOT_TERRAIN_LAYER2_METALLIC_ROUGHNESS,
+            HENKA_MATERIAL_TEXTURE_SLOT_TERRAIN_LAYER3_METALLIC_ROUGHNESS};
+        size_t layer_index;
+        for (layer_index = 0U; layer_index < HENKA_MATERIAL_TERRAIN_LAYER_COUNT; ++layer_index)
+        {
+            const henka_material_layer* layer = &material->terrain_layers[layer_index];
+            HENKA_ADD_MATERIAL_DEPENDENCY(
+                base_color_slots[layer_index], HENKA_TEXTURE_USAGE_COLOR, layer->base_color_texture);
+            HENKA_ADD_MATERIAL_DEPENDENCY(
+                normal_slots[layer_index], HENKA_TEXTURE_USAGE_NORMAL, layer->normal_texture);
+            HENKA_ADD_MATERIAL_DEPENDENCY(
+                metallic_roughness_slots[layer_index],
+                HENKA_TEXTURE_USAGE_METALLIC_ROUGHNESS,
+                layer->metallic_roughness_texture);
+        }
+    }
 #undef HENKA_ADD_MATERIAL_DEPENDENCY
     return HENKA_SUCCESS;
 }
@@ -2804,6 +2834,36 @@ henka_result henka_assets_get_material_instance_dependencies(
     HENKA_ADD_INSTANCE_DEPENDENCY(HENKA_MATERIAL_TEXTURE_SLOT_METALLIC_ROUGHNESS, HENKA_TEXTURE_USAGE_METALLIC_ROUGHNESS, material->metallic_roughness_texture);
     HENKA_ADD_INSTANCE_DEPENDENCY(HENKA_MATERIAL_TEXTURE_SLOT_OCCLUSION, HENKA_TEXTURE_USAGE_OCCLUSION, material->occlusion_texture);
     HENKA_ADD_INSTANCE_DEPENDENCY(HENKA_MATERIAL_TEXTURE_SLOT_EMISSIVE, HENKA_TEXTURE_USAGE_EMISSIVE, material->emissive_texture);
+    {
+        static const henka_material_texture_slot base_color_slots[HENKA_MATERIAL_TERRAIN_LAYER_COUNT] = {
+            HENKA_MATERIAL_TEXTURE_SLOT_TERRAIN_LAYER0_BASE_COLOR,
+            HENKA_MATERIAL_TEXTURE_SLOT_TERRAIN_LAYER1_BASE_COLOR,
+            HENKA_MATERIAL_TEXTURE_SLOT_TERRAIN_LAYER2_BASE_COLOR,
+            HENKA_MATERIAL_TEXTURE_SLOT_TERRAIN_LAYER3_BASE_COLOR};
+        static const henka_material_texture_slot normal_slots[HENKA_MATERIAL_TERRAIN_LAYER_COUNT] = {
+            HENKA_MATERIAL_TEXTURE_SLOT_TERRAIN_LAYER0_NORMAL,
+            HENKA_MATERIAL_TEXTURE_SLOT_TERRAIN_LAYER1_NORMAL,
+            HENKA_MATERIAL_TEXTURE_SLOT_TERRAIN_LAYER2_NORMAL,
+            HENKA_MATERIAL_TEXTURE_SLOT_TERRAIN_LAYER3_NORMAL};
+        static const henka_material_texture_slot metallic_roughness_slots[HENKA_MATERIAL_TERRAIN_LAYER_COUNT] = {
+            HENKA_MATERIAL_TEXTURE_SLOT_TERRAIN_LAYER0_METALLIC_ROUGHNESS,
+            HENKA_MATERIAL_TEXTURE_SLOT_TERRAIN_LAYER1_METALLIC_ROUGHNESS,
+            HENKA_MATERIAL_TEXTURE_SLOT_TERRAIN_LAYER2_METALLIC_ROUGHNESS,
+            HENKA_MATERIAL_TEXTURE_SLOT_TERRAIN_LAYER3_METALLIC_ROUGHNESS};
+        size_t layer_index;
+        for (layer_index = 0U; layer_index < HENKA_MATERIAL_TERRAIN_LAYER_COUNT; ++layer_index)
+        {
+            const henka_material_layer* layer = &material->terrain_layers[layer_index];
+            HENKA_ADD_INSTANCE_DEPENDENCY(
+                base_color_slots[layer_index], HENKA_TEXTURE_USAGE_COLOR, layer->base_color_texture);
+            HENKA_ADD_INSTANCE_DEPENDENCY(
+                normal_slots[layer_index], HENKA_TEXTURE_USAGE_NORMAL, layer->normal_texture);
+            HENKA_ADD_INSTANCE_DEPENDENCY(
+                metallic_roughness_slots[layer_index],
+                HENKA_TEXTURE_USAGE_METALLIC_ROUGHNESS,
+                layer->metallic_roughness_texture);
+        }
+    }
 #undef HENKA_ADD_INSTANCE_DEPENDENCY
     return HENKA_SUCCESS;
 }

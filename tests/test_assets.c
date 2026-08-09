@@ -680,6 +680,25 @@ void henka_test_assets(void)
     HENKA_TEST_ASSERT(material_dependencies.dependency_count == 1U);
     HENKA_TEST_ASSERT(material_dependencies.dependencies[0].slot ==
         HENKA_MATERIAL_TEXTURE_SLOT_BASE_COLOR);
+    {
+        henka_material_asset terrain_asset = {0};
+        henka_material_dependency_info terrain_dependencies;
+        terrain_asset.material = henka_material_terrain_default();
+        terrain_asset.material.terrain_layers[0].base_color_texture = &fallback_texture;
+        terrain_asset.material.terrain_layers[1].normal_texture = &fallback_texture;
+        terrain_asset.material.terrain_layers[2].metallic_roughness_texture = &fallback_texture;
+        terrain_asset.revision = 9U;
+        HENKA_TEST_ASSERT(henka_assets_get_material_asset_dependencies(
+            &terrain_asset, &terrain_dependencies) == HENKA_SUCCESS);
+        HENKA_TEST_ASSERT(terrain_dependencies.definition_revision == 9U);
+        HENKA_TEST_ASSERT(terrain_dependencies.dependency_count == 3U);
+        HENKA_TEST_ASSERT(terrain_dependencies.dependencies[0].slot ==
+            HENKA_MATERIAL_TEXTURE_SLOT_TERRAIN_LAYER0_BASE_COLOR);
+        HENKA_TEST_ASSERT(terrain_dependencies.dependencies[1].slot ==
+            HENKA_MATERIAL_TEXTURE_SLOT_TERRAIN_LAYER1_NORMAL);
+        HENKA_TEST_ASSERT(terrain_dependencies.dependencies[2].slot ==
+            HENKA_MATERIAL_TEXTURE_SLOT_TERRAIN_LAYER2_METALLIC_ROUGHNESS);
+    }
     HENKA_TEST_ASSERT(henka_assets_create_material_instance(
         &material_entry, &material_instance) == HENKA_SUCCESS);
     HENKA_TEST_ASSERT(henka_assets_material_instance_set_float(

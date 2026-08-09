@@ -210,7 +210,10 @@ world-space PBR layer blends. Each layer has validated base-color, normal, and
 metallic/roughness texture semantics plus base color, metallic, roughness,
 normal-strength, and meters-per-tile factors. The normal Rendered shader
 consumes these weights; ordinary material vertex-color tint remains disabled
-for this material.
+for this material. The existing asset-manager dependency inspection contract
+also enumerates each of the twelve optional layer texture slots with its
+semantic usage for both material definitions and effective instances; the
+manager remains the owner of those borrowed texture handles.
 Uploaded GPU meshes use a four-edge transition mask when an adjacent resident
 chunk is exactly one LOD coarser. The mesh keeps shared even edge samples and
 remaps intervening fine edge samples into a bounded transition strip, including
