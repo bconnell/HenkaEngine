@@ -177,8 +177,9 @@ culling, and replaces meshes transactionally only after a candidate upload
 succeeds. Four LOD bands use hysteresis and deterministic adjacent-chunk
 selection; render visibility is bounded by the configured outer band. The
 owner destroys its entities and meshes without destroying the borrowed world.
-Cross-LOD seam stitching, automatic world-residency scheduling, and manual
-visual validation remain subsequent work. The Sandbox also routes one shared
+Uploaded GPU meshes add bounded downward edge skirts to cover finite LOD
+transitions; full neighbor-aware stitching, automatic world-residency
+scheduling, and manual visual validation remain subsequent work. The Sandbox also routes one shared
 raise command through authoritative integer mutation, refreshes the
 transactional physics patch, and refreshes the affected GPU mesh; this is a
 runtime smoke path, not persistence or network authority.

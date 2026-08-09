@@ -5,6 +5,7 @@
 #include <string.h>
 
 #include "../henka_internal.h"
+#include <henka/log.h>
 #include <henka/memory.h>
 
 typedef struct henka_terrain_render_request
@@ -517,6 +518,12 @@ henka_result henka_terrain_render_runtime_pump(
         if (result != HENKA_SUCCESS)
         {
             runtime->stats.failed_rebuilds += 1U;
+            HENKA_LOG_WARN(
+                "Terrain chunk (%d,%d) LOD %u rebuild failed: %s",
+                slot->chunk_id.x,
+                slot->chunk_id.z,
+                request.lod_level,
+                henka_result_to_string(result));
             continue;
         }
         if (!slot->resident)

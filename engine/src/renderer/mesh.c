@@ -1,12 +1,125 @@
 #include "henka_internal.h"
 
 #include <math.h>
+#include <string.h>
 
 #include <henka/core.h>
 #include <henka/log.h>
 #include <henka/memory.h>
 
 #include "../core/checked.h"
+
+static void henka_terrain_mesh_append_skirt_segment(
+    henka_terrain_mesh_data* mesh,
+    uint32_t first_source,
+    uint32_t second_source,
+    float skirt_depth,
+    henka_vec3 normal,
+    bool forward)
+{
+    henka_terrain_mesh_vertex first = mesh->vertices[first_source];
+    henka_terrain_mesh_vertex second = mesh->vertices[second_source];
+    henka_terrain_mesh_vertex first_bottom = first;
+    henka_terrain_mesh_vertex second_bottom = second;
+    uint32_t first_vertex = mesh->vertex_count;
+
+    first.normal[0] = normal.x;
+    first.normal[1] = normal.y;
+    first.normal[2] = normal.z;
+    second.normal[0] = normal.x;
+    second.normal[1] = normal.y;
+    second.normal[2] = normal.z;
+    first_bottom.normal[0] = normal.x;
+    first_bottom.normal[1] = normal.y;
+    first_bottom.normal[2] = normal.z;
+    second_bottom.normal[0] = normal.x;
+    second_bottom.normal[1] = normal.y;
+    second_bottom.normal[2] = normal.z;
+    first_bottom.position[1] -= skirt_depth;
+    second_bottom.position[1] -= skirt_depth;
+    mesh->vertices[mesh->vertex_count++] = first;
+    mesh->vertices[mesh->vertex_count++] = second;
+    mesh->vertices[mesh->vertex_count++] = first_bottom;
+    mesh->vertices[mesh->vertex_count++] = second_bottom;
+    if (forward)
+    {
+        mesh->indices[mesh->index_count++] = first_vertex;
+        mesh->indices[mesh->index_count++] = first_vertex + 1U;
+        mesh->indices[mesh->index_count++] = first_vertex + 2U;
+        mesh->indices[mesh->index_count++] = first_vertex + 1U;
+        mesh->indices[mesh->index_count++] = first_vertex + 3U;
+        mesh->indices[mesh->index_count++] = first_vertex + 2U;
+    }
+    else
+    {
+        mesh->indices[mesh->index_count++] = first_vertex;
+        mesh->indices[mesh->index_count++] = first_vertex + 2U;
+        mesh->indices[mesh->index_count++] = first_vertex + 1U;
+        mesh->indices[mesh->index_count++] = first_vertex + 1U;
+        mesh->indices[mesh->index_count++] = first_vertex + 2U;
+        mesh->indices[mesh->index_count++] = first_vertex + 3U;
+    }
+}
+
+static henka_result henka_terrain_mesh_append_skirts(
+    henka_terrain_mesh_data* mesh,
+    uint32_t samples_per_side,
+    float skirt_depth)
+{
+    uint32_t segment;
+    uint32_t base_vertex_count;
+    uint32_t base_index_count;
+    uint64_t segment_count;
+    uint64_t required_vertices;
+    uint64_t required_indices;
+
+    if (mesh == NULL || samples_per_side < 2U || !isfinite(skirt_depth) || skirt_depth <= 0.0f)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    base_vertex_count = mesh->vertex_count;
+    base_index_count = mesh->index_count;
+    segment_count = (uint64_t)(samples_per_side - 1U) * 4U;
+    required_vertices = (uint64_t)base_vertex_count + segment_count * 4U;
+    required_indices = (uint64_t)base_index_count + segment_count * 6U;
+    if (required_vertices > mesh->vertex_capacity || required_indices > mesh->index_capacity ||
+        required_vertices > UINT32_MAX || required_indices > UINT32_MAX)
+    {
+        return HENKA_ERROR_LIMIT;
+    }
+    for (segment = 0U; segment + 1U < samples_per_side; ++segment)
+    {
+        henka_terrain_mesh_append_skirt_segment(
+            mesh,
+            segment,
+            segment + 1U,
+            skirt_depth,
+            (henka_vec3){0.0f, 0.0f, -1.0f},
+            true);
+        henka_terrain_mesh_append_skirt_segment(
+            mesh,
+            (samples_per_side - 1U) * samples_per_side + segment,
+            (samples_per_side - 1U) * samples_per_side + segment + 1U,
+            skirt_depth,
+            (henka_vec3){0.0f, 0.0f, 1.0f},
+            false);
+        henka_terrain_mesh_append_skirt_segment(
+            mesh,
+            segment * samples_per_side,
+            (segment + 1U) * samples_per_side,
+            skirt_depth,
+            (henka_vec3){-1.0f, 0.0f, 0.0f},
+            false);
+        henka_terrain_mesh_append_skirt_segment(
+            mesh,
+            segment * samples_per_side + samples_per_side - 1U,
+            (segment + 1U) * samples_per_side + samples_per_side - 1U,
+            skirt_depth,
+            (henka_vec3){1.0f, 0.0f, 0.0f},
+            true);
+    }
+    return HENKA_SUCCESS;
+}
 
 henka_result henka_mesh_create_cube(henka_engine* engine, henka_mesh** out_mesh)
 {
@@ -431,9 +544,14 @@ henka_result henka_mesh_create_from_terrain_chunk(
     henka_terrain_mesh_vertex* terrain_vertices = NULL;
     henka_vertex* render_vertices = NULL;
     unsigned int* indices = NULL;
+    henka_terrain_world_desc terrain_desc;
     henka_result result;
     int vertex_count;
     int index_count;
+    uint32_t samples_per_side;
+    uint64_t skirt_segments;
+    uint64_t total_vertices;
+    uint64_t total_indices;
     uint32_t index;
 
     if (out_mesh == NULL || engine == NULL || world == NULL)
@@ -457,9 +575,24 @@ henka_result henka_mesh_create_from_terrain_chunk(
     {
         return result == HENKA_SUCCESS ? HENKA_ERROR_INVALID_ARGUMENT : result;
     }
-    terrain_vertices = henka_calloc(terrain_mesh.vertex_count, sizeof(*terrain_vertices));
-    render_vertices = henka_calloc(terrain_mesh.vertex_count, sizeof(*render_vertices));
-    indices = henka_calloc(terrain_mesh.index_count, sizeof(*indices));
+    if (henka_terrain_world_get_desc(world, &terrain_desc) != HENKA_SUCCESS ||
+        terrain_desc.samples_per_chunk < 2U ||
+        (terrain_desc.samples_per_chunk - 1U) % (1U << lod_level) != 0U)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    samples_per_side = (terrain_desc.samples_per_chunk - 1U) / (1U << lod_level) + 1U;
+    skirt_segments = (uint64_t)(samples_per_side - 1U) * 4U;
+    total_vertices = (uint64_t)terrain_mesh.vertex_count + skirt_segments * 4U;
+    total_indices = (uint64_t)terrain_mesh.index_count + skirt_segments * 6U;
+    if (total_vertices > UINT32_MAX || total_indices > UINT32_MAX ||
+        total_vertices > HENKA_MAX_MESH_ELEMENTS || total_indices > HENKA_MAX_MESH_ELEMENTS)
+    {
+        return HENKA_ERROR_LIMIT;
+    }
+    terrain_vertices = henka_calloc((size_t)total_vertices, sizeof(*terrain_vertices));
+    render_vertices = henka_calloc((size_t)total_vertices, sizeof(*render_vertices));
+    indices = henka_calloc((size_t)total_indices, sizeof(*indices));
     if (terrain_vertices == NULL || render_vertices == NULL || indices == NULL)
     {
         henka_free(indices);
@@ -467,11 +600,22 @@ henka_result henka_mesh_create_from_terrain_chunk(
         henka_free(terrain_vertices);
         return HENKA_ERROR_OUT_OF_MEMORY;
     }
+    terrain_mesh.vertex_capacity = (uint32_t)total_vertices;
+    terrain_mesh.index_capacity = (uint32_t)total_indices;
     terrain_mesh.vertices = terrain_vertices;
-    terrain_mesh.vertex_capacity = terrain_mesh.vertex_count;
     terrain_mesh.indices = indices;
-    terrain_mesh.index_capacity = terrain_mesh.index_count;
     result = henka_terrain_mesh_build_chunk(world, chunk_id, lod_level, &terrain_mesh);
+    if (result != HENKA_SUCCESS)
+    {
+        henka_free(indices);
+        henka_free(render_vertices);
+        henka_free(terrain_vertices);
+        return result;
+    }
+    result = henka_terrain_mesh_append_skirts(
+        &terrain_mesh,
+        samples_per_side,
+        fmaxf(8.0f, (float)terrain_desc.chunk_edge_meters * 0.25f));
     if (result != HENKA_SUCCESS)
     {
         henka_free(indices);
@@ -500,8 +644,43 @@ henka_result henka_mesh_create_from_terrain_chunk(
              (float)source->material_weights[2] / 255.0f,
              (float)source->material_weights[3] / 255.0f},
             true,
-            {1.0f, 0.0f, 0.0f, 1.0f},
+            {fabsf(source->normal[0]) > 0.9f ? 0.0f : 1.0f,
+             0.0f,
+             fabsf(source->normal[0]) > 0.9f ? 1.0f : 0.0f,
+             1.0f},
             true};
+    }
+    for (index = 0U; index < terrain_mesh.index_count; ++index)
+    {
+        if (indices[index] >= (unsigned int)terrain_mesh.vertex_count)
+        {
+            HENKA_LOG_WARN(
+                "Terrain skirt index %u is out of range at %u/%u",
+                indices[index],
+                index,
+                terrain_mesh.index_count);
+            break;
+        }
+    }
+    for (index = 0U; index < terrain_mesh.vertex_count; ++index)
+    {
+        const henka_vertex* vertex = &render_vertices[index];
+        if (!isfinite(vertex->position.x) || !isfinite(vertex->position.y) || !isfinite(vertex->position.z) ||
+            !isfinite(vertex->normal.x) || !isfinite(vertex->normal.y) || !isfinite(vertex->normal.z) ||
+            !isfinite(vertex->uv.x) || !isfinite(vertex->uv.y) ||
+            !isfinite(vertex->tangent.x) || !isfinite(vertex->tangent.y) ||
+            !isfinite(vertex->tangent.z) || !isfinite(vertex->tangent.w) ||
+            fabsf(vertex->tangent.w) < 0.5f ||
+            !isfinite(vertex->color.x) || !isfinite(vertex->color.y) ||
+            !isfinite(vertex->color.z) || !isfinite(vertex->color.w) ||
+            vertex->color.x < 0.0f || vertex->color.x > 1.0f ||
+            vertex->color.y < 0.0f || vertex->color.y > 1.0f ||
+            vertex->color.z < 0.0f || vertex->color.z > 1.0f ||
+            vertex->color.w < 0.0f || vertex->color.w > 1.0f)
+        {
+            HENKA_LOG_WARN("Terrain skirt vertex %u failed finite validation", index);
+            break;
+        }
     }
     result = henka_renderer_create_mesh_from_data(
         engine->renderer,
@@ -511,6 +690,17 @@ henka_result henka_mesh_create_from_terrain_chunk(
         index_count,
         HENKA_MESH_PRIMITIVE_TRIANGLES,
         out_mesh);
+    if (result != HENKA_SUCCESS)
+    {
+        HENKA_LOG_WARN(
+            "Terrain GPU upload rejected chunk (%d,%d) LOD %u with %u vertices and %u indices: %s",
+            chunk_id.x,
+            chunk_id.z,
+            lod_level,
+            terrain_mesh.vertex_count,
+            terrain_mesh.index_count,
+            henka_result_to_string(result));
+    }
     if (result == HENKA_SUCCESS)
     {
         if (out_revision != NULL)
