@@ -180,6 +180,12 @@ owner destroys its entities and meshes without destroying the borrowed world.
 Cross-LOD seam stitching, automatic world-residency scheduling, and manual
 visual validation remain subsequent work.
 
+The Sandbox reference scene now creates one deterministic bounded region,
+marks it render-resident, and attaches four chunks through this owner. It
+updates selection from the active camera and pumps at most two replacements
+per frame. This is runtime integration coverage, not a claim that editor
+sculpt/paint tools or visual human approval are complete.
+
 The descriptor stores the format version, world and base identities, all
 world/region/chunk relationships, and bounded residency limits. Creating a
 world allocates only the configured region and chunk residency tables; it does

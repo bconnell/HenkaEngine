@@ -317,6 +317,8 @@ typedef struct sandbox3d_state
     henka_material residency_stress_original_material;
     henka_material_asset* marker_material_asset;
     henka_material_instance marker_material_instance;
+    henka_terrain_world* terrain_world;
+    henka_terrain_render_runtime* terrain_render;
     henka_asset_type asset_browser_type;
     size_t asset_browser_page;
     size_t asset_browser_selected_metadata_index;
@@ -1536,6 +1538,9 @@ static void sandbox3d_draw_detached_workspace_panel_content(
 static void sandbox3d_build_detached_workspace_panel_ui(henka_engine* engine, sandbox3d_state* state);
 static henka_result sandbox3d_initialize_physics(sandbox3d_state* state);
 static void sandbox3d_update_physics(sandbox3d_state* state, double delta_seconds);
+static henka_result sandbox3d_initialize_terrain_rendering(
+    henka_engine* engine,
+    sandbox3d_state* state);
 static void sandbox3d_draw_physics_overlay(sandbox3d_state* state, henka_viewport viewport);
 static void sandbox3d_draw_selection_highlight(sandbox3d_state* state, henka_viewport viewport);
 static void sandbox3d_draw_reflection_probe_overlay(sandbox3d_state* state, henka_viewport viewport);
@@ -3991,6 +3996,146 @@ static henka_result sandbox3d_initialize_gizmo_rendering(henka_engine* engine, s
     return HENKA_SUCCESS;
 }
 
+static henka_result sandbox3d_initialize_terrain_rendering(
+    henka_engine* engine,
+    sandbox3d_state* state)
+{
+    henka_terrain_world_desc world_desc = henka_terrain_world_desc_default();
+    henka_terrain_render_desc render_desc = henka_terrain_render_desc_default();
+    henka_terrain_layout layout;
+    henka_terrain_sample* samples = NULL;
+    henka_material terrain_material;
+    uint32_t sample_z;
+    uint32_t sample_x;
+    henka_result result;
+
+    if (engine == NULL || state == NULL || state->scene == NULL || state->basic_shader == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    world_desc.max_resident_regions = 1U;
+    world_desc.max_resident_chunks = 64U;
+    world_desc.max_pending_io = 16U;
+    world_desc.max_stream_observers = 2U;
+    result = henka_terrain_world_desc_get_layout(&world_desc, &layout);
+    if (result != HENKA_SUCCESS)
+    {
+        return result;
+    }
+    result = henka_terrain_world_create(&world_desc, &state->terrain_world);
+    if (result != HENKA_SUCCESS)
+    {
+        return result;
+    }
+    samples = henka_calloc(layout.samples_per_region, sizeof(*samples));
+    if (samples == NULL)
+    {
+        result = HENKA_ERROR_OUT_OF_MEMORY;
+        goto fail;
+    }
+    for (sample_z = 0U; sample_z < layout.samples_per_region_edge; ++sample_z)
+    {
+        for (sample_x = 0U; sample_x < layout.samples_per_region_edge; ++sample_x)
+        {
+            henka_terrain_sample* sample = &samples[
+                (size_t)sample_z * layout.samples_per_region_edge + sample_x];
+            sample->height_millimeters = 900 +
+                (int32_t)((sample_x * 17U + sample_z * 29U) % 1200U);
+            if (((sample_x / 32U) + (sample_z / 32U)) % 2U == 0U)
+            {
+                sample->material_weights[0] = 180U;
+                sample->material_weights[1] = 40U;
+                sample->material_weights[2] = 25U;
+                sample->material_weights[3] = 10U;
+            }
+            else
+            {
+                sample->material_weights[0] = 120U;
+                sample->material_weights[1] = 90U;
+                sample->material_weights[2] = 30U;
+                sample->material_weights[3] = 15U;
+            }
+        }
+    }
+    result = henka_terrain_world_apply_region_snapshot(
+        state->terrain_world,
+        (henka_terrain_region_storage_info){(henka_terrain_region_id){0, 0}, 1U, 1U},
+        samples,
+        layout.samples_per_region);
+    henka_free(samples);
+    samples = NULL;
+    if (result != HENKA_SUCCESS ||
+        henka_terrain_world_set_region_residency(
+            state->terrain_world,
+            (henka_terrain_region_id){0, 0},
+            false,
+            true,
+            false) != HENKA_SUCCESS)
+    {
+        result = result == HENKA_SUCCESS ? HENKA_ERROR_UNKNOWN : result;
+        goto fail;
+    }
+
+    terrain_material = henka_material_default();
+    terrain_material.name = "Sandbox Terrain Vertex Layers";
+    terrain_material.type = HENKA_MATERIAL_TYPE_VERTEX_COLOR;
+    terrain_material.shader = state->basic_shader;
+    terrain_material.base_color = (henka_vec4){0.62f, 0.72f, 0.46f, 1.0f};
+    terrain_material.roughness = 0.88f;
+    render_desc.max_resident_chunks = 16U;
+    render_desc.max_pending_requests = 16U;
+    render_desc.material = terrain_material;
+    result = henka_terrain_render_runtime_create(
+        engine,
+        state->scene,
+        state->terrain_world,
+        &render_desc,
+        &state->terrain_render);
+    if (result != HENKA_SUCCESS)
+    {
+        goto fail;
+    }
+    for (sample_z = 0U; sample_z < 2U; ++sample_z)
+    {
+        for (sample_x = 0U; sample_x < 2U; ++sample_x)
+        {
+            result = henka_terrain_render_runtime_request_chunk(
+                state->terrain_render,
+                (henka_terrain_chunk_id){(int32_t)sample_x, (int32_t)sample_z},
+                0U);
+            if (result != HENKA_SUCCESS)
+            {
+                goto fail;
+            }
+        }
+    }
+    result = henka_terrain_render_runtime_pump(state->terrain_render, 4U);
+    if (result != HENKA_SUCCESS)
+    {
+        goto fail;
+    }
+    {
+        henka_terrain_render_stats stats;
+        if (henka_terrain_render_runtime_get_stats(state->terrain_render, &stats) != HENKA_SUCCESS ||
+            stats.resident_chunks != 4U || stats.rebuilt_chunks != 4U)
+        {
+            result = HENKA_ERROR_UNKNOWN;
+            goto fail;
+        }
+    }
+    printf("Terrain render: 4 bounded chunks resident; transactional mesh uploads ready.\n");
+    fflush(stdout);
+    return HENKA_SUCCESS;
+
+fail:
+    henka_free(samples);
+    henka_terrain_render_runtime_destroy(state->terrain_render);
+    state->terrain_render = NULL;
+    henka_terrain_world_destroy(state->terrain_world);
+    state->terrain_world = NULL;
+    return result;
+}
+
 static void sandbox3d_release_owned_resources(sandbox3d_state* state)
 {
     int index;
@@ -3999,6 +4144,8 @@ static void sandbox3d_release_owned_resources(sandbox3d_state* state)
         return;
     }
 
+    henka_terrain_render_runtime_destroy(state->terrain_render);
+    henka_terrain_world_destroy(state->terrain_world);
     henka_mesh_destroy(state->gizmo_render.axis_mesh);
     henka_mesh_destroy(state->gizmo_render.ring_mesh);
     henka_mesh_destroy(state->grid_mesh);
@@ -4039,6 +4186,8 @@ static void sandbox3d_release_owned_resources(sandbox3d_state* state)
     state->physics.world = NULL;
     state->gizmo_render.axis_mesh = NULL;
     state->gizmo_render.ring_mesh = NULL;
+    state->terrain_render = NULL;
+    state->terrain_world = NULL;
     state->marker_mesh = NULL;
     state->marker_material_asset = NULL;
     memset(&state->marker_material_instance, 0, sizeof(state->marker_material_instance));
@@ -14336,6 +14485,12 @@ static henka_result sandbox3d_initialize(henka_engine* engine, void* user_data)
         goto fail;
     }
 
+    result = sandbox3d_initialize_terrain_rendering(engine, state);
+    if (result != HENKA_SUCCESS)
+    {
+        goto fail;
+    }
+
     {
         const henka_shader_contract_desc grid_contract =
             henka_shader_contract_desc_default(HENKA_SHADER_CONTRACT_MINIMAL_GEOMETRY);
@@ -15874,6 +16029,27 @@ static void sandbox3d_update(henka_engine* engine, double delta_seconds, void* u
     sandbox3d_state* state;
 
     state = (sandbox3d_state*)user_data;
+    if (state->terrain_render != NULL)
+    {
+        henka_result terrain_result = henka_terrain_render_runtime_update_observer(
+            state->terrain_render,
+            state->camera.position);
+        if (terrain_result == HENKA_SUCCESS)
+        {
+            terrain_result = henka_terrain_render_runtime_pump(state->terrain_render, 2U);
+        }
+        if (terrain_result != HENKA_SUCCESS)
+        {
+            HENKA_LOG_ERROR(
+                "Terrain render update failed (%s)",
+                henka_result_to_string(terrain_result));
+            if (state->smoke_test)
+            {
+                state->smoke_validation_failed = true;
+                henka_engine_request_exit(engine);
+            }
+        }
+    }
     memset(&engine_diagnostics, 0, sizeof(engine_diagnostics));
     if (henka_engine_get_diagnostics(engine, &engine_diagnostics) == HENKA_SUCCESS &&
         !engine_diagnostics.main_window_focused &&
