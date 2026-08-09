@@ -18478,18 +18478,20 @@ static void sandbox3d_update(henka_engine* engine, double delta_seconds, void* u
                 terrain_world_stats.cpu_bytes == 0U ||
                 terrain_render_stats.gpu_vertex_bytes == 0U ||
                 terrain_render_stats.gpu_index_bytes == 0U ||
-                terrain_render_stats.material_gpu_bytes == 0U)
+                terrain_render_stats.material_gpu_bytes == 0U ||
+                terrain_render_stats.material_texture_count != HENKA_MATERIAL_TERRAIN_LAYER_COUNT * 3U)
             {
                 state->smoke_validation_failed = true;
             }
             else
             {
                 printf(
-                    "Terrain resource diagnostics: cpu=%llu bytes vertex-gpu=%llu index-gpu=%llu material-gpu=%llu.\n",
+                    "Terrain resource diagnostics: cpu=%llu bytes vertex-gpu=%llu index-gpu=%llu material-gpu=%llu material-textures=%u.\n",
                     (unsigned long long)terrain_world_stats.cpu_bytes,
                     (unsigned long long)terrain_render_stats.gpu_vertex_bytes,
                     (unsigned long long)terrain_render_stats.gpu_index_bytes,
-                    (unsigned long long)terrain_render_stats.material_gpu_bytes);
+                    (unsigned long long)terrain_render_stats.material_gpu_bytes,
+                    terrain_render_stats.material_texture_count);
             }
             if (smoke_diagnostics.viewport_shading_mode == HENKA_VIEWPORT_SHADING_RENDERED &&
                 (smoke_diagnostics.rendered_scene_terrain_draw_calls == 0U ||

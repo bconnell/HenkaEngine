@@ -259,7 +259,10 @@ consumes these weights; ordinary material vertex-color tint remains disabled
 for this material. The Sandbox reference fixture creates four deterministic
 16x16 Sandbox-owned procedural grass, dirt, rock, and wet base-color,
 tangent-normal, and metallic/roughness tiles. The material retains deterministic
-factor fallback for replacement or unavailable optional sources. The existing asset-manager dependency inspection contract
+factor fallback for replacement or unavailable optional sources. The graphical
+owner reports the exact unique layer-texture count and resident material bytes;
+the Sandbox reference fixture therefore expects all twelve semantic layer slots
+to contribute without duplicating shared handles. The existing asset-manager dependency inspection contract
 also enumerates each of the twelve optional layer texture slots with its
 semantic usage for both material definitions and effective instances; the
 manager remains the owner of those borrowed texture handles.
