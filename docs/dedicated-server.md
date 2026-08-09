@@ -87,8 +87,9 @@ server acknowledges them.
 The package check proves startup, local bind, loopback connection, clean
 shutdown, and two consecutive save-root runs with revision recovery. The
 runtime also sends a bounded connect-time Terrain session-info message that
-identifies the world/base and advertises up to 16 resident regions for client
-snapshot bootstrap. The runtime client recovery test additionally covers a
+identifies the world/base and advertises up to 16 resident regions in
+deterministic row-major coordinate order for client snapshot bootstrap. The
+runtime client recovery test additionally covers a
 forced disconnect, explicit reconnect, replacement of the authoritative server
 wrapper on the same endpoint, a late observer, and exact resident-sample
 checksum convergence. This does not claim application authentication,

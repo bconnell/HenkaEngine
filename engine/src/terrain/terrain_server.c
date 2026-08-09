@@ -103,6 +103,37 @@ static henka_result henka_terrain_server_send_rejection(
         HENKA_NETWORK_MESSAGE_TERRAIN_EDIT_REJECTED, payload, payload_size);
 }
 
+static bool henka_terrain_server_region_precedes(
+    henka_terrain_region_id left,
+    henka_terrain_region_id right)
+{
+    return left.z < right.z || (left.z == right.z && left.x < right.x);
+}
+
+static void henka_terrain_server_sort_session_regions(
+    henka_terrain_session_info* info)
+{
+    uint32_t index;
+    if (info == NULL)
+    {
+        return;
+    }
+    for (index = 1U; index < info->region_count; ++index)
+    {
+        henka_terrain_session_region candidate = info->regions[index];
+        uint32_t insertion_index = index;
+        while (insertion_index > 0U &&
+               henka_terrain_server_region_precedes(
+                   candidate.region_id,
+                   info->regions[insertion_index - 1U].region_id))
+        {
+            info->regions[insertion_index] = info->regions[insertion_index - 1U];
+            --insertion_index;
+        }
+        info->regions[insertion_index] = candidate;
+    }
+}
+
 static henka_result henka_terrain_server_send_session_info(
     henka_terrain_server* server,
     henka_network_peer_id peer_id)
@@ -132,6 +163,8 @@ static henka_result henka_terrain_server_send_session_info(
         info.regions[index] = (henka_terrain_session_region){
             state.id, state.revision, state.generation};
     }
+    /* A capped manifest must remain deterministic after residency slot reuse. */
+    henka_terrain_server_sort_session_regions(&info);
     if (henka_terrain_session_info_encode(
             &info, payload, sizeof(payload), &payload_size) != HENKA_SUCCESS)
     {

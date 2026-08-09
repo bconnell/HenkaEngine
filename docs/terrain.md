@@ -100,7 +100,9 @@ public ENet server, decodes edit messages, routes them through authority, and
 encodes the response. It also echoes control pings, sends a bounded control
 session-info message on connect, and disconnects malformed edit payloads as
 protocol errors. Session info carries the world/base identities plus up to 16
-current resident regions with revision and generation. The client validates
+current resident regions with revision and generation, sorted in deterministic
+row-major coordinate order before encoding so residency-slot reuse cannot
+change a capped manifest's order. The client validates
 those identities and requests snapshots for the advertised regions, so an
 empty client can enter through the same replica snapshot path used for
 recovery. This is a bounded late-join bootstrap, not a full application

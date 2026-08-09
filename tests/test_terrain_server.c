@@ -361,7 +361,118 @@ cleanup:
     return result;
 }
 
+static int test_session_info_order_is_coordinate_stable(void)
+{
+    henka_terrain_world_desc world_desc = henka_terrain_world_desc_default();
+    henka_terrain_layout layout;
+    henka_terrain_world* world = NULL;
+    henka_terrain_storage* storage = NULL;
+    henka_network_server* network = NULL;
+    henka_network_client* client = NULL;
+    henka_terrain_server* server = NULL;
+    henka_network_server_desc server_desc = henka_network_server_desc_default();
+    henka_network_client_desc client_desc = henka_network_client_desc_default();
+    henka_terrain_server_desc terrain_server_desc;
+    henka_terrain_sample* samples = NULL;
+    const henka_terrain_region_id region_ids[] = {{2, 1}, {0, 2}, {1, 0}};
+    const henka_terrain_region_id expected_ids[] = {{1, 0}, {2, 1}, {0, 2}};
+    henka_network_event event;
+    henka_terrain_session_info info;
+    uint32_t index;
+    uint32_t iteration;
+    int received = 0;
+    int result = 0;
+
+    world_desc.max_resident_regions = 3U;
+    server_desc.bind_endpoint.host[0] = '1';
+    server_desc.bind_endpoint.host[1] = '2';
+    server_desc.bind_endpoint.host[2] = '7';
+    server_desc.bind_endpoint.host[3] = '.';
+    server_desc.bind_endpoint.host[4] = '0';
+    server_desc.bind_endpoint.host[5] = '.';
+    server_desc.bind_endpoint.host[6] = '0';
+    server_desc.bind_endpoint.host[7] = '.';
+    server_desc.bind_endpoint.host[8] = '1';
+    server_desc.bind_endpoint.port = 7810U;
+    client_desc.remote_endpoint = server_desc.bind_endpoint;
+    if (henka_terrain_world_desc_get_layout(&world_desc, &layout) != HENKA_SUCCESS ||
+        henka_terrain_world_create(&world_desc, &world) != HENKA_SUCCESS ||
+        henka_terrain_storage_create(
+            &world_desc, "build/test_tmp/terrain_server_session_order_v1", &storage) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    samples = henka_calloc(layout.samples_per_region, sizeof(*samples));
+    if (samples == NULL)
+    {
+        goto cleanup;
+    }
+    samples[0].material_weights[0] = 255U;
+    for (index = 0U; index < 3U; ++index)
+    {
+        if (henka_terrain_world_apply_region_snapshot(
+                world,
+                (henka_terrain_region_storage_info){region_ids[index], index + 1U, index + 10U},
+                samples,
+                layout.samples_per_region) != HENKA_SUCCESS)
+        {
+            goto cleanup;
+        }
+    }
+    if (henka_network_server_create(&server_desc, &network) != HENKA_SUCCESS ||
+        henka_network_client_create(&client_desc, &client) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    terrain_server_desc = henka_terrain_server_desc_default();
+    terrain_server_desc.network = network;
+    terrain_server_desc.world = world;
+    terrain_server_desc.storage = storage;
+    if (henka_terrain_server_create(&terrain_server_desc, &server) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    for (iteration = 0U; iteration < 2000U && !received; ++iteration)
+    {
+        if (henka_terrain_server_poll(server, 2U, iteration) != HENKA_SUCCESS ||
+            henka_network_client_poll(client, 2U, &event) != HENKA_SUCCESS)
+        {
+            goto cleanup;
+        }
+        if (event.type == HENKA_NETWORK_EVENT_MESSAGE &&
+            event.message.type == HENKA_NETWORK_MESSAGE_CONNECT)
+        {
+            if (henka_terrain_session_info_decode(
+                    event.message.payload, event.message.payload_size, &info) != HENKA_SUCCESS ||
+                info.region_count != 3U)
+            {
+                goto cleanup;
+            }
+            for (index = 0U; index < 3U; ++index)
+            {
+                if (info.regions[index].region_id.x != expected_ids[index].x ||
+                    info.regions[index].region_id.z != expected_ids[index].z)
+                {
+                    goto cleanup;
+                }
+            }
+            received = 1;
+        }
+    }
+    result = received;
+
+cleanup:
+    henka_terrain_server_destroy(server);
+    henka_network_client_destroy(client);
+    henka_network_server_destroy(network);
+    henka_terrain_storage_destroy(storage);
+    henka_terrain_world_destroy(world);
+    henka_free(samples);
+    return result;
+}
+
 int main(void)
 {
-    return test_loopback_authoritative_edit() ? 0 : 1;
+    return test_loopback_authoritative_edit() &&
+        test_session_info_order_is_coordinate_stable() ? 0 : 1;
 }
