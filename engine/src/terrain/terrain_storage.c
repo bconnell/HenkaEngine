@@ -22,6 +22,8 @@
 #define HENKA_TERRAIN_JOURNAL_MAGIC UINT32_C(0x48544A31)
 #define HENKA_TERRAIN_REGION_HEADER_BYTES 56U
 #define HENKA_TERRAIN_REGION_CHECKSUM_BYTES 4U
+#define HENKA_TERRAIN_MANIFEST_MAGIC UINT32_C(0x48544D31)
+#define HENKA_TERRAIN_MANIFEST_BYTES 80U
 #define HENKA_TERRAIN_JOURNAL_HEADER_BYTES 20U
 #define HENKA_TERRAIN_JOURNAL_BEGIN 1U
 #define HENKA_TERRAIN_JOURNAL_REGION 2U
@@ -339,6 +341,122 @@ static henka_result henka_terrain_storage_journal_path(
     return henka_terrain_storage_resolve(storage, "terrain.journal", out_path);
 }
 
+static henka_result henka_terrain_storage_manifest_path(
+    const henka_terrain_storage* storage,
+    bool temporary,
+    char** out_path)
+{
+    return henka_terrain_storage_resolve(
+        storage, temporary ? "terrain.manifest.tmp" : "terrain.manifest", out_path);
+}
+
+static void henka_terrain_manifest_write_u32(uint8_t* destination, uint32_t value)
+{
+    destination[0] = (uint8_t)(value & 0xFFU);
+    destination[1] = (uint8_t)((value >> 8U) & 0xFFU);
+    destination[2] = (uint8_t)((value >> 16U) & 0xFFU);
+    destination[3] = (uint8_t)((value >> 24U) & 0xFFU);
+}
+
+static void henka_terrain_manifest_write_u64(uint8_t* destination, uint64_t value)
+{
+    uint32_t index;
+    for (index = 0U; index < 8U; ++index)
+    {
+        destination[index] = (uint8_t)((value >> (index * 8U)) & 0xFFU);
+    }
+}
+
+static uint32_t henka_terrain_manifest_read_u32(const uint8_t* source)
+{
+    return (uint32_t)source[0] |
+        ((uint32_t)source[1] << 8U) |
+        ((uint32_t)source[2] << 16U) |
+        ((uint32_t)source[3] << 24U);
+}
+
+static uint64_t henka_terrain_manifest_read_u64(const uint8_t* source)
+{
+    uint64_t value = 0U;
+    uint32_t index;
+    for (index = 0U; index < 8U; ++index)
+    {
+        value |= (uint64_t)source[index] << (index * 8U);
+    }
+    return value;
+}
+
+static void henka_terrain_manifest_encode(
+    const henka_terrain_world_desc* desc,
+    uint8_t buffer[HENKA_TERRAIN_MANIFEST_BYTES])
+{
+    const uint32_t values[] = {
+        desc->world_width_meters,
+        desc->world_depth_meters,
+        desc->region_edge_meters,
+        desc->chunk_edge_meters,
+        desc->samples_per_chunk,
+        desc->base_sample_spacing_meters,
+        desc->chunks_per_region_edge,
+        desc->regions_across,
+        desc->regions_down,
+        desc->max_resident_regions,
+        desc->max_resident_chunks,
+        desc->max_pending_io,
+        desc->max_stream_observers};
+    uint32_t index;
+    henka_terrain_manifest_write_u32(buffer + 0U, HENKA_TERRAIN_MANIFEST_MAGIC);
+    henka_terrain_manifest_write_u32(buffer + 4U, HENKA_TERRAIN_MANIFEST_VERSION);
+    henka_terrain_manifest_write_u64(buffer + 8U, desc->world_identity);
+    henka_terrain_manifest_write_u64(buffer + 16U, desc->base_asset_identity);
+    for (index = 0U; index < sizeof(values) / sizeof(values[0]); ++index)
+    {
+        henka_terrain_manifest_write_u32(buffer + 24U + index * 4U, values[index]);
+    }
+    henka_terrain_manifest_write_u32(
+        buffer + HENKA_TERRAIN_MANIFEST_BYTES - 4U,
+        henka_terrain_checksum(buffer, HENKA_TERRAIN_MANIFEST_BYTES - 4U));
+}
+
+static henka_result henka_terrain_manifest_decode(
+    const uint8_t* buffer,
+    size_t buffer_size,
+    henka_terrain_world_desc* out_desc)
+{
+    uint32_t values[13];
+    uint32_t index;
+    if (buffer == NULL || out_desc == NULL || buffer_size != HENKA_TERRAIN_MANIFEST_BYTES ||
+        henka_terrain_manifest_read_u32(buffer) != HENKA_TERRAIN_MANIFEST_MAGIC ||
+        henka_terrain_manifest_read_u32(buffer + 4U) != HENKA_TERRAIN_MANIFEST_VERSION ||
+        henka_terrain_manifest_read_u32(buffer + HENKA_TERRAIN_MANIFEST_BYTES - 4U) !=
+            henka_terrain_checksum(buffer, HENKA_TERRAIN_MANIFEST_BYTES - 4U))
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    *out_desc = henka_terrain_world_desc_default();
+    out_desc->format_version = HENKA_TERRAIN_FORMAT_VERSION;
+    out_desc->world_identity = henka_terrain_manifest_read_u64(buffer + 8U);
+    out_desc->base_asset_identity = henka_terrain_manifest_read_u64(buffer + 16U);
+    for (index = 0U; index < 13U; ++index)
+    {
+        values[index] = henka_terrain_manifest_read_u32(buffer + 24U + index * 4U);
+    }
+    out_desc->world_width_meters = values[0];
+    out_desc->world_depth_meters = values[1];
+    out_desc->region_edge_meters = values[2];
+    out_desc->chunk_edge_meters = values[3];
+    out_desc->samples_per_chunk = values[4];
+    out_desc->base_sample_spacing_meters = values[5];
+    out_desc->chunks_per_region_edge = values[6];
+    out_desc->regions_across = values[7];
+    out_desc->regions_down = values[8];
+    out_desc->max_resident_regions = values[9];
+    out_desc->max_resident_chunks = values[10];
+    out_desc->max_pending_io = values[11];
+    out_desc->max_stream_observers = values[12];
+    return henka_terrain_world_desc_validate(out_desc);
+}
+
 static henka_result henka_terrain_flush(FILE* file)
 {
     if (fflush(file) != 0)
@@ -599,6 +717,102 @@ henka_result henka_terrain_storage_recover(henka_terrain_storage* storage)
     }
     fclose(file);
     return result;
+}
+
+static henka_result henka_terrain_storage_write_manifest(
+    henka_terrain_storage* storage)
+{
+    char* path = NULL;
+    char* temporary_path = NULL;
+    FILE* file = NULL;
+    uint8_t buffer[HENKA_TERRAIN_MANIFEST_BYTES];
+    henka_result result;
+
+    if (storage == NULL ||
+        henka_terrain_storage_manifest_path(storage, false, &path) != HENKA_SUCCESS ||
+        henka_terrain_storage_manifest_path(storage, true, &temporary_path) != HENKA_SUCCESS)
+    {
+        henka_free(path);
+        henka_free(temporary_path);
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    henka_terrain_manifest_encode(&storage->desc, buffer);
+    file = henka_terrain_open_file(temporary_path, "wb");
+    if (file == NULL)
+    {
+        henka_free(path);
+        henka_free(temporary_path);
+        return HENKA_ERROR_PLATFORM;
+    }
+    result = fwrite(buffer, sizeof(buffer), 1U, file) == 1U
+        ? henka_terrain_flush(file) : HENKA_ERROR_PLATFORM;
+    fclose(file);
+    if (result == HENKA_SUCCESS)
+    {
+#if defined(_WIN32)
+        result = MoveFileExA(
+            temporary_path, path, MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH) != 0
+            ? HENKA_SUCCESS : HENKA_ERROR_PLATFORM;
+#else
+        result = rename(temporary_path, path) == 0 ? HENKA_SUCCESS : HENKA_ERROR_PLATFORM;
+#endif
+    }
+    henka_free(path);
+    henka_free(temporary_path);
+    return result;
+}
+
+henka_result henka_terrain_storage_load_manifest(
+    henka_terrain_storage* storage,
+    henka_terrain_world_desc* out_desc)
+{
+    char* path = NULL;
+    FILE* file = NULL;
+    uint8_t buffer[HENKA_TERRAIN_MAX_MANIFEST_BYTES];
+    size_t bytes_read;
+    if (storage == NULL || out_desc == NULL ||
+        henka_terrain_storage_manifest_path(storage, false, &path) != HENKA_SUCCESS)
+    {
+        henka_free(path);
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    file = henka_terrain_open_file(path, "rb");
+    henka_free(path);
+    if (file == NULL)
+    {
+        return errno == ENOENT ? HENKA_ERROR_ASSET_SOURCE : HENKA_ERROR_PLATFORM;
+    }
+    bytes_read = fread(buffer, 1U, sizeof(buffer), file);
+    if (ferror(file) != 0 ||
+        (bytes_read == sizeof(buffer) && fgetc(file) != EOF) ||
+        (bytes_read != sizeof(buffer) && !feof(file)))
+    {
+        fclose(file);
+        return HENKA_ERROR_LIMIT;
+    }
+    fclose(file);
+    return henka_terrain_manifest_decode(buffer, bytes_read, out_desc);
+}
+
+henka_result henka_terrain_storage_ensure_manifest(henka_terrain_storage* storage)
+{
+    henka_terrain_world_desc manifest_desc;
+    henka_result result;
+    if (storage == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    result = henka_terrain_storage_load_manifest(storage, &manifest_desc);
+    if (result == HENKA_ERROR_ASSET_SOURCE)
+    {
+        return henka_terrain_storage_write_manifest(storage);
+    }
+    if (result != HENKA_SUCCESS)
+    {
+        return result;
+    }
+    return memcmp(&manifest_desc, &storage->desc, sizeof(manifest_desc)) == 0
+        ? HENKA_SUCCESS : HENKA_ERROR_INVALID_ARGUMENT;
 }
 
 henka_result henka_terrain_storage_compact(henka_terrain_storage* storage)

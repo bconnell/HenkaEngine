@@ -611,7 +611,8 @@ int main(int argc, char** argv)
             &terrain_world_desc,
             options.has_save_root ? options.save_root : "build/server-save",
             &terrain_storage) != HENKA_SUCCESS ||
-        henka_terrain_storage_recover(terrain_storage) != HENKA_SUCCESS)
+        henka_terrain_storage_recover(terrain_storage) != HENKA_SUCCESS ||
+        henka_terrain_storage_ensure_manifest(terrain_storage) != HENKA_SUCCESS)
     {
         fprintf(stderr, "terrain runtime initialization failed\n");
         exit_code = 4;
@@ -647,11 +648,14 @@ int main(int argc, char** argv)
     if (options.has_world_path)
     {
         henka_terrain_layout layout;
+        henka_terrain_world_desc base_desc;
         henka_terrain_sample* samples = NULL;
         henka_terrain_region_storage_info info;
         if (henka_terrain_storage_create(
                 &terrain_world_desc, options.world_path, &base_terrain_storage) != HENKA_SUCCESS ||
             henka_terrain_storage_recover(base_terrain_storage) != HENKA_SUCCESS ||
+            henka_terrain_storage_load_manifest(base_terrain_storage, &base_desc) != HENKA_SUCCESS ||
+            memcmp(&base_desc, &terrain_world_desc, sizeof(base_desc)) != 0 ||
             henka_terrain_world_desc_get_layout(&terrain_world_desc, &layout) != HENKA_SUCCESS)
         {
             fprintf(stderr, "base Terrain world could not be opened or recovered\n");

@@ -52,6 +52,8 @@ static int test_codec_and_transaction_recovery(void)
     }
     packet[packet_size - 1U] ^= 1U;
     if (henka_terrain_storage_create(&desc, "build/test_tmp/terrain_storage_v1", &storage) != HENKA_SUCCESS ||
+        henka_terrain_storage_ensure_manifest(storage) != HENKA_SUCCESS ||
+        henka_terrain_storage_load_manifest(storage, &desc) != HENKA_SUCCESS ||
         henka_terrain_storage_begin(storage, 100U) != HENKA_SUCCESS ||
         henka_terrain_storage_write_region(
             storage, region, 4U, 9U, samples, layout.samples_per_region) != HENKA_SUCCESS ||

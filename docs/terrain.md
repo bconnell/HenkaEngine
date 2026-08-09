@@ -210,9 +210,9 @@ physics, render, pending-I/O, dirty, revision, and generation state.
 ## Current boundary
 
 This slice establishes the shared data model and bounded ownership contract.
-World manifest integration, full residency-wide dirty-neighbor scheduling,
-automatic render residency, cross-LOD seam stitching, and reconnect/late-join
-orchestration are subsequent validated runtime slices. Accepted edits can now derive one-chunk
+Full residency-wide dirty-neighbor scheduling, automatic render mesh
+residency, cross-LOD seam stitching, and reconnect/late-join orchestration are
+subsequent validated runtime slices. Accepted edits can now derive one-chunk
 physics-neighbor coverage through the bounded collision queue, and client
 prediction is available through the separate presentation-world owner.
 They must use this
