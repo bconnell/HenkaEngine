@@ -194,9 +194,10 @@ authority acceptance. Callers still own the pump cadence.
 `<henka/terrain_mesh.h>` provides the corresponding renderer-independent
 geometry boundary. `henka_terrain_mesh_build_chunk` requires a render-resident
 chunk and fills caller-owned buffers for LOD 0 through LOD 3. It derives finite
-central-difference normals, world-normalized UVs, and copies the four
-normalized material weights without allocating. The result carries the source
-revision and generation, so a graphics owner can discard a stale upload. GPU
+central-difference normals, an orthogonal tangent vec4 basis with deterministic
+handedness, stable world-space UV transport, and copies the four normalized
+material weights without allocating. The result carries the source revision
+and generation, so a graphics owner can discard a stale upload. GPU
 mesh ownership is provided by `<henka/terrain_render.h>` in the graphical
 client: it borrows the engine, scene, and world, keeps fixed-capacity chunk
 slots and request queues, creates scene entities with bounds for renderer
@@ -204,6 +205,12 @@ culling, and replaces meshes transactionally only after a candidate upload
 succeeds. Four LOD bands use hysteresis and deterministic adjacent-chunk
 selection; render visibility is bounded by the configured outer band. The
 owner destroys its entities and meshes without destroying the borrowed world.
+The built-in Terrain material uses exactly four normalized painted weights as
+world-space PBR layer blends. Each layer has validated base-color, normal, and
+metallic/roughness texture semantics plus base color, metallic, roughness,
+normal-strength, and meters-per-tile factors. The normal Rendered shader
+consumes these weights; ordinary material vertex-color tint remains disabled
+for this material.
 Uploaded GPU meshes add bounded downward edge skirts to cover finite LOD
 transitions. On each observer update the owner now derives a deterministic
 nearest working set from render-resident regions, removes slots whose regions
@@ -211,8 +218,9 @@ leave render residency or the outer LOD band, and queues only bounded missing
 chunks. It also compares uploaded revision/generation identity with the
 borrowed world and queues stale resident chunks for transactional replacement;
 it does not mutate the borrowed world or allocate per-frame working arrays.
-Full neighbor-aware stitching and manual visual validation remain
-subsequent work. The Sandbox also routes one shared
+Neighbor-aware border-normal sampling uses available authoritative regions and
+falls back to the resident edge until a neighbor streams in. Cross-LOD topology
+stitching and manual visual validation remain subsequent work. The Sandbox also routes one shared
 raise command through authoritative integer mutation, refreshes the
 transactional physics patch, and refreshes the affected GPU mesh; this is a
 runtime smoke path, not persistence or network authority.

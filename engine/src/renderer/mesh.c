@@ -644,10 +644,7 @@ henka_result henka_mesh_create_from_terrain_chunk(
              (float)source->material_weights[2] / 255.0f,
              (float)source->material_weights[3] / 255.0f},
             true,
-            {fabsf(source->normal[0]) > 0.9f ? 0.0f : 1.0f,
-             0.0f,
-             fabsf(source->normal[0]) > 0.9f ? 1.0f : 0.0f,
-             1.0f},
+            {source->tangent[0], source->tangent[1], source->tangent[2], source->tangent[3]},
             true};
     }
     for (index = 0U; index < terrain_mesh.index_count; ++index)

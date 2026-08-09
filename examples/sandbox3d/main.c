@@ -4193,9 +4193,8 @@ static henka_result sandbox3d_initialize_terrain_rendering(
         }
     }
 
-    terrain_material = henka_material_default();
-    terrain_material.name = "Sandbox Terrain Vertex Layers";
-    terrain_material.type = HENKA_MATERIAL_TYPE_VERTEX_COLOR;
+    terrain_material = henka_material_terrain_default();
+    terrain_material.name = "Sandbox Terrain PBR";
     terrain_material.shader = state->basic_shader;
     terrain_material.base_color = (henka_vec4){0.62f, 0.72f, 0.46f, 1.0f};
     terrain_material.roughness = 0.88f;

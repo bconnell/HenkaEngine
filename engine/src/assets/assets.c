@@ -3333,11 +3333,11 @@ henka_result henka_assets_reload_gltf_scene_asset(
 {
     char* key = NULL;
     henka_gltf_scene_asset* asset;
-    henka_gltf_scene_asset candidate;
-    henka_model_scene_data old_data;
-    henka_mesh* old_meshes[HENKA_MODEL_MAX_SCENE_ITEMS];
-    henka_material old_materials[HENKA_MODEL_MAX_SCENE_ITEMS];
-    bool old_material_ready[HENKA_MODEL_MAX_SCENE_ITEMS];
+    henka_gltf_scene_asset* candidate = NULL;
+    henka_model_scene_data* old_data = NULL;
+    henka_mesh** old_meshes = NULL;
+    henka_material* old_materials = NULL;
+    bool* old_material_ready = NULL;
     henka_result result;
 
     if (out_asset != NULL) *out_asset = NULL;
@@ -3347,23 +3347,50 @@ henka_result henka_assets_reload_gltf_scene_asset(
     asset = henka_asset_manager_find_gltf_scene_entry(manager, key);
     henka_free(key);
     if (asset == NULL) return HENKA_ERROR_INVALID_ARGUMENT;
-    memset(&candidate, 0, sizeof(candidate));
-    result = henka_assets_build_gltf_scene_payload(manager, asset->source_path, asset->shader, &candidate);
-    if (result != HENKA_SUCCESS) return result;
+    candidate = henka_calloc(1U, sizeof(*candidate));
+    old_data = henka_calloc(1U, sizeof(*old_data));
+    old_meshes = henka_calloc(HENKA_MODEL_MAX_SCENE_ITEMS, sizeof(*old_meshes));
+    old_materials = henka_calloc(HENKA_MODEL_MAX_SCENE_ITEMS, sizeof(*old_materials));
+    old_material_ready = henka_calloc(HENKA_MODEL_MAX_SCENE_ITEMS, sizeof(*old_material_ready));
+    if (candidate == NULL || old_data == NULL || old_meshes == NULL ||
+        old_materials == NULL || old_material_ready == NULL)
+    {
+        henka_free(candidate);
+        henka_free(old_data);
+        henka_free(old_meshes);
+        henka_free(old_materials);
+        henka_free(old_material_ready);
+        return HENKA_ERROR_OUT_OF_MEMORY;
+    }
+    result = henka_assets_build_gltf_scene_payload(manager, asset->source_path, asset->shader, candidate);
+    if (result != HENKA_SUCCESS)
+    {
+        henka_free(candidate);
+        henka_free(old_data);
+        henka_free(old_meshes);
+        henka_free(old_materials);
+        henka_free(old_material_ready);
+        return result;
+    }
 
-    old_data = asset->data;
-    memcpy(old_meshes, asset->primitive_meshes, sizeof(old_meshes));
-    memcpy(old_materials, asset->materials, sizeof(old_materials));
-    memcpy(old_material_ready, asset->material_ready, sizeof(old_material_ready));
-    asset->data = candidate.data;
-    memcpy(asset->primitive_meshes, candidate.primitive_meshes, sizeof(asset->primitive_meshes));
-    memcpy(asset->materials, candidate.materials, sizeof(asset->materials));
-    memcpy(asset->material_ready, candidate.material_ready, sizeof(asset->material_ready));
-    candidate.data = old_data;
-    memcpy(candidate.primitive_meshes, old_meshes, sizeof(candidate.primitive_meshes));
-    memcpy(candidate.materials, old_materials, sizeof(candidate.materials));
-    memcpy(candidate.material_ready, old_material_ready, sizeof(candidate.material_ready));
-    henka_assets_destroy_gltf_scene_payload(&candidate);
+    *old_data = asset->data;
+    memcpy(old_meshes, asset->primitive_meshes, sizeof(asset->primitive_meshes));
+    memcpy(old_materials, asset->materials, sizeof(asset->materials));
+    memcpy(old_material_ready, asset->material_ready, sizeof(asset->material_ready));
+    asset->data = candidate->data;
+    memcpy(asset->primitive_meshes, candidate->primitive_meshes, sizeof(asset->primitive_meshes));
+    memcpy(asset->materials, candidate->materials, sizeof(asset->materials));
+    memcpy(asset->material_ready, candidate->material_ready, sizeof(asset->material_ready));
+    candidate->data = *old_data;
+    memcpy(candidate->primitive_meshes, old_meshes, sizeof(candidate->primitive_meshes));
+    memcpy(candidate->materials, old_materials, sizeof(candidate->materials));
+    memcpy(candidate->material_ready, old_material_ready, sizeof(candidate->material_ready));
+    henka_assets_destroy_gltf_scene_payload(candidate);
+    henka_free(candidate);
+    henka_free(old_data);
+    henka_free(old_meshes);
+    henka_free(old_materials);
+    henka_free(old_material_ready);
     asset->revision += 1U;
     henka_asset_set_summary(&asset->metadata,
         "glTF scene reloaded transactionally while preserving stable scene identity.", "");

@@ -17,20 +17,63 @@ static float henka_terrain_mesh_height_meters(const henka_terrain_sample* sample
     return (float)sample->height_millimeters / 1000.0F;
 }
 
-static henka_result henka_terrain_mesh_get_sample(
-    const henka_terrain_sample* samples,
-    uint32_t edge,
-    uint32_t x,
-    uint32_t z,
-    float* out_height)
+typedef struct henka_terrain_mesh_region_view
 {
-    if (samples == NULL || out_height == NULL || x >= edge || z >= edge)
+    henka_terrain_region_id id;
+    const henka_terrain_sample* samples;
+} henka_terrain_mesh_region_view;
+
+static const henka_terrain_sample* henka_terrain_mesh_find_world_sample(
+    const henka_terrain_mesh_region_view views[3][3],
+    henka_terrain_region_id current_region,
+    const henka_terrain_sample* current_samples,
+    uint32_t region_sample_span,
+    uint32_t global_x,
+    uint32_t global_z)
+{
+    uint32_t view_z;
+    uint32_t view_x;
+
+    for (view_z = 0U; view_z < 3U; ++view_z)
     {
-        return HENKA_ERROR_INVALID_ARGUMENT;
+        for (view_x = 0U; view_x < 3U; ++view_x)
+        {
+            const henka_terrain_mesh_region_view* view = &views[view_z][view_x];
+            uint32_t base_x;
+            uint32_t base_z;
+            uint32_t local_x;
+            uint32_t local_z;
+            if (view->samples == NULL)
+            {
+                continue;
+            }
+            base_x = (uint32_t)view->id.x * region_sample_span;
+            base_z = (uint32_t)view->id.z * region_sample_span;
+            if (global_x < base_x || global_z < base_z ||
+                global_x > base_x + region_sample_span ||
+                global_z > base_z + region_sample_span)
+            {
+                continue;
+            }
+            local_x = global_x - base_x;
+            local_z = global_z - base_z;
+            return &view->samples[henka_terrain_mesh_sample_index(
+                region_sample_span + 1U, local_x, local_z)];
+        }
     }
-    *out_height = henka_terrain_mesh_height_meters(
-        &samples[henka_terrain_mesh_sample_index(edge, x, z)]);
-    return isfinite(*out_height) ? HENKA_SUCCESS : HENKA_ERROR_NUMERIC_RANGE;
+
+    /* A render-resident region may legitimately have no resident neighbor yet.
+     * Keep that chunk renderable while using the neighbor whenever it exists. */
+    {
+        uint32_t current_base_x = (uint32_t)current_region.x * region_sample_span;
+        uint32_t current_base_z = (uint32_t)current_region.z * region_sample_span;
+        uint32_t local_x = global_x < current_base_x ? 0U : global_x - current_base_x;
+        uint32_t local_z = global_z < current_base_z ? 0U : global_z - current_base_z;
+        if (local_x > region_sample_span) local_x = region_sample_span;
+        if (local_z > region_sample_span) local_z = region_sample_span;
+        return &current_samples[henka_terrain_mesh_sample_index(
+            region_sample_span + 1U, local_x, local_z)];
+    }
 }
 
 static henka_result henka_terrain_mesh_required_counts(
@@ -82,6 +125,7 @@ henka_result henka_terrain_mesh_build_chunk(
     uint32_t index_index = 0U;
     uint32_t local_x;
     uint32_t local_z;
+    henka_terrain_mesh_region_view region_views[3][3] = {{{0}}};
 
     if (world == NULL || io_mesh == NULL ||
         henka_terrain_world_get_desc(world, &desc) != HENKA_SUCCESS ||
@@ -114,23 +158,48 @@ henka_result henka_terrain_mesh_build_chunk(
     chunk_sample_span = desc.samples_per_chunk - 1U;
     step = 1U << lod_level;
     {
-        uint32_t region_chunk_x = (uint32_t)chunk_id.x % desc.chunks_per_region_edge;
-        uint32_t region_chunk_z = (uint32_t)chunk_id.z % desc.chunks_per_region_edge;
-        uint32_t base_x = region_chunk_x * chunk_sample_span;
-        uint32_t base_z = region_chunk_z * chunk_sample_span;
+        int32_t view_z;
+        int32_t view_x;
+        for (view_z = -1; view_z <= 1; ++view_z)
+        {
+            for (view_x = -1; view_x <= 1; ++view_x)
+            {
+                henka_terrain_region_id view_id = {
+                    region_id.x + view_x, region_id.z + view_z};
+                if (henka_terrain_region_id_is_valid(&desc, view_id))
+                {
+                    size_t view_sample_count = 0U;
+                    region_views[view_z + 1][view_x + 1].id = view_id;
+                    if (henka_terrain_world_get_region_samples(
+                        world,
+                        view_id,
+                        &region_views[view_z + 1][view_x + 1].samples,
+                        &view_sample_count) != HENKA_SUCCESS ||
+                        view_sample_count != layout.samples_per_region)
+                    {
+                        region_views[view_z + 1][view_x + 1].samples = NULL;
+                    }
+                }
+            }
+        }
+    }
+    {
         uint32_t samples_per_side = chunk_sample_span / step + 1U;
+        uint32_t region_sample_span = region_sample_edge - 1U;
+        uint32_t world_sample_x_max = desc.world_width_meters / desc.base_sample_spacing_meters;
+        uint32_t world_sample_z_max = desc.world_depth_meters / desc.base_sample_spacing_meters;
         for (local_z = 0U; local_z < samples_per_side; ++local_z)
         {
             for (local_x = 0U; local_x < samples_per_side; ++local_x)
             {
                 uint32_t sample_x = local_x * step;
                 uint32_t sample_z = local_z * step;
-                uint32_t source_x = base_x + sample_x;
-                uint32_t source_z = base_z + sample_z;
-                uint32_t left_x = sample_x > 0U ? sample_x - step : sample_x;
-                uint32_t right_x = sample_x + step <= chunk_sample_span ? sample_x + step : sample_x;
-                uint32_t down_z = sample_z > 0U ? sample_z - step : sample_z;
-                uint32_t up_z = sample_z + step <= chunk_sample_span ? sample_z + step : sample_z;
+                uint32_t source_x = (uint32_t)chunk_id.x * chunk_sample_span + sample_x;
+                uint32_t source_z = (uint32_t)chunk_id.z * chunk_sample_span + sample_z;
+                uint32_t left_x = source_x > step ? source_x - step : 0U;
+                uint32_t right_x = source_x + step < world_sample_x_max ? source_x + step : world_sample_x_max;
+                uint32_t down_z = source_z > step ? source_z - step : 0U;
+                uint32_t up_z = source_z + step < world_sample_z_max ? source_z + step : world_sample_z_max;
                 float height;
                 float left_height;
                 float right_height;
@@ -140,12 +209,30 @@ henka_result henka_terrain_mesh_build_chunk(
                 float normal_y;
                 float normal_z;
                 float normal_length;
+                float tangent_x;
+                float tangent_y;
+                float tangent_z;
+                float tangent_dot_normal;
+                float tangent_length;
+                float tangent_handedness;
                 const henka_terrain_sample* source;
-                if (henka_terrain_mesh_get_sample(samples, region_sample_edge, source_x, source_z, &height) != HENKA_SUCCESS ||
-                    henka_terrain_mesh_get_sample(samples, region_sample_edge, base_x + left_x, source_z, &left_height) != HENKA_SUCCESS ||
-                    henka_terrain_mesh_get_sample(samples, region_sample_edge, base_x + right_x, source_z, &right_height) != HENKA_SUCCESS ||
-                    henka_terrain_mesh_get_sample(samples, region_sample_edge, source_x, base_z + down_z, &down_height) != HENKA_SUCCESS ||
-                    henka_terrain_mesh_get_sample(samples, region_sample_edge, source_x, base_z + up_z, &up_height) != HENKA_SUCCESS)
+                const henka_terrain_sample* left_sample = henka_terrain_mesh_find_world_sample(
+                    region_views, region_id, samples, region_sample_span, left_x, source_z);
+                const henka_terrain_sample* right_sample = henka_terrain_mesh_find_world_sample(
+                    region_views, region_id, samples, region_sample_span, right_x, source_z);
+                const henka_terrain_sample* down_sample = henka_terrain_mesh_find_world_sample(
+                    region_views, region_id, samples, region_sample_span, source_x, down_z);
+                const henka_terrain_sample* up_sample = henka_terrain_mesh_find_world_sample(
+                    region_views, region_id, samples, region_sample_span, source_x, up_z);
+                source = henka_terrain_mesh_find_world_sample(
+                    region_views, region_id, samples, region_sample_span, source_x, source_z);
+                if (source == NULL || left_sample == NULL || right_sample == NULL ||
+                    down_sample == NULL || up_sample == NULL ||
+                    !isfinite((height = henka_terrain_mesh_height_meters(source))) ||
+                    !isfinite((left_height = henka_terrain_mesh_height_meters(left_sample))) ||
+                    !isfinite((right_height = henka_terrain_mesh_height_meters(right_sample))) ||
+                    !isfinite((down_height = henka_terrain_mesh_height_meters(down_sample))) ||
+                    !isfinite((up_height = henka_terrain_mesh_height_meters(up_sample))))
                 {
                     return HENKA_ERROR_NUMERIC_RANGE;
                 }
@@ -157,15 +244,44 @@ henka_result henka_terrain_mesh_build_chunk(
                 {
                     return HENKA_ERROR_NUMERIC_RANGE;
                 }
-                source = &samples[henka_terrain_mesh_sample_index(
-                    region_sample_edge, source_x, source_z)];
+                normal_x /= normal_length;
+                normal_y /= normal_length;
+                normal_z /= normal_length;
+                tangent_x = 2.0f * (float)step * (float)desc.base_sample_spacing_meters;
+                tangent_y = right_height - left_height;
+                tangent_z = 0.0f;
+                tangent_dot_normal = tangent_x * normal_x + tangent_y * normal_y;
+                tangent_x -= tangent_dot_normal * normal_x;
+                tangent_y -= tangent_dot_normal * normal_y;
+                tangent_z -= tangent_dot_normal * normal_z;
+                tangent_length = sqrtf(tangent_x * tangent_x + tangent_y * tangent_y + tangent_z * tangent_z);
+                if (!isfinite(tangent_length) || tangent_length <= 0.0F)
+                {
+                    tangent_x = fabsf(normal_y) > 0.5f ? 1.0f : 0.0f;
+                    tangent_y = 0.0f;
+                    tangent_z = fabsf(normal_y) > 0.5f ? 0.0f : 1.0f;
+                    tangent_dot_normal = tangent_x * normal_x + tangent_y * normal_y + tangent_z * normal_z;
+                    tangent_x -= tangent_dot_normal * normal_x;
+                    tangent_y -= tangent_dot_normal * normal_y;
+                    tangent_z -= tangent_dot_normal * normal_z;
+                    tangent_length = sqrtf(tangent_x * tangent_x + tangent_y * tangent_y + tangent_z * tangent_z);
+                }
+                if (!isfinite(tangent_length) || tangent_length <= 0.0F)
+                {
+                    return HENKA_ERROR_NUMERIC_RANGE;
+                }
+                tangent_x /= tangent_length;
+                tangent_y /= tangent_length;
+                tangent_z /= tangent_length;
+                tangent_handedness = normal_z * tangent_x - normal_x * tangent_z < 0.0f ? 1.0f : -1.0f;
                 io_mesh->vertices[vertex_index++] = (henka_terrain_mesh_vertex){
                     {(float)(chunk_id.x * (int32_t)desc.chunk_edge_meters) +
                         (float)(sample_x * desc.base_sample_spacing_meters),
                         height,
                         (float)(chunk_id.z * (int32_t)desc.chunk_edge_meters) +
                         (float)(sample_z * desc.base_sample_spacing_meters)},
-                    {normal_x / normal_length, normal_y / normal_length, normal_z / normal_length},
+                    {normal_x, normal_y, normal_z},
+                    {tangent_x, tangent_y, tangent_z, tangent_handedness},
                     {(float)(chunk_id.x * desc.chunk_edge_meters + sample_x * desc.base_sample_spacing_meters) /
                         (float)desc.world_width_meters,
                      (float)(chunk_id.z * desc.chunk_edge_meters + sample_z * desc.base_sample_spacing_meters) /

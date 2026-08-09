@@ -51,6 +51,16 @@ void henka_test_material(void)
     HENKA_TEST_ASSERT(tiny_description[sizeof(tiny_description) - 1U] == '\0');
 
     {
+        henka_material terrain = henka_material_terrain_default();
+        terrain.shader = (henka_shader*)(uintptr_t)1U;
+        HENKA_TEST_ASSERT(terrain.terrain_layers_enabled);
+        HENKA_TEST_ASSERT(henka_material_validate(&terrain) == HENKA_SUCCESS);
+        HENKA_TEST_ASSERT(terrain.terrain_layers[0].roughness > terrain.terrain_layers[2].roughness);
+        terrain.terrain_layers[1].texture_scale_meters = 0.0f;
+        HENKA_TEST_ASSERT(henka_material_validate(&terrain) == HENKA_ERROR_INVALID_ARGUMENT);
+    }
+
+    {
         henka_material valid = henka_material_default();
         valid.shader = (henka_shader*)(uintptr_t)1U;
         HENKA_TEST_ASSERT(henka_material_validate(&valid) == HENKA_SUCCESS);

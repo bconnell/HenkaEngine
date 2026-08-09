@@ -493,6 +493,8 @@ typedef struct henka_opengl_functions
     PFNGLUNIFORMMATRIX4FVPROC UniformMatrix4fv;
     PFNGLUNIFORM4FPROC Uniform4f;
     PFNGLUNIFORM4FVPROC Uniform4fv;
+    PFNGLUNIFORM1IVPROC Uniform1iv;
+    PFNGLUNIFORM1FVPROC Uniform1fv;
     PFNGLUNIFORM3FPROC Uniform3f;
     PFNGLUNIFORM2FPROC Uniform2f;
     PFNGLUNIFORM1IPROC Uniform1i;
@@ -807,6 +809,8 @@ static bool henka_opengl_load_functions(void)
     HENKA_GL_LOAD(UniformMatrix4fv);
     HENKA_GL_LOAD(Uniform4f);
     HENKA_GL_LOAD(Uniform4fv);
+    HENKA_GL_LOAD(Uniform1iv);
+    HENKA_GL_LOAD(Uniform1fv);
     HENKA_GL_LOAD(Uniform3f);
     HENKA_GL_LOAD(Uniform2f);
     HENKA_GL_LOAD(Uniform1i);
@@ -1202,7 +1206,11 @@ static void henka_add_optional_shader_locations(
         "reflectionProbePosition", "reflectionProbeExtents", "useReflectionProbe",
         "reflectionProbeMap", "useReflectionProbeMap", "doubleSided",
         "previousViewProjection", "previousModel", "useMotionVectors",
-        "useInstancing", "thickness", "attenuationDistance", "attenuationColor"
+        "useInstancing", "thickness", "attenuationDistance", "attenuationColor",
+        "useTerrainLayers", "terrainLayerBaseColor[0]", "terrainLayerParameters[0]",
+        "terrainLayerBaseColorAvailable[0]", "terrainLayerNormalAvailable[0]",
+        "terrainLayerMetallicRoughnessAvailable[0]", "terrainLayerBaseColorTextures[0]",
+        "terrainLayerNormalTextures[0]", "terrainLayerMetallicRoughnessTextures[0]"
     };
     size_t index;
 
@@ -1352,6 +1360,34 @@ static void henka_set_uniform_vec4_array_owned(
     if (location >= 0 && values != NULL && count > 0)
     {
         g_gl.Uniform4fv(location, count, values);
+    }
+}
+
+static void henka_set_uniform_int_array_owned(
+    GLuint program,
+    const henka_opengl_shader_data* shader_data,
+    const char* name,
+    const int* values,
+    int count)
+{
+    GLint location = henka_opengl_shader_uniform_location(program, shader_data, name);
+    if (location >= 0 && values != NULL && count > 0)
+    {
+        g_gl.Uniform1iv(location, count, values);
+    }
+}
+
+static void henka_set_uniform_float_array_owned(
+    GLuint program,
+    const henka_opengl_shader_data* shader_data,
+    const char* name,
+    const float* values,
+    int count)
+{
+    GLint location = henka_opengl_shader_uniform_location(program, shader_data, name);
+    if (location >= 0 && values != NULL && count > 0)
+    {
+        g_gl.Uniform1fv(location, count, values);
     }
 }
 
@@ -4431,11 +4467,12 @@ static bool henka_opengl_material_batch_compatible(
     const henka_material* a,
     const henka_material* b)
 {
+    size_t layer_index;
     if (a == NULL || b == NULL)
     {
         return false;
     }
-    return a->type == b->type &&
+    if (!(a->type == b->type &&
         a->shader == b->shader &&
         a->base_color_texture == b->base_color_texture &&
         a->normal_texture == b->normal_texture &&
@@ -4483,7 +4520,31 @@ static bool henka_opengl_material_batch_compatible(
         a->sheen_color.x == b->sheen_color.x &&
         a->sheen_color.y == b->sheen_color.y &&
         a->sheen_color.z == b->sheen_color.z &&
-        a->sheen_roughness == b->sheen_roughness;
+        a->sheen_roughness == b->sheen_roughness &&
+        a->terrain_layers_enabled == b->terrain_layers_enabled))
+    {
+        return false;
+    }
+    for (layer_index = 0U; layer_index < HENKA_MATERIAL_TERRAIN_LAYER_COUNT; ++layer_index)
+    {
+        const henka_material_layer* left = &a->terrain_layers[layer_index];
+        const henka_material_layer* right = &b->terrain_layers[layer_index];
+        if (left->base_color_texture != right->base_color_texture ||
+            left->normal_texture != right->normal_texture ||
+            left->metallic_roughness_texture != right->metallic_roughness_texture ||
+            left->base_color.x != right->base_color.x ||
+            left->base_color.y != right->base_color.y ||
+            left->base_color.z != right->base_color.z ||
+            left->base_color.w != right->base_color.w ||
+            left->metallic != right->metallic ||
+            left->roughness != right->roughness ||
+            left->texture_scale_meters != right->texture_scale_meters ||
+            left->normal_scale != right->normal_scale)
+        {
+            return false;
+        }
+    }
+    return true;
 }
 
 static bool henka_opengl_scene_has_active_reflection_probe(const henka_scene* scene)
@@ -5383,6 +5444,59 @@ henka_result henka_opengl_renderer_draw_scene(
         henka_set_uniform_int(program, "occlusionUvSet", entity->material.occlusion_uv_set);
         henka_set_uniform_int(program, "emissiveTexture", 4);
         henka_set_uniform_int(program, "emissiveUvSet", entity->material.emissive_uv_set);
+        {
+            float terrain_layer_colors[HENKA_MATERIAL_TERRAIN_LAYER_COUNT * 4U] = {0.0f};
+            float terrain_layer_parameters[HENKA_MATERIAL_TERRAIN_LAYER_COUNT * 4U] = {0.0f};
+            int terrain_layer_base_color_available[HENKA_MATERIAL_TERRAIN_LAYER_COUNT] = {0};
+            int terrain_layer_normal_available[HENKA_MATERIAL_TERRAIN_LAYER_COUNT] = {0};
+            int terrain_layer_metallic_roughness_available[HENKA_MATERIAL_TERRAIN_LAYER_COUNT] = {0};
+            int terrain_layer_base_color_units[HENKA_MATERIAL_TERRAIN_LAYER_COUNT] = {14, 15, 16, 17};
+            int terrain_layer_normal_units[HENKA_MATERIAL_TERRAIN_LAYER_COUNT] = {18, 19, 20, 21};
+            int terrain_layer_metallic_roughness_units[HENKA_MATERIAL_TERRAIN_LAYER_COUNT] = {22, 23, 24, 25};
+            uint32_t layer_index;
+            for (layer_index = 0U; layer_index < HENKA_MATERIAL_TERRAIN_LAYER_COUNT; ++layer_index)
+            {
+                const henka_material_layer* layer = &entity->material.terrain_layers[layer_index];
+                const henka_opengl_texture_data* layer_base_color = layer->base_color_texture != NULL ?
+                    (const henka_opengl_texture_data*)layer->base_color_texture->backend_data : NULL;
+                const henka_opengl_texture_data* layer_normal = layer->normal_texture != NULL ?
+                    (const henka_opengl_texture_data*)layer->normal_texture->backend_data : NULL;
+                const henka_opengl_texture_data* layer_metallic_roughness = layer->metallic_roughness_texture != NULL ?
+                    (const henka_opengl_texture_data*)layer->metallic_roughness_texture->backend_data : NULL;
+                terrain_layer_colors[layer_index * 4U + 0U] = layer->base_color.x;
+                terrain_layer_colors[layer_index * 4U + 1U] = layer->base_color.y;
+                terrain_layer_colors[layer_index * 4U + 2U] = layer->base_color.z;
+                terrain_layer_colors[layer_index * 4U + 3U] = layer->base_color.w;
+                terrain_layer_parameters[layer_index * 4U + 0U] = layer->metallic;
+                terrain_layer_parameters[layer_index * 4U + 1U] = layer->roughness;
+                terrain_layer_parameters[layer_index * 4U + 2U] = layer->texture_scale_meters;
+                terrain_layer_parameters[layer_index * 4U + 3U] = layer->normal_scale;
+                terrain_layer_base_color_available[layer_index] = layer_base_color != NULL && layer_base_color->texture_id != 0U;
+                terrain_layer_normal_available[layer_index] = layer_normal != NULL && layer_normal->texture_id != 0U;
+                terrain_layer_metallic_roughness_available[layer_index] = layer_metallic_roughness != NULL && layer_metallic_roughness->texture_id != 0U;
+            }
+            henka_set_uniform_bool_owned(
+                program,
+                shader_data,
+                "useTerrainLayers",
+                !helper_entity && entity->material.terrain_layers_enabled);
+            henka_set_uniform_vec4_array_owned(
+                program, shader_data, "terrainLayerBaseColor[0]", terrain_layer_colors, HENKA_MATERIAL_TERRAIN_LAYER_COUNT);
+            henka_set_uniform_vec4_array_owned(
+                program, shader_data, "terrainLayerParameters[0]", terrain_layer_parameters, HENKA_MATERIAL_TERRAIN_LAYER_COUNT);
+            henka_set_uniform_int_array_owned(
+                program, shader_data, "terrainLayerBaseColorAvailable[0]", terrain_layer_base_color_available, HENKA_MATERIAL_TERRAIN_LAYER_COUNT);
+            henka_set_uniform_int_array_owned(
+                program, shader_data, "terrainLayerNormalAvailable[0]", terrain_layer_normal_available, HENKA_MATERIAL_TERRAIN_LAYER_COUNT);
+            henka_set_uniform_int_array_owned(
+                program, shader_data, "terrainLayerMetallicRoughnessAvailable[0]", terrain_layer_metallic_roughness_available, HENKA_MATERIAL_TERRAIN_LAYER_COUNT);
+            henka_set_uniform_int_array_owned(
+                program, shader_data, "terrainLayerBaseColorTextures[0]", terrain_layer_base_color_units, HENKA_MATERIAL_TERRAIN_LAYER_COUNT);
+            henka_set_uniform_int_array_owned(
+                program, shader_data, "terrainLayerNormalTextures[0]", terrain_layer_normal_units, HENKA_MATERIAL_TERRAIN_LAYER_COUNT);
+            henka_set_uniform_int_array_owned(
+                program, shader_data, "terrainLayerMetallicRoughnessTextures[0]", terrain_layer_metallic_roughness_units, HENKA_MATERIAL_TERRAIN_LAYER_COUNT);
+        }
         henka_set_uniform_bool(program, "useNormalTexture",
             normal_texture_data != NULL && normal_texture_data->texture_id != 0U);
         henka_set_uniform_bool(program, "useMetallicRoughnessTexture",
@@ -5521,6 +5635,25 @@ henka_result henka_opengl_renderer_draw_scene(
         g_gl.ActiveTexture(GL_TEXTURE13);
         glBindTexture(GL_TEXTURE_CUBE_MAP,
             rendered && point_shadow_light_index >= 0 ? state->point_shadow_depth_texture : 0U);
+        {
+            uint32_t layer_index;
+            for (layer_index = 0U; layer_index < HENKA_MATERIAL_TERRAIN_LAYER_COUNT; ++layer_index)
+            {
+                const henka_material_layer* layer = &entity->material.terrain_layers[layer_index];
+                const henka_opengl_texture_data* layer_base_color_texture = layer->base_color_texture != NULL ?
+                    (const henka_opengl_texture_data*)layer->base_color_texture->backend_data : NULL;
+                const henka_opengl_texture_data* normal = layer->normal_texture != NULL ?
+                    (const henka_opengl_texture_data*)layer->normal_texture->backend_data : NULL;
+                const henka_opengl_texture_data* metallic_roughness = layer->metallic_roughness_texture != NULL ?
+                    (const henka_opengl_texture_data*)layer->metallic_roughness_texture->backend_data : NULL;
+                g_gl.ActiveTexture((GLenum)(GL_TEXTURE14 + layer_index));
+                glBindTexture(GL_TEXTURE_2D, layer_base_color_texture != NULL ? layer_base_color_texture->texture_id : 0U);
+                g_gl.ActiveTexture((GLenum)(GL_TEXTURE18 + layer_index));
+                glBindTexture(GL_TEXTURE_2D, normal != NULL ? normal->texture_id : 0U);
+                g_gl.ActiveTexture((GLenum)(GL_TEXTURE22 + layer_index));
+                glBindTexture(GL_TEXTURE_2D, metallic_roughness != NULL ? metallic_roughness->texture_id : 0U);
+            }
+        }
         g_gl.ActiveTexture(GL_TEXTURE0);
         if (instance_count == 1U && pass == 0U && !helper_entity &&
             draw_index < HENKA_OPENGL_OCCLUSION_QUERY_CAPACITY &&
@@ -5630,6 +5763,18 @@ henka_result henka_opengl_renderer_draw_scene(
     glBindTexture(GL_TEXTURE_2D, 0);
     g_gl.ActiveTexture(GL_TEXTURE13);
     glBindTexture(GL_TEXTURE_CUBE_MAP, 0);
+    {
+        uint32_t layer_index;
+        for (layer_index = 0U; layer_index < HENKA_MATERIAL_TERRAIN_LAYER_COUNT; ++layer_index)
+        {
+            g_gl.ActiveTexture((GLenum)(GL_TEXTURE14 + layer_index));
+            glBindTexture(GL_TEXTURE_2D, 0);
+            g_gl.ActiveTexture((GLenum)(GL_TEXTURE18 + layer_index));
+            glBindTexture(GL_TEXTURE_2D, 0);
+            g_gl.ActiveTexture((GLenum)(GL_TEXTURE22 + layer_index));
+            glBindTexture(GL_TEXTURE_2D, 0);
+        }
+    }
     g_gl.ActiveTexture(GL_TEXTURE0);
     g_gl.UseProgram(0);
     glDisable(GL_BLEND);

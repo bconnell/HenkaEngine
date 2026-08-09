@@ -94,9 +94,7 @@ henka_terrain_render_desc henka_terrain_render_desc_default(void)
     desc.lod_max_distances[2] = 512.0f;
     desc.lod_max_distances[3] = 1024.0f;
     desc.lod_hysteresis = 0.15f;
-    desc.material = henka_material_default();
-    desc.material.name = "Terrain";
-    desc.material.type = HENKA_MATERIAL_TYPE_VERTEX_COLOR;
+    desc.material = henka_material_terrain_default();
     return desc;
 }
 
@@ -463,6 +461,8 @@ henka_result henka_terrain_render_runtime_create(
     henka_terrain_render_runtime* runtime;
     henka_terrain_render_desc resolved;
     henka_terrain_world_desc world_desc;
+    henka_asset_manager* assets;
+    henka_shader* terrain_shader = NULL;
 
     if (out_runtime == NULL)
     {
@@ -472,8 +472,24 @@ henka_result henka_terrain_render_runtime_create(
     resolved = desc != NULL ? *desc : henka_terrain_render_desc_default();
     if (engine == NULL || scene == NULL || world == NULL || engine->renderer == NULL ||
         henka_terrain_world_get_desc(world, &world_desc) != HENKA_SUCCESS ||
-        henka_terrain_world_desc_validate(&world_desc) != HENKA_SUCCESS ||
-        !henka_terrain_render_desc_is_valid(&resolved))
+        henka_terrain_world_desc_validate(&world_desc) != HENKA_SUCCESS)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    if (resolved.material.shader == NULL)
+    {
+        assets = henka_engine_get_asset_manager(engine);
+        if (assets == NULL || henka_assets_load_shader(
+                assets,
+                "assets/shaders/basic_lit.vert",
+                "assets/shaders/basic_lit.frag",
+                &terrain_shader) != HENKA_SUCCESS || terrain_shader == NULL)
+        {
+            return HENKA_ERROR_ASSET_SOURCE;
+        }
+        resolved.material.shader = terrain_shader;
+    }
+    if (!henka_terrain_render_desc_is_valid(&resolved))
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }

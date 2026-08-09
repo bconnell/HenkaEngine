@@ -13,6 +13,7 @@ typedef struct henka_terrain_mesh_vertex
 {
     float position[3];
     float normal[3];
+    float tangent[4];
     float uv[2];
     uint8_t material_weights[HENKA_TERRAIN_ACTIVE_MATERIAL_COUNT];
 } henka_terrain_mesh_vertex;

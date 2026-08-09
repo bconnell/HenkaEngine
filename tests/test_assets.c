@@ -172,7 +172,7 @@ void henka_test_assets(void)
     henka_mesh* gltf_mesh;
     henka_material_asset* material_asset;
     henka_gltf_scene_asset* scene_asset;
-    henka_gltf_scene_asset scene_entry;
+    henka_gltf_scene_asset* scene_entry;
     henka_gltf_scene_asset* scene_entry_array[1];
     henka_material material;
     henka_material_instance material_instance;
@@ -781,14 +781,15 @@ void henka_test_assets(void)
     material_scene = NULL;
     HENKA_TEST_ASSERT(henka_assets_apply_material_instance_to_entity(
         NULL, NULL, HENKA_INVALID_ENTITY) == HENKA_ERROR_INVALID_ARGUMENT);
-    memset(&scene_entry, 0, sizeof(scene_entry));
-    scene_entry.key = "assets/models/reload-scene.gltf";
-    scene_entry.source_path = "assets/models/reload-scene.gltf";
-    scene_entry.shader = &managed_shader;
-    scene_entry.data.scene_count = 2U;
-    scene_entry.data.active_scene_index = 0U;
-    scene_entry.metadata.type = HENKA_ASSET_TYPE_GLTF_SCENE;
-    scene_entry_array[0] = &scene_entry;
+    scene_entry = henka_calloc(1U, sizeof(*scene_entry));
+    HENKA_TEST_ASSERT(scene_entry != NULL);
+    scene_entry->key = "assets/models/reload-scene.gltf";
+    scene_entry->source_path = "assets/models/reload-scene.gltf";
+    scene_entry->shader = &managed_shader;
+    scene_entry->data.scene_count = 2U;
+    scene_entry->data.active_scene_index = 0U;
+    scene_entry->metadata.type = HENKA_ASSET_TYPE_GLTF_SCENE;
+    scene_entry_array[0] = scene_entry;
     manager.gltf_scene_entries = scene_entry_array;
     manager.gltf_scene_count = 1U;
     manager.gltf_scene_capacity = 1U;
@@ -798,12 +799,12 @@ void henka_test_assets(void)
         "assets/models/reload-scene.gltf",
         &scene_asset) != HENKA_SUCCESS);
     HENKA_TEST_ASSERT(scene_asset == NULL);
-    HENKA_TEST_ASSERT(manager.gltf_scene_entries[0] == &scene_entry);
-    HENKA_TEST_ASSERT(scene_entry.data.primitive_count == 0U);
-    HENKA_TEST_ASSERT(henka_assets_set_gltf_scene_active_scene(&scene_entry, 2U) != HENKA_SUCCESS);
-    HENKA_TEST_ASSERT(scene_entry.data.active_scene_index == 0U);
-    HENKA_TEST_ASSERT(henka_assets_set_gltf_scene_active_scene(&scene_entry, 1U) == HENKA_SUCCESS);
-    HENKA_TEST_ASSERT(scene_entry.data.active_scene_index == 1U);
+    HENKA_TEST_ASSERT(manager.gltf_scene_entries[0] == scene_entry);
+    HENKA_TEST_ASSERT(scene_entry->data.primitive_count == 0U);
+    HENKA_TEST_ASSERT(henka_assets_set_gltf_scene_active_scene(scene_entry, 2U) != HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(scene_entry->data.active_scene_index == 0U);
+    HENKA_TEST_ASSERT(henka_assets_set_gltf_scene_active_scene(scene_entry, 1U) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(scene_entry->data.active_scene_index == 1U);
     texture = (henka_texture*)1;
     HENKA_TEST_ASSERT(henka_assets_retry_failed_texture(
         &manager,
@@ -891,4 +892,5 @@ void henka_test_assets(void)
     HENKA_TEST_ASSERT(resolved_path == NULL);
     HENKA_TEST_ASSERT(henka_assets_resolve_path("C:/HenkaSandbox3D", "assets/CON/model.obj", &resolved_path) == HENKA_ERROR_INVALID_ARGUMENT);
     HENKA_TEST_ASSERT(resolved_path == NULL);
+    henka_free(scene_entry);
 }

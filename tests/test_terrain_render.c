@@ -12,7 +12,12 @@ static int test_default_descriptor(void)
         desc.lod_max_distances[2] < desc.lod_max_distances[3] &&
         isfinite(desc.lod_hysteresis) && desc.lod_hysteresis >= 0.0f &&
         desc.lod_hysteresis < 1.0f &&
-        desc.material.type == HENKA_MATERIAL_TYPE_VERTEX_COLOR;
+        desc.material.type == HENKA_MATERIAL_TYPE_LIT &&
+        desc.material.terrain_layers_enabled &&
+        desc.material.terrain_layers[0].texture_scale_meters > 0.0f &&
+        desc.material.terrain_layers[1].texture_scale_meters > 0.0f &&
+        desc.material.terrain_layers[2].texture_scale_meters > 0.0f &&
+        desc.material.terrain_layers[3].texture_scale_meters > 0.0f;
 }
 
 static int test_invalid_boundaries(void)

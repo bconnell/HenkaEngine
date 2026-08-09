@@ -37,6 +37,20 @@ typedef enum henka_material_alpha_mode
     HENKA_MATERIAL_ALPHA_BLENDED
 } henka_material_alpha_mode;
 
+#define HENKA_MATERIAL_TERRAIN_LAYER_COUNT 4U
+
+typedef struct henka_material_layer
+{
+    henka_texture* base_color_texture;
+    henka_texture* normal_texture;
+    henka_texture* metallic_roughness_texture;
+    henka_vec4 base_color;
+    float metallic;
+    float roughness;
+    float texture_scale_meters;
+    float normal_scale;
+} henka_material_layer;
+
 typedef struct henka_material
 {
     const char* name;
@@ -81,6 +95,8 @@ typedef struct henka_material
     bool receive_shadows;
     henka_vec3 sheen_color;
     float sheen_roughness;
+    bool terrain_layers_enabled;
+    henka_material_layer terrain_layers[HENKA_MATERIAL_TERRAIN_LAYER_COUNT];
 } henka_material;
 
 typedef struct henka_scene_object_info
@@ -189,6 +205,7 @@ const char* henka_material_type_get_label(henka_material_type type);
 henka_result henka_material_validate(const henka_material* material);
 henka_result henka_material_describe(const henka_material* material, char* buffer, size_t buffer_size);
 henka_material henka_material_default(void);
+henka_material henka_material_terrain_default(void);
 henka_result henka_scene_create(henka_scene** out_scene);
 void henka_scene_destroy(henka_scene* scene);
 henka_entity henka_scene_create_entity(henka_scene* scene);

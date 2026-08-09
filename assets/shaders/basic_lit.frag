@@ -18,6 +18,15 @@ uniform sampler2D baseColorTexture;
 uniform int baseColorUvSet;
 uniform bool useTexture;
 uniform bool useVertexColor;
+uniform bool useTerrainLayers;
+uniform vec4 terrainLayerBaseColor[4];
+uniform vec4 terrainLayerParameters[4];
+uniform int terrainLayerBaseColorAvailable[4];
+uniform int terrainLayerNormalAvailable[4];
+uniform int terrainLayerMetallicRoughnessAvailable[4];
+uniform sampler2D terrainLayerBaseColorTextures[4];
+uniform sampler2D terrainLayerNormalTextures[4];
+uniform sampler2D terrainLayerMetallicRoughnessTextures[4];
 uniform vec3 cameraPosition;
 uniform vec3 lightDirection;
 uniform vec3 lightColor;
@@ -324,7 +333,25 @@ vec3 sampleEnvironment(vec3 direction)
 void main()
 {
     vec4 surfaceColor = baseColor;
-    if (useTexture)
+    if (useTerrainLayers)
+    {
+        vec4 terrainWeights = max(fragVertexColor, vec4(0.0));
+        float terrainWeightSum = max(dot(terrainWeights, vec4(1.0)), 0.0001);
+        terrainWeights /= terrainWeightSum;
+        vec3 terrainAlbedo = vec3(0.0);
+        for (int layerIndex = 0; layerIndex < 4; ++layerIndex)
+        {
+            vec4 layerColor = terrainLayerBaseColor[layerIndex];
+            vec2 layerUv = fragWorldPosition.xz / max(terrainLayerParameters[layerIndex].z, 0.001);
+            if (terrainLayerBaseColorAvailable[layerIndex] != 0)
+            {
+                layerColor *= texture(terrainLayerBaseColorTextures[layerIndex], layerUv);
+            }
+            terrainAlbedo += layerColor.rgb * terrainWeights[layerIndex];
+        }
+        surfaceColor = vec4(terrainAlbedo * max(baseColor.rgb, vec3(0.0)), baseColor.a);
+    }
+    else if (useTexture)
     {
         surfaceColor *= texture(baseColorTexture, materialUv(baseColorUvSet));
     }
@@ -343,7 +370,32 @@ void main()
         geometricNormal = -geometricNormal;
     }
     vec3 normal = geometricNormal;
-    if (useNormalTexture)
+    if (useTerrainLayers)
+    {
+        vec4 terrainWeights = max(fragVertexColor, vec4(0.0));
+        float terrainWeightSum = max(dot(terrainWeights, vec4(1.0)), 0.0001);
+        terrainWeights /= terrainWeightSum;
+        vec3 terrainTangentNormal = vec3(0.0, 0.0, 0.0);
+        vec3 tangent = fragTangent - geometricNormal * dot(geometricNormal, fragTangent);
+        tangent = safeNormalize(tangent, vec3(1.0, 0.0, 0.0));
+        vec3 bitangent = safeNormalize(cross(geometricNormal, tangent), vec3(0.0, 0.0, 1.0)) * fragTangentHandedness;
+        for (int layerIndex = 0; layerIndex < 4; ++layerIndex)
+        {
+            vec3 layerNormal = vec3(0.0, 0.0, 1.0);
+            if (terrainLayerNormalAvailable[layerIndex] != 0)
+            {
+                vec2 layerUv = fragWorldPosition.xz / max(terrainLayerParameters[layerIndex].z, 0.001);
+                layerNormal = texture(terrainLayerNormalTextures[layerIndex], layerUv).xyz * 2.0 - 1.0;
+                layerNormal.xy *= terrainLayerParameters[layerIndex].w;
+                layerNormal = safeNormalize(layerNormal, vec3(0.0, 0.0, 1.0));
+            }
+            terrainTangentNormal += layerNormal * terrainWeights[layerIndex];
+        }
+        normal = safeNormalize(
+            mat3(tangent, bitangent, geometricNormal) * safeNormalize(terrainTangentNormal, vec3(0.0, 0.0, 1.0)),
+            geometricNormal);
+    }
+    else if (useNormalTexture)
     {
         vec3 tangent = fragTangent - geometricNormal * dot(geometricNormal, fragTangent);
         tangent = safeNormalize(tangent, vec3(1.0, 0.0, 0.0));
@@ -365,7 +417,31 @@ void main()
     float surfaceClearcoatRoughness = clamp(clearcoatRoughness, 0.045, 1.0);
     vec3 surfaceSheenColor = clamp(sheenColor, vec3(0.0), vec3(1.0));
     float surfaceSheenRoughness = clamp(sheenRoughness, 0.045, 1.0);
-    if (useMetallicRoughnessTexture)
+    if (useTerrainLayers)
+    {
+        vec4 terrainWeights = max(fragVertexColor, vec4(0.0));
+        float terrainWeightSum = max(dot(terrainWeights, vec4(1.0)), 0.0001);
+        terrainWeights /= terrainWeightSum;
+        surfaceMetallic = 0.0;
+        surfaceRoughness = 0.0;
+        for (int layerIndex = 0; layerIndex < 4; ++layerIndex)
+        {
+            vec2 layerUv = fragWorldPosition.xz / max(terrainLayerParameters[layerIndex].z, 0.001);
+            float layerMetallic = terrainLayerParameters[layerIndex].x;
+            float layerRoughness = terrainLayerParameters[layerIndex].y;
+            if (terrainLayerMetallicRoughnessAvailable[layerIndex] != 0)
+            {
+                vec4 layerMaterialData = texture(terrainLayerMetallicRoughnessTextures[layerIndex], layerUv);
+                layerMetallic *= layerMaterialData.b;
+                layerRoughness *= layerMaterialData.g;
+            }
+            surfaceMetallic += saturate(layerMetallic) * terrainWeights[layerIndex];
+            surfaceRoughness += clamp(layerRoughness, 0.045, 1.0) * terrainWeights[layerIndex];
+        }
+        surfaceMetallic = saturate(surfaceMetallic);
+        surfaceRoughness = clamp(surfaceRoughness, 0.045, 1.0);
+    }
+    else if (useMetallicRoughnessTexture)
     {
         vec4 materialData = texture(metallicRoughnessTexture, materialUv(metallicRoughnessUvSet));
         surfaceMetallic = saturate(surfaceMetallic * materialData.b);

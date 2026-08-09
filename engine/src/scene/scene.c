@@ -15,6 +15,23 @@
 
 static bool henka_is_finite_float(float value);
 
+static henka_material_layer henka_material_layer_default(
+    henka_vec4 base_color,
+    float metallic,
+    float roughness,
+    float texture_scale_meters)
+{
+    return (henka_material_layer){
+        NULL,
+        NULL,
+        NULL,
+        base_color,
+        metallic,
+        roughness,
+        texture_scale_meters,
+        1.0f};
+}
+
 static void henka_scene_bump_render_revision(henka_scene* scene)
 {
     if (scene == NULL)
@@ -60,6 +77,15 @@ henka_material henka_material_default(void)
     material.clearcoat_roughness = 0.2f;
     material.sheen_color = (henka_vec3){0.0f, 0.0f, 0.0f};
     material.sheen_roughness = 0.5f;
+    material.terrain_layers_enabled = false;
+    material.terrain_layers[0] = henka_material_layer_default(
+        (henka_vec4){0.22f, 0.38f, 0.10f, 1.0f}, 0.0f, 0.92f, 4.0f);
+    material.terrain_layers[1] = henka_material_layer_default(
+        (henka_vec4){0.34f, 0.17f, 0.07f, 1.0f}, 0.0f, 0.98f, 3.0f);
+    material.terrain_layers[2] = henka_material_layer_default(
+        (henka_vec4){0.34f, 0.37f, 0.40f, 1.0f}, 0.0f, 0.82f, 5.0f);
+    material.terrain_layers[3] = henka_material_layer_default(
+        (henka_vec4){0.68f, 0.70f, 0.72f, 1.0f}, 0.0f, 0.70f, 6.0f);
     material.alpha_cutoff = 0.5f;
     material.use_texture = false;
     material.use_lighting = true;
@@ -68,6 +94,14 @@ henka_material henka_material_default(void)
     material.double_sided = false;
     material.cast_shadows = true;
     material.receive_shadows = true;
+    return material;
+}
+
+henka_material henka_material_terrain_default(void)
+{
+    henka_material material = henka_material_default();
+    material.name = "Terrain PBR";
+    material.terrain_layers_enabled = true;
     return material;
 }
 
@@ -203,6 +237,36 @@ henka_result henka_material_validate(const henka_material* material)
         !henka_material_texture_matches(material->emissive_texture, HENKA_TEXTURE_USAGE_EMISSIVE, HENKA_TEXTURE_COLOR_SPACE_SRGB))
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    if (material->terrain_layers_enabled)
+    {
+        size_t layer_index;
+        for (layer_index = 0U; layer_index < HENKA_MATERIAL_TERRAIN_LAYER_COUNT; ++layer_index)
+        {
+            const henka_material_layer* layer = &material->terrain_layers[layer_index];
+            if (!henka_is_finite_float(layer->base_color.x) ||
+                !henka_is_finite_float(layer->base_color.y) ||
+                !henka_is_finite_float(layer->base_color.z) ||
+                !henka_is_finite_float(layer->base_color.w) ||
+                !henka_is_finite_float(layer->metallic) ||
+                !henka_is_finite_float(layer->roughness) ||
+                !henka_is_finite_float(layer->texture_scale_meters) ||
+                !henka_is_finite_float(layer->normal_scale) ||
+                layer->base_color.x < 0.0f || layer->base_color.x > 1.0f ||
+                layer->base_color.y < 0.0f || layer->base_color.y > 1.0f ||
+                layer->base_color.z < 0.0f || layer->base_color.z > 1.0f ||
+                layer->base_color.w < 0.0f || layer->base_color.w > 1.0f ||
+                layer->metallic < 0.0f || layer->metallic > 1.0f ||
+                layer->roughness < 0.045f || layer->roughness > 1.0f ||
+                layer->texture_scale_meters <= 0.0f || layer->texture_scale_meters > 4096.0f ||
+                layer->normal_scale < 0.0f || layer->normal_scale > 4.0f ||
+                !henka_material_texture_matches(layer->base_color_texture, HENKA_TEXTURE_USAGE_COLOR, HENKA_TEXTURE_COLOR_SPACE_SRGB) ||
+                !henka_material_texture_matches(layer->normal_texture, HENKA_TEXTURE_USAGE_NORMAL, HENKA_TEXTURE_COLOR_SPACE_LINEAR) ||
+                !henka_material_texture_matches(layer->metallic_roughness_texture, HENKA_TEXTURE_USAGE_METALLIC_ROUGHNESS, HENKA_TEXTURE_COLOR_SPACE_LINEAR))
+            {
+                return HENKA_ERROR_INVALID_ARGUMENT;
+            }
+        }
     }
     return HENKA_SUCCESS;
 }
