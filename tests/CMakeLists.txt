@@ -206,6 +206,16 @@ target_link_libraries(henka_terrain_physics_tests
 henka_enable_project_warnings(henka_terrain_physics_tests)
 add_test(NAME henka_terrain_physics_tests COMMAND henka_terrain_physics_tests)
 
+add_executable(henka_terrain_workflow_tests
+    test_terrain_workflow.c
+)
+target_link_libraries(henka_terrain_workflow_tests
+    PRIVATE
+        henka_runtime
+)
+henka_enable_project_warnings(henka_terrain_workflow_tests)
+add_test(NAME henka_terrain_workflow_tests COMMAND henka_terrain_workflow_tests)
+
 add_executable(henka_heightfield_physics_tests
     test_heightfield_physics.c
 )
