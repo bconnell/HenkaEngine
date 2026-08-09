@@ -241,8 +241,9 @@ semantic usage for both material definitions and effective instances; the
 manager remains the owner of those borrowed texture handles.
 Uploaded GPU meshes use a four-edge transition mask when an adjacent resident
 chunk is exactly one LOD coarser. The mesh keeps shared even edge samples and
-remaps intervening fine edge samples into a bounded transition strip, including
-independent edges and corners. A missing or invalid neighbor uses a bounded
+keeps all regular non-degenerate triangles, and morphs intervening fine edge
+samples onto the linear boundary between the shared coarse endpoints. This is
+bounded per-edge geometry morphing for one-level differences; a missing or invalid neighbor uses a bounded
 downward skirt only on that edge until the neighbor is resident; the owner
 records both masks in chunk diagnostics. On each observer update the owner now derives a deterministic
 nearest working set from render-resident regions, removes slots whose regions
@@ -319,11 +320,12 @@ physics, render, pending-I/O, dirty, revision, and generation state.
 ## Current boundary
 
 The current validated boundary includes bounded observer-driven render working
-set discovery, stale render identity refresh, and physics patch synchronization
-with deterministic capacity-based admission and removal. Full residency-wide
-dirty-neighbor scheduling beyond the bounded physics patch capacity, cross-LOD
-seam stitching, relevance-driven late-join selection, and multiplayer soak
-remain subsequent validated runtime slices. Accepted edits can now derive
+set discovery, stale render identity refresh, one-level cross-LOD edge morphing,
+and physics patch synchronization with deterministic capacity-based admission
+and removal. Full residency-wide dirty-neighbor scheduling beyond the bounded
+physics patch capacity, four-way corner visual QA, relevance-driven late-join
+selection, and multiplayer soak remain subsequent validated runtime slices.
+Accepted edits can now derive
 one-chunk physics-neighbor coverage through the bounded collision queue, and
 client prediction is available through the separate presentation-world owner.
 They must use this

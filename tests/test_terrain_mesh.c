@@ -178,19 +178,47 @@ cleanup:
 static int test_transition_topology(void)
 {
     henka_terrain_world_desc desc = henka_terrain_world_desc_default();
+    henka_terrain_layout layout;
     henka_terrain_world* world = NULL;
+    henka_terrain_sample* samples = NULL;
     henka_terrain_mesh_vertex vertices[HENKA_TERRAIN_MESH_MAX_VERTICES];
+    henka_terrain_mesh_vertex neighbor_vertices[HENKA_TERRAIN_MESH_MAX_VERTICES];
     uint32_t indices[HENKA_TERRAIN_MESH_MAX_INDICES];
+    uint32_t neighbor_indices[HENKA_TERRAIN_MESH_MAX_INDICES];
     henka_terrain_mesh_data mesh = {0};
+    henka_terrain_mesh_data neighbor_mesh = {0};
     uint32_t index;
-    uint32_t side;
+    uint32_t z;
     int result = 0;
 
     desc.max_resident_regions = 1U;
-    if (henka_terrain_world_create(&desc, &world) != HENKA_SUCCESS ||
+    if (henka_terrain_world_desc_get_layout(&desc, &layout) != HENKA_SUCCESS ||
+        henka_terrain_world_create(&desc, &world) != HENKA_SUCCESS ||
         henka_terrain_world_reserve_region(world, (henka_terrain_region_id){0, 0}) != HENKA_SUCCESS ||
         henka_terrain_world_set_region_residency(
             world, (henka_terrain_region_id){0, 0}, false, true, false) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    samples = henka_calloc(layout.samples_per_region, sizeof(*samples));
+    if (samples == NULL)
+    {
+        goto cleanup;
+    }
+    for (index = 0U; index < layout.samples_per_region; ++index)
+    {
+        samples[index].material_weights[0] = 255U;
+    }
+    for (z = 0U; z < desc.samples_per_chunk; ++z)
+    {
+        samples[z * layout.samples_per_region_edge + 64U].height_millimeters =
+            (z & 1U) != 0U ? 1000 : 0;
+    }
+    if (henka_terrain_world_apply_region_snapshot(
+            world,
+            (henka_terrain_region_storage_info){{0, 0}, 2U, 1U},
+            samples,
+            layout.samples_per_region) != HENKA_SUCCESS)
     {
         goto cleanup;
     }
@@ -198,21 +226,60 @@ static int test_transition_topology(void)
     mesh.vertex_capacity = HENKA_TERRAIN_MESH_MAX_VERTICES;
     mesh.indices = indices;
     mesh.index_capacity = HENKA_TERRAIN_MESH_MAX_INDICES;
+    neighbor_mesh.vertices = neighbor_vertices;
+    neighbor_mesh.vertex_capacity = HENKA_TERRAIN_MESH_MAX_VERTICES;
+    neighbor_mesh.indices = neighbor_indices;
+    neighbor_mesh.index_capacity = HENKA_TERRAIN_MESH_MAX_INDICES;
     if (henka_terrain_mesh_build_chunk_with_edge_mask(
             world,
             (henka_terrain_chunk_id){0, 0},
             0U,
-            HENKA_TERRAIN_MESH_EDGE_NORTH,
+            HENKA_TERRAIN_MESH_EDGE_EAST,
             &mesh) != HENKA_SUCCESS)
     {
         goto cleanup;
     }
-    side = desc.samples_per_chunk;
-    for (index = 0U; index < mesh.index_count; ++index)
+    if (henka_terrain_mesh_build_chunk(
+            world,
+            (henka_terrain_chunk_id){1, 0},
+            1U,
+            &neighbor_mesh) != HENKA_SUCCESS)
     {
-        uint32_t vertex = mesh.indices[index];
-        if (vertex >= mesh.vertex_count ||
-            (vertex < side && (vertex % side) % 2U != 0U))
+        goto cleanup;
+    }
+    for (z = 1U; z < desc.samples_per_chunk - 1U; z += 2U)
+    {
+        const float expected_height =
+            (vertices[(z - 1U) * desc.samples_per_chunk + 64U].position[1] +
+                vertices[(z + 1U) * desc.samples_per_chunk + 64U].position[1]) *
+            0.5f;
+        if (fabsf(vertices[z * desc.samples_per_chunk + 64U].position[1] - expected_height) >
+                0.0001f ||
+            fabsf(vertices[z * desc.samples_per_chunk + 64U].position[1] -
+                neighbor_vertices[(z + 1U) / 2U * 33U].position[1]) > 0.0001f)
+        {
+            goto cleanup;
+        }
+    }
+    for (index = 0U; index < mesh.index_count; index += 3U)
+    {
+        if (mesh.indices[index] == mesh.indices[index + 1U] ||
+            mesh.indices[index] == mesh.indices[index + 2U] ||
+            mesh.indices[index + 1U] == mesh.indices[index + 2U])
+        {
+            goto cleanup;
+        }
+    }
+    for (index = 0U; index < mesh.vertex_count; ++index)
+    {
+        if (!isfinite(mesh.vertices[index].normal[0]) ||
+            !isfinite(mesh.vertices[index].normal[1]) ||
+            !isfinite(mesh.vertices[index].normal[2]) ||
+            !isfinite(mesh.vertices[index].tangent[0]) ||
+            !isfinite(mesh.vertices[index].tangent[1]) ||
+            !isfinite(mesh.vertices[index].tangent[2]) ||
+            !isfinite(mesh.vertices[index].tangent[3]) ||
+            fabsf(mesh.vertices[index].tangent[3]) < 0.5f)
         {
             goto cleanup;
         }
@@ -237,6 +304,7 @@ static int test_transition_topology(void)
     result = 1;
 
 cleanup:
+    henka_free(samples);
     henka_terrain_world_destroy(world);
     return result;
 }

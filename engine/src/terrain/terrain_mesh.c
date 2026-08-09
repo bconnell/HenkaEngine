@@ -18,24 +18,46 @@ static uint32_t henka_terrain_mesh_transition_vertex(
     uint32_t z,
     uint32_t edge_transition_mask)
 {
-    uint32_t last = side - 1U;
-    if ((edge_transition_mask & HENKA_TERRAIN_MESH_EDGE_NORTH) != 0U && z == 0U)
-    {
-        x &= ~1U;
-    }
-    if ((edge_transition_mask & HENKA_TERRAIN_MESH_EDGE_EAST) != 0U && x == last)
-    {
-        z &= ~1U;
-    }
-    if ((edge_transition_mask & HENKA_TERRAIN_MESH_EDGE_SOUTH) != 0U && z == last)
-    {
-        x &= ~1U;
-    }
-    if ((edge_transition_mask & HENKA_TERRAIN_MESH_EDGE_WEST) != 0U && x == 0U)
-    {
-        z &= ~1U;
-    }
+    (void)edge_transition_mask;
     return henka_terrain_mesh_sample_index(side, x, z);
+}
+
+static void henka_terrain_mesh_morph_transition_vertex(
+    henka_terrain_mesh_vertex* target,
+    const henka_terrain_mesh_vertex* first,
+    const henka_terrain_mesh_vertex* second)
+{
+    uint32_t component;
+
+    if (target == NULL || first == NULL || second == NULL)
+    {
+        return;
+    }
+    for (component = 0U; component < 3U; ++component)
+    {
+        target->position[component] =
+            (first->position[component] + second->position[component]) * 0.5f;
+        target->normal[component] =
+            (first->normal[component] + second->normal[component]) * 0.5f;
+    }
+    for (component = 0U; component < 4U; ++component)
+    {
+        target->tangent[component] =
+            (first->tangent[component] + second->tangent[component]) * 0.5f;
+    }
+    target->tangent[3] = fabsf(first->tangent[3]) >= 0.5f
+        ? first->tangent[3]
+        : second->tangent[3];
+    for (component = 0U; component < 2U; ++component)
+    {
+        target->uv[component] = (first->uv[component] + second->uv[component]) * 0.5f;
+    }
+    for (component = 0U; component < HENKA_TERRAIN_ACTIVE_MATERIAL_COUNT; ++component)
+    {
+        target->material_weights[component] = (uint8_t)(
+            ((uint16_t)first->material_weights[component] +
+                (uint16_t)second->material_weights[component]) / 2U);
+    }
 }
 
 static float henka_terrain_mesh_height_meters(const henka_terrain_sample* sample)
@@ -316,6 +338,50 @@ henka_result henka_terrain_mesh_build_chunk_with_edge_mask(
                         (float)desc.world_depth_meters},
                     {source->material_weights[0], source->material_weights[1],
                      source->material_weights[2], source->material_weights[3]}};
+            }
+        }
+        for (local_z = 0U; local_z < samples_per_side; ++local_z)
+        {
+            for (local_x = 0U; local_x < samples_per_side; ++local_x)
+            {
+                uint32_t previous_index;
+                uint32_t next_index;
+                henka_terrain_mesh_vertex* target;
+
+                if ((local_z == 0U &&
+                        (edge_transition_mask & HENKA_TERRAIN_MESH_EDGE_NORTH) != 0U &&
+                        (local_x & 1U) != 0U && local_x + 1U < samples_per_side) ||
+                    (local_z + 1U == samples_per_side &&
+                        (edge_transition_mask & HENKA_TERRAIN_MESH_EDGE_SOUTH) != 0U &&
+                        (local_x & 1U) != 0U && local_x + 1U < samples_per_side))
+                {
+                    previous_index = henka_terrain_mesh_sample_index(
+                        samples_per_side, local_x - 1U, local_z);
+                    next_index = henka_terrain_mesh_sample_index(
+                        samples_per_side, local_x + 1U, local_z);
+                }
+                else if ((local_x == 0U &&
+                            (edge_transition_mask & HENKA_TERRAIN_MESH_EDGE_WEST) != 0U &&
+                            (local_z & 1U) != 0U && local_z + 1U < samples_per_side) ||
+                    (local_x + 1U == samples_per_side &&
+                        (edge_transition_mask & HENKA_TERRAIN_MESH_EDGE_EAST) != 0U &&
+                        (local_z & 1U) != 0U && local_z + 1U < samples_per_side))
+                {
+                    previous_index = henka_terrain_mesh_sample_index(
+                        samples_per_side, local_x, local_z - 1U);
+                    next_index = henka_terrain_mesh_sample_index(
+                        samples_per_side, local_x, local_z + 1U);
+                }
+                else
+                {
+                    continue;
+                }
+                target = &io_mesh->vertices[
+                    henka_terrain_mesh_sample_index(samples_per_side, local_x, local_z)];
+                henka_terrain_mesh_morph_transition_vertex(
+                    target,
+                    &io_mesh->vertices[previous_index],
+                    &io_mesh->vertices[next_index]);
             }
         }
         for (local_z = 0U; local_z + 1U < samples_per_side; ++local_z)
