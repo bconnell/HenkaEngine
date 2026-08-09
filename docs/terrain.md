@@ -103,6 +103,13 @@ before authority validation, subject to the world's resident-region limit. It
 does not preload the 8 km height field; eviction and asynchronous physics or
 render regeneration remain separate work.
 
+The dedicated server recovers complete journal transactions before opening its
+network endpoint and loads an existing reserved region snapshot into the live
+world. Its bounded smoke mode also exercises a loopback client and commits a
+deterministic edit when the save root is empty, allowing the packaged restart
+check to verify that the same revision is restored. This does not replace a
+multi-process multiplayer soak or reconnect/late-join policy.
+
 Accepted edits also produce a bounded delta in the same terrain channel. The
 delta repeats world/base identity, client nonce, server command identity, the
 algorithm-versioned command, and the resulting revision for each affected

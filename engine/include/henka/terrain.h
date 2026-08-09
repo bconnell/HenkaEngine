@@ -35,6 +35,13 @@ typedef struct henka_terrain_region_id
     int32_t z;
 } henka_terrain_region_id;
 
+typedef struct henka_terrain_region_storage_info
+{
+    henka_terrain_region_id id;
+    henka_terrain_revision revision;
+    henka_terrain_generation generation;
+} henka_terrain_region_storage_info;
+
 typedef struct henka_terrain_chunk_id
 {
     int32_t x;
@@ -159,5 +166,12 @@ henka_result henka_terrain_world_get_region_state(
 henka_result henka_terrain_world_get_stats(
     const henka_terrain_world* world,
     henka_terrain_world_stats* out_stats);
+
+/* Atomically replaces one resident region with a validated storage snapshot. */
+henka_result henka_terrain_world_apply_region_snapshot(
+    henka_terrain_world* world,
+    henka_terrain_region_storage_info info,
+    const henka_terrain_sample* samples,
+    size_t sample_count);
 
 #endif

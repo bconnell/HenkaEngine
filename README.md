@@ -24,7 +24,7 @@ Henka Engine is still early, but the sandbox now renders a visible 3D scene with
 - `henka` static library target
 - renderer-independent `henka_runtime` static library target for headless consumers
 - `henka_sandbox3d` example target
-- renderer-free `henka_dedicated_server` host target with bounded config-file loading, fixed-tick simulation, Terrain world/storage/session initialization, loopback transport servicing, and graceful client shutdown; packaged deployment and restart orchestration remain unfinished
+- renderer-free `henka_dedicated_server` host target with bounded config-file loading, fixed-tick simulation, Terrain snapshot recovery, loopback smoke connectivity, transactional edit persistence, and graceful client shutdown; a headless deployment package and restart-persistence check are available, while reconnect/late-join orchestration and two-process multiplayer soak remain unfinished
 - `henka_tests` unit test target with CTest integration
 - SDL3-backed platform layer hidden behind Henka headers
 - OpenGL renderer backend isolated inside renderer implementation files

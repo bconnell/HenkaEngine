@@ -37,12 +37,29 @@ ctest --test-dir out/headless -C Debug -R henka_headless_runtime_tests --output-
 `henka_runtime` is the public static library for renderer-independent
 consumers. `henka` links it underneath the existing graphical API. The
 dedicated-server executable is a headless network host with bounded
-command-line/configuration input, fixed-tick physics servicing, Terrain world
-storage/session initialization, a bounded physics-resident Terrain collision
-rebuild path, loopback message handling, and graceful client shutdown. Full
-packaged deployment and restart orchestration remain future work. ENet is
-fetched at the pinned commit recorded in `docs/architecture.md`; its license
-is included in `third_party/licenses/enet.txt`.
+command-line/configuration input, fixed-tick physics servicing, Terrain
+snapshot recovery, a bounded physics-resident Terrain collision rebuild path,
+loopback message handling, transactional smoke persistence, and graceful
+client shutdown. A headless deployment package and restart-persistence check
+are available; reconnect/late-join orchestration and two-process multiplayer
+soak remain future work. ENet is fetched at the pinned commit recorded in
+`docs/architecture.md`; its license is included in `third_party/licenses/enet.txt`.
+
+For a developer-owned deployment package, run:
+
+```powershell
+.\scripts\package_dedicated_server_windows.ps1 -Configuration Release
+.\scripts\check_packaged_dedicated_server_windows.ps1
+```
+
+The package is written to `out/HenkaDedicatedServer` and contains the
+renderer-free server, sample configuration, server documentation, provenance,
+and an operator-owned `save/` directory. It does not include graphical
+assets, SDL, OpenGL, UI files, or KTX tooling. The package check launches the
+server without a window, proves a local loopback client and bind, and runs the
+same save root twice to verify committed Terrain revision recovery. Developers
+may deploy that package on another development PC, a physical server, or a VPS
+they control; Henka does not provide a hosted service.
 
 The C17 `templates/external_server_minimal` project links only
 `henka_runtime`. Validate it with

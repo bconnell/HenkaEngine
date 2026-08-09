@@ -1,0 +1,8 @@
+# Values are relative to the server working directory unless an absolute path
+# is intentionally supplied by the operator.
+bind=0.0.0.0
+port=7777
+max_clients=32
+tick_rate=60
+save_root=save
+world=world

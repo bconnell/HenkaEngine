@@ -10,13 +10,6 @@
 
 typedef struct henka_terrain_storage henka_terrain_storage;
 
-typedef struct henka_terrain_region_storage_info
-{
-    henka_terrain_region_id id;
-    henka_terrain_revision revision;
-    henka_terrain_generation generation;
-} henka_terrain_region_storage_info;
-
 henka_result henka_terrain_region_encode(
     const henka_terrain_world_desc* desc,
     henka_terrain_region_id region_id,
