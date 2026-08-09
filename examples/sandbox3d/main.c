@@ -1747,7 +1747,9 @@ static henka_result sandbox3d_refresh_terrain_collision_chunk(
     sandbox3d_state* state,
     henka_terrain_chunk_id chunk_id);
 static henka_result sandbox3d_refresh_terrain_collision(sandbox3d_state* state);
-static henka_result sandbox3d_save_terrain_region(sandbox3d_state* state);
+static henka_result sandbox3d_save_terrain_regions(
+    sandbox3d_state* state,
+    uint32_t* out_saved_region_count);
 static henka_result sandbox3d_reload_terrain_region(sandbox3d_state* state);
 static henka_result sandbox3d_apply_terrain_tool_command(
     sandbox3d_state* state,
@@ -4675,60 +4677,27 @@ static henka_result sandbox3d_refresh_terrain_collision(sandbox3d_state* state)
         state, (henka_terrain_chunk_id){0, 0});
 }
 
-static henka_result sandbox3d_save_terrain_region(sandbox3d_state* state)
+static henka_result sandbox3d_save_terrain_regions(
+    sandbox3d_state* state,
+    uint32_t* out_saved_region_count)
 {
-    const henka_terrain_sample* samples;
-    henka_terrain_region_state region_state;
-    size_t sample_count;
     uint64_t transaction_id;
-    henka_result result;
 
-    if (state == NULL || state->terrain_world == NULL || state->terrain_storage == NULL)
+    if (state == NULL || state->terrain_world == NULL || state->terrain_storage == NULL ||
+        out_saved_region_count == NULL)
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
-    }
-    result = henka_terrain_world_get_region_samples(
-        state->terrain_world,
-        (henka_terrain_region_id){0, 0},
-        &samples,
-        &sample_count);
-    if (result != HENKA_SUCCESS)
-    {
-        return result;
-    }
-    result = henka_terrain_world_get_region_state(
-        state->terrain_world,
-        (henka_terrain_region_id){0, 0},
-        &region_state);
-    if (result != HENKA_SUCCESS)
-    {
-        return result;
     }
     transaction_id = ++state->terrain_tool_nonce;
     if (transaction_id == 0U)
     {
         transaction_id = ++state->terrain_tool_nonce;
     }
-    result = henka_terrain_storage_begin(state->terrain_storage, transaction_id);
-    if (result == HENKA_SUCCESS)
-    {
-        result = henka_terrain_storage_write_region(
-            state->terrain_storage,
-            (henka_terrain_region_id){0, 0},
-            region_state.revision,
-            region_state.generation,
-            samples,
-            sample_count);
-    }
-    if (result == HENKA_SUCCESS)
-    {
-        result = henka_terrain_storage_commit(state->terrain_storage, transaction_id);
-    }
-    if (result != HENKA_SUCCESS)
-    {
-        (void)henka_terrain_storage_abort(state->terrain_storage, transaction_id);
-    }
-    return result;
+    return henka_terrain_storage_save_resident_regions(
+        state->terrain_storage,
+        state->terrain_world,
+        transaction_id,
+        out_saved_region_count);
 }
 
 static henka_result sandbox3d_reload_terrain_region(sandbox3d_state* state)
@@ -14384,14 +14353,17 @@ static void sandbox3d_draw_utility_panel(
             }
             if (henka_ui_primary_button(state->ui, "terrain_save", (henka_ui_rect){x_left, y_start + 240.0f, 86.0f, 24.0f}, "Save"))
             {
-                const henka_result save_result = sandbox3d_save_terrain_region(state);
+                uint32_t saved_region_count = 0U;
+                const henka_result save_result = sandbox3d_save_terrain_regions(
+                    state, &saved_region_count);
                 sandbox3d_set_statusf(
                     state,
                     save_result != HENKA_SUCCESS,
                     true,
                     save_result == HENKA_SUCCESS
-                        ? "Terrain region saved transactionally."
+                        ? "Terrain resident regions saved transactionally (%u)."
                         : "Terrain save failed: %s.",
+                    saved_region_count,
                     henka_result_to_string(save_result));
             }
             if (henka_ui_button(state->ui, "terrain_compact", (henka_ui_rect){x_left + 92.0f, y_start + 240.0f, 104.0f, 24.0f}, "Compact"))

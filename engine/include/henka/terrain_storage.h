@@ -56,6 +56,14 @@ henka_result henka_terrain_storage_write_region(
 henka_result henka_terrain_storage_commit(
     henka_terrain_storage* storage,
     uint64_t transaction_id);
+/* Atomically persists every currently CPU-resident world region and clears
+ * their dirty flags only after the storage transaction commits. The world
+ * and storage are borrowed and must describe the same bounded terrain. */
+henka_result henka_terrain_storage_save_resident_regions(
+    henka_terrain_storage* storage,
+    henka_terrain_world* world,
+    uint64_t transaction_id,
+    uint32_t* out_saved_region_count);
 henka_result henka_terrain_storage_abort(
     henka_terrain_storage* storage,
     uint64_t transaction_id);

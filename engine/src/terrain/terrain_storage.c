@@ -15,6 +15,7 @@
 
 #include <henka/memory.h>
 #include <henka/persistence.h>
+#include <henka/terrain_edit.h>
 
 #include "terrain_internal.h"
 
@@ -949,6 +950,75 @@ henka_result henka_terrain_storage_commit(
     }
     storage->active_transaction_id = 0U;
     return henka_terrain_storage_recover(storage);
+}
+
+henka_result henka_terrain_storage_save_resident_regions(
+    henka_terrain_storage* storage,
+    henka_terrain_world* world,
+    uint64_t transaction_id,
+    uint32_t* out_saved_region_count)
+{
+    henka_terrain_world_desc world_desc;
+    henka_terrain_world_stats world_stats;
+    uint32_t index;
+    uint32_t saved_region_count = 0U;
+    henka_result result;
+
+    if (storage == NULL || world == NULL || transaction_id == 0U ||
+        out_saved_region_count == NULL ||
+        henka_terrain_world_get_desc(world, &world_desc) != HENKA_SUCCESS ||
+        !henka_terrain_storage_desc_equal(&storage->desc, &world_desc) ||
+        henka_terrain_world_get_stats(world, &world_stats) != HENKA_SUCCESS)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    *out_saved_region_count = 0U;
+    result = henka_terrain_storage_begin(storage, transaction_id);
+    if (result != HENKA_SUCCESS)
+    {
+        return result;
+    }
+    for (index = 0U; index < world_stats.resident_region_count; ++index)
+    {
+        henka_terrain_region_state state;
+        const henka_terrain_sample* samples = NULL;
+        size_t sample_count = 0U;
+        result = henka_terrain_world_get_resident_region_at(world, index, &state);
+        if (result == HENKA_SUCCESS)
+        {
+            result = henka_terrain_world_get_region_samples(
+                world, state.id, &samples, &sample_count);
+        }
+        if (result == HENKA_SUCCESS)
+        {
+            result = henka_terrain_storage_write_region(
+                storage, state.id, state.revision, state.generation,
+                samples, sample_count);
+        }
+        if (result != HENKA_SUCCESS)
+        {
+            (void)henka_terrain_storage_abort(storage, transaction_id);
+            return result;
+        }
+        ++saved_region_count;
+    }
+    result = henka_terrain_storage_commit(storage, transaction_id);
+    if (result != HENKA_SUCCESS)
+    {
+        (void)henka_terrain_storage_abort(storage, transaction_id);
+        return result;
+    }
+    for (index = 0U; index < world_stats.resident_region_count; ++index)
+    {
+        henka_terrain_region_state state;
+        if (henka_terrain_world_get_resident_region_at(world, index, &state) == HENKA_SUCCESS)
+        {
+            (void)henka_terrain_world_set_region_revision(
+                world, state.id, state.revision, state.generation, false);
+        }
+    }
+    *out_saved_region_count = saved_region_count;
+    return HENKA_SUCCESS;
 }
 
 henka_result henka_terrain_storage_abort(
