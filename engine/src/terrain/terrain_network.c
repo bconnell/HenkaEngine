@@ -6,6 +6,7 @@
 #define HENKA_TERRAIN_RESPONSE_FIXED_BYTES 17U
 #define HENKA_TERRAIN_REJECTION_BYTES 9U
 #define HENKA_TERRAIN_DELTA_FIXED_BYTES 57U
+#define HENKA_TERRAIN_RECOVERY_REQUEST_BYTES 48U
 
 static void henka_terrain_network_write_u32(uint8_t* destination, uint32_t value)
 {
@@ -412,6 +413,63 @@ henka_result henka_terrain_snapshot_request_decode(
     out_request->expected_revision = henka_terrain_network_read_u64(buffer + 24U);
     return out_request->region_id.x < 0 || out_request->region_id.z < 0
         ? HENKA_ERROR_INVALID_ARGUMENT : HENKA_SUCCESS;
+}
+
+henka_result henka_terrain_delta_recovery_request_encode(
+    const henka_terrain_delta_recovery_request* request,
+    uint8_t* buffer,
+    size_t buffer_capacity,
+    size_t* out_size)
+{
+    if (request == NULL || buffer == NULL || out_size == NULL ||
+        request->region_id.x < 0 || request->region_id.z < 0 ||
+        request->from_revision == 0U || request->target_revision < request->from_revision)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    if (buffer_capacity < HENKA_TERRAIN_RECOVERY_REQUEST_BYTES)
+    {
+        return HENKA_ERROR_LIMIT;
+    }
+    henka_terrain_network_write_u64(buffer + 0U, request->world_identity);
+    henka_terrain_network_write_u64(buffer + 8U, request->base_asset_identity);
+    henka_terrain_network_write_u32(buffer + 16U, (uint32_t)request->region_id.x);
+    henka_terrain_network_write_u32(buffer + 20U, (uint32_t)request->region_id.z);
+    henka_terrain_network_write_u64(buffer + 24U, request->from_revision);
+    henka_terrain_network_write_u64(buffer + 32U, request->target_revision);
+    memset(buffer + 40U, 0, 8U);
+    *out_size = HENKA_TERRAIN_RECOVERY_REQUEST_BYTES;
+    return HENKA_SUCCESS;
+}
+
+henka_result henka_terrain_delta_recovery_request_decode(
+    const uint8_t* buffer,
+    size_t buffer_size,
+    henka_terrain_delta_recovery_request* out_request)
+{
+    if (buffer == NULL || out_request == NULL || buffer_size != HENKA_TERRAIN_RECOVERY_REQUEST_BYTES)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    out_request->world_identity = henka_terrain_network_read_u64(buffer + 0U);
+    out_request->base_asset_identity = henka_terrain_network_read_u64(buffer + 8U);
+    out_request->region_id.x = (int32_t)henka_terrain_network_read_u32(buffer + 16U);
+    out_request->region_id.z = (int32_t)henka_terrain_network_read_u32(buffer + 20U);
+    out_request->from_revision = henka_terrain_network_read_u64(buffer + 24U);
+    out_request->target_revision = henka_terrain_network_read_u64(buffer + 32U);
+    if (out_request->region_id.x < 0 || out_request->region_id.z < 0 ||
+        out_request->from_revision == 0U || out_request->target_revision < out_request->from_revision)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    for (size_t index = 40U; index < HENKA_TERRAIN_RECOVERY_REQUEST_BYTES; ++index)
+    {
+        if (buffer[index] != 0U)
+        {
+            return HENKA_ERROR_INVALID_ARGUMENT;
+        }
+    }
+    return HENKA_SUCCESS;
 }
 
 henka_result henka_terrain_session_info_encode(

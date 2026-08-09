@@ -18,6 +18,8 @@ static int test_request_and_response_codecs(void)
     henka_terrain_snapshot_fragment decoded_snapshot_fragment;
     henka_terrain_session_info session_info = {0};
     henka_terrain_session_info decoded_session_info;
+    henka_terrain_delta_recovery_request recovery_request = {0};
+    henka_terrain_delta_recovery_request decoded_recovery_request;
     uint8_t buffer[HENKA_TERRAIN_NETWORK_MAX_EDIT_REQUEST_BYTES];
     size_t size = 0U;
 
@@ -132,6 +134,27 @@ static int test_request_and_response_codecs(void)
     session_info.region_count = HENKA_TERRAIN_NETWORK_MAX_SESSION_REGIONS + 1U;
     if (henka_terrain_session_info_encode(
             &session_info, buffer, sizeof(buffer), &size) != HENKA_ERROR_INVALID_ARGUMENT)
+    {
+        return 0;
+    }
+    recovery_request.world_identity = 11U;
+    recovery_request.base_asset_identity = 22U;
+    recovery_request.region_id = (henka_terrain_region_id){2, 3};
+    recovery_request.from_revision = 4U;
+    recovery_request.target_revision = 8U;
+    if (henka_terrain_delta_recovery_request_encode(
+            &recovery_request, buffer, sizeof(buffer), &size) != HENKA_SUCCESS ||
+        henka_terrain_delta_recovery_request_decode(
+            buffer, size, &decoded_recovery_request) != HENKA_SUCCESS ||
+        decoded_recovery_request.region_id.z != 3 ||
+        decoded_recovery_request.from_revision != 4U ||
+        decoded_recovery_request.target_revision != 8U)
+    {
+        return 0;
+    }
+    buffer[40U] = 1U;
+    if (henka_terrain_delta_recovery_request_decode(
+            buffer, size, &decoded_recovery_request) != HENKA_ERROR_INVALID_ARGUMENT)
     {
         return 0;
     }

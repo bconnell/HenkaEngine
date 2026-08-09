@@ -120,8 +120,11 @@ Accepted edits also produce a bounded delta in the same terrain channel. The
 delta repeats world/base identity, client nonce, server command identity, the
 algorithm-versioned command, and the resulting revision for each affected
 region. The server broadcasts that event reliably after sending the requester
-acceptance; the client session adapter applies it only across exact revision
-steps and requests bounded region snapshots when the replica reports a gap.
+acceptance and retains the last 64 accepted deltas in a fixed ring. The client
+session adapter applies deltas only across exact revision steps; a gap sends a
+bounded recovery request for the missing regional revision range. Complete
+retained history is sent as deltas, while an exhausted or incomplete range
+uses the existing transactional regional snapshot path.
 The connect-time session-info bootstrap covers only the bounded advertised
 resident set; broader reconnect and late-join orchestration and editor
 controls remain subsequent work. `<henka/terrain_prediction.h>` owns a separate bounded presentation

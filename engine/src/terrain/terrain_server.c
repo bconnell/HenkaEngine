@@ -16,6 +16,9 @@ struct henka_terrain_server
     henka_terrain_authority* authority;
     henka_terrain_server_diagnostics diagnostics;
     uint64_t next_snapshot_transfer_id;
+    henka_terrain_edit_delta delta_history[HENKA_TERRAIN_SERVER_MAX_DELTA_HISTORY];
+    uint32_t delta_history_next;
+    uint32_t delta_history_count;
 };
 
 henka_terrain_server_desc henka_terrain_server_desc_default(void)
@@ -276,6 +279,120 @@ cleanup:
         ? HENKA_SUCCESS : result;
 }
 
+static bool henka_terrain_server_delta_region_revision(
+    const henka_terrain_edit_delta* delta,
+    henka_terrain_region_id region_id,
+    henka_terrain_revision* out_revision)
+{
+    uint32_t index;
+    for (index = 0U; index < delta->affected_region_count; ++index)
+    {
+        if (henka_terrain_region_id_equal(delta->affected_regions[index].region_id, region_id))
+        {
+            if (out_revision != NULL)
+            {
+                *out_revision = delta->affected_regions[index].revision;
+            }
+            return true;
+        }
+    }
+    return false;
+}
+
+static void henka_terrain_server_store_delta(
+    henka_terrain_server* server,
+    const henka_terrain_edit_delta* delta)
+{
+    server->delta_history[server->delta_history_next] = *delta;
+    server->delta_history_next =
+        (server->delta_history_next + 1U) % HENKA_TERRAIN_SERVER_MAX_DELTA_HISTORY;
+    if (server->delta_history_count < HENKA_TERRAIN_SERVER_MAX_DELTA_HISTORY)
+    {
+        ++server->delta_history_count;
+    }
+}
+
+static henka_result henka_terrain_server_send_delta(
+    henka_terrain_server* server,
+    henka_network_peer_id peer_id,
+    const henka_terrain_edit_delta* delta)
+{
+    uint8_t payload[HENKA_TERRAIN_NETWORK_MAX_DELTA_BYTES];
+    size_t payload_size;
+    if (henka_terrain_edit_delta_encode(
+            delta, payload, sizeof(payload), &payload_size) != HENKA_SUCCESS)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    return henka_network_server_send(
+        server->network, peer_id, HENKA_NETWORK_CHANNEL_TERRAIN,
+        HENKA_NETWORK_MESSAGE_TERRAIN_DELTA, payload, payload_size);
+}
+
+static henka_result henka_terrain_server_recover_deltas(
+    henka_terrain_server* server,
+    henka_network_peer_id peer_id,
+    const henka_terrain_delta_recovery_request* request)
+{
+    henka_terrain_revision expected = request->from_revision;
+    uint32_t index;
+    for (index = 0U; index < server->delta_history_count && expected <= request->target_revision; ++index)
+    {
+        uint32_t history_index =
+            (server->delta_history_next + HENKA_TERRAIN_SERVER_MAX_DELTA_HISTORY -
+                server->delta_history_count + index) % HENKA_TERRAIN_SERVER_MAX_DELTA_HISTORY;
+        const henka_terrain_edit_delta* delta = &server->delta_history[history_index];
+        henka_terrain_revision revision;
+        if (!henka_terrain_server_delta_region_revision(delta, request->region_id, &revision))
+        {
+            continue;
+        }
+        if (revision < expected)
+        {
+            continue;
+        }
+        if (revision != expected || henka_terrain_server_send_delta(server, peer_id, delta) != HENKA_SUCCESS)
+        {
+            return HENKA_ERROR_ASSET_SOURCE;
+        }
+        ++server->diagnostics.delta_recovery_sent_count;
+        ++expected;
+    }
+    return expected > request->target_revision ? HENKA_SUCCESS : HENKA_ERROR_ASSET_SOURCE;
+}
+
+static henka_result henka_terrain_server_handle_recovery_request(
+    henka_terrain_server* server,
+    henka_network_peer_id peer_id,
+    const henka_terrain_delta_recovery_request* request)
+{
+    henka_terrain_world_desc desc;
+    henka_terrain_region_state state;
+    henka_terrain_snapshot_request snapshot_request;
+    if (henka_terrain_world_get_desc(server->world, &desc) != HENKA_SUCCESS ||
+        request->world_identity != desc.world_identity ||
+        request->base_asset_identity != desc.base_asset_identity ||
+        henka_terrain_world_get_region_state(server->world, request->region_id, &state) != HENKA_SUCCESS)
+    {
+        ++server->diagnostics.snapshot_failure_count;
+        (void)henka_network_server_disconnect(
+            server->network, peer_id, HENKA_NETWORK_DISCONNECT_REASON_PROTOCOL);
+        return HENKA_SUCCESS;
+    }
+    if (state.revision >= request->target_revision &&
+        henka_terrain_server_recover_deltas(server, peer_id, request) == HENKA_SUCCESS)
+    {
+        return HENKA_SUCCESS;
+    }
+    snapshot_request = (henka_terrain_snapshot_request){
+        request->world_identity,
+        request->base_asset_identity,
+        request->region_id,
+        request->from_revision - 1U};
+    ++server->diagnostics.delta_recovery_snapshot_fallback_count;
+    return henka_terrain_server_send_snapshot(server, peer_id, &snapshot_request);
+}
+
 static void henka_terrain_server_materialize_request_regions(
     henka_terrain_server* server,
     const henka_terrain_edit_request* request)
@@ -362,6 +479,22 @@ henka_result henka_terrain_server_handle_event(
         }
         return henka_terrain_server_send_snapshot(server, event->peer_id, &snapshot_request);
     }
+    if (event->message.channel == HENKA_NETWORK_CHANNEL_TERRAIN &&
+        event->message.type == HENKA_NETWORK_MESSAGE_TERRAIN_RECOVERY_REQUEST)
+    {
+        henka_terrain_delta_recovery_request recovery_request;
+        ++server->diagnostics.delta_recovery_request_count;
+        if (henka_terrain_delta_recovery_request_decode(
+                event->message.payload, event->message.payload_size, &recovery_request) != HENKA_SUCCESS)
+        {
+            ++server->diagnostics.protocol_disconnect_count;
+            (void)henka_network_server_disconnect(
+                server->network, event->peer_id, HENKA_NETWORK_DISCONNECT_REASON_PROTOCOL);
+            return HENKA_SUCCESS;
+        }
+        return henka_terrain_server_handle_recovery_request(
+            server, event->peer_id, &recovery_request);
+    }
     if (event->message.channel != HENKA_NETWORK_CHANNEL_TERRAIN ||
         event->message.type != HENKA_NETWORK_MESSAGE_TERRAIN_EDIT_REQUEST)
     {
@@ -424,6 +557,7 @@ henka_result henka_terrain_server_handle_event(
             &delta, payload, sizeof(payload), &payload_size);
         if (result == HENKA_SUCCESS)
         {
+            henka_terrain_server_store_delta(server, &delta);
             result = henka_network_server_broadcast(
                 server->network, HENKA_NETWORK_CHANNEL_TERRAIN,
                 HENKA_NETWORK_MESSAGE_TERRAIN_DELTA, payload, payload_size);

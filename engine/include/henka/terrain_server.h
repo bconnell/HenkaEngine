@@ -9,6 +9,8 @@
 
 typedef struct henka_terrain_server henka_terrain_server;
 
+#define HENKA_TERRAIN_SERVER_MAX_DELTA_HISTORY 64U
+
 typedef struct henka_terrain_server_desc
 {
     henka_network_server* network;
@@ -31,6 +33,9 @@ typedef struct henka_terrain_server_diagnostics
     uint64_t snapshot_request_count;
     uint64_t snapshot_fragment_count;
     uint64_t snapshot_failure_count;
+    uint64_t delta_recovery_request_count;
+    uint64_t delta_recovery_sent_count;
+    uint64_t delta_recovery_snapshot_fallback_count;
 } henka_terrain_server_diagnostics;
 
 henka_terrain_server_desc henka_terrain_server_desc_default(void);

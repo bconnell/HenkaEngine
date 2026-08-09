@@ -136,21 +136,39 @@ static henka_result henka_terrain_client_request_delta_recovery(
     for (index = 0U; index < delta->affected_region_count; ++index)
     {
         henka_terrain_region_state state;
-        henka_terrain_snapshot_request request = {
+        henka_terrain_delta_recovery_request request = {
             delta->world_identity,
             delta->base_asset_identity,
             delta->affected_regions[index].region_id,
-            0U};
+            1U,
+            delta->affected_regions[index].revision};
         if (henka_terrain_world_get_region_state(
                 client->world, request.region_id, &state) == HENKA_SUCCESS)
         {
-            request.expected_revision = state.revision;
+            if (state.revision >= request.target_revision)
+            {
+                continue;
+            }
+            if (state.revision == UINT64_MAX)
+            {
+                return HENKA_ERROR_LIMIT;
+            }
+            request.from_revision = state.revision + 1U;
         }
-        if (henka_terrain_client_request_snapshot(client, request) != HENKA_SUCCESS)
         {
-            return HENKA_ERROR_PLATFORM;
+            uint8_t payload[HENKA_TERRAIN_NETWORK_MAX_RECOVERY_REQUEST_BYTES];
+            size_t payload_size;
+            if (henka_terrain_delta_recovery_request_encode(
+                    &request, payload, sizeof(payload), &payload_size) != HENKA_SUCCESS ||
+                henka_network_client_send(
+                    client->network, HENKA_NETWORK_CHANNEL_TERRAIN,
+                    HENKA_NETWORK_MESSAGE_TERRAIN_RECOVERY_REQUEST,
+                    payload, payload_size) != HENKA_SUCCESS)
+            {
+                return HENKA_ERROR_PLATFORM;
+            }
         }
-        ++client->diagnostics.recovery_snapshot_request_count;
+        ++client->diagnostics.recovery_delta_request_count;
     }
     return HENKA_SUCCESS;
 }

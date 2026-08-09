@@ -82,3 +82,10 @@ identifies the world/base and advertises up to 16 resident regions for client
 snapshot bootstrap. This does not claim application authentication,
 relevance-driven reconnect or late-join orchestration, or production
 multiplayer soak coverage.
+
+The server retains a fixed 64-entry authoritative Terrain delta history per
+server process. A connected client may request a bounded regional revision
+range after detecting a gap; the server sends the complete retained range or
+falls back to a transactional regional snapshot when history is unavailable.
+The history is in-memory recovery state and is not a replacement for the
+durable Terrain journal.
