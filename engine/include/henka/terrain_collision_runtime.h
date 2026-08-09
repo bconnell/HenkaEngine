@@ -18,6 +18,7 @@ typedef struct henka_terrain_collision_runtime_desc
 typedef struct henka_terrain_collision_runtime_stats
 {
     uint32_t pending_chunk_count;
+    uint32_t max_pending_chunk_count;
     uint64_t queued_count;
     uint64_t coalesced_count;
     uint64_t rebuilt_count;

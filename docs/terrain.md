@@ -54,7 +54,10 @@ they have no physics/render residency, pending I/O, or dirty edits. A zero
 unload radius preserves the CPU radius; a larger unload radius provides bounded
 movement hysteresis. Loaded regions now synchronize physics/render residency
 flags from the observer radius union; renderer mesh and physics patch
-regeneration remain caller-owned asynchronous presentation work.
+regeneration remain caller-owned asynchronous presentation work. The graphical
+render owner reports high-water pending-request, resident-chunk, and
+visible-chunk counts; the collision queue reports its high-water pending chunk
+count so callers can distinguish a bounded budget from a transient drain state.
 
 ## Deterministic edits
 

@@ -30,6 +30,9 @@ typedef struct henka_terrain_render_stats
     uint32_t pending_requests;
     uint32_t resident_chunks;
     uint32_t visible_chunks;
+    uint32_t max_pending_requests;
+    uint32_t max_resident_chunks;
+    uint32_t max_visible_chunks;
     uint32_t lod_counts[HENKA_TERRAIN_MESH_MAX_LOD_LEVEL + 1U];
     uint64_t queued_requests;
     uint64_t coalesced_requests;

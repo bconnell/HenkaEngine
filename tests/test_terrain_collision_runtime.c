@@ -32,7 +32,8 @@ static int test_runtime_edit_discovers_neighbor_chunks(void)
         goto cleanup;
     }
     henka_terrain_collision_runtime_get_stats(runtime, &stats);
-    if (stats.queued_count != 9U || stats.rebuilt_count != 9U || stats.pending_chunk_count != 0U)
+    if (stats.queued_count != 9U || stats.rebuilt_count != 9U ||
+        stats.max_pending_chunk_count < 9U || stats.pending_chunk_count != 0U)
     {
         goto cleanup;
     }

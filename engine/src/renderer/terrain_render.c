@@ -159,6 +159,10 @@ static henka_result henka_terrain_render_queue_slot(
     queue_index = (runtime->request_head + runtime->request_count) % runtime->desc.max_pending_requests;
     runtime->requests[queue_index] = (henka_terrain_render_request){slot_index, slot->serial, lod_level};
     runtime->request_count += 1U;
+    if (runtime->request_count > runtime->stats.max_pending_requests)
+    {
+        runtime->stats.max_pending_requests = runtime->request_count;
+    }
     slot->queued = true;
     runtime->stats.queued_requests += 1U;
     return HENKA_SUCCESS;
@@ -840,6 +844,7 @@ henka_result henka_terrain_render_runtime_get_stats(
     henka_terrain_render_stats* out_stats)
 {
     uint32_t index;
+    henka_terrain_render_stats* mutable_stats;
     if (runtime == NULL || out_stats == NULL)
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
@@ -862,5 +867,16 @@ henka_result henka_terrain_render_runtime_get_stats(
             out_stats->lod_counts[slot->selected_lod] += 1U;
         }
     }
+    mutable_stats = (henka_terrain_render_stats*)&runtime->stats;
+    if (out_stats->resident_chunks > out_stats->max_resident_chunks)
+    {
+        out_stats->max_resident_chunks = out_stats->resident_chunks;
+    }
+    if (out_stats->visible_chunks > out_stats->max_visible_chunks)
+    {
+        out_stats->max_visible_chunks = out_stats->visible_chunks;
+    }
+    mutable_stats->max_resident_chunks = out_stats->max_resident_chunks;
+    mutable_stats->max_visible_chunks = out_stats->max_visible_chunks;
     return HENKA_SUCCESS;
 }

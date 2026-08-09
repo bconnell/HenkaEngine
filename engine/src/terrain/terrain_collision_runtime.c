@@ -38,6 +38,16 @@ static uint32_t henka_terrain_collision_runtime_find_request(
     return runtime->desc.max_pending_chunks;
 }
 
+static void henka_terrain_collision_runtime_record_pending(
+    henka_terrain_collision_runtime* runtime)
+{
+    ++runtime->stats.pending_chunk_count;
+    if (runtime->stats.pending_chunk_count > runtime->stats.max_pending_chunk_count)
+    {
+        runtime->stats.max_pending_chunk_count = runtime->stats.pending_chunk_count;
+    }
+}
+
 henka_terrain_collision_runtime_desc henka_terrain_collision_runtime_desc_default(void)
 {
     return (henka_terrain_collision_runtime_desc){64U};
@@ -116,7 +126,7 @@ henka_result henka_terrain_collision_runtime_request_chunk(
         if (!runtime->requests[index].active)
         {
             runtime->requests[index].active = true;
-            ++runtime->stats.pending_chunk_count;
+            henka_terrain_collision_runtime_record_pending(runtime);
             ++runtime->stats.queued_count;
             return HENKA_SUCCESS;
         }
@@ -129,7 +139,7 @@ henka_result henka_terrain_collision_runtime_request_chunk(
         {
             runtime->requests[index].active = true;
             runtime->requests[index].chunk_id = chunk_id;
-            ++runtime->stats.pending_chunk_count;
+            henka_terrain_collision_runtime_record_pending(runtime);
             ++runtime->stats.queued_count;
             return HENKA_SUCCESS;
         }
