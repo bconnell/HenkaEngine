@@ -171,7 +171,7 @@ It does not replace human visual QA. You should still confirm by eye that the sc
 .\scripts\test_external_game_template_windows.ps1
 ```
 
-This script copies `templates/external_game_minimal` into a repo-local validation folder under `build/`, configures it against the current Henka checkout, builds it, and runs a small smoke test.
+This script copies `templates/external_game_minimal` into a repo-local validation folder under `build/`, configures it against the current Henka checkout, builds it, and runs the public-API Terrain consumer smoke test. The test covers the Terrain material contract, shared edits, collision raycast, CPU render-mesh rebuild, transactional persistence, and restart reload.
 
 The packaged sandbox does not rely on the repository root as its working directory. Assets resolve relative to the executable folder by default.
 

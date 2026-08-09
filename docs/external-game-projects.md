@@ -42,6 +42,12 @@ cmake -S . -B build -DHENKA_ENGINE_DIR="C:/Path/To/HenkaEngine"
 ```
 
 The template under `templates/external_game_minimal/` shows one way to do that.
+Its executable is a bounded public-API Terrain consumer smoke test: it
+validates the shared four-layer material contract, deterministic raise/paint,
+collision raycast, CPU render-mesh rebuild, transactional save, and restart
+reload without including Sandbox source. This proves the reusable runtime
+path; an actual graphical game still owns its engine window, scene, camera,
+and Rendered presentation.
 
 To validate that template against the current Henka checkout from this repository, run:
 

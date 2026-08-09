@@ -147,8 +147,9 @@ $result = Invoke-HenkaNativeCapture `
     -Label "Run external game template smoke test" `
     -TimeoutMilliseconds 30000
 
-if ($result.Stdout -notmatch "External game template initialized\.") {
-    throw "The external game template smoke test did not print the expected initialization output."
+if ($result.Stdout -notmatch "External game template initialized\." -or
+    $result.Stdout -notmatch "External Terrain material, edit, collision, render-data, save, and restart workflow passed\.") {
+    throw "The external game template Terrain workflow did not complete its expected public-API checks."
 }
 
 Write-Host "[pass] External game template configured, built, and ran successfully."
