@@ -18,7 +18,7 @@
 - New queues, residency, material resources, topology variants, and diagnostics remain bounded with explicit ownership.
 - No ordinary per-frame heap allocation in new rendering paths.
 - Update README and relevant public documentation in the same validated slice as public behavior changes.
-- Commit coherent slices normally; publish only at validated major checkpoints A, B, C, and final.
+- Commit coherent slices normally and publish every green, clean coherent slice through the authorized fast-forward gate.
 - Before each push: test, diff review, hygiene, integrity, `git fetch origin --prune`, divergence inspection, normal push, and remote SHA verification.
 
 ## Current Implementation Matrix
@@ -118,9 +118,9 @@
 - Add a bounded edge-transition mask or equivalent topology selector to mesh build inputs.
 - Preserve the fixed maximum vertex/index limits and deterministic neighbor LOD clamp.
 
-- [ ] Add RED topology tests for equal LOD, one-level edge transitions, and four-way corners.
-- [ ] Implement reusable transition index variants using shared edge samples; reject unsupported differences rather than creating holes.
-- [ ] Keep skirts only as a documented last-resort fallback for invalid/nonresident neighbor state, with diagnostics.
+- [x] Add RED topology tests for equal LOD, one-level edge transitions, and four-way corners.
+- [x] Implement reusable transition index variants using shared edge samples; reject unsupported differences rather than creating holes.
+- [x] Keep skirts only as a documented last-resort fallback for invalid/nonresident neighbor state, with diagnostics.
 - [ ] Validate mesh bounds and GPU upload replacement under each topology variant.
 - [ ] Commit `feat: stitch Terrain LOD boundaries`.
 

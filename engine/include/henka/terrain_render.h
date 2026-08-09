@@ -37,6 +37,8 @@ typedef struct henka_terrain_render_stats
     uint64_t queued_requests;
     uint64_t coalesced_requests;
     uint64_t rebuilt_chunks;
+    uint64_t transition_rebuilds;
+    uint64_t fallback_skirt_chunks;
     uint64_t failed_rebuilds;
     uint64_t dropped_requests;
 } henka_terrain_render_stats;
@@ -49,6 +51,8 @@ typedef struct henka_terrain_render_chunk_info
     henka_terrain_revision revision;
     henka_terrain_generation generation;
     uint32_t lod_level;
+    uint32_t edge_transition_mask;
+    uint32_t fallback_skirt_mask;
     bool resident;
     bool visible;
     bool queued;

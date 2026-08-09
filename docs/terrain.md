@@ -211,16 +211,20 @@ metallic/roughness texture semantics plus base color, metallic, roughness,
 normal-strength, and meters-per-tile factors. The normal Rendered shader
 consumes these weights; ordinary material vertex-color tint remains disabled
 for this material.
-Uploaded GPU meshes add bounded downward edge skirts to cover finite LOD
-transitions. On each observer update the owner now derives a deterministic
+Uploaded GPU meshes use a four-edge transition mask when an adjacent resident
+chunk is exactly one LOD coarser. The mesh keeps shared even edge samples and
+remaps intervening fine edge samples into a bounded transition strip, including
+independent edges and corners. A missing or invalid neighbor uses a bounded
+downward skirt only on that edge until the neighbor is resident; the owner
+records both masks in chunk diagnostics. On each observer update the owner now derives a deterministic
 nearest working set from render-resident regions, removes slots whose regions
 leave render residency or the outer LOD band, and queues only bounded missing
 chunks. It also compares uploaded revision/generation identity with the
 borrowed world and queues stale resident chunks for transactional replacement;
 it does not mutate the borrowed world or allocate per-frame working arrays.
 Neighbor-aware border-normal sampling uses available authoritative regions and
-falls back to the resident edge until a neighbor streams in. Cross-LOD topology
-stitching and manual visual validation remain subsequent work. The Sandbox also routes one shared
+falls back to the resident edge until a neighbor streams in. Dynamic deformation
+bounds and manual visual validation remain subsequent work. The Sandbox also routes one shared
 raise command through authoritative integer mutation, refreshes the
 transactional physics patch, and refreshes the affected GPU mesh; this is a
 runtime smoke path, not persistence or network authority.

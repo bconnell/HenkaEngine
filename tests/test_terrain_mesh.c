@@ -175,9 +175,76 @@ cleanup:
     return result;
 }
 
+static int test_transition_topology(void)
+{
+    henka_terrain_world_desc desc = henka_terrain_world_desc_default();
+    henka_terrain_world* world = NULL;
+    henka_terrain_mesh_vertex vertices[HENKA_TERRAIN_MESH_MAX_VERTICES];
+    uint32_t indices[HENKA_TERRAIN_MESH_MAX_INDICES];
+    henka_terrain_mesh_data mesh = {0};
+    uint32_t index;
+    uint32_t side;
+    int result = 0;
+
+    desc.max_resident_regions = 1U;
+    if (henka_terrain_world_create(&desc, &world) != HENKA_SUCCESS ||
+        henka_terrain_world_reserve_region(world, (henka_terrain_region_id){0, 0}) != HENKA_SUCCESS ||
+        henka_terrain_world_set_region_residency(
+            world, (henka_terrain_region_id){0, 0}, false, true, false) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    mesh.vertices = vertices;
+    mesh.vertex_capacity = HENKA_TERRAIN_MESH_MAX_VERTICES;
+    mesh.indices = indices;
+    mesh.index_capacity = HENKA_TERRAIN_MESH_MAX_INDICES;
+    if (henka_terrain_mesh_build_chunk_with_edge_mask(
+            world,
+            (henka_terrain_chunk_id){0, 0},
+            0U,
+            HENKA_TERRAIN_MESH_EDGE_NORTH,
+            &mesh) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    side = desc.samples_per_chunk;
+    for (index = 0U; index < mesh.index_count; ++index)
+    {
+        uint32_t vertex = mesh.indices[index];
+        if (vertex >= mesh.vertex_count ||
+            (vertex < side && (vertex % side) % 2U != 0U))
+        {
+            goto cleanup;
+        }
+    }
+    if (henka_terrain_mesh_build_chunk_with_edge_mask(
+            world,
+            (henka_terrain_chunk_id){0, 0},
+            0U,
+            HENKA_TERRAIN_MESH_EDGE_NORTH |
+                HENKA_TERRAIN_MESH_EDGE_WEST,
+            &mesh) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    for (index = 0U; index < mesh.index_count; ++index)
+    {
+        if (mesh.indices[index] >= mesh.vertex_count)
+        {
+            goto cleanup;
+        }
+    }
+    result = 1;
+
+cleanup:
+    henka_terrain_world_destroy(world);
+    return result;
+}
+
 int main(void)
 {
     return test_chunk_mesh_lod_and_identity() &&
         test_chunk_mesh_tangent_basis() &&
-        test_neighbor_border_normals() ? 0 : 1;
+        test_neighbor_border_normals() &&
+        test_transition_topology() ? 0 : 1;
 }

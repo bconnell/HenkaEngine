@@ -12,6 +12,32 @@ static uint32_t henka_terrain_mesh_sample_index(
     return z * edge + x;
 }
 
+static uint32_t henka_terrain_mesh_transition_vertex(
+    uint32_t side,
+    uint32_t x,
+    uint32_t z,
+    uint32_t edge_transition_mask)
+{
+    uint32_t last = side - 1U;
+    if ((edge_transition_mask & HENKA_TERRAIN_MESH_EDGE_NORTH) != 0U && z == 0U)
+    {
+        x &= ~1U;
+    }
+    if ((edge_transition_mask & HENKA_TERRAIN_MESH_EDGE_EAST) != 0U && x == last)
+    {
+        z &= ~1U;
+    }
+    if ((edge_transition_mask & HENKA_TERRAIN_MESH_EDGE_SOUTH) != 0U && z == last)
+    {
+        x &= ~1U;
+    }
+    if ((edge_transition_mask & HENKA_TERRAIN_MESH_EDGE_WEST) != 0U && x == 0U)
+    {
+        z &= ~1U;
+    }
+    return henka_terrain_mesh_sample_index(side, x, z);
+}
+
 static float henka_terrain_mesh_height_meters(const henka_terrain_sample* sample)
 {
     return (float)sample->height_millimeters / 1000.0F;
@@ -104,10 +130,11 @@ static henka_result henka_terrain_mesh_required_counts(
     return HENKA_SUCCESS;
 }
 
-henka_result henka_terrain_mesh_build_chunk(
+henka_result henka_terrain_mesh_build_chunk_with_edge_mask(
     const henka_terrain_world* world,
     henka_terrain_chunk_id chunk_id,
     uint32_t lod_level,
+    uint32_t edge_transition_mask,
     henka_terrain_mesh_data* io_mesh)
 {
     henka_terrain_world_desc desc;
@@ -128,6 +155,7 @@ henka_result henka_terrain_mesh_build_chunk(
     henka_terrain_mesh_region_view region_views[3][3] = {{{0}}};
 
     if (world == NULL || io_mesh == NULL ||
+        (edge_transition_mask & ~HENKA_TERRAIN_MESH_EDGE_ALL) != 0U ||
         henka_terrain_world_get_desc(world, &desc) != HENKA_SUCCESS ||
         !henka_terrain_chunk_id_is_valid(&desc, chunk_id) ||
         henka_terrain_world_desc_get_layout(&desc, &layout) != HENKA_SUCCESS ||
@@ -294,16 +322,32 @@ henka_result henka_terrain_mesh_build_chunk(
         {
             for (local_x = 0U; local_x + 1U < samples_per_side; ++local_x)
             {
-                uint32_t first = local_z * samples_per_side + local_x;
-                uint32_t second = first + samples_per_side;
+                uint32_t first = henka_terrain_mesh_transition_vertex(
+                    samples_per_side, local_x, local_z, edge_transition_mask);
+                uint32_t second = henka_terrain_mesh_transition_vertex(
+                    samples_per_side, local_x, local_z + 1U, edge_transition_mask);
+                uint32_t third = henka_terrain_mesh_transition_vertex(
+                    samples_per_side, local_x + 1U, local_z, edge_transition_mask);
+                uint32_t fourth = henka_terrain_mesh_transition_vertex(
+                    samples_per_side, local_x + 1U, local_z + 1U, edge_transition_mask);
                 io_mesh->indices[index_index++] = first;
                 io_mesh->indices[index_index++] = second;
-                io_mesh->indices[index_index++] = first + 1U;
+                io_mesh->indices[index_index++] = third;
                 io_mesh->indices[index_index++] = second;
-                io_mesh->indices[index_index++] = second + 1U;
-                io_mesh->indices[index_index++] = first + 1U;
+                io_mesh->indices[index_index++] = fourth;
+                io_mesh->indices[index_index++] = third;
             }
         }
     }
     return HENKA_SUCCESS;
+}
+
+henka_result henka_terrain_mesh_build_chunk(
+    const henka_terrain_world* world,
+    henka_terrain_chunk_id chunk_id,
+    uint32_t lod_level,
+    henka_terrain_mesh_data* io_mesh)
+{
+    return henka_terrain_mesh_build_chunk_with_edge_mask(
+        world, chunk_id, lod_level, 0U, io_mesh);
 }

@@ -33,6 +33,16 @@ henka_result henka_mesh_create_from_terrain_chunk(
     henka_mesh** out_mesh,
     henka_terrain_revision* out_revision,
     henka_terrain_generation* out_generation);
+henka_result henka_mesh_create_from_terrain_chunk_with_edge_mask(
+    henka_engine* engine,
+    const henka_terrain_world* world,
+    henka_terrain_chunk_id chunk_id,
+    uint32_t lod_level,
+    uint32_t edge_transition_mask,
+    uint32_t fallback_skirt_mask,
+    henka_mesh** out_mesh,
+    henka_terrain_revision* out_revision,
+    henka_terrain_generation* out_generation);
 /* Releases caller-owned meshes. Manager-owned borrowed meshes are ignored. */
 void henka_mesh_destroy(henka_mesh* mesh);
 

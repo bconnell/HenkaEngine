@@ -9,6 +9,12 @@
 #define HENKA_TERRAIN_MESH_MAX_VERTICES (HENKA_TERRAIN_DEFAULT_SAMPLES_PER_CHUNK * HENKA_TERRAIN_DEFAULT_SAMPLES_PER_CHUNK)
 #define HENKA_TERRAIN_MESH_MAX_INDICES ((HENKA_TERRAIN_DEFAULT_CHUNK_EDGE_METERS / HENKA_TERRAIN_DEFAULT_SAMPLE_SPACING_METERS) * (HENKA_TERRAIN_DEFAULT_CHUNK_EDGE_METERS / HENKA_TERRAIN_DEFAULT_SAMPLE_SPACING_METERS) * 6U)
 
+#define HENKA_TERRAIN_MESH_EDGE_NORTH 0x01U
+#define HENKA_TERRAIN_MESH_EDGE_EAST 0x02U
+#define HENKA_TERRAIN_MESH_EDGE_SOUTH 0x04U
+#define HENKA_TERRAIN_MESH_EDGE_WEST 0x08U
+#define HENKA_TERRAIN_MESH_EDGE_ALL (HENKA_TERRAIN_MESH_EDGE_NORTH | HENKA_TERRAIN_MESH_EDGE_EAST | HENKA_TERRAIN_MESH_EDGE_SOUTH | HENKA_TERRAIN_MESH_EDGE_WEST)
+
 typedef struct henka_terrain_mesh_vertex
 {
     float position[3];
@@ -36,6 +42,13 @@ henka_result henka_terrain_mesh_build_chunk(
     const henka_terrain_world* world,
     henka_terrain_chunk_id chunk_id,
     uint32_t lod_level,
+    henka_terrain_mesh_data* io_mesh);
+
+henka_result henka_terrain_mesh_build_chunk_with_edge_mask(
+    const henka_terrain_world* world,
+    henka_terrain_chunk_id chunk_id,
+    uint32_t lod_level,
+    uint32_t edge_transition_mask,
     henka_terrain_mesh_data* io_mesh);
 
 #endif

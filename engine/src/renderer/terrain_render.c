@@ -14,6 +14,8 @@ typedef struct henka_terrain_render_request
     uint32_t slot_index;
     uint32_t serial;
     uint32_t lod_level;
+    uint32_t edge_transition_mask;
+    uint32_t fallback_skirt_mask;
 } henka_terrain_render_request;
 
 typedef struct henka_terrain_render_slot
@@ -27,6 +29,12 @@ typedef struct henka_terrain_render_slot
     uint32_t requested_lod;
     uint32_t selected_lod;
     uint32_t desired_lod;
+    uint32_t requested_edge_transition_mask;
+    uint32_t selected_edge_transition_mask;
+    uint32_t desired_edge_transition_mask;
+    uint32_t requested_fallback_skirt_mask;
+    uint32_t selected_fallback_skirt_mask;
+    uint32_t desired_fallback_skirt_mask;
     henka_entity entity;
     henka_mesh* mesh;
     henka_terrain_revision revision;
@@ -131,7 +139,9 @@ static int32_t henka_terrain_render_find_free_slot(
 static henka_result henka_terrain_render_queue_slot(
     henka_terrain_render_runtime* runtime,
     uint32_t slot_index,
-    uint32_t lod_level)
+    uint32_t lod_level,
+    uint32_t edge_transition_mask,
+    uint32_t fallback_skirt_mask)
 {
     uint32_t index;
     uint32_t queue_index;
@@ -144,6 +154,8 @@ static henka_result henka_terrain_render_queue_slot(
             runtime->requests[queue_index].serial == slot->serial)
         {
             runtime->requests[queue_index].lod_level = lod_level;
+            runtime->requests[queue_index].edge_transition_mask = edge_transition_mask;
+            runtime->requests[queue_index].fallback_skirt_mask = fallback_skirt_mask;
             slot->queued = true;
             runtime->stats.coalesced_requests += 1U;
             return HENKA_SUCCESS;
@@ -155,7 +167,8 @@ static henka_result henka_terrain_render_queue_slot(
         return HENKA_ERROR_LIMIT;
     }
     queue_index = (runtime->request_head + runtime->request_count) % runtime->desc.max_pending_requests;
-    runtime->requests[queue_index] = (henka_terrain_render_request){slot_index, slot->serial, lod_level};
+    runtime->requests[queue_index] = (henka_terrain_render_request){
+        slot_index, slot->serial, lod_level, edge_transition_mask, fallback_skirt_mask};
     runtime->request_count += 1U;
     if (runtime->request_count > runtime->stats.max_pending_requests)
     {
@@ -252,6 +265,70 @@ static bool henka_terrain_render_are_neighbors(
     return (dx == 0 && (dz == 1 || dz == -1)) ||
         (dz == 0 && (dx == 1 || dx == -1));
 }
+
+static void henka_terrain_render_topology_masks(
+    const henka_terrain_render_runtime* runtime,
+    const henka_terrain_render_slot* slot,
+    uint32_t* out_transition_mask,
+    uint32_t* out_fallback_mask)
+{
+    static const int32_t offsets[4][2] = {{0, -1}, {1, 0}, {0, 1}, {-1, 0}};
+    static const uint32_t edge_masks[4] = {
+        HENKA_TERRAIN_MESH_EDGE_NORTH,
+        HENKA_TERRAIN_MESH_EDGE_EAST,
+        HENKA_TERRAIN_MESH_EDGE_SOUTH,
+        HENKA_TERRAIN_MESH_EDGE_WEST};
+    henka_terrain_world_desc desc;
+    uint32_t index;
+    uint32_t transition_mask = 0U;
+    uint32_t fallback_mask = 0U;
+
+    if (out_transition_mask != NULL) *out_transition_mask = 0U;
+    if (out_fallback_mask != NULL) *out_fallback_mask = 0U;
+    if (runtime == NULL || slot == NULL ||
+        henka_terrain_world_get_desc(runtime->world, &desc) != HENKA_SUCCESS)
+    {
+        return;
+    }
+    for (index = 0U; index < 4U; ++index)
+    {
+        henka_terrain_chunk_id neighbor_id = {
+            slot->chunk_id.x + offsets[index][0],
+            slot->chunk_id.z + offsets[index][1]};
+        int32_t neighbor_slot_index;
+        const henka_terrain_render_slot* neighbor;
+        int32_t lod_difference;
+        if (!henka_terrain_chunk_id_is_valid(&desc, neighbor_id))
+        {
+            continue;
+        }
+        neighbor_slot_index = henka_terrain_render_find_slot(runtime, neighbor_id);
+        if (neighbor_slot_index < 0 || !runtime->slots[neighbor_slot_index].resident)
+        {
+            fallback_mask |= edge_masks[index];
+            continue;
+        }
+        neighbor = &runtime->slots[neighbor_slot_index];
+        lod_difference = (int32_t)neighbor->desired_lod - (int32_t)slot->desired_lod;
+        if (lod_difference == 1)
+        {
+            transition_mask |= edge_masks[index];
+        }
+        else if (lod_difference > 1 || lod_difference < -1)
+        {
+            fallback_mask |= edge_masks[index];
+        }
+    }
+    if (out_transition_mask != NULL) *out_transition_mask = transition_mask;
+    if (out_fallback_mask != NULL) *out_fallback_mask = fallback_mask;
+}
+
+static henka_result henka_terrain_render_request_chunk_internal(
+    henka_terrain_render_runtime* runtime,
+    henka_terrain_chunk_id chunk_id,
+    uint32_t lod_level,
+    uint32_t edge_transition_mask,
+    uint32_t fallback_skirt_mask);
 
 static float henka_terrain_render_distance_squared(
     const henka_terrain_render_runtime* runtime,
@@ -360,8 +437,12 @@ static void henka_terrain_render_schedule_resident_chunks(
         {
             continue;
         }
-        (void)henka_terrain_render_runtime_request_chunk(
-            runtime, slot->chunk_id, slot->requested_lod);
+        (void)henka_terrain_render_request_chunk_internal(
+            runtime,
+            slot->chunk_id,
+            slot->requested_lod,
+            slot->selected_edge_transition_mask,
+            slot->selected_fallback_skirt_mask);
     }
 
     /* The world may expose more render-resident chunks than the graphical
@@ -564,10 +645,12 @@ void henka_terrain_render_runtime_destroy(henka_terrain_render_runtime* runtime)
     henka_free(runtime);
 }
 
-henka_result henka_terrain_render_runtime_request_chunk(
+static henka_result henka_terrain_render_request_chunk_internal(
     henka_terrain_render_runtime* runtime,
     henka_terrain_chunk_id chunk_id,
-    uint32_t lod_level)
+    uint32_t lod_level,
+    uint32_t edge_transition_mask,
+    uint32_t fallback_skirt_mask)
 {
     henka_terrain_world_desc desc;
     int32_t slot_index;
@@ -575,6 +658,9 @@ henka_result henka_terrain_render_runtime_request_chunk(
     henka_result result;
 
     if (runtime == NULL || lod_level > HENKA_TERRAIN_MESH_MAX_LOD_LEVEL ||
+        (edge_transition_mask & ~HENKA_TERRAIN_MESH_EDGE_ALL) != 0U ||
+        (fallback_skirt_mask & ~HENKA_TERRAIN_MESH_EDGE_ALL) != 0U ||
+        (edge_transition_mask & fallback_skirt_mask) != 0U ||
         henka_terrain_world_get_desc(runtime->world, &desc) != HENKA_SUCCESS ||
         !henka_terrain_chunk_id_is_valid(&desc, chunk_id))
     {
@@ -605,13 +691,32 @@ henka_result henka_terrain_render_runtime_request_chunk(
         slot->selected_lod = lod_level;
     }
     slot = &runtime->slots[slot_index];
-    slot->requested_lod = lod_level;
-    result = henka_terrain_render_queue_slot(runtime, (uint32_t)slot_index, lod_level);
+    result = henka_terrain_render_queue_slot(
+        runtime,
+        (uint32_t)slot_index,
+        lod_level,
+        edge_transition_mask,
+        fallback_skirt_mask);
+    if (result == HENKA_SUCCESS)
+    {
+        slot->requested_lod = lod_level;
+        slot->requested_edge_transition_mask = edge_transition_mask;
+        slot->requested_fallback_skirt_mask = fallback_skirt_mask;
+    }
     if (result != HENKA_SUCCESS && !slot->resident)
     {
         slot->occupied = false;
     }
     return result;
+}
+
+henka_result henka_terrain_render_runtime_request_chunk(
+    henka_terrain_render_runtime* runtime,
+    henka_terrain_chunk_id chunk_id,
+    uint32_t lod_level)
+{
+    return henka_terrain_render_request_chunk_internal(
+        runtime, chunk_id, lod_level, 0U, HENKA_TERRAIN_MESH_EDGE_ALL);
 }
 
 henka_result henka_terrain_render_runtime_remove_chunk(
@@ -700,6 +805,19 @@ henka_result henka_terrain_render_runtime_update_observer(
     for (first = 0U; first < runtime->desc.max_resident_chunks; ++first)
     {
         henka_terrain_render_slot* slot = &runtime->slots[first];
+        if (!slot->occupied)
+        {
+            continue;
+        }
+        henka_terrain_render_topology_masks(
+            runtime,
+            slot,
+            &slot->desired_edge_transition_mask,
+            &slot->desired_fallback_skirt_mask);
+    }
+    for (first = 0U; first < runtime->desc.max_resident_chunks; ++first)
+    {
+        henka_terrain_render_slot* slot = &runtime->slots[first];
         float distance;
         henka_vec3 center;
         float dx;
@@ -716,10 +834,16 @@ henka_result henka_terrain_render_runtime_update_observer(
             runtime,
             slot,
             isfinite(distance) && distance <= runtime->desc.lod_max_distances[HENKA_TERRAIN_MESH_MAX_LOD_LEVEL]);
-        if (slot->desired_lod != slot->requested_lod)
+        if (slot->desired_lod != slot->requested_lod ||
+            slot->desired_edge_transition_mask != slot->requested_edge_transition_mask ||
+            slot->desired_fallback_skirt_mask != slot->requested_fallback_skirt_mask)
         {
-            (void)henka_terrain_render_runtime_request_chunk(
-                runtime, slot->chunk_id, slot->desired_lod);
+            (void)henka_terrain_render_request_chunk_internal(
+                runtime,
+                slot->chunk_id,
+                slot->desired_lod,
+                slot->desired_edge_transition_mask,
+                slot->desired_fallback_skirt_mask);
         }
     }
     return HENKA_SUCCESS;
@@ -759,11 +883,13 @@ henka_result henka_terrain_render_runtime_pump(
             continue;
         }
         slot->queued = false;
-        result = henka_mesh_create_from_terrain_chunk(
+        result = henka_mesh_create_from_terrain_chunk_with_edge_mask(
             runtime->engine,
             runtime->world,
             slot->chunk_id,
             request.lod_level,
+            request.edge_transition_mask,
+            request.fallback_skirt_mask,
             &candidate,
             &revision,
             &generation);
@@ -824,9 +950,21 @@ henka_result henka_terrain_render_runtime_pump(
         slot->resident = true;
         slot->selected_lod = request.lod_level;
         slot->requested_lod = request.lod_level;
+        slot->selected_edge_transition_mask = request.edge_transition_mask;
+        slot->requested_edge_transition_mask = request.edge_transition_mask;
+        slot->selected_fallback_skirt_mask = request.fallback_skirt_mask;
+        slot->requested_fallback_skirt_mask = request.fallback_skirt_mask;
         slot->revision = revision;
         slot->generation = generation;
         runtime->stats.rebuilt_chunks += 1U;
+        if (request.edge_transition_mask != 0U)
+        {
+            runtime->stats.transition_rebuilds += 1U;
+        }
+        if (request.fallback_skirt_mask != 0U)
+        {
+            runtime->stats.fallback_skirt_chunks += 1U;
+        }
         rebuilt += 1U;
     }
     return HENKA_SUCCESS;
@@ -851,7 +989,10 @@ henka_result henka_terrain_render_runtime_get_chunk(
     slot = &runtime->slots[slot_index];
     *out_info = (henka_terrain_render_chunk_info){
         slot->chunk_id, slot->entity, slot->mesh, slot->revision, slot->generation,
-        slot->selected_lod, slot->resident, slot->visible, slot->queued};
+        slot->selected_lod,
+        slot->selected_edge_transition_mask,
+        slot->selected_fallback_skirt_mask,
+        slot->resident, slot->visible, slot->queued};
     return HENKA_SUCCESS;
 }
 
