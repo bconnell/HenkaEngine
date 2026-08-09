@@ -143,10 +143,11 @@ revision. The server reads the validated region record from storage and emits
 transfer-identified fragments with the record revision, generation, total
 size, index, count, and payload bytes. The transport keeps each fragment under
 the existing 32 KiB snapshot payload limit. The client session adapter owns the
-bounded fragment assembly through `<henka/terrain_replica.h>` and requests a
-snapshot when a delta cannot be applied. Connect-time session info can request
-the same bounded snapshot path for up to 16 advertised resident regions;
-relevance-driven reconnect and late-join policy are not yet implemented.
+bounded fragment assembly through `<henka/terrain_replica.h>`; a delta gap
+first requests the retained revision range and uses a snapshot when that
+range is unavailable. Connect-time session info can request the same bounded
+snapshot path for up to 16 advertised resident regions; relevance-driven
+reconnect and late-join selection remain outside this bounded policy.
 
 `<henka/terrain_replica.h>` is the bounded client-side state owner consumed by
 `<henka/terrain_client.h>`. It applies a delta only when every affected region advances
@@ -220,8 +221,8 @@ physics, render, pending-I/O, dirty, revision, and generation state.
 
 This slice establishes the shared data model and bounded ownership contract.
 Full residency-wide dirty-neighbor scheduling, automatic render mesh
-residency, cross-LOD seam stitching, and reconnect/late-join orchestration are
-subsequent validated runtime slices. Accepted edits can now derive one-chunk
+residency, cross-LOD seam stitching, relevance-driven late-join selection, and
+multi-process soak remain subsequent validated runtime slices. Accepted edits can now derive one-chunk
 physics-neighbor coverage through the bounded collision queue, and client
 prediction is available through the separate presentation-world owner.
 They must use this
