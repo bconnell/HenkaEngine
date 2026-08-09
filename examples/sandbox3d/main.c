@@ -3805,6 +3805,15 @@ static void sandbox3d_print_scene_legend(const sandbox3d_state* state)
     size_t index;
 
     printf("Scene examples:\n");
+    if (!state->primitive_gallery)
+    {
+        printf("  Showcase Giraffe: central-left, the Cheeky Giraffe mascot loaded through the packaged glTF scene/material path.\n");
+        printf("  Showcase Rocket: central-right, the Original Realistic Rocket loaded through the packaged glTF scene/material path.\n");
+        printf("  Ground: below the showcase, a textured plane for scale and lighting.\n");
+        printf("  Debug Grid: spans the floor so you can judge position, depth, and movement.\n");
+        printf("  Use --primitive-gallery to show the engineering primitive and fallback samples.\n");
+        return;
+    }
     for (index = 0U; index < SANDBOX3D_OBJECT_COUNT; ++index)
     {
         const sandbox3d_object_descriptor* descriptor;
