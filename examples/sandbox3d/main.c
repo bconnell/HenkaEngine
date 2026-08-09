@@ -5737,13 +5737,13 @@ static void sandbox3d_apply_capture_camera(sandbox3d_state* state)
         return;
     }
 
-    /* Capture evidence is a fixed Terrain showcase, while normal editor
+    /* Capture evidence is a fixed two-model showcase, while normal editor
      * startup continues to honor the persisted user camera. */
     {
-        const henka_vec3 target = {350.0f, 1.0f, 275.0f};
+        const henka_vec3 target = {0.0f, 2.05f, -1.7f};
         const henka_vec3 direction = henka_vec3_normalize(
-            henka_vec3_subtract(target, (henka_vec3){430.0f, 18.0f, 410.0f}));
-        state->camera.position = (henka_vec3){430.0f, 18.0f, 410.0f};
+            henka_vec3_subtract(target, (henka_vec3){0.0f, 3.0f, 8.8f}));
+        state->camera.position = (henka_vec3){0.0f, 3.0f, 8.8f};
         state->camera.yaw_radians = atan2f(direction.z, direction.x);
         state->camera.pitch_radians = asinf(direction.y);
     }
@@ -15418,7 +15418,9 @@ static henka_result sandbox3d_initialize(henka_engine* engine, void* user_data)
     int panel_index;
     sandbox3d_state* state;
     state = (sandbox3d_state*)user_data;
-    state->diagnostics.show_reflection_probes = true;
+    /* Probe volumes remain available from Diagnostics, but do not obscure the
+     * normal showcase/editor viewport until the user explicitly enables them. */
+    state->diagnostics.show_reflection_probes = false;
     sandbox3d_editor_controls_initialize(&state->editor_controls);
     sandbox3d_editor_ui_state_reset(&state->editor_ui);
     state->editor_controls_loaded_safely = true;
@@ -15925,7 +15927,7 @@ static henka_result sandbox3d_initialize(henka_engine* engine, void* user_data)
     ground_material.shader = state->basic_shader;
     ground_material.base_color_texture = state->ground_texture;
     ground_material.use_texture = true;
-    ground_material.base_color = (henka_vec4){0.96f, 0.98f, 0.90f, 1.0f};
+    ground_material.base_color = (henka_vec4){0.24f, 0.28f, 0.34f, 1.0f};
     ground_material.use_lighting = true;
     ground_material.roughness = 0.82f;
     ground_material.receive_shadows = true;
@@ -16303,6 +16305,13 @@ static henka_result sandbox3d_initialize(henka_engine* engine, void* user_data)
 
     transform = sandbox3d_make_transform((henka_vec3){0.0f, 0.0f, 0.0f}, (henka_vec3){1.0f, 1.0f, 1.0f});
     result = sandbox3d_configure_entity(state->scene, state->grid_entity, state->grid_mesh, grid_material, transform);
+    if (result != HENKA_SUCCESS)
+    {
+        goto fail;
+    }
+    /* The grid is an editor helper, so Solid must preserve its restrained
+     * unlit graphite material instead of replacing it with scene solid color. */
+    result = sandbox3d_mark_gizmo_helper_entity(state, state->grid_entity);
     if (result != HENKA_SUCCESS)
     {
         goto fail;

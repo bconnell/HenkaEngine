@@ -87,7 +87,7 @@ if ($IncludeStartupShowcase) {
 $records = New-Object System.Collections.Generic.List[string]
 $records.Add("Same-camera viewport evidence")
 $records.Add("Source: $executable")
-$records.Add("Camera policy: capture-mode runs use the same deterministic Terrain showcase camera and never save capture-mode settings")
+$records.Add("Camera policy: capture-mode runs use the same deterministic two-model showcase camera and never save capture-mode settings")
 $records.Add("Modes: Solid, Material Preview, Rendered")
 $records.Add("Startup evidence: optional ordinary startup camera with the default showcase models")
 $records.Add("Capture: application window bounds copied from the desktop into repo-local generated output")

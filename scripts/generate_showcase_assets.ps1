@@ -40,6 +40,37 @@ function Add-Triangle {
     [void]$Part.Indices.Add($C)
 }
 
+function Normalize-Vector {
+    param([float[]]$Vector)
+    $length = [Math]::Sqrt(
+        $Vector[0] * $Vector[0] +
+        $Vector[1] * $Vector[1] +
+        $Vector[2] * $Vector[2])
+    if ($length -le 0.000001 -or [double]::IsNaN($length) -or [double]::IsInfinity($length)) {
+        throw "Showcase generator received a zero or non-finite vector."
+    }
+    return @(
+        [float]($Vector[0] / $length),
+        [float]($Vector[1] / $length),
+        [float]($Vector[2] / $length))
+}
+
+function Dot-Vector {
+    param([float[]]$Left, [float[]]$Right)
+    return [float](
+        $Left[0] * $Right[0] +
+        $Left[1] * $Right[1] +
+        $Left[2] * $Right[2])
+}
+
+function Cross-Vector {
+    param([float[]]$Left, [float[]]$Right)
+    return @(
+        [float]($Left[1] * $Right[2] - $Left[2] * $Right[1]),
+        [float]($Left[2] * $Right[0] - $Left[0] * $Right[2]),
+        [float]($Left[0] * $Right[1] - $Left[1] * $Right[0]))
+}
+
 function Add-Ellipsoid {
     param(
         [object]$Part,
@@ -68,7 +99,24 @@ function Add-Ellipsoid {
                 [float]($Center[0] + $Radius[0] * $unit[0]),
                 [float]($Center[1] + $Radius[1] * $unit[1]),
                 [float]($Center[2] + $Radius[2] * $unit[2]))
-            $tangent = @([float](-$sinPhi), 0.0, [float]$cosPhi, 1.0)
+            # The analytic ellipsoid tangent is the phi derivative of the
+            # non-uniformly scaled surface.  The old unit-sphere tangent was
+            # not orthogonal after scaling, which made normal maps and
+            # specular highlights split across the showcase.
+            $analyticTangent = @(
+                [float](-$Radius[0] * $sinTheta * $sinPhi),
+                0.0,
+                [float]($Radius[2] * $sinTheta * $cosPhi))
+            if ([Math]::Sqrt(
+                    $analyticTangent[0] * $analyticTangent[0] +
+                    $analyticTangent[1] * $analyticTangent[1] +
+                    $analyticTangent[2] * $analyticTangent[2]) -le 0.000001) {
+                $tangent = @([float](-$sinPhi), 0.0, [float]$cosPhi)
+            }
+            else {
+                $tangent = Normalize-Vector $analyticTangent
+            }
+            $tangent = @([float]$tangent[0], [float]$tangent[1], [float]$tangent[2], 1.0)
             [void]$row.Add((Add-Vertex $Part $position $normal @([float]($segment / $Segments), [float]($ring / $Rings)) $tangent))
         }
     }
@@ -78,8 +126,15 @@ function Add-Ellipsoid {
             $b = $row[$ring * ($Segments + 1) + $segment + 1]
             $c = $row[($ring + 1) * ($Segments + 1) + $segment + 1]
             $d = $row[($ring + 1) * ($Segments + 1) + $segment]
-            Add-Triangle $Part $a $b $c
-            Add-Triangle $Part $a $c $d
+            # The duplicated longitude samples at each pole are retained for
+            # simple bounded vertex layout, but their zero-area pole triangles
+            # are intentionally omitted.
+            if ($ring -gt 0) {
+                Add-Triangle $Part $a $b $c
+            }
+            if ($ring -lt ($Rings - 1)) {
+                Add-Triangle $Part $a $c $d
+            }
         }
     }
 }
@@ -95,13 +150,16 @@ function Add-Frustum {
         [float]$CenterZ = 0.0,
         [int]$Segments = 24
     )
+    if ($TopY -le $BottomY -or $BottomRadius -le 0.0 -or $TopRadius -le 0.0) {
+        throw "Showcase frustum dimensions are invalid."
+    }
+    $slope = ($TopRadius - $BottomRadius) / ($TopY - $BottomY)
     $rings = New-Object 'System.Collections.Generic.List[int]'
     foreach ($pair in @(@($BottomY, $BottomRadius), @($TopY, $TopRadius))) {
         for ($segment = 0; $segment -le $Segments; ++$segment) {
             $phi = 2.0 * [Math]::PI * $segment / $Segments
             $sinPhi = [Math]::Sin($phi)
             $cosPhi = [Math]::Cos($phi)
-            $slope = ($pair[1] - $BottomRadius) / ($TopY - $BottomY)
             $normal = @([float]$cosPhi, [float](-$slope), [float]$sinPhi)
             $normalLength = [Math]::Sqrt($normal[0] * $normal[0] + $normal[1] * $normal[1] + $normal[2] * $normal[2])
             $normal = @([float]($normal[0] / $normalLength), [float]($normal[1] / $normalLength), [float]($normal[2] / $normalLength))
@@ -118,8 +176,76 @@ function Add-Frustum {
         $b = $rings[$segment + 1]
         $c = $rings[$Segments + 1 + $segment + 1]
         $d = $rings[$Segments + 1 + $segment]
-        Add-Triangle $Part $a $b $c
-        Add-Triangle $Part $a $c $d
+        # Increasing phi and increasing height otherwise wind the side inward.
+        Add-Triangle $Part $a $c $b
+        Add-Triangle $Part $a $d $c
+    }
+}
+
+function Add-EllipsoidSurfaceSpot {
+    param(
+        [object]$Part,
+        [float[]]$Center,
+        [float[]]$Radius,
+        [float[]]$UnitSurfaceDirection,
+        [float]$MajorRadius,
+        [float]$MinorRadius,
+        [float]$RotationRadians = 0.0
+    )
+    $unit = Normalize-Vector $UnitSurfaceDirection
+    $point = @(
+        [float]($Center[0] + $Radius[0] * $unit[0]),
+        [float]($Center[1] + $Radius[1] * $unit[1]),
+        [float]($Center[2] + $Radius[2] * $unit[2]))
+    $normal = Normalize-Vector @(
+        [float]($unit[0] / $Radius[0]),
+        [float]($unit[1] / $Radius[1]),
+        [float]($unit[2] / $Radius[2]))
+    Add-SurfaceSpot $Part $point $normal $MajorRadius $MinorRadius $RotationRadians
+}
+
+function Add-SurfaceSpot {
+    param(
+        [object]$Part,
+        [float[]]$Center,
+        [float[]]$Normal,
+        [float]$MajorRadius,
+        [float]$MinorRadius,
+        [float]$RotationRadians = 0.0,
+        [int]$Segments = 12
+    )
+    $normal = Normalize-Vector $Normal
+    $reference = if ([Math]::Abs($normal[1]) -lt 0.9) { @(0.0, 1.0, 0.0) } else { @(1.0, 0.0, 0.0) }
+    $tangent = Normalize-Vector (Cross-Vector $reference $normal)
+    $bitangent = Normalize-Vector (Cross-Vector $normal $tangent)
+    $rotatedTangent = @(
+        [float]($tangent[0] * [Math]::Cos($RotationRadians) + $bitangent[0] * [Math]::Sin($RotationRadians)),
+        [float]($tangent[1] * [Math]::Cos($RotationRadians) + $bitangent[1] * [Math]::Sin($RotationRadians)),
+        [float]($tangent[2] * [Math]::Cos($RotationRadians) + $bitangent[2] * [Math]::Sin($RotationRadians)))
+    $rotatedBitangent = @(
+        [float](-$tangent[0] * [Math]::Sin($RotationRadians) + $bitangent[0] * [Math]::Cos($RotationRadians)),
+        [float](-$tangent[1] * [Math]::Sin($RotationRadians) + $bitangent[1] * [Math]::Cos($RotationRadians)),
+        [float](-$tangent[2] * [Math]::Sin($RotationRadians) + $bitangent[2] * [Math]::Cos($RotationRadians)))
+    $epsilon = 0.006
+    $centerPosition = @(
+        [float]($Center[0] + $normal[0] * $epsilon),
+        [float]($Center[1] + $normal[1] * $epsilon),
+        [float]($Center[2] + $normal[2] * $epsilon))
+    $centerIndex = Add-Vertex $Part $centerPosition $normal @(0.5, 0.5) @([float]$rotatedTangent[0], [float]$rotatedTangent[1], [float]$rotatedTangent[2], 1.0)
+    $ring = New-Object 'System.Collections.Generic.List[int]'
+    for ($segment = 0; $segment -lt $Segments; ++$segment) {
+        $angle = 2.0 * [Math]::PI * $segment / $Segments
+        $cosine = [Math]::Cos($angle)
+        $sine = [Math]::Sin($angle)
+        $position = @(
+            [float]($centerPosition[0] + $rotatedTangent[0] * $MajorRadius * $cosine + $rotatedBitangent[0] * $MinorRadius * $sine),
+            [float]($centerPosition[1] + $rotatedTangent[1] * $MajorRadius * $cosine + $rotatedBitangent[1] * $MinorRadius * $sine),
+            [float]($centerPosition[2] + $rotatedTangent[2] * $MajorRadius * $cosine + $rotatedBitangent[2] * $MinorRadius * $sine))
+        [void]$ring.Add((Add-Vertex $Part $position $normal @([float](0.5 + 0.5 * $cosine), [float](0.5 + 0.5 * $sine)) @([float]$rotatedTangent[0], [float]$rotatedTangent[1], [float]$rotatedTangent[2], 1.0)))
+    }
+    for ($segment = 0; $segment -lt $Segments; ++$segment) {
+        $next = ($segment + 1) % $Segments
+        Add-Triangle $Part $centerIndex $ring[$segment] $ring[$next]
     }
 }
 
@@ -150,6 +276,64 @@ function Add-Box {
     }
 }
 
+function Add-Quad {
+    param([object]$Part, [float[][]]$Positions)
+    if ($Positions.Count -ne 4) {
+        throw "Showcase quad requires four positions."
+    }
+    $edge1 = @(
+        [float]($Positions[1][0] - $Positions[0][0]),
+        [float]($Positions[1][1] - $Positions[0][1]),
+        [float]($Positions[1][2] - $Positions[0][2]))
+    $edge2 = @(
+        [float]($Positions[2][0] - $Positions[0][0]),
+        [float]($Positions[2][1] - $Positions[0][1]),
+        [float]($Positions[2][2] - $Positions[0][2]))
+    $normal = Normalize-Vector (Cross-Vector $edge1 $edge2)
+    $tangent = Normalize-Vector $edge1
+    $tangent4 = @([float]$tangent[0], [float]$tangent[1], [float]$tangent[2], 1.0)
+    $indices = New-Object 'System.Collections.Generic.List[int]'
+    foreach ($position in $Positions) {
+        [void]$indices.Add((Add-Vertex $Part $position $normal @(0.0, 0.0) $tangent4))
+    }
+    Add-Triangle $Part $indices[0] $indices[1] $indices[2]
+    Add-Triangle $Part $indices[0] $indices[2] $indices[3]
+}
+
+function Add-RadialFin {
+    param(
+        [object]$Part,
+        [float]$DirectionX,
+        [float]$DirectionZ,
+        [float]$Thickness = 0.07
+    )
+    $radial = Normalize-Vector @($DirectionX, 0.0, $DirectionZ)
+    $tangent = @([float](-$radial[2]), 0.0, [float]$radial[0])
+    $profile = @(
+        @([float]0.52, [float]0.35),
+        @([float]0.96, [float]0.48),
+        @([float]0.88, [float]1.18),
+        @([float]0.55, [float]0.96))
+    $front = @()
+    $back = @()
+    foreach ($point in $profile) {
+        $front += ,@(
+            [float]($radial[0] * $point[0] + $tangent[0] * $Thickness),
+            [float]$point[1],
+            [float]($radial[2] * $point[0] + $tangent[2] * $Thickness))
+        $back += ,@(
+            [float]($radial[0] * $point[0] - $tangent[0] * $Thickness),
+            [float]$point[1],
+            [float]($radial[2] * $point[0] - $tangent[2] * $Thickness))
+    }
+    Add-Quad $Part @($front[0], $front[3], $front[2], $front[1])
+    Add-Quad $Part @($back[0], $back[1], $back[2], $back[3])
+    Add-Quad $Part @($front[1], $back[1], $back[2], $front[2])
+    Add-Quad $Part @($front[2], $back[2], $back[3], $front[3])
+    Add-Quad $Part @($front[3], $back[3], $back[0], $front[0])
+    Add-Quad $Part @($front[0], $back[0], $back[1], $front[1])
+}
+
 function New-Material {
     param([string]$Name, [float[]]$Color, [float]$Metallic, [float]$Roughness)
     return [ordered]@{
@@ -158,13 +342,73 @@ function New-Material {
             baseColorFactor = $Color
             metallicFactor = $Metallic
             roughnessFactor = $Roughness
-            baseColorTexture = [ordered]@{ index = 0 }
+        }
+    }
+}
+
+function Test-ShowcasePart {
+    param([object]$Part, [int]$MaterialCount)
+    if ($Part.Vertices.Count -lt 3 -or $Part.Indices.Count -lt 3 -or ($Part.Indices.Count % 3) -ne 0) {
+        throw "Showcase part has an invalid triangle count."
+    }
+    if ($Part.Material -lt 0 -or $Part.Material -ge $MaterialCount) {
+        throw "Showcase part references an invalid material."
+    }
+    foreach ($vertex in $Part.Vertices) {
+        $values = @($vertex.Position + $vertex.Normal + $vertex.Uv + $vertex.Tangent)
+        foreach ($value in $values) {
+            if ([double]::IsNaN([double]$value) -or [double]::IsInfinity([double]$value)) {
+                throw "Showcase part contains a non-finite vertex value."
+            }
+        }
+        $normalLength = [Math]::Sqrt((Dot-Vector $vertex.Normal $vertex.Normal))
+        $tangentLength = [Math]::Sqrt(
+            $vertex.Tangent[0] * $vertex.Tangent[0] +
+            $vertex.Tangent[1] * $vertex.Tangent[1] +
+            $vertex.Tangent[2] * $vertex.Tangent[2])
+        if ($normalLength -lt 0.99 -or $normalLength -gt 1.01 -or
+            $tangentLength -lt 0.99 -or $tangentLength -gt 1.01 -or
+            [Math]::Abs((Dot-Vector $vertex.Normal @($vertex.Tangent[0], $vertex.Tangent[1], $vertex.Tangent[2]))) -gt 0.02 -or
+            [Math]::Abs($vertex.Tangent[3]) -lt 0.5) {
+            throw "Showcase part contains an invalid normal/tangent frame."
+        }
+    }
+    for ($index = 0; $index -lt $Part.Indices.Count; $index += 3) {
+        $a = $Part.Indices[$index]
+        $b = $Part.Indices[$index + 1]
+        $c = $Part.Indices[$index + 2]
+        if ($a -lt 0 -or $b -lt 0 -or $c -lt 0 -or
+            $a -ge $Part.Vertices.Count -or $b -ge $Part.Vertices.Count -or $c -ge $Part.Vertices.Count) {
+            throw "Showcase part contains an out-of-range index."
+        }
+        $edge1 = @(
+            [float]($Part.Vertices[$b].Position[0] - $Part.Vertices[$a].Position[0]),
+            [float]($Part.Vertices[$b].Position[1] - $Part.Vertices[$a].Position[1]),
+            [float]($Part.Vertices[$b].Position[2] - $Part.Vertices[$a].Position[2]))
+        $edge2 = @(
+            [float]($Part.Vertices[$c].Position[0] - $Part.Vertices[$a].Position[0]),
+            [float]($Part.Vertices[$c].Position[1] - $Part.Vertices[$a].Position[1]),
+            [float]($Part.Vertices[$c].Position[2] - $Part.Vertices[$a].Position[2]))
+        $faceNormal = Cross-Vector $edge1 $edge2
+        $area = [Math]::Sqrt((Dot-Vector $faceNormal $faceNormal))
+        $averageNormal = Normalize-Vector @(
+            [float]($Part.Vertices[$a].Normal[0] + $Part.Vertices[$b].Normal[0] + $Part.Vertices[$c].Normal[0]),
+            [float]($Part.Vertices[$a].Normal[1] + $Part.Vertices[$b].Normal[1] + $Part.Vertices[$c].Normal[1]),
+            [float]($Part.Vertices[$a].Normal[2] + $Part.Vertices[$b].Normal[2] + $Part.Vertices[$c].Normal[2]))
+        if ($area -lt 0.000001 -or (Dot-Vector $faceNormal $averageNormal) -le 0.0) {
+            throw "Showcase part material $($Part.Material) contains a degenerate or inward-wound triangle at index $index."
         }
     }
 }
 
 function Write-Gltf {
     param([string]$Path, [string]$Name, [object[]]$Parts, [object[]]$Materials, [float[]]$Translation)
+    if ($Parts.Count -eq 0 -or $Materials.Count -eq 0) {
+        throw "Showcase asset must contain geometry and materials."
+    }
+    foreach ($part in $Parts) {
+        Test-ShowcasePart $part $Materials.Count
+    }
     $stream = New-Object System.IO.MemoryStream
     $writer = New-Object System.IO.BinaryWriter($stream)
     $views = @()
@@ -215,8 +459,6 @@ function Write-Gltf {
         buffers = @([ordered]@{ uri = ([IO.Path]::GetFileName([IO.Path]::ChangeExtension($Path, ".bin"))); byteLength = $bytes.Length })
         bufferViews = $views
         accessors = $accessors
-        images = @([ordered]@{ uri = "cube_albedo.png" })
-        textures = @([ordered]@{ source = 0 })
         materials = $Materials
         meshes = @([ordered]@{ name = $Name; primitives = $primitives })
         nodes = @([ordered]@{ name = $Name; mesh = 0; translation = $Translation })
@@ -250,16 +492,19 @@ function New-Giraffe {
     Add-Ellipsoid $tan @(0.55, 4.22, 0.0) @(0.32, 0.13, 0.52) 8 16
     Add-Frustum $tan 4.15 4.48 0.095 0.075 -0.24 0.0 12
     Add-Frustum $tan 4.15 4.48 0.095 0.075 0.24 0.0 12
-    Add-Ellipsoid $spots @(-0.48, 1.62, 0.61) @(0.24, 0.30, 0.035) 6 12
-    Add-Ellipsoid $spots @(0.38, 1.05, 0.61) @(0.28, 0.20, 0.035) 6 12
-    Add-Ellipsoid $spots @(0.48, 1.72, -0.61) @(0.22, 0.35, 0.035) 6 12
-    Add-Ellipsoid $spots @(-0.22, 2.55, 0.33) @(0.14, 0.25, 0.035) 6 12
-    Add-Ellipsoid $spots @(0.20, 3.02, 0.28) @(0.12, 0.22, 0.035) 6 12
-    Add-Ellipsoid $spots @(-0.38, 3.92, 0.50) @(0.14, 0.12, 0.035) 6 12
-    Add-Ellipsoid $spots @(0.35, 3.70, 0.48) @(0.16, 0.10, 0.035) 6 12
+    # Spots are low-profile tangent patches, not intersecting ellipsoids. The
+    # small outward bias is a deterministic decal-style separation that keeps
+    # the pattern readable without introducing bumps or coplanar z-fighting.
+    Add-EllipsoidSurfaceSpot $spots @(0.0, 1.35, 0.0) @(0.92, 1.0, 0.62) @(-0.48, 0.20, 0.86) 0.23 0.17 -0.20
+    Add-EllipsoidSurfaceSpot $spots @(0.0, 1.35, 0.0) @(0.92, 1.0, 0.62) @(0.38, -0.18, 0.91) 0.25 0.14 0.35
+    Add-EllipsoidSurfaceSpot $spots @(0.0, 1.35, 0.0) @(0.92, 1.0, 0.62) @(-0.18, -0.52, 0.83) 0.16 0.22 0.20
+    Add-EllipsoidSurfaceSpot $spots @(0.0, 1.35, 0.0) @(0.92, 1.0, 0.62) @(0.54, 0.50, 0.67) 0.16 0.12 -0.45
+    Add-EllipsoidSurfaceSpot $spots @(0.0, 1.35, 0.0) @(0.92, 1.0, 0.62) @(-0.70, -0.35, 0.62) 0.15 0.12 0.55
+    Add-SurfaceSpot $spots @(0.0, 2.22, 0.30) @(0.0, 0.0, 1.0) 0.13 0.22 -0.15
+    Add-SurfaceSpot $spots @(0.0, 2.78, 0.30) @(0.0, 0.0, 1.0) 0.12 0.17 0.25
+    Add-EllipsoidSurfaceSpot $spots @(0.0, 3.82, 0.0) @(0.72, 0.56, 0.56) @(-0.32, 0.18, 0.92) 0.12 0.10 0.35
+    Add-EllipsoidSurfaceSpot $spots @(0.0, 3.82, 0.0) @(0.72, 0.56, 0.56) @(0.34, -0.22, 0.90) 0.13 0.09 -0.30
     Add-Ellipsoid $cream @(0.0, 3.62, 0.50) @(0.42, 0.24, 0.20) 8 16
-    Add-Ellipsoid $cream @(-0.55, 4.20, 0.0) @(0.34, 0.12, 0.50) 8 16
-    Add-Ellipsoid $cream @(0.55, 4.20, 0.0) @(0.34, 0.12, 0.50) 8 16
     Add-Ellipsoid $eyes @(-0.28, 3.98, 0.51) @(0.115, 0.16, 0.065) 8 12
     Add-Ellipsoid $eyes @(0.28, 3.98, 0.51) @(0.115, 0.16, 0.065) 8 12
     Add-Frustum $eyes 4.00 4.18 0.028 0.012 -0.39 0.54 8
@@ -278,21 +523,22 @@ function New-Rocket {
     $metal = New-Part 1
     $heat = New-Part 2
     $stripe = New-Part 3
-    Add-Frustum $paint 0.35 2.55 0.62 0.56 0.0 0.0 32
-    Add-Ellipsoid $paint @(0.0, 2.83, 0.0) @(0.56, 0.62, 0.56) 12 32
-    Add-Frustum $paint 2.42 2.58 0.62 0.62 0.0 0.0 32
+    Add-Frustum $paint 0.35 2.50 0.62 0.56 0.0 0.0 32
+    Add-Frustum $paint 2.50 2.84 0.56 0.34 0.0 0.0 32
+    Add-Frustum $paint 2.84 3.12 0.34 0.075 0.0 0.0 32
+    Add-Ellipsoid $paint @(0.0, 3.17, 0.0) @(0.08, 0.11, 0.08) 8 16
     Add-Frustum $metal 0.28 0.48 0.64 0.64 0.0 0.0 32
     Add-Frustum $metal 1.20 1.30 0.575 0.575 0.0 0.0 32
-    Add-Frustum $metal 2.34 2.43 0.60 0.60 0.0 0.0 32
+    Add-Frustum $metal 2.28 2.38 0.60 0.60 0.0 0.0 32
     foreach ($engine in @(@(-0.28, 0.0), @(0.0, 0.0), @(0.28, 0.0))) {
         Add-Frustum $heat 0.02 0.40 0.16 0.11 $engine[0] $engine[1] 20
         Add-Ellipsoid $heat @($engine[0], 0.02, $engine[1]) @(0.20, 0.08, 0.20) 8 16
     }
-    Add-Box $stripe @(0.0, 1.82, 0.0) @(0.575, 0.06, 0.575)
-    Add-Box $heat @(-0.78, 0.65, 0.0) @(0.16, 0.42, 0.06)
-    Add-Box $heat @(0.78, 0.65, 0.0) @(0.16, 0.42, 0.06)
-    Add-Box $heat @(0.0, 0.65, -0.78) @(0.06, 0.42, 0.16)
-    Add-Box $heat @(0.0, 0.65, 0.78) @(0.06, 0.42, 0.16)
+    Add-Frustum $stripe 1.78 1.91 0.59 0.59 0.0 0.0 32
+    Add-RadialFin $heat 1.0 0.0
+    Add-RadialFin $heat -1.0 0.0
+    Add-RadialFin $heat 0.0 1.0
+    Add-RadialFin $heat 0.0 -1.0
     return [pscustomobject]@{ Parts = @($paint, $metal, $heat, $stripe); Materials = $materials }
 }
 

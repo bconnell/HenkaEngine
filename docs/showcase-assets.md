@@ -2,14 +2,14 @@
 
 The normal Windows Sandbox startup presents two repo-owned sample models:
 
-- `cheeky_giraffe.gltf` — an original stylized-realistic Cheeky Giraffe mascot with a long neck, spots, eyes, lashes, ears, ossicones, and a cheeky smile.
-- `original_realistic_rocket.gltf` — an original plausible launch vehicle with painted body sections, metal bands, heat-resistant engine hardware, and stabilization fins.
+- `cheeky_giraffe.gltf` — an original stylized-realistic Cheeky Giraffe mascot with a long neck, surface-fitted spots, eyes, lashes, ears, ossicones, and a cheeky smile.
+- `original_realistic_rocket.gltf` — an original stylized launch vehicle with a shaped fairing, painted body sections, integrated metal bands, heat-resistant engine hardware, and tapered stabilization fins.
 
 ## Ownership and generation
 
 The Sandbox target build runs `scripts/generate_showcase_assets.ps1` for both files. The generator creates deterministic bounded geometry, UVs, normals, tangent vec4 attributes, PBR material definitions, and a sibling binary buffer. It uses no third-party model, no external authoring application at runtime, and no copyrighted vehicle or character model.
 
-The generated glTF files reference a build-local copy of the repo-owned `assets/textures/cube_albedo.png`. The CMake post-build step places the glTF, `.bin`, and model-local texture beside the executable, so packaged execution resolves all dependencies from the package rather than the repository root.
+The generated glTF files use material factors and do not bind the unrelated primitive-gallery cube texture. Their glTF and sibling binary buffers are copied beside the executable, so packaged execution resolves the showcase from package-owned files without a repository-root or runtime authoring dependency.
 
 ## Runtime path
 
@@ -23,4 +23,4 @@ HenkaSandbox3D.exe --primitive-gallery
 
 That opt-in path preserves the cube, sphere, marker, fallback, foliage, and realism validation samples used by renderer, material, physics, and editor QA.
 
-These are representative engine samples. Human visual QA is still required before treating the showcase as production-quality art.
+The generator rejects non-finite vertex data, invalid frames, out-of-range indices, degenerate triangles, and inward-wound faces before writing either asset. These remain representative engine samples rather than movie-production assets; human visual QA across Solid, Material Preview, and Rendered remains a required acceptance gate.

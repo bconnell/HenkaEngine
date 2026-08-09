@@ -7,7 +7,7 @@
 - a textured ground plane with a visible floor surface and grid
 - a debug grid
 
-The showcase models are deterministic repo-owned glTF assets generated during the Windows build and packaged beside their binary buffers and texture dependency. Use `henka_sandbox3d.exe --primitive-gallery` to show the engineering primitives, OBJ marker, fallback samples, foliage, and realism material row again.
+The showcase models are deterministic repo-owned glTF assets generated during the Windows build and packaged beside their binary buffers. They use their own material factors rather than the primitive-gallery cube texture. Use `henka_sandbox3d.exe --primitive-gallery` to show the engineering primitives, OBJ marker, fallback samples, foliage, and realism material row again.
 
 The sandbox also saves a small local settings file so wireframe, grid visibility, mouse sensitivity, camera preset, camera pose, orthographic zoom, and panel visibility can carry across runs.
 It now also includes small in-window developer panels for inspection and settings tasks.

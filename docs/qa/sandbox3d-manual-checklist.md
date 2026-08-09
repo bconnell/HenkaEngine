@@ -14,8 +14,8 @@ Use this checklist when you want to confirm that `henka_sandbox3d` is visually r
 .\scripts\run_sandbox3d.ps1
 ```
 
-For application-only evidence of the normal model showcase plus the existing
-same-camera shading comparison, run:
+For application-only evidence of the normal model showcase plus the same-camera
+Solid, Material Preview, and Rendered comparison, run:
 
 ```powershell
 .\scripts\capture_visual_evidence_windows.ps1 -IncludeStartupShowcase
