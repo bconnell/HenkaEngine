@@ -16901,6 +16901,9 @@ static void sandbox3d_update(henka_engine* engine, double delta_seconds, void* u
         henka_terrain_render_chunk_info chunk_info = {0};
         henka_terrain_physics_hit terrain_hit = {0};
         henka_bounds terrain_bounds = {0};
+        henka_mesh* previous_terrain_mesh = NULL;
+        henka_terrain_revision previous_terrain_revision = 0U;
+        henka_terrain_render_stats terrain_render_stats = {0};
         henka_result terrain_result;
 
         command.client_nonce = 1U;
@@ -16956,6 +16959,61 @@ static void sandbox3d_update(henka_engine* engine, double delta_seconds, void* u
                 terrain_result = HENKA_ERROR_UNKNOWN;
             }
         }
+        if (terrain_result == HENKA_SUCCESS)
+        {
+            previous_terrain_mesh = chunk_info.mesh;
+            previous_terrain_revision = chunk_info.revision;
+            (void)henka_terrain_render_runtime_get_stats(
+                state->terrain_render,
+                &terrain_render_stats);
+            if (henka_terrain_world_set_region_residency(
+                    state->terrain_world,
+                    (henka_terrain_region_id){0, 0},
+                    true,
+                    false,
+                    false) != HENKA_SUCCESS ||
+                henka_terrain_render_runtime_request_chunk(
+                    state->terrain_render,
+                    (henka_terrain_chunk_id){0, 0},
+                    0U) != HENKA_SUCCESS ||
+                henka_terrain_render_runtime_pump(state->terrain_render, 1U) != HENKA_SUCCESS ||
+                henka_terrain_render_runtime_get_chunk(
+                    state->terrain_render,
+                    (henka_terrain_chunk_id){0, 0},
+                    &chunk_info) != HENKA_SUCCESS ||
+                chunk_info.mesh != previous_terrain_mesh ||
+                chunk_info.revision != previous_terrain_revision ||
+                !chunk_info.resident)
+            {
+                terrain_result = HENKA_ERROR_UNKNOWN;
+            }
+        }
+        if (terrain_result == HENKA_SUCCESS)
+        {
+            if (henka_terrain_world_set_region_residency(
+                    state->terrain_world,
+                    (henka_terrain_region_id){0, 0},
+                    true,
+                    true,
+                    false) != HENKA_SUCCESS ||
+                henka_terrain_render_runtime_request_chunk(
+                    state->terrain_render,
+                    (henka_terrain_chunk_id){0, 0},
+                    0U) != HENKA_SUCCESS ||
+                henka_terrain_render_runtime_pump(state->terrain_render, 1U) != HENKA_SUCCESS ||
+                henka_terrain_render_runtime_get_chunk(
+                    state->terrain_render,
+                    (henka_terrain_chunk_id){0, 0},
+                    &chunk_info) != HENKA_SUCCESS ||
+                chunk_info.revision < previous_terrain_revision ||
+                henka_terrain_render_runtime_get_stats(
+                    state->terrain_render,
+                    &terrain_render_stats) != HENKA_SUCCESS ||
+                terrain_render_stats.failed_rebuilds == 0U)
+            {
+                terrain_result = HENKA_ERROR_UNKNOWN;
+            }
+        }
         if (terrain_result != HENKA_SUCCESS)
         {
             HENKA_LOG_ERROR(
@@ -16966,7 +17024,7 @@ static void sandbox3d_update(henka_engine* engine, double delta_seconds, void* u
         }
         else
         {
-            printf("Terrain edit: shared raise command rebuilt render revision %llu, collision patch, and height bounds %.3fm +/- %.3fm.\n",
+            printf("Terrain edit: shared raise command rebuilt render revision %llu, collision patch, height bounds %.3fm +/- %.3fm, and preserved the prior mesh across a failed replacement.\n",
                 (unsigned long long)chunk_info.revision,
                 terrain_bounds.center.y,
                 terrain_bounds.extents.y);

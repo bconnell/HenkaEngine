@@ -256,7 +256,11 @@ scene bounds are replaced with the candidate mesh and restored on failure.
 Manual visual validation remains subsequent work. The Sandbox also routes one shared
 raise command through authoritative integer mutation, refreshes the
 transactional physics patch, and refreshes the affected GPU mesh; this is a
-runtime smoke path, not persistence or network authority.
+runtime smoke path, not persistence or network authority. The same graphical
+smoke revokes render residency after the upload, forces a candidate mesh
+failure, verifies the previous mesh and revision remain resident, then restores
+residency and proves replacement recovery; this is bounded failure-injection
+coverage, not complete stress or visual QA.
 
 The Sandbox reference scene now creates one deterministic bounded region,
 marks it render-resident, and lets this owner discover its bounded chunk

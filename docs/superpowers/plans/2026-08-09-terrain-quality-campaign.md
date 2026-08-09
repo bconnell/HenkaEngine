@@ -197,6 +197,7 @@
 
 - [ ] Add deterministic bounded rolling, cliff, valley, four-layer, wet/roughness, shadow, AO/SSGI, reflection, and distant-LOD fixtures.
 - [ ] Add failure injection for region/mesh/GPU/material/queue/collision/snapshot/persistence paths with previous-state assertions.
+- [x] Add graphical mesh-candidate failure injection with previous mesh/revision retention and successful residency recovery in the Sandbox smoke path.
 - [ ] Add camera-crossing, LOD, rapid edit/paint, boundary, mode-switch, resize, context, multiplayer, restart, and shutdown soak scenarios.
 - [ ] Record CPU/GPU/Terrain memory, queue high-water, culling, draw, recovery, GL-error, thread, and clean-shutdown diagnostics.
 - [ ] Commit `test: add Terrain realism and bounded stress coverage`.
