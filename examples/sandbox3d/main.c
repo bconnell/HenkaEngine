@@ -429,6 +429,11 @@ static const char* g_setting_key_scene_panel_visible = "ui.scene_objects_panel_v
 static const char* g_setting_key_details_panel_visible = "ui.object_details_panel_visible";
 static const char* g_setting_key_layout_mode = "ui.layout_mode";
 static const char* g_setting_key_active_utility = "ui.active_utility";
+static const char* g_setting_key_terrain_tool_radius = "terrain.tool.radius_samples";
+static const char* g_setting_key_terrain_tool_strength = "terrain.tool.strength";
+static const char* g_setting_key_terrain_tool_layer = "terrain.tool.layer";
+static const char* g_setting_key_terrain_tool_falloff = "terrain.tool.falloff";
+static const char* g_setting_key_terrain_tool_operation = "terrain.tool.operation";
 static const char* g_setting_key_workspace_topology_version = "ui.workspace.topology.version";
 static const char* g_setting_key_workspace_left_dock_width = "ui.workspace.left_dock_width";
 static const char* g_setting_key_workspace_right_dock_width = "ui.workspace.right_dock_width";
@@ -6590,6 +6595,51 @@ static void sandbox3d_apply_loaded_settings(henka_engine* engine, sandbox3d_stat
     state->workspace.active_utility = sandbox3d_parse_utility_view(
         henka_settings_get_string(state->settings, g_setting_key_active_utility, "none"));
     {
+        const int radius_samples = henka_settings_get_int(
+            state->settings,
+            g_setting_key_terrain_tool_radius,
+            (int)state->terrain_tool_radius_samples);
+        const int strength = henka_settings_get_int(
+            state->settings,
+            g_setting_key_terrain_tool_strength,
+            (int)state->terrain_tool_strength);
+        const int layer = henka_settings_get_int(
+            state->settings,
+            g_setting_key_terrain_tool_layer,
+            (int)state->terrain_tool_layer);
+        const int falloff = henka_settings_get_int(
+            state->settings,
+            g_setting_key_terrain_tool_falloff,
+            (int)state->terrain_tool_falloff);
+        const int operation = henka_settings_get_int(
+            state->settings,
+            g_setting_key_terrain_tool_operation,
+            (int)state->terrain_tool_operation);
+
+        if (radius_samples >= 1 && radius_samples <= 64)
+        {
+            state->terrain_tool_radius_samples = (uint32_t)radius_samples;
+        }
+        if (strength >= 1 && strength <= 255)
+        {
+            state->terrain_tool_strength = (uint8_t)strength;
+        }
+        if (layer >= 0 && layer < (int)HENKA_TERRAIN_ACTIVE_MATERIAL_COUNT)
+        {
+            state->terrain_tool_layer = (uint8_t)layer;
+        }
+        if (falloff == (int)HENKA_TERRAIN_EDIT_FALLOFF_LINEAR ||
+            falloff == (int)HENKA_TERRAIN_EDIT_FALLOFF_SMOOTH)
+        {
+            state->terrain_tool_falloff = (henka_terrain_edit_falloff)falloff;
+        }
+        if (operation >= (int)HENKA_TERRAIN_EDIT_RAISE &&
+            operation <= (int)HENKA_TERRAIN_EDIT_PAINT)
+        {
+            state->terrain_tool_operation = (henka_terrain_edit_operation)operation;
+        }
+    }
+    {
         const bool panel_settings_valid =
             sandbox3d_load_workspace_panel_settings(
                 &state->workspace.model,
@@ -6663,6 +6713,11 @@ static henka_result sandbox3d_save_settings(henka_engine* engine, sandbox3d_stat
     henka_settings_set_bool(state->settings, g_setting_key_scene_panel_visible, state->workspace.scene_objects_panel_visible);
     henka_settings_set_bool(state->settings, g_setting_key_details_panel_visible, state->workspace.object_details_panel_visible);
     henka_settings_set_string(state->settings, g_setting_key_active_utility, sandbox3d_get_utility_setting_value(state->workspace.active_utility));
+    henka_settings_set_int(state->settings, g_setting_key_terrain_tool_radius, (int)state->terrain_tool_radius_samples);
+    henka_settings_set_int(state->settings, g_setting_key_terrain_tool_strength, (int)state->terrain_tool_strength);
+    henka_settings_set_int(state->settings, g_setting_key_terrain_tool_layer, (int)state->terrain_tool_layer);
+    henka_settings_set_int(state->settings, g_setting_key_terrain_tool_falloff, (int)state->terrain_tool_falloff);
+    henka_settings_set_int(state->settings, g_setting_key_terrain_tool_operation, (int)state->terrain_tool_operation);
     sandbox3d_save_workspace_panel_settings(&state->workspace.model, state->settings);
     sandbox3d_save_workspace_topology_settings(&state->workspace.model, state->settings);
     sandbox3d_save_custom_workspace_layout_settings(&state->workspace.model, state->settings);

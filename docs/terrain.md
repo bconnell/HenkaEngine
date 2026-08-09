@@ -261,16 +261,17 @@ tab now exposes bounded resident/render/collision statistics and raise, lower,
 flatten, smooth, and paint controls with radius, strength, layer, and falloff
 settings. It uses the same deterministic command API as runtime callers; a
 resident physics hit now supplies the integer sample center for the next
-command, while saved brush state and complete paint/material preview remain
-unfinished.
+command. Brush radius, strength, active layer, falloff, and operation are
+persisted through the normal Sandbox settings file with range validation on
+load, while complete paint/material preview remains unfinished.
 
 The Terrain utility also projects the scene-view cursor through the shared
 camera ray API and queries the resident physics patch owner. A successful
 resident hit is shown with chunk/source identity and becomes the integer
 sample center for the next raise, lower, flatten, smooth, or paint command;
 nonresident terrain is not invented and a miss leaves the previous command
-center unchanged. This is an editor/runtime command bridge, not saved brush
-state or network authority. The same utility opens a user-data-local
+center unchanged. This is an editor/runtime command bridge, not network
+authority. The same utility opens a user-data-local
 `terrain-sandbox` storage root, recovers or loads region `(0,0)` at startup,
 and exposes transactional Save and committed-journal Compact actions; failed
 saves leave the live world unchanged because storage owns the transaction.
