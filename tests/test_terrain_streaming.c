@@ -316,11 +316,11 @@ static int test_explicit_request_survives_observer_cancellation(void)
         henka_terrain_storage_write_region(
             storage, broad_observer.center_region, 11U, 4U, samples, layout.samples_per_region) != HENKA_SUCCESS ||
         henka_terrain_storage_write_region(
-            storage, (henka_terrain_region_id){4, 4}, 12U, 5U, samples, layout.samples_per_region) != HENKA_SUCCESS ||
+            storage, (henka_terrain_region_id){3, 3}, 12U, 5U, samples, layout.samples_per_region) != HENKA_SUCCESS ||
         henka_terrain_storage_commit(storage, 1U) != HENKA_SUCCESS ||
         henka_terrain_streamer_create(world, storage, &stream_desc, &streamer) != HENKA_SUCCESS ||
         henka_terrain_streamer_add_observer(streamer, &broad_observer) != HENKA_SUCCESS ||
-        henka_terrain_streamer_request_region(streamer, (henka_terrain_region_id){4, 4}) != HENKA_SUCCESS ||
+        henka_terrain_streamer_request_region(streamer, (henka_terrain_region_id){3, 3}) != HENKA_SUCCESS ||
         henka_terrain_streamer_update_observer(streamer, &focused_observer) != HENKA_SUCCESS)
     {
         goto cleanup;
@@ -337,7 +337,7 @@ static int test_explicit_request_survives_observer_cancellation(void)
             goto cleanup;
         }
         if (henka_terrain_world_get_region_state(
-                world, (henka_terrain_region_id){4, 4}, &state) == HENKA_SUCCESS)
+                world, (henka_terrain_region_id){3, 3}, &state) == HENKA_SUCCESS)
         {
             break;
         }
@@ -346,7 +346,7 @@ static int test_explicit_request_survives_observer_cancellation(void)
 #endif
     }
     if (henka_terrain_world_get_region_state(
-            world, (henka_terrain_region_id){4, 4}, &state) != HENKA_SUCCESS ||
+            world, (henka_terrain_region_id){3, 3}, &state) != HENKA_SUCCESS ||
         state.revision != 12U || state.generation != 5U || !state.cpu_resident)
     {
         goto cleanup;
