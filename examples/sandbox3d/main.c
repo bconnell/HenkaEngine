@@ -4894,8 +4894,8 @@ static henka_result sandbox3d_apply_terrain_tool_command(
     }
     if (result == HENKA_SUCCESS)
     {
-        result = henka_terrain_render_runtime_request_chunk(
-            state->terrain_render, (henka_terrain_chunk_id){0, 0}, 0U);
+        result = henka_terrain_render_runtime_request_edit(
+            state->terrain_render, &command);
     }
     if (result == HENKA_SUCCESS)
     {
@@ -17483,6 +17483,11 @@ static void sandbox3d_update(henka_engine* engine, double delta_seconds, void* u
             {
                 terrain_result = sandbox3d_refresh_terrain_collision(state);
             }
+        }
+        if (terrain_result == HENKA_SUCCESS)
+        {
+            terrain_result = henka_terrain_render_runtime_request_edit(
+                state->terrain_render, &command);
         }
         if (terrain_result == HENKA_SUCCESS)
         {

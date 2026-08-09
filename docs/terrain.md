@@ -273,6 +273,11 @@ falls back to the resident edge until a neighbor streams in. Uploaded chunks
 track the bounded 3x3 region revision/generation identities used by that border
 sampling, so a neighbor edit queues dependent chunks as well; height-derived
 scene bounds are replaced with the candidate mesh and restored on failure.
+Callers that already accepted a deterministic edit may use
+`henka_terrain_render_runtime_request_edit` to requeue resident chunks covered
+by the edit plus a one-chunk dependency border. The call validates the command,
+never admits nonresident chunks, coalesces into the fixed render queue, and
+leaves observer working-set admission and pump cadence with the caller.
 The mesh regression suite also builds an all-four-edge transition and rejects
 degenerate triangles or non-finite tangent bases at the corners. Manual visual
 corner validation remains subsequent work. The Sandbox also routes one shared

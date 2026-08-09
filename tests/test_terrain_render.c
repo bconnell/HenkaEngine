@@ -29,7 +29,15 @@ static int test_invalid_boundaries(void)
         runtime == NULL;
 }
 
+static int test_edit_request_requires_valid_inputs(void)
+{
+    henka_terrain_edit_command command = henka_terrain_edit_command_default();
+    return henka_terrain_render_runtime_request_edit(NULL, &command) == HENKA_ERROR_INVALID_ARGUMENT &&
+        henka_terrain_render_runtime_request_edit(NULL, NULL) == HENKA_ERROR_INVALID_ARGUMENT;
+}
+
 int main(void)
 {
-    return test_default_descriptor() && test_invalid_boundaries() ? 0 : 1;
+    return test_default_descriptor() && test_invalid_boundaries() &&
+        test_edit_request_requires_valid_inputs() ? 0 : 1;
 }

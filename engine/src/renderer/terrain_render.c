@@ -883,6 +883,100 @@ henka_result henka_terrain_render_runtime_request_chunk(
         runtime, chunk_id, lod_level, 0U, HENKA_TERRAIN_MESH_EDGE_ALL);
 }
 
+henka_result henka_terrain_render_runtime_request_edit(
+    henka_terrain_render_runtime* runtime,
+    const henka_terrain_edit_command* command)
+{
+    henka_terrain_world_desc desc;
+    henka_terrain_layout layout;
+    uint32_t samples_across;
+    uint32_t samples_down;
+    uint32_t chunk_sample_span;
+    uint32_t min_sample_x;
+    uint32_t max_sample_x;
+    uint32_t min_sample_z;
+    uint32_t max_sample_z;
+    int32_t min_chunk_x;
+    int32_t max_chunk_x;
+    int32_t min_chunk_z;
+    int32_t max_chunk_z;
+    int32_t chunk_z;
+    henka_result first_error = HENKA_SUCCESS;
+
+    if (runtime == NULL || command == NULL || runtime->world == NULL ||
+        henka_terrain_world_get_desc(runtime->world, &desc) != HENKA_SUCCESS ||
+        henka_terrain_world_desc_get_layout(&desc, &layout) != HENKA_SUCCESS ||
+        henka_terrain_edit_command_validate(runtime->world, command) != HENKA_SUCCESS)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    samples_across = desc.world_width_meters / desc.base_sample_spacing_meters + 1U;
+    samples_down = desc.world_depth_meters / desc.base_sample_spacing_meters + 1U;
+    chunk_sample_span = desc.samples_per_chunk - 1U;
+    min_sample_x = command->center_sample_x > (int32_t)command->radius_samples
+        ? (uint32_t)(command->center_sample_x - (int32_t)command->radius_samples) : 0U;
+    min_sample_z = command->center_sample_z > (int32_t)command->radius_samples
+        ? (uint32_t)(command->center_sample_z - (int32_t)command->radius_samples) : 0U;
+    max_sample_x = (uint32_t)command->center_sample_x + command->radius_samples;
+    max_sample_z = (uint32_t)command->center_sample_z + command->radius_samples;
+    if (max_sample_x >= samples_across)
+    {
+        max_sample_x = samples_across - 1U;
+    }
+    if (max_sample_z >= samples_down)
+    {
+        max_sample_z = samples_down - 1U;
+    }
+
+    min_chunk_x = (int32_t)(min_sample_x / chunk_sample_span) - 1;
+    max_chunk_x = (int32_t)(max_sample_x / chunk_sample_span) + 1;
+    min_chunk_z = (int32_t)(min_sample_z / chunk_sample_span) - 1;
+    max_chunk_z = (int32_t)(max_sample_z / chunk_sample_span) + 1;
+    if (min_chunk_x < 0) { min_chunk_x = 0; }
+    if (min_chunk_z < 0) { min_chunk_z = 0; }
+    if (max_chunk_x >= (int32_t)layout.chunks_across)
+    {
+        max_chunk_x = (int32_t)layout.chunks_across - 1;
+    }
+    if (max_chunk_z >= (int32_t)layout.chunks_down)
+    {
+        max_chunk_z = (int32_t)layout.chunks_down - 1;
+    }
+
+    for (chunk_z = min_chunk_z; chunk_z <= max_chunk_z; ++chunk_z)
+    {
+        int32_t chunk_x;
+        for (chunk_x = min_chunk_x; chunk_x <= max_chunk_x; ++chunk_x)
+        {
+            henka_terrain_chunk_id chunk_id = {chunk_x, chunk_z};
+            int32_t slot_index = henka_terrain_render_find_slot(runtime, chunk_id);
+            henka_terrain_render_slot* slot;
+            henka_result result;
+            if (slot_index < 0)
+            {
+                continue;
+            }
+            slot = &runtime->slots[slot_index];
+            if (!slot->occupied)
+            {
+                continue;
+            }
+            result = henka_terrain_render_request_chunk_internal(
+                runtime,
+                chunk_id,
+                slot->resident ? slot->selected_lod : slot->desired_lod,
+                slot->resident ? slot->selected_edge_transition_mask : slot->desired_edge_transition_mask,
+                slot->resident ? slot->selected_fallback_skirt_mask : slot->desired_fallback_skirt_mask);
+            if (result != HENKA_SUCCESS && first_error == HENKA_SUCCESS)
+            {
+                first_error = result;
+            }
+        }
+    }
+    return first_error;
+}
+
 henka_result henka_terrain_render_runtime_remove_chunk(
     henka_terrain_render_runtime* runtime,
     henka_terrain_chunk_id chunk_id)
