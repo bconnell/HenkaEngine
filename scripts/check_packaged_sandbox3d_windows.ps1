@@ -618,6 +618,7 @@ $gitCommand = Get-HenkaGitPath
 $packageRoot = Join-Path $repoRoot "out\HenkaSandbox3D"
 $packagedExe = Join-Path $packageRoot "HenkaSandbox3D.exe"
 $assetsDir = Join-Path $packageRoot "assets"
+$showcaseModelsDir = Join-Path $assetsDir "models"
 $helpPath = Join-Path $packageRoot "docs\help\sandbox3d.md"
 $readmePath = Join-Path $packageRoot "README.txt"
 $packageInfoPath = Join-Path $packageRoot "PACKAGE_INFO.txt"
@@ -718,6 +719,15 @@ Write-Step "Checking packaged sandbox contents"
 Assert-PathExists -Path $packageRoot -Description "Packaged sandbox folder"
 Assert-PathExists -Path $packagedExe -Description "Packaged sandbox executable"
 Assert-PathExists -Path $assetsDir -Description "Packaged assets folder"
+foreach ($showcaseFile in @(
+    "cheeky_giraffe.gltf",
+    "cheeky_giraffe.bin",
+    "original_realistic_rocket.gltf",
+    "original_realistic_rocket.bin",
+    "cube_albedo.png"
+)) {
+    Assert-PathExists -Path (Join-Path $showcaseModelsDir $showcaseFile) -Description "Packaged showcase asset $showcaseFile"
+}
 Assert-PathExists -Path (Join-Path $assetsDir "textures\residency\residency_64.png") -Description "Packaged residency stress fixtures"
 Assert-PathExists -Path $helpPath -Description "Packaged offline help"
 Assert-PathExists -Path $readmePath -Description "Packaged run guide"
@@ -764,6 +774,7 @@ Assert-FileContains -Path $readmePath -Pattern "Use M or G, R, and S for action-
 Assert-FileContains -Path $readmePath -Pattern "status area" -Description "Packaged status guidance"
 Assert-FileContains -Path $helpPath -Pattern "Utility panel" -Description "Packaged utility help"
 Assert-FileContains -Path $helpPath -Pattern "Perspective 3D, Side 2.5D, Top-down 2.5D, and Isometric 2.5D" -Description "Packaged camera preset help"
+Assert-FileContains -Path $helpPath -Pattern "Showcase Giraffe" -Description "Packaged showcase help"
 
 if ($NonInteractive) {
     if ($ContractOnly) {
@@ -784,6 +795,9 @@ if ($NonInteractive) {
     }
     if ($smoke.Stdout -notmatch "Runtime mode: Packaged") {
         throw "The packaged smoke test did not report Packaged mode."
+    }
+    if ($smoke.Stdout -notmatch "Showcase assets: Cheeky Giraffe \(5 parts\), Original Realistic Rocket \(4 parts\)") {
+        throw "The packaged smoke test did not load both showcase glTF scenes."
     }
     if ($smoke.Stdout -notmatch "Sandbox smoke test completed\.") {
         throw "The packaged smoke test did not reach its deterministic exit."
