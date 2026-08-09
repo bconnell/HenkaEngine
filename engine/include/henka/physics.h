@@ -27,7 +27,8 @@ typedef enum henka_physics_shape_type
 {
     HENKA_PHYSICS_SHAPE_SPHERE = 0,
     HENKA_PHYSICS_SHAPE_BOX,
-    HENKA_PHYSICS_SHAPE_PLANE
+    HENKA_PHYSICS_SHAPE_PLANE,
+    HENKA_PHYSICS_SHAPE_HEIGHTFIELD
 } henka_physics_shape_type;
 
 typedef enum henka_physics_event_type
@@ -68,6 +69,14 @@ typedef struct henka_physics_collider_desc
             henka_vec3 normal;
             float offset;
         } plane;
+        struct
+        {
+            uint32_t samples_x;
+            uint32_t samples_z;
+            float cell_spacing;
+            int32_t* heights_millimeters;
+            henka_vec3 origin;
+        } heightfield;
     } data;
     bool is_trigger;
     uint32_t layer;
@@ -142,6 +151,17 @@ henka_physics_material henka_physics_material_default(void);
 henka_physics_collider_desc henka_physics_collider_sphere(float radius);
 henka_physics_collider_desc henka_physics_collider_box(henka_vec3 half_extents);
 henka_physics_collider_desc henka_physics_collider_plane(henka_vec3 normal, float offset);
+/*
+ * The input height array is borrowed for this call only. A body created or
+ * updated with this collider owns a checked copy for its lifetime. The
+ * pointer returned by body state is read-only borrowed engine storage.
+ */
+henka_physics_collider_desc henka_physics_collider_heightfield(
+    uint32_t samples_x,
+    uint32_t samples_z,
+    float cell_spacing,
+    int32_t* heights_millimeters,
+    henka_vec3 origin);
 
 henka_result henka_physics_world_create(henka_physics_world** out_world);
 void henka_physics_world_destroy(henka_physics_world* world);

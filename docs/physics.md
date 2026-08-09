@@ -12,17 +12,28 @@ The public physics API provides:
 - kinematic bodies driven by assigned velocity; gravity and forces do not drive them
 - angular velocity and torque integration
 - material restitution, static friction, dynamic friction, linear damping, and angular damping
-- sphere, axis-aligned box, and plane colliders
+- sphere, axis-aligned box, plane, and bounded static heightfield colliders
 - layer and mask filtering
 - trigger overlap reporting without physical response
 - collision and trigger enter, stay, and exit events
-- raycasts against every supported collider shape
+- raycasts against every supported collider shape, including bounded heightfield traversal
 - optional links from physics bodies to real scene entities
 - debug-shape and contact data for truthful runtime visualization
 - transform validation that rejects non-finite and collapsed scale components
 - physics allocations included in Henka's debug memory accounting
 - atomic fixed substeps whose allocation failures retain the prior valid world
 - selective contact and pair-history removal when a body is destroyed, with one EXIT event per active removed pair and unrelated queued events preserved
+
+Heightfields are created with `henka_physics_collider_heightfield`. The source
+array is borrowed only for the create or replacement call; the body copies and
+owns the signed millimeter samples. Version 1 accepts static, identity-oriented
+heightfields with at least a 2 by 2 grid and a bounded 4096 by 4096 dimension.
+Sphere and axis-aligned box contacts use deterministic bounded corner/support
+queries, derive terrain normals from neighboring samples, and honor the normal
+layer/mask filters. Raycasts use a bounded cell-sized march and fail closed when
+the requested range cannot be covered by the traversal budget. Replacement
+copies the candidate before releasing the prior field, so invalid input or
+allocation failure preserves the last valid collision representation.
 
 The broadphase currently iterates body pairs directly, which is appropriate for the small sandbox scene and deterministic tests.
 
@@ -61,7 +72,8 @@ Physics simulation writes linked-body transforms to the real scene entities. Edi
 
 - Box collision is axis-aligned; rotated boxes are not oriented colliders.
 - Integration validates acceleration, damping, velocity, position, angular delta, and quaternion state before commit. Collision geometry, contact normals, penetration, contact points, impulses, friction, and positional correction are likewise required to remain finite and representable.
-- There are no mesh or concave colliders.
+- There are no arbitrary mesh or concave colliders; heightfields are the only
+  supported terrain-shaped collider.
 - There are no constraints, character controllers, vehicles, cloth, soft bodies, fluids, or ragdolls.
 - Continuous collision detection is not implemented; the demo and tests use normal fixed-step conditions.
 - Physics state is runtime state, not scene-authoring or save-data support.

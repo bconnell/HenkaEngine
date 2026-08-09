@@ -137,9 +137,13 @@ world. The patch carries the source revision and generation so a later physics
 owner can reject stale regeneration work. `<henka/terrain_physics.h>` provides
 that bounded owner: it copies each patch transactionally, retains at most the
 configured patch count, chooses overlapping patches in stable slot order, and
-answers bilinear height and finite normal queries with source identity. It is
-not yet a rigid-body collider; body contact integration, replacement
-scheduling, and asynchronous regeneration remain subsequent work.
+answers bilinear height and finite normal queries with source identity. The
+rigid-body API additionally exposes a static heightfield collider whose signed
+millimeter source is copied into the body. Sphere and axis-aligned box
+contacts, terrain normals, layer/mask filtering, bounded heightfield raycasts,
+and transactional replacement are implemented. Terrain edits still need an
+owner-level regeneration scheduler to turn dirty resident chunks into collision
+replacements automatically.
 
 `<henka/terrain_mesh.h>` provides the corresponding renderer-independent
 geometry boundary. `henka_terrain_mesh_build_chunk` requires a render-resident
@@ -159,7 +163,7 @@ physics, render, pending-I/O, dirty, revision, and generation state.
 ## Current boundary
 
 This slice establishes the shared data model and bounded ownership contract.
-World manifest integration, rigid-body collision regeneration, scene
+World manifest integration, collision regeneration scheduling, scene
 ownership and GPU residency, reconnect/late-join orchestration, and client
 prediction are subsequent validated runtime slices.
 They must use this
