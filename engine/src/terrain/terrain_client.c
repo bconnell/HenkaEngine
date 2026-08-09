@@ -9,6 +9,7 @@ struct henka_terrain_client
     henka_network_client* network;
     henka_terrain_world* world;
     henka_terrain_replica* replica;
+    henka_terrain_prediction* prediction;
     henka_terrain_client_diagnostics diagnostics;
 };
 
@@ -17,7 +18,8 @@ henka_terrain_client_desc henka_terrain_client_desc_default(void)
     return (henka_terrain_client_desc){
         NULL,
         NULL,
-        HENKA_TERRAIN_MAX_REGION_RECORD_BYTES};
+        HENKA_TERRAIN_MAX_REGION_RECORD_BYTES,
+        16U};
 }
 
 henka_result henka_terrain_client_create(
@@ -47,6 +49,20 @@ henka_result henka_terrain_client_create(
         henka_free(client);
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
+    {
+        henka_terrain_prediction_desc prediction_desc = henka_terrain_prediction_desc_default();
+        prediction_desc.authoritative_world = desc->world;
+        if (desc->max_pending_prediction_commands != 0U)
+        {
+            prediction_desc.max_pending_commands = desc->max_pending_prediction_commands;
+        }
+        if (henka_terrain_prediction_create(&prediction_desc, &client->prediction) != HENKA_SUCCESS)
+        {
+            henka_terrain_replica_destroy(client->replica);
+            henka_free(client);
+            return HENKA_ERROR_OUT_OF_MEMORY;
+        }
+    }
     client->network = desc->network;
     client->world = desc->world;
     *out_client = client;
@@ -60,6 +76,7 @@ void henka_terrain_client_destroy(henka_terrain_client* client)
         return;
     }
     henka_terrain_replica_destroy(client->replica);
+    henka_terrain_prediction_destroy(client->prediction);
     henka_free(client);
 }
 
@@ -69,14 +86,29 @@ henka_result henka_terrain_client_send_edit_request(
 {
     uint8_t payload[HENKA_TERRAIN_NETWORK_MAX_EDIT_REQUEST_BYTES];
     size_t payload_size;
+    henka_terrain_edit_command prediction_command;
     if (client == NULL || request == NULL ||
         henka_terrain_edit_request_encode(request, payload, sizeof(payload), &payload_size) != HENKA_SUCCESS)
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
-    return henka_network_client_send(
-        client->network, HENKA_NETWORK_CHANNEL_TERRAIN,
-        HENKA_NETWORK_MESSAGE_TERRAIN_EDIT_REQUEST, payload, payload_size);
+    prediction_command = request->command;
+    prediction_command.client_nonce = request->client_nonce;
+    if (henka_terrain_prediction_submit(client->prediction, &prediction_command) != HENKA_SUCCESS)
+    {
+        return HENKA_ERROR_LIMIT;
+    }
+    {
+        henka_result send_result = henka_network_client_send(
+            client->network, HENKA_NETWORK_CHANNEL_TERRAIN,
+            HENKA_NETWORK_MESSAGE_TERRAIN_EDIT_REQUEST, payload, payload_size);
+        if (send_result != HENKA_SUCCESS)
+        {
+            (void)henka_terrain_prediction_reject(
+                client->prediction, prediction_command.client_nonce);
+        }
+        return send_result;
+    }
 }
 
 henka_result henka_terrain_client_request_snapshot(
@@ -133,6 +165,13 @@ static void henka_terrain_client_sync_replica_diagnostics(
     client->diagnostics.rejected_delta_count = replica_diagnostics.rejected_delta_count;
     client->diagnostics.completed_snapshot_count = replica_diagnostics.completed_snapshot_count;
     client->diagnostics.rejected_snapshot_count = replica_diagnostics.rejected_snapshot_count;
+    {
+        henka_terrain_prediction_stats prediction_stats;
+        henka_terrain_prediction_get_stats(client->prediction, &prediction_stats);
+        client->diagnostics.pending_prediction_count = prediction_stats.pending_command_count;
+        client->diagnostics.prediction_replay_failure_count = prediction_stats.replay_failure_count;
+        client->diagnostics.prediction_enabled = prediction_stats.prediction_enabled;
+    }
 }
 
 henka_result henka_terrain_client_handle_event(
@@ -187,6 +226,16 @@ henka_result henka_terrain_client_handle_event(
         client->diagnostics.last_rejection = rejection;
         client->diagnostics.last_rejection_valid = true;
         ++client->diagnostics.rejection_count;
+        {
+            henka_result prediction_result = henka_terrain_prediction_reject(
+                client->prediction, rejection.client_nonce);
+            if (prediction_result != HENKA_SUCCESS &&
+                prediction_result != HENKA_ERROR_INVALID_ARGUMENT)
+            {
+                return prediction_result;
+            }
+        }
+        henka_terrain_client_sync_replica_diagnostics(client);
         return HENKA_SUCCESS;
     }
     if (event->message.type == HENKA_NETWORK_MESSAGE_TERRAIN_DELTA)
@@ -209,6 +258,20 @@ henka_result henka_terrain_client_handle_event(
             }
             return HENKA_SUCCESS;
         }
+        if (delta.client_nonce != 0U)
+        {
+            henka_result prediction_result = henka_terrain_prediction_accept(
+                client->prediction, delta.client_nonce);
+            if (prediction_result != HENKA_SUCCESS &&
+                prediction_result != HENKA_ERROR_INVALID_ARGUMENT)
+            {
+                return prediction_result;
+            }
+        }
+        if (henka_terrain_prediction_refresh(client->prediction) != HENKA_SUCCESS)
+        {
+            return HENKA_ERROR_ASSET_SOURCE;
+        }
         (void)applied;
         henka_terrain_client_sync_replica_diagnostics(client);
         return HENKA_SUCCESS;
@@ -228,6 +291,10 @@ henka_result henka_terrain_client_handle_event(
         {
             ++client->diagnostics.rejected_snapshot_count;
             return result;
+        }
+        if (complete && henka_terrain_prediction_refresh(client->prediction) != HENKA_SUCCESS)
+        {
+            return HENKA_ERROR_ASSET_SOURCE;
         }
         (void)complete;
         henka_terrain_client_sync_replica_diagnostics(client);
@@ -285,4 +352,10 @@ void henka_terrain_client_get_diagnostics(
     *out_diagnostics = client == NULL
         ? (henka_terrain_client_diagnostics){0}
         : client->diagnostics;
+}
+
+henka_terrain_world* henka_terrain_client_get_predicted_world(
+    henka_terrain_client* client)
+{
+    return client == NULL ? NULL : henka_terrain_prediction_get_world(client->prediction);
 }

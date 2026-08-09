@@ -28,6 +28,7 @@
 #include <henka/terrain_client.h>
 #include <henka/terrain_collision_runtime.h>
 #include <henka/terrain_physics.h>
+#include <henka/terrain_prediction.h>
 #include <henka/ui.h>
 #include <henka/workspace.h>
 

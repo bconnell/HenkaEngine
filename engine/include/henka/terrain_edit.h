@@ -56,5 +56,10 @@ henka_result henka_terrain_world_get_region_samples(
     henka_terrain_region_id region_id,
     const henka_terrain_sample** out_samples,
     size_t* out_sample_count);
+/* Copies one CPU-resident authoritative region into a presentation world. */
+henka_result henka_terrain_world_copy_region_samples(
+    const henka_terrain_world* source,
+    henka_terrain_world* destination,
+    henka_terrain_region_id region_id);
 
 #endif

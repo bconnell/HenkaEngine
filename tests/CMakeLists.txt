@@ -169,6 +169,24 @@ henka_enable_project_warnings(henka_terrain_collision_runtime_tests)
 
 add_test(NAME henka_terrain_collision_runtime_tests COMMAND henka_terrain_collision_runtime_tests)
 
+add_executable(henka_terrain_prediction_tests
+    test_terrain_prediction.c
+)
+
+target_link_libraries(henka_terrain_prediction_tests
+    PRIVATE
+        henka_runtime
+)
+
+target_include_directories(henka_terrain_prediction_tests
+    PRIVATE
+        ${PROJECT_SOURCE_DIR}/engine/include
+)
+
+henka_enable_project_warnings(henka_terrain_prediction_tests)
+
+add_test(NAME henka_terrain_prediction_tests COMMAND henka_terrain_prediction_tests)
+
 add_executable(henka_terrain_physics_tests
     test_terrain_physics.c
 )

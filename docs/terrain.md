@@ -64,8 +64,8 @@ runtime determines every affected resident region before allocating candidate
 copies; all candidate regions pass validation before any live sample or
 revision is swapped. The same ordered command stream therefore produces
 byte-identical authoritative samples across runtimes. General editor/runtime
-tool integration, client prediction, and asynchronous persistence scheduling
-are not yet integrated; the server authority path persists accepted commands
+tool integration and asynchronous persistence scheduling are not yet
+integrated; the server authority path persists accepted commands
 synchronously through the storage transaction described below.
 
 Terrain network payloads in `<henka/terrain_network.h>` use explicit bounded
@@ -95,7 +95,7 @@ encodes the response. It also echoes control pings and disconnects malformed
 edit payloads as protocol errors. The server-side delta broadcast and
 snapshot-fragment response are described below; the client session adapter
 applies those messages through the replica and owns bounded recovery requests.
-Reconnect/late-join orchestration, prediction, and editor controls remain
+Reconnect/late-join orchestration and editor controls remain
 subsequent integration work.
 
 For edit requests, the session lazily materializes missing persisted regions
@@ -109,8 +109,13 @@ algorithm-versioned command, and the resulting revision for each affected
 region. The server broadcasts that event reliably after sending the requester
 acceptance; the client session adapter applies it only across exact revision
 steps and requests bounded region snapshots when the replica reports a gap.
-Reconnect and late-join orchestration, prediction/reconciliation, and editor
-controls remain subsequent work.
+Reconnect and late-join orchestration and editor controls remain subsequent
+work. `<henka/terrain_prediction.h>` owns a separate bounded presentation
+world for local commands: it copies CPU-resident authoritative regions, applies
+pending commands in submission order, and rebuilds from authoritative state
+when a command is accepted or rejected. The authoritative replica is never
+used as prediction scratch state, and exceeding the pending-command bound fails
+closed.
 
 Snapshot requests identify the world, packaged base, region, and expected
 revision. The server reads the validated region record from storage and emits
@@ -128,7 +133,7 @@ rejects gaps or mixed duplicate/new multi-region states before changing live
 samples. Snapshot fragments are accumulated under a configured byte budget;
 the validated record is decoded and atomically swapped into the world only
 after every fragment arrives. The replica does not own network transport,
-reconnect state, prediction history, or render/physics residency policy; the
+reconnect state or render/physics residency policy; the
 client adapter does not invent those missing policies.
 
 `<henka/terrain_collision.h>` extracts a physics-resident chunk into a

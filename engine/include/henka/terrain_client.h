@@ -4,6 +4,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 
+#include <henka/terrain_prediction.h>
 #include <henka/terrain_replica.h>
 
 typedef struct henka_terrain_client henka_terrain_client;
@@ -13,6 +14,7 @@ typedef struct henka_terrain_client_desc
     henka_network_client* network;
     henka_terrain_world* world;
     uint32_t max_snapshot_bytes;
+    uint32_t max_pending_prediction_commands;
 } henka_terrain_client_desc;
 
 typedef struct henka_terrain_client_diagnostics
@@ -29,6 +31,9 @@ typedef struct henka_terrain_client_diagnostics
     uint64_t completed_snapshot_count;
     uint64_t rejected_snapshot_count;
     uint64_t recovery_snapshot_request_count;
+    uint32_t pending_prediction_count;
+    uint64_t prediction_replay_failure_count;
+    bool prediction_enabled;
     bool last_acceptance_valid;
     henka_terrain_edit_acceptance last_acceptance;
     bool last_rejection_valid;
@@ -57,5 +62,7 @@ henka_result henka_terrain_client_poll(
 void henka_terrain_client_get_diagnostics(
     const henka_terrain_client* client,
     henka_terrain_client_diagnostics* out_diagnostics);
+henka_terrain_world* henka_terrain_client_get_predicted_world(
+    henka_terrain_client* client);
 
 #endif

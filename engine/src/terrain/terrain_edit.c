@@ -456,3 +456,49 @@ henka_result henka_terrain_world_get_region_samples(
     *out_sample_count = record->sample_count;
     return HENKA_SUCCESS;
 }
+
+henka_result henka_terrain_world_copy_region_samples(
+    const henka_terrain_world* source,
+    henka_terrain_world* destination,
+    henka_terrain_region_id region_id)
+{
+    const henka_terrain_region_record* source_record;
+    henka_terrain_region_record* destination_record;
+    henka_terrain_world_desc source_desc;
+    henka_terrain_world_desc destination_desc;
+
+    source_record = henka_terrain_find_region_record_const(source, region_id);
+    if (source_record == NULL || source_record->samples == NULL ||
+        !source_record->state.cpu_resident ||
+        henka_terrain_world_get_desc(source, &source_desc) != HENKA_SUCCESS ||
+        henka_terrain_world_get_desc(destination, &destination_desc) != HENKA_SUCCESS ||
+        source_desc.world_identity != destination_desc.world_identity ||
+        source_desc.base_asset_identity != destination_desc.base_asset_identity ||
+        source_desc.format_version != destination_desc.format_version)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    if (henka_terrain_world_reserve_region(destination, region_id) != HENKA_SUCCESS)
+    {
+        return HENKA_ERROR_LIMIT;
+    }
+    destination_record = henka_terrain_find_region_record(destination, region_id);
+    if (destination_record == NULL || destination_record->samples == NULL ||
+        destination_record->sample_count != source_record->sample_count)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    memcpy(
+        destination_record->samples,
+        source_record->samples,
+        source_record->sample_count * sizeof(*source_record->samples));
+    destination_record->state.revision = source_record->state.revision;
+    destination_record->state.generation = source_record->state.generation;
+    destination_record->state.cpu_resident = true;
+    destination_record->state.physics_resident = false;
+    destination_record->state.render_resident = false;
+    destination_record->state.pending_io = false;
+    destination_record->state.dirty = false;
+    destination_record->state.resident_chunk_count = 0U;
+    return HENKA_SUCCESS;
+}
