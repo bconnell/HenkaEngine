@@ -49,6 +49,8 @@ typedef struct henka_terrain_render_stats
     uint64_t material_gpu_bytes;
     /* Unique borrowed layer textures inspected for material stats. */
     uint32_t material_texture_count;
+    /* Resident slots whose source revision/dependency identity was requeued. */
+    uint64_t dirty_refresh_requests;
 } henka_terrain_render_stats;
 
 typedef struct henka_terrain_render_chunk_info
@@ -97,6 +99,15 @@ henka_result henka_terrain_render_runtime_request_chunk(
 henka_result henka_terrain_render_runtime_request_edit(
     henka_terrain_render_runtime* runtime,
     const henka_terrain_edit_command* command);
+
+/*
+ * Requeues resident slots whose region revision, generation, or 3x3 source
+ * dependency identity changed. Callers may use this after local/remote edits,
+ * snapshot replacement, or transactional reload before pumping replacements.
+ * Nonresident chunks remain owned by observer synchronization.
+ */
+henka_result henka_terrain_render_runtime_refresh_dirty(
+    henka_terrain_render_runtime* runtime);
 
 henka_result henka_terrain_render_runtime_remove_chunk(
     henka_terrain_render_runtime* runtime,

@@ -493,6 +493,57 @@ static henka_result henka_terrain_render_request_chunk_internal(
     uint32_t edge_transition_mask,
     uint32_t fallback_skirt_mask);
 
+static henka_result henka_terrain_render_refresh_dirty_internal(
+    henka_terrain_render_runtime* runtime)
+{
+    henka_result first_error = HENKA_SUCCESS;
+    uint32_t index;
+
+    if (runtime == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    for (index = 0U; index < runtime->desc.max_resident_chunks; ++index)
+    {
+        henka_terrain_render_slot* slot = &runtime->slots[index];
+        henka_terrain_world_desc slot_desc;
+        henka_terrain_region_id region_id;
+        henka_terrain_region_state region_state;
+        henka_result result;
+
+        if (!slot->occupied || !slot->resident ||
+            henka_terrain_world_get_desc(runtime->world, &slot_desc) != HENKA_SUCCESS ||
+            henka_terrain_region_id_from_chunk(
+                &slot_desc, slot->chunk_id, &region_id) != HENKA_SUCCESS ||
+            henka_terrain_world_get_region_state(
+                runtime->world, region_id, &region_state) != HENKA_SUCCESS ||
+            (slot->revision == region_state.revision &&
+             slot->generation == region_state.generation &&
+             henka_terrain_render_dependencies_match(runtime, slot)))
+        {
+            continue;
+        }
+        result = henka_terrain_render_request_chunk_internal(
+            runtime,
+            slot->chunk_id,
+            slot->requested_lod,
+            slot->selected_edge_transition_mask,
+            slot->selected_fallback_skirt_mask);
+        if (result == HENKA_SUCCESS)
+        {
+            if (runtime->stats.dirty_refresh_requests < UINT64_MAX)
+            {
+                ++runtime->stats.dirty_refresh_requests;
+            }
+        }
+        else if (first_error == HENKA_SUCCESS)
+        {
+            first_error = result;
+        }
+    }
+    return first_error;
+}
+
 static float henka_terrain_render_distance_squared(
     const henka_terrain_render_runtime* runtime,
     henka_terrain_chunk_id chunk_id,
@@ -583,31 +634,7 @@ static void henka_terrain_render_schedule_resident_chunks(
     /* A committed world edit changes the source identity without changing the
      * chunk's residency. Queue a transactional replacement for stale uploads;
      * the existing bounded queue coalesces repeated observations. */
-    for (index = 0U; index < runtime->desc.max_resident_chunks; ++index)
-    {
-        henka_terrain_render_slot* slot = &runtime->slots[index];
-        henka_terrain_world_desc slot_desc;
-        henka_terrain_region_id region_id;
-        henka_terrain_region_state region_state;
-        if (!slot->occupied || !slot->resident ||
-            henka_terrain_world_get_desc(runtime->world, &slot_desc) != HENKA_SUCCESS ||
-            henka_terrain_region_id_from_chunk(
-                &slot_desc, slot->chunk_id, &region_id) != HENKA_SUCCESS ||
-            henka_terrain_world_get_region_state(
-                runtime->world, region_id, &region_state) != HENKA_SUCCESS ||
-            (slot->revision == region_state.revision &&
-             slot->generation == region_state.generation &&
-             henka_terrain_render_dependencies_match(runtime, slot)))
-        {
-            continue;
-        }
-        (void)henka_terrain_render_request_chunk_internal(
-            runtime,
-            slot->chunk_id,
-            slot->requested_lod,
-            slot->selected_edge_transition_mask,
-            slot->selected_fallback_skirt_mask);
-    }
+    (void)henka_terrain_render_refresh_dirty_internal(runtime);
 
     /* The world may expose more render-resident chunks than the graphical
      * owner can retain. Scan stable region/chunk order and replace only a
@@ -975,6 +1002,12 @@ henka_result henka_terrain_render_runtime_request_edit(
         }
     }
     return first_error;
+}
+
+henka_result henka_terrain_render_runtime_refresh_dirty(
+    henka_terrain_render_runtime* runtime)
+{
+    return henka_terrain_render_refresh_dirty_internal(runtime);
 }
 
 henka_result henka_terrain_render_runtime_remove_chunk(

@@ -4862,8 +4862,7 @@ static henka_result sandbox3d_reload_terrain_region(sandbox3d_state* state)
     }
     if (result == HENKA_SUCCESS)
     {
-        result = henka_terrain_render_runtime_request_chunk(
-            state->terrain_render, (henka_terrain_chunk_id){0, 0}, 0U);
+        result = henka_terrain_render_runtime_refresh_dirty(state->terrain_render);
     }
     if (result == HENKA_SUCCESS)
     {
@@ -18500,12 +18499,13 @@ static void sandbox3d_update(henka_engine* engine, double delta_seconds, void* u
             else
             {
                 printf(
-                    "Terrain resource diagnostics: cpu=%llu bytes vertex-gpu=%llu index-gpu=%llu material-gpu=%llu material-textures=%u.\n",
+                    "Terrain resource diagnostics: cpu=%llu bytes vertex-gpu=%llu index-gpu=%llu material-gpu=%llu material-textures=%u dirty-refresh=%llu.\n",
                     (unsigned long long)terrain_world_stats.cpu_bytes,
                     (unsigned long long)terrain_render_stats.gpu_vertex_bytes,
                     (unsigned long long)terrain_render_stats.gpu_index_bytes,
                     (unsigned long long)terrain_render_stats.material_gpu_bytes,
-                    terrain_render_stats.material_texture_count);
+                    terrain_render_stats.material_texture_count,
+                    (unsigned long long)terrain_render_stats.dirty_refresh_requests);
             }
             {
                 const uint32_t required_terrain_pass_flags =

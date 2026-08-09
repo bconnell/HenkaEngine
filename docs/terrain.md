@@ -287,7 +287,12 @@ Callers that already accepted a deterministic edit may use
 `henka_terrain_render_runtime_request_edit` to requeue resident chunks covered
 by the edit plus a one-chunk dependency border. The call validates the command,
 never admits nonresident chunks, coalesces into the fixed render queue, and
-leaves observer working-set admission and pump cadence with the caller.
+leaves observer working-set admission and pump cadence with the caller. Region
+snapshot, remote-delta, and transactional reload owners can use
+`henka_terrain_render_runtime_refresh_dirty` before pumping to route the same
+revision/dependency check without forcing an unconditional chunk rebuild;
+successful stale-slot requeues are included in bounded render diagnostics.
+The Sandbox resource line reports that counter alongside owner memory totals.
 The mesh regression suite also builds an all-four-edge transition and rejects
 degenerate triangles or non-finite tangent bases at the corners. Manual visual
 corner validation remains subsequent work. The Sandbox also routes one shared
