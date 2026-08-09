@@ -837,6 +837,7 @@ int main(int argc, char** argv)
         {
             (void)henka_terrain_streamer_pump(terrain_streamer, 4U);
         }
+        (void)henka_terrain_collision_runtime_sync_residency(terrain_collision_runtime);
         (void)henka_terrain_collision_runtime_pump(terrain_collision_runtime, 4U);
         if (exit_code == 0 &&
             !henka_server_run_loopback_smoke(
@@ -886,6 +887,7 @@ int main(int argc, char** argv)
         {
             (void)henka_terrain_streamer_pump(terrain_streamer, 4U);
         }
+        (void)henka_terrain_collision_runtime_sync_residency(terrain_collision_runtime);
         (void)henka_terrain_collision_runtime_pump(terrain_collision_runtime, 4U);
         accumulator += time_state.delta_seconds;
         if (options.run_for_milliseconds != 0U &&

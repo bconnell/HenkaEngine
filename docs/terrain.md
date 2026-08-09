@@ -174,11 +174,13 @@ and transactional replacement are implemented. The renderer-free
 coalescing rebuild queue: the runtime thread builds full-resolution patches for
 physics-resident chunks and replaces the durable physics representation only
 after the candidate succeeds. A failed rebuild leaves the last valid patch in
-place. `henka_terrain_collision_runtime_request_edit` derives the accepted
-edit footprint plus one chunk of physics-neighbor coverage, and the Terrain
-server session can borrow that queue to schedule it after authority acceptance.
-Callers still own the pump cadence and may enqueue individual chunks when
-residency changes.
+place. `henka_terrain_collision_runtime_sync_residency` tracks bounded patch
+identity, queues missing or stale physics-resident chunks in stable order, and
+removes patches when their regions leave physics residency; the physics owner's
+patch capacity is the hard admission bound. `henka_terrain_collision_runtime_request_edit`
+derives the accepted edit footprint plus one chunk of physics-neighbor coverage,
+and the Terrain server session can borrow that queue to schedule it after
+authority acceptance. Callers still own the pump cadence.
 
 `<henka/terrain_mesh.h>` provides the corresponding renderer-independent
 geometry boundary. `henka_terrain_mesh_build_chunk` requires a render-resident
@@ -224,7 +226,8 @@ physics, render, pending-I/O, dirty, revision, and generation state.
 ## Current boundary
 
 This slice establishes the shared data model and bounded ownership contract.
-Full residency-wide dirty-neighbor scheduling, cross-LOD seam stitching,
+Full residency-wide dirty-neighbor scheduling beyond the bounded physics patch
+capacity, cross-LOD seam stitching,
 relevance-driven late-join selection, and multi-process soak remain subsequent
 validated runtime slices. Accepted edits can now derive one-chunk
 physics-neighbor coverage through the bounded collision queue, and client

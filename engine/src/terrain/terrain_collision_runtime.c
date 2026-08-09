@@ -7,7 +7,10 @@
 typedef struct henka_terrain_collision_runtime_request
 {
     bool active;
+    bool resident;
     henka_terrain_chunk_id chunk_id;
+    henka_terrain_revision revision;
+    henka_terrain_generation generation;
 } henka_terrain_collision_runtime_request;
 
 struct henka_terrain_collision_runtime
@@ -26,7 +29,7 @@ static uint32_t henka_terrain_collision_runtime_find_request(
     uint32_t index;
     for (index = 0U; index < runtime->desc.max_pending_chunks; ++index)
     {
-        if (runtime->requests[index].active &&
+        if ((runtime->requests[index].active || runtime->requests[index].resident) &&
             henka_terrain_chunk_id_equal(runtime->requests[index].chunk_id, chunk_id))
         {
             return index;
@@ -107,15 +110,22 @@ henka_result henka_terrain_collision_runtime_request_chunk(
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
-    if (henka_terrain_collision_runtime_find_request(runtime, chunk_id) <
-        runtime->desc.max_pending_chunks)
+    index = henka_terrain_collision_runtime_find_request(runtime, chunk_id);
+    if (index < runtime->desc.max_pending_chunks)
     {
+        if (!runtime->requests[index].active)
+        {
+            runtime->requests[index].active = true;
+            ++runtime->stats.pending_chunk_count;
+            ++runtime->stats.queued_count;
+            return HENKA_SUCCESS;
+        }
         ++runtime->stats.coalesced_count;
         return HENKA_SUCCESS;
     }
     for (index = 0U; index < runtime->desc.max_pending_chunks; ++index)
     {
-        if (!runtime->requests[index].active)
+        if (!runtime->requests[index].active && !runtime->requests[index].resident)
         {
             runtime->requests[index].active = true;
             runtime->requests[index].chunk_id = chunk_id;
@@ -126,6 +136,101 @@ henka_result henka_terrain_collision_runtime_request_chunk(
     }
     ++runtime->stats.dropped_count;
     return HENKA_ERROR_LIMIT;
+}
+
+henka_result henka_terrain_collision_runtime_sync_residency(
+    henka_terrain_collision_runtime* runtime)
+{
+    henka_terrain_world_desc world_desc;
+    henka_terrain_world_stats world_stats;
+    henka_terrain_physics_stats physics_stats;
+    uint32_t index;
+    uint32_t tracked_count = 0U;
+    henka_result first_error = HENKA_SUCCESS;
+
+    if (runtime == NULL ||
+        henka_terrain_world_get_desc(runtime->world, &world_desc) != HENKA_SUCCESS ||
+        henka_terrain_world_get_stats(runtime->world, &world_stats) != HENKA_SUCCESS)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    henka_terrain_physics_get_stats(runtime->physics, &physics_stats);
+
+    for (index = 0U; index < runtime->desc.max_pending_chunks; ++index)
+    {
+        henka_terrain_collision_runtime_request* request = &runtime->requests[index];
+        henka_terrain_region_id region_id;
+        henka_terrain_region_state region_state;
+        if (!request->active && !request->resident)
+        {
+            continue;
+        }
+        if (henka_terrain_region_id_from_chunk(
+                &world_desc, request->chunk_id, &region_id) != HENKA_SUCCESS ||
+            henka_terrain_world_get_region_state(
+                runtime->world, region_id, &region_state) != HENKA_SUCCESS ||
+            !region_state.physics_resident)
+        {
+            (void)henka_terrain_collision_runtime_remove_chunk(runtime, request->chunk_id);
+            continue;
+        }
+        ++tracked_count;
+        if (request->resident && !request->active &&
+            (request->revision != region_state.revision ||
+             request->generation != region_state.generation))
+        {
+            henka_result result = henka_terrain_collision_runtime_request_chunk(
+                runtime, request->chunk_id);
+            if (result != HENKA_SUCCESS && first_error == HENKA_SUCCESS)
+            {
+                first_error = result;
+            }
+        }
+    }
+
+    /* Stable resident-region/chunk order is the deterministic fallback when
+     * physics capacity is smaller than the streamer's physics residency. */
+    for (index = 0U; index < world_stats.resident_region_count &&
+         tracked_count < physics_stats.max_patches; ++index)
+    {
+        henka_terrain_region_state region_state;
+        uint32_t local_z;
+        uint32_t local_x;
+        if (henka_terrain_world_get_resident_region_at(
+                runtime->world, index, &region_state) != HENKA_SUCCESS ||
+            !region_state.physics_resident)
+        {
+            continue;
+        }
+        for (local_z = 0U; local_z < world_desc.chunks_per_region_edge &&
+             tracked_count < physics_stats.max_patches; ++local_z)
+        {
+            for (local_x = 0U; local_x < world_desc.chunks_per_region_edge &&
+                 tracked_count < physics_stats.max_patches; ++local_x)
+            {
+                henka_terrain_chunk_id chunk_id = {
+                    region_state.id.x * (int32_t)world_desc.chunks_per_region_edge + (int32_t)local_x,
+                    region_state.id.z * (int32_t)world_desc.chunks_per_region_edge + (int32_t)local_z};
+                henka_result result;
+                if (!henka_terrain_chunk_id_is_valid(&world_desc, chunk_id) ||
+                    henka_terrain_collision_runtime_find_request(runtime, chunk_id) <
+                        runtime->desc.max_pending_chunks)
+                {
+                    continue;
+                }
+                result = henka_terrain_collision_runtime_request_chunk(runtime, chunk_id);
+                if (result == HENKA_SUCCESS)
+                {
+                    ++tracked_count;
+                }
+                else if (first_error == HENKA_SUCCESS)
+                {
+                    first_error = result;
+                }
+            }
+        }
+    }
+    return first_error;
 }
 
 henka_result henka_terrain_collision_runtime_request_edit(
@@ -210,10 +315,14 @@ henka_result henka_terrain_collision_runtime_remove_chunk(
     if (index < runtime->desc.max_pending_chunks)
     {
         runtime->requests[index].active = false;
+        runtime->requests[index].resident = false;
         if (runtime->stats.pending_chunk_count > 0U)
         {
             --runtime->stats.pending_chunk_count;
         }
+        (void)henka_terrain_physics_remove_patch(runtime->physics, chunk_id);
+        runtime->requests[index] = (henka_terrain_collision_runtime_request){0};
+        return HENKA_SUCCESS;
     }
     return henka_terrain_physics_remove_patch(runtime->physics, chunk_id);
 }
@@ -234,16 +343,17 @@ henka_result henka_terrain_collision_runtime_pump(
     }
     for (index = 0U; index < runtime->desc.max_pending_chunks && rebuilt < max_rebuilds; ++index)
     {
+        henka_terrain_collision_runtime_request* request = &runtime->requests[index];
         henka_terrain_chunk_id chunk_id;
         henka_terrain_collision_patch patch;
         henka_terrain_physics_patch_desc physics_patch;
         henka_result result;
-        if (!runtime->requests[index].active)
+        if (!request->active)
         {
             continue;
         }
-        chunk_id = runtime->requests[index].chunk_id;
-        runtime->requests[index].active = false;
+        chunk_id = request->chunk_id;
+        request->active = false;
         if (runtime->stats.pending_chunk_count > 0U)
         {
             --runtime->stats.pending_chunk_count;
@@ -264,6 +374,9 @@ henka_result henka_terrain_collision_runtime_pump(
         }
         if (result == HENKA_SUCCESS)
         {
+            request->resident = true;
+            request->revision = patch.revision;
+            request->generation = patch.generation;
             ++runtime->stats.rebuilt_count;
         }
         else

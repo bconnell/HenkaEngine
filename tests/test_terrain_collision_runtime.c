@@ -45,6 +45,55 @@ cleanup:
     return result;
 }
 
+static int test_runtime_syncs_physics_residency(void)
+{
+    henka_terrain_world_desc world_desc = henka_terrain_world_desc_default();
+    henka_terrain_world* world = NULL;
+    henka_terrain_physics* physics = NULL;
+    henka_terrain_collision_runtime* runtime = NULL;
+    henka_terrain_physics_desc physics_desc = {4U};
+    henka_terrain_collision_runtime_desc runtime_desc = {4U};
+    henka_terrain_physics_stats physics_stats;
+    int result = 1;
+
+    world_desc.max_resident_regions = 1U;
+    if (henka_terrain_world_create(&world_desc, &world) != HENKA_SUCCESS ||
+        henka_terrain_world_reserve_region(world, (henka_terrain_region_id){0, 0}) != HENKA_SUCCESS ||
+        henka_terrain_world_set_region_residency(
+            world, (henka_terrain_region_id){0, 0}, true, false, false) != HENKA_SUCCESS ||
+        henka_terrain_physics_create(&physics_desc, &physics) != HENKA_SUCCESS ||
+        henka_terrain_collision_runtime_create(
+            world, physics, &runtime_desc, &runtime) != HENKA_SUCCESS ||
+        henka_terrain_collision_runtime_sync_residency(runtime) != HENKA_SUCCESS ||
+        henka_terrain_collision_runtime_pump(runtime, 4U) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    henka_terrain_physics_get_stats(physics, &physics_stats);
+    if (physics_stats.resident_patch_count != 4U)
+    {
+        goto cleanup;
+    }
+    if (henka_terrain_world_set_region_residency(
+            world, (henka_terrain_region_id){0, 0}, false, false, false) != HENKA_SUCCESS ||
+        henka_terrain_collision_runtime_sync_residency(runtime) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    henka_terrain_physics_get_stats(physics, &physics_stats);
+    if (physics_stats.resident_patch_count != 0U)
+    {
+        goto cleanup;
+    }
+    result = 0;
+
+cleanup:
+    henka_terrain_collision_runtime_destroy(runtime);
+    henka_terrain_physics_destroy(physics);
+    henka_terrain_world_destroy(world);
+    return result;
+}
+
 int main(void)
 {
     henka_terrain_world_desc world_desc = henka_terrain_world_desc_default();
@@ -98,5 +147,6 @@ cleanup:
     henka_terrain_collision_runtime_destroy(runtime);
     henka_terrain_physics_destroy(physics);
     henka_terrain_world_destroy(world);
-    return result || test_runtime_edit_discovers_neighbor_chunks();
+    return result || test_runtime_edit_discovers_neighbor_chunks() ||
+        test_runtime_syncs_physics_residency();
 }

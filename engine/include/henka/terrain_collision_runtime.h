@@ -35,6 +35,9 @@ void henka_terrain_collision_runtime_destroy(henka_terrain_collision_runtime* ru
 henka_result henka_terrain_collision_runtime_request_chunk(
     henka_terrain_collision_runtime* runtime,
     henka_terrain_chunk_id chunk_id);
+/* Synchronizes bounded physics patches with currently physics-resident regions. */
+henka_result henka_terrain_collision_runtime_sync_residency(
+    henka_terrain_collision_runtime* runtime);
 /* Queues the edit footprint plus one chunk of physics-neighbor coverage. */
 henka_result henka_terrain_collision_runtime_request_edit(
     henka_terrain_collision_runtime* runtime,
