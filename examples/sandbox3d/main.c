@@ -1711,6 +1711,9 @@ static henka_result sandbox3d_seed_terrain_fixture_region(
 static henka_result sandbox3d_initialize_terrain_rendering(
     henka_engine* engine,
     sandbox3d_state* state);
+static henka_result sandbox3d_refresh_terrain_collision_chunk(
+    sandbox3d_state* state,
+    henka_terrain_chunk_id chunk_id);
 static henka_result sandbox3d_refresh_terrain_collision(sandbox3d_state* state);
 static henka_result sandbox3d_save_terrain_region(sandbox3d_state* state);
 static henka_result sandbox3d_reload_terrain_region(sandbox3d_state* state);
@@ -4510,19 +4513,27 @@ fail:
     return result;
 }
 
-static henka_result sandbox3d_refresh_terrain_collision(sandbox3d_state* state)
+static henka_result sandbox3d_refresh_terrain_collision_chunk(
+    sandbox3d_state* state,
+    henka_terrain_chunk_id chunk_id)
 {
     int32_t heights[HENKA_TERRAIN_COLLISION_PATCH_SAMPLES];
     henka_terrain_collision_patch patch;
+    henka_terrain_world_desc world_desc;
     henka_result result;
 
     if (state == NULL || state->terrain_world == NULL || state->terrain_physics == NULL)
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
+    result = henka_terrain_world_get_desc(state->terrain_world, &world_desc);
+    if (result != HENKA_SUCCESS)
+    {
+        return result;
+    }
     result = henka_terrain_world_build_collision_patch(
         state->terrain_world,
-        (henka_terrain_chunk_id){0, 0},
+        chunk_id,
         heights,
         HENKA_TERRAIN_COLLISION_PATCH_SAMPLES,
         &patch);
@@ -4532,7 +4543,17 @@ static henka_result sandbox3d_refresh_terrain_collision(sandbox3d_state* state)
     }
     return henka_terrain_physics_replace_patch(
         state->terrain_physics,
-        &(henka_terrain_physics_patch_desc){patch, 1.0f, 0.0f, 0.0f});
+        &(henka_terrain_physics_patch_desc){
+            patch,
+            (float)world_desc.base_sample_spacing_meters,
+            (float)chunk_id.x * (float)world_desc.chunk_edge_meters,
+            (float)chunk_id.z * (float)world_desc.chunk_edge_meters});
+}
+
+static henka_result sandbox3d_refresh_terrain_collision(sandbox3d_state* state)
+{
+    return sandbox3d_refresh_terrain_collision_chunk(
+        state, (henka_terrain_chunk_id){0, 0});
 }
 
 static henka_result sandbox3d_save_terrain_region(sandbox3d_state* state)
@@ -16975,6 +16996,8 @@ static henka_result sandbox3d_run_terrain_stream_stress(
     henka_result render_result;
     uint32_t index;
     bool crossed = false;
+    bool collision_crossed = false;
+    bool collision_returned = false;
 
     if (state == NULL || state->terrain_world == NULL ||
         state->terrain_streamer == NULL || state->terrain_render == NULL ||
@@ -17052,6 +17075,20 @@ static henka_result sandbox3d_run_terrain_stream_stress(
         fflush(stdout);
         return HENKA_ERROR_UNKNOWN;
     }
+    if (sandbox3d_refresh_terrain_collision_chunk(
+            state, (henka_terrain_chunk_id){8, 0}) == HENKA_SUCCESS)
+    {
+        henka_terrain_physics_hit collision_hit = {0};
+        collision_crossed = henka_terrain_physics_sample(
+            state->terrain_physics, 544.0f, 32.0f, &collision_hit) == HENKA_SUCCESS &&
+            collision_hit.hit && isfinite(collision_hit.position.y);
+    }
+    if (!collision_crossed)
+    {
+        printf("Terrain stream stress collision crossing was not resident.\n");
+        fflush(stdout);
+        return HENKA_ERROR_UNKNOWN;
+    }
 
     state->camera.position = (henka_vec3){32.0f, 2.4f, 32.0f};
     for (index = 0U; index < 64U; ++index)
@@ -17089,6 +17126,20 @@ static henka_result sandbox3d_run_terrain_stream_stress(
         fflush(stdout);
         return HENKA_ERROR_UNKNOWN;
     }
+    if (sandbox3d_refresh_terrain_collision_chunk(
+            state, (henka_terrain_chunk_id){0, 0}) == HENKA_SUCCESS)
+    {
+        henka_terrain_physics_hit collision_hit = {0};
+        collision_returned = henka_terrain_physics_sample(
+            state->terrain_physics, 32.0f, 32.0f, &collision_hit) == HENKA_SUCCESS &&
+            collision_hit.hit && isfinite(collision_hit.position.y);
+    }
+    if (!collision_returned)
+    {
+        printf("Terrain stream stress collision return was not resident.\n");
+        fflush(stdout);
+        return HENKA_ERROR_UNKNOWN;
+    }
     for (index = 0U; index < 128U; ++index)
     {
         henka_terrain_streamer_get_stats(state->terrain_streamer, &stream_stats);
@@ -17121,7 +17172,8 @@ static henka_result sandbox3d_run_terrain_stream_stress(
         stream_stats.active_request_count != 0U ||
         world_stats.resident_region_count > world_stats.max_resident_regions ||
         world_stats.max_resident_regions != 4U ||
-        !region_state.cpu_resident || !region_state.render_resident)
+        !region_state.cpu_resident || !region_state.render_resident ||
+        !collision_crossed || !collision_returned)
     {
         printf(
             "Terrain stream stress bounds rejected: failed=%llu queued=%u active=%u residents=%u/%u region0 cpu=%s render=%s.\n",
@@ -17136,7 +17188,7 @@ static henka_result sandbox3d_run_terrain_stream_stress(
         return HENKA_ERROR_UNKNOWN;
     }
     printf(
-        "Terrain stream stress: seeded=2x2 crossed=(0,0)->(1,0)->(0,0) completed=%llu failed=%llu resident-regions=%u/%u render-return=valid.\n",
+        "Terrain stream stress: seeded=2x2 crossed=(0,0)->(1,0)->(0,0) completed=%llu failed=%llu resident-regions=%u/%u render-return=valid collision-return=valid.\n",
         (unsigned long long)stream_stats.completed_request_count,
         (unsigned long long)stream_stats.failed_request_count,
         world_stats.resident_region_count,

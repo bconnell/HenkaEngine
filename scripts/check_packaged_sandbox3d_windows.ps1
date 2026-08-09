@@ -804,6 +804,7 @@ if ($NonInteractive) {
     if ($terrainStreamStress.Stdout -notmatch "Terrain stream stress: seeded=2x2 crossed=\(0,0\)->\(1,0\)->\(0,0\)" -or
         $terrainStreamStress.Stdout -notmatch "failed=0" -or
         $terrainStreamStress.Stdout -notmatch "render-return=valid" -or
+        $terrainStreamStress.Stdout -notmatch "collision-return=valid" -or
         $terrainStreamStress.Stdout -notmatch "Sandbox smoke test completed\.") {
         throw "The packaged Terrain stream stress did not prove the bounded camera crossing contract."
     }
