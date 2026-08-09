@@ -345,12 +345,13 @@ physics, render, pending-I/O, dirty, revision, and generation state.
 
 The current validated boundary includes bounded observer-driven render working
 set discovery, stale render identity refresh, one-level cross-LOD edge morphing,
-and physics patch synchronization with deterministic capacity-based admission
-and removal. Full residency-wide dirty-neighbor scheduling beyond the bounded
-physics patch capacity, four-way corner visual QA, relevance-driven late-join
-selection, and production-scale multiplayer soak remain subsequent validated
-runtime slices; the bounded process integration soak now repeats the advertised
-resident-region scenario for a finite session count.
+automated four-edge transition-mesh checks, and physics patch synchronization
+with deterministic capacity-based admission and removal. Full residency-wide
+dirty-neighbor scheduling beyond the bounded physics patch capacity, four-way
+corner visual QA, relevance-driven late-join selection, and production-scale
+multiplayer soak remain subsequent validated runtime slices; the bounded
+process integration soak now repeats the advertised resident-region scenario
+for a finite session count.
 Accepted edits can now derive
 one-chunk physics-neighbor coverage through the bounded collision queue, and
 client prediction is available through the separate presentation-world owner.

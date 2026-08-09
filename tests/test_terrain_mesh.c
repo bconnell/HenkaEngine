@@ -181,11 +181,14 @@ static int test_transition_topology(void)
     henka_terrain_layout layout;
     henka_terrain_world* world = NULL;
     henka_terrain_sample* samples = NULL;
+    henka_terrain_mesh_vertex base_vertices[HENKA_TERRAIN_MESH_MAX_VERTICES];
     henka_terrain_mesh_vertex vertices[HENKA_TERRAIN_MESH_MAX_VERTICES];
     henka_terrain_mesh_vertex neighbor_vertices[HENKA_TERRAIN_MESH_MAX_VERTICES];
+    uint32_t base_indices[HENKA_TERRAIN_MESH_MAX_INDICES];
     uint32_t indices[HENKA_TERRAIN_MESH_MAX_INDICES];
     uint32_t neighbor_indices[HENKA_TERRAIN_MESH_MAX_INDICES];
     henka_terrain_mesh_data mesh = {0};
+    henka_terrain_mesh_data base_mesh = {0};
     henka_terrain_mesh_data neighbor_mesh = {0};
     uint32_t index;
     uint32_t z;
@@ -226,10 +229,22 @@ static int test_transition_topology(void)
     mesh.vertex_capacity = HENKA_TERRAIN_MESH_MAX_VERTICES;
     mesh.indices = indices;
     mesh.index_capacity = HENKA_TERRAIN_MESH_MAX_INDICES;
+    base_mesh.vertices = base_vertices;
+    base_mesh.vertex_capacity = HENKA_TERRAIN_MESH_MAX_VERTICES;
+    base_mesh.indices = base_indices;
+    base_mesh.index_capacity = HENKA_TERRAIN_MESH_MAX_INDICES;
     neighbor_mesh.vertices = neighbor_vertices;
     neighbor_mesh.vertex_capacity = HENKA_TERRAIN_MESH_MAX_VERTICES;
     neighbor_mesh.indices = neighbor_indices;
     neighbor_mesh.index_capacity = HENKA_TERRAIN_MESH_MAX_INDICES;
+    if (henka_terrain_mesh_build_chunk(
+            world,
+            (henka_terrain_chunk_id){0, 0},
+            0U,
+            &base_mesh) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
     if (henka_terrain_mesh_build_chunk_with_edge_mask(
             world,
             (henka_terrain_chunk_id){0, 0},
@@ -335,6 +350,28 @@ static int test_transition_topology(void)
             !isfinite(mesh.vertices[index].tangent[2]) ||
             !isfinite(mesh.vertices[index].tangent[3]) ||
             fabsf(mesh.vertices[index].tangent[3]) < 0.5f)
+        {
+            goto cleanup;
+        }
+    }
+    for (z = 1U; z < desc.samples_per_chunk - 1U; z += 2U)
+    {
+        const uint32_t west_index = z * desc.samples_per_chunk;
+        const uint32_t east_index = west_index + desc.samples_per_chunk - 1U;
+        const float west_expected = (base_vertices[west_index - desc.samples_per_chunk].position[1] +
+            base_vertices[west_index + desc.samples_per_chunk].position[1]) * 0.5f;
+        const float east_expected = (base_vertices[east_index - desc.samples_per_chunk].position[1] +
+            base_vertices[east_index + desc.samples_per_chunk].position[1]) * 0.5f;
+        const uint32_t north_index = z;
+        const uint32_t south_index = (desc.samples_per_chunk - 1U) * desc.samples_per_chunk + z;
+        const float north_expected = (base_vertices[north_index - 1U].position[1] +
+            base_vertices[north_index + 1U].position[1]) * 0.5f;
+        const float south_expected = (base_vertices[south_index - 1U].position[1] +
+            base_vertices[south_index + 1U].position[1]) * 0.5f;
+        if (fabsf(vertices[west_index].position[1] - west_expected) > 0.0001f ||
+            fabsf(vertices[east_index].position[1] - east_expected) > 0.0001f ||
+            fabsf(vertices[north_index].position[1] - north_expected) > 0.0001f ||
+            fabsf(vertices[south_index].position[1] - south_expected) > 0.0001f)
         {
             goto cleanup;
         }
