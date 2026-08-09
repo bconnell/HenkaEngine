@@ -1559,6 +1559,7 @@ static henka_result sandbox3d_initialize_terrain_rendering(
     sandbox3d_state* state);
 static henka_result sandbox3d_refresh_terrain_collision(sandbox3d_state* state);
 static henka_result sandbox3d_save_terrain_region(sandbox3d_state* state);
+static henka_result sandbox3d_reload_terrain_region(sandbox3d_state* state);
 static henka_result sandbox3d_apply_terrain_tool_command(
     sandbox3d_state* state,
     henka_terrain_edit_operation operation);
@@ -4055,7 +4056,7 @@ static henka_result sandbox3d_initialize_terrain_rendering(
 {
     henka_terrain_world_desc world_desc = henka_terrain_world_desc_default();
     henka_terrain_render_desc render_desc = henka_terrain_render_desc_default();
-    henka_terrain_layout layout;
+    henka_terrain_layout layout = {0};
     henka_terrain_sample* samples = NULL;
     henka_terrain_region_storage_info loaded_info;
     bool loaded_from_storage = false;
@@ -4327,6 +4328,105 @@ static henka_result sandbox3d_save_terrain_region(sandbox3d_state* state)
     {
         (void)henka_terrain_storage_abort(state->terrain_storage, transaction_id);
     }
+    return result;
+}
+
+static henka_result sandbox3d_reload_terrain_region(sandbox3d_state* state)
+{
+    henka_terrain_layout layout = {0};
+    henka_terrain_world_desc world_desc;
+    henka_terrain_region_storage_info loaded_info;
+    henka_terrain_region_state previous_state = {0};
+    const henka_terrain_sample* previous_samples;
+    henka_terrain_sample* loaded_samples = NULL;
+    henka_terrain_sample* backup_samples = NULL;
+    size_t sample_count;
+    henka_result result;
+
+    if (state == NULL || state->terrain_world == NULL || state->terrain_storage == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    result = henka_terrain_world_get_desc(state->terrain_world, &world_desc);
+    if (result == HENKA_SUCCESS)
+    {
+        result = henka_terrain_world_desc_get_layout(&world_desc, &layout);
+    }
+    if (result != HENKA_SUCCESS)
+    {
+        return result;
+    }
+    loaded_samples = henka_calloc(layout.samples_per_region, sizeof(*loaded_samples));
+    if (loaded_samples == NULL)
+    {
+        return HENKA_ERROR_OUT_OF_MEMORY;
+    }
+    result = henka_terrain_storage_load_region(
+        state->terrain_storage,
+        (henka_terrain_region_id){0, 0},
+        &loaded_info,
+        loaded_samples,
+        layout.samples_per_region);
+    if (result != HENKA_SUCCESS)
+    {
+        henka_free(loaded_samples);
+        return result;
+    }
+    result = henka_terrain_world_get_region_samples(
+        state->terrain_world,
+        (henka_terrain_region_id){0, 0},
+        &previous_samples,
+        &sample_count);
+    if (result == HENKA_SUCCESS)
+    {
+        result = henka_terrain_world_get_region_state(
+            state->terrain_world,
+            (henka_terrain_region_id){0, 0},
+            &previous_state);
+    }
+    if (result == HENKA_SUCCESS)
+    {
+        backup_samples = henka_malloc(sample_count * sizeof(*backup_samples));
+        if (backup_samples == NULL)
+        {
+            result = HENKA_ERROR_OUT_OF_MEMORY;
+        }
+        else
+        {
+            memcpy(backup_samples, previous_samples, sample_count * sizeof(*backup_samples));
+            result = henka_terrain_world_apply_region_snapshot(
+                state->terrain_world,
+                loaded_info,
+                loaded_samples,
+                layout.samples_per_region);
+        }
+    }
+    if (result == HENKA_SUCCESS)
+    {
+        result = sandbox3d_refresh_terrain_collision(state);
+    }
+    if (result == HENKA_SUCCESS)
+    {
+        result = henka_terrain_render_runtime_request_chunk(
+            state->terrain_render, (henka_terrain_chunk_id){0, 0}, 0U);
+    }
+    if (result == HENKA_SUCCESS)
+    {
+        result = henka_terrain_render_runtime_pump(state->terrain_render, 1U);
+    }
+    if (result != HENKA_SUCCESS && backup_samples != NULL)
+    {
+        memcpy((void*)previous_samples, backup_samples, sample_count * sizeof(*backup_samples));
+        (void)henka_terrain_world_set_region_revision(
+            state->terrain_world,
+            (henka_terrain_region_id){0, 0},
+            previous_state.revision,
+            previous_state.generation,
+            previous_state.dirty);
+        (void)sandbox3d_refresh_terrain_collision(state);
+    }
+    henka_free(backup_samples);
+    henka_free(loaded_samples);
     return result;
 }
 
@@ -13800,6 +13900,18 @@ static void sandbox3d_draw_utility_panel(
                         ? "Terrain journal compacted."
                         : "Terrain compact failed: %s.",
                     henka_result_to_string(compact_result));
+            }
+            if (henka_ui_button(state->ui, "terrain_reload", (henka_ui_rect){x_left + 202.0f, y_start + 240.0f, 86.0f, 24.0f}, "Reload"))
+            {
+                const henka_result reload_result = sandbox3d_reload_terrain_region(state);
+                sandbox3d_set_statusf(
+                    state,
+                    reload_result != HENKA_SUCCESS,
+                    true,
+                    reload_result == HENKA_SUCCESS
+                        ? "Terrain region reloaded transactionally."
+                        : "Terrain reload failed: %s.",
+                    henka_result_to_string(reload_result));
             }
             if (state->diagnostics.terrain_pick_valid)
             {
