@@ -172,9 +172,11 @@ physics, render, pending-I/O, dirty, revision, and generation state.
 ## Current boundary
 
 This slice establishes the shared data model and bounded ownership contract.
-World manifest integration, collision regeneration scheduling, scene
-ownership and GPU residency, reconnect/late-join orchestration, and client
-prediction are subsequent validated runtime slices.
+World manifest integration, automatic dirty-neighbor discovery, scene
+ownership and GPU residency, and reconnect/late-join orchestration are
+subsequent validated runtime slices. Collision replacement is available
+through the bounded runtime queue, and client prediction is available through
+the separate presentation-world owner.
 They must use this
 same world identity, region/chunk mapping, revision, and residency ownership;
 they must not introduce a second world-sized representation.

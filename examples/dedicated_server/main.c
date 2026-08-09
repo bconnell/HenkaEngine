@@ -404,6 +404,9 @@ int main(int argc, char** argv)
     henka_terrain_world* terrain_world = NULL;
     henka_terrain_storage* terrain_storage = NULL;
     henka_terrain_server* terrain_server = NULL;
+    henka_terrain_streamer* terrain_streamer = NULL;
+    henka_terrain_physics* terrain_physics = NULL;
+    henka_terrain_collision_runtime* terrain_collision_runtime = NULL;
     henka_terrain_world_desc terrain_world_desc;
     henka_terrain_server_desc terrain_server_desc;
     henka_network_server* network = NULL;
@@ -434,6 +437,9 @@ int main(int argc, char** argv)
     terrain_world_desc.max_resident_regions = options.max_clients;
     if (henka_terrain_world_create(&terrain_world_desc, &terrain_world) != HENKA_SUCCESS ||
         henka_terrain_world_reserve_region(terrain_world, (henka_terrain_region_id){0, 0}) != HENKA_SUCCESS ||
+        henka_terrain_world_reserve_chunk(terrain_world, (henka_terrain_chunk_id){0, 0}) != HENKA_SUCCESS ||
+        henka_terrain_world_set_region_residency(
+            terrain_world, (henka_terrain_region_id){0, 0}, true, false, false) != HENKA_SUCCESS ||
         henka_terrain_storage_create(
             &terrain_world_desc,
             options.has_save_root ? options.save_root : "build/server-save",
@@ -443,6 +449,36 @@ int main(int argc, char** argv)
         exit_code = 4;
         goto shutdown;
     }
+    {
+        henka_terrain_physics_desc terrain_physics_desc = henka_terrain_physics_desc_default();
+        henka_terrain_collision_runtime_desc collision_desc = henka_terrain_collision_runtime_desc_default();
+        if (henka_terrain_physics_create(&terrain_physics_desc, &terrain_physics) != HENKA_SUCCESS ||
+            henka_terrain_collision_runtime_create(
+                terrain_world, terrain_physics, &collision_desc,
+                &terrain_collision_runtime) != HENKA_SUCCESS ||
+            henka_terrain_collision_runtime_request_chunk(
+                terrain_collision_runtime, (henka_terrain_chunk_id){0, 0}) != HENKA_SUCCESS ||
+            henka_terrain_collision_runtime_pump(terrain_collision_runtime, 1U) != HENKA_SUCCESS)
+        {
+            fprintf(stderr, "terrain collision initialization failed\n");
+            exit_code = 4;
+            goto shutdown;
+        }
+    }
+#if defined(_WIN32)
+    {
+        henka_terrain_stream_desc stream_desc = henka_terrain_stream_desc_default();
+        henka_terrain_stream_observer observer = {1U, {0, 0}, 1U, 1U, 0U, 2U};
+        if (henka_terrain_streamer_create(
+                terrain_world, terrain_storage, &stream_desc, &terrain_streamer) != HENKA_SUCCESS ||
+            henka_terrain_streamer_add_observer(terrain_streamer, &observer) != HENKA_SUCCESS)
+        {
+            fprintf(stderr, "terrain streaming initialization failed\n");
+            exit_code = 4;
+            goto shutdown;
+        }
+    }
+#endif
     fixed_timestep = 1.0 / (double)options.tick_rate;
     if (henka_physics_world_set_fixed_timestep(physics, (float)fixed_timestep) != HENKA_SUCCESS)
     {
@@ -508,6 +544,11 @@ int main(int argc, char** argv)
             fprintf(stderr, "headless simulation step failed\n");
             exit_code = 9;
         }
+        if (terrain_streamer != NULL)
+        {
+            (void)henka_terrain_streamer_pump(terrain_streamer, 4U);
+        }
+        (void)henka_terrain_collision_runtime_pump(terrain_collision_runtime, 4U);
         puts("Dedicated server smoke initialized.");
         g_henka_server_running = 0;
     }
@@ -540,6 +581,11 @@ int main(int argc, char** argv)
             }
         }
         henka_time_tick(&time_state);
+        if (terrain_streamer != NULL)
+        {
+            (void)henka_terrain_streamer_pump(terrain_streamer, 4U);
+        }
+        (void)henka_terrain_collision_runtime_pump(terrain_collision_runtime, 4U);
         accumulator += time_state.delta_seconds;
         if (accumulator > fixed_timestep * HENKA_SERVER_MAX_SUBSTEPS_PER_LOOP)
         {
@@ -561,6 +607,9 @@ int main(int argc, char** argv)
 
 shutdown:
     henka_terrain_server_destroy(terrain_server);
+    henka_terrain_collision_runtime_destroy(terrain_collision_runtime);
+    henka_terrain_streamer_destroy(terrain_streamer);
+    henka_terrain_physics_destroy(terrain_physics);
     henka_network_server_destroy(network);
     henka_terrain_storage_destroy(terrain_storage);
     henka_terrain_world_destroy(terrain_world);

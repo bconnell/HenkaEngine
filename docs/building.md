@@ -37,9 +37,10 @@ ctest --test-dir out/headless -C Debug -R henka_headless_runtime_tests --output-
 `henka_runtime` is the public static library for renderer-independent
 consumers. `henka` links it underneath the existing graphical API. The
 dedicated-server executable is a headless network host with bounded
-command-line/configuration input, fixed-tick physics servicing, loopback
-message handling, and graceful client shutdown. Terrain v1 authority and
-persistence responsibilities are being added in later runtime slices. ENet is
+command-line/configuration input, fixed-tick physics servicing, Terrain world
+storage/session initialization, a bounded physics-resident Terrain collision
+rebuild path, loopback message handling, and graceful client shutdown. Full
+packaged deployment and restart orchestration remain future work. ENet is
 fetched at the pinned commit recorded in `docs/architecture.md`; its license
 is included in `third_party/licenses/enet.txt`.
 
