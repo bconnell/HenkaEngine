@@ -46,6 +46,13 @@ coverage, broad-world streaming, or human visual approval.
 - `Escape`: close the sandbox UI first, then release the mouse, then exit
 - Window close: exit
 
+In `--primitive-gallery`, selecting `Textured Cube` exposes the shared
+authoring source in Object Details. The Authoring section shows the selected
+topology face and provides bounded `Extrude`, `Inset`, `Undo`, and `Redo`
+actions. The evaluated mesh and scene bounds are replaced only after the
+candidate succeeds; mesh-file open/save and topology-face picking remain
+unfinished.
+
 ## Scene legend
 
 - `Showcase Giraffe`: the Cheeky Giraffe mascot loaded through the packaged glTF scene/material path.
@@ -72,6 +79,7 @@ The engineering sample legend is available with `--primitive-gallery`:
 - Open `Camera/Status` and compare Perspective 3D, Side 2.5D, Top-down 2.5D, and Isometric 2.5D. Use `Orbit` and `Pan` with left drag, plus `Mouse Wheel`, `F`, and `Home`, to test customization, pan, projection-aware zoom, frame selected, and preset reset.
 - Use the optional `Alt + Left Mouse` orbit and `Middle Mouse` pan shortcuts if you want to compare them with the explicit tool modes.
 - Switch the Viewport Tool section between Select, Move, Rotate, and Scale, then drag the gizmo on a selected object.
+- In `--primitive-gallery`, select `Textured Cube`, expand Object Details > Authoring, and use Extrude, Inset, Undo, and Redo to verify the source topology, scene mesh, bounds, and renderer stay connected.
 - Toggle snapping on and off to compare free movement with stepped adjustments.
 - Click the grid and wireframe controls to confirm the in-window UI updates the same engine state as the keyboard shortcuts.
 - Open Help, Scene Legend, Paths, Settings, Diagnostics, and Transform QA in the Utility panel so you can inspect the sandbox without relying on the console.

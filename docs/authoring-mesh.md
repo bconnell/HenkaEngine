@@ -39,17 +39,24 @@ evaluation reads the same committed source-of-truth. Versioned mesh-file load
 also commits transactionally, so a malformed file does not replace the current
 authoring state.
 
-The horizontal editor connection is intentionally still incomplete. Sandbox
-scene selection and object identity are not yet backed by an authoring-mesh
-asset; evaluated buffers are caller-owned and are not yet transactionally
-installed into a scene render mesh; history is not yet the automatic action
-boundary for editor modeling commands; and mesh save/load is not yet wired to
-the editor's open/save workflow. Material regions retain their numeric
-metadata, but material-instance assignment, texture dependencies, bounds,
-picking, collision, package ownership, and showcase authoring still need the
-shared scene/asset-manager bridge. Those limitations are tracked explicitly
-so this API does not claim a disconnected modeling editor or a second material
-authority.
+The first horizontal editor connection is now exercised by the Sandbox's
+selected Textured Cube: it owns a bounded authoring box and history, and the
+Object Details Authoring section exposes face identity plus transactional
+Extrude, Inset, Undo, and Redo commands. Each command evaluates a candidate,
+creates a normal renderer mesh, updates the scene entity mesh and local bounds,
+then checkpoints history; any evaluation, renderer, scene, bounds, or history
+failure retains the prior source and render state. Scene selection remains the
+existing generation-checked entity authority rather than a second selection
+system.
+
+The broader horizontal connection is still incomplete. Mesh save/load is not
+yet wired to the editor's open/save workflow; other scene entities do not yet
+have authoring sources; and material-instance assignment, texture
+dependencies, collision, package ownership, topology-aware picking, and
+showcase rebuilds still need the shared scene/asset-manager bridge. Material
+regions retain their numeric metadata but do not yet choose multiple shared
+material instances. These limitations are tracked explicitly so this API does
+not claim a complete modeling editor or a second material authority.
 
 The API allocates only within caller-selected bounded capacities. Invalid
 faces and capacity failures leave the prior topology unchanged. Render

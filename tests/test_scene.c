@@ -88,6 +88,7 @@ void henka_test_scene(void)
     henka_scene_environment_desc read_environment;
     henka_scene_fog_desc fog;
     henka_scene_fog_desc read_fog;
+    henka_mesh* read_mesh;
     henka_scene_light_desc light;
     henka_scene_light_desc read_light;
     henka_scene_lod_desc lod;
@@ -209,6 +210,9 @@ void henka_test_scene(void)
     HENKA_TEST_ASSERT(second != HENKA_INVALID_ENTITY);
     HENKA_TEST_ASSERT(henka_scene_is_entity_valid(scene, first));
     HENKA_TEST_ASSERT(henka_scene_is_entity_valid(scene, second));
+    HENKA_TEST_ASSERT(henka_scene_clear_entity_mesh(scene, first) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_scene_get_entity_mesh(scene, first, &read_mesh) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(read_mesh == NULL);
     HENKA_TEST_ASSERT(henka_scene_get_entity_count(scene) == 2U);
     lod = (henka_scene_lod_desc){0};
     HENKA_TEST_ASSERT(henka_scene_set_entity_lod(scene, first, lod) == HENKA_SUCCESS);

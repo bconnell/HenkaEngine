@@ -232,6 +232,7 @@ henka_result henka_scene_translate_entity(henka_scene* scene, henka_entity entit
 henka_result henka_scene_rotate_entity(henka_scene* scene, henka_entity entity, henka_quat delta_rotation);
 henka_result henka_scene_scale_entity(henka_scene* scene, henka_entity entity, henka_vec3 scale_multiplier);
 henka_result henka_scene_set_entity_mesh(henka_scene* scene, henka_entity entity, henka_mesh* mesh);
+henka_result henka_scene_clear_entity_mesh(henka_scene* scene, henka_entity entity);
 henka_result henka_scene_set_entity_material(henka_scene* scene, henka_entity entity, henka_material material);
 henka_result henka_scene_set_entity_name(henka_scene* scene, henka_entity entity, const char* name);
 henka_result henka_scene_set_entity_tag(henka_scene* scene, henka_entity entity, const char* tag);

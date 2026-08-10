@@ -30,6 +30,8 @@ static const char* g_details_transform_key =
     "ui.object_details.transform.expanded";
 static const char* g_details_materials_key =
     "ui.object_details.materials.expanded";
+static const char* g_details_authoring_key =
+    "ui.object_details.authoring.expanded";
 static const char* g_details_physics_key =
     "ui.object_details.physics.expanded";
 static const char* g_details_interaction_key =
@@ -53,6 +55,7 @@ void sandbox3d_editor_ui_state_reset(
     state->details_overview_expanded = true;
     state->details_transform_expanded = true;
     state->details_materials_expanded = true;
+    state->details_authoring_expanded = true;
     state->details_physics_expanded = false;
     state->details_interaction_expanded = false;
     state->details_actions_expanded = false;
@@ -91,6 +94,7 @@ void sandbox3d_editor_ui_state_load(
             {g_details_overview_key, &state->details_overview_expanded},
             {g_details_transform_key, &state->details_transform_expanded},
             {g_details_materials_key, &state->details_materials_expanded},
+            {g_details_authoring_key, &state->details_authoring_expanded},
             {g_details_physics_key, &state->details_physics_expanded},
             {g_details_interaction_key, &state->details_interaction_expanded},
             {g_details_actions_key, &state->details_actions_expanded}
@@ -133,6 +137,7 @@ henka_result sandbox3d_editor_ui_state_store(
             {g_details_overview_key, &state->details_overview_expanded},
             {g_details_transform_key, &state->details_transform_expanded},
             {g_details_materials_key, &state->details_materials_expanded},
+            {g_details_authoring_key, &state->details_authoring_expanded},
             {g_details_physics_key, &state->details_physics_expanded},
             {g_details_interaction_key, &state->details_interaction_expanded},
             {g_details_actions_key, &state->details_actions_expanded}

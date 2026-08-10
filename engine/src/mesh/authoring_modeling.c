@@ -236,7 +236,13 @@ henka_result henka_authoring_mesh_extrude_face(
     henka_authoring_face_id new_face_id = HENKA_AUTHORING_INVALID_ID;
     henka_authoring_vertex_id original[HENKA_AUTHORING_MESH_HARD_MAX_FACE_CORNERS];
     henka_authoring_vertex_id duplicated[HENKA_AUTHORING_MESH_HARD_MAX_FACE_CORNERS];
+    henka_vec2 source_uvs[HENKA_AUTHORING_MESH_HARD_MAX_FACE_CORNERS];
     const henka_authoring_face* source;
+    henka_vec3 offset;
+    size_t corner_count;
+    uint32_t material_region;
+    bool smooth;
+    bool replace_source;
     size_t corner;
     henka_result result;
     if (mesh == NULL || out_face_id == NULL || !modeling_finite_scalar(distance) ||
@@ -252,17 +258,34 @@ henka_result henka_authoring_mesh_extrude_face(
     for (corner = 0U; corner < source->corner_count; ++corner)
     {
         original[corner] = source->vertices[corner];
+        source_uvs[corner] = source->uvs[corner];
     }
+    corner_count = source->corner_count;
+    material_region = source->material_region;
+    smooth = source->smooth;
+    replace_source = false;
+    for (corner = 0U; corner < corner_count; ++corner)
+    {
+        const henka_authoring_edge* edge = henka_authoring_mesh_get_edge(mesh, source->edges[corner]);
+        if (edge != NULL && edge->face_count > 1U)
+        {
+            replace_source = true;
+            break;
+        }
+    }
+    offset = henka_vec3_scale(modeling_face_normal(mesh, source), distance);
     result = henka_authoring_mesh_clone(mesh, &candidate);
     if (result != HENKA_SUCCESS)
     {
         return result;
     }
-    source = henka_authoring_mesh_get_face(candidate, face_id);
+    result = replace_source ? henka_authoring_mesh_remove_face(candidate, face_id) : HENKA_SUCCESS;
     {
-        const henka_vec3 normal = modeling_face_normal(candidate, source);
-        const henka_vec3 offset = henka_vec3_scale(normal, distance);
-        for (corner = 0U; corner < source->corner_count; ++corner)
+        if (result != HENKA_SUCCESS)
+        {
+            goto cleanup;
+        }
+        for (corner = 0U; corner < corner_count; ++corner)
         {
             const henka_authoring_vertex* vertex = henka_authoring_mesh_get_vertex(candidate, original[corner]);
             result = henka_authoring_mesh_add_vertex(candidate,
@@ -272,23 +295,23 @@ henka_result henka_authoring_mesh_extrude_face(
                 goto cleanup;
             }
         }
-        for (corner = 0U; corner < source->corner_count; ++corner)
+        for (corner = 0U; corner < corner_count; ++corner)
         {
             henka_authoring_vertex_id side[4] = {
-                original[corner], original[(corner + 1U) % source->corner_count],
-                duplicated[(corner + 1U) % source->corner_count], duplicated[corner]};
-            result = henka_authoring_mesh_add_face(candidate, side, 4U, source->material_region, false, &new_face_id);
+                original[corner], original[(corner + 1U) % corner_count],
+                duplicated[(corner + 1U) % corner_count], duplicated[corner]};
+            result = henka_authoring_mesh_add_face(candidate, side, 4U, material_region, false, &new_face_id);
             if (result != HENKA_SUCCESS)
             {
                 goto cleanup;
             }
         }
-        result = henka_authoring_mesh_add_face(candidate, duplicated, source->corner_count,
-            source->material_region, source->smooth, &new_face_id);
-        for (corner = 0U; result == HENKA_SUCCESS && corner < source->corner_count; ++corner)
+        result = henka_authoring_mesh_add_face(candidate, duplicated, corner_count,
+            material_region, smooth, &new_face_id);
+        for (corner = 0U; result == HENKA_SUCCESS && corner < corner_count; ++corner)
         {
             result = henka_authoring_mesh_set_face_corner_uv(
-                candidate, new_face_id, corner, source->uvs[corner]);
+                candidate, new_face_id, corner, source_uvs[corner]);
         }
     }
 cleanup:

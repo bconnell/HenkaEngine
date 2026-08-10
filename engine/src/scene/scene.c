@@ -1285,6 +1285,20 @@ henka_result henka_scene_set_entity_mesh(henka_scene* scene, henka_entity entity
     return HENKA_SUCCESS;
 }
 
+henka_result henka_scene_clear_entity_mesh(henka_scene* scene, henka_entity entity)
+{
+    henka_scene_entity_record* record;
+
+    record = henka_scene_get_entity_record(scene, entity);
+    if (record == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    record->mesh = NULL;
+    henka_scene_bump_render_revision(scene);
+    return HENKA_SUCCESS;
+}
+
 henka_result henka_scene_set_entity_material(henka_scene* scene, henka_entity entity, henka_material material)
 {
     char* material_name;

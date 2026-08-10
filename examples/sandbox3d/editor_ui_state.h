@@ -16,6 +16,7 @@ typedef struct sandbox3d_editor_ui_state
     bool details_overview_expanded;
     bool details_transform_expanded;
     bool details_materials_expanded;
+    bool details_authoring_expanded;
     bool details_physics_expanded;
     bool details_interaction_expanded;
     bool details_actions_expanded;

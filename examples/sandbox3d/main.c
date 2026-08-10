@@ -317,6 +317,7 @@ typedef struct sandbox3d_state
     henka_mesh* marker_mesh;
     henka_mesh* missing_model_mesh;
     henka_mesh* foliage_mesh;
+    sandbox3d_authoring_object* authoring_object;
     henka_shader* basic_shader;
     henka_shader* grid_shader;
     henka_texture* cube_texture;
@@ -5060,6 +5061,7 @@ static void sandbox3d_release_owned_resources(sandbox3d_state* state)
     henka_mesh_destroy(state->sphere_mesh);
     henka_mesh_destroy(state->foliage_mesh);
     henka_physics_world_destroy(state->physics.world);
+    sandbox3d_authoring_object_destroy(state->authoring_object);
     henka_scene_destroy(state->scene);
     henka_texture_destroy(state->environment_texture);
     for (int terrain_layer_index = 0;
@@ -5100,6 +5102,7 @@ static void sandbox3d_release_owned_resources(sandbox3d_state* state)
     state->wet_dry_roughness_texture = NULL;
     state->foliage_mask_texture = NULL;
     state->foliage_mesh = NULL;
+    state->authoring_object = NULL;
     state->physics.world = NULL;
     state->gizmo_render.axis_mesh = NULL;
     state->gizmo_render.ring_mesh = NULL;
@@ -13033,6 +13036,7 @@ static void sandbox3d_draw_object_details_panel(
     bool transform_locked;
     bool visible;
     char action_label[32];
+    char authoring_face_text[48];
     char clear_action_id[64];
     char focus_action_id[64];
     char interaction_text[64];
@@ -13729,6 +13733,57 @@ static void sandbox3d_draw_object_details_panel(
                     state,
                     material_view.editor_binding,
                     row);
+            }
+        }
+    }
+
+    if (state->authoring_object != NULL &&
+        entity == sandbox3d_authoring_object_get_entity(state->authoring_object))
+    {
+        (void)sandbox3d_details_flow_disclosure(
+            state,
+            flow_desc.bounds,
+            "object_details.authoring",
+            "Authoring",
+            &state->editor_ui.details_authoring_expanded,
+            &disclosure_changed);
+        if (state->editor_ui.details_authoring_expanded)
+        {
+            snprintf(
+                authoring_face_text,
+                sizeof(authoring_face_text),
+                "Face %u",
+                (unsigned int)sandbox3d_authoring_object_get_selected_face(state->authoring_object));
+            if (sandbox3d_details_flow_next_row(state, flow_desc.bounds, 22.0f, 1U, &row))
+            {
+                sandbox3d_draw_value_row(state->ui, row.x, row.y, row.width, "Source", "Authoring mesh");
+            }
+            if (sandbox3d_details_flow_next_row(state, flow_desc.bounds, 22.0f, 1U, &row))
+            {
+                sandbox3d_draw_value_row(state->ui, row.x, row.y, row.width, "Selection", authoring_face_text);
+            }
+            if (sandbox3d_details_flow_next_row(state, flow_desc.bounds, 28.0f, 1U, &row) && row.width >= 290.0f)
+            {
+                if (henka_ui_button(state->ui, "authoring_extrude", (henka_ui_rect){row.x, row.y, 82.0f, 24.0f}, "Extrude") &&
+                    sandbox3d_authoring_object_extrude_selected_face(state->authoring_object, 0.25f) == HENKA_SUCCESS)
+                {
+                    sandbox3d_set_status(state, false, "Authoring face extruded and evaluated into the scene.");
+                }
+                if (henka_ui_button(state->ui, "authoring_inset", (henka_ui_rect){row.x + 88.0f, row.y, 82.0f, 24.0f}, "Inset") &&
+                    sandbox3d_authoring_object_inset_selected_face(state->authoring_object, 0.75f) == HENKA_SUCCESS)
+                {
+                    sandbox3d_set_status(state, false, "Authoring face inset and evaluated into the scene.");
+                }
+                if (henka_ui_button(state->ui, "authoring_undo", (henka_ui_rect){row.x + 176.0f, row.y, 54.0f, 24.0f}, "Undo") &&
+                    sandbox3d_authoring_object_undo(state->authoring_object) == HENKA_SUCCESS)
+                {
+                    sandbox3d_set_status(state, false, "Authoring mesh undo restored the scene render.");
+                }
+                if (henka_ui_button(state->ui, "authoring_redo", (henka_ui_rect){row.x + 236.0f, row.y, 54.0f, 24.0f}, "Redo") &&
+                    sandbox3d_authoring_object_redo(state->authoring_object) == HENKA_SUCCESS)
+                {
+                    sandbox3d_set_status(state, false, "Authoring mesh redo restored the scene render.");
+                }
             }
         }
     }
@@ -16180,6 +16235,76 @@ static henka_result sandbox3d_initialize(henka_engine* engine, void* user_data)
     {
         goto fail;
     }
+    result = sandbox3d_authoring_object_create_box(
+        engine,
+        state->scene,
+        state->cube_entity,
+        1.0f,
+        1.0f,
+        1.0f,
+        NULL,
+        32U,
+        &state->authoring_object);
+    if (result != HENKA_SUCCESS)
+    {
+        goto fail;
+    }
+    if (state->smoke_test)
+    {
+        const henka_authoring_mesh_counts baseline = henka_authoring_mesh_get_counts(
+            sandbox3d_authoring_object_get_mesh(state->authoring_object));
+        henka_authoring_mesh_counts edited;
+        henka_authoring_mesh_counts restored;
+        henka_mesh* authoring_scene_mesh = NULL;
+        result = sandbox3d_authoring_object_extrude_selected_face(state->authoring_object, 0.25f);
+        if (result != HENKA_SUCCESS)
+        {
+            printf("Authoring smoke failure: extrude returned %s.\n", henka_result_to_string(result));
+            goto fail;
+        }
+        edited = henka_authoring_mesh_get_counts(
+            sandbox3d_authoring_object_get_mesh(state->authoring_object));
+        if (edited.faces <= baseline.faces)
+        {
+            printf("Authoring smoke failure: extrude did not increase face count.\n");
+            result = HENKA_ERROR_UNKNOWN;
+            goto fail;
+        }
+        result = sandbox3d_authoring_object_undo(state->authoring_object);
+        if (result != HENKA_SUCCESS)
+        {
+            printf("Authoring smoke failure: undo returned %s.\n", henka_result_to_string(result));
+            goto fail;
+        }
+        restored = henka_authoring_mesh_get_counts(
+            sandbox3d_authoring_object_get_mesh(state->authoring_object));
+        if (restored.faces != baseline.faces)
+        {
+            printf("Authoring smoke failure: undo did not restore face count.\n");
+            result = HENKA_ERROR_UNKNOWN;
+            goto fail;
+        }
+        result = sandbox3d_authoring_object_redo(state->authoring_object);
+        if (result != HENKA_SUCCESS)
+        {
+            printf("Authoring smoke failure: redo returned %s.\n", henka_result_to_string(result));
+            goto fail;
+        }
+        result = sandbox3d_authoring_object_undo(state->authoring_object);
+        if (result != HENKA_SUCCESS)
+        {
+            printf("Authoring smoke failure: final undo returned %s.\n", henka_result_to_string(result));
+            goto fail;
+        }
+        result = henka_scene_get_entity_mesh(state->scene, state->cube_entity, &authoring_scene_mesh);
+        if (result != HENKA_SUCCESS || authoring_scene_mesh == NULL)
+        {
+            printf("Authoring smoke failure: scene render mesh was not retained.\n");
+            result = HENKA_ERROR_UNKNOWN;
+            goto fail;
+        }
+        printf("Authoring smoke: topology edit, evaluated mesh replacement, bounds, undo, and redo passed.\n");
+    }
     sandbox3d_apply_entity_foundation(
         state,
         state->cube_entity,
@@ -16194,7 +16319,7 @@ static henka_result sandbox3d_initialize(henka_engine* engine, void* user_data)
         "Textured Cube",
         "Near the center,",
         "shows a cube using a texture material.",
-        "Uses the built-in cube mesh with a base-color texture.",
+        "Uses the shared authoring-mesh source with an evaluated base-color mesh.",
         "Built-in cube mesh.",
         "Textured lit material.",
         "Cube albedo texture from assets/textures/cube_albedo.png.",
