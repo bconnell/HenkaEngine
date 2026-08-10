@@ -45,10 +45,12 @@ viewport ray picker resolves a hit to the actual authoring face identity. The
 Object Details Authoring section exposes that face plus transactional
 Extrude, Inset, Undo, Redo, Save Source, and Reload Source commands. Each edit
 evaluates a candidate, creates a normal renderer mesh, updates the scene entity
-mesh and local bounds, then checkpoints history; reload builds a replacement
+mesh and local bounds, then checkpoints history; the Sandbox's linked box
+collider consumes the same evaluated local bounds after each successful editor
+operation. Reload builds a replacement
 history from the validated source before swapping the scene representation. Any
 evaluation, renderer, scene, bounds, history, or file-parse failure retains the
-prior source and render state. The save/reload buttons use a confined,
+prior source, render, and (when the linked body is present) spatial state. The save/reload buttons use a confined,
 engine-owned user-data slot, so they do not scan or overwrite arbitrary files.
 Scene selection remains the existing generation-checked entity authority rather
 than a second selection system.

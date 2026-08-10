@@ -85,6 +85,7 @@ The engineering sample legend is available with `--primitive-gallery`:
 - In `--primitive-gallery`, select `Textured Cube`, expand Object Details > Authoring, and use Extrude, Inset, Undo, and Redo to verify the source topology, scene mesh, bounds, and renderer stay connected.
 - Click different visible faces of `Textured Cube` to verify the selected face identity follows the authoring topology before using a modeling command.
 - Use Save Source, make another edit, then use Reload Source to verify the saved editable topology replaces the scene render and bounds transactionally; an invalid or missing source retains the prior render.
+- With the optional Physics QA body enabled, use Extrude and Undo and inspect Diagnostics/Physics QA to verify the linked Textured Cube box collider follows the evaluated bounds.
 - Toggle snapping on and off to compare free movement with stepped adjustments.
 - Click the grid and wireframe controls to confirm the in-window UI updates the same engine state as the keyboard shortcuts.
 - Open Help, Scene Legend, Paths, Settings, Diagnostics, and Transform QA in the Utility panel so you can inspect the sandbox without relying on the console.
