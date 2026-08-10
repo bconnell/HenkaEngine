@@ -505,12 +505,13 @@ static void henka_engine_queue_visible_texture_residency(
     for (entity_index = 0U; entity_index < engine->active_scene->entity_count; ++entity_index)
     {
         const henka_scene_entity_record* entity = &engine->active_scene->entities[entity_index];
-        henka_texture* textures[5];
+        henka_texture* textures[HENKA_MATERIAL_MAX_TEXTURE_DEPENDENCIES];
         uint32_t requested_mips;
         uint32_t request_priority;
         float distance;
         float projected_radius;
         size_t texture_index;
+        size_t texture_count;
 
         if (!entity->active || !entity->visible)
             continue;
@@ -543,12 +544,28 @@ static void henka_engine_queue_visible_texture_residency(
         textures[2] = entity->material.metallic_roughness_texture;
         textures[3] = entity->material.occlusion_texture;
         textures[4] = entity->material.emissive_texture;
-        for (texture_index = 0U; texture_index < sizeof(textures) / sizeof(textures[0]); ++texture_index)
+        texture_count = 5U;
+        if (entity->material.terrain_layers_enabled)
+        {
+            uint32_t layer_index;
+            for (layer_index = 0U;
+                 layer_index < HENKA_MATERIAL_TERRAIN_LAYER_COUNT;
+                 ++layer_index)
+            {
+                const henka_material_layer* layer =
+                    &entity->material.terrain_layers[layer_index];
+                textures[texture_count++] = layer->base_color_texture;
+                textures[texture_count++] = layer->normal_texture;
+                textures[texture_count++] = layer->metallic_roughness_texture;
+            }
+        }
+        for (texture_index = 0U; texture_index < texture_count; ++texture_index)
         {
             henka_texture_info info;
             uint32_t target_mips;
             float target_threshold;
             float target_hysteresis;
+            uint32_t semantic_priority;
             (void)henka_assets_pin_texture_for_residency_frame(
                 engine->asset_manager,
                 textures[texture_index]);
@@ -570,12 +587,15 @@ static void henka_engine_queue_visible_texture_residency(
                 target_mips = info.resident_mip_count;
             if (target_mips == info.resident_mip_count)
                 continue;
+            semantic_priority = texture_index < 5U
+                ? (texture_index == 0U ? 2U :
+                    (texture_index == 1U || texture_index == 2U ? 1U : 0U))
+                : (((texture_index - 5U) % 3U) == 0U ? 2U : 1U);
             (void)henka_assets_queue_texture_residency_request_with_priority(
                 engine->asset_manager,
                 textures[texture_index],
                 target_mips,
-                request_priority + (texture_index == 0U ? 2U :
-                    (texture_index == 1U || texture_index == 2U ? 1U : 0U)));
+                request_priority + semantic_priority);
         }
     }
 }

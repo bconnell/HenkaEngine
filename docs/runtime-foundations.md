@@ -117,8 +117,9 @@ reread, validated, and uploaded into a replacement backend before the existing
 texture identity is changed; budget or source failure leaves the old backend
 and cache entry unchanged. PNG/HDR sources are not streamable through this
 API. Manager-owned KTX2 requests can be coalesced into a bounded queue and
-processed with completion/failure counters; visible active scene materials
-enqueue distance-bounded KTX2 mip targets, and the engine frame lifecycle
+processed with completion/failure counters; visible active scene materials,
+including all configured Terrain layer texture dependencies, enqueue
+distance-bounded KTX2 mip targets, and the engine frame lifecycle
 services at most one queued request while the renderer context is active, but
 the upload itself remains synchronous. Repeated requests for one texture retain
 the strongest target and priority so a farther reference cannot demote a nearer one;
