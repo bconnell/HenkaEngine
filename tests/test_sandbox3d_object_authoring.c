@@ -169,14 +169,38 @@ static void henka_test_sandbox3d_object_authoring_source_persistence(void)
     HENKA_TEST_ASSERT(henka_authoring_mesh_get_face(
         sandbox3d_authoring_object_get_mesh(object),
         sandbox3d_authoring_object_get_selected_face(object))->material_region == 17U);
+    {
+        uint32_t minimum_region = UINT32_MAX;
+        uint32_t maximum_region = 0U;
+        HENKA_TEST_ASSERT(
+            sandbox3d_authoring_object_get_render_material_region_range(
+                object, &minimum_region, &maximum_region) == HENKA_SUCCESS);
+        HENKA_TEST_ASSERT(minimum_region == 0U && maximum_region == 17U);
+    }
     HENKA_TEST_ASSERT(sandbox3d_authoring_object_undo(object) == HENKA_SUCCESS);
     HENKA_TEST_ASSERT(henka_authoring_mesh_get_face(
         sandbox3d_authoring_object_get_mesh(object),
         sandbox3d_authoring_object_get_selected_face(object))->material_region != 17U);
+    {
+        uint32_t minimum_region = UINT32_MAX;
+        uint32_t maximum_region = 0U;
+        HENKA_TEST_ASSERT(
+            sandbox3d_authoring_object_get_render_material_region_range(
+                object, &minimum_region, &maximum_region) == HENKA_SUCCESS);
+        HENKA_TEST_ASSERT(minimum_region == 0U && maximum_region == 0U);
+    }
     HENKA_TEST_ASSERT(sandbox3d_authoring_object_redo(object) == HENKA_SUCCESS);
     HENKA_TEST_ASSERT(henka_authoring_mesh_get_face(
         sandbox3d_authoring_object_get_mesh(object),
         sandbox3d_authoring_object_get_selected_face(object))->material_region == 17U);
+    {
+        uint32_t minimum_region = UINT32_MAX;
+        uint32_t maximum_region = 0U;
+        HENKA_TEST_ASSERT(
+            sandbox3d_authoring_object_get_render_material_region_range(
+                object, &minimum_region, &maximum_region) == HENKA_SUCCESS);
+        HENKA_TEST_ASSERT(minimum_region == 0U && maximum_region == 17U);
+    }
     {
         const henka_ray pick_ray = {{0.0f, 0.0f, 5.0f}, {0.0f, 0.0f, -1.0f}};
         const henka_ray miss_ray = {{0.0f, 0.0f, 5.0f}, {0.0f, 1.0f, 0.0f}};

@@ -9,6 +9,20 @@
 
 #include "../core/checked.h"
 
+henka_result henka_mesh_get_material_region_range(
+    const henka_mesh* mesh,
+    uint32_t* out_min_region,
+    uint32_t* out_max_region)
+{
+    if (mesh == NULL || out_min_region == NULL || out_max_region == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    *out_min_region = mesh->material_region_min;
+    *out_max_region = mesh->material_region_max;
+    return HENKA_SUCCESS;
+}
+
 static void henka_terrain_mesh_append_skirt_segment(
     henka_terrain_mesh_data* mesh,
     uint32_t first_source,

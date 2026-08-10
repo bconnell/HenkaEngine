@@ -1200,6 +1200,7 @@ henka_result henka_mesh_create_from_model_data(henka_engine* engine, const henka
         vertices[vertex_index].color_valid = true;
         vertices[vertex_index].tangent = model->vertices[vertex_index].tangent;
         vertices[vertex_index].tangent_valid = model->vertices[vertex_index].tangent_valid;
+        vertices[vertex_index].material_region = model->vertices[vertex_index].material_region;
     }
 
     *out_mesh = NULL;

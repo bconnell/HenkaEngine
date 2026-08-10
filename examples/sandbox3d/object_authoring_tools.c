@@ -197,6 +197,7 @@ static henka_result sandbox3d_authoring_evaluate_render(
         model_vertices[vertex_index].color = (henka_vec4){1.0f, 1.0f, 1.0f, 1.0f};
         model_vertices[vertex_index].tangent = vertex->tangent;
         model_vertices[vertex_index].tangent_valid = false;
+        model_vertices[vertex_index].material_region = vertex->material_region;
     }
     for (index = 0U; index < render.index_count; ++index)
     {
@@ -708,6 +709,19 @@ henka_entity sandbox3d_authoring_object_get_entity(const sandbox3d_authoring_obj
 const henka_authoring_mesh* sandbox3d_authoring_object_get_mesh(const sandbox3d_authoring_object* object)
 {
     return object == NULL ? NULL : object->mesh;
+}
+
+henka_result sandbox3d_authoring_object_get_render_material_region_range(
+    const sandbox3d_authoring_object* object,
+    uint32_t* out_min_region,
+    uint32_t* out_max_region)
+{
+    if (object == NULL || object->render_mesh == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    return henka_mesh_get_material_region_range(
+        object->render_mesh, out_min_region, out_max_region);
 }
 
 henka_authoring_face_id sandbox3d_authoring_object_get_selected_face(const sandbox3d_authoring_object* object)

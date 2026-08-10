@@ -23,6 +23,8 @@ typedef struct henka_model_vertex
     /* Optional imported tangent frame. w is the handedness sign. */
     henka_vec4 tangent;
     bool tangent_valid;
+    /* Editable authoring metadata carried through evaluated mesh upload. */
+    uint32_t material_region;
 } henka_model_vertex;
 
 typedef struct henka_model_material_source

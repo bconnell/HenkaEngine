@@ -46,6 +46,11 @@ henka_result sandbox3d_authoring_object_create_box(
 void sandbox3d_authoring_object_destroy(sandbox3d_authoring_object* object);
 henka_entity sandbox3d_authoring_object_get_entity(const sandbox3d_authoring_object* object);
 const henka_authoring_mesh* sandbox3d_authoring_object_get_mesh(const sandbox3d_authoring_object* object);
+/* Returns the material-region range retained by the evaluated render mesh. */
+henka_result sandbox3d_authoring_object_get_render_material_region_range(
+    const sandbox3d_authoring_object* object,
+    uint32_t* out_min_region,
+    uint32_t* out_max_region);
 henka_authoring_face_id sandbox3d_authoring_object_get_selected_face(const sandbox3d_authoring_object* object);
 henka_result sandbox3d_authoring_object_pick_face(
     sandbox3d_authoring_object* object,

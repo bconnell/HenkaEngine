@@ -43,6 +43,13 @@ henka_result henka_mesh_create_from_terrain_chunk_with_edge_mask(
     henka_mesh** out_mesh,
     henka_terrain_revision* out_revision,
     henka_terrain_generation* out_generation);
+/* Returns the bounded material-region range carried by the uploaded mesh.
+ * Region values are metadata only until shared multi-material submesh binding
+ * is implemented; the range remains useful for authoring diagnostics. */
+henka_result henka_mesh_get_material_region_range(
+    const henka_mesh* mesh,
+    uint32_t* out_min_region,
+    uint32_t* out_max_region);
 /* Releases caller-owned meshes. Manager-owned borrowed meshes are ignored. */
 void henka_mesh_destroy(henka_mesh* mesh);
 

@@ -7010,6 +7010,20 @@ henka_result henka_opengl_renderer_create_mesh_from_data(
         return HENKA_ERROR_OUT_OF_MEMORY;
     }
 
+    mesh->material_region_min = vertices[0].material_region;
+    mesh->material_region_max = vertices[0].material_region;
+    for (vertex_index = 1; vertex_index < vertex_count; ++vertex_index)
+    {
+        if (vertices[vertex_index].material_region < mesh->material_region_min)
+        {
+            mesh->material_region_min = vertices[vertex_index].material_region;
+        }
+        if (vertices[vertex_index].material_region > mesh->material_region_max)
+        {
+            mesh->material_region_max = vertices[vertex_index].material_region;
+        }
+    }
+
     g_gl.GenVertexArrays(1, &mesh_data->vao);
     g_gl.GenBuffers(1, &mesh_data->vertex_buffer);
     g_gl.GenBuffers(1, &mesh_data->index_buffer);

@@ -106,6 +106,7 @@ typedef struct henka_vertex
     bool color_valid;
     henka_vec4 tangent;
     bool tangent_valid;
+    uint32_t material_region;
 } henka_vertex;
 
 typedef struct henka_input_state
@@ -368,6 +369,8 @@ struct henka_mesh
     henka_mesh_primitive primitive;
     int vertex_count;
     int index_count;
+    uint32_t material_region_min;
+    uint32_t material_region_max;
     void* backend_data;
 };
 

@@ -67,9 +67,11 @@ entities do not yet have authoring sources; vertex/edge selection modes and
 multi-selection are not yet present; and material-instance assignment, texture
 dependencies, general collision integration beyond the bound box contract,
 package ownership, topology-aware picking, and showcase rebuilds still need the
-shared scene/asset-manager bridge. Material
-regions retain their editable numeric metadata but do not yet choose multiple
-shared material instances. These limitations are tracked explicitly so this API does
+shared scene/asset-manager bridge.
+Material regions retain their editable numeric metadata, and the evaluated
+model-to-render-mesh upload retains the bounded minimum/maximum region range
+for diagnostics. They do not yet choose multiple shared material instances in
+the renderer. These limitations are tracked explicitly so this API does
 not claim a complete modeling editor or a second material authority.
 
 The API allocates only within caller-selected bounded capacities. Invalid
