@@ -229,6 +229,7 @@ henka_result henka_ktx2_prepare_upload_with_mip_limit(
     uint32_t resident_level_count;
     bool is_srgb;
     bool compressed;
+    bool transcoded = false;
     henka_result result = HENKA_ERROR_ASSET_SOURCE;
 
     if (out_upload != NULL)
@@ -259,6 +260,7 @@ henka_result henka_ktx2_prepare_upload_with_mip_limit(
 
     if (ktxTexture2_NeedsTranscoding(texture))
     {
+        transcoded = true;
         if (henka_ktx_select_transcode_target(usage, capabilities, &transcode_target))
         {
             if (ktxTexture2_TranscodeBasis(texture, transcode_target, 0U) != KTX_SUCCESS)
@@ -271,7 +273,7 @@ henka_result henka_ktx2_prepare_upload_with_mip_limit(
     }
 
     if (!henka_ktx_vk_format_is_srgb(texture->vkFormat, &is_srgb) ||
-        is_srgb != (color_space == HENKA_TEXTURE_COLOR_SPACE_SRGB) ||
+        (!transcoded && is_srgb != (color_space == HENKA_TEXTURE_COLOR_SPACE_SRGB)) ||
         !henka_ktx_vk_format_to_gpu_format(
             texture->vkFormat, capabilities, &format, &compressed))
     {
@@ -282,6 +284,12 @@ henka_result henka_ktx2_prepare_upload_with_mip_limit(
         format = HENKA_KTX2_GPU_FORMAT_RGBA8;
         compressed = false;
     }
+    /* Basis transcode targets describe block layout, not the source transfer
+     * function. Preserve the validated semantic color-space contract when
+     * selecting the OpenGL internal format instead of trusting the target's
+     * VK_FORMAT_UNORM/SRGB spelling. */
+    if (transcoded)
+        is_srgb = color_space == HENKA_TEXTURE_COLOR_SPACE_SRGB;
 
     resident_level_count = max_resident_mips == 0U ||
         max_resident_mips > texture->numLevels ? texture->numLevels : max_resident_mips;

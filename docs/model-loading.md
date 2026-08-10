@@ -94,8 +94,10 @@ The loader currently supports:
   that capability. Uncompressed RGBA8 levels and Basis payloads without a
   supported compressed target use a checked RGBA8 upload; native compressed
   payloads without a matching capability are rejected. They are not decoded as
-  arbitrary bytes. The container transfer function is checked against the
-  requested semantic color space, and the selected payload's exact mip bytes
+  arbitrary bytes. Native container transfer metadata is checked against the
+  requested semantic color space; Basis transcode targets preserve the
+  caller-validated semantic color space because their block layout does not
+  carry that source transfer contract. The selected payload's exact mip bytes
   are included in renderer memory accounting. The same checked KTX2 boundary
   is used for external images and embedded URI/bufferView bytes, so GLB and
   data-URI ownership does not create a second decoder or bypass the asset
