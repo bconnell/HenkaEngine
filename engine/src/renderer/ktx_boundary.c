@@ -272,9 +272,11 @@ henka_result henka_ktx2_prepare_upload_with_mip_limit(
         }
     }
 
-    if (!henka_ktx_vk_format_is_srgb(texture->vkFormat, &is_srgb) ||
-        (!transcoded && is_srgb != (color_space == HENKA_TEXTURE_COLOR_SPACE_SRGB)) ||
-        !henka_ktx_vk_format_to_gpu_format(
+    if (!henka_ktx_vk_format_is_srgb(texture->vkFormat, &is_srgb))
+        goto cleanup;
+    if (!transcoded && is_srgb != (color_space == HENKA_TEXTURE_COLOR_SPACE_SRGB))
+        goto cleanup;
+    if (!henka_ktx_vk_format_to_gpu_format(
             texture->vkFormat, capabilities, &format, &compressed))
     {
         /* RGBA8 is the only universally supported fallback. A native

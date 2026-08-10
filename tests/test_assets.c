@@ -92,6 +92,16 @@ void henka_test_assets(void)
         HENKA_TEST_ASSERT(upload.data_size == sizeof(level_zero));
         HENKA_TEST_ASSERT(upload.levels[0].size == sizeof(level_zero));
         henka_ktx2_upload_dispose(&upload);
+        memset(&upload, 0, sizeof(upload));
+        HENKA_TEST_ASSERT(henka_ktx2_prepare_upload(
+            generated_bytes,
+            (size_t)generated_size,
+            HENKA_TEXTURE_USAGE_COLOR,
+            HENKA_TEXTURE_COLOR_SPACE_LINEAR,
+            0U,
+            &upload) == HENKA_ERROR_ASSET_SOURCE);
+        HENKA_TEST_ASSERT(upload.data == NULL && upload.level_count == 0U);
+        henka_ktx2_upload_dispose(&upload);
         free(generated_bytes);
 
         generated_bytes = NULL;
