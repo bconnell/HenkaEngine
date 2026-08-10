@@ -1836,7 +1836,8 @@ henka_result henka_scene_set_environment(
         environment.atmosphere.horizon_intensity == 0.0f)
     {
         defaults = henka_scene_environment_default();
-        environment.mode = HENKA_SCENE_ENVIRONMENT_GRADIENT;
+        environment.mode = environment.hdr_texture != NULL ?
+            HENKA_SCENE_ENVIRONMENT_HDRI : HENKA_SCENE_ENVIRONMENT_GRADIENT;
         environment.atmosphere = defaults.atmosphere;
         environment.sun = defaults.sun;
         environment.time_of_day_hours = defaults.time_of_day_hours;

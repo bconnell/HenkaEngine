@@ -441,6 +441,14 @@ static const char* g_setting_key_viewport_shading_mode =
     "ui.scene_view.shading_mode";
 static const char* g_setting_key_viewport_exposure =
     "ui.scene_view.exposure_stops";
+static const char* g_setting_key_environment_mode =
+    "scene.environment.mode";
+static const char* g_setting_key_environment_time_hours =
+    "scene.environment.time_of_day_hours";
+static const char* g_setting_key_environment_time_scale =
+    "scene.environment.time_scale";
+static const char* g_setting_key_environment_time_enabled =
+    "scene.environment.time_of_day_enabled";
 static const char* g_setting_key_mouse_sensitivity = "mouse_sensitivity";
 static const char* g_setting_key_camera_speed = "camera_movement_speed";
 static const char* g_setting_key_camera_position_x = "camera_position_x";
@@ -1947,6 +1955,20 @@ static const char* sandbox3d_get_utility_label(sandbox3d_utility_view utility)
         case SANDBOX3D_UTILITY_NONE:
         default:
             return "None";
+    }
+}
+
+static const char* sandbox3d_get_environment_mode_label(henka_scene_environment_mode mode)
+{
+    switch (mode)
+    {
+        case HENKA_SCENE_ENVIRONMENT_HDRI:
+            return "HDRI";
+        case HENKA_SCENE_ENVIRONMENT_PROCEDURAL:
+            return "Procedural";
+        case HENKA_SCENE_ENVIRONMENT_GRADIENT:
+        default:
+            return "Gradient";
     }
 }
 
@@ -7066,6 +7088,11 @@ static void sandbox3d_apply_loaded_settings(henka_engine* engine, sandbox3d_stat
     float movement_speed;
     float orthographic_height;
     float exposure;
+    int environment_mode;
+    float environment_time_hours;
+    float environment_time_scale;
+    bool environment_time_enabled;
+    henka_scene_environment_desc environment;
     henka_camera_preset camera_preset;
     henka_result result;
     henka_viewport_shading_mode shading_mode;
@@ -7179,6 +7206,46 @@ static void sandbox3d_apply_loaded_settings(henka_engine* engine, sandbox3d_stat
         (void)henka_engine_set_viewport_exposure(engine, 0.0f);
     }
 
+    if (henka_scene_get_environment(state->scene, &environment) == HENKA_SUCCESS)
+    {
+        environment_mode = henka_settings_get_int(
+            state->settings,
+            g_setting_key_environment_mode,
+            (int)environment.mode);
+        environment_time_hours = henka_settings_get_float(
+            state->settings,
+            g_setting_key_environment_time_hours,
+            environment.time_of_day_hours);
+        environment_time_scale = henka_settings_get_float(
+            state->settings,
+            g_setting_key_environment_time_scale,
+            environment.time_scale);
+        environment_time_enabled = henka_settings_get_bool(
+            state->settings,
+            g_setting_key_environment_time_enabled,
+            environment.time_of_day_enabled);
+        if (environment_mode >= (int)HENKA_SCENE_ENVIRONMENT_GRADIENT &&
+            environment_mode <= (int)HENKA_SCENE_ENVIRONMENT_PROCEDURAL &&
+            isfinite(environment_time_hours) &&
+            environment_time_hours >= 0.0f && environment_time_hours < 24.0f &&
+            isfinite(environment_time_scale) &&
+            environment_time_scale >= -64.0f && environment_time_scale <= 64.0f)
+        {
+            environment.mode = (henka_scene_environment_mode)environment_mode;
+            environment.time_of_day_hours = environment_time_hours;
+            environment.time_scale = environment_time_scale;
+            environment.time_of_day_enabled = environment_time_enabled;
+            if (henka_scene_set_environment(state->scene, environment) != HENKA_SUCCESS)
+            {
+                HENKA_LOG_WARN("Unsafe environment settings were ignored and the current environment was retained.");
+            }
+        }
+        else
+        {
+            HENKA_LOG_WARN("Unsafe environment settings were ignored and the current environment was retained.");
+        }
+    }
+
     layout_mode_value = henka_settings_get_string(state->settings, g_setting_key_layout_mode, "view");
     state->workspace.layout_mode = sandbox3d_parse_layout_mode(layout_mode_value);
     state->workspace.scene_objects_panel_visible = henka_settings_get_bool(state->settings, g_setting_key_scene_panel_visible, true);
@@ -7285,6 +7352,16 @@ static henka_result sandbox3d_save_settings(henka_engine* engine, sandbox3d_stat
             henka_engine_get_viewport_shading_mode(engine)));
     henka_settings_set_bool(state->settings, g_setting_key_wireframe_enabled, henka_engine_is_wireframe_enabled(engine));
     henka_settings_set_float(state->settings, g_setting_key_viewport_exposure, henka_engine_get_viewport_exposure(engine));
+    {
+        henka_scene_environment_desc environment;
+        if (henka_scene_get_environment(state->scene, &environment) == HENKA_SUCCESS)
+        {
+            henka_settings_set_int(state->settings, g_setting_key_environment_mode, (int)environment.mode);
+            henka_settings_set_float(state->settings, g_setting_key_environment_time_hours, environment.time_of_day_hours);
+            henka_settings_set_float(state->settings, g_setting_key_environment_time_scale, environment.time_scale);
+            henka_settings_set_bool(state->settings, g_setting_key_environment_time_enabled, environment.time_of_day_enabled);
+        }
+    }
     henka_settings_set_float(state->settings, g_setting_key_mouse_sensitivity, sandbox3d_get_mouse_sensitivity(state));
     henka_settings_set_float(state->settings, g_setting_key_camera_speed, state->camera.movement_speed);
     henka_settings_set_float(state->settings, g_setting_key_camera_position_x, state->camera.position.x);
@@ -7387,6 +7464,15 @@ static henka_result sandbox3d_reset_settings(henka_engine* engine, sandbox3d_sta
     if (result != HENKA_SUCCESS)
     {
         return result;
+    }
+
+    {
+        henka_scene_environment_desc environment = henka_scene_environment_default();
+        environment.hdr_texture = state->environment_texture;
+        if (henka_scene_set_environment(state->scene, environment) != HENKA_SUCCESS)
+        {
+            return HENKA_ERROR_INVALID_ARGUMENT;
+        }
     }
 
     result = henka_engine_set_viewport_shading_mode(
@@ -14913,6 +14999,8 @@ static void sandbox3d_draw_utility_panel(
             break;
 
         case SANDBOX3D_UTILITY_SETTINGS:
+        {
+            henka_scene_environment_desc environment;
             descriptor = sandbox3d_get_selected_descriptor(state);
             sandbox3d_draw_section_heading(state->ui, x_left, y_start, "Sandbox settings");
             sandbox3d_draw_value_row(state->ui, x_left, y_start + 18.0f, panel_bounds.width - 28.0f, "Layout", sandbox3d_get_layout_mode_label(state->workspace.layout_mode));
@@ -14926,6 +15014,23 @@ static void sandbox3d_draw_utility_panel(
                 "Shading",
                 henka_viewport_shading_mode_get_label(
                     henka_engine_get_viewport_shading_mode(engine)));
+            if (henka_scene_get_environment(state->scene, &environment) == HENKA_SUCCESS)
+            {
+                sandbox3d_draw_value_row(
+                    state->ui,
+                    x_left,
+                    y_start + 122.0f,
+                    panel_bounds.width - 28.0f,
+                    "Environment",
+                    sandbox3d_get_environment_mode_label(environment.mode));
+                snprintf(
+                    row_value,
+                    sizeof(row_value),
+                    "%.2fh %s",
+                    environment.time_of_day_hours,
+                    environment.time_of_day_enabled ? "running" : "paused");
+                sandbox3d_draw_value_row(state->ui, x_left, y_start + 148.0f, panel_bounds.width - 28.0f, "Sky time", row_value);
+            }
             snprintf(row_value, sizeof(row_value), "%.2f stops", henka_engine_get_viewport_exposure(engine));
             sandbox3d_draw_value_row(state->ui, x_left, y_start + 174.0f, panel_bounds.width - 28.0f, "Exposure", row_value);
             if (henka_ui_button(state->ui, "utility_exposure_less", (henka_ui_rect){x_left, y_start + 204.0f, 88.0f, 24.0f}, "Exposure-"))
@@ -14955,7 +15060,30 @@ static void sandbox3d_draw_utility_panel(
             {
                 sandbox3d_adjust_camera_speed(state, 0.5f);
             }
+            if (henka_ui_button(state->ui, "utility_environment_cycle", (henka_ui_rect){x_left, y_start + 320.0f, 112.0f, 24.0f}, "Cycle Sky"))
+            {
+                if (henka_scene_get_environment(state->scene, &environment) == HENKA_SUCCESS)
+                {
+                    environment.mode = (henka_scene_environment_mode)(((int)environment.mode + 1) % 3);
+                    if (henka_scene_set_environment(state->scene, environment) != HENKA_SUCCESS)
+                    {
+                        sandbox3d_set_status(state, true, "Sky mode change was rejected.");
+                    }
+                }
+            }
+            if (henka_ui_button(state->ui, "utility_environment_time", (henka_ui_rect){x_left + 120.0f, y_start + 320.0f, 112.0f, 24.0f}, "Time On/Off"))
+            {
+                if (henka_scene_get_environment(state->scene, &environment) == HENKA_SUCCESS)
+                {
+                    environment.time_of_day_enabled = !environment.time_of_day_enabled;
+                    if (henka_scene_set_environment(state->scene, environment) != HENKA_SUCCESS)
+                    {
+                        sandbox3d_set_status(state, true, "Sky time change was rejected.");
+                    }
+                }
+            }
             break;
+        }
 
         case SANDBOX3D_UTILITY_DIAGNOSTICS:
         {
@@ -18253,6 +18381,11 @@ static void sandbox3d_update(henka_engine* engine, double delta_seconds, void* u
     sandbox3d_state* state;
 
     state = (sandbox3d_state*)user_data;
+    if (state != NULL && state->scene != NULL &&
+        henka_scene_advance_environment_time(state->scene, (float)delta_seconds) != HENKA_SUCCESS)
+    {
+        HENKA_LOG_WARN("Environment time update was rejected; the previous sky and sun state remains active.");
+    }
     if (state->terrain_streamer != NULL)
     {
         const henka_result stream_result = sandbox3d_update_terrain_streaming(state);
@@ -19093,11 +19226,30 @@ static void sandbox3d_update(henka_engine* engine, double delta_seconds, void* u
         henka_terrain_stream_stats terrain_stream_stats;
         henka_terrain_render_chunk_info terrain_chunk_info;
         henka_material terrain_scene_material;
+        henka_scene_environment_desc smoke_environment;
         henka_texture_info stress_texture_info;
         henka_texture_info terrain_texture_info;
         memset(&terrain_stream_stats, 0, sizeof(terrain_stream_stats));
         memset(&stress_texture_info, 0, sizeof(stress_texture_info));
         memset(&terrain_texture_info, 0, sizeof(terrain_texture_info));
+        if (henka_scene_get_environment(state->scene, &smoke_environment) != HENKA_SUCCESS ||
+            smoke_environment.mode < HENKA_SCENE_ENVIRONMENT_GRADIENT ||
+            smoke_environment.mode > HENKA_SCENE_ENVIRONMENT_PROCEDURAL ||
+            !isfinite(smoke_environment.time_of_day_hours) ||
+            smoke_environment.time_of_day_hours < 0.0f ||
+            smoke_environment.time_of_day_hours >= 24.0f)
+        {
+            state->smoke_validation_failed = true;
+        }
+        else
+        {
+            printf(
+                "Environment diagnostics: mode=%s time=%.2fh %s sun=%s.\n",
+                sandbox3d_get_environment_mode_label(smoke_environment.mode),
+                smoke_environment.time_of_day_hours,
+                smoke_environment.time_of_day_enabled ? "running" : "paused",
+                smoke_environment.sun.enabled ? "enabled" : "disabled");
+        }
         if (state->terrain_streamer == NULL ||
             (henka_terrain_streamer_get_stats(state->terrain_streamer, &terrain_stream_stats),
              terrain_stream_stats.observer_count != 1U))

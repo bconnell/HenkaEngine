@@ -369,7 +369,7 @@ vec3 sampleEnvironment(vec3 direction)
     {
         return min(sampleProceduralEnvironment(direction) * max(environmentIntensity, 0.0), vec3(65504.0));
     }
-    if (useEnvironmentTexture)
+    if (environmentMode == 1 && useEnvironmentTexture)
     {
         float longitude = atan(direction.z, direction.x) / (2.0 * PI) + 0.5 + environmentRotation / (2.0 * PI);
         float latitude = acos(clamp(direction.y, -1.0, 1.0)) / PI;
