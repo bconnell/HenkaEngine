@@ -119,6 +119,7 @@ static void henka_test_sandbox3d_object_authoring_source_persistence(void)
     henka_authoring_mesh_counts changed_counts;
     henka_authoring_mesh_counts restored_counts;
     henka_mesh* render_mesh = NULL;
+    henka_mesh* uv_render_mesh = NULL;
     henka_bounds bounds;
 
     config.application_name = "Henka Authoring Persistence Test";
@@ -154,6 +155,18 @@ static void henka_test_sandbox3d_object_authoring_source_persistence(void)
             HENKA_TEST_ASSERT(sandbox3d_authoring_object_undo(object) == HENKA_SUCCESS);
         }
     }
+
+    HENKA_TEST_ASSERT(henka_scene_get_entity_mesh(scene, entity, &render_mesh) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_project_selected_face_uv(
+        object, HENKA_AUTHORING_UV_PROJECT_Z) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_authoring_mesh_face_uvs_are_finite(
+        sandbox3d_authoring_object_get_mesh(object),
+        sandbox3d_authoring_object_get_selected_face(object)));
+    HENKA_TEST_ASSERT(henka_scene_get_entity_mesh(scene, entity, &uv_render_mesh) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(uv_render_mesh != NULL && uv_render_mesh != render_mesh);
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_pack_selected_face_uv(object, 0.02f) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_undo(object) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_undo(object) == HENKA_SUCCESS);
 
     HENKA_TEST_ASSERT(sandbox3d_authoring_object_extrude_selected_face(object, 0.25f) == HENKA_SUCCESS);
     saved_counts = henka_authoring_mesh_get_counts(sandbox3d_authoring_object_get_mesh(object));

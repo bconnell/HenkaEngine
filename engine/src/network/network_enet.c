@@ -10,6 +10,14 @@
 
 #include "network_internal.h"
 
+/* Debug validation and bounded headless integration runs can pause a peer for
+ * longer than ENet's 30-second reliable-packet ceiling while still servicing
+ * the host. Keep liveness checks frequent but allow a finite slow-run window. */
+#define HENKA_NETWORK_ENET_PING_INTERVAL_MILLISECONDS 1000U
+#define HENKA_NETWORK_ENET_TIMEOUT_LIMIT 64U
+#define HENKA_NETWORK_ENET_TIMEOUT_MINIMUM_MILLISECONDS 15000U
+#define HENKA_NETWORK_ENET_TIMEOUT_MAXIMUM_MILLISECONDS 120000U
+
 typedef struct henka_network_peer_record
 {
     ENetPeer* peer;
@@ -287,6 +295,13 @@ henka_result henka_network_transport_poll(
             record->peer = event.peer;
             record->id = henka_network_next_peer_id(transport);
             record->disconnect_reason = HENKA_NETWORK_DISCONNECT_REASON_NONE;
+            enet_peer_ping_interval(
+                event.peer, HENKA_NETWORK_ENET_PING_INTERVAL_MILLISECONDS);
+            enet_peer_timeout(
+                event.peer,
+                HENKA_NETWORK_ENET_TIMEOUT_LIMIT,
+                HENKA_NETWORK_ENET_TIMEOUT_MINIMUM_MILLISECONDS,
+                HENKA_NETWORK_ENET_TIMEOUT_MAXIMUM_MILLISECONDS);
             event.peer->data = record;
             ++transport->diagnostics.connected_peer_count;
             out_event->type = HENKA_NETWORK_EVENT_CONNECTED;

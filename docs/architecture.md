@@ -21,7 +21,9 @@ channels. The shared runtime privately pins ENet commit
 `5a9c537fd464b3c6d3c55e1d3bd47588faf71b42` under its MIT license and exposes
 only Henka host, peer, event, message, send, poll, disconnect, and diagnostic
 types. The transport foundation provides bounded reliable ordered localhost
-delivery, server-directed disconnect, and client reconnect. Terrain authority
+delivery, one-second peer liveness pings, a finite 120-second reliable-packet
+timeout for slow but serviced validation runs, server-directed disconnect, and
+client reconnect. Terrain authority
 and revision recovery are exercised through the bounded Terrain session
 adapter, including a two-client replica convergence regression after edits from
 both peers and a finite repeated process integration soak; relevance-driven

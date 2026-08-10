@@ -6,6 +6,7 @@
 
 #include <henka/authoring_mesh.h>
 #include <henka/authoring_modeling.h>
+#include <henka/authoring_uv.h>
 #include <henka/engine.h>
 #include <henka/scene.h>
 
@@ -63,6 +64,12 @@ henka_result sandbox3d_authoring_object_bevel_selected_face(
     float width);
 henka_result sandbox3d_authoring_object_subdivide_selected_face(
     sandbox3d_authoring_object* object);
+henka_result sandbox3d_authoring_object_project_selected_face_uv(
+    sandbox3d_authoring_object* object,
+    henka_authoring_uv_projection_axis axis);
+henka_result sandbox3d_authoring_object_pack_selected_face_uv(
+    sandbox3d_authoring_object* object,
+    float padding);
 henka_result sandbox3d_authoring_object_save_source(
     const sandbox3d_authoring_object* object,
     const char* path);

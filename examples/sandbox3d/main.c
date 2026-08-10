@@ -13883,6 +13883,20 @@ static void sandbox3d_draw_object_details_panel(
                     sandbox3d_set_status(state, false, "Authoring face subdivided and evaluated into the scene.");
                 }
             }
+            if (sandbox3d_details_flow_next_row(state, flow_desc.bounds, 28.0f, 1U, &row) && row.width >= 290.0f)
+            {
+                if (henka_ui_button(state->ui, "authoring_project_uv", (henka_ui_rect){row.x, row.y, 116.0f, 24.0f}, "Project UV") &&
+                    sandbox3d_authoring_object_project_selected_face_uv(
+                        state->authoring_object, HENKA_AUTHORING_UV_PROJECT_Z) == HENKA_SUCCESS)
+                {
+                    sandbox3d_set_status(state, false, "Selected face UVs projected and evaluated into the scene.");
+                }
+                if (henka_ui_button(state->ui, "authoring_pack_uv", (henka_ui_rect){row.x + 122.0f, row.y, 94.0f, 24.0f}, "Pack UV") &&
+                    sandbox3d_authoring_object_pack_selected_face_uv(state->authoring_object, 0.02f) == HENKA_SUCCESS)
+                {
+                    sandbox3d_set_status(state, false, "Selected face UVs packed and evaluated into the scene.");
+                }
+            }
         }
     }
 
