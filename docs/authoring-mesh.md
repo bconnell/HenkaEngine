@@ -15,6 +15,8 @@ The current foundation provides:
 - fail-closed face validation, non-manifold edge rejection, deletion safety,
   and deterministic fan triangulation into caller-owned render buffers;
 - evaluated normals that honor smooth-face and hard-edge intent.
+- bounded shared topology undo/redo snapshots and versioned transactional
+  mesh-file save/load with failed-load retention.
 
 The API allocates only within caller-selected bounded capacities. Invalid
 faces and capacity failures leave the prior topology unchanged. Render
@@ -23,7 +25,8 @@ renderer or asset manager.
 
 This is checkpoint A of the authoring-parity campaign. It is not yet a full
 modeling editor: primitive tools, extrude/inset/bevel/subdivide/weld/split,
-UV unwrap and packing, material editing, texture painting, shared mesh undo,
-project persistence, and showcase rebuild workflows remain unfinished. glTF
+UV unwrap and packing, material editing, texture painting, editor integration
+for the history/file APIs, and showcase rebuild workflows remain unfinished.
+glTF
 and KTX2 material ownership continues through the existing asset paths; this
 API does not introduce a second material file format.

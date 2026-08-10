@@ -1,7 +1,12 @@
 #include <henka/authoring_mesh.h>
 
 #include <math.h>
+#include <stdio.h>
 #include <string.h>
+
+#ifdef _WIN32
+#include <windows.h>
+#endif
 
 #include <henka/memory.h>
 
@@ -805,4 +810,585 @@ henka_result henka_authoring_mesh_evaluate(const henka_authoring_mesh* mesh, hen
     out_data->vertex_count = required_vertices;
     out_data->index_count = required_indices;
     return HENKA_SUCCESS;
+}
+
+static bool authoring_desc_equal(const henka_authoring_mesh_desc* left, const henka_authoring_mesh_desc* right)
+{
+    return left->max_vertices == right->max_vertices && left->max_edges == right->max_edges &&
+        left->max_faces == right->max_faces && left->max_face_corners == right->max_face_corners;
+}
+
+static henka_result authoring_mesh_clone_internal(const henka_authoring_mesh* source, henka_authoring_mesh** out_mesh)
+{
+    henka_authoring_mesh* clone;
+    size_t index;
+    henka_result result;
+    if (source == NULL || out_mesh == NULL || !henka_authoring_mesh_validate(source))
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    result = henka_authoring_mesh_create(&source->desc, &clone);
+    if (result != HENKA_SUCCESS)
+    {
+        return result;
+    }
+    clone->vertex_slots = source->vertex_slots;
+    clone->edge_slots = source->edge_slots;
+    clone->face_slots = source->face_slots;
+    memcpy(clone->vertices, source->vertices, source->vertex_slots * sizeof(*source->vertices));
+    memcpy(clone->edges, source->edges, source->edge_slots * sizeof(*source->edges));
+    for (index = 0U; index < source->face_slots; ++index)
+    {
+        const henka_authoring_face* source_face = &source->faces[index];
+        henka_authoring_face* clone_face = &clone->faces[index];
+        *clone_face = *source_face;
+        clone_face->vertices = NULL;
+        clone_face->edges = NULL;
+        if (source_face->active)
+        {
+            clone_face->vertices = henka_malloc(source_face->corner_count * sizeof(*clone_face->vertices));
+            clone_face->edges = henka_malloc(source_face->corner_count * sizeof(*clone_face->edges));
+            if (clone_face->vertices == NULL || clone_face->edges == NULL)
+            {
+                henka_authoring_mesh_destroy(clone);
+                return HENKA_ERROR_OUT_OF_MEMORY;
+            }
+            memcpy(clone_face->vertices, source_face->vertices,
+                source_face->corner_count * sizeof(*clone_face->vertices));
+            memcpy(clone_face->edges, source_face->edges,
+                source_face->corner_count * sizeof(*clone_face->edges));
+        }
+    }
+    *out_mesh = clone;
+    return HENKA_SUCCESS;
+}
+
+henka_result henka_authoring_mesh_clone(const henka_authoring_mesh* source, henka_authoring_mesh** out_mesh)
+{
+    if (out_mesh != NULL)
+    {
+        *out_mesh = NULL;
+    }
+    return authoring_mesh_clone_internal(source, out_mesh);
+}
+
+static void authoring_mesh_swap(henka_authoring_mesh* left, henka_authoring_mesh* right)
+{
+    henka_authoring_mesh temporary = *left;
+    *left = *right;
+    *right = temporary;
+}
+
+henka_result henka_authoring_mesh_copy(henka_authoring_mesh* destination, const henka_authoring_mesh* source)
+{
+    henka_authoring_mesh* replacement = NULL;
+    henka_result result;
+    if (destination == NULL || source == NULL || !authoring_desc_equal(&destination->desc, &source->desc))
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    result = authoring_mesh_clone_internal(source, &replacement);
+    if (result != HENKA_SUCCESS)
+    {
+        return result;
+    }
+    authoring_mesh_swap(destination, replacement);
+    henka_authoring_mesh_destroy(replacement);
+    return HENKA_SUCCESS;
+}
+
+#define HENKA_AUTHORING_MESH_MAX_HISTORY_STEPS 64U
+
+struct henka_authoring_mesh_history
+{
+    size_t max_steps;
+    size_t undo_count;
+    size_t redo_count;
+    henka_authoring_mesh** undo;
+    henka_authoring_mesh** redo;
+};
+
+static void authoring_history_discard_oldest(henka_authoring_mesh** snapshots, size_t* count)
+{
+    if (*count == 0U)
+    {
+        return;
+    }
+    henka_authoring_mesh_destroy(snapshots[0]);
+    if (*count > 1U)
+    {
+        memmove(&snapshots[0], &snapshots[1], (*count - 1U) * sizeof(*snapshots));
+    }
+    --*count;
+}
+
+static henka_result authoring_history_append(
+    henka_authoring_mesh** snapshots,
+    size_t* count,
+    size_t max_steps,
+    henka_authoring_mesh* snapshot)
+{
+    if (*count >= max_steps)
+    {
+        authoring_history_discard_oldest(snapshots, count);
+    }
+    snapshots[(*count)++] = snapshot;
+    return HENKA_SUCCESS;
+}
+
+static bool authoring_history_mesh_matches(
+    const henka_authoring_mesh_history* history,
+    const henka_authoring_mesh* mesh)
+{
+    return history != NULL && mesh != NULL && history->undo_count > 0U &&
+        authoring_desc_equal(&history->undo[0]->desc, &mesh->desc);
+}
+
+henka_result henka_authoring_mesh_history_create(const henka_authoring_mesh* initial_mesh, size_t max_steps, henka_authoring_mesh_history** out_history)
+{
+    henka_authoring_mesh_history* history;
+    henka_authoring_mesh* initial = NULL;
+    henka_result result;
+    if (out_history == NULL || initial_mesh == NULL || max_steps == 0U ||
+        max_steps > HENKA_AUTHORING_MESH_MAX_HISTORY_STEPS)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    *out_history = NULL;
+    result = authoring_mesh_clone_internal(initial_mesh, &initial);
+    if (result != HENKA_SUCCESS)
+    {
+        return result;
+    }
+    history = henka_calloc(1U, sizeof(*history));
+    if (history != NULL)
+    {
+        history->undo = henka_calloc(max_steps, sizeof(*history->undo));
+        history->redo = henka_calloc(max_steps, sizeof(*history->redo));
+    }
+    if (history == NULL || history->undo == NULL || history->redo == NULL)
+    {
+        henka_authoring_mesh_destroy(initial);
+        if (history != NULL)
+        {
+            henka_free(history->undo);
+            henka_free(history->redo);
+            henka_free(history);
+        }
+        return HENKA_ERROR_OUT_OF_MEMORY;
+    }
+    history->max_steps = max_steps;
+    history->undo[0] = initial;
+    history->undo_count = 1U;
+    *out_history = history;
+    return HENKA_SUCCESS;
+}
+
+void henka_authoring_mesh_history_destroy(henka_authoring_mesh_history* history)
+{
+    size_t index;
+    if (history == NULL)
+    {
+        return;
+    }
+    for (index = 0U; index < history->undo_count; ++index)
+    {
+        henka_authoring_mesh_destroy(history->undo[index]);
+    }
+    for (index = 0U; index < history->redo_count; ++index)
+    {
+        henka_authoring_mesh_destroy(history->redo[index]);
+    }
+    henka_free(history->undo);
+    henka_free(history->redo);
+    henka_free(history);
+}
+
+henka_result henka_authoring_mesh_history_checkpoint(henka_authoring_mesh_history* history, const henka_authoring_mesh* mesh)
+{
+    henka_authoring_mesh* snapshot = NULL;
+    henka_result result;
+    if (!authoring_history_mesh_matches(history, mesh) || !henka_authoring_mesh_validate(mesh))
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    result = authoring_mesh_clone_internal(mesh, &snapshot);
+    if (result != HENKA_SUCCESS)
+    {
+        return result;
+    }
+    for (result = HENKA_SUCCESS; history->redo_count > 0U; --history->redo_count)
+    {
+        henka_authoring_mesh_destroy(history->redo[history->redo_count - 1U]);
+    }
+    return authoring_history_append(history->undo, &history->undo_count, history->max_steps, snapshot);
+}
+
+bool henka_authoring_mesh_history_can_undo(const henka_authoring_mesh_history* history)
+{
+    return history != NULL && history->undo_count > 1U;
+}
+
+bool henka_authoring_mesh_history_can_redo(const henka_authoring_mesh_history* history)
+{
+    return history != NULL && history->redo_count > 0U;
+}
+
+static henka_result authoring_history_restore(
+    henka_authoring_mesh_history* history,
+    henka_authoring_mesh* mesh,
+    henka_authoring_mesh** target,
+    size_t target_index,
+    henka_authoring_mesh** opposite,
+    size_t* target_count,
+    size_t* opposite_count)
+{
+    henka_authoring_mesh* current = NULL;
+    henka_authoring_mesh* replacement = NULL;
+    henka_result result;
+    result = authoring_mesh_clone_internal(mesh, &current);
+    if (result != HENKA_SUCCESS)
+    {
+        return result;
+    }
+    result = authoring_mesh_clone_internal(target[target_index], &replacement);
+    if (result != HENKA_SUCCESS)
+    {
+        henka_authoring_mesh_destroy(current);
+        return result;
+    }
+    authoring_mesh_swap(mesh, replacement);
+    henka_authoring_mesh_destroy(replacement);
+    henka_authoring_mesh_destroy(target[*target_count - 1U]);
+    --*target_count;
+    return authoring_history_append(opposite, opposite_count, history->max_steps, current);
+}
+
+henka_result henka_authoring_mesh_history_undo(henka_authoring_mesh_history* history, henka_authoring_mesh* mesh)
+{
+    if (!authoring_history_mesh_matches(history, mesh) || !henka_authoring_mesh_history_can_undo(history))
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    return authoring_history_restore(history, mesh, history->undo, history->undo_count - 2U,
+        history->redo, &history->undo_count, &history->redo_count);
+}
+
+henka_result henka_authoring_mesh_history_redo(henka_authoring_mesh_history* history, henka_authoring_mesh* mesh)
+{
+    if (!authoring_history_mesh_matches(history, mesh) || !henka_authoring_mesh_history_can_redo(history))
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    return authoring_history_restore(history, mesh, history->redo, history->redo_count - 1U,
+        history->undo, &history->redo_count, &history->undo_count);
+}
+
+static bool authoring_write_u32(FILE* file, uint32_t value)
+{
+    return fwrite(&value, sizeof(value), 1U, file) == 1U;
+}
+
+static bool authoring_read_u32(FILE* file, uint32_t* out_value)
+{
+    return out_value != NULL && fread(out_value, sizeof(*out_value), 1U, file) == 1U;
+}
+
+static bool authoring_write_f32(FILE* file, float value)
+{
+    return fwrite(&value, sizeof(value), 1U, file) == 1U;
+}
+
+static bool authoring_read_f32(FILE* file, float* out_value)
+{
+    return out_value != NULL && fread(out_value, sizeof(*out_value), 1U, file) == 1U;
+}
+
+static bool authoring_write_byte(FILE* file, unsigned char value)
+{
+    return fwrite(&value, sizeof(value), 1U, file) == 1U;
+}
+
+static bool authoring_read_byte(FILE* file, unsigned char* out_value)
+{
+    return out_value != NULL && fread(out_value, sizeof(*out_value), 1U, file) == 1U;
+}
+
+static bool authoring_write_vec3(FILE* file, henka_vec3 value)
+{
+    return authoring_write_f32(file, value.x) && authoring_write_f32(file, value.y) && authoring_write_f32(file, value.z);
+}
+
+static bool authoring_read_vec3(FILE* file, henka_vec3* out_value)
+{
+    return out_value != NULL && authoring_read_f32(file, &out_value->x) && authoring_read_f32(file, &out_value->y) && authoring_read_f32(file, &out_value->z);
+}
+
+static bool authoring_write_vec2(FILE* file, henka_vec2 value)
+{
+    return authoring_write_f32(file, value.x) && authoring_write_f32(file, value.y);
+}
+
+static FILE* authoring_open_file(const char* path, const char* mode)
+{
+    FILE* file = NULL;
+#ifdef _WIN32
+    if (fopen_s(&file, path, mode) != 0)
+    {
+        return NULL;
+    }
+#else
+    file = fopen(path, mode);
+#endif
+    return file;
+}
+
+static bool authoring_read_vec2(FILE* file, henka_vec2* out_value)
+{
+    return out_value != NULL && authoring_read_f32(file, &out_value->x) && authoring_read_f32(file, &out_value->y);
+}
+
+henka_result henka_authoring_mesh_save_file(const henka_authoring_mesh* mesh, const char* path)
+{
+    FILE* file = NULL;
+    char* temporary_path = NULL;
+    size_t path_length;
+    size_t index;
+    bool ok = false;
+    if (mesh == NULL || path == NULL || path[0] == '\0' || !henka_authoring_mesh_validate(mesh))
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    path_length = strlen(path);
+    if (path_length > SIZE_MAX - 5U)
+    {
+        return HENKA_ERROR_LIMIT;
+    }
+    temporary_path = henka_malloc(path_length + 5U);
+    if (temporary_path == NULL)
+    {
+        return HENKA_ERROR_OUT_OF_MEMORY;
+    }
+    memcpy(temporary_path, path, path_length);
+    memcpy(&temporary_path[path_length], ".tmp", 5U);
+    file = authoring_open_file(temporary_path, "wb");
+    if (file == NULL)
+    {
+        henka_free(temporary_path);
+        return HENKA_ERROR_ASSET_SOURCE;
+    }
+    ok = fwrite("HAMS", 4U, 1U, file) == 1U && authoring_write_u32(file, 1U) &&
+        authoring_write_u32(file, (uint32_t)mesh->desc.max_vertices) &&
+        authoring_write_u32(file, (uint32_t)mesh->desc.max_edges) &&
+        authoring_write_u32(file, (uint32_t)mesh->desc.max_faces) &&
+        authoring_write_u32(file, (uint32_t)mesh->desc.max_face_corners) &&
+        authoring_write_u32(file, (uint32_t)mesh->vertex_slots) &&
+        authoring_write_u32(file, (uint32_t)mesh->edge_slots) &&
+        authoring_write_u32(file, (uint32_t)mesh->face_slots);
+    for (index = 0U; ok && index < mesh->vertex_slots; ++index)
+    {
+        const henka_authoring_vertex* vertex = &mesh->vertices[index];
+        ok = authoring_write_byte(file, vertex->active ? 1U : 0U);
+        if (ok && vertex->active)
+        {
+            ok = authoring_write_vec3(file, vertex->position) && authoring_write_vec2(file, vertex->uv) &&
+                authoring_write_u32(file, vertex->material_region);
+        }
+    }
+    for (index = 0U; ok && index < mesh->edge_slots; ++index)
+    {
+        const henka_authoring_edge* edge = &mesh->edges[index];
+        ok = authoring_write_byte(file, edge->active ? 1U : 0U);
+        if (ok && edge->active)
+        {
+            ok = authoring_write_u32(file, edge->vertices[0]) && authoring_write_u32(file, edge->vertices[1]) &&
+                authoring_write_u32(file, edge->faces[0]) && authoring_write_u32(file, edge->faces[1]) &&
+                authoring_write_u32(file, (uint32_t)edge->face_count) && authoring_write_byte(file, edge->hard ? 1U : 0U);
+        }
+    }
+    for (index = 0U; ok && index < mesh->face_slots; ++index)
+    {
+        const henka_authoring_face* face = &mesh->faces[index];
+        size_t corner;
+        ok = authoring_write_byte(file, face->active ? 1U : 0U);
+        if (ok && face->active)
+        {
+            ok = authoring_write_u32(file, (uint32_t)face->corner_count) &&
+                authoring_write_u32(file, face->material_region) && authoring_write_byte(file, face->smooth ? 1U : 0U);
+            for (corner = 0U; ok && corner < face->corner_count; ++corner)
+            {
+                ok = authoring_write_u32(file, face->vertices[corner]);
+            }
+            for (corner = 0U; ok && corner < face->corner_count; ++corner)
+            {
+                ok = authoring_write_u32(file, face->edges[corner]);
+            }
+        }
+    }
+    ok = ok && fflush(file) == 0 && fclose(file) == 0;
+    file = NULL;
+    if (ok)
+    {
+#ifdef _WIN32
+        ok = MoveFileExA(temporary_path, path, MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH) != 0;
+#else
+        remove(path);
+        ok = rename(temporary_path, path) == 0;
+#endif
+    }
+    if (!ok)
+    {
+        if (file != NULL)
+        {
+            fclose(file);
+        }
+        remove(temporary_path);
+    }
+    henka_free(temporary_path);
+    return ok ? HENKA_SUCCESS : HENKA_ERROR_ASSET_SOURCE;
+}
+
+henka_result henka_authoring_mesh_load_file(henka_authoring_mesh* mesh, const char* path)
+{
+    FILE* file = NULL;
+    henka_authoring_mesh* candidate = NULL;
+    henka_authoring_mesh_desc file_desc;
+    uint32_t version;
+    uint32_t slots[3];
+    uint32_t capacities[4];
+    size_t index;
+    henka_result result = HENKA_ERROR_ASSET_SOURCE;
+    if (mesh == NULL || path == NULL || path[0] == '\0')
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    file = authoring_open_file(path, "rb");
+    if (file == NULL)
+    {
+        return HENKA_ERROR_ASSET_SOURCE;
+    }
+    {
+        char magic[4];
+        if (fread(magic, sizeof(magic), 1U, file) != 1U || memcmp(magic, "HAMS", 4U) != 0 ||
+            !authoring_read_u32(file, &version) || version != 1U ||
+            !authoring_read_u32(file, &capacities[0]) || !authoring_read_u32(file, &capacities[1]) ||
+            !authoring_read_u32(file, &capacities[2]) || !authoring_read_u32(file, &capacities[3]) ||
+            !authoring_read_u32(file, &slots[0]) || !authoring_read_u32(file, &slots[1]) ||
+            !authoring_read_u32(file, &slots[2]))
+        {
+            goto cleanup;
+        }
+    }
+    file_desc = (henka_authoring_mesh_desc){capacities[0], capacities[1], capacities[2], capacities[3]};
+    if (!authoring_desc_valid(&file_desc) || !authoring_desc_equal(&file_desc, &mesh->desc) ||
+        slots[0] > capacities[0] || slots[1] > capacities[1] || slots[2] > capacities[2])
+    {
+        result = HENKA_ERROR_INVALID_ARGUMENT;
+        goto cleanup;
+    }
+    result = henka_authoring_mesh_create(&mesh->desc, &candidate);
+    if (result != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    candidate->vertex_slots = slots[0];
+    candidate->edge_slots = slots[1];
+    candidate->face_slots = slots[2];
+    for (index = 0U; index < candidate->vertex_slots; ++index)
+    {
+        unsigned char active;
+        henka_authoring_vertex* vertex = &candidate->vertices[index];
+        if (!authoring_read_byte(file, &active) || active > 1U)
+        {
+            goto cleanup;
+        }
+        vertex->id = (henka_authoring_vertex_id)(index + 1U);
+        vertex->active = active != 0U;
+        if (vertex->active && (!authoring_read_vec3(file, &vertex->position) ||
+            !authoring_read_vec2(file, &vertex->uv) || !authoring_read_u32(file, &vertex->material_region)))
+        {
+            goto cleanup;
+        }
+    }
+    for (index = 0U; index < candidate->edge_slots; ++index)
+    {
+        unsigned char active;
+        henka_authoring_edge* edge = &candidate->edges[index];
+        uint32_t face_count = 0U;
+        if (!authoring_read_byte(file, &active) || active > 1U)
+        {
+            goto cleanup;
+        }
+        edge->id = (henka_authoring_edge_id)(index + 1U);
+        edge->active = active != 0U;
+        if (edge->active && (!authoring_read_u32(file, &edge->vertices[0]) ||
+            !authoring_read_u32(file, &edge->vertices[1]) || !authoring_read_u32(file, &edge->faces[0]) ||
+            !authoring_read_u32(file, &edge->faces[1]) || !authoring_read_u32(file, &face_count) ||
+            !authoring_read_byte(file, &active) || active > 1U || face_count > 2U))
+        {
+            goto cleanup;
+        }
+        if (edge->active)
+        {
+            edge->face_count = face_count;
+            edge->hard = active != 0U;
+        }
+    }
+    for (index = 0U; index < candidate->face_slots; ++index)
+    {
+        unsigned char active;
+        henka_authoring_face* face = &candidate->faces[index];
+        uint32_t corner_count;
+        size_t corner;
+        if (!authoring_read_byte(file, &active) || active > 1U)
+        {
+            goto cleanup;
+        }
+        face->id = (henka_authoring_face_id)(index + 1U);
+        face->active = active != 0U;
+        if (!face->active)
+        {
+            continue;
+        }
+        if (!authoring_read_u32(file, &corner_count) || corner_count < 3U ||
+            corner_count > candidate->desc.max_face_corners || !authoring_read_u32(file, &face->material_region) ||
+            !authoring_read_byte(file, &active) || active > 1U)
+        {
+            goto cleanup;
+        }
+        face->corner_count = corner_count;
+        face->smooth = active != 0U;
+        face->vertices = henka_malloc(corner_count * sizeof(*face->vertices));
+        face->edges = henka_malloc(corner_count * sizeof(*face->edges));
+        if (face->vertices == NULL || face->edges == NULL)
+        {
+            goto cleanup;
+        }
+        for (corner = 0U; corner < corner_count; ++corner)
+        {
+            if (!authoring_read_u32(file, &face->vertices[corner]))
+            {
+                goto cleanup;
+            }
+        }
+        for (corner = 0U; corner < corner_count; ++corner)
+        {
+            if (!authoring_read_u32(file, &face->edges[corner]))
+            {
+                goto cleanup;
+            }
+        }
+    }
+    if (fgetc(file) != EOF || !henka_authoring_mesh_validate(candidate))
+    {
+        result = HENKA_ERROR_INVALID_ARGUMENT;
+        goto cleanup;
+    }
+    authoring_mesh_swap(mesh, candidate);
+    result = HENKA_SUCCESS;
+
+cleanup:
+    fclose(file);
+    henka_authoring_mesh_destroy(candidate);
+    return result;
 }

@@ -26,6 +26,7 @@ typedef uint32_t henka_authoring_face_id;
 #define HENKA_AUTHORING_INVALID_ID UINT32_MAX
 
 typedef struct henka_authoring_mesh henka_authoring_mesh;
+typedef struct henka_authoring_mesh_history henka_authoring_mesh_history;
 
 typedef struct henka_authoring_mesh_desc
 {
@@ -94,6 +95,8 @@ typedef struct henka_authoring_render_data
 henka_authoring_mesh_desc henka_authoring_mesh_desc_default(void);
 henka_result henka_authoring_mesh_create(const henka_authoring_mesh_desc* desc, henka_authoring_mesh** out_mesh);
 void henka_authoring_mesh_destroy(henka_authoring_mesh* mesh);
+henka_result henka_authoring_mesh_clone(const henka_authoring_mesh* source, henka_authoring_mesh** out_mesh);
+henka_result henka_authoring_mesh_copy(henka_authoring_mesh* destination, const henka_authoring_mesh* source);
 henka_authoring_mesh_counts henka_authoring_mesh_get_counts(const henka_authoring_mesh* mesh);
 bool henka_authoring_mesh_validate(const henka_authoring_mesh* mesh);
 
@@ -118,5 +121,20 @@ bool henka_authoring_mesh_edge_is_boundary(const henka_authoring_mesh* mesh, hen
 /* Converts polygons to deterministic fan triangles and computes normals from
  * winding plus smooth-face and hard-edge intent. Output buffers are borrowed. */
 henka_result henka_authoring_mesh_evaluate(const henka_authoring_mesh* mesh, henka_authoring_render_data* out_data);
+
+/* History stores bounded topology snapshots. Checkpoint after a successful
+ * edit; the initial mesh is captured at history creation. */
+henka_result henka_authoring_mesh_history_create(const henka_authoring_mesh* initial_mesh, size_t max_steps, henka_authoring_mesh_history** out_history);
+void henka_authoring_mesh_history_destroy(henka_authoring_mesh_history* history);
+henka_result henka_authoring_mesh_history_checkpoint(henka_authoring_mesh_history* history, const henka_authoring_mesh* mesh);
+bool henka_authoring_mesh_history_can_undo(const henka_authoring_mesh_history* history);
+bool henka_authoring_mesh_history_can_redo(const henka_authoring_mesh_history* history);
+henka_result henka_authoring_mesh_history_undo(henka_authoring_mesh_history* history, henka_authoring_mesh* mesh);
+henka_result henka_authoring_mesh_history_redo(henka_authoring_mesh_history* history, henka_authoring_mesh* mesh);
+
+/* Versioned bounded persistence. Loading parses into a candidate and swaps it
+ * only after complete validation, retaining the prior mesh on every failure. */
+henka_result henka_authoring_mesh_save_file(const henka_authoring_mesh* mesh, const char* path);
+henka_result henka_authoring_mesh_load_file(henka_authoring_mesh* mesh, const char* path);
 
 #endif

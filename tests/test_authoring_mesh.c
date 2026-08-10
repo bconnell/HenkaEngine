@@ -122,7 +122,87 @@ cleanup:
     return result ? 1 : fail("rejection/tombstone");
 }
 
+static int test_history_and_persistence(void)
+{
+    const char* path = "authoring_mesh_checkpoint.bin";
+    henka_authoring_mesh_desc desc = {3U, 3U, 1U, 3U};
+    henka_authoring_mesh* mesh = NULL;
+    henka_authoring_mesh_history* history = NULL;
+    henka_authoring_vertex_id ids[3];
+    henka_authoring_vertex_id face[] = {1U, 2U, 3U};
+    henka_authoring_face_id face_id;
+    const henka_authoring_vertex* vertex;
+    FILE* corrupt;
+    int corrupt_ok;
+    int result = 0;
+
+    if (henka_authoring_mesh_create(&desc, &mesh) != HENKA_SUCCESS ||
+        henka_authoring_mesh_add_vertex(mesh, (henka_vec3){0.0f, 0.0f, 0.0f}, (henka_vec2){0.0f, 0.0f}, 0U, &ids[0]) != HENKA_SUCCESS ||
+        henka_authoring_mesh_add_vertex(mesh, (henka_vec3){1.0f, 0.0f, 0.0f}, (henka_vec2){1.0f, 0.0f}, 0U, &ids[1]) != HENKA_SUCCESS ||
+        henka_authoring_mesh_add_vertex(mesh, (henka_vec3){0.0f, 1.0f, 0.0f}, (henka_vec2){0.0f, 1.0f}, 0U, &ids[2]) != HENKA_SUCCESS ||
+        henka_authoring_mesh_add_face(mesh, face, 3U, 0U, false, &face_id) != HENKA_SUCCESS ||
+        henka_authoring_mesh_history_create(mesh, 4U, &history) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    if (henka_authoring_mesh_set_vertex_uv(mesh, ids[0], (henka_vec2){0.5f, 0.5f}) != HENKA_SUCCESS ||
+        henka_authoring_mesh_history_checkpoint(history, mesh) != HENKA_SUCCESS ||
+        !henka_authoring_mesh_history_can_undo(history) ||
+        henka_authoring_mesh_history_undo(history, mesh) != HENKA_SUCCESS ||
+        henka_authoring_mesh_history_can_undo(history) ||
+        henka_authoring_mesh_history_redo(history, mesh) != HENKA_SUCCESS ||
+        !henka_authoring_mesh_history_can_undo(history))
+    {
+        goto cleanup;
+    }
+    vertex = henka_authoring_mesh_get_vertex(mesh, ids[0]);
+    if (vertex == NULL || fabsf(vertex->uv.x - 0.5f) > 0.0001f ||
+        henka_authoring_mesh_save_file(mesh, path) != HENKA_SUCCESS ||
+        henka_authoring_mesh_set_vertex_uv(mesh, ids[0], (henka_vec2){9.0f, 9.0f}) != HENKA_SUCCESS ||
+        henka_authoring_mesh_load_file(mesh, path) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    vertex = henka_authoring_mesh_get_vertex(mesh, ids[0]);
+    if (vertex == NULL || fabsf(vertex->uv.x - 0.5f) > 0.0001f)
+    {
+        goto cleanup;
+    }
+    corrupt = NULL;
+    if (fopen_s(&corrupt, path, "wb") != 0)
+    {
+        corrupt = NULL;
+    }
+    corrupt_ok = corrupt != NULL && fwrite("bad", 3U, 1U, corrupt) == 1U;
+    if (corrupt != NULL && fclose(corrupt) != 0)
+    {
+        corrupt_ok = 0;
+    }
+    if (!corrupt_ok)
+    {
+        if (corrupt != NULL)
+        {
+            fclose(corrupt);
+        }
+        goto cleanup;
+    }
+    if (henka_authoring_mesh_set_vertex_uv(mesh, ids[0], (henka_vec2){8.0f, 8.0f}) != HENKA_SUCCESS ||
+        henka_authoring_mesh_load_file(mesh, path) == HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    vertex = henka_authoring_mesh_get_vertex(mesh, ids[0]);
+    result = vertex != NULL && fabsf(vertex->uv.x - 8.0f) < 0.0001f;
+
+cleanup:
+    remove(path);
+    henka_authoring_mesh_history_destroy(history);
+    henka_authoring_mesh_destroy(mesh);
+    return result ? 1 : fail("history/persistence");
+}
+
 int main(void)
 {
-    return test_topology_and_evaluation() && test_rejection_and_tombstones() ? 0 : 1;
+    return test_topology_and_evaluation() && test_rejection_and_tombstones() &&
+        test_history_and_persistence() ? 0 : 1;
 }
