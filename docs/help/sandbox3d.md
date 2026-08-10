@@ -15,11 +15,14 @@ The docked workspace opens in `View` mode with no selected scene object so the c
 
 For a bounded non-interactive streaming check, run
 `henka_sandbox3d.exe --terrain-stream-stress`. It seeds or reuses four
-procedural regions in the local `terrain-sandbox-v2` data root, crosses from
-region `(0,0)` to `(1,0)` to `(1,1)` and back, verifies rendered and collision
-chunk return on both axes, and reports request failures and resident-region
-capacity. This is a small runtime foundation check, not broad-world streaming
-or human visual approval.
+procedural regions in the local `terrain-sandbox-v2` data root, verifies the
+active camera requests a bounded one-region CPU/physics/render window, then
+crosses from `(0,0)` to generated regions `(2,0)` and `(2,2)` before returning.
+It verifies rendered return on both axes plus a bounded collision-patch overlap
+across the return, and reports request failures and resident-region capacity.
+The active camera region is prioritized for bounded collision coverage. This is
+a small runtime foundation check, not residency-wide collision
+coverage, broad-world streaming, or human visual approval.
 
 ## Controls
 

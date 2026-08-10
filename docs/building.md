@@ -111,18 +111,20 @@ The package script creates:
 
 - `out/HenkaSandbox3D/HenkaSandbox3D.exe`
 - `out/HenkaSandbox3D/assets/`
-- `out/HenkaSandbox3D/assets/models/` with the generated Cheeky Giraffe and Original Realistic Rocket glTF scenes, sibling binary buffers, and their packaged texture dependency
+- `out/HenkaSandbox3D/assets/models/` with the generated Cheeky Giraffe and Original Realistic Rocket glTF scenes and sibling binary buffers
 - `out/HenkaSandbox3D/assets/textures/residency/` with the bounded residency
   stress fixtures used by `--residency-stress`
 - `out/HenkaSandbox3D/docs/help/sandbox3d.md`
 - `out/HenkaSandbox3D/PACKAGE_INFO.txt`
 
 The packaged executable also accepts `--terrain-stream-stress`. It uses the
-same public Sandbox path to seed and cross the bounded 2x2 Terrain fixture,
-then returns to the original rendered region and collision patch while
-reporting request failures and resident-region capacity. This is a runtime
-streaming foundation check, not a claim of broad-world streaming or automatic
-background regeneration.
+same public Sandbox path to seed the bounded 2x2 fixture, prove the active
+camera's one-region CPU/physics/render demand window, cross into generated
+regions, and return to the original rendered region and collision patch while
+reporting request failures and resident-region capacity; collision validation
+uses the bounded overlap patch rather than claiming residency-wide coverage.
+This is a runtime streaming foundation check, not a claim of broad-world
+streaming or automatic background regeneration.
 
 ## Capture same-camera shading evidence
 

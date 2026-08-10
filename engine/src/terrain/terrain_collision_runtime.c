@@ -20,6 +20,8 @@ struct henka_terrain_collision_runtime
     henka_terrain_collision_runtime_desc desc;
     henka_terrain_collision_runtime_request* requests;
     henka_terrain_collision_runtime_stats stats;
+    henka_terrain_region_id focus_region;
+    bool focus_valid;
 };
 
 static uint32_t henka_terrain_collision_runtime_find_request(
@@ -148,6 +150,22 @@ henka_result henka_terrain_collision_runtime_request_chunk(
     return HENKA_ERROR_LIMIT;
 }
 
+henka_result henka_terrain_collision_runtime_set_focus(
+    henka_terrain_collision_runtime* runtime,
+    henka_terrain_region_id region_id)
+{
+    henka_terrain_world_desc world_desc;
+    if (runtime == NULL ||
+        henka_terrain_world_get_desc(runtime->world, &world_desc) != HENKA_SUCCESS ||
+        !henka_terrain_region_id_is_valid(&world_desc, region_id))
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    runtime->focus_region = region_id;
+    runtime->focus_valid = true;
+    return HENKA_SUCCESS;
+}
+
 henka_result henka_terrain_collision_runtime_sync_residency(
     henka_terrain_collision_runtime* runtime)
 {
@@ -195,6 +213,100 @@ henka_result henka_terrain_collision_runtime_sync_residency(
             {
                 first_error = result;
             }
+        }
+    }
+
+    /* Keep the active camera/interaction region covered when the bounded
+     * patch owner has retained patches from an older working set.  Evict one
+     * deterministic non-focus patch before admitting the focus representative
+     * so the request remains valid even when physics capacity is full. */
+    if (runtime->focus_valid && physics_stats.max_patches > 0U)
+    {
+        henka_terrain_region_state focus_state;
+        henka_terrain_chunk_id focus_chunk;
+        uint32_t focus_request_index;
+        if (henka_terrain_world_get_region_state(
+                runtime->world, runtime->focus_region, &focus_state) == HENKA_SUCCESS &&
+            focus_state.physics_resident)
+        {
+            focus_chunk = (henka_terrain_chunk_id){
+                runtime->focus_region.x * (int32_t)world_desc.chunks_per_region_edge,
+                runtime->focus_region.z * (int32_t)world_desc.chunks_per_region_edge};
+            focus_request_index = henka_terrain_collision_runtime_find_request(
+                runtime, focus_chunk);
+            if (focus_request_index >= runtime->desc.max_pending_chunks &&
+                tracked_count >= physics_stats.max_patches)
+            {
+                for (index = runtime->desc.max_pending_chunks; index > 0U; --index)
+                {
+                    henka_terrain_collision_runtime_request* request = &runtime->requests[index - 1U];
+                    henka_terrain_region_id region_id;
+                    if ((!request->active && !request->resident) ||
+                        henka_terrain_region_id_from_chunk(
+                            &world_desc, request->chunk_id, &region_id) != HENKA_SUCCESS ||
+                        henka_terrain_region_id_equal(region_id, runtime->focus_region))
+                    {
+                        continue;
+                    }
+                    (void)henka_terrain_collision_runtime_remove_chunk(runtime, request->chunk_id);
+                    if (tracked_count > 0U)
+                    {
+                        --tracked_count;
+                    }
+                    break;
+                }
+            }
+            if (henka_terrain_collision_runtime_find_request(runtime, focus_chunk) >=
+                    runtime->desc.max_pending_chunks &&
+                tracked_count < physics_stats.max_patches)
+            {
+                henka_result result = henka_terrain_collision_runtime_request_chunk(
+                    runtime, focus_chunk);
+                if (result == HENKA_SUCCESS)
+                {
+                    ++tracked_count;
+                }
+                else if (first_error == HENKA_SUCCESS)
+                {
+                    first_error = result;
+                }
+            }
+        }
+    }
+
+    /* Give each physics-resident region one deterministic representative
+     * before consuming remaining capacity.  Without this pass, a bounded
+     * patch owner fills entirely from the first region and leaves newly
+     * entered regions without any collision coverage. */
+    for (index = 0U; index < world_stats.resident_region_count &&
+         tracked_count < physics_stats.max_patches; ++index)
+    {
+        henka_terrain_region_state region_state;
+        henka_terrain_chunk_id chunk_id;
+        henka_result result;
+        if (henka_terrain_world_get_resident_region_at(
+                runtime->world, index, &region_state) != HENKA_SUCCESS ||
+            !region_state.physics_resident)
+        {
+            continue;
+        }
+        chunk_id = (henka_terrain_chunk_id){
+            region_state.id.x * (int32_t)world_desc.chunks_per_region_edge,
+            region_state.id.z * (int32_t)world_desc.chunks_per_region_edge};
+        if (!henka_terrain_chunk_id_is_valid(&world_desc, chunk_id) ||
+            henka_terrain_collision_runtime_find_request(runtime, chunk_id) <
+                runtime->desc.max_pending_chunks)
+        {
+            continue;
+        }
+        result = henka_terrain_collision_runtime_request_chunk(runtime, chunk_id);
+        if (result == HENKA_SUCCESS)
+        {
+            ++tracked_count;
+        }
+        else if (first_error == HENKA_SUCCESS)
+        {
+            first_error = result;
         }
     }
 

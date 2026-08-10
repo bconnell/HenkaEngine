@@ -227,8 +227,12 @@ physics-resident chunks and replaces the durable physics representation only
 after the candidate succeeds. A failed rebuild leaves the last valid patch in
 place. `henka_terrain_collision_runtime_sync_residency` tracks bounded patch
 identity, queues missing or stale physics-resident chunks in stable order, and
-removes patches when their regions leave physics residency; the physics owner's
-patch capacity is the hard admission bound. `henka_terrain_collision_runtime_request_edit`
+removes patches when their regions leave physics residency; callers may set a
+deterministic camera/interaction focus region with
+`henka_terrain_collision_runtime_set_focus`, which admits that region's
+representative patch first and evicts one non-focus patch when the bounded
+physics capacity is full. The physics owner's patch capacity is the hard
+admission bound. `henka_terrain_collision_runtime_request_edit`
 derives the accepted edit footprint plus one chunk of physics-neighbor coverage,
 and the Terrain server session can borrow that queue to schedule it after
 authority acceptance. The Sandbox graphical path owns this runtime beside the
@@ -323,7 +327,8 @@ lets this owner discover its bounded chunk working set from the active camera.
 The fixture contains rolling ground, a valley, a steep ridge/cliff, and
 continuous grass/dirt/rock/wet four-layer weights; existing committed samples
 are retained. The same camera feeds the public streaming observer under a
-four-region CPU budget. Stream requests are admitted in deterministic priority
+four-region CPU budget with a one-region CPU, physics, render, and unload
+window. Stream requests are admitted in deterministic priority
 order: render-radius regions first, then physics-radius regions, then the
 remaining CPU-radius regions by Chebyshev distance, with stable request
 sequence tie breaking. Updating or removing an observer re-scores queued
@@ -331,9 +336,10 @@ requests while holding the stream lock and cancels observer-demand work that
 leaves every observer's CPU radius; an active stale observer load is canceled
 at its next worker boundary as well, so a moving camera cannot spend bounded
 capacity on obsolete requests. The opt-in Windows `--terrain-stream-stress` path
-crosses `(0,0) -> (1,0) -> (1,1) -> (0,0)`, waits only through bounded
-worker/render queues, checks rendered and collision chunk return at both axes,
-and reports the resident-region bound. Normal movement remains
+proves the initial one-region camera window at `(0,0)`, then crosses
+`(2,0) -> (2,2) -> (0,0)`, waits only through bounded
+worker/render queues, checks rendered return at both axes and a bounded
+collision-patch overlap, and reports the resident-region bound. Normal movement remains
 observer-driven and pumps at most two render replacements per frame. The
 Sandbox also supplies the same deterministic generator to the stream worker,
 so a camera can move into a valid unpersisted region without manual region

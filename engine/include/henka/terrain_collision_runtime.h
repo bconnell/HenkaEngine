@@ -36,6 +36,10 @@ void henka_terrain_collision_runtime_destroy(henka_terrain_collision_runtime* ru
 henka_result henka_terrain_collision_runtime_request_chunk(
     henka_terrain_collision_runtime* runtime,
     henka_terrain_chunk_id chunk_id);
+/* Gives bounded collision residency a deterministic camera/interaction focus. */
+henka_result henka_terrain_collision_runtime_set_focus(
+    henka_terrain_collision_runtime* runtime,
+    henka_terrain_region_id region_id);
 /* Synchronizes bounded physics patches with currently physics-resident regions. */
 henka_result henka_terrain_collision_runtime_sync_residency(
     henka_terrain_collision_runtime* runtime);
