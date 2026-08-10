@@ -192,6 +192,17 @@ henka_result henka_assets_load_texture_with_descriptor(
     const char* path,
     const henka_texture_descriptor* descriptor,
     henka_texture** out_texture);
+/* Adopts one caller-created GPU texture under a stable confined runtime
+ * identity. Ownership transfers only on success; the manager then owns the
+ * borrowed texture pointer and destroys it with the other texture assets.
+ * Runtime textures have no source-file reload path, so their metadata reports
+ * reload_supported=false. Existing identities are rejected rather than
+ * silently replacing a live dependency. */
+henka_result henka_assets_adopt_runtime_texture(
+    henka_asset_manager* manager,
+    const char* identity,
+    henka_texture* texture,
+    henka_texture** out_texture);
 /* A zero budget disables the limit. New loads and replacements that would
  * exceed a non-zero budget are rejected until the caller trims residency. */
 henka_result henka_assets_set_texture_residency_budget(

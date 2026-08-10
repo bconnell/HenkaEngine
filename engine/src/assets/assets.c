@@ -1499,6 +1499,123 @@ henka_result henka_assets_load_texture_with_descriptor(
     return HENKA_SUCCESS;
 }
 
+henka_result henka_assets_adopt_runtime_texture(
+    henka_asset_manager* manager,
+    const char* identity,
+    henka_texture* texture,
+    henka_texture** out_texture)
+{
+    char* display_name;
+    char* key;
+    char* source_path;
+    henka_asset_texture_entry* existing_entry;
+    henka_texture_info texture_info;
+    henka_result result;
+
+    if (out_texture != NULL)
+    {
+        *out_texture = NULL;
+    }
+    if (manager == NULL || identity == NULL || texture == NULL ||
+        out_texture == NULL || texture->asset_manager_owned ||
+        texture->fallback_alias || texture->backend_data == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    key = NULL;
+    result = henka_assets_make_canonical_key(identity, &key);
+    if (result != HENKA_SUCCESS)
+    {
+        return result;
+    }
+    existing_entry = henka_asset_manager_find_texture_entry(manager, key);
+    if (existing_entry != NULL)
+    {
+        henka_free(key);
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    memset(&texture_info, 0, sizeof(texture_info));
+    result = henka_texture_get_info(texture, &texture_info);
+    if (result != HENKA_SUCCESS || !texture_info.backend_ready ||
+        texture_info.fallback_alias || texture_info.resident_gpu_bytes == 0U)
+    {
+        henka_free(key);
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    if ((manager->texture_residency_budget_bytes != 0U &&
+            (texture_info.resident_gpu_bytes > manager->texture_residency_budget_bytes ||
+             manager->texture_resident_bytes >
+                manager->texture_residency_budget_bytes - texture_info.resident_gpu_bytes)) ||
+        manager->texture_resident_bytes > UINT64_MAX - texture_info.resident_gpu_bytes)
+    {
+        if (manager->texture_budget_rejection_count < UINT32_MAX)
+        {
+            ++manager->texture_budget_rejection_count;
+        }
+        henka_assets_add_failed_texture_bytes(manager, texture_info.resident_gpu_bytes);
+        henka_free(key);
+        return HENKA_ERROR_LIMIT;
+    }
+
+    display_name = henka_asset_copy_display_name(key);
+    if (display_name == NULL)
+    {
+        henka_free(key);
+        return HENKA_ERROR_OUT_OF_MEMORY;
+    }
+    source_path = henka_duplicate_string(key);
+    if (source_path == NULL)
+    {
+        henka_free(display_name);
+        henka_free(key);
+        return HENKA_ERROR_OUT_OF_MEMORY;
+    }
+    if (manager->texture_count == manager->texture_capacity)
+    {
+        result = henka_asset_manager_grow_textures(manager);
+        if (result != HENKA_SUCCESS)
+        {
+            henka_free(source_path);
+            henka_free(display_name);
+            henka_free(key);
+            return result;
+        }
+    }
+
+    texture->asset_manager_owned = true;
+    texture->fallback_alias = false;
+    manager->texture_entries[manager->texture_count].key = key;
+    manager->texture_entries[manager->texture_count].source_path = source_path;
+    manager->texture_entries[manager->texture_count].display_name = display_name;
+    manager->texture_entries[manager->texture_count].texture = texture;
+    manager->texture_entries[manager->texture_count].owns_texture = true;
+    manager->texture_entries[manager->texture_count].descriptor = texture_info.descriptor;
+    manager->texture_entries[manager->texture_count].resident_gpu_bytes = texture_info.resident_gpu_bytes;
+    manager->texture_entries[manager->texture_count].metadata.type = HENKA_ASSET_TYPE_TEXTURE;
+    manager->texture_entries[manager->texture_count].metadata.source_path =
+        manager->texture_entries[manager->texture_count].source_path;
+    manager->texture_entries[manager->texture_count].metadata.display_name = display_name;
+    manager->texture_entries[manager->texture_count].metadata.loaded = true;
+    manager->texture_entries[manager->texture_count].metadata.fallback = false;
+    manager->texture_entries[manager->texture_count].metadata.reload_supported = false;
+    manager->texture_entries[manager->texture_count].metadata.has_texture_descriptor = true;
+    manager->texture_entries[manager->texture_count].metadata.texture_descriptor = texture_info.descriptor;
+    henka_asset_set_summary(
+        &manager->texture_entries[manager->texture_count].metadata,
+        "Runtime texture adopted by the asset manager under a stable identity.",
+        "Runtime textures have no source-file reload path.");
+    manager->texture_count += 1U;
+    manager->texture_resident_bytes += texture_info.resident_gpu_bytes;
+    if (UINT64_MAX - manager->texture_uploaded_bytes >= texture_info.resident_gpu_bytes)
+    {
+        manager->texture_uploaded_bytes += texture_info.resident_gpu_bytes;
+    }
+    *out_texture = texture;
+    return HENKA_SUCCESS;
+}
+
 henka_result henka_assets_set_texture_residency_budget(
     henka_asset_manager* manager,
     uint64_t budget_bytes)

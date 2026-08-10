@@ -5089,7 +5089,6 @@ static void sandbox3d_release_owned_resources(sandbox3d_state* state)
     henka_physics_world_destroy(state->physics.world);
     sandbox3d_authoring_object_destroy(state->authoring_object);
     henka_scene_destroy(state->scene);
-    henka_texture_destroy(state->environment_texture);
     for (int terrain_layer_index = 0;
          terrain_layer_index < (int)HENKA_MATERIAL_TERRAIN_LAYER_COUNT;
          ++terrain_layer_index)
@@ -15719,16 +15718,31 @@ static henka_result sandbox3d_initialize(henka_engine* engine, void* user_data)
             result = HENKA_ERROR_INVALID_ARGUMENT;
             goto fail;
         }
-        result = henka_texture_create_from_rgba32f_with_descriptor(
-            engine,
-            SANDBOX3D_STUDIO_ENVIRONMENT_WIDTH,
-            SANDBOX3D_STUDIO_ENVIRONMENT_HEIGHT,
-            studio_environment_pixels,
-            &environment_descriptor,
-            &state->environment_texture);
-        if (result != HENKA_SUCCESS)
         {
-            goto fail;
+            henka_texture* generated_environment_texture = NULL;
+            result = henka_texture_create_from_rgba32f_with_descriptor(
+                engine,
+                SANDBOX3D_STUDIO_ENVIRONMENT_WIDTH,
+                SANDBOX3D_STUDIO_ENVIRONMENT_HEIGHT,
+                studio_environment_pixels,
+                &environment_descriptor,
+                &generated_environment_texture);
+            if (result == HENKA_SUCCESS)
+            {
+                result = henka_assets_adopt_runtime_texture(
+                    henka_engine_get_asset_manager(engine),
+                    "runtime/environment/studio",
+                    generated_environment_texture,
+                    &state->environment_texture);
+                if (result != HENKA_SUCCESS)
+                {
+                    henka_texture_destroy(generated_environment_texture);
+                }
+            }
+            if (result != HENKA_SUCCESS)
+            {
+                goto fail;
+            }
         }
         result = henka_scene_set_environment(
             state->scene,

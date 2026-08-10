@@ -210,6 +210,11 @@ void henka_test_assets(void)
     henka_texture* stable_texture_identity;
     henka_engine fake_engine;
     henka_renderer fake_renderer;
+    henka_asset_manager runtime_manager;
+    henka_asset_texture_entry runtime_entries[1];
+    henka_texture runtime_texture;
+    henka_texture* adopted_runtime_texture;
+    size_t allocations_before_runtime;
     size_t allocations_before_alias;
     static const unsigned char one_pixel[] =
     {
@@ -351,6 +356,63 @@ void henka_test_assets(void)
     fallback_texture.owns_backend = true;
     fallback_texture.width = 2;
     fallback_texture.height = 2;
+
+    memset(&runtime_manager, 0, sizeof(runtime_manager));
+    memset(&runtime_entries, 0, sizeof(runtime_entries));
+    memset(&runtime_texture, 0, sizeof(runtime_texture));
+    runtime_texture.renderer = &fake_renderer;
+    runtime_texture.backend_data = (void*)3;
+    runtime_texture.owns_backend = true;
+    runtime_texture.width = 4;
+    runtime_texture.height = 2;
+    runtime_texture.descriptor = henka_texture_descriptor_default_data();
+    runtime_texture.resident_gpu_bytes = 128U;
+    runtime_texture.resident_mip_count = 1U;
+    runtime_texture.mip_count = 1U;
+    runtime_texture.content_revision = 1U;
+    runtime_manager.texture_entries = runtime_entries;
+    runtime_manager.texture_capacity = 1U;
+    allocations_before_runtime = henka_memory_get_allocation_count();
+    adopted_runtime_texture = (henka_texture*)1;
+    HENKA_TEST_ASSERT(henka_assets_adopt_runtime_texture(
+        &runtime_manager,
+        "runtime\\environment\\studio",
+        &runtime_texture,
+        &adopted_runtime_texture) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(adopted_runtime_texture == &runtime_texture);
+    HENKA_TEST_ASSERT(runtime_texture.asset_manager_owned);
+    HENKA_TEST_ASSERT(runtime_manager.texture_count == 1U);
+    HENKA_TEST_ASSERT(runtime_manager.texture_resident_bytes == 128U);
+    HENKA_TEST_ASSERT(!runtime_entries[0].metadata.reload_supported);
+    HENKA_TEST_ASSERT(strcmp(
+        runtime_entries[0].metadata.source_path,
+        "runtime/environment/studio") == 0);
+    adopted_runtime_texture = (henka_texture*)1;
+    HENKA_TEST_ASSERT(henka_assets_adopt_runtime_texture(
+        &runtime_manager,
+        "runtime/environment/studio",
+        &runtime_texture,
+        &adopted_runtime_texture) == HENKA_ERROR_INVALID_ARGUMENT);
+    HENKA_TEST_ASSERT(adopted_runtime_texture == NULL);
+    runtime_manager.texture_residency_budget_bytes = 64U;
+    runtime_texture.asset_manager_owned = false;
+    runtime_texture.backend_data = (void*)4;
+    runtime_texture.owns_backend = true;
+    adopted_runtime_texture = (henka_texture*)1;
+    HENKA_TEST_ASSERT(henka_assets_adopt_runtime_texture(
+        &runtime_manager,
+        "runtime/environment/too-large",
+        &runtime_texture,
+        &adopted_runtime_texture) == HENKA_ERROR_LIMIT);
+    HENKA_TEST_ASSERT(adopted_runtime_texture == NULL);
+    HENKA_TEST_ASSERT(runtime_manager.texture_budget_rejection_count == 1U);
+    runtime_texture.backend_data = NULL;
+    runtime_texture.owns_backend = false;
+    runtime_texture.asset_manager_owned = false;
+    henka_free(runtime_entries[0].key);
+    henka_free(runtime_entries[0].source_path);
+    henka_free(runtime_entries[0].display_name);
+    HENKA_TEST_ASSERT(henka_memory_get_allocation_count() == allocations_before_runtime);
 
     allocations_before_alias =
         henka_memory_get_allocation_count();
