@@ -19226,6 +19226,27 @@ static void sandbox3d_update(henka_engine* engine, double delta_seconds, void* u
                 if (!temporal_recovery_valid)
                     state->smoke_validation_failed = true;
             }
+            if (smoke_diagnostics.viewport_shading_mode == HENKA_VIEWPORT_SHADING_RENDERED &&
+                (smoke_diagnostics.rendered_reflection_probe_enabled_count == 0U ||
+                 smoke_diagnostics.rendered_reflection_probe_capture_generation == 0U))
+            {
+                printf(
+                    "Reflection probe smoke validation failed: enabled=%u captured=%u generation=%llu failures=%u.\n",
+                    (unsigned int)smoke_diagnostics.rendered_reflection_probe_enabled_count,
+                    (unsigned int)smoke_diagnostics.rendered_reflection_probe_captured_count,
+                    (unsigned long long)smoke_diagnostics.rendered_reflection_probe_capture_generation,
+                    (unsigned int)smoke_diagnostics.rendered_reflection_probe_capture_failure_count);
+                state->smoke_validation_failed = true;
+            }
+            else
+            {
+                printf(
+                    "Reflection probe smoke diagnostics: enabled=%u captured=%u generation=%llu failures=%u.\n",
+                    (unsigned int)smoke_diagnostics.rendered_reflection_probe_enabled_count,
+                    (unsigned int)smoke_diagnostics.rendered_reflection_probe_captured_count,
+                    (unsigned long long)smoke_diagnostics.rendered_reflection_probe_capture_generation,
+                    (unsigned int)smoke_diagnostics.rendered_reflection_probe_capture_failure_count);
+            }
             printf(
                 "Rendered smoke diagnostics: HDR=%s Bloom=%s IBL=%s (%s) TAA=R%llu/F%llu/I%u(%s) CPU=%.2fms GPU=%.2fms(%s) VRAM=%llu bytes Residency=%llu/%llu KTX-mips=%u Visibility-mips=%u->%u->%u source-failed=%llu unknown-source=%llu.\n",
                 smoke_diagnostics.rendered_hdr_ready ? "ready" : "fallback",
