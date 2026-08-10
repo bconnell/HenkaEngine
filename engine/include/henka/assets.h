@@ -315,6 +315,13 @@ henka_result henka_assets_apply_material_instance_to_entity(
     const henka_material_instance* instance,
     henka_scene* scene,
     henka_entity entity);
+/* Refreshes scene entities that still use their manager-owned definition
+ * directly after a transactional material or glTF-scene reload. Explicit
+ * material-instance overrides are left untouched. */
+henka_result henka_assets_refresh_scene_material_bindings(
+    const henka_asset_manager* manager,
+    henka_scene* scene,
+    size_t* out_refreshed_count);
 henka_result henka_assets_material_instance_set_float(
     henka_material_instance* instance,
     henka_material_instance_parameter parameter,

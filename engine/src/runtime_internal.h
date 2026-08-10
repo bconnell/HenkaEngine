@@ -22,6 +22,8 @@ typedef struct henka_scene_entity_record
     henka_scene_lod_desc lod;
     henka_material material;
     const henka_material_asset* material_asset;
+    uint64_t material_asset_revision;
+    bool material_asset_overridden;
     char* material_name;
     bool has_local_bounds;
     henka_bounds local_bounds;

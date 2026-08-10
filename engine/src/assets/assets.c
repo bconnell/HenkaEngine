@@ -3089,6 +3089,9 @@ henka_result henka_assets_apply_material_instance_to_entity(
     henka_entity entity)
 {
     henka_material material;
+    const henka_material_asset* previous_asset = NULL;
+    uint64_t previous_revision = 0U;
+    bool previous_overridden = false;
     henka_result result;
 
     if (instance == NULL || scene == NULL || entity == HENKA_INVALID_ENTITY ||
@@ -3096,13 +3099,114 @@ henka_result henka_assets_apply_material_instance_to_entity(
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
-    result = henka_scene_set_entity_material(scene, entity, material);
-    if (result != HENKA_SUCCESS)
+    if (henka_scene_get_entity_material_asset(
+            scene, entity, &previous_asset) != HENKA_SUCCESS ||
+        henka_scene_get_material_asset_state(
+            scene, entity, &previous_revision, &previous_overridden) != HENKA_SUCCESS)
     {
-        return result;
+        return HENKA_ERROR_INVALID_ARGUMENT;
     }
-    return henka_scene_set_entity_material_asset(
-        scene, entity, instance->definition);
+    if (previous_asset != instance->definition)
+    {
+        result = henka_scene_set_entity_material_asset(
+            scene, entity, instance->definition);
+        if (result != HENKA_SUCCESS)
+        {
+            return result;
+        }
+    }
+    result = henka_scene_set_entity_material(scene, entity, material);
+    if (result != HENKA_SUCCESS && previous_asset != instance->definition)
+    {
+        (void)henka_scene_restore_material_asset_state(
+            scene, entity, previous_asset, previous_revision, previous_overridden);
+    }
+    return result;
+}
+
+static bool henka_assets_find_material_asset_state(
+    const henka_asset_manager* manager,
+    const henka_material_asset* target,
+    henka_material* out_material,
+    uint64_t* out_revision)
+{
+    size_t index;
+    size_t material_index;
+
+    if (manager == NULL || target == NULL || out_material == NULL || out_revision == NULL)
+    {
+        return false;
+    }
+    for (index = 0U; index < manager->material_count; ++index)
+    {
+        const henka_material_asset* asset = manager->material_entries[index];
+        if (asset == target)
+        {
+            *out_material = asset->material;
+            *out_revision = asset->revision;
+            return true;
+        }
+    }
+    for (index = 0U; index < manager->gltf_scene_count; ++index)
+    {
+        const henka_gltf_scene_asset* scene = manager->gltf_scene_entries[index];
+        for (material_index = 0U; material_index < scene->data.material_count; ++material_index)
+        {
+            if (scene->material_ready[material_index] &&
+                &scene->material_assets[material_index] == target)
+            {
+                *out_material = scene->material_assets[material_index].material;
+                *out_revision = scene->material_assets[material_index].revision;
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+henka_result henka_assets_refresh_scene_material_bindings(
+    const henka_asset_manager* manager,
+    henka_scene* scene,
+    size_t* out_refreshed_count)
+{
+    size_t entity_index;
+    size_t refreshed_count = 0U;
+
+    if (out_refreshed_count != NULL) *out_refreshed_count = 0U;
+    if (manager == NULL || scene == NULL || out_refreshed_count == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    for (entity_index = 0U; entity_index < henka_scene_get_entity_count(scene); ++entity_index)
+    {
+        henka_entity entity = henka_scene_get_entity_at_index(scene, entity_index);
+        const henka_material_asset* asset = NULL;
+        henka_material material;
+        uint64_t applied_revision = 0U;
+        uint64_t current_revision = 0U;
+        bool overridden = false;
+
+        if (entity == HENKA_INVALID_ENTITY ||
+            henka_scene_get_entity_material_asset(scene, entity, &asset) != HENKA_SUCCESS ||
+            asset == NULL ||
+            henka_scene_get_material_asset_state(
+                scene, entity, &applied_revision, &overridden) != HENKA_SUCCESS ||
+            overridden ||
+            !henka_assets_find_material_asset_state(
+                manager, asset, &material, &current_revision) ||
+            current_revision == 0U || applied_revision == current_revision)
+        {
+            continue;
+        }
+        if (henka_scene_apply_material_asset(
+                scene, entity, asset, material, current_revision) != HENKA_SUCCESS)
+        {
+            return HENKA_ERROR_UNKNOWN;
+        }
+        ++refreshed_count;
+    }
+    *out_refreshed_count = refreshed_count;
+    return HENKA_SUCCESS;
 }
 
 static henka_result henka_material_instance_commit(
@@ -3737,9 +3841,21 @@ static henka_result henka_assets_instantiate_gltf_scene_node(
             material = asset->materials[asset->data.primitives[primitive_index].material_index];
             material_asset = &asset->material_assets[asset->data.primitives[primitive_index].material_index];
         }
-        if (henka_scene_set_entity_material(target_scene, entity, material) != HENKA_SUCCESS ||
-            henka_scene_set_entity_material_asset(target_scene, entity, material_asset) != HENKA_SUCCESS ||
-            henka_scene_set_entity_transform(target_scene, entity, node->world_transform) != HENKA_SUCCESS) return HENKA_ERROR_UNKNOWN;
+        if (material_asset != NULL)
+        {
+            if (henka_scene_apply_material_asset(
+                    target_scene, entity, material_asset, material,
+                    material_asset->revision) != HENKA_SUCCESS)
+            {
+                return HENKA_ERROR_UNKNOWN;
+            }
+        }
+        else if (henka_scene_set_entity_material(target_scene, entity, material) != HENKA_SUCCESS ||
+                 henka_scene_set_entity_material_asset(target_scene, entity, NULL) != HENKA_SUCCESS)
+        {
+            return HENKA_ERROR_UNKNOWN;
+        }
+        if (henka_scene_set_entity_transform(target_scene, entity, node->world_transform) != HENKA_SUCCESS) return HENKA_ERROR_UNKNOWN;
     }
     for (child_index = 0U; child_index < asset->data.node_count; ++child_index)
         if (asset->data.nodes[child_index].parent_index == node_index)

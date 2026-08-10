@@ -621,6 +621,20 @@ static henka_result henka_engine_render_frame(henka_engine* engine)
      */
     if (engine->asset_manager != NULL)
     {
+        if (engine->active_scene != NULL)
+        {
+            size_t refreshed_materials = 0U;
+            result = henka_assets_refresh_scene_material_bindings(
+                engine->asset_manager,
+                engine->active_scene,
+                &refreshed_materials);
+            if (result != HENKA_SUCCESS)
+            {
+                HENKA_LOG_WARN(
+                    "scene material definition refresh failed: %s",
+                    henka_result_to_string(result));
+            }
+        }
         henka_engine_queue_visible_texture_residency(engine);
         result = henka_assets_process_texture_residency_requests(
             engine->asset_manager,

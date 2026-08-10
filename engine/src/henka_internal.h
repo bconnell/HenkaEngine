@@ -181,6 +181,8 @@ typedef struct henka_scene_entity_record
     henka_scene_lod_desc lod;
     henka_material material;
     const henka_material_asset* material_asset;
+    uint64_t material_asset_revision;
+    bool material_asset_overridden;
     char* material_name;
     bool has_local_bounds;
     henka_bounds local_bounds;
@@ -319,6 +321,27 @@ struct henka_scene
     bool local_light_active[HENKA_SCENE_MAX_LOCAL_LIGHTS];
     henka_scene_fog_desc fog;
 };
+
+/* Internal bridge used by the asset manager to publish a refreshed
+ * manager-owned material definition without turning it into an instance
+ * override. */
+henka_result henka_scene_apply_material_asset(
+    henka_scene* scene,
+    henka_entity entity,
+    const henka_material_asset* asset,
+    henka_material material,
+    uint64_t revision);
+henka_result henka_scene_get_material_asset_state(
+    const henka_scene* scene,
+    henka_entity entity,
+    uint64_t* out_revision,
+    bool* out_overridden);
+henka_result henka_scene_restore_material_asset_state(
+    henka_scene* scene,
+    henka_entity entity,
+    const henka_material_asset* asset,
+    uint64_t revision,
+    bool overridden);
 
 struct henka_platform;
 

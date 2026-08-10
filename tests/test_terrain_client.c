@@ -2,6 +2,7 @@
 #include <henka/terrain_client.h>
 #include <henka/terrain_server.h>
 
+#include <stdio.h>
 #include <string.h>
 
 static henka_result poll_terrain_server_capture_peer(
@@ -73,8 +74,9 @@ static int test_client_snapshot_and_delta_path(void)
     henka_terrain_region_state state;
     uint32_t event_count;
     uint32_t index;
-    uint32_t iteration;
+    uint32_t iteration = 0U;
     henka_network_peer_id server_peer_id = HENKA_NETWORK_INVALID_PEER_ID;
+    const char* failure_stage = "setup";
     int result = 0;
 
     world_desc.max_resident_regions = 1U;
@@ -140,6 +142,7 @@ static int test_client_snapshot_and_delta_path(void)
     {
         goto cleanup;
     }
+    failure_stage = "initial connection";
     for (iteration = 0U; iteration < 2000U; ++iteration)
     {
         if (poll_terrain_server_capture_peer(
@@ -158,6 +161,7 @@ static int test_client_snapshot_and_delta_path(void)
     {
         goto cleanup;
     }
+    failure_stage = "initial snapshot";
     for (iteration = 0U; iteration < 2000U; ++iteration)
     {
         if (poll_terrain_server_capture_peer(
@@ -248,6 +252,7 @@ static int test_client_snapshot_and_delta_path(void)
     {
         goto cleanup;
     }
+    failure_stage = "corrupt snapshot recovery";
     for (iteration = 0U; iteration < 2000U; ++iteration)
     {
         if (poll_terrain_server_capture_peer(
@@ -280,6 +285,7 @@ static int test_client_snapshot_and_delta_path(void)
     {
         goto cleanup;
     }
+    failure_stage = "delta edit";
     for (iteration = 0U; iteration < 2000U; ++iteration)
     {
         if (poll_terrain_server_capture_peer(
@@ -307,6 +313,7 @@ static int test_client_snapshot_and_delta_path(void)
     {
         goto cleanup;
     }
+    failure_stage = "disconnect";
     for (iteration = 0U; iteration < 2000U; ++iteration)
     {
         if (poll_terrain_server_capture_peer(
@@ -325,6 +332,7 @@ static int test_client_snapshot_and_delta_path(void)
     {
         goto cleanup;
     }
+    failure_stage = "reconnect";
     for (iteration = 0U; iteration < 2000U; ++iteration)
     {
         if (poll_terrain_server_capture_peer(
@@ -362,6 +370,7 @@ static int test_client_snapshot_and_delta_path(void)
     {
         goto cleanup;
     }
+    failure_stage = "server restart";
     for (iteration = 0U; iteration < 2000U; ++iteration)
     {
         if (poll_terrain_server_capture_peer(
@@ -387,6 +396,18 @@ static int test_client_snapshot_and_delta_path(void)
     result = 1;
 
 cleanup:
+    if (!result)
+    {
+        henka_terrain_client_get_diagnostics(terrain_client, &client_diagnostics);
+        fprintf(stderr, "terrain client test failed during %s at iteration %u (connected=%llu snapshots=%llu deltas=%llu recovery=%llu disconnects=%llu)\n",
+            failure_stage,
+            (unsigned int)iteration,
+            (unsigned long long)client_diagnostics.connected_event_count,
+            (unsigned long long)client_diagnostics.completed_snapshot_count,
+            (unsigned long long)client_diagnostics.applied_delta_count,
+            (unsigned long long)client_diagnostics.recovery_snapshot_request_count,
+            (unsigned long long)client_diagnostics.disconnected_event_count);
+    }
     henka_terrain_client_destroy(terrain_client);
     henka_terrain_server_destroy(terrain_server);
     henka_network_client_destroy(network_client);
@@ -427,7 +448,8 @@ static int test_two_client_authoritative_convergence(void)
     henka_terrain_region_state state_b;
     uint32_t event_count;
     uint32_t index;
-    uint32_t iteration;
+    uint32_t iteration = 0U;
+    const char* failure_stage = "setup";
     int result = 0;
 
     world_desc.max_resident_regions = 1U;
@@ -504,6 +526,7 @@ static int test_two_client_authoritative_convergence(void)
         goto cleanup;
     }
 
+    failure_stage = "two-client initial snapshots";
     for (iteration = 0U; iteration < 3000U; ++iteration)
     {
         if (henka_terrain_server_poll(terrain_server, 2U, 11000U + iteration) != HENKA_SUCCESS ||
@@ -546,6 +569,7 @@ static int test_two_client_authoritative_convergence(void)
     {
         goto cleanup;
     }
+    failure_stage = "two-client first delta";
     for (iteration = 0U; iteration < 3000U; ++iteration)
     {
         if (henka_terrain_server_poll(terrain_server, 2U, 15000U + iteration) != HENKA_SUCCESS ||
@@ -582,6 +606,7 @@ static int test_two_client_authoritative_convergence(void)
     {
         goto cleanup;
     }
+    failure_stage = "two-client second delta";
     for (iteration = 0U; iteration < 3000U; ++iteration)
     {
         if (henka_terrain_server_poll(terrain_server, 2U, 19000U + iteration) != HENKA_SUCCESS ||
@@ -612,6 +637,20 @@ static int test_two_client_authoritative_convergence(void)
     result = 1;
 
 cleanup:
+    if (!result)
+    {
+        henka_terrain_client_get_diagnostics(terrain_client_a, &diagnostics_a);
+        henka_terrain_client_get_diagnostics(terrain_client_b, &diagnostics_b);
+        fprintf(stderr, "two-client terrain test failed during %s at iteration %u (A connected=%llu snapshots=%llu deltas=%llu; B connected=%llu snapshots=%llu deltas=%llu)\n",
+            failure_stage,
+            (unsigned int)iteration,
+            (unsigned long long)diagnostics_a.connected_event_count,
+            (unsigned long long)diagnostics_a.completed_snapshot_count,
+            (unsigned long long)diagnostics_a.applied_delta_count,
+            (unsigned long long)diagnostics_b.connected_event_count,
+            (unsigned long long)diagnostics_b.completed_snapshot_count,
+            (unsigned long long)diagnostics_b.applied_delta_count);
+    }
     henka_terrain_client_destroy(terrain_client_b);
     henka_terrain_client_destroy(terrain_client_a);
     henka_terrain_server_destroy(terrain_server);

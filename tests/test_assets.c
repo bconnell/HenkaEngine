@@ -188,14 +188,17 @@ void henka_test_assets(void)
     henka_material_instance material_instance;
     henka_material_dependency_info material_dependencies;
     henka_scene* material_scene;
+    henka_scene* refresh_scene;
     henka_entity material_entity;
     henka_entity material_entity_peer;
+    henka_entity refresh_entity;
     henka_material applied_material;
     henka_material peer_material;
     float peer_roughness_before;
     uint64_t material_revision;
     size_t processed_residency_requests;
     size_t cancelled_residency_requests;
+    size_t refreshed_material_count;
     henka_asset_texture_entry texture_entries[HENKA_MAX_TEXTURE_RESIDENCY_REQUESTS + 1U];
     henka_texture stress_textures[HENKA_MAX_TEXTURE_RESIDENCY_REQUESTS + 1U];
     henka_mesh fallback_mesh;
@@ -894,6 +897,46 @@ void henka_test_assets(void)
     HENKA_TEST_ASSERT(henka_scene_get_entity_material(
         material_scene, material_entity, &applied_material) == HENKA_SUCCESS);
     HENKA_TEST_ASSERT(applied_material.roughness == material_entry.material.roughness);
+
+    /* A direct glTF/material-definition binding refreshes after reimport,
+     * while an explicitly applied instance remains authoritative. */
+    refresh_scene = NULL;
+    refresh_entity = HENKA_INVALID_ENTITY;
+    HENKA_TEST_ASSERT(henka_scene_create(&refresh_scene) == HENKA_SUCCESS);
+    refresh_entity = henka_scene_create_entity_named(refresh_scene, "Definition Refresh Target");
+    HENKA_TEST_ASSERT(refresh_entity != HENKA_INVALID_ENTITY);
+    HENKA_TEST_ASSERT(henka_scene_apply_material_asset(
+        refresh_scene,
+        refresh_entity,
+        &material_entry,
+        material_entry.material,
+        material_entry.revision) == HENKA_SUCCESS);
+    material_entry.material.roughness = 0.17f;
+    material_entry.revision += 1U;
+    refreshed_material_count = 0U;
+    HENKA_TEST_ASSERT(henka_assets_refresh_scene_material_bindings(
+        &manager, refresh_scene, &refreshed_material_count) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(refreshed_material_count == 1U);
+    HENKA_TEST_ASSERT(henka_scene_get_entity_material(
+        refresh_scene, refresh_entity, &applied_material) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(applied_material.roughness, 0.17f, 0.0001f);
+    HENKA_TEST_ASSERT(henka_assets_create_material_instance(
+        &material_entry, &material_instance) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_assets_material_instance_set_float(
+        &material_instance, HENKA_MATERIAL_INSTANCE_ROUGHNESS, 0.91f) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_assets_apply_material_instance_to_entity(
+        &material_instance, refresh_scene, refresh_entity) == HENKA_SUCCESS);
+    material_entry.material.roughness = 0.29f;
+    material_entry.revision += 1U;
+    refreshed_material_count = 0U;
+    HENKA_TEST_ASSERT(henka_assets_refresh_scene_material_bindings(
+        &manager, refresh_scene, &refreshed_material_count) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(refreshed_material_count == 0U);
+    HENKA_TEST_ASSERT(henka_scene_get_entity_material(
+        refresh_scene, refresh_entity, &applied_material) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(applied_material.roughness, 0.91f, 0.0001f);
+    henka_scene_destroy(refresh_scene);
+    refresh_scene = NULL;
     henka_scene_destroy(material_scene);
     material_scene = NULL;
     HENKA_TEST_ASSERT(henka_assets_apply_material_instance_to_entity(

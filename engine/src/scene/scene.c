@@ -694,6 +694,8 @@ static henka_result henka_scene_grow(henka_scene* scene)
         new_entities[index].mesh = NULL;
         new_entities[index].material = henka_material_default();
         new_entities[index].material_asset = NULL;
+        new_entities[index].material_asset_revision = 0U;
+        new_entities[index].material_asset_overridden = false;
         new_entities[index].material_name = NULL;
         new_entities[index].has_local_bounds = false;
         new_entities[index].local_bounds = (henka_bounds){{0.0f, 0.0f, 0.0f}, {0.0f, 0.0f, 0.0f}};
@@ -878,6 +880,8 @@ void henka_scene_destroy_entity(henka_scene* scene, henka_entity entity)
     record->mesh = NULL;
     record->material = henka_material_default();
     record->material_asset = NULL;
+    record->material_asset_revision = 0U;
+    record->material_asset_overridden = false;
     henka_free(record->name);
     henka_free(record->tag);
     henka_free(record->material_name);
@@ -1350,6 +1354,10 @@ henka_result henka_scene_set_entity_material(henka_scene* scene, henka_entity en
     record->material_name = material_name;
     record->material = material;
     record->material.name = material_name != NULL ? material_name : "Material";
+    if (record->material_asset != NULL)
+    {
+        record->material_asset_overridden = true;
+    }
     henka_scene_bump_render_revision(scene);
     return HENKA_SUCCESS;
 }
@@ -1368,7 +1376,83 @@ henka_result henka_scene_set_entity_material_asset(
     }
 
     record->material_asset = asset;
+    record->material_asset_revision = 0U;
+    record->material_asset_overridden = false;
     henka_scene_bump_render_revision(scene);
+    return HENKA_SUCCESS;
+}
+
+henka_result henka_scene_apply_material_asset(
+    henka_scene* scene,
+    henka_entity entity,
+    const henka_material_asset* asset,
+    henka_material material,
+    uint64_t revision)
+{
+    henka_scene_entity_record* record;
+
+    record = henka_scene_get_entity_record(scene, entity);
+    if (record == NULL || asset == NULL || revision == 0U ||
+        !henka_scene_material_is_valid(material))
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    /* The asset owns the stable name storage. This allocation-free refresh
+     * path is safe to call from the frame lifecycle. */
+    henka_free(record->material_name);
+    record->material_name = NULL;
+    record->material = material;
+    record->material.name = material.name != NULL && material.name[0] != '\0'
+        ? material.name
+        : "Material";
+    record->material_asset = asset;
+    record->material_asset_revision = revision;
+    record->material_asset_overridden = false;
+    henka_scene_bump_render_revision(scene);
+    return HENKA_SUCCESS;
+}
+
+henka_result henka_scene_get_material_asset_state(
+    const henka_scene* scene,
+    henka_entity entity,
+    uint64_t* out_revision,
+    bool* out_overridden)
+{
+    const henka_scene_entity_record* record;
+
+    if (out_revision != NULL) *out_revision = 0U;
+    if (out_overridden != NULL) *out_overridden = false;
+    if (scene == NULL || out_revision == NULL || out_overridden == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    record = henka_scene_get_entity_record_const(scene, entity);
+    if (record == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    *out_revision = record->material_asset_revision;
+    *out_overridden = record->material_asset_overridden;
+    return HENKA_SUCCESS;
+}
+
+henka_result henka_scene_restore_material_asset_state(
+    henka_scene* scene,
+    henka_entity entity,
+    const henka_material_asset* asset,
+    uint64_t revision,
+    bool overridden)
+{
+    henka_scene_entity_record* record = henka_scene_get_entity_record(scene, entity);
+
+    if (record == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    record->material_asset = asset;
+    record->material_asset_revision = revision;
+    record->material_asset_overridden = overridden;
     return HENKA_SUCCESS;
 }
 
