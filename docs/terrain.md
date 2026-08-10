@@ -261,7 +261,7 @@ metallic/roughness texture semantics plus base color, metallic, roughness,
 normal-strength, and meters-per-tile factors. The normal Rendered shader
 consumes these weights; ordinary material vertex-color tint remains disabled
 for this material. The Sandbox reference fixture creates four deterministic
-16x16 Sandbox-owned procedural grass, dirt, rock, and wet base-color,
+16x16 asset-manager-owned runtime grass, dirt, rock, and wet base-color,
 tangent-normal, and metallic/roughness tiles. The material retains deterministic
 factor fallback for replacement or unavailable optional sources. The graphical
 owner reports the exact unique layer-texture count and resident material bytes;

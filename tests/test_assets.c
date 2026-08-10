@@ -395,6 +395,12 @@ void henka_test_assets(void)
         &runtime_texture.descriptor,
         &runtime_cache_lookup) == HENKA_SUCCESS);
     HENKA_TEST_ASSERT(runtime_cache_lookup == &runtime_texture);
+    runtime_cache_lookup = NULL;
+    HENKA_TEST_ASSERT(henka_assets_load_texture(
+        &runtime_manager,
+        "runtime/environment/studio",
+        &runtime_cache_lookup) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(runtime_cache_lookup == &runtime_texture);
     adopted_runtime_texture = (henka_texture*)1;
     HENKA_TEST_ASSERT(henka_assets_adopt_runtime_texture(
         &runtime_manager,

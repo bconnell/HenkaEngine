@@ -1298,6 +1298,7 @@ henka_result henka_assets_load_texture_with_descriptor(
     henka_texture_info texture_info;
     uint64_t source_size;
     bool source_size_known;
+    size_t index;
     henka_result result;
 
     if (out_texture != NULL)
@@ -1331,6 +1332,20 @@ henka_result henka_assets_load_texture_with_descriptor(
     {
         henka_free(key);
         return result;
+    }
+
+    for (index = 0U; index < manager->texture_count; ++index)
+    {
+        henka_asset_texture_entry* runtime_entry = &manager->texture_entries[index];
+        if (!runtime_entry->metadata.reload_supported &&
+            runtime_entry->source_path != NULL &&
+            strcmp(runtime_entry->source_path, source_path) == 0)
+        {
+            *out_texture = runtime_entry->texture;
+            henka_free(source_path);
+            henka_free(key);
+            return HENKA_SUCCESS;
+        }
     }
 
     existing_entry =

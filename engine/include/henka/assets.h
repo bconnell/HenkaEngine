@@ -197,7 +197,8 @@ henka_result henka_assets_load_texture_with_descriptor(
  * borrowed texture pointer and destroys it with the other texture assets.
  * Runtime textures have no source-file reload path, so their metadata reports
  * reload_supported=false. Existing identities are rejected rather than
- * silently replacing a live dependency. */
+ * silently replacing a live dependency. Subsequent path loads of the runtime
+ * identity return the adopted borrowed pointer as the identity authority. */
 henka_result henka_assets_adopt_runtime_texture(
     henka_asset_manager* manager,
     const char* identity,

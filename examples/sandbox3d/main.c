@@ -1782,6 +1782,22 @@ static henka_result sandbox3d_seed_terrain_fixture_region(
 static henka_result sandbox3d_initialize_terrain_rendering(
     henka_engine* engine,
     sandbox3d_state* state);
+static henka_result sandbox3d_create_runtime_rgba8_texture(
+    henka_engine* engine,
+    int width,
+    int height,
+    const unsigned char* pixels,
+    const henka_texture_descriptor* descriptor,
+    const char* identity,
+    henka_texture** out_texture);
+static henka_result sandbox3d_create_runtime_rgba32f_texture(
+    henka_engine* engine,
+    int width,
+    int height,
+    const float* pixels,
+    const henka_texture_descriptor* descriptor,
+    const char* identity,
+    henka_texture** out_texture);
 static henka_result sandbox3d_refresh_terrain_collision_chunk(
     sandbox3d_state* state,
     henka_terrain_chunk_id chunk_id);
@@ -4482,34 +4498,46 @@ static henka_result sandbox3d_initialize_terrain_rendering(
                 terrain_layer_metallic_roughness_pixels[layer_index][pixel_offset + 3U] = 255U;
             }
         }
-        result = henka_texture_create_from_rgba8_with_descriptor(
+        result = sandbox3d_create_runtime_rgba8_texture(
             engine,
             16,
             16,
             &terrain_layer_pixels[layer_index][0],
             &terrain_texture_descriptor,
+            layer_index == 0U ? "runtime/terrain/layer0/base_color" :
+            layer_index == 1U ? "runtime/terrain/layer1/base_color" :
+            layer_index == 2U ? "runtime/terrain/layer2/base_color" :
+            "runtime/terrain/layer3/base_color",
             &state->terrain_layer_textures[layer_index]);
         if (result != HENKA_SUCCESS)
         {
             goto fail;
         }
-        result = henka_texture_create_from_rgba8_with_descriptor(
+        result = sandbox3d_create_runtime_rgba8_texture(
             engine,
             16,
             16,
             &terrain_layer_normal_pixels[layer_index][0],
             &terrain_normal_descriptor,
+            layer_index == 0U ? "runtime/terrain/layer0/normal" :
+            layer_index == 1U ? "runtime/terrain/layer1/normal" :
+            layer_index == 2U ? "runtime/terrain/layer2/normal" :
+            "runtime/terrain/layer3/normal",
             &state->terrain_layer_normal_textures[layer_index]);
         if (result != HENKA_SUCCESS)
         {
             goto fail;
         }
-        result = henka_texture_create_from_rgba8_with_descriptor(
+        result = sandbox3d_create_runtime_rgba8_texture(
             engine,
             16,
             16,
             &terrain_layer_metallic_roughness_pixels[layer_index][0],
             &terrain_metallic_roughness_descriptor,
+            layer_index == 0U ? "runtime/terrain/layer0/metallic_roughness" :
+            layer_index == 1U ? "runtime/terrain/layer1/metallic_roughness" :
+            layer_index == 2U ? "runtime/terrain/layer2/metallic_roughness" :
+            "runtime/terrain/layer3/metallic_roughness",
             &state->terrain_layer_metallic_roughness_textures[layer_index]);
         if (result != HENKA_SUCCESS)
         {
@@ -5065,6 +5093,92 @@ static henka_result sandbox3d_apply_terrain_tool_command(
     return result;
 }
 
+static henka_result sandbox3d_create_runtime_rgba8_texture(
+    henka_engine* engine,
+    int width,
+    int height,
+    const unsigned char* pixels,
+    const henka_texture_descriptor* descriptor,
+    const char* identity,
+    henka_texture** out_texture)
+{
+    henka_texture* generated_texture = NULL;
+    henka_result result;
+
+    if (out_texture != NULL)
+    {
+        *out_texture = NULL;
+    }
+    if (engine == NULL || pixels == NULL || descriptor == NULL ||
+        identity == NULL || out_texture == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    result = henka_texture_create_from_rgba8_with_descriptor(
+        engine,
+        width,
+        height,
+        pixels,
+        descriptor,
+        &generated_texture);
+    if (result == HENKA_SUCCESS)
+    {
+        result = henka_assets_adopt_runtime_texture(
+            henka_engine_get_asset_manager(engine),
+            identity,
+            generated_texture,
+            out_texture);
+        if (result != HENKA_SUCCESS)
+        {
+            henka_texture_destroy(generated_texture);
+        }
+    }
+    return result;
+}
+
+static henka_result sandbox3d_create_runtime_rgba32f_texture(
+    henka_engine* engine,
+    int width,
+    int height,
+    const float* pixels,
+    const henka_texture_descriptor* descriptor,
+    const char* identity,
+    henka_texture** out_texture)
+{
+    henka_texture* generated_texture = NULL;
+    henka_result result;
+
+    if (out_texture != NULL)
+    {
+        *out_texture = NULL;
+    }
+    if (engine == NULL || pixels == NULL || descriptor == NULL ||
+        identity == NULL || out_texture == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    result = henka_texture_create_from_rgba32f_with_descriptor(
+        engine,
+        width,
+        height,
+        pixels,
+        descriptor,
+        &generated_texture);
+    if (result == HENKA_SUCCESS)
+    {
+        result = henka_assets_adopt_runtime_texture(
+            henka_engine_get_asset_manager(engine),
+            identity,
+            generated_texture,
+            out_texture);
+        if (result != HENKA_SUCCESS)
+        {
+            henka_texture_destroy(generated_texture);
+        }
+    }
+    return result;
+}
+
 static void sandbox3d_release_owned_resources(sandbox3d_state* state)
 {
     int index;
@@ -5093,18 +5207,10 @@ static void sandbox3d_release_owned_resources(sandbox3d_state* state)
          terrain_layer_index < (int)HENKA_MATERIAL_TERRAIN_LAYER_COUNT;
          ++terrain_layer_index)
     {
-        henka_texture_destroy(state->terrain_layer_textures[terrain_layer_index]);
         state->terrain_layer_textures[terrain_layer_index] = NULL;
-        henka_texture_destroy(state->terrain_layer_normal_textures[terrain_layer_index]);
         state->terrain_layer_normal_textures[terrain_layer_index] = NULL;
-        henka_texture_destroy(state->terrain_layer_metallic_roughness_textures[terrain_layer_index]);
         state->terrain_layer_metallic_roughness_textures[terrain_layer_index] = NULL;
     }
-    henka_texture_destroy(state->detail_normal_texture);
-    henka_texture_destroy(state->macro_variation_texture);
-    henka_texture_destroy(state->wood_grain_texture);
-    henka_texture_destroy(state->wet_dry_roughness_texture);
-    henka_texture_destroy(state->foliage_mask_texture);
     henka_action_context_destroy(state->actions);
     henka_settings_destroy(state->settings);
     henka_ui_destroy(state->ui);
@@ -15718,31 +15824,17 @@ static henka_result sandbox3d_initialize(henka_engine* engine, void* user_data)
             result = HENKA_ERROR_INVALID_ARGUMENT;
             goto fail;
         }
+        result = sandbox3d_create_runtime_rgba32f_texture(
+            engine,
+            SANDBOX3D_STUDIO_ENVIRONMENT_WIDTH,
+            SANDBOX3D_STUDIO_ENVIRONMENT_HEIGHT,
+            studio_environment_pixels,
+            &environment_descriptor,
+            "runtime/environment/studio",
+            &state->environment_texture);
+        if (result != HENKA_SUCCESS)
         {
-            henka_texture* generated_environment_texture = NULL;
-            result = henka_texture_create_from_rgba32f_with_descriptor(
-                engine,
-                SANDBOX3D_STUDIO_ENVIRONMENT_WIDTH,
-                SANDBOX3D_STUDIO_ENVIRONMENT_HEIGHT,
-                studio_environment_pixels,
-                &environment_descriptor,
-                &generated_environment_texture);
-            if (result == HENKA_SUCCESS)
-            {
-                result = henka_assets_adopt_runtime_texture(
-                    henka_engine_get_asset_manager(engine),
-                    "runtime/environment/studio",
-                    generated_environment_texture,
-                    &state->environment_texture);
-                if (result != HENKA_SUCCESS)
-                {
-                    henka_texture_destroy(generated_environment_texture);
-                }
-            }
-            if (result != HENKA_SUCCESS)
-            {
-                goto fail;
-            }
+            goto fail;
         }
         result = henka_scene_set_environment(
             state->scene,
@@ -15819,56 +15911,61 @@ static henka_result sandbox3d_initialize(henka_engine* engine, void* user_data)
             roughness_descriptor.generate_mipmaps = true;
             roughness_descriptor.min_filter = HENKA_TEXTURE_FILTER_LINEAR_MIPMAP_LINEAR;
             roughness_descriptor.usage = HENKA_TEXTURE_USAGE_METALLIC_ROUGHNESS;
-            result = henka_texture_create_from_rgba8_with_descriptor(
+            result = sandbox3d_create_runtime_rgba8_texture(
                 engine,
                 4,
                 4,
                 detail_normal_pixels,
                 &normal_descriptor,
+                "runtime/showcase/detail_normal",
                 &state->detail_normal_texture);
             if (result != HENKA_SUCCESS)
             {
                 goto fail;
             }
-            result = henka_texture_create_from_rgba8_with_descriptor(
+            result = sandbox3d_create_runtime_rgba8_texture(
                 engine,
                 4,
                 4,
                 macro_variation_pixels,
                 &macro_descriptor,
+                "runtime/showcase/macro_variation",
                 &state->macro_variation_texture);
             if (result != HENKA_SUCCESS)
             {
                 goto fail;
             }
-            result = henka_texture_create_from_rgba8_with_descriptor(
+            result = sandbox3d_create_runtime_rgba8_texture(
                 engine,
                 4,
                 4,
                 wood_grain_pixels,
                 &macro_descriptor,
+                "runtime/showcase/wood_grain",
                 &state->wood_grain_texture);
             if (result != HENKA_SUCCESS)
             {
                 goto fail;
             }
-            result = henka_texture_create_from_rgba8_with_descriptor(
+            result = sandbox3d_create_runtime_rgba8_texture(
                 engine,
                 4,
                 4,
                 wet_dry_roughness_pixels,
                 &roughness_descriptor,
+                "runtime/showcase/wet_dry_roughness",
                 &state->wet_dry_roughness_texture);
             if (result != HENKA_SUCCESS)
             {
                 goto fail;
             }
-            result = henka_texture_create_from_rgba8_with_descriptor(
+            result = sandbox3d_create_runtime_rgba8_texture(
                 engine,
                 4,
                 4,
                 foliage_mask_pixels,
                 &macro_descriptor,
+                "runtime/showcase/foliage_mask",
                 &state->foliage_mask_texture);
             if (result != HENKA_SUCCESS)
             {
@@ -18971,7 +19068,7 @@ static void sandbox3d_update(henka_engine* engine, double delta_seconds, void* u
                 }
             }
             if (!state->smoke_validation_failed)
-                printf("Terrain material diagnostics: four normalized layers use Sandbox-owned procedural base-color, normal, and metallic/roughness textures.\n");
+                printf("Terrain material diagnostics: four normalized layers use asset-manager-owned runtime base-color, normal, and metallic/roughness textures.\n");
         }
         if (state->residency_stress_ktx_texture != NULL)
             (void)henka_texture_get_info(
