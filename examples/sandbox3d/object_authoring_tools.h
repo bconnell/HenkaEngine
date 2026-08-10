@@ -54,6 +54,12 @@ henka_result sandbox3d_authoring_object_extrude_selected_face(
 henka_result sandbox3d_authoring_object_inset_selected_face(
     sandbox3d_authoring_object* object,
     float factor);
+henka_result sandbox3d_authoring_object_save_source(
+    const sandbox3d_authoring_object* object,
+    const char* path);
+henka_result sandbox3d_authoring_object_reload_source(
+    sandbox3d_authoring_object* object,
+    const char* path);
 henka_result sandbox3d_authoring_object_undo(sandbox3d_authoring_object* object);
 henka_result sandbox3d_authoring_object_redo(sandbox3d_authoring_object* object);
 

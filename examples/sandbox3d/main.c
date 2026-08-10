@@ -13756,11 +13756,49 @@ static void sandbox3d_draw_object_details_panel(
                 (unsigned int)sandbox3d_authoring_object_get_selected_face(state->authoring_object));
             if (sandbox3d_details_flow_next_row(state, flow_desc.bounds, 22.0f, 1U, &row))
             {
-                sandbox3d_draw_value_row(state->ui, row.x, row.y, row.width, "Source", "Authoring mesh");
+                sandbox3d_draw_value_row(state->ui, row.x, row.y, row.width, "Source", "Authoring mesh (user slot)");
             }
             if (sandbox3d_details_flow_next_row(state, flow_desc.bounds, 22.0f, 1U, &row))
             {
                 sandbox3d_draw_value_row(state->ui, row.x, row.y, row.width, "Selection", authoring_face_text);
+            }
+            if (sandbox3d_details_flow_next_row(state, flow_desc.bounds, 28.0f, 1U, &row) && row.width >= 290.0f)
+            {
+                const bool save_requested = henka_ui_button(
+                    state->ui,
+                    "authoring_save_source",
+                    (henka_ui_rect){row.x, row.y, 140.0f, 24.0f},
+                    "Save Source");
+                const bool reload_requested = henka_ui_button(
+                    state->ui,
+                    "authoring_reload_source",
+                    (henka_ui_rect){row.x + 148.0f, row.y, 140.0f, 24.0f},
+                    "Reload Source");
+                if (save_requested || reload_requested)
+                {
+                    char* authoring_path = NULL;
+                    result = henka_save_data_build_slot_path(
+                        henka_engine_get_user_data_base_path(engine),
+                        "sandbox3d_textured_cube_authoring",
+                        &authoring_path);
+                    if (result == HENKA_SUCCESS)
+                    {
+                        result = save_requested
+                            ? sandbox3d_authoring_object_save_source(state->authoring_object, authoring_path)
+                            : sandbox3d_authoring_object_reload_source(state->authoring_object, authoring_path);
+                    }
+                    henka_free(authoring_path);
+                    sandbox3d_set_status(
+                        state,
+                        result != HENKA_SUCCESS,
+                        result == HENKA_SUCCESS
+                            ? (save_requested
+                                ? "Authoring source saved to the bounded user slot."
+                                : "Authoring source reloaded and evaluated transactionally.")
+                            : (save_requested
+                                ? "Authoring source save failed."
+                                : "Authoring source reload failed; the current render was retained."));
+                }
             }
             if (sandbox3d_details_flow_next_row(state, flow_desc.bounds, 28.0f, 1U, &row) && row.width >= 290.0f)
             {

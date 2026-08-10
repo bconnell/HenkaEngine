@@ -42,16 +42,19 @@ authoring state.
 The first horizontal editor connection is now exercised by the Sandbox's
 selected Textured Cube: it owns a bounded authoring box and history, and the
 Object Details Authoring section exposes face identity plus transactional
-Extrude, Inset, Undo, and Redo commands. Each command evaluates a candidate,
-creates a normal renderer mesh, updates the scene entity mesh and local bounds,
-then checkpoints history; any evaluation, renderer, scene, bounds, or history
-failure retains the prior source and render state. Scene selection remains the
-existing generation-checked entity authority rather than a second selection
-system.
+Extrude, Inset, Undo, Redo, Save Source, and Reload Source commands. Each edit
+evaluates a candidate, creates a normal renderer mesh, updates the scene entity
+mesh and local bounds, then checkpoints history; reload builds a replacement
+history from the validated source before swapping the scene representation. Any
+evaluation, renderer, scene, bounds, history, or file-parse failure retains the
+prior source and render state. The save/reload buttons use a confined,
+engine-owned user-data slot, so they do not scan or overwrite arbitrary files.
+Scene selection remains the existing generation-checked entity authority rather
+than a second selection system.
 
-The broader horizontal connection is still incomplete. Mesh save/load is not
-yet wired to the editor's open/save workflow; other scene entities do not yet
-have authoring sources; and material-instance assignment, texture
+The broader horizontal connection is still incomplete. General project open/save
+and arbitrary authoring-file selection are not yet editor workflows; other scene
+entities do not yet have authoring sources; and material-instance assignment, texture
 dependencies, collision, package ownership, topology-aware picking, and
 showcase rebuilds still need the shared scene/asset-manager bridge. Material
 regions retain their numeric metadata but do not yet choose multiple shared

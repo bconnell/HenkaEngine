@@ -48,10 +48,11 @@ coverage, broad-world streaming, or human visual approval.
 
 In `--primitive-gallery`, selecting `Textured Cube` exposes the shared
 authoring source in Object Details. The Authoring section shows the selected
-topology face and provides bounded `Extrude`, `Inset`, `Undo`, and `Redo`
-actions. The evaluated mesh and scene bounds are replaced only after the
-candidate succeeds; mesh-file open/save and topology-face picking remain
-unfinished.
+topology face and provides bounded `Extrude`, `Inset`, `Undo`, `Redo`, `Save
+Source`, and `Reload Source` actions. Save and reload use the sandbox's confined
+user-data authoring slot; the evaluated mesh and scene bounds are replaced only
+after the candidate succeeds. General mesh-file open/save and topology-face
+picking remain unfinished.
 
 ## Scene legend
 
@@ -80,6 +81,7 @@ The engineering sample legend is available with `--primitive-gallery`:
 - Use the optional `Alt + Left Mouse` orbit and `Middle Mouse` pan shortcuts if you want to compare them with the explicit tool modes.
 - Switch the Viewport Tool section between Select, Move, Rotate, and Scale, then drag the gizmo on a selected object.
 - In `--primitive-gallery`, select `Textured Cube`, expand Object Details > Authoring, and use Extrude, Inset, Undo, and Redo to verify the source topology, scene mesh, bounds, and renderer stay connected.
+- Use Save Source, make another edit, then use Reload Source to verify the saved editable topology replaces the scene render and bounds transactionally; an invalid or missing source retains the prior render.
 - Toggle snapping on and off to compare free movement with stepped adjustments.
 - Click the grid and wireframe controls to confirm the in-window UI updates the same engine state as the keyboard shortcuts.
 - Open Help, Scene Legend, Paths, Settings, Diagnostics, and Transform QA in the Utility panel so you can inspect the sandbox without relying on the console.

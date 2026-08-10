@@ -14,6 +14,7 @@ struct sandbox3d_authoring_object
     henka_entity entity;
     henka_authoring_mesh* mesh;
     henka_authoring_mesh_history* history;
+    size_t history_steps;
     henka_mesh* render_mesh;
     henka_authoring_face_id selected_face;
 };
@@ -188,7 +189,7 @@ static henka_result sandbox3d_authoring_publish_candidate(
 {
     henka_mesh* candidate_render = NULL;
     henka_mesh* old_scene_mesh = NULL;
-    henka_bounds candidate_bounds;
+    henka_bounds candidate_bounds = {{0.0f, 0.0f, 0.0f}, {0.0f, 0.0f, 0.0f}};
     henka_bounds old_bounds;
     bool had_old_bounds;
     henka_result result;
@@ -239,6 +240,71 @@ static henka_result sandbox3d_authoring_publish_candidate(
     henka_authoring_mesh_destroy(object->mesh);
     henka_mesh_destroy(object->render_mesh);
     object->mesh = candidate;
+    object->render_mesh = candidate_render;
+    sandbox3d_authoring_repair_selection(object);
+    return HENKA_SUCCESS;
+}
+
+static henka_result sandbox3d_authoring_replace_loaded_source(
+    sandbox3d_authoring_object* object,
+    henka_authoring_mesh* candidate)
+{
+    henka_authoring_mesh_history* candidate_history = NULL;
+    henka_mesh* candidate_render = NULL;
+    henka_mesh* old_scene_mesh = NULL;
+    henka_bounds candidate_bounds = {{0.0f, 0.0f, 0.0f}, {0.0f, 0.0f, 0.0f}};
+    henka_bounds old_bounds;
+    bool had_old_bounds;
+    henka_result result;
+
+    if (object == NULL || candidate == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    result = henka_authoring_mesh_history_create(
+        candidate, object->history_steps, &candidate_history);
+    if (result == HENKA_SUCCESS)
+    {
+        result = sandbox3d_authoring_evaluate_render(
+            object, candidate, &candidate_render, &candidate_bounds);
+    }
+    if (result == HENKA_SUCCESS)
+    {
+        result = henka_scene_get_entity_mesh(object->scene, object->entity, &old_scene_mesh);
+    }
+    had_old_bounds = henka_scene_get_entity_local_bounds(
+        object->scene, object->entity, &old_bounds) == HENKA_SUCCESS;
+    if (result == HENKA_SUCCESS)
+    {
+        result = henka_scene_set_entity_mesh(object->scene, object->entity, candidate_render);
+    }
+    if (result == HENKA_SUCCESS)
+    {
+        result = henka_scene_set_entity_local_bounds(object->scene, object->entity, candidate_bounds);
+    }
+    if (result != HENKA_SUCCESS)
+    {
+        if (old_scene_mesh != NULL)
+        {
+            (void)henka_scene_set_entity_mesh(object->scene, object->entity, old_scene_mesh);
+        }
+        if (had_old_bounds)
+        {
+            (void)henka_scene_set_entity_local_bounds(object->scene, object->entity, old_bounds);
+        }
+        else
+        {
+            (void)henka_scene_clear_entity_local_bounds(object->scene, object->entity);
+        }
+        henka_mesh_destroy(candidate_render);
+        henka_authoring_mesh_history_destroy(candidate_history);
+        return result;
+    }
+    henka_authoring_mesh_destroy(object->mesh);
+    henka_authoring_mesh_history_destroy(object->history);
+    henka_mesh_destroy(object->render_mesh);
+    object->mesh = candidate;
+    object->history = candidate_history;
     object->render_mesh = candidate_render;
     sandbox3d_authoring_repair_selection(object);
     return HENKA_SUCCESS;
@@ -419,6 +485,7 @@ henka_result sandbox3d_authoring_object_create_box(
     object->scene = scene;
     object->entity = entity;
     object->mesh = mesh;
+    object->history_steps = history_steps;
     object->selected_face = 1U;
     result = henka_authoring_mesh_history_create(mesh, history_steps, &object->history);
     if (result == HENKA_SUCCESS)
@@ -565,6 +632,43 @@ henka_result sandbox3d_authoring_object_inset_selected_face(
         }
     }
     else
+    {
+        henka_authoring_mesh_destroy(candidate);
+    }
+    return result;
+}
+
+henka_result sandbox3d_authoring_object_save_source(
+    const sandbox3d_authoring_object* object,
+    const char* path)
+{
+    if (object == NULL || path == NULL || path[0] == '\0')
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    return henka_authoring_mesh_save_file(object->mesh, path);
+}
+
+henka_result sandbox3d_authoring_object_reload_source(
+    sandbox3d_authoring_object* object,
+    const char* path)
+{
+    henka_authoring_mesh* candidate = NULL;
+    henka_result result;
+    if (object == NULL || path == NULL || path[0] == '\0')
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    result = henka_authoring_mesh_clone(object->mesh, &candidate);
+    if (result == HENKA_SUCCESS)
+    {
+        result = henka_authoring_mesh_load_file(candidate, path);
+    }
+    if (result == HENKA_SUCCESS)
+    {
+        result = sandbox3d_authoring_replace_loaded_source(object, candidate);
+    }
+    if (result != HENKA_SUCCESS)
     {
         henka_authoring_mesh_destroy(candidate);
     }
