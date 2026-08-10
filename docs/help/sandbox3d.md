@@ -59,7 +59,9 @@ unfinished.
 The Authoring section also reports the evaluated render-mesh material-region
 range after each successful edit, undo, redo, save, or reload. This is metadata
 continuity diagnostics; region values do not yet select multiple renderer
-material instances.
+material instances. Face selection is part of the bounded authoring history:
+topology edits select their resulting face, undo/redo restores the matching
+face identity where valid, and editing after undo clears the redo branch.
 
 ## Scene legend
 

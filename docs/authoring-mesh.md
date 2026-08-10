@@ -55,6 +55,11 @@ evaluation, renderer, scene, bounds, history, or file-parse failure retains the
 prior source, render, and (when the linked body is present) spatial state,
 including the prior collider. The save/reload buttons use a confined,
 engine-owned user-data slot, so they do not scan or overwrite arbitrary files.
+The bridge stores one bounded selected-face identity beside each mesh-history
+snapshot. Topology operations select their deterministic result, undo/redo
+restores the corresponding prior or next face when it still exists, and a new
+edit after undo truncates both histories together. Reload resets the selection
+history to the validated replacement source.
 When the bounded authoring wrapper closes, it restores the mesh and local bounds
 that belonged to the entity before authoring took ownership, provided another
 editor path has not replaced the active evaluated mesh in the meantime.
