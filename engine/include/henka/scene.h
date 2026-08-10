@@ -125,6 +125,15 @@ typedef enum henka_scene_environment_mode
     HENKA_SCENE_ENVIRONMENT_PROCEDURAL
 } henka_scene_environment_mode;
 
+typedef enum henka_scene_environment_preset
+{
+    HENKA_SCENE_ENVIRONMENT_PRESET_CLEAR_MIDDAY = 0,
+    HENKA_SCENE_ENVIRONMENT_PRESET_GOLDEN_HOUR,
+    HENKA_SCENE_ENVIRONMENT_PRESET_MOONLIT_NIGHT,
+    HENKA_SCENE_ENVIRONMENT_PRESET_ALIEN_HAZE,
+    HENKA_SCENE_ENVIRONMENT_PRESET_COUNT
+} henka_scene_environment_preset;
+
 typedef struct henka_scene_atmosphere_desc
 {
     float rayleigh_scattering;
@@ -265,6 +274,8 @@ henka_result henka_material_describe(const henka_material* material, char* buffe
 henka_material henka_material_default(void);
 henka_material henka_material_terrain_default(void);
 henka_scene_environment_desc henka_scene_environment_default(void);
+const char* henka_scene_environment_preset_get_label(
+    henka_scene_environment_preset preset);
 henka_result henka_scene_create(henka_scene** out_scene);
 void henka_scene_destroy(henka_scene* scene);
 henka_entity henka_scene_create_entity(henka_scene* scene);
@@ -324,6 +335,12 @@ void henka_scene_set_ambient_color(henka_scene* scene, henka_vec3 ambient_color)
 henka_result henka_scene_set_environment(
     henka_scene* scene,
     henka_scene_environment_desc environment);
+/* Applies a bounded built-in environment starting point through the same
+ * transactional environment setter. The preset is not retained as hidden
+ * state; the resulting descriptor remains ordinarily editable and serializable. */
+henka_result henka_scene_set_environment_preset(
+    henka_scene* scene,
+    henka_scene_environment_preset preset);
 henka_result henka_scene_get_environment(
     const henka_scene* scene,
     henka_scene_environment_desc* out_environment);

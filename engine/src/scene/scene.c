@@ -131,6 +131,25 @@ henka_scene_environment_desc henka_scene_environment_default(void)
     return environment;
 }
 
+const char* henka_scene_environment_preset_get_label(
+    henka_scene_environment_preset preset)
+{
+    switch (preset)
+    {
+        case HENKA_SCENE_ENVIRONMENT_PRESET_GOLDEN_HOUR:
+            return "Golden Hour";
+        case HENKA_SCENE_ENVIRONMENT_PRESET_MOONLIT_NIGHT:
+            return "Moonlit Night";
+        case HENKA_SCENE_ENVIRONMENT_PRESET_ALIEN_HAZE:
+            return "Alien Haze";
+        case HENKA_SCENE_ENVIRONMENT_PRESET_CLEAR_MIDDAY:
+            return "Clear Midday";
+        case HENKA_SCENE_ENVIRONMENT_PRESET_COUNT:
+        default:
+            return "Unknown";
+    }
+}
+
 const char* henka_material_type_get_label(henka_material_type type)
 {
     switch (type)
@@ -1998,6 +2017,83 @@ henka_result henka_scene_set_environment(
     }
     henka_scene_bump_render_revision(scene);
     return HENKA_SUCCESS;
+}
+
+henka_result henka_scene_set_environment_preset(
+    henka_scene* scene,
+    henka_scene_environment_preset preset)
+{
+    henka_scene_environment_desc environment;
+    henka_scene_environment_desc current;
+
+    if (scene == NULL || preset < HENKA_SCENE_ENVIRONMENT_PRESET_CLEAR_MIDDAY ||
+        preset >= HENKA_SCENE_ENVIRONMENT_PRESET_COUNT)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    environment = henka_scene_environment_default();
+    if (henka_scene_get_environment(scene, &current) == HENKA_SUCCESS)
+    {
+        /* The preset changes environment presentation but does not take
+         * ownership of or discard the existing manager-owned source. */
+        environment.hdr_texture = current.hdr_texture;
+    }
+    environment.mode = HENKA_SCENE_ENVIRONMENT_PROCEDURAL;
+    switch (preset)
+    {
+        case HENKA_SCENE_ENVIRONMENT_PRESET_GOLDEN_HOUR:
+            environment.ground_color = (henka_vec3){0.12f, 0.055f, 0.025f};
+            environment.horizon_color = (henka_vec3){0.72f, 0.26f, 0.08f};
+            environment.zenith_color = (henka_vec3){0.10f, 0.13f, 0.28f};
+            environment.intensity = 1.25f;
+            environment.atmosphere.mie_scattering = 0.14f;
+            environment.atmosphere.turbidity = 3.5f;
+            environment.sun.color = (henka_vec3){1.0f, 0.68f, 0.42f};
+            environment.sun.intensity = 2.0f;
+            environment.moon.enabled = false;
+            environment.stars.enabled = false;
+            environment.time_of_day_hours = 17.5f;
+            break;
+        case HENKA_SCENE_ENVIRONMENT_PRESET_MOONLIT_NIGHT:
+            environment.ground_color = (henka_vec3){0.006f, 0.009f, 0.022f};
+            environment.horizon_color = (henka_vec3){0.035f, 0.055f, 0.12f};
+            environment.zenith_color = (henka_vec3){0.004f, 0.008f, 0.025f};
+            environment.intensity = 0.55f;
+            environment.sun.intensity = 0.15f;
+            environment.moon.intensity = 0.35f;
+            environment.stars.intensity = 0.35f;
+            environment.time_of_day_hours = 0.5f;
+            break;
+        case HENKA_SCENE_ENVIRONMENT_PRESET_ALIEN_HAZE:
+            environment.ground_color = (henka_vec3){0.035f, 0.008f, 0.06f};
+            environment.horizon_color = (henka_vec3){0.34f, 0.05f, 0.24f};
+            environment.zenith_color = (henka_vec3){0.02f, 0.08f, 0.16f};
+            environment.intensity = 1.4f;
+            environment.atmosphere.rayleigh_scattering = 0.55f;
+            environment.atmosphere.mie_scattering = 0.22f;
+            environment.atmosphere.mie_anisotropy = -0.35f;
+            environment.atmosphere.turbidity = 7.0f;
+            environment.atmosphere.ground_albedo = (henka_vec3){0.16f, 0.04f, 0.22f};
+            environment.sun.manual_direction = true;
+            environment.sun.direction = (henka_vec3){-0.25f, -0.82f, 0.52f};
+            environment.sun.color = (henka_vec3){0.46f, 0.72f, 1.0f};
+            environment.sun.intensity = 2.4f;
+            environment.moon.enabled = true;
+            environment.moon.color = (henka_vec3){1.0f, 0.30f, 0.72f};
+            environment.moon.intensity = 0.22f;
+            environment.moon.angular_radius = 0.012f;
+            environment.stars.intensity = 0.20f;
+            environment.time_of_day_hours = 20.0f;
+            break;
+        case HENKA_SCENE_ENVIRONMENT_PRESET_CLEAR_MIDDAY:
+        case HENKA_SCENE_ENVIRONMENT_PRESET_COUNT:
+        default:
+            environment.time_of_day_hours = 12.0f;
+            break;
+    }
+    environment.time_of_day_enabled = false;
+    return henka_scene_set_environment(scene, environment);
 }
 
 henka_result henka_scene_get_environment(

@@ -408,6 +408,7 @@ typedef struct sandbox3d_state
     bool temporal_stress;
     bool material_stress;
     bool environment_stress;
+    uint32_t environment_preset_index;
     bool material_stress_ran;
     bool terrain_stream_stress;
     bool terrain_stream_stress_ran;
@@ -15369,6 +15370,28 @@ static void sandbox3d_draw_utility_panel(
                     {
                         sandbox3d_set_status(state, true, "Sky time change was rejected.");
                     }
+                }
+            }
+            if (henka_ui_button(state->ui, "utility_environment_preset", (henka_ui_rect){x_left + 240.0f, y_start + 320.0f, 88.0f, 24.0f}, "Preset +"))
+            {
+                const henka_scene_environment_preset preset =
+                    (henka_scene_environment_preset)(state->environment_preset_index %
+                        (uint32_t)HENKA_SCENE_ENVIRONMENT_PRESET_COUNT);
+                if (henka_scene_set_environment_preset(state->scene, preset) == HENKA_SUCCESS)
+                {
+                    sandbox3d_set_statusf(
+                        state,
+                        false,
+                        false,
+                        "Environment preset applied: %s.",
+                        henka_scene_environment_preset_get_label(preset));
+                    state->environment_preset_index =
+                        (state->environment_preset_index + 1U) %
+                        (uint32_t)HENKA_SCENE_ENVIRONMENT_PRESET_COUNT;
+                }
+                else
+                {
+                    sandbox3d_set_status(state, true, "Environment preset was rejected.");
                 }
             }
             break;

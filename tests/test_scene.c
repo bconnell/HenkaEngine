@@ -138,6 +138,28 @@ void henka_test_scene(void)
     invalid_environment = read_environment;
     invalid_environment.moon.intensity = -1.0f;
     HENKA_TEST_ASSERT(henka_scene_set_environment(scene, invalid_environment) == HENKA_ERROR_INVALID_ARGUMENT);
+    {
+        henka_scene_environment_preset preset;
+        const char* preset_label;
+        for (preset = HENKA_SCENE_ENVIRONMENT_PRESET_CLEAR_MIDDAY;
+             preset < HENKA_SCENE_ENVIRONMENT_PRESET_COUNT;
+             ++preset)
+        {
+            preset_label = henka_scene_environment_preset_get_label(preset);
+            HENKA_TEST_ASSERT(preset_label != NULL);
+            HENKA_TEST_ASSERT(strcmp(preset_label, "Unknown") != 0);
+            HENKA_TEST_ASSERT(henka_scene_set_environment_preset(scene, preset) == HENKA_SUCCESS);
+            HENKA_TEST_ASSERT(henka_scene_get_environment(scene, &read_environment) == HENKA_SUCCESS);
+            HENKA_TEST_ASSERT(read_environment.mode == HENKA_SCENE_ENVIRONMENT_PROCEDURAL);
+            HENKA_TEST_ASSERT(!read_environment.time_of_day_enabled);
+        }
+        invalid_environment = read_environment;
+        HENKA_TEST_ASSERT(henka_scene_set_environment_preset(
+            scene,
+            (henka_scene_environment_preset)HENKA_SCENE_ENVIRONMENT_PRESET_COUNT) == HENKA_ERROR_INVALID_ARGUMENT);
+        HENKA_TEST_ASSERT(henka_scene_get_environment(scene, &read_environment) == HENKA_SUCCESS);
+        HENKA_TEST_ASSERT_FLOAT_CLOSE(read_environment.intensity, invalid_environment.intensity, 0.0001f);
+    }
     light = (henka_scene_light_desc){
         HENKA_SCENE_LIGHT_POINT,
         (henka_vec3){1.0f, 2.0f, 3.0f},
