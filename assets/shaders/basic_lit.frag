@@ -38,6 +38,14 @@ uniform vec3 environmentGroundColor;
 uniform vec3 environmentHorizonColor;
 uniform vec3 environmentZenithColor;
 uniform float environmentIntensity;
+uniform int environmentMode;
+uniform vec3 environmentSunDirection;
+uniform vec3 environmentSunColor;
+uniform float environmentSunIntensity;
+uniform vec4 environmentAtmosphere;
+uniform vec3 environmentGroundAlbedo;
+uniform float environmentHorizonIntensity;
+uniform float environmentSunAngularRadius;
 uniform sampler2D environmentTexture;
 uniform bool useEnvironmentTexture;
 uniform float environmentRotation;
@@ -334,8 +342,33 @@ float localShadowFactor(vec3 normal, vec3 lightDir)
     return visible / 9.0;
 }
 
+vec3 sampleProceduralEnvironment(vec3 direction)
+{
+    float up = clamp(direction.y, -1.0, 1.0);
+    float daylight = max(up, 0.0);
+    float rayleigh = clamp(environmentAtmosphere.x * max(environmentAtmosphere.z, 0.01), 0.0, 8.0);
+    float mie = clamp(environmentAtmosphere.y * (0.65 + 0.35 * environmentAtmosphere.w), 0.0, 8.0);
+    float horizonBand = exp(-abs(up) * 5.0) * max(environmentHorizonIntensity, 0.0);
+    float horizon = smoothstep(0.04, 0.48, clamp(up * 0.5 + 0.5, 0.0, 1.0));
+    vec3 lower = mix(environmentGroundColor, environmentHorizonColor, horizon);
+    vec3 gradient = mix(lower, environmentZenithColor, smoothstep(0.48, 1.0, clamp(up * 0.5 + 0.5, 0.0, 1.0)));
+    vec3 rayleighColor = vec3(0.24, 0.43, 0.95) * rayleigh * (0.16 + 0.84 * daylight);
+    vec3 warmMie = vec3(1.0, 0.58, 0.30) * mie * pow(max(1.0 - daylight, 0.0), 1.35) * 0.12;
+    vec3 sky = gradient + rayleighColor * (0.35 + 0.65 * daylight) + warmMie * horizonBand;
+    sky = mix(sky, environmentGroundAlbedo, max(-up, 0.0) * 0.65);
+    vec3 sunVector = length(environmentSunDirection) > 0.0001 ? normalize(-environmentSunDirection) : vec3(0.0, 1.0, 0.0);
+    float sunFacing = max(dot(direction, sunVector), 0.0);
+    float sunDisc = smoothstep(cos(max(environmentSunAngularRadius, 0.0001) * 2.0), 1.0, sunFacing);
+    float sunHalo = pow(sunFacing, 32.0) * 0.035;
+    return max(sky + (sunDisc + sunHalo) * max(environmentSunIntensity, 0.0) * max(environmentSunColor, vec3(0.0)), vec3(0.0));
+}
+
 vec3 sampleEnvironment(vec3 direction)
 {
+    if (environmentMode == 2)
+    {
+        return min(sampleProceduralEnvironment(direction) * max(environmentIntensity, 0.0), vec3(65504.0));
+    }
     if (useEnvironmentTexture)
     {
         float longitude = atan(direction.z, direction.x) / (2.0 * PI) + 0.5 + environmentRotation / (2.0 * PI);

@@ -105,6 +105,29 @@ henka_material henka_material_terrain_default(void)
     return material;
 }
 
+henka_scene_environment_desc henka_scene_environment_default(void)
+{
+    henka_scene_environment_desc environment = {0};
+
+    environment.ground_color = (henka_vec3){0.035f, 0.045f, 0.065f};
+    environment.horizon_color = (henka_vec3){0.16f, 0.19f, 0.24f};
+    environment.zenith_color = (henka_vec3){0.055f, 0.08f, 0.14f};
+    environment.intensity = 1.5f;
+    environment.hdr_texture = NULL;
+    environment.hdr_rotation = 0.0f;
+    environment.mode = HENKA_SCENE_ENVIRONMENT_GRADIENT;
+    environment.atmosphere = (henka_scene_atmosphere_desc){
+        0.32f, 0.08f, 0.76f, 1.0f, 2.2f, 0.04f, 8.0f, 6360.0f,
+        {0.20f, 0.24f, 0.18f}, 1.0f};
+    environment.sun = (henka_scene_sun_desc){
+        true, true, {-0.4f, -1.0f, -0.2f}, {1.0f, 0.96f, 0.90f}, 3.0f, 0.00465f};
+    environment.time_of_day_hours = 12.0f;
+    environment.day_length_seconds = 600.0f;
+    environment.time_scale = 1.0f;
+    environment.time_of_day_enabled = false;
+    return environment;
+}
+
 const char* henka_material_type_get_label(henka_material_type type)
 {
     switch (type)
@@ -733,13 +756,7 @@ henka_result henka_scene_create(henka_scene** out_scene)
     scene->ambient_color.x = 0.16f;
     scene->ambient_color.y = 0.18f;
     scene->ambient_color.z = 0.22f;
-    scene->environment = (henka_scene_environment_desc){
-        (henka_vec3){0.035f, 0.045f, 0.065f},
-        (henka_vec3){0.16f, 0.19f, 0.24f},
-        (henka_vec3){0.055f, 0.08f, 0.14f},
-        1.5f,
-        NULL,
-        0.0f};
+    scene->environment = henka_scene_environment_default();
     scene->fog = (henka_scene_fog_desc){
         false,
         HENKA_SCENE_FOG_LINEAR,
@@ -1791,6 +1808,43 @@ henka_result henka_scene_set_environment(
     henka_scene* scene,
     henka_scene_environment_desc environment)
 {
+    henka_scene_environment_desc defaults;
+    float sun_direction_length;
+
+    /* Preserve source compatibility for callers that used the original
+     * six-field aggregate initializer before environment authority gained
+     * procedural/time fields. An explicit new descriptor should come from
+     * henka_scene_environment_default(), so zero remains a valid authored
+     * value for individual scattering controls. */
+    if (environment.day_length_seconds == 0.0f &&
+        environment.time_of_day_hours == 0.0f &&
+        environment.time_scale == 0.0f &&
+        environment.mode == HENKA_SCENE_ENVIRONMENT_GRADIENT &&
+        !environment.time_of_day_enabled &&
+        !environment.sun.enabled &&
+        environment.atmosphere.rayleigh_scattering == 0.0f &&
+        environment.atmosphere.mie_scattering == 0.0f &&
+        environment.atmosphere.mie_anisotropy == 0.0f &&
+        environment.atmosphere.density == 0.0f &&
+        environment.atmosphere.turbidity == 0.0f &&
+        environment.atmosphere.ozone_absorption == 0.0f &&
+        environment.atmosphere.atmosphere_height == 0.0f &&
+        environment.atmosphere.planet_radius == 0.0f &&
+        environment.atmosphere.ground_albedo.x == 0.0f &&
+        environment.atmosphere.ground_albedo.y == 0.0f &&
+        environment.atmosphere.ground_albedo.z == 0.0f &&
+        environment.atmosphere.horizon_intensity == 0.0f)
+    {
+        defaults = henka_scene_environment_default();
+        environment.mode = HENKA_SCENE_ENVIRONMENT_GRADIENT;
+        environment.atmosphere = defaults.atmosphere;
+        environment.sun = defaults.sun;
+        environment.time_of_day_hours = defaults.time_of_day_hours;
+        environment.day_length_seconds = defaults.day_length_seconds;
+        environment.time_scale = defaults.time_scale;
+        environment.time_of_day_enabled = defaults.time_of_day_enabled;
+    }
+
     if (scene == NULL ||
         !henka_is_finite_float(environment.ground_color.x) ||
         !henka_is_finite_float(environment.ground_color.y) ||
@@ -1814,12 +1868,97 @@ henka_result henka_scene_set_environment(
         environment.zenith_color.z < 0.0f || environment.zenith_color.z > 16.0f ||
         environment.intensity < 0.0f || environment.intensity > 16.0f ||
         environment.hdr_rotation < -1000000.0f ||
-        environment.hdr_rotation > 1000000.0f)
+        environment.hdr_rotation > 1000000.0f ||
+        environment.mode < HENKA_SCENE_ENVIRONMENT_GRADIENT ||
+        environment.mode > HENKA_SCENE_ENVIRONMENT_PROCEDURAL ||
+        !henka_is_finite_float(environment.atmosphere.rayleigh_scattering) ||
+        !henka_is_finite_float(environment.atmosphere.mie_scattering) ||
+        !henka_is_finite_float(environment.atmosphere.mie_anisotropy) ||
+        !henka_is_finite_float(environment.atmosphere.density) ||
+        !henka_is_finite_float(environment.atmosphere.turbidity) ||
+        !henka_is_finite_float(environment.atmosphere.ozone_absorption) ||
+        !henka_is_finite_float(environment.atmosphere.atmosphere_height) ||
+        !henka_is_finite_float(environment.atmosphere.planet_radius) ||
+        !henka_scene_vec3_is_finite(environment.atmosphere.ground_albedo) ||
+        !henka_is_finite_float(environment.atmosphere.horizon_intensity) ||
+        environment.atmosphere.rayleigh_scattering < 0.0f ||
+        environment.atmosphere.rayleigh_scattering > 8.0f ||
+        environment.atmosphere.mie_scattering < 0.0f ||
+        environment.atmosphere.mie_scattering > 8.0f ||
+        environment.atmosphere.mie_anisotropy < -0.99f ||
+        environment.atmosphere.mie_anisotropy > 0.99f ||
+        environment.atmosphere.density < 0.0f ||
+        environment.atmosphere.density > 8.0f ||
+        environment.atmosphere.turbidity < 0.0f ||
+        environment.atmosphere.turbidity > 32.0f ||
+        environment.atmosphere.ozone_absorption < 0.0f ||
+        environment.atmosphere.ozone_absorption > 8.0f ||
+        environment.atmosphere.atmosphere_height <= 0.0f ||
+        environment.atmosphere.atmosphere_height > 100000.0f ||
+        environment.atmosphere.planet_radius <= 0.0f ||
+        environment.atmosphere.planet_radius > 1000000000.0f ||
+        environment.atmosphere.ground_albedo.x < 0.0f ||
+        environment.atmosphere.ground_albedo.y < 0.0f ||
+        environment.atmosphere.ground_albedo.z < 0.0f ||
+        environment.atmosphere.ground_albedo.x > 16.0f ||
+        environment.atmosphere.ground_albedo.y > 16.0f ||
+        environment.atmosphere.ground_albedo.z > 16.0f ||
+        environment.atmosphere.horizon_intensity < 0.0f ||
+        environment.atmosphere.horizon_intensity > 16.0f ||
+        !henka_is_finite_float(environment.time_of_day_hours) ||
+        !henka_is_finite_float(environment.day_length_seconds) ||
+        !henka_is_finite_float(environment.time_scale) ||
+        environment.time_of_day_hours < 0.0f ||
+        environment.time_of_day_hours >= 24.0f ||
+        environment.day_length_seconds <= 0.0f ||
+        environment.day_length_seconds > 604800.0f ||
+        environment.time_scale < -64.0f ||
+        environment.time_scale > 64.0f)
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
 
+    if (environment.sun.enabled)
+    {
+        sun_direction_length = henka_vec3_length(environment.sun.direction);
+        if (!henka_scene_vec3_is_finite(environment.sun.direction) ||
+            !henka_scene_vec3_is_finite(environment.sun.color) ||
+            !henka_is_finite_float(environment.sun.intensity) ||
+            !henka_is_finite_float(environment.sun.angular_radius) ||
+            sun_direction_length <= 0.000001f ||
+            environment.sun.color.x < 0.0f || environment.sun.color.y < 0.0f || environment.sun.color.z < 0.0f ||
+            environment.sun.color.x > 16.0f || environment.sun.color.y > 16.0f || environment.sun.color.z > 16.0f ||
+            environment.sun.intensity < 0.0f || environment.sun.intensity > 64.0f ||
+            environment.sun.angular_radius < 0.0001f || environment.sun.angular_radius > 0.5f)
+        {
+            return HENKA_ERROR_INVALID_ARGUMENT;
+        }
+    }
+
     scene->environment = environment;
+    if (environment.sun.enabled)
+    {
+        henka_vec3 direction = henka_vec3_normalize(environment.sun.direction);
+        float elevation = 1.0f;
+        if (!environment.sun.manual_direction)
+        {
+            const float pi = 3.14159265358979323846f;
+            float phase = (environment.time_of_day_hours - 6.0f) * pi / 12.0f;
+            elevation = sinf(phase);
+            {
+                float horizontal = sqrtf(fmaxf(0.0f, 1.0f - elevation * elevation));
+                float azimuth = environment.time_of_day_hours * pi / 12.0f;
+                direction = (henka_vec3){
+                    cosf(azimuth) * horizontal,
+                    -elevation,
+                    sinf(azimuth) * horizontal};
+            }
+        }
+        scene->light_direction = direction;
+        scene->light_color = environment.sun.color;
+        scene->light_intensity = environment.sun.intensity *
+            (environment.sun.manual_direction ? 1.0f : fmaxf(elevation, 0.03f));
+    }
     henka_scene_bump_render_revision(scene);
     return HENKA_SUCCESS;
 }
@@ -1835,6 +1974,34 @@ henka_result henka_scene_get_environment(
 
     *out_environment = scene->environment;
     return HENKA_SUCCESS;
+}
+
+henka_result henka_scene_advance_environment_time(
+    henka_scene* scene,
+    float delta_seconds)
+{
+    henka_scene_environment_desc environment;
+    float hours;
+
+    if (scene == NULL || !henka_is_finite_float(delta_seconds) ||
+        delta_seconds < -86400.0f || delta_seconds > 86400.0f)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    environment = scene->environment;
+    if (!environment.time_of_day_enabled)
+    {
+        return HENKA_SUCCESS;
+    }
+    hours = environment.time_of_day_hours +
+        delta_seconds * environment.time_scale / environment.day_length_seconds * 24.0f;
+    hours = fmodf(hours, 24.0f);
+    if (hours < 0.0f)
+    {
+        hours += 24.0f;
+    }
+    environment.time_of_day_hours = hours;
+    return henka_scene_set_environment(scene, environment);
 }
 
 static henka_result henka_scene_validate_reflection_probe(

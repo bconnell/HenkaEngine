@@ -88,6 +88,7 @@ void henka_test_scene(void)
     henka_transform read_back;
     henka_scene_environment_desc environment;
     henka_scene_environment_desc read_environment;
+    henka_scene_environment_desc invalid_environment;
     henka_scene_fog_desc fog;
     henka_scene_fog_desc read_fog;
     henka_mesh* read_mesh;
@@ -118,6 +119,20 @@ void henka_test_scene(void)
     HENKA_TEST_ASSERT(henka_scene_set_environment(scene, environment) == HENKA_ERROR_INVALID_ARGUMENT);
     HENKA_TEST_ASSERT(henka_scene_get_environment(scene, &read_environment) == HENKA_SUCCESS);
     HENKA_TEST_ASSERT_FLOAT_CLOSE(read_environment.intensity, 2.0f, 0.0001f);
+    environment = henka_scene_environment_default();
+    environment.mode = HENKA_SCENE_ENVIRONMENT_PROCEDURAL;
+    environment.sun.manual_direction = false;
+    environment.time_of_day_enabled = true;
+    environment.time_of_day_hours = 6.0f;
+    HENKA_TEST_ASSERT(henka_scene_set_environment(scene, environment) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_scene_advance_environment_time(scene, 60.0f) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_scene_get_environment(scene, &read_environment) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(read_environment.time_of_day_hours, 8.4f, 0.0001f);
+    invalid_environment = read_environment;
+    invalid_environment.atmosphere.rayleigh_scattering = -1.0f;
+    HENKA_TEST_ASSERT(henka_scene_set_environment(scene, invalid_environment) == HENKA_ERROR_INVALID_ARGUMENT);
+    HENKA_TEST_ASSERT(henka_scene_get_environment(scene, &read_environment) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(read_environment.time_of_day_hours, 8.4f, 0.0001f);
     light = (henka_scene_light_desc){
         HENKA_SCENE_LIGHT_POINT,
         (henka_vec3){1.0f, 2.0f, 3.0f},

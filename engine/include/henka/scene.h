@@ -118,6 +118,37 @@ typedef struct henka_interaction_desc
     const char* prompt;
 } henka_interaction_desc;
 
+typedef enum henka_scene_environment_mode
+{
+    HENKA_SCENE_ENVIRONMENT_GRADIENT = 0,
+    HENKA_SCENE_ENVIRONMENT_HDRI,
+    HENKA_SCENE_ENVIRONMENT_PROCEDURAL
+} henka_scene_environment_mode;
+
+typedef struct henka_scene_atmosphere_desc
+{
+    float rayleigh_scattering;
+    float mie_scattering;
+    float mie_anisotropy;
+    float density;
+    float turbidity;
+    float ozone_absorption;
+    float atmosphere_height;
+    float planet_radius;
+    henka_vec3 ground_albedo;
+    float horizon_intensity;
+} henka_scene_atmosphere_desc;
+
+typedef struct henka_scene_sun_desc
+{
+    bool enabled;
+    bool manual_direction;
+    henka_vec3 direction;
+    henka_vec3 color;
+    float intensity;
+    float angular_radius;
+} henka_scene_sun_desc;
+
 typedef struct henka_scene_environment_desc
 {
     henka_vec3 ground_color;
@@ -127,6 +158,13 @@ typedef struct henka_scene_environment_desc
     /* Borrowed linear HDR equirectangular texture; the scene does not own it. */
     henka_texture* hdr_texture;
     float hdr_rotation;
+    henka_scene_environment_mode mode;
+    henka_scene_atmosphere_desc atmosphere;
+    henka_scene_sun_desc sun;
+    float time_of_day_hours;
+    float day_length_seconds;
+    float time_scale;
+    bool time_of_day_enabled;
 } henka_scene_environment_desc;
 
 #define HENKA_SCENE_MAX_REFLECTION_PROBES 8U
@@ -207,6 +245,7 @@ henka_result henka_material_validate(const henka_material* material);
 henka_result henka_material_describe(const henka_material* material, char* buffer, size_t buffer_size);
 henka_material henka_material_default(void);
 henka_material henka_material_terrain_default(void);
+henka_scene_environment_desc henka_scene_environment_default(void);
 henka_result henka_scene_create(henka_scene** out_scene);
 void henka_scene_destroy(henka_scene* scene);
 henka_entity henka_scene_create_entity(henka_scene* scene);
@@ -269,6 +308,11 @@ henka_result henka_scene_set_environment(
 henka_result henka_scene_get_environment(
     const henka_scene* scene,
     henka_scene_environment_desc* out_environment);
+/* Advances deterministic environment time without requiring a renderer. The
+ * scene sun and direct-light state are updated transactionally. */
+henka_result henka_scene_advance_environment_time(
+    henka_scene* scene,
+    float delta_seconds);
 henka_result henka_scene_add_reflection_probe(
     henka_scene* scene,
     henka_scene_reflection_probe_desc probe,
