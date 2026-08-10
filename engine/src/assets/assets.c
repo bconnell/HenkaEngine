@@ -1524,23 +1524,32 @@ henka_result henka_assets_adopt_runtime_texture(
     }
 
     key = NULL;
-    result = henka_assets_make_canonical_key(identity, &key);
-    if (result != HENKA_SUCCESS)
-    {
-        return result;
-    }
-    existing_entry = henka_asset_manager_find_texture_entry(manager, key);
-    if (existing_entry != NULL)
-    {
-        henka_free(key);
-        return HENKA_ERROR_INVALID_ARGUMENT;
-    }
-
+    source_path = NULL;
     memset(&texture_info, 0, sizeof(texture_info));
     result = henka_texture_get_info(texture, &texture_info);
     if (result != HENKA_SUCCESS || !texture_info.backend_ready ||
         texture_info.fallback_alias || texture_info.resident_gpu_bytes == 0U)
     {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    result = henka_assets_make_canonical_key(identity, &source_path);
+    if (result != HENKA_SUCCESS)
+    {
+        return result;
+    }
+    result = henka_assets_make_texture_cache_key(
+        source_path,
+        &texture_info.descriptor,
+        &key);
+    if (result != HENKA_SUCCESS)
+    {
+        henka_free(source_path);
+        return result;
+    }
+    existing_entry = henka_asset_manager_find_texture_entry(manager, key);
+    if (existing_entry != NULL)
+    {
+        henka_free(source_path);
         henka_free(key);
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
@@ -1555,20 +1564,15 @@ henka_result henka_assets_adopt_runtime_texture(
             ++manager->texture_budget_rejection_count;
         }
         henka_assets_add_failed_texture_bytes(manager, texture_info.resident_gpu_bytes);
+        henka_free(source_path);
         henka_free(key);
         return HENKA_ERROR_LIMIT;
     }
 
-    display_name = henka_asset_copy_display_name(key);
+    display_name = henka_asset_copy_display_name(source_path);
     if (display_name == NULL)
     {
-        henka_free(key);
-        return HENKA_ERROR_OUT_OF_MEMORY;
-    }
-    source_path = henka_duplicate_string(key);
-    if (source_path == NULL)
-    {
-        henka_free(display_name);
+        henka_free(source_path);
         henka_free(key);
         return HENKA_ERROR_OUT_OF_MEMORY;
     }

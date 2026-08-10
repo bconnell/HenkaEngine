@@ -214,6 +214,7 @@ void henka_test_assets(void)
     henka_asset_texture_entry runtime_entries[1];
     henka_texture runtime_texture;
     henka_texture* adopted_runtime_texture;
+    henka_texture* runtime_cache_lookup;
     size_t allocations_before_runtime;
     size_t allocations_before_alias;
     static const unsigned char one_pixel[] =
@@ -387,6 +388,13 @@ void henka_test_assets(void)
     HENKA_TEST_ASSERT(strcmp(
         runtime_entries[0].metadata.source_path,
         "runtime/environment/studio") == 0);
+    runtime_cache_lookup = NULL;
+    HENKA_TEST_ASSERT(henka_assets_load_texture_with_descriptor(
+        &runtime_manager,
+        "runtime/environment/studio",
+        &runtime_texture.descriptor,
+        &runtime_cache_lookup) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(runtime_cache_lookup == &runtime_texture);
     adopted_runtime_texture = (henka_texture*)1;
     HENKA_TEST_ASSERT(henka_assets_adopt_runtime_texture(
         &runtime_manager,
