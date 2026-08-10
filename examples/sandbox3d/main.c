@@ -13976,6 +13976,38 @@ static void sandbox3d_draw_object_details_panel(
                     sandbox3d_set_status(state, false, "Selected face material region updated and evaluated.");
                 }
             }
+            if (sandbox3d_details_flow_next_row(state, flow_desc.bounds, 22.0f, 1U, &row))
+            {
+                uint32_t minimum_region = 0U;
+                uint32_t maximum_region = 0U;
+                char evaluated_material_region_text[48];
+                if (sandbox3d_authoring_object_get_render_material_region_range(
+                        state->authoring_object,
+                        &minimum_region,
+                        &maximum_region) == HENKA_SUCCESS)
+                {
+                    snprintf(
+                        evaluated_material_region_text,
+                        sizeof(evaluated_material_region_text),
+                        "%u - %u",
+                        (unsigned int)minimum_region,
+                        (unsigned int)maximum_region);
+                }
+                else
+                {
+                    (void)snprintf(
+                        evaluated_material_region_text,
+                        sizeof(evaluated_material_region_text),
+                        "Unavailable");
+                }
+                sandbox3d_draw_value_row(
+                    state->ui,
+                    row.x,
+                    row.y,
+                    row.width,
+                    "Evaluated Regions",
+                    evaluated_material_region_text);
+            }
             if (sandbox3d_details_flow_next_row(state, flow_desc.bounds, 28.0f, 1U, &row) && row.width >= 290.0f)
             {
                 const bool save_requested = henka_ui_button(

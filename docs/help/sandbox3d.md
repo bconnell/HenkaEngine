@@ -56,6 +56,11 @@ authoring slot; the evaluated mesh and scene bounds are replaced only after the
 candidate succeeds. Vertex/edge modes and general mesh-file open/save remain
 unfinished.
 
+The Authoring section also reports the evaluated render-mesh material-region
+range after each successful edit, undo, redo, save, or reload. This is metadata
+continuity diagnostics; region values do not yet select multiple renderer
+material instances.
+
 ## Scene legend
 
 - `Showcase Giraffe`: the Cheeky Giraffe mascot loaded through the packaged glTF scene/material path.
