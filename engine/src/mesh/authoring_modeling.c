@@ -62,8 +62,19 @@ static henka_result modeling_add_offset_face(
             return HENKA_ERROR_LIMIT;
         }
     }
-    return henka_authoring_mesh_add_face(
-        mesh, vertices, source->corner_count, source->material_region, source->smooth, out_face_id);
+    if (henka_authoring_mesh_add_face(
+        mesh, vertices, source->corner_count, source->material_region, source->smooth, out_face_id) != HENKA_SUCCESS)
+    {
+        return HENKA_ERROR_LIMIT;
+    }
+    for (corner = 0U; corner < source->corner_count; ++corner)
+    {
+        if (henka_authoring_mesh_set_face_corner_uv(mesh, *out_face_id, corner, source->uvs[corner]) != HENKA_SUCCESS)
+        {
+            return HENKA_ERROR_INVALID_ARGUMENT;
+        }
+    }
+    return HENKA_SUCCESS;
 }
 
 henka_result henka_authoring_mesh_create_plane(
@@ -274,6 +285,11 @@ henka_result henka_authoring_mesh_extrude_face(
         }
         result = henka_authoring_mesh_add_face(candidate, duplicated, source->corner_count,
             source->material_region, source->smooth, &new_face_id);
+        for (corner = 0U; result == HENKA_SUCCESS && corner < source->corner_count; ++corner)
+        {
+            result = henka_authoring_mesh_set_face_corner_uv(
+                candidate, new_face_id, corner, source->uvs[corner]);
+        }
     }
 cleanup:
     if (result == HENKA_SUCCESS)
@@ -299,6 +315,7 @@ static henka_result modeling_inset_candidate(
     henka_authoring_vertex_id outer[HENKA_AUTHORING_MESH_HARD_MAX_FACE_CORNERS];
     henka_authoring_vertex_id inner[HENKA_AUTHORING_MESH_HARD_MAX_FACE_CORNERS];
     henka_vec3 center = {0.0f, 0.0f, 0.0f};
+    henka_vec2 source_uvs[HENKA_AUTHORING_MESH_HARD_MAX_FACE_CORNERS];
     size_t corner_count;
     uint32_t material_region;
     bool smooth;
@@ -315,6 +332,7 @@ static henka_result modeling_inset_candidate(
     {
         const henka_authoring_vertex* vertex = henka_authoring_mesh_get_vertex(mesh, source->vertices[corner]);
         outer[corner] = source->vertices[corner];
+        source_uvs[corner] = source->uvs[corner];
         center = henka_vec3_add(center, vertex->position);
     }
     center = henka_vec3_scale(center, 1.0f / (float)source->corner_count);
@@ -323,7 +341,7 @@ static henka_result modeling_inset_candidate(
         const henka_authoring_vertex* vertex = henka_authoring_mesh_get_vertex(mesh, outer[corner]);
         const henka_vec3 position = henka_vec3_add(center,
             henka_vec3_scale(henka_vec3_subtract(vertex->position, center), factor));
-        result = henka_authoring_mesh_add_vertex(mesh, position, vertex->uv,
+        result = henka_authoring_mesh_add_vertex(mesh, position, source_uvs[corner],
             vertex->material_region, &inner[corner]);
         if (result != HENKA_SUCCESS)
         {
@@ -341,13 +359,25 @@ static henka_result modeling_inset_candidate(
             outer[corner], outer[(corner + 1U) % corner_count],
             inner[(corner + 1U) % corner_count], inner[corner]};
         result = henka_authoring_mesh_add_face(mesh, ring, 4U, material_region, smooth, out_face_id);
+        if (result == HENKA_SUCCESS)
+        {
+            result = henka_authoring_mesh_set_face_corner_uv(mesh, *out_face_id, 0U, source_uvs[corner]);
+            if (result == HENKA_SUCCESS) result = henka_authoring_mesh_set_face_corner_uv(mesh, *out_face_id, 1U, source_uvs[(corner + 1U) % corner_count]);
+            if (result == HENKA_SUCCESS) result = henka_authoring_mesh_set_face_corner_uv(mesh, *out_face_id, 2U, source_uvs[(corner + 1U) % corner_count]);
+            if (result == HENKA_SUCCESS) result = henka_authoring_mesh_set_face_corner_uv(mesh, *out_face_id, 3U, source_uvs[corner]);
+        }
         if (result != HENKA_SUCCESS)
         {
             return result;
         }
     }
-    return henka_authoring_mesh_add_face(mesh, inner, corner_count,
+    result = henka_authoring_mesh_add_face(mesh, inner, corner_count,
         material_region, smooth, out_face_id);
+    for (corner = 0U; result == HENKA_SUCCESS && corner < corner_count; ++corner)
+    {
+        result = henka_authoring_mesh_set_face_corner_uv(mesh, *out_face_id, corner, source_uvs[corner]);
+    }
+    return result;
 }
 
 henka_result henka_authoring_mesh_inset_face(
@@ -436,6 +466,8 @@ henka_result henka_authoring_mesh_subdivide_face(
     size_t corner;
     const henka_authoring_face* source;
     henka_vec3 center = {0.0f, 0.0f, 0.0f};
+    henka_vec2 source_uvs[HENKA_AUTHORING_MESH_HARD_MAX_FACE_CORNERS];
+    henka_vec2 center_uv = {0.0f, 0.0f};
     size_t corner_count;
     uint32_t material_region;
     bool smooth;
@@ -451,10 +483,15 @@ henka_result henka_authoring_mesh_subdivide_face(
     for (corner = 0U; corner < source->corner_count; ++corner)
     {
         outer[corner] = source->vertices[corner];
+        source_uvs[corner] = source->uvs[corner];
+        center_uv.x += source_uvs[corner].x;
+        center_uv.y += source_uvs[corner].y;
         center = henka_vec3_add(center,
             henka_authoring_mesh_get_vertex(mesh, outer[corner])->position);
     }
     center = henka_vec3_scale(center, 1.0f / (float)source->corner_count);
+    center_uv.x /= (float)source->corner_count;
+    center_uv.y /= (float)source->corner_count;
     result = henka_authoring_mesh_clone(mesh, &candidate);
     if (result != HENKA_SUCCESS)
     {
@@ -464,7 +501,7 @@ henka_result henka_authoring_mesh_subdivide_face(
     corner_count = source->corner_count;
     material_region = source->material_region;
     smooth = source->smooth;
-    result = henka_authoring_mesh_add_vertex(candidate, center, (henka_vec2){0.5f, 0.5f},
+    result = henka_authoring_mesh_add_vertex(candidate, center, center_uv,
         material_region, &center_id);
     for (corner = 0U; result == HENKA_SUCCESS && corner < corner_count; ++corner)
     {
@@ -487,6 +524,19 @@ henka_result henka_authoring_mesh_subdivide_face(
             midpoints[(corner + corner_count - 1U) % corner_count]};
         result = henka_authoring_mesh_add_face(candidate, quad, 4U,
             material_region, smooth, &ignored_face);
+        if (result == HENKA_SUCCESS)
+        {
+            henka_vec2 midpoint_uv = {
+                (source_uvs[corner].x + source_uvs[(corner + 1U) % corner_count].x) * 0.5f,
+                (source_uvs[corner].y + source_uvs[(corner + 1U) % corner_count].y) * 0.5f};
+            henka_vec2 previous_uv = {
+                (source_uvs[(corner + corner_count - 1U) % corner_count].x + source_uvs[corner].x) * 0.5f,
+                (source_uvs[(corner + corner_count - 1U) % corner_count].y + source_uvs[corner].y) * 0.5f};
+            result = henka_authoring_mesh_set_face_corner_uv(candidate, ignored_face, 0U, source_uvs[corner]);
+            if (result == HENKA_SUCCESS) result = henka_authoring_mesh_set_face_corner_uv(candidate, ignored_face, 1U, midpoint_uv);
+            if (result == HENKA_SUCCESS) result = henka_authoring_mesh_set_face_corner_uv(candidate, ignored_face, 2U, center_uv);
+            if (result == HENKA_SUCCESS) result = henka_authoring_mesh_set_face_corner_uv(candidate, ignored_face, 3U, previous_uv);
+        }
     }
     if (result == HENKA_SUCCESS)
     {

@@ -61,6 +61,7 @@ typedef struct henka_authoring_face
     size_t corner_count;
     henka_authoring_vertex_id* vertices;
     henka_authoring_edge_id* edges;
+    henka_vec2* uvs;
     uint32_t material_region;
     bool smooth;
     bool active;
@@ -110,6 +111,8 @@ henka_result henka_authoring_mesh_remove_face(henka_authoring_mesh* mesh, henka_
 const henka_authoring_face* henka_authoring_mesh_get_face(const henka_authoring_mesh* mesh, henka_authoring_face_id id);
 const henka_authoring_edge* henka_authoring_mesh_get_edge(const henka_authoring_mesh* mesh, henka_authoring_edge_id id);
 henka_result henka_authoring_mesh_set_face_smoothing(henka_authoring_mesh* mesh, henka_authoring_face_id id, bool smooth);
+henka_result henka_authoring_mesh_set_face_corner_uv(henka_authoring_mesh* mesh, henka_authoring_face_id id, size_t corner, henka_vec2 uv);
+henka_result henka_authoring_mesh_get_face_corner_uv(const henka_authoring_mesh* mesh, henka_authoring_face_id id, size_t corner, henka_vec2* out_uv);
 henka_result henka_authoring_mesh_set_edge_hard(henka_authoring_mesh* mesh, henka_authoring_edge_id id, bool hard);
 
 size_t henka_authoring_mesh_get_vertex_edge_count(const henka_authoring_mesh* mesh, henka_authoring_vertex_id vertex_id);

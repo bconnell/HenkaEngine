@@ -3,6 +3,7 @@
 
 #include <henka/authoring_mesh.h>
 #include <henka/authoring_modeling.h>
+#include <henka/authoring_uv.h>
 
 static int fail(const char* message)
 {
@@ -67,9 +68,11 @@ static int test_topology_and_evaluation(void)
         henka_authoring_mesh_get_edge_face_count(mesh, shared_edge) != 2U ||
         henka_authoring_mesh_edge_is_boundary(mesh, shared_edge) ||
         henka_authoring_mesh_set_edge_hard(mesh, shared_edge, true) != HENKA_SUCCESS ||
+        henka_authoring_mesh_set_face_corner_uv(mesh, first_face_id, 0U, (henka_vec2){2.0f, 3.0f}) != HENKA_SUCCESS ||
         henka_authoring_mesh_evaluate(mesh, &render) != HENKA_SUCCESS ||
         render.vertex_count != 7U || render.index_count != 9U ||
         render.vertices[0].material_region != 2U || render.vertices[4].material_region != 3U ||
+        fabsf(render.vertices[0].uv.x - 2.0f) > 0.0001f ||
         !isfinite(render.vertices[0].normal.z) || fabsf(render.vertices[0].normal.z) < 0.9f)
     {
         goto cleanup;
@@ -158,6 +161,7 @@ static int test_history_and_persistence(void)
     }
     vertex = henka_authoring_mesh_get_vertex(mesh, ids[0]);
     if (vertex == NULL || fabsf(vertex->uv.x - 0.5f) > 0.0001f ||
+        henka_authoring_mesh_set_face_corner_uv(mesh, face_id, 0U, (henka_vec2){4.0f, 5.0f}) != HENKA_SUCCESS ||
         henka_authoring_mesh_save_file(mesh, path) != HENKA_SUCCESS ||
         henka_authoring_mesh_set_vertex_uv(mesh, ids[0], (henka_vec2){9.0f, 9.0f}) != HENKA_SUCCESS ||
         henka_authoring_mesh_load_file(mesh, path) != HENKA_SUCCESS)
@@ -165,9 +169,14 @@ static int test_history_and_persistence(void)
         goto cleanup;
     }
     vertex = henka_authoring_mesh_get_vertex(mesh, ids[0]);
-    if (vertex == NULL || fabsf(vertex->uv.x - 0.5f) > 0.0001f)
     {
-        goto cleanup;
+        henka_vec2 corner_uv;
+        if (vertex == NULL || fabsf(vertex->uv.x - 0.5f) > 0.0001f ||
+            henka_authoring_mesh_get_face_corner_uv(mesh, face_id, 0U, &corner_uv) != HENKA_SUCCESS ||
+            fabsf(corner_uv.x - 4.0f) > 0.0001f)
+        {
+            goto cleanup;
+        }
     }
     corrupt = NULL;
     if (fopen_s(&corrupt, path, "wb") != 0)
@@ -266,8 +275,42 @@ cleanup:
     return result ? 1 : fail("modeling operations");
 }
 
+static int test_uv_authoring(void)
+{
+    const henka_authoring_mesh_desc desc = {64U, 128U, 64U, 8U};
+    henka_authoring_mesh* mesh = NULL;
+    henka_vec2 uv;
+    int result = 0;
+
+    if (henka_authoring_mesh_create_plane(&desc, 2.0f, 2.0f, &mesh) != HENKA_SUCCESS ||
+        henka_authoring_mesh_project_face_uv(mesh, 1U, HENKA_AUTHORING_UV_PROJECT_Y) != HENKA_SUCCESS ||
+        henka_authoring_mesh_get_face_corner_uv(mesh, 1U, 2U, &uv) != HENKA_SUCCESS ||
+        fabsf(uv.x - 1.0f) > 0.0001f || fabsf(uv.y - 1.0f) > 0.0001f ||
+        henka_authoring_mesh_transform_face_uv(mesh, 1U, (henka_vec2){2.0f, 2.0f}, (henka_vec2){-1.0f, -1.0f}) != HENKA_SUCCESS ||
+        henka_authoring_mesh_pack_face_uv(mesh, 1U, 0.1f) != HENKA_SUCCESS ||
+        !henka_authoring_mesh_face_uvs_are_finite(mesh, 1U) ||
+        henka_authoring_mesh_get_face_corner_uv(mesh, 1U, 0U, &uv) != HENKA_SUCCESS ||
+        uv.x < 0.099f || uv.y < 0.099f)
+    {
+        goto cleanup;
+    }
+    henka_authoring_mesh_destroy(mesh);
+    mesh = NULL;
+    if (henka_authoring_mesh_create_box(&desc, 2.0f, 2.0f, 2.0f, &mesh) != HENKA_SUCCESS ||
+        henka_authoring_mesh_set_face_corner_uv(mesh, 1U, 1U, (henka_vec2){9.0f, 9.0f}) != HENKA_SUCCESS ||
+        !henka_authoring_mesh_faces_share_uv_seam(mesh, 1U, 3U))
+    {
+        goto cleanup;
+    }
+    result = 1;
+
+cleanup:
+    henka_authoring_mesh_destroy(mesh);
+    return result ? 1 : fail("UV authoring");
+}
+
 int main(void)
 {
     return test_topology_and_evaluation() && test_rejection_and_tombstones() &&
-        test_history_and_persistence() && test_modeling_operations() ? 0 : 1;
+        test_history_and_persistence() && test_modeling_operations() && test_uv_authoring() ? 0 : 1;
 }

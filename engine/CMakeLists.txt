@@ -10,6 +10,7 @@ add_library(henka_runtime STATIC
     src/scene/scene.c
     src/mesh/authoring_mesh.c
     src/mesh/authoring_modeling.c
+    src/mesh/authoring_uv.c
     src/terrain/terrain.c
     src/terrain/terrain_edit.c
     src/terrain/terrain_authority.c

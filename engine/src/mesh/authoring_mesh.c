@@ -259,6 +259,7 @@ void henka_authoring_mesh_destroy(henka_authoring_mesh* mesh)
     {
         henka_free(mesh->faces[index].vertices);
         henka_free(mesh->faces[index].edges);
+        henka_free(mesh->faces[index].uvs);
     }
     henka_free(mesh->vertices);
     henka_free(mesh->edges);
@@ -343,7 +344,8 @@ bool henka_authoring_mesh_validate(const henka_authoring_mesh* mesh)
             continue;
         }
         if (face->id != (henka_authoring_face_id)(index + 1U) || face->corner_count < 3U ||
-            face->corner_count > mesh->desc.max_face_corners || face->vertices == NULL || face->edges == NULL)
+            face->corner_count > mesh->desc.max_face_corners || face->vertices == NULL ||
+            face->edges == NULL || face->uvs == NULL)
         {
             return false;
         }
@@ -358,7 +360,8 @@ bool henka_authoring_mesh_validate(const henka_authoring_mesh* mesh)
             henka_authoring_vertex_id high = face->vertices[corner] < face->vertices[next] ?
                 face->vertices[next] : face->vertices[corner];
             if (vertex == NULL || next_vertex == NULL || edge == NULL ||
-                edge->vertices[0] != low || edge->vertices[1] != high)
+                edge->vertices[0] != low || edge->vertices[1] != high ||
+                !authoring_finite_vec2(face->uvs[corner]))
             {
                 return false;
             }
@@ -439,6 +442,7 @@ henka_result henka_authoring_mesh_add_face(henka_authoring_mesh* mesh, const hen
 {
     henka_authoring_face* face;
     henka_authoring_edge_id* new_edges;
+    henka_vec2* new_uvs;
     henka_authoring_vertex_id* new_vertices;
     size_t corner;
     size_t edge_start;
@@ -466,10 +470,12 @@ henka_result henka_authoring_mesh_add_face(henka_authoring_mesh* mesh, const hen
     }
     new_vertices = henka_malloc(corner_count * sizeof(*new_vertices));
     new_edges = henka_malloc(corner_count * sizeof(*new_edges));
-    if (new_vertices == NULL || new_edges == NULL)
+    new_uvs = henka_malloc(corner_count * sizeof(*new_uvs));
+    if (new_vertices == NULL || new_edges == NULL || new_uvs == NULL)
     {
         henka_free(new_vertices);
         henka_free(new_edges);
+        henka_free(new_uvs);
         return HENKA_ERROR_OUT_OF_MEMORY;
     }
     for (corner = 0U; corner < corner_count; ++corner)
@@ -477,12 +483,17 @@ henka_result henka_authoring_mesh_add_face(henka_authoring_mesh* mesh, const hen
         new_edges[corner] = HENKA_AUTHORING_INVALID_ID;
     }
     memcpy(new_vertices, vertices, corner_count * sizeof(*new_vertices));
+    for (corner = 0U; corner < corner_count; ++corner)
+    {
+        new_uvs[corner] = henka_authoring_mesh_get_vertex(mesh, vertices[corner])->uv;
+    }
     face = &mesh->faces[mesh->face_slots];
     memset(face, 0, sizeof(*face));
     face->id = (henka_authoring_face_id)(mesh->face_slots + 1U);
     face->corner_count = corner_count;
     face->vertices = new_vertices;
     face->edges = new_edges;
+    face->uvs = new_uvs;
     face->material_region = material_region;
     face->smooth = smooth;
     face->active = true;
@@ -544,6 +555,7 @@ rollback:
     mesh->edge_slots = edge_start;
     henka_free(face->vertices);
     henka_free(face->edges);
+    henka_free(face->uvs);
     memset(face, 0, sizeof(*face));
     return result;
 }
@@ -584,8 +596,10 @@ henka_result henka_authoring_mesh_remove_face(henka_authoring_mesh* mesh, henka_
     face->active = false;
     henka_free(face->vertices);
     henka_free(face->edges);
+    henka_free(face->uvs);
     face->vertices = NULL;
     face->edges = NULL;
+    face->uvs = NULL;
     return HENKA_SUCCESS;
 }
 
@@ -609,6 +623,37 @@ henka_result henka_authoring_mesh_set_face_smoothing(henka_authoring_mesh* mesh,
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
     face->smooth = smooth;
+    return HENKA_SUCCESS;
+}
+
+henka_result henka_authoring_mesh_set_face_corner_uv(
+    henka_authoring_mesh* mesh,
+    henka_authoring_face_id id,
+    size_t corner,
+    henka_vec2 uv)
+{
+    henka_authoring_face* face = authoring_face(mesh, id);
+    if (face == NULL || !face->active || face->uvs == NULL || corner >= face->corner_count ||
+        !authoring_finite_vec2(uv))
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    face->uvs[corner] = uv;
+    return HENKA_SUCCESS;
+}
+
+henka_result henka_authoring_mesh_get_face_corner_uv(
+    const henka_authoring_mesh* mesh,
+    henka_authoring_face_id id,
+    size_t corner,
+    henka_vec2* out_uv)
+{
+    const henka_authoring_face* face = authoring_face_const(mesh, id);
+    if (face == NULL || !face->active || face->uvs == NULL || out_uv == NULL || corner >= face->corner_count)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    *out_uv = face->uvs[corner];
     return HENKA_SUCCESS;
 }
 
@@ -794,7 +839,7 @@ henka_result henka_authoring_mesh_evaluate(const henka_authoring_mesh* mesh, hen
         {
             const henka_authoring_vertex* source = authoring_vertex_const(mesh, face->vertices[corner]);
             out_data->vertices[output_vertex].position = source->position;
-            out_data->vertices[output_vertex].uv = source->uv;
+            out_data->vertices[output_vertex].uv = face->uvs[corner];
             out_data->vertices[output_vertex].material_region = face->material_region;
             out_data->vertices[output_vertex].normal = authoring_corner_normal(mesh, face, source->id, face_normal);
             out_data->vertices[output_vertex].tangent = (henka_vec4){1.0f, 0.0f, 0.0f, 1.0f};
@@ -844,11 +889,13 @@ static henka_result authoring_mesh_clone_internal(const henka_authoring_mesh* so
         *clone_face = *source_face;
         clone_face->vertices = NULL;
         clone_face->edges = NULL;
+        clone_face->uvs = NULL;
         if (source_face->active)
         {
             clone_face->vertices = henka_malloc(source_face->corner_count * sizeof(*clone_face->vertices));
             clone_face->edges = henka_malloc(source_face->corner_count * sizeof(*clone_face->edges));
-            if (clone_face->vertices == NULL || clone_face->edges == NULL)
+            clone_face->uvs = henka_malloc(source_face->corner_count * sizeof(*clone_face->uvs));
+            if (clone_face->vertices == NULL || clone_face->edges == NULL || clone_face->uvs == NULL)
             {
                 henka_authoring_mesh_destroy(clone);
                 return HENKA_ERROR_OUT_OF_MEMORY;
@@ -857,6 +904,8 @@ static henka_result authoring_mesh_clone_internal(const henka_authoring_mesh* so
                 source_face->corner_count * sizeof(*clone_face->vertices));
             memcpy(clone_face->edges, source_face->edges,
                 source_face->corner_count * sizeof(*clone_face->edges));
+            memcpy(clone_face->uvs, source_face->uvs,
+                source_face->corner_count * sizeof(*clone_face->uvs));
         }
     }
     *out_mesh = clone;
@@ -1177,7 +1226,7 @@ henka_result henka_authoring_mesh_save_file(const henka_authoring_mesh* mesh, co
         henka_free(temporary_path);
         return HENKA_ERROR_ASSET_SOURCE;
     }
-    ok = fwrite("HAMS", 4U, 1U, file) == 1U && authoring_write_u32(file, 1U) &&
+    ok = fwrite("HAMS", 4U, 1U, file) == 1U && authoring_write_u32(file, 2U) &&
         authoring_write_u32(file, (uint32_t)mesh->desc.max_vertices) &&
         authoring_write_u32(file, (uint32_t)mesh->desc.max_edges) &&
         authoring_write_u32(file, (uint32_t)mesh->desc.max_faces) &&
@@ -1218,6 +1267,10 @@ henka_result henka_authoring_mesh_save_file(const henka_authoring_mesh* mesh, co
             for (corner = 0U; ok && corner < face->corner_count; ++corner)
             {
                 ok = authoring_write_u32(file, face->vertices[corner]);
+            }
+            for (corner = 0U; ok && corner < face->corner_count; ++corner)
+            {
+                ok = authoring_write_vec2(file, face->uvs[corner]);
             }
             for (corner = 0U; ok && corner < face->corner_count; ++corner)
             {
@@ -1270,7 +1323,7 @@ henka_result henka_authoring_mesh_load_file(henka_authoring_mesh* mesh, const ch
     {
         char magic[4];
         if (fread(magic, sizeof(magic), 1U, file) != 1U || memcmp(magic, "HAMS", 4U) != 0 ||
-            !authoring_read_u32(file, &version) || version != 1U ||
+            !authoring_read_u32(file, &version) || version != 2U ||
             !authoring_read_u32(file, &capacities[0]) || !authoring_read_u32(file, &capacities[1]) ||
             !authoring_read_u32(file, &capacities[2]) || !authoring_read_u32(file, &capacities[3]) ||
             !authoring_read_u32(file, &slots[0]) || !authoring_read_u32(file, &slots[1]) ||
@@ -1360,13 +1413,21 @@ henka_result henka_authoring_mesh_load_file(henka_authoring_mesh* mesh, const ch
         face->smooth = active != 0U;
         face->vertices = henka_malloc(corner_count * sizeof(*face->vertices));
         face->edges = henka_malloc(corner_count * sizeof(*face->edges));
-        if (face->vertices == NULL || face->edges == NULL)
+        face->uvs = henka_malloc(corner_count * sizeof(*face->uvs));
+        if (face->vertices == NULL || face->edges == NULL || face->uvs == NULL)
         {
             goto cleanup;
         }
         for (corner = 0U; corner < corner_count; ++corner)
         {
             if (!authoring_read_u32(file, &face->vertices[corner]))
+            {
+                goto cleanup;
+            }
+        }
+        for (corner = 0U; corner < corner_count; ++corner)
+        {
+            if (!authoring_read_vec2(file, &face->uvs[corner]))
             {
                 goto cleanup;
             }
