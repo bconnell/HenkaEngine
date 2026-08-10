@@ -450,6 +450,7 @@ static const char* g_setting_key_environment_time_scale =
     "scene.environment.time_scale";
 static const char* g_setting_key_environment_time_enabled =
     "scene.environment.time_of_day_enabled";
+static const char* g_setting_key_environment_prefix = "scene.environment.";
 static const char* g_setting_key_mouse_sensitivity = "mouse_sensitivity";
 static const char* g_setting_key_camera_speed = "camera_movement_speed";
 static const char* g_setting_key_camera_position_x = "camera_position_x";
@@ -1971,6 +1972,266 @@ static const char* sandbox3d_get_environment_mode_label(henka_scene_environment_
         default:
             return "Gradient";
     }
+}
+
+static float sandbox3d_get_environment_float(
+    const henka_settings* settings,
+    const char* suffix,
+    float fallback)
+{
+    char key[128];
+
+    if (settings == NULL || suffix == NULL)
+    {
+        return fallback;
+    }
+    (void)snprintf(key, sizeof(key), "%s%s", g_setting_key_environment_prefix, suffix);
+    return henka_settings_get_float(settings, key, fallback);
+}
+
+static bool sandbox3d_get_environment_bool(
+    const henka_settings* settings,
+    const char* suffix,
+    bool fallback)
+{
+    char key[128];
+
+    if (settings == NULL || suffix == NULL)
+    {
+        return fallback;
+    }
+    (void)snprintf(key, sizeof(key), "%s%s", g_setting_key_environment_prefix, suffix);
+    return henka_settings_get_bool(settings, key, fallback);
+}
+
+static void sandbox3d_set_environment_float(
+    henka_settings* settings,
+    const char* suffix,
+    float value)
+{
+    char key[128];
+
+    if (settings == NULL || suffix == NULL)
+    {
+        return;
+    }
+    (void)snprintf(key, sizeof(key), "%s%s", g_setting_key_environment_prefix, suffix);
+    (void)henka_settings_set_float(settings, key, value);
+}
+
+static void sandbox3d_set_environment_bool(
+    henka_settings* settings,
+    const char* suffix,
+    bool value)
+{
+    char key[128];
+
+    if (settings == NULL || suffix == NULL)
+    {
+        return;
+    }
+    (void)snprintf(key, sizeof(key), "%s%s", g_setting_key_environment_prefix, suffix);
+    (void)henka_settings_set_bool(settings, key, value);
+}
+
+static void sandbox3d_load_environment_parameters(
+    const henka_settings* settings,
+    henka_scene_environment_desc* environment)
+{
+    if (settings == NULL || environment == NULL)
+    {
+        return;
+    }
+
+#define LOAD_ENV_FLOAT(field, suffix) \
+    (environment->field) = sandbox3d_get_environment_float(settings, suffix, environment->field)
+#define LOAD_ENV_BOOL(field, suffix) \
+    (environment->field) = sandbox3d_get_environment_bool(settings, suffix, environment->field)
+    LOAD_ENV_FLOAT(ground_color.x, "ground_color.x");
+    LOAD_ENV_FLOAT(ground_color.y, "ground_color.y");
+    LOAD_ENV_FLOAT(ground_color.z, "ground_color.z");
+    LOAD_ENV_FLOAT(horizon_color.x, "horizon_color.x");
+    LOAD_ENV_FLOAT(horizon_color.y, "horizon_color.y");
+    LOAD_ENV_FLOAT(horizon_color.z, "horizon_color.z");
+    LOAD_ENV_FLOAT(zenith_color.x, "zenith_color.x");
+    LOAD_ENV_FLOAT(zenith_color.y, "zenith_color.y");
+    LOAD_ENV_FLOAT(zenith_color.z, "zenith_color.z");
+    LOAD_ENV_FLOAT(intensity, "intensity");
+    LOAD_ENV_FLOAT(hdr_rotation, "hdr_rotation");
+    LOAD_ENV_FLOAT(atmosphere.rayleigh_scattering, "atmosphere.rayleigh_scattering");
+    LOAD_ENV_FLOAT(atmosphere.mie_scattering, "atmosphere.mie_scattering");
+    LOAD_ENV_FLOAT(atmosphere.mie_anisotropy, "atmosphere.mie_anisotropy");
+    LOAD_ENV_FLOAT(atmosphere.density, "atmosphere.density");
+    LOAD_ENV_FLOAT(atmosphere.turbidity, "atmosphere.turbidity");
+    LOAD_ENV_FLOAT(atmosphere.ozone_absorption, "atmosphere.ozone_absorption");
+    LOAD_ENV_FLOAT(atmosphere.atmosphere_height, "atmosphere.atmosphere_height");
+    LOAD_ENV_FLOAT(atmosphere.planet_radius, "atmosphere.planet_radius");
+    LOAD_ENV_FLOAT(atmosphere.ground_albedo.x, "atmosphere.ground_albedo.x");
+    LOAD_ENV_FLOAT(atmosphere.ground_albedo.y, "atmosphere.ground_albedo.y");
+    LOAD_ENV_FLOAT(atmosphere.ground_albedo.z, "atmosphere.ground_albedo.z");
+    LOAD_ENV_FLOAT(atmosphere.horizon_intensity, "atmosphere.horizon_intensity");
+    LOAD_ENV_BOOL(sun.enabled, "sun.enabled");
+    LOAD_ENV_BOOL(sun.manual_direction, "sun.manual_direction");
+    LOAD_ENV_FLOAT(sun.direction.x, "sun.direction.x");
+    LOAD_ENV_FLOAT(sun.direction.y, "sun.direction.y");
+    LOAD_ENV_FLOAT(sun.direction.z, "sun.direction.z");
+    LOAD_ENV_FLOAT(sun.color.x, "sun.color.x");
+    LOAD_ENV_FLOAT(sun.color.y, "sun.color.y");
+    LOAD_ENV_FLOAT(sun.color.z, "sun.color.z");
+    LOAD_ENV_FLOAT(sun.intensity, "sun.intensity");
+    LOAD_ENV_FLOAT(sun.angular_radius, "sun.angular_radius");
+    LOAD_ENV_BOOL(moon.enabled, "moon.enabled");
+    LOAD_ENV_BOOL(moon.manual_direction, "moon.manual_direction");
+    LOAD_ENV_FLOAT(moon.direction.x, "moon.direction.x");
+    LOAD_ENV_FLOAT(moon.direction.y, "moon.direction.y");
+    LOAD_ENV_FLOAT(moon.direction.z, "moon.direction.z");
+    LOAD_ENV_FLOAT(moon.color.x, "moon.color.x");
+    LOAD_ENV_FLOAT(moon.color.y, "moon.color.y");
+    LOAD_ENV_FLOAT(moon.color.z, "moon.color.z");
+    LOAD_ENV_FLOAT(moon.intensity, "moon.intensity");
+    LOAD_ENV_FLOAT(moon.angular_radius, "moon.angular_radius");
+    LOAD_ENV_BOOL(stars.enabled, "stars.enabled");
+    LOAD_ENV_FLOAT(stars.intensity, "stars.intensity");
+    LOAD_ENV_FLOAT(stars.rotation, "stars.rotation");
+    LOAD_ENV_FLOAT(time_of_day_hours, "time_of_day_hours");
+    LOAD_ENV_FLOAT(day_length_seconds, "day_length_seconds");
+    LOAD_ENV_FLOAT(time_scale, "time_scale");
+    LOAD_ENV_BOOL(time_of_day_enabled, "time_of_day_enabled");
+#undef LOAD_ENV_BOOL
+#undef LOAD_ENV_FLOAT
+}
+
+static void sandbox3d_save_environment_parameters(
+    henka_settings* settings,
+    const henka_scene_environment_desc* environment)
+{
+    if (settings == NULL || environment == NULL)
+    {
+        return;
+    }
+
+#define SAVE_ENV_FLOAT(field, suffix) \
+    sandbox3d_set_environment_float(settings, suffix, environment->field)
+#define SAVE_ENV_BOOL(field, suffix) \
+    sandbox3d_set_environment_bool(settings, suffix, environment->field)
+    SAVE_ENV_FLOAT(ground_color.x, "ground_color.x");
+    SAVE_ENV_FLOAT(ground_color.y, "ground_color.y");
+    SAVE_ENV_FLOAT(ground_color.z, "ground_color.z");
+    SAVE_ENV_FLOAT(horizon_color.x, "horizon_color.x");
+    SAVE_ENV_FLOAT(horizon_color.y, "horizon_color.y");
+    SAVE_ENV_FLOAT(horizon_color.z, "horizon_color.z");
+    SAVE_ENV_FLOAT(zenith_color.x, "zenith_color.x");
+    SAVE_ENV_FLOAT(zenith_color.y, "zenith_color.y");
+    SAVE_ENV_FLOAT(zenith_color.z, "zenith_color.z");
+    SAVE_ENV_FLOAT(intensity, "intensity");
+    SAVE_ENV_FLOAT(hdr_rotation, "hdr_rotation");
+    SAVE_ENV_FLOAT(atmosphere.rayleigh_scattering, "atmosphere.rayleigh_scattering");
+    SAVE_ENV_FLOAT(atmosphere.mie_scattering, "atmosphere.mie_scattering");
+    SAVE_ENV_FLOAT(atmosphere.mie_anisotropy, "atmosphere.mie_anisotropy");
+    SAVE_ENV_FLOAT(atmosphere.density, "atmosphere.density");
+    SAVE_ENV_FLOAT(atmosphere.turbidity, "atmosphere.turbidity");
+    SAVE_ENV_FLOAT(atmosphere.ozone_absorption, "atmosphere.ozone_absorption");
+    SAVE_ENV_FLOAT(atmosphere.atmosphere_height, "atmosphere.atmosphere_height");
+    SAVE_ENV_FLOAT(atmosphere.planet_radius, "atmosphere.planet_radius");
+    SAVE_ENV_FLOAT(atmosphere.ground_albedo.x, "atmosphere.ground_albedo.x");
+    SAVE_ENV_FLOAT(atmosphere.ground_albedo.y, "atmosphere.ground_albedo.y");
+    SAVE_ENV_FLOAT(atmosphere.ground_albedo.z, "atmosphere.ground_albedo.z");
+    SAVE_ENV_FLOAT(atmosphere.horizon_intensity, "atmosphere.horizon_intensity");
+    SAVE_ENV_BOOL(sun.enabled, "sun.enabled");
+    SAVE_ENV_BOOL(sun.manual_direction, "sun.manual_direction");
+    SAVE_ENV_FLOAT(sun.direction.x, "sun.direction.x");
+    SAVE_ENV_FLOAT(sun.direction.y, "sun.direction.y");
+    SAVE_ENV_FLOAT(sun.direction.z, "sun.direction.z");
+    SAVE_ENV_FLOAT(sun.color.x, "sun.color.x");
+    SAVE_ENV_FLOAT(sun.color.y, "sun.color.y");
+    SAVE_ENV_FLOAT(sun.color.z, "sun.color.z");
+    SAVE_ENV_FLOAT(sun.intensity, "sun.intensity");
+    SAVE_ENV_FLOAT(sun.angular_radius, "sun.angular_radius");
+    SAVE_ENV_BOOL(moon.enabled, "moon.enabled");
+    SAVE_ENV_BOOL(moon.manual_direction, "moon.manual_direction");
+    SAVE_ENV_FLOAT(moon.direction.x, "moon.direction.x");
+    SAVE_ENV_FLOAT(moon.direction.y, "moon.direction.y");
+    SAVE_ENV_FLOAT(moon.direction.z, "moon.direction.z");
+    SAVE_ENV_FLOAT(moon.color.x, "moon.color.x");
+    SAVE_ENV_FLOAT(moon.color.y, "moon.color.y");
+    SAVE_ENV_FLOAT(moon.color.z, "moon.color.z");
+    SAVE_ENV_FLOAT(moon.intensity, "moon.intensity");
+    SAVE_ENV_FLOAT(moon.angular_radius, "moon.angular_radius");
+    SAVE_ENV_BOOL(stars.enabled, "stars.enabled");
+    SAVE_ENV_FLOAT(stars.intensity, "stars.intensity");
+    SAVE_ENV_FLOAT(stars.rotation, "stars.rotation");
+    SAVE_ENV_FLOAT(time_of_day_hours, "time_of_day_hours");
+    SAVE_ENV_FLOAT(day_length_seconds, "day_length_seconds");
+    SAVE_ENV_FLOAT(time_scale, "time_scale");
+    SAVE_ENV_BOOL(time_of_day_enabled, "time_of_day_enabled");
+#undef SAVE_ENV_BOOL
+#undef SAVE_ENV_FLOAT
+}
+
+static bool sandbox3d_environment_parameters_equal(
+    const henka_scene_environment_desc* left,
+    const henka_scene_environment_desc* right)
+{
+    if (left == NULL || right == NULL)
+    {
+        return false;
+    }
+
+#define ENV_FLOAT_EQUAL(field) (fabsf((left->field) - (right->field)) <= 0.0001f)
+#define ENV_BOOL_EQUAL(field) ((left->field) == (right->field))
+    return
+        ENV_FLOAT_EQUAL(ground_color.x) &&
+        ENV_FLOAT_EQUAL(ground_color.y) &&
+        ENV_FLOAT_EQUAL(ground_color.z) &&
+        ENV_FLOAT_EQUAL(horizon_color.x) &&
+        ENV_FLOAT_EQUAL(horizon_color.y) &&
+        ENV_FLOAT_EQUAL(horizon_color.z) &&
+        ENV_FLOAT_EQUAL(zenith_color.x) &&
+        ENV_FLOAT_EQUAL(zenith_color.y) &&
+        ENV_FLOAT_EQUAL(zenith_color.z) &&
+        ENV_FLOAT_EQUAL(intensity) &&
+        ENV_FLOAT_EQUAL(hdr_rotation) &&
+        ENV_FLOAT_EQUAL(atmosphere.rayleigh_scattering) &&
+        ENV_FLOAT_EQUAL(atmosphere.mie_scattering) &&
+        ENV_FLOAT_EQUAL(atmosphere.mie_anisotropy) &&
+        ENV_FLOAT_EQUAL(atmosphere.density) &&
+        ENV_FLOAT_EQUAL(atmosphere.turbidity) &&
+        ENV_FLOAT_EQUAL(atmosphere.ozone_absorption) &&
+        ENV_FLOAT_EQUAL(atmosphere.atmosphere_height) &&
+        ENV_FLOAT_EQUAL(atmosphere.planet_radius) &&
+        ENV_FLOAT_EQUAL(atmosphere.ground_albedo.x) &&
+        ENV_FLOAT_EQUAL(atmosphere.ground_albedo.y) &&
+        ENV_FLOAT_EQUAL(atmosphere.ground_albedo.z) &&
+        ENV_FLOAT_EQUAL(atmosphere.horizon_intensity) &&
+        ENV_BOOL_EQUAL(sun.enabled) &&
+        ENV_BOOL_EQUAL(sun.manual_direction) &&
+        ENV_FLOAT_EQUAL(sun.direction.x) &&
+        ENV_FLOAT_EQUAL(sun.direction.y) &&
+        ENV_FLOAT_EQUAL(sun.direction.z) &&
+        ENV_FLOAT_EQUAL(sun.color.x) &&
+        ENV_FLOAT_EQUAL(sun.color.y) &&
+        ENV_FLOAT_EQUAL(sun.color.z) &&
+        ENV_FLOAT_EQUAL(sun.intensity) &&
+        ENV_FLOAT_EQUAL(sun.angular_radius) &&
+        ENV_BOOL_EQUAL(moon.enabled) &&
+        ENV_BOOL_EQUAL(moon.manual_direction) &&
+        ENV_FLOAT_EQUAL(moon.direction.x) &&
+        ENV_FLOAT_EQUAL(moon.direction.y) &&
+        ENV_FLOAT_EQUAL(moon.direction.z) &&
+        ENV_FLOAT_EQUAL(moon.color.x) &&
+        ENV_FLOAT_EQUAL(moon.color.y) &&
+        ENV_FLOAT_EQUAL(moon.color.z) &&
+        ENV_FLOAT_EQUAL(moon.intensity) &&
+        ENV_FLOAT_EQUAL(moon.angular_radius) &&
+        ENV_BOOL_EQUAL(stars.enabled) &&
+        ENV_FLOAT_EQUAL(stars.intensity) &&
+        ENV_FLOAT_EQUAL(stars.rotation) &&
+        ENV_FLOAT_EQUAL(time_of_day_hours) &&
+        ENV_FLOAT_EQUAL(day_length_seconds) &&
+        ENV_FLOAT_EQUAL(time_scale) &&
+        ENV_BOOL_EQUAL(time_of_day_enabled);
+#undef ENV_BOOL_EQUAL
+#undef ENV_FLOAT_EQUAL
 }
 
 static const char* sandbox3d_get_utility_setting_value(sandbox3d_utility_view utility)
@@ -7209,6 +7470,7 @@ static void sandbox3d_apply_loaded_settings(henka_engine* engine, sandbox3d_stat
 
     if (henka_scene_get_environment(state->scene, &environment) == HENKA_SUCCESS)
     {
+        sandbox3d_load_environment_parameters(state->settings, &environment);
         environment_mode = henka_settings_get_int(
             state->settings,
             g_setting_key_environment_mode,
@@ -7258,6 +7520,20 @@ static void sandbox3d_apply_loaded_settings(henka_engine* engine, sandbox3d_stat
         {
             state->smoke_validation_failed = true;
             HENKA_LOG_ERROR("Environment stress could not install its procedural/time-of-day descriptor.");
+        }
+        else
+        {
+            henka_scene_environment_desc round_trip = henka_scene_environment_default();
+            round_trip.hdr_texture = environment.hdr_texture;
+            round_trip.mode = environment.mode;
+            sandbox3d_save_environment_parameters(state->settings, &environment);
+            sandbox3d_load_environment_parameters(state->settings, &round_trip);
+            if (!sandbox3d_environment_parameters_equal(&environment, &round_trip) ||
+                henka_scene_set_environment(state->scene, round_trip) != HENKA_SUCCESS)
+            {
+                state->smoke_validation_failed = true;
+                HENKA_LOG_ERROR("Environment settings round-trip did not retain the validated descriptor.");
+            }
         }
     }
 
@@ -7372,9 +7648,7 @@ static henka_result sandbox3d_save_settings(henka_engine* engine, sandbox3d_stat
         if (henka_scene_get_environment(state->scene, &environment) == HENKA_SUCCESS)
         {
             henka_settings_set_int(state->settings, g_setting_key_environment_mode, (int)environment.mode);
-            henka_settings_set_float(state->settings, g_setting_key_environment_time_hours, environment.time_of_day_hours);
-            henka_settings_set_float(state->settings, g_setting_key_environment_time_scale, environment.time_scale);
-            henka_settings_set_bool(state->settings, g_setting_key_environment_time_enabled, environment.time_of_day_enabled);
+            sandbox3d_save_environment_parameters(state->settings, &environment);
         }
     }
     henka_settings_set_float(state->settings, g_setting_key_mouse_sensitivity, sandbox3d_get_mouse_sensitivity(state));
