@@ -3243,6 +3243,70 @@ henka_result henka_assets_reload_gltf_material_asset(
     return HENKA_SUCCESS;
 }
 
+henka_result henka_assets_reload_material_asset(
+    henka_asset_manager* manager,
+    const henka_material_asset* asset,
+    henka_material_asset** out_asset)
+{
+    size_t index;
+    size_t material_index;
+
+    if (out_asset != NULL)
+    {
+        *out_asset = NULL;
+    }
+    if (manager == NULL || asset == NULL || out_asset == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    for (index = 0U; index < manager->material_count; ++index)
+    {
+        henka_material_asset* entry = manager->material_entries[index];
+
+        if (entry != asset)
+        {
+            continue;
+        }
+        if (entry->source_path == NULL || entry->source_path[0] == '\0')
+        {
+            return HENKA_ERROR_INVALID_ARGUMENT;
+        }
+        return henka_assets_reload_gltf_material_asset(
+            manager, entry->source_path, out_asset);
+    }
+
+    for (index = 0U; index < manager->gltf_scene_count; ++index)
+    {
+        henka_gltf_scene_asset* scene = manager->gltf_scene_entries[index];
+
+        for (material_index = 0U;
+             material_index < scene->data.material_count;
+             ++material_index)
+        {
+            if (&scene->material_assets[material_index] != asset)
+            {
+                continue;
+            }
+            if (scene->source_path == NULL || scene->source_path[0] == '\0')
+            {
+                return HENKA_ERROR_INVALID_ARGUMENT;
+            }
+            {
+                henka_result result = henka_assets_reload_gltf_scene_asset(
+                    manager, scene->source_path, &scene);
+                if (result == HENKA_SUCCESS)
+                {
+                    *out_asset = &scene->material_assets[material_index];
+                }
+                return result;
+            }
+        }
+    }
+
+    return HENKA_ERROR_INVALID_ARGUMENT;
+}
+
 henka_result henka_assets_load_gltf_mesh_with_material(
     henka_asset_manager* manager,
     const char* path,

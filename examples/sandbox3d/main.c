@@ -1458,12 +1458,7 @@ static void sandbox3d_draw_material_instance_editor(
             }
         }
 
-        if (binding->entity == state->marker_entity &&
-            binding->instance ==
-                &state->marker_material_instance &&
-            binding->asset ==
-                state->marker_material_asset &&
-            henka_ui_button(
+        if (henka_ui_button(
                 state->ui,
                 "material_asset_reimport",
                 (henka_ui_rect){
@@ -1473,24 +1468,27 @@ static void sandbox3d_draw_material_instance_editor(
                     24.0f},
                 "Reimport"))
         {
-            const henka_material_instance previous =
-                state->marker_material_instance;
-            henka_material_asset* reloaded_asset =
-                state->marker_material_asset;
+            const henka_material_instance previous = *binding->instance;
+            henka_material_asset* reloaded_asset = binding->asset;
 
-            if (henka_assets_reload_gltf_material_asset(
+            if (henka_assets_reload_material_asset(
                     henka_engine_get_asset_manager(engine),
-                    "assets/models/henka_marker.gltf",
+                    binding->asset,
                     &reloaded_asset) == HENKA_SUCCESS &&
+                reloaded_asset == binding->asset &&
                 henka_assets_refresh_material_instance(
-                    &state->marker_material_instance) ==
+                    binding->instance) ==
                     HENKA_SUCCESS &&
                 henka_assets_apply_material_instance_to_entity(
-                    &state->marker_material_instance,
+                    binding->instance,
                     state->scene,
-                    state->marker_entity) == HENKA_SUCCESS)
+                    binding->entity) == HENKA_SUCCESS)
             {
-                state->marker_material_asset = reloaded_asset;
+                binding->asset = reloaded_asset;
+                if (binding->entity == state->marker_entity)
+                {
+                    state->marker_material_asset = reloaded_asset;
+                }
                 sandbox3d_set_statusf(
                     state,
                     false,
@@ -1500,7 +1498,7 @@ static void sandbox3d_draw_material_instance_editor(
             }
             else
             {
-                state->marker_material_instance = previous;
+                *binding->instance = previous;
                 sandbox3d_set_statusf(
                     state,
                     true,

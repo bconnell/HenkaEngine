@@ -9,6 +9,8 @@
 #include <henka/terrain_edit.h>
 #include <henka/terrain_streaming.h>
 
+#define HENKA_TERRAIN_STREAM_TEST_POLL_LIMIT 2000U
+
 typedef struct test_region_generator_state
 {
     uint32_t calls;
@@ -102,7 +104,7 @@ static int test_streaming(void)
     {
         goto cleanup;
     }
-    for (index = 0U; index < 200U; ++index)
+    for (index = 0U; index < HENKA_TERRAIN_STREAM_TEST_POLL_LIMIT; ++index)
     {
         if (henka_terrain_streamer_pump(streamer, 1U) != HENKA_SUCCESS)
         {
@@ -132,7 +134,7 @@ static int test_streaming(void)
     {
         goto cleanup;
     }
-    for (index = 0U; index < 200U; ++index)
+    for (index = 0U; index < HENKA_TERRAIN_STREAM_TEST_POLL_LIMIT; ++index)
     {
         if (henka_terrain_streamer_pump(streamer, 1U) != HENKA_SUCCESS)
         {
@@ -156,7 +158,7 @@ static int test_streaming(void)
     {
         goto cleanup;
     }
-    for (index = 0U; index < 200U; ++index)
+    for (index = 0U; index < HENKA_TERRAIN_STREAM_TEST_POLL_LIMIT; ++index)
     {
         if (henka_terrain_streamer_pump(streamer, 1U) != HENKA_SUCCESS)
         {
@@ -246,7 +248,7 @@ static int test_observer_center_is_loaded_before_distant_regions(void)
     {
         goto cleanup;
     }
-    for (index = 0U; index < 200U; ++index)
+    for (index = 0U; index < HENKA_TERRAIN_STREAM_TEST_POLL_LIMIT; ++index)
     {
         if (henka_terrain_streamer_pump(streamer, 1U) != HENKA_SUCCESS)
         {

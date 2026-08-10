@@ -340,6 +340,15 @@ henka_result henka_assets_reload_gltf_material_asset(
     henka_asset_manager* manager,
     const char* path,
     henka_material_asset** out_asset);
+/* Reloads the manager-owned definition identified by the borrowed pointer.
+ * Standalone glTF material assets reload through their material cache entry;
+ * definitions embedded in a glTF scene reload through that scene's
+ * transactional payload. Stable identity is preserved on success and the
+ * prior definition remains live on failure. */
+henka_result henka_assets_reload_material_asset(
+    henka_asset_manager* manager,
+    const henka_material_asset* asset,
+    henka_material_asset** out_asset);
 henka_result henka_assets_load_gltf_scene_asset(
     henka_asset_manager* manager,
     const char* path,

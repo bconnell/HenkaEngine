@@ -679,6 +679,12 @@ void henka_test_assets(void)
         "assets/models/reload.gltf",
         &material_asset) != HENKA_SUCCESS);
     HENKA_TEST_ASSERT(material_asset == NULL);
+    material_asset = (henka_material_asset*)1;
+    HENKA_TEST_ASSERT(henka_assets_reload_material_asset(
+        &manager,
+        &material_entry,
+        &material_asset) != HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(material_asset == NULL);
     HENKA_TEST_ASSERT(manager.material_entries[0] == &material_entry);
     HENKA_TEST_ASSERT(material_entry.material.shader == &managed_shader);
     HENKA_TEST_ASSERT(henka_assets_get_material_asset_revision(
@@ -823,11 +829,19 @@ void henka_test_assets(void)
     scene_entry->shader = &managed_shader;
     scene_entry->data.scene_count = 2U;
     scene_entry->data.active_scene_index = 0U;
+    scene_entry->data.material_count = 1U;
     scene_entry->metadata.type = HENKA_ASSET_TYPE_GLTF_SCENE;
     scene_entry_array[0] = scene_entry;
     manager.gltf_scene_entries = scene_entry_array;
     manager.gltf_scene_count = 1U;
     manager.gltf_scene_capacity = 1U;
+    material_asset = (henka_material_asset*)1;
+    HENKA_TEST_ASSERT(henka_assets_reload_material_asset(
+        &manager,
+        &scene_entry->material_assets[0],
+        &material_asset) != HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(material_asset == NULL);
+    HENKA_TEST_ASSERT(manager.gltf_scene_entries[0] == scene_entry);
     scene_asset = (henka_gltf_scene_asset*)1;
     HENKA_TEST_ASSERT(henka_assets_reload_gltf_scene_asset(
         &manager,
