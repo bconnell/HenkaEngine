@@ -141,6 +141,18 @@ static void henka_test_sandbox3d_object_authoring_source_persistence(void)
             sandbox3d_authoring_object_get_mesh(object), picked_face) != NULL);
         HENKA_TEST_ASSERT(sandbox3d_authoring_object_pick_face(object, miss_ray, 100.0f) != HENKA_SUCCESS);
         HENKA_TEST_ASSERT(sandbox3d_authoring_object_get_selected_face(object) == picked_face);
+        {
+            const henka_authoring_mesh_counts before_bevel = henka_authoring_mesh_get_counts(
+                sandbox3d_authoring_object_get_mesh(object));
+            HENKA_TEST_ASSERT(sandbox3d_authoring_object_bevel_selected_face(object, 0.1f) == HENKA_SUCCESS);
+            HENKA_TEST_ASSERT(henka_authoring_mesh_get_counts(
+                sandbox3d_authoring_object_get_mesh(object)).faces > before_bevel.faces);
+            HENKA_TEST_ASSERT(sandbox3d_authoring_object_undo(object) == HENKA_SUCCESS);
+            HENKA_TEST_ASSERT(sandbox3d_authoring_object_subdivide_selected_face(object) == HENKA_SUCCESS);
+            HENKA_TEST_ASSERT(henka_authoring_mesh_get_counts(
+                sandbox3d_authoring_object_get_mesh(object)).vertices > before_bevel.vertices);
+            HENKA_TEST_ASSERT(sandbox3d_authoring_object_undo(object) == HENKA_SUCCESS);
+        }
     }
 
     HENKA_TEST_ASSERT(sandbox3d_authoring_object_extrude_selected_face(object, 0.25f) == HENKA_SUCCESS);

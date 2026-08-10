@@ -13868,6 +13868,21 @@ static void sandbox3d_draw_object_details_panel(
                     sandbox3d_set_status(state, false, "Authoring mesh redo restored the scene render.");
                 }
             }
+            if (sandbox3d_details_flow_next_row(state, flow_desc.bounds, 28.0f, 1U, &row) && row.width >= 290.0f)
+            {
+                if (henka_ui_button(state->ui, "authoring_bevel", (henka_ui_rect){row.x, row.y, 82.0f, 24.0f}, "Bevel") &&
+                    sandbox3d_authoring_object_bevel_selected_face(state->authoring_object, 0.1f) == HENKA_SUCCESS &&
+                    sandbox3d_sync_authoring_physics_bounds(state) == HENKA_SUCCESS)
+                {
+                    sandbox3d_set_status(state, false, "Authoring face beveled and evaluated into the scene.");
+                }
+                if (henka_ui_button(state->ui, "authoring_subdivide", (henka_ui_rect){row.x + 88.0f, row.y, 98.0f, 24.0f}, "Subdivide") &&
+                    sandbox3d_authoring_object_subdivide_selected_face(state->authoring_object) == HENKA_SUCCESS &&
+                    sandbox3d_sync_authoring_physics_bounds(state) == HENKA_SUCCESS)
+                {
+                    sandbox3d_set_status(state, false, "Authoring face subdivided and evaluated into the scene.");
+                }
+            }
         }
     }
 

@@ -43,7 +43,7 @@ The first horizontal editor connection is now exercised by the Sandbox's
 selected Textured Cube: it owns a bounded authoring box and history, and the
 viewport ray picker resolves a hit to the actual authoring face identity. The
 Object Details Authoring section exposes that face plus transactional
-Extrude, Inset, Undo, Redo, Save Source, and Reload Source commands. Each edit
+Extrude, Inset, Bevel, Subdivide, Undo, Redo, Save Source, and Reload Source commands. Each edit
 evaluates a candidate, creates a normal renderer mesh, updates the scene entity
 mesh and local bounds, then checkpoints history; the Sandbox's linked box
 collider consumes the same evaluated local bounds after each successful editor

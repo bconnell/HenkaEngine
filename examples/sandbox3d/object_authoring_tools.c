@@ -739,6 +739,78 @@ henka_result sandbox3d_authoring_object_inset_selected_face(
     return result;
 }
 
+henka_result sandbox3d_authoring_object_bevel_selected_face(
+    sandbox3d_authoring_object* object,
+    float width)
+{
+    henka_authoring_mesh* candidate = NULL;
+    henka_authoring_face_id new_face_id = HENKA_AUTHORING_INVALID_ID;
+    henka_result result;
+    if (object == NULL || !isfinite(width))
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    result = henka_authoring_mesh_clone(object->mesh, &candidate);
+    if (result == HENKA_SUCCESS)
+    {
+        result = henka_authoring_mesh_bevel_face(
+            candidate, object->selected_face, width, &new_face_id);
+    }
+    if (result == HENKA_SUCCESS)
+    {
+        result = sandbox3d_authoring_publish_candidate(object, candidate, true);
+        if (result == HENKA_SUCCESS)
+        {
+            object->selected_face = new_face_id;
+        }
+        else
+        {
+            henka_authoring_mesh_destroy(candidate);
+        }
+    }
+    else
+    {
+        henka_authoring_mesh_destroy(candidate);
+    }
+    return result;
+}
+
+henka_result sandbox3d_authoring_object_subdivide_selected_face(
+    sandbox3d_authoring_object* object)
+{
+    henka_authoring_mesh* candidate = NULL;
+    henka_authoring_vertex_id center_vertex_id = HENKA_AUTHORING_INVALID_ID;
+    henka_result result;
+    if (object == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    result = henka_authoring_mesh_clone(object->mesh, &candidate);
+    if (result == HENKA_SUCCESS)
+    {
+        result = henka_authoring_mesh_subdivide_face(
+            candidate, object->selected_face, &center_vertex_id);
+    }
+    if (result == HENKA_SUCCESS)
+    {
+        result = sandbox3d_authoring_publish_candidate(object, candidate, true);
+        if (result == HENKA_SUCCESS)
+        {
+            (void)center_vertex_id;
+            sandbox3d_authoring_repair_selection(object);
+        }
+        else
+        {
+            henka_authoring_mesh_destroy(candidate);
+        }
+    }
+    else
+    {
+        henka_authoring_mesh_destroy(candidate);
+    }
+    return result;
+}
+
 henka_result sandbox3d_authoring_object_save_source(
     const sandbox3d_authoring_object* object,
     const char* path)
