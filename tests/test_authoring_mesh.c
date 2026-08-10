@@ -309,8 +309,108 @@ cleanup:
     return result ? 1 : fail("UV authoring");
 }
 
+static int test_modeling_material_region_and_uv_continuity(void)
+{
+    const char* path = "authoring_material_regions.hams";
+    const henka_authoring_mesh_desc desc = {64U, 128U, 64U, 8U};
+    const henka_vec3 positions[4] =
+    {
+        {0.0f, 0.0f, 0.0f},
+        {1.0f, 0.0f, 0.0f},
+        {1.0f, 1.0f, 0.0f},
+        {0.0f, 1.0f, 0.0f}
+    };
+    const henka_vec2 vertex_uvs[4] =
+    {
+        {0.0f, 0.0f}, {1.0f, 0.0f}, {1.0f, 1.0f}, {0.0f, 1.0f}
+    };
+    const henka_authoring_vertex_id face_vertices[4] = {1U, 2U, 3U, 4U};
+    henka_authoring_mesh* mesh = NULL;
+    henka_authoring_vertex_id vertex_ids[4];
+    henka_authoring_face_id new_face_id = HENKA_AUTHORING_INVALID_ID;
+    henka_authoring_render_vertex render_vertices[24];
+    uint32_t render_indices[36];
+    henka_authoring_render_data render =
+        {render_vertices, 24U, 0U, render_indices, 36U, 0U};
+    henka_authoring_face_id face_id = HENKA_AUTHORING_INVALID_ID;
+    size_t index;
+    int result = 0;
+
+    if (henka_authoring_mesh_create(&desc, &mesh) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    for (index = 0U; index < 4U; ++index)
+    {
+        if (henka_authoring_mesh_add_vertex(
+                mesh, positions[index], vertex_uvs[index], 7U, &vertex_ids[index]) != HENKA_SUCCESS)
+        {
+            goto cleanup;
+        }
+    }
+    if (henka_authoring_mesh_add_face(mesh, face_vertices, 4U, 11U, true, &face_id) != HENKA_SUCCESS ||
+        henka_authoring_mesh_set_face_corner_uv(mesh, face_id, 0U, (henka_vec2){0.2f, 0.3f}) != HENKA_SUCCESS ||
+        henka_authoring_mesh_set_face_corner_uv(mesh, face_id, 1U, (henka_vec2){1.2f, 0.3f}) != HENKA_SUCCESS ||
+        henka_authoring_mesh_set_face_corner_uv(mesh, face_id, 2U, (henka_vec2){1.2f, 1.3f}) != HENKA_SUCCESS ||
+        henka_authoring_mesh_set_face_corner_uv(mesh, face_id, 3U, (henka_vec2){0.2f, 1.3f}) != HENKA_SUCCESS ||
+        henka_authoring_mesh_extrude_face(mesh, face_id, 0.25f, &new_face_id) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    if (henka_authoring_mesh_get_counts(mesh).faces != 6U ||
+        henka_authoring_mesh_get_face(mesh, new_face_id) == NULL ||
+        henka_authoring_mesh_get_face(mesh, new_face_id)->material_region != 11U)
+    {
+        goto cleanup;
+    }
+    for (index = 1U; index <= henka_authoring_mesh_get_counts(mesh).faces + 2U; ++index)
+    {
+        const henka_authoring_face* face = henka_authoring_mesh_get_face(
+            mesh, (henka_authoring_face_id)index);
+        if (face != NULL && face->material_region != 11U)
+        {
+            goto cleanup;
+        }
+    }
+    if (henka_authoring_mesh_evaluate(mesh, &render) != HENKA_SUCCESS ||
+        render.vertex_count != 24U || render.index_count != 36U)
+    {
+        goto cleanup;
+    }
+    for (index = 0U; index < render.vertex_count; ++index)
+    {
+        if (render.vertices[index].material_region != 11U)
+        {
+            goto cleanup;
+        }
+    }
+    if (henka_authoring_mesh_save_file(mesh, path) != HENKA_SUCCESS ||
+        henka_authoring_mesh_set_face_corner_uv(mesh, new_face_id, 0U, (henka_vec2){9.0f, 9.0f}) != HENKA_SUCCESS ||
+        henka_authoring_mesh_load_file(mesh, path) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    {
+        henka_vec2 restored_uv;
+        const henka_authoring_face* restored_face = henka_authoring_mesh_get_face(mesh, new_face_id);
+        if (restored_face == NULL || restored_face->material_region != 11U ||
+            henka_authoring_mesh_get_face_corner_uv(mesh, new_face_id, 0U, &restored_uv) != HENKA_SUCCESS ||
+            fabsf(restored_uv.x - 0.2f) > 0.0001f || fabsf(restored_uv.y - 0.3f) > 0.0001f)
+        {
+            goto cleanup;
+        }
+    }
+    result = 1;
+
+cleanup:
+    remove(path);
+    henka_authoring_mesh_destroy(mesh);
+    return result ? 1 : fail("modeling material-region/UV continuity");
+}
+
 int main(void)
 {
     return test_topology_and_evaluation() && test_rejection_and_tombstones() &&
-        test_history_and_persistence() && test_modeling_operations() && test_uv_authoring() ? 0 : 1;
+        test_history_and_persistence() && test_modeling_operations() && test_uv_authoring() &&
+        test_modeling_material_region_and_uv_continuity() ? 0 : 1;
 }
