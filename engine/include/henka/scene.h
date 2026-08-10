@@ -149,6 +149,23 @@ typedef struct henka_scene_sun_desc
     float angular_radius;
 } henka_scene_sun_desc;
 
+typedef struct henka_scene_moon_desc
+{
+    bool enabled;
+    bool manual_direction;
+    henka_vec3 direction;
+    henka_vec3 color;
+    float intensity;
+    float angular_radius;
+} henka_scene_moon_desc;
+
+typedef struct henka_scene_stars_desc
+{
+    bool enabled;
+    float intensity;
+    float rotation;
+} henka_scene_stars_desc;
+
 typedef struct henka_scene_environment_desc
 {
     henka_vec3 ground_color;
@@ -161,6 +178,8 @@ typedef struct henka_scene_environment_desc
     henka_scene_environment_mode mode;
     henka_scene_atmosphere_desc atmosphere;
     henka_scene_sun_desc sun;
+    henka_scene_moon_desc moon;
+    henka_scene_stars_desc stars;
     float time_of_day_hours;
     float day_length_seconds;
     float time_scale;

@@ -107,6 +107,8 @@ void henka_test_scene(void)
     HENKA_TEST_ASSERT(scene != NULL);
     HENKA_TEST_ASSERT(henka_scene_get_environment(scene, &read_environment) == HENKA_SUCCESS);
     HENKA_TEST_ASSERT_FLOAT_CLOSE(read_environment.intensity, 1.5f, 0.0001f);
+    HENKA_TEST_ASSERT(read_environment.moon.enabled);
+    HENKA_TEST_ASSERT(read_environment.stars.enabled);
     environment = (henka_scene_environment_desc){
         (henka_vec3){0.02f, 0.03f, 0.05f},
         (henka_vec3){0.14f, 0.18f, 0.24f},
@@ -133,6 +135,9 @@ void henka_test_scene(void)
     HENKA_TEST_ASSERT(henka_scene_set_environment(scene, invalid_environment) == HENKA_ERROR_INVALID_ARGUMENT);
     HENKA_TEST_ASSERT(henka_scene_get_environment(scene, &read_environment) == HENKA_SUCCESS);
     HENKA_TEST_ASSERT_FLOAT_CLOSE(read_environment.time_of_day_hours, 8.4f, 0.0001f);
+    invalid_environment = read_environment;
+    invalid_environment.moon.intensity = -1.0f;
+    HENKA_TEST_ASSERT(henka_scene_set_environment(scene, invalid_environment) == HENKA_ERROR_INVALID_ARGUMENT);
     light = (henka_scene_light_desc){
         HENKA_SCENE_LIGHT_POINT,
         (henka_vec3){1.0f, 2.0f, 3.0f},

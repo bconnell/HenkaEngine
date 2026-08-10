@@ -2796,7 +2796,9 @@ static henka_result henka_opengl_create_render_programs(
          "environmentTexture", "useEnvironmentTexture", "environmentRotation",
          "environmentCube", "useIBLCube", "environmentMode", "sunDirection",
          "sunColor", "sunIntensity", "atmosphereParameters", "atmosphereGroundAlbedo",
-         "horizonIntensity", "sunAngularRadius"};
+         "horizonIntensity", "sunAngularRadius", "moonDirection", "moonColor",
+         "moonIntensity", "moonAngularRadius", "starsEnabled", "starsIntensity",
+         "starsRotation"};
     static const char* shadow_uniforms[] =
         {"model", "lightMatrix", "baseColor", "baseColorTexture", "baseColorUvSet", "useTexture", "alphaMode", "alphaCutoff", "pointLightPosition", "pointLightFarPlane", "pointShadowPass"};
     static const char* tone_vertex =
@@ -2845,8 +2847,9 @@ static henka_result henka_opengl_create_render_programs(
         "void main(){ float nDotV=clamp(uv.x,0.0,1.0); float roughness=clamp(1.0-uv.y,0.0,1.0); float fresnel=pow(1.0-nDotV,5.0); outColor=vec2((1.0-fresnel)*(1.0-0.5*roughness),fresnel)*brdfScale; }\n";
     static const char* environment_fragment =
         "#version 330 core\n"
-        "in vec2 uv; uniform vec3 groundColor; uniform vec3 horizonColor; uniform vec3 zenithColor; uniform float intensity; uniform sampler2D environmentTexture; uniform samplerCube environmentCube; uniform bool useEnvironmentTexture; uniform bool useIBLCube; uniform float environmentRotation; uniform int environmentMode; uniform vec3 sunDirection; uniform vec3 sunColor; uniform float sunIntensity; uniform vec4 atmosphereParameters; uniform vec3 atmosphereGroundAlbedo; uniform float horizonIntensity; uniform float sunAngularRadius; out vec4 outColor; const float PI=3.14159265359;\n"
-        "vec3 proceduralSky(vec3 direction, vec3 gradient){ float up=clamp(direction.y,-1.0,1.0); float daylight=max(up,0.0); float rayleigh=clamp(atmosphereParameters.x*max(atmosphereParameters.z,0.01),0.0,8.0); float mie=clamp(atmosphereParameters.y*(0.65+0.35*atmosphereParameters.w),0.0,8.0); float horizonBand=exp(-abs(up)*5.0)*max(horizonIntensity,0.0); vec3 rayleighColor=vec3(0.24,0.43,0.95)*rayleigh*(0.16+0.84*daylight); vec3 warmMie=vec3(1.0,0.58,0.30)*mie*pow(max(1.0-daylight,0.0),1.35)*0.12; vec3 sky=gradient+rayleighColor*(0.35+0.65*daylight)+warmMie*horizonBand; sky=mix(sky,atmosphereGroundAlbedo,max(-up,0.0)*0.65); vec3 sunVector=normalize(-sunDirection); float sunFacing=max(dot(direction,sunVector),0.0); float disc=smoothstep(cos(max(sunAngularRadius,0.0001)*2.0),1.0,sunFacing); float halo=pow(sunFacing,32.0)*0.035; sky+=(disc+halo)*max(sunIntensity,0.0)*max(sunColor,vec3(0.0)); return max(sky,vec3(0.0)); }\n"
+        "in vec2 uv; uniform vec3 groundColor; uniform vec3 horizonColor; uniform vec3 zenithColor; uniform float intensity; uniform sampler2D environmentTexture; uniform samplerCube environmentCube; uniform bool useEnvironmentTexture; uniform bool useIBLCube; uniform float environmentRotation; uniform int environmentMode; uniform vec3 sunDirection; uniform vec3 sunColor; uniform float sunIntensity; uniform vec4 atmosphereParameters; uniform vec3 atmosphereGroundAlbedo; uniform float horizonIntensity; uniform float sunAngularRadius; uniform vec3 moonDirection; uniform vec3 moonColor; uniform float moonIntensity; uniform float moonAngularRadius; uniform bool starsEnabled; uniform float starsIntensity; uniform float starsRotation; out vec4 outColor; const float PI=3.14159265359;\n"
+        "float starHash(vec3 p){ return fract(sin(dot(p,vec3(127.1,311.7,74.7)))*43758.5453); }\n"
+        "vec3 proceduralSky(vec3 direction, vec3 gradient){ float up=clamp(direction.y,-1.0,1.0); float daylight=max(up,0.0); float rayleigh=clamp(atmosphereParameters.x*max(atmosphereParameters.z,0.01),0.0,8.0); float mie=clamp(atmosphereParameters.y*(0.65+0.35*atmosphereParameters.w),0.0,8.0); float horizonBand=exp(-abs(up)*5.0)*max(horizonIntensity,0.0); vec3 rayleighColor=vec3(0.24,0.43,0.95)*rayleigh*(0.16+0.84*daylight); vec3 warmMie=vec3(1.0,0.58,0.30)*mie*pow(max(1.0-daylight,0.0),1.35)*0.12; vec3 sky=gradient+rayleighColor*(0.35+0.65*daylight)+warmMie*horizonBand; sky=mix(sky,atmosphereGroundAlbedo,max(-up,0.0)*0.65); vec3 sunVector=normalize(-sunDirection); float sunFacing=max(dot(direction,sunVector),0.0); float disc=smoothstep(cos(max(sunAngularRadius,0.0001)*2.0),1.0,sunFacing); float halo=pow(sunFacing,32.0)*0.035; sky+=(disc+halo)*max(sunIntensity,0.0)*max(sunColor,vec3(0.0)); float night=1.0-smoothstep(-0.10,0.10,sunVector.y); vec3 moonVector=length(moonDirection)>0.0001?normalize(moonDirection):vec3(0.0,1.0,0.0); float moonFacing=max(dot(direction,moonVector),0.0); float moonDisc=smoothstep(cos(max(moonAngularRadius,0.0001)*2.0),1.0,moonFacing); float moonHalo=pow(moonFacing,24.0)*0.02; sky+=(moonDisc+moonHalo)*max(moonIntensity,0.0)*max(moonColor,vec3(0.0))*night; if(starsEnabled){ vec3 starCell=normalize(direction+vec3(starsRotation*0.001,0.0,0.0))*96.0; float star=step(0.9975,starHash(floor(starCell))); sky+=vec3(star*max(starsIntensity,0.0)*night); } return max(sky,vec3(0.0)); }\n"
         "void main(){ float height=clamp(uv.y,0.0,1.0); float horizon=smoothstep(0.04,0.48,height); vec3 lower=mix(groundColor,horizonColor,horizon); vec3 gradient=mix(lower,zenithColor,smoothstep(0.48,1.0,height)); float longitude=fract(uv.x+environmentRotation/6.28318530718); float latitude=height*PI; vec3 direction=vec3(sin(latitude)*cos(longitude*2.0*PI),cos(latitude),sin(latitude)*sin(longitude*2.0*PI)); vec3 hdr=useIBLCube?texture(environmentCube,direction).rgb:texture(environmentTexture,vec2(longitude,height)).rgb; vec3 color=environmentMode==2?proceduralSky(direction,gradient):(environmentMode==1&&(useEnvironmentTexture||useIBLCube)?hdr:gradient); outColor=vec4(max(color*max(intensity,0.0),vec3(0.0)),1.0); }\n";
     static const char* shadow_vertex =
         "#version 330 core\n"
@@ -3049,6 +3052,41 @@ static void henka_opengl_draw_environment(
         &state->environment_shader_data,
         "sunAngularRadius",
         scene->environment.sun.angular_radius);
+    henka_set_uniform_vec3_owned(
+        state->environment_program,
+        &state->environment_shader_data,
+        "moonDirection",
+        scene->environment.moon.direction);
+    henka_set_uniform_vec3_owned(
+        state->environment_program,
+        &state->environment_shader_data,
+        "moonColor",
+        scene->environment.moon.color);
+    henka_set_uniform_float_owned(
+        state->environment_program,
+        &state->environment_shader_data,
+        "moonIntensity",
+        scene->environment.moon.enabled ? scene->environment.moon.intensity : 0.0f);
+    henka_set_uniform_float_owned(
+        state->environment_program,
+        &state->environment_shader_data,
+        "moonAngularRadius",
+        scene->environment.moon.angular_radius);
+    henka_set_uniform_bool_owned(
+        state->environment_program,
+        &state->environment_shader_data,
+        "starsEnabled",
+        scene->environment.stars.enabled);
+    henka_set_uniform_float_owned(
+        state->environment_program,
+        &state->environment_shader_data,
+        "starsIntensity",
+        scene->environment.stars.intensity);
+    henka_set_uniform_float_owned(
+        state->environment_program,
+        &state->environment_shader_data,
+        "starsRotation",
+        scene->environment.stars.rotation);
     g_gl.ActiveTexture(GL_TEXTURE6);
     glBindTexture(
         GL_TEXTURE_2D,

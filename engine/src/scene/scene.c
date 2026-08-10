@@ -121,6 +121,9 @@ henka_scene_environment_desc henka_scene_environment_default(void)
         {0.20f, 0.24f, 0.18f}, 1.0f};
     environment.sun = (henka_scene_sun_desc){
         true, true, {-0.4f, -1.0f, -0.2f}, {1.0f, 0.96f, 0.90f}, 3.0f, 0.00465f};
+    environment.moon = (henka_scene_moon_desc){
+        true, false, {0.4f, 1.0f, 0.2f}, {0.52f, 0.62f, 1.0f}, 0.10f, 0.0045f};
+    environment.stars = (henka_scene_stars_desc){true, 0.08f, 0.0f};
     environment.time_of_day_hours = 12.0f;
     environment.day_length_seconds = 600.0f;
     environment.time_scale = 1.0f;
@@ -1822,6 +1825,8 @@ henka_result henka_scene_set_environment(
         environment.mode == HENKA_SCENE_ENVIRONMENT_GRADIENT &&
         !environment.time_of_day_enabled &&
         !environment.sun.enabled &&
+        !environment.moon.enabled &&
+        !environment.stars.enabled &&
         environment.atmosphere.rayleigh_scattering == 0.0f &&
         environment.atmosphere.mie_scattering == 0.0f &&
         environment.atmosphere.mie_anisotropy == 0.0f &&
@@ -1840,6 +1845,8 @@ henka_result henka_scene_set_environment(
             HENKA_SCENE_ENVIRONMENT_HDRI : HENKA_SCENE_ENVIRONMENT_GRADIENT;
         environment.atmosphere = defaults.atmosphere;
         environment.sun = defaults.sun;
+        environment.moon = defaults.moon;
+        environment.stars = defaults.stars;
         environment.time_of_day_hours = defaults.time_of_day_hours;
         environment.day_length_seconds = defaults.day_length_seconds;
         environment.time_scale = defaults.time_scale;
@@ -1936,6 +1943,30 @@ henka_result henka_scene_set_environment(
         }
     }
 
+    if (environment.moon.enabled)
+    {
+        sun_direction_length = henka_vec3_length(environment.moon.direction);
+        if (!henka_scene_vec3_is_finite(environment.moon.direction) ||
+            !henka_scene_vec3_is_finite(environment.moon.color) ||
+            !henka_is_finite_float(environment.moon.intensity) ||
+            !henka_is_finite_float(environment.moon.angular_radius) ||
+            sun_direction_length <= 0.000001f ||
+            environment.moon.color.x < 0.0f || environment.moon.color.y < 0.0f || environment.moon.color.z < 0.0f ||
+            environment.moon.color.x > 16.0f || environment.moon.color.y > 16.0f || environment.moon.color.z > 16.0f ||
+            environment.moon.intensity < 0.0f || environment.moon.intensity > 16.0f ||
+            environment.moon.angular_radius < 0.0001f || environment.moon.angular_radius > 0.5f)
+        {
+            return HENKA_ERROR_INVALID_ARGUMENT;
+        }
+    }
+    if (!henka_is_finite_float(environment.stars.intensity) ||
+        !henka_is_finite_float(environment.stars.rotation) ||
+        environment.stars.intensity < 0.0f || environment.stars.intensity > 16.0f ||
+        environment.stars.rotation < -1000000.0f || environment.stars.rotation > 1000000.0f)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
     scene->environment = environment;
     if (environment.sun.enabled)
     {
@@ -1959,6 +1990,11 @@ henka_result henka_scene_set_environment(
         scene->light_color = environment.sun.color;
         scene->light_intensity = environment.sun.intensity *
             (environment.sun.manual_direction ? 1.0f : fmaxf(elevation, 0.03f));
+    }
+    if (scene->environment.moon.enabled && !scene->environment.moon.manual_direction)
+    {
+        scene->environment.moon.direction = scene->environment.sun.enabled ?
+            scene->light_direction : henka_vec3_normalize(environment.moon.direction);
     }
     henka_scene_bump_render_revision(scene);
     return HENKA_SUCCESS;
