@@ -60,7 +60,7 @@ The camera module now exposes reusable helpers for:
 - orbit, pan, and dolly behavior around a target
 - screen-point ray creation
 
-The sandbox still uses a free camera, but the math is now reusable outside the example.
+The sandbox still uses a free camera, but the math is now reusable outside the example. Its normal startup and Reset View operation use one scene-first framing authority: visible non-helper mesh bounds are collected while excluding editor grid and ground geometry, showcase-prefixed content is preferred when available, and arbitrary projects fall back to other meaningful visible meshes. A versioned settings migration replaces only the legacy generated origin/floor-facing pose; a valid changed user pose is preserved, and an empty scene uses the existing deterministic camera fallback.
 
 Camera constructors now sanitize invalid field-of-view, aspect, near-plane, far-plane, and orthographic-height inputs to documented defaults. `henka_camera_is_valid` provides one public contract for scene assignment and projection helpers. Screen-ray and world-to-screen conversion reject non-finite or degenerate state and initialize outputs deterministically on failure. Camera mutation helpers reject non-finite deltas without poisoning persistent camera state.
 

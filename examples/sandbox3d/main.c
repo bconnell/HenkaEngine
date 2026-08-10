@@ -461,6 +461,8 @@ static const char* g_setting_key_camera_yaw = "camera_yaw_radians";
 static const char* g_setting_key_camera_pitch = "camera_pitch_radians";
 static const char* g_setting_key_camera_preset = "camera_preset";
 static const char* g_setting_key_camera_orthographic_height = "camera_orthographic_height";
+static const char* g_setting_key_camera_framing_version = "camera_framing.version";
+static const int g_camera_framing_settings_version = 1;
 static const char* g_setting_key_scene_panel_visible = "ui.scene_objects_panel_visible";
 static const char* g_setting_key_details_panel_visible = "ui.object_details_panel_visible";
 static const char* g_setting_key_layout_mode = "ui.layout_mode";
@@ -662,6 +664,13 @@ static void sandbox3d_set_view_navigation_target(sandbox3d_state* state, henka_v
 static void sandbox3d_sync_view_navigation_target_to_selection(sandbox3d_state* state);
 static const char* sandbox3d_get_camera_preset_setting_value(henka_camera_preset preset);
 static henka_camera_preset sandbox3d_parse_camera_preset(const char* value);
+static bool sandbox3d_get_scene_framing_bounds(
+    const sandbox3d_state* state,
+    henka_bounds* out_bounds);
+static bool sandbox3d_camera_matches_legacy_default(
+    const henka_camera* camera,
+    const henka_camera* legacy_camera);
+static bool sandbox3d_validate_startup_camera(const sandbox3d_state* state);
 static bool sandbox3d_apply_camera_preset(
     sandbox3d_state* state,
     henka_camera_preset preset,
@@ -2393,6 +2402,13 @@ static bool sandbox3d_is_finite_float(float value)
     return isfinite(value) != 0;
 }
 
+static bool sandbox3d_vec3_is_finite(henka_vec3 value)
+{
+    return sandbox3d_is_finite_float(value.x) &&
+        sandbox3d_is_finite_float(value.y) &&
+        sandbox3d_is_finite_float(value.z);
+}
+
 static bool sandbox3d_transform_is_finite(henka_transform transform)
 {
     return sandbox3d_is_finite_float(transform.position.x) &&
@@ -3447,6 +3463,179 @@ static henka_bounds sandbox3d_make_bounds(henka_vec3 center, henka_vec3 extents)
 static henka_vec3 sandbox3d_get_default_orbit_target(void)
 {
     return (henka_vec3){0.0f, 0.6f, 0.0f};
+}
+
+static bool sandbox3d_get_scene_framing_bounds(
+    const sandbox3d_state* state,
+    henka_bounds* out_bounds)
+{
+    size_t pass;
+    size_t entity_index;
+    bool found;
+    henka_vec3 minimum;
+    henka_vec3 maximum;
+
+    if (state == NULL || state->scene == NULL || out_bounds == NULL)
+    {
+        return false;
+    }
+
+    /* Pass zero gives the normal Sandbox's authored showcase priority. Pass
+     * one remains project-agnostic and frames any visible non-helper mesh when
+     * a future project has no showcase naming convention. Ground and grid are
+     * deliberately excluded from both passes because neither is scene content
+     * a user opens the editor to inspect. */
+    for (pass = 0U; pass < 2U; ++pass)
+    {
+        found = false;
+        minimum = (henka_vec3){0.0f, 0.0f, 0.0f};
+        maximum = (henka_vec3){0.0f, 0.0f, 0.0f};
+        for (entity_index = 0U;
+             entity_index < henka_scene_get_entity_count(state->scene);
+             ++entity_index)
+        {
+            henka_entity entity;
+            henka_mesh* mesh;
+            henka_bounds bounds;
+            henka_transform transform;
+            const char* name;
+            henka_vec3 bounds_minimum;
+            henka_vec3 bounds_maximum;
+            bool showcase_name;
+
+            entity = henka_scene_get_entity_at_index(state->scene, entity_index);
+            if (entity == HENKA_INVALID_ENTITY ||
+                entity == state->grid_entity ||
+                entity == state->ground_entity ||
+                !henka_scene_is_entity_visible(state->scene, entity) ||
+                henka_scene_is_entity_helper(state->scene, entity) ||
+                henka_scene_get_entity_mesh(state->scene, entity, &mesh) != HENKA_SUCCESS ||
+                mesh == NULL)
+            {
+                continue;
+            }
+
+            if (henka_scene_get_entity_world_bounds(state->scene, entity, &bounds) != HENKA_SUCCESS)
+            {
+                /* Imported glTF primitives currently expose render meshes
+                 * before they expose explicit scene bounds. Keep startup
+                 * framing useful with a bounded transform-space proxy rather
+                 * than dropping the visible scene entirely. */
+                if (henka_scene_get_entity_transform(state->scene, entity, &transform) != HENKA_SUCCESS ||
+                    !sandbox3d_vec3_is_finite(transform.position) ||
+                    !sandbox3d_vec3_is_finite(transform.scale))
+                {
+                    continue;
+                }
+                bounds.center = transform.position;
+                bounds.extents = (henka_vec3){
+                    fmaxf(0.25f, fminf(100.0f, fabsf(transform.scale.x) * 0.75f)),
+                    fmaxf(0.25f, fminf(100.0f, fabsf(transform.scale.y) * 0.75f)),
+                    fmaxf(0.25f, fminf(100.0f, fabsf(transform.scale.z) * 0.75f))};
+            }
+            if (!sandbox3d_vec3_is_finite(bounds.center) ||
+                !sandbox3d_vec3_is_finite(bounds.extents) ||
+                bounds.extents.x < 0.0f || bounds.extents.y < 0.0f || bounds.extents.z < 0.0f ||
+                bounds.extents.x > 1000.0f || bounds.extents.y > 1000.0f || bounds.extents.z > 1000.0f)
+            {
+                continue;
+            }
+
+            name = henka_scene_get_entity_name(state->scene, entity);
+            showcase_name = name != NULL && strncmp(name, "Showcase ", 9U) == 0;
+            if ((pass == 0U && !showcase_name) || (pass == 1U && showcase_name))
+            {
+                continue;
+            }
+
+            bounds_minimum = henka_vec3_subtract(bounds.center, bounds.extents);
+            bounds_maximum = henka_vec3_add(bounds.center, bounds.extents);
+            if (!sandbox3d_vec3_is_finite(bounds_minimum) || !sandbox3d_vec3_is_finite(bounds_maximum))
+            {
+                continue;
+            }
+
+            if (!found)
+            {
+                minimum = bounds_minimum;
+                maximum = bounds_maximum;
+                found = true;
+            }
+            else
+            {
+                minimum.x = fminf(minimum.x, bounds_minimum.x);
+                minimum.y = fminf(minimum.y, bounds_minimum.y);
+                minimum.z = fminf(minimum.z, bounds_minimum.z);
+                maximum.x = fmaxf(maximum.x, bounds_maximum.x);
+                maximum.y = fmaxf(maximum.y, bounds_maximum.y);
+                maximum.z = fmaxf(maximum.z, bounds_maximum.z);
+            }
+        }
+
+        if (found)
+        {
+            out_bounds->center = henka_vec3_scale(henka_vec3_add(minimum, maximum), 0.5f);
+            out_bounds->extents = henka_vec3_scale(henka_vec3_subtract(maximum, minimum), 0.5f);
+            if (sandbox3d_vec3_is_finite(out_bounds->center) &&
+                sandbox3d_vec3_is_finite(out_bounds->extents) &&
+                out_bounds->extents.x >= 0.0f &&
+                out_bounds->extents.y >= 0.0f &&
+                out_bounds->extents.z >= 0.0f &&
+                out_bounds->extents.x <= 1000.0f &&
+                out_bounds->extents.y <= 1000.0f &&
+                out_bounds->extents.z <= 1000.0f)
+            {
+                return true;
+            }
+        }
+    }
+
+    return false;
+}
+
+static bool sandbox3d_camera_matches_legacy_default(
+    const henka_camera* camera,
+    const henka_camera* legacy_camera)
+{
+    const float tolerance = 0.001f;
+
+    return camera != NULL && legacy_camera != NULL &&
+        camera->projection_mode == legacy_camera->projection_mode &&
+        fabsf(camera->position.x - legacy_camera->position.x) <= tolerance &&
+        fabsf(camera->position.y - legacy_camera->position.y) <= tolerance &&
+        fabsf(camera->position.z - legacy_camera->position.z) <= tolerance &&
+        fabsf(camera->yaw_radians - legacy_camera->yaw_radians) <= tolerance &&
+        fabsf(camera->pitch_radians - legacy_camera->pitch_radians) <= tolerance &&
+        fabsf(camera->orthographic_height - legacy_camera->orthographic_height) <= tolerance;
+}
+
+static bool sandbox3d_validate_startup_camera(const sandbox3d_state* state)
+{
+    henka_bounds bounds;
+    henka_vec3 forward;
+    henka_vec3 to_target;
+    float distance;
+
+    if (state == NULL || !henka_camera_is_valid(&state->camera) ||
+        !sandbox3d_get_scene_framing_bounds(state, &bounds))
+    {
+        return state != NULL && henka_camera_is_valid(&state->camera);
+    }
+
+    forward = henka_camera_get_forward(&state->camera);
+    to_target = henka_vec3_subtract(bounds.center, state->camera.position);
+    distance = henka_vec3_length(to_target);
+    if (!sandbox3d_vec3_is_finite(forward) || !sandbox3d_vec3_is_finite(to_target) ||
+        !isfinite(distance) || distance <= 0.5f || distance > 1000.0f ||
+        henka_vec3_dot(forward, to_target) <= 0.0f)
+    {
+        return false;
+    }
+
+    /* Perspective startup/reset is scene-first. Other valid presets retain
+     * their intentional projection/orientation choices. */
+    return state->camera_preset != HENKA_CAMERA_PRESET_PERSPECTIVE_3D ||
+        state->camera.pitch_radians > -0.75f;
 }
 
 static void sandbox3d_reset_workspace_layout(sandbox3d_state* state)
@@ -6162,6 +6351,8 @@ static bool sandbox3d_apply_camera_preset(
 static void sandbox3d_reset_camera_defaults(sandbox3d_state* state)
 {
     henka_camera_preset preset;
+    henka_bounds framing_bounds;
+    bool has_framing_bounds;
 
     if (state == NULL)
     {
@@ -6187,6 +6378,22 @@ static void sandbox3d_reset_camera_defaults(sandbox3d_state* state)
         state->camera.pitch_radians = g_camera_start_pitch;
         state->camera.projection_mode = HENKA_CAMERA_PROJECTION_PERSPECTIVE;
     }
+
+    has_framing_bounds = sandbox3d_get_scene_framing_bounds(state, &framing_bounds);
+    if (has_framing_bounds)
+    {
+        if (!henka_camera_frame_bounds(
+                &state->camera,
+                framing_bounds,
+                state->camera.yaw_radians,
+                state->camera.pitch_radians))
+        {
+            has_framing_bounds = false;
+        }
+    }
+    sandbox3d_set_view_navigation_target(
+        state,
+        has_framing_bounds ? framing_bounds.center : sandbox3d_get_default_orbit_target());
 
     state->camera.movement_speed = g_default_camera_movement_speed;
     state->camera.fast_movement_multiplier = 2.5f;
@@ -7344,7 +7551,10 @@ static void sandbox3d_save_custom_workspace_layout_slots_settings(
 static void sandbox3d_apply_loaded_settings(henka_engine* engine, sandbox3d_state* state)
 {
     henka_camera candidate_camera;
+    henka_camera legacy_camera;
     bool camera_settings_valid;
+    bool camera_pose_settings_present;
+    bool camera_framing_migration_needed;
     bool grid_visible;
     const char* layout_mode_value;
     float mouse_sensitivity;
@@ -7357,6 +7567,7 @@ static void sandbox3d_apply_loaded_settings(henka_engine* engine, sandbox3d_stat
     bool environment_time_enabled;
     henka_scene_environment_desc environment;
     henka_camera_preset camera_preset;
+    int camera_framing_version;
     henka_result result;
     henka_viewport_shading_mode shading_mode;
 
@@ -7390,6 +7601,20 @@ static void sandbox3d_apply_loaded_settings(henka_engine* engine, sandbox3d_stat
     {
         sandbox3d_reset_camera_defaults(state);
     }
+    legacy_camera = state->camera;
+    camera_framing_version = henka_settings_get_int(
+        state->settings,
+        g_setting_key_camera_framing_version,
+        0);
+    camera_framing_migration_needed =
+        camera_framing_version < g_camera_framing_settings_version;
+    camera_pose_settings_present =
+        henka_settings_has_key(state->settings, g_setting_key_camera_position_x) &&
+        henka_settings_has_key(state->settings, g_setting_key_camera_position_y) &&
+        henka_settings_has_key(state->settings, g_setting_key_camera_position_z) &&
+        henka_settings_has_key(state->settings, g_setting_key_camera_yaw) &&
+        henka_settings_has_key(state->settings, g_setting_key_camera_pitch) &&
+        henka_settings_has_key(state->settings, g_setting_key_camera_orthographic_height);
 
     candidate_camera = state->camera;
     candidate_camera.position.x = henka_settings_get_float(
@@ -7429,12 +7654,27 @@ static void sandbox3d_apply_loaded_settings(henka_engine* engine, sandbox3d_stat
     if (camera_settings_valid)
     {
         state->camera = candidate_camera;
+        if (camera_framing_migration_needed &&
+            (!camera_pose_settings_present ||
+             sandbox3d_camera_matches_legacy_default(&candidate_camera, &legacy_camera)))
+        {
+            /* Older settings stored the generated origin view as if it were
+             * user intent. Migrate that one known default to scene-first
+             * framing, while preserving any valid, changed camera pose. */
+            sandbox3d_reset_camera_defaults(state);
+            state->camera.movement_speed = movement_speed;
+            HENKA_LOG_INFO("Migrated the legacy sandbox camera to scene-first framing.");
+        }
     }
     else
     {
         sandbox3d_reset_camera_defaults(state);
         HENKA_LOG_WARN("Unsafe sandbox camera settings were ignored and replaced with safe defaults.");
     }
+    (void)henka_settings_set_int(
+        state->settings,
+        g_setting_key_camera_framing_version,
+        g_camera_framing_settings_version);
     sandbox3d_apply_capture_camera(state);
 
     if (!isfinite(mouse_sensitivity) ||
@@ -7663,6 +7903,10 @@ static henka_result sandbox3d_save_settings(henka_engine* engine, sandbox3d_stat
         state->settings,
         g_setting_key_camera_preset,
         sandbox3d_get_camera_preset_setting_value(state->camera_preset));
+    henka_settings_set_int(
+        state->settings,
+        g_setting_key_camera_framing_version,
+        g_camera_framing_settings_version);
     henka_settings_set_float(
         state->settings,
         g_setting_key_camera_orthographic_height,
@@ -17436,6 +17680,29 @@ static henka_result sandbox3d_initialize(henka_engine* engine, void* user_data)
     }
 
     sandbox3d_apply_loaded_settings(engine, state);
+    if (state->smoke_test &&
+        !state->capture_mode_requested &&
+        !sandbox3d_validate_startup_camera(state))
+    {
+        HENKA_LOG_ERROR("Sandbox startup camera did not frame meaningful scene content.");
+        state->smoke_validation_failed = true;
+    }
+    else if (state->smoke_test && !state->capture_mode_requested)
+    {
+        henka_bounds startup_bounds;
+        if (sandbox3d_get_scene_framing_bounds(state, &startup_bounds))
+        {
+            printf(
+                "Startup camera framing: target=(%.2f, %.2f, %.2f) pitch=%.3f distance=%.2f.\n",
+                startup_bounds.center.x,
+                startup_bounds.center.y,
+                startup_bounds.center.z,
+                state->camera.pitch_radians,
+                henka_vec3_length(henka_vec3_subtract(
+                    startup_bounds.center,
+                    state->camera.position)));
+        }
+    }
     sandbox3d_editor_ui_state_load(
         state->settings,
         &state->editor_ui);
