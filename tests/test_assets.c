@@ -782,6 +782,12 @@ void henka_test_assets(void)
         &material_instance, material_scene, material_entity) == HENKA_SUCCESS);
     HENKA_TEST_ASSERT(henka_scene_get_entity_material(
         material_scene, material_entity, &applied_material) == HENKA_SUCCESS);
+    {
+        const henka_material_asset* applied_asset = NULL;
+        HENKA_TEST_ASSERT(henka_scene_get_entity_material_asset(
+            material_scene, material_entity, &applied_asset) == HENKA_SUCCESS);
+        HENKA_TEST_ASSERT(applied_asset == &material_entry);
+    }
     HENKA_TEST_ASSERT(applied_material.roughness == material_entry.material.roughness);
     HENKA_TEST_ASSERT(henka_assets_material_instance_set_float(
         &material_instance, HENKA_MATERIAL_INSTANCE_IOR, 0.5f) ==

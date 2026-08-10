@@ -180,6 +180,7 @@ typedef struct henka_scene_entity_record
     henka_mesh* mesh;
     henka_scene_lod_desc lod;
     henka_material material;
+    const henka_material_asset* material_asset;
     char* material_name;
     bool has_local_bounds;
     henka_bounds local_bounds;
@@ -241,6 +242,7 @@ struct henka_gltf_scene_asset
     henka_model_scene_data data;
     henka_mesh* primitive_meshes[HENKA_MODEL_MAX_SCENE_ITEMS];
     henka_material materials[HENKA_MODEL_MAX_SCENE_ITEMS];
+    henka_material_asset material_assets[HENKA_MODEL_MAX_SCENE_ITEMS];
     bool material_ready[HENKA_MODEL_MAX_SCENE_ITEMS];
     henka_asset_metadata metadata;
     uint64_t revision;

@@ -21,6 +21,7 @@ typedef struct henka_scene_entity_record
     henka_mesh* mesh;
     henka_scene_lod_desc lod;
     henka_material material;
+    const henka_material_asset* material_asset;
     char* material_name;
     bool has_local_bounds;
     henka_bounds local_bounds;

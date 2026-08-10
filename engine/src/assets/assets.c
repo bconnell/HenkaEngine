@@ -784,6 +784,7 @@ static void henka_assets_destroy_gltf_scene_payload(henka_gltf_scene_asset* asse
     }
     henka_model_scene_data_destroy(&asset->data);
     memset(asset->materials, 0, sizeof(asset->materials));
+    memset(asset->material_assets, 0, sizeof(asset->material_assets));
     memset(asset->material_ready, 0, sizeof(asset->material_ready));
 }
 
@@ -2952,13 +2953,20 @@ henka_result henka_assets_apply_material_instance_to_entity(
     henka_entity entity)
 {
     henka_material material;
+    henka_result result;
 
     if (instance == NULL || scene == NULL || entity == HENKA_INVALID_ENTITY ||
         henka_assets_get_material_instance_material(instance, &material) != HENKA_SUCCESS)
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
-    return henka_scene_set_entity_material(scene, entity, material);
+    result = henka_scene_set_entity_material(scene, entity, material);
+    if (result != HENKA_SUCCESS)
+    {
+        return result;
+    }
+    return henka_scene_set_entity_material_asset(
+        scene, entity, instance->definition);
 }
 
 static henka_result henka_material_instance_commit(
@@ -3286,6 +3294,8 @@ static henka_result henka_assets_build_gltf_scene_payload(
             henka_assets_destroy_gltf_scene_payload(out_asset);
             return result;
         }
+        out_asset->material_assets[index].material = out_asset->materials[index];
+        out_asset->material_assets[index].revision = 1U;
         out_asset->material_ready[index] = true;
     }
     for (index = 0U; index < out_asset->data.primitive_count; ++index)
@@ -3397,6 +3407,7 @@ henka_result henka_assets_reload_gltf_scene_asset(
     henka_model_scene_data* old_data = NULL;
     henka_mesh** old_meshes = NULL;
     henka_material* old_materials = NULL;
+    henka_material_asset* old_material_assets = NULL;
     bool* old_material_ready = NULL;
     henka_result result;
 
@@ -3411,14 +3422,16 @@ henka_result henka_assets_reload_gltf_scene_asset(
     old_data = henka_calloc(1U, sizeof(*old_data));
     old_meshes = henka_calloc(HENKA_MODEL_MAX_SCENE_ITEMS, sizeof(*old_meshes));
     old_materials = henka_calloc(HENKA_MODEL_MAX_SCENE_ITEMS, sizeof(*old_materials));
+    old_material_assets = henka_calloc(HENKA_MODEL_MAX_SCENE_ITEMS, sizeof(*old_material_assets));
     old_material_ready = henka_calloc(HENKA_MODEL_MAX_SCENE_ITEMS, sizeof(*old_material_ready));
     if (candidate == NULL || old_data == NULL || old_meshes == NULL ||
-        old_materials == NULL || old_material_ready == NULL)
+        old_materials == NULL || old_material_assets == NULL || old_material_ready == NULL)
     {
         henka_free(candidate);
         henka_free(old_data);
         henka_free(old_meshes);
         henka_free(old_materials);
+        henka_free(old_material_assets);
         henka_free(old_material_ready);
         return HENKA_ERROR_OUT_OF_MEMORY;
     }
@@ -3429,6 +3442,7 @@ henka_result henka_assets_reload_gltf_scene_asset(
         henka_free(old_data);
         henka_free(old_meshes);
         henka_free(old_materials);
+        henka_free(old_material_assets);
         henka_free(old_material_ready);
         return result;
     }
@@ -3436,20 +3450,36 @@ henka_result henka_assets_reload_gltf_scene_asset(
     *old_data = asset->data;
     memcpy(old_meshes, asset->primitive_meshes, sizeof(asset->primitive_meshes));
     memcpy(old_materials, asset->materials, sizeof(asset->materials));
+    memcpy(old_material_assets, asset->material_assets, sizeof(asset->material_assets));
     memcpy(old_material_ready, asset->material_ready, sizeof(asset->material_ready));
     asset->data = candidate->data;
     memcpy(asset->primitive_meshes, candidate->primitive_meshes, sizeof(asset->primitive_meshes));
     memcpy(asset->materials, candidate->materials, sizeof(asset->materials));
+    memcpy(asset->material_assets, candidate->material_assets, sizeof(asset->material_assets));
     memcpy(asset->material_ready, candidate->material_ready, sizeof(asset->material_ready));
+    {
+        size_t material_index;
+        for (material_index = 0U; material_index < asset->data.material_count; ++material_index)
+        {
+            if (asset->material_ready[material_index])
+            {
+                uint64_t previous_revision = old_material_assets[material_index].revision;
+                asset->material_assets[material_index].revision =
+                    previous_revision == UINT64_MAX ? 1U : previous_revision + 1U;
+            }
+        }
+    }
     candidate->data = *old_data;
     memcpy(candidate->primitive_meshes, old_meshes, sizeof(candidate->primitive_meshes));
     memcpy(candidate->materials, old_materials, sizeof(candidate->materials));
+    memcpy(candidate->material_assets, old_material_assets, sizeof(candidate->material_assets));
     memcpy(candidate->material_ready, old_material_ready, sizeof(candidate->material_ready));
     henka_assets_destroy_gltf_scene_payload(candidate);
     henka_free(candidate);
     henka_free(old_data);
     henka_free(old_meshes);
     henka_free(old_materials);
+    henka_free(old_material_assets);
     henka_free(old_material_ready);
     asset->revision += 1U;
     henka_asset_set_summary(&asset->metadata,
@@ -3488,6 +3518,7 @@ static henka_result henka_assets_instantiate_gltf_scene_node(
     {
         henka_entity entity;
         henka_material material;
+        const henka_material_asset* material_asset = NULL;
         int written = snprintf(name, sizeof(name), "%s%s%s", name_prefix == NULL ? "" : name_prefix,
             node->name == NULL ? "Node" : node->name,
             asset->data.primitive_count > 1U ? " Primitive" : "");
@@ -3500,9 +3531,14 @@ static henka_result henka_assets_instantiate_gltf_scene_node(
         material = henka_material_default();
         material.shader = asset->shader;
         if (asset->data.primitives[primitive_index].material_index >= 0 &&
+            (size_t)asset->data.primitives[primitive_index].material_index < asset->data.material_count &&
             asset->material_ready[asset->data.primitives[primitive_index].material_index])
+        {
             material = asset->materials[asset->data.primitives[primitive_index].material_index];
+            material_asset = &asset->material_assets[asset->data.primitives[primitive_index].material_index];
+        }
         if (henka_scene_set_entity_material(target_scene, entity, material) != HENKA_SUCCESS ||
+            henka_scene_set_entity_material_asset(target_scene, entity, material_asset) != HENKA_SUCCESS ||
             henka_scene_set_entity_transform(target_scene, entity, node->world_transform) != HENKA_SUCCESS) return HENKA_ERROR_UNKNOWN;
     }
     for (child_index = 0U; child_index < asset->data.node_count; ++child_index)

@@ -693,6 +693,7 @@ static henka_result henka_scene_grow(henka_scene* scene)
         new_entities[index].previous_transform_valid = false;
         new_entities[index].mesh = NULL;
         new_entities[index].material = henka_material_default();
+        new_entities[index].material_asset = NULL;
         new_entities[index].material_name = NULL;
         new_entities[index].has_local_bounds = false;
         new_entities[index].local_bounds = (henka_bounds){{0.0f, 0.0f, 0.0f}, {0.0f, 0.0f, 0.0f}};
@@ -800,6 +801,7 @@ henka_entity henka_scene_create_entity_named(henka_scene* scene, const char* nam
             scene->entities[index].mesh = NULL;
             scene->entities[index].lod = (henka_scene_lod_desc){0};
             scene->entities[index].material = henka_material_default();
+            scene->entities[index].material_asset = NULL;
             henka_free(scene->entities[index].name);
             henka_free(scene->entities[index].tag);
             henka_free(scene->entities[index].material_name);
@@ -875,6 +877,7 @@ void henka_scene_destroy_entity(henka_scene* scene, henka_entity entity)
     record->flags = HENKA_SCENE_ENTITY_FLAG_NONE;
     record->mesh = NULL;
     record->material = henka_material_default();
+    record->material_asset = NULL;
     henka_free(record->name);
     henka_free(record->tag);
     henka_free(record->material_name);
@@ -1108,6 +1111,28 @@ henka_result henka_scene_get_entity_material(const henka_scene* scene, henka_ent
     return HENKA_SUCCESS;
 }
 
+henka_result henka_scene_get_entity_material_asset(
+    const henka_scene* scene,
+    henka_entity entity,
+    const henka_material_asset** out_asset)
+{
+    const henka_scene_entity_record* record;
+
+    if (out_asset == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    record = henka_scene_get_entity_record_const(scene, entity);
+    if (record == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    *out_asset = record->material_asset;
+    return HENKA_SUCCESS;
+}
+
 henka_result henka_scene_get_entity_local_bounds(const henka_scene* scene, henka_entity entity, henka_bounds* out_bounds)
 {
     const henka_scene_entity_record* record;
@@ -1325,6 +1350,24 @@ henka_result henka_scene_set_entity_material(henka_scene* scene, henka_entity en
     record->material_name = material_name;
     record->material = material;
     record->material.name = material_name != NULL ? material_name : "Material";
+    henka_scene_bump_render_revision(scene);
+    return HENKA_SUCCESS;
+}
+
+henka_result henka_scene_set_entity_material_asset(
+    henka_scene* scene,
+    henka_entity entity,
+    const henka_material_asset* asset)
+{
+    henka_scene_entity_record* record;
+
+    record = henka_scene_get_entity_record(scene, entity);
+    if (record == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    record->material_asset = asset;
     henka_scene_bump_render_revision(scene);
     return HENKA_SUCCESS;
 }

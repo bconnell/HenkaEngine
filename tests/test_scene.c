@@ -82,6 +82,8 @@ void henka_test_scene(void)
     henka_interaction_desc interaction;
     henka_interaction_desc read_interaction;
     henka_material read_material;
+    const henka_material_asset* material_asset;
+    const henka_material_asset* read_material_asset;
     henka_transform transform;
     henka_transform read_back;
     henka_scene_environment_desc environment;
@@ -328,6 +330,25 @@ void henka_test_scene(void)
     material_name[0] = 'X';
     HENKA_TEST_ASSERT(henka_scene_get_entity_material(scene, second, &read_material) == HENKA_SUCCESS);
     HENKA_TEST_ASSERT(strcmp(read_material.name, "Mutable Material") == 0);
+    material_asset = (const henka_material_asset*)(uintptr_t)0x1234U;
+    read_material_asset = NULL;
+    HENKA_TEST_ASSERT(henka_scene_get_entity_material_asset(
+        scene, second, &read_material_asset) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(read_material_asset == NULL);
+    HENKA_TEST_ASSERT(henka_scene_set_entity_material_asset(
+        scene, second, material_asset) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_scene_get_entity_material_asset(
+        scene, second, &read_material_asset) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(read_material_asset == material_asset);
+    HENKA_TEST_ASSERT(henka_scene_set_entity_material(scene, second, material) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_scene_get_entity_material_asset(
+        scene, second, &read_material_asset) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(read_material_asset == material_asset);
+    HENKA_TEST_ASSERT(henka_scene_set_entity_material_asset(
+        scene, second, NULL) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_scene_get_entity_material_asset(
+        scene, second, &read_material_asset) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(read_material_asset == NULL);
     material.base_color.x = NAN;
     HENKA_TEST_ASSERT(henka_scene_set_entity_material(scene, second, material) == HENKA_ERROR_INVALID_ARGUMENT);
     material.base_color.x = 1.0f;

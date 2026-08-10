@@ -13,6 +13,7 @@
 #include <henka/texture.h>
 
 typedef struct henka_scene henka_scene;
+typedef struct henka_material_asset henka_material_asset;
 
 /*
  * Opaque generation-checked scene identity. Numeric values are not stable
@@ -223,6 +224,12 @@ henka_result henka_scene_get_entity_info(const henka_scene* scene, henka_entity 
 henka_result henka_scene_get_entity_transform(const henka_scene* scene, henka_entity entity, henka_transform* out_transform);
 henka_result henka_scene_get_entity_mesh(const henka_scene* scene, henka_entity entity, henka_mesh** out_mesh);
 henka_result henka_scene_get_entity_material(const henka_scene* scene, henka_entity entity, henka_material* out_material);
+/* Borrowed manager-owned definition identity, when the effective material
+ * originated from an asset-manager material definition. */
+henka_result henka_scene_get_entity_material_asset(
+    const henka_scene* scene,
+    henka_entity entity,
+    const henka_material_asset** out_asset);
 henka_result henka_scene_get_entity_local_bounds(const henka_scene* scene, henka_entity entity, henka_bounds* out_bounds);
 henka_result henka_scene_get_entity_world_bounds(const henka_scene* scene, henka_entity entity, henka_bounds* out_bounds);
 henka_result henka_scene_get_entity_interaction(const henka_scene* scene, henka_entity entity, henka_interaction_desc* out_interaction);
@@ -234,6 +241,12 @@ henka_result henka_scene_scale_entity(henka_scene* scene, henka_entity entity, h
 henka_result henka_scene_set_entity_mesh(henka_scene* scene, henka_entity entity, henka_mesh* mesh);
 henka_result henka_scene_clear_entity_mesh(henka_scene* scene, henka_entity entity);
 henka_result henka_scene_set_entity_material(henka_scene* scene, henka_entity entity, henka_material material);
+/* Associates a borrowed manager-owned definition with the entity. Passing
+ * NULL clears the association without changing the effective material. */
+henka_result henka_scene_set_entity_material_asset(
+    henka_scene* scene,
+    henka_entity entity,
+    const henka_material_asset* asset);
 henka_result henka_scene_set_entity_name(henka_scene* scene, henka_entity entity, const char* name);
 henka_result henka_scene_set_entity_tag(henka_scene* scene, henka_entity entity, const char* tag);
 henka_result henka_scene_set_entity_visible(henka_scene* scene, henka_entity entity, bool visible);
