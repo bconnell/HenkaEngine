@@ -1209,7 +1209,7 @@ static void henka_add_optional_shader_locations(
         "reflectionProbePosition", "reflectionProbeExtents", "useReflectionProbe",
         "reflectionProbeMap", "useReflectionProbeMap", "doubleSided",
         "previousViewProjection", "previousModel", "useMotionVectors",
-        "useInstancing", "thickness", "attenuationDistance", "attenuationColor",
+        "useInstancing", "cascadeBlendDistance", "thickness", "attenuationDistance", "attenuationColor",
         "useTerrainLayers", "terrainLayerBaseColor[0]", "terrainLayerParameters[0]",
         "terrainLayerBaseColorAvailable[0]", "terrainLayerNormalAvailable[0]",
         "terrainLayerMetallicRoughnessAvailable[0]", "terrainLayerBaseColorTextures[0]",
@@ -5561,6 +5561,7 @@ henka_result henka_opengl_renderer_draw_scene(
         henka_set_uniform_bool(program, "useCascadeShadowMap",
             rendered && state->cascade_shadow_depth_texture != 0U && entity->material.receive_shadows);
         henka_set_uniform_float(program, "cascadeSplitDistance", 18.0f);
+        henka_set_uniform_float(program, "cascadeBlendDistance", 4.0f);
         henka_set_uniform_int(program, "pointShadowMap", 13);
         henka_set_uniform_bool(program, "usePointShadowMap",
             rendered && point_shadow_light_index >= 0 &&
