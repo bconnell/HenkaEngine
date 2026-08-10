@@ -16,6 +16,9 @@ struct sandbox3d_authoring_object
     henka_authoring_mesh_history* history;
     size_t history_steps;
     henka_mesh* render_mesh;
+    henka_mesh* previous_scene_mesh;
+    bool had_previous_bounds;
+    henka_bounds previous_bounds;
     henka_authoring_face_id selected_face;
 };
 
@@ -504,6 +507,12 @@ henka_result sandbox3d_authoring_object_create_box(
     }
     if (result == HENKA_SUCCESS)
     {
+        object->previous_scene_mesh = old_mesh;
+        object->had_previous_bounds = henka_scene_get_entity_local_bounds(
+            scene, entity, &object->previous_bounds) == HENKA_SUCCESS;
+    }
+    if (result == HENKA_SUCCESS)
+    {
         result = henka_scene_set_entity_mesh(scene, entity, object->render_mesh);
     }
     if (result == HENKA_SUCCESS)
@@ -515,6 +524,15 @@ henka_result sandbox3d_authoring_object_create_box(
         if (object->render_mesh != NULL)
         {
             (void)henka_scene_set_entity_mesh(scene, entity, old_mesh);
+        }
+        if (object->had_previous_bounds)
+        {
+            (void)henka_scene_set_entity_local_bounds(
+                scene, entity, object->previous_bounds);
+        }
+        else
+        {
+            (void)henka_scene_clear_entity_local_bounds(scene, entity);
         }
         sandbox3d_authoring_object_destroy(object);
         return result;
@@ -536,7 +554,24 @@ void sandbox3d_authoring_object_destroy(sandbox3d_authoring_object* object)
         if (henka_scene_get_entity_mesh(object->scene, object->entity, &scene_mesh) == HENKA_SUCCESS &&
             scene_mesh == object->render_mesh)
         {
-            (void)henka_scene_clear_entity_mesh(object->scene, object->entity);
+            if (object->previous_scene_mesh != NULL)
+            {
+                (void)henka_scene_set_entity_mesh(
+                    object->scene, object->entity, object->previous_scene_mesh);
+            }
+            else
+            {
+                (void)henka_scene_clear_entity_mesh(object->scene, object->entity);
+            }
+            if (object->had_previous_bounds)
+            {
+                (void)henka_scene_set_entity_local_bounds(
+                    object->scene, object->entity, object->previous_bounds);
+            }
+            else
+            {
+                (void)henka_scene_clear_entity_local_bounds(object->scene, object->entity);
+            }
         }
     }
     henka_mesh_destroy(object->render_mesh);

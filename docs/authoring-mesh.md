@@ -52,6 +52,9 @@ history from the validated source before swapping the scene representation. Any
 evaluation, renderer, scene, bounds, history, or file-parse failure retains the
 prior source, render, and (when the linked body is present) spatial state. The save/reload buttons use a confined,
 engine-owned user-data slot, so they do not scan or overwrite arbitrary files.
+When the bounded authoring wrapper closes, it restores the mesh and local bounds
+that belonged to the entity before authoring took ownership, provided another
+editor path has not replaced the active evaluated mesh in the meantime.
 Scene selection remains the existing generation-checked entity authority rather
 than a second selection system.
 

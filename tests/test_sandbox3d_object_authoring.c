@@ -127,6 +127,8 @@ static void henka_test_sandbox3d_object_authoring_source_persistence(void)
     henka_authoring_mesh_counts restored_counts;
     henka_mesh* render_mesh = NULL;
     henka_mesh* uv_render_mesh = NULL;
+    henka_mesh* previous_mesh = NULL;
+    const henka_bounds previous_bounds = {{3.0f, 4.0f, 5.0f}, {0.25f, 0.5f, 0.75f}};
     henka_bounds bounds;
 
     config.application_name = "Henka Authoring Persistence Test";
@@ -137,6 +139,9 @@ static void henka_test_sandbox3d_object_authoring_source_persistence(void)
     HENKA_TEST_ASSERT(henka_scene_create(&scene) == HENKA_SUCCESS);
     entity = henka_scene_create_entity_named(scene, "Authoring Source");
     HENKA_TEST_ASSERT(entity != HENKA_INVALID_ENTITY);
+    HENKA_TEST_ASSERT(henka_mesh_create_cube(engine, &previous_mesh) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_scene_set_entity_mesh(scene, entity, previous_mesh) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_scene_set_entity_local_bounds(scene, entity, previous_bounds) == HENKA_SUCCESS);
     HENKA_TEST_ASSERT(sandbox3d_authoring_object_create_box(
         engine, scene, entity, 1.0f, 1.0f, 1.0f, NULL, 8U, &object) == HENKA_SUCCESS);
     {
@@ -192,6 +197,16 @@ static void henka_test_sandbox3d_object_authoring_source_persistence(void)
     HENKA_TEST_ASSERT(henka_authoring_mesh_get_counts(sandbox3d_authoring_object_get_mesh(object)).faces == saved_counts.faces);
 
     sandbox3d_authoring_object_destroy(object);
+    HENKA_TEST_ASSERT(henka_scene_get_entity_mesh(scene, entity, &render_mesh) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(render_mesh == previous_mesh);
+    HENKA_TEST_ASSERT(henka_scene_get_entity_local_bounds(scene, entity, &bounds) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(bounds.center.x, previous_bounds.center.x, 0.0001f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(bounds.center.y, previous_bounds.center.y, 0.0001f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(bounds.center.z, previous_bounds.center.z, 0.0001f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(bounds.extents.x, previous_bounds.extents.x, 0.0001f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(bounds.extents.y, previous_bounds.extents.y, 0.0001f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(bounds.extents.z, previous_bounds.extents.z, 0.0001f);
+    henka_mesh_destroy(previous_mesh);
     henka_scene_destroy(scene);
     henka_engine_destroy(engine);
 }
