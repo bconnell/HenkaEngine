@@ -41,7 +41,8 @@ authoring state.
 
 The first horizontal editor connection is now exercised by the Sandbox's
 selected Textured Cube: it owns a bounded authoring box and history, and the
-Object Details Authoring section exposes face identity plus transactional
+viewport ray picker resolves a hit to the actual authoring face identity. The
+Object Details Authoring section exposes that face plus transactional
 Extrude, Inset, Undo, Redo, Save Source, and Reload Source commands. Each edit
 evaluates a candidate, creates a normal renderer mesh, updates the scene entity
 mesh and local bounds, then checkpoints history; reload builds a replacement
@@ -54,7 +55,8 @@ than a second selection system.
 
 The broader horizontal connection is still incomplete. General project open/save
 and arbitrary authoring-file selection are not yet editor workflows; other scene
-entities do not yet have authoring sources; and material-instance assignment, texture
+entities do not yet have authoring sources; vertex/edge selection modes and
+multi-selection are not yet present; and material-instance assignment, texture
 dependencies, collision, package ownership, topology-aware picking, and
 showcase rebuilds still need the shared scene/asset-manager bridge. Material
 regions retain their numeric metadata but do not yet choose multiple shared

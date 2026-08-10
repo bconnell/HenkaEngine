@@ -9012,6 +9012,18 @@ static void sandbox3d_try_pick_object(henka_engine* engine, sandbox3d_state* sta
         sandbox3d_is_selectable_entity(state, picked_entity))
     {
         sandbox3d_select_entity(state, picked_entity);
+        if (state->authoring_object != NULL &&
+            picked_entity == sandbox3d_authoring_object_get_entity(state->authoring_object) &&
+            sandbox3d_authoring_object_pick_face(state->authoring_object, ray, 1000000.0f) == HENKA_SUCCESS)
+        {
+            sandbox3d_set_statusf(
+                state,
+                false,
+                false,
+                "Picked %s face %u.",
+                sandbox3d_safe_entity_name(state, picked_entity, "object"),
+                (unsigned int)sandbox3d_authoring_object_get_selected_face(state->authoring_object));
+        }
         sandbox3d_record_reject_reason(state, SANDBOX3D_INTERACTION_REJECT_NONE, false);
         sandbox3d_record_success_result(state, "Picked %s", sandbox3d_safe_entity_name(state, picked_entity, "object"));
         sandbox3d_set_statusf(state, false, false, "Picked %s.", sandbox3d_safe_entity_name(state, picked_entity, "object"));

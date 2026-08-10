@@ -554,6 +554,107 @@ henka_authoring_face_id sandbox3d_authoring_object_get_selected_face(const sandb
     return object == NULL ? HENKA_AUTHORING_INVALID_ID : object->selected_face;
 }
 
+static henka_vec3 sandbox3d_authoring_transform_point(
+    henka_transform transform,
+    henka_vec3 point)
+{
+    point.x *= transform.scale.x;
+    point.y *= transform.scale.y;
+    point.z *= transform.scale.z;
+    return henka_vec3_add(transform.position, henka_quat_rotate_vec3(transform.rotation, point));
+}
+
+static bool sandbox3d_authoring_ray_triangle(
+    henka_ray ray,
+    henka_vec3 first,
+    henka_vec3 second,
+    henka_vec3 third,
+    float maximum_distance,
+    float* out_distance)
+{
+    const henka_vec3 edge_one = henka_vec3_subtract(second, first);
+    const henka_vec3 edge_two = henka_vec3_subtract(third, first);
+    const henka_vec3 cross_direction = henka_vec3_cross(ray.direction, edge_two);
+    const float determinant = henka_vec3_dot(edge_one, cross_direction);
+    const float inverse_determinant = 1.0f / determinant;
+    const henka_vec3 origin_offset = henka_vec3_subtract(ray.origin, first);
+    const float barycentric_u = henka_vec3_dot(origin_offset, cross_direction) * inverse_determinant;
+    const henka_vec3 cross_offset = henka_vec3_cross(origin_offset, edge_one);
+    const float barycentric_v = henka_vec3_dot(ray.direction, cross_offset) * inverse_determinant;
+    const float distance = henka_vec3_dot(edge_two, cross_offset) * inverse_determinant;
+
+    if (!isfinite(determinant) || fabsf(determinant) <= 0.000001f ||
+        !isfinite(barycentric_u) || !isfinite(barycentric_v) || !isfinite(distance) ||
+        barycentric_u < 0.0f || barycentric_u > 1.0f || barycentric_v < 0.0f ||
+        barycentric_u + barycentric_v > 1.0f || distance < 0.0f || distance > maximum_distance)
+    {
+        return false;
+    }
+    if (out_distance != NULL)
+    {
+        *out_distance = distance;
+    }
+    return true;
+}
+
+henka_result sandbox3d_authoring_object_pick_face(
+    sandbox3d_authoring_object* object,
+    henka_ray ray,
+    float maximum_distance)
+{
+    henka_transform transform;
+    henka_authoring_face_id nearest_face = HENKA_AUTHORING_INVALID_ID;
+    float nearest_distance = maximum_distance;
+    size_t face_id;
+
+    if (object == NULL || !isfinite(maximum_distance) || maximum_distance <= 0.0f ||
+        !sandbox3d_authoring_finite_vec3(ray.origin) || !sandbox3d_authoring_finite_vec3(ray.direction) ||
+        henka_vec3_length(ray.direction) <= 0.000001f ||
+        henka_scene_get_entity_transform(object->scene, object->entity, &transform) != HENKA_SUCCESS)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    ray.direction = henka_vec3_normalize(ray.direction);
+    for (face_id = 0U; face_id < HENKA_AUTHORING_MESH_HARD_MAX_FACES; ++face_id)
+    {
+        const henka_authoring_face* face = henka_authoring_mesh_get_face(
+            object->mesh, (henka_authoring_face_id)face_id);
+        size_t corner;
+        if (face == NULL)
+        {
+            continue;
+        }
+        for (corner = 1U; corner + 1U < face->corner_count; ++corner)
+        {
+            const henka_authoring_vertex* first = henka_authoring_mesh_get_vertex(
+                object->mesh, face->vertices[0]);
+            const henka_authoring_vertex* second = henka_authoring_mesh_get_vertex(
+                object->mesh, face->vertices[corner]);
+            const henka_authoring_vertex* third = henka_authoring_mesh_get_vertex(
+                object->mesh, face->vertices[corner + 1U]);
+            float distance;
+            if (first != NULL && second != NULL && third != NULL &&
+                sandbox3d_authoring_ray_triangle(
+                    ray,
+                    sandbox3d_authoring_transform_point(transform, first->position),
+                    sandbox3d_authoring_transform_point(transform, second->position),
+                    sandbox3d_authoring_transform_point(transform, third->position),
+                    nearest_distance,
+                    &distance))
+            {
+                nearest_distance = distance;
+                nearest_face = face->id;
+            }
+        }
+    }
+    if (nearest_face == HENKA_AUTHORING_INVALID_ID)
+    {
+        return HENKA_ERROR_UNKNOWN;
+    }
+    object->selected_face = nearest_face;
+    return HENKA_SUCCESS;
+}
+
 henka_result sandbox3d_authoring_object_select_face(
     sandbox3d_authoring_object* object,
     henka_authoring_face_id face_id)

@@ -131,6 +131,17 @@ static void henka_test_sandbox3d_object_authoring_source_persistence(void)
     HENKA_TEST_ASSERT(entity != HENKA_INVALID_ENTITY);
     HENKA_TEST_ASSERT(sandbox3d_authoring_object_create_box(
         engine, scene, entity, 1.0f, 1.0f, 1.0f, NULL, 8U, &object) == HENKA_SUCCESS);
+    {
+        const henka_ray pick_ray = {{0.0f, 0.0f, 5.0f}, {0.0f, 0.0f, -1.0f}};
+        const henka_ray miss_ray = {{0.0f, 0.0f, 5.0f}, {0.0f, 1.0f, 0.0f}};
+        henka_authoring_face_id picked_face;
+        HENKA_TEST_ASSERT(sandbox3d_authoring_object_pick_face(object, pick_ray, 100.0f) == HENKA_SUCCESS);
+        picked_face = sandbox3d_authoring_object_get_selected_face(object);
+        HENKA_TEST_ASSERT(henka_authoring_mesh_get_face(
+            sandbox3d_authoring_object_get_mesh(object), picked_face) != NULL);
+        HENKA_TEST_ASSERT(sandbox3d_authoring_object_pick_face(object, miss_ray, 100.0f) != HENKA_SUCCESS);
+        HENKA_TEST_ASSERT(sandbox3d_authoring_object_get_selected_face(object) == picked_face);
+    }
 
     HENKA_TEST_ASSERT(sandbox3d_authoring_object_extrude_selected_face(object, 0.25f) == HENKA_SUCCESS);
     saved_counts = henka_authoring_mesh_get_counts(sandbox3d_authoring_object_get_mesh(object));
