@@ -342,6 +342,7 @@ Scene visibility:
 - Showcase Rocket:
 - Ground:
 - Debug Grid:
+- Rendered ground/environment has no unexplained center crease or left/right presentation split:
 - Primitive gallery (if selected):
 - Textured Cube:
 - Material Ball:
