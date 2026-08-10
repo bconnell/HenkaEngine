@@ -7754,6 +7754,9 @@ static void sandbox3d_apply_loaded_settings(henka_engine* engine, sandbox3d_stat
     {
         environment.mode = HENKA_SCENE_ENVIRONMENT_PROCEDURAL;
         environment.sun.manual_direction = false;
+        environment.moon.enabled = true;
+        environment.moon.manual_direction = false;
+        environment.moon.intensity = 0.24f;
         environment.time_of_day_hours = 6.0f;
         environment.time_scale = 1.0f;
         environment.time_of_day_enabled = true;

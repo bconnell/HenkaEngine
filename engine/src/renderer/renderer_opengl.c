@@ -1176,6 +1176,7 @@ static bool henka_validate_shader_contract(
         "environmentMode", "environmentSunDirection", "environmentSunColor",
         "environmentSunIntensity", "environmentAtmosphere", "environmentGroundAlbedo",
         "environmentHorizonIntensity", "environmentSunAngularRadius",
+        "environmentMoonDirection", "environmentMoonColor", "environmentMoonIntensity",
         "localLightCount", "localLightPositionRange[0]",
         "localLightColorIntensity[0]", "localLightDirectionInner[0]",
         "localLightOuterType[0]"
@@ -5517,6 +5518,14 @@ henka_result henka_opengl_renderer_draw_scene(
         henka_set_uniform_vec3(program, "environmentGroundAlbedo", scene->environment.atmosphere.ground_albedo);
         henka_set_uniform_float(program, "environmentHorizonIntensity", scene->environment.atmosphere.horizon_intensity);
         henka_set_uniform_float(program, "environmentSunAngularRadius", scene->environment.sun.angular_radius);
+        henka_set_uniform_vec3(program, "environmentMoonDirection", scene->environment.moon.direction);
+        henka_set_uniform_vec3(program, "environmentMoonColor", scene->environment.moon.color);
+        henka_set_uniform_float(
+            program,
+            "environmentMoonIntensity",
+            policy.use_scene_lighting && scene->environment.moon.enabled
+                ? scene->environment.moon.intensity
+                : 0.0f);
         henka_set_uniform_int(program, "environmentTexture", 6);
         henka_set_uniform_bool(
             program,

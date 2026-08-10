@@ -46,6 +46,9 @@ uniform vec4 environmentAtmosphere;
 uniform vec3 environmentGroundAlbedo;
 uniform float environmentHorizonIntensity;
 uniform float environmentSunAngularRadius;
+uniform vec3 environmentMoonDirection;
+uniform vec3 environmentMoonColor;
+uniform float environmentMoonIntensity;
 uniform sampler2D environmentTexture;
 uniform bool useEnvironmentTexture;
 uniform float environmentRotation;
@@ -544,6 +547,31 @@ void main()
         }
         float shadow = shadowFactor(normal, lightDir);
         color += (diffuse + specular) * baseLayerTransmission * radiance * nDotL * shadow;
+
+        /* The shared scene moon is a bounded second directional source. It is
+         * intentionally shadowless in this slice: the directional sun shadow
+         * contract remains authoritative, while the moon descriptor now
+         * contributes consistently to Rendered PBR materials. */
+        if (useEnvironment && environmentMoonIntensity > 0.0)
+        {
+            vec3 moonLightDir = safeNormalize(-environmentMoonDirection, vec3(0.0, 1.0, 0.0));
+            vec3 moonRadiance = min(
+                clamp(environmentMoonColor, vec3(0.0), vec3(16.0)) *
+                    clamp(environmentMoonIntensity, 0.0, 16.0),
+                vec3(65504.0));
+            float moonNDotL = saturate(dot(normal, moonLightDir));
+            vec3 moonHalfVector = safeNormalize(viewDirection + moonLightDir, normal);
+            float moonNDotH = saturate(dot(normal, moonHalfVector));
+            float moonVDotH = saturate(dot(viewDirection, moonHalfVector));
+            vec3 moonFresnel = fresnelSchlick(moonVDotH, f0);
+            float moonDistribution = distributionGGX(moonNDotH, alpha);
+            float moonVisibility = visibilitySmithGGXCorrelated(nDotV, moonNDotL, alpha);
+            vec3 moonSpecular = moonDistribution * moonVisibility * moonFresnel;
+            vec3 moonDiffuse = (1.0 - surfaceTransmission) *
+                (1.0 - moonFresnel) * (1.0 - surfaceMetallic) * albedo / PI;
+            color += (moonDiffuse + moonSpecular) * baseLayerTransmission *
+                moonRadiance * moonNDotL;
+        }
 
         if (surfaceClearcoat > 0.0)
         {
