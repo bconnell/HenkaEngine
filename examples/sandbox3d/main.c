@@ -407,6 +407,7 @@ typedef struct sandbox3d_state
     uint32_t residency_visibility_return_mips;
     bool temporal_stress;
     bool material_stress;
+    bool environment_stress;
     bool material_stress_ran;
     bool terrain_stream_stress;
     bool terrain_stream_stress_ran;
@@ -7243,6 +7244,20 @@ static void sandbox3d_apply_loaded_settings(henka_engine* engine, sandbox3d_stat
         else
         {
             HENKA_LOG_WARN("Unsafe environment settings were ignored and the current environment was retained.");
+        }
+    }
+    if (state->environment_stress &&
+        henka_scene_get_environment(state->scene, &environment) == HENKA_SUCCESS)
+    {
+        environment.mode = HENKA_SCENE_ENVIRONMENT_PROCEDURAL;
+        environment.sun.manual_direction = false;
+        environment.time_of_day_hours = 6.0f;
+        environment.time_scale = 1.0f;
+        environment.time_of_day_enabled = true;
+        if (henka_scene_set_environment(state->scene, environment) != HENKA_SUCCESS)
+        {
+            state->smoke_validation_failed = true;
+            HENKA_LOG_ERROR("Environment stress could not install its procedural/time-of-day descriptor.");
         }
     }
 
@@ -19249,6 +19264,18 @@ static void sandbox3d_update(henka_engine* engine, double delta_seconds, void* u
                 smoke_environment.time_of_day_hours,
                 smoke_environment.time_of_day_enabled ? "running" : "paused",
                 smoke_environment.sun.enabled ? "enabled" : "disabled");
+            if (state->environment_stress &&
+                (smoke_environment.mode != HENKA_SCENE_ENVIRONMENT_PROCEDURAL ||
+                 !smoke_environment.time_of_day_enabled ||
+                 smoke_environment.time_of_day_hours <= 6.0f))
+            {
+                state->smoke_validation_failed = true;
+                printf("Environment stress validation failed: procedural sky or advancing sun state was not retained.\n");
+            }
+            else if (state->environment_stress)
+            {
+                printf("Environment stress: procedural sky branch executed with advancing shared sun/time state.\n");
+            }
         }
         if (state->terrain_streamer == NULL ||
             (henka_terrain_streamer_get_stats(state->terrain_streamer, &terrain_stream_stats),
@@ -19458,6 +19485,7 @@ int main(int argc, char** argv)
     bool residency_stress;
     bool temporal_stress;
     bool material_stress;
+    bool environment_stress;
     bool terrain_stream_stress;
     bool capture_mode_requested;
     bool terrain_capture_mode_requested;
@@ -19468,6 +19496,7 @@ int main(int argc, char** argv)
     residency_stress = false;
     temporal_stress = false;
     material_stress = false;
+    environment_stress = false;
     terrain_stream_stress = false;
     capture_mode_requested = false;
     terrain_capture_mode_requested = false;
@@ -19495,6 +19524,11 @@ int main(int argc, char** argv)
         smoke_test = true;
         material_stress = true;
     }
+    else if (argc == 2 && strcmp(argv[1], "--environment-stress") == 0)
+    {
+        smoke_test = true;
+        environment_stress = true;
+    }
     else if (argc == 2 && strcmp(argv[1], "--terrain-stream-stress") == 0)
     {
         smoke_test = true;
@@ -19513,7 +19547,7 @@ int main(int argc, char** argv)
     }
     else if (argc != 1)
     {
-        fprintf(stderr, "Usage: %s [--primitive-gallery | --smoke-test | --residency-stress | --temporal-stress | --material-stress | --terrain-stream-stress | --capture-mode solid|material_preview|rendered | --capture-terrain-mode solid|material_preview|rendered]\n", argv[0]);
+        fprintf(stderr, "Usage: %s [--primitive-gallery | --smoke-test | --residency-stress | --temporal-stress | --material-stress | --environment-stress | --terrain-stream-stress | --capture-mode solid|material_preview|rendered | --capture-terrain-mode solid|material_preview|rendered]\n", argv[0]);
         return 2;
     }
 
@@ -19523,6 +19557,7 @@ int main(int argc, char** argv)
     state.residency_stress = residency_stress;
     state.temporal_stress = temporal_stress;
     state.material_stress = material_stress;
+    state.environment_stress = environment_stress;
     state.terrain_stream_stress = terrain_stream_stress;
     state.capture_mode_requested = capture_mode_requested;
     state.terrain_capture_mode_requested = terrain_capture_mode_requested;
