@@ -55,6 +55,8 @@ static void henka_test_sandbox3d_object_authoring_duplicate(void)
     henka_bounds bounds;
     henka_interaction_desc interaction;
     henka_material material;
+    const henka_material_asset* material_asset;
+    const henka_material_asset* duplicate_material_asset;
     henka_result result;
 
     HENKA_TEST_ASSERT(henka_scene_create(&scene) == HENKA_SUCCESS);
@@ -77,6 +79,8 @@ static void henka_test_sandbox3d_object_authoring_duplicate(void)
     material.shader = (henka_shader*)(uintptr_t)1U;
     material.metallic = 0.8f;
     HENKA_TEST_ASSERT(henka_scene_set_entity_material(scene, source, material) == HENKA_SUCCESS);
+    material_asset = (const henka_material_asset*)(uintptr_t)2U;
+    HENKA_TEST_ASSERT(henka_scene_set_entity_material_asset(scene, source, material_asset) == HENKA_SUCCESS);
 
     result = sandbox3d_object_authoring_duplicate_entity(scene, source, "Duplicate", &duplicate);
     HENKA_TEST_ASSERT(result == HENKA_SUCCESS);
@@ -94,6 +98,9 @@ static void henka_test_sandbox3d_object_authoring_duplicate(void)
     HENKA_TEST_ASSERT(strcmp(interaction.prompt, "Use") == 0);
     HENKA_TEST_ASSERT(henka_scene_get_entity_material(scene, duplicate, &material) == HENKA_SUCCESS);
     HENKA_TEST_ASSERT_FLOAT_CLOSE(material.metallic, 0.8f, 0.0001f);
+    HENKA_TEST_ASSERT(henka_scene_get_entity_material_asset(
+        scene, duplicate, &duplicate_material_asset) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(duplicate_material_asset == material_asset);
 
     duplicate_transform.position.x = 99.0f;
     HENKA_TEST_ASSERT(henka_scene_set_entity_transform(scene, duplicate, duplicate_transform) == HENKA_SUCCESS);

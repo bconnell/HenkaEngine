@@ -362,6 +362,7 @@ henka_result sandbox3d_object_authoring_duplicate_entity(
     henka_transform transform;
     henka_mesh* mesh;
     henka_material material;
+    const henka_material_asset* material_asset;
     henka_bounds bounds = {{0.0f, 0.0f, 0.0f}, {0.0f, 0.0f, 0.0f}};
     henka_interaction_desc interaction;
     uint32_t flags;
@@ -384,6 +385,7 @@ henka_result sandbox3d_object_authoring_duplicate_entity(
     if (henka_scene_get_entity_transform(scene, source, &transform) != HENKA_SUCCESS ||
         henka_scene_get_entity_mesh(scene, source, &mesh) != HENKA_SUCCESS ||
         henka_scene_get_entity_material(scene, source, &material) != HENKA_SUCCESS ||
+        henka_scene_get_entity_material_asset(scene, source, &material_asset) != HENKA_SUCCESS ||
         henka_scene_get_entity_interaction(scene, source, &interaction) != HENKA_SUCCESS ||
         henka_scene_get_entity_flags(scene, source, &flags) != HENKA_SUCCESS)
     {
@@ -406,6 +408,10 @@ henka_result sandbox3d_object_authoring_duplicate_entity(
     if (result == HENKA_SUCCESS)
     {
         result = henka_scene_set_entity_material(scene, duplicate, material);
+    }
+    if (result == HENKA_SUCCESS)
+    {
+        result = henka_scene_set_entity_material_asset(scene, duplicate, material_asset);
     }
     if (result == HENKA_SUCCESS)
     {
