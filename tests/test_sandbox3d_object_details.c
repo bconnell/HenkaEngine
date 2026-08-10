@@ -127,6 +127,17 @@ void henka_test_sandbox3d_object_details(void)
     HENKA_TEST_ASSERT_FLOAT_CLOSE(material.roughness, 0.42f, 0.0001f);
 
     HENKA_TEST_ASSERT(
+        henka_scene_set_entity_material_asset(scene, entity, NULL) ==
+            HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(
+        sandbox3d_prepare_material_editor_binding(
+            scene,
+            entity,
+            scene_bindings,
+            2U) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(!scene_bindings[0].valid);
+
+    HENKA_TEST_ASSERT(
         sandbox3d_resolve_selected_material(
             scene,
             entity,

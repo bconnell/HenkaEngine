@@ -31,6 +31,26 @@ henka_result sandbox3d_prepare_material_editor_binding(
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
 
+    /* Scene identity is the lifetime boundary for these stack-owned editor
+     * instances. Reclaim entries for deleted entities or entities whose
+     * material definition was detached before looking for a free slot. */
+    for (index = 0U; index < binding_count; ++index)
+    {
+        const henka_material_asset* binding_asset = NULL;
+
+        if (!bindings[index].valid ||
+            !henka_scene_is_entity_valid(scene, bindings[index].entity) ||
+            henka_scene_get_entity_material_asset(
+                scene, bindings[index].entity, &binding_asset) != HENKA_SUCCESS ||
+            binding_asset == NULL)
+        {
+            if (bindings[index].valid)
+            {
+                sandbox3d_clear_material_editor_binding(&bindings[index]);
+            }
+        }
+    }
+
     for (index = 0U; index < binding_count; ++index)
     {
         if (bindings[index].valid && bindings[index].entity == entity)
