@@ -315,6 +315,11 @@ production visual validation for every effect.
 The Terrain utility reports exact world-owned CPU bytes and graphical-owner
 vertex/index/material GPU bytes for resident resources; these values exclude
 borrowed renderer resources outside the Terrain owner.
+For application-only visual evidence, run
+`scripts/capture_visual_evidence_windows.ps1 -Configuration Release -IncludeTerrain`.
+The optional terrain capture uses one deterministic reference camera for Solid,
+Material Preview, and Rendered, so material and presentation comparisons do not
+change scene data or scene lights.
 The same graphical
 smoke revokes render residency after the upload, forces a candidate mesh
 failure, verifies the previous mesh and revision remain resident, then restores

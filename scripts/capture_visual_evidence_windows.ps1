@@ -4,7 +4,9 @@ param(
 
     [string]$OutputDirectory = "",
 
-    [switch]$IncludeStartupShowcase
+    [switch]$IncludeStartupShowcase,
+
+    [switch]$IncludeTerrain
 )
 
 Set-StrictMode -Version Latest
@@ -90,6 +92,7 @@ $records.Add("Source: $executable")
 $records.Add("Camera policy: capture-mode runs use the same deterministic two-model showcase camera and never save capture-mode settings")
 $records.Add("Modes: Solid, Material Preview, Rendered")
 $records.Add("Startup evidence: optional ordinary startup camera with the default showcase models")
+$records.Add("Terrain evidence: optional deterministic terrain reference camera")
 $records.Add("Capture: application window bounds copied from the desktop into repo-local generated output")
 
 foreach ($mode in $modes) {
@@ -152,6 +155,77 @@ foreach ($mode in $modes) {
         }
         if ($null -ne $process) {
             $process.Dispose()
+        }
+    }
+}
+
+if ($IncludeTerrain) {
+    $terrainModes = @(
+        @{ Label = "terrain_solid"; Arguments = @("--capture-terrain-mode", "solid"); File = "terrain-same-camera-solid.png" },
+        @{ Label = "terrain_material_preview"; Arguments = @("--capture-terrain-mode", "material_preview"); File = "terrain-same-camera-material-preview.png" },
+        @{ Label = "terrain_rendered"; Arguments = @("--capture-terrain-mode", "rendered"); File = "terrain-same-camera-rendered.png" }
+    )
+    foreach ($terrainMode in $terrainModes) {
+        $process = Start-HenkaProcess `
+            -FilePath $executable `
+            -Arguments $terrainMode.Arguments `
+            -WorkingDirectory (Split-Path -Parent $executable)
+        $handle = [IntPtr]::Zero
+        try {
+            for ($attempt = 0; $attempt -lt 80 -and $handle -eq [IntPtr]::Zero; ++$attempt) {
+                Start-Sleep -Milliseconds 250
+                $process.Refresh()
+                $handle = [HenkaVisualCaptureNativeMethods]::FindSandboxWindow([uint32]$process.Id)
+            }
+            if ($handle -eq [IntPtr]::Zero -or -not [HenkaVisualCaptureNativeMethods]::IsWindow($handle)) {
+                throw "Sandbox window did not become available for $($terrainMode.Label)."
+            }
+            [HenkaVisualCaptureNativeMethods]::ActivateSandboxWindow($handle)
+            Start-Sleep -Milliseconds 1500
+            $rect = New-Object HenkaVisualCaptureNativeMethods+RECT
+            $dwmResult = [HenkaVisualCaptureNativeMethods]::DwmGetWindowAttribute(
+                $handle,
+                9,
+                [ref]$rect,
+                [System.Runtime.InteropServices.Marshal]::SizeOf($rect))
+            if ($dwmResult -ne 0) {
+                throw "Window bounds could not be read for $($terrainMode.Label): $dwmResult"
+            }
+            $width = $rect.Right - $rect.Left
+            $height = $rect.Bottom - $rect.Top
+            if ($width -le 0 -or $height -le 0) {
+                throw "Window bounds were invalid for $($terrainMode.Label)."
+            }
+            $bitmap = New-Object System.Drawing.Bitmap($width, $height)
+            try {
+                $graphics = [System.Drawing.Graphics]::FromImage($bitmap)
+                try {
+                    $graphics.CopyFromScreen($rect.Left, $rect.Top, 0, 0, $bitmap.Size)
+                }
+                finally {
+                    $graphics.Dispose()
+                }
+                $path = Join-Path $OutputDirectory $terrainMode.File
+                $bitmap.Save($path, [System.Drawing.Imaging.ImageFormat]::Png)
+                $hash = (Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash.ToLowerInvariant()
+                $records.Add("$($terrainMode.Label): $($terrainMode.File) SHA-256=$hash bounds=$width`x$height")
+            }
+            finally {
+                $bitmap.Dispose()
+            }
+        }
+        finally {
+            if ($null -ne $process -and -not $process.HasExited) {
+                if ($handle -ne [IntPtr]::Zero) {
+                    [HenkaVisualCaptureNativeMethods]::PostMessage($handle, 0x0010, [IntPtr]::Zero, [IntPtr]::Zero) | Out-Null
+                }
+                if (-not $process.WaitForExit(10000)) {
+                    Stop-HenkaProcessTree -ProcessId $process.Id
+                }
+            }
+            if ($null -ne $process) {
+                $process.Dispose()
+            }
         }
     }
 }

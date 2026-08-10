@@ -408,6 +408,7 @@ typedef struct sandbox3d_state
     bool terrain_stream_stress_ran;
     bool smoke_validation_failed;
     bool capture_mode_requested;
+    bool terrain_capture_mode_requested;
     henka_viewport_shading_mode capture_mode;
 } sandbox3d_state;
 
@@ -5774,13 +5775,18 @@ static void sandbox3d_apply_capture_camera(sandbox3d_state* state)
         return;
     }
 
-    /* Capture evidence is a fixed two-model showcase, while normal editor
+    /* Capture evidence uses deterministic cameras, while normal editor
      * startup continues to honor the persisted user camera. */
     {
-        const henka_vec3 target = {0.0f, 2.05f, -1.7f};
+        const henka_vec3 target = state->terrain_capture_mode_requested
+            ? (henka_vec3){32.0f, -0.6f, 32.0f}
+            : (henka_vec3){0.0f, 2.05f, -1.7f};
+        const henka_vec3 position = state->terrain_capture_mode_requested
+            ? (henka_vec3){64.0f, 16.0f, 84.0f}
+            : (henka_vec3){0.0f, 3.0f, 8.8f};
         const henka_vec3 direction = henka_vec3_normalize(
-            henka_vec3_subtract(target, (henka_vec3){0.0f, 3.0f, 8.8f}));
-        state->camera.position = (henka_vec3){0.0f, 3.0f, 8.8f};
+            henka_vec3_subtract(target, position));
+        state->camera.position = position;
         state->camera.yaw_radians = atan2f(direction.z, direction.x);
         state->camera.pitch_radians = asinf(direction.y);
     }
@@ -18782,6 +18788,7 @@ int main(int argc, char** argv)
     bool material_stress;
     bool terrain_stream_stress;
     bool capture_mode_requested;
+    bool terrain_capture_mode_requested;
     henka_viewport_shading_mode capture_mode;
 
     smoke_test = false;
@@ -18791,6 +18798,7 @@ int main(int argc, char** argv)
     material_stress = false;
     terrain_stream_stress = false;
     capture_mode_requested = false;
+    terrain_capture_mode_requested = false;
     capture_mode = HENKA_VIEWPORT_SHADING_RENDERED;
     if (argc == 2 && strcmp(argv[1], "--smoke-test") == 0)
     {
@@ -18825,9 +18833,15 @@ int main(int argc, char** argv)
     {
         capture_mode_requested = true;
     }
+    else if (argc == 3 && strcmp(argv[1], "--capture-terrain-mode") == 0 &&
+        henka_viewport_shading_mode_parse(argv[2], &capture_mode) == HENKA_SUCCESS)
+    {
+        capture_mode_requested = true;
+        terrain_capture_mode_requested = true;
+    }
     else if (argc != 1)
     {
-        fprintf(stderr, "Usage: %s [--primitive-gallery | --smoke-test | --residency-stress | --temporal-stress | --material-stress | --terrain-stream-stress | --capture-mode solid|material_preview|rendered]\n", argv[0]);
+        fprintf(stderr, "Usage: %s [--primitive-gallery | --smoke-test | --residency-stress | --temporal-stress | --material-stress | --terrain-stream-stress | --capture-mode solid|material_preview|rendered | --capture-terrain-mode solid|material_preview|rendered]\n", argv[0]);
         return 2;
     }
 
@@ -18839,6 +18853,7 @@ int main(int argc, char** argv)
     state.material_stress = material_stress;
     state.terrain_stream_stress = terrain_stream_stress;
     state.capture_mode_requested = capture_mode_requested;
+    state.terrain_capture_mode_requested = terrain_capture_mode_requested;
     state.capture_mode = capture_mode;
     state.asset_browser_type = HENKA_ASSET_TYPE_TEXTURE;
     state.camera = henka_camera_create_perspective(60.0f * HENKA_DEG_TO_RAD, 16.0f / 9.0f, 0.1f, 100.0f);
