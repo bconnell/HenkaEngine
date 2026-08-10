@@ -4143,31 +4143,6 @@ static void sandbox3d_sync_physics_body_from_entity(sandbox3d_state* state, henk
     }
 }
 
-static henka_result sandbox3d_sync_authoring_physics_bounds(sandbox3d_state* state)
-{
-    henka_physics_body_id body;
-    henka_physics_body_state body_state;
-    henka_bounds bounds;
-
-    if (state == NULL || state->physics.world == NULL || state->scene == NULL ||
-        state->cube_entity == HENKA_INVALID_ENTITY)
-    {
-        return HENKA_ERROR_INVALID_ARGUMENT;
-    }
-    body = sandbox3d_get_physics_body_for_entity(state, state->cube_entity);
-    if (body == HENKA_INVALID_PHYSICS_BODY_ID ||
-        henka_physics_body_get_state(state->physics.world, body, &body_state) != HENKA_SUCCESS ||
-        body_state.collider.shape != HENKA_PHYSICS_SHAPE_BOX ||
-        henka_scene_get_entity_local_bounds(state->scene, state->cube_entity, &bounds) != HENKA_SUCCESS)
-    {
-        return HENKA_ERROR_INVALID_ARGUMENT;
-    }
-    body_state.collider.offset = bounds.center;
-    body_state.collider.data.box.half_extents = bounds.extents;
-    return henka_physics_body_set_collider(
-        state->physics.world, body, body_state.collider);
-}
-
 static henka_result sandbox3d_add_physics_body(
     sandbox3d_state* state,
     sandbox3d_object_kind kind,
@@ -5228,8 +5203,9 @@ static void sandbox3d_release_owned_resources(sandbox3d_state* state)
     henka_mesh_destroy(state->cube_mesh);
     henka_mesh_destroy(state->sphere_mesh);
     henka_mesh_destroy(state->foliage_mesh);
-    henka_physics_world_destroy(state->physics.world);
+    sandbox3d_authoring_object_unbind_physics(state->authoring_object);
     sandbox3d_authoring_object_destroy(state->authoring_object);
+    henka_physics_world_destroy(state->physics.world);
     henka_scene_destroy(state->scene);
     for (int terrain_layer_index = 0;
          terrain_layer_index < (int)HENKA_MATERIAL_TERRAIN_LAYER_COUNT;
@@ -13982,10 +13958,6 @@ static void sandbox3d_draw_object_details_panel(
                         result = save_requested
                             ? sandbox3d_authoring_object_save_source(state->authoring_object, authoring_path)
                             : sandbox3d_authoring_object_reload_source(state->authoring_object, authoring_path);
-                        if (result == HENKA_SUCCESS && !save_requested)
-                        {
-                            result = sandbox3d_sync_authoring_physics_bounds(state);
-                        }
                     }
                     henka_free(authoring_path);
                     sandbox3d_set_status(
@@ -14003,26 +13975,22 @@ static void sandbox3d_draw_object_details_panel(
             if (sandbox3d_details_flow_next_row(state, flow_desc.bounds, 28.0f, 1U, &row) && row.width >= 290.0f)
             {
                 if (henka_ui_button(state->ui, "authoring_extrude", (henka_ui_rect){row.x, row.y, 82.0f, 24.0f}, "Extrude") &&
-                    sandbox3d_authoring_object_extrude_selected_face(state->authoring_object, 0.25f) == HENKA_SUCCESS &&
-                    sandbox3d_sync_authoring_physics_bounds(state) == HENKA_SUCCESS)
+                    sandbox3d_authoring_object_extrude_selected_face(state->authoring_object, 0.25f) == HENKA_SUCCESS)
                 {
                     sandbox3d_set_status(state, false, "Authoring face extruded and evaluated into the scene.");
                 }
                 if (henka_ui_button(state->ui, "authoring_inset", (henka_ui_rect){row.x + 88.0f, row.y, 82.0f, 24.0f}, "Inset") &&
-                    sandbox3d_authoring_object_inset_selected_face(state->authoring_object, 0.75f) == HENKA_SUCCESS &&
-                    sandbox3d_sync_authoring_physics_bounds(state) == HENKA_SUCCESS)
+                    sandbox3d_authoring_object_inset_selected_face(state->authoring_object, 0.75f) == HENKA_SUCCESS)
                 {
                     sandbox3d_set_status(state, false, "Authoring face inset and evaluated into the scene.");
                 }
                 if (henka_ui_button(state->ui, "authoring_undo", (henka_ui_rect){row.x + 176.0f, row.y, 54.0f, 24.0f}, "Undo") &&
-                    sandbox3d_authoring_object_undo(state->authoring_object) == HENKA_SUCCESS &&
-                    sandbox3d_sync_authoring_physics_bounds(state) == HENKA_SUCCESS)
+                    sandbox3d_authoring_object_undo(state->authoring_object) == HENKA_SUCCESS)
                 {
                     sandbox3d_set_status(state, false, "Authoring mesh undo restored the scene render.");
                 }
                 if (henka_ui_button(state->ui, "authoring_redo", (henka_ui_rect){row.x + 236.0f, row.y, 54.0f, 24.0f}, "Redo") &&
-                    sandbox3d_authoring_object_redo(state->authoring_object) == HENKA_SUCCESS &&
-                    sandbox3d_sync_authoring_physics_bounds(state) == HENKA_SUCCESS)
+                    sandbox3d_authoring_object_redo(state->authoring_object) == HENKA_SUCCESS)
                 {
                     sandbox3d_set_status(state, false, "Authoring mesh redo restored the scene render.");
                 }
@@ -14030,14 +13998,12 @@ static void sandbox3d_draw_object_details_panel(
             if (sandbox3d_details_flow_next_row(state, flow_desc.bounds, 28.0f, 1U, &row) && row.width >= 290.0f)
             {
                 if (henka_ui_button(state->ui, "authoring_bevel", (henka_ui_rect){row.x, row.y, 82.0f, 24.0f}, "Bevel") &&
-                    sandbox3d_authoring_object_bevel_selected_face(state->authoring_object, 0.1f) == HENKA_SUCCESS &&
-                    sandbox3d_sync_authoring_physics_bounds(state) == HENKA_SUCCESS)
+                    sandbox3d_authoring_object_bevel_selected_face(state->authoring_object, 0.1f) == HENKA_SUCCESS)
                 {
                     sandbox3d_set_status(state, false, "Authoring face beveled and evaluated into the scene.");
                 }
                 if (henka_ui_button(state->ui, "authoring_subdivide", (henka_ui_rect){row.x + 88.0f, row.y, 98.0f, 24.0f}, "Subdivide") &&
-                    sandbox3d_authoring_object_subdivide_selected_face(state->authoring_object) == HENKA_SUCCESS &&
-                    sandbox3d_sync_authoring_physics_bounds(state) == HENKA_SUCCESS)
+                    sandbox3d_authoring_object_subdivide_selected_face(state->authoring_object) == HENKA_SUCCESS)
                 {
                     sandbox3d_set_status(state, false, "Authoring face subdivided and evaluated into the scene.");
                 }
@@ -16826,6 +16792,19 @@ static henka_result sandbox3d_initialize(henka_engine* engine, void* user_data)
     {
         goto fail;
     }
+    if (state->authoring_object != NULL)
+    {
+        const henka_physics_body_id authoring_body =
+            sandbox3d_get_physics_body_for_entity(state, state->cube_entity);
+        if (authoring_body == HENKA_INVALID_PHYSICS_BODY_ID ||
+            sandbox3d_authoring_object_bind_physics(
+                state->authoring_object, state->physics.world, authoring_body) != HENKA_SUCCESS)
+        {
+            printf("Authoring integration failure: evaluated mesh could not bind its box collider.\n");
+            result = HENKA_ERROR_UNKNOWN;
+            goto fail;
+        }
+    }
     if (state->smoke_test && state->authoring_object != NULL)
     {
         const henka_physics_body_id authoring_body =
@@ -16834,7 +16813,6 @@ static henka_result sandbox3d_initialize(henka_engine* engine, void* user_data)
         henka_bounds baseline_bounds;
         henka_bounds edited_bounds;
         if (authoring_body == HENKA_INVALID_PHYSICS_BODY_ID ||
-            sandbox3d_sync_authoring_physics_bounds(state) != HENKA_SUCCESS ||
             henka_physics_body_get_state(state->physics.world, authoring_body, &body_state) != HENKA_SUCCESS ||
             henka_scene_get_entity_local_bounds(state->scene, state->cube_entity, &baseline_bounds) != HENKA_SUCCESS ||
             body_state.collider.shape != HENKA_PHYSICS_SHAPE_BOX ||
@@ -16847,10 +16825,6 @@ static henka_result sandbox3d_initialize(henka_engine* engine, void* user_data)
             goto fail;
         }
         result = sandbox3d_authoring_object_extrude_selected_face(state->authoring_object, 0.25f);
-        if (result == HENKA_SUCCESS)
-        {
-            result = sandbox3d_sync_authoring_physics_bounds(state);
-        }
         if (result != HENKA_SUCCESS ||
             henka_scene_get_entity_local_bounds(state->scene, state->cube_entity, &edited_bounds) != HENKA_SUCCESS ||
             henka_physics_body_get_state(state->physics.world, authoring_body, &body_state) != HENKA_SUCCESS ||
@@ -16863,10 +16837,6 @@ static henka_result sandbox3d_initialize(henka_engine* engine, void* user_data)
             goto fail;
         }
         result = sandbox3d_authoring_object_undo(state->authoring_object);
-        if (result == HENKA_SUCCESS)
-        {
-            result = sandbox3d_sync_authoring_physics_bounds(state);
-        }
         if (result != HENKA_SUCCESS ||
             henka_physics_body_get_state(state->physics.world, authoring_body, &body_state) != HENKA_SUCCESS ||
             fabsf(body_state.collider.data.box.half_extents.x - baseline_bounds.extents.x) > 0.0001f ||

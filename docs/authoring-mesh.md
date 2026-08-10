@@ -45,12 +45,14 @@ viewport ray picker resolves a hit to the actual authoring face identity. The
 Object Details Authoring section exposes that face plus transactional
 Extrude, Inset, Bevel, Subdivide, Project UV, Pack UV, Undo, Redo, Save Source, and Reload Source commands. Each edit
 evaluates a candidate, creates a normal renderer mesh, updates the scene entity
-mesh and local bounds, then checkpoints history; the Sandbox's linked box
-collider consumes the same evaluated local bounds after each successful editor
-operation. Reload builds a replacement
+mesh and local bounds, then checkpoints history; a bound box collider consumes
+the same evaluated local bounds as part of that transaction after each
+successful editor operation, so the editor does not rely on a later manual
+physics refresh. Reload builds a replacement
 history from the validated source before swapping the scene representation. Any
 evaluation, renderer, scene, bounds, history, or file-parse failure retains the
-prior source, render, and (when the linked body is present) spatial state. The save/reload buttons use a confined,
+prior source, render, and (when the linked body is present) spatial state,
+including the prior collider. The save/reload buttons use a confined,
 engine-owned user-data slot, so they do not scan or overwrite arbitrary files.
 When the bounded authoring wrapper closes, it restores the mesh and local bounds
 that belonged to the entity before authoring took ownership, provided another
@@ -62,8 +64,9 @@ The broader horizontal connection is still incomplete. General project open/save
 and arbitrary authoring-file selection are not yet editor workflows; other scene
 entities do not yet have authoring sources; vertex/edge selection modes and
 multi-selection are not yet present; and material-instance assignment, texture
-dependencies, collision, package ownership, topology-aware picking, and
-showcase rebuilds still need the shared scene/asset-manager bridge. Material
+dependencies, general collision integration beyond the bound box contract,
+package ownership, topology-aware picking, and showcase rebuilds still need the
+shared scene/asset-manager bridge. Material
 regions retain their numeric metadata but do not yet choose multiple shared
 material instances. These limitations are tracked explicitly so this API does
 not claim a complete modeling editor or a second material authority.

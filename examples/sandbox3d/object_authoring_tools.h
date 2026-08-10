@@ -8,6 +8,7 @@
 #include <henka/authoring_modeling.h>
 #include <henka/authoring_uv.h>
 #include <henka/engine.h>
+#include <henka/physics.h>
 #include <henka/scene.h>
 
 typedef struct sandbox3d_authoring_object sandbox3d_authoring_object;
@@ -76,6 +77,15 @@ henka_result sandbox3d_authoring_object_save_source(
 henka_result sandbox3d_authoring_object_reload_source(
     sandbox3d_authoring_object* object,
     const char* path);
+/* Binds the evaluated local bounds to an existing box collider.  The bridge
+ * does not own the physics world or body; callers must unbind before either
+ * is destroyed.  Modeling and source reload then update the collider as one
+ * transaction with the scene render replacement. */
+henka_result sandbox3d_authoring_object_bind_physics(
+    sandbox3d_authoring_object* object,
+    henka_physics_world* world,
+    henka_physics_body_id body);
+void sandbox3d_authoring_object_unbind_physics(sandbox3d_authoring_object* object);
 henka_result sandbox3d_authoring_object_undo(sandbox3d_authoring_object* object);
 henka_result sandbox3d_authoring_object_redo(sandbox3d_authoring_object* object);
 

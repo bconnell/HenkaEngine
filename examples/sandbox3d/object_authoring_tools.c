@@ -19,8 +19,73 @@ struct sandbox3d_authoring_object
     henka_mesh* previous_scene_mesh;
     bool had_previous_bounds;
     henka_bounds previous_bounds;
+    henka_physics_world* physics_world;
+    henka_physics_body_id physics_body;
     henka_authoring_face_id selected_face;
 };
+
+static henka_result sandbox3d_authoring_set_physics_bounds(
+    sandbox3d_authoring_object* object,
+    const henka_bounds* bounds)
+{
+    henka_physics_body_state body_state;
+
+    if (object == NULL || bounds == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    if (object->physics_world == NULL || object->physics_body == HENKA_INVALID_PHYSICS_BODY_ID)
+    {
+        return HENKA_SUCCESS;
+    }
+    if (henka_physics_body_get_state(
+            object->physics_world, object->physics_body, &body_state) != HENKA_SUCCESS ||
+        body_state.collider.shape != HENKA_PHYSICS_SHAPE_BOX)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    body_state.collider.offset = bounds->center;
+    body_state.collider.data.box.half_extents = bounds->extents;
+    return henka_physics_body_set_collider(
+        object->physics_world, object->physics_body, body_state.collider);
+}
+
+static henka_result sandbox3d_authoring_get_physics_collider(
+    const sandbox3d_authoring_object* object,
+    henka_physics_collider_desc* out_collider)
+{
+    henka_physics_body_state body_state;
+
+    if (object == NULL || out_collider == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    if (object->physics_world == NULL || object->physics_body == HENKA_INVALID_PHYSICS_BODY_ID)
+    {
+        *out_collider = (henka_physics_collider_desc){0};
+        return HENKA_SUCCESS;
+    }
+    if (henka_physics_body_get_state(
+            object->physics_world, object->physics_body, &body_state) != HENKA_SUCCESS ||
+        body_state.collider.shape != HENKA_PHYSICS_SHAPE_BOX)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    *out_collider = body_state.collider;
+    return HENKA_SUCCESS;
+}
+
+static void sandbox3d_authoring_restore_physics_collider(
+    const sandbox3d_authoring_object* object,
+    const henka_physics_collider_desc* collider)
+{
+    if (object != NULL && collider != NULL && object->physics_world != NULL &&
+        object->physics_body != HENKA_INVALID_PHYSICS_BODY_ID)
+    {
+        (void)henka_physics_body_set_collider(
+            object->physics_world, object->physics_body, *collider);
+    }
+}
 
 static bool sandbox3d_authoring_finite_vec3(henka_vec3 value)
 {
@@ -194,7 +259,9 @@ static henka_result sandbox3d_authoring_publish_candidate(
     henka_mesh* old_scene_mesh = NULL;
     henka_bounds candidate_bounds = {{0.0f, 0.0f, 0.0f}, {0.0f, 0.0f, 0.0f}};
     henka_bounds old_bounds;
+    henka_physics_collider_desc old_collider = {0};
     bool had_old_bounds;
+    bool had_old_collider;
     henka_result result;
 
     if (object == NULL || candidate == NULL ||
@@ -215,16 +282,23 @@ static henka_result sandbox3d_authoring_publish_candidate(
     }
     had_old_bounds = henka_scene_get_entity_local_bounds(
         object->scene, object->entity, &old_bounds) == HENKA_SUCCESS;
+    had_old_collider = sandbox3d_authoring_get_physics_collider(object, &old_collider) == HENKA_SUCCESS &&
+        object->physics_world != NULL && object->physics_body != HENKA_INVALID_PHYSICS_BODY_ID;
     result = henka_scene_set_entity_mesh(object->scene, object->entity, candidate_render);
     if (result == HENKA_SUCCESS)
     {
         result = henka_scene_set_entity_local_bounds(object->scene, object->entity, candidate_bounds);
+    }
+    if (result == HENKA_SUCCESS)
+    {
+        result = sandbox3d_authoring_set_physics_bounds(object, &candidate_bounds);
     }
     if (result != HENKA_SUCCESS)
     {
         (void)henka_scene_set_entity_mesh(object->scene, object->entity, old_scene_mesh);
         if (had_old_bounds) (void)henka_scene_set_entity_local_bounds(object->scene, object->entity, old_bounds);
         else (void)henka_scene_clear_entity_local_bounds(object->scene, object->entity);
+        if (had_old_collider) sandbox3d_authoring_restore_physics_collider(object, &old_collider);
         henka_mesh_destroy(candidate_render);
         return result;
     }
@@ -236,6 +310,7 @@ static henka_result sandbox3d_authoring_publish_candidate(
             (void)henka_scene_set_entity_mesh(object->scene, object->entity, old_scene_mesh);
             if (had_old_bounds) (void)henka_scene_set_entity_local_bounds(object->scene, object->entity, old_bounds);
             else (void)henka_scene_clear_entity_local_bounds(object->scene, object->entity);
+            if (had_old_collider) sandbox3d_authoring_restore_physics_collider(object, &old_collider);
             henka_mesh_destroy(candidate_render);
             return result;
         }
@@ -257,7 +332,9 @@ static henka_result sandbox3d_authoring_replace_loaded_source(
     henka_mesh* old_scene_mesh = NULL;
     henka_bounds candidate_bounds = {{0.0f, 0.0f, 0.0f}, {0.0f, 0.0f, 0.0f}};
     henka_bounds old_bounds;
+    henka_physics_collider_desc old_collider = {0};
     bool had_old_bounds;
+    bool had_old_collider;
     henka_result result;
 
     if (object == NULL || candidate == NULL)
@@ -277,6 +354,8 @@ static henka_result sandbox3d_authoring_replace_loaded_source(
     }
     had_old_bounds = henka_scene_get_entity_local_bounds(
         object->scene, object->entity, &old_bounds) == HENKA_SUCCESS;
+    had_old_collider = sandbox3d_authoring_get_physics_collider(object, &old_collider) == HENKA_SUCCESS &&
+        object->physics_world != NULL && object->physics_body != HENKA_INVALID_PHYSICS_BODY_ID;
     if (result == HENKA_SUCCESS)
     {
         result = henka_scene_set_entity_mesh(object->scene, object->entity, candidate_render);
@@ -284,6 +363,10 @@ static henka_result sandbox3d_authoring_replace_loaded_source(
     if (result == HENKA_SUCCESS)
     {
         result = henka_scene_set_entity_local_bounds(object->scene, object->entity, candidate_bounds);
+    }
+    if (result == HENKA_SUCCESS)
+    {
+        result = sandbox3d_authoring_set_physics_bounds(object, &candidate_bounds);
     }
     if (result != HENKA_SUCCESS)
     {
@@ -299,6 +382,7 @@ static henka_result sandbox3d_authoring_replace_loaded_source(
         {
             (void)henka_scene_clear_entity_local_bounds(object->scene, object->entity);
         }
+        if (had_old_collider) sandbox3d_authoring_restore_physics_collider(object, &old_collider);
         henka_mesh_destroy(candidate_render);
         henka_authoring_mesh_history_destroy(candidate_history);
         return result;
@@ -496,6 +580,7 @@ henka_result sandbox3d_authoring_object_create_box(
     object->mesh = mesh;
     object->history_steps = history_steps;
     object->selected_face = 1U;
+    object->physics_body = HENKA_INVALID_PHYSICS_BODY_ID;
     result = henka_authoring_mesh_history_create(mesh, history_steps, &object->history);
     if (result == HENKA_SUCCESS)
     {
@@ -578,6 +663,41 @@ void sandbox3d_authoring_object_destroy(sandbox3d_authoring_object* object)
     henka_authoring_mesh_history_destroy(object->history);
     henka_authoring_mesh_destroy(object->mesh);
     henka_free(object);
+}
+
+henka_result sandbox3d_authoring_object_bind_physics(
+    sandbox3d_authoring_object* object,
+    henka_physics_world* world,
+    henka_physics_body_id body)
+{
+    henka_physics_body_state body_state;
+    henka_bounds bounds;
+
+    if (object == NULL || world == NULL || body == HENKA_INVALID_PHYSICS_BODY_ID ||
+        henka_scene_get_entity_local_bounds(object->scene, object->entity, &bounds) != HENKA_SUCCESS ||
+        henka_physics_body_get_state(world, body, &body_state) != HENKA_SUCCESS ||
+        body_state.collider.shape != HENKA_PHYSICS_SHAPE_BOX)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    body_state.collider.offset = bounds.center;
+    body_state.collider.data.box.half_extents = bounds.extents;
+    if (henka_physics_body_set_collider(world, body, body_state.collider) != HENKA_SUCCESS)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    object->physics_world = world;
+    object->physics_body = body;
+    return HENKA_SUCCESS;
+}
+
+void sandbox3d_authoring_object_unbind_physics(sandbox3d_authoring_object* object)
+{
+    if (object != NULL)
+    {
+        object->physics_world = NULL;
+        object->physics_body = HENKA_INVALID_PHYSICS_BODY_ID;
+    }
 }
 
 henka_entity sandbox3d_authoring_object_get_entity(const sandbox3d_authoring_object* object)

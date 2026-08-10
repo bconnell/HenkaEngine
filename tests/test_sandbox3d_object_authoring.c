@@ -128,6 +128,11 @@ static void henka_test_sandbox3d_object_authoring_source_persistence(void)
     henka_mesh* render_mesh = NULL;
     henka_mesh* uv_render_mesh = NULL;
     henka_mesh* previous_mesh = NULL;
+    henka_physics_world* physics_world = NULL;
+    henka_physics_body_id physics_body = HENKA_INVALID_PHYSICS_BODY_ID;
+    henka_physics_body_state physics_state;
+    henka_physics_body_desc physics_desc = {0};
+    henka_bounds edited_physics_bounds;
     const henka_bounds previous_bounds = {{3.0f, 4.0f, 5.0f}, {0.25f, 0.5f, 0.75f}};
     henka_bounds bounds;
 
@@ -144,6 +149,21 @@ static void henka_test_sandbox3d_object_authoring_source_persistence(void)
     HENKA_TEST_ASSERT(henka_scene_set_entity_local_bounds(scene, entity, previous_bounds) == HENKA_SUCCESS);
     HENKA_TEST_ASSERT(sandbox3d_authoring_object_create_box(
         engine, scene, entity, 1.0f, 1.0f, 1.0f, NULL, 8U, &object) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_physics_world_create(&physics_world) == HENKA_SUCCESS);
+    physics_desc.type = HENKA_PHYSICS_BODY_STATIC;
+    physics_desc.transform = henka_transform_identity();
+    physics_desc.mass = 1.0f;
+    physics_desc.material = henka_physics_material_default();
+    physics_desc.collider = henka_physics_collider_box((henka_vec3){0.5f, 0.5f, 0.5f});
+    physics_desc.linked_scene = scene;
+    physics_desc.linked_entity = entity;
+    HENKA_TEST_ASSERT(henka_physics_body_create(
+        physics_world, &physics_desc, &physics_body) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_bind_physics(
+        object, physics_world, physics_body) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_physics_body_get_state(
+        physics_world, physics_body, &physics_state) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(physics_state.collider.data.box.half_extents.x, 0.5f, 0.0001f);
     {
         const henka_ray pick_ray = {{0.0f, 0.0f, 5.0f}, {0.0f, 0.0f, -1.0f}};
         const henka_ray miss_ray = {{0.0f, 0.0f, 5.0f}, {0.0f, 1.0f, 0.0f}};
@@ -181,6 +201,16 @@ static void henka_test_sandbox3d_object_authoring_source_persistence(void)
     HENKA_TEST_ASSERT(sandbox3d_authoring_object_undo(object) == HENKA_SUCCESS);
 
     HENKA_TEST_ASSERT(sandbox3d_authoring_object_extrude_selected_face(object, 0.25f) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_scene_get_entity_local_bounds(
+        scene, entity, &edited_physics_bounds) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_physics_body_get_state(
+        physics_world, physics_body, &physics_state) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(
+        physics_state.collider.data.box.half_extents.x, edited_physics_bounds.extents.x, 0.0001f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(
+        physics_state.collider.data.box.half_extents.y, edited_physics_bounds.extents.y, 0.0001f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(
+        physics_state.collider.data.box.half_extents.z, edited_physics_bounds.extents.z, 0.0001f);
     saved_counts = henka_authoring_mesh_get_counts(sandbox3d_authoring_object_get_mesh(object));
     HENKA_TEST_ASSERT(sandbox3d_authoring_object_save_source(object, "build/test_tmp/authoring_object_source.hams") == HENKA_SUCCESS);
     HENKA_TEST_ASSERT(sandbox3d_authoring_object_inset_selected_face(object, 0.75f) == HENKA_SUCCESS);
@@ -196,7 +226,13 @@ static void henka_test_sandbox3d_object_authoring_source_persistence(void)
     HENKA_TEST_ASSERT(sandbox3d_authoring_object_reload_source(object, "build/test_tmp/authoring_object_missing.hams") != HENKA_SUCCESS);
     HENKA_TEST_ASSERT(henka_authoring_mesh_get_counts(sandbox3d_authoring_object_get_mesh(object)).faces == saved_counts.faces);
 
+    HENKA_TEST_ASSERT(henka_physics_body_get_state(
+        physics_world, physics_body, &physics_state) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(physics_state.collider.data.box.half_extents.y, bounds.extents.y, 0.0001f);
+    sandbox3d_authoring_object_unbind_physics(object);
     sandbox3d_authoring_object_destroy(object);
+    HENKA_TEST_ASSERT(henka_physics_body_destroy(physics_world, physics_body) == HENKA_SUCCESS);
+    henka_physics_world_destroy(physics_world);
     HENKA_TEST_ASSERT(henka_scene_get_entity_mesh(scene, entity, &render_mesh) == HENKA_SUCCESS);
     HENKA_TEST_ASSERT(render_mesh == previous_mesh);
     HENKA_TEST_ASSERT(henka_scene_get_entity_local_bounds(scene, entity, &bounds) == HENKA_SUCCESS);
