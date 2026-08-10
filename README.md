@@ -268,6 +268,7 @@ See [Platform Support](docs/platform-support.md) and [Package Provenance](docs/p
 - `F`: frame the selected object
 - `H`: print controls and the scene legend again
 - `Home`: reset the camera view to the meaningful scene bounds (or a safe deterministic fallback)
+- Rendered PBR also consumes an enabled scene moon as a bounded shadowless directional source; Material Preview remains on its deterministic editor light
 - `M` or `G`: move the selected visible and unlocked object
 - `R`: rotate the selected visible and unlocked object
 - `S`: scale the selected visible and unlocked object
