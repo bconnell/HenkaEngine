@@ -2192,12 +2192,30 @@ static void henka_opengl_sync_ibl_resources(
     const henka_texture* source;
     uint64_t revision;
     float rotation;
+    bool environment_uses_ibl;
 
     if (state == NULL || scene == NULL)
         return;
-    source = scene->environment.hdr_texture;
+    environment_uses_ibl =
+        scene->environment.mode == HENKA_SCENE_ENVIRONMENT_HDRI;
+    source = environment_uses_ibl ? scene->environment.hdr_texture : NULL;
     revision = source != NULL ? source->content_revision : 0U;
     rotation = scene->environment.hdr_rotation;
+    if (!environment_uses_ibl)
+    {
+        if (state->ibl_ready || state->ibl_environment_cube != 0U)
+            henka_opengl_delete_ibl_resources(state);
+        state->ibl_source_texture = NULL;
+        state->ibl_source_revision = 0U;
+        state->ibl_source_rotation = 0.0f;
+        (void)snprintf(
+            state->ibl_failure_reason,
+            sizeof(state->ibl_failure_reason),
+            "%s environment uses analytical fallback",
+            scene->environment.mode == HENKA_SCENE_ENVIRONMENT_PROCEDURAL ?
+                "procedural" : "gradient");
+        return;
+    }
     if (source == NULL || source->backend_data == NULL)
     {
         if (state->ibl_ready || state->ibl_environment_cube != 0U)
@@ -2996,6 +3014,7 @@ static void henka_opengl_draw_environment(
         state->environment_program,
         &state->environment_shader_data,
         "useEnvironmentTexture",
+        scene->environment.mode == HENKA_SCENE_ENVIRONMENT_HDRI &&
         scene->environment.hdr_texture != NULL &&
         scene->environment.hdr_texture->backend_data != NULL);
     henka_set_uniform_bool_owned(
@@ -5503,13 +5522,20 @@ henka_result henka_opengl_renderer_draw_scene(
             program,
             "useEnvironmentTexture",
             !helper_entity &&
+            scene->environment.mode == HENKA_SCENE_ENVIRONMENT_HDRI &&
             scene->environment.hdr_texture != NULL &&
             scene->environment.hdr_texture->backend_data != NULL);
         henka_set_uniform_float(program, "environmentRotation", scene->environment.hdr_rotation);
         henka_set_uniform_int_owned(program, shader_data, "iblIrradianceMap", 7);
         henka_set_uniform_int_owned(program, shader_data, "iblPrefilterMap", 8);
         henka_set_uniform_int_owned(program, shader_data, "iblBrdfLut", 9);
-        henka_set_uniform_bool_owned(program, shader_data, "useIBL", !helper_entity && state->ibl_ready);
+        henka_set_uniform_bool_owned(
+            program,
+            shader_data,
+            "useIBL",
+            !helper_entity &&
+            scene->environment.mode == HENKA_SCENE_ENVIRONMENT_HDRI &&
+            state->ibl_ready);
         henka_set_uniform_vec3_owned(
             program,
             shader_data,

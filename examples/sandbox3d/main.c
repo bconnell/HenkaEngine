@@ -19367,10 +19367,12 @@ static void sandbox3d_update(henka_engine* engine, double delta_seconds, void* u
                     HENKA_RENDERED_TERRAIN_PASS_DEPTH |
                     HENKA_RENDERED_TERRAIN_PASS_AO |
                     HENKA_RENDERED_TERRAIN_PASS_SSGI |
-                    HENKA_RENDERED_TERRAIN_PASS_SSR |
                     HENKA_RENDERED_TERRAIN_PASS_FOG |
                     HENKA_RENDERED_TERRAIN_PASS_HDR;
-                const uint32_t required_flags = required_terrain_pass_flags;
+                const uint32_t required_flags =
+                    required_terrain_pass_flags |
+                    (smoke_environment.mode == HENKA_SCENE_ENVIRONMENT_HDRI ?
+                        HENKA_RENDERED_TERRAIN_PASS_SSR : 0U);
 
                 printf(
                     "Terrain Rendered pass diagnostics: mask=0x%03x required=0x%03x color-draws=%u shadow-draws=%u.\n",
@@ -19405,7 +19407,13 @@ static void sandbox3d_update(henka_engine* engine, double delta_seconds, void* u
                 if (!temporal_recovery_valid)
                     state->smoke_validation_failed = true;
             }
+            if (state->environment_stress && smoke_diagnostics.rendered_ibl_ready)
+            {
+                printf("Environment stress validation failed: procedural mode retained HDRI-derived IBL resources.\n");
+                state->smoke_validation_failed = true;
+            }
             if (smoke_diagnostics.viewport_shading_mode == HENKA_VIEWPORT_SHADING_RENDERED &&
+                smoke_environment.mode == HENKA_SCENE_ENVIRONMENT_HDRI &&
                 (smoke_diagnostics.rendered_reflection_probe_enabled_count == 0U ||
                  smoke_diagnostics.rendered_reflection_probe_capture_generation == 0U))
             {
