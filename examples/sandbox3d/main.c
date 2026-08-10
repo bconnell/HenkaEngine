@@ -13936,6 +13936,48 @@ static void sandbox3d_draw_object_details_panel(
             }
             if (sandbox3d_details_flow_next_row(state, flow_desc.bounds, 28.0f, 1U, &row) && row.width >= 290.0f)
             {
+                const henka_authoring_face* selected_face = henka_authoring_mesh_get_face(
+                    sandbox3d_authoring_object_get_mesh(state->authoring_object),
+                    sandbox3d_authoring_object_get_selected_face(state->authoring_object));
+                const bool has_selected_face = selected_face != NULL;
+                const uint32_t selected_material_region =
+                    has_selected_face ? selected_face->material_region : 0U;
+                char material_region_text[32];
+                snprintf(
+                    material_region_text,
+                    sizeof(material_region_text),
+                    "%u",
+                    (unsigned int)selected_material_region);
+                sandbox3d_draw_value_row(
+                    state->ui, row.x, row.y, row.width - 128.0f,
+                    "Material Region", material_region_text);
+                if (has_selected_face &&
+                    henka_ui_button(
+                        state->ui,
+                        "authoring_material_region_up",
+                        (henka_ui_rect){row.x + row.width - 122.0f, row.y, 58.0f, 24.0f},
+                        "Region +") &&
+                    selected_material_region < UINT32_MAX &&
+                    sandbox3d_authoring_object_set_selected_face_material_region(
+                        state->authoring_object, selected_material_region + 1U) == HENKA_SUCCESS)
+                {
+                    sandbox3d_set_status(state, false, "Selected face material region updated and evaluated.");
+                }
+                if (has_selected_face &&
+                    henka_ui_button(
+                        state->ui,
+                        "authoring_material_region_down",
+                        (henka_ui_rect){row.x + row.width - 60.0f, row.y, 58.0f, 24.0f},
+                        "Region -") &&
+                    selected_material_region > 0U &&
+                    sandbox3d_authoring_object_set_selected_face_material_region(
+                        state->authoring_object, selected_material_region - 1U) == HENKA_SUCCESS)
+                {
+                    sandbox3d_set_status(state, false, "Selected face material region updated and evaluated.");
+                }
+            }
+            if (sandbox3d_details_flow_next_row(state, flow_desc.bounds, 28.0f, 1U, &row) && row.width >= 290.0f)
+            {
                 const bool save_requested = henka_ui_button(
                     state->ui,
                     "authoring_save_source",

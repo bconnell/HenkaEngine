@@ -828,6 +828,38 @@ henka_result sandbox3d_authoring_object_select_face(
     return HENKA_SUCCESS;
 }
 
+henka_result sandbox3d_authoring_object_set_selected_face_material_region(
+    sandbox3d_authoring_object* object,
+    uint32_t material_region)
+{
+    henka_authoring_mesh* candidate = NULL;
+    henka_result result;
+
+    if (object == NULL || henka_authoring_mesh_get_face(object->mesh, object->selected_face) == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    result = henka_authoring_mesh_clone(object->mesh, &candidate);
+    if (result == HENKA_SUCCESS)
+    {
+        result = henka_authoring_mesh_set_face_material_region(
+            candidate, object->selected_face, material_region);
+    }
+    if (result == HENKA_SUCCESS)
+    {
+        result = sandbox3d_authoring_publish_candidate(object, candidate, true);
+        if (result != HENKA_SUCCESS)
+        {
+            henka_authoring_mesh_destroy(candidate);
+        }
+    }
+    else
+    {
+        henka_authoring_mesh_destroy(candidate);
+    }
+    return result;
+}
+
 henka_result sandbox3d_authoring_object_extrude_selected_face(
     sandbox3d_authoring_object* object,
     float distance)

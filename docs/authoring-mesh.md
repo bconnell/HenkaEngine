@@ -10,8 +10,8 @@ The current foundation provides:
   elements;
 - explicit polygon corners and edges, with deterministic vertex-edge and
   edge-face adjacency and boundary queries;
-- bounded material-region and UV data, face smoothing intent, and hard-edge
-  intent;
+- bounded material-region and UV data, transactional face material-region
+  editing, face smoothing intent, and hard-edge intent;
 - fail-closed face validation, non-manifold edge rejection, deletion safety,
   and deterministic fan triangulation into caller-owned render buffers;
 - evaluated normals that honor smooth-face and hard-edge intent.
@@ -42,8 +42,9 @@ authoring state.
 The first horizontal editor connection is now exercised by the Sandbox's
 selected Textured Cube: it owns a bounded authoring box and history, and the
 viewport ray picker resolves a hit to the actual authoring face identity. The
-Object Details Authoring section exposes that face plus transactional
-Extrude, Inset, Bevel, Subdivide, Project UV, Pack UV, Undo, Redo, Save Source, and Reload Source commands. Each edit
+Object Details Authoring section exposes that face plus transactional material
+region editing, Extrude, Inset, Bevel, Subdivide, Project UV, Pack UV, Undo,
+Redo, Save Source, and Reload Source commands. Each edit
 evaluates a candidate, creates a normal renderer mesh, updates the scene entity
 mesh and local bounds, then checkpoints history; a bound box collider consumes
 the same evaluated local bounds as part of that transaction after each
@@ -67,8 +68,8 @@ multi-selection are not yet present; and material-instance assignment, texture
 dependencies, general collision integration beyond the bound box contract,
 package ownership, topology-aware picking, and showcase rebuilds still need the
 shared scene/asset-manager bridge. Material
-regions retain their numeric metadata but do not yet choose multiple shared
-material instances. These limitations are tracked explicitly so this API does
+regions retain their editable numeric metadata but do not yet choose multiple
+shared material instances. These limitations are tracked explicitly so this API does
 not claim a complete modeling editor or a second material authority.
 
 The API allocates only within caller-selected bounded capacities. Invalid

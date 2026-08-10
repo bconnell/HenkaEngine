@@ -615,6 +615,20 @@ const henka_authoring_edge* henka_authoring_mesh_get_edge(const henka_authoring_
     return edge != NULL && edge->active ? edge : NULL;
 }
 
+henka_result henka_authoring_mesh_set_face_material_region(
+    henka_authoring_mesh* mesh,
+    henka_authoring_face_id id,
+    uint32_t material_region)
+{
+    henka_authoring_face* face = authoring_face(mesh, id);
+    if (face == NULL || !face->active)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    face->material_region = material_region;
+    return HENKA_SUCCESS;
+}
+
 henka_result henka_authoring_mesh_set_face_smoothing(henka_authoring_mesh* mesh, henka_authoring_face_id id, bool smooth)
 {
     henka_authoring_face* face = authoring_face(mesh, id);

@@ -164,6 +164,19 @@ static void henka_test_sandbox3d_object_authoring_source_persistence(void)
     HENKA_TEST_ASSERT(henka_physics_body_get_state(
         physics_world, physics_body, &physics_state) == HENKA_SUCCESS);
     HENKA_TEST_ASSERT_FLOAT_CLOSE(physics_state.collider.data.box.half_extents.x, 0.5f, 0.0001f);
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_set_selected_face_material_region(
+        object, 17U) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_authoring_mesh_get_face(
+        sandbox3d_authoring_object_get_mesh(object),
+        sandbox3d_authoring_object_get_selected_face(object))->material_region == 17U);
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_undo(object) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_authoring_mesh_get_face(
+        sandbox3d_authoring_object_get_mesh(object),
+        sandbox3d_authoring_object_get_selected_face(object))->material_region != 17U);
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_redo(object) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_authoring_mesh_get_face(
+        sandbox3d_authoring_object_get_mesh(object),
+        sandbox3d_authoring_object_get_selected_face(object))->material_region == 17U);
     {
         const henka_ray pick_ray = {{0.0f, 0.0f, 5.0f}, {0.0f, 0.0f, -1.0f}};
         const henka_ray miss_ray = {{0.0f, 0.0f, 5.0f}, {0.0f, 1.0f, 0.0f}};

@@ -110,6 +110,10 @@ henka_result henka_authoring_mesh_add_face(henka_authoring_mesh* mesh, const hen
 henka_result henka_authoring_mesh_remove_face(henka_authoring_mesh* mesh, henka_authoring_face_id id);
 const henka_authoring_face* henka_authoring_mesh_get_face(const henka_authoring_mesh* mesh, henka_authoring_face_id id);
 const henka_authoring_edge* henka_authoring_mesh_get_edge(const henka_authoring_mesh* mesh, henka_authoring_edge_id id);
+henka_result henka_authoring_mesh_set_face_material_region(
+    henka_authoring_mesh* mesh,
+    henka_authoring_face_id id,
+    uint32_t material_region);
 henka_result henka_authoring_mesh_set_face_smoothing(henka_authoring_mesh* mesh, henka_authoring_face_id id, bool smooth);
 henka_result henka_authoring_mesh_set_face_corner_uv(henka_authoring_mesh* mesh, henka_authoring_face_id id, size_t corner, henka_vec2 uv);
 henka_result henka_authoring_mesh_get_face_corner_uv(const henka_authoring_mesh* mesh, henka_authoring_face_id id, size_t corner, henka_vec2* out_uv);

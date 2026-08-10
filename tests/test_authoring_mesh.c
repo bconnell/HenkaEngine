@@ -349,6 +349,7 @@ static int test_modeling_material_region_and_uv_continuity(void)
         }
     }
     if (henka_authoring_mesh_add_face(mesh, face_vertices, 4U, 11U, true, &face_id) != HENKA_SUCCESS ||
+        henka_authoring_mesh_set_face_material_region(mesh, face_id, 13U) != HENKA_SUCCESS ||
         henka_authoring_mesh_set_face_corner_uv(mesh, face_id, 0U, (henka_vec2){0.2f, 0.3f}) != HENKA_SUCCESS ||
         henka_authoring_mesh_set_face_corner_uv(mesh, face_id, 1U, (henka_vec2){1.2f, 0.3f}) != HENKA_SUCCESS ||
         henka_authoring_mesh_set_face_corner_uv(mesh, face_id, 2U, (henka_vec2){1.2f, 1.3f}) != HENKA_SUCCESS ||
@@ -359,7 +360,7 @@ static int test_modeling_material_region_and_uv_continuity(void)
     }
     if (henka_authoring_mesh_get_counts(mesh).faces != 6U ||
         henka_authoring_mesh_get_face(mesh, new_face_id) == NULL ||
-        henka_authoring_mesh_get_face(mesh, new_face_id)->material_region != 11U)
+        henka_authoring_mesh_get_face(mesh, new_face_id)->material_region != 13U)
     {
         goto cleanup;
     }
@@ -367,7 +368,7 @@ static int test_modeling_material_region_and_uv_continuity(void)
     {
         const henka_authoring_face* face = henka_authoring_mesh_get_face(
             mesh, (henka_authoring_face_id)index);
-        if (face != NULL && face->material_region != 11U)
+        if (face != NULL && face->material_region != 13U)
         {
             goto cleanup;
         }
@@ -379,7 +380,7 @@ static int test_modeling_material_region_and_uv_continuity(void)
     }
     for (index = 0U; index < render.vertex_count; ++index)
     {
-        if (render.vertices[index].material_region != 11U)
+        if (render.vertices[index].material_region != 13U)
         {
             goto cleanup;
         }
@@ -393,7 +394,7 @@ static int test_modeling_material_region_and_uv_continuity(void)
     {
         henka_vec2 restored_uv;
         const henka_authoring_face* restored_face = henka_authoring_mesh_get_face(mesh, new_face_id);
-        if (restored_face == NULL || restored_face->material_region != 11U ||
+        if (restored_face == NULL || restored_face->material_region != 13U ||
             henka_authoring_mesh_get_face_corner_uv(mesh, new_face_id, 0U, &restored_uv) != HENKA_SUCCESS ||
             fabsf(restored_uv.x - 0.2f) > 0.0001f || fabsf(restored_uv.y - 0.3f) > 0.0001f)
         {

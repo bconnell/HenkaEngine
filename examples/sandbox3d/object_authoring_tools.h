@@ -54,6 +54,9 @@ henka_result sandbox3d_authoring_object_pick_face(
 henka_result sandbox3d_authoring_object_select_face(
     sandbox3d_authoring_object* object,
     henka_authoring_face_id face_id);
+henka_result sandbox3d_authoring_object_set_selected_face_material_region(
+    sandbox3d_authoring_object* object,
+    uint32_t material_region);
 henka_result sandbox3d_authoring_object_extrude_selected_face(
     sandbox3d_authoring_object* object,
     float distance);
