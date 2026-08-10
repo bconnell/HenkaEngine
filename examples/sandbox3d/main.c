@@ -26,6 +26,8 @@
 #include "studio_environment.h"
 #include "workspace_tools.h"
 
+#define SANDBOX3D_MAX_MATERIAL_EDITOR_BINDINGS 256U
+
 typedef enum sandbox3d_object_kind
 {
     SANDBOX3D_OBJECT_GROUND = 0,
@@ -357,6 +359,7 @@ typedef struct sandbox3d_state
     henka_material_instance_parameter material_editor_parameter;
     unsigned int material_editor_component;
     bool marker_material_instance_valid;
+    sandbox3d_material_editor_binding material_editor_bindings[SANDBOX3D_MAX_MATERIAL_EDITOR_BINDINGS];
     henka_entity cube_entity;
     henka_entity ground_entity;
     henka_entity grid_entity;
@@ -3961,7 +3964,7 @@ static void sandbox3d_print_help(const sandbox3d_state* state)
     printf("  Ctrl+M maximizes the focused or hovered workspace section; press it again to restore the section.\n");
     printf("  Open Native Panel Test from the Controls QA page to validate a separate OS-level tool window.\n");
     printf("  Use the panels to inspect named scene objects, clear selection, switch gizmo modes, focus the camera, reset object transforms, toggle visibility, and open in-window Help, Scene Legend, Object Info, Assets, Paths, Settings, Diagnostics, Transform QA, and Physics QA utilities.\n");
-    printf("  Select glTF Marker to edit its shared material instance in Object Details; scalar/vector, flags, alpha, and semantic texture overrides apply transactionally. Use Utility > Assets to choose manager-owned textures for editable slots.\n");
+    printf("  Select an imported glTF scene entity to edit its shared material instance in Object Details; scalar/vector, flags, alpha, and semantic texture overrides apply transactionally. Use Utility > Assets to choose manager-owned textures for editable slots.\n");
     printf("  Physics QA enables an opt-in fixed-step rigid-body demo with collider/contact debug drawing, impulses, body modes, and camera raycasts.\n");
     printf("  The Controls panel uses Main, Camera/Status, and QA pages, and Scene Objects supports paging when the dock is tighter than the full list.\n");
     printf("  Controls also provides Default, Modeling, Materials, Scene Assembly, Debugging, and Minimal Viewport workspace presets; topology edits mark the workspace Custom.\n");
@@ -5139,6 +5142,7 @@ static void sandbox3d_release_owned_resources(sandbox3d_state* state)
     state->marker_material_asset = NULL;
     memset(&state->marker_material_instance, 0, sizeof(state->marker_material_instance));
     state->marker_material_instance_valid = false;
+    memset(state->material_editor_bindings, 0, sizeof(state->material_editor_bindings));
     state->missing_model_mesh = NULL;
     state->scene = NULL;
     state->actions = NULL;
@@ -13303,6 +13307,7 @@ static void sandbox3d_draw_object_details_panel(
                 "Available");
     }
 
+    memset(&marker_binding, 0, sizeof(marker_binding));
     marker_binding.entity = state->marker_entity;
     marker_binding.instance =
         &state->marker_material_instance;
@@ -13311,11 +13316,26 @@ static void sandbox3d_draw_object_details_panel(
         state->marker_material_instance_valid;
 
     memset(&material_view, 0, sizeof(material_view));
+    if (entity != state->marker_entity)
+    {
+        /* Imported scene entities retain their shared material-definition
+         * identity. Material editing must follow that identity instead of
+         * silently falling back to the Marker-only demo binding. */
+        (void)sandbox3d_prepare_material_editor_binding(
+            state->scene,
+            entity,
+            state->material_editor_bindings,
+            SANDBOX3D_MAX_MATERIAL_EDITOR_BINDINGS);
+    }
     if (sandbox3d_resolve_selected_material(
             state->scene,
             entity,
-            &marker_binding,
-            1U,
+            entity == state->marker_entity
+                ? &marker_binding
+                : state->material_editor_bindings,
+            entity == state->marker_entity
+                ? 1U
+                : SANDBOX3D_MAX_MATERIAL_EDITOR_BINDINGS,
             &material_view) != HENKA_SUCCESS)
     {
         material_view.access =

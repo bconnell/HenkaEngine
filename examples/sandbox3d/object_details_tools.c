@@ -3,6 +3,139 @@
 #include <stdio.h>
 #include <string.h>
 
+static void sandbox3d_clear_material_editor_binding(
+    sandbox3d_material_editor_binding* binding)
+{
+    if (binding != NULL)
+    {
+        memset(binding, 0, sizeof(*binding));
+        binding->entity = HENKA_INVALID_ENTITY;
+    }
+}
+
+henka_result sandbox3d_prepare_material_editor_binding(
+    henka_scene* scene,
+    henka_entity entity,
+    sandbox3d_material_editor_binding* bindings,
+    size_t binding_count)
+{
+    const henka_material_asset* scene_asset = NULL;
+    sandbox3d_material_editor_binding* binding = NULL;
+    size_t index;
+    henka_result result;
+
+    if (scene == NULL || entity == HENKA_INVALID_ENTITY ||
+        (bindings == NULL && binding_count != 0U) ||
+        !henka_scene_is_entity_valid(scene, entity))
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    for (index = 0U; index < binding_count; ++index)
+    {
+        if (bindings[index].valid && bindings[index].entity == entity)
+        {
+            binding = &bindings[index];
+            break;
+        }
+    }
+
+    if (henka_scene_get_entity_material_asset(
+            scene, entity, &scene_asset) != HENKA_SUCCESS)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    if (scene_asset == NULL)
+    {
+        if (binding != NULL)
+        {
+            sandbox3d_clear_material_editor_binding(binding);
+        }
+        return HENKA_SUCCESS;
+    }
+
+    if (binding == NULL)
+    {
+        for (index = 0U; index < binding_count; ++index)
+        {
+            if (!bindings[index].valid)
+            {
+                binding = &bindings[index];
+                break;
+            }
+        }
+        if (binding == NULL)
+        {
+            return HENKA_ERROR_LIMIT;
+        }
+        sandbox3d_clear_material_editor_binding(binding);
+        binding->entity = entity;
+        binding->asset = (henka_material_asset*)scene_asset;
+        result = henka_assets_create_material_instance(
+            scene_asset, &binding->owned_instance);
+        if (result != HENKA_SUCCESS)
+        {
+            sandbox3d_clear_material_editor_binding(binding);
+            return result;
+        }
+        binding->instance = &binding->owned_instance;
+        binding->valid = true;
+        return HENKA_SUCCESS;
+    }
+
+    if (binding->asset != (henka_material_asset*)scene_asset ||
+        binding->instance == NULL ||
+        binding->instance->definition != scene_asset)
+    {
+        henka_material_instance candidate;
+
+        result = henka_assets_create_material_instance(
+            scene_asset, &candidate);
+        if (result != HENKA_SUCCESS)
+        {
+            return result;
+        }
+        binding->owned_instance = candidate;
+        binding->instance = &binding->owned_instance;
+        binding->asset = (henka_material_asset*)scene_asset;
+        binding->entity = entity;
+        binding->valid = true;
+        return HENKA_SUCCESS;
+    }
+
+    {
+        uint64_t revision = 0U;
+
+        result = henka_assets_get_material_asset_revision(
+            scene_asset, &revision);
+        if (result != HENKA_SUCCESS)
+        {
+            return result;
+        }
+        if (binding->instance->definition_revision != revision)
+        {
+            henka_material_instance candidate = *binding->instance;
+
+            result = henka_assets_refresh_material_instance(&candidate);
+            if (result != HENKA_SUCCESS)
+            {
+                return result;
+            }
+            result = henka_assets_apply_material_instance_to_entity(
+                &candidate, scene, entity);
+            if (result != HENKA_SUCCESS)
+            {
+                return result;
+            }
+            binding->owned_instance = candidate;
+            binding->instance = &binding->owned_instance;
+        }
+    }
+
+    return HENKA_SUCCESS;
+}
+
 henka_result sandbox3d_resolve_selected_material(
     const henka_scene* scene,
     henka_entity entity,

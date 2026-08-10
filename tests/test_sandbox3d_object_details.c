@@ -6,6 +6,7 @@
 #include <henka/assets.h>
 #include <henka/scene.h>
 
+#include "../engine/src/henka_internal.h"
 #include "../examples/sandbox3d/object_details_tools.h"
 
 void henka_test_sandbox3d_object_details(void)
@@ -13,12 +14,14 @@ void henka_test_sandbox3d_object_details(void)
     henka_entity entity;
     henka_entity no_mesh_entity;
     henka_material material;
+    henka_material_asset scene_asset;
     henka_material_instance instance;
     henka_scene* scene;
     henka_mesh* fake_mesh;
     henka_shader* fake_shader;
     sandbox3d_material_editor_binding binding;
     sandbox3d_material_editor_binding duplicate_bindings[2];
+    sandbox3d_material_editor_binding scene_bindings[2];
     sandbox3d_selected_material_view view;
 
     scene = NULL;
@@ -70,6 +73,59 @@ void henka_test_sandbox3d_object_details(void)
             entity,
             material) == HENKA_SUCCESS);
 
+    memset(&scene_asset, 0, sizeof(scene_asset));
+    scene_asset.material = material;
+    scene_asset.material.name = "Shared Scene Material";
+    scene_asset.material.roughness = 0.80f;
+    scene_asset.revision = 3U;
+    memset(scene_bindings, 0, sizeof(scene_bindings));
+    HENKA_TEST_ASSERT(
+        henka_scene_set_entity_material_asset(
+            scene,
+            entity,
+            &scene_asset) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(
+        sandbox3d_prepare_material_editor_binding(
+            scene,
+            entity,
+            scene_bindings,
+            2U) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(scene_bindings[0].valid);
+    HENKA_TEST_ASSERT(scene_bindings[0].entity == entity);
+    HENKA_TEST_ASSERT(scene_bindings[0].asset == &scene_asset);
+    HENKA_TEST_ASSERT(scene_bindings[0].instance == &scene_bindings[0].owned_instance);
+    HENKA_TEST_ASSERT(scene_bindings[0].instance->definition == &scene_asset);
+
+    HENKA_TEST_ASSERT(
+        henka_assets_material_instance_set_float(
+            scene_bindings[0].instance,
+            HENKA_MATERIAL_INSTANCE_METALLIC,
+            0.65f) == HENKA_SUCCESS);
+    scene_asset.material.roughness = 0.42f;
+    scene_asset.revision = 4U;
+    HENKA_TEST_ASSERT(
+        sandbox3d_prepare_material_editor_binding(
+            scene,
+            entity,
+            scene_bindings,
+            2U) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(scene_bindings[0].instance->definition_revision == 4U);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(
+        scene_bindings[0].instance->material.metallic,
+        0.65f,
+        0.0001f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(
+        scene_bindings[0].instance->material.roughness,
+        0.42f,
+        0.0001f);
+    HENKA_TEST_ASSERT(
+        henka_scene_get_entity_material(
+            scene,
+            entity,
+            &material) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(material.metallic, 0.65f, 0.0001f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(material.roughness, 0.42f, 0.0001f);
+
     HENKA_TEST_ASSERT(
         sandbox3d_resolve_selected_material(
             scene,
@@ -83,11 +139,11 @@ void henka_test_sandbox3d_object_details(void)
     HENKA_TEST_ASSERT(view.editor_binding == NULL);
     HENKA_TEST_ASSERT_FLOAT_CLOSE(
         view.material.metallic,
-        0.25f,
+        0.65f,
         0.0001f);
     HENKA_TEST_ASSERT_FLOAT_CLOSE(
         view.material.roughness,
-        0.75f,
+        0.42f,
         0.0001f);
 
     instance = (henka_material_instance){0};
