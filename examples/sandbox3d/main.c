@@ -4098,6 +4098,34 @@ static henka_physics_body_id sandbox3d_get_physics_body_for_entity(const sandbox
     return HENKA_INVALID_PHYSICS_BODY_ID;
 }
 
+static void sandbox3d_release_physics_body_for_entity(
+    sandbox3d_state* state,
+    henka_entity entity)
+{
+    int index;
+
+    if (state == NULL || state->physics.world == NULL || entity == HENKA_INVALID_ENTITY)
+    {
+        return;
+    }
+    for (index = 0; index < SANDBOX3D_OBJECT_COUNT; ++index)
+    {
+        if (state->descriptors[index].entity != entity)
+        {
+            continue;
+        }
+        if (state->physics.bodies[index] != HENKA_INVALID_PHYSICS_BODY_ID &&
+            henka_physics_body_destroy(
+                state->physics.world, state->physics.bodies[index]) != HENKA_SUCCESS)
+        {
+            HENKA_LOG_WARN(
+                "Physics body cleanup failed for deleted entity %llu.",
+                (unsigned long long)entity);
+        }
+        state->physics.bodies[index] = HENKA_INVALID_PHYSICS_BODY_ID;
+    }
+}
+
 static void sandbox3d_sync_physics_body_from_entity(sandbox3d_state* state, henka_entity entity)
 {
     henka_physics_body_id body;
@@ -6159,6 +6187,14 @@ static bool sandbox3d_delete_selected_object(sandbox3d_state* state)
     {
         return false;
     }
+
+    if (state->authoring_object != NULL &&
+        sandbox3d_authoring_object_get_entity(state->authoring_object) == selected_entity)
+    {
+        sandbox3d_authoring_object_destroy(state->authoring_object);
+        state->authoring_object = NULL;
+    }
+    sandbox3d_release_physics_body_for_entity(state, selected_entity);
 
     state->selected_entity = HENKA_INVALID_ENTITY;
     sandbox3d_clear_gizmo_drag(state, true);
