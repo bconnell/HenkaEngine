@@ -32,6 +32,19 @@ henka_enable_project_warnings(henka_terrain_tests)
 
 add_test(NAME henka_terrain_tests COMMAND henka_terrain_tests)
 
+add_executable(henka_authoring_mesh_tests
+    test_authoring_mesh.c
+)
+
+target_link_libraries(henka_authoring_mesh_tests
+    PRIVATE
+        henka_runtime
+)
+
+henka_enable_project_warnings(henka_authoring_mesh_tests)
+
+add_test(NAME henka_authoring_mesh_tests COMMAND henka_authoring_mesh_tests)
+
 add_executable(henka_terrain_storage_tests
     test_terrain_storage.c
 )
