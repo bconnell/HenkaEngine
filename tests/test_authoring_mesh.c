@@ -2,6 +2,7 @@
 #include <stdio.h>
 
 #include <henka/authoring_mesh.h>
+#include <henka/authoring_modeling.h>
 
 static int fail(const char* message)
 {
@@ -201,8 +202,72 @@ cleanup:
     return result ? 1 : fail("history/persistence");
 }
 
+static int test_modeling_operations(void)
+{
+    const henka_authoring_mesh_desc desc = {64U, 128U, 64U, 8U};
+    henka_authoring_mesh* mesh = NULL;
+    henka_authoring_face_id face_id = HENKA_AUTHORING_INVALID_ID;
+    henka_authoring_face_id new_face_id = HENKA_AUTHORING_INVALID_ID;
+    henka_authoring_vertex_id center_id = HENKA_AUTHORING_INVALID_ID;
+    henka_authoring_mesh_counts counts;
+    int result = 0;
+
+    if (henka_authoring_mesh_create_box(&desc, 2.0f, 3.0f, 4.0f, &mesh) != HENKA_SUCCESS ||
+        !henka_authoring_mesh_validate(mesh) || henka_authoring_mesh_get_counts(mesh).vertices != 8U ||
+        henka_authoring_mesh_get_counts(mesh).edges != 12U || henka_authoring_mesh_get_counts(mesh).faces != 6U)
+    {
+        goto cleanup;
+    }
+    henka_authoring_mesh_destroy(mesh);
+    mesh = NULL;
+    if (henka_authoring_mesh_create_plane(&desc, 2.0f, 2.0f, &mesh) != HENKA_SUCCESS ||
+        !henka_authoring_mesh_validate(mesh))
+    {
+        goto cleanup;
+    }
+    counts = henka_authoring_mesh_get_counts(mesh);
+    if (counts.vertices != 4U || counts.edges != 4U || counts.faces != 1U ||
+        henka_authoring_mesh_duplicate_face(mesh, 1U, (henka_vec3){0.0f, 1.0f, 0.0f}, &new_face_id) != HENKA_SUCCESS ||
+        !henka_authoring_mesh_validate(mesh) || henka_authoring_mesh_get_counts(mesh).faces != 2U)
+    {
+        goto cleanup;
+    }
+    henka_authoring_mesh_destroy(mesh);
+    mesh = NULL;
+    if (henka_authoring_mesh_create_plane(&desc, 2.0f, 2.0f, &mesh) != HENKA_SUCCESS ||
+        henka_authoring_mesh_extrude_face(mesh, 1U, 0.5f, &new_face_id) != HENKA_SUCCESS ||
+        !henka_authoring_mesh_validate(mesh) || henka_authoring_mesh_get_counts(mesh).vertices != 8U ||
+        henka_authoring_mesh_get_counts(mesh).faces != 6U)
+    {
+        goto cleanup;
+    }
+    henka_authoring_mesh_destroy(mesh);
+    mesh = NULL;
+    if (henka_authoring_mesh_create_plane(&desc, 2.0f, 2.0f, &mesh) != HENKA_SUCCESS ||
+        henka_authoring_mesh_inset_face(mesh, 1U, 0.5f, &face_id) != HENKA_SUCCESS ||
+        henka_authoring_mesh_bevel_face(mesh, face_id, 0.25f, &new_face_id) != HENKA_SUCCESS ||
+        !henka_authoring_mesh_validate(mesh) || henka_authoring_mesh_get_counts(mesh).faces != 9U)
+    {
+        goto cleanup;
+    }
+    henka_authoring_mesh_destroy(mesh);
+    mesh = NULL;
+    if (henka_authoring_mesh_create_plane(&desc, 2.0f, 2.0f, &mesh) != HENKA_SUCCESS ||
+        henka_authoring_mesh_subdivide_face(mesh, 1U, &center_id) != HENKA_SUCCESS ||
+        center_id == HENKA_AUTHORING_INVALID_ID || !henka_authoring_mesh_validate(mesh) ||
+        henka_authoring_mesh_get_counts(mesh).faces != 4U)
+    {
+        goto cleanup;
+    }
+    result = 1;
+
+cleanup:
+    henka_authoring_mesh_destroy(mesh);
+    return result ? 1 : fail("modeling operations");
+}
+
 int main(void)
 {
     return test_topology_and_evaluation() && test_rejection_and_tombstones() &&
-        test_history_and_persistence() ? 0 : 1;
+        test_history_and_persistence() && test_modeling_operations() ? 0 : 1;
 }

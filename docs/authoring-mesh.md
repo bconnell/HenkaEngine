@@ -18,15 +18,21 @@ The current foundation provides:
 - bounded shared topology undo/redo snapshots and versioned transactional
   mesh-file save/load with failed-load retention.
 
+`<henka/authoring_modeling.h>` adds bounded plane and box constructors plus
+transactional duplicate, extrude, inset, planar bevel-ring, and face
+subdivide operations. Each operation works on a clone and publishes only a
+validated result, so capacity or non-manifold rejection leaves the source
+mesh unchanged.
+
 The API allocates only within caller-selected bounded capacities. Invalid
 faces and capacity failures leave the prior topology unchanged. Render
 buffers are caller-owned, so evaluation does not transfer ownership to the
 renderer or asset manager.
 
-This is checkpoint A of the authoring-parity campaign. It is not yet a full
-modeling editor: primitive tools, extrude/inset/bevel/subdivide/weld/split,
-UV unwrap and packing, material editing, texture painting, editor integration
-for the history/file APIs, and showcase rebuild workflows remain unfinished.
-glTF
+This is the bounded runtime foundation of the authoring-parity campaign. It is
+not yet a full modeling editor: selection UI, weld/split/delete/bridge/loop
+cuts, production hard-surface profiles, UV unwrap and packing, material
+editing, texture painting, editor integration for the history/file APIs, and
+showcase rebuild workflows remain unfinished. glTF
 and KTX2 material ownership continues through the existing asset paths; this
 API does not introduce a second material file format.
