@@ -328,6 +328,23 @@ void henka_test_sandbox3d_editor_ui(void)
             NULL,
             100.0f,
             1));
+
+    state.controls_workspace_expanded = true;
+    state.controls_viewer_expanded = false;
+    state.details_actions_expanded = true;
+    state.controls_scroll_offset = 120.0f;
+    state.controls_content_height = 300.0f;
+    state.details_scroll_offset = 80.0f;
+    state.details_content_height = 240.0f;
+    sandbox3d_editor_ui_state_reset(&state);
+    HENKA_TEST_ASSERT(!state.controls_workspace_expanded);
+    HENKA_TEST_ASSERT(state.controls_viewer_expanded);
+    HENKA_TEST_ASSERT(!state.details_actions_expanded);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(state.controls_scroll_offset, 0.0f, 0.0001f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(state.controls_content_height, 0.0f, 0.0001f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(state.details_scroll_offset, 0.0f, 0.0001f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(state.details_content_height, 0.0f, 0.0001f);
+
     HENKA_TEST_ASSERT(
         !sandbox3d_editor_ui_scroll_controls(
             &state,

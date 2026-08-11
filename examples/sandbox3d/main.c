@@ -3726,6 +3726,7 @@ static void sandbox3d_reset_workspace_layout(sandbox3d_state* state)
     state->workspace.object_details_panel_visible = true;
     state->workspace.active_utility = SANDBOX3D_UTILITY_NONE;
     sandbox3d_workspace_reset_layout(&state->workspace.model);
+    sandbox3d_editor_ui_state_reset(&state->editor_ui);
     state->viewport_tool = SANDBOX3D_VIEWPORT_TOOL_SELECT;
     state->gizmo.mode = SANDBOX3D_GIZMO_MODE_SELECT;
     sandbox3d_clear_gizmo_drag(state, true);

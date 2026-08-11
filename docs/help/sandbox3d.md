@@ -114,7 +114,7 @@ The engineering sample legend is available with `--primitive-gallery`:
 - Hover a merged workspace tab for a compact guide: click to activate, drag to reorder within the group, or drop a panel at the center to join tabs.
 - Use Controls > Undo Layout and Redo Layout for the bounded workspace layout history; detached panels are redocked before a snapshot is restored.
 - With panels visible, `Ctrl+Z` undoes and `Ctrl+Y` or `Ctrl+Shift+Z` redoes the bounded workspace layout history.
-- Reset Layout returns to the default topology, redocks detached panels, and preserves valid saved named layout slots.
+- Reset Layout returns to the default topology and panel disclosure/scroll state, redocks detached panels, and preserves valid saved named layout slots.
 - Hover a topology divider or dock splitter to see the matching horizontal or vertical system resize cursor; the cursor returns to normal when the viewport or a tool owns the pointer.
 - Confirm the small in-window status area reports common actions such as layout changes, camera reset, saved settings, or object focus.
 - Select each scene object and confirm the Object Details panel updates.

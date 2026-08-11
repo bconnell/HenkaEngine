@@ -155,6 +155,9 @@ content and scrollbar bounds, and retain the same bounded wheel and thumb-drag
 behavior after resizing. Diagnostic-heavy pages remain separate from normal
 object properties.
 
+`Reset Layout` also restores the default collapsible-group expansion and panel
+scroll offsets while preserving valid named workspace layout slots.
+
 The selected object also shows a transform gizmo inside the dedicated scene viewport.
 
 - `Select` keeps normal viewport selection active. Left-dragging empty Scene View space past the small drag threshold pans the camera/target for laptop touchpads while ordinary clicks still select or clear selection.
