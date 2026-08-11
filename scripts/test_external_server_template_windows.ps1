@@ -38,7 +38,8 @@ function Invoke-ExternalServerNative {
 
 $repoRoot = Get-HenkaRepoRoot -ScriptDirectory $PSScriptRoot
 $templateRoot = Join-Path $repoRoot "templates\external_server_minimal"
-$validationRoot = Join-Path $repoRoot ("build\tv\server_ext_" + (Get-Date -Format "yyyyMMdd_HHmmss"))
+$validationParent = Join-Path $repoRoot "build\tv"
+$validationRoot = Join-Path $validationParent "external_server_minimal"
 $validationSource = Join-Path $validationRoot "external_server_minimal_src"
 $validationBuild = Join-Path $validationRoot "external_server_minimal_build"
 $cmake = Get-HenkaCMakePath
@@ -63,7 +64,38 @@ else {
 
 Write-Host "cmake: $cmake"
 Write-Host "repo: $repoRoot"
+
+function Remove-GeneratedValidationTree {
+    param([Parameter(Mandatory = $true)][string]$Path)
+
+    $fullPath = [System.IO.Path]::GetFullPath($Path)
+    $parentPath = [System.IO.Path]::GetFullPath($validationParent)
+    $stableRoot = [System.IO.Path]::Combine($parentPath, "external_server_minimal")
+    $stableSource = [System.IO.Path]::Combine($stableRoot, "external_server_minimal_src")
+    if ($fullPath -ne $stableRoot -and $fullPath -ne $stableSource -and
+        -not ($fullPath.StartsWith($parentPath + [System.IO.Path]::DirectorySeparatorChar, [System.StringComparison]::OrdinalIgnoreCase) -and
+            [System.IO.Path]::GetFileName($fullPath) -match '^server_ext_[0-9]{8}_[0-9]{6}$')) {
+        throw "Refusing to remove a non-owned external-server generated path: $fullPath"
+    }
+    if (Test-Path -LiteralPath $fullPath) {
+        Remove-Item -LiteralPath $fullPath -Recurse -Force -ErrorAction Stop
+    }
+}
+
+[System.IO.Directory]::CreateDirectory($validationParent) | Out-Null
+$legacyValidationRoots = @(
+    Get-ChildItem -LiteralPath $validationParent -Directory -ErrorAction SilentlyContinue |
+        Where-Object { $_.Name -match '^server_ext_[0-9]{8}_[0-9]{6}$' }
+)
+foreach ($legacyRoot in $legacyValidationRoots) {
+    Remove-GeneratedValidationTree -Path $legacyRoot.FullName
+}
+if ($legacyValidationRoots.Count -gt 0) {
+    Write-Host "Retired $($legacyValidationRoots.Count) superseded external-server validation tree(s)."
+}
+
 [System.IO.Directory]::CreateDirectory($validationRoot) | Out-Null
+Remove-GeneratedValidationTree -Path $validationSource
 Copy-Item -LiteralPath $templateRoot -Destination $validationSource -Recurse
 
 Invoke-ExternalServerNative -FilePath $cmake -Arguments $configureArguments -WorkingDirectory $repoRoot -Label "Configure external server template"

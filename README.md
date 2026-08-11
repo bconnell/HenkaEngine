@@ -21,6 +21,7 @@ Henka Engine is still early, but the sandbox now presents a deterministic two-mo
 ### What currently exists
 
 - C17 build through CMake
+- Generated development output uses bounded owned scratch roots: external-template validation reuses stable `build/tv` trees, Terrain process validation retains only the latest `out/terrain-process-integration` result, and committed Terrain journals auto-compact after their bounded threshold. Use `scripts/check_generated_output_lifecycle_windows.ps1` to detect abnormal file-count or byte growth; generated output is never a source or package input for a later recursive copy
 - `henka` static library target
 - renderer-independent `henka_runtime` static library target for headless consumers
 - `henka_sandbox3d` example target

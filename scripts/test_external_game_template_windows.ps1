@@ -58,7 +58,8 @@ function Invoke-ExternalNativeDirect {
 
 $repoRoot = Get-HenkaRepoRoot -ScriptDirectory $PSScriptRoot
 $templateRoot = Join-Path $repoRoot "templates\external_game_minimal"
-$validationRoot = Join-Path $repoRoot ("build\tv\ext_" + (Get-Date -Format "yyyyMMdd_HHmmss"))
+$validationParent = Join-Path $repoRoot "build\tv"
+$validationRoot = Join-Path $validationParent "external_game_minimal"
 $validationSource = Join-Path $validationRoot "external_game_minimal_src"
 $validationBuild = Join-Path $validationRoot "external_game_minimal_build"
 $cmake = Get-HenkaCMakePath
@@ -120,8 +121,38 @@ $configureArguments += "-DCMAKE_SUPPRESS_REGENERATION=ON"
 Write-Host "cmake: $cmake"
 Write-Host "repo: $repoRoot"
 
+function Remove-GeneratedValidationTree {
+    param([Parameter(Mandatory = $true)][string]$Path)
+
+    $fullPath = [System.IO.Path]::GetFullPath($Path)
+    $parentPath = [System.IO.Path]::GetFullPath($validationParent)
+    $stableRoot = [System.IO.Path]::Combine($parentPath, "external_game_minimal")
+    $stableSource = [System.IO.Path]::Combine($stableRoot, "external_game_minimal_src")
+    if ($fullPath -ne $stableRoot -and $fullPath -ne $stableSource -and
+        -not ($fullPath.StartsWith($parentPath + [System.IO.Path]::DirectorySeparatorChar, [System.StringComparison]::OrdinalIgnoreCase) -and
+            [System.IO.Path]::GetFileName($fullPath) -match '^ext_[0-9]{8}_[0-9]{6}$')) {
+        throw "Refusing to remove a non-owned external-template generated path: $fullPath"
+    }
+    if (Test-Path -LiteralPath $fullPath) {
+        Remove-Item -LiteralPath $fullPath -Recurse -Force -ErrorAction Stop
+    }
+}
+
+[System.IO.Directory]::CreateDirectory($validationParent) | Out-Null
+$legacyValidationRoots = @(
+    Get-ChildItem -LiteralPath $validationParent -Directory -ErrorAction SilentlyContinue |
+        Where-Object { $_.Name -match '^ext_[0-9]{8}_[0-9]{6}$' }
+)
+foreach ($legacyRoot in $legacyValidationRoots) {
+    Remove-GeneratedValidationTree -Path $legacyRoot.FullName
+}
+if ($legacyValidationRoots.Count -gt 0) {
+    Write-Host "Retired $($legacyValidationRoots.Count) superseded external-game validation tree(s)."
+}
+
 Write-Step "Preparing repo-local template validation folder"
 [System.IO.Directory]::CreateDirectory($validationRoot) | Out-Null
+Remove-GeneratedValidationTree -Path $validationSource
 Copy-Item -LiteralPath $templateRoot -Destination $validationSource -Recurse
 
 Invoke-ExternalNativeDirect `

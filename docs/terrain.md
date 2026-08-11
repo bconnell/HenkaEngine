@@ -34,8 +34,12 @@ by subsequent recovery.
 
 `henka_terrain_storage_compact` first recovers complete transactions, rejects
 an active transaction, then atomically replaces the journal with an empty
-durable file. Region snapshots remain the source of truth, so compaction does
-not require loading the world-sized terrain or rewriting every region.
+durable file. Successful commits also compact automatically after the bounded
+`HENKA_TERRAIN_STORAGE_AUTO_COMPACT_THRESHOLD_BYTES` threshold is reached.
+Region snapshots remain the source of truth, so compaction does not require
+loading the world-sized terrain or rewriting every region. This keeps repeated
+tests, dedicated-server sessions, and runtime saves from accumulating committed
+journal history without limit.
 
 ## Streaming boundary
 

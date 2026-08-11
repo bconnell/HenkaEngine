@@ -7,9 +7,39 @@ $repoRoot = Get-HenkaRepoRoot -ScriptDirectory $PSScriptRoot
 $cmake = Get-HenkaCMakePath
 $serverExe = Join-Path $repoRoot "build\examples\dedicated_server\Debug\henka_dedicated_server.exe"
 $clientExe = Join-Path $repoRoot "build\tests\Debug\henka_terrain_process_client.exe"
-$evidenceRoot = Join-Path $repoRoot ("out\terrain-process-integration-" + (Get-Date -Format "yyyyMMdd_HHmmss"))
+$outRoot = Join-Path $repoRoot "out"
+$evidenceRoot = Join-Path $outRoot "terrain-process-integration"
 $saveRoot = Join-Path $evidenceRoot "save"
 
+[System.IO.Directory]::CreateDirectory($outRoot) | Out-Null
+function Remove-GeneratedIntegrationTree {
+    param([Parameter(Mandatory = $true)][string]$Path)
+
+    $fullPath = [System.IO.Path]::GetFullPath($Path)
+    $outPath = [System.IO.Path]::GetFullPath($outRoot)
+    $stableRoot = [System.IO.Path]::Combine($outPath, "terrain-process-integration")
+    $leaf = [System.IO.Path]::GetFileName($fullPath)
+    if ($fullPath -ne $stableRoot -and
+        -not ($fullPath.StartsWith($outPath + [System.IO.Path]::DirectorySeparatorChar, [System.StringComparison]::OrdinalIgnoreCase) -and
+            $leaf -match '^terrain-process-integration-[0-9]{8}_[0-9]{6}$')) {
+        throw "Refusing to remove a non-owned Terrain integration output: $fullPath"
+    }
+    if (Test-Path -LiteralPath $fullPath) {
+        Remove-Item -LiteralPath $fullPath -Recurse -Force -ErrorAction Stop
+    }
+}
+
+$legacyEvidenceRoots = @(
+    Get-ChildItem -LiteralPath $outRoot -Directory -ErrorAction SilentlyContinue |
+        Where-Object { $_.Name -match '^terrain-process-integration-[0-9]{8}_[0-9]{6}$' }
+)
+foreach ($legacyRoot in $legacyEvidenceRoots) {
+    Remove-GeneratedIntegrationTree -Path $legacyRoot.FullName
+}
+if ($legacyEvidenceRoots.Count -gt 0) {
+    Write-Host "Retired $($legacyEvidenceRoots.Count) superseded Terrain integration output(s)."
+}
+Remove-GeneratedIntegrationTree -Path $evidenceRoot
 [System.IO.Directory]::CreateDirectory($evidenceRoot) | Out-Null
 Invoke-HenkaNative -FilePath $cmake -Arguments @(
     "--build", (Join-Path $repoRoot "build"), "--config", "Debug",
@@ -62,7 +92,7 @@ $restartServer = $null
 $restartClient = $null
 try {
     $server = Start-HenkaCapturedProcess -FilePath $serverExe -Arguments @(
-        "--bind", "127.0.0.1", "--port", "7831", "--max-clients", "4",
+        "--bind", "127.0.0.1", "--port", "7831", "--max-clients", "8",
         "--save-root", $saveRoot, "--run-for-ms", "60000"
     ) -WorkingDirectory $repoRoot -StdoutPath (Join-Path $evidenceRoot "server.out.txt") -StderrPath (Join-Path $evidenceRoot "server.err.txt") -CreateNoWindow
     Start-Sleep -Milliseconds 500
@@ -121,7 +151,7 @@ try {
     Close-HenkaCapturedProcess $server; $server = $null
 
     $restartServer = Start-HenkaCapturedProcess -FilePath $serverExe -Arguments @(
-        "--bind", "127.0.0.1", "--port", "7832", "--max-clients", "4",
+        "--bind", "127.0.0.1", "--port", "7832", "--max-clients", "8",
         "--save-root", $saveRoot, "--run-for-ms", "7000"
     ) -WorkingDirectory $repoRoot -StdoutPath (Join-Path $evidenceRoot "restart_server.out.txt") -StderrPath (Join-Path $evidenceRoot "restart_server.err.txt") -CreateNoWindow
     Start-Sleep -Milliseconds 500

@@ -949,7 +949,45 @@ henka_result henka_terrain_storage_commit(
         return result;
     }
     storage->active_transaction_id = 0U;
-    return henka_terrain_storage_recover(storage);
+    result = henka_terrain_storage_recover(storage);
+    if (result == HENKA_SUCCESS)
+    {
+        char* journal_path = NULL;
+        FILE* journal = NULL;
+        long journal_size = 0L;
+
+        if (henka_terrain_storage_journal_path(storage, &journal_path) != HENKA_SUCCESS)
+        {
+            return HENKA_ERROR_INVALID_ARGUMENT;
+        }
+        journal = henka_terrain_open_file(journal_path, "rb");
+        if (journal == NULL)
+        {
+            result = errno == ENOENT ? HENKA_SUCCESS : HENKA_ERROR_PLATFORM;
+        }
+        else if (fseek(journal, 0L, SEEK_END) != 0 ||
+            (journal_size = ftell(journal)) < 0L)
+        {
+            result = HENKA_ERROR_PLATFORM;
+        }
+        else if ((uint64_t)journal_size >=
+            (uint64_t)HENKA_TERRAIN_STORAGE_AUTO_COMPACT_THRESHOLD_BYTES)
+        {
+            result = HENKA_SUCCESS;
+        }
+        if (journal != NULL)
+        {
+            fclose(journal);
+        }
+        henka_free(journal_path);
+
+        if (result == HENKA_SUCCESS &&
+            journal_size >= (long)HENKA_TERRAIN_STORAGE_AUTO_COMPACT_THRESHOLD_BYTES)
+        {
+            result = henka_terrain_storage_compact(storage);
+        }
+    }
+    return result;
 }
 
 henka_result henka_terrain_storage_save_resident_regions(

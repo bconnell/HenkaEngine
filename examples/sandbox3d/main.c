@@ -19826,18 +19826,20 @@ static void sandbox3d_update(henka_engine* engine, double delta_seconds, void* u
         else
         {
             printf(
-                "Environment diagnostics: mode=%s time=%.2fh %s sun=%s.\n",
+                "Environment diagnostics: mode=%s time=%.2fh %s sun=%s moon=%s.\n",
                 sandbox3d_get_environment_mode_label(smoke_environment.mode),
                 smoke_environment.time_of_day_hours,
                 smoke_environment.time_of_day_enabled ? "running" : "paused",
-                smoke_environment.sun.enabled ? "enabled" : "disabled");
+                smoke_environment.sun.enabled ? "enabled" : "disabled",
+                smoke_environment.moon.enabled ? "enabled" : "disabled");
             if (state->environment_stress &&
                 (smoke_environment.mode != HENKA_SCENE_ENVIRONMENT_PROCEDURAL ||
                  !smoke_environment.time_of_day_enabled ||
-                 smoke_environment.time_of_day_hours <= 6.0f))
+                 smoke_environment.time_of_day_hours <= 6.0f ||
+                 !smoke_environment.moon.enabled))
             {
                 state->smoke_validation_failed = true;
-                printf("Environment stress validation failed: procedural sky or advancing sun state was not retained.\n");
+                printf("Environment stress validation failed: procedural sky, advancing sun state, or shared moon state was not retained.\n");
             }
             else if (state->environment_stress)
             {

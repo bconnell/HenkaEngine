@@ -9,6 +9,10 @@
 #define HENKA_TERRAIN_MAX_REGION_RECORD_BYTES (16U * 1024U * 1024U)
 #define HENKA_TERRAIN_MANIFEST_VERSION UINT32_C(1)
 #define HENKA_TERRAIN_MAX_MANIFEST_BYTES 256U
+/* Committed journal history is reclaimed automatically once this bounded
+ * threshold is reached. Explicit compaction remains available for callers
+ * that want to reclaim it earlier. */
+#define HENKA_TERRAIN_STORAGE_AUTO_COMPACT_THRESHOLD_BYTES (8U * 1024U * 1024U)
 
 typedef struct henka_terrain_storage henka_terrain_storage;
 

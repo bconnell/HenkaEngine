@@ -24,6 +24,16 @@ ordinary clean-clone builds.
 
 The script configures and builds the project in `build/`.
 
+`build/` and `out/` are generated roots, not durable source. The external game
+and server template checks reuse the stable scratch roots
+`build/tv/external_game_minimal/` and `build/tv/external_server_minimal/`; they
+retire older timestamped validation roots and never copy a generated validation
+tree back into its own source. The Terrain process integration check similarly
+reuses `out/terrain-process-integration/` and keeps only the latest bounded
+session evidence. Use `scripts/check_generated_output_lifecycle_windows.ps1`
+to inspect these bounds; it fails before an abnormal generated tree can be
+mistaken for normal validation output.
+
 The normal client build keeps the graphical compatibility target `henka` and
 the sandbox enabled. A renderer-free runtime-only configuration is also
 validated independently:
@@ -82,10 +92,11 @@ with:
 .\scripts\soak_terrain_process_integration_windows.ps1 -Iterations 3
 ```
 
-Each iteration starts fresh server/client processes and a fresh save root. This
-proves repeatable cleanup and restart recovery for the advertised resident
-region contract; it does not claim relevance-driven multi-region orchestration
-or production-scale multiplayer capacity.
+Each iteration starts fresh server/client processes and resets the owned stable
+save root before use. This proves repeatable cleanup and restart recovery for
+the advertised resident region contract without retaining one full save tree
+per iteration; it does not claim relevance-driven multi-region orchestration or
+production-scale multiplayer capacity.
 
 ## Run tests
 
@@ -199,7 +210,14 @@ It does not replace human visual QA. You should still confirm by eye that the sc
 .\scripts\test_external_game_template_windows.ps1
 ```
 
-This script copies `templates/external_game_minimal` into a repo-local validation folder under `build/`, configures it against the current Henka checkout, builds it, copies generic shader fixtures beside the executable, and runs the public-API Terrain consumer smokes. The test covers the Terrain material contract, shared edits, collision raycast, CPU render-mesh rebuild, transactional persistence, restart reload, and a graphical Rendered draw with HDR/shadow diagnostics.
+This script copies `templates/external_game_minimal` into the stable repo-local
+validation scratch root under `build/tv/external_game_minimal/`, configures it
+against the current Henka checkout, builds it, copies generic shader fixtures
+beside the executable, and runs the public-API Terrain consumer smokes. The
+test covers the Terrain material contract, shared edits, collision raycast, CPU
+render-mesh rebuild, transactional persistence, restart reload, and a
+graphical Rendered draw with HDR/shadow diagnostics. Repeated validation reuses
+that root instead of creating a complete timestamped nested build each time.
 
 The packaged sandbox does not rely on the repository root as its working directory. Assets resolve relative to the executable folder by default.
 

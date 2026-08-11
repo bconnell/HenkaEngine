@@ -1,8 +1,23 @@
 #include <stdint.h>
+#include <stdio.h>
 #include <string.h>
 
 #include <henka/memory.h>
 #include <henka/terrain_storage.h>
+
+static long test_terrain_storage_file_size(const char* path)
+{
+    FILE* file = fopen(path, "rb");
+    long size;
+    if (file == NULL || fseek(file, 0L, SEEK_END) != 0)
+    {
+        if (file != NULL) { fclose(file); }
+        return -1L;
+    }
+    size = ftell(file);
+    fclose(file);
+    return size;
+}
 
 static int test_codec_and_transaction_recovery(void)
 {
@@ -184,8 +199,59 @@ cleanup:
     return result;
 }
 
+static int test_committed_journal_stays_bounded_across_repeated_runs(void)
+{
+    henka_terrain_world_desc desc = henka_terrain_world_desc_default();
+    henka_terrain_layout layout;
+    henka_terrain_storage* storage = NULL;
+    henka_terrain_sample* samples = NULL;
+    uint32_t index;
+    uint64_t transaction_id;
+    int result = 0;
+
+    if (henka_terrain_world_desc_get_layout(&desc, &layout) != HENKA_SUCCESS ||
+        henka_terrain_storage_create(&desc, "build/test_tmp/terrain_storage_bounded_v1", &storage) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    samples = henka_calloc(layout.samples_per_region, sizeof(*samples));
+    if (samples == NULL)
+    {
+        goto cleanup;
+    }
+    for (index = 0U; index < layout.samples_per_region; ++index)
+    {
+        samples[index].material_weights[0] = 255U;
+    }
+    for (transaction_id = 1U; transaction_id <= 8U; ++transaction_id)
+    {
+        if (henka_terrain_storage_begin(storage, transaction_id) != HENKA_SUCCESS ||
+            henka_terrain_storage_write_region(
+                storage, (henka_terrain_region_id){0, 0},
+                (henka_terrain_revision)transaction_id, transaction_id,
+                samples, layout.samples_per_region) != HENKA_SUCCESS ||
+            henka_terrain_storage_commit(storage, transaction_id) != HENKA_SUCCESS)
+        {
+            goto cleanup;
+        }
+    }
+    if (test_terrain_storage_file_size("build/test_tmp/terrain_storage_bounded_v1/terrain.journal") < 0L ||
+        test_terrain_storage_file_size("build/test_tmp/terrain_storage_bounded_v1/terrain.journal") >=
+            (long)HENKA_TERRAIN_STORAGE_AUTO_COMPACT_THRESHOLD_BYTES)
+    {
+        goto cleanup;
+    }
+    result = 1;
+
+cleanup:
+    henka_terrain_storage_destroy(storage);
+    henka_free(samples);
+    return result;
+}
+
 int main(void)
 {
     return test_codec_and_transaction_recovery() &&
-        test_save_resident_regions_transactionally() ? 0 : 1;
+        test_save_resident_regions_transactionally() &&
+        test_committed_journal_stays_bounded_across_repeated_runs() ? 0 : 1;
 }

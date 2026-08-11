@@ -57,6 +57,13 @@ To validate that template against the current Henka checkout from this repositor
 .\scripts\test_external_game_template_windows.ps1
 ```
 
+The validation script owns and reuses `build/tv/external_game_minimal/` as a
+bounded scratch tree. It replaces only the generated template source snapshot,
+reuses the corresponding build directory, and retires legacy timestamped
+`ext_YYYYMMDD_HHMMSS` trees. The server template follows the same policy under
+`build/tv/external_server_minimal/`. Repeated checks therefore do not create a
+new complete nested engine build on every run.
+
 ## Using the external server template
 
 `templates/external_server_minimal/` is the renderer-free C17 counterpart. It

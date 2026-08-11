@@ -426,7 +426,14 @@ function Stop-HenkaProcessTree {
 
     $taskkill = Join-Path $env:SystemRoot "System32\taskkill.exe"
     if (Test-Path -LiteralPath $taskkill -PathType Leaf) {
-        & $taskkill /PID $ProcessId /T /F 2>$null | Out-Null
+        $previousErrorActionPreference = $ErrorActionPreference
+        try {
+            $ErrorActionPreference = "SilentlyContinue"
+            & $taskkill /PID $ProcessId /T /F 2>$null | Out-Null
+        }
+        finally {
+            $ErrorActionPreference = $previousErrorActionPreference
+        }
     }
 }
 

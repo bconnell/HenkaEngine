@@ -58,3 +58,7 @@ jobs:
       - name: Validate external game template
         shell: powershell
         run: .\scripts\test_external_game_template_windows.ps1 -NoLocalProviders
+
+      - name: Check generated output lifecycle
+        shell: powershell
+        run: .\scripts\check_generated_output_lifecycle_windows.ps1
