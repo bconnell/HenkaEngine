@@ -107,7 +107,7 @@ typedef struct henka_opengl_shader_data
     {
         char name[64];
         GLint location;
-    } locations[96];
+    } locations[128];
 } henka_opengl_shader_data;
 
 typedef struct henka_opengl_renderer_state
@@ -1156,7 +1156,7 @@ static bool henka_validate_shader_contract(
     static const char* material_uniforms[] =
     {
         "model", "view", "projection", "lightMatrix", "baseColor",
-        "baseColorTexture", "useTexture", "useVertexColor", "cameraPosition",
+        "baseColorTexture", "useTexture", "useVertexColor", "useTerrainLayers", "cameraPosition",
         "lightDirection", "lightColor", "lightIntensity", "ambientColor",
         "useLighting", "useEnvironment", "environmentGroundColor",
         "environmentHorizonColor", "environmentZenithColor", "environmentIntensity",

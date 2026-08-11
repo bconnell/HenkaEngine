@@ -337,8 +337,10 @@ borrowed renderer resources outside the Terrain owner.
 For application-only visual evidence, run
 `scripts/capture_visual_evidence_windows.ps1 -Configuration Release -IncludeTerrain`.
 The optional terrain capture uses one deterministic reference camera aimed across
-the seeded rolling/valley/cliff area for Solid, Material Preview, and Rendered,
-so material and presentation comparisons do not change scene data or scene lights.
+the seeded rolling/valley/cliff area for Solid, Material Preview, and Rendered.
+Capture mode refreshes the four bounded fixture regions from their seeded samples
+so persisted editor edits cannot change the comparison; material and
+presentation comparisons do not change scene materials or scene lights.
 The same graphical
 smoke revokes render residency after the upload, forces a candidate mesh
 failure, verifies the previous mesh and revision remain resident, then restores

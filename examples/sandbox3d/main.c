@@ -1760,14 +1760,17 @@ static henka_result sandbox3d_seed_terrain_fixture_region(
     const henka_terrain_layout* layout,
     henka_terrain_region_id region_id,
     uint64_t transaction_id,
-    henka_terrain_sample* samples)
+    henka_terrain_sample* samples,
+    bool overwrite_existing)
 {
     henka_terrain_region_storage_info info;
     henka_result result;
 
     sandbox3d_generate_terrain_fixture(layout, region_id, samples);
-    result = henka_terrain_storage_load_region(
-        storage, region_id, &info, samples, layout->samples_per_region);
+    result = overwrite_existing
+        ? HENKA_ERROR_ASSET_SOURCE
+        : henka_terrain_storage_load_region(
+            storage, region_id, &info, samples, layout->samples_per_region);
     if (result == HENKA_SUCCESS)
     {
         return HENKA_SUCCESS;
@@ -5088,7 +5091,8 @@ static henka_result sandbox3d_initialize_terrain_rendering(
                 &layout,
                 fixture_regions[fixture_index],
                 UINT64_C(0x53414E4454450000) + (uint64_t)fixture_index,
-                seed_samples);
+                seed_samples,
+                state->capture_mode_requested && state->terrain_capture_mode_requested);
             if (result != HENKA_SUCCESS)
             {
                 goto fail;
@@ -6383,10 +6387,10 @@ static void sandbox3d_apply_capture_camera(sandbox3d_state* state)
      * startup uses the scene-first reset framing path. */
     {
         const henka_vec3 target = state->terrain_capture_mode_requested
-            ? (henka_vec3){300.0f, 1.0f, 260.0f}
+            ? (henka_vec3){280.0f, 1.0f, 280.0f}
             : (henka_vec3){0.0f, 2.05f, -1.7f};
         const henka_vec3 position = state->terrain_capture_mode_requested
-            ? (henka_vec3){470.0f, 70.0f, 470.0f}
+            ? (henka_vec3){360.0f, 38.0f, 360.0f}
             : (henka_vec3){0.0f, 3.0f, 8.8f};
         const henka_vec3 direction = henka_vec3_normalize(
             henka_vec3_subtract(target, position));
