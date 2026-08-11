@@ -168,10 +168,11 @@ working directory or settings:
 ```
 
 With `-IncludeTerrain`, the helper validates the three application-only
-Terrain images plus a second same-camera view aimed at the four seeded regions'
-world-space corner with the bounded Scene View guards. This proves packaged
-launch, Rendered-path distinction, and non-flat corner evidence; it remains
-automated evidence rather than human visual approval or complete topology QA.
+Terrain images plus deterministic close-material and four-seeded-region corner
+views with the bounded Scene View guards. This proves packaged launch,
+Rendered-path distinction, and non-flat terrain framing at wide, material-scale,
+and corner views; it remains automated evidence rather than human visual
+approval or complete topology QA.
 
 If any runtime DLLs are needed beside the executable, the package script copies them into the same folder.
 

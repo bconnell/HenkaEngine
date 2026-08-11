@@ -64,6 +64,15 @@ try {
     & (Join-Path $PSScriptRoot "check_terrain_corner_visual_evidence_windows.ps1") `
         -InputDirectory $fixtureRoot | Out-Null
 
+    foreach ($mode in @("solid", "material-preview", "rendered")) {
+        New-TestTerrainImage `
+            -Path (Join-Path $fixtureRoot ("terrain-close-{0}.png" -f $mode)) `
+            -Flat $false `
+            -Rendered ($mode -eq "rendered")
+    }
+    & (Join-Path $PSScriptRoot "check_terrain_close_visual_evidence_windows.ps1") `
+        -InputDirectory $fixtureRoot | Out-Null
+
     New-TestTerrainImage -Path (Join-Path $fixtureRoot "terrain-same-camera-solid.png") -Flat $true -Rendered $false
     New-TestTerrainImage -Path (Join-Path $fixtureRoot "terrain-same-camera-material-preview.png") -Flat $true -Rendered $false
     New-TestTerrainImage -Path (Join-Path $fixtureRoot "terrain-same-camera-rendered.png") -Flat $true -Rendered $true

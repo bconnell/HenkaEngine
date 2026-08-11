@@ -99,7 +99,7 @@ $records.Add("Source: $executable")
 $records.Add("Camera policy: capture-mode runs use the same deterministic two-model showcase camera and never save capture-mode settings")
 $records.Add("Modes: Solid, Material Preview, Rendered")
 $records.Add("Startup evidence: optional ordinary startup camera with the default showcase models")
-$records.Add("Terrain evidence: deterministic wide and four-region-corner cameras")
+$records.Add("Terrain evidence: deterministic wide, close-material, and four-region-corner cameras")
 $records.Add("Capture: application window bounds copied from the desktop into repo-local generated output")
 
 foreach ($mode in $modes) {
@@ -173,7 +173,10 @@ if ($IncludeTerrain) {
         @{ Label = "terrain_rendered"; Arguments = @("--capture-terrain-mode", "rendered"); File = "terrain-same-camera-rendered.png" },
         @{ Label = "terrain_corner_solid"; Arguments = @("--capture-terrain-view", "corner", "solid"); File = "terrain-corner-solid.png" },
         @{ Label = "terrain_corner_material_preview"; Arguments = @("--capture-terrain-view", "corner", "material_preview"); File = "terrain-corner-material-preview.png" },
-        @{ Label = "terrain_corner_rendered"; Arguments = @("--capture-terrain-view", "corner", "rendered"); File = "terrain-corner-rendered.png" }
+        @{ Label = "terrain_corner_rendered"; Arguments = @("--capture-terrain-view", "corner", "rendered"); File = "terrain-corner-rendered.png" },
+        @{ Label = "terrain_close_solid"; Arguments = @("--capture-terrain-view", "close", "solid"); File = "terrain-close-solid.png" },
+        @{ Label = "terrain_close_material_preview"; Arguments = @("--capture-terrain-view", "close", "material_preview"); File = "terrain-close-material-preview.png" },
+        @{ Label = "terrain_close_rendered"; Arguments = @("--capture-terrain-view", "close", "rendered"); File = "terrain-close-rendered.png" }
     )
     foreach ($terrainMode in $terrainModes) {
         $process = Start-HenkaProcess `
@@ -244,6 +247,8 @@ if ($IncludeTerrain) {
     & (Join-Path $PSScriptRoot "check_terrain_visual_evidence_windows.ps1") `
         -InputDirectory $OutputDirectory
     & (Join-Path $PSScriptRoot "check_terrain_corner_visual_evidence_windows.ps1") `
+        -InputDirectory $OutputDirectory
+    & (Join-Path $PSScriptRoot "check_terrain_close_visual_evidence_windows.ps1") `
         -InputDirectory $OutputDirectory
 }
 
