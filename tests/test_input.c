@@ -47,10 +47,13 @@ void henka_test_input(void)
     memset(&input, 0, sizeof(input));
     memset(&tool_window_state, 0, sizeof(tool_window_state));
     tool_window_state.mouse_position = (henka_vec2){12.0f, 34.0f};
+    tool_window_state.mouse_wheel_delta = (henka_vec2){1.25f, -2.5f};
     tool_window_state.mouse_left_down = true;
     tool_window_state.mouse_left_pressed = true;
     HENKA_TEST_ASSERT(tool_window_state.mouse_position.x == 12.0f);
     HENKA_TEST_ASSERT(tool_window_state.mouse_position.y == 34.0f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(tool_window_state.mouse_wheel_delta.x, 1.25f, 0.0001f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(tool_window_state.mouse_wheel_delta.y, -2.5f, 0.0001f);
     HENKA_TEST_ASSERT(tool_window_state.mouse_left_down);
     HENKA_TEST_ASSERT(tool_window_state.mouse_left_pressed);
     HENKA_TEST_ASSERT(!tool_window_state.mouse_left_released);

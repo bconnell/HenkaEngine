@@ -149,9 +149,11 @@ scene state, content height is recomputed after every group change and resize,
 short content does not expose an invalid scrollbar, and longer content shows a
 graphite scrollbar with a draggable thumb. Wheel and fractional touchpad deltas
 belong to the panel body while the pointer is over it; Scene View keeps wheel
-ownership for camera zoom. Detached production panels use the same panel content
-and state model, while diagnostic-heavy pages remain separate from normal object
-properties.
+ownership for camera zoom. Detached production panels receive their own native
+wheel deltas and pointer state, use their detached framebuffer geometry for
+content and scrollbar bounds, and retain the same bounded wheel and thumb-drag
+behavior after resizing. Diagnostic-heavy pages remain separate from normal
+object properties.
 
 The selected object also shows a transform gizmo inside the dedicated scene viewport.
 

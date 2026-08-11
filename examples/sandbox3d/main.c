@@ -1578,16 +1578,28 @@ static sandbox3d_panel_scroll_target sandbox3d_get_panel_scroll_target(const san
 static void sandbox3d_advance_panel_paging(sandbox3d_state* state, sandbox3d_panel_scroll_target target, int delta);
 static henka_ui_rect sandbox3d_panel_content_bounds(
     const sandbox3d_state* state,
+    const sandbox3d_workspace_layout* layout,
     sandbox3d_panel_scroll_target target);
 static henka_ui_rect sandbox3d_panel_scrollbar_bounds(
     const sandbox3d_state* state,
+    const sandbox3d_workspace_layout* layout,
     sandbox3d_panel_scroll_target target);
 static void sandbox3d_draw_panel_scrollbar(
     sandbox3d_state* state,
+    const sandbox3d_workspace_layout* layout,
     sandbox3d_panel_scroll_target target);
 static bool sandbox3d_handle_panel_scrollbar_input(
     sandbox3d_state* state,
+    const sandbox3d_workspace_layout* layout,
     henka_vec2 framebuffer_mouse,
+    bool left_down,
+    bool left_pressed);
+static void sandbox3d_handle_detached_panel_input(
+    sandbox3d_state* state,
+    const sandbox3d_workspace_layout* layout,
+    sandbox3d_workspace_panel_id panel_id,
+    henka_vec2 mouse_position,
+    henka_vec2 wheel_delta,
     bool left_down,
     bool left_pressed);
 static void sandbox3d_draw_value_row(
@@ -1616,6 +1628,7 @@ static void sandbox3d_draw_detached_workspace_panel_content(
     henka_engine* engine,
     sandbox3d_state* state,
     sandbox3d_workspace_panel_id panel_id,
+    const henka_tool_window_state* window_state,
     int framebuffer_width,
     int framebuffer_height);
 static void sandbox3d_build_detached_workspace_panel_ui(henka_engine* engine, sandbox3d_state* state);
@@ -5993,7 +6006,8 @@ static void sandbox3d_close_detached_workspace_panel(
 {
     henka_window_id window_id;
 
-    if (engine == NULL || state == NULL || panel_id < 0 || panel_id >= SANDBOX3D_WORKSPACE_PANEL_COUNT)
+    if (engine == NULL || state == NULL ||
+        panel_id < 0 || panel_id >= SANDBOX3D_WORKSPACE_PANEL_COUNT)
     {
         return;
     }
@@ -6114,6 +6128,7 @@ static void sandbox3d_draw_detached_workspace_panel_content(
     henka_engine* engine,
     sandbox3d_state* state,
     sandbox3d_workspace_panel_id panel_id,
+    const henka_tool_window_state* window_state,
     int framebuffer_width,
     int framebuffer_height)
 {
@@ -6137,7 +6152,8 @@ static void sandbox3d_draw_detached_workspace_panel_content(
     sandbox3d_workspace_dock_zone requested_dock;
     sandbox3d_workspace_layout detached_layout;
 
-    if (engine == NULL || state == NULL || panel_id < 0 || panel_id >= SANDBOX3D_WORKSPACE_PANEL_COUNT)
+    if (engine == NULL || state == NULL || window_state == NULL ||
+        panel_id < 0 || panel_id >= SANDBOX3D_WORKSPACE_PANEL_COUNT)
     {
         return;
     }
@@ -6187,6 +6203,14 @@ static void sandbox3d_draw_detached_workspace_panel_content(
 
     previous_ui = state->ui;
     state->ui = state->detached_panel_ui[panel_id];
+    sandbox3d_handle_detached_panel_input(
+        state,
+        &detached_layout,
+        panel_id,
+        window_state->mouse_position,
+        window_state->mouse_wheel_delta,
+        window_state->mouse_left_down,
+        window_state->mouse_left_pressed);
     requested_dock = SANDBOX3D_WORKSPACE_DOCK_DETACHED;
 
     dock_button_width = ((float)framebuffer_width - 142.0f) / 3.0f;
@@ -6353,6 +6377,7 @@ static void sandbox3d_build_detached_workspace_panel_ui(henka_engine* engine, sa
             engine,
             state,
             panel_id,
+            &window_state,
             frame_desc.framebuffer_width,
             frame_desc.framebuffer_height);
 
@@ -8548,6 +8573,7 @@ static bool sandbox3d_handle_workspace_input(
 
     if (sandbox3d_handle_panel_scrollbar_input(
             state,
+            &state->frame_layout,
             framebuffer_mouse,
             left_down,
             left_pressed))
@@ -12352,27 +12378,30 @@ static bool sandbox3d_controls_flow_disclosure(
 }
 
 static henka_ui_rect sandbox3d_controls_main_content_bounds(
-    const sandbox3d_state* state)
+    const sandbox3d_state* state,
+    const sandbox3d_workspace_layout* layout)
 {
     return sandbox3d_panel_content_bounds(
         state,
+        layout,
         SANDBOX3D_PANEL_SCROLL_CONTROLS);
 }
 
 static henka_ui_rect sandbox3d_panel_content_bounds(
     const sandbox3d_state* state,
+    const sandbox3d_workspace_layout* layout,
     sandbox3d_panel_scroll_target target)
 {
     henka_ui_rect bounds;
 
     bounds = (henka_ui_rect){0.0f, 0.0f, 0.0f, 0.0f};
-    if (state == NULL)
+    if (state == NULL || layout == NULL)
     {
         return bounds;
     }
     if (target == SANDBOX3D_PANEL_SCROLL_CONTROLS)
     {
-        bounds = state->frame_layout.controls_panel;
+        bounds = layout->controls_panel;
         bounds.x += 14.0f;
         bounds.y += 74.0f;
         bounds.width -= 40.0f;
@@ -12380,7 +12409,7 @@ static henka_ui_rect sandbox3d_panel_content_bounds(
     }
     else if (target == SANDBOX3D_PANEL_SCROLL_DETAILS)
     {
-        bounds = state->frame_layout.object_details_panel;
+        bounds = layout->object_details_panel;
         bounds.x += 14.0f;
         bounds.y += 38.0f;
         bounds.width -= 40.0f;
@@ -12395,9 +12424,10 @@ static henka_ui_rect sandbox3d_panel_content_bounds(
 
 static henka_ui_rect sandbox3d_panel_scrollbar_bounds(
     const sandbox3d_state* state,
+    const sandbox3d_workspace_layout* layout,
     sandbox3d_panel_scroll_target target)
 {
-    const henka_ui_rect content = sandbox3d_panel_content_bounds(state, target);
+    const henka_ui_rect content = sandbox3d_panel_content_bounds(state, layout, target);
 
     if (content.width <= 0.0f || content.height <= 0.0f)
     {
@@ -12412,6 +12442,7 @@ static henka_ui_rect sandbox3d_panel_scrollbar_bounds(
 
 static void sandbox3d_draw_panel_scrollbar(
     sandbox3d_state* state,
+    const sandbox3d_workspace_layout* layout,
     sandbox3d_panel_scroll_target target)
 {
     henka_ui_rect track;
@@ -12425,7 +12456,7 @@ static void sandbox3d_draw_panel_scrollbar(
     {
         return;
     }
-    track = sandbox3d_panel_scrollbar_bounds(state, target);
+    track = sandbox3d_panel_scrollbar_bounds(state, layout, target);
     if (track.width <= 0.0f || track.height <= 0.0f)
     {
         return;
@@ -12481,8 +12512,135 @@ static void sandbox3d_draw_panel_scrollbar(
         (henka_vec4){0.25f, 0.34f, 0.42f, 0.95f});
 }
 
+static bool sandbox3d_handle_panel_scrollbar_input_for_target(
+    sandbox3d_state* state,
+    const sandbox3d_workspace_layout* layout,
+    sandbox3d_panel_scroll_target target,
+    sandbox3d_workspace_panel_id panel_id,
+    bool respect_workspace_hover,
+    henka_vec2 framebuffer_mouse,
+    bool left_down,
+    bool left_pressed)
+{
+    const henka_ui_rect track = sandbox3d_panel_scrollbar_bounds(state, layout, target);
+    const bool dragging_active = target == SANDBOX3D_PANEL_SCROLL_CONTROLS
+        ? state->editor_ui.controls_scroll_dragging
+        : state->editor_ui.details_scroll_dragging;
+    bool* dragging;
+    float* grab_offset;
+    float* offset;
+    float content_height;
+    sandbox3d_editor_scroll_state scroll_state;
+    float thumb_height;
+    float thumb_offset;
+    henka_ui_rect thumb;
+
+    if (state == NULL || layout == NULL ||
+        !isfinite(framebuffer_mouse.x) || !isfinite(framebuffer_mouse.y) ||
+        !sandbox3d_workspace_panel_visible(state, panel_id) ||
+        (respect_workspace_hover && !dragging_active &&
+         state->workspace.model.hovered_panel != SANDBOX3D_WORKSPACE_PANEL_NONE &&
+         state->workspace.model.hovered_panel != panel_id))
+    {
+        return false;
+    }
+
+    if (target == SANDBOX3D_PANEL_SCROLL_CONTROLS)
+    {
+        dragging = &state->editor_ui.controls_scroll_dragging;
+        grab_offset = &state->editor_ui.controls_scroll_grab_offset;
+        offset = &state->editor_ui.controls_scroll_offset;
+        content_height = state->editor_ui.controls_content_height;
+    }
+    else if (target == SANDBOX3D_PANEL_SCROLL_DETAILS)
+    {
+        dragging = &state->editor_ui.details_scroll_dragging;
+        grab_offset = &state->editor_ui.details_scroll_grab_offset;
+        offset = &state->editor_ui.details_scroll_offset;
+        content_height = state->editor_ui.details_content_height;
+    }
+    else
+    {
+        return false;
+    }
+
+    if (*dragging)
+    {
+        if (!left_down)
+        {
+            *dragging = false;
+            *grab_offset = 0.0f;
+            return true;
+        }
+        scroll_state = (sandbox3d_editor_scroll_state){
+            *offset,
+            content_height,
+            track.height};
+        if (sandbox3d_editor_ui_scroll_state_set_from_scrollbar(
+                &scroll_state,
+                framebuffer_mouse.y,
+                track.y,
+                track.height,
+                sandbox3d_editor_ui_scrollbar_thumb_height(
+                    content_height,
+                    track.height,
+                    track.height),
+                *grab_offset))
+        {
+            *offset = scroll_state.offset;
+        }
+        return true;
+    }
+
+    if (!left_pressed || !henka_ui_rect_contains(track, framebuffer_mouse))
+    {
+        return false;
+    }
+    scroll_state = (sandbox3d_editor_scroll_state){
+        *offset,
+        content_height,
+        track.height};
+    sandbox3d_editor_ui_scroll_state_set_content(
+        &scroll_state,
+        content_height,
+        track.height);
+    thumb_height = sandbox3d_editor_ui_scrollbar_thumb_height(
+        scroll_state.content_height,
+        scroll_state.viewport_height,
+        track.height);
+    if (thumb_height <= 0.0f)
+    {
+        return false;
+    }
+    thumb_offset = sandbox3d_editor_ui_scrollbar_thumb_offset(
+        scroll_state.offset,
+        scroll_state.content_height,
+        scroll_state.viewport_height,
+        track.height,
+        thumb_height);
+    thumb = (henka_ui_rect){
+        track.x,
+        track.y + thumb_offset,
+        track.width,
+        thumb_height};
+    *grab_offset = henka_ui_rect_contains(thumb, framebuffer_mouse)
+        ? framebuffer_mouse.y - thumb.y
+        : thumb_height * 0.5f;
+    *dragging = true;
+    (void)sandbox3d_editor_ui_scroll_state_set_from_scrollbar(
+        &scroll_state,
+        framebuffer_mouse.y,
+        track.y,
+        track.height,
+        thumb_height,
+        *grab_offset);
+    *offset = scroll_state.offset;
+    return true;
+}
+
 static bool sandbox3d_handle_panel_scrollbar_input(
     sandbox3d_state* state,
+    const sandbox3d_workspace_layout* layout,
     henka_vec2 framebuffer_mouse,
     bool left_down,
     bool left_pressed)
@@ -12494,7 +12652,7 @@ static bool sandbox3d_handle_panel_scrollbar_input(
     };
     size_t index;
 
-    if (state == NULL || !isfinite(framebuffer_mouse.x) ||
+    if (state == NULL || layout == NULL || !isfinite(framebuffer_mouse.x) ||
         !isfinite(framebuffer_mouse.y))
     {
         return false;
@@ -12502,129 +12660,34 @@ static bool sandbox3d_handle_panel_scrollbar_input(
     for (index = 0U; index < sizeof(targets) / sizeof(targets[0]); ++index)
     {
         const sandbox3d_panel_scroll_target target = targets[index];
-        const henka_ui_rect track = sandbox3d_panel_scrollbar_bounds(state, target);
         const sandbox3d_workspace_panel_id panel_id =
             target == SANDBOX3D_PANEL_SCROLL_CONTROLS
                 ? SANDBOX3D_WORKSPACE_PANEL_CONTROLS
                 : SANDBOX3D_WORKSPACE_PANEL_OBJECT_DETAILS;
-        const bool dragging_active = target == SANDBOX3D_PANEL_SCROLL_CONTROLS
-            ? state->editor_ui.controls_scroll_dragging
-            : state->editor_ui.details_scroll_dragging;
-        bool* dragging;
-        float* grab_offset;
-        float* offset;
-        float content_height;
-        sandbox3d_editor_scroll_state scroll_state;
-        float thumb_height;
-        float thumb_offset;
-        henka_ui_rect thumb;
-
-        if (!sandbox3d_workspace_panel_visible(state, panel_id) ||
-            (!dragging_active &&
-             state->workspace.model.hovered_panel != SANDBOX3D_WORKSPACE_PANEL_NONE &&
-             state->workspace.model.hovered_panel != panel_id))
+        if (sandbox3d_handle_panel_scrollbar_input_for_target(
+                state,
+                layout,
+                target,
+                panel_id,
+                true,
+                framebuffer_mouse,
+                left_down,
+                left_pressed))
         {
-            continue;
-        }
-
-        if (target == SANDBOX3D_PANEL_SCROLL_CONTROLS)
-        {
-            dragging = &state->editor_ui.controls_scroll_dragging;
-            grab_offset = &state->editor_ui.controls_scroll_grab_offset;
-            offset = &state->editor_ui.controls_scroll_offset;
-            content_height = state->editor_ui.controls_content_height;
-        }
-        else
-        {
-            dragging = &state->editor_ui.details_scroll_dragging;
-            grab_offset = &state->editor_ui.details_scroll_grab_offset;
-            offset = &state->editor_ui.details_scroll_offset;
-            content_height = state->editor_ui.details_content_height;
-        }
-
-        if (*dragging)
-        {
-            if (!left_down)
-            {
-                *dragging = false;
-                *grab_offset = 0.0f;
-                return true;
-            }
-            scroll_state = (sandbox3d_editor_scroll_state){
-                *offset,
-                content_height,
-                track.height};
-            if (sandbox3d_editor_ui_scroll_state_set_from_scrollbar(
-                    &scroll_state,
-                    framebuffer_mouse.y,
-                    track.y,
-                    track.height,
-                    sandbox3d_editor_ui_scrollbar_thumb_height(
-                        content_height,
-                        track.height,
-                        track.height),
-                    *grab_offset))
-            {
-                *offset = scroll_state.offset;
-            }
             return true;
         }
-
-        if (!left_pressed || !henka_ui_rect_contains(track, framebuffer_mouse))
-        {
-            continue;
-        }
-        scroll_state = (sandbox3d_editor_scroll_state){
-            *offset,
-            content_height,
-            track.height};
-        sandbox3d_editor_ui_scroll_state_set_content(
-            &scroll_state,
-            content_height,
-            track.height);
-        thumb_height = sandbox3d_editor_ui_scrollbar_thumb_height(
-            scroll_state.content_height,
-            scroll_state.viewport_height,
-            track.height);
-        if (thumb_height <= 0.0f)
-        {
-            return false;
-        }
-        thumb_offset = sandbox3d_editor_ui_scrollbar_thumb_offset(
-            scroll_state.offset,
-            scroll_state.content_height,
-            scroll_state.viewport_height,
-            track.height,
-            thumb_height);
-        thumb = (henka_ui_rect){
-            track.x,
-            track.y + thumb_offset,
-            track.width,
-            thumb_height};
-        *grab_offset = henka_ui_rect_contains(thumb, framebuffer_mouse)
-            ? framebuffer_mouse.y - thumb.y
-            : thumb_height * 0.5f;
-        *dragging = true;
-        (void)sandbox3d_editor_ui_scroll_state_set_from_scrollbar(
-            &scroll_state,
-            framebuffer_mouse.y,
-            track.y,
-            track.height,
-            thumb_height,
-            *grab_offset);
-        *offset = scroll_state.offset;
-        return true;
     }
     return false;
 }
 
 static void sandbox3d_handle_panel_scroll(
     sandbox3d_state* state,
+    const sandbox3d_workspace_layout* layout,
     henka_vec2 point,
     sandbox3d_panel_scroll_target target,
     float delta_pixels)
 {
-    if (state == NULL || !isfinite(delta_pixels) || delta_pixels == 0.0f)
+    if (state == NULL || layout == NULL || !isfinite(delta_pixels) || delta_pixels == 0.0f)
     {
         return;
     }
@@ -12635,15 +12698,16 @@ static void sandbox3d_handle_panel_scroll(
             SANDBOX3D_CONTROLS_PAGE_MAIN)
     {
         const henka_ui_rect content_bounds =
-            sandbox3d_controls_main_content_bounds(state);
+            sandbox3d_panel_content_bounds(state, layout, SANDBOX3D_PANEL_SCROLL_CONTROLS);
 
         if (content_bounds.width > 0.0f &&
             content_bounds.height > 0.0f &&
             (henka_ui_rect_contains(content_bounds, point) ||
              henka_ui_rect_contains(
-                 sandbox3d_panel_scrollbar_bounds(
-                     state,
-                     SANDBOX3D_PANEL_SCROLL_CONTROLS),
+                sandbox3d_panel_scrollbar_bounds(
+                    state,
+                    layout,
+                    SANDBOX3D_PANEL_SCROLL_CONTROLS),
                  point)) &&
             sandbox3d_editor_ui_scroll_controls_by(
                 &state->editor_ui,
@@ -12658,15 +12722,17 @@ static void sandbox3d_handle_panel_scroll(
     {
         henka_ui_rect content_bounds = sandbox3d_panel_content_bounds(
             state,
+            layout,
             SANDBOX3D_PANEL_SCROLL_DETAILS);
 
         if (content_bounds.width > 0.0f &&
             content_bounds.height > 0.0f &&
             (henka_ui_rect_contains(content_bounds, point) ||
              henka_ui_rect_contains(
-                 sandbox3d_panel_scrollbar_bounds(
-                     state,
-                     SANDBOX3D_PANEL_SCROLL_DETAILS),
+                sandbox3d_panel_scrollbar_bounds(
+                    state,
+                    layout,
+                    SANDBOX3D_PANEL_SCROLL_DETAILS),
                  point)) &&
             sandbox3d_editor_ui_scroll_details_by(
                 &state->editor_ui,
@@ -12681,6 +12747,61 @@ static void sandbox3d_handle_panel_scroll(
         state,
         target,
         delta_pixels > 0.0f ? 1 : -1);
+}
+
+static void sandbox3d_handle_detached_panel_input(
+    sandbox3d_state* state,
+    const sandbox3d_workspace_layout* layout,
+    sandbox3d_workspace_panel_id panel_id,
+    henka_vec2 mouse_position,
+    henka_vec2 wheel_delta,
+    bool left_down,
+    bool left_pressed)
+{
+    sandbox3d_panel_scroll_target target;
+
+    if (state == NULL || layout == NULL ||
+        !isfinite(mouse_position.x) || !isfinite(mouse_position.y) ||
+        !isfinite(wheel_delta.y))
+    {
+        return;
+    }
+
+    if (panel_id == SANDBOX3D_WORKSPACE_PANEL_CONTROLS)
+    {
+        target = SANDBOX3D_PANEL_SCROLL_CONTROLS;
+    }
+    else if (panel_id == SANDBOX3D_WORKSPACE_PANEL_OBJECT_DETAILS)
+    {
+        target = SANDBOX3D_PANEL_SCROLL_DETAILS;
+    }
+    else
+    {
+        return;
+    }
+
+    if (sandbox3d_handle_panel_scrollbar_input_for_target(
+            state,
+            layout,
+            target,
+            panel_id,
+            false,
+            mouse_position,
+            left_down,
+            left_pressed))
+    {
+        return;
+    }
+
+    if (wheel_delta.y != 0.0f)
+    {
+        sandbox3d_handle_panel_scroll(
+            state,
+            layout,
+            mouse_position,
+            target,
+            -wheel_delta.y * 48.0f);
+    }
 }
 
 static void sandbox3d_draw_controls_panel(
@@ -12808,7 +12929,7 @@ static void sandbox3d_draw_controls_panel(
         henka_ui_rect row;
 
         disclosure_changed = false;
-        flow_desc.bounds = sandbox3d_controls_main_content_bounds(state);
+        flow_desc.bounds = sandbox3d_controls_main_content_bounds(state, layout);
         flow_desc.row_spacing = 6.0f;
         flow_desc.indent_width = 10.0f;
         state->editor_ui.controls_scroll_offset =
@@ -13533,6 +13654,7 @@ static void sandbox3d_draw_controls_panel(
             }
             sandbox3d_draw_panel_scrollbar(
                 state,
+                layout,
                 SANDBOX3D_PANEL_SCROLL_CONTROLS);
         }
     }
@@ -14438,6 +14560,7 @@ static void sandbox3d_draw_object_details_panel(
 
     flow_desc.bounds = sandbox3d_panel_content_bounds(
         state,
+        layout,
         SANDBOX3D_PANEL_SCROLL_DETAILS);
     flow_desc.row_spacing = 6.0f;
     flow_desc.indent_width = 10.0f;
@@ -15309,6 +15432,7 @@ static void sandbox3d_draw_object_details_panel(
     }
     sandbox3d_draw_panel_scrollbar(
         state,
+        layout,
         SANDBOX3D_PANEL_SCROLL_DETAILS);
 }
 
@@ -20082,6 +20206,7 @@ static void sandbox3d_update(henka_engine* engine, double delta_seconds, void* u
         {
             sandbox3d_handle_panel_scroll(
                 state,
+                &state->frame_layout,
                 framebuffer_mouse_position,
                 sandbox3d_get_panel_scroll_target(
                     state,

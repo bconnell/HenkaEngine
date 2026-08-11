@@ -121,6 +121,7 @@ typedef struct henka_platform_tool_window
     bool mouse_left_down;
     bool mouse_left_pressed;
     bool mouse_left_released;
+    henka_vec2 mouse_wheel_delta;
     char last_event[48];
 } henka_platform_tool_window;
 
@@ -263,6 +264,7 @@ static void henka_platform_reset_tool_window_frame_input(
 
         platform->tool_windows[index].mouse_left_pressed = false;
         platform->tool_windows[index].mouse_left_released = false;
+        platform->tool_windows[index].mouse_wheel_delta = (henka_vec2){0.0f, 0.0f};
         platform->tool_windows[index].resized = false;
     }
 }
@@ -708,6 +710,7 @@ bool henka_platform_get_tool_window_state(
     out_state->mouse_left_down = slot->mouse_left_down;
     out_state->mouse_left_pressed = slot->mouse_left_pressed;
     out_state->mouse_left_released = slot->mouse_left_released;
+    out_state->mouse_wheel_delta = slot->mouse_wheel_delta;
     out_state->close_requested = slot->close_requested;
     out_state->resized = slot->resized;
     snprintf(
@@ -1113,6 +1116,8 @@ henka_result henka_platform_poll_events(struct henka_platform* platform, henka_i
                     if (tool_window != NULL)
                     {
                         henka_platform_record_tool_event(platform, tool_window, "wheel", false, false);
+                        tool_window->mouse_wheel_delta.x += event.wheel.x;
+                        tool_window->mouse_wheel_delta.y += event.wheel.y;
                     }
                     else
                     {

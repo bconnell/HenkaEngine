@@ -219,7 +219,7 @@ Fixed physics substeps commit atomically. Scratch allocation failure and finite 
 The compact strip below Scene View keeps essential input-gate, gizmo, hovered-panel, panel-header, and workspace drag state visible while testing, so a rejected viewport or panel gesture can be diagnosed without switching views.
 `Object Use` in Object Details reports the optional object interaction prompt and range only; it is separate from transform tools and gizmo state.
 
-Workspace panel placement, dock sizes, and bounded named layout slots persist through the local settings file. Production panels can detach into separate OS-level windows with matching controls, safe close-to-redock recovery, bounded saved placement, and title-bar drag-back recognition when a focused detached window enters the main-window envelope; shared side docks stack panels vertically instead of overlapping them. Detachable Scene View remains future work. `Native Panel Test` remains available for focused multi-window verification.
+Workspace panel placement, dock sizes, and bounded named layout slots persist through the local settings file. Production panels can detach into separate OS-level windows with matching controls, safe close-to-redock recovery, bounded saved placement, title-bar drag-back recognition when a focused detached window enters the main-window envelope, and the same wheel/scrollbar behavior through detached-window input; shared side docks stack panels vertically instead of overlapping them. Detachable Scene View remains future work. `Native Panel Test` remains available for focused multi-window verification.
 
 When the UI is open:
 

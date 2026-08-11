@@ -60,6 +60,7 @@ typedef struct henka_tool_window_state
     bool close_requested;
     bool resized;
     char last_event[48];
+    henka_vec2 mouse_wheel_delta;
 } henka_tool_window_state;
 
 typedef enum henka_package_mode
