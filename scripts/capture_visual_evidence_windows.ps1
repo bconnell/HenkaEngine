@@ -4,6 +4,8 @@ param(
 
     [string]$OutputDirectory = "",
 
+    [string]$ExecutablePath = "",
+
     [switch]$IncludeStartupShowcase,
 
     [switch]$IncludeTerrain
@@ -15,7 +17,12 @@ $ErrorActionPreference = "Stop"
 . (Join-Path $PSScriptRoot "henka_script_common.ps1")
 
 $repoRoot = Get-HenkaRepoRoot -ScriptDirectory $PSScriptRoot
-$executable = Join-Path $repoRoot ("build\examples\sandbox3d\{0}\henka_sandbox3d.exe" -f $Configuration)
+$executable = if ([string]::IsNullOrWhiteSpace($ExecutablePath)) {
+    Join-Path $repoRoot ("build\examples\sandbox3d\{0}\henka_sandbox3d.exe" -f $Configuration)
+}
+else {
+    [System.IO.Path]::GetFullPath($ExecutablePath)
+}
 if ([string]::IsNullOrWhiteSpace($OutputDirectory)) {
     $OutputDirectory = Join-Path $repoRoot "build\visual_evidence"
 }

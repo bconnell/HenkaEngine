@@ -127,6 +127,8 @@ The package script creates:
   stress fixtures used by `--residency-stress`
 - `out/HenkaSandbox3D/docs/help/sandbox3d.md`
 - `out/HenkaSandbox3D/PACKAGE_INFO.txt`
+- `out/HenkaSandbox3D/README.txt`
+- `out/HenkaSandbox3D/user/` when local sandbox settings have already been created
 
 The packaged executable also accepts `--terrain-stream-stress`. It uses the
 same public Sandbox path to seed the bounded 2x2 fixture, prove the active
@@ -153,8 +155,22 @@ user-profile file is changed by this evidence path. Rendered uses scene
 lighting, the shadow path, transactional HDR/IBL presentation, bloom, and
 temporal presentation; Material Preview uses its deterministic preview-light
 policy and is not a substitute for the Rendered path.
-- `out/HenkaSandbox3D/README.txt`
-- `out/HenkaSandbox3D/user/` when local sandbox settings have already been created
+
+The same helper can target the packaged executable without changing its
+working directory or settings:
+
+```powershell
+.\scripts\capture_visual_evidence_windows.ps1 `
+    -Configuration Release `
+    -ExecutablePath .\out\HenkaSandbox3D\HenkaSandbox3D.exe `
+    -IncludeTerrain `
+    -OutputDirectory .\build\visual_evidence\packaged-terrain
+```
+
+With `-IncludeTerrain`, the helper validates the three application-only
+Terrain images with the bounded Scene View guard. This proves packaged launch
+and Rendered-path distinction; it remains automated evidence rather than human
+visual approval or complete four-way corner validation.
 
 If any runtime DLLs are needed beside the executable, the package script copies them into the same folder.
 
