@@ -157,11 +157,20 @@ bounded recovery request for the missing regional revision range. Complete
 retained history is sent as deltas, while an exhausted or incomplete range
 uses the existing transactional regional snapshot path.
 The connect-time session-info bootstrap covers only the bounded advertised
-resident set; broader reconnect and late-join orchestration remain subsequent
-work. The recovery test covers one bounded resident set through forced
-disconnect, reconnect, and server-wrapper restart, but does not claim
-relevance-driven multi-region orchestration or production-scale multiplayer
-soak. A separate
+resident set. Clients that know their interest center can opt into a second,
+bounded relevance request through `<henka/terrain_client.h>`; the server
+filters resident regions by Chebyshev radius, orders them by squared distance
+with coordinate-stable ties, and caps the response at 16 regions. The
+filtered response is transactional at the client session boundary: the
+client ignores the initial legacy summary while the opt-in request is pending,
+then requests snapshots only for the selected response. Request radius and
+response count are validated before any world state is touched; malformed or
+identity-mismatched requests disconnect the peer. This is bounded selection,
+not application authentication or render/physics residency orchestration.
+The recovery test covers one bounded resident set through forced disconnect,
+reconnect, and server-wrapper restart, while a server regression covers
+coordinate-stable relevance selection. Production-scale multiplayer soak
+remains subsequent work. A separate
 public client-session regression connects two replicas to the same authoritative
 server, bootstraps the advertised region, sends one edit from each peer, and
 compares the complete resident sample arrays against the server after both
@@ -186,11 +195,15 @@ client session adapter owns the
 bounded fragment assembly through `<henka/terrain_replica.h>`; a delta gap
 first requests the retained revision range and uses a snapshot when that
 range is unavailable. Connect-time session info can request the same bounded
-snapshot path for up to 16 advertised resident regions. The Windows process
-harness exercises that bounded late-observer path, explicit client reconnect,
+snapshot path for up to 16 advertised resident regions. An opt-in
+session-interest request narrows that list before snapshot requests using a
+validated center, radius, and maximum count; the response is marked so old
+unfiltered connect summaries are not applied twice. The Windows process
+harness exercises the bounded late-observer path, explicit client reconnect,
 and restart checksum convergence; the finite process soak repeats this bounded
-policy, while relevance-driven reconnect and late-join selection remain
-outside it.
+policy. The selection remains a runtime transport foundation, not application
+authentication, relevance-aware render/physics residency, or production-scale
+multiplayer capacity.
 
 `<henka/terrain_replica.h>` is the bounded client-side state owner consumed by
 `<henka/terrain_client.h>`. It applies a delta only when every affected region advances
@@ -397,8 +410,8 @@ set discovery, stale render identity refresh, one-level cross-LOD edge morphing,
 automated four-edge transition-mesh checks, and physics patch synchronization
 with deterministic capacity-based admission and removal. Full residency-wide
 dirty-neighbor scheduling beyond the bounded physics patch capacity, four-way
-corner visual QA, relevance-driven late-join selection, and production-scale
-multiplayer soak remain subsequent validated runtime slices; the bounded
+corner visual QA, and production-scale multiplayer soak remain subsequent
+validated runtime slices; the bounded
 process integration soak now repeats the advertised resident-region scenario
 for a finite session count.
 Accepted edits can now derive

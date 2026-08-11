@@ -15,6 +15,10 @@ typedef struct henka_terrain_client_desc
     henka_terrain_world* world;
     uint32_t max_snapshot_bytes;
     uint32_t max_pending_prediction_commands;
+    bool session_interest_enabled;
+    henka_terrain_region_id session_center_region;
+    uint32_t session_radius_regions;
+    uint32_t session_max_regions;
 } henka_terrain_client_desc;
 
 typedef struct henka_terrain_client_diagnostics
@@ -33,6 +37,8 @@ typedef struct henka_terrain_client_diagnostics
     uint64_t recovery_delta_request_count;
     uint64_t recovery_snapshot_request_count;
     uint64_t session_snapshot_request_count;
+    uint64_t session_interest_request_count;
+    uint64_t session_interest_region_count;
     uint32_t pending_prediction_count;
     uint64_t prediction_replay_failure_count;
     bool prediction_enabled;
@@ -54,6 +60,8 @@ henka_result henka_terrain_client_reconnect(henka_terrain_client* client);
 henka_result henka_terrain_client_request_snapshot(
     henka_terrain_client* client,
     henka_terrain_snapshot_request request);
+henka_result henka_terrain_client_request_session_interest(
+    henka_terrain_client* client);
 henka_result henka_terrain_client_handle_event(
     henka_terrain_client* client,
     const henka_network_event* event);

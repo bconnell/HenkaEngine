@@ -106,6 +106,8 @@ try {
     $firstOutput = (Get-Content -LiteralPath (Join-Path $evidenceRoot "client_a.out.txt") -Raw) +
         (Get-Content -LiteralPath (Join-Path $evidenceRoot "client_b.out.txt") -Raw)
     if ($firstOutput -notmatch "terrain process client connected=" -or
+        $firstOutput -notmatch "session-interest=1" -or
+        $firstOutput -notmatch "filtered-regions=1" -or
         $firstOutput -notmatch "accepted=1" -or $firstOutput -notmatch "rejected=1") {
         throw "The two independent clients did not prove one accepted and one stale Terrain edit."
     }
@@ -128,6 +130,7 @@ try {
     $lateOutput = Get-Content -LiteralPath (Join-Path $evidenceRoot "late_client.out.txt") -Raw
     $lateChecksumMatch = [Regex]::Match($lateOutput, "checksum=([0-9]+)")
     if ($lateOutput -notmatch "mode=observe" -or $lateOutput -notmatch "snapshots=1" -or
+        $lateOutput -notmatch "session-interest=1" -or $lateOutput -notmatch "filtered-regions=1" -or
         $lateOutput -notmatch ("revision=" + $acceptedRevision) -or -not $lateChecksumMatch.Success -or
         $lateChecksumMatch.Groups[1].Value -ne $acceptedChecksumMatch.Groups[1].Value) {
         throw "The late-join Terrain client did not converge to the accepted resident region."
@@ -139,6 +142,7 @@ try {
     $reconnectOutput = Get-Content -LiteralPath (Join-Path $evidenceRoot "reconnect_client.out.txt") -Raw
     if ($reconnectOutput -notmatch "mode=reconnect" -or
         $reconnectOutput -notmatch "connected=2" -or
+        $reconnectOutput -notmatch "session-interest=2" -or $reconnectOutput -notmatch "filtered-regions=2" -or
         $reconnectOutput -notmatch "accepted=1" -or
         $reconnectOutput -notmatch ("revision=" + ($acceptedRevision + 1))) {
         throw "The reconnecting Terrain client did not complete a fresh connection after its accepted edit."
@@ -165,6 +169,7 @@ try {
     $restartChecksumMatch = [Regex]::Match($restartOutput, "checksum=([0-9]+)")
     if ($restartOutput -notmatch "mode=observe" -or
         $restartOutput -notmatch "snapshots=1" -or
+        $restartOutput -notmatch "session-interest=1" -or $restartOutput -notmatch "filtered-regions=1" -or
         $restartOutput -notmatch ("revision=" + ($acceptedRevision + 1)) -or
         -not $restartChecksumMatch.Success -or
         $restartChecksumMatch.Groups[1].Value -ne $reconnectChecksumMatch.Groups[1].Value) {

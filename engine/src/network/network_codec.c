@@ -52,6 +52,7 @@ bool henka_network_message_type_is_valid(henka_network_message_type type)
         case HENKA_NETWORK_MESSAGE_SNAPSHOT_FRAGMENT:
         case HENKA_NETWORK_MESSAGE_SNAPSHOT_REQUEST:
         case HENKA_NETWORK_MESSAGE_TERRAIN_RECOVERY_REQUEST:
+        case HENKA_NETWORK_MESSAGE_TERRAIN_SESSION_REQUEST:
             return true;
         default:
             return false;

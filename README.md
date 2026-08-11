@@ -25,7 +25,7 @@ Henka Engine is still early, but the sandbox now presents a deterministic two-mo
 - `henka` static library target
 - renderer-independent `henka_runtime` static library target for headless consumers
 - `henka_sandbox3d` example target
-- renderer-free `henka_dedicated_server` host target with bounded config-file loading, validated optional Terrain base-world loading, fixed-tick simulation, Terrain snapshot recovery, loopback smoke connectivity, transactional edit persistence, graceful client shutdown, and a bounded `--run-for-ms` integration mode; a headless deployment package and restart-persistence check are available, while broader relevance-driven late-join orchestration and production-scale multiplayer soak remain unfinished; the bounded process integration soak repeats the full two-client/reconnect/restart scenario for a configured finite number of sessions
+- renderer-free `henka_dedicated_server` host target with bounded config-file loading, validated optional Terrain base-world loading, fixed-tick simulation, Terrain snapshot recovery, loopback smoke connectivity, transactional edit persistence, graceful client shutdown, and a bounded `--run-for-ms` integration mode; a headless deployment package and restart-persistence check are available, while opt-in bounded relevance-filtered reconnect/late-join selection is available through the Terrain client/server session contract and production-scale multiplayer soak remains unfinished; the bounded process integration soak repeats the full two-client/reconnect/restart scenario for a configured finite number of sessions
 - `henka_tests` unit test target with CTest integration
 - SDL3-backed platform layer hidden behind Henka headers
 - OpenGL renderer backend isolated inside renderer implementation files
@@ -117,7 +117,7 @@ Henka Engine is still early, but the sandbox now presents a deterministic two-mo
 - Full production editor and project-authoring workflow
 - Full asset browser, import/reimport, dependency-graph, and project authoring workflow (the sandbox has only a bounded manager-known asset view and editable-instance texture-slot assignment)
 - Audio
-- Relevance-driven reconnect/late-join Terrain recovery orchestration and production-scale dedicated-server multiplayer soak tooling; a bounded repeated process soak is available for the existing advertised-resident-region contract
+- Production-scale dedicated-server multiplayer soak tooling; bounded relevance-filtered reconnect/late-join selection is available, while application authentication, render/physics residency orchestration, and production-scale capacity remain unfinished
 - Scripting
 - Full 2D renderer
 - Full 2.5D sprite, layered-depth, parallax, animation, and constrained-movement workflow

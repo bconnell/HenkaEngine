@@ -15,6 +15,11 @@ struct henka_terrain_client
     henka_terrain_client_diagnostics diagnostics;
     uint64_t last_snapshot_retry_transfer_id;
     uint32_t snapshot_retry_count;
+    bool session_interest_enabled;
+    henka_terrain_region_id session_center_region;
+    uint32_t session_radius_regions;
+    uint32_t session_max_regions;
+    bool session_interest_pending;
 };
 
 henka_terrain_client_desc henka_terrain_client_desc_default(void)
@@ -23,7 +28,11 @@ henka_terrain_client_desc henka_terrain_client_desc_default(void)
         NULL,
         NULL,
         HENKA_TERRAIN_MAX_REGION_RECORD_BYTES,
-        16U};
+        16U,
+        false,
+        {0, 0},
+        0U,
+        HENKA_TERRAIN_NETWORK_MAX_SESSION_REGIONS};
 }
 
 henka_result henka_terrain_client_create(
@@ -69,6 +78,12 @@ henka_result henka_terrain_client_create(
     }
     client->network = desc->network;
     client->world = desc->world;
+    client->session_interest_enabled = desc->session_interest_enabled;
+    client->session_center_region = desc->session_center_region;
+    client->session_radius_regions = desc->session_radius_regions;
+    client->session_max_regions = desc->session_max_regions != 0U
+        ? desc->session_max_regions : HENKA_TERRAIN_NETWORK_MAX_SESSION_REGIONS;
+    client->session_interest_pending = false;
     *out_client = client;
     return HENKA_SUCCESS;
 }
@@ -120,6 +135,43 @@ henka_result henka_terrain_client_reconnect(henka_terrain_client* client)
     return client == NULL
         ? HENKA_ERROR_INVALID_ARGUMENT
         : henka_network_client_reconnect(client->network);
+}
+
+henka_result henka_terrain_client_request_session_interest(
+    henka_terrain_client* client)
+{
+    henka_terrain_world_desc desc;
+    henka_terrain_session_request request;
+    uint8_t payload[HENKA_TERRAIN_NETWORK_MAX_SESSION_REQUEST_BYTES];
+    size_t payload_size;
+    if (client == NULL || !client->session_interest_enabled ||
+        henka_terrain_world_get_desc(client->world, &desc) != HENKA_SUCCESS)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    request = (henka_terrain_session_request){
+        desc.world_identity,
+        desc.base_asset_identity,
+        client->session_center_region,
+        client->session_radius_regions,
+        client->session_max_regions};
+    if (henka_terrain_session_request_encode(
+            &request, payload, sizeof(payload), &payload_size) != HENKA_SUCCESS)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    if (henka_network_client_send(
+            client->network,
+            HENKA_NETWORK_CHANNEL_CONTROL,
+            HENKA_NETWORK_MESSAGE_TERRAIN_SESSION_REQUEST,
+            payload,
+            payload_size) != HENKA_SUCCESS)
+    {
+        return HENKA_ERROR_PLATFORM;
+    }
+    client->session_interest_pending = true;
+    ++client->diagnostics.session_interest_request_count;
+    return HENKA_SUCCESS;
 }
 
 henka_result henka_terrain_client_request_snapshot(
@@ -239,6 +291,18 @@ static henka_result henka_terrain_client_handle_session_info(
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
+    if (client->session_interest_pending && info.flags == 0U)
+    {
+        /* The server sends its bounded legacy summary immediately on connect.
+         * An opted-in client waits for the relevance-filtered response so it
+         * does not bootstrap an irrelevant second set of regions. */
+        return HENKA_SUCCESS;
+    }
+    if ((info.flags & HENKA_TERRAIN_SESSION_INFO_FLAG_RELEVANCE_FILTERED) != 0U)
+    {
+        client->session_interest_pending = false;
+        client->diagnostics.session_interest_region_count += info.region_count;
+    }
     for (index = 0U; index < info.region_count; ++index)
     {
         henka_terrain_region_state state;
@@ -297,6 +361,11 @@ henka_result henka_terrain_client_handle_event(
         ++client->diagnostics.connected_event_count;
         client->last_snapshot_retry_transfer_id = 0U;
         client->snapshot_retry_count = 0U;
+        if (client->session_interest_enabled &&
+            henka_terrain_client_request_session_interest(client) != HENKA_SUCCESS)
+        {
+            return HENKA_ERROR_PLATFORM;
+        }
         return HENKA_SUCCESS;
     }
     if (event->type == HENKA_NETWORK_EVENT_DISCONNECTED)

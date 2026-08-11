@@ -378,9 +378,13 @@ static int test_session_info_order_is_coordinate_stable(void)
     const henka_terrain_region_id expected_ids[] = {{1, 0}, {2, 1}, {0, 2}};
     henka_network_event event;
     henka_terrain_session_info info;
+    henka_terrain_session_request session_request;
+    uint8_t session_request_payload[HENKA_TERRAIN_NETWORK_MAX_SESSION_REQUEST_BYTES];
+    size_t session_request_payload_size;
     uint32_t index;
     uint32_t iteration;
     int received = 0;
+    int filtered_received = 0;
     int result = 0;
 
     world_desc.max_resident_regions = 3U;
@@ -459,7 +463,46 @@ static int test_session_info_order_is_coordinate_stable(void)
             received = 1;
         }
     }
-    result = received;
+    session_request = (henka_terrain_session_request){
+        world_desc.world_identity,
+        world_desc.base_asset_identity,
+        (henka_terrain_region_id){2, 1},
+        1U,
+        2U};
+    if (!received ||
+        henka_terrain_session_request_encode(
+            &session_request,
+            session_request_payload,
+            sizeof(session_request_payload),
+            &session_request_payload_size) != HENKA_SUCCESS ||
+        henka_network_client_send(
+            client,
+            HENKA_NETWORK_CHANNEL_CONTROL,
+            HENKA_NETWORK_MESSAGE_TERRAIN_SESSION_REQUEST,
+            session_request_payload,
+            session_request_payload_size) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    for (iteration = 0U; iteration < 2000U && !filtered_received; ++iteration)
+    {
+        if (henka_terrain_server_poll(server, 2U, iteration + 2000U) != HENKA_SUCCESS ||
+            henka_network_client_poll(client, 2U, &event) != HENKA_SUCCESS)
+        {
+            goto cleanup;
+        }
+        if (event.type == HENKA_NETWORK_EVENT_MESSAGE &&
+            event.message.type == HENKA_NETWORK_MESSAGE_CONNECT &&
+            henka_terrain_session_info_decode(
+                event.message.payload, event.message.payload_size, &info) == HENKA_SUCCESS &&
+            info.flags == HENKA_TERRAIN_SESSION_INFO_FLAG_RELEVANCE_FILTERED)
+        {
+            filtered_received = info.region_count == 2U &&
+                info.regions[0].region_id.x == 2 && info.regions[0].region_id.z == 1 &&
+                info.regions[1].region_id.x == 1 && info.regions[1].region_id.z == 0;
+        }
+    }
+    result = received && filtered_received;
 
 cleanup:
     henka_terrain_server_destroy(server);

@@ -36,6 +36,9 @@ typedef struct henka_terrain_server_diagnostics
     uint64_t delta_recovery_request_count;
     uint64_t delta_recovery_sent_count;
     uint64_t delta_recovery_snapshot_fallback_count;
+    uint64_t session_interest_request_count;
+    uint64_t session_interest_failure_count;
+    uint64_t session_interest_region_count;
 } henka_terrain_server_diagnostics;
 
 henka_terrain_server_desc henka_terrain_server_desc_default(void);

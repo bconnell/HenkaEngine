@@ -102,6 +102,10 @@ int main(int argc, char** argv)
     client_desc = henka_terrain_client_desc_default();
     client_desc.network = network;
     client_desc.world = world;
+    client_desc.session_interest_enabled = true;
+    client_desc.session_center_region = (henka_terrain_region_id){0, 0};
+    client_desc.session_radius_regions = 0U;
+    client_desc.session_max_regions = 1U;
     if (henka_terrain_client_create(&client_desc, &client) != HENKA_SUCCESS)
     {
         goto cleanup;
@@ -157,7 +161,8 @@ int main(int argc, char** argv)
         }
         if (response_received &&
             (strcmp(mode, "reconnect") != 0 ||
-             diagnostics.connected_event_count >= 2U))
+             (diagnostics.connected_event_count >= 2U &&
+              diagnostics.session_interest_region_count >= diagnostics.connected_event_count)))
         {
             reconnect_complete = strcmp(mode, "reconnect") == 0 ? 1 : 0;
             break;
@@ -169,12 +174,14 @@ int main(int argc, char** argv)
         (strcmp(mode, "reconnect") != 0 || reconnect_complete != 0))
     {
         printf(
-            "terrain process client connected=%llu disconnected=%llu snapshots=%llu accepted=%llu rejected=%llu revision=%llu checksum=%llu mode=%s\n",
+            "terrain process client connected=%llu disconnected=%llu snapshots=%llu accepted=%llu rejected=%llu session-interest=%llu filtered-regions=%llu revision=%llu checksum=%llu mode=%s\n",
             (unsigned long long)diagnostics.connected_event_count,
             (unsigned long long)diagnostics.disconnected_event_count,
             (unsigned long long)diagnostics.completed_snapshot_count,
             (unsigned long long)diagnostics.acceptance_count,
             (unsigned long long)diagnostics.rejection_count,
+            (unsigned long long)diagnostics.session_interest_request_count,
+            (unsigned long long)diagnostics.session_interest_region_count,
             (unsigned long long)(henka_terrain_world_get_region_state(
                 world, (henka_terrain_region_id){0, 0}, &region) == HENKA_SUCCESS
                 ? region.revision : 0U),
@@ -186,12 +193,14 @@ int main(int argc, char** argv)
     {
         fprintf(
             stderr,
-            "terrain process client incomplete connected=%llu disconnected=%llu snapshots=%llu accepted=%llu rejected=%llu response=%d reconnect_requested=%d\n",
+            "terrain process client incomplete connected=%llu disconnected=%llu snapshots=%llu accepted=%llu rejected=%llu session-interest=%llu filtered-regions=%llu response=%d reconnect_requested=%d\n",
             (unsigned long long)diagnostics.connected_event_count,
             (unsigned long long)diagnostics.disconnected_event_count,
             (unsigned long long)diagnostics.completed_snapshot_count,
             (unsigned long long)diagnostics.acceptance_count,
             (unsigned long long)diagnostics.rejection_count,
+            (unsigned long long)diagnostics.session_interest_request_count,
+            (unsigned long long)diagnostics.session_interest_region_count,
             response_received,
             reconnect_requested);
     }

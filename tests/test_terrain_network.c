@@ -18,6 +18,8 @@ static int test_request_and_response_codecs(void)
     henka_terrain_snapshot_fragment decoded_snapshot_fragment;
     henka_terrain_session_info session_info = {0};
     henka_terrain_session_info decoded_session_info;
+    henka_terrain_session_request session_request = {0};
+    henka_terrain_session_request decoded_session_request;
     henka_terrain_delta_recovery_request recovery_request = {0};
     henka_terrain_delta_recovery_request decoded_recovery_request;
     uint8_t buffer[HENKA_TERRAIN_NETWORK_MAX_EDIT_REQUEST_BYTES];
@@ -195,6 +197,38 @@ static int test_request_and_response_codecs(void)
     buffer[40U] = 1U;
     if (henka_terrain_delta_recovery_request_decode(
             buffer, size, &decoded_recovery_request) != HENKA_ERROR_INVALID_ARGUMENT)
+    {
+        return 0;
+    }
+    session_request.world_identity = 11U;
+    session_request.base_asset_identity = 22U;
+    session_request.center_region = (henka_terrain_region_id){4, 5};
+    session_request.radius_regions = 2U;
+    session_request.max_regions = 6U;
+    if (henka_terrain_session_request_encode(
+            &session_request, buffer, sizeof(buffer), &size) != HENKA_SUCCESS ||
+        henka_terrain_session_request_decode(
+            buffer, size, &decoded_session_request) != HENKA_SUCCESS ||
+        decoded_session_request.center_region.x != 4 ||
+        decoded_session_request.center_region.z != 5 ||
+        decoded_session_request.radius_regions != 2U ||
+        decoded_session_request.max_regions != 6U)
+    {
+        return 0;
+    }
+    buffer[24U] = (uint8_t)(HENKA_TERRAIN_NETWORK_MAX_SESSION_RADIUS + 1U);
+    if (henka_terrain_session_request_decode(
+            buffer, size, &decoded_session_request) != HENKA_ERROR_INVALID_ARGUMENT)
+    {
+        return 0;
+    }
+    session_info.region_count = 1U;
+    session_info.flags = HENKA_TERRAIN_SESSION_INFO_FLAG_RELEVANCE_FILTERED;
+    if (henka_terrain_session_info_encode(
+            &session_info, buffer, sizeof(buffer), &size) != HENKA_SUCCESS ||
+        henka_terrain_session_info_decode(
+            buffer, size, &decoded_session_info) != HENKA_SUCCESS ||
+        decoded_session_info.flags != HENKA_TERRAIN_SESSION_INFO_FLAG_RELEVANCE_FILTERED)
     {
         return 0;
     }

@@ -138,6 +138,10 @@ static int test_client_snapshot_and_delta_path(void)
     client_config = henka_terrain_client_desc_default();
     client_config.network = network_client;
     client_config.world = client_world;
+    client_config.session_interest_enabled = true;
+    client_config.session_center_region = (henka_terrain_region_id){0, 0};
+    client_config.session_radius_regions = 0U;
+    client_config.session_max_regions = 1U;
     if (henka_terrain_client_create(&client_config, &terrain_client) != HENKA_SUCCESS)
     {
         goto cleanup;
@@ -172,7 +176,9 @@ static int test_client_snapshot_and_delta_path(void)
         }
         henka_terrain_client_get_diagnostics(terrain_client, &client_diagnostics);
         if (client_diagnostics.completed_snapshot_count == 1U &&
-            client_diagnostics.session_snapshot_request_count == 1U)
+            client_diagnostics.session_snapshot_request_count == 1U &&
+            client_diagnostics.session_interest_request_count == 1U &&
+            client_diagnostics.session_interest_region_count >= 1U)
         {
             break;
         }

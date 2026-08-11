@@ -13,11 +13,13 @@
 #define HENKA_TERRAIN_NETWORK_MAX_DELTA_BYTES 512U
 #define HENKA_TERRAIN_NETWORK_MAX_SNAPSHOT_REQUEST_BYTES 32U
 #define HENKA_TERRAIN_NETWORK_MAX_RECOVERY_REQUEST_BYTES 48U
+#define HENKA_TERRAIN_NETWORK_MAX_SESSION_REQUEST_BYTES 32U
 #define HENKA_TERRAIN_NETWORK_MAX_SNAPSHOT_FRAGMENT_HEADER_BYTES 64U
 #define HENKA_TERRAIN_NETWORK_MAX_SNAPSHOT_FRAGMENT_DATA_BYTES \
     (HENKA_NETWORK_MAX_SNAPSHOT_FRAGMENT_PAYLOAD - HENKA_TERRAIN_NETWORK_MAX_SNAPSHOT_FRAGMENT_HEADER_BYTES)
 #define HENKA_TERRAIN_NETWORK_MAX_SNAPSHOT_FRAGMENTS 1024U
 #define HENKA_TERRAIN_NETWORK_MAX_SESSION_REGIONS 16U
+#define HENKA_TERRAIN_NETWORK_MAX_SESSION_RADIUS 32U
 
 typedef struct henka_terrain_network_region_revision
 {
@@ -86,7 +88,22 @@ typedef struct henka_terrain_session_info
     henka_terrain_base_asset_identity base_asset_identity;
     uint32_t region_count;
     henka_terrain_session_region regions[HENKA_TERRAIN_NETWORK_MAX_SESSION_REGIONS];
+    uint32_t flags;
 } henka_terrain_session_info;
+
+enum
+{
+    HENKA_TERRAIN_SESSION_INFO_FLAG_RELEVANCE_FILTERED = 1U << 0
+};
+
+typedef struct henka_terrain_session_request
+{
+    henka_terrain_world_identity world_identity;
+    henka_terrain_base_asset_identity base_asset_identity;
+    henka_terrain_region_id center_region;
+    uint32_t radius_regions;
+    uint32_t max_regions;
+} henka_terrain_session_request;
 
 typedef struct henka_terrain_snapshot_fragment
 {
@@ -183,6 +200,15 @@ henka_result henka_terrain_session_info_decode(
     const uint8_t* buffer,
     size_t buffer_size,
     henka_terrain_session_info* out_info);
+henka_result henka_terrain_session_request_encode(
+    const henka_terrain_session_request* request,
+    uint8_t* buffer,
+    size_t buffer_capacity,
+    size_t* out_size);
+henka_result henka_terrain_session_request_decode(
+    const uint8_t* buffer,
+    size_t buffer_size,
+    henka_terrain_session_request* out_request);
 henka_result henka_terrain_snapshot_fragment_encode(
     const henka_terrain_snapshot_fragment* fragment,
     uint8_t* buffer,

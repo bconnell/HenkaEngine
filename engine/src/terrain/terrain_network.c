@@ -485,7 +485,11 @@ henka_result henka_terrain_session_info_encode(
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
-    size = 20U + (size_t)info->region_count * 24U;
+    if ((info->flags & ~HENKA_TERRAIN_SESSION_INFO_FLAG_RELEVANCE_FILTERED) != 0U)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    size = 20U + (size_t)info->region_count * 24U + (info->flags != 0U ? 4U : 0U);
     if (buffer_capacity < size)
     {
         return HENKA_ERROR_LIMIT;
@@ -504,6 +508,10 @@ henka_result henka_terrain_session_info_encode(
         henka_terrain_network_write_u32(buffer + offset + 4U, (uint32_t)info->regions[index].region_id.z);
         henka_terrain_network_write_u64(buffer + offset + 8U, info->regions[index].revision);
         henka_terrain_network_write_u64(buffer + offset + 16U, info->regions[index].generation);
+    }
+    if (info->flags != 0U)
+    {
+        henka_terrain_network_write_u32(buffer + 20U + (size_t)info->region_count * 24U, info->flags);
     }
     *out_size = size;
     return HENKA_SUCCESS;
@@ -529,7 +537,7 @@ henka_result henka_terrain_session_info_decode(
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
     expected_size = 20U + (size_t)out_info->region_count * 24U;
-    if (buffer_size != expected_size)
+    if (buffer_size != expected_size && buffer_size != expected_size + 4U)
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
@@ -544,6 +552,69 @@ henka_result henka_terrain_session_info_decode(
         }
         out_info->regions[index].revision = henka_terrain_network_read_u64(buffer + offset + 8U);
         out_info->regions[index].generation = henka_terrain_network_read_u64(buffer + offset + 16U);
+    }
+    if (buffer_size == expected_size + 4U)
+    {
+        out_info->flags = henka_terrain_network_read_u32(buffer + expected_size);
+        if ((out_info->flags & ~HENKA_TERRAIN_SESSION_INFO_FLAG_RELEVANCE_FILTERED) != 0U)
+        {
+            return HENKA_ERROR_INVALID_ARGUMENT;
+        }
+    }
+    return HENKA_SUCCESS;
+}
+
+henka_result henka_terrain_session_request_encode(
+    const henka_terrain_session_request* request,
+    uint8_t* buffer,
+    size_t buffer_capacity,
+    size_t* out_size)
+{
+    if (request == NULL || buffer == NULL || out_size == NULL ||
+        request->center_region.x < 0 || request->center_region.z < 0 ||
+        request->radius_regions > HENKA_TERRAIN_NETWORK_MAX_SESSION_RADIUS ||
+        request->max_regions == 0U ||
+        request->max_regions > HENKA_TERRAIN_NETWORK_MAX_SESSION_REGIONS)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    if (buffer_capacity < HENKA_TERRAIN_NETWORK_MAX_SESSION_REQUEST_BYTES)
+    {
+        return HENKA_ERROR_LIMIT;
+    }
+    henka_terrain_network_write_u64(buffer + 0U, request->world_identity);
+    henka_terrain_network_write_u64(buffer + 8U, request->base_asset_identity);
+    henka_terrain_network_write_u32(buffer + 16U, (uint32_t)request->center_region.x);
+    henka_terrain_network_write_u32(buffer + 20U, (uint32_t)request->center_region.z);
+    henka_terrain_network_write_u32(buffer + 24U, request->radius_regions);
+    henka_terrain_network_write_u32(buffer + 28U, request->max_regions);
+    *out_size = HENKA_TERRAIN_NETWORK_MAX_SESSION_REQUEST_BYTES;
+    return HENKA_SUCCESS;
+}
+
+henka_result henka_terrain_session_request_decode(
+    const uint8_t* buffer,
+    size_t buffer_size,
+    henka_terrain_session_request* out_request)
+{
+    if (buffer == NULL || out_request == NULL ||
+        buffer_size != HENKA_TERRAIN_NETWORK_MAX_SESSION_REQUEST_BYTES)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    memset(out_request, 0, sizeof(*out_request));
+    out_request->world_identity = henka_terrain_network_read_u64(buffer + 0U);
+    out_request->base_asset_identity = henka_terrain_network_read_u64(buffer + 8U);
+    out_request->center_region.x = (int32_t)henka_terrain_network_read_u32(buffer + 16U);
+    out_request->center_region.z = (int32_t)henka_terrain_network_read_u32(buffer + 20U);
+    out_request->radius_regions = henka_terrain_network_read_u32(buffer + 24U);
+    out_request->max_regions = henka_terrain_network_read_u32(buffer + 28U);
+    if (out_request->center_region.x < 0 || out_request->center_region.z < 0 ||
+        out_request->radius_regions > HENKA_TERRAIN_NETWORK_MAX_SESSION_RADIUS ||
+        out_request->max_regions == 0U ||
+        out_request->max_regions > HENKA_TERRAIN_NETWORK_MAX_SESSION_REGIONS)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
     }
     return HENKA_SUCCESS;
 }
