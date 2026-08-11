@@ -378,16 +378,19 @@ priming; edits become persistent only through the normal transactional storage
 path. This proves bounded procedural broad-world regeneration and a small
 persistent camera crossing fixture, not asynchronous background physics/render
 regeneration or human visual approval.
-The Utility Terrain
-tab now exposes bounded resident/render/collision statistics and raise, lower,
-flatten, smooth, and paint controls with radius, strength, layer, and falloff
-settings. It uses the same deterministic command API as runtime callers; a
-resident physics hit now supplies the integer sample center for the next
-command. A bounded horizontal brush preview follows a successful resident
-physics hit while the Terrain utility is active. Brush radius, strength, active
-layer, falloff, and operation are persisted through the normal Sandbox settings
-file with range validation on load, while complete material preview remains
-unfinished.
+The Utility Terrain tab now exposes bounded resident/render/collision statistics
+and raise, lower, flatten, smooth, and paint controls with radius, strength,
+layer, and falloff settings. It uses the same deterministic command API as
+runtime callers; a resident physics hit now supplies the integer sample center
+for the next command. A bounded horizontal brush preview follows a successful
+resident physics hit while the Terrain utility is active. Brush radius,
+strength, active layer, falloff, and operation are persisted through the normal
+Sandbox settings file with range validation on load. Its read-only Material
+layers section reports Grass, Dirt, Rock, and Wet base-color, normal, and
+metallic/roughness texture dimensions, GPU formats, and resident/total mip
+counts directly from the manager-owned live textures. This is dependency
+inspection and edit support, not a separate material authority or a claim of
+complete viewport material-preview authoring.
 
 The Terrain utility also projects the scene-view cursor through the shared
 camera ray API and queries the resident physics patch owner. A successful

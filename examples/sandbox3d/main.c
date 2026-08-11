@@ -15599,6 +15599,13 @@ static void sandbox3d_draw_utility_panel(
             break;
 
         case SANDBOX3D_UTILITY_TERRAIN:
+        {
+            size_t terrain_layer_index;
+            char terrain_layer_summary[256];
+            henka_texture_info terrain_base_info;
+            henka_texture_info terrain_normal_info;
+            henka_texture_info terrain_metallic_roughness_info;
+
             memset(&terrain_world_stats, 0, sizeof(terrain_world_stats));
             memset(&terrain_stream_stats, 0, sizeof(terrain_stream_stats));
             memset(&terrain_render_stats, 0, sizeof(terrain_render_stats));
@@ -15662,51 +15669,89 @@ static void sandbox3d_draw_utility_panel(
                 state->terrain_tool_falloff == HENKA_TERRAIN_EDIT_FALLOFF_LINEAR ? "Linear" : "Smooth",
                 state->terrain_tool_operation == HENKA_TERRAIN_EDIT_PAINT ? "Paint" : "Sculpt");
             sandbox3d_draw_value_row(state->ui, x_left, y_start + 122.0f, panel_bounds.width - 28.0f, "Mode", row_value);
-            if (henka_ui_button(state->ui, "terrain_raise", (henka_ui_rect){x_left, y_start + 150.0f, 72.0f, 24.0f}, "Raise"))
+            sandbox3d_draw_section_heading(state->ui, x_left, y_start + 148.0f, "Material layers");
+            for (terrain_layer_index = 0U;
+                 terrain_layer_index < HENKA_MATERIAL_TERRAIN_LAYER_COUNT;
+                 ++terrain_layer_index)
+            {
+                const bool layer_ready =
+                    state->terrain_layer_textures[terrain_layer_index] != NULL &&
+                    state->terrain_layer_normal_textures[terrain_layer_index] != NULL &&
+                    state->terrain_layer_metallic_roughness_textures[terrain_layer_index] != NULL &&
+                    henka_texture_get_info(
+                        state->terrain_layer_textures[terrain_layer_index],
+                        &terrain_base_info) == HENKA_SUCCESS &&
+                    henka_texture_get_info(
+                        state->terrain_layer_normal_textures[terrain_layer_index],
+                        &terrain_normal_info) == HENKA_SUCCESS &&
+                    henka_texture_get_info(
+                        state->terrain_layer_metallic_roughness_textures[terrain_layer_index],
+                        &terrain_metallic_roughness_info) == HENKA_SUCCESS &&
+                    sandbox3d_format_terrain_layer_display(
+                        (uint32_t)terrain_layer_index,
+                        &terrain_base_info,
+                        &terrain_normal_info,
+                        &terrain_metallic_roughness_info,
+                        terrain_layer_summary,
+                        sizeof(terrain_layer_summary)) == HENKA_SUCCESS;
+                snprintf(
+                    row_value,
+                    sizeof(row_value),
+                    "Layer %u",
+                    (unsigned int)terrain_layer_index);
+                sandbox3d_draw_value_row(
+                    state->ui,
+                    x_left,
+                    y_start + 166.0f + (float)terrain_layer_index * 22.0f,
+                    panel_bounds.width - 28.0f,
+                    row_value,
+                    layer_ready ? terrain_layer_summary : "Unavailable");
+            }
+            if (henka_ui_button(state->ui, "terrain_raise", (henka_ui_rect){x_left, y_start + 260.0f, 72.0f, 24.0f}, "Raise"))
             {
                 (void)sandbox3d_apply_terrain_tool_command(state, HENKA_TERRAIN_EDIT_RAISE);
                 state->terrain_tool_operation = HENKA_TERRAIN_EDIT_RAISE;
             }
-            if (henka_ui_button(state->ui, "terrain_lower", (henka_ui_rect){x_left + 78.0f, y_start + 150.0f, 72.0f, 24.0f}, "Lower"))
+            if (henka_ui_button(state->ui, "terrain_lower", (henka_ui_rect){x_left + 78.0f, y_start + 260.0f, 72.0f, 24.0f}, "Lower"))
             {
                 (void)sandbox3d_apply_terrain_tool_command(state, HENKA_TERRAIN_EDIT_LOWER);
                 state->terrain_tool_operation = HENKA_TERRAIN_EDIT_LOWER;
             }
-            if (henka_ui_button(state->ui, "terrain_flatten", (henka_ui_rect){x_left + 156.0f, y_start + 150.0f, 80.0f, 24.0f}, "Flatten"))
+            if (henka_ui_button(state->ui, "terrain_flatten", (henka_ui_rect){x_left + 156.0f, y_start + 260.0f, 80.0f, 24.0f}, "Flatten"))
             {
                 (void)sandbox3d_apply_terrain_tool_command(state, HENKA_TERRAIN_EDIT_FLATTEN);
                 state->terrain_tool_operation = HENKA_TERRAIN_EDIT_FLATTEN;
             }
-            if (henka_ui_button(state->ui, "terrain_smooth", (henka_ui_rect){x_left + 242.0f, y_start + 150.0f, 72.0f, 24.0f}, "Smooth"))
+            if (henka_ui_button(state->ui, "terrain_smooth", (henka_ui_rect){x_left + 242.0f, y_start + 260.0f, 72.0f, 24.0f}, "Smooth"))
             {
                 (void)sandbox3d_apply_terrain_tool_command(state, HENKA_TERRAIN_EDIT_SMOOTH);
                 state->terrain_tool_operation = HENKA_TERRAIN_EDIT_SMOOTH;
             }
-            if (henka_ui_primary_button(state->ui, "terrain_paint", (henka_ui_rect){x_left, y_start + 180.0f, 72.0f, 24.0f}, "Paint"))
+            if (henka_ui_primary_button(state->ui, "terrain_paint", (henka_ui_rect){x_left, y_start + 290.0f, 72.0f, 24.0f}, "Paint"))
             {
                 (void)sandbox3d_apply_terrain_tool_command(state, HENKA_TERRAIN_EDIT_PAINT);
                 state->terrain_tool_operation = HENKA_TERRAIN_EDIT_PAINT;
             }
-            if (henka_ui_button(state->ui, "terrain_radius", (henka_ui_rect){x_left + 78.0f, y_start + 180.0f, 96.0f, 24.0f}, "Radius +"))
+            if (henka_ui_button(state->ui, "terrain_radius", (henka_ui_rect){x_left + 78.0f, y_start + 290.0f, 96.0f, 24.0f}, "Radius +"))
             {
                 state->terrain_tool_radius_samples = state->terrain_tool_radius_samples >= 64U
                     ? 4U : state->terrain_tool_radius_samples + 4U;
             }
-            if (henka_ui_button(state->ui, "terrain_strength", (henka_ui_rect){x_left + 180.0f, y_start + 180.0f, 96.0f, 24.0f}, "Strength +"))
+            if (henka_ui_button(state->ui, "terrain_strength", (henka_ui_rect){x_left + 180.0f, y_start + 290.0f, 96.0f, 24.0f}, "Strength +"))
             {
                 state->terrain_tool_strength = state->terrain_tool_strength >= 192U
                     ? 32U : (uint8_t)(state->terrain_tool_strength + 32U);
             }
-            if (henka_ui_button(state->ui, "terrain_layer", (henka_ui_rect){x_left, y_start + 210.0f, 96.0f, 24.0f}, "Layer +"))
+            if (henka_ui_button(state->ui, "terrain_layer", (henka_ui_rect){x_left, y_start + 320.0f, 96.0f, 24.0f}, "Layer +"))
             {
                 state->terrain_tool_layer = (uint8_t)((state->terrain_tool_layer + 1U) % HENKA_TERRAIN_ACTIVE_MATERIAL_COUNT);
             }
-            if (henka_ui_button(state->ui, "terrain_falloff", (henka_ui_rect){x_left + 102.0f, y_start + 210.0f, 104.0f, 24.0f}, "Falloff"))
+            if (henka_ui_button(state->ui, "terrain_falloff", (henka_ui_rect){x_left + 102.0f, y_start + 320.0f, 104.0f, 24.0f}, "Falloff"))
             {
                 state->terrain_tool_falloff = state->terrain_tool_falloff == HENKA_TERRAIN_EDIT_FALLOFF_LINEAR
                     ? HENKA_TERRAIN_EDIT_FALLOFF_SMOOTH : HENKA_TERRAIN_EDIT_FALLOFF_LINEAR;
             }
-            if (henka_ui_primary_button(state->ui, "terrain_save", (henka_ui_rect){x_left, y_start + 240.0f, 86.0f, 24.0f}, "Save"))
+            if (henka_ui_primary_button(state->ui, "terrain_save", (henka_ui_rect){x_left, y_start + 350.0f, 86.0f, 24.0f}, "Save"))
             {
                 uint32_t saved_region_count = 0U;
                 const henka_result save_result = sandbox3d_save_terrain_regions(
@@ -15721,7 +15766,7 @@ static void sandbox3d_draw_utility_panel(
                     saved_region_count,
                     henka_result_to_string(save_result));
             }
-            if (henka_ui_button(state->ui, "terrain_compact", (henka_ui_rect){x_left + 92.0f, y_start + 240.0f, 104.0f, 24.0f}, "Compact"))
+            if (henka_ui_button(state->ui, "terrain_compact", (henka_ui_rect){x_left + 92.0f, y_start + 350.0f, 104.0f, 24.0f}, "Compact"))
             {
                 const henka_result compact_result = state->terrain_storage == NULL
                     ? HENKA_ERROR_INVALID_ARGUMENT
@@ -15735,7 +15780,7 @@ static void sandbox3d_draw_utility_panel(
                         : "Terrain compact failed: %s.",
                     henka_result_to_string(compact_result));
             }
-            if (henka_ui_button(state->ui, "terrain_reload", (henka_ui_rect){x_left + 202.0f, y_start + 240.0f, 86.0f, 24.0f}, "Reload"))
+            if (henka_ui_button(state->ui, "terrain_reload", (henka_ui_rect){x_left + 202.0f, y_start + 350.0f, 86.0f, 24.0f}, "Reload"))
             {
                 const henka_result reload_result = sandbox3d_reload_terrain_region(state);
                 sandbox3d_set_statusf(
@@ -15763,11 +15808,12 @@ static void sandbox3d_draw_utility_panel(
             {
                 snprintf(row_value, sizeof(row_value), "Move cursor over resident terrain");
             }
-            sandbox3d_draw_value_row(state->ui, x_left, y_start + 270.0f, panel_bounds.width - 28.0f, "Pick", row_value);
-            henka_ui_label(state->ui, x_left, y_start + 294.0f, 1.0f, "Commands use the same deterministic API as runtime edits.");
-            henka_ui_label(state->ui, x_left, y_start + 310.0f, 1.0f, "Click the viewport to pick; buttons edit the picked sample.");
-            henka_ui_label(state->ui, x_left, y_start + 326.0f, 1.0f, "Persistence and network authority remain separate workflows.");
+            sandbox3d_draw_value_row(state->ui, x_left, y_start + 380.0f, panel_bounds.width - 28.0f, "Pick", row_value);
+            henka_ui_label(state->ui, x_left, y_start + 404.0f, 1.0f, "Commands use the same deterministic API as runtime edits.");
+            henka_ui_label(state->ui, x_left, y_start + 420.0f, 1.0f, "Click the viewport to pick; buttons edit the picked sample.");
+            henka_ui_label(state->ui, x_left, y_start + 436.0f, 1.0f, "Persistence and network authority remain separate workflows.");
             break;
+        }
 
         case SANDBOX3D_UTILITY_SETTINGS:
         {

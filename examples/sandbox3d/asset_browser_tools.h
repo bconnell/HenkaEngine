@@ -3,6 +3,7 @@
 
 #include <stdbool.h>
 #include <stddef.h>
+#include <stdint.h>
 
 #include <henka/assets.h>
 
@@ -42,6 +43,16 @@ typedef struct sandbox3d_texture_slot_display
     char residency[48];
     char state[32];
 } sandbox3d_texture_slot_display;
+
+const char* sandbox3d_terrain_layer_label(uint32_t layer_index);
+
+henka_result sandbox3d_format_terrain_layer_display(
+    uint32_t layer_index,
+    const henka_texture_info* base_color,
+    const henka_texture_info* normal,
+    const henka_texture_info* metallic_roughness,
+    char* out_summary,
+    size_t out_summary_capacity);
 
 henka_result sandbox3d_format_material_texture_slot(
     const henka_asset_manager* manager,

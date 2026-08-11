@@ -54,6 +54,81 @@ static const char* sandbox3d_asset_browser_format_label(henka_texture_gpu_format
     }
 }
 
+const char* sandbox3d_terrain_layer_label(uint32_t layer_index)
+{
+    static const char* labels[] = {"Grass", "Dirt", "Rock", "Wet"};
+    return layer_index < sizeof(labels) / sizeof(labels[0])
+        ? labels[layer_index]
+        : "Unknown";
+}
+
+static int sandbox3d_format_terrain_texture_summary(
+    const henka_texture_info* info,
+    char* out_summary,
+    size_t out_summary_capacity)
+{
+    if (info == NULL || out_summary == NULL || out_summary_capacity == 0U)
+    {
+        return -1;
+    }
+    if (info->width <= 0 || info->height <= 0 || info->mip_count == 0U)
+    {
+        return snprintf(out_summary, out_summary_capacity, "invalid");
+    }
+    return snprintf(
+        out_summary,
+        out_summary_capacity,
+        "%dx%d %s %u/%u",
+        info->width,
+        info->height,
+        sandbox3d_asset_browser_format_label(info->gpu_format),
+        info->resident_mip_count,
+        info->mip_count);
+}
+
+henka_result sandbox3d_format_terrain_layer_display(
+    uint32_t layer_index,
+    const henka_texture_info* base_color,
+    const henka_texture_info* normal,
+    const henka_texture_info* metallic_roughness,
+    char* out_summary,
+    size_t out_summary_capacity)
+{
+    char base_summary[48];
+    char normal_summary[48];
+    char metallic_roughness_summary[48];
+    int written;
+
+    if (layer_index >= HENKA_MATERIAL_TERRAIN_LAYER_COUNT ||
+        base_color == NULL || normal == NULL || metallic_roughness == NULL ||
+        out_summary == NULL || out_summary_capacity < 32U)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    if (sandbox3d_format_terrain_texture_summary(
+            base_color, base_summary, sizeof(base_summary)) < 0 ||
+        sandbox3d_format_terrain_texture_summary(
+            normal, normal_summary, sizeof(normal_summary)) < 0 ||
+        sandbox3d_format_terrain_texture_summary(
+            metallic_roughness,
+            metallic_roughness_summary,
+            sizeof(metallic_roughness_summary)) < 0)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    written = snprintf(
+        out_summary,
+        out_summary_capacity,
+        "%s | base %s | normal %s | M/R %s",
+        sandbox3d_terrain_layer_label(layer_index),
+        base_summary,
+        normal_summary,
+        metallic_roughness_summary);
+    return written >= 0 && (size_t)written < out_summary_capacity
+        ? HENKA_SUCCESS
+        : HENKA_ERROR_INVALID_ARGUMENT;
+}
+
 static henka_texture* sandbox3d_material_texture_for_slot(
     const henka_material* material,
     henka_material_texture_slot slot)

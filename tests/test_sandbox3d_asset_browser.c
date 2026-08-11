@@ -151,9 +151,66 @@ static void henka_test_sandbox3d_asset_browser_texture_and_assignment(void)
     HENKA_TEST_ASSERT(instance.override_mask == 0U);
 }
 
+static void henka_test_sandbox3d_terrain_layer_display(void)
+{
+    henka_texture_info base;
+    henka_texture_info normal;
+    henka_texture_info metallic_roughness;
+    char summary[256];
+
+    HENKA_TEST_ASSERT(strcmp(sandbox3d_terrain_layer_label(0U), "Grass") == 0);
+    HENKA_TEST_ASSERT(strcmp(sandbox3d_terrain_layer_label(1U), "Dirt") == 0);
+    HENKA_TEST_ASSERT(strcmp(sandbox3d_terrain_layer_label(2U), "Rock") == 0);
+    HENKA_TEST_ASSERT(strcmp(sandbox3d_terrain_layer_label(3U), "Wet") == 0);
+    HENKA_TEST_ASSERT(strcmp(sandbox3d_terrain_layer_label(4U), "Unknown") == 0);
+
+    memset(&base, 0, sizeof(base));
+    memset(&normal, 0, sizeof(normal));
+    memset(&metallic_roughness, 0, sizeof(metallic_roughness));
+    base.width = 16;
+    base.height = 16;
+    base.gpu_format = HENKA_TEXTURE_GPU_FORMAT_RGBA8;
+    base.mip_count = 5U;
+    base.resident_mip_count = 3U;
+    normal = base;
+    normal.gpu_format = HENKA_TEXTURE_GPU_FORMAT_BC5;
+    metallic_roughness = base;
+    metallic_roughness.gpu_format = HENKA_TEXTURE_GPU_FORMAT_BC7;
+
+    HENKA_TEST_ASSERT(
+        sandbox3d_format_terrain_layer_display(
+            0U,
+            &base,
+            &normal,
+            &metallic_roughness,
+            summary,
+            sizeof(summary)) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(strstr(summary, "Grass") != NULL);
+    HENKA_TEST_ASSERT(strstr(summary, "base 16x16 RGBA8 3/5") != NULL);
+    HENKA_TEST_ASSERT(strstr(summary, "normal 16x16 BC5 3/5") != NULL);
+    HENKA_TEST_ASSERT(strstr(summary, "M/R 16x16 BC7 3/5") != NULL);
+    HENKA_TEST_ASSERT(
+        sandbox3d_format_terrain_layer_display(
+            4U,
+            &base,
+            &normal,
+            &metallic_roughness,
+            summary,
+            sizeof(summary)) == HENKA_ERROR_INVALID_ARGUMENT);
+    HENKA_TEST_ASSERT(
+        sandbox3d_format_terrain_layer_display(
+            0U,
+            &base,
+            &normal,
+            &metallic_roughness,
+            summary,
+            8U) == HENKA_ERROR_INVALID_ARGUMENT);
+}
+
 void henka_test_sandbox3d_asset_browser(void)
 {
     henka_test_sandbox3d_asset_browser_collection();
     henka_test_sandbox3d_asset_browser_paging();
     henka_test_sandbox3d_asset_browser_texture_and_assignment();
+    henka_test_sandbox3d_terrain_layer_display();
 }

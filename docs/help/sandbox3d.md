@@ -103,6 +103,7 @@ The engineering sample legend is available with `--primitive-gallery`:
 - Watch the compact strip below Scene View while testing; it reports tool, selection, selected-highlight state, pointer ownership, gizmo, hover, drag, and rejection state live.
 - Use Transform QA first to confirm whether selected-object mutation works even if gizmo dragging or viewport input is failing.
 - Open `Physics QA`. `Enable` starts the arranged multi-body demonstration. `Make Dynamic + Drop` instead activates only the selected supported body at its current transform, leaving unrelated samples still.
+- Open Utility > Terrain to inspect the live manager-owned Grass, Dirt, Rock, and Wet layer texture triplets. The Material layers section reports dimensions, GPU format, and resident/total mip counts for base color, normal, and metallic/roughness sources; it is read-only dependency inspection, while viewport material-preview authoring remains outside this bounded workflow.
 - `DRAG` marks a live panel header. Drag a docked panel header and release over a valid left or right outline to dock there.
 - If a side dock already contains a panel, the incoming panel stacks into the same side instead of covering it.
 - Release away from the dock outlines to open a separate native tool window. Move or resize that window with the operating-system frame.
