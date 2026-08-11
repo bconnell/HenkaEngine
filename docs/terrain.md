@@ -389,10 +389,12 @@ center unchanged. This is an editor/runtime command bridge, not network
 authority. The same utility opens a user-data-local
 `terrain-sandbox-v2` storage root, recovers or loads region `(0,0)` at startup,
 and exposes transactional Save for every currently CPU-resident region plus
-committed-journal Compact actions; dirty flags clear only after the bounded
-multi-region transaction commits, and failed saves leave the live world
-unchanged because storage owns the transaction. Nonresident world authoring
-and background persistence scheduling are not claimed.
+committed-journal Compact actions. The storage API also provides a dirty-only
+transaction that skips clean resident regions, which is the bounded path for
+future scheduled saves; dirty flags clear only after the bounded multi-region
+transaction commits, and failed saves leave the live world unchanged because
+storage owns the transaction. Nonresident world authoring and background
+persistence scheduling are not claimed.
 Reload uses a bounded temporary decode, then rebuilds the physics patch and
 render mesh; a presentation failure restores the previous samples, revision,
 generation, and collision patch.

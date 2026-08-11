@@ -990,11 +990,12 @@ henka_result henka_terrain_storage_commit(
     return result;
 }
 
-henka_result henka_terrain_storage_save_resident_regions(
+static henka_result henka_terrain_storage_save_regions(
     henka_terrain_storage* storage,
     henka_terrain_world* world,
     uint64_t transaction_id,
-    uint32_t* out_saved_region_count)
+    uint32_t* out_saved_region_count,
+    bool dirty_only)
 {
     henka_terrain_world_desc world_desc;
     henka_terrain_world_stats world_stats;
@@ -1022,6 +1023,10 @@ henka_result henka_terrain_storage_save_resident_regions(
         const henka_terrain_sample* samples = NULL;
         size_t sample_count = 0U;
         result = henka_terrain_world_get_resident_region_at(world, index, &state);
+        if (result == HENKA_SUCCESS && dirty_only && !state.dirty)
+        {
+            continue;
+        }
         if (result == HENKA_SUCCESS)
         {
             result = henka_terrain_world_get_region_samples(
@@ -1051,12 +1056,36 @@ henka_result henka_terrain_storage_save_resident_regions(
         henka_terrain_region_state state;
         if (henka_terrain_world_get_resident_region_at(world, index, &state) == HENKA_SUCCESS)
         {
+            if (dirty_only && !state.dirty)
+            {
+                continue;
+            }
             (void)henka_terrain_world_set_region_revision(
                 world, state.id, state.revision, state.generation, false);
         }
     }
     *out_saved_region_count = saved_region_count;
     return HENKA_SUCCESS;
+}
+
+henka_result henka_terrain_storage_save_resident_regions(
+    henka_terrain_storage* storage,
+    henka_terrain_world* world,
+    uint64_t transaction_id,
+    uint32_t* out_saved_region_count)
+{
+    return henka_terrain_storage_save_regions(
+        storage, world, transaction_id, out_saved_region_count, false);
+}
+
+henka_result henka_terrain_storage_save_dirty_regions(
+    henka_terrain_storage* storage,
+    henka_terrain_world* world,
+    uint64_t transaction_id,
+    uint32_t* out_saved_region_count)
+{
+    return henka_terrain_storage_save_regions(
+        storage, world, transaction_id, out_saved_region_count, true);
 }
 
 henka_result henka_terrain_storage_abort(

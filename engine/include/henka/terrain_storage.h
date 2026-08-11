@@ -68,6 +68,14 @@ henka_result henka_terrain_storage_save_resident_regions(
     henka_terrain_world* world,
     uint64_t transaction_id,
     uint32_t* out_saved_region_count);
+/* Atomically persists only currently CPU-resident dirty regions and clears
+ * their dirty flags only after the storage transaction commits. Clean
+ * resident regions are not rewritten. */
+henka_result henka_terrain_storage_save_dirty_regions(
+    henka_terrain_storage* storage,
+    henka_terrain_world* world,
+    uint64_t transaction_id,
+    uint32_t* out_saved_region_count);
 henka_result henka_terrain_storage_abort(
     henka_terrain_storage* storage,
     uint64_t transaction_id);
