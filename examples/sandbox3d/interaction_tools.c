@@ -246,6 +246,24 @@ sandbox3d_interaction_reject_reason sandbox3d_evaluate_select_reject_reason(
     return sandbox3d_evaluate_common_reject_reason(gate);
 }
 
+bool sandbox3d_should_start_empty_viewport_pan(
+    sandbox3d_viewport_tool_mode tool_mode,
+    const sandbox3d_interaction_gate* gate,
+    bool empty_viewport_drag_candidate,
+    bool gizmo_drag_active,
+    bool alt_orbit_active,
+    float drag_distance_pixels)
+{
+    return tool_mode == SANDBOX3D_VIEWPORT_TOOL_SELECT &&
+        sandbox3d_evaluate_select_reject_reason(gate) ==
+            SANDBOX3D_INTERACTION_REJECT_NONE &&
+        empty_viewport_drag_candidate &&
+        !gizmo_drag_active &&
+        !alt_orbit_active &&
+        isfinite(drag_distance_pixels) &&
+        drag_distance_pixels >= SANDBOX3D_EMPTY_VIEWPORT_PAN_DRAG_THRESHOLD_PIXELS;
+}
+
 bool sandbox3d_selection_highlight_is_allowed(const sandbox3d_interaction_gate* gate)
 {
     return gate != NULL &&

@@ -70,6 +70,50 @@ void henka_test_sandbox3d_interaction(void)
     HENKA_TEST_ASSERT(
         sandbox3d_evaluate_navigation_reject_reason(SANDBOX3D_VIEWPORT_TOOL_PAN, &gate) ==
         SANDBOX3D_INTERACTION_REJECT_NONE);
+    HENKA_TEST_ASSERT(!sandbox3d_should_start_empty_viewport_pan(
+        SANDBOX3D_VIEWPORT_TOOL_SELECT,
+        &gate,
+        true,
+        false,
+        false,
+        SANDBOX3D_EMPTY_VIEWPORT_PAN_DRAG_THRESHOLD_PIXELS - 0.01f));
+    HENKA_TEST_ASSERT(sandbox3d_should_start_empty_viewport_pan(
+        SANDBOX3D_VIEWPORT_TOOL_SELECT,
+        &gate,
+        true,
+        false,
+        false,
+        SANDBOX3D_EMPTY_VIEWPORT_PAN_DRAG_THRESHOLD_PIXELS));
+    HENKA_TEST_ASSERT(!sandbox3d_should_start_empty_viewport_pan(
+        SANDBOX3D_VIEWPORT_TOOL_SELECT,
+        &gate,
+        true,
+        true,
+        false,
+        20.0f));
+    HENKA_TEST_ASSERT(!sandbox3d_should_start_empty_viewport_pan(
+        SANDBOX3D_VIEWPORT_TOOL_SELECT,
+        &gate,
+        true,
+        false,
+        true,
+        20.0f));
+    HENKA_TEST_ASSERT(!sandbox3d_should_start_empty_viewport_pan(
+        SANDBOX3D_VIEWPORT_TOOL_MOVE,
+        &gate,
+        true,
+        false,
+        false,
+        20.0f));
+    gate.ui_wants_mouse = true;
+    HENKA_TEST_ASSERT(!sandbox3d_should_start_empty_viewport_pan(
+        SANDBOX3D_VIEWPORT_TOOL_SELECT,
+        &gate,
+        true,
+        false,
+        false,
+        20.0f));
+    gate.ui_wants_mouse = false;
 
     memset(&gate, 0, sizeof(gate));
     gate.supported_mouse_button = true;

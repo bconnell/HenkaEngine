@@ -145,7 +145,7 @@ The current `Object Details` panel can:
 
 The selected object also shows a transform gizmo inside the dedicated scene viewport.
 
-- `Select` keeps normal viewport selection active.
+- `Select` keeps normal viewport selection active. Left-dragging empty Scene View space past the small drag threshold pans the camera/target for laptop touchpads while ordinary clicks still select or clear selection.
 - `Orbit` uses left drag in the viewport to orbit around the selected object or current view target.
 - `Pan` uses left drag in the viewport to pan the camera and target together.
 - `Move` exposes world-axis translation handles.
@@ -163,13 +163,16 @@ The viewport now also supports direct navigation while mouse capture is released
 
 - `Orbit` tool plus `Left Mouse`: orbit around the selected object or current view target
 - `Pan` tool plus `Left Mouse`: pan the view
+- `Select` tool plus empty `Left Mouse` drag: pan the view after the intentional drag threshold
 - `Alt + Left Mouse`: optional orbit shortcut
 - `Middle Mouse`: optional pan shortcut
-- `Mouse Wheel`: zoom the view when the cursor is over the viewport
+- `Mouse Wheel` or two-finger touchpad scroll: zoom the view when the cursor is over the viewport
 - `F`: frame the selected object
 - `Home`: reset the default camera view
 
 Mouse wheel input over the `Controls` or `Scene Objects` panels is routed to panel paging instead of the viewport, so panel interaction does not leak into scene zooming.
+
+Normal startup and `Home` share the same scene-first framing path after the final Scene View size is known. The sandbox keeps movement speed and other validated editor settings, but it no longer restores older transient camera-pose keys automatically on launch.
 
 A compact diagnostic strip stays visible immediately below the Scene View while panels are open. It shows the active tool, selected object, selected-highlight state, mouse capture state, whether the cursor is in the viewport, whether a visible panel owns the pointer, gizmo model state, handle count, hovered handle, drag state, last rejection reason, hovered panel, whether the cursor is on a draggable header, active panel movement or resize, dock target, and latest workspace action. The strip is informational and does not consume viewport input.
 

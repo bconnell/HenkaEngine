@@ -187,6 +187,8 @@ typedef struct sandbox3d_view_navigation_state
 {
     bool orbiting;
     bool panning;
+    bool empty_viewport_drag_candidate;
+    henka_vec2 empty_viewport_drag_origin;
     henka_vec3 orbit_target;
     bool orbit_target_valid;
 } sandbox3d_view_navigation_state;
@@ -379,6 +381,7 @@ typedef struct sandbox3d_state
     bool ui_visibility_report_pending;
     bool ui_visible_last_frame;
     bool status_warning;
+    bool startup_frame_pending;
     char status_message[160];
     sandbox3d_workspace_layout frame_layout;
     henka_ui_rect scene_view_header_controls;
@@ -401,6 +404,7 @@ typedef struct sandbox3d_state
     bool residency_stress;
     bool residency_stress_ran;
     bool terrain_edit_smoke_ran;
+    bool primitive_add_smoke_ran;
     bool residency_stress_scene_material_active;
     uint32_t residency_visibility_far_mips;
     uint32_t residency_visibility_near_mips;
@@ -454,15 +458,8 @@ static const char* g_setting_key_environment_time_enabled =
 static const char* g_setting_key_environment_prefix = "scene.environment.";
 static const char* g_setting_key_mouse_sensitivity = "mouse_sensitivity";
 static const char* g_setting_key_camera_speed = "camera_movement_speed";
-static const char* g_setting_key_camera_position_x = "camera_position_x";
-static const char* g_setting_key_camera_position_y = "camera_position_y";
-static const char* g_setting_key_camera_position_z = "camera_position_z";
-static const char* g_setting_key_camera_yaw = "camera_yaw_radians";
-static const char* g_setting_key_camera_pitch = "camera_pitch_radians";
-static const char* g_setting_key_camera_preset = "camera_preset";
-static const char* g_setting_key_camera_orthographic_height = "camera_orthographic_height";
 static const char* g_setting_key_camera_framing_version = "camera_framing.version";
-static const int g_camera_framing_settings_version = 1;
+static const int g_camera_framing_settings_version = 2;
 static const char* g_setting_key_scene_panel_visible = "ui.scene_objects_panel_visible";
 static const char* g_setting_key_details_panel_visible = "ui.object_details_panel_visible";
 static const char* g_setting_key_layout_mode = "ui.layout_mode";
@@ -630,6 +627,7 @@ static bool sandbox3d_is_selectable_entity(const sandbox3d_state* state, henka_e
 static void sandbox3d_select_entity(sandbox3d_state* state, henka_entity entity);
 static void sandbox3d_clear_selection(sandbox3d_state* state, const char* reason);
 static bool sandbox3d_add_primitive_object(sandbox3d_state* state);
+static henka_result sandbox3d_validate_add_primitive_smoke(sandbox3d_state* state);
 static bool sandbox3d_duplicate_selected_object(sandbox3d_state* state);
 static bool sandbox3d_delete_selected_object(sandbox3d_state* state);
 static void sandbox3d_cancel_active_transform_session(
@@ -662,15 +660,11 @@ static henka_vec3 sandbox3d_get_default_orbit_target(void);
 static henka_vec3 sandbox3d_get_view_navigation_target(const sandbox3d_state* state);
 static void sandbox3d_set_view_navigation_target(sandbox3d_state* state, henka_vec3 target);
 static void sandbox3d_sync_view_navigation_target_to_selection(sandbox3d_state* state);
-static const char* sandbox3d_get_camera_preset_setting_value(henka_camera_preset preset);
-static henka_camera_preset sandbox3d_parse_camera_preset(const char* value);
 static bool sandbox3d_get_scene_framing_bounds(
     const sandbox3d_state* state,
     henka_bounds* out_bounds);
-static bool sandbox3d_camera_matches_legacy_default(
-    const henka_camera* camera,
-    const henka_camera* legacy_camera);
 static bool sandbox3d_validate_startup_camera(const sandbox3d_state* state);
+static void sandbox3d_report_startup_camera_validation(sandbox3d_state* state);
 static bool sandbox3d_apply_camera_preset(
     sandbox3d_state* state,
     henka_camera_preset preset,
@@ -2467,6 +2461,7 @@ static void sandbox3d_set_viewport_tool_mode(
         state->gizmo.mode = (sandbox3d_gizmo_mode)gizmo_mode;
         state->view_navigation.orbiting = false;
         state->view_navigation.panning = false;
+        state->view_navigation.empty_viewport_drag_candidate = false;
         sandbox3d_clear_gizmo_drag(state, true);
         if (update_status)
         {
@@ -3593,22 +3588,6 @@ static bool sandbox3d_get_scene_framing_bounds(
     return false;
 }
 
-static bool sandbox3d_camera_matches_legacy_default(
-    const henka_camera* camera,
-    const henka_camera* legacy_camera)
-{
-    const float tolerance = 0.001f;
-
-    return camera != NULL && legacy_camera != NULL &&
-        camera->projection_mode == legacy_camera->projection_mode &&
-        fabsf(camera->position.x - legacy_camera->position.x) <= tolerance &&
-        fabsf(camera->position.y - legacy_camera->position.y) <= tolerance &&
-        fabsf(camera->position.z - legacy_camera->position.z) <= tolerance &&
-        fabsf(camera->yaw_radians - legacy_camera->yaw_radians) <= tolerance &&
-        fabsf(camera->pitch_radians - legacy_camera->pitch_radians) <= tolerance &&
-        fabsf(camera->orthographic_height - legacy_camera->orthographic_height) <= tolerance;
-}
-
 static bool sandbox3d_validate_startup_camera(const sandbox3d_state* state)
 {
     henka_bounds bounds;
@@ -3636,6 +3615,37 @@ static bool sandbox3d_validate_startup_camera(const sandbox3d_state* state)
      * their intentional projection/orientation choices. */
     return state->camera_preset != HENKA_CAMERA_PRESET_PERSPECTIVE_3D ||
         state->camera.pitch_radians > -0.75f;
+}
+
+static void sandbox3d_report_startup_camera_validation(sandbox3d_state* state)
+{
+    henka_bounds startup_bounds;
+
+    if (state == NULL || !state->smoke_test || state->capture_mode_requested)
+    {
+        return;
+    }
+
+    if (!sandbox3d_validate_startup_camera(state))
+    {
+        HENKA_LOG_ERROR("Sandbox startup camera did not frame meaningful scene content.");
+        state->smoke_validation_failed = true;
+        return;
+    }
+
+    if (sandbox3d_get_scene_framing_bounds(state, &startup_bounds))
+    {
+        printf(
+            "Startup camera framing: target=(%.2f, %.2f, %.2f) pitch=%.3f distance=%.2f.\n",
+            startup_bounds.center.x,
+            startup_bounds.center.y,
+            startup_bounds.center.z,
+            state->camera.pitch_radians,
+            henka_vec3_length(henka_vec3_subtract(
+                startup_bounds.center,
+                state->camera.position)));
+        fflush(stdout);
+    }
 }
 
 static void sandbox3d_reset_workspace_layout(sandbox3d_state* state)
@@ -4423,9 +4433,10 @@ static void sandbox3d_print_help(const sandbox3d_state* state)
     printf("  Mouse            Look around while mouse capture is active\n");
     printf("  Right Mouse / Tab Toggle mouse capture\n");
     printf("  Left Mouse       Select, manipulate, or clear selection by clicking empty scene background\n");
+    printf("  Left Drag Empty  In Select mode, pan after a small intentional empty-viewport drag\n");
     printf("  Alt + Left Mouse Orbit around the selected object or current view target\n");
     printf("  Middle Mouse     Pan the viewport\n");
-    printf("  Mouse Wheel      Zoom the viewport when the cursor is over the scene view\n");
+    printf("  Mouse Wheel      Zoom the viewport when the cursor is over the scene view; touchpad scroll works the same\n");
     printf("  F1               Enter Wireframe or restore the last non-wireframe mode\n");
     printf("  F2               Print the scene legend again\n");
     printf("  F3               Show or hide the debug grid\n");
@@ -6283,44 +6294,6 @@ static void sandbox3d_build_detached_workspace_panel_ui(henka_engine* engine, sa
         }
     }
 }
-static const char* sandbox3d_get_camera_preset_setting_value(henka_camera_preset preset)
-{
-    switch (preset)
-    {
-        case HENKA_CAMERA_PRESET_SIDE_2_5D:
-            return "side";
-        case HENKA_CAMERA_PRESET_TOP_DOWN_2_5D:
-            return "top_down";
-        case HENKA_CAMERA_PRESET_ISOMETRIC_2_5D:
-            return "isometric";
-        case HENKA_CAMERA_PRESET_PERSPECTIVE_3D:
-        case HENKA_CAMERA_PRESET_COUNT:
-        default:
-            return "perspective";
-    }
-}
-
-static henka_camera_preset sandbox3d_parse_camera_preset(const char* value)
-{
-    if (value == NULL)
-    {
-        return HENKA_CAMERA_PRESET_PERSPECTIVE_3D;
-    }
-    if (strcmp(value, "side") == 0)
-    {
-        return HENKA_CAMERA_PRESET_SIDE_2_5D;
-    }
-    if (strcmp(value, "top_down") == 0)
-    {
-        return HENKA_CAMERA_PRESET_TOP_DOWN_2_5D;
-    }
-    if (strcmp(value, "isometric") == 0)
-    {
-        return HENKA_CAMERA_PRESET_ISOMETRIC_2_5D;
-    }
-    return HENKA_CAMERA_PRESET_PERSPECTIVE_3D;
-}
-
 static bool sandbox3d_apply_camera_preset(
     sandbox3d_state* state,
     henka_camera_preset preset,
@@ -6407,7 +6380,7 @@ static void sandbox3d_apply_capture_camera(sandbox3d_state* state)
     }
 
     /* Capture evidence uses deterministic cameras, while normal editor
-     * startup continues to honor the persisted user camera. */
+     * startup uses the scene-first reset framing path. */
     {
         const henka_vec3 target = state->terrain_capture_mode_requested
             ? (henka_vec3){32.0f, -0.6f, 32.0f}
@@ -6571,6 +6544,7 @@ static bool sandbox3d_add_primitive_object(sandbox3d_state* state)
 {
     henka_action_request request;
     henka_action_result result;
+    henka_material material;
 
     if (state == NULL || state->actions == NULL)
     {
@@ -6588,8 +6562,80 @@ static bool sandbox3d_add_primitive_object(sandbox3d_state* state)
         return false;
     }
 
+    /* The action layer intentionally owns only renderer-independent scene
+     * identity, bounds, and transform state. The Sandbox is the graphical
+     * primitive author, so publish its normal solid mesh/material before the
+     * entity is exposed as the selected user-facing cube. */
+    material = henka_material_default();
+    material.name = "New Cube Material";
+    material.type = HENKA_MATERIAL_TYPE_LIT;
+    material.shader = state->basic_shader;
+    material.base_color_texture = state->cube_texture;
+    material.use_texture = state->cube_texture != NULL;
+    material.base_color = (henka_vec4){0.72f, 0.82f, 0.96f, 1.0f};
+    material.roughness = 0.46f;
+    material.metallic = 0.0f;
+    material.use_lighting = true;
+    material.cast_shadows = true;
+    material.receive_shadows = true;
+    if (state->cube_mesh == NULL ||
+        sandbox3d_configure_entity(
+            state->scene,
+            result.affected_entity,
+            state->cube_mesh,
+            material,
+            request.params.add_primitive.transform) != HENKA_SUCCESS)
+    {
+        henka_action_request rollback_request;
+
+        memset(&rollback_request, 0, sizeof(rollback_request));
+        rollback_request.command = HENKA_ACTION_COMMAND_DELETE_OBJECT;
+        rollback_request.params.entity.entity = result.affected_entity;
+        (void)sandbox3d_execute_action(state, &rollback_request, NULL);
+        return false;
+    }
+
     sandbox3d_select_entity(state, result.affected_entity);
     return true;
+}
+
+static henka_result sandbox3d_validate_add_primitive_smoke(sandbox3d_state* state)
+{
+    henka_entity entity;
+    henka_mesh* mesh;
+    henka_material material;
+
+    if (state == NULL || state->scene == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    if (!sandbox3d_add_primitive_object(state))
+    {
+        return HENKA_ERROR_UNKNOWN;
+    }
+
+    entity = sandbox3d_get_real_selected_entity(state);
+    mesh = NULL;
+    memset(&material, 0, sizeof(material));
+    if (entity == HENKA_INVALID_ENTITY ||
+        henka_scene_get_entity_mesh(state->scene, entity, &mesh) != HENKA_SUCCESS ||
+        mesh != state->cube_mesh ||
+        henka_scene_get_entity_material(state->scene, entity, &material) != HENKA_SUCCESS ||
+        material.type != HENKA_MATERIAL_TYPE_LIT ||
+        material.shader != state->basic_shader ||
+        material.base_color.w <= 0.0f)
+    {
+        (void)sandbox3d_delete_selected_object(state);
+        return HENKA_ERROR_UNKNOWN;
+    }
+
+    if (!sandbox3d_delete_selected_object(state))
+    {
+        return HENKA_ERROR_UNKNOWN;
+    }
+
+    return HENKA_SUCCESS;
 }
 
 static bool sandbox3d_duplicate_selected_object(sandbox3d_state* state)
@@ -7550,24 +7596,16 @@ static void sandbox3d_save_custom_workspace_layout_slots_settings(
 
 static void sandbox3d_apply_loaded_settings(henka_engine* engine, sandbox3d_state* state)
 {
-    henka_camera candidate_camera;
-    henka_camera legacy_camera;
-    bool camera_settings_valid;
-    bool camera_pose_settings_present;
-    bool camera_framing_migration_needed;
     bool grid_visible;
     const char* layout_mode_value;
     float mouse_sensitivity;
     float movement_speed;
-    float orthographic_height;
     float exposure;
     int environment_mode;
     float environment_time_hours;
     float environment_time_scale;
     bool environment_time_enabled;
     henka_scene_environment_desc environment;
-    henka_camera_preset camera_preset;
-    int camera_framing_version;
     henka_result result;
     henka_viewport_shading_mode shading_mode;
 
@@ -7589,87 +7627,20 @@ static void sandbox3d_apply_loaded_settings(henka_engine* engine, sandbox3d_stat
         state->settings,
         g_setting_key_mouse_sensitivity,
         g_default_mouse_look_sensitivity);
-    camera_preset = sandbox3d_parse_camera_preset(
-        henka_settings_get_string(state->settings, g_setting_key_camera_preset, "perspective"));
-
-    state->camera_preset = camera_preset;
-    if (!sandbox3d_apply_camera_preset(
-            state,
-            camera_preset,
-            sandbox3d_get_default_orbit_target(),
-            false))
+    /* Camera movement is session state. Older settings stored the last pose
+     * and preset as implicit startup intent, which can reopen a project aimed
+     * at empty floor. Preserve those keys for compatibility but never restore
+     * them automatically: normal launch and Home both use scene-first framing.
+     * A future explicit startup-view/bookmark feature can opt in separately. */
+    state->camera_preset = HENKA_CAMERA_PRESET_PERSPECTIVE_3D;
+    sandbox3d_reset_camera_defaults(state);
+    if (isfinite(movement_speed) && movement_speed >= 1.0f && movement_speed <= 16.0f)
     {
-        sandbox3d_reset_camera_defaults(state);
-    }
-    legacy_camera = state->camera;
-    camera_framing_version = henka_settings_get_int(
-        state->settings,
-        g_setting_key_camera_framing_version,
-        0);
-    camera_framing_migration_needed =
-        camera_framing_version < g_camera_framing_settings_version;
-    camera_pose_settings_present =
-        henka_settings_has_key(state->settings, g_setting_key_camera_position_x) &&
-        henka_settings_has_key(state->settings, g_setting_key_camera_position_y) &&
-        henka_settings_has_key(state->settings, g_setting_key_camera_position_z) &&
-        henka_settings_has_key(state->settings, g_setting_key_camera_yaw) &&
-        henka_settings_has_key(state->settings, g_setting_key_camera_pitch) &&
-        henka_settings_has_key(state->settings, g_setting_key_camera_orthographic_height);
-
-    candidate_camera = state->camera;
-    candidate_camera.position.x = henka_settings_get_float(
-        state->settings,
-        g_setting_key_camera_position_x,
-        candidate_camera.position.x);
-    candidate_camera.position.y = henka_settings_get_float(
-        state->settings,
-        g_setting_key_camera_position_y,
-        candidate_camera.position.y);
-    candidate_camera.position.z = henka_settings_get_float(
-        state->settings,
-        g_setting_key_camera_position_z,
-        candidate_camera.position.z);
-    candidate_camera.yaw_radians = henka_settings_get_float(
-        state->settings,
-        g_setting_key_camera_yaw,
-        candidate_camera.yaw_radians);
-    candidate_camera.pitch_radians = henka_settings_get_float(
-        state->settings,
-        g_setting_key_camera_pitch,
-        candidate_camera.pitch_radians);
-    orthographic_height = henka_settings_get_float(
-        state->settings,
-        g_setting_key_camera_orthographic_height,
-        candidate_camera.orthographic_height);
-    candidate_camera.orthographic_height = orthographic_height;
-    candidate_camera.movement_speed = movement_speed;
-    candidate_camera.fast_movement_multiplier = 2.5f;
-
-    camera_settings_valid =
-        movement_speed >= 1.0f &&
-        movement_speed <= 16.0f &&
-        orthographic_height >= 0.5f &&
-        orthographic_height <= 80.0f &&
-        henka_camera_is_valid(&candidate_camera);
-    if (camera_settings_valid)
-    {
-        state->camera = candidate_camera;
-        if (camera_framing_migration_needed &&
-            (!camera_pose_settings_present ||
-             sandbox3d_camera_matches_legacy_default(&candidate_camera, &legacy_camera)))
-        {
-            /* Older settings stored the generated origin view as if it were
-             * user intent. Migrate that one known default to scene-first
-             * framing, while preserving any valid, changed camera pose. */
-            sandbox3d_reset_camera_defaults(state);
-            state->camera.movement_speed = movement_speed;
-            HENKA_LOG_INFO("Migrated the legacy sandbox camera to scene-first framing.");
-        }
+        state->camera.movement_speed = movement_speed;
     }
     else
     {
-        sandbox3d_reset_camera_defaults(state);
-        HENKA_LOG_WARN("Unsafe sandbox camera settings were ignored and replaced with safe defaults.");
+        HENKA_LOG_WARN("Unsafe sandbox camera movement speed was ignored.");
     }
     (void)henka_settings_set_int(
         state->settings,
@@ -7897,23 +7868,10 @@ static henka_result sandbox3d_save_settings(henka_engine* engine, sandbox3d_stat
     }
     henka_settings_set_float(state->settings, g_setting_key_mouse_sensitivity, sandbox3d_get_mouse_sensitivity(state));
     henka_settings_set_float(state->settings, g_setting_key_camera_speed, state->camera.movement_speed);
-    henka_settings_set_float(state->settings, g_setting_key_camera_position_x, state->camera.position.x);
-    henka_settings_set_float(state->settings, g_setting_key_camera_position_y, state->camera.position.y);
-    henka_settings_set_float(state->settings, g_setting_key_camera_position_z, state->camera.position.z);
-    henka_settings_set_float(state->settings, g_setting_key_camera_yaw, state->camera.yaw_radians);
-    henka_settings_set_float(state->settings, g_setting_key_camera_pitch, state->camera.pitch_radians);
-    henka_settings_set_string(
-        state->settings,
-        g_setting_key_camera_preset,
-        sandbox3d_get_camera_preset_setting_value(state->camera_preset));
     henka_settings_set_int(
         state->settings,
         g_setting_key_camera_framing_version,
         g_camera_framing_settings_version);
-    henka_settings_set_float(
-        state->settings,
-        g_setting_key_camera_orthographic_height,
-        state->camera.orthographic_height);
     henka_settings_set_string(state->settings, g_setting_key_layout_mode, sandbox3d_get_layout_mode_setting_value(state->workspace.layout_mode));
     henka_settings_set_bool(state->settings, g_setting_key_scene_panel_visible, state->workspace.scene_objects_panel_visible);
     henka_settings_set_bool(state->settings, g_setting_key_details_panel_visible, state->workspace.object_details_panel_visible);
@@ -9654,7 +9612,7 @@ static void sandbox3d_update_gizmo_hover(henka_engine* engine, sandbox3d_state* 
     }
 }
 
-static void sandbox3d_try_pick_object(henka_engine* engine, sandbox3d_state* state)
+static bool sandbox3d_try_pick_object(henka_engine* engine, sandbox3d_state* state)
 {
     bool in_dead_zone;
     henka_gizmo_overlay_model overlay;
@@ -9674,7 +9632,7 @@ static void sandbox3d_try_pick_object(henka_engine* engine, sandbox3d_state* sta
 
     if (engine == NULL || state == NULL || state->scene == NULL)
     {
-        return;
+        return false;
     }
 
     memset(&gate, 0, sizeof(gate));
@@ -9690,7 +9648,7 @@ static void sandbox3d_try_pick_object(henka_engine* engine, sandbox3d_state* sta
             &ray) != HENKA_SUCCESS)
     {
         sandbox3d_record_reject_reason(state, SANDBOX3D_INTERACTION_REJECT_CURSOR_OUTSIDE_VIEWPORT, false);
-        return;
+        return false;
     }
 
     selected_entity = sandbox3d_get_real_selected_entity(state);
@@ -9722,7 +9680,7 @@ static void sandbox3d_try_pick_object(henka_engine* engine, sandbox3d_state* sta
             {
                 sandbox3d_record_drag_result(state, "Gizmo drag could not start");
                 sandbox3d_set_status(state, true, "Gizmo drag could not start.");
-                return;
+                return true;
             }
             state->gizmo.drag = drag_state;
             state->gizmo.drag.drag_start_viewport = scene_viewport;
@@ -9743,13 +9701,13 @@ static void sandbox3d_try_pick_object(henka_engine* engine, sandbox3d_state* sta
                 "Gizmo drag started for %s on %s.",
                 sandbox3d_safe_entity_name(state, selected_entity, "object"),
                 sandbox3d_get_gizmo_axis_label(gizmo_axis));
-            return;
+            return true;
         }
         if (in_dead_zone)
         {
             sandbox3d_record_reject_reason(state, SANDBOX3D_INTERACTION_REJECT_CURSOR_IN_GIZMO_DEAD_ZONE, true);
             sandbox3d_set_status(state, false, "Gizmo area hit. Drag a visible handle.");
-            return;
+            return true;
         }
         gate.handle_under_cursor = false;
         gate.cursor_in_gizmo_dead_zone = false;
@@ -9794,6 +9752,7 @@ static void sandbox3d_try_pick_object(henka_engine* engine, sandbox3d_state* sta
         sandbox3d_record_reject_reason(state, SANDBOX3D_INTERACTION_REJECT_NONE, false);
         sandbox3d_record_success_result(state, "Picked %s", sandbox3d_safe_entity_name(state, picked_entity, "object"));
         sandbox3d_set_statusf(state, false, false, "Picked %s.", sandbox3d_safe_entity_name(state, picked_entity, "object"));
+        return true;
     }
     else
     {
@@ -9815,11 +9774,12 @@ static void sandbox3d_try_pick_object(henka_engine* engine, sandbox3d_state* sta
                 terrain_hit.position.x,
                 terrain_hit.position.y,
                 terrain_hit.position.z);
-            return;
+            return true;
         }
         sandbox3d_clear_selection(state, "No viewport object hit. Selection cleared.");
         sandbox3d_record_drag_result(state, "No viewport object hit");
     }
+    return false;
 }
 
 static void sandbox3d_apply_gizmo_drag(henka_engine* engine, sandbox3d_state* state)
@@ -17683,29 +17643,7 @@ static henka_result sandbox3d_initialize(henka_engine* engine, void* user_data)
     }
 
     sandbox3d_apply_loaded_settings(engine, state);
-    if (state->smoke_test &&
-        !state->capture_mode_requested &&
-        !sandbox3d_validate_startup_camera(state))
-    {
-        HENKA_LOG_ERROR("Sandbox startup camera did not frame meaningful scene content.");
-        state->smoke_validation_failed = true;
-    }
-    else if (state->smoke_test && !state->capture_mode_requested)
-    {
-        henka_bounds startup_bounds;
-        if (sandbox3d_get_scene_framing_bounds(state, &startup_bounds))
-        {
-            printf(
-                "Startup camera framing: target=(%.2f, %.2f, %.2f) pitch=%.3f distance=%.2f.\n",
-                startup_bounds.center.x,
-                startup_bounds.center.y,
-                startup_bounds.center.z,
-                state->camera.pitch_radians,
-                henka_vec3_length(henka_vec3_subtract(
-                    startup_bounds.center,
-                    state->camera.position)));
-        }
-    }
+    state->startup_frame_pending = !state->capture_mode_requested;
     sandbox3d_editor_ui_state_load(
         state->settings,
         &state->editor_ui);
@@ -19538,6 +19476,32 @@ static void sandbox3d_update(henka_engine* engine, double delta_seconds, void* u
         henka_engine_set_scene_viewport(engine, state->frame_layout.scene_viewport);
     }
 
+    if (state->startup_frame_pending)
+    {
+        sandbox3d_reset_camera_defaults(state);
+        state->startup_frame_pending = false;
+        sandbox3d_report_startup_camera_validation(state);
+    }
+    if (state->smoke_test && !state->primitive_add_smoke_ran)
+    {
+        const henka_result primitive_smoke_result =
+            sandbox3d_validate_add_primitive_smoke(state);
+        if (primitive_smoke_result != HENKA_SUCCESS)
+        {
+            state->smoke_validation_failed = true;
+            HENKA_LOG_ERROR(
+                "Sandbox Add Cube smoke validation failed (%d)",
+                (int)primitive_smoke_result);
+            henka_engine_request_exit(engine);
+        }
+        else
+        {
+            printf("Add Cube smoke: sandbox command created a solid lit cube mesh/material and removed the temporary entity.\n");
+            fflush(stdout);
+        }
+        state->primitive_add_smoke_ran = true;
+    }
+
     if (henka_input_was_key_pressed(engine, HENKA_KEY_HOME))
     {
         sandbox3d_reset_camera_defaults(state);
@@ -19605,6 +19569,10 @@ static void sandbox3d_update(henka_engine* engine, double delta_seconds, void* u
         const bool middle_pan_pressed = henka_input_was_mouse_button_pressed(engine, HENKA_MOUSE_BUTTON_MIDDLE);
         const bool left_pressed = henka_input_was_mouse_button_pressed(engine, HENKA_MOUSE_BUTTON_LEFT);
         const bool left_down = henka_input_is_mouse_button_down(engine, HENKA_MOUSE_BUTTON_LEFT);
+        const float empty_drag_distance = sandbox3d_vec2_length(
+            sandbox3d_vec2_subtract(
+                framebuffer_mouse_position,
+                state->view_navigation.empty_viewport_drag_origin));
         const henka_entity selected_entity = sandbox3d_get_real_selected_entity(state);
         sandbox3d_interaction_gate gate;
 
@@ -19619,14 +19587,17 @@ static void sandbox3d_update(henka_engine* engine, double delta_seconds, void* u
         gate.selected_object_selectable = gate.selected_object_valid && sandbox3d_is_selectable_entity(state, selected_entity);
         gate.selected_bounds_valid = sandbox3d_get_selected_bounds(state, &(henka_bounds){0});
 
-        if (alt_orbit_pressed && mouse_in_viewport)
+        if (alt_orbit_pressed &&
+            sandbox3d_evaluate_select_reject_reason(&gate) == SANDBOX3D_INTERACTION_REJECT_NONE)
         {
             sandbox3d_clear_gizmo_drag(state, true);
             state->view_navigation.orbiting = true;
+            state->view_navigation.empty_viewport_drag_candidate = false;
             sandbox3d_set_view_navigation_target(state, sandbox3d_get_view_navigation_target(state));
             sandbox3d_record_success_result(state, "Orbit shortcut started");
         }
-        if (middle_pan_pressed && mouse_in_viewport)
+        if (middle_pan_pressed &&
+            sandbox3d_evaluate_select_reject_reason(&gate) == SANDBOX3D_INTERACTION_REJECT_NONE)
         {
             sandbox3d_clear_gizmo_drag(state, true);
             state->view_navigation.panning = true;
@@ -19641,9 +19612,24 @@ static void sandbox3d_update(henka_engine* engine, double delta_seconds, void* u
         }
         if (state->view_navigation.panning &&
             !middle_pan_held &&
-            !(state->viewport_tool == SANDBOX3D_VIEWPORT_TOOL_PAN && left_down))
+            !(state->viewport_tool == SANDBOX3D_VIEWPORT_TOOL_PAN && left_down) &&
+            !(state->view_navigation.empty_viewport_drag_candidate && left_down))
         {
             state->view_navigation.panning = false;
+        }
+
+        if (sandbox3d_should_start_empty_viewport_pan(
+                state->viewport_tool,
+                &gate,
+                state->view_navigation.empty_viewport_drag_candidate,
+                state->gizmo.drag.dragging,
+                alt_orbit_held,
+                empty_drag_distance))
+        {
+            state->view_navigation.orbiting = false;
+            state->view_navigation.panning = true;
+            sandbox3d_set_view_navigation_target(state, sandbox3d_get_view_navigation_target(state));
+            sandbox3d_record_success_result(state, "Empty viewport drag panning");
         }
 
         if (mouse_in_viewport && mouse_wheel_delta.y != 0.0f)
@@ -19739,6 +19725,10 @@ static void sandbox3d_update(henka_engine* engine, double delta_seconds, void* u
         {
             state->view_navigation.panning = false;
         }
+        if (!left_down)
+        {
+            state->view_navigation.empty_viewport_drag_candidate = false;
+        }
 
         if (!navigation_active)
         {
@@ -19767,7 +19757,9 @@ static void sandbox3d_update(henka_engine* engine, double delta_seconds, void* u
             {
                 if (sandbox3d_evaluate_select_reject_reason(&gate) == SANDBOX3D_INTERACTION_REJECT_NONE)
                 {
-                    sandbox3d_try_pick_object(engine, state);
+                    state->view_navigation.empty_viewport_drag_candidate =
+                        !sandbox3d_try_pick_object(engine, state);
+                    state->view_navigation.empty_viewport_drag_origin = framebuffer_mouse_position;
                 }
                 else
                 {

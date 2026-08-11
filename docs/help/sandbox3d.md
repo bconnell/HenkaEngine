@@ -86,7 +86,8 @@ The engineering sample legend is available with `--primitive-gallery`:
 - Use `F3` to hide the grid briefly, then show it again to confirm the scene layout still reads clearly.
 - Press `F4` to open the sandbox panels, then use `F5` to compare the View, Inspect, and Full Tools layouts.
 - Release mouse capture, then use the Viewport Tool buttons to switch between Select, Orbit, Pan, Move, Rotate, and Scale.
-- Open `Camera/Status` and compare Perspective 3D, Side 2.5D, Top-down 2.5D, and Isometric 2.5D. Use `Orbit` and `Pan` with left drag, plus `Mouse Wheel`, `F`, and `Home`, to test customization, pan, projection-aware zoom, frame selected, and preset reset.
+- Open `Camera/Status` and compare Perspective 3D, Side 2.5D, Top-down 2.5D, and Isometric 2.5D. Use `Orbit` and `Pan` with left drag, plus `Mouse Wheel` or two-finger touchpad scroll, `F`, and `Home`, to test customization, pan, projection-aware zoom, frame selected, and preset reset.
+- In Select mode, left-drag empty Scene View space past the small drag threshold to pan on laptop touchpads without turning ordinary clicks into camera movement.
 - Use the optional `Alt + Left Mouse` orbit and `Middle Mouse` pan shortcuts if you want to compare them with the explicit tool modes.
 - Switch the Viewport Tool section between Select, Move, Rotate, and Scale, then drag the gizmo on a selected object.
 - In `--primitive-gallery`, select `Textured Cube`, expand Object Details > Authoring, and use Extrude, Inset, Bevel, Subdivide, Project UV, Pack UV, Undo, and Redo to verify the source topology, scene mesh, bounds, and renderer stay connected.
@@ -117,7 +118,8 @@ The engineering sample legend is available with `--primitive-gallery`:
 - Confirm the small in-window status area reports common actions such as layout changes, camera reset, saved settings, or object focus.
 - Select each scene object and confirm the Object Details panel updates.
 - Use Focus Camera, Reset Transform, and Print Object Info on a few different objects.
-- Use the controls panel to reset the camera, save settings, and reset sandbox settings.
+- Use the controls panel to reset the camera, save settings, and reset sandbox settings. Normal startup and `Home` share scene-first framing; older transient camera-pose settings are ignored rather than restored automatically.
+- Use Add Cube in the object tools and confirm the new cube appears as a solid lit object, not just a selection outline. The core action remains renderer-independent; the sandbox attaches the visible mesh and material.
 - Select an object and use `M` or `G`, `R`, or `S` to start a move, rotate, or scale transform. Use `X`, `Y`, or `Z` to constrain it, then confirm or cancel.
 
 ## Sandbox panels

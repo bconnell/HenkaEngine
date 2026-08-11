@@ -64,6 +64,7 @@ them to the repository.
 7. Confirm Debug Grid is not highlighted on startup.
 8. Confirm Object Details, Physics QA, Diagnostics, and the compact strip report no selected object on startup.
 9. Confirm the scene renders inside its own viewport region.
+9a. Confirm the startup camera frames the meaningful scene content straight ahead; it should not restore an old down-left transient pose.
 10. Confirm docked panels do not cover scene graphics.
 11. Confirm the main scene objects remain visible while the UI is open.
 12. Press `F4` and confirm the visible UI appears or hides as expected.
@@ -118,8 +119,10 @@ them to the repository.
 56. Open `Transform QA` and confirm direct move, rotate, scale, and reset controls visibly change the selected real object.
 57. Click `Orbit` and left-drag more than once; confirm it remains repeatable after floating and redocking panels.
 58. Click `Pan` and left-drag more than once; confirm it remains repeatable after floating and redocking panels.
-59. Use the mouse wheel over the viewport and confirm zoom works; wheel over a panel must not zoom the viewport.
+58a. Switch back to `Select`, left-drag empty Scene View space past the small threshold, and confirm the view pans without needing a middle mouse button. A normal empty click should still clear selection instead of panning.
+59. Use the mouse wheel or two-finger touchpad scroll over the viewport and confirm zoom works; wheel or touchpad scroll over a panel must not zoom the viewport.
 60. Press `F` and `Home` and confirm camera framing and reset remain usable.
+60a. Click Add Cube in the object tools and confirm the new cube appears as a solid lit object with filled faces, not only a selection or bounds outline.
 61. Select `Textured Cube`, use Move X/Y/Z, Rotate X/Y/Z, and Scale, and confirm the selected object transforms after dock movement and resize.
 62. Toggle `Hit Boxes` and confirm the viewport still shows handle regions used for hit testing.
 63. Confirm Object Details updates after viewport manipulation.

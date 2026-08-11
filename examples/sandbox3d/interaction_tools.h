@@ -73,6 +73,10 @@ typedef struct sandbox3d_selection_highlight_model
     henka_vec3 edge_ends[12];
 } sandbox3d_selection_highlight_model;
 
+/* Keep ordinary clicks as selection while allowing laptop touchpads to pan
+ * only after an intentional empty-viewport drag. */
+#define SANDBOX3D_EMPTY_VIEWPORT_PAN_DRAG_THRESHOLD_PIXELS 6.0f
+
 const char* sandbox3d_viewport_tool_mode_to_string(sandbox3d_viewport_tool_mode tool_mode);
 const char* sandbox3d_interaction_reject_reason_to_string(sandbox3d_interaction_reject_reason reason);
 henka_gizmo_mode sandbox3d_viewport_tool_mode_to_gizmo_mode(sandbox3d_viewport_tool_mode tool_mode);
@@ -90,6 +94,13 @@ sandbox3d_interaction_reject_reason sandbox3d_evaluate_gizmo_reject_reason(
     const sandbox3d_interaction_gate* gate);
 sandbox3d_interaction_reject_reason sandbox3d_evaluate_select_reject_reason(
     const sandbox3d_interaction_gate* gate);
+bool sandbox3d_should_start_empty_viewport_pan(
+    sandbox3d_viewport_tool_mode tool_mode,
+    const sandbox3d_interaction_gate* gate,
+    bool empty_viewport_drag_candidate,
+    bool gizmo_drag_active,
+    bool alt_orbit_active,
+    float drag_distance_pixels);
 bool sandbox3d_selection_highlight_is_allowed(const sandbox3d_interaction_gate* gate);
 henka_vec3 sandbox3d_make_move_delta(henka_gizmo_axis axis, float magnitude);
 henka_quat sandbox3d_make_rotation_delta(henka_gizmo_axis axis, float radians);
