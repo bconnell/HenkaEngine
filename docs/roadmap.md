@@ -38,23 +38,23 @@ Henka is moving toward a practical developer workspace, but this should happen i
 Current workspace foundations include:
 
 1. Docked panels with a dedicated Scene View.
-2. Session-only native detached tool windows with close-to-redock recovery.
-3. Resizable occupied dock regions and reset-layout recovery.
-4. Visible workspace and viewport interaction diagnostics.
-5. A multi-window platform foundation with a separate native test panel for render and event-routing validation.
+2. Native detached tool windows with matching production-panel content, close-to-redock recovery, bounded virtual-screen placement persistence, and title-bar drag-back recognition.
+3. Resizable occupied dock regions, validated split topology, tab grouping/reordering, bounded layout history, named layout slots, and reset-layout recovery.
+4. Scrollable panel bodies with bounded wheel/touchpad ownership, persistent collapsible property groups, fixed panel headers, and integrated scrollbar behavior.
+5. Visible workspace and viewport interaction diagnostics.
+6. A multi-window platform foundation with a separate native test panel for render and event-routing validation.
 
 Current runtime foundations also include rigid-body physics v1: fixed-step worlds, static/dynamic/kinematic bodies, sphere/AABB/plane collision, impulse response, friction, restitution, trigger events, raycasts, opt-in sandbox QA controls, and viewport selection highlighting for the selected real scene object.
 
 Planned workspace improvements include:
 
-1. Finish full controls and drag-back redocking for native detached tool windows.
-2. Add saved workspace placement and dock sizes.
-3. Add an in-window controls editor for the existing local keybinding profiles.
-4. A detachable Scene View after multi-window rendering and viewport input are dependable.
-5. A clearer scene hierarchy.
-6. Numeric transform editing.
-7. Undo and redo for basic scene operations.
-8. Scene save and load support.
+1. Complete the remaining native desktop feel and manual QA for detached controls and title-bar drag-back redocking.
+2. Add an in-window controls editor for the existing local keybinding profiles.
+3. A detachable Scene View after multi-window rendering and viewport input are dependable.
+4. A clearer scene hierarchy.
+5. Numeric transform editing.
+6. Undo and redo for basic scene operations.
+7. Scene save and load support.
 
 These features should appear only when they are wired into the engine, tested, documented, and useful.
 
@@ -164,8 +164,8 @@ Current limitations include:
 2. The transform gizmo workflow still needs manual desktop QA for visual feel and mouse comfort.
 3. Scene saving and loading are not complete authoring workflows yet.
 4. The docked and detached workspace is useful for inspection, testing, and early authoring behavior, but it is not yet a full production editor and project-authoring workflow.
-5. Workspace movement and sizing require desktop QA for feel. Detached placement, matching detached controls, and bounded title-bar drag-back recognition are implemented; native desktop feel and detachable Scene View remain manual-QA/open items.
-6. The native test panel and compact detached production-panel surfaces use multi-window rendering and event routing; bounded detached controls and title-bar drag-back recognition are implemented, while detachable Scene View remains open.
+5. Workspace movement and sizing require desktop QA for feel. Detached placement, matching detached controls, bounded title-bar drag-back recognition, layout history, named slots, and panel-group persistence are implemented; native desktop feel and detachable Scene View remain manual-QA/open items.
+6. The native test panel and detached production-panel surfaces use multi-window rendering and event routing; bounded detached controls and title-bar drag-back recognition are implemented, while detachable Scene View remains open.
 7. Asset loading is still limited.
 8. The 2D workflow and the sprite, layer, parallax, animation, and movement-constraint parts of 2.5D are not implemented yet; the first 2.5D camera presets are available.
 9. Physics v1 is intentionally limited to rigid bodies and primitive colliders; mesh collision, joints, character controllers, and advanced simulation remain future work.
