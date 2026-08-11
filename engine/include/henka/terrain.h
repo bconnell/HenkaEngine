@@ -107,6 +107,8 @@ typedef struct henka_terrain_world_stats
     /* Exact bytes owned by the world object, resident sample buffers, and
      * bounded region/chunk tables. */
     uint64_t cpu_bytes;
+    /* Active regions whose latest edit has not been persisted. */
+    uint32_t dirty_region_count;
 } henka_terrain_world_stats;
 
 henka_terrain_world_desc henka_terrain_world_desc_default(void);

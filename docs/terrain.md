@@ -415,6 +415,12 @@ Reload uses a bounded temporary decode, then rebuilds the physics patch and
 render mesh; a presentation failure restores the previous samples, revision,
 generation, and collision patch.
 
+`henka_terrain_world_get_stats` reports `dirty_region_count` alongside resident
+and pending-I/O counts. The Sandbox Terrain utility displays that count before
+the Render and Collision rows, so an editor user can see unsaved active regions
+without inferring it from the storage journal. This is a diagnostic only; it
+does not schedule persistence or change the transactional Save contract.
+
 The descriptor stores the format version, world and base identities, all
 world/region/chunk relationships, and bounded residency limits. Creating a
 world allocates only the configured region and chunk residency tables; it does

@@ -582,11 +582,19 @@ henka_result henka_terrain_world_get_stats(
     henka_terrain_world_stats* out_stats)
 {
     uint64_t cpu_bytes;
+    uint32_t dirty_region_count = 0U;
     uint32_t index;
 
     if (world == NULL || out_stats == NULL)
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    for (index = 0U; index < world->desc.max_resident_regions; ++index)
+    {
+        if (world->regions[index].active && world->regions[index].state.dirty)
+        {
+            ++dirty_region_count;
+        }
     }
     cpu_bytes = (uint64_t)sizeof(*world);
     if (world->desc.max_resident_regions > UINT64_MAX / sizeof(*world->regions) ||
@@ -620,13 +628,14 @@ henka_result henka_terrain_world_get_stats(
         }
     }
     *out_stats = (henka_terrain_world_stats){
-        world->resident_region_count,
-        world->resident_chunk_count,
-        world->pending_io_count,
-        world->desc.max_resident_regions,
-        world->desc.max_resident_chunks,
-        world->desc.max_pending_io,
-        cpu_bytes};
+        .resident_region_count = world->resident_region_count,
+        .resident_chunk_count = world->resident_chunk_count,
+        .pending_io_count = world->pending_io_count,
+        .dirty_region_count = dirty_region_count,
+        .max_resident_regions = world->desc.max_resident_regions,
+        .max_resident_chunks = world->desc.max_resident_chunks,
+        .max_pending_io = world->desc.max_pending_io,
+        .cpu_bytes = cpu_bytes};
     return HENKA_SUCCESS;
 }
 

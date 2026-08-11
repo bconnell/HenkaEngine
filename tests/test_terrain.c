@@ -79,12 +79,23 @@ static int test_bounded_residency(void)
         !region_state.cpu_resident || region_state.revision != 0U ||
         henka_terrain_world_get_stats(world, &stats) != HENKA_SUCCESS ||
         stats.resident_region_count != 1U || stats.resident_chunk_count != 1U ||
+        stats.dirty_region_count != 0U ||
         stats.max_resident_regions != 1U || stats.max_resident_chunks != 1U)
     {
         henka_terrain_world_destroy(world);
         return 0;
     }
     if (stats.cpu_bytes == 0U)
+    {
+        henka_terrain_world_destroy(world);
+        return 0;
+    }
+    if (henka_terrain_world_set_region_revision(world, region, 3U, 7U, true) != HENKA_SUCCESS ||
+        henka_terrain_world_get_stats(world, &stats) != HENKA_SUCCESS ||
+        stats.dirty_region_count != 1U ||
+        henka_terrain_world_set_region_revision(world, region, 3U, 7U, false) != HENKA_SUCCESS ||
+        henka_terrain_world_get_stats(world, &stats) != HENKA_SUCCESS ||
+        stats.dirty_region_count != 0U)
     {
         henka_terrain_world_destroy(world);
         return 0;
