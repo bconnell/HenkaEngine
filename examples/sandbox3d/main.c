@@ -309,6 +309,11 @@ typedef struct sandbox3d_physics_state
 #define SANDBOX3D_TERRAIN_STREAM_PHYSICS_RADIUS_REGIONS 1U
 #define SANDBOX3D_TERRAIN_STREAM_RENDER_RADIUS_REGIONS 1U
 #define SANDBOX3D_TERRAIN_STREAM_UNLOAD_RADIUS_REGIONS 1U
+#define SANDBOX3D_TERRAIN_STREAM_RETURN_PUMPS 512U
+/* A production region is a bounded 513x513 sample buffer; allow the worker
+ * to complete the final persisted-region handoff without making this soak
+ * unbounded. */
+#define SANDBOX3D_TERRAIN_STREAM_DRAIN_PUMPS 2048U
 
 typedef struct sandbox3d_state
 {
@@ -19042,6 +19047,7 @@ static henka_result sandbox3d_run_terrain_stream_stress(
     bool collision_crossed = false;
     bool collision_diagonal = false;
     bool collision_returned = false;
+    bool return_region_ready = false;
 
     if (state == NULL || state->terrain_world == NULL ||
         state->terrain_streamer == NULL || state->terrain_render == NULL ||
@@ -19274,7 +19280,7 @@ static henka_result sandbox3d_run_terrain_stream_stress(
     }
 
     state->camera.position = (henka_vec3){32.0f, 2.4f, 32.0f};
-    for (index = 0U; index < 64U; ++index)
+    for (index = 0U; index < SANDBOX3D_TERRAIN_STREAM_RETURN_PUMPS; ++index)
     {
         stream_result = sandbox3d_update_terrain_streaming(state);
         render_result = stream_result == HENKA_SUCCESS
@@ -19297,15 +19303,44 @@ static henka_result sandbox3d_run_terrain_stream_stress(
             henka_terrain_render_runtime_get_chunk(
                 state->terrain_render, (henka_terrain_chunk_id){0, 0}, &chunk_info) == HENKA_SUCCESS)
         {
+            return_region_ready = true;
             break;
         }
 #if defined(_WIN32)
         Sleep(1U);
 #endif
     }
-    if (index >= 64U)
+    if (!return_region_ready)
     {
-        printf("Terrain stream stress return did not restore region 0 within 64 pumps.\n");
+        memset(&stream_stats, 0, sizeof(stream_stats));
+        memset(&render_stats, 0, sizeof(render_stats));
+        (void)henka_terrain_streamer_get_stats(state->terrain_streamer, &stream_stats);
+        const henka_result region_state_result = henka_terrain_world_get_region_state(
+            state->terrain_world, (henka_terrain_region_id){0, 0}, &region_state);
+        (void)henka_terrain_render_runtime_get_stats(state->terrain_render, &render_stats);
+        chunk_result = henka_terrain_render_runtime_get_chunk(
+            state->terrain_render, (henka_terrain_chunk_id){0, 0}, &chunk_info);
+        printf(
+            "Terrain stream stress return did not restore region 0 within %u pumps: state=%s cpu=%s physics=%s render=%s pending=%s rev=%llu gen=%llu stream queued=%u active=%u completions=%u completed=%llu failed=%llu cancelled=%llu evicted=%llu render resident=%u queued=%u rebuilt=%llu chunk=%s.\n",
+            SANDBOX3D_TERRAIN_STREAM_RETURN_PUMPS,
+            region_state_result == HENKA_SUCCESS ? "available" : "unavailable",
+            region_state_result == HENKA_SUCCESS && region_state.cpu_resident ? "yes" : "no",
+            region_state_result == HENKA_SUCCESS && region_state.physics_resident ? "yes" : "no",
+            region_state_result == HENKA_SUCCESS && region_state.render_resident ? "yes" : "no",
+            region_state_result == HENKA_SUCCESS && region_state.pending_io ? "yes" : "no",
+            region_state_result == HENKA_SUCCESS ? (unsigned long long)region_state.revision : 0ULL,
+            region_state_result == HENKA_SUCCESS ? (unsigned long long)region_state.generation : 0ULL,
+            stream_stats.queued_request_count,
+            stream_stats.active_request_count,
+            stream_stats.completion_count,
+            (unsigned long long)stream_stats.completed_request_count,
+            (unsigned long long)stream_stats.failed_request_count,
+            (unsigned long long)stream_stats.cancelled_request_count,
+            (unsigned long long)stream_stats.evicted_region_count,
+            render_stats.resident_chunks,
+            render_stats.pending_requests,
+            (unsigned long long)render_stats.rebuilt_chunks,
+            henka_result_to_string(chunk_result));
         fflush(stdout);
         return HENKA_ERROR_UNKNOWN;
     }
@@ -19350,14 +19385,17 @@ static henka_result sandbox3d_run_terrain_stream_stress(
         fflush(stdout);
         return HENKA_ERROR_UNKNOWN;
     }
-    for (index = 0U; index < 128U; ++index)
+    for (index = 0U; index < SANDBOX3D_TERRAIN_STREAM_DRAIN_PUMPS; ++index)
     {
         henka_terrain_streamer_get_stats(state->terrain_streamer, &stream_stats);
         if (stream_stats.queued_request_count == 0U &&
             stream_stats.active_request_count == 0U &&
             stream_stats.completion_count == 0U)
         {
-            break;
+#if defined(_WIN32)
+            Sleep(1U);
+#endif
+            continue;
         }
         if (henka_terrain_streamer_pump(state->terrain_streamer, 8U) != HENKA_SUCCESS)
         {
@@ -19367,9 +19405,17 @@ static henka_result sandbox3d_run_terrain_stream_stress(
         Sleep(1U);
 #endif
     }
-    if (index >= 128U)
+    henka_terrain_streamer_get_stats(state->terrain_streamer, &stream_stats);
+    if (stream_stats.queued_request_count != 0U ||
+        stream_stats.active_request_count != 0U ||
+        stream_stats.completion_count != 0U)
     {
-        printf("Terrain stream stress worker did not drain within 128 bounded waits.\n");
+        printf(
+            "Terrain stream stress worker did not drain within %u bounded waits: queued=%u active=%u completions=%u.\n",
+            SANDBOX3D_TERRAIN_STREAM_DRAIN_PUMPS,
+            stream_stats.queued_request_count,
+            stream_stats.active_request_count,
+            stream_stats.completion_count);
         fflush(stdout);
         return HENKA_ERROR_UNKNOWN;
     }
