@@ -179,8 +179,17 @@ The `Object Details` panel shows the current selection.
 - scale
 - what the object demonstrates
 - mesh, material, texture or fallback summary, and interaction availability
-- full Object Details mode also shows the bounded effective material description for the selected object; definition identity, instance override values, and dependency graphs remain API/documentation workflows; a complete authoring panel is not implemented yet
+- full Object Details mode also shows the bounded effective material description for the selected object, shared definition identity, instance override values, semantic texture dependencies, and transactional reimport status; a complete authoring panel is not implemented yet
 - safe actions for visibility, camera focus, transform reset, and console info output
+
+Controls Main and Object Details use fixed panel headers and bounded scrollable
+bodies. Their property groups have stable internal identities, persistent
+expanded/collapsed state, and recomputed scroll extents after collapse or
+resize. Wheel and continuous touchpad deltas stay with the panel body, while
+Scene View retains wheel ownership for camera zoom. Detached production panels
+use the same body and scrollbar behavior through their native-window input
+path. Workspace tab reordering is supported; property-group reordering remains
+deferred until the panel renderer can expose it without duplicating tool state.
 
 The selected object also shows a visible transform gizmo in the scene viewport.
 
@@ -248,13 +257,13 @@ The runtime also reports whether it is running in `Development` or `Packaged` mo
 - The UI overlay is intentionally small. It is meant for sandbox control and object inspection, not as a full editor or a complete runtime UI system.
 - The current 2.5D support is a camera foundation. Sprites, texture regions, layers, parallax, animation, and movement-plane constraints remain future work. Blended materials use a bounded back-to-front transparent queue after opaque and masked geometry; if a scene exceeds the 4,096-item queue, the renderer keeps deterministic entity-order blending as a safe fallback. This is sorted straight-alpha blending, not order-independent transparency.
 - Docked workspace panels can detach into separate native windows, move independently, and return to their last valid dock when closed. Detachable Scene View support remains future workspace work.
-- The transform gizmo is intentionally scoped to world-axis move, rotate, and scale for the current sandbox object model. Undo, numeric editing, saved workspace arrangements, scene authoring, and broader tool surfaces are separate future work.
+- The transform gizmo is intentionally scoped to world-axis move, rotate, and scale for the current sandbox object model. Undo, numeric editing, and broader tool surfaces remain separate future work; bounded workspace arrangements, named layout slots, layout history, and panel presentation persistence are available.
 - Scale is currently uniform-only in the viewport gizmo path. Per-axis scale handles are intentionally not shown until they are reliable enough to ship.
 - Manual desktop QA is still the best way to judge gizmo handle feel, hover clarity, and transform drag comfort.
 - Manual desktop QA is also still the best way to judge whether Orbit and Pan feel reliable in a packaged run.
 - Rigid-body physics v1 is limited to primitive sphere, axis-aligned box, and plane colliders; advanced collider and solver features remain future work, and manual desktop QA is still required for collision feel and debug overlay readability.
 - The packaged sandbox still opens a console window at this stage. In-window utilities and status are the preferred viewer workflow, while the console remains available for fallback logs.
-- Editor tools, asset browser UI, and broader 2D or 2.5D workflows are not available yet.
+- Full editor project-authoring tools and broader 2D or 2.5D workflows are not available yet; the sandbox includes bounded asset, material, texture, terrain, and authoring QA surfaces.
 
 More detail about the current UI layer is available in [docs/ui.md](../ui.md).
 
