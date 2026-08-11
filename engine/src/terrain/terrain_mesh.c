@@ -27,6 +27,9 @@ static void henka_terrain_mesh_morph_transition_vertex(
     const henka_terrain_mesh_vertex* first,
     const henka_terrain_mesh_vertex* second)
 {
+    float normal_length;
+    float tangent_length;
+    float tangent_dot_normal;
     uint32_t component;
 
     if (target == NULL || first == NULL || second == NULL)
@@ -45,9 +48,57 @@ static void henka_terrain_mesh_morph_transition_vertex(
         target->tangent[component] =
             (first->tangent[component] + second->tangent[component]) * 0.5f;
     }
+    normal_length = sqrtf(
+        target->normal[0] * target->normal[0] +
+        target->normal[1] * target->normal[1] +
+        target->normal[2] * target->normal[2]);
+    if (!isfinite(normal_length) || normal_length <= 0.000001f)
+    {
+        target->normal[0] = 0.0f;
+        target->normal[1] = 1.0f;
+        target->normal[2] = 0.0f;
+    }
+    else
+    {
+        target->normal[0] /= normal_length;
+        target->normal[1] /= normal_length;
+        target->normal[2] /= normal_length;
+    }
+    tangent_dot_normal = target->tangent[0] * target->normal[0] +
+        target->tangent[1] * target->normal[1] +
+        target->tangent[2] * target->normal[2];
+    target->tangent[0] -= tangent_dot_normal * target->normal[0];
+    target->tangent[1] -= tangent_dot_normal * target->normal[1];
+    target->tangent[2] -= tangent_dot_normal * target->normal[2];
+    tangent_length = sqrtf(
+        target->tangent[0] * target->tangent[0] +
+        target->tangent[1] * target->tangent[1] +
+        target->tangent[2] * target->tangent[2]);
+    if (!isfinite(tangent_length) || tangent_length <= 0.000001f)
+    {
+        target->tangent[0] = fabsf(target->normal[1]) < 0.9f ? 0.0f : 1.0f;
+        target->tangent[1] = fabsf(target->normal[1]) < 0.9f ? 1.0f : 0.0f;
+        target->tangent[2] = 0.0f;
+        tangent_dot_normal = target->tangent[0] * target->normal[0] +
+            target->tangent[1] * target->normal[1] +
+            target->tangent[2] * target->normal[2];
+        target->tangent[0] -= tangent_dot_normal * target->normal[0];
+        target->tangent[1] -= tangent_dot_normal * target->normal[1];
+        target->tangent[2] -= tangent_dot_normal * target->normal[2];
+        tangent_length = sqrtf(
+            target->tangent[0] * target->tangent[0] +
+            target->tangent[1] * target->tangent[1] +
+            target->tangent[2] * target->tangent[2]);
+    }
+    if (isfinite(tangent_length) && tangent_length > 0.000001f)
+    {
+        target->tangent[0] /= tangent_length;
+        target->tangent[1] /= tangent_length;
+        target->tangent[2] /= tangent_length;
+    }
     target->tangent[3] = fabsf(first->tangent[3]) >= 0.5f
-        ? first->tangent[3]
-        : second->tangent[3];
+        ? (first->tangent[3] < 0.0f ? -1.0f : 1.0f)
+        : (second->tangent[3] < 0.0f ? -1.0f : 1.0f);
     for (component = 0U; component < 2U; ++component)
     {
         target->uv[component] = (first->uv[component] + second->uv[component]) * 0.5f;
@@ -58,6 +109,7 @@ static void henka_terrain_mesh_morph_transition_vertex(
             ((uint16_t)first->material_weights[component] +
                 (uint16_t)second->material_weights[component]) / 2U);
     }
+    (void)henka_terrain_normalize_weights(target->material_weights);
 }
 
 static float henka_terrain_mesh_height_meters(const henka_terrain_sample* sample)

@@ -290,7 +290,9 @@ manager remains the owner of those borrowed texture handles.
 Uploaded GPU meshes use a four-edge transition mask when an adjacent resident
 chunk is exactly one LOD coarser. The mesh keeps shared even edge samples and
 keeps all regular non-degenerate triangles, and morphs intervening fine edge
-samples onto the linear boundary between the shared coarse endpoints. This is
+samples onto the linear boundary between the shared coarse endpoints. Transition
+vertices re-normalize their interpolated normal/tangent basis and restore the
+255-sum material-layer invariant before upload. This is
 bounded per-edge geometry morphing for one-level differences; a missing or invalid neighbor uses a bounded
 downward skirt only on that edge until the neighbor is resident; the owner
 records both masks in chunk diagnostics. On each observer update the owner now derives a deterministic

@@ -354,6 +354,36 @@ static int test_transition_topology(void)
             goto cleanup;
         }
     }
+    for (index = 0U; index < mesh.vertex_count; ++index)
+    {
+        const henka_terrain_mesh_vertex* vertex = &mesh.vertices[index];
+        const float normal_length = sqrtf(
+            vertex->normal[0] * vertex->normal[0] +
+            vertex->normal[1] * vertex->normal[1] +
+            vertex->normal[2] * vertex->normal[2]);
+        const float tangent_length = sqrtf(
+            vertex->tangent[0] * vertex->tangent[0] +
+            vertex->tangent[1] * vertex->tangent[1] +
+            vertex->tangent[2] * vertex->tangent[2]);
+        const float tangent_dot_normal =
+            vertex->normal[0] * vertex->tangent[0] +
+            vertex->normal[1] * vertex->tangent[1] +
+            vertex->normal[2] * vertex->tangent[2];
+        uint32_t weight_sum = 0U;
+        uint32_t component;
+
+        for (component = 0U; component < HENKA_TERRAIN_ACTIVE_MATERIAL_COUNT; ++component)
+        {
+            weight_sum += vertex->material_weights[component];
+        }
+        if (!isfinite(normal_length) || fabsf(normal_length - 1.0f) > 0.001f ||
+            !isfinite(tangent_length) || fabsf(tangent_length - 1.0f) > 0.001f ||
+            !isfinite(tangent_dot_normal) || fabsf(tangent_dot_normal) > 0.001f ||
+            weight_sum != 255U)
+        {
+            goto cleanup;
+        }
+    }
     for (z = 1U; z < desc.samples_per_chunk - 1U; z += 2U)
     {
         const uint32_t west_index = z * desc.samples_per_chunk;
