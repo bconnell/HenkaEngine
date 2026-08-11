@@ -2,7 +2,7 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
 $repoRoot = Split-Path -Parent $PSScriptRoot
-$fixtureRoot = Join-Path $repoRoot ".terrain-visual-validator-test"
+$fixtureRoot = Join-Path $repoRoot (".terrain-visual-validator-test-" + [Guid]::NewGuid().ToString("N"))
 [System.IO.Directory]::CreateDirectory($fixtureRoot) | Out-Null
 Add-Type -AssemblyName System.Drawing
 
@@ -49,34 +49,41 @@ function Invoke-Validator {
         -InputDirectory $InputDirectory | Out-Null
 }
 
-New-TestTerrainImage -Path (Join-Path $fixtureRoot "terrain-same-camera-solid.png") -Flat $false -Rendered $false
-New-TestTerrainImage -Path (Join-Path $fixtureRoot "terrain-same-camera-material-preview.png") -Flat $false -Rendered $false
-New-TestTerrainImage -Path (Join-Path $fixtureRoot "terrain-same-camera-rendered.png") -Flat $false -Rendered $true
-Invoke-Validator -InputDirectory $fixtureRoot
-
-foreach ($mode in @("solid", "material-preview", "rendered")) {
-    New-TestTerrainImage `
-        -Path (Join-Path $fixtureRoot ("terrain-corner-{0}.png" -f $mode)) `
-        -Flat $false `
-        -Rendered ($mode -eq "rendered")
-}
-& (Join-Path $PSScriptRoot "check_terrain_corner_visual_evidence_windows.ps1") `
-    -InputDirectory $fixtureRoot | Out-Null
-
-New-TestTerrainImage -Path (Join-Path $fixtureRoot "terrain-same-camera-solid.png") -Flat $true -Rendered $false
-New-TestTerrainImage -Path (Join-Path $fixtureRoot "terrain-same-camera-material-preview.png") -Flat $true -Rendered $false
-New-TestTerrainImage -Path (Join-Path $fixtureRoot "terrain-same-camera-rendered.png") -Flat $true -Rendered $true
-$rejectedFlatEvidence = $false
-$flatEvidenceMessage = ""
 try {
+    New-TestTerrainImage -Path (Join-Path $fixtureRoot "terrain-same-camera-solid.png") -Flat $false -Rendered $false
+    New-TestTerrainImage -Path (Join-Path $fixtureRoot "terrain-same-camera-material-preview.png") -Flat $false -Rendered $false
+    New-TestTerrainImage -Path (Join-Path $fixtureRoot "terrain-same-camera-rendered.png") -Flat $false -Rendered $true
     Invoke-Validator -InputDirectory $fixtureRoot
-}
-catch {
-    $rejectedFlatEvidence = $true
-    $flatEvidenceMessage = $_.Exception.Message
-}
-if (-not $rejectedFlatEvidence -or $flatEvidenceMessage -notmatch "too flat") {
-    throw "The validator did not reject flat terrain evidence for the expected reason."
-}
 
-Write-Output "Terrain visual evidence validator tests passed."
+    foreach ($mode in @("solid", "material-preview", "rendered")) {
+        New-TestTerrainImage `
+            -Path (Join-Path $fixtureRoot ("terrain-corner-{0}.png" -f $mode)) `
+            -Flat $false `
+            -Rendered ($mode -eq "rendered")
+    }
+    & (Join-Path $PSScriptRoot "check_terrain_corner_visual_evidence_windows.ps1") `
+        -InputDirectory $fixtureRoot | Out-Null
+
+    New-TestTerrainImage -Path (Join-Path $fixtureRoot "terrain-same-camera-solid.png") -Flat $true -Rendered $false
+    New-TestTerrainImage -Path (Join-Path $fixtureRoot "terrain-same-camera-material-preview.png") -Flat $true -Rendered $false
+    New-TestTerrainImage -Path (Join-Path $fixtureRoot "terrain-same-camera-rendered.png") -Flat $true -Rendered $true
+    $rejectedFlatEvidence = $false
+    $flatEvidenceMessage = ""
+    try {
+        Invoke-Validator -InputDirectory $fixtureRoot
+    }
+    catch {
+        $rejectedFlatEvidence = $true
+        $flatEvidenceMessage = $_.Exception.Message
+    }
+    if (-not $rejectedFlatEvidence -or $flatEvidenceMessage -notmatch "too flat") {
+        throw "The validator did not reject flat terrain evidence for the expected reason."
+    }
+
+    Write-Output "Terrain visual evidence validator tests passed."
+}
+finally {
+    if (Test-Path -LiteralPath $fixtureRoot) {
+        Remove-Item -LiteralPath $fixtureRoot -Recurse -Force -ErrorAction SilentlyContinue
+    }
+}
