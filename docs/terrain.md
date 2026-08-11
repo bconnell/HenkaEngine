@@ -340,7 +340,12 @@ The optional terrain capture uses one deterministic reference camera aimed acros
 the seeded rolling/valley/cliff area for Solid, Material Preview, and Rendered.
 Capture mode refreshes the four bounded fixture regions from their seeded samples
 so persisted editor edits cannot change the comparison; material and
-presentation comparisons do not change scene materials or scene lights.
+presentation comparisons do not change scene materials or scene lights. The
+capture command runs `scripts/check_terrain_visual_evidence_windows.ps1`, which
+samples only the normalized Scene View interior and rejects missing or
+dimension-mismatched images, flat content in any mode, and a Rendered image
+that is not measurably distinct from Material Preview. This is an automated
+presentation-path guard, not a baseline-image or human visual approval.
 The same graphical
 smoke revokes render residency after the upload, forces a candidate mesh
 failure, verifies the previous mesh and revision remain resident, then restores

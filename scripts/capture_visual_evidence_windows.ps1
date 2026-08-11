@@ -230,5 +230,10 @@ if ($IncludeTerrain) {
     }
 }
 
+if ($IncludeTerrain) {
+    & (Join-Path $PSScriptRoot "check_terrain_visual_evidence_windows.ps1") `
+        -InputDirectory $OutputDirectory
+}
+
 $records | Set-Content -LiteralPath (Join-Path $OutputDirectory "INDEX.txt")
 Write-Host "[pass] Same-camera Solid, Material Preview, and Rendered evidence captured in $OutputDirectory"
