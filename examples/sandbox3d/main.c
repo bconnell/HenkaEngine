@@ -6383,10 +6383,10 @@ static void sandbox3d_apply_capture_camera(sandbox3d_state* state)
      * startup uses the scene-first reset framing path. */
     {
         const henka_vec3 target = state->terrain_capture_mode_requested
-            ? (henka_vec3){32.0f, -0.6f, 32.0f}
+            ? (henka_vec3){300.0f, 1.0f, 260.0f}
             : (henka_vec3){0.0f, 2.05f, -1.7f};
         const henka_vec3 position = state->terrain_capture_mode_requested
-            ? (henka_vec3){64.0f, 16.0f, 84.0f}
+            ? (henka_vec3){470.0f, 70.0f, 470.0f}
             : (henka_vec3){0.0f, 3.0f, 8.8f};
         const henka_vec3 direction = henka_vec3_normalize(
             henka_vec3_subtract(target, position));
