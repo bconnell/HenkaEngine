@@ -54,6 +54,15 @@ New-TestTerrainImage -Path (Join-Path $fixtureRoot "terrain-same-camera-material
 New-TestTerrainImage -Path (Join-Path $fixtureRoot "terrain-same-camera-rendered.png") -Flat $false -Rendered $true
 Invoke-Validator -InputDirectory $fixtureRoot
 
+foreach ($mode in @("solid", "material-preview", "rendered")) {
+    New-TestTerrainImage `
+        -Path (Join-Path $fixtureRoot ("terrain-corner-{0}.png" -f $mode)) `
+        -Flat $false `
+        -Rendered ($mode -eq "rendered")
+}
+& (Join-Path $PSScriptRoot "check_terrain_corner_visual_evidence_windows.ps1") `
+    -InputDirectory $fixtureRoot | Out-Null
+
 New-TestTerrainImage -Path (Join-Path $fixtureRoot "terrain-same-camera-solid.png") -Flat $true -Rendered $false
 New-TestTerrainImage -Path (Join-Path $fixtureRoot "terrain-same-camera-material-preview.png") -Flat $true -Rendered $false
 New-TestTerrainImage -Path (Join-Path $fixtureRoot "terrain-same-camera-rendered.png") -Flat $true -Rendered $true

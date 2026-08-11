@@ -64,6 +64,13 @@ typedef enum sandbox3d_layout_mode
     SANDBOX3D_LAYOUT_COUNT
 } sandbox3d_layout_mode;
 
+typedef enum sandbox3d_terrain_capture_view
+{
+    SANDBOX3D_TERRAIN_CAPTURE_VIEW_WIDE = 0,
+    SANDBOX3D_TERRAIN_CAPTURE_VIEW_CORNER,
+    SANDBOX3D_TERRAIN_CAPTURE_VIEW_CLOSE
+} sandbox3d_terrain_capture_view;
+
 typedef enum sandbox3d_utility_view
 {
     SANDBOX3D_UTILITY_NONE = 0,
@@ -419,6 +426,7 @@ typedef struct sandbox3d_state
     bool smoke_validation_failed;
     bool capture_mode_requested;
     bool terrain_capture_mode_requested;
+    sandbox3d_terrain_capture_view terrain_capture_view;
     henka_viewport_shading_mode capture_mode;
 } sandbox3d_state;
 
@@ -1909,6 +1917,32 @@ static sandbox3d_layout_mode sandbox3d_parse_layout_mode(const char* value)
     }
 
     return SANDBOX3D_LAYOUT_VIEW;
+}
+
+static bool sandbox3d_parse_terrain_capture_view(
+    const char* value,
+    sandbox3d_terrain_capture_view* out_view)
+{
+    if (value == NULL || out_view == NULL)
+    {
+        return false;
+    }
+    if (strcmp(value, "wide") == 0)
+    {
+        *out_view = SANDBOX3D_TERRAIN_CAPTURE_VIEW_WIDE;
+        return true;
+    }
+    if (strcmp(value, "corner") == 0)
+    {
+        *out_view = SANDBOX3D_TERRAIN_CAPTURE_VIEW_CORNER;
+        return true;
+    }
+    if (strcmp(value, "close") == 0)
+    {
+        *out_view = SANDBOX3D_TERRAIN_CAPTURE_VIEW_CLOSE;
+        return true;
+    }
+    return false;
 }
 
 static henka_viewport_shading_mode
@@ -6400,12 +6434,29 @@ static void sandbox3d_apply_capture_camera(sandbox3d_state* state)
     /* Capture evidence uses deterministic cameras, while normal editor
      * startup uses the scene-first reset framing path. */
     {
-        const henka_vec3 target = state->terrain_capture_mode_requested
-            ? (henka_vec3){280.0f, 1.0f, 280.0f}
-            : (henka_vec3){0.0f, 2.05f, -1.7f};
-        const henka_vec3 position = state->terrain_capture_mode_requested
-            ? (henka_vec3){360.0f, 38.0f, 360.0f}
-            : (henka_vec3){0.0f, 3.0f, 8.8f};
+        henka_vec3 target;
+        henka_vec3 position;
+        if (!state->terrain_capture_mode_requested)
+        {
+            target = (henka_vec3){0.0f, 2.05f, -1.7f};
+            position = (henka_vec3){0.0f, 3.0f, 8.8f};
+        }
+        else if (state->terrain_capture_view == SANDBOX3D_TERRAIN_CAPTURE_VIEW_CORNER)
+        {
+            /* The four seeded regions meet at this world-space corner. */
+            target = (henka_vec3){512.0f, 3.0f, 512.0f};
+            position = (henka_vec3){626.0f, 92.0f, 626.0f};
+        }
+        else if (state->terrain_capture_view == SANDBOX3D_TERRAIN_CAPTURE_VIEW_CLOSE)
+        {
+            target = (henka_vec3){372.0f, 4.0f, 320.0f};
+            position = (henka_vec3){430.0f, 34.0f, 378.0f};
+        }
+        else
+        {
+            target = (henka_vec3){280.0f, 1.0f, 280.0f};
+            position = (henka_vec3){360.0f, 38.0f, 360.0f};
+        }
         const henka_vec3 direction = henka_vec3_normalize(
             henka_vec3_subtract(target, position));
         state->camera.position = position;
@@ -20378,6 +20429,7 @@ int main(int argc, char** argv)
     bool terrain_stream_stress;
     bool capture_mode_requested;
     bool terrain_capture_mode_requested;
+    sandbox3d_terrain_capture_view terrain_capture_view;
     henka_viewport_shading_mode capture_mode;
 
     smoke_test = false;
@@ -20389,6 +20441,7 @@ int main(int argc, char** argv)
     terrain_stream_stress = false;
     capture_mode_requested = false;
     terrain_capture_mode_requested = false;
+    terrain_capture_view = SANDBOX3D_TERRAIN_CAPTURE_VIEW_WIDE;
     capture_mode = HENKA_VIEWPORT_SHADING_RENDERED;
     if (argc == 2 && strcmp(argv[1], "--smoke-test") == 0)
     {
@@ -20434,9 +20487,16 @@ int main(int argc, char** argv)
         capture_mode_requested = true;
         terrain_capture_mode_requested = true;
     }
+    else if (argc == 4 && strcmp(argv[1], "--capture-terrain-view") == 0 &&
+        sandbox3d_parse_terrain_capture_view(argv[2], &terrain_capture_view) &&
+        henka_viewport_shading_mode_parse(argv[3], &capture_mode) == HENKA_SUCCESS)
+    {
+        capture_mode_requested = true;
+        terrain_capture_mode_requested = true;
+    }
     else if (argc != 1)
     {
-        fprintf(stderr, "Usage: %s [--primitive-gallery | --smoke-test | --residency-stress | --temporal-stress | --material-stress | --environment-stress | --terrain-stream-stress | --capture-mode solid|material_preview|rendered | --capture-terrain-mode solid|material_preview|rendered]\n", argv[0]);
+        fprintf(stderr, "Usage: %s [--primitive-gallery | --smoke-test | --residency-stress | --temporal-stress | --material-stress | --environment-stress | --terrain-stream-stress | --capture-mode solid|material_preview|rendered | --capture-terrain-mode solid|material_preview|rendered | --capture-terrain-view wide|corner|close solid|material_preview|rendered]\n", argv[0]);
         return 2;
     }
 
@@ -20450,6 +20510,7 @@ int main(int argc, char** argv)
     state.terrain_stream_stress = terrain_stream_stress;
     state.capture_mode_requested = capture_mode_requested;
     state.terrain_capture_mode_requested = terrain_capture_mode_requested;
+    state.terrain_capture_view = terrain_capture_view;
     state.capture_mode = capture_mode;
     state.asset_browser_type = HENKA_ASSET_TYPE_TEXTURE;
     state.camera = henka_camera_create_perspective(60.0f * HENKA_DEG_TO_RAD, 16.0f / 9.0f, 0.1f, 100.0f);
