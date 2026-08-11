@@ -73,6 +73,11 @@ The sandbox persists display, camera, input, and workspace state. Short status m
 - a general content database
 - symlink-aware filesystem sandboxing
 - per-game save-slot UI
-- autosave or background save loops
+- general-purpose autosave or background save loops
+
+The Sandbox Terrain editor is a bounded exception: during normal editor runtime
+it schedules a dirty-only transactional save of CPU-resident Terrain regions
+every ten seconds. Capture and smoke modes do not schedule this persistence;
+external games still need their own save policy and broader scheduling model.
 
 External games should define their own save policy, migration strategy, backup behavior, and data layout. The current Henka layer is a hardened local foundation. It is not a complete save system for shipped games.

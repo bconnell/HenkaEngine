@@ -300,6 +300,7 @@ add_executable(henka_tests
     ../examples/sandbox3d/object_authoring_tools.c
     ../examples/sandbox3d/asset_browser_tools.c
     ../examples/sandbox3d/interaction_tools.c
+    ../examples/sandbox3d/terrain_autosave.c
     ../examples/sandbox3d/physics_tools.c
     ../examples/sandbox3d/studio_environment.c
     ../examples/sandbox3d/workspace_tools.c

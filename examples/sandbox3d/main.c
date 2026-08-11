@@ -22,6 +22,7 @@
 #include "object_authoring_tools.h"
 #include "object_details_tools.h"
 #include "interaction_tools.h"
+#include "terrain_autosave.h"
 #include "physics_tools.h"
 #include "studio_environment.h"
 #include "workspace_tools.h"
@@ -360,6 +361,7 @@ typedef struct sandbox3d_state
     henka_terrain_edit_falloff terrain_tool_falloff;
     henka_terrain_edit_operation terrain_tool_operation;
     uint64_t terrain_tool_nonce;
+    double terrain_autosave_elapsed_seconds;
     henka_asset_type asset_browser_type;
     size_t asset_browser_page;
     size_t asset_browser_selected_metadata_index;
@@ -5413,6 +5415,29 @@ static henka_result sandbox3d_save_terrain_regions(
         transaction_id = ++state->terrain_tool_nonce;
     }
     return henka_terrain_storage_save_resident_regions(
+        state->terrain_storage,
+        state->terrain_world,
+        transaction_id,
+        out_saved_region_count);
+}
+
+static henka_result sandbox3d_autosave_terrain_regions(
+    sandbox3d_state* state,
+    uint32_t* out_saved_region_count)
+{
+    uint64_t transaction_id;
+
+    if (state == NULL || state->terrain_world == NULL || state->terrain_storage == NULL ||
+        out_saved_region_count == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    transaction_id = ++state->terrain_tool_nonce;
+    if (transaction_id == 0U)
+    {
+        transaction_id = ++state->terrain_tool_nonce;
+    }
+    return henka_terrain_storage_save_dirty_regions(
         state->terrain_storage,
         state->terrain_world,
         transaction_id,
@@ -19278,6 +19303,45 @@ static void sandbox3d_update(henka_engine* engine, double delta_seconds, void* u
     sandbox3d_state* state;
 
     state = (sandbox3d_state*)user_data;
+    if (state != NULL && state->terrain_world != NULL && state->terrain_storage != NULL &&
+        !state->smoke_test && !state->capture_mode_requested &&
+        !state->terrain_capture_mode_requested)
+    {
+        henka_terrain_world_stats terrain_world_stats = {0};
+        if (henka_terrain_world_get_stats(state->terrain_world, &terrain_world_stats) == HENKA_SUCCESS &&
+            sandbox3d_terrain_autosave_is_due(
+                &state->terrain_autosave_elapsed_seconds,
+                delta_seconds,
+                terrain_world_stats.dirty_region_count,
+                SANDBOX3D_TERRAIN_AUTOSAVE_INTERVAL_SECONDS))
+        {
+            uint32_t saved_region_count = 0U;
+            const henka_result save_result = sandbox3d_autosave_terrain_regions(
+                state,
+                &saved_region_count);
+            if (save_result == HENKA_SUCCESS)
+            {
+                sandbox3d_set_statusf(
+                    state,
+                    false,
+                    true,
+                    "Terrain autosaved %u dirty resident region(s).",
+                    saved_region_count);
+            }
+            else
+            {
+                HENKA_LOG_WARN(
+                    "Terrain autosave failed (%s); dirty regions remain pending.",
+                    henka_result_to_string(save_result));
+                sandbox3d_set_statusf(
+                    state,
+                    true,
+                    true,
+                    "Terrain autosave failed: %s.",
+                    henka_result_to_string(save_result));
+            }
+        }
+    }
     if (state != NULL && state->scene != NULL &&
         henka_scene_advance_environment_time(state->scene, (float)delta_seconds) != HENKA_SUCCESS)
     {

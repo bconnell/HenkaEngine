@@ -269,8 +269,11 @@ The current AO term is a bounded four-direction, two-sided, multi-step view-spac
 
 The Utility Diagnostics panel includes the active shading/exposure row plus current texture-residency bytes, configured budget, queue depth, active pin count, stale-request cancellations, readable source-failure bytes, and unknown-size request/source failure counts from the engine diagnostics snapshot. Full Tools Object Details and the Object Info utility show the selected effective material description; Object Info also reports the count of borrowed semantic texture dependencies. Object Details creates bounded persistent instances for selected imported scene entities, with identity-routed Reimport, dependency inspection, revision refresh, and per-override or all-override reset through the shared typed C asset path. Text-entry import, drag/drop, material-file authoring, and a dedicated dependency-graph panel remain unimplemented.
 
-The Utility Terrain tab reports bounded resident/render/collision statistics and
-provides raise, lower, flatten, smooth, and paint buttons. Brush radius,
+The Utility Terrain tab reports bounded resident/render/collision statistics,
+including active dirty regions awaiting persistence, and provides raise, lower,
+flatten, smooth, and paint buttons. During normal editor runtime, dirty
+CPU-resident Terrain regions are autosaved transactionally every ten seconds;
+failed saves leave the Dirty count pending for a later retry. Brush radius,
 strength, material layer, and falloff controls feed the same deterministic
 Terrain command API used by runtime edits. Height edits use the bounded
 collision-runtime queue for the full edit footprint plus neighbor coverage;

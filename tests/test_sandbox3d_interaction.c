@@ -3,9 +3,11 @@
 #include <string.h>
 
 #include "../examples/sandbox3d/interaction_tools.h"
+#include "../examples/sandbox3d/terrain_autosave.h"
 
 void henka_test_sandbox3d_interaction(void)
 {
+    double autosave_elapsed_seconds = 0.0;
     henka_camera camera;
     henka_quat rotation_delta;
     henka_bounds selection_bounds;
@@ -114,6 +116,38 @@ void henka_test_sandbox3d_interaction(void)
         false,
         20.0f));
     gate.ui_wants_mouse = false;
+
+    HENKA_TEST_ASSERT(!sandbox3d_terrain_autosave_is_due(
+        &autosave_elapsed_seconds,
+        9.0,
+        0U,
+        SANDBOX3D_TERRAIN_AUTOSAVE_INTERVAL_SECONDS));
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(autosave_elapsed_seconds, 0.0, 0.0001);
+    HENKA_TEST_ASSERT(!sandbox3d_terrain_autosave_is_due(
+        &autosave_elapsed_seconds,
+        4.0,
+        1U,
+        SANDBOX3D_TERRAIN_AUTOSAVE_INTERVAL_SECONDS));
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(autosave_elapsed_seconds, 4.0, 0.0001);
+    HENKA_TEST_ASSERT(sandbox3d_terrain_autosave_is_due(
+        &autosave_elapsed_seconds,
+        6.0,
+        1U,
+        SANDBOX3D_TERRAIN_AUTOSAVE_INTERVAL_SECONDS));
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(autosave_elapsed_seconds, 0.0, 0.0001);
+    HENKA_TEST_ASSERT(!sandbox3d_terrain_autosave_is_due(
+        &autosave_elapsed_seconds,
+        10.0,
+        0U,
+        SANDBOX3D_TERRAIN_AUTOSAVE_INTERVAL_SECONDS));
+
+    autosave_elapsed_seconds = -1.0;
+    HENKA_TEST_ASSERT(!sandbox3d_terrain_autosave_is_due(
+        &autosave_elapsed_seconds,
+        1.0,
+        1U,
+        SANDBOX3D_TERRAIN_AUTOSAVE_INTERVAL_SECONDS));
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(autosave_elapsed_seconds, 1.0, 0.0001);
 
     memset(&gate, 0, sizeof(gate));
     gate.supported_mouse_button = true;

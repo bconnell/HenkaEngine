@@ -5,6 +5,7 @@ add_executable(henka_sandbox3d
     object_authoring_tools.c
     object_details_tools.c
     interaction_tools.c
+    terrain_autosave.c
     physics_tools.c
     studio_environment.c
     workspace_tools.c
