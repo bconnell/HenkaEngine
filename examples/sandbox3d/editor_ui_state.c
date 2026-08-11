@@ -1,5 +1,6 @@
 #include "editor_ui_state.h"
 
+#include <float.h>
 #include <math.h>
 #include <stddef.h>
 
@@ -64,6 +65,10 @@ void sandbox3d_editor_ui_state_reset(
     state->controls_content_height = 0.0f;
     state->details_scroll_offset = 0.0f;
     state->details_content_height = 0.0f;
+    state->controls_scroll_dragging = false;
+    state->details_scroll_dragging = false;
+    state->controls_scroll_grab_offset = 0.0f;
+    state->details_scroll_grab_offset = 0.0f;
 }
 
 void sandbox3d_editor_ui_state_load(
@@ -186,14 +191,216 @@ float sandbox3d_editor_ui_clamp_scroll(
         : requested_offset;
 }
 
+void sandbox3d_editor_ui_scroll_state_set_content(
+    sandbox3d_editor_scroll_state* state,
+    float content_height,
+    float viewport_height)
+{
+    if (state == NULL)
+    {
+        return;
+    }
+
+    state->content_height = isfinite(content_height) && content_height >= 0.0f
+        ? content_height
+        : 0.0f;
+    state->viewport_height = isfinite(viewport_height) && viewport_height > 0.0f
+        ? viewport_height
+        : 0.0f;
+    state->offset = sandbox3d_editor_ui_clamp_scroll(
+        state->offset,
+        state->content_height,
+        state->viewport_height);
+}
+
+bool sandbox3d_editor_ui_scroll_state_apply_delta(
+    sandbox3d_editor_scroll_state* state,
+    float delta_pixels,
+    float viewport_height)
+{
+    float requested_offset;
+
+    if (state == NULL || !isfinite(delta_pixels) || delta_pixels == 0.0f)
+    {
+        if (state != NULL)
+        {
+            sandbox3d_editor_ui_scroll_state_set_content(
+                state,
+                state->content_height,
+                viewport_height);
+        }
+        return false;
+    }
+
+    sandbox3d_editor_ui_scroll_state_set_content(
+        state,
+        state->content_height,
+        viewport_height);
+    if (state->content_height <= state->viewport_height)
+    {
+        state->offset = 0.0f;
+        return false;
+    }
+
+    requested_offset = state->offset + delta_pixels;
+    if (!isfinite(requested_offset))
+    {
+        requested_offset = delta_pixels < 0.0f ? 0.0f : FLT_MAX;
+    }
+    state->offset = sandbox3d_editor_ui_clamp_scroll(
+        requested_offset,
+        state->content_height,
+        state->viewport_height);
+    return true;
+}
+
+float sandbox3d_editor_ui_scrollbar_thumb_height(
+    float content_height,
+    float viewport_height,
+    float track_height)
+{
+    float thumb_height;
+
+    if (!isfinite(content_height) || !isfinite(viewport_height) ||
+        !isfinite(track_height) || content_height <= viewport_height ||
+        viewport_height <= 0.0f || track_height <= 0.0f)
+    {
+        return 0.0f;
+    }
+
+    thumb_height = track_height * viewport_height / content_height;
+    if (!isfinite(thumb_height))
+    {
+        return 0.0f;
+    }
+    if (thumb_height < 24.0f)
+    {
+        thumb_height = 24.0f;
+    }
+    return thumb_height > track_height ? track_height : thumb_height;
+}
+
+float sandbox3d_editor_ui_scrollbar_thumb_offset(
+    float scroll_offset,
+    float content_height,
+    float viewport_height,
+    float track_height,
+    float thumb_height)
+{
+    const float maximum_offset = content_height - viewport_height;
+    const float travel = track_height - thumb_height;
+    const float clamped_offset = sandbox3d_editor_ui_clamp_scroll(
+        scroll_offset,
+        content_height,
+        viewport_height);
+
+    if (maximum_offset <= 0.0f || travel <= 0.0f)
+    {
+        return 0.0f;
+    }
+    return travel * clamped_offset / maximum_offset;
+}
+
+bool sandbox3d_editor_ui_scroll_state_set_from_scrollbar(
+    sandbox3d_editor_scroll_state* state,
+    float pointer_y,
+    float track_y,
+    float track_height,
+    float thumb_height,
+    float grab_offset)
+{
+    float travel;
+    float thumb_y;
+    float normalized;
+
+    if (state == NULL || !isfinite(pointer_y) || !isfinite(track_y) ||
+        !isfinite(track_height) || !isfinite(thumb_height) ||
+        !isfinite(grab_offset) || track_height <= 0.0f ||
+        thumb_height <= 0.0f || thumb_height > track_height ||
+        state->content_height <= state->viewport_height)
+    {
+        return false;
+    }
+
+    travel = track_height - thumb_height;
+    if (travel <= 0.0f)
+    {
+        state->offset = 0.0f;
+        return false;
+    }
+    thumb_y = pointer_y - grab_offset - track_y;
+    if (thumb_y < 0.0f)
+    {
+        thumb_y = 0.0f;
+    }
+    if (thumb_y > travel)
+    {
+        thumb_y = travel;
+    }
+    normalized = thumb_y / travel;
+    state->offset = sandbox3d_editor_ui_clamp_scroll(
+        normalized * (state->content_height - state->viewport_height),
+        state->content_height,
+        state->viewport_height);
+    return true;
+}
+
+static bool sandbox3d_editor_ui_scroll_by(
+    float* offset,
+    float content_height,
+    float viewport_height,
+    float delta_pixels)
+{
+    sandbox3d_editor_scroll_state state;
+
+    if (offset == NULL)
+    {
+        return false;
+    }
+    state.offset = *offset;
+    state.content_height = content_height;
+    state.viewport_height = viewport_height;
+    if (!sandbox3d_editor_ui_scroll_state_apply_delta(
+            &state,
+            delta_pixels,
+            viewport_height))
+    {
+        *offset = state.offset;
+        return false;
+    }
+    *offset = state.offset;
+    return true;
+}
+
+bool sandbox3d_editor_ui_scroll_controls_by(
+    sandbox3d_editor_ui_state* state,
+    float viewport_height,
+    float delta_pixels)
+{
+    return state != NULL && sandbox3d_editor_ui_scroll_by(
+        &state->controls_scroll_offset,
+        state->controls_content_height,
+        viewport_height,
+        delta_pixels);
+}
+
+bool sandbox3d_editor_ui_scroll_details_by(
+    sandbox3d_editor_ui_state* state,
+    float viewport_height,
+    float delta_pixels)
+{
+    return state != NULL && sandbox3d_editor_ui_scroll_by(
+        &state->details_scroll_offset,
+        state->details_content_height,
+        viewport_height,
+        delta_pixels);
+}
+
 bool sandbox3d_editor_ui_scroll_controls(
     sandbox3d_editor_ui_state* state,
     float viewport_height,
     int direction)
 {
-    float requested_offset;
-    float step_direction;
-
     if (state == NULL ||
         !isfinite(viewport_height) ||
         viewport_height <= 0.0f ||
@@ -205,35 +412,10 @@ bool sandbox3d_editor_ui_scroll_controls(
         }
         return false;
     }
-
-    state->controls_scroll_offset =
-        sandbox3d_editor_ui_clamp_scroll(
-            state->controls_scroll_offset,
-            state->controls_content_height,
-            viewport_height);
-
-    if (!isfinite(state->controls_content_height) ||
-        state->controls_content_height <= viewport_height)
-    {
-        state->controls_scroll_offset = 0.0f;
-        return false;
-    }
-
-    step_direction = (float)direction;
-    requested_offset =
-        state->controls_scroll_offset +
-        step_direction * 48.0f;
-    if (requested_offset < 0.0f)
-    {
-        requested_offset = 0.0f;
-    }
-
-    state->controls_scroll_offset =
-        sandbox3d_editor_ui_clamp_scroll(
-            requested_offset,
-            state->controls_content_height,
-            viewport_height);
-    return true;
+    return sandbox3d_editor_ui_scroll_controls_by(
+        state,
+        viewport_height,
+        (float)direction * 48.0f);
 }
 
 bool sandbox3d_editor_ui_scroll_details(
@@ -241,8 +423,6 @@ bool sandbox3d_editor_ui_scroll_details(
     float viewport_height,
     int direction)
 {
-    float requested_offset;
-
     if (state == NULL ||
         !isfinite(viewport_height) ||
         viewport_height <= 0.0f ||
@@ -254,32 +434,8 @@ bool sandbox3d_editor_ui_scroll_details(
         }
         return false;
     }
-
-    state->details_scroll_offset =
-        sandbox3d_editor_ui_clamp_scroll(
-            state->details_scroll_offset,
-            state->details_content_height,
-            viewport_height);
-
-    if (!isfinite(state->details_content_height) ||
-        state->details_content_height <= viewport_height)
-    {
-        state->details_scroll_offset = 0.0f;
-        return false;
-    }
-
-    requested_offset =
-        state->details_scroll_offset +
-        (float)direction * 48.0f;
-    if (requested_offset < 0.0f)
-    {
-        requested_offset = 0.0f;
-    }
-
-    state->details_scroll_offset =
-        sandbox3d_editor_ui_clamp_scroll(
-            requested_offset,
-            state->details_content_height,
-            viewport_height);
-    return true;
+    return sandbox3d_editor_ui_scroll_details_by(
+        state,
+        viewport_height,
+        (float)direction * 48.0f);
 }

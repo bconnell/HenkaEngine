@@ -181,6 +181,71 @@ void henka_test_sandbox3d_editor_ui(void)
         0.0f,
         0.0001f);
 
+    {
+        sandbox3d_editor_scroll_state scroll = {0.0f, 0.0f, 0.0f};
+        const float thumb_height =
+            sandbox3d_editor_ui_scrollbar_thumb_height(
+                400.0f,
+                100.0f,
+                200.0f);
+
+        sandbox3d_editor_ui_scroll_state_set_content(
+            &scroll,
+            400.0f,
+            100.0f);
+        HENKA_TEST_ASSERT(
+            sandbox3d_editor_ui_scroll_state_apply_delta(
+                &scroll,
+                12.5f,
+                100.0f));
+        HENKA_TEST_ASSERT_FLOAT_CLOSE(scroll.offset, 12.5f, 0.0001f);
+        HENKA_TEST_ASSERT_FLOAT_CLOSE(thumb_height, 50.0f, 0.0001f);
+        HENKA_TEST_ASSERT_FLOAT_CLOSE(
+            sandbox3d_editor_ui_scrollbar_thumb_offset(
+                scroll.offset,
+                scroll.content_height,
+                scroll.viewport_height,
+                200.0f,
+                thumb_height),
+            6.25f,
+            0.0001f);
+        HENKA_TEST_ASSERT(
+            sandbox3d_editor_ui_scroll_state_set_from_scrollbar(
+                &scroll,
+                150.0f,
+                10.0f,
+                200.0f,
+                thumb_height,
+                25.0f));
+        HENKA_TEST_ASSERT_FLOAT_CLOSE(scroll.offset, 230.0f, 0.0001f);
+        HENKA_TEST_ASSERT(
+            sandbox3d_editor_ui_scroll_state_apply_delta(
+                &scroll,
+                1000.0f,
+                100.0f));
+        HENKA_TEST_ASSERT_FLOAT_CLOSE(scroll.offset, 300.0f, 0.0001f);
+        HENKA_TEST_ASSERT(
+            sandbox3d_editor_ui_scroll_state_apply_delta(
+                &scroll,
+                -1000.0f,
+                100.0f));
+        HENKA_TEST_ASSERT_FLOAT_CLOSE(scroll.offset, 0.0f, 0.0001f);
+        scroll.content_height = 80.0f;
+        HENKA_TEST_ASSERT(
+            !sandbox3d_editor_ui_scroll_state_apply_delta(
+                &scroll,
+                24.0f,
+                100.0f));
+        HENKA_TEST_ASSERT_FLOAT_CLOSE(scroll.offset, 0.0f, 0.0001f);
+        HENKA_TEST_ASSERT_FLOAT_CLOSE(
+            sandbox3d_editor_ui_scrollbar_thumb_height(
+                80.0f,
+                100.0f,
+                200.0f),
+            0.0f,
+            0.0001f);
+    }
+
     HENKA_TEST_ASSERT(
         sandbox3d_editor_ui_state_store(
             NULL,

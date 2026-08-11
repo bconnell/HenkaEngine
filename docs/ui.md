@@ -143,6 +143,16 @@ The current `Object Details` panel can:
 - reset the default transform
 - open object info in the utility panel and still print it to the console
 
+Controls Main and Object Details share a bounded panel-body presentation model.
+Their stable group identifiers persist expanded/collapsed state separately from
+scene state, content height is recomputed after every group change and resize,
+short content does not expose an invalid scrollbar, and longer content shows a
+graphite scrollbar with a draggable thumb. Wheel and fractional touchpad deltas
+belong to the panel body while the pointer is over it; Scene View keeps wheel
+ownership for camera zoom. Detached production panels use the same panel content
+and state model, while diagnostic-heavy pages remain separate from normal object
+properties.
+
 The selected object also shows a transform gizmo inside the dedicated scene viewport.
 
 - `Select` keeps normal viewport selection active. Left-dragging empty Scene View space past the small drag threshold pans the camera/target for laptop touchpads while ordinary clicks still select or clear selection.
