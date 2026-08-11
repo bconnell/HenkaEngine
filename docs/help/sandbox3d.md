@@ -188,8 +188,9 @@ expanded/collapsed state, and recomputed scroll extents after collapse or
 resize. Wheel and continuous touchpad deltas stay with the panel body, while
 Scene View retains wheel ownership for camera zoom. Detached production panels
 use the same body and scrollbar behavior through their native-window input
-path. Workspace tab reordering is supported; property-group reordering remains
-deferred until the panel renderer can expose it without duplicating tool state.
+path. Workspace tab reordering is supported; property-group reordering is
+available in Object Details through bounded up/down header actions and persists
+as presentation-only order; it does not duplicate the selected object's state.
 
 The selected object also shows a visible transform gizmo in the scene viewport.
 

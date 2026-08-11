@@ -9,6 +9,7 @@
 void henka_test_sandbox3d_editor_ui(void)
 {
     henka_settings* settings;
+    sandbox3d_editor_ui_state invalid_state;
     sandbox3d_editor_ui_state state;
     sandbox3d_editor_ui_state stored;
 
@@ -29,6 +30,16 @@ void henka_test_sandbox3d_editor_ui(void)
     HENKA_TEST_ASSERT(!state.details_physics_expanded);
     HENKA_TEST_ASSERT(!state.details_interaction_expanded);
     HENKA_TEST_ASSERT(!state.details_actions_expanded);
+    HENKA_TEST_ASSERT(
+        sandbox3d_editor_ui_details_group_order_is_valid(
+            state.details_group_order));
+    HENKA_TEST_ASSERT(
+        state.details_group_order[0] ==
+            SANDBOX3D_EDITOR_DETAILS_GROUP_OVERVIEW);
+    HENKA_TEST_ASSERT(
+        state.details_group_order[
+            SANDBOX3D_EDITOR_DETAILS_GROUP_COUNT - 1U] ==
+            SANDBOX3D_EDITOR_DETAILS_GROUP_ACTIONS);
 
     HENKA_TEST_ASSERT_FLOAT_CLOSE(
         state.controls_scroll_offset, 0.0f, 0.0001f);
@@ -87,6 +98,34 @@ void henka_test_sandbox3d_editor_ui(void)
     stored.details_physics_expanded = true;
     stored.details_interaction_expanded = true;
     stored.details_actions_expanded = true;
+    HENKA_TEST_ASSERT(
+        sandbox3d_editor_ui_reorder_details_group(
+            &stored,
+            SANDBOX3D_EDITOR_DETAILS_GROUP_MATERIALS,
+            0U));
+    HENKA_TEST_ASSERT(
+        stored.details_group_order[0] ==
+            SANDBOX3D_EDITOR_DETAILS_GROUP_MATERIALS);
+    HENKA_TEST_ASSERT(
+        sandbox3d_editor_ui_reorder_details_group(
+            &stored,
+            0U,
+            SANDBOX3D_EDITOR_DETAILS_GROUP_COUNT - 1U));
+    HENKA_TEST_ASSERT(
+        stored.details_group_order[
+            SANDBOX3D_EDITOR_DETAILS_GROUP_COUNT - 1U] ==
+            SANDBOX3D_EDITOR_DETAILS_GROUP_MATERIALS);
+    HENKA_TEST_ASSERT(
+        !sandbox3d_editor_ui_reorder_details_group(
+            &stored,
+            SANDBOX3D_EDITOR_DETAILS_GROUP_COUNT,
+            0U));
+    invalid_state = stored;
+    invalid_state.details_group_order[1] = invalid_state.details_group_order[0];
+    HENKA_TEST_ASSERT(
+        sandbox3d_editor_ui_state_store(
+            settings,
+            &invalid_state) == HENKA_ERROR_INVALID_ARGUMENT);
 
     HENKA_TEST_ASSERT(
         sandbox3d_editor_ui_state_store(
@@ -144,6 +183,26 @@ void henka_test_sandbox3d_editor_ui(void)
             settings,
             "ui.object_details.actions.expanded",
             false));
+    HENKA_TEST_ASSERT(
+        henka_settings_get_int(
+            settings,
+            "ui.object_details.group_order.6",
+            -1) == SANDBOX3D_EDITOR_DETAILS_GROUP_MATERIALS);
+
+    sandbox3d_editor_ui_state_load(settings, &state);
+    HENKA_TEST_ASSERT(
+        state.details_group_order[
+            SANDBOX3D_EDITOR_DETAILS_GROUP_COUNT - 1U] ==
+            SANDBOX3D_EDITOR_DETAILS_GROUP_MATERIALS);
+    HENKA_TEST_ASSERT(
+        henka_settings_set_int(
+            settings,
+            "ui.object_details.group_order.0",
+            99) == HENKA_SUCCESS);
+    sandbox3d_editor_ui_state_load(settings, &state);
+    HENKA_TEST_ASSERT(
+        state.details_group_order[0] ==
+            SANDBOX3D_EDITOR_DETAILS_GROUP_OVERVIEW);
 
     HENKA_TEST_ASSERT_FLOAT_CLOSE(
         sandbox3d_editor_ui_clamp_scroll(

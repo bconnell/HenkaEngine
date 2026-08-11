@@ -3,6 +3,8 @@
 #include <float.h>
 #include <math.h>
 #include <stddef.h>
+#include <stdio.h>
+#include <string.h>
 
 typedef struct sandbox3d_editor_ui_bool_binding
 {
@@ -40,6 +42,24 @@ static const char* g_details_interaction_key =
 static const char* g_details_actions_key =
     "ui.object_details.actions.expanded";
 
+static const char* g_details_group_order_prefix =
+    "ui.object_details.group_order.";
+
+static void sandbox3d_editor_ui_details_group_order_reset(
+    unsigned char* order)
+{
+    size_t index;
+
+    if (order == NULL)
+    {
+        return;
+    }
+    for (index = 0U; index < SANDBOX3D_EDITOR_DETAILS_GROUP_COUNT; ++index)
+    {
+        order[index] = (unsigned char)index;
+    }
+}
+
 void sandbox3d_editor_ui_state_reset(
     sandbox3d_editor_ui_state* state)
 {
@@ -60,6 +80,7 @@ void sandbox3d_editor_ui_state_reset(
     state->details_physics_expanded = false;
     state->details_interaction_expanded = false;
     state->details_actions_expanded = false;
+    sandbox3d_editor_ui_details_group_order_reset(state->details_group_order);
 
     state->controls_scroll_offset = 0.0f;
     state->controls_content_height = 0.0f;
@@ -118,6 +139,42 @@ void sandbox3d_editor_ui_state_load(
                         *bindings[index].value);
             }
         }
+
+        {
+            unsigned char loaded_order[SANDBOX3D_EDITOR_DETAILS_GROUP_COUNT];
+            char key[96];
+            bool has_complete_order = true;
+
+            sandbox3d_editor_ui_details_group_order_reset(loaded_order);
+            for (index = 0U;
+                 index < SANDBOX3D_EDITOR_DETAILS_GROUP_COUNT;
+                 ++index)
+            {
+                (void)snprintf(
+                    key,
+                    sizeof(key),
+                    "%s%zu",
+                    g_details_group_order_prefix,
+                    index);
+                if (!henka_settings_has_key(settings, key))
+                {
+                    has_complete_order = false;
+                    break;
+                }
+                loaded_order[index] = (unsigned char)henka_settings_get_int(
+                    settings,
+                    key,
+                    (int)index);
+            }
+            if (has_complete_order &&
+                sandbox3d_editor_ui_details_group_order_is_valid(loaded_order))
+            {
+                memcpy(
+                    state->details_group_order,
+                    loaded_order,
+                    sizeof(state->details_group_order));
+            }
+        }
     }
 }
 
@@ -128,6 +185,11 @@ henka_result sandbox3d_editor_ui_state_store(
     size_t index;
 
     if (settings == NULL || state == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    if (!sandbox3d_editor_ui_details_group_order_is_valid(
+            state->details_group_order))
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
@@ -160,6 +222,29 @@ henka_result sandbox3d_editor_ui_state_store(
             if (result != HENKA_SUCCESS)
             {
                 return result;
+            }
+        }
+
+        for (index = 0U;
+             index < SANDBOX3D_EDITOR_DETAILS_GROUP_COUNT;
+             ++index)
+        {
+            char key[96];
+            (void)snprintf(
+                key,
+                sizeof(key),
+                "%s%zu",
+                g_details_group_order_prefix,
+                index);
+            {
+                const henka_result result = henka_settings_set_int(
+                    settings,
+                    key,
+                    (int)state->details_group_order[index]);
+                if (result != HENKA_SUCCESS)
+                {
+                    return result;
+                }
             }
         }
     }
@@ -438,4 +523,73 @@ bool sandbox3d_editor_ui_scroll_details(
         state,
         viewport_height,
         (float)direction * 48.0f);
+}
+
+bool sandbox3d_editor_ui_details_group_order_is_valid(
+    const unsigned char* order)
+{
+    size_t index;
+
+    if (order == NULL)
+    {
+        return false;
+    }
+    for (index = 0U; index < SANDBOX3D_EDITOR_DETAILS_GROUP_COUNT; ++index)
+    {
+        size_t other;
+        if (order[index] >= SANDBOX3D_EDITOR_DETAILS_GROUP_COUNT)
+        {
+            return false;
+        }
+        for (other = 0U; other < index; ++other)
+        {
+            if (order[other] == order[index])
+            {
+                return false;
+            }
+        }
+    }
+    return true;
+}
+
+bool sandbox3d_editor_ui_reorder_details_group(
+    sandbox3d_editor_ui_state* state,
+    size_t from_position,
+    size_t to_position)
+{
+    unsigned char moving;
+    size_t index;
+
+    if (state == NULL ||
+        !sandbox3d_editor_ui_details_group_order_is_valid(
+            state->details_group_order) ||
+        from_position >= SANDBOX3D_EDITOR_DETAILS_GROUP_COUNT ||
+        to_position >= SANDBOX3D_EDITOR_DETAILS_GROUP_COUNT)
+    {
+        return false;
+    }
+    if (from_position == to_position)
+    {
+        return true;
+    }
+    moving = state->details_group_order[from_position];
+    if (from_position < to_position)
+    {
+        for (index = from_position; index < to_position; ++index)
+        {
+            state->details_group_order[index] =
+                state->details_group_order[index + 1U];
+        }
+    }
+    else
+    {
+        for (index = from_position; index > to_position; --index)
+        {
+            state->details_group_order[index] =
+                state->details_group_order[index - 1U];
+        }
+    }
+    state->details_group_order[to_position] = moving;
+    return sandbox3d_editor_ui_details_group_order_is_valid(
+        state->details_group_order);
 }

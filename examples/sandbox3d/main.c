@@ -14189,12 +14189,16 @@ static bool sandbox3d_details_flow_disclosure(
     henka_ui_rect viewport,
     const char* id,
     const char* label,
+    sandbox3d_editor_details_group_id group_id,
     bool* expanded,
     bool* any_changed)
 {
     bool changed;
     bool visible;
     henka_ui_rect bounds;
+    size_t group_position;
+    char move_down_id[96];
+    char move_up_id[96];
 
     if (state == NULL ||
         state->ui == NULL ||
@@ -14241,6 +14245,67 @@ static bool sandbox3d_details_flow_disclosure(
         *any_changed = true;
     }
 
+    group_position = SANDBOX3D_EDITOR_DETAILS_GROUP_COUNT;
+    for (size_t index = 0U;
+         index < SANDBOX3D_EDITOR_DETAILS_GROUP_COUNT;
+         ++index)
+    {
+        if (state->editor_ui.details_group_order[index] ==
+            (unsigned char)group_id)
+        {
+            group_position = index;
+            break;
+        }
+    }
+    if (group_position < SANDBOX3D_EDITOR_DETAILS_GROUP_COUNT &&
+        bounds.width >= 86.0f)
+    {
+        (void)snprintf(
+            move_up_id,
+            sizeof(move_up_id),
+            "%s.move_up",
+            id);
+        (void)snprintf(
+            move_down_id,
+            sizeof(move_down_id),
+            "%s.move_down",
+            id);
+        if (group_position > 0U &&
+            henka_ui_button(
+                state->ui,
+                move_up_id,
+                (henka_ui_rect){
+                    bounds.x + bounds.width - 58.0f,
+                    bounds.y + 2.0f,
+                    24.0f,
+                    24.0f},
+                "^"))
+        {
+            (void)sandbox3d_editor_ui_reorder_details_group(
+                &state->editor_ui,
+                group_position,
+                group_position - 1U);
+            sandbox3d_set_status(state, false, "Object Details group moved up.");
+        }
+        if (group_position + 1U < SANDBOX3D_EDITOR_DETAILS_GROUP_COUNT &&
+            henka_ui_button(
+                state->ui,
+                move_down_id,
+                (henka_ui_rect){
+                    bounds.x + bounds.width - 30.0f,
+                    bounds.y + 2.0f,
+                    24.0f,
+                    24.0f},
+                "v"))
+        {
+            (void)sandbox3d_editor_ui_reorder_details_group(
+                &state->editor_ui,
+                group_position,
+                group_position + 1U);
+            sandbox3d_set_status(state, false, "Object Details group moved down.");
+        }
+    }
+
     return true;
 }
 
@@ -14285,6 +14350,7 @@ static void sandbox3d_draw_object_details_panel(
     henka_ui_flow_desc flow_desc;
     henka_ui_rect panel_bounds;
     henka_ui_rect row;
+    size_t details_group_position;
 
     if (engine == NULL ||
         state == NULL ||
@@ -14605,11 +14671,40 @@ static void sandbox3d_draw_object_details_panel(
             display_name);
     }
 
+    details_group_position = 0U;
+details_group_dispatch:
+    if (details_group_position >= SANDBOX3D_EDITOR_DETAILS_GROUP_COUNT)
+    {
+        goto details_groups_complete;
+    }
+    switch (state->editor_ui.details_group_order[details_group_position++])
+    {
+        case SANDBOX3D_EDITOR_DETAILS_GROUP_OVERVIEW:
+            goto details_group_overview;
+        case SANDBOX3D_EDITOR_DETAILS_GROUP_TRANSFORM:
+            goto details_group_transform;
+        case SANDBOX3D_EDITOR_DETAILS_GROUP_MATERIALS:
+            goto details_group_materials;
+        case SANDBOX3D_EDITOR_DETAILS_GROUP_AUTHORING:
+            goto details_group_authoring;
+        case SANDBOX3D_EDITOR_DETAILS_GROUP_PHYSICS:
+            goto details_group_physics;
+        case SANDBOX3D_EDITOR_DETAILS_GROUP_INTERACTION:
+            goto details_group_interaction;
+        case SANDBOX3D_EDITOR_DETAILS_GROUP_ACTIONS:
+            goto details_group_actions;
+        default:
+            goto details_groups_complete;
+    }
+
+details_group_overview:
+    {
     (void)sandbox3d_details_flow_disclosure(
         state,
         flow_desc.bounds,
         "object_details.overview",
         "Overview",
+        SANDBOX3D_EDITOR_DETAILS_GROUP_OVERVIEW,
         &state->editor_ui.details_overview_expanded,
         &disclosure_changed);
     if (state->editor_ui.details_overview_expanded)
@@ -14677,12 +14772,17 @@ static void sandbox3d_draw_object_details_panel(
                     "(none)");
         }
     }
+    }
+    goto details_group_dispatch;
 
+details_group_transform:
+    {
     (void)sandbox3d_details_flow_disclosure(
         state,
         flow_desc.bounds,
         "object_details.transform",
         "Transform",
+        SANDBOX3D_EDITOR_DETAILS_GROUP_TRANSFORM,
         &state->editor_ui.details_transform_expanded,
         &disclosure_changed);
     if (state->editor_ui.details_transform_expanded)
@@ -14750,12 +14850,17 @@ static void sandbox3d_draw_object_details_panel(
                     "Editable");
         }
     }
+    }
+    goto details_group_dispatch;
 
+details_group_materials:
+    {
     (void)sandbox3d_details_flow_disclosure(
         state,
         flow_desc.bounds,
         "object_details.materials",
         "Materials",
+        SANDBOX3D_EDITOR_DETAILS_GROUP_MATERIALS,
         &state->editor_ui.details_materials_expanded,
         &disclosure_changed);
     if (state->editor_ui.details_materials_expanded)
@@ -14967,7 +15072,11 @@ static void sandbox3d_draw_object_details_panel(
             }
         }
     }
+    }
+    goto details_group_dispatch;
 
+details_group_authoring:
+    {
     if (state->authoring_object != NULL &&
         entity == sandbox3d_authoring_object_get_entity(state->authoring_object))
     {
@@ -14976,6 +15085,7 @@ static void sandbox3d_draw_object_details_panel(
             flow_desc.bounds,
             "object_details.authoring",
             "Authoring",
+            SANDBOX3D_EDITOR_DETAILS_GROUP_AUTHORING,
             &state->editor_ui.details_authoring_expanded,
             &disclosure_changed);
         if (state->editor_ui.details_authoring_expanded)
@@ -15157,12 +15267,17 @@ static void sandbox3d_draw_object_details_panel(
             }
         }
     }
+    }
+    goto details_group_dispatch;
 
+details_group_physics:
+    {
     (void)sandbox3d_details_flow_disclosure(
         state,
         flow_desc.bounds,
         "object_details.physics",
         "Physics",
+        SANDBOX3D_EDITOR_DETAILS_GROUP_PHYSICS,
         &state->editor_ui.details_physics_expanded,
         &disclosure_changed);
     if (state->editor_ui.details_physics_expanded)
@@ -15198,12 +15313,17 @@ static void sandbox3d_draw_object_details_panel(
                 velocity_text);
         }
     }
+    }
+    goto details_group_dispatch;
 
+details_group_interaction:
+    {
     (void)sandbox3d_details_flow_disclosure(
         state,
         flow_desc.bounds,
         "object_details.interaction",
         "Interaction",
+        SANDBOX3D_EDITOR_DETAILS_GROUP_INTERACTION,
         &state->editor_ui.details_interaction_expanded,
         &disclosure_changed);
     if (state->editor_ui.details_interaction_expanded &&
@@ -15222,12 +15342,17 @@ static void sandbox3d_draw_object_details_panel(
             "Object Use",
             interaction_text);
     }
+    }
+    goto details_group_dispatch;
 
+details_group_actions:
+    {
     (void)sandbox3d_details_flow_disclosure(
         state,
         flow_desc.bounds,
         "object_details.actions",
         "Actions",
+        SANDBOX3D_EDITOR_DETAILS_GROUP_ACTIONS,
         &state->editor_ui.details_actions_expanded,
         &disclosure_changed);
     if (state->editor_ui.details_actions_expanded)
@@ -15415,7 +15540,10 @@ static void sandbox3d_draw_object_details_panel(
             }
         }
     }
+    }
+    goto details_group_dispatch;
 
+details_groups_complete:
     if (henka_ui_flow_end(
             state->ui,
             &content_height) == HENKA_SUCCESS)

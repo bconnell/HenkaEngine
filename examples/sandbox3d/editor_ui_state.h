@@ -2,6 +2,7 @@
 #define SANDBOX3D_EDITOR_UI_STATE_H
 
 #include <stdbool.h>
+#include <stddef.h>
 
 #include <henka/persistence.h>
 #include <henka/result.h>
@@ -15,6 +16,18 @@ typedef struct sandbox3d_editor_scroll_state
     float content_height;
     float viewport_height;
 } sandbox3d_editor_scroll_state;
+
+typedef enum sandbox3d_editor_details_group_id
+{
+    SANDBOX3D_EDITOR_DETAILS_GROUP_OVERVIEW = 0,
+    SANDBOX3D_EDITOR_DETAILS_GROUP_TRANSFORM,
+    SANDBOX3D_EDITOR_DETAILS_GROUP_MATERIALS,
+    SANDBOX3D_EDITOR_DETAILS_GROUP_AUTHORING,
+    SANDBOX3D_EDITOR_DETAILS_GROUP_PHYSICS,
+    SANDBOX3D_EDITOR_DETAILS_GROUP_INTERACTION,
+    SANDBOX3D_EDITOR_DETAILS_GROUP_ACTIONS,
+    SANDBOX3D_EDITOR_DETAILS_GROUP_COUNT
+} sandbox3d_editor_details_group_id;
 
 typedef struct sandbox3d_editor_ui_state
 {
@@ -30,6 +43,7 @@ typedef struct sandbox3d_editor_ui_state
     bool details_physics_expanded;
     bool details_interaction_expanded;
     bool details_actions_expanded;
+    unsigned char details_group_order[SANDBOX3D_EDITOR_DETAILS_GROUP_COUNT];
 
     float controls_scroll_offset;
     float controls_content_height;
@@ -107,4 +121,12 @@ bool sandbox3d_editor_ui_scroll_details(
     sandbox3d_editor_ui_state* state,
     float viewport_height,
     int direction);
+
+bool sandbox3d_editor_ui_details_group_order_is_valid(
+    const unsigned char* order);
+
+bool sandbox3d_editor_ui_reorder_details_group(
+    sandbox3d_editor_ui_state* state,
+    size_t from_position,
+    size_t to_position);
 #endif

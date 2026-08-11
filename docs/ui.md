@@ -153,10 +153,14 @@ ownership for camera zoom. Detached production panels receive their own native
 wheel deltas and pointer state, use their detached framebuffer geometry for
 content and scrollbar bounds, and retain the same bounded wheel and thumb-drag
 behavior after resizing. Diagnostic-heavy pages remain separate from normal
-object properties.
+object properties. Object Details also exposes bounded up/down actions on each
+visible group header; the resulting presentation order uses stable group IDs,
+persists through the existing settings authority, rejects malformed orders, and
+does not move or duplicate any selected-object or subsystem state.
 
-`Reset Layout` also restores the default collapsible-group expansion and panel
-scroll offsets while preserving valid named workspace layout slots.
+`Reset Layout` also restores the default collapsible-group expansion, Object
+Details group order, and panel scroll offsets while preserving valid named
+workspace layout slots.
 
 The selected object also shows a transform gizmo inside the dedicated scene viewport.
 
