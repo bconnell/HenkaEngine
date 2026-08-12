@@ -298,9 +298,13 @@ metallic/roughness texture semantics plus base color, metallic, roughness,
 normal-strength, and meters-per-tile factors. The normal Rendered shader
 consumes these weights; ordinary material vertex-color tint remains disabled
 for this material. The Sandbox reference fixture creates four deterministic
-16x16 asset-manager-owned runtime grass, dirt, rock, and wet base-color,
-tangent-normal, and metallic/roughness tiles. The material retains deterministic
-factor fallback for replacement or unavailable optional sources. The graphical
+32x32 asset-manager-owned runtime grass, dirt, rock, and wet base-color with
+tangent-normal, and metallic/roughness tiles using bounded multi-frequency
+variation. The Rendered Terrain shader also adds bounded world-space macro
+variation to albedo and roughness to reduce large-scale tile repetition; this
+does not claim authored texture streaming.
+The material retains deterministic factor fallback for replacement or unavailable
+optional sources. The graphical
 owner reports the exact unique layer-texture count and resident material bytes;
 the Sandbox reference fixture therefore expects all twelve semantic layer slots
 to contribute without duplicating shared handles. The existing asset-manager dependency inspection contract

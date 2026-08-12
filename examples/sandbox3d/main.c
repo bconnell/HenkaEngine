@@ -4972,9 +4972,9 @@ static henka_result sandbox3d_initialize_terrain_rendering(
     henka_texture_descriptor terrain_normal_descriptor;
     henka_texture_descriptor terrain_metallic_roughness_descriptor;
     henka_terrain_stream_observer stream_observer;
-    unsigned char terrain_layer_pixels[HENKA_MATERIAL_TERRAIN_LAYER_COUNT][16U * 16U * 4U];
-    unsigned char terrain_layer_normal_pixels[HENKA_MATERIAL_TERRAIN_LAYER_COUNT][16U * 16U * 4U];
-    unsigned char terrain_layer_metallic_roughness_pixels[HENKA_MATERIAL_TERRAIN_LAYER_COUNT][16U * 16U * 4U];
+    unsigned char terrain_layer_pixels[HENKA_MATERIAL_TERRAIN_LAYER_COUNT][32U * 32U * 4U];
+    unsigned char terrain_layer_normal_pixels[HENKA_MATERIAL_TERRAIN_LAYER_COUNT][32U * 32U * 4U];
+    unsigned char terrain_layer_metallic_roughness_pixels[HENKA_MATERIAL_TERRAIN_LAYER_COUNT][32U * 32U * 4U];
     henka_result result;
 
     if (engine == NULL || state == NULL || state->scene == NULL || state->basic_shader == NULL)
@@ -5001,18 +5001,26 @@ static henka_result sandbox3d_initialize_terrain_rendering(
          layer_index < HENKA_MATERIAL_TERRAIN_LAYER_COUNT;
          ++layer_index)
     {
-        for (size_t tex_z = 0U; tex_z < 16U; ++tex_z)
+        for (size_t tex_z = 0U; tex_z < 32U; ++tex_z)
         {
-            for (size_t tex_x = 0U; tex_x < 16U; ++tex_x)
+            for (size_t tex_x = 0U; tex_x < 32U; ++tex_x)
             {
                 uint32_t noise = (uint32_t)(tex_x * 374761393U +
                     tex_z * 668265263U + layer_index * 2246822519U);
+                uint32_t secondary_noise = (uint32_t)(tex_x * 1597334677U +
+                    tex_z * 3812015801U + layer_index * 958282323U);
                 int variation;
-                size_t pixel_offset = (tex_z * 16U + tex_x) * 4U;
+                int broad_variation;
+                size_t pixel_offset = (tex_z * 32U + tex_x) * 4U;
                 noise ^= noise >> 13U;
                 noise *= 1274126177U;
                 noise ^= noise >> 16U;
+                secondary_noise ^= secondary_noise >> 15U;
+                secondary_noise *= 2246822519U;
+                secondary_noise ^= secondary_noise >> 13U;
                 variation = (int)(noise & 31U) - 16;
+                broad_variation = (int)((secondary_noise >> 24U) & 31U) - 16;
+                variation = variation * 2 / 3 + broad_variation;
                 if (layer_index == 0U)
                 {
                     terrain_layer_pixels[layer_index][pixel_offset + 0U] = (unsigned char)(68 + variation);
@@ -5061,8 +5069,8 @@ static henka_result sandbox3d_initialize_terrain_rendering(
         }
         result = sandbox3d_create_runtime_rgba8_texture(
             engine,
-            16,
-            16,
+            32,
+            32,
             &terrain_layer_pixels[layer_index][0],
             &terrain_texture_descriptor,
             layer_index == 0U ? "runtime/terrain/layer0/base_color" :
@@ -5076,8 +5084,8 @@ static henka_result sandbox3d_initialize_terrain_rendering(
         }
         result = sandbox3d_create_runtime_rgba8_texture(
             engine,
-            16,
-            16,
+            32,
+            32,
             &terrain_layer_normal_pixels[layer_index][0],
             &terrain_normal_descriptor,
             layer_index == 0U ? "runtime/terrain/layer0/normal" :
@@ -5091,8 +5099,8 @@ static henka_result sandbox3d_initialize_terrain_rendering(
         }
         result = sandbox3d_create_runtime_rgba8_texture(
             engine,
-            16,
-            16,
+            32,
+            32,
             &terrain_layer_metallic_roughness_pixels[layer_index][0],
             &terrain_metallic_roughness_descriptor,
             layer_index == 0U ? "runtime/terrain/layer0/metallic_roughness" :

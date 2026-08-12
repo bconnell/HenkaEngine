@@ -136,6 +136,28 @@ vec2 materialUv(int uvSet)
     return uvSet == 1 ? fragUv1 : fragUv;
 }
 
+float terrainMacroHash(vec2 cell)
+{
+    return fract(sin(dot(cell, vec2(127.1, 311.7))) * 43758.5453);
+}
+
+float terrainMacroVariation(vec2 worldPosition)
+{
+    vec2 cellPosition = worldPosition * 0.035;
+    vec2 cell = floor(cellPosition);
+    vec2 fraction = fract(cellPosition);
+    fraction = fraction * fraction * (3.0 - 2.0 * fraction);
+    float lower = mix(
+        terrainMacroHash(cell),
+        terrainMacroHash(cell + vec2(1.0, 0.0)),
+        fraction.x);
+    float upper = mix(
+        terrainMacroHash(cell + vec2(0.0, 1.0)),
+        terrainMacroHash(cell + vec2(1.0, 1.0)),
+        fraction.x);
+    return mix(lower, upper, fraction.y);
+}
+
 vec3 safeNormalize(vec3 value, vec3 fallback)
 {
     float lengthSquared = dot(value, value);
@@ -403,6 +425,8 @@ void main()
             {
                 layerColor *= texture(terrainLayerBaseColorTextures[layerIndex], layerUv);
             }
+            float macro = terrainMacroVariation(fragWorldPosition.xz + vec2(float(layerIndex) * 19.0));
+            layerColor.rgb *= 0.92 + macro * 0.16;
             terrainAlbedo += layerColor.rgb * terrainWeights[layerIndex];
         }
         surfaceColor = vec4(terrainAlbedo * max(baseColor.rgb, vec3(0.0)), baseColor.a);
@@ -491,6 +515,8 @@ void main()
                 layerMetallic *= layerMaterialData.b;
                 layerRoughness *= layerMaterialData.g;
             }
+            float macro = terrainMacroVariation(fragWorldPosition.xz + vec2(float(layerIndex) * 19.0));
+            layerRoughness *= 0.94 + macro * 0.12;
             surfaceMetallic += saturate(layerMetallic) * terrainWeights[layerIndex];
             surfaceRoughness += clamp(layerRoughness, 0.045, 1.0) * terrainWeights[layerIndex];
         }
