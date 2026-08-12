@@ -39,6 +39,7 @@ _deps/
 *.log
 
 # Temporary files
+/test_tmp/
 *.tmp
 *.temp
 *.user

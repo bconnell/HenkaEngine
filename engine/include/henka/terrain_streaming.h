@@ -61,6 +61,7 @@ typedef struct henka_terrain_stream_stats
     uint64_t failed_request_count;
     uint64_t cancelled_request_count;
     uint64_t dropped_completion_count;
+    uint64_t stale_completion_count;
     uint64_t evicted_region_count;
     uint64_t generated_region_count;
     uint64_t generator_failure_count;

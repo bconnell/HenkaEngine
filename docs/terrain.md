@@ -82,6 +82,13 @@ Observer-driven requests are marked separately from explicit
 observer cancels only stale observer demands, so an explicit caller request
 remains queued or active until it completes or is explicitly canceled.
 
+Before publishing a successful worker completion, the pump compares its
+region generation/revision with the currently resident authoritative state.
+An older completion is discarded instead of overwriting newer edits,
+recovery, or reload state, and is counted in `stale_completion_count` for
+diagnostics. This preserves the transactional ownership boundary without
+making a stale asynchronous load look like an I/O failure.
+
 ## Deterministic edits
 
 `<henka/terrain_edit.h>` is the single command path for raise, lower, flatten,

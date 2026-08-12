@@ -51,6 +51,7 @@ struct henka_terrain_streamer
     uint64_t failed_request_count;
     uint64_t cancelled_request_count;
     uint64_t dropped_completion_count;
+    uint64_t stale_completion_count;
     uint64_t evicted_region_count;
     uint64_t generated_region_count;
     uint64_t generator_failure_count;
@@ -240,6 +241,24 @@ static void henka_terrain_stream_cancel_stale_observer_requests_locked(
             ++streamer->cancelled_request_count;
         }
     }
+}
+
+static bool henka_terrain_stream_completion_is_stale(
+    const henka_terrain_streamer* streamer,
+    const henka_terrain_stream_completion* completion)
+{
+    henka_terrain_region_state current;
+    if (streamer == NULL || completion == NULL || completion->result != HENKA_SUCCESS ||
+        henka_terrain_world_get_region_state(
+            streamer->world, completion->info.id, &current) != HENKA_SUCCESS)
+    {
+        return false;
+    }
+    if (current.generation != completion->info.generation)
+    {
+        return current.generation > completion->info.generation;
+    }
+    return current.revision > completion->info.revision;
 }
 
 static bool henka_terrain_stream_region_retained(
@@ -880,7 +899,13 @@ henka_result henka_terrain_streamer_pump(
         {
             break;
         }
-        if (completion.result == HENKA_SUCCESS &&
+        if (henka_terrain_stream_completion_is_stale(streamer, &completion))
+        {
+            EnterCriticalSection(&streamer->lock);
+            ++streamer->stale_completion_count;
+            LeaveCriticalSection(&streamer->lock);
+        }
+        else if (completion.result == HENKA_SUCCESS &&
             henka_terrain_world_apply_region_snapshot(
                 streamer->world, completion.info, completion.samples,
                 streamer->world->layout.samples_per_region) == HENKA_SUCCESS)
@@ -932,6 +957,7 @@ void henka_terrain_streamer_get_stats(
         out_stats->failed_request_count = streamer->failed_request_count;
         out_stats->cancelled_request_count = streamer->cancelled_request_count;
         out_stats->dropped_completion_count = streamer->dropped_completion_count;
+        out_stats->stale_completion_count = streamer->stale_completion_count;
         out_stats->evicted_region_count = streamer->evicted_region_count;
         out_stats->generated_region_count = streamer->generated_region_count;
         out_stats->generator_failure_count = streamer->generator_failure_count;
