@@ -14190,6 +14190,7 @@ static bool sandbox3d_details_flow_disclosure(
     const char* id,
     const char* label,
     sandbox3d_editor_details_group_id group_id,
+    const unsigned char* display_order,
     bool* expanded,
     bool* any_changed)
 {
@@ -14205,6 +14206,7 @@ static bool sandbox3d_details_flow_disclosure(
         state->ui == NULL ||
         id == NULL ||
         label == NULL ||
+        display_order == NULL ||
         expanded == NULL)
     {
         return false;
@@ -14256,7 +14258,7 @@ static bool sandbox3d_details_flow_disclosure(
          index < SANDBOX3D_EDITOR_DETAILS_GROUP_COUNT;
          ++index)
     {
-        if (state->editor_ui.details_group_order[index] ==
+        if (display_order[index] ==
             (unsigned char)group_id)
         {
             group_position = index;
@@ -14356,6 +14358,7 @@ static void sandbox3d_draw_object_details_panel(
     henka_ui_flow_desc flow_desc;
     henka_ui_rect panel_bounds;
     henka_ui_rect row;
+    unsigned char details_display_order[SANDBOX3D_EDITOR_DETAILS_GROUP_COUNT];
     size_t details_group_position;
 
     if (engine == NULL ||
@@ -14677,13 +14680,17 @@ static void sandbox3d_draw_object_details_panel(
             display_name);
     }
 
+    memcpy(
+        details_display_order,
+        state->editor_ui.details_group_order,
+        sizeof(details_display_order));
     details_group_position = 0U;
 details_group_dispatch:
     if (details_group_position >= SANDBOX3D_EDITOR_DETAILS_GROUP_COUNT)
     {
         goto details_groups_complete;
     }
-    switch (state->editor_ui.details_group_order[details_group_position++])
+    switch (details_display_order[details_group_position++])
     {
         case SANDBOX3D_EDITOR_DETAILS_GROUP_OVERVIEW:
             goto details_group_overview;
@@ -14711,6 +14718,7 @@ details_group_overview:
         "object_details.overview",
         "Overview",
         SANDBOX3D_EDITOR_DETAILS_GROUP_OVERVIEW,
+        details_display_order,
         &state->editor_ui.details_overview_expanded,
         &disclosure_changed);
     if (state->editor_ui.details_overview_expanded)
@@ -14789,6 +14797,7 @@ details_group_transform:
         "object_details.transform",
         "Transform",
         SANDBOX3D_EDITOR_DETAILS_GROUP_TRANSFORM,
+        details_display_order,
         &state->editor_ui.details_transform_expanded,
         &disclosure_changed);
     if (state->editor_ui.details_transform_expanded)
@@ -14867,6 +14876,7 @@ details_group_materials:
         "object_details.materials",
         "Materials",
         SANDBOX3D_EDITOR_DETAILS_GROUP_MATERIALS,
+        details_display_order,
         &state->editor_ui.details_materials_expanded,
         &disclosure_changed);
     if (state->editor_ui.details_materials_expanded)
@@ -15092,6 +15102,7 @@ details_group_authoring:
             "object_details.authoring",
             "Authoring",
             SANDBOX3D_EDITOR_DETAILS_GROUP_AUTHORING,
+            details_display_order,
             &state->editor_ui.details_authoring_expanded,
             &disclosure_changed);
         if (state->editor_ui.details_authoring_expanded)
@@ -15284,6 +15295,7 @@ details_group_physics:
         "object_details.physics",
         "Physics",
         SANDBOX3D_EDITOR_DETAILS_GROUP_PHYSICS,
+        details_display_order,
         &state->editor_ui.details_physics_expanded,
         &disclosure_changed);
     if (state->editor_ui.details_physics_expanded)
@@ -15330,6 +15342,7 @@ details_group_interaction:
         "object_details.interaction",
         "Interaction",
         SANDBOX3D_EDITOR_DETAILS_GROUP_INTERACTION,
+        details_display_order,
         &state->editor_ui.details_interaction_expanded,
         &disclosure_changed);
     if (state->editor_ui.details_interaction_expanded &&
@@ -15359,6 +15372,7 @@ details_group_actions:
         "object_details.actions",
         "Actions",
         SANDBOX3D_EDITOR_DETAILS_GROUP_ACTIONS,
+        details_display_order,
         &state->editor_ui.details_actions_expanded,
         &disclosure_changed);
     if (state->editor_ui.details_actions_expanded)
