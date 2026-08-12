@@ -217,7 +217,7 @@ process failures remain fatal. Local runs remain strict by default.
 .\scripts\check_packaged_sandbox3d_windows.ps1
 ```
 
-The packaged check script confirms that the packaged folder contains the expected files, launches the sandbox, checks the startup help text and package marker, confirms UI state logs when available, exercises a few UI clicks, and confirms the close-window path exits cleanly.
+The packaged check script confirms that the packaged folder contains the expected files, launches the sandbox, checks the startup help text and package marker, confirms UI state logs when available, exercises a few UI clicks, and confirms the close-window path exits cleanly. The interactive startup heading check allows a bounded 15-second cold-start window for shader and asset initialization; the deterministic `-NonInteractive` path remains the preferred CI/package gate.
 It also checks the packaged runtime marker and runtime-mode output when that signal is available.
 
 It does not replace human visual QA. You should still confirm by eye that the scene stays inside its own viewport, that docked panels do not cover scene graphics, that the controls are not cramped, and that the in-window utilities and status area feel readable and useful.

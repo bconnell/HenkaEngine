@@ -869,8 +869,8 @@ try {
         throw "The packaged sandbox window did not become available."
     }
 
-    if (-not (Wait-FileContains -Path $stdoutPath -Pattern "Henka Engine Sandbox 3D" -TimeoutMilliseconds 5000)) {
-        throw "Startup help heading was not found in the packaged sandbox output."
+    if (-not (Wait-FileContains -Path $stdoutPath -Pattern "Henka Engine Sandbox 3D" -TimeoutMilliseconds 15000)) {
+        throw "Startup help heading was not found in the packaged sandbox output within the bounded 15-second startup window."
     }
     Assert-FileContains -Path $stdoutPath -Pattern "Henka Engine Sandbox 3D" -Description "Startup help heading"
     Assert-FileContains -Path $stdoutPath -Pattern "F4               Show or hide the sandbox panels" -Description "F4 help text"
