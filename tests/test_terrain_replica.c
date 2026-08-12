@@ -3,6 +3,8 @@
 #include <henka/memory.h>
 #include <henka/terrain_replica.h>
 
+#include "../engine/src/core/memory_internal.h"
+
 static int test_replica_delta_and_snapshot(void)
 {
     henka_terrain_world_desc world_desc = henka_terrain_world_desc_default();
@@ -214,6 +216,39 @@ static int test_replica_delta_and_snapshot(void)
     if (diagnostics.rejected_snapshot_count == 0U)
     {
         goto cleanup;
+    }
+    state_before_invalid_transfer = state;
+    fragment.transfer_id = 12U;
+    complete = false;
+    offset = 0U;
+    for (fragment_index = 0U; fragment_index < fragment_count; ++fragment_index)
+    {
+        size_t remaining = record_size - offset;
+        size_t data_size = remaining > HENKA_TERRAIN_NETWORK_MAX_SNAPSHOT_FRAGMENT_DATA_BYTES
+            ? HENKA_TERRAIN_NETWORK_MAX_SNAPSHOT_FRAGMENT_DATA_BYTES : remaining;
+        fragment.fragment_index = fragment_index;
+        fragment.data_size = (uint32_t)data_size;
+        fragment.data = record + offset;
+        if (fragment_index + 1U == fragment_count)
+        {
+            henka_memory_test_fail_after(0U);
+        }
+        fragment_result = henka_terrain_replica_apply_snapshot_fragment(
+            snapshot_replica, &fragment, &complete);
+        henka_memory_test_disable_failures();
+        if (fragment_index + 1U < fragment_count && fragment_result != HENKA_SUCCESS)
+        {
+            goto cleanup;
+        }
+        if (fragment_index + 1U == fragment_count &&
+            (fragment_result != HENKA_ERROR_OUT_OF_MEMORY || complete ||
+             henka_terrain_world_get_region_state(
+                 snapshot_world, (henka_terrain_region_id){0, 0}, &state) != HENKA_SUCCESS ||
+             memcmp(&state, &state_before_invalid_transfer, sizeof(state)) != 0))
+        {
+            goto cleanup;
+        }
+        offset += data_size;
     }
     fragment.transfer_id = 9U;
     complete = false;

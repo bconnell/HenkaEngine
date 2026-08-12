@@ -237,6 +237,11 @@ is the only delta failure eligible for bounded recovery; identity, protocol,
 validation, and allocation failures remain hard errors and do not trigger a
 request derived from the rejected message.
 
+The replica's final decode/sample allocation is also transactional: an
+allocation failure after all fragments arrive leaves the previous resident
+region state untouched, clears the failed transfer, and permits a later
+transfer to retry cleanly.
+
 When a decoded fragment is rejected, the public Terrain client requests a new
 snapshot for the same region and target revision, once per transfer and up to
 four times per connection. Undecodable messages remain hard errors because
