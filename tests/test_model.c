@@ -148,6 +148,7 @@ static void henka_test_gltf_scene_import(void)
     henka_model_scene_data_destroy(&scene);
     HENKA_TEST_ASSERT(henka_memory_get_allocation_count() == allocations_before_scene);
 
+    allocations_before_scene = henka_memory_get_allocation_count();
     scene_length = strlen(scene_gltf);
     invalid_scene = henka_malloc(scene_length + 1U);
     HENKA_TEST_ASSERT(invalid_scene != NULL);
@@ -161,6 +162,7 @@ static void henka_test_gltf_scene_import(void)
     HENKA_TEST_ASSERT(scene.node_count == 0U);
     henka_model_scene_data_destroy(&scene);
     henka_free(invalid_scene);
+    HENKA_TEST_ASSERT(henka_memory_get_allocation_count() == allocations_before_scene);
 
     memset(&scene, 0, sizeof(scene));
     HENKA_TEST_ASSERT(henka_model_scene_data_load_gltf_from_memory(

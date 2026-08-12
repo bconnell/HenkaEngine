@@ -1353,7 +1353,9 @@ static bool henka_gltf_parse_scene_cameras(
         float ymag = 1.0f;
         float number;
 
-        if (scene->camera_count != index || !henka_gltf_copy_optional_name(camera, camera_end, &scene->cameras[index].name) ||
+        if (scene->camera_count != index) return false;
+        scene->camera_count = index + 1U;
+        if (!henka_gltf_copy_optional_name(camera, camera_end, &scene->cameras[index].name) ||
             !henka_gltf_find_member(camera, camera_end, "type", &type_value, &type_end) ||
             !henka_gltf_read_string(type_value, type_end, type, sizeof(type), NULL)) return false;
         if (strcmp(type, "perspective") == 0)
@@ -1383,7 +1385,6 @@ static bool henka_gltf_parse_scene_cameras(
             scene->cameras[index].camera = henka_camera_create_orthographic(number, xmag / ymag, znear, zfar);
         }
         else return false;
-        scene->camera_count += 1U;
     }
     return !henka_gltf_array_item(cameras, cameras_end, HENKA_MODEL_MAX_SCENE_ITEMS, &camera, &camera_end);
 }
@@ -1421,7 +1422,9 @@ static bool henka_gltf_parse_scene_lights(
         const char* spot;
         const char* spot_end;
 
-        if (scene->light_count != index || !henka_gltf_copy_optional_name(light, light_end, &output->name) ||
+        if (scene->light_count != index) return false;
+        scene->light_count = index + 1U;
+        if (!henka_gltf_copy_optional_name(light, light_end, &output->name) ||
             !henka_gltf_find_member(light, light_end, "type", &value, &value_end) ||
             !henka_gltf_read_string(value, value_end, type, sizeof(type), NULL)) return false;
         if (henka_gltf_find_member(light, light_end, "color", &value, &value_end) &&
@@ -1450,7 +1453,6 @@ static bool henka_gltf_parse_scene_lights(
         output->range = range;
         output->inner_cone_cosine = cosf(inner);
         output->outer_cone_cosine = cosf(outer);
-        scene->light_count += 1U;
     }
     return !henka_gltf_array_item(lights, lights_end, HENKA_MODEL_MAX_SCENE_ITEMS, &light, &light_end);
 }
@@ -1601,6 +1603,7 @@ static bool henka_gltf_parse_scene_nodes(
         output->mesh_index = -1;
         output->camera_index = -1;
         output->light_index = -1;
+        scene->node_count = index + 1U;
         output->local_transform = henka_transform_identity();
         output->local_matrix = henka_mat4_identity();
         if (!henka_gltf_copy_optional_name(node, node_end, &output->name)) return false;
@@ -1649,7 +1652,6 @@ static bool henka_gltf_parse_scene_nodes(
                     output->light_index < 0 || (size_t)output->light_index >= scene->light_count) return false;
             }
         }
-        scene->node_count += 1U;
     }
     if (henka_gltf_array_item(nodes, nodes_end, HENKA_MODEL_MAX_SCENE_ITEMS, &node, &node_end)) return false;
     for (index = 0U; index < scene->node_count; ++index)
