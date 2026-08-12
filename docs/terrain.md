@@ -89,6 +89,12 @@ recovery, or reload state, and is counted in `stale_completion_count` for
 diagnostics. This preserves the transactional ownership boundary without
 making a stale asynchronous load look like an I/O failure.
 
+Queued completions retain whether their request came only from an observer.
+If that observer moves before the completion is pumped, the result is
+discarded and counted in `cancelled_completion_count`; explicit requests that
+were coalesced onto the same load clear that observer-only ownership and are
+still allowed to complete.
+
 ## Deterministic edits
 
 `<henka/terrain_edit.h>` is the single command path for raise, lower, flatten,

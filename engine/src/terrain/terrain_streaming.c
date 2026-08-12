@@ -22,6 +22,7 @@ typedef struct henka_terrain_stream_request
 typedef struct henka_terrain_stream_completion
 {
     bool active;
+    bool observer_demand;
     henka_result result;
     bool generated;
     henka_terrain_region_storage_info info;
@@ -52,6 +53,7 @@ struct henka_terrain_streamer
     uint64_t cancelled_request_count;
     uint64_t dropped_completion_count;
     uint64_t stale_completion_count;
+    uint64_t cancelled_completion_count;
     uint64_t evicted_region_count;
     uint64_t generated_region_count;
     uint64_t generator_failure_count;
@@ -261,6 +263,17 @@ static bool henka_terrain_stream_completion_is_stale(
     return current.revision > completion->info.revision;
 }
 
+static bool henka_terrain_stream_completion_is_cancelled(
+    const henka_terrain_streamer* streamer,
+    const henka_terrain_stream_completion* completion)
+{
+    if (streamer == NULL || completion == NULL || !completion->observer_demand)
+    {
+        return false;
+    }
+    return !henka_terrain_stream_region_within_any_cpu_radius(streamer, completion->info.id);
+}
+
 static bool henka_terrain_stream_region_retained(
     const henka_terrain_streamer* streamer,
     henka_terrain_region_id region_id)
@@ -382,6 +395,7 @@ static DWORD WINAPI henka_terrain_stream_worker(void* argument)
         uint32_t request_index;
         uint32_t completion_index;
         bool cancelled;
+        bool completion_observer_demand;
         bool generated = false;
         bool generator_attempted = false;
 
@@ -474,6 +488,7 @@ static DWORD WINAPI henka_terrain_stream_worker(void* argument)
             ++streamer->generator_failure_count;
         }
         cancelled = streamer->cancel_active;
+        completion_observer_demand = streamer->active_observer_demand;
         streamer->active_request_count = 0U;
         streamer->active_region_valid = false;
         streamer->active_observer_demand = false;
@@ -499,6 +514,8 @@ static DWORD WINAPI henka_terrain_stream_worker(void* argument)
                     samples = NULL;
                 }
                 streamer->completions[completion_index].active = true;
+                streamer->completions[completion_index].observer_demand =
+                    completion_observer_demand;
                 streamer->completions[completion_index].result = result;
                 streamer->completions[completion_index].generated = generated;
                 streamer->completions[completion_index].info = info;
@@ -899,7 +916,13 @@ henka_result henka_terrain_streamer_pump(
         {
             break;
         }
-        if (henka_terrain_stream_completion_is_stale(streamer, &completion))
+        if (henka_terrain_stream_completion_is_cancelled(streamer, &completion))
+        {
+            EnterCriticalSection(&streamer->lock);
+            ++streamer->cancelled_completion_count;
+            LeaveCriticalSection(&streamer->lock);
+        }
+        else if (henka_terrain_stream_completion_is_stale(streamer, &completion))
         {
             EnterCriticalSection(&streamer->lock);
             ++streamer->stale_completion_count;
@@ -958,6 +981,7 @@ void henka_terrain_streamer_get_stats(
         out_stats->cancelled_request_count = streamer->cancelled_request_count;
         out_stats->dropped_completion_count = streamer->dropped_completion_count;
         out_stats->stale_completion_count = streamer->stale_completion_count;
+        out_stats->cancelled_completion_count = streamer->cancelled_completion_count;
         out_stats->evicted_region_count = streamer->evicted_region_count;
         out_stats->generated_region_count = streamer->generated_region_count;
         out_stats->generator_failure_count = streamer->generator_failure_count;
