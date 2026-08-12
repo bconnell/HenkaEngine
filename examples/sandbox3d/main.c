@@ -353,6 +353,7 @@ typedef struct sandbox3d_state
     henka_texture* residency_stress_ktx_texture;
     henka_material residency_stress_original_material;
     henka_material_asset* marker_material_asset;
+    henka_material_asset* terrain_material_asset;
     henka_material_instance marker_material_instance;
     henka_terrain_world* terrain_world;
     henka_terrain_storage* terrain_storage;
@@ -5303,6 +5304,16 @@ static henka_result sandbox3d_initialize_terrain_rendering(
     render_desc.max_resident_chunks = 16U;
     render_desc.max_pending_requests = 16U;
     render_desc.material = terrain_material;
+    result = henka_assets_adopt_runtime_material(
+        henka_engine_get_asset_manager(engine),
+        "runtime/terrain/reference-material",
+        &render_desc.material,
+        &state->terrain_material_asset);
+    if (result != HENKA_SUCCESS)
+    {
+        goto fail;
+    }
+    render_desc.material_asset = state->terrain_material_asset;
     result = henka_terrain_render_runtime_create(
         engine,
         state->scene,
@@ -5343,6 +5354,7 @@ fail:
     henka_free(seed_samples);
     henka_terrain_render_runtime_destroy(state->terrain_render);
     state->terrain_render = NULL;
+    state->terrain_material_asset = NULL;
     henka_terrain_streamer_destroy(state->terrain_streamer);
     state->terrain_streamer = NULL;
     henka_terrain_physics_destroy(state->terrain_physics);
@@ -20561,6 +20573,7 @@ static void sandbox3d_update(henka_engine* engine, double delta_seconds, void* u
         henka_engine_diagnostics smoke_diagnostics;
         henka_terrain_stream_stats terrain_stream_stats;
         henka_terrain_render_chunk_info terrain_chunk_info;
+        const henka_material_asset* terrain_material_asset = NULL;
         henka_material terrain_scene_material;
         henka_scene_environment_desc smoke_environment;
         henka_texture_info stress_texture_info;
@@ -20619,6 +20632,9 @@ static void sandbox3d_update(henka_engine* engine, double delta_seconds, void* u
         }
         if (henka_terrain_render_runtime_get_chunk(
                 state->terrain_render, (henka_terrain_chunk_id){0, 0}, &terrain_chunk_info) != HENKA_SUCCESS ||
+            henka_scene_get_entity_material_asset(
+                state->scene, terrain_chunk_info.entity, &terrain_material_asset) != HENKA_SUCCESS ||
+            terrain_material_asset != state->terrain_material_asset ||
             henka_scene_get_entity_material(
                 state->scene, terrain_chunk_info.entity, &terrain_scene_material) != HENKA_SUCCESS ||
             !terrain_scene_material.terrain_layers_enabled ||
