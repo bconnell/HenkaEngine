@@ -48,6 +48,7 @@ typedef struct henka_terrain_render_stats
     uint64_t runtime_cpu_bytes;
     uint64_t gpu_vertex_bytes;
     uint64_t gpu_index_bytes;
+    uint64_t gpu_weight_bytes;
     uint64_t material_gpu_bytes;
     /* Unique borrowed layer textures inspected for material stats. */
     uint32_t material_texture_count;

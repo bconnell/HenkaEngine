@@ -132,6 +132,8 @@ static int test_paint_updates_weights_without_rebuilding_geometry(void)
     passed = after.rebuilt_chunks == before.rebuilt_chunks &&
         after.weight_updates == before.weight_updates + 1U &&
         after.failed_weight_updates == before.failed_weight_updates &&
+        after.gpu_weight_bytes > 0U &&
+        after.gpu_weight_bytes == before.gpu_weight_bytes &&
         after_chunk.mesh == before_chunk.mesh &&
         after_chunk.revision > before_chunk.revision &&
         after_chunk.generation == before_chunk.generation;

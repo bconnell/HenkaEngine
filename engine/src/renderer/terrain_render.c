@@ -1367,6 +1367,7 @@ henka_result henka_terrain_render_runtime_get_stats(
         (uint64_t)runtime->desc.max_pending_requests * sizeof(*runtime->requests);
     out_stats->gpu_vertex_bytes = 0U;
     out_stats->gpu_index_bytes = 0U;
+    out_stats->gpu_weight_bytes = 0U;
     out_stats->material_texture_count = 0U;
     out_stats->material_gpu_bytes = 0U;
     memset(out_stats->lod_counts, 0, sizeof(out_stats->lod_counts));
@@ -1426,6 +1427,12 @@ henka_result henka_terrain_render_runtime_get_stats(
                 henka_terrain_render_add_bytes(
                     &out_stats->gpu_index_bytes,
                     (uint64_t)slot->mesh->index_count * sizeof(unsigned int));
+                if (slot->mesh->terrain_weight_stream)
+                {
+                    henka_terrain_render_add_bytes(
+                        &out_stats->gpu_weight_bytes,
+                        (uint64_t)slot->mesh->vertex_count * HENKA_TERRAIN_ACTIVE_MATERIAL_COUNT);
+                }
             }
         }
     }

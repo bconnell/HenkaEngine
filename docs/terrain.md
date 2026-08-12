@@ -329,6 +329,9 @@ not a general-purpose mesh attribute update API, and height edits or topology,
 LOD, border-normal, and dependency changes still use transactional mesh
 replacement.
 The Sandbox resource line reports that counter alongside owner memory totals.
+`henka_terrain_render_stats.gpu_weight_bytes` reports the exact resident bytes
+owned by those weight buffers; it is kept separate from the interleaved mesh
+vertex and index totals so diagnostics do not hide the additional upload.
 The mesh regression suite also builds an all-four-edge transition and rejects
 degenerate triangles or non-finite tangent bases at the corners. Manual visual
 corner validation remains subsequent work. The Sandbox also routes one shared
@@ -345,7 +348,7 @@ for the current frame, including probe capture only when a Terrain entity is
 actually submitted to that capture. It is a path diagnostic, not a claim of
 production visual validation for every effect.
 The Terrain utility reports exact world-owned CPU bytes and graphical-owner
-vertex/index/material GPU bytes for resident resources; these values exclude
+vertex/index/weight/material GPU bytes for resident resources; these values exclude
 borrowed renderer resources outside the Terrain owner.
 For application-only visual evidence, run
 `scripts/capture_visual_evidence_windows.ps1 -Configuration Release -IncludeTerrain`.

@@ -16005,6 +16005,7 @@ static void sandbox3d_draw_utility_panel(
                 terrain_render_stats.pending_requests,
                 (unsigned long long)((terrain_render_stats.gpu_vertex_bytes +
                     terrain_render_stats.gpu_index_bytes +
+                    terrain_render_stats.gpu_weight_bytes +
                     terrain_render_stats.material_gpu_bytes) / 1024U));
             sandbox3d_draw_value_row(state->ui, x_left, y_start + 70.0f, panel_bounds.width - 28.0f, "Render", row_value);
             snprintf(
@@ -20674,10 +20675,11 @@ static void sandbox3d_update(henka_engine* engine, double delta_seconds, void* u
             else
             {
                 printf(
-                    "Terrain resource diagnostics: cpu=%llu bytes vertex-gpu=%llu index-gpu=%llu material-gpu=%llu material-textures=%u dirty-regions=%u dirty-refresh=%llu weight-updates=%llu failed-weight-updates=%llu.\n",
+                    "Terrain resource diagnostics: cpu=%llu bytes vertex-gpu=%llu index-gpu=%llu weight-gpu=%llu material-gpu=%llu material-textures=%u dirty-regions=%u dirty-refresh=%llu weight-updates=%llu failed-weight-updates=%llu.\n",
                     (unsigned long long)terrain_world_stats.cpu_bytes,
                     (unsigned long long)terrain_render_stats.gpu_vertex_bytes,
                     (unsigned long long)terrain_render_stats.gpu_index_bytes,
+                    (unsigned long long)terrain_render_stats.gpu_weight_bytes,
                     (unsigned long long)terrain_render_stats.material_gpu_bytes,
                     terrain_render_stats.material_texture_count,
                     terrain_world_stats.dirty_region_count,
