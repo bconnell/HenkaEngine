@@ -11,6 +11,10 @@ if(MSVC)
     # MSBuild file tracking and resilient to KTX-Software's nested paths.
     set(CMAKE_VS_GLOBALS "TrackFileAccess=false" CACHE STRING "" FORCE)
     set(CMAKE_OBJECT_PATH_MAX 128 CACHE STRING "" FORCE)
+    # KTX-Software returns application-owned buffers from its C API. Keep the
+    # static dependency and every Henka target on the same CRT heap in every
+    # multi-config build so those buffers can be released safely on Windows.
+    set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>DLL" CACHE STRING "" FORCE)
 endif()
 
 option(HENKA_BUILD_TESTS "Build Henka Engine tests." ON)

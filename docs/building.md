@@ -16,6 +16,12 @@ a machine-wide Git or MSBuild setting or a populated dependency folder. The
 top-level project applies the same bounded Visual Studio path hardening to
 ordinary clean-clone builds.
 
+MSVC multi-config builds also apply one DLL CRT policy to Henka and the pinned
+KTX-Software dependency (`/MDd` for Debug and `/MD` for Release). This keeps
+KTX application-owned buffers on the same Windows heap as the consuming test
+and engine targets. Rebuild stale binaries after changing configuration or
+updating the dependency.
+
 ## Build from the repository root
 
 ```powershell
