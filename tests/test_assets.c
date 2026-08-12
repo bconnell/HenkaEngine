@@ -216,6 +216,10 @@ void henka_test_assets(void)
     henka_asset_manager runtime_manager;
     henka_asset_texture_entry runtime_entries[1];
     henka_texture runtime_texture;
+    henka_asset_manager runtime_material_manager;
+    henka_material_asset* runtime_material_entries[1];
+    henka_asset_shader_entry runtime_material_shader_entries[1];
+    henka_asset_texture_entry runtime_material_texture_entries[1];
     henka_texture* adopted_runtime_texture;
     henka_texture* runtime_cache_lookup;
     size_t allocations_before_runtime;
@@ -793,6 +797,66 @@ void henka_test_assets(void)
             HENKA_MATERIAL_TEXTURE_SLOT_TERRAIN_LAYER1_NORMAL);
         HENKA_TEST_ASSERT(terrain_dependencies.dependencies[2].slot ==
             HENKA_MATERIAL_TEXTURE_SLOT_TERRAIN_LAYER2_METALLIC_ROUGHNESS);
+    }
+    {
+        henka_material runtime_material = henka_material_terrain_default();
+        henka_material invalid_runtime_material;
+        henka_material_asset* runtime_asset = NULL;
+        henka_material_asset* collision_asset = NULL;
+        henka_material_dependency_info runtime_dependencies;
+        henka_shader foreign_shader;
+
+        memset(&runtime_material_manager, 0, sizeof(runtime_material_manager));
+        memset(&runtime_material_entries, 0, sizeof(runtime_material_entries));
+        memset(&runtime_material_shader_entries, 0, sizeof(runtime_material_shader_entries));
+        memset(&runtime_material_texture_entries, 0, sizeof(runtime_material_texture_entries));
+        runtime_material_manager.material_entries = runtime_material_entries;
+        runtime_material_manager.material_capacity = 1U;
+        runtime_material_shader_entries[0].shader = &managed_shader;
+        runtime_material_manager.shader_entries = runtime_material_shader_entries;
+        runtime_material_manager.shader_count = 1U;
+        runtime_material_manager.shader_capacity = 1U;
+        runtime_material_texture_entries[0].texture = &fallback_texture;
+        runtime_material_manager.texture_entries = runtime_material_texture_entries;
+        runtime_material_manager.texture_count = 1U;
+        runtime_material_manager.texture_capacity = 1U;
+        runtime_material.shader = &managed_shader;
+        runtime_material.name = "Runtime Terrain Material";
+        runtime_material.terrain_layers[0].base_color_texture = &fallback_texture;
+        HENKA_TEST_ASSERT(henka_assets_adopt_runtime_material(
+            &runtime_material_manager,
+            "runtime/terrain/reference",
+            &runtime_material,
+            &runtime_asset) == HENKA_SUCCESS);
+        HENKA_TEST_ASSERT(runtime_asset != NULL);
+        HENKA_TEST_ASSERT(henka_assets_get_material_asset_revision(
+            runtime_asset, &material_revision) == HENKA_SUCCESS);
+        HENKA_TEST_ASSERT(material_revision == 1U);
+        HENKA_TEST_ASSERT(henka_assets_get_material_asset_dependencies(
+            runtime_asset, &runtime_dependencies) == HENKA_SUCCESS);
+        HENKA_TEST_ASSERT(runtime_dependencies.dependency_count == 1U);
+        HENKA_TEST_ASSERT(runtime_dependencies.dependencies[0].slot ==
+            HENKA_MATERIAL_TEXTURE_SLOT_TERRAIN_LAYER0_BASE_COLOR);
+        memset(&foreign_shader, 0, sizeof(foreign_shader));
+        invalid_runtime_material = runtime_material;
+        invalid_runtime_material.shader = &foreign_shader;
+        runtime_asset = (henka_material_asset*)1;
+        HENKA_TEST_ASSERT(henka_assets_adopt_runtime_material(
+            &runtime_material_manager,
+            "runtime/terrain/foreign-dependency",
+            &invalid_runtime_material,
+            &runtime_asset) == HENKA_ERROR_INVALID_ARGUMENT);
+        HENKA_TEST_ASSERT(runtime_asset == NULL);
+        HENKA_TEST_ASSERT(henka_assets_adopt_runtime_material(
+            &runtime_material_manager,
+            "runtime/terrain/reference",
+            &runtime_material,
+            &collision_asset) == HENKA_ERROR_INVALID_ARGUMENT);
+        HENKA_TEST_ASSERT(collision_asset == NULL);
+        henka_free(runtime_material_entries[0]->key);
+        henka_free(runtime_material_entries[0]->source_path);
+        henka_free(runtime_material_entries[0]->display_name);
+        henka_free(runtime_material_entries[0]);
     }
     HENKA_TEST_ASSERT(henka_assets_create_material_instance(
         &material_entry, &material_instance) == HENKA_SUCCESS);

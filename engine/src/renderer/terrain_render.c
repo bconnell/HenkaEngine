@@ -1262,7 +1262,17 @@ henka_result henka_terrain_render_runtime_pump(
             (void)snprintf(name, sizeof(name), "TerrainChunk_%d_%d", slot->chunk_id.x, slot->chunk_id.z);
             slot->entity = henka_scene_create_entity_named(runtime->scene, name);
             if (slot->entity == HENKA_INVALID_ENTITY ||
-                henka_scene_set_entity_material(runtime->scene, slot->entity, runtime->desc.material) != HENKA_SUCCESS ||
+                (runtime->desc.material_asset != NULL
+                    ? henka_scene_apply_material_asset(
+                        runtime->scene,
+                        slot->entity,
+                        runtime->desc.material_asset,
+                        runtime->desc.material,
+                        runtime->desc.material_asset->revision)
+                    : henka_scene_set_entity_material(
+                        runtime->scene,
+                        slot->entity,
+                        runtime->desc.material)) != HENKA_SUCCESS ||
                 henka_scene_set_entity_mesh(runtime->scene, slot->entity, candidate) != HENKA_SUCCESS ||
                 henka_scene_set_entity_transform(runtime->scene, slot->entity, henka_transform_identity()) != HENKA_SUCCESS ||
                 henka_scene_set_entity_local_bounds(runtime->scene, slot->entity, bounds) != HENKA_SUCCESS)

@@ -1,4 +1,5 @@
 #include <math.h>
+#include <henka/assets.h>
 #include <henka/engine.h>
 #include <henka/memory.h>
 #include <henka/scene.h>
@@ -12,6 +13,7 @@ typedef struct terrain_pass_test_context
     henka_terrain_sample* samples;
     size_t sample_count;
     uint32_t update_count;
+    henka_material_asset* terrain_material_asset;
     int passed;
 } terrain_pass_test_context;
 
@@ -23,6 +25,8 @@ static henka_result terrain_pass_test_initialize(
     henka_terrain_world_desc world_desc = henka_terrain_world_desc_default();
     henka_terrain_layout layout;
     henka_camera camera;
+    henka_terrain_render_desc render_desc = henka_terrain_render_desc_default();
+    henka_asset_manager* assets;
     henka_result result;
     size_t index;
 
@@ -71,14 +75,44 @@ static henka_result terrain_pass_test_initialize(
         henka_scene_set_camera(context->scene, &camera) != HENKA_SUCCESS ||
         henka_engine_set_scene(engine, context->scene) != HENKA_SUCCESS ||
         henka_engine_set_viewport_shading_mode(
-            engine, HENKA_VIEWPORT_SHADING_RENDERED) != HENKA_SUCCESS ||
-        henka_terrain_render_runtime_create(
-            engine, context->scene, context->world, NULL, &context->runtime) != HENKA_SUCCESS ||
+            engine, HENKA_VIEWPORT_SHADING_RENDERED) != HENKA_SUCCESS)
+    {
+        return HENKA_ERROR_RENDERER;
+    }
+    assets = henka_engine_get_asset_manager(engine);
+    if (assets == NULL || henka_assets_load_shader(
+            assets,
+            "assets/shaders/basic_lit.vert",
+            "assets/shaders/basic_lit.frag",
+            &render_desc.material.shader) != HENKA_SUCCESS ||
+        henka_assets_adopt_runtime_material(
+            assets,
+            "runtime/terrain/test-material",
+            &render_desc.material,
+            &context->terrain_material_asset) != HENKA_SUCCESS)
+    {
+        return HENKA_ERROR_ASSET_SOURCE;
+    }
+    render_desc.material_asset = context->terrain_material_asset;
+    if (henka_terrain_render_runtime_create(
+            engine, context->scene, context->world, &render_desc, &context->runtime) != HENKA_SUCCESS ||
         henka_terrain_render_runtime_request_chunk(
             context->runtime, (henka_terrain_chunk_id){0, 0}, 0U) != HENKA_SUCCESS ||
         henka_terrain_render_runtime_pump(context->runtime, 1U) != HENKA_SUCCESS)
     {
         return HENKA_ERROR_RENDERER;
+    }
+    {
+        henka_terrain_render_chunk_info chunk_info;
+        const henka_material_asset* material_asset = NULL;
+        if (henka_terrain_render_runtime_get_chunk(
+                context->runtime, (henka_terrain_chunk_id){0, 0}, &chunk_info) != HENKA_SUCCESS ||
+            henka_scene_get_entity_material_asset(
+                context->scene, chunk_info.entity, &material_asset) != HENKA_SUCCESS ||
+            material_asset != context->terrain_material_asset)
+        {
+            return HENKA_ERROR_RENDERER;
+        }
     }
     return HENKA_SUCCESS;
 }

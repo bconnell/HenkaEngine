@@ -302,7 +302,16 @@ the Sandbox reference fixture therefore expects all twelve semantic layer slots
 to contribute without duplicating shared handles. The existing asset-manager dependency inspection contract
 also enumerates each of the twelve optional layer texture slots with its
 semantic usage for both material definitions and effective instances; the
-manager remains the owner of those borrowed texture handles.
+manager remains the owner of those borrowed texture handles. Terrain render
+descriptors may optionally carry a stable identity returned by
+`henka_assets_adopt_runtime_material`. When present, newly resident chunk
+entities bind that manager-owned definition identity together with the
+validated effective material value. Adoption rejects shader or texture
+dependencies that are not owned by the same manager, duplicate identities, and
+invalid material values; the manager owns the definition and its identity, but
+does not invent a source-file reload path for generated runtime definitions.
+The descriptor still borrows the manager-owned definition and its dependencies,
+so they must outlive the graphical Terrain runtime.
 Uploaded GPU meshes use a four-edge transition mask when an adjacent resident
 chunk is exactly one LOD coarser. The mesh keeps shared even edge samples and
 keeps all regular non-degenerate triangles, and morphs intervening fine edge

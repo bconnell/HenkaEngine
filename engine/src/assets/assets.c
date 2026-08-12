@@ -758,6 +758,72 @@ static henka_material_asset* henka_asset_manager_find_material_entry(
     return NULL;
 }
 
+static bool henka_asset_manager_owns_shader_pointer(
+    const henka_asset_manager* manager,
+    const henka_shader* shader)
+{
+    size_t index;
+
+    if (shader == NULL) return true;
+    if (manager == NULL) return false;
+    for (index = 0U; index < manager->shader_count; ++index)
+    {
+        if (manager->shader_entries[index].shader == shader) return true;
+    }
+    return false;
+}
+
+static bool henka_asset_manager_owns_texture_pointer(
+    const henka_asset_manager* manager,
+    const henka_texture* texture)
+{
+    size_t index;
+
+    if (texture == NULL) return true;
+    if (manager == NULL) return false;
+    if (texture == manager->white_texture || texture == manager->error_texture ||
+        texture == manager->normal_texture ||
+        texture == manager->metallic_roughness_texture ||
+        texture == manager->occlusion_texture || texture == manager->emissive_texture)
+    {
+        return true;
+    }
+    for (index = 0U; index < manager->texture_count; ++index)
+    {
+        if (manager->texture_entries[index].texture == texture) return true;
+    }
+    return false;
+}
+
+static bool henka_asset_manager_owns_material_dependencies(
+    const henka_asset_manager* manager,
+    const henka_material* material)
+{
+    uint32_t layer_index;
+
+    if (manager == NULL || material == NULL ||
+        !henka_asset_manager_owns_shader_pointer(manager, material->shader) ||
+        !henka_asset_manager_owns_texture_pointer(manager, material->base_color_texture) ||
+        !henka_asset_manager_owns_texture_pointer(manager, material->normal_texture) ||
+        !henka_asset_manager_owns_texture_pointer(manager, material->metallic_roughness_texture) ||
+        !henka_asset_manager_owns_texture_pointer(manager, material->occlusion_texture) ||
+        !henka_asset_manager_owns_texture_pointer(manager, material->emissive_texture))
+    {
+        return false;
+    }
+    for (layer_index = 0U; layer_index < HENKA_MATERIAL_TERRAIN_LAYER_COUNT; ++layer_index)
+    {
+        const henka_material_layer* layer = &material->terrain_layers[layer_index];
+        if (!henka_asset_manager_owns_texture_pointer(manager, layer->base_color_texture) ||
+            !henka_asset_manager_owns_texture_pointer(manager, layer->normal_texture) ||
+            !henka_asset_manager_owns_texture_pointer(manager, layer->metallic_roughness_texture))
+        {
+            return false;
+        }
+    }
+    return true;
+}
+
 static henka_gltf_scene_asset* henka_asset_manager_find_gltf_scene_entry(
     henka_asset_manager* manager,
     const char* key)
@@ -2788,6 +2854,87 @@ henka_result henka_assets_load_gltf_material_asset(
     henka_asset_set_summary(&asset->metadata,
         "glTF material asset loaded through the shared material and texture dependency path.",
         "");
+    manager->material_entries[manager->material_count++] = asset;
+    *out_asset = asset;
+    return HENKA_SUCCESS;
+}
+
+henka_result henka_assets_adopt_runtime_material(
+    henka_asset_manager* manager,
+    const char* identity,
+    const henka_material* material,
+    henka_material_asset** out_asset)
+{
+    char* key = NULL;
+    char* source_path = NULL;
+    char* display_name = NULL;
+    henka_material_asset* asset = NULL;
+    henka_result result;
+
+    if (out_asset != NULL) *out_asset = NULL;
+    if (manager == NULL || identity == NULL || material == NULL || out_asset == NULL ||
+        henka_material_validate(material) != HENKA_SUCCESS ||
+        !henka_asset_manager_owns_material_dependencies(manager, material))
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    result = henka_assets_make_canonical_key(identity, &key);
+    if (result != HENKA_SUCCESS) return result;
+    result = henka_assets_normalize_source_path(identity, &source_path);
+    if (result != HENKA_SUCCESS)
+    {
+        henka_free(key);
+        return result;
+    }
+    if (henka_asset_manager_find_material_entry(manager, key) != NULL)
+    {
+        henka_free(key);
+        henka_free(source_path);
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    display_name = henka_asset_copy_display_name(source_path);
+    if (display_name == NULL)
+    {
+        henka_free(key);
+        henka_free(source_path);
+        return HENKA_ERROR_OUT_OF_MEMORY;
+    }
+    asset = henka_calloc(1U, sizeof(*asset));
+    if (asset == NULL)
+    {
+        henka_free(display_name);
+        henka_free(key);
+        henka_free(source_path);
+        return HENKA_ERROR_OUT_OF_MEMORY;
+    }
+    if (manager->material_count == manager->material_capacity)
+    {
+        result = henka_asset_manager_grow_materials(manager);
+        if (result != HENKA_SUCCESS)
+        {
+            henka_free(asset);
+            henka_free(display_name);
+            henka_free(key);
+            henka_free(source_path);
+            return result;
+        }
+    }
+    asset->key = key;
+    asset->source_path = source_path;
+    asset->display_name = display_name;
+    asset->material = *material;
+    asset->revision = 1U;
+    asset->metadata.type = HENKA_ASSET_TYPE_MATERIAL;
+    asset->metadata.source_path = asset->source_path;
+    asset->metadata.display_name = asset->display_name;
+    asset->metadata.loaded = true;
+    asset->metadata.fallback = false;
+    asset->metadata.reload_supported = false;
+    henka_asset_set_summary(
+        &asset->metadata,
+        "Runtime material definition adopted under a stable manager-owned identity.",
+        "Runtime material definitions have no source-file reload path.");
     manager->material_entries[manager->material_count++] = asset;
     *out_asset = asset;
     return HENKA_SUCCESS;

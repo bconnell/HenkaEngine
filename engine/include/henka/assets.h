@@ -286,6 +286,16 @@ henka_result henka_assets_load_gltf_material_asset(
     const char* path,
     henka_shader* shader,
     henka_material_asset** out_asset);
+/* Adopts a validated runtime material definition under a stable confined
+ * identity. The manager owns the definition and its identity; textures and
+ * shader pointers remain borrowed manager-owned dependencies. Runtime
+ * definitions have no source-file reload path and identity collisions are
+ * rejected without changing the existing entry. */
+henka_result henka_assets_adopt_runtime_material(
+    henka_asset_manager* manager,
+    const char* identity,
+    const henka_material* material,
+    henka_material_asset** out_asset);
 henka_result henka_assets_get_material_asset_material(
     const henka_material_asset* asset,
     henka_material* out_material);

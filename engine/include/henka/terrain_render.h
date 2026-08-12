@@ -24,6 +24,9 @@ typedef struct henka_terrain_render_desc
     float lod_hysteresis;
     /* Texture/shader handles are borrowed and must outlive the runtime and scene. */
     henka_material material;
+    /* Optional manager-owned definition identity for scene bindings. The
+     * effective material value above remains the renderer input. */
+    const henka_material_asset* material_asset;
 } henka_terrain_render_desc;
 
 typedef struct henka_terrain_render_stats
