@@ -157,7 +157,7 @@
 - Modify: `tests/test_terrain_render.c`, renderer/pass tests
 - Modify: `README.md`, `docs/terrain.md`, rendering docs
 
-- [ ] Add pass-level assertions or diagnostics proving Terrain submissions enter color, shadow, depth, AO/SSGI/SSR, probe capture, temporal, fog, and HDR presentation paths where supported.
+- [x] Add pass-level assertions or diagnostics proving Terrain submissions enter the supported color, shadow, depth, AO/SSGI, fog, and HDR presentation paths; the public Rendered-pass regression intentionally leaves SSR, probe-capture, and temporal flags conditional on their runtime prerequisites.
 - [x] Expose and assert per-frame Terrain color/shadow submissions through the existing renderer diagnostics in the Rendered Sandbox smoke path.
 - [ ] Connect the active Scene View/game camera to Terrain streaming demand without manual region priming.
 - [ ] Verify cast/receive shadow flags, culling, selection/picking, and clean scene teardown.

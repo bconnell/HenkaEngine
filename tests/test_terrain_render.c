@@ -4,6 +4,162 @@
 #include <henka/scene.h>
 #include <henka/terrain_render.h>
 
+typedef struct terrain_pass_test_context
+{
+    henka_scene* scene;
+    henka_terrain_world* world;
+    henka_terrain_render_runtime* runtime;
+    henka_terrain_sample* samples;
+    size_t sample_count;
+    uint32_t update_count;
+    int passed;
+} terrain_pass_test_context;
+
+static henka_result terrain_pass_test_initialize(
+    henka_engine* engine,
+    void* user_data)
+{
+    terrain_pass_test_context* context = user_data;
+    henka_terrain_world_desc world_desc = henka_terrain_world_desc_default();
+    henka_terrain_layout layout;
+    henka_camera camera;
+    henka_result result;
+    size_t index;
+
+    if (context == NULL ||
+        henka_scene_create(&context->scene) != HENKA_SUCCESS ||
+        henka_terrain_world_desc_get_layout(&world_desc, &layout) != HENKA_SUCCESS ||
+        henka_terrain_world_create(&world_desc, &context->world) != HENKA_SUCCESS)
+    {
+        return HENKA_ERROR_OUT_OF_MEMORY;
+    }
+    context->sample_count = layout.samples_per_region;
+    context->samples = henka_calloc(context->sample_count, sizeof(*context->samples));
+    if (context->samples == NULL)
+    {
+        return HENKA_ERROR_OUT_OF_MEMORY;
+    }
+    for (index = 0U; index < context->sample_count; ++index)
+    {
+        context->samples[index].material_weights[0] = 255U;
+        context->samples[index].height_millimeters =
+            (int32_t)((index % layout.samples_per_region_edge) * 2U);
+    }
+    result = henka_terrain_world_apply_region_snapshot(
+        context->world,
+        (henka_terrain_region_storage_info){{0, 0}, 1U, 1U},
+        context->samples,
+        context->sample_count);
+    if (result != HENKA_SUCCESS ||
+        henka_terrain_world_set_region_residency(
+            context->world, (henka_terrain_region_id){0, 0}, true, true, false) != HENKA_SUCCESS)
+    {
+        return HENKA_ERROR_ASSET_SOURCE;
+    }
+    if (henka_scene_set_fog(
+            context->scene,
+            (henka_scene_fog_desc){
+                true, HENKA_SCENE_FOG_LINEAR, {0.16f, 0.19f, 0.24f},
+                8.0f, 80.0f, 0.04f}) != HENKA_SUCCESS)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    camera = henka_camera_create_perspective(
+        60.0f * HENKA_DEG_TO_RAD, 4.0f / 3.0f, 0.1f, 200.0f);
+    camera.position = (henka_vec3){32.0f, 24.0f, 56.0f};
+    if (!henka_camera_look_at(&camera, (henka_vec3){32.0f, 0.0f, 32.0f}) ||
+        henka_scene_set_camera(context->scene, &camera) != HENKA_SUCCESS ||
+        henka_engine_set_scene(engine, context->scene) != HENKA_SUCCESS ||
+        henka_engine_set_viewport_shading_mode(
+            engine, HENKA_VIEWPORT_SHADING_RENDERED) != HENKA_SUCCESS ||
+        henka_terrain_render_runtime_create(
+            engine, context->scene, context->world, NULL, &context->runtime) != HENKA_SUCCESS ||
+        henka_terrain_render_runtime_request_chunk(
+            context->runtime, (henka_terrain_chunk_id){0, 0}, 0U) != HENKA_SUCCESS ||
+        henka_terrain_render_runtime_pump(context->runtime, 1U) != HENKA_SUCCESS)
+    {
+        return HENKA_ERROR_RENDERER;
+    }
+    return HENKA_SUCCESS;
+}
+
+static void terrain_pass_test_update(
+    henka_engine* engine,
+    double delta_seconds,
+    void* user_data)
+{
+    terrain_pass_test_context* context = user_data;
+    henka_engine_diagnostics diagnostics;
+    const uint32_t required_flags =
+        HENKA_RENDERED_TERRAIN_PASS_COLOR |
+        HENKA_RENDERED_TERRAIN_PASS_SHADOW |
+        HENKA_RENDERED_TERRAIN_PASS_DEPTH |
+        HENKA_RENDERED_TERRAIN_PASS_AO |
+        HENKA_RENDERED_TERRAIN_PASS_SSGI |
+        HENKA_RENDERED_TERRAIN_PASS_FOG |
+        HENKA_RENDERED_TERRAIN_PASS_HDR;
+    (void)delta_seconds;
+    if (context == NULL || ++context->update_count < 2U)
+    {
+        return;
+    }
+    context->passed =
+        henka_engine_get_diagnostics(engine, &diagnostics) == HENKA_SUCCESS &&
+        diagnostics.rendered_scene_terrain_draw_calls > 0U &&
+        diagnostics.rendered_scene_terrain_shadow_draw_calls > 0U &&
+        (diagnostics.rendered_scene_terrain_pass_flags & required_flags) == required_flags;
+    henka_engine_request_exit(engine);
+}
+
+static void terrain_pass_test_shutdown(
+    henka_engine* engine,
+    void* user_data)
+{
+    terrain_pass_test_context* context = user_data;
+    (void)engine;
+    if (context == NULL)
+    {
+        return;
+    }
+    henka_terrain_render_runtime_destroy(context->runtime);
+    henka_scene_destroy(context->scene);
+    henka_terrain_world_destroy(context->world);
+    henka_free(context->samples);
+    context->runtime = NULL;
+    context->scene = NULL;
+    context->world = NULL;
+    context->samples = NULL;
+}
+
+static int test_rendered_pass_participation(void)
+{
+    terrain_pass_test_context context = {0};
+    henka_engine_config config = {0};
+    henka_engine* engine = NULL;
+    henka_result result;
+
+    config.application_name = "Terrain Rendered Pass Test";
+    config.window_width = 320;
+    config.window_height = 240;
+    config.enable_vsync = false;
+    config.asset_base_path = ".";
+    config.on_initialize = terrain_pass_test_initialize;
+    config.on_update = terrain_pass_test_update;
+    config.on_shutdown = terrain_pass_test_shutdown;
+    config.user_data = &context;
+    result = henka_engine_create(&config, &engine);
+    if (result == HENKA_SUCCESS)
+    {
+        result = henka_engine_run(engine);
+        henka_engine_destroy(engine);
+    }
+    if (result != HENKA_SUCCESS)
+    {
+        terrain_pass_test_shutdown(NULL, &context);
+    }
+    return result == HENKA_SUCCESS && context.passed;
+}
+
 static int test_default_descriptor(void)
 {
     henka_terrain_render_desc desc = henka_terrain_render_desc_default();
@@ -313,5 +469,6 @@ int main(void)
         test_edit_request_requires_valid_inputs() &&
         test_dirty_refresh_requires_valid_runtime() &&
         test_paint_updates_weights_without_rebuilding_geometry() &&
-        test_observer_sync_refreshes_replacement_and_bounds() ? 0 : 1;
+        test_observer_sync_refreshes_replacement_and_bounds() &&
+        test_rendered_pass_participation() ? 0 : 1;
 }
