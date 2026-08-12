@@ -439,9 +439,11 @@ The Terrain utility also projects the scene-view cursor through the shared
 camera ray API and queries the resident physics patch owner. A successful
 resident hit is shown with chunk/source identity and becomes the integer
 sample center for the next raise, lower, flatten, smooth, or paint command;
-nonresident terrain is not invented and a miss leaves the previous command
-center unchanged. This is an editor/runtime command bridge, not network
-authority. The same utility opens a user-data-local
+when a scene-bound object is also under the cursor, the nearest finite hit wins
+so a Terrain chunk does not hide an object in front of it. Nonresident terrain
+is not invented and a miss leaves the previous command center unchanged. This
+is an editor/runtime command bridge, not network authority. The same utility
+opens a user-data-local
 `terrain-sandbox-v2` storage root, recovers or loads region `(0,0)` at startup,
 and exposes transactional Save for every currently CPU-resident region plus
 committed-journal Compact actions. The storage API also provides a dirty-only

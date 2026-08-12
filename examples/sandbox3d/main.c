@@ -9773,6 +9773,8 @@ static bool sandbox3d_try_pick_object(henka_engine* engine, sandbox3d_state* sta
     henka_entity picked_entity;
     henka_ray ray;
     float distance;
+    bool object_hit;
+    bool terrain_hit_valid;
     henka_entity selected_entity;
     henka_viewport scene_viewport;
     henka_terrain_physics_hit terrain_hit;
@@ -9782,6 +9784,7 @@ static bool sandbox3d_try_pick_object(henka_engine* engine, sandbox3d_state* sta
         return false;
     }
 
+    memset(&terrain_hit, 0, sizeof(terrain_hit));
     memset(&gate, 0, sizeof(gate));
     if (henka_engine_get_scene_viewport(engine, &scene_viewport) != HENKA_SUCCESS ||
         !henka_viewport_is_valid(scene_viewport) ||
@@ -9880,8 +9883,35 @@ static bool sandbox3d_try_pick_object(henka_engine* engine, sandbox3d_state* sta
             "Gizmo unavailable; checking viewport selection");
     }
 
-    if (henka_scene_pick_entity(state->scene, ray, &picked_entity, &distance) == HENKA_SUCCESS &&
-        sandbox3d_is_selectable_entity(state, picked_entity))
+    object_hit = henka_scene_pick_entity(state->scene, ray, &picked_entity, &distance) == HENKA_SUCCESS &&
+        sandbox3d_is_selectable_entity(state, picked_entity);
+    terrain_hit_valid = sandbox3d_try_pick_terrain(state, ray, &terrain_hit);
+    if (sandbox3d_should_prefer_terrain_hit(
+            terrain_hit_valid,
+            terrain_hit.distance,
+            object_hit,
+            distance))
+    {
+        state->diagnostics.terrain_pick = terrain_hit;
+        state->diagnostics.terrain_pick_valid = true;
+        sandbox3d_record_reject_reason(state, SANDBOX3D_INTERACTION_REJECT_NONE, false);
+        sandbox3d_record_success_result(
+            state,
+            "Picked Terrain chunk (%d, %d)",
+            terrain_hit.chunk_id.x,
+            terrain_hit.chunk_id.z);
+        sandbox3d_set_statusf(
+            state,
+            false,
+            false,
+            "Picked Terrain at %.1f, %.1f, %.1f.",
+            terrain_hit.position.x,
+            terrain_hit.position.y,
+            terrain_hit.position.z);
+        return true;
+    }
+
+    if (object_hit)
     {
         sandbox3d_select_entity(state, picked_entity);
         if (state->authoring_object != NULL &&
@@ -9903,7 +9933,7 @@ static bool sandbox3d_try_pick_object(henka_engine* engine, sandbox3d_state* sta
     }
     else
     {
-        if (sandbox3d_try_pick_terrain(state, ray, &terrain_hit))
+        if (terrain_hit_valid)
         {
             state->diagnostics.terrain_pick = terrain_hit;
             state->diagnostics.terrain_pick_valid = true;

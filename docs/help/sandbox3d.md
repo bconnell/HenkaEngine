@@ -289,5 +289,6 @@ Terrain command API used by runtime edits. Height edits use the bounded
 collision-runtime queue for the full edit footprint plus neighbor coverage;
 paint-only edits do not rebuild collision. The automated smoke path uses a fixed
 repeatable sample center; normal editor use can place the brush from viewport
-Terrain ray-picking. Saved brush state is available, while complete
+Terrain ray-picking, with the nearest valid Terrain or scene-bound hit winning
+when both are under the cursor. Saved brush state is available, while complete
 material-layer preview is not yet claimed.

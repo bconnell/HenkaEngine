@@ -264,6 +264,25 @@ bool sandbox3d_should_start_empty_viewport_pan(
         drag_distance_pixels >= SANDBOX3D_EMPTY_VIEWPORT_PAN_DRAG_THRESHOLD_PIXELS;
 }
 
+bool sandbox3d_should_prefer_terrain_hit(
+    bool terrain_hit,
+    float terrain_distance,
+    bool object_hit,
+    float object_distance)
+{
+    if (!terrain_hit || !isfinite(terrain_distance) || terrain_distance < 0.0f)
+    {
+        return false;
+    }
+
+    if (!object_hit || !isfinite(object_distance) || object_distance < 0.0f)
+    {
+        return true;
+    }
+
+    return terrain_distance < object_distance;
+}
+
 bool sandbox3d_selection_highlight_is_allowed(const sandbox3d_interaction_gate* gate)
 {
     return gate != NULL &&

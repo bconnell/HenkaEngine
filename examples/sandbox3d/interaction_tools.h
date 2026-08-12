@@ -101,6 +101,11 @@ bool sandbox3d_should_start_empty_viewport_pan(
     bool gizmo_drag_active,
     bool alt_orbit_active,
     float drag_distance_pixels);
+bool sandbox3d_should_prefer_terrain_hit(
+    bool terrain_hit,
+    float terrain_distance,
+    bool object_hit,
+    float object_distance);
 bool sandbox3d_selection_highlight_is_allowed(const sandbox3d_interaction_gate* gate);
 henka_vec3 sandbox3d_make_move_delta(henka_gizmo_axis axis, float magnitude);
 henka_quat sandbox3d_make_rotation_delta(henka_gizmo_axis axis, float radians);

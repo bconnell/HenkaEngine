@@ -1,5 +1,6 @@
 #include "test_suite.h"
 
+#include <math.h>
 #include <string.h>
 
 #include "../examples/sandbox3d/interaction_tools.h"
@@ -116,6 +117,13 @@ void henka_test_sandbox3d_interaction(void)
         false,
         20.0f));
     gate.ui_wants_mouse = false;
+
+    HENKA_TEST_ASSERT(sandbox3d_should_prefer_terrain_hit(true, 3.0f, false, 0.0f));
+    HENKA_TEST_ASSERT(sandbox3d_should_prefer_terrain_hit(true, 3.0f, true, 4.0f));
+    HENKA_TEST_ASSERT(!sandbox3d_should_prefer_terrain_hit(true, 5.0f, true, 4.0f));
+    HENKA_TEST_ASSERT(!sandbox3d_should_prefer_terrain_hit(false, 3.0f, true, 4.0f));
+    HENKA_TEST_ASSERT(!sandbox3d_should_prefer_terrain_hit(true, -1.0f, false, 0.0f));
+    HENKA_TEST_ASSERT(!sandbox3d_should_prefer_terrain_hit(true, NAN, false, 0.0f));
 
     HENKA_TEST_ASSERT(!sandbox3d_terrain_autosave_is_due(
         &autosave_elapsed_seconds,
