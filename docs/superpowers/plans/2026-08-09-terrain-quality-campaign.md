@@ -159,7 +159,7 @@
 
 - [x] Add pass-level assertions or diagnostics proving Terrain submissions enter the supported color, shadow, depth, AO/SSGI, fog, and HDR presentation paths; the public Rendered-pass regression intentionally leaves SSR, probe-capture, and temporal flags conditional on their runtime prerequisites.
 - [x] Expose and assert per-frame Terrain color/shadow submissions through the existing renderer diagnostics in the Rendered Sandbox smoke path.
-- [ ] Connect the active Scene View/game camera to Terrain streaming demand without manual region priming.
+- [x] Connect the active Scene View/game camera to Terrain streaming demand without manual region priming; the Sandbox update loop feeds the active camera into both the stream/collision observer and graphical Terrain owner, and the packaged `--terrain-stream-stress` path proves bounded camera-window crossing and rendered/collision return.
 - [ ] Verify cast/receive shadow flags, culling, selection/picking, and clean scene teardown.
 - [ ] Exercise outdoor/studio, sun, slope, local light, fog, AO/SSGI, reflection, Solid, Material Preview, and Rendered modes.
 - [ ] Commit `feat: integrate Terrain with Rendered passes`.
@@ -206,7 +206,7 @@
 - [x] Seed new Sandbox Terrain storage with deterministic rolling, valley, ridge/cliff, and continuous four-layer material-weight fixtures while preserving persisted worlds.
 - [ ] Add failure injection for region/mesh/GPU/material/queue/collision/snapshot/persistence paths with previous-state assertions.
 - [x] Add graphical mesh-candidate failure injection with previous mesh/revision retention and successful residency recovery in the Sandbox smoke path.
-- [ ] Add camera-crossing, LOD, rapid edit/paint, boundary, mode-switch, resize, context, multiplayer, restart, and shutdown soak scenarios.
+- [x] Add bounded camera-crossing, LOD-working-set, rapid edit/paint, boundary, mode-switch, resize, multiplayer, restart, and shutdown scenarios across the Terrain renderer regression, Sandbox smoke/stress, package harness, client/server tests, and process integration; a production-scale long-duration soak and human visual approval remain open.
 - [ ] Record CPU/GPU/Terrain memory, queue high-water, culling, draw, recovery, GL-error, thread, and clean-shutdown diagnostics.
 - [x] Record exact world-owned CPU and resident graphical-owner vertex/index/weight/material GPU bytes in public Terrain stats and the Rendered Sandbox smoke.
 - [ ] Commit `test: add Terrain realism and bounded stress coverage`.

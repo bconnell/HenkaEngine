@@ -69,6 +69,12 @@ The graphical
 render owner reports high-water pending-request, resident-chunk, and
 visible-chunk counts; the collision queue reports its high-water pending chunk
 count so callers can distinguish a bounded budget from a transient drain state.
+The renderer-owner regression also drives two render-resident regions through
+the public observer seam, verifies nearest bounded working-set replacement after
+camera relocation, and confirms that all presentation slots are removed beyond
+the outer LOD distance band while resident/visible high-water diagnostics remain
+valid. This is bounded runtime coverage, not production-scale streaming or
+human visual approval.
 Observer-driven requests are marked separately from explicit
 `henka_terrain_streamer_request_region` calls: shrinking or removing an
 observer cancels only stale observer demands, so an explicit caller request
