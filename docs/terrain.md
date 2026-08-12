@@ -153,9 +153,15 @@ algorithm-versioned command, and the resulting revision for each affected
 region. The server broadcasts that event reliably after sending the requester
 acceptance and retains the last 64 accepted deltas in a fixed ring. The client
 session adapter applies deltas only across exact revision steps; a gap sends a
-bounded recovery request for the missing regional revision range. Complete
-retained history is sent as deltas, while an exhausted or incomplete range
-uses the existing transactional regional snapshot path.
+bounded recovery request for the missing regional revision range. At most one
+pending recovery request is retained per affected region; repeated copies of
+the same or an older gap are suppressed and counted, while a newer target
+revision replaces the pending target. A successful recovered delta or snapshot
+clears that region's pending entry, and an explicit reconnect clears all
+entries before the new connection's session bootstrap. Complete retained
+history is sent as deltas, while an exhausted or incomplete range uses the
+existing transactional regional snapshot path. The bounded pending count and
+suppression count are exposed by the public client diagnostics.
 The connect-time session-info bootstrap covers only the bounded advertised
 resident set. Clients that know their interest center can opt into a second,
 bounded relevance request through `<henka/terrain_client.h>`; the server

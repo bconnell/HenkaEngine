@@ -65,10 +65,14 @@ static int test_client_snapshot_and_delta_path(void)
     henka_terrain_edit_request edit_request = {0};
     henka_terrain_snapshot_fragment snapshot_fragment;
     henka_network_event snapshot_event;
+    henka_network_event gap_event;
+    henka_terrain_edit_delta gap_delta;
     uint8_t* encoded_record = NULL;
     uint8_t* corrupted_record = NULL;
     uint8_t* fragment_payload = NULL;
+    uint8_t gap_payload[HENKA_TERRAIN_NETWORK_MAX_DELTA_BYTES];
     size_t encoded_record_size = 0U;
+    size_t gap_payload_size = 0U;
     uint32_t snapshot_fragment_count;
     size_t snapshot_offset;
     henka_terrain_region_state state;
@@ -313,6 +317,43 @@ static int test_client_snapshot_and_delta_path(void)
     {
         goto cleanup;
     }
+    gap_delta = (henka_terrain_edit_delta){0};
+    gap_delta.world_identity = world_desc.world_identity;
+    gap_delta.base_asset_identity = world_desc.base_asset_identity;
+    gap_delta.server_command_id = 100U;
+    gap_delta.command = henka_terrain_edit_command_default();
+    gap_delta.command.center_sample_x = 100;
+    gap_delta.command.center_sample_z = 100;
+    gap_delta.command.radius_samples = 4U;
+    gap_delta.affected_region_count = 1U;
+    gap_delta.affected_regions[0] =
+        (henka_terrain_network_region_revision){{0, 0}, 10U};
+    gap_event = (henka_network_event){
+        HENKA_NETWORK_EVENT_MESSAGE,
+        HENKA_NETWORK_INVALID_PEER_ID,
+        HENKA_NETWORK_DISCONNECT_REASON_NONE,
+        {HENKA_NETWORK_CHANNEL_TERRAIN,
+         HENKA_NETWORK_MESSAGE_TERRAIN_DELTA,
+         gap_payload,
+         0U}};
+    if (henka_terrain_edit_delta_encode(
+            &gap_delta, gap_payload, sizeof(gap_payload), &gap_payload_size) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    gap_event.message.payload_size = (uint32_t)gap_payload_size;
+    if (henka_terrain_client_handle_event(terrain_client, &gap_event) != HENKA_SUCCESS ||
+        henka_terrain_client_handle_event(terrain_client, &gap_event) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    henka_terrain_client_get_diagnostics(terrain_client, &client_diagnostics);
+    if (client_diagnostics.recovery_delta_request_count != 1U ||
+        client_diagnostics.recovery_delta_suppressed_count != 1U ||
+        client_diagnostics.pending_recovery_count != 1U)
+    {
+        goto cleanup;
+    }
     if (server_peer_id == HENKA_NETWORK_INVALID_PEER_ID ||
         henka_network_server_disconnect(
             network_server, server_peer_id, HENKA_NETWORK_DISCONNECT_REASON_APPLICATION) != HENKA_SUCCESS)
@@ -335,6 +376,11 @@ static int test_client_snapshot_and_delta_path(void)
         }
     }
     if (iteration == 2000U || henka_terrain_client_reconnect(terrain_client) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    henka_terrain_client_get_diagnostics(terrain_client, &client_diagnostics);
+    if (client_diagnostics.pending_recovery_count != 0U)
     {
         goto cleanup;
     }
