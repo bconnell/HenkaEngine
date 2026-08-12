@@ -14195,6 +14195,7 @@ static bool sandbox3d_details_flow_disclosure(
 {
     bool changed;
     bool visible;
+    henka_ui_rect disclosure_bounds;
     henka_ui_rect bounds;
     size_t group_position;
     char move_down_id[96];
@@ -14229,10 +14230,15 @@ static bool sandbox3d_details_flow_disclosure(
     }
 
     changed = false;
+    disclosure_bounds = bounds;
+    if (disclosure_bounds.width >= 86.0f)
+    {
+        disclosure_bounds.width -= 58.0f;
+    }
     if (henka_ui_disclosure_row(
             state->ui,
             id,
-            bounds,
+            disclosure_bounds,
             label,
             expanded,
             &changed) != HENKA_SUCCESS)
