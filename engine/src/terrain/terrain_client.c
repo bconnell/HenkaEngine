@@ -14,6 +14,14 @@ typedef struct henka_terrain_client_pending_recovery
     henka_terrain_revision target_revision;
 } henka_terrain_client_pending_recovery;
 
+typedef struct henka_terrain_client_pending_snapshot
+{
+    bool active;
+    henka_terrain_region_id region_id;
+    henka_terrain_revision target_revision;
+    henka_terrain_generation target_generation;
+} henka_terrain_client_pending_snapshot;
+
 struct henka_terrain_client
 {
     henka_network_client* network;
@@ -25,6 +33,8 @@ struct henka_terrain_client
     uint32_t snapshot_retry_count;
     henka_terrain_client_pending_recovery pending_recoveries[
         HENKA_TERRAIN_CLIENT_MAX_PENDING_RECOVERIES];
+    henka_terrain_client_pending_snapshot pending_session_snapshots[
+        HENKA_TERRAIN_NETWORK_MAX_SESSION_REGIONS];
     bool session_interest_enabled;
     henka_terrain_region_id session_center_region;
     uint32_t session_radius_regions;
@@ -71,6 +81,42 @@ static void henka_terrain_client_clear_all_pending_recoveries(
 {
     memset(client->pending_recoveries, 0, sizeof(client->pending_recoveries));
     client->diagnostics.pending_recovery_count = 0U;
+}
+
+static uint32_t henka_terrain_client_find_pending_session_snapshot(
+    const henka_terrain_client* client,
+    henka_terrain_region_id region_id)
+{
+    uint32_t index;
+    for (index = 0U; index < HENKA_TERRAIN_NETWORK_MAX_SESSION_REGIONS; ++index)
+    {
+        if (client->pending_session_snapshots[index].active &&
+            henka_terrain_region_id_equal(
+                client->pending_session_snapshots[index].region_id, region_id))
+        {
+            return index;
+        }
+    }
+    return HENKA_TERRAIN_NETWORK_MAX_SESSION_REGIONS;
+}
+
+static void henka_terrain_client_clear_session_snapshot(
+    henka_terrain_client* client,
+    henka_terrain_region_id region_id,
+    henka_terrain_revision revision)
+{
+    uint32_t index = henka_terrain_client_find_pending_session_snapshot(client, region_id);
+    if (index < HENKA_TERRAIN_NETWORK_MAX_SESSION_REGIONS &&
+        revision >= client->pending_session_snapshots[index].target_revision)
+    {
+        client->pending_session_snapshots[index].active = false;
+    }
+}
+
+static void henka_terrain_client_clear_all_pending_session_snapshots(
+    henka_terrain_client* client)
+{
+    memset(client->pending_session_snapshots, 0, sizeof(client->pending_session_snapshots));
 }
 
 henka_terrain_client_desc henka_terrain_client_desc_default(void)
@@ -195,6 +241,7 @@ henka_result henka_terrain_client_reconnect(henka_terrain_client* client)
          * the new connection's authoritative stream. The reconnect event will
          * bootstrap fresh session state and any required snapshots. */
         henka_terrain_client_clear_all_pending_recoveries(client);
+        henka_terrain_client_clear_all_pending_session_snapshots(client);
     }
     return result;
 }
@@ -413,6 +460,8 @@ static henka_result henka_terrain_client_handle_session_info(
             state.revision == info.regions[index].revision &&
             state.generation == info.regions[index].generation)
         {
+            henka_terrain_client_clear_session_snapshot(
+                client, info.regions[index].region_id, state.revision);
             continue;
         }
         request = (henka_terrain_snapshot_request){
@@ -420,11 +469,46 @@ static henka_result henka_terrain_client_handle_session_info(
             desc.base_asset_identity,
             info.regions[index].region_id,
             info.regions[index].revision};
-        if (henka_terrain_client_request_snapshot(client, request) != HENKA_SUCCESS)
         {
-            return HENKA_ERROR_PLATFORM;
+            uint32_t pending_snapshot_index = henka_terrain_client_find_pending_session_snapshot(
+                client, info.regions[index].region_id);
+            if (pending_snapshot_index < HENKA_TERRAIN_NETWORK_MAX_SESSION_REGIONS &&
+                info.regions[index].revision <=
+                    client->pending_session_snapshots[pending_snapshot_index].target_revision &&
+                info.regions[index].generation <=
+                    client->pending_session_snapshots[pending_snapshot_index].target_generation)
+            {
+                ++client->diagnostics.session_snapshot_suppressed_count;
+                continue;
+            }
+            if (pending_snapshot_index >= HENKA_TERRAIN_NETWORK_MAX_SESSION_REGIONS)
+            {
+                for (pending_snapshot_index = 0U;
+                     pending_snapshot_index < HENKA_TERRAIN_NETWORK_MAX_SESSION_REGIONS;
+                     ++pending_snapshot_index)
+                {
+                    if (!client->pending_session_snapshots[pending_snapshot_index].active)
+                    {
+                        break;
+                    }
+                }
+            }
+            if (pending_snapshot_index >= HENKA_TERRAIN_NETWORK_MAX_SESSION_REGIONS)
+            {
+                return HENKA_ERROR_LIMIT;
+            }
+            if (henka_terrain_client_request_snapshot(client, request) != HENKA_SUCCESS)
+            {
+                return HENKA_ERROR_PLATFORM;
+            }
+            client->pending_session_snapshots[pending_snapshot_index].active = true;
+            client->pending_session_snapshots[pending_snapshot_index].region_id = request.region_id;
+            client->pending_session_snapshots[pending_snapshot_index].target_revision = request.expected_revision;
+            client->pending_session_snapshots[pending_snapshot_index].target_generation =
+                info.regions[index].generation;
+            ++client->diagnostics.session_snapshot_request_count;
+            continue;
         }
-        ++client->diagnostics.session_snapshot_request_count;
     }
     return HENKA_SUCCESS;
 }
@@ -608,6 +692,8 @@ henka_result henka_terrain_client_handle_event(
         }
         if (complete)
         {
+            henka_terrain_client_clear_session_snapshot(
+                client, fragment.region_id, fragment.revision);
             henka_terrain_client_clear_pending_recovery(
                 client, fragment.region_id, fragment.revision);
             client->last_snapshot_retry_transfer_id = 0U;

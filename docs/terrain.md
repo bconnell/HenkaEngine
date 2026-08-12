@@ -175,8 +175,11 @@ filters resident regions by Chebyshev radius, orders them by squared distance
 with coordinate-stable ties, and caps the response at 16 regions. The
 filtered response is transactional at the client session boundary: the
 client ignores the initial legacy summary while the opt-in request is pending,
-then requests snapshots only for the selected response. Request radius and
-response count are validated before any world state is touched; malformed or
+then requests snapshots only for the selected response. Per-region session
+snapshot requests are coalesced while a target revision/generation is pending;
+a newer advertisement replaces that bounded target, while equal or older
+advertisements are suppressed with diagnostics. Request radius and response
+count are validated before any world state is touched; malformed or
 identity-mismatched requests disconnect the peer. This is bounded selection,
 not application authentication or render/physics residency orchestration.
 The recovery test covers one bounded resident set through forced disconnect,

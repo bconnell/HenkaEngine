@@ -66,13 +66,17 @@ static int test_client_snapshot_and_delta_path(void)
     henka_terrain_snapshot_fragment snapshot_fragment;
     henka_network_event snapshot_event;
     henka_network_event gap_event;
+    henka_network_event session_info_event;
+    henka_terrain_session_info session_info;
     henka_terrain_edit_delta gap_delta;
     uint8_t* encoded_record = NULL;
     uint8_t* corrupted_record = NULL;
     uint8_t* fragment_payload = NULL;
     uint8_t gap_payload[HENKA_TERRAIN_NETWORK_MAX_DELTA_BYTES];
+    uint8_t session_info_payload[1024];
     size_t encoded_record_size = 0U;
     size_t gap_payload_size = 0U;
+    size_t session_info_payload_size = 0U;
     uint32_t snapshot_fragment_count;
     size_t snapshot_offset;
     henka_terrain_region_state state;
@@ -190,6 +194,60 @@ static int test_client_snapshot_and_delta_path(void)
     if (iteration == 2000U ||
         henka_terrain_world_get_region_state(client_world, (henka_terrain_region_id){0, 0}, &state) != HENKA_SUCCESS ||
         state.revision != 7U)
+    {
+        goto cleanup;
+    }
+    session_info = (henka_terrain_session_info){
+        world_desc.world_identity,
+        world_desc.base_asset_identity,
+        1U,
+        {{{0, 0}, 8U, 4U}},
+        HENKA_TERRAIN_SESSION_INFO_FLAG_RELEVANCE_FILTERED};
+    session_info_event = (henka_network_event){
+        HENKA_NETWORK_EVENT_MESSAGE,
+        HENKA_NETWORK_INVALID_PEER_ID,
+        HENKA_NETWORK_DISCONNECT_REASON_NONE,
+        {HENKA_NETWORK_CHANNEL_CONTROL,
+         HENKA_NETWORK_MESSAGE_CONNECT,
+         session_info_payload,
+         0U}};
+    if (henka_terrain_session_info_encode(
+            &session_info,
+            session_info_payload,
+            sizeof(session_info_payload),
+            &session_info_payload_size) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    session_info_event.message.payload_size = (uint32_t)session_info_payload_size;
+    if (henka_terrain_client_handle_event(terrain_client, &session_info_event) != HENKA_SUCCESS ||
+        henka_terrain_client_handle_event(terrain_client, &session_info_event) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    henka_terrain_client_get_diagnostics(terrain_client, &client_diagnostics);
+    if (client_diagnostics.session_snapshot_request_count != 2U ||
+        client_diagnostics.session_snapshot_suppressed_count != 1U)
+    {
+        goto cleanup;
+    }
+    session_info.regions[0].revision = 9U;
+    session_info.regions[0].generation = 5U;
+    if (henka_terrain_session_info_encode(
+            &session_info,
+            session_info_payload,
+            sizeof(session_info_payload),
+            &session_info_payload_size) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    session_info_event.message.payload_size = (uint32_t)session_info_payload_size;
+    if (henka_terrain_client_handle_event(terrain_client, &session_info_event) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    henka_terrain_client_get_diagnostics(terrain_client, &client_diagnostics);
+    if (client_diagnostics.session_snapshot_request_count != 3U)
     {
         goto cleanup;
     }
