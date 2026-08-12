@@ -81,8 +81,8 @@
 - [ ] Add shader uniforms and bounded layer blending: normalized weights, linear-space color blending, roughness/metallic blending, and stable normal blending in tangent space.
 - [x] Use world-space terrain UVs with per-layer meter-scale tiling and deterministic factor fallback when a texture is absent; the Sandbox smoke now asserts all four layers carry bounded asset-manager-owned runtime base-color textures.
 - [ ] Load or generate only small documented reference textures for grass, dirt, rock, and a contrasting fourth layer; keep resource ownership in the existing asset manager.
-- [ ] Route Sandbox Terrain through the new material constructor and preserve existing external material consumers.
-- [ ] Run focused render/material tests, shader/package smoke, and inspect the diff for accidental public ABI or generated-file changes.
+- [x] Route Sandbox Terrain through the shared `henka_material_terrain_default()` constructor and preserve existing external material consumers; the external C17 graphical template validates the same public four-layer contract and Rendered diagnostics.
+- [x] Run focused render/material tests, shader/package smoke, and inspect the diff for accidental public ABI or generated-file changes; the published Rendered-pass/working-set regressions, Debug/Release CTest, exact-HEAD Release smoke, and package-path checks are green, while human material QA remains open.
 - [ ] Commit `feat: complete Terrain PBR material blending` after green validation.
 
 ### Task 3: Correct Terrain tangent space, border normals, and world mapping
@@ -217,8 +217,8 @@
 - Modify only files identified by the two recursive audits, plus public docs and validation scripts required by evidence.
 
 - [ ] Run two independent connection audits from public API through package, external consumers, tests, diagnostics, and docs; repair every genuine reachable defect.
-- [ ] Run Debug/Release builds and complete CTest, server-only build, packages, package checks, external templates, malformed-input, recovery, two-client, stress, shutdown, hygiene, integrity, and private-path scans.
-- [ ] Capture application-only Terrain evidence for wide, close material, four-layer transition, cliff, shadow, LOD, AO/SSGI, far streaming, sculpt, paint, and restart states.
+- [x] Run Debug/Release builds and complete CTest, server-only build, package checks, external templates, malformed-input, recovery, two-client, bounded stress, shutdown, hygiene, integrity, and private-path scans; exact-HEAD Release CTest/smoke and Release application-only Terrain evidence are now fresh. Production-scale soak and final recursive closure remain open.
+- [x] Capture application-only Terrain evidence for wide, close-material, and four-region-corner cameras in Solid, Material Preview, and Rendered; all image guards pass and Rendered is measurably distinct from Material Preview. Human visual approval of four-layer transitions, cliff/shadow/LOD/AO/SSGI/far-streaming/edit/restart cases remains required.
 - [ ] Update all public documentation and keep VR explicitly roadmap-only.
 - [ ] At each major checkpoint, inspect staged diffs and publish only clean validated normal fast-forward commits.
 - [ ] Finalize one evidence archive, verify final local/remote SHA equality, and commit no generated evidence.
