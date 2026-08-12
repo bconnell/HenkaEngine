@@ -43,7 +43,7 @@ static int test_dirty_refresh_requires_valid_runtime(void)
     return henka_terrain_render_runtime_refresh_dirty(NULL) == HENKA_ERROR_INVALID_ARGUMENT;
 }
 
-static int test_observer_sync_refreshes_world_replacement(void)
+static int test_observer_sync_refreshes_replacement_and_bounds(void)
 {
     henka_engine_config engine_config = {0};
     henka_engine* engine = NULL;
@@ -55,6 +55,9 @@ static int test_observer_sync_refreshes_world_replacement(void)
     henka_terrain_render_desc render_desc = henka_terrain_render_desc_default();
     henka_terrain_render_runtime* runtime = NULL;
     henka_terrain_render_chunk_info chunk_info;
+    henka_bounds initial_bounds;
+    henka_bounds replacement_bounds;
+    henka_bounds failed_bounds;
     henka_result result = HENKA_ERROR_UNKNOWN;
     size_t index;
 
@@ -112,7 +115,9 @@ static int test_observer_sync_refreshes_world_replacement(void)
         henka_terrain_render_runtime_pump(runtime, 1U) != HENKA_SUCCESS ||
         henka_terrain_render_runtime_get_chunk(
             runtime, (henka_terrain_chunk_id){0, 0}, &chunk_info) != HENKA_SUCCESS ||
-        chunk_info.revision != 1U)
+        chunk_info.revision != 1U ||
+        henka_scene_get_entity_local_bounds(
+            scene, chunk_info.entity, &initial_bounds) != HENKA_SUCCESS)
     {
         goto cleanup;
     }
@@ -131,6 +136,28 @@ static int test_observer_sync_refreshes_world_replacement(void)
         henka_terrain_render_runtime_get_chunk(
             runtime, (henka_terrain_chunk_id){0, 0}, &chunk_info) != HENKA_SUCCESS ||
         chunk_info.revision != 2U ||
+        henka_scene_get_entity_local_bounds(
+            scene, chunk_info.entity, &replacement_bounds) != HENKA_SUCCESS ||
+        replacement_bounds.center.y <= initial_bounds.center.y ||
+        replacement_bounds.extents.y <= initial_bounds.extents.y ||
+        henka_terrain_world_set_region_residency(
+            world, (henka_terrain_region_id){0, 0}, true, false, false) != HENKA_SUCCESS ||
+        henka_terrain_render_runtime_request_chunk(
+            runtime, (henka_terrain_chunk_id){0, 0}, 0U) != HENKA_SUCCESS ||
+        henka_terrain_render_runtime_pump(runtime, 1U) != HENKA_SUCCESS ||
+        henka_scene_get_entity_local_bounds(
+            scene, chunk_info.entity, &failed_bounds) != HENKA_SUCCESS ||
+        failed_bounds.center.x != replacement_bounds.center.x ||
+        failed_bounds.center.y != replacement_bounds.center.y ||
+        failed_bounds.center.z != replacement_bounds.center.z ||
+        failed_bounds.extents.x != replacement_bounds.extents.x ||
+        failed_bounds.extents.y != replacement_bounds.extents.y ||
+        failed_bounds.extents.z != replacement_bounds.extents.z ||
+        henka_terrain_world_set_region_residency(
+            world, (henka_terrain_region_id){0, 0}, true, true, false) != HENKA_SUCCESS ||
+        henka_terrain_render_runtime_request_chunk(
+            runtime, (henka_terrain_chunk_id){0, 0}, 0U) != HENKA_SUCCESS ||
+        henka_terrain_render_runtime_pump(runtime, 1U) != HENKA_SUCCESS ||
         henka_terrain_render_runtime_get_chunk(
             runtime, (henka_terrain_chunk_id){1, 0}, &chunk_info) != HENKA_SUCCESS ||
         chunk_info.revision != 2U)
@@ -153,5 +180,5 @@ int main(void)
     return test_default_descriptor() && test_invalid_boundaries() &&
         test_edit_request_requires_valid_inputs() &&
         test_dirty_refresh_requires_valid_runtime() &&
-        test_observer_sync_refreshes_world_replacement() ? 0 : 1;
+        test_observer_sync_refreshes_replacement_and_bounds() ? 0 : 1;
 }

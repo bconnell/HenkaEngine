@@ -139,11 +139,11 @@
 
 - [ ] Add RED tests for local edit, remote delta, snapshot replacement, reload, paint-only edit, and failed candidate replacement.
 - [ ] Route each source through one dirty propagation seam; dirty neighboring chunks when height borders affect normals/topology.
-- [ ] Update dynamic world bounds from resident samples and retain previous valid bounds on invalid replacement.
+- [x] Update dynamic scene bounds from resident samples and retain previous valid bounds on invalid replacement; the focused Terrain render regression verifies both successful replacement and failure preservation.
 - [ ] Avoid collision rebuild for paint-only edits and avoid geometry rebuild for separable weight-only updates where safe.
 - [x] Sandbox smoke now proves a shared paint command advances the authoritative layer weight and rendered mesh revision without refreshing collision.
 - [x] Observer synchronization now propagates the first bounded dirty-replacement queue/admission error while retaining queued work for a later pump/retry; a focused regression covers stale resident replacement under queue pressure.
-- [ ] Commit `feat: rebuild Terrain render state after edits`.
+- [x] Commit `fix: propagate terrain render queue failures` (`df53c83`).
 
 ### Task 6: Complete normal Rendered pass participation and camera-driven residency
 
