@@ -1,6 +1,55 @@
 #include <henka/terrain_collision_runtime.h>
 #include <henka/terrain_edit.h>
 
+static int test_runtime_paint_does_not_rebuild_collision(void)
+{
+    henka_terrain_world_desc world_desc = henka_terrain_world_desc_default();
+    henka_terrain_world* world = NULL;
+    henka_terrain_physics* physics = NULL;
+    henka_terrain_collision_runtime* runtime = NULL;
+    henka_terrain_physics_desc physics_desc = {4U};
+    henka_terrain_collision_runtime_stats before;
+    henka_terrain_collision_runtime_stats after;
+    henka_terrain_edit_command command = henka_terrain_edit_command_default();
+    int result = 1;
+
+    world_desc.max_resident_regions = 1U;
+    if (henka_terrain_world_create(&world_desc, &world) != HENKA_SUCCESS ||
+        henka_terrain_world_reserve_region(world, (henka_terrain_region_id){0, 0}) != HENKA_SUCCESS ||
+        henka_terrain_world_set_region_residency(
+            world, (henka_terrain_region_id){0, 0}, true, false, false) != HENKA_SUCCESS ||
+        henka_terrain_physics_create(&physics_desc, &physics) != HENKA_SUCCESS ||
+        henka_terrain_collision_runtime_create(
+            world, physics, NULL, &runtime) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    command.operation = HENKA_TERRAIN_EDIT_PAINT;
+    command.center_sample_x = 32;
+    command.center_sample_z = 32;
+    command.radius_samples = 4U;
+    henka_terrain_collision_runtime_get_stats(runtime, &before);
+    if (henka_terrain_collision_runtime_request_edit(runtime, &command) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    henka_terrain_collision_runtime_get_stats(runtime, &after);
+    if (after.pending_chunk_count != before.pending_chunk_count ||
+        after.queued_count != before.queued_count ||
+        after.rebuilt_count != before.rebuilt_count ||
+        after.failed_count != before.failed_count)
+    {
+        goto cleanup;
+    }
+    result = 0;
+
+cleanup:
+    henka_terrain_collision_runtime_destroy(runtime);
+    henka_terrain_physics_destroy(physics);
+    henka_terrain_world_destroy(world);
+    return result;
+}
+
 static int test_runtime_edit_discovers_neighbor_chunks(void)
 {
     henka_terrain_world_desc world_desc = henka_terrain_world_desc_default();
@@ -347,7 +396,8 @@ cleanup:
     henka_terrain_collision_runtime_destroy(runtime);
     henka_terrain_physics_destroy(physics);
     henka_terrain_world_destroy(world);
-    return result || test_runtime_edit_discovers_neighbor_chunks() ||
+    return result || test_runtime_paint_does_not_rebuild_collision() ||
+        test_runtime_edit_discovers_neighbor_chunks() ||
         test_runtime_syncs_physics_residency() ||
         test_runtime_queue_saturation_recovers() ||
         test_runtime_failed_rebuild_retains_previous_patch() ||

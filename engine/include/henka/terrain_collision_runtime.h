@@ -43,7 +43,7 @@ henka_result henka_terrain_collision_runtime_set_focus(
 /* Synchronizes bounded physics patches with currently physics-resident regions. */
 henka_result henka_terrain_collision_runtime_sync_residency(
     henka_terrain_collision_runtime* runtime);
-/* Queues the edit footprint plus one chunk of physics-neighbor coverage. */
+/* Queues height-edit coverage; paint-only edits return without collision work. */
 henka_result henka_terrain_collision_runtime_request_edit(
     henka_terrain_collision_runtime* runtime,
     const henka_terrain_edit_command* command);

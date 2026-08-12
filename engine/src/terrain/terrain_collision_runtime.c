@@ -380,6 +380,10 @@ henka_result henka_terrain_collision_runtime_request_edit(
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
+    if (command->operation == HENKA_TERRAIN_EDIT_PAINT)
+    {
+        return HENKA_SUCCESS;
+    }
     chunk_sample_span = world_desc.chunk_edge_meters / world_desc.base_sample_spacing_meters;
     samples_across = world_desc.world_width_meters / world_desc.base_sample_spacing_meters + 1U;
     samples_down = world_desc.world_depth_meters / world_desc.base_sample_spacing_meters + 1U;

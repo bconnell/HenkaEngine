@@ -250,13 +250,15 @@ deterministic camera/interaction focus region with
 representative patch first and evicts one non-focus patch when the bounded
 physics capacity is full. The physics owner's patch capacity is the hard
 admission bound. `henka_terrain_collision_runtime_request_edit`
-derives the accepted edit footprint plus one chunk of physics-neighbor coverage,
-and the Terrain server session can borrow that queue to schedule it after
-authority acceptance. The Sandbox graphical path owns this runtime beside the
-physics world: camera residency sync, local sculpt/paint edits, and region
-reloads use the queue and bounded pump, so edits crossing chunk boundaries do
-not silently refresh only the fixture's first chunk. Callers still own the pump
-cadence.
+derives height-edit coverage plus one chunk of physics-neighbor coverage;
+paint-only edits validate and return without queueing collision work because
+they change material weights rather than the heightfield. The Terrain server
+session can borrow that queue to schedule height edits after authority
+acceptance. The Sandbox graphical path owns this runtime beside the physics
+world: camera residency sync, local sculpt edits, and region reloads use the
+queue and bounded pump, while paint refreshes render material weights only.
+Height edits crossing chunk boundaries do not silently refresh only the
+fixture's first chunk. Callers still own the pump cadence.
 
 `<henka/terrain_mesh.h>` provides the corresponding renderer-independent
 geometry boundary. `henka_terrain_mesh_build_chunk` requires a render-resident
