@@ -44,6 +44,7 @@ static int test_loopback_authoritative_edit(void)
     int recovery_delta_received = 0;
     int stale_request_sent = 0;
     int stale_rejection_received = 0;
+    int materialization_rejection_received = 0;
     uint32_t snapshot_fragment_count = 0U;
     uint32_t snapshot_received = 0U;
     uint32_t snapshot_total_bytes = 0U;
@@ -141,6 +142,51 @@ static int test_loopback_authoritative_edit(void)
         henka_network_diagnostics server_diagnostics;
         henka_network_server_get_diagnostics(network, &server_diagnostics);
         if (server_diagnostics.connected_peer_count != 2U)
+        {
+            goto cleanup;
+        }
+    }
+    request.world_identity = world_desc.world_identity;
+    request.base_asset_identity = world_desc.base_asset_identity;
+    request.client_nonce = 990U;
+    request.command = henka_terrain_edit_command_default();
+    request.command.center_sample_x = 512;
+    request.command.center_sample_z = 100;
+    request.command.radius_samples = 4U;
+    request.affected_region_count = 2U;
+    request.affected_regions[0] = (henka_terrain_network_region_revision){{0, 0}, 0U};
+    request.affected_regions[1] = (henka_terrain_network_region_revision){{1, 0}, 0U};
+    if (henka_terrain_edit_request_encode(&request, payload, sizeof(payload), &payload_size) != HENKA_SUCCESS ||
+        henka_network_client_send(
+            client, HENKA_NETWORK_CHANNEL_TERRAIN, HENKA_NETWORK_MESSAGE_TERRAIN_EDIT_REQUEST,
+            payload, payload_size) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    for (iteration = 0U; iteration < 2000U && !materialization_rejection_received; ++iteration)
+    {
+        if (henka_terrain_server_poll(server, 2U, 1500U + iteration) != HENKA_SUCCESS ||
+            henka_network_client_poll(client, 2U, &event) != HENKA_SUCCESS)
+        {
+            goto cleanup;
+        }
+        if (event.type == HENKA_NETWORK_EVENT_MESSAGE &&
+            event.message.type == HENKA_NETWORK_MESSAGE_TERRAIN_EDIT_REJECTED)
+        {
+            henka_terrain_edit_rejection rejection;
+            if (henka_terrain_edit_rejection_decode(
+                    event.message.payload, event.message.payload_size, &rejection) != HENKA_SUCCESS ||
+                rejection.client_nonce != 990U)
+            {
+                goto cleanup;
+            }
+            materialization_rejection_received = 1;
+        }
+    }
+    {
+        henka_terrain_server_diagnostics diagnostics;
+        henka_terrain_server_get_diagnostics(server, &diagnostics);
+        if (!materialization_rejection_received || diagnostics.materialization_failure_count == 0U)
         {
             goto cleanup;
         }

@@ -526,13 +526,21 @@ static void henka_terrain_server_materialize_request_regions(
         samples = henka_calloc(layout.samples_per_region, sizeof(*samples));
         if (samples == NULL)
         {
+            ++server->diagnostics.materialization_failure_count;
             continue;
         }
         if (henka_terrain_storage_load_region(
                 server->storage, regions[index], &info, samples, layout.samples_per_region) == HENKA_SUCCESS)
         {
-            (void)henka_terrain_world_apply_region_snapshot(
-                server->world, info, samples, layout.samples_per_region);
+            if (henka_terrain_world_apply_region_snapshot(
+                    server->world, info, samples, layout.samples_per_region) != HENKA_SUCCESS)
+            {
+                ++server->diagnostics.materialization_failure_count;
+            }
+        }
+        else
+        {
+            ++server->diagnostics.materialization_failure_count;
         }
         henka_free(samples);
     }

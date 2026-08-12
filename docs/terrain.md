@@ -156,7 +156,10 @@ application authentication or relevance-driven world streaming.
 For edit requests, the session lazily materializes missing persisted regions
 before authority validation, subject to the world's resident-region limit. It
 does not preload the 8 km height field; eviction and asynchronous physics or
-render regeneration remain separate work.
+render regeneration remain separate work. `henka_terrain_server_diagnostics`
+reports `materialization_failure_count` when a requested region cannot be
+allocated, loaded, or published into the live world; the edit remains rejected
+and no partial authority operation is accepted.
 
 The dedicated server recovers complete journal transactions before opening its
 network endpoint and loads an existing reserved region snapshot into the live
