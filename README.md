@@ -72,6 +72,7 @@ Henka Engine is still early, but the sandbox now presents a deterministic two-mo
 - Shader-based rendering of built-in primitives
 - Sandbox window titled `Henka Engine Sandbox 3D`
 - Ground plane, restrained debug grid, Cheeky Giraffe mascot, Original Realistic Rocket, textured materials, and visible fallback behavior for missing texture and model assets
+- The sandbox ground is a uniform restrained graphite/slate receiver; the editor grid remains an explicitly unlit line helper so Rendered mode has no unexplained checker or center lighting split
 - The editor grid is an explicitly unlit, restrained graphite/slate line surface; its studio environment source is periodic and validated so Rendered presentation does not introduce a center seam. The procedural ground plane uses front-face winding consistent with its +Y normals.
 - Keyboard movement, mouse look when capture is active, viewport-local Wireframe, Solid, Material Preview, and Rendered shading controls, and offline runtime help
 - Bounded local settings persistence with transactional loads and replace-on-success writes
@@ -190,7 +191,7 @@ The sandbox starts a visible 3D scene with:
 
 - the Cheeky Giraffe mascot
 - the Original Realistic Rocket
-- a textured ground plane and restrained debug grid
+- a restrained graphite ground plane and debug grid
 
 Both showcase models are generated deterministically during the Windows build and loaded as ordinary packaged glTF scene/material assets. Use `--primitive-gallery` to make the engineering primitives, fallback samples, and realism material row visible again.
 

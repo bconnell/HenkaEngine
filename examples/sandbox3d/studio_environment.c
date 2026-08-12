@@ -89,3 +89,13 @@ bool sandbox3d_studio_environment_is_valid(const float* pixels, size_t pixel_cou
     }
     return true;
 }
+
+henka_vec4 sandbox3d_ground_surface_color(void)
+{
+    return (henka_vec4){0.035f, 0.050f, 0.075f, 1.0f};
+}
+
+bool sandbox3d_ground_surface_uses_texture(void)
+{
+    return false;
+}

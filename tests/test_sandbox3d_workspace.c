@@ -11,6 +11,7 @@
 void henka_test_sandbox3d_workspace(void)
 {
     float studio_environment[SANDBOX3D_STUDIO_ENVIRONMENT_PIXEL_COUNT];
+    henka_vec4 ground_color;
     const sandbox3d_workspace_panel* panel;
     henka_ui_rect ownership[2];
     henka_ui_rect rect;
@@ -33,6 +34,13 @@ void henka_test_sandbox3d_workspace(void)
     henka_ui_rect left_splitter;
     henka_ui_rect right_splitter;
     henka_ui_rect visual_splitter;
+
+    ground_color = sandbox3d_ground_surface_color();
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(ground_color.x, 0.035f, 0.0001f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(ground_color.y, 0.050f, 0.0001f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(ground_color.z, 0.075f, 0.0001f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(ground_color.w, 1.0f, 0.0001f);
+    HENKA_TEST_ASSERT(!sandbox3d_ground_surface_uses_texture());
 
     sandbox3d_generate_studio_environment(
         studio_environment,

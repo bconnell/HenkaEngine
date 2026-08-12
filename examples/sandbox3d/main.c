@@ -4420,7 +4420,7 @@ static void sandbox3d_print_scene_legend(const sandbox3d_state* state)
     {
         printf("  Showcase Giraffe: central-left, the Cheeky Giraffe mascot loaded through the packaged glTF scene/material path.\n");
         printf("  Showcase Rocket: central-right, the Original Realistic Rocket loaded through the packaged glTF scene/material path.\n");
-        printf("  Ground: below the showcase, a textured plane for scale and lighting.\n");
+        printf("  Ground: below the showcase, a restrained graphite plane for scale and lighting.\n");
         printf("  Debug Grid: spans the floor so you can judge position, depth, and movement.\n");
         printf("  Use --primitive-gallery to show the engineering primitive and fallback samples.\n");
         return;
@@ -15769,7 +15769,7 @@ static void sandbox3d_draw_utility_panel(
 
         case SANDBOX3D_UTILITY_SCENE_LEGEND:
             sandbox3d_draw_section_heading(state->ui, x_left, y_start, "Scene legend");
-            henka_ui_label(state->ui, x_left, y_start + 18.0f, 1.0f, "Ground: textured plane under the scene.");
+            henka_ui_label(state->ui, x_left, y_start + 18.0f, 1.0f, "Ground: graphite plane under the scene.");
             henka_ui_label(state->ui, x_left, y_start + 34.0f, 1.0f, "Textured Cube: texture material rendering.");
             henka_ui_label(state->ui, x_left, y_start + 50.0f, 1.0f, "Material Ball: rounded untextured base color.");
             henka_ui_label(state->ui, x_left, y_start + 66.0f, 1.0f, "glTF Marker: current glTF mesh loading path.");
@@ -17497,11 +17497,7 @@ static henka_result sandbox3d_initialize(henka_engine* engine, void* user_data)
         goto fail;
     }
 
-    result = henka_assets_load_texture(assets, "assets/textures/ground_checker.png", &state->ground_texture);
-    if (result != HENKA_SUCCESS)
-    {
-        goto fail;
-    }
+    state->ground_texture = NULL;
 
     result = henka_assets_load_texture(assets, "assets/textures/missing_texture.png", &state->missing_texture);
     if (result != HENKA_SUCCESS)
@@ -17707,12 +17703,12 @@ static henka_result sandbox3d_initialize(henka_engine* engine, void* user_data)
     }
 
     ground_material = henka_material_default();
-    ground_material.name = "Ground Checker";
+    ground_material.name = "Graphite Ground";
     ground_material.type = HENKA_MATERIAL_TYPE_LIT;
     ground_material.shader = state->basic_shader;
-    ground_material.base_color_texture = state->ground_texture;
-    ground_material.use_texture = true;
-    ground_material.base_color = (henka_vec4){0.24f, 0.28f, 0.34f, 1.0f};
+    ground_material.base_color_texture = NULL;
+    ground_material.use_texture = sandbox3d_ground_surface_uses_texture();
+    ground_material.base_color = sandbox3d_ground_surface_color();
     ground_material.use_lighting = true;
     ground_material.roughness = 0.82f;
     ground_material.receive_shadows = true;
@@ -17907,11 +17903,11 @@ static henka_result sandbox3d_initialize(henka_engine* engine, void* user_data)
         state->ground_entity,
         "Ground",
         "Under the scene,",
-        "shows repeated local texture use.",
-        "Uses a built-in plane mesh with a lit checker texture.",
+        "shows a restrained local floor surface.",
+        "Uses a built-in plane mesh with a restrained lit graphite surface.",
         "Built-in plane mesh.",
-        "Textured lit material.",
-        "Ground checker texture from assets/textures/ground_checker.png.",
+        "Lit graphite material.",
+        "Uniform slate ground surface; no checker texture or hidden split surface.",
         true,
         true,
         transform);
