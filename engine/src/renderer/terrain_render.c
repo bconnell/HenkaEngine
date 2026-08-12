@@ -1068,6 +1068,7 @@ henka_result henka_terrain_render_runtime_update_observer(
 {
     uint32_t first;
     uint32_t second;
+    henka_result first_error = HENKA_SUCCESS;
     if (runtime == NULL || !isfinite(observer_position.x) ||
         !isfinite(observer_position.y) || !isfinite(observer_position.z))
     {
@@ -1151,15 +1152,19 @@ henka_result henka_terrain_render_runtime_update_observer(
             slot->desired_edge_transition_mask != slot->requested_edge_transition_mask ||
             slot->desired_fallback_skirt_mask != slot->requested_fallback_skirt_mask)
         {
-            (void)henka_terrain_render_request_chunk_internal(
+            henka_result request_result = henka_terrain_render_request_chunk_internal(
                 runtime,
                 slot->chunk_id,
                 slot->desired_lod,
                 slot->desired_edge_transition_mask,
                 slot->desired_fallback_skirt_mask);
+            if (request_result != HENKA_SUCCESS && first_error == HENKA_SUCCESS)
+            {
+                first_error = request_result;
+            }
         }
     }
-    return HENKA_SUCCESS;
+    return first_error;
 }
 
 henka_result henka_terrain_render_runtime_pump(

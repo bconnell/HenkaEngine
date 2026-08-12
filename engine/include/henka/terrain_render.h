@@ -117,8 +117,8 @@ henka_result henka_terrain_render_runtime_remove_chunk(
  * Synchronizes the bounded graphical working set from render-resident world
  * regions, selects LOD, and applies deterministic adjacent-chunk clamping.
  * The renderer performs frustum culling from the scene bounds. Returns the
- * first bounded scheduling error while retaining already queued work for a
- * later pump/retry.
+ * first bounded synchronization or scheduling error while retaining already
+ * queued work for a later pump/retry.
  */
 henka_result henka_terrain_render_runtime_update_observer(
     henka_terrain_render_runtime* runtime,
