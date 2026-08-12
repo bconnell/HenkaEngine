@@ -556,6 +556,12 @@ henka_result henka_terrain_client_handle_event(
     if (event->type == HENKA_NETWORK_EVENT_DISCONNECTED)
     {
         ++client->diagnostics.disconnected_event_count;
+        /* The transport has retired this stream. Requests recorded against
+         * it must not suppress recovery on the next connection, even when a
+         * caller observes the disconnect before invoking reconnect. */
+        henka_terrain_client_clear_all_pending_recoveries(client);
+        henka_terrain_client_clear_all_pending_session_snapshots(client);
+        client->session_interest_pending = false;
         return HENKA_SUCCESS;
     }
     if (event->type != HENKA_NETWORK_EVENT_MESSAGE)

@@ -241,7 +241,9 @@ When a decoded fragment is rejected, the public Terrain client requests a new
 snapshot for the same region and target revision, once per transfer and up to
 four times per connection. Undecodable messages remain hard errors because
 their identity cannot be trusted for a retry; the bounded retry count is
-reported through `recovery_snapshot_request_count`.
+reported through `recovery_snapshot_request_count`. A disconnect retires all
+delta-recovery and session-snapshot suppression entries immediately, so a
+subsequent reconnect cannot inherit requests from the old transport.
 
 `<henka/terrain_collision.h>` extracts a physics-resident chunk into a
 caller-owned 65×65 signed-millimeter patch without allocating or mutating the

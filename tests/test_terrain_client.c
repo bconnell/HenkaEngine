@@ -457,7 +457,13 @@ static int test_client_snapshot_and_delta_path(void)
             break;
         }
     }
-    if (iteration == 2000U || henka_terrain_client_reconnect(terrain_client) != HENKA_SUCCESS)
+    if (iteration == 2000U)
+    {
+        goto cleanup;
+    }
+    henka_terrain_client_get_diagnostics(terrain_client, &client_diagnostics);
+    if (client_diagnostics.pending_recovery_count != 0U ||
+        henka_terrain_client_reconnect(terrain_client) != HENKA_SUCCESS)
     {
         goto cleanup;
     }
