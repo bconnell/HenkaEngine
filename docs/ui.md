@@ -145,7 +145,9 @@ The current `Object Details` panel can:
 
 Controls Main and Object Details share a bounded panel-body presentation model.
 Their stable group identifiers persist expanded/collapsed state separately from
-scene state, content height is recomputed after every group change and resize,
+scene state, and bounded scroll offsets persist through the local settings
+authority while being clamped after content measurement and resize. Content
+height is recomputed after every group change and resize,
 short content does not expose an invalid scrollbar, and longer content shows a
 graphite scrollbar with a draggable thumb. Wheel and fractional touchpad deltas
 belong to the panel body while the pointer is over it; Scene View keeps wheel

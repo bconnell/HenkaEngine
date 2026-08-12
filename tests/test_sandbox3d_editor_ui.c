@@ -98,6 +98,8 @@ void henka_test_sandbox3d_editor_ui(void)
     stored.details_physics_expanded = true;
     stored.details_interaction_expanded = true;
     stored.details_actions_expanded = true;
+    stored.controls_scroll_offset = 96.0f;
+    stored.details_scroll_offset = 144.0f;
     HENKA_TEST_ASSERT(
         sandbox3d_editor_ui_reorder_details_group(
             &stored,
@@ -183,6 +185,20 @@ void henka_test_sandbox3d_editor_ui(void)
             settings,
             "ui.object_details.actions.expanded",
             false));
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(
+        henka_settings_get_float(
+            settings,
+            "ui.controls.scroll.offset",
+            0.0f),
+        96.0f,
+        0.0001f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(
+        henka_settings_get_float(
+            settings,
+            "ui.object_details.scroll.offset",
+            0.0f),
+        144.0f,
+        0.0001f);
     HENKA_TEST_ASSERT(
         henka_settings_get_int(
             settings,
@@ -194,6 +210,33 @@ void henka_test_sandbox3d_editor_ui(void)
         state.details_group_order[
             SANDBOX3D_EDITOR_DETAILS_GROUP_COUNT - 1U] ==
             SANDBOX3D_EDITOR_DETAILS_GROUP_MATERIALS);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(
+        state.controls_scroll_offset,
+        96.0f,
+        0.0001f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(
+        state.details_scroll_offset,
+        144.0f,
+        0.0001f);
+    HENKA_TEST_ASSERT(
+        henka_settings_set_string(
+            settings,
+            "ui.controls.scroll.offset",
+            "-4") == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(
+        henka_settings_set_string(
+            settings,
+            "ui.object_details.scroll.offset",
+            "nan") == HENKA_SUCCESS);
+    sandbox3d_editor_ui_state_load(settings, &state);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(
+        state.controls_scroll_offset,
+        0.0f,
+        0.0001f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(
+        state.details_scroll_offset,
+        0.0f,
+        0.0001f);
     HENKA_TEST_ASSERT(
         henka_settings_set_int(
             settings,

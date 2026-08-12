@@ -44,6 +44,15 @@ static const char* g_details_actions_key =
 
 static const char* g_details_group_order_prefix =
     "ui.object_details.group_order.";
+static const char* g_controls_scroll_offset_key =
+    "ui.controls.scroll.offset";
+static const char* g_details_scroll_offset_key =
+    "ui.object_details.scroll.offset";
+
+static float sandbox3d_editor_ui_sanitize_scroll_offset(float value)
+{
+    return isfinite(value) && value > 0.0f ? value : 0.0f;
+}
 
 static void sandbox3d_editor_ui_details_group_order_reset(
     unsigned char* order)
@@ -140,6 +149,19 @@ void sandbox3d_editor_ui_state_load(
             }
         }
 
+        state->controls_scroll_offset =
+            sandbox3d_editor_ui_sanitize_scroll_offset(
+                henka_settings_get_float(
+                    settings,
+                    g_controls_scroll_offset_key,
+                    0.0f));
+        state->details_scroll_offset =
+            sandbox3d_editor_ui_sanitize_scroll_offset(
+                henka_settings_get_float(
+                    settings,
+                    g_details_scroll_offset_key,
+                    0.0f));
+
         {
             unsigned char loaded_order[SANDBOX3D_EDITOR_DETAILS_GROUP_COUNT];
             char key[96];
@@ -222,6 +244,29 @@ henka_result sandbox3d_editor_ui_state_store(
             if (result != HENKA_SUCCESS)
             {
                 return result;
+            }
+        }
+
+        {
+            const henka_result controls_result = henka_settings_set_float(
+                settings,
+                g_controls_scroll_offset_key,
+                sandbox3d_editor_ui_sanitize_scroll_offset(
+                    state->controls_scroll_offset));
+            if (controls_result != HENKA_SUCCESS)
+            {
+                return controls_result;
+            }
+        }
+        {
+            const henka_result details_result = henka_settings_set_float(
+                settings,
+                g_details_scroll_offset_key,
+                sandbox3d_editor_ui_sanitize_scroll_offset(
+                    state->details_scroll_offset));
+            if (details_result != HENKA_SUCCESS)
+            {
+                return details_result;
             }
         }
 
