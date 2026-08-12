@@ -1,6 +1,7 @@
 #include <stdint.h>
 #include <string.h>
 
+#include <henka/memory.h>
 #include <henka/terrain.h>
 
 static int test_default_layout(void)
@@ -118,7 +119,46 @@ static int test_bounded_residency(void)
     return 1;
 }
 
+static int test_snapshot_clears_pending_io_budget(void)
+{
+    henka_terrain_world_desc desc = henka_terrain_world_desc_default();
+    henka_terrain_world* world = NULL;
+    henka_terrain_layout layout;
+    henka_terrain_sample* samples = NULL;
+    henka_terrain_world_stats stats;
+    int result = 0;
+
+    desc.max_resident_regions = 1U;
+    if (henka_terrain_world_desc_get_layout(&desc, &layout) != HENKA_SUCCESS ||
+        henka_terrain_world_create(&desc, &world) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    samples = henka_calloc(layout.samples_per_region, sizeof(*samples));
+    if (samples == NULL ||
+        henka_terrain_world_reserve_region(world, (henka_terrain_region_id){0, 0}) != HENKA_SUCCESS ||
+        henka_terrain_world_set_region_residency(
+            world, (henka_terrain_region_id){0, 0}, false, false, true) != HENKA_SUCCESS ||
+        henka_terrain_world_get_stats(world, &stats) != HENKA_SUCCESS ||
+        stats.pending_io_count != 1U ||
+        henka_terrain_world_apply_region_snapshot(
+            world, (henka_terrain_region_storage_info){{0, 0}, 1U, 1U},
+            samples, layout.samples_per_region) != HENKA_SUCCESS ||
+        henka_terrain_world_get_stats(world, &stats) != HENKA_SUCCESS ||
+        stats.pending_io_count != 0U)
+    {
+        goto cleanup;
+    }
+    result = 1;
+
+cleanup:
+    henka_free(samples);
+    henka_terrain_world_destroy(world);
+    return result;
+}
+
 int main(void)
 {
-    return test_default_layout() && test_deterministic_weights() && test_bounded_residency() ? 0 : 1;
+    return test_default_layout() && test_deterministic_weights() &&
+        test_bounded_residency() && test_snapshot_clears_pending_io_budget() ? 0 : 1;
 }

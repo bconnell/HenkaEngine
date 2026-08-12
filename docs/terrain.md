@@ -65,6 +65,8 @@ caller-owned sample buffer, validates every generated sample's normalized
 main-thread snapshot swap. Persisted regions always win over the generator,
 and callback or validation failures remain failed requests. Renderer mesh and
 physics patch regeneration remain caller-owned asynchronous presentation work.
+Publishing a validated region snapshot also clears that region's pending-I/O
+flag and releases its corresponding world pending-I/O budget slot exactly once.
 The graphical
 render owner reports high-water pending-request, resident-chunk, and
 visible-chunk counts; the collision queue reports its high-water pending chunk

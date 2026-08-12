@@ -665,6 +665,10 @@ henka_result henka_terrain_world_apply_region_snapshot(
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
     memcpy(record->samples, samples, sample_count * sizeof(*samples));
+    if (record->state.pending_io && world->pending_io_count > 0U)
+    {
+        --world->pending_io_count;
+    }
     record->state.revision = info.revision;
     record->state.generation = info.generation;
     record->state.dirty = false;
