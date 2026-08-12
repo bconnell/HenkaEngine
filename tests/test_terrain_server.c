@@ -185,8 +185,11 @@ static int test_loopback_authoritative_edit(void)
     }
     {
         henka_terrain_server_diagnostics diagnostics;
+        henka_terrain_world_stats world_stats;
         henka_terrain_server_get_diagnostics(server, &diagnostics);
-        if (!materialization_rejection_received || diagnostics.materialization_failure_count == 0U)
+        if (!materialization_rejection_received || diagnostics.materialization_failure_count == 0U ||
+            henka_terrain_world_get_stats(world, &world_stats) != HENKA_SUCCESS ||
+            world_stats.resident_region_count != 0U)
         {
             goto cleanup;
         }

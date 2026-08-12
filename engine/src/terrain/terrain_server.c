@@ -498,21 +498,23 @@ static henka_result henka_terrain_server_handle_recovery_request(
     return henka_terrain_server_send_snapshot(server, peer_id, &snapshot_request);
 }
 
-static void henka_terrain_server_materialize_request_regions(
+static bool henka_terrain_server_materialize_request_regions(
     henka_terrain_server* server,
     const henka_terrain_edit_request* request)
 {
     henka_terrain_world_desc desc;
     henka_terrain_layout layout;
     henka_terrain_region_id regions[HENKA_TERRAIN_EDIT_MAX_AFFECTED_REGIONS];
+    henka_terrain_region_id materialized[HENKA_TERRAIN_EDIT_MAX_AFFECTED_REGIONS];
     uint32_t region_count = HENKA_TERRAIN_EDIT_MAX_AFFECTED_REGIONS;
+    uint32_t materialized_count = 0U;
     uint32_t index;
     if (henka_terrain_world_get_desc(server->world, &desc) != HENKA_SUCCESS ||
         henka_terrain_world_desc_get_layout(&desc, &layout) != HENKA_SUCCESS ||
         henka_terrain_edit_get_affected_regions(
             server->world, &request->command, regions, &region_count) != HENKA_SUCCESS)
     {
-        return;
+        return false;
     }
     for (index = 0U; index < region_count; ++index)
     {
@@ -527,7 +529,7 @@ static void henka_terrain_server_materialize_request_regions(
         if (samples == NULL)
         {
             ++server->diagnostics.materialization_failure_count;
-            continue;
+            goto rollback;
         }
         if (henka_terrain_storage_load_region(
                 server->storage, regions[index], &info, samples, layout.samples_per_region) == HENKA_SUCCESS)
@@ -536,14 +538,28 @@ static void henka_terrain_server_materialize_request_regions(
                     server->world, info, samples, layout.samples_per_region) != HENKA_SUCCESS)
             {
                 ++server->diagnostics.materialization_failure_count;
+                henka_free(samples);
+                goto rollback;
             }
+            materialized[materialized_count++] = regions[index];
         }
         else
         {
             ++server->diagnostics.materialization_failure_count;
+            henka_free(samples);
+            goto rollback;
         }
         henka_free(samples);
     }
+    return true;
+
+rollback:
+    while (materialized_count > 0U)
+    {
+        --materialized_count;
+        (void)henka_terrain_world_release_region(server->world, materialized[materialized_count]);
+    }
+    return false;
 }
 
 henka_result henka_terrain_server_handle_event(
@@ -645,7 +661,13 @@ henka_result henka_terrain_server_handle_event(
             server->network, event->peer_id, HENKA_NETWORK_DISCONNECT_REASON_PROTOCOL);
         return HENKA_SUCCESS;
     }
-    henka_terrain_server_materialize_request_regions(server, &request);
+    if (!henka_terrain_server_materialize_request_regions(server, &request))
+    {
+        ++server->diagnostics.rejected_edit_count;
+        return henka_terrain_server_send_rejection(
+            server, event->peer_id,
+            &(henka_terrain_edit_rejection){request.client_nonce, HENKA_TERRAIN_EDIT_REJECT_INVALID});
+    }
     result = henka_terrain_authority_process_request(
         server->authority, event->peer_id, &request, now_milliseconds, &response);
     if (result != HENKA_SUCCESS)

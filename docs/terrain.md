@@ -159,7 +159,9 @@ does not preload the 8 km height field; eviction and asynchronous physics or
 render regeneration remain separate work. `henka_terrain_server_diagnostics`
 reports `materialization_failure_count` when a requested region cannot be
 allocated, loaded, or published into the live world; the edit remains rejected
-and no partial authority operation is accepted.
+and no partial authority operation is accepted. Materialization is
+all-or-nothing for the request: regions loaded by a request are released again
+when a later requested region fails.
 
 The dedicated server recovers complete journal transactions before opening its
 network endpoint and loads an existing reserved region snapshot into the live
