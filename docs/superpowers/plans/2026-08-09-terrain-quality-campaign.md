@@ -142,6 +142,7 @@
 - [ ] Update dynamic world bounds from resident samples and retain previous valid bounds on invalid replacement.
 - [ ] Avoid collision rebuild for paint-only edits and avoid geometry rebuild for separable weight-only updates where safe.
 - [x] Sandbox smoke now proves a shared paint command advances the authoritative layer weight and rendered mesh revision without refreshing collision.
+- [x] Observer synchronization now propagates the first bounded dirty-replacement queue/admission error while retaining queued work for a later pump/retry; a focused regression covers stale resident replacement under queue pressure.
 - [ ] Commit `feat: rebuild Terrain render state after edits`.
 
 ### Task 6: Complete normal Rendered pass participation and camera-driven residency

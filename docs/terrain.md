@@ -306,7 +306,10 @@ falls back to the resident edge until a neighbor streams in. Uploaded chunks
 track the bounded 3x3 region revision/generation identities used by that border
 sampling, so a neighbor edit queues dependent chunks as well; height-derived
 scene bounds are replaced with the candidate mesh and restored on failure.
-Callers that already accepted a deterministic edit may use
+Observer synchronization runs this same stale-dependency check before working-
+set admission and propagates the first bounded queue/admission error instead of
+silently dropping it; already queued replacements remain available for a later
+pump/retry. Callers that already accepted a deterministic edit may use
 `henka_terrain_render_runtime_request_edit` to requeue resident chunks covered
 by the edit plus a one-chunk dependency border. The call validates the command,
 never admits nonresident chunks, coalesces into the fixed render queue, and

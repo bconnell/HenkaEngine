@@ -600,7 +600,7 @@ static int32_t henka_terrain_render_find_farthest_slot(
     return farthest;
 }
 
-static void henka_terrain_render_schedule_resident_chunks(
+static henka_result henka_terrain_render_schedule_resident_chunks(
     henka_terrain_render_runtime* runtime,
     henka_vec3 observer_position)
 {
@@ -608,11 +608,12 @@ static void henka_terrain_render_schedule_resident_chunks(
     henka_terrain_world_stats stats;
     uint32_t index;
     float far_distance_squared;
+    henka_result first_error = HENKA_SUCCESS;
 
     if (henka_terrain_world_get_desc(runtime->world, &desc) != HENKA_SUCCESS ||
         henka_terrain_world_get_stats(runtime->world, &stats) != HENKA_SUCCESS)
     {
-        return;
+        return HENKA_ERROR_INVALID_ARGUMENT;
     }
     far_distance_squared = runtime->desc.lod_max_distances[HENKA_TERRAIN_MESH_MAX_LOD_LEVEL];
     far_distance_squared *= far_distance_squared;
@@ -634,7 +635,13 @@ static void henka_terrain_render_schedule_resident_chunks(
     /* A committed world edit changes the source identity without changing the
      * chunk's residency. Queue a transactional replacement for stale uploads;
      * the existing bounded queue coalesces repeated observations. */
-    (void)henka_terrain_render_refresh_dirty_internal(runtime);
+    {
+        henka_result refresh_result = henka_terrain_render_refresh_dirty_internal(runtime);
+        if (refresh_result != HENKA_SUCCESS)
+        {
+            first_error = refresh_result;
+        }
+    }
 
     /* The world may expose more render-resident chunks than the graphical
      * owner can retain. Scan stable region/chunk order and replace only a
@@ -705,10 +712,18 @@ static void henka_terrain_render_schedule_resident_chunks(
                     (void)henka_terrain_render_runtime_remove_chunk(
                         runtime, runtime->slots[farthest_slot].chunk_id);
                 }
-                (void)henka_terrain_render_runtime_request_chunk(runtime, chunk_id, 0U);
+                {
+                    henka_result request_result = henka_terrain_render_runtime_request_chunk(
+                        runtime, chunk_id, 0U);
+                    if (request_result != HENKA_SUCCESS && first_error == HENKA_SUCCESS)
+                    {
+                        first_error = request_result;
+                    }
+                }
             }
         }
     }
+    return first_error;
 }
 
 static void henka_terrain_render_set_visibility(
@@ -1058,7 +1073,14 @@ henka_result henka_terrain_render_runtime_update_observer(
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
-    henka_terrain_render_schedule_resident_chunks(runtime, observer_position);
+    {
+        henka_result schedule_result = henka_terrain_render_schedule_resident_chunks(
+            runtime, observer_position);
+        if (schedule_result != HENKA_SUCCESS)
+        {
+            return schedule_result;
+        }
+    }
     for (first = 0U; first < runtime->desc.max_resident_chunks; ++first)
     {
         henka_terrain_render_slot* slot = &runtime->slots[first];
