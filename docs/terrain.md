@@ -404,7 +404,10 @@ The same graphical
 smoke revokes render residency after the upload, forces a candidate mesh
 failure, verifies the previous mesh and revision remain resident, then restores
 residency and proves replacement recovery; this is bounded failure-injection
-coverage, not complete stress or visual QA.
+coverage. The renderer test suite additionally forces candidate allocation
+failure during a dirty replacement and verifies the prior mesh, revision, and
+scene bounds remain live before a retry succeeds; this is not complete stress
+or visual QA.
 
 The Sandbox reference scene seeds four deterministic regions in a persistent
 `terrain-sandbox-v2` storage root, marks the initial region render-resident, and

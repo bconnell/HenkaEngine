@@ -5,6 +5,8 @@
 #include <henka/scene.h>
 #include <henka/terrain_render.h>
 
+#include "../engine/src/core/memory_internal.h"
+
 typedef struct terrain_pass_test_context
 {
     henka_scene* scene;
@@ -501,6 +503,140 @@ cleanup:
     return result == HENKA_SUCCESS ? 1 : 0;
 }
 
+static int test_candidate_allocation_failure_retains_resident_mesh(void)
+{
+    henka_engine_config engine_config = {0};
+    henka_engine* engine = NULL;
+    henka_scene* scene = NULL;
+    henka_terrain_world_desc world_desc = henka_terrain_world_desc_default();
+    henka_terrain_layout layout;
+    henka_terrain_world* world = NULL;
+    henka_terrain_sample* samples = NULL;
+    henka_terrain_render_desc render_desc = henka_terrain_render_desc_default();
+    henka_terrain_render_runtime* runtime = NULL;
+    henka_terrain_render_chunk_info before;
+    henka_terrain_render_chunk_info after_failure;
+    henka_terrain_render_chunk_info after_retry;
+    henka_terrain_render_stats before_stats;
+    henka_terrain_render_stats after_stats;
+    henka_bounds before_bounds;
+    henka_bounds after_failure_bounds;
+    henka_result result = HENKA_ERROR_UNKNOWN;
+    size_t index;
+
+    engine_config.application_name = "Terrain Render Allocation Failure Test";
+    engine_config.window_width = 320;
+    engine_config.window_height = 240;
+    engine_config.enable_vsync = false;
+    engine_config.asset_base_path = ".";
+    world_desc.world_width_meters = 64U;
+    world_desc.world_depth_meters = 64U;
+    world_desc.region_edge_meters = 64U;
+    world_desc.chunk_edge_meters = 64U;
+    world_desc.samples_per_chunk = 65U;
+    world_desc.base_sample_spacing_meters = 1U;
+    world_desc.chunks_per_region_edge = 1U;
+    world_desc.regions_across = 1U;
+    world_desc.regions_down = 1U;
+    world_desc.max_resident_regions = 1U;
+    world_desc.max_resident_chunks = 1U;
+    world_desc.max_pending_io = 2U;
+    world_desc.max_stream_observers = 1U;
+    render_desc.max_resident_chunks = 1U;
+    render_desc.max_pending_requests = 2U;
+
+    if (henka_engine_create(&engine_config, &engine) != HENKA_SUCCESS ||
+        henka_scene_create(&scene) != HENKA_SUCCESS ||
+        henka_terrain_world_desc_get_layout(&world_desc, &layout) != HENKA_SUCCESS ||
+        henka_terrain_world_create(&world_desc, &world) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    samples = henka_calloc(layout.samples_per_region, sizeof(*samples));
+    if (samples == NULL)
+    {
+        goto cleanup;
+    }
+    for (index = 0U; index < layout.samples_per_region; ++index)
+    {
+        samples[index].material_weights[0] = 255U;
+    }
+    if (henka_terrain_world_apply_region_snapshot(
+            world,
+            (henka_terrain_region_storage_info){{0, 0}, 1U, 1U},
+            samples,
+            layout.samples_per_region) != HENKA_SUCCESS ||
+        henka_terrain_world_set_region_residency(
+            world, (henka_terrain_region_id){0, 0}, true, true, false) != HENKA_SUCCESS ||
+        henka_terrain_render_runtime_create(
+            engine, scene, world, &render_desc, &runtime) != HENKA_SUCCESS ||
+        henka_terrain_render_runtime_request_chunk(
+            runtime, (henka_terrain_chunk_id){0, 0}, 0U) != HENKA_SUCCESS ||
+        henka_terrain_render_runtime_pump(runtime, 1U) != HENKA_SUCCESS ||
+        henka_terrain_render_runtime_get_chunk(
+            runtime, (henka_terrain_chunk_id){0, 0}, &before) != HENKA_SUCCESS ||
+        henka_scene_get_entity_local_bounds(
+            scene, before.entity, &before_bounds) != HENKA_SUCCESS ||
+        henka_terrain_render_runtime_get_stats(runtime, &before_stats) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+
+    samples[0].height_millimeters = 1500;
+    if (henka_terrain_world_apply_region_snapshot(
+            world,
+            (henka_terrain_region_storage_info){{0, 0}, 2U, 2U},
+            samples,
+            layout.samples_per_region) != HENKA_SUCCESS ||
+        henka_terrain_render_runtime_refresh_dirty(runtime) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    henka_memory_test_fail_after(0U);
+    if (henka_terrain_render_runtime_pump(runtime, 1U) != HENKA_SUCCESS)
+    {
+        henka_memory_test_disable_failures();
+        goto cleanup;
+    }
+    henka_memory_test_disable_failures();
+    if (henka_terrain_render_runtime_get_chunk(
+            runtime, (henka_terrain_chunk_id){0, 0}, &after_failure) != HENKA_SUCCESS ||
+        henka_scene_get_entity_local_bounds(
+            scene, after_failure.entity, &after_failure_bounds) != HENKA_SUCCESS ||
+        henka_terrain_render_runtime_get_stats(runtime, &after_stats) != HENKA_SUCCESS ||
+        after_failure.mesh != before.mesh ||
+        after_failure.revision != before.revision ||
+        after_failure_bounds.center.x != before_bounds.center.x ||
+        after_failure_bounds.center.y != before_bounds.center.y ||
+        after_failure_bounds.center.z != before_bounds.center.z ||
+        after_failure_bounds.extents.x != before_bounds.extents.x ||
+        after_failure_bounds.extents.y != before_bounds.extents.y ||
+        after_failure_bounds.extents.z != before_bounds.extents.z ||
+        after_stats.failed_rebuilds <= before_stats.failed_rebuilds)
+    {
+        goto cleanup;
+    }
+    if (henka_terrain_render_runtime_refresh_dirty(runtime) != HENKA_SUCCESS ||
+        henka_terrain_render_runtime_pump(runtime, 1U) != HENKA_SUCCESS ||
+        henka_terrain_render_runtime_get_chunk(
+            runtime, (henka_terrain_chunk_id){0, 0}, &after_retry) != HENKA_SUCCESS ||
+        after_retry.mesh == before.mesh ||
+        after_retry.revision != 2U)
+    {
+        goto cleanup;
+    }
+    result = HENKA_SUCCESS;
+
+cleanup:
+    henka_memory_test_disable_failures();
+    henka_terrain_render_runtime_destroy(runtime);
+    henka_terrain_world_destroy(world);
+    henka_free(samples);
+    henka_scene_destroy(scene);
+    henka_engine_destroy(engine);
+    return result == HENKA_SUCCESS ? 1 : 0;
+}
+
 static int test_observer_working_set_and_distance_culling(void)
 {
     henka_engine_config engine_config = {0};
@@ -622,6 +758,7 @@ int main(void)
         test_dirty_refresh_requires_valid_runtime() &&
         test_paint_updates_weights_without_rebuilding_geometry() &&
         test_observer_sync_refreshes_replacement_and_bounds() &&
+        test_candidate_allocation_failure_retains_resident_mesh() &&
         test_observer_working_set_and_distance_culling() &&
         test_rendered_pass_participation() ? 0 : 1;
 }
