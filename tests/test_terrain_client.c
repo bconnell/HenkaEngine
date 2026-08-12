@@ -413,7 +413,8 @@ static int test_client_snapshot_and_delta_path(void)
         goto cleanup;
     }
     henka_terrain_client_get_diagnostics(terrain_client, &client_diagnostics);
-    if (client_diagnostics.recovery_delta_request_count != 0U)
+    if (client_diagnostics.recovery_delta_request_count != 0U ||
+        client_diagnostics.rejected_delta_count == 0U)
     {
         goto cleanup;
     }

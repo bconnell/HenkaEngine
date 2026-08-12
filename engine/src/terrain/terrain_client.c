@@ -628,6 +628,7 @@ henka_result henka_terrain_client_handle_event(
              * errors and must never cause a request based on untrusted data. */
             if (result != HENKA_ERROR_ASSET_SOURCE)
             {
+                henka_terrain_client_sync_replica_diagnostics(client);
                 return result;
             }
             if (henka_terrain_client_request_delta_recovery(client, &delta) != HENKA_SUCCESS)
