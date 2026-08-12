@@ -93,7 +93,9 @@ Queued completions retain whether their request came only from an observer.
 If that observer moves before the completion is pumped, the result is
 discarded and counted in `cancelled_completion_count`; explicit requests that
 were coalesced onto the same load clear that observer-only ownership and are
-still allowed to complete.
+still allowed to complete. An explicit request also coalesces onto a
+successful same-region completion already waiting in the bounded pump queue,
+preventing duplicate worker loads.
 
 ## Deterministic edits
 

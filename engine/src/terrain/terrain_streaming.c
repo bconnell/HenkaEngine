@@ -653,6 +653,18 @@ henka_result henka_terrain_streamer_request_region(
             return HENKA_SUCCESS;
         }
     }
+    for (index = 0U; index < streamer->desc.max_completions; ++index)
+    {
+        if (streamer->completions[index].active &&
+            streamer->completions[index].result == HENKA_SUCCESS &&
+            henka_terrain_stream_region_equal(streamer->completions[index].info.id, region_id))
+        {
+            streamer->completions[index].observer_demand = false;
+            ++streamer->coalesced_request_count;
+            LeaveCriticalSection(&streamer->lock);
+            return HENKA_SUCCESS;
+        }
+    }
     index = henka_terrain_stream_find_free_request(streamer);
     if (index >= streamer->desc.max_requests)
     {
