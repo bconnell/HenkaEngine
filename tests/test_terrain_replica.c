@@ -25,6 +25,7 @@ static int test_replica_delta_and_snapshot(void)
     henka_result fragment_result;
     henka_terrain_replica_diagnostics diagnostics;
     henka_terrain_region_state state;
+    henka_terrain_region_state state_before_invalid_transfer;
     int result = 0;
     uint32_t index;
 
@@ -137,6 +138,35 @@ static int test_replica_delta_and_snapshot(void)
     {
         goto cleanup;
     }
+    state_before_invalid_transfer = state;
+    fragment.transfer_id = 11U;
+    fragment.fragment_index = 0U;
+    fragment.data_size = (uint32_t)(record_size > HENKA_TERRAIN_NETWORK_MAX_SNAPSHOT_FRAGMENT_DATA_BYTES
+        ? HENKA_TERRAIN_NETWORK_MAX_SNAPSHOT_FRAGMENT_DATA_BYTES : record_size);
+    fragment.data = record;
+    fragment.world_identity ^= UINT64_C(1);
+    complete = false;
+    if (henka_terrain_replica_apply_snapshot_fragment(
+            snapshot_replica, &fragment, &complete) != HENKA_ERROR_INVALID_ARGUMENT ||
+        complete ||
+        henka_terrain_world_get_region_state(
+            snapshot_world, (henka_terrain_region_id){0, 0}, &state) != HENKA_SUCCESS ||
+        memcmp(&state, &state_before_invalid_transfer, sizeof(state)) != 0)
+    {
+        goto cleanup;
+    }
+    fragment.world_identity = world_desc.world_identity;
+    fragment.base_asset_identity ^= UINT64_C(1);
+    if (henka_terrain_replica_apply_snapshot_fragment(
+            snapshot_replica, &fragment, &complete) != HENKA_ERROR_INVALID_ARGUMENT ||
+        complete ||
+        henka_terrain_world_get_region_state(
+            snapshot_world, (henka_terrain_region_id){0, 0}, &state) != HENKA_SUCCESS ||
+        memcmp(&state, &state_before_invalid_transfer, sizeof(state)) != 0)
+    {
+        goto cleanup;
+    }
+    fragment.base_asset_identity = world_desc.base_asset_identity;
     fragment.transfer_id = 10U;
     fragment.fragment_index = 0U;
     fragment.data_size = HENKA_TERRAIN_NETWORK_MAX_SNAPSHOT_FRAGMENT_DATA_BYTES;
@@ -188,20 +218,20 @@ static int test_replica_delta_and_snapshot(void)
     fragment.transfer_id = 9U;
     complete = false;
     offset = 0U;
-    for (fragment_index = 0U; fragment_index < fragment_count; ++fragment_index)
+    for (fragment_index = fragment_count; fragment_index-- > 0U;)
     {
-        size_t remaining = record_size - offset;
+        size_t fragment_offset = (size_t)fragment_index * HENKA_TERRAIN_NETWORK_MAX_SNAPSHOT_FRAGMENT_DATA_BYTES;
+        size_t remaining = record_size - fragment_offset;
         size_t data_size = remaining > HENKA_TERRAIN_NETWORK_MAX_SNAPSHOT_FRAGMENT_DATA_BYTES
             ? HENKA_TERRAIN_NETWORK_MAX_SNAPSHOT_FRAGMENT_DATA_BYTES : remaining;
         fragment.fragment_index = fragment_index;
         fragment.data_size = (uint32_t)data_size;
-        fragment.data = record + offset;
+        fragment.data = record + fragment_offset;
         if (henka_terrain_replica_apply_snapshot_fragment(
                 snapshot_replica, &fragment, &complete) != HENKA_SUCCESS)
         {
             goto cleanup;
         }
-        offset += data_size;
     }
     if (!complete)
     {

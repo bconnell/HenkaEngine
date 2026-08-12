@@ -216,10 +216,12 @@ multiplayer capacity.
 by exactly one revision, accepts an all-duplicate delta idempotently, and
 rejects gaps or mixed duplicate/new multi-region states before changing live
 samples. Snapshot fragments are accumulated under a configured byte budget;
-duplicate fragments, malformed sizing, and checksum/decode failures are
-rejected without publishing partial samples; a new transfer can retry and the
-validated record is decoded and atomically swapped into the world only after
-every fragment arrives. The replica does not own network transport,
+duplicate fragments, malformed sizing, world/base identity mismatches, and
+checksum/decode failures are rejected without publishing partial samples; a
+valid transfer may arrive out of order and commits only after every expected
+fragment arrives. A new transfer can retry and the validated record is decoded
+and atomically swapped into the world only after every fragment arrives. The
+replica does not own network transport,
 reconnect state or render/physics residency policy; the
 client adapter does not invent those missing policies.
 
