@@ -368,7 +368,10 @@ Terrain entities after graphical-owner teardown. The mesh regression suite
 also builds an all-four-edge transition, verifies
 stitched output emits fewer indices than the regular grid, and rejects
 degenerate triangles or non-finite tangent bases at the corners. Manual visual
-corner validation remains subsequent work. The Sandbox also routes one shared
+corner validation remains subsequent work; the suite also compares all four
+fine/coarse boundary positions, including shared corners, and verifies that
+odd fine-edge indices redirect to shared coarse endpoints without degenerate
+triangles. The Sandbox also routes one shared
 raise command through authoritative integer mutation, refreshes the
 transactional physics patch, and refreshes the affected GPU mesh; this is a
 runtime smoke path, not persistence or network authority. It also applies a
