@@ -249,7 +249,7 @@ The packaged QA script can confirm startup logs and UI state output, and the loc
 
 ## Future direction
 
-This layer is a foundation for better engine-side inspection and sample controls. It is not yet meant to replace planned editor work, hierarchy tooling, numeric property editing, saved workspace layouts, or a broader UI toolkit.
+This layer is a foundation for better engine-side inspection and sample controls. It is not yet meant to replace planned editor work, hierarchy tooling, numeric property editing, or a broader UI toolkit.
 
 ## Modernization closure
 

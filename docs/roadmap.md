@@ -40,7 +40,7 @@ Current workspace foundations include:
 1. Docked panels with a dedicated Scene View.
 2. Native detached tool windows with matching production-panel content, close-to-redock recovery, bounded virtual-screen placement persistence, and title-bar drag-back recognition.
 3. Resizable occupied dock regions, validated split topology, tab grouping/reordering, bounded layout history, named layout slots, and reset-layout recovery.
-4. Scrollable panel bodies with bounded wheel/touchpad ownership, persistent collapsible property groups, fixed panel headers, and integrated scrollbar behavior.
+4. Scrollable panel bodies with bounded wheel/touchpad ownership, persistent collapsible property groups and scroll offsets, fixed panel headers, integrated scrollbar behavior, and bounded presentation-only Object Details group ordering.
 5. Visible workspace and viewport interaction diagnostics.
 6. A multi-window platform foundation with a separate native test panel for render and event-routing validation.
 
