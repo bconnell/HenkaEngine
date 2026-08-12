@@ -314,13 +314,15 @@ The descriptor still borrows the manager-owned definition and its dependencies,
 so they must outlive the graphical Terrain runtime.
 Uploaded GPU meshes use a four-edge transition mask when an adjacent resident
 chunk is exactly one LOD coarser. The mesh keeps shared even edge samples and
-keeps all regular non-degenerate triangles, and morphs intervening fine edge
-samples onto the linear boundary between the shared coarse endpoints. Transition
-vertices re-normalize their interpolated normal/tangent basis and restore the
-255-sum material-layer invariant before upload. This is
-bounded per-edge geometry morphing for one-level differences; a missing or invalid neighbor uses a bounded
-downward skirt only on that edge until the neighbor is resident; the owner
-records both masks in chunk diagnostics. On each observer update the owner now derives a deterministic
+redirects odd fine-edge indices to those shared coarse endpoints, omitting
+triangles that collapse under the mapping. Intervening fine edge samples are
+also morphed onto the linear boundary between the shared coarse endpoints.
+Transition vertices re-normalize their interpolated normal/tangent basis and
+restore the 255-sum material-layer invariant before upload. This is bounded
+per-edge stitched topology plus geometry morphing for one-level differences; a
+missing or invalid neighbor uses a bounded downward skirt only on that edge
+until the neighbor is resident; the owner records both masks in chunk
+diagnostics. On each observer update the owner now derives a deterministic
 nearest working set from render-resident regions, removes slots whose regions
 leave render residency or the outer LOD band, and queues only bounded missing
 chunks. It also compares uploaded revision/generation identity with the
@@ -355,7 +357,8 @@ The Sandbox resource line reports that counter alongside owner memory totals.
 `henka_terrain_render_stats.gpu_weight_bytes` reports the exact resident bytes
 owned by those weight buffers; it is kept separate from the interleaved mesh
 vertex and index totals so diagnostics do not hide the additional upload.
-The mesh regression suite also builds an all-four-edge transition and rejects
+The mesh regression suite also builds an all-four-edge transition, verifies
+stitched output emits fewer indices than the regular grid, and rejects
 degenerate triangles or non-finite tangent bases at the corners. Manual visual
 corner validation remains subsequent work. The Sandbox also routes one shared
 raise command through authoritative integer mutation, refreshes the
@@ -473,8 +476,9 @@ physics, render, pending-I/O, dirty, revision, and generation state.
 ## Current boundary
 
 The current validated boundary includes bounded observer-driven render working
-set discovery, stale render identity refresh, one-level cross-LOD edge morphing,
-automated four-edge transition-mesh checks, and physics patch synchronization
+set discovery, stale render identity refresh, one-level cross-LOD stitched edge
+topology and morphing, automated four-edge transition-mesh checks, and physics
+patch synchronization
 with deterministic capacity-based admission and removal. Full residency-wide
 dirty-neighbor scheduling beyond the bounded physics patch capacity, four-way
 corner visual QA, and production-scale multiplayer soak remain subsequent

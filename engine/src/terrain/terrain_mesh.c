@@ -18,7 +18,33 @@ static uint32_t henka_terrain_mesh_transition_vertex(
     uint32_t z,
     uint32_t edge_transition_mask)
 {
-    (void)edge_transition_mask;
+    /* Redirect odd fine-edge samples to the preceding shared coarse sample.
+     * The regular interior grid remains unchanged; index emission below drops
+     * the triangles that collapse under this mapping. */
+    if (z == 0U &&
+        (edge_transition_mask & HENKA_TERRAIN_MESH_EDGE_NORTH) != 0U &&
+        (x & 1U) != 0U)
+    {
+        --x;
+    }
+    else if (z + 1U == side &&
+        (edge_transition_mask & HENKA_TERRAIN_MESH_EDGE_SOUTH) != 0U &&
+        (x & 1U) != 0U)
+    {
+        --x;
+    }
+    else if (x == 0U &&
+        (edge_transition_mask & HENKA_TERRAIN_MESH_EDGE_WEST) != 0U &&
+        (z & 1U) != 0U)
+    {
+        --z;
+    }
+    else if (x + 1U == side &&
+        (edge_transition_mask & HENKA_TERRAIN_MESH_EDGE_EAST) != 0U &&
+        (z & 1U) != 0U)
+    {
+        --z;
+    }
     return henka_terrain_mesh_sample_index(side, x, z);
 }
 
@@ -436,6 +462,7 @@ henka_result henka_terrain_mesh_build_chunk_with_edge_mask(
                     &io_mesh->vertices[next_index]);
             }
         }
+        io_mesh->index_count = 0U;
         for (local_z = 0U; local_z + 1U < samples_per_side; ++local_z)
         {
             for (local_x = 0U; local_x + 1U < samples_per_side; ++local_x)
@@ -448,14 +475,21 @@ henka_result henka_terrain_mesh_build_chunk_with_edge_mask(
                     samples_per_side, local_x + 1U, local_z, edge_transition_mask);
                 uint32_t fourth = henka_terrain_mesh_transition_vertex(
                     samples_per_side, local_x + 1U, local_z + 1U, edge_transition_mask);
-                io_mesh->indices[index_index++] = first;
-                io_mesh->indices[index_index++] = second;
-                io_mesh->indices[index_index++] = third;
-                io_mesh->indices[index_index++] = second;
-                io_mesh->indices[index_index++] = fourth;
-                io_mesh->indices[index_index++] = third;
+                if (first != second && first != third && second != third)
+                {
+                    io_mesh->indices[index_index++] = first;
+                    io_mesh->indices[index_index++] = second;
+                    io_mesh->indices[index_index++] = third;
+                }
+                if (second != fourth && second != third && fourth != third)
+                {
+                    io_mesh->indices[index_index++] = second;
+                    io_mesh->indices[index_index++] = fourth;
+                    io_mesh->indices[index_index++] = third;
+                }
             }
         }
+        io_mesh->index_count = index_index;
     }
     return HENKA_SUCCESS;
 }

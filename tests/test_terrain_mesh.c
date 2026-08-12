@@ -254,6 +254,10 @@ static int test_transition_topology(void)
     {
         goto cleanup;
     }
+    if (mesh.index_count >= base_mesh.index_count)
+    {
+        goto cleanup;
+    }
     if (henka_terrain_mesh_build_chunk(
             world,
             (henka_terrain_chunk_id){1, 0},
