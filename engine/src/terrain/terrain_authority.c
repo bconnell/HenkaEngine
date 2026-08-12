@@ -97,6 +97,17 @@ static henka_result henka_terrain_authority_reject(
     return HENKA_SUCCESS;
 }
 
+static void henka_terrain_authority_free_backups(
+    henka_terrain_authority_backup backups[HENKA_TERRAIN_EDIT_MAX_AFFECTED_REGIONS])
+{
+    uint32_t index;
+    for (index = 0U; index < HENKA_TERRAIN_EDIT_MAX_AFFECTED_REGIONS; ++index)
+    {
+        henka_free(backups[index].samples);
+        backups[index].samples = NULL;
+    }
+}
+
 static henka_terrain_rate_record* henka_terrain_authority_rate_record(
     henka_terrain_authority* authority,
     henka_network_peer_id peer_id)
@@ -188,12 +199,14 @@ henka_result henka_terrain_authority_process_request(
     {
         if (!henka_terrain_region_id_equal(affected[index], request->affected_regions[index].region_id))
         {
+            henka_terrain_authority_free_backups(backups);
             return henka_terrain_authority_reject(request, HENKA_TERRAIN_EDIT_REJECT_INVALID, out_response);
         }
         if (henka_terrain_world_get_region_state(
                 authority->world, affected[index], &backups[index].state) != HENKA_SUCCESS ||
             backups[index].state.revision != request->affected_regions[index].revision)
         {
+            henka_terrain_authority_free_backups(backups);
             return henka_terrain_authority_reject(request, HENKA_TERRAIN_EDIT_REJECT_STALE_REVISION, out_response);
         }
         backups[index].id = affected[index];
@@ -203,6 +216,7 @@ henka_result henka_terrain_authority_process_request(
             if (henka_terrain_world_get_region_samples(
                     authority->world, affected[index], &source, &sample_count) != HENKA_SUCCESS)
             {
+                henka_terrain_authority_free_backups(backups);
                 return henka_terrain_authority_reject(request, HENKA_TERRAIN_EDIT_REJECT_INVALID, out_response);
             }
             backups[index].samples = henka_malloc(sample_count * sizeof(*source));

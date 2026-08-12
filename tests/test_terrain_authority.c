@@ -3,6 +3,8 @@
 #include <henka/memory.h>
 #include <henka/terrain_authority.h>
 
+#include "../engine/src/core/memory_internal.h"
+
 static int test_authoritative_acceptance_and_stale_rejection(void)
 {
     henka_terrain_world_desc world_desc = henka_terrain_world_desc_default();
@@ -16,14 +18,16 @@ static int test_authoritative_acceptance_and_stale_rejection(void)
     henka_terrain_region_storage_info info;
     henka_terrain_layout layout;
     henka_terrain_sample* samples = NULL;
+    size_t allocations_before_partial_validation;
     int result = 0;
     uint32_t index;
 
-    world_desc.max_resident_regions = 1U;
+    world_desc.max_resident_regions = 2U;
     if (henka_terrain_world_desc_get_layout(&world_desc, &layout) != HENKA_SUCCESS ||
         henka_terrain_world_create(&world_desc, &world) != HENKA_SUCCESS ||
         henka_terrain_world_reserve_region(world, (henka_terrain_region_id){0, 0}) != HENKA_SUCCESS ||
-        henka_terrain_storage_create(&world_desc, "build/test_tmp/terrain_authority_v1", &storage) != HENKA_SUCCESS)
+        henka_terrain_world_reserve_region(world, (henka_terrain_region_id){1, 0}) != HENKA_SUCCESS ||
+        henka_terrain_storage_create(&world_desc, "test_tmp/terrain_authority_v1", &storage) != HENKA_SUCCESS)
     {
         goto cleanup;
     }
@@ -38,6 +42,7 @@ static int test_authoritative_acceptance_and_stale_rejection(void)
     }
     if (henka_terrain_storage_begin(storage, 1U) != HENKA_SUCCESS ||
         henka_terrain_storage_write_region(storage, (henka_terrain_region_id){0, 0}, 0U, 0U, samples, layout.samples_per_region) != HENKA_SUCCESS ||
+        henka_terrain_storage_write_region(storage, (henka_terrain_region_id){1, 0}, 0U, 0U, samples, layout.samples_per_region) != HENKA_SUCCESS ||
         henka_terrain_storage_commit(storage, 1U) != HENKA_SUCCESS)
     {
         goto cleanup;
@@ -95,6 +100,19 @@ static int test_authoritative_acceptance_and_stale_rejection(void)
         !response.accepted || response.acceptance.server_command_id != 2U ||
         henka_terrain_world_get_region_state(world, (henka_terrain_region_id){0, 0}, &state) != HENKA_SUCCESS ||
         state.revision != 2U)
+    {
+        goto cleanup;
+    }
+    allocations_before_partial_validation = henka_memory_get_allocation_count();
+    request.client_nonce = 80U;
+    request.command.operation = HENKA_TERRAIN_EDIT_RAISE;
+    request.command.center_sample_x = 512;
+    request.affected_region_count = 2U;
+    request.affected_regions[0] = (henka_terrain_network_region_revision){{0, 0}, 2U};
+    request.affected_regions[1] = (henka_terrain_network_region_revision){{1, 0}, 999U};
+    if (henka_terrain_authority_process_request(authority, 2U, &request, 1003U, &response) != HENKA_SUCCESS ||
+        response.accepted || response.rejection.reason != HENKA_TERRAIN_EDIT_REJECT_STALE_REVISION ||
+        henka_memory_get_allocation_count() != allocations_before_partial_validation)
     {
         goto cleanup;
     }
