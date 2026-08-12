@@ -284,8 +284,9 @@ and generation, so a graphics owner can discard a stale upload. GPU
 mesh ownership is provided by `<henka/terrain_render.h>` in the graphical
 client: it borrows the engine, scene, and world, keeps fixed-capacity chunk
 slots and request queues, creates scene entities with bounds for renderer
-culling, and replaces meshes transactionally only after a candidate upload
-succeeds. Four LOD bands use hysteresis and deterministic adjacent-chunk
+culling and ordinary scene selection, and replaces meshes transactionally only
+after a candidate upload succeeds. Four LOD bands use hysteresis and
+deterministic adjacent-chunk
 selection; render visibility is bounded by the configured outer band. The
 owner destroys its entities and meshes without destroying the borrowed world.
 The built-in Terrain material uses exactly four normalized painted weights as
@@ -357,7 +358,10 @@ The Sandbox resource line reports that counter alongside owner memory totals.
 `henka_terrain_render_stats.gpu_weight_bytes` reports the exact resident bytes
 owned by those weight buffers; it is kept separate from the interleaved mesh
 vertex and index totals so diagnostics do not hide the additional upload.
-The mesh regression suite also builds an all-four-edge transition, verifies
+The render regression suite verifies resident Terrain entities are visible to
+the normal scene ray picker and that observer-driven removal leaves no stale
+Terrain entities after graphical-owner teardown. The mesh regression suite
+also builds an all-four-edge transition, verifies
 stitched output emits fewer indices than the regular grid, and rejects
 degenerate triangles or non-finite tangent bases at the corners. Manual visual
 corner validation remains subsequent work. The Sandbox also routes one shared

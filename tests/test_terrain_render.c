@@ -510,6 +510,8 @@ static int test_observer_working_set_and_distance_culling(void)
     henka_terrain_sample* samples = NULL;
     henka_terrain_render_stats stats;
     henka_terrain_render_chunk_info chunk_info;
+    henka_entity picked_entity = HENKA_INVALID_ENTITY;
+    float picked_distance = 0.0f;
     size_t index;
     int passed = 0;
 
@@ -565,7 +567,15 @@ static int test_observer_working_set_and_distance_culling(void)
         stats.resident_chunks != 2U || stats.visible_chunks != 2U ||
         henka_terrain_render_runtime_get_chunk(
             runtime, (henka_terrain_chunk_id){0, 0}, &chunk_info) != HENKA_SUCCESS ||
-        !chunk_info.resident || !chunk_info.visible)
+        !chunk_info.resident || !chunk_info.visible ||
+        !henka_scene_is_entity_valid(scene, chunk_info.entity) ||
+        henka_scene_pick_entity(
+            scene,
+            (henka_ray){{32.0f, 100.0f, 32.0f}, {0.0f, -1.0f, 0.0f}},
+            &picked_entity,
+            &picked_distance) != HENKA_SUCCESS ||
+        picked_entity != chunk_info.entity ||
+        !isfinite(picked_distance) || picked_distance < 0.0f)
     {
         goto cleanup;
     }
@@ -584,7 +594,9 @@ static int test_observer_working_set_and_distance_culling(void)
             runtime, (henka_vec3){5000.0f, 0.0f, 5000.0f}) != HENKA_SUCCESS ||
         henka_terrain_render_runtime_get_stats(runtime, &stats) != HENKA_SUCCESS ||
         stats.resident_chunks != 0U || stats.visible_chunks != 0U ||
-        stats.max_resident_chunks < 2U || stats.max_visible_chunks < 2U)
+        stats.max_resident_chunks < 2U || stats.max_visible_chunks < 2U ||
+        henka_scene_get_entity_count(scene) != 0U ||
+        henka_scene_is_entity_valid(scene, chunk_info.entity))
     {
         goto cleanup;
     }
