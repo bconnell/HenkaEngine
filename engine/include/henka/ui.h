@@ -38,6 +38,15 @@ typedef struct henka_ui_flow_desc
     float row_spacing;
     float indent_width;
 } henka_ui_flow_desc;
+
+/* Presentation-only bounded scrolling state. It carries no editor or scene
+ * data and can therefore be shared by docked and detached tool surfaces. */
+typedef struct henka_ui_scroll_state
+{
+    float offset;
+    float content_height;
+    float viewport_height;
+} henka_ui_scroll_state;
 typedef enum henka_ui_semantic_color
 {
     HENKA_UI_COLOR_NORMAL = 0,
@@ -87,6 +96,32 @@ henka_result henka_ui_flow_next_row(
 henka_result henka_ui_flow_end(
     henka_ui_context* context,
     float* out_content_height);
+henka_result henka_ui_scroll_state_set_content(
+    henka_ui_scroll_state* state,
+    float content_height,
+    float viewport_height);
+henka_result henka_ui_scroll_state_apply_delta(
+    henka_ui_scroll_state* state,
+    float delta_pixels);
+henka_result henka_ui_scrollbar_thumb_height(
+    float content_height,
+    float viewport_height,
+    float track_height,
+    float* out_thumb_height);
+henka_result henka_ui_scrollbar_thumb_offset(
+    float scroll_offset,
+    float content_height,
+    float viewport_height,
+    float track_height,
+    float thumb_height,
+    float* out_thumb_offset);
+henka_result henka_ui_scroll_state_set_from_scrollbar(
+    henka_ui_scroll_state* state,
+    float pointer_y,
+    float track_y,
+    float track_height,
+    float thumb_height,
+    float grab_offset);
 henka_result henka_ui_disclosure_row(
     henka_ui_context* context,
     const char* id,

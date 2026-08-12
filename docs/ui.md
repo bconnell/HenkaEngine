@@ -144,6 +144,11 @@ The current `Object Details` panel can:
 - open object info in the utility panel and still print it to the console
 
 Controls Main and Object Details share a bounded panel-body presentation model.
+The core Henka UI API owns the presentation-only scroll state, scrollbar thumb
+geometry, and bounded thumb-drag mapping; Sandbox editor state is an adapter
+that persists offsets and group presentation without becoming a second scroll
+authority. This keeps docked and detached tool surfaces on the same validated
+geometry contract.
 Their stable group identifiers persist expanded/collapsed state separately from
 scene state, and bounded scroll offsets persist through the local settings
 authority while being clamped after content measurement and resize. Content

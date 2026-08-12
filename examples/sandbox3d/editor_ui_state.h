@@ -6,16 +6,12 @@
 
 #include <henka/persistence.h>
 #include <henka/result.h>
+#include <henka/ui.h>
 
 /* Presentation-only scroll state. It deliberately does not carry any engine
  * or scene data, so panel resizing and input ownership can be handled without
  * mutating the scene. */
-typedef struct sandbox3d_editor_scroll_state
-{
-    float offset;
-    float content_height;
-    float viewport_height;
-} sandbox3d_editor_scroll_state;
+typedef henka_ui_scroll_state sandbox3d_editor_scroll_state;
 
 typedef enum sandbox3d_editor_details_group_id
 {

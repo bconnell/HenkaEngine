@@ -23,6 +23,72 @@ void henka_test_ui(void)
     HENKA_TEST_ASSERT(henka_ui_create(NULL) == HENKA_ERROR_INVALID_ARGUMENT);
     HENKA_TEST_ASSERT(henka_ui_create(&ui) == HENKA_SUCCESS);
     HENKA_TEST_ASSERT(ui != NULL);
+
+    {
+        henka_ui_scroll_state scroll = {0.0f, 0.0f, 0.0f};
+        float thumb_height;
+        float thumb_offset;
+        HENKA_TEST_ASSERT(
+            henka_ui_scroll_state_set_content(
+                &scroll,
+                400.0f,
+                100.0f) == HENKA_SUCCESS);
+        HENKA_TEST_ASSERT_FLOAT_CLOSE(scroll.offset, 0.0f, 0.0001f);
+        HENKA_TEST_ASSERT(
+            henka_ui_scrollbar_thumb_height(
+                400.0f,
+                100.0f,
+                200.0f,
+                &thumb_height) == HENKA_SUCCESS);
+        HENKA_TEST_ASSERT_FLOAT_CLOSE(thumb_height, 50.0f, 0.0001f);
+        HENKA_TEST_ASSERT(
+            henka_ui_scrollbar_thumb_offset(
+                300.0f,
+                400.0f,
+                100.0f,
+                200.0f,
+                thumb_height,
+                &thumb_offset) == HENKA_SUCCESS);
+        HENKA_TEST_ASSERT_FLOAT_CLOSE(thumb_offset, 150.0f, 0.0001f);
+        HENKA_TEST_ASSERT(
+            henka_ui_scroll_state_set_from_scrollbar(
+                &scroll,
+                200.0f,
+                0.0f,
+                200.0f,
+                thumb_height,
+                thumb_height * 0.5f) == HENKA_SUCCESS);
+        HENKA_TEST_ASSERT_FLOAT_CLOSE(scroll.offset, 300.0f, 0.0001f);
+        scroll.offset = 0.0f;
+        HENKA_TEST_ASSERT(
+            henka_ui_scroll_state_apply_delta(
+                &scroll,
+                40.0f) == HENKA_SUCCESS);
+        HENKA_TEST_ASSERT_FLOAT_CLOSE(scroll.offset, 40.0f, 0.0001f);
+        HENKA_TEST_ASSERT(
+            henka_ui_scroll_state_apply_delta(
+                &scroll,
+                1000.0f) == HENKA_SUCCESS);
+        HENKA_TEST_ASSERT_FLOAT_CLOSE(scroll.offset, 300.0f, 0.0001f);
+        HENKA_TEST_ASSERT(
+            henka_ui_scroll_state_set_content(
+                &scroll,
+                80.0f,
+                100.0f) == HENKA_SUCCESS);
+        HENKA_TEST_ASSERT_FLOAT_CLOSE(scroll.offset, 0.0f, 0.0001f);
+        HENKA_TEST_ASSERT(
+            henka_ui_scrollbar_thumb_height(
+                100.0f,
+                100.0f,
+                200.0f,
+                &thumb_height) == HENKA_ERROR_INVALID_ARGUMENT);
+        HENKA_TEST_ASSERT(
+            henka_ui_scroll_state_set_content(
+                &scroll,
+                100.0f,
+                0.0f) == HENKA_ERROR_INVALID_ARGUMENT);
+    }
+
     HENKA_TEST_ASSERT(henka_ui_is_visible(ui) == false);
     HENKA_TEST_ASSERT(henka_ui_get_wants_mouse(ui) == false);
     HENKA_TEST_ASSERT(henka_ui_get_draw_rect_count(ui) == 0U);

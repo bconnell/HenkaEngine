@@ -1221,6 +1221,177 @@ bool henka_ui_rect_contains(henka_ui_rect rect, henka_vec2 point)
         point.y < rect.y + rect.height;
 }
 
+static float henka_ui_scroll_clamp_offset(
+    float offset,
+    float content_height,
+    float viewport_height)
+{
+    const float maximum_offset = content_height - viewport_height;
+
+    if (!henka_ui_float_is_finite(offset) || offset < 0.0f ||
+        !henka_ui_float_is_finite(content_height) || content_height < 0.0f ||
+        !henka_ui_float_is_finite(viewport_height) || viewport_height <= 0.0f ||
+        content_height <= viewport_height)
+    {
+        return 0.0f;
+    }
+    return offset > maximum_offset ? maximum_offset : offset;
+}
+
+henka_result henka_ui_scroll_state_set_content(
+    henka_ui_scroll_state* state,
+    float content_height,
+    float viewport_height)
+{
+    if (state == NULL || !henka_ui_float_is_finite(content_height) ||
+        content_height < 0.0f || !henka_ui_float_is_finite(viewport_height) ||
+        viewport_height <= 0.0f)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    state->content_height = content_height;
+    state->viewport_height = viewport_height;
+    state->offset = henka_ui_scroll_clamp_offset(
+        state->offset,
+        content_height,
+        viewport_height);
+    return HENKA_SUCCESS;
+}
+
+henka_result henka_ui_scroll_state_apply_delta(
+    henka_ui_scroll_state* state,
+    float delta_pixels)
+{
+    double requested_offset;
+
+    if (state == NULL || !henka_ui_float_is_finite(delta_pixels) ||
+        !henka_ui_float_is_finite(state->content_height) ||
+        !henka_ui_float_is_finite(state->viewport_height) ||
+        state->content_height < 0.0f || state->viewport_height <= 0.0f)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    state->offset = henka_ui_scroll_clamp_offset(
+        state->offset,
+        state->content_height,
+        state->viewport_height);
+    if (state->content_height <= state->viewport_height || delta_pixels == 0.0f)
+    {
+        return HENKA_SUCCESS;
+    }
+    requested_offset = (double)state->offset + (double)delta_pixels;
+    if (!isfinite(requested_offset))
+    {
+        requested_offset = delta_pixels < 0.0f ? 0.0 : (double)FLT_MAX;
+    }
+    if (requested_offset < 0.0)
+    {
+        requested_offset = 0.0;
+    }
+    if (requested_offset > (double)FLT_MAX)
+    {
+        requested_offset = (double)FLT_MAX;
+    }
+    state->offset = henka_ui_scroll_clamp_offset(
+        (float)requested_offset,
+        state->content_height,
+        state->viewport_height);
+    return HENKA_SUCCESS;
+}
+
+henka_result henka_ui_scrollbar_thumb_height(
+    float content_height,
+    float viewport_height,
+    float track_height,
+    float* out_thumb_height)
+{
+    float thumb_height;
+
+    if (out_thumb_height != NULL) *out_thumb_height = 0.0f;
+    if (out_thumb_height == NULL || !henka_ui_float_is_finite(content_height) ||
+        !henka_ui_float_is_finite(viewport_height) ||
+        !henka_ui_float_is_finite(track_height) || content_height <= viewport_height ||
+        viewport_height <= 0.0f || track_height <= 0.0f)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    thumb_height = track_height * viewport_height / content_height;
+    if (!henka_ui_float_is_finite(thumb_height))
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    if (thumb_height < 24.0f) thumb_height = 24.0f;
+    if (thumb_height > track_height) thumb_height = track_height;
+    *out_thumb_height = thumb_height;
+    return HENKA_SUCCESS;
+}
+
+henka_result henka_ui_scrollbar_thumb_offset(
+    float scroll_offset,
+    float content_height,
+    float viewport_height,
+    float track_height,
+    float thumb_height,
+    float* out_thumb_offset)
+{
+    const float maximum_offset = content_height - viewport_height;
+    const float travel = track_height - thumb_height;
+
+    if (out_thumb_offset != NULL) *out_thumb_offset = 0.0f;
+    if (out_thumb_offset == NULL || !henka_ui_float_is_finite(scroll_offset) ||
+        !henka_ui_float_is_finite(content_height) ||
+        !henka_ui_float_is_finite(viewport_height) ||
+        !henka_ui_float_is_finite(track_height) ||
+        !henka_ui_float_is_finite(thumb_height) || content_height <= viewport_height ||
+        viewport_height <= 0.0f || track_height <= 0.0f || thumb_height <= 0.0f ||
+        thumb_height > track_height || maximum_offset <= 0.0f || travel <= 0.0f)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    *out_thumb_offset = travel * henka_ui_scroll_clamp_offset(
+        scroll_offset,
+        content_height,
+        viewport_height) / maximum_offset;
+    return HENKA_SUCCESS;
+}
+
+henka_result henka_ui_scroll_state_set_from_scrollbar(
+    henka_ui_scroll_state* state,
+    float pointer_y,
+    float track_y,
+    float track_height,
+    float thumb_height,
+    float grab_offset)
+{
+    float travel;
+    float thumb_y;
+    float normalized;
+
+    if (state == NULL || !henka_ui_float_is_finite(pointer_y) ||
+        !henka_ui_float_is_finite(track_y) || !henka_ui_float_is_finite(track_height) ||
+        !henka_ui_float_is_finite(thumb_height) || !henka_ui_float_is_finite(grab_offset) ||
+        track_height <= 0.0f || thumb_height <= 0.0f || thumb_height > track_height ||
+        state->content_height <= state->viewport_height)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    travel = track_height - thumb_height;
+    if (travel <= 0.0f)
+    {
+        state->offset = 0.0f;
+        return HENKA_SUCCESS;
+    }
+    thumb_y = pointer_y - grab_offset - track_y;
+    if (thumb_y < 0.0f) thumb_y = 0.0f;
+    if (thumb_y > travel) thumb_y = travel;
+    normalized = thumb_y / travel;
+    state->offset = henka_ui_scroll_clamp_offset(
+        normalized * (state->content_height - state->viewport_height),
+        state->content_height,
+        state->viewport_height);
+    return HENKA_SUCCESS;
+}
+
 henka_result henka_ui_flow_begin(
     henka_ui_context* context,
     const henka_ui_flow_desc* desc)

@@ -302,23 +302,24 @@ float sandbox3d_editor_ui_clamp_scroll(
     float content_height,
     float viewport_height)
 {
-    float maximum_offset;
+    sandbox3d_editor_scroll_state state;
 
-    if (!isfinite(requested_offset) ||
-        !isfinite(content_height) ||
-        !isfinite(viewport_height) ||
-        requested_offset < 0.0f ||
-        content_height < 0.0f ||
-        viewport_height <= 0.0f ||
-        content_height <= viewport_height)
+    state.offset = requested_offset;
+    state.content_height = content_height;
+    state.viewport_height = viewport_height;
+    if (!isfinite(content_height) || content_height < 0.0f ||
+        !isfinite(viewport_height) || viewport_height <= 0.0f)
     {
         return 0.0f;
     }
-
-    maximum_offset = content_height - viewport_height;
-    return requested_offset > maximum_offset
-        ? maximum_offset
-        : requested_offset;
+    if (henka_ui_scroll_state_set_content(
+            &state,
+            content_height,
+            viewport_height) != HENKA_SUCCESS)
+    {
+        return 0.0f;
+    }
+    return state.offset;
 }
 
 void sandbox3d_editor_ui_scroll_state_set_content(
@@ -331,14 +332,10 @@ void sandbox3d_editor_ui_scroll_state_set_content(
         return;
     }
 
-    state->content_height = isfinite(content_height) && content_height >= 0.0f
-        ? content_height
-        : 0.0f;
-    state->viewport_height = isfinite(viewport_height) && viewport_height > 0.0f
-        ? viewport_height
-        : 0.0f;
-    state->offset = sandbox3d_editor_ui_clamp_scroll(
-        state->offset,
+    state->content_height = isfinite(content_height) && content_height >= 0.0f ? content_height : 0.0f;
+    state->viewport_height = isfinite(viewport_height) && viewport_height > 0.0f ? viewport_height : 1.0f;
+    (void)henka_ui_scroll_state_set_content(
+        state,
         state->content_height,
         state->viewport_height);
 }
@@ -348,9 +345,7 @@ bool sandbox3d_editor_ui_scroll_state_apply_delta(
     float delta_pixels,
     float viewport_height)
 {
-    float requested_offset;
-
-    if (state == NULL || !isfinite(delta_pixels) || delta_pixels == 0.0f)
+    if (state == NULL || !isfinite(delta_pixels))
     {
         if (state != NULL)
         {
@@ -362,26 +357,12 @@ bool sandbox3d_editor_ui_scroll_state_apply_delta(
         return false;
     }
 
-    sandbox3d_editor_ui_scroll_state_set_content(
-        state,
-        state->content_height,
-        viewport_height);
-    if (state->content_height <= state->viewport_height)
+    sandbox3d_editor_ui_scroll_state_set_content(state, state->content_height, viewport_height);
+    if (henka_ui_scroll_state_apply_delta(state, delta_pixels) != HENKA_SUCCESS)
     {
-        state->offset = 0.0f;
         return false;
     }
-
-    requested_offset = state->offset + delta_pixels;
-    if (!isfinite(requested_offset))
-    {
-        requested_offset = delta_pixels < 0.0f ? 0.0f : FLT_MAX;
-    }
-    state->offset = sandbox3d_editor_ui_clamp_scroll(
-        requested_offset,
-        state->content_height,
-        state->viewport_height);
-    return true;
+    return state->content_height > state->viewport_height && delta_pixels != 0.0f;
 }
 
 float sandbox3d_editor_ui_scrollbar_thumb_height(
@@ -389,25 +370,13 @@ float sandbox3d_editor_ui_scrollbar_thumb_height(
     float viewport_height,
     float track_height)
 {
-    float thumb_height;
-
-    if (!isfinite(content_height) || !isfinite(viewport_height) ||
-        !isfinite(track_height) || content_height <= viewport_height ||
-        viewport_height <= 0.0f || track_height <= 0.0f)
-    {
-        return 0.0f;
-    }
-
-    thumb_height = track_height * viewport_height / content_height;
-    if (!isfinite(thumb_height))
-    {
-        return 0.0f;
-    }
-    if (thumb_height < 24.0f)
-    {
-        thumb_height = 24.0f;
-    }
-    return thumb_height > track_height ? track_height : thumb_height;
+    float thumb_height = 0.0f;
+    (void)henka_ui_scrollbar_thumb_height(
+        content_height,
+        viewport_height,
+        track_height,
+        &thumb_height);
+    return thumb_height;
 }
 
 float sandbox3d_editor_ui_scrollbar_thumb_offset(
@@ -417,18 +386,15 @@ float sandbox3d_editor_ui_scrollbar_thumb_offset(
     float track_height,
     float thumb_height)
 {
-    const float maximum_offset = content_height - viewport_height;
-    const float travel = track_height - thumb_height;
-    const float clamped_offset = sandbox3d_editor_ui_clamp_scroll(
+    float thumb_offset = 0.0f;
+    (void)henka_ui_scrollbar_thumb_offset(
         scroll_offset,
         content_height,
-        viewport_height);
-
-    if (maximum_offset <= 0.0f || travel <= 0.0f)
-    {
-        return 0.0f;
-    }
-    return travel * clamped_offset / maximum_offset;
+        viewport_height,
+        track_height,
+        thumb_height,
+        &thumb_offset);
+    return thumb_offset;
 }
 
 bool sandbox3d_editor_ui_scroll_state_set_from_scrollbar(
@@ -439,40 +405,13 @@ bool sandbox3d_editor_ui_scroll_state_set_from_scrollbar(
     float thumb_height,
     float grab_offset)
 {
-    float travel;
-    float thumb_y;
-    float normalized;
-
-    if (state == NULL || !isfinite(pointer_y) || !isfinite(track_y) ||
-        !isfinite(track_height) || !isfinite(thumb_height) ||
-        !isfinite(grab_offset) || track_height <= 0.0f ||
-        thumb_height <= 0.0f || thumb_height > track_height ||
-        state->content_height <= state->viewport_height)
-    {
-        return false;
-    }
-
-    travel = track_height - thumb_height;
-    if (travel <= 0.0f)
-    {
-        state->offset = 0.0f;
-        return false;
-    }
-    thumb_y = pointer_y - grab_offset - track_y;
-    if (thumb_y < 0.0f)
-    {
-        thumb_y = 0.0f;
-    }
-    if (thumb_y > travel)
-    {
-        thumb_y = travel;
-    }
-    normalized = thumb_y / travel;
-    state->offset = sandbox3d_editor_ui_clamp_scroll(
-        normalized * (state->content_height - state->viewport_height),
-        state->content_height,
-        state->viewport_height);
-    return true;
+    return henka_ui_scroll_state_set_from_scrollbar(
+        state,
+        pointer_y,
+        track_y,
+        track_height,
+        thumb_height,
+        grab_offset) == HENKA_SUCCESS;
 }
 
 static bool sandbox3d_editor_ui_scroll_by(
