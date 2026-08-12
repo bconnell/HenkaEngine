@@ -423,6 +423,40 @@ static henka_result henka_terrain_client_request_delta_recovery(
     return HENKA_SUCCESS;
 }
 
+static bool henka_terrain_client_delta_has_revision_gap(
+    const henka_terrain_client* client,
+    const henka_terrain_edit_delta* delta)
+{
+    henka_terrain_world_desc desc;
+    uint32_t index;
+
+    if (client == NULL || delta == NULL ||
+        henka_terrain_world_get_desc(client->world, &desc) != HENKA_SUCCESS ||
+        desc.world_identity != delta->world_identity ||
+        desc.base_asset_identity != delta->base_asset_identity)
+    {
+        return false;
+    }
+    for (index = 0U; index < delta->affected_region_count; ++index)
+    {
+        henka_terrain_region_state state;
+        const henka_terrain_revision target_revision =
+            delta->affected_regions[index].revision;
+        if (target_revision == 0U ||
+            henka_terrain_world_get_region_state(
+                client->world, delta->affected_regions[index].region_id, &state) != HENKA_SUCCESS ||
+            state.revision == UINT64_MAX)
+        {
+            return false;
+        }
+        if (target_revision > state.revision + 1U)
+        {
+            return true;
+        }
+    }
+    return false;
+}
+
 static henka_result henka_terrain_client_handle_session_info(
     henka_terrain_client* client,
     const henka_network_event* event)
@@ -628,11 +662,13 @@ henka_result henka_terrain_client_handle_event(
         result = henka_terrain_replica_apply_delta(client->replica, &delta, &applied);
         if (result != HENKA_SUCCESS)
         {
-            /* Only a revision gap is recoverable from the delta stream. The
-             * replica uses ASSET_SOURCE for that state mismatch; protocol,
-             * identity, sizing, and allocation failures must remain hard
-             * errors and must never cause a request based on untrusted data. */
-            if (result != HENKA_ERROR_ASSET_SOURCE)
+            /* The replica also uses ASSET_SOURCE for some non-gap failures.
+             * Verify the revision relationship independently before allowing
+             * recovery; protocol, identity, sizing, and allocation failures
+             * must remain hard errors and must never cause a request derived
+             * from the rejected message. */
+            if (result != HENKA_ERROR_ASSET_SOURCE ||
+                !henka_terrain_client_delta_has_revision_gap(client, &delta))
             {
                 henka_terrain_client_sync_replica_diagnostics(client);
                 return result;
