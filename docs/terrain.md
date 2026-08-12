@@ -247,6 +247,9 @@ checksum/decode failures are rejected without publishing partial samples; a
 valid transfer may arrive out of order and commits only after every expected
 fragment arrives. A new transfer can retry and the validated record is decoded
 and atomically swapped into the world only after every fragment arrives. The
+replica rejects a decoded snapshot whose generation/revision is older than the
+currently resident region, counts it in `stale_snapshot_count`, and leaves the
+newer state untouched. The
 replica does not own network transport,
 reconnect state or render/physics residency policy; the
 client adapter does not invent those missing policies. A revision-gap result

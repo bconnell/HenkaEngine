@@ -288,8 +288,23 @@ henka_result henka_terrain_replica_apply_snapshot_fragment(
     }
     if (result == HENKA_SUCCESS)
     {
-        result = henka_terrain_world_apply_region_snapshot(
-            replica->world, info, samples, layout.samples_per_region);
+        henka_terrain_region_state current;
+        if (henka_terrain_world_get_region_state(
+                replica->world, info.id, &current) == HENKA_SUCCESS &&
+            ((current.generation > info.generation) ||
+                (current.generation == info.generation && current.revision > info.revision)))
+        {
+            ++replica->diagnostics.stale_snapshot_count;
+            result = HENKA_SUCCESS;
+            /* The transfer completed and was valid, but its state was already
+             * superseded. Treat it as a successful no-op so the client does
+             * not retry an obsolete recovery packet. */
+        }
+        else
+        {
+            result = henka_terrain_world_apply_region_snapshot(
+                replica->world, info, samples, layout.samples_per_region);
+        }
     }
     henka_free(samples);
     henka_terrain_replica_reset_snapshot(replica);

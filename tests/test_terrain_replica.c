@@ -272,6 +272,40 @@ static int test_replica_delta_and_snapshot(void)
     {
         goto cleanup;
     }
+    state_before_invalid_transfer = state;
+    if (henka_terrain_region_encode(
+            &world_desc, (henka_terrain_region_id){0, 0}, 1U, 3U,
+            samples, layout.samples_per_region, record,
+            HENKA_TERRAIN_MAX_REGION_RECORD_BYTES, &record_size) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    fragment.transfer_id = 13U;
+    fragment.revision = 1U;
+    fragment.generation = 3U;
+    complete = false;
+    offset = 0U;
+    for (fragment_index = 0U; fragment_index < fragment_count; ++fragment_index)
+    {
+        size_t remaining = record_size - offset;
+        size_t data_size = remaining > HENKA_TERRAIN_NETWORK_MAX_SNAPSHOT_FRAGMENT_DATA_BYTES
+            ? HENKA_TERRAIN_NETWORK_MAX_SNAPSHOT_FRAGMENT_DATA_BYTES : remaining;
+        fragment.fragment_index = fragment_index;
+        fragment.data_size = (uint32_t)data_size;
+        fragment.data = record + offset;
+        if (henka_terrain_replica_apply_snapshot_fragment(
+                snapshot_replica, &fragment, &complete) != HENKA_SUCCESS)
+        {
+            goto cleanup;
+        }
+        offset += data_size;
+    }
+    henka_terrain_replica_get_diagnostics(snapshot_replica, &diagnostics);
+    if (!complete || diagnostics.stale_snapshot_count != 1U ||
+        memcmp(&state, &state_before_invalid_transfer, sizeof(state)) != 0)
+    {
+        goto cleanup;
+    }
     result = 1;
 
 cleanup:

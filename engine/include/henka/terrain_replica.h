@@ -23,6 +23,7 @@ typedef struct henka_terrain_replica_diagnostics
     uint64_t accepted_snapshot_fragment_count;
     uint64_t completed_snapshot_count;
     uint64_t rejected_snapshot_count;
+    uint64_t stale_snapshot_count;
 } henka_terrain_replica_diagnostics;
 
 henka_terrain_replica_desc henka_terrain_replica_desc_default(void);
