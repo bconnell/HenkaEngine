@@ -371,6 +371,7 @@ struct henka_mesh
     int index_count;
     uint32_t material_region_min;
     uint32_t material_region_max;
+    bool terrain_weight_stream;
     void* backend_data;
 };
 
@@ -517,6 +518,20 @@ henka_result henka_renderer_create_mesh_from_data(
     henka_mesh_primitive primitive,
     struct henka_mesh** out_mesh);
 void henka_renderer_destroy_mesh(struct henka_mesh* mesh);
+henka_result henka_renderer_set_terrain_weights(
+    struct henka_mesh* mesh,
+    const uint8_t* weights,
+    int vertex_count);
+henka_result henka_mesh_update_terrain_weights_from_chunk(
+    henka_engine* engine,
+    const henka_terrain_world* world,
+    henka_terrain_chunk_id chunk_id,
+    uint32_t lod_level,
+    uint32_t edge_transition_mask,
+    uint32_t fallback_skirt_mask,
+    henka_mesh* mesh,
+    henka_terrain_revision* out_revision,
+    henka_terrain_generation* out_generation);
 henka_result henka_renderer_create_shader_from_files(
     struct henka_renderer* renderer,
     const char* vertex_path,
@@ -695,6 +710,10 @@ henka_result henka_opengl_renderer_create_mesh_from_data(
     henka_mesh_primitive primitive,
     struct henka_mesh** out_mesh);
 void henka_opengl_renderer_destroy_mesh(struct henka_mesh* mesh);
+henka_result henka_opengl_renderer_set_terrain_weights(
+    struct henka_mesh* mesh,
+    const uint8_t* weights,
+    int vertex_count);
 henka_result henka_opengl_renderer_create_shader_from_files(
     struct henka_renderer* renderer,
     const char* vertex_path,

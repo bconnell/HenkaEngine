@@ -43,6 +43,108 @@ static int test_dirty_refresh_requires_valid_runtime(void)
     return henka_terrain_render_runtime_refresh_dirty(NULL) == HENKA_ERROR_INVALID_ARGUMENT;
 }
 
+static int test_paint_updates_weights_without_rebuilding_geometry(void)
+{
+    henka_engine_config engine_config = {0};
+    henka_engine* engine = NULL;
+    henka_scene* scene = NULL;
+    henka_terrain_world_desc world_desc = henka_terrain_world_desc_default();
+    henka_terrain_world* world = NULL;
+    henka_terrain_render_desc render_desc = henka_terrain_render_desc_default();
+    henka_terrain_render_runtime* runtime = NULL;
+    henka_terrain_edit_command command = henka_terrain_edit_command_default();
+    henka_terrain_render_stats before;
+    henka_terrain_render_stats after;
+    henka_terrain_render_chunk_info before_chunk;
+    henka_terrain_render_chunk_info after_chunk;
+    henka_terrain_region_id region_id = {0, 0};
+    henka_terrain_region_storage_info storage_info = {region_id, 1U, 1U};
+    henka_terrain_layout layout;
+    henka_terrain_sample* samples = NULL;
+    size_t index;
+    int passed = 0;
+
+    engine_config.application_name = "Terrain Paint Weight Stream Test";
+    engine_config.window_width = 320;
+    engine_config.window_height = 240;
+    engine_config.enable_vsync = false;
+    engine_config.asset_base_path = ".";
+    world_desc.world_width_meters = 64U;
+    world_desc.world_depth_meters = 64U;
+    world_desc.region_edge_meters = 64U;
+    world_desc.chunk_edge_meters = 64U;
+    world_desc.samples_per_chunk = 65U;
+    world_desc.base_sample_spacing_meters = 1U;
+    world_desc.chunks_per_region_edge = 1U;
+    world_desc.regions_across = 1U;
+    world_desc.regions_down = 1U;
+    world_desc.max_resident_regions = 1U;
+    world_desc.max_resident_chunks = 1U;
+    world_desc.max_pending_io = 2U;
+    world_desc.max_stream_observers = 1U;
+    render_desc.max_resident_chunks = 1U;
+    render_desc.max_pending_requests = 2U;
+
+    if (henka_engine_create(&engine_config, &engine) != HENKA_SUCCESS ||
+        henka_scene_create(&scene) != HENKA_SUCCESS ||
+        henka_terrain_world_desc_get_layout(&world_desc, &layout) != HENKA_SUCCESS ||
+        henka_terrain_world_create(&world_desc, &world) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    samples = henka_calloc(layout.samples_per_region, sizeof(*samples));
+    if (samples == NULL)
+    {
+        goto cleanup;
+    }
+    for (index = 0U; index < layout.samples_per_region; ++index)
+    {
+        samples[index].material_weights[0] = 255U;
+    }
+    if (henka_terrain_world_apply_region_snapshot(
+            world, storage_info, samples, layout.samples_per_region) != HENKA_SUCCESS ||
+        henka_terrain_world_set_region_residency(world, region_id, true, true, false) != HENKA_SUCCESS ||
+        henka_terrain_render_runtime_create(engine, scene, world, &render_desc, &runtime) != HENKA_SUCCESS ||
+        henka_terrain_render_runtime_request_chunk(runtime, (henka_terrain_chunk_id){0, 0}, 0U) != HENKA_SUCCESS ||
+        henka_terrain_render_runtime_pump(runtime, 1U) != HENKA_SUCCESS ||
+        henka_terrain_render_runtime_get_stats(runtime, &before) != HENKA_SUCCESS ||
+        henka_terrain_render_runtime_get_chunk(
+            runtime, (henka_terrain_chunk_id){0, 0}, &before_chunk) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+
+    command.operation = HENKA_TERRAIN_EDIT_PAINT;
+    command.center_sample_x = 32;
+    command.center_sample_z = 32;
+    command.radius_samples = 4U;
+    command.paint_layer = 1U;
+    command.paint_strength = 255U;
+    if (henka_terrain_world_apply_edit(world, &command, 2U) != HENKA_SUCCESS ||
+        henka_terrain_render_runtime_request_edit(runtime, &command) != HENKA_SUCCESS ||
+        henka_terrain_render_runtime_pump(runtime, 1U) != HENKA_SUCCESS ||
+        henka_terrain_render_runtime_get_stats(runtime, &after) != HENKA_SUCCESS ||
+        henka_terrain_render_runtime_get_chunk(
+            runtime, (henka_terrain_chunk_id){0, 0}, &after_chunk) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    passed = after.rebuilt_chunks == before.rebuilt_chunks &&
+        after.weight_updates == before.weight_updates + 1U &&
+        after.failed_weight_updates == before.failed_weight_updates &&
+        after_chunk.mesh == before_chunk.mesh &&
+        after_chunk.revision > before_chunk.revision &&
+        after_chunk.generation == before_chunk.generation;
+
+cleanup:
+    henka_terrain_render_runtime_destroy(runtime);
+    henka_terrain_world_destroy(world);
+    henka_free(samples);
+    henka_scene_destroy(scene);
+    henka_engine_destroy(engine);
+    return passed;
+}
+
 static int test_observer_sync_refreshes_replacement_and_bounds(void)
 {
     henka_engine_config engine_config = {0};
@@ -208,5 +310,6 @@ int main(void)
     return test_default_descriptor() && test_invalid_boundaries() &&
         test_edit_request_requires_valid_inputs() &&
         test_dirty_refresh_requires_valid_runtime() &&
+        test_paint_updates_weights_without_rebuilding_geometry() &&
         test_observer_sync_refreshes_replacement_and_bounds() ? 0 : 1;
 }

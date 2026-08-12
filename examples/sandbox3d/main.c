@@ -20674,14 +20674,16 @@ static void sandbox3d_update(henka_engine* engine, double delta_seconds, void* u
             else
             {
                 printf(
-                    "Terrain resource diagnostics: cpu=%llu bytes vertex-gpu=%llu index-gpu=%llu material-gpu=%llu material-textures=%u dirty-regions=%u dirty-refresh=%llu.\n",
+                    "Terrain resource diagnostics: cpu=%llu bytes vertex-gpu=%llu index-gpu=%llu material-gpu=%llu material-textures=%u dirty-regions=%u dirty-refresh=%llu weight-updates=%llu failed-weight-updates=%llu.\n",
                     (unsigned long long)terrain_world_stats.cpu_bytes,
                     (unsigned long long)terrain_render_stats.gpu_vertex_bytes,
                     (unsigned long long)terrain_render_stats.gpu_index_bytes,
                     (unsigned long long)terrain_render_stats.material_gpu_bytes,
                     terrain_render_stats.material_texture_count,
                     terrain_world_stats.dirty_region_count,
-                    (unsigned long long)terrain_render_stats.dirty_refresh_requests);
+                    (unsigned long long)terrain_render_stats.dirty_refresh_requests,
+                    (unsigned long long)terrain_render_stats.weight_updates,
+                    (unsigned long long)terrain_render_stats.failed_weight_updates);
             }
             {
                 const uint32_t required_terrain_pass_flags =

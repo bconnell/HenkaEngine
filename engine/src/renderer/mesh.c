@@ -568,6 +568,7 @@ henka_result henka_mesh_create_from_terrain_chunk_with_edge_mask(
     henka_terrain_mesh_data terrain_mesh = {0};
     henka_terrain_mesh_vertex* terrain_vertices = NULL;
     henka_vertex* render_vertices = NULL;
+    uint8_t* terrain_weights = NULL;
     unsigned int* indices = NULL;
     henka_terrain_world_desc terrain_desc;
     henka_result result;
@@ -629,10 +630,12 @@ henka_result henka_mesh_create_from_terrain_chunk_with_edge_mask(
     }
     terrain_vertices = henka_calloc((size_t)total_vertices, sizeof(*terrain_vertices));
     render_vertices = henka_calloc((size_t)total_vertices, sizeof(*render_vertices));
+    terrain_weights = henka_calloc((size_t)total_vertices, HENKA_TERRAIN_ACTIVE_MATERIAL_COUNT);
     indices = henka_calloc((size_t)total_indices, sizeof(*indices));
-    if (terrain_vertices == NULL || render_vertices == NULL || indices == NULL)
+    if (terrain_vertices == NULL || render_vertices == NULL || terrain_weights == NULL || indices == NULL)
     {
         henka_free(indices);
+        henka_free(terrain_weights);
         henka_free(render_vertices);
         henka_free(terrain_vertices);
         return HENKA_ERROR_OUT_OF_MEMORY;
@@ -646,6 +649,7 @@ henka_result henka_mesh_create_from_terrain_chunk_with_edge_mask(
     if (result != HENKA_SUCCESS)
     {
         henka_free(indices);
+        henka_free(terrain_weights);
         henka_free(render_vertices);
         henka_free(terrain_vertices);
         return result;
@@ -658,6 +662,7 @@ henka_result henka_mesh_create_from_terrain_chunk_with_edge_mask(
     if (result != HENKA_SUCCESS)
     {
         henka_free(indices);
+        henka_free(terrain_weights);
         henka_free(render_vertices);
         henka_free(terrain_vertices);
         return result;
@@ -667,6 +672,7 @@ henka_result henka_mesh_create_from_terrain_chunk_with_edge_mask(
     {
         henka_free(indices);
         henka_free(render_vertices);
+        henka_free(terrain_weights);
         henka_free(terrain_vertices);
         return HENKA_ERROR_NUMERIC_RANGE;
     }
@@ -695,13 +701,14 @@ henka_result henka_mesh_create_from_terrain_chunk_with_edge_mask(
             terrain_normal,
             {source->uv[0], source->uv[1]},
             {0.0f, 0.0f},
-            {(float)source->material_weights[0] / 255.0f,
-             (float)source->material_weights[1] / 255.0f,
-             (float)source->material_weights[2] / 255.0f,
-             (float)source->material_weights[3] / 255.0f},
+            {1.0f, 1.0f, 1.0f, 1.0f},
             true,
             {terrain_tangent.x, terrain_tangent.y, terrain_tangent.z, source->tangent[3]},
             terrain_tangent_valid};
+        memcpy(
+            &terrain_weights[index * HENKA_TERRAIN_ACTIVE_MATERIAL_COUNT],
+            source->material_weights,
+            HENKA_TERRAIN_ACTIVE_MATERIAL_COUNT);
     }
     for (index = 0U; index < terrain_mesh.index_count; ++index)
     {
@@ -756,6 +763,18 @@ henka_result henka_mesh_create_from_terrain_chunk_with_edge_mask(
     }
     if (result == HENKA_SUCCESS)
     {
+        result = henka_renderer_set_terrain_weights(
+            *out_mesh,
+            terrain_weights,
+            vertex_count);
+        if (result != HENKA_SUCCESS)
+        {
+            henka_mesh_destroy(*out_mesh);
+            *out_mesh = NULL;
+        }
+    }
+    if (result == HENKA_SUCCESS)
+    {
         if (out_revision != NULL)
         {
             *out_revision = terrain_mesh.revision;
@@ -766,6 +785,7 @@ henka_result henka_mesh_create_from_terrain_chunk_with_edge_mask(
         }
     }
     henka_free(indices);
+    henka_free(terrain_weights);
     henka_free(render_vertices);
     henka_free(terrain_vertices);
     return result;
@@ -783,6 +803,115 @@ henka_result henka_mesh_create_from_terrain_chunk(
     return henka_mesh_create_from_terrain_chunk_with_edge_mask(
         engine, world, chunk_id, lod_level, 0U,
         HENKA_TERRAIN_MESH_EDGE_ALL, out_mesh, out_revision, out_generation);
+}
+
+henka_result henka_mesh_update_terrain_weights_from_chunk(
+    henka_engine* engine,
+    const henka_terrain_world* world,
+    henka_terrain_chunk_id chunk_id,
+    uint32_t lod_level,
+    uint32_t edge_transition_mask,
+    uint32_t fallback_skirt_mask,
+    henka_mesh* mesh,
+    henka_terrain_revision* out_revision,
+    henka_terrain_generation* out_generation)
+{
+    henka_terrain_mesh_data terrain_mesh = {0};
+    henka_terrain_mesh_vertex* terrain_vertices = NULL;
+    uint32_t* terrain_indices = NULL;
+    uint8_t* terrain_weights = NULL;
+    henka_terrain_world_desc terrain_desc;
+    henka_result result;
+    uint32_t samples_per_side;
+    uint32_t skirt_edge_count = 0U;
+    uint64_t skirt_segments;
+    uint64_t total_vertices;
+    uint64_t total_indices;
+    uint32_t index;
+    int vertex_count;
+
+    if (engine == NULL || world == NULL || mesh == NULL ||
+        (edge_transition_mask & ~HENKA_TERRAIN_MESH_EDGE_ALL) != 0U ||
+        (fallback_skirt_mask & ~HENKA_TERRAIN_MESH_EDGE_ALL) != 0U ||
+        (edge_transition_mask & fallback_skirt_mask) != 0U ||
+        henka_terrain_world_get_desc(world, &terrain_desc) != HENKA_SUCCESS ||
+        mesh->renderer != engine->renderer || !mesh->terrain_weight_stream)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    if (out_revision != NULL) *out_revision = 0U;
+    if (out_generation != NULL) *out_generation = 0U;
+
+    result = henka_terrain_mesh_build_chunk_with_edge_mask(
+        world, chunk_id, lod_level, edge_transition_mask, &terrain_mesh);
+    if (result != HENKA_ERROR_LIMIT || terrain_mesh.vertex_count == 0U || terrain_mesh.index_count == 0U)
+    {
+        return result == HENKA_SUCCESS ? HENKA_ERROR_INVALID_ARGUMENT : result;
+    }
+    if (terrain_desc.samples_per_chunk < 2U ||
+        (terrain_desc.samples_per_chunk - 1U) % (1U << lod_level) != 0U)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    samples_per_side = (terrain_desc.samples_per_chunk - 1U) / (1U << lod_level) + 1U;
+    if ((fallback_skirt_mask & HENKA_TERRAIN_MESH_EDGE_NORTH) != 0U) ++skirt_edge_count;
+    if ((fallback_skirt_mask & HENKA_TERRAIN_MESH_EDGE_EAST) != 0U) ++skirt_edge_count;
+    if ((fallback_skirt_mask & HENKA_TERRAIN_MESH_EDGE_SOUTH) != 0U) ++skirt_edge_count;
+    if ((fallback_skirt_mask & HENKA_TERRAIN_MESH_EDGE_WEST) != 0U) ++skirt_edge_count;
+    skirt_segments = (uint64_t)(samples_per_side - 1U) * skirt_edge_count;
+    total_vertices = (uint64_t)terrain_mesh.vertex_count + skirt_segments * 4U;
+    total_indices = (uint64_t)terrain_mesh.index_count + skirt_segments * 6U;
+    if (total_vertices != (uint64_t)mesh->vertex_count ||
+        total_vertices > HENKA_MAX_MESH_ELEMENTS ||
+        total_indices > HENKA_MAX_MESH_ELEMENTS ||
+        !henka_checked_size_to_int((size_t)total_vertices, &vertex_count))
+    {
+        return HENKA_ERROR_LIMIT;
+    }
+    terrain_vertices = henka_calloc((size_t)total_vertices, sizeof(*terrain_vertices));
+    terrain_indices = henka_calloc((size_t)total_indices, sizeof(*terrain_indices));
+    terrain_weights = henka_calloc((size_t)total_vertices, HENKA_TERRAIN_ACTIVE_MATERIAL_COUNT);
+    if (terrain_vertices == NULL || terrain_indices == NULL || terrain_weights == NULL)
+    {
+        henka_free(terrain_weights);
+        henka_free(terrain_indices);
+        henka_free(terrain_vertices);
+        return HENKA_ERROR_OUT_OF_MEMORY;
+    }
+    terrain_mesh.vertex_capacity = (uint32_t)total_vertices;
+    terrain_mesh.index_capacity = (uint32_t)total_indices;
+    terrain_mesh.vertices = terrain_vertices;
+    terrain_mesh.indices = terrain_indices;
+    result = henka_terrain_mesh_build_chunk_with_edge_mask(
+        world, chunk_id, lod_level, edge_transition_mask, &terrain_mesh);
+    if (result == HENKA_SUCCESS)
+    {
+        result = henka_terrain_mesh_append_skirts(
+            &terrain_mesh,
+            samples_per_side,
+            fmaxf(8.0f, (float)terrain_desc.chunk_edge_meters * 0.25f),
+            fallback_skirt_mask);
+    }
+    if (result == HENKA_SUCCESS)
+    {
+        for (index = 0U; index < terrain_mesh.vertex_count; ++index)
+        {
+            memcpy(
+                &terrain_weights[index * HENKA_TERRAIN_ACTIVE_MATERIAL_COUNT],
+                terrain_vertices[index].material_weights,
+                HENKA_TERRAIN_ACTIVE_MATERIAL_COUNT);
+        }
+        result = henka_renderer_set_terrain_weights(mesh, terrain_weights, vertex_count);
+    }
+    if (result == HENKA_SUCCESS)
+    {
+        if (out_revision != NULL) *out_revision = terrain_mesh.revision;
+        if (out_generation != NULL) *out_generation = terrain_mesh.generation;
+    }
+    henka_free(terrain_weights);
+    henka_free(terrain_indices);
+    henka_free(terrain_vertices);
+    return result;
 }
 
 void henka_mesh_destroy(henka_mesh* mesh)

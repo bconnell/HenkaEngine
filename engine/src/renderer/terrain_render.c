@@ -1004,12 +1004,41 @@ henka_result henka_terrain_render_runtime_request_edit(
             {
                 continue;
             }
-            result = henka_terrain_render_request_chunk_internal(
-                runtime,
-                chunk_id,
-                slot->resident ? slot->selected_lod : slot->desired_lod,
-                slot->resident ? slot->selected_edge_transition_mask : slot->desired_edge_transition_mask,
-                slot->resident ? slot->selected_fallback_skirt_mask : slot->desired_fallback_skirt_mask);
+            if (command->operation == HENKA_TERRAIN_EDIT_PAINT && slot->resident)
+            {
+                henka_terrain_revision revision = 0U;
+                henka_terrain_generation generation = 0U;
+                result = henka_mesh_update_terrain_weights_from_chunk(
+                    runtime->engine,
+                    runtime->world,
+                    chunk_id,
+                    slot->selected_lod,
+                    slot->selected_edge_transition_mask,
+                    slot->selected_fallback_skirt_mask,
+                    slot->mesh,
+                    &revision,
+                    &generation);
+                if (result == HENKA_SUCCESS)
+                {
+                    slot->revision = revision;
+                    slot->generation = generation;
+                    henka_terrain_render_capture_dependencies(runtime, slot);
+                    runtime->stats.weight_updates += 1U;
+                }
+                else
+                {
+                    runtime->stats.failed_weight_updates += 1U;
+                }
+            }
+            else
+            {
+                result = henka_terrain_render_request_chunk_internal(
+                    runtime,
+                    chunk_id,
+                    slot->resident ? slot->selected_lod : slot->desired_lod,
+                    slot->resident ? slot->selected_edge_transition_mask : slot->desired_edge_transition_mask,
+                    slot->resident ? slot->selected_fallback_skirt_mask : slot->desired_fallback_skirt_mask);
+            }
             if (result != HENKA_SUCCESS && first_error == HENKA_SUCCESS)
             {
                 first_error = result;

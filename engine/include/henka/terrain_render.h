@@ -41,6 +41,8 @@ typedef struct henka_terrain_render_stats
     uint64_t transition_rebuilds;
     uint64_t fallback_skirt_chunks;
     uint64_t failed_rebuilds;
+    uint64_t weight_updates;
+    uint64_t failed_weight_updates;
     uint64_t dropped_requests;
     /* Exact owner allocations and uploaded Terrain resources. */
     uint64_t runtime_cpu_bytes;

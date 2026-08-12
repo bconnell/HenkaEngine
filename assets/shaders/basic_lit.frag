@@ -7,6 +7,7 @@ in vec2 fragUv1;
 in vec3 fragTangent;
 in float fragTangentHandedness;
 in vec4 fragVertexColor;
+in vec4 fragTerrainWeights;
 in vec4 fragLightSpacePosition;
 in vec4 fragCascadeShadowPosition;
 in vec4 fragLocalShadowPosition;
@@ -390,7 +391,7 @@ void main()
     vec4 surfaceColor = baseColor;
     if (useTerrainLayers)
     {
-        vec4 terrainWeights = max(fragVertexColor, vec4(0.0));
+        vec4 terrainWeights = max(fragTerrainWeights, vec4(0.0));
         float terrainWeightSum = max(dot(terrainWeights, vec4(1.0)), 0.0001);
         terrainWeights /= terrainWeightSum;
         vec3 terrainAlbedo = vec3(0.0);
@@ -427,7 +428,7 @@ void main()
     vec3 normal = geometricNormal;
     if (useTerrainLayers)
     {
-        vec4 terrainWeights = max(fragVertexColor, vec4(0.0));
+        vec4 terrainWeights = max(fragTerrainWeights, vec4(0.0));
         float terrainWeightSum = max(dot(terrainWeights, vec4(1.0)), 0.0001);
         terrainWeights /= terrainWeightSum;
         vec3 terrainTangentNormal = vec3(0.0, 0.0, 0.0);
@@ -474,7 +475,7 @@ void main()
     float surfaceSheenRoughness = clamp(sheenRoughness, 0.045, 1.0);
     if (useTerrainLayers)
     {
-        vec4 terrainWeights = max(fragVertexColor, vec4(0.0));
+        vec4 terrainWeights = max(fragTerrainWeights, vec4(0.0));
         float terrainWeightSum = max(dot(terrainWeights, vec4(1.0)), 0.0001);
         terrainWeights /= terrainWeightSum;
         surfaceMetallic = 0.0;

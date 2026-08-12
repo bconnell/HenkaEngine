@@ -320,6 +320,14 @@ snapshot, remote-delta, and transactional reload owners can use
 `henka_terrain_render_runtime_refresh_dirty` before pumping to route the same
 revision/dependency check without forcing an unconditional chunk rebuild;
 successful stale-slot requeues are included in bounded render diagnostics.
+Paint-only edits use a separate four-byte-per-vertex Terrain weight stream.
+The graphical owner builds a bounded candidate weight payload and swaps its GPU
+buffer only after the upload succeeds, preserving the existing mesh VAO,
+indices, geometry, bounds, and scene entity identity. `weight_updates` and
+`failed_weight_updates` distinguish this path from geometry rebuilds. This is
+not a general-purpose mesh attribute update API, and height edits or topology,
+LOD, border-normal, and dependency changes still use transactional mesh
+replacement.
 The Sandbox resource line reports that counter alongside owner memory totals.
 The mesh regression suite also builds an all-four-edge transition and rejects
 degenerate triangles or non-finite tangent bases at the corners. Manual visual

@@ -140,7 +140,8 @@
 - [ ] Add RED tests for local edit, remote delta, snapshot replacement, reload, paint-only edit, and failed candidate replacement.
 - [ ] Route each source through one dirty propagation seam; dirty neighboring chunks when height borders affect normals/topology.
 - [x] Update dynamic scene bounds from resident samples and retain previous valid bounds on invalid replacement; the focused Terrain render regression verifies both successful replacement and failure preservation.
-- [x] Avoid collision rebuild for paint-only edits; the collision-runtime regression proves paint validation leaves queue, pending, rebuild, and failure counters unchanged. Separable graphical weight-only buffer updates remain open.
+- [x] Avoid collision rebuild for paint-only edits; the collision-runtime regression proves paint validation leaves queue, pending, rebuild, and failure counters unchanged.
+- [x] Route resident paint-only edits through a separate transactional Terrain weight stream; geometry, VAO/index ownership, bounds, and scene entity identity remain unchanged, with distinct successful/failed weight-update diagnostics. Height/topology/LOD/dependency edits still use full mesh replacement.
 - [x] Sandbox smoke now proves a shared paint command advances the authoritative layer weight and rendered mesh revision without refreshing collision.
 - [x] Observer synchronization now propagates the first bounded dirty-replacement or LOD/topology queue/admission error while retaining queued work for a later pump/retry; a focused regression covers both stale replacement and observer-driven LOD pressure.
 - [x] Commit `fix: propagate terrain render queue failures` (`df53c83`).

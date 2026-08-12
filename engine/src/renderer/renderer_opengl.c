@@ -542,6 +542,9 @@ typedef struct henka_opengl_mesh_data
     GLuint vao;
     GLuint vertex_buffer;
     GLuint index_buffer;
+    GLuint terrain_weight_buffer;
+    GLsizei terrain_weight_count;
+    uint64_t terrain_weight_bytes;
     GLenum primitive_mode;
     GLsizei index_count;
     uint64_t tracked_gpu_bytes;
@@ -7190,6 +7193,9 @@ henka_result henka_opengl_renderer_create_mesh_from_data(
     g_gl.VertexAttribPointer(4, 4, GL_FLOAT, GL_FALSE, sizeof(henka_vertex), (const void*)offsetof(henka_vertex, color));
     g_gl.EnableVertexAttribArray(5);
     g_gl.VertexAttribPointer(5, 2, GL_FLOAT, GL_FALSE, sizeof(henka_vertex), (const void*)offsetof(henka_vertex, uv1));
+    /* Terrain enables this attribute after creation. Keeping it disabled for
+     * ordinary meshes preserves the default (0, 0, 0, 1) input. */
+    g_gl.DisableVertexAttribArray(14);
     g_gl.BindVertexArray(0);
 
     henka_free(bitangents);
@@ -7248,11 +7254,128 @@ void henka_opengl_renderer_destroy_mesh(struct henka_mesh* mesh)
             --memory_state->tracked_mesh_count;
         }
     }
+    if (mesh_data->terrain_weight_buffer != 0U)
+    {
+        g_gl.DeleteBuffers(1, &mesh_data->terrain_weight_buffer);
+    }
     g_gl.DeleteBuffers(1, &mesh_data->index_buffer);
     g_gl.DeleteBuffers(1, &mesh_data->vertex_buffer);
     g_gl.DeleteVertexArrays(1, &mesh_data->vao);
     henka_free(mesh_data);
     henka_free(mesh);
+}
+
+henka_result henka_opengl_renderer_set_terrain_weights(
+    struct henka_mesh* mesh,
+    const uint8_t* weights,
+    int vertex_count)
+{
+    henka_opengl_mesh_data* mesh_data;
+    GLuint candidate_buffer = 0U;
+    GLuint previous_buffer;
+    uint64_t previous_weight_bytes;
+    size_t weight_size;
+    uint64_t weight_bytes;
+
+    if (mesh == NULL || mesh->backend_data == NULL || weights == NULL ||
+        vertex_count <= 0 || vertex_count != mesh->vertex_count ||
+        !henka_checked_size_multiply((size_t)vertex_count, 4U, &weight_size))
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    mesh_data = (henka_opengl_mesh_data*)mesh->backend_data;
+    weight_bytes = (uint64_t)weight_size;
+    previous_weight_bytes = mesh_data->terrain_weight_bytes;
+    if (weight_bytes > (uint64_t)PTRDIFF_MAX)
+    {
+        return HENKA_ERROR_NUMERIC_RANGE;
+    }
+    while (glGetError() != GL_NO_ERROR) {}
+    g_gl.GenBuffers(1, &candidate_buffer);
+    if (candidate_buffer == 0U)
+    {
+        return HENKA_ERROR_RENDERER;
+    }
+    g_gl.BindBuffer(GL_ARRAY_BUFFER, candidate_buffer);
+    g_gl.BufferData(GL_ARRAY_BUFFER, (GLsizeiptr)weight_bytes, weights, GL_DYNAMIC_DRAW);
+    if (glGetError() != GL_NO_ERROR)
+    {
+        g_gl.DeleteBuffers(1, &candidate_buffer);
+        g_gl.BindBuffer(GL_ARRAY_BUFFER, 0U);
+        return HENKA_ERROR_RENDERER;
+    }
+    previous_buffer = mesh_data->terrain_weight_buffer;
+    g_gl.BindVertexArray(mesh_data->vao);
+    g_gl.BindBuffer(GL_ARRAY_BUFFER, candidate_buffer);
+    g_gl.EnableVertexAttribArray(14);
+    g_gl.VertexAttribPointer(14, 4, GL_UNSIGNED_BYTE, GL_TRUE, 4, (const void*)0);
+    if (glGetError() != GL_NO_ERROR)
+    {
+        g_gl.BindBuffer(GL_ARRAY_BUFFER, previous_buffer);
+        if (previous_buffer != 0U)
+        {
+            g_gl.EnableVertexAttribArray(14);
+            g_gl.VertexAttribPointer(14, 4, GL_UNSIGNED_BYTE, GL_TRUE, 4, (const void*)0);
+        }
+        else
+        {
+            g_gl.DisableVertexAttribArray(14);
+        }
+        g_gl.BindVertexArray(0U);
+        g_gl.DeleteBuffers(1, &candidate_buffer);
+        g_gl.BindBuffer(GL_ARRAY_BUFFER, 0U);
+        return HENKA_ERROR_RENDERER;
+    }
+    g_gl.BindVertexArray(0U);
+    g_gl.BindBuffer(GL_ARRAY_BUFFER, 0U);
+    mesh_data->terrain_weight_buffer = candidate_buffer;
+    mesh_data->terrain_weight_count = (GLsizei)vertex_count;
+    mesh_data->terrain_weight_bytes = weight_bytes;
+    mesh->terrain_weight_stream = true;
+    if (mesh->renderer != NULL && mesh->renderer->backend_state != NULL)
+    {
+        henka_opengl_renderer_state* memory_state =
+            (henka_opengl_renderer_state*)mesh->renderer->backend_state;
+        if (weight_bytes > 0U)
+        {
+            henka_opengl_memory_add_category(
+                memory_state,
+                &memory_state->tracked_mesh_bytes,
+                weight_bytes);
+            if (!henka_opengl_memory_add(&mesh_data->tracked_gpu_bytes, weight_bytes))
+            {
+                memory_state->memory_overflow = true;
+                memory_state->tracked_gpu_bytes = UINT64_MAX;
+            }
+            else
+            {
+                henka_opengl_memory_refresh(memory_state);
+            }
+        }
+    }
+    if (previous_buffer != 0U)
+    {
+        if (mesh->renderer != NULL && mesh->renderer->backend_state != NULL)
+        {
+            henka_opengl_renderer_state* memory_state =
+                (henka_opengl_renderer_state*)mesh->renderer->backend_state;
+            henka_opengl_memory_remove_category(
+                memory_state,
+                &memory_state->tracked_mesh_bytes,
+                previous_weight_bytes);
+            if (!henka_opengl_memory_subtract(&mesh_data->tracked_gpu_bytes, previous_weight_bytes))
+            {
+                memory_state->memory_overflow = true;
+                memory_state->tracked_gpu_bytes = UINT64_MAX;
+            }
+            else
+            {
+                henka_opengl_memory_refresh(memory_state);
+            }
+        }
+        g_gl.DeleteBuffers(1, &previous_buffer);
+    }
+    return HENKA_SUCCESS;
 }
 
 henka_result henka_opengl_renderer_create_shader_from_files(

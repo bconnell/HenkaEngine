@@ -456,6 +456,14 @@ void henka_renderer_destroy_mesh(struct henka_mesh* mesh)
     henka_opengl_renderer_destroy_mesh(mesh);
 }
 
+henka_result henka_renderer_set_terrain_weights(
+    struct henka_mesh* mesh,
+    const uint8_t* weights,
+    int vertex_count)
+{
+    return henka_opengl_renderer_set_terrain_weights(mesh, weights, vertex_count);
+}
+
 henka_result henka_renderer_create_shader_from_files(
     struct henka_renderer* renderer,
     const char* vertex_path,
