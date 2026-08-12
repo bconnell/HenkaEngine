@@ -557,6 +557,7 @@ static void henka_terrain_client_sync_replica_diagnostics(
     client->diagnostics.rejected_delta_count = replica_diagnostics.rejected_delta_count;
     client->diagnostics.completed_snapshot_count = replica_diagnostics.completed_snapshot_count;
     client->diagnostics.rejected_snapshot_count = replica_diagnostics.rejected_snapshot_count;
+    client->diagnostics.stale_snapshot_count = replica_diagnostics.stale_snapshot_count;
     {
         henka_terrain_prediction_stats prediction_stats;
         henka_terrain_prediction_get_stats(client->prediction, &prediction_stats);

@@ -34,6 +34,7 @@ typedef struct henka_terrain_client_diagnostics
     uint64_t rejected_delta_count;
     uint64_t completed_snapshot_count;
     uint64_t rejected_snapshot_count;
+    uint64_t stale_snapshot_count;
     uint64_t recovery_delta_request_count;
     uint64_t recovery_delta_suppressed_count;
     uint64_t recovery_snapshot_request_count;

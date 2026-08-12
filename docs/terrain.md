@@ -249,7 +249,9 @@ fragment arrives. A new transfer can retry and the validated record is decoded
 and atomically swapped into the world only after every fragment arrives. The
 replica rejects a decoded snapshot whose generation/revision is older than the
 currently resident region, counts it in `stale_snapshot_count`, and leaves the
-newer state untouched. The
+newer state untouched. The client diagnostics expose the same count so
+external consumers can distinguish superseded recovery packets from malformed
+or failed transfers. The
 replica does not own network transport,
 reconnect state or render/physics residency policy; the
 client adapter does not invent those missing policies. A revision-gap result
