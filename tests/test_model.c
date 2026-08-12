@@ -120,6 +120,8 @@ static void henka_test_gltf_scene_import(void)
     char* selected_roots;
     char* root_value;
     char* zfar_value;
+    char* light_intensity_value;
+    char* node_camera_value;
     size_t scene_length;
     size_t allocations_before_scene;
 
@@ -164,6 +166,21 @@ static void henka_test_gltf_scene_import(void)
     henka_free(invalid_scene);
     HENKA_TEST_ASSERT(henka_memory_get_allocation_count() == allocations_before_scene);
 
+    allocations_before_scene = henka_memory_get_allocation_count();
+    invalid_scene = henka_malloc(scene_length + 1U);
+    HENKA_TEST_ASSERT(invalid_scene != NULL);
+    memcpy(invalid_scene, scene_gltf, scene_length + 1U);
+    light_intensity_value = strstr(invalid_scene, "\"intensity\":2.0");
+    HENKA_TEST_ASSERT(light_intensity_value != NULL);
+    light_intensity_value[strlen("\"intensity\":")] = 'n';
+    memset(&scene, 0, sizeof(scene));
+    HENKA_TEST_ASSERT(henka_model_scene_data_load_gltf_from_memory(
+        invalid_scene, scene_length, "invalid-light.gltf", &scene) != HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(scene.node_count == 0U);
+    henka_model_scene_data_destroy(&scene);
+    henka_free(invalid_scene);
+    HENKA_TEST_ASSERT(henka_memory_get_allocation_count() == allocations_before_scene);
+
     memset(&scene, 0, sizeof(scene));
     HENKA_TEST_ASSERT(henka_model_scene_data_load_gltf_from_memory(
         matrix_scene_gltf, strlen(matrix_scene_gltf), "matrix-scene.gltf", &scene) == HENKA_SUCCESS);
@@ -198,6 +215,21 @@ static void henka_test_gltf_scene_import(void)
     HENKA_TEST_ASSERT(scene.scene_count == 1U);
     HENKA_TEST_ASSERT(scene.scene_root_counts[0] == 1U);
     henka_model_scene_data_destroy(&scene);
+
+    allocations_before_scene = henka_memory_get_allocation_count();
+    invalid_scene = henka_malloc(strlen(camera_only_scene_gltf) + 1U);
+    HENKA_TEST_ASSERT(invalid_scene != NULL);
+    memcpy(invalid_scene, camera_only_scene_gltf, strlen(camera_only_scene_gltf) + 1U);
+    node_camera_value = strstr(invalid_scene, "\"camera\":0");
+    HENKA_TEST_ASSERT(node_camera_value != NULL);
+    node_camera_value[strlen("\"camera\":")] = '-';
+    memset(&scene, 0, sizeof(scene));
+    HENKA_TEST_ASSERT(henka_model_scene_data_load_gltf_from_memory(
+        invalid_scene, strlen(camera_only_scene_gltf), "invalid-node.gltf", &scene) != HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(scene.node_count == 0U);
+    henka_model_scene_data_destroy(&scene);
+    henka_free(invalid_scene);
+    HENKA_TEST_ASSERT(henka_memory_get_allocation_count() == allocations_before_scene);
 
     scene_length = strlen(scene_gltf);
     invalid_scene = henka_malloc(scene_length + 1U);
