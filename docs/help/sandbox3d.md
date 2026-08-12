@@ -252,7 +252,7 @@ The runtime also reports whether it is running in `Development` or `Packaged` mo
 ## Current limitations
 
 - The sandbox uses built-in meshes plus bounded OBJ and glTF loading paths.
-- OBJ support includes positive and negative indices plus triangle, quad, and bounded n-gon fan triangulation; glTF adds the documented bounded geometry and shared PBR material path. Model hierarchies, concave-polygon correction beyond basic fan triangulation, and animation are not supported yet.
+- OBJ support includes positive and negative indices plus triangle, quad, and bounded n-gon fan triangulation; glTF adds the documented bounded geometry, node hierarchy, and shared PBR material path. OBJ material libraries and concave-polygon correction beyond basic fan triangulation remain unsupported; skeletal animation, skinning, morph targets, and editor hierarchy authoring are not available yet.
 - The current settings file is a small local key/value format. It is easy to inspect by hand, but it is not a finished save-game system.
 - A separate save-data foundation now exists for scene id, camera pose, and simple flags, but the sandbox still uses settings for its normal viewer state.
 - The UI overlay is intentionally small. It is meant for sandbox control and object inspection, not as a full editor or a complete runtime UI system.

@@ -320,7 +320,7 @@ To validate the generic external game template against the current Henka checkou
 - The default showcase assets are intentionally sample-quality procedural glTF models, not movie-production assets; detailed manual visual QA across Solid, Material Preview, and Rendered remains required.
 - Missing textures fall back safely to an error texture, and missing OBJ assets fall back to a visible mesh. Failed OBJ mesh fallbacks can be retried explicitly after the source asset is fixed.
 - OBJ support is intentionally limited to bounded local files containing comments, blank lines, finite positions, optional finite UVs and normals, positive and negative indices, and triangle/quad/n-gon faces through basic fan triangulation.
-- OBJ material libraries, concave polygon correction beyond basic fan triangulation, model hierarchies, and animation are not supported yet.
+- OBJ material libraries and concave polygon correction beyond basic fan triangulation remain unsupported; bounded glTF scene hierarchies are supported, while skeletal animation, skinning, morph targets, and editor hierarchy authoring remain unfinished.
 - The local settings format is bounded, transactionally loaded, and written through a replace-on-success temporary file.
 - The local save-data foundation validates slot names, finite camera values, complete camera records, and boolean flags before replacing existing state.
 - Remote saves, registry storage, encryption, network-backed persistence, symlink-aware confinement, migration tooling, and per-game save policy remain outside this local foundation.
