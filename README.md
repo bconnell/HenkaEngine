@@ -27,6 +27,7 @@ Henka Engine is still early, but the sandbox now presents a deterministic two-mo
 - `henka_sandbox3d` example target
 - renderer-free `henka_dedicated_server` host target with bounded config-file loading, validated optional Terrain base-world loading, fixed-tick simulation, Terrain snapshot recovery, loopback smoke connectivity, transactional edit persistence, graceful client shutdown, and a bounded `--run-for-ms` integration mode; a headless deployment package and restart-persistence check are available, while opt-in bounded relevance-filtered reconnect/late-join selection is available through the Terrain client/server session contract and production-scale multiplayer soak remains unfinished; the bounded process integration soak repeats the full two-client/reconnect/restart scenario for a configured finite number of sessions
 - `henka_tests` unit test target with CTest integration
+- Terrain client delta recovery is limited to validated revision gaps; identity, protocol, validation, and allocation failures remain hard errors without recovery requests
 - SDL3-backed platform layer hidden behind Henka headers
 - OpenGL renderer backend isolated inside renderer implementation files
 - Public math, time, camera, mesh, texture, shader, scene, and asset APIs

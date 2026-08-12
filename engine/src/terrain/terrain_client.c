@@ -622,6 +622,14 @@ henka_result henka_terrain_client_handle_event(
         result = henka_terrain_replica_apply_delta(client->replica, &delta, &applied);
         if (result != HENKA_SUCCESS)
         {
+            /* Only a revision gap is recoverable from the delta stream. The
+             * replica uses ASSET_SOURCE for that state mismatch; protocol,
+             * identity, sizing, and allocation failures must remain hard
+             * errors and must never cause a request based on untrusted data. */
+            if (result != HENKA_ERROR_ASSET_SOURCE)
+            {
+                return result;
+            }
             if (henka_terrain_client_request_delta_recovery(client, &delta) != HENKA_SUCCESS)
             {
                 return result;

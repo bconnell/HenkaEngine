@@ -69,6 +69,7 @@ static int test_client_snapshot_and_delta_path(void)
     henka_network_event session_info_event;
     henka_terrain_session_info session_info;
     henka_terrain_edit_delta gap_delta;
+    henka_terrain_edit_delta invalid_identity_delta;
     uint8_t* encoded_record = NULL;
     uint8_t* corrupted_record = NULL;
     uint8_t* fragment_payload = NULL;
@@ -394,6 +395,28 @@ static int test_client_snapshot_and_delta_path(void)
          HENKA_NETWORK_MESSAGE_TERRAIN_DELTA,
          gap_payload,
          0U}};
+    if (henka_terrain_edit_delta_encode(
+            &gap_delta, gap_payload, sizeof(gap_payload), &gap_payload_size) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    invalid_identity_delta = gap_delta;
+    invalid_identity_delta.world_identity += 1U;
+    if (henka_terrain_edit_delta_encode(
+            &invalid_identity_delta, gap_payload, sizeof(gap_payload), &gap_payload_size) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    gap_event.message.payload_size = (uint32_t)gap_payload_size;
+    if (henka_terrain_client_handle_event(terrain_client, &gap_event) != HENKA_ERROR_INVALID_ARGUMENT)
+    {
+        goto cleanup;
+    }
+    henka_terrain_client_get_diagnostics(terrain_client, &client_diagnostics);
+    if (client_diagnostics.recovery_delta_request_count != 0U)
+    {
+        goto cleanup;
+    }
     if (henka_terrain_edit_delta_encode(
             &gap_delta, gap_payload, sizeof(gap_payload), &gap_payload_size) != HENKA_SUCCESS)
     {

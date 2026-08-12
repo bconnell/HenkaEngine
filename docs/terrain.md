@@ -232,7 +232,10 @@ fragment arrives. A new transfer can retry and the validated record is decoded
 and atomically swapped into the world only after every fragment arrives. The
 replica does not own network transport,
 reconnect state or render/physics residency policy; the
-client adapter does not invent those missing policies.
+client adapter does not invent those missing policies. A revision-gap result
+is the only delta failure eligible for bounded recovery; identity, protocol,
+validation, and allocation failures remain hard errors and do not trigger a
+request derived from the rejected message.
 
 When a decoded fragment is rejected, the public Terrain client requests a new
 snapshot for the same region and target revision, once per transfer and up to
