@@ -105,11 +105,15 @@ static henka_result terrain_pass_test_initialize(
     {
         henka_terrain_render_chunk_info chunk_info;
         const henka_material_asset* material_asset = NULL;
+        henka_material terrain_material;
         if (henka_terrain_render_runtime_get_chunk(
-                context->runtime, (henka_terrain_chunk_id){0, 0}, &chunk_info) != HENKA_SUCCESS ||
+            context->runtime, (henka_terrain_chunk_id){0, 0}, &chunk_info) != HENKA_SUCCESS ||
             henka_scene_get_entity_material_asset(
                 context->scene, chunk_info.entity, &material_asset) != HENKA_SUCCESS ||
-            material_asset != context->terrain_material_asset)
+            material_asset != context->terrain_material_asset ||
+            henka_scene_get_entity_material(
+                context->scene, chunk_info.entity, &terrain_material) != HENKA_SUCCESS ||
+            !terrain_material.cast_shadows || !terrain_material.receive_shadows)
         {
             return HENKA_ERROR_RENDERER;
         }

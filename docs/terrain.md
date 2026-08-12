@@ -361,7 +361,8 @@ The Sandbox resource line reports that counter alongside owner memory totals.
 `henka_terrain_render_stats.gpu_weight_bytes` reports the exact resident bytes
 owned by those weight buffers; it is kept separate from the interleaved mesh
 vertex and index totals so diagnostics do not hide the additional upload.
-The render regression suite verifies resident Terrain entities are visible to
+The render regression suite verifies resident Terrain entities retain the
+shared material's cast/receive shadow flags, are visible to
 the normal scene ray picker and that observer-driven removal leaves no stale
 Terrain entities after graphical-owner teardown. The mesh regression suite
 also builds an all-four-edge transition, verifies
