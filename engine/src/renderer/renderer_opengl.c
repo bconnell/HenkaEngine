@@ -3183,6 +3183,7 @@ static void henka_opengl_draw_environment(
     g_gl.BindVertexArray(state->tone_vertex_array);
     glDrawArrays(GL_TRIANGLES, 0, 3);
     g_gl.BindVertexArray(0);
+    g_gl.ActiveTexture(GL_TEXTURE6);
     glBindTexture(GL_TEXTURE_2D, 0U);
     g_gl.ActiveTexture(GL_TEXTURE7);
     glBindTexture(GL_TEXTURE_CUBE_MAP, 0U);
