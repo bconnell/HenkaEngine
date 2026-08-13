@@ -144,6 +144,10 @@ void henka_test_scene(void)
             -1.0f,
             0.0001f);
     }
+    environment.time_of_day_enabled = true;
+    environment.time_of_day_hours = 8.4f;
+    HENKA_TEST_ASSERT(henka_scene_set_environment(scene, environment) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_scene_get_environment(scene, &read_environment) == HENKA_SUCCESS);
     invalid_environment = read_environment;
     invalid_environment.atmosphere.rayleigh_scattering = -1.0f;
     HENKA_TEST_ASSERT(henka_scene_set_environment(scene, invalid_environment) == HENKA_ERROR_INVALID_ARGUMENT);

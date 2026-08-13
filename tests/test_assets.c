@@ -233,6 +233,54 @@ void henka_test_assets(void)
         HENKA_TEST_ASSERT(upload.level_count == 1U && upload.levels[0].size == 8U);
         henka_ktx2_upload_dispose(&upload);
         free(generated_bytes);
+
+        {
+            const uint32_t eac_formats[] = {153U, 154U, 155U, 156U};
+            const size_t eac_sizes[] = {8U, 8U, 16U, 16U};
+            const bool eac_supported[] = {false, false, true, false};
+            size_t eac_index;
+            for (eac_index = 0U; eac_index < sizeof(eac_formats) / sizeof(eac_formats[0]); ++eac_index)
+            {
+                generated_bytes = NULL;
+                memset(&create_info, 0, sizeof(create_info));
+                create_info.vkFormat = eac_formats[eac_index];
+                create_info.baseWidth = 4U;
+                create_info.baseHeight = 4U;
+                create_info.baseDepth = 1U;
+                create_info.numDimensions = 2U;
+                create_info.numLevels = 1U;
+                create_info.numLayers = 1U;
+                create_info.numFaces = 1U;
+                HENKA_TEST_ASSERT(ktxTexture2_Create(
+                    &create_info,
+                    KTX_TEXTURE_CREATE_ALLOC_STORAGE,
+                    &generated_texture) == KTX_SUCCESS);
+                HENKA_TEST_ASSERT(generated_texture != NULL);
+                HENKA_TEST_ASSERT(ktxTexture_SetImageFromMemory(
+                    ktxTexture(generated_texture), 0U, 0U, 0U,
+                    level_zero, eac_sizes[eac_index]) == KTX_SUCCESS);
+                HENKA_TEST_ASSERT(ktxTexture_WriteToMemory(
+                    ktxTexture(generated_texture), &generated_bytes, &generated_size) == KTX_SUCCESS);
+                ktxTexture_Destroy(ktxTexture(generated_texture));
+                generated_texture = NULL;
+                memset(&upload, 0, sizeof(upload));
+                HENKA_TEST_ASSERT((henka_ktx2_prepare_upload(
+                    generated_bytes,
+                    (size_t)generated_size,
+                    HENKA_TEXTURE_USAGE_GENERIC_DATA,
+                    HENKA_TEXTURE_COLOR_SPACE_LINEAR,
+                    HENKA_KTX2_CAPABILITY_ETC2,
+                    &upload) == HENKA_SUCCESS) == eac_supported[eac_index]);
+                if (eac_supported[eac_index])
+                {
+                    HENKA_TEST_ASSERT(upload.compressed);
+                    HENKA_TEST_ASSERT(upload.format == HENKA_KTX2_GPU_FORMAT_ETC2_RG);
+                    HENKA_TEST_ASSERT(upload.levels[0].size == eac_sizes[eac_index]);
+                }
+                henka_ktx2_upload_dispose(&upload);
+                free(generated_bytes);
+            }
+        }
     }
 #endif
     char* display_name;

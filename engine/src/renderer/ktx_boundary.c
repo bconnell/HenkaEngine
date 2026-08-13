@@ -32,8 +32,7 @@ static bool henka_ktx_vk_format_is_srgb(uint32_t vk_format, bool* out_is_srgb)
         case 145U: /* VK_FORMAT_BC7_UNORM_BLOCK */
         case 147U: /* VK_FORMAT_ETC2_R8G8B8_UNORM_BLOCK */
         case 151U: /* VK_FORMAT_ETC2_R8G8B8A8_UNORM_BLOCK */
-        case 153U: /* VK_FORMAT_EAC_R11_UNORM_BLOCK */
-        case 154U: /* VK_FORMAT_EAC_R11G11_UNORM_BLOCK */
+        case 155U: /* VK_FORMAT_EAC_R11G11_UNORM_BLOCK */
         case 157U: /* VK_FORMAT_ASTC_4x4_UNORM_BLOCK */
             *out_is_srgb = false;
             return true;
@@ -104,8 +103,7 @@ static bool henka_ktx_vk_format_to_gpu_format(
             *out_format = HENKA_KTX2_GPU_FORMAT_ETC2_RGBA;
             supported = (capabilities & HENKA_KTX2_CAPABILITY_ETC2) != 0U;
             break;
-        case 153U:
-        case 154U:
+        case 155U:
             *out_format = HENKA_KTX2_GPU_FORMAT_ETC2_RG;
             supported = (capabilities & HENKA_KTX2_CAPABILITY_ETC2) != 0U;
             break;
