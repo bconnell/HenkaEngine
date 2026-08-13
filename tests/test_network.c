@@ -30,6 +30,28 @@ static int test_codec_round_trip(void)
     return 1;
 }
 
+static int test_snapshot_failure_codec_round_trip(void)
+{
+    const uint8_t payload[] = {11U, 22U, 33U};
+    uint8_t packet[HENKA_NETWORK_MAX_PACKET_BYTES];
+    henka_network_message_view view;
+    size_t packet_size = 0U;
+
+    return henka_network_message_encode(
+        HENKA_NETWORK_CHANNEL_SNAPSHOT,
+        HENKA_NETWORK_MESSAGE_SNAPSHOT_FAILED,
+        payload,
+        sizeof(payload),
+        packet,
+        sizeof(packet),
+        &packet_size) == HENKA_SUCCESS &&
+        henka_network_message_decode(packet, packet_size, &view) == HENKA_SUCCESS &&
+        view.channel == HENKA_NETWORK_CHANNEL_SNAPSHOT &&
+        view.type == HENKA_NETWORK_MESSAGE_SNAPSHOT_FAILED &&
+        view.payload_size == sizeof(payload) &&
+        memcmp(view.payload, payload, sizeof(payload)) == 0;
+}
+
 static int test_codec_rejects_malformed_input(void)
 {
     uint8_t packet[HENKA_NETWORK_MAX_PACKET_BYTES];
@@ -97,16 +119,22 @@ int main(void)
     henka_network_event client_event;
     const uint8_t first_payload[] = {5U};
     const uint8_t second_payload[] = {6U};
+    const uint8_t snapshot_failure_payload[] = {11U, 22U, 33U};
     int client_connected = 0;
     int server_connected = 0;
     henka_network_peer_id server_peer_id = HENKA_NETWORK_INVALID_PEER_ID;
     int first_received = 0;
     int second_received = 0;
+    int snapshot_failure_received = 0;
     int acknowledgement_received = 0;
     int disconnected = 0;
     int index;
 
     if (!test_codec_rejects_malformed_input())
+    {
+        return 1;
+    }
+    if (!test_snapshot_failure_codec_round_trip())
     {
         return 1;
     }
@@ -159,6 +187,40 @@ int main(void)
         }
     }
     if (!server_connected || !client_connected ||
+        henka_network_server_send(
+            server,
+            server_peer_id,
+            HENKA_NETWORK_CHANNEL_SNAPSHOT,
+            HENKA_NETWORK_MESSAGE_SNAPSHOT_FAILED,
+            snapshot_failure_payload,
+            sizeof(snapshot_failure_payload)) != HENKA_SUCCESS)
+    {
+        henka_network_client_destroy(client);
+        henka_network_server_destroy(server);
+        return 5;
+    }
+    for (index = 0; index < 200 && !snapshot_failure_received; ++index)
+    {
+        if (henka_network_client_poll(client, 5U, &client_event) != HENKA_SUCCESS)
+        {
+            henka_network_client_destroy(client);
+            henka_network_server_destroy(server);
+            return 5;
+        }
+        if (client_event.type == HENKA_NETWORK_EVENT_MESSAGE &&
+            client_event.message.channel == HENKA_NETWORK_CHANNEL_SNAPSHOT &&
+            client_event.message.type == HENKA_NETWORK_MESSAGE_SNAPSHOT_FAILED &&
+            client_event.message.payload_size == sizeof(snapshot_failure_payload) &&
+            memcmp(
+                client_event.message.payload,
+                snapshot_failure_payload,
+                sizeof(snapshot_failure_payload)) == 0)
+        {
+            snapshot_failure_received = 1;
+        }
+        (void)henka_network_server_poll(server, 0U, &server_event);
+    }
+    if (!snapshot_failure_received ||
         henka_network_client_send(
             client,
             HENKA_NETWORK_CHANNEL_CONTROL,
