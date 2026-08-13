@@ -256,6 +256,12 @@ static int test_loopback_authoritative_edit(void)
         }
         if (acceptance_received && delta_received && !snapshot_requested)
         {
+            henka_terrain_world_stats world_stats;
+            if (henka_terrain_world_get_stats(world, &world_stats) != HENKA_SUCCESS ||
+                world_stats.resident_region_count != 0U)
+            {
+                goto cleanup;
+            }
             snapshot_request.world_identity = world_desc.world_identity;
             snapshot_request.base_asset_identity = world_desc.base_asset_identity;
             snapshot_request.region_id = (henka_terrain_region_id){0, 0};

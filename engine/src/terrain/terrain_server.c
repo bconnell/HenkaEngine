@@ -521,18 +521,25 @@ static henka_result henka_terrain_server_handle_recovery_request(
 {
     henka_terrain_world_desc desc;
     henka_terrain_region_state state;
+    bool state_available;
     henka_terrain_snapshot_request snapshot_request;
     if (henka_terrain_world_get_desc(server->world, &desc) != HENKA_SUCCESS ||
         request->world_identity != desc.world_identity ||
-        request->base_asset_identity != desc.base_asset_identity ||
-        henka_terrain_world_get_region_state(server->world, request->region_id, &state) != HENKA_SUCCESS)
+        request->base_asset_identity != desc.base_asset_identity)
     {
         ++server->diagnostics.snapshot_failure_count;
         (void)henka_network_server_disconnect(
             server->network, peer_id, HENKA_NETWORK_DISCONNECT_REASON_PROTOCOL);
         return HENKA_SUCCESS;
     }
-    if (state.revision >= request->target_revision &&
+    state_available = henka_terrain_world_get_region_state(
+        server->world, request->region_id, &state) == HENKA_SUCCESS;
+    /* A previously temporary region may have been released after an
+     * accepted edit. The bounded delta history is authoritative for this
+     * recovery window, so it can satisfy the request without rematerializing
+     * the region; if history is insufficient, the snapshot path below loads
+     * it from storage. */
+    if ((!state_available || state.revision >= request->target_revision) &&
         henka_terrain_server_recover_deltas(server, peer_id, request) == HENKA_SUCCESS)
     {
         return HENKA_SUCCESS;
@@ -765,6 +772,12 @@ henka_result henka_terrain_server_handle_event(
         (void)henka_terrain_collision_runtime_request_edit(
             server->collision_runtime, &request.command);
     }
+    /* The authority and collision request have copied the edit's durable
+     * result. Release only the regions this request materialized so an
+     * accepted edit does not turn a temporary server-side dependency into a
+     * permanent residency leak. */
+    henka_terrain_server_release_request_materialization(
+        server, request_materialized, request_materialized_count);
     result = henka_terrain_edit_acceptance_encode(
         &response.acceptance, payload, sizeof(payload), &payload_size);
     if (result != HENKA_SUCCESS)
