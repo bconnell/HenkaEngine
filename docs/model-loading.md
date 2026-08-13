@@ -90,7 +90,7 @@ The loader currently supports:
 - `KHR_texture_basisu` source selection for external KTX2 images; the texture
   loader validates KTX2 bounds, dimensions, layers/faces, and the complete
   bounded mip chain before the pinned KTX-Software boundary selects an OpenGL
-  BC1 RGB/RGBA and BC3, BC5, BC7, ETC2, or ASTC 4x4 upload when the active context advertises
+  BC1 RGB/RGBA (with alpha-preserving BC1 RGBA upload), and BC3, BC5, BC7, ETC2, or ASTC 4x4 upload when the active context advertises
   that capability. Uncompressed RGBA8 levels and Basis payloads without a
   supported compressed target use a checked RGBA8 upload; native compressed
   payloads without a matching capability are rejected. They are not decoded as

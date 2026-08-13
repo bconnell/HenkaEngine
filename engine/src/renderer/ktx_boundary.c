@@ -72,9 +72,12 @@ static bool henka_ktx_vk_format_to_gpu_format(
             return true;
         case 131U:
         case 132U:
+            *out_format = HENKA_KTX2_GPU_FORMAT_BC1;
+            supported = (capabilities & HENKA_KTX2_CAPABILITY_BC1_3) != 0U;
+            break;
         case 133U:
         case 134U:
-            *out_format = HENKA_KTX2_GPU_FORMAT_BC1;
+            *out_format = HENKA_KTX2_GPU_FORMAT_BC1_RGBA;
             supported = (capabilities & HENKA_KTX2_CAPABILITY_BC1_3) != 0U;
             break;
         case 137U:
@@ -140,6 +143,7 @@ static bool henka_ktx_expected_level_size(
     }
 
     if (format == HENKA_KTX2_GPU_FORMAT_BC1 ||
+        format == HENKA_KTX2_GPU_FORMAT_BC1_RGBA ||
         format == HENKA_KTX2_GPU_FORMAT_ETC2_RGB)
     {
         bytes_per_block = 8U;

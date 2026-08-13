@@ -229,7 +229,7 @@ void henka_test_assets(void)
             HENKA_KTX2_CAPABILITY_BC1_3,
             &upload) == HENKA_SUCCESS);
         HENKA_TEST_ASSERT(upload.compressed && upload.is_srgb);
-        HENKA_TEST_ASSERT(upload.format == HENKA_KTX2_GPU_FORMAT_BC1);
+        HENKA_TEST_ASSERT(upload.format == HENKA_KTX2_GPU_FORMAT_BC1_RGBA);
         HENKA_TEST_ASSERT(upload.level_count == 1U && upload.levels[0].size == 8U);
         henka_ktx2_upload_dispose(&upload);
         free(generated_bytes);

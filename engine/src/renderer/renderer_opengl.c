@@ -609,6 +609,8 @@ static GLenum henka_opengl_ktx2_internal_format(
     {
         case HENKA_KTX2_GPU_FORMAT_BC1:
             return is_srgb ? 0x8C4C : GL_COMPRESSED_RGB_S3TC_DXT1_EXT;
+        case HENKA_KTX2_GPU_FORMAT_BC1_RGBA:
+            return is_srgb ? 0x8C4D : GL_COMPRESSED_RGBA_S3TC_DXT1_EXT;
         case HENKA_KTX2_GPU_FORMAT_BC3:
             return is_srgb ? 0x8C4F : GL_COMPRESSED_RGBA_S3TC_DXT5_EXT;
         case HENKA_KTX2_GPU_FORMAT_BC5:
@@ -8261,7 +8263,9 @@ henka_result henka_opengl_renderer_create_texture_from_ktx2_memory_with_mip_limi
     texture->source_byte_size = data_size;
     texture->original_channel_count = 4;
     texture->gpu_compressed = upload.compressed;
-    texture->gpu_format = (henka_texture_gpu_format)upload.format + 1;
+    texture->gpu_format = upload.format == HENKA_KTX2_GPU_FORMAT_BC1_RGBA ?
+        HENKA_TEXTURE_GPU_FORMAT_BC1_RGBA :
+        (henka_texture_gpu_format)upload.format + 1;
     texture->resident_gpu_bytes = logical_texture_bytes;
     texture->resident_mip_count = upload.level_count;
     texture->mip_count = upload.total_level_count;

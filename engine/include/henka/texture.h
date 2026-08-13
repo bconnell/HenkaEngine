@@ -70,7 +70,8 @@ typedef enum henka_texture_gpu_format
     HENKA_TEXTURE_GPU_FORMAT_ETC2_RGB,
     HENKA_TEXTURE_GPU_FORMAT_ETC2_RGBA,
     HENKA_TEXTURE_GPU_FORMAT_ETC2_RG,
-    HENKA_TEXTURE_GPU_FORMAT_ASTC_4X4
+    HENKA_TEXTURE_GPU_FORMAT_ASTC_4X4,
+    HENKA_TEXTURE_GPU_FORMAT_BC1_RGBA
 } henka_texture_gpu_format;
 
 typedef enum henka_texture_failure_category
