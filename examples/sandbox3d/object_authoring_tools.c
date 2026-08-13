@@ -6,6 +6,7 @@
 
 #include <henka/memory.h>
 #include <henka/model.h>
+#include <henka/persistence.h>
 
 #define SANDBOX3D_AUTHORING_MAX_HISTORY_STEPS 64U
 #define SANDBOX3D_AUTHORING_MAX_SELECTED_COMPONENTS 64U
@@ -36,7 +37,35 @@ struct sandbox3d_authoring_object
     size_t selected_vertex_count;
     size_t selected_edge_count;
     size_t selected_face_count;
+    char* source_path;
 };
+
+static henka_result sandbox3d_authoring_set_source_path(
+    sandbox3d_authoring_object* object,
+    const char* path)
+{
+    char* copy;
+    size_t length;
+
+    if (object == NULL || path == NULL || path[0] == '\0')
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    length = strlen(path);
+    if (length > 767U)
+    {
+        return HENKA_ERROR_LIMIT;
+    }
+    copy = henka_calloc(length + 1U, sizeof(*copy));
+    if (copy == NULL)
+    {
+        return HENKA_ERROR_OUT_OF_MEMORY;
+    }
+    memcpy(copy, path, length + 1U);
+    henka_free(object->source_path);
+    object->source_path = copy;
+    return HENKA_SUCCESS;
+}
 
 static henka_result sandbox3d_authoring_set_physics_bounds(
     sandbox3d_authoring_object* object,
@@ -913,6 +942,7 @@ void sandbox3d_authoring_object_destroy(sandbox3d_authoring_object* object)
     henka_authoring_mesh_history_destroy(object->history);
     henka_authoring_mesh_destroy(object->mesh);
     henka_free(object->selection_history);
+    henka_free(object->source_path);
     henka_free(object);
 }
 
@@ -1661,7 +1691,14 @@ henka_result sandbox3d_authoring_object_save_source(
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
-    return henka_authoring_mesh_save_file(object->mesh, path);
+    {
+        const henka_result result = henka_authoring_mesh_save_file(object->mesh, path);
+        if (result == HENKA_SUCCESS)
+        {
+            (void)sandbox3d_authoring_set_source_path((sandbox3d_authoring_object*)object, path);
+        }
+        return result;
+    }
 }
 
 henka_result sandbox3d_authoring_object_reload_source(
@@ -1688,6 +1725,134 @@ henka_result sandbox3d_authoring_object_reload_source(
         henka_authoring_mesh_destroy(candidate);
     }
     return result;
+}
+
+henka_result sandbox3d_authoring_object_save_project(
+    const sandbox3d_authoring_object* object,
+    const char* project_path,
+    const char* source_path)
+{
+    henka_settings* settings = NULL;
+    henka_transform transform;
+    henka_result result;
+
+    if (object == NULL || project_path == NULL || project_path[0] == '\0' ||
+        source_path == NULL || source_path[0] == '\0' ||
+        henka_scene_get_entity_transform(object->scene, object->entity, &transform) != HENKA_SUCCESS)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    result = henka_authoring_mesh_save_file(object->mesh, source_path);
+    if (result != HENKA_SUCCESS)
+    {
+        return result;
+    }
+    result = henka_settings_create(&settings);
+    if (result == HENKA_SUCCESS) result = henka_settings_set_int(settings, "project.version", 1);
+    if (result == HENKA_SUCCESS) result = henka_settings_set_string(settings, "project.source_path", source_path);
+    if (result == HENKA_SUCCESS) result = henka_settings_set_float(settings, "transform.position.x", transform.position.x);
+    if (result == HENKA_SUCCESS) result = henka_settings_set_float(settings, "transform.position.y", transform.position.y);
+    if (result == HENKA_SUCCESS) result = henka_settings_set_float(settings, "transform.position.z", transform.position.z);
+    if (result == HENKA_SUCCESS) result = henka_settings_set_float(settings, "transform.rotation.x", transform.rotation.x);
+    if (result == HENKA_SUCCESS) result = henka_settings_set_float(settings, "transform.rotation.y", transform.rotation.y);
+    if (result == HENKA_SUCCESS) result = henka_settings_set_float(settings, "transform.rotation.z", transform.rotation.z);
+    if (result == HENKA_SUCCESS) result = henka_settings_set_float(settings, "transform.rotation.w", transform.rotation.w);
+    if (result == HENKA_SUCCESS) result = henka_settings_set_float(settings, "transform.scale.x", transform.scale.x);
+    if (result == HENKA_SUCCESS) result = henka_settings_set_float(settings, "transform.scale.y", transform.scale.y);
+    if (result == HENKA_SUCCESS) result = henka_settings_set_float(settings, "transform.scale.z", transform.scale.z);
+    if (result == HENKA_SUCCESS) result = henka_settings_set_bool(
+        settings, "entity.visible", henka_scene_is_entity_visible(object->scene, object->entity));
+    if (result == HENKA_SUCCESS) result = henka_settings_save_file(settings, project_path);
+    henka_settings_destroy(settings);
+    if (result == HENKA_SUCCESS)
+    {
+        result = sandbox3d_authoring_set_source_path((sandbox3d_authoring_object*)object, source_path);
+    }
+    return result;
+}
+
+henka_result sandbox3d_authoring_object_load_project(
+    sandbox3d_authoring_object* object,
+    const char* project_path)
+{
+    henka_settings* settings = NULL;
+    henka_authoring_mesh* candidate = NULL;
+    henka_authoring_mesh* rollback_mesh = NULL;
+    henka_transform transform;
+    henka_transform previous_transform = henka_transform_identity();
+    const char* source_path;
+    bool visible = false;
+    bool previous_visible;
+    bool have_previous_scene_state = false;
+    int version;
+    henka_result result;
+
+    if (object == NULL || project_path == NULL || project_path[0] == '\0')
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    result = henka_settings_create(&settings);
+    if (result == HENKA_SUCCESS) result = henka_settings_load_file(settings, project_path);
+    version = result == HENKA_SUCCESS ? henka_settings_get_int(settings, "project.version", 0) : 0;
+    source_path = result == HENKA_SUCCESS ? henka_settings_get_string(settings, "project.source_path", NULL) : NULL;
+    if (result == HENKA_SUCCESS && (version != 1 || source_path == NULL || source_path[0] == '\0'))
+        result = HENKA_ERROR_UNKNOWN;
+    transform = henka_transform_identity();
+    if (result == HENKA_SUCCESS)
+    {
+        transform.position.x = henka_settings_get_float(settings, "transform.position.x", NAN);
+        transform.position.y = henka_settings_get_float(settings, "transform.position.y", NAN);
+        transform.position.z = henka_settings_get_float(settings, "transform.position.z", NAN);
+        transform.rotation.x = henka_settings_get_float(settings, "transform.rotation.x", NAN);
+        transform.rotation.y = henka_settings_get_float(settings, "transform.rotation.y", NAN);
+        transform.rotation.z = henka_settings_get_float(settings, "transform.rotation.z", NAN);
+        transform.rotation.w = henka_settings_get_float(settings, "transform.rotation.w", NAN);
+        transform.scale.x = henka_settings_get_float(settings, "transform.scale.x", NAN);
+        transform.scale.y = henka_settings_get_float(settings, "transform.scale.y", NAN);
+        transform.scale.z = henka_settings_get_float(settings, "transform.scale.z", NAN);
+        visible = henka_settings_get_bool(settings, "entity.visible", false);
+        if (!sandbox3d_authoring_finite_vec3(transform.position) ||
+            !sandbox3d_authoring_finite_vec3(transform.scale) ||
+            !isfinite(transform.rotation.x) || !isfinite(transform.rotation.y) ||
+            !isfinite(transform.rotation.z) || !isfinite(transform.rotation.w) ||
+            transform.scale.x <= 0.0f || transform.scale.y <= 0.0f || transform.scale.z <= 0.0f)
+        {
+            result = HENKA_ERROR_INVALID_ARGUMENT;
+        }
+    }
+    if (result == HENKA_SUCCESS) result = henka_authoring_mesh_clone(object->mesh, &candidate);
+    if (result == HENKA_SUCCESS) result = henka_authoring_mesh_clone(object->mesh, &rollback_mesh);
+    if (result == HENKA_SUCCESS) result = henka_authoring_mesh_load_file(candidate, source_path);
+    if (result == HENKA_SUCCESS) result = henka_scene_get_entity_transform(object->scene, object->entity, &previous_transform);
+    if (result == HENKA_SUCCESS) have_previous_scene_state = true;
+    previous_visible = result == HENKA_SUCCESS ? henka_scene_is_entity_visible(object->scene, object->entity) : false;
+    if (result == HENKA_SUCCESS) result = sandbox3d_authoring_replace_loaded_source(object, candidate);
+    if (result == HENKA_SUCCESS) result = henka_scene_set_entity_transform(object->scene, object->entity, transform);
+    if (result == HENKA_SUCCESS) result = henka_scene_set_entity_visible(object->scene, object->entity, visible);
+    if (result == HENKA_SUCCESS) result = sandbox3d_authoring_set_source_path(object, source_path);
+    if (result != HENKA_SUCCESS)
+    {
+        if (candidate != NULL && candidate != object->mesh) henka_authoring_mesh_destroy(candidate);
+        if (rollback_mesh != NULL)
+        {
+            (void)sandbox3d_authoring_replace_loaded_source(object, rollback_mesh);
+            rollback_mesh = NULL;
+        }
+        if (have_previous_scene_state)
+        {
+            (void)henka_scene_set_entity_transform(object->scene, object->entity, previous_transform);
+            (void)henka_scene_set_entity_visible(object->scene, object->entity, previous_visible);
+        }
+    }
+    henka_authoring_mesh_destroy(rollback_mesh);
+    henka_settings_destroy(settings);
+    return result;
+}
+
+const char* sandbox3d_authoring_object_get_source_path(
+    const sandbox3d_authoring_object* object)
+{
+    return object != NULL && object->source_path != NULL ? object->source_path : "";
 }
 
 static henka_result sandbox3d_authoring_history_move(

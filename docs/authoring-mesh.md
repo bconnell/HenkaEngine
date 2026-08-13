@@ -49,7 +49,10 @@ commands offset the selected components through a cloned mesh and the existing
 transactional scene/render/bounds/collider publication path. Face mode exposes
 the selected face plus transactional material
 region editing, Extrude, Inset, Bevel, Subdivide, Project UV, Pack UV, Undo,
-Redo, Save Source, and Reload Source commands. Each edit
+Redo, Save Project, and Reload Project commands. Save Project writes a bounded
+versioned manifest beside the existing transactional `.hams` topology source;
+the manifest retains the source path, transform, and visibility needed to
+reopen the current bridge. Each edit
 evaluates a candidate, creates a normal renderer mesh, updates the scene entity
 mesh and local bounds, then checkpoints history; a bound box collider consumes
 the same evaluated local bounds as part of that transaction after each
@@ -64,7 +67,9 @@ The bridge stores one bounded selected-face identity beside each mesh-history
 snapshot. Topology operations select their deterministic result, undo/redo
 restores the corresponding prior or next face when it still exists, and a new
 edit after undo truncates both histories together. Reload resets the selection
-history to the validated replacement source.
+history to the validated replacement source. A missing or malformed project
+manifest, source, or transform is rejected without replacing the current scene
+mesh, bounds, transform, visibility, or authoring history.
 When the bounded authoring wrapper closes, it restores the mesh and local bounds
 that belonged to the entity before authoring took ownership, provided another
 editor path has not replaced the active evaluated mesh in the meantime.

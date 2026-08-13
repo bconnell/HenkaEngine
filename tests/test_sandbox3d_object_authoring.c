@@ -135,6 +135,8 @@ static void henka_test_sandbox3d_object_authoring_source_persistence(void)
     henka_bounds edited_physics_bounds;
     const henka_bounds previous_bounds = {{3.0f, 4.0f, 5.0f}, {0.25f, 0.5f, 0.75f}};
     henka_bounds bounds;
+    henka_transform project_transform = henka_transform_identity();
+    henka_transform loaded_transform;
 
     config.application_name = "Henka Authoring Persistence Test";
     config.window_width = 320;
@@ -287,6 +289,28 @@ static void henka_test_sandbox3d_object_authoring_source_persistence(void)
     HENKA_TEST_ASSERT(bounds.extents.x > 0.0f && bounds.extents.y > 0.0f && bounds.extents.z > 0.0f);
     HENKA_TEST_ASSERT(sandbox3d_authoring_object_reload_source(object, "build/test_tmp/authoring_object_missing.hams") != HENKA_SUCCESS);
     HENKA_TEST_ASSERT(henka_authoring_mesh_get_counts(sandbox3d_authoring_object_get_mesh(object)).faces == saved_counts.faces);
+
+    project_transform.position = (henka_vec3){6.0f, 7.0f, 8.0f};
+    project_transform.scale = (henka_vec3){1.25f, 0.75f, 1.5f};
+    HENKA_TEST_ASSERT(henka_scene_set_entity_transform(scene, entity, project_transform) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_save_project(
+        object,
+        "build/test_tmp/authoring_project.henka",
+        "build/test_tmp/authoring_project.hams") == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(strcmp(
+        sandbox3d_authoring_object_get_source_path(object),
+        "build/test_tmp/authoring_project.hams") == 0);
+    project_transform.position.x = 42.0f;
+    HENKA_TEST_ASSERT(henka_scene_set_entity_transform(scene, entity, project_transform) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_load_project(
+        object, "build/test_tmp/authoring_project.henka") == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_scene_get_entity_transform(scene, entity, &loaded_transform) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(loaded_transform.position.x, 6.0f, 0.0001f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(loaded_transform.scale.y, 0.75f, 0.0001f);
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_load_project(
+        object, "build/test_tmp/authoring_project_missing.henka") != HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_scene_get_entity_transform(scene, entity, &loaded_transform) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(loaded_transform.position.x, 6.0f, 0.0001f);
 
     HENKA_TEST_ASSERT(henka_physics_body_get_state(
         physics_world, physics_body, &physics_state) == HENKA_SUCCESS);

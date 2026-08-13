@@ -127,6 +127,20 @@ henka_result sandbox3d_authoring_object_save_source(
 henka_result sandbox3d_authoring_object_reload_source(
     sandbox3d_authoring_object* object,
     const char* path);
+/* Saves a bounded project manifest beside the existing versioned mesh source.
+ * The manifest owns no renderer or asset-manager state; it records only the
+ * source path, entity transform, and visibility needed to reopen this bridge. */
+henka_result sandbox3d_authoring_object_save_project(
+    const sandbox3d_authoring_object* object,
+    const char* project_path,
+    const char* source_path);
+/* Loads and validates the manifest and referenced authoring source
+ * transactionally. The current scene representation is retained on failure. */
+henka_result sandbox3d_authoring_object_load_project(
+    sandbox3d_authoring_object* object,
+    const char* project_path);
+const char* sandbox3d_authoring_object_get_source_path(
+    const sandbox3d_authoring_object* object);
 /* Binds the evaluated local bounds to an existing box collider.  The bridge
  * does not own the physics world or body; callers must unbind before either
  * is destroyed.  Modeling and source reload then update the collider as one

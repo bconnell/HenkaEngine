@@ -15558,36 +15558,47 @@ details_group_authoring:
                     state->ui,
                     "authoring_save_source",
                     (henka_ui_rect){row.x, row.y, 140.0f, 24.0f},
-                    "Save Source");
+                    "Save Project");
                 const bool reload_requested = henka_ui_button(
                     state->ui,
                     "authoring_reload_source",
                     (henka_ui_rect){row.x + 148.0f, row.y, 140.0f, 24.0f},
-                    "Reload Source");
+                    "Reload Project");
                 if (save_requested || reload_requested)
                 {
-                    char* authoring_path = NULL;
-                    result = henka_save_data_build_slot_path(
+                    char* project_path = NULL;
+                    char* source_path = NULL;
+                    result = henka_path_resolve_confined(
                         henka_engine_get_user_data_base_path(engine),
-                        "sandbox3d_textured_cube_authoring",
-                        &authoring_path);
+                        "saves/sandbox3d_textured_cube_project.henka",
+                        &project_path);
+                    if (result == HENKA_SUCCESS)
+                    {
+                        result = henka_path_resolve_confined(
+                            henka_engine_get_user_data_base_path(engine),
+                            "saves/sandbox3d_textured_cube_authoring.hams",
+                            &source_path);
+                    }
                     if (result == HENKA_SUCCESS)
                     {
                         result = save_requested
-                            ? sandbox3d_authoring_object_save_source(state->authoring_object, authoring_path)
-                            : sandbox3d_authoring_object_reload_source(state->authoring_object, authoring_path);
+                            ? sandbox3d_authoring_object_save_project(
+                                state->authoring_object, project_path, source_path)
+                            : sandbox3d_authoring_object_load_project(
+                                state->authoring_object, project_path);
                     }
-                    henka_free(authoring_path);
+                    henka_free(source_path);
+                    henka_free(project_path);
                     sandbox3d_set_status(
                         state,
                         result != HENKA_SUCCESS,
                         result == HENKA_SUCCESS
                             ? (save_requested
-                                ? "Authoring source saved to the bounded user slot."
-                                : "Authoring source reloaded and evaluated transactionally.")
+                                ? "Authoring project and mesh source saved to the bounded user slot."
+                                : "Authoring project reloaded and evaluated transactionally.")
                             : (save_requested
-                                ? "Authoring source save failed."
-                                : "Authoring source reload failed; the current render was retained."));
+                                ? "Authoring project save failed."
+                                : "Authoring project reload failed; the current render was retained."));
                 }
             }
             if (selection_mode == SANDBOX3D_AUTHORING_SELECTION_FACE &&
