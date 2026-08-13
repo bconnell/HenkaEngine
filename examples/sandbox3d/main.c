@@ -4524,6 +4524,69 @@ static const char* sandbox3d_safe_entity_name(const sandbox3d_state* state, henk
     return name != NULL ? name : fallback_name;
 }
 
+static henka_result sandbox3d_resolve_authoring_project_paths(
+    henka_engine* engine,
+    henka_entity entity,
+    char** out_project_path,
+    char** out_source_path)
+{
+    char project_relative[96];
+    char source_relative[96];
+    int project_length;
+    int source_length;
+    henka_result result;
+
+    if (out_project_path != NULL)
+    {
+        *out_project_path = NULL;
+    }
+    if (out_source_path != NULL)
+    {
+        *out_source_path = NULL;
+    }
+    if (engine == NULL || entity == HENKA_INVALID_ENTITY ||
+        out_project_path == NULL || out_source_path == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    project_length = snprintf(
+        project_relative,
+        sizeof(project_relative),
+        "saves/sandbox3d_authoring_%llx_project.henka",
+        (unsigned long long)entity);
+    source_length = snprintf(
+        source_relative,
+        sizeof(source_relative),
+        "saves/sandbox3d_authoring_%llx.hams",
+        (unsigned long long)entity);
+    if (project_length < 0 || (size_t)project_length >= sizeof(project_relative) ||
+        source_length < 0 || (size_t)source_length >= sizeof(source_relative))
+    {
+        return HENKA_ERROR_LIMIT;
+    }
+
+    result = henka_path_resolve_confined(
+        henka_engine_get_user_data_base_path(engine),
+        project_relative,
+        out_project_path);
+    if (result == HENKA_SUCCESS)
+    {
+        result = henka_path_resolve_confined(
+            henka_engine_get_user_data_base_path(engine),
+            source_relative,
+            out_source_path);
+    }
+    if (result != HENKA_SUCCESS)
+    {
+        henka_free(*out_project_path);
+        henka_free(*out_source_path);
+        *out_project_path = NULL;
+        *out_source_path = NULL;
+    }
+    return result;
+}
+
 static void sandbox3d_register_object_descriptor(
     sandbox3d_state* state,
     sandbox3d_object_kind kind,
@@ -15838,7 +15901,7 @@ details_group_authoring:
                 selected_component_count);
             if (sandbox3d_details_flow_next_row(state, flow_desc.bounds, 22.0f, 1U, &row))
             {
-                sandbox3d_draw_value_row(state->ui, row.x, row.y, row.width, "Source", "Authoring mesh (user slot)");
+                sandbox3d_draw_value_row(state->ui, row.x, row.y, row.width, "Source", "Authoring mesh (per-object user slot)");
             }
             if (sandbox3d_details_flow_next_row(state, flow_desc.bounds, 28.0f, 1U, &row) && row.width >= 290.0f)
             {
@@ -15995,17 +16058,11 @@ details_group_authoring:
                 {
                     char* project_path = NULL;
                     char* source_path = NULL;
-                    result = henka_path_resolve_confined(
-                        henka_engine_get_user_data_base_path(engine),
-                        "saves/sandbox3d_textured_cube_project.henka",
-                        &project_path);
-                    if (result == HENKA_SUCCESS)
-                    {
-                        result = henka_path_resolve_confined(
-                            henka_engine_get_user_data_base_path(engine),
-                            "saves/sandbox3d_textured_cube_authoring.hams",
-                            &source_path);
-                    }
+                    result = sandbox3d_resolve_authoring_project_paths(
+                        engine,
+                        entity,
+                        &project_path,
+                        &source_path);
                     if (result == HENKA_SUCCESS)
                     {
                         result = save_requested

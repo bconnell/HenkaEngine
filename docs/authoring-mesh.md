@@ -63,7 +63,11 @@ history from the validated source before swapping the scene representation. Any
 evaluation, renderer, scene, bounds, history, or file-parse failure retains the
 prior source, render, and (when the linked body is present) spatial state,
 including the prior collider. The save/reload buttons use a confined,
-engine-owned user-data slot, so they do not scan or overwrite arbitrary files.
+engine-owned user-data slot derived from the selected entity identity, so
+selecting or duplicating an authored object cannot overwrite another authored
+object's source through the editor controls; they do not scan or overwrite
+arbitrary files. This remains per-object authoring persistence, not complete
+scene/project serialization.
 The bridge stores one bounded selected-face identity beside each mesh-history
 snapshot. Topology operations select their deterministic result, undo/redo
 restores the corresponding prior or next face when it still exists, and a new
