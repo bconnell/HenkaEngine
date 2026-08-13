@@ -50,6 +50,16 @@ henka_result sandbox3d_authoring_object_create_box(
     const henka_authoring_mesh_desc* mesh_desc,
     size_t history_steps,
     sandbox3d_authoring_object** out_object);
+/* Creates an independent authoring bridge by cloning an existing source mesh.
+ * The clone owns its topology, history, evaluated render mesh, and scene
+ * replacement; the caller retains ownership of the source. */
+henka_result sandbox3d_authoring_object_create_from_mesh(
+    henka_engine* engine,
+    henka_scene* scene,
+    henka_entity entity,
+    const henka_authoring_mesh* source,
+    size_t history_steps,
+    sandbox3d_authoring_object** out_object);
 void sandbox3d_authoring_object_destroy(sandbox3d_authoring_object* object);
 henka_entity sandbox3d_authoring_object_get_entity(const sandbox3d_authoring_object* object);
 const henka_authoring_mesh* sandbox3d_authoring_object_get_mesh(const sandbox3d_authoring_object* object);

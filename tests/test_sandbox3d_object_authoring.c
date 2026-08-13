@@ -309,6 +309,63 @@ static void henka_test_sandbox3d_object_authoring_source_persistence(void)
     henka_engine_destroy(engine);
 }
 
+static void henka_test_sandbox3d_object_authoring_clone_bridge(void)
+{
+    henka_engine_config config = {0};
+    henka_engine* engine = NULL;
+    henka_scene* scene = NULL;
+    sandbox3d_authoring_object* source_object = NULL;
+    sandbox3d_authoring_object* clone_object = NULL;
+    henka_authoring_mesh* source_clone = NULL;
+    henka_entity source_entity;
+    henka_entity clone_entity;
+    henka_mesh* clone_previous_mesh = NULL;
+    henka_mesh* clone_render_mesh = NULL;
+    henka_authoring_mesh_counts source_counts;
+
+    config.application_name = "Henka Authoring Clone Test";
+    config.window_width = 320;
+    config.window_height = 240;
+    config.enable_vsync = false;
+    HENKA_TEST_ASSERT(henka_engine_create(&config, &engine) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_scene_create(&scene) == HENKA_SUCCESS);
+    source_entity = henka_scene_create_entity_named(scene, "Authoring Source");
+    clone_entity = henka_scene_create_entity_named(scene, "Authoring Clone");
+    HENKA_TEST_ASSERT(source_entity != HENKA_INVALID_ENTITY);
+    HENKA_TEST_ASSERT(clone_entity != HENKA_INVALID_ENTITY);
+    HENKA_TEST_ASSERT(henka_mesh_create_cube(engine, &clone_previous_mesh) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_scene_set_entity_mesh(scene, clone_entity, clone_previous_mesh) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_create_box(
+        engine, scene, source_entity, 1.0f, 1.0f, 1.0f, NULL, 8U, &source_object) == HENKA_SUCCESS);
+    source_counts = henka_authoring_mesh_get_counts(sandbox3d_authoring_object_get_mesh(source_object));
+    HENKA_TEST_ASSERT(henka_authoring_mesh_clone(
+        sandbox3d_authoring_object_get_mesh(source_object), &source_clone) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_create_from_mesh(
+        engine, scene, clone_entity, source_clone, 8U, &clone_object) == HENKA_SUCCESS);
+    henka_authoring_mesh_destroy(source_clone);
+    source_clone = NULL;
+    HENKA_TEST_ASSERT(henka_authoring_mesh_get_counts(
+        sandbox3d_authoring_object_get_mesh(clone_object)).faces == source_counts.faces);
+    HENKA_TEST_ASSERT(henka_scene_get_entity_mesh(scene, clone_entity, &clone_render_mesh) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(clone_render_mesh != clone_previous_mesh);
+    sandbox3d_authoring_object_set_selection_mode(clone_object, SANDBOX3D_AUTHORING_SELECTION_VERTEX);
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_select_component(clone_object, 1U, false) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_move_selected_components(
+        clone_object, (henka_vec3){0.25f, 0.0f, 0.0f}) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_authoring_mesh_get_vertex(
+        sandbox3d_authoring_object_get_mesh(source_object), 1U)->position.x !=
+        henka_authoring_mesh_get_vertex(sandbox3d_authoring_object_get_mesh(clone_object), 1U)->position.x);
+    sandbox3d_authoring_object_destroy(clone_object);
+    clone_object = NULL;
+    HENKA_TEST_ASSERT(henka_scene_get_entity_mesh(scene, clone_entity, &clone_render_mesh) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(clone_render_mesh == clone_previous_mesh);
+    henka_scene_destroy_entity(scene, clone_entity);
+    sandbox3d_authoring_object_destroy(source_object);
+    henka_mesh_destroy(clone_previous_mesh);
+    henka_scene_destroy(scene);
+    henka_engine_destroy(engine);
+}
+
 static void henka_test_sandbox3d_object_authoring_component_selection(void)
 {
     henka_engine_config config = {0};
@@ -360,5 +417,6 @@ void henka_test_sandbox3d_object_authoring(void)
     henka_test_sandbox3d_object_authoring_scene_policy();
     henka_test_sandbox3d_object_authoring_duplicate();
     henka_test_sandbox3d_object_authoring_source_persistence();
+    henka_test_sandbox3d_object_authoring_clone_bridge();
     henka_test_sandbox3d_object_authoring_component_selection();
 }

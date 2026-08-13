@@ -723,38 +723,27 @@ henka_result sandbox3d_object_authoring_duplicate_entity(
     return HENKA_SUCCESS;
 }
 
-henka_result sandbox3d_authoring_object_create_box(
+static henka_result sandbox3d_authoring_object_create_from_owned_mesh(
     henka_engine* engine,
     henka_scene* scene,
     henka_entity entity,
-    float width,
-    float height,
-    float depth,
-    const henka_authoring_mesh_desc* mesh_desc,
+    henka_authoring_mesh* mesh,
     size_t history_steps,
     sandbox3d_authoring_object** out_object)
 {
     sandbox3d_authoring_object* object;
-    henka_authoring_mesh_desc default_desc;
-    henka_authoring_mesh* mesh = NULL;
     henka_mesh* old_mesh = NULL;
     henka_bounds bounds = {{0.0f, 0.0f, 0.0f}, {0.0f, 0.0f, 0.0f}};
     henka_result result;
 
-    if (out_object == NULL || engine == NULL || scene == NULL ||
+    if (out_object == NULL || engine == NULL || scene == NULL || mesh == NULL ||
         entity == HENKA_INVALID_ENTITY || !henka_scene_is_entity_valid(scene, entity) ||
         history_steps == 0U || history_steps > SANDBOX3D_AUTHORING_MAX_HISTORY_STEPS)
     {
+        henka_authoring_mesh_destroy(mesh);
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
     *out_object = NULL;
-    default_desc = henka_authoring_mesh_desc_default();
-    result = henka_authoring_mesh_create_box(
-        mesh_desc == NULL ? &default_desc : mesh_desc, width, height, depth, &mesh);
-    if (result != HENKA_SUCCESS)
-    {
-        return result;
-    }
     object = henka_calloc(1U, sizeof(*object));
     if (object == NULL)
     {
@@ -811,8 +800,7 @@ henka_result sandbox3d_authoring_object_create_box(
         }
         if (object->had_previous_bounds)
         {
-            (void)henka_scene_set_entity_local_bounds(
-                scene, entity, object->previous_bounds);
+            (void)henka_scene_set_entity_local_bounds(scene, entity, object->previous_bounds);
         }
         else
         {
@@ -822,6 +810,69 @@ henka_result sandbox3d_authoring_object_create_box(
         return result;
     }
     *out_object = object;
+    return HENKA_SUCCESS;
+}
+
+henka_result sandbox3d_authoring_object_create_box(
+    henka_engine* engine,
+    henka_scene* scene,
+    henka_entity entity,
+    float width,
+    float height,
+    float depth,
+    const henka_authoring_mesh_desc* mesh_desc,
+    size_t history_steps,
+    sandbox3d_authoring_object** out_object)
+{
+    henka_authoring_mesh_desc default_desc;
+    henka_authoring_mesh* mesh = NULL;
+    henka_result result;
+
+    if (out_object == NULL || engine == NULL || scene == NULL ||
+        entity == HENKA_INVALID_ENTITY || !henka_scene_is_entity_valid(scene, entity) ||
+        history_steps == 0U || history_steps > SANDBOX3D_AUTHORING_MAX_HISTORY_STEPS)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    *out_object = NULL;
+    default_desc = henka_authoring_mesh_desc_default();
+    result = henka_authoring_mesh_create_box(
+        mesh_desc == NULL ? &default_desc : mesh_desc, width, height, depth, &mesh);
+    if (result != HENKA_SUCCESS)
+    {
+        return result;
+    }
+    return sandbox3d_authoring_object_create_from_owned_mesh(
+        engine, scene, entity, mesh, history_steps, out_object);
+}
+
+henka_result sandbox3d_authoring_object_create_from_mesh(
+    henka_engine* engine,
+    henka_scene* scene,
+    henka_entity entity,
+    const henka_authoring_mesh* source,
+    size_t history_steps,
+    sandbox3d_authoring_object** out_object)
+{
+    henka_authoring_mesh* mesh = NULL;
+    henka_result result;
+
+    if (out_object == NULL || source == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    *out_object = NULL;
+    result = henka_authoring_mesh_clone(source, &mesh);
+    if (result != HENKA_SUCCESS)
+    {
+        return result;
+    }
+    result = sandbox3d_authoring_object_create_from_owned_mesh(
+        engine, scene, entity, mesh, history_steps, out_object);
+    if (result != HENKA_SUCCESS)
+    {
+        return result;
+    }
     return HENKA_SUCCESS;
 }
 
