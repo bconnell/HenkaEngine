@@ -4113,6 +4113,8 @@ henka_result henka_opengl_renderer_abort_frame(
 
     g_gl.BindBuffer(GL_ARRAY_BUFFER, 0);
     g_gl.BindVertexArray(0);
+    g_gl.BindFramebuffer(GL_FRAMEBUFFER, 0U);
+    g_gl.ActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, 0);
     g_gl.UseProgram(0);
     glDisable(GL_BLEND);
