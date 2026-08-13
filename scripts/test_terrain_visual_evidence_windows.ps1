@@ -97,24 +97,32 @@ try {
         throw "The validator did not reject flat terrain evidence for the expected reason."
     }
 
-    foreach ($mode in @("solid", "material-preview", "rendered")) {
-        New-TestTerrainImage `
-            -Path (Join-Path $fixtureRoot ("terrain-same-camera-{0}.png" -f $mode)) `
-            -Flat $false `
-            -Rendered ($mode -eq "rendered") `
-            -Gray $true
+    foreach ($set in @("same-camera", "corner", "close")) {
+        foreach ($mode in @("solid", "material-preview", "rendered")) {
+            New-TestTerrainImage `
+                -Path (Join-Path $fixtureRoot ("terrain-{0}-{1}.png" -f $set, $mode)) `
+                -Flat $false `
+                -Rendered ($mode -eq "rendered") `
+                -Gray $true
+        }
     }
-    $rejectedGrayEvidence = $false
-    $grayEvidenceMessage = ""
-    try {
-        Invoke-Validator -InputDirectory $fixtureRoot
-    }
-    catch {
-        $rejectedGrayEvidence = $true
-        $grayEvidenceMessage = $_.Exception.Message
-    }
-    if (-not $rejectedGrayEvidence -or $grayEvidenceMessage -notmatch "material identity") {
-        throw "The validator did not reject low-chroma terrain evidence for the expected reason."
+    $semanticValidators = @(
+        "check_terrain_visual_evidence_windows.ps1",
+        "check_terrain_corner_visual_evidence_windows.ps1",
+        "check_terrain_close_visual_evidence_windows.ps1")
+    foreach ($validator in $semanticValidators) {
+        $rejectedGrayEvidence = $false
+        $grayEvidenceMessage = ""
+        try {
+            & (Join-Path $PSScriptRoot $validator) -InputDirectory $fixtureRoot | Out-Null
+        }
+        catch {
+            $rejectedGrayEvidence = $true
+            $grayEvidenceMessage = $_.Exception.Message
+        }
+        if (-not $rejectedGrayEvidence -or $grayEvidenceMessage -notmatch "material identity") {
+            throw "$validator did not reject low-chroma terrain evidence for the expected reason."
+        }
     }
 
     Write-Output "Terrain visual evidence validator tests passed."
