@@ -4394,7 +4394,6 @@ static bool henka_opengl_allocate_reflection_probe_cube(GLuint* out_texture)
     }
     while (glGetError() != GL_NO_ERROR) {}
     glGetIntegerv(GL_ACTIVE_TEXTURE, &previous_active_texture);
-    g_gl.ActiveTexture(GL_TEXTURE0);
     glGetIntegerv(GL_TEXTURE_BINDING_CUBE_MAP, &previous_texture);
     glGenTextures(1, &texture);
     if (texture == 0U)
@@ -4429,9 +4428,8 @@ static bool henka_opengl_allocate_reflection_probe_cube(GLuint* out_texture)
         glDeleteTextures(1, &texture);
         texture = 0U;
     }
-    g_gl.ActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_CUBE_MAP, (GLuint)previous_texture);
     g_gl.ActiveTexture((GLenum)previous_active_texture);
+    glBindTexture(GL_TEXTURE_CUBE_MAP, (GLuint)previous_texture);
     *out_texture = texture;
     return valid;
 }
@@ -4515,9 +4513,7 @@ static void henka_opengl_capture_next_reflection_probe(
     glGetIntegerv(GL_FRAMEBUFFER_BINDING, &previous_framebuffer);
     glGetIntegerv(GL_RENDERBUFFER_BINDING, &previous_renderbuffer);
     glGetIntegerv(GL_ACTIVE_TEXTURE, &previous_active_texture);
-    g_gl.ActiveTexture(GL_TEXTURE0);
     glGetIntegerv(GL_TEXTURE_BINDING_CUBE_MAP, &previous_texture);
-    g_gl.ActiveTexture((GLenum)previous_active_texture);
     glGetIntegerv(GL_VIEWPORT, previous_viewport);
     glGetFloatv(GL_COLOR_CLEAR_VALUE, previous_clear_color);
     while (glGetError() != GL_NO_ERROR) {}
@@ -4578,9 +4574,8 @@ static void henka_opengl_capture_next_reflection_probe(
     glClearColor(
         previous_clear_color[0], previous_clear_color[1],
         previous_clear_color[2], previous_clear_color[3]);
-    g_gl.ActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_CUBE_MAP, (GLuint)previous_texture);
     g_gl.ActiveTexture((GLenum)previous_active_texture);
+    glBindTexture(GL_TEXTURE_CUBE_MAP, (GLuint)previous_texture);
     if (success)
     {
         if (state->reflection_probe_cubes[probe_index] != 0U)
