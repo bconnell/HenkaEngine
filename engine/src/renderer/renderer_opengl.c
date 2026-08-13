@@ -1224,6 +1224,7 @@ static void henka_add_optional_shader_locations(
     {
         "iblIrradianceMap", "iblPrefilterMap", "iblBrdfLut", "useIBL",
         "reflectionProbePosition", "reflectionProbeExtents", "useReflectionProbe",
+        "useReflectionProbeBoxProjection",
         "reflectionProbeMap", "useReflectionProbeMap", "doubleSided",
         "previousViewProjection", "previousModel", "useMotionVectors",
         "useInstancing", "cascadeBlendDistance", "thickness", "attenuationDistance", "attenuationColor",
@@ -5186,6 +5187,7 @@ henka_result henka_opengl_renderer_draw_scene(
         henka_scene_reflection_probe_desc reflection_probe = {0};
         henka_vec3 reflection_probe_center;
         bool use_reflection_probe;
+        bool use_reflection_probe_box_projection;
         uint32_t reflection_probe_index = UINT32_MAX;
         bool use_reflection_probe_map;
         size_t instance_count = 1U;
@@ -5315,7 +5317,8 @@ henka_result henka_opengl_renderer_draw_scene(
             reflection_probe_index < HENKA_SCENE_MAX_REFLECTION_PROBES &&
             state->reflection_probe_capture_ready[reflection_probe_index] &&
             state->reflection_probe_cubes[reflection_probe_index] != 0U;
-        use_reflection_probe = use_reflection_probe && reflection_probe.box_projection;
+        use_reflection_probe_box_projection = use_reflection_probe &&
+            reflection_probe.box_projection;
         editor_surface =
             !helper_entity &&
             henka_renderer_get_viewport_shading_mode(
@@ -5573,13 +5576,18 @@ henka_result henka_opengl_renderer_draw_scene(
             program,
             shader_data,
             "reflectionProbePosition",
-            use_reflection_probe ? reflection_probe.position : (henka_vec3){0.0f, 0.0f, 0.0f});
+            use_reflection_probe_box_projection ? reflection_probe.position : (henka_vec3){0.0f, 0.0f, 0.0f});
         henka_set_uniform_vec3_owned(
             program,
             shader_data,
             "reflectionProbeExtents",
-            use_reflection_probe ? reflection_probe.extents : (henka_vec3){1.0f, 1.0f, 1.0f});
+            use_reflection_probe_box_projection ? reflection_probe.extents : (henka_vec3){1.0f, 1.0f, 1.0f});
         henka_set_uniform_bool_owned(program, shader_data, "useReflectionProbe", use_reflection_probe);
+        henka_set_uniform_bool_owned(
+            program,
+            shader_data,
+            "useReflectionProbeBoxProjection",
+            use_reflection_probe_box_projection);
         henka_set_uniform_int_owned(program, shader_data, "reflectionProbeMap", 10);
         henka_set_uniform_bool_owned(program, shader_data, "useReflectionProbeMap", use_reflection_probe_map);
         henka_set_uniform_int(program, "localLightCount", local_light_count);

@@ -60,6 +60,7 @@ uniform bool useIBL;
 uniform vec3 reflectionProbePosition;
 uniform vec3 reflectionProbeExtents;
 uniform bool useReflectionProbe;
+uniform bool useReflectionProbeBoxProjection;
 uniform samplerCube reflectionProbeMap;
 uniform bool useReflectionProbeMap;
 uniform bool doubleSided;
@@ -166,7 +167,7 @@ vec3 safeNormalize(vec3 value, vec3 fallback)
 
 vec3 parallaxCorrectReflectionDirection(vec3 direction)
 {
-    if (!useReflectionProbe)
+    if (!useReflectionProbe || !useReflectionProbeBoxProjection)
     {
         return direction;
     }
