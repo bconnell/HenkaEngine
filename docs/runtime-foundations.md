@@ -111,9 +111,10 @@ native BC1 RGB/RGBA and BC3 payloads are checked against independent GPU capabil
 for example, DXT1-only support does not authorize a BC3 upload. Compressed
 payloads without a matching GPU capability fail closed because the
 bounded KTX boundary does not reinterpret compressed blocks as RGBA8.
-Basis normal maps select BC5 or ETC2-RG when available and otherwise use the
-checked RGBA8 fallback; they do not select BC1/BC3, which cannot preserve a
-two-channel normal representation.
+Basis normal maps prefer BC5 or ETC2-RG, may use BC7/ASTC RGBA when those are
+the available compressed targets, and otherwise use the checked RGBA8
+fallback; they do not select BC1/BC3, which cannot preserve a two-channel
+normal representation.
 The asset manager can enforce a configured texture residency budget before a
 new source load is published and exposes rejection, resident-byte, managed
 count, and fallback-count diagnostics. Manager-owned KTX2 textures also

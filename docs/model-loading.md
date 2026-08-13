@@ -91,8 +91,9 @@ The loader currently supports:
   loader validates KTX2 bounds, dimensions, layers/faces, and the complete
   bounded mip chain before the pinned KTX-Software boundary selects an OpenGL
   BC1 RGB/RGBA (with alpha-preserving BC1 RGBA upload), and BC3, BC5, BC7, ETC2, or ASTC 4x4 upload when the active context advertises
-  that capability. Basis normal maps select two-channel BC5 or ETC2-RG targets;
-  they never use an RGB/alpha-only BC1/BC3 target. Uncompressed RGBA8 levels
+  that capability. Basis normal maps prefer two-channel BC5 or ETC2-RG targets;
+  BC7/ASTC RGBA are valid compressed fallbacks, but RGB/alpha-only BC1/BC3
+  targets are never selected. Uncompressed RGBA8 levels
   and Basis payloads without a supported compressed target use a checked RGBA8 upload; native compressed
   payloads without a matching capability are rejected. They are not decoded as
   arbitrary bytes. Native container transfer metadata is checked against the
