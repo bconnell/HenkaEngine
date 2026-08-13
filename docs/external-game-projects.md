@@ -42,14 +42,18 @@ cmake -S . -B build -DHENKA_ENGINE_DIR="C:/Path/To/HenkaEngine"
 ```
 
 The template under `templates/external_game_minimal/` shows one way to do that.
-Its executable is a bounded public-API Terrain consumer smoke test: it
-validates the shared four-layer material contract, deterministic raise/paint,
-collision raycast, CPU render-mesh rebuild, transactional save, and restart
-reload without including Sandbox source. It then creates a real engine window,
-scene, camera, and Terrain render owner through public APIs, runs the normal
-Rendered path, and requires a visible draw plus HDR/shadow diagnostics. The
-consuming game still owns its window, scene, camera, and presentation policy;
-the template proves that Terrain can cross that public graphical boundary.
+Its executable is a bounded public-API authoring and Terrain consumer smoke
+test. It creates a box authoring mesh from code, manipulates stable vertex,
+edge, and face identities, evaluates it into a normal renderer mesh, saves and
+reloads the authored source, creates and picks a scene entity, creates a linked
+physics box, and verifies duplicate/delete of a user-owned entity without
+including Sandbox source. The same reloaded mesh is handed to a real engine
+window, scene, camera, and Terrain render owner through public APIs; the normal
+Rendered path requires a visible draw plus HDR/shadow diagnostics. This is a
+bounded dogfood harness, not a complete external game's scene serializer or
+editor; authored scene/project persistence beyond the mesh source remains
+unfinished. The consuming game still owns its window, scene, camera, and
+presentation policy.
 
 To validate that template against the current Henka checkout from this repository, run:
 

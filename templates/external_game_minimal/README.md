@@ -28,13 +28,17 @@ cmake --build build --config Debug
 .\build\Debug\external_game_minimal.exe
 ```
 
-The executable is also a bounded Terrain consumer smoke test. It uses only
-public C17 APIs to validate the shared four-layer Terrain material contract,
-deterministic raise and paint commands, collision raycast, CPU render-mesh
-rebuild, transactional region save, and restart reload. It then creates an
-engine/scene/camera and public Terrain render owner, runs the normal Rendered
-path, and requires a visible draw with HDR and shadow diagnostics. A passing
-run prints both Terrain workflow markers; it does not depend on Sandbox source.
+The executable is also a bounded public authoring and Terrain consumer smoke
+test. It creates a box authoring mesh, manipulates stable vertex, edge, and
+face identities, evaluates the mesh into a normal renderer mesh, saves and
+reloads the authored source, creates and picks a scene entity, creates a linked
+physics box, and verifies duplicate/delete of a user-owned entity. The same
+reloaded mesh is then handed to the graphical scene alongside the public
+Terrain render owner. The run uses only public C17 APIs, validates the shared
+four-layer Terrain material contract, deterministic raise and paint commands,
+collision raycast, CPU render-mesh rebuild, transactional region save, and
+restart reload, then requires a visible Rendered draw with HDR and shadow
+diagnostics. It does not depend on Sandbox source.
 
 ## Template notes
 

@@ -1,6 +1,8 @@
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
+#include <math.h>
+#include <string.h>
 
 #include <henka/henka.h>
 
@@ -10,9 +12,124 @@ typedef struct external_graphical_terrain_state
     henka_terrain_world* world;
     henka_terrain_render_runtime* render;
     henka_terrain_sample* samples;
+    henka_authoring_mesh* authored_mesh;
+    henka_mesh* authored_render_mesh;
+    henka_shader* authored_shader;
+    henka_physics_world* authored_physics;
+    henka_physics_body_id authored_body;
+    henka_entity authored_entity;
     uint64_t start_frame;
     bool success;
 } external_graphical_terrain_state;
+
+static bool external_authoring_bounds(
+    const henka_authoring_render_data* render_data,
+    henka_bounds* out_bounds)
+{
+    henka_vec3 minimum;
+    henka_vec3 maximum;
+    size_t index;
+    if (render_data == NULL || out_bounds == NULL || render_data->vertices == NULL ||
+        render_data->vertex_count == 0U)
+    {
+        return false;
+    }
+    minimum = render_data->vertices[0].position;
+    maximum = minimum;
+    for (index = 1U; index < render_data->vertex_count; ++index)
+    {
+        const henka_vec3 point = render_data->vertices[index].position;
+        minimum.x = fminf(minimum.x, point.x);
+        minimum.y = fminf(minimum.y, point.y);
+        minimum.z = fminf(minimum.z, point.z);
+        maximum.x = fmaxf(maximum.x, point.x);
+        maximum.y = fmaxf(maximum.y, point.y);
+        maximum.z = fmaxf(maximum.z, point.z);
+    }
+    out_bounds->center = henka_vec3_scale(henka_vec3_add(minimum, maximum), 0.5f);
+    out_bounds->extents = henka_vec3_scale(henka_vec3_subtract(maximum, minimum), 0.5f);
+    return true;
+}
+
+static henka_result external_authoring_render_mesh(
+    henka_engine* engine,
+    const henka_authoring_mesh* source,
+    henka_mesh** out_mesh,
+    henka_bounds* out_bounds)
+{
+    henka_authoring_render_vertex* source_vertices = NULL;
+    uint32_t* source_indices = NULL;
+    henka_model_vertex* model_vertices = NULL;
+    uint32_t* model_indices = NULL;
+    henka_authoring_render_data render_data = {0};
+    henka_model_data model = {0};
+    henka_result result = HENKA_ERROR_INVALID_ARGUMENT;
+    size_t index;
+    henka_material material;
+
+    if (engine == NULL || source == NULL || out_mesh == NULL || out_bounds == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    *out_mesh = NULL;
+    source_vertices = henka_calloc(256U, sizeof(*source_vertices));
+    source_indices = henka_calloc(768U, sizeof(*source_indices));
+    if (source_vertices == NULL || source_indices == NULL)
+    {
+        goto cleanup;
+    }
+    render_data.vertices = source_vertices;
+    render_data.vertex_capacity = 256U;
+    render_data.indices = source_indices;
+    render_data.index_capacity = 768U;
+    result = henka_authoring_mesh_evaluate(source, &render_data);
+    if (result != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    if (!external_authoring_bounds(&render_data, out_bounds))
+    {
+        result = HENKA_ERROR_INVALID_ARGUMENT;
+        goto cleanup;
+    }
+    model_vertices = henka_calloc(render_data.vertex_count, sizeof(*model_vertices));
+    model_indices = henka_calloc(render_data.index_count, sizeof(*model_indices));
+    if (model_vertices == NULL || model_indices == NULL)
+    {
+        result = HENKA_ERROR_OUT_OF_MEMORY;
+        goto cleanup;
+    }
+    for (index = 0U; index < render_data.vertex_count; ++index)
+    {
+        model_vertices[index].position = render_data.vertices[index].position;
+        model_vertices[index].normal = render_data.vertices[index].normal;
+        model_vertices[index].tangent = render_data.vertices[index].tangent;
+        /* The evaluated tangent may be parallel to a box face normal; let the
+         * renderer derive an orthogonal frame for this public upload path. */
+        model_vertices[index].tangent_valid = false;
+        model_vertices[index].uv = render_data.vertices[index].uv;
+        model_vertices[index].color = (henka_vec4){1.0f, 1.0f, 1.0f, 1.0f};
+        model_vertices[index].material_region = render_data.vertices[index].material_region;
+    }
+    memcpy(model_indices, render_data.indices, render_data.index_count * sizeof(*model_indices));
+    material = henka_material_default();
+    material.base_color = (henka_vec4){0.18f, 0.52f, 0.86f, 1.0f};
+    material.roughness = 0.32f;
+    model.vertices = model_vertices;
+    model.vertex_count = (uint32_t)render_data.vertex_count;
+    model.indices = model_indices;
+    model.index_count = (uint32_t)render_data.index_count;
+    model.has_material = true;
+    model.material_source.material = material;
+    result = henka_mesh_create_from_model_data(engine, &model, out_mesh);
+
+cleanup:
+    henka_free(model_indices);
+    henka_free(model_vertices);
+    henka_free(source_indices);
+    henka_free(source_vertices);
+    return result;
+}
 
 static void external_graphical_terrain_destroy(external_graphical_terrain_state* state)
 {
@@ -21,13 +138,215 @@ static void external_graphical_terrain_destroy(external_graphical_terrain_state*
         return;
     }
     henka_terrain_render_runtime_destroy(state->render);
+    if (state->authored_physics != NULL && state->authored_body != HENKA_INVALID_PHYSICS_BODY_ID)
+    {
+        (void)henka_physics_body_destroy(state->authored_physics, state->authored_body);
+    }
+    henka_physics_world_destroy(state->authored_physics);
     henka_scene_destroy(state->scene);
+    henka_shader_destroy(state->authored_shader);
     henka_terrain_world_destroy(state->world);
+    henka_mesh_destroy(state->authored_render_mesh);
+    henka_authoring_mesh_destroy(state->authored_mesh);
     henka_free(state->samples);
     state->render = NULL;
     state->scene = NULL;
     state->world = NULL;
     state->samples = NULL;
+    state->authored_render_mesh = NULL;
+    state->authored_shader = NULL;
+    state->authored_mesh = NULL;
+    state->authored_physics = NULL;
+    state->authored_body = HENKA_INVALID_PHYSICS_BODY_ID;
+    state->authored_entity = HENKA_INVALID_ENTITY;
+}
+
+static henka_result external_authoring_initialize(
+    henka_engine* engine,
+    external_graphical_terrain_state* state)
+{
+    henka_authoring_mesh_desc mesh_desc = henka_authoring_mesh_desc_default();
+    henka_authoring_mesh* loaded_mesh = NULL;
+    henka_authoring_mesh* history_candidate = NULL;
+    henka_authoring_mesh_history* history = NULL;
+    henka_authoring_face_id face_id = HENKA_AUTHORING_INVALID_ID;
+    henka_authoring_face_id extruded_face_id = HENKA_AUTHORING_INVALID_ID;
+    henka_authoring_edge_id edge_id = HENKA_AUTHORING_INVALID_ID;
+    henka_authoring_vertex_id vertex_id = HENKA_AUTHORING_INVALID_ID;
+    henka_bounds bounds;
+    henka_transform transform = henka_transform_identity();
+    henka_entity duplicate = HENKA_INVALID_ENTITY;
+    henka_material material;
+    henka_ray pick_ray;
+    henka_entity picked_entity = HENKA_INVALID_ENTITY;
+    float picked_distance = 0.0f;
+    henka_physics_body_desc body_desc = {0};
+    henka_physics_raycast_hit physics_hit = {0};
+    henka_result result;
+
+    if (engine == NULL || state == NULL || state->scene == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    mesh_desc.max_vertices = 128U;
+    mesh_desc.max_edges = 256U;
+    mesh_desc.max_faces = 128U;
+    mesh_desc.max_face_corners = 8U;
+    result = henka_authoring_mesh_create_box(
+        &mesh_desc, 2.0f, 2.0f, 2.0f, &state->authored_mesh);
+    if (result != HENKA_SUCCESS)
+    {
+        printf("External authoring failure: create box (%s).\n", henka_result_to_string(result));
+        return result;
+    }
+    for (uint32_t candidate_id = 1U; candidate_id < 128U; ++candidate_id)
+    {
+        if (vertex_id == HENKA_AUTHORING_INVALID_ID &&
+            henka_authoring_mesh_get_vertex(state->authored_mesh, candidate_id) != NULL)
+            vertex_id = candidate_id;
+        if (edge_id == HENKA_AUTHORING_INVALID_ID &&
+            henka_authoring_mesh_get_edge(state->authored_mesh, candidate_id) != NULL)
+            edge_id = candidate_id;
+        if (face_id == HENKA_AUTHORING_INVALID_ID &&
+            henka_authoring_mesh_get_face(state->authored_mesh, candidate_id) != NULL)
+            face_id = candidate_id;
+    }
+    if (vertex_id == HENKA_AUTHORING_INVALID_ID || edge_id == HENKA_AUTHORING_INVALID_ID ||
+        face_id == HENKA_AUTHORING_INVALID_ID ||
+        henka_authoring_mesh_set_vertex_position(
+            state->authored_mesh, vertex_id, (henka_vec3){-1.05f, -1.0f, -1.0f}) != HENKA_SUCCESS ||
+        henka_authoring_mesh_set_edge_hard(state->authored_mesh, edge_id, true) != HENKA_SUCCESS ||
+        henka_authoring_mesh_set_face_material_region(state->authored_mesh, face_id, 2U) != HENKA_SUCCESS ||
+        henka_authoring_mesh_extrude_face(
+            state->authored_mesh, face_id, 0.2f, &extruded_face_id) != HENKA_SUCCESS ||
+        !henka_authoring_mesh_validate(state->authored_mesh) ||
+        henka_authoring_mesh_save_file(state->authored_mesh, "external_authoring_workflow.hams") != HENKA_SUCCESS)
+    {
+        printf("External authoring failure: edit/extrude/save (%s).\n", henka_result_to_string(HENKA_ERROR_INVALID_ARGUMENT));
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    result = henka_authoring_mesh_create(&mesh_desc, &loaded_mesh);
+    if (result == HENKA_SUCCESS)
+    {
+        result = henka_authoring_mesh_load_file(
+            loaded_mesh, "external_authoring_workflow.hams");
+    }
+    if (result != HENKA_SUCCESS)
+    {
+        printf("External authoring failure: reload (%s).\n", henka_result_to_string(result));
+        henka_authoring_mesh_destroy(loaded_mesh);
+        return result;
+    }
+    henka_authoring_mesh_destroy(state->authored_mesh);
+    state->authored_mesh = loaded_mesh;
+    loaded_mesh = NULL;
+
+    result = henka_authoring_mesh_history_create(state->authored_mesh, 4U, &history);
+    if (result == HENKA_SUCCESS)
+        result = henka_authoring_mesh_clone(state->authored_mesh, &history_candidate);
+    if (result == HENKA_SUCCESS)
+        result = henka_authoring_mesh_set_vertex_position(
+            history_candidate, vertex_id, (henka_vec3){-1.0f, -1.0f, -1.0f});
+    if (result == HENKA_SUCCESS)
+        result = henka_authoring_mesh_history_checkpoint(history, history_candidate);
+    if (result == HENKA_SUCCESS)
+        result = henka_authoring_mesh_history_undo(history, history_candidate);
+    if (result == HENKA_SUCCESS)
+        result = henka_authoring_mesh_history_redo(history, history_candidate);
+    henka_authoring_mesh_destroy(history_candidate);
+    henka_authoring_mesh_history_destroy(history);
+    if (result != HENKA_SUCCESS ||
+        !henka_authoring_mesh_get_face(state->authored_mesh, extruded_face_id) ||
+        !henka_authoring_mesh_get_edge(state->authored_mesh, edge_id))
+    {
+        printf("External authoring failure: history or identity continuity (%s).\n", henka_result_to_string(result));
+        return HENKA_ERROR_UNKNOWN;
+    }
+    result = external_authoring_render_mesh(
+        engine, state->authored_mesh, &state->authored_render_mesh, &bounds);
+    if (result != HENKA_SUCCESS)
+    {
+        printf("External authoring failure: evaluate renderer mesh (%s).\n", henka_result_to_string(result));
+        return result;
+    }
+    result = henka_shader_create_from_files(
+        engine,
+        "assets/shaders/basic_lit.vert",
+        "assets/shaders/basic_lit.frag",
+        &state->authored_shader);
+    if (result != HENKA_SUCCESS)
+    {
+        printf("External authoring failure: shader (%s).\n", henka_result_to_string(result));
+        return result;
+    }
+    state->authored_entity = henka_scene_create_entity_named(state->scene, "External Authored Box");
+    if (state->authored_entity == HENKA_INVALID_ENTITY)
+    {
+        printf("External authoring failure: create entity.\n");
+        return HENKA_ERROR_OUT_OF_MEMORY;
+    }
+    transform.position = (henka_vec3){32.0f, 3.0f, 32.0f};
+    material = henka_material_default();
+    material.shader = state->authored_shader;
+    material.base_color = (henka_vec4){0.18f, 0.52f, 0.86f, 1.0f};
+    material.roughness = 0.32f;
+    result = henka_scene_set_entity_transform(state->scene, state->authored_entity, transform);
+    if (result == HENKA_SUCCESS)
+        result = henka_scene_set_entity_mesh(state->scene, state->authored_entity, state->authored_render_mesh);
+    if (result == HENKA_SUCCESS)
+        result = henka_scene_set_entity_material(state->scene, state->authored_entity, material);
+    if (result == HENKA_SUCCESS)
+        result = henka_scene_set_entity_local_bounds(state->scene, state->authored_entity, bounds);
+    if (result != HENKA_SUCCESS)
+    {
+        printf("External authoring failure: install entity state (%s).\n", henka_result_to_string(result));
+        return result;
+    }
+
+    duplicate = henka_scene_create_entity_named(state->scene, "External Authored Duplicate");
+    if (duplicate == HENKA_INVALID_ENTITY ||
+        henka_scene_set_entity_transform(state->scene, duplicate, transform) != HENKA_SUCCESS ||
+        henka_scene_set_entity_mesh(state->scene, duplicate, state->authored_render_mesh) != HENKA_SUCCESS ||
+        henka_scene_set_entity_material(state->scene, duplicate, material) != HENKA_SUCCESS ||
+        henka_scene_set_entity_local_bounds(state->scene, duplicate, bounds) != HENKA_SUCCESS)
+    {
+        printf("External authoring failure: duplicate/delete.\n");
+        if (duplicate != HENKA_INVALID_ENTITY) henka_scene_destroy_entity(state->scene, duplicate);
+        return HENKA_ERROR_UNKNOWN;
+    }
+    henka_scene_destroy_entity(state->scene, duplicate);
+    if (henka_scene_is_entity_valid(state->scene, duplicate))
+    {
+        printf("External authoring failure: scene pick or physics create.\n");
+        return HENKA_ERROR_UNKNOWN;
+    }
+
+    pick_ray.origin = (henka_vec3){32.0f, 3.5f, 72.0f};
+    pick_ray.direction = (henka_vec3){0.0f, 0.0f, -1.0f};
+    if (henka_scene_pick_entity(state->scene, pick_ray, &picked_entity, &picked_distance) != HENKA_SUCCESS ||
+        picked_entity != state->authored_entity ||
+        henka_physics_world_create(&state->authored_physics) != HENKA_SUCCESS)
+    {
+        return HENKA_ERROR_UNKNOWN;
+    }
+    body_desc.type = HENKA_PHYSICS_BODY_STATIC;
+    body_desc.transform = transform;
+    body_desc.mass = 1.0f;
+    body_desc.material = henka_physics_material_default();
+    body_desc.collider = henka_physics_collider_box(bounds.extents);
+    body_desc.linked_scene = state->scene;
+    body_desc.linked_entity = state->authored_entity;
+    if (henka_physics_body_create(
+            state->authored_physics, &body_desc, &state->authored_body) != HENKA_SUCCESS ||
+        henka_physics_world_raycast(
+            state->authored_physics, pick_ray, 100.0f, HENKA_PHYSICS_ALL_LAYERS, &physics_hit) != HENKA_SUCCESS ||
+        !physics_hit.hit)
+    {
+        printf("External authoring failure: linked physics raycast.\n");
+        return HENKA_ERROR_UNKNOWN;
+    }
+    printf("External public authoring mesh, scene, collision, duplicate/delete, and reload handoff passed.\n");
+    return HENKA_SUCCESS;
 }
 
 static henka_result external_graphical_terrain_initialize(
@@ -45,6 +364,11 @@ static henka_result external_graphical_terrain_initialize(
         henka_scene_create(&state->scene) != HENKA_SUCCESS)
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    if (external_authoring_initialize(engine, state) != HENKA_SUCCESS)
+    {
+        external_graphical_terrain_destroy(state);
+        return HENKA_ERROR_UNKNOWN;
     }
     world_desc.max_resident_regions = 1U;
     world_desc.max_resident_chunks = 1U;
