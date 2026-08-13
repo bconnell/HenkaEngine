@@ -1,4 +1,6 @@
+#include <inttypes.h>
 #include <stdint.h>
+#include <stdio.h>
 #include <string.h>
 
 #if defined(_WIN32)
@@ -201,7 +203,7 @@ static int test_stale_completion_does_not_overwrite_newer_region(void)
     henka_terrain_sample* samples = NULL;
     const henka_terrain_region_id region_id = {8, 9};
     henka_terrain_stream_stats stats;
-    henka_terrain_region_state state;
+    henka_terrain_region_state state = {0};
     const henka_terrain_sample* resident_samples = NULL;
     size_t resident_sample_count = 0U;
     uint32_t index;
@@ -294,7 +296,7 @@ static int test_moved_observer_discards_queued_completion(void)
     const henka_terrain_stream_observer initial_observer = {10U, region_id, 0U, 0U, 0U, 0U};
     const henka_terrain_stream_observer moved_observer = {10U, {4, 4}, 0U, 0U, 0U, 0U};
     henka_terrain_stream_stats stats;
-    henka_terrain_region_state state;
+    henka_terrain_region_state state = {0};
     uint32_t index;
     int result = 0;
 
@@ -370,7 +372,7 @@ static int test_explicit_request_coalesces_queued_completion(void)
     const henka_terrain_region_id region_id = {3, 4};
     const henka_terrain_stream_observer observer = {11U, region_id, 0U, 0U, 0U, 0U};
     henka_terrain_stream_stats stats;
-    henka_terrain_region_state state;
+    henka_terrain_region_state state = {0};
     uint32_t index;
     int result = 0;
 
@@ -415,6 +417,22 @@ static int test_explicit_request_coalesces_queued_completion(void)
     if (stats.completion_count != 1U ||
         henka_terrain_streamer_update_observer(
             streamer, &(henka_terrain_stream_observer){11U, {5, 5}, 0U, 0U, 0U, 0U}) != HENKA_SUCCESS ||
+        henka_terrain_streamer_remove_observer(streamer, 11U) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    for (index = 0U; index < HENKA_TERRAIN_STREAM_TEST_POLL_LIMIT; ++index)
+    {
+        henka_terrain_streamer_get_stats(streamer, &stats);
+        if (stats.queued_request_count == 0U && stats.active_request_count == 0U)
+        {
+            break;
+        }
+#if defined(_WIN32)
+        Sleep(1U);
+#endif
+    }
+    if ((stats.queued_request_count != 0U || stats.active_request_count != 0U) ||
         henka_terrain_streamer_request_region(streamer, region_id) != HENKA_SUCCESS ||
         henka_terrain_streamer_pump(streamer, 1U) != HENKA_SUCCESS)
     {
@@ -427,6 +445,19 @@ static int test_explicit_request_coalesces_queued_completion(void)
         henka_terrain_world_get_region_state(world, region_id, &state) != HENKA_SUCCESS ||
         state.revision != 14U || state.generation != 8U)
     {
+        fprintf(
+            stderr,
+            "completion coalesce mismatch: completion=%u cancelled_completion=%" PRIu64 " completed=%" PRIu64 " failed=%" PRIu64 " queued=%u active=%u coalesced=%" PRIu64 " state_revision=%" PRIu64 " state_generation=%" PRIu64 " cpu=%d\n",
+            stats.completion_count,
+            stats.cancelled_completion_count,
+            stats.completed_request_count,
+            stats.failed_request_count,
+            stats.queued_request_count,
+            stats.active_request_count,
+            stats.coalesced_request_count,
+            state.revision,
+            state.generation,
+            state.cpu_resident ? 1 : 0);
         goto cleanup;
     }
     result = 1;
@@ -914,14 +945,25 @@ cleanup:
 
 int main(void)
 {
-    return test_streaming() &&
-        test_stale_completion_does_not_overwrite_newer_region() &&
-        test_moved_observer_discards_queued_completion() &&
-        test_explicit_request_coalesces_queued_completion() &&
-        test_observer_center_is_loaded_before_distant_regions() &&
-        test_observer_update_cancels_stale_requests() &&
-        test_explicit_request_survives_observer_cancellation() &&
-        test_observer_union_preserves_other_observer_demand() &&
-        test_observer_radius_loads_bounded_camera_window() &&
-        test_missing_region_uses_bounded_generator() ? 0 : 1;
+#define HENKA_RUN_STREAM_TEST(test_function) \
+    do \
+    { \
+        if (!(test_function)()) \
+        { \
+            fprintf(stderr, "terrain streaming test failed: %s\n", #test_function); \
+            return 1; \
+        } \
+    } while (0)
+    HENKA_RUN_STREAM_TEST(test_streaming);
+    HENKA_RUN_STREAM_TEST(test_stale_completion_does_not_overwrite_newer_region);
+    HENKA_RUN_STREAM_TEST(test_moved_observer_discards_queued_completion);
+    HENKA_RUN_STREAM_TEST(test_explicit_request_coalesces_queued_completion);
+    HENKA_RUN_STREAM_TEST(test_observer_center_is_loaded_before_distant_regions);
+    HENKA_RUN_STREAM_TEST(test_observer_update_cancels_stale_requests);
+    HENKA_RUN_STREAM_TEST(test_explicit_request_survives_observer_cancellation);
+    HENKA_RUN_STREAM_TEST(test_observer_union_preserves_other_observer_demand);
+    HENKA_RUN_STREAM_TEST(test_observer_radius_loads_bounded_camera_window);
+    HENKA_RUN_STREAM_TEST(test_missing_region_uses_bounded_generator);
+#undef HENKA_RUN_STREAM_TEST
+    return 0;
 }
