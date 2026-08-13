@@ -3444,6 +3444,7 @@ static void henka_opengl_present_hdr(
 {
     henka_viewport viewport;
     bool use_temporal_history;
+    GLint previous_active_texture = GL_TEXTURE0;
 
     state->screen_space_reflections_active = false;
     state->reflection_fallback_active = false;
@@ -3456,6 +3457,7 @@ static void henka_opengl_present_hdr(
     {
         return;
     }
+    glGetIntegerv(GL_ACTIVE_TEXTURE, &previous_active_texture);
     state->screen_space_reflections_active = use_rendered_post_processing &&
         state->hdr_depth_buffer != 0U && state->ibl_ready;
     state->reflection_fallback_active = use_rendered_post_processing &&
@@ -3610,7 +3612,7 @@ static void henka_opengl_present_hdr(
     glBindTexture(GL_TEXTURE_2D, 0U);
     g_gl.ActiveTexture(GL_TEXTURE6);
     glBindTexture(GL_TEXTURE_2D, 0U);
-    g_gl.ActiveTexture(GL_TEXTURE0);
+    g_gl.ActiveTexture((GLenum)previous_active_texture);
     g_gl.UseProgram(0);
     if (state->temporal_history_ready &&
         state->temporal_history_width == viewport.width &&
@@ -3657,7 +3659,7 @@ static void henka_opengl_present_hdr(
             viewport.width,
             viewport.height);
         glBindTexture(GL_TEXTURE_2D, 0U);
-        g_gl.ActiveTexture(GL_TEXTURE0);
+        g_gl.ActiveTexture((GLenum)previous_active_texture);
         if (glGetError() != GL_NO_ERROR)
         {
             state->temporal_history_valid = false;
