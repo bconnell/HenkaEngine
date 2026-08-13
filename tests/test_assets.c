@@ -998,12 +998,17 @@ void henka_test_assets(void)
     HENKA_TEST_ASSERT(henka_assets_material_instance_set_float(
         &material_instance, HENKA_MATERIAL_INSTANCE_TRANSMISSION, 0.65f) == HENKA_SUCCESS);
     HENKA_TEST_ASSERT(henka_assets_material_instance_set_float(
+        &material_instance, HENKA_MATERIAL_INSTANCE_SUBSURFACE, 0.55f) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_assets_material_instance_set_float(
         &material_instance, HENKA_MATERIAL_INSTANCE_THICKNESS, 0.35f) == HENKA_SUCCESS);
     HENKA_TEST_ASSERT(henka_assets_material_instance_set_float(
         &material_instance, HENKA_MATERIAL_INSTANCE_ATTENUATION_DISTANCE, 3.0f) == HENKA_SUCCESS);
     HENKA_TEST_ASSERT(henka_assets_material_instance_set_vec3(
         &material_instance, HENKA_MATERIAL_INSTANCE_ATTENUATION_COLOR,
         (henka_vec3){0.5f, 0.6f, 0.7f}) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_assets_material_instance_set_vec3(
+        &material_instance, HENKA_MATERIAL_INSTANCE_SUBSURFACE_COLOR,
+        (henka_vec3){0.9f, 0.4f, 0.25f}) == HENKA_SUCCESS);
     HENKA_TEST_ASSERT(henka_assets_material_instance_set_bool(
         &material_instance, HENKA_MATERIAL_INSTANCE_DOUBLE_SIDED, true) == HENKA_SUCCESS);
     HENKA_TEST_ASSERT(henka_assets_material_instance_set_alpha_mode(
@@ -1021,9 +1026,11 @@ void henka_test_assets(void)
     HENKA_TEST_ASSERT(material_instance.definition_revision == 5U);
     HENKA_TEST_ASSERT(material_instance.material.metallic == 0.8f);
     HENKA_TEST_ASSERT(material_instance.material.transmission == 0.65f);
+    HENKA_TEST_ASSERT(material_instance.material.subsurface == 0.55f);
     HENKA_TEST_ASSERT(material_instance.material.thickness == 0.35f);
     HENKA_TEST_ASSERT(material_instance.material.attenuation_distance == 3.0f);
     HENKA_TEST_ASSERT_FLOAT_CLOSE(material_instance.material.attenuation_color.z, 0.7f, 0.0001f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(material_instance.material.subsurface_color.y, 0.4f, 0.0001f);
     HENKA_TEST_ASSERT(material_instance.material.roughness == 0.8f);
     HENKA_TEST_ASSERT(material_instance.material.double_sided);
     HENKA_TEST_ASSERT(material_instance.material.alpha_mode == HENKA_MATERIAL_ALPHA_MASKED);

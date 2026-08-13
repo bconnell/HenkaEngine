@@ -1228,6 +1228,7 @@ static void henka_add_optional_shader_locations(
         "reflectionProbeMap", "useReflectionProbeMap", "doubleSided",
         "previousViewProjection", "previousModel", "useMotionVectors",
         "useInstancing", "cascadeBlendDistance", "thickness", "attenuationDistance", "attenuationColor",
+        "subsurface", "subsurfaceColor",
         "useTerrainLayers", "terrainLayerBaseColor[0]", "terrainLayerParameters[0]",
         "terrainLayerBaseColorAvailable[0]", "terrainLayerNormalAvailable[0]",
         "terrainLayerMetallicRoughnessAvailable[0]", "terrainLayerBaseColorTextures[0]",
@@ -5810,9 +5811,11 @@ henka_result henka_opengl_renderer_draw_scene(
         henka_set_uniform_vec3(program, "specularColor", entity->material.specular_color);
         henka_set_uniform_float(program, "ior", entity->material.ior);
         henka_set_uniform_float(program, "transmission", entity->material.transmission);
+        henka_set_uniform_float(program, "subsurface", entity->material.subsurface);
         henka_set_uniform_float(program, "thickness", entity->material.thickness);
         henka_set_uniform_float(program, "attenuationDistance", entity->material.attenuation_distance);
         henka_set_uniform_vec3(program, "attenuationColor", entity->material.attenuation_color);
+        henka_set_uniform_vec3(program, "subsurfaceColor", entity->material.subsurface_color);
         henka_set_uniform_float(program, "normalScale", entity->material.normal_scale);
         henka_set_uniform_float(program, "occlusionStrength", entity->material.occlusion_strength);
         henka_set_uniform_vec3(program, "emissiveColor", entity->material.emissive_color);

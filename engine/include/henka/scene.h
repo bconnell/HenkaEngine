@@ -81,6 +81,10 @@ typedef struct henka_material
     float thickness;
     float attenuation_distance;
     henka_vec3 attenuation_color;
+    /* Runtime-authored bounded direct-light backscatter approximation. This
+     * is not a full multi-scatter subsurface profile or diffusion texture. */
+    float subsurface;
+    henka_vec3 subsurface_color;
     float normal_scale;
     float occlusion_strength;
     float emissive_strength;

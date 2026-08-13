@@ -93,9 +93,11 @@ uniform float specularFactor;
 uniform vec3 specularColor;
 uniform float ior;
 uniform float transmission;
+uniform float subsurface;
 uniform float thickness;
 uniform float attenuationDistance;
 uniform vec3 attenuationColor;
+uniform vec3 subsurfaceColor;
 uniform float normalScale;
 uniform float occlusionStrength;
 uniform vec3 emissiveColor;
@@ -539,6 +541,8 @@ void main()
     float surfaceMetallic = saturate(metallic);
     float surfaceRoughness = clamp(roughness, 0.045, 1.0);
     float surfaceTransmission = saturate(transmission);
+    float surfaceSubsurface = saturate(subsurface);
+    vec3 surfaceSubsurfaceColor = clamp(subsurfaceColor, vec3(0.0), vec3(1.0));
     float surfaceThickness = saturate(thickness);
     float safeAttenuationDistance = max(attenuationDistance, 0.0001);
     vec3 volumeTransmittance = pow(
@@ -626,6 +630,10 @@ void main()
         }
         float shadow = shadowFactor(normal, lightDir);
         color += (diffuse + specular) * baseLayerTransmission * radiance * nDotL * shadow;
+        float backScatter = pow(saturate(dot(-normal, lightDir)), 2.0);
+        float wrappedLight = saturate((dot(normal, lightDir) + 0.35) / 1.35);
+        color += albedo * surfaceSubsurfaceColor * surfaceSubsurface *
+            (backScatter * 0.90 + wrappedLight * 0.10) * radiance * shadow;
 
         /* The shared scene moon is a bounded second directional source. It is
          * intentionally shadowless in this slice: the directional sun shadow
@@ -650,6 +658,10 @@ void main()
                 (1.0 - moonFresnel) * (1.0 - surfaceMetallic) * albedo / PI;
             color += (moonDiffuse + moonSpecular) * baseLayerTransmission *
                 moonRadiance * moonNDotL;
+            float moonBackScatter = pow(saturate(dot(-normal, moonLightDir)), 2.0);
+            float moonWrappedLight = saturate((dot(normal, moonLightDir) + 0.35) / 1.35);
+            color += albedo * surfaceSubsurfaceColor * surfaceSubsurface *
+                (moonBackScatter * 0.90 + moonWrappedLight * 0.10) * moonRadiance;
         }
 
         if (surfaceClearcoat > 0.0)
@@ -750,6 +762,10 @@ void main()
             vec3 localSpecular = localDistribution * localVisibility * localFresnel;
             vec3 localDiffuse = (1.0 - surfaceTransmission) * (1.0 - localFresnel) * (1.0 - surfaceMetallic) * albedo / PI;
             color += (localDiffuse + localSpecular) * localRadiance * localNDotL * localShadow;
+            float localBackScatter = pow(saturate(dot(-normal, localLightDirection)), 2.0);
+            float localWrappedLight = saturate((dot(normal, localLightDirection) + 0.35) / 1.35);
+            color += albedo * surfaceSubsurfaceColor * surfaceSubsurface *
+                (localBackScatter * 0.90 + localWrappedLight * 0.10) * localRadiance * localShadow;
         }
     }
     else

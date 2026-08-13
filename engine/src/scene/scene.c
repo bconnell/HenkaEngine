@@ -70,6 +70,8 @@ henka_material henka_material_default(void)
     material.thickness = 0.0f;
     material.attenuation_distance = 10000.0f;
     material.attenuation_color = (henka_vec3){1.0f, 1.0f, 1.0f};
+    material.subsurface = 0.0f;
+    material.subsurface_color = (henka_vec3){1.0f, 1.0f, 1.0f};
     material.normal_scale = 1.0f;
     material.occlusion_strength = 1.0f;
     material.emissive_strength = 0.0f;
@@ -226,6 +228,10 @@ henka_result henka_material_validate(const henka_material* material)
         !henka_is_finite_float(material->attenuation_color.x) ||
         !henka_is_finite_float(material->attenuation_color.y) ||
         !henka_is_finite_float(material->attenuation_color.z) ||
+        !henka_is_finite_float(material->subsurface) ||
+        !henka_is_finite_float(material->subsurface_color.x) ||
+        !henka_is_finite_float(material->subsurface_color.y) ||
+        !henka_is_finite_float(material->subsurface_color.z) ||
         !henka_is_finite_float(material->normal_scale) ||
         !henka_is_finite_float(material->occlusion_strength) ||
         !henka_is_finite_float(material->emissive_strength) ||
@@ -257,6 +263,10 @@ henka_result henka_material_validate(const henka_material* material)
         material->attenuation_color.x < 0.0f || material->attenuation_color.x > 1.0f ||
         material->attenuation_color.y < 0.0f || material->attenuation_color.y > 1.0f ||
         material->attenuation_color.z < 0.0f || material->attenuation_color.z > 1.0f ||
+        material->subsurface < 0.0f || material->subsurface > 1.0f ||
+        material->subsurface_color.x < 0.0f || material->subsurface_color.x > 1.0f ||
+        material->subsurface_color.y < 0.0f || material->subsurface_color.y > 1.0f ||
+        material->subsurface_color.z < 0.0f || material->subsurface_color.z > 1.0f ||
         material->normal_scale > 4.0f || material->occlusion_strength < 0.0f ||
         material->occlusion_strength > 1.0f || material->emissive_strength < 0.0f ||
         material->emissive_strength > 100.0f || material->alpha_cutoff < 0.0f ||

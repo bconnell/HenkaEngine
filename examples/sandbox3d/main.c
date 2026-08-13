@@ -309,6 +309,7 @@ typedef struct sandbox3d_physics_state
 } sandbox3d_physics_state;
 
 #define SANDBOX3D_RESIDENCY_STRESS_TEXTURE_COUNT 65U
+#define SANDBOX3D_REALISM_ENTITY_COUNT 9U
 #define SANDBOX3D_TERRAIN_TEXTURE_SIZE 64U
 
 /* Keep the interactive Terrain working set small and deterministic.  The
@@ -398,7 +399,7 @@ typedef struct sandbox3d_state
     henka_entity marker_entity;
     henka_entity fallback_model_entity;
     henka_entity foliage_entity;
-    henka_entity realism_entities[8];
+    henka_entity realism_entities[SANDBOX3D_REALISM_ENTITY_COUNT];
     sandbox3d_object_descriptor descriptors[SANDBOX3D_OBJECT_COUNT];
     sandbox3d_workspace_state workspace;
     sandbox3d_gizmo_state gizmo;
@@ -819,7 +820,8 @@ static const char* sandbox3d_material_editor_parameter_label(
         "Emissive Color", "Specular Color", "Sheen Color", "Use Lighting",
         "Depth Test", "Double Sided", "Cast Shadows", "Receive Shadows", "Alpha Mode",
         "Thickness", "Attenuation Distance", "Attenuation Color", "Base Color Texture",
-        "Normal Texture", "Metallic-Roughness Texture", "Occlusion Texture", "Emissive Texture"
+        "Normal Texture", "Metallic-Roughness Texture", "Occlusion Texture", "Emissive Texture",
+        "Subsurface", "Subsurface Color"
     };
     if (parameter < 0 || parameter >= HENKA_MATERIAL_INSTANCE_PARAMETER_COUNT)
     {
@@ -859,6 +861,7 @@ static bool sandbox3d_material_editor_is_float(henka_material_instance_parameter
         parameter == HENKA_MATERIAL_INSTANCE_SPECULAR_FACTOR ||
         parameter == HENKA_MATERIAL_INSTANCE_IOR ||
         parameter == HENKA_MATERIAL_INSTANCE_TRANSMISSION ||
+        parameter == HENKA_MATERIAL_INSTANCE_SUBSURFACE ||
         parameter == HENKA_MATERIAL_INSTANCE_NORMAL_SCALE ||
         parameter == HENKA_MATERIAL_INSTANCE_OCCLUSION_STRENGTH ||
         parameter == HENKA_MATERIAL_INSTANCE_EMISSIVE_STRENGTH ||
@@ -896,6 +899,7 @@ static float sandbox3d_material_editor_float_value(
         case HENKA_MATERIAL_INSTANCE_SPECULAR_FACTOR: return material->specular_factor;
         case HENKA_MATERIAL_INSTANCE_IOR: return material->ior;
         case HENKA_MATERIAL_INSTANCE_TRANSMISSION: return material->transmission;
+        case HENKA_MATERIAL_INSTANCE_SUBSURFACE: return material->subsurface;
         case HENKA_MATERIAL_INSTANCE_NORMAL_SCALE: return material->normal_scale;
         case HENKA_MATERIAL_INSTANCE_OCCLUSION_STRENGTH: return material->occlusion_strength;
         case HENKA_MATERIAL_INSTANCE_EMISSIVE_STRENGTH: return material->emissive_strength;
@@ -918,6 +922,7 @@ static float sandbox3d_material_editor_step(henka_material_instance_parameter pa
         case HENKA_MATERIAL_INSTANCE_EMISSIVE_STRENGTH: return 0.1f;
         case HENKA_MATERIAL_INSTANCE_THICKNESS: return 0.05f;
         case HENKA_MATERIAL_INSTANCE_ATTENUATION_DISTANCE: return 0.25f;
+        case HENKA_MATERIAL_INSTANCE_SUBSURFACE: return 0.05f;
         default: return 0.05f;
     }
 }
@@ -1007,7 +1012,8 @@ static henka_result sandbox3d_material_editor_apply_delta(
         parameter == HENKA_MATERIAL_INSTANCE_EMISSIVE_COLOR ||
         parameter == HENKA_MATERIAL_INSTANCE_SPECULAR_COLOR ||
         parameter == HENKA_MATERIAL_INSTANCE_SHEEN_COLOR ||
-        parameter == HENKA_MATERIAL_INSTANCE_ATTENUATION_COLOR)
+        parameter == HENKA_MATERIAL_INSTANCE_ATTENUATION_COLOR ||
+        parameter == HENKA_MATERIAL_INSTANCE_SUBSURFACE_COLOR)
     {
         const float delta = 0.05f * (float)direction;
 
@@ -1047,9 +1053,13 @@ static henka_result sandbox3d_material_editor_apply_delta(
             {
                 value3 = material.sheen_color;
             }
-            else
+            else if (parameter == HENKA_MATERIAL_INSTANCE_ATTENUATION_COLOR)
             {
                 value3 = material.attenuation_color;
+            }
+            else
+            {
+                value3 = material.subsurface_color;
             }
 
             {
@@ -18780,27 +18790,28 @@ static henka_result sandbox3d_initialize(henka_engine* engine, void* user_data)
     grid_material.use_lighting = false;
 
     {
-        static const char* realism_names[8] =
+        static const char* realism_names[SANDBOX3D_REALISM_ENTITY_COUNT] =
         {
             "Realism Rough Metal", "Realism Polished Metal", "Realism Painted Clearcoat",
             "Realism Plastic", "Realism Stone", "Realism Fabric Sheen",
-            "Realism Wood Dry", "Realism Stone Wet Dry"
+            "Realism Wood Dry", "Realism Stone Wet Dry", "Realism Subsurface"
         };
-        static const henka_vec3 realism_positions[8] =
+        static const henka_vec3 realism_positions[SANDBOX3D_REALISM_ENTITY_COUNT] =
         {
-            {-5.6f, 0.65f, -2.8f}, {-4.0f, 0.65f, -2.8f}, {-2.4f, 0.65f, -2.8f},
-            {-0.8f, 0.65f, -2.8f}, {0.8f, 0.65f, -2.8f}, {2.4f, 0.65f, -2.8f},
-            {4.0f, 0.65f, -2.8f}, {5.6f, 0.65f, -2.8f}
+            {-6.3f, 0.65f, -2.8f}, {-4.5f, 0.65f, -2.8f}, {-2.7f, 0.65f, -2.8f},
+            {-0.9f, 0.65f, -2.8f}, {0.9f, 0.65f, -2.8f}, {2.7f, 0.65f, -2.8f},
+            {4.5f, 0.65f, -2.8f}, {6.3f, 0.65f, -2.8f}, {0.0f, 0.65f, -4.2f}
         };
-        static const henka_vec4 realism_colors[8] =
+        static const henka_vec4 realism_colors[9] =
         {
             {0.18f, 0.20f, 0.24f, 1.0f}, {0.72f, 0.76f, 0.82f, 1.0f},
             {0.72f, 0.06f, 0.04f, 1.0f}, {0.04f, 0.24f, 0.72f, 1.0f},
             {0.42f, 0.28f, 0.16f, 1.0f}, {0.38f, 0.08f, 0.22f, 1.0f},
-            {0.72f, 0.34f, 0.10f, 1.0f}, {0.24f, 0.30f, 0.34f, 1.0f}
+            {0.72f, 0.34f, 0.10f, 1.0f}, {0.24f, 0.30f, 0.34f, 1.0f},
+            {0.58f, 0.16f, 0.12f, 1.0f}
         };
         int realism_index;
-        for (realism_index = 0; realism_index < 8; ++realism_index)
+        for (realism_index = 0; realism_index < 9; ++realism_index)
         {
             henka_material realism_material = henka_material_default();
             henka_transform realism_transform = sandbox3d_make_transform(
@@ -18858,6 +18869,12 @@ static henka_result sandbox3d_initialize(henka_engine* engine, void* user_data)
                 realism_material.normal_scale = 0.48f;
                 realism_material.clearcoat = 0.22f;
                 realism_material.clearcoat_roughness = 0.09f;
+            }
+            if (realism_index == 8)
+            {
+                realism_material.subsurface = 0.72f;
+                realism_material.subsurface_color = (henka_vec3){1.0f, 0.22f, 0.14f};
+                realism_material.roughness = 0.38f;
             }
             result = sandbox3d_configure_entity(
                 state->scene,
@@ -19699,26 +19716,29 @@ static henka_result sandbox3d_run_material_stress(
         HENKA_MATERIAL_INSTANCE_ALPHA_CUTOFF,
         HENKA_MATERIAL_INSTANCE_SHEEN_ROUGHNESS,
         HENKA_MATERIAL_INSTANCE_THICKNESS,
-        HENKA_MATERIAL_INSTANCE_ATTENUATION_DISTANCE
+        HENKA_MATERIAL_INSTANCE_ATTENUATION_DISTANCE,
+        HENKA_MATERIAL_INSTANCE_SUBSURFACE
     };
     static const float float_values[] =
     {
         0.82f, 0.31f, 0.65f, 1.45f, 0.40f, 0.90f, 0.75f,
-        2.0f, 0.55f, 0.25f, 0.42f, 0.35f, 0.40f, 4.0f
+        2.0f, 0.55f, 0.25f, 0.42f, 0.35f, 0.40f, 4.0f, 0.58f
     };
     static const henka_material_instance_parameter vec3_parameters[] =
     {
         HENKA_MATERIAL_INSTANCE_EMISSIVE_COLOR,
         HENKA_MATERIAL_INSTANCE_SPECULAR_COLOR,
         HENKA_MATERIAL_INSTANCE_SHEEN_COLOR,
-        HENKA_MATERIAL_INSTANCE_ATTENUATION_COLOR
+        HENKA_MATERIAL_INSTANCE_ATTENUATION_COLOR,
+        HENKA_MATERIAL_INSTANCE_SUBSURFACE_COLOR
     };
     static const henka_vec3 vec3_values[] =
     {
         {0.12f, 0.08f, 0.04f},
         {0.82f, 0.86f, 0.90f},
         {0.16f, 0.20f, 0.24f},
-        {0.70f, 0.82f, 0.94f}
+        {0.70f, 0.82f, 0.94f},
+        {0.92f, 0.38f, 0.22f}
     };
     static const henka_material_instance_parameter bool_parameters[] =
     {

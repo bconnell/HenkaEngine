@@ -2988,7 +2988,9 @@ enum
     HENKA_MATERIAL_OVERRIDE_NORMAL_TEXTURE = 1U << 26,
     HENKA_MATERIAL_OVERRIDE_METALLIC_ROUGHNESS_TEXTURE = 1U << 27,
     HENKA_MATERIAL_OVERRIDE_OCCLUSION_TEXTURE = 1U << 28,
-    HENKA_MATERIAL_OVERRIDE_EMISSIVE_TEXTURE = 1U << 29
+    HENKA_MATERIAL_OVERRIDE_EMISSIVE_TEXTURE = 1U << 29,
+    HENKA_MATERIAL_OVERRIDE_SUBSURFACE = 1U << 30,
+    HENKA_MATERIAL_OVERRIDE_SUBSURFACE_COLOR = UINT32_C(1) << 31
 };
 
 static uint32_t henka_material_instance_override_bit(
@@ -3025,7 +3027,9 @@ static uint32_t henka_material_instance_override_bit(
         HENKA_MATERIAL_OVERRIDE_NORMAL_TEXTURE,
         HENKA_MATERIAL_OVERRIDE_METALLIC_ROUGHNESS_TEXTURE,
         HENKA_MATERIAL_OVERRIDE_OCCLUSION_TEXTURE,
-        HENKA_MATERIAL_OVERRIDE_EMISSIVE_TEXTURE
+        HENKA_MATERIAL_OVERRIDE_EMISSIVE_TEXTURE,
+        HENKA_MATERIAL_OVERRIDE_SUBSURFACE,
+        HENKA_MATERIAL_OVERRIDE_SUBSURFACE_COLOR
     };
     return parameter >= 0 &&
         (size_t)parameter < sizeof(bits) / sizeof(bits[0]) ? bits[parameter] : 0U;
@@ -3189,6 +3193,7 @@ henka_result henka_assets_refresh_material_instance(
     HENKA_PRESERVE_MATERIAL_OVERRIDE(HENKA_MATERIAL_OVERRIDE_SPECULAR_FACTOR, specular_factor);
     HENKA_PRESERVE_MATERIAL_OVERRIDE(HENKA_MATERIAL_OVERRIDE_IOR, ior);
     HENKA_PRESERVE_MATERIAL_OVERRIDE(HENKA_MATERIAL_OVERRIDE_TRANSMISSION, transmission);
+    HENKA_PRESERVE_MATERIAL_OVERRIDE(HENKA_MATERIAL_OVERRIDE_SUBSURFACE, subsurface);
     HENKA_PRESERVE_MATERIAL_OVERRIDE(HENKA_MATERIAL_OVERRIDE_NORMAL_SCALE, normal_scale);
     HENKA_PRESERVE_MATERIAL_OVERRIDE(HENKA_MATERIAL_OVERRIDE_OCCLUSION_STRENGTH, occlusion_strength);
     HENKA_PRESERVE_MATERIAL_OVERRIDE(HENKA_MATERIAL_OVERRIDE_EMISSIVE_STRENGTH, emissive_strength);
@@ -3209,6 +3214,7 @@ henka_result henka_assets_refresh_material_instance(
     HENKA_PRESERVE_MATERIAL_OVERRIDE(HENKA_MATERIAL_OVERRIDE_THICKNESS, thickness);
     HENKA_PRESERVE_MATERIAL_OVERRIDE(HENKA_MATERIAL_OVERRIDE_ATTENUATION_DISTANCE, attenuation_distance);
     HENKA_PRESERVE_MATERIAL_OVERRIDE(HENKA_MATERIAL_OVERRIDE_ATTENUATION_COLOR, attenuation_color);
+    HENKA_PRESERVE_MATERIAL_OVERRIDE(HENKA_MATERIAL_OVERRIDE_SUBSURFACE_COLOR, subsurface_color);
     HENKA_PRESERVE_MATERIAL_OVERRIDE(HENKA_MATERIAL_OVERRIDE_NORMAL_TEXTURE, normal_texture);
     HENKA_PRESERVE_MATERIAL_OVERRIDE(HENKA_MATERIAL_OVERRIDE_METALLIC_ROUGHNESS_TEXTURE, metallic_roughness_texture);
     HENKA_PRESERVE_MATERIAL_OVERRIDE(HENKA_MATERIAL_OVERRIDE_OCCLUSION_TEXTURE, occlusion_texture);
@@ -3396,6 +3402,7 @@ static bool henka_material_instance_restore_definition_field(
         HENKA_RESTORE_MATERIAL_FIELD(HENKA_MATERIAL_INSTANCE_SPECULAR_FACTOR, specular_factor);
         HENKA_RESTORE_MATERIAL_FIELD(HENKA_MATERIAL_INSTANCE_IOR, ior);
         HENKA_RESTORE_MATERIAL_FIELD(HENKA_MATERIAL_INSTANCE_TRANSMISSION, transmission);
+        HENKA_RESTORE_MATERIAL_FIELD(HENKA_MATERIAL_INSTANCE_SUBSURFACE, subsurface);
         HENKA_RESTORE_MATERIAL_FIELD(HENKA_MATERIAL_INSTANCE_NORMAL_SCALE, normal_scale);
         HENKA_RESTORE_MATERIAL_FIELD(HENKA_MATERIAL_INSTANCE_OCCLUSION_STRENGTH, occlusion_strength);
         HENKA_RESTORE_MATERIAL_FIELD(HENKA_MATERIAL_INSTANCE_EMISSIVE_STRENGTH, emissive_strength);
@@ -3416,6 +3423,7 @@ static bool henka_material_instance_restore_definition_field(
         HENKA_RESTORE_MATERIAL_FIELD(HENKA_MATERIAL_INSTANCE_THICKNESS, thickness);
         HENKA_RESTORE_MATERIAL_FIELD(HENKA_MATERIAL_INSTANCE_ATTENUATION_DISTANCE, attenuation_distance);
         HENKA_RESTORE_MATERIAL_FIELD(HENKA_MATERIAL_INSTANCE_ATTENUATION_COLOR, attenuation_color);
+        HENKA_RESTORE_MATERIAL_FIELD(HENKA_MATERIAL_INSTANCE_SUBSURFACE_COLOR, subsurface_color);
         case HENKA_MATERIAL_INSTANCE_BASE_COLOR_TEXTURE:
             candidate->base_color_texture = definition->base_color_texture;
             candidate->use_texture = definition->use_texture;
@@ -3486,6 +3494,7 @@ henka_result henka_assets_material_instance_set_float(
         case HENKA_MATERIAL_INSTANCE_SPECULAR_FACTOR: candidate.specular_factor = value; break;
         case HENKA_MATERIAL_INSTANCE_IOR: candidate.ior = value; break;
         case HENKA_MATERIAL_INSTANCE_TRANSMISSION: candidate.transmission = value; break;
+        case HENKA_MATERIAL_INSTANCE_SUBSURFACE: candidate.subsurface = value; break;
         case HENKA_MATERIAL_INSTANCE_NORMAL_SCALE: candidate.normal_scale = value; break;
         case HENKA_MATERIAL_INSTANCE_OCCLUSION_STRENGTH: candidate.occlusion_strength = value; break;
         case HENKA_MATERIAL_INSTANCE_EMISSIVE_STRENGTH: candidate.emissive_strength = value; break;
@@ -3514,6 +3523,7 @@ henka_result henka_assets_material_instance_set_vec3(
         case HENKA_MATERIAL_INSTANCE_SPECULAR_COLOR: candidate.specular_color = value; break;
         case HENKA_MATERIAL_INSTANCE_SHEEN_COLOR: candidate.sheen_color = value; break;
         case HENKA_MATERIAL_INSTANCE_ATTENUATION_COLOR: candidate.attenuation_color = value; break;
+        case HENKA_MATERIAL_INSTANCE_SUBSURFACE_COLOR: candidate.subsurface_color = value; break;
         default: return HENKA_ERROR_INVALID_ARGUMENT;
     }
     return henka_material_instance_commit(instance, candidate, parameter);

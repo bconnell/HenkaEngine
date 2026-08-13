@@ -6,7 +6,8 @@ Henka's realism work is built as a layered, truthful rendering stack. The curren
 
 The current Rendered path includes:
 
-- glTF-oriented PBR material inputs for base color, metallic/roughness, normals, occlusion, emissive response, specular controls, IOR, transmission, volume attenuation, clearcoat, sheen, alpha modes, and double-sided rendering;
+- glTF-oriented PBR material inputs for base color, metallic/roughness, normals, occlusion, emissive response, specular controls, IOR, transmission, volume attenuation, clearcoat, sheen, alpha modes, and double-sided rendering, plus runtime-authored subsurface amount/tint controls;
+- a bounded direct-light backscatter and wrapped-light approximation for subsurface-tinted materials; this is not true multi-scatter diffusion, a skin/wax profile, thickness-texture SSS, or screen-space/ray-traced SSS;
 - HDR environment lighting with derived irradiance, prefiltered specular environment data, and a BRDF lookup texture;
 - local reflection probes;
 - directional, cascade, spot, and point shadow-map foundations;
@@ -29,10 +30,11 @@ This is not full global illumination. The screen-space method cannot see geometr
 The next realism work should build from reference scenes. Effects outside those scenes should wait until a concrete visual need is identified. Important follow-up tracks are:
 
 1. validate PBR energy response, texture color-space handling, normal-map behavior, roughness/metallic response, IBL calibration, and exposure against reference materials;
-2. validate the screen-space indirect diffuse result for leaks, halos, over-brightening, camera-motion instability, and performance;
-3. add a scene-space indirect-light solution that can represent off-screen and hidden contributors, such as a bounded irradiance-probe or probe-grid system;
-4. improve local reflection-probe placement, blending, capture policy, and interaction with indirect diffuse lighting;
-5. retain rasterization as the broad hardware baseline while designing future renderer-backend boundaries for optional hardware ray tracing;
-6. consider a path-traced reference renderer later as a visual ground-truth tool, even if production games continue to use hybrid real-time rendering.
+2. replace the bounded subsurface approximation with a production SSS solution when profile, thickness, ownership, and performance contracts are defined;
+3. validate the screen-space indirect diffuse result for leaks, halos, over-brightening, camera-motion instability, and performance;
+4. add a scene-space indirect-light solution that can represent off-screen and hidden contributors, such as a bounded irradiance-probe or probe-grid system;
+5. improve local reflection-probe placement, blending, capture policy, and interaction with indirect diffuse lighting;
+6. retain rasterization as the broad hardware baseline while designing future renderer-backend boundaries for optional hardware ray tracing;
+7. consider a path-traced reference renderer later as a visual ground-truth tool, even if production games continue to use hybrid real-time rendering.
 
 Spectral rendering is not part of the current implementation. It should remain research work until RGB PBR, indirect lighting, material import, color management, and reference-scene validation are mature.
