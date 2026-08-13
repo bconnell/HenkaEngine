@@ -1945,6 +1945,20 @@ static const char* sandbox3d_get_layout_mode_setting_value(sandbox3d_layout_mode
     }
 }
 
+static const char* sandbox3d_get_terrain_operation_label(
+    henka_terrain_edit_operation operation)
+{
+    switch (operation)
+    {
+        case HENKA_TERRAIN_EDIT_RAISE: return "Raise";
+        case HENKA_TERRAIN_EDIT_LOWER: return "Lower";
+        case HENKA_TERRAIN_EDIT_FLATTEN: return "Flatten";
+        case HENKA_TERRAIN_EDIT_SMOOTH: return "Smooth";
+        case HENKA_TERRAIN_EDIT_PAINT: return "Paint";
+        default: return "Unknown";
+    }
+}
+
 static sandbox3d_layout_mode sandbox3d_parse_layout_mode(const char* value)
 {
     if (value == NULL || value[0] == '\0')
@@ -5937,7 +5951,6 @@ static henka_result sandbox3d_apply_terrain_tool_command(
     henka_terrain_edit_operation operation)
 {
     henka_terrain_edit_command command;
-    henka_terrain_region_state region_state;
     henka_terrain_world_desc terrain_desc;
     int32_t center_sample_x = 32;
     int32_t center_sample_z = 32;
@@ -5960,12 +5973,6 @@ static henka_result sandbox3d_apply_terrain_tool_command(
     if (state->terrain_tool_layer >= HENKA_TERRAIN_ACTIVE_MATERIAL_COUNT)
     {
         state->terrain_tool_layer = 1U;
-    }
-    if (henka_terrain_world_get_region_state(
-            state->terrain_world, (henka_terrain_region_id){0, 0}, &region_state) != HENKA_SUCCESS ||
-        region_state.revision == UINT64_MAX)
-    {
-        return HENKA_ERROR_INVALID_ARGUMENT;
     }
     command = henka_terrain_edit_command_default();
     command.client_nonce = ++state->terrain_tool_nonce;
@@ -5998,7 +6005,7 @@ static henka_result sandbox3d_apply_terrain_tool_command(
     command.paint_layer = state->terrain_tool_layer;
     command.paint_strength = state->terrain_tool_strength;
     result = henka_terrain_edit_history_apply(
-        state->terrain_edit_history, &command, region_state.revision + 1U);
+        state->terrain_edit_history, &command, command.client_nonce);
     if (result == HENKA_SUCCESS)
     {
         if (state->terrain_collision_runtime != NULL)
@@ -12856,6 +12863,52 @@ static void sandbox3d_draw_scene_viewport_frame(
         }
     }
 }
+
+static void sandbox3d_draw_terrain_mode_banner(
+    sandbox3d_state* state,
+    henka_ui_rect bounds)
+{
+    char details[192];
+    const char* hint;
+
+    if (state == NULL || state->ui == NULL ||
+        state->workspace.active_utility != SANDBOX3D_UTILITY_TERRAIN ||
+        bounds.width < 300.0f || bounds.height < 120.0f)
+    {
+        return;
+    }
+
+    snprintf(
+        details,
+        sizeof(details),
+        "Radius %u  Strength %u  Falloff %s  Layer %u",
+        state->terrain_tool_radius_samples,
+        state->terrain_tool_strength,
+        state->terrain_tool_falloff == HENKA_TERRAIN_EDIT_FALLOFF_LINEAR ? "Linear" : "Smooth",
+        (unsigned int)state->terrain_tool_layer);
+    hint = state->diagnostics.terrain_pick_valid
+        ? "Drag over resident terrain to edit; boundary patches remain unchanged."
+        : "Move over resident terrain to place the brush; drag to edit.";
+    henka_ui_overlay_rect(
+        state->ui,
+        (henka_ui_rect){bounds.x + 8.0f, bounds.y + 32.0f, 390.0f, 58.0f},
+        (henka_vec4){0.035f, 0.045f, 0.065f, 0.93f});
+    (void)henka_ui_label_colored(
+        state->ui, bounds.x + 16.0f, bounds.y + 38.0f, 1.0f,
+        "Terrain Edit", HENKA_UI_COLOR_ACCENT);
+    (void)henka_ui_label_colored(
+        state->ui, bounds.x + 112.0f, bounds.y + 38.0f, 1.0f,
+        sandbox3d_get_terrain_operation_label(state->terrain_tool_operation),
+        HENKA_UI_COLOR_WARNING);
+    (void)henka_ui_label_colored(
+        state->ui, bounds.x + 16.0f, bounds.y + 56.0f, 1.0f,
+        details, HENKA_UI_COLOR_INFO);
+    (void)henka_ui_label_colored(
+        state->ui, bounds.x + 16.0f, bounds.y + 73.0f, 1.0f,
+        hint,
+        state->diagnostics.terrain_pick_valid ? HENKA_UI_COLOR_SUCCESS : HENKA_UI_COLOR_MUTED);
+}
+
 static henka_ui_semantic_color sandbox3d_debug_bool_color(bool value)
 {
     return value ? HENKA_UI_COLOR_SUCCESS : HENKA_UI_COLOR_DANGER;
@@ -13006,6 +13059,17 @@ static void sandbox3d_draw_viewport_debug_strip(
     x = bounds.x + 8.0f;
     y = bounds.y + 8.0f;
     x = sandbox3d_draw_debug_pair(state->ui, x, y, max_x, "Tool", sandbox3d_viewport_tool_mode_to_string(state->viewport_tool), HENKA_UI_COLOR_ACCENT);
+    if (state->workspace.active_utility == SANDBOX3D_UTILITY_TERRAIN)
+    {
+        x = sandbox3d_draw_debug_pair(
+            state->ui,
+            x,
+            y,
+            max_x,
+            "Terrain",
+            sandbox3d_get_terrain_operation_label(state->terrain_tool_operation),
+            HENKA_UI_COLOR_WARNING);
+    }
     x = sandbox3d_draw_debug_pair(state->ui, x, y, max_x, "Sel", selected_text, sandbox3d_debug_name_color(selected_text));
     x = sandbox3d_draw_debug_pair(state->ui, x, y, max_x, "HL", state->diagnostics.selected_highlight_active ? "On" : "Off", sandbox3d_debug_on_off_color(state->diagnostics.selected_highlight_active));
     x = sandbox3d_draw_debug_pair(state->ui, x, y, max_x, "Cap", henka_engine_is_mouse_captured(engine) ? "On" : "Off", sandbox3d_debug_on_off_color(henka_engine_is_mouse_captured(engine)));
@@ -16883,8 +16947,8 @@ static void sandbox3d_draw_utility_panel(
                 row_value,
                 sizeof(row_value),
                 "%s / %s",
-                state->terrain_tool_falloff == HENKA_TERRAIN_EDIT_FALLOFF_LINEAR ? "Linear" : "Smooth",
-                state->terrain_tool_operation == HENKA_TERRAIN_EDIT_PAINT ? "Paint" : "Sculpt");
+                sandbox3d_get_terrain_operation_label(state->terrain_tool_operation),
+                state->terrain_tool_falloff == HENKA_TERRAIN_EDIT_FALLOFF_LINEAR ? "Linear" : "Smooth");
             sandbox3d_draw_value_row(state->ui, x_left, y_start + 148.0f, panel_bounds.width - 28.0f, "Mode", row_value);
             sandbox3d_draw_section_heading(state->ui, x_left, y_start + 174.0f, "Material layers");
             for (terrain_layer_index = 0U;
@@ -17802,6 +17866,7 @@ static void sandbox3d_build_ui(henka_engine* engine, sandbox3d_state* state)
             sandbox3d_workspace_splitter_border_mask(
                 layout.left_splitter.width > 0.0f,
                 layout.right_splitter.width > 0.0f));
+        sandbox3d_draw_terrain_mode_banner(state, layout.scene_frame);
         sandbox3d_draw_reflection_probe_overlay(state, layout.scene_viewport);
         sandbox3d_draw_terrain_brush_preview(state, layout.scene_viewport);
         sandbox3d_draw_selection_highlight(state, layout.scene_viewport);

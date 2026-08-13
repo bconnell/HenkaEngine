@@ -507,6 +507,15 @@ counts directly from the manager-owned live textures. This is dependency
 inspection and edit support, not a separate material authority or a claim of
 complete viewport material-preview authoring.
 
+When Terrain is the active utility, the Scene View also shows a bounded Terrain
+Edit banner naming the active operation and its radius, strength, falloff, and
+paint layer, together with the resident-patch interaction hint. The debug strip
+repeats the active operation so a docked or resized layout does not turn the
+editor mode into an ambiguous generic sculpt state. Owner-marked Terrain chunks
+remain excluded from generic object selection and reflection-probe capture, but
+their valid terrain layer material is still bound in Material Preview and
+Rendered modes; Solid retains the neutral geometry presentation.
+
 The Terrain utility also projects the scene-view cursor through the shared
 camera ray API and queries the resident physics patch owner. A successful
 resident hit is shown with chunk/source identity and becomes the integer

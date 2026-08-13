@@ -5767,7 +5767,9 @@ henka_result henka_opengl_renderer_draw_scene(
                 program,
                 shader_data,
                 "useTerrainLayers",
-                !helper_entity && entity->material.terrain_layers_enabled);
+                entity->material.terrain_layers_enabled &&
+                henka_renderer_get_viewport_shading_mode(renderer) >=
+                    HENKA_VIEWPORT_SHADING_MATERIAL_PREVIEW);
             henka_set_uniform_vec4_array_owned(
                 program, shader_data, "terrainLayerBaseColor[0]", terrain_layer_colors, HENKA_MATERIAL_TERRAIN_LAYER_COUNT);
             henka_set_uniform_vec4_array_owned(

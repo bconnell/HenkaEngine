@@ -115,6 +115,7 @@ static henka_result terrain_pass_test_initialize(
             material_asset != context->terrain_material_asset ||
             henka_scene_get_entity_material(
                 context->scene, chunk_info.entity, &terrain_material) != HENKA_SUCCESS ||
+            !terrain_material.terrain_layers_enabled ||
             !terrain_material.cast_shadows || !terrain_material.receive_shadows)
         {
             return HENKA_ERROR_RENDERER;
