@@ -738,15 +738,14 @@ henka_result henka_terrain_client_handle_event(
             ++client->diagnostics.malformed_message_count;
             return result;
         }
+        if (henka_terrain_client_delta_is_out_of_interest(client, &delta))
+        {
+            ++client->diagnostics.out_of_interest_delta_count;
+            return HENKA_SUCCESS;
+        }
         result = henka_terrain_replica_apply_delta(client->replica, &delta, &applied);
         if (result != HENKA_SUCCESS)
         {
-            if (result == HENKA_ERROR_INVALID_ARGUMENT &&
-                henka_terrain_client_delta_is_out_of_interest(client, &delta))
-            {
-                ++client->diagnostics.out_of_interest_delta_count;
-                return HENKA_SUCCESS;
-            }
             /* The replica also uses ASSET_SOURCE for some non-gap failures.
              * Verify the revision relationship independently before allowing
              * recovery; protocol, identity, sizing, and allocation failures
