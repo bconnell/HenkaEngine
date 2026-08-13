@@ -40,8 +40,9 @@ also commits transactionally, so a malformed file does not replace the current
 authoring state.
 
 The first horizontal editor connection is now exercised by the Sandbox's
-selected Textured Cube: it owns a bounded authoring box and history, and the
-viewport ray picker resolves a hit to the actual authoring component identity.
+selected Textured Cube and Add Cube results: each owns a bounded authoring box
+and history, and the viewport ray picker resolves a hit to the actual
+authoring component identity.
 Object Details Authoring exposes bounded Vertex, Edge, and Face selection modes;
 Ctrl-click adds components to the active mode, and the viewport draws the
 selected vertices, edges, or face borders. Small Move X+, Move Y+, and Move Z+

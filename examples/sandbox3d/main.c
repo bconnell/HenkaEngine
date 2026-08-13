@@ -647,8 +647,10 @@ static const char* sandbox3d_safe_entity_name(const sandbox3d_state* state, henk
 static bool sandbox3d_is_selectable_entity(const sandbox3d_state* state, henka_entity entity);
 static void sandbox3d_select_entity(sandbox3d_state* state, henka_entity entity);
 static void sandbox3d_clear_selection(sandbox3d_state* state, const char* reason);
-static bool sandbox3d_add_primitive_object(sandbox3d_state* state);
-static henka_result sandbox3d_validate_add_primitive_smoke(sandbox3d_state* state);
+static bool sandbox3d_add_primitive_object(henka_engine* engine, sandbox3d_state* state);
+static henka_result sandbox3d_validate_add_primitive_smoke(
+    henka_engine* engine,
+    sandbox3d_state* state);
 static henka_result sandbox3d_validate_authoring_duplicate_smoke(
     henka_engine* engine,
     sandbox3d_state* state);
@@ -6980,13 +6982,14 @@ static void sandbox3d_select_entity(sandbox3d_state* state, henka_entity entity)
     }
 }
 
-static bool sandbox3d_add_primitive_object(sandbox3d_state* state)
+static bool sandbox3d_add_primitive_object(henka_engine* engine, sandbox3d_state* state)
 {
     henka_action_request request;
     henka_action_result result;
     henka_material material;
+    sandbox3d_authoring_object* authoring_object = NULL;
 
-    if (state == NULL || state->actions == NULL)
+    if (engine == NULL || state == NULL || state->actions == NULL)
     {
         return false;
     }
@@ -7035,36 +7038,76 @@ static bool sandbox3d_add_primitive_object(sandbox3d_state* state)
         return false;
     }
 
+    if (sandbox3d_authoring_object_create_box(
+            engine,
+            state->scene,
+            result.affected_entity,
+            1.0f,
+            1.0f,
+            1.0f,
+            NULL,
+            32U,
+            &authoring_object) != HENKA_SUCCESS ||
+        !sandbox3d_register_authoring_object(state, authoring_object))
+    {
+        sandbox3d_authoring_object_destroy(authoring_object);
+        {
+            henka_action_request rollback_request;
+
+            memset(&rollback_request, 0, sizeof(rollback_request));
+            rollback_request.command = HENKA_ACTION_COMMAND_DELETE_OBJECT;
+            rollback_request.params.entity.entity = result.affected_entity;
+            (void)sandbox3d_execute_action(state, &rollback_request, NULL);
+        }
+        return false;
+    }
+
     sandbox3d_select_entity(state, result.affected_entity);
     return true;
 }
 
-static henka_result sandbox3d_validate_add_primitive_smoke(sandbox3d_state* state)
+static henka_result sandbox3d_validate_add_primitive_smoke(
+    henka_engine* engine,
+    sandbox3d_state* state)
 {
     henka_entity entity;
     henka_mesh* mesh;
     henka_material material;
+    sandbox3d_authoring_object* authoring_object;
 
     if (state == NULL || state->scene == NULL)
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
 
-    if (!sandbox3d_add_primitive_object(state))
+    if (!sandbox3d_add_primitive_object(engine, state))
     {
         return HENKA_ERROR_UNKNOWN;
     }
 
     entity = sandbox3d_get_real_selected_entity(state);
+    authoring_object = sandbox3d_find_authoring_object(state, entity);
     mesh = NULL;
     memset(&material, 0, sizeof(material));
     if (entity == HENKA_INVALID_ENTITY ||
+        authoring_object == NULL ||
         henka_scene_get_entity_mesh(state->scene, entity, &mesh) != HENKA_SUCCESS ||
-        mesh != state->cube_mesh ||
+        mesh == state->cube_mesh ||
         henka_scene_get_entity_material(state->scene, entity, &material) != HENKA_SUCCESS ||
         material.type != HENKA_MATERIAL_TYPE_LIT ||
         material.shader != state->basic_shader ||
         material.base_color.w <= 0.0f)
+    {
+        (void)sandbox3d_delete_selected_object(state);
+        return HENKA_ERROR_UNKNOWN;
+    }
+
+    sandbox3d_authoring_object_set_selection_mode(
+        authoring_object, SANDBOX3D_AUTHORING_SELECTION_VERTEX);
+    if (sandbox3d_authoring_object_select_component(authoring_object, 1U, false) != HENKA_SUCCESS ||
+        sandbox3d_authoring_object_move_selected_components(
+            authoring_object, (henka_vec3){0.125f, 0.0f, 0.0f}) != HENKA_SUCCESS ||
+        sandbox3d_authoring_object_undo(authoring_object) != HENKA_SUCCESS)
     {
         (void)sandbox3d_delete_selected_object(state);
         return HENKA_ERROR_UNKNOWN;
@@ -14505,7 +14548,7 @@ static void sandbox3d_draw_scene_objects_panel(
             (henka_ui_rect){panel_bounds.x + 14.0f, action_y, action_width, 24.0f},
             "Add Cube"))
     {
-        if (sandbox3d_add_primitive_object(state))
+        if (sandbox3d_add_primitive_object(engine, state))
         {
             sandbox3d_set_status(state, false, "Created and selected a new cube.");
         }
@@ -20912,7 +20955,7 @@ static void sandbox3d_update(henka_engine* engine, double delta_seconds, void* u
     if (state->smoke_test && !state->primitive_add_smoke_ran)
     {
         const henka_result primitive_smoke_result =
-            sandbox3d_validate_add_primitive_smoke(state);
+            sandbox3d_validate_add_primitive_smoke(engine, state);
         if (primitive_smoke_result != HENKA_SUCCESS)
         {
             state->smoke_validation_failed = true;
