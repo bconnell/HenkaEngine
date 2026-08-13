@@ -224,6 +224,10 @@ typedef struct henka_asset_texture_entry
     henka_asset_metadata metadata;
 } henka_asset_texture_entry;
 
+/* One case-insensitive suffix contract is shared by loading, residency, and
+ * budget eviction so a texture cannot be streamable in only one path. */
+bool henka_asset_texture_path_is_ktx2(const char* path);
+
 typedef struct henka_asset_mesh_entry
 {
     char* key;

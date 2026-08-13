@@ -415,7 +415,6 @@ static bool henka_engine_is_ktx2_texture(
 {
     size_t index;
     const char* source_path;
-    size_t length;
 
     if (manager == NULL || texture == NULL)
         return false;
@@ -426,13 +425,7 @@ static bool henka_engine_is_ktx2_texture(
         source_path = manager->texture_entries[index].metadata.source_path;
         if (source_path == NULL)
             return false;
-        length = strlen(source_path);
-        return length >= 5U &&
-            tolower((unsigned char)source_path[length - 5U]) == '.' &&
-            tolower((unsigned char)source_path[length - 4U]) == 'k' &&
-            tolower((unsigned char)source_path[length - 3U]) == 't' &&
-            tolower((unsigned char)source_path[length - 2U]) == 'x' &&
-            tolower((unsigned char)source_path[length - 1U]) == '2';
+        return henka_asset_texture_path_is_ktx2(source_path);
     }
     return false;
 }

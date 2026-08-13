@@ -18,6 +18,9 @@
 void henka_test_assets(void)
 {
 #if defined(HENKA_WITH_KTX2_TRANSCODER)
+    HENKA_TEST_ASSERT(henka_asset_texture_path_is_ktx2("textures/albedo.Ktx2"));
+    HENKA_TEST_ASSERT(henka_asset_texture_path_is_ktx2("textures/albedo.kTX2"));
+    HENKA_TEST_ASSERT(!henka_asset_texture_path_is_ktx2("textures/albedo.ktx"));
     static const unsigned char malformed_ktx2[] =
         {0xABU, 0x4BU, 0x54U, 0x58U, 0x20U, 0x32U, 0x30U, 0xBBU, 0x0DU, 0x0AU, 0x1AU, 0x0AU};
     unsigned char* decoded_ktx2 = NULL;

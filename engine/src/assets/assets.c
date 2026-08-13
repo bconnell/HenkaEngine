@@ -42,7 +42,7 @@ static char* henka_duplicate_string(const char* value)
     return copy;
 }
 
-static bool henka_asset_texture_path_is_ktx2(const char* path)
+bool henka_asset_texture_path_is_ktx2(const char* path)
 {
     size_t length;
 
@@ -54,7 +54,7 @@ static bool henka_asset_texture_path_is_ktx2(const char* path)
         tolower((unsigned char)path[length - 4U]) == 'k' &&
         tolower((unsigned char)path[length - 3U]) == 't' &&
         tolower((unsigned char)path[length - 2U]) == 'x' &&
-        path[length - 1U] == '2';
+        tolower((unsigned char)path[length - 1U]) == '2';
 }
 
 static void henka_assets_add_failed_texture_bytes(
