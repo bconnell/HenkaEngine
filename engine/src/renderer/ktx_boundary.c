@@ -76,7 +76,7 @@ static bool henka_ktx_vk_format_to_gpu_format(
         case 137U:
         case 138U:
             *out_format = HENKA_KTX2_GPU_FORMAT_BC3;
-            supported = (capabilities & HENKA_KTX2_CAPABILITY_BC1_3) != 0U;
+            supported = (capabilities & HENKA_KTX2_CAPABILITY_BC3) != 0U;
             break;
         case 141U:
             *out_format = HENKA_KTX2_GPU_FORMAT_BC5;
@@ -182,7 +182,8 @@ static bool henka_ktx_select_transcode_target(
         *out_target = KTX_TTF_BC7_RGBA;
         return true;
     }
-    if ((capabilities & HENKA_KTX2_CAPABILITY_BC1_3) != 0U)
+    if ((capabilities & (HENKA_KTX2_CAPABILITY_BC1_3 | HENKA_KTX2_CAPABILITY_BC3)) ==
+        (HENKA_KTX2_CAPABILITY_BC1_3 | HENKA_KTX2_CAPABILITY_BC3))
     {
         *out_target = KTX_TTF_BC1_OR_3;
         return true;

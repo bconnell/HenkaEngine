@@ -107,7 +107,9 @@ pixel/block byte count before a payload is published. Texture info now reports t
 resident mip counts, whether the backend chose a compressed GPU format, and
 the selected BC, ETC2, ASTC, or RGBA8 resident format. Uncompressed and Basis
 sources can fall back to RGBA8 when compressed upload is unavailable; native
-compressed payloads without a matching GPU capability fail closed because the
+native BC1 and BC3 payloads are checked against independent GPU capabilities;
+for example, DXT1-only support does not authorize a BC3 upload. Compressed
+payloads without a matching GPU capability fail closed because the
 bounded KTX boundary does not reinterpret compressed blocks as RGBA8.
 The asset manager can enforce a configured texture residency budget before a
 new source load is published and exposes rejection, resident-byte, managed

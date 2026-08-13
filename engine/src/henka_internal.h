@@ -38,6 +38,7 @@ typedef enum henka_ktx2_gpu_format
 #define HENKA_KTX2_CAPABILITY_BC7 (1U << 2)
 #define HENKA_KTX2_CAPABILITY_ETC2 (1U << 3)
 #define HENKA_KTX2_CAPABILITY_ASTC_4X4 (1U << 4)
+#define HENKA_KTX2_CAPABILITY_BC3 (1U << 5)
 
 typedef struct henka_ktx2_upload_level
 {

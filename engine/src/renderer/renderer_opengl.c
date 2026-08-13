@@ -586,6 +586,8 @@ static uint32_t henka_opengl_ktx2_capabilities(void)
     if (henka_opengl_has_extension(extensions, "GL_EXT_texture_compression_s3tc") ||
         henka_opengl_has_extension(extensions, "GL_EXT_texture_compression_dxt1"))
         capabilities |= HENKA_KTX2_CAPABILITY_BC1_3;
+    if (henka_opengl_has_extension(extensions, "GL_EXT_texture_compression_s3tc"))
+        capabilities |= HENKA_KTX2_CAPABILITY_BC3;
     if (henka_opengl_has_extension(extensions, "GL_EXT_texture_compression_rgtc") ||
         henka_opengl_has_extension(extensions, "GL_ARB_texture_compression_rgtc"))
         capabilities |= HENKA_KTX2_CAPABILITY_BC5;
