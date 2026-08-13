@@ -4400,38 +4400,65 @@ static bool henka_opengl_reflection_probe_desc_equal(
 static bool henka_opengl_ensure_reflection_probe_target(
     henka_opengl_renderer_state* state)
 {
+    GLuint framebuffer;
+    GLuint depth_buffer;
+    bool created_framebuffer = false;
+    bool created_depth_buffer = false;
+    bool depth_storage_valid = true;
     GLint previous_renderbuffer = 0;
 
     if (state == NULL)
     {
         return false;
     }
+    framebuffer = state->reflection_probe_framebuffer;
+    depth_buffer = state->reflection_probe_depth_buffer;
     glGetIntegerv(GL_RENDERBUFFER_BINDING, &previous_renderbuffer);
-    if (state->reflection_probe_framebuffer == 0U)
+    if (framebuffer == 0U)
     {
-        g_gl.GenFramebuffers(1, &state->reflection_probe_framebuffer);
+        g_gl.GenFramebuffers(1, &framebuffer);
+        created_framebuffer = true;
     }
-    if (state->reflection_probe_depth_buffer == 0U)
+    if (depth_buffer == 0U)
     {
-        g_gl.GenRenderbuffers(1, &state->reflection_probe_depth_buffer);
-        if (state->reflection_probe_depth_buffer != 0U)
+        g_gl.GenRenderbuffers(1, &depth_buffer);
+        created_depth_buffer = true;
+        if (depth_buffer != 0U)
         {
-            g_gl.BindRenderbuffer(GL_RENDERBUFFER, state->reflection_probe_depth_buffer);
+            g_gl.BindRenderbuffer(GL_RENDERBUFFER, depth_buffer);
+            while (glGetError() != GL_NO_ERROR) {}
             g_gl.RenderbufferStorage(
                 GL_RENDERBUFFER,
                 GL_DEPTH_COMPONENT24,
                 HENKA_REFLECTION_PROBE_RESOLUTION,
                 HENKA_REFLECTION_PROBE_RESOLUTION);
-            henka_opengl_memory_add_category(
-                state,
-                &state->tracked_render_target_bytes,
-                (uint64_t)HENKA_REFLECTION_PROBE_RESOLUTION *
-                    (uint64_t)HENKA_REFLECTION_PROBE_RESOLUTION * 4U);
+            depth_storage_valid = glGetError() == GL_NO_ERROR;
+            if (depth_storage_valid)
+            {
+                henka_opengl_memory_add_category(
+                    state,
+                    &state->tracked_render_target_bytes,
+                    (uint64_t)HENKA_REFLECTION_PROBE_RESOLUTION *
+                        (uint64_t)HENKA_REFLECTION_PROBE_RESOLUTION * 4U);
+            }
         }
     }
     g_gl.BindRenderbuffer(GL_RENDERBUFFER, (GLuint)previous_renderbuffer);
-    return state->reflection_probe_framebuffer != 0U &&
-        state->reflection_probe_depth_buffer != 0U;
+    if (framebuffer == 0U || depth_buffer == 0U || !depth_storage_valid)
+    {
+        if (created_framebuffer && framebuffer != 0U)
+        {
+            g_gl.DeleteFramebuffers(1, &framebuffer);
+        }
+        if (created_depth_buffer && depth_buffer != 0U)
+        {
+            g_gl.DeleteRenderbuffers(1, &depth_buffer);
+        }
+        return false;
+    }
+    state->reflection_probe_framebuffer = framebuffer;
+    state->reflection_probe_depth_buffer = depth_buffer;
+    return true;
 }
 
 static bool henka_opengl_allocate_reflection_probe_cube(GLuint* out_texture)
