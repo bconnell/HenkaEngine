@@ -183,12 +183,19 @@ static bool henka_ktx_select_transcode_target(
         *out_target = KTX_TTF_BC5_RG;
         return true;
     }
+    if (usage == HENKA_TEXTURE_USAGE_NORMAL &&
+        (capabilities & HENKA_KTX2_CAPABILITY_ETC2) != 0U)
+    {
+        *out_target = KTX_TTF_ETC2_EAC_RG11;
+        return true;
+    }
     if ((capabilities & HENKA_KTX2_CAPABILITY_BC7) != 0U)
     {
         *out_target = KTX_TTF_BC7_RGBA;
         return true;
     }
-    if ((capabilities & (HENKA_KTX2_CAPABILITY_BC1_3 | HENKA_KTX2_CAPABILITY_BC3)) ==
+    if (usage != HENKA_TEXTURE_USAGE_NORMAL &&
+        (capabilities & (HENKA_KTX2_CAPABILITY_BC1_3 | HENKA_KTX2_CAPABILITY_BC3)) ==
         (HENKA_KTX2_CAPABILITY_BC1_3 | HENKA_KTX2_CAPABILITY_BC3))
     {
         *out_target = KTX_TTF_BC1_OR_3;
@@ -196,8 +203,7 @@ static bool henka_ktx_select_transcode_target(
     }
     if ((capabilities & HENKA_KTX2_CAPABILITY_ETC2) != 0U)
     {
-        *out_target = usage == HENKA_TEXTURE_USAGE_NORMAL ?
-            KTX_TTF_ETC2_EAC_RG11 : KTX_TTF_ETC2_RGBA;
+        *out_target = KTX_TTF_ETC2_RGBA;
         return true;
     }
     if ((capabilities & HENKA_KTX2_CAPABILITY_ASTC_4X4) != 0U)

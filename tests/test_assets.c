@@ -267,7 +267,8 @@ void henka_test_assets(void)
                 HENKA_TEST_ASSERT((henka_ktx2_prepare_upload(
                     generated_bytes,
                     (size_t)generated_size,
-                    HENKA_TEXTURE_USAGE_GENERIC_DATA,
+                    eac_formats[eac_index] == 155U ?
+                        HENKA_TEXTURE_USAGE_NORMAL : HENKA_TEXTURE_USAGE_GENERIC_DATA,
                     HENKA_TEXTURE_COLOR_SPACE_LINEAR,
                     HENKA_KTX2_CAPABILITY_ETC2,
                     &upload) == HENKA_SUCCESS) == eac_supported[eac_index]);
