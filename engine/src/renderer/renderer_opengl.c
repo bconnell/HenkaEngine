@@ -2525,6 +2525,7 @@ static henka_result henka_opengl_create_shadow_target(
     GLuint depth_texture = 0U;
     GLuint framebuffer = 0U;
     GLint previous_framebuffer = 0;
+    GLint previous_active_texture = GL_TEXTURE0;
     GLint previous_texture = 0;
     GLint previous_draw_buffer = GL_BACK;
     GLint previous_read_buffer = GL_BACK;
@@ -2539,6 +2540,7 @@ static henka_result henka_opengl_create_shadow_target(
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
     glGetIntegerv(GL_FRAMEBUFFER_BINDING, &previous_framebuffer);
+    glGetIntegerv(GL_ACTIVE_TEXTURE, &previous_active_texture);
     glGetIntegerv(GL_TEXTURE_BINDING_2D, &previous_texture);
     glGetIntegerv(GL_DRAW_BUFFER, &previous_draw_buffer);
     glGetIntegerv(GL_READ_BUFFER, &previous_read_buffer);
@@ -2549,6 +2551,7 @@ static henka_result henka_opengl_create_shadow_target(
         if (depth_texture != 0U) glDeleteTextures(1, &depth_texture);
         if (framebuffer != 0U) g_gl.DeleteFramebuffers(1, &framebuffer);
         (void)snprintf(state->shadow_failure_reason, sizeof(state->shadow_failure_reason), "GPU object allocation failed");
+        g_gl.ActiveTexture((GLenum)previous_active_texture);
         return HENKA_ERROR_RENDERER;
     }
     g_gl.BindFramebuffer(GL_FRAMEBUFFER, framebuffer);
@@ -2569,6 +2572,7 @@ static henka_result henka_opengl_create_shadow_target(
     {
         (void)snprintf(state->shadow_failure_reason, sizeof(state->shadow_failure_reason), "incomplete shadow framebuffer");
         g_gl.BindFramebuffer(GL_FRAMEBUFFER, (GLuint)previous_framebuffer);
+        g_gl.ActiveTexture((GLenum)previous_active_texture);
         glBindTexture(GL_TEXTURE_2D, (GLuint)previous_texture);
         glDrawBuffer((GLenum)previous_draw_buffer);
         glReadBuffer((GLenum)previous_read_buffer);
@@ -2577,6 +2581,7 @@ static henka_result henka_opengl_create_shadow_target(
         return HENKA_ERROR_RENDERER;
     }
     g_gl.BindFramebuffer(GL_FRAMEBUFFER, (GLuint)previous_framebuffer);
+    g_gl.ActiveTexture((GLenum)previous_active_texture);
     glBindTexture(GL_TEXTURE_2D, (GLuint)previous_texture);
     glDrawBuffer((GLenum)previous_draw_buffer);
     glReadBuffer((GLenum)previous_read_buffer);
@@ -2604,6 +2609,7 @@ static henka_result henka_opengl_create_local_shadow_target(
     GLuint depth_texture = 0U;
     GLuint framebuffer = 0U;
     GLint previous_framebuffer = 0;
+    GLint previous_active_texture = GL_TEXTURE0;
     GLint previous_texture = 0;
     GLint previous_draw_buffer = 0;
     GLint previous_read_buffer = 0;
@@ -2619,6 +2625,7 @@ static henka_result henka_opengl_create_local_shadow_target(
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
     glGetIntegerv(GL_FRAMEBUFFER_BINDING, &previous_framebuffer);
+    glGetIntegerv(GL_ACTIVE_TEXTURE, &previous_active_texture);
     glGetIntegerv(GL_TEXTURE_BINDING_2D, &previous_texture);
     glGetIntegerv(GL_DRAW_BUFFER, &previous_draw_buffer);
     glGetIntegerv(GL_READ_BUFFER, &previous_read_buffer);
@@ -2631,6 +2638,7 @@ static henka_result henka_opengl_create_local_shadow_target(
         (void)snprintf(state->local_shadow_failure_reason,
             sizeof(state->local_shadow_failure_reason),
             "local shadow GPU allocation failed");
+        g_gl.ActiveTexture((GLenum)previous_active_texture);
         return HENKA_ERROR_RENDERER;
     }
     g_gl.BindFramebuffer(GL_FRAMEBUFFER, framebuffer);
@@ -2650,6 +2658,7 @@ static henka_result henka_opengl_create_local_shadow_target(
             sizeof(state->local_shadow_failure_reason),
             "incomplete local shadow framebuffer");
         g_gl.BindFramebuffer(GL_FRAMEBUFFER, (GLuint)previous_framebuffer);
+        g_gl.ActiveTexture((GLenum)previous_active_texture);
         glBindTexture(GL_TEXTURE_2D, (GLuint)previous_texture);
         glDrawBuffer((GLenum)previous_draw_buffer);
         glReadBuffer((GLenum)previous_read_buffer);
@@ -2658,6 +2667,7 @@ static henka_result henka_opengl_create_local_shadow_target(
         return HENKA_ERROR_RENDERER;
     }
     g_gl.BindFramebuffer(GL_FRAMEBUFFER, (GLuint)previous_framebuffer);
+    g_gl.ActiveTexture((GLenum)previous_active_texture);
     glBindTexture(GL_TEXTURE_2D, (GLuint)previous_texture);
     glDrawBuffer((GLenum)previous_draw_buffer);
     glReadBuffer((GLenum)previous_read_buffer);
@@ -2683,6 +2693,7 @@ static henka_result henka_opengl_create_cascade_shadow_target(
     GLuint depth_texture = 0U;
     GLuint framebuffer = 0U;
     GLint previous_framebuffer = 0;
+    GLint previous_active_texture = GL_TEXTURE0;
     GLint previous_texture = 0;
     GLint previous_draw_buffer = 0;
     GLint previous_read_buffer = 0;
@@ -2698,6 +2709,7 @@ static henka_result henka_opengl_create_cascade_shadow_target(
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
     glGetIntegerv(GL_FRAMEBUFFER_BINDING, &previous_framebuffer);
+    glGetIntegerv(GL_ACTIVE_TEXTURE, &previous_active_texture);
     glGetIntegerv(GL_TEXTURE_BINDING_2D, &previous_texture);
     glGetIntegerv(GL_DRAW_BUFFER, &previous_draw_buffer);
     glGetIntegerv(GL_READ_BUFFER, &previous_read_buffer);
@@ -2710,6 +2722,7 @@ static henka_result henka_opengl_create_cascade_shadow_target(
         (void)snprintf(state->cascade_shadow_failure_reason,
             sizeof(state->cascade_shadow_failure_reason),
             "cascade shadow GPU allocation failed");
+        g_gl.ActiveTexture((GLenum)previous_active_texture);
         return HENKA_ERROR_RENDERER;
     }
     g_gl.BindFramebuffer(GL_FRAMEBUFFER, framebuffer);
@@ -2733,6 +2746,7 @@ static henka_result henka_opengl_create_cascade_shadow_target(
             sizeof(state->cascade_shadow_failure_reason),
             "incomplete cascade shadow framebuffer");
         g_gl.BindFramebuffer(GL_FRAMEBUFFER, (GLuint)previous_framebuffer);
+        g_gl.ActiveTexture((GLenum)previous_active_texture);
         glBindTexture(GL_TEXTURE_2D, (GLuint)previous_texture);
         glDrawBuffer((GLenum)previous_draw_buffer);
         glReadBuffer((GLenum)previous_read_buffer);
@@ -2741,6 +2755,7 @@ static henka_result henka_opengl_create_cascade_shadow_target(
         return HENKA_ERROR_RENDERER;
     }
     g_gl.BindFramebuffer(GL_FRAMEBUFFER, (GLuint)previous_framebuffer);
+    g_gl.ActiveTexture((GLenum)previous_active_texture);
     glBindTexture(GL_TEXTURE_2D, (GLuint)previous_texture);
     glDrawBuffer((GLenum)previous_draw_buffer);
     glReadBuffer((GLenum)previous_read_buffer);
@@ -2797,6 +2812,7 @@ static henka_result henka_opengl_create_point_shadow_target(
             sizeof(state->point_shadow_failure_reason),
             "point shadow GPU allocation failed");
         g_gl.ActiveTexture((GLenum)previous_active_texture);
+        glBindTexture(GL_TEXTURE_CUBE_MAP, (GLuint)previous_texture);
         return HENKA_ERROR_RENDERER;
     }
     glBindTexture(GL_TEXTURE_CUBE_MAP, depth_texture);
