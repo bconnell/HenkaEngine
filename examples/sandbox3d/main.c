@@ -2788,6 +2788,16 @@ static bool sandbox3d_project_handle_point(
         henka_camera_world_to_screen(&state->camera, viewport.width, viewport.height, world_point, out_screen_local, NULL) == HENKA_SUCCESS;
 }
 
+static henka_vec3 sandbox3d_transform_authoring_point(
+    henka_transform transform,
+    henka_vec3 point)
+{
+    point.x *= transform.scale.x;
+    point.y *= transform.scale.y;
+    point.z *= transform.scale.z;
+    return henka_vec3_add(transform.position, henka_quat_rotate_vec3(transform.rotation, point));
+}
+
 static bool sandbox3d_project_handle_box(
     const sandbox3d_state* state,
     henka_viewport viewport,
@@ -3425,6 +3435,119 @@ static void sandbox3d_draw_selection_highlight(sandbox3d_state* state, henka_vie
 
         sandbox3d_draw_viewport_clipped_overlay_line(state->ui, viewport, start, end, 4.0f, outer_color);
         sandbox3d_draw_viewport_clipped_overlay_line(state->ui, viewport, start, end, 2.0f, inner_color);
+    }
+
+    if (state->authoring_object != NULL &&
+        selected_entity == sandbox3d_authoring_object_get_entity(state->authoring_object))
+    {
+        const henka_authoring_mesh* mesh = sandbox3d_authoring_object_get_mesh(state->authoring_object);
+        henka_transform transform;
+        const sandbox3d_authoring_selection_mode selection_mode =
+            sandbox3d_authoring_object_get_selection_mode(state->authoring_object);
+        const size_t selected_count =
+            sandbox3d_authoring_object_get_selected_component_count(state->authoring_object);
+        size_t selected_index;
+
+        if (mesh != NULL &&
+            henka_scene_get_entity_transform(state->scene, selected_entity, &transform) == HENKA_SUCCESS)
+        {
+            const henka_vec4 component_outer = (henka_vec4){0.01f, 0.03f, 0.05f, 0.95f};
+            const henka_vec4 component_inner = (henka_vec4){0.12f, 0.88f, 1.0f, 0.98f};
+            for (selected_index = 0U; selected_index < selected_count; ++selected_index)
+            {
+                uint32_t component_id;
+                if (sandbox3d_authoring_object_get_selected_component_at(
+                        state->authoring_object, selected_index, &component_id) != HENKA_SUCCESS)
+                {
+                    continue;
+                }
+                if (selection_mode == SANDBOX3D_AUTHORING_SELECTION_VERTEX)
+                {
+                    const henka_authoring_vertex* vertex = henka_authoring_mesh_get_vertex(mesh, component_id);
+                    henka_vec2 center;
+                    const float marker = 6.0f;
+                    if (vertex == NULL || !sandbox3d_project_handle_point(
+                            state, viewport,
+                            sandbox3d_transform_authoring_point(transform, vertex->position),
+                            &center))
+                    {
+                        continue;
+                    }
+                    (void)sandbox3d_draw_viewport_clipped_overlay_line(
+                        state->ui, viewport,
+                        (henka_vec2){center.x - marker, center.y},
+                        (henka_vec2){center.x + marker, center.y},
+                        4.0f, component_outer);
+                    (void)sandbox3d_draw_viewport_clipped_overlay_line(
+                        state->ui, viewport,
+                        (henka_vec2){center.x - marker, center.y},
+                        (henka_vec2){center.x + marker, center.y},
+                        2.0f, component_inner);
+                    (void)sandbox3d_draw_viewport_clipped_overlay_line(
+                        state->ui, viewport,
+                        (henka_vec2){center.x, center.y - marker},
+                        (henka_vec2){center.x, center.y + marker},
+                        4.0f, component_outer);
+                    (void)sandbox3d_draw_viewport_clipped_overlay_line(
+                        state->ui, viewport,
+                        (henka_vec2){center.x, center.y - marker},
+                        (henka_vec2){center.x, center.y + marker},
+                        2.0f, component_inner);
+                }
+                else if (selection_mode == SANDBOX3D_AUTHORING_SELECTION_EDGE)
+                {
+                    const henka_authoring_edge* edge_data = henka_authoring_mesh_get_edge(mesh, component_id);
+                    const henka_authoring_vertex* first;
+                    const henka_authoring_vertex* second;
+                    henka_vec2 start;
+                    henka_vec2 end;
+                    if (edge_data == NULL ||
+                        (first = henka_authoring_mesh_get_vertex(mesh, edge_data->vertices[0])) == NULL ||
+                        (second = henka_authoring_mesh_get_vertex(mesh, edge_data->vertices[1])) == NULL ||
+                        !sandbox3d_project_handle_point(
+                            state, viewport,
+                            sandbox3d_transform_authoring_point(transform, first->position), &start) ||
+                        !sandbox3d_project_handle_point(
+                            state, viewport,
+                            sandbox3d_transform_authoring_point(transform, second->position), &end))
+                    {
+                        continue;
+                    }
+                    (void)sandbox3d_draw_viewport_clipped_overlay_line(
+                        state->ui, viewport, start, end, 5.0f, component_outer);
+                    (void)sandbox3d_draw_viewport_clipped_overlay_line(
+                        state->ui, viewport, start, end, 3.0f, component_inner);
+                }
+                else
+                {
+                    const henka_authoring_face* face = henka_authoring_mesh_get_face(mesh, component_id);
+                    size_t corner;
+                    if (face == NULL) continue;
+                    for (corner = 0U; corner < face->corner_count; ++corner)
+                    {
+                        const henka_authoring_vertex* first = henka_authoring_mesh_get_vertex(mesh, face->vertices[corner]);
+                        const henka_authoring_vertex* second = henka_authoring_mesh_get_vertex(
+                            mesh, face->vertices[(corner + 1U) % face->corner_count]);
+                        henka_vec2 start;
+                        henka_vec2 end;
+                        if (first == NULL || second == NULL ||
+                            !sandbox3d_project_handle_point(
+                                state, viewport,
+                                sandbox3d_transform_authoring_point(transform, first->position), &start) ||
+                            !sandbox3d_project_handle_point(
+                                state, viewport,
+                                sandbox3d_transform_authoring_point(transform, second->position), &end))
+                        {
+                            continue;
+                        }
+                        (void)sandbox3d_draw_viewport_clipped_overlay_line(
+                            state->ui, viewport, start, end, 5.0f, component_outer);
+                        (void)sandbox3d_draw_viewport_clipped_overlay_line(
+                            state->ui, viewport, start, end, 3.0f, component_inner);
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -9883,6 +10006,7 @@ static bool sandbox3d_try_pick_object(henka_engine* engine, sandbox3d_state* sta
     henka_ray ray;
     float distance;
     bool object_hit;
+    bool authoring_component_hit = false;
     bool terrain_hit_valid;
     henka_entity selected_entity;
     henka_viewport scene_viewport;
@@ -10025,19 +10149,33 @@ static bool sandbox3d_try_pick_object(henka_engine* engine, sandbox3d_state* sta
         sandbox3d_select_entity(state, picked_entity);
         if (state->authoring_object != NULL &&
             picked_entity == sandbox3d_authoring_object_get_entity(state->authoring_object) &&
-            sandbox3d_authoring_object_pick_face(state->authoring_object, ray, 1000000.0f) == HENKA_SUCCESS)
+            sandbox3d_authoring_object_pick_component(
+                state->authoring_object,
+                ray,
+                1000000.0f,
+                henka_input_is_key_down(engine, HENKA_KEY_LEFT_CTRL)) == HENKA_SUCCESS)
         {
+            const sandbox3d_authoring_selection_mode selection_mode =
+                sandbox3d_authoring_object_get_selection_mode(state->authoring_object);
+            const char* selection_label = selection_mode == SANDBOX3D_AUTHORING_SELECTION_VERTEX
+                ? "vertex"
+                : selection_mode == SANDBOX3D_AUTHORING_SELECTION_EDGE ? "edge" : "face";
+            authoring_component_hit = true;
             sandbox3d_set_statusf(
                 state,
                 false,
                 false,
-                "Picked %s face %u.",
+                "Picked %s %s (%zu selected).",
                 sandbox3d_safe_entity_name(state, picked_entity, "object"),
-                (unsigned int)sandbox3d_authoring_object_get_selected_face(state->authoring_object));
+                selection_label,
+                sandbox3d_authoring_object_get_selected_component_count(state->authoring_object));
         }
         sandbox3d_record_reject_reason(state, SANDBOX3D_INTERACTION_REJECT_NONE, false);
         sandbox3d_record_success_result(state, "Picked %s", sandbox3d_safe_entity_name(state, picked_entity, "object"));
-        sandbox3d_set_statusf(state, false, false, "Picked %s.", sandbox3d_safe_entity_name(state, picked_entity, "object"));
+        if (!authoring_component_hit)
+        {
+            sandbox3d_set_statusf(state, false, false, "Picked %s.", sandbox3d_safe_entity_name(state, picked_entity, "object"));
+        }
         return true;
     }
     else
@@ -15258,18 +15396,87 @@ details_group_authoring:
             &disclosure_changed);
         if (state->editor_ui.details_authoring_expanded)
         {
+            const sandbox3d_authoring_selection_mode selection_mode =
+                sandbox3d_authoring_object_get_selection_mode(state->authoring_object);
+            const char* selection_label = selection_mode == SANDBOX3D_AUTHORING_SELECTION_VERTEX
+                ? "Vertex"
+                : selection_mode == SANDBOX3D_AUTHORING_SELECTION_EDGE ? "Edge" : "Face";
+            const size_t selected_component_count =
+                sandbox3d_authoring_object_get_selected_component_count(state->authoring_object);
             snprintf(
                 authoring_face_text,
                 sizeof(authoring_face_text),
-                "Face %u",
-                (unsigned int)sandbox3d_authoring_object_get_selected_face(state->authoring_object));
+                "%s (%zu selected)",
+                selection_label,
+                selected_component_count);
             if (sandbox3d_details_flow_next_row(state, flow_desc.bounds, 22.0f, 1U, &row))
             {
                 sandbox3d_draw_value_row(state->ui, row.x, row.y, row.width, "Source", "Authoring mesh (user slot)");
             }
+            if (sandbox3d_details_flow_next_row(state, flow_desc.bounds, 28.0f, 1U, &row) && row.width >= 290.0f)
+            {
+                if (henka_ui_button(
+                        state->ui, "authoring_mode_vertex",
+                        (henka_ui_rect){row.x, row.y, 88.0f, 24.0f}, "Vertex") )
+                {
+                    sandbox3d_authoring_object_set_selection_mode(
+                        state->authoring_object, SANDBOX3D_AUTHORING_SELECTION_VERTEX);
+                    sandbox3d_set_status(state, false, "Authoring Vertex selection mode active; Ctrl-click adds components.");
+                }
+                if (henka_ui_button(
+                        state->ui, "authoring_mode_edge",
+                        (henka_ui_rect){row.x + 96.0f, row.y, 88.0f, 24.0f}, "Edge") )
+                {
+                    sandbox3d_authoring_object_set_selection_mode(
+                        state->authoring_object, SANDBOX3D_AUTHORING_SELECTION_EDGE);
+                    sandbox3d_set_status(state, false, "Authoring Edge selection mode active; Ctrl-click adds components.");
+                }
+                if (henka_ui_button(
+                        state->ui, "authoring_mode_face",
+                        (henka_ui_rect){row.x + 192.0f, row.y, 88.0f, 24.0f}, "Face") )
+                {
+                    sandbox3d_authoring_object_set_selection_mode(
+                        state->authoring_object, SANDBOX3D_AUTHORING_SELECTION_FACE);
+                    sandbox3d_set_status(state, false, "Authoring Face selection mode active; Ctrl-click adds components.");
+                }
+            }
             if (sandbox3d_details_flow_next_row(state, flow_desc.bounds, 22.0f, 1U, &row))
             {
                 sandbox3d_draw_value_row(state->ui, row.x, row.y, row.width, "Selection", authoring_face_text);
+            }
+            if (sandbox3d_details_flow_next_row(state, flow_desc.bounds, 28.0f, 1U, &row) && row.width >= 290.0f)
+            {
+                if (henka_ui_button(
+                        state->ui, "authoring_move_x",
+                        (henka_ui_rect){row.x, row.y, 88.0f, 24.0f}, "Move X+") &&
+                    sandbox3d_authoring_object_move_selected_components(
+                        state->authoring_object, (henka_vec3){0.1f, 0.0f, 0.0f}) == HENKA_SUCCESS)
+                {
+                    sandbox3d_set_status(state, false, "Selected authoring components moved on X.");
+                }
+                if (henka_ui_button(
+                        state->ui, "authoring_move_y",
+                        (henka_ui_rect){row.x + 96.0f, row.y, 88.0f, 24.0f}, "Move Y+") &&
+                    sandbox3d_authoring_object_move_selected_components(
+                        state->authoring_object, (henka_vec3){0.0f, 0.1f, 0.0f}) == HENKA_SUCCESS)
+                {
+                    sandbox3d_set_status(state, false, "Selected authoring components moved on Y.");
+                }
+                if (henka_ui_button(
+                        state->ui, "authoring_move_z",
+                        (henka_ui_rect){row.x + 192.0f, row.y, 88.0f, 24.0f}, "Move Z+") &&
+                    sandbox3d_authoring_object_move_selected_components(
+                        state->authoring_object, (henka_vec3){0.0f, 0.0f, 0.1f}) == HENKA_SUCCESS)
+                {
+                    sandbox3d_set_status(state, false, "Selected authoring components moved on Z.");
+                }
+            }
+            if (selection_mode != SANDBOX3D_AUTHORING_SELECTION_FACE &&
+                sandbox3d_details_flow_next_row(state, flow_desc.bounds, 22.0f, 1U, &row))
+            {
+                sandbox3d_draw_value_row(
+                    state->ui, row.x, row.y, row.width,
+                    "Face tools", "Switch to Face mode to edit a polygon");
             }
             if (sandbox3d_details_flow_next_row(state, flow_desc.bounds, 28.0f, 1U, &row) && row.width >= 290.0f)
             {
@@ -15383,7 +15590,8 @@ details_group_authoring:
                                 : "Authoring source reload failed; the current render was retained."));
                 }
             }
-            if (sandbox3d_details_flow_next_row(state, flow_desc.bounds, 28.0f, 1U, &row) && row.width >= 290.0f)
+            if (selection_mode == SANDBOX3D_AUTHORING_SELECTION_FACE &&
+                sandbox3d_details_flow_next_row(state, flow_desc.bounds, 28.0f, 1U, &row) && row.width >= 290.0f)
             {
                 if (henka_ui_button(state->ui, "authoring_extrude", (henka_ui_rect){row.x, row.y, 82.0f, 24.0f}, "Extrude") &&
                     sandbox3d_authoring_object_extrude_selected_face(state->authoring_object, 0.25f) == HENKA_SUCCESS)
@@ -15406,7 +15614,8 @@ details_group_authoring:
                     sandbox3d_set_status(state, false, "Authoring mesh redo restored the scene render.");
                 }
             }
-            if (sandbox3d_details_flow_next_row(state, flow_desc.bounds, 28.0f, 1U, &row) && row.width >= 290.0f)
+            if (selection_mode == SANDBOX3D_AUTHORING_SELECTION_FACE &&
+                sandbox3d_details_flow_next_row(state, flow_desc.bounds, 28.0f, 1U, &row) && row.width >= 290.0f)
             {
                 if (henka_ui_button(state->ui, "authoring_bevel", (henka_ui_rect){row.x, row.y, 82.0f, 24.0f}, "Bevel") &&
                     sandbox3d_authoring_object_bevel_selected_face(state->authoring_object, 0.1f) == HENKA_SUCCESS)
@@ -15419,7 +15628,8 @@ details_group_authoring:
                     sandbox3d_set_status(state, false, "Authoring face subdivided and evaluated into the scene.");
                 }
             }
-            if (sandbox3d_details_flow_next_row(state, flow_desc.bounds, 28.0f, 1U, &row) && row.width >= 290.0f)
+            if (selection_mode == SANDBOX3D_AUTHORING_SELECTION_FACE &&
+                sandbox3d_details_flow_next_row(state, flow_desc.bounds, 28.0f, 1U, &row) && row.width >= 290.0f)
             {
                 if (henka_ui_button(state->ui, "authoring_project_uv", (henka_ui_rect){row.x, row.y, 116.0f, 24.0f}, "Project UV") &&
                     sandbox3d_authoring_object_project_selected_face_uv(

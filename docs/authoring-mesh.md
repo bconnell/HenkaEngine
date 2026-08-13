@@ -41,8 +41,13 @@ authoring state.
 
 The first horizontal editor connection is now exercised by the Sandbox's
 selected Textured Cube: it owns a bounded authoring box and history, and the
-viewport ray picker resolves a hit to the actual authoring face identity. The
-Object Details Authoring section exposes that face plus transactional material
+viewport ray picker resolves a hit to the actual authoring component identity.
+Object Details Authoring exposes bounded Vertex, Edge, and Face selection modes;
+Ctrl-click adds components to the active mode, and the viewport draws the
+selected vertices, edges, or face borders. Small Move X+, Move Y+, and Move Z+
+commands offset the selected components through a cloned mesh and the existing
+transactional scene/render/bounds/collider publication path. Face mode exposes
+the selected face plus transactional material
 region editing, Extrude, Inset, Bevel, Subdivide, Project UV, Pack UV, Undo,
 Redo, Save Source, and Reload Source commands. Each edit
 evaluates a candidate, creates a normal renderer mesh, updates the scene entity
@@ -68,8 +73,8 @@ than a second selection system.
 
 The broader horizontal connection is still incomplete. General project open/save
 and arbitrary authoring-file selection are not yet editor workflows; other scene
-entities do not yet have authoring sources; vertex/edge selection modes and
-multi-selection are not yet present; and material-instance assignment, texture
+entities do not yet have authoring sources; vertex/edge topology editing beyond
+bounded selection and component movement is not yet present; and material-instance assignment, texture
 dependencies, general collision integration beyond the bound box contract,
 package ownership, topology-aware picking, and showcase rebuilds still need the
 shared scene/asset-manager bridge.
@@ -85,8 +90,8 @@ buffers are caller-owned, so evaluation does not transfer ownership to the
 renderer or asset manager.
 
 This is the bounded runtime foundation of the authoring-parity campaign. It is
-not yet a full modeling editor: selection UI, weld/split/delete/bridge/loop
-cuts, production hard-surface profiles, automatic multi-island UV unwrap and
+not yet a full modeling editor: component delete, weld/split/bridge/loop cuts,
+production hard-surface profiles, automatic multi-island UV unwrap and
 global packing, material editing, texture painting, editor integration for the
 history/file APIs, and showcase rebuild workflows remain unfinished. glTF
 and KTX2 material ownership continues through the existing asset paths; this

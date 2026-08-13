@@ -427,6 +427,20 @@ const henka_authoring_vertex* henka_authoring_mesh_get_vertex(const henka_author
     return vertex != NULL && vertex->active ? vertex : NULL;
 }
 
+henka_result henka_authoring_mesh_set_vertex_position(
+    henka_authoring_mesh* mesh,
+    henka_authoring_vertex_id id,
+    henka_vec3 position)
+{
+    henka_authoring_vertex* vertex = authoring_vertex(mesh, id);
+    if (vertex == NULL || !vertex->active || !authoring_finite_vec3(position))
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    vertex->position = position;
+    return HENKA_SUCCESS;
+}
+
 henka_result henka_authoring_mesh_set_vertex_uv(henka_authoring_mesh* mesh, henka_authoring_vertex_id id, henka_vec2 uv)
 {
     henka_authoring_vertex* vertex = authoring_vertex(mesh, id);

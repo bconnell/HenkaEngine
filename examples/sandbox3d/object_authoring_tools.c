@@ -8,6 +8,7 @@
 #include <henka/model.h>
 
 #define SANDBOX3D_AUTHORING_MAX_HISTORY_STEPS 64U
+#define SANDBOX3D_AUTHORING_MAX_SELECTED_COMPONENTS 64U
 
 struct sandbox3d_authoring_object
 {
@@ -28,6 +29,13 @@ struct sandbox3d_authoring_object
     size_t selection_history_capacity;
     size_t selection_history_count;
     size_t selection_history_cursor;
+    sandbox3d_authoring_selection_mode selection_mode;
+    uint32_t selected_vertices[SANDBOX3D_AUTHORING_MAX_SELECTED_COMPONENTS];
+    uint32_t selected_edges[SANDBOX3D_AUTHORING_MAX_SELECTED_COMPONENTS];
+    uint32_t selected_faces[SANDBOX3D_AUTHORING_MAX_SELECTED_COMPONENTS];
+    size_t selected_vertex_count;
+    size_t selected_edge_count;
+    size_t selected_face_count;
 };
 
 static henka_result sandbox3d_authoring_set_physics_bounds(
@@ -242,18 +250,120 @@ cleanup:
 static void sandbox3d_authoring_repair_selection(sandbox3d_authoring_object* object)
 {
     size_t face_id;
-    if (object == NULL || henka_authoring_mesh_get_face(object->mesh, object->selected_face) != NULL)
+    size_t selected_index;
+    if (object == NULL)
     {
         return;
     }
-    object->selected_face = HENKA_AUTHORING_INVALID_ID;
-    for (face_id = 1U; face_id <= HENKA_AUTHORING_MESH_HARD_MAX_FACES; ++face_id)
+    if (henka_authoring_mesh_get_face(object->mesh, object->selected_face) == NULL)
     {
-        if (henka_authoring_mesh_get_face(object->mesh, (henka_authoring_face_id)face_id) != NULL)
+        object->selected_face = HENKA_AUTHORING_INVALID_ID;
+        for (face_id = 1U; face_id <= HENKA_AUTHORING_MESH_HARD_MAX_FACES; ++face_id)
         {
-            object->selected_face = (henka_authoring_face_id)face_id;
+            if (henka_authoring_mesh_get_face(object->mesh, (henka_authoring_face_id)face_id) != NULL)
+            {
+                object->selected_face = (henka_authoring_face_id)face_id;
+                break;
+            }
+        }
+    }
+    if (object->selection_mode != SANDBOX3D_AUTHORING_SELECTION_FACE ||
+        object->selected_face == HENKA_AUTHORING_INVALID_ID)
+    {
+        return;
+    }
+    for (selected_index = 0U; selected_index < object->selected_face_count; ++selected_index)
+    {
+        if (object->selected_faces[selected_index] == object->selected_face)
+        {
             return;
         }
+    }
+    if (object->selected_face_count < SANDBOX3D_AUTHORING_MAX_SELECTED_COMPONENTS)
+    {
+        object->selected_faces[object->selected_face_count++] = object->selected_face;
+    }
+    else
+    {
+        object->selected_faces[object->selected_face_count - 1U] = object->selected_face;
+    }
+}
+
+static uint32_t* sandbox3d_authoring_selected_ids(
+    sandbox3d_authoring_object* object,
+    size_t* out_count)
+{
+    if (out_count != NULL) *out_count = 0U;
+    if (object == NULL || out_count == NULL)
+    {
+        return NULL;
+    }
+    switch (object->selection_mode)
+    {
+        case SANDBOX3D_AUTHORING_SELECTION_VERTEX:
+            *out_count = object->selected_vertex_count;
+            return object->selected_vertices;
+        case SANDBOX3D_AUTHORING_SELECTION_EDGE:
+            *out_count = object->selected_edge_count;
+            return object->selected_edges;
+        case SANDBOX3D_AUTHORING_SELECTION_FACE:
+        default:
+            *out_count = object->selected_face_count;
+            return object->selected_faces;
+    }
+}
+
+static const uint32_t* sandbox3d_authoring_selected_ids_const(
+    const sandbox3d_authoring_object* object,
+    size_t* out_count)
+{
+    return sandbox3d_authoring_selected_ids((sandbox3d_authoring_object*)object, out_count);
+}
+
+static bool sandbox3d_authoring_component_selected(
+    const sandbox3d_authoring_object* object,
+    uint32_t id)
+{
+    size_t count;
+    size_t index;
+    const uint32_t* ids = sandbox3d_authoring_selected_ids_const(object, &count);
+    for (index = 0U; ids != NULL && index < count; ++index)
+    {
+        if (ids[index] == id) return true;
+    }
+    return false;
+}
+
+static void sandbox3d_authoring_remove_invalid_component_selection(
+    sandbox3d_authoring_object* object)
+{
+    uint32_t* ids;
+    size_t* count;
+    size_t index;
+    size_t write_index = 0U;
+    if (object == NULL) return;
+    ids = sandbox3d_authoring_selected_ids(object, &index);
+    if (object->selection_mode == SANDBOX3D_AUTHORING_SELECTION_VERTEX)
+        count = &object->selected_vertex_count;
+    else if (object->selection_mode == SANDBOX3D_AUTHORING_SELECTION_EDGE)
+        count = &object->selected_edge_count;
+    else
+        count = &object->selected_face_count;
+    for (index = 0U; ids != NULL && index < *count; ++index)
+    {
+        const bool valid = object->selection_mode == SANDBOX3D_AUTHORING_SELECTION_VERTEX
+            ? henka_authoring_mesh_get_vertex(object->mesh, ids[index]) != NULL
+            : object->selection_mode == SANDBOX3D_AUTHORING_SELECTION_EDGE
+                ? henka_authoring_mesh_get_edge(object->mesh, ids[index]) != NULL
+                : henka_authoring_mesh_get_face(object->mesh, ids[index]) != NULL;
+        if (valid) ids[write_index++] = ids[index];
+    }
+    *count = write_index;
+    if (object->selection_mode == SANDBOX3D_AUTHORING_SELECTION_FACE)
+    {
+        object->selected_face = write_index > 0U
+            ? (henka_authoring_face_id)ids[write_index - 1U]
+            : HENKA_AUTHORING_INVALID_ID;
     }
 }
 
@@ -390,6 +500,7 @@ static henka_result sandbox3d_authoring_publish_candidate(
     object->render_mesh = candidate_render;
     object->selected_face = selected_after;
     sandbox3d_authoring_repair_selection(object);
+    sandbox3d_authoring_remove_invalid_component_selection(object);
     if (checkpoint_history)
     {
         sandbox3d_authoring_commit_selection_history(
@@ -656,6 +767,9 @@ henka_result sandbox3d_authoring_object_create_box(
     object->mesh = mesh;
     object->history_steps = history_steps;
     object->selected_face = 1U;
+    object->selection_mode = SANDBOX3D_AUTHORING_SELECTION_FACE;
+    object->selected_faces[0] = object->selected_face;
+    object->selected_face_count = 1U;
     object->physics_body = HENKA_INVALID_PHYSICS_BODY_ID;
     object->selection_history_capacity = history_steps;
     object->selection_history = henka_calloc(
@@ -814,6 +928,104 @@ henka_authoring_face_id sandbox3d_authoring_object_get_selected_face(const sandb
     return object == NULL ? HENKA_AUTHORING_INVALID_ID : object->selected_face;
 }
 
+void sandbox3d_authoring_object_set_selection_mode(
+    sandbox3d_authoring_object* object,
+    sandbox3d_authoring_selection_mode mode)
+{
+    if (object == NULL || mode < SANDBOX3D_AUTHORING_SELECTION_VERTEX ||
+        mode > SANDBOX3D_AUTHORING_SELECTION_FACE)
+    {
+        return;
+    }
+    object->selection_mode = mode;
+}
+
+sandbox3d_authoring_selection_mode sandbox3d_authoring_object_get_selection_mode(
+    const sandbox3d_authoring_object* object)
+{
+    return object == NULL ? SANDBOX3D_AUTHORING_SELECTION_FACE : object->selection_mode;
+}
+
+void sandbox3d_authoring_object_clear_component_selection(
+    sandbox3d_authoring_object* object)
+{
+    uint32_t* ids = sandbox3d_authoring_selected_ids(object, &(size_t){0U});
+    if (ids == NULL || object == NULL) return;
+    if (object->selection_mode == SANDBOX3D_AUTHORING_SELECTION_VERTEX)
+        object->selected_vertex_count = 0U;
+    else if (object->selection_mode == SANDBOX3D_AUTHORING_SELECTION_EDGE)
+        object->selected_edge_count = 0U;
+    else
+    {
+        object->selected_face_count = 0U;
+        object->selected_face = HENKA_AUTHORING_INVALID_ID;
+    }
+}
+
+size_t sandbox3d_authoring_object_get_selected_component_count(
+    const sandbox3d_authoring_object* object)
+{
+    size_t count = 0U;
+    (void)sandbox3d_authoring_selected_ids_const(object, &count);
+    return count;
+}
+
+henka_result sandbox3d_authoring_object_get_selected_component_at(
+    const sandbox3d_authoring_object* object,
+    size_t ordinal,
+    uint32_t* out_id)
+{
+    size_t count;
+    const uint32_t* ids;
+    if (out_id != NULL) *out_id = HENKA_AUTHORING_INVALID_ID;
+    ids = sandbox3d_authoring_selected_ids_const(object, &count);
+    if (ids == NULL || out_id == NULL || ordinal >= count)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    *out_id = ids[ordinal];
+    return HENKA_SUCCESS;
+}
+
+henka_result sandbox3d_authoring_object_select_component(
+    sandbox3d_authoring_object* object,
+    uint32_t component_id,
+    bool additive)
+{
+    uint32_t* ids;
+    size_t* count;
+    if (object == NULL || component_id == HENKA_AUTHORING_INVALID_ID)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    if (object->selection_mode == SANDBOX3D_AUTHORING_SELECTION_VERTEX)
+    {
+        if (henka_authoring_mesh_get_vertex(object->mesh, component_id) == NULL) return HENKA_ERROR_INVALID_ARGUMENT;
+        ids = object->selected_vertices; count = &object->selected_vertex_count;
+    }
+    else if (object->selection_mode == SANDBOX3D_AUTHORING_SELECTION_EDGE)
+    {
+        if (henka_authoring_mesh_get_edge(object->mesh, component_id) == NULL) return HENKA_ERROR_INVALID_ARGUMENT;
+        ids = object->selected_edges; count = &object->selected_edge_count;
+    }
+    else
+    {
+        if (henka_authoring_mesh_get_face(object->mesh, component_id) == NULL) return HENKA_ERROR_INVALID_ARGUMENT;
+        ids = object->selected_faces; count = &object->selected_face_count;
+    }
+    if (!additive) *count = 0U;
+    if (!sandbox3d_authoring_component_selected(object, component_id))
+    {
+        if (*count >= SANDBOX3D_AUTHORING_MAX_SELECTED_COMPONENTS) return HENKA_ERROR_LIMIT;
+        ids[(*count)++] = component_id;
+    }
+    if (object->selection_mode == SANDBOX3D_AUTHORING_SELECTION_FACE)
+    {
+        object->selected_face = (henka_authoring_face_id)component_id;
+    }
+    return HENKA_SUCCESS;
+}
+
 static henka_vec3 sandbox3d_authoring_transform_point(
     henka_transform transform,
     henka_vec3 point)
@@ -855,6 +1067,222 @@ static bool sandbox3d_authoring_ray_triangle(
         *out_distance = distance;
     }
     return true;
+}
+
+static bool sandbox3d_authoring_ray_point_distance(
+    henka_ray ray,
+    henka_vec3 point,
+    float maximum_distance,
+    float* out_distance)
+{
+    const henka_vec3 offset = henka_vec3_subtract(point, ray.origin);
+    const float distance = henka_vec3_dot(offset, ray.direction);
+    const henka_vec3 closest = henka_vec3_add(ray.origin, henka_vec3_scale(ray.direction, distance));
+    const float error = henka_vec3_length(henka_vec3_subtract(point, closest));
+    const float tolerance = 0.18f + distance * 0.018f;
+    if (!isfinite(distance) || !isfinite(error) || distance < 0.0f || distance > maximum_distance || error > tolerance)
+    {
+        return false;
+    }
+    if (out_distance != NULL) *out_distance = distance;
+    return true;
+}
+
+static bool sandbox3d_authoring_ray_segment_distance(
+    henka_ray ray,
+    henka_vec3 first,
+    henka_vec3 second,
+    float maximum_distance,
+    float* out_distance)
+{
+    const henka_vec3 segment = henka_vec3_subtract(second, first);
+    const henka_vec3 origin_to_first = henka_vec3_subtract(ray.origin, first);
+    const float segment_length_squared = henka_vec3_dot(segment, segment);
+    const float ray_segment_dot = henka_vec3_dot(ray.direction, segment);
+    const float ray_first_dot = henka_vec3_dot(ray.direction, origin_to_first);
+    const float segment_first_dot = henka_vec3_dot(segment, origin_to_first);
+    float ray_distance;
+    float segment_factor;
+    henka_vec3 ray_point;
+    henka_vec3 segment_point;
+    float tolerance;
+    if (!isfinite(segment_length_squared) || segment_length_squared <= 0.000001f)
+    {
+        return sandbox3d_authoring_ray_point_distance(ray, first, maximum_distance, out_distance);
+    }
+    {
+        const float denominator = 1.0f * segment_length_squared - ray_segment_dot * ray_segment_dot;
+        if (fabsf(denominator) <= 0.000001f)
+        {
+            segment_factor = fminf(1.0f, fmaxf(0.0f, segment_first_dot / segment_length_squared));
+            ray_distance = ray_first_dot + ray_segment_dot * segment_factor;
+        }
+        else
+        {
+            ray_distance = (ray_segment_dot * segment_first_dot - segment_length_squared * ray_first_dot) / denominator;
+            segment_factor = (ray_segment_dot * ray_distance + segment_first_dot) / segment_length_squared;
+            segment_factor = fminf(1.0f, fmaxf(0.0f, segment_factor));
+        }
+    }
+    if (ray_distance < 0.0f || ray_distance > maximum_distance)
+    {
+        return false;
+    }
+    ray_point = henka_vec3_add(ray.origin, henka_vec3_scale(ray.direction, ray_distance));
+    segment_point = henka_vec3_add(first, henka_vec3_scale(segment, segment_factor));
+    tolerance = 0.14f + ray_distance * 0.014f;
+    if (henka_vec3_length(henka_vec3_subtract(ray_point, segment_point)) > tolerance)
+    {
+        return false;
+    }
+    if (out_distance != NULL) *out_distance = ray_distance;
+    return true;
+}
+
+henka_result sandbox3d_authoring_object_pick_component(
+    sandbox3d_authoring_object* object,
+    henka_ray ray,
+    float maximum_distance,
+    bool additive)
+{
+    henka_transform transform;
+    uint32_t nearest_id = HENKA_AUTHORING_INVALID_ID;
+    float nearest_distance = maximum_distance;
+    size_t id;
+    if (object == NULL || !isfinite(maximum_distance) || maximum_distance <= 0.0f ||
+        !sandbox3d_authoring_finite_vec3(ray.origin) || !sandbox3d_authoring_finite_vec3(ray.direction) ||
+        henka_vec3_length(ray.direction) <= 0.000001f ||
+        henka_scene_get_entity_transform(object->scene, object->entity, &transform) != HENKA_SUCCESS)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    ray.direction = henka_vec3_normalize(ray.direction);
+    if (object->selection_mode == SANDBOX3D_AUTHORING_SELECTION_FACE)
+    {
+        uint32_t prior_faces[SANDBOX3D_AUTHORING_MAX_SELECTED_COMPONENTS];
+        size_t prior_face_count = 0U;
+        henka_result result;
+        if (additive)
+        {
+            prior_face_count = object->selected_face_count;
+            memcpy(prior_faces, object->selected_faces, prior_face_count * sizeof(prior_faces[0]));
+        }
+        result = sandbox3d_authoring_object_pick_face(object, ray, maximum_distance);
+        if (result == HENKA_SUCCESS && additive)
+        {
+            object->selected_face_count = prior_face_count;
+            memcpy(object->selected_faces, prior_faces, prior_face_count * sizeof(prior_faces[0]));
+            object->selection_mode = SANDBOX3D_AUTHORING_SELECTION_FACE;
+            result = sandbox3d_authoring_object_select_component(
+                object, object->selected_face, true);
+        }
+        if (result == HENKA_SUCCESS)
+        {
+            return result;
+        }
+        return result;
+    }
+    for (id = 1U; id <= HENKA_AUTHORING_MESH_HARD_MAX_VERTICES &&
+        object->selection_mode == SANDBOX3D_AUTHORING_SELECTION_VERTEX; ++id)
+    {
+        const henka_authoring_vertex* vertex = henka_authoring_mesh_get_vertex(object->mesh, (henka_authoring_vertex_id)id);
+        float distance;
+        if (vertex != NULL && sandbox3d_authoring_ray_point_distance(
+                ray, sandbox3d_authoring_transform_point(transform, vertex->position), nearest_distance, &distance))
+        {
+            nearest_distance = distance;
+            nearest_id = (uint32_t)id;
+        }
+    }
+    if (object->selection_mode == SANDBOX3D_AUTHORING_SELECTION_EDGE)
+    {
+        for (id = 1U; id <= HENKA_AUTHORING_MESH_HARD_MAX_EDGES; ++id)
+        {
+            const henka_authoring_edge* edge = henka_authoring_mesh_get_edge(object->mesh, (henka_authoring_edge_id)id);
+            const henka_authoring_vertex* first;
+            const henka_authoring_vertex* second;
+            float distance;
+            if (edge == NULL ||
+                (first = henka_authoring_mesh_get_vertex(object->mesh, edge->vertices[0])) == NULL ||
+                (second = henka_authoring_mesh_get_vertex(object->mesh, edge->vertices[1])) == NULL)
+            {
+                continue;
+            }
+            if (sandbox3d_authoring_ray_segment_distance(
+                    ray,
+                    sandbox3d_authoring_transform_point(transform, first->position),
+                    sandbox3d_authoring_transform_point(transform, second->position),
+                    nearest_distance,
+                    &distance))
+            {
+                nearest_distance = distance;
+                nearest_id = (uint32_t)id;
+            }
+        }
+    }
+    return nearest_id == HENKA_AUTHORING_INVALID_ID
+        ? HENKA_ERROR_UNKNOWN
+        : sandbox3d_authoring_object_select_component(object, nearest_id, additive);
+}
+
+henka_result sandbox3d_authoring_object_move_selected_components(
+    sandbox3d_authoring_object* object,
+    henka_vec3 offset)
+{
+    henka_authoring_mesh* candidate = NULL;
+    henka_authoring_vertex_id vertex_ids[SANDBOX3D_AUTHORING_MAX_SELECTED_COMPONENTS * 2U];
+    size_t vertex_count = 0U;
+    size_t selected_count;
+    const uint32_t* selected_ids;
+    size_t index;
+    henka_result result;
+    if (object == NULL || !sandbox3d_authoring_finite_vec3(offset)) return HENKA_ERROR_INVALID_ARGUMENT;
+    selected_ids = sandbox3d_authoring_selected_ids_const(object, &selected_count);
+    if (selected_ids == NULL || selected_count == 0U) return HENKA_ERROR_INVALID_ARGUMENT;
+    for (index = 0U; index < selected_count; ++index)
+    {
+        const henka_authoring_vertex_id* candidates = NULL;
+        size_t candidate_count = 0U;
+        if (object->selection_mode == SANDBOX3D_AUTHORING_SELECTION_VERTEX)
+        {
+            candidates = &selected_ids[index]; candidate_count = 1U;
+        }
+        else if (object->selection_mode == SANDBOX3D_AUTHORING_SELECTION_EDGE)
+        {
+            const henka_authoring_edge* edge = henka_authoring_mesh_get_edge(object->mesh, selected_ids[index]);
+            if (edge != NULL) { candidates = edge->vertices; candidate_count = 2U; }
+        }
+        else
+        {
+            const henka_authoring_face* face = henka_authoring_mesh_get_face(object->mesh, selected_ids[index]);
+            if (face != NULL) { candidates = face->vertices; candidate_count = face->corner_count; }
+        }
+        for (size_t candidate_index = 0U; candidate_index < candidate_count; ++candidate_index)
+        {
+            size_t existing;
+            bool duplicate = false;
+            for (existing = 0U; existing < vertex_count; ++existing)
+                if (vertex_ids[existing] == candidates[candidate_index]) duplicate = true;
+            if (!duplicate && vertex_count < sizeof(vertex_ids) / sizeof(vertex_ids[0]))
+                vertex_ids[vertex_count++] = candidates[candidate_index];
+        }
+    }
+    result = henka_authoring_mesh_clone(object->mesh, &candidate);
+    if (result == HENKA_SUCCESS)
+    {
+        for (index = 0U; index < vertex_count && result == HENKA_SUCCESS; ++index)
+        {
+            const henka_authoring_vertex* vertex = henka_authoring_mesh_get_vertex(candidate, vertex_ids[index]);
+            result = vertex == NULL ? HENKA_ERROR_INVALID_ARGUMENT :
+                henka_authoring_mesh_set_vertex_position(candidate, vertex->id, henka_vec3_add(vertex->position, offset));
+        }
+    }
+    if (result == HENKA_SUCCESS)
+    {
+        result = sandbox3d_authoring_publish_candidate(object, candidate, true, object->selected_face);
+    }
+    if (result != HENKA_SUCCESS) henka_authoring_mesh_destroy(candidate);
+    return result;
 }
 
 henka_result sandbox3d_authoring_object_pick_face(
@@ -912,6 +1340,8 @@ henka_result sandbox3d_authoring_object_pick_face(
         return HENKA_ERROR_UNKNOWN;
     }
     object->selected_face = nearest_face;
+    object->selection_mode = SANDBOX3D_AUTHORING_SELECTION_FACE;
+    (void)sandbox3d_authoring_object_select_component(object, nearest_face, false);
     return HENKA_SUCCESS;
 }
 
@@ -923,8 +1353,8 @@ henka_result sandbox3d_authoring_object_select_face(
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
-    object->selected_face = face_id;
-    return HENKA_SUCCESS;
+    object->selection_mode = SANDBOX3D_AUTHORING_SELECTION_FACE;
+    return sandbox3d_authoring_object_select_component(object, face_id, false);
 }
 
 henka_result sandbox3d_authoring_object_set_selected_face_material_region(

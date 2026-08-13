@@ -13,6 +13,13 @@
 
 typedef struct sandbox3d_authoring_object sandbox3d_authoring_object;
 
+typedef enum sandbox3d_authoring_selection_mode
+{
+    SANDBOX3D_AUTHORING_SELECTION_VERTEX = 0,
+    SANDBOX3D_AUTHORING_SELECTION_EDGE,
+    SANDBOX3D_AUTHORING_SELECTION_FACE
+} sandbox3d_authoring_selection_mode;
+
 /* Returns all active non-helper entities in scene enumeration order. */
 size_t sandbox3d_object_authoring_collect_user_entities(
     const henka_scene* scene,
@@ -52,6 +59,31 @@ henka_result sandbox3d_authoring_object_get_render_material_region_range(
     uint32_t* out_min_region,
     uint32_t* out_max_region);
 henka_authoring_face_id sandbox3d_authoring_object_get_selected_face(const sandbox3d_authoring_object* object);
+void sandbox3d_authoring_object_set_selection_mode(
+    sandbox3d_authoring_object* object,
+    sandbox3d_authoring_selection_mode mode);
+sandbox3d_authoring_selection_mode sandbox3d_authoring_object_get_selection_mode(
+    const sandbox3d_authoring_object* object);
+void sandbox3d_authoring_object_clear_component_selection(
+    sandbox3d_authoring_object* object);
+size_t sandbox3d_authoring_object_get_selected_component_count(
+    const sandbox3d_authoring_object* object);
+henka_result sandbox3d_authoring_object_get_selected_component_at(
+    const sandbox3d_authoring_object* object,
+    size_t ordinal,
+    uint32_t* out_id);
+henka_result sandbox3d_authoring_object_select_component(
+    sandbox3d_authoring_object* object,
+    uint32_t component_id,
+    bool additive);
+henka_result sandbox3d_authoring_object_pick_component(
+    sandbox3d_authoring_object* object,
+    henka_ray ray,
+    float maximum_distance,
+    bool additive);
+henka_result sandbox3d_authoring_object_move_selected_components(
+    sandbox3d_authoring_object* object,
+    henka_vec3 offset);
 henka_result sandbox3d_authoring_object_pick_face(
     sandbox3d_authoring_object* object,
     henka_ray ray,

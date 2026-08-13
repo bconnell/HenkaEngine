@@ -149,7 +149,9 @@ static int test_history_and_persistence(void)
     {
         goto cleanup;
     }
-    if (henka_authoring_mesh_set_vertex_uv(mesh, ids[0], (henka_vec2){0.5f, 0.5f}) != HENKA_SUCCESS ||
+    if (henka_authoring_mesh_set_vertex_position(mesh, ids[0], (henka_vec3){2.0f, 3.0f, 4.0f}) != HENKA_SUCCESS ||
+        henka_authoring_mesh_get_vertex(mesh, ids[0])->position.z != 4.0f ||
+        henka_authoring_mesh_set_vertex_uv(mesh, ids[0], (henka_vec2){0.5f, 0.5f}) != HENKA_SUCCESS ||
         henka_authoring_mesh_history_checkpoint(history, mesh) != HENKA_SUCCESS ||
         !henka_authoring_mesh_history_can_undo(history) ||
         henka_authoring_mesh_history_undo(history, mesh) != HENKA_SUCCESS ||
