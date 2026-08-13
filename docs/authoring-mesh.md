@@ -78,11 +78,13 @@ than a second selection system.
 
 The broader horizontal connection is still incomplete. General project open/save
 and arbitrary authoring-file selection are not yet editor workflows. The
-Sandbox bridge can now clone a validated authoring source into an independent
-per-entity history/render/bounds handoff, but the editor still presents only
-one active authoring wrapper and does not yet auto-attach that bridge to every
-duplicated or imported entity. Vertex/edge topology editing beyond bounded
-selection and component movement is not yet present; and material-instance assignment, texture
+Sandbox bridge clones a validated authoring source into an independent
+per-entity history/render/bounds handoff, and the editor keeps a bounded
+per-entity registry for authored objects: duplicating an authored object creates
+an independent editable source, while selecting another entity activates only
+that entity's wrapper. Imported entities are not yet automatically authoring-
+enabled. Vertex/edge topology editing beyond bounded selection and component
+movement is not yet present; and material-instance assignment, texture
 dependencies, general collision integration beyond the bound box contract,
 package ownership, topology-aware picking, and showcase rebuilds still need the
 shared scene/asset-manager bridge.

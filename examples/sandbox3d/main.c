@@ -28,6 +28,7 @@
 #include "workspace_tools.h"
 
 #define SANDBOX3D_MAX_MATERIAL_EDITOR_BINDINGS 256U
+#define SANDBOX3D_MAX_AUTHORING_OBJECTS 8U
 
 typedef enum sandbox3d_object_kind
 {
@@ -335,6 +336,7 @@ typedef struct sandbox3d_state
     henka_mesh* missing_model_mesh;
     henka_mesh* foliage_mesh;
     sandbox3d_authoring_object* authoring_object;
+    sandbox3d_authoring_object* authoring_objects[SANDBOX3D_MAX_AUTHORING_OBJECTS];
     henka_shader* basic_shader;
     henka_shader* grid_shader;
     henka_texture* cube_texture;
@@ -647,7 +649,10 @@ static void sandbox3d_select_entity(sandbox3d_state* state, henka_entity entity)
 static void sandbox3d_clear_selection(sandbox3d_state* state, const char* reason);
 static bool sandbox3d_add_primitive_object(sandbox3d_state* state);
 static henka_result sandbox3d_validate_add_primitive_smoke(sandbox3d_state* state);
-static bool sandbox3d_duplicate_selected_object(sandbox3d_state* state);
+static henka_result sandbox3d_validate_authoring_duplicate_smoke(
+    henka_engine* engine,
+    sandbox3d_state* state);
+static bool sandbox3d_duplicate_selected_object(henka_engine* engine, sandbox3d_state* state);
 static bool sandbox3d_delete_selected_object(sandbox3d_state* state);
 static void sandbox3d_cancel_active_transform_session(
     sandbox3d_state* state,
@@ -6028,8 +6033,14 @@ static void sandbox3d_release_owned_resources(sandbox3d_state* state)
     henka_mesh_destroy(state->cube_mesh);
     henka_mesh_destroy(state->sphere_mesh);
     henka_mesh_destroy(state->foliage_mesh);
-    sandbox3d_authoring_object_unbind_physics(state->authoring_object);
-    sandbox3d_authoring_object_destroy(state->authoring_object);
+    for (int authoring_index = 0;
+         authoring_index < (int)SANDBOX3D_MAX_AUTHORING_OBJECTS;
+         ++authoring_index)
+    {
+        sandbox3d_authoring_object_unbind_physics(state->authoring_objects[authoring_index]);
+        sandbox3d_authoring_object_destroy(state->authoring_objects[authoring_index]);
+        state->authoring_objects[authoring_index] = NULL;
+    }
     henka_physics_world_destroy(state->physics.world);
     henka_scene_destroy(state->scene);
     for (int terrain_layer_index = 0;
@@ -6859,6 +6870,65 @@ static bool sandbox3d_execute_action(
     return result.success;
 }
 
+static sandbox3d_authoring_object* sandbox3d_find_authoring_object(
+    const sandbox3d_state* state,
+    henka_entity entity)
+{
+    size_t index;
+    if (state == NULL || entity == HENKA_INVALID_ENTITY)
+    {
+        return NULL;
+    }
+    for (index = 0U; index < SANDBOX3D_MAX_AUTHORING_OBJECTS; ++index)
+    {
+        if (state->authoring_objects[index] != NULL &&
+            sandbox3d_authoring_object_get_entity(state->authoring_objects[index]) == entity)
+        {
+            return state->authoring_objects[index];
+        }
+    }
+    return NULL;
+}
+
+static bool sandbox3d_register_authoring_object(
+    sandbox3d_state* state,
+    sandbox3d_authoring_object* object)
+{
+    size_t index;
+    if (state == NULL || object == NULL)
+    {
+        return false;
+    }
+    for (index = 0U; index < SANDBOX3D_MAX_AUTHORING_OBJECTS; ++index)
+    {
+        if (state->authoring_objects[index] == NULL)
+        {
+            state->authoring_objects[index] = object;
+            return true;
+        }
+    }
+    return false;
+}
+
+static void sandbox3d_unregister_authoring_object(
+    sandbox3d_state* state,
+    sandbox3d_authoring_object* object)
+{
+    size_t index;
+    if (state == NULL || object == NULL)
+    {
+        return;
+    }
+    for (index = 0U; index < SANDBOX3D_MAX_AUTHORING_OBJECTS; ++index)
+    {
+        if (state->authoring_objects[index] == object)
+        {
+            state->authoring_objects[index] = NULL;
+            return;
+        }
+    }
+}
+
 static void sandbox3d_select_entity(sandbox3d_state* state, henka_entity entity)
 {
     henka_action_request request;
@@ -6889,6 +6959,7 @@ static void sandbox3d_select_entity(sandbox3d_state* state, henka_entity entity)
     {
         state->selected_entity = HENKA_INVALID_ENTITY;
     }
+    state->authoring_object = sandbox3d_find_authoring_object(state, state->selected_entity);
 
     entity_name = sandbox3d_safe_entity_name(state, state->selected_entity, "object");
     if (state->selected_entity != HENKA_INVALID_ENTITY)
@@ -7007,13 +7078,135 @@ static henka_result sandbox3d_validate_add_primitive_smoke(sandbox3d_state* stat
     return HENKA_SUCCESS;
 }
 
-static bool sandbox3d_duplicate_selected_object(sandbox3d_state* state)
+static henka_result sandbox3d_validate_authoring_duplicate_smoke(
+    henka_engine* engine,
+    sandbox3d_state* state)
+{
+    const henka_authoring_vertex* source_vertex;
+    const henka_authoring_vertex* duplicate_vertex;
+    sandbox3d_authoring_object* source_authoring;
+    sandbox3d_authoring_object* duplicate_authoring;
+    henka_entity previous_entity;
+    henka_entity duplicate_entity;
+    float source_x;
+    float duplicate_x;
+
+    if (engine == NULL || state == NULL || state->scene == NULL ||
+        state->cube_entity == HENKA_INVALID_ENTITY)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    previous_entity = state->selected_entity;
+    duplicate_entity = HENKA_INVALID_ENTITY;
+    source_authoring = sandbox3d_find_authoring_object(state, state->cube_entity);
+    if (source_authoring == NULL)
+    {
+        return HENKA_ERROR_UNKNOWN;
+    }
+
+    sandbox3d_select_entity(state, state->cube_entity);
+    if (!sandbox3d_duplicate_selected_object(engine, state))
+    {
+        goto fail;
+    }
+    duplicate_entity = state->selected_entity;
+    duplicate_authoring = sandbox3d_find_authoring_object(state, duplicate_entity);
+    if (duplicate_entity == HENKA_INVALID_ENTITY ||
+        duplicate_entity == state->cube_entity || duplicate_authoring == NULL)
+    {
+        goto fail;
+    }
+
+    source_vertex = henka_authoring_mesh_get_vertex(
+        sandbox3d_authoring_object_get_mesh(source_authoring), 1U);
+    duplicate_vertex = henka_authoring_mesh_get_vertex(
+        sandbox3d_authoring_object_get_mesh(duplicate_authoring), 1U);
+    if (source_vertex == NULL || duplicate_vertex == NULL)
+    {
+        goto fail;
+    }
+    source_x = source_vertex->position.x;
+    duplicate_x = duplicate_vertex->position.x;
+
+    sandbox3d_authoring_object_set_selection_mode(
+        duplicate_authoring, SANDBOX3D_AUTHORING_SELECTION_VERTEX);
+    if (sandbox3d_authoring_object_select_component(duplicate_authoring, 1U, false) != HENKA_SUCCESS ||
+        sandbox3d_authoring_object_move_selected_components(
+            duplicate_authoring, (henka_vec3){0.25f, 0.0f, 0.0f}) != HENKA_SUCCESS)
+    {
+        goto fail;
+    }
+    source_vertex = henka_authoring_mesh_get_vertex(
+        sandbox3d_authoring_object_get_mesh(source_authoring), 1U);
+    duplicate_vertex = henka_authoring_mesh_get_vertex(
+        sandbox3d_authoring_object_get_mesh(duplicate_authoring), 1U);
+    if (source_vertex == NULL || duplicate_vertex == NULL ||
+        fabsf(source_vertex->position.x - source_x) > 0.0001f ||
+        fabsf(duplicate_vertex->position.x - duplicate_x) < 0.1f)
+    {
+        goto fail;
+    }
+
+    if (sandbox3d_authoring_object_undo(duplicate_authoring) != HENKA_SUCCESS)
+    {
+        goto fail;
+    }
+    duplicate_vertex = henka_authoring_mesh_get_vertex(
+        sandbox3d_authoring_object_get_mesh(duplicate_authoring), 1U);
+    if (duplicate_vertex == NULL || fabsf(duplicate_vertex->position.x - duplicate_x) > 0.0001f)
+    {
+        goto fail;
+    }
+
+    if (!sandbox3d_delete_selected_object(state) ||
+        sandbox3d_find_authoring_object(state, state->cube_entity) != source_authoring ||
+        !henka_scene_is_entity_valid(state->scene, state->cube_entity))
+    {
+        goto fail;
+    }
+    duplicate_entity = HENKA_INVALID_ENTITY;
+
+    if (previous_entity != HENKA_INVALID_ENTITY &&
+        henka_scene_is_entity_valid(state->scene, previous_entity))
+    {
+        sandbox3d_select_entity(state, previous_entity);
+    }
+    else
+    {
+        sandbox3d_clear_selection(state, "Duplicate smoke selection cleared");
+    }
+    printf("Authoring smoke: duplicated object retained independent topology and history.\n");
+    return HENKA_SUCCESS;
+
+fail:
+    if (duplicate_entity != HENKA_INVALID_ENTITY &&
+        henka_scene_is_entity_valid(state->scene, duplicate_entity))
+    {
+        sandbox3d_select_entity(state, duplicate_entity);
+        (void)sandbox3d_delete_selected_object(state);
+    }
+    if (previous_entity != HENKA_INVALID_ENTITY &&
+        henka_scene_is_entity_valid(state->scene, previous_entity))
+    {
+        sandbox3d_select_entity(state, previous_entity);
+    }
+    else
+    {
+        sandbox3d_clear_selection(state, "Duplicate smoke selection cleared");
+    }
+    return HENKA_ERROR_UNKNOWN;
+}
+
+static bool sandbox3d_duplicate_selected_object(henka_engine* engine, sandbox3d_state* state)
 {
     char duplicate_name[128];
     henka_entity selected_entity;
     henka_entity duplicate;
+    sandbox3d_authoring_object* source_authoring;
+    sandbox3d_authoring_object* duplicate_authoring = NULL;
 
-    if (state == NULL || state->scene == NULL)
+    if (engine == NULL || state == NULL || state->scene == NULL)
     {
         return false;
     }
@@ -7023,6 +7216,7 @@ static bool sandbox3d_duplicate_selected_object(sandbox3d_state* state)
     {
         return false;
     }
+    source_authoring = sandbox3d_find_authoring_object(state, selected_entity);
 
     snprintf(
         duplicate_name,
@@ -7038,6 +7232,23 @@ static bool sandbox3d_duplicate_selected_object(sandbox3d_state* state)
         return false;
     }
 
+    if (source_authoring != NULL)
+    {
+        if (sandbox3d_authoring_object_create_from_mesh(
+                engine,
+                state->scene,
+                duplicate,
+                sandbox3d_authoring_object_get_mesh(source_authoring),
+                32U,
+                &duplicate_authoring) != HENKA_SUCCESS ||
+            !sandbox3d_register_authoring_object(state, duplicate_authoring))
+        {
+            sandbox3d_authoring_object_destroy(duplicate_authoring);
+            henka_scene_destroy_entity(state->scene, duplicate);
+            return false;
+        }
+    }
+
     sandbox3d_select_entity(state, duplicate);
     return true;
 }
@@ -7047,6 +7258,7 @@ static bool sandbox3d_delete_selected_object(sandbox3d_state* state)
     henka_action_request request;
     henka_action_result result;
     henka_entity selected_entity;
+    sandbox3d_authoring_object* deleted_authoring_object;
 
     if (state == NULL || state->actions == NULL)
     {
@@ -7058,6 +7270,7 @@ static bool sandbox3d_delete_selected_object(sandbox3d_state* state)
     {
         return false;
     }
+    deleted_authoring_object = sandbox3d_find_authoring_object(state, selected_entity);
 
     if (state->transform_session.active && state->transform_session.entity == selected_entity)
     {
@@ -7071,15 +7284,16 @@ static bool sandbox3d_delete_selected_object(sandbox3d_state* state)
         return false;
     }
 
-    if (state->authoring_object != NULL &&
-        sandbox3d_authoring_object_get_entity(state->authoring_object) == selected_entity)
+    if (deleted_authoring_object != NULL)
     {
-        sandbox3d_authoring_object_destroy(state->authoring_object);
-        state->authoring_object = NULL;
+        sandbox3d_unregister_authoring_object(state, deleted_authoring_object);
+        sandbox3d_authoring_object_unbind_physics(deleted_authoring_object);
+        sandbox3d_authoring_object_destroy(deleted_authoring_object);
     }
     sandbox3d_release_physics_body_for_entity(state, selected_entity);
 
     state->selected_entity = HENKA_INVALID_ENTITY;
+    state->authoring_object = NULL;
     sandbox3d_clear_gizmo_drag(state, true);
     sandbox3d_sync_view_navigation_target_to_selection(state);
     return true;
@@ -7103,6 +7317,7 @@ static void sandbox3d_clear_selection(sandbox3d_state* state, const char* reason
     if (sandbox3d_execute_action(state, &request, &result))
     {
         state->selected_entity = HENKA_INVALID_ENTITY;
+        state->authoring_object = NULL;
         if (previous_entity != HENKA_INVALID_ENTITY)
         {
             sandbox3d_clear_gizmo_drag(state, true);
@@ -14305,7 +14520,7 @@ static void sandbox3d_draw_scene_objects_panel(
             (henka_ui_rect){panel_bounds.x + 14.0f + action_width + 6.0f, action_y, action_width, 24.0f},
             "Duplicate"))
     {
-        if (sandbox3d_duplicate_selected_object(state))
+        if (sandbox3d_duplicate_selected_object(engine, state))
         {
             sandbox3d_set_status(state, false, "Duplicated and selected the object.");
         }
@@ -18297,6 +18512,13 @@ static henka_result sandbox3d_initialize(henka_engine* engine, void* user_data)
     {
         goto fail;
     }
+    if (!sandbox3d_register_authoring_object(state, state->authoring_object))
+    {
+        result = HENKA_ERROR_LIMIT;
+        sandbox3d_authoring_object_destroy(state->authoring_object);
+        state->authoring_object = NULL;
+        goto fail;
+    }
     if (state->smoke_test)
     {
         const henka_authoring_mesh_counts baseline = henka_authoring_mesh_get_counts(
@@ -18653,6 +18875,15 @@ static henka_result sandbox3d_initialize(henka_engine* engine, void* user_data)
             goto fail;
         }
         printf("Authoring smoke: evaluated bounds and linked physics collider converged across edit and undo.\n");
+    }
+    if (state->smoke_test && state->authoring_object != NULL)
+    {
+        result = sandbox3d_validate_authoring_duplicate_smoke(engine, state);
+        if (result != HENKA_SUCCESS)
+        {
+            printf("Authoring smoke failure: duplicated object did not retain an independent authoring source.\n");
+            goto fail;
+        }
     }
 
     result = sandbox3d_initialize_gizmo_rendering(engine, state);
