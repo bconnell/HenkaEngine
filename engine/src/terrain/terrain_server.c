@@ -387,7 +387,16 @@ cleanup:
     if (result != HENKA_SUCCESS)
     {
         ++server->diagnostics.snapshot_failure_count;
-        if (!send_started)
+        if (send_started)
+        {
+            /* A stream with a missing middle fragment cannot be completed or
+             * safely resumed by the receiver. Retire the transport so the
+             * client clears the partial replica state and reconnects for a
+             * fresh authoritative session. */
+            (void)henka_network_server_disconnect(
+                server->network, peer_id, HENKA_NETWORK_DISCONNECT_REASON_PROTOCOL);
+        }
+        else
         {
             henka_terrain_snapshot_failure_reason reason =
                 result == HENKA_ERROR_OUT_OF_MEMORY
@@ -398,10 +407,9 @@ cleanup:
             henka_terrain_server_send_snapshot_failure(server, peer_id, request, reason);
         }
     }
-    return !send_started
-        ? HENKA_SUCCESS
-        : result == HENKA_ERROR_OUT_OF_MEMORY || result == HENKA_ERROR_LIMIT
-        ? HENKA_SUCCESS : result;
+    /* A failed snapshot request is reported on the wire or by the protocol
+     * disconnect above; it must not tear down the terrain server poll loop. */
+    return HENKA_SUCCESS;
 }
 
 static void henka_terrain_server_send_snapshot_failure(

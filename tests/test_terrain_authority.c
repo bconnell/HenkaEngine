@@ -67,6 +67,7 @@ static int test_authoritative_acceptance_and_stale_rejection(void)
         !response.accepted || response.acceptance.server_command_id != 1U ||
         henka_terrain_world_get_region_state(world, (henka_terrain_region_id){0, 0}, &state) != HENKA_SUCCESS ||
         state.revision != 1U ||
+        state.dirty ||
         henka_terrain_storage_load_region(storage, (henka_terrain_region_id){0, 0}, &info, samples, layout.samples_per_region) != HENKA_SUCCESS ||
         info.revision != 1U)
     {
@@ -100,7 +101,8 @@ static int test_authoritative_acceptance_and_stale_rejection(void)
     if (henka_terrain_authority_process_request(authority, 2U, &request, 1002U, &response) != HENKA_SUCCESS ||
         !response.accepted || response.acceptance.server_command_id != 2U ||
         henka_terrain_world_get_region_state(world, (henka_terrain_region_id){0, 0}, &state) != HENKA_SUCCESS ||
-        state.revision != 2U)
+        state.revision != 2U ||
+        state.dirty)
     {
         goto cleanup;
     }

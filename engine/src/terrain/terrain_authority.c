@@ -301,6 +301,22 @@ rollback:
         }
         return henka_terrain_authority_reject(request, HENKA_TERRAIN_EDIT_REJECT_LIMIT, out_response);
     }
+    /* The journal commit is the authority boundary. Keep the in-memory
+     * regions consistent with the durable transaction so streaming does not
+     * retain already-persisted edits as dirty work. */
+    for (index = 0U; index < affected_count; ++index)
+    {
+        henka_terrain_region_state state;
+        if (henka_terrain_world_get_region_state(
+                authority->world, affected[index], &state) != HENKA_SUCCESS ||
+            henka_terrain_world_set_region_revision(
+                authority->world, affected[index], state.revision, state.generation, false) != HENKA_SUCCESS)
+        {
+            /* Storage is already committed; retaining the dirty bit is safer
+             * than reporting a false rollback after the durable boundary. */
+            return HENKA_ERROR_UNKNOWN;
+        }
+    }
     out_response->accepted = true;
     out_response->acceptance.client_nonce = request->client_nonce;
     out_response->acceptance.server_command_id = command_id;
