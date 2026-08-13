@@ -361,12 +361,15 @@ typedef struct sandbox3d_state
     henka_terrain_render_runtime* terrain_render;
     henka_terrain_physics* terrain_physics;
     henka_terrain_collision_runtime* terrain_collision_runtime;
+    henka_terrain_edit_history* terrain_edit_history;
     uint32_t terrain_tool_radius_samples;
     uint8_t terrain_tool_strength;
     uint8_t terrain_tool_layer;
     henka_terrain_edit_falloff terrain_tool_falloff;
     henka_terrain_edit_operation terrain_tool_operation;
     uint64_t terrain_tool_nonce;
+    bool terrain_stroke_active;
+    henka_vec3 terrain_stroke_last_position;
     double terrain_autosave_elapsed_seconds;
     henka_asset_type asset_browser_type;
     size_t asset_browser_page;
@@ -1869,6 +1872,13 @@ static henka_result sandbox3d_reload_terrain_region(sandbox3d_state* state);
 static henka_result sandbox3d_apply_terrain_tool_command(
     sandbox3d_state* state,
     henka_terrain_edit_operation operation);
+static henka_result sandbox3d_apply_terrain_history_action(
+    sandbox3d_state* state,
+    bool redo);
+static bool sandbox3d_try_get_terrain_pick_under_cursor(
+    henka_engine* engine,
+    sandbox3d_state* state,
+    henka_terrain_physics_hit* out_hit);
 static void sandbox3d_draw_physics_overlay(sandbox3d_state* state, henka_viewport viewport);
 static void sandbox3d_draw_terrain_brush_preview(sandbox3d_state* state, henka_viewport viewport);
 static void sandbox3d_draw_selection_highlight(sandbox3d_state* state, henka_viewport viewport);
@@ -5127,6 +5137,14 @@ static henka_result sandbox3d_initialize_terrain_rendering(
     {
         return result;
     }
+    result = henka_terrain_edit_history_create(
+        state->terrain_world,
+        NULL,
+        &state->terrain_edit_history);
+    if (result != HENKA_SUCCESS)
+    {
+        goto fail;
+    }
     result = henka_path_resolve(
         henka_engine_get_user_data_base_path(engine),
         "terrain-sandbox-v2",
@@ -5593,6 +5611,7 @@ static henka_result sandbox3d_apply_terrain_tool_command(
     henka_result result;
 
     if (state == NULL || state->terrain_world == NULL ||
+        state->terrain_edit_history == NULL ||
         state->terrain_render == NULL || state->terrain_physics == NULL)
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
@@ -5645,8 +5664,8 @@ static henka_result sandbox3d_apply_terrain_tool_command(
         : (int32_t)state->terrain_tool_strength * 8;
     command.paint_layer = state->terrain_tool_layer;
     command.paint_strength = state->terrain_tool_strength;
-    result = henka_terrain_world_apply_edit(
-        state->terrain_world, &command, region_state.revision + 1U);
+    result = henka_terrain_edit_history_apply(
+        state->terrain_edit_history, &command, region_state.revision + 1U);
     if (result == HENKA_SUCCESS)
     {
         if (state->terrain_collision_runtime != NULL)
@@ -5695,6 +5714,87 @@ static henka_result sandbox3d_apply_terrain_tool_command(
             henka_result_to_string(result));
     }
     return result;
+}
+
+static henka_result sandbox3d_apply_terrain_history_action(
+    sandbox3d_state* state,
+    bool redo)
+{
+    henka_terrain_edit_command command;
+    henka_result result;
+
+    if (state == NULL || state->terrain_edit_history == NULL ||
+        state->terrain_render == NULL || state->terrain_physics == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    command = henka_terrain_edit_command_default();
+    result = redo
+        ? henka_terrain_edit_history_redo(state->terrain_edit_history, &command)
+        : henka_terrain_edit_history_undo(state->terrain_edit_history, &command);
+    if (result == HENKA_SUCCESS)
+    {
+        if (state->terrain_collision_runtime != NULL)
+        {
+            result = henka_terrain_collision_runtime_request_edit(
+                state->terrain_collision_runtime, &command);
+            if (result == HENKA_SUCCESS)
+            {
+                result = henka_terrain_collision_runtime_pump(
+                    state->terrain_collision_runtime, 16U);
+            }
+        }
+        else
+        {
+            result = sandbox3d_refresh_terrain_collision(state);
+        }
+    }
+    if (result == HENKA_SUCCESS)
+    {
+        result = henka_terrain_render_runtime_refresh_dirty(state->terrain_render);
+    }
+    if (result == HENKA_SUCCESS)
+    {
+        result = henka_terrain_render_runtime_pump(state->terrain_render, 16U);
+    }
+    if (result != HENKA_SUCCESS)
+    {
+        /* Restore the history cursor and authoritative samples when a
+         * dependent presentation owner rejects the refresh. */
+        if (redo)
+        {
+            (void)henka_terrain_edit_history_undo(state->terrain_edit_history, NULL);
+        }
+        else
+        {
+            (void)henka_terrain_edit_history_redo(state->terrain_edit_history, NULL);
+        }
+    }
+    return result;
+}
+
+static bool sandbox3d_try_get_terrain_pick_under_cursor(
+    henka_engine* engine,
+    sandbox3d_state* state,
+    henka_terrain_physics_hit* out_hit)
+{
+    henka_vec2 mouse_framebuffer;
+    henka_vec2 mouse_local;
+    henka_ray ray;
+    henka_viewport viewport;
+
+    if (engine == NULL || state == NULL || out_hit == NULL ||
+        henka_engine_get_scene_viewport(engine, &viewport) != HENKA_SUCCESS ||
+        !henka_viewport_is_valid(viewport) ||
+        !sandbox3d_try_get_mouse_viewport_local(
+            engine, viewport, &mouse_framebuffer, &mouse_local) ||
+        !henka_viewport_contains_point(viewport, mouse_framebuffer) ||
+        henka_camera_screen_point_to_ray(
+            &state->camera, viewport.width, viewport.height, mouse_local, &ray) != HENKA_SUCCESS)
+    {
+        return false;
+    }
+    return sandbox3d_try_pick_terrain(state, ray, out_hit);
 }
 
 static henka_result sandbox3d_create_runtime_rgba8_texture(
@@ -5796,6 +5896,7 @@ static void sandbox3d_release_owned_resources(sandbox3d_state* state)
     henka_terrain_storage_destroy(state->terrain_storage);
     henka_terrain_collision_runtime_destroy(state->terrain_collision_runtime);
     henka_terrain_physics_destroy(state->terrain_physics);
+    henka_terrain_edit_history_destroy(state->terrain_edit_history);
     henka_terrain_world_destroy(state->terrain_world);
     henka_mesh_destroy(state->gizmo_render.axis_mesh);
     henka_mesh_destroy(state->gizmo_render.ring_mesh);
@@ -16120,28 +16221,28 @@ static void sandbox3d_draw_utility_panel(
             }
             if (henka_ui_button(state->ui, "terrain_raise", (henka_ui_rect){x_left, y_start + 286.0f, 72.0f, 24.0f}, "Raise"))
             {
-                (void)sandbox3d_apply_terrain_tool_command(state, HENKA_TERRAIN_EDIT_RAISE);
                 state->terrain_tool_operation = HENKA_TERRAIN_EDIT_RAISE;
+                (void)sandbox3d_apply_terrain_tool_command(state, state->terrain_tool_operation);
             }
             if (henka_ui_button(state->ui, "terrain_lower", (henka_ui_rect){x_left + 78.0f, y_start + 286.0f, 72.0f, 24.0f}, "Lower"))
             {
-                (void)sandbox3d_apply_terrain_tool_command(state, HENKA_TERRAIN_EDIT_LOWER);
                 state->terrain_tool_operation = HENKA_TERRAIN_EDIT_LOWER;
+                (void)sandbox3d_apply_terrain_tool_command(state, state->terrain_tool_operation);
             }
             if (henka_ui_button(state->ui, "terrain_flatten", (henka_ui_rect){x_left + 156.0f, y_start + 286.0f, 80.0f, 24.0f}, "Flatten"))
             {
-                (void)sandbox3d_apply_terrain_tool_command(state, HENKA_TERRAIN_EDIT_FLATTEN);
                 state->terrain_tool_operation = HENKA_TERRAIN_EDIT_FLATTEN;
+                (void)sandbox3d_apply_terrain_tool_command(state, state->terrain_tool_operation);
             }
             if (henka_ui_button(state->ui, "terrain_smooth", (henka_ui_rect){x_left + 242.0f, y_start + 286.0f, 72.0f, 24.0f}, "Smooth"))
             {
-                (void)sandbox3d_apply_terrain_tool_command(state, HENKA_TERRAIN_EDIT_SMOOTH);
                 state->terrain_tool_operation = HENKA_TERRAIN_EDIT_SMOOTH;
+                (void)sandbox3d_apply_terrain_tool_command(state, state->terrain_tool_operation);
             }
             if (henka_ui_primary_button(state->ui, "terrain_paint", (henka_ui_rect){x_left, y_start + 316.0f, 72.0f, 24.0f}, "Paint"))
             {
-                (void)sandbox3d_apply_terrain_tool_command(state, HENKA_TERRAIN_EDIT_PAINT);
                 state->terrain_tool_operation = HENKA_TERRAIN_EDIT_PAINT;
+                (void)sandbox3d_apply_terrain_tool_command(state, state->terrain_tool_operation);
             }
             if (henka_ui_button(state->ui, "terrain_radius", (henka_ui_rect){x_left + 78.0f, y_start + 316.0f, 96.0f, 24.0f}, "Radius +"))
             {
@@ -16161,6 +16262,30 @@ static void sandbox3d_draw_utility_panel(
             {
                 state->terrain_tool_falloff = state->terrain_tool_falloff == HENKA_TERRAIN_EDIT_FALLOFF_LINEAR
                     ? HENKA_TERRAIN_EDIT_FALLOFF_SMOOTH : HENKA_TERRAIN_EDIT_FALLOFF_LINEAR;
+            }
+            if (henka_ui_button(state->ui, "terrain_undo", (henka_ui_rect){x_left + 212.0f, y_start + 346.0f, 58.0f, 24.0f}, "Undo"))
+            {
+                const henka_result history_result = sandbox3d_apply_terrain_history_action(state, false);
+                sandbox3d_set_statusf(
+                    state,
+                    history_result != HENKA_SUCCESS,
+                    true,
+                    history_result == HENKA_SUCCESS
+                        ? "Terrain edit undone."
+                        : "Terrain undo unavailable: %s.",
+                    henka_result_to_string(history_result));
+            }
+            if (henka_ui_button(state->ui, "terrain_redo", (henka_ui_rect){x_left + 276.0f, y_start + 346.0f, 58.0f, 24.0f}, "Redo"))
+            {
+                const henka_result history_result = sandbox3d_apply_terrain_history_action(state, true);
+                sandbox3d_set_statusf(
+                    state,
+                    history_result != HENKA_SUCCESS,
+                    true,
+                    history_result == HENKA_SUCCESS
+                        ? "Terrain edit redone."
+                        : "Terrain redo unavailable: %s.",
+                    henka_result_to_string(history_result));
             }
             if (henka_ui_primary_button(state->ui, "terrain_save", (henka_ui_rect){x_left, y_start + 376.0f, 86.0f, 24.0f}, "Save"))
             {
@@ -16220,9 +16345,20 @@ static void sandbox3d_draw_utility_panel(
                 snprintf(row_value, sizeof(row_value), "Move cursor over resident terrain");
             }
             sandbox3d_draw_value_row(state->ui, x_left, y_start + 406.0f, panel_bounds.width - 28.0f, "Pick", row_value);
-            henka_ui_label(state->ui, x_left, y_start + 430.0f, 1.0f, "Commands use the same deterministic API as runtime edits.");
-            henka_ui_label(state->ui, x_left, y_start + 446.0f, 1.0f, "Click the viewport to pick; buttons edit the picked sample.");
-            henka_ui_label(state->ui, x_left, y_start + 462.0f, 1.0f, "Persistence and network authority remain separate workflows.");
+            {
+                henka_terrain_edit_history_stats history_stats = {0};
+                henka_terrain_edit_history_get_stats(state->terrain_edit_history, &history_stats);
+                snprintf(
+                    row_value,
+                    sizeof(row_value),
+                    "%u applied / %u stored",
+                    history_stats.applied_entry_count,
+                    history_stats.entry_count);
+                sandbox3d_draw_value_row(state->ui, x_left, y_start + 430.0f, panel_bounds.width - 28.0f, "History", row_value);
+            }
+            henka_ui_label(state->ui, x_left, y_start + 454.0f, 1.0f, "Commands use the same deterministic API as runtime edits.");
+            henka_ui_label(state->ui, x_left, y_start + 470.0f, 1.0f, "Move over resident terrain; drag to sculpt or paint.");
+            henka_ui_label(state->ui, x_left, y_start + 486.0f, 1.0f, "Undo/Redo restores render, collision, and dirty state.");
             break;
         }
 
@@ -20228,13 +20364,45 @@ static void sandbox3d_update(henka_engine* engine, double delta_seconds, void* u
         if (undo_shortcut)
         {
             henka_input_consume_key_press(engine, HENKA_KEY_Z);
-            (void)sandbox3d_undo_workspace_layout(engine, state);
+            if (state->workspace.active_utility == SANDBOX3D_UTILITY_TERRAIN &&
+                state->terrain_edit_history != NULL)
+            {
+                const henka_result history_result = sandbox3d_apply_terrain_history_action(state, false);
+                sandbox3d_set_statusf(
+                    state,
+                    history_result != HENKA_SUCCESS,
+                    true,
+                    history_result == HENKA_SUCCESS
+                        ? "Terrain edit undone."
+                        : "Terrain undo unavailable: %s.",
+                    henka_result_to_string(history_result));
+            }
+            else
+            {
+                (void)sandbox3d_undo_workspace_layout(engine, state);
+            }
         }
         else if (redo_shortcut)
         {
             henka_input_consume_key_press(engine, HENKA_KEY_Y);
             henka_input_consume_key_press(engine, HENKA_KEY_Z);
-            (void)sandbox3d_redo_workspace_layout(engine, state);
+            if (state->workspace.active_utility == SANDBOX3D_UTILITY_TERRAIN &&
+                state->terrain_edit_history != NULL)
+            {
+                const henka_result history_result = sandbox3d_apply_terrain_history_action(state, true);
+                sandbox3d_set_statusf(
+                    state,
+                    history_result != HENKA_SUCCESS,
+                    true,
+                    history_result == HENKA_SUCCESS
+                        ? "Terrain edit redone."
+                        : "Terrain redo unavailable: %s.",
+                    henka_result_to_string(history_result));
+            }
+            else
+            {
+                (void)sandbox3d_redo_workspace_layout(engine, state);
+            }
         }
     }
     if (!ui_toggled_with_f4 && state->ui_visible_last_frame && !ui_visible)
@@ -20376,6 +20544,9 @@ static void sandbox3d_update(henka_engine* engine, double delta_seconds, void* u
         const bool middle_pan_pressed = henka_input_was_mouse_button_pressed(engine, HENKA_MOUSE_BUTTON_MIDDLE);
         const bool left_pressed = henka_input_was_mouse_button_pressed(engine, HENKA_MOUSE_BUTTON_LEFT);
         const bool left_down = henka_input_is_mouse_button_down(engine, HENKA_MOUSE_BUTTON_LEFT);
+        const bool terrain_mode =
+            state->workspace.active_utility == SANDBOX3D_UTILITY_TERRAIN &&
+            state->viewport_tool == SANDBOX3D_VIEWPORT_TOOL_SELECT;
         const float empty_drag_distance = sandbox3d_vec2_length(
             sandbox3d_vec2_subtract(
                 framebuffer_mouse_position,
@@ -20393,6 +20564,71 @@ static void sandbox3d_update(henka_engine* engine, double delta_seconds, void* u
         gate.selected_object_visible = gate.selected_object_valid && henka_scene_is_entity_visible(state->scene, selected_entity);
         gate.selected_object_selectable = gate.selected_object_valid && sandbox3d_is_selectable_entity(state, selected_entity);
         gate.selected_bounds_valid = sandbox3d_get_selected_bounds(state, &(henka_bounds){0});
+
+        if (terrain_mode && mouse_in_viewport && !ui_wants_mouse &&
+            !alt_orbit_held && !middle_pan_held && left_down)
+        {
+            henka_terrain_physics_hit terrain_hit;
+            const bool terrain_hit_valid = sandbox3d_try_get_terrain_pick_under_cursor(
+                engine, state, &terrain_hit);
+            if (terrain_hit_valid)
+            {
+                const henka_terrain_world_desc* world_desc = NULL;
+                henka_terrain_world_desc terrain_desc;
+                float sample_spacing = 1.0f;
+                if (state->terrain_world != NULL &&
+                    henka_terrain_world_get_desc(state->terrain_world, &terrain_desc) == HENKA_SUCCESS)
+                {
+                    world_desc = &terrain_desc;
+                    sample_spacing = (float)fmax(1U, terrain_desc.base_sample_spacing_meters);
+                }
+                state->diagnostics.terrain_pick = terrain_hit;
+                state->diagnostics.terrain_pick_valid = true;
+                if (left_pressed)
+                {
+                    state->terrain_stroke_active = true;
+                    state->terrain_stroke_last_position = terrain_hit.position;
+                    if (sandbox3d_apply_terrain_tool_command(state, state->terrain_tool_operation) != HENKA_SUCCESS)
+                    {
+                        state->terrain_stroke_active = false;
+                    }
+                    navigation_active = true;
+                }
+                else if (state->terrain_stroke_active)
+                {
+                    const henka_vec3 delta = henka_vec3_subtract(
+                        terrain_hit.position, state->terrain_stroke_last_position);
+                    const float spacing_squared = sample_spacing * sample_spacing;
+                    const float segment_threshold = fmaxf(spacing_squared, spacing_squared *
+                        (float)state->terrain_tool_radius_samples * 0.25f);
+                    if (world_desc != NULL && henka_vec3_dot(delta, delta) >= segment_threshold)
+                    {
+                        if (sandbox3d_apply_terrain_tool_command(state, state->terrain_tool_operation) == HENKA_SUCCESS)
+                        {
+                            state->terrain_stroke_last_position = terrain_hit.position;
+                        }
+                        else
+                        {
+                            state->terrain_stroke_active = false;
+                        }
+                    }
+                    navigation_active = true;
+                }
+            }
+            else if (state->terrain_stroke_active)
+            {
+                /* A stream boundary is an explicit limitation of the direct
+                 * brush. Keep the stroke alive so it can resume when the
+                 * resident working set catches up, without editing a hidden
+                 * or nonresident region. */
+                navigation_active = true;
+            }
+        }
+        if (!left_down && state->terrain_stroke_active)
+        {
+            state->terrain_stroke_active = false;
+            sandbox3d_set_status(state, false, "Terrain stroke completed.");
+        }
 
         if (alt_orbit_pressed &&
             sandbox3d_evaluate_select_reject_reason(&gate) == SANDBOX3D_INTERACTION_REJECT_NONE)

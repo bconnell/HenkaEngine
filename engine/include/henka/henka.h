@@ -25,6 +25,7 @@
 #include <henka/time.h>
 #include <henka/texture.h>
 #include <henka/terrain_mesh.h>
+#include <henka/terrain_edit_history.h>
 #include <henka/terrain_render.h>
 #include <henka/terrain_client.h>
 #include <henka/terrain_collision_runtime.h>

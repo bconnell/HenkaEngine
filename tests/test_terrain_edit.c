@@ -3,6 +3,7 @@
 
 #include <henka/memory.h>
 #include <henka/terrain_edit.h>
+#include <henka/terrain_edit_history.h>
 
 #include "../engine/src/core/memory_internal.h"
 
@@ -128,8 +129,77 @@ cleanup:
     return result;
 }
 
+static int test_edit_history_undo_redo(void)
+{
+    henka_terrain_world_desc desc = henka_terrain_world_desc_default();
+    henka_terrain_world* world = NULL;
+    henka_terrain_edit_history* history = NULL;
+    henka_terrain_edit_command command = henka_terrain_edit_command_default();
+    const henka_terrain_sample* samples = NULL;
+    henka_terrain_sample* before = NULL;
+    henka_terrain_sample* after = NULL;
+    henka_terrain_region_state state;
+    size_t sample_count = 0U;
+    size_t bytes;
+    int result = 0;
+
+    desc.max_resident_regions = 2U;
+    if (henka_terrain_world_create(&desc, &world) != HENKA_SUCCESS ||
+        henka_terrain_world_reserve_region(world, (henka_terrain_region_id){0, 0}) != HENKA_SUCCESS ||
+        henka_terrain_edit_history_create(world, NULL, &history) != HENKA_SUCCESS ||
+        henka_terrain_world_get_region_samples(
+            world, (henka_terrain_region_id){0, 0}, &samples, &sample_count) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    bytes = sample_count * sizeof(*samples);
+    before = henka_malloc(bytes);
+    after = henka_malloc(bytes);
+    if (before == NULL || after == NULL)
+    {
+        goto cleanup;
+    }
+    memcpy(before, samples, bytes);
+    command.operation = HENKA_TERRAIN_EDIT_RAISE;
+    command.center_sample_x = 100;
+    command.center_sample_z = 100;
+    command.radius_samples = 4U;
+    command.value_millimeters = 1000;
+    if (henka_terrain_edit_history_apply(history, &command, 1U) != HENKA_SUCCESS ||
+        henka_terrain_world_get_region_samples(
+            world, (henka_terrain_region_id){0, 0}, &samples, &sample_count) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    memcpy(after, samples, bytes);
+    if (memcmp(before, after, bytes) == 0 ||
+        henka_terrain_world_get_region_state(
+            world, (henka_terrain_region_id){0, 0}, &state) != HENKA_SUCCESS ||
+        state.revision != 1U || !state.dirty ||
+        henka_terrain_edit_history_undo(history, NULL) != HENKA_SUCCESS ||
+        henka_terrain_world_get_region_samples(
+            world, (henka_terrain_region_id){0, 0}, &samples, &sample_count) != HENKA_SUCCESS ||
+        memcmp(before, samples, bytes) != 0 ||
+        henka_terrain_edit_history_redo(history, NULL) != HENKA_SUCCESS ||
+        henka_terrain_world_get_region_samples(
+            world, (henka_terrain_region_id){0, 0}, &samples, &sample_count) != HENKA_SUCCESS ||
+        memcmp(after, samples, bytes) != 0)
+    {
+        goto cleanup;
+    }
+    result = 1;
+
+cleanup:
+    henka_free(after);
+    henka_free(before);
+    henka_terrain_edit_history_destroy(history);
+    henka_terrain_world_destroy(world);
+    return result;
+}
+
 int main(void)
 {
     return test_deterministic_raise_and_paint() &&
-        test_allocation_failure_preserves_region() ? 0 : 1;
+        test_allocation_failure_preserves_region() &&
+        test_edit_history_undo_redo() ? 0 : 1;
 }

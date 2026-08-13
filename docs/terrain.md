@@ -107,8 +107,15 @@ runtime determines every affected resident region before allocating candidate
 copies; all candidate regions pass validation before any live sample or
 revision is swapped. The same ordered command stream therefore produces
 byte-identical authoritative samples across runtimes. The Sandbox editor and
-runtime callers use this same command path; saved brush state and asynchronous
-persistence scheduling are not yet integrated. The server authority path
+runtime callers use this same command path. The public
+`<henka/terrain_edit_history.h>` owner records bounded before/after resident
+region snapshots, restores revision/generation/dirty state transactionally, and
+provides deterministic Undo/Redo without owning the Terrain world. The Sandbox
+direct viewport mode emits one command per bounded cursor segment and refreshes
+collision and render owners after history actions; strokes stop at nonresident
+terrain rather than editing hidden data. Brush settings remain persisted through
+the existing Sandbox settings path, while asynchronous persistence scheduling
+is separate. The server authority path
 persists accepted commands synchronously through the storage transaction
 described below.
 
