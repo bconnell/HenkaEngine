@@ -197,6 +197,42 @@ void henka_test_assets(void)
         HENKA_TEST_ASSERT(upload.level_count == 1U && upload.levels[0].size == 16U);
         henka_ktx2_upload_dispose(&upload);
         free(generated_bytes);
+
+        generated_bytes = NULL;
+        memset(&create_info, 0, sizeof(create_info));
+        create_info.vkFormat = 134U; /* VK_FORMAT_BC1_RGBA_SRGB_BLOCK */
+        create_info.baseWidth = 4U;
+        create_info.baseHeight = 4U;
+        create_info.baseDepth = 1U;
+        create_info.numDimensions = 2U;
+        create_info.numLevels = 1U;
+        create_info.numLayers = 1U;
+        create_info.numFaces = 1U;
+        HENKA_TEST_ASSERT(ktxTexture2_Create(
+            &create_info,
+            KTX_TEXTURE_CREATE_ALLOC_STORAGE,
+            &generated_texture) == KTX_SUCCESS);
+        HENKA_TEST_ASSERT(generated_texture != NULL);
+        HENKA_TEST_ASSERT(ktxTexture_SetImageFromMemory(
+            ktxTexture(generated_texture), 0U, 0U, 0U,
+            level_one, 8U) == KTX_SUCCESS);
+        HENKA_TEST_ASSERT(ktxTexture_WriteToMemory(
+            ktxTexture(generated_texture), &generated_bytes, &generated_size) == KTX_SUCCESS);
+        ktxTexture_Destroy(ktxTexture(generated_texture));
+        generated_texture = NULL;
+        memset(&upload, 0, sizeof(upload));
+        HENKA_TEST_ASSERT(henka_ktx2_prepare_upload(
+            generated_bytes,
+            (size_t)generated_size,
+            HENKA_TEXTURE_USAGE_COLOR,
+            HENKA_TEXTURE_COLOR_SPACE_SRGB,
+            HENKA_KTX2_CAPABILITY_BC1_3,
+            &upload) == HENKA_SUCCESS);
+        HENKA_TEST_ASSERT(upload.compressed && upload.is_srgb);
+        HENKA_TEST_ASSERT(upload.format == HENKA_KTX2_GPU_FORMAT_BC1);
+        HENKA_TEST_ASSERT(upload.level_count == 1U && upload.levels[0].size == 8U);
+        henka_ktx2_upload_dispose(&upload);
+        free(generated_bytes);
     }
 #endif
     char* display_name;
