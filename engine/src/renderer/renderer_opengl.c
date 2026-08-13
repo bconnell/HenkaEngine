@@ -5593,10 +5593,16 @@ henka_result henka_opengl_renderer_draw_scene(
             program,
             "ambientColor",
             ambient_color);
+        /* Terrain chunks are owner-marked helpers for editor selection and
+         * probe-capture exclusion, but they are still scene content. Keep
+         * their normal Rendered environment/IBL contribution active so a
+         * terrain surface is not reduced to direct light plus a dark fallback
+         * ambient term. */
         henka_set_uniform_bool(
             program,
             "useEnvironment",
-            !helper_entity && policy.use_hdr_presentation);
+            policy.use_hdr_presentation &&
+            (!helper_entity || entity->material.terrain_layers_enabled));
         henka_set_uniform_vec3(
             program,
             "environmentGroundColor",
@@ -5641,7 +5647,7 @@ henka_result henka_opengl_renderer_draw_scene(
         henka_set_uniform_bool(
             program,
             "useEnvironmentTexture",
-            !helper_entity &&
+            (!helper_entity || entity->material.terrain_layers_enabled) &&
             scene->environment.mode == HENKA_SCENE_ENVIRONMENT_HDRI &&
             scene->environment.hdr_texture != NULL &&
             scene->environment.hdr_texture->backend_data != NULL);
@@ -5653,7 +5659,7 @@ henka_result henka_opengl_renderer_draw_scene(
             program,
             shader_data,
             "useIBL",
-            !helper_entity &&
+            (!helper_entity || entity->material.terrain_layers_enabled) &&
             scene->environment.mode == HENKA_SCENE_ENVIRONMENT_HDRI &&
             state->ibl_ready);
         henka_set_uniform_vec3_owned(
@@ -5699,7 +5705,10 @@ henka_result henka_opengl_renderer_draw_scene(
             "localLightOuterType[0]",
             local_light_outer_type,
             (int)HENKA_SCENE_MAX_LOCAL_LIGHTS);
-        henka_set_uniform_bool(program, "fogEnabled", !helper_entity && scene->fog.enabled);
+        henka_set_uniform_bool(
+            program,
+            "fogEnabled",
+            (!helper_entity || entity->material.terrain_layers_enabled) && scene->fog.enabled);
         henka_set_uniform_int(program, "fogMode", (int)scene->fog.mode);
         henka_set_uniform_vec3(program, "fogColor", scene->fog.color);
         henka_set_uniform_float(program, "fogStartDistance", scene->fog.start_distance);
@@ -5902,18 +5911,22 @@ henka_result henka_opengl_renderer_draw_scene(
         g_gl.ActiveTexture(GL_TEXTURE6);
         glBindTexture(
             GL_TEXTURE_2D,
-            !helper_entity && scene->environment.hdr_texture != NULL &&
+            (!helper_entity || entity->material.terrain_layers_enabled) &&
+            scene->environment.hdr_texture != NULL &&
             scene->environment.hdr_texture->backend_data != NULL ?
             ((const henka_opengl_texture_data*)scene->environment.hdr_texture->backend_data)->texture_id : 0U);
         g_gl.ActiveTexture(GL_TEXTURE7);
         glBindTexture(GL_TEXTURE_CUBE_MAP,
-            !helper_entity && state->ibl_ready ? state->ibl_irradiance_cube : 0U);
+            (!helper_entity || entity->material.terrain_layers_enabled) && state->ibl_ready ?
+                state->ibl_irradiance_cube : 0U);
         g_gl.ActiveTexture(GL_TEXTURE8);
         glBindTexture(GL_TEXTURE_CUBE_MAP,
-            !helper_entity && state->ibl_ready ? state->ibl_prefilter_cube : 0U);
+            (!helper_entity || entity->material.terrain_layers_enabled) && state->ibl_ready ?
+                state->ibl_prefilter_cube : 0U);
         g_gl.ActiveTexture(GL_TEXTURE9);
         glBindTexture(GL_TEXTURE_2D,
-            !helper_entity && state->ibl_ready ? state->ibl_brdf_lut : 0U);
+            (!helper_entity || entity->material.terrain_layers_enabled) && state->ibl_ready ?
+                state->ibl_brdf_lut : 0U);
         g_gl.ActiveTexture(GL_TEXTURE10);
         glBindTexture(GL_TEXTURE_CUBE_MAP,
             use_reflection_probe_map ? state->reflection_probe_cubes[reflection_probe_index] : 0U);

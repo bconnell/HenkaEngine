@@ -309,6 +309,7 @@ typedef struct sandbox3d_physics_state
 } sandbox3d_physics_state;
 
 #define SANDBOX3D_RESIDENCY_STRESS_TEXTURE_COUNT 65U
+#define SANDBOX3D_TERRAIN_TEXTURE_SIZE 64U
 
 /* Keep the interactive Terrain working set small and deterministic.  The
  * observer policy is shared by startup and per-frame updates so camera demand
@@ -1798,6 +1799,56 @@ static void sandbox3d_generate_terrain_fixture(
             (void)henka_terrain_normalize_weights(sample->material_weights);
         }
     }
+}
+
+static uint32_t sandbox3d_terrain_texture_hash(
+    uint32_t x,
+    uint32_t z,
+    uint32_t layer)
+{
+    uint32_t value = x * 374761393U ^ z * 668265263U ^ layer * 2246822519U;
+    value ^= value >> 13U;
+    value *= 1274126177U;
+    value ^= value >> 16U;
+    return value;
+}
+
+static float sandbox3d_terrain_texture_value_noise(
+    uint32_t x,
+    uint32_t z,
+    uint32_t layer,
+    uint32_t cell_size)
+{
+    const uint32_t period = SANDBOX3D_TERRAIN_TEXTURE_SIZE;
+    const uint32_t x0 = (x / cell_size) * cell_size;
+    const uint32_t z0 = (z / cell_size) * cell_size;
+    const uint32_t x1 = (x0 + cell_size) % period;
+    const uint32_t z1 = (z0 + cell_size) % period;
+    const float x_fraction = (float)(x % cell_size) / (float)cell_size;
+    const float z_fraction = (float)(z % cell_size) / (float)cell_size;
+    const float x_smooth = x_fraction * x_fraction * (3.0f - 2.0f * x_fraction);
+    const float z_smooth = z_fraction * z_fraction * (3.0f - 2.0f * z_fraction);
+    const float lower = (float)(sandbox3d_terrain_texture_hash(x0, z0, layer) & 0xffffU) / 65535.0f *
+        (1.0f - x_smooth) +
+        (float)(sandbox3d_terrain_texture_hash(x1, z0, layer) & 0xffffU) / 65535.0f * x_smooth;
+    const float upper = (float)(sandbox3d_terrain_texture_hash(x0, z1, layer) & 0xffffU) / 65535.0f *
+        (1.0f - x_smooth) +
+        (float)(sandbox3d_terrain_texture_hash(x1, z1, layer) & 0xffffU) / 65535.0f * x_smooth;
+    return lower * (1.0f - z_smooth) + upper * z_smooth;
+}
+
+static float sandbox3d_terrain_texture_height(
+    uint32_t x,
+    uint32_t z,
+    uint32_t layer)
+{
+    const uint32_t period = SANDBOX3D_TERRAIN_TEXTURE_SIZE;
+    const uint32_t wrapped_x = x % period;
+    const uint32_t wrapped_z = z % period;
+    const float fine = sandbox3d_terrain_texture_value_noise(wrapped_x, wrapped_z, layer, 4U);
+    const float medium = sandbox3d_terrain_texture_value_noise(wrapped_x, wrapped_z, layer + 17U, 12U);
+    const float broad = sandbox3d_terrain_texture_value_noise(wrapped_x, wrapped_z, layer + 31U, 32U);
+    return (fine - 0.5f) * 0.62f + (medium - 0.5f) * 0.29f + (broad - 0.5f) * 0.16f;
 }
 
 static henka_result sandbox3d_generate_stream_region(
@@ -5329,9 +5380,9 @@ static henka_result sandbox3d_initialize_terrain_rendering(
     henka_texture_descriptor terrain_normal_descriptor;
     henka_texture_descriptor terrain_metallic_roughness_descriptor;
     henka_terrain_stream_observer stream_observer;
-    unsigned char terrain_layer_pixels[HENKA_MATERIAL_TERRAIN_LAYER_COUNT][32U * 32U * 4U];
-    unsigned char terrain_layer_normal_pixels[HENKA_MATERIAL_TERRAIN_LAYER_COUNT][32U * 32U * 4U];
-    unsigned char terrain_layer_metallic_roughness_pixels[HENKA_MATERIAL_TERRAIN_LAYER_COUNT][32U * 32U * 4U];
+    unsigned char terrain_layer_pixels[HENKA_MATERIAL_TERRAIN_LAYER_COUNT][SANDBOX3D_TERRAIN_TEXTURE_SIZE * SANDBOX3D_TERRAIN_TEXTURE_SIZE * 4U];
+    unsigned char terrain_layer_normal_pixels[HENKA_MATERIAL_TERRAIN_LAYER_COUNT][SANDBOX3D_TERRAIN_TEXTURE_SIZE * SANDBOX3D_TERRAIN_TEXTURE_SIZE * 4U];
+    unsigned char terrain_layer_metallic_roughness_pixels[HENKA_MATERIAL_TERRAIN_LAYER_COUNT][SANDBOX3D_TERRAIN_TEXTURE_SIZE * SANDBOX3D_TERRAIN_TEXTURE_SIZE * 4U];
     henka_result result;
 
     if (engine == NULL || state == NULL || state->scene == NULL || state->basic_shader == NULL)
@@ -5358,60 +5409,78 @@ static henka_result sandbox3d_initialize_terrain_rendering(
          layer_index < HENKA_MATERIAL_TERRAIN_LAYER_COUNT;
          ++layer_index)
     {
-        for (size_t tex_z = 0U; tex_z < 32U; ++tex_z)
+        for (size_t tex_z = 0U; tex_z < SANDBOX3D_TERRAIN_TEXTURE_SIZE; ++tex_z)
         {
-            for (size_t tex_x = 0U; tex_x < 32U; ++tex_x)
+            for (size_t tex_x = 0U; tex_x < SANDBOX3D_TERRAIN_TEXTURE_SIZE; ++tex_x)
             {
-                uint32_t noise = (uint32_t)(tex_x * 374761393U +
-                    tex_z * 668265263U + layer_index * 2246822519U);
-                uint32_t secondary_noise = (uint32_t)(tex_x * 1597334677U +
-                    tex_z * 3812015801U + layer_index * 958282323U);
+                uint32_t noise = sandbox3d_terrain_texture_hash(
+                    (uint32_t)tex_x, (uint32_t)tex_z, (uint32_t)layer_index);
                 int variation;
-                int broad_variation;
-                size_t pixel_offset = (tex_z * 32U + tex_x) * 4U;
-                noise ^= noise >> 13U;
-                noise *= 1274126177U;
-                noise ^= noise >> 16U;
-                secondary_noise ^= secondary_noise >> 15U;
-                secondary_noise *= 2246822519U;
-                secondary_noise ^= secondary_noise >> 13U;
-                variation = (int)(noise & 31U) - 16;
-                broad_variation = (int)((secondary_noise >> 24U) & 31U) - 16;
-                variation = variation * 2 / 3 + broad_variation;
+                const float phase = (float)layer_index * 1.73f;
+                const float fine_pattern = sandbox3d_terrain_texture_value_noise(
+                    (uint32_t)tex_x, (uint32_t)tex_z, (uint32_t)layer_index, 4U);
+                const float medium_pattern = sandbox3d_terrain_texture_value_noise(
+                    (uint32_t)tex_x, (uint32_t)tex_z, (uint32_t)layer_index + 17U, 12U);
+                const float broad_pattern = sandbox3d_terrain_texture_value_noise(
+                    (uint32_t)tex_x, (uint32_t)tex_z, (uint32_t)layer_index + 31U, 32U);
+                const float granular_pattern = (float)(noise & 31U) / 31.0f - 0.5f;
+                const float height_x0 = sandbox3d_terrain_texture_height(
+                    ((uint32_t)tex_x + SANDBOX3D_TERRAIN_TEXTURE_SIZE - 1U) % SANDBOX3D_TERRAIN_TEXTURE_SIZE,
+                    (uint32_t)tex_z,
+                    (uint32_t)layer_index);
+                const float height_x1 = sandbox3d_terrain_texture_height(
+                    ((uint32_t)tex_x + 1U) % SANDBOX3D_TERRAIN_TEXTURE_SIZE,
+                    (uint32_t)tex_z,
+                    (uint32_t)layer_index);
+                const float height_z0 = sandbox3d_terrain_texture_height(
+                    (uint32_t)tex_x,
+                    ((uint32_t)tex_z + SANDBOX3D_TERRAIN_TEXTURE_SIZE - 1U) % SANDBOX3D_TERRAIN_TEXTURE_SIZE,
+                    (uint32_t)layer_index);
+                const float height_z1 = sandbox3d_terrain_texture_height(
+                    (uint32_t)tex_x,
+                    ((uint32_t)tex_z + 1U) % SANDBOX3D_TERRAIN_TEXTURE_SIZE,
+                    (uint32_t)layer_index);
+                const int normal_x = (int)lroundf((height_x0 - height_x1) * 64.0f);
+                const int normal_z = (int)lroundf((height_z0 - height_z1) * 64.0f);
+                size_t pixel_offset = (tex_z * SANDBOX3D_TERRAIN_TEXTURE_SIZE + tex_x) * 4U;
+                variation = (int)lroundf(
+                    (fine_pattern - 0.5f) * 13.0f +
+                    (medium_pattern - 0.5f) * 8.0f +
+                    (broad_pattern - 0.5f) * 5.0f + granular_pattern * 2.0f);
                 if (layer_index == 0U)
                 {
-                    terrain_layer_pixels[layer_index][pixel_offset + 0U] = (unsigned char)(68 + variation);
-                    terrain_layer_pixels[layer_index][pixel_offset + 1U] = (unsigned char)(102 + variation);
-                    terrain_layer_pixels[layer_index][pixel_offset + 2U] = (unsigned char)(38 + variation / 2);
+                    terrain_layer_pixels[layer_index][pixel_offset + 0U] = (unsigned char)(74 + variation);
+                    terrain_layer_pixels[layer_index][pixel_offset + 1U] = (unsigned char)(112 + variation);
+                    terrain_layer_pixels[layer_index][pixel_offset + 2U] = (unsigned char)(42 + variation / 2);
                 }
                 else if (layer_index == 1U)
                 {
-                    terrain_layer_pixels[layer_index][pixel_offset + 0U] = (unsigned char)(116 + variation * 2);
-                    terrain_layer_pixels[layer_index][pixel_offset + 1U] = (unsigned char)(70 + variation);
-                    terrain_layer_pixels[layer_index][pixel_offset + 2U] = (unsigned char)(36 + variation / 2);
+                    terrain_layer_pixels[layer_index][pixel_offset + 0U] = (unsigned char)(126 + variation);
+                    terrain_layer_pixels[layer_index][pixel_offset + 1U] = (unsigned char)(76 + variation);
+                    terrain_layer_pixels[layer_index][pixel_offset + 2U] = (unsigned char)(38 + variation / 2);
                 }
                 else if (layer_index == 2U)
                 {
-                    terrain_layer_pixels[layer_index][pixel_offset + 0U] = (unsigned char)(108 + variation * 2);
-                    terrain_layer_pixels[layer_index][pixel_offset + 1U] = (unsigned char)(112 + variation * 2);
-                    terrain_layer_pixels[layer_index][pixel_offset + 2U] = (unsigned char)(106 + variation * 2);
+                    terrain_layer_pixels[layer_index][pixel_offset + 0U] = (unsigned char)(120 + variation);
+                    terrain_layer_pixels[layer_index][pixel_offset + 1U] = (unsigned char)(124 + variation);
+                    terrain_layer_pixels[layer_index][pixel_offset + 2U] = (unsigned char)(118 + variation);
                 }
                 else
                 {
-                    terrain_layer_pixels[layer_index][pixel_offset + 0U] = (unsigned char)(42 + variation);
-                    terrain_layer_pixels[layer_index][pixel_offset + 1U] = (unsigned char)(72 + variation);
-                    terrain_layer_pixels[layer_index][pixel_offset + 2U] = (unsigned char)(64 + variation);
+                    terrain_layer_pixels[layer_index][pixel_offset + 0U] = (unsigned char)(50 + variation / 2);
+                    terrain_layer_pixels[layer_index][pixel_offset + 1U] = (unsigned char)(82 + variation);
+                    terrain_layer_pixels[layer_index][pixel_offset + 2U] = (unsigned char)(74 + variation);
                 }
                 terrain_layer_pixels[layer_index][pixel_offset + 3U] = 255U;
-                terrain_layer_normal_pixels[layer_index][pixel_offset + 0U] = (unsigned char)(128 + variation / 4);
-                terrain_layer_normal_pixels[layer_index][pixel_offset + 1U] = (unsigned char)(128 - variation / 5);
-                terrain_layer_normal_pixels[layer_index][pixel_offset + 2U] = (unsigned char)(255 - (unsigned char)(layer_index * 2U));
+                terrain_layer_normal_pixels[layer_index][pixel_offset + 0U] = (unsigned char)(128 + normal_x);
+                terrain_layer_normal_pixels[layer_index][pixel_offset + 1U] = (unsigned char)(128 + normal_z);
+                terrain_layer_normal_pixels[layer_index][pixel_offset + 2U] = 255U;
                 terrain_layer_normal_pixels[layer_index][pixel_offset + 3U] = 255U;
                 terrain_layer_metallic_roughness_pixels[layer_index][pixel_offset + 0U] = 255U;
                 {
-                    int roughness_value = (int)(layer_index == 0U ? 218U :
-                        layer_index == 1U ? 235U :
-                        layer_index == 2U ? 158U : 92U) + variation / 4;
+                    int roughness_value = (int)(layer_index == 0U ? 205U :
+                        layer_index == 1U ? 225U :
+                        layer_index == 2U ? 154U : 104U) + variation / 2;
                     if (roughness_value < 0)
                         roughness_value = 0;
                     if (roughness_value > 255)
@@ -5420,14 +5489,15 @@ static henka_result sandbox3d_initialize_terrain_rendering(
                         (unsigned char)roughness_value;
                 }
                 terrain_layer_metallic_roughness_pixels[layer_index][pixel_offset + 2U] =
-                    layer_index == 2U ? (unsigned char)(18 + variation / 4) : 0U;
+                    layer_index == 2U ? (unsigned char)(22 + variation / 2) :
+                    layer_index == 3U ? (unsigned char)(8 + variation / 3) : 0U;
                 terrain_layer_metallic_roughness_pixels[layer_index][pixel_offset + 3U] = 255U;
             }
         }
         result = sandbox3d_create_runtime_rgba8_texture(
             engine,
-            32,
-            32,
+            SANDBOX3D_TERRAIN_TEXTURE_SIZE,
+            SANDBOX3D_TERRAIN_TEXTURE_SIZE,
             &terrain_layer_pixels[layer_index][0],
             &terrain_texture_descriptor,
             layer_index == 0U ? "runtime/terrain/layer0/base_color" :
@@ -5441,8 +5511,8 @@ static henka_result sandbox3d_initialize_terrain_rendering(
         }
         result = sandbox3d_create_runtime_rgba8_texture(
             engine,
-            32,
-            32,
+            SANDBOX3D_TERRAIN_TEXTURE_SIZE,
+            SANDBOX3D_TERRAIN_TEXTURE_SIZE,
             &terrain_layer_normal_pixels[layer_index][0],
             &terrain_normal_descriptor,
             layer_index == 0U ? "runtime/terrain/layer0/normal" :
@@ -5456,8 +5526,8 @@ static henka_result sandbox3d_initialize_terrain_rendering(
         }
         result = sandbox3d_create_runtime_rgba8_texture(
             engine,
-            32,
-            32,
+            SANDBOX3D_TERRAIN_TEXTURE_SIZE,
+            SANDBOX3D_TERRAIN_TEXTURE_SIZE,
             &terrain_layer_metallic_roughness_pixels[layer_index][0],
             &terrain_metallic_roughness_descriptor,
             layer_index == 0U ? "runtime/terrain/layer0/metallic_roughness" :
@@ -5657,7 +5727,7 @@ static henka_result sandbox3d_initialize_terrain_rendering(
     terrain_material = henka_material_terrain_default();
     terrain_material.name = "Sandbox Terrain PBR";
     terrain_material.shader = state->basic_shader;
-    terrain_material.base_color = (henka_vec4){0.62f, 0.72f, 0.46f, 1.0f};
+    terrain_material.base_color = (henka_vec4){1.0f, 1.0f, 1.0f, 1.0f};
     terrain_material.roughness = 0.88f;
     for (size_t layer_index = 0U;
          layer_index < HENKA_MATERIAL_TERRAIN_LAYER_COUNT;
@@ -5669,10 +5739,15 @@ static henka_result sandbox3d_initialize_terrain_rendering(
             state->terrain_layer_normal_textures[layer_index];
         terrain_material.terrain_layers[layer_index].metallic_roughness_texture =
             state->terrain_layer_metallic_roughness_textures[layer_index];
+        /* The runtime fixture's texture is the authored albedo source. Keep
+         * the factor neutral so the fallback colors in the shared default
+         * material do not darken an otherwise valid texture by multiplication. */
+        terrain_material.terrain_layers[layer_index].base_color =
+            (henka_vec4){1.0f, 1.0f, 1.0f, 1.0f};
         terrain_material.terrain_layers[layer_index].texture_scale_meters =
             layer_index == 0U ? 6.0f : layer_index == 1U ? 8.0f : layer_index == 2U ? 4.0f : 3.0f;
         terrain_material.terrain_layers[layer_index].normal_scale =
-            layer_index == 2U ? 0.42f : layer_index == 3U ? 0.28f : 0.34f;
+            layer_index == 2U ? 0.46f : layer_index == 3U ? 0.34f : 0.38f;
     }
     render_desc.max_resident_chunks = 16U;
     render_desc.max_pending_requests = 16U;
@@ -8584,6 +8659,18 @@ static void sandbox3d_apply_loaded_settings(henka_engine* engine, sandbox3d_stat
         else
         {
             HENKA_LOG_WARN("Unsafe environment settings were ignored and the current environment was retained.");
+        }
+    }
+    if (state->capture_mode_requested && state->environment_texture != NULL &&
+        henka_scene_get_environment(state->scene, &environment) == HENKA_SUCCESS)
+    {
+        /* Visual evidence must exercise the packaged studio environment rather
+         * than a prior user's saved sky-mode choice. Capture mode never saves
+         * settings, so this remains isolated from normal editor preferences. */
+        environment.mode = HENKA_SCENE_ENVIRONMENT_HDRI;
+        if (henka_scene_set_environment(state->scene, environment) != HENKA_SUCCESS)
+        {
+            HENKA_LOG_WARN("Deterministic capture environment could not be installed; retaining the loaded environment.");
         }
     }
     if (state->environment_stress &&
@@ -18196,15 +18283,17 @@ static henka_result sandbox3d_initialize(henka_engine* engine, void* user_data)
         {
             goto fail;
         }
-        result = henka_scene_set_environment(
-            state->scene,
-            (henka_scene_environment_desc){
-                (henka_vec3){0.04f, 0.05f, 0.08f},
-                (henka_vec3){0.12f, 0.18f, 0.30f},
-                (henka_vec3){0.18f, 0.24f, 0.42f},
-                1.0f,
-                state->environment_texture,
-                0.0f});
+        {
+            henka_scene_environment_desc environment = henka_scene_environment_default();
+            environment.ground_color = (henka_vec3){0.04f, 0.05f, 0.08f};
+            environment.horizon_color = (henka_vec3){0.12f, 0.18f, 0.30f};
+            environment.zenith_color = (henka_vec3){0.18f, 0.24f, 0.42f};
+            environment.intensity = 1.0f;
+            environment.hdr_texture = state->environment_texture;
+            environment.hdr_rotation = 0.0f;
+            environment.mode = HENKA_SCENE_ENVIRONMENT_HDRI;
+            result = henka_scene_set_environment(state->scene, environment);
+        }
         if (result != HENKA_SUCCESS)
         {
             goto fail;

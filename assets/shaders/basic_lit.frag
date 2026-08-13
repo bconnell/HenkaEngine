@@ -159,6 +159,52 @@ float terrainMacroVariation(vec2 worldPosition)
     return mix(lower, upper, fraction.y);
 }
 
+/* Terrain layer images are intentionally bounded runtime fixtures in the
+ * Sandbox, so their authored resolution must not be the only source of
+ * material detail. This value-noise path is shared by albedo, roughness, and
+ * tangent-normal response. It is deliberately subtle and world-space so it
+ * breaks large texture repeats without producing a painted overlay or a
+ * camera-dependent pattern. */
+float terrainDetailHash(vec2 cell)
+{
+    return fract(sin(dot(cell, vec2(127.1, 311.7)) + 19.19) * 43758.5453);
+}
+
+float terrainDetailNoise(vec2 position)
+{
+    vec2 cell = floor(position);
+    vec2 fraction = fract(position);
+    fraction = fraction * fraction * (3.0 - 2.0 * fraction);
+    float lower = mix(
+        terrainDetailHash(cell),
+        terrainDetailHash(cell + vec2(1.0, 0.0)),
+        fraction.x);
+    float upper = mix(
+        terrainDetailHash(cell + vec2(0.0, 1.0)),
+        terrainDetailHash(cell + vec2(1.0, 1.0)),
+        fraction.x);
+    return mix(lower, upper, fraction.y);
+}
+
+float terrainLayerDetail(vec2 worldPosition, float layerIndex)
+{
+    vec2 offset = vec2(layerIndex * 17.0 + 3.0, layerIndex * 11.0 + 5.0);
+    float fine = terrainDetailNoise(worldPosition * 0.34 + offset);
+    float medium = terrainDetailNoise(worldPosition * 0.12 + offset * 0.47);
+    return (fine - 0.5) * 0.78 + (medium - 0.5) * 0.34;
+}
+
+vec2 terrainLayerDetailSlope(vec2 worldPosition, float layerIndex)
+{
+    const float sampleDistance = 0.28;
+    float xForward = terrainLayerDetail(worldPosition + vec2(sampleDistance, 0.0), layerIndex);
+    float xBackward = terrainLayerDetail(worldPosition - vec2(sampleDistance, 0.0), layerIndex);
+    float zForward = terrainLayerDetail(worldPosition + vec2(0.0, sampleDistance), layerIndex);
+    float zBackward = terrainLayerDetail(worldPosition - vec2(0.0, sampleDistance), layerIndex);
+    return vec2(xForward - xBackward, zForward - zBackward) /
+        (2.0 * sampleDistance);
+}
+
 vec3 safeNormalize(vec3 value, vec3 fallback)
 {
     float lengthSquared = dot(value, value);
@@ -427,7 +473,8 @@ void main()
                 layerColor *= texture(terrainLayerBaseColorTextures[layerIndex], layerUv);
             }
             float macro = terrainMacroVariation(fragWorldPosition.xz + vec2(float(layerIndex) * 19.0));
-            layerColor.rgb *= 0.92 + macro * 0.16;
+            float detail = terrainLayerDetail(fragWorldPosition.xz, float(layerIndex));
+            layerColor.rgb *= clamp(0.90 + macro * 0.12 + detail * 0.18, 0.68, 1.14);
             terrainAlbedo += layerColor.rgb * terrainWeights[layerIndex];
         }
         surfaceColor = vec4(terrainAlbedo * max(baseColor.rgb, vec3(0.0)), baseColor.a);
@@ -468,6 +515,9 @@ void main()
                 vec2 layerUv = fragWorldPosition.xz / max(terrainLayerParameters[layerIndex].z, 0.001);
                 layerNormal = texture(terrainLayerNormalTextures[layerIndex], layerUv).xyz * 2.0 - 1.0;
                 layerNormal.xy *= terrainLayerParameters[layerIndex].w;
+                layerNormal.xy += terrainLayerDetailSlope(
+                    fragWorldPosition.xz, float(layerIndex)) *
+                    (0.16 + terrainLayerParameters[layerIndex].w * 0.10);
                 layerNormal = safeNormalize(layerNormal, vec3(0.0, 0.0, 1.0));
             }
             terrainTangentNormal += layerNormal * terrainWeights[layerIndex];
@@ -517,7 +567,8 @@ void main()
                 layerRoughness *= layerMaterialData.g;
             }
             float macro = terrainMacroVariation(fragWorldPosition.xz + vec2(float(layerIndex) * 19.0));
-            layerRoughness *= 0.94 + macro * 0.12;
+            float detail = terrainLayerDetail(fragWorldPosition.xz, float(layerIndex));
+            layerRoughness *= clamp(0.94 + macro * 0.08 + detail * 0.10, 0.72, 1.10);
             surfaceMetallic += saturate(layerMetallic) * terrainWeights[layerIndex];
             surfaceRoughness += clamp(layerRoughness, 0.045, 1.0) * terrainWeights[layerIndex];
         }

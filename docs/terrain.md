@@ -348,11 +348,12 @@ metallic/roughness texture semantics plus base color, metallic, roughness,
 normal-strength, and meters-per-tile factors. The normal Rendered shader
 consumes these weights; ordinary material vertex-color tint remains disabled
 for this material. The Sandbox reference fixture creates four deterministic
-32x32 asset-manager-owned runtime grass, dirt, rock, and wet base-color with
-tangent-normal, and metallic/roughness tiles using bounded multi-frequency
-variation. The Rendered Terrain shader also adds bounded world-space macro
-variation to albedo and roughness to reduce large-scale tile repetition; this
-does not claim authored texture streaming.
+64x64 asset-manager-owned runtime grass, dirt, rock, and wet base-color with
+finite-difference tangent-normal and metallic/roughness tiles using bounded
+multi-frequency variation. The Rendered Terrain shader also adds bounded
+world-space macro/detail variation to albedo, roughness, and tangent normals to
+reduce large-scale tile repetition; this does not claim authored texture
+streaming, displacement, or parallax.
 The material retains deterministic factor fallback for replacement or unavailable
 optional sources. The graphical
 owner reports the exact unique layer-texture count and resident material bytes;
@@ -434,7 +435,9 @@ shared paint command, verifies the authoritative layer weight and rendered
 revision advance, and leaves collision untouched for that paint-only mutation.
 Sandbox smoke also checks the per-frame Terrain color and shadow submission
 diagnostics while the viewport is Rendered; generic depth, AO, reflection,
-temporal, fog, and HDR processing consume the same scene submission path. The
+temporal, fog, and HDR/IBL processing consume the same scene submission path.
+Terrain helper entities retain scene fog and Rendered environment/IBL response
+while remaining excluded from generic local reflection-probe capture. The
 engine diagnostics bitmask identifies Terrain participation in those consumers
 for the current frame, including probe capture only when a Terrain entity is
 actually submitted to that capture. It is a path diagnostic, not a claim of
