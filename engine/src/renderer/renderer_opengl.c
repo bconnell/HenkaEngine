@@ -2047,7 +2047,10 @@ static henka_result henka_opengl_build_ibl_resources(
     GLuint prefilter_cube = 0U;
     GLuint brdf_lut = 0U;
     GLint previous_framebuffer = 0;
+    GLint previous_active_texture = GL_TEXTURE0;
     GLint previous_texture = 0;
+    GLint previous_cube_texture = 0;
+    GLint previous_viewport[4] = {0, 0, 0, 0};
     const henka_opengl_texture_data* source_data;
     henka_mat4 projection;
     int face;
@@ -2062,7 +2065,10 @@ static henka_result henka_opengl_build_ibl_resources(
     if (source_data->texture_id == 0U)
         return HENKA_ERROR_RENDERER;
     glGetIntegerv(GL_FRAMEBUFFER_BINDING, &previous_framebuffer);
+    glGetIntegerv(GL_ACTIVE_TEXTURE, &previous_active_texture);
     glGetIntegerv(GL_TEXTURE_BINDING_2D, &previous_texture);
+    glGetIntegerv(GL_TEXTURE_BINDING_CUBE_MAP, &previous_cube_texture);
+    glGetIntegerv(GL_VIEWPORT, previous_viewport);
     g_gl.GenFramebuffers(1, &framebuffer);
     if (framebuffer == 0U ||
         !henka_opengl_allocate_ibl_cube(&environment_cube, HENKA_IBL_ENVIRONMENT_RESOLUTION, 1) ||
@@ -2162,8 +2168,12 @@ static henka_result henka_opengl_build_ibl_resources(
     g_gl.BindVertexArray(0);
     g_gl.UseProgram(0);
     g_gl.BindFramebuffer(GL_FRAMEBUFFER, (GLuint)previous_framebuffer);
+    glViewport(
+        previous_viewport[0], previous_viewport[1],
+        previous_viewport[2], previous_viewport[3]);
+    g_gl.ActiveTexture((GLenum)previous_active_texture);
     glBindTexture(GL_TEXTURE_2D, (GLuint)previous_texture);
-    glBindTexture(GL_TEXTURE_CUBE_MAP, 0U);
+    glBindTexture(GL_TEXTURE_CUBE_MAP, (GLuint)previous_cube_texture);
     henka_opengl_delete_ibl_resources(state);
     state->ibl_framebuffer = framebuffer;
     state->ibl_environment_cube = environment_cube;
@@ -2187,7 +2197,12 @@ static henka_result henka_opengl_build_ibl_resources(
 
 ibl_failure:
     g_gl.BindFramebuffer(GL_FRAMEBUFFER, (GLuint)previous_framebuffer);
+    glViewport(
+        previous_viewport[0], previous_viewport[1],
+        previous_viewport[2], previous_viewport[3]);
+    g_gl.ActiveTexture((GLenum)previous_active_texture);
     glBindTexture(GL_TEXTURE_2D, (GLuint)previous_texture);
+    glBindTexture(GL_TEXTURE_CUBE_MAP, (GLuint)previous_cube_texture);
     if (environment_cube != 0U) glDeleteTextures(1, &environment_cube);
     if (irradiance_cube != 0U) glDeleteTextures(1, &irradiance_cube);
     if (prefilter_cube != 0U) glDeleteTextures(1, &prefilter_cube);
