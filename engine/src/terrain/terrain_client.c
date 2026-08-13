@@ -119,6 +119,26 @@ static void henka_terrain_client_clear_all_pending_session_snapshots(
     memset(client->pending_session_snapshots, 0, sizeof(client->pending_session_snapshots));
 }
 
+static void henka_terrain_client_clear_failed_snapshot_state(
+    henka_terrain_client* client,
+    henka_terrain_region_id region_id)
+{
+    uint32_t index = henka_terrain_client_find_pending_recovery(client, region_id);
+    if (index < HENKA_TERRAIN_CLIENT_MAX_PENDING_RECOVERIES)
+    {
+        client->pending_recoveries[index].active = false;
+        if (client->diagnostics.pending_recovery_count > 0U)
+        {
+            --client->diagnostics.pending_recovery_count;
+        }
+    }
+    index = henka_terrain_client_find_pending_session_snapshot(client, region_id);
+    if (index < HENKA_TERRAIN_NETWORK_MAX_SESSION_REGIONS)
+    {
+        client->pending_session_snapshots[index].active = false;
+    }
+}
+
 henka_terrain_client_desc henka_terrain_client_desc_default(void)
 {
     return (henka_terrain_client_desc){
@@ -343,10 +363,27 @@ static henka_result henka_terrain_client_request_delta_recovery(
     henka_terrain_client* client,
     const henka_terrain_edit_delta* delta)
 {
+    henka_terrain_world_desc desc;
+    henka_terrain_region_id affected[HENKA_TERRAIN_EDIT_MAX_AFFECTED_REGIONS];
+    uint32_t affected_count = HENKA_TERRAIN_EDIT_MAX_AFFECTED_REGIONS;
     uint32_t index;
+    if (henka_terrain_world_get_desc(client->world, &desc) != HENKA_SUCCESS ||
+        desc.world_identity != delta->world_identity ||
+        desc.base_asset_identity != delta->base_asset_identity ||
+        henka_terrain_edit_get_affected_regions(
+            client->world, &delta->command, affected, &affected_count) != HENKA_SUCCESS ||
+        affected_count != delta->affected_region_count)
+    {
+        return false;
+    }
     for (index = 0U; index < delta->affected_region_count; ++index)
     {
         henka_terrain_region_state state;
+        if (!henka_terrain_region_id_equal(
+                affected[index], delta->affected_regions[index].region_id))
+        {
+            return false;
+        }
         uint32_t pending_index;
         bool replacing_pending = false;
         henka_terrain_delta_recovery_request request = {
@@ -567,6 +604,47 @@ static void henka_terrain_client_sync_replica_diagnostics(
     }
 }
 
+static bool henka_terrain_client_delta_is_out_of_interest(
+    const henka_terrain_client* client,
+    const henka_terrain_edit_delta* delta)
+{
+    henka_terrain_world_desc desc;
+    henka_terrain_region_id affected[HENKA_TERRAIN_EDIT_MAX_AFFECTED_REGIONS];
+    uint32_t affected_count = HENKA_TERRAIN_EDIT_MAX_AFFECTED_REGIONS;
+    uint32_t index;
+    bool missing_region = false;
+    bool resident_region = false;
+    if (client == NULL || delta == NULL ||
+        henka_terrain_world_get_desc(client->world, &desc) != HENKA_SUCCESS ||
+        desc.world_identity != delta->world_identity ||
+        desc.base_asset_identity != delta->base_asset_identity ||
+        henka_terrain_edit_get_affected_regions(
+            client->world, &delta->command, affected, &affected_count) != HENKA_SUCCESS ||
+        affected_count != delta->affected_region_count)
+    {
+        return false;
+    }
+    for (index = 0U; index < delta->affected_region_count; ++index)
+    {
+        henka_terrain_region_state state;
+        if (!henka_terrain_region_id_equal(
+                affected[index], delta->affected_regions[index].region_id))
+        {
+            return false;
+        }
+        if (henka_terrain_world_get_region_state(
+                client->world, delta->affected_regions[index].region_id, &state) != HENKA_SUCCESS)
+        {
+            missing_region = true;
+        }
+        else
+        {
+            resident_region = true;
+        }
+    }
+    return missing_region && !resident_region;
+}
+
 henka_result henka_terrain_client_handle_event(
     henka_terrain_client* client,
     const henka_network_event* event)
@@ -663,6 +741,12 @@ henka_result henka_terrain_client_handle_event(
         result = henka_terrain_replica_apply_delta(client->replica, &delta, &applied);
         if (result != HENKA_SUCCESS)
         {
+            if (result == HENKA_ERROR_INVALID_ARGUMENT &&
+                henka_terrain_client_delta_is_out_of_interest(client, &delta))
+            {
+                ++client->diagnostics.out_of_interest_delta_count;
+                return HENKA_SUCCESS;
+            }
             /* The replica also uses ASSET_SOURCE for some non-gap failures.
              * Verify the revision relationship independently before allowing
              * recovery; protocol, identity, sizing, and allocation failures
@@ -706,6 +790,24 @@ henka_result henka_terrain_client_handle_event(
         }
         (void)applied;
         henka_terrain_client_sync_replica_diagnostics(client);
+        return HENKA_SUCCESS;
+    }
+    if (event->message.channel == HENKA_NETWORK_CHANNEL_SNAPSHOT &&
+        event->message.type == HENKA_NETWORK_MESSAGE_SNAPSHOT_FAILED)
+    {
+        henka_terrain_snapshot_failure failure;
+        henka_terrain_world_desc desc;
+        if (henka_terrain_snapshot_failure_decode(
+                event->message.payload, event->message.payload_size, &failure) != HENKA_SUCCESS ||
+            henka_terrain_world_get_desc(client->world, &desc) != HENKA_SUCCESS ||
+            desc.world_identity != failure.world_identity ||
+            desc.base_asset_identity != failure.base_asset_identity)
+        {
+            ++client->diagnostics.malformed_message_count;
+            return HENKA_ERROR_INVALID_ARGUMENT;
+        }
+        henka_terrain_client_clear_failed_snapshot_state(client, failure.region_id);
+        ++client->diagnostics.snapshot_failure_count;
         return HENKA_SUCCESS;
     }
     if (event->message.type == HENKA_NETWORK_MESSAGE_SNAPSHOT_FRAGMENT)

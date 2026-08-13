@@ -85,6 +85,25 @@ void henka_terrain_authority_destroy(henka_terrain_authority* authority)
     henka_free(authority);
 }
 
+void henka_terrain_authority_retire_peer(
+    henka_terrain_authority* authority,
+    henka_network_peer_id peer_id)
+{
+    uint32_t index;
+    if (authority == NULL || peer_id == HENKA_NETWORK_INVALID_PEER_ID)
+    {
+        return;
+    }
+    for (index = 0U; index < authority->max_clients; ++index)
+    {
+        if (authority->rate_records[index].peer_id == peer_id)
+        {
+            authority->rate_records[index] = (henka_terrain_rate_record){0};
+            return;
+        }
+    }
+}
+
 static henka_result henka_terrain_authority_reject(
     const henka_terrain_edit_request* request,
     henka_terrain_edit_rejection_reason reason,

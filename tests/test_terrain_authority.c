@@ -72,6 +72,7 @@ static int test_authoritative_acceptance_and_stale_rejection(void)
     {
         goto cleanup;
     }
+    henka_terrain_authority_retire_peer(authority, 1U);
     request.client_nonce = 78U;
     request.world_identity ^= UINT64_C(1);
     if (henka_terrain_authority_process_request(authority, 2U, &request, 1001U, &response) != HENKA_SUCCESS ||

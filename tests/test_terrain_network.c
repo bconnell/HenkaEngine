@@ -14,6 +14,8 @@ static int test_request_and_response_codecs(void)
     henka_terrain_edit_delta decoded_delta;
     henka_terrain_snapshot_request snapshot_request = {0};
     henka_terrain_snapshot_request decoded_snapshot_request;
+    henka_terrain_snapshot_failure snapshot_failure = {0};
+    henka_terrain_snapshot_failure decoded_snapshot_failure;
     henka_terrain_snapshot_fragment snapshot_fragment = {0};
     henka_terrain_snapshot_fragment decoded_snapshot_fragment;
     henka_terrain_session_info session_info = {0};
@@ -99,6 +101,20 @@ static int test_request_and_response_codecs(void)
             &snapshot_request, buffer, sizeof(buffer), &size) != HENKA_SUCCESS ||
         henka_terrain_snapshot_request_decode(buffer, size, &decoded_snapshot_request) != HENKA_SUCCESS ||
         decoded_snapshot_request.region_id.z != 3 || decoded_snapshot_request.expected_revision != 8U)
+    {
+        return 0;
+    }
+    snapshot_failure.world_identity = 11U;
+    snapshot_failure.base_asset_identity = 22U;
+    snapshot_failure.region_id = snapshot_request.region_id;
+    snapshot_failure.expected_revision = 8U;
+    snapshot_failure.reason = HENKA_TERRAIN_SNAPSHOT_FAILURE_OUT_OF_MEMORY;
+    if (henka_terrain_snapshot_failure_encode(
+            &snapshot_failure, buffer, sizeof(buffer), &size) != HENKA_SUCCESS ||
+        henka_terrain_snapshot_failure_decode(
+            buffer, size, &decoded_snapshot_failure) != HENKA_SUCCESS ||
+        decoded_snapshot_failure.region_id.z != 3 ||
+        decoded_snapshot_failure.reason != HENKA_TERRAIN_SNAPSHOT_FAILURE_OUT_OF_MEMORY)
     {
         return 0;
     }

@@ -415,6 +415,52 @@ henka_result henka_terrain_snapshot_request_decode(
         ? HENKA_ERROR_INVALID_ARGUMENT : HENKA_SUCCESS;
 }
 
+henka_result henka_terrain_snapshot_failure_encode(
+    const henka_terrain_snapshot_failure* failure,
+    uint8_t* buffer,
+    size_t buffer_capacity,
+    size_t* out_size)
+{
+    if (failure == NULL || buffer == NULL || out_size == NULL ||
+        failure->region_id.x < 0 || failure->region_id.z < 0 ||
+        failure->reason > HENKA_TERRAIN_SNAPSHOT_FAILURE_OUT_OF_MEMORY ||
+        buffer_capacity < HENKA_TERRAIN_NETWORK_MAX_SNAPSHOT_FAILURE_BYTES)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    henka_terrain_network_write_u64(buffer + 0U, failure->world_identity);
+    henka_terrain_network_write_u64(buffer + 8U, failure->base_asset_identity);
+    henka_terrain_network_write_u32(buffer + 16U, (uint32_t)failure->region_id.x);
+    henka_terrain_network_write_u32(buffer + 20U, (uint32_t)failure->region_id.z);
+    henka_terrain_network_write_u64(buffer + 24U, failure->expected_revision);
+    henka_terrain_network_write_u32(buffer + 32U, (uint32_t)failure->reason);
+    henka_terrain_network_write_u32(buffer + 36U, 0U);
+    *out_size = HENKA_TERRAIN_NETWORK_MAX_SNAPSHOT_FAILURE_BYTES;
+    return HENKA_SUCCESS;
+}
+
+henka_result henka_terrain_snapshot_failure_decode(
+    const uint8_t* buffer,
+    size_t buffer_size,
+    henka_terrain_snapshot_failure* out_failure)
+{
+    if (buffer == NULL || out_failure == NULL ||
+        buffer_size != HENKA_TERRAIN_NETWORK_MAX_SNAPSHOT_FAILURE_BYTES)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    out_failure->world_identity = henka_terrain_network_read_u64(buffer + 0U);
+    out_failure->base_asset_identity = henka_terrain_network_read_u64(buffer + 8U);
+    out_failure->region_id.x = (int32_t)henka_terrain_network_read_u32(buffer + 16U);
+    out_failure->region_id.z = (int32_t)henka_terrain_network_read_u32(buffer + 20U);
+    out_failure->expected_revision = henka_terrain_network_read_u64(buffer + 24U);
+    out_failure->reason = (henka_terrain_snapshot_failure_reason)
+        henka_terrain_network_read_u32(buffer + 32U);
+    return out_failure->region_id.x < 0 || out_failure->region_id.z < 0 ||
+        out_failure->reason > HENKA_TERRAIN_SNAPSHOT_FAILURE_OUT_OF_MEMORY
+        ? HENKA_ERROR_INVALID_ARGUMENT : HENKA_SUCCESS;
+}
+
 henka_result henka_terrain_delta_recovery_request_encode(
     const henka_terrain_delta_recovery_request* request,
     uint8_t* buffer,

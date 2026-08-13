@@ -65,6 +65,7 @@ static int test_client_snapshot_and_delta_path(void)
     henka_terrain_edit_request edit_request = {0};
     henka_terrain_snapshot_fragment snapshot_fragment;
     henka_network_event snapshot_event;
+    henka_network_event snapshot_failure_event;
     henka_network_event gap_event;
     henka_network_event session_info_event;
     henka_terrain_session_info session_info;
@@ -75,9 +76,11 @@ static int test_client_snapshot_and_delta_path(void)
     uint8_t* fragment_payload = NULL;
     uint8_t gap_payload[HENKA_TERRAIN_NETWORK_MAX_DELTA_BYTES];
     uint8_t session_info_payload[1024];
+    uint8_t snapshot_failure_payload[HENKA_TERRAIN_NETWORK_MAX_SNAPSHOT_FAILURE_BYTES];
     size_t encoded_record_size = 0U;
     size_t gap_payload_size = 0U;
     size_t session_info_payload_size = 0U;
+    size_t snapshot_failure_payload_size = 0U;
     uint32_t snapshot_fragment_count;
     size_t snapshot_offset;
     henka_terrain_region_state state;
@@ -251,6 +254,48 @@ static int test_client_snapshot_and_delta_path(void)
     if (client_diagnostics.session_snapshot_request_count != 3U)
     {
         goto cleanup;
+    }
+    {
+        henka_terrain_snapshot_failure failure = {
+            world_desc.world_identity,
+            world_desc.base_asset_identity,
+            (henka_terrain_region_id){0, 0},
+            9U,
+            HENKA_TERRAIN_SNAPSHOT_FAILURE_STORAGE};
+        if (henka_terrain_snapshot_failure_encode(
+                &failure, snapshot_failure_payload, sizeof(snapshot_failure_payload),
+                &snapshot_failure_payload_size) != HENKA_SUCCESS)
+        {
+            goto cleanup;
+        }
+        snapshot_failure_event = (henka_network_event){
+            HENKA_NETWORK_EVENT_MESSAGE,
+            HENKA_NETWORK_INVALID_PEER_ID,
+            HENKA_NETWORK_DISCONNECT_REASON_NONE,
+            {HENKA_NETWORK_CHANNEL_SNAPSHOT,
+             HENKA_NETWORK_MESSAGE_SNAPSHOT_FAILED,
+             snapshot_failure_payload,
+             (uint32_t)snapshot_failure_payload_size}};
+        if (henka_terrain_client_handle_event(
+                terrain_client, &snapshot_failure_event) != HENKA_SUCCESS)
+        {
+            goto cleanup;
+        }
+        henka_terrain_client_get_diagnostics(terrain_client, &client_diagnostics);
+        if (client_diagnostics.snapshot_failure_count != 1U)
+        {
+            goto cleanup;
+        }
+        if (henka_terrain_client_handle_event(
+                terrain_client, &snapshot_failure_event) != HENKA_SUCCESS)
+        {
+            goto cleanup;
+        }
+        henka_terrain_client_get_diagnostics(terrain_client, &client_diagnostics);
+        if (client_diagnostics.session_snapshot_suppressed_count != 1U)
+        {
+            goto cleanup;
+        }
     }
     encoded_record = henka_malloc(HENKA_TERRAIN_MAX_REGION_RECORD_BYTES);
     corrupted_record = henka_malloc(HENKA_TERRAIN_MAX_REGION_RECORD_BYTES);

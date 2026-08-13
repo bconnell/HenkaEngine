@@ -560,3 +560,17 @@ without renderer dependencies: deterministic raise and paint commands change
 the authoritative region, a full-resolution collision patch follows the edit,
 the committed region reloads into a new world and physics owner, and an
 uncommitted journal transaction is discarded during recovery.
+Terrain server authority rate records are bounded by the configured simultaneous
+client capacity and are retired on transport disconnect before a later peer can
+reuse the slot. Request-time loading of persisted regions records the regions it
+created and releases only those regions when materialization or later authority
+validation rejects the edit; preexisting residency is preserved.
+
+Accepted deltas remain globally delivered by the bounded transport, but a client
+that does not currently own an affected region treats a validated out-of-interest
+delta as a bounded no-op. It does not invent a region or request revision-gap
+recovery; a later relevance/session response acquires the authoritative snapshot.
+Valid snapshot requests also receive an explicit terminal failure message when
+bounded storage, allocation, or encoding work fails before the first fragment.
+Malformed or identity-invalid requests remain protocol failures, not retryable
+successes.

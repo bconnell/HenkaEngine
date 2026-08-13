@@ -40,6 +40,9 @@ henka_result henka_terrain_authority_create(
     const henka_terrain_authority_desc* desc,
     henka_terrain_authority** out_authority);
 void henka_terrain_authority_destroy(henka_terrain_authority* authority);
+void henka_terrain_authority_retire_peer(
+    henka_terrain_authority* authority,
+    henka_network_peer_id peer_id);
 henka_result henka_terrain_authority_process_request(
     henka_terrain_authority* authority,
     henka_network_peer_id peer_id,
