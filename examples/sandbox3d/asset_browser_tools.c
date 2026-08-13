@@ -34,6 +34,8 @@ static const char* sandbox3d_asset_browser_format_label(henka_texture_gpu_format
             return "RGBA8";
         case HENKA_TEXTURE_GPU_FORMAT_BC1:
             return "BC1";
+        case HENKA_TEXTURE_GPU_FORMAT_BC1_RGBA:
+            return "BC1 RGBA";
         case HENKA_TEXTURE_GPU_FORMAT_BC3:
             return "BC3";
         case HENKA_TEXTURE_GPU_FORMAT_BC5:

@@ -177,6 +177,19 @@ static void henka_test_sandbox3d_terrain_layer_display(void)
     metallic_roughness = base;
     metallic_roughness.gpu_format = HENKA_TEXTURE_GPU_FORMAT_BC7;
 
+    base.gpu_format = HENKA_TEXTURE_GPU_FORMAT_BC1_RGBA;
+    HENKA_TEST_ASSERT(
+        sandbox3d_format_terrain_layer_display(
+            0U,
+            &base,
+            &normal,
+            &metallic_roughness,
+            summary,
+            sizeof(summary)) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(strstr(summary, "base 16x16 BC1 RGBA") != NULL);
+
+    base.gpu_format = HENKA_TEXTURE_GPU_FORMAT_RGBA8;
+
     HENKA_TEST_ASSERT(
         sandbox3d_format_terrain_layer_display(
             0U,
