@@ -2738,6 +2738,8 @@ static henka_result henka_opengl_create_point_shadow_target(
     GLint previous_framebuffer = 0;
     GLint previous_active_texture = GL_TEXTURE0;
     GLint previous_texture = 0;
+    GLint previous_draw_buffer = GL_BACK;
+    GLint previous_read_buffer = GL_BACK;
 
     if (state == NULL || resolution <= 0 || resolution > 1024)
     {
@@ -2751,8 +2753,10 @@ static henka_result henka_opengl_create_point_shadow_target(
     }
     glGetIntegerv(GL_FRAMEBUFFER_BINDING, &previous_framebuffer);
     glGetIntegerv(GL_ACTIVE_TEXTURE, &previous_active_texture);
-    g_gl.ActiveTexture(GL_TEXTURE0);
     glGetIntegerv(GL_TEXTURE_BINDING_CUBE_MAP, &previous_texture);
+    glGetIntegerv(GL_DRAW_BUFFER, &previous_draw_buffer);
+    glGetIntegerv(GL_READ_BUFFER, &previous_read_buffer);
+    g_gl.ActiveTexture(GL_TEXTURE0);
     g_gl.GenFramebuffers(1, &framebuffer);
     glGenTextures(1, &depth_texture);
     if (framebuffer == 0U || depth_texture == 0U)
@@ -2787,15 +2791,19 @@ static henka_result henka_opengl_create_point_shadow_target(
             sizeof(state->point_shadow_failure_reason),
             "incomplete point shadow framebuffer");
         g_gl.BindFramebuffer(GL_FRAMEBUFFER, (GLuint)previous_framebuffer);
-        glBindTexture(GL_TEXTURE_CUBE_MAP, (GLuint)previous_texture);
+        glDrawBuffer((GLenum)previous_draw_buffer);
+        glReadBuffer((GLenum)previous_read_buffer);
         g_gl.ActiveTexture((GLenum)previous_active_texture);
+        glBindTexture(GL_TEXTURE_CUBE_MAP, (GLuint)previous_texture);
         glDeleteTextures(1, &depth_texture);
         g_gl.DeleteFramebuffers(1, &framebuffer);
         return HENKA_ERROR_RENDERER;
     }
     g_gl.BindFramebuffer(GL_FRAMEBUFFER, (GLuint)previous_framebuffer);
-    glBindTexture(GL_TEXTURE_CUBE_MAP, (GLuint)previous_texture);
+    glDrawBuffer((GLenum)previous_draw_buffer);
+    glReadBuffer((GLenum)previous_read_buffer);
     g_gl.ActiveTexture((GLenum)previous_active_texture);
+    glBindTexture(GL_TEXTURE_CUBE_MAP, (GLuint)previous_texture);
     henka_opengl_delete_point_shadow_target(state);
     state->point_shadow_framebuffer = framebuffer;
     state->point_shadow_depth_texture = depth_texture;
