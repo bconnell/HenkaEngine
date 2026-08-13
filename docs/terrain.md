@@ -454,8 +454,9 @@ the development or packaged executable. The wide set runs
 `scripts/check_terrain_corner_visual_evidence_windows.ps1`, and the close set
 runs `scripts/check_terrain_close_visual_evidence_windows.ps1`. All three sample
 only the normalized Scene View interior and reject missing or dimension-
-mismatched images, flat content in any mode, and a Rendered image that is not
-measurably distinct from Material Preview. This is an automated
+mismatched images, flat or low-chroma material content, spatially featureless
+content, and a Rendered image that is not measurably distinct from Material
+Preview. This is an automated
 presentation-path guard, not a baseline-image or human visual approval or
 complete topology QA.
 The same graphical

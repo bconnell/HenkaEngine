@@ -10,7 +10,8 @@ function New-TestTerrainImage {
     param(
         [Parameter(Mandatory = $true)][string]$Path,
         [Parameter(Mandatory = $true)][bool]$Flat,
-        [Parameter(Mandatory = $true)][bool]$Rendered
+        [Parameter(Mandatory = $true)][bool]$Rendered,
+        [bool]$Gray = $false
     )
 
     $bitmap = [System.Drawing.Bitmap]::new(640, 360)
@@ -25,9 +26,16 @@ function New-TestTerrainImage {
                 }
                 else {
                     $wave = [int](18.0 * [Math]::Sin($x * 0.07) + 14.0 * [Math]::Cos($y * 0.11))
-                    $red = 48 + $wave + $(if ($Rendered) { 18 } else { 0 })
-                    $green = 72 + $wave + $(if ($Rendered) { 8 } else { 0 })
-                    $blue = 42 + $wave + $(if ($Rendered) { -4 } else { 0 })
+                    if ($Gray) {
+                        $red = 80 + $wave
+                        $green = 80 + $wave
+                        $blue = 80 + $wave
+                    }
+                    else {
+                        $red = 48 + $wave + $(if ($Rendered) { 18 } else { 0 })
+                        $green = 72 + $wave + $(if ($Rendered) { 8 } else { 0 })
+                        $blue = 42 + $wave + $(if ($Rendered) { -4 } else { 0 })
+                    }
                 }
                 $bitmap.SetPixel($x, $y, [System.Drawing.Color]::FromArgb(
                     [Math]::Max(0, [Math]::Min(255, $red)),
@@ -87,6 +95,26 @@ try {
     }
     if (-not $rejectedFlatEvidence -or $flatEvidenceMessage -notmatch "too flat") {
         throw "The validator did not reject flat terrain evidence for the expected reason."
+    }
+
+    foreach ($mode in @("solid", "material-preview", "rendered")) {
+        New-TestTerrainImage `
+            -Path (Join-Path $fixtureRoot ("terrain-same-camera-{0}.png" -f $mode)) `
+            -Flat $false `
+            -Rendered ($mode -eq "rendered") `
+            -Gray $true
+    }
+    $rejectedGrayEvidence = $false
+    $grayEvidenceMessage = ""
+    try {
+        Invoke-Validator -InputDirectory $fixtureRoot
+    }
+    catch {
+        $rejectedGrayEvidence = $true
+        $grayEvidenceMessage = $_.Exception.Message
+    }
+    if (-not $rejectedGrayEvidence -or $grayEvidenceMessage -notmatch "material identity") {
+        throw "The validator did not reject low-chroma terrain evidence for the expected reason."
     }
 
     Write-Output "Terrain visual evidence validator tests passed."
