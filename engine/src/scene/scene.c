@@ -2013,7 +2013,8 @@ henka_result henka_scene_set_environment(
     if (scene->environment.moon.enabled && !scene->environment.moon.manual_direction)
     {
         scene->environment.moon.direction = scene->environment.sun.enabled ?
-            scene->light_direction : henka_vec3_normalize(environment.moon.direction);
+            henka_vec3_scale(scene->light_direction, -1.0f) :
+            henka_vec3_normalize(environment.moon.direction);
     }
     henka_scene_bump_render_revision(scene);
     return HENKA_SUCCESS;

@@ -130,6 +130,20 @@ void henka_test_scene(void)
     HENKA_TEST_ASSERT(henka_scene_advance_environment_time(scene, 60.0f) == HENKA_SUCCESS);
     HENKA_TEST_ASSERT(henka_scene_get_environment(scene, &read_environment) == HENKA_SUCCESS);
     HENKA_TEST_ASSERT_FLOAT_CLOSE(read_environment.time_of_day_hours, 8.4f, 0.0001f);
+    {
+        henka_scene_environment_desc orbital_environment = henka_scene_environment_default();
+        orbital_environment.mode = HENKA_SCENE_ENVIRONMENT_PROCEDURAL;
+        orbital_environment.sun.manual_direction = true;
+        orbital_environment.sun.direction = henka_vec3_normalize((henka_vec3){0.25f, -0.8f, 0.5f});
+        orbital_environment.moon.enabled = true;
+        orbital_environment.moon.manual_direction = false;
+        HENKA_TEST_ASSERT(henka_scene_set_environment(scene, orbital_environment) == HENKA_SUCCESS);
+        HENKA_TEST_ASSERT(henka_scene_get_environment(scene, &read_environment) == HENKA_SUCCESS);
+        HENKA_TEST_ASSERT_FLOAT_CLOSE(
+            henka_vec3_dot(read_environment.sun.direction, read_environment.moon.direction),
+            -1.0f,
+            0.0001f);
+    }
     invalid_environment = read_environment;
     invalid_environment.atmosphere.rayleigh_scattering = -1.0f;
     HENKA_TEST_ASSERT(henka_scene_set_environment(scene, invalid_environment) == HENKA_ERROR_INVALID_ARGUMENT);

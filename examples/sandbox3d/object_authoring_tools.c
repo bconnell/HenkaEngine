@@ -130,7 +130,7 @@ static henka_result sandbox3d_authoring_evaluate_render(
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
 
-    for (face_id = 0U; face_id < HENKA_AUTHORING_MESH_HARD_MAX_FACES; ++face_id)
+    for (face_id = 1U; face_id <= HENKA_AUTHORING_MESH_HARD_MAX_FACES; ++face_id)
     {
         const henka_authoring_face* face = henka_authoring_mesh_get_face(
             source, (henka_authoring_face_id)face_id);
@@ -247,7 +247,7 @@ static void sandbox3d_authoring_repair_selection(sandbox3d_authoring_object* obj
         return;
     }
     object->selected_face = HENKA_AUTHORING_INVALID_ID;
-    for (face_id = 0U; face_id < HENKA_AUTHORING_MESH_HARD_MAX_FACES; ++face_id)
+    for (face_id = 1U; face_id <= HENKA_AUTHORING_MESH_HARD_MAX_FACES; ++face_id)
     {
         if (henka_authoring_mesh_get_face(object->mesh, (henka_authoring_face_id)face_id) != NULL)
         {
@@ -875,7 +875,7 @@ henka_result sandbox3d_authoring_object_pick_face(
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
     ray.direction = henka_vec3_normalize(ray.direction);
-    for (face_id = 0U; face_id < HENKA_AUTHORING_MESH_HARD_MAX_FACES; ++face_id)
+    for (face_id = 1U; face_id <= HENKA_AUTHORING_MESH_HARD_MAX_FACES; ++face_id)
     {
         const henka_authoring_face* face = henka_authoring_mesh_get_face(
             object->mesh, (henka_authoring_face_id)face_id);
