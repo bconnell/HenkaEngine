@@ -4405,6 +4405,7 @@ static bool henka_opengl_ensure_reflection_probe_target(
     bool created_framebuffer = false;
     bool created_depth_buffer = false;
     bool depth_storage_valid = true;
+    bool depth_memory_added = false;
     GLint previous_renderbuffer = 0;
 
     if (state == NULL)
@@ -4440,6 +4441,7 @@ static bool henka_opengl_ensure_reflection_probe_target(
                     &state->tracked_render_target_bytes,
                     (uint64_t)HENKA_REFLECTION_PROBE_RESOLUTION *
                         (uint64_t)HENKA_REFLECTION_PROBE_RESOLUTION * 4U);
+                depth_memory_added = true;
             }
         }
     }
@@ -4453,6 +4455,14 @@ static bool henka_opengl_ensure_reflection_probe_target(
         if (created_depth_buffer && depth_buffer != 0U)
         {
             g_gl.DeleteRenderbuffers(1, &depth_buffer);
+            if (depth_memory_added)
+            {
+                henka_opengl_memory_remove_category(
+                    state,
+                    &state->tracked_render_target_bytes,
+                    (uint64_t)HENKA_REFLECTION_PROBE_RESOLUTION *
+                        (uint64_t)HENKA_REFLECTION_PROBE_RESOLUTION * 4U);
+            }
         }
         return false;
     }
