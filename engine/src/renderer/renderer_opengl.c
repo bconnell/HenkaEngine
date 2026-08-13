@@ -1712,6 +1712,7 @@ static henka_result henka_opengl_create_temporal_history(
     GLuint depth_texture = 0U;
     GLuint depth_framebuffer = 0U;
     GLint previous_framebuffer = 0;
+    GLint previous_active_texture = GL_TEXTURE0;
     GLint previous_texture = 0;
     bool previous_history_ready;
     GLenum texture_error;
@@ -1725,6 +1726,7 @@ static henka_result henka_opengl_create_temporal_history(
         state->temporal_history_depth_texture != 0U &&
         state->temporal_history_depth_framebuffer != 0U;
     glGetIntegerv(GL_FRAMEBUFFER_BINDING, &previous_framebuffer);
+    glGetIntegerv(GL_ACTIVE_TEXTURE, &previous_active_texture);
     glGetIntegerv(GL_TEXTURE_BINDING_2D, &previous_texture);
     glGenTextures(1, &texture);
     glGenTextures(1, &depth_texture);
@@ -1737,6 +1739,7 @@ static henka_result henka_opengl_create_temporal_history(
         if (state->temporal_history_allocation_failure_count < UINT32_MAX)
             ++state->temporal_history_allocation_failure_count;
         state->temporal_previous_history_retained = previous_history_ready;
+        g_gl.ActiveTexture((GLenum)previous_active_texture);
         glBindTexture(GL_TEXTURE_2D, (GLuint)previous_texture);
         return HENKA_ERROR_RENDERER;
     }
@@ -1762,6 +1765,7 @@ static henka_result henka_opengl_create_temporal_history(
     if (texture_error == GL_NO_ERROR && g_gl.CheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
         texture_error = GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT;
     g_gl.BindFramebuffer(GL_FRAMEBUFFER, (GLuint)previous_framebuffer);
+    g_gl.ActiveTexture((GLenum)previous_active_texture);
     glBindTexture(GL_TEXTURE_2D, (GLuint)previous_texture);
     if (texture_error != GL_NO_ERROR)
     {
@@ -1810,6 +1814,7 @@ static henka_result henka_opengl_create_bloom_target(
     GLuint framebuffer = 0U;
     GLuint blur_framebuffer = 0U;
     GLint previous_framebuffer = 0;
+    GLint previous_active_texture = GL_TEXTURE0;
     GLint previous_texture = 0;
     int bloom_width;
     int bloom_height;
@@ -1826,6 +1831,7 @@ static henka_result henka_opengl_create_bloom_target(
     bloom_width = width > 1 ? width / 2 : 1;
     bloom_height = height > 1 ? height / 2 : 1;
     glGetIntegerv(GL_FRAMEBUFFER_BINDING, &previous_framebuffer);
+    glGetIntegerv(GL_ACTIVE_TEXTURE, &previous_active_texture);
     glGetIntegerv(GL_TEXTURE_BINDING_2D, &previous_texture);
     g_gl.GenFramebuffers(1, &framebuffer);
     g_gl.GenFramebuffers(1, &blur_framebuffer);
@@ -1862,6 +1868,7 @@ static henka_result henka_opengl_create_bloom_target(
     if (g_gl.CheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
         goto bloom_target_failure;
     g_gl.BindFramebuffer(GL_FRAMEBUFFER, (GLuint)previous_framebuffer);
+    g_gl.ActiveTexture((GLenum)previous_active_texture);
     glBindTexture(GL_TEXTURE_2D, (GLuint)previous_texture);
     henka_opengl_delete_bloom_target(state);
     state->bloom_framebuffer = framebuffer;
@@ -1880,6 +1887,7 @@ static henka_result henka_opengl_create_bloom_target(
 
 bloom_target_failure:
     g_gl.BindFramebuffer(GL_FRAMEBUFFER, (GLuint)previous_framebuffer);
+    g_gl.ActiveTexture((GLenum)previous_active_texture);
     glBindTexture(GL_TEXTURE_2D, (GLuint)previous_texture);
     glDeleteTextures(1, &color_texture);
     glDeleteTextures(1, &blur_texture);
@@ -2405,6 +2413,7 @@ static henka_result henka_opengl_create_hdr_target(
     GLuint depth_buffer = 0U;
     GLuint framebuffer = 0U;
     GLint previous_framebuffer = 0;
+    GLint previous_active_texture = GL_TEXTURE0;
     GLint previous_texture = 0;
 
     if (state == NULL)
@@ -2419,6 +2428,7 @@ static henka_result henka_opengl_create_hdr_target(
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
     glGetIntegerv(GL_FRAMEBUFFER_BINDING, &previous_framebuffer);
+    glGetIntegerv(GL_ACTIVE_TEXTURE, &previous_active_texture);
     glGetIntegerv(GL_TEXTURE_BINDING_2D, &previous_texture);
     g_gl.GenFramebuffers(1, &framebuffer);
     glGenTextures(1, &color_texture);
@@ -2475,6 +2485,7 @@ static henka_result henka_opengl_create_hdr_target(
     {
         (void)snprintf(state->hdr_failure_reason, sizeof(state->hdr_failure_reason), "incomplete HDR framebuffer");
         g_gl.BindFramebuffer(GL_FRAMEBUFFER, (GLuint)previous_framebuffer);
+        g_gl.ActiveTexture((GLenum)previous_active_texture);
         glBindTexture(GL_TEXTURE_2D, (GLuint)previous_texture);
         glDeleteTextures(1, &depth_buffer);
         glDeleteTextures(1, &color_texture);
@@ -2484,6 +2495,7 @@ static henka_result henka_opengl_create_hdr_target(
         return HENKA_ERROR_RENDERER;
     }
     g_gl.BindFramebuffer(GL_FRAMEBUFFER, (GLuint)previous_framebuffer);
+    g_gl.ActiveTexture((GLenum)previous_active_texture);
     glBindTexture(GL_TEXTURE_2D, (GLuint)previous_texture);
     henka_opengl_delete_hdr_target(state);
     state->hdr_framebuffer = framebuffer;
