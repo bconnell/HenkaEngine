@@ -19317,6 +19317,47 @@ static henka_result sandbox3d_initialize(henka_engine* engine, void* user_data)
 
     henka_scene_set_light_direction(state->scene, (henka_vec3){-0.5f, -1.0f, -0.3f});
     henka_scene_set_ambient_color(state->scene, (henka_vec3){0.18f, 0.20f, 0.25f});
+    {
+        uint32_t light_index;
+        /* The showcase uses the public local-light path so Rendered mode has
+         * a readable warm key, cool fill, and real spot-shadow coverage. The
+         * sources are scene-owned fixtures; imported glTF materials remain
+         * unchanged and the settings file does not own these lights. */
+        result = henka_scene_add_light(
+            state->scene,
+            (henka_scene_light_desc){
+                HENKA_SCENE_LIGHT_SPOT,
+                (henka_vec3){-3.5f, 5.5f, 3.5f},
+                henka_vec3_normalize((henka_vec3){0.45f, -0.72f, -0.52f}),
+                (henka_vec3){1.0f, 0.62f, 0.36f},
+                34.0f,
+                16.0f,
+                0.92f,
+                0.72f,
+                true},
+            &light_index);
+        if (result != HENKA_SUCCESS)
+        {
+            goto fail;
+        }
+        result = henka_scene_add_light(
+            state->scene,
+            (henka_scene_light_desc){
+                HENKA_SCENE_LIGHT_POINT,
+                (henka_vec3){3.5f, 3.0f, 1.5f},
+                (henka_vec3){0.0f, -1.0f, 0.0f},
+                (henka_vec3){0.28f, 0.46f, 1.0f},
+                15.0f,
+                12.0f,
+                1.0f,
+                0.5f,
+                true},
+            &light_index);
+        if (result != HENKA_SUCCESS)
+        {
+            goto fail;
+        }
+    }
 
     result = henka_engine_get_framebuffer_size(engine, &framebuffer_width, &framebuffer_height);
     if (result != HENKA_SUCCESS || framebuffer_height <= 0)
