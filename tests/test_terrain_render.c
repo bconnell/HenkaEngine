@@ -147,6 +147,12 @@ static void terrain_pass_test_update(
         henka_engine_get_diagnostics(engine, &diagnostics) == HENKA_SUCCESS &&
         diagnostics.rendered_scene_terrain_draw_calls > 0U &&
         diagnostics.rendered_scene_terrain_shadow_draw_calls > 0U &&
+        diagnostics.rendered_screen_space_reflections_active !=
+            diagnostics.rendered_reflection_fallback_active &&
+        (!diagnostics.rendered_screen_space_reflections_active ||
+            (diagnostics.rendered_scene_terrain_pass_flags & HENKA_RENDERED_TERRAIN_PASS_SSR) != 0U) &&
+        (!diagnostics.rendered_reflection_fallback_active ||
+            !diagnostics.rendered_screen_space_reflections_active) &&
         (diagnostics.rendered_scene_terrain_pass_flags & required_flags) == required_flags;
     henka_engine_request_exit(engine);
 }

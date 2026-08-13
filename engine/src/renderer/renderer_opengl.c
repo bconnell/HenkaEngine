@@ -205,6 +205,8 @@ typedef struct henka_opengl_renderer_state
     uint32_t reflection_probe_captured_count;
     uint64_t reflection_probe_capture_generation;
     uint32_t reflection_probe_capture_failure_count;
+    bool screen_space_reflections_active;
+    bool reflection_fallback_active;
     GLuint shadow_program;
     henka_opengl_shader_data shadow_shader_data;
     GLuint shadow_framebuffer;
@@ -3443,6 +3445,8 @@ static void henka_opengl_present_hdr(
     henka_viewport viewport;
     bool use_temporal_history;
 
+    state->screen_space_reflections_active = false;
+    state->reflection_fallback_active = false;
     if (state->hdr_color_texture == 0U || state->tone_program == 0U)
     {
         return;
@@ -3452,6 +3456,10 @@ static void henka_opengl_present_hdr(
     {
         return;
     }
+    state->screen_space_reflections_active = use_rendered_post_processing &&
+        state->hdr_depth_buffer != 0U && state->ibl_ready;
+    state->reflection_fallback_active = use_rendered_post_processing &&
+        !state->screen_space_reflections_active;
     use_temporal_history =
         use_rendered_post_processing &&
         state->temporal_jitter_enabled &&
@@ -3477,7 +3485,7 @@ static void henka_opengl_present_hdr(
             state->scene_terrain_pass_flags |=
                 HENKA_RENDERED_TERRAIN_PASS_AO |
                 HENKA_RENDERED_TERRAIN_PASS_SSGI;
-            if (state->ibl_ready)
+            if (state->screen_space_reflections_active)
                 state->scene_terrain_pass_flags |= HENKA_RENDERED_TERRAIN_PASS_SSR;
         }
         if (use_temporal_history)
@@ -3560,7 +3568,7 @@ static void henka_opengl_present_hdr(
         state->tone_program,
         &state->tone_shader_data,
         "useScreenSpaceReflections",
-        use_rendered_post_processing && state->hdr_depth_buffer != 0U && state->ibl_ready);
+        state->screen_space_reflections_active);
     g_gl.ActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, state->hdr_color_texture);
     g_gl.ActiveTexture(GL_TEXTURE1);
@@ -6959,6 +6967,20 @@ void henka_opengl_renderer_get_reflection_probe_diagnostics(
         *out_capture_generation = state != NULL ? state->reflection_probe_capture_generation : 0U;
     if (out_capture_failure_count != NULL)
         *out_capture_failure_count = state != NULL ? state->reflection_probe_capture_failure_count : 0U;
+}
+
+void henka_opengl_renderer_get_reflection_policy_diagnostics(
+    const struct henka_renderer* renderer,
+    bool* out_screen_space_active,
+    bool* out_fallback_active)
+{
+    const henka_opengl_renderer_state* state = renderer != NULL && renderer->backend_state != NULL ?
+        (const henka_opengl_renderer_state*)renderer->backend_state : NULL;
+
+    if (out_screen_space_active != NULL)
+        *out_screen_space_active = state != NULL && state->screen_space_reflections_active;
+    if (out_fallback_active != NULL)
+        *out_fallback_active = state != NULL && state->reflection_fallback_active;
 }
 
 henka_result henka_opengl_renderer_set_vsync(struct henka_renderer* renderer, bool enabled)

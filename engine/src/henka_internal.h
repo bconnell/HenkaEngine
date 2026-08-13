@@ -688,6 +688,10 @@ void henka_opengl_renderer_get_reflection_probe_diagnostics(
     uint32_t* out_capture_index,
     uint64_t* out_capture_generation,
     uint32_t* out_capture_failure_count);
+void henka_opengl_renderer_get_reflection_policy_diagnostics(
+    const struct henka_renderer* renderer,
+    bool* out_screen_space_active,
+    bool* out_fallback_active);
 void henka_opengl_renderer_get_scene_diagnostics(
     const struct henka_renderer* renderer,
     uint32_t* out_draw_calls,

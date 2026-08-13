@@ -128,6 +128,10 @@ typedef struct henka_engine_diagnostics
     bool rendered_temporal_jitter_enabled;
     float rendered_temporal_jitter_x;
     float rendered_temporal_jitter_y;
+    /* These describe the bounded Rendered post-process policy for the
+     * current frame. They do not claim that every pixel found an SSR hit. */
+    bool rendered_screen_space_reflections_active;
+    bool rendered_reflection_fallback_active;
     uint32_t rendered_reflection_probe_enabled_count;
     uint32_t rendered_reflection_probe_captured_count;
     bool rendered_reflection_probe_capture_active;
