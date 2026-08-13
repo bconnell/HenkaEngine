@@ -7,6 +7,7 @@
 #include <henka/scene.h>
 
 #include "../engine/src/core/checked.h"
+#include "../engine/src/henka_internal.h"
 
 static void henka_test_scene_capacity_growth(void)
 {
@@ -37,6 +38,12 @@ static void henka_test_scene_capacity_growth(void)
     HENKA_TEST_ASSERT(!henka_scene_is_entity_valid(scene, entities[7]));
     HENKA_TEST_ASSERT(henka_scene_is_entity_valid(scene, replacement));
     HENKA_TEST_ASSERT(henka_scene_get_entity_count(scene) == (size_t)ENTITY_COUNT);
+    HENKA_TEST_ASSERT(
+        henka_scene_get_entity_at_storage_index(scene, 7U) == replacement);
+    HENKA_TEST_ASSERT(
+        henka_scene_get_entity_at_storage_index(scene, 0U) == entities[0]);
+    HENKA_TEST_ASSERT(
+        henka_scene_get_entity_at_storage_index(scene, ENTITY_COUNT) == HENKA_INVALID_ENTITY);
     HENKA_TEST_ASSERT(strcmp(henka_scene_get_entity_name(scene, replacement), "Replacement") == 0);
 
     replacement_transform = henka_transform_identity();

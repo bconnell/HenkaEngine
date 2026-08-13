@@ -961,6 +961,18 @@ size_t henka_scene_get_entity_count(const henka_scene* scene)
     return scene->entity_count;
 }
 
+henka_entity henka_scene_get_entity_at_storage_index(
+    const henka_scene* scene,
+    size_t index)
+{
+    if (scene == NULL || index >= scene->entity_capacity ||
+        !scene->entities[index].active)
+    {
+        return HENKA_INVALID_ENTITY;
+    }
+    return henka_scene_make_entity(index, scene->entities[index].generation);
+}
+
 henka_entity henka_scene_get_entity_at_index(const henka_scene* scene, size_t index)
 {
     size_t active_index;

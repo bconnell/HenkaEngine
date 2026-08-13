@@ -65,6 +65,9 @@
 #ifndef GL_ANY_SAMPLES_PASSED
 #define GL_ANY_SAMPLES_PASSED 0x8C2F
 #endif
+#ifndef GL_NUM_EXTENSIONS
+#define GL_NUM_EXTENSIONS 0x821D
+#endif
 
 #define HENKA_OPENGL_OCCLUSION_QUERY_CAPACITY 256U
 
@@ -514,6 +517,7 @@ typedef struct henka_opengl_functions
     PFNGLDRAWELEMENTSINSTANCEDPROC DrawElementsInstanced;
     PFNGLDELETEBUFFERSPROC DeleteBuffers;
     PFNGLDELETEVERTEXARRAYSPROC DeleteVertexArrays;
+    PFNGLGETSTRINGIPROC GetStringi;
     PFNGLACTIVETEXTUREPROC ActiveTexture;
     PFNGLGENERATEMIPMAPPROC GenerateMipmap;
     PFNGLCOMPRESSEDTEXIMAGE2DPROC CompressedTexImage2D;
@@ -558,45 +562,44 @@ typedef struct henka_opengl_texture_data
 
 static henka_opengl_functions g_gl;
 
-#if defined(HENKA_WITH_KTX2_TRANSCODER)
-static bool henka_opengl_has_extension(const char* extensions, const char* name)
+static bool henka_opengl_extension_supported(const char* name)
 {
-    const char* cursor;
-    size_t name_length;
+    GLint extension_count = 0;
+    GLuint extension_index;
 
-    if (extensions == NULL || name == NULL || name[0] == '\0')
+    if (name == NULL || name[0] == '\0' || g_gl.GetStringi == NULL)
         return false;
-    name_length = strlen(name);
-    cursor = extensions;
-    while ((cursor = strstr(cursor, name)) != NULL)
+    glGetIntegerv(GL_NUM_EXTENSIONS, &extension_count);
+    if (extension_count <= 0)
+        return false;
+    for (extension_index = 0U; extension_index < (GLuint)extension_count; ++extension_index)
     {
-        if ((cursor == extensions || cursor[-1] == ' ') &&
-            (cursor[name_length] == '\0' || cursor[name_length] == ' '))
+        const char* extension = (const char*)g_gl.GetStringi(GL_EXTENSIONS, extension_index);
+        if (extension != NULL && strcmp(extension, name) == 0)
             return true;
-        cursor += name_length;
     }
     return false;
 }
 
+#if defined(HENKA_WITH_KTX2_TRANSCODER)
 static uint32_t henka_opengl_ktx2_capabilities(void)
 {
-    const char* extensions = (const char*)glGetString(GL_EXTENSIONS);
     uint32_t capabilities = 0U;
 
-    if (henka_opengl_has_extension(extensions, "GL_EXT_texture_compression_s3tc") ||
-        henka_opengl_has_extension(extensions, "GL_EXT_texture_compression_dxt1"))
+    if (henka_opengl_extension_supported("GL_EXT_texture_compression_s3tc") ||
+        henka_opengl_extension_supported("GL_EXT_texture_compression_dxt1"))
         capabilities |= HENKA_KTX2_CAPABILITY_BC1_3;
-    if (henka_opengl_has_extension(extensions, "GL_EXT_texture_compression_s3tc"))
+    if (henka_opengl_extension_supported("GL_EXT_texture_compression_s3tc"))
         capabilities |= HENKA_KTX2_CAPABILITY_BC3;
-    if (henka_opengl_has_extension(extensions, "GL_EXT_texture_compression_rgtc") ||
-        henka_opengl_has_extension(extensions, "GL_ARB_texture_compression_rgtc"))
+    if (henka_opengl_extension_supported("GL_EXT_texture_compression_rgtc") ||
+        henka_opengl_extension_supported("GL_ARB_texture_compression_rgtc"))
         capabilities |= HENKA_KTX2_CAPABILITY_BC5;
-    if (henka_opengl_has_extension(extensions, "GL_ARB_texture_compression_bptc"))
+    if (henka_opengl_extension_supported("GL_ARB_texture_compression_bptc"))
         capabilities |= HENKA_KTX2_CAPABILITY_BC7;
-    if (henka_opengl_has_extension(extensions, "GL_ARB_ES3_compatibility") ||
-        henka_opengl_has_extension(extensions, "GL_OES_compressed_ETC2_RGB8_texture"))
+    if (henka_opengl_extension_supported("GL_ARB_ES3_compatibility") ||
+        henka_opengl_extension_supported("GL_OES_compressed_ETC2_RGB8_texture"))
         capabilities |= HENKA_KTX2_CAPABILITY_ETC2;
-    if (henka_opengl_has_extension(extensions, "GL_KHR_texture_compression_astc_ldr"))
+    if (henka_opengl_extension_supported("GL_KHR_texture_compression_astc_ldr"))
         capabilities |= HENKA_KTX2_CAPABILITY_ASTC_4X4;
     return capabilities;
 }
@@ -843,6 +846,7 @@ static bool henka_opengl_load_functions(void)
     HENKA_GL_LOAD(VertexAttribPointer);
     HENKA_GL_LOAD(DeleteBuffers);
     HENKA_GL_LOAD(DeleteVertexArrays);
+    HENKA_GL_LOAD(GetStringi);
     HENKA_GL_LOAD(ActiveTexture);
     HENKA_GL_LOAD(GenerateMipmap);
     HENKA_GL_LOAD(CompressedTexImage2D);
@@ -4139,7 +4143,7 @@ static float henka_opengl_entity_view_depth(
     center = entity->transform.position;
     if (entity->has_local_bounds)
     {
-        entity_id = henka_scene_get_entity_at_index(scene, index);
+        entity_id = henka_scene_get_entity_at_storage_index(scene, index);
         if (entity_id != HENKA_INVALID_ENTITY &&
             henka_scene_get_entity_world_bounds(scene, entity_id, &bounds) == HENKA_SUCCESS)
         {
@@ -4761,7 +4765,7 @@ static bool henka_opengl_entity_can_join_instance_batch(
     }
     if (candidate->has_local_bounds)
     {
-        henka_entity entity_id = henka_scene_get_entity_at_index(scene, candidate_index);
+        henka_entity entity_id = henka_scene_get_entity_at_storage_index(scene, candidate_index);
         henka_bounds world_bounds;
         if (entity_id != HENKA_INVALID_ENTITY &&
             henka_scene_get_entity_world_bounds(scene, entity_id, &world_bounds) == HENKA_SUCCESS &&
@@ -5192,7 +5196,7 @@ henka_result henka_opengl_renderer_draw_scene(
         if ((entity->flags & HENKA_SCENE_ENTITY_FLAG_HELPER) == 0U &&
             entity->has_local_bounds)
         {
-            entity_id = henka_scene_get_entity_at_index(scene, draw_index);
+            entity_id = henka_scene_get_entity_at_storage_index(scene, draw_index);
             if (entity_id != HENKA_INVALID_ENTITY &&
                 henka_scene_get_entity_world_bounds(scene, entity_id, &world_bounds) == HENKA_SUCCESS &&
                 !henka_opengl_bounds_in_camera(&scene->camera, view, world_bounds))
@@ -7922,9 +7926,7 @@ static henka_result henka_opengl_create_texture_from_pixels(
                 descriptor->wrap_v == HENKA_TEXTURE_WRAP_MIRRORED_REPEAT ?
                 GL_MIRRORED_REPEAT : GL_REPEAT);
         if (descriptor->anisotropy > 0.0f &&
-            glGetString(GL_EXTENSIONS) != NULL &&
-            strstr((const char*)glGetString(GL_EXTENSIONS),
-                "GL_EXT_texture_filter_anisotropic") != NULL)
+            henka_opengl_extension_supported("GL_EXT_texture_filter_anisotropic"))
         {
             GLfloat maximum_anisotropy = 1.0f;
             glGetFloatv(GL_MAX_TEXTURE_MAX_ANISOTROPY_EXT, &maximum_anisotropy);

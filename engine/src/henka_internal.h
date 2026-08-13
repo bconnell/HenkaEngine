@@ -193,6 +193,12 @@ typedef struct henka_scene_entity_record
     char* interaction_prompt;
 } henka_scene_entity_record;
 
+/* Renderer and editor internals iterate the backing slot array directly.
+ * This is deliberately separate from the public active-ordinal accessor. */
+henka_entity henka_scene_get_entity_at_storage_index(
+    const henka_scene* scene,
+    size_t index);
+
 typedef struct henka_asset_shader_entry
 {
     char* vertex_key;

@@ -482,6 +482,24 @@ static int test_client_snapshot_and_delta_path(void)
     {
         goto cleanup;
     }
+    {
+        henka_terrain_edit_delta malformed_recovery_delta = gap_delta;
+        malformed_recovery_delta.command.center_sample_x = 600;
+        malformed_recovery_delta.command.center_sample_z = 100;
+        malformed_recovery_delta.affected_regions[0] =
+            (henka_terrain_network_region_revision){{0, 0}, 10U};
+        if (henka_terrain_edit_delta_encode(
+                &malformed_recovery_delta, gap_payload, sizeof(gap_payload), &gap_payload_size) !=
+            HENKA_SUCCESS)
+        {
+            goto cleanup;
+        }
+        gap_event.message.payload_size = (uint32_t)gap_payload_size;
+        if (henka_terrain_client_handle_event(terrain_client, &gap_event) == HENKA_SUCCESS)
+        {
+            goto cleanup;
+        }
+    }
     out_of_interest_delta = gap_delta;
     out_of_interest_delta.server_command_id = 101U;
     out_of_interest_delta.command.center_sample_x = 600;

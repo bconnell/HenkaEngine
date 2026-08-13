@@ -367,14 +367,25 @@ static henka_result henka_terrain_client_request_delta_recovery(
     henka_terrain_region_id affected[HENKA_TERRAIN_EDIT_MAX_AFFECTED_REGIONS];
     uint32_t affected_count = HENKA_TERRAIN_EDIT_MAX_AFFECTED_REGIONS;
     uint32_t index;
-    if (henka_terrain_world_get_desc(client->world, &desc) != HENKA_SUCCESS ||
-        desc.world_identity != delta->world_identity ||
-        desc.base_asset_identity != delta->base_asset_identity ||
-        henka_terrain_edit_get_affected_regions(
-            client->world, &delta->command, affected, &affected_count) != HENKA_SUCCESS ||
-        affected_count != delta->affected_region_count)
+    henka_result result = henka_terrain_world_get_desc(client->world, &desc);
+    if (result != HENKA_SUCCESS)
     {
-        return false;
+        return result;
+    }
+    if (desc.world_identity != delta->world_identity ||
+        desc.base_asset_identity != delta->base_asset_identity)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    result = henka_terrain_edit_get_affected_regions(
+        client->world, &delta->command, affected, &affected_count);
+    if (result != HENKA_SUCCESS)
+    {
+        return result;
+    }
+    if (affected_count != delta->affected_region_count)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
     }
     for (index = 0U; index < delta->affected_region_count; ++index)
     {
@@ -382,7 +393,7 @@ static henka_result henka_terrain_client_request_delta_recovery(
         if (!henka_terrain_region_id_equal(
                 affected[index], delta->affected_regions[index].region_id))
         {
-            return false;
+            return HENKA_ERROR_INVALID_ARGUMENT;
         }
         uint32_t pending_index;
         bool replacing_pending = false;
@@ -757,7 +768,8 @@ henka_result henka_terrain_client_handle_event(
                 henka_terrain_client_sync_replica_diagnostics(client);
                 return result;
             }
-            if (henka_terrain_client_request_delta_recovery(client, &delta) != HENKA_SUCCESS)
+            result = henka_terrain_client_request_delta_recovery(client, &delta);
+            if (result != HENKA_SUCCESS)
             {
                 return result;
             }
