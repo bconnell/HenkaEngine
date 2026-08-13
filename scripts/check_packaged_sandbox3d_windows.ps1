@@ -719,6 +719,8 @@ Write-Step "Checking packaged sandbox contents"
 Assert-PathExists -Path $packageRoot -Description "Packaged sandbox folder"
 Assert-PathExists -Path $packagedExe -Description "Packaged sandbox executable"
 Assert-PathExists -Path $assetsDir -Description "Packaged assets folder"
+Assert-PathExists -Path (Join-Path $assetsDir "branding\henka_engine_emblem.png") -Description "Packaged Henka emblem branding"
+Assert-PathExists -Path (Join-Path $assetsDir "branding\henka_engine_lockup.png") -Description "Packaged Henka lockup branding"
 foreach ($showcaseFile in @(
     "cheeky_giraffe.gltf",
     "cheeky_giraffe.bin",

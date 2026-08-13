@@ -269,6 +269,56 @@ static void henka_platform_reset_tool_window_frame_input(
     }
 }
 
+static void henka_platform_apply_window_icon(SDL_Window* window)
+{
+    const char* base_path;
+    SDL_Surface* icon;
+    char icon_path[4096];
+    size_t base_length;
+    int written;
+
+    if (window == NULL)
+    {
+        return;
+    }
+
+    base_path = SDL_GetBasePath();
+    if (base_path == NULL)
+    {
+        HENKA_LOG_WARN("official window icon could not resolve the executable base path");
+        return;
+    }
+
+    base_length = SDL_strlen(base_path);
+    written = SDL_snprintf(
+        icon_path,
+        sizeof(icon_path),
+        "%s%sassets/branding/henka_engine_emblem.png",
+        base_path,
+        base_length > 0U &&
+                (base_path[base_length - 1U] == '/' || base_path[base_length - 1U] == '\\')
+            ? ""
+            : "/");
+    if (written <= 0 || (size_t)written >= sizeof(icon_path))
+    {
+        HENKA_LOG_WARN("official window icon path exceeded the supported limit");
+        return;
+    }
+
+    icon = SDL_LoadPNG(icon_path);
+    if (icon == NULL)
+    {
+        HENKA_LOG_WARN("official window icon resource is unavailable; using the platform default");
+        return;
+    }
+
+    if (!SDL_SetWindowIcon(window, icon))
+    {
+        HENKA_LOG_WARN("official window icon could not be applied; using the platform default");
+    }
+    SDL_DestroySurface(icon);
+}
+
 char* henka_platform_get_base_path_copy(void)
 {
     char* copy;
@@ -443,6 +493,8 @@ henka_result henka_platform_create(
         return HENKA_ERROR_PLATFORM;
     }
 
+    henka_platform_apply_window_icon(platform->window);
+
     platform->main_window_id = SDL_GetWindowID(platform->window);
     if (platform->main_window_id == 0U)
     {
@@ -595,6 +647,8 @@ henka_result henka_platform_create_tool_window(
             SDL_GetError());
         return HENKA_ERROR_PLATFORM;
     }
+
+    henka_platform_apply_window_icon(slot->window);
 
     slot->native_window_id = SDL_GetWindowID(slot->window);
     if (slot->native_window_id == 0U)

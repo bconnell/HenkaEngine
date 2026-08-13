@@ -17,6 +17,12 @@ if(WIN32)
         COMMAND powershell.exe -NoProfile -ExecutionPolicy Bypass -File
             ${CMAKE_SOURCE_DIR}/scripts/test_showcase_assets_windows.ps1
             -OutputDirectory ${CMAKE_BINARY_DIR}/showcase_asset_test)
+
+    add_test(
+        NAME henka_branding_asset_tests
+        COMMAND powershell.exe -NoProfile -ExecutionPolicy Bypass -File
+            ${CMAKE_SOURCE_DIR}/scripts/test_branding_windows.ps1
+            -RepositoryRoot ${CMAKE_SOURCE_DIR})
 endif()
 
 add_executable(henka_terrain_tests

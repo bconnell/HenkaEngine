@@ -102,6 +102,8 @@ function Test-HenkaPackageDirectoryComplete {
     foreach ($requiredRelativePath in @(
         "HenkaSandbox3D.exe",
         "assets",
+        "assets\branding\henka_engine_emblem.png",
+        "assets\branding\henka_engine_lockup.png",
         "docs\help\sandbox3d.md",
         "README.txt",
         "PACKAGE_INFO.txt"

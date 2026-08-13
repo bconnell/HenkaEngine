@@ -18,6 +18,8 @@ See SUPPORT.md for what sponsorship supports and what it does not promise.
 
 Henka Engine is still early, but the sandbox now presents a deterministic two-model showcase through Henka's normal glTF scene, material, texture, lighting, and packaging paths.
 
+Official project branding is tracked in [assets/branding](assets/branding/) and is used proportionally: the supplied full lockup is reserved for spacious project or information surfaces, while a faithful emblem derivative is used for the Windows application and tool-window icons. See [docs/branding.md](docs/branding.md) for the concise ownership and packaging convention.
+
 ### What currently exists
 
 - C17 build through CMake
@@ -72,6 +74,7 @@ Henka Engine is still early, but the sandbox now presents a deterministic two-mo
 - Bounded single-read texture decoding with truthful rejection of HDR and 16-bit sources, plus path-specific white/error fallback aliases
 - Shader-based rendering of built-in primitives
 - Sandbox window titled `Henka Engine Sandbox 3D`
+- Windows Sandbox and detached tool windows use the executable-relative official Henka emblem icon; missing branding resources fall back safely without affecting headless targets
 - Ground plane, restrained debug grid, Cheeky Giraffe mascot, Original Realistic Rocket, textured materials, and visible fallback behavior for missing texture and model assets
 - The sandbox ground is a uniform restrained graphite/slate receiver; the editor grid remains an explicitly unlit line helper so Rendered mode has no unexplained checker or center lighting split
 - The editor grid is an explicitly unlit, restrained graphite/slate line surface; its studio environment source is periodic and validated so Rendered presentation does not introduce a center seam. The procedural ground plane uses front-face winding consistent with its +Y normals.
