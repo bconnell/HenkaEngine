@@ -415,7 +415,7 @@ static bool henka_engine_is_ktx2_texture(
 {
     size_t index;
     const char* source_path;
-    const char* extension;
+    size_t length;
 
     if (manager == NULL || texture == NULL)
         return false;
@@ -424,9 +424,15 @@ static bool henka_engine_is_ktx2_texture(
         if (manager->texture_entries[index].texture != texture)
             continue;
         source_path = manager->texture_entries[index].metadata.source_path;
-        extension = source_path != NULL ? strrchr(source_path, '.') : NULL;
-        return extension != NULL &&
-            (strcmp(extension, ".ktx2") == 0 || strcmp(extension, ".KTX2") == 0);
+        if (source_path == NULL)
+            return false;
+        length = strlen(source_path);
+        return length >= 5U &&
+            tolower((unsigned char)source_path[length - 5U]) == '.' &&
+            tolower((unsigned char)source_path[length - 4U]) == 'k' &&
+            tolower((unsigned char)source_path[length - 3U]) == 't' &&
+            tolower((unsigned char)source_path[length - 2U]) == 'x' &&
+            tolower((unsigned char)source_path[length - 1U]) == '2';
     }
     return false;
 }
@@ -502,7 +508,9 @@ static void henka_engine_queue_visible_texture_residency(
 
     if (engine == NULL || engine->asset_manager == NULL || engine->active_scene == NULL)
         return;
-    for (entity_index = 0U; entity_index < engine->active_scene->entity_count; ++entity_index)
+    for (entity_index = 0U;
+         entity_index < engine->active_scene->entity_capacity;
+         ++entity_index)
     {
         const henka_scene_entity_record* entity = &engine->active_scene->entities[entity_index];
         henka_texture* textures[HENKA_MATERIAL_MAX_TEXTURE_DEPENDENCIES];

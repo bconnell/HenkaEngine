@@ -848,6 +848,13 @@ static void henka_assets_destroy_gltf_scene_payload(henka_gltf_scene_asset* asse
             henka_mesh_destroy_owned(asset->primitive_meshes[index]);
         asset->primitive_meshes[index] = NULL;
     }
+    for (index = 0U; index < asset->retired_primitive_mesh_count; ++index)
+    {
+        if (asset->retired_primitive_meshes[index] != NULL)
+            henka_mesh_destroy_owned(asset->retired_primitive_meshes[index]);
+        asset->retired_primitive_meshes[index] = NULL;
+    }
+    asset->retired_primitive_mesh_count = 0U;
     henka_model_scene_data_destroy(&asset->data);
     memset(asset->materials, 0, sizeof(asset->materials));
     memset(asset->material_assets, 0, sizeof(asset->material_assets));
@@ -3898,6 +3905,19 @@ henka_result henka_assets_reload_gltf_scene_asset(
         return result;
     }
 
+    if (asset->retired_primitive_mesh_count > HENKA_MODEL_MAX_SCENE_ITEMS -
+            asset->data.primitive_count)
+    {
+        henka_assets_destroy_gltf_scene_payload(candidate);
+        henka_free(candidate);
+        henka_free(old_data);
+        henka_free(old_meshes);
+        henka_free(old_materials);
+        henka_free(old_material_assets);
+        henka_free(old_material_ready);
+        return HENKA_ERROR_LIMIT;
+    }
+
     *old_data = asset->data;
     memcpy(old_meshes, asset->primitive_meshes, sizeof(asset->primitive_meshes));
     memcpy(old_materials, asset->materials, sizeof(asset->materials));
@@ -3920,8 +3940,19 @@ henka_result henka_assets_reload_gltf_scene_asset(
             }
         }
     }
+    {
+        size_t mesh_index;
+        for (mesh_index = 0U; mesh_index < old_data->primitive_count; ++mesh_index)
+        {
+            if (old_meshes[mesh_index] != NULL)
+            {
+                asset->retired_primitive_meshes[
+                    asset->retired_primitive_mesh_count++] = old_meshes[mesh_index];
+            }
+        }
+    }
     candidate->data = *old_data;
-    memcpy(candidate->primitive_meshes, old_meshes, sizeof(candidate->primitive_meshes));
+    memset(candidate->primitive_meshes, 0, sizeof(candidate->primitive_meshes));
     memcpy(candidate->materials, old_materials, sizeof(candidate->materials));
     memcpy(candidate->material_assets, old_material_assets, sizeof(candidate->material_assets));
     memcpy(candidate->material_ready, old_material_ready, sizeof(candidate->material_ready));

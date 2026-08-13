@@ -387,6 +387,9 @@ henka_result henka_assets_reload_gltf_scene_asset(
     henka_asset_manager* manager,
     const char* path,
     henka_gltf_scene_asset** out_asset);
+/* Instantiated entities borrow the scene asset's primitive mesh wrappers.
+ * Successful reload preserves prior wrappers until the owning scene asset is
+ * destroyed, so existing entities do not retain dangling mesh pointers. */
 henka_result henka_assets_set_gltf_scene_active_scene(
     henka_gltf_scene_asset* asset,
     size_t scene_index);

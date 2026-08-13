@@ -252,6 +252,11 @@ struct henka_gltf_scene_asset
     henka_shader* shader;
     henka_model_scene_data data;
     henka_mesh* primitive_meshes[HENKA_MODEL_MAX_SCENE_ITEMS];
+    /* Instantiated scene entities borrow primitive mesh wrappers. Retain
+     * replaced wrappers until the owning asset is destroyed so reload cannot
+     * leave those entities dangling. */
+    henka_mesh* retired_primitive_meshes[HENKA_MODEL_MAX_SCENE_ITEMS];
+    size_t retired_primitive_mesh_count;
     henka_material materials[HENKA_MODEL_MAX_SCENE_ITEMS];
     henka_material_asset material_assets[HENKA_MODEL_MAX_SCENE_ITEMS];
     bool material_ready[HENKA_MODEL_MAX_SCENE_ITEMS];
