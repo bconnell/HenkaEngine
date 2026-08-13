@@ -423,6 +423,7 @@ static int test_observer_sync_refreshes_replacement_and_bounds(void)
         henka_terrain_render_runtime_get_chunk(
             runtime, (henka_terrain_chunk_id){0, 0}, &chunk_info) != HENKA_SUCCESS ||
         chunk_info.revision != 1U ||
+        !henka_scene_is_entity_helper(scene, chunk_info.entity) ||
         henka_scene_get_entity_local_bounds(
             scene, chunk_info.entity, &initial_bounds) != HENKA_SUCCESS)
     {
@@ -657,7 +658,6 @@ static int test_observer_working_set_and_distance_culling(void)
     henka_terrain_render_stats stats;
     henka_terrain_render_chunk_info chunk_info;
     henka_entity picked_entity = HENKA_INVALID_ENTITY;
-    float picked_distance = 0.0f;
     size_t index;
     int passed = 0;
 
@@ -719,9 +719,8 @@ static int test_observer_working_set_and_distance_culling(void)
             scene,
             (henka_ray){{32.0f, 100.0f, 32.0f}, {0.0f, -1.0f, 0.0f}},
             &picked_entity,
-            &picked_distance) != HENKA_SUCCESS ||
-        picked_entity != chunk_info.entity ||
-        !isfinite(picked_distance) || picked_distance < 0.0f)
+            NULL) != HENKA_ERROR_UNKNOWN ||
+        picked_entity != HENKA_INVALID_ENTITY)
     {
         goto cleanup;
     }

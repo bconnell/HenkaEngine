@@ -493,6 +493,64 @@ static henka_result henka_terrain_render_request_chunk_internal(
     uint32_t edge_transition_mask,
     uint32_t fallback_skirt_mask);
 
+static henka_result henka_terrain_render_create_chunk_entity(
+    henka_terrain_render_runtime* runtime,
+    henka_terrain_chunk_id chunk_id,
+    henka_mesh* mesh,
+    henka_bounds bounds,
+    henka_entity* out_entity)
+{
+    char name[64];
+    henka_entity entity;
+    henka_result result;
+
+    if (runtime == NULL || mesh == NULL || out_entity == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    *out_entity = HENKA_INVALID_ENTITY;
+    (void)snprintf(name, sizeof(name), "TerrainChunk_%d_%d", chunk_id.x, chunk_id.z);
+    entity = henka_scene_create_entity_named(runtime->scene, name);
+    if (entity == HENKA_INVALID_ENTITY)
+    {
+        return HENKA_ERROR_OUT_OF_MEMORY;
+    }
+    result = henka_scene_set_entity_flags(
+        runtime->scene, entity, HENKA_SCENE_ENTITY_FLAG_HELPER);
+    if (result == HENKA_SUCCESS)
+    {
+        result = runtime->desc.material_asset != NULL
+            ? henka_scene_apply_material_asset(
+                runtime->scene,
+                entity,
+                runtime->desc.material_asset,
+                runtime->desc.material,
+                runtime->desc.material_asset->revision)
+            : henka_scene_set_entity_material(
+                runtime->scene, entity, runtime->desc.material);
+    }
+    if (result == HENKA_SUCCESS)
+    {
+        result = henka_scene_set_entity_mesh(runtime->scene, entity, mesh);
+    }
+    if (result == HENKA_SUCCESS)
+    {
+        result = henka_scene_set_entity_transform(
+            runtime->scene, entity, henka_transform_identity());
+    }
+    if (result == HENKA_SUCCESS)
+    {
+        result = henka_scene_set_entity_local_bounds(runtime->scene, entity, bounds);
+    }
+    if (result != HENKA_SUCCESS)
+    {
+        henka_scene_destroy_entity(runtime->scene, entity);
+        return result;
+    }
+    *out_entity = entity;
+    return HENKA_SUCCESS;
+}
+
 static henka_result henka_terrain_render_refresh_dirty_internal(
     henka_terrain_render_runtime* runtime)
 {
@@ -517,7 +575,8 @@ static henka_result henka_terrain_render_refresh_dirty_internal(
                 &slot_desc, slot->chunk_id, &region_id) != HENKA_SUCCESS ||
             henka_terrain_world_get_region_state(
                 runtime->world, region_id, &region_state) != HENKA_SUCCESS ||
-            (slot->revision == region_state.revision &&
+            (henka_scene_is_entity_valid(runtime->scene, slot->entity) &&
+             slot->revision == region_state.revision &&
              slot->generation == region_state.generation &&
              henka_terrain_render_dependencies_match(runtime, slot)))
         {
@@ -1213,9 +1272,10 @@ henka_result henka_terrain_render_runtime_pump(
         henka_terrain_revision revision = 0U;
         henka_terrain_generation generation = 0U;
         henka_result result;
-        char name[64];
         henka_bounds bounds;
         henka_bounds old_bounds;
+        henka_entity replacement_entity = HENKA_INVALID_ENTITY;
+        bool entity_valid;
 
         runtime->request_head = (runtime->request_head + 1U) % runtime->desc.max_pending_requests;
         runtime->request_count -= 1U;
@@ -1243,11 +1303,17 @@ henka_result henka_terrain_render_runtime_pump(
         {
             runtime->stats.failed_rebuilds += 1U;
             HENKA_LOG_WARN(
-                "Terrain chunk (%d,%d) LOD %u rebuild failed: %s",
+                "Terrain chunk (%d,%d) LOD %u rebuild failed: %s (edge=%u fallback=%u requested=%u/%u selected=%u/%u)",
                 slot->chunk_id.x,
                 slot->chunk_id.z,
                 request.lod_level,
-                henka_result_to_string(result));
+                henka_result_to_string(result),
+                request.edge_transition_mask,
+                request.fallback_skirt_mask,
+                slot->requested_edge_transition_mask,
+                slot->requested_fallback_skirt_mask,
+                slot->selected_edge_transition_mask,
+                slot->selected_fallback_skirt_mask);
             continue;
         }
         if (!henka_terrain_render_get_chunk_bounds(
@@ -1257,35 +1323,20 @@ henka_result henka_terrain_render_runtime_pump(
             runtime->stats.failed_rebuilds += 1U;
             continue;
         }
-        if (!slot->resident)
+        entity_valid = slot->resident &&
+            slot->entity != HENKA_INVALID_ENTITY &&
+            henka_scene_is_entity_valid(runtime->scene, slot->entity);
+        if (!entity_valid)
         {
-            (void)snprintf(name, sizeof(name), "TerrainChunk_%d_%d", slot->chunk_id.x, slot->chunk_id.z);
-            slot->entity = henka_scene_create_entity_named(runtime->scene, name);
-            if (slot->entity == HENKA_INVALID_ENTITY ||
-                (runtime->desc.material_asset != NULL
-                    ? henka_scene_apply_material_asset(
-                        runtime->scene,
-                        slot->entity,
-                        runtime->desc.material_asset,
-                        runtime->desc.material,
-                        runtime->desc.material_asset->revision)
-                    : henka_scene_set_entity_material(
-                        runtime->scene,
-                        slot->entity,
-                        runtime->desc.material)) != HENKA_SUCCESS ||
-                henka_scene_set_entity_mesh(runtime->scene, slot->entity, candidate) != HENKA_SUCCESS ||
-                henka_scene_set_entity_transform(runtime->scene, slot->entity, henka_transform_identity()) != HENKA_SUCCESS ||
-                henka_scene_set_entity_local_bounds(runtime->scene, slot->entity, bounds) != HENKA_SUCCESS)
+            result = henka_terrain_render_create_chunk_entity(
+                runtime, slot->chunk_id, candidate, bounds, &replacement_entity);
+            if (result != HENKA_SUCCESS)
             {
-                if (slot->entity != HENKA_INVALID_ENTITY)
-                {
-                    henka_scene_destroy_entity(runtime->scene, slot->entity);
-                }
-                slot->entity = HENKA_INVALID_ENTITY;
                 henka_mesh_destroy(candidate);
                 runtime->stats.failed_rebuilds += 1U;
                 continue;
             }
+            slot->entity = replacement_entity;
             slot->visible = true;
         }
         else if (henka_scene_get_entity_local_bounds(runtime->scene, slot->entity, &old_bounds) != HENKA_SUCCESS ||

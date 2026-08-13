@@ -323,9 +323,15 @@ material weights without allocating. The result carries the source revision
 and generation, so a graphics owner can discard a stale upload. GPU
 mesh ownership is provided by `<henka/terrain_render.h>` in the graphical
 client: it borrows the engine, scene, and world, keeps fixed-capacity chunk
-slots and request queues, creates scene entities with bounds for renderer
-culling and ordinary scene selection, and replaces meshes transactionally only
-after a candidate upload succeeds. Four LOD bands use hysteresis and
+slots and request queues, creates owner-marked helper scene entities with bounds
+for renderer culling and depth presentation, and replaces meshes transactionally
+only after a candidate upload succeeds. Terrain chunk entities are therefore
+excluded from generic Scene Objects selection, duplicate, delete, and transform
+actions; Terrain editing remains on the Terrain command path. If an external
+operation removes a resident presentation entity, the next dirty/residency
+refresh attempts to recreate the helper entity and candidate mesh transactionally;
+a failed recreation keeps the previous slot mesh and records the rebuild failure.
+Four LOD bands use hysteresis and
 deterministic adjacent-chunk
 selection; render visibility is bounded by the configured outer band. The
 owner destroys its entities and meshes without destroying the borrowed world.
@@ -403,8 +409,9 @@ The Sandbox resource line reports that counter alongside owner memory totals.
 owned by those weight buffers; it is kept separate from the interleaved mesh
 vertex and index totals so diagnostics do not hide the additional upload.
 The render regression suite verifies resident Terrain entities retain the
-shared material's cast/receive shadow flags, are visible to
-the normal scene ray picker and that observer-driven removal leaves no stale
+shared material's cast/receive shadow flags, are owner-marked helpers rejected
+by generic action selection/deletion and scene picking, and that observer-driven
+removal leaves no stale
 Terrain entities after graphical-owner teardown. The mesh regression suite
 also builds an all-four-edge transition, verifies
 stitched output emits fewer indices than the regular grid, and rejects

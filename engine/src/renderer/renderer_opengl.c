@@ -3337,7 +3337,8 @@ static void henka_opengl_draw_shadow_pass(
         if (!entity->active || !entity->visible || entity->mesh == NULL ||
             !entity->material.cast_shadows ||
             entity->material.alpha_mode == HENKA_MATERIAL_ALPHA_BLENDED ||
-            (entity->flags & HENKA_SCENE_ENTITY_FLAG_HELPER) != 0U)
+            ((entity->flags & HENKA_SCENE_ENTITY_FLAG_HELPER) != 0U &&
+                !entity->material.terrain_layers_enabled))
         {
             continue;
         }
