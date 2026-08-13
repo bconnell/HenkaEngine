@@ -30,6 +30,12 @@
 #define SANDBOX3D_MAX_MATERIAL_EDITOR_BINDINGS 256U
 #define SANDBOX3D_MAX_AUTHORING_OBJECTS 8U
 
+typedef struct sandbox3d_authoring_physics_binding
+{
+    sandbox3d_authoring_object* object;
+    henka_physics_body_id body;
+} sandbox3d_authoring_physics_binding;
+
 typedef enum sandbox3d_object_kind
 {
     SANDBOX3D_OBJECT_GROUND = 0,
@@ -292,6 +298,7 @@ typedef struct sandbox3d_physics_state
 {
     henka_physics_world* world;
     henka_physics_body_id bodies[SANDBOX3D_OBJECT_COUNT];
+    sandbox3d_authoring_physics_binding authoring_bindings[SANDBOX3D_MAX_AUTHORING_OBJECTS];
     bool enabled;
     bool paused;
     bool gravity_enabled;
@@ -656,6 +663,10 @@ static henka_result sandbox3d_validate_authoring_duplicate_smoke(
     sandbox3d_state* state);
 static bool sandbox3d_duplicate_selected_object(henka_engine* engine, sandbox3d_state* state);
 static bool sandbox3d_delete_selected_object(sandbox3d_state* state);
+static henka_result sandbox3d_bind_authoring_physics(
+    sandbox3d_state* state,
+    sandbox3d_authoring_object* object,
+    henka_entity source_entity);
 static void sandbox3d_cancel_active_transform_session(
     sandbox3d_state* state,
     bool restore_original);
@@ -4793,7 +4804,47 @@ static henka_physics_body_id sandbox3d_get_physics_body_for_entity(const sandbox
             return state->physics.bodies[index];
         }
     }
+    for (index = 0U; index < SANDBOX3D_MAX_AUTHORING_OBJECTS; ++index)
+    {
+        if (state->physics.authoring_bindings[index].object != NULL &&
+            sandbox3d_authoring_object_get_entity(
+                state->physics.authoring_bindings[index].object) == entity)
+        {
+            return state->physics.authoring_bindings[index].body;
+        }
+    }
     return HENKA_INVALID_PHYSICS_BODY_ID;
+}
+
+static void sandbox3d_release_authoring_physics(
+    sandbox3d_state* state,
+    sandbox3d_authoring_object* object)
+{
+    size_t index;
+
+    if (state == NULL || object == NULL)
+    {
+        return;
+    }
+    for (index = 0U; index < SANDBOX3D_MAX_AUTHORING_OBJECTS; ++index)
+    {
+        sandbox3d_authoring_physics_binding* binding =
+            &state->physics.authoring_bindings[index];
+        if (binding->object != object)
+        {
+            continue;
+        }
+        if (state->physics.world != NULL &&
+            binding->body != HENKA_INVALID_PHYSICS_BODY_ID)
+        {
+            (void)henka_physics_body_destroy(state->physics.world, binding->body);
+        }
+        binding->object = NULL;
+        binding->body = HENKA_INVALID_PHYSICS_BODY_ID;
+        sandbox3d_authoring_object_unbind_physics(object);
+        return;
+    }
+    sandbox3d_authoring_object_unbind_physics(object);
 }
 
 static void sandbox3d_release_physics_body_for_entity(
@@ -4822,6 +4873,95 @@ static void sandbox3d_release_physics_body_for_entity(
         }
         state->physics.bodies[index] = HENKA_INVALID_PHYSICS_BODY_ID;
     }
+    for (index = 0; index < (int)SANDBOX3D_MAX_AUTHORING_OBJECTS; ++index)
+    {
+        sandbox3d_authoring_physics_binding* binding =
+            &state->physics.authoring_bindings[index];
+        if (binding->object != NULL &&
+            sandbox3d_authoring_object_get_entity(binding->object) == entity)
+        {
+            sandbox3d_release_authoring_physics(state, binding->object);
+        }
+    }
+}
+
+static henka_result sandbox3d_bind_authoring_physics(
+    sandbox3d_state* state,
+    sandbox3d_authoring_object* object,
+    henka_entity source_entity)
+{
+    henka_physics_body_state source_body;
+    henka_physics_body_desc body_desc;
+    henka_transform transform;
+    henka_bounds bounds;
+    henka_physics_body_id body = HENKA_INVALID_PHYSICS_BODY_ID;
+    size_t index;
+    henka_entity entity;
+
+    if (state == NULL || object == NULL || state->physics.world == NULL ||
+        state->scene == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    entity = sandbox3d_authoring_object_get_entity(object);
+    if (henka_scene_get_entity_transform(state->scene, entity, &transform) != HENKA_SUCCESS ||
+        henka_scene_get_entity_local_bounds(state->scene, entity, &bounds) != HENKA_SUCCESS)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    memset(&source_body, 0, sizeof(source_body));
+    source_body.type = HENKA_PHYSICS_BODY_STATIC;
+    source_body.mass = 1.0f;
+    source_body.material = henka_physics_material_default();
+    source_body.collider = henka_physics_collider_box(bounds.extents);
+    if (source_entity != HENKA_INVALID_ENTITY)
+    {
+        const henka_physics_body_id source_body_id =
+            sandbox3d_get_physics_body_for_entity(state, source_entity);
+        if (source_body_id != HENKA_INVALID_PHYSICS_BODY_ID &&
+            henka_physics_body_get_state(state->physics.world, source_body_id, &source_body) != HENKA_SUCCESS)
+        {
+            return HENKA_ERROR_INVALID_ARGUMENT;
+        }
+    }
+    if (source_body.collider.shape != HENKA_PHYSICS_SHAPE_BOX)
+    {
+        source_body.collider = henka_physics_collider_box(bounds.extents);
+    }
+    for (index = 0U; index < SANDBOX3D_MAX_AUTHORING_OBJECTS; ++index)
+    {
+        if (state->physics.authoring_bindings[index].object == NULL)
+        {
+            break;
+        }
+    }
+    if (index == SANDBOX3D_MAX_AUTHORING_OBJECTS)
+    {
+        return HENKA_ERROR_LIMIT;
+    }
+
+    memset(&body_desc, 0, sizeof(body_desc));
+    body_desc.type = source_body.type;
+    body_desc.transform = transform;
+    body_desc.mass = source_body.mass;
+    body_desc.material = source_body.material;
+    body_desc.collider = source_body.collider;
+    body_desc.collider.offset = bounds.center;
+    body_desc.collider.data.box.half_extents = bounds.extents;
+    body_desc.linked_scene = state->scene;
+    body_desc.linked_entity = entity;
+    if (henka_physics_body_create(state->physics.world, &body_desc, &body) != HENKA_SUCCESS ||
+        sandbox3d_authoring_object_bind_physics(object, state->physics.world, body) != HENKA_SUCCESS)
+    {
+        if (body != HENKA_INVALID_PHYSICS_BODY_ID)
+        {
+            (void)henka_physics_body_destroy(state->physics.world, body);
+        }
+        return HENKA_ERROR_UNKNOWN;
+    }
+    state->physics.authoring_bindings[index].object = object;
+    state->physics.authoring_bindings[index].body = body;
+    return HENKA_SUCCESS;
 }
 
 static void sandbox3d_sync_physics_body_from_entity(sandbox3d_state* state, henka_entity entity)
@@ -6039,7 +6179,7 @@ static void sandbox3d_release_owned_resources(sandbox3d_state* state)
          authoring_index < (int)SANDBOX3D_MAX_AUTHORING_OBJECTS;
          ++authoring_index)
     {
-        sandbox3d_authoring_object_unbind_physics(state->authoring_objects[authoring_index]);
+        sandbox3d_release_authoring_physics(state, state->authoring_objects[authoring_index]);
         sandbox3d_authoring_object_destroy(state->authoring_objects[authoring_index]);
         state->authoring_objects[authoring_index] = NULL;
     }
@@ -7062,6 +7202,23 @@ static bool sandbox3d_add_primitive_object(henka_engine* engine, sandbox3d_state
         return false;
     }
 
+    if (state->physics.world != NULL &&
+        sandbox3d_bind_authoring_physics(state, authoring_object, state->cube_entity) != HENKA_SUCCESS)
+    {
+        sandbox3d_unregister_authoring_object(state, authoring_object);
+        sandbox3d_release_authoring_physics(state, authoring_object);
+        sandbox3d_authoring_object_destroy(authoring_object);
+        {
+            henka_action_request rollback_request;
+
+            memset(&rollback_request, 0, sizeof(rollback_request));
+            rollback_request.command = HENKA_ACTION_COMMAND_DELETE_OBJECT;
+            rollback_request.params.entity.entity = result.affected_entity;
+            (void)sandbox3d_execute_action(state, &rollback_request, NULL);
+        }
+        return false;
+    }
+
     sandbox3d_select_entity(state, result.affected_entity);
     return true;
 }
@@ -7131,6 +7288,8 @@ static henka_result sandbox3d_validate_authoring_duplicate_smoke(
     sandbox3d_authoring_object* duplicate_authoring;
     henka_entity previous_entity;
     henka_entity duplicate_entity;
+    henka_physics_body_id source_body;
+    henka_physics_body_id duplicate_body;
     float source_x;
     float duplicate_x;
 
@@ -7155,8 +7314,13 @@ static henka_result sandbox3d_validate_authoring_duplicate_smoke(
     }
     duplicate_entity = state->selected_entity;
     duplicate_authoring = sandbox3d_find_authoring_object(state, duplicate_entity);
+    source_body = sandbox3d_get_physics_body_for_entity(state, state->cube_entity);
+    duplicate_body = sandbox3d_get_physics_body_for_entity(state, duplicate_entity);
     if (duplicate_entity == HENKA_INVALID_ENTITY ||
-        duplicate_entity == state->cube_entity || duplicate_authoring == NULL)
+        duplicate_entity == state->cube_entity || duplicate_authoring == NULL ||
+        source_body == HENKA_INVALID_PHYSICS_BODY_ID ||
+        duplicate_body == HENKA_INVALID_PHYSICS_BODY_ID ||
+        source_body == duplicate_body)
     {
         goto fail;
     }
@@ -7204,7 +7368,9 @@ static henka_result sandbox3d_validate_authoring_duplicate_smoke(
 
     if (!sandbox3d_delete_selected_object(state) ||
         sandbox3d_find_authoring_object(state, state->cube_entity) != source_authoring ||
-        !henka_scene_is_entity_valid(state->scene, state->cube_entity))
+        !henka_scene_is_entity_valid(state->scene, state->cube_entity) ||
+        sandbox3d_get_physics_body_for_entity(state, state->cube_entity) != source_body ||
+        sandbox3d_get_physics_body_for_entity(state, duplicate_entity) != HENKA_INVALID_PHYSICS_BODY_ID)
     {
         goto fail;
     }
@@ -7284,8 +7450,11 @@ static bool sandbox3d_duplicate_selected_object(henka_engine* engine, sandbox3d_
                 sandbox3d_authoring_object_get_mesh(source_authoring),
                 32U,
                 &duplicate_authoring) != HENKA_SUCCESS ||
-            !sandbox3d_register_authoring_object(state, duplicate_authoring))
+            !sandbox3d_register_authoring_object(state, duplicate_authoring) ||
+            sandbox3d_bind_authoring_physics(state, duplicate_authoring, selected_entity) != HENKA_SUCCESS)
         {
+            sandbox3d_unregister_authoring_object(state, duplicate_authoring);
+            sandbox3d_release_authoring_physics(state, duplicate_authoring);
             sandbox3d_authoring_object_destroy(duplicate_authoring);
             henka_scene_destroy_entity(state->scene, duplicate);
             return false;
@@ -7329,8 +7498,8 @@ static bool sandbox3d_delete_selected_object(sandbox3d_state* state)
 
     if (deleted_authoring_object != NULL)
     {
+        sandbox3d_release_authoring_physics(state, deleted_authoring_object);
         sandbox3d_unregister_authoring_object(state, deleted_authoring_object);
-        sandbox3d_authoring_object_unbind_physics(deleted_authoring_object);
         sandbox3d_authoring_object_destroy(deleted_authoring_object);
     }
     sandbox3d_release_physics_body_for_entity(state, selected_entity);

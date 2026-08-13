@@ -83,9 +83,12 @@ Sandbox bridge clones a validated authoring source into an independent
 per-entity history/render/bounds handoff, and the editor keeps a bounded
 per-entity registry for authored objects: duplicating an authored object creates
 an independent editable source, while selecting another entity activates only
-that entity's wrapper. Imported entities are not yet automatically authoring-
-enabled. Vertex/edge topology editing beyond bounded selection and component
-movement is not yet present; and material-instance assignment, texture
+that entity's wrapper. When the source has the Sandbox box-collider contract,
+the duplicate receives a separate bounded collider and its collider is retired
+with the duplicate; the source body remains owned by its original descriptor.
+Imported entities are not yet automatically authoring-enabled. Vertex/edge
+topology editing beyond bounded selection and component movement is not yet
+present; and material-instance assignment, texture
 dependencies, general collision integration beyond the bound box contract,
 package ownership, topology-aware picking, and showcase rebuilds still need the
 shared scene/asset-manager bridge.
