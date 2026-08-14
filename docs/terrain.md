@@ -391,7 +391,11 @@ Neighbor-aware border-normal sampling uses available authoritative regions and
 falls back to the resident edge until a neighbor streams in. Uploaded chunks
 track the bounded 3x3 region revision/generation identities used by that border
 sampling, so a neighbor edit queues dependent chunks as well; height-derived
-scene bounds are replaced with the candidate mesh and restored on failure.
+scene bounds are replaced with the candidate mesh and restored on failure. A
+queued graphical rebuild that reaches the pump after its source region loses
+render residency is treated as obsolete work: the owner retires that slot
+without attempting a stale upload or counting a rebuild failure, while valid
+replacement failures still retain the previous mesh and revision for retry.
 Observer synchronization runs this same stale-dependency check before working-
 set admission and propagates the first bounded queue/admission error instead of
 silently dropping it; already queued replacements remain available for a later

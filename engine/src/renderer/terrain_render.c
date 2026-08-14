@@ -1289,6 +1289,16 @@ henka_result henka_terrain_render_runtime_pump(
             continue;
         }
         slot->queued = false;
+        /* A stream/residency update may retire the source region after this
+         * request was queued but before the bounded pump reaches it. Treat
+         * that request as obsolete work: remove the presentation owner and
+         * do not report a rebuild failure for a source that is no longer
+         * render-owned. */
+        if (!henka_terrain_render_chunk_is_render_resident(runtime, slot->chunk_id))
+        {
+            (void)henka_terrain_render_runtime_remove_chunk(runtime, slot->chunk_id);
+            continue;
+        }
         result = henka_mesh_create_from_terrain_chunk_with_edge_mask(
             runtime->engine,
             runtime->world,
