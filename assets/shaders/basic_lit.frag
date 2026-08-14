@@ -543,6 +543,10 @@ void main()
     float surfaceTransmission = saturate(transmission);
     float surfaceSubsurface = saturate(subsurface);
     vec3 surfaceSubsurfaceColor = clamp(subsurfaceColor, vec3(0.0), vec3(1.0));
+    /* Reserve part of the diffuse energy for the bounded backscatter lobe.
+     * This keeps the approximation from simply adding light on top of a full
+     * diffuse response; it is not a replacement for profile/thickness SSS. */
+    float diffuseEnergyWeight = 1.0 - surfaceSubsurface * 0.65;
     float surfaceThickness = saturate(thickness);
     float safeAttenuationDistance = max(attenuationDistance, 0.0001);
     vec3 volumeTransmittance = pow(
@@ -615,7 +619,7 @@ void main()
         float distribution = distributionGGX(nDotH, alpha);
         float visibility = visibilitySmithGGXCorrelated(nDotV, nDotL, alpha);
         vec3 specular = distribution * visibility * fresnel;
-        vec3 diffuse = (1.0 - surfaceTransmission) * (1.0 - fresnel) * (1.0 - surfaceMetallic) * albedo / PI;
+        vec3 diffuse = (1.0 - surfaceTransmission) * (1.0 - fresnel) * (1.0 - surfaceMetallic) * albedo * diffuseEnergyWeight / PI;
         vec3 baseLayerTransmission = vec3(1.0);
         if (surfaceClearcoat > 0.0)
         {
@@ -655,7 +659,7 @@ void main()
             float moonVisibility = visibilitySmithGGXCorrelated(nDotV, moonNDotL, alpha);
             vec3 moonSpecular = moonDistribution * moonVisibility * moonFresnel;
             vec3 moonDiffuse = (1.0 - surfaceTransmission) *
-                (1.0 - moonFresnel) * (1.0 - surfaceMetallic) * albedo / PI;
+                (1.0 - moonFresnel) * (1.0 - surfaceMetallic) * albedo * diffuseEnergyWeight / PI;
             color += (moonDiffuse + moonSpecular) * baseLayerTransmission *
                 moonRadiance * moonNDotL;
             float moonBackScatter = pow(saturate(dot(-normal, moonLightDir)), 2.0);
@@ -686,7 +690,7 @@ void main()
 
         // Ambient remains an indirect fallback for scenes without a richer probe path.
         vec3 safeAmbient = min(max(ambientColor, vec3(0.0)), vec3(16.0));
-        color += min(safeAmbient * ((1.0 - surfaceTransmission) * (1.0 - surfaceMetallic) * albedo + fresnel * 0.5) *
+        color += min(safeAmbient * ((1.0 - surfaceTransmission) * (1.0 - surfaceMetallic) * albedo * diffuseEnergyWeight + fresnel * 0.5) *
             baseLayerTransmission * occlusion, vec3(65504.0));
         if (useEnvironment)
         {
@@ -716,7 +720,7 @@ void main()
             }
             vec2 brdf = useIBL ? texture(iblBrdfLut, vec2(nDotV, 1.0 - surfaceRoughness)).rg : vec2(1.0, 0.0);
             color += min(
-                environmentDiffuse * ((1.0 - surfaceTransmission) * (1.0 - surfaceMetallic) * albedo / PI) *
+                environmentDiffuse * ((1.0 - surfaceTransmission) * (1.0 - surfaceMetallic) * albedo * diffuseEnergyWeight / PI) *
                     baseLayerTransmission * occlusion * 0.55 +
                 environmentSpecular * (fresnel * brdf.x + brdf.y) * baseLayerTransmission * occlusion *
                     (0.35 + 0.65 * (1.0 - surfaceRoughness)) +
@@ -760,7 +764,7 @@ void main()
                 (localLightOuterType[lightIndex].z > 0.5 ?
                     localShadowFactor(normal, localLightDirection) : 1.0);
             vec3 localSpecular = localDistribution * localVisibility * localFresnel;
-            vec3 localDiffuse = (1.0 - surfaceTransmission) * (1.0 - localFresnel) * (1.0 - surfaceMetallic) * albedo / PI;
+            vec3 localDiffuse = (1.0 - surfaceTransmission) * (1.0 - localFresnel) * (1.0 - surfaceMetallic) * albedo * diffuseEnergyWeight / PI;
             color += (localDiffuse + localSpecular) * localRadiance * localNDotL * localShadow;
             float localBackScatter = pow(saturate(dot(-normal, localLightDirection)), 2.0);
             float localWrappedLight = saturate((dot(normal, localLightDirection) + 0.35) / 1.35);
