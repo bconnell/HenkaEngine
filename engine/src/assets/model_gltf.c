@@ -1053,7 +1053,9 @@ static bool henka_gltf_parse_material(
         }
         if (henka_gltf_find_member(extensions, extensions_end, "KHR_materials_volume", &extension, &extension_end))
         {
-            if (henka_gltf_find_member(extension, extension_end, "thicknessTexture", &value, &value_end)) return false;
+            if (!henka_gltf_material_texture(context, extension, extension_end, "thicknessTexture",
+                    &out_source->thickness_uri, &out_source->thickness_embedded_data,
+                    &out_source->thickness_embedded_size, &out_source->material.thickness_uv_set)) return false;
             if (henka_gltf_find_member(extension, extension_end, "thicknessFactor", &value, &value_end) &&
                 !henka_gltf_member_float(extension, extension_end, "thicknessFactor", &out_source->material.thickness)) return false;
             if (henka_gltf_find_member(extension, extension_end, "attenuationDistance", &value, &value_end) &&
@@ -1890,11 +1892,13 @@ void henka_model_scene_data_destroy(henka_model_scene_data* scene)
         henka_free(scene->materials[index].metallic_roughness_uri);
         henka_free(scene->materials[index].occlusion_uri);
         henka_free(scene->materials[index].emissive_uri);
+        henka_free(scene->materials[index].thickness_uri);
         henka_free(scene->materials[index].base_color_embedded_data);
         henka_free(scene->materials[index].normal_embedded_data);
         henka_free(scene->materials[index].metallic_roughness_embedded_data);
         henka_free(scene->materials[index].occlusion_embedded_data);
         henka_free(scene->materials[index].emissive_embedded_data);
+        henka_free(scene->materials[index].thickness_embedded_data);
     }
     for (index = 0U; index < scene->node_count; ++index) henka_free(scene->nodes[index].name);
     for (index = 0U; index < scene->camera_count; ++index) henka_free(scene->cameras[index].name);

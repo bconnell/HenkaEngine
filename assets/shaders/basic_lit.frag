@@ -83,6 +83,9 @@ uniform sampler2D occlusionTexture;
 uniform int occlusionUvSet;
 uniform sampler2D emissiveTexture;
 uniform int emissiveUvSet;
+uniform sampler2D thicknessTexture;
+uniform int thicknessUvSet;
+uniform bool useThicknessTexture;
 uniform bool useNormalTexture;
 uniform bool useMetallicRoughnessTexture;
 uniform bool useOcclusionTexture;
@@ -544,6 +547,10 @@ void main()
     float surfaceSubsurface = saturate(subsurface);
     vec3 surfaceSubsurfaceColor = clamp(subsurfaceColor, vec3(0.0), vec3(1.0));
     float surfaceThickness = saturate(thickness);
+    if (useThicknessTexture)
+    {
+        surfaceThickness *= clamp(texture(thicknessTexture, materialUv(thicknessUvSet)).r, 0.0, 1.0);
+    }
     /* Reserve more diffuse energy as the authored thickness increases. The
      * response below remains a bounded raster approximation, not a profile or
      * thickness-texture diffusion model. */

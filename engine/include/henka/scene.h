@@ -68,6 +68,7 @@ typedef struct henka_material
     int metallic_roughness_uv_set;
     int occlusion_uv_set;
     int emissive_uv_set;
+    int thickness_uv_set;
     henka_vec4 base_color;
     henka_vec3 emissive_color;
     float metallic;
@@ -79,6 +80,9 @@ typedef struct henka_material
     float transmission;
     /* Bounded glTF volume attenuation controls; refraction and layered volume remain renderer work. */
     float thickness;
+    /* Optional glTF KHR_materials_volume thickness data; manager-owned and
+     * sampled as a bounded linear scalar in the renderer. */
+    henka_texture* thickness_texture;
     float attenuation_distance;
     henka_vec3 attenuation_color;
     /* Runtime-authored bounded direct-light backscatter approximation. This

@@ -807,7 +807,8 @@ static bool henka_asset_manager_owns_material_dependencies(
         !henka_asset_manager_owns_texture_pointer(manager, material->normal_texture) ||
         !henka_asset_manager_owns_texture_pointer(manager, material->metallic_roughness_texture) ||
         !henka_asset_manager_owns_texture_pointer(manager, material->occlusion_texture) ||
-        !henka_asset_manager_owns_texture_pointer(manager, material->emissive_texture))
+        !henka_asset_manager_owns_texture_pointer(manager, material->emissive_texture) ||
+        !henka_asset_manager_owns_texture_pointer(manager, material->thickness_texture))
     {
         return false;
     }
@@ -2696,6 +2697,7 @@ static henka_result henka_assets_resolve_gltf_material_source(
     candidate.metallic_roughness_texture = NULL;
     candidate.occlusion_texture = NULL;
     candidate.emissive_texture = NULL;
+    candidate.thickness_texture = NULL;
     candidate.use_texture = false;
 
     descriptor = henka_texture_descriptor_default_color();
@@ -2722,6 +2724,10 @@ static henka_result henka_assets_resolve_gltf_material_source(
     if (result == HENKA_SUCCESS) result = henka_assets_resolve_gltf_material_texture_source(
         manager, source_path, source->emissive_uri, source->emissive_embedded_data,
         source->emissive_embedded_size, descriptor, &candidate.emissive_texture);
+    descriptor = henka_texture_descriptor_default_data();
+    if (result == HENKA_SUCCESS) result = henka_assets_resolve_gltf_material_texture_source(
+        manager, source_path, source->thickness_uri, source->thickness_embedded_data,
+        source->thickness_embedded_size, descriptor, &candidate.thickness_texture);
     if (result == HENKA_SUCCESS) result = henka_material_validate(&candidate);
     if (result == HENKA_SUCCESS) *out_material = candidate;
     return result;
@@ -3069,6 +3075,7 @@ henka_result henka_assets_get_material_asset_dependencies(
     HENKA_ADD_MATERIAL_DEPENDENCY(HENKA_MATERIAL_TEXTURE_SLOT_METALLIC_ROUGHNESS, HENKA_TEXTURE_USAGE_METALLIC_ROUGHNESS, material->metallic_roughness_texture);
     HENKA_ADD_MATERIAL_DEPENDENCY(HENKA_MATERIAL_TEXTURE_SLOT_OCCLUSION, HENKA_TEXTURE_USAGE_OCCLUSION, material->occlusion_texture);
     HENKA_ADD_MATERIAL_DEPENDENCY(HENKA_MATERIAL_TEXTURE_SLOT_EMISSIVE, HENKA_TEXTURE_USAGE_EMISSIVE, material->emissive_texture);
+    HENKA_ADD_MATERIAL_DEPENDENCY(HENKA_MATERIAL_TEXTURE_SLOT_THICKNESS, HENKA_TEXTURE_USAGE_GENERIC_DATA, material->thickness_texture);
     {
         static const henka_material_texture_slot base_color_slots[HENKA_MATERIAL_TERRAIN_LAYER_COUNT] = {
             HENKA_MATERIAL_TEXTURE_SLOT_TERRAIN_LAYER0_BASE_COLOR,
@@ -3129,6 +3136,7 @@ henka_result henka_assets_get_material_instance_dependencies(
     HENKA_ADD_INSTANCE_DEPENDENCY(HENKA_MATERIAL_TEXTURE_SLOT_METALLIC_ROUGHNESS, HENKA_TEXTURE_USAGE_METALLIC_ROUGHNESS, material->metallic_roughness_texture);
     HENKA_ADD_INSTANCE_DEPENDENCY(HENKA_MATERIAL_TEXTURE_SLOT_OCCLUSION, HENKA_TEXTURE_USAGE_OCCLUSION, material->occlusion_texture);
     HENKA_ADD_INSTANCE_DEPENDENCY(HENKA_MATERIAL_TEXTURE_SLOT_EMISSIVE, HENKA_TEXTURE_USAGE_EMISSIVE, material->emissive_texture);
+    HENKA_ADD_INSTANCE_DEPENDENCY(HENKA_MATERIAL_TEXTURE_SLOT_THICKNESS, HENKA_TEXTURE_USAGE_GENERIC_DATA, material->thickness_texture);
     {
         static const henka_material_texture_slot base_color_slots[HENKA_MATERIAL_TERRAIN_LAYER_COUNT] = {
             HENKA_MATERIAL_TEXTURE_SLOT_TERRAIN_LAYER0_BASE_COLOR,

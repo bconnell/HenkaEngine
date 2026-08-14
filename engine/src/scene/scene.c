@@ -59,6 +59,8 @@ henka_material henka_material_default(void)
     material.metallic_roughness_uv_set = 0;
     material.occlusion_uv_set = 0;
     material.emissive_uv_set = 0;
+    material.thickness_uv_set = 0;
+    material.thickness_texture = NULL;
     material.base_color = (henka_vec4){1.0f, 1.0f, 1.0f, 1.0f};
     material.emissive_color = (henka_vec3){0.0f, 0.0f, 0.0f};
     material.metallic = 0.0f;
@@ -289,7 +291,8 @@ henka_result henka_material_validate(const henka_material* material)
         !henka_material_texture_matches(material->normal_texture, HENKA_TEXTURE_USAGE_NORMAL, HENKA_TEXTURE_COLOR_SPACE_LINEAR) ||
         !henka_material_texture_matches(material->metallic_roughness_texture, HENKA_TEXTURE_USAGE_METALLIC_ROUGHNESS, HENKA_TEXTURE_COLOR_SPACE_LINEAR) ||
         !henka_material_texture_matches(material->occlusion_texture, HENKA_TEXTURE_USAGE_OCCLUSION, HENKA_TEXTURE_COLOR_SPACE_LINEAR) ||
-        !henka_material_texture_matches(material->emissive_texture, HENKA_TEXTURE_USAGE_EMISSIVE, HENKA_TEXTURE_COLOR_SPACE_SRGB))
+        !henka_material_texture_matches(material->emissive_texture, HENKA_TEXTURE_USAGE_EMISSIVE, HENKA_TEXTURE_COLOR_SPACE_SRGB) ||
+        !henka_material_texture_matches(material->thickness_texture, HENKA_TEXTURE_USAGE_GENERIC_DATA, HENKA_TEXTURE_COLOR_SPACE_LINEAR))
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
