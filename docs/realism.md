@@ -8,7 +8,7 @@ The current Rendered path includes:
 
 - glTF-oriented PBR material inputs for base color, metallic/roughness, normals, occlusion, emissive response, specular controls, IOR, transmission, volume attenuation, clearcoat, sheen, alpha modes, and double-sided rendering, plus runtime-authored subsurface amount/tint controls;
 - a bounded direct-light backscatter and wrapped-light approximation for subsurface-tinted materials; this is not true multi-scatter diffusion, a skin/wax profile, thickness-texture SSS, or screen-space/ray-traced SSS;
-- HDR environment lighting with derived irradiance, prefiltered specular environment data, and a BRDF lookup texture;
+- HDR environment lighting with transactionally derived 32-sample cosine-weighted irradiance, 32-sample GGX-prefiltered specular environment data across bounded mips, and a 32-sample split-sum BRDF lookup texture; this improves the rasterized environment response without claiming path tracing or full-scene global illumination;
 - local reflection probes;
 - directional, cascade, spot, and point shadow-map foundations;
 - depth-derived ambient occlusion;

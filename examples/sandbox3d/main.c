@@ -20835,9 +20835,9 @@ static void sandbox3d_update(henka_engine* engine, double delta_seconds, void* u
         henka_terrain_revision paint_revision_before = 0U;
         uint8_t paint_weight_before = 0U;
         uint8_t paint_layer = 0U;
-        henka_mesh* previous_terrain_mesh = NULL;
         henka_terrain_revision previous_terrain_revision = 0U;
         henka_terrain_render_stats terrain_render_stats = {0};
+        uint64_t failed_rebuilds_before = 0U;
         henka_terrain_collision_runtime_stats collision_runtime_stats = {0};
         henka_result terrain_result;
         const char* terrain_smoke_stage = "raise";
@@ -21014,12 +21014,12 @@ static void sandbox3d_update(henka_engine* engine, double delta_seconds, void* u
         }
         if (terrain_result == HENKA_SUCCESS)
         {
-            terrain_smoke_stage = "failed replacement";
-            previous_terrain_mesh = chunk_info.mesh;
+            terrain_smoke_stage = "stale replacement cancellation";
             previous_terrain_revision = chunk_info.revision;
             (void)henka_terrain_render_runtime_get_stats(
                 state->terrain_render,
                 &terrain_render_stats);
+            failed_rebuilds_before = terrain_render_stats.failed_rebuilds;
             if (henka_terrain_world_set_region_residency(
                     state->terrain_world,
                     (henka_terrain_region_id){0, 0},
@@ -21031,13 +21031,14 @@ static void sandbox3d_update(henka_engine* engine, double delta_seconds, void* u
                     (henka_terrain_chunk_id){0, 0},
                     0U) != HENKA_SUCCESS ||
                 henka_terrain_render_runtime_pump(state->terrain_render, 1U) != HENKA_SUCCESS ||
+                henka_terrain_render_runtime_get_stats(
+                    state->terrain_render,
+                    &terrain_render_stats) != HENKA_SUCCESS ||
+                terrain_render_stats.failed_rebuilds != failed_rebuilds_before ||
                 henka_terrain_render_runtime_get_chunk(
                     state->terrain_render,
                     (henka_terrain_chunk_id){0, 0},
-                    &chunk_info) != HENKA_SUCCESS ||
-                chunk_info.mesh != previous_terrain_mesh ||
-                chunk_info.revision != previous_terrain_revision ||
-                !chunk_info.resident)
+                    &chunk_info) != HENKA_ERROR_INVALID_ARGUMENT)
             {
                 terrain_result = HENKA_ERROR_UNKNOWN;
             }
@@ -21064,7 +21065,7 @@ static void sandbox3d_update(henka_engine* engine, double delta_seconds, void* u
                 henka_terrain_render_runtime_get_stats(
                     state->terrain_render,
                     &terrain_render_stats) != HENKA_SUCCESS ||
-                terrain_render_stats.failed_rebuilds == 0U)
+                terrain_render_stats.failed_rebuilds != failed_rebuilds_before)
             {
                 terrain_result = HENKA_ERROR_UNKNOWN;
             }
@@ -21080,7 +21081,7 @@ static void sandbox3d_update(henka_engine* engine, double delta_seconds, void* u
         }
         else
         {
-            printf("Terrain edit: shared raise plus adaptive layer-%u paint rebuilt render revision %llu, collision queue rebuilt %llu patches (failed=%llu), height bounds %.3fm +/- %.3fm, and preserved the prior mesh across a failed replacement.\n",
+            printf("Terrain edit: shared raise plus adaptive layer-%u paint rebuilt render revision %llu, collision queue rebuilt %llu patches (failed=%llu), height bounds %.3fm +/- %.3fm, and cancelled an obsolete nonresident render request before recovery.\n",
                 (unsigned int)paint_layer,
                 (unsigned long long)chunk_info.revision,
                 (unsigned long long)collision_runtime_stats.rebuilt_count,
