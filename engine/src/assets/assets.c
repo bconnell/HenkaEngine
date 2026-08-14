@@ -3529,6 +3529,17 @@ enum
 };
 
 #define HENKA_MATERIAL_TEXTURE_OVERRIDE_TRANSMISSION UINT32_C(1)
+#define HENKA_MATERIAL_TEXTURE_OVERRIDE_THICKNESS UINT32_C(2)
+
+static uint32_t henka_material_instance_texture_override_bit(
+    henka_material_instance_parameter parameter)
+{
+    if (parameter == HENKA_MATERIAL_INSTANCE_TRANSMISSION_TEXTURE)
+        return HENKA_MATERIAL_TEXTURE_OVERRIDE_TRANSMISSION;
+    if (parameter == HENKA_MATERIAL_INSTANCE_THICKNESS_TEXTURE)
+        return HENKA_MATERIAL_TEXTURE_OVERRIDE_THICKNESS;
+    return 0U;
+}
 
 static uint32_t henka_material_instance_override_bit(
     henka_material_instance_parameter parameter)
@@ -3575,7 +3586,7 @@ static uint32_t henka_material_instance_override_bit(
 static bool henka_material_instance_is_texture_override(
     henka_material_instance_parameter parameter)
 {
-    return parameter == HENKA_MATERIAL_INSTANCE_TRANSMISSION_TEXTURE;
+    return henka_material_instance_texture_override_bit(parameter) != 0U;
 }
 
 henka_result henka_assets_get_material_asset_revision(
@@ -3768,6 +3779,8 @@ henka_result henka_assets_refresh_material_instance(
     HENKA_PRESERVE_MATERIAL_OVERRIDE(HENKA_MATERIAL_OVERRIDE_EMISSIVE_TEXTURE, emissive_texture);
     if ((instance->texture_override_mask & HENKA_MATERIAL_TEXTURE_OVERRIDE_TRANSMISSION) != 0U)
         candidate.transmission_texture = previous->transmission_texture;
+    if ((instance->texture_override_mask & HENKA_MATERIAL_TEXTURE_OVERRIDE_THICKNESS) != 0U)
+        candidate.thickness_texture = previous->thickness_texture;
     if ((instance->override_mask & HENKA_MATERIAL_OVERRIDE_BASE_COLOR_TEXTURE) != 0U)
     {
         candidate.base_color_texture = previous->base_color_texture;
@@ -3932,7 +3945,8 @@ static henka_result henka_material_instance_commit(
         return HENKA_ERROR_INVALID_ARGUMENT;
     instance->material = candidate;
     if (henka_material_instance_is_texture_override(parameter))
-        instance->texture_override_mask |= HENKA_MATERIAL_TEXTURE_OVERRIDE_TRANSMISSION;
+        instance->texture_override_mask |=
+            henka_material_instance_texture_override_bit(parameter);
     else
         instance->override_mask |= bit;
     instance->definition_revision = instance->definition->revision;
@@ -3986,6 +4000,7 @@ static bool henka_material_instance_restore_definition_field(
         HENKA_RESTORE_MATERIAL_FIELD(HENKA_MATERIAL_INSTANCE_OCCLUSION_TEXTURE, occlusion_texture);
         HENKA_RESTORE_MATERIAL_FIELD(HENKA_MATERIAL_INSTANCE_EMISSIVE_TEXTURE, emissive_texture);
         HENKA_RESTORE_MATERIAL_FIELD(HENKA_MATERIAL_INSTANCE_TRANSMISSION_TEXTURE, transmission_texture);
+        HENKA_RESTORE_MATERIAL_FIELD(HENKA_MATERIAL_INSTANCE_THICKNESS_TEXTURE, thickness_texture);
         default:
             return false;
     }
@@ -4006,7 +4021,8 @@ henka_result henka_assets_material_instance_reset_override(
     bit = henka_material_instance_override_bit(parameter);
     if (henka_material_instance_is_texture_override(parameter))
     {
-        if ((instance->texture_override_mask & HENKA_MATERIAL_TEXTURE_OVERRIDE_TRANSMISSION) == 0U)
+        if ((instance->texture_override_mask &
+                henka_material_instance_texture_override_bit(parameter)) == 0U)
             return HENKA_SUCCESS;
     }
     else if (bit == 0U || (instance->override_mask & bit) == 0U)
@@ -4018,7 +4034,8 @@ henka_result henka_assets_material_instance_reset_override(
         return HENKA_ERROR_ASSET_SOURCE;
     instance->material = candidate;
     if (henka_material_instance_is_texture_override(parameter))
-        instance->texture_override_mask &= ~HENKA_MATERIAL_TEXTURE_OVERRIDE_TRANSMISSION;
+        instance->texture_override_mask &=
+            ~henka_material_instance_texture_override_bit(parameter);
     else
         instance->override_mask &= ~bit;
     instance->definition_revision = instance->definition->revision;
@@ -4175,6 +4192,10 @@ henka_result henka_assets_material_instance_set_texture(
         case HENKA_MATERIAL_TEXTURE_SLOT_TRANSMISSION:
             candidate.transmission_texture = texture;
             parameter = HENKA_MATERIAL_INSTANCE_TRANSMISSION_TEXTURE;
+            break;
+        case HENKA_MATERIAL_TEXTURE_SLOT_THICKNESS:
+            candidate.thickness_texture = texture;
+            parameter = HENKA_MATERIAL_INSTANCE_THICKNESS_TEXTURE;
             break;
         default:
             return HENKA_ERROR_INVALID_ARGUMENT;

@@ -831,7 +831,7 @@ static const char* sandbox3d_material_editor_parameter_label(
         "Depth Test", "Double Sided", "Cast Shadows", "Receive Shadows", "Alpha Mode",
         "Thickness", "Attenuation Distance", "Attenuation Color", "Base Color Texture",
         "Normal Texture", "Metallic-Roughness Texture", "Occlusion Texture", "Emissive Texture",
-        "Subsurface", "Subsurface Color"
+        "Subsurface", "Subsurface Color", "Transmission Texture", "Thickness Texture"
     };
     if (parameter < 0 || parameter >= HENKA_MATERIAL_INSTANCE_PARAMETER_COUNT)
     {
@@ -896,7 +896,8 @@ static bool sandbox3d_material_editor_is_texture(henka_material_instance_paramet
 {
     return (parameter >= HENKA_MATERIAL_INSTANCE_BASE_COLOR_TEXTURE &&
             parameter <= HENKA_MATERIAL_INSTANCE_EMISSIVE_TEXTURE) ||
-        parameter == HENKA_MATERIAL_INSTANCE_TRANSMISSION_TEXTURE;
+        parameter == HENKA_MATERIAL_INSTANCE_TRANSMISSION_TEXTURE ||
+        parameter == HENKA_MATERIAL_INSTANCE_THICKNESS_TEXTURE;
 }
 
 static henka_material_texture_slot sandbox3d_material_editor_texture_slot(
@@ -904,6 +905,8 @@ static henka_material_texture_slot sandbox3d_material_editor_texture_slot(
 {
     if (parameter == HENKA_MATERIAL_INSTANCE_TRANSMISSION_TEXTURE)
         return HENKA_MATERIAL_TEXTURE_SLOT_TRANSMISSION;
+    if (parameter == HENKA_MATERIAL_INSTANCE_THICKNESS_TEXTURE)
+        return HENKA_MATERIAL_TEXTURE_SLOT_THICKNESS;
     return (henka_material_texture_slot)(
         parameter - HENKA_MATERIAL_INSTANCE_BASE_COLOR_TEXTURE);
 }
@@ -16141,7 +16144,7 @@ details_group_materials:
             {
                 static const char* texture_slot_labels[] =
                 {
-                    "Base Color", "Normal", "Metal/Rough", "Occlusion", "Emissive", "Transmission"
+                    "Base Color", "Normal", "Metal/Rough", "Occlusion", "Emissive", "Thickness", "Transmission"
                 };
                 static const henka_material_texture_slot texture_slots[] =
                 {
@@ -16150,6 +16153,7 @@ details_group_materials:
                     HENKA_MATERIAL_TEXTURE_SLOT_METALLIC_ROUGHNESS,
                     HENKA_MATERIAL_TEXTURE_SLOT_OCCLUSION,
                     HENKA_MATERIAL_TEXTURE_SLOT_EMISSIVE,
+                    HENKA_MATERIAL_TEXTURE_SLOT_THICKNESS,
                     HENKA_MATERIAL_TEXTURE_SLOT_TRANSMISSION
                 };
                 size_t texture_slot_index;
@@ -16167,13 +16171,18 @@ details_group_materials:
                         material_view.editor_binding != NULL;
                     const bool transmission_slot =
                         texture_slots[texture_slot_index] == HENKA_MATERIAL_TEXTURE_SLOT_TRANSMISSION;
+                    const bool thickness_slot =
+                        texture_slots[texture_slot_index] == HENKA_MATERIAL_TEXTURE_SLOT_THICKNESS;
                     const unsigned int texture_parameter = transmission_slot ?
                         (unsigned int)HENKA_MATERIAL_INSTANCE_TRANSMISSION_TEXTURE :
+                        (thickness_slot ?
+                            (unsigned int)HENKA_MATERIAL_INSTANCE_THICKNESS_TEXTURE :
                         (unsigned int)HENKA_MATERIAL_INSTANCE_BASE_COLOR_TEXTURE +
-                            (unsigned int)texture_slot_index;
+                            (unsigned int)texture_slot_index);
                     const bool overridden = editable &&
-                        (transmission_slot ?
-                            (material_view.editor_binding->instance->texture_override_mask & 1U) != 0U :
+                        ((transmission_slot || thickness_slot) ?
+                            (material_view.editor_binding->instance->texture_override_mask &
+                                (transmission_slot ? 1U : 2U)) != 0U :
                             (texture_parameter < 32U &&
                                 (material_view.editor_binding->instance->override_mask &
                                  (uint32_t)(1U << texture_parameter)) != 0U));
@@ -20102,6 +20111,11 @@ static henka_result sandbox3d_run_material_stress(
             &state->marker_material_instance,
             HENKA_MATERIAL_TEXTURE_SLOT_EMISSIVE,
             texture_source.emissive_texture);
+    if (result == HENKA_SUCCESS)
+        result = henka_assets_material_instance_set_texture(
+            &state->marker_material_instance,
+            HENKA_MATERIAL_TEXTURE_SLOT_THICKNESS,
+            texture_source.thickness_texture);
     stage = "boolean overrides";
     for (index = 0U; result == HENKA_SUCCESS &&
         index < sizeof(bool_parameters) / sizeof(bool_parameters[0]); ++index)

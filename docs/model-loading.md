@@ -184,8 +184,10 @@ The current loader does not provide:
 - skeletal animation
 - editor import workflows
 - live replacement of an already-loaded mesh that scenes may still reference
-- glTF transmission/thickness textures, refraction, layered volume, skins, animations, morph targets, and compressed buffer extensions in
-  the existing manager renderer path
+- refraction, layered volume, skins, animations, morph targets, and compressed
+  buffer extensions in the existing manager renderer path; glTF transmission
+  scalar and volume-thickness textures are supported as manager-owned semantic
+  dependencies and feed the bounded renderer responses
 - a second Henka-only material JSON authority; an editor material format will
   only be introduced if it adds instance/editor behavior beyond glTF and will
   reuse this same material and dependency path
