@@ -79,6 +79,14 @@ typedef enum sandbox3d_terrain_capture_view
     SANDBOX3D_TERRAIN_CAPTURE_VIEW_CLOSE
 } sandbox3d_terrain_capture_view;
 
+typedef enum sandbox3d_showcase_capture_view
+{
+    SANDBOX3D_SHOWCASE_CAPTURE_VIEW_WIDE = 0,
+    SANDBOX3D_SHOWCASE_CAPTURE_VIEW_FRONT,
+    SANDBOX3D_SHOWCASE_CAPTURE_VIEW_THREE_QUARTER,
+    SANDBOX3D_SHOWCASE_CAPTURE_VIEW_PROFILE
+} sandbox3d_showcase_capture_view;
+
 typedef enum sandbox3d_utility_view
 {
     SANDBOX3D_UTILITY_NONE = 0,
@@ -448,7 +456,9 @@ typedef struct sandbox3d_state
     bool smoke_validation_failed;
     bool capture_mode_requested;
     bool terrain_capture_mode_requested;
+    bool showcase_capture_view_requested;
     sandbox3d_terrain_capture_view terrain_capture_view;
+    sandbox3d_showcase_capture_view showcase_capture_view;
     henka_viewport_shading_mode capture_mode;
 } sandbox3d_state;
 
@@ -2064,6 +2074,37 @@ static bool sandbox3d_parse_terrain_capture_view(
     if (strcmp(value, "close") == 0)
     {
         *out_view = SANDBOX3D_TERRAIN_CAPTURE_VIEW_CLOSE;
+        return true;
+    }
+    return false;
+}
+
+static bool sandbox3d_parse_showcase_capture_view(
+    const char* value,
+    sandbox3d_showcase_capture_view* out_view)
+{
+    if (value == NULL || out_view == NULL)
+    {
+        return false;
+    }
+    if (strcmp(value, "wide") == 0)
+    {
+        *out_view = SANDBOX3D_SHOWCASE_CAPTURE_VIEW_WIDE;
+        return true;
+    }
+    if (strcmp(value, "front") == 0)
+    {
+        *out_view = SANDBOX3D_SHOWCASE_CAPTURE_VIEW_FRONT;
+        return true;
+    }
+    if (strcmp(value, "three-quarter") == 0)
+    {
+        *out_view = SANDBOX3D_SHOWCASE_CAPTURE_VIEW_THREE_QUARTER;
+        return true;
+    }
+    if (strcmp(value, "profile") == 0)
+    {
+        *out_view = SANDBOX3D_SHOWCASE_CAPTURE_VIEW_PROFILE;
         return true;
     }
     return false;
@@ -3884,6 +3925,108 @@ static bool sandbox3d_get_scene_framing_bounds(
     }
 
     return false;
+}
+
+static bool sandbox3d_get_named_showcase_framing_bounds(
+    const sandbox3d_state* state,
+    const char* name_prefix,
+    henka_bounds* out_bounds)
+{
+    size_t entity_index;
+    size_t prefix_length;
+
+    if (state == NULL || state->scene == NULL || name_prefix == NULL || out_bounds == NULL)
+    {
+        return false;
+    }
+    prefix_length = strlen(name_prefix);
+    if (prefix_length == 0U)
+    {
+        return false;
+    }
+
+    for (entity_index = 0U;
+         entity_index < henka_scene_get_entity_count(state->scene);
+         ++entity_index)
+    {
+        henka_entity entity;
+        const char* name;
+        henka_transform transform;
+        henka_bounds bounds;
+
+        entity = henka_scene_get_entity_at_index(state->scene, entity_index);
+        if (entity == HENKA_INVALID_ENTITY ||
+            !henka_scene_is_entity_visible(state->scene, entity) ||
+            henka_scene_is_entity_helper(state->scene, entity))
+        {
+            continue;
+        }
+        name = henka_scene_get_entity_name(state->scene, entity);
+        if (name == NULL || strncmp(name, name_prefix, prefix_length) != 0)
+        {
+            continue;
+        }
+        if (henka_scene_get_entity_world_bounds(state->scene, entity, &bounds) != HENKA_SUCCESS)
+        {
+            if (henka_scene_get_entity_transform(state->scene, entity, &transform) != HENKA_SUCCESS ||
+                !sandbox3d_vec3_is_finite(transform.position) ||
+                !sandbox3d_vec3_is_finite(transform.scale))
+            {
+                return false;
+            }
+            bounds.center = transform.position;
+            bounds.extents = (henka_vec3){
+                fmaxf(0.25f, fminf(100.0f, fabsf(transform.scale.x) * 0.75f)),
+                fmaxf(0.25f, fminf(100.0f, fabsf(transform.scale.y) * 0.75f)),
+                fmaxf(0.25f, fminf(100.0f, fabsf(transform.scale.z) * 0.75f))};
+        }
+        if (!sandbox3d_vec3_is_finite(bounds.center) ||
+            !sandbox3d_vec3_is_finite(bounds.extents) ||
+            bounds.extents.x < 0.0f || bounds.extents.y < 0.0f || bounds.extents.z < 0.0f)
+        {
+            return false;
+        }
+        *out_bounds = bounds;
+        return true;
+    }
+    return false;
+}
+
+static bool sandbox3d_set_named_showcase_local_bounds(
+    henka_scene* scene,
+    const char* name_prefix,
+    henka_bounds bounds)
+{
+    size_t entity_index;
+    size_t prefix_length;
+    bool found;
+
+    if (scene == NULL || name_prefix == NULL ||
+        !sandbox3d_vec3_is_finite(bounds.center) ||
+        !sandbox3d_vec3_is_finite(bounds.extents) ||
+        bounds.extents.x < 0.0f || bounds.extents.y < 0.0f || bounds.extents.z < 0.0f)
+    {
+        return false;
+    }
+    prefix_length = strlen(name_prefix);
+    found = false;
+    for (entity_index = 0U; entity_index < henka_scene_get_entity_count(scene); ++entity_index)
+    {
+        henka_entity entity;
+        const char* name;
+
+        entity = henka_scene_get_entity_at_index(scene, entity_index);
+        name = entity == HENKA_INVALID_ENTITY ? NULL : henka_scene_get_entity_name(scene, entity);
+        if (name != NULL && strncmp(name, name_prefix, prefix_length) == 0)
+        {
+            if (henka_scene_set_entity_local_bounds(scene, entity, bounds) != HENKA_SUCCESS)
+            {
+                return false;
+            }
+            found = true;
+        }
+    }
+    return found;
 }
 
 static bool sandbox3d_validate_startup_camera(const sandbox3d_state* state)
@@ -7042,9 +7185,83 @@ static void sandbox3d_apply_capture_camera(sandbox3d_state* state)
     /* Capture evidence uses deterministic cameras, while normal editor
      * startup uses the scene-first reset framing path. */
     {
-        henka_vec3 target;
-        henka_vec3 position;
-        if (!state->terrain_capture_mode_requested)
+        bool framed_from_bounds;
+        bool have_showcase_bounds;
+        henka_bounds showcase_bounds = (henka_bounds){{0.0f, 0.0f, 0.0f}, {0.0f, 0.0f, 0.0f}};
+        henka_vec3 target = (henka_vec3){0.0f, 2.0f, -1.7f};
+        henka_vec3 position = (henka_vec3){0.0f, 3.0f, 8.8f};
+        float showcase_yaw;
+        float showcase_pitch;
+
+        framed_from_bounds = false;
+        have_showcase_bounds = false;
+        showcase_yaw = -HENKA_PI * 0.5f;
+        showcase_pitch = -0.08f;
+        if (!state->terrain_capture_mode_requested && state->showcase_capture_view_requested)
+        {
+            switch (state->showcase_capture_view)
+            {
+                case SANDBOX3D_SHOWCASE_CAPTURE_VIEW_FRONT:
+                    showcase_yaw = -HENKA_PI * 0.5f;
+                    have_showcase_bounds = sandbox3d_get_named_showcase_framing_bounds(
+                        state, "Showcase Giraffe", &showcase_bounds);
+                    break;
+                case SANDBOX3D_SHOWCASE_CAPTURE_VIEW_THREE_QUARTER:
+                    showcase_yaw = -0.92f;
+                    have_showcase_bounds = sandbox3d_get_named_showcase_framing_bounds(
+                        state, "Showcase Giraffe", &showcase_bounds);
+                    break;
+                case SANDBOX3D_SHOWCASE_CAPTURE_VIEW_PROFILE:
+                    showcase_yaw = 0.0f;
+                    have_showcase_bounds = sandbox3d_get_named_showcase_framing_bounds(
+                        state, "Showcase Giraffe", &showcase_bounds);
+                    break;
+                case SANDBOX3D_SHOWCASE_CAPTURE_VIEW_WIDE:
+                default:
+                    showcase_yaw = -HENKA_PI * 0.5f;
+                    have_showcase_bounds = sandbox3d_get_scene_framing_bounds(state, &showcase_bounds);
+                    break;
+            }
+            if (have_showcase_bounds)
+            {
+                framed_from_bounds = henka_camera_frame_bounds(
+                    &state->camera,
+                    showcase_bounds,
+                    showcase_yaw,
+                    showcase_pitch);
+            }
+            if (framed_from_bounds)
+            {
+                /* The actual imported entity bounds own the capture target and
+                 * distance. This keeps evidence valid when the asset's
+                 * authored transform changes, without hiding defects by
+                 * cropping the model. */
+            }
+            else
+            {
+                switch (state->showcase_capture_view)
+                {
+                    case SANDBOX3D_SHOWCASE_CAPTURE_VIEW_FRONT:
+                        target = (henka_vec3){-2.15f, 2.25f, -1.7f};
+                        position = (henka_vec3){-2.15f, 2.30f, 4.65f};
+                        break;
+                    case SANDBOX3D_SHOWCASE_CAPTURE_VIEW_THREE_QUARTER:
+                        target = (henka_vec3){-2.15f, 2.25f, -1.7f};
+                        position = (henka_vec3){-5.45f, 2.70f, 2.55f};
+                        break;
+                    case SANDBOX3D_SHOWCASE_CAPTURE_VIEW_PROFILE:
+                        target = (henka_vec3){-2.15f, 2.30f, -1.7f};
+                        position = (henka_vec3){-7.15f, 2.45f, -1.7f};
+                        break;
+                    case SANDBOX3D_SHOWCASE_CAPTURE_VIEW_WIDE:
+                    default:
+                        target = (henka_vec3){0.0f, 2.10f, -1.7f};
+                        position = (henka_vec3){0.0f, 2.90f, 12.50f};
+                        break;
+                }
+            }
+        }
+        else if (!state->terrain_capture_mode_requested)
         {
             target = (henka_vec3){0.0f, 2.05f, -1.7f};
             position = (henka_vec3){0.0f, 3.0f, 8.8f};
@@ -7065,11 +7282,32 @@ static void sandbox3d_apply_capture_camera(sandbox3d_state* state)
             target = (henka_vec3){280.0f, 1.0f, 280.0f};
             position = (henka_vec3){360.0f, 38.0f, 360.0f};
         }
-        const henka_vec3 direction = henka_vec3_normalize(
-            henka_vec3_subtract(target, position));
-        state->camera.position = position;
-        state->camera.yaw_radians = atan2f(direction.z, direction.x);
-        state->camera.pitch_radians = asinf(direction.y);
+        if (!framed_from_bounds)
+        {
+            const henka_vec3 direction = henka_vec3_normalize(
+                henka_vec3_subtract(target, position));
+            state->camera.position = position;
+            state->camera.yaw_radians = atan2f(direction.z, direction.x);
+            state->camera.pitch_radians = asinf(direction.y);
+        }
+        if (state->showcase_capture_view_requested)
+        {
+            HENKA_LOG_INFO(
+                "Showcase capture camera: view=%d bounds=%s center=(%.2f,%.2f,%.2f) extents=(%.2f,%.2f,%.2f) position=(%.2f,%.2f,%.2f) yaw=%.3f pitch=%.3f.",
+                (int)state->showcase_capture_view,
+                framed_from_bounds ? "yes" : "fallback",
+                showcase_bounds.center.x,
+                showcase_bounds.center.y,
+                showcase_bounds.center.z,
+                showcase_bounds.extents.x,
+                showcase_bounds.extents.y,
+                showcase_bounds.extents.z,
+                state->camera.position.x,
+                state->camera.position.y,
+                state->camera.position.z,
+                state->camera.yaw_radians,
+                state->camera.pitch_radians);
+        }
     }
     state->camera.far_plane = 800.0f;
     state->camera_preset = HENKA_CAMERA_PRESET_PERSPECTIVE_3D;
@@ -18535,7 +18773,12 @@ static henka_result sandbox3d_initialize(henka_engine* engine, void* user_data)
         goto fail;
     }
 
-    result = henka_mesh_create_plane(engine, 12.0f, 12.0f, &state->ground_mesh);
+    /* Keep the studio floor beyond the camera's practical horizon. A small
+     * finite plane exposed an unintended diagonal environment seam in
+     * Rendered and Material Preview captures as the camera framed the
+     * showcase assets. This remains bounded geometry, while grid lines stay
+     * an independent editor helper above the surface. */
+    result = henka_mesh_create_plane(engine, 64.0f, 64.0f, &state->ground_mesh);
     if (result != HENKA_SUCCESS)
     {
         goto fail;
@@ -18658,6 +18901,15 @@ static henka_result sandbox3d_initialize(henka_engine* engine, void* user_data)
         HENKA_LOG_ERROR("Showcase giraffe instantiation failed: %s (parts=%zu)", henka_result_to_string(result), giraffe_entity_count);
         goto fail;
     }
+    if (!sandbox3d_set_named_showcase_local_bounds(
+            state->scene,
+            "Showcase Giraffe",
+            (henka_bounds){{0.0f, 2.35f, 0.0f}, {0.96f, 2.30f, 0.76f}}))
+    {
+        HENKA_LOG_ERROR("Showcase giraffe bounds could not be assigned.");
+        result = HENKA_ERROR_UNKNOWN;
+        goto fail;
+    }
 
     rocket_scene_asset = NULL;
     result = henka_assets_load_gltf_scene_asset(
@@ -18680,6 +18932,15 @@ static henka_result sandbox3d_initialize(henka_engine* engine, void* user_data)
     if (result != HENKA_SUCCESS || rocket_entity_count == 0U)
     {
         HENKA_LOG_ERROR("Showcase rocket instantiation failed: %s (parts=%zu)", henka_result_to_string(result), rocket_entity_count);
+        goto fail;
+    }
+    if (!sandbox3d_set_named_showcase_local_bounds(
+            state->scene,
+            "Showcase Rocket",
+            (henka_bounds){{0.0f, 1.60f, 0.0f}, {1.05f, 1.70f, 1.05f}}))
+    {
+        HENKA_LOG_ERROR("Showcase rocket bounds could not be assigned.");
+        result = HENKA_ERROR_UNKNOWN;
         goto fail;
     }
     printf(
@@ -19464,6 +19725,14 @@ static henka_result sandbox3d_initialize(henka_engine* engine, void* user_data)
         state->workspace.active_utility = SANDBOX3D_UTILITY_PHYSICS_QA;
     }
     henka_ui_set_visible(state->ui, state->startup_panels_auto_opened);
+    if (state->showcase_capture_view_requested)
+    {
+        /* Dedicated mascot inspection is application-only evidence. Keep the
+         * real renderer and scene path active, but remove editor chrome so the
+         * close and silhouette views cannot hide construction defects behind
+         * dock panels. */
+        henka_ui_set_visible(state->ui, false);
+    }
     state->ui_visibility_report_pending = state->startup_panels_auto_opened;
     sandbox3d_set_status(
         state,
@@ -21372,6 +21641,24 @@ static void sandbox3d_update(henka_engine* engine, double delta_seconds, void* u
             sandbox3d_workspace_set_ui_scale(&state->workspace.model, 1.0f);
         }
         layout = sandbox3d_get_workspace_layout(state, framebuffer_width, framebuffer_height);
+        if (state->showcase_capture_view_requested)
+        {
+            /* Dedicated visual evidence has no editor chrome. Do not leave a
+             * saved dock topology owning a stale narrow renderer viewport
+             * after the panels are hidden: the scene must own the full
+             * framebuffer for every showcase angle and shading mode. */
+            layout.scene_frame = (henka_ui_rect){
+                0.0f,
+                0.0f,
+                (float)framebuffer_width,
+                (float)framebuffer_height};
+            layout.scene_viewport = (henka_viewport){
+                0,
+                0,
+                framebuffer_width,
+                framebuffer_height};
+            layout.debug_strip = (henka_ui_rect){0.0f, 0.0f, 0.0f, 0.0f};
+        }
         if (state->gizmo.drag.dragging &&
             !sandbox3d_viewports_match(layout.scene_viewport, state->gizmo.drag.drag_start_viewport))
         {
@@ -21382,12 +21669,12 @@ static void sandbox3d_update(henka_engine* engine, double delta_seconds, void* u
         henka_engine_set_scene_viewport(engine, layout.scene_viewport);
         henka_camera_set_aspect_ratio(&state->camera, henka_viewport_get_aspect_ratio(layout.scene_viewport));
     }
-    else
-    {
-        sandbox3d_workspace_set_ui_scale(&state->workspace.model, 1.0f);
-        state->frame_layout = sandbox3d_get_workspace_layout(state, 1280, 720);
-        henka_engine_set_scene_viewport(engine, state->frame_layout.scene_viewport);
-    }
+        else
+        {
+            sandbox3d_workspace_set_ui_scale(&state->workspace.model, 1.0f);
+            state->frame_layout = sandbox3d_get_workspace_layout(state, 1280, 720);
+            henka_engine_set_scene_viewport(engine, state->frame_layout.scene_viewport);
+        }
 
     if (state->startup_frame_pending)
     {
@@ -21771,6 +22058,76 @@ static void sandbox3d_update(henka_engine* engine, double delta_seconds, void* u
 
     sandbox3d_update_physics(state, delta_seconds);
     henka_scene_set_camera(state->scene, &state->camera);
+    if (state->showcase_capture_view_requested && henka_engine_get_frame_index(engine) <= 1U)
+    {
+        henka_viewport capture_viewport;
+        henka_bounds capture_bounds;
+        henka_vec2 projected_center;
+        henka_transform capture_transform = henka_transform_identity();
+        bool have_capture_transform = false;
+        size_t capture_entity_index;
+        const bool have_capture_bounds =
+            sandbox3d_get_named_showcase_framing_bounds(
+                state,
+                "Showcase Giraffe",
+                &capture_bounds);
+        for (capture_entity_index = 0U;
+             capture_entity_index < henka_scene_get_entity_count(state->scene);
+             ++capture_entity_index)
+        {
+            const henka_entity capture_entity =
+                henka_scene_get_entity_at_index(state->scene, capture_entity_index);
+            const char* capture_name =
+                capture_entity == HENKA_INVALID_ENTITY
+                    ? NULL
+                    : henka_scene_get_entity_name(state->scene, capture_entity);
+            if (capture_name != NULL &&
+                strncmp(capture_name, "Showcase Giraffe", strlen("Showcase Giraffe")) == 0 &&
+                henka_scene_get_entity_transform(state->scene, capture_entity, &capture_transform) == HENKA_SUCCESS)
+            {
+                have_capture_transform = true;
+                break;
+            }
+        }
+        if (henka_engine_get_scene_viewport(engine, &capture_viewport) == HENKA_SUCCESS &&
+            have_capture_bounds &&
+            henka_camera_world_to_screen(
+                &state->camera,
+                capture_viewport.width,
+                capture_viewport.height,
+                capture_bounds.center,
+                &projected_center,
+                NULL) == HENKA_SUCCESS)
+        {
+            HENKA_LOG_INFO(
+                "Showcase capture runtime: viewport=%d,%d %dx%d camera=(%.2f,%.2f,%.2f) yaw=%.3f pitch=%.3f bounds=(%.2f,%.2f,%.2f) projected=(%.2f,%.2f).",
+                capture_viewport.x,
+                capture_viewport.y,
+                capture_viewport.width,
+                capture_viewport.height,
+                state->camera.position.x,
+                state->camera.position.y,
+                state->camera.position.z,
+                state->camera.yaw_radians,
+                state->camera.pitch_radians,
+                capture_bounds.center.x,
+                capture_bounds.center.y,
+                capture_bounds.center.z,
+                projected_center.x,
+                projected_center.y);
+            if (have_capture_transform)
+            {
+                HENKA_LOG_INFO(
+                    "Showcase capture entity transform: position=(%.2f,%.2f,%.2f) scale=(%.2f,%.2f,%.2f).",
+                    capture_transform.position.x,
+                    capture_transform.position.y,
+                    capture_transform.position.z,
+                    capture_transform.scale.x,
+                    capture_transform.scale.y,
+                    capture_transform.scale.z);
+            }
+        }
+    }
     sandbox3d_update_gizmo_rendering(state);
     sandbox3d_refresh_interaction_diagnostics(engine, state);
     sandbox3d_build_ui(engine, state);
@@ -22048,7 +22405,9 @@ int main(int argc, char** argv)
     bool terrain_stream_stress;
     bool capture_mode_requested;
     bool terrain_capture_mode_requested;
+    bool showcase_capture_view_requested;
     sandbox3d_terrain_capture_view terrain_capture_view;
+    sandbox3d_showcase_capture_view showcase_capture_view;
     henka_viewport_shading_mode capture_mode;
 
     smoke_test = false;
@@ -22060,7 +22419,9 @@ int main(int argc, char** argv)
     terrain_stream_stress = false;
     capture_mode_requested = false;
     terrain_capture_mode_requested = false;
+    showcase_capture_view_requested = false;
     terrain_capture_view = SANDBOX3D_TERRAIN_CAPTURE_VIEW_WIDE;
+    showcase_capture_view = SANDBOX3D_SHOWCASE_CAPTURE_VIEW_WIDE;
     capture_mode = HENKA_VIEWPORT_SHADING_RENDERED;
     if (argc == 2 && strcmp(argv[1], "--smoke-test") == 0)
     {
@@ -22100,6 +22461,13 @@ int main(int argc, char** argv)
     {
         capture_mode_requested = true;
     }
+    else if (argc == 4 && strcmp(argv[1], "--capture-showcase-view") == 0 &&
+        sandbox3d_parse_showcase_capture_view(argv[2], &showcase_capture_view) &&
+        henka_viewport_shading_mode_parse(argv[3], &capture_mode) == HENKA_SUCCESS)
+    {
+        capture_mode_requested = true;
+        showcase_capture_view_requested = true;
+    }
     else if (argc == 3 && strcmp(argv[1], "--capture-terrain-mode") == 0 &&
         henka_viewport_shading_mode_parse(argv[2], &capture_mode) == HENKA_SUCCESS)
     {
@@ -22115,7 +22483,7 @@ int main(int argc, char** argv)
     }
     else if (argc != 1)
     {
-        fprintf(stderr, "Usage: %s [--primitive-gallery | --smoke-test | --residency-stress | --temporal-stress | --material-stress | --environment-stress | --terrain-stream-stress | --capture-mode solid|material_preview|rendered | --capture-terrain-mode solid|material_preview|rendered | --capture-terrain-view wide|corner|close solid|material_preview|rendered]\n", argv[0]);
+        fprintf(stderr, "Usage: %s [--primitive-gallery | --smoke-test | --residency-stress | --temporal-stress | --material-stress | --environment-stress | --terrain-stream-stress | --capture-mode solid|material_preview|rendered | --capture-showcase-view wide|front|three-quarter|profile solid|material_preview|rendered | --capture-terrain-mode solid|material_preview|rendered | --capture-terrain-view wide|corner|close solid|material_preview|rendered]\n", argv[0]);
         return 2;
     }
 
@@ -22129,7 +22497,9 @@ int main(int argc, char** argv)
     state.terrain_stream_stress = terrain_stream_stress;
     state.capture_mode_requested = capture_mode_requested;
     state.terrain_capture_mode_requested = terrain_capture_mode_requested;
+    state.showcase_capture_view_requested = showcase_capture_view_requested;
     state.terrain_capture_view = terrain_capture_view;
+    state.showcase_capture_view = showcase_capture_view;
     state.capture_mode = capture_mode;
     state.asset_browser_type = HENKA_ASSET_TYPE_TEXTURE;
     state.camera = henka_camera_create_perspective(60.0f * HENKA_DEG_TO_RAD, 16.0f / 9.0f, 0.1f, 100.0f);

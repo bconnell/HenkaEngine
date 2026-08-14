@@ -8,6 +8,8 @@ param(
 
     [switch]$IncludeStartupShowcase,
 
+    [switch]$IncludeGiraffeInspection,
+
     [switch]$IncludeTerrain
 )
 
@@ -99,6 +101,7 @@ $records.Add("Source: $executable")
 $records.Add("Camera policy: capture-mode runs use the same deterministic two-model showcase camera and never save capture-mode settings")
 $records.Add("Modes: Solid, Material Preview, Rendered")
 $records.Add("Startup evidence: optional ordinary startup camera with the default showcase models")
+$records.Add("Giraffe inspection: optional close front, three-quarter, profile, and wide Rendered views plus front Material Preview")
 $records.Add("Terrain evidence: deterministic wide, close-material, and four-region-corner cameras")
 $records.Add("Capture: application window bounds copied from the desktop into repo-local generated output")
 
@@ -162,6 +165,79 @@ foreach ($mode in $modes) {
         }
         if ($null -ne $process) {
             $process.Dispose()
+        }
+    }
+}
+
+if ($IncludeGiraffeInspection) {
+    $giraffeModes = @(
+        @{ Label = "giraffe_front_rendered"; Arguments = @("--capture-showcase-view", "front", "rendered"); File = "giraffe-front-rendered.png" },
+        @{ Label = "giraffe_three_quarter_rendered"; Arguments = @("--capture-showcase-view", "three-quarter", "rendered"); File = "giraffe-three-quarter-rendered.png" },
+        @{ Label = "giraffe_profile_rendered"; Arguments = @("--capture-showcase-view", "profile", "rendered"); File = "giraffe-profile-rendered.png" },
+        @{ Label = "giraffe_wide_rendered"; Arguments = @("--capture-showcase-view", "wide", "rendered"); File = "giraffe-wide-rendered.png" },
+        @{ Label = "giraffe_front_material_preview"; Arguments = @("--capture-showcase-view", "front", "material_preview"); File = "giraffe-front-material-preview.png" }
+    )
+    foreach ($giraffeMode in $giraffeModes) {
+        $process = Start-HenkaProcess `
+            -FilePath $executable `
+            -Arguments $giraffeMode.Arguments `
+            -WorkingDirectory (Split-Path -Parent $executable)
+        $handle = [IntPtr]::Zero
+        try {
+            for ($attempt = 0; $attempt -lt 80 -and $handle -eq [IntPtr]::Zero; ++$attempt) {
+                Start-Sleep -Milliseconds 250
+                $process.Refresh()
+                $handle = [HenkaVisualCaptureNativeMethods]::FindSandboxWindow([uint32]$process.Id)
+            }
+            if ($handle -eq [IntPtr]::Zero -or -not [HenkaVisualCaptureNativeMethods]::IsWindow($handle)) {
+                throw "Sandbox window did not become available for $($giraffeMode.Label)."
+            }
+            [HenkaVisualCaptureNativeMethods]::ActivateSandboxWindow($handle)
+            Start-Sleep -Milliseconds 1500
+            $rect = New-Object HenkaVisualCaptureNativeMethods+RECT
+            $dwmResult = [HenkaVisualCaptureNativeMethods]::DwmGetWindowAttribute(
+                $handle,
+                9,
+                [ref]$rect,
+                [System.Runtime.InteropServices.Marshal]::SizeOf($rect))
+            if ($dwmResult -ne 0) {
+                throw "Window bounds could not be read for $($giraffeMode.Label): $dwmResult"
+            }
+            $width = $rect.Right - $rect.Left
+            $height = $rect.Bottom - $rect.Top
+            if ($width -le 0 -or $height -le 0) {
+                throw "Window bounds were invalid for $($giraffeMode.Label)."
+            }
+            $bitmap = New-Object System.Drawing.Bitmap($width, $height)
+            try {
+                $graphics = [System.Drawing.Graphics]::FromImage($bitmap)
+                try {
+                    $graphics.CopyFromScreen($rect.Left, $rect.Top, 0, 0, $bitmap.Size)
+                }
+                finally {
+                    $graphics.Dispose()
+                }
+                $path = Join-Path $OutputDirectory $giraffeMode.File
+                $bitmap.Save($path, [System.Drawing.Imaging.ImageFormat]::Png)
+                $hash = (Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash.ToLowerInvariant()
+                $records.Add("$($giraffeMode.Label): $($giraffeMode.File) SHA-256=$hash bounds=$width`x$height")
+            }
+            finally {
+                $bitmap.Dispose()
+            }
+        }
+        finally {
+            if ($null -ne $process -and -not $process.HasExited) {
+                if ($handle -ne [IntPtr]::Zero) {
+                    [HenkaVisualCaptureNativeMethods]::PostMessage($handle, 0x0010, [IntPtr]::Zero, [IntPtr]::Zero) | Out-Null
+                }
+                if (-not $process.WaitForExit(10000)) {
+                    Stop-HenkaProcessTree -ProcessId $process.Id
+                }
+            }
+            if ($null -ne $process) {
+                $process.Dispose()
+            }
         }
     }
 }

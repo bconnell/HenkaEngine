@@ -13,6 +13,40 @@ The generated glTF files use material factors plus the renderer-supported clearc
 
 The packaged studio HDR fixture is also generated in memory and now contains bounded asymmetric warm-key and cool-fill area-light lobes. This gives clearcoat, brushed metal, and emissive engine details a stable highlight structure through the derived IBL path while retaining the direct local-light and shadow fixtures. It is an authored lighting reference, not a claim of photographic HDRI coverage.
 
+The Sandbox studio floor uses a bounded 64 m graphite plane beneath the
+independent debug grid. The larger surface keeps its finite far edge outside
+ordinary showcase framing, so Rendered and Material Preview do not acquire an
+unintended diagonal environment seam.
+
+## In-engine visual acceptance
+
+The normal Windows graphical path is the source of truth for showcase review. The
+existing same-camera capture covers Solid, Material Preview, and Rendered, while
+the dedicated Giraffe inspection capture launches the real Sandbox repeatedly
+with the generated glTF scene loaded and records a normal startup frame plus
+close front, close three-quarter, close profile, and wide silhouette Rendered
+views. It also records a front Material Preview comparison. The dedicated views
+hide only editor chrome for application-only inspection; they do not replace the
+scene, material, lighting, asset-manager, or renderer path.
+
+```powershell
+.\scripts\capture_visual_evidence_windows.ps1 `
+  -Configuration Debug `
+  -OutputDirectory (Join-Path (Get-Location) "build\visual_evidence_giraffe") `
+  -IncludeStartupShowcase `
+  -IncludeGiraffeInspection
+.\scripts\check_showcase_visual_evidence_windows.ps1 `
+  -InputDirectory (Join-Path (Get-Location) "build\visual_evidence_giraffe")
+```
+
+The validator checks that the evidence identifies the Henka Sandbox executable,
+contains all required views, and rejects missing, flat, low-chroma, or
+dimension-invalid frames. Those objective guards do not constitute human visual
+approval: inspect the retained images for silhouette, facial-feature assembly,
+neck/head attachment, eyes, ears, ossicones, nostrils, mouth, mane, spots,
+intersections, gaps, and material/shading defects. Generated evidence remains
+repo-local and is not committed.
+
 ## Runtime path
 
 Sandbox loads both files through `henka_assets_load_gltf_scene_asset` and instantiates them with `henka_assets_instantiate_gltf_scene`. Materials and texture dependencies remain manager-owned and use the same glTF material path as imported consumer assets. A missing or corrupted generated file fails initialization through the normal bounded asset error path; it is not replaced by hardcoded geometry in `main.c`.
