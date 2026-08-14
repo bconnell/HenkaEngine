@@ -216,6 +216,23 @@ vec3 safeNormalize(vec3 value, vec3 fallback)
     return lengthSquared > 0.000001 ? value * inversesqrt(lengthSquared) : fallback;
 }
 
+/* A bounded three-lobe diffusion-profile approximation for direct light. The
+ * lobes widen with authored thickness, which gives wax, skin, and thin
+ * translucent materials a more useful response than a single wrapped term.
+ * It is intentionally local to the shaded point: it does not claim true
+ * screen-space or multi-scatter transport. */
+float subsurfaceDirectProfile(vec3 normal, vec3 lightDirection, float thicknessValue)
+{
+    float normalLight = dot(normal, lightDirection);
+    float backLight = saturate(-normalLight);
+    float broadWidth = mix(0.20, 0.62, thicknessValue);
+    float broadLobe = saturate((normalLight + broadWidth) / (1.0 + broadWidth));
+    float wideLobe = pow(backLight, mix(5.0, 1.80, thicknessValue));
+    float middleLobe = pow(backLight, mix(11.0, 3.50, thicknessValue));
+    float narrowLobe = pow(backLight, mix(22.0, 7.0, thicknessValue));
+    return broadLobe * 0.24 + wideLobe * 0.46 + middleLobe * 0.22 + narrowLobe * 0.08;
+}
+
 vec3 parallaxCorrectReflectionDirection(vec3 direction)
 {
     if (!useReflectionProbe || !useReflectionProbeBoxProjection)
@@ -646,14 +663,8 @@ void main()
         }
         float shadow = shadowFactor(normal, lightDir);
         color += (diffuse + specular) * baseLayerTransmission * radiance * nDotL * shadow;
-        float subsurfaceWidth = mix(0.35, 0.85, surfaceThickness);
-        float backScatter = pow(
-            saturate(dot(-normal, lightDir)),
-            mix(3.5, 1.35, surfaceThickness));
-        float wrappedLight = saturate((dot(normal, lightDir) + subsurfaceWidth) /
-            (1.0 + subsurfaceWidth));
         color += albedo * surfaceSubsurfaceColor * surfaceSubsurface *
-            (backScatter * 0.78 + wrappedLight * 0.22) * radiance * shadow;
+            subsurfaceDirectProfile(normal, lightDir, surfaceThickness) * radiance * shadow;
 
         /* The shared scene moon is a bounded second directional source. It is
          * intentionally shadowless in this slice: the directional sun shadow
@@ -786,14 +797,8 @@ void main()
             vec3 localSpecular = localDistribution * localVisibility * localFresnel;
             vec3 localDiffuse = (1.0 - surfaceTransmission) * (1.0 - localFresnel) * (1.0 - surfaceMetallic) * albedo * diffuseEnergyWeight / PI;
             color += (localDiffuse + localSpecular) * localRadiance * localNDotL * localShadow;
-            float localSubsurfaceWidth = mix(0.35, 0.85, surfaceThickness);
-            float localBackScatter = pow(
-                saturate(dot(-normal, localLightDirection)),
-                mix(3.5, 1.35, surfaceThickness));
-            float localWrappedLight = saturate((dot(normal, localLightDirection) + localSubsurfaceWidth) /
-                (1.0 + localSubsurfaceWidth));
             color += albedo * surfaceSubsurfaceColor * surfaceSubsurface *
-                (localBackScatter * 0.78 + localWrappedLight * 0.22) * localRadiance * localShadow;
+                subsurfaceDirectProfile(normal, localLightDirection, surfaceThickness) * localRadiance * localShadow;
         }
     }
     else
