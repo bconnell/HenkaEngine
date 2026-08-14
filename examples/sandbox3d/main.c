@@ -894,8 +894,18 @@ static bool sandbox3d_material_editor_is_bool(henka_material_instance_parameter 
 
 static bool sandbox3d_material_editor_is_texture(henka_material_instance_parameter parameter)
 {
-    return parameter >= HENKA_MATERIAL_INSTANCE_BASE_COLOR_TEXTURE &&
-        parameter <= HENKA_MATERIAL_INSTANCE_EMISSIVE_TEXTURE;
+    return (parameter >= HENKA_MATERIAL_INSTANCE_BASE_COLOR_TEXTURE &&
+            parameter <= HENKA_MATERIAL_INSTANCE_EMISSIVE_TEXTURE) ||
+        parameter == HENKA_MATERIAL_INSTANCE_TRANSMISSION_TEXTURE;
+}
+
+static henka_material_texture_slot sandbox3d_material_editor_texture_slot(
+    henka_material_instance_parameter parameter)
+{
+    if (parameter == HENKA_MATERIAL_INSTANCE_TRANSMISSION_TEXTURE)
+        return HENKA_MATERIAL_TEXTURE_SLOT_TRANSMISSION;
+    return (henka_material_texture_slot)(
+        parameter - HENKA_MATERIAL_INSTANCE_BASE_COLOR_TEXTURE);
 }
 
 static float sandbox3d_material_editor_float_value(
@@ -1148,9 +1158,7 @@ static henka_result sandbox3d_material_editor_apply_delta(
             result =
                 henka_assets_material_instance_set_texture(
                     binding->instance,
-                    (henka_material_texture_slot)(
-                        parameter -
-                        HENKA_MATERIAL_INSTANCE_BASE_COLOR_TEXTURE),
+                    sandbox3d_material_editor_texture_slot(parameter),
                     NULL);
         }
         else
@@ -16133,10 +16141,21 @@ details_group_materials:
             {
                 static const char* texture_slot_labels[] =
                 {
-                    "Base Color", "Normal", "Metal/Rough", "Occlusion", "Emissive"
+                    "Base Color", "Normal", "Metal/Rough", "Occlusion", "Emissive", "Transmission"
+                };
+                static const henka_material_texture_slot texture_slots[] =
+                {
+                    HENKA_MATERIAL_TEXTURE_SLOT_BASE_COLOR,
+                    HENKA_MATERIAL_TEXTURE_SLOT_NORMAL,
+                    HENKA_MATERIAL_TEXTURE_SLOT_METALLIC_ROUGHNESS,
+                    HENKA_MATERIAL_TEXTURE_SLOT_OCCLUSION,
+                    HENKA_MATERIAL_TEXTURE_SLOT_EMISSIVE,
+                    HENKA_MATERIAL_TEXTURE_SLOT_TRANSMISSION
                 };
                 size_t texture_slot_index;
-                for (texture_slot_index = 0U; texture_slot_index < 5U; ++texture_slot_index)
+                for (texture_slot_index = 0U;
+                     texture_slot_index < sizeof(texture_slots) / sizeof(texture_slots[0]);
+                     ++texture_slot_index)
                 {
                     sandbox3d_texture_slot_display slot_display;
                     char slot_value[160];
@@ -16146,18 +16165,24 @@ details_group_materials:
                     const bool editable =
                         material_view.access == SANDBOX3D_MATERIAL_ACCESS_EDITABLE_INSTANCE &&
                         material_view.editor_binding != NULL;
-                    const unsigned int texture_parameter =
+                    const bool transmission_slot =
+                        texture_slots[texture_slot_index] == HENKA_MATERIAL_TEXTURE_SLOT_TRANSMISSION;
+                    const unsigned int texture_parameter = transmission_slot ?
+                        (unsigned int)HENKA_MATERIAL_INSTANCE_TRANSMISSION_TEXTURE :
                         (unsigned int)HENKA_MATERIAL_INSTANCE_BASE_COLOR_TEXTURE +
-                        (unsigned int)texture_slot_index;
-                    const bool overridden = editable && texture_parameter < 32U &&
-                        (material_view.editor_binding->instance->override_mask &
-                         (uint32_t)(1U << texture_parameter)) != 0U;
+                            (unsigned int)texture_slot_index;
+                    const bool overridden = editable &&
+                        (transmission_slot ?
+                            (material_view.editor_binding->instance->texture_override_mask & 1U) != 0U :
+                            (texture_parameter < 32U &&
+                                (material_view.editor_binding->instance->override_mask &
+                                 (uint32_t)(1U << texture_parameter)) != 0U));
 
                     memset(&slot_display, 0, sizeof(slot_display));
                     if (sandbox3d_format_material_texture_slot(
                             henka_engine_get_asset_manager_const(engine),
                             &material_view.material,
-                            (henka_material_texture_slot)texture_slot_index,
+                            texture_slots[texture_slot_index],
                             &slot_display) != HENKA_SUCCESS)
                     {
                         snprintf(slot_value, sizeof(slot_value), "Unavailable");
@@ -16194,7 +16219,7 @@ details_group_materials:
                                 engine,
                                 state,
                                 material_view.editor_binding,
-                                (henka_material_texture_slot)texture_slot_index,
+                                texture_slots[texture_slot_index],
                                 state->asset_browser_selected_texture) == HENKA_SUCCESS)
                         {
                             sandbox3d_set_status(state, false, "Texture assigned to the editable material instance.");
@@ -16215,7 +16240,7 @@ details_group_materials:
                                 engine,
                                 state,
                                 material_view.editor_binding,
-                                (henka_material_texture_slot)texture_slot_index) == HENKA_SUCCESS)
+                                texture_slots[texture_slot_index]) == HENKA_SUCCESS)
                         {
                             sandbox3d_set_status(state, false, "Texture slot restored from the material definition.");
                         }
@@ -16235,7 +16260,7 @@ details_group_materials:
                                 engine,
                                 state,
                                 material_view.editor_binding,
-                                (henka_material_texture_slot)texture_slot_index,
+                                texture_slots[texture_slot_index],
                                 NULL) == HENKA_SUCCESS)
                         {
                             sandbox3d_set_status(state, false, "Texture cleared from the editable material instance.");

@@ -152,8 +152,27 @@ static henka_texture* sandbox3d_material_texture_for_slot(
             return material->occlusion_texture;
         case HENKA_MATERIAL_TEXTURE_SLOT_EMISSIVE:
             return material->emissive_texture;
+        case HENKA_MATERIAL_TEXTURE_SLOT_TRANSMISSION:
+            return material->transmission_texture;
         default:
             return NULL;
+    }
+}
+
+static bool sandbox3d_material_texture_slot_is_instance_slot(
+    henka_material_texture_slot slot)
+{
+    switch (slot)
+    {
+        case HENKA_MATERIAL_TEXTURE_SLOT_BASE_COLOR:
+        case HENKA_MATERIAL_TEXTURE_SLOT_NORMAL:
+        case HENKA_MATERIAL_TEXTURE_SLOT_METALLIC_ROUGHNESS:
+        case HENKA_MATERIAL_TEXTURE_SLOT_OCCLUSION:
+        case HENKA_MATERIAL_TEXTURE_SLOT_EMISSIVE:
+        case HENKA_MATERIAL_TEXTURE_SLOT_TRANSMISSION:
+            return true;
+        default:
+            return false;
     }
 }
 
@@ -375,8 +394,7 @@ henka_result sandbox3d_format_material_texture_slot(
         memset(out_display, 0, sizeof(*out_display));
     }
     if (manager == NULL || material == NULL || out_display == NULL ||
-        slot < HENKA_MATERIAL_TEXTURE_SLOT_BASE_COLOR ||
-        slot > HENKA_MATERIAL_TEXTURE_SLOT_EMISSIVE)
+        !sandbox3d_material_texture_slot_is_instance_slot(slot))
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
@@ -477,14 +495,15 @@ henka_result sandbox3d_restore_material_instance_texture(
     henka_result result;
 
     if (manager == NULL || instance == NULL ||
-        slot < HENKA_MATERIAL_TEXTURE_SLOT_BASE_COLOR ||
-        slot > HENKA_MATERIAL_TEXTURE_SLOT_EMISSIVE)
+        !sandbox3d_material_texture_slot_is_instance_slot(slot))
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
 
-    parameter = (henka_material_instance_parameter)(
-        HENKA_MATERIAL_INSTANCE_BASE_COLOR_TEXTURE + slot);
+    parameter = slot == HENKA_MATERIAL_TEXTURE_SLOT_TRANSMISSION
+        ? HENKA_MATERIAL_INSTANCE_TRANSMISSION_TEXTURE
+        : (henka_material_instance_parameter)(
+            HENKA_MATERIAL_INSTANCE_BASE_COLOR_TEXTURE + slot);
     candidate = *instance;
     result = henka_assets_material_instance_reset_override(&candidate, parameter);
     if (result != HENKA_SUCCESS)
