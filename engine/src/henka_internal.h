@@ -224,6 +224,31 @@ typedef struct henka_asset_texture_entry
     henka_asset_metadata metadata;
 } henka_asset_texture_entry;
 
+typedef struct henka_texture_residency_io_job
+{
+    bool active;
+    henka_texture* texture;
+    char* path;
+    henka_texture_descriptor descriptor;
+    uint32_t resident_mip_count;
+    uint64_t content_revision;
+    uint64_t sequence;
+} henka_texture_residency_io_job;
+
+typedef struct henka_texture_residency_io_completion
+{
+    bool active;
+    henka_texture* texture;
+    unsigned char* bytes;
+    size_t byte_count;
+    uint32_t resident_mip_count;
+    uint64_t content_revision;
+    uint64_t sequence;
+    uint64_t source_failed_bytes;
+    bool source_size_known;
+    henka_result result;
+} henka_texture_residency_io_completion;
+
 /* One case-insensitive suffix contract is shared by loading, residency, and
  * budget eviction so a texture cannot be streamable in only one path. */
 bool henka_asset_texture_path_is_ktx2(const char* path);
@@ -318,6 +343,15 @@ struct henka_asset_manager
     uint64_t texture_residency_trim_failure_count;
     uint64_t texture_residency_frame_index;
     bool texture_residency_frame_active;
+    henka_texture_residency_progression_mode texture_residency_progression_mode;
+    void* texture_residency_worker_lock;
+    void* texture_residency_worker_condition;
+    void* texture_residency_worker_handle;
+    bool texture_residency_worker_stop;
+    henka_texture_residency_io_job texture_residency_io_job;
+    henka_texture_residency_io_completion texture_residency_io_completion;
+    uint64_t texture_residency_io_sequence;
+    uint64_t texture_residency_io_cancel_before;
 };
 
 struct henka_scene
@@ -564,6 +598,13 @@ void henka_renderer_destroy_shader(struct henka_shader* shader);
 henka_result henka_texture_create_from_file_with_descriptor_and_mip_limit(
     henka_engine* engine,
     const char* path,
+    const henka_texture_descriptor* descriptor,
+    uint32_t max_resident_mips,
+    henka_texture** out_texture);
+henka_result henka_texture_create_from_ktx2_memory_with_mip_limit(
+    henka_engine* engine,
+    const unsigned char* data,
+    size_t data_size,
     const henka_texture_descriptor* descriptor,
     uint32_t max_resident_mips,
     henka_texture** out_texture);

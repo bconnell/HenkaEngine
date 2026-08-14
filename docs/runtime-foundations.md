@@ -141,8 +141,15 @@ active frame before this trim step, and diagnostics report the bounded pin count
 Visible KTX2 targets use projected texture radius from validated entity bounds,
 camera projection, and scene viewport, with deterministic distance fallback when
 those inputs are invalid. A small threshold hysteresis band suppresses repeated
-promotion/demotion when a reference remains near a target boundary. Background I/O
-and broader automatic frame policy remain unfinished.
+promotion/demotion when a reference remains near a target boundary. On Windows,
+callers may select asynchronous progression: one bounded worker reads one source
+file at a time, while the render-thread process call validates the bytes and
+commits the replacement GPU payload transactionally. Worker jobs snapshot the
+texture content revision and cancellation sequence, so reimport, scene
+replacement, and explicit cancellation cannot publish stale bytes. The default
+mode remains synchronous on every platform, and non-Windows builds report an
+explicit platform result for the asynchronous mode. Broader automatic frame
+policy, background decode, and whole-resource eviction remain unfinished.
 
 The Windows sandbox `--residency-stress` mode uses only public asset APIs to load
 65 path-distinct manager-owned PNG textures (alternating the two packaged source
@@ -158,14 +165,14 @@ ownership, queue, budget, mip, failure accounting, and lifetime behavior at
 application runtime. Before the live-scene pass, the KTX2 fixture is returned
 to one resident mip; the rendered far/near/return camera phase reports its
 observed resident-mip trace in the smoke diagnostics, including far-camera
-demotion after near-camera promotion. This is bounded visibility threshold
-evidence, not a claim of background streaming or complete budget convergence;
+demotion after near-camera promotion. This is bounded visibility threshold and
+one-source-at-a-time Windows worker-read evidence, not a claim of complete
+background decode/upload or budget convergence;
 The same scenario also writes a larger native BC1 KTX2 chain. If the active
 device exposes BC1, it verifies compressed resident-mip trim and promotion;
 without that capability, the native-compressed source fails closed and the
-output records `BC1=unsupported`. This is capability-pressure coverage,
-not asynchronous streaming or a complete budget-convergence policy. Background
-I/O streaming remains a separate unfinished track.
+output records `BC1=unsupported`. This is capability-pressure coverage, not a
+complete background decode/upload or automatic budget-convergence policy.
 
 Residency diagnostics also retain cumulative bytes successfully uploaded through
 manager-owned texture creation or replacement, bytes removed by successful trim
@@ -173,8 +180,9 @@ demotions, resident payload bytes known to have been rejected after a successful
 replacement upload was prepared, and encoded source bytes for readable files
 that were rejected before residency. Missing or unreadable sources retain a
 separate unknown-source-failure count. No byte count is fabricated.
-These counters describe the bounded synchronous lifecycle; they are not evidence
-of background I/O streaming.
+These counters describe the bounded synchronous lifecycle plus the optional
+Windows source-read worker; they are not evidence of complete background decode,
+automatic residency policy, or whole-resource streaming.
 
 Materials now expose a bounded metallic-roughness subset: base color, metallic, roughness, tangent-space normal scale, occlusion strength, emissive color and strength, bounded clearcoat and optional sheen color and roughness, alpha mode, double-sided state, cast/receive-shadow intent, bounded volume attenuation controls, and runtime-authored subsurface amount/tint controls. Material assignment validates texture semantic usage and color space. Manager-owned glTF material definitions now create stack-owned instances with validated parameter overrides, revision-aware refresh after transactional reimport, semantic dependency inspection, transactional reset of one or all overrides, and a transactional bridge that applies the validated effective instance view to a scene entity; the definition remains the shared glTF material authority and no second JSON schema is introduced. glTF transmission scalar textures are now retained as manager-owned linear dependencies and multiply the authored transmission factor in the shared renderer path. The OpenGL path uses GGX distribution, correlated Smith visibility, Schlick Fresnel, a dielectric F0, energy-conserving diffuse/specular separation, and bounded clearcoat and sheen lobes whose base-layer transmission is attenuated before the secondary response is added. When subsurface amount is nonzero, direct sun, moon, and supported local lights add an explicitly bounded three-lobe diffusion-profile approximation tinted by the shared subsurface color, with authored scalar or glTF linear thickness data widening the response. This is a local direct-light approximation, not true multi-scatter diffusion, a skin/wax profile system, or screen-space/ray-traced SSS. Scene environments can now borrow a validated linear HDR equirectangular texture for the background and material environment response while retaining the analytical gradient fallback; irradiance, prefiltered specular, and BRDF-LUT resources are derived transactionally when the GPU path is available. HDR target and shadow diagnostics report dimensions, generations, completeness, and bounded failure text. Generated UV spheres use nondegenerate fan caps, and mesh-upload tangent accumulation starts from zero so valid UV derivatives are not biased by fallback axes; degenerate UVs still receive finite orthogonal fallbacks. Model data can now carry a finite imported tangent frame and its handedness, which the upload path preserves after normal orthogonalization; legacy and procedural data continue to use generated tangents. Full MikkTSpace conformance remains future work. Blended entities always render after opaque and masked entities. Up to 4,096 blended entities use an allocation-free O(n log n) back-to-front sort with explicit depth/index tie-breaking; overflow falls back to deterministic entity order while preserving the opaque-first pass, and overflow count is exposed in diagnostics. Scenes support a bounded four-light point/spot list with normalized directions, inverse-square/range falloff, and spot cones in the GL 3.3 path; two fitted directional cascades, one deterministic 512² map for the first enabled spot, and one bounded 256² cubemap for the first enabled point provide bounded local shadowing. Distance fog is explicitly selected as linear, exponential, or exponential-squared, is disabled by default, and remains a distance effect. Volumetric fog is not implemented. Renderer diagnostics also report bounded distance-based LOD selections and configured-LOD fallback use; this is selection/culling foundation, not texture streaming or residency. Editor-authored material files and other advanced lobes remain future work.
 
@@ -433,4 +441,4 @@ Temporal history allocation validates the replacement texture before retiring th
 
 The bounded AO horizon search now applies a depth-agreement edge confidence to suppress haloing across discontinuities while retaining the existing radius, thickness, falloff, bias, and intensity controls. Temporal AO history, multi-frame denoise, and production GTAO validation remain unfinished.
 
-KTX2 residency requests now retain a bounded priority alongside their strongest mip target. Visible scene references assign deterministic projected-radius, distance-fallback, and semantic-slot priorities, and the manager services the highest-priority request first with mip-count tie breaking and stable queue order. Each queued request snapshots the manager-owned texture content revision; reimport or another transactional replacement cancels stale work before GPU commit and reports a cumulative cancellation count. Active scene replacement can also cancel all pending requests transactionally before the new scene is installed. Residency diagnostics separately report known failed payload bytes, readable encoded source bytes rejected before residency, unknown-size request failures, unknown-size source failures, active pinned bytes, and the explicit synchronous-main-thread progression mode. The active-frame API clears and records bounded pins on manager-owned texture entries; visible references use it so trim cannot evict a texture needed by the current frame, and its explicit end operation releases pins immediately for scene replacement or other early exits. This remains synchronous and does not claim background I/O or automatic residency policy.
+KTX2 residency requests now retain a bounded priority alongside their strongest mip target. Visible scene references assign deterministic projected-radius, distance-fallback, and semantic-slot priorities, and the manager services the highest-priority request first with mip-count tie breaking and stable queue order. Each queued request snapshots the manager-owned texture content revision; reimport or another transactional replacement cancels stale work before GPU commit and reports a cumulative cancellation count. Active scene replacement can also cancel all pending requests transactionally before the new scene is installed. Residency diagnostics separately report known failed payload bytes, readable encoded source bytes rejected before residency, unknown-size request failures, unknown-size source failures, active pinned bytes, and the selected progression mode. The active-frame API clears and records bounded pins on manager-owned texture entries; visible references use it so trim cannot evict a texture needed by the current frame, and its explicit end operation releases pins immediately for scene replacement or other early exits. The default remains synchronous; the opt-in Windows worker moves only one bounded source read at a time off the render thread, while validation and GPU replacement remain explicit process work. Automatic residency policy, background decode, and whole-resource eviction remain unfinished.

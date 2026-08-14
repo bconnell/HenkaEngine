@@ -44,7 +44,11 @@ typedef struct henka_asset_metadata
 
 typedef enum henka_texture_residency_progression_mode
 {
-    HENKA_TEXTURE_RESIDENCY_PROGRESS_SYNCHRONOUS_MAIN_THREAD = 0
+    HENKA_TEXTURE_RESIDENCY_PROGRESS_SYNCHRONOUS_MAIN_THREAD = 0,
+    /* File reads occur on the bounded residency worker; validation and GPU
+     * replacement remain owned by the main/render thread. Windows enables
+     * this mode; other platforms retain the synchronous mode. */
+    HENKA_TEXTURE_RESIDENCY_PROGRESS_ASYNCHRONOUS_IO
 } henka_texture_residency_progression_mode;
 
 typedef struct henka_texture_residency_diagnostics
@@ -222,6 +226,11 @@ henka_result henka_assets_set_texture_residency_budget(
 henka_result henka_assets_get_texture_residency_diagnostics(
     const henka_asset_manager* manager,
     henka_texture_residency_diagnostics* out_diagnostics);
+/* Selects bounded residency progression. Switching modes requires no queued
+ * work and never changes a live texture payload. */
+henka_result henka_assets_set_texture_residency_progression_mode(
+    henka_asset_manager* manager,
+    henka_texture_residency_progression_mode mode);
 /* Starts the bounded active-frame residency scope. Pins made after this call
  * are retained until the next frame scope begins and are not trim candidates. */
 henka_result henka_assets_begin_texture_residency_frame(
@@ -236,7 +245,8 @@ henka_result henka_assets_pin_texture_for_residency_frame(
     henka_texture* texture);
 /* Coalesces a bounded manager-owned KTX2 mip request. Repeated requests for
  * one texture retain the strongest resident-mip target. Processing is
- * explicit and synchronous; background I/O remains unfinished. */
+ * explicit; asynchronous mode performs only bounded source reads away from
+ * the render thread and commits GPU work during process calls. */
 henka_result henka_assets_queue_texture_residency_request(
     henka_asset_manager* manager,
     henka_texture* texture,

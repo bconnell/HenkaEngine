@@ -20361,6 +20361,11 @@ static henka_result sandbox3d_run_residency_stress(
     if (henka_texture_get_info(ktx_texture, &ktx_after_demote) != HENKA_SUCCESS ||
         ktx_after_demote.resident_mip_count != 1U)
         return HENKA_ERROR_UNKNOWN;
+    result = henka_assets_set_texture_residency_progression_mode(
+        assets,
+        HENKA_TEXTURE_RESIDENCY_PROGRESS_ASYNCHRONOUS_IO);
+    if (result != HENKA_SUCCESS)
+        return result;
     result = henka_assets_queue_texture_residency_request_with_priority(
         assets,
         ktx_texture,
@@ -20368,16 +20373,31 @@ static henka_result sandbox3d_run_residency_stress(
         UINT32_MAX);
     if (result != HENKA_SUCCESS)
         return result;
-    result = henka_assets_process_texture_residency_requests(
-        assets,
-        1U,
-        &ktx_processed);
-    if (result != HENKA_SUCCESS || ktx_processed != 1U)
-        return result == HENKA_SUCCESS ? HENKA_ERROR_UNKNOWN : result;
+    ktx_processed = 0U;
+    for (index = 0U; index < 250U && ktx_processed == 0U; ++index)
+    {
+        size_t processed_now = 0U;
+        result = henka_assets_process_texture_residency_requests(
+            assets,
+            1U,
+            &processed_now);
+        if (result != HENKA_SUCCESS)
+            return result;
+        ktx_processed += processed_now;
+        if (ktx_processed == 0U)
+            Sleep(1U);
+    }
+    if (ktx_processed != 1U)
+        return HENKA_ERROR_UNKNOWN;
     memset(&ktx_after_promotion, 0, sizeof(ktx_after_promotion));
     if (henka_texture_get_info(ktx_texture, &ktx_after_promotion) != HENKA_SUCCESS ||
         ktx_after_promotion.resident_mip_count != 3U)
         return HENKA_ERROR_UNKNOWN;
+    result = henka_assets_set_texture_residency_progression_mode(
+        assets,
+        HENKA_TEXTURE_RESIDENCY_PROGRESS_SYNCHRONOUS_MAIN_THREAD);
+    if (result != HENKA_SUCCESS)
+        return result;
     if (henka_assets_get_texture_residency_diagnostics(
             assets, &before_trim) != HENKA_SUCCESS ||
         before_trim.resident_bytes <= 1U)

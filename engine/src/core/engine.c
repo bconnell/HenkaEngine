@@ -636,9 +636,10 @@ static henka_result henka_engine_render_frame(henka_engine* engine)
      * Service residency work only while the renderer owns the active frame
      * context.  The queue and replacement path are bounded and transactional;
      * one request and one budget eviction per frame keep ordinary rendering
-     * responsive while making the public residency contract useful without a
-     * background worker.  Individual failures remain diagnostics rather than
-     * invalidating an otherwise healthy frame.
+     * responsive.  The default progression is synchronous, while the opt-in
+     * Windows worker moves only source-file reads off the render thread;
+     * validation and GPU replacement remain here. Individual failures remain
+     * diagnostics rather than invalidating an otherwise healthy frame.
      */
     if (engine->asset_manager != NULL)
     {
