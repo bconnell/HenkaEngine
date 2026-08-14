@@ -18794,7 +18794,7 @@ static henka_result sandbox3d_initialize(henka_engine* engine, void* user_data)
         {
             "Realism Rough Metal", "Realism Polished Metal", "Realism Painted Clearcoat",
             "Realism Plastic", "Realism Stone", "Realism Fabric Sheen",
-            "Realism Wood Dry", "Realism Stone Wet Dry", "Realism Subsurface"
+            "Realism Wood Dry", "Realism Stone Wet Dry", "Realism Subsurface Wax"
         };
         static const henka_vec3 realism_positions[SANDBOX3D_REALISM_ENTITY_COUNT] =
         {
@@ -18874,6 +18874,7 @@ static henka_result sandbox3d_initialize(henka_engine* engine, void* user_data)
             {
                 realism_material.subsurface = 0.72f;
                 realism_material.subsurface_color = (henka_vec3){1.0f, 0.22f, 0.14f};
+                realism_material.thickness = 0.42f;
                 realism_material.roughness = 0.38f;
             }
             result = sandbox3d_configure_entity(

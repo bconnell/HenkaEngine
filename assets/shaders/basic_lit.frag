@@ -543,12 +543,13 @@ void main()
     float surfaceTransmission = saturate(transmission);
     float surfaceSubsurface = saturate(subsurface);
     vec3 surfaceSubsurfaceColor = clamp(subsurfaceColor, vec3(0.0), vec3(1.0));
-    /* Reserve part of the diffuse energy for the bounded backscatter lobe.
-     * This keeps the approximation from simply adding light on top of a full
-     * diffuse response; it is not a replacement for profile/thickness SSS. */
-    float diffuseEnergyWeight = 1.0 - surfaceSubsurface * 0.65;
-    float surfaceIor = clamp(ior, 1.01, 2.5);
     float surfaceThickness = saturate(thickness);
+    /* Reserve more diffuse energy as the authored thickness increases. The
+     * response below remains a bounded raster approximation, not a profile or
+     * thickness-texture diffusion model. */
+    float diffuseEnergyWeight = 1.0 - surfaceSubsurface *
+        mix(0.65, 0.78, surfaceThickness);
+    float surfaceIor = clamp(ior, 1.01, 2.5);
     float safeAttenuationDistance = max(attenuationDistance, 0.0001);
     vec3 volumeTransmittance = pow(
         clamp(attenuationColor, vec3(0.0001), vec3(1.0)),
@@ -638,10 +639,14 @@ void main()
         }
         float shadow = shadowFactor(normal, lightDir);
         color += (diffuse + specular) * baseLayerTransmission * radiance * nDotL * shadow;
-        float backScatter = pow(saturate(dot(-normal, lightDir)), 2.0);
-        float wrappedLight = saturate((dot(normal, lightDir) + 0.35) / 1.35);
+        float subsurfaceWidth = mix(0.35, 0.85, surfaceThickness);
+        float backScatter = pow(
+            saturate(dot(-normal, lightDir)),
+            mix(3.5, 1.35, surfaceThickness));
+        float wrappedLight = saturate((dot(normal, lightDir) + subsurfaceWidth) /
+            (1.0 + subsurfaceWidth));
         color += albedo * surfaceSubsurfaceColor * surfaceSubsurface *
-            (backScatter * 0.90 + wrappedLight * 0.10) * radiance * shadow;
+            (backScatter * 0.78 + wrappedLight * 0.22) * radiance * shadow;
 
         /* The shared scene moon is a bounded second directional source. It is
          * intentionally shadowless in this slice: the directional sun shadow
@@ -699,6 +704,8 @@ void main()
         if (useEnvironment)
         {
             vec3 environmentDiffuse = useIBL ? texture(iblIrradianceMap, normal).rgb : sampleEnvironment(normal);
+            vec3 environmentBackScatter = useIBL ?
+                texture(iblIrradianceMap, -normal).rgb : sampleEnvironment(-normal);
             vec3 reflectionDirection = reflect(-viewDirection, normal);
             vec3 blurredReflectionDirection = safeNormalize(
                 mix(reflectionDirection, normal, surfaceRoughness * 0.75),
@@ -728,6 +735,8 @@ void main()
                     baseLayerTransmission * occlusion * 0.55 +
                 environmentSpecular * (fresnel * brdf.x + brdf.y) * baseLayerTransmission * occlusion *
                     (0.35 + 0.65 * (1.0 - surfaceRoughness)) +
+                environmentBackScatter * albedo * surfaceSubsurfaceColor * surfaceSubsurface *
+                    (0.08 + 0.12 * surfaceThickness) * occlusion +
                 sampleEnvironment(transmissionDirection) * albedo * surfaceTransmission * volumeTransmittance * (1.0 - fresnel) * 0.55,
                 vec3(65504.0));
         }
@@ -770,10 +779,14 @@ void main()
             vec3 localSpecular = localDistribution * localVisibility * localFresnel;
             vec3 localDiffuse = (1.0 - surfaceTransmission) * (1.0 - localFresnel) * (1.0 - surfaceMetallic) * albedo * diffuseEnergyWeight / PI;
             color += (localDiffuse + localSpecular) * localRadiance * localNDotL * localShadow;
-            float localBackScatter = pow(saturate(dot(-normal, localLightDirection)), 2.0);
-            float localWrappedLight = saturate((dot(normal, localLightDirection) + 0.35) / 1.35);
+            float localSubsurfaceWidth = mix(0.35, 0.85, surfaceThickness);
+            float localBackScatter = pow(
+                saturate(dot(-normal, localLightDirection)),
+                mix(3.5, 1.35, surfaceThickness));
+            float localWrappedLight = saturate((dot(normal, localLightDirection) + localSubsurfaceWidth) /
+                (1.0 + localSubsurfaceWidth));
             color += albedo * surfaceSubsurfaceColor * surfaceSubsurface *
-                (localBackScatter * 0.90 + localWrappedLight * 0.10) * localRadiance * localShadow;
+                (localBackScatter * 0.78 + localWrappedLight * 0.22) * localRadiance * localShadow;
         }
     }
     else
