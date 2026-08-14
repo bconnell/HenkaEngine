@@ -9,7 +9,7 @@ The normal Windows Sandbox startup presents two repo-owned sample models:
 
 The Sandbox target build runs `scripts/generate_showcase_assets.ps1` for both files. The generator creates deterministic bounded geometry, UVs, normals, tangent vec4 attributes, PBR material definitions, and a sibling binary buffer. It uses no third-party model, no external authoring application at runtime, and no copyrighted vehicle or character model.
 
-The generated glTF files use material factors and do not bind the unrelated primitive-gallery cube texture. Their glTF and sibling binary buffers are copied beside the executable, so packaged execution resolves the showcase from package-owned files without a repository-root or runtime authoring dependency. These two models are the public visual reference set and should be regenerated and manually reviewed as renderer, material, lighting, and geometry capabilities improve.
+The generated glTF files use material factors plus the renderer-supported clearcoat and restrained sheen extensions; they do not bind the unrelated primitive-gallery cube texture. Their glTF and sibling binary buffers are copied beside the executable, so packaged execution resolves the showcase from package-owned files without a repository-root or runtime authoring dependency. These two models are the public visual reference set and should be regenerated and manually reviewed as renderer, material, lighting, and geometry capabilities improve.
 
 ## Runtime path
 

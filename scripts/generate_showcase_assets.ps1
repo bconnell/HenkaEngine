@@ -335,8 +335,17 @@ function Add-RadialFin {
 }
 
 function New-Material {
-    param([string]$Name, [float[]]$Color, [float]$Metallic, [float]$Roughness)
-    return [ordered]@{
+    param(
+        [string]$Name,
+        [float[]]$Color,
+        [float]$Metallic,
+        [float]$Roughness,
+        [float]$Clearcoat = 0.0,
+        [float]$ClearcoatRoughness = 0.20,
+        [float[]]$SheenColor = @(0.0, 0.0, 0.0),
+        [float]$SheenRoughness = 0.50
+    )
+    $material = [ordered]@{
         name = $Name
         pbrMetallicRoughness = [ordered]@{
             baseColorFactor = $Color
@@ -344,6 +353,23 @@ function New-Material {
             roughnessFactor = $Roughness
         }
     }
+    $extensions = [ordered]@{}
+    if ($Clearcoat -gt 0.0) {
+        $extensions.Add("KHR_materials_clearcoat", [ordered]@{
+            clearcoatFactor = $Clearcoat
+            clearcoatRoughnessFactor = $ClearcoatRoughness
+        })
+    }
+    if (([Math]::Abs($SheenColor[0]) + [Math]::Abs($SheenColor[1]) + [Math]::Abs($SheenColor[2])) -gt 0.0001) {
+        $extensions.Add("KHR_materials_sheen", [ordered]@{
+            sheenColorFactor = $SheenColor
+            sheenRoughnessFactor = $SheenRoughness
+        })
+    }
+    if ($extensions.Count -gt 0) {
+        $material.Add("extensions", $extensions)
+    }
+    return $material
 }
 
 function Test-ShowcasePart {
@@ -456,6 +482,7 @@ function Write-Gltf {
     [IO.File]::WriteAllBytes([IO.Path]::ChangeExtension($Path, ".bin"), $bytes)
     $json = [ordered]@{
         asset = [ordered]@{ version = "2.0"; generator = "Henka Engine deterministic showcase generator" }
+        extensionsUsed = @("KHR_materials_clearcoat", "KHR_materials_sheen")
         buffers = @([ordered]@{ uri = ([IO.Path]::GetFileName([IO.Path]::ChangeExtension($Path, ".bin"))); byteLength = $bytes.Length })
         bufferViews = $views
         accessors = $accessors
@@ -472,11 +499,11 @@ function Write-Gltf {
 
 function New-Giraffe {
     $materials = @(
-        (New-Material "Giraffe Tan" @(0.72, 0.44, 0.18, 1.0) 0.0 0.52),
+        (New-Material "Giraffe Tan" @(0.72, 0.44, 0.18, 1.0) 0.0 0.52 0.08 0.36 @(0.07, 0.025, 0.01) 0.45),
         (New-Material "Giraffe Spots" @(0.16, 0.038, 0.012, 1.0) 0.0 0.64),
-        (New-Material "Giraffe Cream" @(0.95, 0.76, 0.48, 1.0) 0.0 0.48),
-        (New-Material "Giraffe Eyes" @(0.008, 0.006, 0.004, 1.0) 0.0 0.16),
-        (New-Material "Giraffe Smile" @(0.70, 0.035, 0.045, 1.0) 0.0 0.34))
+        (New-Material "Giraffe Cream" @(0.95, 0.76, 0.48, 1.0) 0.0 0.48 0.06 0.28 @(0.11, 0.06, 0.025) 0.48),
+        (New-Material "Giraffe Eyes" @(0.008, 0.006, 0.004, 1.0) 0.0 0.16 0.40 0.08),
+        (New-Material "Giraffe Smile" @(0.70, 0.035, 0.045, 1.0) 0.0 0.34 0.05 0.22))
     $tan = New-Part 0
     $spots = New-Part 1
     $cream = New-Part 2
@@ -525,10 +552,10 @@ function New-Giraffe {
 
 function New-Rocket {
     $materials = @(
-        (New-Material "Rocket Painted Ceramic" @(0.64, 0.70, 0.76, 1.0) 0.18 0.28),
-        (New-Material "Rocket Brushed Metal" @(0.48, 0.52, 0.58, 1.0) 0.86 0.20),
+        (New-Material "Rocket Painted Ceramic" @(0.64, 0.70, 0.76, 1.0) 0.18 0.28 0.32 0.16),
+        (New-Material "Rocket Brushed Metal" @(0.48, 0.52, 0.58, 1.0) 0.86 0.20 0.08 0.20),
         (New-Material "Rocket Heat Shield" @(0.055, 0.065, 0.075, 1.0) 0.62 0.34),
-        (New-Material "Rocket Mission Stripe" @(0.84, 0.14, 0.055, 1.0) 0.18 0.30))
+        (New-Material "Rocket Mission Stripe" @(0.84, 0.14, 0.055, 1.0) 0.18 0.30 0.12 0.20))
     $paint = New-Part 0
     $metal = New-Part 1
     $heat = New-Part 2
