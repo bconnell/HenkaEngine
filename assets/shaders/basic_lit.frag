@@ -547,6 +547,7 @@ void main()
      * This keeps the approximation from simply adding light on top of a full
      * diffuse response; it is not a replacement for profile/thickness SSS. */
     float diffuseEnergyWeight = 1.0 - surfaceSubsurface * 0.65;
+    float surfaceIor = clamp(ior, 1.01, 2.5);
     float surfaceThickness = saturate(thickness);
     float safeAttenuationDistance = max(attenuationDistance, 0.0001);
     vec3 volumeTransmittance = pow(
@@ -598,6 +599,9 @@ void main()
 
     vec3 albedo = max(surfaceColor.rgb, vec3(0.0));
     vec3 viewDirection = safeNormalize(cameraPosition - fragWorldPosition, vec3(0.0, 0.0, 1.0));
+    vec3 transmissionDirection = safeNormalize(
+        refract(-viewDirection, normal, 1.0 / surfaceIor),
+        -normal);
     vec3 lightDir = safeNormalize(-lightDirection, vec3(0.0, 1.0, 0.0));
     vec3 safeLightColor = clamp(lightColor, vec3(0.0), vec3(1.0));
     float safeLightIntensity = clamp(lightIntensity, 0.0, 10000.0);
@@ -724,7 +728,7 @@ void main()
                     baseLayerTransmission * occlusion * 0.55 +
                 environmentSpecular * (fresnel * brdf.x + brdf.y) * baseLayerTransmission * occlusion *
                     (0.35 + 0.65 * (1.0 - surfaceRoughness)) +
-                sampleEnvironment(-normal) * albedo * surfaceTransmission * volumeTransmittance * (1.0 - fresnel) * 0.55,
+                sampleEnvironment(transmissionDirection) * albedo * surfaceTransmission * volumeTransmittance * (1.0 - fresnel) * 0.55,
                 vec3(65504.0));
         }
 

@@ -7,6 +7,7 @@ Henka's realism work is built as a layered, truthful rendering stack. The curren
 The current Rendered path includes:
 
 - glTF-oriented PBR material inputs for base color, metallic/roughness, normals, occlusion, emissive response, specular controls, IOR, transmission, volume attenuation, clearcoat, sheen, alpha modes, and double-sided rendering, plus runtime-authored subsurface amount/tint controls;
+- transmission uses the authored IOR for a bounded environment-refraction direction and the authored volume attenuation for the transmitted response; screen-space refraction, thickness textures, layered volumes, and production glass remain unfinished;
 - a bounded direct-light backscatter and wrapped-light approximation for subsurface-tinted materials with a diffuse-energy reservation to avoid simply adding the lobe on top of full diffuse; this is not true multi-scatter diffusion, a skin/wax profile, thickness-texture SSS, or screen-space/ray-traced SSS;
 - HDR environment lighting with transactionally derived 32-sample cosine-weighted irradiance, 32-sample GGX-prefiltered specular environment data across bounded mips, and a 32-sample split-sum BRDF lookup texture; this improves the rasterized environment response without claiming path tracing or full-scene global illumination;
 - local reflection probes;
