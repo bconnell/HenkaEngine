@@ -13,6 +13,12 @@ add_test(NAME henka_headless_runtime_tests COMMAND henka_headless_runtime_tests)
 
 if(WIN32)
     add_test(
+        NAME henka_fullscreen_presentation_mapping_tests
+        COMMAND powershell.exe -NoProfile -ExecutionPolicy Bypass -File
+            ${CMAKE_SOURCE_DIR}/scripts/test_fullscreen_presentation_windows.ps1
+            -RepositoryRoot ${CMAKE_SOURCE_DIR})
+
+    add_test(
         NAME henka_showcase_asset_generator_tests
         COMMAND powershell.exe -NoProfile -ExecutionPolicy Bypass -File
             ${CMAKE_SOURCE_DIR}/scripts/test_showcase_assets_windows.ps1

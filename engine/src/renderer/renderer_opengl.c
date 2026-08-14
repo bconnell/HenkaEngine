@@ -2900,7 +2900,7 @@ static henka_result henka_opengl_create_render_programs(
     static const char* tone_vertex =
         "#version 330 core\n"
         "out vec2 uv;\n"
-        "void main(){ vec2 p = vec2((gl_VertexID << 1) & 2, gl_VertexID & 2); uv = p * 0.5; gl_Position = vec4(p * 2.0 - 1.0, 0.0, 1.0); }\n";
+        "void main(){ vec2 p = vec2((gl_VertexID << 1) & 2, gl_VertexID & 2); uv = p; gl_Position = vec4(p * 2.0 - 1.0, 0.0, 1.0); }\n";
     static const char* tone_fragment =
         "#version 330 core\n"
         "in vec2 uv; uniform sampler2D hdrTexture; uniform sampler2D bloomTexture; uniform sampler2D historyTexture; uniform sampler2D historyDepthTexture; uniform sampler2D motionTexture; uniform sampler2D reactiveTexture; uniform sampler2D depthTexture; uniform mat4 projection; uniform float exposure; uniform bool useBloom; uniform float bloomStrength; uniform bool useTemporalHistory; uniform bool useMotionVectors; uniform bool useReactiveMask; uniform bool useAmbientOcclusion; uniform float aoRadius; uniform float aoThickness; uniform float aoFalloff; uniform float aoBias; uniform float aoIntensity; uniform float ssrThickness; uniform float ssrMaxDistance; uniform float ssrRoughness; uniform float ssrEdgeFade; uniform float temporalBlend; uniform float sharpenStrength; uniform bool useRenderedGrade; uniform bool useScreenSpaceReflections; out vec4 outColor;\n"

@@ -19,6 +19,13 @@ The current Rendered path includes:
 
 Rendered post-processing keeps the bounded screen-space reflection and ambient-occlusion contributions in the linear HDR target until the single final exposure/tone-map/presentation transform. Reflection misses still retain the existing IBL, probe, or analytical fallback. This improves color-space correctness but does not turn the screen-space paths into full-scene reflections or production GTAO.
 
+The shared fullscreen-triangle presentation path maps its oversized clip-space
+triangle to the complete normalized texture domain. Material Preview and
+Rendered therefore preserve the same scene composition as Solid while applying
+their intended shading and post-processing differences. The Windows regression
+covers the triangle contract and normalized edge/corner coverage; application
+captures remain the visual authority for subject placement and quality.
+
 ## Screen-space indirect diffuse lighting
 
 Rendered presentation also contains a bounded screen-space indirect diffuse approximation. It reconstructs the current receiver position and normal from depth, samples nearby visible HDR surfaces in eight directions, rejects samples outside bounded distance and thickness limits, caps source radiance, and adds the gathered indirect contribution in HDR before bloom and tone mapping.

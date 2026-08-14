@@ -79,6 +79,7 @@ Official project branding is tracked in [assets/branding](assets/branding/) and 
 - Ground plane, restrained debug grid, Cheeky Giraffe mascot, Original Realistic Rocket, textured materials, and visible fallback behavior for missing texture and model assets
 - The sandbox ground is a uniform restrained graphite/slate receiver; the editor grid remains an explicitly unlit line helper so Rendered mode has no unexplained checker or center lighting split
 - The editor grid is an explicitly unlit, restrained graphite/slate line surface; its studio environment source is periodic and validated so Rendered presentation does not introduce a center seam. The procedural ground plane uses front-face winding consistent with its +Y normals.
+- Material Preview and Rendered now present the complete HDR target through the shared fullscreen-triangle UV contract, preserving the same front-pair composition as Solid; the Windows mapping regression and same-camera application capture cover the full texture edges and corners
 - Keyboard movement, mouse look when capture is active, viewport-local Wireframe, Solid, Material Preview, and Rendered shading controls, and offline runtime help
 - Bounded local settings persistence with transactional loads and replace-on-success writes
 - In-window editor UI with mixed-case built-in text, restrained graphite/slate surfaces, lower-contrast one-pixel framing, flat secondary controls, underline-only tabs, compact switch toggles, quieter structured rows, clear selected-state accents, and release-confirm control activation
