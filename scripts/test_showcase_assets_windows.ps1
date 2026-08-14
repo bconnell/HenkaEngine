@@ -31,4 +31,22 @@ foreach ($name in @("cheeky_giraffe", "original_realistic_rocket")) {
         }
     }
 }
+$giraffe = Get-Content -LiteralPath (Join-Path $OutputDirectory "cheeky_giraffe.gltf") -Raw | ConvertFrom-Json
+$giraffeMaterialNames = @($giraffe.materials | ForEach-Object { $_.name })
+foreach ($requiredName in @("Giraffe Eye White", "Giraffe Iris", "Giraffe Eye Detail", "Giraffe Ear Inner")) {
+    if ($giraffeMaterialNames -notcontains $requiredName) {
+        throw "Showcase giraffe is missing authored feature material '$requiredName'."
+    }
+}
+if ($giraffe.meshes[0].primitives.Count -lt 8) {
+    throw "Showcase giraffe does not contain enough independently shaded feature geometry."
+}
+$rocket = Get-Content -LiteralPath (Join-Path $OutputDirectory "original_realistic_rocket.gltf") -Raw | ConvertFrom-Json
+$rocketMaterialNames = @($rocket.materials | ForEach-Object { $_.name })
+if ($rocketMaterialNames -notcontains "Rocket Avionics") {
+    throw "Showcase rocket is missing its stage-separation/avionics material."
+}
+if ($rocket.meshes[0].primitives.Count -lt 5) {
+    throw "Showcase rocket does not contain enough independently shaded stage and engine geometry."
+}
 Write-Host "[pass] Deterministic showcase geometry, material ownership, and generated glTF contracts passed."

@@ -510,13 +510,19 @@ function New-Giraffe {
         (New-Material "Giraffe Tan" @(0.72, 0.44, 0.18, 1.0) 0.0 0.52 0.08 0.36 @(0.07, 0.025, 0.01) 0.45),
         (New-Material "Giraffe Spots" @(0.16, 0.038, 0.012, 1.0) 0.0 0.64),
         (New-Material "Giraffe Cream" @(0.95, 0.76, 0.48, 1.0) 0.0 0.48 0.06 0.28 @(0.11, 0.06, 0.025) 0.48),
-        (New-Material "Giraffe Eyes" @(0.008, 0.006, 0.004, 1.0) 0.0 0.16 0.40 0.08),
-        (New-Material "Giraffe Smile" @(0.70, 0.035, 0.045, 1.0) 0.0 0.34 0.05 0.22))
+        (New-Material "Giraffe Eye White" @(0.76, 0.72, 0.62, 1.0) 0.0 0.18 0.54 0.08),
+        (New-Material "Giraffe Iris" @(0.18, 0.055, 0.014, 1.0) 0.0 0.24 0.64 0.06),
+        (New-Material "Giraffe Eye Detail" @(0.004, 0.002, 0.001, 1.0) 0.0 0.10 0.70 0.06),
+        (New-Material "Giraffe Smile" @(0.42, 0.018, 0.018, 1.0) 0.0 0.34 0.05 0.22),
+        (New-Material "Giraffe Ear Inner" @(0.38, 0.10, 0.045, 1.0) 0.0 0.42 0.03 0.18))
     $tan = New-Part 0
     $spots = New-Part 1
     $cream = New-Part 2
     $eyes = New-Part 3
-    $smile = New-Part 4
+    $iris = New-Part 4
+    $details = New-Part 5
+    $smile = New-Part 6
+    $earInner = New-Part 7
     # Keep the proportions stylized, but use enough curvature that the
     # silhouette reads as an authored animated-film character rather than a
     # low-resolution primitive assembly.
@@ -530,6 +536,10 @@ function New-Giraffe {
     Add-Ellipsoid $tan @(0.55, 4.22, 0.0) @(0.32, 0.13, 0.52) 12 24
     Add-Frustum $tan 4.15 4.48 0.095 0.075 -0.24 0.0 16
     Add-Frustum $tan 4.15 4.48 0.095 0.075 0.24 0.0 16
+    Add-Ellipsoid $earInner @(-0.55, 4.22, 0.46) @(0.17, 0.065, 0.27) 10 20
+    Add-Ellipsoid $earInner @(0.55, 4.22, 0.46) @(0.17, 0.065, 0.27) 10 20
+    Add-Ellipsoid $details @(-0.24, 4.52, 0.0) @(0.11, 0.075, 0.10) 8 16
+    Add-Ellipsoid $details @(0.24, 4.52, 0.0) @(0.11, 0.075, 0.10) 8 16
     # A short mane row gives the neck a readable rear contour without making
     # the mascot realistic in the photographic sense.
     foreach ($maneY in @(1.95, 2.18, 2.41, 2.64, 2.87, 3.10, 3.33)) {
@@ -550,12 +560,19 @@ function New-Giraffe {
     Add-Ellipsoid $cream @(0.0, 3.62, 0.50) @(0.42, 0.24, 0.20) 12 24
     Add-Ellipsoid $eyes @(-0.28, 3.98, 0.51) @(0.115, 0.16, 0.065) 12 20
     Add-Ellipsoid $eyes @(0.28, 3.98, 0.51) @(0.115, 0.16, 0.065) 12 20
-    Add-Ellipsoid $eyes @(-0.17, 3.66, 0.685) @(0.045, 0.035, 0.022) 8 12
-    Add-Ellipsoid $eyes @(0.17, 3.66, 0.685) @(0.045, 0.035, 0.022) 8 12
-    Add-Frustum $eyes 4.00 4.18 0.028 0.012 -0.39 0.54 12
-    Add-Frustum $eyes 4.00 4.18 0.028 0.012 0.39 0.54 12
-    Add-Ellipsoid $smile @(0.14, 3.58, 0.68) @(0.18, 0.055, 0.025) 8 16
-    return [pscustomobject]@{ Parts = @($tan, $spots, $cream, $eyes, $smile); Materials = $materials }
+    Add-Ellipsoid $iris @(-0.28, 3.98, 0.573) @(0.064, 0.090, 0.022) 10 18
+    Add-Ellipsoid $iris @(0.28, 3.98, 0.573) @(0.064, 0.090, 0.022) 10 18
+    Add-Ellipsoid $details @(-0.28, 3.98, 0.594) @(0.027, 0.050, 0.010) 8 14
+    Add-Ellipsoid $details @(0.28, 3.98, 0.594) @(0.027, 0.050, 0.010) 8 14
+    Add-Ellipsoid $eyes @(-0.30, 4.025, 0.603) @(0.014, 0.020, 0.006) 6 10
+    Add-Ellipsoid $eyes @(0.26, 4.025, 0.603) @(0.014, 0.020, 0.006) 6 10
+    Add-Ellipsoid $details @(-0.14, 3.66, 0.695) @(0.070, 0.038, 0.014) 8 14
+    Add-Ellipsoid $details @(0.14, 3.66, 0.695) @(0.070, 0.038, 0.014) 8 14
+    Add-Frustum $details 4.00 4.18 0.028 0.012 -0.39 0.54 12
+    Add-Frustum $details 4.00 4.18 0.028 0.012 0.39 0.54 12
+    Add-Ellipsoid $smile @(0.0, 3.55, 0.695) @(0.24, 0.035, 0.014) 8 16
+    Add-Ellipsoid $smile @(0.14, 3.58, 0.685) @(0.18, 0.045, 0.016) 8 16
+    return [pscustomobject]@{ Parts = @($tan, $spots, $cream, $eyes, $iris, $details, $smile, $earInner); Materials = $materials }
 }
 
 function New-Rocket {
@@ -563,11 +580,13 @@ function New-Rocket {
         (New-Material "Rocket Painted Ceramic" @(0.64, 0.70, 0.76, 1.0) 0.18 0.28 0.32 0.16),
         (New-Material "Rocket Brushed Metal" @(0.48, 0.52, 0.58, 1.0) 0.86 0.20 0.08 0.20),
         (New-Material "Rocket Heat Shield" @(0.055, 0.065, 0.075, 1.0) 0.62 0.34 0.0 0.20 @(0.0, 0.0, 0.0) 0.50 @(0.18, 0.025, 0.005) 0.40),
-        (New-Material "Rocket Mission Stripe" @(0.84, 0.14, 0.055, 1.0) 0.18 0.30 0.12 0.20))
+        (New-Material "Rocket Mission Stripe" @(0.84, 0.14, 0.055, 1.0) 0.18 0.30 0.12 0.20),
+        (New-Material "Rocket Avionics" @(0.025, 0.032, 0.042, 1.0) 0.72 0.24 0.10 0.18))
     $paint = New-Part 0
     $metal = New-Part 1
     $heat = New-Part 2
     $stripe = New-Part 3
+    $avionics = New-Part 4
     # Staged core, interstage, and ogive-like fairing sections provide a more
     # believable modern launch-vehicle silhouette while remaining bounded.
     Add-Frustum $paint 0.35 2.50 0.62 0.56 0.0 0.0 40
@@ -578,13 +597,16 @@ function New-Rocket {
     Add-Ellipsoid $paint @(0.0, 3.17, 0.0) @(0.08, 0.11, 0.08) 10 20
     Add-Frustum $metal 0.28 0.48 0.64 0.64 0.0 0.0 32
     Add-Frustum $metal 0.48 0.56 0.64 0.59 0.0 0.0 32
-    Add-Frustum $metal 1.20 1.30 0.575 0.575 0.0 0.0 32
+    Add-Frustum $metal 1.24 1.30 0.575 0.575 0.0 0.0 32
     Add-Frustum $metal 2.28 2.38 0.60 0.60 0.0 0.0 32
-    Add-Frustum $metal 2.50 2.62 0.56 0.56 0.0 0.0 32
+    Add-Frustum $metal 2.54 2.62 0.56 0.56 0.0 0.0 32
     Add-Frustum $metal 2.76 2.84 0.44 0.44 0.0 0.0 32
+    Add-Frustum $avionics 1.18 1.24 0.58 0.58 0.0 0.0 32
+    Add-Frustum $avionics 2.48 2.54 0.56 0.56 0.0 0.0 32
     foreach ($engine in @(@(-0.28, 0.0), @(0.0, 0.0), @(0.28, 0.0))) {
         Add-Frustum $heat 0.02 0.40 0.16 0.11 $engine[0] $engine[1] 20
         Add-Frustum $heat 0.40 0.46 0.11 0.08 $engine[0] $engine[1] 20
+        Add-Frustum $avionics 0.05 0.12 0.12 0.075 $engine[0] $engine[1] 16
         Add-Ellipsoid $heat @($engine[0], 0.02, $engine[1]) @(0.20, 0.08, 0.20) 8 16
     }
     Add-Frustum $stripe 1.78 1.91 0.59 0.59 0.0 0.0 32
@@ -592,7 +614,7 @@ function New-Rocket {
     Add-RadialFin $metal -1.0 0.0
     Add-RadialFin $metal 0.0 1.0
     Add-RadialFin $metal 0.0 -1.0
-    return [pscustomobject]@{ Parts = @($paint, $metal, $heat, $stripe); Materials = $materials }
+    return [pscustomobject]@{ Parts = @($paint, $metal, $heat, $stripe, $avionics); Materials = $materials }
 }
 
 if (-not [IO.Path]::IsPathRooted($OutputDirectory)) {

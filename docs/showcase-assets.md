@@ -2,14 +2,14 @@
 
 The normal Windows Sandbox startup presents two repo-owned sample models:
 
-- `cheeky_giraffe.gltf` — an original stylized-realistic, animated-film-oriented Cheeky Giraffe mascot with smooth high-curvature body and head forms, surface-fitted spots, a readable mane row, eyes, lashes, ears, ossicones, nostrils, and a cheeky smile.
-- `original_realistic_rocket.gltf` — an original stylized modern launch vehicle with a staged core, ogive-like fairing sections, interstage and engine-skirt hardware, integrated metal bands, a clustered heat-resistant engine section, and tapered stabilization fins.
+- `cheeky_giraffe.gltf` — an original stylized-realistic, animated-film-oriented Cheeky Giraffe mascot with smooth high-curvature body and head forms, surface-fitted spots, a readable mane row, modeled inner ears and ossicone caps, layered eye whites/irises/pupils/highlights, nostrils, and a shaped mouth line. The presentation remains expressive by design, but the face is built from separately shaded anatomical features rather than a single cartoon eye material.
+- `original_realistic_rocket.gltf` — an original stylized modern launch vehicle with a staged core, ogive-like fairing sections, interstage and engine-skirt hardware, dark avionics separation bands, clustered bell/nozzle geometry, a restrained heat response, and tapered stabilization fins.
 
 ## Ownership and generation
 
 The Sandbox target build runs `scripts/generate_showcase_assets.ps1` for both files. The generator creates deterministic bounded geometry, UVs, normals, tangent vec4 attributes, PBR material definitions, and a sibling binary buffer. It uses no third-party model, no external authoring application at runtime, and no copyrighted vehicle or character model.
 
-The generated glTF files use material factors plus the renderer-supported clearcoat and restrained sheen extensions; they do not bind the unrelated primitive-gallery cube texture. Their glTF and sibling binary buffers are copied beside the executable, so packaged execution resolves the showcase from package-owned files without a repository-root or runtime authoring dependency. These two models are the public visual reference set and should be regenerated and manually reviewed as renderer, material, lighting, and geometry capabilities improve.
+The generated glTF files use material factors plus the renderer-supported clearcoat, restrained sheen, and emissive-strength extensions; they do not bind the unrelated primitive-gallery cube texture. Their glTF and sibling binary buffers are copied beside the executable, so packaged execution resolves the showcase from package-owned files without a repository-root or runtime authoring dependency. These two models are the public visual reference set and should be regenerated and manually reviewed after material, lighting, geometry, and shading improvements. They are deliberately generic public samples; project-specific scenes and visual references are not part of this repository.
 
 ## Runtime path
 
