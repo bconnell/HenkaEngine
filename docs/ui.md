@@ -198,7 +198,7 @@ The viewport now also supports direct navigation while mouse capture is released
 
 Mouse wheel input over the `Controls` or `Scene Objects` panels is routed to panel paging instead of the viewport, so panel interaction does not leak into scene zooming.
 
-Normal startup and `Home` share the same scene-first framing path after the final Scene View size is known. The sandbox keeps movement speed and other validated editor settings, but it no longer restores older transient camera-pose keys automatically on launch.
+Normal startup and `Home` share the same scene-first framing path after the final Scene View size is known. When the default showcase pair is present, that path looks at the front side of the Giraffe and rocket around their shared midpoint. Capture mode reapplies its deterministic framing once after the final docked or full-viewport aspect is known, so laptop layouts do not crop one model. The sandbox keeps movement speed and other validated editor settings, but it no longer restores older transient camera-pose keys automatically on launch.
 
 A compact diagnostic strip stays visible immediately below the Scene View while panels are open. It shows the active tool, selected object, selected-highlight state, mouse capture state, whether the cursor is in the viewport, whether a visible panel owns the pointer, gizmo model state, handle count, hovered handle, drag state, last rejection reason, hovered panel, whether the cursor is on a draggable header, active panel movement or resize, dock target, and latest workspace action. The strip is informational and does not consume viewport input.
 

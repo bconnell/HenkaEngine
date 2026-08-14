@@ -155,8 +155,10 @@ camera in Solid, Material Preview, and Rendered mode:
 ```
 
 The PNGs and `INDEX.txt` are generated under `build/visual_evidence/`. Capture
-mode runs use one deterministic two-model showcase camera for all three modes and
-do not save sandbox settings, so ordinary user camera state is unchanged and no
+mode runs use one deterministic two-model showcase camera for all three modes; the
+camera is reframed once after the final capture viewport aspect is known so narrow
+Scene View layouts do not crop either model. Capture runs do not save sandbox
+settings, so ordinary user camera state is unchanged and no
 user-profile file is changed by this evidence path. Rendered uses scene
 lighting, the shadow path, transactional HDR/IBL presentation, bloom, and
 temporal presentation; Material Preview uses its deterministic preview-light

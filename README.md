@@ -36,7 +36,7 @@ Official project branding is tracked in [assets/branding](assets/branding/) and 
 - Input action foundation for named engine-level controls
 - Generation-checked 64-bit scene entity identities that invalidate destroyed handles before slot reuse, protecting selection, actions, physics links, and future authoring references
 - Reusable camera helpers for reset, focus, screen-ray creation, stable vertical view bases, orthographic zoom, and Perspective 3D, Side 2.5D, Top-down 2.5D, and Isometric 2.5D presets
-- Sandbox startup and Reset View use bounded scene-first framing: visible non-helper mesh bounds are preferred over the debug grid and ground plane, showcase content is prioritized when present, and a one-time versioned migration replaces the legacy generated floor-facing default without resetting an intentionally saved camera pose
+- Sandbox startup and Reset View use bounded scene-first framing: visible non-helper mesh bounds are preferred over the debug grid and ground plane, showcase content is prioritized when present, and the default Giraffe-and-rocket pair is framed from its front side around the shared midpoint. Capture-mode framing reapplies once after the final docked or full-viewport aspect is known so laptop layouts do not crop the pair; a one-time versioned migration replaces the legacy generated floor-facing default without resetting an intentionally saved camera pose
 - Local action-command foundation for validated scene and object operations, including signed scale transforms for mirror workflows
 - Asset metadata with cache-owned source and display strings, plus stronger material summaries
 - Local save-data foundation with confined slot paths, complete-file validation, and transactional state replacement

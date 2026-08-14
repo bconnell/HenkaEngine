@@ -457,6 +457,7 @@ typedef struct sandbox3d_state
     bool capture_mode_requested;
     bool terrain_capture_mode_requested;
     bool showcase_capture_view_requested;
+    bool capture_camera_aspect_applied;
     sandbox3d_terrain_capture_view terrain_capture_view;
     sandbox3d_showcase_capture_view showcase_capture_view;
     henka_viewport_shading_mode capture_mode;
@@ -3853,11 +3854,29 @@ static bool sandbox3d_get_scene_framing_bounds(
                 entity == state->grid_entity ||
                 entity == state->ground_entity ||
                 !henka_scene_is_entity_visible(state->scene, entity) ||
-                henka_scene_is_entity_helper(state->scene, entity) ||
-                henka_scene_get_entity_mesh(state->scene, entity, &mesh) != HENKA_SUCCESS ||
-                mesh == NULL)
+                henka_scene_is_entity_helper(state->scene, entity))
             {
                 continue;
+            }
+
+            name = henka_scene_get_entity_name(state->scene, entity);
+            showcase_name = name != NULL && strncmp(name, "Showcase ", 9U) == 0;
+            if ((pass == 0U && !showcase_name) || (pass == 1U && showcase_name))
+            {
+                continue;
+            }
+            if (henka_scene_get_entity_mesh(state->scene, entity, &mesh) != HENKA_SUCCESS ||
+                mesh == NULL)
+            {
+                /* Showcase entities own bounded authored framing even while
+                 * their asynchronous render meshes are still resolving. Do
+                 * not let that load window reframe capture mode around only
+                 * whichever model happened to finish first. Generic scene
+                 * fallback framing still requires a render mesh. */
+                if (pass != 0U)
+                {
+                    continue;
+                }
             }
 
             if (henka_scene_get_entity_world_bounds(state->scene, entity, &bounds) != HENKA_SUCCESS)
@@ -3882,13 +3901,6 @@ static bool sandbox3d_get_scene_framing_bounds(
                 !sandbox3d_vec3_is_finite(bounds.extents) ||
                 bounds.extents.x < 0.0f || bounds.extents.y < 0.0f || bounds.extents.z < 0.0f ||
                 bounds.extents.x > 1000.0f || bounds.extents.y > 1000.0f || bounds.extents.z > 1000.0f)
-            {
-                continue;
-            }
-
-            name = henka_scene_get_entity_name(state->scene, entity);
-            showcase_name = name != NULL && strncmp(name, "Showcase ", 9U) == 0;
-            if ((pass == 0U && !showcase_name) || (pass == 1U && showcase_name))
             {
                 continue;
             }
@@ -7140,6 +7152,9 @@ static void sandbox3d_reset_camera_defaults(sandbox3d_state* state)
     henka_camera_preset preset;
     henka_bounds framing_bounds;
     bool has_framing_bounds;
+    bool has_giraffe_showcase;
+    bool has_rocket_showcase;
+    size_t entity_index;
 
     if (state == NULL)
     {
@@ -7169,6 +7184,36 @@ static void sandbox3d_reset_camera_defaults(sandbox3d_state* state)
     has_framing_bounds = sandbox3d_get_scene_framing_bounds(state, &framing_bounds);
     if (has_framing_bounds)
     {
+        has_giraffe_showcase = false;
+        has_rocket_showcase = false;
+        for (entity_index = 0U;
+             entity_index < henka_scene_get_entity_count(state->scene);
+             ++entity_index)
+        {
+            const henka_entity entity =
+                henka_scene_get_entity_at_index(state->scene, entity_index);
+            const char* name = entity == HENKA_INVALID_ENTITY
+                ? NULL
+                : henka_scene_get_entity_name(state->scene, entity);
+            if (name != NULL && strncmp(name, "Showcase Giraffe", strlen("Showcase Giraffe")) == 0)
+            {
+                has_giraffe_showcase = true;
+            }
+            if (name != NULL && strncmp(name, "Showcase Rocket", strlen("Showcase Rocket")) == 0)
+            {
+                has_rocket_showcase = true;
+            }
+        }
+        if (preset == HENKA_CAMERA_PRESET_PERSPECTIVE_3D &&
+            has_giraffe_showcase && has_rocket_showcase)
+        {
+            /* The packaged showcase pair faces +Z. Keep the ordinary opening
+             * view deterministic: look straight at the pair's front side and
+             * frame their shared midpoint, rather than inheriting a stale
+             * orbit heading from a prior editor session. */
+            state->camera.yaw_radians = -HENKA_PI * 0.5f;
+            state->camera.pitch_radians = -0.08f;
+        }
         if (!henka_camera_frame_bounds(
                 &state->camera,
                 framing_bounds,
@@ -7208,30 +7253,41 @@ static void sandbox3d_apply_capture_camera(sandbox3d_state* state)
         have_showcase_bounds = false;
         showcase_yaw = -HENKA_PI * 0.5f;
         showcase_pitch = -0.08f;
-        if (!state->terrain_capture_mode_requested && state->showcase_capture_view_requested)
+        if (!state->terrain_capture_mode_requested)
         {
-            switch (state->showcase_capture_view)
+            if (state->showcase_capture_view_requested)
             {
-                case SANDBOX3D_SHOWCASE_CAPTURE_VIEW_FRONT:
-                    showcase_yaw = -HENKA_PI * 0.5f;
-                    have_showcase_bounds = sandbox3d_get_named_showcase_framing_bounds(
-                        state, "Showcase Giraffe", &showcase_bounds);
-                    break;
-                case SANDBOX3D_SHOWCASE_CAPTURE_VIEW_THREE_QUARTER:
-                    showcase_yaw = -0.92f;
-                    have_showcase_bounds = sandbox3d_get_named_showcase_framing_bounds(
-                        state, "Showcase Giraffe", &showcase_bounds);
-                    break;
-                case SANDBOX3D_SHOWCASE_CAPTURE_VIEW_PROFILE:
-                    showcase_yaw = 0.0f;
-                    have_showcase_bounds = sandbox3d_get_named_showcase_framing_bounds(
-                        state, "Showcase Giraffe", &showcase_bounds);
-                    break;
-                case SANDBOX3D_SHOWCASE_CAPTURE_VIEW_WIDE:
-                default:
-                    showcase_yaw = -HENKA_PI * 0.5f;
-                    have_showcase_bounds = sandbox3d_get_scene_framing_bounds(state, &showcase_bounds);
-                    break;
+                switch (state->showcase_capture_view)
+                {
+                    case SANDBOX3D_SHOWCASE_CAPTURE_VIEW_FRONT:
+                        showcase_yaw = -HENKA_PI * 0.5f;
+                        have_showcase_bounds = sandbox3d_get_named_showcase_framing_bounds(
+                            state, "Showcase Giraffe", &showcase_bounds);
+                        break;
+                    case SANDBOX3D_SHOWCASE_CAPTURE_VIEW_THREE_QUARTER:
+                        showcase_yaw = -0.92f;
+                        have_showcase_bounds = sandbox3d_get_named_showcase_framing_bounds(
+                            state, "Showcase Giraffe", &showcase_bounds);
+                        break;
+                    case SANDBOX3D_SHOWCASE_CAPTURE_VIEW_PROFILE:
+                        showcase_yaw = 0.0f;
+                        have_showcase_bounds = sandbox3d_get_named_showcase_framing_bounds(
+                            state, "Showcase Giraffe", &showcase_bounds);
+                        break;
+                    case SANDBOX3D_SHOWCASE_CAPTURE_VIEW_WIDE:
+                    default:
+                        showcase_yaw = -HENKA_PI * 0.5f;
+                        have_showcase_bounds = sandbox3d_get_scene_framing_bounds(state, &showcase_bounds);
+                        break;
+                }
+            }
+            else
+            {
+                /* Same-camera evidence must use the actual showcase pair's
+                 * bounds. A fixed distance cropped the pair on laptop-sized
+                 * viewports and made the three shading modes incomparable. */
+                showcase_yaw = -HENKA_PI * 0.5f;
+                have_showcase_bounds = sandbox3d_get_scene_framing_bounds(state, &showcase_bounds);
             }
             if (have_showcase_bounds)
             {
@@ -7241,14 +7297,12 @@ static void sandbox3d_apply_capture_camera(sandbox3d_state* state)
                     showcase_yaw,
                     showcase_pitch);
             }
-            if (framed_from_bounds)
+            if (!framed_from_bounds && !state->showcase_capture_view_requested)
             {
-                /* The actual imported entity bounds own the capture target and
-                 * distance. This keeps evidence valid when the asset's
-                 * authored transform changes, without hiding defects by
-                 * cropping the model. */
+                target = (henka_vec3){0.0f, 2.05f, -1.7f};
+                position = (henka_vec3){0.0f, 3.0f, 8.8f};
             }
-            else
+            else if (!framed_from_bounds)
             {
                 switch (state->showcase_capture_view)
                 {
@@ -7271,11 +7325,6 @@ static void sandbox3d_apply_capture_camera(sandbox3d_state* state)
                         break;
                 }
             }
-        }
-        else if (!state->terrain_capture_mode_requested)
-        {
-            target = (henka_vec3){0.0f, 2.05f, -1.7f};
-            position = (henka_vec3){0.0f, 3.0f, 8.8f};
         }
         else if (state->terrain_capture_view == SANDBOX3D_TERRAIN_CAPTURE_VIEW_CORNER)
         {
@@ -7300,24 +7349,6 @@ static void sandbox3d_apply_capture_camera(sandbox3d_state* state)
             state->camera.position = position;
             state->camera.yaw_radians = atan2f(direction.z, direction.x);
             state->camera.pitch_radians = asinf(direction.y);
-        }
-        if (state->showcase_capture_view_requested)
-        {
-            HENKA_LOG_INFO(
-                "Showcase capture camera: view=%d bounds=%s center=(%.2f,%.2f,%.2f) extents=(%.2f,%.2f,%.2f) position=(%.2f,%.2f,%.2f) yaw=%.3f pitch=%.3f.",
-                (int)state->showcase_capture_view,
-                framed_from_bounds ? "yes" : "fallback",
-                showcase_bounds.center.x,
-                showcase_bounds.center.y,
-                showcase_bounds.center.z,
-                showcase_bounds.extents.x,
-                showcase_bounds.extents.y,
-                showcase_bounds.extents.z,
-                state->camera.position.x,
-                state->camera.position.y,
-                state->camera.position.z,
-                state->camera.yaw_radians,
-                state->camera.pitch_radians);
         }
     }
     state->camera.far_plane = 800.0f;
@@ -21727,6 +21758,16 @@ static void sandbox3d_update(henka_engine* engine, double delta_seconds, void* u
         state->frame_layout = layout;
         henka_engine_set_scene_viewport(engine, layout.scene_viewport);
         henka_camera_set_aspect_ratio(&state->camera, henka_viewport_get_aspect_ratio(layout.scene_viewport));
+        if (state->capture_mode_requested && !state->capture_camera_aspect_applied)
+        {
+            /* Capture framing is authored before the window exists, so the
+             * final dock/fullscreen aspect must own the one deterministic
+             * reframe. Otherwise a narrow laptop Scene View crops the pair
+             * even though the startup camera was valid for a wide aspect. */
+            sandbox3d_apply_capture_camera(state);
+            state->capture_camera_aspect_applied = true;
+            henka_scene_set_camera(state->scene, &state->camera);
+        }
     }
         else
         {
@@ -22117,76 +22158,6 @@ static void sandbox3d_update(henka_engine* engine, double delta_seconds, void* u
 
     sandbox3d_update_physics(state, delta_seconds);
     henka_scene_set_camera(state->scene, &state->camera);
-    if (state->showcase_capture_view_requested && henka_engine_get_frame_index(engine) <= 1U)
-    {
-        henka_viewport capture_viewport;
-        henka_bounds capture_bounds;
-        henka_vec2 projected_center;
-        henka_transform capture_transform = henka_transform_identity();
-        bool have_capture_transform = false;
-        size_t capture_entity_index;
-        const bool have_capture_bounds =
-            sandbox3d_get_named_showcase_framing_bounds(
-                state,
-                "Showcase Giraffe",
-                &capture_bounds);
-        for (capture_entity_index = 0U;
-             capture_entity_index < henka_scene_get_entity_count(state->scene);
-             ++capture_entity_index)
-        {
-            const henka_entity capture_entity =
-                henka_scene_get_entity_at_index(state->scene, capture_entity_index);
-            const char* capture_name =
-                capture_entity == HENKA_INVALID_ENTITY
-                    ? NULL
-                    : henka_scene_get_entity_name(state->scene, capture_entity);
-            if (capture_name != NULL &&
-                strncmp(capture_name, "Showcase Giraffe", strlen("Showcase Giraffe")) == 0 &&
-                henka_scene_get_entity_transform(state->scene, capture_entity, &capture_transform) == HENKA_SUCCESS)
-            {
-                have_capture_transform = true;
-                break;
-            }
-        }
-        if (henka_engine_get_scene_viewport(engine, &capture_viewport) == HENKA_SUCCESS &&
-            have_capture_bounds &&
-            henka_camera_world_to_screen(
-                &state->camera,
-                capture_viewport.width,
-                capture_viewport.height,
-                capture_bounds.center,
-                &projected_center,
-                NULL) == HENKA_SUCCESS)
-        {
-            HENKA_LOG_INFO(
-                "Showcase capture runtime: viewport=%d,%d %dx%d camera=(%.2f,%.2f,%.2f) yaw=%.3f pitch=%.3f bounds=(%.2f,%.2f,%.2f) projected=(%.2f,%.2f).",
-                capture_viewport.x,
-                capture_viewport.y,
-                capture_viewport.width,
-                capture_viewport.height,
-                state->camera.position.x,
-                state->camera.position.y,
-                state->camera.position.z,
-                state->camera.yaw_radians,
-                state->camera.pitch_radians,
-                capture_bounds.center.x,
-                capture_bounds.center.y,
-                capture_bounds.center.z,
-                projected_center.x,
-                projected_center.y);
-            if (have_capture_transform)
-            {
-                HENKA_LOG_INFO(
-                    "Showcase capture entity transform: position=(%.2f,%.2f,%.2f) scale=(%.2f,%.2f,%.2f).",
-                    capture_transform.position.x,
-                    capture_transform.position.y,
-                    capture_transform.position.z,
-                    capture_transform.scale.x,
-                    capture_transform.scale.y,
-                    capture_transform.scale.z);
-            }
-        }
-    }
     sandbox3d_update_gizmo_rendering(state);
     sandbox3d_refresh_interaction_diagnostics(engine, state);
     sandbox3d_build_ui(engine, state);
