@@ -343,7 +343,9 @@ function New-Material {
         [float]$Clearcoat = 0.0,
         [float]$ClearcoatRoughness = 0.20,
         [float[]]$SheenColor = @(0.0, 0.0, 0.0),
-        [float]$SheenRoughness = 0.50
+        [float]$SheenRoughness = 0.50,
+        [float[]]$EmissiveColor = @(0.0, 0.0, 0.0),
+        [float]$EmissiveStrength = 1.0
     )
     $material = [ordered]@{
         name = $Name
@@ -364,6 +366,12 @@ function New-Material {
         $extensions.Add("KHR_materials_sheen", [ordered]@{
             sheenColorFactor = $SheenColor
             sheenRoughnessFactor = $SheenRoughness
+        })
+    }
+    if (([Math]::Abs($EmissiveColor[0]) + [Math]::Abs($EmissiveColor[1]) + [Math]::Abs($EmissiveColor[2])) -gt 0.0001) {
+        $material.Add("emissiveFactor", $EmissiveColor)
+        $extensions.Add("KHR_materials_emissive_strength", [ordered]@{
+            emissiveStrength = $EmissiveStrength
         })
     }
     if ($extensions.Count -gt 0) {
@@ -482,7 +490,7 @@ function Write-Gltf {
     [IO.File]::WriteAllBytes([IO.Path]::ChangeExtension($Path, ".bin"), $bytes)
     $json = [ordered]@{
         asset = [ordered]@{ version = "2.0"; generator = "Henka Engine deterministic showcase generator" }
-        extensionsUsed = @("KHR_materials_clearcoat", "KHR_materials_sheen")
+        extensionsUsed = @("KHR_materials_clearcoat", "KHR_materials_sheen", "KHR_materials_emissive_strength")
         buffers = @([ordered]@{ uri = ([IO.Path]::GetFileName([IO.Path]::ChangeExtension($Path, ".bin"))); byteLength = $bytes.Length })
         bufferViews = $views
         accessors = $accessors
@@ -554,7 +562,7 @@ function New-Rocket {
     $materials = @(
         (New-Material "Rocket Painted Ceramic" @(0.64, 0.70, 0.76, 1.0) 0.18 0.28 0.32 0.16),
         (New-Material "Rocket Brushed Metal" @(0.48, 0.52, 0.58, 1.0) 0.86 0.20 0.08 0.20),
-        (New-Material "Rocket Heat Shield" @(0.055, 0.065, 0.075, 1.0) 0.62 0.34),
+        (New-Material "Rocket Heat Shield" @(0.055, 0.065, 0.075, 1.0) 0.62 0.34 0.0 0.20 @(0.0, 0.0, 0.0) 0.50 @(0.18, 0.025, 0.005) 0.40),
         (New-Material "Rocket Mission Stripe" @(0.84, 0.14, 0.055, 1.0) 0.18 0.30 0.12 0.20))
     $paint = New-Part 0
     $metal = New-Part 1
@@ -580,10 +588,10 @@ function New-Rocket {
         Add-Ellipsoid $heat @($engine[0], 0.02, $engine[1]) @(0.20, 0.08, 0.20) 8 16
     }
     Add-Frustum $stripe 1.78 1.91 0.59 0.59 0.0 0.0 32
-    Add-RadialFin $heat 1.0 0.0
-    Add-RadialFin $heat -1.0 0.0
-    Add-RadialFin $heat 0.0 1.0
-    Add-RadialFin $heat 0.0 -1.0
+    Add-RadialFin $metal 1.0 0.0
+    Add-RadialFin $metal -1.0 0.0
+    Add-RadialFin $metal 0.0 1.0
+    Add-RadialFin $metal 0.0 -1.0
     return [pscustomobject]@{ Parts = @($paint, $metal, $heat, $stripe); Materials = $materials }
 }
 
