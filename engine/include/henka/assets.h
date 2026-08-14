@@ -136,7 +136,9 @@ typedef enum henka_material_texture_slot
     HENKA_MATERIAL_TEXTURE_SLOT_TERRAIN_LAYER3_BASE_COLOR,
     HENKA_MATERIAL_TEXTURE_SLOT_TERRAIN_LAYER3_NORMAL,
     HENKA_MATERIAL_TEXTURE_SLOT_TERRAIN_LAYER3_METALLIC_ROUGHNESS,
-    HENKA_MATERIAL_TEXTURE_SLOT_THICKNESS
+    HENKA_MATERIAL_TEXTURE_SLOT_THICKNESS,
+    /* Imported KHR_materials_transmission scalar data. */
+    HENKA_MATERIAL_TEXTURE_SLOT_TRANSMISSION
 } henka_material_texture_slot;
 
 typedef struct henka_material_dependency

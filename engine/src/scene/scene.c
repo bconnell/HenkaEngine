@@ -59,6 +59,7 @@ henka_material henka_material_default(void)
     material.metallic_roughness_uv_set = 0;
     material.occlusion_uv_set = 0;
     material.emissive_uv_set = 0;
+    material.transmission_uv_set = 0;
     material.thickness_uv_set = 0;
     material.thickness_texture = NULL;
     material.base_color = (henka_vec4){1.0f, 1.0f, 1.0f, 1.0f};
@@ -69,6 +70,7 @@ henka_material henka_material_default(void)
     material.specular_color = (henka_vec3){1.0f, 1.0f, 1.0f};
     material.ior = 1.5f;
     material.transmission = 0.0f;
+    material.transmission_texture = NULL;
     material.thickness = 0.0f;
     material.attenuation_distance = 10000.0f;
     material.attenuation_color = (henka_vec3){1.0f, 1.0f, 1.0f};
@@ -278,6 +280,7 @@ henka_result henka_material_validate(const henka_material* material)
         material->metallic_roughness_uv_set < 0 || material->metallic_roughness_uv_set > 1 ||
         material->occlusion_uv_set < 0 || material->occlusion_uv_set > 1 ||
         material->emissive_uv_set < 0 || material->emissive_uv_set > 1 ||
+        material->transmission_uv_set < 0 || material->transmission_uv_set > 1 ||
         material->clearcoat < 0.0f || material->clearcoat > 1.0f ||
         material->clearcoat_roughness < 0.045f || material->clearcoat_roughness > 1.0f ||
         material->sheen_color.x < 0.0f || material->sheen_color.x > 1.0f ||
@@ -292,6 +295,7 @@ henka_result henka_material_validate(const henka_material* material)
         !henka_material_texture_matches(material->metallic_roughness_texture, HENKA_TEXTURE_USAGE_METALLIC_ROUGHNESS, HENKA_TEXTURE_COLOR_SPACE_LINEAR) ||
         !henka_material_texture_matches(material->occlusion_texture, HENKA_TEXTURE_USAGE_OCCLUSION, HENKA_TEXTURE_COLOR_SPACE_LINEAR) ||
         !henka_material_texture_matches(material->emissive_texture, HENKA_TEXTURE_USAGE_EMISSIVE, HENKA_TEXTURE_COLOR_SPACE_SRGB) ||
+        !henka_material_texture_matches(material->transmission_texture, HENKA_TEXTURE_USAGE_GENERIC_DATA, HENKA_TEXTURE_COLOR_SPACE_LINEAR) ||
         !henka_material_texture_matches(material->thickness_texture, HENKA_TEXTURE_USAGE_GENERIC_DATA, HENKA_TEXTURE_COLOR_SPACE_LINEAR))
     {
         return HENKA_ERROR_INVALID_ARGUMENT;

@@ -68,6 +68,7 @@ typedef struct henka_material
     int metallic_roughness_uv_set;
     int occlusion_uv_set;
     int emissive_uv_set;
+    int transmission_uv_set;
     int thickness_uv_set;
     henka_vec4 base_color;
     henka_vec3 emissive_color;
@@ -78,6 +79,9 @@ typedef struct henka_material
     float ior;
     /* Bounded environment-based transmission factor; refraction/layered volume remain renderer work. */
     float transmission;
+    /* Optional glTF KHR_materials_transmission scalar texture; manager-owned and
+     * sampled as a bounded linear factor in the renderer. */
+    henka_texture* transmission_texture;
     /* Bounded glTF volume attenuation controls; refraction and layered volume remain renderer work. */
     float thickness;
     /* Optional glTF KHR_materials_volume thickness data; manager-owned and

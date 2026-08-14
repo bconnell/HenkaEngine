@@ -1047,7 +1047,9 @@ static bool henka_gltf_parse_material(
             !henka_gltf_member_float(extension, extension_end, "ior", &out_source->material.ior)) return false;
         if (henka_gltf_find_member(extensions, extensions_end, "KHR_materials_transmission", &extension, &extension_end))
         {
-            if (henka_gltf_find_member(extension, extension_end, "transmissionTexture", &value, &value_end)) return false;
+            if (!henka_gltf_material_texture(context, extension, extension_end, "transmissionTexture",
+                    &out_source->transmission_uri, &out_source->transmission_embedded_data,
+                    &out_source->transmission_embedded_size, &out_source->material.transmission_uv_set)) return false;
             if (henka_gltf_find_member(extension, extension_end, "transmissionFactor", &value, &value_end) &&
                 !henka_gltf_member_float(extension, extension_end, "transmissionFactor", &out_source->material.transmission)) return false;
         }
@@ -1892,12 +1894,14 @@ void henka_model_scene_data_destroy(henka_model_scene_data* scene)
         henka_free(scene->materials[index].metallic_roughness_uri);
         henka_free(scene->materials[index].occlusion_uri);
         henka_free(scene->materials[index].emissive_uri);
+        henka_free(scene->materials[index].transmission_uri);
         henka_free(scene->materials[index].thickness_uri);
         henka_free(scene->materials[index].base_color_embedded_data);
         henka_free(scene->materials[index].normal_embedded_data);
         henka_free(scene->materials[index].metallic_roughness_embedded_data);
         henka_free(scene->materials[index].occlusion_embedded_data);
         henka_free(scene->materials[index].emissive_embedded_data);
+        henka_free(scene->materials[index].transmission_embedded_data);
         henka_free(scene->materials[index].thickness_embedded_data);
     }
     for (index = 0U; index < scene->node_count; ++index) henka_free(scene->nodes[index].name);

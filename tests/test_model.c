@@ -306,7 +306,8 @@ void henka_test_model(void)
         "\"baseColorFactor\":[0.8,0.6,0.2,1.0],\"metallicFactor\":0.8,\"roughnessFactor\":0.3,"
         "\"baseColorTexture\":{\"index\":0,\"texCoord\":1}},\"emissiveFactor\":[0.1,0.2,0.3],"
         "\"alphaMode\":\"MASK\",\"alphaCutoff\":0.4,\"doubleSided\":true,"
-        "\"extensions\":{\"KHR_materials_volume\":{\"thicknessTexture\":{\"index\":0,\"texCoord\":1}}}}],"
+        "\"extensions\":{\"KHR_materials_transmission\":{\"transmissionFactor\":0.65,\"transmissionTexture\":{\"index\":0,\"texCoord\":1}},"
+        "\"KHR_materials_volume\":{\"thicknessTexture\":{\"index\":0,\"texCoord\":1}}}}],"
         "\"meshes\":[{\"primitives\":[{\"attributes\":{\"POSITION\":0},\"material\":0}]}]}";
     static const char* valid_gltf_embedded_material =
         "{\"asset\":{\"version\":\"2.0\"},"
@@ -496,12 +497,15 @@ void henka_test_model(void)
     HENKA_TEST_ASSERT(model.has_material);
     HENKA_TEST_ASSERT(strcmp(model.material_source.name, "Imported Gold") == 0);
     HENKA_TEST_ASSERT(strcmp(model.material_source.base_color_uri, "textures/albedo.ktx2") == 0);
+    HENKA_TEST_ASSERT(strcmp(model.material_source.transmission_uri, "textures/albedo.ktx2") == 0);
     HENKA_TEST_ASSERT(strcmp(model.material_source.thickness_uri, "textures/albedo.ktx2") == 0);
     HENKA_TEST_ASSERT(model.material_source.material.base_color_uv_set == 1);
     HENKA_TEST_ASSERT(model.material_source.material.thickness_uv_set == 1);
+    HENKA_TEST_ASSERT(model.material_source.material.transmission_uv_set == 1);
     HENKA_TEST_ASSERT_FLOAT_CLOSE(model.material_source.material.base_color.x, 0.8f, 0.0001f);
     HENKA_TEST_ASSERT_FLOAT_CLOSE(model.material_source.material.metallic, 0.8f, 0.0001f);
     HENKA_TEST_ASSERT_FLOAT_CLOSE(model.material_source.material.roughness, 0.3f, 0.0001f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(model.material_source.material.transmission, 0.65f, 0.0001f);
     HENKA_TEST_ASSERT(model.material_source.material.alpha_mode == HENKA_MATERIAL_ALPHA_MASKED);
     HENKA_TEST_ASSERT(model.material_source.material.double_sided);
     henka_model_data_destroy(&model);

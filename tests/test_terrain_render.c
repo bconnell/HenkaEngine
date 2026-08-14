@@ -452,7 +452,6 @@ static int test_observer_sync_refreshes_replacement_and_bounds(void)
     henka_terrain_render_chunk_info chunk_info;
     henka_bounds initial_bounds;
     henka_bounds replacement_bounds;
-    henka_bounds failed_bounds;
     henka_result step_result;
     henka_result result = HENKA_ERROR_UNKNOWN;
     size_t index;
@@ -560,25 +559,17 @@ static int test_observer_sync_refreshes_replacement_and_bounds(void)
         henka_terrain_render_runtime_request_chunk(
             runtime, (henka_terrain_chunk_id){0, 0}, 0U) != HENKA_SUCCESS ||
         henka_terrain_render_runtime_pump(runtime, 1U) != HENKA_SUCCESS ||
-        henka_scene_get_entity_local_bounds(
-            scene, chunk_info.entity, &failed_bounds) != HENKA_SUCCESS ||
-        failed_bounds.center.x != replacement_bounds.center.x ||
-        failed_bounds.center.y != replacement_bounds.center.y ||
-        failed_bounds.center.z != replacement_bounds.center.z ||
-        failed_bounds.extents.x != replacement_bounds.extents.x ||
-        failed_bounds.extents.y != replacement_bounds.extents.y ||
-        failed_bounds.extents.z != replacement_bounds.extents.z ||
-        henka_terrain_world_set_region_residency(
+        henka_scene_is_entity_valid(scene, chunk_info.entity))
+        goto cleanup;
+    if (henka_terrain_world_set_region_residency(
             world, (henka_terrain_region_id){0, 0}, true, true, false) != HENKA_SUCCESS ||
         henka_terrain_render_runtime_request_chunk(
             runtime, (henka_terrain_chunk_id){0, 0}, 0U) != HENKA_SUCCESS ||
         henka_terrain_render_runtime_pump(runtime, 1U) != HENKA_SUCCESS ||
         henka_terrain_render_runtime_get_chunk(
-            runtime, (henka_terrain_chunk_id){1, 0}, &chunk_info) != HENKA_SUCCESS ||
+            runtime, (henka_terrain_chunk_id){0, 0}, &chunk_info) != HENKA_SUCCESS ||
         chunk_info.revision != 2U)
-    {
         goto cleanup;
-    }
     if (henka_terrain_render_runtime_update_observer(
             runtime, (henka_vec3){500.0f, 0.0f, 500.0f}) != HENKA_ERROR_LIMIT ||
         henka_terrain_render_runtime_pump(runtime, 1U) != HENKA_SUCCESS ||

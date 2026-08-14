@@ -29,6 +29,7 @@ void henka_test_material(void)
     HENKA_TEST_ASSERT_FLOAT_CLOSE(material.specular_color.x, 1.0f, 0.0001f);
     HENKA_TEST_ASSERT(material.ior == 1.5f);
     HENKA_TEST_ASSERT(material.transmission == 0.0f);
+    HENKA_TEST_ASSERT(material.transmission_texture == NULL);
     HENKA_TEST_ASSERT(material.thickness == 0.0f);
     HENKA_TEST_ASSERT(material.attenuation_distance == 10000.0f);
     HENKA_TEST_ASSERT_FLOAT_CLOSE(material.attenuation_color.z, 1.0f, 0.0001f);

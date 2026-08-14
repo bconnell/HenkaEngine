@@ -1228,7 +1228,8 @@ static void henka_add_optional_shader_locations(
         "reflectionProbeMap", "useReflectionProbeMap", "doubleSided",
         "previousViewProjection", "previousModel", "useMotionVectors",
         "useInstancing", "cascadeBlendDistance", "thickness", "attenuationDistance", "attenuationColor",
-        "thicknessUvSet", "useThicknessTexture", "subsurface", "subsurfaceColor",
+        "thicknessUvSet", "useThicknessTexture", "transmissionUvSet", "useTransmissionTexture",
+        "subsurface", "subsurfaceColor",
         "useTerrainLayers", "terrainLayerBaseColor[0]", "terrainLayerParameters[0]",
         "terrainLayerBaseColorAvailable[0]", "terrainLayerNormalAvailable[0]",
         "terrainLayerMetallicRoughnessAvailable[0]", "terrainLayerBaseColorTextures[0]",
@@ -4744,12 +4745,14 @@ static bool henka_opengl_material_batch_compatible(
         a->metallic_roughness_texture == b->metallic_roughness_texture &&
         a->occlusion_texture == b->occlusion_texture &&
         a->emissive_texture == b->emissive_texture &&
+        a->transmission_texture == b->transmission_texture &&
         a->thickness_texture == b->thickness_texture &&
         a->base_color_uv_set == b->base_color_uv_set &&
         a->normal_uv_set == b->normal_uv_set &&
         a->metallic_roughness_uv_set == b->metallic_roughness_uv_set &&
         a->occlusion_uv_set == b->occlusion_uv_set &&
         a->emissive_uv_set == b->emissive_uv_set &&
+        a->transmission_uv_set == b->transmission_uv_set &&
         a->thickness_uv_set == b->thickness_uv_set &&
         a->base_color.x == b->base_color.x &&
         a->base_color.y == b->base_color.y &&
@@ -5277,6 +5280,7 @@ henka_result henka_opengl_renderer_draw_scene(
         const henka_opengl_texture_data* metallic_roughness_texture_data;
         const henka_opengl_texture_data* occlusion_texture_data;
         const henka_opengl_texture_data* emissive_texture_data;
+        const henka_opengl_texture_data* transmission_texture_data;
         const henka_opengl_texture_data* thickness_texture_data;
         henka_vec3 ambient_color;
         henka_vec4 base_color;
@@ -5505,6 +5509,8 @@ henka_result henka_opengl_renderer_draw_scene(
             (const henka_opengl_texture_data*)entity->material.occlusion_texture->backend_data : NULL;
         emissive_texture_data = entity->material.emissive_texture != NULL ?
             (const henka_opengl_texture_data*)entity->material.emissive_texture->backend_data : NULL;
+        transmission_texture_data = entity->material.transmission_texture != NULL ?
+            (const henka_opengl_texture_data*)entity->material.transmission_texture->backend_data : NULL;
         thickness_texture_data = entity->material.thickness_texture != NULL ?
             (const henka_opengl_texture_data*)entity->material.thickness_texture->backend_data : NULL;
 
@@ -5771,6 +5777,7 @@ henka_result henka_opengl_renderer_draw_scene(
         henka_set_uniform_int(program, "occlusionTexture", 3);
         henka_set_uniform_int(program, "occlusionUvSet", entity->material.occlusion_uv_set);
         henka_set_uniform_int(program, "emissiveTexture", 4);
+        henka_set_uniform_int(program, "transmissionTexture", 15);
         henka_set_uniform_int(program, "thicknessTexture", 14);
         henka_set_uniform_int(program, "emissiveUvSet", entity->material.emissive_uv_set);
         {
@@ -5842,6 +5849,10 @@ henka_result henka_opengl_renderer_draw_scene(
         henka_set_uniform_vec3(program, "specularColor", entity->material.specular_color);
         henka_set_uniform_float(program, "ior", entity->material.ior);
         henka_set_uniform_float(program, "transmission", entity->material.transmission);
+        henka_set_uniform_int(program, "transmissionUvSet", entity->material.transmission_uv_set);
+        henka_set_uniform_bool(program, "useTransmissionTexture",
+            !entity->material.terrain_layers_enabled &&
+            transmission_texture_data != NULL && transmission_texture_data->texture_id != 0U);
         henka_set_uniform_float(program, "subsurface", entity->material.subsurface);
         henka_set_uniform_float(program, "thickness", entity->material.thickness);
         henka_set_uniform_int(program, "thicknessUvSet", entity->material.thickness_uv_set);
@@ -5980,6 +5991,10 @@ henka_result henka_opengl_renderer_draw_scene(
         glBindTexture(GL_TEXTURE_2D,
             (!entity->material.terrain_layers_enabled && thickness_texture_data != NULL) ?
                 thickness_texture_data->texture_id : 0U);
+        g_gl.ActiveTexture(GL_TEXTURE15);
+        glBindTexture(GL_TEXTURE_2D,
+            (!entity->material.terrain_layers_enabled && transmission_texture_data != NULL) ?
+                transmission_texture_data->texture_id : 0U);
         {
             uint32_t layer_index;
             for (layer_index = 0U; layer_index < HENKA_MATERIAL_TERRAIN_LAYER_COUNT; ++layer_index)

@@ -83,6 +83,9 @@ uniform sampler2D occlusionTexture;
 uniform int occlusionUvSet;
 uniform sampler2D emissiveTexture;
 uniform int emissiveUvSet;
+uniform sampler2D transmissionTexture;
+uniform int transmissionUvSet;
+uniform bool useTransmissionTexture;
 uniform sampler2D thicknessTexture;
 uniform int thicknessUvSet;
 uniform bool useThicknessTexture;
@@ -561,6 +564,10 @@ void main()
     float surfaceMetallic = saturate(metallic);
     float surfaceRoughness = clamp(roughness, 0.045, 1.0);
     float surfaceTransmission = saturate(transmission);
+    if (useTransmissionTexture)
+    {
+        surfaceTransmission *= clamp(texture(transmissionTexture, materialUv(transmissionUvSet)).r, 0.0, 1.0);
+    }
     float surfaceSubsurface = saturate(subsurface);
     vec3 surfaceSubsurfaceColor = clamp(subsurfaceColor, vec3(0.0), vec3(1.0));
     float surfaceThickness = saturate(thickness);

@@ -38,6 +38,7 @@ typedef struct henka_model_material_source
     char* metallic_roughness_uri;
     char* occlusion_uri;
     char* emissive_uri;
+    char* transmission_uri;
     char* thickness_uri;
     unsigned char* base_color_embedded_data;
     size_t base_color_embedded_size;
@@ -49,6 +50,8 @@ typedef struct henka_model_material_source
     size_t occlusion_embedded_size;
     unsigned char* emissive_embedded_data;
     size_t emissive_embedded_size;
+    unsigned char* transmission_embedded_data;
+    size_t transmission_embedded_size;
     unsigned char* thickness_embedded_data;
     size_t thickness_embedded_size;
 } henka_model_material_source;
