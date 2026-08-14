@@ -48,6 +48,20 @@ void henka_test_sandbox3d_workspace(void)
     HENKA_TEST_ASSERT(sandbox3d_studio_environment_is_valid(
         studio_environment,
         SANDBOX3D_STUDIO_ENVIRONMENT_PIXEL_COUNT));
+    {
+        const size_t key_pixel = (size_t)2U *
+            SANDBOX3D_STUDIO_ENVIRONMENT_WIDTH *
+            SANDBOX3D_STUDIO_ENVIRONMENT_CHANNELS +
+            (size_t)5U * SANDBOX3D_STUDIO_ENVIRONMENT_CHANNELS;
+        const size_t neutral_pixel = (size_t)2U *
+            SANDBOX3D_STUDIO_ENVIRONMENT_WIDTH *
+            SANDBOX3D_STUDIO_ENVIRONMENT_CHANNELS +
+            (size_t)20U * SANDBOX3D_STUDIO_ENVIRONMENT_CHANNELS;
+        HENKA_TEST_ASSERT(studio_environment[key_pixel + 0U] >
+            studio_environment[neutral_pixel + 0U]);
+        HENKA_TEST_ASSERT(studio_environment[key_pixel + 0U] >
+            studio_environment[key_pixel + 2U]);
+    }
     HENKA_TEST_ASSERT(!sandbox3d_studio_environment_is_valid(
         studio_environment,
         SANDBOX3D_STUDIO_ENVIRONMENT_PIXEL_COUNT - 1U));
