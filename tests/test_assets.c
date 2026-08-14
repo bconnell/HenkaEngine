@@ -339,6 +339,7 @@ void henka_test_assets(void)
     char* resolved_path;
     henka_shader managed_shader;
     henka_texture fallback_texture;
+    henka_texture transmission_texture;
     henka_texture priority_texture;
     henka_texture* texture;
     henka_texture* texture_alias;
@@ -883,6 +884,10 @@ void henka_test_assets(void)
     material_entry.material.shader = &managed_shader;
     material_entry.material.use_texture = true;
     material_entry.material.base_color_texture = &fallback_texture;
+    transmission_texture = (henka_texture){0};
+    transmission_texture.descriptor = henka_texture_descriptor_default_data();
+    transmission_texture.backend_data = (void*)1;
+    material_entry.material.transmission_texture = &transmission_texture;
     fallback_texture.descriptor = henka_texture_descriptor_default_color();
     material_entry.revision = 4U;
     material_entry_array[0] = &material_entry;
@@ -909,9 +914,11 @@ void henka_test_assets(void)
     HENKA_TEST_ASSERT(henka_assets_get_material_asset_dependencies(
         &material_entry, &material_dependencies) == HENKA_SUCCESS);
     HENKA_TEST_ASSERT(material_dependencies.definition_revision == 4U);
-    HENKA_TEST_ASSERT(material_dependencies.dependency_count == 1U);
+    HENKA_TEST_ASSERT(material_dependencies.dependency_count == 2U);
     HENKA_TEST_ASSERT(material_dependencies.dependencies[0].slot ==
         HENKA_MATERIAL_TEXTURE_SLOT_BASE_COLOR);
+    HENKA_TEST_ASSERT(material_dependencies.dependencies[1].slot ==
+        HENKA_MATERIAL_TEXTURE_SLOT_TRANSMISSION);
     {
         henka_material_asset terrain_asset = {0};
         henka_material_dependency_info terrain_dependencies;
@@ -1016,6 +1023,9 @@ void henka_test_assets(void)
     HENKA_TEST_ASSERT(henka_assets_material_instance_set_texture(
         &material_instance, HENKA_MATERIAL_TEXTURE_SLOT_BASE_COLOR, NULL) == HENKA_SUCCESS);
     HENKA_TEST_ASSERT(!material_instance.material.use_texture);
+    HENKA_TEST_ASSERT(henka_assets_material_instance_set_texture(
+        &material_instance, HENKA_MATERIAL_TEXTURE_SLOT_TRANSMISSION, NULL) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(material_instance.texture_override_mask != 0U);
     HENKA_TEST_ASSERT(henka_assets_get_material_instance_dependencies(
         &material_instance, &material_dependencies) == HENKA_SUCCESS);
     HENKA_TEST_ASSERT(material_dependencies.definition_revision == 4U);
@@ -1026,6 +1036,7 @@ void henka_test_assets(void)
     HENKA_TEST_ASSERT(material_instance.definition_revision == 5U);
     HENKA_TEST_ASSERT(material_instance.material.metallic == 0.8f);
     HENKA_TEST_ASSERT(material_instance.material.transmission == 0.65f);
+    HENKA_TEST_ASSERT(material_instance.material.transmission_texture == NULL);
     HENKA_TEST_ASSERT(material_instance.material.subsurface == 0.55f);
     HENKA_TEST_ASSERT(material_instance.material.thickness == 0.35f);
     HENKA_TEST_ASSERT(material_instance.material.attenuation_distance == 3.0f);
@@ -1038,6 +1049,10 @@ void henka_test_assets(void)
     HENKA_TEST_ASSERT(henka_assets_material_instance_reset_override(
         &material_instance, HENKA_MATERIAL_INSTANCE_METALLIC) == HENKA_SUCCESS);
     HENKA_TEST_ASSERT(material_instance.material.metallic == material_entry.material.metallic);
+    HENKA_TEST_ASSERT(henka_assets_material_instance_reset_override(
+        &material_instance, HENKA_MATERIAL_INSTANCE_TRANSMISSION_TEXTURE) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(material_instance.material.transmission_texture ==
+        material_entry.material.transmission_texture);
     HENKA_TEST_ASSERT(henka_assets_material_instance_reset_overrides(
         &material_instance) == HENKA_SUCCESS);
     HENKA_TEST_ASSERT(material_instance.override_mask == 0U);

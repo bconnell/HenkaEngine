@@ -427,7 +427,7 @@ The Scene View owns an explicit shading mode. It does not rely on a global polyg
 
 The legacy wireframe API remains compatible: enabling it selects Wireframe, while disabling it restores the last valid non-wireframe mode. The sandbox persists the authoritative mode under `ui.scene_view.shading_mode`; older `wireframe_enabled` settings are migrated only when the new key is absent.
 
-Material instances layer validated scalar, vector, alpha-mode, and semantic-texture overrides over the shared glTF material definition. Effective dependency inspection reports the borrowed texture slots after those overrides, while revision-aware refresh preserves explicit instance choices across transactional definition reimport.
+Material instances layer validated scalar, vector, alpha-mode, and semantic-texture overrides over the shared glTF material definition. Effective dependency inspection reports the borrowed texture slots after those overrides, including the imported transmission scalar slot, while revision-aware refresh preserves explicit instance choices across transactional definition reimport.
 
 Temporal history allocation validates the replacement texture before retiring the previous object. If a resize or texture allocation fails, the previous GPU object remains owned, accumulation is marked invalid for the requested viewport, and diagnostics report the fallback instead of presenting stale history as valid.
 

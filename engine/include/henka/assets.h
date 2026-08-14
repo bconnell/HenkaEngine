@@ -114,6 +114,8 @@ typedef enum henka_material_instance_parameter
     HENKA_MATERIAL_INSTANCE_EMISSIVE_TEXTURE,
     HENKA_MATERIAL_INSTANCE_SUBSURFACE,
     HENKA_MATERIAL_INSTANCE_SUBSURFACE_COLOR,
+    /* Optional imported KHR_materials_transmission scalar texture override. */
+    HENKA_MATERIAL_INSTANCE_TRANSMISSION_TEXTURE,
     HENKA_MATERIAL_INSTANCE_PARAMETER_COUNT
 } henka_material_instance_parameter;
 
@@ -163,6 +165,9 @@ typedef struct henka_material_instance
     henka_material material;
     uint64_t definition_revision;
     uint32_t override_mask;
+    /* The original scalar/vector mask uses all 32 bits; bit zero tracks the
+     * transmission texture override. */
+    uint32_t texture_override_mask;
 } henka_material_instance;
 
 henka_asset_manager* henka_engine_get_asset_manager(henka_engine* engine);
@@ -358,7 +363,8 @@ henka_result henka_assets_material_instance_set_alpha_mode(
     henka_material_alpha_mode mode);
 /* Assigns a borrowed semantic texture to an instance without changing the
  * shared definition. A null base-color texture disables texture sampling for
- * the effective instance; all other null values clear only that slot. */
+ * the effective instance; all other null values clear only that slot. The
+ * imported transmission scalar texture is also a supported instance slot. */
 henka_result henka_assets_material_instance_set_texture(
     henka_material_instance* instance,
     henka_material_texture_slot slot,
