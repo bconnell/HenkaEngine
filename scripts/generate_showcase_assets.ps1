@@ -482,16 +482,24 @@ function New-Giraffe {
     $cream = New-Part 2
     $eyes = New-Part 3
     $smile = New-Part 4
-    Add-Ellipsoid $tan @(0.0, 1.35, 0.0) @(0.92, 1.0, 0.62)
-    Add-Frustum $tan 1.55 3.55 0.34 0.29
-    Add-Ellipsoid $tan @(0.0, 3.82, 0.0) @(0.72, 0.56, 0.56)
+    # Keep the proportions stylized, but use enough curvature that the
+    # silhouette reads as an authored animated-film character rather than a
+    # low-resolution primitive assembly.
+    Add-Ellipsoid $tan @(0.0, 1.35, 0.0) @(0.92, 1.0, 0.62) 20 36
+    Add-Frustum $tan 1.55 3.55 0.34 0.29 0.0 0.0 32
+    Add-Ellipsoid $tan @(0.0, 3.82, 0.0) @(0.72, 0.56, 0.56) 18 32
     foreach ($leg in @(@(-0.55, 0.0, -0.36), @(0.55, 0.0, -0.36), @(-0.55, 0.0, 0.36), @(0.55, 0.0, 0.36))) {
-        Add-Frustum $tan 0.12 0.92 0.18 0.14 $leg[0] $leg[2] 16
+        Add-Frustum $tan 0.12 0.92 0.18 0.14 $leg[0] $leg[2] 20
     }
-    Add-Ellipsoid $tan @(-0.55, 4.22, 0.0) @(0.32, 0.13, 0.52) 8 16
-    Add-Ellipsoid $tan @(0.55, 4.22, 0.0) @(0.32, 0.13, 0.52) 8 16
-    Add-Frustum $tan 4.15 4.48 0.095 0.075 -0.24 0.0 12
-    Add-Frustum $tan 4.15 4.48 0.095 0.075 0.24 0.0 12
+    Add-Ellipsoid $tan @(-0.55, 4.22, 0.0) @(0.32, 0.13, 0.52) 12 24
+    Add-Ellipsoid $tan @(0.55, 4.22, 0.0) @(0.32, 0.13, 0.52) 12 24
+    Add-Frustum $tan 4.15 4.48 0.095 0.075 -0.24 0.0 16
+    Add-Frustum $tan 4.15 4.48 0.095 0.075 0.24 0.0 16
+    # A short mane row gives the neck a readable rear contour without making
+    # the mascot realistic in the photographic sense.
+    foreach ($maneY in @(1.95, 2.18, 2.41, 2.64, 2.87, 3.10, 3.33)) {
+        Add-Ellipsoid $spots @(0.0, $maneY, -0.31) @(0.075, 0.13, 0.035) 8 16
+    }
     # Spots are low-profile tangent patches, not intersecting ellipsoids. The
     # small outward bias is a deterministic decal-style separation that keeps
     # the pattern readable without introducing bumps or coplanar z-fighting.
@@ -504,12 +512,14 @@ function New-Giraffe {
     Add-SurfaceSpot $spots @(0.0, 2.78, 0.30) @(0.0, 0.0, 1.0) 0.12 0.17 0.25
     Add-EllipsoidSurfaceSpot $spots @(0.0, 3.82, 0.0) @(0.72, 0.56, 0.56) @(-0.32, 0.18, 0.92) 0.12 0.10 0.35
     Add-EllipsoidSurfaceSpot $spots @(0.0, 3.82, 0.0) @(0.72, 0.56, 0.56) @(0.34, -0.22, 0.90) 0.13 0.09 -0.30
-    Add-Ellipsoid $cream @(0.0, 3.62, 0.50) @(0.42, 0.24, 0.20) 8 16
-    Add-Ellipsoid $eyes @(-0.28, 3.98, 0.51) @(0.115, 0.16, 0.065) 8 12
-    Add-Ellipsoid $eyes @(0.28, 3.98, 0.51) @(0.115, 0.16, 0.065) 8 12
-    Add-Frustum $eyes 4.00 4.18 0.028 0.012 -0.39 0.54 8
-    Add-Frustum $eyes 4.00 4.18 0.028 0.012 0.39 0.54 8
-    Add-Ellipsoid $smile @(0.14, 3.58, 0.68) @(0.18, 0.055, 0.025) 6 12
+    Add-Ellipsoid $cream @(0.0, 3.62, 0.50) @(0.42, 0.24, 0.20) 12 24
+    Add-Ellipsoid $eyes @(-0.28, 3.98, 0.51) @(0.115, 0.16, 0.065) 12 20
+    Add-Ellipsoid $eyes @(0.28, 3.98, 0.51) @(0.115, 0.16, 0.065) 12 20
+    Add-Ellipsoid $eyes @(-0.17, 3.66, 0.685) @(0.045, 0.035, 0.022) 8 12
+    Add-Ellipsoid $eyes @(0.17, 3.66, 0.685) @(0.045, 0.035, 0.022) 8 12
+    Add-Frustum $eyes 4.00 4.18 0.028 0.012 -0.39 0.54 12
+    Add-Frustum $eyes 4.00 4.18 0.028 0.012 0.39 0.54 12
+    Add-Ellipsoid $smile @(0.14, 3.58, 0.68) @(0.18, 0.055, 0.025) 8 16
     return [pscustomobject]@{ Parts = @($tan, $spots, $cream, $eyes, $smile); Materials = $materials }
 }
 
@@ -523,15 +533,23 @@ function New-Rocket {
     $metal = New-Part 1
     $heat = New-Part 2
     $stripe = New-Part 3
-    Add-Frustum $paint 0.35 2.50 0.62 0.56 0.0 0.0 32
-    Add-Frustum $paint 2.50 2.84 0.56 0.34 0.0 0.0 32
-    Add-Frustum $paint 2.84 3.12 0.34 0.075 0.0 0.0 32
-    Add-Ellipsoid $paint @(0.0, 3.17, 0.0) @(0.08, 0.11, 0.08) 8 16
+    # Staged core, interstage, and ogive-like fairing sections provide a more
+    # believable modern launch-vehicle silhouette while remaining bounded.
+    Add-Frustum $paint 0.35 2.50 0.62 0.56 0.0 0.0 40
+    Add-Frustum $paint 2.50 2.62 0.56 0.54 0.0 0.0 40
+    Add-Frustum $paint 2.62 2.76 0.54 0.44 0.0 0.0 40
+    Add-Frustum $paint 2.76 2.92 0.44 0.27 0.0 0.0 40
+    Add-Frustum $paint 2.92 3.12 0.27 0.075 0.0 0.0 40
+    Add-Ellipsoid $paint @(0.0, 3.17, 0.0) @(0.08, 0.11, 0.08) 10 20
     Add-Frustum $metal 0.28 0.48 0.64 0.64 0.0 0.0 32
+    Add-Frustum $metal 0.48 0.56 0.64 0.59 0.0 0.0 32
     Add-Frustum $metal 1.20 1.30 0.575 0.575 0.0 0.0 32
     Add-Frustum $metal 2.28 2.38 0.60 0.60 0.0 0.0 32
+    Add-Frustum $metal 2.50 2.62 0.56 0.56 0.0 0.0 32
+    Add-Frustum $metal 2.76 2.84 0.44 0.44 0.0 0.0 32
     foreach ($engine in @(@(-0.28, 0.0), @(0.0, 0.0), @(0.28, 0.0))) {
         Add-Frustum $heat 0.02 0.40 0.16 0.11 $engine[0] $engine[1] 20
+        Add-Frustum $heat 0.40 0.46 0.11 0.08 $engine[0] $engine[1] 20
         Add-Ellipsoid $heat @($engine[0], 0.02, $engine[1]) @(0.20, 0.08, 0.20) 8 16
     }
     Add-Frustum $stripe 1.78 1.91 0.59 0.59 0.0 0.0 32

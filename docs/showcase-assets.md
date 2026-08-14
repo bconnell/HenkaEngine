@@ -2,14 +2,14 @@
 
 The normal Windows Sandbox startup presents two repo-owned sample models:
 
-- `cheeky_giraffe.gltf` — an original stylized-realistic Cheeky Giraffe mascot with a long neck, surface-fitted spots, eyes, lashes, ears, ossicones, and a cheeky smile.
-- `original_realistic_rocket.gltf` — an original stylized launch vehicle with a shaped fairing, painted body sections, integrated metal bands, heat-resistant engine hardware, and tapered stabilization fins.
+- `cheeky_giraffe.gltf` — an original stylized-realistic, animated-film-oriented Cheeky Giraffe mascot with smooth high-curvature body and head forms, surface-fitted spots, a readable mane row, eyes, lashes, ears, ossicones, nostrils, and a cheeky smile.
+- `original_realistic_rocket.gltf` — an original stylized modern launch vehicle with a staged core, ogive-like fairing sections, interstage and engine-skirt hardware, integrated metal bands, a clustered heat-resistant engine section, and tapered stabilization fins.
 
 ## Ownership and generation
 
 The Sandbox target build runs `scripts/generate_showcase_assets.ps1` for both files. The generator creates deterministic bounded geometry, UVs, normals, tangent vec4 attributes, PBR material definitions, and a sibling binary buffer. It uses no third-party model, no external authoring application at runtime, and no copyrighted vehicle or character model.
 
-The generated glTF files use material factors and do not bind the unrelated primitive-gallery cube texture. Their glTF and sibling binary buffers are copied beside the executable, so packaged execution resolves the showcase from package-owned files without a repository-root or runtime authoring dependency.
+The generated glTF files use material factors and do not bind the unrelated primitive-gallery cube texture. Their glTF and sibling binary buffers are copied beside the executable, so packaged execution resolves the showcase from package-owned files without a repository-root or runtime authoring dependency. These two models are the public visual reference set and should be regenerated and manually reviewed as renderer, material, lighting, and geometry capabilities improve.
 
 ## Runtime path
 
