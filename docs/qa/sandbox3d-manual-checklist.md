@@ -222,6 +222,7 @@ Use `--primitive-gallery` when the engineering samples are specifically under te
 - The `Controls` panel can adjust mouse sensitivity and camera speed with the mouse.
 - The `Controls` panel can reset the camera, save settings, reset sandbox settings, print help, print the scene legend, and reset the panel layout.
 - The `Scene Objects` panel lists the current scene examples by name.
+- `Create Native Rocket` creates a nontrivial authored source; verify its body, nose, nozzle, and fins render in the scene, then use Object Details component/topology controls and Save Project/Reload Project without losing the source.
 - The `Diagnostics` utility reports current viewport, selection, and interaction state.
 - The `Transform QA` utility can move, rotate, scale, and reset the selected object through direct controls.
 - Clicking an object updates the `Object Details` panel.

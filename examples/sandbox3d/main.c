@@ -399,6 +399,7 @@ typedef struct sandbox3d_state
     bool native_authoring_material_thickness_reported;
     bool native_authoring_material_subsurface_tint_reported;
     bool native_authoring_material_history_reported;
+    bool native_authored_showcase_control_reported;
     henka_terrain_world* terrain_world;
     henka_terrain_storage* terrain_storage;
     henka_terrain_streamer* terrain_streamer;
@@ -696,6 +697,7 @@ static bool sandbox3d_is_selectable_entity(const sandbox3d_state* state, henka_e
 static void sandbox3d_select_entity(sandbox3d_state* state, henka_entity entity);
 static void sandbox3d_clear_selection(sandbox3d_state* state, const char* reason);
 static bool sandbox3d_add_primitive_object(henka_engine* engine, sandbox3d_state* state);
+static bool sandbox3d_add_native_rocket_object(henka_engine* engine, sandbox3d_state* state);
 static const henka_model_scene_primitive* sandbox3d_get_showcase_authoring_primitive(
     const sandbox3d_state* state,
     henka_entity entity);
@@ -9484,6 +9486,364 @@ static void sandbox3d_select_entity(sandbox3d_state* state, henka_entity entity)
     }
 }
 
+static henka_result sandbox3d_create_native_rocket_mesh(
+    henka_authoring_mesh** out_mesh)
+{
+    enum { body_sides = 12, nozzle_sides = 8, fin_count = 4 };
+    const float two_pi = 6.28318530717958647692f;
+    henka_authoring_mesh_desc desc;
+    henka_authoring_mesh* mesh = NULL;
+    henka_authoring_vertex_id body_bottom[body_sides];
+    henka_authoring_vertex_id body_top[body_sides];
+    henka_authoring_vertex_id nozzle_bottom[nozzle_sides];
+    henka_authoring_vertex_id nozzle_top[nozzle_sides];
+    henka_authoring_vertex_id nose_tip;
+    henka_result result;
+    int side;
+
+    if (out_mesh == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    *out_mesh = NULL;
+    desc = henka_authoring_mesh_desc_default();
+    desc.max_vertices = 512U;
+    desc.max_edges = 1024U;
+    desc.max_faces = 512U;
+    desc.max_face_corners = 32U;
+    result = henka_authoring_mesh_create(&desc, &mesh);
+    if (result != HENKA_SUCCESS)
+    {
+        return result;
+    }
+
+    for (side = 0; side < body_sides; ++side)
+    {
+        const float angle = two_pi * (float)side / (float)body_sides;
+        const float x = cosf(angle);
+        const float z = sinf(angle);
+        const float u = (float)side / (float)body_sides;
+        result = henka_authoring_mesh_add_vertex(
+            mesh,
+            (henka_vec3){0.82f * x, -1.55f, 0.82f * z},
+            (henka_vec2){u, 0.0f},
+            0U,
+            &body_bottom[side]);
+        if (result == HENKA_SUCCESS)
+        {
+            result = henka_authoring_mesh_add_vertex(
+                mesh,
+                (henka_vec3){0.82f * x, 1.10f, 0.82f * z},
+                (henka_vec2){u, 1.0f},
+                0U,
+                &body_top[side]);
+        }
+        if (result != HENKA_SUCCESS)
+        {
+            henka_authoring_mesh_destroy(mesh);
+            return result;
+        }
+    }
+
+    for (side = 0; side < body_sides; ++side)
+    {
+        const henka_authoring_vertex_id next =
+            body_bottom[(side + 1) % body_sides];
+        const henka_authoring_vertex_id top_next =
+            body_top[(side + 1) % body_sides];
+        const henka_authoring_vertex_id face[] = {
+            body_bottom[side], body_top[side], top_next, next};
+        result = henka_authoring_mesh_add_face(
+            mesh, face, 4U, 0U, true, &(henka_authoring_face_id){0U});
+        if (result != HENKA_SUCCESS)
+        {
+            henka_authoring_mesh_destroy(mesh);
+            return result;
+        }
+    }
+
+    result = henka_authoring_mesh_add_vertex(
+        mesh,
+        (henka_vec3){0.0f, 2.30f, 0.0f},
+        (henka_vec2){0.5f, 1.0f},
+        0U,
+        &nose_tip);
+    if (result != HENKA_SUCCESS)
+    {
+        henka_authoring_mesh_destroy(mesh);
+        return result;
+    }
+    for (side = 0; side < body_sides; ++side)
+    {
+        const henka_authoring_vertex_id face[] = {
+            body_top[(side + 1) % body_sides], body_top[side], nose_tip};
+        result = henka_authoring_mesh_add_face(
+            mesh, face, 3U, 0U, true, &(henka_authoring_face_id){0U});
+        if (result != HENKA_SUCCESS)
+        {
+            henka_authoring_mesh_destroy(mesh);
+            return result;
+        }
+    }
+
+    {
+        henka_authoring_vertex_id cap[body_sides];
+        for (side = 0; side < body_sides; ++side)
+        {
+            cap[side] = body_bottom[body_sides - side - 1];
+        }
+        result = henka_authoring_mesh_add_face(
+            mesh, cap, body_sides, 0U, false, &(henka_authoring_face_id){0U});
+        if (result != HENKA_SUCCESS)
+        {
+            henka_authoring_mesh_destroy(mesh);
+            return result;
+        }
+    }
+
+    for (side = 0; side < nozzle_sides; ++side)
+    {
+        const float angle = two_pi * (float)side / (float)nozzle_sides;
+        const float x = cosf(angle);
+        const float z = sinf(angle);
+        result = henka_authoring_mesh_add_vertex(
+            mesh,
+            (henka_vec3){0.36f * x, -1.98f, 0.36f * z},
+            (henka_vec2){(float)side / (float)nozzle_sides, 0.0f},
+            2U,
+            &nozzle_bottom[side]);
+        if (result == HENKA_SUCCESS)
+        {
+            result = henka_authoring_mesh_add_vertex(
+                mesh,
+                (henka_vec3){0.36f * x, -1.50f, 0.36f * z},
+                (henka_vec2){(float)side / (float)nozzle_sides, 1.0f},
+                2U,
+                &nozzle_top[side]);
+        }
+        if (result != HENKA_SUCCESS)
+        {
+            henka_authoring_mesh_destroy(mesh);
+            return result;
+        }
+    }
+    for (side = 0; side < nozzle_sides; ++side)
+    {
+        const int next_index = (side + 1) % nozzle_sides;
+        const henka_authoring_vertex_id face[] = {
+            nozzle_bottom[side], nozzle_top[side],
+            nozzle_top[next_index], nozzle_bottom[next_index]};
+        result = henka_authoring_mesh_add_face(
+            mesh, face, 4U, 2U, true, &(henka_authoring_face_id){0U});
+        if (result != HENKA_SUCCESS)
+        {
+            henka_authoring_mesh_destroy(mesh);
+            return result;
+        }
+    }
+
+    for (side = 0; side < fin_count; ++side)
+    {
+        const float angle = two_pi * (float)side / (float)fin_count;
+        const henka_vec3 direction = {cosf(angle), 0.0f, sinf(angle)};
+        const henka_vec3 tangent = {-sinf(angle), 0.0f, cosf(angle)};
+        henka_authoring_vertex_id fin[2][3];
+        int layer;
+        int point;
+        const henka_vec3 points[3] = {
+            {0.70f, -1.15f, 0.0f},
+            {0.70f, 0.45f, 0.0f},
+            {1.42f, -0.62f, 0.0f}};
+
+        for (layer = 0; layer < 2; ++layer)
+        {
+            const float offset = layer == 0 ? -0.075f : 0.075f;
+            for (point = 0; point < 3; ++point)
+            {
+                const henka_vec3 position = {
+                    direction.x * points[point].x + tangent.x * offset,
+                    points[point].y,
+                    direction.z * points[point].x + tangent.z * offset};
+                result = henka_authoring_mesh_add_vertex(
+                    mesh,
+                    position,
+                    (henka_vec2){point == 1 ? 0.0f : 1.0f, point == 0 ? 0.0f : 1.0f},
+                    1U,
+                    &fin[layer][point]);
+                if (result != HENKA_SUCCESS)
+                {
+                    henka_authoring_mesh_destroy(mesh);
+                    return result;
+                }
+            }
+        }
+        {
+            const henka_authoring_vertex_id faces[][4] = {
+                {fin[0][0], fin[0][1], fin[0][2], HENKA_AUTHORING_INVALID_ID},
+                {fin[1][2], fin[1][1], fin[1][0], HENKA_AUTHORING_INVALID_ID},
+                {fin[0][0], fin[1][0], fin[1][1], fin[0][1]},
+                {fin[0][1], fin[1][1], fin[1][2], fin[0][2]},
+                {fin[0][2], fin[1][2], fin[1][0], fin[0][0]}};
+            const size_t corner_counts[] = {3U, 3U, 4U, 4U, 4U};
+            int face_index;
+            for (face_index = 0; face_index < 5; ++face_index)
+            {
+                result = henka_authoring_mesh_add_face(
+                    mesh,
+                    faces[face_index],
+                    corner_counts[face_index],
+                    1U,
+                    false,
+                    &(henka_authoring_face_id){0U});
+                if (result != HENKA_SUCCESS)
+                {
+                    henka_authoring_mesh_destroy(mesh);
+                    return result;
+                }
+            }
+        }
+    }
+
+    if (!henka_authoring_mesh_validate(mesh))
+    {
+        henka_authoring_mesh_destroy(mesh);
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    *out_mesh = mesh;
+    return HENKA_SUCCESS;
+}
+
+static bool sandbox3d_add_native_rocket_object(henka_engine* engine, sandbox3d_state* state)
+{
+    henka_action_request request;
+    henka_action_result action_result;
+    henka_authoring_mesh* source_mesh = NULL;
+    sandbox3d_authoring_object* authoring_object = NULL;
+    henka_material material;
+    henka_transform transform;
+    henka_entity entity;
+    henka_authoring_mesh_counts counts;
+    henka_result creation_result;
+    const char* failure_stage;
+    bool registered = false;
+
+    if (engine == NULL || state == NULL || state->actions == NULL || state->scene == NULL)
+    {
+        return false;
+    }
+    memset(&request, 0, sizeof(request));
+    request.command = HENKA_ACTION_COMMAND_ADD_PRIMITIVE_OBJECT;
+    request.params.add_primitive.primitive = HENKA_ACTION_PRIMITIVE_CUBE;
+    request.params.add_primitive.name = "Native Showcase Rocket";
+    transform = henka_transform_identity();
+    transform.position = (henka_vec3){0.0f, 2.0f, 1.8f};
+    request.params.add_primitive.transform = transform;
+    request.params.add_primitive.visible = true;
+    if (!sandbox3d_execute_action(state, &request, &action_result))
+    {
+        return false;
+    }
+    entity = action_result.affected_entity;
+    material = henka_material_default();
+    material.name = "Native Showcase Rocket Material";
+    material.type = HENKA_MATERIAL_TYPE_LIT;
+    material.shader = state->basic_shader;
+    material.base_color = (henka_vec4){0.10f, 0.22f, 0.38f, 1.0f};
+    material.metallic = 0.68f;
+    material.roughness = 0.28f;
+    material.use_lighting = true;
+    material.cast_shadows = true;
+    material.receive_shadows = true;
+    failure_stage = "mesh";
+    creation_result = sandbox3d_create_native_rocket_mesh(&source_mesh);
+    if (creation_result == HENKA_SUCCESS)
+    {
+        failure_stage = "scene-material";
+        creation_result = sandbox3d_configure_entity(
+            state->scene, entity, state->cube_mesh, material, transform);
+    }
+    if (creation_result == HENKA_SUCCESS)
+    {
+        failure_stage = "authoring-bridge";
+        creation_result = sandbox3d_authoring_object_create_from_mesh(
+            engine, state->scene, entity, source_mesh, 32U, &authoring_object);
+    }
+    if (creation_result == HENKA_SUCCESS && authoring_object == NULL)
+    {
+        failure_stage = "authoring-bridge-null";
+        creation_result = HENKA_ERROR_UNKNOWN;
+    }
+    if (creation_result == HENKA_SUCCESS &&
+        !sandbox3d_register_authoring_object(state, authoring_object))
+    {
+        failure_stage = "authoring-registry";
+        creation_result = HENKA_ERROR_LIMIT;
+    }
+    if (creation_result != HENKA_SUCCESS)
+    {
+        printf(
+            "Native authoring creation rejected: stage=%s result=%d.\n",
+            failure_stage,
+            (int)creation_result);
+        fflush(stdout);
+        henka_authoring_mesh_destroy(source_mesh);
+        sandbox3d_authoring_object_destroy(authoring_object);
+        {
+            henka_action_request rollback_request;
+            memset(&rollback_request, 0, sizeof(rollback_request));
+            rollback_request.command = HENKA_ACTION_COMMAND_DELETE_OBJECT;
+            rollback_request.params.entity.entity = entity;
+            (void)sandbox3d_execute_action(state, &rollback_request, NULL);
+        }
+        return false;
+    }
+    registered = true;
+    henka_authoring_mesh_destroy(source_mesh);
+    source_mesh = NULL;
+    if (state->physics.world != NULL &&
+        sandbox3d_bind_authoring_physics(state, authoring_object, HENKA_INVALID_ENTITY) != HENKA_SUCCESS)
+    {
+        sandbox3d_unregister_authoring_object(state, authoring_object);
+        sandbox3d_authoring_object_destroy(authoring_object);
+        {
+            henka_action_request rollback_request;
+            memset(&rollback_request, 0, sizeof(rollback_request));
+            rollback_request.command = HENKA_ACTION_COMMAND_DELETE_OBJECT;
+            rollback_request.params.entity.entity = entity;
+            (void)sandbox3d_execute_action(state, &rollback_request, NULL);
+        }
+        return false;
+    }
+    sandbox3d_select_entity(state, entity);
+    if (!sandbox3d_promote_authoring_material(engine, state, entity))
+    {
+        if (registered)
+        {
+            sandbox3d_unregister_authoring_object(state, authoring_object);
+            sandbox3d_release_authoring_physics(state, authoring_object);
+            sandbox3d_authoring_object_destroy(authoring_object);
+        }
+        {
+            henka_action_request rollback_request;
+            memset(&rollback_request, 0, sizeof(rollback_request));
+            rollback_request.command = HENKA_ACTION_COMMAND_DELETE_OBJECT;
+            rollback_request.params.entity.entity = entity;
+            (void)sandbox3d_execute_action(state, &rollback_request, NULL);
+        }
+        return false;
+    }
+    counts = henka_authoring_mesh_get_counts(
+        sandbox3d_authoring_object_get_mesh(authoring_object));
+    printf(
+        "Native authoring creation: name=%s vertices=%zu faces=%zu source_state=HENKA_NATIVE_AUTHORED.\n",
+        sandbox3d_safe_entity_name(state, entity, "Native Showcase Rocket"),
+        counts.vertices,
+        counts.faces);
+    fflush(stdout);
+    sandbox3d_set_status(state, false, "Created a native authored rocket source with manager-owned material.");
+    return true;
+}
+
 static bool sandbox3d_add_primitive_object(henka_engine* engine, sandbox3d_state* state)
 {
     henka_action_request request;
@@ -17143,6 +17503,7 @@ static void sandbox3d_draw_scene_objects_panel(
     float footer_y;
     float row_y;
     float action_y;
+    float native_action_y;
     float action_width;
     henka_entity entity;
     henka_ui_rect panel_bounds;
@@ -17174,6 +17535,7 @@ static void sandbox3d_draw_scene_objects_panel(
     henka_ui_label(state->ui, panel_bounds.x + 14.0f, panel_bounds.y + 38.0f, 1.0f, "Scene objects");
 
     action_y = panel_bounds.y + 60.0f;
+    native_action_y = action_y + 30.0f;
     action_width = fmaxf(56.0f, (panel_bounds.width - 40.0f) / 3.0f);
     has_selection = sandbox3d_get_real_selected_entity(state) != HENKA_INVALID_ENTITY;
     if (henka_ui_primary_button(
@@ -17222,6 +17584,28 @@ static void sandbox3d_draw_scene_objects_panel(
         }
     }
 
+    if (!state->native_authored_showcase_control_reported)
+    {
+        printf(
+            "Native authored showcase control: x=%.1f y=%.1f width=%.1f height=24.0.\n",
+            panel_bounds.x + 14.0f,
+            native_action_y,
+            panel_bounds.width - 28.0f);
+        fflush(stdout);
+        state->native_authored_showcase_control_reported = true;
+    }
+    if (henka_ui_primary_button(
+            state->ui,
+            "scene_object_create_native_rocket",
+            (henka_ui_rect){panel_bounds.x + 14.0f, native_action_y, panel_bounds.width - 28.0f, 24.0f},
+            "Create Native Rocket"))
+    {
+        if (!sandbox3d_add_native_rocket_object(engine, state))
+        {
+            sandbox3d_set_status(state, true, "The native authored rocket could not be created.");
+        }
+    }
+
     selectable_count = 0U;
     for (scene_index = 0U; scene_index < henka_scene_get_entity_count(state->scene); ++scene_index)
     {
@@ -17233,7 +17617,7 @@ static void sandbox3d_draw_scene_objects_panel(
         }
     }
 
-    items_per_page = (int)((panel_bounds.height - 132.0f) / 34.0f);
+    items_per_page = (int)((panel_bounds.height - 162.0f) / 34.0f);
     if (items_per_page < 1)
     {
         items_per_page = 1;
@@ -17249,7 +17633,7 @@ static void sandbox3d_draw_scene_objects_panel(
     }
     page_index = state->paging.scene_objects_page;
 
-    row_y = panel_bounds.y + 94.0f;
+    row_y = panel_bounds.y + 124.0f;
     visible_index = 0U;
     for (scene_index = 0U; scene_index < henka_scene_get_entity_count(state->scene); ++scene_index)
     {

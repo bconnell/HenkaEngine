@@ -681,6 +681,7 @@ $startupScreenshotPath = Join-Path $logDir "check_packaged_sandbox3d_startup.png
 $qaScreenshotPath = Join-Path $logDir "check_packaged_sandbox3d_controls_qa.png"
 $nativeScreenshotPath = Join-Path $logDir "check_packaged_sandbox3d_native_panel.png"
 $nativeAuthoringScreenshotPath = Join-Path $logDir "check_packaged_sandbox3d_native_authoring.png"
+$nativeAuthoredScreenshotPath = Join-Path $logDir "check_packaged_sandbox3d_native_authored_rocket.png"
 $contextMenuScreenshotPath = Join-Path $logDir "check_packaged_sandbox3d_context_menu.png"
 $stabilityFirstPath = Join-Path $logDir "check_packaged_sandbox3d_stability_a.png"
 $stabilitySecondPath = Join-Path $logDir "check_packaged_sandbox3d_stability_b.png"
@@ -904,6 +905,7 @@ Remove-Item `
         $qaScreenshotPath,
         $nativeScreenshotPath,
         $nativeAuthoringScreenshotPath,
+        $nativeAuthoredScreenshotPath,
         $persistenceStdoutPath,
         $persistenceStderrPath,
         $startupRestoreStdoutPath,
@@ -2215,6 +2217,94 @@ try {
         throw "The user-facing native viewport component picker could not obtain the live Scene View viewport geometry."
     }
 
+    Write-Step "Checking engine-native showcase creation"
+    Set-HenkaAutomationForeground -Handle $mainWindowHandle
+    Start-Sleep -Milliseconds 300
+    [System.Windows.Forms.SendKeys]::SendWait('{F4}')
+    if (-not (Wait-FileContains -Path $stdoutPath -Pattern "Sandbox panel: shown" -TimeoutMilliseconds 4000)) {
+        throw "The editor panels could not be reopened for engine-native showcase creation."
+    }
+    if (-not (Wait-FileContains -Path $stdoutPath -Pattern "Native authored showcase control:" -TimeoutMilliseconds 3000)) {
+        throw "The engine-native showcase creation control did not become visible."
+    }
+    $nativeAuthoredShowcaseMatch = Get-LastLogRegexMatch `
+        -Path $stdoutPath `
+        -Pattern 'Native authored showcase control: x=([-0-9.]+) y=([-0-9.]+) width=([-0-9.]+) height=24.0\.'
+    if ($null -eq $nativeAuthoredShowcaseMatch) {
+        throw "The engine-native showcase creation control geometry could not be parsed."
+    }
+    $nativeAuthoredShowcaseX = [double]$nativeAuthoredShowcaseMatch.Groups[1].Value
+    $nativeAuthoredShowcaseY = [double]$nativeAuthoredShowcaseMatch.Groups[2].Value
+    $nativeAuthoredShowcaseWidth = [double]$nativeAuthoredShowcaseMatch.Groups[3].Value
+    Assert-FramebufferRect `
+        -Name "Native authored showcase creation control" `
+        -FramebufferWidth $framebufferWidth `
+        -FramebufferHeight $framebufferHeight `
+        -X $nativeAuthoredShowcaseX `
+        -Y $nativeAuthoredShowcaseY `
+        -Width $nativeAuthoredShowcaseWidth `
+        -Height 24.0
+    Click-FramebufferPoint `
+        -Handle $mainWindowHandle `
+        -FramebufferWidth $framebufferWidth `
+        -FramebufferHeight $framebufferHeight `
+        -FramebufferX ($nativeAuthoredShowcaseX + $nativeAuthoredShowcaseWidth / 2.0) `
+        -FramebufferY ($nativeAuthoredShowcaseY + 12.0)
+    if (-not (Wait-FileContains -Path $stdoutPath -Pattern "source_state=HENKA_NATIVE_AUTHORED" -TimeoutMilliseconds 5000)) {
+        throw "The user-facing engine-native showcase creation did not produce an authored source."
+    }
+    Write-Output "[pass] User-facing engine-native showcase creation completed"
+    if (-not (Wait-FileContains -Path $stdoutPath -Pattern "Native authoring project controls:" -TimeoutMilliseconds 3000)) {
+        throw "The native authored showcase did not expose project save/reload controls."
+    }
+    $nativeCreatedProjectMatch = Get-LastLogRegexMatch `
+        -Path $stdoutPath `
+        -Pattern 'Native authoring project controls: name=(.+) save_x=([-0-9.]+) save_y=([-0-9.]+) reload_x=([-0-9.]+) reload_y=([-0-9.]+) width=140.0 height=24.0\.'
+    if ($null -eq $nativeCreatedProjectMatch) {
+        throw "The native authored project control geometry could not be parsed."
+    }
+    $nativeCreatedSaveX = [double]$nativeCreatedProjectMatch.Groups[2].Value
+    $nativeCreatedSaveY = [double]$nativeCreatedProjectMatch.Groups[3].Value
+    $nativeCreatedReloadX = [double]$nativeCreatedProjectMatch.Groups[4].Value
+    $nativeCreatedReloadY = [double]$nativeCreatedProjectMatch.Groups[5].Value
+    foreach ($nativeCreatedControl in @(
+        @{ Name = "native authored Save Project"; X = $nativeCreatedSaveX; Y = $nativeCreatedSaveY },
+        @{ Name = "native authored Reload Project"; X = $nativeCreatedReloadX; Y = $nativeCreatedReloadY }
+    )) {
+        Assert-FramebufferRect `
+            -Name $nativeCreatedControl.Name `
+            -FramebufferWidth $framebufferWidth `
+            -FramebufferHeight $framebufferHeight `
+            -X $nativeCreatedControl.X `
+            -Y $nativeCreatedControl.Y `
+            -Width 140.0 `
+            -Height 24.0
+    }
+    Click-FramebufferPoint `
+        -Handle $mainWindowHandle `
+        -FramebufferWidth $framebufferWidth `
+        -FramebufferHeight $framebufferHeight `
+        -FramebufferX ($nativeCreatedSaveX + 70.0) `
+        -FramebufferY ($nativeCreatedSaveY + 12.0)
+    if (-not (Wait-FileContains -Path $stdoutPath -Pattern "Native authoring dogfood: project saved for Native Showcase Rocket" -TimeoutMilliseconds 5000)) {
+        throw "The native authored showcase project save did not complete."
+    }
+    Click-FramebufferPoint `
+        -Handle $mainWindowHandle `
+        -FramebufferWidth $framebufferWidth `
+        -FramebufferHeight $framebufferHeight `
+        -FramebufferX ($nativeCreatedReloadX + 70.0) `
+        -FramebufferY ($nativeCreatedReloadY + 12.0)
+    if (-not (Wait-FileContains -Path $stdoutPath -Pattern "Native authoring dogfood: project reloaded for Native Showcase Rocket" -TimeoutMilliseconds 5000)) {
+        throw "The native authored showcase project reload did not complete transactionally."
+    }
+    Write-Output "[pass] Native authored showcase project save/reload completed transactionally"
+    Start-Sleep -Milliseconds 350
+    Save-WindowScreenshot `
+        -Handle $mainWindowHandle `
+        -Path $nativeAuthoredScreenshotPath `
+        -Description "Packaged native authored rocket visual proof"
+
     Write-Step "Checking clean close-window shutdown"
     [NativeMethods]::PostMessage($mainWindowHandle, 0x0010, [System.IntPtr]::Zero, [System.IntPtr]::Zero) | Out-Null
     if (-not $process.WaitForExit(10000)) {
@@ -2321,6 +2411,9 @@ try {
     Assert-PathExists `
         -Path $nativeAuthoringScreenshotPath `
         -Description "Packaged native authoring visual proof"
+    Assert-PathExists `
+        -Path $nativeAuthoredScreenshotPath `
+        -Description "Packaged native authored rocket visual proof"
     Write-Output "[pass] Live workspace settings recovery persisted across relaunch"
     Write-Output "[pass] Packaged sandbox checks completed."
 }

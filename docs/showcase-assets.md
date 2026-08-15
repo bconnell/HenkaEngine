@@ -48,6 +48,13 @@ native-authored source export remain
 open. Complete native showcase proof still requires a real
 user edit, save, close/reload, continued edit, and rendered evidence.
 
+The editor also exposes `Create Native Rocket`. That user-facing action
+creates a bounded multi-part rocket directly through the Henka authoring mesh
+API, evaluates it into the scene, adopts a manager-owned material instance,
+and emits `HENKA_NATIVE_AUTHORED` provenance before normal component, topology,
+material, and project save/reload editing. Fresh-process restoration and native
+multi-material binding remain explicitly unfinished.
+
 - `cheeky_giraffe.gltf` — an original stylized-realistic, animated-film-oriented Cheeky Giraffe mascot with smooth high-curvature body and head forms, surface-fitted spots, a readable mane row, compact flattened ear lobes with inset inner-ear patches, connected tan ossicone stalks, and outward-angled dark-brown caps, layered eye whites/irises/pupils/highlights, nostrils, and a shaped mouth line. The presentation remains expressive by design, but the face is built from separately shaded anatomical features rather than a single cartoon eye material.
 - `original_realistic_rocket.gltf` — an original stylized modern launch vehicle with a staged core, ogive-like fairing sections, interstage and engine-skirt hardware, dark avionics separation bands, a bounded seven-engine bell/nozzle cluster, a restrained heat response, and tapered stabilization fins.
 
