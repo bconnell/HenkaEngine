@@ -21,9 +21,20 @@ foreach ($name in @("cheeky_giraffe", "original_realistic_rocket")) {
         $null -eq $json.meshes -or $json.meshes.Count -ne 1) {
         throw "Showcase asset $name has no bounded material/mesh contract."
     }
-    if ($json.PSObject.Properties.Name -contains "images" -or
-        $json.PSObject.Properties.Name -contains "textures") {
-        throw "Showcase asset $name unexpectedly binds a texture dependency."
+    if ($json.PSObject.Properties.Name -notcontains "images" -or
+        $json.PSObject.Properties.Name -notcontains "textures" -or
+        $json.images.Count -ne 2 -or $json.textures.Count -ne 2) {
+        throw "Showcase asset $name is missing its bounded normal and metallic/roughness texture dependencies."
+    }
+    foreach ($image in $json.images) {
+        if ([IO.Path]::IsPathRooted([string]$image.uri) -or
+            [string]::IsNullOrWhiteSpace([string]$image.uri)) {
+            throw "Showcase asset $name contains an invalid texture URI."
+        }
+        $imagePath = Join-Path $OutputDirectory ([string]$image.uri)
+        if (-not (Test-Path -LiteralPath $imagePath -PathType Leaf)) {
+            throw "Showcase asset $name is missing generated texture $($image.uri)."
+        }
     }
     foreach ($primitive in $json.meshes[0].primitives) {
         if ($primitive.material -lt 0 -or $primitive.material -ge $json.materials.Count) {
@@ -70,6 +81,10 @@ foreach ($requiredName in @("Giraffe Eye White", "Giraffe Iris", "Giraffe Eye De
         throw "Showcase giraffe is missing authored feature material '$requiredName'."
     }
 }
+$giraffeNormalBindings = @($giraffe.materials | Where-Object { $_.PSObject.Properties.Name -contains "normalTexture" })
+if ($giraffeNormalBindings.Count -lt 5) {
+    throw "Showcase giraffe does not exercise enough generated normal-map material bindings."
+}
 if ($giraffe.meshes[0].primitives.Count -lt 8) {
     throw "Showcase giraffe does not contain enough independently shaded feature geometry."
 }
@@ -85,6 +100,10 @@ $rocket = Get-Content -LiteralPath (Join-Path $OutputDirectory "original_realist
 $rocketMaterialNames = @($rocket.materials | ForEach-Object { $_.name })
 if ($rocketMaterialNames -notcontains "Rocket Avionics") {
     throw "Showcase rocket is missing its stage-separation/avionics material."
+}
+$rocketNormalBindings = @($rocket.materials | Where-Object { $_.PSObject.Properties.Name -contains "normalTexture" })
+if ($rocketNormalBindings.Count -ne $rocket.materials.Count) {
+    throw "Showcase rocket does not bind generated normal detail across all material regions."
 }
 if ($rocket.meshes[0].primitives.Count -lt 5) {
     throw "Showcase rocket does not contain enough independently shaded stage and engine geometry."

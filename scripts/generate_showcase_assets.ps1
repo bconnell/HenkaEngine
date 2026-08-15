@@ -403,7 +403,10 @@ function New-Material {
         [float[]]$SheenColor = @(0.0, 0.0, 0.0),
         [float]$SheenRoughness = 0.50,
         [float[]]$EmissiveColor = @(0.0, 0.0, 0.0),
-        [float]$EmissiveStrength = 1.0
+        [float]$EmissiveStrength = 1.0,
+        [int]$NormalTextureIndex = -1,
+        [float]$NormalTextureScale = 0.35,
+        [int]$MetallicRoughnessTextureIndex = -1
     )
     $material = [ordered]@{
         name = $Name
@@ -412,6 +415,17 @@ function New-Material {
             metallicFactor = $Metallic
             roughnessFactor = $Roughness
         }
+    }
+    if ($MetallicRoughnessTextureIndex -ge 0) {
+        $material.pbrMetallicRoughness.Add("metallicRoughnessTexture", [ordered]@{
+            index = $MetallicRoughnessTextureIndex
+        })
+    }
+    if ($NormalTextureIndex -ge 0) {
+        $material.Add("normalTexture", [ordered]@{
+            index = $NormalTextureIndex
+            scale = $NormalTextureScale
+        })
     }
     $extensions = [ordered]@{}
     if ($Clearcoat -gt 0.0) {
@@ -436,6 +450,71 @@ function New-Material {
         $material.Add("extensions", $extensions)
     }
     return $material
+}
+
+function Write-ShowcaseTexture {
+    param(
+        [Parameter(Mandatory = $true)][string]$Path,
+        [Parameter(Mandatory = $true)][ValidateSet("normal", "metallic_roughness")][string]$Kind,
+        [Parameter(Mandatory = $true)][ValidateSet("giraffe", "rocket")][string]$Subject
+    )
+    Add-Type -AssemblyName System.Drawing
+    $bitmap = [System.Drawing.Bitmap]::new(64, 64, [System.Drawing.Imaging.PixelFormat]::Format32bppArgb)
+    try {
+        for ($y = 0; $y -lt 64; ++$y) {
+            for ($x = 0; $x -lt 64; ++$x) {
+                $u = ($x + 0.5) / 64.0
+                $v = ($y + 0.5) / 64.0
+                if ($Kind -eq "normal") {
+                    $frequency = if ($Subject -eq "giraffe") { 0.34 } else { 0.52 }
+                    $nx = 0.12 * [Math]::Sin(($x + 3) * $frequency) * [Math]::Cos(($y + 7) * ($frequency * 0.73))
+                    $ny = 0.10 * [Math]::Cos(($y + 5) * ($frequency * 0.91)) * [Math]::Sin(($x + 11) * ($frequency * 0.61))
+                    $nz = [Math]::Sqrt([Math]::Max(0.0, 1.0 - ($nx * $nx) - ($ny * $ny)))
+                    $red = [int][Math]::Round(128.0 + (127.0 * $nx))
+                    $green = [int][Math]::Round(128.0 + (127.0 * $ny))
+                    $blue = [int][Math]::Round(255.0 * $nz)
+                }
+                else {
+                    $variation = 0.5 + (0.5 * [Math]::Sin(($x + 2) * 0.24 + ($y + 5) * 0.17))
+                    $roughness = if ($Subject -eq "giraffe") {
+                        120.0 + (58.0 * $variation)
+                    }
+                    else {
+                        82.0 + (78.0 * $variation)
+                    }
+                    $red = 255
+                    $green = [int][Math]::Round($roughness)
+                    $blue = if ($Subject -eq "giraffe") { 0 } else { 190 }
+                }
+                $bitmap.SetPixel(
+                    $x,
+                    $y,
+                    [System.Drawing.Color]::FromArgb(
+                        255,
+                        [Math]::Max(0, [Math]::Min(255, $red)),
+                        [Math]::Max(0, [Math]::Min(255, $green)),
+                        [Math]::Max(0, [Math]::Min(255, $blue))))
+            }
+        }
+        $bitmap.Save($Path, [System.Drawing.Imaging.ImageFormat]::Png)
+    }
+    finally {
+        $bitmap.Dispose()
+    }
+}
+
+function New-ShowcaseTextureDefinitions {
+    param(
+        [Parameter(Mandatory = $true)][string]$OutputDirectory,
+        [Parameter(Mandatory = $true)][ValidateSet("giraffe", "rocket")][string]$Subject
+    )
+    $normalName = "${Subject}_detail_normal.png"
+    $metallicRoughnessName = "${Subject}_metallic_roughness.png"
+    Write-ShowcaseTexture (Join-Path $OutputDirectory $normalName) "normal" $Subject
+    Write-ShowcaseTexture (Join-Path $OutputDirectory $metallicRoughnessName) "metallic_roughness" $Subject
+    return @(
+        ([ordered]@{ uri = $normalName }),
+        ([ordered]@{ uri = $metallicRoughnessName }))
 }
 
 function Test-ShowcasePart {
@@ -494,7 +573,13 @@ function Test-ShowcasePart {
 }
 
 function Write-Gltf {
-    param([string]$Path, [string]$Name, [object[]]$Parts, [object[]]$Materials, [float[]]$Translation)
+    param(
+        [string]$Path,
+        [string]$Name,
+        [object[]]$Parts,
+        [object[]]$Materials,
+        [float[]]$Translation,
+        [object[]]$TextureDefinitions = @())
     if ($Parts.Count -eq 0 -or $Materials.Count -eq 0) {
         throw "Showcase asset must contain geometry and materials."
     }
@@ -557,23 +642,32 @@ function Write-Gltf {
         nodes = @([ordered]@{ name = $Name; mesh = 0; translation = $Translation })
         scenes = @([ordered]@{ name = "$Name Scene"; nodes = @(0) })
         scene = 0
-    } | ConvertTo-Json -Depth 30 -Compress
-    [IO.File]::WriteAllText($Path, $json, [Text.UTF8Encoding]::new($false))
+    }
+    if ($TextureDefinitions.Count -gt 0) {
+        $json.Add("images", @($TextureDefinitions))
+        $textures = @()
+        for ($textureIndex = 0; $textureIndex -lt $TextureDefinitions.Count; ++$textureIndex) {
+            $textures += ,([ordered]@{ source = $textureIndex })
+        }
+        $json.Add("textures", $textures)
+    }
+    $jsonText = $json | ConvertTo-Json -Depth 30 -Compress
+    [IO.File]::WriteAllText($Path, $jsonText, [Text.UTF8Encoding]::new($false))
     $writer.Dispose()
     $stream.Dispose()
 }
 
 function New-Giraffe {
     $materials = @(
-        (New-Material "Giraffe Tan" @(0.72, 0.44, 0.18, 1.0) 0.0 0.52 0.08 0.36 @(0.07, 0.025, 0.01) 0.45),
-        (New-Material "Giraffe Spots" @(0.16, 0.038, 0.012, 1.0) 0.0 0.64),
-        (New-Material "Giraffe Cream" @(0.95, 0.76, 0.48, 1.0) 0.0 0.48 0.06 0.28 @(0.11, 0.06, 0.025) 0.48),
+        (New-Material "Giraffe Tan" @(0.72, 0.44, 0.18, 1.0) 0.0 0.52 0.08 0.36 @(0.07, 0.025, 0.01) 0.45 -NormalTextureIndex 0 -MetallicRoughnessTextureIndex 1),
+        (New-Material "Giraffe Spots" @(0.16, 0.038, 0.012, 1.0) 0.0 0.64 -NormalTextureIndex 0 -MetallicRoughnessTextureIndex 1),
+        (New-Material "Giraffe Cream" @(0.95, 0.76, 0.48, 1.0) 0.0 0.48 0.06 0.28 @(0.11, 0.06, 0.025) 0.48 -NormalTextureIndex 0 -MetallicRoughnessTextureIndex 1),
         (New-Material "Giraffe Eye White" @(0.76, 0.72, 0.62, 1.0) 0.0 0.18 0.54 0.08),
         (New-Material "Giraffe Iris" @(0.18, 0.055, 0.014, 1.0) 0.0 0.24 0.64 0.06),
         (New-Material "Giraffe Eye Detail" @(0.004, 0.002, 0.001, 1.0) 0.0 0.10 0.70 0.06),
         (New-Material "Giraffe Smile" @(0.42, 0.018, 0.018, 1.0) 0.0 0.34 0.05 0.22),
-        (New-Material "Giraffe Ear Inner" @(0.38, 0.10, 0.045, 1.0) 0.0 0.42 0.03 0.18),
-        (New-Material "Giraffe Ossicone Cap" @(0.20, 0.055, 0.018, 1.0) 0.0 0.46 0.02 0.24))
+        (New-Material "Giraffe Ear Inner" @(0.38, 0.10, 0.045, 1.0) 0.0 0.42 0.03 0.18 -NormalTextureIndex 0 -MetallicRoughnessTextureIndex 1),
+        (New-Material "Giraffe Ossicone Cap" @(0.20, 0.055, 0.018, 1.0) 0.0 0.46 0.02 0.24 -NormalTextureIndex 0 -MetallicRoughnessTextureIndex 1))
     $tan = New-Part 0
     $spots = New-Part 1
     $cream = New-Part 2
@@ -643,11 +737,11 @@ function New-Giraffe {
 
 function New-Rocket {
     $materials = @(
-        (New-Material "Rocket Painted Ceramic" @(0.64, 0.70, 0.76, 1.0) 0.18 0.28 0.32 0.16),
-        (New-Material "Rocket Brushed Metal" @(0.48, 0.52, 0.58, 1.0) 0.86 0.20 0.08 0.20),
-        (New-Material "Rocket Heat Shield" @(0.055, 0.065, 0.075, 1.0) 0.62 0.34 0.0 0.20 @(0.0, 0.0, 0.0) 0.50 @(0.18, 0.025, 0.005) 0.40),
-        (New-Material "Rocket Mission Stripe" @(0.84, 0.14, 0.055, 1.0) 0.18 0.30 0.12 0.20),
-        (New-Material "Rocket Avionics" @(0.025, 0.032, 0.042, 1.0) 0.72 0.24 0.10 0.18))
+        (New-Material "Rocket Painted Ceramic" @(0.64, 0.70, 0.76, 1.0) 0.18 0.28 0.32 0.16 -NormalTextureIndex 0 -MetallicRoughnessTextureIndex 1),
+        (New-Material "Rocket Brushed Metal" @(0.48, 0.52, 0.58, 1.0) 0.86 0.20 0.08 0.20 -NormalTextureIndex 0 -MetallicRoughnessTextureIndex 1),
+        (New-Material "Rocket Heat Shield" @(0.055, 0.065, 0.075, 1.0) 0.62 0.34 0.0 0.20 @(0.0, 0.0, 0.0) 0.50 @(0.18, 0.025, 0.005) 0.40 -NormalTextureIndex 0 -MetallicRoughnessTextureIndex 1),
+        (New-Material "Rocket Mission Stripe" @(0.84, 0.14, 0.055, 1.0) 0.18 0.30 0.12 0.20 -NormalTextureIndex 0 -MetallicRoughnessTextureIndex 1),
+        (New-Material "Rocket Avionics" @(0.025, 0.032, 0.042, 1.0) 0.72 0.24 0.10 0.18 -NormalTextureIndex 0 -MetallicRoughnessTextureIndex 1))
     $paint = New-Part 0
     $metal = New-Part 1
     $heat = New-Part 2
@@ -695,6 +789,8 @@ if (-not [IO.Path]::IsPathRooted($OutputDirectory)) {
 }
 [IO.Directory]::CreateDirectory($OutputDirectory) | Out-Null
 $giraffe = New-Giraffe
-Write-Gltf (Join-Path $OutputDirectory "cheeky_giraffe.gltf") "Cheeky Giraffe Mascot" $giraffe.Parts $giraffe.Materials @(-2.15, 0.0, -1.7)
+$giraffeTextures = New-ShowcaseTextureDefinitions $OutputDirectory "giraffe"
+Write-Gltf (Join-Path $OutputDirectory "cheeky_giraffe.gltf") "Cheeky Giraffe Mascot" $giraffe.Parts $giraffe.Materials @(-2.15, 0.0, -1.7) $giraffeTextures
 $rocket = New-Rocket
-Write-Gltf (Join-Path $OutputDirectory "original_realistic_rocket.gltf") "Original Realistic Rocket" $rocket.Parts $rocket.Materials @(2.15, 0.0, -1.7)
+$rocketTextures = New-ShowcaseTextureDefinitions $OutputDirectory "rocket"
+Write-Gltf (Join-Path $OutputDirectory "original_realistic_rocket.gltf") "Original Realistic Rocket" $rocket.Parts $rocket.Materials @(2.15, 0.0, -1.7) $rocketTextures

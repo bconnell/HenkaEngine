@@ -220,8 +220,12 @@ try {
     foreach ($showcaseFile in @(
         "cheeky_giraffe.gltf",
         "cheeky_giraffe.bin",
+        "giraffe_detail_normal.png",
+        "giraffe_metallic_roughness.png",
         "original_realistic_rocket.gltf",
-        "original_realistic_rocket.bin"
+        "original_realistic_rocket.bin",
+        "rocket_detail_normal.png",
+        "rocket_metallic_roughness.png"
     )) {
         $showcaseSourceFile = Join-Path $showcaseModelSource $showcaseFile
         if (-not (Test-Path -LiteralPath $showcaseSourceFile -PathType Leaf)) {
