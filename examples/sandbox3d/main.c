@@ -703,6 +703,9 @@ static bool sandbox3d_make_selected_object_editable(
     henka_engine* engine,
     sandbox3d_state* state,
     henka_entity entity);
+static henka_result sandbox3d_restore_persisted_native_showcase_sources(
+    henka_engine* engine,
+    sandbox3d_state* state);
 static bool sandbox3d_register_authoring_object(
     sandbox3d_state* state,
     sandbox3d_authoring_object* object);
@@ -8840,6 +8843,180 @@ static bool sandbox3d_make_selected_object_editable(
     fflush(stdout);
     sandbox3d_set_status(state, false, "Imported showcase primitive is now a Henka authoring source.");
     return true;
+}
+
+static bool sandbox3d_file_exists(const char* path)
+{
+    FILE* file;
+
+    if (path == NULL || path[0] == '\0')
+    {
+        return false;
+    }
+#if defined(_WIN32)
+    if (fopen_s(&file, path, "rb") != 0)
+    {
+        return false;
+    }
+#else
+    file = fopen(path, "rb");
+    if (file == NULL)
+    {
+        return false;
+    }
+#endif
+    fclose(file);
+    return true;
+}
+
+static henka_result sandbox3d_restore_persisted_native_showcase_sources(
+    henka_engine* engine,
+    sandbox3d_state* state)
+{
+    size_t entity_index;
+
+    if (engine == NULL || state == NULL || state->scene == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    for (entity_index = 0U;
+         entity_index < henka_scene_get_entity_count(state->scene);
+         ++entity_index)
+    {
+        const henka_entity entity = henka_scene_get_entity_at_index(state->scene, entity_index);
+        const henka_model_scene_primitive* primitive =
+            sandbox3d_get_showcase_authoring_primitive(state, entity);
+        char* project_path = NULL;
+        char* source_path = NULL;
+        sandbox3d_authoring_object* object;
+        henka_result result;
+
+        if (primitive == NULL ||
+            sandbox3d_resolve_authoring_project_paths(
+                engine,
+                entity,
+                &project_path,
+                &source_path) != HENKA_SUCCESS ||
+            !sandbox3d_file_exists(project_path))
+        {
+            henka_free(source_path);
+            henka_free(project_path);
+            continue;
+        }
+
+        if (!sandbox3d_make_selected_object_editable(engine, state, entity))
+        {
+            printf(
+                "Native authoring startup restore rejected: name=%s result=%s imported_render_retained=1.\n",
+                sandbox3d_safe_entity_name(state, entity, "showcase primitive"),
+                henka_result_to_string(HENKA_ERROR_UNKNOWN));
+            fflush(stdout);
+            henka_free(source_path);
+            henka_free(project_path);
+            continue;
+        }
+        object = sandbox3d_find_authoring_object(state, entity);
+        result = object == NULL
+            ? HENKA_ERROR_UNKNOWN
+            : sandbox3d_authoring_object_load_project(object, project_path);
+        if (result == HENKA_SUCCESS)
+        {
+            char* material_sidecar_path = sandbox3d_native_material_sidecar_path(project_path);
+            if (sandbox3d_file_exists(material_sidecar_path))
+            {
+                if (sandbox3d_prepare_material_editor_binding(
+                        state->scene,
+                        entity,
+                        state->material_editor_bindings,
+                        SANDBOX3D_MAX_MATERIAL_EDITOR_BINDINGS) != HENKA_SUCCESS)
+                {
+                    result = HENKA_ERROR_ASSET_SOURCE;
+                }
+                else
+                {
+                    sandbox3d_material_editor_binding* binding =
+                        sandbox3d_find_material_binding(state, entity);
+                    henka_material previous_material = henka_material_default();
+                    const henka_material_asset* previous_asset = NULL;
+                    henka_material_instance material_candidate;
+                    bool material_present = false;
+                    const bool previous_material_valid =
+                        binding != NULL &&
+                        binding->instance != NULL &&
+                        henka_scene_get_entity_material(state->scene, entity, &previous_material) == HENKA_SUCCESS &&
+                        henka_scene_get_entity_material_asset(state->scene, entity, &previous_asset) == HENKA_SUCCESS;
+
+                    result = sandbox3d_promote_authoring_material(engine, state, entity)
+                        ? sandbox3d_load_native_authoring_material(
+                            engine,
+                            state,
+                            entity,
+                            project_path,
+                            &material_candidate,
+                            &material_present)
+                        : HENKA_ERROR_ASSET_SOURCE;
+                    if (result == HENKA_SUCCESS &&
+                        material_present &&
+                        binding != NULL &&
+                        henka_assets_apply_material_instance_to_entity(
+                            &material_candidate,
+                            state->scene,
+                            entity) == HENKA_SUCCESS)
+                    {
+                        *binding->instance = material_candidate;
+                        sandbox3d_material_history_reset(binding);
+                        printf(
+                            "Native authoring startup restore: material state restored for name=%s source_state=HENKA_NATIVE_EDITABLE_MATERIAL_INSTANCE.\n",
+                            sandbox3d_safe_entity_name(state, entity, "showcase primitive"));
+                        fflush(stdout);
+                    }
+                    else if (previous_material_valid)
+                    {
+                        (void)henka_scene_set_entity_material_asset(state->scene, entity, previous_asset);
+                        (void)henka_scene_set_entity_material(state->scene, entity, previous_material);
+                        state->native_authoring_material_asset = NULL;
+                        state->native_authoring_material_entity = HENKA_INVALID_ENTITY;
+                        result = HENKA_ERROR_ASSET_SOURCE;
+                    }
+                }
+            }
+            henka_free(material_sidecar_path);
+        }
+        if (result == HENKA_SUCCESS)
+        {
+            const henka_authoring_mesh_counts counts =
+                henka_authoring_mesh_get_counts(sandbox3d_authoring_object_get_mesh(object));
+            printf(
+                "Native authoring startup restore: name=%s vertices=%zu faces=%zu source_state=HENKA_NATIVE_EDITABLE_SOURCE.\n",
+                sandbox3d_safe_entity_name(state, entity, "showcase primitive"),
+                counts.vertices,
+                counts.faces);
+            fflush(stdout);
+        }
+        else
+        {
+            sandbox3d_release_authoring_physics(state, object);
+            sandbox3d_unregister_authoring_object(state, object);
+            if (state->authoring_object == object)
+            {
+                state->authoring_object = NULL;
+            }
+            sandbox3d_authoring_object_destroy(object);
+            printf(
+                "Native authoring startup restore rejected: name=%s result=%s imported_render_retained=1.\n",
+                sandbox3d_safe_entity_name(state, entity, "showcase primitive"),
+                henka_result_to_string(result));
+            fflush(stdout);
+        }
+        henka_free(source_path);
+        henka_free(project_path);
+    }
+
+    state->authoring_object = sandbox3d_find_authoring_object(
+        state,
+        sandbox3d_get_real_selected_entity(state));
+    return HENKA_SUCCESS;
 }
 
 static bool sandbox3d_register_authoring_object(
@@ -21479,6 +21656,14 @@ static henka_result sandbox3d_initialize(henka_engine* engine, void* user_data)
         if (result != HENKA_SUCCESS)
         {
             printf("Authoring smoke failure: duplicated object did not retain an independent authoring source.\n");
+            goto fail;
+        }
+    }
+    if (!state->smoke_test)
+    {
+        result = sandbox3d_restore_persisted_native_showcase_sources(engine, state);
+        if (result != HENKA_SUCCESS)
+        {
             goto fail;
         }
     }

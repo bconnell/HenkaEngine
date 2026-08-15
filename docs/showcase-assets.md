@@ -18,6 +18,9 @@ While that source is active, Scene View component picks also remain usable when
 a frontmost spot or decal primitive from the same showcase asset wins the render
 ray; the visible hit is routed through the selected native source and the source
 mesh still performs the final component intersection validation.
+The saved native source is also discovered on a later normal packaged launch;
+valid mesh and owned-material sidecars are restored transactionally, while a
+malformed or missing slot retains the imported glTF render.
 
 This is intentionally a bounded bridge rather than a completed content
 workspace. It currently targets the imported showcase primitives and preserves

@@ -686,6 +686,8 @@ $stabilityFirstPath = Join-Path $logDir "check_packaged_sandbox3d_stability_a.pn
 $stabilitySecondPath = Join-Path $logDir "check_packaged_sandbox3d_stability_b.png"
 $persistenceStdoutPath = Join-Path $logDir "check_packaged_sandbox3d_persistence_stdout.log"
 $persistenceStderrPath = Join-Path $logDir "check_packaged_sandbox3d_persistence_stderr.log"
+$startupRestoreStdoutPath = Join-Path $logDir "check_packaged_sandbox3d_startup_restore_stdout.log"
+$startupRestoreStderrPath = Join-Path $logDir "check_packaged_sandbox3d_startup_restore_stderr.log"
 
 if (-not $NonInteractive) {
     Add-Type -AssemblyName System.Windows.Forms
@@ -903,7 +905,9 @@ Remove-Item `
         $nativeScreenshotPath,
         $nativeAuthoringScreenshotPath,
         $persistenceStdoutPath,
-        $persistenceStderrPath) `
+        $persistenceStderrPath,
+        $startupRestoreStdoutPath,
+        $startupRestoreStderrPath) `
     -ErrorAction SilentlyContinue
 
 $capturedProcess = $null
@@ -2113,6 +2117,60 @@ try {
     if (-not (Try-AssertPathExists -Path $settingsPath -Description "Packaged settings file")) {
         Write-Output "[warn] Automated packaged close did not leave behind a settings file in this run. Manual packaged persistence QA is still needed."
     }
+
+    Write-Step "Checking persisted native authoring relaunch"
+    $startupRestoreCapture = Start-HenkaCapturedProcess `
+        -FilePath $packagedExe `
+        -WorkingDirectory $packageRoot `
+        -StdoutPath $startupRestoreStdoutPath `
+        -StderrPath $startupRestoreStderrPath
+    $startupRestoreProcess = $startupRestoreCapture.Process
+    if (-not (Wait-FileContains `
+            -Path $startupRestoreStdoutPath `
+            -Pattern "Native authoring startup restore: name=" `
+            -TimeoutMilliseconds 15000)) {
+        $restoreWindow = [NativeMethods]::FindProcessWindow(
+            [uint32]$startupRestoreProcess.Id,
+            "Henka Engine Sandbox 3D")
+        if ($restoreWindow -ne [System.IntPtr]::Zero) {
+            [NativeMethods]::PostMessage(
+                $restoreWindow,
+                0x0010,
+                [System.IntPtr]::Zero,
+                [System.IntPtr]::Zero) | Out-Null
+        }
+        throw "A normal packaged relaunch did not restore the saved native showcase source."
+    }
+    if (-not (Wait-FileContains `
+            -Path $startupRestoreStdoutPath `
+            -Pattern "Native authoring startup restore: material state restored" `
+            -TimeoutMilliseconds 3000)) {
+        $restoreWindow = [NativeMethods]::FindProcessWindow(
+            [uint32]$startupRestoreProcess.Id,
+            "Henka Engine Sandbox 3D")
+        if ($restoreWindow -ne [System.IntPtr]::Zero) {
+            [NativeMethods]::PostMessage(
+                $restoreWindow,
+                0x0010,
+                [System.IntPtr]::Zero,
+                [System.IntPtr]::Zero) | Out-Null
+        }
+        throw "A normal packaged relaunch did not restore the saved native material sidecar."
+    }
+    $restoreWindow = [NativeMethods]::FindProcessWindow(
+        [uint32]$startupRestoreProcess.Id,
+        "Henka Engine Sandbox 3D")
+    if ($restoreWindow -ne [System.IntPtr]::Zero) {
+        [NativeMethods]::PostMessage(
+            $restoreWindow,
+            0x0010,
+            [System.IntPtr]::Zero,
+            [System.IntPtr]::Zero) | Out-Null
+    }
+    if (-not $startupRestoreProcess.WaitForExit(10000)) {
+        throw "The persisted native authoring relaunch did not close cleanly."
+    }
+    Write-Output "[pass] Persisted native source and owned material restored on normal packaged relaunch"
 
     Write-Step "Checking persisted live workspace settings recovery"
     $persistenceSmoke = Invoke-HenkaNativeCapture `
