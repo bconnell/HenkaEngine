@@ -21864,6 +21864,7 @@ static henka_result sandbox3d_initialize(henka_engine* engine, void* user_data)
             goto fail;
         }
         {
+            unsigned char ground_surface_pixels[SANDBOX3D_GROUND_TEXTURE_PIXEL_COUNT];
             static const unsigned char detail_normal_pixels[] =
             {
                 128U, 128U, 255U, 255U, 142U, 116U, 246U, 255U,
@@ -21916,15 +21917,41 @@ static henka_result sandbox3d_initialize(henka_engine* engine, void* user_data)
                 44U, 152U, 52U, 0U, 54U, 168U, 62U, 255U
             };
             henka_texture_descriptor normal_descriptor = henka_texture_descriptor_default_normal();
+            henka_texture_descriptor ground_descriptor = henka_texture_descriptor_default_color();
             henka_texture_descriptor macro_descriptor = henka_texture_descriptor_default_color();
             henka_texture_descriptor roughness_descriptor = henka_texture_descriptor_default_data();
+            sandbox3d_generate_ground_surface_texture(
+                ground_surface_pixels,
+                SANDBOX3D_GROUND_TEXTURE_PIXEL_COUNT);
+            if (!sandbox3d_ground_surface_texture_is_valid(
+                    ground_surface_pixels,
+                    SANDBOX3D_GROUND_TEXTURE_PIXEL_COUNT))
+            {
+                result = HENKA_ERROR_INVALID_ARGUMENT;
+                goto fail;
+            }
             normal_descriptor.generate_mipmaps = true;
+            ground_descriptor.generate_mipmaps = true;
+            ground_descriptor.wrap_u = HENKA_TEXTURE_WRAP_REPEAT;
+            ground_descriptor.wrap_v = HENKA_TEXTURE_WRAP_REPEAT;
             macro_descriptor.generate_mipmaps = true;
             macro_descriptor.wrap_u = HENKA_TEXTURE_WRAP_REPEAT;
             macro_descriptor.wrap_v = HENKA_TEXTURE_WRAP_REPEAT;
             roughness_descriptor.generate_mipmaps = true;
             roughness_descriptor.min_filter = HENKA_TEXTURE_FILTER_LINEAR_MIPMAP_LINEAR;
             roughness_descriptor.usage = HENKA_TEXTURE_USAGE_METALLIC_ROUGHNESS;
+            result = sandbox3d_create_runtime_rgba8_texture(
+                engine,
+                SANDBOX3D_GROUND_TEXTURE_WIDTH,
+                SANDBOX3D_GROUND_TEXTURE_HEIGHT,
+                ground_surface_pixels,
+                &ground_descriptor,
+                "runtime/showcase/ground_surface",
+                &state->ground_texture);
+            if (result != HENKA_SUCCESS)
+            {
+                goto fail;
+            }
             result = sandbox3d_create_runtime_rgba8_texture(
                 engine,
                 4,
@@ -22064,8 +22091,6 @@ static henka_result sandbox3d_initialize(henka_engine* engine, void* user_data)
     {
         goto fail;
     }
-
-    state->ground_texture = NULL;
 
     result = henka_assets_load_texture(assets, "assets/textures/missing_texture.png", &state->missing_texture);
     if (result != HENKA_SUCCESS)
@@ -22380,11 +22405,14 @@ static henka_result sandbox3d_initialize(henka_engine* engine, void* user_data)
     ground_material.name = "Graphite Ground";
     ground_material.type = HENKA_MATERIAL_TYPE_LIT;
     ground_material.shader = state->basic_shader;
-    ground_material.base_color_texture = NULL;
+    ground_material.base_color_texture = state->ground_texture;
     ground_material.use_texture = sandbox3d_ground_surface_uses_texture();
-    ground_material.base_color = sandbox3d_ground_surface_color();
+    ground_material.base_color = (henka_vec4){1.0f, 1.0f, 1.0f, 1.0f};
+    ground_material.normal_texture = state->detail_normal_texture;
+    ground_material.metallic_roughness_texture = state->wet_dry_roughness_texture;
+    ground_material.normal_scale = 0.18f;
     ground_material.use_lighting = true;
-    ground_material.roughness = 0.82f;
+    ground_material.roughness = 0.76f;
     ground_material.receive_shadows = true;
 
     cube_material = henka_material_default();
@@ -22586,10 +22614,10 @@ static henka_result sandbox3d_initialize(henka_engine* engine, void* user_data)
         "Ground",
         "Under the scene,",
         "shows a restrained local floor surface.",
-        "Uses a built-in plane mesh with a restrained lit graphite surface.",
+        "Uses a built-in plane mesh with a manager-owned graphite surface, detail normal, and wet/dry roughness response.",
         "Built-in plane mesh.",
         "Lit graphite material.",
-        "Uniform slate ground surface; no checker texture or hidden split surface.",
+        "Bounded graphite texture variation; no checker texture or hidden split surface.",
         true,
         true,
         transform);

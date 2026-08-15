@@ -11,6 +11,7 @@
 void henka_test_sandbox3d_workspace(void)
 {
     float studio_environment[SANDBOX3D_STUDIO_ENVIRONMENT_PIXEL_COUNT];
+    unsigned char ground_texture[SANDBOX3D_GROUND_TEXTURE_PIXEL_COUNT];
     henka_vec4 ground_color;
     const sandbox3d_workspace_panel* panel;
     henka_ui_rect ownership[2];
@@ -40,7 +41,20 @@ void henka_test_sandbox3d_workspace(void)
     HENKA_TEST_ASSERT_FLOAT_CLOSE(ground_color.y, 0.050f, 0.0001f);
     HENKA_TEST_ASSERT_FLOAT_CLOSE(ground_color.z, 0.075f, 0.0001f);
     HENKA_TEST_ASSERT_FLOAT_CLOSE(ground_color.w, 1.0f, 0.0001f);
-    HENKA_TEST_ASSERT(!sandbox3d_ground_surface_uses_texture());
+    HENKA_TEST_ASSERT(sandbox3d_ground_surface_uses_texture());
+
+    memset(ground_texture, 0, sizeof(ground_texture));
+    sandbox3d_generate_ground_surface_texture(
+        ground_texture,
+        SANDBOX3D_GROUND_TEXTURE_PIXEL_COUNT);
+    HENKA_TEST_ASSERT(sandbox3d_ground_surface_texture_is_valid(
+        ground_texture,
+        SANDBOX3D_GROUND_TEXTURE_PIXEL_COUNT));
+    HENKA_TEST_ASSERT(ground_texture[0U] !=
+        ground_texture[SANDBOX3D_GROUND_TEXTURE_CHANNELS]);
+    HENKA_TEST_ASSERT(!sandbox3d_ground_surface_texture_is_valid(
+        ground_texture,
+        SANDBOX3D_GROUND_TEXTURE_PIXEL_COUNT - 1U));
 
     sandbox3d_generate_studio_environment(
         studio_environment,

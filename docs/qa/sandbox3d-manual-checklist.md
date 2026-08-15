@@ -177,7 +177,7 @@ The normal startup should show these showcase assets:
 
 - `Showcase Giraffe`: the Cheeky Giraffe mascot, loaded from the packaged glTF scene/material path.
 - `Showcase Rocket`: the Original Realistic Rocket, loaded from the packaged glTF scene/material path.
-- `Ground`: the restrained graphite plane beneath the showcase and the debug grid.
+- `Ground`: the restrained graphite plane beneath the showcase, with subtle surface variation, beneath the debug grid.
 
 Use `--primitive-gallery` when the engineering samples are specifically under test. In that opt-in mode you should be able to identify these additional examples:
 

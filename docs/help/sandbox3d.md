@@ -4,7 +4,7 @@
 
 - the original Cheeky Giraffe mascot
 - the original realistic rocket sample
-- a restrained graphite ground plane with a visible floor surface and grid
+- a restrained manager-owned graphite ground surface with subtle albedo, normal, and wet/dry roughness variation, plus a visible editor grid
 - a debug grid
 
 The showcase models are deterministic repo-owned glTF assets generated during the Windows build and packaged beside their binary buffers. They use their own material factors rather than the primitive-gallery cube texture. Use `henka_sandbox3d.exe --primitive-gallery` to show the engineering primitives, OBJ marker, fallback samples, foliage, and realism material row again.
