@@ -2072,6 +2072,32 @@ try {
         Write-Output "[warn] Automated F4 panel open could not be confirmed. Manual packaged UI QA is still needed."
     }
 
+    Write-Step "Checking user-facing native viewport component picking"
+    $pickerViewportMatch = Get-LastLogRegexMatch `
+        -Path $stdoutPath `
+        -Pattern 'Sandbox viewport: origin ([0-9]+),([0-9]+) size ([0-9]+)x([0-9]+)\.'
+    if ($null -ne $pickerViewportMatch) {
+        $pickerViewportX = [double]$pickerViewportMatch.Groups[1].Value
+        $pickerViewportY = [double]$pickerViewportMatch.Groups[2].Value
+        $pickerViewportWidth = [double]$pickerViewportMatch.Groups[3].Value
+        $pickerViewportHeight = [double]$pickerViewportMatch.Groups[4].Value
+        Click-FramebufferPoint `
+            -Handle $mainWindowHandle `
+            -FramebufferWidth $framebufferWidth `
+            -FramebufferHeight $framebufferHeight `
+            -FramebufferX ($pickerViewportX + $pickerViewportWidth * 0.33) `
+            -FramebufferY ($pickerViewportY + $pickerViewportHeight * 0.55)
+        if (Wait-FileContains -Path $stdoutPath -Pattern "Native authoring component picked:" -TimeoutMilliseconds 2500) {
+            Write-Output "[pass] User-facing native viewport component picker selected a showcase component"
+        }
+        else {
+            throw "The user-facing native viewport component picker did not select a component on the authored showcase entity."
+        }
+    }
+    else {
+        throw "The user-facing native viewport component picker could not obtain the live Scene View viewport geometry."
+    }
+
     Write-Step "Checking clean close-window shutdown"
     [NativeMethods]::PostMessage($mainWindowHandle, 0x0010, [System.IntPtr]::Zero, [System.IntPtr]::Zero) | Out-Null
     if (-not $process.WaitForExit(10000)) {

@@ -695,6 +695,10 @@ static bool sandbox3d_add_primitive_object(henka_engine* engine, sandbox3d_state
 static const henka_model_scene_primitive* sandbox3d_get_showcase_authoring_primitive(
     const sandbox3d_state* state,
     henka_entity entity);
+static bool sandbox3d_entities_share_showcase_asset(
+    const sandbox3d_state* state,
+    henka_entity left,
+    henka_entity right);
 static bool sandbox3d_make_selected_object_editable(
     henka_engine* engine,
     sandbox3d_state* state,
@@ -8706,6 +8710,41 @@ static const henka_model_scene_primitive* sandbox3d_get_showcase_authoring_primi
     return NULL;
 }
 
+static bool sandbox3d_entities_share_showcase_asset(
+    const sandbox3d_state* state,
+    henka_entity left,
+    henka_entity right)
+{
+    const char* left_name;
+    const char* right_name;
+    static const char* const prefixes[] = {
+        "Showcase Giraffe ",
+        "Showcase Rocket "};
+    size_t index;
+
+    if (state == NULL || state->scene == NULL ||
+        left == HENKA_INVALID_ENTITY || right == HENKA_INVALID_ENTITY)
+    {
+        return false;
+    }
+    left_name = henka_scene_get_entity_name(state->scene, left);
+    right_name = henka_scene_get_entity_name(state->scene, right);
+    if (left_name == NULL || right_name == NULL)
+    {
+        return false;
+    }
+    for (index = 0U; index < sizeof(prefixes) / sizeof(prefixes[0]); ++index)
+    {
+        const size_t prefix_length = strlen(prefixes[index]);
+        if (strncmp(left_name, prefixes[index], prefix_length) == 0 &&
+            strncmp(right_name, prefixes[index], prefix_length) == 0)
+        {
+            return true;
+        }
+    }
+    return false;
+}
+
 static bool sandbox3d_promote_authoring_material(
     henka_engine* engine,
     sandbox3d_state* state,
@@ -12222,6 +12261,7 @@ static bool sandbox3d_try_pick_object(henka_engine* engine, sandbox3d_state* sta
     henka_vec2 mouse_framebuffer;
     henka_vec2 mouse_local;
     henka_entity picked_entity;
+    henka_entity visual_hit_entity;
     henka_ray ray;
     float distance;
     bool object_hit;
@@ -12337,6 +12377,20 @@ static bool sandbox3d_try_pick_object(henka_engine* engine, sandbox3d_state* sta
 
     object_hit = henka_scene_pick_entity(state->scene, ray, &picked_entity, &distance) == HENKA_SUCCESS &&
         sandbox3d_is_selectable_entity(state, picked_entity);
+    visual_hit_entity = object_hit ? picked_entity : HENKA_INVALID_ENTITY;
+    if (object_hit && state->authoring_object != NULL &&
+        sandbox3d_entities_share_showcase_asset(
+            state,
+            picked_entity,
+            sandbox3d_authoring_object_get_entity(state->authoring_object)))
+    {
+        /* Imported showcase materials are separate selectable primitives. A
+         * visible decal/spot primitive can be the frontmost ray hit even
+         * though the user is editing the selected native source primitive.
+         * Keep the source selection stable and let its own geometry validate
+         * the component ray before changing topology. */
+        picked_entity = sandbox3d_authoring_object_get_entity(state->authoring_object);
+    }
     terrain_hit_valid = sandbox3d_try_pick_terrain(state, ray, &terrain_hit);
     if (sandbox3d_should_prefer_terrain_hit(
             terrain_hit_valid,
@@ -12367,33 +12421,46 @@ static bool sandbox3d_try_pick_object(henka_engine* engine, sandbox3d_state* sta
     {
         sandbox3d_select_entity(state, picked_entity);
         if (state->authoring_object != NULL &&
-            picked_entity == sandbox3d_authoring_object_get_entity(state->authoring_object) &&
-            sandbox3d_authoring_object_pick_component(
-                state->authoring_object,
-                ray,
-                1000000.0f,
-                henka_input_is_key_down(engine, HENKA_KEY_LEFT_CTRL)) == HENKA_SUCCESS)
+            picked_entity == sandbox3d_authoring_object_get_entity(state->authoring_object))
         {
-            const sandbox3d_authoring_selection_mode selection_mode =
-                sandbox3d_authoring_object_get_selection_mode(state->authoring_object);
-            const char* selection_label = selection_mode == SANDBOX3D_AUTHORING_SELECTION_VERTEX
-                ? "vertex"
-                : selection_mode == SANDBOX3D_AUTHORING_SELECTION_EDGE ? "edge" : "face";
-            authoring_component_hit = true;
-            printf(
-                "Native authoring component picked: name=%s mode=%s selected=%zu source_state=HENKA_NATIVE_EDITABLE_SOURCE.\n",
-                sandbox3d_safe_entity_name(state, picked_entity, "object"),
-                selection_label,
-                sandbox3d_authoring_object_get_selected_component_count(state->authoring_object));
-            fflush(stdout);
-            sandbox3d_set_statusf(
-                state,
-                false,
-                false,
-                "Picked %s %s (%zu selected).",
-                sandbox3d_safe_entity_name(state, picked_entity, "object"),
-                selection_label,
-                sandbox3d_authoring_object_get_selected_component_count(state->authoring_object));
+            const henka_result component_result =
+                sandbox3d_authoring_object_pick_component(
+                    state->authoring_object,
+                    ray,
+                    1000000.0f,
+                    henka_input_is_key_down(engine, HENKA_KEY_LEFT_CTRL));
+            if (component_result == HENKA_SUCCESS)
+            {
+                const sandbox3d_authoring_selection_mode selection_mode =
+                    sandbox3d_authoring_object_get_selection_mode(state->authoring_object);
+                const char* selection_label = selection_mode == SANDBOX3D_AUTHORING_SELECTION_VERTEX
+                    ? "vertex"
+                    : selection_mode == SANDBOX3D_AUTHORING_SELECTION_EDGE ? "edge" : "face";
+                authoring_component_hit = true;
+                printf(
+                    "Native authoring component picked: name=%s visual=%s mode=%s selected=%zu source_state=HENKA_NATIVE_EDITABLE_SOURCE.\n",
+                    sandbox3d_safe_entity_name(state, picked_entity, "object"),
+                    sandbox3d_safe_entity_name(state, visual_hit_entity, "object"),
+                    selection_label,
+                    sandbox3d_authoring_object_get_selected_component_count(state->authoring_object));
+                fflush(stdout);
+                sandbox3d_set_statusf(
+                    state,
+                    false,
+                    false,
+                    "Picked %s %s (%zu selected).",
+                    sandbox3d_safe_entity_name(state, picked_entity, "object"),
+                    selection_label,
+                    sandbox3d_authoring_object_get_selected_component_count(state->authoring_object));
+            }
+            else
+            {
+                printf(
+                    "Native authoring component pick rejected: name=%s result=%s source_state=HENKA_NATIVE_EDITABLE_SOURCE.\n",
+                    sandbox3d_safe_entity_name(state, picked_entity, "object"),
+                    henka_result_to_string(component_result));
+                fflush(stdout);
+            }
         }
         sandbox3d_record_reject_reason(state, SANDBOX3D_INTERACTION_REJECT_NONE, false);
         sandbox3d_record_success_result(state, "Picked %s", sandbox3d_safe_entity_name(state, picked_entity, "object"));

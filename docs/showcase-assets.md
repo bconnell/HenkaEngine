@@ -14,6 +14,10 @@ Henka converts
 that validated primitive into a user-owned authoring mesh connected to the
 selected scene entity; the existing component, topology, UV, undo/redo, and
 `Save Project` / `Reload Project` controls operate on that source afterward.
+While that source is active, Scene View component picks also remain usable when
+a frontmost spot or decal primitive from the same showcase asset wins the render
+ray; the visible hit is routed through the selected native source and the source
+mesh still performs the final component intersection validation.
 
 This is intentionally a bounded bridge rather than a completed content
 workspace. It currently targets the imported showcase primitives and preserves
