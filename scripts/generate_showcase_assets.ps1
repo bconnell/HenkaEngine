@@ -467,6 +467,7 @@ function New-Material {
         [float]$SheenRoughness = 0.50,
         [float[]]$EmissiveColor = @(0.0, 0.0, 0.0),
         [float]$EmissiveStrength = 1.0,
+        [int]$BaseColorTextureIndex = -1,
         [int]$NormalTextureIndex = -1,
         [float]$NormalTextureScale = 0.35,
         [int]$MetallicRoughnessTextureIndex = -1
@@ -478,6 +479,11 @@ function New-Material {
             metallicFactor = $Metallic
             roughnessFactor = $Roughness
         }
+    }
+    if ($BaseColorTextureIndex -ge 0) {
+        $material.pbrMetallicRoughness.Add("baseColorTexture", [ordered]@{
+            index = $BaseColorTextureIndex
+        })
     }
     if ($MetallicRoughnessTextureIndex -ge 0) {
         $material.pbrMetallicRoughness.Add("metallicRoughnessTexture", [ordered]@{
@@ -518,17 +524,50 @@ function New-Material {
 function Write-ShowcaseTexture {
     param(
         [Parameter(Mandatory = $true)][string]$Path,
-        [Parameter(Mandatory = $true)][ValidateSet("normal", "metallic_roughness")][string]$Kind,
+        [Parameter(Mandatory = $true)][ValidateSet("base_color", "normal", "metallic_roughness")][string]$Kind,
         [Parameter(Mandatory = $true)][ValidateSet("giraffe", "rocket")][string]$Subject
     )
     Add-Type -AssemblyName System.Drawing
-    $bitmap = [System.Drawing.Bitmap]::new(64, 64, [System.Drawing.Imaging.PixelFormat]::Format32bppArgb)
+    $size = if ($Kind -eq "base_color") { 128 } else { 64 }
+    $bitmap = [System.Drawing.Bitmap]::new($size, $size, [System.Drawing.Imaging.PixelFormat]::Format32bppArgb)
     try {
-        for ($y = 0; $y -lt 64; ++$y) {
-            for ($x = 0; $x -lt 64; ++$x) {
-                $u = ($x + 0.5) / 64.0
-                $v = ($y + 0.5) / 64.0
-                if ($Kind -eq "normal") {
+        for ($y = 0; $y -lt $size; ++$y) {
+            for ($x = 0; $x -lt $size; ++$x) {
+                $u = ($x + 0.5) / $size
+                $v = ($y + 0.5) / $size
+                if ($Kind -eq "base_color") {
+                    $spot = $false
+                    foreach ($spotCenter in @(
+                            @(0.04, 0.20, 0.075, 0.065), @(0.24, 0.26, 0.065, 0.085),
+                            @(0.48, 0.18, 0.085, 0.060), @(0.72, 0.28, 0.070, 0.080),
+                            @(0.92, 0.16, 0.060, 0.055), @(0.14, 0.54, 0.085, 0.070),
+                            @(0.38, 0.48, 0.065, 0.090), @(0.62, 0.58, 0.090, 0.065),
+                            @(0.86, 0.50, 0.070, 0.080), @(0.05, 0.82, 0.080, 0.065),
+                            @(0.28, 0.76, 0.065, 0.075), @(0.54, 0.84, 0.085, 0.060),
+                            @(0.78, 0.76, 0.065, 0.085))) {
+                        $du = [Math]::Abs($u - $spotCenter[0])
+                        $du = [Math]::Min($du, 1.0 - $du)
+                        $dv = $v - $spotCenter[1]
+                        $distance = ($du / $spotCenter[2]) * ($du / $spotCenter[2]) +
+                            ($dv / $spotCenter[3]) * ($dv / $spotCenter[3])
+                        $edgeVariation = 0.92 + 0.08 * [Math]::Sin(($x + 3) * 0.21 + ($y + 11) * 0.17)
+                        if ($distance -lt $edgeVariation) {
+                            $spot = $true
+                            break
+                        }
+                    }
+                    if ($spot) {
+                        $red = 168 + [int][Math]::Round(10.0 * [Math]::Sin(($x + 3) * 0.11))
+                        $green = 92 + [int][Math]::Round(8.0 * [Math]::Cos(($y + 5) * 0.13))
+                        $blue = 38
+                    }
+                    else {
+                        $red = 255
+                        $green = 255
+                        $blue = 255
+                    }
+                }
+                elseif ($Kind -eq "normal") {
                     $frequency = if ($Subject -eq "giraffe") { 0.34 } else { 0.52 }
                     $nx = 0.12 * [Math]::Sin(($x + 3) * $frequency) * [Math]::Cos(($y + 7) * ($frequency * 0.73))
                     $ny = 0.10 * [Math]::Cos(($y + 5) * ($frequency * 0.91)) * [Math]::Sin(($x + 11) * ($frequency * 0.61))
@@ -569,15 +608,22 @@ function Write-ShowcaseTexture {
 function New-ShowcaseTextureDefinitions {
     param(
         [Parameter(Mandatory = $true)][string]$OutputDirectory,
-        [Parameter(Mandatory = $true)][ValidateSet("giraffe", "rocket")][string]$Subject
+        [Parameter(Mandatory = $true)][ValidateSet("giraffe", "rocket")][string]$Subject,
+        [switch]$IncludeBaseColor
     )
     $normalName = "${Subject}_detail_normal.png"
     $metallicRoughnessName = "${Subject}_metallic_roughness.png"
     Write-ShowcaseTexture (Join-Path $OutputDirectory $normalName) "normal" $Subject
     Write-ShowcaseTexture (Join-Path $OutputDirectory $metallicRoughnessName) "metallic_roughness" $Subject
-    return @(
+    $definitions = @(
         ([ordered]@{ uri = $normalName }),
         ([ordered]@{ uri = $metallicRoughnessName }))
+    if ($IncludeBaseColor) {
+        $baseColorName = "${Subject}_base_color.png"
+        Write-ShowcaseTexture (Join-Path $OutputDirectory $baseColorName) "base_color" $Subject
+        $definitions += ,([ordered]@{ uri = $baseColorName })
+    }
+    return $definitions
 }
 
 function Test-ShowcasePart {
@@ -722,7 +768,7 @@ function Write-Gltf {
 
 function New-Giraffe {
     $materials = @(
-        (New-Material "Giraffe Tan" @(0.46, 0.25, 0.08, 1.0) 0.0 0.56 0.08 0.36 @(0.07, 0.025, 0.01) 0.45 -NormalTextureIndex 0 -NormalTextureScale 0.14 -MetallicRoughnessTextureIndex 1),
+        (New-Material "Giraffe Tan" @(0.46, 0.25, 0.08, 1.0) 0.0 0.56 0.08 0.36 @(0.07, 0.025, 0.01) 0.45 -BaseColorTextureIndex 2 -NormalTextureIndex 0 -NormalTextureScale 0.14 -MetallicRoughnessTextureIndex 1),
         (New-Material "Giraffe Spots" @(0.09, 0.018, 0.006, 1.0) 0.0 0.68 -NormalTextureIndex 0 -NormalTextureScale 0.12 -MetallicRoughnessTextureIndex 1),
         (New-Material "Giraffe Cream" @(0.72, 0.55, 0.32, 1.0) 0.0 0.50 0.06 0.28 @(0.11, 0.06, 0.025) 0.48 -NormalTextureIndex 0 -NormalTextureScale 0.14 -MetallicRoughnessTextureIndex 1),
         (New-Material "Giraffe Eye White" @(0.76, 0.72, 0.62, 1.0) 0.0 0.18 0.54 0.08),
@@ -773,15 +819,8 @@ function New-Giraffe {
     # Spots are low-profile tangent patches, not intersecting ellipsoids. The
     # small outward bias is a deterministic decal-style separation that keeps
     # the pattern readable without introducing bumps or coplanar z-fighting.
-    Add-EllipsoidSurfaceSpot $spots @(0.0, 1.35, 0.0) @(0.92, 1.0, 0.62) @(-0.48, 0.20, 0.86) 0.23 0.17 -0.20
-    Add-EllipsoidSurfaceSpot $spots @(0.0, 1.35, 0.0) @(0.92, 1.0, 0.62) @(0.38, -0.18, 0.91) 0.25 0.14 0.35
-    Add-EllipsoidSurfaceSpot $spots @(0.0, 1.35, 0.0) @(0.92, 1.0, 0.62) @(-0.18, -0.52, 0.83) 0.16 0.22 0.20
-    Add-EllipsoidSurfaceSpot $spots @(0.0, 1.35, 0.0) @(0.92, 1.0, 0.62) @(0.54, 0.50, 0.67) 0.16 0.12 -0.45
-    Add-EllipsoidSurfaceSpot $spots @(0.0, 1.35, 0.0) @(0.92, 1.0, 0.62) @(-0.70, -0.35, 0.62) 0.15 0.12 0.55
     Add-SurfaceSpot $spots @(0.0, 2.22, 0.30) @(0.0, 0.0, 1.0) 0.13 0.22 -0.15
     Add-SurfaceSpot $spots @(0.0, 2.78, 0.30) @(0.0, 0.0, 1.0) 0.12 0.17 0.25
-    Add-EllipsoidSurfaceSpot $spots @(0.0, 3.82, 0.0) @(0.72, 0.56, 0.56) @(-0.32, 0.18, 0.92) 0.12 0.10 0.35
-    Add-EllipsoidSurfaceSpot $spots @(0.0, 3.82, 0.0) @(0.72, 0.56, 0.56) @(0.34, -0.22, 0.90) 0.13 0.09 -0.30
     Add-Ellipsoid $cream @(0.0, 3.63, 0.50) @(0.40, 0.22, 0.19) 18 32
     Add-Ellipsoid $cream @(0.0, 3.48, 0.53) @(0.29, 0.12, 0.14) 14 28
     Add-Ellipsoid $eyes @(-0.27, 3.98, 0.50) @(0.095, 0.13, 0.060) 16 28
@@ -849,7 +888,7 @@ if (-not [IO.Path]::IsPathRooted($OutputDirectory)) {
 }
 [IO.Directory]::CreateDirectory($OutputDirectory) | Out-Null
 $giraffe = New-Giraffe
-$giraffeTextures = New-ShowcaseTextureDefinitions $OutputDirectory "giraffe"
+$giraffeTextures = New-ShowcaseTextureDefinitions -OutputDirectory $OutputDirectory -Subject "giraffe" -IncludeBaseColor
 Write-Gltf (Join-Path $OutputDirectory "cheeky_giraffe.gltf") "Cheeky Giraffe Mascot" $giraffe.Parts $giraffe.Materials @(-2.15, 0.0, -1.7) $giraffeTextures
 $rocket = New-Rocket
 $rocketTextures = New-ShowcaseTextureDefinitions $OutputDirectory "rocket"

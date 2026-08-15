@@ -780,6 +780,7 @@ Assert-PathExists -Path (Join-Path $assetsDir "branding\henka_engine_lockup.png"
 foreach ($showcaseFile in @(
     "cheeky_giraffe.gltf",
     "cheeky_giraffe.bin",
+    "giraffe_base_color.png",
     "giraffe_detail_normal.png",
     "giraffe_metallic_roughness.png",
     "original_realistic_rocket.gltf",

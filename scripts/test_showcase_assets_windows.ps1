@@ -23,8 +23,9 @@ foreach ($name in @("cheeky_giraffe", "original_realistic_rocket")) {
     }
     if ($json.PSObject.Properties.Name -notcontains "images" -or
         $json.PSObject.Properties.Name -notcontains "textures" -or
-        $json.images.Count -ne 2 -or $json.textures.Count -ne 2) {
-        throw "Showcase asset $name is missing its bounded normal and metallic/roughness texture dependencies."
+        (($name -eq "cheeky_giraffe" -and ($json.images.Count -ne 3 -or $json.textures.Count -ne 3)) -or
+         ($name -ne "cheeky_giraffe" -and ($json.images.Count -ne 2 -or $json.textures.Count -ne 2)))) {
+        throw "Showcase asset $name is missing its bounded material texture dependencies."
     }
     foreach ($image in $json.images) {
         if ([IO.Path]::IsPathRooted([string]$image.uri) -or
@@ -84,6 +85,12 @@ foreach ($requiredName in @("Giraffe Eye White", "Giraffe Iris", "Giraffe Eye De
 $giraffeNormalBindings = @($giraffe.materials | Where-Object { $_.PSObject.Properties.Name -contains "normalTexture" })
 if ($giraffeNormalBindings.Count -lt 5) {
     throw "Showcase giraffe does not exercise enough generated normal-map material bindings."
+}
+$giraffeTan = @($giraffe.materials | Where-Object { $_.name -eq "Giraffe Tan" })[0]
+if ($null -eq $giraffeTan -or
+    $giraffeTan.pbrMetallicRoughness.PSObject.Properties.Name -notcontains "baseColorTexture" -or
+    [int]$giraffeTan.pbrMetallicRoughness.baseColorTexture.index -ne 2) {
+    throw "Showcase giraffe does not bind its deterministic flush spot base-color texture."
 }
 $giraffeVertexCount = 0
 foreach ($primitive in $giraffe.meshes[0].primitives) {
