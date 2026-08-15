@@ -22,10 +22,11 @@ their borrowed glTF material identity until the user explicitly chooses
 the bounded controls then exercise a base-color edit and a semantic normal
 texture assignment without changing the imported glTF source. The packaged
 Windows dogfood path exercises Make Editable, material and texture edits, a
-component move, Save Project, and Reload Project transactionally. The project
-manifest persists the mesh source, transform, and visibility, while its bounded
-`.material` sidecar persists base color, metallic, roughness, emissive strength,
-and the manager-owned normal-texture identity and reloads those values
+component move, base-color, metallic, roughness, and emissive-strength edits,
+Save Project, and Reload Project transactionally. The project manifest persists
+the mesh source, transform, and visibility, while its bounded `.material`
+sidecar persists base color, metallic, roughness, emissive strength, and the
+manager-owned normal-texture identity and reloads those values
 transactionally. Broader material-parameter serialization and native-authored
 source export remain open. Complete native showcase proof still requires a real
 user edit, save, close/reload, continued edit, and rendered evidence.

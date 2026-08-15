@@ -1236,6 +1236,25 @@ static henka_result sandbox3d_material_editor_apply_delta(
     return result;
 }
 
+static henka_result sandbox3d_native_authoring_edit_scalar(
+    sandbox3d_state* state,
+    sandbox3d_material_editor_binding* binding,
+    henka_material_instance_parameter parameter)
+{
+    const henka_material_instance_parameter previous_parameter =
+        state != NULL ? state->material_editor_parameter : HENKA_MATERIAL_INSTANCE_BASE_COLOR;
+    henka_result result;
+
+    if (state == NULL || binding == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    state->material_editor_parameter = parameter;
+    result = sandbox3d_material_editor_apply_delta(state, binding, 1);
+    state->material_editor_parameter = previous_parameter;
+    return result;
+}
+
 static henka_result sandbox3d_apply_texture_to_material_binding(
     henka_engine* engine,
     sandbox3d_state* state,
@@ -5708,7 +5727,7 @@ static void sandbox3d_print_help(const sandbox3d_state* state)
     printf("  Open Native Panel Test from the Controls QA page to validate a separate OS-level tool window.\n");
     printf("  Use the panels to inspect named scene objects, clear selection, switch gizmo modes, focus the camera, reset object transforms, toggle visibility, and open in-window Help, Scene Legend, Object Info, Assets, Paths, Settings, Diagnostics, Transform QA, and Physics QA utilities.\n");
     printf("  Select an imported glTF scene entity to edit its shared material instance in Object Details; scalar/vector, flags, alpha, and semantic texture overrides apply transactionally. Use Utility > Assets to choose manager-owned textures for editable slots.\n");
-    printf("  Select a Showcase Giraffe or Showcase Rocket primitive, open Object Details > Authoring, and choose Make Editable; Own Material then promotes a manager-owned runtime definition for bounded base-color and semantic normal-texture editing. Mesh/project save-reload and the bounded native material sidecar are supported, while broader material-parameter serialization and native-authored source export remain unfinished.\n");
+    printf("  Select a Showcase Giraffe or Showcase Rocket primitive, open Object Details > Authoring, and choose Make Editable; Own Material then promotes a manager-owned runtime definition for bounded base-color, metallic, roughness, emissive-strength, and semantic normal-texture editing. Mesh/project save-reload and the bounded native material sidecar are supported, while broader material-parameter serialization and native-authored source export remain unfinished.\n");
     printf("  Physics QA enables an opt-in fixed-step rigid-body demo with collider/contact debug drawing, impulses, body modes, and camera raycasts.\n");
     printf("  The Controls panel uses Main, Camera/Status, and QA pages, and Scene Objects supports paging when the dock is tighter than the full list.\n");
     printf("  Controls also provides Default, Modeling, Materials, Scene Assembly, Debugging, and Minimal Viewport workspace presets; topology edits mark the workspace Custom.\n");
@@ -17372,14 +17391,21 @@ details_group_authoring:
                 }
                 else if (material_view.editor_binding != NULL)
                 {
-                    const float tint_x = row.x + row.width - 212.0f;
+                    const float tint_x = row.x + row.width - 290.0f;
+                    const float metal_x = tint_x + 58.0f;
+                    const float rough_x = tint_x + 116.0f;
+                    const float emissive_x = tint_x + 174.0f;
+                    const float texture_x = tint_x + 232.0f;
                     if (!state->native_authoring_material_editor_reported)
                     {
                         printf(
-                            "Native authoring material controls: name=%s tint_x=%.1f texture_x=%.1f y=%.1f width=96.0 height=24.0.\n",
+                            "Native authoring material controls: name=%s tint_x=%.1f metal_x=%.1f rough_x=%.1f emissive_x=%.1f texture_x=%.1f y=%.1f width=56.0 height=24.0.\n",
                             display_name,
                             tint_x,
-                            row.x + row.width - 100.0f,
+                            metal_x,
+                            rough_x,
+                            emissive_x,
+                            texture_x,
                             row.y);
                         fflush(stdout);
                         state->native_authoring_material_editor_reported = true;
@@ -17387,8 +17413,8 @@ details_group_authoring:
                     if (henka_ui_button(
                             state->ui,
                             "authoring_material_tint",
-                            (henka_ui_rect){tint_x, row.y, 96.0f, 24.0f},
-                            "Tint +"))
+                            (henka_ui_rect){tint_x, row.y, 56.0f, 24.0f},
+                            "Tint"))
                     {
                         const henka_material_instance_parameter previous_parameter =
                             state->material_editor_parameter;
@@ -17409,8 +17435,8 @@ details_group_authoring:
                     if (henka_ui_button(
                             state->ui,
                             "authoring_material_texture",
-                            (henka_ui_rect){row.x + row.width - 100.0f, row.y, 96.0f, 24.0f},
-                            "Use Detail"))
+                            (henka_ui_rect){texture_x, row.y, 56.0f, 24.0f},
+                            "Detail"))
                     {
                         if (state->detail_normal_texture != NULL &&
                             sandbox3d_apply_texture_to_material_binding(
@@ -17425,6 +17451,60 @@ details_group_authoring:
                                 display_name);
                             fflush(stdout);
                             sandbox3d_set_status(state, false, "Native normal texture dependency assigned transactionally.");
+                        }
+                    }
+                    if (henka_ui_button(
+                            state->ui,
+                            "authoring_material_metallic",
+                            (henka_ui_rect){metal_x, row.y, 56.0f, 24.0f},
+                            "Metal"))
+                    {
+                        if (sandbox3d_native_authoring_edit_scalar(
+                                state,
+                                material_view.editor_binding,
+                                HENKA_MATERIAL_INSTANCE_METALLIC) == HENKA_SUCCESS)
+                        {
+                            printf(
+                                "Native authoring material edited: name=%s parameter=Metallic source_state=HENKA_NATIVE_EDITABLE_MATERIAL_INSTANCE.\n",
+                                display_name);
+                            fflush(stdout);
+                            sandbox3d_set_status(state, false, "Native metallic value edited transactionally.");
+                        }
+                    }
+                    if (henka_ui_button(
+                            state->ui,
+                            "authoring_material_roughness",
+                            (henka_ui_rect){rough_x, row.y, 56.0f, 24.0f},
+                            "Rough"))
+                    {
+                        if (sandbox3d_native_authoring_edit_scalar(
+                                state,
+                                material_view.editor_binding,
+                                HENKA_MATERIAL_INSTANCE_ROUGHNESS) == HENKA_SUCCESS)
+                        {
+                            printf(
+                                "Native authoring material edited: name=%s parameter=Roughness source_state=HENKA_NATIVE_EDITABLE_MATERIAL_INSTANCE.\n",
+                                display_name);
+                            fflush(stdout);
+                            sandbox3d_set_status(state, false, "Native roughness value edited transactionally.");
+                        }
+                    }
+                    if (henka_ui_button(
+                            state->ui,
+                            "authoring_material_emissive",
+                            (henka_ui_rect){emissive_x, row.y, 56.0f, 24.0f},
+                            "Emit"))
+                    {
+                        if (sandbox3d_native_authoring_edit_scalar(
+                                state,
+                                material_view.editor_binding,
+                                HENKA_MATERIAL_INSTANCE_EMISSIVE_STRENGTH) == HENKA_SUCCESS)
+                        {
+                            printf(
+                                "Native authoring material edited: name=%s parameter=Emissive Strength source_state=HENKA_NATIVE_EDITABLE_MATERIAL_INSTANCE.\n",
+                                display_name);
+                            fflush(stdout);
+                            sandbox3d_set_status(state, false, "Native emissive strength edited transactionally.");
                         }
                     }
                 }

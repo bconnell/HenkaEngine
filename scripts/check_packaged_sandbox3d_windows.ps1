@@ -1322,43 +1322,87 @@ try {
         }
         $nativeMaterialControlsMatch = Get-LastLogRegexMatch `
             -Path $stdoutPath `
-            -Pattern 'Native authoring material controls: name=(.+) tint_x=([-0-9.]+) texture_x=([-0-9.]+) y=([-0-9.]+) width=96.0 height=24.0\.'
+            -Pattern 'Native authoring material controls: name=(.+) tint_x=([-0-9.]+) metal_x=([-0-9.]+) rough_x=([-0-9.]+) emissive_x=([-0-9.]+) texture_x=([-0-9.]+) y=([-0-9.]+) width=56.0 height=24.0\.'
         if ($null -eq $nativeMaterialControlsMatch) {
             throw "The native material editor control geometry could not be parsed."
         }
         $nativeMaterialTintX = [double]$nativeMaterialControlsMatch.Groups[2].Value
-        $nativeMaterialTextureX = [double]$nativeMaterialControlsMatch.Groups[3].Value
-        $nativeMaterialY = [double]$nativeMaterialControlsMatch.Groups[4].Value
+        $nativeMaterialMetalX = [double]$nativeMaterialControlsMatch.Groups[3].Value
+        $nativeMaterialRoughX = [double]$nativeMaterialControlsMatch.Groups[4].Value
+        $nativeMaterialEmissiveX = [double]$nativeMaterialControlsMatch.Groups[5].Value
+        $nativeMaterialTextureX = [double]$nativeMaterialControlsMatch.Groups[6].Value
+        $nativeMaterialY = [double]$nativeMaterialControlsMatch.Groups[7].Value
         Assert-FramebufferRect `
             -Name "Native authoring material tint control" `
             -FramebufferWidth $framebufferWidth `
             -FramebufferHeight $framebufferHeight `
             -X $nativeMaterialTintX `
             -Y $nativeMaterialY `
-            -Width 96.0 `
+            -Width 56.0 `
             -Height 24.0
         Click-FramebufferPoint `
             -Handle $mainWindowHandle `
             -FramebufferWidth $framebufferWidth `
             -FramebufferHeight $framebufferHeight `
-            -FramebufferX ($nativeMaterialTintX + 48.0) `
+            -FramebufferX ($nativeMaterialTintX + 28.0) `
             -FramebufferY ($nativeMaterialY + 12.0)
         if (-not (Wait-FileContains -Path $stdoutPath -Pattern "Native authoring material edited" -TimeoutMilliseconds 5000)) {
             throw "The user-facing native material parameter edit did not complete."
         }
+        Assert-FramebufferRect `
+            -Name "Native authoring metallic control" `
+            -FramebufferWidth $framebufferWidth `
+            -FramebufferHeight $framebufferHeight `
+            -X $nativeMaterialMetalX `
+            -Y $nativeMaterialY `
+            -Width 56.0 `
+            -Height 24.0
+        Click-FramebufferPoint `
+            -Handle $mainWindowHandle `
+            -FramebufferWidth $framebufferWidth `
+            -FramebufferHeight $framebufferHeight `
+            -FramebufferX ($nativeMaterialMetalX + 28.0) `
+            -FramebufferY ($nativeMaterialY + 12.0)
+        if (-not (Wait-FileContains -Path $stdoutPath -Pattern "parameter=Metallic" -TimeoutMilliseconds 5000)) {
+            throw "The user-facing native metallic edit did not complete."
+        }
+        Write-Output "[pass] User-facing native metallic edit completed"
+        foreach ($scalarControl in @(
+            @{ Name = "roughness"; X = $nativeMaterialRoughX; Pattern = "parameter=Roughness" },
+            @{ Name = "emissive strength"; X = $nativeMaterialEmissiveX; Pattern = "parameter=Emissive Strength" }
+        )) {
+            Assert-FramebufferRect `
+                -Name ("Native authoring " + $scalarControl.Name + " control") `
+                -FramebufferWidth $framebufferWidth `
+                -FramebufferHeight $framebufferHeight `
+                -X $scalarControl.X `
+                -Y $nativeMaterialY `
+                -Width 56.0 `
+                -Height 24.0
+            Click-FramebufferPoint `
+                -Handle $mainWindowHandle `
+                -FramebufferWidth $framebufferWidth `
+                -FramebufferHeight $framebufferHeight `
+                -FramebufferX ($scalarControl.X + 28.0) `
+                -FramebufferY ($nativeMaterialY + 12.0)
+            if (-not (Wait-FileContains -Path $stdoutPath -Pattern $scalarControl.Pattern -TimeoutMilliseconds 5000)) {
+                throw ("The user-facing native " + $scalarControl.Name + " edit did not complete.")
+            }
+        }
+        Write-Output "[pass] User-facing native material scalar edits completed"
         Assert-FramebufferRect `
             -Name "Native authoring texture control" `
             -FramebufferWidth $framebufferWidth `
             -FramebufferHeight $framebufferHeight `
             -X $nativeMaterialTextureX `
             -Y $nativeMaterialY `
-            -Width 96.0 `
+            -Width 56.0 `
             -Height 24.0
         Click-FramebufferPoint `
             -Handle $mainWindowHandle `
             -FramebufferWidth $framebufferWidth `
             -FramebufferHeight $framebufferHeight `
-            -FramebufferX ($nativeMaterialTextureX + 48.0) `
+            -FramebufferX ($nativeMaterialTextureX + 28.0) `
             -FramebufferY ($nativeMaterialY + 12.0)
         if (-not (Wait-FileContains -Path $stdoutPath -Pattern "Native authoring texture edited" -TimeoutMilliseconds 5000)) {
             throw "The user-facing native texture assignment did not complete."
