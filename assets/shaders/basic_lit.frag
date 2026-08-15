@@ -219,12 +219,17 @@ vec3 safeNormalize(vec3 value, vec3 fallback)
     return lengthSquared > 0.000001 ? value * inversesqrt(lengthSquared) : fallback;
 }
 
-/* A bounded three-lobe diffusion-profile approximation for direct light. The
- * lobes widen with authored thickness, which gives wax, skin, and thin
- * translucent materials a more useful response than a single wrapped term.
- * It is intentionally local to the shaded point: it does not claim true
+/* A bounded view-aware three-lobe diffusion-profile approximation for direct
+ * light. The lobes widen with authored thickness and the through-light lobe
+ * follows the view direction, which gives wax, skin, and thin translucent
+ * materials a more useful response than a single wrapped term. It is
+ * intentionally local to the shaded point: it does not claim true
  * screen-space or multi-scatter transport. */
-float subsurfaceDirectProfile(vec3 normal, vec3 lightDirection, float thicknessValue)
+float subsurfaceDirectProfile(
+    vec3 normal,
+    vec3 lightDirection,
+    vec3 viewDirection,
+    float thicknessValue)
 {
     float normalLight = dot(normal, lightDirection);
     float backLight = saturate(-normalLight);
@@ -233,7 +238,19 @@ float subsurfaceDirectProfile(vec3 normal, vec3 lightDirection, float thicknessV
     float wideLobe = pow(backLight, mix(5.0, 1.80, thicknessValue));
     float middleLobe = pow(backLight, mix(11.0, 3.50, thicknessValue));
     float narrowLobe = pow(backLight, mix(22.0, 7.0, thicknessValue));
-    return broadLobe * 0.24 + wideLobe * 0.46 + middleLobe * 0.22 + narrowLobe * 0.08;
+    float throughLight = saturate(dot(-lightDirection, viewDirection));
+    float grazingView = 1.0 - saturate(dot(normal, viewDirection));
+    float throughLobe = pow(
+        throughLight,
+        mix(5.0, 1.75, thicknessValue)) *
+        mix(0.08, 0.24, thicknessValue) *
+        mix(0.35, 1.0, grazingView);
+    return saturate(
+        broadLobe * 0.22 +
+        wideLobe * 0.42 +
+        middleLobe * 0.20 +
+        narrowLobe * 0.07 +
+        throughLobe);
 }
 
 vec3 parallaxCorrectReflectionDirection(vec3 direction)
@@ -671,7 +688,7 @@ void main()
         float shadow = shadowFactor(normal, lightDir);
         color += (diffuse + specular) * baseLayerTransmission * radiance * nDotL * shadow;
         color += albedo * surfaceSubsurfaceColor * surfaceSubsurface *
-            subsurfaceDirectProfile(normal, lightDir, surfaceThickness) * radiance * shadow;
+            subsurfaceDirectProfile(normal, lightDir, viewDirection, surfaceThickness) * radiance * shadow;
 
         /* The shared scene moon is a bounded second directional source. It is
          * intentionally shadowless in this slice: the directional sun shadow
@@ -805,7 +822,7 @@ void main()
             vec3 localDiffuse = (1.0 - surfaceTransmission) * (1.0 - localFresnel) * (1.0 - surfaceMetallic) * albedo * diffuseEnergyWeight / PI;
             color += (localDiffuse + localSpecular) * localRadiance * localNDotL * localShadow;
             color += albedo * surfaceSubsurfaceColor * surfaceSubsurface *
-                subsurfaceDirectProfile(normal, localLightDirection, surfaceThickness) * localRadiance * localShadow;
+                subsurfaceDirectProfile(normal, localLightDirection, viewDirection, surfaceThickness) * localRadiance * localShadow;
         }
     }
     else
