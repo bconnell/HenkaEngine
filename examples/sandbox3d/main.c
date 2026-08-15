@@ -393,9 +393,12 @@ typedef struct sandbox3d_state
     bool native_authoring_row_reported;
     bool native_authoring_control_reported;
     bool native_authoring_face_controls_reported;
+    float native_authoring_face_controls_reported_y;
     bool native_authoring_bevel_reported;
     bool native_authoring_move_reported;
     float native_authoring_move_reported_y;
+    bool native_authoring_profile_reported;
+    float native_authoring_profile_reported_y;
     bool native_authoring_project_controls_reported;
     float native_authoring_project_controls_reported_y;
     bool native_authoring_material_control_reported;
@@ -6660,7 +6663,7 @@ static void sandbox3d_print_help(const sandbox3d_state* state)
     printf("  Open Native Panel Test from the Controls QA page to validate a separate OS-level tool window.\n");
     printf("  Use the panels to inspect named scene objects, clear selection, switch gizmo modes, focus the camera, reset object transforms, toggle visibility, and open in-window Help, Scene Legend, Object Info, Assets, Paths, Settings, Diagnostics, Transform QA, and Physics QA utilities.\n");
     printf("  Select an imported glTF scene entity to edit its shared material instance in Object Details; scalar/vector, flags, alpha, and semantic texture overrides apply transactionally. Use Utility > Assets to choose manager-owned textures for editable slots.\n");
-    printf("  Select a Showcase Giraffe or Showcase Rocket primitive, open Object Details > Authoring, and choose Make Editable; Own Material then promotes a manager-owned runtime definition for bounded base-color, metallic, roughness, emissive-strength, IOR, transmission, subsurface amount, thickness, and tint, plus in-engine procedural normal and metallic-roughness texture creation. Mesh/project save-reload and the native material sidecar preserve all supported PBR scalars, colors, flags, alpha mode, and seven material texture identities; texture painting and native-authored source export remain unfinished.\n");
+    printf("  Select a Showcase Giraffe or Showcase Rocket primitive, open Object Details > Authoring, and choose Make Editable; Refine Profile applies a bounded native region transform to the imported giraffe neck/head or rocket upper stage, while Own Material promotes a manager-owned runtime definition for bounded base-color, metallic, roughness, emissive-strength, IOR, transmission, subsurface amount, thickness, and tint, plus in-engine procedural normal and metallic-roughness texture creation. Mesh/project save-reload and the native material sidecar preserve all supported PBR scalars, colors, flags, alpha mode, and seven material texture identities; texture painting and native-authored source export remain unfinished.\n");
     printf("  Physics QA enables an opt-in fixed-step rigid-body demo with collider/contact debug drawing, impulses, body modes, and camera raycasts.\n");
     printf("  The Controls panel uses Main, Camera/Status, and QA pages, and Scene Objects supports paging when the dock is tighter than the full list.\n");
     printf("  Controls also provides Default, Modeling, Materials, Scene Assembly, Debugging, and Minimal Viewport workspace presets; topology edits mark the workspace Custom.\n");
@@ -8182,9 +8185,12 @@ static void sandbox3d_release_owned_resources(sandbox3d_state* state)
     state->native_authoring_row_reported = false;
     state->native_authoring_control_reported = false;
     state->native_authoring_face_controls_reported = false;
+    state->native_authoring_face_controls_reported_y = -FLT_MAX;
     state->native_authoring_bevel_reported = false;
     state->native_authoring_move_reported = false;
     state->native_authoring_move_reported_y = -FLT_MAX;
+    state->native_authoring_profile_reported = false;
+    state->native_authoring_profile_reported_y = -FLT_MAX;
     state->native_authoring_project_controls_reported = false;
     state->native_authoring_project_controls_reported_y = 0.0f;
     state->native_authoring_material_control_reported = false;
@@ -9333,9 +9339,12 @@ static bool sandbox3d_promote_authoring_material(
     state->native_authoring_material_subsurface_tint_reported = false;
     state->native_authoring_material_history_reported = false;
     state->native_authoring_face_controls_reported = false;
+    state->native_authoring_face_controls_reported_y = -FLT_MAX;
     state->native_authoring_bevel_reported = false;
     state->native_authoring_move_reported = false;
     state->native_authoring_move_reported_y = -FLT_MAX;
+    state->native_authoring_profile_reported = false;
+    state->native_authoring_profile_reported_y = -FLT_MAX;
     state->native_authoring_project_controls_reported = false;
     state->native_authoring_project_controls_reported_y = 0.0f;
     printf(
@@ -9383,6 +9392,59 @@ static bool sandbox3d_make_selected_object_editable(
     fflush(stdout);
     sandbox3d_set_status(state, false, "Imported showcase primitive is now a Henka authoring source.");
     return true;
+}
+
+static bool sandbox3d_refine_showcase_profile(
+    sandbox3d_state* state,
+    henka_entity entity,
+    size_t* out_affected_vertices)
+{
+    const char* name;
+    sandbox3d_authoring_region_transform profile;
+
+    if (out_affected_vertices != NULL)
+    {
+        *out_affected_vertices = 0U;
+    }
+    if (state == NULL || state->authoring_object == NULL ||
+        state->scene == NULL || entity == HENKA_INVALID_ENTITY)
+    {
+        return false;
+    }
+    name = henka_scene_get_entity_name(state->scene, entity);
+    if (name == NULL)
+    {
+        return false;
+    }
+    if (strncmp(name, "Showcase Giraffe ", sizeof("Showcase Giraffe ") - 1U) == 0)
+    {
+        /* Shape the imported core's neck and head as one authored region so
+         * the profile reads as a connected animal form instead of a stack of
+         * independent capsules. */
+        profile = (sandbox3d_authoring_region_transform){
+            {-0.72f, 2.00f, -0.62f},
+            {0.72f, 4.90f, 0.62f},
+            {0.0f, 3.35f, 0.0f},
+            {0.92f, 1.02f, 0.94f},
+            {0.04f, 0.03f, 0.0f}};
+    }
+    else if (strncmp(name, "Showcase Rocket ", sizeof("Showcase Rocket ") - 1U) == 0)
+    {
+        /* Tighten the imported upper stage and preserve its axial height so
+         * the fairing reads as launch hardware rather than a capped tube. */
+        profile = (sandbox3d_authoring_region_transform){
+            {-0.65f, 2.20f, -0.65f},
+            {0.65f, 3.30f, 0.65f},
+            {0.0f, 2.65f, 0.0f},
+            {0.86f, 1.03f, 0.86f},
+            {0.0f, 0.04f, 0.0f}};
+    }
+    else
+    {
+        return false;
+    }
+    return sandbox3d_authoring_object_transform_vertex_region(
+        state->authoring_object, &profile, out_affected_vertices) == HENKA_SUCCESS;
 }
 
 static bool sandbox3d_file_exists(const char* path)
@@ -19507,6 +19569,58 @@ details_group_authoring:
                     sandbox3d_set_status(state, false, "Selected authoring components moved on Z.");
                 }
             }
+            if (state->authoring_object != NULL &&
+                (strncmp(display_name, "Showcase Giraffe ", sizeof("Showcase Giraffe ") - 1U) == 0 ||
+                 strncmp(display_name, "Showcase Rocket ", sizeof("Showcase Rocket ") - 1U) == 0) &&
+                sandbox3d_details_flow_next_row(state, flow_desc.bounds, 28.0f, 1U, &row) &&
+                row.width >= 290.0f)
+            {
+                if (!state->native_authoring_profile_reported ||
+                    fabsf(row.y - state->native_authoring_profile_reported_y) > 0.5f)
+                {
+                    printf(
+                        "Native authoring profile control: name=%s x=%.1f y=%.1f width=180.0 height=24.0.\n",
+                        display_name,
+                        row.x,
+                        row.y);
+                    fflush(stdout);
+                    state->native_authoring_profile_reported = true;
+                    state->native_authoring_profile_reported_y = row.y;
+                }
+                if (henka_ui_button(
+                        state->ui,
+                        "authoring_refine_profile",
+                        (henka_ui_rect){row.x, row.y, 180.0f, 24.0f},
+                        "Refine Profile"))
+                {
+                    size_t affected_vertices = 0U;
+                    if (sandbox3d_refine_showcase_profile(
+                            state, entity, &affected_vertices))
+                    {
+                        const henka_authoring_mesh_counts counts =
+                            henka_authoring_mesh_get_counts(
+                                sandbox3d_authoring_object_get_mesh(state->authoring_object));
+                        printf(
+                            "Native authoring dogfood: showcase profile edited %s; affected_vertices=%zu vertices=%zu faces=%zu source_state=HENKA_NATIVE_EDITABLE_SOURCE.\n",
+                            display_name,
+                            affected_vertices,
+                            counts.vertices,
+                            counts.faces);
+                        fflush(stdout);
+                        sandbox3d_set_status(
+                            state,
+                            false,
+                            "Showcase profile refined through native authoring.");
+                    }
+                    else
+                    {
+                        sandbox3d_set_status(
+                            state,
+                            true,
+                            "Showcase profile refinement was rejected; source retained.");
+                    }
+                }
+            }
             if (state->native_authoring_material_asset != NULL &&
                 state->native_authoring_material_entity == entity &&
                 material_view.editor_binding != NULL &&
@@ -19563,7 +19677,8 @@ details_group_authoring:
                 flow_desc.bounds);
             if (sandbox3d_details_flow_next_row(state, flow_desc.bounds, 28.0f, 1U, &row) && row.width >= 290.0f)
             {
-                if (!state->native_authoring_face_controls_reported)
+                if (!state->native_authoring_face_controls_reported ||
+                    fabsf(row.y - state->native_authoring_face_controls_reported_y) > 0.5f)
                 {
                     printf(
                         "Native authoring face controls: name=%s face_x=%.1f face_y=%.1f width=88.0 height=24.0.\n",
@@ -19572,6 +19687,7 @@ details_group_authoring:
                         row.y);
                     fflush(stdout);
                     state->native_authoring_face_controls_reported = true;
+                    state->native_authoring_face_controls_reported_y = row.y;
                 }
                 if (henka_ui_button(
                         state->ui, "authoring_mode_vertex",

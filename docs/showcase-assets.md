@@ -62,6 +62,16 @@ relaunch gate restores the valid authored source and material sidecar
 transactionally; the current native path still uses one manager-owned material
 and does not claim native multi-material binding.
 
+`Make Editable` on an imported `Showcase Giraffe ...` or `Showcase Rocket ...`
+also exposes the bounded `Refine Profile` operation. It applies a local-space
+region transform to the Giraffe neck/head or Rocket upper stage through the
+same native authoring transaction used by other modeling controls. The
+operation preserves topology, material-region assignments, evaluated bounds,
+and undo/redo state; the resulting source is covered by the existing project
+save/reload and relaunch persistence path. This is native editing dogfood, not
+a claim that the generated fixture pair itself is native-authored or that the
+bounded control replaces full anatomical or mechanical modeling tools.
+
 - `cheeky_giraffe.gltf` — an original realism-oriented Cheeky Giraffe mascot with a taller, slimmer body-to-head silhouette, smooth high-curvature body and head forms, surface-fitted spots, a readable mane row, compact flattened ear lobes with inset inner-ear patches, connected tan ossicone stalks, and outward-angled dark-brown caps, layered eye whites/irises/pupils/highlights, nostrils, a defined muzzle/jaw, and a subdued mouth line. The presentation retains restrained personality, while the face is built from separately shaded anatomical features rather than a single cartoon eye material.
 - `original_realistic_rocket.gltf` — an original modern launch vehicle reference with a continuous tapered core/fairing profile, visible mission-stripe and lower avionics bands, interstage and engine-skirt hardware, dark avionics separation bands, a bounded seven-engine bell/nozzle cluster, a restrained heat response, and tapered stabilization fins.
 

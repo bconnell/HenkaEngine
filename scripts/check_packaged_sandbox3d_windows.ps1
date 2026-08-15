@@ -38,6 +38,9 @@ public static class HenkaUiAutomationNative
     public static extern bool BringWindowToTop(IntPtr hWnd);
 
     [DllImport("user32.dll")]
+    public static extern void SwitchToThisWindow(IntPtr hWnd, bool fAltTab);
+
+    [DllImport("user32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]
     public static extern bool ShowWindowAsync(IntPtr hWnd, int nCmdShow);
 
@@ -67,6 +70,7 @@ function Set-HenkaAutomationForeground {
         $Handle,
         [HenkaUiAutomationNative]::SW_RESTORE) | Out-Null
     [HenkaUiAutomationNative]::BringWindowToTop($Handle) | Out-Null
+    [HenkaUiAutomationNative]::SwitchToThisWindow($Handle, $true)
 
     $deadline = (Get-Date).AddSeconds(3)
 
@@ -1319,7 +1323,23 @@ try {
         if (-not $nativeSelectionObserved) {
             throw "Selecting the showcase row did not expose Object Details > Authoring > Make Editable."
         }
-        if (-not (Wait-FileContains -Path $stdoutPath -Pattern "Native authoring Make Editable control:" -TimeoutMilliseconds 3000)) {
+        $nativeAuthoringControlObserved = Wait-FileContains `
+            -Path $stdoutPath `
+            -Pattern "Native authoring Make Editable control:" `
+            -TimeoutMilliseconds 3000
+        for ($nativeAuthoringControlAttempt = 0; $nativeAuthoringControlAttempt -lt 3 -and -not $nativeAuthoringControlObserved; ++$nativeAuthoringControlAttempt) {
+            Click-FramebufferPoint `
+                -Handle $mainWindowHandle `
+                -FramebufferWidth $framebufferWidth `
+                -FramebufferHeight $framebufferHeight `
+                -FramebufferX ($nativeRowX + $nativeRowWidth * 0.5) `
+                -FramebufferY ($nativeRowY + $nativeRowHeight * 0.5)
+            $nativeAuthoringControlObserved = Wait-FileContains `
+                -Path $stdoutPath `
+                -Pattern "Native authoring Make Editable control:" `
+                -TimeoutMilliseconds 2000
+        }
+        if (-not $nativeAuthoringControlObserved) {
             throw "The selected showcase authoring controls did not become visible in the prioritized Authoring group."
         }
         $nativeMakeEditableMatch = Get-LastLogRegexMatch `
@@ -1338,13 +1358,20 @@ try {
             -Y $nativeMakeEditableY `
             -Width 180.0 `
             -Height 24.0
-        Click-FramebufferPoint `
-            -Handle $mainWindowHandle `
-            -FramebufferWidth $framebufferWidth `
-            -FramebufferHeight $framebufferHeight `
-            -FramebufferX ($nativeMakeEditableX + 90.0) `
-            -FramebufferY ($nativeMakeEditableY + 12.0)
-        if (-not (Wait-FileContains -Path $stdoutPath -Pattern "Native authoring dogfood: Make Editable converted" -TimeoutMilliseconds 5000)) {
+        $nativeMakeEditableObserved = $false
+        for ($makeEditableAttempt = 0; $makeEditableAttempt -lt 3 -and -not $nativeMakeEditableObserved; ++$makeEditableAttempt) {
+            Click-FramebufferPoint `
+                -Handle $mainWindowHandle `
+                -FramebufferWidth $framebufferWidth `
+                -FramebufferHeight $framebufferHeight `
+                -FramebufferX ($nativeMakeEditableX + 90.0) `
+                -FramebufferY ($nativeMakeEditableY + 12.0)
+            $nativeMakeEditableObserved = Wait-FileContains `
+                -Path $stdoutPath `
+                -Pattern "Native authoring dogfood: Make Editable converted" `
+                -TimeoutMilliseconds 2500
+        }
+        if (-not $nativeMakeEditableObserved) {
             throw "Make Editable did not create the user-owned native authoring source."
         }
         Write-Output "[pass] Imported showcase primitive entered the user-facing native authoring workflow"
@@ -1367,13 +1394,20 @@ try {
             -Y $nativeMaterialOwnershipY `
             -Width 100.0 `
             -Height 24.0
-        Click-FramebufferPoint `
-            -Handle $mainWindowHandle `
-            -FramebufferWidth $framebufferWidth `
-            -FramebufferHeight $framebufferHeight `
-            -FramebufferX ($nativeMaterialOwnershipX + 50.0) `
-            -FramebufferY ($nativeMaterialOwnershipY + 12.0)
-        if (-not (Wait-FileContains -Path $stdoutPath -Pattern "Native authoring material: editable runtime definition adopted" -TimeoutMilliseconds 5000)) {
+        $nativeMaterialOwnershipObserved = $false
+        for ($materialOwnershipAttempt = 0; $materialOwnershipAttempt -lt 3 -and -not $nativeMaterialOwnershipObserved; ++$materialOwnershipAttempt) {
+            Click-FramebufferPoint `
+                -Handle $mainWindowHandle `
+                -FramebufferWidth $framebufferWidth `
+                -FramebufferHeight $framebufferHeight `
+                -FramebufferX ($nativeMaterialOwnershipX + 50.0) `
+                -FramebufferY ($nativeMaterialOwnershipY + 12.0)
+            $nativeMaterialOwnershipObserved = Wait-FileContains `
+                -Path $stdoutPath `
+                -Pattern "Native authoring material: editable runtime definition adopted" `
+                -TimeoutMilliseconds 2500
+        }
+        if (-not $nativeMaterialOwnershipObserved) {
             throw "The showcase material was not promoted to a manager-owned editable definition."
         }
         if (-not (Wait-FileContains -Path $stdoutPath -Pattern "Native authoring material controls:" -TimeoutMilliseconds 3000)) {
@@ -1662,24 +1696,75 @@ try {
             -Y $nativeMoveY `
             -Width 88.0 `
             -Height 24.0
-        Click-FramebufferPoint `
-            -Handle $mainWindowHandle `
-            -FramebufferWidth $framebufferWidth `
-            -FramebufferHeight $framebufferHeight `
-            -FramebufferX ($nativeMoveX + 44.0) `
-            -FramebufferY ($nativeMoveY + 12.0)
-        if (-not (Wait-FileContains -Path $stdoutPath -Pattern "Native authoring dogfood: component move edited" -TimeoutMilliseconds 5000)) {
+        $nativeMoveObserved = $false
+        for ($moveAttempt = 0; $moveAttempt -lt 3 -and -not $nativeMoveObserved; ++$moveAttempt) {
+            Click-FramebufferPoint `
+                -Handle $mainWindowHandle `
+                -FramebufferWidth $framebufferWidth `
+                -FramebufferHeight $framebufferHeight `
+                -FramebufferX ($nativeMoveX + 44.0) `
+                -FramebufferY ($nativeMoveY + 12.0)
+            $nativeMoveObserved = Wait-FileContains `
+                -Path $stdoutPath `
+                -Pattern "Native authoring dogfood: component move edited" `
+                -TimeoutMilliseconds 2500
+        }
+        if (-not $nativeMoveObserved) {
             throw "The user-facing component edit did not update the native authoring source."
         }
         Write-Output "[pass] User-facing component edit changed the native showcase source"
-        for ($scrollTopologyAttempt = 0; $scrollTopologyAttempt -lt 5; ++$scrollTopologyAttempt) {
+        if (-not (Wait-FileContains -Path $stdoutPath -Pattern "Native authoring profile control:" -TimeoutMilliseconds 3000)) {
+            throw "The converted showcase did not expose the native profile refinement control."
+        }
+        $nativeProfileMatch = Get-LastLogRegexMatch `
+            -Path $stdoutPath `
+            -Pattern 'Native authoring profile control: name=(.+) x=([-0-9.]+) y=([-0-9.]+) width=180.0 height=24.0\.'
+        if ($null -eq $nativeProfileMatch) {
+            throw "The native profile refinement control geometry could not be parsed."
+        }
+        $nativeProfileX = [double]$nativeProfileMatch.Groups[2].Value
+        $nativeProfileY = [double]$nativeProfileMatch.Groups[3].Value
+        Assert-FramebufferRect `
+            -Name "Native authoring profile refinement control" `
+            -FramebufferWidth $framebufferWidth `
+            -FramebufferHeight $framebufferHeight `
+            -X $nativeProfileX `
+            -Y $nativeProfileY `
+            -Width 180.0 `
+            -Height 24.0
+        $nativeProfileObserved = $false
+        for ($profileAttempt = 0; $profileAttempt -lt 3 -and -not $nativeProfileObserved; ++$profileAttempt) {
+            Click-FramebufferPoint `
+                -Handle $mainWindowHandle `
+                -FramebufferWidth $framebufferWidth `
+                -FramebufferHeight $framebufferHeight `
+                -FramebufferX ($nativeProfileX + 90.0) `
+                -FramebufferY ($nativeProfileY + 12.0)
+            $nativeProfileObserved = Wait-FileContains `
+                -Path $stdoutPath `
+                -Pattern "Native authoring dogfood: showcase profile edited" `
+                -TimeoutMilliseconds 2500
+        }
+        if (-not $nativeProfileObserved) {
+            throw "The user-facing native profile refinement did not change the showcase source."
+        }
+        Write-Output "[pass] User-facing native showcase profile refinement changed the imported geometry"
+        $faceControlLogPattern = 'Native authoring face controls:'
+        $faceControlCountBefore = @(
+            Select-String -LiteralPath $stdoutPath -Pattern $faceControlLogPattern -ErrorAction SilentlyContinue
+        ).Count
+        $freshFaceControlObserved = $false
+        for ($scrollTopologyAttempt = 0; $scrollTopologyAttempt -lt 5 -and -not $freshFaceControlObserved; ++$scrollTopologyAttempt) {
             Scroll-FramebufferPoint `
                 -Handle $mainWindowHandle `
                 -FramebufferWidth $framebufferWidth `
                 -FramebufferHeight $framebufferHeight `
                 -FramebufferX ($detailsX + [Math]::Max(12.0, $detailsWidth - 18.0)) `
                 -FramebufferY ($detailsY + [Math]::Max(30.0, $detailsHeight * 0.55)) `
-                -WheelDelta 120
+                -WheelDelta -120
+            $freshFaceControlObserved = @(
+                Select-String -LiteralPath $stdoutPath -Pattern $faceControlLogPattern -ErrorAction SilentlyContinue
+            ).Count -gt $faceControlCountBefore
         }
         if (-not (Wait-FileContains -Path $stdoutPath -Pattern "Native authoring face controls:" -TimeoutMilliseconds 3000)) {
             throw "The converted showcase did not expose native topology selection controls."
@@ -1704,12 +1789,22 @@ try {
         $bevelControlCountBefore = @(
             Select-String -LiteralPath $stdoutPath -Pattern $bevelControlLogPattern -ErrorAction SilentlyContinue
         ).Count
-        Click-FramebufferPoint `
-            -Handle $mainWindowHandle `
-            -FramebufferWidth $framebufferWidth `
-            -FramebufferHeight $framebufferHeight `
-            -FramebufferX ($nativeFaceX + 44.0) `
-            -FramebufferY ($nativeFaceY + 12.0)
+        $nativeFaceModeObserved = $false
+        for ($faceModeAttempt = 0; $faceModeAttempt -lt 3 -and -not $nativeFaceModeObserved; ++$faceModeAttempt) {
+            Click-FramebufferPoint `
+                -Handle $mainWindowHandle `
+                -FramebufferWidth $framebufferWidth `
+                -FramebufferHeight $framebufferHeight `
+                -FramebufferX ($nativeFaceX + 44.0) `
+                -FramebufferY ($nativeFaceY + 12.0)
+            $nativeFaceModeObserved = Wait-FileContains `
+                -Path $stdoutPath `
+                -Pattern "Native authoring topology mode:.*mode=Face" `
+                -TimeoutMilliseconds 2500
+        }
+        if (-not $nativeFaceModeObserved) {
+            throw "The user-facing Face selection mode did not become active."
+        }
         for ($bevelStateAttempt = 0; $bevelStateAttempt -lt 6; ++$bevelStateAttempt) {
             $bevelControlCount = @(
                 Select-String -LiteralPath $stdoutPath -Pattern $bevelControlLogPattern -ErrorAction SilentlyContinue
@@ -1741,21 +1836,20 @@ try {
             -Y $nativeBevelY `
             -Width 82.0 `
             -Height 24.0
-        Click-FramebufferPoint `
-            -Handle $mainWindowHandle `
-            -FramebufferWidth $framebufferWidth `
-            -FramebufferHeight $framebufferHeight `
-            -FramebufferX ($nativeBevelX + 41.0) `
-            -FramebufferY ($nativeBevelY + 12.0)
-        if (-not (Wait-FileContains -Path $stdoutPath -Pattern "Native authoring bevel request:" -TimeoutMilliseconds 1500)) {
+        $nativeBevelObserved = $false
+        for ($bevelAttempt = 0; $bevelAttempt -lt 3 -and -not $nativeBevelObserved; ++$bevelAttempt) {
             Click-FramebufferPoint `
                 -Handle $mainWindowHandle `
                 -FramebufferWidth $framebufferWidth `
                 -FramebufferHeight $framebufferHeight `
-                -FramebufferX ($nativeBevelX + 12.0) `
-                -FramebufferY ($nativeBevelY + 8.0)
+                -FramebufferX ($nativeBevelX + 41.0) `
+                -FramebufferY ($nativeBevelY + 12.0)
+            $nativeBevelObserved = Wait-FileContains `
+                -Path $stdoutPath `
+                -Pattern "Native authoring dogfood: face bevel edited" `
+                -TimeoutMilliseconds 2500
         }
-        if (-not (Wait-FileContains -Path $stdoutPath -Pattern "Native authoring dogfood: face bevel edited" -TimeoutMilliseconds 5000)) {
+        if (-not $nativeBevelObserved) {
             throw "The user-facing native bevel operation did not update the showcase source."
         }
         Write-Output "[pass] User-facing topology selection and bevel changed the native showcase source"
@@ -2126,6 +2220,12 @@ try {
                     -TimeoutMilliseconds 2000)) {
                 throw "Viewport shading mode could not be confirmed: $($shadingNames[$modeIndex])"
             }
+        }
+        $bevelControlCount = @(
+            Select-String -LiteralPath $stdoutPath -Pattern $bevelControlLogPattern -ErrorAction SilentlyContinue
+        ).Count
+        if ($bevelControlCount -le $bevelControlCountBefore) {
+            throw "The native bevel control did not become visible after Face selection."
         }
 
         Click-WindowPoint `

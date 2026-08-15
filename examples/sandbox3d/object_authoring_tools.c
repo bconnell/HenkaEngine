@@ -1481,6 +1481,86 @@ henka_result sandbox3d_authoring_object_move_selected_components(
     return result;
 }
 
+henka_result sandbox3d_authoring_object_transform_vertex_region(
+    sandbox3d_authoring_object* object,
+    const sandbox3d_authoring_region_transform* transform,
+    size_t* out_affected_vertices)
+{
+    henka_authoring_mesh* candidate = NULL;
+    size_t affected_vertices = 0U;
+    uint32_t vertex_id;
+    henka_result result;
+
+    if (out_affected_vertices != NULL)
+    {
+        *out_affected_vertices = 0U;
+    }
+    if (object == NULL || transform == NULL ||
+        !sandbox3d_authoring_finite_vec3(transform->minimum) ||
+        !sandbox3d_authoring_finite_vec3(transform->maximum) ||
+        !sandbox3d_authoring_finite_vec3(transform->pivot) ||
+        !sandbox3d_authoring_finite_vec3(transform->scale) ||
+        !sandbox3d_authoring_finite_vec3(transform->offset) ||
+        transform->minimum.x > transform->maximum.x ||
+        transform->minimum.y > transform->maximum.y ||
+        transform->minimum.z > transform->maximum.z ||
+        transform->scale.x <= 0.0f || transform->scale.y <= 0.0f || transform->scale.z <= 0.0f ||
+        transform->scale.x > 4.0f || transform->scale.y > 4.0f || transform->scale.z > 4.0f)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    result = henka_authoring_mesh_clone(object->mesh, &candidate);
+    if (result != HENKA_SUCCESS)
+    {
+        return result;
+    }
+    for (vertex_id = 1U; vertex_id <= HENKA_AUTHORING_MESH_HARD_MAX_VERTICES; ++vertex_id)
+    {
+        const henka_authoring_vertex* vertex = henka_authoring_mesh_get_vertex(
+            candidate, (henka_authoring_vertex_id)vertex_id);
+        henka_vec3 position;
+        henka_vec3 relative;
+        if (vertex == NULL ||
+            vertex->position.x < transform->minimum.x || vertex->position.x > transform->maximum.x ||
+            vertex->position.y < transform->minimum.y || vertex->position.y > transform->maximum.y ||
+            vertex->position.z < transform->minimum.z || vertex->position.z > transform->maximum.z)
+        {
+            continue;
+        }
+        relative = (henka_vec3){
+            vertex->position.x - transform->pivot.x,
+            vertex->position.y - transform->pivot.y,
+            vertex->position.z - transform->pivot.z};
+        position = (henka_vec3){
+            transform->pivot.x + relative.x * transform->scale.x + transform->offset.x,
+            transform->pivot.y + relative.y * transform->scale.y + transform->offset.y,
+            transform->pivot.z + relative.z * transform->scale.z + transform->offset.z};
+        result = henka_authoring_mesh_set_vertex_position(candidate, vertex->id, position);
+        if (result != HENKA_SUCCESS)
+        {
+            henka_authoring_mesh_destroy(candidate);
+            return result;
+        }
+        ++affected_vertices;
+    }
+    if (affected_vertices == 0U)
+    {
+        henka_authoring_mesh_destroy(candidate);
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    result = sandbox3d_authoring_publish_candidate(object, candidate, true, object->selected_face);
+    if (result != HENKA_SUCCESS)
+    {
+        henka_authoring_mesh_destroy(candidate);
+        return result;
+    }
+    if (out_affected_vertices != NULL)
+    {
+        *out_affected_vertices = affected_vertices;
+    }
+    return HENKA_SUCCESS;
+}
+
 henka_result sandbox3d_authoring_object_pick_face(
     sandbox3d_authoring_object* object,
     henka_ray ray,

@@ -21,6 +21,19 @@ typedef enum sandbox3d_authoring_selection_mode
     SANDBOX3D_AUTHORING_SELECTION_FACE
 } sandbox3d_authoring_selection_mode;
 
+/* Describes a bounded, local-space vertex-region transform.  The operation
+ * preserves the source topology and material regions while publishing the
+ * changed mesh through the same scene, history, bounds, and physics
+ * transaction used by the other native modeling tools. */
+typedef struct sandbox3d_authoring_region_transform
+{
+    henka_vec3 minimum;
+    henka_vec3 maximum;
+    henka_vec3 pivot;
+    henka_vec3 scale;
+    henka_vec3 offset;
+} sandbox3d_authoring_region_transform;
+
 /* Returns all active non-helper entities in scene enumeration order. */
 size_t sandbox3d_object_authoring_collect_user_entities(
     const henka_scene* scene,
@@ -105,6 +118,10 @@ henka_result sandbox3d_authoring_object_pick_component(
 henka_result sandbox3d_authoring_object_move_selected_components(
     sandbox3d_authoring_object* object,
     henka_vec3 offset);
+henka_result sandbox3d_authoring_object_transform_vertex_region(
+    sandbox3d_authoring_object* object,
+    const sandbox3d_authoring_region_transform* transform,
+    size_t* out_affected_vertices);
 henka_result sandbox3d_authoring_object_pick_face(
     sandbox3d_authoring_object* object,
     henka_ray ray,

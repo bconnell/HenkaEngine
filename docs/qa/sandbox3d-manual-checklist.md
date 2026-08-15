@@ -227,6 +227,7 @@ Use `--primitive-gallery` when the engineering samples are specifically under te
 - The `Transform QA` utility can move, rotate, scale, and reset the selected object through direct controls.
 - Clicking an object updates the `Object Details` panel.
 - The `Object Details` panel can toggle visibility, focus the camera, reset the selected transform, and print object info.
+- After selecting an imported `Showcase Giraffe` or `Showcase Rocket`, `Make Editable` exposes `Refine Profile`; verify the giraffe neck/head or rocket upper-stage profile changes through that native operation without changing vertex/face counts, then verify the changed mesh survives Save Project, Reload Project, and a later relaunch.
 - The `Object Info` utility shows the selected effective material description and the count of borrowed semantic texture dependencies; full in-panel material authoring remains outside this checklist.
 - The `Object Details` panel shows tag and interaction state when those foundations are available.
 - A selected object shows a visible transform gizmo in the viewport, and the visible handle matches the clickable region.

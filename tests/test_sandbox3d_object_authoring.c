@@ -456,6 +456,42 @@ static void henka_test_sandbox3d_object_authoring_model_primitive_bridge(void)
     HENKA_TEST_ASSERT(henka_scene_get_entity_local_bounds(scene, entity, &authored_bounds) == HENKA_SUCCESS);
     HENKA_TEST_ASSERT(authored_bounds.extents.x > 0.0f && authored_bounds.extents.y > 0.0f);
 
+    {
+        const henka_authoring_mesh_counts before_profile =
+            henka_authoring_mesh_get_counts(sandbox3d_authoring_object_get_mesh(object));
+        const henka_vec3 before_position =
+            henka_authoring_mesh_get_vertex(
+                sandbox3d_authoring_object_get_mesh(object), 3U)->position;
+        const sandbox3d_authoring_region_transform profile = {
+            {-1.0f, -1.0f, -0.1f},
+            {1.0f, 1.0f, 0.1f},
+            {0.0f, 0.0f, 0.0f},
+            {1.25f, 1.0f, 0.75f},
+            {0.125f, 0.0f, 0.0f}};
+        size_t affected_vertices = 0U;
+        HENKA_TEST_ASSERT(sandbox3d_authoring_object_transform_vertex_region(
+            object, &profile, &affected_vertices) == HENKA_SUCCESS);
+        HENKA_TEST_ASSERT(affected_vertices == 4U);
+        HENKA_TEST_ASSERT(henka_authoring_mesh_validate(
+            sandbox3d_authoring_object_get_mesh(object)));
+        HENKA_TEST_ASSERT(henka_authoring_mesh_get_counts(
+            sandbox3d_authoring_object_get_mesh(object)).vertices == before_profile.vertices);
+        HENKA_TEST_ASSERT(henka_authoring_mesh_get_counts(
+            sandbox3d_authoring_object_get_mesh(object)).faces == before_profile.faces);
+        HENKA_TEST_ASSERT_FLOAT_CLOSE(
+            henka_authoring_mesh_get_vertex(
+                sandbox3d_authoring_object_get_mesh(object), 3U)->position.x,
+            before_position.x * 1.25f + 0.125f,
+            0.0001f);
+        HENKA_TEST_ASSERT(sandbox3d_authoring_object_undo(object) == HENKA_SUCCESS);
+        HENKA_TEST_ASSERT_FLOAT_CLOSE(
+            henka_authoring_mesh_get_vertex(
+                sandbox3d_authoring_object_get_mesh(object), 3U)->position.x,
+            before_position.x,
+            0.0001f);
+        HENKA_TEST_ASSERT(sandbox3d_authoring_object_redo(object) == HENKA_SUCCESS);
+    }
+
     sandbox3d_authoring_object_set_selection_mode(object, SANDBOX3D_AUTHORING_SELECTION_FACE);
     HENKA_TEST_ASSERT(sandbox3d_authoring_object_select_face(object, 1U) == HENKA_SUCCESS);
     HENKA_TEST_ASSERT(sandbox3d_authoring_object_bevel_selected_face(object, 0.1f) == HENKA_SUCCESS);
