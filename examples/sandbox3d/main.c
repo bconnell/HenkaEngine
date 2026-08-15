@@ -9573,6 +9573,65 @@ static henka_result sandbox3d_add_native_rocket_ring(
     return HENKA_SUCCESS;
 }
 
+static bool sandbox3d_seed_native_rocket_surface_detail(
+    henka_engine* engine,
+    sandbox3d_state* state,
+    henka_entity entity)
+{
+    sandbox3d_material_editor_binding* binding;
+    henka_texture* normal_texture = NULL;
+    henka_texture* surface_texture = NULL;
+    char normal_identity[96];
+    char surface_identity[96];
+
+    if (engine == NULL || state == NULL || entity == HENKA_INVALID_ENTITY)
+    {
+        return false;
+    }
+    binding = sandbox3d_find_material_binding(state, entity);
+    if (binding == NULL &&
+        sandbox3d_prepare_material_editor_binding(
+            state->scene,
+            entity,
+            state->material_editor_bindings,
+            SANDBOX3D_MAX_MATERIAL_EDITOR_BINDINGS) == HENKA_SUCCESS)
+    {
+        binding = sandbox3d_find_material_binding(state, entity);
+    }
+    if (binding == NULL)
+    {
+        return false;
+    }
+    (void)snprintf(
+        normal_identity,
+        sizeof(normal_identity),
+        "runtime/native-authoring/%llu/rocket-normal",
+        (unsigned long long)entity);
+    (void)snprintf(
+        surface_identity,
+        sizeof(surface_identity),
+        "runtime/native-authoring/%llu/rocket-surface-metallic-roughness",
+        (unsigned long long)entity);
+    if (sandbox3d_ensure_native_detail_texture(
+            engine, normal_identity, &normal_texture) != HENKA_SUCCESS ||
+        sandbox3d_ensure_native_surface_texture(
+            engine, surface_identity, &surface_texture) != HENKA_SUCCESS ||
+        sandbox3d_apply_native_surface_detail_to_material_binding(
+            state, binding, normal_texture, surface_texture) != HENKA_SUCCESS)
+    {
+        printf(
+            "Native authoring material detail: name=%s normal=fallback surface=fallback source_state=HENKA_NATIVE_AUTHORED.\n",
+            sandbox3d_safe_entity_name(state, entity, "Native Showcase Rocket"));
+        fflush(stdout);
+        return false;
+    }
+    printf(
+        "Native authoring material detail: name=%s normal=loaded surface=loaded source_state=HENKA_NATIVE_AUTHORED.\n",
+        sandbox3d_safe_entity_name(state, entity, "Native Showcase Rocket"));
+    fflush(stdout);
+    return true;
+}
+
 static henka_result sandbox3d_create_native_rocket_mesh(
     henka_authoring_mesh** out_mesh)
 {
@@ -9964,6 +10023,7 @@ static bool sandbox3d_add_native_rocket_object(henka_engine* engine, sandbox3d_s
         }
         return false;
     }
+    (void)sandbox3d_seed_native_rocket_surface_detail(engine, state, entity);
     counts = henka_authoring_mesh_get_counts(
         sandbox3d_authoring_object_get_mesh(authoring_object));
     printf(

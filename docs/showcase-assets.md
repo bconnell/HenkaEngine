@@ -54,12 +54,13 @@ The editor also exposes `Create Native Rocket`. That user-facing action
 creates a bounded 201-vertex/121-face multi-part rocket directly through the
 Henka authoring mesh API: a continuous body and nose, three open structural
 collars, a five-bell engine cluster, and four fins. It evaluates the source
-into the scene, adopts a manager-owned material instance, and emits
-`HENKA_NATIVE_AUTHORED` provenance before normal component, topology, material,
-and project save/reload editing. The packaged relaunch gate restores the valid
-authored source and material sidecar transactionally; the current native path
-still uses one manager-owned material and does not claim native multi-material
-binding.
+into the scene, adopts a manager-owned material instance, and seeds generated
+manager-owned normal plus metallic/roughness detail textures when GPU texture
+creation succeeds. It emits `HENKA_NATIVE_AUTHORED` provenance before normal
+component, topology, material, and project save/reload editing. The packaged
+relaunch gate restores the valid authored source and material sidecar
+transactionally; the current native path still uses one manager-owned material
+and does not claim native multi-material binding.
 
 - `cheeky_giraffe.gltf` — an original realism-oriented Cheeky Giraffe mascot with smooth high-curvature body and head forms, surface-fitted spots, a readable mane row, compact flattened ear lobes with inset inner-ear patches, connected tan ossicone stalks, and outward-angled dark-brown caps, layered eye whites/irises/pupils/highlights, nostrils, a defined muzzle/jaw, and a subdued mouth line. The presentation retains restrained personality, while the face is built from separately shaded anatomical features rather than a single cartoon eye material.
 - `original_realistic_rocket.gltf` — an original modern launch vehicle reference with a continuous tapered core/fairing profile, interstage and engine-skirt hardware, dark avionics separation bands, a bounded seven-engine bell/nozzle cluster, a restrained heat response, and tapered stabilization fins.

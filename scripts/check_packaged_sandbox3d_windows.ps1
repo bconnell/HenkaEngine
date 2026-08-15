@@ -2264,6 +2264,9 @@ try {
     if (-not (Wait-FileContains -Path $stdoutPath -Pattern "source_state=HENKA_NATIVE_AUTHORED" -TimeoutMilliseconds 5000)) {
         throw "The user-facing engine-native showcase creation did not produce an authored source."
     }
+    if (-not (Wait-FileContains -Path $stdoutPath -Pattern "Native authoring material detail: name=Native Showcase Rocket normal=loaded surface=loaded source_state=HENKA_NATIVE_AUTHORED" -TimeoutMilliseconds 5000)) {
+        throw "The native authored rocket did not adopt its manager-owned surface detail textures."
+    }
     Write-Output "[pass] User-facing engine-native showcase creation completed"
     if (-not (Wait-FileContains -Path $stdoutPath -Pattern "Native authoring project controls:" -TimeoutMilliseconds 3000)) {
         throw "The native authored showcase did not expose project save/reload controls."
