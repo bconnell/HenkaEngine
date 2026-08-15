@@ -633,8 +633,6 @@ function New-Giraffe {
     Add-Ellipsoid $eyes @(0.26, 4.025, 0.603) @(0.014, 0.020, 0.006) 6 10
     Add-Ellipsoid $details @(-0.14, 3.66, 0.695) @(0.070, 0.038, 0.014) 8 14
     Add-Ellipsoid $details @(0.14, 3.66, 0.695) @(0.070, 0.038, 0.014) 8 14
-    Add-Frustum $details 4.00 4.18 0.028 0.012 -0.39 0.54 12
-    Add-Frustum $details 4.00 4.18 0.028 0.012 0.39 0.54 12
     Add-Ellipsoid $smile @(0.0, 3.55, 0.695) @(0.24, 0.035, 0.014) 8 16
     Add-Ellipsoid $smile @(0.14, 3.58, 0.685) @(0.18, 0.045, 0.016) 8 16
     return [pscustomobject]@{ Parts = @($tan, $spots, $cream, $eyes, $iris, $details, $smile, $earInner, $ossicone); Materials = $materials }
@@ -668,11 +666,18 @@ function New-Rocket {
     Add-Frustum $metal 2.76 2.84 0.44 0.44 0.0 0.0 32
     Add-Frustum $avionics 1.18 1.24 0.58 0.58 0.0 0.0 32
     Add-Frustum $avionics 2.48 2.54 0.56 0.56 0.0 0.0 32
-    foreach ($engine in @(@(-0.28, 0.0), @(0.0, 0.0), @(0.28, 0.0))) {
-        Add-Frustum $heat 0.02 0.40 0.16 0.11 $engine[0] $engine[1] 20
-        Add-Frustum $heat 0.40 0.46 0.11 0.08 $engine[0] $engine[1] 20
+    # A bounded seven-engine cluster gives the lower stage a recognizable
+    # modern launch-vehicle layout instead of three red cylinders. Each
+    # engine keeps a metallic throat ring, a dark heat bell, and a smaller
+    # avionics insert so the cluster remains legible under the studio HDR.
+    foreach ($engine in @(
+            @(-0.28, 0.0), @(0.0, 0.0), @(0.28, 0.0),
+            @(0.0, -0.28), @(0.0, 0.28), @(-0.20, -0.20), @(0.20, 0.20))) {
+        Add-Frustum $metal 0.02 0.16 0.21 0.18 $engine[0] $engine[1] 20
+        Add-Frustum $heat 0.14 0.40 0.16 0.105 $engine[0] $engine[1] 20
+        Add-Frustum $heat 0.40 0.46 0.105 0.075 $engine[0] $engine[1] 20
         Add-Frustum $avionics 0.05 0.12 0.12 0.075 $engine[0] $engine[1] 16
-        Add-Ellipsoid $heat @($engine[0], 0.02, $engine[1]) @(0.20, 0.08, 0.20) 8 16
+        Add-Ellipsoid $heat @($engine[0], 0.02, $engine[1]) @(0.17, 0.06, 0.17) 8 16
     }
     Add-Frustum $stripe 1.78 1.91 0.59 0.59 0.0 0.0 32
     Add-RadialFin $metal 1.0 0.0
