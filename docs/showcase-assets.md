@@ -39,7 +39,14 @@ scene, material, lighting, asset-manager, or renderer path.
   -InputDirectory (Join-Path (Get-Location) "build\visual_evidence_giraffe")
 ```
 
-The validator checks that the evidence identifies the Henka Sandbox executable,
+The capture process waits up to a bounded 20 seconds for a CAPTURE_READY record
+from the real application. That record proves both named subject groups are
+visible, their authoritative bounds and render meshes are ready, the final
+Scene View viewport is known, the front camera is level, the combined midpoint
+is centered, both projected rectangles have safety margins, and three settled
+frames have completed. The validator also requires matching readiness metadata
+for Solid, Material Preview, and Rendered before checking the images. It then
+checks that the evidence identifies the Henka Sandbox executable,
 contains all required views, and rejects missing, flat, low-chroma, or
 dimension-invalid frames. Those objective guards do not constitute human visual
 approval: inspect the retained images for silhouette, facial-feature assembly,

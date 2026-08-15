@@ -19,6 +19,64 @@ if ($indexText -notmatch "Source: .*henka_sandbox3d\.exe") {
     throw "Showcase visual evidence does not identify the Henka Sandbox executable."
 }
 
+function Get-CaptureMetadata {
+    param(
+        [Parameter(Mandatory = $true)][string]$Mode
+    )
+
+    $match = [regex]::Match(
+        $indexText,
+        "(?m)CAPTURE_READY mode=$Mode viewport=(?<vx>-?\d+),(?<vy>-?\d+),(?<vw>\d+),(?<vh>\d+) aspect=(?<aspect>[-0-9.]+) .* pitch=(?<pitch>[-0-9.]+) roll=(?<roll>[-0-9.]+) .* giraffe_screen=(?<gminx>[-0-9.]+),(?<gminy>[-0-9.]+),(?<gmaxx>[-0-9.]+),(?<gmaxy>[-0-9.]+) rocket_screen=(?<rminx>[-0-9.]+),(?<rminy>[-0-9.]+),(?<rmaxx>[-0-9.]+),(?<rmaxy>[-0-9.]+) combined_midpoint=(?<mx>[-0-9.]+),(?<my>[-0-9.]+) giraffe_parts=(?<gp>\d+) rocket_parts=(?<rp>\d+) settled_frames=(?<sf>\d+) draw_expected=1")
+    if (-not $match.Success) {
+        throw "Showcase evidence is missing valid CAPTURE_READY metadata for $Mode."
+    }
+    return $match
+}
+
+$captureMetadata = @(
+    Get-CaptureMetadata "solid"
+    Get-CaptureMetadata "material_preview"
+    Get-CaptureMetadata "rendered"
+)
+$canonicalCaptureMetadata = $captureMetadata[0].Value -replace 'mode=(solid|material_preview|rendered)', 'mode=shared'
+foreach ($metadata in $captureMetadata) {
+    if (($metadata.Value -replace 'mode=(solid|material_preview|rendered)', 'mode=shared') -ne $canonicalCaptureMetadata) {
+        throw "Showcase composition metadata diverges across shading modes."
+    }
+}
+foreach ($requiredMode in @("solid", "material_preview", "rendered")) {
+    $metadata = Get-CaptureMetadata $requiredMode
+    $width = [int]$metadata.Groups["vw"].Value
+    $height = [int]$metadata.Groups["vh"].Value
+    $pitch = [double]::Parse($metadata.Groups["pitch"].Value, [Globalization.CultureInfo]::InvariantCulture)
+    $roll = [double]::Parse($metadata.Groups["roll"].Value, [Globalization.CultureInfo]::InvariantCulture)
+    $midpointX = [double]::Parse($metadata.Groups["mx"].Value, [Globalization.CultureInfo]::InvariantCulture)
+    $midpointY = [double]::Parse($metadata.Groups["my"].Value, [Globalization.CultureInfo]::InvariantCulture)
+    if ([Math]::Abs($pitch) -gt 0.001 -or [Math]::Abs($roll) -gt 0.001) {
+        throw "Showcase $requiredMode metadata is not level."
+    }
+    if ([Math]::Abs($midpointX - ($width / 2.0)) -gt ($width * 0.02) -or
+        [Math]::Abs($midpointY - ($height / 2.0)) -gt ($height * 0.02)) {
+        throw "Showcase $requiredMode metadata does not center the combined midpoint."
+    }
+    foreach ($prefix in @("g", "r")) {
+        $minX = [double]::Parse($metadata.Groups["$($prefix)minx"].Value, [Globalization.CultureInfo]::InvariantCulture)
+        $minY = [double]::Parse($metadata.Groups["$($prefix)miny"].Value, [Globalization.CultureInfo]::InvariantCulture)
+        $maxX = [double]::Parse($metadata.Groups["$($prefix)maxx"].Value, [Globalization.CultureInfo]::InvariantCulture)
+        $maxY = [double]::Parse($metadata.Groups["$($prefix)maxy"].Value, [Globalization.CultureInfo]::InvariantCulture)
+        if ($minX -lt ($width * 0.04) -or $minY -lt ($height * 0.04) -or
+            $maxX -gt ($width * 0.96) -or $maxY -gt ($height * 0.96) -or
+            $maxX -le $minX -or $maxY -le $minY) {
+            throw "Showcase $requiredMode metadata reports a cropped subject."
+        }
+    }
+    if ([int]$metadata.Groups["gp"].Value -lt 1 -or
+        [int]$metadata.Groups["rp"].Value -lt 1 -or
+        [int]$metadata.Groups["sf"].Value -lt 3) {
+        throw "Showcase $requiredMode metadata does not prove both subjects and settled frames."
+    }
+}
+
 Add-Type -AssemblyName System.Drawing
 
 function Get-ImageMetrics {
@@ -106,11 +164,14 @@ function Get-MeanRgbDifference {
 
 $required = [ordered]@{
     "startup" = "startup-showcase.png"
-    "front Rendered" = "giraffe-front-rendered.png"
-    "three-quarter Rendered" = "giraffe-three-quarter-rendered.png"
-    "profile Rendered" = "giraffe-profile-rendered.png"
-    "wide Rendered" = "giraffe-wide-rendered.png"
-    "front Material Preview" = "giraffe-front-material-preview.png"
+    "pair Solid" = "same-camera-solid.png"
+    "pair Material Preview" = "same-camera-material-preview.png"
+    "pair Rendered" = "same-camera-rendered.png"
+    "giraffe front Rendered" = "giraffe-front-rendered.png"
+    "giraffe three-quarter Rendered" = "giraffe-three-quarter-rendered.png"
+    "giraffe profile Rendered" = "giraffe-profile-rendered.png"
+    "giraffe wide Rendered" = "giraffe-wide-rendered.png"
+    "giraffe front Material Preview" = "giraffe-front-material-preview.png"
 }
 $measurements = New-Object System.Collections.Generic.List[object]
 foreach ($label in $required.Keys) {
@@ -125,8 +186,8 @@ foreach ($label in $required.Keys) {
 }
 
 $difference = Get-MeanRgbDifference `
-    (Join-Path $InputDirectory $required["front Material Preview"]) `
-    (Join-Path $InputDirectory $required["front Rendered"])
+    (Join-Path $InputDirectory $required["giraffe front Material Preview"]) `
+    (Join-Path $InputDirectory $required["giraffe front Rendered"])
 if ($difference -lt 2.0) {
     throw "Front Rendered evidence is not materially distinct from Material Preview (mean RGB difference=$([Math]::Round($difference, 2)))."
 }
@@ -135,7 +196,7 @@ $summary = @(
     "Showcase visual evidence validation: passed",
     "Application-only source: Henka Sandbox executable identified in INDEX.txt",
     "Required views: startup, close front, close three-quarter, close profile, wide silhouette",
-    "Rendered and Material Preview front mean RGB difference: $([Math]::Round($difference, 2))",
+    "Giraffe Rendered and Material Preview front mean RGB difference: $([Math]::Round($difference, 2))",
     "Objective guards: non-flat, chromatic, dimension-valid frames for every required view",
     "Status: automated evidence guard passed; human visual inspection remains required"
 )

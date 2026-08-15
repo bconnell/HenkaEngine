@@ -21,8 +21,9 @@ Solid, Material Preview, and Rendered comparison, run:
 .\scripts\capture_visual_evidence_windows.ps1 -IncludeStartupShowcase
 ```
 
-This writes generated images under `build/visual_evidence/`; it does not add
-them to the repository.
+This waits for the application CAPTURE_READY metadata before capturing each
+shaded mode. It writes generated images plus per-mode logs under
+`build/visual_evidence/`; it does not add them to the repository.
 
 ## Packaged executable test
 

@@ -50,15 +50,26 @@ try {
     }
     New-TestShowcaseImage -Path (Join-Path $fixtureRoot "giraffe-front-material-preview.png") -Flat $false -Offset 2
     New-TestShowcaseImage -Path (Join-Path $fixtureRoot "startup-showcase.png") -Flat $false -Offset 8
+    New-TestShowcaseImage -Path (Join-Path $fixtureRoot "same-camera-solid.png") -Flat $false -Offset 10
+    New-TestShowcaseImage -Path (Join-Path $fixtureRoot "same-camera-material-preview.png") -Flat $false -Offset 12
+    New-TestShowcaseImage -Path (Join-Path $fixtureRoot "same-camera-rendered.png") -Flat $false -Offset 14
+    $metadata = @(
+        "solid metadata: CAPTURE_READY mode=solid viewport=0,0,640,360 aspect=1.777778 camera_position=0.0000,0.0000,5.0000 yaw=-1.570796 pitch=0.000000 roll=0.000000 fov=1.047198 giraffe_bounds=-2.0,2.0,0.0,1.0,2.0,1.0 rocket_bounds=2.0,2.0,0.0,1.0,2.0,1.0 combined_bounds=0.0,2.0,0.0,3.0,2.0,1.0 giraffe_screen=50.00,30.00,250.00,330.00 rocket_screen=390.00,30.00,590.00,330.00 combined_midpoint=320.00,180.00 giraffe_parts=8 rocket_parts=5 settled_frames=3 draw_expected=1",
+        "material metadata: CAPTURE_READY mode=material_preview viewport=0,0,640,360 aspect=1.777778 camera_position=0.0000,0.0000,5.0000 yaw=-1.570796 pitch=0.000000 roll=0.000000 fov=1.047198 giraffe_bounds=-2.0,2.0,0.0,1.0,2.0,1.0 rocket_bounds=2.0,2.0,0.0,1.0,2.0,1.0 combined_bounds=0.0,2.0,0.0,3.0,2.0,1.0 giraffe_screen=50.00,30.00,250.00,330.00 rocket_screen=390.00,30.00,590.00,330.00 combined_midpoint=320.00,180.00 giraffe_parts=8 rocket_parts=5 settled_frames=3 draw_expected=1",
+        "rendered metadata: CAPTURE_READY mode=rendered viewport=0,0,640,360 aspect=1.777778 camera_position=0.0000,0.0000,5.0000 yaw=-1.570796 pitch=0.000000 roll=0.000000 fov=1.047198 giraffe_bounds=-2.0,2.0,0.0,1.0,2.0,1.0 rocket_bounds=2.0,2.0,0.0,1.0,2.0,1.0 combined_bounds=0.0,2.0,0.0,3.0,2.0,1.0 giraffe_screen=50.00,30.00,250.00,330.00 rocket_screen=390.00,30.00,590.00,330.00 combined_midpoint=320.00,180.00 giraffe_parts=8 rocket_parts=5 settled_frames=3 draw_expected=1"
+    )
     @(
         "Source: henka_sandbox3d.exe",
+        "pair-solid: same-camera-solid.png",
+        "pair-material-preview: same-camera-material-preview.png",
+        "pair-rendered: same-camera-rendered.png",
         "giraffe-front-rendered: giraffe-front-rendered.png",
         "giraffe-three-quarter-rendered: giraffe-three-quarter-rendered.png",
         "giraffe-profile-rendered: giraffe-profile-rendered.png",
         "giraffe-wide-rendered: giraffe-wide-rendered.png",
         "giraffe-front-material-preview: giraffe-front-material-preview.png",
         "startup: startup-showcase.png"
-    ) | Set-Content -LiteralPath (Join-Path $fixtureRoot "INDEX.txt")
+    ) + $metadata | Set-Content -LiteralPath (Join-Path $fixtureRoot "INDEX.txt")
 
     & (Join-Path $PSScriptRoot "check_showcase_visual_evidence_windows.ps1") -InputDirectory $fixtureRoot | Out-Null
 

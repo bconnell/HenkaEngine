@@ -83,6 +83,85 @@ public static class HenkaVisualCaptureNativeMethods
 }
 "@
 
+function Wait-HenkaCaptureReady {
+    param(
+        [Parameter(Mandatory = $true)][string]$StdoutPath,
+        [Parameter(Mandatory = $true)][System.Diagnostics.Process]$Process,
+        [Parameter(Mandatory = $true)][string]$Label
+    )
+
+    for ($attempt = 0; $attempt -lt 200; ++$attempt) {
+        if (Test-Path -LiteralPath $StdoutPath -PathType Leaf) {
+            $line = Select-String -LiteralPath $StdoutPath -Pattern '^CAPTURE_READY ' |
+                Select-Object -Last 1
+            if ($null -ne $line) {
+                return $line.Line
+            }
+        }
+        if ($Process.HasExited) {
+            throw "Sandbox exited before bounded capture readiness for $Label."
+        }
+        Start-Sleep -Milliseconds 100
+    }
+    throw "Sandbox did not report bounded capture readiness for $Label within 20 seconds."
+}
+
+function Assert-HenkaCaptureMetadata {
+    param(
+        [Parameter(Mandatory = $true)][string]$Line,
+        [Parameter(Mandatory = $true)][string]$Label
+    )
+
+    $pattern = '^\s*CAPTURE_READY mode=(?<mode>[a-z_]+) viewport=(?<vx>-?\d+),(?<vy>-?\d+),(?<vw>\d+),(?<vh>\d+) aspect=(?<aspect>[-0-9.]+) camera_position=(?<px>[-0-9.]+),(?<py>[-0-9.]+),(?<pz>[-0-9.]+) yaw=(?<yaw>[-0-9.]+) pitch=(?<pitch>[-0-9.]+) roll=(?<roll>[-0-9.]+) fov=(?<fov>[-0-9.]+) .* giraffe_screen=(?<gminx>[-0-9.]+),(?<gminy>[-0-9.]+),(?<gmaxx>[-0-9.]+),(?<gmaxy>[-0-9.]+) rocket_screen=(?<rminx>[-0-9.]+),(?<rminy>[-0-9.]+),(?<rmaxx>[-0-9.]+),(?<rmaxy>[-0-9.]+) combined_midpoint=(?<mx>[-0-9.]+),(?<my>[-0-9.]+) giraffe_parts=(?<gp>\d+) rocket_parts=(?<rp>\d+) settled_frames=(?<sf>\d+) draw_expected=1\s*$'
+    $match = [regex]::Match($Line, $pattern)
+    if (-not $match.Success) {
+        throw "Capture readiness metadata was malformed for $Label."
+    }
+
+    $width = [int]$match.Groups["vw"].Value
+    $height = [int]$match.Groups["vh"].Value
+    $pitch = [double]::Parse($match.Groups["pitch"].Value, [Globalization.CultureInfo]::InvariantCulture)
+    $roll = [double]::Parse($match.Groups["roll"].Value, [Globalization.CultureInfo]::InvariantCulture)
+    $midpointX = [double]::Parse($match.Groups["mx"].Value, [Globalization.CultureInfo]::InvariantCulture)
+    $midpointY = [double]::Parse($match.Groups["my"].Value, [Globalization.CultureInfo]::InvariantCulture)
+    $marginX = $width * 0.04
+    $marginY = $height * 0.04
+    $rectangles = @(
+        @("giraffe", "gminx", "gminy", "gmaxx", "gmaxy"),
+        @("rocket", "rminx", "rminy", "rmaxx", "rmaxy")
+    )
+
+    if ([Math]::Abs($pitch) -gt 0.001 -or [Math]::Abs($roll) -gt 0.001) {
+        throw "Capture camera is not level for $Label (pitch=$pitch roll=$roll)."
+    }
+    if ([Math]::Abs($midpointX - ($width / 2.0)) -gt ($width * 0.02) -or
+        [Math]::Abs($midpointY - ($height / 2.0)) -gt ($height * 0.02)) {
+        throw "Showcase midpoint is not centered for $Label (midpoint=$midpointX,$midpointY viewport=$($width)x$($height))."
+    }
+    foreach ($rectangle in $rectangles) {
+        $name = $rectangle[0]
+        $minX = [double]::Parse($match.Groups[$rectangle[1]].Value, [Globalization.CultureInfo]::InvariantCulture)
+        $minY = [double]::Parse($match.Groups[$rectangle[2]].Value, [Globalization.CultureInfo]::InvariantCulture)
+        $maxX = [double]::Parse($match.Groups[$rectangle[3]].Value, [Globalization.CultureInfo]::InvariantCulture)
+        $maxY = [double]::Parse($match.Groups[$rectangle[4]].Value, [Globalization.CultureInfo]::InvariantCulture)
+        if ($minX -lt $marginX -or $minY -lt $marginY -or
+            $maxX -gt ($width - $marginX) -or $maxY -gt ($height - $marginY) -or
+            $maxX -le $minX -or $maxY -le $minY) {
+            throw "$name projected bounds are outside the bounded capture frame for $Label."
+        }
+    }
+    if ([int]$match.Groups["gp"].Value -lt 1 -or
+        [int]$match.Groups["rp"].Value -lt 1 -or
+        [int]$match.Groups["sf"].Value -lt 3) {
+        throw "Capture readiness did not prove both subjects and settled frames for $Label."
+    }
+
+    return [pscustomobject]@{
+        Canonical = ($Line -replace 'mode=[^ ]+', 'mode=shared')
+        Mode = $match.Groups["mode"].Value
+    }
+}
+
 [System.IO.Directory]::CreateDirectory($OutputDirectory) | Out-Null
 Add-Type -AssemblyName System.Drawing
 $modes = @(
@@ -104,12 +183,14 @@ $records.Add("Startup evidence: optional ordinary startup camera with the defaul
 $records.Add("Giraffe inspection: optional close front, three-quarter, profile, and wide Rendered views plus front Material Preview")
 $records.Add("Terrain evidence: deterministic wide, close-material, and four-region-corner cameras")
 $records.Add("Capture: application window bounds copied from the desktop into repo-local generated output")
+$captureMetadata = New-Object System.Collections.Generic.List[object]
 
 foreach ($mode in $modes) {
-    $process = Start-HenkaProcess `
-        -FilePath $executable `
-        -Arguments $mode.Arguments `
-        -WorkingDirectory (Split-Path -Parent $executable)
+    $capturedProcess = $null
+    $stdoutPath = Join-Path $OutputDirectory "$($mode.Label).stdout.txt"
+    $stderrPath = Join-Path $OutputDirectory "$($mode.Label).stderr.txt"
+    $capturedProcess = Start-HenkaCapturedProcess -FilePath $executable -Arguments $mode.Arguments -WorkingDirectory (Split-Path -Parent $executable) -StdoutPath $stdoutPath -StderrPath $stderrPath
+    $process = $capturedProcess.Process
     $handle = [IntPtr]::Zero
     try {
         for ($attempt = 0; $attempt -lt 80 -and $handle -eq [IntPtr]::Zero; ++$attempt) {
@@ -121,7 +202,18 @@ foreach ($mode in $modes) {
             throw "Sandbox window did not become available for $($mode.Label)."
         }
         [HenkaVisualCaptureNativeMethods]::ActivateSandboxWindow($handle)
-        Start-Sleep -Milliseconds 1500
+        $metadataLine = if ($mode.Label -eq "startup") {
+            Start-Sleep -Milliseconds 1500
+            "CAPTURE_READY mode=startup readiness=ordinary-startup"
+        }
+        else {
+            Wait-HenkaCaptureReady -StdoutPath $stdoutPath -Process $process -Label $mode.Label
+        }
+        if ($mode.Label -ne "startup") {
+            [void]$captureMetadata.Add(
+                (Assert-HenkaCaptureMetadata -Line $metadataLine -Label $mode.Label))
+        }
+        Start-Sleep -Milliseconds 150
         $rect = New-Object HenkaVisualCaptureNativeMethods+RECT
         $dwmResult = [HenkaVisualCaptureNativeMethods]::DwmGetWindowAttribute(
             $handle,
@@ -148,7 +240,8 @@ foreach ($mode in $modes) {
             $path = Join-Path $OutputDirectory $mode.File
             $bitmap.Save($path, [System.Drawing.Imaging.ImageFormat]::Png)
             $hash = (Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash.ToLowerInvariant()
-            $records.Add("$($mode.Label): $($mode.File) SHA-256=$hash bounds=$width`x$height")
+            $records.Add("$($mode.Label): $($mode.File) SHA-256=$hash bounds=$($width)x$($height)")
+            $records.Add("$($mode.Label) metadata: $metadataLine")
         }
         finally {
             $bitmap.Dispose()
@@ -159,14 +252,24 @@ foreach ($mode in $modes) {
             if ($handle -ne [IntPtr]::Zero) {
                 [HenkaVisualCaptureNativeMethods]::PostMessage($handle, 0x0010, [IntPtr]::Zero, [IntPtr]::Zero) | Out-Null
             }
-            if (-not $process.WaitForExit(10000)) {
+            if (-not $capturedProcess.WaitForExit(10000)) {
                 Stop-HenkaProcessTree -ProcessId $process.Id
             }
         }
-        if ($null -ne $process) {
-            $process.Dispose()
+        if ($null -ne $capturedProcess) {
+            Close-HenkaCapturedProcess $capturedProcess
         }
     }
+}
+
+if ($captureMetadata.Count -gt 1) {
+    $canonical = $captureMetadata[0].Canonical
+    foreach ($metadata in $captureMetadata) {
+        if ($metadata.Canonical -ne $canonical) {
+            throw "Same-camera capture metadata diverged between shading modes."
+        }
+    }
+    $records.Add("Composition metadata: identical across Solid, Material Preview, and Rendered")
 }
 
 if ($IncludeGiraffeInspection) {
@@ -178,10 +281,11 @@ if ($IncludeGiraffeInspection) {
         @{ Label = "giraffe_front_material_preview"; Arguments = @("--capture-showcase-view", "front", "material_preview"); File = "giraffe-front-material-preview.png" }
     )
     foreach ($giraffeMode in $giraffeModes) {
-        $process = Start-HenkaProcess `
-            -FilePath $executable `
-            -Arguments $giraffeMode.Arguments `
-            -WorkingDirectory (Split-Path -Parent $executable)
+        $capturedProcess = $null
+        $stdoutPath = Join-Path $OutputDirectory "$($giraffeMode.Label).stdout.txt"
+        $stderrPath = Join-Path $OutputDirectory "$($giraffeMode.Label).stderr.txt"
+        $capturedProcess = Start-HenkaCapturedProcess -FilePath $executable -Arguments $giraffeMode.Arguments -WorkingDirectory (Split-Path -Parent $executable) -StdoutPath $stdoutPath -StderrPath $stderrPath
+        $process = $capturedProcess.Process
         $handle = [IntPtr]::Zero
         try {
             for ($attempt = 0; $attempt -lt 80 -and $handle -eq [IntPtr]::Zero; ++$attempt) {
@@ -193,7 +297,8 @@ if ($IncludeGiraffeInspection) {
                 throw "Sandbox window did not become available for $($giraffeMode.Label)."
             }
             [HenkaVisualCaptureNativeMethods]::ActivateSandboxWindow($handle)
-            Start-Sleep -Milliseconds 1500
+            $metadataLine = Wait-HenkaCaptureReady -StdoutPath $stdoutPath -Process $process -Label $giraffeMode.Label
+            Start-Sleep -Milliseconds 150
             $rect = New-Object HenkaVisualCaptureNativeMethods+RECT
             $dwmResult = [HenkaVisualCaptureNativeMethods]::DwmGetWindowAttribute(
                 $handle,
@@ -220,7 +325,8 @@ if ($IncludeGiraffeInspection) {
                 $path = Join-Path $OutputDirectory $giraffeMode.File
                 $bitmap.Save($path, [System.Drawing.Imaging.ImageFormat]::Png)
                 $hash = (Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash.ToLowerInvariant()
-                $records.Add("$($giraffeMode.Label): $($giraffeMode.File) SHA-256=$hash bounds=$width`x$height")
+                $records.Add("$($giraffeMode.Label): $($giraffeMode.File) SHA-256=$hash bounds=$($width)x$($height)")
+                $records.Add("$($giraffeMode.Label) metadata: $metadataLine")
             }
             finally {
                 $bitmap.Dispose()
@@ -231,12 +337,12 @@ if ($IncludeGiraffeInspection) {
                 if ($handle -ne [IntPtr]::Zero) {
                     [HenkaVisualCaptureNativeMethods]::PostMessage($handle, 0x0010, [IntPtr]::Zero, [IntPtr]::Zero) | Out-Null
                 }
-                if (-not $process.WaitForExit(10000)) {
+                if (-not $capturedProcess.WaitForExit(10000)) {
                     Stop-HenkaProcessTree -ProcessId $process.Id
                 }
             }
-            if ($null -ne $process) {
-                $process.Dispose()
+            if ($null -ne $capturedProcess) {
+                Close-HenkaCapturedProcess $capturedProcess
             }
         }
     }
