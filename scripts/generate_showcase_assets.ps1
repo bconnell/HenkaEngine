@@ -484,6 +484,19 @@ function Add-Box {
     }
 }
 
+function Scale-Part-Uniform {
+    param([object]$Part, [float]$Scale)
+    if ($Scale -le 0.0 -or [double]::IsNaN($Scale) -or [double]::IsInfinity($Scale)) {
+        throw "Showcase uniform scale must be finite and positive."
+    }
+    foreach ($vertex in $Part.Vertices) {
+        $vertex.Position = @(
+            [float]($vertex.Position[0] * $Scale),
+            [float]($vertex.Position[1] * $Scale),
+            [float]($vertex.Position[2] * $Scale))
+    }
+}
+
 function Add-Quad {
     param([object]$Part, [float[][]]$Positions)
     if ($Positions.Count -ne 4) {
@@ -940,12 +953,14 @@ function New-Rocket {
         (New-Material "Rocket Brushed Metal" @(0.36, 0.40, 0.47, 1.0) 0.86 0.24 0.08 0.20 -NormalTextureIndex 0 -NormalTextureScale 0.14 -MetallicRoughnessTextureIndex 1),
         (New-Material "Rocket Heat Shield" @(0.035, 0.042, 0.050, 1.0) 0.62 0.38 0.0 0.20 @(0.0, 0.0, 0.0) 0.50 @(0.18, 0.025, 0.005) 0.40 -NormalTextureIndex 0 -NormalTextureScale 0.12 -MetallicRoughnessTextureIndex 1),
         (New-Material "Rocket Mission Stripe" @(0.68, 0.085, 0.028, 1.0) 0.18 0.34 0.12 0.20 -NormalTextureIndex 0 -NormalTextureScale 0.14 -MetallicRoughnessTextureIndex 1),
-        (New-Material "Rocket Avionics" @(0.018, 0.024, 0.034, 1.0) 0.72 0.28 0.10 0.18 -NormalTextureIndex 0 -NormalTextureScale 0.12 -MetallicRoughnessTextureIndex 1))
+        (New-Material "Rocket Avionics" @(0.018, 0.024, 0.034, 1.0) 0.72 0.28 0.10 0.18 -NormalTextureIndex 0 -NormalTextureScale 0.12 -MetallicRoughnessTextureIndex 1),
+        (New-Material "Rocket Launch Pad" @(0.075, 0.090, 0.105, 1.0) 0.32 0.68 0.10 0.16 -NormalTextureIndex 0 -NormalTextureScale 0.10 -MetallicRoughnessTextureIndex 1))
     $paint = New-Part 0
     $metal = New-Part 1
     $heat = New-Part 2
     $stripe = New-Part 3
     $avionics = New-Part 4
+    $pad = New-Part 5
     # Staged core, interstage, and ogive-like fairing sections provide a more
     # believable modern launch-vehicle silhouette while remaining bounded.
     Add-ProfiledFrustum $paint @(0.35, 1.15, 2.25, 2.50, 2.62, 2.76, 2.92, 3.12) @(0.62, 0.61, 0.58, 0.56, 0.54, 0.44, 0.27, 0.075) 0.0 0.0 56
@@ -976,7 +991,22 @@ function New-Rocket {
     Add-RadialFin $metal -1.0 0.0
     Add-RadialFin $metal 0.0 1.0
     Add-RadialFin $metal 0.0 -1.0
-    return [pscustomobject]@{ Parts = @($paint, $metal, $heat, $stripe, $avionics); Materials = $materials }
+    # Keep the rocket clearly larger than the giraffe in the generated asset,
+    # so the relationship survives the ordinary glTF import path.
+    # The bounded pad adds real launch-site context: a slab, raised flame
+    # trench plate, and four hold-down towers without a full launch complex.
+    Add-Box $pad @(0.0, -0.18, 0.0) @(1.30, 0.10, 1.30)
+    Add-Box $pad @(0.0, -0.045, 0.0) @(0.78, 0.035, 0.78)
+    foreach ($tower in @(
+            @(-0.92, -0.92), @(0.92, -0.92),
+            @(-0.92, 0.92), @(0.92, 0.92))) {
+        Add-Box $pad @($tower[0], 0.27, $tower[1]) @(0.08, 0.32, 0.08)
+    }
+    $rocketScale = 1.70
+    foreach ($part in @($paint, $metal, $heat, $stripe, $avionics, $pad)) {
+        Scale-Part-Uniform $part $rocketScale
+    }
+    return [pscustomobject]@{ Parts = @($paint, $metal, $heat, $stripe, $avionics, $pad); Materials = $materials }
 }
 
 if (-not [IO.Path]::IsPathRooted($OutputDirectory)) {

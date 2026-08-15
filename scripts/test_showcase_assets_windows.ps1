@@ -133,8 +133,9 @@ if ($smileWidth -gt 0.36 -or $smileHeight -gt 0.05) {
 $rocket = Get-Content -LiteralPath (Join-Path $OutputDirectory "original_realistic_rocket.gltf") -Raw | ConvertFrom-Json
 $rocketBinary = [IO.File]::ReadAllBytes((Join-Path $OutputDirectory "original_realistic_rocket.bin"))
 $rocketMaterialNames = @($rocket.materials | ForEach-Object { $_.name })
-if ($rocketMaterialNames -notcontains "Rocket Avionics") {
-    throw "Showcase rocket is missing its stage-separation/avionics material."
+if ($rocketMaterialNames -notcontains "Rocket Avionics" -or
+    $rocketMaterialNames -notcontains "Rocket Launch Pad") {
+    throw "Showcase rocket is missing its stage-separation/avionics or launch-pad material."
 }
 $rocketNormalBindings = @($rocket.materials | Where-Object { $_.PSObject.Properties.Name -contains "normalTexture" })
 if ($rocketNormalBindings.Count -ne $rocket.materials.Count) {
@@ -152,8 +153,22 @@ foreach ($material in $rocket.materials) {
         throw "Showcase rocket detail-normal scale is too strong for restrained surface response."
     }
 }
-if ($rocket.meshes[0].primitives.Count -lt 5) {
-    throw "Showcase rocket does not contain enough independently shaded stage and engine geometry."
+if ($rocket.meshes[0].primitives.Count -lt 6) {
+    throw "Showcase rocket does not contain enough independently shaded stage, engine, and launch-pad geometry."
+}
+$rocketCorePrimitive = @($rocket.meshes[0].primitives | Where-Object { $_.material -eq 0 })[0]
+$rocketCoreBounds = Get-PositionBounds -Gltf $rocket -Binary $rocketBinary -Primitive $rocketCorePrimitive
+$rocketCoreHeight = $rocketCoreBounds.Maximum[1] - $rocketCoreBounds.Minimum[1]
+if ($rocketCoreHeight -le ($giraffeTanHeight * 1.05)) {
+    throw "Showcase rocket core is not clearly larger than the giraffe body-to-head silhouette."
+}
+$rocketPadMaterialIndex = [array]::IndexOf($rocketMaterialNames, "Rocket Launch Pad")
+$rocketPadPrimitive = @($rocket.meshes[0].primitives | Where-Object { $_.material -eq $rocketPadMaterialIndex })[0]
+$rocketPadBounds = Get-PositionBounds -Gltf $rocket -Binary $rocketBinary -Primitive $rocketPadPrimitive
+$rocketPadWidth = $rocketPadBounds.Maximum[0] - $rocketPadBounds.Minimum[0]
+$rocketPadDepth = $rocketPadBounds.Maximum[2] - $rocketPadBounds.Minimum[2]
+if ($rocketPadWidth -lt 3.5 -or $rocketPadDepth -lt 3.5 -or $rocketPadBounds.Minimum[1] -ge 0.0) {
+    throw "Showcase rocket launch pad is missing its bounded ground-contact assembly."
 }
 $rocketStripePrimitive = @($rocket.meshes[0].primitives | Where-Object { $_.material -eq 3 })[0]
 $rocketStripeBounds = Get-PositionBounds -Gltf $rocket -Binary $rocketBinary -Primitive $rocketStripePrimitive
