@@ -62,7 +62,7 @@ relaunch gate restores the valid authored source and material sidecar
 transactionally; the current native path still uses one manager-owned material
 and does not claim native multi-material binding.
 
-- `cheeky_giraffe.gltf` — an original realism-oriented Cheeky Giraffe mascot with smooth high-curvature body and head forms, surface-fitted spots, a readable mane row, compact flattened ear lobes with inset inner-ear patches, connected tan ossicone stalks, and outward-angled dark-brown caps, layered eye whites/irises/pupils/highlights, nostrils, a defined muzzle/jaw, and a subdued mouth line. The presentation retains restrained personality, while the face is built from separately shaded anatomical features rather than a single cartoon eye material.
+- `cheeky_giraffe.gltf` — an original realism-oriented Cheeky Giraffe mascot with a taller, slimmer body-to-head silhouette, smooth high-curvature body and head forms, surface-fitted spots, a readable mane row, compact flattened ear lobes with inset inner-ear patches, connected tan ossicone stalks, and outward-angled dark-brown caps, layered eye whites/irises/pupils/highlights, nostrils, a defined muzzle/jaw, and a subdued mouth line. The presentation retains restrained personality, while the face is built from separately shaded anatomical features rather than a single cartoon eye material.
 - `original_realistic_rocket.gltf` — an original modern launch vehicle reference with a continuous tapered core/fairing profile, interstage and engine-skirt hardware, dark avionics separation bands, a bounded seven-engine bell/nozzle cluster, a restrained heat response, and tapered stabilization fins.
 
 ## Ownership and generation

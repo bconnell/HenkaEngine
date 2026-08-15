@@ -789,28 +789,28 @@ function New-Giraffe {
     # Keep the mascot identity restrained, but use continuous profiles and
     # believable curvature so the silhouette does not read as primitive
     # assembly when inspected from the authored front and three-quarter views.
-    Add-Ellipsoid $tan @(0.0, 1.42, 0.0) @(0.98, 0.96, 0.64) 28 56
-    Add-ProfiledFrustum $tan @(1.55, 1.86, 2.25, 2.72, 3.18, 3.55) @(0.41, 0.39, 0.36, 0.33, 0.30, 0.29) 0.0 0.0 48
-    Add-Ellipsoid $tan @(0.0, 3.82, 0.0) @(0.68, 0.54, 0.52) 26 48
-    foreach ($leg in @(@(-0.55, 0.0, -0.36), @(0.55, 0.0, -0.36), @(-0.55, 0.0, 0.36), @(0.55, 0.0, 0.36))) {
-        Add-ProfiledFrustum $tan @(0.08, 0.28, 0.62, 0.98, 1.10) @(0.16, 0.18, 0.17, 0.145, 0.13) $leg[0] $leg[2] 28
+    Add-Ellipsoid $tan @(0.0, 1.34, 0.0) @(0.86, 0.88, 0.56) 28 56
+    Add-ProfiledFrustum $tan @(1.50, 1.88, 2.32, 2.78, 3.22, 3.58) @(0.32, 0.30, 0.28, 0.25, 0.23, 0.21) 0.0 0.0 48
+    Add-Ellipsoid $tan @(0.0, 3.84, 0.0) @(0.56, 0.48, 0.43) 26 48
+    foreach ($leg in @(@(-0.48, 0.0, -0.30), @(0.48, 0.0, -0.30), @(-0.48, 0.0, 0.30), @(0.48, 0.0, 0.30))) {
+        Add-ProfiledFrustum $tan @(0.08, 0.30, 0.76, 1.12, 1.24) @(0.13, 0.15, 0.14, 0.12, 0.105) $leg[0] $leg[2] 28
     }
     # Model the ears as compact, flattened lobes in the head plane. The
     # previous deep capsules read like small missiles when viewed from the
     # front, especially with the inner-ear patch sitting on their top edge.
-    Add-Ellipsoid $tan @(-0.62, 4.22, 0.0) @(0.34, 0.23, 0.14) 12 24
-    Add-Ellipsoid $tan @(0.62, 4.22, 0.0) @(0.34, 0.23, 0.14) 12 24
-    Add-Frustum $tan 4.15 4.48 0.095 0.075 -0.24 0.0 16
-    Add-Frustum $tan 4.15 4.48 0.095 0.075 0.24 0.0 16
-    Add-Ellipsoid $earInner @(-0.62, 4.22, 0.15) @(0.18, 0.12, 0.025) 10 20
-    Add-Ellipsoid $earInner @(0.62, 4.22, 0.15) @(0.18, 0.12, 0.025) 10 20
+    Add-Ellipsoid $tan @(-0.52, 4.22, 0.0) @(0.28, 0.20, 0.12) 12 24
+    Add-Ellipsoid $tan @(0.52, 4.22, 0.0) @(0.28, 0.20, 0.12) 12 24
+    Add-Frustum $tan 4.15 4.48 0.075 0.060 -0.20 0.0 16
+    Add-Frustum $tan 4.15 4.48 0.075 0.060 0.20 0.0 16
+    Add-Ellipsoid $earInner @(-0.52, 4.22, 0.15) @(0.15, 0.11, 0.025) 10 20
+    Add-Ellipsoid $earInner @(0.52, 4.22, 0.15) @(0.15, 0.11, 0.025) 10 20
     # Ossicones use a visible tan stalk and a short cap angled outward from
     # the head. The previous isolated ellipsoids read as floating pegs and
     # gave the mascot an unintended, lopsided silhouette in front views.
-    Add-Frustum $tan 4.28 4.52 0.065 0.052 -0.24 0.0 16
-    Add-Frustum $tan 4.28 4.52 0.065 0.052 0.24 0.0 16
-    Add-OrientedCone $ossicone @(-0.24, 4.48, 0.0) @(-0.32, 4.72, -0.01) 0.10 16
-    Add-OrientedCone $ossicone @(0.24, 4.48, 0.0) @(0.32, 4.72, -0.01) 0.10 16
+    Add-Frustum $tan 4.28 4.52 0.055 0.044 -0.20 0.0 16
+    Add-Frustum $tan 4.28 4.52 0.055 0.044 0.20 0.0 16
+    Add-OrientedCone $ossicone @(-0.20, 4.48, 0.0) @(-0.27, 4.72, -0.01) 0.08 16
+    Add-OrientedCone $ossicone @(0.20, 4.48, 0.0) @(0.27, 4.72, -0.01) 0.08 16
     # A short mane row gives the neck a readable rear contour without making
     # the mascot realistic in the photographic sense.
     foreach ($maneY in @(1.95, 2.18, 2.41, 2.64, 2.87, 3.10, 3.33)) {
@@ -821,20 +821,20 @@ function New-Giraffe {
     # the pattern readable without introducing bumps or coplanar z-fighting.
     Add-SurfaceSpot $spots @(0.0, 2.22, 0.30) @(0.0, 0.0, 1.0) 0.13 0.22 -0.15
     Add-SurfaceSpot $spots @(0.0, 2.78, 0.30) @(0.0, 0.0, 1.0) 0.12 0.17 0.25
-    Add-Ellipsoid $cream @(0.0, 3.63, 0.50) @(0.40, 0.22, 0.19) 18 32
-    Add-Ellipsoid $cream @(0.0, 3.48, 0.53) @(0.29, 0.12, 0.14) 14 28
-    Add-Ellipsoid $eyes @(-0.25, 3.98, 0.50) @(0.075, 0.105, 0.045) 16 28
-    Add-Ellipsoid $eyes @(0.25, 3.98, 0.50) @(0.075, 0.105, 0.045) 16 28
-    Add-Ellipsoid $iris @(-0.25, 3.98, 0.548) @(0.040, 0.060, 0.015) 12 24
-    Add-Ellipsoid $iris @(0.25, 3.98, 0.548) @(0.040, 0.060, 0.015) 12 24
-    Add-Ellipsoid $details @(-0.25, 3.98, 0.563) @(0.015, 0.028, 0.007) 10 18
-    Add-Ellipsoid $details @(0.25, 3.98, 0.563) @(0.015, 0.028, 0.007) 10 18
-    Add-Ellipsoid $eyes @(-0.262, 4.008, 0.570) @(0.008, 0.012, 0.004) 8 14
-    Add-Ellipsoid $eyes @(0.238, 4.008, 0.570) @(0.008, 0.012, 0.004) 8 14
-    Add-Ellipsoid $details @(-0.14, 3.66, 0.695) @(0.070, 0.038, 0.014) 8 14
-    Add-Ellipsoid $details @(0.14, 3.66, 0.695) @(0.070, 0.038, 0.014) 8 14
-    Add-Ellipsoid $smile @(0.0, 3.55, 0.695) @(0.24, 0.035, 0.014) 8 16
-    Add-Ellipsoid $smile @(0.14, 3.58, 0.685) @(0.18, 0.045, 0.016) 8 16
+    Add-Ellipsoid $cream @(0.0, 3.63, 0.42) @(0.32, 0.18, 0.14) 18 32
+    Add-Ellipsoid $cream @(0.0, 3.48, 0.44) @(0.22, 0.10, 0.10) 14 28
+    Add-Ellipsoid $eyes @(-0.21, 3.98, 0.43) @(0.065, 0.090, 0.035) 16 28
+    Add-Ellipsoid $eyes @(0.21, 3.98, 0.43) @(0.065, 0.090, 0.035) 16 28
+    Add-Ellipsoid $iris @(-0.21, 3.98, 0.475) @(0.034, 0.050, 0.012) 12 24
+    Add-Ellipsoid $iris @(0.21, 3.98, 0.475) @(0.034, 0.050, 0.012) 12 24
+    Add-Ellipsoid $details @(-0.21, 3.98, 0.488) @(0.012, 0.024, 0.006) 10 18
+    Add-Ellipsoid $details @(0.21, 3.98, 0.488) @(0.012, 0.024, 0.006) 10 18
+    Add-Ellipsoid $eyes @(-0.218, 4.008, 0.495) @(0.007, 0.010, 0.003) 8 14
+    Add-Ellipsoid $eyes @(0.202, 4.008, 0.495) @(0.007, 0.010, 0.003) 8 14
+    Add-Ellipsoid $details @(-0.12, 3.66, 0.56) @(0.055, 0.030, 0.010) 8 14
+    Add-Ellipsoid $details @(0.12, 3.66, 0.56) @(0.055, 0.030, 0.010) 8 14
+    Add-Ellipsoid $smile @(0.0, 3.55, 0.56) @(0.19, 0.028, 0.010) 8 16
+    Add-Ellipsoid $smile @(0.11, 3.58, 0.55) @(0.14, 0.035, 0.012) 8 16
     return [pscustomobject]@{ Parts = @($tan, $spots, $cream, $eyes, $iris, $details, $smile, $earInner, $ossicone); Materials = $materials }
 }
 

@@ -93,11 +93,19 @@ if ($null -eq $giraffeTan -or
     throw "Showcase giraffe does not bind its deterministic flush spot base-color texture."
 }
 $giraffeVertexCount = 0
+$giraffeBinary = [IO.File]::ReadAllBytes((Join-Path $OutputDirectory "cheeky_giraffe.bin"))
 foreach ($primitive in $giraffe.meshes[0].primitives) {
     $giraffeVertexCount += [int]$giraffe.accessors[$primitive.attributes.POSITION].count
 }
 if ($giraffeVertexCount -lt 9000) {
     throw "Showcase giraffe lost its bounded curved-form topology density."
+}
+$giraffeTanPrimitive = @($giraffe.meshes[0].primitives | Where-Object { $_.material -eq 0 })[0]
+$giraffeTanBounds = Get-PositionBounds -Gltf $giraffe -Binary $giraffeBinary -Primitive $giraffeTanPrimitive
+$giraffeTanWidth = $giraffeTanBounds.Maximum[0] - $giraffeTanBounds.Minimum[0]
+$giraffeTanHeight = $giraffeTanBounds.Maximum[1] - $giraffeTanBounds.Minimum[1]
+if ($giraffeTanWidth -gt 1.90 -or $giraffeTanHeight -lt 4.35) {
+    throw "Showcase giraffe silhouette lost its tall, restrained body-to-head proportion contract."
 }
 foreach ($material in $giraffe.materials) {
     if ($material.PSObject.Properties.Name -contains "normalTexture" -and
@@ -108,7 +116,6 @@ foreach ($material in $giraffe.materials) {
 if ($giraffe.meshes[0].primitives.Count -lt 8) {
     throw "Showcase giraffe does not contain enough independently shaded feature geometry."
 }
-$giraffeBinary = [IO.File]::ReadAllBytes((Join-Path $OutputDirectory "cheeky_giraffe.bin"))
 $earPrimitive = @($giraffe.meshes[0].primitives | Where-Object { $_.material -eq 7 })[0]
 $earBounds = Get-PositionBounds -Gltf $giraffe -Binary $giraffeBinary -Primitive $earPrimitive
 $earYSpan = $earBounds.Maximum[1] - $earBounds.Minimum[1]
