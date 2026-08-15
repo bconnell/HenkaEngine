@@ -15,6 +15,8 @@ typedef enum sandbox3d_material_access
     SANDBOX3D_MATERIAL_ACCESS_EDITABLE_INSTANCE
 } sandbox3d_material_access;
 
+#define SANDBOX3D_MATERIAL_HISTORY_CAPACITY 16U
+
 typedef struct sandbox3d_material_editor_binding
 {
     henka_entity entity;
@@ -24,6 +26,10 @@ typedef struct sandbox3d_material_editor_binding
      * pointer fields remain available for the existing Marker binding and
      * focused tests that provide their own stack-owned instance. */
     henka_material_instance owned_instance;
+    henka_material_instance* undo_history;
+    henka_material_instance* redo_history;
+    size_t undo_count;
+    size_t redo_count;
     bool valid;
 } sandbox3d_material_editor_binding;
 
@@ -49,6 +55,10 @@ henka_result sandbox3d_resolve_selected_material(
 henka_result sandbox3d_prepare_material_editor_binding(
     henka_scene* scene,
     henka_entity entity,
+    sandbox3d_material_editor_binding* bindings,
+    size_t binding_count);
+
+void sandbox3d_destroy_material_editor_bindings(
     sandbox3d_material_editor_binding* bindings,
     size_t binding_count);
 

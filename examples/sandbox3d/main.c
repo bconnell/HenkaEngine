@@ -394,6 +394,7 @@ typedef struct sandbox3d_state
     bool native_authoring_project_controls_reported;
     bool native_authoring_material_control_reported;
     bool native_authoring_material_editor_reported;
+    bool native_authoring_material_history_reported;
     henka_terrain_world* terrain_world;
     henka_terrain_storage* terrain_storage;
     henka_terrain_streamer* terrain_streamer;
@@ -995,6 +996,141 @@ static float sandbox3d_material_editor_clamp(float value, float minimum, float m
     return value < minimum ? minimum : (value > maximum ? maximum : value);
 }
 
+static void sandbox3d_material_history_reset(
+    sandbox3d_material_editor_binding* binding)
+{
+    if (binding != NULL)
+    {
+        binding->undo_count = 0U;
+        binding->redo_count = 0U;
+    }
+}
+
+static void sandbox3d_material_history_append_undo(
+    sandbox3d_material_editor_binding* binding,
+    const henka_material_instance* previous)
+{
+    if (binding == NULL || previous == NULL)
+    {
+        return;
+    }
+    if (binding->undo_count >= SANDBOX3D_MATERIAL_HISTORY_CAPACITY)
+    {
+        memmove(
+            &binding->undo_history[0],
+            &binding->undo_history[1],
+            (SANDBOX3D_MATERIAL_HISTORY_CAPACITY - 1U) *
+                sizeof(binding->undo_history[0]));
+        binding->undo_count = SANDBOX3D_MATERIAL_HISTORY_CAPACITY - 1U;
+    }
+    binding->undo_history[binding->undo_count++] = *previous;
+}
+
+static void sandbox3d_material_history_push_undo(
+    sandbox3d_material_editor_binding* binding,
+    const henka_material_instance* previous)
+{
+    sandbox3d_material_history_append_undo(binding, previous);
+    if (binding != NULL)
+    {
+        binding->redo_count = 0U;
+    }
+}
+
+static void sandbox3d_material_history_push_redo(
+    sandbox3d_material_editor_binding* binding,
+    const henka_material_instance* current)
+{
+    if (binding == NULL || current == NULL)
+    {
+        return;
+    }
+    if (binding->redo_count >= SANDBOX3D_MATERIAL_HISTORY_CAPACITY)
+    {
+        memmove(
+            &binding->redo_history[0],
+            &binding->redo_history[1],
+            (SANDBOX3D_MATERIAL_HISTORY_CAPACITY - 1U) *
+                sizeof(binding->redo_history[0]));
+        binding->redo_count = SANDBOX3D_MATERIAL_HISTORY_CAPACITY - 1U;
+    }
+    binding->redo_history[binding->redo_count++] = *current;
+}
+
+static henka_result sandbox3d_material_history_undo(
+    sandbox3d_state* state,
+    sandbox3d_material_editor_binding* binding)
+{
+    henka_material_instance current;
+    henka_material_instance candidate;
+    henka_result result;
+
+    if (state == NULL || binding == NULL || !binding->valid ||
+        binding->instance == NULL || binding->asset == NULL ||
+        binding->instance->definition != binding->asset ||
+        state->scene == NULL || binding->entity == HENKA_INVALID_ENTITY ||
+        binding->undo_count == 0U)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    current = *binding->instance;
+    candidate = binding->undo_history[binding->undo_count - 1U];
+    if (candidate.definition != binding->asset)
+    {
+        sandbox3d_material_history_reset(binding);
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    result = henka_assets_apply_material_instance_to_entity(
+        &candidate,
+        state->scene,
+        binding->entity);
+    if (result != HENKA_SUCCESS)
+    {
+        return result;
+    }
+    *binding->instance = candidate;
+    --binding->undo_count;
+    sandbox3d_material_history_push_redo(binding, &current);
+    return HENKA_SUCCESS;
+}
+
+static henka_result sandbox3d_material_history_redo(
+    sandbox3d_state* state,
+    sandbox3d_material_editor_binding* binding)
+{
+    henka_material_instance current;
+    henka_material_instance candidate;
+    henka_result result;
+
+    if (state == NULL || binding == NULL || !binding->valid ||
+        binding->instance == NULL || binding->asset == NULL ||
+        binding->instance->definition != binding->asset ||
+        state->scene == NULL || binding->entity == HENKA_INVALID_ENTITY ||
+        binding->redo_count == 0U)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    current = *binding->instance;
+    candidate = binding->redo_history[binding->redo_count - 1U];
+    if (candidate.definition != binding->asset)
+    {
+        sandbox3d_material_history_reset(binding);
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    result = henka_assets_apply_material_instance_to_entity(
+        &candidate,
+        state->scene,
+        binding->entity);
+    if (result != HENKA_SUCCESS)
+    {
+        return result;
+    }
+    *binding->instance = candidate;
+    --binding->redo_count;
+    sandbox3d_material_history_append_undo(binding, &current);
+    return HENKA_SUCCESS;
+}
+
 static henka_result sandbox3d_material_editor_apply_delta(
     sandbox3d_state* state,
     sandbox3d_material_editor_binding* binding,
@@ -1232,6 +1368,10 @@ static henka_result sandbox3d_material_editor_apply_delta(
     {
         *binding->instance = previous;
     }
+    else
+    {
+        sandbox3d_material_history_push_undo(binding, &previous);
+    }
 
     return result;
 }
@@ -1290,6 +1430,7 @@ static henka_result sandbox3d_apply_texture_to_material_binding(
         return result;
     }
     *binding->instance = candidate;
+    sandbox3d_material_history_push_undo(binding, &previous);
     return HENKA_SUCCESS;
 }
 
@@ -1327,6 +1468,7 @@ static henka_result sandbox3d_restore_texture_material_binding(
         return result;
     }
     *binding->instance = candidate;
+    sandbox3d_material_history_push_undo(binding, &previous);
     return HENKA_SUCCESS;
 }
 
@@ -1969,6 +2111,170 @@ static void sandbox3d_draw_material_instance_editor(
                     "%s",
                     "Material reimport was rejected transactionally.");
             }
+        }
+    }
+}
+
+static bool sandbox3d_details_flow_next_row(
+    sandbox3d_state* state,
+    henka_ui_rect viewport,
+    float row_height,
+    size_t indent_level,
+    henka_ui_rect* out_bounds);
+static henka_result sandbox3d_resolve_authoring_project_paths(
+    henka_engine* engine,
+    henka_entity entity,
+    char** out_project_path,
+    char** out_source_path);
+
+static void sandbox3d_draw_native_authoring_project_controls(
+    henka_engine* engine,
+    sandbox3d_state* state,
+    henka_entity entity,
+    const char* display_name,
+    henka_ui_rect viewport)
+{
+    henka_ui_rect row;
+    const bool project_row_visible =
+        sandbox3d_details_flow_next_row(
+            state,
+            viewport,
+            24.0f,
+            1U,
+            &row);
+
+    if (row.width < 290.0f)
+    {
+        return;
+    }
+    if (!state->native_authoring_project_controls_reported)
+    {
+        printf(
+            "Native authoring project controls: name=%s save_x=%.1f save_y=%.1f reload_x=%.1f reload_y=%.1f width=140.0 height=24.0.\n",
+            display_name,
+            row.x,
+            row.y,
+            row.x + 148.0f,
+            row.y);
+        fflush(stdout);
+        state->native_authoring_project_controls_reported = true;
+    }
+    if (!project_row_visible)
+    {
+        state->native_authoring_project_controls_reported = false;
+        return;
+    }
+
+    {
+        const bool save_requested = henka_ui_button(
+            state->ui,
+            "authoring_save_source",
+            (henka_ui_rect){row.x, row.y, 140.0f, 24.0f},
+            "Save Project");
+        const bool reload_requested = henka_ui_button(
+            state->ui,
+            "authoring_reload_source",
+            (henka_ui_rect){row.x + 148.0f, row.y, 140.0f, 24.0f},
+            "Reload Project");
+        if (save_requested || reload_requested)
+        {
+            char* project_path = NULL;
+            char* source_path = NULL;
+            henka_material_instance material_candidate;
+            bool material_present = false;
+            henka_result result = sandbox3d_resolve_authoring_project_paths(
+                engine,
+                entity,
+                &project_path,
+                &source_path);
+            if (result == HENKA_SUCCESS && reload_requested)
+            {
+                result = sandbox3d_load_native_authoring_material(
+                    engine,
+                    state,
+                    entity,
+                    project_path,
+                    &material_candidate,
+                    &material_present);
+            }
+            if (result == HENKA_SUCCESS)
+            {
+                result = save_requested
+                    ? sandbox3d_authoring_object_save_project(
+                        state->authoring_object,
+                        project_path,
+                        source_path)
+                    : sandbox3d_authoring_object_load_project(
+                        state->authoring_object,
+                        project_path);
+            }
+            if (result == HENKA_SUCCESS && save_requested)
+            {
+                result = sandbox3d_save_native_authoring_material(
+                    engine,
+                    state,
+                    entity,
+                    project_path);
+            }
+            if (result == HENKA_SUCCESS && reload_requested && material_present)
+            {
+                sandbox3d_material_editor_binding* binding =
+                    sandbox3d_find_material_binding(state, entity);
+                if (binding == NULL ||
+                    henka_assets_apply_material_instance_to_entity(
+                        &material_candidate,
+                        state->scene,
+                        entity) != HENKA_SUCCESS)
+                {
+                    result = HENKA_ERROR_ASSET_SOURCE;
+                }
+                else
+                {
+                    *binding->instance = material_candidate;
+                    sandbox3d_material_history_reset(binding);
+                }
+            }
+            henka_free(source_path);
+            henka_free(project_path);
+            printf(
+                "Native authoring project request: save=%d reload=%d result=%s.\n",
+                save_requested ? 1 : 0,
+                reload_requested ? 1 : 0,
+                henka_result_to_string(result));
+            fflush(stdout);
+            if (result == HENKA_SUCCESS)
+            {
+                const henka_authoring_mesh_counts counts =
+                    henka_authoring_mesh_get_counts(
+                        sandbox3d_authoring_object_get_mesh(
+                            state->authoring_object));
+                printf(
+                    "Native authoring dogfood: project %s for %s; vertices=%zu faces=%zu source_state=HENKA_NATIVE_EDITABLE_SOURCE.\n",
+                    save_requested ? "saved" : "reloaded",
+                    display_name,
+                    counts.vertices,
+                    counts.faces);
+                fflush(stdout);
+                if (state->native_authoring_material_asset != NULL &&
+                    state->native_authoring_material_entity == entity)
+                {
+                    printf(
+                        "Native authoring dogfood: material state %s for %s source_state=HENKA_NATIVE_EDITABLE_MATERIAL_INSTANCE.\n",
+                        save_requested ? "saved" : (material_present ? "reloaded" : "retained"),
+                        display_name);
+                    fflush(stdout);
+                }
+            }
+            sandbox3d_set_status(
+                state,
+                result != HENKA_SUCCESS,
+                result == HENKA_SUCCESS
+                    ? (save_requested
+                        ? "Authoring project and mesh source saved to the bounded user slot."
+                        : "Authoring project reloaded and evaluated transactionally.")
+                    : (save_requested
+                        ? "Authoring project save failed."
+                        : "Authoring project reload failed; the current render was retained."));
         }
     }
 }
@@ -7349,6 +7655,7 @@ static void sandbox3d_release_owned_resources(sandbox3d_state* state)
     state->native_authoring_project_controls_reported = false;
     state->native_authoring_material_control_reported = false;
     state->native_authoring_material_editor_reported = false;
+    state->native_authoring_material_history_reported = false;
     for (int terrain_layer_index = 0;
          terrain_layer_index < (int)HENKA_MATERIAL_TERRAIN_LAYER_COUNT;
          ++terrain_layer_index)
@@ -8444,6 +8751,11 @@ static bool sandbox3d_promote_authoring_material(
     }
     state->native_authoring_material_asset = native_asset;
     state->native_authoring_material_entity = entity;
+    state->native_authoring_material_editor_reported = false;
+    state->native_authoring_material_history_reported = false;
+    state->native_authoring_face_controls_reported = false;
+    state->native_authoring_move_reported = false;
+    state->native_authoring_project_controls_reported = false;
     printf(
         "Native authoring material: editable runtime definition adopted for entity=%llu source_state=HENKA_NATIVE_EDITABLE_MATERIAL_INSTANCE.\n",
         (unsigned long long)entity);
@@ -17444,7 +17756,7 @@ details_group_authoring:
                 "%s (%zu selected)",
                 selection_label,
                 selected_component_count);
-            if (sandbox3d_details_flow_next_row(state, flow_desc.bounds, 22.0f, 1U, &row))
+            if (sandbox3d_details_flow_next_row(state, flow_desc.bounds, 13.0f, 1U, &row))
             {
                 const bool native_material_owned =
                     state->native_authoring_material_asset != NULL &&
@@ -17614,6 +17926,60 @@ details_group_authoring:
                     }
                 }
             }
+            if (state->native_authoring_material_asset != NULL &&
+                state->native_authoring_material_entity == entity &&
+                material_view.editor_binding != NULL &&
+                sandbox3d_details_flow_next_row(state, flow_desc.bounds, 28.0f, 1U, &row) &&
+                row.width >= 290.0f)
+            {
+                if (!state->native_authoring_material_history_reported)
+                {
+                    printf(
+                        "Native authoring material history: name=%s undo_x=%.1f redo_x=%.1f y=%.1f width=140.0 height=24.0.\n",
+                        display_name,
+                        row.x,
+                        row.x + 148.0f,
+                        row.y);
+                    fflush(stdout);
+                    state->native_authoring_material_history_reported = true;
+                }
+                if (henka_ui_button(
+                        state->ui,
+                        "authoring_material_undo",
+                        (henka_ui_rect){row.x, row.y, 140.0f, 24.0f},
+                        "Undo Mat") &&
+                    sandbox3d_material_history_undo(
+                        state,
+                        material_view.editor_binding) == HENKA_SUCCESS)
+                {
+                    printf(
+                        "Native authoring material undo: name=%s source_state=HENKA_NATIVE_EDITABLE_MATERIAL_INSTANCE.\n",
+                        display_name);
+                    fflush(stdout);
+                    sandbox3d_set_status(state, false, "Native material edit undone transactionally.");
+                }
+                if (henka_ui_button(
+                        state->ui,
+                        "authoring_material_redo",
+                        (henka_ui_rect){row.x + 148.0f, row.y, 140.0f, 24.0f},
+                        "Redo Mat") &&
+                    sandbox3d_material_history_redo(
+                        state,
+                        material_view.editor_binding) == HENKA_SUCCESS)
+                {
+                    printf(
+                        "Native authoring material redo: name=%s source_state=HENKA_NATIVE_EDITABLE_MATERIAL_INSTANCE.\n",
+                        display_name);
+                    fflush(stdout);
+                    sandbox3d_set_status(state, false, "Native material edit redone transactionally.");
+                }
+            }
+            sandbox3d_draw_native_authoring_project_controls(
+                engine,
+                state,
+                entity,
+                display_name,
+                flow_desc.bounds);
             if (sandbox3d_details_flow_next_row(state, flow_desc.bounds, 28.0f, 1U, &row) && row.width >= 290.0f)
             {
                 if (!state->native_authoring_face_controls_reported)
@@ -17702,7 +18068,7 @@ details_group_authoring:
                 }
             }
             if (selection_mode != SANDBOX3D_AUTHORING_SELECTION_FACE &&
-                sandbox3d_details_flow_next_row(state, flow_desc.bounds, 22.0f, 1U, &row))
+                sandbox3d_details_flow_next_row(state, flow_desc.bounds, 17.0f, 1U, &row))
             {
                 sandbox3d_draw_value_row(
                     state->ui, row.x, row.y, row.width,
@@ -17750,7 +18116,7 @@ details_group_authoring:
                     sandbox3d_set_status(state, false, "Selected face material region updated and evaluated.");
                 }
             }
-            if (sandbox3d_details_flow_next_row(state, flow_desc.bounds, 22.0f, 1U, &row))
+            if (sandbox3d_details_flow_next_row(state, flow_desc.bounds, 14.0f, 1U, &row))
             {
                 uint32_t minimum_region = 0U;
                 uint32_t maximum_region = 0U;
@@ -17781,124 +18147,6 @@ details_group_authoring:
                     row.width,
                     "Evaluated Regions",
                     evaluated_material_region_text);
-            }
-            if (sandbox3d_details_flow_next_row(state, flow_desc.bounds, 28.0f, 1U, &row) && row.width >= 290.0f)
-            {
-                if (!state->native_authoring_project_controls_reported)
-                {
-                    printf(
-                        "Native authoring project controls: name=%s save_x=%.1f save_y=%.1f reload_x=%.1f reload_y=%.1f width=140.0 height=24.0.\n",
-                        display_name,
-                        row.x,
-                        row.y,
-                        row.x + 148.0f,
-                        row.y);
-                    fflush(stdout);
-                    state->native_authoring_project_controls_reported = true;
-                }
-                const bool save_requested = henka_ui_button(
-                    state->ui,
-                    "authoring_save_source",
-                    (henka_ui_rect){row.x, row.y, 140.0f, 24.0f},
-                    "Save Project");
-                const bool reload_requested = henka_ui_button(
-                    state->ui,
-                    "authoring_reload_source",
-                    (henka_ui_rect){row.x + 148.0f, row.y, 140.0f, 24.0f},
-                    "Reload Project");
-                if (save_requested || reload_requested)
-                {
-                    char* project_path = NULL;
-                    char* source_path = NULL;
-                    henka_material_instance material_candidate;
-                    bool material_present = false;
-                    result = sandbox3d_resolve_authoring_project_paths(
-                        engine,
-                        entity,
-                        &project_path,
-                        &source_path);
-                    if (result == HENKA_SUCCESS)
-                    {
-                        if (reload_requested)
-                        {
-                            result = sandbox3d_load_native_authoring_material(
-                                engine,
-                                state,
-                                entity,
-                                project_path,
-                                &material_candidate,
-                                &material_present);
-                        }
-                        if (result == HENKA_SUCCESS)
-                        {
-                            result = save_requested
-                                ? sandbox3d_authoring_object_save_project(
-                                    state->authoring_object, project_path, source_path)
-                                : sandbox3d_authoring_object_load_project(
-                                    state->authoring_object, project_path);
-                        }
-                        if (result == HENKA_SUCCESS && save_requested)
-                        {
-                            result = sandbox3d_save_native_authoring_material(
-                                engine, state, entity, project_path);
-                        }
-                        if (result == HENKA_SUCCESS && reload_requested && material_present)
-                        {
-                            sandbox3d_material_editor_binding* binding =
-                                sandbox3d_find_material_binding(state, entity);
-                            if (binding == NULL ||
-                                henka_assets_apply_material_instance_to_entity(
-                                    &material_candidate, state->scene, entity) != HENKA_SUCCESS)
-                            {
-                                result = HENKA_ERROR_ASSET_SOURCE;
-                            }
-                            else
-                            {
-                                *binding->instance = material_candidate;
-                            }
-                        }
-                    }
-                    henka_free(source_path);
-                    henka_free(project_path);
-                    printf(
-                        "Native authoring project request: save=%d reload=%d result=%s.\n",
-                        save_requested ? 1 : 0,
-                        reload_requested ? 1 : 0,
-                        henka_result_to_string(result));
-                    fflush(stdout);
-                    if (result == HENKA_SUCCESS)
-                    {
-                        const henka_authoring_mesh_counts counts =
-                            henka_authoring_mesh_get_counts(
-                                sandbox3d_authoring_object_get_mesh(state->authoring_object));
-                        printf(
-                            "Native authoring dogfood: project %s for %s; vertices=%zu faces=%zu source_state=HENKA_NATIVE_EDITABLE_SOURCE.\n",
-                            save_requested ? "saved" : "reloaded",
-                            display_name,
-                            counts.vertices,
-                            counts.faces);
-                        fflush(stdout);
-                        if (state->native_authoring_material_asset != NULL &&
-                            state->native_authoring_material_entity == entity)
-                        {
-                            printf(
-                                "Native authoring dogfood: material state %s for %s source_state=HENKA_NATIVE_EDITABLE_MATERIAL_INSTANCE.\n",
-                                save_requested ? "saved" : (material_present ? "reloaded" : "retained"),
-                                display_name);
-                            fflush(stdout);
-                        }
-                    }
-                    sandbox3d_set_status(
-                        state,
-                        result != HENKA_SUCCESS,
-                        result == HENKA_SUCCESS
-                            ? (save_requested
-                                ? "Authoring project and mesh source saved to the bounded user slot."
-                                : "Authoring project reloaded and evaluated transactionally.")
-                            : (save_requested
-                                ? "Authoring project save failed."
-                                : "Authoring project reload failed; the current render was retained."));
-                }
             }
             if (selection_mode == SANDBOX3D_AUTHORING_SELECTION_FACE &&
                 sandbox3d_details_flow_next_row(state, flow_desc.bounds, 28.0f, 1U, &row) && row.width >= 290.0f)
@@ -23903,6 +24151,9 @@ static void sandbox3d_shutdown(henka_engine* engine, void* user_data)
     henka_engine_set_mouse_capture(engine, false);
     henka_engine_set_scene(engine, NULL);
     henka_engine_set_ui_context(engine, NULL);
+    sandbox3d_destroy_material_editor_bindings(
+        state->material_editor_bindings,
+        SANDBOX3D_MAX_MATERIAL_EDITOR_BINDINGS);
     sandbox3d_release_owned_resources(state);
 }
 

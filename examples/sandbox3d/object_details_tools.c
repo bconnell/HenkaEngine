@@ -3,13 +3,33 @@
 #include <stdio.h>
 #include <string.h>
 
+#include <henka/memory.h>
+
 static void sandbox3d_clear_material_editor_binding(
     sandbox3d_material_editor_binding* binding)
 {
     if (binding != NULL)
     {
+        henka_free(binding->undo_history);
+        henka_free(binding->redo_history);
         memset(binding, 0, sizeof(*binding));
         binding->entity = HENKA_INVALID_ENTITY;
+    }
+}
+
+void sandbox3d_destroy_material_editor_bindings(
+    sandbox3d_material_editor_binding* bindings,
+    size_t binding_count)
+{
+    size_t index;
+
+    if (bindings == NULL)
+    {
+        return;
+    }
+    for (index = 0U; index < binding_count; ++index)
+    {
+        sandbox3d_clear_material_editor_binding(&bindings[index]);
     }
 }
 
@@ -92,6 +112,17 @@ henka_result sandbox3d_prepare_material_editor_binding(
         sandbox3d_clear_material_editor_binding(binding);
         binding->entity = entity;
         binding->asset = (henka_material_asset*)scene_asset;
+        binding->undo_history = henka_calloc(
+            SANDBOX3D_MATERIAL_HISTORY_CAPACITY,
+            sizeof(*binding->undo_history));
+        binding->redo_history = henka_calloc(
+            SANDBOX3D_MATERIAL_HISTORY_CAPACITY,
+            sizeof(*binding->redo_history));
+        if (binding->undo_history == NULL || binding->redo_history == NULL)
+        {
+            sandbox3d_clear_material_editor_binding(binding);
+            return HENKA_ERROR_OUT_OF_MEMORY;
+        }
         result = henka_assets_create_material_instance(
             scene_asset, &binding->owned_instance);
         if (result != HENKA_SUCCESS)
@@ -120,6 +151,8 @@ henka_result sandbox3d_prepare_material_editor_binding(
         binding->instance = &binding->owned_instance;
         binding->asset = (henka_material_asset*)scene_asset;
         binding->entity = entity;
+        binding->undo_count = 0U;
+        binding->redo_count = 0U;
         binding->valid = true;
         return HENKA_SUCCESS;
     }

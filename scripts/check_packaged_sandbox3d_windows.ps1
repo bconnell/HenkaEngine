@@ -459,6 +459,51 @@ function Click-FramebufferPoint {
         [System.UIntPtr]::Zero)
     Start-Sleep -Milliseconds 250
 }
+
+function Scroll-FramebufferPoint {
+    param(
+        [Parameter(Mandatory = $true)][System.IntPtr]$Handle,
+        [Parameter(Mandatory = $true)][int]$FramebufferWidth,
+        [Parameter(Mandatory = $true)][int]$FramebufferHeight,
+        [Parameter(Mandatory = $true)][double]$FramebufferX,
+        [Parameter(Mandatory = $true)][double]$FramebufferY,
+        [Parameter(Mandatory = $true)][int]$WheelDelta
+    )
+
+    if ($WheelDelta -eq 0) {
+        throw "The packaged UI scroll delta must be non-zero."
+    }
+
+    $clientRect = New-Object NativeMethods+RECT
+    if (-not [NativeMethods]::GetClientRect($Handle, [ref]$clientRect)) {
+        throw "The packaged sandbox client bounds could not be read for scroll input."
+    }
+    $clientWidth = $clientRect.Right - $clientRect.Left
+    $clientHeight = $clientRect.Bottom - $clientRect.Top
+    if ($FramebufferWidth -le 0 -or $FramebufferHeight -le 0 -or
+        $clientWidth -le 0 -or $clientHeight -le 0) {
+        throw "Invalid framebuffer or client dimensions for scroll input."
+    }
+
+    $point = New-Object NativeMethods+POINT
+    $point.X = [int][Math]::Round($FramebufferX * [double]$clientWidth / [double]$FramebufferWidth)
+    $point.Y = [int][Math]::Round($FramebufferY * [double]$clientHeight / [double]$FramebufferHeight)
+    if (-not [NativeMethods]::ClientToScreen($Handle, [ref]$point)) {
+        throw "The packaged sandbox scroll point could not be converted to screen coordinates."
+    }
+
+    Set-HenkaAutomationForeground -Handle $Handle
+    [NativeMethods]::SetCursorPos($point.X, $point.Y) | Out-Null
+    Start-Sleep -Milliseconds 100
+    $wheelWParam = [IntPtr](([int64]$WheelDelta) -shl 16)
+    $wheelLParam = New-HenkaMouseLParam -X $point.X -Y $point.Y
+    [NativeMethods]::PostMessage(
+        $Handle,
+        0x020A,
+        $wheelWParam,
+        $wheelLParam) | Out-Null
+    Start-Sleep -Milliseconds 250
+}
 function Click-FramebufferPointRight {
     param(
         [Parameter(Mandatory = $true)][System.IntPtr]$Handle,
@@ -802,7 +847,7 @@ if ($NonInteractive) {
     if ($smoke.Stdout -notmatch "Runtime mode: Packaged") {
         throw "The packaged smoke test did not report Packaged mode."
     }
-    if ($smoke.Stdout -notmatch "Showcase assets: Cheeky Giraffe \(5 parts\), Original Realistic Rocket \(4 parts\)") {
+    if ($smoke.Stdout -notmatch "Showcase assets: Cheeky Giraffe \(9 parts\), Original Realistic Rocket \(5 parts\)") {
         throw "The packaged smoke test did not load both showcase glTF scenes."
     }
     $terrainPassMatch = [regex]::Match($smoke.Stdout, "Terrain Rendered pass diagnostics: mask=0x([0-9a-fA-F]+) required=0x([0-9a-fA-F]+)")
@@ -1408,6 +1453,76 @@ try {
             throw "The user-facing native texture assignment did not complete."
         }
         Write-Output "[pass] User-facing native material and texture edits completed"
+        if (-not (Wait-FileContains -Path $stdoutPath -Pattern "Native authoring material history:" -TimeoutMilliseconds 1200)) {
+            for ($scrollAttempt = 0; $scrollAttempt -lt 4; ++$scrollAttempt) {
+                Scroll-FramebufferPoint `
+                    -Handle $mainWindowHandle `
+                    -FramebufferWidth $framebufferWidth `
+                    -FramebufferHeight $framebufferHeight `
+                    -FramebufferX ($detailsX + [Math]::Max(12.0, $detailsWidth - 18.0)) `
+                    -FramebufferY ($detailsY + [Math]::Max(30.0, $detailsHeight * 0.55)) `
+                    -WheelDelta -120
+                if (Wait-FileContains -Path $stdoutPath -Pattern "Native authoring material history:" -TimeoutMilliseconds 1000) {
+                    break
+                }
+            }
+        }
+        if (-not (Wait-FileContains -Path $stdoutPath -Pattern "Native authoring material history:" -TimeoutMilliseconds 2500)) {
+            throw "The converted showcase did not expose the native material undo/redo controls."
+        }
+        $nativeMaterialHistoryMatch = Get-LastLogRegexMatch `
+            -Path $stdoutPath `
+            -Pattern 'Native authoring material history: name=(.+) undo_x=([-0-9.]+) redo_x=([-0-9.]+) y=([-0-9.]+) width=140.0 height=24.0\.'
+        if ($null -eq $nativeMaterialHistoryMatch) {
+            throw "The native material undo/redo control geometry could not be parsed."
+        }
+        $nativeMaterialUndoX = [double]$nativeMaterialHistoryMatch.Groups[2].Value
+        $nativeMaterialRedoX = [double]$nativeMaterialHistoryMatch.Groups[3].Value
+        $nativeMaterialHistoryY = [double]$nativeMaterialHistoryMatch.Groups[4].Value
+        Assert-FramebufferRect `
+            -Name "Native authoring material undo control" `
+            -FramebufferWidth $framebufferWidth `
+            -FramebufferHeight $framebufferHeight `
+            -X $nativeMaterialUndoX `
+            -Y $nativeMaterialHistoryY `
+            -Width 140.0 `
+            -Height 24.0
+        Click-FramebufferPoint `
+            -Handle $mainWindowHandle `
+            -FramebufferWidth $framebufferWidth `
+            -FramebufferHeight $framebufferHeight `
+            -FramebufferX ($nativeMaterialUndoX + 70.0) `
+            -FramebufferY ($nativeMaterialHistoryY + 12.0)
+        if (-not (Wait-FileContains -Path $stdoutPath -Pattern "Native authoring material undo:" -TimeoutMilliseconds 5000)) {
+            throw "The user-facing native material undo did not restore the prior material state."
+        }
+        Assert-FramebufferRect `
+            -Name "Native authoring material redo control" `
+            -FramebufferWidth $framebufferWidth `
+            -FramebufferHeight $framebufferHeight `
+            -X $nativeMaterialRedoX `
+            -Y $nativeMaterialHistoryY `
+            -Width 140.0 `
+            -Height 24.0
+        Click-FramebufferPoint `
+            -Handle $mainWindowHandle `
+            -FramebufferWidth $framebufferWidth `
+            -FramebufferHeight $framebufferHeight `
+            -FramebufferX ($nativeMaterialRedoX + 70.0) `
+            -FramebufferY ($nativeMaterialHistoryY + 12.0)
+        if (-not (Wait-FileContains -Path $stdoutPath -Pattern "Native authoring material redo:" -TimeoutMilliseconds 5000)) {
+            throw "The user-facing native material redo did not restore the edited material state."
+        }
+        Write-Output "[pass] User-facing native material undo/redo completed"
+        for ($scrollTopAttempt = 0; $scrollTopAttempt -lt 5; ++$scrollTopAttempt) {
+            Scroll-FramebufferPoint `
+                -Handle $mainWindowHandle `
+                -FramebufferWidth $framebufferWidth `
+                -FramebufferHeight $framebufferHeight `
+                -FramebufferX ($detailsX + [Math]::Max(12.0, $detailsWidth - 18.0)) `
+                -FramebufferY ($detailsY + [Math]::Max(30.0, $detailsHeight * 0.55)) `
+                -WheelDelta 120
+        }
         if (-not (Wait-FileContains -Path $stdoutPath -Pattern "Native authoring move control:" -TimeoutMilliseconds 3000)) {
             throw "The converted showcase did not expose a bounded component-edit control."
         }
@@ -1437,6 +1552,15 @@ try {
             throw "The user-facing component edit did not update the native authoring source."
         }
         Write-Output "[pass] User-facing component edit changed the native showcase source"
+        for ($scrollProjectAttempt = 0; $scrollProjectAttempt -lt 4; ++$scrollProjectAttempt) {
+            Scroll-FramebufferPoint `
+                -Handle $mainWindowHandle `
+                -FramebufferWidth $framebufferWidth `
+                -FramebufferHeight $framebufferHeight `
+                -FramebufferX ($detailsX + [Math]::Max(12.0, $detailsWidth - 18.0)) `
+                -FramebufferY ($detailsY + [Math]::Max(30.0, $detailsHeight * 0.55)) `
+                -WheelDelta -120
+        }
         if (-not (Wait-FileContains -Path $stdoutPath -Pattern "Native authoring project controls:" -TimeoutMilliseconds 3000)) {
             throw "The converted showcase did not expose bounded project save/reload controls."
         }

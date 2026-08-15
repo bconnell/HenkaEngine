@@ -91,6 +91,7 @@ The engineering sample legend is available with `--primitive-gallery`:
 - Use the optional `Alt + Left Mouse` orbit and `Middle Mouse` pan shortcuts if you want to compare them with the explicit tool modes.
 - Switch the Viewport Tool section between Select, Move, Rotate, and Scale, then drag the gizmo on a selected object.
 - In `--primitive-gallery`, select `Textured Cube`, expand Object Details > Authoring, and use Extrude, Inset, Bevel, Subdivide, Project UV, Pack UV, Undo, and Redo to verify the source topology, scene mesh, bounds, and renderer stay connected.
+- For an imported Showcase Giraffe or Showcase Rocket, use Object Details > Authoring > Make Editable, then Own Material. The compact native material row edits base color, metallic, roughness, emissive strength, and creates a procedural detail normal; Undo Mat and Redo Mat restore those material-instance states transactionally before Save Project and Reload Project.
 - Click different visible faces of `Textured Cube` to verify the selected face identity follows the authoring topology before using a modeling command.
 - Use Save Source, make another edit, then use Reload Source to verify the saved editable topology replaces the scene render and bounds transactionally; an invalid or missing source retains the prior render.
 - With the optional Physics QA body enabled, use Extrude and Undo and inspect Diagnostics/Physics QA to verify the linked Textured Cube box collider follows the evaluated bounds.

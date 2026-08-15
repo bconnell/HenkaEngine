@@ -24,8 +24,9 @@ emissive-strength edits plus in-engine procedural normal-texture creation
 without changing the imported glTF source. The packaged
 Windows dogfood path exercises Make Editable, material and texture edits, a
 component move, base-color, metallic, roughness, and emissive-strength edits,
-in-engine procedural detail-normal texture creation, Save Project, and Reload
-Project transactionally. The project manifest persists the mesh source,
+in-engine procedural detail-normal texture creation, bounded material
+undo/redo, Save Project, and Reload Project transactionally. The project
+manifest persists the mesh source,
 transform, and visibility, while its bounded `.material` sidecar persists base
 color, metallic, roughness, emissive strength, and the manager-owned
 normal-texture identity; native runtime detail textures are recreated from
