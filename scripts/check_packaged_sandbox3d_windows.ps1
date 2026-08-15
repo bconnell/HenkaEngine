@@ -1376,6 +1376,41 @@ try {
         if (-not (Wait-FileContains -Path $stdoutPath -Pattern "Native authoring material controls:" -TimeoutMilliseconds 3000)) {
             throw "The native material editor controls did not become visible after ownership promotion."
         }
+        if (-not (Wait-FileContains -Path $stdoutPath -Pattern "Native authoring optical material controls:" -TimeoutMilliseconds 3000)) {
+            throw "The native optical material controls did not become visible after ownership promotion."
+        }
+        $nativeOpticalMaterialMatch = Get-LastLogRegexMatch `
+            -Path $stdoutPath `
+            -Pattern 'Native authoring optical material controls: name=(.+) ior_x=([-0-9.]+) transmission_x=([-0-9.]+) y=([-0-9.]+) width=104.0 height=24.0\.'
+        if ($null -eq $nativeOpticalMaterialMatch) {
+            throw "The native optical material control geometry could not be parsed."
+        }
+        $nativeIorX = [double]$nativeOpticalMaterialMatch.Groups[2].Value
+        $nativeTransmissionX = [double]$nativeOpticalMaterialMatch.Groups[3].Value
+        $nativeOpticalMaterialY = [double]$nativeOpticalMaterialMatch.Groups[4].Value
+        foreach ($opticalControl in @(
+            @{ Name = "IOR"; X = $nativeIorX; Pattern = "parameter=IOR" },
+            @{ Name = "transmission"; X = $nativeTransmissionX; Pattern = "parameter=Transmission" }
+        )) {
+            Assert-FramebufferRect `
+                -Name ("Native authoring " + $opticalControl.Name + " control") `
+                -FramebufferWidth $framebufferWidth `
+                -FramebufferHeight $framebufferHeight `
+                -X $opticalControl.X `
+                -Y $nativeOpticalMaterialY `
+                -Width 48.0 `
+                -Height 24.0
+            Click-FramebufferPoint `
+                -Handle $mainWindowHandle `
+                -FramebufferWidth $framebufferWidth `
+                -FramebufferHeight $framebufferHeight `
+                -FramebufferX ($opticalControl.X + 24.0) `
+                -FramebufferY ($nativeOpticalMaterialY + 12.0)
+            if (-not (Wait-FileContains -Path $stdoutPath -Pattern $opticalControl.Pattern -TimeoutMilliseconds 5000)) {
+                throw ("The user-facing native " + $opticalControl.Name + " edit did not complete.")
+            }
+        }
+        Write-Output "[pass] User-facing native optical material edits completed"
         $nativeMaterialControlsMatch = Get-LastLogRegexMatch `
             -Path $stdoutPath `
             -Pattern 'Native authoring material controls: name=(.+) tint_x=([-0-9.]+) metal_x=([-0-9.]+) rough_x=([-0-9.]+) emissive_x=([-0-9.]+) texture_x=([-0-9.]+) subsurface_x=([-0-9.]+) y=([-0-9.]+) width=48.0 height=24.0\.'
@@ -1547,15 +1582,6 @@ try {
             throw "The user-facing native material redo did not restore the edited material state."
         }
         Write-Output "[pass] User-facing native material undo/redo completed"
-        for ($scrollTopAttempt = 0; $scrollTopAttempt -lt 5; ++$scrollTopAttempt) {
-            Scroll-FramebufferPoint `
-                -Handle $mainWindowHandle `
-                -FramebufferWidth $framebufferWidth `
-                -FramebufferHeight $framebufferHeight `
-                -FramebufferX ($detailsX + [Math]::Max(12.0, $detailsWidth - 18.0)) `
-                -FramebufferY ($detailsY + [Math]::Max(30.0, $detailsHeight * 0.55)) `
-                -WheelDelta 120
-        }
         if (-not (Wait-FileContains -Path $stdoutPath -Pattern "Native authoring move control:" -TimeoutMilliseconds 3000)) {
             throw "The converted showcase did not expose a bounded component-edit control."
         }
@@ -1613,6 +1639,10 @@ try {
             -Y $nativeFaceY `
             -Width 88.0 `
             -Height 24.0
+        $bevelControlLogPattern = 'Native authoring bevel control:'
+        $bevelControlCountBefore = @(
+            Select-String -LiteralPath $stdoutPath -Pattern $bevelControlLogPattern -ErrorAction SilentlyContinue
+        ).Count
         Click-FramebufferPoint `
             -Handle $mainWindowHandle `
             -FramebufferWidth $framebufferWidth `
@@ -1620,7 +1650,10 @@ try {
             -FramebufferX ($nativeFaceX + 44.0) `
             -FramebufferY ($nativeFaceY + 12.0)
         for ($bevelStateAttempt = 0; $bevelStateAttempt -lt 6; ++$bevelStateAttempt) {
-            if (Wait-FileContains -Path $stdoutPath -Pattern "Native authoring bevel control:" -TimeoutMilliseconds 750) {
+            $bevelControlCount = @(
+                Select-String -LiteralPath $stdoutPath -Pattern $bevelControlLogPattern -ErrorAction SilentlyContinue
+            ).Count
+            if ($bevelControlCount -gt $bevelControlCountBefore) {
                 break
             }
             Scroll-FramebufferPoint `

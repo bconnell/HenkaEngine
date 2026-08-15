@@ -26,12 +26,14 @@ This is intentionally a bounded bridge rather than a completed content
 workspace. It currently targets the imported showcase primitives and preserves
 their borrowed glTF material identity until the user explicitly chooses
 `Own Material`. That action adopts a manager-owned runtime material definition;
-the bounded controls then exercise base-color, metallic, roughness, and
-emissive-strength and bounded subsurface-response edits plus in-engine procedural detail-normal and
+the bounded controls then exercise base-color, metallic, roughness,
+emissive-strength, IOR, transmission, and bounded subsurface-response edits
+plus in-engine procedural detail-normal and
 metallic-roughness texture creation without changing the imported glTF source.
 The packaged
 Windows dogfood path exercises Make Editable, material and texture edits, a
-component move, base-color, metallic, roughness, and emissive-strength edits,
+component move, base-color, metallic, roughness, emissive-strength, IOR, and
+transmission edits,
 in-engine procedural detail-normal and metallic-roughness texture creation,
 bounded material
 undo/redo, Face selection, bevel, Save Project, and Reload Project
