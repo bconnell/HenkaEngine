@@ -123,6 +123,13 @@ $earZSpan = $earBounds.Maximum[2] - $earBounds.Minimum[2]
 if ($earYSpan -lt 0.20 -or $earZSpan -gt 0.10) {
     throw "Showcase giraffe inner ears are not flattened, head-plane features."
 }
+$smilePrimitive = @($giraffe.meshes[0].primitives | Where-Object { $_.material -eq 6 })[0]
+$smileBounds = Get-PositionBounds -Gltf $giraffe -Binary $giraffeBinary -Primitive $smilePrimitive
+$smileWidth = $smileBounds.Maximum[0] - $smileBounds.Minimum[0]
+$smileHeight = $smileBounds.Maximum[1] - $smileBounds.Minimum[1]
+if ($smileWidth -gt 0.36 -or $smileHeight -gt 0.05) {
+    throw "Showcase giraffe mouth detail is too expressive or deep for the restrained face contract."
+}
 $rocket = Get-Content -LiteralPath (Join-Path $OutputDirectory "original_realistic_rocket.gltf") -Raw | ConvertFrom-Json
 $rocketBinary = [IO.File]::ReadAllBytes((Join-Path $OutputDirectory "original_realistic_rocket.bin"))
 $rocketMaterialNames = @($rocket.materials | ForEach-Object { $_.name })

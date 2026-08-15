@@ -821,20 +821,23 @@ function New-Giraffe {
     # the pattern readable without introducing bumps or coplanar z-fighting.
     Add-SurfaceSpot $spots @(0.0, 2.22, 0.30) @(0.0, 0.0, 1.0) 0.13 0.22 -0.15
     Add-SurfaceSpot $spots @(0.0, 2.78, 0.30) @(0.0, 0.0, 1.0) 0.12 0.17 0.25
-    Add-Ellipsoid $cream @(0.0, 3.63, 0.42) @(0.32, 0.18, 0.14) 18 32
-    Add-Ellipsoid $cream @(0.0, 3.48, 0.44) @(0.22, 0.10, 0.10) 14 28
-    Add-Ellipsoid $eyes @(-0.21, 3.98, 0.43) @(0.065, 0.090, 0.035) 16 28
-    Add-Ellipsoid $eyes @(0.21, 3.98, 0.43) @(0.065, 0.090, 0.035) 16 28
-    Add-Ellipsoid $iris @(-0.21, 3.98, 0.475) @(0.034, 0.050, 0.012) 12 24
-    Add-Ellipsoid $iris @(0.21, 3.98, 0.475) @(0.034, 0.050, 0.012) 12 24
-    Add-Ellipsoid $details @(-0.21, 3.98, 0.488) @(0.012, 0.024, 0.006) 10 18
-    Add-Ellipsoid $details @(0.21, 3.98, 0.488) @(0.012, 0.024, 0.006) 10 18
-    Add-Ellipsoid $eyes @(-0.218, 4.008, 0.495) @(0.007, 0.010, 0.003) 8 14
-    Add-Ellipsoid $eyes @(0.202, 4.008, 0.495) @(0.007, 0.010, 0.003) 8 14
+    # Keep the face readable, but reduce the toy-like eye and muzzle circles.
+    # The mouth is a short level crease rather than a smiling arc, which keeps
+    # the mascot identity restrained while moving the silhouette toward a
+    # believable giraffe head.
+    Add-Ellipsoid $cream @(0.0, 3.63, 0.42) @(0.34, 0.18, 0.14) 18 32
+    Add-Ellipsoid $cream @(0.0, 3.48, 0.44) @(0.24, 0.10, 0.10) 14 28
+    Add-Ellipsoid $eyes @(-0.21, 3.98, 0.43) @(0.055, 0.078, 0.035) 16 28
+    Add-Ellipsoid $eyes @(0.21, 3.98, 0.43) @(0.055, 0.078, 0.035) 16 28
+    Add-Ellipsoid $iris @(-0.21, 3.98, 0.475) @(0.028, 0.042, 0.012) 12 24
+    Add-Ellipsoid $iris @(0.21, 3.98, 0.475) @(0.028, 0.042, 0.012) 12 24
+    Add-Ellipsoid $details @(-0.21, 3.98, 0.488) @(0.010, 0.020, 0.006) 10 18
+    Add-Ellipsoid $details @(0.21, 3.98, 0.488) @(0.010, 0.020, 0.006) 10 18
+    Add-Ellipsoid $eyes @(-0.218, 4.008, 0.495) @(0.008, 0.012, 0.004) 8 14
+    Add-Ellipsoid $eyes @(0.202, 4.008, 0.495) @(0.008, 0.012, 0.004) 8 14
     Add-Ellipsoid $details @(-0.12, 3.66, 0.56) @(0.055, 0.030, 0.010) 8 14
     Add-Ellipsoid $details @(0.12, 3.66, 0.56) @(0.055, 0.030, 0.010) 8 14
-    Add-Ellipsoid $smile @(0.0, 3.55, 0.56) @(0.19, 0.028, 0.010) 8 16
-    Add-Ellipsoid $smile @(0.11, 3.58, 0.55) @(0.14, 0.035, 0.012) 8 16
+    Add-Ellipsoid $smile @(0.0, 3.51, 0.56) @(0.16, 0.018, 0.008) 8 16
     return [pscustomobject]@{ Parts = @($tan, $spots, $cream, $eyes, $iris, $details, $smile, $earInner, $ossicone); Materials = $materials }
 }
 
