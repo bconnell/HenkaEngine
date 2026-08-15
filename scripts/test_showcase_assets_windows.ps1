@@ -31,6 +31,38 @@ foreach ($name in @("cheeky_giraffe", "original_realistic_rocket")) {
         }
     }
 }
+
+function Get-PositionBounds {
+    param(
+        [Parameter(Mandatory = $true)][object]$Gltf,
+        [Parameter(Mandatory = $true)][byte[]]$Binary,
+        [Parameter(Mandatory = $true)][object]$Primitive
+    )
+    $accessor = $Gltf.accessors[$Primitive.attributes.POSITION]
+    $bufferView = $Gltf.bufferViews[$accessor.bufferView]
+    $stride = if ($bufferView.PSObject.Properties.Name -contains "byteStride") {
+        [int]$bufferView.byteStride
+    }
+    else {
+        12
+    }
+    $baseOffset = [int]$bufferView.byteOffset + [int]$accessor.byteOffset
+    $minimum = @([double]::PositiveInfinity, [double]::PositiveInfinity, [double]::PositiveInfinity)
+    $maximum = @([double]::NegativeInfinity, [double]::NegativeInfinity, [double]::NegativeInfinity)
+    for ($index = 0; $index -lt [int]$accessor.count; ++$index) {
+        $offset = $baseOffset + ($index * $stride)
+        $position = @(
+            [double][BitConverter]::ToSingle($Binary, $offset),
+            [double][BitConverter]::ToSingle($Binary, $offset + 4),
+            [double][BitConverter]::ToSingle($Binary, $offset + 8))
+        for ($axis = 0; $axis -lt 3; ++$axis) {
+            $minimum[$axis] = [Math]::Min($minimum[$axis], $position[$axis])
+            $maximum[$axis] = [Math]::Max($maximum[$axis], $position[$axis])
+        }
+    }
+    return [pscustomobject]@{ Minimum = $minimum; Maximum = $maximum }
+}
+
 $giraffe = Get-Content -LiteralPath (Join-Path $OutputDirectory "cheeky_giraffe.gltf") -Raw | ConvertFrom-Json
 $giraffeMaterialNames = @($giraffe.materials | ForEach-Object { $_.name })
 foreach ($requiredName in @("Giraffe Eye White", "Giraffe Iris", "Giraffe Eye Detail", "Giraffe Ear Inner", "Giraffe Ossicone Cap")) {
@@ -40,6 +72,14 @@ foreach ($requiredName in @("Giraffe Eye White", "Giraffe Iris", "Giraffe Eye De
 }
 if ($giraffe.meshes[0].primitives.Count -lt 8) {
     throw "Showcase giraffe does not contain enough independently shaded feature geometry."
+}
+$giraffeBinary = [IO.File]::ReadAllBytes((Join-Path $OutputDirectory "cheeky_giraffe.bin"))
+$earPrimitive = @($giraffe.meshes[0].primitives | Where-Object { $_.material -eq 7 })[0]
+$earBounds = Get-PositionBounds -Gltf $giraffe -Binary $giraffeBinary -Primitive $earPrimitive
+$earYSpan = $earBounds.Maximum[1] - $earBounds.Minimum[1]
+$earZSpan = $earBounds.Maximum[2] - $earBounds.Minimum[2]
+if ($earYSpan -lt 0.20 -or $earZSpan -gt 0.10) {
+    throw "Showcase giraffe inner ears are not flattened, head-plane features."
 }
 $rocket = Get-Content -LiteralPath (Join-Path $OutputDirectory "original_realistic_rocket.gltf") -Raw | ConvertFrom-Json
 $rocketMaterialNames = @($rocket.materials | ForEach-Object { $_.name })

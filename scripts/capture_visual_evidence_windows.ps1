@@ -231,6 +231,10 @@ foreach ($mode in $modes) {
                 (Assert-HenkaCaptureMetadata -Line $metadataLine -Label $mode.Label))
         }
         Start-Sleep -Milliseconds 150
+        # Readiness can be reached while another desktop window regains focus.
+        # Re-assert ownership at the last safe point before CopyFromScreen so
+        # application-only evidence cannot silently capture an unrelated app.
+        Wait-HenkaSandboxForeground -Handle $handle -Label $mode.Label
         $rect = New-Object HenkaVisualCaptureNativeMethods+RECT
         $dwmResult = [HenkaVisualCaptureNativeMethods]::DwmGetWindowAttribute(
             $handle,
@@ -319,6 +323,7 @@ if ($IncludeGiraffeInspection) {
             Wait-HenkaSandboxForeground -Handle $handle -Label $inspectionMode.Label
             $metadataLine = Wait-HenkaCaptureReady -StdoutPath $stdoutPath -Process $process -Label $inspectionMode.Label
             Start-Sleep -Milliseconds 150
+            Wait-HenkaSandboxForeground -Handle $handle -Label $inspectionMode.Label
             $rect = New-Object HenkaVisualCaptureNativeMethods+RECT
             $dwmResult = [HenkaVisualCaptureNativeMethods]::DwmGetWindowAttribute(
                 $handle,
@@ -397,6 +402,7 @@ if ($IncludeTerrain) {
             }
             Wait-HenkaSandboxForeground -Handle $handle -Label $terrainMode.Label
             Start-Sleep -Milliseconds 1500
+            Wait-HenkaSandboxForeground -Handle $handle -Label $terrainMode.Label
             $rect = New-Object HenkaVisualCaptureNativeMethods+RECT
             $dwmResult = [HenkaVisualCaptureNativeMethods]::DwmGetWindowAttribute(
                 $handle,
