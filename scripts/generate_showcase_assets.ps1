@@ -245,6 +245,93 @@ function Add-ProfiledFrustum {
     }
 }
 
+function Add-AnatomicalLoft {
+    param(
+        [object]$Part,
+        [float[]]$Y,
+        [float[]]$RadiusX,
+        [float[]]$RadiusZ,
+        [float]$CenterX = 0.0,
+        [float[]]$CenterZ = @(),
+        [int]$Segments = 32
+    )
+    if ($Y.Count -lt 2 -or
+        $Y.Count -ne $RadiusX.Count -or
+        $Y.Count -ne $RadiusZ.Count -or
+        ($CenterZ.Count -ne 0 -and $CenterZ.Count -ne $Y.Count) -or
+        $Segments -lt 3) {
+        throw "Showcase anatomical loft requires matching bounded profiles."
+    }
+    for ($profileIndex = 0; $profileIndex -lt $Y.Count; ++$profileIndex) {
+        if ($RadiusX[$profileIndex] -le 0.0 -or $RadiusZ[$profileIndex] -le 0.0) {
+            throw "Showcase anatomical loft profile has an invalid radius."
+        }
+        if ($profileIndex -gt 0 -and $Y[$profileIndex] -le $Y[$profileIndex - 1]) {
+            throw "Showcase anatomical loft profile is not strictly increasing."
+        }
+    }
+    $rings = New-Object 'System.Collections.Generic.List[int]'
+    $firstY = [float]$Y[0]
+    $lastY = [float]$Y[$Y.Count - 1]
+    for ($profileIndex = 0; $profileIndex -lt $Y.Count; ++$profileIndex) {
+        if ($profileIndex -eq 0) {
+            $previous = 0
+            $next = 1
+        }
+        elseif ($profileIndex -eq ($Y.Count - 1)) {
+            $previous = $profileIndex - 1
+            $next = $profileIndex
+        }
+        else {
+            $previous = $profileIndex - 1
+            $next = $profileIndex + 1
+        }
+        $slopeX = ($RadiusX[$next] - $RadiusX[$previous]) /
+            [Math]::Max(0.000001, ($Y[$next] - $Y[$previous]))
+        $slopeZ = ($RadiusZ[$next] - $RadiusZ[$previous]) /
+            [Math]::Max(0.000001, ($Y[$next] - $Y[$previous]))
+        $centerSlopeZ = if ($CenterZ.Count -eq 0) { 0.0 } else {
+            ($CenterZ[$next] - $CenterZ[$previous]) /
+                [Math]::Max(0.000001, ($Y[$next] - $Y[$previous]))
+        }
+        $zCenter = if ($CenterZ.Count -eq 0) { 0.0 } else { [float]$CenterZ[$profileIndex] }
+        for ($segment = 0; $segment -le $Segments; ++$segment) {
+            $phi = 2.0 * [Math]::PI * $segment / $Segments
+            $sinPhi = [Math]::Sin($phi)
+            $cosPhi = [Math]::Cos($phi)
+            $normal = Normalize-Vector @(
+                [float]($cosPhi / $RadiusX[$profileIndex]),
+                [float](-($slopeX * $cosPhi * $cosPhi / $RadiusX[$profileIndex]) -
+                    (($centerSlopeZ + $slopeZ * $sinPhi) * $sinPhi / $RadiusZ[$profileIndex])),
+                [float]($sinPhi / $RadiusZ[$profileIndex]))
+            $position = @(
+                [float]($CenterX + $RadiusX[$profileIndex] * $cosPhi),
+                [float]$Y[$profileIndex],
+                [float]($zCenter + $RadiusZ[$profileIndex] * $sinPhi))
+            $tangent = Normalize-Vector @(
+                [float](-$RadiusX[$profileIndex] * $sinPhi),
+                0.0,
+                [float]($RadiusZ[$profileIndex] * $cosPhi))
+            [void]$rings.Add((Add-Vertex $Part $position $normal @(
+                    [float]($segment / $Segments),
+                    [float](($Y[$profileIndex] - $firstY) / ($lastY - $firstY))) @(
+                    [float]$tangent[0], [float]$tangent[1], [float]$tangent[2], 1.0)))
+        }
+    }
+    for ($profileIndex = 0; $profileIndex -lt ($Y.Count - 1); ++$profileIndex) {
+        $ringOffset = $profileIndex * ($Segments + 1)
+        $nextRingOffset = ($profileIndex + 1) * ($Segments + 1)
+        for ($segment = 0; $segment -lt $Segments; ++$segment) {
+            $a = $rings[$ringOffset + $segment]
+            $b = $rings[$ringOffset + $segment + 1]
+            $c = $rings[$nextRingOffset + $segment + 1]
+            $d = $rings[$nextRingOffset + $segment]
+            Add-Triangle $Part $a $c $b
+            Add-Triangle $Part $a $d $c
+        }
+    }
+}
+
 function Add-OrientedCone {
     param(
         [object]$Part,
@@ -789,8 +876,14 @@ function New-Giraffe {
     # Keep the mascot identity restrained, but use continuous profiles and
     # believable curvature so the silhouette does not read as primitive
     # assembly when inspected from the authored front and three-quarter views.
-    Add-Ellipsoid $tan @(0.0, 1.34, 0.0) @(0.86, 0.88, 0.56) 28 56
-    Add-ProfiledFrustum $tan @(1.50, 1.88, 2.32, 2.78, 3.22, 3.58) @(0.32, 0.30, 0.28, 0.25, 0.23, 0.21) 0.0 0.0 48
+    # A single elliptical loft carries the chest through the shoulder and
+    # into the neck. This is the primary silhouette surface, so the body no
+    # longer reads as a stack of an ellipsoid and a separate narrow frustum.
+    Add-AnatomicalLoft $tan `
+        @(0.55, 0.78, 1.08, 1.42, 1.78, 2.14, 2.48, 2.82, 3.18, 3.50, 3.72) `
+        @(0.58, 0.76, 0.86, 0.86, 0.80, 0.38, 0.31, 0.28, 0.25, 0.23, 0.22) `
+        @(0.42, 0.51, 0.56, 0.56, 0.51, 0.31, 0.27, 0.25, 0.23, 0.22, 0.21) `
+        0.0 @(0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.01, 0.02, 0.02) 96
     Add-Ellipsoid $tan @(0.0, 3.84, 0.0) @(0.56, 0.48, 0.43) 26 48
     foreach ($leg in @(@(-0.48, 0.0, -0.30), @(0.48, 0.0, -0.30), @(-0.48, 0.0, 0.30), @(0.48, 0.0, 0.30))) {
         Add-ProfiledFrustum $tan @(0.08, 0.30, 0.76, 1.12, 1.24) @(0.13, 0.15, 0.14, 0.12, 0.105) $leg[0] $leg[2] 28

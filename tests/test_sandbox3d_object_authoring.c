@@ -478,6 +478,58 @@ static void henka_test_sandbox3d_object_authoring_model_primitive_bridge(void)
             sandbox3d_authoring_object_get_mesh(object)).vertices == before_profile.vertices);
         HENKA_TEST_ASSERT(henka_authoring_mesh_get_counts(
             sandbox3d_authoring_object_get_mesh(object)).faces == before_profile.faces);
+        {
+            const henka_authoring_mesh* profiled_mesh =
+                sandbox3d_authoring_object_get_mesh(object);
+            const henka_authoring_mesh_counts profiled_counts =
+                henka_authoring_mesh_get_counts(profiled_mesh);
+            size_t active_vertices = 0U;
+            size_t active_edges = 0U;
+            size_t active_faces = 0U;
+            uint32_t id;
+            float minimum_x = 1000000.0f;
+            float maximum_x = -1000000.0f;
+            float minimum_y = 1000000.0f;
+            float maximum_y = -1000000.0f;
+            for (id = 1U; id <= HENKA_AUTHORING_MESH_HARD_MAX_VERTICES; ++id)
+            {
+                const henka_authoring_vertex* vertex =
+                    henka_authoring_mesh_get_vertex(profiled_mesh, id);
+                if (vertex == NULL) continue;
+                ++active_vertices;
+                if (vertex->position.x < minimum_x) minimum_x = vertex->position.x;
+                if (vertex->position.x > maximum_x) maximum_x = vertex->position.x;
+                if (vertex->position.y < minimum_y) minimum_y = vertex->position.y;
+                if (vertex->position.y > maximum_y) maximum_y = vertex->position.y;
+            }
+            for (id = 1U; id <= HENKA_AUTHORING_MESH_HARD_MAX_EDGES; ++id)
+            {
+                const henka_authoring_edge* edge =
+                    henka_authoring_mesh_get_edge(profiled_mesh, id);
+                size_t face_index;
+                if (edge == NULL) continue;
+                ++active_edges;
+                HENKA_TEST_ASSERT(henka_authoring_mesh_get_edge_face_count(profiled_mesh, id) >= 1U);
+                HENKA_TEST_ASSERT(henka_authoring_mesh_get_edge_face_count(profiled_mesh, id) <= 2U);
+                for (face_index = 0U; face_index < edge->face_count; ++face_index)
+                {
+                    henka_authoring_face_id face_id = HENKA_AUTHORING_INVALID_ID;
+                    HENKA_TEST_ASSERT(henka_authoring_mesh_get_edge_face_at(
+                        profiled_mesh, id, face_index, &face_id) == HENKA_SUCCESS);
+                    HENKA_TEST_ASSERT(henka_authoring_mesh_get_face(profiled_mesh, face_id) != NULL);
+                }
+            }
+            for (id = 1U; id <= HENKA_AUTHORING_MESH_HARD_MAX_FACES; ++id)
+            {
+                if (henka_authoring_mesh_get_face(profiled_mesh, id) != NULL) ++active_faces;
+            }
+            HENKA_TEST_ASSERT(active_vertices == profiled_counts.vertices);
+            HENKA_TEST_ASSERT(active_edges == profiled_counts.edges);
+            HENKA_TEST_ASSERT(active_faces == profiled_counts.faces);
+            HENKA_TEST_ASSERT(maximum_x > minimum_x && maximum_y > minimum_y);
+            HENKA_TEST_ASSERT(minimum_x < -0.9f && maximum_x > 0.9f);
+            HENKA_TEST_ASSERT(minimum_y < -0.9f && maximum_y > 0.9f);
+        }
         HENKA_TEST_ASSERT_FLOAT_CLOSE(
             henka_authoring_mesh_get_vertex(
                 sandbox3d_authoring_object_get_mesh(object), 3U)->position.x,
