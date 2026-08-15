@@ -905,6 +905,110 @@ henka_result sandbox3d_authoring_object_create_from_mesh(
     return HENKA_SUCCESS;
 }
 
+henka_result sandbox3d_authoring_object_create_from_model_primitive(
+    henka_engine* engine,
+    henka_scene* scene,
+    henka_entity entity,
+    const henka_model_scene_primitive* primitive,
+    size_t history_steps,
+    sandbox3d_authoring_object** out_object)
+{
+    henka_authoring_mesh_desc desc;
+    henka_authoring_mesh* mesh = NULL;
+    henka_authoring_vertex_id* vertex_ids = NULL;
+    size_t face_count;
+    size_t vertex_index;
+    size_t index_offset;
+    henka_result result;
+
+    if (out_object != NULL) *out_object = NULL;
+    if (primitive == NULL || primitive->vertices == NULL || primitive->indices == NULL ||
+        primitive->vertex_count < 3U || primitive->index_count < 3U ||
+        primitive->index_count % 3U != 0U ||
+        primitive->vertex_count > HENKA_AUTHORING_MESH_HARD_MAX_VERTICES)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    face_count = primitive->index_count / 3U;
+    if (face_count > HENKA_AUTHORING_MESH_HARD_MAX_FACES ||
+        face_count > HENKA_AUTHORING_MESH_HARD_MAX_EDGES / 3U)
+    {
+        return HENKA_ERROR_LIMIT;
+    }
+    desc = (henka_authoring_mesh_desc){
+        primitive->vertex_count,
+        face_count * 3U,
+        face_count,
+        3U};
+    result = henka_authoring_mesh_create(&desc, &mesh);
+    if (result != HENKA_SUCCESS)
+    {
+        return result;
+    }
+    vertex_ids = henka_calloc(primitive->vertex_count, sizeof(*vertex_ids));
+    if (vertex_ids == NULL)
+    {
+        henka_authoring_mesh_destroy(mesh);
+        return HENKA_ERROR_OUT_OF_MEMORY;
+    }
+    for (vertex_index = 0U; vertex_index < primitive->vertex_count; ++vertex_index)
+    {
+        const henka_model_vertex* source = &primitive->vertices[vertex_index];
+        result = henka_authoring_mesh_add_vertex(
+            mesh,
+            source->position,
+            source->uv,
+            source->material_region,
+            &vertex_ids[vertex_index]);
+        if (result != HENKA_SUCCESS)
+        {
+            henka_free(vertex_ids);
+            henka_authoring_mesh_destroy(mesh);
+            return result;
+        }
+    }
+    for (index_offset = 0U; index_offset < primitive->index_count; index_offset += 3U)
+    {
+        const uint32_t first = primitive->indices[index_offset];
+        const uint32_t second = primitive->indices[index_offset + 1U];
+        const uint32_t third = primitive->indices[index_offset + 2U];
+        henka_authoring_vertex_id face_vertices[3];
+        henka_authoring_face_id face_id;
+
+        if (first >= primitive->vertex_count || second >= primitive->vertex_count ||
+            third >= primitive->vertex_count || first == second || first == third || second == third)
+        {
+            henka_free(vertex_ids);
+            henka_authoring_mesh_destroy(mesh);
+            return HENKA_ERROR_INVALID_ARGUMENT;
+        }
+        face_vertices[0] = vertex_ids[first];
+        face_vertices[1] = vertex_ids[second];
+        face_vertices[2] = vertex_ids[third];
+        result = henka_authoring_mesh_add_face(
+            mesh,
+            face_vertices,
+            3U,
+            primitive->vertices[first].material_region,
+            true,
+            &face_id);
+        if (result != HENKA_SUCCESS)
+        {
+            henka_free(vertex_ids);
+            henka_authoring_mesh_destroy(mesh);
+            return result;
+        }
+    }
+    henka_free(vertex_ids);
+    if (!henka_authoring_mesh_validate(mesh))
+    {
+        henka_authoring_mesh_destroy(mesh);
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    return sandbox3d_authoring_object_create_from_owned_mesh(
+        engine, scene, entity, mesh, history_steps, out_object);
+}
+
 void sandbox3d_authoring_object_destroy(sandbox3d_authoring_object* object)
 {
     if (object == NULL)

@@ -390,6 +390,80 @@ static void henka_test_sandbox3d_object_authoring_clone_bridge(void)
     henka_engine_destroy(engine);
 }
 
+static void henka_test_sandbox3d_object_authoring_model_primitive_bridge(void)
+{
+    henka_engine_config config = {0};
+    henka_engine* engine = NULL;
+    henka_scene* scene = NULL;
+    sandbox3d_authoring_object* object = NULL;
+    henka_entity entity;
+    henka_mesh* previous_mesh = NULL;
+    henka_mesh* authored_mesh = NULL;
+    const henka_material_asset* material_asset =
+        (const henka_material_asset*)(uintptr_t)3U;
+    henka_bounds authored_bounds;
+    henka_model_vertex vertices[4] = {0};
+    uint32_t indices[6] = {0U, 1U, 2U, 0U, 2U, 3U};
+    henka_model_scene_primitive primitive = {0};
+    henka_authoring_mesh_counts counts;
+
+    config.application_name = "Henka Imported Authoring Bridge Test";
+    config.window_width = 320;
+    config.window_height = 240;
+    config.enable_vsync = false;
+    HENKA_TEST_ASSERT(henka_engine_create(&config, &engine) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_scene_create(&scene) == HENKA_SUCCESS);
+    entity = henka_scene_create_entity_named(scene, "Imported Showcase Primitive");
+    HENKA_TEST_ASSERT(entity != HENKA_INVALID_ENTITY);
+    HENKA_TEST_ASSERT(henka_mesh_create_cube(engine, &previous_mesh) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_scene_set_entity_mesh(scene, entity, previous_mesh) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_scene_set_entity_material_asset(scene, entity, material_asset) == HENKA_SUCCESS);
+
+    vertices[0].position = (henka_vec3){-1.0f, -1.0f, 0.0f};
+    vertices[1].position = (henka_vec3){1.0f, -1.0f, 0.0f};
+    vertices[2].position = (henka_vec3){1.0f, 1.0f, 0.0f};
+    vertices[3].position = (henka_vec3){-1.0f, 1.0f, 0.0f};
+    vertices[0].uv = (henka_vec2){0.0f, 0.0f};
+    vertices[1].uv = (henka_vec2){1.0f, 0.0f};
+    vertices[2].uv = (henka_vec2){1.0f, 1.0f};
+    vertices[3].uv = (henka_vec2){0.0f, 1.0f};
+    vertices[0].material_region = 2U;
+    vertices[1].material_region = 2U;
+    vertices[2].material_region = 2U;
+    vertices[3].material_region = 4U;
+    primitive.vertices = vertices;
+    primitive.vertex_count = 4U;
+    primitive.indices = indices;
+    primitive.index_count = 6U;
+
+    indices[5] = 4U;
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_create_from_model_primitive(
+        engine, scene, entity, &primitive, 8U, &object) == HENKA_ERROR_INVALID_ARGUMENT);
+    HENKA_TEST_ASSERT(object == NULL);
+    HENKA_TEST_ASSERT(henka_scene_get_entity_mesh(scene, entity, &authored_mesh) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(authored_mesh == previous_mesh);
+    indices[5] = 3U;
+
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_create_from_model_primitive(
+        engine, scene, entity, &primitive, 8U, &object) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(object != NULL);
+    counts = henka_authoring_mesh_get_counts(sandbox3d_authoring_object_get_mesh(object));
+    HENKA_TEST_ASSERT(counts.vertices == 4U && counts.faces == 2U && counts.edges == 5U);
+    HENKA_TEST_ASSERT(henka_scene_get_entity_mesh(scene, entity, &authored_mesh) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(authored_mesh != NULL && authored_mesh != previous_mesh);
+    HENKA_TEST_ASSERT(henka_scene_get_entity_material_asset(scene, entity, &material_asset) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(material_asset == (const henka_material_asset*)(uintptr_t)3U);
+    HENKA_TEST_ASSERT(henka_scene_get_entity_local_bounds(scene, entity, &authored_bounds) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(authored_bounds.extents.x > 0.0f && authored_bounds.extents.y > 0.0f);
+
+    sandbox3d_authoring_object_destroy(object);
+    HENKA_TEST_ASSERT(henka_scene_get_entity_mesh(scene, entity, &authored_mesh) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(authored_mesh == previous_mesh);
+    henka_scene_destroy(scene);
+    henka_mesh_destroy(previous_mesh);
+    henka_engine_destroy(engine);
+}
+
 static void henka_test_sandbox3d_object_authoring_component_selection(void)
 {
     henka_engine_config config = {0};
@@ -442,5 +516,6 @@ void henka_test_sandbox3d_object_authoring(void)
     henka_test_sandbox3d_object_authoring_duplicate();
     henka_test_sandbox3d_object_authoring_source_persistence();
     henka_test_sandbox3d_object_authoring_clone_bridge();
+    henka_test_sandbox3d_object_authoring_model_primitive_bridge();
     henka_test_sandbox3d_object_authoring_component_selection();
 }

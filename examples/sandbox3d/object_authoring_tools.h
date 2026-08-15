@@ -8,6 +8,7 @@
 #include <henka/authoring_modeling.h>
 #include <henka/authoring_uv.h>
 #include <henka/engine.h>
+#include <henka/model.h>
 #include <henka/physics.h>
 #include <henka/scene.h>
 
@@ -58,6 +59,16 @@ henka_result sandbox3d_authoring_object_create_from_mesh(
     henka_scene* scene,
     henka_entity entity,
     const henka_authoring_mesh* source,
+    size_t history_steps,
+    sandbox3d_authoring_object** out_object);
+/* Builds a user-owned authoring source from one validated imported model
+ * primitive. The caller retains the imported source data; the bridge owns the
+ * converted topology and publishes its evaluated mesh transactionally. */
+henka_result sandbox3d_authoring_object_create_from_model_primitive(
+    henka_engine* engine,
+    henka_scene* scene,
+    henka_entity entity,
+    const henka_model_scene_primitive* primitive,
     size_t history_steps,
     sandbox3d_authoring_object** out_object);
 void sandbox3d_authoring_object_destroy(sandbox3d_authoring_object* object);

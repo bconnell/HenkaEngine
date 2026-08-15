@@ -4,6 +4,23 @@ The normal Windows Sandbox startup presents two repo-owned sample models. It als
 
 Provenance is explicit: the current models and generated detail textures are `GENERATED_TEST_FIXTURE` / `IMPORT_COMPATIBILITY_ASSET` content produced by the deterministic repository generator and consumed through the public glTF/material asset path. They are not `HENKA_NATIVE_AUTHORED` proof. The native-authoring gate remains open until a nontrivial showcase part can be created and edited through Henka's ordinary user-facing authoring workflow, then saved, reloaded, and rendered from that authoritative source.
 
+## Bounded native-authoring bridge
+
+The normal editor now provides the shortest native dogfood path for those
+fixtures. Press `F5` until `Inspect` or `Full Tools` is active, select a
+`Showcase Giraffe ...` or `Showcase Rocket ...` primitive in `Scene Objects`,
+open `Object Details > Authoring`, and choose `Make Editable`. Henka converts
+that validated primitive into a user-owned authoring mesh connected to the
+selected scene entity; the existing component, topology, UV, undo/redo, and
+`Save Project` / `Reload Project` controls operate on that source afterward.
+
+This is intentionally a bounded bridge rather than a completed content
+workspace. It currently targets the imported showcase primitives, preserves
+their borrowed glTF material identity, and does not make the generated files
+native-authored. Complete native showcase proof still requires a real user
+edit, save, close/reload, continued edit, and rendered evidence, followed by
+material and texture authoring coverage.
+
 - `cheeky_giraffe.gltf` — an original stylized-realistic, animated-film-oriented Cheeky Giraffe mascot with smooth high-curvature body and head forms, surface-fitted spots, a readable mane row, compact flattened ear lobes with inset inner-ear patches, connected tan ossicone stalks, and outward-angled dark-brown caps, layered eye whites/irises/pupils/highlights, nostrils, and a shaped mouth line. The presentation remains expressive by design, but the face is built from separately shaded anatomical features rather than a single cartoon eye material.
 - `original_realistic_rocket.gltf` — an original stylized modern launch vehicle with a staged core, ogive-like fairing sections, interstage and engine-skirt hardware, dark avionics separation bands, a bounded seven-engine bell/nozzle cluster, a restrained heat response, and tapered stabilization fins.
 
