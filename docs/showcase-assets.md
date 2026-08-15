@@ -2,7 +2,7 @@
 
 The normal Windows Sandbox startup presents two repo-owned sample models. It also applies the renderer's bounded view-aware subsurface material-instance response to the warm Giraffe regions, while leaving eyes and hard feature materials on their authored opaque response. This is visual dogfooding of the existing material-instance path, not a claim of full multi-scatter or ray-traced subsurface transport:
 
-Provenance is explicit: the current models and generated detail textures are `GENERATED_TEST_FIXTURE` / `IMPORT_COMPATIBILITY_ASSET` content produced by the deterministic repository generator and consumed through the public glTF/material asset path. They are not `HENKA_NATIVE_AUTHORED` proof. The native-authoring gate remains open until a nontrivial showcase part can be created and edited through Henka's ordinary user-facing authoring workflow, then saved, reloaded, and rendered from that authoritative source.
+Provenance is explicit: the current pair and generated detail textures are `GENERATED_TEST_FIXTURE` / `IMPORT_COMPATIBILITY_ASSET` content produced by the deterministic repository generator and consumed through the public glTF/material asset path. They remain imported fixture content, not `HENKA_NATIVE_AUTHORED` proof. The separate native-authoring bridge now provides a nontrivial user-created rocket path, and the packaged gate saves, reloads, relaunches, and renders that authored source transactionally; native multi-material binding and a fully native-authored Giraffe remain open.
 
 ## Bounded native-authoring bridge
 
@@ -43,20 +43,23 @@ manifest persists the mesh source,
 transform, and visibility, while its bounded `.material` sidecar persists the
 supported PBR scalars, colors, flags, alpha mode, and seven material texture
 identities; native runtime detail-normal and metallic-roughness textures are
-recreated from their bounded recipes on reload. Texture painting and
-native-authored source export remain
-open. Complete native showcase proof still requires a real
-user edit, save, close/reload, continued edit, and rendered evidence.
+recreated from their bounded recipes on reload. Texture painting,
+native-authored source export, and native multi-material binding remain open.
+The packaged gate already supplies bounded real-user creation/edit,
+save/reload, relaunch restoration, and Rendered evidence for the native
+rocket; it does not promote the imported fixture pair to native-authored
+content.
 
 The editor also exposes `Create Native Rocket`. That user-facing action
 creates a bounded multi-part rocket directly through the Henka authoring mesh
 API, evaluates it into the scene, adopts a manager-owned material instance,
 and emits `HENKA_NATIVE_AUTHORED` provenance before normal component, topology,
-material, and project save/reload editing. Fresh-process restoration and native
-multi-material binding remain explicitly unfinished.
+material, and project save/reload editing. The packaged relaunch gate restores
+the valid authored source and material sidecar transactionally; native
+multi-material binding remains explicitly unfinished.
 
-- `cheeky_giraffe.gltf` — an original stylized-realistic, animated-film-oriented Cheeky Giraffe mascot with smooth high-curvature body and head forms, surface-fitted spots, a readable mane row, compact flattened ear lobes with inset inner-ear patches, connected tan ossicone stalks, and outward-angled dark-brown caps, layered eye whites/irises/pupils/highlights, nostrils, and a shaped mouth line. The presentation remains expressive by design, but the face is built from separately shaded anatomical features rather than a single cartoon eye material.
-- `original_realistic_rocket.gltf` — an original stylized modern launch vehicle with a staged core, ogive-like fairing sections, interstage and engine-skirt hardware, dark avionics separation bands, a bounded seven-engine bell/nozzle cluster, a restrained heat response, and tapered stabilization fins.
+- `cheeky_giraffe.gltf` — an original realism-oriented Cheeky Giraffe mascot with smooth high-curvature body and head forms, surface-fitted spots, a readable mane row, compact flattened ear lobes with inset inner-ear patches, connected tan ossicone stalks, and outward-angled dark-brown caps, layered eye whites/irises/pupils/highlights, nostrils, a defined muzzle/jaw, and a subdued mouth line. The presentation retains restrained personality, while the face is built from separately shaded anatomical features rather than a single cartoon eye material.
+- `original_realistic_rocket.gltf` — an original modern launch vehicle reference with a continuous tapered core/fairing profile, interstage and engine-skirt hardware, dark avionics separation bands, a bounded seven-engine bell/nozzle cluster, a restrained heat response, and tapered stabilization fins.
 
 ## Ownership and generation
 

@@ -85,6 +85,19 @@ $giraffeNormalBindings = @($giraffe.materials | Where-Object { $_.PSObject.Prope
 if ($giraffeNormalBindings.Count -lt 5) {
     throw "Showcase giraffe does not exercise enough generated normal-map material bindings."
 }
+$giraffeVertexCount = 0
+foreach ($primitive in $giraffe.meshes[0].primitives) {
+    $giraffeVertexCount += [int]$giraffe.accessors[$primitive.attributes.POSITION].count
+}
+if ($giraffeVertexCount -lt 9000) {
+    throw "Showcase giraffe lost its bounded curved-form topology density."
+}
+foreach ($material in $giraffe.materials) {
+    if ($material.PSObject.Properties.Name -contains "normalTexture" -and
+        [double]$material.normalTexture.scale -gt 0.20) {
+        throw "Showcase giraffe detail-normal scale is too strong for restrained surface response."
+    }
+}
 if ($giraffe.meshes[0].primitives.Count -lt 8) {
     throw "Showcase giraffe does not contain enough independently shaded feature geometry."
 }
@@ -104,6 +117,18 @@ if ($rocketMaterialNames -notcontains "Rocket Avionics") {
 $rocketNormalBindings = @($rocket.materials | Where-Object { $_.PSObject.Properties.Name -contains "normalTexture" })
 if ($rocketNormalBindings.Count -ne $rocket.materials.Count) {
     throw "Showcase rocket does not bind generated normal detail across all material regions."
+}
+$rocketVertexCount = 0
+foreach ($primitive in $rocket.meshes[0].primitives) {
+    $rocketVertexCount += [int]$rocket.accessors[$primitive.attributes.POSITION].count
+}
+if ($rocketVertexCount -lt 3500) {
+    throw "Showcase rocket lost its continuous tapered-form topology density."
+}
+foreach ($material in $rocket.materials) {
+    if ([double]$material.normalTexture.scale -gt 0.20) {
+        throw "Showcase rocket detail-normal scale is too strong for restrained surface response."
+    }
 }
 if ($rocket.meshes[0].primitives.Count -lt 5) {
     throw "Showcase rocket does not contain enough independently shaded stage and engine geometry."

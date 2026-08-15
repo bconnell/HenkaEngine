@@ -182,6 +182,69 @@ function Add-Frustum {
     }
 }
 
+function Add-ProfiledFrustum {
+    param(
+        [object]$Part,
+        [float[]]$Y,
+        [float[]]$Radius,
+        [float]$CenterX = 0.0,
+        [float]$CenterZ = 0.0,
+        [int]$Segments = 32
+    )
+    if ($Y.Count -lt 2 -or $Y.Count -ne $Radius.Count -or $Segments -lt 3) {
+        throw "Showcase profiled frustum requires matching bounded profiles."
+    }
+    for ($profileIndex = 1; $profileIndex -lt $Y.Count; ++$profileIndex) {
+        if ($Y[$profileIndex] -le $Y[$profileIndex - 1] -or $Radius[$profileIndex] -le 0.0) {
+            throw "Showcase profiled frustum profile is not strictly increasing and positive."
+        }
+    }
+    if ($Radius[0] -le 0.0) {
+        throw "Showcase profiled frustum profile has an invalid base radius."
+    }
+    $rings = New-Object 'System.Collections.Generic.List[int]'
+    $firstY = [float]$Y[0]
+    $lastY = [float]$Y[$Y.Count - 1]
+    for ($profileIndex = 0; $profileIndex -lt $Y.Count; ++$profileIndex) {
+        if ($profileIndex -eq 0) {
+            $slope = ($Radius[1] - $Radius[0]) / ($Y[1] - $Y[0])
+        }
+        elseif ($profileIndex -eq ($Y.Count - 1)) {
+            $previous = $profileIndex - 1
+            $slope = ($Radius[$profileIndex] - $Radius[$previous]) / ($Y[$profileIndex] - $Y[$previous])
+        }
+        else {
+            $previous = $profileIndex - 1
+            $next = $profileIndex + 1
+            $slope = ($Radius[$next] - $Radius[$previous]) / ($Y[$next] - $Y[$previous])
+        }
+        for ($segment = 0; $segment -le $Segments; ++$segment) {
+            $phi = 2.0 * [Math]::PI * $segment / $Segments
+            $sinPhi = [Math]::Sin($phi)
+            $cosPhi = [Math]::Cos($phi)
+            $normal = Normalize-Vector @([float]$cosPhi, [float](-$slope), [float]$sinPhi)
+            $position = @(
+                [float]($CenterX + $Radius[$profileIndex] * $cosPhi),
+                [float]$Y[$profileIndex],
+                [float]($CenterZ + $Radius[$profileIndex] * $sinPhi))
+            $tangent = @([float](-$sinPhi), 0.0, [float]$cosPhi, 1.0)
+            [void]$rings.Add((Add-Vertex $Part $position $normal @([float]($segment / $Segments), [float](($Y[$profileIndex] - $firstY) / ($lastY - $firstY))) $tangent))
+        }
+    }
+    for ($profileIndex = 0; $profileIndex -lt ($Y.Count - 1); ++$profileIndex) {
+        $ringOffset = $profileIndex * ($Segments + 1)
+        $nextRingOffset = ($profileIndex + 1) * ($Segments + 1)
+        for ($segment = 0; $segment -lt $Segments; ++$segment) {
+            $a = $rings[$ringOffset + $segment]
+            $b = $rings[$ringOffset + $segment + 1]
+            $c = $rings[$nextRingOffset + $segment + 1]
+            $d = $rings[$nextRingOffset + $segment]
+            Add-Triangle $Part $a $c $b
+            Add-Triangle $Part $a $d $c
+        }
+    }
+}
+
 function Add-OrientedCone {
     param(
         [object]$Part,
@@ -659,15 +722,15 @@ function Write-Gltf {
 
 function New-Giraffe {
     $materials = @(
-        (New-Material "Giraffe Tan" @(0.72, 0.44, 0.18, 1.0) 0.0 0.52 0.08 0.36 @(0.07, 0.025, 0.01) 0.45 -NormalTextureIndex 0 -MetallicRoughnessTextureIndex 1),
-        (New-Material "Giraffe Spots" @(0.16, 0.038, 0.012, 1.0) 0.0 0.64 -NormalTextureIndex 0 -MetallicRoughnessTextureIndex 1),
-        (New-Material "Giraffe Cream" @(0.95, 0.76, 0.48, 1.0) 0.0 0.48 0.06 0.28 @(0.11, 0.06, 0.025) 0.48 -NormalTextureIndex 0 -MetallicRoughnessTextureIndex 1),
+        (New-Material "Giraffe Tan" @(0.46, 0.25, 0.08, 1.0) 0.0 0.56 0.08 0.36 @(0.07, 0.025, 0.01) 0.45 -NormalTextureIndex 0 -NormalTextureScale 0.14 -MetallicRoughnessTextureIndex 1),
+        (New-Material "Giraffe Spots" @(0.09, 0.018, 0.006, 1.0) 0.0 0.68 -NormalTextureIndex 0 -NormalTextureScale 0.12 -MetallicRoughnessTextureIndex 1),
+        (New-Material "Giraffe Cream" @(0.72, 0.55, 0.32, 1.0) 0.0 0.50 0.06 0.28 @(0.11, 0.06, 0.025) 0.48 -NormalTextureIndex 0 -NormalTextureScale 0.14 -MetallicRoughnessTextureIndex 1),
         (New-Material "Giraffe Eye White" @(0.76, 0.72, 0.62, 1.0) 0.0 0.18 0.54 0.08),
         (New-Material "Giraffe Iris" @(0.18, 0.055, 0.014, 1.0) 0.0 0.24 0.64 0.06),
         (New-Material "Giraffe Eye Detail" @(0.004, 0.002, 0.001, 1.0) 0.0 0.10 0.70 0.06),
-        (New-Material "Giraffe Smile" @(0.42, 0.018, 0.018, 1.0) 0.0 0.34 0.05 0.22),
-        (New-Material "Giraffe Ear Inner" @(0.38, 0.10, 0.045, 1.0) 0.0 0.42 0.03 0.18 -NormalTextureIndex 0 -MetallicRoughnessTextureIndex 1),
-        (New-Material "Giraffe Ossicone Cap" @(0.20, 0.055, 0.018, 1.0) 0.0 0.46 0.02 0.24 -NormalTextureIndex 0 -MetallicRoughnessTextureIndex 1))
+        (New-Material "Giraffe Smile" @(0.11, 0.015, 0.008, 1.0) 0.0 0.34 0.05 0.22),
+        (New-Material "Giraffe Ear Inner" @(0.30, 0.065, 0.025, 1.0) 0.0 0.44 0.03 0.18 -NormalTextureIndex 0 -NormalTextureScale 0.12 -MetallicRoughnessTextureIndex 1),
+        (New-Material "Giraffe Ossicone Cap" @(0.12, 0.025, 0.006, 1.0) 0.0 0.48 0.02 0.24 -NormalTextureIndex 0 -NormalTextureScale 0.12 -MetallicRoughnessTextureIndex 1))
     $tan = New-Part 0
     $spots = New-Part 1
     $cream = New-Part 2
@@ -677,14 +740,14 @@ function New-Giraffe {
     $smile = New-Part 6
     $earInner = New-Part 7
     $ossicone = New-Part 8
-    # Keep the proportions stylized, but use enough curvature that the
-    # silhouette reads as an authored animated-film character rather than a
-    # low-resolution primitive assembly.
-    Add-Ellipsoid $tan @(0.0, 1.35, 0.0) @(0.92, 1.0, 0.62) 20 36
-    Add-Frustum $tan 1.55 3.55 0.34 0.29 0.0 0.0 32
-    Add-Ellipsoid $tan @(0.0, 3.82, 0.0) @(0.72, 0.56, 0.56) 18 32
+    # Keep the mascot identity restrained, but use continuous profiles and
+    # believable curvature so the silhouette does not read as primitive
+    # assembly when inspected from the authored front and three-quarter views.
+    Add-Ellipsoid $tan @(0.0, 1.42, 0.0) @(0.98, 0.96, 0.64) 28 56
+    Add-ProfiledFrustum $tan @(1.55, 1.86, 2.25, 2.72, 3.18, 3.55) @(0.41, 0.39, 0.36, 0.33, 0.30, 0.29) 0.0 0.0 48
+    Add-Ellipsoid $tan @(0.0, 3.82, 0.0) @(0.68, 0.54, 0.52) 26 48
     foreach ($leg in @(@(-0.55, 0.0, -0.36), @(0.55, 0.0, -0.36), @(-0.55, 0.0, 0.36), @(0.55, 0.0, 0.36))) {
-        Add-Frustum $tan 0.12 0.92 0.18 0.14 $leg[0] $leg[2] 20
+        Add-ProfiledFrustum $tan @(0.08, 0.28, 0.62, 0.98, 1.10) @(0.16, 0.18, 0.17, 0.145, 0.13) $leg[0] $leg[2] 28
     }
     # Model the ears as compact, flattened lobes in the head plane. The
     # previous deep capsules read like small missiles when viewed from the
@@ -719,15 +782,16 @@ function New-Giraffe {
     Add-SurfaceSpot $spots @(0.0, 2.78, 0.30) @(0.0, 0.0, 1.0) 0.12 0.17 0.25
     Add-EllipsoidSurfaceSpot $spots @(0.0, 3.82, 0.0) @(0.72, 0.56, 0.56) @(-0.32, 0.18, 0.92) 0.12 0.10 0.35
     Add-EllipsoidSurfaceSpot $spots @(0.0, 3.82, 0.0) @(0.72, 0.56, 0.56) @(0.34, -0.22, 0.90) 0.13 0.09 -0.30
-    Add-Ellipsoid $cream @(0.0, 3.62, 0.50) @(0.42, 0.24, 0.20) 12 24
-    Add-Ellipsoid $eyes @(-0.28, 3.98, 0.51) @(0.115, 0.16, 0.065) 12 20
-    Add-Ellipsoid $eyes @(0.28, 3.98, 0.51) @(0.115, 0.16, 0.065) 12 20
-    Add-Ellipsoid $iris @(-0.28, 3.98, 0.573) @(0.064, 0.090, 0.022) 10 18
-    Add-Ellipsoid $iris @(0.28, 3.98, 0.573) @(0.064, 0.090, 0.022) 10 18
-    Add-Ellipsoid $details @(-0.28, 3.98, 0.594) @(0.027, 0.050, 0.010) 8 14
-    Add-Ellipsoid $details @(0.28, 3.98, 0.594) @(0.027, 0.050, 0.010) 8 14
-    Add-Ellipsoid $eyes @(-0.30, 4.025, 0.603) @(0.014, 0.020, 0.006) 6 10
-    Add-Ellipsoid $eyes @(0.26, 4.025, 0.603) @(0.014, 0.020, 0.006) 6 10
+    Add-Ellipsoid $cream @(0.0, 3.63, 0.50) @(0.40, 0.22, 0.19) 18 32
+    Add-Ellipsoid $cream @(0.0, 3.48, 0.53) @(0.29, 0.12, 0.14) 14 28
+    Add-Ellipsoid $eyes @(-0.27, 3.98, 0.50) @(0.095, 0.13, 0.060) 16 28
+    Add-Ellipsoid $eyes @(0.27, 3.98, 0.50) @(0.095, 0.13, 0.060) 16 28
+    Add-Ellipsoid $iris @(-0.27, 3.98, 0.562) @(0.052, 0.074, 0.020) 12 24
+    Add-Ellipsoid $iris @(0.27, 3.98, 0.562) @(0.052, 0.074, 0.020) 12 24
+    Add-Ellipsoid $details @(-0.27, 3.98, 0.581) @(0.020, 0.038, 0.009) 10 18
+    Add-Ellipsoid $details @(0.27, 3.98, 0.581) @(0.020, 0.038, 0.009) 10 18
+    Add-Ellipsoid $eyes @(-0.285, 4.015, 0.590) @(0.010, 0.015, 0.005) 8 14
+    Add-Ellipsoid $eyes @(0.255, 4.015, 0.590) @(0.010, 0.015, 0.005) 8 14
     Add-Ellipsoid $details @(-0.14, 3.66, 0.695) @(0.070, 0.038, 0.014) 8 14
     Add-Ellipsoid $details @(0.14, 3.66, 0.695) @(0.070, 0.038, 0.014) 8 14
     Add-Ellipsoid $smile @(0.0, 3.55, 0.695) @(0.24, 0.035, 0.014) 8 16
@@ -737,11 +801,11 @@ function New-Giraffe {
 
 function New-Rocket {
     $materials = @(
-        (New-Material "Rocket Painted Ceramic" @(0.64, 0.70, 0.76, 1.0) 0.18 0.28 0.32 0.16 -NormalTextureIndex 0 -MetallicRoughnessTextureIndex 1),
-        (New-Material "Rocket Brushed Metal" @(0.48, 0.52, 0.58, 1.0) 0.86 0.20 0.08 0.20 -NormalTextureIndex 0 -MetallicRoughnessTextureIndex 1),
-        (New-Material "Rocket Heat Shield" @(0.055, 0.065, 0.075, 1.0) 0.62 0.34 0.0 0.20 @(0.0, 0.0, 0.0) 0.50 @(0.18, 0.025, 0.005) 0.40 -NormalTextureIndex 0 -MetallicRoughnessTextureIndex 1),
-        (New-Material "Rocket Mission Stripe" @(0.84, 0.14, 0.055, 1.0) 0.18 0.30 0.12 0.20 -NormalTextureIndex 0 -MetallicRoughnessTextureIndex 1),
-        (New-Material "Rocket Avionics" @(0.025, 0.032, 0.042, 1.0) 0.72 0.24 0.10 0.18 -NormalTextureIndex 0 -MetallicRoughnessTextureIndex 1))
+        (New-Material "Rocket Painted Ceramic" @(0.52, 0.58, 0.66, 1.0) 0.18 0.32 0.32 0.16 -NormalTextureIndex 0 -NormalTextureScale 0.16 -MetallicRoughnessTextureIndex 1),
+        (New-Material "Rocket Brushed Metal" @(0.36, 0.40, 0.47, 1.0) 0.86 0.24 0.08 0.20 -NormalTextureIndex 0 -NormalTextureScale 0.14 -MetallicRoughnessTextureIndex 1),
+        (New-Material "Rocket Heat Shield" @(0.035, 0.042, 0.050, 1.0) 0.62 0.38 0.0 0.20 @(0.0, 0.0, 0.0) 0.50 @(0.18, 0.025, 0.005) 0.40 -NormalTextureIndex 0 -NormalTextureScale 0.12 -MetallicRoughnessTextureIndex 1),
+        (New-Material "Rocket Mission Stripe" @(0.68, 0.085, 0.028, 1.0) 0.18 0.34 0.12 0.20 -NormalTextureIndex 0 -NormalTextureScale 0.14 -MetallicRoughnessTextureIndex 1),
+        (New-Material "Rocket Avionics" @(0.018, 0.024, 0.034, 1.0) 0.72 0.28 0.10 0.18 -NormalTextureIndex 0 -NormalTextureScale 0.12 -MetallicRoughnessTextureIndex 1))
     $paint = New-Part 0
     $metal = New-Part 1
     $heat = New-Part 2
@@ -749,12 +813,8 @@ function New-Rocket {
     $avionics = New-Part 4
     # Staged core, interstage, and ogive-like fairing sections provide a more
     # believable modern launch-vehicle silhouette while remaining bounded.
-    Add-Frustum $paint 0.35 2.50 0.62 0.56 0.0 0.0 40
-    Add-Frustum $paint 2.50 2.62 0.56 0.54 0.0 0.0 40
-    Add-Frustum $paint 2.62 2.76 0.54 0.44 0.0 0.0 40
-    Add-Frustum $paint 2.76 2.92 0.44 0.27 0.0 0.0 40
-    Add-Frustum $paint 2.92 3.12 0.27 0.075 0.0 0.0 40
-    Add-Ellipsoid $paint @(0.0, 3.17, 0.0) @(0.08, 0.11, 0.08) 10 20
+    Add-ProfiledFrustum $paint @(0.35, 1.15, 2.25, 2.50, 2.62, 2.76, 2.92, 3.12) @(0.62, 0.61, 0.58, 0.56, 0.54, 0.44, 0.27, 0.075) 0.0 0.0 56
+    Add-Ellipsoid $paint @(0.0, 3.17, 0.0) @(0.08, 0.11, 0.08) 16 32
     Add-Frustum $metal 0.28 0.48 0.64 0.64 0.0 0.0 32
     Add-Frustum $metal 0.48 0.56 0.64 0.59 0.0 0.0 32
     Add-Frustum $metal 1.24 1.30 0.575 0.575 0.0 0.0 32
