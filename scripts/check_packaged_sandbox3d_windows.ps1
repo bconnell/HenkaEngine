@@ -2143,7 +2143,7 @@ try {
     }
     if (-not (Wait-FileContains `
             -Path $startupRestoreStdoutPath `
-            -Pattern "Native authoring startup restore: material state restored" `
+            -Pattern "Native authoring startup restore: material state restored.*pbr_state=restored" `
             -TimeoutMilliseconds 3000)) {
         $restoreWindow = [NativeMethods]::FindProcessWindow(
             [uint32]$startupRestoreProcess.Id,

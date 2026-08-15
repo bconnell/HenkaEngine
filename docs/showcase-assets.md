@@ -35,12 +35,11 @@ in-engine procedural detail-normal texture creation, bounded material
 undo/redo, Face selection, bevel, Save Project, and Reload Project
 transactionally. The project
 manifest persists the mesh source,
-transform, and visibility, while its bounded `.material` sidecar persists base
-color, metallic, roughness, emissive strength, and the manager-owned
-normal-texture identity; native runtime detail textures are recreated from
-their bounded recipe on reload. Broader material-parameter serialization,
-texture painting, and native-authored
-source export remain open. Complete native showcase proof still requires a real
+transform, and visibility, while its bounded `.material` sidecar persists the
+supported PBR scalars, colors, flags, alpha mode, and seven material texture
+identities; native runtime detail textures are recreated from their bounded
+recipe on reload. Texture painting and native-authored source export remain
+open. Complete native showcase proof still requires a real
 user edit, save, close/reload, continued edit, and rendered evidence.
 
 - `cheeky_giraffe.gltf` — an original stylized-realistic, animated-film-oriented Cheeky Giraffe mascot with smooth high-curvature body and head forms, surface-fitted spots, a readable mane row, compact flattened ear lobes with inset inner-ear patches, connected tan ossicone stalks, and outward-angled dark-brown caps, layered eye whites/irises/pupils/highlights, nostrils, and a shaped mouth line. The presentation remains expressive by design, but the face is built from separately shaded anatomical features rather than a single cartoon eye material.

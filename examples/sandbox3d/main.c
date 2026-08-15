@@ -1616,6 +1616,67 @@ static henka_result sandbox3d_ensure_native_detail_texture(
     return result;
 }
 
+static henka_result sandbox3d_save_native_material_texture(
+    const henka_asset_manager* assets,
+    henka_settings* settings,
+    const char* key,
+    const henka_texture* texture)
+{
+    henka_asset_metadata metadata;
+
+    if (assets == NULL || settings == NULL || key == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    if (texture == NULL)
+    {
+        return henka_settings_set_string(settings, key, "");
+    }
+    memset(&metadata, 0, sizeof(metadata));
+    if (henka_assets_get_texture_metadata(assets, texture, &metadata) != HENKA_SUCCESS ||
+        metadata.source_path == NULL || metadata.source_path[0] == '\0')
+    {
+        return HENKA_ERROR_ASSET_SOURCE;
+    }
+    return henka_settings_set_string(settings, key, metadata.source_path);
+}
+
+static henka_result sandbox3d_load_native_material_texture(
+    henka_engine* engine,
+    henka_settings* settings,
+    henka_material_instance* candidate,
+    const char* key,
+    henka_material_texture_slot slot,
+    henka_material_instance_parameter parameter)
+{
+    henka_texture* texture = NULL;
+    const char* path;
+    henka_result result;
+
+    if (engine == NULL || settings == NULL || candidate == NULL || key == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    path = henka_settings_get_string(settings, key, NULL);
+    if (path == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    if (path[0] == '\0')
+    {
+        return henka_assets_material_instance_reset_override(candidate, parameter);
+    }
+    result = strncmp(path, "runtime/native-authoring/", 25U) == 0
+        ? sandbox3d_ensure_native_detail_texture(engine, path, &texture)
+        : henka_assets_load_texture(
+            henka_engine_get_asset_manager(engine), path, &texture);
+    if (result != HENKA_SUCCESS)
+    {
+        return result;
+    }
+    return henka_assets_material_instance_set_texture(candidate, slot, texture);
+}
+
 static henka_result sandbox3d_save_native_authoring_material(
     henka_engine* engine,
     sandbox3d_state* state,
@@ -1625,7 +1686,6 @@ static henka_result sandbox3d_save_native_authoring_material(
     sandbox3d_material_editor_binding* binding;
     henka_material material;
     henka_settings* settings = NULL;
-    henka_asset_metadata metadata;
     char* sidecar_path = NULL;
     henka_result result;
 
@@ -1647,33 +1707,61 @@ static henka_result sandbox3d_save_native_authoring_material(
         henka_free(sidecar_path);
         return HENKA_ERROR_OUT_OF_MEMORY;
     }
-    result = henka_settings_set_int(settings, "material.version", 1);
+    result = henka_settings_set_int(settings, "material.version", 2);
     if (result == HENKA_SUCCESS) result = henka_settings_set_float(settings, "base_color.r", material.base_color.x);
     if (result == HENKA_SUCCESS) result = henka_settings_set_float(settings, "base_color.g", material.base_color.y);
     if (result == HENKA_SUCCESS) result = henka_settings_set_float(settings, "base_color.b", material.base_color.z);
     if (result == HENKA_SUCCESS) result = henka_settings_set_float(settings, "base_color.a", material.base_color.w);
     if (result == HENKA_SUCCESS) result = henka_settings_set_float(settings, "metallic", material.metallic);
     if (result == HENKA_SUCCESS) result = henka_settings_set_float(settings, "roughness", material.roughness);
+    if (result == HENKA_SUCCESS) result = henka_settings_set_float(settings, "specular_factor", material.specular_factor);
+    if (result == HENKA_SUCCESS) result = henka_settings_set_float(settings, "ior", material.ior);
+    if (result == HENKA_SUCCESS) result = henka_settings_set_float(settings, "transmission", material.transmission);
+    if (result == HENKA_SUCCESS) result = henka_settings_set_float(settings, "normal_scale", material.normal_scale);
+    if (result == HENKA_SUCCESS) result = henka_settings_set_float(settings, "occlusion_strength", material.occlusion_strength);
     if (result == HENKA_SUCCESS) result = henka_settings_set_float(settings, "emissive_strength", material.emissive_strength);
-    if (result == HENKA_SUCCESS && material.normal_texture != NULL)
-    {
-        memset(&metadata, 0, sizeof(metadata));
-        if (henka_assets_get_texture_metadata(
-                henka_engine_get_asset_manager(engine), material.normal_texture, &metadata) != HENKA_SUCCESS ||
-            metadata.source_path == NULL)
-        {
-            result = HENKA_ERROR_ASSET_SOURCE;
-        }
-        else
-        {
-            result = henka_settings_set_string(
-                settings, "texture.normal.path", metadata.source_path);
-        }
-    }
-    if (result == HENKA_SUCCESS && material.normal_texture == NULL)
-    {
-        result = henka_settings_set_string(settings, "texture.normal.path", "");
-    }
+    if (result == HENKA_SUCCESS) result = henka_settings_set_float(settings, "clearcoat", material.clearcoat);
+    if (result == HENKA_SUCCESS) result = henka_settings_set_float(settings, "clearcoat_roughness", material.clearcoat_roughness);
+    if (result == HENKA_SUCCESS) result = henka_settings_set_float(settings, "alpha_cutoff", material.alpha_cutoff);
+    if (result == HENKA_SUCCESS) result = henka_settings_set_float(settings, "sheen_roughness", material.sheen_roughness);
+    if (result == HENKA_SUCCESS) result = henka_settings_set_float(settings, "thickness", material.thickness);
+    if (result == HENKA_SUCCESS) result = henka_settings_set_float(settings, "attenuation_distance", material.attenuation_distance);
+    if (result == HENKA_SUCCESS) result = henka_settings_set_float(settings, "subsurface", material.subsurface);
+    if (result == HENKA_SUCCESS) result = henka_settings_set_float(settings, "emissive_color.r", material.emissive_color.x);
+    if (result == HENKA_SUCCESS) result = henka_settings_set_float(settings, "emissive_color.g", material.emissive_color.y);
+    if (result == HENKA_SUCCESS) result = henka_settings_set_float(settings, "emissive_color.b", material.emissive_color.z);
+    if (result == HENKA_SUCCESS) result = henka_settings_set_float(settings, "specular_color.r", material.specular_color.x);
+    if (result == HENKA_SUCCESS) result = henka_settings_set_float(settings, "specular_color.g", material.specular_color.y);
+    if (result == HENKA_SUCCESS) result = henka_settings_set_float(settings, "specular_color.b", material.specular_color.z);
+    if (result == HENKA_SUCCESS) result = henka_settings_set_float(settings, "sheen_color.r", material.sheen_color.x);
+    if (result == HENKA_SUCCESS) result = henka_settings_set_float(settings, "sheen_color.g", material.sheen_color.y);
+    if (result == HENKA_SUCCESS) result = henka_settings_set_float(settings, "sheen_color.b", material.sheen_color.z);
+    if (result == HENKA_SUCCESS) result = henka_settings_set_float(settings, "attenuation_color.r", material.attenuation_color.x);
+    if (result == HENKA_SUCCESS) result = henka_settings_set_float(settings, "attenuation_color.g", material.attenuation_color.y);
+    if (result == HENKA_SUCCESS) result = henka_settings_set_float(settings, "attenuation_color.b", material.attenuation_color.z);
+    if (result == HENKA_SUCCESS) result = henka_settings_set_float(settings, "subsurface_color.r", material.subsurface_color.x);
+    if (result == HENKA_SUCCESS) result = henka_settings_set_float(settings, "subsurface_color.g", material.subsurface_color.y);
+    if (result == HENKA_SUCCESS) result = henka_settings_set_float(settings, "subsurface_color.b", material.subsurface_color.z);
+    if (result == HENKA_SUCCESS) result = henka_settings_set_bool(settings, "use_lighting", material.use_lighting);
+    if (result == HENKA_SUCCESS) result = henka_settings_set_bool(settings, "depth_test", material.depth_test);
+    if (result == HENKA_SUCCESS) result = henka_settings_set_bool(settings, "double_sided", material.double_sided);
+    if (result == HENKA_SUCCESS) result = henka_settings_set_bool(settings, "cast_shadows", material.cast_shadows);
+    if (result == HENKA_SUCCESS) result = henka_settings_set_bool(settings, "receive_shadows", material.receive_shadows);
+    if (result == HENKA_SUCCESS) result = henka_settings_set_int(settings, "alpha_mode", (int)material.alpha_mode);
+    if (result == HENKA_SUCCESS) result = sandbox3d_save_native_material_texture(
+        henka_engine_get_asset_manager(engine), settings, "texture.base_color.path", material.base_color_texture);
+    if (result == HENKA_SUCCESS) result = sandbox3d_save_native_material_texture(
+        henka_engine_get_asset_manager(engine), settings, "texture.normal.path", material.normal_texture);
+    if (result == HENKA_SUCCESS) result = sandbox3d_save_native_material_texture(
+        henka_engine_get_asset_manager(engine), settings, "texture.metallic_roughness.path", material.metallic_roughness_texture);
+    if (result == HENKA_SUCCESS) result = sandbox3d_save_native_material_texture(
+        henka_engine_get_asset_manager(engine), settings, "texture.occlusion.path", material.occlusion_texture);
+    if (result == HENKA_SUCCESS) result = sandbox3d_save_native_material_texture(
+        henka_engine_get_asset_manager(engine), settings, "texture.emissive.path", material.emissive_texture);
+    if (result == HENKA_SUCCESS) result = sandbox3d_save_native_material_texture(
+        henka_engine_get_asset_manager(engine), settings, "texture.transmission.path", material.transmission_texture);
+    if (result == HENKA_SUCCESS) result = sandbox3d_save_native_material_texture(
+        henka_engine_get_asset_manager(engine), settings, "texture.thickness.path", material.thickness_texture);
     if (result == HENKA_SUCCESS)
     {
         result = henka_settings_save_file(settings, sidecar_path);
@@ -1727,7 +1815,7 @@ static henka_result sandbox3d_load_native_authoring_material(
         return HENKA_SUCCESS;
     }
     version = result == HENKA_SUCCESS ? henka_settings_get_int(settings, "material.version", 0) : 0;
-    if (result == HENKA_SUCCESS && version != 1)
+    if (result == HENKA_SUCCESS && (version < 1 || version > 2))
     {
         result = HENKA_ERROR_UNKNOWN;
     }
@@ -1790,6 +1878,144 @@ static henka_result sandbox3d_load_native_authoring_material(
     {
         result = henka_assets_material_instance_reset_override(
             &candidate, HENKA_MATERIAL_INSTANCE_NORMAL_TEXTURE);
+    }
+    if (result == HENKA_SUCCESS && version >= 2)
+    {
+        const float specular_factor = henka_settings_get_float(settings, "specular_factor", NAN);
+        const float ior = henka_settings_get_float(settings, "ior", NAN);
+        const float transmission = henka_settings_get_float(settings, "transmission", NAN);
+        const float normal_scale = henka_settings_get_float(settings, "normal_scale", NAN);
+        const float occlusion_strength = henka_settings_get_float(settings, "occlusion_strength", NAN);
+        const float clearcoat = henka_settings_get_float(settings, "clearcoat", NAN);
+        const float clearcoat_roughness = henka_settings_get_float(settings, "clearcoat_roughness", NAN);
+        const float alpha_cutoff = henka_settings_get_float(settings, "alpha_cutoff", NAN);
+        const float sheen_roughness = henka_settings_get_float(settings, "sheen_roughness", NAN);
+        const float thickness = henka_settings_get_float(settings, "thickness", NAN);
+        const float attenuation_distance = henka_settings_get_float(settings, "attenuation_distance", NAN);
+        const float subsurface = henka_settings_get_float(settings, "subsurface", NAN);
+
+        if (!isfinite(specular_factor) || !isfinite(ior) || !isfinite(transmission) ||
+            !isfinite(normal_scale) || !isfinite(occlusion_strength) || !isfinite(clearcoat) ||
+            !isfinite(clearcoat_roughness) || !isfinite(alpha_cutoff) || !isfinite(sheen_roughness) ||
+            !isfinite(thickness) || !isfinite(attenuation_distance) || !isfinite(subsurface))
+        {
+            result = HENKA_ERROR_INVALID_ARGUMENT;
+        }
+        else
+        {
+            result = henka_assets_material_instance_set_float(
+                &candidate, HENKA_MATERIAL_INSTANCE_SPECULAR_FACTOR, specular_factor);
+            if (result == HENKA_SUCCESS) result = henka_assets_material_instance_set_float(
+                &candidate, HENKA_MATERIAL_INSTANCE_IOR, ior);
+            if (result == HENKA_SUCCESS) result = henka_assets_material_instance_set_float(
+                &candidate, HENKA_MATERIAL_INSTANCE_TRANSMISSION, transmission);
+            if (result == HENKA_SUCCESS) result = henka_assets_material_instance_set_float(
+                &candidate, HENKA_MATERIAL_INSTANCE_NORMAL_SCALE, normal_scale);
+            if (result == HENKA_SUCCESS) result = henka_assets_material_instance_set_float(
+                &candidate, HENKA_MATERIAL_INSTANCE_OCCLUSION_STRENGTH, occlusion_strength);
+            if (result == HENKA_SUCCESS) result = henka_assets_material_instance_set_float(
+                &candidate, HENKA_MATERIAL_INSTANCE_CLEARCOAT, clearcoat);
+            if (result == HENKA_SUCCESS) result = henka_assets_material_instance_set_float(
+                &candidate, HENKA_MATERIAL_INSTANCE_CLEARCOAT_ROUGHNESS, clearcoat_roughness);
+            if (result == HENKA_SUCCESS) result = henka_assets_material_instance_set_float(
+                &candidate, HENKA_MATERIAL_INSTANCE_ALPHA_CUTOFF, alpha_cutoff);
+            if (result == HENKA_SUCCESS) result = henka_assets_material_instance_set_float(
+                &candidate, HENKA_MATERIAL_INSTANCE_SHEEN_ROUGHNESS, sheen_roughness);
+            if (result == HENKA_SUCCESS) result = henka_assets_material_instance_set_float(
+                &candidate, HENKA_MATERIAL_INSTANCE_THICKNESS, thickness);
+            if (result == HENKA_SUCCESS) result = henka_assets_material_instance_set_float(
+                &candidate, HENKA_MATERIAL_INSTANCE_ATTENUATION_DISTANCE, attenuation_distance);
+            if (result == HENKA_SUCCESS) result = henka_assets_material_instance_set_float(
+                &candidate, HENKA_MATERIAL_INSTANCE_SUBSURFACE, subsurface);
+        }
+    }
+    if (result == HENKA_SUCCESS && version >= 2)
+    {
+        const henka_vec3 emissive_color = {
+            henka_settings_get_float(settings, "emissive_color.r", NAN),
+            henka_settings_get_float(settings, "emissive_color.g", NAN),
+            henka_settings_get_float(settings, "emissive_color.b", NAN)};
+        const henka_vec3 specular_color = {
+            henka_settings_get_float(settings, "specular_color.r", NAN),
+            henka_settings_get_float(settings, "specular_color.g", NAN),
+            henka_settings_get_float(settings, "specular_color.b", NAN)};
+        const henka_vec3 sheen_color = {
+            henka_settings_get_float(settings, "sheen_color.r", NAN),
+            henka_settings_get_float(settings, "sheen_color.g", NAN),
+            henka_settings_get_float(settings, "sheen_color.b", NAN)};
+        const henka_vec3 attenuation_color = {
+            henka_settings_get_float(settings, "attenuation_color.r", NAN),
+            henka_settings_get_float(settings, "attenuation_color.g", NAN),
+            henka_settings_get_float(settings, "attenuation_color.b", NAN)};
+        const henka_vec3 subsurface_color = {
+            henka_settings_get_float(settings, "subsurface_color.r", NAN),
+            henka_settings_get_float(settings, "subsurface_color.g", NAN),
+            henka_settings_get_float(settings, "subsurface_color.b", NAN)};
+        const int alpha_mode = henka_settings_get_int(settings, "alpha_mode", -1);
+
+        if (!isfinite(emissive_color.x) || !isfinite(emissive_color.y) || !isfinite(emissive_color.z) ||
+            !isfinite(specular_color.x) || !isfinite(specular_color.y) || !isfinite(specular_color.z) ||
+            !isfinite(sheen_color.x) || !isfinite(sheen_color.y) || !isfinite(sheen_color.z) ||
+            !isfinite(attenuation_color.x) || !isfinite(attenuation_color.y) || !isfinite(attenuation_color.z) ||
+            !isfinite(subsurface_color.x) || !isfinite(subsurface_color.y) || !isfinite(subsurface_color.z) ||
+            alpha_mode < (int)HENKA_MATERIAL_ALPHA_OPAQUE || alpha_mode > (int)HENKA_MATERIAL_ALPHA_BLENDED)
+        {
+            result = HENKA_ERROR_INVALID_ARGUMENT;
+        }
+        else
+        {
+            result = henka_assets_material_instance_set_vec3(
+                &candidate, HENKA_MATERIAL_INSTANCE_EMISSIVE_COLOR, emissive_color);
+            if (result == HENKA_SUCCESS) result = henka_assets_material_instance_set_vec3(
+                &candidate, HENKA_MATERIAL_INSTANCE_SPECULAR_COLOR, specular_color);
+            if (result == HENKA_SUCCESS) result = henka_assets_material_instance_set_vec3(
+                &candidate, HENKA_MATERIAL_INSTANCE_SHEEN_COLOR, sheen_color);
+            if (result == HENKA_SUCCESS) result = henka_assets_material_instance_set_vec3(
+                &candidate, HENKA_MATERIAL_INSTANCE_ATTENUATION_COLOR, attenuation_color);
+            if (result == HENKA_SUCCESS) result = henka_assets_material_instance_set_vec3(
+                &candidate, HENKA_MATERIAL_INSTANCE_SUBSURFACE_COLOR, subsurface_color);
+            if (result == HENKA_SUCCESS) result = henka_assets_material_instance_set_bool(
+                &candidate, HENKA_MATERIAL_INSTANCE_USE_LIGHTING,
+                henka_settings_get_bool(settings, "use_lighting", candidate.material.use_lighting));
+            if (result == HENKA_SUCCESS) result = henka_assets_material_instance_set_bool(
+                &candidate, HENKA_MATERIAL_INSTANCE_DEPTH_TEST,
+                henka_settings_get_bool(settings, "depth_test", candidate.material.depth_test));
+            if (result == HENKA_SUCCESS) result = henka_assets_material_instance_set_bool(
+                &candidate, HENKA_MATERIAL_INSTANCE_DOUBLE_SIDED,
+                henka_settings_get_bool(settings, "double_sided", candidate.material.double_sided));
+            if (result == HENKA_SUCCESS) result = henka_assets_material_instance_set_bool(
+                &candidate, HENKA_MATERIAL_INSTANCE_CAST_SHADOWS,
+                henka_settings_get_bool(settings, "cast_shadows", candidate.material.cast_shadows));
+            if (result == HENKA_SUCCESS) result = henka_assets_material_instance_set_bool(
+                &candidate, HENKA_MATERIAL_INSTANCE_RECEIVE_SHADOWS,
+                henka_settings_get_bool(settings, "receive_shadows", candidate.material.receive_shadows));
+            if (result == HENKA_SUCCESS) result = henka_assets_material_instance_set_alpha_mode(
+                &candidate, (henka_material_alpha_mode)alpha_mode);
+        }
+    }
+    if (result == HENKA_SUCCESS && version >= 2)
+    {
+        result = sandbox3d_load_native_material_texture(
+            engine, settings, &candidate, "texture.base_color.path",
+            HENKA_MATERIAL_TEXTURE_SLOT_BASE_COLOR, HENKA_MATERIAL_INSTANCE_BASE_COLOR_TEXTURE);
+        if (result == HENKA_SUCCESS) result = sandbox3d_load_native_material_texture(
+            engine, settings, &candidate, "texture.normal.path",
+            HENKA_MATERIAL_TEXTURE_SLOT_NORMAL, HENKA_MATERIAL_INSTANCE_NORMAL_TEXTURE);
+        if (result == HENKA_SUCCESS) result = sandbox3d_load_native_material_texture(
+            engine, settings, &candidate, "texture.metallic_roughness.path",
+            HENKA_MATERIAL_TEXTURE_SLOT_METALLIC_ROUGHNESS, HENKA_MATERIAL_INSTANCE_METALLIC_ROUGHNESS_TEXTURE);
+        if (result == HENKA_SUCCESS) result = sandbox3d_load_native_material_texture(
+            engine, settings, &candidate, "texture.occlusion.path",
+            HENKA_MATERIAL_TEXTURE_SLOT_OCCLUSION, HENKA_MATERIAL_INSTANCE_OCCLUSION_TEXTURE);
+        if (result == HENKA_SUCCESS) result = sandbox3d_load_native_material_texture(
+            engine, settings, &candidate, "texture.emissive.path",
+            HENKA_MATERIAL_TEXTURE_SLOT_EMISSIVE, HENKA_MATERIAL_INSTANCE_EMISSIVE_TEXTURE);
+        if (result == HENKA_SUCCESS) result = sandbox3d_load_native_material_texture(
+            engine, settings, &candidate, "texture.transmission.path",
+            HENKA_MATERIAL_TEXTURE_SLOT_TRANSMISSION, HENKA_MATERIAL_INSTANCE_TRANSMISSION_TEXTURE);
+        if (result == HENKA_SUCCESS) result = sandbox3d_load_native_material_texture(
+            engine, settings, &candidate, "texture.thickness.path",
+            HENKA_MATERIAL_TEXTURE_SLOT_THICKNESS, HENKA_MATERIAL_INSTANCE_THICKNESS_TEXTURE);
     }
     henka_settings_destroy(settings);
     if (result == HENKA_SUCCESS)
@@ -6135,7 +6361,7 @@ static void sandbox3d_print_help(const sandbox3d_state* state)
     printf("  Open Native Panel Test from the Controls QA page to validate a separate OS-level tool window.\n");
     printf("  Use the panels to inspect named scene objects, clear selection, switch gizmo modes, focus the camera, reset object transforms, toggle visibility, and open in-window Help, Scene Legend, Object Info, Assets, Paths, Settings, Diagnostics, Transform QA, and Physics QA utilities.\n");
     printf("  Select an imported glTF scene entity to edit its shared material instance in Object Details; scalar/vector, flags, alpha, and semantic texture overrides apply transactionally. Use Utility > Assets to choose manager-owned textures for editable slots.\n");
-    printf("  Select a Showcase Giraffe or Showcase Rocket primitive, open Object Details > Authoring, and choose Make Editable; Own Material then promotes a manager-owned runtime definition for bounded base-color, metallic, roughness, emissive-strength, and in-engine procedural normal-texture creation. Mesh/project save-reload and the bounded native material sidecar are supported, while broader material-parameter serialization, texture painting, and native-authored source export remain unfinished.\n");
+    printf("  Select a Showcase Giraffe or Showcase Rocket primitive, open Object Details > Authoring, and choose Make Editable; Own Material then promotes a manager-owned runtime definition for bounded base-color, metallic, roughness, emissive-strength, and in-engine procedural normal-texture creation. Mesh/project save-reload and the native material sidecar preserve all supported PBR scalars, colors, flags, alpha mode, and seven material texture identities; texture painting and native-authored source export remain unfinished.\n");
     printf("  Physics QA enables an opt-in fixed-step rigid-body demo with collider/contact debug drawing, impulses, body modes, and camera raycasts.\n");
     printf("  The Controls panel uses Main, Camera/Status, and QA pages, and Scene Objects supports paging when the dock is tighter than the full list.\n");
     printf("  Controls also provides Default, Modeling, Materials, Scene Assembly, Debugging, and Minimal Viewport workspace presets; topology edits mark the workspace Custom.\n");
@@ -8967,8 +9193,13 @@ static henka_result sandbox3d_restore_persisted_native_showcase_sources(
                         *binding->instance = material_candidate;
                         sandbox3d_material_history_reset(binding);
                         printf(
-                            "Native authoring startup restore: material state restored for name=%s source_state=HENKA_NATIVE_EDITABLE_MATERIAL_INSTANCE.\n",
-                            sandbox3d_safe_entity_name(state, entity, "showcase primitive"));
+                            "Native authoring startup restore: material state restored for name=%s source_state=HENKA_NATIVE_EDITABLE_MATERIAL_INSTANCE pbr_state=restored transmission=%.3f ior=%.3f subsurface=%.3f clearcoat=%.3f sheen=%.3f.\n",
+                            sandbox3d_safe_entity_name(state, entity, "showcase primitive"),
+                            material_candidate.material.transmission,
+                            material_candidate.material.ior,
+                            material_candidate.material.subsurface,
+                            material_candidate.material.clearcoat,
+                            material_candidate.material.sheen_roughness);
                         fflush(stdout);
                     }
                     else if (previous_material_valid)
