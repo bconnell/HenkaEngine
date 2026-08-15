@@ -369,6 +369,7 @@ typedef struct sandbox3d_state
     henka_texture* wood_grain_texture;
     henka_texture* wet_dry_roughness_texture;
     henka_texture* foliage_mask_texture;
+    henka_texture* giraffe_thickness_texture;
     henka_texture* residency_stress_textures[SANDBOX3D_RESIDENCY_STRESS_TEXTURE_COUNT];
     henka_texture* residency_stress_ktx_texture;
     henka_material residency_stress_original_material;
@@ -382,6 +383,9 @@ typedef struct sandbox3d_state
     size_t giraffe_normal_texture_region_count;
     size_t giraffe_normal_texture_loaded_count;
     size_t giraffe_normal_texture_fallback_count;
+    size_t giraffe_thickness_texture_region_count;
+    size_t giraffe_thickness_texture_loaded_count;
+    size_t giraffe_thickness_texture_fallback_count;
     henka_model_scene_data giraffe_authoring_source;
     bool giraffe_authoring_source_valid;
     henka_model_scene_data rocket_authoring_source;
@@ -1721,6 +1725,73 @@ static henka_result sandbox3d_ensure_native_surface_texture(
     descriptor.wrap_u = HENKA_TEXTURE_WRAP_REPEAT;
     descriptor.wrap_v = HENKA_TEXTURE_WRAP_REPEAT;
     descriptor.min_filter = HENKA_TEXTURE_FILTER_LINEAR_MIPMAP_LINEAR;
+    result = henka_texture_create_from_rgba8_with_descriptor(
+        engine, 64, 64, pixels, &descriptor, &texture);
+    henka_free(pixels);
+    if (result == HENKA_SUCCESS)
+    {
+        result = henka_assets_adopt_runtime_texture(assets, identity, texture, out_texture);
+        if (result != HENKA_SUCCESS)
+        {
+            henka_texture_destroy(texture);
+        }
+    }
+    return result;
+}
+
+static henka_result sandbox3d_ensure_giraffe_thickness_texture(
+    henka_engine* engine,
+    const char* identity,
+    henka_texture** out_texture)
+{
+    henka_asset_manager* assets;
+    henka_texture_descriptor descriptor;
+    henka_texture* texture = NULL;
+    unsigned char* pixels = NULL;
+    size_t byte_count;
+    int x;
+    int y;
+    henka_result result;
+
+    if (out_texture != NULL) *out_texture = NULL;
+    if (engine == NULL || identity == NULL || identity[0] == '\0' || out_texture == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    assets = henka_engine_get_asset_manager(engine);
+    if (sandbox3d_native_runtime_texture_exists(assets, identity))
+    {
+        return henka_assets_load_texture(assets, identity, out_texture);
+    }
+    byte_count = 64U * 64U * 4U;
+    pixels = henka_calloc(byte_count, sizeof(*pixels));
+    if (pixels == NULL)
+    {
+        return HENKA_ERROR_OUT_OF_MEMORY;
+    }
+    for (y = 0; y < 64; ++y)
+    {
+        for (x = 0; x < 64; ++x)
+        {
+            const float u = (float)x / 63.0f;
+            const float v = (float)y / 63.0f;
+            const float variation = 0.5f + 0.5f * sinf(u * 9.0f + v * 4.0f) * cosf(v * 13.0f - u * 3.0f);
+            const float thickness = sandbox3d_material_editor_clamp(
+                0.62f + variation * 0.22f, 0.42f, 0.92f);
+            const unsigned char value = (unsigned char)(thickness * 255.0f);
+            const size_t offset = ((size_t)y * 64U + (size_t)x) * 4U;
+            pixels[offset + 0U] = value;
+            pixels[offset + 1U] = value;
+            pixels[offset + 2U] = value;
+            pixels[offset + 3U] = 255U;
+        }
+    }
+    descriptor = henka_texture_descriptor_default_data();
+    descriptor.generate_mipmaps = true;
+    descriptor.wrap_u = HENKA_TEXTURE_WRAP_REPEAT;
+    descriptor.wrap_v = HENKA_TEXTURE_WRAP_REPEAT;
+    descriptor.min_filter = HENKA_TEXTURE_FILTER_LINEAR_MIPMAP_LINEAR;
+    descriptor.usage = HENKA_TEXTURE_USAGE_GENERIC_DATA;
     result = henka_texture_create_from_rgba8_with_descriptor(
         engine, 64, 64, pixels, &descriptor, &texture);
     henka_free(pixels);
@@ -5335,7 +5406,7 @@ static void sandbox3d_report_capture_ready(
     }
 
     printf(
-        "CAPTURE_READY mode=%s viewport=%d,%d,%d,%d aspect=%.6f camera_position=%.4f,%.4f,%.4f yaw=%.6f pitch=%.6f roll=%.6f fov=%.6f giraffe_bounds=%.4f,%.4f,%.4f,%.4f,%.4f,%.4f rocket_bounds=%.4f,%.4f,%.4f,%.4f,%.4f,%.4f combined_bounds=%.4f,%.4f,%.4f,%.4f,%.4f,%.4f giraffe_screen=%.2f,%.2f,%.2f,%.2f rocket_screen=%.2f,%.2f,%.2f,%.2f combined_midpoint=%.2f,%.2f giraffe_parts=%zu rocket_parts=%zu giraffe_sss_regions=%zu giraffe_normal_texture_regions=%zu giraffe_normal_texture_loaded=%zu giraffe_normal_texture_fallbacks=%zu settled_frames=%u draw_expected=1\n",
+        "CAPTURE_READY mode=%s viewport=%d,%d,%d,%d aspect=%.6f camera_position=%.4f,%.4f,%.4f yaw=%.6f pitch=%.6f roll=%.6f fov=%.6f giraffe_bounds=%.4f,%.4f,%.4f,%.4f,%.4f,%.4f rocket_bounds=%.4f,%.4f,%.4f,%.4f,%.4f,%.4f combined_bounds=%.4f,%.4f,%.4f,%.4f,%.4f,%.4f giraffe_screen=%.2f,%.2f,%.2f,%.2f rocket_screen=%.2f,%.2f,%.2f,%.2f combined_midpoint=%.2f,%.2f giraffe_parts=%zu rocket_parts=%zu giraffe_sss_regions=%zu giraffe_normal_texture_regions=%zu giraffe_normal_texture_loaded=%zu giraffe_normal_texture_fallbacks=%zu giraffe_thickness_texture_regions=%zu giraffe_thickness_texture_loaded=%zu giraffe_thickness_texture_fallbacks=%zu settled_frames=%u draw_expected=1\n",
         henka_viewport_shading_mode_get_setting_value(state->capture_mode),
         viewport.x,
         viewport.y,
@@ -5383,6 +5454,9 @@ static void sandbox3d_report_capture_ready(
         state->giraffe_normal_texture_region_count,
         state->giraffe_normal_texture_loaded_count,
         state->giraffe_normal_texture_fallback_count,
+        state->giraffe_thickness_texture_region_count,
+        state->giraffe_thickness_texture_loaded_count,
+        state->giraffe_thickness_texture_fallback_count,
         state->capture_settled_frames);
     fflush(stdout);
     state->capture_metadata_reported = true;
@@ -5488,6 +5562,10 @@ static henka_result sandbox3d_apply_giraffe_subsurface(
                 (henka_vec3){1.0f, 0.30f, 0.12f}) != HENKA_SUCCESS ||
             henka_assets_material_instance_set_float(
                 instance, HENKA_MATERIAL_INSTANCE_THICKNESS, 0.62f) != HENKA_SUCCESS ||
+            henka_assets_material_instance_set_texture(
+                instance,
+                HENKA_MATERIAL_TEXTURE_SLOT_THICKNESS,
+                state->giraffe_thickness_texture) != HENKA_SUCCESS ||
             henka_assets_apply_material_instance_to_entity(instance, state->scene, entity) != HENKA_SUCCESS)
         {
             memset(instance, 0, sizeof(*instance));
@@ -5497,6 +5575,77 @@ static henka_result sandbox3d_apply_giraffe_subsurface(
     }
     state->giraffe_material_instance_count = applied_count;
     *out_applied_count = applied_count;
+    return HENKA_SUCCESS;
+}
+
+static henka_result sandbox3d_collect_giraffe_thickness_texture_evidence(
+    const sandbox3d_state* state,
+    const henka_asset_manager* assets,
+    size_t* out_region_count,
+    size_t* out_loaded_count,
+    size_t* out_fallback_count)
+{
+    henka_asset_metadata metadata;
+    size_t instance_index;
+    size_t region_count;
+    size_t loaded_count;
+    size_t fallback_count;
+
+    if (out_region_count != NULL) *out_region_count = 0U;
+    if (out_loaded_count != NULL) *out_loaded_count = 0U;
+    if (out_fallback_count != NULL) *out_fallback_count = 0U;
+    if (state == NULL || assets == NULL || state->giraffe_thickness_texture == NULL ||
+        out_region_count == NULL || out_loaded_count == NULL || out_fallback_count == NULL ||
+        henka_assets_get_texture_metadata(assets, state->giraffe_thickness_texture, &metadata) != HENKA_SUCCESS)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    region_count = 0U;
+    loaded_count = 0U;
+    fallback_count = 0U;
+    for (instance_index = 0U;
+         instance_index < state->giraffe_material_instance_count;
+         ++instance_index)
+    {
+        henka_material_dependency_info dependencies;
+        size_t dependency_index;
+        bool assigned = false;
+
+        memset(&dependencies, 0, sizeof(dependencies));
+        if (henka_assets_get_material_instance_dependencies(
+                &state->giraffe_material_instances[instance_index],
+                &dependencies) != HENKA_SUCCESS)
+        {
+            return HENKA_ERROR_UNKNOWN;
+        }
+        for (dependency_index = 0U;
+             dependency_index < dependencies.dependency_count;
+             ++dependency_index)
+        {
+            const henka_material_dependency* dependency = &dependencies.dependencies[dependency_index];
+            if (dependency->usage == HENKA_TEXTURE_USAGE_GENERIC_DATA &&
+                dependency->texture == state->giraffe_thickness_texture)
+            {
+                assigned = true;
+                break;
+            }
+        }
+        if (assigned)
+        {
+            ++region_count;
+        }
+    }
+    if (metadata.loaded)
+    {
+        loaded_count = region_count;
+    }
+    if (metadata.fallback)
+    {
+        fallback_count = region_count;
+    }
+    *out_region_count = region_count;
+    *out_loaded_count = loaded_count;
+    *out_fallback_count = fallback_count;
     return HENKA_SUCCESS;
 }
 
@@ -8073,6 +8222,7 @@ static void sandbox3d_release_owned_resources(sandbox3d_state* state)
     state->wood_grain_texture = NULL;
     state->wet_dry_roughness_texture = NULL;
     state->foliage_mask_texture = NULL;
+    state->giraffe_thickness_texture = NULL;
     state->foliage_mesh = NULL;
     state->authoring_object = NULL;
     state->physics.world = NULL;
@@ -8093,6 +8243,9 @@ static void sandbox3d_release_owned_resources(sandbox3d_state* state)
     state->giraffe_normal_texture_region_count = 0U;
     state->giraffe_normal_texture_loaded_count = 0U;
     state->giraffe_normal_texture_fallback_count = 0U;
+    state->giraffe_thickness_texture_region_count = 0U;
+    state->giraffe_thickness_texture_loaded_count = 0U;
+    state->giraffe_thickness_texture_fallback_count = 0U;
     memset(state->material_editor_bindings, 0, sizeof(state->material_editor_bindings));
     state->missing_model_mesh = NULL;
     state->scene = NULL;
@@ -22082,6 +22235,15 @@ static henka_result sandbox3d_initialize(henka_engine* engine, void* user_data)
         result = HENKA_ERROR_UNKNOWN;
         goto fail;
     }
+    result = sandbox3d_ensure_giraffe_thickness_texture(
+        engine,
+        "runtime/showcase/giraffe_thickness",
+        &state->giraffe_thickness_texture);
+    if (result != HENKA_SUCCESS)
+    {
+        HENKA_LOG_ERROR("Showcase giraffe thickness texture creation failed: %s", henka_result_to_string(result));
+        goto fail;
+    }
     giraffe_sss_count = 0U;
     result = sandbox3d_apply_giraffe_subsurface(state, &giraffe_sss_count);
     if (result != HENKA_SUCCESS || giraffe_sss_count == 0U)
@@ -22114,6 +22276,29 @@ static henka_result sandbox3d_initialize(henka_engine* engine, void* user_data)
             giraffe_entity_count);
         goto fail;
     }
+    result = sandbox3d_collect_giraffe_thickness_texture_evidence(
+        state,
+        assets,
+        &state->giraffe_thickness_texture_region_count,
+        &state->giraffe_thickness_texture_loaded_count,
+        &state->giraffe_thickness_texture_fallback_count);
+    if (result != HENKA_SUCCESS ||
+        state->giraffe_thickness_texture_region_count != giraffe_sss_count ||
+        state->giraffe_thickness_texture_loaded_count != state->giraffe_thickness_texture_region_count ||
+        state->giraffe_thickness_texture_fallback_count != 0U)
+    {
+        HENKA_LOG_ERROR(
+            "Showcase Giraffe thickness texture proof failed: %s (bound=%zu loaded=%zu fallback=%zu warm_regions=%zu)",
+            henka_result_to_string(result),
+            state->giraffe_thickness_texture_region_count,
+            state->giraffe_thickness_texture_loaded_count,
+            state->giraffe_thickness_texture_fallback_count,
+            giraffe_sss_count);
+        goto fail;
+    }
+    printf(
+        "Showcase material dependencies: %zu Giraffe thickness texture assignments loaded through the asset manager with no fallback.\n",
+        state->giraffe_thickness_texture_loaded_count);
     printf(
         "Showcase material dependencies: %zu Giraffe normal textures loaded through the asset manager with no fallback.\n",
         state->giraffe_normal_texture_loaded_count);
