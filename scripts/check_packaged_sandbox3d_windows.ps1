@@ -1411,6 +1411,35 @@ try {
             }
         }
         Write-Output "[pass] User-facing native optical material edits completed"
+        if (-not (Wait-FileContains -Path $stdoutPath -Pattern "Native authoring subsurface thickness control:" -TimeoutMilliseconds 3000)) {
+            throw "The native subsurface thickness control did not become visible after ownership promotion."
+        }
+        $nativeThicknessMatch = Get-LastLogRegexMatch `
+            -Path $stdoutPath `
+            -Pattern 'Native authoring subsurface thickness control: name=(.+) thickness_x=([-0-9.]+) y=([-0-9.]+) width=48.0 height=24.0\.'
+        if ($null -eq $nativeThicknessMatch) {
+            throw "The native subsurface thickness control geometry could not be parsed."
+        }
+        $nativeThicknessX = [double]$nativeThicknessMatch.Groups[2].Value
+        $nativeThicknessY = [double]$nativeThicknessMatch.Groups[3].Value
+        Assert-FramebufferRect `
+            -Name "Native authoring subsurface thickness control" `
+            -FramebufferWidth $framebufferWidth `
+            -FramebufferHeight $framebufferHeight `
+            -X $nativeThicknessX `
+            -Y $nativeThicknessY `
+            -Width 48.0 `
+            -Height 24.0
+        Click-FramebufferPoint `
+            -Handle $mainWindowHandle `
+            -FramebufferWidth $framebufferWidth `
+            -FramebufferHeight $framebufferHeight `
+            -FramebufferX ($nativeThicknessX + 24.0) `
+            -FramebufferY ($nativeThicknessY + 12.0)
+        if (-not (Wait-FileContains -Path $stdoutPath -Pattern "parameter=Thickness" -TimeoutMilliseconds 5000)) {
+            throw "The user-facing native subsurface thickness edit did not complete."
+        }
+        Write-Output "[pass] User-facing native subsurface thickness edit completed"
         $nativeMaterialControlsMatch = Get-LastLogRegexMatch `
             -Path $stdoutPath `
             -Pattern 'Native authoring material controls: name=(.+) tint_x=([-0-9.]+) metal_x=([-0-9.]+) rough_x=([-0-9.]+) emissive_x=([-0-9.]+) texture_x=([-0-9.]+) subsurface_x=([-0-9.]+) y=([-0-9.]+) width=48.0 height=24.0\.'
