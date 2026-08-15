@@ -6483,7 +6483,7 @@ static void sandbox3d_print_help(const sandbox3d_state* state)
     printf("  Open Native Panel Test from the Controls QA page to validate a separate OS-level tool window.\n");
     printf("  Use the panels to inspect named scene objects, clear selection, switch gizmo modes, focus the camera, reset object transforms, toggle visibility, and open in-window Help, Scene Legend, Object Info, Assets, Paths, Settings, Diagnostics, Transform QA, and Physics QA utilities.\n");
     printf("  Select an imported glTF scene entity to edit its shared material instance in Object Details; scalar/vector, flags, alpha, and semantic texture overrides apply transactionally. Use Utility > Assets to choose manager-owned textures for editable slots.\n");
-    printf("  Select a Showcase Giraffe or Showcase Rocket primitive, open Object Details > Authoring, and choose Make Editable; Own Material then promotes a manager-owned runtime definition for bounded base-color, metallic, roughness, emissive-strength, and in-engine procedural normal and metallic-roughness texture creation. Mesh/project save-reload and the native material sidecar preserve all supported PBR scalars, colors, flags, alpha mode, and seven material texture identities; texture painting and native-authored source export remain unfinished.\n");
+    printf("  Select a Showcase Giraffe or Showcase Rocket primitive, open Object Details > Authoring, and choose Make Editable; Own Material then promotes a manager-owned runtime definition for bounded base-color, metallic, roughness, emissive-strength, subsurface response, and in-engine procedural normal and metallic-roughness texture creation. Mesh/project save-reload and the native material sidecar preserve all supported PBR scalars, colors, flags, alpha mode, and seven material texture identities; texture painting and native-authored source export remain unfinished.\n");
     printf("  Physics QA enables an opt-in fixed-step rigid-body demo with collider/contact debug drawing, impulses, body modes, and camera raycasts.\n");
     printf("  The Controls panel uses Main, Camera/Status, and QA pages, and Scene Objects supports paging when the dock is tighter than the full list.\n");
     printf("  Controls also provides Default, Modeling, Materials, Scene Assembly, Debugging, and Minimal Viewport workspace presets; topology edits mark the workspace Custom.\n");
@@ -18401,21 +18401,23 @@ details_group_authoring:
                 }
                 else if (material_view.editor_binding != NULL)
                 {
-                    const float tint_x = row.x + row.width - 290.0f;
-                    const float metal_x = tint_x + 58.0f;
-                    const float rough_x = tint_x + 116.0f;
-                    const float emissive_x = tint_x + 174.0f;
-                    const float texture_x = tint_x + 232.0f;
+                    const float tint_x = row.x + row.width - 298.0f;
+                    const float metal_x = tint_x + 50.0f;
+                    const float rough_x = tint_x + 100.0f;
+                    const float emissive_x = tint_x + 150.0f;
+                    const float texture_x = tint_x + 200.0f;
+                    const float subsurface_x = tint_x + 250.0f;
                     if (!state->native_authoring_material_editor_reported)
                     {
                         printf(
-                            "Native authoring material controls: name=%s tint_x=%.1f metal_x=%.1f rough_x=%.1f emissive_x=%.1f texture_x=%.1f y=%.1f width=56.0 height=24.0.\n",
+                            "Native authoring material controls: name=%s tint_x=%.1f metal_x=%.1f rough_x=%.1f emissive_x=%.1f texture_x=%.1f subsurface_x=%.1f y=%.1f width=48.0 height=24.0.\n",
                             display_name,
                             tint_x,
                             metal_x,
                             rough_x,
                             emissive_x,
                             texture_x,
+                            subsurface_x,
                             row.y);
                         fflush(stdout);
                         state->native_authoring_material_editor_reported = true;
@@ -18423,7 +18425,7 @@ details_group_authoring:
                     if (henka_ui_button(
                             state->ui,
                             "authoring_material_tint",
-                            (henka_ui_rect){tint_x, row.y, 56.0f, 24.0f},
+                            (henka_ui_rect){tint_x, row.y, 48.0f, 24.0f},
                             "Tint"))
                     {
                         const henka_material_instance_parameter previous_parameter =
@@ -18445,7 +18447,7 @@ details_group_authoring:
                     if (henka_ui_button(
                             state->ui,
                             "authoring_material_texture",
-                            (henka_ui_rect){texture_x, row.y, 56.0f, 24.0f},
+                            (henka_ui_rect){texture_x, row.y, 48.0f, 24.0f},
                             "Detail"))
                     {
                         char detail_identity[96];
@@ -18489,7 +18491,7 @@ details_group_authoring:
                     if (henka_ui_button(
                             state->ui,
                             "authoring_material_metallic",
-                            (henka_ui_rect){metal_x, row.y, 56.0f, 24.0f},
+                            (henka_ui_rect){metal_x, row.y, 48.0f, 24.0f},
                             "Metal"))
                     {
                         if (sandbox3d_native_authoring_edit_scalar(
@@ -18507,7 +18509,7 @@ details_group_authoring:
                     if (henka_ui_button(
                             state->ui,
                             "authoring_material_roughness",
-                            (henka_ui_rect){rough_x, row.y, 56.0f, 24.0f},
+                            (henka_ui_rect){rough_x, row.y, 48.0f, 24.0f},
                             "Rough"))
                     {
                         if (sandbox3d_native_authoring_edit_scalar(
@@ -18525,7 +18527,7 @@ details_group_authoring:
                     if (henka_ui_button(
                             state->ui,
                             "authoring_material_emissive",
-                            (henka_ui_rect){emissive_x, row.y, 56.0f, 24.0f},
+                            (henka_ui_rect){emissive_x, row.y, 48.0f, 24.0f},
                             "Emit"))
                     {
                         if (sandbox3d_native_authoring_edit_scalar(
@@ -18539,6 +18541,22 @@ details_group_authoring:
                             fflush(stdout);
                             sandbox3d_set_status(state, false, "Native emissive strength edited transactionally.");
                         }
+                    }
+                    if (henka_ui_button(
+                            state->ui,
+                            "authoring_material_subsurface",
+                            (henka_ui_rect){subsurface_x, row.y, 48.0f, 24.0f},
+                            "SSS") &&
+                        sandbox3d_native_authoring_edit_scalar(
+                            state,
+                            material_view.editor_binding,
+                            HENKA_MATERIAL_INSTANCE_SUBSURFACE) == HENKA_SUCCESS)
+                    {
+                        printf(
+                            "Native authoring material edited: name=%s parameter=Subsurface source_state=HENKA_NATIVE_EDITABLE_MATERIAL_INSTANCE.\n",
+                            display_name);
+                        fflush(stdout);
+                        sandbox3d_set_status(state, false, "Native subsurface response edited transactionally.");
                     }
                 }
             }
