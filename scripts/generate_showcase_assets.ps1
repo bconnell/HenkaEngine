@@ -860,7 +860,7 @@ function New-Rocket {
     Add-Frustum $metal 2.28 2.38 0.60 0.60 0.0 0.0 32
     Add-Frustum $metal 2.54 2.62 0.56 0.56 0.0 0.0 32
     Add-Frustum $metal 2.76 2.84 0.44 0.44 0.0 0.0 32
-    Add-Frustum $avionics 1.18 1.24 0.58 0.58 0.0 0.0 32
+    Add-Frustum $avionics 1.18 1.24 0.60 0.60 0.0 0.0 32
     Add-Frustum $avionics 2.48 2.54 0.56 0.56 0.0 0.0 32
     # A bounded seven-engine cluster gives the lower stage a recognizable
     # modern launch-vehicle layout instead of three red cylinders. Each
@@ -875,7 +875,7 @@ function New-Rocket {
         Add-Frustum $avionics 0.05 0.12 0.12 0.075 $engine[0] $engine[1] 16
         Add-Ellipsoid $heat @($engine[0], 0.02, $engine[1]) @(0.17, 0.06, 0.17) 8 16
     }
-    Add-Frustum $stripe 1.78 1.91 0.59 0.59 0.0 0.0 32
+    Add-Frustum $stripe 1.72 1.91 0.607 0.607 0.0 0.0 32
     Add-RadialFin $metal 1.0 0.0
     Add-RadialFin $metal -1.0 0.0
     Add-RadialFin $metal 0.0 1.0

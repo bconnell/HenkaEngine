@@ -124,6 +124,7 @@ if ($earYSpan -lt 0.20 -or $earZSpan -gt 0.10) {
     throw "Showcase giraffe inner ears are not flattened, head-plane features."
 }
 $rocket = Get-Content -LiteralPath (Join-Path $OutputDirectory "original_realistic_rocket.gltf") -Raw | ConvertFrom-Json
+$rocketBinary = [IO.File]::ReadAllBytes((Join-Path $OutputDirectory "original_realistic_rocket.bin"))
 $rocketMaterialNames = @($rocket.materials | ForEach-Object { $_.name })
 if ($rocketMaterialNames -notcontains "Rocket Avionics") {
     throw "Showcase rocket is missing its stage-separation/avionics material."
@@ -146,5 +147,12 @@ foreach ($material in $rocket.materials) {
 }
 if ($rocket.meshes[0].primitives.Count -lt 5) {
     throw "Showcase rocket does not contain enough independently shaded stage and engine geometry."
+}
+$rocketStripePrimitive = @($rocket.meshes[0].primitives | Where-Object { $_.material -eq 3 })[0]
+$rocketStripeBounds = Get-PositionBounds -Gltf $rocket -Binary $rocketBinary -Primitive $rocketStripePrimitive
+$rocketStripeWidth = $rocketStripeBounds.Maximum[0] - $rocketStripeBounds.Minimum[0]
+$rocketStripeHeight = $rocketStripeBounds.Maximum[1] - $rocketStripeBounds.Minimum[1]
+if ($rocketStripeWidth -lt 1.20 -or $rocketStripeHeight -lt 0.18) {
+    throw "Showcase rocket mission stripe does not visibly wrap the painted core."
 }
 Write-Host "[pass] Deterministic showcase geometry, material ownership, and generated glTF contracts passed."
