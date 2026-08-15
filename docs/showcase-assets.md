@@ -27,8 +27,8 @@ workspace. It currently targets the imported showcase primitives and preserves
 their borrowed glTF material identity until the user explicitly chooses
 `Own Material`. That action adopts a manager-owned runtime material definition;
 the bounded controls then exercise base-color, metallic, roughness,
-emissive-strength, IOR, transmission, subsurface amount, and bounded
-subsurface-thickness edits
+emissive-strength, IOR, transmission, subsurface amount, bounded
+subsurface-thickness, and subsurface-tint edits
 plus in-engine procedural detail-normal and
 metallic-roughness texture creation without changing the imported glTF source.
 The packaged

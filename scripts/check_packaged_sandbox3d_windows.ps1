@@ -1440,6 +1440,35 @@ try {
             throw "The user-facing native subsurface thickness edit did not complete."
         }
         Write-Output "[pass] User-facing native subsurface thickness edit completed"
+        if (-not (Wait-FileContains -Path $stdoutPath -Pattern "Native authoring subsurface tint control:" -TimeoutMilliseconds 3000)) {
+            throw "The native subsurface tint control did not become visible after ownership promotion."
+        }
+        $nativeSubsurfaceTintMatch = Get-LastLogRegexMatch `
+            -Path $stdoutPath `
+            -Pattern 'Native authoring subsurface tint control: name=(.+) x=([-0-9.]+) y=([-0-9.]+) width=48.0 height=24.0\.'
+        if ($null -eq $nativeSubsurfaceTintMatch) {
+            throw "The native subsurface tint control geometry could not be parsed."
+        }
+        $nativeSubsurfaceTintX = [double]$nativeSubsurfaceTintMatch.Groups[2].Value
+        $nativeSubsurfaceTintY = [double]$nativeSubsurfaceTintMatch.Groups[3].Value
+        Assert-FramebufferRect `
+            -Name "Native authoring subsurface tint control" `
+            -FramebufferWidth $framebufferWidth `
+            -FramebufferHeight $framebufferHeight `
+            -X $nativeSubsurfaceTintX `
+            -Y $nativeSubsurfaceTintY `
+            -Width 48.0 `
+            -Height 24.0
+        Click-FramebufferPoint `
+            -Handle $mainWindowHandle `
+            -FramebufferWidth $framebufferWidth `
+            -FramebufferHeight $framebufferHeight `
+            -FramebufferX ($nativeSubsurfaceTintX + 24.0) `
+            -FramebufferY ($nativeSubsurfaceTintY + 12.0)
+        if (-not (Wait-FileContains -Path $stdoutPath -Pattern "parameter=Subsurface Color" -TimeoutMilliseconds 5000)) {
+            throw "The user-facing native subsurface tint edit did not complete."
+        }
+        Write-Output "[pass] User-facing native subsurface tint edit completed"
         $nativeMaterialControlsMatch = Get-LastLogRegexMatch `
             -Path $stdoutPath `
             -Pattern 'Native authoring material controls: name=(.+) tint_x=([-0-9.]+) metal_x=([-0-9.]+) rough_x=([-0-9.]+) emissive_x=([-0-9.]+) texture_x=([-0-9.]+) subsurface_x=([-0-9.]+) y=([-0-9.]+) width=48.0 height=24.0\.'

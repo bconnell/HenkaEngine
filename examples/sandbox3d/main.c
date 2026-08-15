@@ -397,6 +397,7 @@ typedef struct sandbox3d_state
     bool native_authoring_material_editor_reported;
     bool native_authoring_material_optical_reported;
     bool native_authoring_material_thickness_reported;
+    bool native_authoring_material_subsurface_tint_reported;
     bool native_authoring_material_history_reported;
     henka_terrain_world* terrain_world;
     henka_terrain_storage* terrain_storage;
@@ -6486,7 +6487,7 @@ static void sandbox3d_print_help(const sandbox3d_state* state)
     printf("  Open Native Panel Test from the Controls QA page to validate a separate OS-level tool window.\n");
     printf("  Use the panels to inspect named scene objects, clear selection, switch gizmo modes, focus the camera, reset object transforms, toggle visibility, and open in-window Help, Scene Legend, Object Info, Assets, Paths, Settings, Diagnostics, Transform QA, and Physics QA utilities.\n");
     printf("  Select an imported glTF scene entity to edit its shared material instance in Object Details; scalar/vector, flags, alpha, and semantic texture overrides apply transactionally. Use Utility > Assets to choose manager-owned textures for editable slots.\n");
-    printf("  Select a Showcase Giraffe or Showcase Rocket primitive, open Object Details > Authoring, and choose Make Editable; Own Material then promotes a manager-owned runtime definition for bounded base-color, metallic, roughness, emissive-strength, IOR, transmission, subsurface amount and thickness, and in-engine procedural normal and metallic-roughness texture creation. Mesh/project save-reload and the native material sidecar preserve all supported PBR scalars, colors, flags, alpha mode, and seven material texture identities; texture painting and native-authored source export remain unfinished.\n");
+    printf("  Select a Showcase Giraffe or Showcase Rocket primitive, open Object Details > Authoring, and choose Make Editable; Own Material then promotes a manager-owned runtime definition for bounded base-color, metallic, roughness, emissive-strength, IOR, transmission, subsurface amount, thickness, and tint, plus in-engine procedural normal and metallic-roughness texture creation. Mesh/project save-reload and the native material sidecar preserve all supported PBR scalars, colors, flags, alpha mode, and seven material texture identities; texture painting and native-authored source export remain unfinished.\n");
     printf("  Physics QA enables an opt-in fixed-step rigid-body demo with collider/contact debug drawing, impulses, body modes, and camera raycasts.\n");
     printf("  The Controls panel uses Main, Camera/Status, and QA pages, and Scene Objects supports paging when the dock is tighter than the full list.\n");
     printf("  Controls also provides Default, Modeling, Materials, Scene Assembly, Debugging, and Minimal Viewport workspace presets; topology edits mark the workspace Custom.\n");
@@ -8016,6 +8017,7 @@ static void sandbox3d_release_owned_resources(sandbox3d_state* state)
     state->native_authoring_material_editor_reported = false;
     state->native_authoring_material_optical_reported = false;
     state->native_authoring_material_thickness_reported = false;
+    state->native_authoring_material_subsurface_tint_reported = false;
     state->native_authoring_material_history_reported = false;
     for (int terrain_layer_index = 0;
          terrain_layer_index < (int)HENKA_MATERIAL_TERRAIN_LAYER_COUNT;
@@ -9150,6 +9152,7 @@ static bool sandbox3d_promote_authoring_material(
     state->native_authoring_material_editor_reported = false;
     state->native_authoring_material_optical_reported = false;
     state->native_authoring_material_thickness_reported = false;
+    state->native_authoring_material_subsurface_tint_reported = false;
     state->native_authoring_material_history_reported = false;
     state->native_authoring_face_controls_reported = false;
     state->native_authoring_bevel_reported = false;
@@ -18578,6 +18581,7 @@ details_group_authoring:
             {
                 const float transmission_x = row.x + 56.0f;
                 const float thickness_x = row.x + 112.0f;
+                const float subsurface_tint_x = row.x + 168.0f;
                 henka_result optical_result;
                 if (!state->native_authoring_material_optical_reported)
                 {
@@ -18599,6 +18603,16 @@ details_group_authoring:
                         row.y);
                     fflush(stdout);
                     state->native_authoring_material_thickness_reported = true;
+                }
+                if (!state->native_authoring_material_subsurface_tint_reported)
+                {
+                    printf(
+                        "Native authoring subsurface tint control: name=%s x=%.1f y=%.1f width=48.0 height=24.0.\n",
+                        display_name,
+                        subsurface_tint_x,
+                        row.y);
+                    fflush(stdout);
+                    state->native_authoring_material_subsurface_tint_reported = true;
                 }
                 if (henka_ui_button(
                         state->ui,
@@ -18683,6 +18697,38 @@ details_group_authoring:
                         fflush(stdout);
                         sandbox3d_set_status(state, true, "Native subsurface thickness edit rejected; material state preserved.");
                     }
+                }
+                if (henka_ui_button(
+                        state->ui,
+                        "authoring_material_subsurface_tint",
+                        (henka_ui_rect){subsurface_tint_x, row.y, 48.0f, 24.0f},
+                        "SSS C"))
+                {
+                    const henka_material_instance_parameter previous_parameter =
+                        state->material_editor_parameter;
+                    state->material_editor_parameter = HENKA_MATERIAL_INSTANCE_SUBSURFACE_COLOR;
+                    optical_result = sandbox3d_material_editor_apply_delta(
+                        state,
+                        material_view.editor_binding,
+                        1);
+                    if (optical_result == HENKA_SUCCESS)
+                    {
+                        printf(
+                            "Native authoring material edited: name=%s parameter=Subsurface Color source_state=HENKA_NATIVE_EDITABLE_MATERIAL_INSTANCE.\n",
+                            display_name);
+                        fflush(stdout);
+                        sandbox3d_set_status(state, false, "Native subsurface tint edited transactionally.");
+                    }
+                    else
+                    {
+                        printf(
+                            "Native authoring material edit rejected: name=%s parameter=Subsurface Color result=%d.\n",
+                            display_name,
+                            (int)optical_result);
+                        fflush(stdout);
+                        sandbox3d_set_status(state, true, "Native subsurface tint edit rejected; material state preserved.");
+                    }
+                    state->material_editor_parameter = previous_parameter;
                 }
             }
             if (state->authoring_object != NULL &&
