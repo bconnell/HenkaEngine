@@ -27,18 +27,21 @@ workspace. It currently targets the imported showcase primitives and preserves
 their borrowed glTF material identity until the user explicitly chooses
 `Own Material`. That action adopts a manager-owned runtime material definition;
 the bounded controls then exercise base-color, metallic, roughness, and
-emissive-strength edits plus in-engine procedural normal-texture creation
-without changing the imported glTF source. The packaged
+emissive-strength edits plus in-engine procedural detail-normal and
+metallic-roughness texture creation without changing the imported glTF source.
+The packaged
 Windows dogfood path exercises Make Editable, material and texture edits, a
 component move, base-color, metallic, roughness, and emissive-strength edits,
-in-engine procedural detail-normal texture creation, bounded material
+in-engine procedural detail-normal and metallic-roughness texture creation,
+bounded material
 undo/redo, Face selection, bevel, Save Project, and Reload Project
 transactionally. The project
 manifest persists the mesh source,
 transform, and visibility, while its bounded `.material` sidecar persists the
 supported PBR scalars, colors, flags, alpha mode, and seven material texture
-identities; native runtime detail textures are recreated from their bounded
-recipe on reload. Texture painting and native-authored source export remain
+identities; native runtime detail-normal and metallic-roughness textures are
+recreated from their bounded recipes on reload. Texture painting and
+native-authored source export remain
 open. Complete native showcase proof still requires a real
 user edit, save, close/reload, continued edit, and rendered evidence.
 

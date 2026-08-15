@@ -1441,6 +1441,50 @@ static henka_result sandbox3d_apply_texture_to_material_binding(
     return HENKA_SUCCESS;
 }
 
+static henka_result sandbox3d_apply_native_surface_detail_to_material_binding(
+    sandbox3d_state* state,
+    sandbox3d_material_editor_binding* binding,
+    henka_texture* normal_texture,
+    henka_texture* surface_texture)
+{
+    henka_material_instance previous;
+    henka_material_instance candidate;
+    henka_result result;
+
+    if (state == NULL || binding == NULL || !binding->valid ||
+        binding->instance == NULL || binding->asset == NULL ||
+        binding->instance->definition != binding->asset || state->scene == NULL ||
+        binding->entity == HENKA_INVALID_ENTITY || normal_texture == NULL ||
+        surface_texture == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    previous = *binding->instance;
+    candidate = previous;
+    result = henka_assets_material_instance_set_texture(
+        &candidate, HENKA_MATERIAL_TEXTURE_SLOT_NORMAL, normal_texture);
+    if (result == HENKA_SUCCESS)
+    {
+        result = henka_assets_material_instance_set_texture(
+            &candidate,
+            HENKA_MATERIAL_TEXTURE_SLOT_METALLIC_ROUGHNESS,
+            surface_texture);
+    }
+    if (result == HENKA_SUCCESS)
+    {
+        result = henka_assets_apply_material_instance_to_entity(
+            &candidate, state->scene, binding->entity);
+    }
+    if (result != HENKA_SUCCESS)
+    {
+        *binding->instance = previous;
+        return result;
+    }
+    *binding->instance = candidate;
+    sandbox3d_material_history_push_undo(binding, &previous);
+    return HENKA_SUCCESS;
+}
+
 static henka_result sandbox3d_restore_texture_material_binding(
     henka_engine* engine,
     sandbox3d_state* state,
@@ -1616,6 +1660,74 @@ static henka_result sandbox3d_ensure_native_detail_texture(
     return result;
 }
 
+static henka_result sandbox3d_ensure_native_surface_texture(
+    henka_engine* engine,
+    const char* identity,
+    henka_texture** out_texture)
+{
+    henka_asset_manager* assets;
+    henka_texture_descriptor descriptor;
+    henka_texture* texture = NULL;
+    unsigned char* pixels = NULL;
+    size_t byte_count;
+    int x;
+    int y;
+    henka_result result;
+
+    if (out_texture != NULL) *out_texture = NULL;
+    if (engine == NULL || identity == NULL || identity[0] == '\0' || out_texture == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    assets = henka_engine_get_asset_manager(engine);
+    if (sandbox3d_native_runtime_texture_exists(assets, identity))
+    {
+        return henka_assets_load_texture(assets, identity, out_texture);
+    }
+    byte_count = 64U * 64U * 4U;
+    pixels = henka_calloc(byte_count, sizeof(*pixels));
+    if (pixels == NULL)
+    {
+        return HENKA_ERROR_OUT_OF_MEMORY;
+    }
+    for (y = 0; y < 64; ++y)
+    {
+        for (x = 0; x < 64; ++x)
+        {
+            const float u = (float)x / 63.0f;
+            const float v = (float)y / 63.0f;
+            const float macro = 0.5f + 0.5f * sinf(u * 12.0f + v * 7.0f);
+            const float roughness = sandbox3d_material_editor_clamp(
+                0.38f + macro * 0.34f + 0.08f * cosf(v * 19.0f), 0.12f, 0.92f);
+            const float metallic = sandbox3d_material_editor_clamp(
+                0.08f + 0.05f * sinf(v * 9.0f - u * 11.0f), 0.0f, 1.0f);
+            const size_t offset = ((size_t)y * 64U + (size_t)x) * 4U;
+            pixels[offset + 0U] = 255U;
+            pixels[offset + 1U] = (unsigned char)(roughness * 255.0f);
+            pixels[offset + 2U] = (unsigned char)(metallic * 255.0f);
+            pixels[offset + 3U] = 255U;
+        }
+    }
+    descriptor = henka_texture_descriptor_default_data();
+    descriptor.usage = HENKA_TEXTURE_USAGE_METALLIC_ROUGHNESS;
+    descriptor.generate_mipmaps = true;
+    descriptor.wrap_u = HENKA_TEXTURE_WRAP_REPEAT;
+    descriptor.wrap_v = HENKA_TEXTURE_WRAP_REPEAT;
+    descriptor.min_filter = HENKA_TEXTURE_FILTER_LINEAR_MIPMAP_LINEAR;
+    result = henka_texture_create_from_rgba8_with_descriptor(
+        engine, 64, 64, pixels, &descriptor, &texture);
+    henka_free(pixels);
+    if (result == HENKA_SUCCESS)
+    {
+        result = henka_assets_adopt_runtime_texture(assets, identity, texture, out_texture);
+        if (result != HENKA_SUCCESS)
+        {
+            henka_texture_destroy(texture);
+        }
+    }
+    return result;
+}
+
 static henka_result sandbox3d_save_native_material_texture(
     const henka_asset_manager* assets,
     henka_settings* settings,
@@ -1666,10 +1778,20 @@ static henka_result sandbox3d_load_native_material_texture(
     {
         return henka_assets_material_instance_reset_override(candidate, parameter);
     }
-    result = strncmp(path, "runtime/native-authoring/", 25U) == 0
-        ? sandbox3d_ensure_native_detail_texture(engine, path, &texture)
-        : henka_assets_load_texture(
+    if (strncmp(path, "runtime/native-authoring/", 25U) == 0)
+    {
+        /* Native material sidecars retain the recipe identity, not pixels.
+         * Recreate each supported runtime-authored texture with the same
+         * semantic descriptor before assigning it to its material slot. */
+        result = strstr(path, "/surface-metallic-roughness") != NULL
+            ? sandbox3d_ensure_native_surface_texture(engine, path, &texture)
+            : sandbox3d_ensure_native_detail_texture(engine, path, &texture);
+    }
+    else
+    {
+        result = henka_assets_load_texture(
             henka_engine_get_asset_manager(engine), path, &texture);
+    }
     if (result != HENKA_SUCCESS)
     {
         return result;
@@ -6361,7 +6483,7 @@ static void sandbox3d_print_help(const sandbox3d_state* state)
     printf("  Open Native Panel Test from the Controls QA page to validate a separate OS-level tool window.\n");
     printf("  Use the panels to inspect named scene objects, clear selection, switch gizmo modes, focus the camera, reset object transforms, toggle visibility, and open in-window Help, Scene Legend, Object Info, Assets, Paths, Settings, Diagnostics, Transform QA, and Physics QA utilities.\n");
     printf("  Select an imported glTF scene entity to edit its shared material instance in Object Details; scalar/vector, flags, alpha, and semantic texture overrides apply transactionally. Use Utility > Assets to choose manager-owned textures for editable slots.\n");
-    printf("  Select a Showcase Giraffe or Showcase Rocket primitive, open Object Details > Authoring, and choose Make Editable; Own Material then promotes a manager-owned runtime definition for bounded base-color, metallic, roughness, emissive-strength, and in-engine procedural normal-texture creation. Mesh/project save-reload and the native material sidecar preserve all supported PBR scalars, colors, flags, alpha mode, and seven material texture identities; texture painting and native-authored source export remain unfinished.\n");
+    printf("  Select a Showcase Giraffe or Showcase Rocket primitive, open Object Details > Authoring, and choose Make Editable; Own Material then promotes a manager-owned runtime definition for bounded base-color, metallic, roughness, emissive-strength, and in-engine procedural normal and metallic-roughness texture creation. Mesh/project save-reload and the native material sidecar preserve all supported PBR scalars, colors, flags, alpha mode, and seven material texture identities; texture painting and native-authored source export remain unfinished.\n");
     printf("  Physics QA enables an opt-in fixed-step rigid-body demo with collider/contact debug drawing, impulses, body modes, and camera raycasts.\n");
     printf("  The Controls panel uses Main, Camera/Status, and QA pages, and Scene Objects supports paging when the dock is tighter than the full list.\n");
     printf("  Controls also provides Default, Modeling, Materials, Scene Assembly, Debugging, and Minimal Viewport workspace presets; topology edits mark the workspace Custom.\n");
@@ -18327,28 +18449,41 @@ details_group_authoring:
                             "Detail"))
                     {
                         char detail_identity[96];
+                        char surface_identity[96];
                         henka_texture* native_detail_texture = NULL;
+                        henka_texture* native_surface_texture = NULL;
                         snprintf(
                             detail_identity,
                             sizeof(detail_identity),
                             "runtime/native-authoring/%llu/detail-normal",
                             (unsigned long long)entity);
+                        snprintf(
+                            surface_identity,
+                            sizeof(surface_identity),
+                            "runtime/native-authoring/%llu/surface-metallic-roughness",
+                            (unsigned long long)entity);
                         if (sandbox3d_ensure_native_detail_texture(
                                 engine,
                                 detail_identity,
                                 &native_detail_texture) == HENKA_SUCCESS &&
-                            sandbox3d_apply_texture_to_material_binding(
+                            sandbox3d_ensure_native_surface_texture(
                                 engine,
+                                surface_identity,
+                                &native_surface_texture) == HENKA_SUCCESS &&
+                            sandbox3d_apply_native_surface_detail_to_material_binding(
                                 state,
                                 material_view.editor_binding,
-                                HENKA_MATERIAL_TEXTURE_SLOT_NORMAL,
-                                native_detail_texture) == HENKA_SUCCESS)
+                                native_detail_texture,
+                                native_surface_texture) == HENKA_SUCCESS)
                         {
                             printf(
                                 "Native authoring texture edited: name=%s slot=Normal source_state=HENKA_NATIVE_EDITABLE_TEXTURE.\n",
                                 display_name);
+                            printf(
+                                "Native authoring texture edited: name=%s slot=Metallic-Roughness source_state=HENKA_NATIVE_EDITABLE_TEXTURE.\n",
+                                display_name);
                             fflush(stdout);
-                            sandbox3d_set_status(state, false, "Native procedural normal texture created and assigned transactionally.");
+                            sandbox3d_set_status(state, false, "Native procedural normal and metallic-roughness textures created and assigned transactionally.");
                         }
                     }
                     if (henka_ui_button(

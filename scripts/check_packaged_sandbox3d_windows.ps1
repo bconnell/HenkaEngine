@@ -1463,6 +1463,9 @@ try {
         if (-not (Wait-FileContains -Path $stdoutPath -Pattern "Native authoring texture edited" -TimeoutMilliseconds 5000)) {
             throw "The user-facing native texture assignment did not complete."
         }
+        if (-not (Wait-FileContains -Path $stdoutPath -Pattern "slot=Metallic-Roughness" -TimeoutMilliseconds 5000)) {
+            throw "The user-facing native metallic-roughness texture authoring did not complete."
+        }
         Write-Output "[pass] User-facing native material and texture edits completed"
         if (-not (Wait-FileContains -Path $stdoutPath -Pattern "Native authoring material history:" -TimeoutMilliseconds 1200)) {
             for ($scrollAttempt = 0; $scrollAttempt -lt 4; ++$scrollAttempt) {
