@@ -182,6 +182,64 @@ function Add-Frustum {
     }
 }
 
+function Add-OrientedCone {
+    param(
+        [object]$Part,
+        [float[]]$BaseCenter,
+        [float[]]$TipCenter,
+        [float]$BaseRadius,
+        [int]$Segments = 16
+    )
+    if ($BaseRadius -le 0.0 -or $Segments -lt 3) {
+        throw "Showcase cone dimensions are invalid."
+    }
+    $axisVector = @(
+        [float]($TipCenter[0] - $BaseCenter[0]),
+        [float]($TipCenter[1] - $BaseCenter[1]),
+        [float]($TipCenter[2] - $BaseCenter[2]))
+    $axisLength = [Math]::Sqrt(
+        $axisVector[0] * $axisVector[0] +
+        $axisVector[1] * $axisVector[1] +
+        $axisVector[2] * $axisVector[2])
+    if ($axisLength -le 0.000001 -or [double]::IsNaN($axisLength) -or [double]::IsInfinity($axisLength)) {
+        throw "Showcase cone endpoints are coincident or non-finite."
+    }
+    $axis = Normalize-Vector $axisVector
+    $reference = if ([Math]::Abs($axis[1]) -lt 0.9) { @(0.0, 1.0, 0.0) } else { @(0.0, 0.0, 1.0) }
+    $basis = Normalize-Vector (Cross-Vector $axis $reference)
+    $bitangent = Normalize-Vector (Cross-Vector $basis $axis)
+    $slope = [float]($BaseRadius / $axisLength)
+    $ring = New-Object 'System.Collections.Generic.List[int]'
+    for ($segment = 0; $segment -lt $Segments; ++$segment) {
+        $angle = 2.0 * [Math]::PI * $segment / $Segments
+        $cosine = [Math]::Cos($angle)
+        $sine = [Math]::Sin($angle)
+        $radial = @(
+            [float]($basis[0] * $cosine + $bitangent[0] * $sine),
+            [float]($basis[1] * $cosine + $bitangent[1] * $sine),
+            [float]($basis[2] * $cosine + $bitangent[2] * $sine))
+        $normal = Normalize-Vector @(
+            [float]($radial[0] + $axis[0] * $slope),
+            [float]($radial[1] + $axis[1] * $slope),
+            [float]($radial[2] + $axis[2] * $slope))
+        $tangent = @(
+            [float](-$basis[0] * $sine + $bitangent[0] * $cosine),
+            [float](-$basis[1] * $sine + $bitangent[1] * $cosine),
+            [float](-$basis[2] * $sine + $bitangent[2] * $cosine),
+            1.0)
+        $position = @(
+            [float]($BaseCenter[0] + $radial[0] * $BaseRadius),
+            [float]($BaseCenter[1] + $radial[1] * $BaseRadius),
+            [float]($BaseCenter[2] + $radial[2] * $BaseRadius))
+        [void]$ring.Add((Add-Vertex $Part $position $normal @([float]($segment / $Segments), 0.0) $tangent))
+    }
+    $tipIndex = Add-Vertex $Part $TipCenter $axis @(0.5, 1.0) @([float]$basis[0], [float]$basis[1], [float]$basis[2], 1.0)
+    for ($segment = 0; $segment -lt $Segments; ++$segment) {
+        $next = ($segment + 1) % $Segments
+        Add-Triangle $Part $ring[$segment] $tipIndex $ring[$next]
+    }
+}
+
 function Add-EllipsoidSurfaceSpot {
     param(
         [object]$Part,
@@ -514,7 +572,8 @@ function New-Giraffe {
         (New-Material "Giraffe Iris" @(0.18, 0.055, 0.014, 1.0) 0.0 0.24 0.64 0.06),
         (New-Material "Giraffe Eye Detail" @(0.004, 0.002, 0.001, 1.0) 0.0 0.10 0.70 0.06),
         (New-Material "Giraffe Smile" @(0.42, 0.018, 0.018, 1.0) 0.0 0.34 0.05 0.22),
-        (New-Material "Giraffe Ear Inner" @(0.38, 0.10, 0.045, 1.0) 0.0 0.42 0.03 0.18))
+        (New-Material "Giraffe Ear Inner" @(0.38, 0.10, 0.045, 1.0) 0.0 0.42 0.03 0.18),
+        (New-Material "Giraffe Ossicone Cap" @(0.20, 0.055, 0.018, 1.0) 0.0 0.46 0.02 0.24))
     $tan = New-Part 0
     $spots = New-Part 1
     $cream = New-Part 2
@@ -523,6 +582,7 @@ function New-Giraffe {
     $details = New-Part 5
     $smile = New-Part 6
     $earInner = New-Part 7
+    $ossicone = New-Part 8
     # Keep the proportions stylized, but use enough curvature that the
     # silhouette reads as an authored animated-film character rather than a
     # low-resolution primitive assembly.
@@ -538,8 +598,13 @@ function New-Giraffe {
     Add-Frustum $tan 4.15 4.48 0.095 0.075 0.24 0.0 16
     Add-Ellipsoid $earInner @(-0.55, 4.22, 0.46) @(0.17, 0.065, 0.27) 10 20
     Add-Ellipsoid $earInner @(0.55, 4.22, 0.46) @(0.17, 0.065, 0.27) 10 20
-    Add-Ellipsoid $details @(-0.24, 4.52, 0.0) @(0.11, 0.075, 0.10) 8 16
-    Add-Ellipsoid $details @(0.24, 4.52, 0.0) @(0.11, 0.075, 0.10) 8 16
+    # Ossicones use a visible tan stalk and a short cap angled outward from
+    # the head. The previous isolated ellipsoids read as floating pegs and
+    # gave the mascot an unintended, lopsided silhouette in front views.
+    Add-Frustum $tan 4.28 4.52 0.065 0.052 -0.24 0.0 16
+    Add-Frustum $tan 4.28 4.52 0.065 0.052 0.24 0.0 16
+    Add-OrientedCone $ossicone @(-0.24, 4.48, 0.0) @(-0.32, 4.72, -0.01) 0.10 16
+    Add-OrientedCone $ossicone @(0.24, 4.48, 0.0) @(0.32, 4.72, -0.01) 0.10 16
     # A short mane row gives the neck a readable rear contour without making
     # the mascot realistic in the photographic sense.
     foreach ($maneY in @(1.95, 2.18, 2.41, 2.64, 2.87, 3.10, 3.33)) {
@@ -572,7 +637,7 @@ function New-Giraffe {
     Add-Frustum $details 4.00 4.18 0.028 0.012 0.39 0.54 12
     Add-Ellipsoid $smile @(0.0, 3.55, 0.695) @(0.24, 0.035, 0.014) 8 16
     Add-Ellipsoid $smile @(0.14, 3.58, 0.685) @(0.18, 0.045, 0.016) 8 16
-    return [pscustomobject]@{ Parts = @($tan, $spots, $cream, $eyes, $iris, $details, $smile, $earInner); Materials = $materials }
+    return [pscustomobject]@{ Parts = @($tan, $spots, $cream, $eyes, $iris, $details, $smile, $earInner, $ossicone); Materials = $materials }
 }
 
 function New-Rocket {

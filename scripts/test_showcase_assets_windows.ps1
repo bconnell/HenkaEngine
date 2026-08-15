@@ -33,7 +33,7 @@ foreach ($name in @("cheeky_giraffe", "original_realistic_rocket")) {
 }
 $giraffe = Get-Content -LiteralPath (Join-Path $OutputDirectory "cheeky_giraffe.gltf") -Raw | ConvertFrom-Json
 $giraffeMaterialNames = @($giraffe.materials | ForEach-Object { $_.name })
-foreach ($requiredName in @("Giraffe Eye White", "Giraffe Iris", "Giraffe Eye Detail", "Giraffe Ear Inner")) {
+foreach ($requiredName in @("Giraffe Eye White", "Giraffe Iris", "Giraffe Eye Detail", "Giraffe Ear Inner", "Giraffe Ossicone Cap")) {
     if ($giraffeMaterialNames -notcontains $requiredName) {
         throw "Showcase giraffe is missing authored feature material '$requiredName'."
     }
