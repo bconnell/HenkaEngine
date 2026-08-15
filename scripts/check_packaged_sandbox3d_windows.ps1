@@ -495,13 +495,19 @@ function Scroll-FramebufferPoint {
     Set-HenkaAutomationForeground -Handle $Handle
     [NativeMethods]::SetCursorPos($point.X, $point.Y) | Out-Null
     Start-Sleep -Milliseconds 100
-    $wheelWParam = [IntPtr](([int64]$WheelDelta) -shl 16)
-    $wheelLParam = New-HenkaMouseLParam -X $point.X -Y $point.Y
-    [NativeMethods]::PostMessage(
-        $Handle,
-        0x020A,
-        $wheelWParam,
-        $wheelLParam) | Out-Null
+    $wheelDataValue = if ($WheelDelta -lt 0) {
+        [uint64](4294967296 + [int64]$WheelDelta)
+    }
+    else {
+        [uint64]$WheelDelta
+    }
+    $wheelData = [uint32]$wheelDataValue
+    [NativeMethods]::mouse_event(
+        0x0800,
+        0,
+        0,
+        $wheelData,
+        [System.UIntPtr]::Zero)
     Start-Sleep -Milliseconds 250
 }
 function Click-FramebufferPointRight {
@@ -708,6 +714,7 @@ public static class NativeMethods {
 
     public const uint MOUSEEVENTF_LEFTDOWN = 0x0002;
     public const uint MOUSEEVENTF_LEFTUP = 0x0004;
+    public const uint MOUSEEVENTF_WHEEL = 0x0800;
 
     [DllImport("user32.dll")]
     public static extern bool SetForegroundWindow(IntPtr hWnd);
@@ -1552,6 +1559,86 @@ try {
             throw "The user-facing component edit did not update the native authoring source."
         }
         Write-Output "[pass] User-facing component edit changed the native showcase source"
+        for ($scrollTopologyAttempt = 0; $scrollTopologyAttempt -lt 5; ++$scrollTopologyAttempt) {
+            Scroll-FramebufferPoint `
+                -Handle $mainWindowHandle `
+                -FramebufferWidth $framebufferWidth `
+                -FramebufferHeight $framebufferHeight `
+                -FramebufferX ($detailsX + [Math]::Max(12.0, $detailsWidth - 18.0)) `
+                -FramebufferY ($detailsY + [Math]::Max(30.0, $detailsHeight * 0.55)) `
+                -WheelDelta 120
+        }
+        if (-not (Wait-FileContains -Path $stdoutPath -Pattern "Native authoring face controls:" -TimeoutMilliseconds 3000)) {
+            throw "The converted showcase did not expose native topology selection controls."
+        }
+        $nativeFaceMatch = Get-LastLogRegexMatch `
+            -Path $stdoutPath `
+            -Pattern 'Native authoring face controls: name=(.+) face_x=([-0-9.]+) face_y=([-0-9.]+) width=88.0 height=24.0\.'
+        if ($null -eq $nativeFaceMatch) {
+            throw "The native topology selection control geometry could not be parsed."
+        }
+        $nativeFaceX = [double]$nativeFaceMatch.Groups[2].Value
+        $nativeFaceY = [double]$nativeFaceMatch.Groups[3].Value
+        Assert-FramebufferRect `
+            -Name "Native authoring Face selection control" `
+            -FramebufferWidth $framebufferWidth `
+            -FramebufferHeight $framebufferHeight `
+            -X $nativeFaceX `
+            -Y $nativeFaceY `
+            -Width 88.0 `
+            -Height 24.0
+        Click-FramebufferPoint `
+            -Handle $mainWindowHandle `
+            -FramebufferWidth $framebufferWidth `
+            -FramebufferHeight $framebufferHeight `
+            -FramebufferX ($nativeFaceX + 44.0) `
+            -FramebufferY ($nativeFaceY + 12.0)
+        for ($bevelStateAttempt = 0; $bevelStateAttempt -lt 6; ++$bevelStateAttempt) {
+            if (Wait-FileContains -Path $stdoutPath -Pattern "Native authoring bevel control:" -TimeoutMilliseconds 750) {
+                break
+            }
+            Scroll-FramebufferPoint `
+                -Handle $mainWindowHandle `
+                -FramebufferWidth $framebufferWidth `
+                -FramebufferHeight $framebufferHeight `
+                -FramebufferX ($detailsX + [Math]::Max(12.0, $detailsWidth - 18.0)) `
+                -FramebufferY ($detailsY + [Math]::Max(30.0, $detailsHeight * 0.55)) `
+                -WheelDelta -120
+        }
+        $nativeBevelMatch = Get-LastLogRegexMatch `
+            -Path $stdoutPath `
+            -Pattern 'Native authoring bevel control: name=(.+) x=([-0-9.]+) y=([-0-9.]+) width=82.0 height=24.0\.'
+        if ($null -eq $nativeBevelMatch) {
+            throw "The native bevel control geometry could not be parsed after Face selection."
+        }
+        $nativeBevelX = [double]$nativeBevelMatch.Groups[2].Value
+        $nativeBevelY = [double]$nativeBevelMatch.Groups[3].Value
+        Assert-FramebufferRect `
+            -Name "Native authoring Bevel control" `
+            -FramebufferWidth $framebufferWidth `
+            -FramebufferHeight $framebufferHeight `
+            -X $nativeBevelX `
+            -Y $nativeBevelY `
+            -Width 82.0 `
+            -Height 24.0
+        Click-FramebufferPoint `
+            -Handle $mainWindowHandle `
+            -FramebufferWidth $framebufferWidth `
+            -FramebufferHeight $framebufferHeight `
+            -FramebufferX ($nativeBevelX + 41.0) `
+            -FramebufferY ($nativeBevelY + 12.0)
+        if (-not (Wait-FileContains -Path $stdoutPath -Pattern "Native authoring bevel request:" -TimeoutMilliseconds 1500)) {
+            Click-FramebufferPoint `
+                -Handle $mainWindowHandle `
+                -FramebufferWidth $framebufferWidth `
+                -FramebufferHeight $framebufferHeight `
+                -FramebufferX ($nativeBevelX + 12.0) `
+                -FramebufferY ($nativeBevelY + 8.0)
+        }
+        if (-not (Wait-FileContains -Path $stdoutPath -Pattern "Native authoring dogfood: face bevel edited" -TimeoutMilliseconds 5000)) {
+            throw "The user-facing native bevel operation did not update the showcase source."
+        }
+        Write-Output "[pass] User-facing topology selection and bevel changed the native showcase source"
         for ($scrollProjectAttempt = 0; $scrollProjectAttempt -lt 4; ++$scrollProjectAttempt) {
             Scroll-FramebufferPoint `
                 -Handle $mainWindowHandle `

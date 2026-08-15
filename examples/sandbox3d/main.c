@@ -12380,6 +12380,12 @@ static bool sandbox3d_try_pick_object(henka_engine* engine, sandbox3d_state* sta
                 ? "vertex"
                 : selection_mode == SANDBOX3D_AUTHORING_SELECTION_EDGE ? "edge" : "face";
             authoring_component_hit = true;
+            printf(
+                "Native authoring component picked: name=%s mode=%s selected=%zu source_state=HENKA_NATIVE_EDITABLE_SOURCE.\n",
+                sandbox3d_safe_entity_name(state, picked_entity, "object"),
+                selection_label,
+                sandbox3d_authoring_object_get_selected_component_count(state->authoring_object));
+            fflush(stdout);
             sandbox3d_set_statusf(
                 state,
                 false,
@@ -18013,8 +18019,64 @@ details_group_authoring:
                         (henka_ui_rect){row.x + 192.0f, row.y, 88.0f, 24.0f}, "Face") )
                 {
                     sandbox3d_authoring_object_set_selection_mode(
-                        state->authoring_object, SANDBOX3D_AUTHORING_SELECTION_FACE);
+                        state->authoring_object,
+                        SANDBOX3D_AUTHORING_SELECTION_FACE);
+                    state->native_authoring_bevel_reported = false;
+                    printf(
+                        "Native authoring topology mode: name=%s mode=Face source_state=HENKA_NATIVE_EDITABLE_SOURCE.\n",
+                        display_name);
+                    fflush(stdout);
                     sandbox3d_set_status(state, false, "Authoring Face selection mode active; Ctrl-click adds components.");
+                }
+            }
+            if (selection_mode == SANDBOX3D_AUTHORING_SELECTION_FACE &&
+                sandbox3d_details_flow_next_row(state, flow_desc.bounds, 28.0f, 1U, &row) && row.width >= 290.0f)
+            {
+                if (!state->native_authoring_bevel_reported)
+                {
+                    printf(
+                        "Native authoring bevel control: name=%s x=%.1f y=%.1f width=82.0 height=24.0.\n",
+                        display_name,
+                        row.x,
+                        row.y);
+                    fflush(stdout);
+                    state->native_authoring_bevel_reported = true;
+                }
+                if (henka_ui_button(state->ui, "authoring_bevel", (henka_ui_rect){row.x, row.y, 82.0f, 24.0f}, "Bevel"))
+                {
+                    const henka_result bevel_result =
+                        sandbox3d_authoring_object_bevel_selected_face(
+                            state->authoring_object,
+                            0.1f);
+                    printf(
+                        "Native authoring bevel request: name=%s result=%s selected_face=%u selected_components=%zu.\n",
+                        display_name,
+                        henka_result_to_string(bevel_result),
+                        (unsigned int)sandbox3d_authoring_object_get_selected_face(state->authoring_object),
+                        sandbox3d_authoring_object_get_selected_component_count(state->authoring_object));
+                    fflush(stdout);
+                    if (bevel_result != HENKA_SUCCESS)
+                    {
+                        sandbox3d_set_status(state, true, "Authoring face bevel failed; the current source was retained.");
+                    }
+                    if (bevel_result == HENKA_SUCCESS)
+                    {
+                        const henka_authoring_mesh_counts counts =
+                            henka_authoring_mesh_get_counts(
+                                sandbox3d_authoring_object_get_mesh(state->authoring_object));
+                        printf(
+                            "Native authoring dogfood: face bevel edited %s; vertices=%zu faces=%zu source_state=HENKA_NATIVE_EDITABLE_SOURCE.\n",
+                            display_name,
+                            counts.vertices,
+                            counts.faces);
+                        fflush(stdout);
+                        sandbox3d_set_status(state, false, "Authoring face beveled and evaluated into the scene.");
+                    }
+                }
+                if (henka_ui_button(state->ui, "authoring_subdivide", (henka_ui_rect){row.x + 88.0f, row.y, 98.0f, 24.0f}, "Subdivide") &&
+                    sandbox3d_authoring_object_subdivide_selected_face(state->authoring_object) == HENKA_SUCCESS)
+                {
+                    sandbox3d_set_status(state, false, "Authoring face subdivided and evaluated into the scene.");
                 }
             }
             if (sandbox3d_details_flow_next_row(state, flow_desc.bounds, 22.0f, 1U, &row))
@@ -18170,39 +18232,6 @@ details_group_authoring:
                     sandbox3d_authoring_object_redo(state->authoring_object) == HENKA_SUCCESS)
                 {
                     sandbox3d_set_status(state, false, "Authoring mesh redo restored the scene render.");
-                }
-            }
-            if (selection_mode == SANDBOX3D_AUTHORING_SELECTION_FACE &&
-                sandbox3d_details_flow_next_row(state, flow_desc.bounds, 28.0f, 1U, &row) && row.width >= 290.0f)
-            {
-                if (!state->native_authoring_bevel_reported)
-                {
-                    printf(
-                        "Native authoring bevel control: name=%s x=%.1f y=%.1f width=82.0 height=24.0.\n",
-                        display_name,
-                        row.x,
-                        row.y);
-                    fflush(stdout);
-                    state->native_authoring_bevel_reported = true;
-                }
-                if (henka_ui_button(state->ui, "authoring_bevel", (henka_ui_rect){row.x, row.y, 82.0f, 24.0f}, "Bevel") &&
-                    sandbox3d_authoring_object_bevel_selected_face(state->authoring_object, 0.1f) == HENKA_SUCCESS)
-                {
-                    const henka_authoring_mesh_counts counts =
-                        henka_authoring_mesh_get_counts(
-                            sandbox3d_authoring_object_get_mesh(state->authoring_object));
-                    printf(
-                        "Native authoring dogfood: face bevel edited %s; vertices=%zu faces=%zu source_state=HENKA_NATIVE_EDITABLE_SOURCE.\n",
-                        display_name,
-                        counts.vertices,
-                        counts.faces);
-                    fflush(stdout);
-                    sandbox3d_set_status(state, false, "Authoring face beveled and evaluated into the scene.");
-                }
-                if (henka_ui_button(state->ui, "authoring_subdivide", (henka_ui_rect){row.x + 88.0f, row.y, 98.0f, 24.0f}, "Subdivide") &&
-                    sandbox3d_authoring_object_subdivide_selected_face(state->authoring_object) == HENKA_SUCCESS)
-                {
-                    sandbox3d_set_status(state, false, "Authoring face subdivided and evaluated into the scene.");
                 }
             }
             if (selection_mode == SANDBOX3D_AUTHORING_SELECTION_FACE &&

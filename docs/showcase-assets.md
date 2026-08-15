@@ -25,7 +25,8 @@ without changing the imported glTF source. The packaged
 Windows dogfood path exercises Make Editable, material and texture edits, a
 component move, base-color, metallic, roughness, and emissive-strength edits,
 in-engine procedural detail-normal texture creation, bounded material
-undo/redo, Save Project, and Reload Project transactionally. The project
+undo/redo, Face selection, bevel, Save Project, and Reload Project
+transactionally. The project
 manifest persists the mesh source,
 transform, and visibility, while its bounded `.material` sidecar persists base
 color, metallic, roughness, emissive strength, and the manager-owned

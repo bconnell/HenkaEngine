@@ -456,6 +456,12 @@ static void henka_test_sandbox3d_object_authoring_model_primitive_bridge(void)
     HENKA_TEST_ASSERT(henka_scene_get_entity_local_bounds(scene, entity, &authored_bounds) == HENKA_SUCCESS);
     HENKA_TEST_ASSERT(authored_bounds.extents.x > 0.0f && authored_bounds.extents.y > 0.0f);
 
+    sandbox3d_authoring_object_set_selection_mode(object, SANDBOX3D_AUTHORING_SELECTION_FACE);
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_select_face(object, 1U) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_bevel_selected_face(object, 0.1f) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_authoring_mesh_get_counts(
+        sandbox3d_authoring_object_get_mesh(object)).faces > counts.faces);
+
     sandbox3d_authoring_object_destroy(object);
     HENKA_TEST_ASSERT(henka_scene_get_entity_mesh(scene, entity, &authored_mesh) == HENKA_SUCCESS);
     HENKA_TEST_ASSERT(authored_mesh == previous_mesh);

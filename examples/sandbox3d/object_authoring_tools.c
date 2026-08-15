@@ -10,6 +10,9 @@
 
 #define SANDBOX3D_AUTHORING_MAX_HISTORY_STEPS 64U
 #define SANDBOX3D_AUTHORING_MAX_SELECTED_COMPONENTS 64U
+#define SANDBOX3D_AUTHORING_IMPORT_VERTEX_RESERVE 256U
+#define SANDBOX3D_AUTHORING_IMPORT_EDGE_RESERVE 512U
+#define SANDBOX3D_AUTHORING_IMPORT_FACE_RESERVE 128U
 
 struct sandbox3d_authoring_object
 {
@@ -936,10 +939,18 @@ henka_result sandbox3d_authoring_object_create_from_model_primitive(
         return HENKA_ERROR_LIMIT;
     }
     desc = (henka_authoring_mesh_desc){
-        primitive->vertex_count,
-        face_count * 3U,
-        face_count,
-        3U};
+        primitive->vertex_count <=
+                HENKA_AUTHORING_MESH_HARD_MAX_VERTICES - SANDBOX3D_AUTHORING_IMPORT_VERTEX_RESERVE
+            ? primitive->vertex_count + SANDBOX3D_AUTHORING_IMPORT_VERTEX_RESERVE
+            : HENKA_AUTHORING_MESH_HARD_MAX_VERTICES,
+        face_count * 3U <=
+                HENKA_AUTHORING_MESH_HARD_MAX_EDGES - SANDBOX3D_AUTHORING_IMPORT_EDGE_RESERVE
+            ? face_count * 3U + SANDBOX3D_AUTHORING_IMPORT_EDGE_RESERVE
+            : HENKA_AUTHORING_MESH_HARD_MAX_EDGES,
+        face_count <= HENKA_AUTHORING_MESH_HARD_MAX_FACES - SANDBOX3D_AUTHORING_IMPORT_FACE_RESERVE
+            ? face_count + SANDBOX3D_AUTHORING_IMPORT_FACE_RESERVE
+            : HENKA_AUTHORING_MESH_HARD_MAX_FACES,
+        HENKA_AUTHORING_MESH_DEFAULT_MAX_FACE_CORNERS};
     result = henka_authoring_mesh_create(&desc, &mesh);
     if (result != HENKA_SUCCESS)
     {
