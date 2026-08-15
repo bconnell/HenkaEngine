@@ -2286,7 +2286,7 @@ try {
         -FramebufferHeight $framebufferHeight `
         -FramebufferX ($nativeCreatedSaveX + 70.0) `
         -FramebufferY ($nativeCreatedSaveY + 12.0)
-    if (-not (Wait-FileContains -Path $stdoutPath -Pattern "Native authoring dogfood: project saved for Native Showcase Rocket" -TimeoutMilliseconds 5000)) {
+    if (-not (Wait-FileContains -Path $stdoutPath -Pattern "Native authoring dogfood: project saved for Native Showcase Rocket; vertices=65 faces=53 source_state=HENKA_NATIVE_AUTHORED" -TimeoutMilliseconds 5000)) {
         throw "The native authored showcase project save did not complete."
     }
     Click-FramebufferPoint `
@@ -2295,7 +2295,7 @@ try {
         -FramebufferHeight $framebufferHeight `
         -FramebufferX ($nativeCreatedReloadX + 70.0) `
         -FramebufferY ($nativeCreatedReloadY + 12.0)
-    if (-not (Wait-FileContains -Path $stdoutPath -Pattern "Native authoring dogfood: project reloaded for Native Showcase Rocket" -TimeoutMilliseconds 5000)) {
+    if (-not (Wait-FileContains -Path $stdoutPath -Pattern "Native authoring dogfood: project reloaded for Native Showcase Rocket; vertices=65 faces=53 source_state=HENKA_NATIVE_AUTHORED" -TimeoutMilliseconds 5000)) {
         throw "The native authored showcase project reload did not complete transactionally."
     }
     Write-Output "[pass] Native authored showcase project save/reload completed transactionally"

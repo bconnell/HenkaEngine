@@ -2609,12 +2609,21 @@ static void sandbox3d_draw_native_authoring_project_controls(
                     henka_authoring_mesh_get_counts(
                         sandbox3d_authoring_object_get_mesh(
                             state->authoring_object));
+                const bool native_authored_source =
+                    display_name != NULL &&
+                    strncmp(
+                        display_name,
+                        "Native Showcase Rocket",
+                        sizeof("Native Showcase Rocket") - 1U) == 0;
                 printf(
-                    "Native authoring dogfood: project %s for %s; vertices=%zu faces=%zu source_state=HENKA_NATIVE_EDITABLE_SOURCE.\n",
+                    "Native authoring dogfood: project %s for %s; vertices=%zu faces=%zu source_state=%s.\n",
                     save_requested ? "saved" : "reloaded",
                     display_name,
                     counts.vertices,
-                    counts.faces);
+                    counts.faces,
+                    native_authored_source
+                        ? "HENKA_NATIVE_AUTHORED"
+                        : "HENKA_NATIVE_EDITABLE_SOURCE");
                 fflush(stdout);
                 if (state->native_authoring_material_asset != NULL &&
                     state->native_authoring_material_entity == entity)
