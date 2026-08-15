@@ -374,6 +374,8 @@ typedef struct sandbox3d_state
     henka_material residency_stress_original_material;
     henka_material_asset* marker_material_asset;
     henka_material_asset* terrain_material_asset;
+    henka_material_asset* native_authoring_material_asset;
+    henka_entity native_authoring_material_entity;
     henka_material_instance marker_material_instance;
     henka_material_instance giraffe_material_instances[SANDBOX3D_SHOWCASE_MAX_GIRAFFE_MATERIAL_INSTANCES];
     size_t giraffe_material_instance_count;
@@ -390,6 +392,8 @@ typedef struct sandbox3d_state
     bool native_authoring_bevel_reported;
     bool native_authoring_move_reported;
     bool native_authoring_project_controls_reported;
+    bool native_authoring_material_control_reported;
+    bool native_authoring_material_editor_reported;
     henka_terrain_world* terrain_world;
     henka_terrain_storage* terrain_storage;
     henka_terrain_streamer* terrain_streamer;
@@ -712,6 +716,9 @@ static henka_result sandbox3d_bind_authoring_physics(
     sandbox3d_state* state,
     sandbox3d_authoring_object* object,
     henka_entity source_entity);
+static void sandbox3d_release_authoring_physics(
+    sandbox3d_state* state,
+    sandbox3d_authoring_object* object);
 static void sandbox3d_cancel_active_transform_session(
     sandbox3d_state* state,
     bool restore_original);
@@ -5475,7 +5482,7 @@ static void sandbox3d_print_help(const sandbox3d_state* state)
     printf("  Open Native Panel Test from the Controls QA page to validate a separate OS-level tool window.\n");
     printf("  Use the panels to inspect named scene objects, clear selection, switch gizmo modes, focus the camera, reset object transforms, toggle visibility, and open in-window Help, Scene Legend, Object Info, Assets, Paths, Settings, Diagnostics, Transform QA, and Physics QA utilities.\n");
     printf("  Select an imported glTF scene entity to edit its shared material instance in Object Details; scalar/vector, flags, alpha, and semantic texture overrides apply transactionally. Use Utility > Assets to choose manager-owned textures for editable slots.\n");
-    printf("  Select a Showcase Giraffe or Showcase Rocket primitive, open Object Details > Authoring, and choose Make Editable to create a bounded Henka authoring source from that imported topology; native showcase save/reload and material/texture authoring remain unfinished.\n");
+    printf("  Select a Showcase Giraffe or Showcase Rocket primitive, open Object Details > Authoring, and choose Make Editable; Own Material then promotes a manager-owned runtime definition for bounded base-color and semantic normal-texture editing. Mesh/project save-reload is supported, while durable material/texture project serialization and native-authored source export remain unfinished.\n");
     printf("  Physics QA enables an opt-in fixed-step rigid-body demo with collider/contact debug drawing, impulses, body modes, and camera raycasts.\n");
     printf("  The Controls panel uses Main, Camera/Status, and QA pages, and Scene Objects supports paging when the dock is tighter than the full list.\n");
     printf("  Controls also provides Default, Modeling, Materials, Scene Assembly, Debugging, and Minimal Viewport workspace presets; topology edits mark the workspace Custom.\n");
@@ -7000,6 +7007,8 @@ static void sandbox3d_release_owned_resources(sandbox3d_state* state)
     state->native_authoring_bevel_reported = false;
     state->native_authoring_move_reported = false;
     state->native_authoring_project_controls_reported = false;
+    state->native_authoring_material_control_reported = false;
+    state->native_authoring_material_editor_reported = false;
     for (int terrain_layer_index = 0;
          terrain_layer_index < (int)HENKA_MATERIAL_TERRAIN_LAYER_COUNT;
          ++terrain_layer_index)
@@ -7040,6 +7049,8 @@ static void sandbox3d_release_owned_resources(sandbox3d_state* state)
     state->terrain_world = NULL;
     state->marker_mesh = NULL;
     state->marker_material_asset = NULL;
+    state->native_authoring_material_asset = NULL;
+    state->native_authoring_material_entity = HENKA_INVALID_ENTITY;
     memset(&state->marker_material_instance, 0, sizeof(state->marker_material_instance));
     state->marker_material_instance_valid = false;
     memset(state->giraffe_material_instances, 0, sizeof(state->giraffe_material_instances));
@@ -8046,6 +8057,58 @@ static const henka_model_scene_primitive* sandbox3d_get_showcase_authoring_primi
         ++ordinal;
     }
     return NULL;
+}
+
+static bool sandbox3d_promote_authoring_material(
+    henka_engine* engine,
+    sandbox3d_state* state,
+    henka_entity entity)
+{
+    const henka_material_asset* previous_asset = NULL;
+    henka_material_asset* native_asset = NULL;
+    henka_material_instance instance;
+    henka_material material;
+    char identity[96];
+
+    if (engine == NULL || state == NULL || state->scene == NULL ||
+        entity == HENKA_INVALID_ENTITY ||
+        henka_scene_get_entity_material(state->scene, entity, &material) != HENKA_SUCCESS ||
+        henka_scene_get_entity_material_asset(state->scene, entity, &previous_asset) != HENKA_SUCCESS)
+    {
+        return false;
+    }
+    if (state->native_authoring_material_asset != NULL &&
+        state->native_authoring_material_entity == entity)
+    {
+        return true;
+    }
+    snprintf(
+        identity,
+        sizeof(identity),
+        "runtime/native-authoring/%llu/material",
+        (unsigned long long)entity);
+    if (henka_assets_adopt_runtime_material(
+            henka_engine_get_asset_manager(engine),
+            identity,
+            &material,
+            &native_asset) != HENKA_SUCCESS ||
+        native_asset == NULL ||
+        henka_assets_create_material_instance(native_asset, &instance) != HENKA_SUCCESS ||
+        henka_assets_apply_material_instance_to_entity(
+            &instance, state->scene, entity) != HENKA_SUCCESS ||
+        henka_scene_set_entity_material_asset(state->scene, entity, native_asset) != HENKA_SUCCESS)
+    {
+        (void)henka_scene_set_entity_material_asset(state->scene, entity, previous_asset);
+        (void)henka_scene_set_entity_material(state->scene, entity, material);
+        return false;
+    }
+    state->native_authoring_material_asset = native_asset;
+    state->native_authoring_material_entity = entity;
+    printf(
+        "Native authoring material: editable runtime definition adopted for entity=%llu source_state=HENKA_NATIVE_EDITABLE_MATERIAL_INSTANCE.\n",
+        (unsigned long long)entity);
+    fflush(stdout);
+    return true;
 }
 
 static bool sandbox3d_make_selected_object_editable(
@@ -17043,7 +17106,102 @@ details_group_authoring:
                 selected_component_count);
             if (sandbox3d_details_flow_next_row(state, flow_desc.bounds, 22.0f, 1U, &row))
             {
-                sandbox3d_draw_value_row(state->ui, row.x, row.y, row.width, "Source", "Authoring mesh (per-object user slot)");
+                const bool native_material_owned =
+                    state->native_authoring_material_asset != NULL &&
+                    state->native_authoring_material_entity == entity;
+                const float material_action_x = row.x + row.width - 108.0f;
+                sandbox3d_draw_value_row(
+                    state->ui,
+                    row.x,
+                    row.y,
+                    native_material_owned ? row.width - 116.0f : row.width - 112.0f,
+                    "Source",
+                    native_material_owned
+                        ? "Authoring mesh + material instance"
+                        : "Authoring mesh (per-object user slot)");
+                if (!native_material_owned)
+                {
+                    if (!state->native_authoring_material_control_reported)
+                    {
+                        printf(
+                            "Native authoring material control: name=%s own_x=%.1f own_y=%.1f width=100.0 height=24.0 owned=0.\n",
+                            display_name,
+                            material_action_x,
+                            row.y);
+                        fflush(stdout);
+                        state->native_authoring_material_control_reported = true;
+                    }
+                    if (henka_ui_button(
+                            state->ui,
+                            "authoring_own_material",
+                            (henka_ui_rect){material_action_x, row.y, 100.0f, 24.0f},
+                            "Own Material") &&
+                        sandbox3d_promote_authoring_material(engine, state, entity))
+                    {
+                        sandbox3d_set_status(
+                            state,
+                            false,
+                            "Native material instance adopted with manager-owned dependencies.");
+                    }
+                }
+                else if (material_view.editor_binding != NULL)
+                {
+                    const float tint_x = row.x + row.width - 212.0f;
+                    if (!state->native_authoring_material_editor_reported)
+                    {
+                        printf(
+                            "Native authoring material controls: name=%s tint_x=%.1f texture_x=%.1f y=%.1f width=96.0 height=24.0.\n",
+                            display_name,
+                            tint_x,
+                            row.x + row.width - 100.0f,
+                            row.y);
+                        fflush(stdout);
+                        state->native_authoring_material_editor_reported = true;
+                    }
+                    if (henka_ui_button(
+                            state->ui,
+                            "authoring_material_tint",
+                            (henka_ui_rect){tint_x, row.y, 96.0f, 24.0f},
+                            "Tint +"))
+                    {
+                        const henka_material_instance_parameter previous_parameter =
+                            state->material_editor_parameter;
+                        state->material_editor_parameter = HENKA_MATERIAL_INSTANCE_BASE_COLOR;
+                        if (sandbox3d_material_editor_apply_delta(
+                                state,
+                                material_view.editor_binding,
+                                1) == HENKA_SUCCESS)
+                        {
+                            printf(
+                                "Native authoring material edited: name=%s parameter=Base Color source_state=HENKA_NATIVE_EDITABLE_MATERIAL_INSTANCE.\n",
+                                display_name);
+                            fflush(stdout);
+                            sandbox3d_set_status(state, false, "Native material base color edited transactionally.");
+                        }
+                        state->material_editor_parameter = previous_parameter;
+                    }
+                    if (henka_ui_button(
+                            state->ui,
+                            "authoring_material_texture",
+                            (henka_ui_rect){row.x + row.width - 100.0f, row.y, 96.0f, 24.0f},
+                            "Use Detail"))
+                    {
+                        if (state->detail_normal_texture != NULL &&
+                            sandbox3d_apply_texture_to_material_binding(
+                                engine,
+                                state,
+                                material_view.editor_binding,
+                                HENKA_MATERIAL_TEXTURE_SLOT_NORMAL,
+                                state->detail_normal_texture) == HENKA_SUCCESS)
+                        {
+                            printf(
+                                "Native authoring texture edited: name=%s slot=Normal source_state=HENKA_NATIVE_EDITABLE_MATERIAL_INSTANCE.\n",
+                                display_name);
+                            fflush(stdout);
+                            sandbox3d_set_status(state, false, "Native normal texture dependency assigned transactionally.");
+                        }
+                    }
+                }
             }
             if (sandbox3d_details_flow_next_row(state, flow_desc.bounds, 28.0f, 1U, &row) && row.width >= 290.0f)
             {

@@ -1289,6 +1289,81 @@ try {
             throw "Make Editable did not create the user-owned native authoring source."
         }
         Write-Output "[pass] Imported showcase primitive entered the user-facing native authoring workflow"
+        if (-not (Wait-FileContains -Path $stdoutPath -Pattern "Native authoring material control:" -TimeoutMilliseconds 3000)) {
+            throw "The converted showcase did not expose the native material ownership control."
+        }
+        $nativeMaterialOwnershipMatch = Get-LastLogRegexMatch `
+            -Path $stdoutPath `
+            -Pattern 'Native authoring material control: name=(.+) own_x=([-0-9.]+) own_y=([-0-9.]+) width=100.0 height=24.0 owned=0\.'
+        if ($null -eq $nativeMaterialOwnershipMatch) {
+            throw "The native material ownership control geometry could not be parsed."
+        }
+        $nativeMaterialOwnershipX = [double]$nativeMaterialOwnershipMatch.Groups[2].Value
+        $nativeMaterialOwnershipY = [double]$nativeMaterialOwnershipMatch.Groups[3].Value
+        Assert-FramebufferRect `
+            -Name "Native authoring material ownership control" `
+            -FramebufferWidth $framebufferWidth `
+            -FramebufferHeight $framebufferHeight `
+            -X $nativeMaterialOwnershipX `
+            -Y $nativeMaterialOwnershipY `
+            -Width 100.0 `
+            -Height 24.0
+        Click-FramebufferPoint `
+            -Handle $mainWindowHandle `
+            -FramebufferWidth $framebufferWidth `
+            -FramebufferHeight $framebufferHeight `
+            -FramebufferX ($nativeMaterialOwnershipX + 50.0) `
+            -FramebufferY ($nativeMaterialOwnershipY + 12.0)
+        if (-not (Wait-FileContains -Path $stdoutPath -Pattern "Native authoring material: editable runtime definition adopted" -TimeoutMilliseconds 5000)) {
+            throw "The showcase material was not promoted to a manager-owned editable definition."
+        }
+        if (-not (Wait-FileContains -Path $stdoutPath -Pattern "Native authoring material controls:" -TimeoutMilliseconds 3000)) {
+            throw "The native material editor controls did not become visible after ownership promotion."
+        }
+        $nativeMaterialControlsMatch = Get-LastLogRegexMatch `
+            -Path $stdoutPath `
+            -Pattern 'Native authoring material controls: name=(.+) tint_x=([-0-9.]+) texture_x=([-0-9.]+) y=([-0-9.]+) width=96.0 height=24.0\.'
+        if ($null -eq $nativeMaterialControlsMatch) {
+            throw "The native material editor control geometry could not be parsed."
+        }
+        $nativeMaterialTintX = [double]$nativeMaterialControlsMatch.Groups[2].Value
+        $nativeMaterialTextureX = [double]$nativeMaterialControlsMatch.Groups[3].Value
+        $nativeMaterialY = [double]$nativeMaterialControlsMatch.Groups[4].Value
+        Assert-FramebufferRect `
+            -Name "Native authoring material tint control" `
+            -FramebufferWidth $framebufferWidth `
+            -FramebufferHeight $framebufferHeight `
+            -X $nativeMaterialTintX `
+            -Y $nativeMaterialY `
+            -Width 96.0 `
+            -Height 24.0
+        Click-FramebufferPoint `
+            -Handle $mainWindowHandle `
+            -FramebufferWidth $framebufferWidth `
+            -FramebufferHeight $framebufferHeight `
+            -FramebufferX ($nativeMaterialTintX + 48.0) `
+            -FramebufferY ($nativeMaterialY + 12.0)
+        if (-not (Wait-FileContains -Path $stdoutPath -Pattern "Native authoring material edited" -TimeoutMilliseconds 5000)) {
+            throw "The user-facing native material parameter edit did not complete."
+        }
+        Assert-FramebufferRect `
+            -Name "Native authoring texture control" `
+            -FramebufferWidth $framebufferWidth `
+            -FramebufferHeight $framebufferHeight `
+            -X $nativeMaterialTextureX `
+            -Y $nativeMaterialY `
+            -Width 96.0 `
+            -Height 24.0
+        Click-FramebufferPoint `
+            -Handle $mainWindowHandle `
+            -FramebufferWidth $framebufferWidth `
+            -FramebufferHeight $framebufferHeight `
+            -FramebufferX ($nativeMaterialTextureX + 48.0) `
+            -FramebufferY ($nativeMaterialY + 12.0)
+        if (-not (Wait-FileContains -Path $stdoutPath -Pattern "Native authoring texture edited" -TimeoutMilliseconds 5000)) {
+            throw "The user-facing native texture assignment did not complete."
+        }
+        Write-Output "[pass] User-facing native material and texture edits completed"
         if (-not (Wait-FileContains -Path $stdoutPath -Pattern "Native authoring move control:" -TimeoutMilliseconds 3000)) {
             throw "The converted showcase did not expose a bounded component-edit control."
         }

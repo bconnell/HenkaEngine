@@ -16,13 +16,18 @@ selected scene entity; the existing component, topology, UV, undo/redo, and
 `Save Project` / `Reload Project` controls operate on that source afterward.
 
 This is intentionally a bounded bridge rather than a completed content
-workspace. It currently targets the imported showcase primitives, preserves
-their borrowed glTF material identity, and does not make the generated files
-native-authored. The packaged Windows dogfood path exercises Make Editable, a
-component move, Save Project, and Reload Project transactionally. Complete
-native showcase proof still requires a real user edit, save, close/reload,
-continued edit, and rendered evidence, followed by material and texture
-authoring coverage.
+workspace. It currently targets the imported showcase primitives and preserves
+their borrowed glTF material identity until the user explicitly chooses
+`Own Material`. That action adopts a manager-owned runtime material definition;
+the bounded controls then exercise a base-color edit and a semantic normal
+texture assignment without changing the imported glTF source. The packaged
+Windows dogfood path exercises Make Editable, material and texture edits, a
+component move, Save Project, and Reload Project transactionally. Runtime
+material edits are currently session-owned: the project manifest persists the
+mesh source, transform, and visibility, but not material overrides or texture
+assignments. Complete native showcase proof still requires a real user edit,
+save, close/reload, continued edit, and rendered evidence, followed by durable
+material/texture project serialization and native-authored source export.
 
 - `cheeky_giraffe.gltf` — an original stylized-realistic, animated-film-oriented Cheeky Giraffe mascot with smooth high-curvature body and head forms, surface-fitted spots, a readable mane row, compact flattened ear lobes with inset inner-ear patches, connected tan ossicone stalks, and outward-angled dark-brown caps, layered eye whites/irises/pupils/highlights, nostrils, and a shaped mouth line. The presentation remains expressive by design, but the face is built from separately shaded anatomical features rather than a single cartoon eye material.
 - `original_realistic_rocket.gltf` — an original stylized modern launch vehicle with a staged core, ogive-like fairing sections, interstage and engine-skirt hardware, dark avionics separation bands, a bounded seven-engine bell/nozzle cluster, a restrained heat response, and tapered stabilization fins.
