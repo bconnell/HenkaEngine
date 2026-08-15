@@ -128,7 +128,7 @@ cleanup:
 
 static int test_history_and_persistence(void)
 {
-    const char* path = "authoring_mesh_checkpoint.bin";
+    const char* path = "build/test_tmp/authoring_nested/authoring_mesh_checkpoint.bin";
     henka_authoring_mesh_desc desc = {3U, 3U, 1U, 3U};
     henka_authoring_mesh* mesh = NULL;
     henka_authoring_mesh_history* history = NULL;

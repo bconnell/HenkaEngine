@@ -629,6 +629,7 @@ $stderrPath = Join-Path $logDir "check_packaged_sandbox3d_stderr.log"
 $startupScreenshotPath = Join-Path $logDir "check_packaged_sandbox3d_startup.png"
 $qaScreenshotPath = Join-Path $logDir "check_packaged_sandbox3d_controls_qa.png"
 $nativeScreenshotPath = Join-Path $logDir "check_packaged_sandbox3d_native_panel.png"
+$nativeAuthoringScreenshotPath = Join-Path $logDir "check_packaged_sandbox3d_native_authoring.png"
 $contextMenuScreenshotPath = Join-Path $logDir "check_packaged_sandbox3d_context_menu.png"
 $stabilityFirstPath = Join-Path $logDir "check_packaged_sandbox3d_stability_a.png"
 $stabilitySecondPath = Join-Path $logDir "check_packaged_sandbox3d_stability_b.png"
@@ -848,6 +849,7 @@ Remove-Item `
         $startupScreenshotPath,
         $qaScreenshotPath,
         $nativeScreenshotPath,
+        $nativeAuthoringScreenshotPath,
         $persistenceStdoutPath,
         $persistenceStderrPath) `
     -ErrorAction SilentlyContinue
@@ -1185,6 +1187,191 @@ try {
             -Height $rightDockHeight `
             -Rectangles $visiblePanelRects
         Write-Output "[pass] Inactive merged tabs may report zero content rectangles safely"
+
+        Write-Step "Checking imported showcase native authoring bridge"
+        Set-HenkaAutomationForeground -Handle $mainWindowHandle
+        [System.Windows.Forms.SendKeys]::SendWait('{F5}')
+        if (-not (Wait-FileContains -Path $stdoutPath -Pattern "Sandbox layout: Inspect" -TimeoutMilliseconds 4000)) {
+            throw "F5 did not enter the Inspect layout required for native authoring validation."
+        }
+        if (-not (Wait-FileContains -Path $stdoutPath -Pattern "Native authoring row:" -TimeoutMilliseconds 4000)) {
+            throw "The Inspect layout did not expose a showcase primitive authoring row."
+        }
+        $nativeRowMatch = Get-LastLogRegexMatch `
+            -Path $stdoutPath `
+            -Pattern 'Native authoring row: name=(.+) x=([-0-9.]+) y=([-0-9.]+) width=([-0-9.]+) height=([-0-9.]+)\.'
+        if ($null -eq $nativeRowMatch) {
+            throw "The native authoring row geometry could not be parsed."
+        }
+        $nativeRowX = [double]$nativeRowMatch.Groups[2].Value
+        $nativeRowY = [double]$nativeRowMatch.Groups[3].Value
+        $nativeRowWidth = [double]$nativeRowMatch.Groups[4].Value
+        $nativeRowHeight = [double]$nativeRowMatch.Groups[5].Value
+        Assert-FramebufferRect `
+            -Name "Native authoring showcase row" `
+            -FramebufferWidth $framebufferWidth `
+            -FramebufferHeight $framebufferHeight `
+            -X $nativeRowX `
+            -Y $nativeRowY `
+            -Width $nativeRowWidth `
+            -Height $nativeRowHeight
+        Save-WindowScreenshot `
+            -Handle $mainWindowHandle `
+            -Path $nativeAuthoringScreenshotPath `
+            -Description "Packaged native authoring pre-selection screenshot"
+        $nativeSelectionObserved = $false
+        for ($attempt = 0; $attempt -lt 3 -and -not $nativeSelectionObserved; ++$attempt) {
+            Click-FramebufferPoint `
+                -Handle $mainWindowHandle `
+                -FramebufferWidth $framebufferWidth `
+                -FramebufferHeight $framebufferHeight `
+                -FramebufferX ($nativeRowX + $nativeRowWidth * 0.5) `
+                -FramebufferY ($nativeRowY + $nativeRowHeight * 0.5)
+                $nativeSelectionObserved = Wait-FileContains `
+                    -Path $stdoutPath `
+                    -Pattern "Native authoring row clicked:" `
+                    -TimeoutMilliseconds 2000
+        }
+        Save-WindowScreenshot `
+            -Handle $mainWindowHandle `
+            -Path $nativeAuthoringScreenshotPath `
+            -Description "Packaged native authoring post-selection screenshot"
+        if (-not $nativeSelectionObserved) {
+            $inspectViewportMatch = Get-LastLogRegexMatch `
+                -Path $stdoutPath `
+                -Pattern 'Sandbox viewport: origin ([0-9]+),([0-9]+) size ([0-9]+)x([0-9]+)\.'
+            if ($null -ne $inspectViewportMatch) {
+                $inspectViewportX = [double]$inspectViewportMatch.Groups[1].Value
+                $inspectViewportY = [double]$inspectViewportMatch.Groups[2].Value
+                $inspectViewportWidth = [double]$inspectViewportMatch.Groups[3].Value
+                $inspectViewportHeight = [double]$inspectViewportMatch.Groups[4].Value
+                Click-FramebufferPoint `
+                    -Handle $mainWindowHandle `
+                    -FramebufferWidth $framebufferWidth `
+                    -FramebufferHeight $framebufferHeight `
+                    -FramebufferX ($inspectViewportX + $inspectViewportWidth * 0.30) `
+                    -FramebufferY ($inspectViewportY + $inspectViewportHeight * 0.45)
+                $nativeSelectionObserved = Wait-FileContains `
+                    -Path $stdoutPath `
+                    -Pattern "Native authoring row clicked:" `
+                    -TimeoutMilliseconds 3000
+            }
+        }
+        if (-not $nativeSelectionObserved) {
+            throw "Selecting the showcase row did not expose Object Details > Authoring > Make Editable."
+        }
+        if (-not (Wait-FileContains -Path $stdoutPath -Pattern "Native authoring Make Editable control:" -TimeoutMilliseconds 3000)) {
+            throw "The selected showcase authoring controls did not become visible in the prioritized Authoring group."
+        }
+        $nativeMakeEditableMatch = Get-LastLogRegexMatch `
+            -Path $stdoutPath `
+            -Pattern 'Native authoring Make Editable control: name=(.+) x=([-0-9.]+) y=([-0-9.]+) width=180.0 height=24.0\.'
+        if ($null -eq $nativeMakeEditableMatch) {
+            throw "The Make Editable control geometry could not be parsed."
+        }
+        $nativeMakeEditableX = [double]$nativeMakeEditableMatch.Groups[2].Value
+        $nativeMakeEditableY = [double]$nativeMakeEditableMatch.Groups[3].Value
+        Assert-FramebufferRect `
+            -Name "Native authoring Make Editable control" `
+            -FramebufferWidth $framebufferWidth `
+            -FramebufferHeight $framebufferHeight `
+            -X $nativeMakeEditableX `
+            -Y $nativeMakeEditableY `
+            -Width 180.0 `
+            -Height 24.0
+        Click-FramebufferPoint `
+            -Handle $mainWindowHandle `
+            -FramebufferWidth $framebufferWidth `
+            -FramebufferHeight $framebufferHeight `
+            -FramebufferX ($nativeMakeEditableX + 90.0) `
+            -FramebufferY ($nativeMakeEditableY + 12.0)
+        if (-not (Wait-FileContains -Path $stdoutPath -Pattern "Native authoring dogfood: Make Editable converted" -TimeoutMilliseconds 5000)) {
+            throw "Make Editable did not create the user-owned native authoring source."
+        }
+        Write-Output "[pass] Imported showcase primitive entered the user-facing native authoring workflow"
+        if (-not (Wait-FileContains -Path $stdoutPath -Pattern "Native authoring move control:" -TimeoutMilliseconds 3000)) {
+            throw "The converted showcase did not expose a bounded component-edit control."
+        }
+        $nativeMoveMatch = Get-LastLogRegexMatch `
+            -Path $stdoutPath `
+            -Pattern 'Native authoring move control: name=(.+) x=([-0-9.]+) y=([-0-9.]+) width=88.0 height=24.0\.'
+        if ($null -eq $nativeMoveMatch) {
+            throw "The native authoring component-edit control geometry could not be parsed."
+        }
+        $nativeMoveX = [double]$nativeMoveMatch.Groups[2].Value
+        $nativeMoveY = [double]$nativeMoveMatch.Groups[3].Value
+        Assert-FramebufferRect `
+            -Name "Native authoring component-edit control" `
+            -FramebufferWidth $framebufferWidth `
+            -FramebufferHeight $framebufferHeight `
+            -X $nativeMoveX `
+            -Y $nativeMoveY `
+            -Width 88.0 `
+            -Height 24.0
+        Click-FramebufferPoint `
+            -Handle $mainWindowHandle `
+            -FramebufferWidth $framebufferWidth `
+            -FramebufferHeight $framebufferHeight `
+            -FramebufferX ($nativeMoveX + 44.0) `
+            -FramebufferY ($nativeMoveY + 12.0)
+        if (-not (Wait-FileContains -Path $stdoutPath -Pattern "Native authoring dogfood: component move edited" -TimeoutMilliseconds 5000)) {
+            throw "The user-facing component edit did not update the native authoring source."
+        }
+        Write-Output "[pass] User-facing component edit changed the native showcase source"
+        if (-not (Wait-FileContains -Path $stdoutPath -Pattern "Native authoring project controls:" -TimeoutMilliseconds 3000)) {
+            throw "The converted showcase did not expose bounded project save/reload controls."
+        }
+        $nativeProjectMatch = Get-LastLogRegexMatch `
+            -Path $stdoutPath `
+            -Pattern 'Native authoring project controls: name=(.+) save_x=([-0-9.]+) save_y=([-0-9.]+) reload_x=([-0-9.]+) reload_y=([-0-9.]+) width=140.0 height=24.0\.'
+        if ($null -eq $nativeProjectMatch) {
+            throw "The native authoring project control geometry could not be parsed."
+        }
+        $nativeSaveX = [double]$nativeProjectMatch.Groups[2].Value
+        $nativeSaveY = [double]$nativeProjectMatch.Groups[3].Value
+        $nativeReloadX = [double]$nativeProjectMatch.Groups[4].Value
+        $nativeReloadY = [double]$nativeProjectMatch.Groups[5].Value
+        Assert-FramebufferRect `
+            -Name "Native authoring Save Project control" `
+            -FramebufferWidth $framebufferWidth `
+            -FramebufferHeight $framebufferHeight `
+            -X $nativeSaveX `
+            -Y $nativeSaveY `
+            -Width 140.0 `
+            -Height 24.0
+        Click-FramebufferPoint `
+            -Handle $mainWindowHandle `
+            -FramebufferWidth $framebufferWidth `
+            -FramebufferHeight $framebufferHeight `
+            -FramebufferX ($nativeSaveX + 70.0) `
+            -FramebufferY ($nativeSaveY + 12.0)
+        if (-not (Wait-FileContains -Path $stdoutPath -Pattern "Native authoring dogfood: project saved" -TimeoutMilliseconds 5000)) {
+            throw "The user-facing native authoring project save did not complete."
+        }
+        Write-Output "[pass] User-facing native authoring project save completed"
+        Assert-FramebufferRect `
+            -Name "Native authoring Reload Project control" `
+            -FramebufferWidth $framebufferWidth `
+            -FramebufferHeight $framebufferHeight `
+            -X $nativeReloadX `
+            -Y $nativeReloadY `
+            -Width 140.0 `
+            -Height 24.0
+        Click-FramebufferPoint `
+            -Handle $mainWindowHandle `
+            -FramebufferWidth $framebufferWidth `
+            -FramebufferHeight $framebufferHeight `
+            -FramebufferX ($nativeReloadX + 70.0) `
+            -FramebufferY ($nativeReloadY + 12.0)
+        if (-not (Wait-FileContains -Path $stdoutPath -Pattern "Native authoring dogfood: project reloaded" -TimeoutMilliseconds 5000)) {
+            throw "The user-facing native authoring project reload did not complete transactionally."
+        }
+        Write-Output "[pass] User-facing native authoring project reload completed transactionally"
+        Start-Sleep -Milliseconds 350
+        Save-WindowScreenshot `
+            -Handle $mainWindowHandle `
+            -Path $nativeAuthoringScreenshotPath `
+            -Description "Packaged native authoring screenshot"
 
         Write-Step "Checking section-header context menu"
         $contextMenuPattern = "Workspace context menu: section=Controls horizontal=available vertical=available"
@@ -1598,6 +1785,9 @@ try {
     Assert-PathExists `
         -Path $nativeScreenshotPath `
         -Description "Packaged native panel visual proof"
+    Assert-PathExists `
+        -Path $nativeAuthoringScreenshotPath `
+        -Description "Packaged native authoring visual proof"
     Write-Output "[pass] Live workspace settings recovery persisted across relaunch"
     Write-Output "[pass] Packaged sandbox checks completed."
 }

@@ -9,6 +9,7 @@
 #endif
 
 #include <henka/memory.h>
+#include <henka/persistence.h>
 
 struct henka_authoring_mesh
 {
@@ -1235,6 +1236,10 @@ henka_result henka_authoring_mesh_save_file(const henka_authoring_mesh* mesh, co
     if (mesh == NULL || path == NULL || path[0] == '\0' || !henka_authoring_mesh_validate(mesh))
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    if (henka_path_ensure_parent_directory(path) != HENKA_SUCCESS)
+    {
+        return HENKA_ERROR_ASSET_SOURCE;
     }
     path_length = strlen(path);
     if (path_length > SIZE_MAX - 5U)

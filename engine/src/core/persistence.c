@@ -821,6 +821,28 @@ henka_result henka_path_parent_directory(const char* path, char** out_parent_dir
     return HENKA_SUCCESS;
 }
 
+henka_result henka_path_ensure_parent_directory(const char* path)
+{
+    char* directory_path = NULL;
+    henka_result result;
+
+    if (path == NULL || path[0] == '\0')
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    result = henka_path_parent_directory(path, &directory_path);
+    if (result == HENKA_ERROR_INVALID_ARGUMENT)
+    {
+        return HENKA_SUCCESS;
+    }
+    if (result == HENKA_SUCCESS)
+    {
+        result = henka_persistence_create_directory_tree(directory_path);
+        henka_free(directory_path);
+    }
+    return result;
+}
+
 henka_result henka_settings_create(henka_settings** out_settings)
 {
     henka_settings* settings;

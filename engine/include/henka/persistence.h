@@ -19,6 +19,8 @@ henka_result henka_path_resolve(const char* base_path, const char* relative_path
  */
 henka_result henka_path_resolve_confined(const char* base_path, const char* relative_path, char** out_path);
 henka_result henka_path_parent_directory(const char* path, char** out_parent_directory);
+/* Creates the parent directory tree when a path has one. */
+henka_result henka_path_ensure_parent_directory(const char* path);
 
 henka_result henka_settings_create(henka_settings** out_settings);
 void henka_settings_destroy(henka_settings* settings);
