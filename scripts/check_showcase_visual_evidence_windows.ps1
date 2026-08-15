@@ -18,6 +18,9 @@ $indexText = Get-Content -LiteralPath $indexPath -Raw
 if ($indexText -notmatch "Source: .*henka_sandbox3d\.exe") {
     throw "Showcase visual evidence does not identify the Henka Sandbox executable."
 }
+if ($indexText -notmatch "(?m)^Evidence profile: FULL_SHOWCASE\s*$") {
+    throw "Showcase visual evidence does not declare the FULL_SHOWCASE profile."
+}
 
 function Get-CaptureMetadata {
     param(
@@ -26,7 +29,7 @@ function Get-CaptureMetadata {
 
     $match = [regex]::Match(
         $indexText,
-        "(?m)CAPTURE_READY mode=$Mode viewport=(?<vx>-?\d+),(?<vy>-?\d+),(?<vw>\d+),(?<vh>\d+) aspect=(?<aspect>[-0-9.]+) .* pitch=(?<pitch>[-0-9.]+) roll=(?<roll>[-0-9.]+) .* giraffe_screen=(?<gminx>[-0-9.]+),(?<gminy>[-0-9.]+),(?<gmaxx>[-0-9.]+),(?<gmaxy>[-0-9.]+) rocket_screen=(?<rminx>[-0-9.]+),(?<rminy>[-0-9.]+),(?<rmaxx>[-0-9.]+),(?<rmaxy>[-0-9.]+) combined_midpoint=(?<mx>[-0-9.]+),(?<my>[-0-9.]+) giraffe_parts=(?<gp>\d+) rocket_parts=(?<rp>\d+) settled_frames=(?<sf>\d+) draw_expected=1")
+        "(?m)CAPTURE_READY mode=$Mode viewport=(?<vx>-?\d+),(?<vy>-?\d+),(?<vw>\d+),(?<vh>\d+) aspect=(?<aspect>[-0-9.]+) .* pitch=(?<pitch>[-0-9.]+) roll=(?<roll>[-0-9.]+) .* giraffe_screen=(?<gminx>[-0-9.]+),(?<gminy>[-0-9.]+),(?<gmaxx>[-0-9.]+),(?<gmaxy>[-0-9.]+) rocket_screen=(?<rminx>[-0-9.]+),(?<rminy>[-0-9.]+),(?<rmaxx>[-0-9.]+),(?<rmaxy>[-0-9.]+) combined_midpoint=(?<mx>[-0-9.]+),(?<my>[-0-9.]+) giraffe_parts=(?<gp>\d+) rocket_parts=(?<rp>\d+) giraffe_sss_regions=(?<sss>\d+) giraffe_normal_texture_regions=(?<normal>\d+) giraffe_normal_texture_loaded=(?<loaded>\d+) giraffe_normal_texture_fallbacks=(?<fallback>\d+) settled_frames=(?<sf>\d+) draw_expected=1")
     if (-not $match.Success) {
         throw "Showcase evidence is missing valid CAPTURE_READY metadata for $Mode."
     }
@@ -72,8 +75,13 @@ foreach ($requiredMode in @("solid", "material_preview", "rendered")) {
     }
     if ([int]$metadata.Groups["gp"].Value -lt 1 -or
         [int]$metadata.Groups["rp"].Value -lt 1 -or
+        [int]$metadata.Groups["sss"].Value -lt 1 -or
+        [int]$metadata.Groups["normal"].Value -lt 1 -or
+        [int]$metadata.Groups["normal"].Value -ne [int]$metadata.Groups["sss"].Value -or
+        [int]$metadata.Groups["loaded"].Value -ne [int]$metadata.Groups["normal"].Value -or
+        [int]$metadata.Groups["fallback"].Value -ne 0 -or
         [int]$metadata.Groups["sf"].Value -lt 3) {
-        throw "Showcase $requiredMode metadata does not prove both subjects and settled frames."
+        throw "Showcase $requiredMode metadata does not prove subjects, material dependencies, subsurface setup, and settled frames."
     }
 }
 

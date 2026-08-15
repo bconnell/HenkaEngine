@@ -332,6 +332,7 @@ typedef struct sandbox3d_physics_state
  * to complete the final persisted-region handoff without making this soak
  * unbounded. */
 #define SANDBOX3D_TERRAIN_STREAM_DRAIN_PUMPS 2048U
+#define SANDBOX3D_SHOWCASE_MAX_GIRAFFE_MATERIAL_INSTANCES 16U
 
 typedef struct sandbox3d_state
 {
@@ -374,6 +375,11 @@ typedef struct sandbox3d_state
     henka_material_asset* marker_material_asset;
     henka_material_asset* terrain_material_asset;
     henka_material_instance marker_material_instance;
+    henka_material_instance giraffe_material_instances[SANDBOX3D_SHOWCASE_MAX_GIRAFFE_MATERIAL_INSTANCES];
+    size_t giraffe_material_instance_count;
+    size_t giraffe_normal_texture_region_count;
+    size_t giraffe_normal_texture_loaded_count;
+    size_t giraffe_normal_texture_fallback_count;
     henka_terrain_world* terrain_world;
     henka_terrain_storage* terrain_storage;
     henka_terrain_streamer* terrain_streamer;
@@ -4270,7 +4276,7 @@ static void sandbox3d_report_capture_ready(
     }
 
     printf(
-        "CAPTURE_READY mode=%s viewport=%d,%d,%d,%d aspect=%.6f camera_position=%.4f,%.4f,%.4f yaw=%.6f pitch=%.6f roll=%.6f fov=%.6f giraffe_bounds=%.4f,%.4f,%.4f,%.4f,%.4f,%.4f rocket_bounds=%.4f,%.4f,%.4f,%.4f,%.4f,%.4f combined_bounds=%.4f,%.4f,%.4f,%.4f,%.4f,%.4f giraffe_screen=%.2f,%.2f,%.2f,%.2f rocket_screen=%.2f,%.2f,%.2f,%.2f combined_midpoint=%.2f,%.2f giraffe_parts=%zu rocket_parts=%zu settled_frames=%u draw_expected=1\n",
+        "CAPTURE_READY mode=%s viewport=%d,%d,%d,%d aspect=%.6f camera_position=%.4f,%.4f,%.4f yaw=%.6f pitch=%.6f roll=%.6f fov=%.6f giraffe_bounds=%.4f,%.4f,%.4f,%.4f,%.4f,%.4f rocket_bounds=%.4f,%.4f,%.4f,%.4f,%.4f,%.4f combined_bounds=%.4f,%.4f,%.4f,%.4f,%.4f,%.4f giraffe_screen=%.2f,%.2f,%.2f,%.2f rocket_screen=%.2f,%.2f,%.2f,%.2f combined_midpoint=%.2f,%.2f giraffe_parts=%zu rocket_parts=%zu giraffe_sss_regions=%zu giraffe_normal_texture_regions=%zu giraffe_normal_texture_loaded=%zu giraffe_normal_texture_fallbacks=%zu settled_frames=%u draw_expected=1\n",
         henka_viewport_shading_mode_get_setting_value(state->capture_mode),
         viewport.x,
         viewport.y,
@@ -4314,6 +4320,10 @@ static void sandbox3d_report_capture_ready(
         combined_midpoint.y,
         giraffe_part_count,
         rocket_part_count,
+        state->giraffe_material_instance_count,
+        state->giraffe_normal_texture_region_count,
+        state->giraffe_normal_texture_loaded_count,
+        state->giraffe_normal_texture_fallback_count,
         state->capture_settled_frames);
     fflush(stdout);
     state->capture_metadata_reported = true;
@@ -4354,6 +4364,152 @@ static bool sandbox3d_set_named_showcase_local_bounds(
         }
     }
     return found;
+}
+
+static henka_result sandbox3d_apply_giraffe_subsurface(
+    sandbox3d_state* state,
+    size_t* out_applied_count)
+{
+    size_t entity_index;
+    size_t applied_count;
+
+    if (state == NULL || state->scene == NULL || out_applied_count == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    *out_applied_count = 0U;
+    applied_count = 0U;
+    for (entity_index = 0U;
+         entity_index < henka_scene_get_entity_count(state->scene);
+         ++entity_index)
+    {
+        henka_entity entity;
+        const char* name;
+        henka_material material;
+        const henka_material_asset* definition;
+        henka_material_instance* instance;
+
+        entity = henka_scene_get_entity_at_index(state->scene, entity_index);
+        name = entity == HENKA_INVALID_ENTITY ? NULL :
+            henka_scene_get_entity_name(state->scene, entity);
+        if (name == NULL ||
+            strncmp(name, "Showcase Giraffe ", sizeof("Showcase Giraffe ") - 1U) != 0)
+        {
+            continue;
+        }
+        if (henka_scene_get_entity_material(state->scene, entity, &material) != HENKA_SUCCESS)
+        {
+            return HENKA_ERROR_UNKNOWN;
+        }
+        /* Warm body, spot, cream, and ear materials are diffuse enough to
+         * benefit from the bounded SSS approximation. Exclude eyes, mouth,
+         * and hard feature materials by their authored roughness. */
+        if (material.metallic > 0.05f || material.roughness < 0.38f)
+        {
+            continue;
+        }
+        if (applied_count >= SANDBOX3D_SHOWCASE_MAX_GIRAFFE_MATERIAL_INSTANCES)
+        {
+            return HENKA_ERROR_LIMIT;
+        }
+        definition = NULL;
+        if (henka_scene_get_entity_material_asset(state->scene, entity, &definition) != HENKA_SUCCESS ||
+            definition == NULL)
+        {
+            return HENKA_ERROR_UNKNOWN;
+        }
+        instance = &state->giraffe_material_instances[applied_count];
+        memset(instance, 0, sizeof(*instance));
+        if (henka_assets_create_material_instance(definition, instance) != HENKA_SUCCESS ||
+            henka_assets_material_instance_set_float(
+                instance, HENKA_MATERIAL_INSTANCE_SUBSURFACE, 0.30f) != HENKA_SUCCESS ||
+            henka_assets_material_instance_set_vec3(
+                instance,
+                HENKA_MATERIAL_INSTANCE_SUBSURFACE_COLOR,
+                (henka_vec3){1.0f, 0.30f, 0.12f}) != HENKA_SUCCESS ||
+            henka_assets_material_instance_set_float(
+                instance, HENKA_MATERIAL_INSTANCE_THICKNESS, 0.62f) != HENKA_SUCCESS ||
+            henka_assets_apply_material_instance_to_entity(instance, state->scene, entity) != HENKA_SUCCESS)
+        {
+            memset(instance, 0, sizeof(*instance));
+            return HENKA_ERROR_UNKNOWN;
+        }
+        ++applied_count;
+    }
+    state->giraffe_material_instance_count = applied_count;
+    *out_applied_count = applied_count;
+    return HENKA_SUCCESS;
+}
+
+static henka_result sandbox3d_collect_giraffe_texture_evidence(
+    const sandbox3d_state* state,
+    const henka_asset_manager* assets,
+    size_t* out_region_count,
+    size_t* out_loaded_count,
+    size_t* out_fallback_count)
+{
+    size_t entity_index;
+    size_t region_count;
+    size_t loaded_count;
+    size_t fallback_count;
+
+    if (state == NULL || state->scene == NULL || assets == NULL ||
+        out_region_count == NULL || out_loaded_count == NULL || out_fallback_count == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    region_count = 0U;
+    loaded_count = 0U;
+    fallback_count = 0U;
+    for (entity_index = 0U;
+         entity_index < henka_scene_get_entity_count(state->scene);
+         ++entity_index)
+    {
+        henka_entity entity;
+        const char* name;
+        henka_material material;
+        const henka_material_asset* definition;
+        henka_asset_metadata metadata;
+
+        entity = henka_scene_get_entity_at_index(state->scene, entity_index);
+        name = entity == HENKA_INVALID_ENTITY ? NULL :
+            henka_scene_get_entity_name(state->scene, entity);
+        if (name == NULL ||
+            strncmp(name, "Showcase Giraffe ", sizeof("Showcase Giraffe ") - 1U) != 0)
+        {
+            continue;
+        }
+        definition = NULL;
+        if (henka_scene_get_entity_material_asset(state->scene, entity, &definition) != HENKA_SUCCESS ||
+            definition == NULL ||
+            henka_assets_get_material_asset_material(definition, &material) != HENKA_SUCCESS)
+        {
+            HENKA_LOG_ERROR("Showcase Giraffe normal material lookup failed for '%s'.", name);
+            return HENKA_ERROR_UNKNOWN;
+        }
+        if (material.normal_texture == NULL)
+        {
+            continue;
+        }
+        if (henka_assets_get_texture_metadata(assets, material.normal_texture, &metadata) != HENKA_SUCCESS)
+        {
+            HENKA_LOG_ERROR("Showcase Giraffe normal texture metadata lookup failed for '%s'.", name);
+            return HENKA_ERROR_UNKNOWN;
+        }
+        ++region_count;
+        if (metadata.loaded)
+        {
+            ++loaded_count;
+        }
+        if (metadata.fallback)
+        {
+            ++fallback_count;
+        }
+    }
+    *out_region_count = region_count;
+    *out_loaded_count = loaded_count;
+    *out_fallback_count = fallback_count;
+    return HENKA_SUCCESS;
 }
 
 static bool sandbox3d_validate_startup_camera(const sandbox3d_state* state)
@@ -6852,6 +7008,11 @@ static void sandbox3d_release_owned_resources(sandbox3d_state* state)
     state->marker_material_asset = NULL;
     memset(&state->marker_material_instance, 0, sizeof(state->marker_material_instance));
     state->marker_material_instance_valid = false;
+    memset(state->giraffe_material_instances, 0, sizeof(state->giraffe_material_instances));
+    state->giraffe_material_instance_count = 0U;
+    state->giraffe_normal_texture_region_count = 0U;
+    state->giraffe_normal_texture_loaded_count = 0U;
+    state->giraffe_normal_texture_fallback_count = 0U;
     memset(state->material_editor_bindings, 0, sizeof(state->material_editor_bindings));
     state->missing_model_mesh = NULL;
     state->scene = NULL;
@@ -18830,6 +18991,7 @@ static henka_result sandbox3d_initialize(henka_engine* engine, void* user_data)
     henka_scene* imported_scene;
     size_t imported_entity_count;
     size_t giraffe_entity_count;
+    size_t giraffe_sss_count;
     size_t rocket_entity_count;
     henka_result result;
     henka_transform transform;
@@ -19302,6 +19464,41 @@ static henka_result sandbox3d_initialize(henka_engine* engine, void* user_data)
         result = HENKA_ERROR_UNKNOWN;
         goto fail;
     }
+    giraffe_sss_count = 0U;
+    result = sandbox3d_apply_giraffe_subsurface(state, &giraffe_sss_count);
+    if (result != HENKA_SUCCESS || giraffe_sss_count == 0U)
+    {
+        HENKA_LOG_ERROR("Showcase giraffe subsurface setup failed: %s (regions=%zu)",
+            henka_result_to_string(result), giraffe_sss_count);
+        goto fail;
+    }
+    printf(
+        "Showcase material response: bounded view-aware subsurface applied to %zu warm Giraffe regions.\n",
+        giraffe_sss_count);
+    result = sandbox3d_collect_giraffe_texture_evidence(
+        state,
+        assets,
+        &state->giraffe_normal_texture_region_count,
+        &state->giraffe_normal_texture_loaded_count,
+        &state->giraffe_normal_texture_fallback_count);
+    if (result != HENKA_SUCCESS ||
+        state->giraffe_normal_texture_region_count != giraffe_sss_count ||
+        state->giraffe_normal_texture_loaded_count != state->giraffe_normal_texture_region_count ||
+        state->giraffe_normal_texture_fallback_count != 0U)
+    {
+        HENKA_LOG_ERROR(
+            "Showcase Giraffe normal texture proof failed: %s (bound=%zu loaded=%zu fallback=%zu warm_regions=%zu parts=%zu)",
+            henka_result_to_string(result),
+            state->giraffe_normal_texture_region_count,
+            state->giraffe_normal_texture_loaded_count,
+            state->giraffe_normal_texture_fallback_count,
+            giraffe_sss_count,
+            giraffe_entity_count);
+        goto fail;
+    }
+    printf(
+        "Showcase material dependencies: %zu Giraffe normal textures loaded through the asset manager with no fallback.\n",
+        state->giraffe_normal_texture_loaded_count);
 
     rocket_scene_asset = NULL;
     result = henka_assets_load_gltf_scene_asset(

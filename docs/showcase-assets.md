@@ -1,6 +1,8 @@
 # Sandbox showcase assets
 
-The normal Windows Sandbox startup presents two repo-owned sample models:
+The normal Windows Sandbox startup presents two repo-owned sample models. It also applies the renderer's bounded view-aware subsurface material-instance response to the warm Giraffe regions, while leaving eyes and hard feature materials on their authored opaque response. This is visual dogfooding of the existing material-instance path, not a claim of full multi-scatter or ray-traced subsurface transport:
+
+Provenance is explicit: the current models and generated detail textures are `GENERATED_TEST_FIXTURE` / `IMPORT_COMPATIBILITY_ASSET` content produced by the deterministic repository generator and consumed through the public glTF/material asset path. They are not `HENKA_NATIVE_AUTHORED` proof. The native-authoring gate remains open until a nontrivial showcase part can be created and edited through Henka's ordinary user-facing authoring workflow, then saved, reloaded, and rendered from that authoritative source.
 
 - `cheeky_giraffe.gltf` — an original stylized-realistic, animated-film-oriented Cheeky Giraffe mascot with smooth high-curvature body and head forms, surface-fitted spots, a readable mane row, compact flattened ear lobes with inset inner-ear patches, connected tan ossicone stalks, and outward-angled dark-brown caps, layered eye whites/irises/pupils/highlights, nostrils, and a shaped mouth line. The presentation remains expressive by design, but the face is built from separately shaded anatomical features rather than a single cartoon eye material.
 - `original_realistic_rocket.gltf` — an original stylized modern launch vehicle with a staged core, ogive-like fairing sections, interstage and engine-skirt hardware, dark avionics separation bands, a bounded seven-engine bell/nozzle cluster, a restrained heat response, and tapered stabilization fins.
@@ -45,7 +47,9 @@ from the real application. That record proves both named subject groups are
 visible, their authoritative bounds and render meshes are ready, the final
 Scene View viewport is known, the front camera is level, the combined midpoint
 is centered, both projected rectangles have safety margins, and three settled
-frames have completed. The validator also requires matching readiness metadata
+frames have completed. Full showcase captures declare the `FULL_SHOWCASE`
+evidence profile; inspection-only runs should use `GIRAFFE_INSPECTION` and must
+not be used with this full validator. The validator also requires matching readiness metadata
 for Solid, Material Preview, and Rendered before checking the images. It then
 checks that the evidence identifies the Henka Sandbox executable,
 contains all required views, and rejects missing, flat, low-chroma, or
