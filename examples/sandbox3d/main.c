@@ -457,6 +457,7 @@ typedef struct sandbox3d_state
     bool capture_mode_requested;
     bool terrain_capture_mode_requested;
     bool showcase_capture_view_requested;
+    bool showcase_capture_rocket_requested;
     bool capture_camera_aspect_applied;
     uint32_t capture_settled_frames;
     bool capture_metadata_reported;
@@ -7549,6 +7550,9 @@ static void sandbox3d_apply_capture_camera(sandbox3d_state* state)
         henka_bounds showcase_bounds = (henka_bounds){{0.0f, 0.0f, 0.0f}, {0.0f, 0.0f, 0.0f}};
         henka_vec3 target = (henka_vec3){0.0f, 2.0f, -1.7f};
         henka_vec3 position = (henka_vec3){0.0f, 3.0f, 8.8f};
+        const char* showcase_subject_prefix = state->showcase_capture_rocket_requested
+            ? "Showcase Rocket"
+            : "Showcase Giraffe";
         float showcase_yaw;
         float showcase_pitch;
 
@@ -7565,17 +7569,19 @@ static void sandbox3d_apply_capture_camera(sandbox3d_state* state)
                     case SANDBOX3D_SHOWCASE_CAPTURE_VIEW_FRONT:
                         showcase_yaw = -HENKA_PI * 0.5f;
                         have_showcase_bounds = sandbox3d_get_named_showcase_framing_bounds(
-                            state, "Showcase Giraffe", &showcase_bounds);
+                            state, showcase_subject_prefix, &showcase_bounds);
                         break;
                     case SANDBOX3D_SHOWCASE_CAPTURE_VIEW_THREE_QUARTER:
                         showcase_yaw = -0.92f;
                         have_showcase_bounds = sandbox3d_get_named_showcase_framing_bounds(
-                            state, "Showcase Giraffe", &showcase_bounds);
+                            state, showcase_subject_prefix, &showcase_bounds);
                         break;
                     case SANDBOX3D_SHOWCASE_CAPTURE_VIEW_PROFILE:
-                        showcase_yaw = 0.0f;
+                        showcase_yaw = state->showcase_capture_rocket_requested
+                            ? HENKA_PI
+                            : 0.0f;
                         have_showcase_bounds = sandbox3d_get_named_showcase_framing_bounds(
-                            state, "Showcase Giraffe", &showcase_bounds);
+                            state, showcase_subject_prefix, &showcase_bounds);
                         break;
                     case SANDBOX3D_SHOWCASE_CAPTURE_VIEW_WIDE:
                     default:
@@ -7610,16 +7616,34 @@ static void sandbox3d_apply_capture_camera(sandbox3d_state* state)
                 switch (state->showcase_capture_view)
                 {
                     case SANDBOX3D_SHOWCASE_CAPTURE_VIEW_FRONT:
-                        target = (henka_vec3){-2.15f, 2.25f, -1.7f};
-                        position = (henka_vec3){-2.15f, 2.30f, 4.65f};
+                        target = (henka_vec3){
+                            state->showcase_capture_rocket_requested ? 2.15f : -2.15f,
+                            state->showcase_capture_rocket_requested ? 1.65f : 2.25f,
+                            -1.7f};
+                        position = (henka_vec3){
+                            state->showcase_capture_rocket_requested ? 2.15f : -2.15f,
+                            state->showcase_capture_rocket_requested ? 1.70f : 2.30f,
+                            4.65f};
                         break;
                     case SANDBOX3D_SHOWCASE_CAPTURE_VIEW_THREE_QUARTER:
-                        target = (henka_vec3){-2.15f, 2.25f, -1.7f};
-                        position = (henka_vec3){-5.45f, 2.70f, 2.55f};
+                        target = (henka_vec3){
+                            state->showcase_capture_rocket_requested ? 2.15f : -2.15f,
+                            state->showcase_capture_rocket_requested ? 1.65f : 2.25f,
+                            -1.7f};
+                        position = (henka_vec3){
+                            state->showcase_capture_rocket_requested ? 5.45f : -5.45f,
+                            state->showcase_capture_rocket_requested ? 2.10f : 2.70f,
+                            state->showcase_capture_rocket_requested ? 0.55f : 2.55f};
                         break;
                     case SANDBOX3D_SHOWCASE_CAPTURE_VIEW_PROFILE:
-                        target = (henka_vec3){-2.15f, 2.30f, -1.7f};
-                        position = (henka_vec3){-7.15f, 2.45f, -1.7f};
+                        target = (henka_vec3){
+                            state->showcase_capture_rocket_requested ? 2.15f : -2.15f,
+                            state->showcase_capture_rocket_requested ? 1.65f : 2.30f,
+                            -1.7f};
+                        position = (henka_vec3){
+                            state->showcase_capture_rocket_requested ? 7.15f : -7.15f,
+                            state->showcase_capture_rocket_requested ? 1.95f : 2.45f,
+                            -1.7f};
                         break;
                     case SANDBOX3D_SHOWCASE_CAPTURE_VIEW_WIDE:
                     default:
@@ -22740,6 +22764,7 @@ int main(int argc, char** argv)
     bool capture_mode_requested;
     bool terrain_capture_mode_requested;
     bool showcase_capture_view_requested;
+    bool showcase_capture_rocket_requested;
     sandbox3d_terrain_capture_view terrain_capture_view;
     sandbox3d_showcase_capture_view showcase_capture_view;
     henka_viewport_shading_mode capture_mode;
@@ -22754,6 +22779,7 @@ int main(int argc, char** argv)
     capture_mode_requested = false;
     terrain_capture_mode_requested = false;
     showcase_capture_view_requested = false;
+    showcase_capture_rocket_requested = false;
     terrain_capture_view = SANDBOX3D_TERRAIN_CAPTURE_VIEW_WIDE;
     showcase_capture_view = SANDBOX3D_SHOWCASE_CAPTURE_VIEW_WIDE;
     capture_mode = HENKA_VIEWPORT_SHADING_RENDERED;
@@ -22802,6 +22828,14 @@ int main(int argc, char** argv)
         capture_mode_requested = true;
         showcase_capture_view_requested = true;
     }
+    else if (argc == 4 && strcmp(argv[1], "--capture-rocket-view") == 0 &&
+        sandbox3d_parse_showcase_capture_view(argv[2], &showcase_capture_view) &&
+        henka_viewport_shading_mode_parse(argv[3], &capture_mode) == HENKA_SUCCESS)
+    {
+        capture_mode_requested = true;
+        showcase_capture_view_requested = true;
+        showcase_capture_rocket_requested = true;
+    }
     else if (argc == 3 && strcmp(argv[1], "--capture-terrain-mode") == 0 &&
         henka_viewport_shading_mode_parse(argv[2], &capture_mode) == HENKA_SUCCESS)
     {
@@ -22817,7 +22851,7 @@ int main(int argc, char** argv)
     }
     else if (argc != 1)
     {
-        fprintf(stderr, "Usage: %s [--primitive-gallery | --smoke-test | --residency-stress | --temporal-stress | --material-stress | --environment-stress | --terrain-stream-stress | --capture-mode solid|material_preview|rendered | --capture-showcase-view wide|front|three-quarter|profile solid|material_preview|rendered | --capture-terrain-mode solid|material_preview|rendered | --capture-terrain-view wide|corner|close solid|material_preview|rendered]\n", argv[0]);
+        fprintf(stderr, "Usage: %s [--primitive-gallery | --smoke-test | --residency-stress | --temporal-stress | --material-stress | --environment-stress | --terrain-stream-stress | --capture-mode solid|material_preview|rendered | --capture-showcase-view wide|front|three-quarter|profile solid|material_preview|rendered | --capture-rocket-view front|three-quarter|profile solid|material_preview|rendered | --capture-terrain-mode solid|material_preview|rendered | --capture-terrain-view wide|corner|close solid|material_preview|rendered]\n", argv[0]);
         return 2;
     }
 
@@ -22832,6 +22866,7 @@ int main(int argc, char** argv)
     state.capture_mode_requested = capture_mode_requested;
     state.terrain_capture_mode_requested = terrain_capture_mode_requested;
     state.showcase_capture_view_requested = showcase_capture_view_requested;
+    state.showcase_capture_rocket_requested = showcase_capture_rocket_requested;
     state.terrain_capture_view = terrain_capture_view;
     state.showcase_capture_view = showcase_capture_view;
     state.capture_mode = capture_mode;

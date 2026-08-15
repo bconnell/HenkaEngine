@@ -48,6 +48,9 @@ try {
     foreach ($view in @("front", "three-quarter", "profile", "wide")) {
         New-TestShowcaseImage -Path (Join-Path $fixtureRoot ("giraffe-{0}-rendered.png" -f $view)) -Flat $false -Offset ($view.Length * 4)
     }
+    foreach ($view in @("front", "three-quarter", "profile")) {
+        New-TestShowcaseImage -Path (Join-Path $fixtureRoot ("rocket-{0}-rendered.png" -f $view)) -Flat $false -Offset ($view.Length * 6)
+    }
     New-TestShowcaseImage -Path (Join-Path $fixtureRoot "giraffe-front-material-preview.png") -Flat $false -Offset 2
     New-TestShowcaseImage -Path (Join-Path $fixtureRoot "startup-showcase.png") -Flat $false -Offset 8
     New-TestShowcaseImage -Path (Join-Path $fixtureRoot "same-camera-solid.png") -Flat $false -Offset 10
@@ -68,6 +71,9 @@ try {
         "giraffe-profile-rendered: giraffe-profile-rendered.png",
         "giraffe-wide-rendered: giraffe-wide-rendered.png",
         "giraffe-front-material-preview: giraffe-front-material-preview.png",
+        "rocket-front-rendered: rocket-front-rendered.png",
+        "rocket-three-quarter-rendered: rocket-three-quarter-rendered.png",
+        "rocket-profile-rendered: rocket-profile-rendered.png",
         "startup: startup-showcase.png"
     ) + $metadata | Set-Content -LiteralPath (Join-Path $fixtureRoot "INDEX.txt")
 

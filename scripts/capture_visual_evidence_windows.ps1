@@ -48,6 +48,7 @@ public static class HenkaVisualCaptureNativeMethods
     [DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(IntPtr handle, out uint processId);
     [DllImport("user32.dll")] public static extern int GetWindowText(IntPtr handle, System.Text.StringBuilder text, int capacity);
     [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr hWnd);
+    [DllImport("user32.dll")] public static extern IntPtr GetForegroundWindow();
     [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr hWnd, int command);
     [DllImport("user32.dll")] public static extern bool BringWindowToTop(IntPtr hWnd);
     [DllImport("user32.dll")] public static extern bool SetWindowPos(IntPtr hWnd, IntPtr insertAfter, int x, int y, int width, int height, uint flags);
@@ -104,6 +105,22 @@ function Wait-HenkaCaptureReady {
         Start-Sleep -Milliseconds 100
     }
     throw "Sandbox did not report bounded capture readiness for $Label within 20 seconds."
+}
+
+function Wait-HenkaSandboxForeground {
+    param(
+        [Parameter(Mandatory = $true)][IntPtr]$Handle,
+        [Parameter(Mandatory = $true)][string]$Label
+    )
+
+    for ($attempt = 0; $attempt -lt 20; ++$attempt) {
+        [HenkaVisualCaptureNativeMethods]::ActivateSandboxWindow($Handle)
+        if ([HenkaVisualCaptureNativeMethods]::GetForegroundWindow() -eq $Handle) {
+            return
+        }
+        Start-Sleep -Milliseconds 50
+    }
+    throw "Sandbox window did not become the foreground capture owner for $Label."
 }
 
 function Assert-HenkaCaptureMetadata {
@@ -201,7 +218,7 @@ foreach ($mode in $modes) {
         if ($handle -eq [IntPtr]::Zero -or -not [HenkaVisualCaptureNativeMethods]::IsWindow($handle)) {
             throw "Sandbox window did not become available for $($mode.Label)."
         }
-        [HenkaVisualCaptureNativeMethods]::ActivateSandboxWindow($handle)
+        Wait-HenkaSandboxForeground -Handle $handle -Label $mode.Label
         $metadataLine = if ($mode.Label -eq "startup") {
             Start-Sleep -Milliseconds 1500
             "CAPTURE_READY mode=startup readiness=ordinary-startup"
@@ -273,18 +290,21 @@ if ($captureMetadata.Count -gt 1) {
 }
 
 if ($IncludeGiraffeInspection) {
-    $giraffeModes = @(
+    $inspectionModes = @(
         @{ Label = "giraffe_front_rendered"; Arguments = @("--capture-showcase-view", "front", "rendered"); File = "giraffe-front-rendered.png" },
         @{ Label = "giraffe_three_quarter_rendered"; Arguments = @("--capture-showcase-view", "three-quarter", "rendered"); File = "giraffe-three-quarter-rendered.png" },
         @{ Label = "giraffe_profile_rendered"; Arguments = @("--capture-showcase-view", "profile", "rendered"); File = "giraffe-profile-rendered.png" },
         @{ Label = "giraffe_wide_rendered"; Arguments = @("--capture-showcase-view", "wide", "rendered"); File = "giraffe-wide-rendered.png" },
-        @{ Label = "giraffe_front_material_preview"; Arguments = @("--capture-showcase-view", "front", "material_preview"); File = "giraffe-front-material-preview.png" }
+        @{ Label = "giraffe_front_material_preview"; Arguments = @("--capture-showcase-view", "front", "material_preview"); File = "giraffe-front-material-preview.png" },
+        @{ Label = "rocket_front_rendered"; Arguments = @("--capture-rocket-view", "front", "rendered"); File = "rocket-front-rendered.png" },
+        @{ Label = "rocket_three_quarter_rendered"; Arguments = @("--capture-rocket-view", "three-quarter", "rendered"); File = "rocket-three-quarter-rendered.png" },
+        @{ Label = "rocket_profile_rendered"; Arguments = @("--capture-rocket-view", "profile", "rendered"); File = "rocket-profile-rendered.png" }
     )
-    foreach ($giraffeMode in $giraffeModes) {
+    foreach ($inspectionMode in $inspectionModes) {
         $capturedProcess = $null
-        $stdoutPath = Join-Path $OutputDirectory "$($giraffeMode.Label).stdout.txt"
-        $stderrPath = Join-Path $OutputDirectory "$($giraffeMode.Label).stderr.txt"
-        $capturedProcess = Start-HenkaCapturedProcess -FilePath $executable -Arguments $giraffeMode.Arguments -WorkingDirectory (Split-Path -Parent $executable) -StdoutPath $stdoutPath -StderrPath $stderrPath
+        $stdoutPath = Join-Path $OutputDirectory "$($inspectionMode.Label).stdout.txt"
+        $stderrPath = Join-Path $OutputDirectory "$($inspectionMode.Label).stderr.txt"
+        $capturedProcess = Start-HenkaCapturedProcess -FilePath $executable -Arguments $inspectionMode.Arguments -WorkingDirectory (Split-Path -Parent $executable) -StdoutPath $stdoutPath -StderrPath $stderrPath
         $process = $capturedProcess.Process
         $handle = [IntPtr]::Zero
         try {
@@ -294,10 +314,10 @@ if ($IncludeGiraffeInspection) {
                 $handle = [HenkaVisualCaptureNativeMethods]::FindSandboxWindow([uint32]$process.Id)
             }
             if ($handle -eq [IntPtr]::Zero -or -not [HenkaVisualCaptureNativeMethods]::IsWindow($handle)) {
-                throw "Sandbox window did not become available for $($giraffeMode.Label)."
+                throw "Sandbox window did not become available for $($inspectionMode.Label)."
             }
-            [HenkaVisualCaptureNativeMethods]::ActivateSandboxWindow($handle)
-            $metadataLine = Wait-HenkaCaptureReady -StdoutPath $stdoutPath -Process $process -Label $giraffeMode.Label
+            Wait-HenkaSandboxForeground -Handle $handle -Label $inspectionMode.Label
+            $metadataLine = Wait-HenkaCaptureReady -StdoutPath $stdoutPath -Process $process -Label $inspectionMode.Label
             Start-Sleep -Milliseconds 150
             $rect = New-Object HenkaVisualCaptureNativeMethods+RECT
             $dwmResult = [HenkaVisualCaptureNativeMethods]::DwmGetWindowAttribute(
@@ -306,12 +326,12 @@ if ($IncludeGiraffeInspection) {
                 [ref]$rect,
                 [System.Runtime.InteropServices.Marshal]::SizeOf($rect))
             if ($dwmResult -ne 0) {
-                throw "Window bounds could not be read for $($giraffeMode.Label): $dwmResult"
+                throw "Window bounds could not be read for $($inspectionMode.Label): $dwmResult"
             }
             $width = $rect.Right - $rect.Left
             $height = $rect.Bottom - $rect.Top
             if ($width -le 0 -or $height -le 0) {
-                throw "Window bounds were invalid for $($giraffeMode.Label)."
+                throw "Window bounds were invalid for $($inspectionMode.Label)."
             }
             $bitmap = New-Object System.Drawing.Bitmap($width, $height)
             try {
@@ -322,11 +342,11 @@ if ($IncludeGiraffeInspection) {
                 finally {
                     $graphics.Dispose()
                 }
-                $path = Join-Path $OutputDirectory $giraffeMode.File
+                $path = Join-Path $OutputDirectory $inspectionMode.File
                 $bitmap.Save($path, [System.Drawing.Imaging.ImageFormat]::Png)
                 $hash = (Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash.ToLowerInvariant()
-                $records.Add("$($giraffeMode.Label): $($giraffeMode.File) SHA-256=$hash bounds=$($width)x$($height)")
-                $records.Add("$($giraffeMode.Label) metadata: $metadataLine")
+                $records.Add("$($inspectionMode.Label): $($inspectionMode.File) SHA-256=$hash bounds=$($width)x$($height)")
+                $records.Add("$($inspectionMode.Label) metadata: $metadataLine")
             }
             finally {
                 $bitmap.Dispose()
@@ -375,7 +395,7 @@ if ($IncludeTerrain) {
             if ($handle -eq [IntPtr]::Zero -or -not [HenkaVisualCaptureNativeMethods]::IsWindow($handle)) {
                 throw "Sandbox window did not become available for $($terrainMode.Label)."
             }
-            [HenkaVisualCaptureNativeMethods]::ActivateSandboxWindow($handle)
+            Wait-HenkaSandboxForeground -Handle $handle -Label $terrainMode.Label
             Start-Sleep -Milliseconds 1500
             $rect = New-Object HenkaVisualCaptureNativeMethods+RECT
             $dwmResult = [HenkaVisualCaptureNativeMethods]::DwmGetWindowAttribute(

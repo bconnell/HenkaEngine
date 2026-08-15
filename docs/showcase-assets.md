@@ -22,11 +22,12 @@ unintended diagonal environment seam.
 
 The normal Windows graphical path is the source of truth for showcase review. The
 existing same-camera capture covers Solid, Material Preview, and Rendered, while
-the dedicated Giraffe inspection capture launches the real Sandbox repeatedly
+the dedicated mascot inspection capture launches the real Sandbox repeatedly
 with the generated glTF scene loaded and records a normal startup frame plus
-close front, close three-quarter, close profile, and wide silhouette Rendered
-views. It also records a front Material Preview comparison. The dedicated views
-hide only editor chrome for application-only inspection; they do not replace the
+Giraffe close front, close three-quarter, close profile, and wide silhouette
+Rendered views, a Giraffe front Material Preview comparison, and Rocket close
+front, close three-quarter, and profile Rendered views. The dedicated views hide
+only editor chrome for application-only inspection; they do not replace the
 scene, material, lighting, asset-manager, or renderer path.
 
 ```powershell

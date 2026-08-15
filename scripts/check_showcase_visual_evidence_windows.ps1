@@ -172,6 +172,9 @@ $required = [ordered]@{
     "giraffe profile Rendered" = "giraffe-profile-rendered.png"
     "giraffe wide Rendered" = "giraffe-wide-rendered.png"
     "giraffe front Material Preview" = "giraffe-front-material-preview.png"
+    "rocket front Rendered" = "rocket-front-rendered.png"
+    "rocket three-quarter Rendered" = "rocket-three-quarter-rendered.png"
+    "rocket profile Rendered" = "rocket-profile-rendered.png"
 }
 $measurements = New-Object System.Collections.Generic.List[object]
 foreach ($label in $required.Keys) {
