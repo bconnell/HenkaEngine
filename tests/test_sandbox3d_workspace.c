@@ -41,6 +41,11 @@ void henka_test_sandbox3d_workspace(void)
     HENKA_TEST_ASSERT_FLOAT_CLOSE(ground_color.y, 0.050f, 0.0001f);
     HENKA_TEST_ASSERT_FLOAT_CLOSE(ground_color.z, 0.075f, 0.0001f);
     HENKA_TEST_ASSERT_FLOAT_CLOSE(ground_color.w, 1.0f, 0.0001f);
+    ground_color = sandbox3d_debug_grid_color();
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(ground_color.x, 0.055f, 0.0001f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(ground_color.y, 0.075f, 0.0001f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(ground_color.z, 0.100f, 0.0001f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(ground_color.w, 1.0f, 0.0001f);
     HENKA_TEST_ASSERT(sandbox3d_ground_surface_uses_texture());
 
     memset(ground_texture, 0, sizeof(ground_texture));

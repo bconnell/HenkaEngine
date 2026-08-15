@@ -29,6 +29,7 @@ bool sandbox3d_studio_environment_is_valid(const float* pixels, size_t pixel_cou
  * variation. Keeping this policy in the fixture module gives the regression
  * test and the runtime one authoritative material contract. */
 henka_vec4 sandbox3d_ground_surface_color(void);
+henka_vec4 sandbox3d_debug_grid_color(void);
 bool sandbox3d_ground_surface_uses_texture(void);
 void sandbox3d_generate_ground_surface_texture(
     unsigned char* pixels,

@@ -119,6 +119,11 @@ henka_vec4 sandbox3d_ground_surface_color(void)
     return (henka_vec4){0.035f, 0.050f, 0.075f, 1.0f};
 }
 
+henka_vec4 sandbox3d_debug_grid_color(void)
+{
+    return (henka_vec4){0.055f, 0.075f, 0.100f, 1.0f};
+}
+
 bool sandbox3d_ground_surface_uses_texture(void)
 {
     return true;

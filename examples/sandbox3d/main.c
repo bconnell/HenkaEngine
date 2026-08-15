@@ -22474,7 +22474,7 @@ static henka_result sandbox3d_initialize(henka_engine* engine, void* user_data)
     grid_material.name = "Debug Grid";
     grid_material.type = HENKA_MATERIAL_TYPE_UNLIT;
     grid_material.shader = state->grid_shader;
-    grid_material.base_color = (henka_vec4){0.10f, 0.14f, 0.19f, 1.0f};
+    grid_material.base_color = sandbox3d_debug_grid_color();
     grid_material.use_texture = false;
     grid_material.use_lighting = false;
 
