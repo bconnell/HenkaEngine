@@ -1768,6 +1768,7 @@ try {
                 -FramebufferY ($detailsY + [Math]::Max(30.0, $detailsHeight * 0.55)) `
                 -WheelDelta -120
         }
+        Start-Sleep -Milliseconds 3000
         if (-not (Wait-FileContains -Path $stdoutPath -Pattern "Native authoring project controls:" -TimeoutMilliseconds 3000)) {
             throw "The converted showcase did not expose bounded project save/reload controls."
         }
@@ -1789,6 +1790,14 @@ try {
             -Y $nativeSaveY `
             -Width 140.0 `
             -Height 24.0
+    Click-FramebufferPoint `
+        -Handle $mainWindowHandle `
+        -FramebufferWidth $framebufferWidth `
+        -FramebufferHeight $framebufferHeight `
+        -FramebufferX ($nativeSaveX + 70.0) `
+        -FramebufferY ($nativeSaveY + 12.0)
+    if (-not (Wait-FileContains -Path $stdoutPath -Pattern "Native authoring dogfood: project saved" -TimeoutMilliseconds 5000)) {
+        Start-Sleep -Milliseconds 250
         Click-FramebufferPoint `
             -Handle $mainWindowHandle `
             -FramebufferWidth $framebufferWidth `
@@ -1798,18 +1807,19 @@ try {
         if (-not (Wait-FileContains -Path $stdoutPath -Pattern "Native authoring dogfood: project saved" -TimeoutMilliseconds 5000)) {
             throw "The user-facing native authoring project save did not complete."
         }
-        if (-not (Wait-FileContains -Path $stdoutPath -Pattern "Native authoring dogfood: material state saved" -TimeoutMilliseconds 5000)) {
-            throw "The user-facing native material state save did not complete."
-        }
-        Write-Output "[pass] User-facing native authoring project save completed"
-        Assert-FramebufferRect `
-            -Name "Native authoring Reload Project control" `
-            -FramebufferWidth $framebufferWidth `
-            -FramebufferHeight $framebufferHeight `
-            -X $nativeReloadX `
-            -Y $nativeReloadY `
-            -Width 140.0 `
-            -Height 24.0
+    }
+    if (-not (Wait-FileContains -Path $stdoutPath -Pattern "Native authoring dogfood: material state saved" -TimeoutMilliseconds 5000)) {
+        throw "The user-facing native material state save did not complete."
+    }
+    Write-Output "[pass] User-facing native authoring project save completed"
+    Assert-FramebufferRect `
+        -Name "Native authoring Reload Project control" `
+        -FramebufferWidth $framebufferWidth `
+        -FramebufferHeight $framebufferHeight `
+        -X $nativeReloadX `
+        -Y $nativeReloadY `
+        -Width 140.0 `
+        -Height 24.0
         Click-FramebufferPoint `
             -Handle $mainWindowHandle `
             -FramebufferWidth $framebufferWidth `
@@ -2287,7 +2297,7 @@ try {
         -FramebufferHeight $framebufferHeight `
         -FramebufferX ($nativeCreatedSaveX + 70.0) `
         -FramebufferY ($nativeCreatedSaveY + 12.0)
-    if (-not (Wait-FileContains -Path $stdoutPath -Pattern "Native authoring dogfood: project saved for Native Showcase Rocket; vertices=65 faces=53 source_state=HENKA_NATIVE_AUTHORED" -TimeoutMilliseconds 5000)) {
+    if (-not (Wait-FileContains -Path $stdoutPath -Pattern "Native authoring dogfood: project saved for Native Showcase Rocket; vertices=201 faces=121 source_state=HENKA_NATIVE_AUTHORED details=stages:3,bells:5,fins:4" -TimeoutMilliseconds 5000)) {
         throw "The native authored showcase project save did not complete."
     }
     Click-FramebufferPoint `
@@ -2296,7 +2306,7 @@ try {
         -FramebufferHeight $framebufferHeight `
         -FramebufferX ($nativeCreatedReloadX + 70.0) `
         -FramebufferY ($nativeCreatedReloadY + 12.0)
-    if (-not (Wait-FileContains -Path $stdoutPath -Pattern "Native authoring dogfood: project reloaded for Native Showcase Rocket; vertices=65 faces=53 source_state=HENKA_NATIVE_AUTHORED" -TimeoutMilliseconds 5000)) {
+    if (-not (Wait-FileContains -Path $stdoutPath -Pattern "Native authoring dogfood: project reloaded for Native Showcase Rocket; vertices=201 faces=121 source_state=HENKA_NATIVE_AUTHORED details=stages:3,bells:5,fins:4" -TimeoutMilliseconds 5000)) {
         throw "The native authored showcase project reload did not complete transactionally."
     }
     Write-Output "[pass] Native authored showcase project save/reload completed transactionally"

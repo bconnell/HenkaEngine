@@ -393,6 +393,7 @@ typedef struct sandbox3d_state
     bool native_authoring_move_reported;
     float native_authoring_move_reported_y;
     bool native_authoring_project_controls_reported;
+    float native_authoring_project_controls_reported_y;
     bool native_authoring_material_control_reported;
     bool native_authoring_material_editor_reported;
     bool native_authoring_material_optical_reported;
@@ -2508,7 +2509,8 @@ static void sandbox3d_draw_native_authoring_project_controls(
     {
         return;
     }
-    if (!state->native_authoring_project_controls_reported)
+    if (!state->native_authoring_project_controls_reported ||
+        fabsf(state->native_authoring_project_controls_reported_y - row.y) > 0.5f)
     {
         printf(
             "Native authoring project controls: name=%s save_x=%.1f save_y=%.1f reload_x=%.1f reload_y=%.1f width=140.0 height=24.0.\n",
@@ -2519,10 +2521,12 @@ static void sandbox3d_draw_native_authoring_project_controls(
             row.y);
         fflush(stdout);
         state->native_authoring_project_controls_reported = true;
+        state->native_authoring_project_controls_reported_y = row.y;
     }
     if (!project_row_visible)
     {
         state->native_authoring_project_controls_reported = false;
+        state->native_authoring_project_controls_reported_y = 0.0f;
         return;
     }
 
@@ -2615,15 +2619,24 @@ static void sandbox3d_draw_native_authoring_project_controls(
                         display_name,
                         "Native Showcase Rocket",
                         sizeof("Native Showcase Rocket") - 1U) == 0;
-                printf(
-                    "Native authoring dogfood: project %s for %s; vertices=%zu faces=%zu source_state=%s.\n",
-                    save_requested ? "saved" : "reloaded",
-                    display_name,
-                    counts.vertices,
-                    counts.faces,
-                    native_authored_source
-                        ? "HENKA_NATIVE_AUTHORED"
-                        : "HENKA_NATIVE_EDITABLE_SOURCE");
+                if (native_authored_source)
+                {
+                    printf(
+                        "Native authoring dogfood: project %s for %s; vertices=%zu faces=%zu source_state=HENKA_NATIVE_AUTHORED details=stages:3,bells:5,fins:4.\n",
+                        save_requested ? "saved" : "reloaded",
+                        display_name,
+                        counts.vertices,
+                        counts.faces);
+                }
+                else
+                {
+                    printf(
+                        "Native authoring dogfood: project %s for %s; vertices=%zu faces=%zu source_state=HENKA_NATIVE_EDITABLE_SOURCE.\n",
+                        save_requested ? "saved" : "reloaded",
+                        display_name,
+                        counts.vertices,
+                        counts.faces);
+                }
                 fflush(stdout);
                 if (state->native_authoring_material_asset != NULL &&
                     state->native_authoring_material_entity == entity)
@@ -8024,6 +8037,7 @@ static void sandbox3d_release_owned_resources(sandbox3d_state* state)
     state->native_authoring_move_reported = false;
     state->native_authoring_move_reported_y = -FLT_MAX;
     state->native_authoring_project_controls_reported = false;
+    state->native_authoring_project_controls_reported_y = 0.0f;
     state->native_authoring_material_control_reported = false;
     state->native_authoring_material_editor_reported = false;
     state->native_authoring_material_optical_reported = false;
@@ -9170,6 +9184,7 @@ static bool sandbox3d_promote_authoring_material(
     state->native_authoring_move_reported = false;
     state->native_authoring_move_reported_y = -FLT_MAX;
     state->native_authoring_project_controls_reported = false;
+    state->native_authoring_project_controls_reported_y = 0.0f;
     printf(
         "Native authoring material: editable runtime definition adopted for entity=%llu source_state=HENKA_NATIVE_EDITABLE_MATERIAL_INSTANCE.\n",
         (unsigned long long)entity);
@@ -9495,6 +9510,69 @@ static void sandbox3d_select_entity(sandbox3d_state* state, henka_entity entity)
     }
 }
 
+static henka_result sandbox3d_add_native_rocket_ring(
+    henka_authoring_mesh* mesh,
+    float center_x,
+    float center_z,
+    float bottom_y,
+    float top_y,
+    float bottom_radius,
+    float top_radius,
+    int side_count,
+    uint32_t material_region,
+    bool smooth)
+{
+    enum { max_ring_sides = 16 };
+    const float two_pi = 6.28318530717958647692f;
+    henka_authoring_vertex_id bottom[max_ring_sides];
+    henka_authoring_vertex_id top[max_ring_sides];
+    int side;
+
+    if (mesh == NULL || side_count < 3 || side_count > max_ring_sides)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    for (side = 0; side < side_count; ++side)
+    {
+        const float angle = two_pi * (float)side / (float)side_count;
+        const float x = cosf(angle);
+        const float z = sinf(angle);
+        const float u = (float)side / (float)side_count;
+        henka_result result = henka_authoring_mesh_add_vertex(
+            mesh,
+            (henka_vec3){center_x + bottom_radius * x, bottom_y, center_z + bottom_radius * z},
+            (henka_vec2){u, 0.0f},
+            material_region,
+            &bottom[side]);
+        if (result == HENKA_SUCCESS)
+        {
+            result = henka_authoring_mesh_add_vertex(
+                mesh,
+                (henka_vec3){center_x + top_radius * x, top_y, center_z + top_radius * z},
+                (henka_vec2){u, 1.0f},
+                material_region,
+                &top[side]);
+        }
+        if (result != HENKA_SUCCESS)
+        {
+            return result;
+        }
+    }
+    for (side = 0; side < side_count; ++side)
+    {
+        const int next = (side + 1) % side_count;
+        const henka_authoring_vertex_id face[] = {
+            bottom[side], top[side], top[next], bottom[next]};
+        const henka_result result = henka_authoring_mesh_add_face(
+            mesh, face, 4U, material_region, smooth, &(henka_authoring_face_id){0U});
+        if (result != HENKA_SUCCESS)
+        {
+            return result;
+        }
+    }
+    return HENKA_SUCCESS;
+}
+
 static henka_result sandbox3d_create_native_rocket_mesh(
     henka_authoring_mesh** out_mesh)
 {
@@ -9610,6 +9688,26 @@ static henka_result sandbox3d_create_native_rocket_mesh(
         }
     }
 
+    /* Three open structural collars add a continuous stage, interstage, and
+     * avionics transition without introducing a second material binding. */
+    result = sandbox3d_add_native_rocket_ring(
+        mesh, 0.0f, 0.0f, -1.76f, -1.48f, 0.93f, 0.86f, body_sides, 2U, false);
+    if (result == HENKA_SUCCESS)
+    {
+        result = sandbox3d_add_native_rocket_ring(
+            mesh, 0.0f, 0.0f, -1.28f, -1.06f, 0.90f, 0.86f, body_sides, 2U, false);
+    }
+    if (result == HENKA_SUCCESS)
+    {
+        result = sandbox3d_add_native_rocket_ring(
+            mesh, 0.0f, 0.0f, 0.72f, 0.98f, 0.86f, 0.82f, body_sides, 2U, false);
+    }
+    if (result != HENKA_SUCCESS)
+    {
+        henka_authoring_mesh_destroy(mesh);
+        return result;
+    }
+
     for (side = 0; side < nozzle_sides; ++side)
     {
         const float angle = two_pi * (float)side / (float)nozzle_sides;
@@ -9617,7 +9715,7 @@ static henka_result sandbox3d_create_native_rocket_mesh(
         const float z = sinf(angle);
         result = henka_authoring_mesh_add_vertex(
             mesh,
-            (henka_vec3){0.36f * x, -1.98f, 0.36f * z},
+            (henka_vec3){0.34f * x, -2.12f, 0.34f * z},
             (henka_vec2){(float)side / (float)nozzle_sides, 0.0f},
             2U,
             &nozzle_bottom[side]);
@@ -9625,7 +9723,7 @@ static henka_result sandbox3d_create_native_rocket_mesh(
         {
             result = henka_authoring_mesh_add_vertex(
                 mesh,
-                (henka_vec3){0.36f * x, -1.50f, 0.36f * z},
+                (henka_vec3){0.18f * x, -1.50f, 0.18f * z},
                 (henka_vec2){(float)side / (float)nozzle_sides, 1.0f},
                 2U,
                 &nozzle_top[side]);
@@ -9636,6 +9734,31 @@ static henka_result sandbox3d_create_native_rocket_mesh(
             return result;
         }
     }
+
+    /* A five-bell cluster makes the engine skirt read as launch hardware. The
+     * center bell above is retained, while four surrounding bells are authored
+     * through the same public ring primitive and share the native material. */
+    for (side = 0; side < 4; ++side)
+    {
+        const float angle = two_pi * (float)side / 4.0f + 0.7853981633974483f;
+        result = sandbox3d_add_native_rocket_ring(
+            mesh,
+            0.40f * cosf(angle),
+            0.40f * sinf(angle),
+            -2.08f,
+            -1.52f,
+            0.22f,
+            0.12f,
+            nozzle_sides,
+            2U,
+            false);
+        if (result != HENKA_SUCCESS)
+        {
+            henka_authoring_mesh_destroy(mesh);
+            return result;
+        }
+    }
+
     for (side = 0; side < nozzle_sides; ++side)
     {
         const int next_index = (side + 1) % nozzle_sides;
