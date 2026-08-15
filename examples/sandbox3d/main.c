@@ -1311,6 +1311,232 @@ static henka_result sandbox3d_restore_texture_material_binding(
     return HENKA_SUCCESS;
 }
 
+static char* sandbox3d_native_material_sidecar_path(const char* project_path)
+{
+    size_t length;
+    char* path;
+
+    if (project_path == NULL || project_path[0] == '\0')
+    {
+        return NULL;
+    }
+    length = strlen(project_path);
+    if (length > SIZE_MAX - 10U)
+    {
+        return NULL;
+    }
+    path = henka_calloc(length + 10U, sizeof(*path));
+    if (path == NULL)
+    {
+        return NULL;
+    }
+    (void)snprintf(path, length + 10U, "%s.material", project_path);
+    return path;
+}
+
+static sandbox3d_material_editor_binding* sandbox3d_find_material_binding(
+    sandbox3d_state* state,
+    henka_entity entity)
+{
+    size_t index;
+
+    if (state == NULL || entity == HENKA_INVALID_ENTITY)
+    {
+        return NULL;
+    }
+    for (index = 0U; index < SANDBOX3D_MAX_MATERIAL_EDITOR_BINDINGS; ++index)
+    {
+        if (state->material_editor_bindings[index].valid &&
+            state->material_editor_bindings[index].entity == entity)
+        {
+            return &state->material_editor_bindings[index];
+        }
+    }
+    return NULL;
+}
+
+static henka_result sandbox3d_save_native_authoring_material(
+    henka_engine* engine,
+    sandbox3d_state* state,
+    henka_entity entity,
+    const char* project_path)
+{
+    sandbox3d_material_editor_binding* binding;
+    henka_material material;
+    henka_settings* settings = NULL;
+    henka_asset_metadata metadata;
+    char* sidecar_path = NULL;
+    henka_result result;
+
+    if (engine == NULL || state == NULL || project_path == NULL ||
+        state->native_authoring_material_asset == NULL ||
+        state->native_authoring_material_entity != entity)
+    {
+        return HENKA_SUCCESS;
+    }
+    binding = sandbox3d_find_material_binding(state, entity);
+    if (binding == NULL || binding->instance == NULL ||
+        henka_assets_get_material_instance_material(binding->instance, &material) != HENKA_SUCCESS)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    sidecar_path = sandbox3d_native_material_sidecar_path(project_path);
+    if (sidecar_path == NULL || henka_settings_create(&settings) != HENKA_SUCCESS)
+    {
+        henka_free(sidecar_path);
+        return HENKA_ERROR_OUT_OF_MEMORY;
+    }
+    result = henka_settings_set_int(settings, "material.version", 1);
+    if (result == HENKA_SUCCESS) result = henka_settings_set_float(settings, "base_color.r", material.base_color.x);
+    if (result == HENKA_SUCCESS) result = henka_settings_set_float(settings, "base_color.g", material.base_color.y);
+    if (result == HENKA_SUCCESS) result = henka_settings_set_float(settings, "base_color.b", material.base_color.z);
+    if (result == HENKA_SUCCESS) result = henka_settings_set_float(settings, "base_color.a", material.base_color.w);
+    if (result == HENKA_SUCCESS) result = henka_settings_set_float(settings, "metallic", material.metallic);
+    if (result == HENKA_SUCCESS) result = henka_settings_set_float(settings, "roughness", material.roughness);
+    if (result == HENKA_SUCCESS) result = henka_settings_set_float(settings, "emissive_strength", material.emissive_strength);
+    if (result == HENKA_SUCCESS && material.normal_texture != NULL)
+    {
+        memset(&metadata, 0, sizeof(metadata));
+        if (henka_assets_get_texture_metadata(
+                henka_engine_get_asset_manager(engine), material.normal_texture, &metadata) != HENKA_SUCCESS ||
+            metadata.source_path == NULL)
+        {
+            result = HENKA_ERROR_ASSET_SOURCE;
+        }
+        else
+        {
+            result = henka_settings_set_string(
+                settings, "texture.normal.path", metadata.source_path);
+        }
+    }
+    if (result == HENKA_SUCCESS && material.normal_texture == NULL)
+    {
+        result = henka_settings_set_string(settings, "texture.normal.path", "");
+    }
+    if (result == HENKA_SUCCESS)
+    {
+        result = henka_settings_save_file(settings, sidecar_path);
+    }
+    henka_settings_destroy(settings);
+    henka_free(sidecar_path);
+    return result;
+}
+
+static henka_result sandbox3d_load_native_authoring_material(
+    henka_engine* engine,
+    sandbox3d_state* state,
+    henka_entity entity,
+    const char* project_path,
+    henka_material_instance* out_instance,
+    bool* out_present)
+{
+    sandbox3d_material_editor_binding* binding;
+    henka_settings* settings = NULL;
+    henka_material_instance candidate;
+    henka_texture* normal_texture = NULL;
+    const char* normal_path;
+    char* sidecar_path = NULL;
+    int version;
+    henka_result result;
+
+    if (out_instance != NULL) memset(out_instance, 0, sizeof(*out_instance));
+    if (out_present != NULL) *out_present = false;
+    if (engine == NULL || state == NULL || project_path == NULL || out_instance == NULL || out_present == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    binding = sandbox3d_find_material_binding(state, entity);
+    if (state->native_authoring_material_asset == NULL ||
+        state->native_authoring_material_entity != entity ||
+        binding == NULL || binding->instance == NULL)
+    {
+        return HENKA_SUCCESS;
+    }
+    sidecar_path = sandbox3d_native_material_sidecar_path(project_path);
+    if (sidecar_path == NULL || henka_settings_create(&settings) != HENKA_SUCCESS)
+    {
+        henka_free(sidecar_path);
+        return HENKA_ERROR_OUT_OF_MEMORY;
+    }
+    result = henka_settings_load_file(settings, sidecar_path);
+    henka_free(sidecar_path);
+    if (result == HENKA_ERROR_ASSET_SOURCE)
+    {
+        henka_settings_destroy(settings);
+        return HENKA_SUCCESS;
+    }
+    version = result == HENKA_SUCCESS ? henka_settings_get_int(settings, "material.version", 0) : 0;
+    if (result == HENKA_SUCCESS && version != 1)
+    {
+        result = HENKA_ERROR_UNKNOWN;
+    }
+    candidate = *binding->instance;
+    if (result == HENKA_SUCCESS)
+    {
+        const float red = henka_settings_get_float(settings, "base_color.r", NAN);
+        const float green = henka_settings_get_float(settings, "base_color.g", NAN);
+        const float blue = henka_settings_get_float(settings, "base_color.b", NAN);
+        const float alpha = henka_settings_get_float(settings, "base_color.a", NAN);
+        if (!isfinite(red) || !isfinite(green) || !isfinite(blue) || !isfinite(alpha))
+        {
+            result = HENKA_ERROR_INVALID_ARGUMENT;
+        }
+        else
+        {
+            result = henka_assets_material_instance_set_vec4(
+                &candidate,
+                HENKA_MATERIAL_INSTANCE_BASE_COLOR,
+                (henka_vec4){red, green, blue, alpha});
+        }
+    }
+    if (result == HENKA_SUCCESS)
+    {
+        result = henka_assets_material_instance_set_float(
+            &candidate,
+            HENKA_MATERIAL_INSTANCE_METALLIC,
+            henka_settings_get_float(settings, "metallic", NAN));
+    }
+    if (result == HENKA_SUCCESS)
+    {
+        result = henka_assets_material_instance_set_float(
+            &candidate,
+            HENKA_MATERIAL_INSTANCE_ROUGHNESS,
+            henka_settings_get_float(settings, "roughness", NAN));
+    }
+    if (result == HENKA_SUCCESS)
+    {
+        result = henka_assets_material_instance_set_float(
+            &candidate,
+            HENKA_MATERIAL_INSTANCE_EMISSIVE_STRENGTH,
+            henka_settings_get_float(settings, "emissive_strength", NAN));
+    }
+    normal_path = result == HENKA_SUCCESS
+        ? henka_settings_get_string(settings, "texture.normal.path", "")
+        : "";
+    if (result == HENKA_SUCCESS && normal_path != NULL && normal_path[0] != '\0')
+    {
+        result = henka_assets_load_texture(
+            henka_engine_get_asset_manager(engine), normal_path, &normal_texture);
+        if (result == HENKA_SUCCESS)
+        {
+            result = henka_assets_material_instance_set_texture(
+                &candidate, HENKA_MATERIAL_TEXTURE_SLOT_NORMAL, normal_texture);
+        }
+    }
+    else if (result == HENKA_SUCCESS)
+    {
+        result = henka_assets_material_instance_reset_override(
+            &candidate, HENKA_MATERIAL_INSTANCE_NORMAL_TEXTURE);
+    }
+    henka_settings_destroy(settings);
+    if (result == HENKA_SUCCESS)
+    {
+        *out_instance = candidate;
+        *out_present = true;
+    }
+    return result;
+}
+
 static void sandbox3d_draw_material_instance_editor(
     henka_engine* engine,
     sandbox3d_state* state,
@@ -5482,7 +5708,7 @@ static void sandbox3d_print_help(const sandbox3d_state* state)
     printf("  Open Native Panel Test from the Controls QA page to validate a separate OS-level tool window.\n");
     printf("  Use the panels to inspect named scene objects, clear selection, switch gizmo modes, focus the camera, reset object transforms, toggle visibility, and open in-window Help, Scene Legend, Object Info, Assets, Paths, Settings, Diagnostics, Transform QA, and Physics QA utilities.\n");
     printf("  Select an imported glTF scene entity to edit its shared material instance in Object Details; scalar/vector, flags, alpha, and semantic texture overrides apply transactionally. Use Utility > Assets to choose manager-owned textures for editable slots.\n");
-    printf("  Select a Showcase Giraffe or Showcase Rocket primitive, open Object Details > Authoring, and choose Make Editable; Own Material then promotes a manager-owned runtime definition for bounded base-color and semantic normal-texture editing. Mesh/project save-reload is supported, while durable material/texture project serialization and native-authored source export remain unfinished.\n");
+    printf("  Select a Showcase Giraffe or Showcase Rocket primitive, open Object Details > Authoring, and choose Make Editable; Own Material then promotes a manager-owned runtime definition for bounded base-color and semantic normal-texture editing. Mesh/project save-reload and the bounded native material sidecar are supported, while broader material-parameter serialization and native-authored source export remain unfinished.\n");
     printf("  Physics QA enables an opt-in fixed-step rigid-body demo with collider/contact debug drawing, impulses, body modes, and camera raycasts.\n");
     printf("  The Controls panel uses Main, Camera/Status, and QA pages, and Scene Objects supports paging when the dock is tighter than the full list.\n");
     printf("  Controls also provides Default, Modeling, Materials, Scene Assembly, Debugging, and Minimal Viewport workspace presets; topology edits mark the workspace Custom.\n");
@@ -17399,6 +17625,8 @@ details_group_authoring:
                 {
                     char* project_path = NULL;
                     char* source_path = NULL;
+                    henka_material_instance material_candidate;
+                    bool material_present = false;
                     result = sandbox3d_resolve_authoring_project_paths(
                         engine,
                         entity,
@@ -17406,11 +17634,44 @@ details_group_authoring:
                         &source_path);
                     if (result == HENKA_SUCCESS)
                     {
-                        result = save_requested
-                            ? sandbox3d_authoring_object_save_project(
-                                state->authoring_object, project_path, source_path)
-                            : sandbox3d_authoring_object_load_project(
-                                state->authoring_object, project_path);
+                        if (reload_requested)
+                        {
+                            result = sandbox3d_load_native_authoring_material(
+                                engine,
+                                state,
+                                entity,
+                                project_path,
+                                &material_candidate,
+                                &material_present);
+                        }
+                        if (result == HENKA_SUCCESS)
+                        {
+                            result = save_requested
+                                ? sandbox3d_authoring_object_save_project(
+                                    state->authoring_object, project_path, source_path)
+                                : sandbox3d_authoring_object_load_project(
+                                    state->authoring_object, project_path);
+                        }
+                        if (result == HENKA_SUCCESS && save_requested)
+                        {
+                            result = sandbox3d_save_native_authoring_material(
+                                engine, state, entity, project_path);
+                        }
+                        if (result == HENKA_SUCCESS && reload_requested && material_present)
+                        {
+                            sandbox3d_material_editor_binding* binding =
+                                sandbox3d_find_material_binding(state, entity);
+                            if (binding == NULL ||
+                                henka_assets_apply_material_instance_to_entity(
+                                    &material_candidate, state->scene, entity) != HENKA_SUCCESS)
+                            {
+                                result = HENKA_ERROR_ASSET_SOURCE;
+                            }
+                            else
+                            {
+                                *binding->instance = material_candidate;
+                            }
+                        }
                     }
                     henka_free(source_path);
                     henka_free(project_path);
@@ -17432,6 +17693,15 @@ details_group_authoring:
                             counts.vertices,
                             counts.faces);
                         fflush(stdout);
+                        if (state->native_authoring_material_asset != NULL &&
+                            state->native_authoring_material_entity == entity)
+                        {
+                            printf(
+                                "Native authoring dogfood: material state %s for %s source_state=HENKA_NATIVE_EDITABLE_MATERIAL_INSTANCE.\n",
+                                save_requested ? "saved" : (material_present ? "reloaded" : "retained"),
+                                display_name);
+                            fflush(stdout);
+                        }
                     }
                     sandbox3d_set_status(
                         state,

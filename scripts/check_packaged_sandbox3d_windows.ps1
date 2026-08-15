@@ -1423,6 +1423,9 @@ try {
         if (-not (Wait-FileContains -Path $stdoutPath -Pattern "Native authoring dogfood: project saved" -TimeoutMilliseconds 5000)) {
             throw "The user-facing native authoring project save did not complete."
         }
+        if (-not (Wait-FileContains -Path $stdoutPath -Pattern "Native authoring dogfood: material state saved" -TimeoutMilliseconds 5000)) {
+            throw "The user-facing native material state save did not complete."
+        }
         Write-Output "[pass] User-facing native authoring project save completed"
         Assert-FramebufferRect `
             -Name "Native authoring Reload Project control" `
@@ -1440,6 +1443,9 @@ try {
             -FramebufferY ($nativeReloadY + 12.0)
         if (-not (Wait-FileContains -Path $stdoutPath -Pattern "Native authoring dogfood: project reloaded" -TimeoutMilliseconds 5000)) {
             throw "The user-facing native authoring project reload did not complete transactionally."
+        }
+        if (-not (Wait-FileContains -Path $stdoutPath -Pattern "Native authoring dogfood: material state reloaded" -TimeoutMilliseconds 5000)) {
+            throw "The user-facing native material state reload did not complete transactionally."
         }
         Write-Output "[pass] User-facing native authoring project reload completed transactionally"
         Start-Sleep -Milliseconds 350
