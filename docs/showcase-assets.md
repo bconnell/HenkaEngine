@@ -19,15 +19,18 @@ This is intentionally a bounded bridge rather than a completed content
 workspace. It currently targets the imported showcase primitives and preserves
 their borrowed glTF material identity until the user explicitly chooses
 `Own Material`. That action adopts a manager-owned runtime material definition;
-the bounded controls then exercise a base-color edit and a semantic normal
-texture assignment without changing the imported glTF source. The packaged
+the bounded controls then exercise base-color, metallic, roughness, and
+emissive-strength edits plus in-engine procedural normal-texture creation
+without changing the imported glTF source. The packaged
 Windows dogfood path exercises Make Editable, material and texture edits, a
 component move, base-color, metallic, roughness, and emissive-strength edits,
-Save Project, and Reload Project transactionally. The project manifest persists
-the mesh source, transform, and visibility, while its bounded `.material`
-sidecar persists base color, metallic, roughness, emissive strength, and the
-manager-owned normal-texture identity and reloads those values
-transactionally. Broader material-parameter serialization and native-authored
+in-engine procedural detail-normal texture creation, Save Project, and Reload
+Project transactionally. The project manifest persists the mesh source,
+transform, and visibility, while its bounded `.material` sidecar persists base
+color, metallic, roughness, emissive strength, and the manager-owned
+normal-texture identity; native runtime detail textures are recreated from
+their bounded recipe on reload. Broader material-parameter serialization,
+texture painting, and native-authored
 source export remain open. Complete native showcase proof still requires a real
 user edit, save, close/reload, continued edit, and rendered evidence.
 
