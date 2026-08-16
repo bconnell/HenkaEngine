@@ -9,17 +9,8 @@ $ErrorActionPreference = "Stop"
 
 $repoRoot = (Get-Location).Path
 $executable = (Resolve-Path -LiteralPath (Join-Path $repoRoot $ExecutablePath)).Path
-$helperText = Get-Content -LiteralPath (Join-Path $repoRoot "scripts\check_packaged_sandbox3d_windows.ps1") -Raw
-$helperStart = $helperText.IndexOf("Set-StrictMode -Version Latest", [System.StringComparison]::Ordinal)
-$helperEnd = $helperText.IndexOf('$repoRoot =', $helperStart, [System.StringComparison]::Ordinal)
-if ($helperStart -lt 0 -or $helperEnd -le $helperStart) {
-    throw "The shared packaged UI automation helpers could not be loaded."
-}
-$ContractOnly = $false
-$NonInteractive = $false
-$scriptDirectoryLiteral = "'" + ((Join-Path $repoRoot "scripts").Replace("'", "''")) + "'"
-$helperLibrary = $helperText.Substring($helperStart, $helperEnd - $helperStart).Replace('$PSScriptRoot', $scriptDirectoryLiteral)
-Invoke-Expression $helperLibrary
+. (Join-Path $repoRoot "scripts\henka_script_common.ps1")
+. (Join-Path $repoRoot "scripts\henka_ui_automation_helpers.ps1")
 Add-Type -AssemblyName System.Windows.Forms
 if (-not ("NativeMethods" -as [type])) {
     Add-Type @'
