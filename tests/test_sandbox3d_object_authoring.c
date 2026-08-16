@@ -544,6 +544,31 @@ static void henka_test_sandbox3d_object_authoring_model_primitive_bridge(void)
         HENKA_TEST_ASSERT(sandbox3d_authoring_object_redo(object) == HENKA_SUCCESS);
     }
 
+    {
+        const henka_authoring_mesh_counts before_regions =
+            henka_authoring_mesh_get_counts(sandbox3d_authoring_object_get_mesh(object));
+        const sandbox3d_authoring_region_transform regions[] = {
+            {{-2.0f, -1.0f, -1.0f}, {2.0f, 0.0f, 1.0f}, {0.0f, -0.55f, 0.0f},
+                {1.10f, 0.95f, 1.0f}, {0.10f, 0.0f, 0.0f}},
+            {{-2.0f, 0.0f, -1.0f}, {2.0f, 1.0f, 1.0f}, {0.0f, 0.55f, 0.0f},
+                {0.90f, 1.08f, 1.0f}, {-0.08f, 0.05f, 0.0f}}};
+        size_t affected_regions = 0U;
+        HENKA_TEST_ASSERT(sandbox3d_authoring_object_transform_vertex_regions(
+            object, regions, sizeof(regions) / sizeof(regions[0]),
+            &affected_regions) == HENKA_SUCCESS);
+        HENKA_TEST_ASSERT(affected_regions == 4U);
+        HENKA_TEST_ASSERT(henka_authoring_mesh_validate(
+            sandbox3d_authoring_object_get_mesh(object)));
+        HENKA_TEST_ASSERT(henka_authoring_mesh_get_counts(
+            sandbox3d_authoring_object_get_mesh(object)).vertices == before_regions.vertices);
+        HENKA_TEST_ASSERT(henka_authoring_mesh_get_counts(
+            sandbox3d_authoring_object_get_mesh(object)).faces == before_regions.faces);
+        HENKA_TEST_ASSERT(sandbox3d_authoring_object_undo(object) == HENKA_SUCCESS);
+        HENKA_TEST_ASSERT(henka_authoring_mesh_get_counts(
+            sandbox3d_authoring_object_get_mesh(object)).vertices == before_regions.vertices);
+        HENKA_TEST_ASSERT(sandbox3d_authoring_object_redo(object) == HENKA_SUCCESS);
+    }
+
     sandbox3d_authoring_object_set_selection_mode(object, SANDBOX3D_AUTHORING_SELECTION_FACE);
     HENKA_TEST_ASSERT(sandbox3d_authoring_object_select_face(object, 1U) == HENKA_SUCCESS);
     HENKA_TEST_ASSERT(sandbox3d_authoring_object_bevel_selected_face(object, 0.1f) == HENKA_SUCCESS);

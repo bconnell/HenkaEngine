@@ -6,7 +6,7 @@ param(
 
     [string]$ExecutablePath = "",
 
-    [ValidateSet("FULL_SHOWCASE", "GIRAFFE_INSPECTION")]
+    [ValidateSet("FULL_SHOWCASE", "GIRAFFE_INSPECTION", "GEOMETRY_SOLID")]
     [string]$EvidenceProfile = "FULL_SHOWCASE",
 
     [switch]$IncludeStartupShowcase,
@@ -40,6 +40,12 @@ if (-not (Test-Path -LiteralPath $executable -PathType Leaf)) {
 }
 if ($EvidenceProfile -eq "FULL_SHOWCASE" -and -not $IncludeStartupShowcase) {
     throw "FULL_SHOWCASE evidence requires -IncludeStartupShowcase. Use GIRAFFE_INSPECTION for inspection-only captures."
+}
+if ($EvidenceProfile -eq "GEOMETRY_SOLID" -and -not $IncludeStartupShowcase) {
+    throw "GEOMETRY_SOLID evidence requires -IncludeStartupShowcase so ordinary startup readiness is verified."
+}
+if ($EvidenceProfile -eq "GEOMETRY_SOLID") {
+    $IncludeGiraffeInspection = $true
 }
 
 Add-Type -TypeDefinition @"
@@ -138,7 +144,7 @@ function Assert-HenkaCaptureMetadata {
         [Parameter(Mandatory = $true)][string]$Label
     )
 
-    $pattern = '^\s*CAPTURE_READY mode=(?<mode>[a-z_]+) viewport=(?<vx>-?\d+),(?<vy>-?\d+),(?<vw>\d+),(?<vh>\d+) aspect=(?<aspect>[-0-9.]+) camera_position=(?<px>[-0-9.]+),(?<py>[-0-9.]+),(?<pz>[-0-9.]+) yaw=(?<yaw>[-0-9.]+) pitch=(?<pitch>[-0-9.]+) roll=(?<roll>[-0-9.]+) fov=(?<fov>[-0-9.]+) .* giraffe_screen=(?<gminx>[-0-9.]+),(?<gminy>[-0-9.]+),(?<gmaxx>[-0-9.]+),(?<gmaxy>[-0-9.]+) rocket_screen=(?<rminx>[-0-9.]+),(?<rminy>[-0-9.]+),(?<rmaxx>[-0-9.]+),(?<rmaxy>[-0-9.]+) combined_midpoint=(?<mx>[-0-9.]+),(?<my>[-0-9.]+) giraffe_parts=(?<gp>\d+) rocket_parts=(?<rp>\d+) giraffe_sss_regions=(?<sss>\d+) giraffe_normal_texture_regions=(?<normal>\d+) giraffe_normal_texture_loaded=(?<loaded>\d+) giraffe_normal_texture_fallbacks=(?<fallback>\d+) giraffe_thickness_texture_regions=(?<thickness>\d+) giraffe_thickness_texture_loaded=(?<thicknessLoaded>\d+) giraffe_thickness_texture_fallbacks=(?<thicknessFallback>\d+) settled_frames=(?<sf>\d+) draw_expected=1\s*$'
+    $pattern = '^\s*CAPTURE_READY mode=(?<mode>[a-z_]+) viewport=(?<vx>-?\d+),(?<vy>-?\d+),(?<vw>\d+),(?<vh>\d+) aspect=(?<aspect>[-0-9.]+) camera_position=(?<px>[-0-9.]+),(?<py>[-0-9.]+),(?<pz>[-0-9.]+) yaw=(?<yaw>[-0-9.]+) pitch=(?<pitch>[-0-9.]+) roll=(?<roll>[-0-9.]+) fov=(?<fov>[-0-9.]+) .* giraffe_screen=(?<gminx>[-0-9.]+),(?<gminy>[-0-9.]+),(?<gmaxx>[-0-9.]+),(?<gmaxy>[-0-9.]+) rocket_screen=(?<rminx>[-0-9.]+),(?<rminy>[-0-9.]+),(?<rmaxx>[-0-9.]+),(?<rmaxy>[-0-9.]+) combined_midpoint=(?<mx>[-0-9.]+),(?<my>[-0-9.]+) giraffe_parts=(?<gp>\d+) rocket_parts=(?<rp>\d+) giraffe_sss_regions=(?<sss>\d+) giraffe_normal_texture_regions=(?<normal>\d+) giraffe_normal_texture_loaded=(?<loaded>\d+) giraffe_normal_texture_fallbacks=(?<fallback>\d+) giraffe_thickness_texture_regions=(?<thickness>\d+) giraffe_thickness_texture_loaded=(?<thicknessLoaded>\d+) giraffe_thickness_texture_fallbacks=(?<thicknessFallback>\d+) settled_frames=(?<sf>\d+) giraffe_provenance=(?<giraffeProvenance>[A-Z_]+) rocket_provenance=(?<rocketProvenance>[A-Z_]+) preset_applied=(?<presetApplied>[01]) draw_expected=1\s*$'
     $match = [regex]::Match($Line, $pattern)
     if (-not $match.Success) {
         throw "Capture readiness metadata was malformed for $Label."
@@ -151,6 +157,11 @@ function Assert-HenkaCaptureMetadata {
         [int]$match.Groups["thicknessLoaded"].Value -ne [int]$match.Groups["thickness"].Value -or
         [int]$match.Groups["thicknessFallback"].Value -ne 0) {
         throw "Capture readiness metadata did not prove the showcase material dependencies for $Label."
+    }
+    if ($match.Groups["giraffeProvenance"].Value -notin @("GENERATED_TEST_FIXTURE", "IMPORT_COMPATIBILITY_ASSET", "HENKA_NATIVE_GENERATED_FIXTURE", "HENKA_NATIVE_AUTHORED") -or
+        $match.Groups["rocketProvenance"].Value -notin @("GENERATED_TEST_FIXTURE", "IMPORT_COMPATIBILITY_ASSET", "HENKA_NATIVE_GENERATED_FIXTURE", "HENKA_NATIVE_AUTHORED") -or
+        $match.Groups["presetApplied"].Value -ne "0") {
+        throw "Capture readiness metadata reported an unknown or preset-determined geometry provenance for $Label."
     }
 
     $width = [int]$match.Groups["vw"].Value
@@ -204,9 +215,14 @@ $modes = @(
     @{ Label = "material_preview"; Arguments = @("--capture-mode", "material_preview"); File = "same-camera-material-preview.png" },
     @{ Label = "rendered"; Arguments = @("--capture-mode", "rendered"); File = "same-camera-rendered.png" }
 )
+if ($EvidenceProfile -eq "GEOMETRY_SOLID") {
+    $modes = @(
+        @{ Label = "solid"; Arguments = @("--capture-mode", "solid"); File = "same-camera-solid.png" }
+    )
+}
 if ($IncludeStartupShowcase) {
     $modes = @(
-        @{ Label = "startup"; Arguments = @(); File = "startup-showcase.png" }
+            @{ Label = "startup"; Arguments = @("--capture-startup"); File = "startup-showcase.png" }
     ) + $modes
 }
 $records = New-Object System.Collections.Generic.List[string]
@@ -215,7 +231,8 @@ $records.Add("Source: $executable")
 $records.Add("Evidence profile: $EvidenceProfile")
 $records.Add("Camera policy: capture-mode runs use the same deterministic two-model showcase camera and never save capture-mode settings")
 $records.Add("Modes: Solid, Material Preview, Rendered")
-$records.Add("Startup evidence: optional ordinary startup camera with the default showcase models")
+$records.Add("Startup evidence: application-provided readiness for the ordinary startup scene")
+$records.Add("Geometry authority: GEOMETRY_SOLID uses neutral Solid captures only; generated fixtures and asset-specific presets are not native-authored proof")
 $records.Add("Giraffe inspection: optional close front, three-quarter, profile, and wide Rendered views plus front Material Preview")
 $records.Add("Terrain evidence: deterministic wide, close-material, and four-region-corner cameras")
 $records.Add("Capture: application window bounds copied from the desktop into repo-local generated output")
@@ -238,17 +255,9 @@ foreach ($mode in $modes) {
             throw "Sandbox window did not become available for $($mode.Label)."
         }
         Wait-HenkaSandboxForeground -Handle $handle -Label $mode.Label
-        $metadataLine = if ($mode.Label -eq "startup") {
-            Start-Sleep -Milliseconds 1500
-            "CAPTURE_READY mode=startup readiness=ordinary-startup"
-        }
-        else {
-            Wait-HenkaCaptureReady -StdoutPath $stdoutPath -Process $process -Label $mode.Label
-        }
-        if ($mode.Label -ne "startup") {
-            [void]$captureMetadata.Add(
-                (Assert-HenkaCaptureMetadata -Line $metadataLine -Label $mode.Label))
-        }
+        $metadataLine = Wait-HenkaCaptureReady -StdoutPath $stdoutPath -Process $process -Label $mode.Label
+        [void]$captureMetadata.Add(
+            (Assert-HenkaCaptureMetadata -Line $metadataLine -Label $mode.Label))
         Start-Sleep -Milliseconds 150
         # Readiness can be reached while another desktop window regains focus.
         # Re-assert ownership at the last safe point before CopyFromScreen so
@@ -313,7 +322,18 @@ if ($captureMetadata.Count -gt 1) {
 }
 
 if ($IncludeGiraffeInspection) {
-    $inspectionModes = @(
+    $inspectionModes = if ($EvidenceProfile -eq "GEOMETRY_SOLID") {
+        @(
+            @{ Label = "giraffe_front_solid"; Arguments = @("--capture-showcase-view", "front", "solid"); File = "giraffe-front-solid.png" },
+            @{ Label = "giraffe_three_quarter_solid"; Arguments = @("--capture-showcase-view", "three-quarter", "solid"); File = "giraffe-three-quarter-solid.png" },
+            @{ Label = "giraffe_profile_solid"; Arguments = @("--capture-showcase-view", "profile", "solid"); File = "giraffe-profile-solid.png" },
+            @{ Label = "rocket_front_solid"; Arguments = @("--capture-rocket-view", "front", "solid"); File = "rocket-front-solid.png" },
+            @{ Label = "rocket_three_quarter_solid"; Arguments = @("--capture-rocket-view", "three-quarter", "solid"); File = "rocket-three-quarter-solid.png" },
+            @{ Label = "rocket_profile_solid"; Arguments = @("--capture-rocket-view", "profile", "solid"); File = "rocket-profile-solid.png" }
+        )
+    }
+    else {
+        @(
         @{ Label = "giraffe_front_rendered"; Arguments = @("--capture-showcase-view", "front", "rendered"); File = "giraffe-front-rendered.png" },
         @{ Label = "giraffe_three_quarter_rendered"; Arguments = @("--capture-showcase-view", "three-quarter", "rendered"); File = "giraffe-three-quarter-rendered.png" },
         @{ Label = "giraffe_profile_rendered"; Arguments = @("--capture-showcase-view", "profile", "rendered"); File = "giraffe-profile-rendered.png" },
@@ -322,7 +342,8 @@ if ($IncludeGiraffeInspection) {
         @{ Label = "rocket_front_rendered"; Arguments = @("--capture-rocket-view", "front", "rendered"); File = "rocket-front-rendered.png" },
         @{ Label = "rocket_three_quarter_rendered"; Arguments = @("--capture-rocket-view", "three-quarter", "rendered"); File = "rocket-three-quarter-rendered.png" },
         @{ Label = "rocket_profile_rendered"; Arguments = @("--capture-rocket-view", "profile", "rendered"); File = "rocket-profile-rendered.png" }
-    )
+        )
+    }
     foreach ($inspectionMode in $inspectionModes) {
         $capturedProcess = $null
         $stdoutPath = Join-Path $OutputDirectory "$($inspectionMode.Label).stdout.txt"

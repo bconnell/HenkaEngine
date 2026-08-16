@@ -122,6 +122,14 @@ henka_result sandbox3d_authoring_object_transform_vertex_region(
     sandbox3d_authoring_object* object,
     const sandbox3d_authoring_region_transform* transform,
     size_t* out_affected_vertices);
+/* Applies a bounded ordered set of local-space region transforms as one
+ * scene/render/history/physics transaction. A vertex matched by more than one
+ * region receives the transforms in array order and is counted once. */
+henka_result sandbox3d_authoring_object_transform_vertex_regions(
+    sandbox3d_authoring_object* object,
+    const sandbox3d_authoring_region_transform* transforms,
+    size_t transform_count,
+    size_t* out_affected_vertices);
 henka_result sandbox3d_authoring_object_pick_face(
     sandbox3d_authoring_object* object,
     henka_ray ray,

@@ -388,8 +388,12 @@ typedef struct sandbox3d_state
     size_t giraffe_thickness_texture_fallback_count;
     henka_model_scene_data giraffe_authoring_source;
     bool giraffe_authoring_source_valid;
+    bool giraffe_generic_modeling_applied;
+    bool giraffe_asset_specific_preset_applied;
     henka_model_scene_data rocket_authoring_source;
     bool rocket_authoring_source_valid;
+    bool rocket_generic_modeling_applied;
+    bool rocket_asset_specific_preset_applied;
     bool native_authoring_row_reported;
     bool native_authoring_control_reported;
     bool native_authoring_face_controls_reported;
@@ -489,6 +493,7 @@ typedef struct sandbox3d_state
     bool terrain_stream_stress_ran;
     bool smoke_validation_failed;
     bool capture_mode_requested;
+    bool startup_capture_requested;
     bool terrain_capture_mode_requested;
     bool showcase_capture_view_requested;
     bool showcase_capture_rocket_requested;
@@ -510,6 +515,74 @@ static const henka_vec3 g_colored_cube_position = {-2.6f, 0.5f, 1.4f};
 static const henka_vec3 g_missing_texture_position = {2.6f, 0.5f, 1.4f};
 static const henka_vec3 g_marker_position = {-4.4f, 0.0f, -0.9f};
 static const henka_vec3 g_missing_model_position = {4.4f, 0.5f, -0.9f};
+
+static bool sandbox3d_is_showcase_giraffe_entity(
+    const sandbox3d_state* state,
+    henka_entity entity)
+{
+    const char* name;
+
+    if (state == NULL || state->scene == NULL || entity == HENKA_INVALID_ENTITY)
+    {
+        return false;
+    }
+    name = henka_scene_get_entity_name(state->scene, entity);
+    return name != NULL && strncmp(name, "Showcase Giraffe ", sizeof("Showcase Giraffe ") - 1U) == 0;
+}
+
+static bool sandbox3d_is_showcase_rocket_entity(
+    const sandbox3d_state* state,
+    henka_entity entity)
+{
+    const char* name;
+
+    if (state == NULL || state->scene == NULL || entity == HENKA_INVALID_ENTITY)
+    {
+        return false;
+    }
+    name = henka_scene_get_entity_name(state->scene, entity);
+    return name != NULL && strncmp(name, "Showcase Rocket ", sizeof("Showcase Rocket ") - 1U) == 0;
+}
+
+static void sandbox3d_mark_generic_modeling_applied(
+    sandbox3d_state* state,
+    henka_entity entity)
+{
+    if (sandbox3d_is_showcase_giraffe_entity(state, entity))
+    {
+        state->giraffe_generic_modeling_applied = true;
+    }
+    else if (sandbox3d_is_showcase_rocket_entity(state, entity))
+    {
+        state->rocket_generic_modeling_applied = true;
+    }
+}
+
+static void sandbox3d_mark_asset_specific_preset_applied(
+    sandbox3d_state* state,
+    henka_entity entity)
+{
+    if (sandbox3d_is_showcase_giraffe_entity(state, entity))
+    {
+        state->giraffe_asset_specific_preset_applied = true;
+    }
+    else if (sandbox3d_is_showcase_rocket_entity(state, entity))
+    {
+        state->rocket_asset_specific_preset_applied = true;
+    }
+}
+
+static const char* sandbox3d_showcase_provenance(
+    const sandbox3d_state* state,
+    henka_entity entity)
+{
+    if ((sandbox3d_is_showcase_giraffe_entity(state, entity) && state->giraffe_generic_modeling_applied) ||
+        (sandbox3d_is_showcase_rocket_entity(state, entity) && state->rocket_generic_modeling_applied))
+    {
+        return "HENKA_NATIVE_AUTHORED";
+    }
+    return "GENERATED_TEST_FIXTURE";
+}
 
 static const float g_ui_panel_margin = 20.0f;
 static const float g_ui_panel_gap = 12.0f;
@@ -720,6 +793,16 @@ static bool sandbox3d_make_selected_object_editable(
 static henka_result sandbox3d_restore_persisted_native_showcase_sources(
     henka_engine* engine,
     sandbox3d_state* state);
+static henka_result sandbox3d_restore_checked_in_authoring_sources(
+    henka_engine* engine,
+    sandbox3d_state* state);
+static henka_entity sandbox3d_find_showcase_entity(
+    const sandbox3d_state* state,
+    const char* prefix);
+static sandbox3d_authoring_object* sandbox3d_find_authoring_object(
+    const sandbox3d_state* state,
+    henka_entity entity);
+static bool sandbox3d_file_exists(const char* path);
 static bool sandbox3d_register_authoring_object(
     sandbox3d_state* state,
     sandbox3d_authoring_object* object);
@@ -1112,6 +1195,67 @@ static henka_result sandbox3d_material_history_undo(
     *binding->instance = candidate;
     --binding->undo_count;
     sandbox3d_material_history_push_redo(binding, &current);
+    return HENKA_SUCCESS;
+}
+
+static henka_result sandbox3d_restore_checked_in_authoring_sources(
+    henka_engine* engine,
+    sandbox3d_state* state)
+{
+    static const struct
+    {
+        const char* entity_prefix;
+        const char* source_path;
+    } sources[] =
+    {
+        {"Showcase Giraffe ", "assets/authoring/showcase_giraffe.hams"},
+        {"Showcase Rocket ", "assets/authoring/showcase_rocket.hams"}
+    };
+    size_t source_index;
+
+    if (engine == NULL || state == NULL || state->scene == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    for (source_index = 0U; source_index < sizeof(sources) / sizeof(sources[0]); ++source_index)
+    {
+        const henka_entity entity = sandbox3d_find_showcase_entity(state, sources[source_index].entity_prefix);
+        sandbox3d_authoring_object* object;
+        henka_result result;
+
+        if (entity == HENKA_INVALID_ENTITY ||
+            !sandbox3d_file_exists(sources[source_index].source_path) ||
+            sandbox3d_find_authoring_object(state, entity) != NULL)
+        {
+            continue;
+        }
+        if (!sandbox3d_make_selected_object_editable(engine, state, entity))
+        {
+            return HENKA_ERROR_UNKNOWN;
+        }
+        object = sandbox3d_find_authoring_object(state, entity);
+        result = object == NULL
+            ? HENKA_ERROR_UNKNOWN
+            : sandbox3d_authoring_object_reload_source(object, sources[source_index].source_path);
+        if (result != HENKA_SUCCESS)
+        {
+            if (object != NULL)
+            {
+                sandbox3d_release_authoring_physics(state, object);
+                sandbox3d_unregister_authoring_object(state, object);
+                sandbox3d_authoring_object_destroy(object);
+            }
+            state->authoring_object = sandbox3d_find_authoring_object(
+                state, sandbox3d_get_real_selected_entity(state));
+            return result;
+        }
+        sandbox3d_mark_generic_modeling_applied(state, entity);
+        printf(
+            "Native authoring source loaded: name=%s path=%s source_state=HENKA_NATIVE_AUTHORED design_authority=GENERIC_USER_FACING_MODELING.\n",
+            sandbox3d_safe_entity_name(state, entity, "showcase primitive"),
+            sources[source_index].source_path);
+        fflush(stdout);
+    }
     return HENKA_SUCCESS;
 }
 
@@ -2563,6 +2707,16 @@ static henka_result sandbox3d_resolve_authoring_project_paths(
     char** out_project_path,
     char** out_source_path);
 
+static henka_result sandbox3d_save_showcase_provenance(
+    const sandbox3d_state* state,
+    henka_entity entity,
+    const char* project_path);
+
+static void sandbox3d_load_showcase_provenance(
+    sandbox3d_state* state,
+    henka_entity entity,
+    const char* project_path);
+
 static void sandbox3d_draw_native_authoring_project_controls(
     henka_engine* engine,
     sandbox3d_state* state,
@@ -2654,6 +2808,13 @@ static void sandbox3d_draw_native_authoring_project_controls(
                     state,
                     entity,
                     project_path);
+                if (result == HENKA_SUCCESS)
+                {
+                    result = sandbox3d_save_showcase_provenance(
+                        state,
+                        entity,
+                        project_path);
+                }
             }
             if (result == HENKA_SUCCESS && reload_requested && material_present)
             {
@@ -2687,30 +2848,18 @@ static void sandbox3d_draw_native_authoring_project_controls(
                     henka_authoring_mesh_get_counts(
                         sandbox3d_authoring_object_get_mesh(
                             state->authoring_object));
-                const bool native_authored_source =
-                    display_name != NULL &&
-                    strncmp(
-                        display_name,
-                        "Native Showcase Rocket",
-                        sizeof("Native Showcase Rocket") - 1U) == 0;
-                if (native_authored_source)
-                {
-                    printf(
-                        "Native authoring dogfood: project %s for %s; vertices=%zu faces=%zu source_state=HENKA_NATIVE_AUTHORED details=stages:3,bells:5,fins:4.\n",
-                        save_requested ? "saved" : "reloaded",
-                        display_name,
-                        counts.vertices,
-                        counts.faces);
-                }
-                else
-                {
-                    printf(
-                        "Native authoring dogfood: project %s for %s; vertices=%zu faces=%zu source_state=HENKA_NATIVE_EDITABLE_SOURCE.\n",
-                        save_requested ? "saved" : "reloaded",
-                        display_name,
-                        counts.vertices,
-                        counts.faces);
-                }
+                printf(
+                    "Native authoring dogfood: project %s for %s; vertices=%zu faces=%zu source_state=%s design_authority=%s preset_applied=%d.\n",
+                    save_requested ? "saved" : "reloaded",
+                    display_name,
+                    counts.vertices,
+                    counts.faces,
+                    sandbox3d_showcase_provenance(state, entity),
+                    strcmp(sandbox3d_showcase_provenance(state, entity), "HENKA_NATIVE_AUTHORED") == 0
+                        ? "GENERIC_USER_FACING_MODELING"
+                        : "ASSET_SPECIFIC_OR_GENERATED_FIXTURE",
+                    (sandbox3d_is_showcase_giraffe_entity(state, entity) && state->giraffe_asset_specific_preset_applied) ||
+                        (sandbox3d_is_showcase_rocket_entity(state, entity) && state->rocket_asset_specific_preset_applied));
                 fflush(stdout);
                 if (state->native_authoring_material_asset != NULL &&
                     state->native_authoring_material_entity == entity)
@@ -5313,6 +5462,30 @@ static bool sandbox3d_project_showcase_bounds(
     return true;
 }
 
+static henka_entity sandbox3d_find_showcase_entity(
+    const sandbox3d_state* state,
+    const char* prefix)
+{
+    size_t entity_index;
+
+    if (state == NULL || state->scene == NULL || prefix == NULL)
+    {
+        return HENKA_INVALID_ENTITY;
+    }
+    for (entity_index = 0U;
+         entity_index < henka_scene_get_entity_count(state->scene);
+         ++entity_index)
+    {
+        const henka_entity entity = henka_scene_get_entity_at_index(state->scene, entity_index);
+        const char* name = henka_scene_get_entity_name(state->scene, entity);
+        if (name != NULL && strncmp(name, prefix, strlen(prefix)) == 0)
+        {
+            return entity;
+        }
+    }
+    return HENKA_INVALID_ENTITY;
+}
+
 static void sandbox3d_report_capture_ready(
     henka_engine* engine,
     sandbox3d_state* state)
@@ -5332,15 +5505,20 @@ static void sandbox3d_report_capture_ready(
     henka_viewport viewport;
     henka_vec3 minimum;
     henka_vec3 maximum;
+    henka_entity giraffe_entity;
+    henka_entity rocket_entity;
 
-    if (engine == NULL || state == NULL || !state->capture_mode_requested ||
+    if (engine == NULL || state == NULL ||
+        (!state->capture_mode_requested && !state->startup_capture_requested) ||
         state->capture_metadata_reported)
     {
         return;
     }
     viewport = state->frame_layout.scene_viewport;
+    giraffe_entity = sandbox3d_find_showcase_entity(state, "Showcase Giraffe ");
+    rocket_entity = sandbox3d_find_showcase_entity(state, "Showcase Rocket ");
     if (viewport.width <= 0 || viewport.height <= 0 ||
-        !state->capture_camera_aspect_applied ||
+        (state->capture_mode_requested && !state->capture_camera_aspect_applied) ||
         !sandbox3d_collect_named_showcase_capture_bounds(
             state,
             "Showcase Giraffe",
@@ -5409,8 +5587,10 @@ static void sandbox3d_report_capture_ready(
     }
 
     printf(
-        "CAPTURE_READY mode=%s viewport=%d,%d,%d,%d aspect=%.6f camera_position=%.4f,%.4f,%.4f yaw=%.6f pitch=%.6f roll=%.6f fov=%.6f giraffe_bounds=%.4f,%.4f,%.4f,%.4f,%.4f,%.4f rocket_bounds=%.4f,%.4f,%.4f,%.4f,%.4f,%.4f combined_bounds=%.4f,%.4f,%.4f,%.4f,%.4f,%.4f giraffe_screen=%.2f,%.2f,%.2f,%.2f rocket_screen=%.2f,%.2f,%.2f,%.2f combined_midpoint=%.2f,%.2f giraffe_parts=%zu rocket_parts=%zu giraffe_sss_regions=%zu giraffe_normal_texture_regions=%zu giraffe_normal_texture_loaded=%zu giraffe_normal_texture_fallbacks=%zu giraffe_thickness_texture_regions=%zu giraffe_thickness_texture_loaded=%zu giraffe_thickness_texture_fallbacks=%zu settled_frames=%u draw_expected=1\n",
-        henka_viewport_shading_mode_get_setting_value(state->capture_mode),
+        "CAPTURE_READY mode=%s viewport=%d,%d,%d,%d aspect=%.6f camera_position=%.4f,%.4f,%.4f yaw=%.6f pitch=%.6f roll=%.6f fov=%.6f giraffe_bounds=%.4f,%.4f,%.4f,%.4f,%.4f,%.4f rocket_bounds=%.4f,%.4f,%.4f,%.4f,%.4f,%.4f combined_bounds=%.4f,%.4f,%.4f,%.4f,%.4f,%.4f giraffe_screen=%.2f,%.2f,%.2f,%.2f rocket_screen=%.2f,%.2f,%.2f,%.2f combined_midpoint=%.2f,%.2f giraffe_parts=%zu rocket_parts=%zu giraffe_sss_regions=%zu giraffe_normal_texture_regions=%zu giraffe_normal_texture_loaded=%zu giraffe_normal_texture_fallbacks=%zu giraffe_thickness_texture_regions=%zu giraffe_thickness_texture_loaded=%zu giraffe_thickness_texture_fallbacks=%zu settled_frames=%u giraffe_provenance=%s rocket_provenance=%s preset_applied=%d draw_expected=1\n",
+        state->startup_capture_requested
+            ? "startup"
+            : henka_viewport_shading_mode_get_setting_value(state->capture_mode),
         viewport.x,
         viewport.y,
         viewport.width,
@@ -5460,7 +5640,11 @@ static void sandbox3d_report_capture_ready(
         state->giraffe_thickness_texture_region_count,
         state->giraffe_thickness_texture_loaded_count,
         state->giraffe_thickness_texture_fallback_count,
-        state->capture_settled_frames);
+        state->capture_settled_frames,
+        sandbox3d_showcase_provenance(state, giraffe_entity),
+        sandbox3d_showcase_provenance(state, rocket_entity),
+        ((sandbox3d_is_showcase_giraffe_entity(state, giraffe_entity) && state->giraffe_asset_specific_preset_applied) ||
+            (sandbox3d_is_showcase_rocket_entity(state, rocket_entity) && state->rocket_asset_specific_preset_applied)) ? 1 : 0);
     fflush(stdout);
     state->capture_metadata_reported = true;
 }
@@ -6499,6 +6683,84 @@ static henka_result sandbox3d_resolve_authoring_project_paths(
     return result;
 }
 
+static henka_result sandbox3d_save_showcase_provenance(
+    const sandbox3d_state* state,
+    henka_entity entity,
+    const char* project_path)
+{
+    henka_settings* settings = NULL;
+    henka_result result;
+
+    if (state == NULL || project_path == NULL || project_path[0] == '\0' ||
+        (!sandbox3d_is_showcase_giraffe_entity(state, entity) &&
+         !sandbox3d_is_showcase_rocket_entity(state, entity)))
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    result = henka_settings_create(&settings);
+    if (result == HENKA_SUCCESS)
+    {
+        result = henka_settings_load_file(settings, project_path);
+    }
+    if (result == HENKA_SUCCESS)
+    {
+        result = henka_settings_set_string(
+            settings,
+            "project.design_authority",
+            sandbox3d_showcase_provenance(state, entity));
+    }
+    if (result == HENKA_SUCCESS)
+    {
+        result = henka_settings_set_bool(
+            settings,
+            "project.asset_specific_preset_applied",
+            (sandbox3d_is_showcase_giraffe_entity(state, entity) && state->giraffe_asset_specific_preset_applied) ||
+                (sandbox3d_is_showcase_rocket_entity(state, entity) && state->rocket_asset_specific_preset_applied));
+    }
+    if (result == HENKA_SUCCESS)
+    {
+        result = henka_settings_save_file(settings, project_path);
+    }
+    henka_settings_destroy(settings);
+    return result;
+}
+
+static void sandbox3d_load_showcase_provenance(
+    sandbox3d_state* state,
+    henka_entity entity,
+    const char* project_path)
+{
+    henka_settings* settings = NULL;
+    const char* authority;
+    const bool is_giraffe = sandbox3d_is_showcase_giraffe_entity(state, entity);
+    const bool is_rocket = sandbox3d_is_showcase_rocket_entity(state, entity);
+
+    if (state == NULL || project_path == NULL || project_path[0] == '\0' ||
+        (!is_giraffe && !is_rocket) ||
+        henka_settings_create(&settings) != HENKA_SUCCESS ||
+        henka_settings_load_file(settings, project_path) != HENKA_SUCCESS)
+    {
+        henka_settings_destroy(settings);
+        return;
+    }
+    authority = henka_settings_get_string(settings, "project.design_authority", NULL);
+    if (is_giraffe)
+    {
+        state->giraffe_generic_modeling_applied =
+            authority != NULL && strcmp(authority, "HENKA_NATIVE_AUTHORED") == 0;
+        state->giraffe_asset_specific_preset_applied = henka_settings_get_bool(
+            settings, "project.asset_specific_preset_applied", false);
+    }
+    else
+    {
+        state->rocket_generic_modeling_applied =
+            authority != NULL && strcmp(authority, "HENKA_NATIVE_AUTHORED") == 0;
+        state->rocket_asset_specific_preset_applied = henka_settings_get_bool(
+            settings, "project.asset_specific_preset_applied", false);
+    }
+    henka_settings_destroy(settings);
+}
+
 static void sandbox3d_register_object_descriptor(
     sandbox3d_state* state,
     sandbox3d_object_kind kind,
@@ -6663,7 +6925,7 @@ static void sandbox3d_print_help(const sandbox3d_state* state)
     printf("  Open Native Panel Test from the Controls QA page to validate a separate OS-level tool window.\n");
     printf("  Use the panels to inspect named scene objects, clear selection, switch gizmo modes, focus the camera, reset object transforms, toggle visibility, and open in-window Help, Scene Legend, Object Info, Assets, Paths, Settings, Diagnostics, Transform QA, and Physics QA utilities.\n");
     printf("  Select an imported glTF scene entity to edit its shared material instance in Object Details; scalar/vector, flags, alpha, and semantic texture overrides apply transactionally. Use Utility > Assets to choose manager-owned textures for editable slots.\n");
-    printf("  Select a Showcase Giraffe or Showcase Rocket primitive, open Object Details > Authoring, and choose Make Editable; Refine Profile applies a bounded native region transform to the imported giraffe neck/head or rocket upper stage, while Own Material promotes a manager-owned runtime definition for bounded base-color, metallic, roughness, emissive-strength, IOR, transmission, subsurface amount, thickness, and tint, plus in-engine procedural normal and metallic-roughness texture creation. Mesh/project save-reload and the native material sidecar preserve all supported PBR scalars, colors, flags, alpha mode, and seven material texture identities; texture painting and native-authored source export remain unfinished.\n");
+    printf("  Select a Showcase Giraffe or Showcase Rocket primitive, open Object Details > Authoring, and choose Make Editable; the generic component Move and Face bevel/subdivide controls are the user-facing modeling path and their persisted source may earn HENKA_NATIVE_AUTHORED provenance. Refine Profile is an asset-specific preset for diagnostics, not generic modeling proof. Own Material promotes a manager-owned runtime definition for bounded base-color, metallic, roughness, emissive-strength, IOR, transmission, subsurface amount, thickness, and tint, plus in-engine procedural normal and metallic-roughness texture creation. Mesh/project save-reload and the native material sidecar preserve all supported PBR scalars, colors, flags, alpha mode, and seven material texture identities; source export and a complete authored Giraffe/Rocket production workflow remain bounded work.\n");
     printf("  Physics QA enables an opt-in fixed-step rigid-body demo with collider/contact debug drawing, impulses, body modes, and camera raycasts.\n");
     printf("  The Controls panel uses Main, Camera/Status, and QA pages, and Scene Objects supports paging when the dock is tighter than the full list.\n");
     printf("  Controls also provides Default, Modeling, Materials, Scene Assembly, Debugging, and Minimal Viewport workspace presets; topology edits mark the workspace Custom.\n");
@@ -8180,8 +8442,12 @@ static void sandbox3d_release_owned_resources(sandbox3d_state* state)
     henka_scene_destroy(state->scene);
     henka_model_scene_data_destroy(&state->giraffe_authoring_source);
     state->giraffe_authoring_source_valid = false;
+    state->giraffe_generic_modeling_applied = false;
+    state->giraffe_asset_specific_preset_applied = false;
     henka_model_scene_data_destroy(&state->rocket_authoring_source);
     state->rocket_authoring_source_valid = false;
+    state->rocket_generic_modeling_applied = false;
+    state->rocket_asset_specific_preset_applied = false;
     state->native_authoring_row_reported = false;
     state->native_authoring_control_reported = false;
     state->native_authoring_face_controls_reported = false;
@@ -9400,7 +9666,8 @@ static bool sandbox3d_refine_showcase_profile(
     size_t* out_affected_vertices)
 {
     const char* name;
-    sandbox3d_authoring_region_transform profile;
+    sandbox3d_authoring_region_transform profiles[2];
+    size_t profile_count = 0U;
 
     if (out_affected_vertices != NULL)
     {
@@ -9421,30 +9688,44 @@ static bool sandbox3d_refine_showcase_profile(
         /* Shape the imported core's neck and head as one authored region so
          * the profile reads as a connected animal form instead of a stack of
          * independent capsules. */
-        profile = (sandbox3d_authoring_region_transform){
+        profiles[0] = (sandbox3d_authoring_region_transform){
             {-0.72f, 2.00f, -0.62f},
-            {0.72f, 4.90f, 0.62f},
+            {0.72f, 3.48f, 0.62f},
             {0.0f, 3.35f, 0.0f},
             {0.92f, 1.02f, 0.94f},
             {0.04f, 0.03f, 0.0f}};
+        profiles[1] = (sandbox3d_authoring_region_transform){
+            {-0.70f, 3.40f, -0.08f},
+            {0.70f, 4.90f, 0.64f},
+            {0.0f, 3.92f, 0.30f},
+            {0.90f, 0.98f, 0.92f},
+            {0.0f, 0.02f, 0.015f}};
+        profile_count = 2U;
     }
     else if (strncmp(name, "Showcase Rocket ", sizeof("Showcase Rocket ") - 1U) == 0)
     {
         /* Tighten the imported upper stage and preserve its axial height so
          * the fairing reads as launch hardware rather than a capped tube. */
-        profile = (sandbox3d_authoring_region_transform){
+        profiles[0] = (sandbox3d_authoring_region_transform){
+            {-1.12f, 0.00f, -1.12f},
+            {1.12f, 2.25f, 1.12f},
+            {0.0f, 1.12f, 0.0f},
+            {0.97f, 1.01f, 0.97f},
+            {0.0f, 0.015f, 0.0f}};
+        profiles[1] = (sandbox3d_authoring_region_transform){
             {-0.65f, 2.20f, -0.65f},
             {0.65f, 3.30f, 0.65f},
             {0.0f, 2.65f, 0.0f},
             {0.86f, 1.03f, 0.86f},
             {0.0f, 0.04f, 0.0f}};
+        profile_count = 2U;
     }
     else
     {
         return false;
     }
-    return sandbox3d_authoring_object_transform_vertex_region(
-        state->authoring_object, &profile, out_affected_vertices) == HENKA_SUCCESS;
+    return sandbox3d_authoring_object_transform_vertex_regions(
+        state->authoring_object, profiles, profile_count, out_affected_vertices) == HENKA_SUCCESS;
 }
 
 static bool sandbox3d_file_exists(const char* path)
@@ -9592,6 +9873,7 @@ static henka_result sandbox3d_restore_persisted_native_showcase_sources(
         }
         if (result == HENKA_SUCCESS)
         {
+            sandbox3d_load_showcase_provenance(state, entity, project_path);
             const henka_authoring_mesh_counts counts =
                 henka_authoring_mesh_get_counts(sandbox3d_authoring_object_get_mesh(object));
             printf(
@@ -9835,13 +10117,13 @@ static bool sandbox3d_seed_native_rocket_surface_detail(
             state, binding, normal_texture, surface_texture) != HENKA_SUCCESS)
     {
         printf(
-            "Native authoring material detail: name=%s normal=fallback surface=fallback source_state=HENKA_NATIVE_AUTHORED.\n",
+            "Native authoring material detail: name=%s normal=fallback surface=fallback source_state=HENKA_NATIVE_GENERATED_FIXTURE.\n",
             sandbox3d_safe_entity_name(state, entity, "Native Showcase Rocket"));
         fflush(stdout);
         return false;
     }
     printf(
-        "Native authoring material detail: name=%s normal=loaded surface=loaded source_state=HENKA_NATIVE_AUTHORED.\n",
+        "Native authoring material detail: name=%s normal=loaded surface=loaded source_state=HENKA_NATIVE_GENERATED_FIXTURE.\n",
         sandbox3d_safe_entity_name(state, entity, "Native Showcase Rocket"));
     fflush(stdout);
     return true;
@@ -10242,12 +10524,12 @@ static bool sandbox3d_add_native_rocket_object(henka_engine* engine, sandbox3d_s
     counts = henka_authoring_mesh_get_counts(
         sandbox3d_authoring_object_get_mesh(authoring_object));
     printf(
-        "Native authoring creation: name=%s vertices=%zu faces=%zu source_state=HENKA_NATIVE_AUTHORED.\n",
+        "Native authoring creation: name=%s vertices=%zu faces=%zu source_state=HENKA_NATIVE_GENERATED_FIXTURE.\n",
         sandbox3d_safe_entity_name(state, entity, "Native Showcase Rocket"),
         counts.vertices,
         counts.faces);
     fflush(stdout);
-    sandbox3d_set_status(state, false, "Created a native authored rocket source with manager-owned material.");
+    sandbox3d_set_status(state, false, "Created a native-generated rocket fixture with manager-owned material.");
     return true;
 }
 
@@ -17994,7 +18276,7 @@ static void sandbox3d_draw_scene_objects_panel(
     if (!state->native_authored_showcase_control_reported)
     {
         printf(
-            "Native authored showcase control: x=%.1f y=%.1f width=%.1f height=24.0.\n",
+            "Native generated fixture control: x=%.1f y=%.1f width=%.1f height=24.0.\n",
             panel_bounds.x + 14.0f,
             native_action_y,
             panel_bounds.width - 28.0f);
@@ -18009,7 +18291,7 @@ static void sandbox3d_draw_scene_objects_panel(
     {
         if (!sandbox3d_add_native_rocket_object(engine, state))
         {
-            sandbox3d_set_status(state, true, "The native authored rocket could not be created.");
+            sandbox3d_set_status(state, true, "The native-generated rocket fixture could not be created.");
         }
     }
 
@@ -19543,11 +19825,12 @@ details_group_authoring:
                     sandbox3d_authoring_object_move_selected_components(
                         state->authoring_object, (henka_vec3){0.1f, 0.0f, 0.0f}) == HENKA_SUCCESS)
                 {
+                    sandbox3d_mark_generic_modeling_applied(state, entity);
                     const henka_authoring_mesh_counts counts =
                         henka_authoring_mesh_get_counts(
                             sandbox3d_authoring_object_get_mesh(state->authoring_object));
                     printf(
-                        "Native authoring dogfood: component move edited %s; vertices=%zu faces=%zu source_state=HENKA_NATIVE_EDITABLE_SOURCE.\n",
+                        "Native authoring dogfood: component move edited %s; vertices=%zu faces=%zu source_state=HENKA_NATIVE_AUTHORED design_authority=GENERIC_USER_FACING_MODELING.\n",
                         display_name,
                         counts.vertices,
                         counts.faces);
@@ -19559,6 +19842,7 @@ details_group_authoring:
                     sandbox3d_authoring_object_move_selected_components(
                         state->authoring_object, (henka_vec3){0.0f, 0.1f, 0.0f}) == HENKA_SUCCESS)
                 {
+                    sandbox3d_mark_generic_modeling_applied(state, entity);
                     sandbox3d_set_status(state, false, "Selected authoring components moved on Y.");
                 }
                 if (henka_ui_button(
@@ -19566,6 +19850,7 @@ details_group_authoring:
                     sandbox3d_authoring_object_move_selected_components(
                         state->authoring_object, (henka_vec3){0.0f, 0.0f, 0.1f}) == HENKA_SUCCESS)
                 {
+                    sandbox3d_mark_generic_modeling_applied(state, entity);
                     sandbox3d_set_status(state, false, "Selected authoring components moved on Z.");
                 }
             }
@@ -19597,11 +19882,12 @@ details_group_authoring:
                     if (sandbox3d_refine_showcase_profile(
                             state, entity, &affected_vertices))
                     {
+                        sandbox3d_mark_asset_specific_preset_applied(state, entity);
                         const henka_authoring_mesh_counts counts =
                             henka_authoring_mesh_get_counts(
                                 sandbox3d_authoring_object_get_mesh(state->authoring_object));
                         printf(
-                            "Native authoring dogfood: showcase profile edited %s; affected_vertices=%zu vertices=%zu faces=%zu source_state=HENKA_NATIVE_EDITABLE_SOURCE.\n",
+                            "Native authoring dogfood: showcase profile edited %s; profile_regions=2 affected_vertices=%zu vertices=%zu faces=%zu source_state=HENKA_NATIVE_EDITABLE_SOURCE design_authority=ASSET_SPECIFIC_PRESET preset_applied=1.\n",
                             display_name,
                             affected_vertices,
                             counts.vertices,
@@ -19762,11 +20048,12 @@ details_group_authoring:
                     }
                     if (bevel_result == HENKA_SUCCESS)
                     {
+                        sandbox3d_mark_generic_modeling_applied(state, entity);
                         const henka_authoring_mesh_counts counts =
                             henka_authoring_mesh_get_counts(
                                 sandbox3d_authoring_object_get_mesh(state->authoring_object));
                         printf(
-                            "Native authoring dogfood: face bevel edited %s; vertices=%zu faces=%zu source_state=HENKA_NATIVE_EDITABLE_SOURCE.\n",
+                            "Native authoring dogfood: face bevel edited %s; vertices=%zu faces=%zu source_state=HENKA_NATIVE_AUTHORED design_authority=GENERIC_USER_FACING_MODELING.\n",
                             display_name,
                             counts.vertices,
                             counts.faces);
@@ -23138,6 +23425,11 @@ static henka_result sandbox3d_initialize(henka_engine* engine, void* user_data)
         {
             goto fail;
         }
+        result = sandbox3d_restore_checked_in_authoring_sources(engine, state);
+        if (result != HENKA_SUCCESS)
+        {
+            goto fail;
+        }
     }
 
     result = sandbox3d_initialize_gizmo_rendering(engine, state);
@@ -25925,6 +26217,7 @@ int main(int argc, char** argv)
     bool environment_stress;
     bool terrain_stream_stress;
     bool capture_mode_requested;
+    bool startup_capture_requested;
     bool terrain_capture_mode_requested;
     bool showcase_capture_view_requested;
     bool showcase_capture_rocket_requested;
@@ -25940,6 +26233,7 @@ int main(int argc, char** argv)
     environment_stress = false;
     terrain_stream_stress = false;
     capture_mode_requested = false;
+    startup_capture_requested = false;
     terrain_capture_mode_requested = false;
     showcase_capture_view_requested = false;
     showcase_capture_rocket_requested = false;
@@ -25979,6 +26273,10 @@ int main(int argc, char** argv)
         smoke_test = true;
         terrain_stream_stress = true;
     }
+    else if (argc == 2 && strcmp(argv[1], "--capture-startup") == 0)
+    {
+        startup_capture_requested = true;
+    }
     else if (argc == 3 && strcmp(argv[1], "--capture-mode") == 0 &&
         henka_viewport_shading_mode_parse(argv[2], &capture_mode) == HENKA_SUCCESS)
     {
@@ -26014,7 +26312,7 @@ int main(int argc, char** argv)
     }
     else if (argc != 1)
     {
-        fprintf(stderr, "Usage: %s [--primitive-gallery | --smoke-test | --residency-stress | --temporal-stress | --material-stress | --environment-stress | --terrain-stream-stress | --capture-mode solid|material_preview|rendered | --capture-showcase-view wide|front|three-quarter|profile solid|material_preview|rendered | --capture-rocket-view front|three-quarter|profile solid|material_preview|rendered | --capture-terrain-mode solid|material_preview|rendered | --capture-terrain-view wide|corner|close solid|material_preview|rendered]\n", argv[0]);
+        fprintf(stderr, "Usage: %s [--primitive-gallery | --smoke-test | --residency-stress | --temporal-stress | --material-stress | --environment-stress | --terrain-stream-stress | --capture-startup | --capture-mode solid|material_preview|rendered | --capture-showcase-view wide|front|three-quarter|profile solid|material_preview|rendered | --capture-rocket-view front|three-quarter|profile solid|material_preview|rendered | --capture-terrain-mode solid|material_preview|rendered | --capture-terrain-view wide|corner|close solid|material_preview|rendered]\n", argv[0]);
         return 2;
     }
 
@@ -26027,6 +26325,7 @@ int main(int argc, char** argv)
     state.environment_stress = environment_stress;
     state.terrain_stream_stress = terrain_stream_stress;
     state.capture_mode_requested = capture_mode_requested;
+    state.startup_capture_requested = startup_capture_requested;
     state.terrain_capture_mode_requested = terrain_capture_mode_requested;
     state.showcase_capture_view_requested = showcase_capture_view_requested;
     state.showcase_capture_rocket_requested = showcase_capture_rocket_requested;

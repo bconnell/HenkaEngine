@@ -1748,6 +1748,9 @@ try {
         if (-not $nativeProfileObserved) {
             throw "The user-facing native profile refinement did not change the showcase source."
         }
+        if (-not (Wait-FileContains -Path $stdoutPath -Pattern "profile_regions=2" -TimeoutMilliseconds 3000)) {
+            throw "The user-facing native profile refinement did not exercise its ordered multi-region transaction."
+        }
         Write-Output "[pass] User-facing native showcase profile refinement changed the imported geometry"
         $faceControlLogPattern = 'Native authoring face controls:'
         $faceControlCountBefore = @(
@@ -2335,12 +2338,12 @@ try {
     if (-not (Wait-FileContains -Path $stdoutPath -Pattern "Sandbox panel: shown" -TimeoutMilliseconds 4000)) {
         throw "The editor panels could not be reopened for engine-native showcase creation."
     }
-    if (-not (Wait-FileContains -Path $stdoutPath -Pattern "Native authored showcase control:" -TimeoutMilliseconds 3000)) {
+    if (-not (Wait-FileContains -Path $stdoutPath -Pattern "Native generated fixture control:" -TimeoutMilliseconds 3000)) {
         throw "The engine-native showcase creation control did not become visible."
     }
     $nativeAuthoredShowcaseMatch = Get-LastLogRegexMatch `
         -Path $stdoutPath `
-        -Pattern 'Native authored showcase control: x=([-0-9.]+) y=([-0-9.]+) width=([-0-9.]+) height=24.0\.'
+        -Pattern 'Native generated fixture control: x=([-0-9.]+) y=([-0-9.]+) width=([-0-9.]+) height=24.0\.'
     if ($null -eq $nativeAuthoredShowcaseMatch) {
         throw "The engine-native showcase creation control geometry could not be parsed."
     }
@@ -2348,7 +2351,7 @@ try {
     $nativeAuthoredShowcaseY = [double]$nativeAuthoredShowcaseMatch.Groups[2].Value
     $nativeAuthoredShowcaseWidth = [double]$nativeAuthoredShowcaseMatch.Groups[3].Value
     Assert-FramebufferRect `
-        -Name "Native authored showcase creation control" `
+        -Name "Native generated fixture creation control" `
         -FramebufferWidth $framebufferWidth `
         -FramebufferHeight $framebufferHeight `
         -X $nativeAuthoredShowcaseX `
@@ -2361,29 +2364,29 @@ try {
         -FramebufferHeight $framebufferHeight `
         -FramebufferX ($nativeAuthoredShowcaseX + $nativeAuthoredShowcaseWidth / 2.0) `
         -FramebufferY ($nativeAuthoredShowcaseY + 12.0)
-    if (-not (Wait-FileContains -Path $stdoutPath -Pattern "source_state=HENKA_NATIVE_AUTHORED" -TimeoutMilliseconds 5000)) {
-        throw "The user-facing engine-native showcase creation did not produce an authored source."
+    if (-not (Wait-FileContains -Path $stdoutPath -Pattern "source_state=HENKA_NATIVE_GENERATED_FIXTURE" -TimeoutMilliseconds 5000)) {
+        throw "The user-facing engine-native showcase creation did not produce the generated-fixture source classification."
     }
-    if (-not (Wait-FileContains -Path $stdoutPath -Pattern "Native authoring material detail: name=Native Showcase Rocket normal=loaded surface=loaded source_state=HENKA_NATIVE_AUTHORED" -TimeoutMilliseconds 5000)) {
-        throw "The native authored rocket did not adopt its manager-owned surface detail textures."
+    if (-not (Wait-FileContains -Path $stdoutPath -Pattern "Native authoring material detail: name=Native Showcase Rocket normal=loaded surface=loaded source_state=HENKA_NATIVE_GENERATED_FIXTURE" -TimeoutMilliseconds 5000)) {
+        throw "The native-generated rocket fixture did not adopt its manager-owned surface detail textures."
     }
     Write-Output "[pass] User-facing engine-native showcase creation completed"
     if (-not (Wait-FileContains -Path $stdoutPath -Pattern "Native authoring project controls:" -TimeoutMilliseconds 3000)) {
-        throw "The native authored showcase did not expose project save/reload controls."
+        throw "The native-generated showcase did not expose project save/reload controls."
     }
     $nativeCreatedProjectMatch = Get-LastLogRegexMatch `
         -Path $stdoutPath `
         -Pattern 'Native authoring project controls: name=(.+) save_x=([-0-9.]+) save_y=([-0-9.]+) reload_x=([-0-9.]+) reload_y=([-0-9.]+) width=140.0 height=24.0\.'
     if ($null -eq $nativeCreatedProjectMatch) {
-        throw "The native authored project control geometry could not be parsed."
+        throw "The native-generated project control geometry could not be parsed."
     }
     $nativeCreatedSaveX = [double]$nativeCreatedProjectMatch.Groups[2].Value
     $nativeCreatedSaveY = [double]$nativeCreatedProjectMatch.Groups[3].Value
     $nativeCreatedReloadX = [double]$nativeCreatedProjectMatch.Groups[4].Value
     $nativeCreatedReloadY = [double]$nativeCreatedProjectMatch.Groups[5].Value
     foreach ($nativeCreatedControl in @(
-        @{ Name = "native authored Save Project"; X = $nativeCreatedSaveX; Y = $nativeCreatedSaveY },
-        @{ Name = "native authored Reload Project"; X = $nativeCreatedReloadX; Y = $nativeCreatedReloadY }
+        @{ Name = "native generated Save Project"; X = $nativeCreatedSaveX; Y = $nativeCreatedSaveY },
+        @{ Name = "native generated Reload Project"; X = $nativeCreatedReloadX; Y = $nativeCreatedReloadY }
     )) {
         Assert-FramebufferRect `
             -Name $nativeCreatedControl.Name `
@@ -2400,8 +2403,8 @@ try {
         -FramebufferHeight $framebufferHeight `
         -FramebufferX ($nativeCreatedSaveX + 70.0) `
         -FramebufferY ($nativeCreatedSaveY + 12.0)
-    if (-not (Wait-FileContains -Path $stdoutPath -Pattern "Native authoring dogfood: project saved for Native Showcase Rocket; vertices=201 faces=121 source_state=HENKA_NATIVE_AUTHORED details=stages:3,bells:5,fins:4" -TimeoutMilliseconds 5000)) {
-        throw "The native authored showcase project save did not complete."
+    if (-not (Wait-FileContains -Path $stdoutPath -Pattern "Native authoring dogfood: project saved for Native Showcase Rocket; vertices=201 faces=121 source_state=HENKA_NATIVE_GENERATED_FIXTURE" -TimeoutMilliseconds 5000)) {
+        throw "The native-generated showcase project save did not complete."
     }
     Click-FramebufferPoint `
         -Handle $mainWindowHandle `
@@ -2409,15 +2412,15 @@ try {
         -FramebufferHeight $framebufferHeight `
         -FramebufferX ($nativeCreatedReloadX + 70.0) `
         -FramebufferY ($nativeCreatedReloadY + 12.0)
-    if (-not (Wait-FileContains -Path $stdoutPath -Pattern "Native authoring dogfood: project reloaded for Native Showcase Rocket; vertices=201 faces=121 source_state=HENKA_NATIVE_AUTHORED details=stages:3,bells:5,fins:4" -TimeoutMilliseconds 5000)) {
-        throw "The native authored showcase project reload did not complete transactionally."
+    if (-not (Wait-FileContains -Path $stdoutPath -Pattern "Native authoring dogfood: project reloaded for Native Showcase Rocket; vertices=201 faces=121 source_state=HENKA_NATIVE_GENERATED_FIXTURE" -TimeoutMilliseconds 5000)) {
+        throw "The native-generated showcase project reload did not complete transactionally."
     }
-    Write-Output "[pass] Native authored showcase project save/reload completed transactionally"
+    Write-Output "[pass] Native-generated showcase project save/reload completed transactionally"
     Start-Sleep -Milliseconds 350
     Save-WindowScreenshot `
         -Handle $mainWindowHandle `
         -Path $nativeAuthoredScreenshotPath `
-        -Description "Packaged native authored rocket visual proof"
+        -Description "Packaged native-generated rocket fixture visual proof"
 
     Write-Step "Checking clean close-window shutdown"
     [NativeMethods]::PostMessage($mainWindowHandle, 0x0010, [System.IntPtr]::Zero, [System.IntPtr]::Zero) | Out-Null
@@ -2527,7 +2530,7 @@ try {
         -Description "Packaged native authoring visual proof"
     Assert-PathExists `
         -Path $nativeAuthoredScreenshotPath `
-        -Description "Packaged native authored rocket visual proof"
+        -Description "Packaged native-generated rocket fixture visual proof"
     Write-Output "[pass] Live workspace settings recovery persisted across relaunch"
     Write-Output "[pass] Packaged sandbox checks completed."
 }

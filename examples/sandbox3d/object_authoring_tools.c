@@ -13,6 +13,7 @@
 #define SANDBOX3D_AUTHORING_IMPORT_VERTEX_RESERVE 256U
 #define SANDBOX3D_AUTHORING_IMPORT_EDGE_RESERVE 512U
 #define SANDBOX3D_AUTHORING_IMPORT_FACE_RESERVE 128U
+#define SANDBOX3D_AUTHORING_MAX_REGION_TRANSFORMS 16U
 
 struct sandbox3d_authoring_object
 {
@@ -1481,13 +1482,31 @@ henka_result sandbox3d_authoring_object_move_selected_components(
     return result;
 }
 
-henka_result sandbox3d_authoring_object_transform_vertex_region(
+static bool sandbox3d_authoring_valid_region_transform(
+    const sandbox3d_authoring_region_transform* transform)
+{
+    return transform != NULL &&
+        sandbox3d_authoring_finite_vec3(transform->minimum) &&
+        sandbox3d_authoring_finite_vec3(transform->maximum) &&
+        sandbox3d_authoring_finite_vec3(transform->pivot) &&
+        sandbox3d_authoring_finite_vec3(transform->scale) &&
+        sandbox3d_authoring_finite_vec3(transform->offset) &&
+        transform->minimum.x <= transform->maximum.x &&
+        transform->minimum.y <= transform->maximum.y &&
+        transform->minimum.z <= transform->maximum.z &&
+        transform->scale.x > 0.0f && transform->scale.y > 0.0f && transform->scale.z > 0.0f &&
+        transform->scale.x <= 4.0f && transform->scale.y <= 4.0f && transform->scale.z <= 4.0f;
+}
+
+henka_result sandbox3d_authoring_object_transform_vertex_regions(
     sandbox3d_authoring_object* object,
-    const sandbox3d_authoring_region_transform* transform,
+    const sandbox3d_authoring_region_transform* transforms,
+    size_t transform_count,
     size_t* out_affected_vertices)
 {
     henka_authoring_mesh* candidate = NULL;
     size_t affected_vertices = 0U;
+    size_t transform_index;
     uint32_t vertex_id;
     henka_result result;
 
@@ -1495,19 +1514,17 @@ henka_result sandbox3d_authoring_object_transform_vertex_region(
     {
         *out_affected_vertices = 0U;
     }
-    if (object == NULL || transform == NULL ||
-        !sandbox3d_authoring_finite_vec3(transform->minimum) ||
-        !sandbox3d_authoring_finite_vec3(transform->maximum) ||
-        !sandbox3d_authoring_finite_vec3(transform->pivot) ||
-        !sandbox3d_authoring_finite_vec3(transform->scale) ||
-        !sandbox3d_authoring_finite_vec3(transform->offset) ||
-        transform->minimum.x > transform->maximum.x ||
-        transform->minimum.y > transform->maximum.y ||
-        transform->minimum.z > transform->maximum.z ||
-        transform->scale.x <= 0.0f || transform->scale.y <= 0.0f || transform->scale.z <= 0.0f ||
-        transform->scale.x > 4.0f || transform->scale.y > 4.0f || transform->scale.z > 4.0f)
+    if (object == NULL || transforms == NULL || transform_count == 0U ||
+        transform_count > SANDBOX3D_AUTHORING_MAX_REGION_TRANSFORMS)
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    for (transform_index = 0U; transform_index < transform_count; ++transform_index)
+    {
+        if (!sandbox3d_authoring_valid_region_transform(&transforms[transform_index]))
+        {
+            return HENKA_ERROR_INVALID_ARGUMENT;
+        }
     }
     result = henka_authoring_mesh_clone(object->mesh, &candidate);
     if (result != HENKA_SUCCESS)
@@ -1518,23 +1535,39 @@ henka_result sandbox3d_authoring_object_transform_vertex_region(
     {
         const henka_authoring_vertex* vertex = henka_authoring_mesh_get_vertex(
             candidate, (henka_authoring_vertex_id)vertex_id);
+        const henka_vec3 original_position = vertex != NULL ? vertex->position : (henka_vec3){0.0f, 0.0f, 0.0f};
         henka_vec3 position;
-        henka_vec3 relative;
-        if (vertex == NULL ||
-            vertex->position.x < transform->minimum.x || vertex->position.x > transform->maximum.x ||
-            vertex->position.y < transform->minimum.y || vertex->position.y > transform->maximum.y ||
-            vertex->position.z < transform->minimum.z || vertex->position.z > transform->maximum.z)
+        bool matched = false;
+
+        if (vertex == NULL)
         {
             continue;
         }
-        relative = (henka_vec3){
-            vertex->position.x - transform->pivot.x,
-            vertex->position.y - transform->pivot.y,
-            vertex->position.z - transform->pivot.z};
-        position = (henka_vec3){
-            transform->pivot.x + relative.x * transform->scale.x + transform->offset.x,
-            transform->pivot.y + relative.y * transform->scale.y + transform->offset.y,
-            transform->pivot.z + relative.z * transform->scale.z + transform->offset.z};
+        position = original_position;
+        for (transform_index = 0U; transform_index < transform_count; ++transform_index)
+        {
+            const sandbox3d_authoring_region_transform* transform = &transforms[transform_index];
+            henka_vec3 relative;
+            if (original_position.x < transform->minimum.x || original_position.x > transform->maximum.x ||
+                original_position.y < transform->minimum.y || original_position.y > transform->maximum.y ||
+                original_position.z < transform->minimum.z || original_position.z > transform->maximum.z)
+            {
+                continue;
+            }
+            relative = (henka_vec3){
+                position.x - transform->pivot.x,
+                position.y - transform->pivot.y,
+                position.z - transform->pivot.z};
+            position = (henka_vec3){
+                transform->pivot.x + relative.x * transform->scale.x + transform->offset.x,
+                transform->pivot.y + relative.y * transform->scale.y + transform->offset.y,
+                transform->pivot.z + relative.z * transform->scale.z + transform->offset.z};
+            matched = true;
+        }
+        if (!matched)
+        {
+            continue;
+        }
         result = henka_authoring_mesh_set_vertex_position(candidate, vertex->id, position);
         if (result != HENKA_SUCCESS)
         {
@@ -1559,6 +1592,15 @@ henka_result sandbox3d_authoring_object_transform_vertex_region(
         *out_affected_vertices = affected_vertices;
     }
     return HENKA_SUCCESS;
+}
+
+henka_result sandbox3d_authoring_object_transform_vertex_region(
+    sandbox3d_authoring_object* object,
+    const sandbox3d_authoring_region_transform* transform,
+    size_t* out_affected_vertices)
+{
+    return sandbox3d_authoring_object_transform_vertex_regions(
+        object, transform, 1U, out_affected_vertices);
 }
 
 henka_result sandbox3d_authoring_object_pick_face(
