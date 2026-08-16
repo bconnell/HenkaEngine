@@ -1,5 +1,6 @@
 #include "test_suite.h"
 
+#include <stdio.h>
 #include <stdint.h>
 #include <string.h>
 
@@ -18,6 +19,8 @@ void henka_test_input(void)
     henka_window_id next_candidate;
     henka_window_id occupied_ids[3];
     henka_result lifecycle_result;
+    FILE* automation_file;
+    const char* automation_path = "henka_input_automation_test.events";
     int height;
     int width;
 
@@ -203,4 +206,59 @@ void henka_test_input(void)
         &engine,
         HENKA_INPUT_ACTION_SELECT_TOOL,
         0U) == HENKA_MOUSE_BUTTON_RIGHT);
+
+    memset(&input, 0, sizeof(input));
+    HENKA_TEST_ASSERT(!input.automation_input_owned);
+#if defined(_WIN32)
+    HENKA_TEST_ASSERT(fopen_s(&automation_file, automation_path, "wb") == 0);
+#else
+    automation_file = fopen(automation_path, "wb");
+    HENKA_TEST_ASSERT(automation_file != NULL);
+#endif
+    HENKA_TEST_ASSERT(automation_file != NULL);
+    HENKA_TEST_ASSERT(fputs("move 1 2\n", automation_file) >= 0);
+    HENKA_TEST_ASSERT(fclose(automation_file) == 0);
+    HENKA_TEST_ASSERT(henka_input_automation_begin(
+        &input,
+        automation_path));
+    HENKA_TEST_ASSERT(input.automation_input_owned);
+    HENKA_TEST_ASSERT(henka_input_automation_apply_event(
+        &input,
+        "move 123.0 234.0"));
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(input.mouse_position.x, 123.0f, 0.0001f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(input.mouse_position.y, 234.0f, 0.0001f);
+    HENKA_TEST_ASSERT(henka_input_automation_apply_event(
+        &input,
+        "wheel 0.0 -1.0"));
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(input.mouse_wheel_delta.y, -1.0f, 0.0001f);
+    HENKA_TEST_ASSERT(henka_input_automation_apply_event(
+        &input,
+        "button left down 123.0 234.0"));
+    HENKA_TEST_ASSERT(input.mouse_buttons_down[HENKA_MOUSE_BUTTON_LEFT]);
+    HENKA_TEST_ASSERT(input.mouse_buttons_pressed[HENKA_MOUSE_BUTTON_LEFT]);
+    HENKA_TEST_ASSERT(henka_input_automation_apply_event(
+        &input,
+        "button left up 123.0 234.0"));
+    HENKA_TEST_ASSERT(!input.mouse_buttons_down[HENKA_MOUSE_BUTTON_LEFT]);
+    HENKA_TEST_ASSERT(input.mouse_buttons_released[HENKA_MOUSE_BUTTON_LEFT]);
+    HENKA_TEST_ASSERT(henka_input_automation_apply_event(
+        &input,
+        "key F5 down"));
+    HENKA_TEST_ASSERT(input.keys_pressed[HENKA_KEY_F5]);
+    HENKA_TEST_ASSERT(!henka_input_automation_apply_event(
+        &input,
+        "move 1.0 1.0 trailing"));
+    HENKA_TEST_ASSERT(!henka_input_automation_apply_event(
+        &input,
+        "wheel 0.0 1025.0"));
+    HENKA_TEST_ASSERT(!henka_input_automation_apply_event(
+        &input,
+        "key F5 down trailing"));
+    henka_input_automation_release(&input);
+    HENKA_TEST_ASSERT(!input.automation_input_owned);
+    HENKA_TEST_ASSERT(input.automation_input_path[0] == '\0');
+    HENKA_TEST_ASSERT(!henka_input_automation_apply_event(
+        &input,
+        "move 1.0 1.0"));
+    HENKA_TEST_ASSERT(remove(automation_path) == 0);
 }

@@ -680,6 +680,33 @@ static void henka_test_sandbox3d_object_authoring_component_selection(void)
     HENKA_TEST_ASSERT(sandbox3d_authoring_object_select_component(object, 1U, false) == HENKA_SUCCESS);
     HENKA_TEST_ASSERT(sandbox3d_authoring_object_get_active_component_id(object) == 1U);
     HENKA_TEST_ASSERT(sandbox3d_authoring_object_get_selected_face(object) == 1U);
+    {
+        const henka_authoring_mesh* mesh = sandbox3d_authoring_object_get_mesh(object);
+        const henka_authoring_face* face = henka_authoring_mesh_get_face(mesh, 1U);
+        henka_authoring_vertex_id ordered[HENKA_AUTHORING_MESH_HARD_MAX_FACE_CORNERS];
+        size_t ordered_count = 0U;
+        size_t corner;
+        HENKA_TEST_ASSERT(face != NULL);
+        HENKA_TEST_ASSERT(sandbox3d_authoring_object_get_face_ordered_corners(
+            object,
+            1U,
+            ordered,
+            sizeof(ordered) / sizeof(ordered[0]),
+            &ordered_count) == HENKA_SUCCESS);
+        HENKA_TEST_ASSERT(ordered_count == face->corner_count);
+        for (corner = 0U; corner < ordered_count; ++corner)
+        {
+            HENKA_TEST_ASSERT(ordered[corner] == face->vertices[corner]);
+            HENKA_TEST_ASSERT(ordered[(corner + 1U) % ordered_count] != ordered[corner]);
+        }
+        HENKA_TEST_ASSERT(sandbox3d_authoring_object_get_face_ordered_corners(
+            object,
+            1U,
+            ordered,
+            2U,
+            &ordered_count) != HENKA_SUCCESS);
+        HENKA_TEST_ASSERT(ordered_count == 0U);
+    }
     HENKA_TEST_ASSERT(sandbox3d_authoring_object_grow_component_selection(object) == HENKA_SUCCESS);
     HENKA_TEST_ASSERT(sandbox3d_authoring_object_get_selected_component_count(object) >= 1U);
     HENKA_TEST_ASSERT(sandbox3d_authoring_object_select_connected_components(object) == HENKA_SUCCESS);

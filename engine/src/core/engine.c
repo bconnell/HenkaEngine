@@ -3,6 +3,7 @@
 #include <ctype.h>
 #include <math.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include <henka/log.h>
@@ -27,6 +28,53 @@ static char* henka_duplicate_string(const char* value)
 
     memcpy(copy, value, length + 1U);
     return copy;
+}
+
+static bool henka_copy_environment_value(
+    const char* name,
+    char* out_value,
+    size_t out_value_capacity)
+{
+    if (name == NULL || out_value == NULL || out_value_capacity == 0U)
+    {
+        return false;
+    }
+    out_value[0] = '\0';
+#if defined(_WIN32)
+    {
+        char* value = NULL;
+        size_t value_length = 0U;
+        if (_dupenv_s(&value, &value_length, name) != 0 || value == NULL)
+        {
+            free(value);
+            return false;
+        }
+        if (value_length == 0U || value_length >= out_value_capacity)
+        {
+            free(value);
+            return false;
+        }
+        memcpy(out_value, value, value_length + 1U);
+        free(value);
+        return true;
+    }
+#else
+    {
+        const char* value = getenv(name);
+        size_t value_length;
+        if (value == NULL)
+        {
+            return false;
+        }
+        value_length = strlen(value);
+        if (value_length == 0U || value_length >= out_value_capacity)
+        {
+            return false;
+        }
+        memcpy(out_value, value, value_length + 1U);
+        return true;
+    }
+#endif
 }
 
 static bool henka_file_exists(const char* path)
@@ -790,6 +838,35 @@ henka_result henka_engine_create(
     engine->config = *config;
     engine->config.application_name = engine->application_name;
     engine->run_state = HENKA_ENGINE_RUN_STATE_CREATED;
+    {
+        char automation_owned[8];
+        char automation_path[sizeof(engine->input.automation_input_path)];
+        const bool ownership_requested =
+            henka_copy_environment_value(
+                "HENKA_AUTOMATION_INPUT_OWNED",
+                automation_owned,
+                sizeof(automation_owned)) &&
+            strcmp(automation_owned, "1") == 0;
+        const bool path_supplied = henka_copy_environment_value(
+            "HENKA_AUTOMATION_INPUT_FILE",
+            automation_path,
+            sizeof(automation_path));
+
+        if (ownership_requested &&
+            (!path_supplied ||
+             !henka_input_automation_begin(&engine->input, automation_path)))
+        {
+            HENKA_LOG_ERROR(
+                "automation input ownership was requested but its bounded event stream could not be opened");
+            henka_free(engine->application_name);
+            henka_free(engine);
+            return HENKA_ERROR_INVALID_ARGUMENT;
+        }
+        if (ownership_requested)
+        {
+            HENKA_LOG_INFO("application-local automation input ownership enabled");
+        }
+    }
     henka_engine_initialize_action_bindings(engine);
 
     HENKA_LOG_INFO(
@@ -923,6 +1000,7 @@ void henka_engine_destroy(henka_engine* engine)
 
     engine->destroying = true;
     HENKA_LOG_INFO("shutting down engine");
+    henka_input_automation_release(&engine->input);
 
     if (engine->shutdown_callback_pending &&
         engine->config.on_shutdown != NULL)

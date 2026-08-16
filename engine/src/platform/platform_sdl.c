@@ -2,13 +2,391 @@
 
 #include <SDL3/SDL.h>
 
+#include <ctype.h>
 #include <limits.h>
+#include <math.h>
+#include <errno.h>
 #include <stdint.h>
+#include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
 
 #include <henka/log.h>
 #include <henka/memory.h>
+
+#if defined(_WIN32)
+#include <share.h>
+#endif
+
+bool henka_input_automation_begin(
+    henka_input_state* input,
+    const char* event_path)
+{
+    size_t path_length;
+
+    if (input == NULL || event_path == NULL)
+    {
+        return false;
+    }
+    path_length = strlen(event_path);
+    if (path_length == 0U || path_length >= sizeof(input->automation_input_path))
+    {
+        return false;
+    }
+
+    {
+        FILE* stream = NULL;
+#if defined(_WIN32)
+        stream = _fsopen(event_path, "rb", _SH_DENYNO);
+        if (stream == NULL)
+        {
+            return false;
+        }
+#else
+        stream = fopen(event_path, "rb");
+        if (stream == NULL)
+        {
+            return false;
+        }
+#endif
+        fclose(stream);
+    }
+
+    memcpy(input->automation_input_path, event_path, path_length + 1U);
+    input->automation_input_offset = 0U;
+    input->automation_input_owned = true;
+    input->automation_input_faulted = false;
+    input->automation_input_stream_failures = 0U;
+    input->mouse_position = (henka_vec2){0.0f, 0.0f};
+    input->mouse_delta = (henka_vec2){0.0f, 0.0f};
+    input->mouse_wheel_delta = (henka_vec2){0.0f, 0.0f};
+    return true;
+}
+
+void henka_input_automation_release(henka_input_state* input)
+{
+    if (input == NULL)
+    {
+        return;
+    }
+
+    input->automation_input_owned = false;
+    input->automation_input_faulted = false;
+    input->automation_input_path[0] = '\0';
+    input->automation_input_offset = 0U;
+    input->automation_input_stream_failures = 0U;
+    henka_platform_release_input_on_focus_loss(input);
+}
+
+static bool henka_input_automation_parse_button(
+    const char* text,
+    henka_mouse_button* out_button)
+{
+    if (text == NULL || out_button == NULL)
+    {
+        return false;
+    }
+    if (strcmp(text, "left") == 0)
+    {
+        *out_button = HENKA_MOUSE_BUTTON_LEFT;
+    }
+    else if (strcmp(text, "right") == 0)
+    {
+        *out_button = HENKA_MOUSE_BUTTON_RIGHT;
+    }
+    else if (strcmp(text, "middle") == 0)
+    {
+        *out_button = HENKA_MOUSE_BUTTON_MIDDLE;
+    }
+    else
+    {
+        *out_button = HENKA_MOUSE_BUTTON_UNKNOWN;
+    }
+    return *out_button != HENKA_MOUSE_BUTTON_UNKNOWN;
+}
+
+static bool henka_input_automation_next_token(
+    const char** cursor,
+    char* out_token,
+    size_t out_token_capacity)
+{
+    const char* start;
+    size_t length;
+
+    if (cursor == NULL || *cursor == NULL || out_token == NULL ||
+        out_token_capacity < 2U)
+    {
+        return false;
+    }
+
+    while (isspace((unsigned char)**cursor))
+    {
+        ++*cursor;
+    }
+    if (**cursor == '\0')
+    {
+        out_token[0] = '\0';
+        return false;
+    }
+
+    start = *cursor;
+    while (**cursor != '\0' && !isspace((unsigned char)**cursor))
+    {
+        ++*cursor;
+    }
+    length = (size_t)(*cursor - start);
+    if (length == 0U || length >= out_token_capacity)
+    {
+        out_token[0] = '\0';
+        return false;
+    }
+    memcpy(out_token, start, length);
+    out_token[length] = '\0';
+    return true;
+}
+
+static bool henka_input_automation_no_more_tokens(const char* cursor)
+{
+    if (cursor == NULL)
+    {
+        return false;
+    }
+    while (isspace((unsigned char)*cursor))
+    {
+        ++cursor;
+    }
+    return *cursor == '\0';
+}
+
+static bool henka_input_automation_parse_float(
+    const char* token,
+    float minimum,
+    float maximum,
+    float* out_value)
+{
+    char* end;
+    float value;
+
+    if (token == NULL || out_value == NULL)
+    {
+        return false;
+    }
+    errno = 0;
+    end = NULL;
+    value = strtof(token, &end);
+    if (errno == ERANGE || end == token || end == NULL || *end != '\0' ||
+        !isfinite(value) || value < minimum || value > maximum)
+    {
+        return false;
+    }
+    *out_value = value;
+    return true;
+}
+
+bool henka_input_automation_apply_event(
+    henka_input_state* input,
+    const char* event_line)
+{
+    char command[32];
+    char first[32];
+    char second[32];
+    char third[32];
+    char fourth[32];
+    const char* cursor;
+    float x;
+    float y;
+
+    if (input == NULL || event_line == NULL || !input->automation_input_owned)
+    {
+        return false;
+    }
+
+    cursor = event_line;
+    if (!henka_input_automation_next_token(&cursor, command, sizeof(command)))
+    {
+        return false;
+    }
+
+    if (strcmp(command, "move") == 0)
+    {
+        if (!henka_input_automation_next_token(&cursor, first, sizeof(first)) ||
+            !henka_input_automation_next_token(&cursor, second, sizeof(second)) ||
+            !henka_input_automation_no_more_tokens(cursor) ||
+            !henka_input_automation_parse_float(first, -65536.0f, 65536.0f, &x) ||
+            !henka_input_automation_parse_float(second, -65536.0f, 65536.0f, &y))
+        {
+            return false;
+        }
+        input->mouse_delta.x += x - input->mouse_position.x;
+        input->mouse_delta.y += y - input->mouse_position.y;
+        input->mouse_position = (henka_vec2){x, y};
+        return true;
+    }
+
+    if (strcmp(command, "wheel") == 0)
+    {
+        if (!henka_input_automation_next_token(&cursor, first, sizeof(first)) ||
+            !henka_input_automation_next_token(&cursor, second, sizeof(second)) ||
+            !henka_input_automation_no_more_tokens(cursor) ||
+            !henka_input_automation_parse_float(first, -1024.0f, 1024.0f, &x) ||
+            !henka_input_automation_parse_float(second, -1024.0f, 1024.0f, &y))
+        {
+            return false;
+        }
+        input->mouse_wheel_delta.x += x;
+        input->mouse_wheel_delta.y += y;
+        return true;
+    }
+
+    if (strcmp(command, "button") == 0)
+    {
+        henka_mouse_button button;
+        if (!henka_input_automation_next_token(&cursor, first, sizeof(first)) ||
+            !henka_input_automation_next_token(&cursor, second, sizeof(second)) ||
+            !henka_input_automation_next_token(&cursor, third, sizeof(third)) ||
+            !henka_input_automation_next_token(&cursor, fourth, sizeof(fourth)) ||
+            !henka_input_automation_no_more_tokens(cursor) ||
+            !henka_input_automation_parse_float(third, -65536.0f, 65536.0f, &x) ||
+            !henka_input_automation_parse_float(fourth, -65536.0f, 65536.0f, &y) ||
+            !henka_input_automation_parse_button(first, &button))
+        {
+            return false;
+        }
+        input->mouse_delta.x += x - input->mouse_position.x;
+        input->mouse_delta.y += y - input->mouse_position.y;
+        input->mouse_position = (henka_vec2){x, y};
+        if (strcmp(second, "down") == 0)
+        {
+            input->mouse_buttons_down[button] = true;
+            input->mouse_buttons_pressed[button] = true;
+            return true;
+        }
+        if (strcmp(second, "up") == 0)
+        {
+            input->mouse_buttons_down[button] = false;
+            input->mouse_buttons_released[button] = true;
+            return true;
+        }
+        return false;
+    }
+
+    if (strcmp(command, "key") == 0)
+    {
+        henka_key key;
+        if (!henka_input_automation_next_token(&cursor, first, sizeof(first)) ||
+            !henka_input_automation_next_token(&cursor, second, sizeof(second)) ||
+            !henka_input_automation_no_more_tokens(cursor))
+        {
+            return false;
+        }
+        key = henka_input_key_find_by_name(first);
+        if (key == HENKA_KEY_UNKNOWN)
+        {
+            return false;
+        }
+        if (strcmp(second, "down") == 0)
+        {
+            input->keys_down[key] = true;
+            input->keys_pressed[key] = true;
+            return true;
+        }
+        if (strcmp(second, "up") == 0)
+        {
+            input->keys_down[key] = false;
+            input->keys_released[key] = true;
+            return true;
+        }
+    }
+
+    return false;
+}
+
+static void henka_platform_poll_automation_event(henka_input_state* input)
+{
+    FILE* stream;
+    char line[256];
+    long next_offset;
+
+    if (input == NULL || !input->automation_input_owned ||
+        input->automation_input_faulted ||
+        input->automation_input_path[0] == '\0')
+    {
+        return;
+    }
+
+    stream = NULL;
+#if defined(_WIN32)
+    stream = _fsopen(input->automation_input_path, "rb", _SH_DENYNO);
+#else
+    stream = fopen(input->automation_input_path, "rb");
+#endif
+    if (stream == NULL || input->automation_input_offset > (uint64_t)LONG_MAX ||
+        fseek(stream, (long)input->automation_input_offset, SEEK_SET) != 0)
+    {
+        if (stream != NULL)
+        {
+            fclose(stream);
+        }
+        if (input->automation_input_stream_failures < UINT32_MAX)
+        {
+            ++input->automation_input_stream_failures;
+        }
+        if (input->automation_input_stream_failures < 4U)
+        {
+            return;
+        }
+        input->automation_input_faulted = true;
+        input->close_requested = true;
+        HENKA_LOG_ERROR("automation input stream remained unavailable; input ownership remains fail-closed");
+        return;
+    }
+    input->automation_input_stream_failures = 0U;
+    if (fgets(line, sizeof(line), stream) == NULL)
+    {
+        const int read_error = ferror(stream);
+        fclose(stream);
+        if (read_error != 0)
+        {
+            input->automation_input_faulted = true;
+            input->close_requested = true;
+            HENKA_LOG_ERROR("automation input stream read failed; input ownership remains fail-closed");
+        }
+        return;
+    }
+    if (strchr(line, '\n') == NULL)
+    {
+        const int at_end = feof(stream);
+        fclose(stream);
+        if (!at_end)
+        {
+            input->automation_input_faulted = true;
+            input->close_requested = true;
+            HENKA_LOG_ERROR("automation input event exceeded the bounded line length");
+        }
+        return;
+    }
+    next_offset = ftell(stream);
+    fclose(stream);
+    if (next_offset < 0L)
+    {
+        input->automation_input_faulted = true;
+        input->close_requested = true;
+        HENKA_LOG_ERROR("automation input stream position could not be read");
+        return;
+    }
+    line[strcspn(line, "\r\n")] = '\0';
+    if (henka_input_automation_apply_event(input, line))
+    {
+        input->automation_input_offset = (uint64_t)next_offset;
+    }
+    else
+    {
+        input->automation_input_offset = (uint64_t)next_offset;
+        input->automation_input_faulted = true;
+        input->close_requested = true;
+        HENKA_LOG_ERROR("malformed automation input event; input ownership remains fail-closed");
+    }
+}
 
 void henka_platform_release_input_on_focus_loss(henka_input_state* input)
 {
@@ -266,6 +644,29 @@ static void henka_platform_reset_tool_window_frame_input(
         platform->tool_windows[index].mouse_left_released = false;
         platform->tool_windows[index].mouse_wheel_delta = (henka_vec2){0.0f, 0.0f};
         platform->tool_windows[index].resized = false;
+    }
+}
+
+static void henka_platform_clear_tool_window_input_for_automation(
+    struct henka_platform* platform)
+{
+    size_t index;
+
+    if (platform == NULL)
+    {
+        return;
+    }
+    for (index = 0U; index < HENKA_MAX_TOOL_WINDOWS; ++index)
+    {
+        henka_platform_tool_window* tool_window = &platform->tool_windows[index];
+        if (!tool_window->open)
+        {
+            continue;
+        }
+        tool_window->mouse_left_down = false;
+        tool_window->mouse_left_pressed = false;
+        tool_window->mouse_left_released = false;
+        tool_window->mouse_wheel_delta = (henka_vec2){0.0f, 0.0f};
     }
 }
 
@@ -880,6 +1281,10 @@ henka_result henka_platform_poll_events(struct henka_platform* platform, henka_i
     platform->last_tool_window_close_requested = false;
     platform->last_tool_window_resized = false;
     henka_platform_reset_tool_window_frame_input(platform);
+    if (input->automation_input_owned)
+    {
+        henka_platform_clear_tool_window_input_for_automation(platform);
+    }
 
     while (SDL_PollEvent(&event))
     {
@@ -1018,6 +1423,10 @@ henka_result henka_platform_poll_events(struct henka_platform* platform, henka_i
                     tool_window = henka_platform_find_tool_window_by_native_id(platform, event.key.windowID);
                     if (tool_window != NULL)
                     {
+                        if (input->automation_input_owned)
+                        {
+                            break;
+                        }
                         henka_platform_record_tool_event(platform, tool_window, "key pressed", false, false);
                     }
                     else
@@ -1028,6 +1437,10 @@ henka_result henka_platform_poll_events(struct henka_platform* platform, henka_i
                 }
                 platform->last_event_route = HENKA_WINDOW_EVENT_ROUTE_MAIN;
                 key = henka_translate_key(event.key.key);
+                if (input->automation_input_owned && key != HENKA_KEY_ESCAPE)
+                {
+                    break;
+                }
                 if (key != HENKA_KEY_UNKNOWN && !event.key.repeat)
                 {
                     input->keys_down[key] = true;
@@ -1046,6 +1459,10 @@ henka_result henka_platform_poll_events(struct henka_platform* platform, henka_i
                     tool_window = henka_platform_find_tool_window_by_native_id(platform, event.key.windowID);
                     if (tool_window != NULL)
                     {
+                        if (input->automation_input_owned)
+                        {
+                            break;
+                        }
                         henka_platform_record_tool_event(platform, tool_window, "key released", false, false);
                     }
                     else
@@ -1056,6 +1473,10 @@ henka_result henka_platform_poll_events(struct henka_platform* platform, henka_i
                 }
                 platform->last_event_route = HENKA_WINDOW_EVENT_ROUTE_MAIN;
                 key = henka_translate_key(event.key.key);
+                if (input->automation_input_owned && key != HENKA_KEY_ESCAPE)
+                {
+                    break;
+                }
                 if (key != HENKA_KEY_UNKNOWN)
                 {
                     input->keys_down[key] = false;
@@ -1070,6 +1491,10 @@ henka_result henka_platform_poll_events(struct henka_platform* platform, henka_i
                     henka_platform_tool_window* tool_window = henka_platform_find_tool_window_by_native_id(platform, event.motion.windowID);
                     if (tool_window != NULL)
                     {
+                        if (input->automation_input_owned)
+                        {
+                            break;
+                        }
                         henka_platform_record_tool_event(platform, tool_window, "pointer moved", false, false);
                         tool_window->mouse_position.x = event.motion.x;
                         tool_window->mouse_position.y = event.motion.y;
@@ -1081,6 +1506,10 @@ henka_result henka_platform_poll_events(struct henka_platform* platform, henka_i
                     break;
                 }
                 platform->last_event_route = HENKA_WINDOW_EVENT_ROUTE_MAIN;
+                if (input->automation_input_owned)
+                {
+                    break;
+                }
                 input->mouse_position.x = event.motion.x;
                 input->mouse_position.y = event.motion.y;
                 input->mouse_delta.x += event.motion.xrel;
@@ -1097,6 +1526,10 @@ henka_result henka_platform_poll_events(struct henka_platform* platform, henka_i
                     tool_window = henka_platform_find_tool_window_by_native_id(platform, event.button.windowID);
                     if (tool_window != NULL)
                     {
+                        if (input->automation_input_owned)
+                        {
+                            break;
+                        }
                         button = henka_translate_mouse_button(event.button.button);
                         henka_platform_record_tool_event(platform, tool_window, "button pressed", false, false);
                         tool_window->mouse_position.x = event.button.x;
@@ -1114,6 +1547,10 @@ henka_result henka_platform_poll_events(struct henka_platform* platform, henka_i
                     break;
                 }
                 platform->last_event_route = HENKA_WINDOW_EVENT_ROUTE_MAIN;
+                if (input->automation_input_owned)
+                {
+                    break;
+                }
                 button = henka_translate_mouse_button(event.button.button);
                 input->mouse_position.x = event.button.x;
                 input->mouse_position.y = event.button.y;
@@ -1135,6 +1572,10 @@ henka_result henka_platform_poll_events(struct henka_platform* platform, henka_i
                     tool_window = henka_platform_find_tool_window_by_native_id(platform, event.button.windowID);
                     if (tool_window != NULL)
                     {
+                        if (input->automation_input_owned)
+                        {
+                            break;
+                        }
                         button = henka_translate_mouse_button(event.button.button);
                         henka_platform_record_tool_event(platform, tool_window, "button released", false, false);
                         tool_window->mouse_position.x = event.button.x;
@@ -1152,6 +1593,10 @@ henka_result henka_platform_poll_events(struct henka_platform* platform, henka_i
                     break;
                 }
                 platform->last_event_route = HENKA_WINDOW_EVENT_ROUTE_MAIN;
+                if (input->automation_input_owned)
+                {
+                    break;
+                }
                 button = henka_translate_mouse_button(event.button.button);
                 input->mouse_position.x = event.button.x;
                 input->mouse_position.y = event.button.y;
@@ -1169,6 +1614,10 @@ henka_result henka_platform_poll_events(struct henka_platform* platform, henka_i
                     henka_platform_tool_window* tool_window = henka_platform_find_tool_window_by_native_id(platform, event.wheel.windowID);
                     if (tool_window != NULL)
                     {
+                        if (input->automation_input_owned)
+                        {
+                            break;
+                        }
                         henka_platform_record_tool_event(platform, tool_window, "wheel", false, false);
                         tool_window->mouse_wheel_delta.x += event.wheel.x;
                         tool_window->mouse_wheel_delta.y += event.wheel.y;
@@ -1180,6 +1629,10 @@ henka_result henka_platform_poll_events(struct henka_platform* platform, henka_i
                     break;
                 }
                 platform->last_event_route = HENKA_WINDOW_EVENT_ROUTE_MAIN;
+                if (input->automation_input_owned)
+                {
+                    break;
+                }
                 input->mouse_wheel_delta.x += event.wheel.x;
                 input->mouse_wheel_delta.y += event.wheel.y;
                 break;
@@ -1188,6 +1641,9 @@ henka_result henka_platform_poll_events(struct henka_platform* platform, henka_i
                 break;
         }
     }
+
+    henka_platform_poll_automation_event(input);
+    out_state->close_requested = out_state->close_requested || input->close_requested;
 
     return HENKA_SUCCESS;
 }

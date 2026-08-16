@@ -3,6 +3,7 @@
 
 #include <stdbool.h>
 #include <stddef.h>
+#include <stdint.h>
 
 #include <henka/assets.h>
 #include <henka/camera.h>
@@ -122,6 +123,11 @@ typedef struct henka_input_state
     henka_vec2 mouse_position;
     henka_vec2 mouse_delta;
     henka_vec2 mouse_wheel_delta;
+    bool automation_input_owned;
+    bool automation_input_faulted;
+    char automation_input_path[1024];
+    uint64_t automation_input_offset;
+    uint32_t automation_input_stream_failures;
     bool close_requested;
 } henka_input_state;
 
@@ -492,6 +498,13 @@ void henka_engine_finish_run_transition(struct henka_engine* engine);
 bool henka_engine_should_continue_run(const struct henka_engine* engine);
 
 void henka_platform_release_input_on_focus_loss(henka_input_state* input);
+bool henka_input_automation_begin(
+    henka_input_state* input,
+    const char* event_path);
+void henka_input_automation_release(henka_input_state* input);
+bool henka_input_automation_apply_event(
+    henka_input_state* input,
+    const char* event_line);
 bool henka_platform_choose_tool_window_id(
     henka_window_id next_candidate,
     const henka_window_id* occupied_ids,

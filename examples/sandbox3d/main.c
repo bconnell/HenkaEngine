@@ -396,6 +396,7 @@ typedef struct sandbox3d_state
     bool rocket_asset_specific_preset_applied;
     henka_entity native_authoring_source_row_reported_entity;
     henka_entity native_authoring_disclosure_reported_entity;
+    bool native_authoring_disclosure_reported_expanded;
     bool native_authoring_row_reported;
     bool native_authoring_control_reported;
     bool native_authoring_face_controls_reported;
@@ -403,6 +404,7 @@ typedef struct sandbox3d_state
     bool native_authoring_bevel_reported;
     bool native_authoring_face_edit_tools_reported;
     float native_authoring_face_edit_tools_reported_y;
+    bool native_authoring_face_edit_leading;
     bool native_authoring_move_reported;
     float native_authoring_move_reported_y;
     bool native_authoring_selection_tools_reported;
@@ -413,6 +415,8 @@ typedef struct sandbox3d_state
     float native_authoring_profile_reported_y;
     bool native_authoring_project_controls_reported;
     float native_authoring_project_controls_reported_y;
+    bool native_authoring_export_control_reported;
+    float native_authoring_export_control_reported_y;
     bool native_authoring_material_control_reported;
     bool native_authoring_material_editor_reported;
     bool native_authoring_material_optical_reported;
@@ -2764,6 +2768,11 @@ static henka_result sandbox3d_resolve_authoring_project_paths(
     henka_entity entity,
     char** out_project_path,
     char** out_source_path);
+static henka_result sandbox3d_resolve_authoring_export_path(
+    henka_engine* engine,
+    const sandbox3d_state* state,
+    henka_entity entity,
+    char** out_path);
 
 static henka_result sandbox3d_save_showcase_provenance(
     const sandbox3d_state* state,
@@ -2783,6 +2792,9 @@ static void sandbox3d_draw_native_authoring_project_controls(
     henka_ui_rect viewport)
 {
     henka_ui_rect row;
+    henka_ui_rect export_row;
+    float project_button_width;
+    float project_button_gap;
     const bool project_row_visible =
         sandbox3d_details_flow_next_row(
             state,
@@ -2791,7 +2803,11 @@ static void sandbox3d_draw_native_authoring_project_controls(
             1U,
             &row);
 
-    if (row.width < 290.0f)
+    project_button_gap = 8.0f;
+    project_button_width = fminf(
+        140.0f,
+        (row.width - project_button_gap) * 0.5f);
+    if (project_button_width < 96.0f)
     {
         return;
     }
@@ -2799,18 +2815,21 @@ static void sandbox3d_draw_native_authoring_project_controls(
     {
         state->native_authoring_project_controls_reported = false;
         state->native_authoring_project_controls_reported_y = 0.0f;
+        state->native_authoring_export_control_reported = false;
+        state->native_authoring_export_control_reported_y = 0.0f;
         return;
     }
     if (!state->native_authoring_project_controls_reported ||
         fabsf(state->native_authoring_project_controls_reported_y - row.y) > 0.5f)
     {
         printf(
-            "Native authoring project controls: name=%s save_x=%.1f save_y=%.1f reload_x=%.1f reload_y=%.1f width=140.0 height=24.0.\n",
+            "Native authoring project controls: name=%s save_x=%.1f save_y=%.1f reload_x=%.1f reload_y=%.1f width=%.1f height=24.0.\n",
             display_name,
             row.x,
             row.y,
-            row.x + 148.0f,
-            row.y);
+            row.x + project_button_width + project_button_gap,
+            row.y,
+            project_button_width);
         fflush(stdout);
         state->native_authoring_project_controls_reported = true;
         state->native_authoring_project_controls_reported_y = row.y;
@@ -2820,12 +2839,12 @@ static void sandbox3d_draw_native_authoring_project_controls(
         const bool save_requested = henka_ui_button(
             state->ui,
             "authoring_save_source",
-            (henka_ui_rect){row.x, row.y, 140.0f, 24.0f},
+            (henka_ui_rect){row.x, row.y, project_button_width, 24.0f},
             "Save Project");
         const bool reload_requested = henka_ui_button(
             state->ui,
             "authoring_reload_source",
-            (henka_ui_rect){row.x + 148.0f, row.y, 140.0f, 24.0f},
+            (henka_ui_rect){row.x + project_button_width + project_button_gap, row.y, project_button_width, 24.0f},
             "Reload Project");
         if (save_requested || reload_requested)
         {
@@ -2942,6 +2961,65 @@ static void sandbox3d_draw_native_authoring_project_controls(
                         ? "Authoring project save failed."
                         : "Authoring project reload failed; the current render was retained."));
         }
+    }
+
+    if (!sandbox3d_details_flow_next_row(
+            state,
+            viewport,
+            24.0f,
+            1U,
+            &export_row))
+    {
+        state->native_authoring_export_control_reported = false;
+        state->native_authoring_export_control_reported_y = 0.0f;
+        return;
+    }
+    if (!state->native_authoring_export_control_reported ||
+        fabsf(state->native_authoring_export_control_reported_y - export_row.y) > 0.5f)
+    {
+        printf(
+            "Native authoring export control: name=%s x=%.1f y=%.1f width=%.1f height=24.0.\n",
+            display_name,
+            export_row.x,
+            export_row.y,
+            export_row.width);
+        fflush(stdout);
+        state->native_authoring_export_control_reported = true;
+        state->native_authoring_export_control_reported_y = export_row.y;
+    }
+    if (henka_ui_button(
+            state->ui,
+            "authoring_export_source",
+            (henka_ui_rect){export_row.x, export_row.y, export_row.width, 24.0f},
+            "Export Source"))
+    {
+        char* export_path = NULL;
+        henka_result export_result = sandbox3d_resolve_authoring_export_path(
+            engine,
+            state,
+            entity,
+            &export_path);
+        if (export_result == HENKA_SUCCESS)
+        {
+            export_result = sandbox3d_authoring_object_save_source(
+                state->authoring_object,
+                export_path);
+        }
+        printf(
+            "Native authoring source export: name=%s path=%s result=%s source_state=%s.\n",
+            display_name,
+            export_path != NULL ? export_path : "(unresolved)",
+            henka_result_to_string(export_result),
+            sandbox3d_showcase_provenance(state, entity));
+        fflush(stdout);
+        sandbox3d_set_statusf(
+            state,
+            export_result != HENKA_SUCCESS,
+            false,
+            export_result == HENKA_SUCCESS
+                ? "Authoring source exported through the visible editor workflow."
+                : "Authoring source export failed; the current source was retained.");
+        henka_free(export_path);
     }
 }
 
@@ -5059,6 +5137,7 @@ static void sandbox3d_draw_selection_highlight(sandbox3d_state* state, henka_vie
     henka_vec2 silhouette[512];
     size_t silhouette_count;
     size_t edge;
+    bool component_selection_active;
 
     if (state == NULL || state->ui == NULL || !henka_viewport_is_valid(viewport))
     {
@@ -5066,6 +5145,11 @@ static void sandbox3d_draw_selection_highlight(sandbox3d_state* state, henka_vie
     }
 
     selected_entity = sandbox3d_get_real_selected_entity(state);
+    component_selection_active =
+        state->authoring_object != NULL &&
+        selected_entity != HENKA_INVALID_ENTITY &&
+        sandbox3d_authoring_object_get_entity(state->authoring_object) == selected_entity &&
+        sandbox3d_authoring_object_get_selected_component_count(state->authoring_object) > 0U;
     memset(&gate, 0, sizeof(gate));
     gate.selected_object_present = selected_entity != HENKA_INVALID_ENTITY;
     gate.selected_object_valid =
@@ -5090,13 +5174,20 @@ static void sandbox3d_draw_selection_highlight(sandbox3d_state* state, henka_vie
 
     outer_color = (henka_vec4){0.02f, 0.04f, 0.06f, 0.92f};
     inner_color = (henka_vec4){1.0f, 0.86f, 0.22f, 0.98f};
-    silhouette_count = sandbox3d_build_screen_silhouette(
-        state,
-        selected_entity,
-        viewport,
-        silhouette,
-        sizeof(silhouette) / sizeof(silhouette[0]));
-    if (silhouette_count >= 3U)
+    /* A component edit has its own topology-authoritative overlay below.
+     * The sampled convex hull is intentionally not combined with it: a hull
+     * over disconnected authoring parts is an object-level indication, not a
+     * valid face boundary, and can create a phantom wedge between unrelated
+     * projected vertices. */
+    silhouette_count = component_selection_active
+        ? 0U
+        : sandbox3d_build_screen_silhouette(
+            state,
+            selected_entity,
+            viewport,
+            silhouette,
+            sizeof(silhouette) / sizeof(silhouette[0]));
+    if (!component_selection_active && silhouette_count >= 3U)
     {
         for (edge = 0U; edge < silhouette_count; ++edge)
         {
@@ -5117,7 +5208,7 @@ static void sandbox3d_draw_selection_highlight(sandbox3d_state* state, henka_vie
                 inner_color);
         }
     }
-    else
+    else if (!component_selection_active)
     {
         for (edge = 0U; edge < model.edge_count; ++edge)
         {
@@ -5302,16 +5393,27 @@ static void sandbox3d_draw_selection_highlight(sandbox3d_state* state, henka_vie
                 }
                 else
                 {
-                    const henka_authoring_face* face = henka_authoring_mesh_get_face(mesh, component_id);
+                    henka_authoring_vertex_id face_vertices[HENKA_AUTHORING_MESH_HARD_MAX_FACE_CORNERS];
+                    size_t face_corner_count = 0U;
                     henka_vec2 face_center = (henka_vec2){0.0f, 0.0f};
                     size_t projected_corner_count = 0U;
                     size_t corner;
-                    if (face == NULL) continue;
-                    for (corner = 0U; corner < face->corner_count; ++corner)
+                    if (sandbox3d_authoring_object_get_face_ordered_corners(
+                            state->authoring_object,
+                            (henka_authoring_face_id)component_id,
+                            face_vertices,
+                            sizeof(face_vertices) / sizeof(face_vertices[0]),
+                            &face_corner_count) != HENKA_SUCCESS)
                     {
-                        const henka_authoring_vertex* first = henka_authoring_mesh_get_vertex(mesh, face->vertices[corner]);
+                        /* Malformed topology is never replaced by a
+                         * convincing-looking fallback polygon. */
+                        continue;
+                    }
+                    for (corner = 0U; corner < face_corner_count; ++corner)
+                    {
+                        const henka_authoring_vertex* first = henka_authoring_mesh_get_vertex(mesh, face_vertices[corner]);
                         const henka_authoring_vertex* second = henka_authoring_mesh_get_vertex(
-                            mesh, face->vertices[(corner + 1U) % face->corner_count]);
+                            mesh, face_vertices[(corner + 1U) % face_corner_count]);
                         henka_vec2 start;
                         henka_vec2 end;
                         if (first == NULL || second == NULL ||
@@ -5364,7 +5466,7 @@ static void sandbox3d_draw_selection_highlight(sandbox3d_state* state, henka_vie
             }
         }
     }
-}
+    }
 }
 
 static void sandbox3d_draw_reflection_probe_overlay(sandbox3d_state* state, henka_viewport viewport)
@@ -7062,6 +7164,89 @@ static henka_result sandbox3d_resolve_authoring_project_paths(
     return result;
 }
 
+static henka_result sandbox3d_resolve_authoring_export_path(
+    henka_engine* engine,
+    const sandbox3d_state* state,
+    henka_entity entity,
+    char** out_path)
+{
+    char export_root[1024];
+    const char* file_name;
+    char relative_path[96];
+    int length;
+
+    if (out_path != NULL)
+    {
+        *out_path = NULL;
+    }
+    if (engine == NULL || state == NULL || entity == HENKA_INVALID_ENTITY ||
+        out_path == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    export_root[0] = '\0';
+#if defined(_WIN32)
+    {
+        char* environment_value = NULL;
+        size_t environment_length = 0U;
+        if (_dupenv_s(
+                &environment_value,
+                &environment_length,
+                "HENKA_SANDBOX_AUTHORING_EXPORT_DIR") == 0 &&
+            environment_value != NULL &&
+            environment_length > 0U &&
+            environment_length < sizeof(export_root))
+        {
+            memcpy(export_root, environment_value, environment_length + 1U);
+        }
+        free(environment_value);
+    }
+#else
+    {
+        const char* environment_value = getenv("HENKA_SANDBOX_AUTHORING_EXPORT_DIR");
+        if (environment_value != NULL && strlen(environment_value) < sizeof(export_root))
+        {
+            memcpy(export_root, environment_value, strlen(environment_value) + 1U);
+        }
+    }
+#endif
+    if (sandbox3d_is_showcase_giraffe_entity(state, entity))
+    {
+        file_name = "showcase_giraffe.hams";
+    }
+    else if (sandbox3d_is_showcase_rocket_entity(state, entity))
+    {
+        file_name = "showcase_rocket.hams";
+    }
+    else
+    {
+        length = snprintf(
+            relative_path,
+            sizeof(relative_path),
+            "exports/sandbox3d_%llx.hams",
+            (unsigned long long)entity);
+        if (length < 0 || (size_t)length >= sizeof(relative_path))
+        {
+            return HENKA_ERROR_LIMIT;
+        }
+        file_name = relative_path;
+    }
+
+    if (export_root[0] != '\0')
+    {
+        /* This is an explicit, non-persistent export destination supplied by
+         * the caller (the visual capture workflow uses it to avoid a manual
+         * post-capture HAMS copy).  The ordinary editor path stays confined to
+         * the engine-owned user data directory below. */
+        return henka_path_resolve(export_root, file_name, out_path);
+    }
+    return henka_path_resolve_confined(
+        henka_engine_get_user_data_base_path(engine),
+        file_name,
+        out_path);
+}
+
 static henka_result sandbox3d_save_showcase_provenance(
     const sandbox3d_state* state,
     henka_entity entity,
@@ -7905,7 +8090,6 @@ static henka_result sandbox3d_initialize_terrain_rendering(
                 uint32_t noise = sandbox3d_terrain_texture_hash(
                     (uint32_t)tex_x, (uint32_t)tex_z, (uint32_t)layer_index);
                 int variation;
-                const float phase = (float)layer_index * 1.73f;
                 const float fine_pattern = sandbox3d_terrain_texture_value_noise(
                     (uint32_t)tex_x, (uint32_t)tex_z, (uint32_t)layer_index, 4U);
                 const float medium_pattern = sandbox3d_terrain_texture_value_noise(
@@ -8829,6 +9013,7 @@ static void sandbox3d_release_owned_resources(sandbox3d_state* state)
     state->rocket_asset_specific_preset_applied = false;
     state->native_authoring_source_row_reported_entity = HENKA_INVALID_ENTITY;
     state->native_authoring_disclosure_reported_entity = HENKA_INVALID_ENTITY;
+    state->native_authoring_disclosure_reported_expanded = false;
     state->native_authoring_row_reported = false;
     state->native_authoring_control_reported = false;
     state->native_authoring_face_controls_reported = false;
@@ -8846,6 +9031,8 @@ static void sandbox3d_release_owned_resources(sandbox3d_state* state)
     state->native_authoring_profile_reported_y = -FLT_MAX;
     state->native_authoring_project_controls_reported = false;
     state->native_authoring_project_controls_reported_y = 0.0f;
+    state->native_authoring_export_control_reported = false;
+    state->native_authoring_export_control_reported_y = 0.0f;
     state->native_authoring_material_control_reported = false;
     state->native_authoring_material_editor_reported = false;
     state->native_authoring_material_optical_reported = false;
@@ -10006,6 +10193,8 @@ static bool sandbox3d_promote_authoring_material(
     state->native_authoring_profile_reported_y = -FLT_MAX;
     state->native_authoring_project_controls_reported = false;
     state->native_authoring_project_controls_reported_y = 0.0f;
+    state->native_authoring_export_control_reported = false;
+    state->native_authoring_export_control_reported_y = 0.0f;
     printf(
         "Native authoring material: editable runtime definition adopted for entity=%llu source_state=HENKA_NATIVE_EDITABLE_MATERIAL_INSTANCE.\n",
         (unsigned long long)entity);
@@ -10060,6 +10249,8 @@ static bool sandbox3d_make_selected_object_editable(
     state->native_authoring_profile_reported_y = -FLT_MAX;
     state->native_authoring_project_controls_reported = false;
     state->native_authoring_project_controls_reported_y = 0.0f;
+    state->native_authoring_export_control_reported = false;
+    state->native_authoring_export_control_reported_y = 0.0f;
     authored_counts = henka_authoring_mesh_get_counts(
         sandbox3d_authoring_object_get_mesh(object));
     printf(
@@ -10418,6 +10609,35 @@ static void sandbox3d_select_entity(sandbox3d_state* state, henka_entity entity)
         {
             sandbox3d_clear_gizmo_drag(state, true);
             sandbox3d_sync_view_navigation_target_to_selection(state);
+            /* Per-entity authoring telemetry drives the visible automation
+             * and diagnostics contract.  Do not let a prior subject's
+             * disclosure/control coordinates suppress the next subject. */
+            state->native_authoring_control_reported = false;
+            state->native_authoring_face_controls_reported = false;
+            state->native_authoring_bevel_reported = false;
+            state->native_authoring_face_edit_tools_reported = false;
+            state->native_authoring_face_edit_leading = false;
+            state->native_authoring_move_reported = false;
+            state->native_authoring_selection_tools_reported = false;
+            state->native_authoring_connected_selection_reported = false;
+            state->native_authoring_profile_reported = false;
+            state->native_authoring_project_controls_reported = false;
+            state->native_authoring_export_control_reported = false;
+            state->native_authoring_material_control_reported = false;
+            state->native_authoring_material_editor_reported = false;
+            state->native_authoring_material_optical_reported = false;
+            state->native_authoring_material_thickness_reported = false;
+            state->native_authoring_material_subsurface_tint_reported = false;
+            state->native_authoring_material_history_reported = false;
+            /* Details rows are laid out from the selected object's current
+             * authoring state.  Do not carry an expanded disclosure across
+             * objects: the next frame may place its controls at a different
+             * scroll offset, which would make an old hit target activate the
+             * disclosure row instead of the intended modeling control. */
+            state->editor_ui.details_authoring_expanded = false;
+            state->editor_ui.details_scroll_offset = 0.0f;
+            state->native_authoring_disclosure_reported_entity = HENKA_INVALID_ENTITY;
+            state->native_authoring_disclosure_reported_expanded = false;
         }
         sandbox3d_record_success_result(state, "Selected %s", entity_name);
         sandbox3d_set_statusf(state, false, false, "Selected %s.", entity_name);
@@ -14487,11 +14707,10 @@ static bool sandbox3d_try_pick_object(henka_engine* engine, sandbox3d_state* sta
             }
             else
             {
-                printf(
-                    "Native authoring component pick rejected: name=%s result=%s source_state=HENKA_NATIVE_EDITABLE_SOURCE.\n",
-                    sandbox3d_safe_entity_name(state, picked_entity, "object"),
-                    henka_result_to_string(component_result));
-                fflush(stdout);
+                sandbox3d_set_status(
+                    state,
+                    true,
+                    "The selected source has no editable component under the cursor.");
             }
         }
         sandbox3d_record_reject_reason(state, SANDBOX3D_INTERACTION_REJECT_NONE, false);
@@ -17408,7 +17627,7 @@ static void sandbox3d_handle_panel_scroll(
                 sandbox3d_panel_scrollbar_bounds(
                     state,
                     layout,
-                    SANDBOX3D_PANEL_SCROLL_DETAILS),
+                 SANDBOX3D_PANEL_SCROLL_DETAILS),
                  point)) &&
             sandbox3d_editor_ui_scroll_details_by(
                 &state->editor_ui,
@@ -18960,21 +19179,24 @@ static bool sandbox3d_details_flow_disclosure(
     {
         const henka_entity selected_entity = sandbox3d_get_real_selected_entity(state);
         if (group_id == SANDBOX3D_EDITOR_DETAILS_GROUP_AUTHORING &&
-            state->native_authoring_disclosure_reported_entity != selected_entity)
-    {
-        if (selected_entity != HENKA_INVALID_ENTITY &&
-            sandbox3d_get_showcase_authoring_primitive(state, selected_entity) != NULL)
+            (state->native_authoring_disclosure_reported_entity != selected_entity ||
+             state->native_authoring_disclosure_reported_expanded != *expanded))
         {
-            printf(
-                "Native authoring disclosure: name=%s x=%.1f y=%.1f width=%.1f height=28.0.\n",
-                sandbox3d_safe_entity_name(state, selected_entity, "showcase primitive"),
-                disclosure_bounds.x,
-                disclosure_bounds.y,
-                disclosure_bounds.width);
-            fflush(stdout);
-            state->native_authoring_disclosure_reported_entity = selected_entity;
+            if (selected_entity != HENKA_INVALID_ENTITY &&
+                sandbox3d_get_showcase_authoring_primitive(state, selected_entity) != NULL)
+            {
+                printf(
+                    "Native authoring disclosure: name=%s x=%.1f y=%.1f width=%.1f height=28.0 expanded=%d.\n",
+                    sandbox3d_safe_entity_name(state, selected_entity, "showcase primitive"),
+                    disclosure_bounds.x,
+                    disclosure_bounds.y,
+                    disclosure_bounds.width,
+                    *expanded ? 1 : 0);
+                fflush(stdout);
+                state->native_authoring_disclosure_reported_entity = selected_entity;
+                state->native_authoring_disclosure_reported_expanded = *expanded;
+            }
         }
-    }
     }
     if (disclosure_bounds.width >= 86.0f)
     {
@@ -19906,6 +20128,11 @@ details_group_authoring:
             const sandbox3d_authoring_selection_mode selection_mode =
                 sandbox3d_authoring_object_get_selection_mode(state->authoring_object);
             bool topology_controls_prioritized = false;
+            bool bevel_controls_prioritized = false;
+            bool face_edit_controls_prioritized = false;
+            bool connected_selection_prioritized = false;
+            bool selection_tools_prioritized = false;
+            bool move_controls_prioritized = false;
             const char* selection_label = selection_mode == SANDBOX3D_AUTHORING_SELECTION_VERTEX
                 ? "Vertex"
                 : selection_mode == SANDBOX3D_AUTHORING_SELECTION_EDGE ? "Edge" : "Face";
@@ -20162,6 +20389,8 @@ details_group_authoring:
                     sandbox3d_authoring_object_set_selection_mode(
                         state->authoring_object, SANDBOX3D_AUTHORING_SELECTION_FACE);
                     state->native_authoring_bevel_reported = false;
+                    state->native_authoring_face_edit_tools_reported = false;
+                    state->native_authoring_face_edit_leading = true;
                     printf(
                         "Native authoring topology mode: name=%s mode=Face source_state=HENKA_NATIVE_EDITABLE_SOURCE.\n",
                         display_name);
@@ -20169,6 +20398,351 @@ details_group_authoring:
                     sandbox3d_set_status(state, false, "Authoring Face selection mode active; Ctrl-click adds components.");
                 }
                 topology_controls_prioritized = true;
+            }
+            if (selection_mode == SANDBOX3D_AUTHORING_SELECTION_FACE &&
+                state->native_authoring_face_edit_leading &&
+                sandbox3d_details_flow_next_row(state, flow_desc.bounds, 28.0f, 1U, &row) &&
+                row.width >= 290.0f)
+            {
+                face_edit_controls_prioritized = true;
+                if (!state->native_authoring_face_edit_tools_reported ||
+                    fabsf(row.y - state->native_authoring_face_edit_tools_reported_y) > 0.5f)
+                {
+                    printf(
+                        "Native authoring face edit tools: name=%s extrude_x=%.1f inset_x=%.1f y=%.1f width=82.0 height=24.0.\n",
+                        display_name,
+                        row.x,
+                        row.x + 88.0f,
+                        row.y);
+                    fflush(stdout);
+                    state->native_authoring_face_edit_tools_reported = true;
+                    state->native_authoring_face_edit_tools_reported_y = row.y;
+                }
+                if (henka_ui_button(
+                        state->ui,
+                        "authoring_extrude_leading",
+                        (henka_ui_rect){row.x, row.y, 82.0f, 24.0f},
+                        "Extrude"))
+                {
+                    const henka_result extrude_result =
+                        sandbox3d_authoring_object_extrude_selected_face(
+                            state->authoring_object,
+                            0.25f);
+                    printf(
+                        "Native authoring face extrude request: name=%s result=%s selected_components=%zu.\n",
+                        display_name,
+                        henka_result_to_string(extrude_result),
+                        sandbox3d_authoring_object_get_selected_component_count(state->authoring_object));
+                    fflush(stdout);
+                    if (extrude_result == HENKA_SUCCESS)
+                    {
+                        const henka_authoring_mesh_counts counts =
+                            henka_authoring_mesh_get_counts(
+                                sandbox3d_authoring_object_get_mesh(state->authoring_object));
+                        sandbox3d_mark_generic_modeling_applied(state, entity);
+                        printf(
+                            "Native authoring dogfood: face extrude edited %s; vertices=%zu faces=%zu source_state=HENKA_NATIVE_EDITED_FIXTURE design_authority=EDITOR_DERIVED_FIXTURE.\n",
+                            display_name,
+                            counts.vertices,
+                            counts.faces);
+                        fflush(stdout);
+                        sandbox3d_set_status(state, false, "Authoring face extruded and evaluated into the scene.");
+                    }
+                    else
+                    {
+                        sandbox3d_set_status(state, true, "Authoring face extrude rejected; source retained.");
+                    }
+                }
+            }
+            if (state->authoring_object != NULL &&
+                sandbox3d_details_flow_next_row(state, flow_desc.bounds, 28.0f, 1U, &row) &&
+                row.width >= 290.0f)
+            {
+                move_controls_prioritized = true;
+                if (!state->native_authoring_move_reported ||
+                    fabsf(row.y - state->native_authoring_move_reported_y) > 0.5f)
+                {
+                    printf(
+                        "Native authoring move control: name=%s x=%.1f y=%.1f width=88.0 height=24.0.\n",
+                        display_name,
+                        row.x,
+                        row.y);
+                    fflush(stdout);
+                    state->native_authoring_move_reported = true;
+                    state->native_authoring_move_reported_y = row.y;
+                }
+                if (henka_ui_button(
+                        state->ui,
+                        "authoring_move_x_top",
+                        (henka_ui_rect){row.x, row.y, 88.0f, 24.0f},
+                        "Move X+") &&
+                    sandbox3d_authoring_object_move_selected_components(
+                        state->authoring_object,
+                        (henka_vec3){0.1f, 0.0f, 0.0f}) == HENKA_SUCCESS)
+                {
+                    sandbox3d_mark_generic_modeling_applied(state, entity);
+                    const henka_authoring_mesh_counts counts =
+                        henka_authoring_mesh_get_counts(
+                            sandbox3d_authoring_object_get_mesh(state->authoring_object));
+                    printf(
+                        "Native authoring dogfood: component move edited %s; vertices=%zu faces=%zu source_state=HENKA_NATIVE_EDITED_FIXTURE design_authority=EDITOR_DERIVED_FIXTURE.\n",
+                        display_name,
+                        counts.vertices,
+                        counts.faces);
+                    fflush(stdout);
+                    sandbox3d_set_status(state, false, "Selected authoring components moved on X.");
+                }
+            }
+            if (state->authoring_object != NULL &&
+                sandbox3d_details_flow_next_row(state, flow_desc.bounds, 28.0f, 1U, &row) &&
+                row.width >= 290.0f)
+            {
+                selection_tools_prioritized = true;
+                if (!state->native_authoring_selection_tools_reported ||
+                    fabsf(row.y - state->native_authoring_selection_tools_reported_y) > 0.5f)
+                {
+                    printf(
+                        "Native authoring selection tools: name=%s grow_x=%.1f scale_x=%.1f y=%.1f width=120.0 height=24.0.\n",
+                        display_name,
+                        row.x,
+                        row.x + 128.0f,
+                        row.y);
+                    fflush(stdout);
+                    state->native_authoring_selection_tools_reported = true;
+                    state->native_authoring_selection_tools_reported_y = row.y;
+                }
+                if (henka_ui_button(
+                        state->ui,
+                        "authoring_grow_selection_top",
+                        (henka_ui_rect){row.x, row.y, 120.0f, 24.0f},
+                        "Grow Selection"))
+                {
+                    const henka_result grow_result =
+                        sandbox3d_authoring_object_grow_component_selection(state->authoring_object);
+                    printf(
+                        "Native authoring selection grown: name=%s result=%s mode=%s selected_components=%zu.\n",
+                        display_name,
+                        henka_result_to_string(grow_result),
+                        selection_label,
+                        sandbox3d_authoring_object_get_selected_component_count(state->authoring_object));
+                    fflush(stdout);
+                    sandbox3d_set_status(
+                        state,
+                        grow_result != HENKA_SUCCESS,
+                        grow_result == HENKA_SUCCESS
+                            ? "Adjacent authoring components added to the selection."
+                            : "Selection growth needs an active component selection.");
+                }
+                if (henka_ui_button(
+                        state->ui,
+                        "authoring_scale_selection_top",
+                        (henka_ui_rect){row.x + 128.0f, row.y, 120.0f, 24.0f},
+                        "Scale Selected"))
+                {
+                    const henka_result scale_result =
+                        sandbox3d_authoring_object_scale_selected_components(
+                            state->authoring_object,
+                            (henka_vec3){1.08f, 1.08f, 1.08f});
+                    if (scale_result == HENKA_SUCCESS)
+                    {
+                        const henka_authoring_mesh_counts counts =
+                            henka_authoring_mesh_get_counts(
+                                sandbox3d_authoring_object_get_mesh(state->authoring_object));
+                        sandbox3d_mark_generic_modeling_applied(state, entity);
+                        printf(
+                            "Native authoring dogfood: selected topology scaled %s; vertices=%zu faces=%zu scale=1.08 source_state=HENKA_NATIVE_EDITED_FIXTURE design_authority=EDITOR_DERIVED_FIXTURE.\n",
+                            display_name,
+                            counts.vertices,
+                            counts.faces);
+                        fflush(stdout);
+                        sandbox3d_set_status(state, false, "Selected authoring topology scaled transactionally.");
+                    }
+                    else
+                    {
+                        printf(
+                            "Native authoring selection scale rejected: name=%s result=%s selected_components=%zu.\n",
+                            display_name,
+                            henka_result_to_string(scale_result),
+                            sandbox3d_authoring_object_get_selected_component_count(state->authoring_object));
+                        fflush(stdout);
+                        sandbox3d_set_status(state, true, "Selected topology scale was rejected; source retained.");
+                    }
+                }
+            }
+            if (state->authoring_object != NULL &&
+                sandbox3d_details_flow_next_row(state, flow_desc.bounds, 28.0f, 1U, &row) &&
+                row.width >= 290.0f)
+            {
+                connected_selection_prioritized = true;
+                if (!state->native_authoring_connected_selection_reported ||
+                    fabsf(row.y - state->native_authoring_connected_selection_reported_y) > 0.5f)
+                {
+                    printf(
+                        "Native authoring connected selection control: name=%s x=%.1f y=%.1f width=140.0 height=24.0.\n",
+                        display_name,
+                        row.x,
+                        row.y);
+                    fflush(stdout);
+                    state->native_authoring_connected_selection_reported = true;
+                    state->native_authoring_connected_selection_reported_y = row.y;
+                }
+                if (henka_ui_button(
+                        state->ui,
+                        "authoring_select_connected_top",
+                        (henka_ui_rect){row.x, row.y, 140.0f, 24.0f},
+                        "Select Connected"))
+                {
+                    const henka_result connected_result =
+                        sandbox3d_authoring_object_select_connected_components(
+                            state->authoring_object);
+                    printf(
+                        "Native authoring connected selection: name=%s result=%s mode=%s selected_components=%zu.\n",
+                        display_name,
+                        henka_result_to_string(connected_result),
+                        selection_label,
+                        sandbox3d_authoring_object_get_selected_component_count(state->authoring_object));
+                    fflush(stdout);
+                    sandbox3d_set_status(
+                        state,
+                        connected_result != HENKA_SUCCESS,
+                        connected_result == HENKA_SUCCESS
+                            ? "Connected authoring component selected."
+                            : "Connected selection exceeded the bounded editor selection budget.");
+                }
+            }
+            if (selection_mode == SANDBOX3D_AUTHORING_SELECTION_FACE &&
+                sandbox3d_details_flow_next_row(state, flow_desc.bounds, 28.0f, 1U, &row) &&
+                row.width >= 290.0f)
+            {
+                bevel_controls_prioritized = true;
+                if (!state->native_authoring_bevel_reported)
+                {
+                    printf(
+                        "Native authoring bevel control: name=%s x=%.1f y=%.1f width=82.0 height=24.0.\n",
+                        display_name,
+                        row.x,
+                        row.y);
+                    fflush(stdout);
+                    state->native_authoring_bevel_reported = true;
+                }
+                if (henka_ui_button(
+                        state->ui,
+                        "authoring_priority_bevel_top",
+                        (henka_ui_rect){row.x, row.y, 82.0f, 24.0f},
+                        "Bevel"))
+                {
+                    (void)sandbox3d_apply_authoring_face_bevel(state, entity, display_name);
+                }
+                face_edit_controls_prioritized = true;
+                if (!state->native_authoring_face_edit_tools_reported)
+                {
+                    printf(
+                        "Native authoring face edit tools: name=%s extrude_x=%.1f inset_x=%.1f y=%.1f width=82.0 height=24.0.\n",
+                        display_name,
+                        row.x + 88.0f,
+                        row.x + 176.0f,
+                        row.y);
+                    fflush(stdout);
+                    state->native_authoring_face_edit_tools_reported = true;
+                    state->native_authoring_face_edit_tools_reported_y = row.y;
+                }
+                if (henka_ui_button(
+                        state->ui,
+                        "authoring_extrude_top_compact",
+                        (henka_ui_rect){row.x + 88.0f, row.y, 82.0f, 24.0f},
+                        "Extrude"))
+                {
+                    const henka_result extrude_result =
+                        sandbox3d_authoring_object_extrude_selected_face(
+                            state->authoring_object,
+                            0.25f);
+                    printf(
+                        "Native authoring face extrude request: name=%s result=%s selected_components=%zu.\n",
+                        display_name,
+                        henka_result_to_string(extrude_result),
+                        sandbox3d_authoring_object_get_selected_component_count(state->authoring_object));
+                    fflush(stdout);
+                    if (extrude_result != HENKA_SUCCESS)
+                    {
+                        sandbox3d_set_status(state, true, "Authoring face extrude rejected; source retained.");
+                    }
+                    else
+                    {
+                    const henka_authoring_mesh_counts counts =
+                        henka_authoring_mesh_get_counts(
+                            sandbox3d_authoring_object_get_mesh(state->authoring_object));
+                    sandbox3d_mark_generic_modeling_applied(state, entity);
+                    printf(
+                        "Native authoring dogfood: face extrude edited %s; vertices=%zu faces=%zu source_state=HENKA_NATIVE_EDITED_FIXTURE design_authority=EDITOR_DERIVED_FIXTURE.\n",
+                        display_name,
+                        counts.vertices,
+                        counts.faces);
+                    fflush(stdout);
+                    sandbox3d_set_status(state, false, "Authoring face extruded and evaluated into the scene.");
+                    }
+                }
+                if (henka_ui_button(
+                        state->ui,
+                        "authoring_inset_top_compact",
+                        (henka_ui_rect){row.x + 176.0f, row.y, 82.0f, 24.0f},
+                        "Inset") &&
+                    sandbox3d_authoring_object_inset_selected_face(
+                        state->authoring_object,
+                        0.75f) == HENKA_SUCCESS)
+                {
+                    sandbox3d_set_status(state, false, "Authoring face inset and evaluated into the scene.");
+                }
+            }
+            if (selection_mode == SANDBOX3D_AUTHORING_SELECTION_FACE &&
+                !face_edit_controls_prioritized &&
+                sandbox3d_details_flow_next_row(state, flow_desc.bounds, 28.0f, 1U, &row) &&
+                row.width >= 290.0f)
+            {
+                face_edit_controls_prioritized = true;
+                if (!state->native_authoring_face_edit_tools_reported)
+                {
+                    printf(
+                        "Native authoring face edit tools: name=%s extrude_x=%.1f inset_x=%.1f y=%.1f width=82.0 height=24.0.\n",
+                        display_name,
+                        row.x,
+                        row.x + 88.0f,
+                        row.y);
+                    fflush(stdout);
+                    state->native_authoring_face_edit_tools_reported = true;
+                    state->native_authoring_face_edit_tools_reported_y = row.y;
+                }
+                if (henka_ui_button(
+                        state->ui,
+                        "authoring_extrude_top",
+                        (henka_ui_rect){row.x, row.y, 82.0f, 24.0f},
+                        "Extrude") &&
+                    sandbox3d_authoring_object_extrude_selected_face(
+                        state->authoring_object,
+                        0.25f) == HENKA_SUCCESS)
+                {
+                    const henka_authoring_mesh_counts counts =
+                        henka_authoring_mesh_get_counts(
+                            sandbox3d_authoring_object_get_mesh(state->authoring_object));
+                    sandbox3d_mark_generic_modeling_applied(state, entity);
+                    printf(
+                        "Native authoring dogfood: face extrude edited %s; vertices=%zu faces=%zu source_state=HENKA_NATIVE_EDITED_FIXTURE design_authority=EDITOR_DERIVED_FIXTURE.\n",
+                        display_name,
+                        counts.vertices,
+                        counts.faces);
+                    fflush(stdout);
+                    sandbox3d_set_status(state, false, "Authoring face extruded and evaluated into the scene.");
+                }
+                if (henka_ui_button(
+                        state->ui,
+                        "authoring_inset_top",
+                        (henka_ui_rect){row.x + 88.0f, row.y, 82.0f, 24.0f},
+                        "Inset") &&
+                    sandbox3d_authoring_object_inset_selected_face(
+                        state->authoring_object,
+                        0.75f) == HENKA_SUCCESS)
+                {
+                    sandbox3d_set_status(state, false, "Authoring face inset and evaluated into the scene.");
+                }
             }
             if (state->native_authoring_material_asset != NULL &&
                 state->native_authoring_material_entity == entity &&
@@ -20332,6 +20906,50 @@ details_group_authoring:
                 sandbox3d_details_flow_next_row(state, flow_desc.bounds, 28.0f, 1U, &row) &&
                 row.width >= 290.0f)
             {
+                connected_selection_prioritized = true;
+                if (!state->native_authoring_connected_selection_reported ||
+                    fabsf(row.y - state->native_authoring_connected_selection_reported_y) > 0.5f)
+                {
+                    printf(
+                        "Native authoring connected selection control: name=%s x=%.1f y=%.1f width=140.0 height=24.0.\n",
+                        display_name,
+                        row.x,
+                        row.y);
+                    fflush(stdout);
+                    state->native_authoring_connected_selection_reported = true;
+                    state->native_authoring_connected_selection_reported_y = row.y;
+                }
+                if (henka_ui_button(
+                        state->ui,
+                        "authoring_select_connected_top",
+                        (henka_ui_rect){row.x, row.y, 140.0f, 24.0f},
+                        "Select Connected"))
+                {
+                    const henka_result connected_result =
+                        sandbox3d_authoring_object_select_connected_components(
+                            state->authoring_object);
+                    printf(
+                        "Native authoring connected selection: name=%s result=%s mode=%s selected_components=%zu.\n",
+                        display_name,
+                        henka_result_to_string(connected_result),
+                        selection_label,
+                        sandbox3d_authoring_object_get_selected_component_count(state->authoring_object));
+                    fflush(stdout);
+                    if (connected_result == HENKA_SUCCESS)
+                    {
+                        sandbox3d_set_status(state, false, "Connected authoring component selected.");
+                    }
+                    else
+                    {
+                        sandbox3d_set_status(state, true, "Connected selection exceeded the bounded editor selection budget.");
+                    }
+                }
+            }
+            if (state->authoring_object != NULL &&
+                !move_controls_prioritized &&
+                sandbox3d_details_flow_next_row(state, flow_desc.bounds, 28.0f, 1U, &row) &&
+                row.width >= 290.0f)
+            {
                 if (!state->native_authoring_move_reported ||
                     fabsf(row.y - state->native_authoring_move_reported_y) > 0.5f)
                 {
@@ -20379,6 +20997,7 @@ details_group_authoring:
                 }
             }
             if (state->authoring_object != NULL &&
+                !selection_tools_prioritized &&
                 sandbox3d_details_flow_next_row(state, flow_desc.bounds, 28.0f, 1U, &row) &&
                 row.width >= 290.0f)
             {
@@ -20601,7 +21220,8 @@ details_group_authoring:
                             "Showcase profile refinement was rejected; source retained.");
                     }
                 }
-                if (selection_mode == SANDBOX3D_AUTHORING_SELECTION_FACE)
+                if (selection_mode == SANDBOX3D_AUTHORING_SELECTION_FACE &&
+                    !bevel_controls_prioritized)
                 {
                     if (!state->native_authoring_bevel_reported)
                     {
@@ -20856,6 +21476,7 @@ details_group_authoring:
                     evaluated_material_region_text);
             }
             if (selection_mode == SANDBOX3D_AUTHORING_SELECTION_FACE &&
+                !face_edit_controls_prioritized &&
                 sandbox3d_details_flow_next_row(state, flow_desc.bounds, 28.0f, 1U, &row) && row.width >= 290.0f)
             {
                 if (!state->native_authoring_face_edit_tools_reported ||

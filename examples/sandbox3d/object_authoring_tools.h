@@ -87,6 +87,16 @@ henka_result sandbox3d_authoring_object_create_from_model_primitive(
 void sandbox3d_authoring_object_destroy(sandbox3d_authoring_object* object);
 henka_entity sandbox3d_authoring_object_get_entity(const sandbox3d_authoring_object* object);
 const henka_authoring_mesh* sandbox3d_authoring_object_get_mesh(const sandbox3d_authoring_object* object);
+/* Copies one active face's authoritative ordered corner loop without
+ * inferring order from IDs or screen-space coordinates.  The accessor fails
+ * closed when the face is missing, malformed, over the bounded capacity, or
+ * references a missing/duplicate vertex. */
+henka_result sandbox3d_authoring_object_get_face_ordered_corners(
+    const sandbox3d_authoring_object* object,
+    henka_authoring_face_id face_id,
+    henka_authoring_vertex_id* out_vertices,
+    size_t vertex_capacity,
+    size_t* out_count);
 /* Returns the material-region range retained by the evaluated render mesh. */
 henka_result sandbox3d_authoring_object_get_render_material_region_range(
     const sandbox3d_authoring_object* object,

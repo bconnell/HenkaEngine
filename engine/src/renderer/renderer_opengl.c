@@ -4963,7 +4963,7 @@ henka_result henka_opengl_renderer_draw_scene(
     const struct henka_scene* scene)
 {
     static const henka_vec4 solid_color =
-        {0.38f, 0.42f, 0.48f, 1.0f};
+        {0.56f, 0.60f, 0.66f, 1.0f};
     static const henka_vec4 wire_color =
         {0.78f, 0.82f, 0.88f, 1.0f};
     static const henka_vec3 preview_light_direction =
@@ -4971,7 +4971,7 @@ henka_result henka_opengl_renderer_draw_scene(
     static const henka_vec3 preview_light_color =
         {1.0f, 0.94f, 0.88f};
     static const henka_vec3 preview_ambient =
-        {0.24f, 0.26f, 0.30f};
+        {0.34f, 0.37f, 0.42f};
     henka_mat4 projection;
     henka_mat4 light_matrix;
     henka_mat4 cascade_shadow_matrix;
