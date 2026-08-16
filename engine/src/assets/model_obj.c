@@ -10,6 +10,7 @@
 
 #include <henka/log.h>
 #include <henka/memory.h>
+#include <henka/authoring_mesh.h>
 #include <henka/model.h>
 
 #include "../core/checked.h"
@@ -1220,6 +1221,150 @@ henka_result henka_mesh_create_from_model_data(henka_engine* engine, const henka
         henka_free(vertices);
         return result;
     }
+}
+
+henka_result henka_mesh_create_from_authoring_mesh(
+    henka_engine* engine,
+    const henka_authoring_mesh* source,
+    henka_mesh** out_mesh)
+{
+    henka_authoring_render_vertex* render_vertices = NULL;
+    uint32_t* render_indices = NULL;
+    henka_model_vertex* model_vertices = NULL;
+    uint32_t* model_indices = NULL;
+    henka_authoring_render_data render;
+    henka_model_data model;
+    size_t vertex_count = 0U;
+    size_t index_count = 0U;
+    size_t face_id;
+    size_t vertex_index;
+    size_t index;
+    henka_result result;
+
+    if (out_mesh == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    if (*out_mesh != NULL || engine == NULL || source == NULL || !henka_authoring_mesh_validate(source))
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    /* Authoring IDs are bounded slots, not a packed range. Scan the public
+     * hard limit so tombstones remain safe and source identity is preserved. */
+    for (face_id = 1U; face_id <= HENKA_AUTHORING_MESH_HARD_MAX_FACES; ++face_id)
+    {
+        const henka_authoring_face* face = henka_authoring_mesh_get_face(
+            source, (henka_authoring_face_id)face_id);
+        size_t face_indices;
+
+        if (face == NULL)
+        {
+            continue;
+        }
+        if (face->corner_count < 3U ||
+            face->corner_count > HENKA_AUTHORING_MESH_HARD_MAX_FACE_CORNERS ||
+            face->corner_count > SIZE_MAX / 3U)
+        {
+            return HENKA_ERROR_INVALID_ARGUMENT;
+        }
+        face_indices = (face->corner_count - 2U) * 3U;
+        if (vertex_count > SIZE_MAX - face->corner_count ||
+            index_count > SIZE_MAX - face_indices)
+        {
+            return HENKA_ERROR_LIMIT;
+        }
+        vertex_count += face->corner_count;
+        index_count += face_indices;
+    }
+    if (vertex_count == 0U || index_count == 0U ||
+        vertex_count > HENKA_MAX_MESH_ELEMENTS ||
+        index_count > HENKA_MAX_MESH_ELEMENTS ||
+        vertex_count > UINT32_MAX || index_count > UINT32_MAX)
+    {
+        return HENKA_ERROR_LIMIT;
+    }
+
+    render_vertices = henka_calloc(vertex_count, sizeof(*render_vertices));
+    render_indices = henka_calloc(index_count, sizeof(*render_indices));
+    model_vertices = henka_calloc(vertex_count, sizeof(*model_vertices));
+    model_indices = henka_calloc(index_count, sizeof(*model_indices));
+    if (render_vertices == NULL || render_indices == NULL ||
+        model_vertices == NULL || model_indices == NULL)
+    {
+        result = HENKA_ERROR_OUT_OF_MEMORY;
+        goto cleanup;
+    }
+
+    render = (henka_authoring_render_data){
+        render_vertices, vertex_count, 0U, render_indices, index_count, 0U};
+    result = henka_authoring_mesh_evaluate(source, &render);
+    if (result != HENKA_SUCCESS || render.vertex_count == 0U || render.index_count == 0U ||
+        render.vertex_count > UINT32_MAX || render.index_count > UINT32_MAX)
+    {
+        if (result == HENKA_SUCCESS)
+        {
+            result = HENKA_ERROR_INVALID_ARGUMENT;
+        }
+        goto cleanup;
+    }
+    for (vertex_index = 0U; vertex_index < render.vertex_count; ++vertex_index)
+    {
+        const henka_authoring_render_vertex* vertex = &render.vertices[vertex_index];
+        if (!isfinite(vertex->position.x) || !isfinite(vertex->position.y) ||
+            !isfinite(vertex->position.z) || !isfinite(vertex->normal.x) ||
+            !isfinite(vertex->normal.y) || !isfinite(vertex->normal.z) ||
+            !isfinite(vertex->tangent.x) || !isfinite(vertex->tangent.y) ||
+            !isfinite(vertex->tangent.z) || !isfinite(vertex->tangent.w) ||
+            !isfinite(vertex->uv.x) || !isfinite(vertex->uv.y))
+        {
+            result = HENKA_ERROR_INVALID_ARGUMENT;
+            goto cleanup;
+        }
+        model_vertices[vertex_index].position = vertex->position;
+        model_vertices[vertex_index].normal = vertex->normal;
+        model_vertices[vertex_index].uv = vertex->uv;
+        model_vertices[vertex_index].color = (henka_vec4){1.0f, 1.0f, 1.0f, 1.0f};
+        model_vertices[vertex_index].tangent = vertex->tangent;
+        /* The bounded authoring evaluator supplies stable non-authoritative
+         * tangent metadata, not a UV-derived tangent basis.  Let the renderer
+         * derive and orthogonalize the tangent so axis-aligned faces cannot
+         * present that metadata as authoritative shading data. */
+        model_vertices[vertex_index].tangent_valid = false;
+        model_vertices[vertex_index].material_region = vertex->material_region;
+    }
+    for (index = 0U; index < render.index_count; ++index)
+    {
+        if (render.indices[index] >= render.vertex_count)
+        {
+            result = HENKA_ERROR_INVALID_ARGUMENT;
+            goto cleanup;
+        }
+        model_indices[index] = render.indices[index];
+    }
+    model.vertices = model_vertices;
+    model.vertex_count = (uint32_t)render.vertex_count;
+    model.indices = model_indices;
+    model.index_count = (uint32_t)render.index_count;
+    {
+        henka_mesh* candidate = NULL;
+        result = henka_mesh_create_from_model_data(engine, &model, &candidate);
+        if (result == HENKA_SUCCESS)
+        {
+            *out_mesh = candidate;
+        }
+        else if (candidate != NULL)
+        {
+            henka_mesh_destroy(candidate);
+        }
+    }
+
+cleanup:
+    henka_free(model_indices);
+    henka_free(model_vertices);
+    henka_free(render_indices);
+    henka_free(render_vertices);
+    return result;
 }
 
 henka_result henka_mesh_create_from_obj(henka_engine* engine, const char* path, henka_mesh** out_mesh)

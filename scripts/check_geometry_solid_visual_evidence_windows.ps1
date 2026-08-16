@@ -2,7 +2,8 @@ param(
     [Parameter(Mandatory = $true)]
     [string]$InputDirectory,
 
-    [switch]$RequireNativeAuthored
+    [Alias("RequireNativeAuthored")]
+    [switch]$RequireEditorDerivedFixture
 )
 
 Set-StrictMode -Version Latest
@@ -78,21 +79,21 @@ $metadata = [regex]::Matches(
 if ($metadata.Count -lt 8) {
     throw "Geometry Solid evidence is missing application readiness metadata for all required views."
 }
-$nativeAuthored = $true
+$editorDerivedFixture = $true
 foreach ($record in $metadata) {
     if ($record.Groups["preset"].Value -ne "0") {
         throw "Geometry Solid evidence was produced after an asset-specific preset."
     }
-    if ($record.Groups["giraffe"].Value -ne "HENKA_NATIVE_AUTHORED" -or
-        $record.Groups["rocket"].Value -ne "HENKA_NATIVE_AUTHORED") {
-        $nativeAuthored = $false
+    if ($record.Groups["giraffe"].Value -ne "HENKA_NATIVE_EDITED_FIXTURE" -or
+        $record.Groups["rocket"].Value -ne "HENKA_NATIVE_EDITED_FIXTURE") {
+        $editorDerivedFixture = $false
     }
 }
-if ($RequireNativeAuthored -and -not $nativeAuthored) {
-    throw "Geometry Solid evidence is fixture-only; generic user-facing modeling provenance is required."
+if ($RequireEditorDerivedFixture -and -not $editorDerivedFixture) {
+    throw "Geometry Solid evidence is missing the expected editor-derived fixture state."
 }
 
-$status = if ($nativeAuthored) { "HENKA_NATIVE_AUTHORED provenance present" } else { "fixture-only evidence; native-authoring gate remains open" }
+$status = if ($editorDerivedFixture) { "HENKA_NATIVE_EDITED_FIXTURE state present; independent user-authored provenance remains unverified" } else { "fixture-only evidence; editor-derived fixture state remains unverified" }
 @(
     "Geometry Solid visual evidence validation: passed",
     "Application-only source: Henka Sandbox executable identified in INDEX.txt",

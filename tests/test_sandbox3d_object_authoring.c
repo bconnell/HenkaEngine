@@ -608,21 +608,84 @@ static void henka_test_sandbox3d_object_authoring_component_selection(void)
 
     sandbox3d_authoring_object_set_selection_mode(object, SANDBOX3D_AUTHORING_SELECTION_VERTEX);
     HENKA_TEST_ASSERT(sandbox3d_authoring_object_select_component(object, 1U, false) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_get_active_component_id(object) == 1U);
+    {
+        const henka_authoring_mesh* mesh = sandbox3d_authoring_object_get_mesh(object);
+        const henka_authoring_vertex* selected_before = henka_authoring_mesh_get_vertex(mesh, 1U);
+        henka_vec3 selected_before_position;
+        henka_authoring_edge_id edge_id = HENKA_AUTHORING_INVALID_ID;
+        const henka_authoring_edge* edge;
+        henka_authoring_vertex_id neighbor_id;
+        const henka_authoring_vertex* neighbor_before;
+        henka_vec3 neighbor_before_position;
+        const henka_authoring_vertex* selected_after;
+        const henka_authoring_vertex* neighbor_after;
+        float selected_delta;
+        float neighbor_delta;
+        HENKA_TEST_ASSERT(selected_before != NULL);
+        selected_before_position = selected_before->position;
+        HENKA_TEST_ASSERT(henka_authoring_mesh_get_vertex_edge_at(
+            mesh, 1U, 0U, &edge_id) == HENKA_SUCCESS);
+        edge = henka_authoring_mesh_get_edge(mesh, edge_id);
+        HENKA_TEST_ASSERT(edge != NULL);
+        neighbor_id = edge->vertices[0] == 1U ? edge->vertices[1] : edge->vertices[0];
+        neighbor_before = henka_authoring_mesh_get_vertex(mesh, neighbor_id);
+        HENKA_TEST_ASSERT(neighbor_before != NULL);
+        neighbor_before_position = neighbor_before->position;
+        HENKA_TEST_ASSERT(sandbox3d_authoring_object_proportional_move_selected_components(
+            object, (henka_vec3){0.0f, 0.4f, 0.0f}, 1U) == HENKA_SUCCESS);
+        selected_after = henka_authoring_mesh_get_vertex(
+            sandbox3d_authoring_object_get_mesh(object), 1U);
+        neighbor_after = henka_authoring_mesh_get_vertex(
+            sandbox3d_authoring_object_get_mesh(object), neighbor_id);
+        HENKA_TEST_ASSERT(selected_after != NULL && neighbor_after != NULL);
+        selected_delta = selected_after->position.y - selected_before_position.y;
+        neighbor_delta = neighbor_after->position.y - neighbor_before_position.y;
+        HENKA_TEST_ASSERT(selected_delta > 0.39f && selected_delta < 0.41f);
+        HENKA_TEST_ASSERT(neighbor_delta > 0.19f && neighbor_delta < 0.21f);
+        HENKA_TEST_ASSERT(henka_authoring_mesh_validate(
+            sandbox3d_authoring_object_get_mesh(object)));
+        HENKA_TEST_ASSERT(sandbox3d_authoring_object_undo(object) == HENKA_SUCCESS);
+        HENKA_TEST_ASSERT(sandbox3d_authoring_object_redo(object) == HENKA_SUCCESS);
+    }
     HENKA_TEST_ASSERT(sandbox3d_authoring_object_select_component(object, 2U, true) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_get_active_component_id(object) == 2U);
     HENKA_TEST_ASSERT(sandbox3d_authoring_object_get_selected_component_count(object) == 2U);
     HENKA_TEST_ASSERT(sandbox3d_authoring_object_get_selected_component_at(object, 1U, &id) == HENKA_SUCCESS && id == 2U);
     HENKA_TEST_ASSERT(sandbox3d_authoring_object_move_selected_components(
         object, (henka_vec3){0.25f, 0.0f, 0.0f}) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_grow_component_selection(object) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_get_selected_component_count(object) > 2U);
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_select_connected_components(object) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_get_selected_component_count(object) == 8U);
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_scale_selected_components(
+        object, (henka_vec3){1.05f, 1.0f, 1.05f}) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_authoring_mesh_validate(
+        sandbox3d_authoring_object_get_mesh(object)));
 
     sandbox3d_authoring_object_set_selection_mode(object, SANDBOX3D_AUTHORING_SELECTION_EDGE);
     HENKA_TEST_ASSERT(sandbox3d_authoring_object_select_component(object, 1U, false) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_get_active_component_id(object) == 1U);
     HENKA_TEST_ASSERT(sandbox3d_authoring_object_get_selected_component_count(object) == 1U);
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_grow_component_selection(object) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_get_selected_component_count(object) >= 1U);
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_select_connected_components(object) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_get_selected_component_count(object) == 12U);
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_scale_selected_components(
+        object, (henka_vec3){1.0f, 1.05f, 1.0f}) == HENKA_SUCCESS);
     HENKA_TEST_ASSERT(sandbox3d_authoring_object_move_selected_components(
         object, (henka_vec3){0.0f, 0.25f, 0.0f}) == HENKA_SUCCESS);
 
     sandbox3d_authoring_object_set_selection_mode(object, SANDBOX3D_AUTHORING_SELECTION_FACE);
     HENKA_TEST_ASSERT(sandbox3d_authoring_object_select_component(object, 1U, false) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_get_active_component_id(object) == 1U);
     HENKA_TEST_ASSERT(sandbox3d_authoring_object_get_selected_face(object) == 1U);
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_grow_component_selection(object) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_get_selected_component_count(object) >= 1U);
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_select_connected_components(object) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_get_selected_component_count(object) == 6U);
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_scale_selected_components(
+        object, (henka_vec3){1.02f, 1.02f, 1.02f}) == HENKA_SUCCESS);
     sandbox3d_authoring_object_destroy(object);
     henka_mesh_destroy(previous_mesh);
     henka_scene_destroy(scene);

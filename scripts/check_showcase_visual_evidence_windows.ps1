@@ -46,8 +46,8 @@ foreach ($metadata in $captureMetadata) {
     if (($metadata.Value -replace 'mode=(solid|material_preview|rendered)', 'mode=shared') -ne $canonicalCaptureMetadata) {
         throw "Showcase composition metadata diverges across shading modes."
     }
-    if ($metadata.Groups["giraffeProvenance"].Value -notin @("GENERATED_TEST_FIXTURE", "IMPORT_COMPATIBILITY_ASSET", "HENKA_NATIVE_GENERATED_FIXTURE", "HENKA_NATIVE_AUTHORED") -or
-        $metadata.Groups["rocketProvenance"].Value -notin @("GENERATED_TEST_FIXTURE", "IMPORT_COMPATIBILITY_ASSET", "HENKA_NATIVE_GENERATED_FIXTURE", "HENKA_NATIVE_AUTHORED") -or
+    if ($metadata.Groups["giraffeProvenance"].Value -notin @("GENERATED_TEST_FIXTURE", "IMPORT_COMPATIBILITY_ASSET", "HENKA_NATIVE_GENERATED_FIXTURE", "HENKA_NATIVE_EDITED_FIXTURE", "HENKA_NATIVE_AUTHORED") -or
+        $metadata.Groups["rocketProvenance"].Value -notin @("GENERATED_TEST_FIXTURE", "IMPORT_COMPATIBILITY_ASSET", "HENKA_NATIVE_GENERATED_FIXTURE", "HENKA_NATIVE_EDITED_FIXTURE", "HENKA_NATIVE_AUTHORED") -or
         $metadata.Groups["presetApplied"].Value -ne "0") {
         throw "Showcase evidence contains unknown or preset-determined geometry provenance."
     }

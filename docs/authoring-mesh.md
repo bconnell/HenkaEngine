@@ -45,9 +45,25 @@ and history, and the viewport ray picker resolves a hit to the actual
 authoring component identity.
 Object Details Authoring exposes bounded Vertex, Edge, and Face selection modes;
 Ctrl-click adds components to the active mode, and the viewport draws the
-selected vertices, edges, or face borders. Small Move X+, Move Y+, and Move Z+
+selected vertices as amber crosses, selected edges as cyan segments with endpoint
+markers, and selected faces as orange borders with a center marker. The most
+recently picked component is the active edit target: it receives a stronger
+mode-specific stroke/marker while the rest of a multi-selection remains visible.
+The Scene View also shows the active topology mode and selected-component count,
+including when the current mode has no component selected yet. Small Move X+, Move Y+, and Move Z+
 commands offset the selected components through a cloned mesh and the existing
 transactional scene/render/bounds/collider publication path. Face mode exposes
+Grow Selection, which expands the active selection by one topology-adjacent
+ring, Select Connected, which continues that expansion to the complete
+reachable component within the bounded selection budget, and Scale Selected,
+which scales the touched vertices around their centroid through the same
+transactional path. Soft Move X+, Soft Move Y+, and Soft Move Z+ apply a bounded
+one-ring linear falloff: the active selection receives the full translation and
+directly adjacent vertices receive half strength. These are bounded generic
+selection/modeling operations rather than showcase-specific geometry rules, and
+the falloff is a foundation for shaping rather than final anatomy or mechanical
+topology proof.
+Face mode also exposes
 the selected face plus transactional material
 region editing, Extrude, Inset, Bevel, Subdivide, Project UV, Pack UV, Undo,
 Redo, Save Project, and Reload Project commands. Save Project writes a bounded
@@ -106,6 +122,28 @@ The API allocates only within caller-selected bounded capacities. Invalid
 faces and capacity failures leave the prior topology unchanged. Render
 buffers are caller-owned, so evaluation does not transfer ownership to the
 renderer or asset manager.
+
+Client applications can call `henka_mesh_create_from_authoring_mesh` from
+`<henka/mesh.h>` to evaluate the same committed source into an ordinary
+renderer-owned triangle mesh. The source remains caller-owned, the output slot
+must start empty, counts and indices are bounded and checked, and allocation or
+evaluation failure leaves the output slot empty. This is the reusable
+authoring-to-render boundary; it does not create a material authority or
+replace glTF scene/material ownership.
+`henka_authoring_mesh_load_file_new` can load a versioned `.hams` source without
+requiring the consumer to duplicate the file's capacity header; it validates
+the declared bounded capacities before creating the candidate and retains an
+empty output slot on any failure.
+`henka_authoring_mesh_get_bounds` exposes bounds from the same active source
+vertices so a consuming scene can publish local bounds without a second
+geometry interpretation.
+
+The evaluator's tangent value is transport metadata for the bounded authoring
+representation, not an authoritative UV-derived tangent basis. At the shared
+authoring-to-render boundary, the renderer derives and orthogonalizes a stable
+tangent whenever that basis is not authoritative. This keeps axis-aligned
+authoring faces from treating non-authoritative tangent metadata as finished
+shading data while preserving the single mesh/material ownership path.
 
 This is the bounded runtime foundation of the authoring-parity campaign. It is
 not yet a full modeling editor: component delete, weld/split/bridge/loop cuts,

@@ -2,7 +2,11 @@
 
 #include <string.h>
 
+#include <henka/authoring_mesh.h>
+#include <henka/authoring_modeling.h>
+#include <henka/engine.h>
 #include <henka/memory.h>
+#include <henka/mesh.h>
 #include <henka/model.h>
 
 #include "../engine/src/core/checked.h"
@@ -79,6 +83,56 @@ static void henka_test_model_rejects_unsafe_bounds(void)
     HENKA_TEST_ASSERT(model.vertices == NULL);
     HENKA_TEST_ASSERT(model.indices == NULL);
     henka_free(oversized_source);
+}
+
+static void henka_test_authoring_mesh_renderer_bridge(void)
+{
+    henka_engine_config config = {0};
+    henka_engine* engine = NULL;
+    henka_authoring_mesh* source = NULL;
+    henka_authoring_mesh_desc desc = {3U, 3U, 1U, 3U};
+    henka_authoring_mesh_desc box_desc = {64U, 128U, 64U, 8U};
+    henka_authoring_vertex_id vertices[3];
+    henka_authoring_vertex_id face_vertices[] = {1U, 2U, 3U};
+    henka_authoring_face_id face_id;
+    henka_mesh* mesh = NULL;
+
+    config.application_name = "Henka Authoring Renderer Bridge Test";
+    config.window_width = 320;
+    config.window_height = 240;
+    config.enable_vsync = false;
+    HENKA_TEST_ASSERT(henka_engine_create(&config, &engine) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_authoring_mesh_create(&desc, &source) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_authoring_mesh_add_vertex(
+        source, (henka_vec3){0.0f, 0.0f, 0.0f}, (henka_vec2){0.0f, 0.0f}, 4U, &vertices[0]) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_authoring_mesh_add_vertex(
+        source, (henka_vec3){1.0f, 0.0f, 0.0f}, (henka_vec2){1.0f, 0.0f}, 4U, &vertices[1]) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_authoring_mesh_add_vertex(
+        source, (henka_vec3){0.0f, 1.0f, 0.0f}, (henka_vec2){0.0f, 1.0f}, 4U, &vertices[2]) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_authoring_mesh_add_face(
+        source, face_vertices, 3U, 4U, true, &face_id) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(face_id == 1U);
+    HENKA_TEST_ASSERT(henka_mesh_create_from_authoring_mesh(engine, source, &mesh) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(mesh != NULL);
+    henka_mesh_destroy(mesh);
+    mesh = NULL;
+    henka_authoring_mesh_destroy(source);
+    source = NULL;
+
+    /* The authoring evaluator intentionally exposes stable non-authoritative
+     * tangent metadata.  Axis-aligned box faces must still cross the public
+     * bridge; the renderer derives a usable tangent when that metadata is not
+     * a valid orthogonal basis for the evaluated normal. */
+    HENKA_TEST_ASSERT(henka_authoring_mesh_create_box(
+        &box_desc, 2.0f, 2.0f, 2.0f, &source) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_mesh_create_from_authoring_mesh(engine, source, &mesh) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(mesh != NULL);
+    henka_mesh_destroy(mesh);
+    mesh = NULL;
+    henka_authoring_mesh_destroy(source);
+    source = NULL;
+    henka_engine_destroy(engine);
+    engine = NULL;
 }
 
 static void henka_test_gltf_scene_import(void)
@@ -659,5 +713,6 @@ void henka_test_model(void)
     HENKA_TEST_ASSERT(model.indices == NULL);
 
     henka_test_model_rejects_unsafe_bounds();
+    henka_test_authoring_mesh_renderer_bridge();
     henka_test_gltf_scene_import();
 }

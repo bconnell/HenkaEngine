@@ -270,6 +270,8 @@ Select an object in the viewport or Scene Objects panel, then use Select, Orbit,
 Use M or G, R, and S for action-based transforms. X, Y, and Z constrain an active transform; Enter applies it and Escape cancels it.
 Use the in-window utilities for help, legend, paths, settings, diagnostics, Transform QA, and Physics QA.
 Editable selected scene objects show a viewport transform highlight until selection is cleared.
+While native mesh editing is active, the most recently picked vertex, edge, or face receives a stronger mode-specific highlight while multi-selection remains visible.
+Soft Move X+/Soft Move Y+/Soft Move Z+ applies a bounded one-ring linear falloff to the active topology selection to reduce hard seams while shaping imported fixture regions.
 Locked objects remain selectable for inspection without a transform highlight or gizmo. Ground starts locked and requires an explicit Unlock Transform action before it can move.
 Clearing selection also clears active transform-session ownership, and viewport overlays do not draw over panels.
 Physics QA explains Static, Dynamic, and Kinematic bodies. Make Dynamic + Drop activates only the selected supported body; Enable starts the full arranged demonstration.

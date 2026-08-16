@@ -371,6 +371,59 @@ bool henka_authoring_mesh_validate(const henka_authoring_mesh* mesh)
     return true;
 }
 
+henka_result henka_authoring_mesh_get_bounds(
+    const henka_authoring_mesh* mesh,
+    henka_vec3* out_center,
+    henka_vec3* out_extents)
+{
+    henka_vec3 minimum = {0.0f, 0.0f, 0.0f};
+    henka_vec3 maximum = {0.0f, 0.0f, 0.0f};
+    size_t index;
+    bool found = false;
+
+    if (mesh == NULL || out_center == NULL || out_extents == NULL ||
+        !henka_authoring_mesh_validate(mesh))
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    for (index = 0U; index < mesh->vertex_slots; ++index)
+    {
+        const henka_authoring_vertex* vertex = &mesh->vertices[index];
+        if (!vertex->active)
+        {
+            continue;
+        }
+        if (!found)
+        {
+            minimum = vertex->position;
+            maximum = vertex->position;
+            found = true;
+        }
+        else
+        {
+            minimum.x = fminf(minimum.x, vertex->position.x);
+            minimum.y = fminf(minimum.y, vertex->position.y);
+            minimum.z = fminf(minimum.z, vertex->position.z);
+            maximum.x = fmaxf(maximum.x, vertex->position.x);
+            maximum.y = fmaxf(maximum.y, vertex->position.y);
+            maximum.z = fmaxf(maximum.z, vertex->position.z);
+        }
+    }
+    if (!found)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    *out_center = (henka_vec3){
+        (minimum.x + maximum.x) * 0.5f,
+        (minimum.y + maximum.y) * 0.5f,
+        (minimum.z + maximum.z) * 0.5f};
+    *out_extents = (henka_vec3){
+        (maximum.x - minimum.x) * 0.5f,
+        (maximum.y - minimum.y) * 0.5f,
+        (maximum.z - minimum.z) * 0.5f};
+    return HENKA_SUCCESS;
+}
+
 henka_result henka_authoring_mesh_add_vertex(henka_authoring_mesh* mesh, henka_vec3 position, henka_vec2 uv, uint32_t material_region, henka_authoring_vertex_id* out_id)
 {
     henka_authoring_vertex* vertex;
@@ -1484,5 +1537,60 @@ henka_result henka_authoring_mesh_load_file(henka_authoring_mesh* mesh, const ch
 cleanup:
     fclose(file);
     henka_authoring_mesh_destroy(candidate);
+    return result;
+}
+
+henka_result henka_authoring_mesh_load_file_new(const char* path, henka_authoring_mesh** out_mesh)
+{
+    FILE* file = NULL;
+    henka_authoring_mesh_desc desc;
+    henka_authoring_mesh* candidate = NULL;
+    henka_result result;
+
+    if (out_mesh == NULL || *out_mesh != NULL || path == NULL || path[0] == '\0')
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    file = authoring_open_file(path, "rb");
+    if (file == NULL)
+    {
+        return HENKA_ERROR_ASSET_SOURCE;
+    }
+    {
+        char magic[4];
+        uint32_t version;
+        uint32_t capacities[4] = {0U, 0U, 0U, 0U};
+        const bool header_ok = fread(magic, sizeof(magic), 1U, file) == 1U &&
+            memcmp(magic, "HAMS", sizeof(magic)) == 0 &&
+            authoring_read_u32(file, &version) && version == 2U &&
+            authoring_read_u32(file, &capacities[0]) &&
+            authoring_read_u32(file, &capacities[1]) &&
+            authoring_read_u32(file, &capacities[2]) &&
+            authoring_read_u32(file, &capacities[3]);
+        desc = (henka_authoring_mesh_desc){
+            capacities[0], capacities[1], capacities[2], capacities[3]};
+        if (!header_ok || !authoring_desc_valid(&desc))
+        {
+            fclose(file);
+            return HENKA_ERROR_INVALID_ARGUMENT;
+        }
+    }
+    if (fclose(file) != 0)
+    {
+        return HENKA_ERROR_ASSET_SOURCE;
+    }
+    result = henka_authoring_mesh_create(&desc, &candidate);
+    if (result == HENKA_SUCCESS)
+    {
+        result = henka_authoring_mesh_load_file(candidate, path);
+    }
+    if (result == HENKA_SUCCESS)
+    {
+        *out_mesh = candidate;
+    }
+    else
+    {
+        henka_authoring_mesh_destroy(candidate);
+    }
     return result;
 }

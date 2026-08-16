@@ -7,6 +7,7 @@
 
 typedef struct henka_engine henka_engine;
 typedef struct henka_mesh henka_mesh;
+typedef struct henka_authoring_mesh henka_authoring_mesh;
 typedef struct henka_model_data henka_model_data;
 
 henka_result henka_mesh_create_cube(henka_engine* engine, henka_mesh** out_mesh);
@@ -22,6 +23,13 @@ henka_result henka_mesh_create_debug_grid(henka_engine* engine, int half_extent,
 henka_result henka_mesh_create_line(henka_engine* engine, henka_vec3 start, henka_vec3 end, henka_mesh** out_mesh);
 henka_result henka_mesh_create_circle_ring(henka_engine* engine, float radius, int segments, henka_mesh** out_mesh);
 henka_result henka_mesh_create_from_model_data(henka_engine* engine, const henka_model_data* model, henka_mesh** out_mesh);
+/* Evaluates bounded editor-owned polygon data and uploads a transactional
+ * triangle mesh. The source remains caller-owned and is never mutated. The
+ * output slot must be NULL and is assigned only after a successful upload. */
+henka_result henka_mesh_create_from_authoring_mesh(
+    henka_engine* engine,
+    const henka_authoring_mesh* source,
+    henka_mesh** out_mesh);
 henka_result henka_mesh_create_from_obj(henka_engine* engine, const char* path, henka_mesh** out_mesh);
 henka_result henka_mesh_create_from_gltf(henka_engine* engine, const char* path, henka_mesh** out_mesh);
 /* Creates a graphical mesh from one render-resident Terrain chunk. */

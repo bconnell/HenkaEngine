@@ -102,6 +102,11 @@ void sandbox3d_authoring_object_clear_component_selection(
     sandbox3d_authoring_object* object);
 size_t sandbox3d_authoring_object_get_selected_component_count(
     const sandbox3d_authoring_object* object);
+/* Returns the most recently picked component in the active topology mode.
+ * This is the edit target that receives the strongest viewport cue when a
+ * multi-component selection is present. */
+uint32_t sandbox3d_authoring_object_get_active_component_id(
+    const sandbox3d_authoring_object* object);
 henka_result sandbox3d_authoring_object_get_selected_component_at(
     const sandbox3d_authoring_object* object,
     size_t ordinal,
@@ -118,6 +123,31 @@ henka_result sandbox3d_authoring_object_pick_component(
 henka_result sandbox3d_authoring_object_move_selected_components(
     sandbox3d_authoring_object* object,
     henka_vec3 offset);
+/* Moves the vertices touched by the active selection with a bounded
+ * topology-aware falloff. The selected vertices receive the full offset;
+ * each connected ring up to ring_count receives a linearly reduced offset.
+ * The result is published through the normal render, bounds, physics, and
+ * undo transaction. */
+henka_result sandbox3d_authoring_object_proportional_move_selected_components(
+    sandbox3d_authoring_object* object,
+    henka_vec3 offset,
+    size_t ring_count);
+/* Adds one topology-adjacent ring to the current vertex, edge, or face
+ * selection. The operation is bounded by the editor selection budget and
+ * does not mutate mesh topology. */
+henka_result sandbox3d_authoring_object_grow_component_selection(
+    sandbox3d_authoring_object* object);
+/* Expands the active selection through all reachable topology until the
+ * bounded editor selection budget is reached or the connected component is
+ * complete. This never mutates mesh topology. */
+henka_result sandbox3d_authoring_object_select_connected_components(
+    sandbox3d_authoring_object* object);
+/* Scales the vertices touched by the current component selection around their
+ * centroid and publishes the result through the normal transactional source,
+ * render, bounds, physics, and undo path. */
+henka_result sandbox3d_authoring_object_scale_selected_components(
+    sandbox3d_authoring_object* object,
+    henka_vec3 scale);
 henka_result sandbox3d_authoring_object_transform_vertex_region(
     sandbox3d_authoring_object* object,
     const sandbox3d_authoring_region_transform* transform,

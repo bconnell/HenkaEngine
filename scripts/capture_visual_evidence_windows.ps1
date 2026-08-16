@@ -38,6 +38,15 @@ else {
 if (-not (Test-Path -LiteralPath $executable -PathType Leaf)) {
     throw "Sandbox executable was not found: $executable"
 }
+$captureRuntimeDirectory = Join-Path $repoRoot ("build\test_tmp\visual-evidence-runtime-" + [Guid]::NewGuid().ToString("N"))
+$captureExecutable = Join-Path $captureRuntimeDirectory "henka_sandbox3d.exe"
+$captureAssets = Join-Path (Split-Path -Parent $executable) "assets"
+if (-not (Test-Path -LiteralPath $captureAssets -PathType Container)) {
+    throw "Sandbox runtime assets were not found beside the executable: $captureAssets"
+}
+New-Item -ItemType Directory -Path $captureRuntimeDirectory -Force | Out-Null
+Copy-Item -LiteralPath $executable -Destination $captureExecutable -Force
+Copy-Item -LiteralPath $captureAssets -Destination (Join-Path $captureRuntimeDirectory "assets") -Recurse -Force
 if ($EvidenceProfile -eq "FULL_SHOWCASE" -and -not $IncludeStartupShowcase) {
     throw "FULL_SHOWCASE evidence requires -IncludeStartupShowcase. Use GIRAFFE_INSPECTION for inspection-only captures."
 }
@@ -158,8 +167,8 @@ function Assert-HenkaCaptureMetadata {
         [int]$match.Groups["thicknessFallback"].Value -ne 0) {
         throw "Capture readiness metadata did not prove the showcase material dependencies for $Label."
     }
-    if ($match.Groups["giraffeProvenance"].Value -notin @("GENERATED_TEST_FIXTURE", "IMPORT_COMPATIBILITY_ASSET", "HENKA_NATIVE_GENERATED_FIXTURE", "HENKA_NATIVE_AUTHORED") -or
-        $match.Groups["rocketProvenance"].Value -notin @("GENERATED_TEST_FIXTURE", "IMPORT_COMPATIBILITY_ASSET", "HENKA_NATIVE_GENERATED_FIXTURE", "HENKA_NATIVE_AUTHORED") -or
+    if ($match.Groups["giraffeProvenance"].Value -notin @("GENERATED_TEST_FIXTURE", "IMPORT_COMPATIBILITY_ASSET", "HENKA_NATIVE_GENERATED_FIXTURE", "HENKA_NATIVE_EDITED_FIXTURE", "HENKA_NATIVE_AUTHORED") -or
+        $match.Groups["rocketProvenance"].Value -notin @("GENERATED_TEST_FIXTURE", "IMPORT_COMPATIBILITY_ASSET", "HENKA_NATIVE_GENERATED_FIXTURE", "HENKA_NATIVE_EDITED_FIXTURE", "HENKA_NATIVE_AUTHORED") -or
         $match.Groups["presetApplied"].Value -ne "0") {
         throw "Capture readiness metadata reported an unknown or preset-determined geometry provenance for $Label."
     }
@@ -228,6 +237,7 @@ if ($IncludeStartupShowcase) {
 $records = New-Object System.Collections.Generic.List[string]
 $records.Add("Same-camera viewport evidence")
 $records.Add("Source: $executable")
+$records.Add("Isolated runtime: $captureExecutable")
 $records.Add("Evidence profile: $EvidenceProfile")
 $records.Add("Camera policy: capture-mode runs use the same deterministic two-model showcase camera and never save capture-mode settings")
 $records.Add("Modes: Solid, Material Preview, Rendered")
@@ -242,7 +252,7 @@ foreach ($mode in $modes) {
     $capturedProcess = $null
     $stdoutPath = Join-Path $OutputDirectory "$($mode.Label).stdout.txt"
     $stderrPath = Join-Path $OutputDirectory "$($mode.Label).stderr.txt"
-    $capturedProcess = Start-HenkaCapturedProcess -FilePath $executable -Arguments $mode.Arguments -WorkingDirectory (Split-Path -Parent $executable) -StdoutPath $stdoutPath -StderrPath $stderrPath
+    $capturedProcess = Start-HenkaCapturedProcess -FilePath $captureExecutable -Arguments $mode.Arguments -WorkingDirectory $captureRuntimeDirectory -StdoutPath $stdoutPath -StderrPath $stderrPath
     $process = $capturedProcess.Process
     $handle = [IntPtr]::Zero
     try {
@@ -348,7 +358,7 @@ if ($IncludeGiraffeInspection) {
         $capturedProcess = $null
         $stdoutPath = Join-Path $OutputDirectory "$($inspectionMode.Label).stdout.txt"
         $stderrPath = Join-Path $OutputDirectory "$($inspectionMode.Label).stderr.txt"
-        $capturedProcess = Start-HenkaCapturedProcess -FilePath $executable -Arguments $inspectionMode.Arguments -WorkingDirectory (Split-Path -Parent $executable) -StdoutPath $stdoutPath -StderrPath $stderrPath
+        $capturedProcess = Start-HenkaCapturedProcess -FilePath $captureExecutable -Arguments $inspectionMode.Arguments -WorkingDirectory $captureRuntimeDirectory -StdoutPath $stdoutPath -StderrPath $stderrPath
         $process = $capturedProcess.Process
         $handle = [IntPtr]::Zero
         try {
@@ -427,9 +437,9 @@ if ($IncludeTerrain) {
     )
     foreach ($terrainMode in $terrainModes) {
         $process = Start-HenkaProcess `
-            -FilePath $executable `
+            -FilePath $captureExecutable `
             -Arguments $terrainMode.Arguments `
-            -WorkingDirectory (Split-Path -Parent $executable)
+            -WorkingDirectory $captureRuntimeDirectory
         $handle = [IntPtr]::Zero
         try {
             for ($attempt = 0; $attempt -lt 80 -and $handle -eq [IntPtr]::Zero; ++$attempt) {

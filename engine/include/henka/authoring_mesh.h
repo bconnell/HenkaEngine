@@ -100,6 +100,11 @@ henka_result henka_authoring_mesh_clone(const henka_authoring_mesh* source, henk
 henka_result henka_authoring_mesh_copy(henka_authoring_mesh* destination, const henka_authoring_mesh* source);
 henka_authoring_mesh_counts henka_authoring_mesh_get_counts(const henka_authoring_mesh* mesh);
 bool henka_authoring_mesh_validate(const henka_authoring_mesh* mesh);
+/* Returns bounds from active source vertices. */
+henka_result henka_authoring_mesh_get_bounds(
+    const henka_authoring_mesh* mesh,
+    henka_vec3* out_center,
+    henka_vec3* out_extents);
 
 henka_result henka_authoring_mesh_add_vertex(henka_authoring_mesh* mesh, henka_vec3 position, henka_vec2 uv, uint32_t material_region, henka_authoring_vertex_id* out_id);
 henka_result henka_authoring_mesh_remove_vertex(henka_authoring_mesh* mesh, henka_authoring_vertex_id id);
@@ -147,5 +152,9 @@ henka_result henka_authoring_mesh_history_redo(henka_authoring_mesh_history* his
  * only after complete validation, retaining the prior mesh on every failure. */
 henka_result henka_authoring_mesh_save_file(const henka_authoring_mesh* mesh, const char* path);
 henka_result henka_authoring_mesh_load_file(henka_authoring_mesh* mesh, const char* path);
+/* Creates a bounded source from a versioned file after validating the file's
+ * declared capacities. The output slot must be empty and is assigned only on
+ * successful parse and topology validation. */
+henka_result henka_authoring_mesh_load_file_new(const char* path, henka_authoring_mesh** out_mesh);
 
 #endif

@@ -56,6 +56,16 @@ static int test_topology_and_evaluation(void)
     {
         goto cleanup;
     }
+    {
+        henka_vec3 center;
+        henka_vec3 extents;
+        if (henka_authoring_mesh_get_bounds(mesh, &center, &extents) != HENKA_SUCCESS ||
+            fabsf(center.x) > 0.0001f || fabsf(center.y - 0.5f) > 0.0001f ||
+            fabsf(extents.x - 1.0f) > 0.0001f || fabsf(extents.y - 0.5f) > 0.0001f)
+        {
+            goto cleanup;
+        }
+    }
     for (edge_index = 1U; edge_index <= counts.edges; ++edge_index)
     {
         const henka_authoring_edge* edge = henka_authoring_mesh_get_edge(mesh, (uint32_t)edge_index);
@@ -131,6 +141,7 @@ static int test_history_and_persistence(void)
     const char* path = "build/test_tmp/authoring_nested/authoring_mesh_checkpoint.bin";
     henka_authoring_mesh_desc desc = {3U, 3U, 1U, 3U};
     henka_authoring_mesh* mesh = NULL;
+    henka_authoring_mesh* loaded = NULL;
     henka_authoring_mesh_history* history = NULL;
     henka_authoring_vertex_id ids[3];
     henka_authoring_vertex_id face[] = {1U, 2U, 3U};
@@ -180,6 +191,13 @@ static int test_history_and_persistence(void)
             goto cleanup;
         }
     }
+    if (henka_authoring_mesh_load_file_new(path, &loaded) != HENKA_SUCCESS ||
+        loaded == NULL || !henka_authoring_mesh_validate(loaded) ||
+        henka_authoring_mesh_get_counts(loaded).faces != 1U ||
+        henka_authoring_mesh_get_vertex(loaded, ids[0]) == NULL)
+    {
+        goto cleanup;
+    }
     corrupt = NULL;
     if (fopen_s(&corrupt, path, "wb") != 0)
     {
@@ -208,6 +226,7 @@ static int test_history_and_persistence(void)
 
 cleanup:
     remove(path);
+    henka_authoring_mesh_destroy(loaded);
     henka_authoring_mesh_history_destroy(history);
     henka_authoring_mesh_destroy(mesh);
     return result ? 1 : fail("history/persistence");

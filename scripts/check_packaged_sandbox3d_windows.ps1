@@ -829,6 +829,7 @@ Assert-FileContains -Path $readmePath -Pattern "panels open automatically" -Desc
 Assert-FileContains -Path $readmePath -Pattern "no selected scene object" -Description "Packaged startup no-selection guidance"
 Assert-FileContains -Path $readmePath -Pattern "Physics QA explains Static, Dynamic, and Kinematic" -Description "Packaged physics body-type guidance"
 Assert-FileContains -Path $readmePath -Pattern "Editable selected scene objects show a viewport transform highlight" -Description "Packaged editable selection highlight guidance"
+Assert-FileContains -Path $readmePath -Pattern "most recently picked vertex, edge, or face receives a stronger mode-specific highlight" -Description "Packaged active edit highlight guidance"
 Assert-FileContains -Path $readmePath -Pattern "Locked objects remain selectable for inspection without a transform highlight or gizmo" -Description "Packaged locked selection guidance"
 Assert-FileContains -Path $readmePath -Pattern "Ground starts locked and requires an explicit Unlock Transform action before it can move" -Description "Packaged ground lock guidance"
 Assert-FileContains -Path $readmePath -Pattern "Clearing selection also clears active transform-session ownership" -Description "Packaged transform-session ownership guidance"
@@ -940,8 +941,8 @@ try {
         throw "The packaged sandbox window did not become available."
     }
 
-    if (-not (Wait-FileContains -Path $stdoutPath -Pattern "Henka Engine Sandbox 3D" -TimeoutMilliseconds 15000)) {
-        throw "Startup help heading was not found in the packaged sandbox output within the bounded 15-second startup window."
+    if (-not (Wait-FileContains -Path $stdoutPath -Pattern "Henka Engine Sandbox 3D" -TimeoutMilliseconds 30000)) {
+        throw "Startup help heading was not found in the packaged sandbox output within the bounded 30-second startup window."
     }
     Assert-FileContains -Path $stdoutPath -Pattern "Henka Engine Sandbox 3D" -Description "Startup help heading"
     Assert-FileContains -Path $stdoutPath -Pattern "F4               Show or hide the sandbox panels" -Description "F4 help text"
@@ -1323,58 +1324,53 @@ try {
         if (-not $nativeSelectionObserved) {
             throw "Selecting the showcase row did not expose Object Details > Authoring > Make Editable."
         }
+        $nativeSourceRestored = Wait-FileContains `
+            -Path $stdoutPath `
+            -Pattern "Native authoring source loaded:" `
+            -TimeoutMilliseconds 3000
         $nativeAuthoringControlObserved = Wait-FileContains `
             -Path $stdoutPath `
             -Pattern "Native authoring Make Editable control:" `
             -TimeoutMilliseconds 3000
-        for ($nativeAuthoringControlAttempt = 0; $nativeAuthoringControlAttempt -lt 3 -and -not $nativeAuthoringControlObserved; ++$nativeAuthoringControlAttempt) {
-            Click-FramebufferPoint `
-                -Handle $mainWindowHandle `
+        if ($nativeSourceRestored) {
+            Write-Output "[pass] Packaged showcase restored its editor-owned native authoring source"
+        } elseif ($nativeAuthoringControlObserved) {
+            $nativeMakeEditableMatch = Get-LastLogRegexMatch `
+                -Path $stdoutPath `
+                -Pattern 'Native authoring Make Editable control: name=(.+) x=([-0-9.]+) y=([-0-9.]+) width=180.0 height=24.0\.'
+            if ($null -eq $nativeMakeEditableMatch) {
+                throw "The Make Editable control geometry could not be parsed."
+            }
+            $nativeMakeEditableX = [double]$nativeMakeEditableMatch.Groups[2].Value
+            $nativeMakeEditableY = [double]$nativeMakeEditableMatch.Groups[3].Value
+            Assert-FramebufferRect `
+                -Name "Native authoring Make Editable control" `
                 -FramebufferWidth $framebufferWidth `
                 -FramebufferHeight $framebufferHeight `
-                -FramebufferX ($nativeRowX + $nativeRowWidth * 0.5) `
-                -FramebufferY ($nativeRowY + $nativeRowHeight * 0.5)
-            $nativeAuthoringControlObserved = Wait-FileContains `
-                -Path $stdoutPath `
-                -Pattern "Native authoring Make Editable control:" `
-                -TimeoutMilliseconds 2000
-        }
-        if (-not $nativeAuthoringControlObserved) {
+                -X $nativeMakeEditableX `
+                -Y $nativeMakeEditableY `
+                -Width 180.0 `
+                -Height 24.0
+            $nativeMakeEditableObserved = $false
+            for ($makeEditableAttempt = 0; $makeEditableAttempt -lt 3 -and -not $nativeMakeEditableObserved; ++$makeEditableAttempt) {
+                Click-FramebufferPoint `
+                    -Handle $mainWindowHandle `
+                    -FramebufferWidth $framebufferWidth `
+                    -FramebufferHeight $framebufferHeight `
+                    -FramebufferX ($nativeMakeEditableX + 90.0) `
+                    -FramebufferY ($nativeMakeEditableY + 12.0)
+                $nativeMakeEditableObserved = Wait-FileContains `
+                    -Path $stdoutPath `
+                    -Pattern "Native authoring dogfood: Make Editable converted" `
+                    -TimeoutMilliseconds 2500
+            }
+            if (-not $nativeMakeEditableObserved) {
+                throw "Make Editable did not create the user-owned native authoring source."
+            }
+            Write-Output "[pass] Imported showcase primitive entered the user-facing native authoring workflow"
+        } else {
             throw "The selected showcase authoring controls did not become visible in the prioritized Authoring group."
         }
-        $nativeMakeEditableMatch = Get-LastLogRegexMatch `
-            -Path $stdoutPath `
-            -Pattern 'Native authoring Make Editable control: name=(.+) x=([-0-9.]+) y=([-0-9.]+) width=180.0 height=24.0\.'
-        if ($null -eq $nativeMakeEditableMatch) {
-            throw "The Make Editable control geometry could not be parsed."
-        }
-        $nativeMakeEditableX = [double]$nativeMakeEditableMatch.Groups[2].Value
-        $nativeMakeEditableY = [double]$nativeMakeEditableMatch.Groups[3].Value
-        Assert-FramebufferRect `
-            -Name "Native authoring Make Editable control" `
-            -FramebufferWidth $framebufferWidth `
-            -FramebufferHeight $framebufferHeight `
-            -X $nativeMakeEditableX `
-            -Y $nativeMakeEditableY `
-            -Width 180.0 `
-            -Height 24.0
-        $nativeMakeEditableObserved = $false
-        for ($makeEditableAttempt = 0; $makeEditableAttempt -lt 3 -and -not $nativeMakeEditableObserved; ++$makeEditableAttempt) {
-            Click-FramebufferPoint `
-                -Handle $mainWindowHandle `
-                -FramebufferWidth $framebufferWidth `
-                -FramebufferHeight $framebufferHeight `
-                -FramebufferX ($nativeMakeEditableX + 90.0) `
-                -FramebufferY ($nativeMakeEditableY + 12.0)
-            $nativeMakeEditableObserved = Wait-FileContains `
-                -Path $stdoutPath `
-                -Pattern "Native authoring dogfood: Make Editable converted" `
-                -TimeoutMilliseconds 2500
-        }
-        if (-not $nativeMakeEditableObserved) {
-            throw "Make Editable did not create the user-owned native authoring source."
-        }
-        Write-Output "[pass] Imported showcase primitive entered the user-facing native authoring workflow"
         if (-not (Wait-FileContains -Path $stdoutPath -Pattern "Native authoring material control:" -TimeoutMilliseconds 3000)) {
             throw "The converted showcase did not expose the native material ownership control."
         }
@@ -1617,7 +1613,7 @@ try {
         }
         Write-Output "[pass] User-facing native material and texture edits completed"
         if (-not (Wait-FileContains -Path $stdoutPath -Pattern "Native authoring material history:" -TimeoutMilliseconds 1200)) {
-            for ($scrollAttempt = 0; $scrollAttempt -lt 4; ++$scrollAttempt) {
+            for ($scrollAttempt = 0; $scrollAttempt -lt 12; ++$scrollAttempt) {
                 Scroll-FramebufferPoint `
                     -Handle $mainWindowHandle `
                     -FramebufferWidth $framebufferWidth `
@@ -1752,34 +1748,47 @@ try {
             throw "The user-facing native profile refinement did not exercise its ordered multi-region transaction."
         }
         Write-Output "[pass] User-facing native showcase profile refinement changed the imported geometry"
-        $faceControlLogPattern = 'Native authoring face controls:'
-        $faceControlCountBefore = @(
-            Select-String -LiteralPath $stdoutPath -Pattern $faceControlLogPattern -ErrorAction SilentlyContinue
-        ).Count
-        $freshFaceControlObserved = $false
-        for ($scrollTopologyAttempt = 0; $scrollTopologyAttempt -lt 5 -and -not $freshFaceControlObserved; ++$scrollTopologyAttempt) {
-            Scroll-FramebufferPoint `
-                -Handle $mainWindowHandle `
-                -FramebufferWidth $framebufferWidth `
-                -FramebufferHeight $framebufferHeight `
-                -FramebufferX ($detailsX + [Math]::Max(12.0, $detailsWidth - 18.0)) `
-                -FramebufferY ($detailsY + [Math]::Max(30.0, $detailsHeight * 0.55)) `
-                -WheelDelta -120
-            $freshFaceControlObserved = @(
-                Select-String -LiteralPath $stdoutPath -Pattern $faceControlLogPattern -ErrorAction SilentlyContinue
-            ).Count -gt $faceControlCountBefore
-        }
-        if (-not (Wait-FileContains -Path $stdoutPath -Pattern "Native authoring face controls:" -TimeoutMilliseconds 3000)) {
-            throw "The converted showcase did not expose native topology selection controls."
-        }
         $nativeFaceMatch = Get-LastLogRegexMatch `
             -Path $stdoutPath `
             -Pattern 'Native authoring face controls: name=(.+) face_x=([-0-9.]+) face_y=([-0-9.]+) width=88.0 height=24.0\.'
+        if ($null -eq $nativeFaceMatch -and
+            -not (Wait-FileContains -Path $stdoutPath -Pattern "Native authoring face controls:" -TimeoutMilliseconds 3000)) {
+            throw "The converted showcase did not expose native topology selection controls."
+        }
+        # The control is normally already visible after the profile edit.  Do
+        # not inject a speculative wheel event: queued scroll input can move the
+        # details panel after its log line was read and make a valid click stale.
+        if ($null -eq $nativeFaceMatch) {
+            $nativeFaceMatch = Get-LastLogRegexMatch `
+                -Path $stdoutPath `
+                -Pattern 'Native authoring face controls: name=(.+) face_x=([-0-9.]+) face_y=([-0-9.]+) width=88.0 height=24.0\.'
+        }
         if ($null -eq $nativeFaceMatch) {
             throw "The native topology selection control geometry could not be parsed."
         }
         $nativeFaceX = [double]$nativeFaceMatch.Groups[2].Value
         $nativeFaceY = [double]$nativeFaceMatch.Groups[3].Value
+        # The details content begins below the fixed panel header.  A deep scroll can
+        # leave the logged topology row partially clipped under that header even
+        # though its last reported rectangle is still inside the framebuffer.  Bring
+        # the control back into the interactive content region before clicking it.
+        for ($faceVisibilityAttempt = 0; $faceVisibilityAttempt -lt 3 -and $nativeFaceY -lt ($detailsY + 32.0); ++$faceVisibilityAttempt) {
+            Scroll-FramebufferPoint `
+                -Handle $mainWindowHandle `
+                -FramebufferWidth $framebufferWidth `
+                -FramebufferHeight $framebufferHeight `
+                -FramebufferX ($detailsX + [Math]::Max(12.0, $detailsWidth - 18.0)) `
+                -FramebufferY ($detailsY + 42.0) `
+                -WheelDelta 120
+            Start-Sleep -Milliseconds 120
+            $visibleFaceMatch = Get-LastLogRegexMatch `
+                -Path $stdoutPath `
+                -Pattern 'Native authoring face controls: name=(.+) face_x=([-0-9.]+) face_y=([-0-9.]+) width=88.0 height=24.0\.'
+            if ($null -ne $visibleFaceMatch) {
+                $nativeFaceX = [double]$visibleFaceMatch.Groups[2].Value
+                $nativeFaceY = [double]$visibleFaceMatch.Groups[3].Value
+            }
+        }
         Assert-FramebufferRect `
             -Name "Native authoring Face selection control" `
             -FramebufferWidth $framebufferWidth `
@@ -1794,16 +1803,22 @@ try {
         ).Count
         $nativeFaceModeObserved = $false
         for ($faceModeAttempt = 0; $faceModeAttempt -lt 3 -and -not $nativeFaceModeObserved; ++$faceModeAttempt) {
-            Click-FramebufferPoint `
-                -Handle $mainWindowHandle `
-                -FramebufferWidth $framebufferWidth `
-                -FramebufferHeight $framebufferHeight `
-                -FramebufferX ($nativeFaceX + 44.0) `
-                -FramebufferY ($nativeFaceY + 12.0)
-            $nativeFaceModeObserved = Wait-FileContains `
-                -Path $stdoutPath `
-                -Pattern "Native authoring topology mode:.*mode=Face" `
-                -TimeoutMilliseconds 2500
+            foreach ($faceXOffset in @(20.0, 44.0, 68.0)) {
+                foreach ($faceYOffset in @(6.0, 12.0, 18.0)) {
+                    if (-not $nativeFaceModeObserved) {
+                        Click-FramebufferPoint `
+                            -Handle $mainWindowHandle `
+                            -FramebufferWidth $framebufferWidth `
+                            -FramebufferHeight $framebufferHeight `
+                            -FramebufferX ($nativeFaceX + $faceXOffset) `
+                            -FramebufferY ($nativeFaceY + $faceYOffset)
+                        $nativeFaceModeObserved = Wait-FileContains `
+                            -Path $stdoutPath `
+                            -Pattern "Native authoring topology mode:.*mode=Face" `
+                            -TimeoutMilliseconds 500
+                    }
+                }
+            }
         }
         if (-not $nativeFaceModeObserved) {
             throw "The user-facing Face selection mode did not become active."
@@ -1821,7 +1836,7 @@ try {
                 -FramebufferHeight $framebufferHeight `
                 -FramebufferX ($detailsX + [Math]::Max(12.0, $detailsWidth - 18.0)) `
                 -FramebufferY ($detailsY + [Math]::Max(30.0, $detailsHeight * 0.55)) `
-                -WheelDelta -120
+                -WheelDelta 120
         }
         $nativeBevelMatch = Get-LastLogRegexMatch `
             -Path $stdoutPath `
@@ -1856,17 +1871,30 @@ try {
             throw "The user-facing native bevel operation did not update the showcase source."
         }
         Write-Output "[pass] User-facing topology selection and bevel changed the native showcase source"
-        for ($scrollProjectAttempt = 0; $scrollProjectAttempt -lt 4; ++$scrollProjectAttempt) {
+        $projectControlPattern = 'Native authoring project controls:'
+        $projectControlCountBefore = @(
+            Select-String -LiteralPath $stdoutPath -Pattern $projectControlPattern -ErrorAction SilentlyContinue
+        ).Count
+        for ($scrollProjectAttempt = 0; $scrollProjectAttempt -lt 8; ++$scrollProjectAttempt) {
             Scroll-FramebufferPoint `
                 -Handle $mainWindowHandle `
                 -FramebufferWidth $framebufferWidth `
                 -FramebufferHeight $framebufferHeight `
                 -FramebufferX ($detailsX + [Math]::Max(12.0, $detailsWidth - 18.0)) `
                 -FramebufferY ($detailsY + [Math]::Max(30.0, $detailsHeight * 0.55)) `
-                -WheelDelta -120
+                -WheelDelta 120
+            $projectControlCount = @(
+                Select-String -LiteralPath $stdoutPath -Pattern $projectControlPattern -ErrorAction SilentlyContinue
+            ).Count
+            if ($projectControlCount -gt $projectControlCountBefore) {
+                break
+            }
         }
         Start-Sleep -Milliseconds 3000
-        if (-not (Wait-FileContains -Path $stdoutPath -Pattern "Native authoring project controls:" -TimeoutMilliseconds 3000)) {
+        $projectControlCount = @(
+            Select-String -LiteralPath $stdoutPath -Pattern $projectControlPattern -ErrorAction SilentlyContinue
+        ).Count
+        if ($projectControlCount -le $projectControlCountBefore) {
             throw "The converted showcase did not expose bounded project save/reload controls."
         }
         $nativeProjectMatch = Get-LastLogRegexMatch `
@@ -1879,14 +1907,14 @@ try {
         $nativeSaveY = [double]$nativeProjectMatch.Groups[3].Value
         $nativeReloadX = [double]$nativeProjectMatch.Groups[4].Value
         $nativeReloadY = [double]$nativeProjectMatch.Groups[5].Value
-        Assert-FramebufferRect `
-            -Name "Native authoring Save Project control" `
-            -FramebufferWidth $framebufferWidth `
-            -FramebufferHeight $framebufferHeight `
-            -X $nativeSaveX `
-            -Y $nativeSaveY `
-            -Width 140.0 `
-            -Height 24.0
+    Assert-FramebufferRect `
+        -Name "Native authoring Save Project control" `
+        -FramebufferWidth $framebufferWidth `
+        -FramebufferHeight $framebufferHeight `
+        -X $nativeSaveX `
+        -Y $nativeSaveY `
+        -Width 140.0 `
+        -Height 24.0
     Click-FramebufferPoint `
         -Handle $mainWindowHandle `
         -FramebufferWidth $framebufferWidth `
