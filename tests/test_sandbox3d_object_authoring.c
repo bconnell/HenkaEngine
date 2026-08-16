@@ -681,6 +681,45 @@ static void henka_test_sandbox3d_object_authoring_component_selection(void)
     HENKA_TEST_ASSERT(sandbox3d_authoring_object_get_active_component_id(object) == 1U);
     HENKA_TEST_ASSERT(sandbox3d_authoring_object_get_selected_face(object) == 1U);
     {
+        const henka_authoring_mesh* before_mesh = sandbox3d_authoring_object_get_mesh(object);
+        const henka_authoring_face* before_face = henka_authoring_mesh_get_face(before_mesh, 1U);
+        const henka_authoring_vertex* before_first;
+        const henka_authoring_vertex* before_second;
+        const henka_authoring_vertex* before_third;
+        henka_vec3 before_normal;
+        henka_vec3 before_position;
+        henka_authoring_vertex_id first_vertex_id;
+        const henka_authoring_vertex* after_vertex;
+        HENKA_TEST_ASSERT(before_face != NULL && before_face->corner_count >= 3U);
+        first_vertex_id = before_face->vertices[0];
+        before_first = henka_authoring_mesh_get_vertex(before_mesh, before_face->vertices[0]);
+        before_second = henka_authoring_mesh_get_vertex(before_mesh, before_face->vertices[1]);
+        before_third = henka_authoring_mesh_get_vertex(before_mesh, before_face->vertices[2]);
+        HENKA_TEST_ASSERT(before_first != NULL && before_second != NULL && before_third != NULL);
+        before_position = before_first->position;
+        before_normal = henka_vec3_normalize(henka_vec3_cross(
+            henka_vec3_subtract(before_second->position, before_first->position),
+            henka_vec3_subtract(before_third->position, before_first->position)));
+        HENKA_TEST_ASSERT(sandbox3d_authoring_object_move_selected_face_normal(object, 0.25f) == HENKA_SUCCESS);
+        after_vertex = henka_authoring_mesh_get_vertex(
+            sandbox3d_authoring_object_get_mesh(object), first_vertex_id);
+        HENKA_TEST_ASSERT(after_vertex != NULL);
+        HENKA_TEST_ASSERT_FLOAT_CLOSE(
+            after_vertex->position.x,
+            before_position.x + before_normal.x * 0.25f,
+            0.0001f);
+        HENKA_TEST_ASSERT_FLOAT_CLOSE(
+            after_vertex->position.y,
+            before_position.y + before_normal.y * 0.25f,
+            0.0001f);
+        HENKA_TEST_ASSERT_FLOAT_CLOSE(
+            after_vertex->position.z,
+            before_position.z + before_normal.z * 0.25f,
+            0.0001f);
+        HENKA_TEST_ASSERT(henka_authoring_mesh_validate(
+            sandbox3d_authoring_object_get_mesh(object)));
+    }
+    {
         const henka_authoring_mesh* mesh = sandbox3d_authoring_object_get_mesh(object);
         const henka_authoring_face* face = henka_authoring_mesh_get_face(mesh, 1U);
         henka_authoring_vertex_id ordered[HENKA_AUTHORING_MESH_HARD_MAX_FACE_CORNERS];

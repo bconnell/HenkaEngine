@@ -133,6 +133,13 @@ henka_result sandbox3d_authoring_object_pick_component(
 henka_result sandbox3d_authoring_object_move_selected_components(
     sandbox3d_authoring_object* object,
     henka_vec3 offset);
+/* Moves the active face selection along its evaluated local-space normal.
+ * The shared face vertices are moved once through the normal transactional
+ * source, preserving topology continuity while providing a direct profile
+ * shaping tool for native-authored geometry. */
+henka_result sandbox3d_authoring_object_move_selected_face_normal(
+    sandbox3d_authoring_object* object,
+    float distance);
 /* Moves the vertices touched by the active selection with a bounded
  * topology-aware falloff. The selected vertices receive the full offset;
  * each connected ring up to ring_count receives a linearly reduced offset.

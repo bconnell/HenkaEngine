@@ -20453,6 +20453,30 @@ details_group_authoring:
                         sandbox3d_set_status(state, true, "Authoring face extrude rejected; source retained.");
                     }
                 }
+                if (henka_ui_button(
+                        state->ui,
+                        "authoring_face_normal_positive",
+                        (henka_ui_rect){row.x + 88.0f, row.y, 96.0f, 24.0f},
+                        "Normal +") &&
+                    sandbox3d_authoring_object_move_selected_face_normal(
+                        state->authoring_object,
+                        0.1f) == HENKA_SUCCESS)
+                {
+                    sandbox3d_mark_generic_modeling_applied(state, entity);
+                    sandbox3d_set_status(state, false, "Selected face pushed along its local normal.");
+                }
+                if (henka_ui_button(
+                        state->ui,
+                        "authoring_face_normal_negative",
+                        (henka_ui_rect){row.x + 190.0f, row.y, 96.0f, 24.0f},
+                        "Normal -") &&
+                    sandbox3d_authoring_object_move_selected_face_normal(
+                        state->authoring_object,
+                        -0.1f) == HENKA_SUCCESS)
+                {
+                    sandbox3d_mark_generic_modeling_applied(state, entity);
+                    sandbox3d_set_status(state, false, "Selected face pulled along its local normal.");
+                }
             }
             if (state->authoring_object != NULL &&
                 sandbox3d_details_flow_next_row(state, flow_desc.bounds, 28.0f, 1U, &row) &&

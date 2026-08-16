@@ -52,8 +52,14 @@ mode-specific stroke/marker while the rest of a multi-selection remains visible.
 The Scene View also shows the active topology mode and selected-component count,
 including when the current mode has no component selected yet. Small Move X+, Move Y+, and Move Z+
 commands offset the selected components through a cloned mesh and the existing
-transactional scene/render/bounds/collider publication path. Face mode exposes
-Grow Selection, which expands the active selection by one topology-adjacent
+transactional scene/render/bounds/collider publication path. Face mode also
+exposes Normal + and Normal - commands that translate the active face's shared
+vertices along its evaluated local-space normal through the same transaction.
+This keeps the face connected to neighboring topology while providing a direct
+bounded profile-shaping operation for native-authored anatomy and mechanical
+forms. The operation rejects malformed or degenerate faces and distances outside
+its bounded editor range. Face mode exposes Grow Selection, which expands the
+active selection by one topology-adjacent
 ring, Select Connected, which continues that expansion to the complete
 reachable component within the bounded selection budget, and Scale Selected,
 which scales the touched vertices around their centroid through the same
