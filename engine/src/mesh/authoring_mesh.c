@@ -2,14 +2,30 @@
 
 #include <math.h>
 #include <stdio.h>
+#include <stdint.h>
 #include <string.h>
 
 #ifdef _WIN32
 #include <windows.h>
+#else
+#include <stdatomic.h>
+#include <unistd.h>
 #endif
 
 #include <henka/memory.h>
 #include <henka/persistence.h>
+
+#include "../core/checked.h"
+
+#define HENKA_AUTHORING_MESH_FILE_VERSION 3U
+#define HENKA_AUTHORING_MESH_LEGACY_FILE_VERSION 2U
+#define HENKA_AUTHORING_TEMP_PATH_SUFFIX_CAPACITY 96U
+
+#ifdef _WIN32
+static volatile LONG g_authoring_save_sequence = 0L;
+#else
+static atomic_uint g_authoring_save_sequence = 0U;
+#endif
 
 struct henka_authoring_mesh
 {
@@ -1217,22 +1233,44 @@ henka_result henka_authoring_mesh_history_redo(henka_authoring_mesh_history* his
 
 static bool authoring_write_u32(FILE* file, uint32_t value)
 {
-    return fwrite(&value, sizeof(value), 1U, file) == 1U;
+    const unsigned char bytes[sizeof(value)] = {
+        (unsigned char)(value & 0xffU),
+        (unsigned char)((value >> 8U) & 0xffU),
+        (unsigned char)((value >> 16U) & 0xffU),
+        (unsigned char)((value >> 24U) & 0xffU)};
+    return fwrite(bytes, sizeof(bytes), 1U, file) == 1U;
 }
 
 static bool authoring_read_u32(FILE* file, uint32_t* out_value)
 {
-    return out_value != NULL && fread(out_value, sizeof(*out_value), 1U, file) == 1U;
+    unsigned char bytes[sizeof(uint32_t)];
+    if (out_value == NULL || fread(bytes, sizeof(bytes), 1U, file) != 1U)
+    {
+        return false;
+    }
+    *out_value = (uint32_t)bytes[0] |
+        ((uint32_t)bytes[1] << 8U) |
+        ((uint32_t)bytes[2] << 16U) |
+        ((uint32_t)bytes[3] << 24U);
+    return true;
 }
 
 static bool authoring_write_f32(FILE* file, float value)
 {
-    return fwrite(&value, sizeof(value), 1U, file) == 1U;
+    uint32_t bits;
+    memcpy(&bits, &value, sizeof(bits));
+    return authoring_write_u32(file, bits);
 }
 
 static bool authoring_read_f32(FILE* file, float* out_value)
 {
-    return out_value != NULL && fread(out_value, sizeof(*out_value), 1U, file) == 1U;
+    uint32_t bits;
+    if (out_value == NULL || !authoring_read_u32(file, &bits))
+    {
+        return false;
+    }
+    memcpy(out_value, &bits, sizeof(*out_value));
+    return true;
 }
 
 static bool authoring_write_byte(FILE* file, unsigned char value)
@@ -1274,6 +1312,62 @@ static FILE* authoring_open_file(const char* path, const char* mode)
     return file;
 }
 
+static uint32_t authoring_next_save_sequence(void)
+{
+#ifdef _WIN32
+    return (uint32_t)InterlockedIncrement(&g_authoring_save_sequence);
+#else
+    return atomic_fetch_add_explicit(
+        &g_authoring_save_sequence,
+        1U,
+        memory_order_relaxed) + 1U;
+#endif
+}
+
+static bool authoring_make_temporary_path(const char* path, char** out_path)
+{
+    const size_t path_length = strlen(path);
+    size_t allocation_size;
+    char* temporary_path;
+    int written;
+    if (out_path == NULL || path_length > SIZE_MAX - HENKA_AUTHORING_TEMP_PATH_SUFFIX_CAPACITY ||
+        !henka_checked_size_add(path_length, HENKA_AUTHORING_TEMP_PATH_SUFFIX_CAPACITY, &allocation_size))
+    {
+        return false;
+    }
+    temporary_path = henka_malloc(allocation_size);
+    if (temporary_path == NULL)
+    {
+        return false;
+    }
+#ifdef _WIN32
+    written = _snprintf_s(
+        temporary_path,
+        allocation_size,
+        _TRUNCATE,
+        "%s.tmp.%lu.%lu.%lu",
+        path,
+        (unsigned long)GetCurrentProcessId(),
+        (unsigned long)GetCurrentThreadId(),
+        (unsigned long)authoring_next_save_sequence());
+#else
+    written = snprintf(
+        temporary_path,
+        allocation_size,
+        "%s.tmp.%ld.%lu",
+        path,
+        (long)getpid(),
+        (unsigned long)authoring_next_save_sequence());
+#endif
+    if (written < 0 || (size_t)written >= allocation_size)
+    {
+        henka_free(temporary_path);
+        return false;
+    }
+    *out_path = temporary_path;
+    return true;
+}
+
 static bool authoring_read_vec2(FILE* file, henka_vec2* out_value)
 {
     return out_value != NULL && authoring_read_f32(file, &out_value->x) && authoring_read_f32(file, &out_value->y);
@@ -1283,7 +1377,6 @@ henka_result henka_authoring_mesh_save_file(const henka_authoring_mesh* mesh, co
 {
     FILE* file = NULL;
     char* temporary_path = NULL;
-    size_t path_length;
     size_t index;
     bool ok = false;
     if (mesh == NULL || path == NULL || path[0] == '\0' || !henka_authoring_mesh_validate(mesh))
@@ -1294,25 +1387,17 @@ henka_result henka_authoring_mesh_save_file(const henka_authoring_mesh* mesh, co
     {
         return HENKA_ERROR_ASSET_SOURCE;
     }
-    path_length = strlen(path);
-    if (path_length > SIZE_MAX - 5U)
-    {
-        return HENKA_ERROR_LIMIT;
-    }
-    temporary_path = henka_malloc(path_length + 5U);
-    if (temporary_path == NULL)
+    if (!authoring_make_temporary_path(path, &temporary_path))
     {
         return HENKA_ERROR_OUT_OF_MEMORY;
     }
-    memcpy(temporary_path, path, path_length);
-    memcpy(&temporary_path[path_length], ".tmp", 5U);
     file = authoring_open_file(temporary_path, "wb");
     if (file == NULL)
     {
         henka_free(temporary_path);
         return HENKA_ERROR_ASSET_SOURCE;
     }
-    ok = fwrite("HAMS", 4U, 1U, file) == 1U && authoring_write_u32(file, 2U) &&
+    ok = fwrite("HAMS", 4U, 1U, file) == 1U && authoring_write_u32(file, HENKA_AUTHORING_MESH_FILE_VERSION) &&
         authoring_write_u32(file, (uint32_t)mesh->desc.max_vertices) &&
         authoring_write_u32(file, (uint32_t)mesh->desc.max_edges) &&
         authoring_write_u32(file, (uint32_t)mesh->desc.max_faces) &&
@@ -1369,9 +1454,8 @@ henka_result henka_authoring_mesh_save_file(const henka_authoring_mesh* mesh, co
     if (ok)
     {
 #ifdef _WIN32
-        ok = MoveFileExA(temporary_path, path, MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH) != 0;
+    ok = MoveFileExA(temporary_path, path, MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH) != 0;
 #else
-        remove(path);
         ok = rename(temporary_path, path) == 0;
 #endif
     }
@@ -1409,7 +1493,9 @@ henka_result henka_authoring_mesh_load_file(henka_authoring_mesh* mesh, const ch
     {
         char magic[4];
         if (fread(magic, sizeof(magic), 1U, file) != 1U || memcmp(magic, "HAMS", 4U) != 0 ||
-            !authoring_read_u32(file, &version) || version != 2U ||
+            !authoring_read_u32(file, &version) ||
+            (version != HENKA_AUTHORING_MESH_LEGACY_FILE_VERSION &&
+             version != HENKA_AUTHORING_MESH_FILE_VERSION) ||
             !authoring_read_u32(file, &capacities[0]) || !authoring_read_u32(file, &capacities[1]) ||
             !authoring_read_u32(file, &capacities[2]) || !authoring_read_u32(file, &capacities[3]) ||
             !authoring_read_u32(file, &slots[0]) || !authoring_read_u32(file, &slots[1]) ||
@@ -1478,6 +1564,8 @@ henka_result henka_authoring_mesh_load_file(henka_authoring_mesh* mesh, const ch
         unsigned char active;
         henka_authoring_face* face = &candidate->faces[index];
         uint32_t corner_count;
+        size_t corner_bytes;
+        size_t uv_bytes;
         size_t corner;
         if (!authoring_read_byte(file, &active) || active > 1U)
         {
@@ -1497,9 +1585,20 @@ henka_result henka_authoring_mesh_load_file(henka_authoring_mesh* mesh, const ch
         }
         face->corner_count = corner_count;
         face->smooth = active != 0U;
-        face->vertices = henka_malloc(corner_count * sizeof(*face->vertices));
-        face->edges = henka_malloc(corner_count * sizeof(*face->edges));
-        face->uvs = henka_malloc(corner_count * sizeof(*face->uvs));
+        if (!henka_checked_size_multiply(
+                (size_t)corner_count,
+                sizeof(*face->vertices),
+                &corner_bytes) ||
+            !henka_checked_size_multiply(
+                (size_t)corner_count,
+                sizeof(*face->uvs),
+                &uv_bytes))
+        {
+            goto cleanup;
+        }
+        face->vertices = henka_malloc(corner_bytes);
+        face->edges = henka_malloc(corner_bytes);
+        face->uvs = henka_malloc(uv_bytes);
         if (face->vertices == NULL || face->edges == NULL || face->uvs == NULL)
         {
             goto cleanup;
@@ -1562,7 +1661,9 @@ henka_result henka_authoring_mesh_load_file_new(const char* path, henka_authorin
         uint32_t capacities[4] = {0U, 0U, 0U, 0U};
         const bool header_ok = fread(magic, sizeof(magic), 1U, file) == 1U &&
             memcmp(magic, "HAMS", sizeof(magic)) == 0 &&
-            authoring_read_u32(file, &version) && version == 2U &&
+            authoring_read_u32(file, &version) &&
+            (version == HENKA_AUTHORING_MESH_LEGACY_FILE_VERSION ||
+             version == HENKA_AUTHORING_MESH_FILE_VERSION) &&
             authoring_read_u32(file, &capacities[0]) &&
             authoring_read_u32(file, &capacities[1]) &&
             authoring_read_u32(file, &capacities[2]) &&

@@ -1,5 +1,6 @@
 #include <math.h>
 #include <stdio.h>
+#include <string.h>
 
 #include <henka/authoring_mesh.h>
 #include <henka/authoring_modeling.h>
@@ -9,6 +10,20 @@ static int fail(const char* message)
 {
     fprintf(stderr, "authoring mesh test failed: %s\n", message);
     return 0;
+}
+
+static FILE* test_open_file(const char* path, const char* mode)
+{
+    FILE* file = NULL;
+#ifdef _WIN32
+    if (fopen_s(&file, path, mode) != 0)
+    {
+        return NULL;
+    }
+#else
+    file = fopen(path, mode);
+#endif
+    return file;
 }
 
 static int test_topology_and_evaluation(void)
@@ -147,6 +162,8 @@ static int test_history_and_persistence(void)
     henka_authoring_vertex_id face[] = {1U, 2U, 3U};
     henka_authoring_face_id face_id;
     const henka_authoring_vertex* vertex;
+    FILE* saved;
+    unsigned char header[8];
     FILE* corrupt;
     int corrupt_ok;
     int result = 0;
@@ -175,8 +192,32 @@ static int test_history_and_persistence(void)
     vertex = henka_authoring_mesh_get_vertex(mesh, ids[0]);
     if (vertex == NULL || fabsf(vertex->uv.x - 0.5f) > 0.0001f ||
         henka_authoring_mesh_set_face_corner_uv(mesh, face_id, 0U, (henka_vec2){4.0f, 5.0f}) != HENKA_SUCCESS ||
-        henka_authoring_mesh_save_file(mesh, path) != HENKA_SUCCESS ||
-        henka_authoring_mesh_set_vertex_uv(mesh, ids[0], (henka_vec2){9.0f, 9.0f}) != HENKA_SUCCESS ||
+        henka_authoring_mesh_save_file(mesh, path) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    saved = test_open_file(path, "rb");
+    if (saved == NULL)
+    {
+        goto cleanup;
+    }
+    if (fread(header, sizeof(header), 1U, saved) != 1U)
+    {
+        fclose(saved);
+        saved = NULL;
+        goto cleanup;
+    }
+    if (fclose(saved) != 0)
+    {
+        saved = NULL;
+        goto cleanup;
+    }
+    saved = NULL;
+    if (memcmp(header, "HAMS\x03\0\0\0", sizeof(header)) != 0)
+    {
+        goto cleanup;
+    }
+    if (henka_authoring_mesh_set_vertex_uv(mesh, ids[0], (henka_vec2){9.0f, 9.0f}) != HENKA_SUCCESS ||
         henka_authoring_mesh_load_file(mesh, path) != HENKA_SUCCESS)
     {
         goto cleanup;

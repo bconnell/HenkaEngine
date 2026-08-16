@@ -130,6 +130,12 @@ must start empty, counts and indices are bounded and checked, and allocation or
 evaluation failure leaves the output slot empty. This is the reusable
 authoring-to-render boundary; it does not create a material authority or
 replace glTF scene/material ownership.
+`henka_authoring_mesh_save_file` writes HAMS v3 with explicitly little-endian
+32-bit integers and IEEE-754 float bit patterns. Each save uses a unique
+same-directory temporary name and atomically replaces the destination only
+after the complete candidate is flushed, so a failed or concurrent save does
+not remove the prior valid source. The loader accepts both the current v3
+format and the existing v2 sources shipped with the repository.
 `henka_authoring_mesh_load_file_new` can load a versioned `.hams` source without
 requiring the consumer to duplicate the file's capacity header; it validates
 the declared bounded capacities before creating the candidate and retains an
