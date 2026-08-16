@@ -138,7 +138,6 @@ void henka_test_persistence(void)
     file = NULL;
     HENKA_TEST_ASSERT(fopen_s(&file, "build/test_tmp/persistence_roundtrip.settings.henka-tmp", "rb") != 0);
     HENKA_TEST_ASSERT(file == NULL);
-    HENKA_TEST_ASSERT(file == NULL);
 
     HENKA_TEST_ASSERT(henka_settings_create(&reloaded) == HENKA_SUCCESS);
     HENKA_TEST_ASSERT(henka_settings_set_string(reloaded, "old_value", "preserve") == HENKA_SUCCESS);
