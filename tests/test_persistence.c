@@ -8,11 +8,26 @@
 #include <henka/memory.h>
 #include <henka/persistence.h>
 
+static FILE* henka_test_open_file(const char* path, const char* mode)
+{
+    FILE* file = NULL;
+#ifdef _WIN32
+    if (fopen_s(&file, path, mode) != 0)
+    {
+        return NULL;
+    }
+#else
+    file = fopen(path, mode);
+#endif
+    return file;
+}
+
 static bool henka_test_write_file(const char* path, const char* content)
 {
     FILE* file = NULL;
 
-    if (fopen_s(&file, path, "wb") != 0 || file == NULL)
+    file = henka_test_open_file(path, "wb");
+    if (file == NULL)
     {
         return false;
     }
@@ -122,6 +137,7 @@ void henka_test_persistence(void)
 
     file = NULL;
     HENKA_TEST_ASSERT(fopen_s(&file, "build/test_tmp/persistence_roundtrip.settings.henka-tmp", "rb") != 0);
+    HENKA_TEST_ASSERT(file == NULL);
     HENKA_TEST_ASSERT(file == NULL);
 
     HENKA_TEST_ASSERT(henka_settings_create(&reloaded) == HENKA_SUCCESS);

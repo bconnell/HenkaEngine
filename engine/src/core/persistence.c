@@ -49,6 +49,20 @@ struct henka_save_data
     henka_settings* flags;
 };
 
+static FILE* henka_persistence_open_file(const char* path, const char* mode)
+{
+    FILE* file = NULL;
+#ifdef _WIN32
+    if (fopen_s(&file, path, mode) != 0)
+    {
+        return NULL;
+    }
+#else
+    file = fopen(path, mode);
+#endif
+    return file;
+}
+
 static henka_result henka_persistence_create_directory_tree(const char* path)
 {
     char* mutable_path;
@@ -902,8 +916,8 @@ henka_result henka_settings_load_file(henka_settings* settings, const char* path
         return result;
     }
 
-    file = NULL;
-    if (fopen_s(&file, path, "rb") != 0 || file == NULL)
+    file = henka_persistence_open_file(path, "rb");
+    if (file == NULL)
     {
         HENKA_LOG_WARN("Settings file could not be opened: %s", path);
         henka_settings_destroy(loaded);
@@ -1061,8 +1075,8 @@ henka_result henka_settings_save_file(const henka_settings* settings, const char
     }
 
     remove(temp_path);
-    file = NULL;
-    if (fopen_s(&file, temp_path, "wb") != 0 || file == NULL)
+    file = henka_persistence_open_file(temp_path, "wb");
+    if (file == NULL)
     {
         henka_free(temp_path);
         return HENKA_ERROR_UNKNOWN;
