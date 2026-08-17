@@ -433,6 +433,20 @@ static henka_result henka_engine_abort_render_frame(
     const char* stage)
 {
     henka_result abort_result;
+    henka_result residency_result;
+
+    if (engine != NULL && engine->asset_manager != NULL)
+    {
+        residency_result = henka_assets_end_texture_residency_frame(
+            engine->asset_manager);
+        if (residency_result != HENKA_SUCCESS)
+        {
+            HENKA_LOG_WARN(
+                "texture residency frame close failed after %s: %s",
+                stage != NULL ? stage : "render failure",
+                henka_result_to_string(residency_result));
+        }
+    }
 
     if (engine == NULL ||
         engine->renderer == NULL ||
@@ -675,6 +689,11 @@ static henka_result henka_engine_render_frame(henka_engine* engine)
         HENKA_LOG_ERROR(
             "renderer begin frame failed: %s",
             henka_result_to_string(result));
+        if (engine->asset_manager != NULL)
+        {
+            (void)henka_assets_end_texture_residency_frame(
+                engine->asset_manager);
+        }
         return result;
     }
 
@@ -796,6 +815,18 @@ static henka_result henka_engine_render_frame(henka_engine* engine)
             engine,
             result,
             "main-window presentation");
+    }
+
+    if (engine->asset_manager != NULL)
+    {
+        result = henka_assets_end_texture_residency_frame(
+            engine->asset_manager);
+        if (result != HENKA_SUCCESS)
+        {
+            HENKA_LOG_WARN(
+                "texture residency frame close failed after presentation: %s",
+                henka_result_to_string(result));
+        }
     }
 
     return HENKA_SUCCESS;
