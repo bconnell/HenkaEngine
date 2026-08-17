@@ -315,6 +315,18 @@ henka_result henka_scene_get_entity_local_bounds(const henka_scene* scene, henka
 henka_result henka_scene_get_entity_world_bounds(const henka_scene* scene, henka_entity entity, henka_bounds* out_bounds);
 henka_result henka_scene_get_entity_interaction(const henka_scene* scene, henka_entity entity, henka_interaction_desc* out_interaction);
 henka_result henka_scene_get_entity_flags(const henka_scene* scene, henka_entity entity, uint32_t* out_flags);
+/* Returns the user-facing logical owner for a render child. New entities own
+ * themselves until an importer or editor assigns a valid owner. */
+henka_result henka_scene_get_entity_selection_owner(
+    const henka_scene* scene,
+    henka_entity entity,
+    henka_entity* out_owner);
+/* Assigns a valid scene entity as the logical selection owner for one render
+ * entity. Ownership does not remove child identity or alter rendering. */
+henka_result henka_scene_set_entity_selection_owner(
+    henka_scene* scene,
+    henka_entity entity,
+    henka_entity owner);
 henka_result henka_scene_set_entity_transform(henka_scene* scene, henka_entity entity, henka_transform transform);
 henka_result henka_scene_translate_entity(henka_scene* scene, henka_entity entity, henka_vec3 delta);
 henka_result henka_scene_rotate_entity(henka_scene* scene, henka_entity entity, henka_quat delta_rotation);

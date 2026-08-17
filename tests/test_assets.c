@@ -359,6 +359,12 @@ void henka_test_assets(void)
     henka_texture* runtime_cache_lookup;
     size_t allocations_before_runtime;
     size_t allocations_before_alias;
+    henka_asset_manager owner_manager;
+    henka_gltf_scene_asset owner_scene;
+    henka_mesh owner_meshes[2];
+    henka_scene* owner_target;
+    henka_entity owner_entities[2];
+    size_t owner_entity_count;
     static const unsigned char one_pixel[] =
     {
         255U, 255U, 255U, 255U
@@ -396,6 +402,48 @@ void henka_test_assets(void)
     HENKA_TEST_ASSERT(scene_asset == NULL);
     HENKA_TEST_ASSERT(henka_assets_instantiate_gltf_scene(
         NULL, NULL, NULL, NULL, NULL) == HENKA_ERROR_INVALID_ARGUMENT);
+    memset(&owner_manager, 0, sizeof(owner_manager));
+    memset(&owner_scene, 0, sizeof(owner_scene));
+    memset(owner_meshes, 0, sizeof(owner_meshes));
+    owner_scene.shader = &managed_shader;
+    owner_scene.data.scene_count = 1U;
+    owner_scene.data.active_scene_index = 0U;
+    owner_scene.data.scene_root_counts[0] = 1U;
+    owner_scene.data.scene_root_nodes[0] = 0;
+    owner_scene.data.node_count = 2U;
+    owner_scene.data.nodes[0].name = "Imported Root";
+    owner_scene.data.nodes[0].parent_index = -1;
+    owner_scene.data.nodes[0].mesh_index = 0;
+    owner_scene.data.nodes[0].world_transform = henka_transform_identity();
+    owner_scene.data.nodes[1].name = "Imported Child";
+    owner_scene.data.nodes[1].parent_index = 0;
+    owner_scene.data.nodes[1].mesh_index = 1;
+    owner_scene.data.nodes[1].world_transform = henka_transform_identity();
+    owner_scene.data.primitive_count = 2U;
+    owner_scene.data.primitives[0].mesh_index = 0U;
+    owner_scene.data.primitives[1].mesh_index = 1U;
+    owner_scene.primitive_meshes[0] = &owner_meshes[0];
+    owner_scene.primitive_meshes[1] = &owner_meshes[1];
+    owner_target = NULL;
+    HENKA_TEST_ASSERT(henka_scene_create(&owner_target) == HENKA_SUCCESS);
+    owner_entity_count = 0U;
+    HENKA_TEST_ASSERT(henka_assets_instantiate_gltf_scene(
+        &owner_manager,
+        &owner_scene,
+        owner_target,
+        "Owner Test ",
+        &owner_entity_count) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(owner_entity_count == 2U);
+    HENKA_TEST_ASSERT(henka_scene_get_entity_at_index(owner_target, 0U) != HENKA_INVALID_ENTITY);
+    HENKA_TEST_ASSERT(henka_scene_get_entity_at_index(owner_target, 1U) != HENKA_INVALID_ENTITY);
+    owner_entities[0] = henka_scene_get_entity_at_index(owner_target, 0U);
+    owner_entities[1] = henka_scene_get_entity_at_index(owner_target, 1U);
+    HENKA_TEST_ASSERT(henka_scene_get_entity_selection_owner(
+        owner_target, owner_entities[0], &owner_entities[0]) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_scene_get_entity_selection_owner(
+        owner_target, owner_entities[1], &owner_entities[1]) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(owner_entities[0] == owner_entities[1]);
+    henka_scene_destroy(owner_target);
     HENKA_TEST_ASSERT(henka_assets_get_metadata_count(NULL) == 0U);
 
     display_name = henka_asset_copy_display_name(display_name_source);

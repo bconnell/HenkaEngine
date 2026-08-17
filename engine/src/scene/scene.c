@@ -871,6 +871,9 @@ henka_entity henka_scene_create_entity_named(henka_scene* scene, const char* nam
             scene->entities[index].has_local_bounds = false;
             scene->entities[index].local_bounds = (henka_bounds){{0.0f, 0.0f, 0.0f}, {0.5f, 0.5f, 0.5f}};
             scene->entities[index].interaction = (henka_interaction_desc){false, 2.0f, NULL};
+            scene->entities[index].selection_owner = henka_scene_make_entity(
+                index,
+                scene->entities[index].generation);
 
             copy_result = henka_scene_duplicate_text(name, &copy);
             if (copy_result != HENKA_SUCCESS)
@@ -904,6 +907,9 @@ henka_entity henka_scene_create_entity_named(henka_scene* scene, const char* nam
     scene->entities[scene->entity_count].has_local_bounds = false;
     scene->entities[scene->entity_count].local_bounds = (henka_bounds){{0.0f, 0.0f, 0.0f}, {0.5f, 0.5f, 0.5f}};
     scene->entities[scene->entity_count].interaction = (henka_interaction_desc){false, 2.0f, NULL};
+    scene->entities[scene->entity_count].selection_owner = henka_scene_make_entity(
+        scene->entity_count,
+        scene->entities[scene->entity_count].generation);
     copy_result = henka_scene_duplicate_text(name, &copy);
     if (copy_result != HENKA_SUCCESS)
     {
@@ -922,6 +928,7 @@ henka_entity henka_scene_create_entity_named(henka_scene* scene, const char* nam
 void henka_scene_destroy_entity(henka_scene* scene, henka_entity entity)
 {
     henka_scene_entity_record* record;
+    size_t index;
 
     record = henka_scene_get_entity_record(scene, entity);
     if (record == NULL)
@@ -929,10 +936,23 @@ void henka_scene_destroy_entity(henka_scene* scene, henka_entity entity)
         return;
     }
 
+    /* A logical owner is a presentation relationship, not an ownership
+     * lifetime. Promote its children to independent roots before retiring the
+     * owner so stale selection handles cannot survive a destroy/reuse cycle. */
+    for (index = 0U; index < scene->entity_capacity; ++index)
+    {
+        henka_scene_entity_record* child = &scene->entities[index];
+        if (child->active && child->selection_owner == entity)
+        {
+            child->selection_owner = henka_scene_make_entity(index, child->generation);
+        }
+    }
+
     record->active = false;
     henka_scene_advance_entity_generation(record);
     record->visible = true;
     record->flags = HENKA_SCENE_ENTITY_FLAG_NONE;
+    record->selection_owner = HENKA_INVALID_ENTITY;
     record->mesh = NULL;
     record->material = henka_material_default();
     record->material_asset = NULL;
@@ -1279,6 +1299,55 @@ henka_result henka_scene_get_entity_flags(const henka_scene* scene, henka_entity
     }
 
     *out_flags = record->flags;
+    return HENKA_SUCCESS;
+}
+
+henka_result henka_scene_get_entity_selection_owner(
+    const henka_scene* scene,
+    henka_entity entity,
+    henka_entity* out_owner)
+{
+    const henka_scene_entity_record* record;
+    const henka_scene_entity_record* owner_record;
+
+    if (out_owner == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    *out_owner = HENKA_INVALID_ENTITY;
+    record = henka_scene_get_entity_record_const(scene, entity);
+    if (record == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    owner_record = henka_scene_get_entity_record_const(scene, record->selection_owner);
+    if (owner_record == NULL || (owner_record->flags & HENKA_SCENE_ENTITY_FLAG_HELPER) != 0U)
+    {
+        return HENKA_ERROR_UNKNOWN;
+    }
+    *out_owner = record->selection_owner;
+    return HENKA_SUCCESS;
+}
+
+henka_result henka_scene_set_entity_selection_owner(
+    henka_scene* scene,
+    henka_entity entity,
+    henka_entity owner)
+{
+    henka_scene_entity_record* record;
+    const henka_scene_entity_record* owner_record;
+
+    record = henka_scene_get_entity_record(scene, entity);
+    owner_record = henka_scene_get_entity_record_const(scene, owner);
+    if (record == NULL || owner_record == NULL ||
+        (record->flags & HENKA_SCENE_ENTITY_FLAG_HELPER) != 0U ||
+        owner_record->selection_owner != owner ||
+        (owner_record->flags & HENKA_SCENE_ENTITY_FLAG_HELPER) != 0U)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    record->selection_owner = owner;
+    henka_scene_bump_render_revision(scene);
     return HENKA_SUCCESS;
 }
 

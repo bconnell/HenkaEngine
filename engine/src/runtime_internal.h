@@ -13,6 +13,7 @@ typedef struct henka_scene_entity_record
     uint64_t generation;
     bool visible;
     uint32_t flags;
+    henka_entity selection_owner;
     char* name;
     char* tag;
     henka_transform transform;

@@ -828,6 +828,8 @@ static void sandbox3d_record_action_result(
 static void sandbox3d_record_success_result(sandbox3d_state* state, const char* format, ...);
 static const sandbox3d_object_descriptor* sandbox3d_get_descriptor_by_entity(const sandbox3d_state* state, henka_entity entity);
 static bool sandbox3d_is_drag_target_valid(const sandbox3d_state* state, henka_entity entity);
+static henka_entity sandbox3d_get_selection_owner(const sandbox3d_state* state, henka_entity entity);
+static bool sandbox3d_is_logical_scene_object(const sandbox3d_state* state, henka_entity entity);
 static void sandbox3d_clear_gizmo_drag(sandbox3d_state* state, bool clear_hover_axis);
 static void sandbox3d_cancel_workspace_interaction(sandbox3d_state* state);
 static void sandbox3d_set_viewport_tool_mode(
@@ -845,7 +847,7 @@ static bool sandbox3d_add_native_rocket_object(henka_engine* engine, sandbox3d_s
 static const henka_model_scene_primitive* sandbox3d_get_showcase_authoring_primitive(
     const sandbox3d_state* state,
     henka_entity entity);
-static bool sandbox3d_entities_share_showcase_asset(
+static bool sandbox3d_entities_share_selection_owner(
     const sandbox3d_state* state,
     henka_entity left,
     henka_entity right);
@@ -6976,6 +6978,7 @@ static henka_entity sandbox3d_get_real_selected_entity(const sandbox3d_state* st
         selected_entity = state->selected_entity;
     }
 
+    selected_entity = sandbox3d_get_selection_owner(state, selected_entity);
     if (!sandbox3d_is_selectable_entity(state, selected_entity))
     {
         return HENKA_INVALID_ENTITY;
@@ -7059,6 +7062,23 @@ static bool sandbox3d_is_selectable_entity(const sandbox3d_state* state, henka_e
 {
     return state != NULL &&
         sandbox3d_object_authoring_can_edit_entity(state->scene, entity);
+}
+
+static henka_entity sandbox3d_get_selection_owner(const sandbox3d_state* state, henka_entity entity)
+{
+    henka_entity owner = HENKA_INVALID_ENTITY;
+
+    if (state == NULL || state->scene == NULL || entity == HENKA_INVALID_ENTITY ||
+        henka_scene_get_entity_selection_owner(state->scene, entity, &owner) != HENKA_SUCCESS)
+    {
+        return HENKA_INVALID_ENTITY;
+    }
+    return owner;
+}
+
+static bool sandbox3d_is_logical_scene_object(const sandbox3d_state* state, henka_entity entity)
+{
+    return entity != HENKA_INVALID_ENTITY && sandbox3d_get_selection_owner(state, entity) == entity;
 }
 
 static const char* sandbox3d_get_descriptor_role_label(const sandbox3d_object_descriptor* descriptor)
@@ -10095,39 +10115,15 @@ static const henka_model_scene_primitive* sandbox3d_get_showcase_authoring_primi
     return NULL;
 }
 
-static bool sandbox3d_entities_share_showcase_asset(
+static bool sandbox3d_entities_share_selection_owner(
     const sandbox3d_state* state,
     henka_entity left,
     henka_entity right)
 {
-    const char* left_name;
-    const char* right_name;
-    static const char* const prefixes[] = {
-        "Showcase Giraffe ",
-        "Showcase Rocket "};
-    size_t index;
+    henka_entity left_owner = sandbox3d_get_selection_owner(state, left);
+    henka_entity right_owner = sandbox3d_get_selection_owner(state, right);
 
-    if (state == NULL || state->scene == NULL ||
-        left == HENKA_INVALID_ENTITY || right == HENKA_INVALID_ENTITY)
-    {
-        return false;
-    }
-    left_name = henka_scene_get_entity_name(state->scene, left);
-    right_name = henka_scene_get_entity_name(state->scene, right);
-    if (left_name == NULL || right_name == NULL)
-    {
-        return false;
-    }
-    for (index = 0U; index < sizeof(prefixes) / sizeof(prefixes[0]); ++index)
-    {
-        const size_t prefix_length = strlen(prefixes[index]);
-        if (strncmp(left_name, prefixes[index], prefix_length) == 0 &&
-            strncmp(right_name, prefixes[index], prefix_length) == 0)
-        {
-            return true;
-        }
-    }
-    return false;
+    return left_owner != HENKA_INVALID_ENTITY && left_owner == right_owner;
 }
 
 static bool sandbox3d_promote_authoring_material(
@@ -10573,6 +10569,13 @@ static void sandbox3d_select_entity(sandbox3d_state* state, henka_entity entity)
 
     if (state == NULL || state->scene == NULL || state->actions == NULL)
     {
+        return;
+    }
+
+    entity = sandbox3d_get_selection_owner(state, entity);
+    if (entity == HENKA_INVALID_ENTITY)
+    {
+        state->selected_entity = HENKA_INVALID_ENTITY;
         return;
     }
 
@@ -14633,10 +14636,18 @@ static bool sandbox3d_try_pick_object(henka_engine* engine, sandbox3d_state* sta
     object_hit = henka_scene_pick_entity(state->scene, ray, &picked_entity, &distance) == HENKA_SUCCESS &&
         sandbox3d_is_selectable_entity(state, picked_entity);
     visual_hit_entity = object_hit ? picked_entity : HENKA_INVALID_ENTITY;
+    if (object_hit)
+    {
+        const henka_entity logical_owner = sandbox3d_get_selection_owner(state, picked_entity);
+        if (logical_owner != HENKA_INVALID_ENTITY)
+        {
+            picked_entity = logical_owner;
+        }
+    }
     if (object_hit && state->authoring_object != NULL &&
-        sandbox3d_entities_share_showcase_asset(
+        sandbox3d_entities_share_selection_owner(
             state,
-            picked_entity,
+            visual_hit_entity,
             sandbox3d_authoring_object_get_entity(state->authoring_object)))
     {
         /* Imported showcase materials are separate selectable primitives. A
@@ -18961,9 +18972,10 @@ static void sandbox3d_draw_scene_objects_panel(
     selectable_count = 0U;
     for (scene_index = 0U; scene_index < henka_scene_get_entity_count(state->scene); ++scene_index)
     {
-        if (sandbox3d_is_selectable_entity(
-                state,
-                henka_scene_get_entity_at_index(state->scene, scene_index)))
+        entity = henka_scene_get_entity_at_index(state->scene, scene_index);
+        if (sandbox3d_is_selectable_entity(state, entity) &&
+            sandbox3d_is_logical_scene_object(
+                state, entity))
         {
             ++selectable_count;
         }
@@ -18990,7 +19002,8 @@ static void sandbox3d_draw_scene_objects_panel(
     for (scene_index = 0U; scene_index < henka_scene_get_entity_count(state->scene); ++scene_index)
     {
         entity = henka_scene_get_entity_at_index(state->scene, scene_index);
-        if (!sandbox3d_is_selectable_entity(state, entity))
+        if (!sandbox3d_is_selectable_entity(state, entity) ||
+            !sandbox3d_is_logical_scene_object(state, entity))
         {
             continue;
         }

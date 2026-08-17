@@ -4584,7 +4584,8 @@ static henka_result henka_assets_instantiate_gltf_scene_node(
     int node_index,
     const char* name_prefix,
     henka_entity* created,
-    size_t* inout_count)
+    size_t* inout_count,
+    henka_entity* inout_selection_owner)
 {
     const henka_model_scene_node* node;
     size_t primitive_index;
@@ -4592,7 +4593,7 @@ static henka_result henka_assets_instantiate_gltf_scene_node(
     char name[HENKA_MAX_SCENE_TEXT_BYTES];
 
     (void)manager;
-    if (asset == NULL || target_scene == NULL || inout_count == NULL || node_index < 0 ||
+    if (asset == NULL || target_scene == NULL || inout_count == NULL || inout_selection_owner == NULL || node_index < 0 ||
         (size_t)node_index >= asset->data.node_count) return HENKA_ERROR_INVALID_ARGUMENT;
     node = &asset->data.nodes[node_index];
     for (primitive_index = 0U; primitive_index < asset->data.primitive_count; ++primitive_index)
@@ -4608,6 +4609,15 @@ static henka_result henka_assets_instantiate_gltf_scene_node(
         entity = henka_scene_create_entity_named(target_scene, name);
         if (entity == HENKA_INVALID_ENTITY) return HENKA_ERROR_OUT_OF_MEMORY;
         created[(*inout_count)++] = entity;
+        if (*inout_selection_owner == HENKA_INVALID_ENTITY)
+        {
+            *inout_selection_owner = entity;
+        }
+        else if (henka_scene_set_entity_selection_owner(
+                     target_scene, entity, *inout_selection_owner) != HENKA_SUCCESS)
+        {
+            return HENKA_ERROR_UNKNOWN;
+        }
         if (henka_scene_set_entity_mesh(target_scene, entity, asset->primitive_meshes[primitive_index]) != HENKA_SUCCESS) return HENKA_ERROR_UNKNOWN;
         material = henka_material_default();
         material.shader = asset->shader;
@@ -4638,7 +4648,7 @@ static henka_result henka_assets_instantiate_gltf_scene_node(
         if (asset->data.nodes[child_index].parent_index == node_index)
         {
             henka_result result = henka_assets_instantiate_gltf_scene_node(manager, asset, target_scene,
-                (int)child_index, name_prefix, created, inout_count);
+                (int)child_index, name_prefix, created, inout_count, inout_selection_owner);
             if (result != HENKA_SUCCESS) return result;
         }
     return HENKA_SUCCESS;
@@ -4753,8 +4763,9 @@ henka_result henka_assets_instantiate_gltf_scene(
     {
         int node_index = asset->data.scene_root_nodes[
             asset->data.scene_root_offsets[asset->data.active_scene_index] + root_index];
+        henka_entity selection_owner = HENKA_INVALID_ENTITY;
         result = henka_assets_instantiate_gltf_scene_node(manager, asset, target_scene, node_index,
-            name_prefix, created, &created_count);
+            name_prefix, created, &created_count, &selection_owner);
         if (result != HENKA_SUCCESS) break;
     }
     if (result != HENKA_SUCCESS)
