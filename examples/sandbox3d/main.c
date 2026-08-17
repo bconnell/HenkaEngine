@@ -4415,50 +4415,22 @@ static bool sandbox3d_project_handle_box(
     return true;
 }
 
-static float sandbox3d_screen_cross(henka_vec2 origin, henka_vec2 left, henka_vec2 right)
-{
-    return (left.x - origin.x) * (right.y - origin.y) -
-        (left.y - origin.y) * (right.x - origin.x);
-}
-
-static void sandbox3d_sort_screen_points(henka_vec2* points, size_t count)
-{
-    size_t index;
-
-    for (index = 1U; index < count; ++index)
-    {
-        const henka_vec2 value = points[index];
-        size_t cursor = index;
-        while (cursor > 0U &&
-            (points[cursor - 1U].x > value.x ||
-             (points[cursor - 1U].x == value.x && points[cursor - 1U].y > value.y)))
-        {
-            points[cursor] = points[cursor - 1U];
-            --cursor;
-        }
-        points[cursor] = value;
-    }
-}
-
 static size_t sandbox3d_build_screen_silhouette(
     sandbox3d_state* state,
     henka_entity entity,
     henka_viewport viewport,
-    henka_vec2* out_points,
-    size_t point_capacity)
+    sandbox3d_silhouette_segment* out_segments,
+    size_t segment_capacity)
 {
-    enum { max_outline_points = 512 };
+    enum { max_outline_triangles = 2048 };
     henka_transform transform;
-    henka_vec2 points[max_outline_points];
+    sandbox3d_projected_triangle triangles[max_outline_triangles];
     const henka_model_scene_primitive* primitive;
     const sandbox3d_authoring_object* authoring;
-    size_t source_count;
-    size_t stride;
-    size_t point_count;
+    size_t triangle_count = 0U;
     size_t index;
-    size_t hull_count;
 
-    if (state == NULL || out_points == NULL || point_capacity < 3U ||
+    if (state == NULL || out_segments == NULL || segment_capacity == 0U ||
         henka_scene_get_entity_transform(state->scene, entity, &transform) != HENKA_SUCCESS)
     {
         return 0U;
@@ -4469,118 +4441,89 @@ static size_t sandbox3d_build_screen_silhouette(
         sandbox3d_authoring_object_get_entity(state->authoring_object) == entity
         ? state->authoring_object
         : NULL;
-    source_count = 0U;
     if (authoring != NULL)
     {
-        source_count = henka_authoring_mesh_get_counts(
-            sandbox3d_authoring_object_get_mesh(authoring)).vertices;
-    }
-    else if (primitive != NULL)
-    {
-        source_count = primitive->vertex_count;
-    }
-    if (source_count < 3U)
-    {
-        return 0U;
-    }
-
-    stride = (source_count + max_outline_points - 1U) / max_outline_points;
-    if (stride < 1U)
-    {
-        stride = 1U;
-    }
-    point_count = 0U;
-    if (authoring != NULL)
-    {
-        size_t authored_seen = 0U;
+        const henka_authoring_mesh* mesh = sandbox3d_authoring_object_get_mesh(authoring);
         for (index = 1U;
-             index <= HENKA_AUTHORING_MESH_HARD_MAX_VERTICES &&
-                 authored_seen < source_count && point_count < max_outline_points;
+             index <= HENKA_AUTHORING_MESH_HARD_MAX_FACES &&
+                 triangle_count < max_outline_triangles;
              ++index)
         {
-            const henka_authoring_vertex* vertex = henka_authoring_mesh_get_vertex(
-                sandbox3d_authoring_object_get_mesh(authoring),
-                (henka_authoring_vertex_id)index);
-            if (vertex == NULL)
+            henka_authoring_vertex_id corners[HENKA_AUTHORING_MESH_HARD_MAX_FACE_CORNERS];
+            size_t corner_count = 0U;
+            size_t corner_index;
+            if (sandbox3d_authoring_object_get_face_ordered_corners(
+                    authoring,
+                    (henka_authoring_face_id)index,
+                    corners,
+                    sizeof(corners) / sizeof(corners[0]),
+                    &corner_count) != HENKA_SUCCESS ||
+                corner_count < 3U)
             {
                 continue;
             }
-            if ((authored_seen++ % stride) != 0U)
+            for (corner_index = 1U;
+                 corner_index + 1U < corner_count && triangle_count < max_outline_triangles;
+                 ++corner_index)
             {
-                continue;
-            }
-            {
-                henka_vec2 screen_point;
-                if (sandbox3d_project_handle_point(
-                        state,
-                        viewport,
-                        sandbox3d_transform_authoring_point(transform, vertex->position),
-                        &screen_point))
+                const henka_authoring_vertex* vertex0 = henka_authoring_mesh_get_vertex(mesh, corners[0]);
+                const henka_authoring_vertex* vertex1 = henka_authoring_mesh_get_vertex(mesh, corners[corner_index]);
+                const henka_authoring_vertex* vertex2 = henka_authoring_mesh_get_vertex(mesh, corners[corner_index + 1U]);
+                if (vertex0 != NULL && vertex1 != NULL && vertex2 != NULL &&
+                    sandbox3d_project_handle_point(
+                        state, viewport,
+                        sandbox3d_transform_authoring_point(transform, vertex0->position),
+                        &triangles[triangle_count].points[0]) &&
+                    sandbox3d_project_handle_point(
+                        state, viewport,
+                        sandbox3d_transform_authoring_point(transform, vertex1->position),
+                        &triangles[triangle_count].points[1]) &&
+                    sandbox3d_project_handle_point(
+                        state, viewport,
+                        sandbox3d_transform_authoring_point(transform, vertex2->position),
+                        &triangles[triangle_count].points[2]))
                 {
-                    points[point_count++] = screen_point;
+                    triangles[triangle_count].vertex_ids[0] = corners[0];
+                    triangles[triangle_count].vertex_ids[1] = corners[corner_index];
+                    triangles[triangle_count].vertex_ids[2] = corners[corner_index + 1U];
+                    ++triangle_count;
                 }
             }
         }
     }
-    else
+    else if (primitive != NULL && primitive->indices != NULL)
     {
-        for (index = 0U; index < source_count && point_count < max_outline_points; index += stride)
+        for (index = 0U;
+             index + 2U < primitive->index_count && triangle_count < max_outline_triangles;
+             index += 3U)
         {
-            henka_vec2 screen_point;
-            if (sandbox3d_project_handle_point(
-                    state,
-                    viewport,
-                    sandbox3d_transform_authoring_point(transform, primitive->vertices[index].position),
-                    &screen_point))
+            const uint32_t i0 = primitive->indices[index];
+            const uint32_t i1 = primitive->indices[index + 1U];
+            const uint32_t i2 = primitive->indices[index + 2U];
+            if (i0 >= primitive->vertex_count || i1 >= primitive->vertex_count || i2 >= primitive->vertex_count ||
+                !sandbox3d_project_handle_point(
+                    state, viewport,
+                    sandbox3d_transform_authoring_point(transform, primitive->vertices[i0].position),
+                    &triangles[triangle_count].points[0]) ||
+                !sandbox3d_project_handle_point(
+                    state, viewport,
+                    sandbox3d_transform_authoring_point(transform, primitive->vertices[i1].position),
+                    &triangles[triangle_count].points[1]) ||
+                !sandbox3d_project_handle_point(
+                    state, viewport,
+                    sandbox3d_transform_authoring_point(transform, primitive->vertices[i2].position),
+                    &triangles[triangle_count].points[2]))
             {
-                points[point_count++] = screen_point;
+                continue;
             }
+            triangles[triangle_count].vertex_ids[0] = i0 + 1U;
+            triangles[triangle_count].vertex_ids[1] = i1 + 1U;
+            triangles[triangle_count].vertex_ids[2] = i2 + 1U;
+            ++triangle_count;
         }
     }
-    if (point_count < 3U)
-    {
-        return 0U;
-    }
-
-    sandbox3d_sort_screen_points(points, point_count);
-    hull_count = 0U;
-    for (index = 0U; index < point_count; ++index)
-    {
-        while (hull_count >= 2U &&
-            sandbox3d_screen_cross(
-                points[hull_count - 2U],
-                points[hull_count - 1U],
-                points[index]) <= 0.0f)
-        {
-            --hull_count;
-        }
-        points[hull_count++] = points[index];
-    }
-    {
-        const size_t lower_count = hull_count + 1U;
-        for (index = point_count; index-- > 0U;)
-        {
-            while (hull_count >= lower_count &&
-                sandbox3d_screen_cross(
-                    points[hull_count - 2U],
-                    points[hull_count - 1U],
-                    points[index]) <= 0.0f)
-            {
-                --hull_count;
-            }
-            points[hull_count++] = points[index];
-        }
-    }
-    if (hull_count > 1U)
-    {
-        --hull_count;
-    }
-    if (hull_count < 3U || hull_count > point_capacity)
-    {
-        return 0U;
-    }
-    memcpy(out_points, points, hull_count * sizeof(*out_points));
-    return hull_count;
+    return sandbox3d_build_topology_silhouette(
+        triangles, triangle_count, out_segments, segment_capacity);
 }
 
 static void sandbox3d_append_gizmo_handle(
@@ -5137,7 +5080,7 @@ static void sandbox3d_draw_selection_highlight(sandbox3d_state* state, henka_vie
     henka_entity selected_entity;
     henka_vec4 outer_color;
     henka_vec4 inner_color;
-    henka_vec2 silhouette[512];
+    sandbox3d_silhouette_segment silhouette[2048];
     size_t silhouette_count;
     size_t edge;
     bool component_selection_active;
@@ -5177,11 +5120,9 @@ static void sandbox3d_draw_selection_highlight(sandbox3d_state* state, henka_vie
 
     outer_color = (henka_vec4){0.02f, 0.04f, 0.06f, 0.92f};
     inner_color = (henka_vec4){1.0f, 0.86f, 0.22f, 0.98f};
-    /* A component edit has its own topology-authoritative overlay below.
-     * The sampled convex hull is intentionally not combined with it: a hull
-     * over disconnected authoring parts is an object-level indication, not a
-     * valid face boundary, and can create a phantom wedge between unrelated
-     * projected vertices. */
+    /* A component edit has its own topology-authoritative overlay below. The
+     * object outline is built from indexed triangle boundaries/front-back
+     * transitions, so disconnected parts and concavities remain explicit. */
     silhouette_count = component_selection_active
         ? 0U
         : sandbox3d_build_screen_silhouette(
@@ -5190,23 +5131,22 @@ static void sandbox3d_draw_selection_highlight(sandbox3d_state* state, henka_vie
             viewport,
             silhouette,
             sizeof(silhouette) / sizeof(silhouette[0]));
-    if (!component_selection_active && silhouette_count >= 3U)
+    if (!component_selection_active && silhouette_count > 0U)
     {
         for (edge = 0U; edge < silhouette_count; ++edge)
         {
-            const size_t next = (edge + 1U) % silhouette_count;
             sandbox3d_draw_viewport_clipped_overlay_line(
                 state->ui,
                 viewport,
-                silhouette[edge],
-                silhouette[next],
+                silhouette[edge].start,
+                silhouette[edge].end,
                 4.0f,
                 outer_color);
             sandbox3d_draw_viewport_clipped_overlay_line(
                 state->ui,
                 viewport,
-                silhouette[edge],
-                silhouette[next],
+                silhouette[edge].start,
+                silhouette[edge].end,
                 2.0f,
                 inner_color);
         }

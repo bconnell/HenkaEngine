@@ -421,6 +421,121 @@ bool sandbox3d_build_ground_selection_highlight_model(
     return true;
 }
 
+size_t sandbox3d_build_topology_silhouette(
+    const sandbox3d_projected_triangle* triangles,
+    size_t triangle_count,
+    sandbox3d_silhouette_segment* out_segments,
+    size_t segment_capacity)
+{
+    enum { edge_slot_count = 4096 };
+    typedef struct silhouette_edge
+    {
+        bool used;
+        uint32_t first_id;
+        uint32_t second_id;
+        uint8_t total_count;
+        uint8_t positive_count;
+        uint8_t negative_count;
+        henka_vec2 start;
+        henka_vec2 end;
+    } silhouette_edge;
+    silhouette_edge edges[edge_slot_count];
+    size_t triangle_index;
+    size_t output_count = 0U;
+
+    if (triangles == NULL || out_segments == NULL || triangle_count == 0U || segment_capacity == 0U)
+    {
+        return 0U;
+    }
+    memset(edges, 0, sizeof(edges));
+    for (triangle_index = 0U; triangle_index < triangle_count; ++triangle_index)
+    {
+        const sandbox3d_projected_triangle* triangle = &triangles[triangle_index];
+        const float area =
+            (triangle->points[1].x - triangle->points[0].x) *
+                (triangle->points[2].y - triangle->points[0].y) -
+            (triangle->points[1].y - triangle->points[0].y) *
+                (triangle->points[2].x - triangle->points[0].x);
+        int edge_index;
+
+        if (!isfinite(area) || fabsf(area) <= 0.0001f)
+        {
+            continue;
+        }
+        for (edge_index = 0; edge_index < 3; ++edge_index)
+        {
+            const int next_index = (edge_index + 1) % 3;
+            uint32_t first_id = triangle->vertex_ids[edge_index];
+            uint32_t second_id = triangle->vertex_ids[next_index];
+            size_t slot;
+            size_t probe;
+            silhouette_edge* edge = NULL;
+
+            if (first_id == second_id)
+            {
+                continue;
+            }
+            if (first_id > second_id)
+            {
+                const uint32_t swap = first_id;
+                first_id = second_id;
+                second_id = swap;
+            }
+            slot = (size_t)((first_id * 2654435761U ^ second_id * 2246822519U) % edge_slot_count);
+            for (probe = 0U; probe < edge_slot_count; ++probe)
+            {
+                silhouette_edge* candidate = &edges[(slot + probe) % edge_slot_count];
+                if (!candidate->used)
+                {
+                    candidate->used = true;
+                    candidate->first_id = first_id;
+                    candidate->second_id = second_id;
+                    candidate->start = triangle->points[edge_index];
+                    candidate->end = triangle->points[next_index];
+                    edge = candidate;
+                    break;
+                }
+                if (candidate->first_id == first_id && candidate->second_id == second_id)
+                {
+                    edge = candidate;
+                    break;
+                }
+            }
+            if (edge == NULL)
+            {
+                return 0U;
+            }
+            if (area > 0.0f)
+            {
+                if (edge->positive_count < UINT8_MAX) ++edge->positive_count;
+            }
+            else if (edge->negative_count < UINT8_MAX)
+            {
+                ++edge->negative_count;
+            }
+            if (edge->total_count < UINT8_MAX) ++edge->total_count;
+        }
+    }
+
+    for (triangle_index = 0U; triangle_index < edge_slot_count; ++triangle_index)
+    {
+        const silhouette_edge* edge = &edges[triangle_index];
+        const bool boundary = edge->total_count == 1U;
+        const bool front_back = edge->total_count == 2U &&
+            edge->positive_count > 0U && edge->negative_count > 0U;
+        if (!edge->used || (!boundary && !front_back))
+        {
+            continue;
+        }
+        if (output_count >= segment_capacity)
+        {
+            return 0U;
+        }
+        out_segments[output_count++] = (sandbox3d_silhouette_segment){edge->start, edge->end};
+    }
+    return output_count;
+}
+
 static bool sandbox3d_clip_line_parameter(float p, float q, float* t0, float* t1)
 {
     float r;

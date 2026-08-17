@@ -22,6 +22,9 @@ void henka_test_sandbox3d_interaction(void)
     sandbox3d_interaction_gate gate;
     henka_ui_rect panels[4];
     henka_ui_rect viewport_clip;
+    sandbox3d_projected_triangle topology_triangles[6];
+    sandbox3d_silhouette_segment topology_segments[32];
+    size_t topology_segment_count;
 
     HENKA_TEST_ASSERT(sandbox3d_viewport_tool_mode_to_gizmo_mode(SANDBOX3D_VIEWPORT_TOOL_MOVE) == HENKA_GIZMO_MODE_MOVE);
     HENKA_TEST_ASSERT(sandbox3d_viewport_tool_mode_to_gizmo_mode(SANDBOX3D_VIEWPORT_TOOL_ROTATE) == HENKA_GIZMO_MODE_ROTATE);
@@ -257,6 +260,50 @@ void henka_test_sandbox3d_interaction(void)
         5000.0f,
         0.0f,
         &ground_highlight_model));
+
+    memset(topology_triangles, 0, sizeof(topology_triangles));
+    topology_triangles[0].points[0] = (henka_vec2){0.0f, 0.0f};
+    topology_triangles[0].points[1] = (henka_vec2){2.0f, 0.0f};
+    topology_triangles[0].points[2] = (henka_vec2){2.0f, 2.0f};
+    topology_triangles[0].vertex_ids[0] = 1U;
+    topology_triangles[0].vertex_ids[1] = 2U;
+    topology_triangles[0].vertex_ids[2] = 3U;
+    topology_triangles[1].points[0] = (henka_vec2){0.0f, 0.0f};
+    topology_triangles[1].points[1] = (henka_vec2){2.0f, 2.0f};
+    topology_triangles[1].points[2] = (henka_vec2){0.0f, 2.0f};
+    topology_triangles[1].vertex_ids[0] = 1U;
+    topology_triangles[1].vertex_ids[1] = 3U;
+    topology_triangles[1].vertex_ids[2] = 4U;
+    topology_segment_count = sandbox3d_build_topology_silhouette(
+        topology_triangles, 2U, topology_segments, 32U);
+    HENKA_TEST_ASSERT(topology_segment_count == 4U);
+    topology_triangles[2] = topology_triangles[0];
+    topology_triangles[3] = topology_triangles[1];
+    topology_triangles[2].points[0].x += 4.0f;
+    topology_triangles[2].points[1].x += 4.0f;
+    topology_triangles[2].points[2].x += 4.0f;
+    topology_triangles[2].vertex_ids[0] += 10U;
+    topology_triangles[2].vertex_ids[1] += 10U;
+    topology_triangles[2].vertex_ids[2] += 10U;
+    topology_triangles[3].points[0].x += 4.0f;
+    topology_triangles[3].points[1].x += 4.0f;
+    topology_triangles[3].points[2].x += 4.0f;
+    topology_triangles[3].vertex_ids[0] += 10U;
+    topology_triangles[3].vertex_ids[1] += 10U;
+    topology_triangles[3].vertex_ids[2] += 10U;
+    topology_segment_count = sandbox3d_build_topology_silhouette(
+        topology_triangles, 4U, topology_segments, 32U);
+    HENKA_TEST_ASSERT(topology_segment_count == 8U);
+    {
+        size_t segment_index;
+        for (segment_index = 0U; segment_index < topology_segment_count; ++segment_index)
+        {
+            const sandbox3d_silhouette_segment* segment = &topology_segments[segment_index];
+            HENKA_TEST_ASSERT(!(
+                (segment->start.x < 2.1f && segment->end.x > 3.9f) ||
+                (segment->end.x < 2.1f && segment->start.x > 3.9f)));
+        }
+    }
 
     viewport_clip = (henka_ui_rect){0.0f, 0.0f, 640.0f, 360.0f};
     clip_start = (henka_vec2){-100.0f, 120.0f};

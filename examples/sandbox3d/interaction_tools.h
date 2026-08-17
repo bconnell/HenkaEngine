@@ -3,6 +3,7 @@
 
 #include <stdbool.h>
 #include <stddef.h>
+#include <stdint.h>
 
 #include <henka/gizmo.h>
 #include <henka/math.h>
@@ -73,6 +74,18 @@ typedef struct sandbox3d_selection_highlight_model
     henka_vec3 edge_ends[12];
 } sandbox3d_selection_highlight_model;
 
+typedef struct sandbox3d_projected_triangle
+{
+    henka_vec2 points[3];
+    uint32_t vertex_ids[3];
+} sandbox3d_projected_triangle;
+
+typedef struct sandbox3d_silhouette_segment
+{
+    henka_vec2 start;
+    henka_vec2 end;
+} sandbox3d_silhouette_segment;
+
 /* Keep ordinary clicks as selection while allowing laptop touchpads to pan
  * only after an intentional empty-viewport drag. */
 #define SANDBOX3D_EMPTY_VIEWPORT_PAN_DRAG_THRESHOLD_PIXELS 6.0f
@@ -118,6 +131,15 @@ bool sandbox3d_build_ground_selection_highlight_model(
     float half_extent,
     float y_offset,
     sandbox3d_selection_highlight_model* out_model);
+/* Builds boundary/front-back silhouette segments from projected indexed
+ * triangles. Internal diagonals and invented convex-hull chords are omitted.
+ * The caller owns the bounded output storage; occlusion-aware depth masking is
+ * a separate renderer task. */
+size_t sandbox3d_build_topology_silhouette(
+    const sandbox3d_projected_triangle* triangles,
+    size_t triangle_count,
+    sandbox3d_silhouette_segment* out_segments,
+    size_t segment_capacity);
 bool sandbox3d_clip_line_to_rect(
     henka_vec2* start,
     henka_vec2* end,
