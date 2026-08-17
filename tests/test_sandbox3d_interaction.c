@@ -33,21 +33,21 @@ void henka_test_sandbox3d_interaction(void)
         memset(dense_triangles, 0, sizeof(dense_triangles));
         for (dense_index = 0U; dense_index < 5000U; ++dense_index)
         {
-            const float x = (float)dense_index * 4.0f;
+            const float x = dense_index < 2U ? 0.0f : (float)dense_index * 4.0f;
             sandbox3d_projected_triangle* triangle = &dense_triangles[dense_index];
             triangle->points[0] = (henka_vec2){x, 0.0f};
             triangle->points[1] = (henka_vec2){x + 1.0f, 0.0f};
             triangle->points[2] = (henka_vec2){x, 1.0f};
-            triangle->depths[0] = 0.5f;
-            triangle->depths[1] = 0.5f;
-            triangle->depths[2] = 0.5f;
+            triangle->depths[0] = dense_index == 0U ? 0.8f : dense_index == 1U ? 0.2f : 0.5f;
+            triangle->depths[1] = triangle->depths[0];
+            triangle->depths[2] = triangle->depths[0];
             triangle->vertex_ids[0] = ((uint64_t)dense_index * 3U) + 1U;
             triangle->vertex_ids[1] = ((uint64_t)dense_index * 3U) + 2U;
             triangle->vertex_ids[2] = ((uint64_t)dense_index * 3U) + 3U;
         }
         HENKA_TEST_ASSERT(
             sandbox3d_build_topology_silhouette(
-                dense_triangles, 5000U, dense_segments, 15000U) == 15000U);
+                dense_triangles, 5000U, dense_segments, 15000U) == 14997U);
     }
 
     HENKA_TEST_ASSERT(sandbox3d_viewport_tool_mode_to_gizmo_mode(SANDBOX3D_VIEWPORT_TOOL_MOVE) == HENKA_GIZMO_MODE_MOVE);

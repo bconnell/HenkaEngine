@@ -1,8 +1,150 @@
 #include "interaction_tools.h"
 
+#include <float.h>
 #include <math.h>
 #include <stdlib.h>
 #include <string.h>
+
+enum
+{
+    SANDBOX3D_SILHOUETTE_GRID_DIMENSION = 64,
+    SANDBOX3D_SILHOUETTE_GRID_CELL_COUNT =
+        SANDBOX3D_SILHOUETTE_GRID_DIMENSION * SANDBOX3D_SILHOUETTE_GRID_DIMENSION,
+    SANDBOX3D_SILHOUETTE_GRID_CELL_CAPACITY = 96,
+    SANDBOX3D_SILHOUETTE_MAX_TRIANGLES = 16384
+};
+
+static uint16_t sandbox3d_silhouette_grid_indices[
+    SANDBOX3D_SILHOUETTE_GRID_CELL_COUNT * SANDBOX3D_SILHOUETTE_GRID_CELL_CAPACITY];
+static uint16_t sandbox3d_silhouette_grid_counts[SANDBOX3D_SILHOUETTE_GRID_CELL_COUNT];
+static uint32_t sandbox3d_silhouette_candidate_marks[SANDBOX3D_SILHOUETTE_MAX_TRIANGLES];
+static uint16_t sandbox3d_silhouette_candidates[SANDBOX3D_SILHOUETTE_MAX_TRIANGLES];
+static uint32_t sandbox3d_silhouette_candidate_stamp;
+
+static int sandbox3d_silhouette_grid_coordinate(float value, float minimum, float maximum)
+{
+    float normalized;
+
+    if (!isfinite(value) || !isfinite(minimum) || !isfinite(maximum) || maximum <= minimum)
+    {
+        return 0;
+    }
+    normalized = (value - minimum) / (maximum - minimum);
+    if (normalized <= 0.0f)
+    {
+        return 0;
+    }
+    if (normalized >= 1.0f)
+    {
+        return SANDBOX3D_SILHOUETTE_GRID_DIMENSION - 1;
+    }
+    return (int)(normalized * (float)SANDBOX3D_SILHOUETTE_GRID_DIMENSION);
+}
+
+static bool sandbox3d_build_silhouette_visibility_grid(
+    const sandbox3d_projected_triangle* triangles,
+    size_t triangle_count,
+    float minimum_x,
+    float maximum_x,
+    float minimum_y,
+    float maximum_y)
+{
+    size_t triangle_index;
+
+    if (triangles == NULL || triangle_count == 0U || triangle_count > SANDBOX3D_SILHOUETTE_MAX_TRIANGLES ||
+        !isfinite(minimum_x) || !isfinite(maximum_x) || !isfinite(minimum_y) || !isfinite(maximum_y) ||
+        maximum_x <= minimum_x || maximum_y <= minimum_y)
+    {
+        return false;
+    }
+    memset(sandbox3d_silhouette_grid_counts, 0, sizeof(sandbox3d_silhouette_grid_counts));
+    for (triangle_index = 0U; triangle_index < triangle_count; ++triangle_index)
+    {
+        const sandbox3d_projected_triangle* triangle = &triangles[triangle_index];
+        const float triangle_min_x = fminf(triangle->points[0].x, fminf(triangle->points[1].x, triangle->points[2].x));
+        const float triangle_max_x = fmaxf(triangle->points[0].x, fmaxf(triangle->points[1].x, triangle->points[2].x));
+        const float triangle_min_y = fminf(triangle->points[0].y, fminf(triangle->points[1].y, triangle->points[2].y));
+        const float triangle_max_y = fmaxf(triangle->points[0].y, fmaxf(triangle->points[1].y, triangle->points[2].y));
+        const int first_x = sandbox3d_silhouette_grid_coordinate(triangle_min_x, minimum_x, maximum_x);
+        const int last_x = sandbox3d_silhouette_grid_coordinate(triangle_max_x, minimum_x, maximum_x);
+        const int first_y = sandbox3d_silhouette_grid_coordinate(triangle_min_y, minimum_y, maximum_y);
+        const int last_y = sandbox3d_silhouette_grid_coordinate(triangle_max_y, minimum_y, maximum_y);
+        int grid_y;
+        int grid_x;
+
+        if (!isfinite(triangle_min_x) || !isfinite(triangle_max_x) ||
+            !isfinite(triangle_min_y) || !isfinite(triangle_max_y))
+        {
+            continue;
+        }
+        for (grid_y = first_y; grid_y <= last_y; ++grid_y)
+        {
+            for (grid_x = first_x; grid_x <= last_x; ++grid_x)
+            {
+                const size_t cell = (size_t)grid_y * SANDBOX3D_SILHOUETTE_GRID_DIMENSION + (size_t)grid_x;
+                const uint16_t count = sandbox3d_silhouette_grid_counts[cell];
+                if (count >= SANDBOX3D_SILHOUETTE_GRID_CELL_CAPACITY)
+                {
+                    return false;
+                }
+                sandbox3d_silhouette_grid_indices[cell * SANDBOX3D_SILHOUETTE_GRID_CELL_CAPACITY + count] =
+                    (uint16_t)triangle_index;
+                sandbox3d_silhouette_grid_counts[cell] = (uint16_t)(count + 1U);
+            }
+        }
+    }
+    return true;
+}
+
+static size_t sandbox3d_collect_silhouette_visibility_candidates(
+    henka_vec2 start,
+    henka_vec2 end,
+    float minimum_x,
+    float maximum_x,
+    float minimum_y,
+    float maximum_y,
+    size_t triangle_count)
+{
+    const float edge_min_x = fminf(start.x, end.x) - 0.001f;
+    const float edge_max_x = fmaxf(start.x, end.x) + 0.001f;
+    const float edge_min_y = fminf(start.y, end.y) - 0.001f;
+    const float edge_max_y = fmaxf(start.y, end.y) + 0.001f;
+    const int first_x = sandbox3d_silhouette_grid_coordinate(edge_min_x, minimum_x, maximum_x);
+    const int last_x = sandbox3d_silhouette_grid_coordinate(edge_max_x, minimum_x, maximum_x);
+    const int first_y = sandbox3d_silhouette_grid_coordinate(edge_min_y, minimum_y, maximum_y);
+    const int last_y = sandbox3d_silhouette_grid_coordinate(edge_max_y, minimum_y, maximum_y);
+    size_t candidate_count = 0U;
+    int grid_y;
+    int grid_x;
+
+    ++sandbox3d_silhouette_candidate_stamp;
+    if (sandbox3d_silhouette_candidate_stamp == 0U)
+    {
+        memset(sandbox3d_silhouette_candidate_marks, 0, sizeof(sandbox3d_silhouette_candidate_marks));
+        sandbox3d_silhouette_candidate_stamp = 1U;
+    }
+    for (grid_y = first_y; grid_y <= last_y; ++grid_y)
+    {
+        for (grid_x = first_x; grid_x <= last_x; ++grid_x)
+        {
+            const size_t cell = (size_t)grid_y * SANDBOX3D_SILHOUETTE_GRID_DIMENSION + (size_t)grid_x;
+            uint16_t cell_index;
+            for (cell_index = 0U; cell_index < sandbox3d_silhouette_grid_counts[cell]; ++cell_index)
+            {
+                const uint16_t triangle_index = sandbox3d_silhouette_grid_indices[
+                    cell * SANDBOX3D_SILHOUETTE_GRID_CELL_CAPACITY + cell_index];
+                if ((size_t)triangle_index >= triangle_count ||
+                    sandbox3d_silhouette_candidate_marks[triangle_index] == sandbox3d_silhouette_candidate_stamp)
+                {
+                    continue;
+                }
+                sandbox3d_silhouette_candidate_marks[triangle_index] = sandbox3d_silhouette_candidate_stamp;
+                sandbox3d_silhouette_candidates[candidate_count++] = triangle_index;
+            }
+        }
+    }
+    return candidate_count;
+}
 
 const char* sandbox3d_viewport_tool_mode_to_string(sandbox3d_viewport_tool_mode tool_mode)
 {
@@ -559,11 +701,36 @@ size_t sandbox3d_build_topology_silhouette(
     static silhouette_edge edges[edge_slot_count];
     size_t triangle_index;
     size_t output_count = 0U;
-    const bool use_pairwise_visibility = triangle_count <= 4096U;
+    float minimum_x = FLT_MAX;
+    float maximum_x = -FLT_MAX;
+    float minimum_y = FLT_MAX;
+    float maximum_y = -FLT_MAX;
+    bool visibility_grid_valid = false;
 
     if (triangles == NULL || out_segments == NULL || triangle_count == 0U || segment_capacity == 0U)
     {
         return 0U;
+    }
+    if (triangle_count > 4096U)
+    {
+        for (triangle_index = 0U; triangle_index < triangle_count; ++triangle_index)
+        {
+            int point_index;
+            for (point_index = 0; point_index < 3; ++point_index)
+            {
+                minimum_x = fminf(minimum_x, triangles[triangle_index].points[point_index].x);
+                maximum_x = fmaxf(maximum_x, triangles[triangle_index].points[point_index].x);
+                minimum_y = fminf(minimum_y, triangles[triangle_index].points[point_index].y);
+                maximum_y = fmaxf(maximum_y, triangles[triangle_index].points[point_index].y);
+            }
+        }
+        visibility_grid_valid = sandbox3d_build_silhouette_visibility_grid(
+            triangles,
+            triangle_count,
+            minimum_x,
+            maximum_x,
+            minimum_y,
+            maximum_y);
     }
     memset(edges, 0, sizeof(edges));
     for (triangle_index = 0U; triangle_index < triangle_count; ++triangle_index)
@@ -660,7 +827,7 @@ size_t sandbox3d_build_topology_silhouette(
         {
             continue;
         }
-        if (!use_pairwise_visibility)
+        if (triangle_count > 4096U && !visibility_grid_valid)
         {
             if (output_count >= segment_capacity)
             {
@@ -676,14 +843,30 @@ size_t sandbox3d_build_topology_silhouette(
             static float visibility_events[max_visibility_events];
             size_t visibility_event_count = 2U;
             size_t occluder_index;
+            size_t candidate_index;
+            size_t candidate_count = triangle_count;
             size_t event_index;
 
             visibility_events[0] = 0.0f;
             visibility_events[1] = 1.0f;
+            if (visibility_grid_valid)
+            {
+                candidate_count = sandbox3d_collect_silhouette_visibility_candidates(
+                    edge->start,
+                    edge->end,
+                    minimum_x,
+                    maximum_x,
+                    minimum_y,
+                    maximum_y,
+                    triangle_count);
+            }
             if (isfinite(edge->start_depth) && isfinite(edge->end_depth))
             {
-                for (occluder_index = 0U; occluder_index < triangle_count; ++occluder_index)
+                for (candidate_index = 0U; candidate_index < candidate_count; ++candidate_index)
                 {
+                    occluder_index = visibility_grid_valid
+                        ? sandbox3d_silhouette_candidates[candidate_index]
+                        : candidate_index;
                     const sandbox3d_projected_triangle* occluder = &triangles[occluder_index];
                     float start_first;
                     float start_second;
@@ -797,8 +980,11 @@ size_t sandbox3d_build_topology_silhouette(
 
                 if (visible && isfinite(sample_depth))
                 {
-                    for (occluder_index = 0U; occluder_index < triangle_count; ++occluder_index)
+                    for (candidate_index = 0U; candidate_index < candidate_count; ++candidate_index)
                     {
+                        occluder_index = visibility_grid_valid
+                            ? sandbox3d_silhouette_candidates[candidate_index]
+                            : candidate_index;
                         float occluder_depth;
                         if (sandbox3d_projected_triangle_depth_at(
                                 &triangles[occluder_index], sample_point, &occluder_depth) &&
