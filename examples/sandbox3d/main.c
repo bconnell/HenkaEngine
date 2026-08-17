@@ -23775,6 +23775,7 @@ static henka_result sandbox3d_initialize(henka_engine* engine, void* user_data)
     size_t giraffe_entity_count;
     size_t giraffe_sss_count;
     size_t rocket_entity_count;
+    size_t source_binding_start;
     henka_result result;
     henka_transform transform;
     int framebuffer_height;
@@ -24270,8 +24271,18 @@ static henka_result sandbox3d_initialize(henka_engine* engine, void* user_data)
         HENKA_LOG_ERROR("Showcase giraffe instantiation failed: %s (parts=%zu)", henka_result_to_string(result), giraffe_entity_count);
         goto fail;
     }
+    source_binding_start = state->imported_source_binding_count;
     sandbox3d_register_imported_source_bindings(
         state, &state->giraffe_authoring_source, "Showcase Giraffe ");
+    if (state->imported_source_binding_count - source_binding_start != giraffe_entity_count)
+    {
+        HENKA_LOG_ERROR(
+            "Showcase giraffe source binding failed: bound=%zu parts=%zu",
+            state->imported_source_binding_count - source_binding_start,
+            giraffe_entity_count);
+        result = HENKA_ERROR_INVALID_ARGUMENT;
+        goto fail;
+    }
     if (!sandbox3d_set_named_showcase_local_bounds(
             state->scene,
             "Showcase Giraffe",
@@ -24380,8 +24391,18 @@ static henka_result sandbox3d_initialize(henka_engine* engine, void* user_data)
         HENKA_LOG_ERROR("Showcase rocket instantiation failed: %s (parts=%zu)", henka_result_to_string(result), rocket_entity_count);
         goto fail;
     }
+    source_binding_start = state->imported_source_binding_count;
     sandbox3d_register_imported_source_bindings(
         state, &state->rocket_authoring_source, "Showcase Rocket ");
+    if (state->imported_source_binding_count - source_binding_start != rocket_entity_count)
+    {
+        HENKA_LOG_ERROR(
+            "Showcase rocket source binding failed: bound=%zu parts=%zu",
+            state->imported_source_binding_count - source_binding_start,
+            rocket_entity_count);
+        result = HENKA_ERROR_INVALID_ARGUMENT;
+        goto fail;
+    }
     if (!sandbox3d_set_named_showcase_local_bounds(
             state->scene,
             "Showcase Rocket",
