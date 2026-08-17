@@ -550,7 +550,10 @@ size_t sandbox3d_build_topology_silhouette(
         float start_depth;
         float end_depth;
     } silhouette_edge;
-    silhouette_edge edges[edge_slot_count];
+    /* This bounded outline pass is render-thread owned. Static scratch keeps
+     * dense showcase meshes from consuming the application stack while the
+     * caller switches from component selection to the full-object outline. */
+    static silhouette_edge edges[edge_slot_count];
     size_t triangle_index;
     size_t output_count = 0U;
 
@@ -655,7 +658,7 @@ size_t sandbox3d_build_topology_silhouette(
         }
         {
             enum { max_visibility_events = 8192 };
-            float visibility_events[max_visibility_events];
+            static float visibility_events[max_visibility_events];
             size_t visibility_event_count = 2U;
             size_t occluder_index;
             size_t event_index;

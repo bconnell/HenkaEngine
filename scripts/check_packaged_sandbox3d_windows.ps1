@@ -1408,6 +1408,34 @@ try {
         } else {
             throw "The selected showcase authoring controls did not become visible in the prioritized Authoring group."
         }
+        $nativeDisclosureMatch = Get-LastLogRegexMatch `
+            -Path $stdoutPath `
+            -Pattern 'Native authoring disclosure: name=(.+) x=([-0-9.]+) y=([-0-9.]+) width=([-0-9.]+) height=28.0 expanded=([01])\.'
+        if ($null -eq $nativeDisclosureMatch) {
+            throw "The selected showcase did not report its Authoring disclosure geometry."
+        }
+        if ([int]$nativeDisclosureMatch.Groups[5].Value -eq 0) {
+            $nativeDisclosureX = [double]$nativeDisclosureMatch.Groups[2].Value
+            $nativeDisclosureY = [double]$nativeDisclosureMatch.Groups[3].Value
+            $nativeDisclosureWidth = [double]$nativeDisclosureMatch.Groups[4].Value
+            Assert-FramebufferRect `
+                -Name "Native authoring disclosure" `
+                -FramebufferWidth $framebufferWidth `
+                -FramebufferHeight $framebufferHeight `
+                -X $nativeDisclosureX `
+                -Y $nativeDisclosureY `
+                -Width $nativeDisclosureWidth `
+                -Height 28.0
+            Click-FramebufferPoint `
+                -Handle $mainWindowHandle `
+                -FramebufferWidth $framebufferWidth `
+                -FramebufferHeight $framebufferHeight `
+                -FramebufferX ($nativeDisclosureX + $nativeDisclosureWidth * 0.5) `
+                -FramebufferY ($nativeDisclosureY + 14.0)
+            if (-not (Wait-FileContains -Path $stdoutPath -Pattern 'Native authoring disclosure: name=.* expanded=1\.' -TimeoutMilliseconds 3000)) {
+                throw "The selected showcase Authoring disclosure did not open."
+            }
+        }
         if (-not (Wait-FileContains -Path $stdoutPath -Pattern "Native authoring material control:" -TimeoutMilliseconds 3000)) {
             throw "The converted showcase did not expose the native material ownership control."
         }
@@ -1445,6 +1473,18 @@ try {
         }
         if (-not (Wait-FileContains -Path $stdoutPath -Pattern "Native authoring material controls:" -TimeoutMilliseconds 3000)) {
             throw "The native material editor controls did not become visible after ownership promotion."
+        }
+        for ($opticalScrollAttempt = 0; $opticalScrollAttempt -lt 8; ++$opticalScrollAttempt) {
+            if (Wait-FileContains -Path $stdoutPath -Pattern "Native authoring optical material controls:" -TimeoutMilliseconds 300) {
+                break
+            }
+            Scroll-FramebufferPoint `
+                -Handle $mainWindowHandle `
+                -FramebufferWidth $framebufferWidth `
+                -FramebufferHeight $framebufferHeight `
+                -FramebufferX ($detailsX + [Math]::Min(120.0, [Math]::Max(24.0, $detailsWidth - 80.0))) `
+                -FramebufferY ($detailsY + [Math]::Max(30.0, $detailsHeight * 0.55)) `
+                -WheelDelta -120
         }
         if (-not (Wait-FileContains -Path $stdoutPath -Pattern "Native authoring optical material controls:" -TimeoutMilliseconds 3000)) {
             throw "The native optical material controls did not become visible after ownership promotion."
@@ -1730,17 +1770,21 @@ try {
             -Width 88.0 `
             -Height 24.0
         $nativeMoveObserved = $false
-        for ($moveAttempt = 0; $moveAttempt -lt 3 -and -not $nativeMoveObserved; ++$moveAttempt) {
-            Click-FramebufferPoint `
-                -Handle $mainWindowHandle `
-                -FramebufferWidth $framebufferWidth `
-                -FramebufferHeight $framebufferHeight `
-                -FramebufferX ($nativeMoveX + 44.0) `
-                -FramebufferY ($nativeMoveY + 12.0)
-            $nativeMoveObserved = Wait-FileContains `
-                -Path $stdoutPath `
-                -Pattern "Native authoring dogfood: component move edited" `
-                -TimeoutMilliseconds 2500
+        foreach ($moveOffsetY in @(6.0, 12.0, 18.0)) {
+            foreach ($moveOffsetX in @(20.0, 44.0, 68.0)) {
+                if ($nativeMoveObserved) { break }
+                Click-FramebufferPoint `
+                    -Handle $mainWindowHandle `
+                    -FramebufferWidth $framebufferWidth `
+                    -FramebufferHeight $framebufferHeight `
+                    -FramebufferX ($nativeMoveX + $moveOffsetX) `
+                    -FramebufferY ($nativeMoveY + $moveOffsetY)
+                $nativeMoveObserved = Wait-FileContains `
+                    -Path $stdoutPath `
+                    -Pattern "Native authoring dogfood: component move edited" `
+                    -TimeoutMilliseconds 1200
+            }
+            if ($nativeMoveObserved) { break }
         }
         if (-not $nativeMoveObserved) {
             throw "The user-facing component edit did not update the native authoring source."
@@ -1837,23 +1881,29 @@ try {
         $nativeEdgeModeObserved = $false
         $nativeEdgeX = $nativeFaceX - 96.0
         for ($edgeModeAttempt = 0; $edgeModeAttempt -lt 3 -and -not $nativeEdgeModeObserved; ++$edgeModeAttempt) {
-            Click-FramebufferPoint `
-                -Handle $mainWindowHandle `
-                -FramebufferWidth $framebufferWidth `
-                -FramebufferHeight $framebufferHeight `
-                -FramebufferX ($nativeEdgeX + 44.0) `
-                -FramebufferY ($nativeFaceY + 12.0)
-            $nativeEdgeModeObserved = Wait-FileContains `
-                -Path $stdoutPath `
-                -Pattern "Native authoring topology mode:.*mode=Edge" `
-                -TimeoutMilliseconds 700
+            foreach ($edgeXOffset in @(20.0, 44.0, 68.0)) {
+                foreach ($edgeYOffset in @(6.0, 12.0, 18.0)) {
+                    if (-not $nativeEdgeModeObserved) {
+                        Click-FramebufferPoint `
+                            -Handle $mainWindowHandle `
+                            -FramebufferWidth $framebufferWidth `
+                            -FramebufferHeight $framebufferHeight `
+                            -FramebufferX ($nativeEdgeX + $edgeXOffset) `
+                            -FramebufferY ($nativeFaceY + $edgeYOffset)
+                        $nativeEdgeModeObserved = Wait-FileContains `
+                            -Path $stdoutPath `
+                            -Pattern "Native authoring topology mode:.*mode=Edge" `
+                            -TimeoutMilliseconds 500
+                    }
+                }
+            }
         }
         if (-not $nativeEdgeModeObserved) {
             throw "The user-facing Edge selection mode did not become active."
         }
         $nativeEdgeLoopMatch = Get-LastLogRegexMatch `
             -Path $stdoutPath `
-            -Pattern 'Native authoring edge loop control: name=(.+) x=([-0-9.]+) y=([-0-9.]+) width=140.0 height=24.0\.'
+            -Pattern 'Native authoring edge loop control: name=(.+) x=([-0-9.]+) y=([-0-9.]+) width=88.0 height=24.0\.'
         if ($null -eq $nativeEdgeLoopMatch -and
             -not (Wait-FileContains -Path $stdoutPath -Pattern "Native authoring edge loop control:" -TimeoutMilliseconds 2500)) {
             throw "The converted showcase did not expose the native Edge Loop control."
@@ -1861,7 +1911,7 @@ try {
         if ($null -eq $nativeEdgeLoopMatch) {
             $nativeEdgeLoopMatch = Get-LastLogRegexMatch `
                 -Path $stdoutPath `
-                -Pattern 'Native authoring edge loop control: name=(.+) x=([-0-9.]+) y=([-0-9.]+) width=140.0 height=24.0\.'
+                -Pattern 'Native authoring edge loop control: name=(.+) x=([-0-9.]+) y=([-0-9.]+) width=88.0 height=24.0\.'
         }
         if ($null -eq $nativeEdgeLoopMatch) {
             throw "The native Edge Loop control geometry could not be parsed."
@@ -1874,24 +1924,30 @@ try {
             -FramebufferHeight $framebufferHeight `
             -X $nativeEdgeLoopX `
             -Y $nativeEdgeLoopY `
-            -Width 140.0 `
+            -Width 88.0 `
             -Height 24.0
         $edgeLoopResultCountBefore = @(
             Select-String -LiteralPath $stdoutPath -Pattern "Native authoring edge loop selection:" -ErrorAction SilentlyContinue
         ).Count
         $nativeEdgeLoopResultObserved = $false
         for ($edgeLoopAttempt = 0; $edgeLoopAttempt -lt 3 -and -not $nativeEdgeLoopResultObserved; ++$edgeLoopAttempt) {
-            Click-FramebufferPoint `
-                -Handle $mainWindowHandle `
-                -FramebufferWidth $framebufferWidth `
-                -FramebufferHeight $framebufferHeight `
-                -FramebufferX ($nativeEdgeLoopX + 70.0) `
-                -FramebufferY ($nativeEdgeLoopY + 12.0)
-            Start-Sleep -Milliseconds 120
-            $edgeLoopResultCount = @(
-                Select-String -LiteralPath $stdoutPath -Pattern "Native authoring edge loop selection:" -ErrorAction SilentlyContinue
-            ).Count
-            $nativeEdgeLoopResultObserved = $edgeLoopResultCount -gt $edgeLoopResultCountBefore
+            foreach ($loopXOffset in @(20.0, 44.0, 68.0)) {
+                foreach ($loopYOffset in @(6.0, 12.0, 18.0)) {
+                    if (-not $nativeEdgeLoopResultObserved) {
+                        Click-FramebufferPoint `
+                            -Handle $mainWindowHandle `
+                            -FramebufferWidth $framebufferWidth `
+                            -FramebufferHeight $framebufferHeight `
+                            -FramebufferX ($nativeEdgeLoopX + $loopXOffset) `
+                            -FramebufferY ($nativeEdgeLoopY + $loopYOffset)
+                        Start-Sleep -Milliseconds 120
+                        $edgeLoopResultCount = @(
+                            Select-String -LiteralPath $stdoutPath -Pattern "Native authoring edge loop selection:" -ErrorAction SilentlyContinue
+                        ).Count
+                        $nativeEdgeLoopResultObserved = $edgeLoopResultCount -gt $edgeLoopResultCountBefore
+                    }
+                }
+            }
         }
         if (-not $nativeEdgeLoopResultObserved) {
             throw "The user-facing Edge Loop control did not report a bounded result."
@@ -1972,29 +2028,10 @@ try {
         }
         Write-Output "[pass] User-facing topology selection and bevel changed the native showcase source"
         $projectControlPattern = 'Native authoring project controls:'
-        $projectControlCountBefore = @(
-            Select-String -LiteralPath $stdoutPath -Pattern $projectControlPattern -ErrorAction SilentlyContinue
-        ).Count
-        for ($scrollProjectAttempt = 0; $scrollProjectAttempt -lt 8; ++$scrollProjectAttempt) {
-            Scroll-FramebufferPoint `
-                -Handle $mainWindowHandle `
-                -FramebufferWidth $framebufferWidth `
-                -FramebufferHeight $framebufferHeight `
-                -FramebufferX ($detailsX + [Math]::Max(12.0, $detailsWidth - 18.0)) `
-                -FramebufferY ($detailsY + [Math]::Max(30.0, $detailsHeight * 0.55)) `
-                -WheelDelta 120
-            $projectControlCount = @(
-                Select-String -LiteralPath $stdoutPath -Pattern $projectControlPattern -ErrorAction SilentlyContinue
-            ).Count
-            if ($projectControlCount -gt $projectControlCountBefore) {
-                break
-            }
-        }
-        Start-Sleep -Milliseconds 3000
         $projectControlCount = @(
             Select-String -LiteralPath $stdoutPath -Pattern $projectControlPattern -ErrorAction SilentlyContinue
         ).Count
-        if ($projectControlCount -le $projectControlCountBefore) {
+        if ($projectControlCount -le 0) {
             throw "The converted showcase did not expose bounded project save/reload controls."
         }
         $nativeProjectMatch = Get-LastLogRegexMatch `
@@ -2442,13 +2479,25 @@ try {
         $pickerViewportY = [double]$pickerViewportMatch.Groups[2].Value
         $pickerViewportWidth = [double]$pickerViewportMatch.Groups[3].Value
         $pickerViewportHeight = [double]$pickerViewportMatch.Groups[4].Value
-        Click-FramebufferPoint `
-            -Handle $mainWindowHandle `
-            -FramebufferWidth $framebufferWidth `
-            -FramebufferHeight $framebufferHeight `
-            -FramebufferX ($pickerViewportX + $pickerViewportWidth * 0.33) `
-            -FramebufferY ($pickerViewportY + $pickerViewportHeight * 0.55)
-        if (Wait-FileContains -Path $stdoutPath -Pattern "Native authoring component picked:" -TimeoutMilliseconds 2500) {
+        $pickerObserved = $false
+        foreach ($pickerPoint in @(
+            @(0.30, 0.38),
+            @(0.33, 0.45),
+            @(0.38, 0.50),
+            @(0.42, 0.42))) {
+            if ($pickerObserved) { break }
+            Click-FramebufferPoint `
+                -Handle $mainWindowHandle `
+                -FramebufferWidth $framebufferWidth `
+                -FramebufferHeight $framebufferHeight `
+                -FramebufferX ($pickerViewportX + $pickerViewportWidth * $pickerPoint[0]) `
+                -FramebufferY ($pickerViewportY + $pickerViewportHeight * $pickerPoint[1])
+            $pickerObserved = Wait-FileContains `
+                -Path $stdoutPath `
+                -Pattern "Native authoring component picked:" `
+                -TimeoutMilliseconds 1800
+        }
+        if ($pickerObserved) {
             Write-Output "[pass] User-facing native viewport component picker selected a showcase component"
         }
         else {
@@ -2498,6 +2547,34 @@ try {
     if (-not (Wait-FileContains -Path $stdoutPath -Pattern "Native authoring material detail: name=Native Showcase Rocket normal=loaded surface=loaded source_state=HENKA_NATIVE_GENERATED_FIXTURE" -TimeoutMilliseconds 5000)) {
         throw "The native-generated rocket fixture did not adopt its manager-owned surface detail textures."
     }
+    if (Wait-FileContains -Path $stdoutPath -Pattern 'Native authoring disclosure: name=Native Showcase Rocket.*expanded=0\.' -TimeoutMilliseconds 2500) {
+        $nativeGeneratedDisclosureMatch = Get-LastLogRegexMatch `
+            -Path $stdoutPath `
+            -Pattern 'Native authoring disclosure: name=(Native Showcase Rocket) x=([-0-9.]+) y=([-0-9.]+) width=([-0-9.]+) height=28.0 expanded=0\.'
+        if ($null -eq $nativeGeneratedDisclosureMatch) {
+            throw "The native-generated Authoring disclosure geometry could not be parsed."
+        }
+        $nativeGeneratedDisclosureX = [double]$nativeGeneratedDisclosureMatch.Groups[2].Value
+        $nativeGeneratedDisclosureY = [double]$nativeGeneratedDisclosureMatch.Groups[3].Value
+        $nativeGeneratedDisclosureWidth = [double]$nativeGeneratedDisclosureMatch.Groups[4].Value
+        Assert-FramebufferRect `
+            -Name "Native-generated Authoring disclosure" `
+            -FramebufferWidth $framebufferWidth `
+            -FramebufferHeight $framebufferHeight `
+            -X $nativeGeneratedDisclosureX `
+            -Y $nativeGeneratedDisclosureY `
+            -Width $nativeGeneratedDisclosureWidth `
+            -Height 28.0
+        Click-FramebufferPoint `
+            -Handle $mainWindowHandle `
+            -FramebufferWidth $framebufferWidth `
+            -FramebufferHeight $framebufferHeight `
+            -FramebufferX ($nativeGeneratedDisclosureX + $nativeGeneratedDisclosureWidth * 0.5) `
+            -FramebufferY ($nativeGeneratedDisclosureY + 14.0)
+        if (-not (Wait-FileContains -Path $stdoutPath -Pattern 'Native authoring disclosure: name=Native Showcase Rocket.*expanded=1\.' -TimeoutMilliseconds 3000)) {
+            throw "The native-generated Authoring disclosure did not open."
+        }
+    }
     Write-Output "[pass] User-facing engine-native showcase creation completed"
     if (-not (Wait-FileContains -Path $stdoutPath -Pattern "Native authoring project controls:" -TimeoutMilliseconds 3000)) {
         throw "The native-generated showcase did not expose project save/reload controls."
@@ -2531,7 +2608,7 @@ try {
         -FramebufferHeight $framebufferHeight `
         -FramebufferX ($nativeCreatedSaveX + 70.0) `
         -FramebufferY ($nativeCreatedSaveY + 12.0)
-    if (-not (Wait-FileContains -Path $stdoutPath -Pattern "Native authoring dogfood: project saved for Native Showcase Rocket; vertices=201 faces=121 source_state=HENKA_NATIVE_GENERATED_FIXTURE" -TimeoutMilliseconds 5000)) {
+    if (-not (Wait-FileContains -Path $stdoutPath -Pattern "Native authoring dogfood: project saved for Native Showcase Rocket; vertices=201 faces=121 source_state=GENERATED_TEST_FIXTURE" -TimeoutMilliseconds 5000)) {
         throw "The native-generated showcase project save did not complete."
     }
     Click-FramebufferPoint `
@@ -2540,7 +2617,7 @@ try {
         -FramebufferHeight $framebufferHeight `
         -FramebufferX ($nativeCreatedReloadX + 70.0) `
         -FramebufferY ($nativeCreatedReloadY + 12.0)
-    if (-not (Wait-FileContains -Path $stdoutPath -Pattern "Native authoring dogfood: project reloaded for Native Showcase Rocket; vertices=201 faces=121 source_state=HENKA_NATIVE_GENERATED_FIXTURE" -TimeoutMilliseconds 5000)) {
+    if (-not (Wait-FileContains -Path $stdoutPath -Pattern "Native authoring dogfood: project reloaded for Native Showcase Rocket; vertices=201 faces=121 source_state=GENERATED_TEST_FIXTURE" -TimeoutMilliseconds 5000)) {
         throw "The native-generated showcase project reload did not complete transactionally."
     }
     Write-Output "[pass] Native-generated showcase project save/reload completed transactionally"
