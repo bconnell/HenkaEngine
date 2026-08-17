@@ -220,16 +220,17 @@ vec3 safeNormalize(vec3 value, vec3 fallback)
 }
 
 /* A bounded view-aware three-lobe diffusion-profile approximation for direct
- * light. The lobes widen with authored thickness and the through-light lobe
- * follows the view direction, which gives wax, skin, and thin translucent
- * materials a more useful response than a single wrapped term. It is
- * intentionally local to the shaded point: it does not claim true
- * screen-space or multi-scatter transport. */
+ * light. The lobes widen with authored thickness, the through-light lobe
+ * follows the view direction, and the geometric-normal curvature term keeps
+ * the response concentrated around thin transitions instead of washing flat
+ * surfaces with a uniform tint. It is intentionally local to the shaded
+ * point: it does not claim true screen-space or multi-scatter transport. */
 float subsurfaceDirectProfile(
     vec3 normal,
     vec3 lightDirection,
     vec3 viewDirection,
-    float thicknessValue)
+    float thicknessValue,
+    float curvatureValue)
 {
     float normalLight = dot(normal, lightDirection);
     float backLight = saturate(-normalLight);
@@ -245,12 +246,17 @@ float subsurfaceDirectProfile(
         mix(5.0, 1.75, thicknessValue)) *
         mix(0.08, 0.24, thicknessValue) *
         mix(0.35, 1.0, grazingView);
+    float edgeLobe = pow(
+        grazingView,
+        mix(1.60, 0.70, thicknessValue)) *
+        mix(0.02, 0.20, curvatureValue);
     return saturate(
         broadLobe * 0.22 +
         wideLobe * 0.42 +
         middleLobe * 0.20 +
         narrowLobe * 0.07 +
-        throughLobe);
+        throughLobe +
+        edgeLobe);
 }
 
 vec3 parallaxCorrectReflectionDirection(vec3 direction)
@@ -592,6 +598,11 @@ void main()
     {
         surfaceThickness *= clamp(texture(thicknessTexture, materialUv(thicknessUvSet)).r, 0.0, 1.0);
     }
+    /* Derivatives of the geometric normal provide a bounded curvature proxy
+     * that is stable across tangent-space detail textures and adds scatter at
+     * real silhouette/crease transitions without inventing screen-space
+     * transport. */
+    float surfaceCurvature = saturate(length(fwidth(geometricNormal)) * 4.0);
     /* Reserve more diffuse energy as the authored thickness increases. The
      * response below remains a bounded raster approximation, not a profile or
      * thickness-texture diffusion model. */
@@ -688,7 +699,7 @@ void main()
         float shadow = shadowFactor(normal, lightDir);
         color += (diffuse + specular) * baseLayerTransmission * radiance * nDotL * shadow;
         color += albedo * surfaceSubsurfaceColor * surfaceSubsurface *
-            subsurfaceDirectProfile(normal, lightDir, viewDirection, surfaceThickness) * radiance * shadow;
+            subsurfaceDirectProfile(normal, lightDir, viewDirection, surfaceThickness, surfaceCurvature) * radiance * shadow;
 
         /* The shared scene moon is a bounded second directional source. It is
          * intentionally shadowless in this slice: the directional sun shadow
@@ -822,7 +833,7 @@ void main()
             vec3 localDiffuse = (1.0 - surfaceTransmission) * (1.0 - localFresnel) * (1.0 - surfaceMetallic) * albedo * diffuseEnergyWeight / PI;
             color += (localDiffuse + localSpecular) * localRadiance * localNDotL * localShadow;
             color += albedo * surfaceSubsurfaceColor * surfaceSubsurface *
-                subsurfaceDirectProfile(normal, localLightDirection, viewDirection, surfaceThickness) * localRadiance * localShadow;
+                subsurfaceDirectProfile(normal, localLightDirection, viewDirection, surfaceThickness, surfaceCurvature) * localRadiance * localShadow;
         }
     }
     else
