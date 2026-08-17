@@ -29,6 +29,7 @@
 
 #define SANDBOX3D_MAX_MATERIAL_EDITOR_BINDINGS 256U
 #define SANDBOX3D_MAX_AUTHORING_OBJECTS 8U
+#define SANDBOX3D_MAX_SCENE_NAME_BYTES 1024U
 
 typedef struct sandbox3d_authoring_physics_binding
 {
@@ -333,6 +334,16 @@ typedef struct sandbox3d_physics_state
  * unbounded. */
 #define SANDBOX3D_TERRAIN_STREAM_DRAIN_PUMPS 2048U
 #define SANDBOX3D_SHOWCASE_MAX_GIRAFFE_MATERIAL_INSTANCES 16U
+#define SANDBOX3D_MAX_IMPORTED_SOURCE_BINDINGS 512U
+
+typedef struct sandbox3d_imported_source_binding
+{
+    bool valid;
+    henka_entity entity;
+    henka_entity selection_owner;
+    const henka_model_scene_data* source;
+    size_t primitive_index;
+} sandbox3d_imported_source_binding;
 
 typedef struct sandbox3d_state
 {
@@ -394,6 +405,8 @@ typedef struct sandbox3d_state
     bool rocket_authoring_source_valid;
     bool rocket_generic_modeling_applied;
     bool rocket_asset_specific_preset_applied;
+    sandbox3d_imported_source_binding imported_source_bindings[SANDBOX3D_MAX_IMPORTED_SOURCE_BINDINGS];
+    size_t imported_source_binding_count;
     henka_entity native_authoring_source_row_reported_entity;
     henka_entity native_authoring_disclosure_reported_entity;
     bool native_authoring_disclosure_reported_expanded;
@@ -844,7 +857,11 @@ static void sandbox3d_select_entity(sandbox3d_state* state, henka_entity entity)
 static void sandbox3d_clear_selection(sandbox3d_state* state, const char* reason);
 static bool sandbox3d_add_primitive_object(henka_engine* engine, sandbox3d_state* state);
 static bool sandbox3d_add_native_rocket_object(henka_engine* engine, sandbox3d_state* state);
-static const henka_model_scene_primitive* sandbox3d_get_showcase_authoring_primitive(
+static void sandbox3d_register_imported_source_bindings(
+    sandbox3d_state* state,
+    const henka_model_scene_data* source,
+    const char* name_prefix);
+static const henka_model_scene_primitive* sandbox3d_get_imported_source_primitive(
     const sandbox3d_state* state,
     henka_entity entity);
 static bool sandbox3d_entities_share_selection_owner(
@@ -4434,6 +4451,123 @@ static bool sandbox3d_project_handle_box(
     return true;
 }
 
+static void sandbox3d_append_authoring_silhouette_triangles(
+    sandbox3d_state* state,
+    henka_viewport viewport,
+    henka_transform transform,
+    const sandbox3d_authoring_object* authoring,
+    sandbox3d_projected_triangle* triangles,
+    size_t triangle_capacity,
+    size_t* inout_triangle_count)
+{
+    const henka_authoring_mesh* mesh;
+    size_t face_index;
+
+    if (state == NULL || authoring == NULL || triangles == NULL || inout_triangle_count == NULL ||
+        *inout_triangle_count >= triangle_capacity)
+    {
+        return;
+    }
+    mesh = sandbox3d_authoring_object_get_mesh(authoring);
+    if (mesh == NULL)
+    {
+        return;
+    }
+    for (face_index = 1U;
+         face_index <= HENKA_AUTHORING_MESH_HARD_MAX_FACES && *inout_triangle_count < triangle_capacity;
+         ++face_index)
+    {
+        henka_authoring_vertex_id corners[HENKA_AUTHORING_MESH_HARD_MAX_FACE_CORNERS];
+        size_t corner_count = 0U;
+        size_t corner_index;
+        if (sandbox3d_authoring_object_get_face_ordered_corners(
+                authoring,
+                (henka_authoring_face_id)face_index,
+                corners,
+                sizeof(corners) / sizeof(corners[0]),
+                &corner_count) != HENKA_SUCCESS || corner_count < 3U)
+        {
+            continue;
+        }
+        for (corner_index = 1U;
+             corner_index + 1U < corner_count && *inout_triangle_count < triangle_capacity;
+             ++corner_index)
+        {
+            const henka_authoring_vertex* vertex0 = henka_authoring_mesh_get_vertex(mesh, corners[0]);
+            const henka_authoring_vertex* vertex1 = henka_authoring_mesh_get_vertex(mesh, corners[corner_index]);
+            const henka_authoring_vertex* vertex2 = henka_authoring_mesh_get_vertex(mesh, corners[corner_index + 1U]);
+            sandbox3d_projected_triangle* triangle = &triangles[*inout_triangle_count];
+            if (vertex0 == NULL || vertex1 == NULL || vertex2 == NULL ||
+                !sandbox3d_project_handle_point_depth(
+                    state, viewport,
+                    sandbox3d_transform_authoring_point(transform, vertex0->position),
+                    &triangle->points[0], &triangle->depths[0]) ||
+                !sandbox3d_project_handle_point_depth(
+                    state, viewport,
+                    sandbox3d_transform_authoring_point(transform, vertex1->position),
+                    &triangle->points[1], &triangle->depths[1]) ||
+                !sandbox3d_project_handle_point_depth(
+                    state, viewport,
+                    sandbox3d_transform_authoring_point(transform, vertex2->position),
+                    &triangle->points[2], &triangle->depths[2]))
+            {
+                continue;
+            }
+            triangle->vertex_ids[0] = corners[0];
+            triangle->vertex_ids[1] = corners[corner_index];
+            triangle->vertex_ids[2] = corners[corner_index + 1U];
+            ++*inout_triangle_count;
+        }
+    }
+}
+
+static void sandbox3d_append_imported_silhouette_triangles(
+    sandbox3d_state* state,
+    henka_viewport viewport,
+    henka_transform transform,
+    const henka_model_scene_primitive* primitive,
+    sandbox3d_projected_triangle* triangles,
+    size_t triangle_capacity,
+    size_t* inout_triangle_count)
+{
+    size_t index;
+
+    if (state == NULL || primitive == NULL || primitive->vertices == NULL || primitive->indices == NULL ||
+        triangles == NULL || inout_triangle_count == NULL)
+    {
+        return;
+    }
+    for (index = 0U;
+         index + 2U < primitive->index_count && *inout_triangle_count < triangle_capacity;
+         index += 3U)
+    {
+        const uint32_t i0 = primitive->indices[index];
+        const uint32_t i1 = primitive->indices[index + 1U];
+        const uint32_t i2 = primitive->indices[index + 2U];
+        sandbox3d_projected_triangle* triangle = &triangles[*inout_triangle_count];
+        if (i0 >= primitive->vertex_count || i1 >= primitive->vertex_count || i2 >= primitive->vertex_count ||
+            !sandbox3d_project_handle_point_depth(
+                state, viewport,
+                sandbox3d_transform_authoring_point(transform, primitive->vertices[i0].position),
+                &triangle->points[0], &triangle->depths[0]) ||
+            !sandbox3d_project_handle_point_depth(
+                state, viewport,
+                sandbox3d_transform_authoring_point(transform, primitive->vertices[i1].position),
+                &triangle->points[1], &triangle->depths[1]) ||
+            !sandbox3d_project_handle_point_depth(
+                state, viewport,
+                sandbox3d_transform_authoring_point(transform, primitive->vertices[i2].position),
+                &triangle->points[2], &triangle->depths[2]))
+        {
+            continue;
+        }
+        triangle->vertex_ids[0] = i0 + 1U;
+        triangle->vertex_ids[1] = i1 + 1U;
+        triangle->vertex_ids[2] = i2 + 1U;
+        ++*inout_triangle_count;
+    }
+}
+
 static size_t sandbox3d_build_screen_silhouette(
     sandbox3d_state* state,
     henka_entity entity,
@@ -4442,109 +4576,45 @@ static size_t sandbox3d_build_screen_silhouette(
     size_t segment_capacity)
 {
     enum { max_outline_triangles = 2048 };
-    henka_transform transform;
     sandbox3d_projected_triangle triangles[max_outline_triangles];
-    const henka_model_scene_primitive* primitive;
-    const sandbox3d_authoring_object* authoring;
+    henka_entity selection_owner;
+    size_t entity_index;
     size_t triangle_count = 0U;
-    size_t index;
 
-    if (state == NULL || out_segments == NULL || segment_capacity == 0U ||
-        henka_scene_get_entity_transform(state->scene, entity, &transform) != HENKA_SUCCESS)
+    if (state == NULL || state->scene == NULL || out_segments == NULL || segment_capacity == 0U ||
+        entity == HENKA_INVALID_ENTITY ||
+        henka_scene_get_entity_selection_owner(state->scene, entity, &selection_owner) != HENKA_SUCCESS)
     {
         return 0U;
     }
+    for (entity_index = 0U; entity_index < henka_scene_get_entity_count(state->scene); ++entity_index)
+    {
+        henka_entity candidate = henka_scene_get_entity_at_index(state->scene, entity_index);
+        henka_entity candidate_owner = HENKA_INVALID_ENTITY;
+        henka_transform transform;
+        const sandbox3d_authoring_object* authoring;
+        const henka_model_scene_primitive* primitive;
 
-    primitive = sandbox3d_get_showcase_authoring_primitive(state, entity);
-    authoring = state->authoring_object != NULL &&
-        sandbox3d_authoring_object_get_entity(state->authoring_object) == entity
-        ? state->authoring_object
-        : NULL;
-    if (authoring != NULL)
-    {
-        const henka_authoring_mesh* mesh = sandbox3d_authoring_object_get_mesh(authoring);
-        for (index = 1U;
-             index <= HENKA_AUTHORING_MESH_HARD_MAX_FACES &&
-                 triangle_count < max_outline_triangles;
-             ++index)
+        if (candidate == HENKA_INVALID_ENTITY ||
+            henka_scene_get_entity_selection_owner(state->scene, candidate, &candidate_owner) != HENKA_SUCCESS ||
+            candidate_owner != selection_owner ||
+            henka_scene_get_entity_transform(state->scene, candidate, &transform) != HENKA_SUCCESS)
         {
-            henka_authoring_vertex_id corners[HENKA_AUTHORING_MESH_HARD_MAX_FACE_CORNERS];
-            size_t corner_count = 0U;
-            size_t corner_index;
-            if (sandbox3d_authoring_object_get_face_ordered_corners(
-                    authoring,
-                    (henka_authoring_face_id)index,
-                    corners,
-                    sizeof(corners) / sizeof(corners[0]),
-                    &corner_count) != HENKA_SUCCESS ||
-                corner_count < 3U)
-            {
-                continue;
-            }
-            for (corner_index = 1U;
-                 corner_index + 1U < corner_count && triangle_count < max_outline_triangles;
-                 ++corner_index)
-            {
-                const henka_authoring_vertex* vertex0 = henka_authoring_mesh_get_vertex(mesh, corners[0]);
-                const henka_authoring_vertex* vertex1 = henka_authoring_mesh_get_vertex(mesh, corners[corner_index]);
-                const henka_authoring_vertex* vertex2 = henka_authoring_mesh_get_vertex(mesh, corners[corner_index + 1U]);
-                if (vertex0 != NULL && vertex1 != NULL && vertex2 != NULL &&
-                    sandbox3d_project_handle_point_depth(
-                        state, viewport,
-                        sandbox3d_transform_authoring_point(transform, vertex0->position),
-                        &triangles[triangle_count].points[0],
-                        &triangles[triangle_count].depths[0]) &&
-                    sandbox3d_project_handle_point_depth(
-                        state, viewport,
-                        sandbox3d_transform_authoring_point(transform, vertex1->position),
-                        &triangles[triangle_count].points[1],
-                        &triangles[triangle_count].depths[1]) &&
-                    sandbox3d_project_handle_point_depth(
-                        state, viewport,
-                        sandbox3d_transform_authoring_point(transform, vertex2->position),
-                        &triangles[triangle_count].points[2],
-                        &triangles[triangle_count].depths[2]))
-                {
-                    triangles[triangle_count].vertex_ids[0] = corners[0];
-                    triangles[triangle_count].vertex_ids[1] = corners[corner_index];
-                    triangles[triangle_count].vertex_ids[2] = corners[corner_index + 1U];
-                    ++triangle_count;
-                }
-            }
+            continue;
         }
-    }
-    else if (primitive != NULL && primitive->indices != NULL)
-    {
-        for (index = 0U;
-             index + 2U < primitive->index_count && triangle_count < max_outline_triangles;
-             index += 3U)
+        authoring = sandbox3d_find_authoring_object(state, candidate);
+        primitive = sandbox3d_get_imported_source_primitive(state, candidate);
+        if (authoring != NULL)
         {
-            const uint32_t i0 = primitive->indices[index];
-            const uint32_t i1 = primitive->indices[index + 1U];
-            const uint32_t i2 = primitive->indices[index + 2U];
-            if (i0 >= primitive->vertex_count || i1 >= primitive->vertex_count || i2 >= primitive->vertex_count ||
-                !sandbox3d_project_handle_point_depth(
-                    state, viewport,
-                    sandbox3d_transform_authoring_point(transform, primitive->vertices[i0].position),
-                    &triangles[triangle_count].points[0],
-                    &triangles[triangle_count].depths[0]) ||
-                !sandbox3d_project_handle_point_depth(
-                    state, viewport,
-                    sandbox3d_transform_authoring_point(transform, primitive->vertices[i1].position),
-                    &triangles[triangle_count].points[1],
-                    &triangles[triangle_count].depths[1]) ||
-                !sandbox3d_project_handle_point_depth(
-                    state, viewport,
-                    sandbox3d_transform_authoring_point(transform, primitive->vertices[i2].position),
-                    &triangles[triangle_count].points[2],
-                    &triangles[triangle_count].depths[2]))
-            {
-                continue;
-            }
-            triangles[triangle_count].vertex_ids[0] = i0 + 1U;
-            triangles[triangle_count].vertex_ids[1] = i1 + 1U;
-            triangles[triangle_count].vertex_ids[2] = i2 + 1U;
-            ++triangle_count;
+            sandbox3d_append_authoring_silhouette_triangles(
+                state, viewport, transform, authoring,
+                triangles, max_outline_triangles, &triangle_count);
+        }
+        else if (primitive != NULL)
+        {
+            sandbox3d_append_imported_silhouette_triangles(
+                state, viewport, transform, primitive,
+                triangles, max_outline_triangles, &triangle_count);
         }
     }
     return sandbox3d_build_topology_silhouette(
@@ -10021,61 +10091,160 @@ static sandbox3d_authoring_object* sandbox3d_find_authoring_object(
     return NULL;
 }
 
-static const henka_model_scene_primitive* sandbox3d_get_showcase_authoring_primitive(
+static bool sandbox3d_source_node_is_active(
+    const henka_model_scene_data* source,
+    size_t node_index)
+{
+    size_t guard;
+    int current;
+
+    if (source == NULL || node_index >= source->node_count ||
+        source->active_scene_index >= source->scene_count)
+    {
+        return false;
+    }
+    current = (int)node_index;
+    for (guard = 0U; guard < source->node_count; ++guard)
+    {
+        const int parent = source->nodes[current].parent_index;
+        size_t root_index;
+        if (parent < 0)
+        {
+            for (root_index = 0U; root_index < source->scene_root_counts[source->active_scene_index]; ++root_index)
+            {
+                if (source->scene_root_nodes[
+                        source->scene_root_offsets[source->active_scene_index] + root_index] == current)
+                {
+                    return true;
+                }
+            }
+            return false;
+        }
+        if ((size_t)parent >= source->node_count)
+        {
+            return false;
+        }
+        current = parent;
+    }
+    return false;
+}
+
+static bool sandbox3d_source_binding_uses_entity(
     const sandbox3d_state* state,
     henka_entity entity)
 {
-    const char* name;
-    const henka_model_scene_data* source;
-    const char* prefix;
-    size_t source_index;
-    size_t ordinal;
-    size_t entity_index;
+    size_t index;
 
-    if (state == NULL || state->scene == NULL || entity == HENKA_INVALID_ENTITY)
+    if (state == NULL || entity == HENKA_INVALID_ENTITY)
     {
-        return NULL;
+        return false;
     }
-    name = henka_scene_get_entity_name(state->scene, entity);
-    source = NULL;
-    prefix = NULL;
-    if (name != NULL &&
-        strncmp(name, "Showcase Giraffe ", sizeof("Showcase Giraffe ") - 1U) == 0 &&
-        state->giraffe_authoring_source_valid)
+    for (index = 0U; index < state->imported_source_binding_count; ++index)
     {
-        source = &state->giraffe_authoring_source;
-        prefix = "Showcase Giraffe ";
+        if (state->imported_source_bindings[index].valid &&
+            state->imported_source_bindings[index].entity == entity)
+        {
+            return true;
+        }
     }
-    else if (name != NULL &&
-        strncmp(name, "Showcase Rocket ", sizeof("Showcase Rocket ") - 1U) == 0 &&
-        state->rocket_authoring_source_valid)
+    return false;
+}
+
+static void sandbox3d_register_imported_source_bindings(
+    sandbox3d_state* state,
+    const henka_model_scene_data* source,
+    const char* name_prefix)
+{
+    size_t node_index;
+
+    if (state == NULL || state->scene == NULL || source == NULL || name_prefix == NULL)
     {
-        source = &state->rocket_authoring_source;
-        prefix = "Showcase Rocket ";
+        return;
     }
-    if (source == NULL || prefix == NULL)
+    for (node_index = 0U; node_index < state->imported_source_binding_count; ++node_index)
     {
-        return NULL;
+        if (state->imported_source_bindings[node_index].source == source)
+        {
+            state->imported_source_bindings[node_index].valid = false;
+        }
     }
-    ordinal = 0U;
-    for (entity_index = 0U; entity_index < henka_scene_get_entity_count(state->scene); ++entity_index)
+    for (node_index = 0U; node_index < source->node_count; ++node_index)
     {
-        henka_entity candidate = henka_scene_get_entity_at_index(state->scene, entity_index);
-        const char* candidate_name = candidate == HENKA_INVALID_ENTITY
-            ? NULL
-            : henka_scene_get_entity_name(state->scene, candidate);
-        if (candidate_name == NULL || strncmp(candidate_name, prefix, strlen(prefix)) != 0)
+        const henka_model_scene_node* node;
+        size_t primitive_index;
+        char expected_name[SANDBOX3D_MAX_SCENE_NAME_BYTES];
+        int written;
+        size_t entity_index;
+
+        if (!sandbox3d_source_node_is_active(source, node_index))
         {
             continue;
         }
-        if (candidate == entity)
+        node = &source->nodes[node_index];
+        written = snprintf(
+            expected_name,
+            sizeof(expected_name),
+            "%s%s%s",
+            name_prefix,
+            node->name == NULL ? "Node" : node->name,
+            source->primitive_count > 1U ? " Primitive" : "");
+        if (written < 0 || (size_t)written >= sizeof(expected_name))
         {
-            source_index = ordinal;
-            return source_index < source->primitive_count
-                ? &source->primitives[source_index]
-                : NULL;
+            continue;
         }
-        ++ordinal;
+        for (primitive_index = 0U; primitive_index < source->primitive_count; ++primitive_index)
+        {
+            if (source->primitives[primitive_index].mesh_index != (uint32_t)node->mesh_index)
+            {
+                continue;
+            }
+            for (entity_index = 0U; entity_index < henka_scene_get_entity_count(state->scene); ++entity_index)
+            {
+                henka_entity entity = henka_scene_get_entity_at_index(state->scene, entity_index);
+                const char* entity_name = entity == HENKA_INVALID_ENTITY
+                    ? NULL
+                    : henka_scene_get_entity_name(state->scene, entity);
+                henka_entity selection_owner = HENKA_INVALID_ENTITY;
+
+                if (entity_name == NULL || strcmp(entity_name, expected_name) != 0 ||
+                    sandbox3d_source_binding_uses_entity(state, entity) ||
+                    henka_scene_get_entity_selection_owner(
+                        state->scene, entity, &selection_owner) != HENKA_SUCCESS ||
+                    state->imported_source_binding_count >= SANDBOX3D_MAX_IMPORTED_SOURCE_BINDINGS)
+                {
+                    continue;
+                }
+                state->imported_source_bindings[state->imported_source_binding_count++] =
+                    (sandbox3d_imported_source_binding){
+                        true,
+                        entity,
+                        selection_owner,
+                        source,
+                        primitive_index};
+                break;
+            }
+        }
+    }
+}
+
+static const henka_model_scene_primitive* sandbox3d_get_imported_source_primitive(
+    const sandbox3d_state* state,
+    henka_entity entity)
+{
+    size_t index;
+
+    if (state == NULL || entity == HENKA_INVALID_ENTITY)
+    {
+        return NULL;
+    }
+    for (index = 0U; index < state->imported_source_binding_count; ++index)
+    {
+        const sandbox3d_imported_source_binding* binding = &state->imported_source_bindings[index];
+        if (binding->valid && binding->entity == entity && binding->source != NULL &&
+            binding->primitive_index < binding->source->primitive_count)
+        {
+            return &binding->source->primitives[binding->primitive_index];
+        }
     }
     return NULL;
 }
@@ -10180,7 +10349,7 @@ static bool sandbox3d_make_selected_object_editable(
     {
         return false;
     }
-    primitive = sandbox3d_get_showcase_authoring_primitive(state, entity);
+    primitive = sandbox3d_get_imported_source_primitive(state, entity);
     if (primitive == NULL ||
         sandbox3d_authoring_object_create_from_model_primitive(
             engine, state->scene, entity, primitive, 32U, &object) != HENKA_SUCCESS ||
@@ -10347,7 +10516,7 @@ static henka_result sandbox3d_restore_persisted_native_showcase_sources(
     {
         const henka_entity entity = henka_scene_get_entity_at_index(state->scene, entity_index);
         const henka_model_scene_primitive* primitive =
-            sandbox3d_get_showcase_authoring_primitive(state, entity);
+            sandbox3d_get_imported_source_primitive(state, entity);
         char* project_path = NULL;
         char* source_path = NULL;
         sandbox3d_authoring_object* object;
@@ -10560,7 +10729,7 @@ static void sandbox3d_select_entity(sandbox3d_state* state, henka_entity entity)
     }
     else
     {
-        if (sandbox3d_get_showcase_authoring_primitive(state, entity) != NULL)
+        if (sandbox3d_get_imported_source_primitive(state, entity) != NULL)
         {
             printf(
                 "Native authoring selection rejected: entity=%u valid=%d helper=%d.\n",
@@ -19009,7 +19178,7 @@ static void sandbox3d_draw_scene_objects_panel(
             row_label,
             sandbox3d_get_real_selected_entity(state) == entity))
         {
-            if (sandbox3d_get_showcase_authoring_primitive(state, entity) != NULL)
+            if (sandbox3d_get_imported_source_primitive(state, entity) != NULL)
             {
                 printf("Native authoring row clicked: name=%s.\n", entity_name);
                 fflush(stdout);
@@ -19018,7 +19187,7 @@ static void sandbox3d_draw_scene_objects_panel(
         }
 
         if (!state->native_authoring_row_reported &&
-            sandbox3d_get_showcase_authoring_primitive(state, entity) != NULL)
+            sandbox3d_get_imported_source_primitive(state, entity) != NULL)
         {
             printf(
                 "Native authoring row: name=%s x=%.1f y=%.1f width=%.1f height=28.0.\n",
@@ -19030,7 +19199,7 @@ static void sandbox3d_draw_scene_objects_panel(
             state->native_authoring_row_reported = true;
         }
         if (state->native_authoring_source_row_reported_entity != entity &&
-            sandbox3d_get_showcase_authoring_primitive(state, entity) != NULL)
+            sandbox3d_get_imported_source_primitive(state, entity) != NULL)
         {
             printf(
                 "Native authoring source row: name=%s x=%.1f y=%.1f width=%.1f height=28.0.\n",
@@ -19165,7 +19334,7 @@ static bool sandbox3d_details_flow_disclosure(
              state->native_authoring_disclosure_reported_expanded != *expanded))
         {
             if (selected_entity != HENKA_INVALID_ENTITY &&
-                sandbox3d_get_showcase_authoring_primitive(state, selected_entity) != NULL)
+                sandbox3d_get_imported_source_primitive(state, selected_entity) != NULL)
             {
                 printf(
                     "Native authoring disclosure: name=%s x=%.1f y=%.1f width=%.1f height=28.0 expanded=%d.\n",
@@ -19634,7 +19803,7 @@ static void sandbox3d_draw_object_details_panel(
         state->editor_ui.details_group_order,
         sizeof(details_display_order));
     prioritize_authoring_group =
-        sandbox3d_get_showcase_authoring_primitive(state, entity) != NULL ||
+        sandbox3d_get_imported_source_primitive(state, entity) != NULL ||
         (state->authoring_object != NULL &&
          entity == sandbox3d_authoring_object_get_entity(state->authoring_object));
     if (prioritize_authoring_group)
@@ -21641,7 +21810,7 @@ details_group_authoring:
             }
         }
     }
-    else if (sandbox3d_get_showcase_authoring_primitive(state, entity) != NULL)
+    else if (sandbox3d_get_imported_source_primitive(state, entity) != NULL)
     {
         if (state->editor_ui.details_authoring_expanded)
         {
@@ -24101,6 +24270,8 @@ static henka_result sandbox3d_initialize(henka_engine* engine, void* user_data)
         HENKA_LOG_ERROR("Showcase giraffe instantiation failed: %s (parts=%zu)", henka_result_to_string(result), giraffe_entity_count);
         goto fail;
     }
+    sandbox3d_register_imported_source_bindings(
+        state, &state->giraffe_authoring_source, "Showcase Giraffe ");
     if (!sandbox3d_set_named_showcase_local_bounds(
             state->scene,
             "Showcase Giraffe",
@@ -24209,6 +24380,8 @@ static henka_result sandbox3d_initialize(henka_engine* engine, void* user_data)
         HENKA_LOG_ERROR("Showcase rocket instantiation failed: %s (parts=%zu)", henka_result_to_string(result), rocket_entity_count);
         goto fail;
     }
+    sandbox3d_register_imported_source_bindings(
+        state, &state->rocket_authoring_source, "Showcase Rocket ");
     if (!sandbox3d_set_named_showcase_local_bounds(
             state->scene,
             "Showcase Rocket",
