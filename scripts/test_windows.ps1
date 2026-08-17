@@ -1,3 +1,8 @@
+param(
+    [ValidateSet("Debug", "Release")]
+    [string]$Configuration = "Debug"
+)
+
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
@@ -13,7 +18,7 @@ $localEnetSource = Join-Path $buildRoot "_deps\enet-src"
 $offlineProviderCount = 0
 $configureArguments = @("-S", $repoRoot, "-B", $buildRoot)
 $provenanceScript = Join-Path $PSScriptRoot "write_build_provenance.ps1"
-$executablePath = Join-Path $buildRoot "examples\sandbox3d\Debug\henka_sandbox3d.exe"
+$executablePath = Join-Path $buildRoot "examples\sandbox3d\$Configuration\henka_sandbox3d.exe"
 if (Test-Path -LiteralPath (Join-Path $localSdlSource "CMakeLists.txt")) {
     $configureArguments += "-DFETCHCONTENT_SOURCE_DIR_SDL3=$localSdlSource"
     $offlineProviderCount += 1
@@ -43,7 +48,7 @@ if (Test-Path -LiteralPath (Join-Path $localEnetSource "CMakeLists.txt")) {
 }
 if ($offlineProviderCount -eq 3) {
     $configureArguments += "-DFETCHCONTENT_FULLY_DISCONNECTED=ON"
-    Write-Host "FetchContent mode: fully disconnected because both optional local providers are present"
+    Write-Host "FetchContent mode: fully disconnected because all repository-local providers are present"
 } else {
     Write-Host "FetchContent mode: normal network-capable fallback for missing providers"
 }
@@ -60,13 +65,13 @@ Invoke-HenkaNative `
 
 Invoke-HenkaNative `
     -FilePath $cmake `
-    -Arguments @("--build", $buildRoot, "--config", "Debug") `
+    -Arguments @("--build", $buildRoot, "--config", $Configuration) `
     -WorkingDirectory $repoRoot `
     -Label "Build Henka Engine tests"
 
 Invoke-HenkaNative `
     -FilePath $ctest `
-    -Arguments @("--test-dir", $buildRoot, "--output-on-failure", "-C", "Debug") `
+    -Arguments @("--test-dir", $buildRoot, "--output-on-failure", "-C", $Configuration) `
     -WorkingDirectory $repoRoot `
     -Label "Run Henka Engine tests"
 
@@ -77,7 +82,7 @@ Invoke-HenkaNative `
         "-ExecutionPolicy", "Bypass",
         "-File", $provenanceScript,
         "-RepoRoot", $repoRoot,
-        "-Configuration", "Debug",
+        "-Configuration", $Configuration,
         "-ExecutablePath", $executablePath,
         "-CMakePath", $cmake) `
     -WorkingDirectory $repoRoot `
