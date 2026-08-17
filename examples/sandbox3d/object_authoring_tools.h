@@ -159,6 +159,11 @@ henka_result sandbox3d_authoring_object_grow_component_selection(
  * complete. This never mutates mesh topology. */
 henka_result sandbox3d_authoring_object_select_connected_components(
     sandbox3d_authoring_object* object);
+/* Replaces the active edge selection with the bounded quad-strip loop that
+ * crosses opposite edges from the active edge. Boundary, non-quad, malformed,
+ * and over-budget traversals fail closed without mutating the selection. */
+henka_result sandbox3d_authoring_object_select_edge_loop(
+    sandbox3d_authoring_object* object);
 /* Scales the vertices touched by the current component selection around their
  * centroid and publishes the result through the normal transactional source,
  * render, bounds, physics, and undo path. */

@@ -89,6 +89,14 @@ Close and explicit exit requests stop before another update or render. The rende
 
 These ownership and transaction boundaries also prepare future 2.5D and modeling work. Editable authoring data should retain stable identities and undoable source state, then compile into runtime rendering and physics data instead of sharing low-level GPU-resource lifetime directly.
 
+The sandbox authoring wrapper now exposes a bounded Edge-mode loop selection
+operation. Starting from the active edge, it walks opposite edges through both
+adjacent sides of a closed manifold quad strip and publishes the resulting
+selection only after the traversal closes. Boundary edges, non-quad faces,
+malformed connectivity, and selection-budget exhaustion retain the prior
+selection. This is topology navigation for native editing; it does not claim
+that the generated Giraffe or Rocket fixtures were authored by a user.
+
 ### Asset identity and ownership
 
 glTF-backed material assets now use the same canonical source identity as the

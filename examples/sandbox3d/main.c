@@ -20837,6 +20837,30 @@ details_group_authoring:
                             : "Connected selection exceeded the bounded editor selection budget.");
                 }
             }
+            if (state->authoring_object != NULL &&
+                selection_mode == SANDBOX3D_AUTHORING_SELECTION_EDGE &&
+                sandbox3d_details_flow_next_row(state, flow_desc.bounds, 28.0f, 1U, &row) &&
+                row.width >= 290.0f)
+            {
+                if (henka_ui_button(
+                        state->ui,
+                        "authoring_edge_loop_top",
+                        (henka_ui_rect){row.x, row.y, 140.0f, 24.0f},
+                        "Select Edge Loop"))
+                {
+                    const henka_result loop_result =
+                        sandbox3d_authoring_object_select_edge_loop(state->authoring_object);
+                    if (loop_result == HENKA_SUCCESS)
+                    {
+                        sandbox3d_mark_generic_modeling_applied(state, entity);
+                        sandbox3d_set_status(state, false, "Quad edge loop selected for native authoring.");
+                    }
+                    else
+                    {
+                        sandbox3d_set_status(state, true, "Edge loop selection requires a bounded quad strip.");
+                    }
+                }
+            }
             if (selection_mode == SANDBOX3D_AUTHORING_SELECTION_FACE &&
                 sandbox3d_details_flow_next_row(state, flow_desc.bounds, 28.0f, 1U, &row) &&
                 row.width >= 290.0f)
@@ -21359,6 +21383,30 @@ details_group_authoring:
                             sandbox3d_authoring_object_get_selected_component_count(state->authoring_object));
                         fflush(stdout);
                         sandbox3d_set_status(state, true, "Selected topology scale was rejected; source retained.");
+                    }
+                }
+            }
+            if (state->authoring_object != NULL &&
+                selection_mode == SANDBOX3D_AUTHORING_SELECTION_EDGE &&
+                sandbox3d_details_flow_next_row(state, flow_desc.bounds, 28.0f, 1U, &row) &&
+                row.width >= 290.0f)
+            {
+                if (henka_ui_button(
+                        state->ui,
+                        "authoring_edge_loop",
+                        (henka_ui_rect){row.x, row.y, 140.0f, 24.0f},
+                        "Select Edge Loop"))
+                {
+                    const henka_result loop_result =
+                        sandbox3d_authoring_object_select_edge_loop(state->authoring_object);
+                    if (loop_result == HENKA_SUCCESS)
+                    {
+                        sandbox3d_mark_generic_modeling_applied(state, entity);
+                        sandbox3d_set_status(state, false, "Quad edge loop selected for native authoring.");
+                    }
+                    else
+                    {
+                        sandbox3d_set_status(state, true, "Edge loop selection requires a bounded quad strip.");
                     }
                 }
             }
