@@ -30,6 +30,21 @@ public static class HenkaUiAutomationNative
     public static extern IntPtr GetForegroundWindow();
 
     [DllImport("user32.dll")]
+    public static extern uint GetWindowThreadProcessId(
+        IntPtr hWnd,
+        out uint processId);
+
+    [DllImport("kernel32.dll")]
+    public static extern uint GetCurrentThreadId();
+
+    [DllImport("user32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static extern bool AttachThreadInput(
+        uint idAttach,
+        uint idAttachTo,
+        bool fAttach);
+
+    [DllImport("user32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]
     public static extern bool SetForegroundWindow(IntPtr hWnd);
 
@@ -66,24 +81,68 @@ function Set-HenkaAutomationForeground {
         return
     }
 
-    [HenkaUiAutomationNative]::ShowWindowAsync(
-        $Handle,
-        [HenkaUiAutomationNative]::SW_RESTORE) | Out-Null
-    [HenkaUiAutomationNative]::BringWindowToTop($Handle) | Out-Null
-    [HenkaUiAutomationNative]::SwitchToThisWindow($Handle, $true)
-
+    $targetThread = [uint32]0
+    $foregroundThread = [uint32]0
+    [uint32]$processId = 0
+    [uint32]$foregroundProcessId = 0
+    $currentThread = [HenkaUiAutomationNative]::GetCurrentThreadId()
+    $foregroundWindow = [HenkaUiAutomationNative]::GetForegroundWindow()
+    $targetThread = [HenkaUiAutomationNative]::GetWindowThreadProcessId($Handle, [ref]$processId)
+    $foregroundThread = [HenkaUiAutomationNative]::GetWindowThreadProcessId($foregroundWindow, [ref]$foregroundProcessId)
+    $attachedCurrent = $false
+    $attachedForeground = $false
+    $foregroundAcquired = $false
     $deadline = (Get-Date).AddSeconds(3)
 
-    do {
-        [HenkaUiAutomationNative]::SetForegroundWindow($Handle) | Out-Null
-
-        if ([HenkaUiAutomationNative]::GetForegroundWindow() -eq $Handle) {
-            Start-Sleep -Milliseconds 150
-            return
+    try {
+        if ($targetThread -ne 0 -and $currentThread -ne $targetThread) {
+            $attachedCurrent = [HenkaUiAutomationNative]::AttachThreadInput(
+                $currentThread,
+                $targetThread,
+                $true)
         }
+        if ($targetThread -ne 0 -and $foregroundThread -ne 0 -and $foregroundThread -ne $targetThread) {
+            $attachedForeground = [HenkaUiAutomationNative]::AttachThreadInput(
+                $foregroundThread,
+                $targetThread,
+                $true)
+        }
+        [HenkaUiAutomationNative]::ShowWindowAsync(
+            $Handle,
+            [HenkaUiAutomationNative]::SW_RESTORE) | Out-Null
+        [HenkaUiAutomationNative]::BringWindowToTop($Handle) | Out-Null
+        [HenkaUiAutomationNative]::SwitchToThisWindow($Handle, $true)
 
-        Start-Sleep -Milliseconds 100
-    } while ((Get-Date) -lt $deadline)
+        do {
+            [HenkaUiAutomationNative]::SetForegroundWindow($Handle) | Out-Null
+
+            if ([HenkaUiAutomationNative]::GetForegroundWindow() -eq $Handle) {
+                $foregroundAcquired = $true
+                break
+            }
+
+            Start-Sleep -Milliseconds 100
+        } while ((Get-Date) -lt $deadline)
+    }
+    finally {
+        if ($attachedForeground) {
+            [HenkaUiAutomationNative]::AttachThreadInput(
+                $foregroundThread,
+                $targetThread,
+                $false) | Out-Null
+        }
+        if ($attachedCurrent) {
+            [HenkaUiAutomationNative]::AttachThreadInput(
+                $currentThread,
+                $targetThread,
+                $false) | Out-Null
+        }
+    }
+
+    if ($foregroundAcquired) {
+        Start-Sleep -Milliseconds 150
+        return
+    }
 
     throw (
         "The packaged UI harness could not acquire the Henka window as " +
@@ -685,6 +744,7 @@ $startupScreenshotPath = Join-Path $logDir "check_packaged_sandbox3d_startup.png
 $qaScreenshotPath = Join-Path $logDir "check_packaged_sandbox3d_controls_qa.png"
 $nativeScreenshotPath = Join-Path $logDir "check_packaged_sandbox3d_native_panel.png"
 $nativeAuthoringScreenshotPath = Join-Path $logDir "check_packaged_sandbox3d_native_authoring.png"
+$selectionOutlineScreenshotPath = Join-Path $logDir "check_packaged_sandbox3d_selection_outline.png"
 $nativeAuthoredScreenshotPath = Join-Path $logDir "check_packaged_sandbox3d_native_authored_rocket.png"
 $contextMenuScreenshotPath = Join-Path $logDir "check_packaged_sandbox3d_context_menu.png"
 $stabilityFirstPath = Join-Path $logDir "check_packaged_sandbox3d_stability_a.png"
@@ -1333,10 +1393,11 @@ try {
                     -Pattern "Native authoring row clicked:" `
                     -TimeoutMilliseconds 2000
         }
+        Start-Sleep -Milliseconds 350
         Save-WindowScreenshot `
             -Handle $mainWindowHandle `
-            -Path $nativeAuthoringScreenshotPath `
-            -Description "Packaged native authoring post-selection screenshot"
+            -Path $selectionOutlineScreenshotPath `
+            -Description "Packaged logical-owner silhouette selection screenshot"
         if (-not $nativeSelectionObserved) {
             $inspectViewportMatch = Get-LastLogRegexMatch `
                 -Path $stdoutPath `
@@ -1426,13 +1487,20 @@ try {
                 -Y $nativeDisclosureY `
                 -Width $nativeDisclosureWidth `
                 -Height 28.0
-            Click-FramebufferPoint `
-                -Handle $mainWindowHandle `
-                -FramebufferWidth $framebufferWidth `
-                -FramebufferHeight $framebufferHeight `
-                -FramebufferX ($nativeDisclosureX + $nativeDisclosureWidth * 0.5) `
-                -FramebufferY ($nativeDisclosureY + 14.0)
-            if (-not (Wait-FileContains -Path $stdoutPath -Pattern 'Native authoring disclosure: name=.* expanded=1\.' -TimeoutMilliseconds 3000)) {
+            $nativeDisclosureObserved = $false
+            for ($disclosureAttempt = 0; $disclosureAttempt -lt 3 -and -not $nativeDisclosureObserved; ++$disclosureAttempt) {
+                Click-FramebufferPoint `
+                    -Handle $mainWindowHandle `
+                    -FramebufferWidth $framebufferWidth `
+                    -FramebufferHeight $framebufferHeight `
+                    -FramebufferX ($nativeDisclosureX + $nativeDisclosureWidth * 0.5) `
+                    -FramebufferY ($nativeDisclosureY + 14.0)
+                $nativeDisclosureObserved = Wait-FileContains `
+                    -Path $stdoutPath `
+                    -Pattern 'Native authoring disclosure: name=.* expanded=1\.' `
+                    -TimeoutMilliseconds 1500
+            }
+            if (-not $nativeDisclosureObserved) {
                 throw "The selected showcase Authoring disclosure did not open."
             }
         }
@@ -1752,6 +1820,36 @@ try {
         Write-Output "[pass] User-facing native material undo/redo completed"
         if (-not (Wait-FileContains -Path $stdoutPath -Pattern "Native authoring move control:" -TimeoutMilliseconds 3000)) {
             throw "The converted showcase did not expose a bounded component-edit control."
+        }
+        $componentViewportMatch = Get-LastLogRegexMatch `
+            -Path $stdoutPath `
+            -Pattern 'Sandbox viewport: origin ([0-9]+),([0-9]+) size ([0-9]+)x([0-9]+)\.'
+        if ($null -eq $componentViewportMatch) {
+            throw "The selected showcase viewport geometry could not be parsed for component picking."
+        }
+        $componentViewportX = [double]$componentViewportMatch.Groups[1].Value
+        $componentViewportY = [double]$componentViewportMatch.Groups[2].Value
+        $componentViewportWidth = [double]$componentViewportMatch.Groups[3].Value
+        $componentViewportHeight = [double]$componentViewportMatch.Groups[4].Value
+        $nativeComponentPicked = $false
+        foreach ($componentPickX in @(0.30, 0.35, 0.40)) {
+            foreach ($componentPickY in @(0.48, 0.54, 0.60)) {
+                if ($nativeComponentPicked) { break }
+                Click-FramebufferPoint `
+                    -Handle $mainWindowHandle `
+                    -FramebufferWidth $framebufferWidth `
+                    -FramebufferHeight $framebufferHeight `
+                    -FramebufferX ($componentViewportX + $componentViewportWidth * $componentPickX) `
+                    -FramebufferY ($componentViewportY + $componentViewportHeight * $componentPickY)
+                $nativeComponentPicked = Wait-FileContains `
+                    -Path $stdoutPath `
+                    -Pattern "Native authoring component picked:" `
+                    -TimeoutMilliseconds 900
+            }
+            if ($nativeComponentPicked) { break }
+        }
+        if (-not $nativeComponentPicked) {
+            throw "The selected showcase did not expose a pickable component for the user-facing edit check."
         }
         $nativeMoveMatch = Get-LastLogRegexMatch `
             -Path $stdoutPath `

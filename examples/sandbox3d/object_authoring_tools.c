@@ -317,6 +317,17 @@ static void sandbox3d_authoring_repair_selection(sandbox3d_authoring_object* obj
     {
         return;
     }
+    if (object->selected_face == HENKA_AUTHORING_INVALID_ID &&
+        object->selected_face_count == 0U &&
+        object->selected_vertex_count == 0U &&
+        object->selected_edge_count == 0U)
+    {
+        /* An empty component selection is intentional for a newly-created or
+         * reloaded authoring source. Do not turn object selection into an
+         * arbitrary face overlay while repairing mesh identity. */
+        object->active_component_id = HENKA_AUTHORING_INVALID_ID;
+        return;
+    }
     if (henka_authoring_mesh_get_face(object->mesh, object->selected_face) == NULL)
     {
         object->selected_face = HENKA_AUTHORING_INVALID_ID;
@@ -823,11 +834,13 @@ static henka_result sandbox3d_authoring_object_create_from_owned_mesh(
     object->entity = entity;
     object->mesh = mesh;
     object->history_steps = history_steps;
-    object->selected_face = 1U;
+    /* New authoring objects enter object-selection state. Component overlays
+     * are opt-in after the user picks a vertex, edge, or face; seeding face 1
+     * here hid the real logical-object silhouette immediately after import. */
+    object->selected_face = HENKA_AUTHORING_INVALID_ID;
     object->selection_mode = SANDBOX3D_AUTHORING_SELECTION_FACE;
-    object->active_component_id = (uint32_t)object->selected_face;
-    object->selected_faces[0] = object->selected_face;
-    object->selected_face_count = 1U;
+    object->active_component_id = HENKA_AUTHORING_INVALID_ID;
+    object->selected_face_count = 0U;
     object->physics_body = HENKA_INVALID_PHYSICS_BODY_ID;
     object->selection_history_capacity = history_steps;
     object->selection_history = henka_calloc(

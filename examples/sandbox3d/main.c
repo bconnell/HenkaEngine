@@ -4642,12 +4642,32 @@ static size_t sandbox3d_build_screen_silhouette(
     sandbox3d_silhouette_segment* out_segments,
     size_t segment_capacity)
 {
-    enum { max_outline_triangles = 2048 };
+    /* The imported showcase meshes are intentionally denser than the old
+     * scratch cap.  Truncating here produced a partial body outline and a
+     * misleading flat closure instead of the selected object's silhouette. */
+    enum { max_outline_triangles = 16384 };
     /* The silhouette builder is render-thread owned. Keep its bounded scratch
      * outside the application stack so dense editable meshes cannot turn a
      * mode switch into a stack overflow. */
     static sandbox3d_projected_triangle triangles[max_outline_triangles];
+    static sandbox3d_silhouette_segment cached_segments[65536];
+    static const sandbox3d_state* cached_state;
+    static henka_entity cached_selection_owner = HENKA_INVALID_ENTITY;
+    static henka_viewport cached_viewport;
+    static henka_camera cached_camera;
+    static henka_transform cached_selected_transform;
+    static const henka_authoring_mesh* cached_authoring_mesh;
+    static henka_authoring_mesh_counts cached_authoring_counts;
+    static henka_vec3 cached_authoring_center;
+    static henka_vec3 cached_authoring_extents;
+    static size_t cached_segment_count;
+    static bool cache_valid;
     henka_entity selection_owner;
+    henka_transform selected_transform;
+    const henka_authoring_mesh* authoring_mesh = NULL;
+    henka_authoring_mesh_counts authoring_counts = {0U, 0U, 0U};
+    henka_vec3 authoring_center = {0.0f, 0.0f, 0.0f};
+    henka_vec3 authoring_extents = {0.0f, 0.0f, 0.0f};
     size_t entity_index;
     size_t triangle_count = 0U;
 
@@ -4656,6 +4676,44 @@ static size_t sandbox3d_build_screen_silhouette(
         henka_scene_get_entity_selection_owner(state->scene, entity, &selection_owner) != HENKA_SUCCESS)
     {
         return 0U;
+    }
+    if (henka_scene_get_entity_transform(state->scene, entity, &selected_transform) != HENKA_SUCCESS)
+    {
+        return 0U;
+    }
+    if (state->authoring_object != NULL &&
+        sandbox3d_entities_share_selection_owner(
+            state,
+            entity,
+            sandbox3d_authoring_object_get_entity(state->authoring_object)))
+    {
+        authoring_mesh = sandbox3d_authoring_object_get_mesh(state->authoring_object);
+        if (authoring_mesh != NULL)
+        {
+            authoring_counts = henka_authoring_mesh_get_counts(authoring_mesh);
+            (void)henka_authoring_mesh_get_bounds(
+                authoring_mesh,
+                &authoring_center,
+                &authoring_extents);
+        }
+    }
+    if (cache_valid &&
+        cached_state == state &&
+        cached_selection_owner == selection_owner &&
+        memcmp(&cached_viewport, &viewport, sizeof(viewport)) == 0 &&
+        memcmp(&cached_camera, &state->camera, sizeof(state->camera)) == 0 &&
+        memcmp(&cached_selected_transform, &selected_transform, sizeof(selected_transform)) == 0 &&
+        cached_authoring_mesh == authoring_mesh &&
+        memcmp(&cached_authoring_counts, &authoring_counts, sizeof(authoring_counts)) == 0 &&
+        memcmp(&cached_authoring_center, &authoring_center, sizeof(authoring_center)) == 0 &&
+        memcmp(&cached_authoring_extents, &authoring_extents, sizeof(authoring_extents)) == 0)
+    {
+        if (cached_segment_count > segment_capacity)
+        {
+            return 0U;
+        }
+        memcpy(out_segments, cached_segments, cached_segment_count * sizeof(*out_segments));
+        return cached_segment_count;
     }
     for (entity_index = 0U; entity_index < henka_scene_get_entity_count(state->scene); ++entity_index)
     {
@@ -4688,8 +4746,26 @@ static size_t sandbox3d_build_screen_silhouette(
                 triangles, max_outline_triangles, &triangle_count);
         }
     }
-    return sandbox3d_build_topology_silhouette(
+    cached_segment_count = sandbox3d_build_topology_silhouette(
         triangles, triangle_count, out_segments, segment_capacity);
+    cached_state = state;
+    cached_selection_owner = selection_owner;
+    cached_viewport = viewport;
+    cached_camera = state->camera;
+    cached_selected_transform = selected_transform;
+    cached_authoring_mesh = authoring_mesh;
+    cached_authoring_counts = authoring_counts;
+    cached_authoring_center = authoring_center;
+    cached_authoring_extents = authoring_extents;
+    cache_valid = true;
+    if (cached_segment_count > 0U)
+    {
+        memcpy(
+            cached_segments,
+            out_segments,
+            cached_segment_count * sizeof(*out_segments));
+    }
+    return cached_segment_count;
 }
 
 static void sandbox3d_append_gizmo_handle(
@@ -5246,7 +5322,11 @@ static void sandbox3d_draw_selection_highlight(sandbox3d_state* state, henka_vie
     henka_entity selected_entity;
     henka_vec4 outer_color;
     henka_vec4 inner_color;
-    sandbox3d_silhouette_segment silhouette[2048];
+    /* Keep the outline result in render-thread-owned fixed storage. Dense
+     * imported sources can produce more than the old 2,048 visible runs;
+     * returning zero at that boundary fabricated a bounding-box outline. */
+    enum { max_outline_segments = 65536 };
+    static sandbox3d_silhouette_segment silhouette[max_outline_segments];
     size_t silhouette_count;
     size_t edge;
     bool component_selection_active;
@@ -25342,6 +25422,13 @@ static henka_result sandbox3d_initialize(henka_engine* engine, void* user_data)
         henka_authoring_mesh_counts edited;
         henka_authoring_mesh_counts restored;
         henka_mesh* authoring_scene_mesh = NULL;
+        result = sandbox3d_authoring_object_select_component(
+            state->authoring_object, 1U, false);
+        if (result != HENKA_SUCCESS)
+        {
+            printf("Authoring smoke failure: initial face selection returned %s.\n", henka_result_to_string(result));
+            goto fail;
+        }
         result = sandbox3d_authoring_object_extrude_selected_face(state->authoring_object, 0.25f);
         if (result != HENKA_SUCCESS)
         {
@@ -25667,7 +25754,13 @@ static henka_result sandbox3d_initialize(henka_engine* engine, void* user_data)
             result = HENKA_ERROR_UNKNOWN;
             goto fail;
         }
-        result = sandbox3d_authoring_object_extrude_selected_face(state->authoring_object, 0.25f);
+        result = sandbox3d_authoring_object_select_component(
+            state->authoring_object, 1U, false);
+        if (result == HENKA_SUCCESS)
+        {
+            result = sandbox3d_authoring_object_extrude_selected_face(
+                state->authoring_object, 0.25f);
+        }
         if (result != HENKA_SUCCESS ||
             henka_scene_get_entity_local_bounds(state->scene, state->cube_entity, &edited_bounds) != HENKA_SUCCESS ||
             henka_physics_body_get_state(state->physics.world, authoring_body, &body_state) != HENKA_SUCCESS ||

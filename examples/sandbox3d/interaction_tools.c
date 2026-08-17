@@ -536,7 +536,10 @@ size_t sandbox3d_build_topology_silhouette(
     sandbox3d_silhouette_segment* out_segments,
     size_t segment_capacity)
 {
-    enum { edge_slot_count = 4096 };
+    /* Keep the edge table load bounded for imported showcase meshes.  A
+     * 4,096-slot table silently truncated the dense Giraffe outline before
+     * the renderer could classify its real silhouette. */
+    enum { edge_slot_count = 65536 };
     typedef struct silhouette_edge
     {
         bool used;
@@ -556,6 +559,7 @@ size_t sandbox3d_build_topology_silhouette(
     static silhouette_edge edges[edge_slot_count];
     size_t triangle_index;
     size_t output_count = 0U;
+    const bool use_pairwise_visibility = triangle_count <= 4096U;
 
     if (triangles == NULL || out_segments == NULL || triangle_count == 0U || segment_capacity == 0U)
     {
@@ -656,8 +660,19 @@ size_t sandbox3d_build_topology_silhouette(
         {
             continue;
         }
+        if (!use_pairwise_visibility)
         {
-            enum { max_visibility_events = 8192 };
+            if (output_count >= segment_capacity)
+            {
+                return 0U;
+            }
+            out_segments[output_count++] = (sandbox3d_silhouette_segment){
+                edge->start,
+                edge->end};
+            continue;
+        }
+        {
+            enum { max_visibility_events = 65536 };
             static float visibility_events[max_visibility_events];
             size_t visibility_event_count = 2U;
             size_t occluder_index;
@@ -683,7 +698,18 @@ size_t sandbox3d_build_topology_silhouette(
                     float depth_base;
                     float depth_slope;
                     float depth_crossing;
+                    const float edge_min_x = fminf(edge->start.x, edge->end.x) - 0.001f;
+                    const float edge_max_x = fmaxf(edge->start.x, edge->end.x) + 0.001f;
+                    const float edge_min_y = fminf(edge->start.y, edge->end.y) - 0.001f;
+                    const float edge_max_y = fmaxf(edge->start.y, edge->end.y) + 0.001f;
 
+                    if (fmaxf(occluder->points[0].x, fmaxf(occluder->points[1].x, occluder->points[2].x)) < edge_min_x ||
+                        fminf(occluder->points[0].x, fminf(occluder->points[1].x, occluder->points[2].x)) > edge_max_x ||
+                        fmaxf(occluder->points[0].y, fmaxf(occluder->points[1].y, occluder->points[2].y)) < edge_min_y ||
+                        fminf(occluder->points[0].y, fminf(occluder->points[1].y, occluder->points[2].y)) > edge_max_y)
+                    {
+                        continue;
+                    }
                     if (!sandbox3d_projected_triangle_barycentric_at(
                             occluder,
                             edge->start,

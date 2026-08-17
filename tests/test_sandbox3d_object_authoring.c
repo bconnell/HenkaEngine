@@ -151,6 +151,22 @@ static void henka_test_sandbox3d_object_authoring_source_persistence(void)
     HENKA_TEST_ASSERT(henka_scene_set_entity_local_bounds(scene, entity, previous_bounds) == HENKA_SUCCESS);
     HENKA_TEST_ASSERT(sandbox3d_authoring_object_create_box(
         engine, scene, entity, 1.0f, 1.0f, 1.0f, NULL, 8U, &object) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(
+        sandbox3d_authoring_object_get_selected_component_count(object) == 0U);
+    HENKA_TEST_ASSERT(
+        sandbox3d_authoring_object_get_selected_face(object) == HENKA_AUTHORING_INVALID_ID);
+    HENKA_TEST_ASSERT(
+        sandbox3d_authoring_object_get_active_component_id(object) == HENKA_AUTHORING_INVALID_ID);
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_save_source(
+        object, "build/test_tmp/authoring_object_empty.hams") == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_reload_source(
+        object, "build/test_tmp/authoring_object_empty.hams") == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(
+        sandbox3d_authoring_object_get_selected_component_count(object) == 0U);
+    HENKA_TEST_ASSERT(
+        sandbox3d_authoring_object_get_selected_face(object) == HENKA_AUTHORING_INVALID_ID);
+    HENKA_TEST_ASSERT(
+        sandbox3d_authoring_object_get_active_component_id(object) == HENKA_AUTHORING_INVALID_ID);
     HENKA_TEST_ASSERT(henka_physics_world_create(&physics_world) == HENKA_SUCCESS);
     physics_desc.type = HENKA_PHYSICS_BODY_STATIC;
     physics_desc.transform = henka_transform_identity();
@@ -166,6 +182,8 @@ static void henka_test_sandbox3d_object_authoring_source_persistence(void)
     HENKA_TEST_ASSERT(henka_physics_body_get_state(
         physics_world, physics_body, &physics_state) == HENKA_SUCCESS);
     HENKA_TEST_ASSERT_FLOAT_CLOSE(physics_state.collider.data.box.half_extents.x, 0.5f, 0.0001f);
+    HENKA_TEST_ASSERT(
+        sandbox3d_authoring_object_select_component(object, 1U, false) == HENKA_SUCCESS);
     HENKA_TEST_ASSERT(sandbox3d_authoring_object_set_selected_face_material_region(
         object, 17U) == HENKA_SUCCESS);
     HENKA_TEST_ASSERT(henka_authoring_mesh_get_face(
