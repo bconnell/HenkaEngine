@@ -86,6 +86,8 @@ void henka_test_scene(void)
     char material_name[] = "Mutable Material";
     char overlong_text[HENKA_MAX_SCENE_TEXT_BYTES + 2U];
     henka_entity second;
+    henka_entity selection_root;
+    henka_entity selection_child;
     henka_interaction_desc interaction;
     henka_interaction_desc read_interaction;
     henka_material read_material;
@@ -284,12 +286,24 @@ void henka_test_scene(void)
     HENKA_TEST_ASSERT(found == first);
     HENKA_TEST_ASSERT(henka_scene_set_entity_selection_owner(scene, first, second) == HENKA_ERROR_INVALID_ARGUMENT);
     HENKA_TEST_ASSERT(henka_scene_set_entity_selection_owner(scene, second, HENKA_INVALID_ENTITY) == HENKA_ERROR_INVALID_ARGUMENT);
+    selection_root = henka_scene_create_entity_named(scene, "Selection Root");
+    selection_child = henka_scene_create_entity_named(scene, "Selection Child");
+    HENKA_TEST_ASSERT(selection_root != HENKA_INVALID_ENTITY);
+    HENKA_TEST_ASSERT(selection_child != HENKA_INVALID_ENTITY);
+    HENKA_TEST_ASSERT(henka_scene_set_entity_selection_owner(
+        scene, selection_child, selection_root) == HENKA_SUCCESS);
+    henka_scene_destroy_entity(scene, selection_root);
+    HENKA_TEST_ASSERT(!henka_scene_is_entity_valid(scene, selection_root));
+    HENKA_TEST_ASSERT(henka_scene_is_entity_valid(scene, selection_child));
+    HENKA_TEST_ASSERT(henka_scene_get_entity_selection_owner(
+        scene, selection_child, &found) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(found == selection_child);
     HENKA_TEST_ASSERT(henka_scene_is_entity_valid(scene, first));
     HENKA_TEST_ASSERT(henka_scene_is_entity_valid(scene, second));
     HENKA_TEST_ASSERT(henka_scene_clear_entity_mesh(scene, first) == HENKA_SUCCESS);
     HENKA_TEST_ASSERT(henka_scene_get_entity_mesh(scene, first, &read_mesh) == HENKA_SUCCESS);
     HENKA_TEST_ASSERT(read_mesh == NULL);
-    HENKA_TEST_ASSERT(henka_scene_get_entity_count(scene) == 2U);
+    HENKA_TEST_ASSERT(henka_scene_get_entity_count(scene) == 3U);
     lod = (henka_scene_lod_desc){0};
     HENKA_TEST_ASSERT(henka_scene_set_entity_lod(scene, first, lod) == HENKA_SUCCESS);
     HENKA_TEST_ASSERT(henka_scene_get_entity_lod(scene, first, &read_lod) == HENKA_SUCCESS);
@@ -301,7 +315,9 @@ void henka_test_scene(void)
     HENKA_TEST_ASSERT(listed == first);
     listed = henka_scene_get_entity_at_index(scene, 1U);
     HENKA_TEST_ASSERT(listed == second);
-    HENKA_TEST_ASSERT(henka_scene_get_entity_at_index(scene, 2U) == HENKA_INVALID_ENTITY);
+    listed = henka_scene_get_entity_at_index(scene, 2U);
+    HENKA_TEST_ASSERT(listed == selection_child);
+    HENKA_TEST_ASSERT(henka_scene_get_entity_at_index(scene, 3U) == HENKA_INVALID_ENTITY);
     HENKA_TEST_ASSERT(henka_scene_is_entity_visible(scene, first));
     HENKA_TEST_ASSERT(strcmp(henka_scene_get_entity_name(scene, first), "Ground") == 0);
     HENKA_TEST_ASSERT(henka_scene_get_entity_name(scene, second) == NULL);
@@ -500,9 +516,10 @@ void henka_test_scene(void)
     HENKA_TEST_ASSERT(!henka_scene_is_entity_valid(scene, first));
     HENKA_TEST_ASSERT(henka_scene_get_entity_selection_owner(scene, second, &found) == HENKA_SUCCESS);
     HENKA_TEST_ASSERT(found == second);
-    HENKA_TEST_ASSERT(henka_scene_get_entity_count(scene) == 2U);
+    HENKA_TEST_ASSERT(henka_scene_get_entity_count(scene) == 3U);
     HENKA_TEST_ASSERT(henka_scene_get_entity_at_index(scene, 0U) == second);
     HENKA_TEST_ASSERT(henka_scene_get_entity_at_index(scene, 1U) == helper);
+    HENKA_TEST_ASSERT(henka_scene_get_entity_at_index(scene, 2U) == selection_child);
 
     henka_scene_destroy(scene);
 
