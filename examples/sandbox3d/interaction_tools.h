@@ -78,7 +78,9 @@ typedef struct sandbox3d_projected_triangle
 {
     henka_vec2 points[3];
     float depths[3];
-    uint32_t vertex_ids[3];
+    /* IDs are source-scoped, not mesh-local.  This lets one logical scene
+     * object aggregate multiple children without inventing shared edges. */
+    uint64_t vertex_ids[3];
 } sandbox3d_projected_triangle;
 
 typedef struct sandbox3d_silhouette_segment

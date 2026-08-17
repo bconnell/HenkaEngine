@@ -474,8 +474,8 @@ size_t sandbox3d_build_topology_silhouette(
     typedef struct silhouette_edge
     {
         bool used;
-        uint32_t first_id;
-        uint32_t second_id;
+        uint64_t first_id;
+        uint64_t second_id;
         uint8_t total_count;
         uint8_t positive_count;
         uint8_t negative_count;
@@ -510,8 +510,8 @@ size_t sandbox3d_build_topology_silhouette(
         for (edge_index = 0; edge_index < 3; ++edge_index)
         {
             const int next_index = (edge_index + 1) % 3;
-            uint32_t first_id = triangle->vertex_ids[edge_index];
-            uint32_t second_id = triangle->vertex_ids[next_index];
+            uint64_t first_id = triangle->vertex_ids[edge_index];
+            uint64_t second_id = triangle->vertex_ids[next_index];
             size_t slot;
             size_t probe;
             silhouette_edge* edge = NULL;
@@ -524,11 +524,12 @@ size_t sandbox3d_build_topology_silhouette(
             }
             if (first_id > second_id)
             {
-                const uint32_t swap = first_id;
+                const uint64_t swap = first_id;
                 first_id = second_id;
                 second_id = swap;
             }
-            slot = (size_t)((first_id * 2654435761U ^ second_id * 2246822519U) % edge_slot_count);
+            slot = (size_t)((first_id * UINT64_C(11400714819323198485) ^
+                second_id * UINT64_C(14029467366897019727)) % edge_slot_count);
             for (probe = 0U; probe < edge_slot_count; ++probe)
             {
                 silhouette_edge* candidate = &edges[(slot + probe) % edge_slot_count];

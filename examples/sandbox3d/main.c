@@ -4456,6 +4456,7 @@ static void sandbox3d_append_authoring_silhouette_triangles(
     henka_viewport viewport,
     henka_transform transform,
     const sandbox3d_authoring_object* authoring,
+    uint64_t vertex_namespace,
     sandbox3d_projected_triangle* triangles,
     size_t triangle_capacity,
     size_t* inout_triangle_count)
@@ -4513,9 +4514,9 @@ static void sandbox3d_append_authoring_silhouette_triangles(
             {
                 continue;
             }
-            triangle->vertex_ids[0] = corners[0];
-            triangle->vertex_ids[1] = corners[corner_index];
-            triangle->vertex_ids[2] = corners[corner_index + 1U];
+            triangle->vertex_ids[0] = (vertex_namespace << 32U) | (uint64_t)corners[0];
+            triangle->vertex_ids[1] = (vertex_namespace << 32U) | (uint64_t)corners[corner_index];
+            triangle->vertex_ids[2] = (vertex_namespace << 32U) | (uint64_t)corners[corner_index + 1U];
             ++*inout_triangle_count;
         }
     }
@@ -4526,6 +4527,7 @@ static void sandbox3d_append_imported_silhouette_triangles(
     henka_viewport viewport,
     henka_transform transform,
     const henka_model_scene_primitive* primitive,
+    uint64_t vertex_namespace,
     sandbox3d_projected_triangle* triangles,
     size_t triangle_capacity,
     size_t* inout_triangle_count)
@@ -4561,9 +4563,9 @@ static void sandbox3d_append_imported_silhouette_triangles(
         {
             continue;
         }
-        triangle->vertex_ids[0] = i0 + 1U;
-        triangle->vertex_ids[1] = i1 + 1U;
-        triangle->vertex_ids[2] = i2 + 1U;
+        triangle->vertex_ids[0] = (vertex_namespace << 32U) | (uint64_t)(i0 + 1U);
+        triangle->vertex_ids[1] = (vertex_namespace << 32U) | (uint64_t)(i1 + 1U);
+        triangle->vertex_ids[2] = (vertex_namespace << 32U) | (uint64_t)(i2 + 1U);
         ++*inout_triangle_count;
     }
 }
@@ -4607,13 +4609,13 @@ static size_t sandbox3d_build_screen_silhouette(
         if (authoring != NULL)
         {
             sandbox3d_append_authoring_silhouette_triangles(
-                state, viewport, transform, authoring,
+                state, viewport, transform, authoring, (uint64_t)(entity_index + 1U),
                 triangles, max_outline_triangles, &triangle_count);
         }
         else if (primitive != NULL)
         {
             sandbox3d_append_imported_silhouette_triangles(
-                state, viewport, transform, primitive,
+                state, viewport, transform, primitive, (uint64_t)(entity_index + 1U),
                 triangles, max_outline_triangles, &triangle_count);
         }
     }

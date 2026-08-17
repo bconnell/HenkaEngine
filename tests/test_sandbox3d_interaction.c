@@ -282,15 +282,19 @@ void henka_test_sandbox3d_interaction(void)
     topology_triangles[2].points[0].x += 4.0f;
     topology_triangles[2].points[1].x += 4.0f;
     topology_triangles[2].points[2].x += 4.0f;
-    topology_triangles[2].vertex_ids[0] += 10U;
-    topology_triangles[2].vertex_ids[1] += 10U;
-    topology_triangles[2].vertex_ids[2] += 10U;
     topology_triangles[3].points[0].x += 4.0f;
     topology_triangles[3].points[1].x += 4.0f;
     topology_triangles[3].points[2].x += 4.0f;
-    topology_triangles[3].vertex_ids[0] += 10U;
-    topology_triangles[3].vertex_ids[1] += 10U;
-    topology_triangles[3].vertex_ids[2] += 10U;
+    /* A logical owner can aggregate separate children whose mesh-local vertex
+     * indices intentionally start at the same values.  The silhouette
+     * builder receives source-scoped IDs and must not merge those unrelated
+     * edges. */
+    topology_triangles[2].vertex_ids[0] |= UINT64_C(2) << 32U;
+    topology_triangles[2].vertex_ids[1] |= UINT64_C(2) << 32U;
+    topology_triangles[2].vertex_ids[2] |= UINT64_C(2) << 32U;
+    topology_triangles[3].vertex_ids[0] |= UINT64_C(2) << 32U;
+    topology_triangles[3].vertex_ids[1] |= UINT64_C(2) << 32U;
+    topology_triangles[3].vertex_ids[2] |= UINT64_C(2) << 32U;
     topology_segment_count = sandbox3d_build_topology_silhouette(
         topology_triangles, 4U, topology_segments, 32U);
     HENKA_TEST_ASSERT(topology_segment_count == 8U);
