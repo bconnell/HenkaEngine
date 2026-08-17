@@ -18,7 +18,7 @@ See SUPPORT.md for what sponsorship supports and what it does not promise.
 
 Henka Engine is still early, but the sandbox now presents a deterministic two-model showcase through Henka's normal glTF scene, material, texture, lighting, and packaging paths.
 
-In the bounded modeling workflow, the active Vertex, Edge, or Face mode now makes the selected source topology explicit in Scene View: vertices use amber cross markers, edges use cyan segments with endpoint markers, and faces use orange outlines with center markers. This is selection/editing feedback, not a claim of complete production modeling authoring.
+In the bounded modeling workflow, the active Vertex, Edge, or Face mode now makes the selected source topology explicit in Scene View: vertices use amber cross markers, edges use cyan segments with endpoint markers, and faces use orange outlines with center markers. Object selection also uses a bounded topology-derived outline that preserves visible concavities and disconnected parts while suppressing sampled segments behind nearer geometry. This is selection/editing feedback, not a claim of complete production modeling authoring or a renderer-owned stencil outline.
 
 Official project branding is tracked in [assets/branding](assets/branding/) and is used proportionally: the supplied full lockup is reserved for spacious project or information surfaces, while a faithful emblem derivative is used for the Windows application and tool-window icons. See [docs/branding.md](docs/branding.md) for the concise ownership and packaging convention.
 

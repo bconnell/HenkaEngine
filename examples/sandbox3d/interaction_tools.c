@@ -421,6 +421,49 @@ bool sandbox3d_build_ground_selection_highlight_model(
     return true;
 }
 
+static bool sandbox3d_projected_triangle_depth_at(
+    const sandbox3d_projected_triangle* triangle,
+    henka_vec2 point,
+    float* out_depth)
+{
+    float denominator;
+    float first_weight;
+    float second_weight;
+    float third_weight;
+
+    if (triangle == NULL || out_depth == NULL)
+    {
+        return false;
+    }
+    denominator =
+        (triangle->points[1].y - triangle->points[2].y) *
+            (triangle->points[0].x - triangle->points[2].x) +
+        (triangle->points[2].x - triangle->points[1].x) *
+            (triangle->points[0].y - triangle->points[2].y);
+    if (!isfinite(denominator) || fabsf(denominator) <= 0.000001f)
+    {
+        return false;
+    }
+    first_weight = (
+        (triangle->points[1].y - triangle->points[2].y) *
+            (point.x - triangle->points[2].x) +
+        (triangle->points[2].x - triangle->points[1].x) *
+            (point.y - triangle->points[2].y)) / denominator;
+    second_weight = (
+        (triangle->points[2].y - triangle->points[0].y) *
+            (point.x - triangle->points[2].x) +
+        (triangle->points[0].x - triangle->points[2].x) *
+            (point.y - triangle->points[2].y)) / denominator;
+    third_weight = 1.0f - first_weight - second_weight;
+    if (first_weight < -0.0005f || second_weight < -0.0005f || third_weight < -0.0005f)
+    {
+        return false;
+    }
+    *out_depth = first_weight * triangle->depths[0] +
+        second_weight * triangle->depths[1] + third_weight * triangle->depths[2];
+    return isfinite(*out_depth);
+}
+
 size_t sandbox3d_build_topology_silhouette(
     const sandbox3d_projected_triangle* triangles,
     size_t triangle_count,
@@ -438,6 +481,8 @@ size_t sandbox3d_build_topology_silhouette(
         uint8_t negative_count;
         henka_vec2 start;
         henka_vec2 end;
+        float start_depth;
+        float end_depth;
     } silhouette_edge;
     silhouette_edge edges[edge_slot_count];
     size_t triangle_index;
@@ -470,6 +515,8 @@ size_t sandbox3d_build_topology_silhouette(
             size_t slot;
             size_t probe;
             silhouette_edge* edge = NULL;
+            const float start_depth = triangle->depths[edge_index];
+            const float end_depth = triangle->depths[next_index];
 
             if (first_id == second_id)
             {
@@ -492,6 +539,8 @@ size_t sandbox3d_build_topology_silhouette(
                     candidate->second_id = second_id;
                     candidate->start = triangle->points[edge_index];
                     candidate->end = triangle->points[next_index];
+                    candidate->start_depth = start_depth;
+                    candidate->end_depth = end_depth;
                     edge = candidate;
                     break;
                 }
@@ -514,6 +563,16 @@ size_t sandbox3d_build_topology_silhouette(
                 ++edge->negative_count;
             }
             if (edge->total_count < UINT8_MAX) ++edge->total_count;
+            if (edge->total_count > 1U &&
+                isfinite(start_depth) && isfinite(end_depth) &&
+                start_depth + end_depth <
+                    (edge->start_depth + edge->end_depth))
+            {
+                edge->start = triangle->points[edge_index];
+                edge->end = triangle->points[next_index];
+                edge->start_depth = start_depth;
+                edge->end_depth = end_depth;
+            }
         }
     }
 
@@ -527,11 +586,66 @@ size_t sandbox3d_build_topology_silhouette(
         {
             continue;
         }
-        if (output_count >= segment_capacity)
         {
-            return 0U;
+            enum { visibility_samples = 8 };
+            size_t sample_index;
+            bool visible_run = false;
+            float visible_start = 0.0f;
+            for (sample_index = 0U; sample_index < visibility_samples; ++sample_index)
+            {
+                const float interval_start = (float)sample_index / (float)visibility_samples;
+                const float interval_end = (float)(sample_index + 1U) / (float)visibility_samples;
+                const float sample_t = (interval_start + interval_end) * 0.5f;
+                const henka_vec2 sample_point = {
+                    edge->start.x + (edge->end.x - edge->start.x) * sample_t,
+                    edge->start.y + (edge->end.y - edge->start.y) * sample_t};
+                const float sample_depth = edge->start_depth +
+                    (edge->end_depth - edge->start_depth) * sample_t;
+                bool visible = true;
+                size_t occluder_index;
+
+                if (isfinite(sample_depth))
+                {
+                    for (occluder_index = 0U; occluder_index < triangle_count; ++occluder_index)
+                    {
+                        float occluder_depth;
+                        if (sandbox3d_projected_triangle_depth_at(
+                                &triangles[occluder_index], sample_point, &occluder_depth) &&
+                            occluder_depth + 0.0015f < sample_depth)
+                        {
+                            visible = false;
+                            break;
+                        }
+                    }
+                }
+                if (visible && !visible_run)
+                {
+                    visible_start = interval_start;
+                    visible_run = true;
+                }
+                if ((!visible || sample_index + 1U == visibility_samples) && visible_run)
+                {
+                    const float visible_end = visible
+                        ? interval_end
+                        : interval_start;
+                    if (visible_end > visible_start + 0.0001f)
+                    {
+                        if (output_count >= segment_capacity)
+                        {
+                            return 0U;
+                        }
+                        out_segments[output_count++] = (sandbox3d_silhouette_segment){
+                            {
+                                edge->start.x + (edge->end.x - edge->start.x) * visible_start,
+                                edge->start.y + (edge->end.y - edge->start.y) * visible_start},
+                            {
+                                edge->start.x + (edge->end.x - edge->start.x) * visible_end,
+                                edge->start.y + (edge->end.y - edge->start.y) * visible_end}};
+                    }
+                    visible_run = false;
+                }
+            }
         }
-        out_segments[output_count++] = (sandbox3d_silhouette_segment){edge->start, edge->end};
     }
     return output_count;
 }

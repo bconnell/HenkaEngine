@@ -4366,6 +4366,25 @@ static bool sandbox3d_project_handle_point(
         henka_camera_world_to_screen(&state->camera, viewport.width, viewport.height, world_point, out_screen_local, NULL) == HENKA_SUCCESS;
 }
 
+static bool sandbox3d_project_handle_point_depth(
+    const sandbox3d_state* state,
+    henka_viewport viewport,
+    henka_vec3 world_point,
+    henka_vec2* out_screen_local,
+    float* out_depth)
+{
+    return state != NULL &&
+        out_screen_local != NULL &&
+        out_depth != NULL &&
+        henka_camera_world_to_screen(
+            &state->camera,
+            viewport.width,
+            viewport.height,
+            world_point,
+            out_screen_local,
+            out_depth) == HENKA_SUCCESS;
+}
+
 static henka_vec3 sandbox3d_transform_authoring_point(
     henka_transform transform,
     henka_vec3 point)
@@ -4470,18 +4489,21 @@ static size_t sandbox3d_build_screen_silhouette(
                 const henka_authoring_vertex* vertex1 = henka_authoring_mesh_get_vertex(mesh, corners[corner_index]);
                 const henka_authoring_vertex* vertex2 = henka_authoring_mesh_get_vertex(mesh, corners[corner_index + 1U]);
                 if (vertex0 != NULL && vertex1 != NULL && vertex2 != NULL &&
-                    sandbox3d_project_handle_point(
+                    sandbox3d_project_handle_point_depth(
                         state, viewport,
                         sandbox3d_transform_authoring_point(transform, vertex0->position),
-                        &triangles[triangle_count].points[0]) &&
-                    sandbox3d_project_handle_point(
+                        &triangles[triangle_count].points[0],
+                        &triangles[triangle_count].depths[0]) &&
+                    sandbox3d_project_handle_point_depth(
                         state, viewport,
                         sandbox3d_transform_authoring_point(transform, vertex1->position),
-                        &triangles[triangle_count].points[1]) &&
-                    sandbox3d_project_handle_point(
+                        &triangles[triangle_count].points[1],
+                        &triangles[triangle_count].depths[1]) &&
+                    sandbox3d_project_handle_point_depth(
                         state, viewport,
                         sandbox3d_transform_authoring_point(transform, vertex2->position),
-                        &triangles[triangle_count].points[2]))
+                        &triangles[triangle_count].points[2],
+                        &triangles[triangle_count].depths[2]))
                 {
                     triangles[triangle_count].vertex_ids[0] = corners[0];
                     triangles[triangle_count].vertex_ids[1] = corners[corner_index];
@@ -4501,18 +4523,21 @@ static size_t sandbox3d_build_screen_silhouette(
             const uint32_t i1 = primitive->indices[index + 1U];
             const uint32_t i2 = primitive->indices[index + 2U];
             if (i0 >= primitive->vertex_count || i1 >= primitive->vertex_count || i2 >= primitive->vertex_count ||
-                !sandbox3d_project_handle_point(
+                !sandbox3d_project_handle_point_depth(
                     state, viewport,
                     sandbox3d_transform_authoring_point(transform, primitive->vertices[i0].position),
-                    &triangles[triangle_count].points[0]) ||
-                !sandbox3d_project_handle_point(
+                    &triangles[triangle_count].points[0],
+                    &triangles[triangle_count].depths[0]) ||
+                !sandbox3d_project_handle_point_depth(
                     state, viewport,
                     sandbox3d_transform_authoring_point(transform, primitive->vertices[i1].position),
-                    &triangles[triangle_count].points[1]) ||
-                !sandbox3d_project_handle_point(
+                    &triangles[triangle_count].points[1],
+                    &triangles[triangle_count].depths[1]) ||
+                !sandbox3d_project_handle_point_depth(
                     state, viewport,
                     sandbox3d_transform_authoring_point(transform, primitive->vertices[i2].position),
-                    &triangles[triangle_count].points[2]))
+                    &triangles[triangle_count].points[2],
+                    &triangles[triangle_count].depths[2]))
             {
                 continue;
             }
