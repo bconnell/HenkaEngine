@@ -39,6 +39,7 @@ out vec4 fragCascadeShadowPosition;
 out vec4 fragLocalShadowPosition;
 out vec4 fragCurrentClipPosition;
 out vec4 fragPreviousClipPosition;
+out float fragViewDepth;
 
 void main()
 {
@@ -59,6 +60,7 @@ void main()
     fragLightSpacePosition = lightMatrix * worldPosition;
     fragCascadeShadowPosition = cascadeShadowMatrix * worldPosition;
     fragLocalShadowPosition = localShadowMatrix * worldPosition;
+    fragViewDepth = -(view * worldPosition).z;
     fragCurrentClipPosition = projection * view * worldPosition;
     fragPreviousClipPosition = previousViewProjection * activePreviousModel * vec4(inPosition, 1.0);
     gl_Position = fragCurrentClipPosition;

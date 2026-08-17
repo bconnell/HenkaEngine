@@ -13,6 +13,7 @@ in vec4 fragCascadeShadowPosition;
 in vec4 fragLocalShadowPosition;
 in vec4 fragCurrentClipPosition;
 in vec4 fragPreviousClipPosition;
+in float fragViewDepth;
 
 uniform vec4 baseColor;
 uniform sampler2D baseColorTexture;
@@ -392,14 +393,16 @@ float farCascadeShadowFactor(vec3 normal, vec3 lightDir)
 
 float shadowFactor(vec3 normal, vec3 lightDir)
 {
-    float cameraDistance = distance(fragWorldPosition, cameraPosition);
+    /* Cascade boundaries are defined along the camera view direction. Using
+     * radial world distance makes the transition move for wide/side views. */
+    float cameraDepth = max(fragViewDepth, 0.0);
     float blendDistance = max(cascadeBlendDistance, 0.0);
     float blendStart = max(0.0, cascadeSplitDistance - blendDistance);
-    if (useCascadeShadowMap && cameraDistance > blendStart)
+    if (useCascadeShadowMap && cameraDepth > blendStart)
     {
         float nearVisibility = nearCascadeShadowFactor(normal, lightDir);
         float farVisibility = farCascadeShadowFactor(normal, lightDir);
-        float blend = smoothstep(blendStart, cascadeSplitDistance + blendDistance, cameraDistance);
+        float blend = smoothstep(blendStart, cascadeSplitDistance + blendDistance, cameraDepth);
         return mix(nearVisibility, farVisibility, blend);
     }
     return nearCascadeShadowFactor(normal, lightDir);
