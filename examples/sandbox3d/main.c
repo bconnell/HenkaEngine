@@ -423,6 +423,8 @@ typedef struct sandbox3d_state
     float native_authoring_move_reported_y;
     bool native_authoring_selection_tools_reported;
     float native_authoring_selection_tools_reported_y;
+    bool native_authoring_edge_loop_reported;
+    float native_authoring_edge_loop_reported_y;
     bool native_authoring_connected_selection_reported;
     float native_authoring_connected_selection_reported_y;
     bool native_authoring_profile_reported;
@@ -9094,6 +9096,8 @@ static void sandbox3d_release_owned_resources(sandbox3d_state* state)
     state->native_authoring_move_reported_y = -FLT_MAX;
     state->native_authoring_selection_tools_reported = false;
     state->native_authoring_selection_tools_reported_y = -FLT_MAX;
+    state->native_authoring_edge_loop_reported = false;
+    state->native_authoring_edge_loop_reported_y = -FLT_MAX;
     state->native_authoring_connected_selection_reported = false;
     state->native_authoring_connected_selection_reported_y = -FLT_MAX;
     state->native_authoring_profile_reported = false;
@@ -10332,6 +10336,8 @@ static bool sandbox3d_promote_authoring_material(
     state->native_authoring_move_reported_y = -FLT_MAX;
     state->native_authoring_selection_tools_reported = false;
     state->native_authoring_selection_tools_reported_y = -FLT_MAX;
+    state->native_authoring_edge_loop_reported = false;
+    state->native_authoring_edge_loop_reported_y = -FLT_MAX;
     state->native_authoring_connected_selection_reported = false;
     state->native_authoring_connected_selection_reported_y = -FLT_MAX;
     state->native_authoring_profile_reported = false;
@@ -20537,6 +20543,10 @@ details_group_authoring:
                 {
                     sandbox3d_authoring_object_set_selection_mode(
                         state->authoring_object, SANDBOX3D_AUTHORING_SELECTION_VERTEX);
+                    printf(
+                        "Native authoring topology mode: name=%s mode=Vertex source_state=HENKA_NATIVE_EDITABLE_SOURCE.\n",
+                        display_name);
+                    fflush(stdout);
                     sandbox3d_set_status(state, false, "Authoring Vertex selection mode active; Ctrl-click adds components.");
                 }
                 if (henka_ui_button(
@@ -20547,6 +20557,10 @@ details_group_authoring:
                 {
                     sandbox3d_authoring_object_set_selection_mode(
                         state->authoring_object, SANDBOX3D_AUTHORING_SELECTION_EDGE);
+                    printf(
+                        "Native authoring topology mode: name=%s mode=Edge source_state=HENKA_NATIVE_EDITABLE_SOURCE.\n",
+                        display_name);
+                    fflush(stdout);
                     sandbox3d_set_status(state, false, "Authoring Edge selection mode active; Ctrl-click adds components.");
                 }
                 if (henka_ui_button(
@@ -20842,6 +20856,18 @@ details_group_authoring:
                 sandbox3d_details_flow_next_row(state, flow_desc.bounds, 28.0f, 1U, &row) &&
                 row.width >= 290.0f)
             {
+                if (!state->native_authoring_edge_loop_reported ||
+                    fabsf(row.y - state->native_authoring_edge_loop_reported_y) > 0.5f)
+                {
+                    printf(
+                        "Native authoring edge loop control: name=%s x=%.1f y=%.1f width=140.0 height=24.0.\n",
+                        display_name,
+                        row.x,
+                        row.y);
+                    fflush(stdout);
+                    state->native_authoring_edge_loop_reported = true;
+                    state->native_authoring_edge_loop_reported_y = row.y;
+                }
                 if (henka_ui_button(
                         state->ui,
                         "authoring_edge_loop_top",
@@ -20850,9 +20876,15 @@ details_group_authoring:
                 {
                     const henka_result loop_result =
                         sandbox3d_authoring_object_select_edge_loop(state->authoring_object);
+                    printf(
+                        "Native authoring edge loop selection: name=%s result=%s mode=%s selected_components=%zu.\n",
+                        display_name,
+                        henka_result_to_string(loop_result),
+                        selection_label,
+                        sandbox3d_authoring_object_get_selected_component_count(state->authoring_object));
+                    fflush(stdout);
                     if (loop_result == HENKA_SUCCESS)
                     {
-                        sandbox3d_mark_generic_modeling_applied(state, entity);
                         sandbox3d_set_status(state, false, "Quad edge loop selected for native authoring.");
                     }
                     else
@@ -21391,6 +21423,18 @@ details_group_authoring:
                 sandbox3d_details_flow_next_row(state, flow_desc.bounds, 28.0f, 1U, &row) &&
                 row.width >= 290.0f)
             {
+                if (!state->native_authoring_edge_loop_reported ||
+                    fabsf(row.y - state->native_authoring_edge_loop_reported_y) > 0.5f)
+                {
+                    printf(
+                        "Native authoring edge loop control: name=%s x=%.1f y=%.1f width=140.0 height=24.0.\n",
+                        display_name,
+                        row.x,
+                        row.y);
+                    fflush(stdout);
+                    state->native_authoring_edge_loop_reported = true;
+                    state->native_authoring_edge_loop_reported_y = row.y;
+                }
                 if (henka_ui_button(
                         state->ui,
                         "authoring_edge_loop",
@@ -21399,9 +21443,15 @@ details_group_authoring:
                 {
                     const henka_result loop_result =
                         sandbox3d_authoring_object_select_edge_loop(state->authoring_object);
+                    printf(
+                        "Native authoring edge loop selection: name=%s result=%s mode=%s selected_components=%zu.\n",
+                        display_name,
+                        henka_result_to_string(loop_result),
+                        selection_label,
+                        sandbox3d_authoring_object_get_selected_component_count(state->authoring_object));
+                    fflush(stdout);
                     if (loop_result == HENKA_SUCCESS)
                     {
-                        sandbox3d_mark_generic_modeling_applied(state, entity);
                         sandbox3d_set_status(state, false, "Quad edge loop selected for native authoring.");
                     }
                     else
