@@ -344,7 +344,11 @@ float nearCascadeShadowFactor(vec3 normal, vec3 lightDir)
                 visible += sampleDepth >= currentDepth ? 1.0 : 0.0;
             }
         }
-        return min(visible / 25.0, 0.75);
+        /* Do not force a minimum light leak in a confirmed blocker. The
+         * kernel already softens the edge; a visibility ceiling made fully
+         * occluded receivers read as permanently lit, especially on the
+         * showcase ground and launch pad. */
+        return visible / 25.0;
     }
     for (int x = -1; x <= 1; ++x)
     {
