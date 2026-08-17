@@ -1797,6 +1797,69 @@ try {
             -Y $nativeFaceY `
             -Width 88.0 `
             -Height 24.0
+        $nativeEdgeModeObserved = $false
+        $nativeEdgeX = $nativeFaceX - 96.0
+        for ($edgeModeAttempt = 0; $edgeModeAttempt -lt 3 -and -not $nativeEdgeModeObserved; ++$edgeModeAttempt) {
+            Click-FramebufferPoint `
+                -Handle $mainWindowHandle `
+                -FramebufferWidth $framebufferWidth `
+                -FramebufferHeight $framebufferHeight `
+                -FramebufferX ($nativeEdgeX + 44.0) `
+                -FramebufferY ($nativeFaceY + 12.0)
+            $nativeEdgeModeObserved = Wait-FileContains `
+                -Path $stdoutPath `
+                -Pattern "Native authoring topology mode:.*mode=Edge" `
+                -TimeoutMilliseconds 700
+        }
+        if (-not $nativeEdgeModeObserved) {
+            throw "The user-facing Edge selection mode did not become active."
+        }
+        $nativeEdgeLoopMatch = Get-LastLogRegexMatch `
+            -Path $stdoutPath `
+            -Pattern 'Native authoring edge loop control: name=(.+) x=([-0-9.]+) y=([-0-9.]+) width=140.0 height=24.0\.'
+        if ($null -eq $nativeEdgeLoopMatch -and
+            -not (Wait-FileContains -Path $stdoutPath -Pattern "Native authoring edge loop control:" -TimeoutMilliseconds 2500)) {
+            throw "The converted showcase did not expose the native Edge Loop control."
+        }
+        if ($null -eq $nativeEdgeLoopMatch) {
+            $nativeEdgeLoopMatch = Get-LastLogRegexMatch `
+                -Path $stdoutPath `
+                -Pattern 'Native authoring edge loop control: name=(.+) x=([-0-9.]+) y=([-0-9.]+) width=140.0 height=24.0\.'
+        }
+        if ($null -eq $nativeEdgeLoopMatch) {
+            throw "The native Edge Loop control geometry could not be parsed."
+        }
+        $nativeEdgeLoopX = [double]$nativeEdgeLoopMatch.Groups[2].Value
+        $nativeEdgeLoopY = [double]$nativeEdgeLoopMatch.Groups[3].Value
+        Assert-FramebufferRect `
+            -Name "Native authoring Edge Loop control" `
+            -FramebufferWidth $framebufferWidth `
+            -FramebufferHeight $framebufferHeight `
+            -X $nativeEdgeLoopX `
+            -Y $nativeEdgeLoopY `
+            -Width 140.0 `
+            -Height 24.0
+        $edgeLoopResultCountBefore = @(
+            Select-String -LiteralPath $stdoutPath -Pattern "Native authoring edge loop selection:" -ErrorAction SilentlyContinue
+        ).Count
+        $nativeEdgeLoopResultObserved = $false
+        for ($edgeLoopAttempt = 0; $edgeLoopAttempt -lt 3 -and -not $nativeEdgeLoopResultObserved; ++$edgeLoopAttempt) {
+            Click-FramebufferPoint `
+                -Handle $mainWindowHandle `
+                -FramebufferWidth $framebufferWidth `
+                -FramebufferHeight $framebufferHeight `
+                -FramebufferX ($nativeEdgeLoopX + 70.0) `
+                -FramebufferY ($nativeEdgeLoopY + 12.0)
+            Start-Sleep -Milliseconds 120
+            $edgeLoopResultCount = @(
+                Select-String -LiteralPath $stdoutPath -Pattern "Native authoring edge loop selection:" -ErrorAction SilentlyContinue
+            ).Count
+            $nativeEdgeLoopResultObserved = $edgeLoopResultCount -gt $edgeLoopResultCountBefore
+        }
+        if (-not $nativeEdgeLoopResultObserved) {
+            throw "The user-facing Edge Loop control did not report a bounded result."
+        }
+        Write-Output "[pass] Packaged native Edge Loop control exposed and reported a bounded result"
         $bevelControlLogPattern = 'Native authoring bevel control:'
         $bevelControlCountBefore = @(
             Select-String -LiteralPath $stdoutPath -Pattern $bevelControlLogPattern -ErrorAction SilentlyContinue
