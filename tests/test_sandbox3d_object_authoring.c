@@ -771,6 +771,28 @@ static void henka_test_sandbox3d_object_authoring_component_selection(void)
     HENKA_TEST_ASSERT(sandbox3d_authoring_object_get_selected_component_count(object) == 6U);
     HENKA_TEST_ASSERT(sandbox3d_authoring_object_scale_selected_components(
         object, (henka_vec3){1.02f, 1.02f, 1.02f}) == HENKA_SUCCESS);
+    {
+        const henka_authoring_mesh_counts before_delete = henka_authoring_mesh_get_counts(
+            sandbox3d_authoring_object_get_mesh(object));
+        HENKA_TEST_ASSERT(sandbox3d_authoring_object_select_face(object, 1U) == HENKA_SUCCESS);
+        HENKA_TEST_ASSERT(sandbox3d_authoring_object_delete_selected_faces(object) == HENKA_SUCCESS);
+        HENKA_TEST_ASSERT(henka_authoring_mesh_get_counts(
+            sandbox3d_authoring_object_get_mesh(object)).faces < before_delete.faces);
+        HENKA_TEST_ASSERT(henka_authoring_mesh_validate(
+            sandbox3d_authoring_object_get_mesh(object)));
+        HENKA_TEST_ASSERT(sandbox3d_authoring_object_undo(object) == HENKA_SUCCESS);
+        HENKA_TEST_ASSERT(henka_authoring_mesh_get_counts(
+            sandbox3d_authoring_object_get_mesh(object)).faces == before_delete.faces);
+        HENKA_TEST_ASSERT(henka_authoring_mesh_get_face(
+            sandbox3d_authoring_object_get_mesh(object), 1U) != NULL);
+        HENKA_TEST_ASSERT(sandbox3d_authoring_object_select_face(object, 1U) == HENKA_SUCCESS);
+        HENKA_TEST_ASSERT(sandbox3d_authoring_object_select_connected_components(object) == HENKA_SUCCESS);
+        HENKA_TEST_ASSERT(sandbox3d_authoring_object_delete_selected_faces(object) != HENKA_SUCCESS);
+        HENKA_TEST_ASSERT(henka_authoring_mesh_get_counts(
+            sandbox3d_authoring_object_get_mesh(object)).faces == before_delete.faces);
+        HENKA_TEST_ASSERT(henka_authoring_mesh_validate(
+            sandbox3d_authoring_object_get_mesh(object)));
+    }
     sandbox3d_authoring_object_destroy(object);
     henka_mesh_destroy(previous_mesh);
     henka_scene_destroy(scene);

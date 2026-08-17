@@ -2027,6 +2027,39 @@ try {
             throw "The user-facing native bevel operation did not update the showcase source."
         }
         Write-Output "[pass] User-facing topology selection and bevel changed the native showcase source"
+        $nativeDeleteMatch = Get-LastLogRegexMatch `
+            -Path $stdoutPath `
+            -Pattern 'Native authoring face delete control: name=(.+) x=([-0-9.]+) y=([-0-9.]+) width=102.0 height=24.0\.'
+        if ($null -eq $nativeDeleteMatch) {
+            throw "The native Face-mode delete control geometry could not be parsed."
+        }
+        $nativeDeleteX = [double]$nativeDeleteMatch.Groups[2].Value
+        $nativeDeleteY = [double]$nativeDeleteMatch.Groups[3].Value
+        Assert-FramebufferRect `
+            -Name "Native authoring Delete Faces control" `
+            -FramebufferWidth $framebufferWidth `
+            -FramebufferHeight $framebufferHeight `
+            -X $nativeDeleteX `
+            -Y $nativeDeleteY `
+            -Width 102.0 `
+            -Height 24.0
+        $nativeDeleteObserved = $false
+        for ($deleteAttempt = 0; $deleteAttempt -lt 3 -and -not $nativeDeleteObserved; ++$deleteAttempt) {
+            Click-FramebufferPoint `
+                -Handle $mainWindowHandle `
+                -FramebufferWidth $framebufferWidth `
+                -FramebufferHeight $framebufferHeight `
+                -FramebufferX ($nativeDeleteX + 51.0) `
+                -FramebufferY ($nativeDeleteY + 12.0)
+            $nativeDeleteObserved = Wait-FileContains `
+                -Path $stdoutPath `
+                -Pattern "Native authoring dogfood: selected faces deleted from" `
+                -TimeoutMilliseconds 2500
+        }
+        if (-not $nativeDeleteObserved) {
+            throw "The user-facing native Face-mode delete operation did not update the showcase source."
+        }
+        Write-Output "[pass] User-facing Face-mode deletion changed the native showcase source"
         $projectControlPattern = 'Native authoring project controls:'
         $projectControlCount = @(
             Select-String -LiteralPath $stdoutPath -Pattern $projectControlPattern -ErrorAction SilentlyContinue

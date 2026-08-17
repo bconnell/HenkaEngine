@@ -25,7 +25,10 @@ malformed or missing slot retains the imported glTF render. The checked-in
 `scripts/capture_editor_owned_authoring_sources_windows.ps1` as bounded UI
 automation. The capture selects Face mode, picks a face in the Scene View, and
 invokes generic Bevel and Extrude before Save/Reload; it does not generate geometry or
-assemble meshes.
+assemble meshes. Face mode also exposes a bounded `Delete Faces` action. It removes
+the current selected face set as one transactional source/render/bounds/history
+operation and fails closed if that would leave no renderable face. Vertex and edge
+deletion are not implied by this control.
 
 This is intentionally a bounded bridge rather than a completed content
 workspace. It currently targets the imported showcase primitives and preserves

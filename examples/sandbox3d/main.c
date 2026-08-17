@@ -638,6 +638,52 @@ static bool sandbox3d_apply_authoring_face_bevel(
     return true;
 }
 
+static bool sandbox3d_apply_authoring_face_delete(
+    sandbox3d_state* state,
+    henka_entity entity,
+    const char* display_name)
+{
+    henka_result delete_result;
+
+    if (state == NULL || state->authoring_object == NULL || display_name == NULL)
+    {
+        return false;
+    }
+    delete_result = sandbox3d_authoring_object_delete_selected_faces(
+        state->authoring_object);
+    printf(
+        "Native authoring face delete request: name=%s result=%s selected_components=%zu.\n",
+        display_name,
+        henka_result_to_string(delete_result),
+        sandbox3d_authoring_object_get_selected_component_count(state->authoring_object));
+    fflush(stdout);
+    if (delete_result != HENKA_SUCCESS)
+    {
+        sandbox3d_set_status(
+            state,
+            true,
+            "Authoring face delete rejected; at least one valid face and the current source were retained.");
+        return false;
+    }
+    {
+        const henka_authoring_mesh_counts counts =
+            henka_authoring_mesh_get_counts(
+                sandbox3d_authoring_object_get_mesh(state->authoring_object));
+        sandbox3d_mark_generic_modeling_applied(state, entity);
+        printf(
+            "Native authoring dogfood: selected faces deleted from %s; vertices=%zu faces=%zu source_state=HENKA_NATIVE_EDITED_FIXTURE design_authority=EDITOR_DERIVED_FIXTURE.\n",
+            display_name,
+            counts.vertices,
+            counts.faces);
+        fflush(stdout);
+    }
+    sandbox3d_set_status(
+        state,
+        false,
+        "Selected faces deleted and evaluated into the scene.");
+    return true;
+}
+
 static void sandbox3d_mark_asset_specific_preset_applied(
     sandbox3d_state* state,
     henka_entity entity)
@@ -21008,6 +21054,20 @@ details_group_authoring:
                         sandbox3d_set_status(state, true, "Selected authoring components could not be moved; source retained.");
                     }
                 }
+                printf(
+                    "Native authoring face delete control: name=%s x=%.1f y=%.1f width=102.0 height=24.0.\n",
+                    display_name,
+                    row.x + 188.0f,
+                    row.y);
+                fflush(stdout);
+                if (henka_ui_button(
+                        state->ui,
+                        "authoring_delete_faces_compact",
+                        (henka_ui_rect){row.x + 188.0f, row.y, 102.0f, 24.0f},
+                        "Delete Faces"))
+                {
+                    (void)sandbox3d_apply_authoring_face_delete(state, entity, display_name);
+                }
             }
             if (selection_mode == SANDBOX3D_AUTHORING_SELECTION_FACE &&
                 state->native_authoring_face_edit_leading &&
@@ -22225,6 +22285,20 @@ details_group_authoring:
                     sandbox3d_authoring_object_subdivide_selected_face(state->authoring_object) == HENKA_SUCCESS)
                 {
                     sandbox3d_set_status(state, false, "Authoring face subdivided and evaluated into the scene.");
+                }
+                printf(
+                    "Native authoring face delete control: name=%s x=%.1f y=%.1f width=102.0 height=24.0.\n",
+                    display_name,
+                    row.x + 188.0f,
+                    row.y);
+                fflush(stdout);
+                if (henka_ui_button(
+                        state->ui,
+                        "authoring_delete_faces",
+                        (henka_ui_rect){row.x + 188.0f, row.y, 102.0f, 24.0f},
+                        "Delete Faces"))
+                {
+                    (void)sandbox3d_apply_authoring_face_delete(state, entity, display_name);
                 }
             }
             }
