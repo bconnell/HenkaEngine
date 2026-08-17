@@ -5189,7 +5189,10 @@ static void sandbox3d_draw_selection_highlight(sandbox3d_state* state, henka_vie
     component_selection_active =
         state->authoring_object != NULL &&
         selected_entity != HENKA_INVALID_ENTITY &&
-        sandbox3d_authoring_object_get_entity(state->authoring_object) == selected_entity &&
+        sandbox3d_entities_share_selection_owner(
+            state,
+            selected_entity,
+            sandbox3d_authoring_object_get_entity(state->authoring_object)) &&
         sandbox3d_authoring_object_get_selected_component_count(state->authoring_object) > 0U;
     memset(&gate, 0, sizeof(gate));
     gate.selected_object_present = selected_entity != HENKA_INVALID_ENTITY;
@@ -5264,7 +5267,11 @@ static void sandbox3d_draw_selection_highlight(sandbox3d_state* state, henka_vie
     }
 
     if (state->authoring_object != NULL &&
-        selected_entity == sandbox3d_authoring_object_get_entity(state->authoring_object))
+        selected_entity != HENKA_INVALID_ENTITY &&
+        sandbox3d_entities_share_selection_owner(
+            state,
+            selected_entity,
+            sandbox3d_authoring_object_get_entity(state->authoring_object)))
     {
         const henka_authoring_mesh* mesh = sandbox3d_authoring_object_get_mesh(state->authoring_object);
         henka_transform transform;
@@ -5277,7 +5284,10 @@ static void sandbox3d_draw_selection_highlight(sandbox3d_state* state, henka_vie
         size_t selected_index;
 
         if (mesh != NULL &&
-            henka_scene_get_entity_transform(state->scene, selected_entity, &transform) == HENKA_SUCCESS)
+            henka_scene_get_entity_transform(
+                state->scene,
+                sandbox3d_authoring_object_get_entity(state->authoring_object),
+                &transform) == HENKA_SUCCESS)
         {
             const henka_vec4 component_outer = (henka_vec4){0.01f, 0.03f, 0.05f, 0.95f};
             const henka_vec4 component_inner = selection_mode == SANDBOX3D_AUTHORING_SELECTION_VERTEX
@@ -14654,6 +14664,7 @@ static bool sandbox3d_try_pick_object(henka_engine* engine, sandbox3d_state* sta
     henka_vec2 mouse_local;
     henka_entity picked_entity;
     henka_entity visual_hit_entity;
+    henka_entity authoring_entity = HENKA_INVALID_ENTITY;
     henka_ray ray;
     float distance;
     bool object_hit;
@@ -14789,7 +14800,8 @@ static bool sandbox3d_try_pick_object(henka_engine* engine, sandbox3d_state* sta
          * though the user is editing the selected native source primitive.
          * Keep the source selection stable and let its own geometry validate
          * the component ray before changing topology. */
-        picked_entity = sandbox3d_authoring_object_get_entity(state->authoring_object);
+        authoring_entity = sandbox3d_authoring_object_get_entity(state->authoring_object);
+        picked_entity = authoring_entity;
     }
     terrain_hit_valid = sandbox3d_try_pick_terrain(state, ray, &terrain_hit);
     if (sandbox3d_should_prefer_terrain_hit(
@@ -14820,8 +14832,8 @@ static bool sandbox3d_try_pick_object(henka_engine* engine, sandbox3d_state* sta
     if (object_hit)
     {
         sandbox3d_select_entity(state, picked_entity);
-        if (state->authoring_object != NULL &&
-            picked_entity == sandbox3d_authoring_object_get_entity(state->authoring_object))
+        if (state->authoring_object != NULL && authoring_entity != HENKA_INVALID_ENTITY &&
+            sandbox3d_entities_share_selection_owner(state, picked_entity, authoring_entity))
         {
             const henka_result component_result =
                 sandbox3d_authoring_object_pick_component(
@@ -20262,7 +20274,11 @@ details_group_authoring:
     {
     const bool authoring_active =
         state->authoring_object != NULL &&
-        entity == sandbox3d_authoring_object_get_entity(state->authoring_object);
+        entity != HENKA_INVALID_ENTITY &&
+        sandbox3d_entities_share_selection_owner(
+            state,
+            entity,
+            sandbox3d_authoring_object_get_entity(state->authoring_object));
     (void)sandbox3d_details_flow_disclosure(
         state,
         flow_desc.bounds,
