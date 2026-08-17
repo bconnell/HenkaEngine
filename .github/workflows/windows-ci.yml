@@ -17,7 +17,7 @@ concurrency:
 jobs:
   build-test-package:
     runs-on: windows-latest
-    timeout-minutes: 35
+    timeout-minutes: 50
 
     steps:
       - name: Check out source
@@ -54,6 +54,10 @@ jobs:
       - name: Run bounded packaged soak
         shell: powershell
         run: .\scripts\soak_packaged_sandbox3d_windows.ps1 -Iterations 10 -AllowHeadlessUnavailable
+
+      - name: Run Release tests
+        shell: powershell
+        run: .\scripts\test_windows.ps1 -Configuration Release
 
       - name: Validate external game template
         shell: powershell

@@ -339,6 +339,9 @@ To validate the generic external game template against the current Henka checkou
 .\scripts\test_terrain_visual_evidence_windows.ps1
 ```
 
+The GitHub Windows workflow runs the packaged Debug contract and bounded soak, then
+an exact Release build and CTest pass before validating the external game template.
+
 ## Current limitations
 
 - The sandbox uses built-in plane, cube, UV-sphere, and debug-grid primitives plus bounded OBJ and glTF loading paths.

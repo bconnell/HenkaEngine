@@ -117,6 +117,11 @@ CTest run, and build-provenance record:
 .\scripts\test_windows.ps1 -Configuration Release
 ```
 
+The GitHub Windows workflow covers the packaged Debug contract and bounded soak,
+then runs this exact Release build-and-test path before checking the external game
+template. Release validation is intentionally separate so the packaged Debug
+provenance remains authoritative for its package checks.
+
 ## Run the sandbox
 
 ```powershell
