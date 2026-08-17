@@ -335,6 +335,7 @@ To validate the generic external game template against the current Henka checkou
 .\scripts\check_public_repo_hygiene.ps1
 .\scripts\check_repository_integrity.ps1
 .\scripts\test_windows.ps1
+.\scripts\test_windows.ps1 -Configuration Release
 .\scripts\test_terrain_visual_evidence_windows.ps1
 ```
 

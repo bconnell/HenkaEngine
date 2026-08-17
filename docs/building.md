@@ -110,6 +110,13 @@ production-scale multiplayer capacity.
 .\scripts\test_windows.ps1
 ```
 
+The same helper accepts `-Configuration Release` for an exact Release build,
+CTest run, and build-provenance record:
+
+```powershell
+.\scripts\test_windows.ps1 -Configuration Release
+```
+
 ## Run the sandbox
 
 ```powershell
