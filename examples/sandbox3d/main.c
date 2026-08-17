@@ -934,6 +934,10 @@ static bool sandbox3d_try_pick_terrain(
     henka_ray ray,
     henka_terrain_physics_hit* out_hit);
 static bool sandbox3d_get_selected_bounds(const sandbox3d_state* state, henka_bounds* out_bounds);
+static bool sandbox3d_get_logical_owner_bounds(
+    const sandbox3d_state* state,
+    henka_entity owner,
+    henka_bounds* out_bounds);
 static henka_vec3 sandbox3d_get_default_orbit_target(void);
 static henka_vec3 sandbox3d_get_view_navigation_target(const sandbox3d_state* state);
 static void sandbox3d_set_view_navigation_target(sandbox3d_state* state, henka_vec3 target);
@@ -4600,6 +4604,7 @@ static size_t sandbox3d_build_screen_silhouette(
         const henka_model_scene_primitive* primitive;
 
         if (candidate == HENKA_INVALID_ENTITY ||
+            !henka_scene_is_entity_visible(state->scene, candidate) ||
             henka_scene_get_entity_selection_owner(state->scene, candidate, &candidate_owner) != HENKA_SUCCESS ||
             candidate_owner != selection_owner ||
             henka_scene_get_entity_transform(state->scene, candidate, &transform) != HENKA_SUCCESS)
@@ -13211,18 +13216,84 @@ static bool sandbox3d_focus_camera_on_selected(sandbox3d_state* state)
     return true;
 }
 
-static bool sandbox3d_get_selected_bounds(const sandbox3d_state* state, henka_bounds* out_bounds)
+static bool sandbox3d_get_logical_owner_bounds(
+    const sandbox3d_state* state,
+    henka_entity owner,
+    henka_bounds* out_bounds)
 {
-    henka_entity entity;
+    size_t entity_index;
+    bool found = false;
+    henka_vec3 minimum = {0.0f, 0.0f, 0.0f};
+    henka_vec3 maximum = {0.0f, 0.0f, 0.0f};
 
-    if (state == NULL || state->scene == NULL || out_bounds == NULL)
+    if (state == NULL || state->scene == NULL || out_bounds == NULL ||
+        owner == HENKA_INVALID_ENTITY ||
+        !henka_scene_is_entity_valid(state->scene, owner))
     {
         return false;
     }
 
-    entity = sandbox3d_get_real_selected_entity(state);
+    for (entity_index = 0U; entity_index < henka_scene_get_entity_count(state->scene); ++entity_index)
+    {
+        henka_entity entity = henka_scene_get_entity_at_index(state->scene, entity_index);
+        henka_entity entity_owner = HENKA_INVALID_ENTITY;
+        henka_bounds bounds;
+        henka_vec3 entity_minimum;
+        henka_vec3 entity_maximum;
+
+        if (entity == HENKA_INVALID_ENTITY ||
+            !henka_scene_is_entity_visible(state->scene, entity) ||
+            henka_scene_get_entity_selection_owner(state->scene, entity, &entity_owner) != HENKA_SUCCESS ||
+            entity_owner != owner ||
+            henka_scene_get_entity_world_bounds(state->scene, entity, &bounds) != HENKA_SUCCESS)
+        {
+            continue;
+        }
+        entity_minimum = (henka_vec3){
+            bounds.center.x - bounds.extents.x,
+            bounds.center.y - bounds.extents.y,
+            bounds.center.z - bounds.extents.z};
+        entity_maximum = (henka_vec3){
+            bounds.center.x + bounds.extents.x,
+            bounds.center.y + bounds.extents.y,
+            bounds.center.z + bounds.extents.z};
+        if (!found)
+        {
+            minimum = entity_minimum;
+            maximum = entity_maximum;
+            found = true;
+        }
+        else
+        {
+            minimum.x = fminf(minimum.x, entity_minimum.x);
+            minimum.y = fminf(minimum.y, entity_minimum.y);
+            minimum.z = fminf(minimum.z, entity_minimum.z);
+            maximum.x = fmaxf(maximum.x, entity_maximum.x);
+            maximum.y = fmaxf(maximum.y, entity_maximum.y);
+            maximum.z = fmaxf(maximum.z, entity_maximum.z);
+        }
+    }
+    if (!found)
+    {
+        return false;
+    }
+    out_bounds->center = (henka_vec3){
+        (minimum.x + maximum.x) * 0.5f,
+        (minimum.y + maximum.y) * 0.5f,
+        (minimum.z + maximum.z) * 0.5f};
+    out_bounds->extents = (henka_vec3){
+        (maximum.x - minimum.x) * 0.5f,
+        (maximum.y - minimum.y) * 0.5f,
+        (maximum.z - minimum.z) * 0.5f};
+    return true;
+}
+
+static bool sandbox3d_get_selected_bounds(const sandbox3d_state* state, henka_bounds* out_bounds)
+{
+    const henka_entity entity = sandbox3d_get_real_selected_entity(state);
+
     return entity != HENKA_INVALID_ENTITY &&
-        henka_scene_get_entity_world_bounds(state->scene, entity, out_bounds) == HENKA_SUCCESS;
+        sandbox3d_get_logical_owner_bounds(state, entity, out_bounds);
 }
 
 static henka_vec3 sandbox3d_get_view_navigation_target(const sandbox3d_state* state)
