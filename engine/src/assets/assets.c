@@ -2046,6 +2046,8 @@ henka_result henka_assets_pin_texture_for_residency_frame(
         if (manager->texture_entries[index].texture == texture)
         {
             manager->texture_entries[index].residency_pinned = true;
+            manager->texture_entries[index].residency_last_used_frame =
+                manager->texture_residency_frame_index;
             return HENKA_SUCCESS;
         }
     }
@@ -2649,6 +2651,7 @@ henka_result henka_assets_trim_texture_residency(
     {
         size_t candidate = SIZE_MAX;
         uint64_t candidate_bytes = 0U;
+        uint64_t candidate_last_used_frame = UINT64_MAX;
         size_t index;
         henka_texture_info candidate_info;
         henka_texture_info resident_info;
@@ -2661,15 +2664,21 @@ henka_result henka_assets_trim_texture_residency(
 
             if (!entry->owns_texture || entry->metadata.fallback ||
                 !henka_asset_texture_path_is_ktx2(entry->source_path) ||
-                entry->resident_gpu_bytes <= candidate_bytes ||
                 henka_texture_get_info(entry->texture, &info) != HENKA_SUCCESS ||
                 info.resident_mip_count <= 1U ||
                 (manager->texture_residency_frame_active && entry->residency_pinned))
             {
                 continue;
             }
-            candidate = index;
-            candidate_bytes = entry->resident_gpu_bytes;
+            if (candidate == SIZE_MAX ||
+                entry->residency_last_used_frame < candidate_last_used_frame ||
+                (entry->residency_last_used_frame == candidate_last_used_frame &&
+                    entry->resident_gpu_bytes > candidate_bytes))
+            {
+                candidate = index;
+                candidate_bytes = entry->resident_gpu_bytes;
+                candidate_last_used_frame = entry->residency_last_used_frame;
+            }
         }
         if (candidate == SIZE_MAX)
             break;

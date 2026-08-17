@@ -279,10 +279,11 @@ henka_result henka_assets_set_texture_resident_mips(
     henka_texture* texture,
     uint32_t resident_mip_count,
     henka_texture_info* out_info);
-/* Synchronously trims the largest eligible manager-owned KTX2 textures by
- * demoting them to their smallest valid resident prefix until target_bytes is
- * met. This does not claim whole-resource eviction. A zero max_evictions means
- * no operation-count limit. Non-KTX2 sources are not candidates, and failure
+/* Synchronously trims the least-recently pinned eligible manager-owned KTX2
+ * textures by demoting them to their smallest valid resident prefix until
+ * target_bytes is met. Equal-use candidates prefer the larger texture. This
+ * does not claim whole-resource eviction. A zero max_evictions means no
+ * operation-count limit. Non-KTX2 sources are not candidates, and failure
  * leaves each texture's prior payload intact. */
 henka_result henka_assets_trim_texture_residency(
     henka_asset_manager* manager,

@@ -228,6 +228,7 @@ typedef struct henka_asset_texture_entry
     henka_texture_descriptor descriptor;
     uint64_t resident_gpu_bytes;
     bool residency_pinned;
+    uint64_t residency_last_used_frame;
     henka_asset_metadata metadata;
 } henka_asset_texture_entry;
 

@@ -138,9 +138,12 @@ services at most one queued request while the renderer context is active, but
 the upload itself remains synchronous. Repeated requests for one texture retain
 the strongest target and priority so a farther reference cannot demote a nearer one;
 visible requests use deterministic distance and semantic-slot priority. A deterministic trim operation can reduce the
-largest eligible KTX2 textures to one resident mip until a caller-provided
-target is met, with separate trimmed/demoted-byte diagnostics and transactional rollback on
-failure. This path does not claim whole-resource eviction. Callers can apply the configured non-zero budget through a bounded
+least-recently pinned eligible KTX2 textures to one resident mip until a caller-provided
+target is met, with equal-use candidates preferring the larger texture. This
+keeps recently visible assets resident while preserving deterministic pressure
+convergence. The path reports separate trimmed/demoted-byte diagnostics and
+transactional rollback on failure. This path does not claim whole-resource
+eviction. Callers can apply the configured non-zero budget through a bounded
 enforcement API; a zero budget remains a no-op and a capped trim count
 returns `HENKA_ERROR_LIMIT` if the target cannot be reached. This is explicit
 policy enforcement, and the frame lifecycle applies at most one configured-

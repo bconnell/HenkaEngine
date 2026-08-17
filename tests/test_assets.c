@@ -706,6 +706,7 @@ void henka_test_assets(void)
         &manager, 7U) == HENKA_SUCCESS);
     HENKA_TEST_ASSERT(henka_assets_pin_texture_for_residency_frame(
         &manager, &fallback_texture) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(texture_entries[0].residency_last_used_frame == 7U);
     {
         henka_texture_residency_diagnostics residency;
         HENKA_TEST_ASSERT(henka_assets_set_texture_residency_budget(
