@@ -794,6 +794,12 @@ foreach ($showcaseFile in @(
 )) {
     Assert-PathExists -Path (Join-Path $showcaseModelsDir $showcaseFile) -Description "Packaged showcase asset $showcaseFile"
 }
+foreach ($authoringFile in @(
+    "showcase_giraffe.hams",
+    "showcase_rocket.hams"
+)) {
+    Assert-PathExists -Path (Join-Path $assetsDir "authoring\$authoringFile") -Description "Packaged editor-owned authoring source $authoringFile"
+}
 Assert-PathExists -Path (Join-Path $assetsDir "textures\residency\residency_64.png") -Description "Packaged residency stress fixtures"
 Assert-PathExists -Path $helpPath -Description "Packaged offline help"
 Assert-PathExists -Path $readmePath -Description "Packaged run guide"
@@ -899,6 +905,37 @@ if ($NonInteractive) {
         throw "The packaged Terrain stream stress did not prove the bounded camera crossing contract."
     }
     Write-Output "[pass] Bounded packaged Terrain stream stress completed."
+
+    foreach ($stressCase in @(
+        @{
+            Name = "texture residency"
+            Arguments = @("--residency-stress")
+            Pattern = "Residency stress: .*"
+        }
+        @{
+            Name = "temporal presentation"
+            Arguments = @("--temporal-stress")
+            Pattern = "Temporal stress: .*"
+        }
+        @{
+            Name = "environment"
+            Arguments = @("--environment-stress")
+            Pattern = "Environment stress: .*"
+        }
+    )) {
+        Write-Step "Running packaged $($stressCase.Name) stress"
+        $stress = Invoke-HenkaNativeCapture `
+            -FilePath $packagedExe `
+            -Arguments $stressCase.Arguments `
+            -WorkingDirectory $packageRoot `
+            -Label "Run packaged $($stressCase.Name) stress"
+
+        if ($stress.Stdout -notmatch $stressCase.Pattern -or
+            $stress.Stdout -notmatch "Sandbox smoke test completed\.") {
+            throw "The packaged $($stressCase.Name) stress did not complete its bounded runtime contract."
+        }
+        Write-Output "[pass] Packaged $($stressCase.Name) stress completed."
+    }
     return
 }
 
