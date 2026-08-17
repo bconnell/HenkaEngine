@@ -700,6 +700,11 @@ void main()
         color += (diffuse + specular) * baseLayerTransmission * radiance * nDotL * shadow;
         color += albedo * surfaceSubsurfaceColor * surfaceSubsurface *
             subsurfaceDirectProfile(normal, lightDir, viewDirection, surfaceThickness, surfaceCurvature) * radiance * shadow;
+        float directTransmission = pow(
+            saturate(dot(-normal, lightDir)),
+            mix(2.20, 0.80, surfaceThickness));
+        color += albedo * volumeTransmittance * surfaceTransmission *
+            (vec3(1.0) - fresnel) * directTransmission * radiance * shadow * 0.35;
 
         /* The shared scene moon is a bounded second directional source. It is
          * intentionally shadowless in this slice: the directional sun shadow
@@ -834,6 +839,11 @@ void main()
             color += (localDiffuse + localSpecular) * localRadiance * localNDotL * localShadow;
             color += albedo * surfaceSubsurfaceColor * surfaceSubsurface *
                 subsurfaceDirectProfile(normal, localLightDirection, viewDirection, surfaceThickness, surfaceCurvature) * localRadiance * localShadow;
+            float localDirectTransmission = pow(
+                saturate(dot(-normal, localLightDirection)),
+                mix(2.20, 0.80, surfaceThickness));
+            color += albedo * volumeTransmittance * surfaceTransmission *
+                (vec3(1.0) - localFresnel) * localDirectTransmission * localRadiance * localShadow * 0.35;
         }
     }
     else
