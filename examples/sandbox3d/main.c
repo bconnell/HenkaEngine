@@ -28118,6 +28118,7 @@ int main(int argc, char** argv)
     config.asset_base_path = NULL;
     config.user_data_base_path = NULL;
     config.package_mode = HENKA_PACKAGE_MODE_AUTO;
+    config.texture_residency_budget_bytes = 0U;
     config.on_initialize = sandbox3d_initialize;
     config.on_update = sandbox3d_update;
     config.on_shutdown = sandbox3d_shutdown;

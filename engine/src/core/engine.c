@@ -988,6 +988,27 @@ henka_result henka_engine_create(
         return result;
     }
 
+    if (config->texture_residency_budget_bytes != 0U)
+    {
+        result = henka_assets_set_texture_residency_budget(
+            engine->asset_manager,
+            config->texture_residency_budget_bytes);
+        if (result != HENKA_SUCCESS)
+        {
+            HENKA_LOG_ERROR(
+                "texture residency budget initialization failed: %s",
+                henka_result_to_string(result));
+            henka_asset_manager_destroy(engine->asset_manager);
+            henka_renderer_destroy(engine->renderer);
+            henka_free(engine->user_data_base_path);
+            henka_free(engine->asset_base_path);
+            henka_platform_destroy(engine->platform);
+            henka_free(engine->application_name);
+            henka_free(engine);
+            return result;
+        }
+    }
+
     henka_time_reset(&engine->time);
 
     if (henka_platform_get_framebuffer_size(

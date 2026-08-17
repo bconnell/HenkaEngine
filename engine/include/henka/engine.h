@@ -244,6 +244,10 @@ typedef struct henka_engine_config
     henka_engine_update_fn on_update;
     henka_engine_shutdown_fn on_shutdown;
     void* user_data;
+    /* Appended for positional-initializer compatibility. A non-zero value
+     * enables the bounded per-frame KTX2 residency budget service. Zero
+     * preserves the historical unlimited default. */
+    uint64_t texture_residency_budget_bytes;
 } henka_engine_config;
 
 /*

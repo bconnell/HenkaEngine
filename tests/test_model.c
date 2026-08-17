@@ -95,13 +95,18 @@ static void henka_test_authoring_mesh_renderer_bridge(void)
     henka_authoring_vertex_id vertices[3];
     henka_authoring_vertex_id face_vertices[] = {1U, 2U, 3U};
     henka_authoring_face_id face_id;
+    henka_texture_residency_diagnostics residency;
     henka_mesh* mesh = NULL;
 
     config.application_name = "Henka Authoring Renderer Bridge Test";
     config.window_width = 320;
     config.window_height = 240;
     config.enable_vsync = false;
+    config.texture_residency_budget_bytes = 4096U;
     HENKA_TEST_ASSERT(henka_engine_create(&config, &engine) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_assets_get_texture_residency_diagnostics(
+        henka_engine_get_asset_manager(engine), &residency) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(residency.budget_bytes == 4096U);
     HENKA_TEST_ASSERT(henka_authoring_mesh_create(&desc, &source) == HENKA_SUCCESS);
     HENKA_TEST_ASSERT(henka_authoring_mesh_add_vertex(
         source, (henka_vec3){0.0f, 0.0f, 0.0f}, (henka_vec2){0.0f, 0.0f}, 4U, &vertices[0]) == HENKA_SUCCESS);

@@ -30,6 +30,7 @@ void henka_test_result(void)
     invalid_config.asset_base_path = NULL;
     invalid_config.user_data_base_path = NULL;
     invalid_config.package_mode = HENKA_PACKAGE_MODE_AUTO;
+    invalid_config.texture_residency_budget_bytes = 0U;
     invalid_config.on_initialize = NULL;
     invalid_config.on_update = NULL;
     invalid_config.on_shutdown = NULL;
