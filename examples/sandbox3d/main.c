@@ -404,6 +404,7 @@ typedef struct sandbox3d_state
     bool native_authoring_bevel_reported;
     bool native_authoring_face_edit_tools_reported;
     float native_authoring_face_edit_tools_reported_y;
+    bool native_authoring_face_normal_controls_reported;
     bool native_authoring_face_edit_leading;
     bool native_authoring_move_reported;
     float native_authoring_move_reported_y;
@@ -9021,6 +9022,7 @@ static void sandbox3d_release_owned_resources(sandbox3d_state* state)
     state->native_authoring_bevel_reported = false;
     state->native_authoring_face_edit_tools_reported = false;
     state->native_authoring_face_edit_tools_reported_y = -FLT_MAX;
+    state->native_authoring_face_normal_controls_reported = false;
     state->native_authoring_move_reported = false;
     state->native_authoring_move_reported_y = -FLT_MAX;
     state->native_authoring_selection_tools_reported = false;
@@ -10183,6 +10185,7 @@ static bool sandbox3d_promote_authoring_material(
     state->native_authoring_bevel_reported = false;
     state->native_authoring_face_edit_tools_reported = false;
     state->native_authoring_face_edit_tools_reported_y = -FLT_MAX;
+    state->native_authoring_face_normal_controls_reported = false;
     state->native_authoring_move_reported = false;
     state->native_authoring_move_reported_y = -FLT_MAX;
     state->native_authoring_selection_tools_reported = false;
@@ -10616,6 +10619,7 @@ static void sandbox3d_select_entity(sandbox3d_state* state, henka_entity entity)
             state->native_authoring_face_controls_reported = false;
             state->native_authoring_bevel_reported = false;
             state->native_authoring_face_edit_tools_reported = false;
+            state->native_authoring_face_normal_controls_reported = false;
             state->native_authoring_face_edit_leading = false;
             state->native_authoring_move_reported = false;
             state->native_authoring_selection_tools_reported = false;
@@ -20417,6 +20421,14 @@ details_group_authoring:
                     fflush(stdout);
                     state->native_authoring_face_edit_tools_reported = true;
                     state->native_authoring_face_edit_tools_reported_y = row.y;
+                    printf(
+                        "Native authoring face normal controls: name=%s positive_x=%.1f negative_x=%.1f y=%.1f width=96.0 height=24.0.\n",
+                        display_name,
+                        row.x + 88.0f,
+                        row.x + 190.0f,
+                        row.y);
+                    fflush(stdout);
+                    state->native_authoring_face_normal_controls_reported = true;
                 }
                 if (henka_ui_button(
                         state->ui,
@@ -20457,25 +20469,51 @@ details_group_authoring:
                         state->ui,
                         "authoring_face_normal_positive",
                         (henka_ui_rect){row.x + 88.0f, row.y, 96.0f, 24.0f},
-                        "Normal +") &&
-                    sandbox3d_authoring_object_move_selected_face_normal(
-                        state->authoring_object,
-                        0.1f) == HENKA_SUCCESS)
+                        "Normal +"))
                 {
-                    sandbox3d_mark_generic_modeling_applied(state, entity);
-                    sandbox3d_set_status(state, false, "Selected face pushed along its local normal.");
+                    const henka_result normal_result =
+                        sandbox3d_authoring_object_move_selected_face_normal(
+                            state->authoring_object,
+                            0.1f);
+                    printf(
+                        "Native authoring face normal move: name=%s distance=0.1 result=%s direction=positive.\n",
+                        display_name,
+                        henka_result_to_string(normal_result));
+                    fflush(stdout);
+                    if (normal_result == HENKA_SUCCESS)
+                    {
+                        sandbox3d_mark_generic_modeling_applied(state, entity);
+                        sandbox3d_set_status(state, false, "Selected face pushed along its local normal.");
+                    }
+                    else
+                    {
+                        sandbox3d_set_status(state, true, "Selected face normal push rejected; source retained.");
+                    }
                 }
                 if (henka_ui_button(
                         state->ui,
                         "authoring_face_normal_negative",
                         (henka_ui_rect){row.x + 190.0f, row.y, 96.0f, 24.0f},
-                        "Normal -") &&
-                    sandbox3d_authoring_object_move_selected_face_normal(
-                        state->authoring_object,
-                        -0.1f) == HENKA_SUCCESS)
+                        "Normal -"))
                 {
-                    sandbox3d_mark_generic_modeling_applied(state, entity);
-                    sandbox3d_set_status(state, false, "Selected face pulled along its local normal.");
+                    const henka_result normal_result =
+                        sandbox3d_authoring_object_move_selected_face_normal(
+                            state->authoring_object,
+                            -0.1f);
+                    printf(
+                        "Native authoring face normal move: name=%s distance=-0.1 result=%s direction=negative.\n",
+                        display_name,
+                        henka_result_to_string(normal_result));
+                    fflush(stdout);
+                    if (normal_result == HENKA_SUCCESS)
+                    {
+                        sandbox3d_mark_generic_modeling_applied(state, entity);
+                        sandbox3d_set_status(state, false, "Selected face pulled along its local normal.");
+                    }
+                    else
+                    {
+                        sandbox3d_set_status(state, true, "Selected face normal pull rejected; source retained.");
+                    }
                 }
             }
             if (state->authoring_object != NULL &&
@@ -20642,7 +20680,7 @@ details_group_authoring:
                 if (!state->native_authoring_bevel_reported)
                 {
                     printf(
-                        "Native authoring bevel control: name=%s x=%.1f y=%.1f width=82.0 height=24.0.\n",
+                        "Native authoring bevel control: name=%s x=%.1f y=%.1f width=54.0 height=24.0.\n",
                         display_name,
                         row.x,
                         row.y);
@@ -20652,7 +20690,7 @@ details_group_authoring:
                 if (henka_ui_button(
                         state->ui,
                         "authoring_priority_bevel_top",
-                        (henka_ui_rect){row.x, row.y, 82.0f, 24.0f},
+                        (henka_ui_rect){row.x, row.y, 54.0f, 24.0f},
                         "Bevel"))
                 {
                     (void)sandbox3d_apply_authoring_face_bevel(state, entity, display_name);
@@ -20661,19 +20699,80 @@ details_group_authoring:
                 if (!state->native_authoring_face_edit_tools_reported)
                 {
                     printf(
-                        "Native authoring face edit tools: name=%s extrude_x=%.1f inset_x=%.1f y=%.1f width=82.0 height=24.0.\n",
+                        "Native authoring face edit tools: name=%s extrude_x=%.1f inset_x=%.1f y=%.1f width=54.0 height=24.0.\n",
                         display_name,
-                        row.x + 88.0f,
-                        row.x + 176.0f,
+                        row.x + 58.0f,
+                        row.x + 116.0f,
                         row.y);
                     fflush(stdout);
                     state->native_authoring_face_edit_tools_reported = true;
                     state->native_authoring_face_edit_tools_reported_y = row.y;
                 }
+                if (!state->native_authoring_face_normal_controls_reported)
+                {
+                    printf(
+                        "Native authoring face normal controls: name=%s positive_x=%.1f negative_x=%.1f y=%.1f width=54.0 height=24.0.\n",
+                        display_name,
+                        row.x + 174.0f,
+                        row.x + 232.0f,
+                        row.y);
+                    fflush(stdout);
+                    state->native_authoring_face_normal_controls_reported = true;
+                }
+                        if (henka_ui_button(
+                                state->ui,
+                                "authoring_face_normal_positive_compact",
+                                (henka_ui_rect){row.x + 174.0f, row.y, 54.0f, 24.0f},
+                                "N +"))
+                        {
+                            const henka_result normal_result =
+                                sandbox3d_authoring_object_move_selected_face_normal(
+                                    state->authoring_object,
+                                    0.1f);
+                            printf(
+                                "Native authoring face normal move: name=%s distance=0.1 result=%s direction=positive.\n",
+                                display_name,
+                                henka_result_to_string(normal_result));
+                            fflush(stdout);
+                            if (normal_result == HENKA_SUCCESS)
+                            {
+                                sandbox3d_mark_generic_modeling_applied(state, entity);
+                                sandbox3d_set_status(state, false, "Selected face pushed along its local normal.");
+                            }
+                            else
+                            {
+                                sandbox3d_set_status(state, true, "Selected face normal push rejected; source retained.");
+                            }
+                        }
+                        if (henka_ui_button(
+                                state->ui,
+                                "authoring_face_normal_negative_compact",
+                                (henka_ui_rect){row.x + 232.0f, row.y, 54.0f, 24.0f},
+                                "N -"))
+                        {
+                            const henka_result normal_result =
+                                sandbox3d_authoring_object_move_selected_face_normal(
+                                    state->authoring_object,
+                                    -0.1f);
+                            printf(
+                                "Native authoring face normal move: name=%s distance=-0.1 result=%s direction=negative.\n",
+                                display_name,
+                                henka_result_to_string(normal_result));
+                            fflush(stdout);
+                            if (normal_result == HENKA_SUCCESS)
+                            {
+                                sandbox3d_mark_generic_modeling_applied(state, entity);
+                                sandbox3d_set_status(state, false, "Selected face pulled along its local normal.");
+                            }
+                            else
+                            {
+                                sandbox3d_set_status(state, true, "Selected face normal pull rejected; source retained.");
+                            }
+                        }
                 if (henka_ui_button(
                         state->ui,
                         "authoring_extrude_top_compact",
-                        (henka_ui_rect){row.x + 88.0f, row.y, 82.0f, 24.0f},
+                        (henka_ui_rect){row.x + 58.0f, row.y, 54.0f, 24.0f},
                         "Extrude"))
                 {
                     const henka_result extrude_result =
@@ -20708,7 +20807,7 @@ details_group_authoring:
                 if (henka_ui_button(
                         state->ui,
                         "authoring_inset_top_compact",
-                        (henka_ui_rect){row.x + 176.0f, row.y, 82.0f, 24.0f},
+                        (henka_ui_rect){row.x + 116.0f, row.y, 54.0f, 24.0f},
                         "Inset") &&
                     sandbox3d_authoring_object_inset_selected_face(
                         state->authoring_object,

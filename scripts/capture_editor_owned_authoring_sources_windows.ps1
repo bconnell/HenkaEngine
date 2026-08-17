@@ -262,7 +262,7 @@ function Get-BevelControl {
     if ([string]::IsNullOrEmpty($text)) {
         return $null
     }
-    $pattern = "(?m)^Native authoring bevel control: name=Showcase $Subject .*? x=(?<x>[-0-9.]+) y=(?<y>[-0-9.]+) width=82\.0 height=24\.0\."
+    $pattern = "(?m)^Native authoring bevel control: name=Showcase $Subject .*? x=(?<x>[-0-9.]+) y=(?<y>[-0-9.]+) width=54\.0 height=24\.0\."
     $matches = [Regex]::Matches($text, $pattern)
     if ($matches.Count -eq 0) {
         return $null
@@ -276,7 +276,21 @@ function Get-FaceEditTools {
     if ([string]::IsNullOrEmpty($text)) {
         return $null
     }
-    $pattern = "(?m)^Native authoring face edit tools: name=Showcase $Subject .*? extrude_x=(?<extrudeX>[-0-9.]+) inset_x=(?<insetX>[-0-9.]+) y=(?<y>[-0-9.]+) width=82\.0 height=24\.0\."
+    $pattern = "(?m)^Native authoring face edit tools: name=Showcase $Subject .*? extrude_x=(?<extrudeX>[-0-9.]+) inset_x=(?<insetX>[-0-9.]+) y=(?<y>[-0-9.]+) width=54\.0 height=24\.0\."
+    $matches = [Regex]::Matches($text, $pattern)
+    if ($matches.Count -eq 0) {
+        return $null
+    }
+    return $matches[$matches.Count - 1]
+}
+
+function Get-FaceNormalControls {
+    param([Parameter(Mandatory = $true)][string]$Subject)
+    $text = Get-Content -LiteralPath $stdoutPath -Raw -ErrorAction SilentlyContinue
+    if ([string]::IsNullOrEmpty($text)) {
+        return $null
+    }
+    $pattern = "(?m)^Native authoring face normal controls: name=Showcase $Subject .*? positive_x=(?<positiveX>[-0-9.]+) negative_x=(?<negativeX>[-0-9.]+) y=(?<y>[-0-9.]+) width=54\.0 height=24\.0\."
     $matches = [Regex]::Matches($text, $pattern)
     if ($matches.Count -eq 0) {
         return $null

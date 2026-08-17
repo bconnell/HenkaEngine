@@ -79,3 +79,77 @@ function Wait-FileContains {
     }
     return $false
 }
+
+function Get-LastLogRegexMatch {
+    param(
+        [Parameter(Mandatory = $true)][string]$Path,
+        [Parameter(Mandatory = $true)][string]$Pattern
+    )
+
+    if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) {
+        return $null
+    }
+
+    $deadline = (Get-Date).AddSeconds(5)
+    $lastReadError = $null
+    do {
+        $stream = $null
+        $reader = $null
+        try {
+            $shareMode = [System.IO.FileShare](
+                [int][System.IO.FileShare]::ReadWrite -bor
+                [int][System.IO.FileShare]::Delete)
+            $stream = [System.IO.FileStream]::new(
+                $Path,
+                [System.IO.FileMode]::Open,
+                [System.IO.FileAccess]::Read,
+                $shareMode)
+            $reader = [System.IO.StreamReader]::new(
+                $stream,
+                [System.Text.Encoding]::UTF8,
+                $true,
+                4096,
+                $false)
+            $text = $reader.ReadToEnd()
+            $reader.Dispose()
+            $reader = $null
+            $stream = $null
+            $lastReadError = $null
+
+            $matches = [Regex]::Matches(
+                $text,
+                $Pattern,
+                [System.Text.RegularExpressions.RegexOptions]::Multiline)
+            if ($matches.Count -gt 0) {
+                return $matches[$matches.Count - 1]
+            }
+        }
+        catch [System.IO.IOException] {
+            $lastReadError = $_.Exception
+        }
+        catch [System.UnauthorizedAccessException] {
+            $lastReadError = $_.Exception
+        }
+        finally {
+            if ($null -ne $reader) {
+                $reader.Dispose()
+            }
+            elseif ($null -ne $stream) {
+                $stream.Dispose()
+            }
+        }
+
+        if ((Get-Date) -lt $deadline) {
+            Start-Sleep -Milliseconds 100
+        }
+    } while ((Get-Date) -lt $deadline)
+
+    if ($null -ne $lastReadError) {
+        throw (
+            "The live editor log could not be read with shared read access " +
+            "within five seconds: " +
+            $lastReadError.Message)
+    }
+
+    return $null
+}
