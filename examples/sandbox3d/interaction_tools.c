@@ -1,6 +1,7 @@
 #include "interaction_tools.h"
 
 #include <math.h>
+#include <stdlib.h>
 #include <string.h>
 
 const char* sandbox3d_viewport_tool_mode_to_string(sandbox3d_viewport_tool_mode tool_mode)
@@ -421,17 +422,20 @@ bool sandbox3d_build_ground_selection_highlight_model(
     return true;
 }
 
-static bool sandbox3d_projected_triangle_depth_at(
+static bool sandbox3d_projected_triangle_barycentric_at(
     const sandbox3d_projected_triangle* triangle,
     henka_vec2 point,
-    float* out_depth)
+    float* out_first_weight,
+    float* out_second_weight,
+    float* out_third_weight)
 {
     float denominator;
     float first_weight;
     float second_weight;
     float third_weight;
 
-    if (triangle == NULL || out_depth == NULL)
+    if (triangle == NULL || out_first_weight == NULL || out_second_weight == NULL ||
+        out_third_weight == NULL)
     {
         return false;
     }
@@ -455,13 +459,75 @@ static bool sandbox3d_projected_triangle_depth_at(
         (triangle->points[0].x - triangle->points[2].x) *
             (point.y - triangle->points[2].y)) / denominator;
     third_weight = 1.0f - first_weight - second_weight;
-    if (first_weight < -0.0005f || second_weight < -0.0005f || third_weight < -0.0005f)
+    *out_first_weight = first_weight;
+    *out_second_weight = second_weight;
+    *out_third_weight = third_weight;
+    return isfinite(first_weight) && isfinite(second_weight) && isfinite(third_weight);
+}
+
+static bool sandbox3d_projected_triangle_depth_at(
+    const sandbox3d_projected_triangle* triangle,
+    henka_vec2 point,
+    float* out_depth)
+{
+    float first_weight;
+    float second_weight;
+    float third_weight;
+
+    if (out_depth == NULL ||
+        !sandbox3d_projected_triangle_barycentric_at(
+            triangle,
+            point,
+            &first_weight,
+            &second_weight,
+            &third_weight) ||
+        first_weight < -0.0005f || second_weight < -0.0005f || third_weight < -0.0005f)
     {
         return false;
     }
     *out_depth = first_weight * triangle->depths[0] +
         second_weight * triangle->depths[1] + third_weight * triangle->depths[2];
     return isfinite(*out_depth);
+}
+
+static bool sandbox3d_clip_affine_interval(
+    float base,
+    float slope,
+    float minimum,
+    float* inout_start,
+    float* inout_end)
+{
+    float crossing;
+
+    if (inout_start == NULL || inout_end == NULL ||
+        !isfinite(base) || !isfinite(slope) || !isfinite(minimum))
+    {
+        return false;
+    }
+    if (fabsf(slope) <= 0.000001f)
+    {
+        return base >= minimum;
+    }
+    crossing = (minimum - base) / slope;
+    if (slope > 0.0f)
+    {
+        if (crossing > *inout_start)
+        {
+            *inout_start = crossing;
+        }
+    }
+    else if (crossing < *inout_end)
+    {
+        *inout_end = crossing;
+    }
+    return *inout_start <= *inout_end + 0.000001f;
+}
+
+static int sandbox3d_compare_float(const void* left, const void* right)
+{
+    const float left_value = *(const float*)left;
+    const float right_value = *(const float*)right;
+    return left_value < right_value ? -1 : left_value > right_value ? 1 : 0;
 }
 
 size_t sandbox3d_build_topology_silhouette(
@@ -588,24 +654,119 @@ size_t sandbox3d_build_topology_silhouette(
             continue;
         }
         {
-            enum { visibility_samples = 8 };
-            size_t sample_index;
-            bool visible_run = false;
-            float visible_start = 0.0f;
-            for (sample_index = 0U; sample_index < visibility_samples; ++sample_index)
+            enum { max_visibility_events = 8192 };
+            float visibility_events[max_visibility_events];
+            size_t visibility_event_count = 2U;
+            size_t occluder_index;
+            size_t event_index;
+
+            visibility_events[0] = 0.0f;
+            visibility_events[1] = 1.0f;
+            if (isfinite(edge->start_depth) && isfinite(edge->end_depth))
             {
-                const float interval_start = (float)sample_index / (float)visibility_samples;
-                const float interval_end = (float)(sample_index + 1U) / (float)visibility_samples;
+                for (occluder_index = 0U; occluder_index < triangle_count; ++occluder_index)
+                {
+                    const sandbox3d_projected_triangle* occluder = &triangles[occluder_index];
+                    float start_first;
+                    float start_second;
+                    float start_third;
+                    float end_first;
+                    float end_second;
+                    float end_third;
+                    float interval_start = 0.0f;
+                    float interval_end = 1.0f;
+                    float occluder_start_depth;
+                    float occluder_end_depth;
+                    float depth_base;
+                    float depth_slope;
+                    float depth_crossing;
+
+                    if (!sandbox3d_projected_triangle_barycentric_at(
+                            occluder,
+                            edge->start,
+                            &start_first,
+                            &start_second,
+                            &start_third) ||
+                        !sandbox3d_projected_triangle_barycentric_at(
+                            occluder,
+                            edge->end,
+                            &end_first,
+                            &end_second,
+                            &end_third) ||
+                        !sandbox3d_clip_affine_interval(
+                            start_first,
+                            end_first - start_first,
+                            -0.0005f,
+                            &interval_start,
+                            &interval_end) ||
+                        !sandbox3d_clip_affine_interval(
+                            start_second,
+                            end_second - start_second,
+                            -0.0005f,
+                            &interval_start,
+                            &interval_end) ||
+                        !sandbox3d_clip_affine_interval(
+                            start_third,
+                            end_third - start_third,
+                            -0.0005f,
+                            &interval_start,
+                            &interval_end) ||
+                        interval_end < -0.000001f || interval_start > 1.000001f)
+                    {
+                        continue;
+                    }
+                    interval_start = fmaxf(interval_start, 0.0f);
+                    interval_end = fminf(interval_end, 1.0f);
+                    if (interval_end < interval_start)
+                    {
+                        continue;
+                    }
+                    if (visibility_event_count + 2U >= max_visibility_events)
+                    {
+                        return 0U;
+                    }
+                    visibility_events[visibility_event_count++] = interval_start;
+                    visibility_events[visibility_event_count++] = interval_end;
+                    occluder_start_depth = start_first * occluder->depths[0] +
+                        start_second * occluder->depths[1] + start_third * occluder->depths[2];
+                    occluder_end_depth = end_first * occluder->depths[0] +
+                        end_second * occluder->depths[1] + end_third * occluder->depths[2];
+                    depth_base = edge->start_depth - occluder_start_depth;
+                    depth_slope = (edge->end_depth - occluder_end_depth) - depth_base;
+                    if (fabsf(depth_slope) > 0.000001f)
+                    {
+                        depth_crossing = (0.0015f - depth_base) / depth_slope;
+                        if (depth_crossing > interval_start + 0.000001f &&
+                            depth_crossing < interval_end - 0.000001f &&
+                            visibility_event_count + 1U < max_visibility_events)
+                        {
+                            visibility_events[visibility_event_count++] = depth_crossing;
+                        }
+                    }
+                }
+            }
+            qsort(
+                visibility_events,
+                visibility_event_count,
+                sizeof(visibility_events[0]),
+                sandbox3d_compare_float);
+            {
+                bool visible_run = false;
+                float visible_start = 0.0f;
+                float visible_end = 0.0f;
+            for (event_index = 0U; event_index + 1U < visibility_event_count; ++event_index)
+            {
+                const float interval_start = visibility_events[event_index];
+                const float interval_end = visibility_events[event_index + 1U];
                 const float sample_t = (interval_start + interval_end) * 0.5f;
                 const henka_vec2 sample_point = {
                     edge->start.x + (edge->end.x - edge->start.x) * sample_t,
                     edge->start.y + (edge->end.y - edge->start.y) * sample_t};
                 const float sample_depth = edge->start_depth +
                     (edge->end_depth - edge->start_depth) * sample_t;
-                bool visible = true;
-                size_t occluder_index;
+                bool visible = interval_end > interval_start + 0.0001f;
 
-                if (isfinite(sample_depth))
+                if (visible && isfinite(sample_depth))
                 {
                     for (occluder_index = 0U; occluder_index < triangle_count; ++occluder_index)
                     {
@@ -619,32 +780,45 @@ size_t sandbox3d_build_topology_silhouette(
                         }
                     }
                 }
-                if (visible && !visible_run)
+                if (visible)
                 {
-                    visible_start = interval_start;
-                    visible_run = true;
-                }
-                if ((!visible || sample_index + 1U == visibility_samples) && visible_run)
-                {
-                    const float visible_end = visible
-                        ? interval_end
-                        : interval_start;
-                    if (visible_end > visible_start + 0.0001f)
+                    if (!visible_run)
                     {
-                        if (output_count >= segment_capacity)
-                        {
-                            return 0U;
-                        }
-                        out_segments[output_count++] = (sandbox3d_silhouette_segment){
-                            {
-                                edge->start.x + (edge->end.x - edge->start.x) * visible_start,
-                                edge->start.y + (edge->end.y - edge->start.y) * visible_start},
-                            {
-                                edge->start.x + (edge->end.x - edge->start.x) * visible_end,
-                                edge->start.y + (edge->end.y - edge->start.y) * visible_end}};
+                        visible_start = interval_start;
+                        visible_run = true;
                     }
+                    visible_end = interval_end;
+                }
+                else if (visible_run)
+                {
+                    if (output_count >= segment_capacity)
+                    {
+                        return 0U;
+                    }
+                    out_segments[output_count++] = (sandbox3d_silhouette_segment){
+                        {
+                            edge->start.x + (edge->end.x - edge->start.x) * visible_start,
+                            edge->start.y + (edge->end.y - edge->start.y) * visible_start},
+                        {
+                            edge->start.x + (edge->end.x - edge->start.x) * visible_end,
+                            edge->start.y + (edge->end.y - edge->start.y) * visible_end}};
                     visible_run = false;
                 }
+            }
+            if (visible_run)
+            {
+                if (output_count >= segment_capacity)
+                {
+                    return 0U;
+                }
+                out_segments[output_count++] = (sandbox3d_silhouette_segment){
+                    {
+                        edge->start.x + (edge->end.x - edge->start.x) * visible_start,
+                        edge->start.y + (edge->end.y - edge->start.y) * visible_start},
+                    {
+                        edge->start.x + (edge->end.x - edge->start.x) * visible_end,
+                        edge->start.y + (edge->end.y - edge->start.y) * visible_end}};
+            }
             }
         }
     }

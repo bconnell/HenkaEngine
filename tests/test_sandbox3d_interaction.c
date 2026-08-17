@@ -328,6 +328,52 @@ void henka_test_sandbox3d_interaction(void)
         topology_triangles + 4U, 2U, topology_segments, 32U);
     HENKA_TEST_ASSERT(topology_segment_count == 3U);
 
+    memset(topology_triangles, 0, sizeof(topology_triangles));
+    topology_triangles[0].points[0] = (henka_vec2){0.0f, 0.0f};
+    topology_triangles[0].points[1] = (henka_vec2){10.0f, 0.0f};
+    topology_triangles[0].points[2] = (henka_vec2){10.0f, 10.0f};
+    topology_triangles[0].depths[0] = 0.8f;
+    topology_triangles[0].depths[1] = 0.8f;
+    topology_triangles[0].depths[2] = 0.8f;
+    topology_triangles[0].vertex_ids[0] = 40U;
+    topology_triangles[0].vertex_ids[1] = 41U;
+    topology_triangles[0].vertex_ids[2] = 42U;
+    topology_triangles[1].points[0] = (henka_vec2){4.9f, 0.0f};
+    topology_triangles[1].points[1] = (henka_vec2){5.1f, 0.0f};
+    topology_triangles[1].points[2] = (henka_vec2){5.0f, 0.2f};
+    topology_triangles[1].depths[0] = 0.2f;
+    topology_triangles[1].depths[1] = 0.2f;
+    topology_triangles[1].depths[2] = 0.2f;
+    topology_triangles[1].vertex_ids[0] = 50U;
+    topology_triangles[1].vertex_ids[1] = 51U;
+    topology_triangles[1].vertex_ids[2] = 52U;
+    topology_segment_count = sandbox3d_build_topology_silhouette(
+        topology_triangles, 2U, topology_segments, 32U);
+    {
+        size_t segment_index;
+        bool full_candidate_edge = false;
+        bool candidate_left_visible = false;
+        bool candidate_right_visible = false;
+        for (segment_index = 0U; segment_index < topology_segment_count; ++segment_index)
+        {
+            const sandbox3d_silhouette_segment* segment = &topology_segments[segment_index];
+            const float minimum_x = fminf(segment->start.x, segment->end.x);
+            const float maximum_x = fmaxf(segment->start.x, segment->end.x);
+            if (fabsf(segment->start.y) < 0.001f && fabsf(segment->end.y) < 0.001f)
+            {
+                full_candidate_edge = full_candidate_edge ||
+                    (minimum_x < 0.001f && maximum_x > 9.999f);
+                candidate_left_visible = candidate_left_visible ||
+                    (minimum_x < 4.89f && maximum_x > 0.01f);
+                candidate_right_visible = candidate_right_visible ||
+                    (minimum_x < 9.99f && maximum_x > 5.11f);
+            }
+        }
+        HENKA_TEST_ASSERT(!full_candidate_edge);
+        HENKA_TEST_ASSERT(candidate_left_visible);
+        HENKA_TEST_ASSERT(candidate_right_visible);
+    }
+
     viewport_clip = (henka_ui_rect){0.0f, 0.0f, 640.0f, 360.0f};
     clip_start = (henka_vec2){-100.0f, 120.0f};
     clip_end = (henka_vec2){700.0f, 120.0f};
