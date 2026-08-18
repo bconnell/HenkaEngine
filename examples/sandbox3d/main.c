@@ -16,6 +16,7 @@
 #include <ktx.h>
 #endif
 
+#include "camera_tools.h"
 #include "editor_controls.h"
 #include "editor_ui_state.h"
 #include "asset_browser_tools.h"
@@ -9913,6 +9914,105 @@ static bool sandbox3d_apply_camera_preset(
     return true;
 }
 
+static bool sandbox3d_get_camera_focus_bounds(
+    sandbox3d_state* state,
+    henka_bounds* out_bounds)
+{
+    const sandbox3d_object_descriptor* descriptor;
+    henka_bounds selected_bounds;
+    const henka_bounds* preferred_bounds;
+    henka_entity preferred_entity;
+
+    if (state == NULL ||
+        state->scene == NULL ||
+        out_bounds == NULL)
+    {
+        return false;
+    }
+
+    descriptor = sandbox3d_get_selected_descriptor(state);
+    preferred_entity = HENKA_INVALID_ENTITY;
+    preferred_bounds = NULL;
+
+    if (descriptor != NULL &&
+        sandbox3d_get_selected_bounds(
+            state,
+            &selected_bounds))
+    {
+        preferred_entity = descriptor->entity;
+        preferred_bounds = &selected_bounds;
+    }
+
+    return sandbox3d_camera_resolve_focus_bounds(
+        state->scene,
+        preferred_entity,
+        preferred_bounds,
+        out_bounds);
+}
+
+static bool sandbox3d_apply_camera_preset_framed(
+    sandbox3d_state* state,
+    henka_camera_preset preset,
+    bool update_status)
+{
+    henka_bounds bounds;
+    henka_camera candidate;
+
+    if (state == NULL)
+    {
+        return false;
+    }
+
+    if (!sandbox3d_get_camera_focus_bounds(
+            state,
+            &bounds))
+    {
+        return sandbox3d_apply_camera_preset(
+            state,
+            preset,
+            sandbox3d_get_default_orbit_target(),
+            update_status);
+    }
+
+    candidate = state->camera;
+
+    if (!sandbox3d_camera_apply_framed_preset(
+            &candidate,
+            preset,
+            bounds))
+    {
+        return false;
+    }
+
+    state->camera = candidate;
+    state->camera_preset = preset;
+
+    sandbox3d_set_view_navigation_target(
+        state,
+        bounds.center);
+
+    /*
+     * An explicit view command owns the resulting camera immediately.
+     * Clear any active editor manipulation that could contaminate the next
+     * visible frame.
+     */
+    sandbox3d_clear_gizmo_drag(
+        state,
+        true);
+
+    if (update_status)
+    {
+        sandbox3d_set_statusf(
+            state,
+            false,
+            false,
+            "Camera preset: %s. View framed.",
+            henka_camera_preset_get_label(preset));
+    }
+
+    return true;
+}
+
 static void sandbox3d_reset_camera_defaults(sandbox3d_state* state)
 {
     henka_camera_preset preset;
@@ -9934,10 +10034,9 @@ static void sandbox3d_reset_camera_defaults(sandbox3d_state* state)
         preset = HENKA_CAMERA_PRESET_PERSPECTIVE_3D;
     }
 
-    if (!sandbox3d_apply_camera_preset(
+    if (!sandbox3d_apply_camera_preset_framed(
             state,
             preset,
-            sandbox3d_get_default_orbit_target(),
             false))
     {
         state->camera_preset = HENKA_CAMERA_PRESET_PERSPECTIVE_3D;
@@ -18961,10 +19060,9 @@ static void sandbox3d_draw_controls_panel(
                 "3D",
                 state->camera_preset == HENKA_CAMERA_PRESET_PERSPECTIVE_3D))
         {
-            (void)sandbox3d_apply_camera_preset(
+            (void)sandbox3d_apply_camera_preset_framed(
                 state,
                 HENKA_CAMERA_PRESET_PERSPECTIVE_3D,
-                sandbox3d_get_view_navigation_target(state),
                 true);
         }
         if (henka_ui_tab(
@@ -18974,10 +19072,9 @@ static void sandbox3d_draw_controls_panel(
                 "Side",
                 state->camera_preset == HENKA_CAMERA_PRESET_SIDE_2_5D))
         {
-            (void)sandbox3d_apply_camera_preset(
+            (void)sandbox3d_apply_camera_preset_framed(
                 state,
                 HENKA_CAMERA_PRESET_SIDE_2_5D,
-                sandbox3d_get_view_navigation_target(state),
                 true);
         }
         if (henka_ui_tab(
@@ -18987,10 +19084,9 @@ static void sandbox3d_draw_controls_panel(
                 "Top",
                 state->camera_preset == HENKA_CAMERA_PRESET_TOP_DOWN_2_5D))
         {
-            (void)sandbox3d_apply_camera_preset(
+            (void)sandbox3d_apply_camera_preset_framed(
                 state,
                 HENKA_CAMERA_PRESET_TOP_DOWN_2_5D,
-                sandbox3d_get_view_navigation_target(state),
                 true);
         }
         if (henka_ui_tab(
@@ -19000,10 +19096,9 @@ static void sandbox3d_draw_controls_panel(
                 "Iso",
                 state->camera_preset == HENKA_CAMERA_PRESET_ISOMETRIC_2_5D))
         {
-            (void)sandbox3d_apply_camera_preset(
+            (void)sandbox3d_apply_camera_preset_framed(
                 state,
                 HENKA_CAMERA_PRESET_ISOMETRIC_2_5D,
-                sandbox3d_get_view_navigation_target(state),
                 true);
         }
         y += 44.0f;
