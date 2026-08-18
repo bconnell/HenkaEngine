@@ -191,6 +191,11 @@ bool henka_ui_tab(henka_ui_context* context, const char* id, henka_ui_rect bound
  * ID per option without retaining caller memory.
  *
  * Selection changes only after the complete control draws successfully.
+ *
+ * `*selected_index == option_count` is a valid "no segment selected" state.
+ * This supports one exclusive logical choice presented across multiple
+ * segmented rows. Values greater than option_count are rejected.
+ *
  * `out_changed` is initialized to false on every valid or rejected call.
  */
 henka_result henka_ui_segmented_select(

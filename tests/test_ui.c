@@ -1096,13 +1096,28 @@ void henka_test_ui(void)
         HENKA_TEST_ASSERT(
             henka_ui_segmented_select(
                 ui,
-                "test.workspace.mode",
+                "test.workspace.mode.none",
                 (henka_ui_rect){20.0f, 20.0f, 300.0f, 28.0f},
                 segmented_labels,
                 3U,
                 &segmented_selection,
-                &segmented_changed) == HENKA_ERROR_INVALID_ARGUMENT);
+                &segmented_changed) == HENKA_SUCCESS);
         HENKA_TEST_ASSERT(segmented_selection == 3U);
+        HENKA_TEST_ASSERT(segmented_changed == false);
+
+        segmented_selection = 4U;
+        segmented_changed = true;
+
+        HENKA_TEST_ASSERT(
+            henka_ui_segmented_select(
+                ui,
+                "test.workspace.mode.invalid",
+                (henka_ui_rect){20.0f, 60.0f, 300.0f, 28.0f},
+                segmented_labels,
+                3U,
+                &segmented_selection,
+                &segmented_changed) == HENKA_ERROR_INVALID_ARGUMENT);
+        HENKA_TEST_ASSERT(segmented_selection == 4U);
         HENKA_TEST_ASSERT(segmented_changed == false);
         HENKA_TEST_ASSERT(henka_ui_end_frame(ui) == HENKA_SUCCESS);
     }

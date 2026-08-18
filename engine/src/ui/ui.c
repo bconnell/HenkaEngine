@@ -2500,7 +2500,7 @@ henka_result henka_ui_segmented_select(
         bounds.height <= 0.0f ||
         option_count < 2U ||
         option_count > HENKA_UI_SEGMENTED_MAX_OPTIONS ||
-        *selected_index >= option_count ||
+        *selected_index > option_count ||
         !henka_checked_c_string_length(
             id,
             HENKA_UI_MAX_ID_BYTES - 4U,

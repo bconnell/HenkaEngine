@@ -18240,77 +18240,69 @@ static void sandbox3d_draw_controls_panel(
                         1U,
                         &row))
                 {
-                    const float gap = 4.0f;
-                    const float item_width =
-                        (row.width - gap * 2.0f) / 3.0f;
-
-                    if (henka_ui_tab(
-                            state->ui,
-                            "layout_view",
-                            (henka_ui_rect){
-                                row.x,
-                                row.y,
-                                item_width,
-                                row.height},
-                            "View",
-                            layout_mode ==
-                                SANDBOX3D_LAYOUT_VIEW))
+                    static const char* const workspace_mode_labels[] =
                     {
-                        state->workspace.layout_mode =
-                            SANDBOX3D_LAYOUT_VIEW;
-                        sandbox3d_set_statusf(
-                            state,
-                            false,
-                            false,
-                            "Layout set to %s.",
-                            sandbox3d_get_layout_mode_label(
-                                state->workspace.layout_mode));
-                        sandbox3d_print_layout_mode(
-                            state,
-                            false);
+                        "View",
+                        "Inspect",
+                        "Full Tools"
+                    };
+                    bool workspace_mode_changed = false;
+                    size_t workspace_mode_selection = 3U;
+                    henka_result workspace_mode_result;
+
+                    switch (layout_mode)
+                    {
+                    case SANDBOX3D_LAYOUT_VIEW:
+                        workspace_mode_selection = 0U;
+                        break;
+
+                    case SANDBOX3D_LAYOUT_INSPECT:
+                        workspace_mode_selection = 1U;
+                        break;
+
+                    case SANDBOX3D_LAYOUT_FULL:
+                        workspace_mode_selection = 2U;
+                        break;
+
+                    default:
+                        break;
                     }
 
-                    if (henka_ui_tab(
+                    workspace_mode_result =
+                        henka_ui_segmented_select(
                             state->ui,
-                            "layout_inspect",
-                            (henka_ui_rect){
-                                row.x + item_width + gap,
-                                row.y,
-                                item_width,
-                                row.height},
-                            "Inspect",
-                            layout_mode ==
-                                SANDBOX3D_LAYOUT_INSPECT))
-                    {
-                        state->workspace.layout_mode =
-                            SANDBOX3D_LAYOUT_INSPECT;
-                        sandbox3d_set_statusf(
-                            state,
-                            false,
-                            false,
-                            "Layout set to %s.",
-                            sandbox3d_get_layout_mode_label(
-                                state->workspace.layout_mode));
-                        sandbox3d_print_layout_mode(
-                            state,
-                            false);
-                    }
+                            "layout_mode_selector",
+                            row,
+                            workspace_mode_labels,
+                            sizeof(workspace_mode_labels) /
+                                sizeof(workspace_mode_labels[0]),
+                            &workspace_mode_selection,
+                            &workspace_mode_changed);
 
-                    if (henka_ui_tab(
-                            state->ui,
-                            "layout_full",
-                            (henka_ui_rect){
-                                row.x +
-                                    (item_width + gap) * 2.0f,
-                                row.y,
-                                item_width,
-                                row.height},
-                            "Full Tools",
-                            layout_mode ==
-                                SANDBOX3D_LAYOUT_FULL))
+                    if (workspace_mode_result == HENKA_SUCCESS &&
+                        workspace_mode_changed)
                     {
-                        state->workspace.layout_mode =
-                            SANDBOX3D_LAYOUT_FULL;
+                        switch (workspace_mode_selection)
+                        {
+                        case 0U:
+                            state->workspace.layout_mode =
+                                SANDBOX3D_LAYOUT_VIEW;
+                            break;
+
+                        case 1U:
+                            state->workspace.layout_mode =
+                                SANDBOX3D_LAYOUT_INSPECT;
+                            break;
+
+                        case 2U:
+                            state->workspace.layout_mode =
+                                SANDBOX3D_LAYOUT_FULL;
+                            break;
+
+                        default:
+                            break;
+                        }
+
                         sandbox3d_set_statusf(
                             state,
                             false,
@@ -18323,7 +18315,6 @@ static void sandbox3d_draw_controls_panel(
                             false);
                     }
                 }
-
                 {
                     const sandbox3d_workspace_named_layout presets[] =
                     {
@@ -18712,63 +18703,74 @@ static void sandbox3d_draw_controls_panel(
                         1U,
                         &row))
                 {
-                    const float gap = 4.0f;
-                    const float item_width =
-                        (row.width - gap * 2.0f) / 3.0f;
-
-                    if (henka_ui_tab(
-                            state->ui,
-                            "tool_select",
-                            (henka_ui_rect){
-                                row.x,
-                                row.y,
-                                item_width,
-                                row.height},
-                            "Select",
-                            state->viewport_tool ==
-                                SANDBOX3D_VIEWPORT_TOOL_SELECT))
+                    static const char* const navigation_tool_labels[] =
                     {
-                        sandbox3d_set_viewport_tool_mode(
-                            state,
-                            SANDBOX3D_VIEWPORT_TOOL_SELECT,
-                            true);
+                        "Select",
+                        "Orbit",
+                        "Pan"
+                    };
+                    bool navigation_tool_changed = false;
+                    size_t navigation_tool_selection = 3U;
+                    henka_result navigation_tool_result;
+
+                    switch (state->viewport_tool)
+                    {
+                    case SANDBOX3D_VIEWPORT_TOOL_SELECT:
+                        navigation_tool_selection = 0U;
+                        break;
+
+                    case SANDBOX3D_VIEWPORT_TOOL_ORBIT:
+                        navigation_tool_selection = 1U;
+                        break;
+
+                    case SANDBOX3D_VIEWPORT_TOOL_PAN:
+                        navigation_tool_selection = 2U;
+                        break;
+
+                    default:
+                        break;
                     }
 
-                    if (henka_ui_tab(
+                    navigation_tool_result =
+                        henka_ui_segmented_select(
                             state->ui,
-                            "tool_orbit",
-                            (henka_ui_rect){
-                                row.x + item_width + gap,
-                                row.y,
-                                item_width,
-                                row.height},
-                            "Orbit",
-                            state->viewport_tool ==
-                                SANDBOX3D_VIEWPORT_TOOL_ORBIT))
-                    {
-                        sandbox3d_set_viewport_tool_mode(
-                            state,
-                            SANDBOX3D_VIEWPORT_TOOL_ORBIT,
-                            true);
-                    }
+                            "viewport_navigation_selector",
+                            row,
+                            navigation_tool_labels,
+                            sizeof(navigation_tool_labels) /
+                                sizeof(navigation_tool_labels[0]),
+                            &navigation_tool_selection,
+                            &navigation_tool_changed);
 
-                    if (henka_ui_tab(
-                            state->ui,
-                            "tool_pan",
-                            (henka_ui_rect){
-                                row.x +
-                                    (item_width + gap) * 2.0f,
-                                row.y,
-                                item_width,
-                                row.height},
-                            "Pan",
-                            state->viewport_tool ==
-                                SANDBOX3D_VIEWPORT_TOOL_PAN))
+                    if (navigation_tool_result == HENKA_SUCCESS &&
+                        navigation_tool_changed)
                     {
-                        sandbox3d_set_viewport_tool_mode(
-                            state,
-                            SANDBOX3D_VIEWPORT_TOOL_PAN,
-                            true);
+                        switch (navigation_tool_selection)
+                        {
+                        case 0U:
+                            sandbox3d_set_viewport_tool_mode(
+                                state,
+                                SANDBOX3D_VIEWPORT_TOOL_SELECT,
+                                true);
+                            break;
+
+                        case 1U:
+                            sandbox3d_set_viewport_tool_mode(
+                                state,
+                                SANDBOX3D_VIEWPORT_TOOL_ORBIT,
+                                true);
+                            break;
+
+                        case 2U:
+                            sandbox3d_set_viewport_tool_mode(
+                                state,
+                                SANDBOX3D_VIEWPORT_TOOL_PAN,
+                                true);
+                            break;
+
+                        default:
+                            break;
+                        }
                     }
                 }
 
@@ -18778,66 +18780,76 @@ static void sandbox3d_draw_controls_panel(
                         1U,
                         &row))
                 {
-                    const float gap = 4.0f;
-                    const float item_width =
-                        (row.width - gap * 2.0f) / 3.0f;
-
-                    if (henka_ui_tab(
-                            state->ui,
-                            "tool_move",
-                            (henka_ui_rect){
-                                row.x,
-                                row.y,
-                                item_width,
-                                row.height},
-                            "Move",
-                            state->viewport_tool ==
-                                SANDBOX3D_VIEWPORT_TOOL_MOVE))
+                    static const char* const transform_tool_labels[] =
                     {
-                        sandbox3d_set_viewport_tool_mode(
-                            state,
-                            SANDBOX3D_VIEWPORT_TOOL_MOVE,
-                            true);
+                        "Move",
+                        "Rotate",
+                        "Scale"
+                    };
+                    bool transform_tool_changed = false;
+                    size_t transform_tool_selection = 3U;
+                    henka_result transform_tool_result;
+
+                    switch (state->viewport_tool)
+                    {
+                    case SANDBOX3D_VIEWPORT_TOOL_MOVE:
+                        transform_tool_selection = 0U;
+                        break;
+
+                    case SANDBOX3D_VIEWPORT_TOOL_ROTATE:
+                        transform_tool_selection = 1U;
+                        break;
+
+                    case SANDBOX3D_VIEWPORT_TOOL_SCALE:
+                        transform_tool_selection = 2U;
+                        break;
+
+                    default:
+                        break;
                     }
 
-                    if (henka_ui_tab(
+                    transform_tool_result =
+                        henka_ui_segmented_select(
                             state->ui,
-                            "tool_rotate",
-                            (henka_ui_rect){
-                                row.x + item_width + gap,
-                                row.y,
-                                item_width,
-                                row.height},
-                            "Rotate",
-                            state->viewport_tool ==
-                                SANDBOX3D_VIEWPORT_TOOL_ROTATE))
-                    {
-                        sandbox3d_set_viewport_tool_mode(
-                            state,
-                            SANDBOX3D_VIEWPORT_TOOL_ROTATE,
-                            true);
-                    }
+                            "viewport_transform_selector",
+                            row,
+                            transform_tool_labels,
+                            sizeof(transform_tool_labels) /
+                                sizeof(transform_tool_labels[0]),
+                            &transform_tool_selection,
+                            &transform_tool_changed);
 
-                    if (henka_ui_tab(
-                            state->ui,
-                            "tool_scale",
-                            (henka_ui_rect){
-                                row.x +
-                                    (item_width + gap) * 2.0f,
-                                row.y,
-                                item_width,
-                                row.height},
-                            "Scale",
-                            state->viewport_tool ==
-                                SANDBOX3D_VIEWPORT_TOOL_SCALE))
+                    if (transform_tool_result == HENKA_SUCCESS &&
+                        transform_tool_changed)
                     {
-                        sandbox3d_set_viewport_tool_mode(
-                            state,
-                            SANDBOX3D_VIEWPORT_TOOL_SCALE,
-                            true);
+                        switch (transform_tool_selection)
+                        {
+                        case 0U:
+                            sandbox3d_set_viewport_tool_mode(
+                                state,
+                                SANDBOX3D_VIEWPORT_TOOL_MOVE,
+                                true);
+                            break;
+
+                        case 1U:
+                            sandbox3d_set_viewport_tool_mode(
+                                state,
+                                SANDBOX3D_VIEWPORT_TOOL_ROTATE,
+                                true);
+                            break;
+
+                        case 2U:
+                            sandbox3d_set_viewport_tool_mode(
+                                state,
+                                SANDBOX3D_VIEWPORT_TOOL_SCALE,
+                                true);
+                            break;
+
+                        default:
+                            break;
+                        }
                     }
                 }
-
                 if (sandbox3d_controls_flow_next_row(
                         state,
                         28.0f,
