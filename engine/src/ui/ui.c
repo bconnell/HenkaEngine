@@ -2362,6 +2362,270 @@ bool henka_ui_tab(
     return clicked;
 }
 
+#define HENKA_UI_SEGMENTED_MAX_OPTIONS 16U
+
+static henka_result henka_ui_segment_internal(
+    henka_ui_context* context,
+    const char* id,
+    henka_ui_rect bounds,
+    const char* label,
+    bool selected,
+    bool* out_clicked)
+{
+    bool active;
+    bool clicked;
+    bool had_active;
+    bool hot;
+    bool owns_active;
+    bool pressed;
+    henka_ui_draw_checkpoint checkpoint;
+    henka_result result;
+    henka_vec4 fill_color;
+
+    if (out_clicked != NULL)
+    {
+        *out_clicked = false;
+    }
+
+    if (context == NULL ||
+        id == NULL ||
+        label == NULL ||
+        out_clicked == NULL ||
+        !context->frame_active ||
+        !henka_ui_id_is_valid(id) ||
+        id[0] == '\0' ||
+        !henka_ui_rect_is_finite(bounds) ||
+        bounds.width <= 0.0f ||
+        bounds.height <= 0.0f)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    if (!context->visible)
+    {
+        return HENKA_SUCCESS;
+    }
+
+    henka_ui_capture_checkpoint(context, &checkpoint);
+
+    hot = henka_ui_control_is_hot(context, bounds);
+    pressed = hot && context->mouse_left_pressed;
+    had_active = henka_ui_active_id_equals(context, id);
+    owns_active = had_active || pressed;
+    active = context->mouse_left_down && owns_active;
+    clicked = hot && context->mouse_left_released && owns_active;
+
+    fill_color = active
+        ? g_ui_primary_active
+        : (hot
+            ? g_ui_tab_hover
+            : (selected ? g_ui_button_fill : g_ui_value_fill));
+
+    result = henka_ui_push_rect(context, bounds, fill_color);
+
+    if (result == HENKA_SUCCESS && selected)
+    {
+        result = henka_ui_push_rect(
+            context,
+            (henka_ui_rect){
+                bounds.x + 4.0f,
+                bounds.y + bounds.height - 3.0f,
+                bounds.width - 8.0f,
+                2.0f},
+            g_ui_heading_color);
+    }
+
+    if (result == HENKA_SUCCESS)
+    {
+        result = henka_ui_draw_fit_text(
+            context,
+            bounds,
+            8.0f,
+            bounds.y + (bounds.height - 7.0f) * 0.5f,
+            1.0f,
+            label,
+            selected ? g_ui_text_color : g_ui_muted_text_color);
+    }
+
+    if (result != HENKA_SUCCESS)
+    {
+        henka_ui_restore_checkpoint(context, &checkpoint);
+        return result;
+    }
+
+    if (pressed && !henka_ui_set_active_id(context, id))
+    {
+        henka_ui_restore_checkpoint(context, &checkpoint);
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    if (context->mouse_left_released && owns_active)
+    {
+        henka_ui_clear_active_id(context);
+    }
+
+    *out_clicked = clicked;
+    return HENKA_SUCCESS;
+}
+
+henka_result henka_ui_segmented_select(
+    henka_ui_context* context,
+    const char* id,
+    henka_ui_rect bounds,
+    const char* const* labels,
+    size_t option_count,
+    size_t* selected_index,
+    bool* out_changed)
+{
+    henka_ui_draw_checkpoint checkpoint;
+    henka_result result;
+    size_t id_length;
+    size_t index;
+    size_t requested_index;
+    float segment_width;
+
+    if (out_changed != NULL)
+    {
+        *out_changed = false;
+    }
+
+    if (context == NULL ||
+        id == NULL ||
+        labels == NULL ||
+        selected_index == NULL ||
+        out_changed == NULL ||
+        !context->frame_active ||
+        !henka_ui_rect_is_finite(bounds) ||
+        bounds.width <= 0.0f ||
+        bounds.height <= 0.0f ||
+        option_count < 2U ||
+        option_count > HENKA_UI_SEGMENTED_MAX_OPTIONS ||
+        *selected_index >= option_count ||
+        !henka_checked_c_string_length(
+            id,
+            HENKA_UI_MAX_ID_BYTES - 4U,
+            &id_length) ||
+        id_length == 0U)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    for (index = 0U; index < option_count; ++index)
+    {
+        size_t label_length;
+
+        if (labels[index] == NULL ||
+            !henka_checked_c_string_length(
+                labels[index],
+                HENKA_UI_MAX_TEXT_BYTES,
+                &label_length) ||
+            label_length == 0U)
+        {
+            return HENKA_ERROR_INVALID_ARGUMENT;
+        }
+    }
+
+    if (!context->visible)
+    {
+        return HENKA_SUCCESS;
+    }
+
+    segment_width = bounds.width / (float)option_count;
+    if (!henka_ui_float_is_finite(segment_width) ||
+        segment_width <= 0.0f)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    henka_ui_capture_checkpoint(context, &checkpoint);
+    requested_index = *selected_index;
+
+    for (index = 0U; index < option_count; ++index)
+    {
+        bool clicked;
+        char segment_id[HENKA_UI_MAX_ID_BYTES + 1U];
+        henka_ui_rect segment_bounds;
+        const int id_result = snprintf(
+            segment_id,
+            sizeof(segment_id),
+            "%s.%u",
+            id,
+            (unsigned int)index);
+
+        if (id_result < 0 ||
+            (size_t)id_result >= sizeof(segment_id))
+        {
+            henka_ui_restore_checkpoint(context, &checkpoint);
+            return HENKA_ERROR_INVALID_ARGUMENT;
+        }
+
+        segment_bounds.x =
+            bounds.x + segment_width * (float)index;
+        segment_bounds.y = bounds.y;
+        segment_bounds.width =
+            index + 1U == option_count
+                ? bounds.x + bounds.width - segment_bounds.x
+                : segment_width;
+        segment_bounds.height = bounds.height;
+
+        result = henka_ui_segment_internal(
+            context,
+            segment_id,
+            segment_bounds,
+            labels[index],
+            index == *selected_index,
+            &clicked);
+
+        if (result != HENKA_SUCCESS)
+        {
+            henka_ui_restore_checkpoint(context, &checkpoint);
+            return result;
+        }
+
+        if (clicked)
+        {
+            requested_index = index;
+        }
+
+        if (index > 0U)
+        {
+            result = henka_ui_push_rect(
+                context,
+                (henka_ui_rect){
+                    segment_bounds.x,
+                    bounds.y + 4.0f,
+                    1.0f,
+                    bounds.height - 8.0f},
+                g_ui_panel_separator);
+
+            if (result != HENKA_SUCCESS)
+            {
+                henka_ui_restore_checkpoint(context, &checkpoint);
+                return result;
+            }
+        }
+    }
+
+    result = henka_ui_push_border(
+        context,
+        bounds,
+        1.0f,
+        g_ui_panel_border);
+
+    if (result != HENKA_SUCCESS)
+    {
+        henka_ui_restore_checkpoint(context, &checkpoint);
+        return result;
+    }
+
+    if (requested_index != *selected_index)
+    {
+        *selected_index = requested_index;
+        *out_changed = true;
+    }
+
+    return HENKA_SUCCESS;
+}
 bool henka_ui_toggle(
     henka_ui_context* context,
     const char* id,

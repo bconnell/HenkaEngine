@@ -184,6 +184,23 @@ bool henka_ui_button(henka_ui_context* context, const char* id, henka_ui_rect bo
 bool henka_ui_primary_button(henka_ui_context* context, const char* id, henka_ui_rect bounds, const char* label);
 bool henka_ui_selectable(henka_ui_context* context, const char* id, henka_ui_rect bounds, const char* label, bool selected);
 bool henka_ui_tab(henka_ui_context* context, const char* id, henka_ui_rect bounds, const char* label, bool selected);
+/*
+ * Draw a compact exclusive-choice control as one bounded segmented row.
+ *
+ * `id` is a stable caller-owned prefix. The control derives one stable child
+ * ID per option without retaining caller memory.
+ *
+ * Selection changes only after the complete control draws successfully.
+ * `out_changed` is initialized to false on every valid or rejected call.
+ */
+henka_result henka_ui_segmented_select(
+    henka_ui_context* context,
+    const char* id,
+    henka_ui_rect bounds,
+    const char* const* labels,
+    size_t option_count,
+    size_t* selected_index,
+    bool* out_changed);
 bool henka_ui_toggle(henka_ui_context* context, const char* id, henka_ui_rect bounds, const char* label, bool* value);
 henka_result henka_ui_status_chip(henka_ui_context* context, henka_ui_rect bounds, const char* label, bool warning);
 

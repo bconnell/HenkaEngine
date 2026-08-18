@@ -1006,5 +1006,105 @@ void henka_test_ui(void)
 
         frame_desc.navigation_enter_pressed = false;
     }
+    /*
+     * Segmented selectors are the reusable exclusive-choice primitive used by
+     * the modern editor surface. Verify press/release ownership, transactional
+     * selection, and fail-closed invalid state.
+     */
+    {
+        static const char* segmented_labels[] = {
+            "View",
+            "Inspect",
+            "Full Tools"
+        };
+        bool segmented_changed;
+        size_t segmented_selection;
+
+        segmented_selection = 0U;
+        segmented_changed = true;
+
+        HENKA_TEST_ASSERT(
+            henka_ui_segmented_select(
+                ui,
+                "test.workspace.mode",
+                (henka_ui_rect){20.0f, 20.0f, 300.0f, 28.0f},
+                segmented_labels,
+                3U,
+                &segmented_selection,
+                &segmented_changed) == HENKA_ERROR_INVALID_ARGUMENT);
+        HENKA_TEST_ASSERT(segmented_selection == 0U);
+        HENKA_TEST_ASSERT(segmented_changed == false);
+
+        memset(&frame_desc, 0, sizeof(frame_desc));
+        frame_desc.framebuffer_width = 1280;
+        frame_desc.framebuffer_height = 720;
+        frame_desc.mouse_position = (henka_vec2){170.0f, 34.0f};
+        frame_desc.mouse_left_down = true;
+        frame_desc.mouse_left_pressed = true;
+
+        henka_ui_set_visible(ui, true);
+        HENKA_TEST_ASSERT(
+            henka_ui_begin_frame(ui, &frame_desc) == HENKA_SUCCESS);
+
+        segmented_changed = true;
+        HENKA_TEST_ASSERT(
+            henka_ui_segmented_select(
+                ui,
+                "test.workspace.mode",
+                (henka_ui_rect){20.0f, 20.0f, 300.0f, 28.0f},
+                segmented_labels,
+                3U,
+                &segmented_selection,
+                &segmented_changed) == HENKA_SUCCESS);
+        HENKA_TEST_ASSERT(segmented_selection == 0U);
+        HENKA_TEST_ASSERT(segmented_changed == false);
+        HENKA_TEST_ASSERT(henka_ui_get_wants_mouse(ui) == true);
+        HENKA_TEST_ASSERT(henka_ui_end_frame(ui) == HENKA_SUCCESS);
+
+        memset(&frame_desc, 0, sizeof(frame_desc));
+        frame_desc.framebuffer_width = 1280;
+        frame_desc.framebuffer_height = 720;
+        frame_desc.mouse_position = (henka_vec2){170.0f, 34.0f};
+        frame_desc.mouse_left_released = true;
+
+        HENKA_TEST_ASSERT(
+            henka_ui_begin_frame(ui, &frame_desc) == HENKA_SUCCESS);
+
+        HENKA_TEST_ASSERT(
+            henka_ui_segmented_select(
+                ui,
+                "test.workspace.mode",
+                (henka_ui_rect){20.0f, 20.0f, 300.0f, 28.0f},
+                segmented_labels,
+                3U,
+                &segmented_selection,
+                &segmented_changed) == HENKA_SUCCESS);
+        HENKA_TEST_ASSERT(segmented_selection == 1U);
+        HENKA_TEST_ASSERT(segmented_changed == true);
+        HENKA_TEST_ASSERT(henka_ui_end_frame(ui) == HENKA_SUCCESS);
+
+        memset(&frame_desc, 0, sizeof(frame_desc));
+        frame_desc.framebuffer_width = 1280;
+        frame_desc.framebuffer_height = 720;
+
+        HENKA_TEST_ASSERT(
+            henka_ui_begin_frame(ui, &frame_desc) == HENKA_SUCCESS);
+
+        segmented_selection = 3U;
+        segmented_changed = true;
+
+        HENKA_TEST_ASSERT(
+            henka_ui_segmented_select(
+                ui,
+                "test.workspace.mode",
+                (henka_ui_rect){20.0f, 20.0f, 300.0f, 28.0f},
+                segmented_labels,
+                3U,
+                &segmented_selection,
+                &segmented_changed) == HENKA_ERROR_INVALID_ARGUMENT);
+        HENKA_TEST_ASSERT(segmented_selection == 3U);
+        HENKA_TEST_ASSERT(segmented_changed == false);
+        HENKA_TEST_ASSERT(henka_ui_end_frame(ui) == HENKA_SUCCESS);
+    }
     henka_ui_destroy(ui);
 }
