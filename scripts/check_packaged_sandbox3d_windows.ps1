@@ -1221,6 +1221,17 @@ try {
             $shadingButtonWidth * 4.0 +
             $shadingGap * 3.0
 
+        $currentLayoutMatch = Get-LastLogRegexMatch `
+            -Path $stdoutPath `
+            -Pattern 'Sandbox layout: (View|Inspect|Full Tools)'
+
+        if ($null -eq $currentLayoutMatch) {
+            throw "The active packaged workspace layout could not be determined."
+        }
+
+        $currentLayout =
+            $currentLayoutMatch.Groups[1].Value
+
         Assert-FramebufferRect `
             -Name "Left dock" `
             -FramebufferWidth $framebufferWidth `
@@ -1229,14 +1240,31 @@ try {
             -Y $leftDockY `
             -Width $leftDockWidth `
             -Height $leftDockHeight
-        Assert-FramebufferRect `
-            -Name "Right dock" `
-            -FramebufferWidth $framebufferWidth `
-            -FramebufferHeight $framebufferHeight `
-            -X $rightDockX `
-            -Y $rightDockY `
-            -Width $rightDockWidth `
-            -Height $rightDockHeight
+        if ($currentLayout -eq "View") {
+            if ([Math]::Abs($rightDockWidth) -gt 0.01 -or
+                $rightDockHeight -le 0.0 -or
+                $rightDockX -lt 0.0 -or
+                $rightDockX -gt [double]$framebufferWidth -or
+                $rightDockY -lt 0.0 -or
+                $rightDockY + $rightDockHeight -gt [double]$framebufferHeight) {
+
+                throw (
+                    "View mode reported an invalid collapsed right dock: " +
+                    "rect=($rightDockX,$rightDockY,$rightDockWidth,$rightDockHeight).")
+            }
+
+            Write-Output "[pass] View mode safely collapses its inactive right dock"
+        }
+        else {
+            Assert-FramebufferRect `
+                -Name "Right dock" `
+                -FramebufferWidth $framebufferWidth `
+                -FramebufferHeight $framebufferHeight `
+                -X $rightDockX `
+                -Y $rightDockY `
+                -Width $rightDockWidth `
+                -Height $rightDockHeight
+        }
 
         $panelRects = @(
             [pscustomobject]@{
@@ -1274,8 +1302,22 @@ try {
                     $_.Width -gt 0.0 -and $_.Height -gt 0.0
                 }
         )
-        if ($visiblePanelRects.Count -lt 2) {
-            throw "Too few active workspace panel rectangles were reported."
+        $minimumVisiblePanelCount =
+            if ($currentLayout -eq "View") { 1 } else { 2 }
+
+        if ($visiblePanelRects.Count -lt $minimumVisiblePanelCount) {
+            throw (
+                "$currentLayout mode reported too few active workspace panel rectangles: " +
+                "$($visiblePanelRects.Count), expected at least $minimumVisiblePanelCount.")
+        }
+
+        if ($currentLayout -eq "View" -and
+            ($sceneObjectsWidth -gt 0.0 -or
+             $sceneObjectsHeight -gt 0.0 -or
+             $detailsWidth -gt 0.0 -or
+             $detailsHeight -gt 0.0)) {
+
+            throw "View mode reported right-side panel content while its right dock was collapsed."
         }
         foreach ($panelRect in $visiblePanelRects) {
             Assert-FramebufferRect `
@@ -1340,21 +1382,83 @@ try {
             -Width $leftDockWidth `
             -Height $leftDockHeight `
             -Rectangles $visiblePanelRects
-        Assert-DockCoverage `
-            -Name "Right dock" `
-            -X $rightDockX `
-            -Y $rightDockY `
-            -Width $rightDockWidth `
-            -Height $rightDockHeight `
-            -Rectangles $visiblePanelRects
+        if ($rightDockWidth -gt 0.0) {
+            Assert-DockCoverage `
+                -Name "Right dock" `
+                -X $rightDockX `
+                -Y $rightDockY `
+                -Width $rightDockWidth `
+                -Height $rightDockHeight `
+                -Rectangles $visiblePanelRects
+        }
+        else {
+            Write-Output "[pass] Collapsed right dock requires no active section coverage"
+        }
         Write-Output "[pass] Inactive merged tabs may report zero content rectangles safely"
 
         Write-Step "Checking imported showcase native authoring bridge"
-        Set-HenkaAutomationForeground -Handle $mainWindowHandle
-        [System.Windows.Forms.SendKeys]::SendWait('{F5}')
-        if (-not (Wait-FileContains -Path $stdoutPath -Pattern "Sandbox layout: Inspect" -TimeoutMilliseconds 4000)) {
-            throw "F5 did not enter the Inspect layout required for native authoring validation."
+
+        $inspectLayoutMatch = Get-LastLogRegexMatch `
+            -Path $stdoutPath `
+            -Pattern 'Sandbox layout: (View|Inspect|Full Tools)'
+
+        if ($null -eq $inspectLayoutMatch) {
+            throw "The workspace layout could not be read before entering Inspect."
         }
+
+        $inspectLayout =
+            $inspectLayoutMatch.Groups[1].Value
+
+        for ($layoutAttempt = 0;
+             $layoutAttempt -lt 3 -and
+             $inspectLayout -ne "Inspect";
+             ++$layoutAttempt) {
+
+            $previousLayout =
+                $inspectLayout
+
+            Set-HenkaAutomationForeground `
+                -Handle $mainWindowHandle
+
+            [System.Windows.Forms.SendKeys]::SendWait('{F5}')
+
+            $layoutDeadline =
+                (Get-Date).AddSeconds(4)
+
+            do {
+                Start-Sleep -Milliseconds 100
+
+                $nextLayoutMatch = Get-LastLogRegexMatch `
+                    -Path $stdoutPath `
+                    -Pattern 'Sandbox layout: (View|Inspect|Full Tools)'
+
+                if ($null -ne $nextLayoutMatch) {
+                    $candidateLayout =
+                        $nextLayoutMatch.Groups[1].Value
+
+                    if ($candidateLayout -ne $previousLayout) {
+                        $inspectLayout =
+                            $candidateLayout
+                        break
+                    }
+                }
+            }
+            while ((Get-Date) -lt $layoutDeadline)
+
+            if ($inspectLayout -eq $previousLayout) {
+                throw (
+                    "F5 did not advance the packaged workspace from " +
+                    "$previousLayout within four seconds.")
+            }
+        }
+
+        if ($inspectLayout -ne "Inspect") {
+            throw (
+                "The packaged workspace did not reach Inspect within " +
+                "three bounded layout transitions.")
+        }
+
+        Write-Output "[pass] Packaged workspace entered Inspect deterministically"
         if (-not (Wait-FileContains -Path $stdoutPath -Pattern "Native authoring row:" -TimeoutMilliseconds 4000)) {
             throw "The Inspect layout did not expose a showcase primitive authoring row."
         }
@@ -1504,43 +1608,93 @@ try {
                 throw "The selected showcase Authoring disclosure did not open."
             }
         }
-        if (-not (Wait-FileContains -Path $stdoutPath -Pattern "Native authoring material control:" -TimeoutMilliseconds 3000)) {
-            throw "The converted showcase did not expose the native material ownership control."
+        $nativeMaterialAlreadyOwned =
+            Wait-FileContains `
+                -Path $stdoutPath `
+                -Pattern "Native authoring material controls:" `
+                -TimeoutMilliseconds 750
+
+        if ($nativeMaterialAlreadyOwned) {
+            if (-not (Wait-FileContains `
+                    -Path $stdoutPath `
+                    -Pattern "Native authoring startup restore: material state restored" `
+                    -TimeoutMilliseconds 3000)) {
+
+                throw (
+                    "Editable native material controls were already present, " +
+                    "but no restored material-state evidence was reported.")
+            }
+
+            Write-Output "[pass] Restored native material ownership remained editable without redundant Own Material"
         }
-        $nativeMaterialOwnershipMatch = Get-LastLogRegexMatch `
-            -Path $stdoutPath `
-            -Pattern 'Native authoring material control: name=(.+) own_x=([-0-9.]+) own_y=([-0-9.]+) width=100.0 height=24.0 owned=0\.'
-        if ($null -eq $nativeMaterialOwnershipMatch) {
-            throw "The native material ownership control geometry could not be parsed."
-        }
-        $nativeMaterialOwnershipX = [double]$nativeMaterialOwnershipMatch.Groups[2].Value
-        $nativeMaterialOwnershipY = [double]$nativeMaterialOwnershipMatch.Groups[3].Value
-        Assert-FramebufferRect `
-            -Name "Native authoring material ownership control" `
-            -FramebufferWidth $framebufferWidth `
-            -FramebufferHeight $framebufferHeight `
-            -X $nativeMaterialOwnershipX `
-            -Y $nativeMaterialOwnershipY `
-            -Width 100.0 `
-            -Height 24.0
-        $nativeMaterialOwnershipObserved = $false
-        for ($materialOwnershipAttempt = 0; $materialOwnershipAttempt -lt 3 -and -not $nativeMaterialOwnershipObserved; ++$materialOwnershipAttempt) {
-            Click-FramebufferPoint `
-                -Handle $mainWindowHandle `
+        else {
+            if (-not (Wait-FileContains `
+                    -Path $stdoutPath `
+                    -Pattern "Native authoring material control:" `
+                    -TimeoutMilliseconds 3000)) {
+
+                throw (
+                    "The showcase exposed neither restored editable material controls " +
+                    "nor the native material ownership control.")
+            }
+
+            $nativeMaterialOwnershipMatch = Get-LastLogRegexMatch `
+                -Path $stdoutPath `
+                -Pattern 'Native authoring material control: name=(.+) own_x=([-0-9.]+) own_y=([-0-9.]+) width=100.0 height=24.0 owned=0\.'
+
+            if ($null -eq $nativeMaterialOwnershipMatch) {
+                throw "The native material ownership control geometry could not be parsed."
+            }
+
+            $nativeMaterialOwnershipX =
+                [double]$nativeMaterialOwnershipMatch.Groups[2].Value
+
+            $nativeMaterialOwnershipY =
+                [double]$nativeMaterialOwnershipMatch.Groups[3].Value
+
+            Assert-FramebufferRect `
+                -Name "Native authoring material ownership control" `
                 -FramebufferWidth $framebufferWidth `
                 -FramebufferHeight $framebufferHeight `
-                -FramebufferX ($nativeMaterialOwnershipX + 50.0) `
-                -FramebufferY ($nativeMaterialOwnershipY + 12.0)
-            $nativeMaterialOwnershipObserved = Wait-FileContains `
+                -X $nativeMaterialOwnershipX `
+                -Y $nativeMaterialOwnershipY `
+                -Width 100.0 `
+                -Height 24.0
+
+            $nativeMaterialOwnershipObserved = $false
+
+            for ($materialOwnershipAttempt = 0;
+                 $materialOwnershipAttempt -lt 3 -and
+                 -not $nativeMaterialOwnershipObserved;
+                 ++$materialOwnershipAttempt) {
+
+                Click-FramebufferPoint `
+                    -Handle $mainWindowHandle `
+                    -FramebufferWidth $framebufferWidth `
+                    -FramebufferHeight $framebufferHeight `
+                    -FramebufferX ($nativeMaterialOwnershipX + 50.0) `
+                    -FramebufferY ($nativeMaterialOwnershipY + 12.0)
+
+                $nativeMaterialOwnershipObserved =
+                    Wait-FileContains `
+                        -Path $stdoutPath `
+                        -Pattern "Native authoring material: editable runtime definition adopted" `
+                        -TimeoutMilliseconds 2500
+            }
+
+            if (-not $nativeMaterialOwnershipObserved) {
+                throw "The showcase material was not promoted to a manager-owned editable definition."
+            }
+
+            Write-Output "[pass] Fresh native material ownership promotion completed"
+        }
+
+        if (-not (Wait-FileContains `
                 -Path $stdoutPath `
-                -Pattern "Native authoring material: editable runtime definition adopted" `
-                -TimeoutMilliseconds 2500
-        }
-        if (-not $nativeMaterialOwnershipObserved) {
-            throw "The showcase material was not promoted to a manager-owned editable definition."
-        }
-        if (-not (Wait-FileContains -Path $stdoutPath -Pattern "Native authoring material controls:" -TimeoutMilliseconds 3000)) {
-            throw "The native material editor controls did not become visible after ownership promotion."
+                -Pattern "Native authoring material controls:" `
+                -TimeoutMilliseconds 3000)) {
+
+            throw "The native material editor controls did not become visible in the resolved ownership state."
         }
         for ($opticalScrollAttempt = 0; $opticalScrollAttempt -lt 8; ++$opticalScrollAttempt) {
             if (Wait-FileContains -Path $stdoutPath -Pattern "Native authoring optical material controls:" -TimeoutMilliseconds 300) {

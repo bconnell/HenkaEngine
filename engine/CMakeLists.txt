@@ -9,6 +9,7 @@ add_library(henka_runtime STATIC
     src/scene/camera.c
     src/scene/scene.c
     src/mesh/authoring_mesh.c
+    src/mesh/authoring_topology.c
     src/mesh/authoring_modeling.c
     src/mesh/authoring_uv.c
     src/terrain/terrain.c
@@ -62,6 +63,7 @@ if(HENKA_BUILD_CLIENT)
         src/renderer/mesh.c
         src/renderer/terrain_render.c
         src/renderer/renderer.c
+        src/renderer/temporal_camera_policy.c
         src/renderer/renderer_opengl.c
         src/renderer/shader.c
         src/renderer/texture.c

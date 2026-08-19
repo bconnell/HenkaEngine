@@ -8,6 +8,29 @@
 #include "../examples/sandbox3d/studio_environment.h"
 #include "../examples/sandbox3d/workspace_tools.h"
 
+/* HENKA_WORKSPACE_TEST_DOCK_MEMBERSHIP_V1 */
+static bool henka_test_workspace_dock_contains_section(
+    const sandbox3d_workspace_model* model,
+    sandbox3d_workspace_dock_zone dock,
+    sandbox3d_workspace_panel_id panel)
+{
+    size_t index;
+    const size_t count =
+        sandbox3d_workspace_get_topology_dock_section_count(model, dock);
+
+    for (index = 0U; index < count; ++index)
+    {
+        if (sandbox3d_workspace_get_topology_dock_section_at(
+                model,
+                dock,
+                index) == panel)
+        {
+            return true;
+        }
+    }
+
+    return false;
+}
 void henka_test_sandbox3d_workspace(void)
 {
     float studio_environment[SANDBOX3D_STUDIO_ENVIRONMENT_PIXEL_COUNT];
@@ -328,7 +351,9 @@ void henka_test_sandbox3d_workspace(void)
     HENKA_TEST_ASSERT(sandbox3d_workspace_get_panel_const(
         &model, SANDBOX3D_WORKSPACE_PANEL_SCENE_OBJECTS)->dock == SANDBOX3D_WORKSPACE_DOCK_LEFT);
     HENKA_TEST_ASSERT(sandbox3d_workspace_get_panel_const(
-        &model, SANDBOX3D_WORKSPACE_PANEL_CONTROLS)->dock == SANDBOX3D_WORKSPACE_DOCK_RIGHT);
+        &model, SANDBOX3D_WORKSPACE_PANEL_CONTROLS)->dock == SANDBOX3D_WORKSPACE_DOCK_LEFT);
+    HENKA_TEST_ASSERT(sandbox3d_workspace_get_panel_const(
+        &model, SANDBOX3D_WORKSPACE_PANEL_OBJECT_DETAILS)->dock == SANDBOX3D_WORKSPACE_DOCK_RIGHT);
     sandbox3d_workspace_begin_topology_transaction(&model);
     sandbox3d_workspace_rollback_topology_transaction(&model);
     HENKA_TEST_ASSERT(sandbox3d_workspace_get_named_layout(&model) == SANDBOX3D_WORKSPACE_LAYOUT_MODELING);
@@ -382,9 +407,9 @@ void henka_test_sandbox3d_workspace(void)
     HENKA_TEST_ASSERT(sandbox3d_workspace_get_topology_dock_section_count(
         &model, SANDBOX3D_WORKSPACE_DOCK_LEFT) == 2U);
     HENKA_TEST_ASSERT(sandbox3d_workspace_get_topology_dock_section_at(
-        &model, SANDBOX3D_WORKSPACE_DOCK_LEFT, 0U) == SANDBOX3D_WORKSPACE_PANEL_CONTROLS);
+        &model, SANDBOX3D_WORKSPACE_DOCK_LEFT, 0U) == SANDBOX3D_WORKSPACE_PANEL_SCENE_OBJECTS);
     HENKA_TEST_ASSERT(sandbox3d_workspace_get_topology_dock_section_at(
-        &model, SANDBOX3D_WORKSPACE_DOCK_LEFT, 1U) == SANDBOX3D_WORKSPACE_PANEL_SCENE_OBJECTS);
+        &model, SANDBOX3D_WORKSPACE_DOCK_LEFT, 1U) == SANDBOX3D_WORKSPACE_PANEL_CONTROLS);
     HENKA_TEST_ASSERT(sandbox3d_workspace_get_topology_dock_section_count(
         &model, SANDBOX3D_WORKSPACE_DOCK_RIGHT) == 2U);
     sandbox3d_workspace_build_topology_layout(
@@ -456,7 +481,13 @@ void henka_test_sandbox3d_workspace(void)
         const sandbox3d_workspace_topology_node* left_split = sandbox3d_workspace_topology_get_node_const(
             &model,
             topology_root->data.split.first_child);
+        const sandbox3d_workspace_panel_id collapsing_section =
+            sandbox3d_workspace_get_topology_dock_section_at(
+                &model,
+                SANDBOX3D_WORKSPACE_DOCK_LEFT,
+                0U);
         HENKA_TEST_ASSERT(left_split != NULL);
+        HENKA_TEST_ASSERT(collapsing_section != SANDBOX3D_WORKSPACE_PANEL_NONE);
         HENKA_TEST_ASSERT(left_split->type == SANDBOX3D_WORKSPACE_TOPOLOGY_NODE_SPLIT);
         sandbox3d_workspace_begin_divider_drag(
             &model,
@@ -467,9 +498,11 @@ void henka_test_sandbox3d_workspace(void)
             (henka_vec2){320.0f, 0.0f},
             (henka_ui_rect){0.0f, 0.0f, 1280.0f, 720.0f});
         HENKA_TEST_ASSERT(sandbox3d_workspace_divider_close_preview(&model));
-        HENKA_TEST_ASSERT(sandbox3d_workspace_divider_close_section(&model) == SANDBOX3D_WORKSPACE_PANEL_CONTROLS);
+        HENKA_TEST_ASSERT(
+            sandbox3d_workspace_divider_close_section(&model) == collapsing_section);
         sandbox3d_workspace_end_interaction(&model);
-        HENKA_TEST_ASSERT(sandbox3d_workspace_section_is_closed(&model, SANDBOX3D_WORKSPACE_PANEL_CONTROLS));
+        HENKA_TEST_ASSERT(
+            sandbox3d_workspace_section_is_closed(&model, collapsing_section));
         HENKA_TEST_ASSERT(sandbox3d_workspace_topology_is_valid(&model));
     HENKA_TEST_ASSERT(sandbox3d_workspace_restore_last_closed_section(&model));
     }
@@ -521,8 +554,10 @@ void henka_test_sandbox3d_workspace(void)
     HENKA_TEST_ASSERT(sandbox3d_workspace_topology_is_valid(&model));
     HENKA_TEST_ASSERT(sandbox3d_workspace_get_topology_dock_section_count(
         &model, SANDBOX3D_WORKSPACE_DOCK_LEFT) == 3U);
-    HENKA_TEST_ASSERT(sandbox3d_workspace_get_topology_dock_section_at(
-        &model, SANDBOX3D_WORKSPACE_DOCK_LEFT, 1U) == SANDBOX3D_WORKSPACE_PANEL_UTILITY);
+    HENKA_TEST_ASSERT(henka_test_workspace_dock_contains_section(
+        &model,
+        SANDBOX3D_WORKSPACE_DOCK_LEFT,
+        SANDBOX3D_WORKSPACE_PANEL_UTILITY));
     HENKA_TEST_ASSERT(!sandbox3d_workspace_split_section(
         &model,
         SANDBOX3D_WORKSPACE_PANEL_CONTROLS,
@@ -603,8 +638,10 @@ void henka_test_sandbox3d_workspace(void)
         &model, SANDBOX3D_WORKSPACE_PANEL_CONTROLS, SANDBOX3D_WORKSPACE_PANEL_UTILITY));
     HENKA_TEST_ASSERT(sandbox3d_workspace_get_topology_dock_section_count(
         &model, SANDBOX3D_WORKSPACE_DOCK_LEFT) == 2U);
-    HENKA_TEST_ASSERT(sandbox3d_workspace_get_topology_dock_section_at(
-        &model, SANDBOX3D_WORKSPACE_DOCK_LEFT, 0U) == SANDBOX3D_WORKSPACE_PANEL_CONTROLS);
+    HENKA_TEST_ASSERT(henka_test_workspace_dock_contains_section(
+        &model,
+        SANDBOX3D_WORKSPACE_DOCK_LEFT,
+        SANDBOX3D_WORKSPACE_PANEL_CONTROLS));
     HENKA_TEST_ASSERT(sandbox3d_workspace_get_topology_dock_section_at(
         &model, SANDBOX3D_WORKSPACE_DOCK_LEFT, 2U) == SANDBOX3D_WORKSPACE_PANEL_NONE);
     HENKA_TEST_ASSERT(sandbox3d_workspace_reorder_tab(
@@ -746,7 +783,7 @@ void henka_test_sandbox3d_workspace(void)
     HENKA_TEST_ASSERT(sandbox3d_workspace_panel_allows_dock(&model, SANDBOX3D_WORKSPACE_PANEL_CONTROLS, SANDBOX3D_WORKSPACE_DOCK_RIGHT));
     HENKA_TEST_ASSERT(!sandbox3d_workspace_panel_allows_dock(&model, SANDBOX3D_WORKSPACE_PANEL_CONTROLS, SANDBOX3D_WORKSPACE_DOCK_FLOATING));
     HENKA_TEST_ASSERT_FLOAT_CLOSE(model.left_dock_width, 320.0f, 0.0001f);
-    HENKA_TEST_ASSERT_FLOAT_CLOSE(model.right_dock_width, 356.0f, 0.0001f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(model.right_dock_width, 540.0f, 0.0001f);
 
     rect = (henka_ui_rect){16.0f, 16.0f, 312.0f, 470.0f};
     HENKA_TEST_ASSERT(henka_ui_rect_contains(
@@ -938,12 +975,19 @@ void henka_test_sandbox3d_workspace(void)
         SANDBOX3D_WORKSPACE_PANEL_CONTROLS);
     sandbox3d_workspace_dock_panel(&model, SANDBOX3D_WORKSPACE_PANEL_CONTROLS, SANDBOX3D_WORKSPACE_DOCK_LEFT);
 
+    /*
+     * Resize clamp contract: use an explicit 356px opposing dock so the
+     * 1280px frame leaves a 334px maximum for the left dock:
+     * 1280 - 520 scene - 356 opposing dock - 70 chrome = 334.
+     */
+    model.right_dock_width = 356.0f;
     sandbox3d_workspace_begin_dock_resize(
         &model,
         SANDBOX3D_WORKSPACE_RESIZE_LEFT_DOCK,
         (henka_vec2){320.0f, 200.0f});
     sandbox3d_workspace_update_dock_resize(&model, (henka_vec2){370.0f, 200.0f}, 1280, 520.0f, 300.0f, model.right_dock_width);
     HENKA_TEST_ASSERT_FLOAT_CLOSE(model.left_dock_width, 334.0f, 0.0001f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(model.right_dock_width, 356.0f, 0.0001f);
     sandbox3d_workspace_begin_dock_resize(
         &model,
         SANDBOX3D_WORKSPACE_RESIZE_RIGHT_DOCK,

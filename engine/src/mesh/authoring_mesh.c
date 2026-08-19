@@ -3,6 +3,7 @@
 #include <math.h>
 #include <stdio.h>
 #include <stdint.h>
+#include <stdlib.h>
 #include <string.h>
 
 #ifdef _WIN32
@@ -1044,6 +1045,699 @@ henka_result henka_authoring_mesh_copy(henka_authoring_mesh* destination, const 
     return HENKA_SUCCESS;
 }
 
+typedef struct authoring_quad_boundary
+{
+    henka_authoring_vertex_id previous;
+    henka_authoring_vertex_id opposite;
+    henka_authoring_vertex_id next;
+    henka_vec2 previous_uv;
+    henka_vec2 opposite_uv;
+    henka_vec2 next_uv;
+} authoring_quad_boundary;
+
+typedef struct authoring_quad_candidate
+{
+    henka_authoring_edge_id edge_id;
+    henka_authoring_face_id first_face;
+    henka_authoring_face_id second_face;
+    float score;
+} authoring_quad_candidate;
+
+static bool authoring_quad_uv_near(
+    henka_vec2 left,
+    henka_vec2 right,
+    float epsilon)
+{
+    return fabsf(left.x - right.x) <= epsilon &&
+        fabsf(left.y - right.y) <= epsilon;
+}
+
+static float authoring_quad_vec3_dot(
+    henka_vec3 left,
+    henka_vec3 right)
+{
+    return left.x * right.x +
+        left.y * right.y +
+        left.z * right.z;
+}
+
+static bool authoring_quad_triangle_boundary(
+    const henka_authoring_face* face,
+    henka_authoring_vertex_id shared_first,
+    henka_authoring_vertex_id shared_second,
+    authoring_quad_boundary* out_boundary)
+{
+    size_t opposite_index;
+    size_t previous_index;
+    size_t next_index;
+    henka_authoring_vertex_id opposite;
+
+    if (face == NULL ||
+        out_boundary == NULL ||
+        face->corner_count != 3U)
+    {
+        return false;
+    }
+
+    for (opposite_index = 0U;
+         opposite_index < 3U;
+         ++opposite_index)
+    {
+        opposite = face->vertices[opposite_index];
+
+        if (opposite != shared_first &&
+            opposite != shared_second)
+        {
+            break;
+        }
+    }
+
+    if (opposite_index >= 3U)
+    {
+        return false;
+    }
+
+    previous_index = (opposite_index + 2U) % 3U;
+    next_index = (opposite_index + 1U) % 3U;
+
+    if (!(
+            (face->vertices[previous_index] == shared_first &&
+             face->vertices[next_index] == shared_second) ||
+            (face->vertices[previous_index] == shared_second &&
+             face->vertices[next_index] == shared_first)))
+    {
+        return false;
+    }
+
+    out_boundary->previous = face->vertices[previous_index];
+    out_boundary->opposite = face->vertices[opposite_index];
+    out_boundary->next = face->vertices[next_index];
+
+    out_boundary->previous_uv = face->uvs[previous_index];
+    out_boundary->opposite_uv = face->uvs[opposite_index];
+    out_boundary->next_uv = face->uvs[next_index];
+
+    return true;
+}
+
+static bool authoring_quad_candidate_from_edge(
+    const henka_authoring_mesh* mesh,
+    const henka_authoring_edge* edge,
+    float minimum_normal_dot,
+    float minimum_diagonal_ratio,
+    float uv_epsilon,
+    authoring_quad_candidate* out_candidate)
+{
+    const henka_authoring_face* first;
+    const henka_authoring_face* second;
+    authoring_quad_boundary first_boundary;
+    authoring_quad_boundary second_boundary;
+    const henka_authoring_vertex* previous_vertex;
+    const henka_authoring_vertex* first_opposite_vertex;
+    const henka_authoring_vertex* next_vertex;
+    const henka_authoring_vertex* second_opposite_vertex;
+    henka_vec3 first_normal;
+    henka_vec3 second_normal;
+    float normal_dot;
+    float shared_length;
+    float perimeter_total;
+    float average_perimeter;
+    float diagonal_ratio;
+    float first_area;
+    float second_area;
+    float area_balance;
+
+    if (mesh == NULL ||
+        edge == NULL ||
+        out_candidate == NULL ||
+        !edge->active ||
+        edge->hard ||
+        edge->face_count != 2U)
+    {
+        return false;
+    }
+
+    first = henka_authoring_mesh_get_face(
+        mesh,
+        edge->faces[0]);
+    second = henka_authoring_mesh_get_face(
+        mesh,
+        edge->faces[1]);
+
+    if (first == NULL ||
+        second == NULL ||
+        first->corner_count != 3U ||
+        second->corner_count != 3U ||
+        first->material_region != second->material_region ||
+        first->smooth != second->smooth)
+    {
+        return false;
+    }
+
+    if (!authoring_quad_triangle_boundary(
+            first,
+            edge->vertices[0],
+            edge->vertices[1],
+            &first_boundary) ||
+        !authoring_quad_triangle_boundary(
+            second,
+            edge->vertices[0],
+            edge->vertices[1],
+            &second_boundary))
+    {
+        return false;
+    }
+
+    if (first_boundary.previous != second_boundary.next ||
+        first_boundary.next != second_boundary.previous)
+    {
+        return false;
+    }
+
+    if (!authoring_quad_uv_near(
+            first_boundary.previous_uv,
+            second_boundary.next_uv,
+            uv_epsilon) ||
+        !authoring_quad_uv_near(
+            first_boundary.next_uv,
+            second_boundary.previous_uv,
+            uv_epsilon))
+    {
+        return false;
+    }
+
+    first_normal = authoring_face_normal(mesh, first);
+    second_normal = authoring_face_normal(mesh, second);
+
+    normal_dot = authoring_quad_vec3_dot(
+        first_normal,
+        second_normal);
+
+    if (!isfinite(normal_dot) ||
+        normal_dot < minimum_normal_dot)
+    {
+        return false;
+    }
+
+    previous_vertex = henka_authoring_mesh_get_vertex(
+        mesh,
+        first_boundary.previous);
+    first_opposite_vertex = henka_authoring_mesh_get_vertex(
+        mesh,
+        first_boundary.opposite);
+    next_vertex = henka_authoring_mesh_get_vertex(
+        mesh,
+        first_boundary.next);
+    second_opposite_vertex = henka_authoring_mesh_get_vertex(
+        mesh,
+        second_boundary.opposite);
+
+    if (previous_vertex == NULL ||
+        first_opposite_vertex == NULL ||
+        next_vertex == NULL ||
+        second_opposite_vertex == NULL)
+    {
+        return false;
+    }
+
+    shared_length = henka_vec3_length(
+        henka_vec3_subtract(
+            previous_vertex->position,
+            next_vertex->position));
+
+    perimeter_total =
+        henka_vec3_length(
+            henka_vec3_subtract(
+                previous_vertex->position,
+                first_opposite_vertex->position)) +
+        henka_vec3_length(
+            henka_vec3_subtract(
+                first_opposite_vertex->position,
+                next_vertex->position)) +
+        henka_vec3_length(
+            henka_vec3_subtract(
+                next_vertex->position,
+                second_opposite_vertex->position)) +
+        henka_vec3_length(
+            henka_vec3_subtract(
+                second_opposite_vertex->position,
+                previous_vertex->position));
+
+    average_perimeter = perimeter_total * 0.25f;
+
+    if (!isfinite(shared_length) ||
+        !isfinite(average_perimeter) ||
+        average_perimeter <= 0.000001f)
+    {
+        return false;
+    }
+
+    diagonal_ratio = shared_length / average_perimeter;
+
+    if (!isfinite(diagonal_ratio) ||
+        diagonal_ratio < minimum_diagonal_ratio)
+    {
+        return false;
+    }
+
+    first_area =
+        0.5f *
+        henka_vec3_length(
+            henka_vec3_cross(
+                henka_vec3_subtract(
+                    first_opposite_vertex->position,
+                    previous_vertex->position),
+                henka_vec3_subtract(
+                    next_vertex->position,
+                    previous_vertex->position)));
+
+    second_area =
+        0.5f *
+        henka_vec3_length(
+            henka_vec3_cross(
+                henka_vec3_subtract(
+                    second_opposite_vertex->position,
+                    next_vertex->position),
+                henka_vec3_subtract(
+                    previous_vertex->position,
+                    next_vertex->position)));
+
+    if (first_area <= 0.0000001f ||
+        second_area <= 0.0000001f)
+    {
+        return false;
+    }
+
+    area_balance =
+        first_area < second_area
+            ? first_area / second_area
+            : second_area / first_area;
+
+    out_candidate->edge_id = edge->id;
+    out_candidate->first_face = first->id;
+    out_candidate->second_face = second->id;
+    out_candidate->score =
+        normal_dot * 4.0f +
+        diagonal_ratio * 2.0f +
+        area_balance;
+
+    return true;
+}
+
+static int authoring_quad_candidate_compare(
+    const void* left_pointer,
+    const void* right_pointer)
+{
+    const authoring_quad_candidate* left =
+        (const authoring_quad_candidate*)left_pointer;
+    const authoring_quad_candidate* right =
+        (const authoring_quad_candidate*)right_pointer;
+
+    if (left->score > right->score)
+    {
+        return -1;
+    }
+    if (left->score < right->score)
+    {
+        return 1;
+    }
+    if (left->edge_id < right->edge_id)
+    {
+        return -1;
+    }
+    if (left->edge_id > right->edge_id)
+    {
+        return 1;
+    }
+    return 0;
+}
+
+henka_result henka_authoring_mesh_recover_quads(
+    henka_authoring_mesh* mesh,
+    float minimum_normal_dot,
+    float minimum_diagonal_ratio,
+    float uv_epsilon,
+    size_t* out_merged_pairs)
+{
+    authoring_quad_candidate* candidates = NULL;
+    henka_authoring_face_id* merge_with = NULL;
+    bool* merge_owner = NULL;
+    henka_authoring_vertex_id* vertex_map = NULL;
+    henka_authoring_mesh* replacement = NULL;
+    size_t candidate_count = 0U;
+    size_t merged_pairs = 0U;
+    size_t edge_index;
+    size_t candidate_index;
+    uint32_t vertex_id;
+    uint32_t face_id;
+    henka_result result = HENKA_SUCCESS;
+
+    if (out_merged_pairs != NULL)
+    {
+        *out_merged_pairs = 0U;
+    }
+
+    if (mesh == NULL ||
+        out_merged_pairs == NULL ||
+        !henka_authoring_mesh_validate(mesh) ||
+        !isfinite(minimum_normal_dot) ||
+        !isfinite(minimum_diagonal_ratio) ||
+        !isfinite(uv_epsilon) ||
+        minimum_normal_dot < 0.0f ||
+        minimum_normal_dot > 1.0f ||
+        minimum_diagonal_ratio <= 0.0f ||
+        uv_epsilon < 0.0f)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    candidates = henka_calloc(
+        mesh->edge_slots > 0U ? mesh->edge_slots : 1U,
+        sizeof(*candidates));
+
+    merge_with = henka_calloc(
+        mesh->face_slots + 1U,
+        sizeof(*merge_with));
+
+    merge_owner = henka_calloc(
+        mesh->face_slots + 1U,
+        sizeof(*merge_owner));
+
+    if (candidates == NULL ||
+        merge_with == NULL ||
+        merge_owner == NULL)
+    {
+        result = HENKA_ERROR_OUT_OF_MEMORY;
+        goto cleanup;
+    }
+
+    for (edge_index = 0U;
+         edge_index < mesh->edge_slots;
+         ++edge_index)
+    {
+        if (authoring_quad_candidate_from_edge(
+                mesh,
+                &mesh->edges[edge_index],
+                minimum_normal_dot,
+                minimum_diagonal_ratio,
+                uv_epsilon,
+                &candidates[candidate_count]))
+        {
+            ++candidate_count;
+        }
+    }
+
+    if (candidate_count == 0U)
+    {
+        goto cleanup;
+    }
+
+    qsort(
+        candidates,
+        candidate_count,
+        sizeof(*candidates),
+        authoring_quad_candidate_compare);
+
+    for (candidate_index = 0U;
+         candidate_index < candidate_count;
+         ++candidate_index)
+    {
+        const authoring_quad_candidate* candidate =
+            &candidates[candidate_index];
+
+        if (candidate->first_face > mesh->face_slots ||
+            candidate->second_face > mesh->face_slots ||
+            merge_with[candidate->first_face] != 0U ||
+            merge_with[candidate->second_face] != 0U)
+        {
+            continue;
+        }
+
+        merge_with[candidate->first_face] =
+            candidate->second_face;
+        merge_with[candidate->second_face] =
+            candidate->first_face;
+
+        merge_owner[candidate->first_face] = true;
+        ++merged_pairs;
+    }
+
+    if (merged_pairs == 0U)
+    {
+        goto cleanup;
+    }
+
+    result = henka_authoring_mesh_create(
+        &mesh->desc,
+        &replacement);
+
+    if (result != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+
+    vertex_map = henka_calloc(
+        mesh->vertex_slots + 1U,
+        sizeof(*vertex_map));
+
+    if (vertex_map == NULL)
+    {
+        result = HENKA_ERROR_OUT_OF_MEMORY;
+        goto cleanup;
+    }
+
+    for (vertex_id = 1U;
+         vertex_id <= mesh->vertex_slots;
+         ++vertex_id)
+    {
+        const henka_authoring_vertex* source_vertex =
+            henka_authoring_mesh_get_vertex(
+                mesh,
+                (henka_authoring_vertex_id)vertex_id);
+
+        if (source_vertex == NULL)
+        {
+            continue;
+        }
+
+        result = henka_authoring_mesh_add_vertex(
+            replacement,
+            source_vertex->position,
+            source_vertex->uv,
+            source_vertex->material_region,
+            &vertex_map[vertex_id]);
+
+        if (result != HENKA_SUCCESS)
+        {
+            goto cleanup;
+        }
+    }
+
+    for (face_id = 1U;
+         face_id <= mesh->face_slots;
+         ++face_id)
+    {
+        const henka_authoring_face* source_face =
+            henka_authoring_mesh_get_face(
+                mesh,
+                (henka_authoring_face_id)face_id);
+        henka_authoring_face_id new_face_id;
+
+        if (source_face == NULL)
+        {
+            continue;
+        }
+
+        if (merge_with[face_id] != 0U)
+        {
+            if (!merge_owner[face_id])
+            {
+                continue;
+            }
+
+            {
+                const henka_authoring_face* second_face =
+                    henka_authoring_mesh_get_face(
+                        mesh,
+                        merge_with[face_id]);
+                const henka_authoring_edge* shared_edge = NULL;
+                authoring_quad_boundary first_boundary;
+                authoring_quad_boundary second_boundary;
+                henka_authoring_vertex_id quad[4];
+                henka_vec2 quad_uvs[4];
+                size_t corner;
+
+                for (corner = 0U;
+                     corner < source_face->corner_count;
+                     ++corner)
+                {
+                    const henka_authoring_edge* edge =
+                        henka_authoring_mesh_get_edge(
+                            mesh,
+                            source_face->edges[corner]);
+
+                    if (edge != NULL &&
+                        edge->face_count == 2U &&
+                        ((edge->faces[0] == face_id &&
+                          edge->faces[1] == merge_with[face_id]) ||
+                         (edge->faces[1] == face_id &&
+                          edge->faces[0] == merge_with[face_id])))
+                    {
+                        shared_edge = edge;
+                        break;
+                    }
+                }
+
+                if (second_face == NULL ||
+                    shared_edge == NULL ||
+                    !authoring_quad_triangle_boundary(
+                        source_face,
+                        shared_edge->vertices[0],
+                        shared_edge->vertices[1],
+                        &first_boundary) ||
+                    !authoring_quad_triangle_boundary(
+                        second_face,
+                        shared_edge->vertices[0],
+                        shared_edge->vertices[1],
+                        &second_boundary))
+                {
+                    result = HENKA_ERROR_UNKNOWN;
+                    goto cleanup;
+                }
+
+                quad[0] = vertex_map[first_boundary.previous];
+                quad[1] = vertex_map[first_boundary.opposite];
+                quad[2] = vertex_map[first_boundary.next];
+                quad[3] = vertex_map[second_boundary.opposite];
+
+                quad_uvs[0] = first_boundary.previous_uv;
+                quad_uvs[1] = first_boundary.opposite_uv;
+                quad_uvs[2] = first_boundary.next_uv;
+                quad_uvs[3] = second_boundary.opposite_uv;
+
+                result = henka_authoring_mesh_add_face(
+                    replacement,
+                    quad,
+                    4U,
+                    source_face->material_region,
+                    source_face->smooth,
+                    &new_face_id);
+
+                for (corner = 0U;
+                     result == HENKA_SUCCESS &&
+                     corner < 4U;
+                     ++corner)
+                {
+                    result =
+                        henka_authoring_mesh_set_face_corner_uv(
+                            replacement,
+                            new_face_id,
+                            corner,
+                            quad_uvs[corner]);
+                }
+
+                if (result != HENKA_SUCCESS)
+                {
+                    goto cleanup;
+                }
+            }
+
+            continue;
+        }
+
+        {
+            henka_authoring_vertex_id
+                mapped_vertices[
+                    HENKA_AUTHORING_MESH_HARD_MAX_FACE_CORNERS];
+            size_t corner;
+
+            if (source_face->corner_count >
+                HENKA_AUTHORING_MESH_HARD_MAX_FACE_CORNERS)
+            {
+                result = HENKA_ERROR_LIMIT;
+                goto cleanup;
+            }
+
+            for (corner = 0U;
+                 corner < source_face->corner_count;
+                 ++corner)
+            {
+                mapped_vertices[corner] =
+                    vertex_map[source_face->vertices[corner]];
+            }
+
+            result = henka_authoring_mesh_add_face(
+                replacement,
+                mapped_vertices,
+                source_face->corner_count,
+                source_face->material_region,
+                source_face->smooth,
+                &new_face_id);
+
+            for (corner = 0U;
+                 result == HENKA_SUCCESS &&
+                 corner < source_face->corner_count;
+                 ++corner)
+            {
+                result =
+                    henka_authoring_mesh_set_face_corner_uv(
+                        replacement,
+                        new_face_id,
+                        corner,
+                        source_face->uvs[corner]);
+            }
+
+            if (result != HENKA_SUCCESS)
+            {
+                goto cleanup;
+            }
+        }
+    }
+
+    for (edge_index = 0U;
+         edge_index < mesh->edge_slots;
+         ++edge_index)
+    {
+        const henka_authoring_edge* source_edge =
+            &mesh->edges[edge_index];
+
+        if (source_edge->active &&
+            source_edge->hard)
+        {
+            henka_authoring_edge* replacement_edge =
+                authoring_find_edge(
+                    replacement,
+                    vertex_map[source_edge->vertices[0]],
+                    vertex_map[source_edge->vertices[1]]);
+
+            if (replacement_edge == NULL)
+            {
+                result = HENKA_ERROR_UNKNOWN;
+                goto cleanup;
+            }
+
+            replacement_edge->hard = true;
+        }
+    }
+
+    if (!henka_authoring_mesh_validate(replacement))
+    {
+        result = HENKA_ERROR_UNKNOWN;
+        goto cleanup;
+    }
+
+    authoring_mesh_swap(mesh, replacement);
+    *out_merged_pairs = merged_pairs;
+
+cleanup:
+    henka_authoring_mesh_destroy(replacement);
+    henka_free(vertex_map);
+    henka_free(merge_owner);
+    henka_free(merge_with);
+    henka_free(candidates);
+
+    return result;
+}
 #define HENKA_AUTHORING_MESH_MAX_HISTORY_STEPS 64U
 
 struct henka_authoring_mesh_history

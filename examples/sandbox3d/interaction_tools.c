@@ -426,6 +426,70 @@ bool sandbox3d_should_prefer_terrain_hit(
     return terrain_distance < object_distance;
 }
 
+henka_result sandbox3d_build_authoring_cage(
+    const henka_authoring_mesh* mesh,
+    sandbox3d_authoring_cage_edge* out_edges,
+    size_t edge_capacity,
+    size_t* out_edge_count)
+{
+    henka_authoring_mesh_counts counts;
+    size_t edge_id;
+    size_t output_count;
+
+    if (out_edge_count != NULL)
+    {
+        *out_edge_count = 0U;
+    }
+
+    if (mesh == NULL ||
+        out_edges == NULL ||
+        out_edge_count == NULL ||
+        edge_capacity == 0U)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    counts = henka_authoring_mesh_get_counts(mesh);
+
+    if (counts.edges > edge_capacity)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    output_count = 0U;
+
+    for (edge_id = 1U;
+         edge_id <= HENKA_AUTHORING_MESH_HARD_MAX_EDGES &&
+         output_count < counts.edges;
+         ++edge_id)
+    {
+        const henka_authoring_edge* edge =
+            henka_authoring_mesh_get_edge(
+                mesh,
+                (henka_authoring_edge_id)edge_id);
+
+        if (edge == NULL)
+        {
+            continue;
+        }
+
+        out_edges[output_count].vertices[0] =
+            edge->vertices[0];
+
+        out_edges[output_count].vertices[1] =
+            edge->vertices[1];
+
+        ++output_count;
+    }
+
+    if (output_count != counts.edges)
+    {
+        return HENKA_ERROR_UNKNOWN;
+    }
+
+    *out_edge_count = output_count;
+    return HENKA_SUCCESS;
+}
 bool sandbox3d_selection_highlight_is_allowed(const sandbox3d_interaction_gate* gate)
 {
     return gate != NULL &&

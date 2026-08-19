@@ -1,5 +1,14 @@
 #include "workspace_tools.h"
 
+/* HENKA_COMMERCIAL_INSPECTOR_V2
+ * Object Details is a working inspector, not a narrow utility strip.
+ */
+
+/* HENKA_COMMERCIAL_WORKSPACE_V1
+ * Stable editor information architecture:
+ * hierarchy left, viewport center, inspector right.
+ */
+
 #include <float.h>
 #include <stdio.h>
 #include <string.h>
@@ -411,18 +420,18 @@ static void sandbox3d_workspace_topology_initialize(
         2U,
         3U,
         SANDBOX3D_WORKSPACE_SPLIT_VERTICAL,
-        0.5f);
+        0.68f);
     sandbox3d_workspace_topology_make_section(
-        &model->topology_nodes[2], SANDBOX3D_WORKSPACE_PANEL_CONTROLS);
+        &model->topology_nodes[2], SANDBOX3D_WORKSPACE_PANEL_SCENE_OBJECTS);
     sandbox3d_workspace_topology_make_section(
-        &model->topology_nodes[3], SANDBOX3D_WORKSPACE_PANEL_SCENE_OBJECTS);
+        &model->topology_nodes[3], SANDBOX3D_WORKSPACE_PANEL_CONTROLS);
     sandbox3d_workspace_topology_make_split(
         &model->topology_nodes[4],
         0U,
         5U,
         6U,
         SANDBOX3D_WORKSPACE_SPLIT_VERTICAL,
-        0.5f);
+        0.82f);
     sandbox3d_workspace_topology_make_section(
         &model->topology_nodes[5], SANDBOX3D_WORKSPACE_PANEL_OBJECT_DETAILS);
     sandbox3d_workspace_topology_make_section(
@@ -953,13 +962,15 @@ bool sandbox3d_workspace_apply_named_layout(
     {
         case SANDBOX3D_WORKSPACE_LAYOUT_MODELING:
             first_left = SANDBOX3D_WORKSPACE_PANEL_SCENE_OBJECTS;
-            second_left = SANDBOX3D_WORKSPACE_PANEL_OBJECT_DETAILS;
-            first_right = SANDBOX3D_WORKSPACE_PANEL_CONTROLS;
+            second_left = SANDBOX3D_WORKSPACE_PANEL_CONTROLS;
+            first_right = SANDBOX3D_WORKSPACE_PANEL_OBJECT_DETAILS;
+            second_right = SANDBOX3D_WORKSPACE_PANEL_UTILITY;
             break;
         case SANDBOX3D_WORKSPACE_LAYOUT_MATERIALS:
-            first_left = SANDBOX3D_WORKSPACE_PANEL_CONTROLS;
-            second_left = SANDBOX3D_WORKSPACE_PANEL_OBJECT_DETAILS;
-            first_right = SANDBOX3D_WORKSPACE_PANEL_SCENE_OBJECTS;
+            first_left = SANDBOX3D_WORKSPACE_PANEL_SCENE_OBJECTS;
+            second_left = SANDBOX3D_WORKSPACE_PANEL_CONTROLS;
+            first_right = SANDBOX3D_WORKSPACE_PANEL_OBJECT_DETAILS;
+            second_right = SANDBOX3D_WORKSPACE_PANEL_UTILITY;
             break;
         case SANDBOX3D_WORKSPACE_LAYOUT_SCENE_ASSEMBLY:
             first_left = SANDBOX3D_WORKSPACE_PANEL_SCENE_OBJECTS;
@@ -1004,11 +1015,19 @@ bool sandbox3d_workspace_apply_named_layout(
         layout == SANDBOX3D_WORKSPACE_LAYOUT_SCENE_ASSEMBLY ? 0.42f :
         layout == SANDBOX3D_WORKSPACE_LAYOUT_DEBUGGING ? 0.54f : 0.50f;
     candidate.topology_nodes[1].data.split.ratio =
-        layout == SANDBOX3D_WORKSPACE_LAYOUT_DEBUGGING ? 0.62f :
-        layout == SANDBOX3D_WORKSPACE_LAYOUT_MINIMAL_VIEWPORT ? 0.38f : 0.50f;
+        layout == SANDBOX3D_WORKSPACE_LAYOUT_MODELING ? 0.70f :
+        layout == SANDBOX3D_WORKSPACE_LAYOUT_MATERIALS ? 0.62f :
+        layout == SANDBOX3D_WORKSPACE_LAYOUT_SCENE_ASSEMBLY ? 0.72f :
+        layout == SANDBOX3D_WORKSPACE_LAYOUT_DEBUGGING ? 0.56f :
+        layout == SANDBOX3D_WORKSPACE_LAYOUT_MINIMAL_VIEWPORT ? 0.62f :
+        0.68f;
     candidate.topology_nodes[4].data.split.ratio =
-        layout == SANDBOX3D_WORKSPACE_LAYOUT_MODELING ? 0.42f :
-        layout == SANDBOX3D_WORKSPACE_LAYOUT_MATERIALS ? 0.58f : 0.50f;
+        layout == SANDBOX3D_WORKSPACE_LAYOUT_MODELING ? 0.84f :
+        layout == SANDBOX3D_WORKSPACE_LAYOUT_MATERIALS ? 0.90f :
+        layout == SANDBOX3D_WORKSPACE_LAYOUT_SCENE_ASSEMBLY ? 0.82f :
+        layout == SANDBOX3D_WORKSPACE_LAYOUT_DEBUGGING ? 0.58f :
+        layout == SANDBOX3D_WORKSPACE_LAYOUT_MINIMAL_VIEWPORT ? 0.76f :
+        0.82f;
     if (layout == SANDBOX3D_WORKSPACE_LAYOUT_MINIMAL_VIEWPORT)
     {
         candidate.left_dock_width = 260.0f;
@@ -1407,7 +1426,7 @@ void sandbox3d_workspace_model_reset(sandbox3d_workspace_model* model)
     model->left_dock_panel_count = 2U;
     model->right_dock_panel_count = 2U;
     model->left_dock_width = 320.0f;
-    model->right_dock_width = 356.0f;
+    model->right_dock_width = 540.0f;
     model->ui_scale = 1.0f;
     model->hovered_panel = SANDBOX3D_WORKSPACE_PANEL_NONE;
     model->keyboard_focus_panel = SANDBOX3D_WORKSPACE_PANEL_NONE;

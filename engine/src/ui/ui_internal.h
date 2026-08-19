@@ -34,6 +34,7 @@ typedef struct henka_ui_draw_line
 
 struct henka_ui_context
 {
+    henka_ui_theme theme;
     bool visible;
     bool frame_active;
     bool wants_mouse;

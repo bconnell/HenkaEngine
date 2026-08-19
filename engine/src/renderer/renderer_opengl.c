@@ -17,6 +17,7 @@
 
 #include "../core/checked.h"
 #include "../ui/ui_internal.h"
+#include "temporal_camera_policy.h"
 
 #ifndef GL_TEXTURE_MAX_ANISOTROPY_EXT
 #define GL_TEXTURE_MAX_ANISOTROPY_EXT 0x84FE
@@ -331,37 +332,6 @@ static void henka_opengl_invalidate_temporal_history(
         reason != NULL && reason[0] != '\0' ? reason : "history invalidated");
 }
 
-static float henka_opengl_temporal_camera_delta(
-    const henka_camera* previous,
-    const henka_camera* current,
-    float* out_position_delta,
-    float* out_angle_delta,
-    float* out_projection_delta)
-{
-    float position_delta;
-    float angle_delta;
-    float projection_delta;
-
-    if (out_position_delta != NULL) *out_position_delta = 0.0f;
-    if (out_angle_delta != NULL) *out_angle_delta = 0.0f;
-    if (out_projection_delta != NULL) *out_projection_delta = 0.0f;
-    if (previous == NULL || current == NULL)
-        return INFINITY;
-    position_delta = henka_vec3_length(henka_vec3_subtract(current->position, previous->position));
-    angle_delta = fmaxf(fabsf(current->yaw_radians - previous->yaw_radians),
-        fabsf(current->pitch_radians - previous->pitch_radians));
-    projection_delta = fmaxf(fabsf(current->field_of_view_radians - previous->field_of_view_radians),
-        fmaxf(fabsf(current->orthographic_height - previous->orthographic_height),
-            fmaxf(fabsf(current->near_plane - previous->near_plane),
-                fmaxf(fabsf(current->far_plane - previous->far_plane),
-                    fabsf(current->aspect_ratio - previous->aspect_ratio)))));
-    if (out_position_delta != NULL) *out_position_delta = position_delta;
-    if (out_angle_delta != NULL) *out_angle_delta = angle_delta;
-    if (out_projection_delta != NULL) *out_projection_delta = projection_delta;
-    if (current->projection_mode != previous->projection_mode)
-        return INFINITY;
-    return fmaxf(position_delta, fmaxf(angle_delta, projection_delta));
-}
 
 static void henka_opengl_memory_refresh(
     henka_opengl_renderer_state* state)
@@ -4994,10 +4964,12 @@ henka_result henka_opengl_renderer_draw_scene(
     int local_shadow_light_index = -1;
     int point_shadow_light_index = -1;
     Uint64 cpu_start_ticks;
-    float temporal_camera_delta = 0.0f;
-    float temporal_position_delta = 0.0f;
-    float temporal_angle_delta = 0.0f;
-    float temporal_projection_delta = 0.0f;
+    henka_temporal_camera_motion temporal_camera_motion = {0};
+    bool temporal_camera_motion_valid = false;
+    bool temporal_camera_static = false;
+    bool temporal_camera_transform_moving = false;
+    bool temporal_camera_cut = false;
+    bool use_temporal_jitter = false;
     bool gpu_query_active = false;
 
     if (renderer == NULL ||
@@ -5202,23 +5174,43 @@ henka_result henka_opengl_renderer_draw_scene(
         henka_camera_get_projection_matrix(&scene->camera);
     view = henka_camera_get_view_matrix(&scene->camera);
     {
-        const bool temporal_camera_static =
+        temporal_camera_motion_valid =
             state->previous_cut_camera_valid &&
-            henka_opengl_temporal_camera_delta(
+            henka_temporal_camera_measure(
                 &state->previous_cut_camera,
                 &scene->camera,
-                NULL,
-                NULL,
-                NULL) <= 0.000001f;
-        bool use_temporal_jitter = rendered &&
-            policy.use_hdr_presentation &&
-            state->temporal_history_ready &&
-            !temporal_camera_static;
-        if (state->temporal_jitter_enabled != use_temporal_jitter)
+                &temporal_camera_motion);
+
+        temporal_camera_static =
+            temporal_camera_motion_valid &&
+            henka_temporal_camera_is_static(
+                &temporal_camera_motion);
+
+        temporal_camera_transform_moving =
+            temporal_camera_motion_valid &&
+            henka_temporal_camera_transform_is_moving(
+                &temporal_camera_motion);
+
+        temporal_camera_cut =
+            temporal_camera_motion_valid &&
+            henka_temporal_camera_is_cut(
+                &temporal_camera_motion);
+
+        use_temporal_jitter =
+            henka_temporal_camera_should_jitter(
+                rendered,
+                policy.use_hdr_presentation,
+                state->temporal_history_ready,
+                scene->camera.projection_mode,
+                temporal_camera_transform_moving,
+                temporal_camera_static,
+                temporal_camera_cut);
+        if (!temporal_camera_cut &&
+            state->temporal_jitter_enabled != use_temporal_jitter)
         {
             henka_opengl_invalidate_temporal_history(
                 state,
-                use_temporal_jitter ? "rendered temporal path enabled" : "shading mode changed");
+                use_temporal_jitter ? "rendered temporal path enabled" : "temporal jitter settled");
         }
         state->temporal_jitter_enabled = use_temporal_jitter;
         if (use_temporal_jitter)
@@ -5246,16 +5238,14 @@ henka_result henka_opengl_renderer_draw_scene(
     }
     current_view_projection = henka_mat4_multiply(projection, view);
     state->current_projection = projection;
-    temporal_camera_delta = state->previous_cut_camera_valid ?
-        henka_opengl_temporal_camera_delta(&state->previous_cut_camera, &scene->camera,
-            &temporal_position_delta, &temporal_angle_delta, &temporal_projection_delta) : 0.0f;
     if (!state->reflection_probe_capture_active &&
-        state->previous_cut_camera_valid &&
-        temporal_camera_delta > 0.75f)
+        temporal_camera_cut)
     {
         char cut_reason[64];
         (void)snprintf(cut_reason, sizeof(cut_reason), "camera cut p%.2f a%.2f r%.2f",
-            temporal_position_delta, temporal_angle_delta, temporal_projection_delta);
+            temporal_camera_motion.position_delta,
+            temporal_camera_motion.angle_delta,
+            temporal_camera_motion.projection_delta);
         henka_opengl_invalidate_temporal_history(state, cut_reason);
     }
     if (!state->previous_view_projection_valid)

@@ -133,6 +133,19 @@ henka_result henka_authoring_mesh_get_vertex_edge_at(const henka_authoring_mesh*
 size_t henka_authoring_mesh_get_edge_face_count(const henka_authoring_mesh* mesh, henka_authoring_edge_id edge_id);
 henka_result henka_authoring_mesh_get_edge_face_at(const henka_authoring_mesh* mesh, henka_authoring_edge_id edge_id, size_t ordinal, henka_authoring_face_id* out_face_id);
 bool henka_authoring_mesh_edge_is_boundary(const henka_authoring_mesh* mesh, henka_authoring_edge_id edge_id);
+/* Reconstructs likely authoring quads from compatible adjacent triangle
+ * pairs. The operation rebuilds the source compactly and transactionally,
+ * preserving material boundaries, hard edges, winding, and UV seams.
+ *
+ * minimum_normal_dot controls surface continuity (0..1).
+ * minimum_diagonal_ratio prefers likely former quad diagonals over perimeter
+ * edges. uv_epsilon prevents merging across per-corner UV seams. */
+henka_result henka_authoring_mesh_recover_quads(
+    henka_authoring_mesh* mesh,
+    float minimum_normal_dot,
+    float minimum_diagonal_ratio,
+    float uv_epsilon,
+    size_t* out_merged_pairs);
 
 /* Converts polygons to deterministic fan triangles and computes normals from
  * winding plus smooth-face and hard-edge intent. Output buffers are borrowed. */

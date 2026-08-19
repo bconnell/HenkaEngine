@@ -28,6 +28,11 @@
 #include "studio_environment.h"
 #include "workspace_tools.h"
 
+/* HENKA_COMMERCIAL_AUTHORING_INSPECTOR_V2
+ * Modeling controls prioritize readable names, predictable hierarchy,
+ * and one discoverable action per operation.
+ */
+
 #define SANDBOX3D_MAX_MATERIAL_EDITOR_BINDINGS 256U
 #define SANDBOX3D_MAX_AUTHORING_OBJECTS 8U
 #define SANDBOX3D_MAX_SCENE_NAME_BYTES 1024U
@@ -751,7 +756,7 @@ static const char* g_setting_key_workspace_topology_version = "ui.workspace.topo
 static const char* g_setting_key_workspace_left_dock_width = "ui.workspace.left_dock_width";
 static const char* g_setting_key_workspace_right_dock_width = "ui.workspace.right_dock_width";
 static const char* g_setting_key_workspace_named_layout = "ui.workspace.named_layout";
-static const int g_workspace_topology_settings_version = 2;
+static const int g_workspace_topology_settings_version = 5;
 static const int g_workspace_custom_layout_settings_version = 1;
 static const int g_workspace_custom_layout_slots_settings_version = 1;
 
@@ -5328,6 +5333,13 @@ static void sandbox3d_draw_selection_highlight(sandbox3d_state* state, henka_vie
      * returning zero at that boundary fabricated a bounding-box outline. */
     enum { max_outline_segments = 65536 };
     static sandbox3d_silhouette_segment silhouette[max_outline_segments];
+    enum { max_authoring_overlay_triangles = 16384 };
+    static sandbox3d_authoring_cage_edge
+        authoring_cage_edges[HENKA_AUTHORING_MESH_HARD_MAX_EDGES];
+    static sandbox3d_projected_triangle
+        authoring_render_triangles[max_authoring_overlay_triangles];
+    static bool authoring_render_triangles_enabled =
+        SANDBOX3D_AUTHORING_RENDER_TRIANGLES_DEFAULT;
     size_t silhouette_count;
     size_t edge;
     bool component_selection_active;
@@ -5344,8 +5356,7 @@ static void sandbox3d_draw_selection_highlight(sandbox3d_state* state, henka_vie
         sandbox3d_entities_share_selection_owner(
             state,
             selected_entity,
-            sandbox3d_authoring_object_get_entity(state->authoring_object)) &&
-        sandbox3d_authoring_object_get_selected_component_count(state->authoring_object) > 0U;
+            sandbox3d_authoring_object_get_entity(state->authoring_object));
     memset(&gate, 0, sizeof(gate));
     gate.selected_object_present = selected_entity != HENKA_INVALID_ENTITY;
     gate.selected_object_valid =
@@ -5441,6 +5452,126 @@ static void sandbox3d_draw_selection_highlight(sandbox3d_state* state, henka_vie
                 sandbox3d_authoring_object_get_entity(state->authoring_object),
                 &transform) == HENKA_SUCCESS)
         {
+            size_t authoring_cage_edge_count = 0U;
+            size_t authoring_cage_edge_index;
+
+            if (sandbox3d_build_authoring_cage(
+                    mesh,
+                    authoring_cage_edges,
+                    sizeof(authoring_cage_edges) /
+                        sizeof(authoring_cage_edges[0]),
+                    &authoring_cage_edge_count) == HENKA_SUCCESS)
+            {
+                const henka_vec4 cage_color =
+                    (henka_vec4){
+                        0.40f,
+                        0.70f,
+                        0.86f,
+                        0.74f};
+
+                for (authoring_cage_edge_index = 0U;
+                     authoring_cage_edge_index <
+                         authoring_cage_edge_count;
+                     ++authoring_cage_edge_index)
+                {
+                    const sandbox3d_authoring_cage_edge*
+                        cage_edge =
+                            &authoring_cage_edges[
+                                authoring_cage_edge_index];
+
+                    const henka_authoring_vertex* first =
+                        henka_authoring_mesh_get_vertex(
+                            mesh,
+                            cage_edge->vertices[0]);
+
+                    const henka_authoring_vertex* second =
+                        henka_authoring_mesh_get_vertex(
+                            mesh,
+                            cage_edge->vertices[1]);
+
+                    henka_vec2 start;
+                    henka_vec2 end;
+
+                    if (first == NULL ||
+                        second == NULL ||
+                        !sandbox3d_project_handle_point(
+                            state,
+                            viewport,
+                            sandbox3d_transform_authoring_point(
+                                transform,
+                                first->position),
+                            &start) ||
+                        !sandbox3d_project_handle_point(
+                            state,
+                            viewport,
+                            sandbox3d_transform_authoring_point(
+                                transform,
+                                second->position),
+                            &end))
+                    {
+                        continue;
+                    }
+
+                    (void)
+                        sandbox3d_draw_viewport_clipped_overlay_line(
+                            state->ui,
+                            viewport,
+                            start,
+                            end,
+                            1.25f,
+                            cage_color);
+                }
+            }
+
+            if (authoring_render_triangles_enabled)
+            {
+                const henka_vec4 triangle_color =
+                    (henka_vec4){
+                        0.92f,
+                        0.43f,
+                        0.20f,
+                        0.66f};
+
+                size_t triangle_count = 0U;
+                size_t triangle_index;
+
+                sandbox3d_append_authoring_silhouette_triangles(
+                    state,
+                    viewport,
+                    transform,
+                    state->authoring_object,
+                    1U,
+                    authoring_render_triangles,
+                    sizeof(authoring_render_triangles) /
+                        sizeof(authoring_render_triangles[0]),
+                    &triangle_count);
+
+                for (triangle_index = 0U;
+                     triangle_index < triangle_count;
+                     ++triangle_index)
+                {
+                    size_t triangle_edge;
+
+                    for (triangle_edge = 0U;
+                         triangle_edge < 3U;
+                         ++triangle_edge)
+                    {
+                        (void)
+                            sandbox3d_draw_viewport_clipped_overlay_line(
+                                state->ui,
+                                viewport,
+                                authoring_render_triangles[
+                                    triangle_index]
+                                    .points[triangle_edge],
+                                authoring_render_triangles[
+                                    triangle_index]
+                                    .points[
+                                        (triangle_edge + 1U) % 3U],
+                                1.0f,
+                                triangle_color);
+                    }
+                }
+            }
             const henka_vec4 component_outer = (henka_vec4){0.01f, 0.03f, 0.05f, 0.95f};
             const henka_vec4 component_inner = selection_mode == SANDBOX3D_AUTHORING_SELECTION_VERTEX
                 ? (henka_vec4){1.0f, 0.78f, 0.16f, 1.0f}
@@ -5496,7 +5627,35 @@ static void sandbox3d_draw_selection_highlight(sandbox3d_state* state, henka_vie
                     selection_overlay.y + 7.0f,
                     1.0f,
                     selection_overlay_text,
-                    HENKA_UI_COLOR_NORMAL);
+                    HENKA_UI_COLOR_INFO);
+            }
+            if (viewport.width >= 430 &&
+                viewport.height >= 52)
+            {
+                (void)henka_ui_toggle(
+                    state->ui,
+                    "authoring_render_triangles_overlay",
+                    (henka_ui_rect){
+                        (float)viewport.x + 238.0f,
+                        (float)viewport.y + 12.0f,
+                        180.0f,
+                        28.0f},
+                    "Render Triangles",
+                    &authoring_render_triangles_enabled);
+            }
+            else if (viewport.width >= 240 &&
+                     viewport.height >= 84)
+            {
+                (void)henka_ui_toggle(
+                    state->ui,
+                    "authoring_render_triangles_overlay",
+                    (henka_ui_rect){
+                        (float)viewport.x + 12.0f,
+                        (float)viewport.y + 44.0f,
+                        214.0f,
+                        28.0f},
+                    "Render Triangles",
+                    &authoring_render_triangles_enabled);
             }
             for (selected_index = 0U; selected_index < selected_count; ++selected_index)
             {
@@ -12052,7 +12211,7 @@ static bool sandbox3d_load_workspace_topology_settings(
     }
     stored_version = henka_settings_get_int(
         settings, g_setting_key_workspace_topology_version, 0);
-    if (stored_version < 1 || stored_version > g_workspace_topology_settings_version)
+    if (stored_version != g_workspace_topology_settings_version)
     {
         return false;
     }
@@ -13091,6 +13250,12 @@ static void sandbox3d_apply_loaded_settings(henka_engine* engine, sandbox3d_stat
         {
             sandbox3d_workspace_reset_layout(
                 &state->workspace.model);
+            /* HENKA_WORKSPACE_RESET_VISIBILITY_V2
+             * A schema migration/reset must return to a usable
+             * editor shell, not Controls + viewport only. */
+            state->workspace.layout_mode = SANDBOX3D_LAYOUT_INSPECT;
+            state->workspace.scene_objects_panel_visible = true;
+            state->workspace.object_details_panel_visible = true;
             sandbox3d_save_workspace_panel_settings(
                 &state->workspace.model,
                 state->settings);
@@ -19543,12 +19708,14 @@ static void sandbox3d_draw_scene_objects_panel(
         if (state->native_authoring_source_row_reported_entity != entity &&
             sandbox3d_get_imported_source_primitive(state, entity) != NULL)
         {
-            printf(
+            if (getenv("HENKA_AUTOMATION_INPUT_OWNED") != NULL)             {
+                printf(
                 "Native authoring source row: name=%s x=%.1f y=%.1f width=%.1f height=28.0.\n",
                 entity_name,
                 panel_bounds.x + 14.0f,
                 row_y,
                 panel_bounds.width - 28.0f);
+            }
             fflush(stdout);
             state->native_authoring_source_row_reported_entity = entity;
         }
@@ -20694,12 +20861,12 @@ details_group_authoring:
                 }
                 else if (material_view.editor_binding != NULL)
                 {
-                    const float tint_x = row.x + row.width - 298.0f;
-                    const float metal_x = tint_x + 50.0f;
-                    const float rough_x = tint_x + 100.0f;
-                    const float emissive_x = tint_x + 150.0f;
-                    const float texture_x = tint_x + 200.0f;
-                    const float subsurface_x = tint_x + 250.0f;
+                    const float tint_x = row.x + row.width - 490.0f;
+                    const float metal_x = tint_x + 82.0f;
+                    const float rough_x = tint_x + 164.0f;
+                    const float emissive_x = tint_x + 246.0f;
+                    const float texture_x = tint_x + 328.0f;
+                    const float subsurface_x = tint_x + 410.0f;
                     if (!state->native_authoring_material_editor_reported)
                     {
                         printf(
@@ -20718,8 +20885,8 @@ details_group_authoring:
                     if (henka_ui_button(
                             state->ui,
                             "authoring_material_tint",
-                            (henka_ui_rect){tint_x, row.y, 48.0f, 24.0f},
-                            "Tint"))
+                            (henka_ui_rect){tint_x, row.y, 80.0f, 28.0f},
+                            "Color"))
                     {
                         const henka_material_instance_parameter previous_parameter =
                             state->material_editor_parameter;
@@ -20740,8 +20907,8 @@ details_group_authoring:
                     if (henka_ui_button(
                             state->ui,
                             "authoring_material_texture",
-                            (henka_ui_rect){texture_x, row.y, 48.0f, 24.0f},
-                            "Detail"))
+                            (henka_ui_rect){texture_x, row.y, 80.0f, 28.0f},
+                            "Texture"))
                     {
                         char detail_identity[96];
                         char surface_identity[96];
@@ -20784,8 +20951,8 @@ details_group_authoring:
                     if (henka_ui_button(
                             state->ui,
                             "authoring_material_metallic",
-                            (henka_ui_rect){metal_x, row.y, 48.0f, 24.0f},
-                            "Metal"))
+                            (henka_ui_rect){metal_x, row.y, 80.0f, 28.0f},
+                            "Metallic"))
                     {
                         if (sandbox3d_native_authoring_edit_scalar(
                                 state,
@@ -20802,8 +20969,8 @@ details_group_authoring:
                     if (henka_ui_button(
                             state->ui,
                             "authoring_material_roughness",
-                            (henka_ui_rect){rough_x, row.y, 48.0f, 24.0f},
-                            "Rough"))
+                            (henka_ui_rect){rough_x, row.y, 80.0f, 28.0f},
+                            "Roughness"))
                     {
                         if (sandbox3d_native_authoring_edit_scalar(
                                 state,
@@ -20820,8 +20987,8 @@ details_group_authoring:
                     if (henka_ui_button(
                             state->ui,
                             "authoring_material_emissive",
-                            (henka_ui_rect){emissive_x, row.y, 48.0f, 24.0f},
-                            "Emit"))
+                            (henka_ui_rect){emissive_x, row.y, 80.0f, 28.0f},
+                            "Emissive"))
                     {
                         if (sandbox3d_native_authoring_edit_scalar(
                                 state,
@@ -20838,8 +21005,8 @@ details_group_authoring:
                     if (henka_ui_button(
                             state->ui,
                             "authoring_material_subsurface",
-                            (henka_ui_rect){subsurface_x, row.y, 48.0f, 24.0f},
-                            "SSS") &&
+                            (henka_ui_rect){subsurface_x, row.y, 80.0f, 28.0f},
+                            "Subsurface") &&
                         sandbox3d_native_authoring_edit_scalar(
                             state,
                             material_view.editor_binding,
@@ -20898,7 +21065,7 @@ details_group_authoring:
                 if (henka_ui_button(
                         state->ui,
                         "authoring_material_ior_top",
-                        (henka_ui_rect){row.x, row.y, 48.0f, 24.0f},
+                        (henka_ui_rect){row.x, row.y, 80.0f, 28.0f},
                         "IOR"))
                 {
                     optical_result = sandbox3d_native_authoring_edit_scalar(
@@ -20915,7 +21082,7 @@ details_group_authoring:
                 if (henka_ui_button(
                         state->ui,
                         "authoring_material_transmission_top",
-                        (henka_ui_rect){transmission_x, row.y, 48.0f, 24.0f},
+                        (henka_ui_rect){transmission_x, row.y, 80.0f, 28.0f},
                         "Tx"))
                 {
                     optical_result = sandbox3d_native_authoring_edit_scalar(
@@ -20932,7 +21099,7 @@ details_group_authoring:
                 if (henka_ui_button(
                         state->ui,
                         "authoring_material_thickness_top",
-                        (henka_ui_rect){thickness_x, row.y, 48.0f, 24.0f},
+                        (henka_ui_rect){thickness_x, row.y, 80.0f, 28.0f},
                         "Thick"))
                 {
                     optical_result = sandbox3d_native_authoring_edit_scalar(
@@ -20949,7 +21116,7 @@ details_group_authoring:
                 if (henka_ui_button(
                         state->ui,
                         "authoring_material_subsurface_tint_top",
-                        (henka_ui_rect){subsurface_tint_x, row.y, 48.0f, 24.0f},
+                        (henka_ui_rect){subsurface_tint_x, row.y, 80.0f, 28.0f},
                         "SSS C"))
                 {
                     const henka_material_instance_parameter previous_parameter =
@@ -20990,7 +21157,7 @@ details_group_authoring:
                         state->ui,
                         "authoring_material_undo_top",
                         (henka_ui_rect){row.x, row.y, 140.0f, 24.0f},
-                        "Undo Mat") &&
+                        "Undo Material") &&
                     sandbox3d_material_history_undo(
                         state, material_view.editor_binding) == HENKA_SUCCESS)
                 {
@@ -21004,7 +21171,7 @@ details_group_authoring:
                         state->ui,
                         "authoring_material_redo_top",
                         (henka_ui_rect){row.x + 148.0f, row.y, 140.0f, 24.0f},
-                        "Redo Mat") &&
+                        "Redo Material") &&
                     sandbox3d_material_history_redo(
                         state, material_view.editor_binding) == HENKA_SUCCESS)
                 {
@@ -21034,7 +21201,57 @@ details_group_authoring:
                     state->native_authoring_profile_reported = true;
                     state->native_authoring_profile_reported_y = row.y;
                 }
+                /* HENKA_T2B_QUAD_REPAIR_UI_V1 */
                 if (henka_ui_button(
+                        state->ui,
+                        "authoring_quad_repair_top",
+                        (henka_ui_rect){row.x, row.y, row.width, 28.0f},
+                        "Recover Quads"))
+                {
+                    size_t recovered_pairs = 0U;
+                    const henka_result recovery_result =
+                        sandbox3d_authoring_object_recover_quads(
+                            state->authoring_object,
+                            0.94f,
+                            1.10f,
+                            0.0001f,
+                            &recovered_pairs);
+
+                    if (recovery_result == HENKA_SUCCESS &&
+                        recovered_pairs > 0U)
+                    {
+                        char status[160];
+
+                        snprintf(
+                            status,
+                            sizeof(status),
+                            "Quad Repair recovered %zu triangle pairs. Save Source to persist.",
+                            recovered_pairs);
+
+                        sandbox3d_set_status(state, false, status);
+
+                        printf(
+                            "Native authoring quad recovery: name=%s merged_pairs=%zu.\n",
+                            display_name,
+                            recovered_pairs);
+                        fflush(stdout);
+                    }
+                    else if (recovery_result == HENKA_SUCCESS)
+                    {
+                        sandbox3d_set_status(
+                            state,
+                            false,
+                            "No compatible triangle pairs remain.");
+                    }
+                    else
+                    {
+                        sandbox3d_set_status(
+                            state,
+                            true,
+                            "Quad Repair rejected; source retained.");
+                    }
+                }
+                if (false && henka_ui_button(
                         state->ui,
                         "authoring_refine_profile_top",
                         (henka_ui_rect){row.x, row.y, 180.0f, 24.0f},
@@ -21184,7 +21401,7 @@ details_group_authoring:
                     fflush(stdout);
                     state->native_authoring_bevel_reported = true;
                 }
-                if (henka_ui_button(
+                if (false && henka_ui_button(
                         state->ui,
                         "authoring_priority_bevel_compact",
                         (henka_ui_rect){row.x, row.y, 82.0f, 24.0f},
@@ -21247,7 +21464,7 @@ details_group_authoring:
                     row.x + 188.0f,
                     row.y);
                 fflush(stdout);
-                if (henka_ui_button(
+                if (false && henka_ui_button(
                         state->ui,
                         "authoring_delete_faces_compact",
                         (henka_ui_rect){row.x + 188.0f, row.y, 102.0f, 24.0f},
@@ -21826,7 +22043,7 @@ details_group_authoring:
                 if (henka_ui_button(
                         state->ui,
                         "authoring_material_ior",
-                        (henka_ui_rect){row.x, row.y, 48.0f, 24.0f},
+                        (henka_ui_rect){row.x, row.y, 80.0f, 28.0f},
                         "IOR"))
                 {
                     optical_result = sandbox3d_native_authoring_edit_scalar(
@@ -21854,8 +22071,8 @@ details_group_authoring:
                 if (henka_ui_button(
                         state->ui,
                         "authoring_material_transmission",
-                        (henka_ui_rect){transmission_x, row.y, 48.0f, 24.0f},
-                        "Tx"))
+                        (henka_ui_rect){transmission_x, row.y, 80.0f, 28.0f},
+                        "Transmission"))
                 {
                     optical_result = sandbox3d_native_authoring_edit_scalar(
                         state,
@@ -21882,8 +22099,8 @@ details_group_authoring:
                 if (henka_ui_button(
                         state->ui,
                         "authoring_material_thickness",
-                        (henka_ui_rect){thickness_x, row.y, 48.0f, 24.0f},
-                        "Thick"))
+                        (henka_ui_rect){thickness_x, row.y, 80.0f, 28.0f},
+                        "Thickness"))
                 {
                     optical_result = sandbox3d_native_authoring_edit_scalar(
                         state,
@@ -21910,8 +22127,8 @@ details_group_authoring:
                 if (henka_ui_button(
                         state->ui,
                         "authoring_material_subsurface_tint",
-                        (henka_ui_rect){subsurface_tint_x, row.y, 48.0f, 24.0f},
-                        "SSS C"))
+                        (henka_ui_rect){subsurface_tint_x, row.y, 80.0f, 28.0f},
+                        "SSS Tint"))
                 {
                     const henka_material_instance_parameter previous_parameter =
                         state->material_editor_parameter;
@@ -22172,7 +22389,7 @@ details_group_authoring:
                     state->native_authoring_connected_selection_reported = true;
                     state->native_authoring_connected_selection_reported_y = row.y;
                 }
-                if (henka_ui_button(
+                if (false && henka_ui_button(
                         state->ui,
                         "authoring_select_connected",
                         (henka_ui_rect){row.x, row.y, 140.0f, 24.0f},
@@ -22271,6 +22488,55 @@ details_group_authoring:
                 }
                 if (henka_ui_button(
                         state->ui,
+                        "authoring_quad_repair",
+                        (henka_ui_rect){row.x, row.y, row.width, 28.0f},
+                        "Recover Quads"))
+                {
+                    size_t recovered_pairs = 0U;
+                    const henka_result recovery_result =
+                        sandbox3d_authoring_object_recover_quads(
+                            state->authoring_object,
+                            0.94f,
+                            1.10f,
+                            0.0001f,
+                            &recovered_pairs);
+
+                    if (recovery_result == HENKA_SUCCESS &&
+                        recovered_pairs > 0U)
+                    {
+                        char status[160];
+
+                        snprintf(
+                            status,
+                            sizeof(status),
+                            "Quad Repair recovered %zu triangle pairs. Save Source to persist.",
+                            recovered_pairs);
+
+                        sandbox3d_set_status(state, false, status);
+
+                        printf(
+                            "Native authoring quad recovery: name=%s merged_pairs=%zu.\n",
+                            display_name,
+                            recovered_pairs);
+                        fflush(stdout);
+                    }
+                    else if (recovery_result == HENKA_SUCCESS)
+                    {
+                        sandbox3d_set_status(
+                            state,
+                            false,
+                            "No compatible triangle pairs remain.");
+                    }
+                    else
+                    {
+                        sandbox3d_set_status(
+                            state,
+                            true,
+                            "Quad Repair rejected; source retained.");
+                    }
+                }
+                if (false && henka_ui_button(
+                        state->ui,
                         "authoring_refine_profile",
                         (henka_ui_rect){row.x, row.y, 180.0f, 24.0f},
                         "Refine Profile"))
@@ -22316,7 +22582,7 @@ details_group_authoring:
                         fflush(stdout);
                         state->native_authoring_bevel_reported = true;
                     }
-                    if (henka_ui_button(
+                    if (false && henka_ui_button(
                             state->ui,
                             "authoring_priority_bevel",
                             (henka_ui_rect){row.x + 188.0f, row.y, 82.0f, 24.0f},
@@ -22354,7 +22620,7 @@ details_group_authoring:
                         state->ui,
                         "authoring_material_undo",
                         (henka_ui_rect){row.x, row.y, 140.0f, 24.0f},
-                        "Undo Mat") &&
+                        "Undo Material") &&
                     sandbox3d_material_history_undo(
                         state,
                         material_view.editor_binding) == HENKA_SUCCESS)
@@ -22369,7 +22635,7 @@ details_group_authoring:
                         state->ui,
                         "authoring_material_redo",
                         (henka_ui_rect){row.x + 148.0f, row.y, 140.0f, 24.0f},
-                        "Redo Mat") &&
+                        "Redo Material") &&
                     sandbox3d_material_history_redo(
                         state,
                         material_view.editor_binding) == HENKA_SUCCESS)
@@ -22460,7 +22726,7 @@ details_group_authoring:
                     fflush(stdout);
                     state->native_authoring_bevel_reported = true;
                 }
-                if (henka_ui_button(
+                if (false && henka_ui_button(
                         state->ui,
                         "authoring_bevel",
                         (henka_ui_rect){row.x, row.y, 82.0f, 24.0f},
@@ -24630,11 +24896,27 @@ static henka_result sandbox3d_initialize(henka_engine* engine, void* user_data)
     {
         goto fail;
     }
+    /* HENKA_GRAPHITE_MAIN_UI_V1 */
+    result = henka_ui_set_theme(
+        state->ui,
+        HENKA_UI_THEME_DARK);
+    if (result != HENKA_SUCCESS)
+    {
+        return result;
+    }
 
     result = henka_ui_create(&state->native_panel_ui);
     if (result != HENKA_SUCCESS)
     {
         goto fail;
+    }
+    /* HENKA_GRAPHITE_NATIVE_PANEL_UI_V1 */
+    result = henka_ui_set_theme(
+        state->native_panel_ui,
+        HENKA_UI_THEME_DARK);
+    if (result != HENKA_SUCCESS)
+    {
+        return result;
     }
 
     henka_ui_set_visible(state->native_panel_ui, true);
@@ -24645,6 +24927,14 @@ static henka_result sandbox3d_initialize(henka_engine* engine, void* user_data)
         if (result != HENKA_SUCCESS)
         {
             goto fail;
+        }
+        /* HENKA_GRAPHITE_DETACHED_PANEL_UI_V1 */
+        result = henka_ui_set_theme(
+            state->detached_panel_ui[panel_index],
+            HENKA_UI_THEME_DARK);
+        if (result != HENKA_SUCCESS)
+        {
+            return result;
         }
         henka_ui_set_visible(state->detached_panel_ui[panel_index], true);
         state->detached_panel_window_ids[panel_index] = HENKA_INVALID_WINDOW_ID;

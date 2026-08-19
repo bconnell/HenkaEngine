@@ -5,8 +5,10 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include <henka/authoring_mesh.h>
 #include <henka/gizmo.h>
 #include <henka/math.h>
+#include <henka/result.h>
 #include <henka/ui.h>
 
 typedef enum sandbox3d_viewport_tool_mode
@@ -122,6 +124,18 @@ bool sandbox3d_should_prefer_terrain_hit(
     float terrain_distance,
     bool object_hit,
     float object_distance);
+#define SANDBOX3D_AUTHORING_RENDER_TRIANGLES_DEFAULT false
+
+typedef struct sandbox3d_authoring_cage_edge
+{
+    henka_authoring_vertex_id vertices[2];
+} sandbox3d_authoring_cage_edge;
+
+henka_result sandbox3d_build_authoring_cage(
+    const henka_authoring_mesh* mesh,
+    sandbox3d_authoring_cage_edge* out_edges,
+    size_t edge_capacity,
+    size_t* out_edge_count);
 bool sandbox3d_selection_highlight_is_allowed(const sandbox3d_interaction_gate* gate);
 henka_vec3 sandbox3d_make_move_delta(henka_gizmo_axis axis, float magnitude);
 henka_quat sandbox3d_make_rotation_delta(henka_gizmo_axis axis, float radians);

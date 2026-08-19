@@ -1216,6 +1216,69 @@ const henka_authoring_mesh* sandbox3d_authoring_object_get_mesh(const sandbox3d_
     return object == NULL ? NULL : object->mesh;
 }
 
+henka_result sandbox3d_authoring_object_recover_quads(
+    sandbox3d_authoring_object* object,
+    float minimum_normal_dot,
+    float minimum_diagonal_ratio,
+    float uv_epsilon,
+    size_t* out_recovered_pairs)
+{
+    henka_authoring_mesh* candidate = NULL;
+    size_t recovered_pairs = 0U;
+    henka_result result;
+
+    if (out_recovered_pairs != NULL)
+    {
+        *out_recovered_pairs = 0U;
+    }
+
+    if (object == NULL || out_recovered_pairs == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    result = henka_authoring_mesh_clone(object->mesh, &candidate);
+    if (result != HENKA_SUCCESS)
+    {
+        return result;
+    }
+
+    result = henka_authoring_mesh_recover_quads(
+        candidate,
+        minimum_normal_dot,
+        minimum_diagonal_ratio,
+        uv_epsilon,
+        &recovered_pairs);
+
+    if (result != HENKA_SUCCESS)
+    {
+        henka_authoring_mesh_destroy(candidate);
+        return result;
+    }
+
+    if (recovered_pairs == 0U)
+    {
+        henka_authoring_mesh_destroy(candidate);
+        return HENKA_SUCCESS;
+    }
+
+    result = sandbox3d_authoring_publish_candidate(
+        object,
+        candidate,
+        true,
+        HENKA_AUTHORING_INVALID_ID);
+
+    if (result != HENKA_SUCCESS)
+    {
+        henka_authoring_mesh_destroy(candidate);
+        return result;
+    }
+
+    sandbox3d_authoring_object_clear_component_selection(object);
+
+    *out_recovered_pairs = recovered_pairs;
+    return HENKA_SUCCESS;
+}
 henka_result sandbox3d_authoring_object_get_face_ordered_corners(
     const sandbox3d_authoring_object* object,
     henka_authoring_face_id face_id,

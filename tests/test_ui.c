@@ -5,9 +5,141 @@
 #include <string.h>
 
 #include <henka/ui.h>
+#include "../engine/src/ui/ui_internal.h"
+
+static void henka_test_ui_theme_is_light_by_default_and_context_local(void)
+{
+    henka_ui_context* first = NULL;
+    henka_ui_context* second = NULL;
+
+    HENKA_TEST_ASSERT(henka_ui_create(&first) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_ui_create(&second) == HENKA_SUCCESS);
+
+    HENKA_TEST_ASSERT(henka_ui_get_theme(first) == HENKA_UI_THEME_LIGHT);
+    HENKA_TEST_ASSERT(henka_ui_get_theme(second) == HENKA_UI_THEME_LIGHT);
+
+    HENKA_TEST_ASSERT(
+        henka_ui_set_theme(first, HENKA_UI_THEME_DARK) == HENKA_SUCCESS);
+
+    HENKA_TEST_ASSERT(henka_ui_get_theme(first) == HENKA_UI_THEME_DARK);
+    HENKA_TEST_ASSERT(henka_ui_get_theme(second) == HENKA_UI_THEME_LIGHT);
+
+    HENKA_TEST_ASSERT(
+        henka_ui_set_theme(
+            first,
+            (henka_ui_theme)99) == HENKA_ERROR_INVALID_ARGUMENT);
+
+    HENKA_TEST_ASSERT(henka_ui_get_theme(first) == HENKA_UI_THEME_DARK);
+
+    henka_ui_destroy(second);
+    henka_ui_destroy(first);
+}
+
+static void henka_test_ui_control_chrome_contract(void)
+{
+    bool toggle_value = false;
+    henka_ui_context* ui = NULL;
+    henka_ui_frame_desc frame_desc = {0};
+    henka_ui_rect bounds;
+    size_t base;
+
+    HENKA_TEST_ASSERT(henka_ui_create(&ui) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(ui != NULL);
+    henka_ui_set_visible(ui, true);
+
+    frame_desc.framebuffer_width = 640;
+    frame_desc.framebuffer_height = 480;
+    frame_desc.mouse_position = (henka_vec2){600.0f, 440.0f};
+
+    HENKA_TEST_ASSERT(
+        henka_ui_begin_frame(ui, &frame_desc) == HENKA_SUCCESS);
+
+    bounds = (henka_ui_rect){20.0f, 20.0f, 120.0f, 28.0f};
+    base = ui->draw_rect_count;
+    HENKA_TEST_ASSERT(
+        !henka_ui_button(ui, "chrome_button", bounds, "A"));
+    HENKA_TEST_ASSERT(ui->draw_rect_count >= base + 5U);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(
+        ui->draw_rects[base + 1U].bounds.x, bounds.x, 0.0001f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(
+        ui->draw_rects[base + 1U].bounds.y, bounds.y, 0.0001f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(
+        ui->draw_rects[base + 1U].bounds.width, bounds.width, 0.0001f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(
+        ui->draw_rects[base + 1U].bounds.height, 1.0f, 0.0001f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(
+        ui->draw_rects[base + 2U].bounds.y,
+        bounds.y + bounds.height - 1.0f,
+        0.0001f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(
+        ui->draw_rects[base + 3U].bounds.width, 1.0f, 0.0001f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(
+        ui->draw_rects[base + 4U].bounds.x,
+        bounds.x + bounds.width - 1.0f,
+        0.0001f);
+
+    bounds = (henka_ui_rect){20.0f, 60.0f, 120.0f, 24.0f};
+    base = ui->draw_rect_count;
+    HENKA_TEST_ASSERT(
+        !henka_ui_tab(ui, "chrome_tab", bounds, "Tab", true));
+    HENKA_TEST_ASSERT(ui->draw_rect_count >= base + 6U);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(
+        ui->draw_rects[base + 1U].bounds.y, bounds.y, 0.0001f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(
+        ui->draw_rects[base + 1U].bounds.height, 1.0f, 0.0001f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(
+        ui->draw_rects[base + 5U].bounds.height, 2.0f, 0.0001f);
+
+    bounds = (henka_ui_rect){20.0f, 100.0f, 140.0f, 30.0f};
+    base = ui->draw_rect_count;
+    HENKA_TEST_ASSERT(
+        !henka_ui_toggle(
+            ui,
+            "chrome_toggle",
+            bounds,
+            "Grid",
+            &toggle_value));
+    HENKA_TEST_ASSERT(ui->draw_rect_count >= base + 9U);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(
+        ui->draw_rects[base + 3U].bounds.x,
+        bounds.x + bounds.width - 42.0f,
+        0.0001f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(
+        ui->draw_rects[base + 3U].bounds.y,
+        bounds.y + (bounds.height - 16.0f) * 0.5f,
+        0.0001f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(
+        ui->draw_rects[base + 3U].bounds.width, 32.0f, 0.0001f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(
+        ui->draw_rects[base + 3U].bounds.height, 1.0f, 0.0001f);
+
+    bounds = (henka_ui_rect){20.0f, 140.0f, 160.0f, 22.0f};
+    base = ui->draw_rect_count;
+    HENKA_TEST_ASSERT(
+        henka_ui_value_row(ui, bounds, "Position", "0.0") ==
+        HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(ui->draw_rect_count >= base + 7U);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(
+        ui->draw_rects[base + 2U].bounds.x,
+        bounds.x + bounds.width * 0.38f,
+        0.0001f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(
+        ui->draw_rects[base + 2U].bounds.y,
+        bounds.y + 2.0f,
+        0.0001f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(
+        ui->draw_rects[base + 2U].bounds.height,
+        bounds.height - 4.0f,
+        0.0001f);
+
+    HENKA_TEST_ASSERT(henka_ui_end_frame(ui) == HENKA_SUCCESS);
+    henka_ui_destroy(ui);
+}
 
 void henka_test_ui(void)
 {
+    henka_test_ui_theme_is_light_by_default_and_context_local();
+    henka_test_ui_control_chrome_contract();
     bool toggle_value;
     henka_result result;
     henka_ui_context* ui;

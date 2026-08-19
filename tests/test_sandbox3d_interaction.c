@@ -6,8 +6,138 @@
 #include "../examples/sandbox3d/interaction_tools.h"
 #include "../examples/sandbox3d/terrain_autosave.h"
 
+static void henka_test_sandbox3d_authoring_cage_overlay(void)
+{
+    const char* test_marker =
+        "HENKA_T1B_AUTHORING_CAGE_TEST_V1";
+    henka_authoring_mesh_desc desc;
+    henka_authoring_mesh* mesh = NULL;
+    henka_authoring_vertex_id vertices[4];
+    henka_authoring_face_id face_id = 0U;
+    sandbox3d_authoring_cage_edge cage_edges[8];
+    size_t cage_edge_count;
+    size_t index;
+    bool diagonal_02 = false;
+    bool diagonal_13 = false;
+
+    HENKA_TEST_ASSERT(
+        strcmp(
+            test_marker,
+            "HENKA_T1B_AUTHORING_CAGE_TEST_V1") == 0);
+
+    HENKA_TEST_ASSERT(
+        !SANDBOX3D_AUTHORING_RENDER_TRIANGLES_DEFAULT);
+
+    desc = henka_authoring_mesh_desc_default();
+    desc.max_vertices = 8U;
+    desc.max_edges = 8U;
+    desc.max_faces = 2U;
+    desc.max_face_corners = 4U;
+
+    HENKA_TEST_ASSERT(
+        henka_authoring_mesh_create(
+            &desc,
+            &mesh) == HENKA_SUCCESS);
+
+    HENKA_TEST_ASSERT(
+        henka_authoring_mesh_add_vertex(
+            mesh,
+            (henka_vec3){-1.0f, -1.0f, 0.0f},
+            (henka_vec2){0.0f, 0.0f},
+            0U,
+            &vertices[0]) == HENKA_SUCCESS);
+
+    HENKA_TEST_ASSERT(
+        henka_authoring_mesh_add_vertex(
+            mesh,
+            (henka_vec3){1.0f, -1.0f, 0.0f},
+            (henka_vec2){1.0f, 0.0f},
+            0U,
+            &vertices[1]) == HENKA_SUCCESS);
+
+    HENKA_TEST_ASSERT(
+        henka_authoring_mesh_add_vertex(
+            mesh,
+            (henka_vec3){1.0f, 1.0f, 0.0f},
+            (henka_vec2){1.0f, 1.0f},
+            0U,
+            &vertices[2]) == HENKA_SUCCESS);
+
+    HENKA_TEST_ASSERT(
+        henka_authoring_mesh_add_vertex(
+            mesh,
+            (henka_vec3){-1.0f, 1.0f, 0.0f},
+            (henka_vec2){0.0f, 1.0f},
+            0U,
+            &vertices[3]) == HENKA_SUCCESS);
+
+    HENKA_TEST_ASSERT(
+        henka_authoring_mesh_add_face(
+            mesh,
+            vertices,
+            4U,
+            0U,
+            false,
+            &face_id) == HENKA_SUCCESS);
+
+    cage_edge_count = 99U;
+
+    HENKA_TEST_ASSERT(
+        sandbox3d_build_authoring_cage(
+            mesh,
+            cage_edges,
+            sizeof(cage_edges) / sizeof(cage_edges[0]),
+            &cage_edge_count) == HENKA_SUCCESS);
+
+    HENKA_TEST_ASSERT(cage_edge_count == 4U);
+
+    for (index = 0U;
+         index < cage_edge_count;
+         ++index)
+    {
+        const henka_authoring_vertex_id first =
+            cage_edges[index].vertices[0];
+
+        const henka_authoring_vertex_id second =
+            cage_edges[index].vertices[1];
+
+        if ((first == vertices[0] &&
+             second == vertices[2]) ||
+            (first == vertices[2] &&
+             second == vertices[0]))
+        {
+            diagonal_02 = true;
+        }
+
+        if ((first == vertices[1] &&
+             second == vertices[3]) ||
+            (first == vertices[3] &&
+             second == vertices[1]))
+        {
+            diagonal_13 = true;
+        }
+    }
+
+    HENKA_TEST_ASSERT(!diagonal_02);
+    HENKA_TEST_ASSERT(!diagonal_13);
+
+    cage_edge_count = 99U;
+
+    HENKA_TEST_ASSERT(
+        sandbox3d_build_authoring_cage(
+            mesh,
+            cage_edges,
+            3U,
+            &cage_edge_count) ==
+        HENKA_ERROR_INVALID_ARGUMENT);
+
+    HENKA_TEST_ASSERT(cage_edge_count == 0U);
+
+    henka_authoring_mesh_destroy(mesh);
+}
 void henka_test_sandbox3d_interaction(void)
 {
+    henka_test_sandbox3d_authoring_cage_overlay();
     double autosave_elapsed_seconds = 0.0;
     henka_camera camera;
     henka_quat rotation_delta;

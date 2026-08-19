@@ -162,7 +162,8 @@ void henka_test_camera(void)
 
     bounds = (henka_bounds){{1.0f, 2.0f, 3.0f}, {2.0f, 1.0f, 3.0f}};
     HENKA_TEST_ASSERT(henka_camera_frame_bounds(&camera, bounds, camera.yaw_radians, camera.pitch_radians));
-    HENKA_TEST_ASSERT(camera.orthographic_height > 8.0f);
+    HENKA_TEST_ASSERT(camera.orthographic_height > 3.5f);
+    HENKA_TEST_ASSERT(camera.orthographic_height < 4.5f);
     HENKA_TEST_ASSERT(henka_camera_world_to_screen(&camera, 1280, 720, bounds.center, &screen_point, NULL) == HENKA_SUCCESS);
     HENKA_TEST_ASSERT_FLOAT_CLOSE(screen_point.x, 640.0f, 0.5f);
     HENKA_TEST_ASSERT_FLOAT_CLOSE(screen_point.y, 360.0f, 0.5f);

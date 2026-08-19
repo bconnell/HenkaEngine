@@ -817,9 +817,168 @@ static void henka_test_sandbox3d_object_authoring_component_selection(void)
     henka_engine_destroy(engine);
 }
 
+/* HENKA_T2B_QUAD_WORKFLOW_TEST_V1 */
+static void henka_test_sandbox3d_object_authoring_quad_recovery_workflow(void)
+{
+    henka_engine_config config = {0};
+    henka_engine* engine = NULL;
+    henka_scene* scene = NULL;
+    henka_mesh* previous_mesh = NULL;
+    henka_authoring_mesh* source = NULL;
+    sandbox3d_authoring_object* object = NULL;
+    henka_entity entity;
+    henka_authoring_mesh_desc desc = {16U, 32U, 16U, 8U};
+    henka_authoring_vertex_id vertices[4];
+    henka_authoring_vertex_id first[3];
+    henka_authoring_vertex_id second[3];
+    henka_authoring_face_id face_id;
+    henka_authoring_mesh_counts counts;
+    size_t recovered = 0U;
+
+    config.application_name = "Henka Quad Recovery Workflow Test";
+    config.window_width = 320;
+    config.window_height = 240;
+    config.enable_vsync = false;
+
+    HENKA_TEST_ASSERT(
+        henka_engine_create(&config, &engine) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(
+        henka_scene_create(&scene) == HENKA_SUCCESS);
+
+    entity = henka_scene_create_entity_named(
+        scene,
+        "Quad Recovery Object");
+
+    HENKA_TEST_ASSERT(entity != HENKA_INVALID_ENTITY);
+
+    HENKA_TEST_ASSERT(
+        henka_mesh_create_cube(engine, &previous_mesh) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(
+        henka_scene_set_entity_mesh(
+            scene,
+            entity,
+            previous_mesh) == HENKA_SUCCESS);
+
+    HENKA_TEST_ASSERT(
+        henka_authoring_mesh_create(
+            &desc,
+            &source) == HENKA_SUCCESS);
+
+    HENKA_TEST_ASSERT(
+        henka_authoring_mesh_add_vertex(
+            source,
+            (henka_vec3){-1.0f, 0.0f, -1.0f},
+            (henka_vec2){0.0f, 0.0f},
+            0U,
+            &vertices[0]) == HENKA_SUCCESS);
+
+    HENKA_TEST_ASSERT(
+        henka_authoring_mesh_add_vertex(
+            source,
+            (henka_vec3){1.0f, 0.0f, -1.0f},
+            (henka_vec2){1.0f, 0.0f},
+            0U,
+            &vertices[1]) == HENKA_SUCCESS);
+
+    HENKA_TEST_ASSERT(
+        henka_authoring_mesh_add_vertex(
+            source,
+            (henka_vec3){1.0f, 0.0f, 1.0f},
+            (henka_vec2){1.0f, 1.0f},
+            0U,
+            &vertices[2]) == HENKA_SUCCESS);
+
+    HENKA_TEST_ASSERT(
+        henka_authoring_mesh_add_vertex(
+            source,
+            (henka_vec3){-1.0f, 0.0f, 1.0f},
+            (henka_vec2){0.0f, 1.0f},
+            0U,
+            &vertices[3]) == HENKA_SUCCESS);
+
+    first[0] = vertices[0];
+    first[1] = vertices[1];
+    first[2] = vertices[2];
+
+    second[0] = vertices[0];
+    second[1] = vertices[2];
+    second[2] = vertices[3];
+
+    HENKA_TEST_ASSERT(
+        henka_authoring_mesh_add_face(
+            source,
+            first,
+            3U,
+            0U,
+            true,
+            &face_id) == HENKA_SUCCESS);
+
+    HENKA_TEST_ASSERT(
+        henka_authoring_mesh_add_face(
+            source,
+            second,
+            3U,
+            0U,
+            true,
+            &face_id) == HENKA_SUCCESS);
+
+    HENKA_TEST_ASSERT(
+        sandbox3d_authoring_object_create_from_mesh(
+            engine,
+            scene,
+            entity,
+            source,
+            8U,
+            &object) == HENKA_SUCCESS);
+
+    HENKA_TEST_ASSERT(
+        sandbox3d_authoring_object_recover_quads(
+            object,
+            0.94f,
+            1.10f,
+            0.0001f,
+            &recovered) == HENKA_SUCCESS);
+
+    HENKA_TEST_ASSERT(recovered == 1U);
+
+    counts = henka_authoring_mesh_get_counts(
+        sandbox3d_authoring_object_get_mesh(object));
+
+    HENKA_TEST_ASSERT(counts.vertices == 4U);
+    HENKA_TEST_ASSERT(counts.edges == 4U);
+    HENKA_TEST_ASSERT(counts.faces == 1U);
+    HENKA_TEST_ASSERT(
+        sandbox3d_authoring_object_get_selected_component_count(object) == 0U);
+
+    HENKA_TEST_ASSERT(
+        sandbox3d_authoring_object_undo(object) == HENKA_SUCCESS);
+
+    counts = henka_authoring_mesh_get_counts(
+        sandbox3d_authoring_object_get_mesh(object));
+
+    HENKA_TEST_ASSERT(counts.faces == 2U);
+    HENKA_TEST_ASSERT(counts.edges == 5U);
+
+    HENKA_TEST_ASSERT(
+        sandbox3d_authoring_object_redo(object) == HENKA_SUCCESS);
+
+    counts = henka_authoring_mesh_get_counts(
+        sandbox3d_authoring_object_get_mesh(object));
+
+    HENKA_TEST_ASSERT(counts.faces == 1U);
+    HENKA_TEST_ASSERT(counts.edges == 4U);
+
+    sandbox3d_authoring_object_destroy(object);
+    henka_authoring_mesh_destroy(source);
+    henka_mesh_destroy(previous_mesh);
+    henka_scene_destroy(scene);
+    henka_engine_destroy(engine);
+}
+
 void henka_test_sandbox3d_object_authoring(void)
 {
     henka_test_sandbox3d_object_authoring_scene_policy();
+    henka_test_sandbox3d_object_authoring_quad_recovery_workflow();
     henka_test_sandbox3d_object_authoring_duplicate();
     henka_test_sandbox3d_object_authoring_source_persistence();
     henka_test_sandbox3d_object_authoring_clone_bridge();

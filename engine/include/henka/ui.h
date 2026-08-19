@@ -9,6 +9,12 @@
 
 typedef struct henka_ui_context henka_ui_context;
 
+typedef enum henka_ui_theme
+{
+    HENKA_UI_THEME_LIGHT = 0,
+    HENKA_UI_THEME_DARK
+} henka_ui_theme;
+
 typedef struct henka_ui_rect
 {
     float x;
@@ -130,6 +136,11 @@ henka_result henka_ui_disclosure_row(
     bool* expanded,
     bool* out_changed);
 henka_result henka_ui_create(henka_ui_context** out_context);
+henka_result henka_ui_set_theme(
+    henka_ui_context* context,
+    henka_ui_theme theme);
+henka_ui_theme henka_ui_get_theme(
+    const henka_ui_context* context);
 void henka_ui_destroy(henka_ui_context* context);
 henka_result henka_ui_begin_frame(henka_ui_context* context, const henka_ui_frame_desc* frame_desc);
 henka_result henka_ui_end_frame(henka_ui_context* context);

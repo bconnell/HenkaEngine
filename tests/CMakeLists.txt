@@ -57,6 +57,33 @@ henka_enable_project_warnings(henka_authoring_mesh_tests)
 
 add_test(NAME henka_authoring_mesh_tests COMMAND henka_authoring_mesh_tests)
 
+add_executable(henka_authoring_topology_tests
+    test_authoring_topology.c
+)
+
+target_link_libraries(henka_authoring_topology_tests
+    PRIVATE
+        henka_runtime
+)
+
+henka_enable_project_warnings(henka_authoring_topology_tests)
+
+add_test(
+    NAME henka_authoring_topology_tests
+    COMMAND henka_authoring_topology_tests
+)
+
+add_executable(henka_authoring_topology_report
+    authoring_topology_report.c
+)
+
+target_link_libraries(henka_authoring_topology_report
+    PRIVATE
+        henka_runtime
+)
+
+henka_enable_project_warnings(henka_authoring_topology_report)
+
 add_executable(henka_terrain_storage_tests
     test_terrain_storage.c
 )
@@ -329,6 +356,7 @@ add_executable(henka_tests
     test_sandbox3d_workspace.c
     test_sandbox3d_editor_ui.c
     test_sandbox3d_camera_tools.c
+    test_camera_hardening.c
     test_sandbox3d_object_details.c
     test_sandbox3d_object_authoring.c
     test_sandbox3d_asset_browser.c
@@ -370,3 +398,18 @@ if(HENKA_TEST_NAMES)
     set(HENKA_TEST_WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}")
     set_tests_properties(${HENKA_TEST_NAMES} PROPERTIES WORKING_DIRECTORY "${HENKA_TEST_WORKING_DIRECTORY}")
 endif()
+add_executable(henka_authoring_quad_recovery_tests
+    test_authoring_quad_recovery.c
+)
+
+target_link_libraries(henka_authoring_quad_recovery_tests
+    PRIVATE
+        henka_runtime
+)
+
+henka_enable_project_warnings(henka_authoring_quad_recovery_tests)
+
+add_test(
+    NAME henka_authoring_quad_recovery_tests
+    COMMAND henka_authoring_quad_recovery_tests
+)

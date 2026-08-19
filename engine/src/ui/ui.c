@@ -342,32 +342,134 @@ static const henka_ui_glyph g_ui_glyphs[] =
     { '?', {0x0E, 0x11, 0x01, 0x02, 0x04, 0, 0x04} }
 };
 
-static const henka_vec4 g_ui_panel_fill = {0.050f, 0.056f, 0.066f, 0.985f};
-static const henka_vec4 g_ui_panel_header_fill = {0.072f, 0.080f, 0.094f, 0.995f};
-static const henka_vec4 g_ui_panel_border = {0.19f, 0.22f, 0.27f, 1.0f};
-static const henka_vec4 g_ui_panel_separator = {0.14f, 0.17f, 0.21f, 1.0f};
-static const henka_vec4 g_ui_text_color = {0.88f, 0.91f, 0.94f, 1.0f};
-static const henka_vec4 g_ui_heading_color = {0.66f, 0.78f, 0.89f, 1.0f};
-static const henka_vec4 g_ui_button_fill = {0.095f, 0.108f, 0.128f, 0.995f};
-static const henka_vec4 g_ui_button_hover = {0.15f, 0.18f, 0.22f, 1.0f};
-static const henka_vec4 g_ui_button_active = {0.10f, 0.145f, 0.185f, 1.0f};
-static const henka_vec4 g_ui_primary_fill = {0.16f, 0.285f, 0.365f, 1.0f};
-static const henka_vec4 g_ui_primary_hover = {0.22f, 0.39f, 0.50f, 1.0f};
-static const henka_vec4 g_ui_primary_active = {0.12f, 0.235f, 0.315f, 1.0f};
-static const henka_vec4 g_ui_tab_fill = {0.072f, 0.082f, 0.098f, 1.0f};
-static const henka_vec4 g_ui_tab_hover = {0.13f, 0.16f, 0.20f, 1.0f};
-static const henka_vec4 g_ui_tab_active = {0.17f, 0.31f, 0.40f, 1.0f};
-static const henka_vec4 g_ui_selected_fill = {0.14f, 0.265f, 0.345f, 1.0f};
-static const henka_vec4 g_ui_selected_hover = {0.21f, 0.37f, 0.47f, 1.0f};
-static const henka_vec4 g_ui_toggle_on = {0.20f, 0.57f, 0.39f, 1.0f};
-static const henka_vec4 g_ui_toggle_off = {0.47f, 0.24f, 0.27f, 1.0f};
-static const henka_vec4 g_ui_value_fill = {0.068f, 0.078f, 0.093f, 1.0f};
-static const henka_vec4 g_ui_row_fill = {0.064f, 0.074f, 0.088f, 0.995f};
-static const henka_vec4 g_ui_status_fill = {0.15f, 0.39f, 0.28f, 1.0f};
-static const henka_vec4 g_ui_status_warning_fill = {0.56f, 0.36f, 0.14f, 1.0f};
-static const henka_vec4 g_ui_muted_text_color = {0.53f, 0.59f, 0.66f, 1.0f};
-static const henka_vec4 g_ui_hint_fill = {0.045f, 0.050f, 0.060f, 0.94f};
-static const henka_vec4 g_ui_hint_border = {0.20f, 0.24f, 0.29f, 0.98f};
+typedef struct henka_ui_palette
+{
+    henka_vec4 panel_fill;
+    henka_vec4 panel_header_fill;
+    henka_vec4 panel_border;
+    henka_vec4 panel_separator;
+    henka_vec4 text_color;
+    henka_vec4 heading_color;
+    henka_vec4 button_fill;
+    henka_vec4 button_hover;
+    henka_vec4 button_active;
+    henka_vec4 primary_fill;
+    henka_vec4 primary_hover;
+    henka_vec4 primary_active;
+    henka_vec4 tab_fill;
+    henka_vec4 tab_hover;
+    henka_vec4 tab_active;
+    henka_vec4 selected_fill;
+    henka_vec4 selected_hover;
+    henka_vec4 toggle_on;
+    henka_vec4 toggle_off;
+    henka_vec4 value_fill;
+    henka_vec4 row_fill;
+    henka_vec4 status_fill;
+    henka_vec4 status_warning_fill;
+    henka_vec4 muted_text_color;
+    henka_vec4 hint_fill;
+    henka_vec4 hint_border;
+} henka_ui_palette;
+
+static const henka_ui_palette g_ui_light_palette =
+{
+    {0.882f, 0.894f, 0.906f, 0.985f},
+    {0.800f, 0.824f, 0.843f, 0.995f},
+    {0.663f, 0.694f, 0.722f, 1.000f},
+    {0.753f, 0.776f, 0.796f, 1.000f},
+    {0.145f, 0.169f, 0.188f, 1.000f},
+    {0.200f, 0.294f, 0.357f, 1.000f},
+    {0.933f, 0.941f, 0.949f, 0.995f},
+    {0.886f, 0.910f, 0.925f, 1.000f},
+    {0.835f, 0.894f, 0.929f, 1.000f},
+    {0.784f, 0.863f, 0.914f, 1.000f},
+    {0.718f, 0.824f, 0.890f, 1.000f},
+    {0.663f, 0.784f, 0.863f, 1.000f},
+    {0.847f, 0.867f, 0.882f, 1.000f},
+    {0.804f, 0.851f, 0.882f, 1.000f},
+    {0.784f, 0.863f, 0.914f, 1.000f},
+    {0.784f, 0.863f, 0.914f, 1.000f},
+    {0.718f, 0.824f, 0.890f, 1.000f},
+    {0.184f, 0.443f, 0.592f, 1.000f},
+    {0.714f, 0.741f, 0.765f, 1.000f},
+    {0.953f, 0.957f, 0.961f, 1.000f},
+    {0.910f, 0.922f, 0.929f, 0.995f},
+    {0.847f, 0.925f, 0.867f, 1.000f},
+    {0.949f, 0.890f, 0.722f, 1.000f},
+    {0.373f, 0.412f, 0.447f, 1.000f},
+    {0.961f, 0.969f, 0.976f, 0.980f},
+    {0.663f, 0.694f, 0.722f, 1.000f}
+};
+
+static const henka_ui_palette g_ui_dark_palette =
+{
+    {0.075f, 0.078f, 0.083f, 1.000f},
+    {0.095f, 0.100f, 0.108f, 1.000f},
+    {0.180f, 0.188f, 0.205f, 1.000f},
+    {0.125f, 0.132f, 0.145f, 1.000f},
+    {0.900f, 0.915f, 0.930f, 1.000f},
+    {0.825f, 0.860f, 0.895f, 1.000f},
+    {0.112f, 0.118f, 0.128f, 1.000f},
+    {0.158f, 0.168f, 0.183f, 1.000f},
+    {0.175f, 0.205f, 0.235f, 1.000f},
+    {0.105f, 0.285f, 0.390f, 1.000f},
+    {0.135f, 0.350f, 0.470f, 1.000f},
+    {0.085f, 0.235f, 0.325f, 1.000f},
+    {0.092f, 0.098f, 0.108f, 1.000f},
+    {0.140f, 0.153f, 0.170f, 1.000f},
+    {0.120f, 0.300f, 0.405f, 1.000f},
+    {0.105f, 0.255f, 0.345f, 1.000f},
+    {0.135f, 0.315f, 0.420f, 1.000f},
+    {0.170f, 0.520f, 0.355f, 1.000f},
+    {0.215f, 0.225f, 0.240f, 1.000f},
+    {0.088f, 0.093f, 0.102f, 1.000f},
+    {0.083f, 0.088f, 0.097f, 1.000f},
+    {0.110f, 0.330f, 0.235f, 1.000f},
+    {0.480f, 0.305f, 0.115f, 1.000f},
+    {0.555f, 0.585f, 0.620f, 1.000f},
+    {0.060f, 0.063f, 0.070f, 0.980f},
+    {0.190f, 0.205f, 0.225f, 0.980f}
+};
+
+static const henka_ui_palette* henka_ui_palette_for(
+    const henka_ui_context* context)
+{
+    if (context != NULL &&
+        context->theme == HENKA_UI_THEME_DARK)
+    {
+        return &g_ui_dark_palette;
+    }
+
+    return &g_ui_light_palette;
+}
+
+#define g_ui_panel_fill (henka_ui_palette_for(context)->panel_fill)
+#define g_ui_panel_header_fill (henka_ui_palette_for(context)->panel_header_fill)
+#define g_ui_panel_border (henka_ui_palette_for(context)->panel_border)
+#define g_ui_panel_separator (henka_ui_palette_for(context)->panel_separator)
+#define g_ui_text_color (henka_ui_palette_for(context)->text_color)
+#define g_ui_heading_color (henka_ui_palette_for(context)->heading_color)
+#define g_ui_button_fill (henka_ui_palette_for(context)->button_fill)
+#define g_ui_button_hover (henka_ui_palette_for(context)->button_hover)
+#define g_ui_button_active (henka_ui_palette_for(context)->button_active)
+#define g_ui_primary_fill (henka_ui_palette_for(context)->primary_fill)
+#define g_ui_primary_hover (henka_ui_palette_for(context)->primary_hover)
+#define g_ui_primary_active (henka_ui_palette_for(context)->primary_active)
+#define g_ui_tab_fill (henka_ui_palette_for(context)->tab_fill)
+#define g_ui_tab_hover (henka_ui_palette_for(context)->tab_hover)
+#define g_ui_tab_active (henka_ui_palette_for(context)->tab_active)
+#define g_ui_selected_fill (henka_ui_palette_for(context)->selected_fill)
+#define g_ui_selected_hover (henka_ui_palette_for(context)->selected_hover)
+#define g_ui_toggle_on (henka_ui_palette_for(context)->toggle_on)
+#define g_ui_toggle_off (henka_ui_palette_for(context)->toggle_off)
+#define g_ui_value_fill (henka_ui_palette_for(context)->value_fill)
+#define g_ui_row_fill (henka_ui_palette_for(context)->row_fill)
+#define g_ui_status_fill (henka_ui_palette_for(context)->status_fill)
+#define g_ui_status_warning_fill (henka_ui_palette_for(context)->status_warning_fill)
+#define g_ui_muted_text_color (henka_ui_palette_for(context)->muted_text_color)
+#define g_ui_hint_fill (henka_ui_palette_for(context)->hint_fill)
+#define g_ui_hint_border (henka_ui_palette_for(context)->hint_border)
 static const henka_vec4 g_ui_semantic_info = {0.48f, 0.69f, 0.87f, 1.0f};
 static const henka_vec4 g_ui_semantic_accent = {0.30f, 0.66f, 0.84f, 1.0f};
 static const henka_vec4 g_ui_semantic_success = {0.37f, 0.78f, 0.51f, 1.0f};
@@ -376,7 +478,7 @@ static const henka_vec4 g_ui_semantic_orange = {0.92f, 0.49f, 0.22f, 1.0f};
 static const henka_vec4 g_ui_semantic_danger = {0.88f, 0.34f, 0.38f, 1.0f};
 static const henka_vec4 g_ui_semantic_disabled = {0.40f, 0.45f, 0.51f, 1.0f};
 
-static henka_vec4 henka_ui_semantic_color_to_vec4(henka_ui_semantic_color color)
+static henka_vec4 henka_ui_semantic_color_to_vec4(const henka_ui_context* context, henka_ui_semantic_color color)
 {
     switch (color)
     {
@@ -919,7 +1021,9 @@ static bool henka_ui_button_internal(
     bool pressed;
     henka_ui_draw_checkpoint checkpoint;
     henka_result result;
+    henka_vec4 border_color;
 
+    /* HENKA UI A2 CONTROL CHROME */
     if (context == NULL || id == NULL || label == NULL ||
         !context->frame_active || !henka_ui_id_is_valid(id))
     {
@@ -942,39 +1046,21 @@ static bool henka_ui_button_internal(
         context,
         bounds,
         active ? active_fill : (hot ? hover_fill : idle_fill));
+
+    border_color =
+        emphasized || hot || active
+            ? accent_color
+            : g_ui_panel_border;
+
     if (result == HENKA_SUCCESS)
     {
-        if (emphasized)
-        {
-            result = henka_ui_push_border(
-                context,
-                bounds,
-                1.0f,
-                accent_color);
-        }
-        else
-        {
-            result = henka_ui_push_rect(
-                context,
-                (henka_ui_rect){
-                    bounds.x,
-                    bounds.y + bounds.height - 1.0f,
-                    bounds.width,
-                    1.0f},
-                g_ui_panel_separator);
-        }
-    }
-    if (result == HENKA_SUCCESS && !emphasized && (hot || active))
-    {
-        result = henka_ui_push_rect(
+        result = henka_ui_push_border(
             context,
-            (henka_ui_rect){
-                bounds.x,
-                bounds.y + 2.0f,
-                2.0f,
-                bounds.height - 4.0f},
-            accent_color);
+            bounds,
+            1.0f,
+            border_color);
     }
+
     if (result != HENKA_SUCCESS ||
         henka_ui_draw_fit_text(
             context,
@@ -1017,6 +1103,7 @@ henka_result henka_ui_create(henka_ui_context** out_context)
         return HENKA_ERROR_OUT_OF_MEMORY;
     }
 
+    context->theme = HENKA_UI_THEME_LIGHT;
     *out_context = context;
     return HENKA_SUCCESS;
 }
@@ -1031,6 +1118,32 @@ void henka_ui_destroy(henka_ui_context* context)
     henka_free(context->draw_rects);
     henka_free(context->draw_lines);
     henka_free(context);
+}
+
+henka_result henka_ui_set_theme(
+    henka_ui_context* context,
+    henka_ui_theme theme)
+{
+    if (context == NULL ||
+        (theme != HENKA_UI_THEME_LIGHT &&
+         theme != HENKA_UI_THEME_DARK))
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    context->theme = theme;
+    return HENKA_SUCCESS;
+}
+
+henka_ui_theme henka_ui_get_theme(
+    const henka_ui_context* context)
+{
+    if (context == NULL)
+    {
+        return HENKA_UI_THEME_LIGHT;
+    }
+
+    return context->theme;
 }
 
 henka_result henka_ui_begin_frame(
@@ -2003,7 +2116,7 @@ henka_result henka_ui_label_colored(
         y,
         scale,
         text,
-        henka_ui_semantic_color_to_vec4(color));
+        henka_ui_semantic_color_to_vec4(context, color));
 }
 
 henka_result henka_ui_label(henka_ui_context* context, float x, float y, float scale, const char* text)
@@ -2024,10 +2137,12 @@ henka_result henka_ui_value_row_colored(
     float label_x;
     float value_x;
     henka_result result;
+    henka_ui_rect value_bounds;
     size_t label_characters;
     size_t value_characters;
 
-    if (context == NULL || label == NULL || value == NULL || !context->frame_active)
+    if (context == NULL || label == NULL || value == NULL ||
+        !context->frame_active)
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
@@ -2037,6 +2152,13 @@ henka_result henka_ui_value_row_colored(
     }
 
     henka_ui_capture_checkpoint(context, &checkpoint);
+
+    value_bounds = (henka_ui_rect){
+        bounds.x + bounds.width * 0.38f,
+        bounds.y + 2.0f,
+        bounds.width - bounds.width * 0.38f - 4.0f,
+        bounds.height - 4.0f};
+
     result = henka_ui_push_rect(context, bounds, g_ui_row_fill);
     if (result == HENKA_SUCCESS)
     {
@@ -2049,6 +2171,25 @@ henka_result henka_ui_value_row_colored(
                 1.0f},
             g_ui_panel_separator);
     }
+    if (result == HENKA_SUCCESS &&
+        value_bounds.width > 0.0f &&
+        value_bounds.height > 0.0f)
+    {
+        result = henka_ui_push_rect(
+            context,
+            value_bounds,
+            g_ui_value_fill);
+    }
+    if (result == HENKA_SUCCESS &&
+        value_bounds.width > 0.0f &&
+        value_bounds.height > 0.0f)
+    {
+        result = henka_ui_push_border(
+            context,
+            value_bounds,
+            1.0f,
+            g_ui_panel_border);
+    }
     if (result != HENKA_SUCCESS)
     {
         henka_ui_restore_checkpoint(context, &checkpoint);
@@ -2056,27 +2197,42 @@ henka_result henka_ui_value_row_colored(
     }
 
     label_characters = henka_ui_clamped_character_count(
-        bounds.width * 0.36f,
+        bounds.width * 0.34f,
         6.0f,
         6U,
         sizeof(label_buffer) - 1U);
+
     value_characters = henka_ui_clamped_character_count(
-        bounds.width * 0.48f,
+        value_bounds.width > 12.0f
+            ? value_bounds.width - 12.0f
+            : 12.0f,
         6.0f,
         8U,
         sizeof(value_buffer) - 1U);
-    henka_ui_copy_fit_text(label, label_buffer, sizeof(label_buffer), label_characters);
-    henka_ui_copy_fit_text(value, value_buffer, sizeof(value_buffer), value_characters);
+
+    henka_ui_copy_fit_text(
+        label,
+        label_buffer,
+        sizeof(label_buffer),
+        label_characters);
+
+    henka_ui_copy_fit_text(
+        value,
+        value_buffer,
+        sizeof(value_buffer),
+        value_characters);
 
     label_x = bounds.x + 8.0f;
-    value_x = bounds.x + bounds.width * 0.40f;
+    value_x = value_bounds.x + 6.0f;
+
     result = henka_ui_draw_text(
         context,
         label_x,
         bounds.y + 6.0f,
         1.0f,
         label_buffer,
-        henka_ui_semantic_color_to_vec4(label_color));
+        henka_ui_semantic_color_to_vec4(context, label_color));
+
     if (result == HENKA_SUCCESS)
     {
         result = henka_ui_draw_text(
@@ -2085,8 +2241,9 @@ henka_result henka_ui_value_row_colored(
             bounds.y + 6.0f,
             1.0f,
             value_buffer,
-            henka_ui_semantic_color_to_vec4(value_color));
+            henka_ui_semantic_color_to_vec4(context, value_color));
     }
+
     if (result != HENKA_SUCCESS)
     {
         henka_ui_restore_checkpoint(context, &checkpoint);
@@ -2287,6 +2444,7 @@ bool henka_ui_tab(
     bool pressed;
     henka_ui_draw_checkpoint checkpoint;
     henka_result result;
+    henka_vec4 border_color;
     henka_vec4 fill_color;
 
     if (context == NULL || id == NULL || label == NULL ||
@@ -2307,29 +2465,37 @@ bool henka_ui_tab(
     active = context->mouse_left_down && owns_active;
     clicked = hot && context->mouse_left_released && owns_active;
 
-    fill_color = active ? g_ui_primary_active :
-        (selected ? g_ui_tab_active :
-            (hot ? g_ui_tab_hover : g_ui_panel_header_fill));
+    fill_color = active
+        ? g_ui_primary_active
+        : (selected
+            ? g_ui_tab_active
+            : (hot ? g_ui_tab_hover : g_ui_tab_fill));
+
+    border_color =
+        selected || hot || active
+            ? g_ui_heading_color
+            : g_ui_panel_border;
+
     result = henka_ui_push_rect(context, bounds, fill_color);
     if (result == HENKA_SUCCESS)
     {
-        result = henka_ui_push_rect(
+        result = henka_ui_push_border(
             context,
-            (henka_ui_rect){
-                bounds.x,
-                bounds.y + bounds.height - 1.0f,
-                bounds.width,
-                1.0f},
-            g_ui_panel_separator);
+            bounds,
+            1.0f,
+            border_color);
     }
-    if (result == HENKA_SUCCESS && selected)
+    if (result == HENKA_SUCCESS &&
+        selected &&
+        bounds.width > 12.0f &&
+        bounds.height >= 3.0f)
     {
         result = henka_ui_push_rect(
             context,
             (henka_ui_rect){
-                bounds.x + 4.0f,
+                bounds.x + 6.0f,
                 bounds.y + bounds.height - 3.0f,
-                bounds.width - 8.0f,
+                bounds.width - 12.0f,
                 2.0f},
             g_ui_heading_color);
     }
@@ -2633,6 +2799,7 @@ bool henka_ui_toggle(
     const char* label,
     bool* value)
 {
+    bool active;
     bool clicked;
     bool displayed_value;
     bool had_active;
@@ -2661,13 +2828,17 @@ bool henka_ui_toggle(
     pressed = hot && context->mouse_left_pressed;
     had_active = henka_ui_active_id_equals(context, id);
     owns_active = had_active || pressed;
+    active = context->mouse_left_down && owns_active;
     clicked = hot && context->mouse_left_released && owns_active;
     displayed_value = clicked ? !*value : *value;
 
     result = henka_ui_push_rect(
         context,
         bounds,
-        hot ? g_ui_button_hover : g_ui_row_fill);
+        active
+            ? g_ui_button_active
+            : (hot ? g_ui_button_hover : g_ui_row_fill));
+
     if (result == HENKA_SUCCESS)
     {
         result = henka_ui_push_rect(
@@ -2685,6 +2856,7 @@ bool henka_ui_toggle(
         bounds.y + (bounds.height - 16.0f) * 0.5f,
         32.0f,
         16.0f};
+
     knob_bounds = (henka_ui_rect){
         displayed_value
             ? track_bounds.x + track_bounds.width - 14.0f
@@ -2698,7 +2870,17 @@ bool henka_ui_toggle(
         result = henka_ui_push_rect(
             context,
             track_bounds,
-            displayed_value ? g_ui_toggle_on : g_ui_panel_separator);
+            displayed_value ? g_ui_toggle_on : g_ui_button_fill);
+    }
+    if (result == HENKA_SUCCESS)
+    {
+        result = henka_ui_push_border(
+            context,
+            track_bounds,
+            1.0f,
+            displayed_value || hot
+                ? g_ui_heading_color
+                : g_ui_panel_border);
     }
     if (result == HENKA_SUCCESS)
     {
@@ -2707,12 +2889,21 @@ bool henka_ui_toggle(
             knob_bounds,
             displayed_value ? g_ui_text_color : g_ui_muted_text_color);
     }
+    if (result == HENKA_SUCCESS)
+    {
+        result = henka_ui_push_border(
+            context,
+            knob_bounds,
+            1.0f,
+            g_ui_panel_border);
+    }
 
     label_characters = henka_ui_clamped_character_count(
         bounds.width > 64.0f ? bounds.width - 64.0f : 24.0f,
         6.0f,
         4U,
         sizeof(label_buffer) - 1U);
+
     henka_ui_copy_fit_text(
         label,
         label_buffer,

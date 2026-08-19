@@ -87,6 +87,14 @@ henka_result sandbox3d_authoring_object_create_from_model_primitive(
 void sandbox3d_authoring_object_destroy(sandbox3d_authoring_object* object);
 henka_entity sandbox3d_authoring_object_get_entity(const sandbox3d_authoring_object* object);
 const henka_authoring_mesh* sandbox3d_authoring_object_get_mesh(const sandbox3d_authoring_object* object);
+/* Reconstructs compatible triangle pairs as authoring quads through the
+ * normal scene/render/history/physics transaction. */
+henka_result sandbox3d_authoring_object_recover_quads(
+    sandbox3d_authoring_object* object,
+    float minimum_normal_dot,
+    float minimum_diagonal_ratio,
+    float uv_epsilon,
+    size_t* out_recovered_pairs);
 /* Copies one active face's authoritative ordered corner loop without
  * inferring order from IDs or screen-space coordinates.  The accessor fails
  * closed when the face is missing, malformed, over the bounded capacity, or

@@ -63,6 +63,34 @@ static float henka_max_float(float left, float right)
     return left > right ? left : right;
 }
 
+static float henka_camera_wrap_angle_radians(float angle_radians)
+{
+    float wrapped;
+
+    if (!isfinite(angle_radians))
+    {
+        return 0.0f;
+    }
+
+    wrapped = fmodf(angle_radians + HENKA_PI, HENKA_PI * 2.0f);
+    if (wrapped < 0.0f)
+    {
+        wrapped += HENKA_PI * 2.0f;
+    }
+
+    return wrapped - HENKA_PI;
+}
+
+static float henka_camera_projected_half_extent(
+    henka_vec3 axis,
+    henka_vec3 extents)
+{
+    return
+        fabsf(axis.x) * extents.x +
+        fabsf(axis.y) * extents.y +
+        fabsf(axis.z) * extents.z;
+}
+
 static bool henka_vec2_is_finite(henka_vec2 value)
 {
     return isfinite(value.x) && isfinite(value.y);
@@ -255,7 +283,7 @@ henka_result henka_camera_apply_preset(henka_camera* camera, henka_camera_preset
 
         case HENKA_CAMERA_PRESET_SIDE_2_5D:
             camera->projection_mode = HENKA_CAMERA_PROJECTION_ORTHOGRAPHIC;
-            camera->yaw_radians = -HENKA_PI * 0.5f;
+            camera->yaw_radians = 0.0f;
             camera->pitch_radians = 0.0f;
             camera->orthographic_height = 8.0f;
             distance = 10.0f;
@@ -597,80 +625,38 @@ void henka_camera_move_relative(henka_camera* camera, henka_vec3 local_direction
 
 bool henka_camera_focus_on_bounds(henka_camera* camera, henka_bounds bounds)
 {
-    henka_vec3 forward;
-    float radius;
-    float distance;
-    float vertical_distance;
-    float horizontal_distance;
-    float horizontal_fov;
-
-    if (!henka_camera_is_valid(camera) || !henka_bounds_are_valid(bounds))
+    if (!henka_camera_is_valid(camera) ||
+        !henka_bounds_are_valid(bounds))
     {
         return false;
     }
 
-    radius = henka_vec3_length(bounds.extents);
-    if (radius <= 0.0f)
-    {
-        radius = 0.5f;
-    }
-
-    forward = henka_camera_get_forward(camera);
-    if (camera->projection_mode == HENKA_CAMERA_PROJECTION_ORTHOGRAPHIC)
-    {
-        henka_vec3 next_position = henka_vec3_subtract(
-            bounds.center,
-            henka_vec3_scale(forward, radius + camera->near_plane + 1.0f));
-        if (!henka_vec3_is_finite(next_position))
-        {
-            return false;
-        }
-
-        camera->position = next_position;
-        return true;
-    }
-
-    vertical_distance = radius / tanf(camera->field_of_view_radians * 0.5f);
-    horizontal_fov = 2.0f * atanf(tanf(camera->field_of_view_radians * 0.5f) * camera->aspect_ratio);
-    horizontal_distance = radius / tanf(horizontal_fov * 0.5f);
-    distance = vertical_distance > horizontal_distance ? vertical_distance : horizontal_distance;
-    distance += radius * 0.6f;
-    if (distance < camera->near_plane + radius)
-    {
-        distance = camera->near_plane + radius + 0.5f;
-    }
-
-    if (!isfinite(distance))
-    {
-        return false;
-    }
-
-    {
-        henka_vec3 next_position = henka_vec3_subtract(
-            bounds.center,
-            henka_vec3_scale(forward, distance));
-        if (!henka_vec3_is_finite(next_position))
-        {
-            return false;
-        }
-
-        camera->position = next_position;
-    }
-    return true;
+    return henka_camera_frame_bounds(
+        camera,
+        bounds,
+        camera->yaw_radians,
+        camera->pitch_radians);
 }
 
 bool henka_camera_frame_bounds(henka_camera* camera, henka_bounds bounds, float yaw_radians, float pitch_radians)
 {
+    float depth_padding;
     float distance;
     float effective_aspect;
-    float framed_height;
+    float half_depth;
+    float half_height;
+    float half_width;
     float horizontal_distance;
     float horizontal_fov;
     float radius;
+    float required_far;
+    float required_height;
     float vertical_distance;
     henka_camera next_camera;
     henka_vec3 forward;
     henka_vec3 next_position;
+    henka_vec3 right;
+    henka_vec3 up;
 
     if (!henka_camera_is_valid(camera) ||
         !henka_bounds_are_valid(bounds) ||
@@ -687,33 +673,104 @@ bool henka_camera_frame_bounds(henka_camera* camera, henka_bounds bounds, float 
     }
 
     next_camera = *camera;
-    next_camera.yaw_radians = yaw_radians;
+    next_camera.yaw_radians =
+        henka_camera_wrap_angle_radians(yaw_radians);
     next_camera.pitch_radians =
         next_camera.projection_mode == HENKA_CAMERA_PROJECTION_ORTHOGRAPHIC &&
         fabsf(fabsf(pitch_radians) - HENKA_PI * 0.5f) <= 0.0001f
             ? pitch_radians
             : henka_clamp_pitch(pitch_radians);
+
     forward = henka_camera_get_forward(&next_camera);
+    right = henka_camera_get_right(&next_camera);
+    up = henka_camera_get_up(&next_camera);
+
+    half_width =
+        henka_camera_projected_half_extent(
+            right,
+            bounds.extents);
+
+    half_height =
+        henka_camera_projected_half_extent(
+            up,
+            bounds.extents);
+
+    half_depth =
+        henka_camera_projected_half_extent(
+            forward,
+            bounds.extents);
+
+    if (!isfinite(half_width) ||
+        !isfinite(half_height) ||
+        !isfinite(half_depth))
+    {
+        return false;
+    }
+
+    if (half_width < 0.001f)
+    {
+        half_width = 0.25f;
+    }
+
+    if (half_height < 0.001f)
+    {
+        half_height = 0.25f;
+    }
+
+    effective_aspect = next_camera.aspect_ratio;
+    if (!isfinite(effective_aspect) || effective_aspect <= 0.0f)
+    {
+        effective_aspect = 1.0f;
+    }
+
+    depth_padding =
+        henka_max_float(
+            1.0f,
+            radius * 0.25f);
 
     if (next_camera.projection_mode == HENKA_CAMERA_PROJECTION_ORTHOGRAPHIC)
     {
-        effective_aspect = next_camera.aspect_ratio;
-        framed_height = radius * 2.4f;
-        if (effective_aspect < 1.0f)
-        {
-            framed_height /= effective_aspect;
-        }
+        required_height =
+            henka_max_float(
+                half_height,
+                half_width / effective_aspect) *
+            2.0f *
+            1.15f;
 
-        next_camera.orthographic_height = henka_max_float(framed_height, 0.5f);
-        next_position = henka_vec3_subtract(
-            bounds.center,
-            henka_vec3_scale(forward, radius + next_camera.near_plane + 2.0f));
+        next_camera.orthographic_height =
+            henka_max_float(
+                required_height,
+                0.5f);
+
+        distance =
+            half_depth +
+            next_camera.near_plane +
+            depth_padding;
+
+        next_position =
+            henka_vec3_subtract(
+                bounds.center,
+                henka_vec3_scale(
+                    forward,
+                    distance));
+
         if (!henka_vec3_is_finite(next_position))
         {
             return false;
         }
 
+        required_far =
+            distance +
+            half_depth +
+            depth_padding;
+
+        if (next_camera.far_plane < required_far)
+        {
+            next_camera.far_plane = required_far;
+        }
+
         next_camera.position = next_position;
+
         if (!henka_camera_is_valid(&next_camera))
         {
             return false;
@@ -723,24 +780,63 @@ bool henka_camera_frame_bounds(henka_camera* camera, henka_bounds bounds, float 
         return true;
     }
 
-    vertical_distance = radius / tanf(next_camera.field_of_view_radians * 0.5f);
+    vertical_distance =
+        half_height /
+        tanf(next_camera.field_of_view_radians * 0.5f);
+
     horizontal_fov =
-        2.0f * atanf(tanf(next_camera.field_of_view_radians * 0.5f) * next_camera.aspect_ratio);
-    horizontal_distance = radius / tanf(horizontal_fov * 0.5f);
-    distance = henka_max_float(vertical_distance, horizontal_distance) + radius * 0.9f;
-    distance = henka_max_float(distance, next_camera.near_plane + radius + 0.75f);
+        2.0f *
+        atanf(
+            tanf(next_camera.field_of_view_radians * 0.5f) *
+            effective_aspect);
+
+    horizontal_distance =
+        half_width /
+        tanf(horizontal_fov * 0.5f);
+
+    distance =
+        half_depth +
+        henka_max_float(
+            vertical_distance,
+            horizontal_distance) *
+        1.15f;
+
+    distance =
+        henka_max_float(
+            distance,
+            next_camera.near_plane +
+                half_depth +
+                0.75f);
+
     if (!isfinite(distance))
     {
         return false;
     }
 
-    next_position = henka_vec3_subtract(bounds.center, henka_vec3_scale(forward, distance));
+    next_position =
+        henka_vec3_subtract(
+            bounds.center,
+            henka_vec3_scale(
+                forward,
+                distance));
+
     if (!henka_vec3_is_finite(next_position))
     {
         return false;
     }
 
+    required_far =
+        distance +
+        half_depth +
+        depth_padding;
+
+    if (next_camera.far_plane < required_far)
+    {
+        next_camera.far_plane = required_far;
+    }
+
     next_camera.position = next_position;
+
     if (!henka_camera_is_valid(&next_camera))
     {
         return false;
@@ -776,7 +872,10 @@ bool henka_camera_orbit_target(henka_camera* camera, henka_vec3 target, float de
     }
 
     next_camera = *camera;
-    next_camera.yaw_radians += delta_yaw_radians;
+    next_camera.yaw_radians =
+        henka_camera_wrap_angle_radians(
+            next_camera.yaw_radians +
+            delta_yaw_radians);
     next_camera.pitch_radians = henka_clamp_pitch(next_camera.pitch_radians + delta_pitch_radians);
     if (!isfinite(next_camera.yaw_radians) || !isfinite(next_camera.pitch_radians))
     {
@@ -1077,7 +1176,10 @@ void henka_camera_apply_mouse_look(henka_camera* camera, float delta_yaw_radians
         return;
     }
 
-    next_yaw = camera->yaw_radians + delta_yaw_radians;
+    next_yaw =
+        henka_camera_wrap_angle_radians(
+            camera->yaw_radians +
+            delta_yaw_radians);
     next_pitch = henka_clamp_pitch(camera->pitch_radians + delta_pitch_radians);
     if (!isfinite(next_yaw) || !isfinite(next_pitch))
     {
