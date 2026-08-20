@@ -53,6 +53,15 @@ typedef struct henka_ui_scroll_state
     float content_height;
     float viewport_height;
 } henka_ui_scroll_state;
+
+typedef struct henka_ui_interaction_state
+{
+    bool hovered;
+    bool pressed;
+    bool held;
+    bool released;
+    bool active;
+} henka_ui_interaction_state;
 typedef enum henka_ui_semantic_color
 {
     HENKA_UI_COLOR_NORMAL = 0,
@@ -148,6 +157,12 @@ void henka_ui_set_visible(henka_ui_context* context, bool visible);
 bool henka_ui_is_visible(const henka_ui_context* context);
 bool henka_ui_get_wants_mouse(const henka_ui_context* context);
 henka_vec2 henka_ui_get_mouse_position(const henka_ui_context* context);
+henka_result henka_ui_custom_interaction(
+    henka_ui_context* context,
+    const char* id,
+    bool pointer_inside,
+    bool enabled,
+    henka_ui_interaction_state* out_state);
 unsigned int henka_ui_get_consumed_navigation_mask(
     const henka_ui_context* context);
 size_t henka_ui_get_draw_rect_count(const henka_ui_context* context);

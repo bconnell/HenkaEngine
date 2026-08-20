@@ -336,6 +336,8 @@ add_executable(henka_tests
     ../examples/sandbox3d/editor_controls.c
     ../examples/sandbox3d/editor_ui_state.c
     ../examples/sandbox3d/camera_tools.c
+    ../examples/sandbox3d/editor_preferences.c
+    ../examples/sandbox3d/view_compass.c
     ../examples/sandbox3d/object_details_tools.c
     ../examples/sandbox3d/object_authoring_tools.c
     ../examples/sandbox3d/asset_browser_tools.c
@@ -375,6 +377,7 @@ add_executable(henka_tests
     test_ui.c
     test_viewport_shading.c
     test_workspace.c
+    test_view_compass.c
 )
 
 target_link_libraries(henka_tests

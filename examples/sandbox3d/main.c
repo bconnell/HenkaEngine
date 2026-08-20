@@ -18,6 +18,7 @@
 
 #include "camera_tools.h"
 #include "editor_controls.h"
+#include "editor_preferences.h"
 #include "editor_layout.h"
 #include "editor_ui_state.h"
 #include "asset_browser_tools.h"
@@ -28,6 +29,7 @@
 #include "physics_tools.h"
 #include "studio_environment.h"
 #include "workspace_tools.h"
+#include "view_compass.h"
 
 /* HENKA_COMMERCIAL_AUTHORING_INSPECTOR_V2
  * Modeling controls prioritize readable names, predictable hierarchy,
@@ -508,6 +510,8 @@ typedef struct sandbox3d_state
     henka_gizmo_model gizmo_model;
     sandbox3d_panel_paging_state paging;
     sandbox3d_view_navigation_state view_navigation;
+    sandbox3d_view_compass_preferences compass_preferences;
+    sandbox3d_view_compass_state compass;
     sandbox3d_viewport_tool_mode viewport_tool;
     sandbox3d_interaction_diagnostics diagnostics;
     sandbox3d_physics_state physics;
@@ -1014,6 +1018,10 @@ static bool sandbox3d_apply_camera_preset(
     bool update_status);
 static void sandbox3d_zoom_camera_to_target(sandbox3d_state* state, float direction_scale);
 static void sandbox3d_frame_selected_object(sandbox3d_state* state, bool print_status);
+static bool sandbox3d_commit_compass_preferences(
+    henka_engine* engine,
+    sandbox3d_state* state,
+    const sandbox3d_view_compass_preferences* candidate);
 static bool sandbox3d_collect_gizmo_overlay_state(
     henka_engine* engine,
     sandbox3d_state* state,
@@ -5924,6 +5932,55 @@ static henka_result sandbox3d_get_settings_path(const henka_engine* engine, char
     return henka_path_resolve(henka_engine_get_user_data_base_path(engine), "sandbox3d.settings", out_path);
 }
 
+static bool sandbox3d_compass_preferences_equal(
+    const sandbox3d_view_compass_preferences* left,
+    const sandbox3d_view_compass_preferences* right)
+{
+    return left != NULL && right != NULL &&
+        left->visible == right->visible &&
+        left->side == right->side &&
+        left->scale == right->scale &&
+        left->show_info == right->show_info &&
+        left->smooth_navigation == right->smooth_navigation &&
+        left->info_mode == right->info_mode;
+}
+
+static bool sandbox3d_commit_compass_preferences(
+    henka_engine* engine,
+    sandbox3d_state* state,
+    const sandbox3d_view_compass_preferences* candidate)
+{
+    char* settings_path = NULL;
+    henka_result result;
+
+    if (engine == NULL || state == NULL || state->settings == NULL || candidate == NULL)
+    {
+        return false;
+    }
+    result = sandbox3d_get_settings_path(engine, &settings_path);
+    if (result == HENKA_SUCCESS)
+    {
+        result = sandbox3d_view_compass_preferences_commit(
+            state->settings,
+            settings_path,
+            &state->compass_preferences,
+            candidate);
+    }
+    henka_free(settings_path);
+    if (result != HENKA_SUCCESS)
+    {
+        sandbox3d_set_statusf(
+            state,
+            true,
+            false,
+            "Compass preference was not saved: %s.",
+            henka_result_to_string(result));
+        return false;
+    }
+    sandbox3d_set_status(state, false, "Compass preference saved.");
+    return true;
+}
+
 static henka_transform sandbox3d_make_transform(henka_vec3 position, henka_vec3 scale)
 {
     henka_transform transform;
@@ -7908,6 +7965,7 @@ static void sandbox3d_print_help(const sandbox3d_state* state)
     printf("  Alt + Left Mouse Orbit around the selected object or current view target\n");
     printf("  Middle Mouse     Pan the viewport\n");
     printf("  Mouse Wheel      Zoom the viewport when the cursor is over the scene view; touchpad scroll works the same\n");
+    printf("  Compass          Click N/E/S/W or Top/Bottom to snap, drag the globe to orbit, and click P/O to switch projection\n");
     printf("  F1               Enter Wireframe or restore the last non-wireframe mode\n");
     printf("  F2               Print the scene legend again\n");
     printf("  F3               Show or hide the debug grid\n");
@@ -7944,6 +8002,7 @@ static void sandbox3d_print_help(const sandbox3d_state* state)
     printf("  Select an object from the list or with Left Mouse in the viewport, then use Move, Rotate, or Scale in the Transform section.\n");
     printf("  Common actions also report short in-window status messages. Console output stays available for fallback logs.\n");
     printf("  Mouse look and camera movement pause while the UI is open.\n");
+    printf("  Viewport Compass is a compact Scene View overlay. Utility > Settings controls visibility, left/right placement, size, info mode, and smooth snap; changes apply immediately and persist across sandbox launches.\n");
     sandbox3d_print_scene_legend(state);
     printf("Manual QA focus:\n");
     printf("  Confirm each scene example is visible, object selection updates the details panel, and camera focus and reset actions stay predictable.\n");
@@ -10127,6 +10186,7 @@ static bool sandbox3d_apply_camera_preset(
         return false;
     }
 
+    sandbox3d_view_compass_cancel_transition(&state->compass);
     state->camera_preset = preset;
     sandbox3d_set_view_navigation_target(state, target);
     sandbox3d_clear_gizmo_drag(state, true);
@@ -10191,6 +10251,8 @@ static bool sandbox3d_apply_camera_preset_framed(
         return false;
     }
 
+    sandbox3d_view_compass_cancel_transition(&state->compass);
+
     if (!sandbox3d_get_camera_focus_bounds(
             state,
             &bounds))
@@ -10254,6 +10316,8 @@ static void sandbox3d_reset_camera_defaults(sandbox3d_state* state)
     {
         return;
     }
+
+    sandbox3d_view_compass_cancel_transition(&state->compass);
 
     preset = state->camera_preset;
     if (preset < HENKA_CAMERA_PRESET_PERSPECTIVE_3D ||
@@ -13853,6 +13917,7 @@ static void sandbox3d_zoom_camera_to_target(sandbox3d_state* state, float direct
         return;
     }
 
+    sandbox3d_view_compass_cancel_transition(&state->compass);
     target = sandbox3d_get_view_navigation_target(state);
     if (state->camera.projection_mode == HENKA_CAMERA_PROJECTION_ORTHOGRAPHIC)
     {
@@ -13881,6 +13946,7 @@ static void sandbox3d_frame_selected_object(sandbox3d_state* state, bool print_s
         return;
     }
 
+    sandbox3d_view_compass_cancel_transition(&state->compass);
     if (!sandbox3d_get_selected_bounds(state, &bounds))
     {
         sandbox3d_set_status(state, true, "Select an object before framing the view.");
@@ -24586,6 +24652,12 @@ static void sandbox3d_draw_utility_panel(
         case SANDBOX3D_UTILITY_SETTINGS:
         {
             henka_scene_environment_desc environment;
+            sandbox3d_view_compass_preferences compass_candidate;
+            const char* compass_side_labels[] = {"Right", "Left"};
+            const char* compass_scale_labels[] = {"Small", "Normal", "Large"};
+            const char* compass_info_labels[] = {"Orientation", "Position", "Target"};
+            size_t compass_index;
+            bool compass_control_changed;
             descriptor = sandbox3d_get_selected_descriptor(state);
             sandbox3d_draw_section_heading(state->ui, x_left, y_start, "Sandbox settings");
             sandbox3d_draw_value_row(state->ui, x_left, y_start + 18.0f, panel_bounds.width - 28.0f, "Layout", sandbox3d_get_layout_mode_label(state->workspace.layout_mode));
@@ -24688,6 +24760,84 @@ static void sandbox3d_draw_utility_panel(
                 {
                     sandbox3d_set_status(state, true, "Environment preset was rejected.");
                 }
+            }
+            sandbox3d_draw_section_heading(state->ui, x_left, y_start + 360.0f, "Viewport Compass");
+            compass_candidate = state->compass_preferences;
+            if (henka_ui_toggle(
+                    state->ui,
+                    "utility_compass_visible",
+                    (henka_ui_rect){x_left, y_start + 382.0f, panel_bounds.width - 28.0f, 24.0f},
+                    "Show Compass",
+                    &compass_candidate.visible))
+            {
+                (void)sandbox3d_commit_compass_preferences(engine, state, &compass_candidate);
+            }
+            compass_index = state->compass_preferences.side == SANDBOX3D_VIEW_COMPASS_SIDE_LEFT ? 1U : 0U;
+            compass_control_changed = false;
+            if (henka_ui_segmented_select(
+                    state->ui,
+                    "utility_compass_side",
+                    (henka_ui_rect){x_left, y_start + 410.0f, panel_bounds.width - 28.0f, 24.0f},
+                    compass_side_labels,
+                    2U,
+                    &compass_index,
+                    &compass_control_changed) == HENKA_SUCCESS && compass_control_changed)
+            {
+                compass_candidate = state->compass_preferences;
+                compass_candidate.side = compass_index == 1U
+                    ? SANDBOX3D_VIEW_COMPASS_SIDE_LEFT
+                    : SANDBOX3D_VIEW_COMPASS_SIDE_RIGHT;
+                (void)sandbox3d_commit_compass_preferences(engine, state, &compass_candidate);
+            }
+            compass_index = sandbox3d_view_compass_scale_index(state->compass_preferences.scale);
+            compass_control_changed = false;
+            if (henka_ui_segmented_select(
+                    state->ui,
+                    "utility_compass_scale",
+                    (henka_ui_rect){x_left, y_start + 438.0f, panel_bounds.width - 28.0f, 24.0f},
+                    compass_scale_labels,
+                    3U,
+                    &compass_index,
+                    &compass_control_changed) == HENKA_SUCCESS && compass_control_changed)
+            {
+                compass_candidate = state->compass_preferences;
+                compass_candidate.scale = sandbox3d_view_compass_scale_for_index(compass_index);
+                (void)sandbox3d_commit_compass_preferences(engine, state, &compass_candidate);
+            }
+            compass_candidate = state->compass_preferences;
+            if (henka_ui_toggle(
+                    state->ui,
+                    "utility_compass_info",
+                    (henka_ui_rect){x_left, y_start + 466.0f, panel_bounds.width - 28.0f, 24.0f},
+                    "Show Info Strip",
+                    &compass_candidate.show_info))
+            {
+                (void)sandbox3d_commit_compass_preferences(engine, state, &compass_candidate);
+            }
+            compass_index = (size_t)state->compass_preferences.info_mode;
+            compass_control_changed = false;
+            if (henka_ui_segmented_select(
+                    state->ui,
+                    "utility_compass_info_mode",
+                    (henka_ui_rect){x_left, y_start + 494.0f, panel_bounds.width - 28.0f, 24.0f},
+                    compass_info_labels,
+                    3U,
+                    &compass_index,
+                    &compass_control_changed) == HENKA_SUCCESS && compass_control_changed)
+            {
+                compass_candidate = state->compass_preferences;
+                compass_candidate.info_mode = (sandbox3d_view_compass_info_mode)compass_index;
+                (void)sandbox3d_commit_compass_preferences(engine, state, &compass_candidate);
+            }
+            compass_candidate = state->compass_preferences;
+            if (henka_ui_toggle(
+                    state->ui,
+                    "utility_compass_smooth",
+                    (henka_ui_rect){x_left, y_start + 522.0f, panel_bounds.width - 28.0f, 24.0f},
+                    "Smooth Snap Navigation",
+                    &compass_candidate.smooth_navigation))
+            {
+                (void)sandbox3d_commit_compass_preferences(engine, state, &compass_candidate);
             }
             break;
         }
@@ -25323,6 +25473,32 @@ static void sandbox3d_build_ui(henka_engine* engine, sandbox3d_state* state)
         sandbox3d_draw_terrain_brush_preview(state, layout.scene_viewport);
         sandbox3d_draw_selection_highlight(state, layout.scene_viewport);
         sandbox3d_draw_gizmo_overlay(engine, state, layout.scene_viewport);
+        {
+            const sandbox3d_view_compass_preferences previous_preferences = state->compass_preferences;
+            const bool compass_changed = sandbox3d_view_compass_draw(
+                state->ui,
+                layout.scene_viewport,
+                &state->camera,
+                &state->view_navigation.orbit_target,
+                &state->view_navigation.orbit_target_valid,
+                &state->compass,
+                &state->compass_preferences,
+                henka_engine_is_mouse_captured(engine),
+                henka_engine_get_delta_time(engine));
+            if (compass_changed)
+            {
+                (void)henka_scene_set_camera(state->scene, &state->camera);
+            }
+            if (!sandbox3d_compass_preferences_equal(
+                    &previous_preferences,
+                    &state->compass_preferences))
+            {
+                (void)sandbox3d_commit_compass_preferences(
+                    engine,
+                    state,
+                    &state->compass_preferences);
+            }
+        }
         sandbox3d_draw_physics_overlay(state, layout.scene_viewport);
         if (state->workspace.active_utility == SANDBOX3D_UTILITY_DIAGNOSTICS ||
         state->workspace.context.debug_hud_visible)
@@ -26989,6 +27165,10 @@ static henka_result sandbox3d_initialize(henka_engine* engine, void* user_data)
             HENKA_LOG_WARN("Sandbox settings path could not be resolved. The sandbox is using first-run defaults.");
         }
     }
+
+    sandbox3d_view_compass_preferences_load(
+        state->settings,
+        &state->compass_preferences);
 
     result = henka_scene_set_camera(state->scene, &state->camera);
     if (result != HENKA_SUCCESS)
@@ -29797,6 +29977,8 @@ int main(int argc, char** argv)
     state.showcase_capture_view = showcase_capture_view;
     state.capture_mode = capture_mode;
     state.asset_browser_type = HENKA_ASSET_TYPE_TEXTURE;
+    sandbox3d_view_compass_preferences_defaults(&state.compass_preferences);
+    sandbox3d_view_compass_state_reset(&state.compass);
     state.camera = henka_camera_create_perspective(60.0f * HENKA_DEG_TO_RAD, 16.0f / 9.0f, 0.1f, 100.0f);
     state.cube_entity = HENKA_INVALID_ENTITY;
     state.ground_entity = HENKA_INVALID_ENTITY;

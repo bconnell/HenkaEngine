@@ -1239,6 +1239,59 @@ henka_vec2 henka_ui_get_mouse_position(const henka_ui_context* context)
     }
     return context->mouse_position;
 }
+
+henka_result henka_ui_custom_interaction(
+    henka_ui_context* context,
+    const char* id,
+    bool pointer_inside,
+    bool enabled,
+    henka_ui_interaction_state* out_state)
+{
+    bool had_active;
+    bool competing_active;
+    bool pressed;
+    bool owns_active;
+
+    if (out_state != NULL)
+    {
+        *out_state = (henka_ui_interaction_state){0};
+    }
+    if (context == NULL || id == NULL || out_state == NULL ||
+        !context->frame_active || !henka_ui_id_is_valid(id))
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    if (!enabled || !context->visible)
+    {
+        return HENKA_SUCCESS;
+    }
+
+    had_active = henka_ui_active_id_equals(context, id);
+    competing_active = context->active_id_set && !had_active;
+    pressed = pointer_inside && context->mouse_left_pressed && !competing_active;
+    owns_active = had_active || pressed;
+
+    out_state->hovered = pointer_inside && !competing_active;
+    out_state->pressed = pressed;
+    out_state->held = context->mouse_left_down && owns_active;
+    out_state->active = owns_active && (context->mouse_left_down || context->mouse_left_released);
+    out_state->released = context->mouse_left_released && owns_active;
+
+    if (out_state->hovered || out_state->active)
+    {
+        context->wants_mouse = true;
+    }
+    if (pressed && !henka_ui_set_active_id(context, id))
+    {
+        *out_state = (henka_ui_interaction_state){0};
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    if (out_state->released)
+    {
+        henka_ui_clear_active_id(context);
+    }
+    return HENKA_SUCCESS;
+}
 unsigned int henka_ui_get_consumed_navigation_mask(
     const henka_ui_context* context)
 {

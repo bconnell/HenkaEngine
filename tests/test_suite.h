@@ -63,5 +63,6 @@ void henka_test_shader(void);
 void henka_test_ui(void);
 void henka_test_viewport_shading(void);
 void henka_test_workspace(void);
+void henka_test_view_compass(void);
 
 #endif

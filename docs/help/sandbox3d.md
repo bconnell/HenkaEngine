@@ -13,6 +13,18 @@ The sandbox also saves a small local settings file so wireframe, grid visibility
 It now also includes small in-window developer panels for inspection and settings tasks.
 The docked workspace opens in the stable `Standard` shell with no selected scene object. `Focus Viewport` is temporary and does not become the startup state.
 
+The Scene View includes a compact procedural Compass overlay in the upper-right
+by default. It is owned by the Scene View and uses the current camera basis: the
+globe shows N/E/S/W plus Top and Bottom, click targets perform canonical view
+snaps, dragging the globe orbits around the current navigation target, and the
+`P`/`O` marker toggles Perspective and Orthographic projection. The info strip
+cycles orientation, position, and target modes on click. Utility > Settings
+controls visibility, left/right placement, size, info-strip visibility, info
+mode, and smooth snap navigation. These preferences are one shared editor
+model, save transactionally to the local settings file, and restore on the next
+launch. A missing navigation target leaves snap/projection actions disabled and
+reports no target rather than inventing state.
+
 For a bounded non-interactive streaming check, run
 `henka_sandbox3d.exe --terrain-stream-stress`. It seeds or reuses four
 procedural regions in the local `terrain-sandbox-v2` data root, verifies the
@@ -35,6 +47,9 @@ coverage, broad-world streaming, or human visual approval.
 - `Alt + Left Mouse`: optional orbit shortcut around the selected object or current view target
 - `Middle Mouse`: optional pan shortcut
 - `Mouse Wheel`: dolly the Perspective 3D view or change orthographic height in Side, Top-down, and Isometric views when the cursor is over Scene View
+- `Compass click`: snap to Front, Back, Left, Right, Top, or Bottom
+- `Compass drag`: orbit around the current navigation target
+- `Compass P/O`: toggle Perspective and Orthographic projection
 - `F1`: toggle wireframe
 - `F2`: print the scene legend to the console again
 - `F3`: show or hide the debug grid

@@ -2,6 +2,8 @@ add_executable(henka_sandbox3d
     editor_controls.c
     editor_ui_state.c
     camera_tools.c
+    editor_preferences.c
+    view_compass.c
     asset_browser_tools.c
     object_authoring_tools.c
     object_details_tools.c
