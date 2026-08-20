@@ -1230,6 +1230,15 @@ bool henka_ui_get_wants_mouse(const henka_ui_context* context)
 {
     return context != NULL && context->wants_mouse;
 }
+
+henka_vec2 henka_ui_get_mouse_position(const henka_ui_context* context)
+{
+    if (context == NULL)
+    {
+        return (henka_vec2){0.0f, 0.0f};
+    }
+    return context->mouse_position;
+}
 unsigned int henka_ui_get_consumed_navigation_mask(
     const henka_ui_context* context)
 {

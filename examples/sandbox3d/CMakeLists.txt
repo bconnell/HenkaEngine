@@ -10,6 +10,7 @@ add_executable(henka_sandbox3d
     physics_tools.c
     studio_environment.c
     workspace_tools.c
+    editor_layout.c
     main.c
 )
 

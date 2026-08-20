@@ -344,6 +344,7 @@ add_executable(henka_tests
     ../examples/sandbox3d/physics_tools.c
     ../examples/sandbox3d/studio_environment.c
     ../examples/sandbox3d/workspace_tools.c
+    ../examples/sandbox3d/editor_layout.c
     test_action.c
     test_assets.c
     test_camera.c
@@ -355,6 +356,7 @@ add_executable(henka_tests
     test_sandbox3d_physics.c
     test_sandbox3d_workspace.c
     test_sandbox3d_editor_ui.c
+    test_sandbox3d_editor_layout.c
     test_sandbox3d_camera_tools.c
     test_camera_hardening.c
     test_sandbox3d_object_details.c

@@ -5,6 +5,7 @@
 #include <string.h>
 
 #include <henka/ui.h>
+#include <henka/ui_icons.h>
 #include "../engine/src/ui/ui_internal.h"
 
 static void henka_test_ui_theme_is_light_by_default_and_context_local(void)
@@ -1252,6 +1253,64 @@ void henka_test_ui(void)
         HENKA_TEST_ASSERT(segmented_selection == 4U);
         HENKA_TEST_ASSERT(segmented_changed == false);
         HENKA_TEST_ASSERT(henka_ui_end_frame(ui) == HENKA_SUCCESS);
+    }
+
+    {
+        henka_ui_tool_button_desc descriptor = {
+            "test.tool.build",
+            "Build",
+            "Build the current project",
+            HENKA_UI_ICON_BUILD,
+            true,
+            true};
+        const size_t lines_before = henka_ui_get_draw_line_count(ui);
+
+        HENKA_TEST_ASSERT(
+            henka_ui_icon_name(HENKA_UI_ICON_SELECT) != NULL);
+        HENKA_TEST_ASSERT(
+            strcmp(
+                henka_ui_icon_name(HENKA_UI_ICON_BUILD),
+                "build") == 0);
+        HENKA_TEST_ASSERT(
+            henka_ui_icon_name((henka_ui_icon)-1) == NULL);
+        HENKA_TEST_ASSERT(
+            henka_ui_icon_name(HENKA_UI_ICON_COUNT) == NULL);
+
+        memset(&frame_desc, 0, sizeof(frame_desc));
+        frame_desc.framebuffer_width = 1280;
+        frame_desc.framebuffer_height = 720;
+        frame_desc.mouse_position = (henka_vec2){32.0f, 32.0f};
+        henka_ui_set_visible(ui, true);
+        HENKA_TEST_ASSERT(
+            henka_ui_begin_frame(ui, &frame_desc) == HENKA_SUCCESS);
+        HENKA_TEST_ASSERT(
+            henka_ui_draw_icon(
+                ui,
+                HENKA_UI_ICON_SELECT,
+                (henka_ui_rect){20.0f, 20.0f, 24.0f, 24.0f},
+                (henka_vec4){1.0f, 1.0f, 1.0f, 1.0f}) == HENKA_SUCCESS);
+        HENKA_TEST_ASSERT(
+            henka_ui_tool_button(
+                ui,
+                (henka_ui_rect){20.0f, 20.0f, 128.0f, 32.0f},
+                &descriptor) == false);
+        HENKA_TEST_ASSERT(
+            henka_ui_get_draw_line_count(ui) > lines_before);
+        descriptor.enabled = false;
+        HENKA_TEST_ASSERT(
+            henka_ui_tool_button(
+                ui,
+                (henka_ui_rect){20.0f, 60.0f, 128.0f, 32.0f},
+                &descriptor) == false);
+        HENKA_TEST_ASSERT(
+            henka_ui_end_frame(ui) == HENKA_SUCCESS);
+
+        HENKA_TEST_ASSERT(
+            henka_ui_draw_icon(
+                ui,
+                (henka_ui_icon)HENKA_UI_ICON_COUNT,
+                (henka_ui_rect){20.0f, 20.0f, 24.0f, 24.0f},
+                (henka_vec4){1.0f, 1.0f, 1.0f, 1.0f}) == HENKA_ERROR_INVALID_ARGUMENT);
     }
     henka_ui_destroy(ui);
 }

@@ -71,6 +71,7 @@ if(HENKA_BUILD_CLIENT)
         src/scene/camera.c
         src/scene/scene.c
         src/ui/ui.c
+        src/ui/ui_icons.c
     )
 
     target_include_directories(henka

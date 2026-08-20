@@ -18,6 +18,7 @@
 
 #include "camera_tools.h"
 #include "editor_controls.h"
+#include "editor_layout.h"
 #include "editor_ui_state.h"
 #include "asset_browser_tools.h"
 #include "object_authoring_tools.h"
@@ -185,6 +186,8 @@ typedef struct sandbox3d_workspace_state
 
 typedef struct sandbox3d_workspace_layout
 {
+    float outer_margin;
+    float panel_gap;
     henka_ui_rect left_dock;
     henka_ui_rect scene_frame;
     henka_ui_rect right_dock;
@@ -15796,6 +15799,9 @@ static void sandbox3d_assign_workspace_dock_stack(
     henka_ui_rect dock_bounds,
     sandbox3d_workspace_layout* layout)
 {
+    const float panel_gap = layout != NULL && layout->panel_gap > 0.0f
+        ? layout->panel_gap
+        : g_ui_panel_gap;
     size_t index;
     size_t panel_count;
     float panel_height;
@@ -15837,7 +15843,7 @@ static void sandbox3d_assign_workspace_dock_stack(
         return;
     }
 
-    panel_height = (dock_bounds.height - g_ui_panel_gap * (float)(panel_count - 1U)) / (float)panel_count;
+    panel_height = (dock_bounds.height - panel_gap * (float)(panel_count - 1U)) / (float)panel_count;
     y = dock_bounds.y;
     for (index = 0U; index < (topology_valid ? topology_count : legacy_count); ++index)
     {
@@ -15860,7 +15866,7 @@ static void sandbox3d_assign_workspace_dock_stack(
         {
             *panel_rect = (henka_ui_rect){dock_bounds.x, y, dock_bounds.width, panel_height};
         }
-        y += panel_height + g_ui_panel_gap;
+        y += panel_height + panel_gap;
     }
 }
 
@@ -15869,6 +15875,18 @@ static sandbox3d_workspace_layout sandbox3d_get_workspace_layout(
     int framebuffer_width,
     int framebuffer_height)
 {
+    sandbox3d_editor_layout_metrics editor_metrics;
+    const bool editor_metrics_valid =
+        sandbox3d_editor_layout_metrics_for_framebuffer(
+            framebuffer_width,
+            framebuffer_height,
+            &editor_metrics) == HENKA_SUCCESS;
+    const float outer_margin = editor_metrics_valid
+        ? editor_metrics.outer_margin
+        : g_ui_panel_margin;
+    const float panel_gap = editor_metrics_valid
+        ? editor_metrics.panel_gap
+        : g_ui_panel_gap;
     henka_result layout_result;
     henka_workspace_desc workspace_desc;
     henka_workspace_layout docked_layout;
@@ -15893,10 +15911,12 @@ static sandbox3d_workspace_layout sandbox3d_get_workspace_layout(
     bool utility_visible;
 
     memset(&layout, 0, sizeof(layout));
-    layout.controls_panel = (henka_ui_rect){g_ui_panel_margin, g_ui_panel_margin, g_ui_controls_width, g_ui_panel_height};
-    layout.scene_objects_panel = (henka_ui_rect){g_ui_panel_margin, g_ui_panel_margin, g_ui_scene_width, g_ui_panel_height};
-    layout.object_details_panel = (henka_ui_rect){g_ui_panel_margin, g_ui_panel_margin, g_ui_details_width, g_ui_panel_height};
-    layout.utility_panel = (henka_ui_rect){g_ui_panel_margin, g_ui_panel_margin, g_ui_details_width, 228.0f};
+    layout.outer_margin = outer_margin;
+    layout.panel_gap = panel_gap;
+    layout.controls_panel = (henka_ui_rect){outer_margin, outer_margin, g_ui_controls_width, g_ui_panel_height};
+    layout.scene_objects_panel = (henka_ui_rect){outer_margin, outer_margin, g_ui_scene_width, g_ui_panel_height};
+    layout.object_details_panel = (henka_ui_rect){outer_margin, outer_margin, g_ui_details_width, g_ui_panel_height};
+    layout.utility_panel = (henka_ui_rect){outer_margin, outer_margin, g_ui_details_width, 228.0f};
     layout.scene_viewport = (henka_viewport){0, 0, framebuffer_width > 0 ? framebuffer_width : 1, framebuffer_height > 0 ? framebuffer_height : 1};
 
     if (framebuffer_width <= 0 || framebuffer_height <= 0)
@@ -15932,11 +15952,17 @@ static sandbox3d_workspace_layout sandbox3d_get_workspace_layout(
     memset(&workspace_desc, 0, sizeof(workspace_desc));
     workspace_desc.framebuffer_width = framebuffer_width;
     workspace_desc.framebuffer_height = framebuffer_height;
-    workspace_desc.margin = 16.0f;
-    workspace_desc.gap = 14.0f;
+    workspace_desc.margin = outer_margin;
+    workspace_desc.gap = panel_gap;
     workspace_desc.scene_header_height = 30.0f;
     workspace_desc.scene_padding = 8.0f;
-    workspace_desc.min_scene_width = framebuffer_width >= 1280 ? 520 : (framebuffer_width >= 960 ? 420 : 260);
+    workspace_desc.min_scene_width = editor_metrics_valid &&
+        editor_metrics.breakpoint == SANDBOX3D_EDITOR_LAYOUT_NARROW
+        ? 260
+        : (editor_metrics_valid &&
+               editor_metrics.breakpoint == SANDBOX3D_EDITOR_LAYOUT_MEDIUM
+               ? 520
+               : 620);
     workspace_desc.min_scene_height = framebuffer_height >= 720 ? 404 : (framebuffer_height >= 640 ? 344 : 244);
     workspace_desc.left_dock_visible = left_visible;
     workspace_desc.right_dock_visible = right_visible;
@@ -15977,10 +16003,10 @@ static sandbox3d_workspace_layout sandbox3d_get_workspace_layout(
              maximized_panel->dock == SANDBOX3D_WORKSPACE_DOCK_RIGHT))
         {
             const henka_ui_rect maximized_bounds = {
-                16.0f,
-                16.0f,
-                fmaxf(1.0f, (float)framebuffer_width - 32.0f),
-                fmaxf(1.0f, (float)framebuffer_height - 32.0f)};
+                outer_margin,
+                outer_margin,
+                fmaxf(1.0f, (float)framebuffer_width - outer_margin * 2.0f),
+                fmaxf(1.0f, (float)framebuffer_height - outer_margin * 2.0f)};
             layout.left_dock = (henka_ui_rect){0.0f, 0.0f, 0.0f, 0.0f};
             layout.right_dock = (henka_ui_rect){0.0f, 0.0f, 0.0f, 0.0f};
             layout.left_splitter = (henka_ui_rect){0.0f, 0.0f, 0.0f, 0.0f};
@@ -16404,8 +16430,12 @@ static henka_ui_rect sandbox3d_get_workspace_dock_target_rect(
 {
     const sandbox3d_workspace_panel_id dragging_panel =
         state != NULL ? state->workspace.model.active_drag_panel : SANDBOX3D_WORKSPACE_PANEL_NONE;
-    const float margin = 14.0f;
-    const float gap = g_ui_panel_gap;
+    const float margin = layout != NULL && layout->outer_margin > 0.0f
+        ? layout->outer_margin
+        : 14.0f;
+    const float gap = layout != NULL && layout->panel_gap > 0.0f
+        ? layout->panel_gap
+        : g_ui_panel_gap;
     float docked_height;
     float height;
     float panel_height;

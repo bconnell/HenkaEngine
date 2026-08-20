@@ -147,6 +147,7 @@ henka_result henka_ui_end_frame(henka_ui_context* context);
 void henka_ui_set_visible(henka_ui_context* context, bool visible);
 bool henka_ui_is_visible(const henka_ui_context* context);
 bool henka_ui_get_wants_mouse(const henka_ui_context* context);
+henka_vec2 henka_ui_get_mouse_position(const henka_ui_context* context);
 unsigned int henka_ui_get_consumed_navigation_mask(
     const henka_ui_context* context);
 size_t henka_ui_get_draw_rect_count(const henka_ui_context* context);
