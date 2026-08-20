@@ -297,6 +297,11 @@ henka_authoring_mesh_counts henka_authoring_mesh_get_counts(const henka_authorin
     return counts;
 }
 
+henka_authoring_mesh_desc henka_authoring_mesh_get_desc(const henka_authoring_mesh* mesh)
+{
+    return mesh != NULL ? mesh->desc : (henka_authoring_mesh_desc){0};
+}
+
 bool henka_authoring_mesh_validate(const henka_authoring_mesh* mesh)
 {
     size_t index;

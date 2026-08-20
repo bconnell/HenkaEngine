@@ -99,6 +99,8 @@ void henka_authoring_mesh_destroy(henka_authoring_mesh* mesh);
 henka_result henka_authoring_mesh_clone(const henka_authoring_mesh* source, henka_authoring_mesh** out_mesh);
 henka_result henka_authoring_mesh_copy(henka_authoring_mesh* destination, const henka_authoring_mesh* source);
 henka_authoring_mesh_counts henka_authoring_mesh_get_counts(const henka_authoring_mesh* mesh);
+/* Returns the bounded slot capacities that govern stable authoring IDs. */
+henka_authoring_mesh_desc henka_authoring_mesh_get_desc(const henka_authoring_mesh* mesh);
 bool henka_authoring_mesh_validate(const henka_authoring_mesh* mesh);
 /* Returns bounds from active source vertices. */
 henka_result henka_authoring_mesh_get_bounds(

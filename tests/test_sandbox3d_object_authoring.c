@@ -817,6 +817,99 @@ static void henka_test_sandbox3d_object_authoring_component_selection(void)
     henka_engine_destroy(engine);
 }
 
+static void henka_test_sandbox3d_object_authoring_scalable_selection(void)
+{
+    henka_engine_config config = {0};
+    henka_engine* engine = NULL;
+    henka_scene* scene = NULL;
+    henka_authoring_mesh* source = NULL;
+    sandbox3d_authoring_object* object = NULL;
+    henka_authoring_mesh_desc desc = {256U, 256U, 128U, 8U};
+    henka_authoring_vertex_id vertices[3];
+    henka_authoring_face_id face_id;
+    henka_entity entity;
+    size_t face_index;
+    size_t ordinal;
+
+    config.application_name = "Henka Scalable Selection Test";
+    config.window_width = 320;
+    config.window_height = 240;
+    config.enable_vsync = false;
+    HENKA_TEST_ASSERT(henka_engine_create(&config, &engine) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_scene_create(&scene) == HENKA_SUCCESS);
+    entity = henka_scene_create_entity_named(scene, "Scalable Selection");
+    HENKA_TEST_ASSERT(entity != HENKA_INVALID_ENTITY);
+    HENKA_TEST_ASSERT(henka_authoring_mesh_create(&desc, &source) == HENKA_SUCCESS);
+
+    for (face_index = 0U; face_index < 70U; ++face_index)
+    {
+        const float x = (float)face_index * 2.0f;
+        HENKA_TEST_ASSERT(henka_authoring_mesh_add_vertex(
+            source, (henka_vec3){x, 0.0f, 0.0f}, (henka_vec2){0.0f, 0.0f}, 0U, &vertices[0]) == HENKA_SUCCESS);
+        HENKA_TEST_ASSERT(henka_authoring_mesh_add_vertex(
+            source, (henka_vec3){x + 0.5f, 1.0f, 0.0f}, (henka_vec2){0.5f, 1.0f}, 0U, &vertices[1]) == HENKA_SUCCESS);
+        HENKA_TEST_ASSERT(henka_authoring_mesh_add_vertex(
+            source, (henka_vec3){x + 1.0f, 0.0f, 0.0f}, (henka_vec2){1.0f, 0.0f}, 0U, &vertices[2]) == HENKA_SUCCESS);
+        HENKA_TEST_ASSERT(henka_authoring_mesh_add_face(
+            source, vertices, 3U, 0U, true, &face_id) == HENKA_SUCCESS);
+    }
+    HENKA_TEST_ASSERT(henka_authoring_mesh_validate(source));
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_create_from_mesh(
+        engine, scene, entity, source, 8U, &object) == HENKA_SUCCESS);
+    sandbox3d_authoring_object_set_selection_mode(object, SANDBOX3D_AUTHORING_SELECTION_FACE);
+
+    for (face_index = 70U; face_index > 0U; --face_index)
+    {
+        HENKA_TEST_ASSERT(sandbox3d_authoring_object_select_component(
+            object, (uint32_t)face_index, true) == HENKA_SUCCESS);
+    }
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_get_selected_component_count(object) == 70U);
+    for (ordinal = 0U; ordinal < 70U; ++ordinal)
+    {
+        uint32_t selected_id = HENKA_AUTHORING_INVALID_ID;
+        HENKA_TEST_ASSERT(sandbox3d_authoring_object_get_selected_component_at(
+            object, ordinal, &selected_id) == HENKA_SUCCESS);
+        HENKA_TEST_ASSERT(selected_id == ordinal + 1U);
+    }
+    sandbox3d_authoring_object_set_selection_mode(object, SANDBOX3D_AUTHORING_SELECTION_VERTEX);
+    for (face_index = 210U; face_index > 0U; --face_index)
+    {
+        HENKA_TEST_ASSERT(sandbox3d_authoring_object_select_component(
+            object, (uint32_t)face_index, true) == HENKA_SUCCESS);
+    }
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_get_selected_component_count(object) == 210U);
+    for (ordinal = 0U; ordinal < 210U; ++ordinal)
+    {
+        uint32_t selected_id = HENKA_AUTHORING_INVALID_ID;
+        HENKA_TEST_ASSERT(sandbox3d_authoring_object_get_selected_component_at(
+            object, ordinal, &selected_id) == HENKA_SUCCESS);
+        HENKA_TEST_ASSERT(selected_id == ordinal + 1U);
+    }
+    sandbox3d_authoring_object_clear_component_selection(object);
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_get_selected_component_count(object) == 0U);
+    sandbox3d_authoring_object_set_selection_mode(object, SANDBOX3D_AUTHORING_SELECTION_EDGE);
+    for (face_index = 210U; face_index > 0U; --face_index)
+    {
+        HENKA_TEST_ASSERT(sandbox3d_authoring_object_select_component(
+            object, (uint32_t)face_index, true) == HENKA_SUCCESS);
+    }
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_get_selected_component_count(object) == 210U);
+    for (ordinal = 0U; ordinal < 210U; ++ordinal)
+    {
+        uint32_t selected_id = HENKA_AUTHORING_INVALID_ID;
+        HENKA_TEST_ASSERT(sandbox3d_authoring_object_get_selected_component_at(
+            object, ordinal, &selected_id) == HENKA_SUCCESS);
+        HENKA_TEST_ASSERT(selected_id == ordinal + 1U);
+    }
+    sandbox3d_authoring_object_clear_component_selection(object);
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_get_selected_component_count(object) == 0U);
+
+    sandbox3d_authoring_object_destroy(object);
+    henka_authoring_mesh_destroy(source);
+    henka_scene_destroy(scene);
+    henka_engine_destroy(engine);
+}
+
 /* HENKA_T2B_QUAD_WORKFLOW_TEST_V1 */
 static void henka_test_sandbox3d_object_authoring_quad_recovery_workflow(void)
 {
@@ -984,4 +1077,5 @@ void henka_test_sandbox3d_object_authoring(void)
     henka_test_sandbox3d_object_authoring_clone_bridge();
     henka_test_sandbox3d_object_authoring_model_primitive_bridge();
     henka_test_sandbox3d_object_authoring_component_selection();
+    henka_test_sandbox3d_object_authoring_scalable_selection();
 }
