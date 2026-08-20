@@ -167,15 +167,16 @@ henka_result sandbox3d_authoring_object_grow_component_selection(
  * complete. This never mutates mesh topology. */
 henka_result sandbox3d_authoring_object_select_connected_components(
     sandbox3d_authoring_object* object);
-/* Replaces the active edge selection with the bounded quad-strip loop that
- * crosses opposite edges from the active edge. Boundary, non-quad, malformed,
- * and over-budget traversals fail closed without mutating the selection. */
+/* Selects the maximal unambiguous connected edge chain through regular quad
+ * topology. Adjacent selected loop edges share vertices. Boundaries and poles
+ * terminate traversal; malformed/nonmanifold topology fails without
+ * replacing the prior selection. */
 henka_result sandbox3d_authoring_object_select_edge_loop(
     sandbox3d_authoring_object* object);
-/* Replaces the active edge selection with the bounded quad-strip ring that
- * follows adjacent edges through opposite faces. Boundary, non-quad,
- * malformed, and over-budget traversals fail closed without mutating the
- * selection. */
+/* Selects the maximal unambiguous edge ring by crossing to opposite edges
+ * through ordered quad faces. Ring edges need not share vertices. Boundaries
+ * and non-quad faces terminate traversal; malformed/nonmanifold topology
+ * fails without replacing the prior selection. */
 henka_result sandbox3d_authoring_object_select_edge_ring(
     sandbox3d_authoring_object* object);
 /* Scales the vertices touched by the current component selection around their

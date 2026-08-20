@@ -7935,7 +7935,7 @@ static void sandbox3d_print_help(const sandbox3d_state* state)
     printf("  Open Native Panel Test from the Tools QA page to validate a separate OS-level tool window.\n");
     printf("  Use the panels to inspect named scene objects, clear selection, switch gizmo modes, focus the camera, reset object transforms, toggle visibility, and open in-window Help, Scene Legend, Object Info, Assets, Paths, Settings, Diagnostics, Transform QA, and Physics QA utilities.\n");
     printf("  Select an imported glTF scene entity to edit its shared material instance in Object Details; scalar/vector, flags, alpha, and semantic texture overrides apply transactionally. Use Utility > Assets to choose manager-owned textures for editable slots.\n");
-    printf("  Select a Showcase Giraffe or Showcase Rocket primitive, open Object Details > Authoring, and choose Make Editable; the generic component Move, Edge-mode Select Edge Loop, and Face Bevel/Extrude/Subdivide controls are the user-facing modeling path. The checked-in HAMS sources are persisted editor-owned derivatives of imported fixture geometry and are reported as HENKA_NATIVE_EDITED_FIXTURE; this does not prove recognizable user-designed Giraffe/Rocket geometry. Refine Profile is an asset-specific preset for diagnostics, not generic modeling proof. Own Material promotes a manager-owned runtime definition for bounded base-color, metallic, roughness, emissive-strength, IOR, transmission, subsurface amount, thickness, and tint, plus in-engine procedural normal and metallic-roughness texture creation. Mesh/project save-reload and the native material sidecar preserve all supported PBR scalars, colors, flags, alpha mode, and seven material texture identities; source export and a complete authored Giraffe/Rocket production workflow remain bounded work.\n");
+    printf("  Select a Showcase Giraffe or Showcase Rocket primitive, open Object Details > Authoring, and choose Make Editable; the generic component Move, Edge-mode Select Edge Loop/Select Edge Ring, and Face Bevel/Extrude/Subdivide controls are the user-facing modeling path. The checked-in HAMS sources are persisted editor-owned derivatives of imported fixture geometry and are reported as HENKA_NATIVE_EDITED_FIXTURE; this does not prove recognizable user-designed Giraffe/Rocket geometry. Refine Profile is an asset-specific preset for diagnostics, not generic modeling proof. Own Material promotes a manager-owned runtime definition for bounded base-color, metallic, roughness, emissive-strength, IOR, transmission, subsurface amount, thickness, and tint, plus in-engine procedural normal and metallic-roughness texture creation. Mesh/project save-reload and the native material sidecar preserve all supported PBR scalars, colors, flags, alpha mode, and seven material texture identities; source export and a complete authored Giraffe/Rocket production workflow remain bounded work.\n");
     printf("  Physics QA enables an opt-in fixed-step rigid-body demo with collider/contact debug drawing, impulses, body modes, and camera raycasts.\n");
     printf("  The Tools panel uses Main, Camera/Status, and QA pages, and Scene Objects supports paging when the dock is tighter than the full list.\n");
     printf("  Tools provides Build, Game, and World work contexts plus saved/custom workspace layouts; topology edits mark the workspace Custom.\n");
@@ -21486,9 +21486,10 @@ details_group_authoring:
                         fabsf(row.y - state->native_authoring_edge_loop_reported_y) > 0.5f)
                     {
                         printf(
-                            "Native authoring edge loop control: name=%s x=%.1f y=%.1f width=88.0 height=24.0.\n",
+                            "Native authoring edge topology controls: name=%s loop_x=%.1f ring_x=%.1f y=%.1f width=88.0 height=24.0.\n",
                             display_name,
                             row.x + 96.0f,
+                            row.x + 192.0f,
                             row.y);
                         fflush(stdout);
                         state->native_authoring_edge_loop_reported = true;
@@ -21512,11 +21513,57 @@ details_group_authoring:
                         fflush(stdout);
                         if (loop_result == HENKA_SUCCESS)
                         {
-                            sandbox3d_set_status(state, false, "Quad edge loop selected for native authoring.");
+                            sandbox3d_set_statusf(
+                                state,
+                                false,
+                                false,
+                                "Selected edge loop: %zu edges.",
+                                sandbox3d_authoring_object_get_selected_component_count(
+                                    state->authoring_object));
                         }
                         else
                         {
-                            sandbox3d_set_status(state, true, "Edge loop selection requires a bounded quad strip.");
+                            sandbox3d_set_statusf(
+                                state,
+                                true,
+                                false,
+                                "Edge loop failed (%s); prior selection retained.",
+                                henka_result_to_string(loop_result));
+                        }
+                    }
+                    if (henka_ui_button(
+                            state->ui,
+                            "authoring_edge_ring_priority",
+                            (henka_ui_rect){row.x + 192.0f, row.y, 88.0f, 24.0f},
+                            "Select Edge Ring"))
+                    {
+                        const henka_result ring_result =
+                            sandbox3d_authoring_object_select_edge_ring(state->authoring_object);
+                        printf(
+                            "Native authoring edge ring selection: name=%s result=%s mode=%s selected_components=%zu.\n",
+                            display_name,
+                            henka_result_to_string(ring_result),
+                            selection_label,
+                            sandbox3d_authoring_object_get_selected_component_count(state->authoring_object));
+                        fflush(stdout);
+                        if (ring_result == HENKA_SUCCESS)
+                        {
+                            sandbox3d_set_statusf(
+                                state,
+                                false,
+                                false,
+                                "Selected edge ring: %zu edges.",
+                                sandbox3d_authoring_object_get_selected_component_count(
+                                    state->authoring_object));
+                        }
+                        else
+                        {
+                            sandbox3d_set_statusf(
+                                state,
+                                true,
+                                false,
+                                "Edge ring failed (%s); prior selection retained.",
+                                henka_result_to_string(ring_result));
                         }
                     }
                 }
@@ -21913,6 +21960,7 @@ details_group_authoring:
                     state->native_authoring_edge_loop_reported = true;
                     state->native_authoring_edge_loop_reported_y = row.y;
                 }
+                native_edge_loop_control_drawn = true;
                 if (henka_ui_button(
                         state->ui,
                         "authoring_edge_loop_top",
@@ -21930,11 +21978,57 @@ details_group_authoring:
                     fflush(stdout);
                     if (loop_result == HENKA_SUCCESS)
                     {
-                        sandbox3d_set_status(state, false, "Quad edge loop selected for native authoring.");
+                        sandbox3d_set_statusf(
+                            state,
+                            false,
+                            false,
+                            "Selected edge loop: %zu edges.",
+                            sandbox3d_authoring_object_get_selected_component_count(
+                                state->authoring_object));
                     }
                     else
                     {
-                        sandbox3d_set_status(state, true, "Edge loop selection requires a bounded quad strip.");
+                        sandbox3d_set_statusf(
+                            state,
+                            true,
+                            false,
+                            "Edge loop failed (%s); prior selection retained.",
+                            henka_result_to_string(loop_result));
+                    }
+                }
+                if (henka_ui_button(
+                        state->ui,
+                        "authoring_edge_ring_top",
+                        (henka_ui_rect){row.x + 96.0f, row.y, 88.0f, 24.0f},
+                        "Select Edge Ring"))
+                {
+                    const henka_result ring_result =
+                        sandbox3d_authoring_object_select_edge_ring(state->authoring_object);
+                    printf(
+                        "Native authoring edge ring selection: name=%s result=%s mode=%s selected_components=%zu.\n",
+                        display_name,
+                        henka_result_to_string(ring_result),
+                        selection_label,
+                        sandbox3d_authoring_object_get_selected_component_count(state->authoring_object));
+                    fflush(stdout);
+                    if (ring_result == HENKA_SUCCESS)
+                    {
+                        sandbox3d_set_statusf(
+                            state,
+                            false,
+                            false,
+                            "Selected edge ring: %zu edges.",
+                            sandbox3d_authoring_object_get_selected_component_count(
+                                state->authoring_object));
+                    }
+                    else
+                    {
+                        sandbox3d_set_statusf(
+                            state,
+                            true,
+                            false,
+                            "Edge ring failed (%s); prior selection retained.",
+                            henka_result_to_string(ring_result));
                     }
                 }
             }
@@ -22484,6 +22578,7 @@ details_group_authoring:
                     state->native_authoring_edge_loop_reported = true;
                     state->native_authoring_edge_loop_reported_y = row.y;
                 }
+                native_edge_loop_control_drawn = true;
                 if (henka_ui_button(
                         state->ui,
                         "authoring_edge_loop",
@@ -22501,11 +22596,57 @@ details_group_authoring:
                     fflush(stdout);
                     if (loop_result == HENKA_SUCCESS)
                     {
-                        sandbox3d_set_status(state, false, "Quad edge loop selected for native authoring.");
+                        sandbox3d_set_statusf(
+                            state,
+                            false,
+                            false,
+                            "Selected edge loop: %zu edges.",
+                            sandbox3d_authoring_object_get_selected_component_count(
+                                state->authoring_object));
                     }
                     else
                     {
-                        sandbox3d_set_status(state, true, "Edge loop selection requires a bounded quad strip.");
+                        sandbox3d_set_statusf(
+                            state,
+                            true,
+                            false,
+                            "Edge loop failed (%s); prior selection retained.",
+                            henka_result_to_string(loop_result));
+                    }
+                }
+                if (henka_ui_button(
+                        state->ui,
+                        "authoring_edge_ring",
+                        (henka_ui_rect){row.x + 96.0f, row.y, 88.0f, 24.0f},
+                        "Select Edge Ring"))
+                {
+                    const henka_result ring_result =
+                        sandbox3d_authoring_object_select_edge_ring(state->authoring_object);
+                    printf(
+                        "Native authoring edge ring selection: name=%s result=%s mode=%s selected_components=%zu.\n",
+                        display_name,
+                        henka_result_to_string(ring_result),
+                        selection_label,
+                        sandbox3d_authoring_object_get_selected_component_count(state->authoring_object));
+                    fflush(stdout);
+                    if (ring_result == HENKA_SUCCESS)
+                    {
+                        sandbox3d_set_statusf(
+                            state,
+                            false,
+                            false,
+                            "Selected edge ring: %zu edges.",
+                            sandbox3d_authoring_object_get_selected_component_count(
+                                state->authoring_object));
+                    }
+                    else
+                    {
+                        sandbox3d_set_statusf(
+                            state,
+                            true,
+                            false,
+                            "Edge ring failed (%s); prior selection retained.",
+                            henka_result_to_string(ring_result));
                     }
                 }
             }

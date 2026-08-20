@@ -1,9 +1,214 @@
 #include <string.h>
 #include <stdint.h>
+#include <stdlib.h>
 
 #include "test_suite.h"
 
 #include "../examples/sandbox3d/object_authoring_tools.h"
+
+static size_t henka_test_quad_grid_vertex_index(
+    size_t column,
+    size_t row,
+    size_t vertex_columns)
+{
+    return row * vertex_columns + column;
+}
+
+static henka_result henka_test_make_quad_grid(
+    henka_authoring_mesh* mesh,
+    size_t face_columns,
+    size_t face_rows,
+    henka_authoring_vertex_id* out_vertices,
+    size_t vertex_capacity)
+{
+    size_t vertex_columns;
+    size_t vertex_rows;
+    size_t vertex_count;
+    size_t row;
+    size_t column;
+    henka_result result;
+
+    if (mesh == NULL || out_vertices == NULL || face_columns == 0U || face_rows == 0U ||
+        face_columns == SIZE_MAX || face_rows == SIZE_MAX)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    vertex_columns = face_columns + 1U;
+    vertex_rows = face_rows + 1U;
+    if (vertex_columns > SIZE_MAX / vertex_rows)
+    {
+        return HENKA_ERROR_LIMIT;
+    }
+    vertex_count = vertex_columns * vertex_rows;
+    if (vertex_count > vertex_capacity)
+    {
+        return HENKA_ERROR_LIMIT;
+    }
+    for (row = 0U; row < vertex_rows; ++row)
+    {
+        for (column = 0U; column < vertex_columns; ++column)
+        {
+            result = henka_authoring_mesh_add_vertex(
+                mesh,
+                (henka_vec3){(float)column, 0.0f, (float)row},
+                (henka_vec2){(float)column, (float)row},
+                0U,
+                &out_vertices[henka_test_quad_grid_vertex_index(column, row, vertex_columns)]);
+            if (result != HENKA_SUCCESS)
+            {
+                return result;
+            }
+        }
+    }
+    for (row = 0U; row < face_rows; ++row)
+    {
+        for (column = 0U; column < face_columns; ++column)
+        {
+            const henka_authoring_vertex_id face_vertices[4] = {
+                out_vertices[henka_test_quad_grid_vertex_index(column, row, vertex_columns)],
+                out_vertices[henka_test_quad_grid_vertex_index(column + 1U, row, vertex_columns)],
+                out_vertices[henka_test_quad_grid_vertex_index(column + 1U, row + 1U, vertex_columns)],
+                out_vertices[henka_test_quad_grid_vertex_index(column, row + 1U, vertex_columns)]};
+            henka_authoring_face_id face_id;
+            result = henka_authoring_mesh_add_face(
+                mesh, face_vertices, 4U, 0U, true, &face_id);
+            if (result != HENKA_SUCCESS)
+            {
+                return result;
+            }
+        }
+    }
+    return HENKA_SUCCESS;
+}
+
+static henka_result henka_test_find_edge_between_vertices(
+    const henka_authoring_mesh* mesh,
+    henka_authoring_vertex_id first,
+    henka_authoring_vertex_id second,
+    henka_authoring_edge_id* out_edge)
+{
+    size_t incident_count;
+    size_t incident_index;
+    size_t match_count = 0U;
+    henka_authoring_edge_id match = HENKA_AUTHORING_INVALID_ID;
+
+    if (mesh == NULL || out_edge == NULL || first == HENKA_AUTHORING_INVALID_ID ||
+        second == HENKA_AUTHORING_INVALID_ID)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    incident_count = henka_authoring_mesh_get_vertex_edge_count(mesh, first);
+    *out_edge = HENKA_AUTHORING_INVALID_ID;
+    for (incident_index = 0U; incident_index < incident_count; ++incident_index)
+    {
+        henka_authoring_edge_id edge_id;
+        const henka_authoring_edge* edge;
+        if (henka_authoring_mesh_get_vertex_edge_at(
+                mesh, first, incident_index, &edge_id) != HENKA_SUCCESS)
+        {
+            return HENKA_ERROR_UNKNOWN;
+        }
+        edge = henka_authoring_mesh_get_edge(mesh, edge_id);
+        if (edge != NULL &&
+            ((edge->vertices[0] == first && edge->vertices[1] == second) ||
+             (edge->vertices[0] == second && edge->vertices[1] == first)))
+        {
+            match = edge_id;
+            ++match_count;
+        }
+    }
+    if (match_count != 1U)
+    {
+        return HENKA_ERROR_UNKNOWN;
+    }
+    *out_edge = match;
+    return HENKA_SUCCESS;
+}
+
+static bool henka_test_selected_edge_contains(
+    const sandbox3d_authoring_object* object,
+    henka_authoring_edge_id edge_id)
+{
+    const size_t selected_count = sandbox3d_authoring_object_get_selected_component_count(object);
+    size_t selected_index;
+    for (selected_index = 0U; selected_index < selected_count; ++selected_index)
+    {
+        uint32_t selected_id = HENKA_AUTHORING_INVALID_ID;
+        if (sandbox3d_authoring_object_get_selected_component_at(
+                object, selected_index, &selected_id) == HENKA_SUCCESS &&
+            selected_id == edge_id)
+        {
+            return true;
+        }
+    }
+    return false;
+}
+
+static bool henka_test_edge_set_matches(
+    const henka_authoring_mesh* mesh,
+    const sandbox3d_authoring_object* object,
+    const henka_authoring_edge_id* expected_edges,
+    size_t expected_count)
+{
+    henka_authoring_mesh_desc desc;
+    size_t edge_id;
+    size_t expected_index;
+    uint32_t previous_id = 0U;
+
+    if (mesh == NULL || object == NULL || expected_edges == NULL ||
+        sandbox3d_authoring_object_get_selected_component_count(object) != expected_count)
+    {
+        return false;
+    }
+    desc = henka_authoring_mesh_get_desc(mesh);
+    for (expected_index = 0U; expected_index < expected_count; ++expected_index)
+    {
+        uint32_t selected_id = HENKA_AUTHORING_INVALID_ID;
+        if (sandbox3d_authoring_object_get_selected_component_at(
+                object, expected_index, &selected_id) != HENKA_SUCCESS ||
+            !henka_test_selected_edge_contains(object, expected_edges[expected_index]) ||
+            (expected_index > 0U && selected_id <= previous_id))
+        {
+            return false;
+        }
+        previous_id = selected_id;
+    }
+    for (edge_id = 1U; edge_id <= desc.max_edges; ++edge_id)
+    {
+        if (henka_authoring_mesh_get_edge(mesh, (henka_authoring_edge_id)edge_id) != NULL)
+        {
+            bool expected = false;
+            for (expected_index = 0U; expected_index < expected_count; ++expected_index)
+            {
+                if (expected_edges[expected_index] == (henka_authoring_edge_id)edge_id)
+                {
+                    expected = true;
+                    break;
+                }
+            }
+            if (henka_test_selected_edge_contains(
+                    object, (henka_authoring_edge_id)edge_id) != expected)
+            {
+                return false;
+            }
+        }
+    }
+    return true;
+}
+
+static bool henka_test_edges_share_vertex(
+    const henka_authoring_mesh* mesh,
+    henka_authoring_edge_id first_id,
+    henka_authoring_edge_id second_id)
+{
+    const henka_authoring_edge* first = henka_authoring_mesh_get_edge(mesh, first_id);
+    const henka_authoring_edge* second = henka_authoring_mesh_get_edge(mesh, second_id);
+    return first != NULL && second != NULL &&
+        ((first->vertices[0] == second->vertices[0]) ||
+         (first->vertices[0] == second->vertices[1]) ||
+         (first->vertices[1] == second->vertices[0]) ||
+         (first->vertices[1] == second->vertices[1]));
+}
 
 static void henka_test_sandbox3d_object_authoring_scene_policy(void)
 {
@@ -687,7 +892,8 @@ static void henka_test_sandbox3d_object_authoring_component_selection(void)
     HENKA_TEST_ASSERT(sandbox3d_authoring_object_get_selected_component_count(object) == 1U);
     HENKA_TEST_ASSERT(sandbox3d_authoring_object_select_edge_loop(object) == HENKA_SUCCESS);
     HENKA_TEST_ASSERT(sandbox3d_authoring_object_get_active_component_id(object) == 1U);
-    HENKA_TEST_ASSERT(sandbox3d_authoring_object_get_selected_component_count(object) == 4U);
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_get_selected_component_count(object) >= 1U);
+    HENKA_TEST_ASSERT(henka_test_selected_edge_contains(object, 1U));
     {
         size_t selected_index;
         for (selected_index = 0U;
@@ -833,6 +1039,126 @@ static void henka_test_sandbox3d_object_authoring_component_selection(void)
     henka_engine_destroy(engine);
 }
 
+static void henka_test_sandbox3d_object_authoring_edge_ring_exact_grid(void)
+{
+    henka_engine_config config = {0};
+    henka_engine* engine = NULL;
+    henka_scene* scene = NULL;
+    henka_authoring_mesh* source = NULL;
+    sandbox3d_authoring_object* object = NULL;
+    henka_authoring_mesh_desc desc = {16U, 32U, 16U, 4U};
+    henka_authoring_vertex_id vertices[8];
+    henka_authoring_edge_id expected_edges[4];
+    henka_entity entity;
+    size_t column;
+
+    config.application_name = "Henka Edge Ring Exact Grid Test";
+    config.window_width = 320;
+    config.window_height = 240;
+    config.enable_vsync = false;
+    HENKA_TEST_ASSERT(henka_engine_create(&config, &engine) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_scene_create(&scene) == HENKA_SUCCESS);
+    entity = henka_scene_create_entity_named(scene, "Edge Ring Grid");
+    HENKA_TEST_ASSERT(entity != HENKA_INVALID_ENTITY);
+    HENKA_TEST_ASSERT(henka_authoring_mesh_create(&desc, &source) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_test_make_quad_grid(source, 3U, 1U, vertices, 8U) == HENKA_SUCCESS);
+    for (column = 0U; column < 4U; ++column)
+    {
+        HENKA_TEST_ASSERT(henka_test_find_edge_between_vertices(
+            source, vertices[column], vertices[column + 4U], &expected_edges[column]) == HENKA_SUCCESS);
+    }
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_create_from_mesh(
+        engine, scene, entity, source, 8U, &object) == HENKA_SUCCESS);
+    sandbox3d_authoring_object_set_selection_mode(object, SANDBOX3D_AUTHORING_SELECTION_EDGE);
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_select_component(
+        object, expected_edges[1], false) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_select_edge_ring(object) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_test_edge_set_matches(source, object, expected_edges, 4U));
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_get_active_component_id(object) == expected_edges[1]);
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_select_edge_loop(object) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_get_selected_component_count(object) == 1U);
+    HENKA_TEST_ASSERT(henka_test_selected_edge_contains(object, expected_edges[1]));
+
+    sandbox3d_authoring_object_destroy(object);
+    henka_authoring_mesh_destroy(source);
+    henka_scene_destroy(scene);
+    henka_engine_destroy(engine);
+}
+
+static void henka_test_sandbox3d_object_authoring_edge_loop_exact_grid(void)
+{
+    henka_engine_config config = {0};
+    henka_engine* engine = NULL;
+    henka_scene* scene = NULL;
+    henka_authoring_mesh* source = NULL;
+    sandbox3d_authoring_object* object = NULL;
+    henka_authoring_mesh_desc desc = {16U, 32U, 16U, 4U};
+    henka_authoring_vertex_id vertices[12];
+    henka_authoring_edge_id expected_edges[3];
+    henka_entity entity;
+    size_t row;
+    size_t column;
+    henka_authoring_edge_id edge_id;
+
+    config.application_name = "Henka Edge Loop Exact Grid Test";
+    config.window_width = 320;
+    config.window_height = 240;
+    config.enable_vsync = false;
+    HENKA_TEST_ASSERT(henka_engine_create(&config, &engine) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_scene_create(&scene) == HENKA_SUCCESS);
+    entity = henka_scene_create_entity_named(scene, "Edge Loop Grid");
+    HENKA_TEST_ASSERT(entity != HENKA_INVALID_ENTITY);
+    HENKA_TEST_ASSERT(henka_authoring_mesh_create(&desc, &source) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_test_make_quad_grid(source, 2U, 3U, vertices, 12U) == HENKA_SUCCESS);
+    for (row = 0U; row < 3U; ++row)
+    {
+        HENKA_TEST_ASSERT(henka_test_find_edge_between_vertices(
+            source,
+            vertices[1U + row * 3U],
+            vertices[1U + (row + 1U) * 3U],
+            &expected_edges[row]) == HENKA_SUCCESS);
+    }
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_create_from_mesh(
+        engine, scene, entity, source, 8U, &object) == HENKA_SUCCESS);
+    sandbox3d_authoring_object_set_selection_mode(object, SANDBOX3D_AUTHORING_SELECTION_EDGE);
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_select_component(
+        object, expected_edges[1], false) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_select_edge_loop(object) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_test_edge_set_matches(source, object, expected_edges, 3U));
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_get_active_component_id(object) == expected_edges[1]);
+    HENKA_TEST_ASSERT(henka_test_edges_share_vertex(source, expected_edges[0], expected_edges[1]));
+    HENKA_TEST_ASSERT(henka_test_edges_share_vertex(source, expected_edges[1], expected_edges[2]));
+    for (row = 0U; row < 3U; ++row)
+    {
+        for (column = 0U; column <= 2U; column += 2U)
+        {
+            HENKA_TEST_ASSERT(henka_test_find_edge_between_vertices(
+                source,
+                vertices[column + row * 3U],
+                vertices[column + (row + 1U) * 3U],
+                &edge_id) == HENKA_SUCCESS);
+            HENKA_TEST_ASSERT(!henka_test_selected_edge_contains(object, edge_id));
+        }
+    }
+    for (row = 0U; row < 4U; ++row)
+    {
+        for (column = 0U; column < 2U; ++column)
+        {
+            HENKA_TEST_ASSERT(henka_test_find_edge_between_vertices(
+                source,
+                vertices[column + row * 3U],
+                vertices[column + 1U + row * 3U],
+                &edge_id) == HENKA_SUCCESS);
+            HENKA_TEST_ASSERT(!henka_test_selected_edge_contains(object, edge_id));
+        }
+    }
+
+    sandbox3d_authoring_object_destroy(object);
+    henka_authoring_mesh_destroy(source);
+    henka_scene_destroy(scene);
+    henka_engine_destroy(engine);
+}
+
 static void henka_test_sandbox3d_object_authoring_scalable_selection(void)
 {
     henka_engine_config config = {0};
@@ -920,7 +1246,7 @@ static void henka_test_sandbox3d_object_authoring_scalable_selection(void)
     sandbox3d_authoring_object_clear_component_selection(object);
     HENKA_TEST_ASSERT(sandbox3d_authoring_object_get_selected_component_count(object) == 0U);
     HENKA_TEST_ASSERT(sandbox3d_authoring_object_select_component(object, 1U, false) == HENKA_SUCCESS);
-    HENKA_TEST_ASSERT(sandbox3d_authoring_object_select_edge_ring(object) != HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_select_edge_ring(object) == HENKA_SUCCESS);
     HENKA_TEST_ASSERT(sandbox3d_authoring_object_get_selected_component_count(object) == 1U);
     {
         uint32_t selected_id = HENKA_AUTHORING_INVALID_ID;
@@ -1102,5 +1428,7 @@ void henka_test_sandbox3d_object_authoring(void)
     henka_test_sandbox3d_object_authoring_clone_bridge();
     henka_test_sandbox3d_object_authoring_model_primitive_bridge();
     henka_test_sandbox3d_object_authoring_component_selection();
+    henka_test_sandbox3d_object_authoring_edge_ring_exact_grid();
+    henka_test_sandbox3d_object_authoring_edge_loop_exact_grid();
     henka_test_sandbox3d_object_authoring_scalable_selection();
 }
