@@ -19844,7 +19844,24 @@ static void sandbox3d_draw_scene_objects_panel(
         if (state->native_authoring_source_row_reported_entity != entity &&
             sandbox3d_get_imported_source_primitive(state, entity) != NULL)
         {
-            if (getenv("HENKA_AUTOMATION_INPUT_OWNED") != NULL)             {
+            bool automation_input_owned = false;
+#if defined(_WIN32)
+            {
+                char* environment_value = NULL;
+                size_t environment_length = 0U;
+                automation_input_owned = _dupenv_s(
+                    &environment_value,
+                    &environment_length,
+                    "HENKA_AUTOMATION_INPUT_OWNED") == 0 &&
+                    environment_value != NULL &&
+                    environment_length > 0U;
+                free(environment_value);
+            }
+#else
+            automation_input_owned = getenv("HENKA_AUTOMATION_INPUT_OWNED") != NULL;
+#endif
+            if (automation_input_owned)
+            {
                 printf(
                 "Native authoring source row: name=%s x=%.1f y=%.1f width=%.1f height=28.0.\n",
                 entity_name,
@@ -22032,6 +22049,104 @@ details_group_authoring:
                     }
                 }
             }
+            if (state->authoring_object != NULL &&
+                sandbox3d_details_flow_next_row(state, flow_desc.bounds, 28.0f, 1U, &row) &&
+                row.width >= 290.0f)
+            {
+                const float selection_button_width = (row.width - 12.0f) / 3.0f;
+                if (henka_ui_button(
+                        state->ui,
+                        "authoring_select_all_top",
+                        (henka_ui_rect){row.x, row.y, selection_button_width, 24.0f},
+                        "Select All"))
+                {
+                    const henka_result select_all_result = sandbox3d_authoring_object_select_all_components(
+                        state->authoring_object);
+                    sandbox3d_set_statusf(
+                        state, select_all_result != HENKA_SUCCESS, false,
+                        select_all_result == HENKA_SUCCESS ? "Selected all active %s components." :
+                            "Select All failed; prior selection retained.",
+                        selection_label);
+                }
+                if (henka_ui_button(
+                        state->ui,
+                        "authoring_select_none_top",
+                        (henka_ui_rect){row.x + selection_button_width + 6.0f, row.y, selection_button_width, 24.0f},
+                        "Select None"))
+                {
+                    const henka_result select_none_result = sandbox3d_authoring_object_select_none_components(
+                        state->authoring_object);
+                    sandbox3d_set_status(
+                        state, select_none_result != HENKA_SUCCESS,
+                        select_none_result == HENKA_SUCCESS ? "Component selection cleared." :
+                            "Select None failed; prior selection retained.");
+                }
+                if (henka_ui_button(
+                        state->ui,
+                        "authoring_select_invert_top",
+                        (henka_ui_rect){row.x + (selection_button_width + 6.0f) * 2.0f, row.y, selection_button_width, 24.0f},
+                        "Invert"))
+                {
+                    const henka_result invert_result = sandbox3d_authoring_object_invert_component_selection(
+                        state->authoring_object);
+                    sandbox3d_set_statusf(
+                        state, invert_result != HENKA_SUCCESS, false,
+                        invert_result == HENKA_SUCCESS ? "Inverted active %s selection." :
+                            "Invert failed; prior selection retained.",
+                        selection_label);
+                }
+            }
+            if (state->authoring_object != NULL &&
+                sandbox3d_details_flow_next_row(state, flow_desc.bounds, 28.0f, 1U, &row) &&
+                row.width >= 290.0f)
+            {
+                const float selection_button_width = (row.width - 12.0f) / 3.0f;
+                if (henka_ui_button(
+                        state->ui,
+                        "authoring_shrink_selection_top",
+                        (henka_ui_rect){row.x, row.y, selection_button_width, 24.0f},
+                        "Shrink"))
+                {
+                    const henka_result shrink_result = sandbox3d_authoring_object_shrink_component_selection(
+                        state->authoring_object);
+                    sandbox3d_set_status(
+                        state, shrink_result != HENKA_SUCCESS,
+                        shrink_result == HENKA_SUCCESS ? "Selection shrunk across topology." :
+                            "Shrink requires a valid active selection; prior selection retained.");
+                }
+                if (henka_ui_button(
+                        state->ui,
+                        "authoring_rotate_selection_top",
+                        (henka_ui_rect){row.x + selection_button_width + 6.0f, row.y, selection_button_width, 24.0f},
+                        "Rotate"))
+                {
+                    const henka_result rotate_result = sandbox3d_authoring_object_rotate_selected_components(
+                        state->authoring_object,
+                        (henka_vec3){0.0f, 1.0f, 0.0f},
+                        15.0f * HENKA_DEG_TO_RAD,
+                        SANDBOX3D_AUTHORING_PIVOT_MEDIAN,
+                        SANDBOX3D_AUTHORING_ORIENTATION_LOCAL);
+                    sandbox3d_set_status(
+                        state, rotate_result != HENKA_SUCCESS,
+                        rotate_result == HENKA_SUCCESS ? "Selected components rotated 15 degrees around the median." :
+                            "Rotate requires a valid selection and finite axis; source retained.");
+                }
+                if (henka_ui_button(
+                        state->ui,
+                        "authoring_scale_active_top",
+                        (henka_ui_rect){row.x + (selection_button_width + 6.0f) * 2.0f, row.y, selection_button_width, 24.0f},
+                        "Scale"))
+                {
+                    const henka_result scale_result = sandbox3d_authoring_object_scale_selected_components_with_pivot(
+                        state->authoring_object,
+                        (henka_vec3){1.08f, 1.08f, 1.08f},
+                        SANDBOX3D_AUTHORING_PIVOT_MEDIAN);
+                    sandbox3d_set_status(
+                        state, scale_result != HENKA_SUCCESS,
+                        scale_result == HENKA_SUCCESS ? "Selected components scaled around the median." :
+                            "Scale requires a valid selection; source retained.");
+                }
+            }
             if (selection_mode == SANDBOX3D_AUTHORING_SELECTION_FACE &&
                 !bevel_controls_prioritized &&
                 sandbox3d_details_flow_next_row(state, flow_desc.bounds, 28.0f, 1U, &row) &&
@@ -22557,6 +22672,104 @@ details_group_authoring:
                         fflush(stdout);
                         sandbox3d_set_status(state, true, "Selected topology scale was rejected; source retained.");
                     }
+                }
+            }
+            if (state->authoring_object != NULL &&
+                sandbox3d_details_flow_next_row(state, flow_desc.bounds, 28.0f, 1U, &row) &&
+                row.width >= 290.0f)
+            {
+                const float selection_button_width = (row.width - 12.0f) / 3.0f;
+                if (henka_ui_button(
+                        state->ui,
+                        "authoring_select_all",
+                        (henka_ui_rect){row.x, row.y, selection_button_width, 24.0f},
+                        "Select All"))
+                {
+                    const henka_result select_all_result = sandbox3d_authoring_object_select_all_components(
+                        state->authoring_object);
+                    sandbox3d_set_statusf(
+                        state, select_all_result != HENKA_SUCCESS, false,
+                        select_all_result == HENKA_SUCCESS ? "Selected all active %s components." :
+                            "Select All failed; prior selection retained.",
+                        selection_label);
+                }
+                if (henka_ui_button(
+                        state->ui,
+                        "authoring_select_none",
+                        (henka_ui_rect){row.x + selection_button_width + 6.0f, row.y, selection_button_width, 24.0f},
+                        "Select None"))
+                {
+                    const henka_result select_none_result = sandbox3d_authoring_object_select_none_components(
+                        state->authoring_object);
+                    sandbox3d_set_status(
+                        state, select_none_result != HENKA_SUCCESS,
+                        select_none_result == HENKA_SUCCESS ? "Component selection cleared." :
+                            "Select None failed; prior selection retained.");
+                }
+                if (henka_ui_button(
+                        state->ui,
+                        "authoring_select_invert",
+                        (henka_ui_rect){row.x + (selection_button_width + 6.0f) * 2.0f, row.y, selection_button_width, 24.0f},
+                        "Invert"))
+                {
+                    const henka_result invert_result = sandbox3d_authoring_object_invert_component_selection(
+                        state->authoring_object);
+                    sandbox3d_set_statusf(
+                        state, invert_result != HENKA_SUCCESS, false,
+                        invert_result == HENKA_SUCCESS ? "Inverted active %s selection." :
+                            "Invert failed; prior selection retained.",
+                        selection_label);
+                }
+            }
+            if (state->authoring_object != NULL &&
+                sandbox3d_details_flow_next_row(state, flow_desc.bounds, 28.0f, 1U, &row) &&
+                row.width >= 290.0f)
+            {
+                const float selection_button_width = (row.width - 12.0f) / 3.0f;
+                if (henka_ui_button(
+                        state->ui,
+                        "authoring_shrink_selection",
+                        (henka_ui_rect){row.x, row.y, selection_button_width, 24.0f},
+                        "Shrink"))
+                {
+                    const henka_result shrink_result = sandbox3d_authoring_object_shrink_component_selection(
+                        state->authoring_object);
+                    sandbox3d_set_status(
+                        state, shrink_result != HENKA_SUCCESS,
+                        shrink_result == HENKA_SUCCESS ? "Selection shrunk across topology." :
+                            "Shrink requires a valid active selection; prior selection retained.");
+                }
+                if (henka_ui_button(
+                        state->ui,
+                        "authoring_rotate_selection",
+                        (henka_ui_rect){row.x + selection_button_width + 6.0f, row.y, selection_button_width, 24.0f},
+                        "Rotate"))
+                {
+                    const henka_result rotate_result = sandbox3d_authoring_object_rotate_selected_components(
+                        state->authoring_object,
+                        (henka_vec3){0.0f, 1.0f, 0.0f},
+                        15.0f * HENKA_DEG_TO_RAD,
+                        SANDBOX3D_AUTHORING_PIVOT_MEDIAN,
+                        SANDBOX3D_AUTHORING_ORIENTATION_LOCAL);
+                    sandbox3d_set_status(
+                        state, rotate_result != HENKA_SUCCESS,
+                        rotate_result == HENKA_SUCCESS ? "Selected components rotated 15 degrees around the median." :
+                            "Rotate requires a valid selection and finite axis; source retained.");
+                }
+                if (henka_ui_button(
+                        state->ui,
+                        "authoring_scale_active",
+                        (henka_ui_rect){row.x + (selection_button_width + 6.0f) * 2.0f, row.y, selection_button_width, 24.0f},
+                        "Scale"))
+                {
+                    const henka_result scale_result = sandbox3d_authoring_object_scale_selected_components_with_pivot(
+                        state->authoring_object,
+                        (henka_vec3){1.08f, 1.08f, 1.08f},
+                        SANDBOX3D_AUTHORING_PIVOT_MEDIAN);
+                    sandbox3d_set_status(
+                        state, scale_result != HENKA_SUCCESS,
+                        scale_result == HENKA_SUCCESS ? "Selected components scaled around the median." :
+                            "Scale requires a valid selection; source retained.");
                 }
             }
             if (state->authoring_object != NULL &&

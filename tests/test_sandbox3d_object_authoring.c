@@ -830,8 +830,70 @@ static void henka_test_sandbox3d_object_authoring_component_selection(void)
         engine, scene, entity, 1.0f, 1.0f, 1.0f, NULL, 8U, &object) == HENKA_SUCCESS);
 
     sandbox3d_authoring_object_set_selection_mode(object, SANDBOX3D_AUTHORING_SELECTION_VERTEX);
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_select_all_components(object) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_get_selected_component_count(object) == 8U);
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_get_active_component_id(object) == 1U);
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_invert_component_selection(object) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_get_selected_component_count(object) == 0U);
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_select_none_components(object) == HENKA_SUCCESS);
     HENKA_TEST_ASSERT(sandbox3d_authoring_object_select_component(object, 1U, false) == HENKA_SUCCESS);
     HENKA_TEST_ASSERT(sandbox3d_authoring_object_get_active_component_id(object) == 1U);
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_select_component(object, 2U, true) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_shrink_component_selection(object) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_get_selected_component_count(object) == 0U);
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_select_component(object, 1U, false) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_select_component(object, 2U, true) == HENKA_SUCCESS);
+    {
+        const henka_authoring_mesh* before_mesh = sandbox3d_authoring_object_get_mesh(object);
+        const henka_authoring_vertex* before_first = henka_authoring_mesh_get_vertex(before_mesh, 1U);
+        const henka_authoring_vertex* before_second = henka_authoring_mesh_get_vertex(before_mesh, 2U);
+        henka_vec3 pivot;
+        henka_quat rotation;
+        henka_vec3 expected_first;
+        henka_vec3 expected_second;
+        HENKA_TEST_ASSERT(before_first != NULL && before_second != NULL);
+        pivot = henka_vec3_scale(
+            henka_vec3_add(before_first->position, before_second->position), 0.5f);
+        rotation = henka_quat_from_axis_angle(
+            (henka_vec3){0.0f, 1.0f, 0.0f}, 1.57079632679f);
+        expected_first = henka_vec3_add(
+            pivot,
+            henka_quat_rotate_vec3(
+                rotation,
+                henka_vec3_subtract(before_first->position, pivot)));
+        expected_second = henka_vec3_add(
+            pivot,
+            henka_quat_rotate_vec3(
+                rotation,
+                henka_vec3_subtract(before_second->position, pivot)));
+        HENKA_TEST_ASSERT(sandbox3d_authoring_object_rotate_selected_components(
+            object,
+            (henka_vec3){0.0f, 1.0f, 0.0f},
+            1.57079632679f,
+            SANDBOX3D_AUTHORING_PIVOT_MEDIAN,
+            SANDBOX3D_AUTHORING_ORIENTATION_LOCAL) == HENKA_SUCCESS);
+        HENKA_TEST_ASSERT_FLOAT_CLOSE(
+            henka_authoring_mesh_get_vertex(
+                sandbox3d_authoring_object_get_mesh(object), 1U)->position.x,
+            expected_first.x,
+            0.0001f);
+        HENKA_TEST_ASSERT_FLOAT_CLOSE(
+            henka_authoring_mesh_get_vertex(
+                sandbox3d_authoring_object_get_mesh(object), 2U)->position.z,
+            expected_second.z,
+            0.0001f);
+        HENKA_TEST_ASSERT(henka_authoring_mesh_validate(
+            sandbox3d_authoring_object_get_mesh(object)));
+        HENKA_TEST_ASSERT(sandbox3d_authoring_object_undo(object) == HENKA_SUCCESS);
+        HENKA_TEST_ASSERT(sandbox3d_authoring_object_redo(object) == HENKA_SUCCESS);
+        HENKA_TEST_ASSERT(sandbox3d_authoring_object_rotate_selected_components(
+            object,
+            (henka_vec3){0.0f, 0.0f, 0.0f},
+            1.0f,
+            SANDBOX3D_AUTHORING_PIVOT_MEDIAN,
+            SANDBOX3D_AUTHORING_ORIENTATION_LOCAL) != HENKA_SUCCESS);
+    }
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_select_component(object, 1U, false) == HENKA_SUCCESS);
     {
         const henka_authoring_mesh* mesh = sandbox3d_authoring_object_get_mesh(object);
         const henka_authoring_vertex* selected_before = henka_authoring_mesh_get_vertex(mesh, 1U);
@@ -1011,6 +1073,25 @@ static void henka_test_sandbox3d_object_authoring_component_selection(void)
     HENKA_TEST_ASSERT(sandbox3d_authoring_object_get_selected_component_count(object) == 6U);
     HENKA_TEST_ASSERT(sandbox3d_authoring_object_scale_selected_components(
         object, (henka_vec3){1.02f, 1.02f, 1.02f}) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_select_face(object, 1U) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_scale_selected_components_with_pivot(
+        object,
+        (henka_vec3){1.01f, 1.01f, 1.01f},
+        SANDBOX3D_AUTHORING_PIVOT_ACTIVE) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_rotate_selected_components(
+        object,
+        (henka_vec3){0.0f, 1.0f, 0.0f},
+        0.1f,
+        SANDBOX3D_AUTHORING_PIVOT_ACTIVE,
+        SANDBOX3D_AUTHORING_ORIENTATION_NORMAL) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_rotate_selected_components(
+        object,
+        (henka_vec3){0.0f, 1.0f, 0.0f},
+        0.1f,
+        SANDBOX3D_AUTHORING_PIVOT_INDIVIDUAL,
+        SANDBOX3D_AUTHORING_ORIENTATION_LOCAL) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_authoring_mesh_validate(
+        sandbox3d_authoring_object_get_mesh(object)));
     {
         const henka_authoring_mesh_counts before_delete = henka_authoring_mesh_get_counts(
             sandbox3d_authoring_object_get_mesh(object));

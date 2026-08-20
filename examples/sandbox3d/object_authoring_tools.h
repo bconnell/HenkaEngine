@@ -21,6 +21,20 @@ typedef enum sandbox3d_authoring_selection_mode
     SANDBOX3D_AUTHORING_SELECTION_FACE
 } sandbox3d_authoring_selection_mode;
 
+typedef enum sandbox3d_authoring_pivot_mode
+{
+    SANDBOX3D_AUTHORING_PIVOT_MEDIAN = 0,
+    SANDBOX3D_AUTHORING_PIVOT_ACTIVE,
+    SANDBOX3D_AUTHORING_PIVOT_INDIVIDUAL
+} sandbox3d_authoring_pivot_mode;
+
+typedef enum sandbox3d_authoring_orientation_mode
+{
+    SANDBOX3D_AUTHORING_ORIENTATION_WORLD = 0,
+    SANDBOX3D_AUTHORING_ORIENTATION_LOCAL,
+    SANDBOX3D_AUTHORING_ORIENTATION_NORMAL
+} sandbox3d_authoring_orientation_mode;
+
 /* Describes a bounded, local-space vertex-region transform.  The operation
  * preserves the source topology and material regions while publishing the
  * changed mesh through the same scene, history, bounds, and physics
@@ -118,6 +132,14 @@ sandbox3d_authoring_selection_mode sandbox3d_authoring_object_get_selection_mode
     const sandbox3d_authoring_object* object);
 void sandbox3d_authoring_object_clear_component_selection(
     sandbox3d_authoring_object* object);
+henka_result sandbox3d_authoring_object_select_all_components(
+    sandbox3d_authoring_object* object);
+henka_result sandbox3d_authoring_object_select_none_components(
+    sandbox3d_authoring_object* object);
+henka_result sandbox3d_authoring_object_invert_component_selection(
+    sandbox3d_authoring_object* object);
+henka_result sandbox3d_authoring_object_shrink_component_selection(
+    sandbox3d_authoring_object* object);
 size_t sandbox3d_authoring_object_get_selected_component_count(
     const sandbox3d_authoring_object* object);
 /* Returns the most recently picked component in the active topology mode.
@@ -185,6 +207,16 @@ henka_result sandbox3d_authoring_object_select_edge_ring(
 henka_result sandbox3d_authoring_object_scale_selected_components(
     sandbox3d_authoring_object* object,
     henka_vec3 scale);
+henka_result sandbox3d_authoring_object_scale_selected_components_with_pivot(
+    sandbox3d_authoring_object* object,
+    henka_vec3 scale,
+    sandbox3d_authoring_pivot_mode pivot_mode);
+henka_result sandbox3d_authoring_object_rotate_selected_components(
+    sandbox3d_authoring_object* object,
+    henka_vec3 axis,
+    float radians,
+    sandbox3d_authoring_pivot_mode pivot_mode,
+    sandbox3d_authoring_orientation_mode orientation_mode);
 henka_result sandbox3d_authoring_object_transform_vertex_region(
     sandbox3d_authoring_object* object,
     const sandbox3d_authoring_region_transform* transform,

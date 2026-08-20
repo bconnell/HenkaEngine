@@ -62,13 +62,21 @@ component acted on next remains clear even when Ctrl-click has added a
 multi-selection. Grow Selection adds one topology-adjacent ring to the
 active component selection, Select Connected expands it to the complete
 reachable topology component within the bounded editor selection budget, and
-Scale Selected applies a bounded centroid scale to the selected topology through
-the same transactional mesh, bounds, physics, and undo path. General mesh-file
+Select All, Select None, Invert, and Shrink provide deterministic bounded
+selection-set operations. Rotate and Scale apply bounded transactional
+component transforms around the median pivot in the sandbox controls; the
+authoring API also exposes active-component and per-face individual pivots plus
+world, local, and face-normal rotation orientation. These commands publish
+through the same mesh, bounds, physics, and undo path. General mesh-file
 open/save remains unfinished. Soft Move X+, Soft Move Y+, and Soft Move Z+ apply
 a bounded one-ring linear falloff: the active selection receives the full
 translation and directly adjacent vertices receive half strength. This reduces
 hard seams while shaping imported fixture regions; it is a modeling foundation,
 not final anatomy or mechanical-topology proof.
+
+The authoring mesh currently represents validated polygonal surfaces only.
+Standalone wire edges and loose vertices are rejected by the validator, so the
+Sandbox does not expose Vertex Extrude or claim loose-component persistence.
 
 The Authoring section also reports the evaluated render-mesh material-region
 range after each successful edit, undo, redo, save, or reload. This is metadata

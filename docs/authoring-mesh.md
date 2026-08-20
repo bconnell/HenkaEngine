@@ -62,8 +62,15 @@ its bounded editor range. Face mode exposes Grow Selection, which expands the
 active selection by one topology-adjacent
 ring, Select Connected, which continues that expansion to the complete
 reachable component within the bounded selection budget, and Scale Selected,
-which scales the touched vertices around their centroid through the same
-transactional path. Soft Move X+, Soft Move Y+, and Soft Move Z+ apply a bounded
+which scales the touched vertices around their median pivot through the same
+transactional path. Select All, Select None, Invert, and Shrink operate on the
+active topology mode with deterministic sorted component IDs; failed
+replacement allocation leaves the prior selection intact. Rotate Selected and
+Scale Selected expose explicit median, active-component, and per-face
+individual pivot policies through the authoring API, plus world, local, and
+face-normal orientation for rotation. The sandbox controls use bounded local
+median transforms, while callers can select the other policies explicitly.
+Soft Move X+, Soft Move Y+, and Soft Move Z+ apply a bounded
 one-ring linear falloff: the active selection receives the full translation and
 directly adjacent vertices receive half strength. These are bounded generic
 selection/modeling operations rather than showcase-specific geometry rules, and
@@ -112,12 +119,17 @@ an independent editable source, while selecting another entity activates only
 that entity's wrapper. When the source has the Sandbox box-collider contract,
 the duplicate receives a separate bounded collider and its collider is retired
 with the duplicate; the source body remains owned by its original descriptor.
-Imported entities are not yet automatically authoring-enabled. Vertex/edge
-topology editing beyond bounded selection and component movement is not yet
-present; and material-instance assignment, texture
+Imported entities are not yet automatically authoring-enabled. Wrapper-level
+vertex/edge topology editing beyond bounded selection and component transforms
+is not yet present; and material-instance assignment, texture
 dependencies, general collision integration beyond the bound box contract,
 package ownership, topology-aware picking, and showcase rebuilds still need the
-shared scene/asset-manager bridge.
+shared scene/asset-manager bridge. The current authoring mesh is a validated
+surface representation: active edges must belong to at least one face, and
+standalone wire edges or loose vertices are rejected by validation. Vertex
+Extrude is therefore not claimed by the Sandbox wrapper; supporting it requires
+an explicit loose-component representation, persistence format, evaluation
+contract, and renderer/collider policy before it can be safely exposed.
 Material regions retain their editable numeric metadata, and the evaluated
 model-to-render-mesh upload retains the bounded minimum/maximum region range
 for diagnostics. They do not yet choose multiple shared material instances in
