@@ -13,7 +13,7 @@ static henka_result make_two_triangle_quad(
     henka_authoring_mesh* mesh = NULL;
     henka_authoring_vertex_id v[4];
     henka_authoring_face_id first_face;
-    henka_authoring_face_id second_face;
+    henka_authoring_face_id second_face = 0U;
     henka_authoring_vertex_id first[3];
     henka_authoring_vertex_id second[3];
     henka_result result;

@@ -21404,36 +21404,6 @@ details_group_authoring:
                             "Quad Repair rejected; source retained.");
                     }
                 }
-                if (false && henka_ui_button(
-                        state->ui,
-                        "authoring_refine_profile_top",
-                        (henka_ui_rect){row.x, row.y, 180.0f, 24.0f},
-                        "Refine Profile"))
-                {
-                    size_t affected_vertices = 0U;
-                    if (sandbox3d_refine_showcase_profile(
-                            state, entity, &affected_vertices))
-                    {
-                        sandbox3d_mark_asset_specific_preset_applied(state, entity);
-                        {
-                            const henka_authoring_mesh_counts counts =
-                                henka_authoring_mesh_get_counts(
-                                    sandbox3d_authoring_object_get_mesh(state->authoring_object));
-                            printf(
-                                "Native authoring dogfood: showcase profile edited %s; profile_regions=2 affected_vertices=%zu vertices=%zu faces=%zu source_state=HENKA_NATIVE_EDITABLE_SOURCE design_authority=ASSET_SPECIFIC_PRESET preset_applied=1.\n",
-                                display_name,
-                                affected_vertices,
-                                counts.vertices,
-                                counts.faces);
-                        }
-                        fflush(stdout);
-                        sandbox3d_set_status(state, false, "Showcase profile refined through the bounded native authoring preset.");
-                    }
-                    else
-                    {
-                        sandbox3d_set_status(state, true, "Showcase profile refinement rejected; source retained.");
-                    }
-                }
             }
             if (sandbox3d_details_flow_next_row(state, flow_desc.bounds, 28.0f, 1U, &row) &&
                 row.width >= 290.0f)
@@ -21601,14 +21571,6 @@ details_group_authoring:
                     fflush(stdout);
                     state->native_authoring_bevel_reported = true;
                 }
-                if (false && henka_ui_button(
-                        state->ui,
-                        "authoring_priority_bevel_compact",
-                        (henka_ui_rect){row.x, row.y, 82.0f, 24.0f},
-                        "Bevel"))
-                {
-                    (void)sandbox3d_apply_authoring_face_bevel(state, entity, display_name);
-                }
                 move_controls_prioritized = true;
                 if (!state->native_authoring_move_reported ||
                     fabsf(row.y - state->native_authoring_move_reported_y) > 0.5f)
@@ -21664,14 +21626,6 @@ details_group_authoring:
                     row.x + 188.0f,
                     row.y);
                 fflush(stdout);
-                if (false && henka_ui_button(
-                        state->ui,
-                        "authoring_delete_faces_compact",
-                        (henka_ui_rect){row.x + 188.0f, row.y, 102.0f, 24.0f},
-                        "Delete Faces"))
-                {
-                    (void)sandbox3d_apply_authoring_face_delete(state, entity, display_name);
-                }
             }
             if (selection_mode == SANDBOX3D_AUTHORING_SELECTION_FACE &&
                 state->native_authoring_face_edit_leading &&
@@ -23197,31 +23151,6 @@ details_group_authoring:
                     state->native_authoring_connected_selection_reported = true;
                     state->native_authoring_connected_selection_reported_y = row.y;
                 }
-                if (false && henka_ui_button(
-                        state->ui,
-                        "authoring_select_connected",
-                        (henka_ui_rect){row.x, row.y, 140.0f, 24.0f},
-                        "Select Connected"))
-                {
-                    const henka_result connected_result =
-                        sandbox3d_authoring_object_select_connected_components(
-                            state->authoring_object);
-                    printf(
-                        "Native authoring connected selection: name=%s result=%s mode=%s selected_components=%zu.\n",
-                        display_name,
-                        henka_result_to_string(connected_result),
-                        selection_label,
-                        sandbox3d_authoring_object_get_selected_component_count(state->authoring_object));
-                    fflush(stdout);
-                    if (connected_result == HENKA_SUCCESS)
-                    {
-                        sandbox3d_set_status(state, false, "Connected authoring component selected.");
-                    }
-                    else
-                    {
-                        sandbox3d_set_status(state, true, "Connected selection exceeded the bounded editor selection budget.");
-                    }
-                }
             }
             if (state->authoring_object != NULL &&
                 sandbox3d_details_flow_next_row(state, flow_desc.bounds, 28.0f, 1U, &row) &&
@@ -23343,40 +23272,6 @@ details_group_authoring:
                             "Quad Repair rejected; source retained.");
                     }
                 }
-                if (false && henka_ui_button(
-                        state->ui,
-                        "authoring_refine_profile",
-                        (henka_ui_rect){row.x, row.y, 180.0f, 24.0f},
-                        "Refine Profile"))
-                {
-                    size_t affected_vertices = 0U;
-                    if (sandbox3d_refine_showcase_profile(
-                            state, entity, &affected_vertices))
-                    {
-                        sandbox3d_mark_asset_specific_preset_applied(state, entity);
-                        const henka_authoring_mesh_counts counts =
-                            henka_authoring_mesh_get_counts(
-                                sandbox3d_authoring_object_get_mesh(state->authoring_object));
-                        printf(
-                            "Native authoring dogfood: showcase profile edited %s; profile_regions=2 affected_vertices=%zu vertices=%zu faces=%zu source_state=HENKA_NATIVE_EDITABLE_SOURCE design_authority=ASSET_SPECIFIC_PRESET preset_applied=1.\n",
-                            display_name,
-                            affected_vertices,
-                            counts.vertices,
-                            counts.faces);
-                        fflush(stdout);
-                        sandbox3d_set_status(
-                            state,
-                            false,
-                            "Showcase profile refined through native authoring.");
-                    }
-                    else
-                    {
-                        sandbox3d_set_status(
-                            state,
-                            true,
-                            "Showcase profile refinement was rejected; source retained.");
-                    }
-                }
                 if (selection_mode == SANDBOX3D_AUTHORING_SELECTION_FACE &&
                     !bevel_controls_prioritized)
                 {
@@ -23389,14 +23284,6 @@ details_group_authoring:
                             row.y);
                         fflush(stdout);
                         state->native_authoring_bevel_reported = true;
-                    }
-                    if (false && henka_ui_button(
-                            state->ui,
-                            "authoring_priority_bevel",
-                            (henka_ui_rect){row.x + 188.0f, row.y, 82.0f, 24.0f},
-                            "Bevel"))
-                    {
-                        (void)sandbox3d_apply_authoring_face_bevel(state, entity, display_name);
                     }
                 }
             }
@@ -23533,14 +23420,6 @@ details_group_authoring:
                         row.y);
                     fflush(stdout);
                     state->native_authoring_bevel_reported = true;
-                }
-                if (false && henka_ui_button(
-                        state->ui,
-                        "authoring_bevel",
-                        (henka_ui_rect){row.x, row.y, 82.0f, 24.0f},
-                        "Bevel"))
-                {
-                    (void)sandbox3d_apply_authoring_face_bevel(state, entity, display_name);
                 }
                 if (henka_ui_button(state->ui, "authoring_subdivide", (henka_ui_rect){row.x + 88.0f, row.y, 98.0f, 24.0f}, "Subdivide") &&
                     sandbox3d_authoring_object_subdivide_selected_face(state->authoring_object) == HENKA_SUCCESS)

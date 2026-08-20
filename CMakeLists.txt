@@ -30,7 +30,7 @@ endif()
 
 function(henka_enable_project_warnings target_name)
     if(MSVC)
-        target_compile_options(${target_name} PRIVATE /W4)
+        target_compile_options(${target_name} PRIVATE /W4 /WX)
     else()
         target_compile_options(${target_name} PRIVATE -Wall -Wextra -Wpedantic)
     endif()
