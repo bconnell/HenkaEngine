@@ -103,4 +103,14 @@ henka_result henka_authoring_mesh_connect_vertices(
     henka_authoring_face_id* out_new_face_id,
     henka_authoring_modeling_report* out_report);
 
+henka_result henka_authoring_mesh_bevel_vertices(
+    henka_authoring_mesh* mesh,
+    const henka_authoring_vertex_id* vertex_ids,
+    size_t vertex_count,
+    float width,
+    henka_authoring_vertex_id* out_result_vertices,
+    size_t result_vertex_capacity,
+    size_t* out_result_vertex_count,
+    henka_authoring_modeling_report* out_report);
+
 #endif

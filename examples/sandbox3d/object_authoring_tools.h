@@ -241,6 +241,13 @@ henka_result sandbox3d_authoring_object_delete_selected_vertices(
     sandbox3d_authoring_object* object);
 henka_result sandbox3d_authoring_object_connect_selected_vertices(
     sandbox3d_authoring_object* object);
+henka_result sandbox3d_authoring_object_bevel_selected_vertices(
+    sandbox3d_authoring_object* object);
+float sandbox3d_authoring_object_get_bevel_width(
+    const sandbox3d_authoring_object* object);
+henka_result sandbox3d_authoring_object_set_bevel_width(
+    sandbox3d_authoring_object* object,
+    float width);
 float sandbox3d_authoring_object_get_merge_distance(
     const sandbox3d_authoring_object* object);
 henka_result sandbox3d_authoring_object_set_merge_distance(

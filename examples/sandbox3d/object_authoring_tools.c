@@ -62,6 +62,7 @@ struct sandbox3d_authoring_object
     size_t selected_face_count;
     char* source_path;
     float merge_distance;
+    float bevel_width;
 };
 
 static henka_result sandbox3d_authoring_allocate_id_scratch(
@@ -1658,6 +1659,7 @@ static henka_result sandbox3d_authoring_object_create_from_owned_mesh(
      * here hid the real logical-object silhouette immediately after import. */
     object->selected_face = HENKA_AUTHORING_INVALID_ID;
     object->merge_distance = 0.001f;
+    object->bevel_width = 0.05f;
     object->selection_mode = SANDBOX3D_AUTHORING_SELECTION_FACE;
     object->active_component_id = HENKA_AUTHORING_INVALID_ID;
     object->selected_face_count = 0U;
@@ -4518,6 +4520,89 @@ henka_result sandbox3d_authoring_object_connect_selected_vertices(
 {
     return sandbox3d_authoring_apply_selected_vertex_topology(
         object, SANDBOX3D_SELECTED_VERTEX_CONNECT);
+}
+
+henka_result sandbox3d_authoring_object_bevel_selected_vertices(
+    sandbox3d_authoring_object* object)
+{
+    const uint32_t* selected_ids;
+    henka_authoring_vertex_id* result_vertices = NULL;
+    henka_authoring_mesh* candidate = NULL;
+    henka_authoring_modeling_report report = {0};
+    size_t selected_count = 0U;
+    size_t result_count = 0U;
+    size_t index;
+    bool published = false;
+    henka_result result;
+
+    if (object == NULL || object->selection_mode != SANDBOX3D_AUTHORING_SELECTION_VERTEX)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    selected_ids = sandbox3d_authoring_selected_ids_const(object, &selected_count);
+    if (selected_ids == NULL || selected_count == 0U || object->selected_vertex_max_id == 0U)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    result_vertices = henka_malloc(object->selected_vertex_max_id * sizeof(*result_vertices));
+    if (result_vertices == NULL) return HENKA_ERROR_OUT_OF_MEMORY;
+    result = henka_authoring_mesh_clone(object->mesh, &candidate);
+    if (result == HENKA_SUCCESS)
+    {
+        result = henka_authoring_mesh_bevel_vertices(
+            candidate,
+            (const henka_authoring_vertex_id*)selected_ids,
+            selected_count,
+            object->bevel_width,
+            result_vertices,
+            object->selected_vertex_max_id,
+            &result_count,
+            &report);
+    }
+    if (result == HENKA_SUCCESS)
+    {
+        for (index = 0U; index < result_count; ++index)
+        {
+            if (henka_authoring_mesh_get_vertex(candidate, result_vertices[index]) == NULL)
+            {
+                result = HENKA_ERROR_INVALID_ARGUMENT;
+                break;
+            }
+        }
+    }
+    if (result == HENKA_SUCCESS)
+    {
+        result = sandbox3d_authoring_publish_candidate(
+            object, candidate, true, HENKA_AUTHORING_INVALID_ID);
+        published = result == HENKA_SUCCESS;
+    }
+    if (result == HENKA_SUCCESS)
+    {
+        result = sandbox3d_authoring_replace_current_selection(
+            object, result_vertices, result_count,
+            result_count > 0U ? result_vertices[0] : HENKA_AUTHORING_INVALID_ID);
+    }
+    if (result != HENKA_SUCCESS && !published) henka_authoring_mesh_destroy(candidate);
+    henka_free(result_vertices);
+    return result;
+}
+
+float sandbox3d_authoring_object_get_bevel_width(
+    const sandbox3d_authoring_object* object)
+{
+    return object != NULL ? object->bevel_width : 0.05f;
+}
+
+henka_result sandbox3d_authoring_object_set_bevel_width(
+    sandbox3d_authoring_object* object,
+    float width)
+{
+    if (object == NULL || !isfinite(width) || width <= 0.0f || width > 1000000.0f)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    object->bevel_width = width;
+    return HENKA_SUCCESS;
 }
 
 float sandbox3d_authoring_object_get_merge_distance(

@@ -22244,6 +22244,50 @@ details_group_authoring:
                     if (topology_result == HENKA_SUCCESS) sandbox3d_mark_generic_modeling_applied(state, entity);
                 }
             }
+            if (state->authoring_object != NULL &&
+                selection_mode == SANDBOX3D_AUTHORING_SELECTION_VERTEX &&
+                sandbox3d_details_flow_next_row(state, flow_desc.bounds, 24.0f, 1U, &row) &&
+                row.width >= 290.0f)
+            {
+                const bool bevel_enabled =
+                    sandbox3d_authoring_object_get_selected_component_count(state->authoring_object) > 0U;
+                (void)henka_ui_label_colored(
+                    state->ui, row.x, row.y + 5.0f, 0.85f,
+                    "Bevel (1+ selected)", HENKA_UI_COLOR_INFO);
+                if (bevel_enabled && henka_ui_button(
+                        state->ui, "authoring_bevel_vertices_top",
+                        (henka_ui_rect){row.x + 104.0f, row.y, 88.0f, 24.0f}, "Bevel"))
+                {
+                    const henka_result bevel_result =
+                        sandbox3d_authoring_object_bevel_selected_vertices(state->authoring_object);
+                    sandbox3d_set_status(state, bevel_result != HENKA_SUCCESS,
+                        bevel_result == HENKA_SUCCESS ? "Selected vertices beveled." :
+                            "Bevel rejected; width, topology, or capacity was invalid.");
+                    if (bevel_result == HENKA_SUCCESS) sandbox3d_mark_generic_modeling_applied(state, entity);
+                }
+            }
+            if (state->authoring_object != NULL &&
+                selection_mode == SANDBOX3D_AUTHORING_SELECTION_VERTEX &&
+                sandbox3d_details_flow_next_row(state, flow_desc.bounds, 24.0f, 1U, &row) &&
+                row.width >= 290.0f)
+            {
+                char bevel_width_text[64];
+                const float bevel_width = sandbox3d_authoring_object_get_bevel_width(state->authoring_object);
+                (void)snprintf(bevel_width_text, sizeof(bevel_width_text), "Bevel width %.6g", bevel_width);
+                (void)henka_ui_label(state->ui, row.x, row.y + 5.0f, 0.85f, bevel_width_text);
+                if (henka_ui_button(state->ui, "authoring_bevel_width_down_top",
+                        (henka_ui_rect){row.x + 170.0f, row.y, 54.0f, 24.0f}, "-"))
+                {
+                    (void)sandbox3d_authoring_object_set_bevel_width(
+                        state->authoring_object, bevel_width * 0.5f);
+                }
+                if (henka_ui_button(state->ui, "authoring_bevel_width_up_top",
+                        (henka_ui_rect){row.x + 230.0f, row.y, 54.0f, 24.0f}, "+"))
+                {
+                    (void)sandbox3d_authoring_object_set_bevel_width(
+                        state->authoring_object, bevel_width * 2.0f);
+                }
+            }
             if (selection_mode == SANDBOX3D_AUTHORING_SELECTION_FACE &&
                 !bevel_controls_prioritized &&
                 sandbox3d_details_flow_next_row(state, flow_desc.bounds, 28.0f, 1U, &row) &&
@@ -22983,6 +23027,30 @@ details_group_authoring:
                 sandbox3d_details_flow_next_row(state, flow_desc.bounds, 24.0f, 1U, &row) &&
                 row.width >= 290.0f)
             {
+                const bool bevel_enabled =
+                    sandbox3d_authoring_object_get_selected_component_count(state->authoring_object) > 0U;
+                (void)henka_ui_label_colored(
+                    state->ui, row.x, row.y + 5.0f, 0.85f,
+                    "Bevel (1+ selected)", HENKA_UI_COLOR_INFO);
+                if (bevel_enabled && henka_ui_button(
+                        state->ui, "authoring_bevel_vertices",
+                        (henka_ui_rect){row.x + 104.0f, row.y, 88.0f, 24.0f}, "Bevel"))
+                {
+                    const henka_result bevel_result =
+                        sandbox3d_authoring_object_bevel_selected_vertices(state->authoring_object);
+                    if (bevel_result == HENKA_SUCCESS)
+                    {
+                        sandbox3d_mark_generic_modeling_applied(state, entity);
+                        sandbox3d_set_status(state, false, "Selected vertices beveled.");
+                    }
+                    else sandbox3d_set_status(state, true, "Bevel rejected; width, topology, or capacity was invalid.");
+                }
+            }
+            if (state->authoring_object != NULL &&
+                selection_mode == SANDBOX3D_AUTHORING_SELECTION_VERTEX &&
+                sandbox3d_details_flow_next_row(state, flow_desc.bounds, 24.0f, 1U, &row) &&
+                row.width >= 290.0f)
+            {
                 char merge_distance_text[64];
                 const float merge_distance = sandbox3d_authoring_object_get_merge_distance(state->authoring_object);
                 (void)snprintf(merge_distance_text, sizeof(merge_distance_text), "Merge distance %.6g", merge_distance);
@@ -22998,6 +23066,28 @@ details_group_authoring:
                 {
                     (void)sandbox3d_authoring_object_set_merge_distance(
                         state->authoring_object, merge_distance * 2.0f);
+                }
+            }
+            if (state->authoring_object != NULL &&
+                selection_mode == SANDBOX3D_AUTHORING_SELECTION_VERTEX &&
+                sandbox3d_details_flow_next_row(state, flow_desc.bounds, 24.0f, 1U, &row) &&
+                row.width >= 290.0f)
+            {
+                char bevel_width_text[64];
+                const float bevel_width = sandbox3d_authoring_object_get_bevel_width(state->authoring_object);
+                (void)snprintf(bevel_width_text, sizeof(bevel_width_text), "Bevel width %.6g", bevel_width);
+                (void)henka_ui_label(state->ui, row.x, row.y + 5.0f, 0.85f, bevel_width_text);
+                if (henka_ui_button(state->ui, "authoring_bevel_width_down",
+                        (henka_ui_rect){row.x + 170.0f, row.y, 54.0f, 24.0f}, "-"))
+                {
+                    (void)sandbox3d_authoring_object_set_bevel_width(
+                        state->authoring_object, bevel_width * 0.5f);
+                }
+                if (henka_ui_button(state->ui, "authoring_bevel_width_up",
+                        (henka_ui_rect){row.x + 230.0f, row.y, 54.0f, 24.0f}, "+"))
+                {
+                    (void)sandbox3d_authoring_object_set_bevel_width(
+                        state->authoring_object, bevel_width * 2.0f);
                 }
             }
             if (state->authoring_object != NULL &&

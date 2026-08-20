@@ -130,6 +130,16 @@ splits one face between two non-adjacent corners while preserving the original
 face ID and allocating the new face from the monotonic face-slot high-water
 mark. Edge topology editing beyond bounded selection and component transforms
 remain incomplete; and
+Vertex Bevel is also available as one atomic multi-selection operation. It
+uses a deterministic edge/end-point cut table, rejects non-finite, zero,
+overlapping, non-manifold, and capacity-invalid requests, preserves
+per-corner UV interpolation and original hard trimmed segments, creates
+same-material interior caps with deterministic planar UVs, and leaves normal
+boundary vertices open. Successful Sandbox bevels replace Vertex selection with
+the live cut vertices and use the same history/render/bounds/collider
+transaction as other authoring edits. Vertex Extrude remains intentionally
+unavailable because the surface representation has no supported loose-edge
+contract.
 material-instance assignment, texture
 dependencies, general collision integration beyond the bound box contract,
 package ownership, topology-aware picking, and showcase rebuilds still need the

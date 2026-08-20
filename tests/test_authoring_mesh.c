@@ -494,6 +494,84 @@ cleanup:
     return result ? 1 : fail("vertex topology operations");
 }
 
+static int test_vertex_bevel_operations(void)
+{
+    const henka_authoring_mesh_desc desc = {64U, 128U, 64U, 8U};
+    henka_authoring_mesh* mesh = NULL;
+    henka_authoring_vertex_id result_vertices[16];
+    henka_authoring_modeling_report report;
+    size_t result_count = 0U;
+    henka_authoring_mesh_counts before;
+    henka_authoring_mesh_counts after;
+    int result = 0;
+
+    if (henka_authoring_mesh_create_plane(&desc, 2.0f, 2.0f, &mesh) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    before = henka_authoring_mesh_get_counts(mesh);
+    if (henka_authoring_mesh_bevel_vertices(
+            mesh, (const henka_authoring_vertex_id[]){1U}, 1U, 0.2f,
+            result_vertices, 16U, &result_count, &report) != HENKA_SUCCESS ||
+        !report.changed || result_count != 2U ||
+        henka_authoring_mesh_get_counts(mesh).vertices != before.vertices + 1U ||
+        henka_authoring_mesh_get_vertex(mesh, 1U) != NULL ||
+        !henka_authoring_mesh_validate(mesh))
+    {
+        goto cleanup;
+    }
+    henka_authoring_mesh_destroy(mesh);
+    mesh = NULL;
+    if (henka_authoring_mesh_create(&desc, &mesh) != HENKA_SUCCESS ||
+        henka_authoring_mesh_add_vertex(mesh, (henka_vec3){0.0f, 0.0f, 0.0f}, (henka_vec2){0.0f, 0.0f}, 0U, &(henka_authoring_vertex_id){0U}) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    {
+        const henka_vec3 positions[3] = {
+            {1.0f, 0.0f, 0.0f}, {-0.5f, 0.0f, 0.8660254f}, {-0.5f, 0.0f, -0.8660254f}};
+        const henka_authoring_vertex_id faces[3][3] = {{1U, 2U, 3U}, {1U, 3U, 4U}, {1U, 4U, 2U}};
+        size_t index;
+        for (index = 0U; index < 3U; ++index)
+        {
+            if (henka_authoring_mesh_add_vertex(mesh, positions[index], (henka_vec2){0.0f, 0.0f}, 0U, &(henka_authoring_vertex_id){0U}) != HENKA_SUCCESS) goto cleanup;
+        }
+        for (index = 0U; index < 3U; ++index)
+        {
+            if (henka_authoring_mesh_add_face(mesh, faces[index], 3U, 0U, false, &(henka_authoring_face_id){0U}) != HENKA_SUCCESS) goto cleanup;
+        }
+    }
+    if (henka_authoring_mesh_bevel_vertices(
+            mesh, (const henka_authoring_vertex_id[]){1U}, 1U, 0.1f,
+            result_vertices, 16U, &result_count, &report) != HENKA_SUCCESS ||
+        result_count != 3U || henka_authoring_mesh_get_counts(mesh).faces != 4U ||
+        henka_authoring_mesh_get_vertex(mesh, 1U) != NULL ||
+        !henka_authoring_mesh_validate(mesh))
+    {
+        goto cleanup;
+    }
+    henka_authoring_mesh_destroy(mesh);
+    mesh = NULL;
+    if (henka_authoring_mesh_create_plane(&desc, 2.0f, 2.0f, &mesh) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    before = henka_authoring_mesh_get_counts(mesh);
+    if (henka_authoring_mesh_bevel_vertices(
+            mesh, (const henka_authoring_vertex_id[]){1U}, 1U, 0.0f,
+            result_vertices, 16U, &result_count, &report) == HENKA_SUCCESS ||
+        (after = henka_authoring_mesh_get_counts(mesh), memcmp(&before, &after, sizeof(before)) != 0) ||
+        henka_authoring_mesh_get_vertex(mesh, 1U) == NULL)
+    {
+        goto cleanup;
+    }
+    result = 1;
+
+cleanup:
+    henka_authoring_mesh_destroy(mesh);
+    return result ? 1 : fail("vertex bevel operations");
+}
+
 static int test_uv_authoring(void)
 {
     const henka_authoring_mesh_desc desc = {64U, 128U, 64U, 8U};
@@ -632,6 +710,6 @@ int main(void)
 {
     return test_topology_and_evaluation() && test_rejection_and_tombstones() &&
         test_history_and_persistence() && test_modeling_operations() && test_vertex_merge_operations() &&
-        test_vertex_topology_operations() && test_uv_authoring() &&
+        test_vertex_topology_operations() && test_vertex_bevel_operations() && test_uv_authoring() &&
         test_modeling_material_region_and_uv_continuity() ? 0 : 1;
 }
