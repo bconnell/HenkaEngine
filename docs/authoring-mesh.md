@@ -120,8 +120,16 @@ that entity's wrapper. When the source has the Sandbox box-collider contract,
 the duplicate receives a separate bounded collider and its collider is retired
 with the duplicate; the source body remains owned by its original descriptor.
 Imported entities are not yet automatically authoring-enabled. Wrapper-level
-vertex merge is present; vertex dissolve/delete/connect, edge topology editing
-beyond bounded selection, and component transforms remain incomplete; and
+vertex merge is present; bounded vertex dissolve/delete/connect are now
+available through the core API and Sandbox Vertex Modeling bridge. Dissolve
+supports boundary corner removal and unambiguous manifold triangle fans;
+ambiguous, hard-edge, UV-seamed, non-triangle, and non-manifold cases fail
+closed. Delete removes selected vertices and their incident faces, then
+removes only newly orphaned vertices in the affected neighborhood. Connect
+splits one face between two non-adjacent corners while preserving the original
+face ID and allocating the new face from the monotonic face-slot high-water
+mark. Edge topology editing beyond bounded selection and component transforms
+remain incomplete; and
 material-instance assignment, texture
 dependencies, general collision integration beyond the bound box contract,
 package ownership, topology-aware picking, and showcase rebuilds still need the
@@ -184,8 +192,8 @@ authoring faces from treating non-authoritative tangent metadata as finished
 shading data while preserving the single mesh/material ownership path.
 
 This is the bounded runtime foundation of the authoring-parity campaign. It is
-not yet a full modeling editor: component dissolve/delete, weld/split/bridge/loop cuts,
-production hard-surface profiles, automatic multi-island UV unwrap and
+not yet a full modeling editor: weld/split/bridge/loop cuts, production
+hard-surface profiles, automatic multi-island UV unwrap and
 global packing, material editing, texture painting, editor integration for the
 history/file APIs, and showcase rebuild workflows remain unfinished. glTF
 and KTX2 material ownership continues through the existing asset paths; this

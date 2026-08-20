@@ -4431,6 +4431,95 @@ henka_result sandbox3d_authoring_object_merge_selected_vertices_by_distance(
         object, true, HENKA_AUTHORING_VERTEX_MERGE_CENTER);
 }
 
+typedef enum sandbox3d_selected_vertex_topology_operation
+{
+    SANDBOX3D_SELECTED_VERTEX_DISSOLVE = 0,
+    SANDBOX3D_SELECTED_VERTEX_DELETE,
+    SANDBOX3D_SELECTED_VERTEX_CONNECT
+} sandbox3d_selected_vertex_topology_operation;
+
+static henka_result sandbox3d_authoring_apply_selected_vertex_topology(
+    sandbox3d_authoring_object* object,
+    sandbox3d_selected_vertex_topology_operation operation)
+{
+    const uint32_t* selected_ids;
+    henka_authoring_vertex_id* vertex_ids = NULL;
+    henka_authoring_mesh* candidate = NULL;
+    henka_authoring_modeling_report report = {0};
+    size_t selected_count = 0U;
+    size_t index;
+    henka_result result;
+
+    if (object == NULL || object->selection_mode != SANDBOX3D_AUTHORING_SELECTION_VERTEX)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    selected_ids = sandbox3d_authoring_selected_ids_const(object, &selected_count);
+    if (selected_ids == NULL || selected_count == 0U ||
+        (operation == SANDBOX3D_SELECTED_VERTEX_CONNECT && selected_count != 2U))
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    vertex_ids = henka_malloc(selected_count * sizeof(*vertex_ids));
+    if (vertex_ids == NULL) return HENKA_ERROR_OUT_OF_MEMORY;
+    for (index = 0U; index < selected_count; ++index)
+    {
+        vertex_ids[index] = (henka_authoring_vertex_id)selected_ids[index];
+    }
+    result = henka_authoring_mesh_clone(object->mesh, &candidate);
+    if (result == HENKA_SUCCESS)
+    {
+        if (operation == SANDBOX3D_SELECTED_VERTEX_DISSOLVE)
+        {
+            result = henka_authoring_mesh_dissolve_vertices(
+                candidate, vertex_ids, selected_count, &report);
+        }
+        else if (operation == SANDBOX3D_SELECTED_VERTEX_DELETE)
+        {
+            result = henka_authoring_mesh_delete_vertices(
+                candidate, vertex_ids, selected_count, &report);
+        }
+        else
+        {
+            henka_authoring_face_id new_face_id = HENKA_AUTHORING_INVALID_ID;
+            result = henka_authoring_mesh_connect_vertices(
+                candidate, vertex_ids[0], vertex_ids[1], &new_face_id, &report);
+        }
+    }
+    if (result == HENKA_SUCCESS)
+    {
+        result = sandbox3d_authoring_publish_candidate(
+            object, candidate, true, HENKA_AUTHORING_INVALID_ID);
+    }
+    if (result != HENKA_SUCCESS)
+    {
+        henka_authoring_mesh_destroy(candidate);
+    }
+    henka_free(vertex_ids);
+    return result;
+}
+
+henka_result sandbox3d_authoring_object_dissolve_selected_vertices(
+    sandbox3d_authoring_object* object)
+{
+    return sandbox3d_authoring_apply_selected_vertex_topology(
+        object, SANDBOX3D_SELECTED_VERTEX_DISSOLVE);
+}
+
+henka_result sandbox3d_authoring_object_delete_selected_vertices(
+    sandbox3d_authoring_object* object)
+{
+    return sandbox3d_authoring_apply_selected_vertex_topology(
+        object, SANDBOX3D_SELECTED_VERTEX_DELETE);
+}
+
+henka_result sandbox3d_authoring_object_connect_selected_vertices(
+    sandbox3d_authoring_object* object)
+{
+    return sandbox3d_authoring_apply_selected_vertex_topology(
+        object, SANDBOX3D_SELECTED_VERTEX_CONNECT);
+}
+
 float sandbox3d_authoring_object_get_merge_distance(
     const sandbox3d_authoring_object* object)
 {

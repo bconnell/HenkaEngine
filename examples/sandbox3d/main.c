@@ -22194,6 +22194,56 @@ details_group_authoring:
                     if (merge_result == HENKA_SUCCESS) sandbox3d_mark_generic_modeling_applied(state, entity);
                 }
             }
+            if (state->authoring_object != NULL &&
+                selection_mode == SANDBOX3D_AUTHORING_SELECTION_VERTEX &&
+                sandbox3d_details_flow_next_row(state, flow_desc.bounds, 24.0f, 1U, &row) &&
+                row.width >= 290.0f)
+            {
+                const size_t selected_count =
+                    sandbox3d_authoring_object_get_selected_component_count(state->authoring_object);
+                const bool topology_enabled = selected_count > 0U;
+                const bool connect_enabled = selected_count == 2U;
+                const float button_width = (row.width - 12.0f) / 3.0f;
+                (void)henka_ui_label_colored(
+                    state->ui, row.x, row.y + 5.0f, 0.85f,
+                    "Topology (1+; Connect=2)", HENKA_UI_COLOR_INFO);
+                if (topology_enabled && henka_ui_button(
+                        state->ui, "authoring_dissolve_vertices_top",
+                        (henka_ui_rect){row.x + 104.0f, row.y, button_width, 24.0f},
+                        "Dissolve"))
+                {
+                    const henka_result topology_result =
+                        sandbox3d_authoring_object_dissolve_selected_vertices(state->authoring_object);
+                    sandbox3d_set_status(state, topology_result != HENKA_SUCCESS,
+                        topology_result == HENKA_SUCCESS ? "Selected vertices dissolved." :
+                            "Dissolve rejected; source and selection retained.");
+                    if (topology_result == HENKA_SUCCESS) sandbox3d_mark_generic_modeling_applied(state, entity);
+                }
+                if (connect_enabled && henka_ui_button(
+                        state->ui, "authoring_connect_vertices_top",
+                        (henka_ui_rect){row.x + 104.0f + button_width + 6.0f, row.y, button_width, 24.0f},
+                        "Connect"))
+                {
+                    const henka_result topology_result =
+                        sandbox3d_authoring_object_connect_selected_vertices(state->authoring_object);
+                    sandbox3d_set_status(state, topology_result != HENKA_SUCCESS,
+                        topology_result == HENKA_SUCCESS ? "Selected vertices connected." :
+                            "Connect rejected; select two non-adjacent vertices on one face.");
+                    if (topology_result == HENKA_SUCCESS) sandbox3d_mark_generic_modeling_applied(state, entity);
+                }
+                if (topology_enabled && henka_ui_button(
+                        state->ui, "authoring_delete_vertices_top",
+                        (henka_ui_rect){row.x + 104.0f + (button_width + 6.0f) * 2.0f, row.y, button_width, 24.0f},
+                        "Delete"))
+                {
+                    const henka_result topology_result =
+                        sandbox3d_authoring_object_delete_selected_vertices(state->authoring_object);
+                    sandbox3d_set_status(state, topology_result != HENKA_SUCCESS,
+                        topology_result == HENKA_SUCCESS ? "Selected vertices deleted." :
+                            "Delete rejected; source and selection retained.");
+                    if (topology_result == HENKA_SUCCESS) sandbox3d_mark_generic_modeling_applied(state, entity);
+                }
+            }
             if (selection_mode == SANDBOX3D_AUTHORING_SELECTION_FACE &&
                 !bevel_controls_prioritized &&
                 sandbox3d_details_flow_next_row(state, flow_desc.bounds, 28.0f, 1U, &row) &&
@@ -22870,6 +22920,62 @@ details_group_authoring:
                         sandbox3d_set_status(state, false, "Selected vertices merged within the configured distance.");
                     }
                     else sandbox3d_set_status(state, true, "Distance merge rejected; source and selection retained.");
+                }
+            }
+            if (state->authoring_object != NULL &&
+                selection_mode == SANDBOX3D_AUTHORING_SELECTION_VERTEX &&
+                sandbox3d_details_flow_next_row(state, flow_desc.bounds, 24.0f, 1U, &row) &&
+                row.width >= 290.0f)
+            {
+                const size_t selected_count =
+                    sandbox3d_authoring_object_get_selected_component_count(state->authoring_object);
+                const bool topology_enabled = selected_count > 0U;
+                const bool connect_enabled = selected_count == 2U;
+                const float button_width = (row.width - 12.0f) / 3.0f;
+                (void)henka_ui_label_colored(
+                    state->ui, row.x, row.y + 5.0f, 0.85f,
+                    "Topology (1+; Connect=2)", HENKA_UI_COLOR_INFO);
+                if (topology_enabled && henka_ui_button(
+                        state->ui, "authoring_dissolve_vertices",
+                        (henka_ui_rect){row.x + 104.0f, row.y, button_width, 24.0f},
+                        "Dissolve"))
+                {
+                    const henka_result topology_result =
+                        sandbox3d_authoring_object_dissolve_selected_vertices(state->authoring_object);
+                    if (topology_result == HENKA_SUCCESS)
+                    {
+                        sandbox3d_mark_generic_modeling_applied(state, entity);
+                        sandbox3d_set_status(state, false, "Selected vertices dissolved.");
+                    }
+                    else sandbox3d_set_status(state, true, "Dissolve rejected; source and selection retained.");
+                }
+                if (connect_enabled && henka_ui_button(
+                        state->ui, "authoring_connect_vertices",
+                        (henka_ui_rect){row.x + 104.0f + button_width + 6.0f, row.y, button_width, 24.0f},
+                        "Connect"))
+                {
+                    const henka_result topology_result =
+                        sandbox3d_authoring_object_connect_selected_vertices(state->authoring_object);
+                    if (topology_result == HENKA_SUCCESS)
+                    {
+                        sandbox3d_mark_generic_modeling_applied(state, entity);
+                        sandbox3d_set_status(state, false, "Selected vertices connected.");
+                    }
+                    else sandbox3d_set_status(state, true, "Connect rejected; select two non-adjacent vertices on one face.");
+                }
+                if (topology_enabled && henka_ui_button(
+                        state->ui, "authoring_delete_vertices",
+                        (henka_ui_rect){row.x + 104.0f + (button_width + 6.0f) * 2.0f, row.y, button_width, 24.0f},
+                        "Delete"))
+                {
+                    const henka_result topology_result =
+                        sandbox3d_authoring_object_delete_selected_vertices(state->authoring_object);
+                    if (topology_result == HENKA_SUCCESS)
+                    {
+                        sandbox3d_mark_generic_modeling_applied(state, entity);
+                        sandbox3d_set_status(state, false, "Selected vertices deleted.");
+                    }
+                    else sandbox3d_set_status(state, true, "Delete rejected; source and selection retained.");
                 }
             }
             if (state->authoring_object != NULL &&

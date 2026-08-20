@@ -84,4 +84,23 @@ henka_result henka_authoring_mesh_merge_vertices_by_distance(
     size_t* out_survivor_count,
     henka_authoring_modeling_report* out_report);
 
+henka_result henka_authoring_mesh_dissolve_vertices(
+    henka_authoring_mesh* mesh,
+    const henka_authoring_vertex_id* vertex_ids,
+    size_t vertex_count,
+    henka_authoring_modeling_report* out_report);
+
+henka_result henka_authoring_mesh_delete_vertices(
+    henka_authoring_mesh* mesh,
+    const henka_authoring_vertex_id* vertex_ids,
+    size_t vertex_count,
+    henka_authoring_modeling_report* out_report);
+
+henka_result henka_authoring_mesh_connect_vertices(
+    henka_authoring_mesh* mesh,
+    henka_authoring_vertex_id first_vertex_id,
+    henka_authoring_vertex_id second_vertex_id,
+    henka_authoring_face_id* out_new_face_id,
+    henka_authoring_modeling_report* out_report);
+
 #endif
