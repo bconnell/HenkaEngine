@@ -7,7 +7,8 @@ Provenance is explicit: the glTF pair and generated detail textures are `GENERAT
 ## Bounded native-authoring bridge
 
 The normal editor now provides the shortest native dogfood path for those
-fixtures. Press `F5` until `Inspect` or `Full Tools` is active, select a
+fixtures. Start in `Standard` or press `F5` for the temporary `Focus Viewport`
+layout, then select a
 `Showcase Giraffe ...` or `Showcase Rocket ...` primitive in `Scene Objects`.
 Selecting one prioritizes `Object Details > Authoring`; choose `Make Editable`.
 Henka converts

@@ -72,7 +72,7 @@ That is enough for the current sandbox panel, status text, and small runtime con
 ## Sandbox panels
 
 In `henka_sandbox3d`, press `F4` to open the panels.
-On startup, the UI opens in `View` mode with no selected scene object so the controls are immediately visible without covering most of the scene.
+On startup, the UI opens in the stable `Standard` shell with no selected scene object. `Focus Viewport` is a temporary presentation mode and never becomes the startup state.
 If you hide the panels, a small in-window recall hint stays visible so the viewport can stay clean without losing the `F4` and `F5` cues.
 
 The sandbox now uses a movable workspace layout with a restrained graphite and slate shell, mixed-case built-in text, lower-contrast one-pixel framing, flat secondary controls, underline-only tabs, compact switch toggles, quieter data-row separators, compact single-tab headers with icon-like drag grips, and docks that do not reserve large empty regions for sections hidden by the active workspace mode. The workspace model also has a bounded, validated single-root split topology: internal split nodes own their divider and ratio, leaf sections retain stable panel identity, and divider edits can be committed or rolled back transactionally. A right-click on section header chrome opens the required context menu; tool content retains right-click authority. Close, merge/tab-group, equalize, maximize/restore, native-detach, last-closed restoration, and available-singleton split actions are wired to the bounded topology/native-window paths. `Close this section` removes a complete multi-tab section, while the separate tab-close path removes only the active tab and a final-tab close removes the containing section; the previous topology is retained for last-closed restoration. The dock stack now projects visible section order from the validated topology, so closed and merged-away leaves no longer remain in legacy dock ordering. Merged sections expose bounded header tab controls, project the selected tab's content into the section, and support same-section tab reordering with click-preserving release and rollback on cancellation; the remaining topology editor workflow is still open:
@@ -98,9 +98,9 @@ The sandbox now uses a movable workspace layout with a restrained graphite and s
 
 Docked panels stay outside the scene. While dragging a docked panel, valid left and right dock targets show a thin outline over the final stack slot. Releasing on an outline redocks there, including across the workspace. Releasing away from the outlines opens a separate native tool window, so the detached panel can move outside the main sandbox frame without clipping. Detached production panels render their matching controls and route their release-confirm input in the native surface; a compact return bar provides Dock L, Dock R, and Home actions. Closing that native window returns the panel to its last valid dock. Bounded detached virtual-screen placement is saved and restored through the public tool-window state/position path; malformed or out-of-range coordinates safely fall back. Moving a focused detached title bar into the main-window envelope requests bounded drag-back docking. Detachable Scene View remains future work. `Reset Layout` closes detached windows and restores the default workspace.
 
-The current `Controls` panel can:
+The current `Tools` panel can:
 
-- switch between `View`, `Inspect`, and `Full Tools`
+- switch between `Build`, `Game`, and `World` work contexts
 - split its content into a readable `Main` page and a `Panels/Status` page
 - toggle the grid
 - toggle wireframe
@@ -111,7 +111,7 @@ The current `Controls` panel can:
 - use action-based move, rotate, scale, axis-constraint, confirm, cancel, stepped-adjustment, and fine-adjustment hotkeys
 - toggle transform snapping and show the current snap increments
 - toggle `Hit Boxes` so the viewport can draw the same handle regions that gizmo hit testing uses
-- start with panels visible on startup and reset-style launches so `Diagnostics`, `Transform QA`, and `Physics QA` are reachable from the main Controls page without using `F4` first
+- start with panels visible on startup and reset-style launches so `Diagnostics`, `Transform QA`, and `Physics QA` are reachable from the main Tools page without using `F4` first
 - start launches with no selected scene object until the user selects one
 - open `Physics QA` for the opt-in rigid-body demo, playback controls, selected-body actions, and debug visualization
 - open `Native Panel Test` as a separate OS-level foundation window
@@ -120,7 +120,7 @@ The current `Controls` panel can:
 - open in-window utilities for help, legend, paths, settings, diagnostics, and transform QA
 - show short in-window status feedback for recent actions
 
-`Inspect` and `Full Tools` keep the object panels available. `Full Tools` also keeps the heavier adjustment and status text visible.
+`Standard` keeps the object panels available. `Focus Viewport` temporarily collapses the ordinary inspection footprint while leaving the stable shell recoverable.
 
 The current `Scene Objects` panel can:
 
@@ -143,7 +143,7 @@ The current `Object Details` panel can:
 - reset the default transform
 - open object info in the utility panel and still print it to the console
 
-Controls Main and Object Details share a bounded panel-body presentation model.
+Tools Main and Object Details share a bounded panel-body presentation model.
 The core Henka UI API owns the presentation-only scroll state, scrollbar thumb
 geometry, and bounded thumb-drag mapping; Sandbox editor state is an adapter
 that persists offsets and group presentation without becoming a second scroll
@@ -177,7 +177,7 @@ The selected object also shows a transform gizmo inside the dedicated scene view
 - `Move` exposes world-axis translation handles.
 - `Rotate` exposes world-axis rotation rings.
 - `Scale` currently exposes a uniform center handle for the current sandbox pass.
-- Snapping can be toggled from the Controls panel.
+- Snapping can be toggled from the Tools panel.
 - The sandbox now draws the normal runtime gizmo as a viewport overlay from the same projected handle model that hit testing and drag start use.
 - Gizmo hit testing uses the active scene viewport plus those same projected handle bounds, so the visible handles and the mouse stay aligned at normal window sizes.
 - The gizmo helper pieces remain internal to the viewport tool path and do not appear as normal sandbox objects in selection, object details, persisted selection state, or normal scene picking.
@@ -196,7 +196,7 @@ The viewport now also supports direct navigation while mouse capture is released
 - `F`: frame the selected object
 - `Home`: reset the default camera view
 
-Mouse wheel input over the `Controls` or `Scene Objects` panels is routed to panel paging instead of the viewport, so panel interaction does not leak into scene zooming.
+Mouse wheel input over the `Tools` or `Scene Objects` panels is routed to panel paging instead of the viewport, so panel interaction does not leak into scene zooming.
 
 Normal startup and `Home` share the same scene-first framing path after the final Scene View size is known. When the default showcase pair is present, that path looks at the front side of the Giraffe and rocket around their shared midpoint. Capture mode reapplies its deterministic framing once after the final docked or full-viewport aspect is known, so laptop layouts do not crop one model. The sandbox keeps movement speed and other validated editor settings, but it no longer restores older transient camera-pose keys automatically on launch.
 
@@ -224,7 +224,7 @@ When Diagnostics, Transform QA, or Physics QA is open in the heavier layout, the
 
 Editable selection is visible directly in the Scene View through a non-selectable highlighted outline around the selected real scene object. Imported multi-primitive roots use the scene's generic logical selection owner: Scene Objects shows one owner row while render children retain their own entity identity for materials, dependencies, diagnostics, and component validation. Ordinary object selection resolves to that owner, but component picking and component overlays retain the editable source entity when it is a child of the owner. Newly-created or imported authoring wrappers begin with no component selected, so the logical-object outline remains visible until the user explicitly picks a vertex, edge, or face. The cached bounded outline aggregates all source-bound render children of that logical owner, namespaces each child mesh's local topology before aggregation, follows projected indexed triangle boundaries/front/back transitions, and preserves concavities and disconnected islands. Small and medium meshes split edges at bounded projected triangle-coverage/depth intervals and suppress intervals behind nearer projected triangles; dense imported meshes use a fixed screen-space spatial index for the same filtering, with conservative projected topology only as an overflow fallback. It remains a presentation overlay rather than a renderer-owned stencil/mask pass. The highlight is clipped to the Scene View and does not draw over workspace panels or the debug strip. Locked objects, including the default Ground, remain selectable and inspectable but do not show the yellow transform highlight or a gizmo. Clearing selection, clicking empty viewport space, hiding or locking the selected object, deleting it, or changing tools clears active transform-session ownership and updates Object Details and Diagnostics.
 
-In-app floating panel rectangles, dock widths, dock assignment, and last valid dock are persisted through the local settings file. Detached OS windows reopen with bounded saved virtual-screen coordinates through the public tool-window state/position API; malformed or out-of-range coordinates safely fall back to the normal window placement. `Reset Layout` redocks the standard panels, closes detached windows, restores safe dock widths, makes panels visible, clears active workspace drag or resize state, and closes `Native Panel Test` if it is open while preserving valid named layout snapshots. The Scene View remains the main center viewport. The bounded topology graph, ratios, tab membership/order, closed-section mask, maximize state, active tab, and selected bounded workspace preset are restored through a versioned validated settings snapshot; the current v2 loader migrates the prior v1 snapshot shape and rejects malformed, future, or incompatible snapshots without replacing defaults. The topology API and section context menu cover bounded close/restore, last-closed restoration, tab-group merge, equalize, maximize/restore, native-detach, chooser-backed available-singleton splits, and visible header tab switching with active-content projection. `Close this section` removes the complete section and its tab group; the separate tab-close path removes only the active tab and removes the section when its final tab closes. The existing last-closed restore path can recover the prior tab group. Maximizing a docked section expands it across the workspace and leaves the scene as a stable presentation surface underneath. Runtime dock stacks now project nested topology rectangles and draw one shared thin divider per internal split with a DPI-scaled logical hit target (10 px at 100%); the visible wire remains one framebuffer pixel. Divider drag updates split ratios transactionally and release near a direct leaf closes it through the existing restoration path. The context menu exposes a visible selection state and Up/Down, Enter, and Escape keyboard navigation. Center-drop panel dragging now previews and joins an existing tab group transactionally. Tab strips also support same-section reordering while preserving the clicked tab as active; Escape/focus-loss cancellation restores the prior order. The Controls panel exposes deterministic Default, Modeling, Materials, Scene Assembly, Debugging, and Minimal Viewport presets; switching a preset participates in bounded layout undo/redo history, closes detached tool windows through the normal redock path, and replaces the validated topology atomically, while later topology edits are labeled Custom. Detached production panels render full matching controls with a native return bar and bounded title-bar drag-back recognition when a focused detached window enters the main-window envelope. Three bounded named layout slots—Custom, Studio, and Assembly—persist validated topology, tab order, closed/maximized state, dock assignments, dock widths, and UI scale; restoring a slot redocks detached panels before applying it. Slot names and contents are bounded and local; an unbounded layout marketplace and detachable Scene View remain future work.
+In-app floating panel rectangles, dock widths, dock assignment, and last valid dock are persisted through the local settings file. Detached OS windows reopen with bounded saved virtual-screen coordinates through the public tool-window state/position API; malformed or out-of-range coordinates safely fall back to the normal window placement. `Reset Layout` redocks the standard panels, closes detached windows, restores safe dock widths, makes panels visible, clears active workspace drag or resize state, and closes `Native Panel Test` if it is open while preserving valid named layout snapshots. The Scene View remains the main center viewport. The bounded topology graph, ratios, tab membership/order, closed-section mask, maximize state, active tab, and selected bounded workspace preset are restored through a versioned validated settings snapshot; the current v2 loader migrates the prior v1 snapshot shape and rejects malformed, future, or incompatible snapshots without replacing defaults. The topology API and section context menu cover bounded close/restore, last-closed restoration, tab-group merge, equalize, maximize/restore, native-detach, chooser-backed available-singleton splits, and visible header tab switching with active-content projection. `Close this section` removes the complete section and its tab group; the separate tab-close path removes only the active tab and removes the section when its final tab closes. The existing last-closed restore path can recover the prior tab group. Maximizing a docked section expands it across the workspace and leaves the scene as a stable presentation surface underneath. Runtime dock stacks now project nested topology rectangles and draw one shared thin divider per internal split with a DPI-scaled logical hit target (10 px at 100%); the visible wire remains one framebuffer pixel. Divider drag updates split ratios transactionally and release near a direct leaf closes it through the existing restoration path. The context menu exposes a visible selection state and Up/Down, Enter, and Escape keyboard navigation. Center-drop panel dragging now previews and joins an existing tab group transactionally. Tab strips also support same-section reordering while preserving the clicked tab as active; Escape/focus-loss cancellation restores the prior order. The Tools panel exposes deterministic Default, Modeling, Materials, Scene Assembly, Debugging, and Minimal Viewport presets; switching a preset participates in bounded layout undo/redo history, closes detached tool windows through the normal redock path, and replaces the validated topology atomically, while later topology edits are labeled Custom. Detached production panels render full matching controls with a native return bar and bounded title-bar drag-back recognition when a focused detached window enters the main-window envelope. Three bounded named layout slots—Custom, Studio, and Assembly—persist validated topology, tab order, closed/maximized state, dock assignments, dock widths, and UI scale; restoring a slot redocks detached panels before applying it. Slot names and contents are bounded and local; an unbounded layout marketplace and detachable Scene View remain future work.
 
 Current builds expose bounded detached virtual-screen coordinates, capture them into sandbox settings, restore valid coordinates on the next detach, and recognize a focused native-window move into the main-window envelope as a title-bar drag-back request; malformed positions safely fall back. Detachable Scene View remains future work.
 
@@ -239,9 +239,9 @@ When the UI is open:
 
 `F5` cycles the current layout mode:
 
-- `View`: compact controls, scene-first
-- `Inspect`: object selection, concise details, and utility support
-- `Full Tools`: larger inspection footprint with more utility space
+- `Standard`: stable scene-first shell with Scene Objects and Object Details
+- `Focus Viewport`: temporary scene-dominant presentation mode
+- Saved/custom layouts: user-controlled workspace topology and panel placement
 
 If the packaged sandbox opens but you do not see the panels:
 

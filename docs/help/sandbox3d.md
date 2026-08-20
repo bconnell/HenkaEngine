@@ -11,7 +11,7 @@ The glTF files are deterministic repo-owned fixture assets generated during the 
 
 The sandbox also saves a small local settings file so wireframe, grid visibility, mouse sensitivity, camera preset, camera pose, orthographic zoom, and panel visibility can carry across runs.
 It now also includes small in-window developer panels for inspection and settings tasks.
-The docked workspace opens in `View` mode with no selected scene object so the controls are visible while most of the scene stays open.
+The docked workspace opens in the stable `Standard` shell with no selected scene object. `Focus Viewport` is temporary and does not become the startup state.
 
 For a bounded non-interactive streaming check, run
 `henka_sandbox3d.exe --terrain-stream-stress`. It seeds or reuses four
@@ -24,7 +24,7 @@ The active camera region is prioritized for bounded collision coverage. This is
 a small runtime foundation check, not residency-wide collision
 coverage, broad-world streaming, or human visual approval.
 
-## Controls
+## Tools
 
 - `W A S D`: move across the scene
 - `Q / E`: move down / up
@@ -39,7 +39,7 @@ coverage, broad-world streaming, or human visual approval.
 - `F2`: print the scene legend to the console again
 - `F3`: show or hide the debug grid
 - `F4`: show or hide the sandbox panels
-- `F5`: cycle View, Inspect, and Full Tools layouts
+- `F5`: switch Standard and Focus Viewport layouts
 - `F`: frame the selected object
 - `H`: print controls and the scene legend to the console again
 - `Home`: reset the camera view
@@ -98,7 +98,7 @@ The engineering sample legend is available with `--primitive-gallery`:
 - In `--primitive-gallery`, find the fallback-model example to confirm that missing OBJ assets fail visibly without stopping the engine.
 - In `--primitive-gallery`, compare the material ball, textured cube, and OBJ marker so it is easy to tell which material path each object is using.
 - Use `F3` to hide the grid briefly, then show it again to confirm the scene layout still reads clearly.
-- Press `F4` to open the sandbox panels, then use `F5` to compare the View, Inspect, and Full Tools layouts.
+- Press `F4` to open the sandbox panels, then use `F5` to compare the Standard shell and temporary Focus Viewport.
 - Release mouse capture, then use the Viewport Tool buttons to switch between Select, Orbit, Pan, Move, Rotate, and Scale.
 - Open `Camera/Status` and compare Perspective 3D, Side 2.5D, Top-down 2.5D, and Isometric 2.5D. Use `Orbit` and `Pan` with left drag, plus `Mouse Wheel` or two-finger touchpad scroll, `F`, and `Home`, to test customization, pan, projection-aware zoom, frame selected, and preset reset.
 - In Select mode, left-drag empty Scene View space past the small drag threshold to pan on laptop touchpads without turning ordinary clicks into camera movement.
@@ -119,7 +119,7 @@ The engineering sample legend is available with `--primitive-gallery`:
 - Toggle snapping on and off to compare free movement with stepped adjustments.
 - Click the grid and wireframe controls to confirm the in-window UI updates the same engine state as the keyboard shortcuts.
 - Open Help, Scene Legend, Paths, Settings, Diagnostics, and Transform QA in the Utility panel so you can inspect the sandbox without relying on the console.
-- Choose `Open Native Panel Test` in Controls to open a separate OS-level window that shows its identifier, focus, size, last routed event, and close guidance.
+- Choose `Open Native Panel Test` in Tools to open a separate OS-level window that shows its identifier, focus, size, last routed event, and close guidance.
 - The in-window panels open on startup and after reset-style launches. `F4` hides or shows them; it is not required for first discovery.
 - Starts have no selected scene object; Object Details, Physics QA, Diagnostics, and the compact strip report no selection until you choose one.
 - Watch the compact strip below Scene View while testing; it reports tool, selection, selected-highlight state, pointer ownership, gizmo, hover, drag, and rejection state live.
@@ -131,10 +131,10 @@ The engineering sample legend is available with `--primitive-gallery`:
 - Release away from the dock outlines to open a separate native tool window. Move or resize that window with the operating-system frame.
 - Close a detached tool window to return its panel to its last valid dock. Detached windows show matching controls, and a focused title-bar move into the main-window envelope requests bounded drag-back docking. `Reset Layout` recovers defaults.
 - Drag the narrow bars beside Scene View to resize occupied docks.
-- Use `Save Custom` and `Restore Custom` in Controls for the primary named workspace. The adjacent Studio and Assembly slot buttons provide two additional bounded local snapshots; restoring any slot redocks detached panels first.
+- Use `Save Custom` and `Restore Custom` in Tools for the primary named workspace. The adjacent Studio and Assembly slot buttons provide two additional bounded local snapshots; restoring any slot redocks detached panels first.
 - Press `Tab` or `Shift+Tab` to cycle focus across visible workspace panels; the focused header is marked with a green accent.
 - Hover a merged workspace tab for a compact guide: click to activate, drag to reorder within the group, or drop a panel at the center to join tabs.
-- Use Controls > Undo Layout and Redo Layout for the bounded workspace layout history; detached panels are redocked before a snapshot is restored.
+- Use Tools > Undo Layout and Redo Layout for the bounded workspace layout history; detached panels are redocked before a snapshot is restored.
 - With panels visible, `Ctrl+Z` undoes and `Ctrl+Y` or `Ctrl+Shift+Z` redoes the bounded workspace layout history.
 - Reset Layout returns to the default topology and panel disclosure/scroll state, redocks detached panels, and preserves valid saved named layout slots.
 - Hover a topology divider or dock splitter to see the matching horizontal or vertical system resize cursor; the cursor returns to normal when the viewport or a tool owns the pointer.
@@ -149,18 +149,18 @@ The engineering sample legend is available with `--primitive-gallery`:
 
 Press `F4` to open the in-window sandbox panels. Press `F5` to cycle between:
 
-- `View`: keeps the largest dedicated scene viewport and shows compact docked tools
-- `Inspect`: keeps the object panels available beside the dedicated viewport
-- `Full Tools`: shows the heavier docked workspace while keeping the scene in its own viewport box
+- `Standard`: keeps the stable editor shell and dedicated viewport
+- `Focus Viewport`: temporarily gives the scene more room without becoming a saved startup mode
+- Saved/custom layouts: preserve user-controlled panel topology and placement
 
 If you hide the panels, a small in-window hint stays in the viewport corner so you can still see that `F4` restores panels and `F5` changes layout.
 When the panels are visible, the scene stays inside its own dedicated viewport region instead of drawing underneath the docked panels.
 
 If the panels do not appear when you expect them to, refresh the packaged sandbox with `.\scripts\package_sandbox3d_windows.ps1`, confirm `out/HenkaSandbox3D/PACKAGE_INFO.txt` was refreshed, and try again.
 
-The `Controls` panel currently includes:
+The `Tools` panel currently includes:
 
-- layout buttons for `View`, `Inspect`, and `Full Tools`
+- Build, Game, and World work-context controls plus saved/custom layouts
 - a readable `Main` page and `Panels/Status` page
 - a `Grid` toggle
 - a `Wire` toggle
@@ -178,8 +178,7 @@ The `Controls` panel currently includes:
 - an `Open Native Panel Test` button for multi-window foundation checks
 - a small in-window status area for recent actions and warnings
 
-`Inspect` and `Full Tools` also expose the wider inspection controls.
-`Full Tools` keeps the most detailed inspection workspace visible.
+`Standard` exposes the normal inspection controls. `Focus Viewport` is intentionally scene-dominant and temporary.
 Transform manipulation happens in the dedicated scene viewport, not inside workspace panels.
 
 The `Scene Objects` panel lists the current sandbox examples by name.
@@ -204,7 +203,7 @@ The `Object Details` panel shows the current selection.
 - full Object Details mode also shows the bounded effective material description for the selected object, shared definition identity, instance override values, semantic texture dependencies, and transactional reimport status; a complete authoring panel is not implemented yet
 - safe actions for visibility, camera focus, transform reset, and console info output
 
-Controls Main and Object Details use fixed panel headers and bounded scrollable
+Tools Main and Object Details use fixed panel headers and bounded scrollable
 bodies. Their property groups have stable internal identities, persistent
 expanded/collapsed state, and recomputed scroll extents after collapse or
 resize. Wheel and continuous touchpad deltas stay with the panel body, while
@@ -222,7 +221,7 @@ The selected object also shows a visible transform gizmo in the scene viewport.
 - `Move` mode drags the selected object on the chosen world axis.
 - `Rotate` mode drags the selected object around the chosen world axis.
 - `Scale` mode uses the center square for uniform scale in the current sandbox pass.
-- Snap can be enabled or disabled from the Controls panel.
+- Snap can be enabled or disabled from the Tools panel.
 - Gizmo dragging uses viewport-relative framebuffer coordinates and the same projected handle model that the overlay draws, so the visible handles stay aligned with the mouse inside the dedicated scene viewport.
 - The current sandbox path now also shares a local validated action-command layer and deterministic gizmo interaction helpers with the test suite, which reduces manual QA for basic object-selection and transform-mutation outcomes.
 - The gizmo helper pieces are internal scene tools. They remain hidden from the normal runtime path, do not become the selected object, do not appear in Scene Objects, and are ignored by normal scene picking.
@@ -299,7 +298,7 @@ The legacy wireframe API remains compatible: enabling it selects Wireframe, whil
 
 The current AO term is a bounded four-direction, two-sided, multi-step view-space horizon-search approximation with safe radius, thickness, falloff, bias, and intensity controls; temporal AO history, denoise filtering, and production GTAO validation remain unfinished. Rendered temporal presentation now includes camera/object reprojection, depth-neighborhood rejection, reactive handling for transparency/transmission/emissive pixels, history clamping, bounded sharpening, and fallback/invalidation diagnostics. Production TAA visual validation across camera cuts, resize, disocclusion, and moving-object cases remains unfinished.
 
-The Utility Diagnostics panel includes the active shading/exposure row plus current texture-residency bytes, configured budget, queue depth, active pin count, stale-request cancellations, readable source-failure bytes, and unknown-size request/source failure counts from the engine diagnostics snapshot. Full Tools Object Details and the Object Info utility show the selected effective material description; Object Info also reports the count of borrowed semantic texture dependencies. Object Details creates bounded persistent instances for selected imported scene entities, with identity-routed Reimport, dependency inspection, revision refresh, and per-override or all-override reset through the shared typed C asset path. Text-entry import, drag/drop, material-file authoring, and a dedicated dependency-graph panel remain unimplemented.
+The Utility Diagnostics panel includes the active shading/exposure row plus current texture-residency bytes, configured budget, queue depth, active pin count, stale-request cancellations, readable source-failure bytes, and unknown-size request/source failure counts from the engine diagnostics snapshot. Standard Object Details and the Object Info utility show the selected effective material description; Object Info also reports the count of borrowed semantic texture dependencies. Object Details creates bounded persistent instances for selected imported scene entities, with identity-routed Reimport, dependency inspection, revision refresh, and per-override or all-override reset through the shared typed C asset path. Text-entry import, drag/drop, material-file authoring, and a dedicated dependency-graph panel remain unimplemented.
 
 The Utility Terrain tab reports bounded resident/render/collision statistics,
 including active dirty regions awaiting persistence, and provides raise, lower,

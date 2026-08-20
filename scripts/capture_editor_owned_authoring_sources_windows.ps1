@@ -462,8 +462,8 @@ try {
 
     Set-HenkaAutomationForeground -Handle $handle
     Send-AutomationKey -KeyName "F5"
-    if (-not (Wait-FileContains -Path $stdoutPath -Pattern "Sandbox layout: Inspect" -TimeoutMilliseconds 5000)) {
-        throw "The visible editor did not enter Inspect layout."
+    if (-not (Wait-FileContains -Path $stdoutPath -Pattern "Sandbox layout: Focus Viewport" -TimeoutMilliseconds 5000)) {
+        throw "The visible editor did not enter Focus Viewport layout."
     }
 
     $lastEditableControl = $null

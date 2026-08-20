@@ -49,6 +49,23 @@ typedef enum sandbox3d_controls_page
     SANDBOX3D_CONTROLS_PAGE_COUNT
 } sandbox3d_controls_page;
 
+/* HENKA_WORK_CONTEXT_V1
+ * Work context selects the editor's purpose. It deliberately does not own
+ * panel geometry, docking, or debug presentation. */
+typedef enum sandbox3d_workspace_work_context
+{
+    SANDBOX3D_WORK_CONTEXT_BUILD = 0,
+    SANDBOX3D_WORK_CONTEXT_GAME,
+    SANDBOX3D_WORK_CONTEXT_WORLD,
+    SANDBOX3D_WORK_CONTEXT_COUNT
+} sandbox3d_workspace_work_context;
+
+typedef struct sandbox3d_workspace_context_state
+{
+    sandbox3d_workspace_work_context active;
+    bool debug_hud_visible;
+} sandbox3d_workspace_context_state;
+
 typedef enum sandbox3d_workspace_split_orientation
 {
     SANDBOX3D_WORKSPACE_SPLIT_HORIZONTAL = 0,
@@ -261,6 +278,20 @@ typedef struct sandbox3d_workspace_model
     henka_ui_rect section_chooser_rect;
     char last_action[128];
 } sandbox3d_workspace_model;
+
+void sandbox3d_workspace_context_state_reset(
+    sandbox3d_workspace_context_state* state);
+bool sandbox3d_workspace_context_is_valid(
+    sandbox3d_workspace_work_context context);
+bool sandbox3d_workspace_context_set(
+    sandbox3d_workspace_context_state* state,
+    sandbox3d_workspace_work_context context);
+const char* sandbox3d_workspace_context_label(
+    sandbox3d_workspace_work_context context);
+const char* sandbox3d_workspace_context_setting_value(
+    sandbox3d_workspace_work_context context);
+sandbox3d_workspace_work_context sandbox3d_workspace_parse_work_context(
+    const char* value);
 
 void sandbox3d_workspace_model_reset(sandbox3d_workspace_model* model);
 void sandbox3d_workspace_reset_layout(sandbox3d_workspace_model* model);

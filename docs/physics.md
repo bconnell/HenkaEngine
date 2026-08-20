@@ -43,7 +43,7 @@ Each fixed substep builds a complete candidate using scratch body, contact, pair
 
 ## Sandbox Physics QA
 
-The sandbox panels open automatically on startup and reset-style launches, and `Physics QA` is reachable from the main Controls area. Starts have no selected physics body until you select one. Simulation remains opt-in until you use `Enable` or `Reset Demo`.
+The sandbox panels open automatically on startup and reset-style launches, and `Physics QA` is reachable from the Tools area. Starts have no selected physics body until you select one. Simulation remains opt-in until you use `Enable` or `Reset Demo`.
 
 The QA view provides real controls for:
 

@@ -261,9 +261,9 @@ try {
 Henka Engine Sandbox 3D
 
 Double-click HenkaSandbox3D.exe to launch the packaged sandbox.
-The in-window panels open automatically so Controls and Physics QA are visible without pressing F4 first.
+The in-window panels open automatically so Tools and Physics QA are visible without pressing F4 first.
 Press F4 to hide or show the in-window panels.
-Press F5 to cycle View, Inspect, and Full Tools.
+Press F5 to switch Standard and Focus Viewport.
 The scene renders inside its own docked viewport when panels are visible.
 Starts have no selected scene object until you select one.
 Select an object in the viewport or Scene Objects panel, then use Select, Orbit, Pan, Move, Rotate, and Scale from the Viewport Tool section.
@@ -276,7 +276,7 @@ Locked objects remain selectable for inspection without a transform highlight or
 Clearing selection also clears active transform-session ownership, and viewport overlays do not draw over panels.
 Physics QA explains Static, Dynamic, and Kinematic bodies. Make Dynamic + Drop activates only the selected supported body; Enable starts the full arranged demonstration.
 DRAG marks a live panel header. Release over a valid left or right outline to dock there, or release away from the outlines to open a separate native tool window.
-Open Native Panel Test from the Controls QA page to exercise a separate OS-level validation window.
+Open Native Panel Test from the Tools QA page to exercise a separate OS-level validation window.
 Close a detached tool window to return its panel to the last valid dock.
 Use Reset Layout to recover panels and default dock sizes.
 If saved live workspace geometry is incompatible, Henka restores current safe defaults and rewrites them after a clean shutdown.

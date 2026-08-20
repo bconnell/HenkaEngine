@@ -72,10 +72,10 @@ shaded mode. It writes generated images plus per-mode logs under
 13. With the panels hidden, confirm a small in-window recall hint appears inside the sandbox window.
 14. Confirm the hint is readable and does not block the main object cluster.
 15. Press `F4` again and confirm the panels return.
-16. Press `F5` and confirm the layout cycles between `View`, `Inspect`, and `Full Tools`.
-17. Confirm `View` has the largest viewport.
-18. Confirm `Inspect` keeps Scene Objects and Object Details docked beside the viewport.
-19. Confirm `Full Tools` still leaves a dedicated viewport.
+16. Press `F5` and confirm the layout switches between `Standard` and `Focus Viewport`.
+17. Confirm `Focus Viewport` gives the scene the largest viewport while preserving the workspace shell.
+18. Press `F5` again and confirm `Standard` restores Scene Objects and Object Details beside the viewport.
+19. Confirm both layouts leave the dedicated Scene View usable.
 20. Confirm `Reset Layout` restores a usable default.
 20a. Save a Custom workspace after changing tabs, dock widths, or a divider; change to another preset, then restore Custom and confirm the validated topology returns.
 21. Click `Open Native Panel Test` and confirm a separate OS-level window opens with visible ID, focus, size, and last-event content.
@@ -102,7 +102,7 @@ shaded mode. It writes generated images plus per-mode logs under
 41. Confirm panel text is readable by eye.
 42. Confirm panel background contrast is readable against the workspace.
 43. Confirm the graphite and slate theme feels neutral and tool-focused instead of a black-and-blue personal theme.
-44. Confirm the Controls panel `Main` and `Panels/Status` pages are readable and that page switching is obvious.
+44. Confirm the Tools panel `Main` and `Panels/Status` pages are readable and that page switching is obvious.
 45. Confirm the Scene Objects panel can reach every sample object through its page buttons or mouse wheel paging.
 46. Confirm utility tabs are readable and the active utility state is obvious.
 47. Confirm Help, Scene Legend, Object Info, Paths, Settings, and Diagnostics are usable in-window.
@@ -200,7 +200,7 @@ Use `--primitive-gallery` when the engineering samples are specifically under te
 - `F2`: print the scene legend again
 - `F3`: show or hide the debug grid
 - `F4`: show or hide the sandbox panels
-- `F5`: cycle View, Inspect, and Full Tools
+- `F5`: switch Standard and Focus Viewport layouts
 - `H`: print controls and the scene legend again
 - `Escape`: close the UI first, then release mouse capture, then exit
 - Window close: exit
@@ -212,10 +212,10 @@ Use `--primitive-gallery` when the engineering samples are specifically under te
 - The scene stays inside its own dedicated viewport when panels are visible.
 - Opening the UI releases mouse capture.
 - Mouse look pauses while the UI is open.
-- `F5` cycles View, Inspect, and Full Tools layouts.
-- The `Controls` panel can toggle the debug grid and wireframe state with the mouse.
-- The `Controls` panel looks lighter in `View` mode and keeps a visible in-window status area.
-- The `Controls` panel can switch between `Select`, `Orbit`, `Pan`, `Move`, `Rotate`, and `Scale`.
+- `F5` switches Standard and Focus Viewport layouts.
+- The `Tools` panel can toggle the debug grid and wireframe state with the mouse.
+- The `Tools` panel keeps a visible in-window status area in both layouts.
+- The `Tools` panel can switch between `Select`, `Orbit`, `Pan`, `Move`, `Rotate`, and `Scale`.
 - Snap can be toggled for transform dragging.
 - The `Hit Boxes` toggle can show the current gizmo hit regions.
 - Docked panels stay outside the dedicated scene viewport in normal workspace modes.

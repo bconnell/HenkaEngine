@@ -823,6 +823,90 @@ static void sandbox3d_workspace_enforce_minimum_floating_size(
     }
 }
 
+/* HENKA_WORK_CONTEXT_V1 */
+void sandbox3d_workspace_context_state_reset(
+    sandbox3d_workspace_context_state* state)
+{
+    if (state == NULL)
+    {
+        return;
+    }
+
+    state->active = SANDBOX3D_WORK_CONTEXT_BUILD;
+    state->debug_hud_visible = false;
+}
+
+bool sandbox3d_workspace_context_is_valid(
+    sandbox3d_workspace_work_context context)
+{
+    return context >= SANDBOX3D_WORK_CONTEXT_BUILD &&
+        context < SANDBOX3D_WORK_CONTEXT_COUNT;
+}
+
+bool sandbox3d_workspace_context_set(
+    sandbox3d_workspace_context_state* state,
+    sandbox3d_workspace_work_context context)
+{
+    if (state == NULL || !sandbox3d_workspace_context_is_valid(context))
+    {
+        return false;
+    }
+
+    state->active = context;
+    return true;
+}
+
+const char* sandbox3d_workspace_context_label(
+    sandbox3d_workspace_work_context context)
+{
+    switch (context)
+    {
+        case SANDBOX3D_WORK_CONTEXT_BUILD:
+            return "Build";
+        case SANDBOX3D_WORK_CONTEXT_GAME:
+            return "Game";
+        case SANDBOX3D_WORK_CONTEXT_WORLD:
+            return "World";
+        case SANDBOX3D_WORK_CONTEXT_COUNT:
+        default:
+            return "Build";
+    }
+}
+
+const char* sandbox3d_workspace_context_setting_value(
+    sandbox3d_workspace_work_context context)
+{
+    switch (context)
+    {
+        case SANDBOX3D_WORK_CONTEXT_BUILD:
+            return "build";
+        case SANDBOX3D_WORK_CONTEXT_GAME:
+            return "game";
+        case SANDBOX3D_WORK_CONTEXT_WORLD:
+            return "world";
+        case SANDBOX3D_WORK_CONTEXT_COUNT:
+        default:
+            return "build";
+    }
+}
+
+sandbox3d_workspace_work_context sandbox3d_workspace_parse_work_context(
+    const char* value)
+{
+    if (value == NULL || value[0] == '\0' || strcmp(value, "build") == 0)
+    {
+        return SANDBOX3D_WORK_CONTEXT_BUILD;
+    }
+    if (strcmp(value, "game") == 0)
+    {
+        return SANDBOX3D_WORK_CONTEXT_GAME;
+    }
+    if (strcmp(value, "world") == 0)
+    {
+        return SANDBOX3D_WORK_CONTEXT_WORLD;
+    }
+    return SANDBOX3D_WORK_CONTEXT_BUILD;
+}
 const char* sandbox3d_workspace_named_layout_label(
     sandbox3d_workspace_named_layout layout)
 {
@@ -839,7 +923,7 @@ const char* sandbox3d_workspace_named_layout_label(
         case SANDBOX3D_WORKSPACE_LAYOUT_DEBUGGING:
             return "Debugging";
         case SANDBOX3D_WORKSPACE_LAYOUT_MINIMAL_VIEWPORT:
-            return "Minimal Viewport";
+            return "Focus Viewport";
         case SANDBOX3D_WORKSPACE_LAYOUT_CUSTOM:
             return "Custom";
         case SANDBOX3D_WORKSPACE_LAYOUT_COUNT:
@@ -4032,7 +4116,7 @@ const char* sandbox3d_workspace_panel_name(sandbox3d_workspace_panel_id panel_id
     switch (panel_id)
     {
         case SANDBOX3D_WORKSPACE_PANEL_CONTROLS:
-            return "Controls";
+            return "Tools";
         case SANDBOX3D_WORKSPACE_PANEL_SCENE_OBJECTS:
             return "Scene Objects";
         case SANDBOX3D_WORKSPACE_PANEL_OBJECT_DETAILS:

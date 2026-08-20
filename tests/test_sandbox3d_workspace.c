@@ -48,6 +48,8 @@ void henka_test_sandbox3d_workspace(void)
     sandbox3d_workspace_topology_layout topology_layout;
     sandbox3d_workspace_topology_layout dock_topology_layout;
     const sandbox3d_workspace_topology_node* topology_root;
+    sandbox3d_workspace_context_state context_state;
+    sandbox3d_workspace_model context_model_before;
     sandbox3d_workspace_model model;
     sandbox3d_workspace_model tab_model;
     uint32_t stress_seed;
@@ -178,6 +180,76 @@ void henka_test_sandbox3d_workspace(void)
          ~HENKA_UI_BORDER_LEFT &
          ~HENKA_UI_BORDER_RIGHT));
 
+    /* HENKA_WORK_CONTEXT_TEST_V1 */
+    sandbox3d_workspace_context_state_reset(&context_state);
+    HENKA_TEST_ASSERT(
+        context_state.active == SANDBOX3D_WORK_CONTEXT_BUILD);
+    HENKA_TEST_ASSERT(!context_state.debug_hud_visible);
+    HENKA_TEST_ASSERT(SANDBOX3D_WORK_CONTEXT_COUNT == 3);
+    HENKA_TEST_ASSERT(strcmp(
+        sandbox3d_workspace_panel_name(
+            SANDBOX3D_WORKSPACE_PANEL_CONTROLS),
+        "Tools") == 0);
+    HENKA_TEST_ASSERT(strcmp(
+        sandbox3d_workspace_context_label(
+            SANDBOX3D_WORK_CONTEXT_BUILD),
+        "Build") == 0);
+    HENKA_TEST_ASSERT(strcmp(
+        sandbox3d_workspace_context_label(
+            SANDBOX3D_WORK_CONTEXT_GAME),
+        "Game") == 0);
+    HENKA_TEST_ASSERT(strcmp(
+        sandbox3d_workspace_context_label(
+            SANDBOX3D_WORK_CONTEXT_WORLD),
+        "World") == 0);
+    HENKA_TEST_ASSERT(
+        sandbox3d_workspace_parse_work_context("build") ==
+        SANDBOX3D_WORK_CONTEXT_BUILD);
+    HENKA_TEST_ASSERT(
+        sandbox3d_workspace_parse_work_context("game") ==
+        SANDBOX3D_WORK_CONTEXT_GAME);
+    HENKA_TEST_ASSERT(
+        sandbox3d_workspace_parse_work_context("world") ==
+        SANDBOX3D_WORK_CONTEXT_WORLD);
+    HENKA_TEST_ASSERT(
+        sandbox3d_workspace_parse_work_context("debug") ==
+        SANDBOX3D_WORK_CONTEXT_BUILD);
+    HENKA_TEST_ASSERT(
+        sandbox3d_workspace_parse_work_context("animate") ==
+        SANDBOX3D_WORK_CONTEXT_BUILD);
+    HENKA_TEST_ASSERT(
+        !sandbox3d_workspace_context_is_valid(
+            (sandbox3d_workspace_work_context)-1));
+    HENKA_TEST_ASSERT(
+        !sandbox3d_workspace_context_is_valid(
+            SANDBOX3D_WORK_CONTEXT_COUNT));
+
+    sandbox3d_workspace_model_reset(&model);
+    context_model_before = model;
+    context_state.debug_hud_visible = true;
+    HENKA_TEST_ASSERT(sandbox3d_workspace_context_set(
+        &context_state,
+        SANDBOX3D_WORK_CONTEXT_GAME));
+    HENKA_TEST_ASSERT(
+        context_state.active == SANDBOX3D_WORK_CONTEXT_GAME);
+    HENKA_TEST_ASSERT(context_state.debug_hud_visible);
+    HENKA_TEST_ASSERT(
+        memcmp(
+            &model,
+            &context_model_before,
+            sizeof(model)) == 0);
+    HENKA_TEST_ASSERT(sandbox3d_workspace_context_set(
+        &context_state,
+        SANDBOX3D_WORK_CONTEXT_WORLD));
+    HENKA_TEST_ASSERT(
+        context_state.active == SANDBOX3D_WORK_CONTEXT_WORLD);
+    HENKA_TEST_ASSERT(context_state.debug_hud_visible);
+    HENKA_TEST_ASSERT(
+        !sandbox3d_workspace_context_set(
+            &context_state,
+            SANDBOX3D_WORK_CONTEXT_COUNT));
+    HENKA_TEST_ASSERT(
+        context_state.active == SANDBOX3D_WORK_CONTEXT_WORLD);
     sandbox3d_workspace_model_reset(&model);
     for (panel_index = 0U;
          panel_index < SANDBOX3D_WORKSPACE_PANEL_COUNT;
@@ -309,6 +381,10 @@ void henka_test_sandbox3d_workspace(void)
     HENKA_TEST_ASSERT(strcmp(
         sandbox3d_workspace_named_layout_label(SANDBOX3D_WORKSPACE_LAYOUT_MODELING),
         "Modeling") == 0);
+    HENKA_TEST_ASSERT(strcmp(
+        sandbox3d_workspace_named_layout_label(
+            SANDBOX3D_WORKSPACE_LAYOUT_MINIMAL_VIEWPORT),
+        "Focus Viewport") == 0);
     HENKA_TEST_ASSERT(sandbox3d_workspace_parse_named_layout("materials") == SANDBOX3D_WORKSPACE_LAYOUT_MATERIALS);
     HENKA_TEST_ASSERT(sandbox3d_workspace_parse_named_layout("scene_assembly") == SANDBOX3D_WORKSPACE_LAYOUT_SCENE_ASSEMBLY);
     HENKA_TEST_ASSERT(sandbox3d_workspace_parse_named_layout("minimal_viewport") == SANDBOX3D_WORKSPACE_LAYOUT_MINIMAL_VIEWPORT);

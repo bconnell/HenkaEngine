@@ -177,7 +177,9 @@ typedef struct sandbox3d_workspace_state
     sandbox3d_layout_mode layout_mode;
     bool scene_objects_panel_visible;
     bool object_details_panel_visible;
+    bool tools_panel_visible;
     sandbox3d_utility_view active_utility;
+    sandbox3d_workspace_context_state context;
     sandbox3d_workspace_model model;
 } sandbox3d_workspace_state;
 
@@ -746,6 +748,7 @@ static const int g_camera_framing_settings_version = 2;
 static const char* g_setting_key_scene_panel_visible = "ui.scene_objects_panel_visible";
 static const char* g_setting_key_details_panel_visible = "ui.object_details_panel_visible";
 static const char* g_setting_key_layout_mode = "ui.layout_mode";
+static const char* g_setting_key_work_context = "ui.work_context";
 static const char* g_setting_key_active_utility = "ui.active_utility";
 static const char* g_setting_key_terrain_tool_radius = "terrain.tool.radius_samples";
 static const char* g_setting_key_terrain_tool_strength = "terrain.tool.strength";
@@ -3523,13 +3526,13 @@ static const char* sandbox3d_get_layout_mode_label(sandbox3d_layout_mode layout_
     switch (layout_mode)
     {
         case SANDBOX3D_LAYOUT_VIEW:
-            return "View";
+            return "Focus Viewport";
         case SANDBOX3D_LAYOUT_INSPECT:
-            return "Inspect";
+            return "Standard";
         case SANDBOX3D_LAYOUT_FULL:
-            return "Full Tools";
+            return "Legacy Full Tools";
         default:
-            return "View";
+            return "Standard";
     }
 }
 
@@ -3566,7 +3569,7 @@ static sandbox3d_layout_mode sandbox3d_parse_layout_mode(const char* value)
 {
     if (value == NULL || value[0] == '\0')
     {
-        return SANDBOX3D_LAYOUT_VIEW;
+        return SANDBOX3D_LAYOUT_INSPECT;
     }
 
     if (strcmp(value, "view") == 0)
@@ -3582,7 +3585,7 @@ static sandbox3d_layout_mode sandbox3d_parse_layout_mode(const char* value)
         return SANDBOX3D_LAYOUT_FULL;
     }
 
-    return SANDBOX3D_LAYOUT_VIEW;
+    return SANDBOX3D_LAYOUT_INSPECT;
 }
 
 static bool sandbox3d_parse_terrain_capture_view(
@@ -4074,10 +4077,10 @@ static sandbox3d_layout_mode sandbox3d_cycle_layout_mode(sandbox3d_layout_mode l
         case SANDBOX3D_LAYOUT_VIEW:
             return SANDBOX3D_LAYOUT_INSPECT;
         case SANDBOX3D_LAYOUT_INSPECT:
-            return SANDBOX3D_LAYOUT_FULL;
+            return SANDBOX3D_LAYOUT_VIEW;
         case SANDBOX3D_LAYOUT_FULL:
         default:
-            return SANDBOX3D_LAYOUT_VIEW;
+            return SANDBOX3D_LAYOUT_INSPECT;
     }
 }
 
@@ -6814,9 +6817,12 @@ static void sandbox3d_reset_workspace_layout(sandbox3d_state* state)
         return;
     }
 
-    state->workspace.layout_mode = SANDBOX3D_LAYOUT_VIEW;
+    /* HENKA_CONTEXT_SHELL_STABLE_DEFAULT_V1
+     * Layout reset restores the stable shell. Focus Viewport is temporary. */
+    state->workspace.layout_mode = SANDBOX3D_LAYOUT_INSPECT;
     state->workspace.scene_objects_panel_visible = true;
     state->workspace.object_details_panel_visible = true;
+    state->workspace.tools_panel_visible = false;
     state->workspace.active_utility = SANDBOX3D_UTILITY_NONE;
     sandbox3d_workspace_reset_layout(&state->workspace.model);
     sandbox3d_editor_ui_state_reset(&state->editor_ui);
@@ -7038,7 +7044,13 @@ static bool sandbox3d_workspace_panel_visible(
     switch (panel_id)
     {
         case SANDBOX3D_WORKSPACE_PANEL_CONTROLS:
-            return state != NULL;
+            return state->workspace.tools_panel_visible ||
+                sandbox3d_workspace_panel_is_floating(
+                    &state->workspace.model,
+                    SANDBOX3D_WORKSPACE_PANEL_CONTROLS) ||
+                sandbox3d_workspace_panel_is_detached(
+                    &state->workspace.model,
+                    SANDBOX3D_WORKSPACE_PANEL_CONTROLS);
         case SANDBOX3D_WORKSPACE_PANEL_SCENE_OBJECTS:
             return sandbox3d_workspace_shows_scene_panel(state);
         case SANDBOX3D_WORKSPACE_PANEL_OBJECT_DETAILS:
@@ -7129,6 +7141,60 @@ static void sandbox3d_set_active_utility(sandbox3d_state* state, sandbox3d_utili
     }
 
     state->workspace.active_utility = utility;
+}
+
+/* HENKA_WORK_CONTEXT_RUNTIME_V1
+ * Context changes which existing editor controls are promoted without
+ * changing dock geometry or turning Debug into a workspace. */
+static bool sandbox3d_apply_work_context(
+    sandbox3d_state* state,
+    sandbox3d_workspace_work_context context)
+{
+    if (state == NULL ||
+        !sandbox3d_workspace_context_set(&state->workspace.context, context))
+    {
+        return false;
+    }
+
+    switch (context)
+    {
+        case SANDBOX3D_WORK_CONTEXT_BUILD:
+            if (state->workspace.active_utility == SANDBOX3D_UTILITY_TERRAIN)
+            {
+                state->workspace.active_utility = SANDBOX3D_UTILITY_NONE;
+            }
+            state->editor_ui.details_materials_expanded = true;
+            state->editor_ui.details_authoring_expanded = true;
+            state->editor_ui.details_physics_expanded = false;
+            state->editor_ui.details_interaction_expanded = false;
+            break;
+
+        case SANDBOX3D_WORK_CONTEXT_GAME:
+            if (state->workspace.active_utility == SANDBOX3D_UTILITY_TERRAIN)
+            {
+                state->workspace.active_utility = SANDBOX3D_UTILITY_NONE;
+            }
+            state->editor_ui.details_materials_expanded = false;
+            state->editor_ui.details_authoring_expanded = false;
+            state->editor_ui.details_physics_expanded = true;
+            state->editor_ui.details_interaction_expanded = true;
+            break;
+
+        case SANDBOX3D_WORK_CONTEXT_WORLD:
+            state->workspace.active_utility = SANDBOX3D_UTILITY_TERRAIN;
+            state->editor_ui.details_materials_expanded = true;
+            state->editor_ui.details_authoring_expanded = false;
+            state->editor_ui.details_physics_expanded = false;
+            state->editor_ui.details_interaction_expanded = false;
+            break;
+
+        case SANDBOX3D_WORK_CONTEXT_COUNT:
+        default:
+            return false;
+    }
+
+    state->editor_ui.details_scroll_offset = 0.0f;
+    return true;
 }
 
 static void sandbox3d_set_status(sandbox3d_state* state, bool warning, const char* message)
@@ -7794,7 +7860,7 @@ static void sandbox3d_print_layout_mode(const sandbox3d_state* state, bool inclu
     printf("Sandbox layout: %s\n", sandbox3d_get_layout_mode_label(state->workspace.layout_mode));
     if (include_hint)
     {
-        printf("Layout help: F5 cycles View, Inspect, and Full Tools.\n");
+        printf("Layout help: F5 switches between Standard and Focus Viewport; saved layouts remain available from Tools.\n");
     }
     fflush(stdout);
 }
@@ -7808,10 +7874,10 @@ static void sandbox3d_print_startup_ui_cue(const sandbox3d_state* state)
 
     if (state->startup_panels_auto_opened)
     {
-        printf("Startup UI: the docked workspace starts open so Controls and Physics QA are discoverable immediately.\n");
-        printf("Startup UI: press F4 to hide or show the panels and press F5 to switch View, Inspect, or Full Tools.\n");
+        printf("Startup UI: the docked workspace starts open so Tools and Physics QA are discoverable immediately.\n");
+        printf("Startup UI: press F4 to hide or show the panels and press F5 to switch Standard or Focus Viewport.\n");
         printf("Startup UI: use the in-window Help, Legend, Assets, Paths, Settings, Diagnostics, Transform QA, and Physics QA utilities for inspection.\n");
-        printf("Startup UI: recent actions and warnings appear in the Controls panel so normal use does not depend on the console.\n");
+        printf("Startup UI: recent actions and warnings appear in the Tools panel so normal use does not depend on the console.\n");
     }
     else
     {
@@ -7843,7 +7909,7 @@ static void sandbox3d_print_help(const sandbox3d_state* state)
     printf("  F2               Print the scene legend again\n");
     printf("  F3               Show or hide the debug grid\n");
     printf("  F4               Show or hide the sandbox panels\n");
-    printf("  F5               Cycle View, Inspect, and Full Tools layouts\n");
+    printf("  F5               Switch Standard and Focus Viewport layouts\n");
     printf("  F                Frame the selected object\n");
     printf("  H                Print controls and the scene legend again\n");
     printf("  Home             Reset the camera view\n");
@@ -7856,20 +7922,20 @@ static void sandbox3d_print_help(const sandbox3d_state* state)
     printf("  Escape           Without a transform: close panels, release mouse, then exit.\n");
     printf("Panel shortcuts:\n");
     printf("  The in-window panels open on startup; F4 hides or shows them.\n");
-    printf("  View keeps the largest dedicated scene viewport. Inspect adds object panels. Full Tools shows the complete workspace.\n");
+    printf("  Standard keeps the stable editor shell. Focus Viewport temporarily gives the scene more room; leaving it restores Standard.\n");
     printf("  Drag any panel header to a left or right outline to redock, or release away to open a native detached window.\n");
     printf("  Drag a panel into another docked section body to preview and join its bounded tab group.\n");
     printf("  Drag the narrow bars beside Scene View to resize occupied docks. Reset Layout restores safe defaults.\n");
     printf("  Workspace context menus support Up / Down to select, Enter to activate, and Escape to cancel; section choosers support the same keyboard path.\n");
     printf("  Tab / Shift+Tab cycles keyboard focus across visible workspace panels; the focused header gets a visible accent.\n");
     printf("  Ctrl+M maximizes the focused or hovered workspace section; press it again to restore the section.\n");
-    printf("  Open Native Panel Test from the Controls QA page to validate a separate OS-level tool window.\n");
+    printf("  Open Native Panel Test from the Tools QA page to validate a separate OS-level tool window.\n");
     printf("  Use the panels to inspect named scene objects, clear selection, switch gizmo modes, focus the camera, reset object transforms, toggle visibility, and open in-window Help, Scene Legend, Object Info, Assets, Paths, Settings, Diagnostics, Transform QA, and Physics QA utilities.\n");
     printf("  Select an imported glTF scene entity to edit its shared material instance in Object Details; scalar/vector, flags, alpha, and semantic texture overrides apply transactionally. Use Utility > Assets to choose manager-owned textures for editable slots.\n");
     printf("  Select a Showcase Giraffe or Showcase Rocket primitive, open Object Details > Authoring, and choose Make Editable; the generic component Move, Edge-mode Select Edge Loop, and Face Bevel/Extrude/Subdivide controls are the user-facing modeling path. The checked-in HAMS sources are persisted editor-owned derivatives of imported fixture geometry and are reported as HENKA_NATIVE_EDITED_FIXTURE; this does not prove recognizable user-designed Giraffe/Rocket geometry. Refine Profile is an asset-specific preset for diagnostics, not generic modeling proof. Own Material promotes a manager-owned runtime definition for bounded base-color, metallic, roughness, emissive-strength, IOR, transmission, subsurface amount, thickness, and tint, plus in-engine procedural normal and metallic-roughness texture creation. Mesh/project save-reload and the native material sidecar preserve all supported PBR scalars, colors, flags, alpha mode, and seven material texture identities; source export and a complete authored Giraffe/Rocket production workflow remain bounded work.\n");
     printf("  Physics QA enables an opt-in fixed-step rigid-body demo with collider/contact debug drawing, impulses, body modes, and camera raycasts.\n");
-    printf("  The Controls panel uses Main, Camera/Status, and QA pages, and Scene Objects supports paging when the dock is tighter than the full list.\n");
-    printf("  Controls also provides Default, Modeling, Materials, Scene Assembly, Debugging, and Minimal Viewport workspace presets; topology edits mark the workspace Custom.\n");
+    printf("  The Tools panel uses Main, Camera/Status, and QA pages, and Scene Objects supports paging when the dock is tighter than the full list.\n");
+    printf("  Tools provides Build, Game, and World work contexts plus saved/custom workspace layouts; topology edits mark the workspace Custom.\n");
     printf("  Save Custom and Restore Custom persist the primary named layout; Studio and Assembly slots provide two additional bounded local snapshots.\n");
     printf("  With panels visible, Ctrl+Z undoes and Ctrl+Y or Ctrl+Shift+Z redoes the bounded workspace layout history.\n");
     printf("  Select an object from the list or with Left Mouse in the viewport, then use Move, Rotate, or Scale in the Transform section.\n");
@@ -9549,7 +9615,7 @@ static void sandbox3d_build_native_panel_test_ui(henka_engine* engine, sandbox3d
     if (henka_engine_get_tool_window_state(engine, state->native_panel_window_id, &window_state) != HENKA_SUCCESS)
     {
         state->native_panel_window_id = HENKA_INVALID_WINDOW_ID;
-        sandbox3d_set_status(state, false, "Native Panel Test was closed. Open it again from Controls.");
+        sandbox3d_set_status(state, false, "Native Panel Test was closed. Open it again from Tools.");
         return;
     }
 
@@ -13184,12 +13250,27 @@ static void sandbox3d_apply_loaded_settings(henka_engine* engine, sandbox3d_stat
         }
     }
 
-    layout_mode_value = henka_settings_get_string(state->settings, g_setting_key_layout_mode, "view");
+    layout_mode_value = henka_settings_get_string(state->settings, g_setting_key_layout_mode, "inspect");
     state->workspace.layout_mode = sandbox3d_parse_layout_mode(layout_mode_value);
+    /* Focus Viewport and legacy Full Tools are never startup states. */
+    if (state->workspace.layout_mode != SANDBOX3D_LAYOUT_INSPECT)
+    {
+        state->workspace.layout_mode = SANDBOX3D_LAYOUT_INSPECT;
+    }
     state->workspace.scene_objects_panel_visible = henka_settings_get_bool(state->settings, g_setting_key_scene_panel_visible, true);
     state->workspace.object_details_panel_visible = henka_settings_get_bool(state->settings, g_setting_key_details_panel_visible, true);
+    state->workspace.tools_panel_visible = false;
+    state->workspace.context.active = sandbox3d_workspace_parse_work_context(
+        henka_settings_get_string(
+            state->settings,
+            g_setting_key_work_context,
+            "build"));
+    state->workspace.context.debug_hud_visible = false;
     state->workspace.active_utility = sandbox3d_parse_utility_view(
         henka_settings_get_string(state->settings, g_setting_key_active_utility, "none"));
+    (void)sandbox3d_apply_work_context(
+        state,
+        state->workspace.context.active);
     {
         const int radius_samples = henka_settings_get_int(
             state->settings,
@@ -13310,7 +13391,16 @@ static henka_result sandbox3d_save_settings(henka_engine* engine, sandbox3d_stat
         state->settings,
         g_setting_key_camera_framing_version,
         g_camera_framing_settings_version);
-    henka_settings_set_string(state->settings, g_setting_key_layout_mode, sandbox3d_get_layout_mode_setting_value(state->workspace.layout_mode));
+    /* Focus Viewport is temporary; persist only the stable shell. */
+    henka_settings_set_string(
+        state->settings,
+        g_setting_key_layout_mode,
+        sandbox3d_get_layout_mode_setting_value(SANDBOX3D_LAYOUT_INSPECT));
+    henka_settings_set_string(
+        state->settings,
+        g_setting_key_work_context,
+        sandbox3d_workspace_context_setting_value(
+            state->workspace.context.active));
     henka_settings_set_bool(state->settings, g_setting_key_scene_panel_visible, state->workspace.scene_objects_panel_visible);
     henka_settings_set_bool(state->settings, g_setting_key_details_panel_visible, state->workspace.object_details_panel_visible);
     henka_settings_set_string(state->settings, g_setting_key_active_utility, sandbox3d_get_utility_setting_value(state->workspace.active_utility));
@@ -13387,6 +13477,8 @@ static henka_result sandbox3d_reset_settings(henka_engine* engine, sandbox3d_sta
     sandbox3d_reset_camera_defaults(state);
     sandbox3d_editor_controls_reset_all(&state->editor_controls);
     sandbox3d_editor_ui_state_reset(&state->editor_ui);
+    sandbox3d_workspace_context_state_reset(&state->workspace.context);
+    state->workspace.tools_panel_visible = false;
     sandbox3d_editor_controls_apply(&state->editor_controls, engine);
     state->editor_controls_loaded_safely = true;
     sandbox3d_close_all_detached_workspace_panels(engine, state);
@@ -15823,8 +15915,8 @@ static sandbox3d_workspace_layout sandbox3d_get_workspace_layout(
     details_visible = sandbox3d_workspace_shows_details_panel(state);
     utility_visible = sandbox3d_workspace_shows_utility_panel(state);
     panel = sandbox3d_workspace_get_panel_const(&state->workspace.model, SANDBOX3D_WORKSPACE_PANEL_CONTROLS);
-    controls_left = panel != NULL && panel->dock == SANDBOX3D_WORKSPACE_DOCK_LEFT;
-    controls_right = panel != NULL && panel->dock == SANDBOX3D_WORKSPACE_DOCK_RIGHT;
+    controls_left = sandbox3d_workspace_panel_visible(state, SANDBOX3D_WORKSPACE_PANEL_CONTROLS) && panel != NULL && panel->dock == SANDBOX3D_WORKSPACE_DOCK_LEFT;
+    controls_right = sandbox3d_workspace_panel_visible(state, SANDBOX3D_WORKSPACE_PANEL_CONTROLS) && panel != NULL && panel->dock == SANDBOX3D_WORKSPACE_DOCK_RIGHT;
     panel = sandbox3d_workspace_get_panel_const(&state->workspace.model, SANDBOX3D_WORKSPACE_PANEL_SCENE_OBJECTS);
     scene_left = scene_visible && panel != NULL && panel->dock == SANDBOX3D_WORKSPACE_DOCK_LEFT;
     scene_right = scene_visible && panel != NULL && panel->dock == SANDBOX3D_WORKSPACE_DOCK_RIGHT;
@@ -15862,7 +15954,13 @@ static sandbox3d_workspace_layout sandbox3d_get_workspace_layout(
     layout.scene_frame = docked_layout.scene_frame;
     layout.right_dock = docked_layout.right_dock;
     layout.scene_viewport = docked_layout.scene_viewport;
-    sandbox3d_reserve_debug_strip(&layout);
+    /* HENKA_DEBUG_HUD_SUBORDINATE_V1
+     * Diagnostics reserve viewport space only when the user explicitly asks. */
+    if (state->workspace.active_utility == SANDBOX3D_UTILITY_DIAGNOSTICS ||
+        state->workspace.context.debug_hud_visible)
+    {
+        sandbox3d_reserve_debug_strip(&layout);
+    }
     layout.controls_panel = (henka_ui_rect){0.0f, 0.0f, 0.0f, 0.0f};
     layout.scene_objects_panel = (henka_ui_rect){0.0f, 0.0f, 0.0f, 0.0f};
     layout.object_details_panel = (henka_ui_rect){0.0f, 0.0f, 0.0f, 0.0f};
@@ -16146,7 +16244,9 @@ static bool sandbox3d_workspace_tab_content_visible(
     switch (panel_id)
     {
         case SANDBOX3D_WORKSPACE_PANEL_CONTROLS:
-            return true;
+            return sandbox3d_workspace_panel_visible(
+                state,
+                SANDBOX3D_WORKSPACE_PANEL_CONTROLS);
         case SANDBOX3D_WORKSPACE_PANEL_SCENE_OBJECTS:
             return sandbox3d_workspace_shows_scene_panel(state);
         case SANDBOX3D_WORKSPACE_PANEL_OBJECT_DETAILS:
@@ -16324,13 +16424,20 @@ static henka_ui_rect sandbox3d_get_workspace_dock_target_rect(
     {
         dock_bounds = layout->left_dock.width > 0.0f
             ? layout->left_dock
-            : (henka_ui_rect){margin, margin, state->workspace.model.left_dock_width,
-                              (float)framebuffer_height - margin * 2.0f - g_ui_debug_strip_height};
+            : (henka_ui_rect){
+                  margin,
+                  margin,
+                  state->workspace.model.left_dock_width,
+                  (float)framebuffer_height - margin * 2.0f -
+                      ((state->workspace.active_utility == SANDBOX3D_UTILITY_DIAGNOSTICS ||
+                       state->workspace.context.debug_hud_visible)
+                           ? g_ui_debug_strip_height
+                           : 0.0f)};
     }
     else if (dock_zone == SANDBOX3D_WORKSPACE_DOCK_RIGHT)
     {
         width = state->workspace.model.right_dock_width;
-        height = (float)framebuffer_height - margin * 2.0f - g_ui_debug_strip_height;
+        height = (float)framebuffer_height - margin * 2.0f - ((state->workspace.active_utility == SANDBOX3D_UTILITY_DIAGNOSTICS || state->workspace.context.debug_hud_visible) ? g_ui_debug_strip_height : 0.0f);
         dock_bounds = layout->right_dock.width > 0.0f
             ? layout->right_dock
             : (henka_ui_rect){(float)framebuffer_width - margin - width, margin, width, height};
@@ -17464,6 +17571,96 @@ static void sandbox3d_draw_scene_viewport_frame(
 
     state->scene_view_header_controls =
         (henka_ui_rect){0.0f, 0.0f, 0.0f, 0.0f};
+
+    /* HENKA_CONTEXT_HEADER_V1 */
+    if (bounds.width >= 430.0f)
+    {
+        static const char* const context_labels[] =
+        {
+            "Build",
+            "Game",
+            "World"
+        };
+        const float context_width = bounds.width >= 760.0f ? 210.0f : 126.0f;
+        const float tools_width = bounds.width >= 760.0f ? 62.0f : 50.0f;
+        const float focus_width = bounds.width >= 760.0f ? 82.0f : 0.0f;
+        const float context_x = bounds.x + 88.0f;
+        size_t context_selection = (size_t)state->workspace.context.active;
+        bool context_changed = false;
+
+        if (henka_ui_segmented_select(
+                state->ui,
+                "work_context_selector",
+                (henka_ui_rect){
+                    context_x,
+                    bounds.y + 4.0f,
+                    context_width,
+                    22.0f},
+                context_labels,
+                sizeof(context_labels) / sizeof(context_labels[0]),
+                &context_selection,
+                &context_changed) == HENKA_SUCCESS &&
+            context_changed &&
+            context_selection < SANDBOX3D_WORK_CONTEXT_COUNT &&
+            sandbox3d_apply_work_context(
+                state,
+                (sandbox3d_workspace_work_context)context_selection))
+        {
+            sandbox3d_set_statusf(
+                state,
+                false,
+                false,
+                "Work context: %s.",
+                sandbox3d_workspace_context_label(
+                    state->workspace.context.active));
+        }
+
+        if (henka_ui_tab(
+                state->ui,
+                "header_tools",
+                (henka_ui_rect){
+                    context_x + context_width + 4.0f,
+                    bounds.y + 4.0f,
+                    tools_width,
+                    22.0f},
+                "Tools",
+                state->workspace.tools_panel_visible))
+        {
+            state->workspace.tools_panel_visible =
+                !state->workspace.tools_panel_visible;
+            sandbox3d_set_status(
+                state,
+                false,
+                state->workspace.tools_panel_visible
+                    ? "Secondary tools shown."
+                    : "Secondary tools hidden.");
+        }
+
+        if (focus_width > 0.0f &&
+            henka_ui_tab(
+                state->ui,
+                "header_focus_viewport",
+                (henka_ui_rect){
+                    context_x + context_width + tools_width + 8.0f,
+                    bounds.y + 4.0f,
+                    focus_width,
+                    22.0f},
+                "Focus",
+                state->workspace.layout_mode == SANDBOX3D_LAYOUT_VIEW))
+        {
+            state->workspace.layout_mode =
+                state->workspace.layout_mode == SANDBOX3D_LAYOUT_VIEW
+                    ? SANDBOX3D_LAYOUT_INSPECT
+                    : SANDBOX3D_LAYOUT_VIEW;
+            sandbox3d_set_status(
+                state,
+                false,
+                state->workspace.layout_mode == SANDBOX3D_LAYOUT_VIEW
+                    ? "Focus Viewport enabled."
+                    : "Standard editor shell restored.");
+        }
+    }
+
     gap = 3.0f;
     labels = full_labels;
     button_width = 68.0f;
@@ -17485,10 +17682,10 @@ static void sandbox3d_draw_scene_viewport_frame(
 
     state->scene_view_header_controls =
         (henka_ui_rect){
-            start_x,
-            bounds.y + 4.0f,
-            button_width * 4.0f + gap * 3.0f,
-            22.0f};
+            bounds.x,
+            bounds.y,
+            bounds.width,
+            30.0f};
 
     if (!state->viewport_shading_bounds_reported)
     {
@@ -17831,7 +18028,7 @@ static void sandbox3d_draw_panel_recall_hint(henka_ui_context* ui, henka_viewpor
     bounds.width = width;
     bounds.height = height;
 
-    henka_ui_overlay_hint(ui, bounds, "Panels hidden. Press F4 to show tools.", "F5 changes layout");
+    henka_ui_overlay_hint(ui, bounds, "Panels hidden. Press F4 to show Tools.", "F5 changes layout");
 }
 
 
@@ -18425,7 +18622,7 @@ static void sandbox3d_draw_controls_panel(
         if (!state->controls_qa_tab_bounds_reported)
         {
             printf(
-                "Controls QA tab: x=%.1f y=%.1f width=%.1f height=%.1f\n",
+                "Tools QA tab: x=%.1f y=%.1f width=%.1f height=%.1f\n",
                 qa_page_bounds.x,
                 qa_page_bounds.y,
                 qa_page_bounds.width,
@@ -18492,101 +18689,16 @@ static void sandbox3d_draw_controls_panel(
             (void)sandbox3d_controls_flow_disclosure(
                 state,
                 "controls.main.workspace",
-                "Workspace",
+                "Layout",
                 &state->editor_ui.controls_workspace_expanded,
                 &disclosure_changed);
 
             if (state->editor_ui.controls_workspace_expanded)
             {
-                if (sandbox3d_controls_flow_next_row(
-                        state,
-                        28.0f,
-                        1U,
-                        &row))
-                {
-                    static const char* const workspace_mode_labels[] =
-                    {
-                        "View",
-                        "Inspect",
-                        "Full Tools"
-                    };
-                    bool workspace_mode_changed = false;
-                    size_t workspace_mode_selection = 3U;
-                    henka_result workspace_mode_result;
-
-                    switch (layout_mode)
-                    {
-                    case SANDBOX3D_LAYOUT_VIEW:
-                        workspace_mode_selection = 0U;
-                        break;
-
-                    case SANDBOX3D_LAYOUT_INSPECT:
-                        workspace_mode_selection = 1U;
-                        break;
-
-                    case SANDBOX3D_LAYOUT_FULL:
-                        workspace_mode_selection = 2U;
-                        break;
-
-                    default:
-                        break;
-                    }
-
-                    workspace_mode_result =
-                        henka_ui_segmented_select(
-                            state->ui,
-                            "layout_mode_selector",
-                            row,
-                            workspace_mode_labels,
-                            sizeof(workspace_mode_labels) /
-                                sizeof(workspace_mode_labels[0]),
-                            &workspace_mode_selection,
-                            &workspace_mode_changed);
-
-                    if (workspace_mode_result == HENKA_SUCCESS &&
-                        workspace_mode_changed)
-                    {
-                        switch (workspace_mode_selection)
-                        {
-                        case 0U:
-                            state->workspace.layout_mode =
-                                SANDBOX3D_LAYOUT_VIEW;
-                            break;
-
-                        case 1U:
-                            state->workspace.layout_mode =
-                                SANDBOX3D_LAYOUT_INSPECT;
-                            break;
-
-                        case 2U:
-                            state->workspace.layout_mode =
-                                SANDBOX3D_LAYOUT_FULL;
-                            break;
-
-                        default:
-                            break;
-                        }
-
-                        sandbox3d_set_statusf(
-                            state,
-                            false,
-                            false,
-                            "Layout set to %s.",
-                            sandbox3d_get_layout_mode_label(
-                                state->workspace.layout_mode));
-                        sandbox3d_print_layout_mode(
-                            state,
-                            false);
-                    }
-                }
                 {
                     const sandbox3d_workspace_named_layout presets[] =
                     {
                         SANDBOX3D_WORKSPACE_LAYOUT_DEFAULT,
-                        SANDBOX3D_WORKSPACE_LAYOUT_MODELING,
-                        SANDBOX3D_WORKSPACE_LAYOUT_MATERIALS,
-                        SANDBOX3D_WORKSPACE_LAYOUT_SCENE_ASSEMBLY,
-                        SANDBOX3D_WORKSPACE_LAYOUT_DEBUGGING,
                         SANDBOX3D_WORKSPACE_LAYOUT_MINIMAL_VIEWPORT
                     };
                     size_t preset_index;
@@ -24637,7 +24749,11 @@ static void sandbox3d_build_ui(henka_engine* engine, sandbox3d_state* state)
         sandbox3d_draw_selection_highlight(state, layout.scene_viewport);
         sandbox3d_draw_gizmo_overlay(engine, state, layout.scene_viewport);
         sandbox3d_draw_physics_overlay(state, layout.scene_viewport);
+        if (state->workspace.active_utility == SANDBOX3D_UTILITY_DIAGNOSTICS ||
+        state->workspace.context.debug_hud_visible)
+    {
         sandbox3d_draw_viewport_debug_strip(engine, state, layout.debug_strip);
+    }
         sandbox3d_draw_docked_workspace_sections(
             engine,
             state,
@@ -26355,7 +26471,7 @@ static henka_result sandbox3d_initialize(henka_engine* engine, void* user_data)
         state,
         !state->editor_controls_loaded_safely,
         state->editor_controls_loaded_safely
-            ? "Panels are open. Use Controls or Physics QA to start testing."
+            ? "Panels are open. Use Tools or Physics QA to start testing."
             : "Control profile settings were invalid. Henka Default controls are active.");
 
     result = henka_engine_set_mouse_capture(engine, false);
@@ -28162,7 +28278,7 @@ static void sandbox3d_update(henka_engine* engine, double delta_seconds, void* u
             false,
             false,
             "%s",
-            ui_visible ? "Panels shown." : "Panels hidden. Press F4 to show tools.");
+            ui_visible ? "Panels shown." : "Panels hidden. Press F4 to show Tools.");
         sandbox3d_print_ui_state(ui_visible);
         ui_toggled_with_f4 = true;
     }

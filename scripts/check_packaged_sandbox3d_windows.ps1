@@ -900,7 +900,7 @@ Assert-FileContains -Path $readmePath -Pattern "Locked objects remain selectable
 Assert-FileContains -Path $readmePath -Pattern "Ground starts locked and requires an explicit Unlock Transform action before it can move" -Description "Packaged ground lock guidance"
 Assert-FileContains -Path $readmePath -Pattern "Clearing selection also clears active transform-session ownership" -Description "Packaged transform-session ownership guidance"
 Assert-FileContains -Path $readmePath -Pattern "release away from the outlines to open a separate native tool window" -Description "Packaged workspace guidance"
-Assert-FileContains -Path $readmePath -Pattern "Open Native Panel Test from the Controls QA page to exercise a separate OS-level validation window" -Description "Packaged native test panel guidance"
+Assert-FileContains -Path $readmePath -Pattern "Open Native Panel Test from the Tools QA page to exercise a separate OS-level validation window" -Description "Packaged native test panel guidance"
 Assert-FileContains -Path $readmePath -Pattern "If saved live workspace geometry is incompatible, Henka restores current safe defaults and rewrites them after a clean shutdown" -Description "Packaged workspace recovery guidance"
 Assert-FileContains -Path $readmePath -Pattern "Close a detached tool window to return its panel to the last valid dock" -Description "Packaged workspace limitation guidance"
 Assert-FileContains -Path $readmePath -Pattern "Use M or G, R, and S for action-based transforms" -Description "Packaged transform hotkey guidance"
@@ -1043,11 +1043,11 @@ try {
     }
     Assert-FileContains -Path $stdoutPath -Pattern "Henka Engine Sandbox 3D" -Description "Startup help heading"
     Assert-FileContains -Path $stdoutPath -Pattern "F4               Show or hide the sandbox panels" -Description "F4 help text"
-    Assert-FileContains -Path $stdoutPath -Pattern "F5               Cycle View, Inspect, and Full Tools layouts" -Description "F5 help text"
+    Assert-FileContains -Path $stdoutPath -Pattern "F5               Switch Standard and Focus Viewport layouts" -Description "F5 help text"
     Assert-FileContains -Path $stdoutPath -Pattern "Runtime mode: Packaged" -Description "Packaged runtime mode output"
     Assert-FileContains -Path $stdoutPath -Pattern "Startup selection: None" -Description "Packaged startup no-selection output"
     Assert-FileContains -Path $stdoutPath -Pattern "Startup UI:" -Description "Startup UI cue"
-    Assert-FileContains -Path $stdoutPath -Pattern "Controls and Physics QA are discoverable immediately" -Description "Startup auto panel cue"
+    Assert-FileContains -Path $stdoutPath -Pattern "Tools and Physics QA are discoverable immediately" -Description "Startup auto panel cue"
     Assert-FileContains -Path $stdoutPath -Pattern "use the in-window .*utilities" -Description "Startup utility cue"
     Assert-FileContains -Path $stdoutPath -Pattern "recent actions and warnings appear" -Description "Startup status cue"
 
@@ -1057,7 +1057,7 @@ try {
     Start-Sleep -Milliseconds 600
     if (Wait-FileContains -Path $stdoutPath -Pattern "Sandbox UI ready:" -TimeoutMilliseconds 1500) {
         Assert-FileContains -Path $stdoutPath -Pattern "Sandbox UI ready:" -Description "Startup UI readiness output"
-        Assert-FileContains -Path $stdoutPath -Pattern "View mode|Inspect mode|Full Tools mode" -Description "Layout mode output"
+        Assert-FileContains -Path $stdoutPath -Pattern "Standard mode|Focus Viewport mode|Legacy Full Tools mode" -Description "Layout mode output"
         Try-AssertFileContains -Path $stdoutPath -Pattern "Sandbox viewport:" -Description "Viewport output"
         $uiAutomationVerified = $true
     }
@@ -1071,7 +1071,7 @@ try {
         if (Wait-FileContains -Path $stdoutPath -Pattern "Sandbox panel: shown" -TimeoutMilliseconds 4000) {
             Assert-FileContains -Path $stdoutPath -Pattern "Sandbox panel: shown" -Description "Panel open output"
             Assert-FileContains -Path $stdoutPath -Pattern "Sandbox UI ready:" -Description "UI readiness output after F4"
-            Assert-FileContains -Path $stdoutPath -Pattern "View mode|Inspect mode|Full Tools mode" -Description "Layout mode output after F4"
+            Assert-FileContains -Path $stdoutPath -Pattern "Standard mode|Focus Viewport mode|Legacy Full Tools mode" -Description "Layout mode output after F4"
             Try-AssertFileContains -Path $stdoutPath -Pattern "Sandbox viewport:" -Description "Viewport output after F4"
             $uiAutomationVerified = $true
         }
@@ -1094,7 +1094,7 @@ try {
             "Workspace UI geometry:",
             "Workspace header chrome:",
             "Grid control:",
-            "Controls QA tab:",
+            "Tools QA tab:",
             "Viewport shading controls:")) {
             if (-not (Wait-FileContains `
                     -Path $stdoutPath `
@@ -1118,7 +1118,7 @@ try {
             -Pattern 'Grid control: x=([-0-9.]+) y=([-0-9.]+) width=([-0-9.]+) height=([-0-9.]+)'
         $qaTabMatch = Get-LastLogRegexMatch `
             -Path $stdoutPath `
-            -Pattern 'Controls QA tab: x=([-0-9.]+) y=([-0-9.]+) width=([-0-9.]+) height=([-0-9.]+)'
+            -Pattern 'Tools QA tab: x=([-0-9.]+) y=([-0-9.]+) width=([-0-9.]+) height=([-0-9.]+)'
         $shadingMatch = Get-LastLogRegexMatch `
             -Path $stdoutPath `
             -Pattern 'Viewport shading controls: x=([-0-9.]+) y=([-0-9.]+) button=([-0-9.]+) gap=([-0-9.]+)'
@@ -1223,7 +1223,7 @@ try {
 
         $currentLayoutMatch = Get-LastLogRegexMatch `
             -Path $stdoutPath `
-            -Pattern 'Sandbox layout: (View|Inspect|Full Tools)'
+            -Pattern 'Sandbox layout: (Standard|Focus Viewport|Legacy Full Tools)'
 
         if ($null -eq $currentLayoutMatch) {
             throw "The active packaged workspace layout could not be determined."
@@ -1240,7 +1240,7 @@ try {
             -Y $leftDockY `
             -Width $leftDockWidth `
             -Height $leftDockHeight
-        if ($currentLayout -eq "View") {
+        if ($currentLayout -eq "Focus Viewport") {
             if ([Math]::Abs($rightDockWidth) -gt 0.01 -or
                 $rightDockHeight -le 0.0 -or
                 $rightDockX -lt 0.0 -or
@@ -1249,11 +1249,11 @@ try {
                 $rightDockY + $rightDockHeight -gt [double]$framebufferHeight) {
 
                 throw (
-                    "View mode reported an invalid collapsed right dock: " +
+                    "Focus Viewport mode reported an invalid collapsed right dock: " +
                     "rect=($rightDockX,$rightDockY,$rightDockWidth,$rightDockHeight).")
             }
 
-            Write-Output "[pass] View mode safely collapses its inactive right dock"
+            Write-Output "[pass] Focus Viewport mode safely collapses its inactive right dock"
         }
         else {
             Assert-FramebufferRect `
@@ -1268,7 +1268,7 @@ try {
 
         $panelRects = @(
             [pscustomobject]@{
-                Name = "Controls panel"
+                Name = "Tools panel"
                 X = $controlsX
                 Y = $controlsY
                 Width = $controlsWidth
@@ -1303,7 +1303,7 @@ try {
                 }
         )
         $minimumVisiblePanelCount =
-            if ($currentLayout -eq "View") { 1 } else { 2 }
+            if ($currentLayout -eq "Focus Viewport") { 1 } else { 2 }
 
         if ($visiblePanelRects.Count -lt $minimumVisiblePanelCount) {
             throw (
@@ -1311,13 +1311,13 @@ try {
                 "$($visiblePanelRects.Count), expected at least $minimumVisiblePanelCount.")
         }
 
-        if ($currentLayout -eq "View" -and
+        if ($currentLayout -eq "Focus Viewport" -and
             ($sceneObjectsWidth -gt 0.0 -or
              $sceneObjectsHeight -gt 0.0 -or
              $detailsWidth -gt 0.0 -or
              $detailsHeight -gt 0.0)) {
 
-            throw "View mode reported right-side panel content while its right dock was collapsed."
+            throw "Focus Viewport mode reported right-side panel content while its right dock was collapsed."
         }
         foreach ($panelRect in $visiblePanelRects) {
             Assert-FramebufferRect `
@@ -1400,10 +1400,10 @@ try {
 
         $inspectLayoutMatch = Get-LastLogRegexMatch `
             -Path $stdoutPath `
-            -Pattern 'Sandbox layout: (View|Inspect|Full Tools)'
+            -Pattern 'Sandbox layout: (Standard|Focus Viewport|Legacy Full Tools)'
 
         if ($null -eq $inspectLayoutMatch) {
-            throw "The workspace layout could not be read before entering Inspect."
+            throw "The workspace layout could not be read before entering Standard."
         }
 
         $inspectLayout =
@@ -1411,7 +1411,7 @@ try {
 
         for ($layoutAttempt = 0;
              $layoutAttempt -lt 3 -and
-             $inspectLayout -ne "Inspect";
+             $inspectLayout -ne "Standard";
              ++$layoutAttempt) {
 
             $previousLayout =
@@ -1430,7 +1430,7 @@ try {
 
                 $nextLayoutMatch = Get-LastLogRegexMatch `
                     -Path $stdoutPath `
-                    -Pattern 'Sandbox layout: (View|Inspect|Full Tools)'
+                    -Pattern 'Sandbox layout: (Standard|Focus Viewport|Legacy Full Tools)'
 
                 if ($null -ne $nextLayoutMatch) {
                     $candidateLayout =
@@ -1452,15 +1452,15 @@ try {
             }
         }
 
-        if ($inspectLayout -ne "Inspect") {
+        if ($inspectLayout -ne "Standard") {
             throw (
-                "The packaged workspace did not reach Inspect within " +
+                "The packaged workspace did not reach Standard within " +
                 "three bounded layout transitions.")
         }
 
-        Write-Output "[pass] Packaged workspace entered Inspect deterministically"
+        Write-Output "[pass] Packaged workspace entered Standard deterministically"
         if (-not (Wait-FileContains -Path $stdoutPath -Pattern "Native authoring row:" -TimeoutMilliseconds 4000)) {
-            throw "The Inspect layout did not expose a showcase primitive authoring row."
+            throw "The Standard layout did not expose a showcase primitive authoring row."
         }
         $nativeRowMatch = Get-LastLogRegexMatch `
             -Path $stdoutPath `
@@ -2387,7 +2387,7 @@ try {
             -Description "Packaged native authoring screenshot"
 
         Write-Step "Checking section-header context menu"
-        $contextMenuPattern = "Workspace context menu: section=Controls horizontal=available vertical=available"
+        $contextMenuPattern = "Workspace context menu: section=Tools horizontal=available vertical=available"
 
         Click-FramebufferPointRight `
             -Handle $mainWindowHandle `
@@ -2402,7 +2402,7 @@ try {
             -TimeoutMilliseconds 4000
 
         if (-not $contextMenuObserved) {
-            Write-Output "[retry] Controls context menu was not observed after the first verified right click; retrying once."
+            Write-Output "[retry] Tools context menu was not observed after the first verified right click; retrying once."
 
             Set-HenkaAutomationForeground -Handle $mainWindowHandle
             Start-Sleep -Milliseconds 250
@@ -2422,11 +2422,11 @@ try {
 
         if (-not $contextMenuObserved) {
             throw (
-                "Right-clicking the Controls header did not open the horizontal/vertical " +
+                "Right-clicking the Tools header did not open the horizontal/vertical " +
                 "section context menu after two verified real-input attempts.")
         }
 
-        Write-Output "[pass] Controls section-header context menu opened from verified real mouse input"
+        Write-Output "[pass] Tools section-header context menu opened from verified real mouse input"
 
         Save-WindowScreenshot `
             -Handle $mainWindowHandle `
@@ -2478,7 +2478,7 @@ try {
         }
         Write-Output (
             "[pass] Workspace headers match live topology: " +
-            "Controls=$controlsChrome/$controlsTabCount, " +
+            "Tools=$controlsChrome/$controlsTabCount, " +
             "Utility=$utilityChrome/$utilityTabCount")
 
         Assert-FramebufferRect `
@@ -2490,7 +2490,7 @@ try {
             -Width $gridWidth `
             -Height $gridHeight
         Assert-FramebufferRect `
-            -Name "Controls QA tab" `
+            -Name "Tools QA tab" `
             -FramebufferWidth $framebufferWidth `
             -FramebufferHeight $framebufferHeight `
             -X $qaTabX `
@@ -2526,20 +2526,20 @@ try {
             -FramebufferX ($qaTabX + $qaTabWidth * 0.5) `
             -FramebufferY ($qaTabY + $qaTabHeight * 0.5)
 
-        Write-Step "Capturing Controls QA page visual proof"
+        Write-Step "Capturing Tools QA page visual proof"
         Set-HenkaAutomationForeground -Handle $mainWindowHandle
         Start-Sleep -Milliseconds 350
         Save-WindowScreenshot `
             -Handle $mainWindowHandle `
             -Path $qaScreenshotPath `
-            -Description "Packaged Controls QA screenshot"
+            -Description "Packaged Tools QA screenshot"
 
         if (-not (Wait-FileContains `
                 -Path $stdoutPath `
                 -Pattern "Native Panel Test control:" `
                 -TimeoutMilliseconds 4000)) {
             throw (
-                "The Controls QA page did not report the Native Panel Test " +
+                "The Tools QA page did not report the Native Panel Test " +
                 "control after the QA tab was activated.")
         }
 
@@ -3011,7 +3011,7 @@ try {
         -Description "Packaged startup workspace visual proof"
     Assert-PathExists `
         -Path $qaScreenshotPath `
-        -Description "Packaged Controls QA visual proof"
+        -Description "Packaged Tools QA visual proof"
     Assert-PathExists `
         -Path $nativeScreenshotPath `
         -Description "Packaged native panel visual proof"
