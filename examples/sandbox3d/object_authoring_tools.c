@@ -2700,6 +2700,186 @@ henka_result sandbox3d_authoring_object_select_edge_loop(
     return HENKA_SUCCESS;
 }
 
+static henka_result sandbox3d_authoring_collect_edge_ring_branch(
+    const sandbox3d_authoring_object* object,
+    henka_authoring_face_id current_face_id,
+    henka_authoring_edge_id current_edge_id,
+    size_t side_offset,
+    uint32_t* ring_edges,
+    size_t* edge_count,
+    size_t edge_capacity)
+{
+    size_t step;
+    if (object == NULL || ring_edges == NULL || edge_count == NULL ||
+        edge_capacity == 0U || (side_offset != 1U && side_offset != 3U))
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    for (step = 0U; step < edge_capacity; ++step)
+    {
+        const henka_authoring_face* face = henka_authoring_mesh_get_face(
+            object->mesh, current_face_id);
+        henka_authoring_edge_id next_edge_id = HENKA_AUTHORING_INVALID_ID;
+        henka_authoring_face_id next_face_id = HENKA_AUTHORING_INVALID_ID;
+        size_t corner;
+        size_t next_face_index;
+        size_t next_face_count;
+
+        if (face == NULL || face->corner_count != 4U || face->edges == NULL)
+        {
+            return HENKA_ERROR_UNKNOWN;
+        }
+        for (corner = 0U; corner < face->corner_count; ++corner)
+        {
+            if (face->edges[corner] == current_edge_id)
+            {
+                next_edge_id = face->edges[(corner + side_offset) % face->corner_count];
+                break;
+            }
+        }
+        if (next_edge_id == HENKA_AUTHORING_INVALID_ID ||
+            henka_authoring_mesh_get_edge(object->mesh, next_edge_id) == NULL)
+        {
+            return HENKA_ERROR_UNKNOWN;
+        }
+        for (corner = 0U; corner < *edge_count; ++corner)
+        {
+            if (ring_edges[corner] == next_edge_id)
+            {
+                return HENKA_SUCCESS;
+            }
+        }
+        if (!sandbox3d_authoring_append_unique_id(
+                ring_edges, edge_count, edge_capacity, next_edge_id))
+        {
+            return HENKA_ERROR_LIMIT;
+        }
+        next_face_count = henka_authoring_mesh_get_edge_face_count(
+            object->mesh, next_edge_id);
+        if (next_face_count != 2U)
+        {
+            return HENKA_ERROR_UNKNOWN;
+        }
+        for (next_face_index = 0U; next_face_index < next_face_count; ++next_face_index)
+        {
+            henka_authoring_face_id candidate_face_id;
+            if (henka_authoring_mesh_get_edge_face_at(
+                    object->mesh,
+                    next_edge_id,
+                    next_face_index,
+                    &candidate_face_id) == HENKA_SUCCESS &&
+                candidate_face_id != current_face_id)
+            {
+                next_face_id = candidate_face_id;
+                break;
+            }
+        }
+        if (next_face_id == HENKA_AUTHORING_INVALID_ID)
+        {
+            return HENKA_ERROR_UNKNOWN;
+        }
+        current_edge_id = next_edge_id;
+        current_face_id = next_face_id;
+    }
+    return HENKA_ERROR_LIMIT;
+}
+
+henka_result sandbox3d_authoring_object_select_edge_ring(
+    sandbox3d_authoring_object* object)
+{
+    uint32_t* ring_edges = NULL;
+    const size_t ring_capacity = object != NULL ? object->selected_edge_max_id : 0U;
+    const henka_authoring_edge* active_edge;
+    uint32_t active_id;
+    size_t adjacent_face_index;
+    size_t adjacent_face_count;
+    size_t edge_count = 0U;
+    henka_result result;
+
+    if (object == NULL || object->selection_mode != SANDBOX3D_AUTHORING_SELECTION_EDGE ||
+        !henka_authoring_mesh_validate(object->mesh))
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    if (sandbox3d_authoring_allocate_id_scratch(ring_capacity, &ring_edges) != HENKA_SUCCESS)
+    {
+        return HENKA_ERROR_OUT_OF_MEMORY;
+    }
+    active_id = object->active_component_id;
+    active_edge = active_id == HENKA_AUTHORING_INVALID_ID
+        ? NULL
+        : henka_authoring_mesh_get_edge(object->mesh, active_id);
+    if (active_edge == NULL || active_edge->face_count != 2U ||
+        !sandbox3d_authoring_append_unique_id(
+            ring_edges, &edge_count, ring_capacity, active_id))
+    {
+        henka_free(ring_edges);
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    adjacent_face_count = henka_authoring_mesh_get_edge_face_count(object->mesh, active_id);
+    for (adjacent_face_index = 0U;
+         adjacent_face_index < adjacent_face_count;
+         ++adjacent_face_index)
+    {
+        henka_authoring_face_id face_id;
+        if (henka_authoring_mesh_get_edge_face_at(
+                object->mesh, active_id, adjacent_face_index, &face_id) != HENKA_SUCCESS)
+        {
+            henka_free(ring_edges);
+            return HENKA_ERROR_UNKNOWN;
+        }
+        result = sandbox3d_authoring_collect_edge_ring_branch(
+            object, face_id, active_id, 1U, ring_edges, &edge_count, ring_capacity);
+        if (result != HENKA_SUCCESS)
+        {
+            henka_free(ring_edges);
+            return result;
+        }
+        result = sandbox3d_authoring_collect_edge_ring_branch(
+            object, face_id, active_id, 3U, ring_edges, &edge_count, ring_capacity);
+        if (result != HENKA_SUCCESS)
+        {
+            henka_free(ring_edges);
+            return result;
+        }
+    }
+    {
+        result = sandbox3d_authoring_selection_reserve_ids(
+            &object->selected_edges,
+            &object->selected_edge_capacity,
+            edge_count,
+            object->selected_edge_max_id);
+        if (result != HENKA_SUCCESS)
+        {
+            henka_free(ring_edges);
+            return result;
+        }
+    }
+    sandbox3d_authoring_selection_clear(
+        object->selected_edge_bits,
+        object->selected_edge_word_count,
+        &object->selected_edge_count);
+    for (size_t ring_index = 0U; ring_index < edge_count; ++ring_index)
+    {
+        result = sandbox3d_authoring_selection_add(
+            object->selected_edge_bits,
+            object->selected_edge_word_count,
+            object->selected_edge_max_id,
+            &object->selected_edges,
+            &object->selected_edge_capacity,
+            &object->selected_edge_count,
+            ring_edges[ring_index]);
+        if (result != HENKA_SUCCESS)
+        {
+            henka_free(ring_edges);
+            return result;
+        }
+    }
+    object->active_component_id = active_id;
+    henka_free(ring_edges);
+    return HENKA_SUCCESS;
+}
+
 henka_result sandbox3d_authoring_object_proportional_move_selected_components(
     sandbox3d_authoring_object* object,
     henka_vec3 offset,

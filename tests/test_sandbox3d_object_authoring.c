@@ -704,6 +704,22 @@ static void henka_test_sandbox3d_object_authoring_component_selection(void)
             HENKA_TEST_ASSERT(selected_edge->face_count >= 1U);
         }
     }
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_select_edge_ring(object) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_get_active_component_id(object) == 1U);
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_get_selected_component_count(object) > 1U);
+    {
+        size_t selected_index;
+        for (selected_index = 0U;
+             selected_index < sandbox3d_authoring_object_get_selected_component_count(object);
+             ++selected_index)
+        {
+            uint32_t selected_edge_id = HENKA_AUTHORING_INVALID_ID;
+            HENKA_TEST_ASSERT(sandbox3d_authoring_object_get_selected_component_at(
+                object, selected_index, &selected_edge_id) == HENKA_SUCCESS);
+            HENKA_TEST_ASSERT(henka_authoring_mesh_get_edge(
+                sandbox3d_authoring_object_get_mesh(object), selected_edge_id) != NULL);
+        }
+    }
     HENKA_TEST_ASSERT(sandbox3d_authoring_object_grow_component_selection(object) == HENKA_SUCCESS);
     HENKA_TEST_ASSERT(sandbox3d_authoring_object_get_selected_component_count(object) >= 1U);
     HENKA_TEST_ASSERT(sandbox3d_authoring_object_select_connected_components(object) == HENKA_SUCCESS);
@@ -903,6 +919,15 @@ static void henka_test_sandbox3d_object_authoring_scalable_selection(void)
     }
     sandbox3d_authoring_object_clear_component_selection(object);
     HENKA_TEST_ASSERT(sandbox3d_authoring_object_get_selected_component_count(object) == 0U);
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_select_component(object, 1U, false) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_select_edge_ring(object) != HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_get_selected_component_count(object) == 1U);
+    {
+        uint32_t selected_id = HENKA_AUTHORING_INVALID_ID;
+        HENKA_TEST_ASSERT(sandbox3d_authoring_object_get_selected_component_at(
+            object, 0U, &selected_id) == HENKA_SUCCESS);
+        HENKA_TEST_ASSERT(selected_id == 1U);
+    }
 
     sandbox3d_authoring_object_destroy(object);
     henka_authoring_mesh_destroy(source);
