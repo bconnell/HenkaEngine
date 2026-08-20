@@ -2084,11 +2084,17 @@ henka_result sandbox3d_authoring_object_pick_component(
     {
         uint32_t* prior_faces = NULL;
         size_t prior_face_count = 0U;
+        size_t prior_face_bytes = 0U;
         henka_authoring_face_id prior_selected_face = object->selected_face;
         henka_result result;
         if (additive)
         {
             prior_face_count = object->selected_face_count;
+            if (!henka_checked_size_multiply(
+                    prior_face_count, sizeof(prior_faces[0]), &prior_face_bytes))
+            {
+                return HENKA_ERROR_LIMIT;
+            }
             if (prior_face_count > 0U &&
                 sandbox3d_authoring_allocate_id_scratch(
                     prior_face_count, &prior_faces) != HENKA_SUCCESS)
@@ -2097,7 +2103,7 @@ henka_result sandbox3d_authoring_object_pick_component(
             }
             if (prior_face_count > 0U)
             {
-                memcpy(prior_faces, object->selected_faces, prior_face_count * sizeof(prior_faces[0]));
+                memcpy(prior_faces, object->selected_faces, prior_face_bytes);
             }
         }
         result = sandbox3d_authoring_object_pick_face(object, ray, maximum_distance);
