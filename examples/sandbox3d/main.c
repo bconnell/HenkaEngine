@@ -22147,6 +22147,53 @@ details_group_authoring:
                             "Scale requires a valid selection; source retained.");
                 }
             }
+            if (state->authoring_object != NULL &&
+                selection_mode == SANDBOX3D_AUTHORING_SELECTION_VERTEX &&
+                sandbox3d_details_flow_next_row(state, flow_desc.bounds, 24.0f, 1U, &row) &&
+                row.width >= 290.0f)
+            {
+                const bool merge_enabled =
+                    sandbox3d_authoring_object_get_selected_component_count(state->authoring_object) >= 2U;
+                const float button_width = (row.width - 12.0f) / 3.0f;
+                (void)henka_ui_label_colored(
+                    state->ui, row.x, row.y + 5.0f, 0.85f, "Vertex Modeling", HENKA_UI_COLOR_INFO);
+                if (merge_enabled && henka_ui_button(
+                        state->ui, "authoring_merge_center_top",
+                        (henka_ui_rect){row.x + 104.0f, row.y, button_width, 24.0f},
+                        "Merge Center"))
+                {
+                    const henka_result merge_result =
+                        sandbox3d_authoring_object_merge_selected_vertices_center(state->authoring_object);
+                    sandbox3d_set_status(state, merge_result != HENKA_SUCCESS,
+                        merge_result == HENKA_SUCCESS ? "Selected vertices merged at their center." :
+                            "Center merge rejected; source and selection retained.");
+                    if (merge_result == HENKA_SUCCESS) sandbox3d_mark_generic_modeling_applied(state, entity);
+                }
+                if (merge_enabled && henka_ui_button(
+                        state->ui, "authoring_merge_active_top",
+                        (henka_ui_rect){row.x + 104.0f + button_width + 6.0f, row.y, button_width, 24.0f},
+                        "Merge Active"))
+                {
+                    const henka_result merge_result =
+                        sandbox3d_authoring_object_merge_selected_vertices_active(state->authoring_object);
+                    sandbox3d_set_status(state, merge_result != HENKA_SUCCESS,
+                        merge_result == HENKA_SUCCESS ? "Selected vertices merged at the active vertex." :
+                            "Active merge rejected; source and selection retained.");
+                    if (merge_result == HENKA_SUCCESS) sandbox3d_mark_generic_modeling_applied(state, entity);
+                }
+                if (merge_enabled && henka_ui_button(
+                        state->ui, "authoring_merge_distance_top",
+                        (henka_ui_rect){row.x + 104.0f + (button_width + 6.0f) * 2.0f, row.y, button_width, 24.0f},
+                        "Merge Distance"))
+                {
+                    const henka_result merge_result =
+                        sandbox3d_authoring_object_merge_selected_vertices_by_distance(state->authoring_object);
+                    sandbox3d_set_status(state, merge_result != HENKA_SUCCESS,
+                        merge_result == HENKA_SUCCESS ? "Selected vertices merged within the configured distance." :
+                            "Distance merge rejected; source and selection retained.");
+                    if (merge_result == HENKA_SUCCESS) sandbox3d_mark_generic_modeling_applied(state, entity);
+                }
+            }
             if (selection_mode == SANDBOX3D_AUTHORING_SELECTION_FACE &&
                 !bevel_controls_prioritized &&
                 sandbox3d_details_flow_next_row(state, flow_desc.bounds, 28.0f, 1U, &row) &&
@@ -22770,6 +22817,81 @@ details_group_authoring:
                         state, scale_result != HENKA_SUCCESS,
                         scale_result == HENKA_SUCCESS ? "Selected components scaled around the median." :
                             "Scale requires a valid selection; source retained.");
+                }
+            }
+            if (state->authoring_object != NULL &&
+                selection_mode == SANDBOX3D_AUTHORING_SELECTION_VERTEX &&
+                sandbox3d_details_flow_next_row(state, flow_desc.bounds, 24.0f, 1U, &row) &&
+                row.width >= 290.0f)
+            {
+                const bool merge_enabled =
+                    sandbox3d_authoring_object_get_selected_component_count(state->authoring_object) >= 2U;
+                const float button_width = (row.width - 12.0f) / 3.0f;
+                (void)henka_ui_label_colored(
+                    state->ui, row.x, row.y + 5.0f, 0.85f, "Vertex Modeling", HENKA_UI_COLOR_INFO);
+                if (merge_enabled && henka_ui_button(
+                        state->ui, "authoring_merge_center",
+                        (henka_ui_rect){row.x + 104.0f, row.y, button_width, 24.0f},
+                        "Merge Center"))
+                {
+                    const henka_result merge_result =
+                        sandbox3d_authoring_object_merge_selected_vertices_center(state->authoring_object);
+                    if (merge_result == HENKA_SUCCESS)
+                    {
+                        sandbox3d_mark_generic_modeling_applied(state, entity);
+                        sandbox3d_set_status(state, false, "Selected vertices merged at their center.");
+                    }
+                    else sandbox3d_set_status(state, true, "Center merge rejected; source and selection retained.");
+                }
+                if (merge_enabled && henka_ui_button(
+                        state->ui, "authoring_merge_active",
+                        (henka_ui_rect){row.x + 104.0f + button_width + 6.0f, row.y, button_width, 24.0f},
+                        "Merge Active"))
+                {
+                    const henka_result merge_result =
+                        sandbox3d_authoring_object_merge_selected_vertices_active(state->authoring_object);
+                    if (merge_result == HENKA_SUCCESS)
+                    {
+                        sandbox3d_mark_generic_modeling_applied(state, entity);
+                        sandbox3d_set_status(state, false, "Selected vertices merged at the active vertex.");
+                    }
+                    else sandbox3d_set_status(state, true, "Active merge rejected; source and selection retained.");
+                }
+                if (merge_enabled && henka_ui_button(
+                        state->ui, "authoring_merge_distance",
+                        (henka_ui_rect){row.x + 104.0f + (button_width + 6.0f) * 2.0f, row.y, button_width, 24.0f},
+                        "Merge Distance"))
+                {
+                    const henka_result merge_result =
+                        sandbox3d_authoring_object_merge_selected_vertices_by_distance(state->authoring_object);
+                    if (merge_result == HENKA_SUCCESS)
+                    {
+                        sandbox3d_mark_generic_modeling_applied(state, entity);
+                        sandbox3d_set_status(state, false, "Selected vertices merged within the configured distance.");
+                    }
+                    else sandbox3d_set_status(state, true, "Distance merge rejected; source and selection retained.");
+                }
+            }
+            if (state->authoring_object != NULL &&
+                selection_mode == SANDBOX3D_AUTHORING_SELECTION_VERTEX &&
+                sandbox3d_details_flow_next_row(state, flow_desc.bounds, 24.0f, 1U, &row) &&
+                row.width >= 290.0f)
+            {
+                char merge_distance_text[64];
+                const float merge_distance = sandbox3d_authoring_object_get_merge_distance(state->authoring_object);
+                (void)snprintf(merge_distance_text, sizeof(merge_distance_text), "Merge distance %.6g", merge_distance);
+                (void)henka_ui_label(state->ui, row.x, row.y + 5.0f, 0.85f, merge_distance_text);
+                if (henka_ui_button(state->ui, "authoring_merge_distance_down",
+                        (henka_ui_rect){row.x + 170.0f, row.y, 54.0f, 24.0f}, "-") )
+                {
+                    (void)sandbox3d_authoring_object_set_merge_distance(
+                        state->authoring_object, merge_distance * 0.5f);
+                }
+                if (henka_ui_button(state->ui, "authoring_merge_distance_up",
+                        (henka_ui_rect){row.x + 230.0f, row.y, 54.0f, 24.0f}, "+") )
+                {
+                    (void)sandbox3d_authoring_object_set_merge_distance(
+                        state->authoring_object, merge_distance * 2.0f);
                 }
             }
             if (state->authoring_object != NULL &&

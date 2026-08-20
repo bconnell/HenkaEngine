@@ -337,6 +337,93 @@ cleanup:
     return result ? 1 : fail("modeling operations");
 }
 
+static int test_vertex_merge_operations(void)
+{
+    const henka_authoring_mesh_desc desc = {64U, 128U, 64U, 8U};
+    henka_authoring_mesh* mesh = NULL;
+    henka_authoring_vertex_id survivors[8] = {0U};
+    henka_authoring_modeling_report report;
+    size_t survivor_count = 0U;
+    henka_authoring_mesh_counts before;
+    henka_result merge_result;
+    int result = 0;
+
+    if (henka_authoring_mesh_create_plane(&desc, 2.0f, 2.0f, &mesh) != HENKA_SUCCESS ||
+        henka_authoring_mesh_merge_vertices(
+            mesh, (const henka_authoring_vertex_id[]){1U, 2U}, 2U,
+            HENKA_AUTHORING_VERTEX_MERGE_CENTER, HENKA_AUTHORING_INVALID_ID,
+            survivors, 8U, &survivor_count, &report) != HENKA_SUCCESS ||
+        survivor_count != 1U || survivors[0] != 1U || !report.changed ||
+        report.removed_vertices != 1U || henka_authoring_mesh_get_counts(mesh).vertices != 3U ||
+        henka_authoring_mesh_get_counts(mesh).faces != 1U || !henka_authoring_mesh_validate(mesh))
+    {
+        goto cleanup;
+    }
+    henka_authoring_mesh_destroy(mesh);
+    mesh = NULL;
+    if (henka_authoring_mesh_create_plane(&desc, 2.0f, 2.0f, &mesh) != HENKA_SUCCESS ||
+        henka_authoring_mesh_merge_vertices(
+            mesh, (const henka_authoring_vertex_id[]){1U, 2U}, 2U,
+            HENKA_AUTHORING_VERTEX_MERGE_ACTIVE, 2U,
+            survivors, 8U, &survivor_count, &report) != HENKA_SUCCESS ||
+        survivor_count != 1U || survivors[0] != 2U ||
+        henka_authoring_mesh_get_vertex(mesh, 1U) != NULL ||
+        henka_authoring_mesh_get_vertex(mesh, 2U) == NULL)
+    {
+        goto cleanup;
+    }
+    henka_authoring_mesh_destroy(mesh);
+    mesh = NULL;
+    if (henka_authoring_mesh_create_plane(&desc, 2.0f, 2.0f, &mesh) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    before = henka_authoring_mesh_get_counts(mesh);
+    if (henka_authoring_mesh_merge_vertices_by_distance(
+            mesh, (const henka_authoring_vertex_id[]){1U, 2U, 3U, 4U}, 4U,
+            0.01f, survivors, 8U, &survivor_count, &report) != HENKA_SUCCESS ||
+        report.changed || survivor_count != 4U ||
+        henka_authoring_mesh_get_counts(mesh).vertices != before.vertices ||
+        !henka_authoring_mesh_validate(mesh))
+    {
+        goto cleanup;
+    }
+    merge_result = henka_authoring_mesh_set_vertex_position(
+        mesh, 2U, (henka_vec3){-0.99f, 0.0f, -1.0f});
+    if (merge_result == HENKA_SUCCESS)
+    {
+        merge_result = henka_authoring_mesh_merge_vertices_by_distance(
+            mesh, (const henka_authoring_vertex_id[]){1U, 2U, 3U, 4U}, 4U,
+            0.02f, survivors, 8U, &survivor_count, &report);
+    }
+    if (merge_result != HENKA_SUCCESS || !report.changed || survivor_count != 3U || survivors[0] != 1U ||
+        henka_authoring_mesh_get_vertex(mesh, 2U) != NULL || !henka_authoring_mesh_validate(mesh))
+    {
+        goto cleanup;
+    }
+    henka_authoring_mesh_destroy(mesh);
+    mesh = NULL;
+    if (henka_authoring_mesh_create_plane(&desc, 2.0f, 2.0f, &mesh) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    before = henka_authoring_mesh_get_counts(mesh);
+    if (henka_authoring_mesh_merge_vertices(
+            mesh, (const henka_authoring_vertex_id[]){1U, 2U, 3U, 4U}, 4U,
+            HENKA_AUTHORING_VERTEX_MERGE_CENTER, HENKA_AUTHORING_INVALID_ID,
+            survivors, 8U, &survivor_count, &report) == HENKA_SUCCESS ||
+        henka_authoring_mesh_get_counts(mesh).vertices != before.vertices ||
+        henka_authoring_mesh_get_counts(mesh).faces != before.faces)
+    {
+        goto cleanup;
+    }
+    result = 1;
+
+cleanup:
+    henka_authoring_mesh_destroy(mesh);
+    return result ? 1 : fail("vertex merge operations");
+}
+
 static int test_uv_authoring(void)
 {
     const henka_authoring_mesh_desc desc = {64U, 128U, 64U, 8U};
@@ -474,6 +561,6 @@ cleanup:
 int main(void)
 {
     return test_topology_and_evaluation() && test_rejection_and_tombstones() &&
-        test_history_and_persistence() && test_modeling_operations() && test_uv_authoring() &&
+        test_history_and_persistence() && test_modeling_operations() && test_vertex_merge_operations() && test_uv_authoring() &&
         test_modeling_material_region_and_uv_continuity() ? 0 : 1;
 }

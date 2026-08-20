@@ -120,8 +120,9 @@ that entity's wrapper. When the source has the Sandbox box-collider contract,
 the duplicate receives a separate bounded collider and its collider is retired
 with the duplicate; the source body remains owned by its original descriptor.
 Imported entities are not yet automatically authoring-enabled. Wrapper-level
-vertex/edge topology editing beyond bounded selection and component transforms
-is not yet present; and material-instance assignment, texture
+vertex merge is present; vertex dissolve/delete/connect, edge topology editing
+beyond bounded selection, and component transforms remain incomplete; and
+material-instance assignment, texture
 dependencies, general collision integration beyond the bound box contract,
 package ownership, topology-aware picking, and showcase rebuilds still need the
 shared scene/asset-manager bridge. The current authoring mesh is a validated
@@ -162,6 +163,19 @@ empty output slot on any failure.
 vertices so a consuming scene can publish local bounds without a second
 geometry interpretation.
 
+Vertex merge is available as an explicit candidate operation through
+`henka_authoring_mesh_merge_vertices` and
+`henka_authoring_mesh_merge_vertices_by_distance`. Center and active-vertex
+modes use deterministic stable-ID selection, preserve per-face corner UVs and
+face metadata, reconcile active endpoint-pair edges without reactivating
+tombstones, and publish only after the candidate validates. Distance mode uses
+a finite positive tolerance, deterministic stable-ID union-find clustering, a
+bounded spatial hash, and double-precision cluster means. A no-op distance
+merge returns success without changing topology or history. The Sandbox
+authoring bridge exposes these operations only in Vertex selection mode and
+keeps the editable merge distance in transient per-object UI state; it is not
+serialized into HAMS or project manifests.
+
 The evaluator's tangent value is transport metadata for the bounded authoring
 representation, not an authoritative UV-derived tangent basis. At the shared
 authoring-to-render boundary, the renderer derives and orthogonalizes a stable
@@ -170,7 +184,7 @@ authoring faces from treating non-authoritative tangent metadata as finished
 shading data while preserving the single mesh/material ownership path.
 
 This is the bounded runtime foundation of the authoring-parity campaign. It is
-not yet a full modeling editor: component delete, weld/split/bridge/loop cuts,
+not yet a full modeling editor: component dissolve/delete, weld/split/bridge/loop cuts,
 production hard-surface profiles, automatic multi-island UV unwrap and
 global packing, material editing, texture painting, editor integration for the
 history/file APIs, and showcase rebuild workflows remain unfinished. glTF
