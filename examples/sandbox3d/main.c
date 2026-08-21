@@ -3267,6 +3267,7 @@ static henka_result sandbox3d_initialize_game_authoring(
     henka_engine* engine,
     sandbox3d_state* state);
 static void sandbox3d_update_game_authoring(
+    henka_engine* engine,
     sandbox3d_state* state);
 static bool sandbox3d_commit_game_authoring_object(
     sandbox3d_state* state,
@@ -8473,11 +8474,27 @@ static henka_result sandbox3d_initialize_game_authoring(
 }
 
 static void sandbox3d_update_game_authoring(
+    henka_engine* engine,
     sandbox3d_state* state)
 {
-    if (state == NULL || state->game_authoring == NULL ||
-        sandbox3d_game_authoring_get_play_state(state->game_authoring) !=
-            SANDBOX3D_PLAY_SESSION_RUNNING)
+    henka_scene* desired_scene;
+
+    if (engine == NULL || state == NULL || state->game_authoring == NULL)
+    {
+        return;
+    }
+    desired_scene = sandbox3d_game_authoring_get_play_scene(state->game_authoring);
+    if (desired_scene == NULL)
+    {
+        desired_scene = sandbox3d_game_authoring_get_authoring_scene(state->game_authoring);
+    }
+    if (desired_scene != NULL && state->scene != desired_scene)
+    {
+        state->scene = desired_scene;
+        (void)henka_engine_set_scene(engine, desired_scene);
+    }
+    if (sandbox3d_game_authoring_get_play_state(state->game_authoring) !=
+        SANDBOX3D_PLAY_SESSION_RUNNING)
     {
         return;
     }
@@ -8563,7 +8580,9 @@ static void sandbox3d_update_physics(sandbox3d_state* state, double delta_second
 {
     size_t event_count;
     const henka_physics_event* events;
-    if (state == NULL || state->physics.world == NULL || !state->physics.enabled || state->physics.paused)
+    if (state == NULL || state->physics.world == NULL || !state->physics.enabled || state->physics.paused ||
+        (state->game_authoring != NULL &&
+            sandbox3d_game_authoring_is_play_locked(state->game_authoring)))
     {
         return;
     }
@@ -24145,6 +24164,17 @@ details_group_physics:
             {
                 const float gap = 6.0f;
                 const float button_width = (row.width - gap) * 0.5f;
+                const sandbox3d_play_session_state play_state =
+                    sandbox3d_game_authoring_get_play_state(state->game_authoring);
+                const char* play_label = play_state == SANDBOX3D_PLAY_SESSION_RUNNING
+                    ? "Pause Play"
+                    : (play_state == SANDBOX3D_PLAY_SESSION_PAUSED
+                        ? "Resume Play"
+                        : (play_state == SANDBOX3D_PLAY_SESSION_PAUSED_ERROR
+                            ? "Play Error"
+                            : (play_state == SANDBOX3D_PLAY_SESSION_FAILED
+                                ? "Play Failed"
+                                : "Start Play")));
                 if (henka_ui_button(
                         state->ui,
                         "game_authoring_physics_trigger",
@@ -24162,24 +24192,24 @@ details_group_physics:
                         state->ui,
                         "game_authoring_play",
                         (henka_ui_rect){row.x + button_width + gap, row.y, button_width, row.height},
-                        sandbox3d_game_authoring_get_play_state(state->game_authoring) == SANDBOX3D_PLAY_SESSION_RUNNING
-                            ? "Pause Play"
-                            : (sandbox3d_game_authoring_get_play_state(state->game_authoring) == SANDBOX3D_PLAY_SESSION_PAUSED
-                                ? "Resume Play"
-                                : "Start Play")))
+                        play_label))
                 {
                     henka_result play_result;
-                    const sandbox3d_play_session_state play_state =
-                        sandbox3d_game_authoring_get_play_state(state->game_authoring);
                     play_result = play_state == SANDBOX3D_PLAY_SESSION_RUNNING
                         ? sandbox3d_game_authoring_pause_play(state->game_authoring)
                         : (play_state == SANDBOX3D_PLAY_SESSION_PAUSED
                             ? sandbox3d_game_authoring_resume_play(state->game_authoring)
-                            : sandbox3d_game_authoring_start_play(state->game_authoring));
+                            : (play_state == SANDBOX3D_PLAY_SESSION_STOPPED
+                                ? sandbox3d_game_authoring_start_play(state->game_authoring)
+                                : HENKA_ERROR_INVALID_ARGUMENT));
                     sandbox3d_set_statusf(
                         state,
                         play_result != HENKA_SUCCESS,
-                        play_result == HENKA_SUCCESS ? "Play session state changed." : "Play session could not start or change state: %s.",
+                        play_result == HENKA_SUCCESS
+                            ? "Play session state changed."
+                            : (play_state == SANDBOX3D_PLAY_SESSION_PAUSED_ERROR
+                            ? "Play is paused after a failure; stop the session before starting again (%s)."
+                                : "Play session could not start or change state: %s."),
                         henka_result_to_string(play_result));
                 }
             }
@@ -30155,7 +30185,7 @@ static void sandbox3d_update(henka_engine* engine, double delta_seconds, void* u
     }
 
     sandbox3d_update_physics(state, delta_seconds);
-    sandbox3d_update_game_authoring(state);
+    sandbox3d_update_game_authoring(engine, state);
     henka_scene_set_camera(state->scene, &state->camera);
     sandbox3d_report_capture_ready(engine, state);
     sandbox3d_update_gizmo_rendering(state);

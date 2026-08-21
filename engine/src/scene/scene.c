@@ -809,6 +809,108 @@ henka_result henka_scene_create(henka_scene** out_scene)
     return HENKA_SUCCESS;
 }
 
+henka_result henka_scene_clone(
+    const henka_scene* source,
+    henka_scene** out_clone)
+{
+    henka_scene* clone;
+    size_t allocation_size;
+    size_t index;
+    henka_result result;
+
+    if (out_clone == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    *out_clone = NULL;
+    if (source == NULL || source->entity_count > HENKA_MAX_SCENE_ENTITIES ||
+        source->entity_count > source->entity_capacity ||
+        source->entity_capacity > HENKA_MAX_SCENE_ENTITIES ||
+        !henka_checked_size_multiply(
+            source->entity_capacity,
+            sizeof(*source->entities),
+            &allocation_size))
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    result = henka_scene_create(&clone);
+    if (result != HENKA_SUCCESS)
+    {
+        return result;
+    }
+
+    clone->camera = source->camera;
+    clone->has_camera = source->has_camera;
+    clone->light_direction = source->light_direction;
+    clone->light_color = source->light_color;
+    clone->light_intensity = source->light_intensity;
+    clone->ambient_color = source->ambient_color;
+    clone->environment = source->environment;
+    memcpy(clone->reflection_probes, source->reflection_probes, sizeof(clone->reflection_probes));
+    memcpy(clone->reflection_probe_active, source->reflection_probe_active, sizeof(clone->reflection_probe_active));
+    clone->render_revision = source->render_revision;
+    memcpy(clone->local_lights, source->local_lights, sizeof(clone->local_lights));
+    memcpy(clone->local_light_active, source->local_light_active, sizeof(clone->local_light_active));
+    clone->fog = source->fog;
+
+    if (source->entity_capacity == 0U)
+    {
+        *out_clone = clone;
+        return HENKA_SUCCESS;
+    }
+
+    clone->entities = henka_malloc(allocation_size);
+    if (clone->entities == NULL)
+    {
+        henka_scene_destroy(clone);
+        return HENKA_ERROR_OUT_OF_MEMORY;
+    }
+    memset(clone->entities, 0, allocation_size);
+    clone->entity_capacity = source->entity_capacity;
+    clone->entity_count = source->entity_count;
+
+    for (index = 0U; index < source->entity_capacity; ++index)
+    {
+        clone->entities[index] = source->entities[index];
+        clone->entities[index].name = NULL;
+        clone->entities[index].tag = NULL;
+        clone->entities[index].material_name = NULL;
+        clone->entities[index].interaction_prompt = NULL;
+
+        result = henka_scene_duplicate_text(source->entities[index].name, &clone->entities[index].name);
+        if (result == HENKA_SUCCESS)
+        {
+            result = henka_scene_duplicate_text(source->entities[index].tag, &clone->entities[index].tag);
+        }
+        if (result == HENKA_SUCCESS)
+        {
+            result = henka_scene_duplicate_text(
+                source->entities[index].material_name,
+                &clone->entities[index].material_name);
+        }
+        if (result == HENKA_SUCCESS)
+        {
+            result = henka_scene_duplicate_text(
+                source->entities[index].interaction_prompt,
+                &clone->entities[index].interaction_prompt);
+        }
+        if (result != HENKA_SUCCESS)
+        {
+            henka_scene_destroy(clone);
+            return result;
+        }
+
+        clone->entities[index].material.name = clone->entities[index].material_name != NULL
+            ? clone->entities[index].material_name
+            : source->entities[index].material.name;
+        clone->entities[index].interaction.prompt = clone->entities[index].interaction_prompt;
+    }
+
+    *out_clone = clone;
+    return HENKA_SUCCESS;
+}
+
 void henka_scene_destroy(henka_scene* scene)
 {
     size_t index;

@@ -11,8 +11,8 @@
 
 typedef struct sandbox3d_game_authoring sandbox3d_game_authoring;
 
-/* The coordinator owns authoring persistence and the dedicated Play world.
- * The scene and runtime entities remain owned by their existing systems. */
+/* The coordinator owns authoring persistence, the dedicated Play world, and a
+ * transactional runtime scene/bridge created for each Play session. */
 henka_result sandbox3d_game_authoring_create(
     henka_scene* scene,
     const char* relative_path,
@@ -44,6 +44,10 @@ henka_result sandbox3d_game_authoring_load(
     sandbox3d_game_authoring* authoring,
     const char* project_root);
 const char* sandbox3d_game_authoring_get_relative_path(
+    const sandbox3d_game_authoring* authoring);
+henka_scene* sandbox3d_game_authoring_get_authoring_scene(
+    const sandbox3d_game_authoring* authoring);
+henka_scene* sandbox3d_game_authoring_get_play_scene(
     const sandbox3d_game_authoring* authoring);
 
 sandbox3d_play_session_state sandbox3d_game_authoring_get_play_state(

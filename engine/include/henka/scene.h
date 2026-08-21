@@ -289,6 +289,13 @@ henka_scene_environment_desc henka_scene_environment_default(void);
 const char* henka_scene_environment_preset_get_label(
     henka_scene_environment_preset preset);
 henka_result henka_scene_create(henka_scene** out_scene);
+/* Creates an independent scene state while borrowing renderer-owned mesh,
+ * texture, shader, and material-asset resources from the source scene. Entity
+ * slot generations and public scene state are preserved, so generation-checked
+ * handles remain meaningful in the clone. */
+henka_result henka_scene_clone(
+    const henka_scene* source,
+    henka_scene** out_clone);
 void henka_scene_destroy(henka_scene* scene);
 henka_entity henka_scene_create_entity(henka_scene* scene);
 henka_entity henka_scene_create_entity_named(henka_scene* scene, const char* name);

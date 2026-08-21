@@ -273,34 +273,35 @@ henka_result sandbox3d_play_session_step_fixed(sandbox3d_play_session* session)
 
 henka_result sandbox3d_play_session_stop(sandbox3d_play_session* session)
 {
+    henka_result restore_result;
+    henka_result body_result;
+    henka_result end_result;
     henka_result result;
     if (session == NULL || session->state == SANDBOX3D_PLAY_SESSION_STOPPED)
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
-    result = sandbox3d_play_session_restore_scene(session);
-    if (result != HENKA_SUCCESS)
-    {
-        session->state = SANDBOX3D_PLAY_SESSION_FAILED;
-        return result;
-    }
-    result = sandbox3d_play_session_destroy_bodies(session);
-    if (result != HENKA_SUCCESS)
-    {
-        session->state = SANDBOX3D_PLAY_SESSION_FAILED;
-        return result;
-    }
-    result = sandbox3d_scene_document_bridge_end_play(session->bridge);
-    if (result != HENKA_SUCCESS)
-    {
-        session->state = SANDBOX3D_PLAY_SESSION_FAILED;
-        return result;
-    }
+
+    /* Cleanup is deliberately attempted in full even if authored-state
+     * restoration fails. Play scenes may be discarded by the coordinator, so
+     * physics bodies and the bridge lock must not retain references into a
+     * scene that is about to be released. */
+    restore_result = sandbox3d_play_session_restore_scene(session);
+    body_result = sandbox3d_play_session_destroy_bodies(session);
+    end_result = sandbox3d_scene_document_bridge_end_play(session->bridge);
+    result = restore_result != HENKA_SUCCESS ? restore_result
+        : (body_result != HENKA_SUCCESS ? body_result : end_result);
     for (size_t index = 0U; index < session->snapshot_count; ++index)
     {
         sandbox3d_play_session_clear_snapshot(&session->snapshots[index]);
     }
     session->snapshot_count = 0U;
+    if (result != HENKA_SUCCESS)
+    {
+        session->last_error = result;
+        session->state = SANDBOX3D_PLAY_SESSION_FAILED;
+        return result;
+    }
     session->last_error = HENKA_SUCCESS;
     session->state = SANDBOX3D_PLAY_SESSION_STOPPED;
     return HENKA_SUCCESS;

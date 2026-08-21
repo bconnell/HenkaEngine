@@ -18,7 +18,10 @@ int main(void)
     henka_entity entity = HENKA_INVALID_ENTITY;
     henka_interaction_desc interaction;
     henka_transform transform;
+    henka_scene* play_scene;
     int exit_code = 1;
+
+    play_scene = NULL;
 
     if (henka_scene_create(&scene) != HENKA_SUCCESS ||
         (entity = henka_scene_create_entity_named(scene, "Game Authoring Object")) == HENKA_INVALID_ENTITY ||
@@ -124,7 +127,10 @@ int main(void)
     }
 
     transform = restored.transform;
-    if (sandbox3d_game_authoring_start_play(authoring) != HENKA_SUCCESS ||
+    if (sandbox3d_game_authoring_get_play_scene(authoring) != NULL ||
+        sandbox3d_game_authoring_start_play(authoring) != HENKA_SUCCESS ||
+        (play_scene = sandbox3d_game_authoring_get_play_scene(authoring)) == NULL ||
+        play_scene == scene ||
         !sandbox3d_game_authoring_is_play_locked(authoring) ||
         sandbox3d_game_authoring_pause_play(authoring) != HENKA_SUCCESS ||
         !sandbox3d_game_authoring_is_play_locked(authoring) ||
@@ -133,10 +139,15 @@ int main(void)
         sandbox3d_game_authoring_update_object_for_entity(authoring, entity, &restored) != HENKA_ERROR_INVALID_ARGUMENT ||
         sandbox3d_game_authoring_resume_play(authoring) != HENKA_SUCCESS ||
         sandbox3d_game_authoring_tick_play(authoring) != HENKA_SUCCESS ||
-        henka_scene_get_entity_transform(scene, entity, &restored.transform) != HENKA_SUCCESS ||
+        henka_scene_get_entity_transform(play_scene, entity, &restored.transform) != HENKA_SUCCESS ||
         restored.transform.position.y >= transform.position.y ||
+        henka_scene_get_entity_transform(scene, entity, &restored.transform) != HENKA_SUCCESS ||
+        restored.transform.position.y != transform.position.y ||
+        henka_scene_set_entity_visible(play_scene, entity, false) != HENKA_SUCCESS ||
+        henka_scene_is_entity_visible(scene, entity) == false ||
         sandbox3d_game_authoring_stop_play(authoring) != HENKA_SUCCESS ||
         sandbox3d_game_authoring_is_play_locked(authoring) ||
+        sandbox3d_game_authoring_get_play_scene(authoring) != NULL ||
         henka_scene_get_entity_transform(scene, entity, &restored.transform) != HENKA_SUCCESS ||
         restored.transform.position.y != transform.position.y)
     {

@@ -75,6 +75,7 @@ void henka_test_scene(void)
     henka_camera camera;
     uint32_t flags;
     henka_scene* scene;
+    henka_scene* cloned_scene;
     henka_entity found;
     henka_entity first;
     henka_entity helper;
@@ -511,6 +512,33 @@ void henka_test_scene(void)
     memset(overlong_text, 'n', sizeof(overlong_text));
     overlong_text[sizeof(overlong_text) - 1U] = '\0';
     HENKA_TEST_ASSERT(henka_scene_set_entity_name(scene, second, overlong_text) == HENKA_ERROR_INVALID_ARGUMENT);
+
+    cloned_scene = NULL;
+    HENKA_TEST_ASSERT(henka_scene_clone(scene, &cloned_scene) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(cloned_scene != NULL);
+    HENKA_TEST_ASSERT(cloned_scene != scene);
+    HENKA_TEST_ASSERT(henka_scene_get_entity_count(cloned_scene) ==
+        henka_scene_get_entity_count(scene));
+    HENKA_TEST_ASSERT(henka_scene_is_entity_valid(cloned_scene, second));
+    HENKA_TEST_ASSERT(henka_scene_get_entity_info(cloned_scene, second, &info) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(info.entity == second);
+    HENKA_TEST_ASSERT(info.tag != NULL && strcmp(info.tag, "marker") == 0);
+    HENKA_TEST_ASSERT(henka_scene_get_entity_material(cloned_scene, second, &read_material) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(strcmp(read_material.name, material_name) == 0);
+    HENKA_TEST_ASSERT(henka_scene_get_entity_interaction(cloned_scene, second, &read_interaction) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(read_interaction.prompt != NULL && strcmp(read_interaction.prompt, "Inspect sample") == 0);
+    HENKA_TEST_ASSERT(henka_scene_get_entity_selection_owner(cloned_scene, second, &found) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(found == first);
+    HENKA_TEST_ASSERT(henka_scene_set_entity_transform(
+        cloned_scene,
+        second,
+        (henka_transform){
+            (henka_vec3){42.0f, 0.0f, 0.0f},
+            henka_quat_identity(),
+            (henka_vec3){1.0f, 1.0f, 1.0f}}) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_scene_get_entity_transform(scene, second, &read_back) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(read_back.position.x != 42.0f);
+    henka_scene_destroy(cloned_scene);
 
     henka_scene_destroy_entity(scene, first);
     HENKA_TEST_ASSERT(!henka_scene_is_entity_valid(scene, first));
