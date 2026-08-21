@@ -171,6 +171,8 @@ bool henka_ui_rect_contains(henka_ui_rect rect, henka_vec2 point);
 henka_result henka_ui_measure_text(const char* text, float scale, int* out_width, int* out_height);
 henka_result henka_ui_overlay_rect(henka_ui_context* context, henka_ui_rect bounds, henka_vec4 color);
 henka_result henka_ui_overlay_line(henka_ui_context* context, henka_vec2 start, henka_vec2 end, float thickness, henka_vec4 color);
+henka_result henka_ui_overlay_disc(henka_ui_context* context, henka_vec2 center, float radius, henka_vec4 color);
+henka_result henka_ui_overlay_circle(henka_ui_context* context, henka_vec2 center, float radius, float thickness, henka_vec4 color);
 henka_result henka_ui_overlay_polyline(
     henka_ui_context* context,
     const henka_vec2* points,

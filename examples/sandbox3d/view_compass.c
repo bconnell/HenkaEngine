@@ -7,10 +7,14 @@
 #include <string.h>
 
 #define SANDBOX3D_VIEW_COMPASS_RING_SAMPLES 48U
-#define SANDBOX3D_VIEW_COMPASS_MIN_DIAMETER 72.0f
-#define SANDBOX3D_VIEW_COMPASS_MAX_DIAMETER 112.0f
-#define SANDBOX3D_VIEW_COMPASS_INFO_HEIGHT 24.0f
-#define SANDBOX3D_VIEW_COMPASS_INFO_WIDTH 132.0f
+#define SANDBOX3D_VIEW_COMPASS_SMALL_DIAMETER 160.0f
+#define SANDBOX3D_VIEW_COMPASS_NORMAL_DIAMETER 192.0f
+#define SANDBOX3D_VIEW_COMPASS_LARGE_DIAMETER 224.0f
+#define SANDBOX3D_VIEW_COMPASS_MIN_DIAMETER 128.0f
+#define SANDBOX3D_VIEW_COMPASS_MAX_DIAMETER SANDBOX3D_VIEW_COMPASS_LARGE_DIAMETER
+#define SANDBOX3D_VIEW_COMPASS_INFO_HEIGHT 29.0f
+#define SANDBOX3D_VIEW_COMPASS_INFO_WIDTH 156.0f
+#define SANDBOX3D_VIEW_COMPASS_INFO_PROJECTION_WIDTH 48.0f
 #define SANDBOX3D_VIEW_COMPASS_DRAG_THRESHOLD 4.0f
 
 static bool sandbox3d_compass_vec3_is_finite(henka_vec3 value)
@@ -190,10 +194,10 @@ bool sandbox3d_view_compass_compute_layout(
         return false;
     }
 
-    diameter = 96.0f * preferences->scale;
+    diameter = SANDBOX3D_VIEW_COMPASS_NORMAL_DIAMETER * preferences->scale;
     display_scale = preferences->scale;
     available_width = (float)viewport.width - 24.0f;
-    available_height = (float)viewport.height - 44.0f;
+    available_height = (float)viewport.height - 52.0f;
     if (diameter > available_width)
     {
         display_scale *= available_width / diameter;
@@ -204,8 +208,22 @@ bool sandbox3d_view_compass_compute_layout(
         display_scale *= available_height / diameter;
         diameter = available_height;
     }
-    diameter = sandbox3d_compass_clamp(diameter, SANDBOX3D_VIEW_COMPASS_MIN_DIAMETER, SANDBOX3D_VIEW_COMPASS_MAX_DIAMETER);
-    display_scale = diameter / 96.0f;
+    if (available_width < SANDBOX3D_VIEW_COMPASS_SMALL_DIAMETER ||
+        available_height < SANDBOX3D_VIEW_COMPASS_SMALL_DIAMETER)
+    {
+        diameter = sandbox3d_compass_clamp(
+            fminf(available_width, available_height),
+            SANDBOX3D_VIEW_COMPASS_MIN_DIAMETER,
+            SANDBOX3D_VIEW_COMPASS_MAX_DIAMETER);
+    }
+    else
+    {
+        diameter = sandbox3d_compass_clamp(
+            diameter,
+            SANDBOX3D_VIEW_COMPASS_SMALL_DIAMETER,
+            SANDBOX3D_VIEW_COMPASS_MAX_DIAMETER);
+    }
+    display_scale = diameter / SANDBOX3D_VIEW_COMPASS_NORMAL_DIAMETER;
     info_width = SANDBOX3D_VIEW_COMPASS_INFO_WIDTH * display_scale;
     x = preferences->side == SANDBOX3D_VIEW_COMPASS_SIDE_LEFT
         ? (float)viewport.x + 12.0f
@@ -219,12 +237,33 @@ bool sandbox3d_view_compass_compute_layout(
         return false;
     }
 
-    *out_layout = (sandbox3d_view_compass_layout){
-        (henka_ui_rect){x, y, diameter, diameter},
-        (henka_ui_rect){x + (diameter - info_width) * 0.5f, y + diameter + 5.0f * display_scale, info_width, SANDBOX3D_VIEW_COMPASS_INFO_HEIGHT * display_scale},
-        (henka_vec2){x + diameter * 0.5f, y + diameter * 0.5f},
-        diameter * 0.5f,
-        display_scale};
+    {
+        const float info_y = y + diameter + 6.0f * display_scale;
+        const float info_height = SANDBOX3D_VIEW_COMPASS_INFO_HEIGHT * display_scale;
+        const henka_ui_rect info_bounds = {
+            x + (diameter - info_width) * 0.5f,
+            info_y,
+            info_width,
+            info_height};
+        const float projection_width = SANDBOX3D_VIEW_COMPASS_INFO_PROJECTION_WIDTH * display_scale;
+        const henka_ui_rect projection_bounds = {
+            info_bounds.x + info_bounds.width - projection_width - 3.0f * display_scale,
+            info_bounds.y + 3.0f * display_scale,
+            projection_width,
+            info_height - 6.0f * display_scale};
+        *out_layout = (sandbox3d_view_compass_layout){
+            (henka_ui_rect){x, y, diameter, diameter},
+            info_bounds,
+            (henka_ui_rect){
+                info_bounds.x,
+                info_bounds.y,
+                info_bounds.width - projection_width - 5.0f * display_scale,
+                info_bounds.height},
+            projection_bounds,
+            (henka_vec2){x + diameter * 0.5f, y + diameter * 0.5f},
+            diameter * 0.5f,
+            display_scale};
+    }
     return true;
 }
 
@@ -495,67 +534,47 @@ static bool sandbox3d_compass_point_inside(
     return sandbox3d_compass_vec2_length(delta) <= radius;
 }
 
-static void sandbox3d_compass_draw_circle_fill(
-    henka_ui_context* ui,
-    henka_vec2 center,
-    float radius,
-    henka_vec4 color)
-{
-    size_t index;
-
-    for (index = 0U; index < 13U; ++index)
-    {
-        const float normalized = ((float)index - 6.0f) / 6.0f;
-        const float half_width = radius * sqrtf(fmaxf(0.0f, 1.0f - normalized * normalized));
-        const float height = radius * 2.0f / 13.0f + 0.75f;
-        if (half_width > 0.0f)
-        {
-            (void)henka_ui_overlay_rect(
-                ui,
-                (henka_ui_rect){center.x - half_width, center.y - radius + (float)index * height, half_width * 2.0f, height},
-                color);
-        }
-    }
-}
-
-static void sandbox3d_compass_draw_world_ring(
+static void sandbox3d_compass_draw_world_ring_layer(
     henka_ui_context* ui,
     const henka_camera* camera,
     henka_vec2 center,
     float radius,
     henka_vec3 (*sample)(float),
-    henka_vec4 front_color,
-    henka_vec4 back_color,
+    bool front_layer,
+    henka_vec4 color,
     float thickness)
 {
+    henka_vec2 points[SANDBOX3D_VIEW_COMPASS_RING_SAMPLES];
+    bool fronts[SANDBOX3D_VIEW_COMPASS_RING_SAMPLES];
     size_t index;
-    henka_vec2 previous_point = {0.0f, 0.0f};
-    bool previous_front = false;
-    bool previous_valid = false;
 
-    for (index = 0U; index <= SANDBOX3D_VIEW_COMPASS_RING_SAMPLES; ++index)
+    for (index = 0U; index < SANDBOX3D_VIEW_COMPASS_RING_SAMPLES; ++index)
     {
-        const float angle = HENKA_PI * 2.0f * (float)(index % SANDBOX3D_VIEW_COMPASS_RING_SAMPLES) /
+        const float angle = HENKA_PI * 2.0f * (float)index /
             (float)SANDBOX3D_VIEW_COMPASS_RING_SAMPLES;
-        henka_vec2 point;
-        bool front;
-        if (!sandbox3d_view_compass_project_direction(camera, sample(angle), radius, center, &point, &front))
+        if (!sandbox3d_view_compass_project_direction(
+                camera,
+                sample(angle),
+                radius,
+                center,
+                &points[index],
+                &fronts[index]))
         {
-            previous_valid = false;
-            continue;
+            return;
         }
-        if (previous_valid)
+    }
+    for (index = 0U; index < SANDBOX3D_VIEW_COMPASS_RING_SAMPLES; ++index)
+    {
+        const size_t next = (index + 1U) % SANDBOX3D_VIEW_COMPASS_RING_SAMPLES;
+        if (fronts[index] == front_layer && fronts[next] == front_layer)
         {
             (void)henka_ui_overlay_line(
                 ui,
-                previous_point,
-                point,
+                points[index],
+                points[next],
                 thickness,
-                previous_front ? front_color : back_color);
+                color);
         }
-        previous_point = point;
-        previous_front = front;
-        previous_valid = true;
     }
 }
 
@@ -581,13 +600,191 @@ static henka_vec3 sandbox3d_compass_latitude_sample(float angle)
     return (henka_vec3){ring_radius * cosf(angle), sinf(latitude), ring_radius * sinf(angle)};
 }
 
+static henka_vec3 sandbox3d_compass_lower_latitude_sample(float angle)
+{
+    const float latitude = -0.52f;
+    const float ring_radius = cosf(latitude);
+    return (henka_vec3){ring_radius * cosf(angle), sinf(latitude), ring_radius * sinf(angle)};
+}
+
+static void sandbox3d_compass_draw_centered_label(
+    henka_ui_context* ui,
+    henka_vec2 point,
+    float scale,
+    const char* label,
+    henka_ui_semantic_color color)
+{
+    int width = 0;
+    int height = 0;
+
+    if (ui == NULL || label == NULL || label[0] == '\0' || scale <= 0.0f)
+    {
+        return;
+    }
+    if (henka_ui_measure_text(label, scale, &width, &height) != HENKA_SUCCESS)
+    {
+        width = 0;
+        height = 7;
+    }
+    (void)henka_ui_label_colored(
+        ui,
+        point.x - (float)width * 0.5f,
+        point.y - (float)height * 0.5f,
+        scale,
+        label,
+        color);
+}
+
+static void sandbox3d_compass_draw_cardinal_glyph(
+    henka_ui_context* ui,
+    henka_vec2 center,
+    const char* label,
+    float scale,
+    henka_vec4 color)
+{
+    const float left = center.x - 3.0f * scale;
+    const float right = center.x + 3.0f * scale;
+    const float top = center.y - 4.0f * scale;
+    const float middle = center.y;
+    const float bottom = center.y + 4.0f * scale;
+    const float stroke = 1.25f * scale;
+
+    if (ui == NULL || label == NULL || label[0] == '\0' || label[1] != '\0' ||
+        scale <= 0.0f)
+    {
+        return;
+    }
+    switch (label[0])
+    {
+        case 'N':
+            (void)henka_ui_overlay_line(ui, (henka_vec2){left, bottom}, (henka_vec2){left, top}, stroke, color);
+            (void)henka_ui_overlay_line(ui, (henka_vec2){left, top}, (henka_vec2){right, bottom}, stroke, color);
+            (void)henka_ui_overlay_line(ui, (henka_vec2){right, bottom}, (henka_vec2){right, top}, stroke, color);
+            break;
+        case 'E':
+            (void)henka_ui_overlay_line(ui, (henka_vec2){right, top}, (henka_vec2){left, top}, stroke, color);
+            (void)henka_ui_overlay_line(ui, (henka_vec2){left, top}, (henka_vec2){left, bottom}, stroke, color);
+            (void)henka_ui_overlay_line(ui, (henka_vec2){left, middle}, (henka_vec2){right - scale, middle}, stroke, color);
+            (void)henka_ui_overlay_line(ui, (henka_vec2){left, bottom}, (henka_vec2){right, bottom}, stroke, color);
+            break;
+        case 'S':
+            (void)henka_ui_overlay_line(ui, (henka_vec2){right, top}, (henka_vec2){left, top}, stroke, color);
+            (void)henka_ui_overlay_line(ui, (henka_vec2){left, top}, (henka_vec2){left, middle}, stroke, color);
+            (void)henka_ui_overlay_line(ui, (henka_vec2){left, middle}, (henka_vec2){right, middle}, stroke, color);
+            (void)henka_ui_overlay_line(ui, (henka_vec2){right, middle}, (henka_vec2){right, bottom}, stroke, color);
+            (void)henka_ui_overlay_line(ui, (henka_vec2){right, bottom}, (henka_vec2){left, bottom}, stroke, color);
+            break;
+        case 'W':
+            (void)henka_ui_overlay_line(ui, (henka_vec2){left, top}, (henka_vec2){left + scale, bottom}, stroke, color);
+            (void)henka_ui_overlay_line(ui, (henka_vec2){left + scale, bottom}, (henka_vec2){center.x, top}, stroke, color);
+            (void)henka_ui_overlay_line(ui, (henka_vec2){center.x, top}, (henka_vec2){right - scale, bottom}, stroke, color);
+            (void)henka_ui_overlay_line(ui, (henka_vec2){right - scale, bottom}, (henka_vec2){right, top}, stroke, color);
+            break;
+        default:
+            break;
+    }
+}
+
+static void sandbox3d_compass_draw_ring_ticks(
+    henka_ui_context* ui,
+    const henka_camera* camera,
+    henka_vec2 center,
+    float radius,
+    bool front_layer,
+    float scale,
+    bool highlighted)
+{
+    size_t index;
+
+    for (index = 0U; index < 12U; ++index)
+    {
+        const float angle = HENKA_PI * 2.0f * (float)index / 12.0f;
+        const henka_vec3 direction = sandbox3d_compass_horizontal_sample(angle);
+        henka_vec2 outer;
+        henka_vec2 inner;
+        bool front;
+        if (!sandbox3d_view_compass_project_direction(
+                camera, direction, radius + 2.5f * scale, center, &outer, &front) ||
+            front != front_layer ||
+            !sandbox3d_view_compass_project_direction(
+                camera, direction, radius - 3.5f * scale, center, &inner, &front))
+        {
+            continue;
+        }
+        (void)henka_ui_overlay_line(
+            ui,
+            inner,
+            outer,
+            (index % 3U == 0U ? 1.4f : 0.8f) * scale,
+            front_layer
+                ? (highlighted
+                    ? (henka_vec4){0.28f, 0.62f, 0.92f, 0.80f}
+                    : (henka_vec4){0.45f, 0.57f, 0.68f, 0.55f})
+                : (henka_vec4){0.18f, 0.24f, 0.30f, 0.28f});
+    }
+}
+
+static void sandbox3d_compass_draw_heading_needle(
+    henka_ui_context* ui,
+    const henka_camera* camera,
+    henka_vec2 center,
+    float radius,
+    float heading,
+    float scale,
+    bool highlighted)
+{
+    henka_vec2 point;
+    bool front;
+    henka_vec2 radial;
+    henka_vec2 tangent;
+    henka_vec2 base;
+    henka_vec2 left;
+    henka_vec2 right;
+
+    if (!sandbox3d_view_compass_project_direction(
+            camera,
+            (henka_vec3){cosf(heading * HENKA_DEG_TO_RAD), 0.0f, sinf(heading * HENKA_DEG_TO_RAD)},
+            radius,
+            center,
+            &point,
+            &front))
+    {
+        return;
+    }
+    radial = sandbox3d_compass_subtract(point, center);
+    {
+        const float length = sandbox3d_compass_vec2_length(radial);
+        if (!isfinite(length) || length <= 0.001f)
+        {
+            return;
+        }
+        radial.x /= length;
+        radial.y /= length;
+    }
+    tangent = (henka_vec2){-radial.y, radial.x};
+    base = (henka_vec2){point.x - radial.x * 8.0f * scale, point.y - radial.y * 8.0f * scale};
+    left = (henka_vec2){base.x + tangent.x * 3.5f * scale, base.y + tangent.y * 3.5f * scale};
+    right = (henka_vec2){base.x - tangent.x * 3.5f * scale, base.y - tangent.y * 3.5f * scale};
+    {
+        const henka_vec4 color = highlighted
+            ? (henka_vec4){0.28f, 0.76f, 1.0f, 0.98f}
+            : (henka_vec4){0.25f, 0.55f, 0.78f, 0.70f};
+        (void)henka_ui_overlay_line(ui, point, left, 1.8f * scale, color);
+        (void)henka_ui_overlay_line(ui, point, right, 1.8f * scale, color);
+        (void)henka_ui_overlay_line(ui, left, right, 1.2f * scale, color);
+        (void)henka_ui_overlay_disc(ui, point, 2.0f * scale, color);
+    }
+}
+
 static bool sandbox3d_compass_draw_marker(
     henka_ui_context* ui,
     const henka_camera* camera,
     henka_vec2 center,
     float radius,
     henka_vec3 direction,
+    const char* id,
     const char* label,
+    bool show_label,
     sandbox3d_view_compass_axis_view view,
     bool enabled,
     sandbox3d_view_compass_state* state,
@@ -602,40 +799,66 @@ static bool sandbox3d_compass_draw_marker(
     bool front;
     henka_ui_rect hit_bounds;
 
-    if (!sandbox3d_view_compass_project_direction(camera, direction, radius * 1.02f, center, &point, &front))
+    if (!sandbox3d_view_compass_project_direction(camera, direction, radius * 1.08f, center, &point, &front))
     {
         return false;
     }
-    hit_bounds = (henka_ui_rect){point.x - 11.0f * scale, point.y - 11.0f * scale, 22.0f * scale, 22.0f * scale};
+    hit_bounds = (henka_ui_rect){point.x - 13.0f * scale, point.y - 13.0f * scale, 26.0f * scale, 26.0f * scale};
     interaction = (henka_ui_interaction_state){0};
     if (henka_ui_custom_interaction(
             ui,
-            label,
+            id,
             henka_ui_rect_contains(hit_bounds, henka_ui_get_mouse_position(ui)),
             enabled,
             &interaction) != HENKA_SUCCESS)
     {
         return false;
     }
-    (void)henka_ui_overlay_line(
-        ui,
-        (henka_vec2){point.x - 4.0f * scale, point.y},
-        (henka_vec2){point.x, point.y - 4.0f * scale},
-        interaction.hovered ? 2.0f : 1.0f,
-        front ? (henka_vec4){0.90f, 0.93f, 0.97f, 0.90f} : (henka_vec4){0.45f, 0.52f, 0.60f, 0.35f});
-    (void)henka_ui_overlay_line(
-        ui,
-        (henka_vec2){point.x, point.y - 4.0f * scale},
-        (henka_vec2){point.x + 4.0f * scale, point.y},
-        interaction.hovered ? 2.0f : 1.0f,
-        front ? (henka_vec4){0.90f, 0.93f, 0.97f, 0.90f} : (henka_vec4){0.45f, 0.52f, 0.60f, 0.35f});
-    (void)henka_ui_label_colored(
-        ui,
-        point.x - 3.0f * scale,
-        point.y - 4.0f * scale,
-        scale,
-        label,
-        interaction.hovered ? HENKA_UI_COLOR_INFO : (front ? HENKA_UI_COLOR_NORMAL : HENKA_UI_COLOR_MUTED));
+    {
+        const float marker_radius = (interaction.hovered ? 5.0f : 3.5f) * scale;
+        const henka_vec4 marker_color = interaction.hovered
+            ? (henka_vec4){0.25f, 0.70f, 1.0f, 0.96f}
+            : (front
+                ? (henka_vec4){0.86f, 0.91f, 0.96f, 0.94f}
+                : (henka_vec4){0.42f, 0.50f, 0.60f, 0.30f});
+        const henka_vec2 radial = sandbox3d_compass_subtract(point, center);
+        const float radial_length = sandbox3d_compass_vec2_length(radial);
+        henka_vec2 label_point = point;
+
+        if (radial_length > 0.001f)
+        {
+            label_point.x += radial.x / radial_length * 8.0f * scale;
+            label_point.y += radial.y / radial_length * 8.0f * scale;
+        }
+        (void)henka_ui_overlay_disc(ui, point, marker_radius, marker_color);
+        (void)henka_ui_overlay_circle(ui, point, marker_radius + 2.0f * scale, 0.8f * scale, marker_color);
+        if (show_label)
+        {
+            sandbox3d_compass_draw_cardinal_glyph(
+                ui,
+                label_point,
+                label,
+                1.40f * scale,
+                interaction.hovered
+                    ? (henka_vec4){0.48f, 0.69f, 0.87f, 1.0f}
+                    : (front
+                        ? (henka_vec4){0.88f, 0.94f, 1.0f, 1.0f}
+                        : (henka_vec4){0.40f, 0.52f, 0.64f, 0.85f}));
+        }
+        else
+        {
+            (void)henka_ui_overlay_line(ui,
+                (henka_vec2){point.x - 4.0f * scale, point.y},
+                (henka_vec2){point.x, point.y - 4.0f * scale},
+                1.0f * scale,
+                marker_color);
+            (void)henka_ui_overlay_line(ui,
+                (henka_vec2){point.x, point.y - 4.0f * scale},
+                (henka_vec2){point.x + 4.0f * scale, point.y},
+                1.0f * scale,
+                marker_color);
+        }
+    }
     if (interaction.released && target_valid &&
         sandbox3d_view_compass_begin_snap(state, in_out_camera, target, view, smooth_navigation))
     {
@@ -670,6 +893,7 @@ bool sandbox3d_view_compass_draw(
     char info[64];
     bool changed = false;
     bool target_valid;
+    bool compass_hovered;
     size_t info_mode;
 
     if (ui == NULL || in_out_camera == NULL || in_out_target == NULL ||
@@ -687,27 +911,115 @@ bool sandbox3d_view_compass_draw(
     scale = layout.scale;
     mouse = henka_ui_get_mouse_position(ui);
 
-    sandbox3d_compass_draw_circle_fill(
+    compass_hovered = !input_blocked && sandbox3d_compass_point_inside(
+        mouse,
+        layout.center,
+        layout.radius * 0.94f);
+
+    /* The UI line list is ordered, so the rear ring is emitted first, the
+     * layered sphere then masks it, and the front ring is emitted last. */
+    (void)henka_ui_overlay_disc(
+        ui,
+        (henka_vec2){layout.center.x + 2.0f * scale, layout.center.y + 3.0f * scale},
+        layout.radius + 3.0f * scale,
+        (henka_vec4){0.0f, 0.0f, 0.0f, 0.34f});
+    sandbox3d_compass_draw_world_ring_layer(
+        ui, in_out_camera, layout.center, layout.radius * 1.14f,
+        sandbox3d_compass_horizontal_sample, false,
+        (henka_vec4){0.10f, 0.15f, 0.20f, 0.78f}, 4.0f * scale);
+    sandbox3d_compass_draw_world_ring_layer(
+        ui, in_out_camera, layout.center, layout.radius * 1.145f,
+        sandbox3d_compass_horizontal_sample, false,
+        (henka_vec4){0.12f, 0.32f, 0.52f, 0.34f}, 1.1f * scale);
+
+    (void)henka_ui_overlay_disc(
         ui,
         layout.center,
         layout.radius,
-        input_blocked ? (henka_vec4){0.045f, 0.055f, 0.070f, 0.78f} : (henka_vec4){0.045f, 0.060f, 0.080f, 0.94f});
-    (void)henka_ui_overlay_line(
+        input_blocked
+            ? (henka_vec4){0.035f, 0.045f, 0.060f, 0.90f}
+            : (henka_vec4){0.055f, 0.075f, 0.105f, 0.98f});
+    (void)henka_ui_overlay_disc(
         ui,
-        (henka_vec2){layout.center.x + layout.radius, layout.center.y},
-        (henka_vec2){layout.center.x + layout.radius, layout.center.y},
-        1.0f,
-        (henka_vec4){0.26f, 0.38f, 0.52f, 0.85f});
-    sandbox3d_compass_draw_world_ring(ui, in_out_camera, layout.center, layout.radius * 0.76f, sandbox3d_compass_horizontal_sample,
-        (henka_vec4){0.62f, 0.72f, 0.82f, 0.72f}, (henka_vec4){0.37f, 0.44f, 0.52f, 0.22f}, 1.0f * scale);
-    sandbox3d_compass_draw_world_ring(ui, in_out_camera, layout.center, layout.radius * 0.72f, sandbox3d_compass_longitude_sample,
-        (henka_vec4){0.70f, 0.76f, 0.82f, 0.48f}, (henka_vec4){0.38f, 0.44f, 0.52f, 0.18f}, 0.7f * scale);
-    sandbox3d_compass_draw_world_ring(ui, in_out_camera, layout.center, layout.radius * 0.72f, sandbox3d_compass_meridian_sample,
-        (henka_vec4){0.70f, 0.76f, 0.82f, 0.42f}, (henka_vec4){0.38f, 0.44f, 0.52f, 0.16f}, 0.7f * scale);
-    sandbox3d_compass_draw_world_ring(ui, in_out_camera, layout.center, layout.radius * 0.66f, sandbox3d_compass_latitude_sample,
-        (henka_vec4){0.58f, 0.68f, 0.78f, 0.32f}, (henka_vec4){0.35f, 0.42f, 0.50f, 0.14f}, 0.6f * scale);
-    sandbox3d_compass_draw_world_ring(ui, in_out_camera, layout.center, layout.radius * 0.96f, sandbox3d_compass_horizontal_sample,
-        (henka_vec4){0.42f, 0.66f, 0.92f, 0.78f}, (henka_vec4){0.26f, 0.38f, 0.52f, 0.28f}, 1.4f * scale);
+        (henka_vec2){layout.center.x - 2.0f * scale, layout.center.y - 2.0f * scale},
+        layout.radius * 0.91f,
+        (henka_vec4){0.11f, 0.14f, 0.18f, 0.90f});
+    (void)henka_ui_overlay_disc(
+        ui,
+        (henka_vec2){layout.center.x - 9.0f * scale, layout.center.y - 11.0f * scale},
+        layout.radius * 0.66f,
+        (henka_vec4){0.25f, 0.31f, 0.38f, 0.13f});
+    (void)henka_ui_overlay_disc(
+        ui,
+        (henka_vec2){layout.center.x + 8.0f * scale, layout.center.y + 10.0f * scale},
+        layout.radius * 0.68f,
+        (henka_vec4){0.005f, 0.010f, 0.018f, 0.25f});
+
+    sandbox3d_compass_draw_world_ring_layer(
+        ui, in_out_camera, layout.center, layout.radius * 0.80f,
+        sandbox3d_compass_horizontal_sample, false,
+        (henka_vec4){0.18f, 0.24f, 0.30f, 0.18f}, 1.0f * scale);
+    sandbox3d_compass_draw_world_ring_layer(
+        ui, in_out_camera, layout.center, layout.radius * 0.74f,
+        sandbox3d_compass_longitude_sample, false,
+        (henka_vec4){0.16f, 0.22f, 0.28f, 0.13f}, 0.75f * scale);
+    sandbox3d_compass_draw_world_ring_layer(
+        ui, in_out_camera, layout.center, layout.radius * 0.74f,
+        sandbox3d_compass_meridian_sample, false,
+        (henka_vec4){0.16f, 0.22f, 0.28f, 0.13f}, 0.75f * scale);
+    sandbox3d_compass_draw_world_ring_layer(
+        ui, in_out_camera, layout.center, layout.radius * 0.66f,
+        sandbox3d_compass_latitude_sample, false,
+        (henka_vec4){0.18f, 0.25f, 0.32f, 0.12f}, 0.65f * scale);
+    sandbox3d_compass_draw_world_ring_layer(
+        ui, in_out_camera, layout.center, layout.radius * 0.66f,
+        sandbox3d_compass_lower_latitude_sample, false,
+        (henka_vec4){0.18f, 0.25f, 0.32f, 0.12f}, 0.65f * scale);
+    sandbox3d_compass_draw_world_ring_layer(
+        ui, in_out_camera, layout.center, layout.radius * 0.80f,
+        sandbox3d_compass_horizontal_sample, true,
+        (henka_vec4){0.55f, 0.67f, 0.78f, 0.58f}, 1.25f * scale);
+    sandbox3d_compass_draw_world_ring_layer(
+        ui, in_out_camera, layout.center, layout.radius * 0.74f,
+        sandbox3d_compass_longitude_sample, true,
+        (henka_vec4){0.56f, 0.67f, 0.77f, 0.34f}, 0.8f * scale);
+    sandbox3d_compass_draw_world_ring_layer(
+        ui, in_out_camera, layout.center, layout.radius * 0.74f,
+        sandbox3d_compass_meridian_sample, true,
+        (henka_vec4){0.56f, 0.67f, 0.77f, 0.32f}, 0.8f * scale);
+    sandbox3d_compass_draw_world_ring_layer(
+        ui, in_out_camera, layout.center, layout.radius * 0.66f,
+        sandbox3d_compass_latitude_sample, true,
+        (henka_vec4){0.48f, 0.59f, 0.69f, 0.22f}, 0.65f * scale);
+    sandbox3d_compass_draw_world_ring_layer(
+        ui, in_out_camera, layout.center, layout.radius * 0.66f,
+        sandbox3d_compass_lower_latitude_sample, true,
+        (henka_vec4){0.48f, 0.59f, 0.69f, 0.22f}, 0.65f * scale);
+
+    sandbox3d_compass_draw_world_ring_layer(
+        ui, in_out_camera, layout.center, layout.radius * 1.14f,
+        sandbox3d_compass_horizontal_sample, true,
+        (henka_vec4){0.23f, 0.40f, 0.57f, 0.88f}, 4.0f * scale);
+    sandbox3d_compass_draw_world_ring_layer(
+        ui, in_out_camera, layout.center, layout.radius * 1.145f,
+        sandbox3d_compass_horizontal_sample, true,
+        compass_hovered || state->drag_active
+            ? (henka_vec4){0.25f, 0.70f, 1.0f, 0.98f}
+            : (henka_vec4){0.24f, 0.53f, 0.78f, 0.82f}, 1.15f * scale);
+    sandbox3d_compass_draw_ring_ticks(
+        ui, in_out_camera, layout.center, layout.radius * 1.14f,
+        false, scale, compass_hovered || state->drag_active);
+    sandbox3d_compass_draw_ring_ticks(
+        ui, in_out_camera, layout.center, layout.radius * 1.14f,
+        true, scale, compass_hovered || state->drag_active);
+    (void)henka_ui_overlay_circle(
+        ui,
+        layout.center,
+        layout.radius * 0.985f,
+        1.2f * scale,
+        compass_hovered || state->drag_active
+            ? (henka_vec4){0.28f, 0.60f, 0.86f, 0.86f}
+            : (henka_vec4){0.36f, 0.45f, 0.54f, 0.70f});
 
     if (sandbox3d_view_compass_get_heading_degrees(in_out_camera, state, &heading))
     {
@@ -716,34 +1028,40 @@ bool sandbox3d_view_compass_draw(
         bool heading_front;
         if (sandbox3d_view_compass_project_direction(
                 in_out_camera,
-                (henka_vec3){cosf(angle), 0.0f, sinf(angle)},
-                layout.radius * 0.90f,
+            (henka_vec3){cosf(angle), 0.0f, sinf(angle)},
+                layout.radius * 1.14f,
                 layout.center,
                 &heading_point,
                 &heading_front))
         {
-            (void)henka_ui_overlay_line(ui, layout.center, heading_point, 2.0f * scale,
-                input_blocked ? (henka_vec4){0.25f, 0.45f, 0.66f, 0.35f} : (henka_vec4){0.28f, 0.72f, 1.0f, 0.92f});
+            (void)heading_point;
+            (void)heading_front;
+            sandbox3d_compass_draw_heading_needle(
+                ui,
+                in_out_camera,
+                layout.center,
+                layout.radius * 1.14f,
+                heading,
+                scale,
+                !input_blocked && (compass_hovered || state->drag_active));
         }
     }
 
     if (!input_blocked)
     {
-        changed |= sandbox3d_compass_draw_marker(ui, in_out_camera, layout.center, layout.radius, (henka_vec3){1.0f, 0.0f, 0.0f}, "N", SANDBOX3D_VIEW_COMPASS_FRONT, true, state, in_out_camera, *in_out_target, target_valid, preferences->smooth_navigation, scale);
-        changed |= sandbox3d_compass_draw_marker(ui, in_out_camera, layout.center, layout.radius, (henka_vec3){-1.0f, 0.0f, 0.0f}, "S", SANDBOX3D_VIEW_COMPASS_BACK, true, state, in_out_camera, *in_out_target, target_valid, preferences->smooth_navigation, scale);
-        changed |= sandbox3d_compass_draw_marker(ui, in_out_camera, layout.center, layout.radius, (henka_vec3){0.0f, 0.0f, 1.0f}, "E", SANDBOX3D_VIEW_COMPASS_LEFT, true, state, in_out_camera, *in_out_target, target_valid, preferences->smooth_navigation, scale);
-        changed |= sandbox3d_compass_draw_marker(ui, in_out_camera, layout.center, layout.radius, (henka_vec3){0.0f, 0.0f, -1.0f}, "W", SANDBOX3D_VIEW_COMPASS_RIGHT, true, state, in_out_camera, *in_out_target, target_valid, preferences->smooth_navigation, scale);
-        changed |= sandbox3d_compass_draw_marker(ui, in_out_camera, layout.center, layout.radius, (henka_vec3){0.0f, 1.0f, 0.0f}, "B", SANDBOX3D_VIEW_COMPASS_BOTTOM, true, state, in_out_camera, *in_out_target, target_valid, preferences->smooth_navigation, scale);
-        changed |= sandbox3d_compass_draw_marker(ui, in_out_camera, layout.center, layout.radius, (henka_vec3){0.0f, -1.0f, 0.0f}, "T", SANDBOX3D_VIEW_COMPASS_TOP, true, state, in_out_camera, *in_out_target, target_valid, preferences->smooth_navigation, scale);
+        changed |= sandbox3d_compass_draw_marker(ui, in_out_camera, layout.center, layout.radius, (henka_vec3){1.0f, 0.0f, 0.0f}, "compass_front", "N", true, SANDBOX3D_VIEW_COMPASS_FRONT, true, state, in_out_camera, *in_out_target, target_valid, preferences->smooth_navigation, scale);
+        changed |= sandbox3d_compass_draw_marker(ui, in_out_camera, layout.center, layout.radius, (henka_vec3){-1.0f, 0.0f, 0.0f}, "compass_back", "S", true, SANDBOX3D_VIEW_COMPASS_BACK, true, state, in_out_camera, *in_out_target, target_valid, preferences->smooth_navigation, scale);
+        changed |= sandbox3d_compass_draw_marker(ui, in_out_camera, layout.center, layout.radius, (henka_vec3){0.0f, 0.0f, 1.0f}, "compass_left", "E", true, SANDBOX3D_VIEW_COMPASS_LEFT, true, state, in_out_camera, *in_out_target, target_valid, preferences->smooth_navigation, scale);
+        changed |= sandbox3d_compass_draw_marker(ui, in_out_camera, layout.center, layout.radius, (henka_vec3){0.0f, 0.0f, -1.0f}, "compass_right", "W", true, SANDBOX3D_VIEW_COMPASS_RIGHT, true, state, in_out_camera, *in_out_target, target_valid, preferences->smooth_navigation, scale);
+        changed |= sandbox3d_compass_draw_marker(ui, in_out_camera, layout.center, layout.radius, (henka_vec3){0.0f, 1.0f, 0.0f}, "compass_bottom", "", false, SANDBOX3D_VIEW_COMPASS_BOTTOM, true, state, in_out_camera, *in_out_target, target_valid, preferences->smooth_navigation, scale);
+        changed |= sandbox3d_compass_draw_marker(ui, in_out_camera, layout.center, layout.radius, (henka_vec3){0.0f, -1.0f, 0.0f}, "compass_top", "", false, SANDBOX3D_VIEW_COMPASS_TOP, true, state, in_out_camera, *in_out_target, target_valid, preferences->smooth_navigation, scale);
     }
 
     projection_interaction = (henka_ui_interaction_state){0};
     (void)henka_ui_custom_interaction(
         ui,
         "view_compass_projection",
-        henka_ui_rect_contains(
-            (henka_ui_rect){layout.center.x - 15.0f * scale, layout.center.y + layout.radius * 0.35f, 30.0f * scale, 18.0f * scale},
-            mouse),
+        henka_ui_rect_contains(layout.projection_bounds, mouse),
         !input_blocked,
         &projection_interaction);
     if (projection_interaction.released &&
@@ -751,13 +1069,20 @@ bool sandbox3d_view_compass_draw(
     {
         changed = true;
     }
-    (void)henka_ui_label_colored(
+    (void)henka_ui_overlay_rect(
         ui,
-        layout.center.x - 4.0f * scale,
-        layout.center.y + layout.radius * 0.36f,
-        scale,
-        in_out_camera->projection_mode == HENKA_CAMERA_PROJECTION_ORTHOGRAPHIC ? "O" : "P",
-        projection_interaction.hovered ? HENKA_UI_COLOR_INFO : HENKA_UI_COLOR_MUTED);
+        layout.projection_bounds,
+        projection_interaction.hovered
+            ? (henka_vec4){0.10f, 0.24f, 0.38f, 0.86f}
+            : (henka_vec4){0.06f, 0.10f, 0.15f, 0.80f});
+    sandbox3d_compass_draw_centered_label(
+        ui,
+        (henka_vec2){
+            layout.projection_bounds.x + layout.projection_bounds.width * 0.5f,
+            layout.projection_bounds.y + layout.projection_bounds.height * 0.5f},
+        0.92f * scale,
+        in_out_camera->projection_mode == HENKA_CAMERA_PROJECTION_ORTHOGRAPHIC ? "Ortho" : "Persp",
+        projection_interaction.hovered ? HENKA_UI_COLOR_INFO : HENKA_UI_COLOR_NORMAL);
 
     globe_interaction = (henka_ui_interaction_state){0};
     (void)henka_ui_custom_interaction(
@@ -802,13 +1127,13 @@ bool sandbox3d_view_compass_draw(
         switch (preferences->info_mode)
         {
             case SANDBOX3D_VIEW_COMPASS_INFO_POSITION:
-                snprintf(info, sizeof(info), "X %.1f Y %.1f Z %.1f", in_out_camera->position.x, in_out_camera->position.y, in_out_camera->position.z);
+                snprintf(info, sizeof(info), "X%.1f Y%.1f Z%.1f", in_out_camera->position.x, in_out_camera->position.y, in_out_camera->position.z);
                 break;
             case SANDBOX3D_VIEW_COMPASS_INFO_TARGET:
                 if (target_valid)
                 {
                     const float distance = henka_vec3_length(henka_vec3_subtract(*in_out_target, in_out_camera->position));
-                    snprintf(info, sizeof(info), "T %.1f D %.1f", in_out_target->x, distance);
+                    snprintf(info, sizeof(info), "Dist %.1f", distance);
                 }
                 else
                 {
@@ -817,15 +1142,35 @@ bool sandbox3d_view_compass_draw(
                 break;
             case SANDBOX3D_VIEW_COMPASS_INFO_ORIENTATION:
             default:
-                snprintf(info, sizeof(info), "H %03.0f P %+03.0f %s", heading_value, pitch_degrees,
-                    in_out_camera->projection_mode == HENKA_CAMERA_PROJECTION_ORTHOGRAPHIC ? "Ortho" : "Persp");
+                snprintf(info, sizeof(info), "%03.0f  %+03.0f", heading_value, pitch_degrees);
                 break;
         }
-        (void)henka_ui_overlay_rect(ui, layout.info_bounds, (henka_vec4){0.045f, 0.055f, 0.070f, 0.92f});
-        (void)henka_ui_overlay_line(ui, (henka_vec2){layout.info_bounds.x, layout.info_bounds.y}, (henka_vec2){layout.info_bounds.x + layout.info_bounds.width, layout.info_bounds.y}, 1.0f, (henka_vec4){0.25f, 0.45f, 0.66f, 0.80f});
-        (void)henka_ui_label_colored(ui, layout.info_bounds.x + 5.0f * scale, layout.info_bounds.y + 8.0f * scale, scale, info, HENKA_UI_COLOR_NORMAL);
+        (void)henka_ui_overlay_rect(ui, layout.info_bounds, (henka_vec4){0.035f, 0.050f, 0.075f, 0.96f});
+        (void)henka_ui_overlay_line(ui,
+            (henka_vec2){layout.info_bounds.x, layout.info_bounds.y},
+            (henka_vec2){layout.info_bounds.x + layout.info_bounds.width, layout.info_bounds.y},
+            1.1f * scale,
+            (henka_vec4){0.28f, 0.54f, 0.76f, 0.90f});
+        (void)henka_ui_overlay_line(ui,
+            (henka_vec2){layout.info_bounds.x + layout.info_bounds.width * 0.5f - 8.0f * scale, layout.info_bounds.y},
+            (henka_vec2){layout.info_bounds.x + layout.info_bounds.width * 0.5f, layout.info_bounds.y - 4.0f * scale},
+            1.0f * scale,
+            (henka_vec4){0.24f, 0.46f, 0.66f, 0.75f});
+        (void)henka_ui_overlay_line(ui,
+            (henka_vec2){layout.info_bounds.x + layout.info_bounds.width * 0.5f, layout.info_bounds.y - 4.0f * scale},
+            (henka_vec2){layout.info_bounds.x + layout.info_bounds.width * 0.5f + 8.0f * scale, layout.info_bounds.y},
+            1.0f * scale,
+            (henka_vec4){0.24f, 0.46f, 0.66f, 0.75f});
+        sandbox3d_compass_draw_centered_label(
+            ui,
+            (henka_vec2){
+                layout.info_cycle_bounds.x + layout.info_cycle_bounds.width * 0.5f,
+                layout.info_cycle_bounds.y + layout.info_cycle_bounds.height * 0.5f},
+            0.98f * scale,
+            info,
+            HENKA_UI_COLOR_NORMAL);
         info_interaction = (henka_ui_interaction_state){0};
-        (void)henka_ui_custom_interaction(ui, "view_compass_info", henka_ui_rect_contains(layout.info_bounds, mouse), !input_blocked, &info_interaction);
+        (void)henka_ui_custom_interaction(ui, "view_compass_info", henka_ui_rect_contains(layout.info_cycle_bounds, mouse), !input_blocked, &info_interaction);
         if (info_interaction.released)
         {
             info_mode = ((size_t)preferences->info_mode + 1U) % (size_t)SANDBOX3D_VIEW_COMPASS_INFO_COUNT;

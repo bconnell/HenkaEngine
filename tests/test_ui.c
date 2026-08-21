@@ -137,10 +137,43 @@ static void henka_test_ui_control_chrome_contract(void)
     henka_ui_destroy(ui);
 }
 
+static void henka_test_ui_overlay_circle_primitives(void)
+{
+    henka_ui_context* ui = NULL;
+    henka_ui_frame_desc frame_desc = {0};
+    const size_t base_lines_expected = 64U;
+
+    HENKA_TEST_ASSERT(henka_ui_create(&ui) == HENKA_SUCCESS);
+    frame_desc.framebuffer_width = 640;
+    frame_desc.framebuffer_height = 480;
+    HENKA_TEST_ASSERT(henka_ui_begin_frame(ui, &frame_desc) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_ui_overlay_disc(
+        ui,
+        (henka_vec2){100.0f, 100.0f},
+        40.0f,
+        (henka_vec4){0.1f, 0.2f, 0.3f, 1.0f}) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_ui_get_draw_line_count(ui) == base_lines_expected);
+    HENKA_TEST_ASSERT(henka_ui_overlay_circle(
+        ui,
+        (henka_vec2){100.0f, 100.0f},
+        40.0f,
+        1.0f,
+        (henka_vec4){0.1f, 0.2f, 0.3f, 1.0f}) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_ui_get_draw_line_count(ui) == base_lines_expected * 2U);
+    HENKA_TEST_ASSERT(henka_ui_overlay_disc(
+        ui,
+        (henka_vec2){0.0f, 0.0f},
+        0.0f,
+        (henka_vec4){0.1f, 0.2f, 0.3f, 1.0f}) == HENKA_ERROR_INVALID_ARGUMENT);
+    HENKA_TEST_ASSERT(henka_ui_end_frame(ui) == HENKA_SUCCESS);
+    henka_ui_destroy(ui);
+}
+
 void henka_test_ui(void)
 {
     henka_test_ui_theme_is_light_by_default_and_context_local();
     henka_test_ui_control_chrome_contract();
+    henka_test_ui_overlay_circle_primitives();
     bool toggle_value;
     henka_result result;
     henka_ui_context* ui;

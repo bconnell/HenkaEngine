@@ -1,368 +1,218 @@
+<p align="center">
+  <img src="assets/branding/henka_engine_lockup.png" alt="Henka Engine" width="360">
+</p>
+
 # Henka Engine
 
-Henka Engine is an early-stage open source engine written in C. The active order is runtime stability, production-quality 2.5D, and then integrated modeling and content-authoring tools, while retaining compatibility with external asset pipelines. The engine now also includes a small local persistence layer and guidance for keeping real games in separate repositories.
+Henka Engine is an early-stage open-source game engine and integrated
+development workspace written in C. It has a native 3D runtime/editor path,
+terrain, rendering, physics, 2.5D camera foundations, modeling and content
+authoring, asset/material workflows, persistence, and external-project support.
 
-## Support Henka Engine
+It is a real engine foundation, not a production-ready game platform. The
+repository's visible Sandbox is an engine sample and QA target; games built
+with Henka should live in separate repositories.
 
-Henka Engine is an open source C game engine and development workspace moving from runtime stability to production-quality 2.5D and then integrated modeling and content authoring.
+## Current project status
 
-Sponsorship helps support development time, testing, documentation, examples, packaged builds, and future workspace tooling. The project will remain open source under its current license.
+Integrated authoring is already underway alongside runtime and workspace
+hardening. The current validated development and packaging path targets 64-bit
+Windows with MSVC, CMake, PowerShell, SDL3, and the OpenGL renderer backend.
+Other operating systems are not currently claimed as supported.
 
-Sponsors help the project move forward, but sponsorship does not purchase feature priority, private support, ownership, or a different license. Feature decisions are still based on project direction, stability, maintainability, and usefulness to the wider engine.
+## Highlights
 
-Use the Sponsor button on this repository to support the project through GitHub Sponsors.
+- C17 runtime architecture with renderer-independent `henka_runtime`
+- Native editor/workspace with docked and detached tools
+- Camera-driven Scene View Compass with snap, orbit, projection, and persisted preferences
+- glTF/GLB scene and PBR material workflow plus bounded OBJ loading
+- Integrated Object/Vertex/Edge/Face authoring with stable mesh-element identities
+- Transactional topology operations, UV foundations, and bounded undo/redo
+- Terrain streaming, editing, persistence, material layers, and collision ownership
+- Rigid-body physics foundation with sandbox inspection
+- Perspective, side, top-down, and isometric 2.5D camera foundations
+- Headless/dedicated-server and external-project template foundations
+- Provenanced, packaged Windows Sandbox builds
 
-See SUPPORT.md for what sponsorship supports and what it does not promise.
+> **Support Henka Engine** — Development is supported through GitHub Sponsors.
+> Use this repository's Sponsor button or read [SUPPORT.md](SUPPORT.md) for
+> details.
 
-## Current status
+## Capability matrix
 
-Henka Engine is still early, but the sandbox now presents a deterministic two-model showcase through Henka's normal glTF scene, material, texture, lighting, and packaging paths.
+| Area | Current status | Highlights |
+| --- | --- | --- |
+| Core runtime | Available | C17 APIs, bounded validation, generation-checked scene identities |
+| Renderer | Available | OpenGL path, Solid/Material Preview/Rendered policies, PBR foundations |
+| Scene and camera | Available | Entities, input actions, framing, gizmos, Compass, 2.5D presets |
+| Editor workspace | Foundation | Docking, detached panels, tabs, layout persistence, early authoring UI |
+| Modeling and authoring | In Progress | Object/Vertex/Edge/Face modes, topology operations, UV and HAMS foundations |
+| Assets and materials | In Progress | glTF/GLB, OBJ, manager-owned dependencies, validated instances |
+| Terrain and world | Foundation | Four-layer terrain, streaming, edits, LOD, persistence, collision paths |
+| Physics | Foundation | Fixed-step rigid bodies, primitive colliders, contacts, events, raycasts |
+| 2.5D | Foundation | Perspective/side/top/isometric camera workflows and orthographic zoom |
+| Networking/server | Foundation | Renderer-free runtime, dedicated host, bounded Terrain authority paths |
+| External projects | Foundation | Separate game/server templates with Windows validation |
+| Game authoring | Planned | Broader scene/project, Play, hierarchy, and content workflows remain open |
+| 2D | Planned | Dedicated 2D renderer, sprites, layers, parallax, and animation remain open |
+| Audio | Planned | No current audio workflow |
+| Scripting/behaviors | Planned | No current scripting runtime |
 
-Rendered directional shadows use camera-stable near/far cascades with view-depth selection, bounded receiver PCF, and a wider near-cascade kernel only at detected blockers; confirmed occlusion is not given an artificial minimum light leak. Shadow filtering remains a bounded raster path, not a claim of production-quality shadow softness on every scene or GPU.
+For the detailed, code-backed inventory and explicit boundaries, see
+[docs/current-capabilities.md](docs/current-capabilities.md).
 
-In the bounded modeling workflow, the active Vertex, Edge, or Face mode now makes the selected source topology explicit in Scene View: vertices use amber cross markers, edges use cyan segments with endpoint markers, and faces use orange outlines with center markers. Ordinary selection remains logical-owner based, while component hits and highlights retain the editable source entity when that source is a child of the owner. Object selection also uses a cached, bounded topology-derived outline that aggregates all render children of a logical imported object and preserves visible concavities and disconnected parts. Small and medium meshes use projected triangle-coverage and depth intervals; dense imported meshes use a fixed screen-space spatial index for the same coverage/depth filtering, with a conservative topology fallback only when that bounded index overflows. This is selection/editing feedback, not a claim of complete production modeling authoring or a renderer-owned stencil outline.
+## Editor and development workspace
 
-Official project branding is tracked in [assets/branding](assets/branding/) and is used proportionally: the supplied full lockup is reserved for spacious project or information surfaces, while a faithful emblem derivative is used for the Windows application and tool-window icons. See [docs/branding.md](docs/branding.md) for the concise ownership and packaging convention.
+The Sandbox provides a native workspace for Scene View, utilities, object
+inspection, physics QA, materials, terrain, authoring, and layout tools. Panels
+can be docked or detached, and the workspace has validated split topology,
+tabs, named layout slots, bounded layout history, and reset-layout recovery.
 
-### What currently exists
+The Compass is a viewport instrument rather than a separate application: it
+tracks the active camera, supports axis snapping and orbit drag, and exposes
+projection and info-strip controls. Detailed controls are in
+[docs/help/sandbox3d.md](docs/help/sandbox3d.md) and
+[docs/editor-controls.md](docs/editor-controls.md).
 
-- C17 build through CMake
-- Generated development output uses bounded owned scratch roots: external-template validation reuses stable `build/tv` trees, Terrain process validation retains only the latest `out/terrain-process-integration` result, and committed Terrain journals auto-compact after their bounded threshold. Use `scripts/check_generated_output_lifecycle_windows.ps1` to detect abnormal file-count or byte growth; generated output is never a source or package input for a later recursive copy
-- `henka` static library target
-- renderer-independent `henka_runtime` static library target for headless consumers
-- `henka_sandbox3d` example target
-- renderer-free `henka_dedicated_server` host target with bounded config-file loading, validated optional Terrain base-world loading, fixed-tick simulation, Terrain snapshot recovery, loopback smoke connectivity, transactional edit persistence, graceful client shutdown, and a bounded `--run-for-ms` integration mode; a headless deployment package and restart-persistence check are available, while opt-in bounded relevance-filtered reconnect/late-join selection is available through the Terrain client/server session contract and production-scale multiplayer soak remains unfinished; the bounded process integration soak repeats the full two-client/reconnect/restart scenario for a configured finite number of sessions, and client disconnect handling retires stale recovery suppression state before reconnect
-- `henka_tests` unit test target with CTest integration
-- Terrain client delta recovery is limited to validated revision gaps; identity, protocol, validation, and allocation failures remain hard errors without recovery requests
-- SDL3-backed platform layer hidden behind Henka headers
-- OpenGL renderer backend isolated inside renderer implementation files
-- Public math, time, camera, mesh, texture, shader, scene, and asset APIs
-- Input action foundation for named engine-level controls
-- Generation-checked 64-bit scene entity identities that invalidate destroyed handles before slot reuse, protecting selection, actions, physics links, and future authoring references
-- Reusable camera helpers for reset, focus, screen-ray creation, stable vertical view bases, orthographic zoom, and Perspective 3D, Side 2.5D, Top-down 2.5D, and Isometric 2.5D presets
-- Sandbox startup and Reset View use bounded scene-first framing: visible non-helper mesh bounds are preferred over the debug grid and ground plane, showcase content is prioritized when present, and the default Giraffe-and-rocket pair is framed from its front side around the shared midpoint. Capture-mode framing reapplies once after the final docked or full-viewport aspect is known so laptop layouts do not crop the pair; a one-time versioned migration replaces the legacy generated floor-facing default without resetting an intentionally saved camera pose
-- Local action-command foundation for validated scene and object operations, including signed scale transforms for mirror workflows
-- Asset metadata with cache-owned source and display strings, plus stronger material summaries
-- Local save-data foundation with confined slot paths, complete-file validation, and transactional state replacement
-- Package mode and engine diagnostics foundation, including Release resource-closure reporting for bounded packaged soaks
-- Run-once engine lifecycle with copied configuration strings, reentrant-run rejection, exit-before-update rendering, checked frame rollback, and main-window presentation only after detached-window UI succeeds
-- Shared overlay-handle transform gizmo foundation for selected object manipulation, with visual feel still being hardened through manual QA
-- Viewport interaction test helpers for reducing manual QA around selection, gizmo hit testing, and transform changes
-- Asset manager foundation with rooted/UNC/device/drive/URI path rejection, platform-aware canonical cache identities, preserved source spelling, checked texture uploads, path-specific stable fallback identities, deterministic hard-failure propagation, and transactional texture and OBJ fallback retries
-- Early OBJ model loading with bounded source and output sizes, finite-number validation, negative indices, n-gon fan triangulation, degenerate-face rejection, and explicit failed-mesh retry support
-- Bounded glTF/GLB geometry and shared PBR material import with manager-owned texture dependencies, transactional material-asset reload, strict bounded JSON/accessor validation, IOR/transmission controls, bounded KHR transmission scalar textures, KHR volume attenuation and linear thickness textures, and runtime-authored subsurface amount/tint/thickness controls plus a manager-owned linear thickness texture on the showcase Giraffe for the renderer's explicitly bounded view-aware multi-lobe direct-light diffusion approximation and back-facing environment approximation
-- glTF-derived material definitions expose stack-owned instances with validated scalar/vector, alpha-mode, and semantic-texture overrides, effective dependency inspection, revision-aware refresh, and transactional reimport; direct scene bindings now refresh automatically on the normal frame path after a successful definition or glTF-scene reload, while explicitly applied material instances remain authoritative; the shared dependency inspection contract also enumerates all twelve optional Terrain layer texture semantics, and material instances support the five core slots plus imported transmission and volume-thickness texture slots; Sandbox Object Details exposes all seven supported instance texture slots for assignment, clearing, and definition restore; a separate Henka-only material file authority is still not present
-- Sandbox Object Details and the Object Info utility expose the selected object's effective material description; Object Info also reports the count of borrowed semantic texture dependencies. Scene entities instantiated from glTF scene assets retain the borrowed manager-owned material-definition identity alongside their effective material, so editor and dependency tooling reconnect to the shared authority without guessing from names or values. Object Details now creates a bounded persistent material instance for any selected imported scene entity with a shared definition, preserves overrides per entity, refreshes them when the definition revision changes, and applies refreshes transactionally; its Reimport action routes by the borrowed definition identity through the existing standalone material or owning glTF-scene transaction. The editor covers the shared scalar/vector, boolean, alpha-mode, and semantic-texture override contracts, plus dependency/revision inspection and reset. The Utility Assets view enumerates manager-known textures, materials, and meshes without a filesystem scan, uses deterministic bounded paging, and preserves stable metadata-index selection; a selected manager-owned texture can be assigned, cleared, or restored to its material definition on the editable instance only, with semantic validation and rollback. External C consumers can use the same validated instance APIs. Text-entry import, drag/drop, material-file authoring, and dedicated dependency-graph panels remain unfinished
-- The sandbox editor now treats valid non-helper scene entities as authoring targets rather than requiring demo descriptors: Scene Objects enumerates logical scene-object owners while preserving imported render-child identities for rendering, diagnostics, and component picking; selection and Object Details share generation-checked entity identity, and the panel exposes validated Add Cube, Duplicate, and Delete operations. Add Cube now creates a scene-connected authoring source with independent evaluated mesh/history ownership, so it immediately supports the bounded Vertex/Edge/Face workflow and can be duplicated independently. Duplicate preserves the source entity's borrowed manager-owned material-definition identity when present, keeping dependency and material tooling connected to the duplicated object; successful Delete also retires the selected entity's descriptor-linked physics body and active authoring wrapper. Transform hotkeys/gizmo edits, visibility, transform locks, reset, material inspection, and scene-object details remain session-only; text-entry rename and durable scene serialization are not yet editor workflows
-- Scene Objects also exposes `Create Native Rocket`, which builds a bounded 201-vertex/121-face multi-part rocket through the public Henka authoring mesh API: a continuous body and nose, three open structural collars, a five-bell engine cluster, and four fins. It evaluates into a scene-connected source, adopts a manager-owned material instance plus generated manager-owned normal and metallic/roughness detail textures when GPU creation succeeds, and remains ready for component, topology, material, and project save/reload dogfooding. This is explicitly `HENKA_NATIVE_GENERATED_FIXTURE` content: the hard-coded constructor verifies the public authoring and persistence path, but it is not evidence that a user designed the rocket. `HENKA_NATIVE_AUTHORED` is reserved for geometry edited through generic visible modeling tools and persisted with that provenance.
-- The runtime now provides a bounded authoring-mesh foundation with stable vertex/edge/face identities, explicit connectivity and boundary queries, per-face material-region editing, per-corner UV/material-region metadata, smoothing and hard-edge intent, fail-closed polygon validation, deterministic caller-owned triangulation, bounded shared topology undo/redo with selected-face restoration and redo-branch truncation, versioned transactional mesh-file persistence, transactional plane/box, duplicate, extrude, inset, planar bevel-ring, face-subdivide, and selected-face deletion operations, plus deterministic planar UV projection, island transforms, packing, and shared-edge seam detection. HAMS v3 saves use portable little-endian scalar encoding and unique same-directory temporary files while retaining reads for the checked-in v2 sources. Evaluated authoring material-region metadata now survives the model-to-render-mesh upload boundary and Object Details reports its bounded evaluated range; client applications can use `henka_mesh_create_from_authoring_mesh` to share that validated authoring-to-render boundary without introducing a second material authority. Sandbox Textured Cube now dogfoods a scene-connected authoring source with viewport Vertex, Edge, and Face modes, Ctrl-click additive component selection, visible component highlights, bounded Grow Selection and Scale Selected operations, bounded X/Y/Z component movement, selected-face Normal +/- profile shaping, transactional evaluated mesh/bounds replacement, a bound box collider that updates transactionally with successful modeling/source-reload edits, restoration of the entity's pre-authoring mesh and bounds when the wrapper closes, Object Details Material Region, Evaluated Regions, Extrude, Inset, Bevel, Subdivide, Delete Faces, Project UV, Pack UV, Undo, Redo, Save Project, and Reload Project; the editor keeps a bounded per-entity authoring registry so duplicating that authored object creates independent topology/history/render/bounds ownership, a distinct bounded box collider, and selecting another entity switches the active wrapper; project persistence is a bounded manifest plus the existing transactional `.hams` source, retains transform/visibility on reload with failure retention, and uses an entity-identity-derived user-data slot so authored duplicates cannot overwrite the original object's slot; vertex/edge deletion, broader topology tools, automatic UV unwrap, multi-material-region binding, texture painting, automatic authoring for imported entities, and showcase rebuild workflows remain unfinished
-- Object Details also exposes generic Select Connected selection expansion: after a Vertex, Edge, or Face pick, it follows topology until the complete reachable component or the bounded selection budget is reached, so subsequent movement and scaling can shape an anatomical or mechanical part without showcase-specific geometry code.
-- Object Details Edge mode also exposes bounded Select Edge Loop: from an active manifold edge it follows opposite edges through a closed quad strip, publishing the replacement selection atomically while preserving the active edit target. Boundary, non-quad, malformed, and over-budget strips fail closed; this is a reusable topology-selection foundation, not proof of production Giraffe anatomy or Rocket mechanical topology.
-- Object Details also exposes bounded one-ring Soft Move X+/Y+/Z+ controls. They move the active topology selection at full strength and apply a linear falloff to adjacent vertices through shared mesh connectivity, reducing hard seams during native fixture shaping; this remains a modeling foundation, not final Giraffe anatomy or Rocket mechanical-topology proof.
-- Selecting a validated imported Giraffe or Rocket primitive now prioritizes `Object Details > Authoring`, where Make Editable converts its nontrivial topology into a user-owned Henka authoring source. The bounded Authoring group then exposes component selection and movement, Face-mode Bevel and Extrude dogfood, project save/reload, explicit Own Material promotion to a manager-owned runtime material definition, transactional base-color, metallic, roughness, emissive-strength, IOR, transmission, subsurface amount, subsurface thickness, and subsurface tint edits, plus in-engine procedural detail-normal and metallic-roughness texture creation/assignment; bounded material-instance Undo Mat/Redo Mat controls restore those changes transactionally, and the imported glTF material remains untouched until promotion. Viewport component picking keeps the selected native source stable when a frontmost spot, decal, or other same-showcase overlay primitive wins the scene ray, then validates the component against the source mesh before changing selection. The project action now persists the bounded native material state sidecar for all supported PBR scalars, colors, flags, alpha mode, and seven supported material texture slots, preserving the existing manager-owned definition and texture identities; a later normal sandbox launch recreates supported native texture recipes and restores the saved native source and valid material sidecar transactionally while retaining the imported render on failure. The Windows dogfood path exercises Make Editable, material and texture edits, material undo/redo, component movement, Face selection, viewport component picking, Bevel, Extrude, Save Project, Reload Project, and relaunch restoration transactionally on the nontrivial Giraffe. The checked-in `assets/authoring/showcase_giraffe.hams` and `showcase_rocket.hams` are persisted editor-owned derivatives captured from that visible workflow; the glTF pair remains explicitly `GENERATED_TEST_FIXTURE` / `IMPORT_COMPATIBILITY_ASSET` input content, and the HAMS serializer does not store provenance metadata. Runtime sidecar/evidence labels use `HENKA_NATIVE_EDITED_FIXTURE`; this is not independent proof that a user designed the recognizable Giraffe or Rocket forms. This is an incremental native-authoring foundation, not final anatomical or mechanical showcase proof: texture painting, broader native source export, and production-quality Giraffe/Rocket modeling remain required
-- The external graphical template now dogfoods the same public authoring boundary without Sandbox source: it builds and edits a box from stable vertex/edge/face IDs, evaluates and reloads the mesh source, creates and picks a scene entity with linked collision, verifies user-owned duplicate/delete, and hands the reloaded mesh into its Rendered scene alongside the public Terrain path; complete external scene/project serialization remains unfinished
-- Bounded glTF/GLB scene import with selected scene roots, node hierarchy transforms, cameras, punctual lights, meshless camera/light scenes, fail-closed accessor-reference validation, and generic logical selection ownership for each active scene root; instantiated entities borrow manager-owned primitive mesh wrappers whose prior wrappers remain valid until the owning scene asset is destroyed across a successful transactional scene reload. Logical ownership changes editor selection presentation only and does not merge render children or their material/dependency identities
-- The normal Sandbox startup presents the original repo-owned Cheeky Giraffe mascot and Original Realistic Rocket glTF scene/material setup with smooth sample forms, a reduced head-to-torso relationship, compact flattened ear lobes with inset inner-ear patches, connected outward-angled ossicone stalks and caps, a restrained articulated tail, restrained eyes, muzzle, and level mouth detail, separately shaded facial features, flush deterministic Giraffe skin spots through a manager-owned base-color texture, staged launch-vehicle and seven-engine lower-stage geometry, a rocket presented at a clearly larger-than-giraffe scale on a bounded launch pad, multiple PBR material factors, generated tangent-space detail normals and roughness/metalness variation, bounded view-aware subsurface response on warm Giraffe regions driven by manager-owned normal and linear thickness textures, and supported clearcoat/sheen/emissive-strength materials. Normal non-smoke startup first loads and instantiates the glTF fixture scene/material path, then restores the checked-in HAMS geometry when available; smoke-test behavior is separate. The HAMS files are persisted editor-owned derivatives of fixture geometry, not independent proof of user-designed recognizable forms. Deterministic build-time generation, editor-owned source capture, geometry and texture validation, qualified provenance, regular visual-reference regeneration, application-only multi-angle Giraffe inspection capture, and the public-only showcase boundary are documented in [docs/showcase-assets.md](docs/showcase-assets.md). The previous primitive and realism samples remain available through `--primitive-gallery` for diagnostics and automated QA
-- Terrain now has a shared built-in four-layer Lit material contract: painted uint8 weights are normalized and consumed as base color, normal, metallic, and roughness blends with validated semantic texture slots and world-space meter tiling. The Sandbox adopts the complete reference definition under a stable manager-owned runtime identity and binds four deterministic 64x64 asset-manager-owned runtime grass, dirt, rock, and wet base-color, finite-difference tangent-normal, and metallic/roughness tiles to it; the Rendered shader adds bounded world-space macro and detail variation to albedo, roughness, and tangent normals so large surfaces do not read as a single repeated tile. Generated chunk entities retain that shared material authority instead of creating an unrelated scene-only definition. Each layer retains validated factor fallbacks for replacement or unavailable optional sources. Runtime definitions are stable, validated, dependency-checked, and intentionally have no file reload path. Terrain resource diagnostics report the exact unique layer-texture count, resident material bytes, and active dirty-region count, with the reference fixture requiring all twelve semantic slots. The graphical owner transports finite tangent vec4 bases with handedness into the normal Rendered shader, mesh generation uses available neighboring authoritative regions for border-normal continuity, and resident one-level LOD differences stitch odd fine boundary samples to shared coarse endpoints with degenerate triangles omitted; per-edge fallback skirts remain for missing or invalid neighbors. Resident Terrain chunk entities are owner-marked helpers: they participate in ordinary bounded scene culling, depth, fog, and Rendered environment/IBL presentation but are excluded from generic Scene Objects selection, scene picking, duplicate, delete, transform actions, and local reflection-probe capture; owner-loss refresh attempts transactional recreation, and observer removal retires their scene identities. The Terrain utility is also a direct viewport editing mode: resident hits show a brush preview, click-drag emits bounded deterministic command segments, and a fixed-budget edit history provides visible Undo/Redo while refreshing collision and render owners transactionally. Nonresident terrain remains explicitly non-editable until the bounded working set arrives. Automated all-edge index/topology checks now include four-way fine/coarse boundary and shared-corner correspondence, while human four-way corner visual approval remains unfinished
-- Transactional HDR environment lighting with bounded 32-sample cosine-weighted irradiance, GGX-prefiltered specular mips, and a numerically integrated split-sum BRDF LUT, plus a shared validated environment authority for gradient and bounded procedural-atmosphere modes, deterministic sun direction, headless-safe time-of-day advancement, bounded procedural moon-disc/star presentation, a shadowless bounded moon direct-light contribution in Rendered PBR materials, and four shared editable starting presets (Clear Midday, Golden Hour, Moonlit Night, and Alien Haze); the rendered sky and PBR environment response consume that same authority, while only HDRI mode enables derived IBL and gradient/procedural modes report an explicit analytical fallback instead of retaining stale HDR resources. Sandbox Environment settings now validate, persist, reload, and edit the complete bounded scalar/celestial environment descriptor through the existing transactional settings file, with an in-memory round-trip smoke check; the Settings utility applies presets through the shared scene API and the generated studio source is recreated through the package-owned runtime path. That packaged studio HDR fixture now includes bounded asymmetric warm-key and cool-fill area-light structure for stable clearcoat and metal highlights, while the normal two-model showcase also installs a restrained warm spot key and cool point fill through the same scene-owned local-light API, so Rendered evidence exercises environment response, local attenuation, and the bounded spot/point shadow paths without changing imported material definitions. Dedicated moon shadow maps, editor environment asset authoring, arbitrary HDRI/cubemap identity persistence, transactional environment hot reload, procedural-environment IBL convolution, and weather/cloud layers remain unfinished. The same path includes fitted directional shadows with bounded receiver-aware contact tightening and far-cascade diagnostics, one deterministic bounded spot-light shadow map, bloom, tone mapping, fog, bounded local probe capture, and explicit Material Preview versus Rendered shading policies; generated runtime environments can be adopted by the asset manager under stable identities with budget accounting and truthful no-source-reload metadata
-- Rendered presentation now includes a bounded screen-space indirect diffuse lighting approximation that reconstructs receiver geometry from depth and gathers nearby visible HDR radiance before bloom and tone mapping. It can provide local diffuse color bleeding from visible surfaces, but it is intentionally described as SSGI. It is not full-scene global illumination: off-screen, hidden, and multi-bounce transport remain future work, and hardware ray tracing/path tracing are not claimed.
-- Rendered presentation includes bounded RG camera- and object-motion history reprojection with an 8-sample subpixel jitter sequence, transactionally retained previous-frame depth for motion/disocclusion rejection plus 3x3 depth-neighborhood rejection, reactive handling for transparency/transmission/emissive pixels, neighborhood history clamping, bounded reconstruction sharpening, cumulative resolve/fallback-frame diagnostics, counted transactional history-allocation failures, and previous-resource-retention state, plus a four-direction, two-sided, multi-step view-space horizon-search ambient-occlusion approximation with bounded radius/thickness/falloff/bias/intensity controls; production GTAO validation and production TAA visual validation across camera cuts, resize, disocclusion, and moving-object cases remain unfinished
-- The opt-in Windows sandbox command `--temporal-stress` drives the public scene path through a viewport resize and restore, camera translation, projection change, entity disocclusion and reappearance, and recovery frames; it reports and checks history-ready recovery, the cleared `history valid` state after a successful color/depth commit, resolve/fallback/invalidation, and transactional history-allocation-retention diagnostics, returns failure if that bounded check does not recover, and does not claim production TAA visual closure
-- The opt-in Windows sandbox command `--environment-stress` installs the shared procedural atmosphere with advancing time-of-day and a bounded moon direct-light source, runs the actual Rendered sky and PBR environment paths, verifies that the procedural mode and sun/time state remain valid, and confirms stale HDRI-derived IBL is not retained after the mode switch; it is a bounded runtime branch check, not a claim of complete atmospheric scattering, dedicated moon shadows, procedural IBL convolution, or weather rendering
-- The opt-in Windows sandbox command `--material-stress` exercises every supported shared glTF material-instance override family (scalar, vector, base-color, boolean, alpha-mode, and semantic-texture), verifies invalid-edit retention, applies the effective value transactionally to the scene, refreshes the definition, resets overrides, and checks clean shutdown; it does not create a second material-file authority
-- Checked KTX2/Basis texture loading with active-OpenGL capability-selected BC/ETC2/ASTC mip uploads; native BC1 RGB and BC1 RGBA preserve separate OpenGL upload formats, with BC3 support checked independently, Basis normal maps prefer two-channel BC5 or ETC2-RG targets and use BC7/ASTC RGBA only when those are the available compressed targets, uncompressed and Basis sources have a truthful RGBA8 fallback when compressed upload is unavailable, while unsupported native-compressed sources fail closed; block data is never presented as RGBA8. Texture inspection reports the selected resident GPU format as well as compressed-versus-fallback state
-- Windows MSVC multi-config builds keep Henka and the pinned KTX-Software dependency on one DLL CRT policy (`/MDd` for Debug and `/MD` for Release), so KTX application-owned buffers are released on the same Windows heap; stale mixed-configuration binaries must be rebuilt before running tests
-- Texture objects report exact resident GPU bytes and mip counts; manager-owned KTX2 textures support synchronous transactional top-mip replacement, plus an opt-in bounded Windows worker that reads one queued source at a time while the render thread performs validation and GPU replacement. The coalescing residency request queue retains the strongest target for repeated references, deterministic least-recently-pinned trim-to-budget with larger-texture tie breaking, explicit configured-budget enforcement, active-frame pinning of visible manager-owned textures, revision-checked stale-request cancellation, and fail-closed residency diagnostics remain in the shared path. Trim demotes eligible KTX2 textures and reports trimmed/demoted bytes separately from true eviction; whole-resource eviction is not claimed. The same budget, resident-byte, cumulative uploaded/failed/source-failed/trimmed/demoted bytes, known-versus-unknown request and source-failure counts, queue, completion/failure/cancellation, trim, pinned-byte, and progression-mode counters are surfaced through the engine diagnostics snapshot; failed bytes count resident payloads known to have been rejected after creation or replacement, source-failed bytes count readable encoded files rejected before residency, and unreadable or missing sources remain explicitly unknown-size. Visible scene materials enqueue KTX2 mip targets from a bounded projected-radius heuristic with deterministic distance fallback, semantic-slot priority, and a small threshold hysteresis band to avoid minor-distance thrashing; the engine services at most one queued request and one configured-budget trim per frame. Non-Windows builds and callers that leave the default mode selected retain synchronous main-thread progression; broader automatic residency policy and whole-resource eviction remain unfinished
-- Scene rendering exposes bounded distance-based LOD selection, frustum culling, draw budgets, and LOD fallback diagnostics; LOD selection does not claim texture residency or streaming
-- The public `--residency-stress` scenario also resets its live KTX2 fixture to one mip and records the rendered far/near/return visibility trace, exercises the opt-in Windows worker read path, and generates a native BC1 KTX2 mip chain. When the active device exposes BC1, it proves compressed residency trim and promotion; otherwise the native-compressed source fails closed and the scenario reports that capability result. This is bounded visibility promotion/demotion and compressed-format pressure coverage, not a complete automatic budget-convergence policy
-- Visible KTX2 texture residency requests now carry deterministic projected-radius, distance-fallback, and semantic-slot priorities; the bounded queue coalesces strongest mip demand and services higher-priority references first, can promote or demote to the current target, cancels requests made stale by a texture replacement, and active-frame pins keep referenced manager-owned textures out of trim. The public asset API can explicitly end a residency scope to release pins immediately, and active scene replacement releases pins and cancels pending work before installing the new scene. Applications can opt into the same bounded per-frame budget service through `henka_engine_config.texture_residency_budget_bytes`; zero keeps the historical unlimited default. The opt-in Windows worker reads one source at a time, while validation and GPU replacement remain explicit process work; broader automatic policy, background decode/upload, and whole-resource eviction remain unfinished
-- The opt-in Windows sandbox command `--residency-stress` exercises the public asset path with 65 path-distinct manager-owned textures, shared-cache identity, configured-budget rejection, active-frame pinning, full-queue saturation and recovery, failed request processing, cancellation, generated pinned-KTX2 promotion/demotion, the bounded worker-read path, a readable corrupt-source byte-count case, live-scene texture binding, a far/near/return camera phase, and shutdown cleanup. The generated KTX2 fixture is an uncompressed bounded mip-chain; automatic policy convergence and broader background decode/upload remain unfinished validation tracks
-- Scene rendering batches contiguous opaque or masked entities with identical mesh and material state through a fixed 256-instance OpenGL upload buffer when the optional instancing contract is available; probe-bearing, LOD-bearing, blended, incompatible, and unsupported-shader submissions fall back to ordinary draws, with instance counts exposed in diagnostics
-- Scene rendering has a bounded previous-frame OpenGL occlusion-query reuse path for unchanged non-LOD entities; camera, scene-revision, transform, unavailable-result, and unsupported-query cases conservatively draw normally, so this is an occlusion foundation, not a complete hierarchical visibility system
-- Bounded realism validation materials and scene samples covering metal, clearcoat, plastic, stone, sheen, wood, wet/dry variation, detail normals, masked foliage, and a thickness-shaped subsurface wax sample
-- Descriptor-aware RGBA8 textures with explicit sRGB/linear, sampler, wrap, mip, flip, usage, alpha, source-class, and content-revision metadata; public runtime-texture adoption transfers ownership to the asset manager only after bounded identity, GPU-readiness, and residency-budget validation
-- Bounded single-read texture decoding with truthful rejection of HDR and 16-bit sources, plus path-specific white/error fallback aliases
-- Shader-based rendering of built-in primitives
-- Sandbox window titled `Henka Engine Sandbox 3D`
-- Windows Sandbox and detached tool windows use the executable-relative official Henka emblem icon; missing branding resources fall back safely without affecting headless targets
-- Ground plane, restrained debug grid, a tall proportioned Cheeky Giraffe mascot whose primary tan surface now uses a continuous elliptical torso-to-neck loft, an Original Realistic Rocket with readable mission hardware, textured materials, and visible fallback behavior for missing texture and model assets; both remain deterministic imported fixture assets rather than native-authored production content
-- Showcase primitives expose a bounded native "Refine Profile" edit after Make Editable: it applies two ordered local-space regions to the imported giraffe neck/head or rocket lower/upper stages as one authoring transaction while preserving topology, material regions, evaluated bounds, undo/redo, and project persistence
-- The sandbox ground is a restrained manager-owned graphite surface with bounded albedo variation, detail normal response, and wet/dry roughness variation; the editor grid remains an explicitly unlit line helper so Rendered mode has no unexplained checker or center lighting split
-- The editor grid is an explicitly unlit, low-contrast graphite/slate line surface; its studio environment source is periodic and validated so Rendered presentation does not introduce a center seam. The procedural ground plane uses front-face winding consistent with its +Y normals.
-- Material Preview and Rendered now present the complete HDR target through the shared fullscreen-triangle UV contract, preserving the same front-pair composition as Solid; the Windows mapping regression and same-camera application capture cover the full texture edges and corners
-- Same-camera showcase evidence waits for bounded application-reported readiness: both named subject groups must be visible with authoritative bounds and render meshes, the final Scene View viewport must be known, three settled frames must pass, and machine-readable camera/subject metadata must agree across Solid, Material Preview, and Rendered; automated composition guards are not human visual approval
-- Keyboard movement, mouse look when capture is active, viewport-local Wireframe, Solid, Material Preview, and Rendered shading controls, and offline runtime help
-- Bounded local settings persistence with transactional loads and replace-on-success writes
-- In-window editor UI with mixed-case built-in text, restrained graphite/slate surfaces, lower-contrast one-pixel framing, flat secondary controls, underline-only tabs, compact switch toggles, quieter structured rows, clear selected-state accents, and release-confirm control activation
-- Native mesh editing exposes an explicit Scene View topology cue: Vertex, Edge, and Face mode plus the selected count remain visible while editing; selected vertices use amber crosses, selected edges cyan segments with endpoint markers, and selected faces orange borders with a center marker; the most recently picked active vertex, edge, or face receives a stronger mode-specific highlight while multi-selection remains visible
-- Face editing draws only the selected face's validated ordered corner loop and adjacent segments; malformed topology fails closed instead of producing a phantom outline, while the editor-only Solid inspection color remains neutral and brighter for authoring readability without changing saved scene materials
-- Controls Main and Object Details use the shared Henka UI bounded scroll-state and scrollbar geometry contract with stable collapsible groups, resize-safe scroll ranges, continuous wheel/touchpad deltas, visible graphite scrollbars, and pointer-owned thumb dragging; the presentation state is persisted separately from scene and engine state, while detached panels retain the same content contract, including wheel input and scrollbar dragging through their own resized geometry
-- Transactional UI frame construction with nested-frame rejection, frame-only widget admission, all-or-nothing composite draw commands, bounded text fitting, and state changes committed only after rendering succeeds
-- Checked workspace and viewport calculations with deterministic failure outputs, framebuffer clipping, custom viewport preservation across resize, and overflow-safe OpenGL coordinate conversion
-- Deterministic per-entity texture binding, checked frame-abort context restoration, and safer main and detached-window OpenGL resource cleanup
-- Locked scene objects remain inspectable without a transform highlight or gizmo; transform hotkeys require a visible unlocked selection and stale transform-session ownership is cleared on selection, visibility, lock, and tool changes
-- Scene Objects, Object Details, and Utility panels with synchronized arbitrary scene-object selection, entity-aware inspection, and bounded lifecycle actions for the sandbox editor
-- Sandbox workspace panels with hidden-section dock compaction, compact single-tab headers, icon-like drag grips, stacked side docks, header drag, cross-zone redocking, native detached-window panels with routed mouse input, safer tool-window renderer context recovery, a validated single-root split-topology model with stable section leaves, nested dock projection, 10 px logical divider hit targets, transactional close-threshold foundation, double-click divider equalization, bounded eight-entry workspace layout undo/redo history with Ctrl+Z/Ctrl+Y/Ctrl+Shift+Z keyboard shortcuts, focus-loss/Escape interaction cancellation, DPI-aware horizontal and vertical resize cursors, dock splitter, bounded tab selection/reordering, Left/Right keyboard tab cycling on hovered merged headers, Tab/Shift+Tab traversal across visible workspace panels with a visible focus cue, Up/Down/Enter/Escape section-chooser navigation, guarded Ctrl+M maximize/restore for the focused or hovered section, idle hover hints for resize/drag affordances and merged-tab activation/reorder/center-drop behavior, and reset-layout recovery controls
-- Controls Main and Object Details use fixed headers, bounded scrollable bodies, persistent stable-ID collapsible groups and scroll offsets, wheel/touchpad ownership, usable scrollbars, detached-window parity, and Object Details presentation-only up/down group reordering without duplicating selected-object state
-- Multi-window platform foundation with focus-loss release synthesis, per-frame detached-window event state, collision-safe engine window identifiers, validated native identifiers, bounded native position read/write, truthful capability diagnostics, and transactional mouse-capture changes
-- Separate `Native Panel Test` window for close, focus, resize, and event-routing QA, opened from the bounded Controls `QA` page
-- Transactional recovery for incompatible saved live workspace panel/topology state; bounded legacy floating-panel dimensions migrate to current minimums, current safe defaults replace structurally invalid live layouts, and repaired state is rewritten on clean shutdown without discarding valid saved custom layouts or named slots
-- Rigid-body physics v1 with atomic fixed substeps, allocation-safe rollback, static/dynamic/kinematic bodies, sphere/AABB/plane/static-heightfield colliders, triggers, events, raycasts, copied Terrain samples, and sandbox debug controls
-- Transactional packaged-sandbox refreshes that preserve user data by default and retain the prior package until activation succeeds
-- Generic documentation and starter template for external game repositories; the external C17 template now runs bounded public-API Terrain CPU and graphical consumer smokes covering the shared material contract, deterministic raise/paint, collision raycast, CPU render-mesh rebuild, transactional save/restart reload, normal engine/scene Terrain ownership, and a Rendered draw with HDR/shadow diagnostics
-- C17 external server template and Windows validation path that links only `henka_runtime` plus its private network implementation
-- Headless-only CMake configuration with `HENKA_BUILD_CLIENT=OFF`, `HENKA_BUILD_DEDICATED_SERVER=OFF`, and `HENKA_ENABLE_KTX2_TRANSCODER=OFF`; the resulting runtime target does not configure SDL, OpenGL, or KTX
-- Version-1 bounded Henka network packet codec and localhost ENet transport with explicit little-endian headers, three logical channels, reliable ordered delivery, a 64 KiB packet ceiling, 32 KiB snapshot fragments, bounded one-second peer liveness pings, a finite 120-second slow-run reliable timeout, authoritative Terrain deltas/snapshots, renderer-free client session ownership, explicit client reconnect, server-directed disconnect, retired bounded authority rate records, validated out-of-interest delta no-ops, and terminal pre-fragment snapshot failure messages; a bounded control session-info message validates world/base identity and advertises up to 16 current resident regions in deterministic row-major coordinate order so empty clients can bootstrap late-join snapshots consistently after residency-slot reuse, while application handshake/authentication, relevance-based server delivery, reconnect policy beyond the advertised bound, and production-scale multiplayer soak remain unfinished; a finite repeated process soak covers the existing bounded scenario
-- Terrain v1 core contract with an 8192 m x 8192 m default descriptor, 512 m regions, 64 m chunks, 65 x 65 full-resolution chunk samples, signed millimeter heights, deterministic four-layer weight normalization, integer region/chunk identities, and separately bounded CPU/physics/render residency state; bounded physics patch synchronization now follows physics-resident regions and can prioritize an explicit camera/interaction focus region, while full residency-wide collision coverage beyond physics capacity remains unfinished and the graphical owner derives a bounded nearest render working set automatically
-- Bounded Terrain v1 world manifests and region records use explicit little-endian descriptor, world/base identity, region, generation, revision, sample, and checksum fields; manifests are atomically created/validated, append-only BEGIN/REGION/COMMIT journaling atomically replaces validated region snapshots, ignores incomplete transactions during recovery, and supports atomic committed-history compaction
-- Bounded Windows Terrain streaming foundation with a renderer-free worker, coalesced region requests including successful same-region completions already waiting in the pump queue, fixed request/completion queues, observer records, cancellation of stale queued and active observer demands while preserving explicit caller-driven requests, candidate validation, main-thread region swaps, stale completion rejection against current region generation/revision, observer-only completion cancellation after observer movement, observer-driven CPU/physics/render residency flags, deterministic render/physics/CPU-radius request priority with stable sequence tie breaking, deterministic clean-region eviction, optional unload hysteresis, current/high-water queue and observer diagnostics including stale and cancelled completion counts, fail-closed saturation counters, and an optional worker-side bounded generator for valid regions without persisted snapshots; generated samples must have normalized 255 material weights before publication, persisted regions remain authoritative, and generator failures remain visible; the Sandbox now seeds a persistent 2x2 procedural fixture in a four-region CPU budget, uses the same deterministic generator for broader camera movement, feeds the active camera into a one-region CPU/physics/render/unload observer window, and routes physics residency, edit footprints, and neighbor coverage through the bounded collision-runtime queue; the opt-in `--terrain-stream-stress` path proves the initial camera window, generated-region rendered return, and bounded collision-overlap return across `(2,0) -> (2,2) -> (0,0)` with no failed requests, while the renderer-owner regression also proves nearest bounded working-set replacement and outer LOD-band culling; background physics/render regeneration and residency-wide collision coverage remain unfinished
-- Shared deterministic Terrain edit commands for raise/lower, flatten, smooth, and paint use algorithm version 1, integer sample centers/radii, fixed-point falloffs, candidate-region preflight, atomic multi-region swaps, revisions, and dirty state; the Sandbox Terrain utility produces the same commands with bounded brush controls, resident-patch viewport ray-pick, hovered brush preview, direct resident-only click-drag strokes, visible Undo/Redo, an in-viewport Terrain Edit banner that names the active operation and shows radius, strength, falloff, paint layer, and the resident-boundary interaction hint, validated persistence of brush radius, strength, layer, falloff, and operation settings, an atomic Save action for every currently CPU-resident region that clears dirty state only after commit, a Dirty row reporting active regions awaiting persistence, and a ten-second dirty-only transactional autosave during normal editor runtime. Autosave failures preserve dirty state and retry on a later interval; capture and smoke modes do not schedule persistence. The public world stats and storage API also expose transactional dirty-only save coverage that skips clean resident regions and preserves rollback semantics; nonresident and broader saved Terrain-world authoring remains unfinished
-- Explicit bounded Terrain edit request, acceptance, and rejection codecs carry world/base identity, client nonce, versioned command fields, affected-region expected revisions, server command identity, and fail-closed rejection reasons without transmitting native C layouts
-- Bounded Terrain authority validation checks peer rate limits, permissions, world/base identity, exact affected-region sets, and expected revisions, applies deterministic edits, commits all affected region snapshots before returning acceptance, and restores live samples/revisions on persistence failure; the server retains a fixed 64-entry delta history for complete revision-gap recovery and falls back to a transactional region snapshot when history is exhausted
-- Renderer-independent Terrain server session routing decodes bounded edit requests from the public ENet server, invokes authority validation, sends encoded acceptance/rejection responses, echoes control pings, sends bounded world/base session info with current resident-region revisions in deterministic row-major coordinate order on connect, disconnects malformed edit peers, and exposes dispatch diagnostics; the client/session tests cover forced disconnect, explicit reconnect, authoritative server-wrapper restart on the same endpoint, and exact resident-sample convergence, while the dedicated two-client process harness proves a late observer joins the committed region, a reconnecting client receives a fresh connection and continues editing, and restart recovery preserves the checksum. The bounded process integration soak repeats that complete scenario for a finite session count. Application handshake/authentication, relevance-based late-join selection, reconnect policy beyond the advertised bound, and production-scale multiplayer soak remain unfinished
-- Authoritative Terrain edit deltas use explicit bounded world/base identity, client nonce, server command ID, deterministic command fields, and resulting region revisions; accepted deltas are broadcast reliably to connected peers and retained in a 64-entry bounded history, while the client adapter applies exact-revision deltas, keeps at most one pending recovery request per affected region, suppresses repeated or older gap requests with diagnostics, and uses the snapshot path when history is unavailable; the replica also rejects decoded recovery snapshots older than the current region generation/revision and reports stale snapshot counts through both replica and client diagnostics; broader relevance-driven reconnect recovery remains unfinished
-- Dedicated-server Terrain snapshot serving validates bounded requests, reads the live authoritative region (materializing a persisted region when needed), and sends transfer-identified fragments below the 32 KiB snapshot ceiling; the client adapter assembles and atomically applies those fragments, and the connect-time session-info message requests snapshots for up to 16 advertised resident regions. The Windows process harness proves this bounded late-join path, explicit reconnect, and exact restart checksum recovery; broader relevance-driven orchestration remains unfinished
-- Renderer-independent Terrain client session ownership routes public network events through the bounded replica, validates connect-time session-info world/base identity, requests snapshots only for advertised regions whose local revision/generation is missing or stale, coalesces repeated per-region session snapshot requests while a target is pending, replaces that target only when a newer revision/generation is advertised, sends edit/snapshot/recovery requests, retries decoded-but-rejected snapshot transfers at most four times per connection, records acceptance/rejection diagnostics, tracks and suppresses duplicate regional delta-gap recovery until a delta or snapshot resolves it, clears those ledgers when a snapshot completes, on disconnect, or when an explicit reconnect replaces the transport, replays a bounded predicted world over authoritative state, and requests retained deltas or a region snapshot only after a verified revision gap; the client tests prove exact resident-sample preservation across forced disconnect, reconnect, and authoritative server-wrapper restart, plus byte-identical convergence of two public client replicas after edits from both peers. The process harness and its finite repeated soak additionally cover bounded late join and explicit reconnect with a deterministic resident-sample checksum. Application handshake/authentication, broader relevance selection, reconnect policy beyond the advertised set, and production-scale multiplayer soak remain unfinished
-- Dedicated-server edit handling lazily materializes requested persisted regions within the configured residency bound before authority validation, avoiding a world-sized preload; `henka_terrain_server_diagnostics.materialization_failure_count` reports bounded allocation, storage-load, or snapshot-publication failures without accepting a partial edit; streaming now has observer-driven bounded CPU-region eviction with optional unload hysteresis, while background regeneration beyond the bounded physics/render queues remains unfinished
-- Renderer-independent Terrain replica ownership applies authoritative deltas only across exact revision steps, treats complete duplicates idempotently, assembles bounded snapshot fragments with transfer metadata and an exact full-size/non-final fragment shape, rejects duplicate or corrupt transfers without publishing partial samples, and atomically swaps the decoded region; session-info-driven bounded late-join bootstrap now feeds that same snapshot path, while broader reconnect orchestration and render/physics residency remain unfinished
-- Deterministic allocation-free Terrain LOD selection scans render-resident chunks in stable region/chunk order, applies bounded distance bands through LOD 3, reports considered/culled/selected counts, and fails closed on output limits; the graphical terrain owner adds fixed-capacity scene entities, renderer bounds culling, hysteretic four-band selection, deterministic nearest-working-set scheduling, adjacent-chunk LOD clamping, non-degenerate edge morphing for one-level resident LOD differences with re-normalized unit normal/tangent bases and 255-sum layer weights, bounded fallback skirts only for missing/invalid neighbors, revision-aware 3x3 region dirty propagation, dynamic height-derived bounds, high-water queue/resident/visible diagnostics, and transactional mesh replacement, while observer synchronization reports the first bounded queue/admission failure and retains queued work for retry; automated all-edge corner topology is covered and four-way corner visual validation remains unfinished
-- Renderer-independent Terrain chunk mesh generation converts a render-resident chunk into caller-owned LOD 0-3 vertices and indices with finite height-derived normals, orthogonal tangent vec4 bases with deterministic handedness, stable world-space UV transport, material weights, source revision/generation identity, and an explicit four-edge transition mask; the graphical mesh API uploads that bounded data through the existing renderer and `<henka/terrain_render.h>` owns borrowed-world scene integration, automatically derives a bounded nearest set from render-resident regions, refreshes stale uploaded revisions transactionally, exposes one shared dirty-refresh seam for local/remote edits, snapshot replacement, and reload plus validated edit-footprint requeue with one-chunk dependency coverage for resident slots, and deterministically destroys slots and meshes. Paint-only edits now use a separate transactional four-byte-per-vertex GPU weight stream, so they preserve mesh geometry, VAO/index ownership, bounds, and entity identity while incrementing weight-update diagnostics; height, topology, LOD, border-normal, and dependency changes still replace the full mesh. Terrain layer textures also participate in the engine’s shared visible-material residency pin/request policy
-- The Sandbox reference scene exercises a render-resident Terrain region through the graphical owner, which derives its bounded nearest chunk working set and camera-driven LOD update; a new world is seeded with a deterministic rolling valley, steep ridge/cliff, and continuous grass/dirt/rock/wet four-layer weight field, while persisted worlds retain their committed samples; its active camera also drives the bounded Terrain streaming observer and the Utility Terrain row exposes the current stream queue; Terrain resource diagnostics separately report interleaved vertex, index, and four-byte-per-vertex weight GPU ownership; the Terrain utility exposes bounded sculpt/paint controls through the shared command API, viewport clicks compare the resident physics hit with scene bounds and use the nearest valid hit to place the next command, and its Material layers section inspects all twelve manager-owned layer texture dependencies with dimensions, GPU format, and mip residency without mutating the material; owner-marked terrain chunks retain the terrain material layer path in Rendered mode, so helper ownership excludes generic selection and probe participation without suppressing the terrain shader; human visual approval remains unfinished
-- The optional terrain visual evidence capture uses deterministic wide, close-material, and four-region-corner cameras across Solid, Material Preview, and Rendered without changing scene materials or scene lights; capture mode refreshes the four bounded fixture regions from their seeded samples so persisted editor edits cannot change the comparison. The capture helper can target either the development or packaged executable and runs bounded Scene View guards for all three views that reject missing, dimension-mismatched, flat, low-chroma, or spatially featureless evidence and require a measurable Rendered-versus-Material Preview difference; it remains application-only evidence, while human visual approval and complete topology QA remain unfinished
-- The optional showcase visual evidence capture launches the real Sandbox through the normal glTF fixture scene/material/renderer path, with normal startup restoring checked-in HAMS geometry when available, and records startup plus Giraffe front, three-quarter, profile, and wide silhouette views in Rendered, a front Material Preview comparison, and Rocket front, three-quarter, and profile Rendered views; its validator is a structural capture/evidence guard that checks executable identity, required files, dimensions, non-flat content, chroma, and measurable mode difference. Each capture run stages the selected executable and adjacent assets into a fresh repo-local runtime so stale user-save state cannot change provenance or composition. It does not independently prove HAMS provenance, user-authored recognizable geometry, realism, completion, or current-worktree identity; human inspection and fresh hash/timestamp metadata remain required for actual anatomy and assembly acceptance
-- Sandbox smoke additionally sends shared integer raise and paint commands through the Terrain world, verifies the painted layer weight reaches a newer rendered revision without replacing the resident mesh for paint-only work, explicitly requeues the accepted edit footprint and one-chunk render dependency border, refreshes the bounded collision patch for height edits, asserts the manager-owned Terrain material retains cast/receive shadow flags and the Terrain entity submits through the Rendered color and shadow passes, reports the current color, shadow, depth, AO/SSGI/SSR, fog, HDR, and valid temporal-history participation mask, reports exact world-owned CPU and resident graphical-owner vertex/index/weight/material GPU bytes plus dirty-refresh requeues, cancels an obsolete nonresident render request without counting a rebuild failure, then proves replacement recovery; the Terrain utility can save and transactionally reload the resident region through the shared journal, compact committed history, and preserve the prior presentation on reload failure, while networked edit authority remains a separate integration
-- Renderer-independent Terrain collision patch extraction copies a physics-resident chunk into a bounded 65 x 65 signed-millimeter height patch with revision and generation identity; a bounded transactional Terrain physics patch owner retains replacements, answers deterministic height/normal queries, and exposes normalized allocation-free raycasts over resident patches, while the rigid-body API owns copied static heightfield colliders with sphere/box contacts and bounded raycasts; a renderer-free coalescing rebuild queue synchronizes missing/stale physics-resident chunks, can prioritize an explicit camera/interaction focus region, exposes current/high-water pending counts, replaces patches transactionally, and now has regression coverage for queue saturation/recovery plus failed-rebuild preservation and retry; coverage beyond physics capacity and broader runtime collision stress remain unfinished
-- The headless Terrain workflow test drives shared raise and paint commands, rebuilds collision for the height edit while leaving collision untouched for paint-only material-weight changes, commits the resulting region, verifies restart reload, and proves an abandoned journal transaction leaves the last committed revision intact
-- Deterministic Windows CI package contract checks that avoid hosted graphics-session assumptions, while local validation still performs packaged runtime smoke, desktop interaction, and application-only screenshot checks
-- Repository integrity checks for tracked artifacts, credential signatures, script parsing, dependency pins, and workflow action pins
+## Game-engine runtime
 
-### What does not exist yet
+Henka is not only a modeling application. Its runtime includes scenes/entities,
+camera and input actions, asset management, rendering, physics, terrain,
+persistence, and a renderer-independent headless boundary. Full Game/Play
+authoring, character controllers, audio, scripting, and mature project
+serialization are not yet available.
 
-- Full production editor and project-authoring workflow
-- Full asset browser, import/reimport, dependency-graph, and project authoring workflow (the sandbox has only a bounded manager-known asset view and editable-instance texture-slot assignment)
-- Audio
-- Production-scale dedicated-server multiplayer soak tooling; bounded relevance-filtered reconnect/late-join selection is available, while application authentication, render/physics residency orchestration, and production-scale capacity remain unfinished
-- Scripting
-- Full 2D renderer
-- Full 2.5D sprite, layered-depth, parallax, animation, and constrained-movement workflow
-- Integrated modeling, UV, rigging, animation-authoring, and content-creation workspace
-- Additional renderer backends
-- Complete cross-backend KTX2/Basis production coverage and GPU-native stress validation, background texture streaming and automatic policy eviction, broader instancing/batching/occlusion scale work, and full screen-space refraction/layered-volume/glass rendering remain unfinished; transmission now uses authored IOR, manager-owned KHR transmission scalar textures, and thickness/attenuation-aware direct-light and environment-refraction fallbacks while retaining scalar and linear thickness-texture volume attenuation. Rendered now has a bounded depth-derived screen-space reflection attempt with thickness, maximum-distance, roughness, confidence, edge-fade, and miss handling when derived IBL resources are ready; scenes without IBL, unsupported materials, missed rays, and out-of-view rays use the existing environment/analytical fallback. glTF transmission and volume attenuation use bounded environment responses. Runtime-authored subsurface controls reserve diffuse energy for a thickness-shaped, view-aware multi-lobe direct-light diffusion approximation, a bounded geometric-normal curvature response at thin transitions, and a back-facing environment approximation; they do not claim true multi-scatter diffusion, skin profiles, or screen-space/ray-traced SSS. Temporal fallback state, invalidation count/reason, reactive-mask support, and bounded sharpening are exposed, but production TAA still requires the documented visual validation cases. Current paths expose truthful fallbacks or bounded foundations
-- Temporal history replacement is fail-closed: a failed new history allocation retains the previous GPU object but disables accumulation for the requested viewport and reports the fallback state. Production temporal visual validation remains unfinished.
-- AO uses a bounded depth-agreement edge confidence around its horizon search to reduce discontinuity halos; temporal AO history, multi-frame denoise, and production GTAO validation remain unfinished.
+## Modeling and content authoring
 
-## Repository layout
+The current integrated authoring foundation includes:
 
-```text
-assets/              Runtime shader, texture, and model assets
-engine/              Core library and public headers
-examples/sandbox3d/  Visible 3D sandbox application
-tests/               Headless unit tests
-docs/                Architecture, build, roadmap, and help documents
-scripts/             Windows helper scripts
-templates/           Generic starter content for separate game repositories
-third_party/         Bundled third-party source used by the engine
-```
+- Object, Vertex, Edge, and Face workflows
+- Component selection, connected selection, bounded edge-loop selection, and soft movement
+- Transform, orientation, pivot, and axis-constrained editing foundations
+- Stable vertex/edge/face identities and connectivity queries
+- Extrude, inset, bevel-ring, face subdivision, selected-face deletion, UV projection, packing, and undo/redo
+- Native editable source persistence and imported-object Make Editable
+- Validated material-region and supported PBR material-instance editing
 
-## Try the sandbox
+Broader topology, automatic UV unwrap, texture painting, rigging, animation
+authoring, and production-quality showcase asset creation remain in progress.
+See [docs/authoring-mesh.md](docs/authoring-mesh.md) and
+[docs/showcase-assets.md](docs/showcase-assets.md).
 
-On Windows, the quickest way to try the current sandbox is:
+## Terrain, world, and 2.5D
+
+Terrain provides bounded region persistence and streaming, four-layer material
+data, resident render/physics owners, sculpt/paint commands, collision patches,
+LOD transitions, and edit history. The current 2.5D foundation is camera-side:
+Perspective, Side, Top-down, and Isometric presets with orthographic zoom.
+Sprites, texture regions, layered depth, parallax, animation, and movement
+constraints remain future work. See [docs/terrain.md](docs/terrain.md) and
+[docs/roadmap.md](docs/roadmap.md).
+
+## Getting started
+
+### Prerequisites
+
+- 64-bit Windows
+- Visual Studio with C/C++ build tools
+- CMake
+- Network access on the first configure unless the pinned dependencies are already cached
+
+### Build and test
 
 ```powershell
+git clone <repository-url>
+cd HenkaEngine
 .\scripts\build_windows.ps1 -Configuration Debug
-.\scripts\package_sandbox3d_windows.ps1 -Configuration Debug
+.\scripts\test_windows.ps1 -Configuration Debug
 ```
 
-The sandbox is an engine sample and QA target. It is not a game, and real games built with Henka should live in separate repositories.
+The detailed build, dependency, headless, Release, and package instructions
+are in [docs/building.md](docs/building.md).
 
-## Build
-
-Windows build instructions are documented in [docs/building.md](docs/building.md).
-
-Quick start from the repository root:
-
-```powershell
-.\scripts\build_windows.ps1 -Configuration Debug
-```
-
-To create a run-ready Windows folder that you can open in Explorer and launch by double-clicking:
-
-```powershell
-.\scripts\package_sandbox3d_windows.ps1 -Configuration Debug
-```
-
-## Run the sandbox
+### Run the Sandbox
 
 ```powershell
 .\scripts\run_sandbox3d.ps1 -Configuration Debug
 ```
 
-## Run the packaged sandbox
-
-After packaging, open `out/HenkaSandbox3D/` in Explorer and double-click `HenkaSandbox3D.exe`.
-
-You can also launch it from PowerShell:
+### Create and run a package
 
 ```powershell
+.\scripts\package_sandbox3d_windows.ps1 -Configuration Debug
 .\scripts\run_packaged_sandbox3d_windows.ps1
 ```
 
-The sandbox starts a visible 3D scene with:
+The run-ready folder is `out/HenkaSandbox3D/`. It contains the executable,
+assets, offline help, package identity, and local user settings when present.
+Packaging and recovery rules are documented in
+[docs/package-provenance.md](docs/package-provenance.md).
 
-- the Cheeky Giraffe mascot
-- the Original Realistic Rocket, presented at a larger-than-giraffe scale on a bounded launch pad
-- a restrained graphite ground plane and debug grid
+## Using Henka from another project
 
-Both showcase models are generated deterministically during the Windows build and loaded as ordinary packaged glTF scene/material assets. Use `--primitive-gallery` to make the engineering primitives, fallback samples, and realism material row visible again.
-
-Sandbox settings are saved locally in a `user/` folder beside the executable. In a packaged run, the settings file is `out/HenkaSandbox3D/user/sandbox3d.settings`.
-The packaged folder also includes `PACKAGE_INFO.txt` so you can tell when the package was last refreshed.
-
-### Persistence safety
-
-- Engine-managed assets accept confined relative paths beneath the configured asset directory.
-- Save-slot names use a bounded portable identifier and cannot contain traversal or path separators.
-- Settings reject structural control characters and enforce bounded keys, values, entry counts, and numeric conversions.
-- Settings and save-data files are fully validated before replacing existing in-memory state.
-- Writes complete in a same-directory temporary file and replace the destination only after the file is flushed and closed successfully.
-
-### Resource bounds
-
-- Shader source files are limited to 1 MiB each and must be read completely.
-- OBJ sources are limited to 16 MiB, individual lines to 4,096 bytes, and parsed arrays to fixed safe maxima.
-- Texture sources are limited to 64 MiB encoded and 16,384 pixels per axis; decoded RGBA8 data is limited to 256 MiB.
-- Mesh uploads validate counts, byte sizes, primitive types, and every index before reaching OpenGL.
-- Shared checked-arithmetic helpers protect capacity growth, size multiplication, and narrowing conversions.
-- Asset caches, scene entities, action default transforms, physics contacts and events, and related runtime arrays use bounded checked growth.
-- Procedural grids and circle rings reject non-finite or excessive dimensions before allocation.
-- Asset paths are bounded to 4,096 bytes and scene-owned names, tags, material names, and interaction prompts are bounded to 1,024 bytes.
-
-### Runtime metadata ownership
-
-- Scene names, tags, material names, and interaction prompts are copied into bounded scene-owned storage.
-- Asset metadata source and display strings use asset-manager-owned storage and do not depend on caller buffers remaining alive.
-- Local bounds reject non-finite centers, non-finite extents, and negative extents.
-- Materials reject invalid types, non-finite or out-of-range physically based values, and textured configurations without a texture. Texture slots also validate semantic usage and linear versus sRGB color-space requirements.
-- Interaction ranges reject negative and non-finite values, and eligibility checks reject non-finite observer positions.
-- Camera constructors sanitize invalid projection inputs, camera projection helpers fail closed on non-finite state, and scene camera assignment accepts only valid camera state.
-- Primitive actions validate bounded names and primitive types before dry-run success, then roll back partially created entities if any setup step fails.
-
-### Physics activation safety
-
-- Sandbox samples start with static bodies so enabling one selected body cannot start unrelated samples.
-- `Make Dynamic + Drop` synchronizes the selected object's current transform, activates only that supported body, clears its velocity, and leaves other samples still.
-- `Enable` remains the explicit full-scene demonstration path and assigns the intended dynamic sample set before playback.
-- Automated coverage proves that an unrelated marker keeps its transform while the selected cube falls.
-- Physics rejects non-finite and collapsed physics scales. Fixed substeps also reject finite calculations that exceed representable engine state with `HENKA_ERROR_NUMERIC_RANGE`; numeric and allocation failures retain the prior bodies, contacts, events, pair history, accumulator, and linked scene transforms so callers can correct inputs and retry. Destroying a body removes only its contacts and pair history, appends one EXIT event for each active pair, and preserves unrelated queued events and survivor contact continuity. Physics allocations remain visible in engine memory diagnostics.
-
-### Validated platform and package identity
-
-- The fully validated build, test, packaging, and external-project path currently targets 64-bit Windows with MSVC.
-- Other operating systems are not presented as supported until their complete path is exercised.
-- Every Windows build records the full commit, source state, configuration, architecture, CMake version, executable path, and executable SHA-256.
-- Packaging requires that build record and rejects stale, mismatched, or cross-configuration executables.
-- `PACKAGE_INFO.txt` carries the verified identity and hashes into the runnable folder.
-
-See [Platform Support](docs/platform-support.md) and [Package Provenance](docs/package-provenance.md).
-
-### Package refresh safety
-
-- Build provenance supports branch and detached checkouts and is written transactionally.
-- Packaging assembles a complete staging directory before replacing the active package.
-- Existing user data is copied into the staged package unless `-ResetUserData` is requested.
-- A failed activation restores the prior package instead of deleting the only preserved user-data copy.
-- Package inputs containing reparse points are rejected before copying.
-- A retained backup from a previously activated, complete package is recovered on the next guarded run; incomplete staging state still stops for inspection.
-
-### Sandbox controls
-
-- `W A S D`: move across the scene
-- `Q / E`: move down / up
-- `Shift`: move faster
-- `Mouse`: look around while mouse capture is active
-- `Right Mouse / Tab`: toggle mouse capture
-- `Left Mouse`: uses the active viewport tool when mouse capture is released
-- `Left Mouse` drag on empty Scene View in Select mode: pans after a small intentional drag threshold, which keeps ordinary clicks as selection/clear-selection and makes laptop touchpads usable
-- `Alt + Left Mouse`: optional orbit shortcut around the selected object or current view target
-- `Middle Mouse`: optional pan shortcut
-- `Mouse Wheel` or two-finger touchpad scroll: zoom the viewport when the cursor is over the scene view
-- `F1`: enter Wireframe or return to the last non-wireframe viewport shading mode
-- `F2`: print the scene legend again
-- `F3`: show or hide the debug grid
-- `F4`: show or hide the sandbox panels
-- `F5`: switch Standard and Focus Viewport layouts; saved/custom layouts remain available from Tools
-- `F`: frame the selected object
-- `H`: print controls and the scene legend again
-- `Home`: reset the camera view to the meaningful scene bounds (or a safe deterministic fallback)
-- Rendered PBR also consumes an enabled scene moon as a bounded shadowless directional source; Material Preview remains on its deterministic editor light
-- `M` or `G`: move the selected visible and unlocked object
-- `R`: rotate the selected visible and unlocked object
-- `S`: scale the selected visible and unlocked object
-- `X`, `Y`, or `Z`: constrain an active transform
-- `Enter` or `Left Mouse`: confirm an active transform
-- `Escape` or `Right Mouse`: cancel an active transform
-- `Left Ctrl` / `Left Shift`: stepped or fine transform adjustment
-- `Escape`: when no transform is active, close the UI first, then release the mouse, then exit
-
-The Scene View header provides Wireframe, Solid, Material Preview, and Rendered shading. Solid uses neutral filled geometry. Material Preview evaluates the metallic-roughness Cook-Torrance material model under deterministic editor lighting and intentionally omits scene-dependent post-processing. Rendered evaluates the same material model with the scene directional light plus bounded point/spot lights and depth shadow maps into a Scene View-sized linear HDR target, then applies scene post-processing including exposure, an ACES-fitted tone map, a Rendered-only color grade, bloom, depth-neighborhood AO, and bounded temporal reconstruction. The directional coverage uses a fitted, stabilized near cascade and a bounded far cascade with a bounded overlap blend at the transition to avoid a hard lighting seam; the first enabled spot light receives a bounded 512² map and the first enabled point light receives a bounded 256² cubemap with linearized depth. Rendered writes bounded camera- and object-motion vectors, uses an eight-sample subpixel jitter sequence, applies motion-compensated history reprojection with depth-neighborhood rejection and reactive masking for unstable pixels, and applies bounded reconstruction sharpening. This remains a temporal foundation pending production visual validation across camera cuts, resize, disocclusion, and moving-object cases. A scene may also provide a borrowed linear Radiance HDR equirectangular texture for the background and material environment response; the analytical gradient remains the fallback. HDR target dimensions, generation, completeness, shadow resolution, resize failures, temporal-history state, fallback/invalidation diagnostics, jitter state, motion-vector attachment state, and local-probe capture counts/failures are available through engine diagnostics, including the bounded point-shadow target. Exposure is independently persisted and can be adjusted from Settings. The current forward transparency path supports straight-alpha blending in entity order; it is not order-independent transparency. The legacy `F1` wireframe control remains compatible and restores the last non-wireframe mode when switched off. Shading mode is saved independently from workspace geometry, so Reset Layout does not discard it.
-
-The sandbox panels open automatically on startup and reset-style launches so Tools and `Physics QA` are discoverable without knowing `F4` first. Starts have no selected scene object until the user selects one, and normal launches use the same scene-first framing authority as `Home` instead of restoring a transient prior camera pose. Press `F4` to hide or show panels, and press `F5` to switch between `Standard` and temporary `Focus Viewport`; saved/custom layouts remain available from Tools. UI buttons, toggles, tabs, and selectable rows activate on mouse release inside the active control so press, drag-away, and release behavior is safer. Active control IDs are copied into bounded UI-owned storage instead of retaining caller stack pointers, and non-finite UI geometry is rejected before draw-list insertion. `DRAG` marks a live panel header. Release on a valid left or right dock outline to redock there, release away from the outlines to keep the panel as an in-app floating panel, or use `Pop` on a floating panel to move it into a separate native tool window. Detached workspace panels now render their matching panel content in native tool windows and route per-window mouse input for release-confirm controls. When two panels share a side, the dock stacks them vertically instead of letting one cover the other. Closing a detached tool window returns its panel to the last valid dock, and `Reset Layout` restores the default workspace. Renderer context recovery is hardened around tool-window drawing. Select a scene object, then use `M` or `G`, `R`, and `S` to start move, rotate, and scale transforms. The Add Cube command creates a scene-connected authoring source with a normal lit evaluated mesh and bounded history; the core Action API remains renderer-independent. Active transforms support `X`, `Y`, or `Z` constraints, confirm, cancel, stepped adjustment, and fine adjustment through the action-based local control profile. Negative scale is preserved as an intentional mirror transform, while zero and near-zero scale are rejected to avoid collapsed objects. Locked objects, including the default Ground, stay selectable for inspection without a yellow transform highlight or gizmo and require an explicit unlock action before movement. Selection, visibility, lock, and tool changes clear active transform-session ownership. UI draw construction is valid only between a matched begin and end call; failed composite controls roll back their draw commands and do not consume release events or mutate toggle state. Open `Physics QA` to inspect the opt-in rigid-body demo. Manual desktop QA is still required before physics feel, native window behavior, panel drag comfort, and transform workflow feel can be called fully complete.
-
-Rendered reflection policy is explicit in engine diagnostics: bounded screen-space reflection is active only when the Rendered depth target and IBL are ready; otherwise the environment/probe or analytical fallback is reported as active. This is a policy diagnostic and does not claim that every screen-space ray finds a hit.
-
-Offline help is also available in [docs/help/sandbox3d.md](docs/help/sandbox3d.md).
-Model loading notes are documented in [docs/model-loading.md](docs/model-loading.md).
-A persistence overview is available in [docs/persistence.md](docs/persistence.md).
-A local action-command overview is available in [docs/action-api.md](docs/action-api.md).
-A rigid-body physics overview is available in [docs/physics.md](docs/physics.md).
-An editor controls overview is available in [docs/editor-controls.md](docs/editor-controls.md).
-A runtime foundation overview is available in [docs/runtime-foundations.md](docs/runtime-foundations.md).
-A UI overview is available in [docs/ui.md](docs/ui.md).
-A guide for separate game repositories is available in [docs/external-game-projects.md](docs/external-game-projects.md).
-Package identity and recovery behavior are documented in [docs/package-provenance.md](docs/package-provenance.md).
-Repository checks are documented in [docs/repository-integrity.md](docs/repository-integrity.md).
-A manual verification checklist is available in [docs/qa/sandbox3d-manual-checklist.md](docs/qa/sandbox3d-manual-checklist.md).
-[Support Henka Engine](SUPPORT.md)
-Packaged output is generated under `out/` and should not be committed.
-
-For deterministic packaged startup checks, use `.\scripts\check_packaged_sandbox3d_windows.ps1 -NonInteractive`.
-For the full local desktop interaction check, use `.\scripts\check_packaged_sandbox3d_windows.ps1`.
-To validate the generic external game template against the current Henka checkout, use `.\scripts\test_external_game_template_windows.ps1`.
-
-## Run validation
+Henka keeps engine code and samples separate from actual games. Put game-specific
+assets, scenes, saves, scripts, and private content in another repository. The
+starter projects under `templates/` demonstrate the public runtime boundary:
 
 ```powershell
-.\scripts\check_public_repo_hygiene.ps1
-.\scripts\check_repository_integrity.ps1
-.\scripts\test_windows.ps1
-.\scripts\test_windows.ps1 -Configuration Release
-.\scripts\test_terrain_visual_evidence_windows.ps1
+cmake -S . -B build -DHENKA_ENGINE_DIR="C:/Path/To/HenkaEngine"
+.\scripts\test_external_game_template_windows.ps1
 ```
 
-The GitHub Windows workflow runs the packaged Debug contract and bounded soak, then
-an exact Release build and CTest pass before validating the external game template.
+The external server template links only `henka_runtime`. These templates are
+bounded consumer validation paths, not complete game project serializers. See
+[docs/external-game-projects.md](docs/external-game-projects.md).
+
+## Documentation
+
+- [Detailed current capabilities](docs/current-capabilities.md)
+- [Architecture](docs/architecture.md)
+- [Building and validation](docs/building.md)
+- [Runtime foundations](docs/runtime-foundations.md)
+- [UI and workspace](docs/ui.md)
+- [Model loading](docs/model-loading.md)
+- [Terrain](docs/terrain.md)
+- [Physics](docs/physics.md)
+- [Editor controls and Sandbox help](docs/editor-controls.md) · [offline help](docs/help/sandbox3d.md)
+- [External game projects](docs/external-game-projects.md)
+- [Showcase asset provenance](docs/showcase-assets.md)
+- [Roadmap](docs/roadmap.md)
+- [Branding](docs/branding.md)
+- [Repository integrity](docs/repository-integrity.md)
+- [Contributing](CONTRIBUTING.md)
 
 ## Current limitations
 
-- The sandbox uses built-in plane, cube, UV-sphere, and debug-grid primitives plus bounded OBJ and glTF loading paths.
-- The default showcase assets are intentionally sample-quality procedural glTF models, not movie-production assets; detailed manual visual QA across Solid, Material Preview, and Rendered remains required.
-- Missing textures fall back safely to an error texture, and missing OBJ assets fall back to a visible mesh. Failed OBJ mesh fallbacks can be retried explicitly after the source asset is fixed.
-- OBJ support is intentionally limited to bounded local files containing comments, blank lines, finite positions, optional finite UVs and normals, positive and negative indices, and triangle/quad/n-gon faces through basic fan triangulation.
-- OBJ material libraries and concave polygon correction beyond basic fan triangulation remain unsupported; bounded glTF scene hierarchies are supported, while skeletal animation, skinning, morph targets, and editor hierarchy authoring remain unfinished.
-- The local settings format is bounded, transactionally loaded, and written through a replace-on-success temporary file.
-- The local save-data foundation validates slot names, finite camera values, complete camera records, and boolean flags before replacing existing state.
-- Remote saves, registry storage, encryption, network-backed persistence, symlink-aware confinement, migration tooling, and per-game save policy remain outside this local foundation.
-- The in-window UI overlay is intentionally small. It now enforces matched frame construction, transactional composite drawing, release-confirm controls, object inspection, utility views, and short status feedback, but it is still not a full editor or a general UI toolkit yet.
-- In-app floating panel rectangles, dock widths, dock assignment, and last valid dock are persisted through the local settings file; detached OS windows save and restore bounded virtual-screen positions through the public tool-window state/position path, while malformed or out-of-range positions are ignored. `Reset Layout` remains the recovery path and preserves valid named layout snapshots. The bounded topology graph, split ratios, tab membership/order, closed-section mask, maximize state, active tab, and selected bounded workspace preset now use a versioned validated settings snapshot; the current v2 loader migrates the prior v1 snapshot shape and rejects malformed, future, or incompatible versions without replacing defaults. The workspace header chrome opens the required section context menu without stealing tool-content right-clicks, and executes bounded close, merge/tab-group, equalize, maximize/restore, native-detach, last-closed restoration, and available-singleton split actions. `Close this section` removes the complete section and its tab group; the separate tab-close path removes only the active tab and removes the section when its final tab closes. The existing last-closed restore transaction reopens the prior tab group on failure recovery. Maximizing a docked section now expands that section across the workspace while keeping the scene underneath as a stable presentation surface. The menu also exposes a visible keyboard selection state with Up/Down, Enter, and Escape navigation. Dock stack section order and membership now project from the validated topology, including nested dock section rectangles, one shared thin topology divider per internal split, suppression of closed and merged-away sections, and a DPI-scaled logical divider hit target (10 px at 100%); the visible wire remains one framebuffer pixel. Merged sections expose bounded header tab controls, center-drop drag-to-tab joining, active-content projection, and same-section tab reordering with click-preserving release and rollback on cancellation. The Tools panel exposes deterministic Default, Modeling, Materials, Scene Assembly, Debugging, and Minimal Viewport workspace presets; switching presets participates in the bounded layout undo/redo history, closes detached tool windows through the normal redock path, and subsequent topology edits are labeled Custom. It also exposes three bounded named layout slots—Custom, Studio, and Assembly—that persist validated topology, tab order, closed/maximized state, dock assignments, dock widths, and UI scale and restore after redocking detached panels. Slot names and contents are bounded and local; an unbounded layout marketplace and detachable Scene View remain open.
-- Production tool panels can detach into separate OS-level windows with full matching panel controls, routed mouse input, an explicit Dock L/Dock R/Home return bar, bounded saved virtual-screen placement, safe close-to-redock recovery, and bounded OS-title-bar drag-back docking when a focused detached window is moved into the main-window envelope. Detachable Scene View remains future work.
-- Viewport transform hotkeys use local action profiles. The current profile editor is config-based; a richer in-window controls editor remains future work.
-- The viewport transform gizmo is intentionally scoped to world-axis move, rotate, and scale behavior for the current sandbox object model. The sandbox now also exposes explicit viewport tool modes, diagnostics, and direct transform fallback controls so interaction failures can be diagnosed without assuming the gizmo is the only path.
-- Ordinary selection uses the generic logical scene owner while retaining child identity for materials and component editing. Newly-created or imported authoring wrappers start without a component selection, keeping the object outline visible until the user explicitly picks a vertex, edge, or face. Its cached bounded projected outline namespaces mesh-local topology per contributing visible child, so hidden parts are excluded and concavities, disconnected islands, and multi-primitive roots do not acquire invented connecting edges; small and medium meshes receive exact projected coverage/depth subdivision, while dense imported meshes use the same bounded filtering through a fixed screen-space spatial index, falling back to conservative topology only when that index overflows. Framing and inspection bounds likewise aggregate the visible owner children. It remains a presentation overlay rather than a renderer-owned stencil or mask pass.
-- Signed negative scale is preserved for mirror transforms and bounds remain usable, but advanced mirrored normal, winding, and material-authoring workflows are still early.
-- Rigid-body physics v1 supports static, dynamic, and kinematic bodies with sphere, axis-aligned box, and plane colliders; mesh collision, constraints, controllers, and advanced simulation remain future work.
-- The first 2.5D camera foundation is available through perspective, side, top-down, and isometric sandbox presets with orthographic zoom. Sprites, layered depth, parallax, animation, and movement-plane constraints are not implemented yet.
-- Visual and interaction checks still need manual QA on a local desktop session.
-- HenkaSandbox3D is an engine sample and QA target, not a game. Real games built with Henka should live in separate repositories.
+- Henka and its editor are early-stage; the native workspace is not a complete production editor.
+- 2D, audio, scripting/behaviors, character controllers, advanced physics, broader renderer backends, and mature Game/Play workflows are unfinished.
+- Scene/project serialization, hierarchy authoring, texture painting, automatic UV unwrap, rigging, animation, and several advanced topology tools remain open.
+- The default Giraffe and Rocket are deterministic imported/generated fixtures and editor-owned dogfood derivatives, not proof of user-authored production assets.
+- Automated evidence does not replace human visual QA for editor feel, detached windows, terrain corners, rendering, or modeling quality.
+
+The detailed boundary inventory is maintained in
+[docs/current-capabilities.md](docs/current-capabilities.md), with subsystem
+contracts owned by the linked documentation above.
+
+## Roadmap
+
+Current priorities are runtime and editor integrity, integrated authoring,
+terrain/world usability, renderer and asset hardening, and the next layers of
+2.5D workflow. Longer-term work includes complete Game authoring, 2D,
+animation, audio, scripting, additional renderer backends, and broader release
+distribution. See the [roadmap](docs/roadmap.md) for the maintained direction.
+
+## Support Henka Engine
+
+Henka sponsorship supports development time, testing, documentation, examples,
+packaged builds, asset workflow work, and future workspace/tooling work. Use the
+[GitHub Sponsors page](https://github.com/sponsors/bconnell) or this repository's
+Sponsor button.
+
+Sponsorship is voluntary support. It does not purchase feature priority,
+private support, guaranteed response times, ownership, project-direction
+control, or a different license. Feature decisions remain based on stability,
+maintainability, scope, and usefulness to the wider engine. See
+[SUPPORT.md](SUPPORT.md) for the full terms and other ways to help.
 
 ## License
 

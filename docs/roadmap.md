@@ -1,24 +1,24 @@
 # Roadmap
 
-Henka Engine is an early-stage open source C game engine and development workspace. The active order is existing defect repair and integrity hardening, production-quality 2.5D, and then integrated modeling and content authoring while retaining external-pipeline compatibility.
+Henka Engine is an early-stage open source C game engine and integrated development workspace. The active work combines runtime and integrity hardening with the already-underway modeling/content-authoring foundation, terrain/world usability, renderer and asset hardening, and the next layers of 2.5D while retaining external-pipeline compatibility.
 
 This roadmap is a direction guide, not a release schedule. Priorities may change as the engine matures, testing finds issues, or core systems need more hardening.
 
 ## Current focus
 
-The current work is focused on finding and repairing existing runtime, workspace, renderer, platform, asset, physics, persistence, packaging, and external-project defects before expanding the feature surface.
+The current work is focused on repairing and hardening runtime, workspace, renderer, platform, asset, physics, persistence, packaging, and external-project paths while strengthening the integrated authoring foundation already present in the Sandbox.
 
 Current priorities include:
 
 1. Stable engine startup and shutdown.
-2. Clear platform, renderer, input, scene, and camera boundaries.
-3. Reliable object selection and transform behavior.
-4. Local settings and save-data foundations.
-5. Asset loading for shaders, textures, and simple model data.
-6. A packaged sandbox that can be tested without private setup.
-7. Documentation that stays aligned with what the engine actually does.
-8. Test coverage for core behavior that should not depend on manual QA.
-9. A scoped rigid-body physics layer with sandbox inspection, debug visualization, and clearer body-type guidance.
+2. Clear platform, renderer, input, scene, camera, and authoring boundaries.
+3. Reliable object/component selection and transform behavior.
+4. Transactional modeling, UV, material, persistence, and undo/redo paths.
+5. Terrain editing, streaming, collision, and visual validation.
+6. Asset loading and material ownership with explicit failure behavior.
+7. A packaged sandbox that can be tested without private setup.
+8. Documentation that stays aligned with what the engine actually does.
+9. Test coverage for core behavior that should not depend on manual QA.
 
 ## Near-term priorities
 

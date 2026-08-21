@@ -6,6 +6,7 @@
 #include <stdio.h>
 #include <string.h>
 
+#include <henka/core.h>
 #include <henka/memory.h>
 
 #include "../core/checked.h"
@@ -21,6 +22,7 @@ typedef struct henka_ui_glyph
 #define HENKA_UI_MAX_ID_BYTES ((size_t)255U)
 #define HENKA_UI_MAX_TEXT_BYTES ((size_t)4096U)
 #define HENKA_UI_MAX_SCALE 64.0f
+#define HENKA_UI_OVERLAY_DISC_SAMPLES ((size_t)64U)
 
 static bool henka_ui_float_is_finite(float value)
 {
@@ -1341,6 +1343,80 @@ henka_result henka_ui_overlay_line(henka_ui_context* context, henka_vec2 start, 
     }
 
     return henka_ui_push_line(context, start, end, thickness, color);
+}
+
+henka_result henka_ui_overlay_disc(
+    henka_ui_context* context,
+    henka_vec2 center,
+    float radius,
+    henka_vec4 color)
+{
+    henka_ui_draw_checkpoint checkpoint;
+    const float step = radius * 2.0f / (float)HENKA_UI_OVERLAY_DISC_SAMPLES;
+    size_t index;
+
+    if (context == NULL || !context->frame_active ||
+        !henka_ui_vec2_is_finite(center) || !henka_ui_float_is_finite(radius) ||
+        radius <= 0.0f || !henka_ui_vec4_is_finite(color))
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    henka_ui_capture_checkpoint(context, &checkpoint);
+    for (index = 0U; index < HENKA_UI_OVERLAY_DISC_SAMPLES; ++index)
+    {
+        const float normalized =
+            (((float)index + 0.5f) / (float)HENKA_UI_OVERLAY_DISC_SAMPLES) * 2.0f - 1.0f;
+        const float half_width = radius * sqrtf(fmaxf(0.0f, 1.0f - normalized * normalized));
+        const float y = center.y - radius + ((float)index + 0.5f) * step;
+        const henka_result result = henka_ui_push_line(
+            context,
+            (henka_vec2){center.x - half_width, y},
+            (henka_vec2){center.x + half_width, y},
+            step + 0.75f,
+            color);
+
+        if (result != HENKA_SUCCESS)
+        {
+            henka_ui_restore_checkpoint(context, &checkpoint);
+            return result;
+        }
+    }
+    return HENKA_SUCCESS;
+}
+
+henka_result henka_ui_overlay_circle(
+    henka_ui_context* context,
+    henka_vec2 center,
+    float radius,
+    float thickness,
+    henka_vec4 color)
+{
+    henka_vec2 points[HENKA_UI_OVERLAY_DISC_SAMPLES + 1U];
+    size_t index;
+
+    if (context == NULL || !context->frame_active ||
+        !henka_ui_vec2_is_finite(center) || !henka_ui_float_is_finite(radius) ||
+        radius <= 0.0f || !henka_ui_float_is_finite(thickness) || thickness <= 0.0f ||
+        !henka_ui_vec4_is_finite(color))
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    for (index = 0U; index <= HENKA_UI_OVERLAY_DISC_SAMPLES; ++index)
+    {
+        const float angle = HENKA_PI * 2.0f * (float)index /
+            (float)HENKA_UI_OVERLAY_DISC_SAMPLES;
+        points[index] = (henka_vec2){
+            center.x + cosf(angle) * radius,
+            center.y + sinf(angle) * radius};
+    }
+    return henka_ui_overlay_polyline(
+        context,
+        points,
+        HENKA_UI_OVERLAY_DISC_SAMPLES + 1U,
+        thickness,
+        color);
 }
 
 henka_result henka_ui_overlay_polyline(

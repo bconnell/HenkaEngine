@@ -24,6 +24,8 @@ typedef struct sandbox3d_view_compass_layout
 {
     henka_ui_rect circle_bounds;
     henka_ui_rect info_bounds;
+    henka_ui_rect info_cycle_bounds;
+    henka_ui_rect projection_bounds;
     henka_vec2 center;
     float radius;
     float scale;
