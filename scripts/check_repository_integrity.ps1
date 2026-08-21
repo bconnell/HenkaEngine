@@ -165,6 +165,23 @@ foreach ($relativePath in $trackedPaths) {
     }
 }
 
+$packagedHarnessPath = Join-Path $repoRoot "scripts\check_packaged_sandbox3d_windows.ps1"
+if (Test-Path -LiteralPath $packagedHarnessPath -PathType Leaf) {
+    $packagedHarnessText = [System.IO.File]::ReadAllText($packagedHarnessPath)
+    if ($packagedHarnessText -match '(?i)\b(SetCursorPos|mouse_event|SendInput|keybd_event|SendKeys)\b') {
+        Add-Finding "scripts/check_packaged_sandbox3d_windows.ps1: deterministic UI gate uses global physical input injection"
+    }
+    foreach ($requiredAutomationContract in @(
+        'HENKA_AUTOMATION_INPUT_OWNED',
+        'HENKA_AUTOMATION_INPUT_FILE',
+        'Send-HenkaAutomationKey'
+    )) {
+        if (-not $packagedHarnessText.Contains($requiredAutomationContract)) {
+            Add-Finding "scripts/check_packaged_sandbox3d_windows.ps1: missing application-local automation contract $requiredAutomationContract"
+        }
+    }
+}
+
 $rootCMake = [System.IO.File]::ReadAllText((Join-Path $repoRoot "CMakeLists.txt"))
 if ($rootCMake -notmatch 'GIT_TAG\s+[0-9a-f]{40}') {
     Add-Finding "CMakeLists.txt: SDL dependency is not pinned to a full commit"

@@ -125,6 +125,15 @@ ownership, and higher-priority editor interactions continue to win. A click
 that never crosses the threshold retains existing legitimate context-click
 behavior. No global operating-system input blocking is used.
 
+When automation ownership is enabled, the platform keeps a separate logical
+pointer state and admits only bounded, fully parsed events from the configured
+test stream. Main-window physical pointer motion, buttons, wheel input, and
+ordinary keys are ignored for application interaction; physical Escape is the
+explicit emergency-abort path. Focus loss releases held logical buttons and
+keys, malformed events fail closed and request shutdown, and ownership is
+released during engine teardown. The PowerShell packaged gate is required to
+use this stream rather than OS-level cursor or key injection.
+
 ## Module boundary rule
 
 New substantial behavior belongs in focused engine or Sandbox modules. The

@@ -241,6 +241,18 @@ void henka_test_input(void)
         "button left up 123.0 234.0"));
     HENKA_TEST_ASSERT(!input.mouse_buttons_down[HENKA_MOUSE_BUTTON_LEFT]);
     HENKA_TEST_ASSERT(input.mouse_buttons_released[HENKA_MOUSE_BUTTON_LEFT]);
+    input.mouse_position = (henka_vec2){123.0f, 234.0f};
+    input.mouse_delta = (henka_vec2){0.0f, 0.0f};
+    input.mouse_buttons_released[HENKA_MOUSE_BUTTON_LEFT] = false;
+    HENKA_TEST_ASSERT(!henka_input_automation_apply_event(
+        &input,
+        "button left sideways 999.0 888.0"));
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(input.mouse_position.x, 123.0f, 0.0001f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(input.mouse_position.y, 234.0f, 0.0001f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(input.mouse_delta.x, 0.0f, 0.0001f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(input.mouse_delta.y, 0.0f, 0.0001f);
+    HENKA_TEST_ASSERT(!input.mouse_buttons_down[HENKA_MOUSE_BUTTON_LEFT]);
+    HENKA_TEST_ASSERT(!input.mouse_buttons_released[HENKA_MOUSE_BUTTON_LEFT]);
     HENKA_TEST_ASSERT(henka_input_automation_apply_event(
         &input,
         "key F5 down"));

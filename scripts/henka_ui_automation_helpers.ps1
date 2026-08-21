@@ -26,6 +26,21 @@ public static class HenkaUiAutomationNative
 
     [DllImport("user32.dll")]
     public static extern IntPtr GetForegroundWindow();
+
+    [DllImport("user32.dll")]
+    public static extern uint GetWindowThreadProcessId(
+        IntPtr hWnd,
+        out uint processId);
+
+    [DllImport("kernel32.dll")]
+    public static extern uint GetCurrentThreadId();
+
+    [DllImport("user32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static extern bool AttachThreadInput(
+        uint idAttach,
+        uint idAttachTo,
+        bool fAttach);
 }
 "@
 }
@@ -60,6 +75,111 @@ function Set-HenkaAutomationForeground {
     throw (
         "The Henka UI harness could not acquire its target window as " +
         "foreground within three seconds. No UI assertion was made.")
+}
+
+function Send-HenkaAutomationEvent {
+    param(
+        [Parameter(Mandatory = $true)][string]$EventPath,
+        [Parameter(Mandatory = $true)][string]$EventLine,
+        [int]$SettleMilliseconds = 120
+    )
+
+    if ([string]::IsNullOrWhiteSpace($EventPath) -or
+        [string]::IsNullOrWhiteSpace($EventLine) -or
+        $EventLine.Contains("`r") -or
+        $EventLine.Contains("`n") -or
+        $EventLine.Length -gt 220) {
+        throw "The bounded Henka automation event was invalid."
+    }
+    if ($SettleMilliseconds -lt 0 -or $SettleMilliseconds -gt 5000) {
+        throw "The Henka automation settle interval was outside its bounded range."
+    }
+
+    $encoding = New-Object System.Text.UTF8Encoding($false)
+    $bytes = $encoding.GetBytes($EventLine + [Environment]::NewLine)
+    $stream = $null
+    try {
+        $stream = [System.IO.File]::Open(
+            $EventPath,
+            [System.IO.FileMode]::OpenOrCreate,
+            [System.IO.FileAccess]::Write,
+            [System.IO.FileShare]::ReadWrite)
+        $stream.Seek(0, [System.IO.SeekOrigin]::End) | Out-Null
+        $stream.Write($bytes, 0, $bytes.Length)
+        $stream.Flush($true)
+    }
+    finally {
+        if ($null -ne $stream) {
+            $stream.Dispose()
+        }
+    }
+    if ($SettleMilliseconds -gt 0) {
+        Start-Sleep -Milliseconds $SettleMilliseconds
+    }
+}
+
+function Format-HenkaAutomationFloat {
+    param([Parameter(Mandatory = $true)][double]$Value)
+
+    if ([double]::IsNaN($Value) -or [double]::IsInfinity($Value)) {
+        throw "The Henka automation value was non-finite."
+    }
+    return $Value.ToString("R", [System.Globalization.CultureInfo]::InvariantCulture)
+}
+
+function Send-HenkaAutomationKey {
+    param(
+        [Parameter(Mandatory = $true)][string]$EventPath,
+        [Parameter(Mandatory = $true)][string]$KeyName
+    )
+
+    if ($KeyName -notmatch '^[A-Za-z0-9_]+$') {
+        throw "The Henka automation key name was invalid."
+    }
+    Send-HenkaAutomationEvent -EventPath $EventPath -EventLine ("key {0} down" -f $KeyName)
+    Send-HenkaAutomationEvent -EventPath $EventPath -EventLine ("key {0} up" -f $KeyName)
+}
+
+function Send-HenkaAutomationClick {
+    param(
+        [Parameter(Mandatory = $true)][string]$EventPath,
+        [Parameter(Mandatory = $true)][double]$X,
+        [Parameter(Mandatory = $true)][double]$Y,
+        [ValidateSet("left", "right", "middle")][string]$Button = "left"
+    )
+
+    if ([double]::IsNaN($X) -or [double]::IsInfinity($X) -or
+        [double]::IsNaN($Y) -or [double]::IsInfinity($Y) -or
+        $X -lt 0.0 -or $Y -lt 0.0 -or $X -gt 65536.0 -or $Y -gt 65536.0) {
+        throw "The Henka automation pointer coordinate was invalid."
+    }
+    $xText = Format-HenkaAutomationFloat -Value $X
+    $yText = Format-HenkaAutomationFloat -Value $Y
+    Send-HenkaAutomationEvent -EventPath $EventPath -EventLine ("move {0} {1}" -f $xText, $yText)
+    Send-HenkaAutomationEvent -EventPath $EventPath -EventLine ("button {0} down {1} {2}" -f $Button, $xText, $yText)
+    Send-HenkaAutomationEvent -EventPath $EventPath -EventLine ("button {0} up {1} {2}" -f $Button, $xText, $yText)
+}
+
+function Send-HenkaAutomationScroll {
+    param(
+        [Parameter(Mandatory = $true)][string]$EventPath,
+        [Parameter(Mandatory = $true)][double]$X,
+        [Parameter(Mandatory = $true)][double]$Y,
+        [Parameter(Mandatory = $true)][double]$WheelDelta
+    )
+
+    if ([double]::IsNaN($X) -or [double]::IsInfinity($X) -or
+        [double]::IsNaN($Y) -or [double]::IsInfinity($Y) -or
+        $X -lt 0.0 -or $Y -lt 0.0 -or $X -gt 65536.0 -or $Y -gt 65536.0 -or
+        [double]::IsNaN($WheelDelta) -or [double]::IsInfinity($WheelDelta) -or
+        $WheelDelta -eq 0.0 -or $WheelDelta -lt -1024.0 -or $WheelDelta -gt 1024.0) {
+        throw "The Henka automation wheel delta was invalid."
+    }
+    $xText = Format-HenkaAutomationFloat -Value $X
+    $yText = Format-HenkaAutomationFloat -Value $Y
+    $wheelText = Format-HenkaAutomationFloat -Value $WheelDelta
+    Send-HenkaAutomationEvent -EventPath $EventPath -EventLine ("move {0} {1}" -f $xText, $yText)
+    Send-HenkaAutomationEvent -EventPath $EventPath -EventLine ("wheel 0 {0}" -f $wheelText)
 }
 
 function Wait-FileContains {

@@ -35,10 +35,6 @@ public static class NativeMethods {
         public int Y;
     }
 
-    public const uint MOUSEEVENTF_LEFTDOWN = 0x0002;
-    public const uint MOUSEEVENTF_LEFTUP = 0x0004;
-    public const uint MOUSEEVENTF_WHEEL = 0x0800;
-
     [DllImport("user32.dll")]
     public static extern bool EnumWindows(EnumWindowsProc callback, IntPtr lParam);
 
@@ -75,11 +71,6 @@ public static class NativeMethods {
     [DllImport("user32.dll")]
     public static extern bool ClientToScreen(IntPtr hWnd, ref POINT point);
 
-    [DllImport("user32.dll")]
-    public static extern bool SetCursorPos(int x, int y);
-
-    [DllImport("user32.dll")]
-    public static extern void mouse_event(uint dwFlags, uint dx, uint dy, uint dwData, UIntPtr dwExtraInfo);
 }
 '@
 }

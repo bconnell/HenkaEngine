@@ -252,6 +252,10 @@ bool henka_input_automation_apply_event(
         {
             return false;
         }
+        if (strcmp(second, "down") != 0 && strcmp(second, "up") != 0)
+        {
+            return false;
+        }
         input->mouse_delta.x += x - input->mouse_position.x;
         input->mouse_delta.y += y - input->mouse_position.y;
         input->mouse_position = (henka_vec2){x, y};
@@ -261,13 +265,9 @@ bool henka_input_automation_apply_event(
             input->mouse_buttons_pressed[button] = true;
             return true;
         }
-        if (strcmp(second, "up") == 0)
-        {
-            input->mouse_buttons_down[button] = false;
-            input->mouse_buttons_released[button] = true;
-            return true;
-        }
-        return false;
+        input->mouse_buttons_down[button] = false;
+        input->mouse_buttons_released[button] = true;
+        return true;
     }
 
     if (strcmp(command, "key") == 0)
@@ -1437,8 +1437,12 @@ henka_result henka_platform_poll_events(struct henka_platform* platform, henka_i
                 }
                 platform->last_event_route = HENKA_WINDOW_EVENT_ROUTE_MAIN;
                 key = henka_translate_key(event.key.key);
-                if (input->automation_input_owned && key != HENKA_KEY_ESCAPE)
+                if (input->automation_input_owned)
                 {
+                    if (key == HENKA_KEY_ESCAPE)
+                    {
+                        input->close_requested = true;
+                    }
                     break;
                 }
                 if (key != HENKA_KEY_UNKNOWN && !event.key.repeat)
@@ -1473,7 +1477,7 @@ henka_result henka_platform_poll_events(struct henka_platform* platform, henka_i
                 }
                 platform->last_event_route = HENKA_WINDOW_EVENT_ROUTE_MAIN;
                 key = henka_translate_key(event.key.key);
-                if (input->automation_input_owned && key != HENKA_KEY_ESCAPE)
+                if (input->automation_input_owned)
                 {
                     break;
                 }
