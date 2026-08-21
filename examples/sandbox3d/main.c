@@ -24175,6 +24175,15 @@ details_group_physics:
                             : (play_state == SANDBOX3D_PLAY_SESSION_FAILED
                                 ? "Play Failed"
                                 : "Start Play")));
+                printf(
+                    "Game authoring play controls: name=%s trigger_x=%.1f play_x=%.1f y=%.1f width=%.1f height=26.0 state=%d.\n",
+                    display_name,
+                    row.x,
+                    row.x + button_width + gap,
+                    row.y,
+                    button_width,
+                    (int)play_state);
+                fflush(stdout);
                 if (henka_ui_button(
                         state->ui,
                         "game_authoring_physics_trigger",
@@ -24205,6 +24214,7 @@ details_group_physics:
                     sandbox3d_set_statusf(
                         state,
                         play_result != HENKA_SUCCESS,
+                        true,
                         play_result == HENKA_SUCCESS
                             ? "Play session state changed."
                             : (play_state == SANDBOX3D_PLAY_SESSION_PAUSED_ERROR
@@ -24222,6 +24232,14 @@ details_group_physics:
             {
                 const float gap = 6.0f;
                 const float button_width = (row.width - gap) * 0.5f;
+                printf(
+                    "Game authoring step controls: name=%s step_x=%.1f stop_x=%.1f y=%.1f width=%.1f height=26.0.\n",
+                    display_name,
+                    row.x,
+                    row.x + button_width + gap,
+                    row.y,
+                    button_width);
+                fflush(stdout);
                 if (henka_ui_button(
                         state->ui,
                         "game_authoring_play_step",
@@ -24233,6 +24251,7 @@ details_group_physics:
                     sandbox3d_set_statusf(
                         state,
                         step_result != HENKA_SUCCESS,
+                        true,
                         step_result == HENKA_SUCCESS ? "Play fixed step complete." : "Play fixed step failed: %s.",
                         henka_result_to_string(step_result));
                 }
@@ -24247,7 +24266,8 @@ details_group_physics:
                     sandbox3d_set_statusf(
                         state,
                         stop_result != HENKA_SUCCESS,
-                        stop_result == HENKA_SUCCESS ? "Play stopped; authored state restored." : "Play stop failed: %s.",
+                        true,
+                        stop_result == HENKA_SUCCESS ? "Play stopped; authored state preserved." : "Play stop failed: %s.",
                         henka_result_to_string(stop_result));
                 }
             }
