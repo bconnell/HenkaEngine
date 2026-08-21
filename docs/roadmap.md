@@ -95,12 +95,14 @@ roadmap is finished.
 
 ### Planned
 
-1. Hierarchy/scene-graph authoring, Inspector behavior authoring, and a
+1. Hierarchy/scene-graph authoring, full Inspector behavior authoring, and a
    complete project serializer. The bounded HenkaScript/Lua lifecycle
    adapters, callable VM, language-neutral host schema, typed host dispatch,
    isolated Play Scene Document binding, bounded behavior state, and explicit
    mixed-language event routing are foundation work already available; editor
-   authoring and broader project scripting workflows remain open.
+   authoring and broader project scripting workflows remain open. Bounded
+   Inspector creation and transactional attachment of Lua/HenkaScript behavior
+   templates are already available; source editing and hot reload remain open.
 2. Broader gameplay systems, input mapping, controllers, animation, and
    production game-debugging workflows.
 

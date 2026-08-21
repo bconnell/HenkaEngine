@@ -29,6 +29,80 @@ static bool henka_script_asset_has_suffix(
         strcmp(path + path_length - suffix_length, suffix) == 0;
 }
 
+henka_result henka_script_asset_create_template(
+    const char* project_root,
+    const char* relative_path,
+    henka_script_language language)
+{
+    static const char lua_source[] =
+        "-- Henka Lua V1 behavior template.\n"
+        "function OnCreate()\n"
+        "end\n\n"
+        "function OnStart()\n"
+        "end\n\n"
+        "function OnUpdate()\n"
+        "end\n";
+    static const char hks_source[] =
+        "// HenkaScript V1 behavior template.\n"
+        "fn OnCreate() { }\n"
+        "fn OnStart() { }\n"
+        "fn OnUpdate() { }\n";
+    const char* source;
+    size_t source_size;
+    char* path = NULL;
+    FILE* file = NULL;
+    henka_result result;
+    if (project_root == NULL || project_root[0] == '\0' ||
+        relative_path == NULL || relative_path[0] == '\0' ||
+        (language != HENKA_SCRIPT_LANGUAGE_LUA &&
+         language != HENKA_SCRIPT_LANGUAGE_HENKASCRIPT) ||
+        (language == HENKA_SCRIPT_LANGUAGE_LUA &&
+         !henka_script_asset_has_suffix(relative_path, ".lua")) ||
+        (language == HENKA_SCRIPT_LANGUAGE_HENKASCRIPT &&
+         !henka_script_asset_has_suffix(relative_path, ".hks")))
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    result = henka_path_resolve_confined(project_root, relative_path, &path);
+    if (result != HENKA_SUCCESS)
+    {
+        return result;
+    }
+    result = henka_path_ensure_parent_directory(path);
+    if (result != HENKA_SUCCESS)
+    {
+        henka_free(path);
+        return result;
+    }
+    source = language == HENKA_SCRIPT_LANGUAGE_LUA
+        ? lua_source
+        : hks_source;
+    source_size = strlen(source);
+#if defined(_MSC_VER)
+    if (fopen_s(&file, path, "wbx") != 0)
+    {
+        file = NULL;
+    }
+#else
+    file = fopen(path, "wbx");
+#endif
+    if (file == NULL)
+    {
+        henka_free(path);
+        return HENKA_ERROR_ASSET_SOURCE;
+    }
+    if (fwrite(source, 1U, source_size, file) != source_size ||
+        fflush(file) != 0 ||
+        fclose(file) != 0)
+    {
+        (void)remove(path);
+        henka_free(path);
+        return HENKA_ERROR_ASSET_SOURCE;
+    }
+    henka_free(path);
+    return HENKA_SUCCESS;
+}
+
 static henka_result henka_script_asset_read_source(
     const char* project_root,
     const char* relative_path,

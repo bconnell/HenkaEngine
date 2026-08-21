@@ -34,9 +34,10 @@ that host to its persistent-ID to runtime-entity and physics-body mapping; Lua
 and HenkaScript emit into the same event queue and can receive the same event
 through `OnEvent`. A separate fixed-capacity behavior-state store provides
 explicit sidecar save/load, while remaining outside authored Scene Document
-data and the script asset loader. Broader host API coverage, Inspector
+data and the script asset loader. Broader host API coverage, full Inspector
 authoring, hot reload, and debugger tooling remain later layers above this
-boundary.
+boundary; the current Sandbox exposes a bounded transactional template-
+attachment path above it.
 
 ### Network boundary
 

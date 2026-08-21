@@ -232,6 +232,13 @@ disabled state, Static or Dynamic body type, Box or Sphere shape, and Trigger
 or Solid Collider. Interaction exposes enabled state and the authored prompt.
 These values are Scene Document data, not live Play-session body state.
 
+The same Object Details section provides bounded `Add Lua` and `Add
+HenkaScript` actions for registered objects. Each action creates a confined
+project-relative source template and attaches it to the authored object as one
+transaction; it never overwrites an existing source file. Save Scene is still
+required to persist the attachment. Source editing, exported properties, and
+hot reload are not part of this slice.
+
 The Actions group provides Save Scene and Reload Scene for the confined
 `sandbox3d_scene.hscene` file. While Play is running or paused, authoring edits,
 scene save/reload, and other scene mutations are rejected. Start Play creates

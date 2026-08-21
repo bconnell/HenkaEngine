@@ -111,14 +111,16 @@ turning the public README into an implementation ledger.
    maps persistent object IDs to runtime entities for the current Entity,
    Transform, Physics, and Events slice. A bounded behavior-state store with
    explicit sidecar save/load and mixed-language `OnEvent` routing is also
-   available; complete host API coverage, Inspector authoring, hot reload, and
-   debugger tooling remain unfinished.
+   available; complete host API coverage, full Inspector authoring, hot reload,
+   and debugger tooling remain unfinished. The Inspector can create confined
+   Lua or HenkaScript behavior templates and attach them transactionally; source
+   editing and reload remain unfinished.
    Persisted `.lua` and `.hks` attachments can now be loaded through a bounded,
    confined-path asset loader and assembled into a mixed-language behavior
    runtime by persistent Scene Document object identity. The Sandbox Play
    session owns that runtime for isolated Create/Start/Update/OnEvent/Stop
    dispatch; runtime-entity identity mapping is available in the isolated Play
-   path; broader runtime/resource mapping, Inspector authoring, and project
+   path; broader runtime/resource mapping, full Inspector authoring, and project
    scripting workflows remain unfinished.
 
 ## Modeling / Content Authoring
