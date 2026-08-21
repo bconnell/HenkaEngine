@@ -10,6 +10,7 @@ add_library(henka_runtime STATIC
     src/scripting/script_host.c
     src/scripting/script_state.c
     src/scripting/script_runtime.c
+    src/scripting/script_source.c
     src/scripting/henkascript.c
     src/scripting/henkascript_backend.c
     src/scripting/script_asset.c

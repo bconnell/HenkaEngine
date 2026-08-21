@@ -35,12 +35,12 @@
 - Consumes: `henka_script_language`, `henka_hks_behavior_backend_create`, `henka_lua_behavior_backend_create`, `henka_malloc/calloc/free`, and the existing language size/diagnostic constants.
 - Produces: `henka_script_source_document`, `henka_script_source_diagnostic`, create/destroy, bounded set/get text, validate/get diagnostic, dirty, and revision APIs exactly as defined in the design spec.
 
-- [ ] **Step 1: Write failing tests** for null arguments, both supported languages, bounded source acceptance, over-limit rejection without mutation, NUL-terminated returned text, dirty/revision transitions, and compiler/backend validation diagnostics.
-- [ ] **Step 2: Run the focused test target** and confirm failure because the source-document symbols do not exist.
-- [ ] **Step 3: Implement the fixed-capacity heap-owned document.** Allocate `max_source_bytes + 1`, reject lengths above the language limit, copy exactly `source_size` bytes, append NUL, increment revision only after a successful copy, and set dirty without changing the old buffer on failure.
-- [ ] **Step 4: Implement validation through existing backends.** For HenkaScript call `henka_hks_behavior_backend_create`; for Lua call `henka_lua_behavior_backend_create`; destroy any temporary backend immediately; copy only bounded line, column, code, and message fields into the language-neutral diagnostic.
-- [ ] **Step 5: Build and run `henka_script_source_tests`.** Confirm both valid and invalid sources produce the expected result and no memory-leak report.
-- [ ] **Step 6: Commit** with `feat: add bounded script source documents`.
+- [x] **Step 1: Write failing tests** for null arguments, both supported languages, bounded source acceptance, over-limit rejection without mutation, NUL-terminated returned text, dirty/revision transitions, and compiler/backend validation diagnostics.
+- [x] **Step 2: Run the focused test target** and confirm failure because the source-document symbols do not exist.
+- [x] **Step 3: Implement the fixed-capacity heap-owned document.** Allocate `max_source_bytes + 1`, reject lengths above the language limit, copy exactly `source_size` bytes, append NUL, increment revision only after a successful copy, and set dirty without changing the old buffer on failure.
+- [x] **Step 4: Implement validation through existing backends.** For HenkaScript call `henka_hks_behavior_backend_create`; for Lua call `henka_lua_behavior_backend_create`; destroy any temporary backend immediately; copy only bounded line, column, code, and message fields into the language-neutral diagnostic.
+- [x] **Step 5: Build and run `henka_script_source_tests`.** Confirm both valid and invalid sources produce the expected result and no memory-leak report.
+- [x] **Step 6: Commit** with `feat: add bounded script source documents`.
 
 ### Task 2: Add confined atomic script-source persistence
 

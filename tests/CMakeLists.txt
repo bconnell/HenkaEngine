@@ -102,6 +102,19 @@ henka_enable_project_warnings(henka_script_asset_tests)
 
 add_test(NAME henka_script_asset_tests COMMAND henka_script_asset_tests)
 
+add_executable(henka_script_source_tests
+    test_script_source.c
+)
+
+target_link_libraries(henka_script_source_tests
+    PRIVATE
+        henka_runtime
+)
+
+henka_enable_project_warnings(henka_script_source_tests)
+
+add_test(NAME henka_script_source_tests COMMAND henka_script_source_tests)
+
 add_executable(henka_scene_behavior_runtime_tests
     test_scene_behavior_runtime.c
 )
