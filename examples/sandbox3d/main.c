@@ -27,6 +27,7 @@
 #include "interaction_tools.h"
 #include "terrain_autosave.h"
 #include "physics_tools.h"
+#include "game_authoring.h"
 #include "studio_environment.h"
 #include "workspace_tools.h"
 #include "view_compass.h"
@@ -493,6 +494,7 @@ typedef struct sandbox3d_state
     henka_entity foliage_entity;
     henka_entity realism_entities[SANDBOX3D_REALISM_ENTITY_COUNT];
     sandbox3d_object_descriptor descriptors[SANDBOX3D_OBJECT_COUNT];
+    sandbox3d_game_authoring* game_authoring;
     sandbox3d_workspace_state workspace;
     sandbox3d_gizmo_state gizmo;
     sandbox3d_gizmo_render_state gizmo_render;
@@ -982,6 +984,36 @@ static bool sandbox3d_apply_transform_preview(
     sandbox3d_state* state,
     henka_entity entity,
     henka_transform transform);
+static bool sandbox3d_action_mutates_scene(henka_action_command command)
+{
+    switch (command)
+    {
+        case HENKA_ACTION_COMMAND_CLEAR_SCENE:
+        case HENKA_ACTION_COMMAND_ADD_PRIMITIVE_OBJECT:
+        case HENKA_ACTION_COMMAND_DELETE_OBJECT:
+        case HENKA_ACTION_COMMAND_RENAME_OBJECT:
+        case HENKA_ACTION_COMMAND_SET_POSITION:
+        case HENKA_ACTION_COMMAND_SET_ROTATION:
+        case HENKA_ACTION_COMMAND_SET_SCALE:
+        case HENKA_ACTION_COMMAND_MOVE_BY_DELTA:
+        case HENKA_ACTION_COMMAND_ROTATE_BY_DELTA:
+        case HENKA_ACTION_COMMAND_SCALE_BY_MULTIPLIER:
+        case HENKA_ACTION_COMMAND_RESET_TRANSFORM:
+        case HENKA_ACTION_COMMAND_HIDE_OBJECT:
+        case HENKA_ACTION_COMMAND_SHOW_OBJECT:
+            return true;
+        case HENKA_ACTION_COMMAND_NONE:
+        case HENKA_ACTION_COMMAND_GET_SCENE_SUMMARY:
+        case HENKA_ACTION_COMMAND_SELECT_OBJECT:
+        case HENKA_ACTION_COMMAND_CLEAR_SELECTION:
+        case HENKA_ACTION_COMMAND_GET_SELECTED_OBJECT:
+        case HENKA_ACTION_COMMAND_GET_OBJECT_DETAILS:
+        case HENKA_ACTION_COMMAND_FOCUS_CAMERA_ON_OBJECT:
+        default:
+            return false;
+    }
+}
+
 static bool sandbox3d_execute_action(
     sandbox3d_state* state,
     const henka_action_request* request,
@@ -3231,6 +3263,15 @@ static void sandbox3d_draw_detached_workspace_panel_content(
 static void sandbox3d_build_detached_workspace_panel_ui(henka_engine* engine, sandbox3d_state* state);
 static henka_result sandbox3d_initialize_physics(sandbox3d_state* state);
 static void sandbox3d_update_physics(sandbox3d_state* state, double delta_seconds);
+static henka_result sandbox3d_initialize_game_authoring(
+    henka_engine* engine,
+    sandbox3d_state* state);
+static void sandbox3d_update_game_authoring(
+    sandbox3d_state* state);
+static bool sandbox3d_commit_game_authoring_object(
+    sandbox3d_state* state,
+    henka_entity entity,
+    const henka_scene_document_object* object);
 static henka_terrain_region_id sandbox3d_terrain_region_at_position(
     const henka_terrain_world_desc* world_desc,
     henka_vec3 position)
@@ -8376,6 +8417,106 @@ static henka_result sandbox3d_initialize_physics(sandbox3d_state* state)
         trigger);
 }
 
+static henka_result sandbox3d_initialize_game_authoring(
+    henka_engine* engine,
+    sandbox3d_state* state)
+{
+    size_t index;
+    henka_result result;
+    const char* project_root;
+
+    if (engine == NULL || state == NULL || state->scene == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    result = sandbox3d_game_authoring_create(
+        state->scene,
+        "sandbox3d_scene.hscene",
+        &state->game_authoring);
+    if (result != HENKA_SUCCESS)
+    {
+        return result;
+    }
+    for (index = 0U; index < SANDBOX3D_OBJECT_COUNT; ++index)
+    {
+        henka_scene_document_id document_id;
+        if (index == SANDBOX3D_OBJECT_DEBUG_GRID ||
+            state->descriptors[index].entity == HENKA_INVALID_ENTITY)
+        {
+            continue;
+        }
+        result = sandbox3d_game_authoring_register_entity(
+            state->game_authoring,
+            state->descriptors[index].entity,
+            &document_id);
+        if (result != HENKA_SUCCESS)
+        {
+            return result;
+        }
+    }
+    project_root = henka_engine_get_user_data_base_path(engine);
+    if (project_root != NULL &&
+        sandbox3d_game_authoring_load(state->game_authoring, project_root) == HENKA_SUCCESS)
+    {
+        printf(
+            "Game authoring document loaded: %s.\n",
+            sandbox3d_game_authoring_get_relative_path(state->game_authoring));
+        fflush(stdout);
+    }
+    else
+    {
+        printf(
+            "Game authoring document: no valid saved state; using the current authored scene.\n");
+        fflush(stdout);
+    }
+    return HENKA_SUCCESS;
+}
+
+static void sandbox3d_update_game_authoring(
+    sandbox3d_state* state)
+{
+    if (state == NULL || state->game_authoring == NULL ||
+        sandbox3d_game_authoring_get_play_state(state->game_authoring) !=
+            SANDBOX3D_PLAY_SESSION_RUNNING)
+    {
+        return;
+    }
+    if (sandbox3d_game_authoring_step_play(state->game_authoring) != HENKA_SUCCESS)
+    {
+        sandbox3d_set_status(
+            state,
+            true,
+        "Play session stopped after a fixed-step failure.");
+    }
+}
+
+static bool sandbox3d_commit_game_authoring_object(
+    sandbox3d_state* state,
+    henka_entity entity,
+    const henka_scene_document_object* object)
+{
+    henka_result result;
+    if (state == NULL || state->game_authoring == NULL || object == NULL)
+    {
+        return false;
+    }
+    result = sandbox3d_game_authoring_update_object_for_entity(
+        state->game_authoring,
+        entity,
+        object);
+    if (result != HENKA_SUCCESS)
+    {
+        sandbox3d_set_statusf(
+            state,
+            true,
+            "Game Inspector edit rejected: %s.",
+            henka_result_to_string(result));
+        return false;
+    }
+    sandbox3d_set_status(state, false, "Game Inspector change committed.");
+    return true;
+}
+
 static void sandbox3d_prepare_physics_demo(sandbox3d_state* state)
 {
     henka_transform transform;
@@ -10606,7 +10747,10 @@ static bool sandbox3d_execute_action(
 {
     henka_action_result result;
 
-    if (state == NULL || state->actions == NULL || request == NULL)
+    if (state == NULL || state->actions == NULL || request == NULL ||
+        (state->game_authoring != NULL &&
+         sandbox3d_game_authoring_is_play_locked(state->game_authoring) &&
+         sandbox3d_action_mutates_scene(request->command)))
     {
         return false;
     }
@@ -11872,6 +12016,24 @@ static bool sandbox3d_add_native_rocket_object(henka_engine* engine, sandbox3d_s
         return false;
     }
     (void)sandbox3d_seed_native_rocket_surface_detail(engine, state, entity);
+    if (state->game_authoring != NULL &&
+        sandbox3d_game_authoring_register_entity(
+            state->game_authoring,
+            entity,
+            &(henka_scene_document_id){HENKA_INVALID_SCENE_DOCUMENT_ID}) != HENKA_SUCCESS)
+    {
+        sandbox3d_unregister_authoring_object(state, authoring_object);
+        sandbox3d_release_authoring_physics(state, authoring_object);
+        sandbox3d_authoring_object_destroy(authoring_object);
+        {
+            henka_action_request rollback_request;
+            memset(&rollback_request, 0, sizeof(rollback_request));
+            rollback_request.command = HENKA_ACTION_COMMAND_DELETE_OBJECT;
+            rollback_request.params.entity.entity = entity;
+            (void)sandbox3d_execute_action(state, &rollback_request, NULL);
+        }
+        return false;
+    }
     counts = henka_authoring_mesh_get_counts(
         sandbox3d_authoring_object_get_mesh(authoring_object));
     printf(
@@ -11973,6 +12135,25 @@ static bool sandbox3d_add_primitive_object(henka_engine* engine, sandbox3d_state
         {
             henka_action_request rollback_request;
 
+            memset(&rollback_request, 0, sizeof(rollback_request));
+            rollback_request.command = HENKA_ACTION_COMMAND_DELETE_OBJECT;
+            rollback_request.params.entity.entity = result.affected_entity;
+            (void)sandbox3d_execute_action(state, &rollback_request, NULL);
+        }
+        return false;
+    }
+
+    if (state->game_authoring != NULL &&
+        sandbox3d_game_authoring_register_entity(
+            state->game_authoring,
+            result.affected_entity,
+            &(henka_scene_document_id){HENKA_INVALID_SCENE_DOCUMENT_ID}) != HENKA_SUCCESS)
+    {
+        sandbox3d_unregister_authoring_object(state, authoring_object);
+        sandbox3d_release_authoring_physics(state, authoring_object);
+        sandbox3d_authoring_object_destroy(authoring_object);
+        {
+            henka_action_request rollback_request;
             memset(&rollback_request, 0, sizeof(rollback_request));
             rollback_request.command = HENKA_ACTION_COMMAND_DELETE_OBJECT;
             rollback_request.params.entity.entity = result.affected_entity;
@@ -12263,6 +12444,12 @@ static bool sandbox3d_delete_selected_object(sandbox3d_state* state)
         sandbox3d_release_authoring_physics(state, deleted_authoring_object);
         sandbox3d_unregister_authoring_object(state, deleted_authoring_object);
         sandbox3d_authoring_object_destroy(deleted_authoring_object);
+    }
+    if (state->game_authoring != NULL)
+    {
+        (void)sandbox3d_game_authoring_unregister_entity(
+            state->game_authoring,
+            selected_entity);
     }
     sandbox3d_release_physics_body_for_entity(state, selected_entity);
 
@@ -13647,6 +13834,8 @@ static bool sandbox3d_reset_selected_entity_transform(sandbox3d_state* state)
     entity = sandbox3d_get_real_selected_entity(state);
     descriptor = sandbox3d_get_selected_descriptor(state);
     if (state == NULL || state->scene == NULL || entity == HENKA_INVALID_ENTITY ||
+        (state->game_authoring != NULL &&
+         sandbox3d_game_authoring_is_play_locked(state->game_authoring)) ||
         henka_scene_is_entity_transform_locked(state->scene, entity))
     {
         return false;
@@ -13677,6 +13866,8 @@ static bool sandbox3d_toggle_selected_transform_lock(sandbox3d_state* state)
 
     entity = sandbox3d_get_real_selected_entity(state);
     if (state == NULL || state->scene == NULL || entity == HENKA_INVALID_ENTITY ||
+        (state->game_authoring != NULL &&
+         sandbox3d_game_authoring_is_play_locked(state->game_authoring)) ||
         henka_scene_get_entity_flags(state->scene, entity, &flags) != HENKA_SUCCESS)
     {
         return false;
@@ -13717,7 +13908,9 @@ static bool sandbox3d_toggle_selected_entity_visibility(sandbox3d_state* state)
     henka_entity entity;
 
     entity = sandbox3d_get_real_selected_entity(state);
-    if (state == NULL || state->scene == NULL || state->actions == NULL || entity == HENKA_INVALID_ENTITY)
+    if (state == NULL || state->scene == NULL || state->actions == NULL || entity == HENKA_INVALID_ENTITY ||
+        (state->game_authoring != NULL &&
+         sandbox3d_game_authoring_is_play_locked(state->game_authoring)))
     {
         return false;
     }
@@ -15087,6 +15280,12 @@ static sandbox3d_viewport_tool_mode sandbox3d_get_viewport_tool_for_transform(sa
 
 static bool sandbox3d_handle_transform_hotkeys(henka_engine* engine, sandbox3d_state* state)
 {
+    if (state == NULL ||
+        (state->game_authoring != NULL &&
+         sandbox3d_game_authoring_is_play_locked(state->game_authoring)))
+    {
+        return false;
+    }
     const bool workspace_busy =
         state->workspace.model.active_drag_panel != SANDBOX3D_WORKSPACE_PANEL_NONE ||
         state->workspace.model.active_resize_panel != SANDBOX3D_WORKSPACE_PANEL_NONE ||
@@ -19889,7 +20088,7 @@ static void sandbox3d_draw_scene_objects_panel(
 
         if (!henka_scene_is_entity_visible(state->scene, entity))
         {
-            sandbox3d_truncate_text("Hidden:", subtitle_text, sizeof(subtitle_text), 12U);
+            snprintf(subtitle_text, sizeof(subtitle_text), "%s", "Hidden:");
             snprintf(row_label, sizeof(row_label), "%s %s", subtitle_text, row_label);
         }
 
@@ -20207,6 +20406,8 @@ static void sandbox3d_draw_object_details_panel(
     const char* detail;
     float content_height;
     henka_interaction_desc interaction;
+    henka_scene_document_object authored_object;
+    henka_scene_document_id authored_document_id;
     henka_interaction_result interaction_result;
     sandbox3d_material_editor_binding marker_binding;
     sandbox3d_selected_material_display material_display;
@@ -20224,6 +20425,7 @@ static void sandbox3d_draw_object_details_panel(
     size_t details_group_position;
     size_t authoring_group_index;
     bool prioritize_authoring_group;
+    bool authored_object_available;
 
     if (engine == NULL ||
         state == NULL ||
@@ -20315,6 +20517,14 @@ static void sandbox3d_draw_object_details_panel(
                 0.0f,
                 NULL};
     }
+    authored_document_id = HENKA_INVALID_SCENE_DOCUMENT_ID;
+    authored_object = henka_scene_document_object_default();
+    authored_object_available = state->game_authoring != NULL &&
+        sandbox3d_game_authoring_get_object_for_entity(
+            state->game_authoring,
+            entity,
+            &authored_document_id,
+            &authored_object) == HENKA_SUCCESS;
 
     interaction_result =
         henka_scene_can_interact(
@@ -20334,7 +20544,19 @@ static void sandbox3d_draw_object_details_panel(
         sandbox3d_get_physics_body_for_entity(
             state,
             entity);
-    if (physics_body != HENKA_INVALID_PHYSICS_BODY_ID &&
+    if (authored_object_available)
+    {
+        snprintf(
+            physics_text,
+            sizeof(physics_text),
+            "%s %s %s%s",
+            authored_object.physics.enabled ? "Enabled" : "Disabled",
+            henka_physics_body_type_get_label(authored_object.physics.body_type),
+            henka_physics_shape_type_get_label(authored_object.physics.shape),
+            authored_object.physics.is_trigger ? " trigger" : "");
+        snprintf(velocity_text, sizeof(velocity_text), "%s", "Play session only");
+    }
+    else if (physics_body != HENKA_INVALID_PHYSICS_BODY_ID &&
         henka_physics_body_get_state(
             state->physics.world,
             physics_body,
@@ -20393,7 +20615,21 @@ static void sandbox3d_draw_object_details_panel(
         transform.scale.y,
         transform.scale.z);
 
-    if (!interaction.enabled)
+    if (authored_object_available && !authored_object.interaction.enabled)
+    {
+        snprintf(interaction_text, sizeof(interaction_text), "%s", "Disabled");
+    }
+    else if (authored_object_available)
+    {
+        snprintf(
+            interaction_text,
+            sizeof(interaction_text),
+            "%s",
+            authored_object.interaction.prompt[0] != '\0'
+                ? authored_object.interaction.prompt
+                : "Available");
+    }
+    else if (!interaction.enabled)
     {
         snprintf(
             interaction_text,
@@ -23834,6 +24070,158 @@ details_group_physics:
                 "Velocity",
                 velocity_text);
         }
+        if (authored_object_available)
+        {
+            if (sandbox3d_details_flow_next_row(
+                    state,
+                    flow_desc.bounds,
+                    26.0f,
+                    1U,
+                    &row))
+            {
+                const float gap = 6.0f;
+                const float button_width = (row.width - gap * 2.0f) / 3.0f;
+                if (henka_ui_button(
+                        state->ui,
+                        "game_authoring_physics_enabled",
+                        (henka_ui_rect){row.x, row.y, button_width, row.height},
+                        authored_object.physics.enabled ? "Disable" : "Enable") &&
+                    !sandbox3d_game_authoring_is_play_locked(state->game_authoring))
+                {
+                    authored_object.physics.enabled = !authored_object.physics.enabled;
+                    (void)sandbox3d_commit_game_authoring_object(
+                        state,
+                        entity,
+                        &authored_object);
+                }
+                if (henka_ui_button(
+                        state->ui,
+                        "game_authoring_physics_body",
+                        (henka_ui_rect){row.x + button_width + gap, row.y, button_width, row.height},
+                        authored_object.physics.body_type == HENKA_PHYSICS_BODY_DYNAMIC ? "Static" : "Dynamic") &&
+                    !sandbox3d_game_authoring_is_play_locked(state->game_authoring))
+                {
+                    authored_object.physics.body_type =
+                        authored_object.physics.body_type == HENKA_PHYSICS_BODY_DYNAMIC
+                            ? HENKA_PHYSICS_BODY_STATIC
+                            : HENKA_PHYSICS_BODY_DYNAMIC;
+                    if (authored_object.physics.body_type == HENKA_PHYSICS_BODY_DYNAMIC &&
+                        authored_object.physics.mass <= 0.0f)
+                    {
+                        authored_object.physics.mass = 1.0f;
+                    }
+                    (void)sandbox3d_commit_game_authoring_object(
+                        state,
+                        entity,
+                        &authored_object);
+                }
+                if (henka_ui_button(
+                        state->ui,
+                        "game_authoring_physics_shape",
+                        (henka_ui_rect){row.x + (button_width + gap) * 2.0f, row.y, button_width, row.height},
+                        authored_object.physics.shape == HENKA_PHYSICS_SHAPE_SPHERE ? "Box" : "Sphere") &&
+                    !sandbox3d_game_authoring_is_play_locked(state->game_authoring))
+                {
+                    if (authored_object.physics.shape == HENKA_PHYSICS_SHAPE_SPHERE)
+                    {
+                        authored_object.physics.shape = HENKA_PHYSICS_SHAPE_BOX;
+                    }
+                    else
+                    {
+                        authored_object.physics.shape = HENKA_PHYSICS_SHAPE_SPHERE;
+                    }
+                    (void)sandbox3d_commit_game_authoring_object(
+                        state,
+                        entity,
+                        &authored_object);
+                }
+            }
+            if (sandbox3d_details_flow_next_row(
+                    state,
+                    flow_desc.bounds,
+                    26.0f,
+                    1U,
+                    &row))
+            {
+                const float gap = 6.0f;
+                const float button_width = (row.width - gap) * 0.5f;
+                if (henka_ui_button(
+                        state->ui,
+                        "game_authoring_physics_trigger",
+                        (henka_ui_rect){row.x, row.y, button_width, row.height},
+                        authored_object.physics.is_trigger ? "Solid Collider" : "Trigger") &&
+                    !sandbox3d_game_authoring_is_play_locked(state->game_authoring))
+                {
+                    authored_object.physics.is_trigger = !authored_object.physics.is_trigger;
+                    (void)sandbox3d_commit_game_authoring_object(
+                        state,
+                        entity,
+                        &authored_object);
+                }
+                if (henka_ui_button(
+                        state->ui,
+                        "game_authoring_play",
+                        (henka_ui_rect){row.x + button_width + gap, row.y, button_width, row.height},
+                        sandbox3d_game_authoring_get_play_state(state->game_authoring) == SANDBOX3D_PLAY_SESSION_RUNNING
+                            ? "Pause Play"
+                            : (sandbox3d_game_authoring_get_play_state(state->game_authoring) == SANDBOX3D_PLAY_SESSION_PAUSED
+                                ? "Resume Play"
+                                : "Start Play")))
+                {
+                    henka_result play_result;
+                    const sandbox3d_play_session_state play_state =
+                        sandbox3d_game_authoring_get_play_state(state->game_authoring);
+                    play_result = play_state == SANDBOX3D_PLAY_SESSION_RUNNING
+                        ? sandbox3d_game_authoring_pause_play(state->game_authoring)
+                        : (play_state == SANDBOX3D_PLAY_SESSION_PAUSED
+                            ? sandbox3d_game_authoring_resume_play(state->game_authoring)
+                            : sandbox3d_game_authoring_start_play(state->game_authoring));
+                    sandbox3d_set_statusf(
+                        state,
+                        play_result != HENKA_SUCCESS,
+                        play_result == HENKA_SUCCESS ? "Play session state changed." : "Play session could not start or change state: %s.",
+                        henka_result_to_string(play_result));
+                }
+            }
+            if (sandbox3d_details_flow_next_row(
+                    state,
+                    flow_desc.bounds,
+                    26.0f,
+                    1U,
+                    &row))
+            {
+                const float gap = 6.0f;
+                const float button_width = (row.width - gap) * 0.5f;
+                if (henka_ui_button(
+                        state->ui,
+                        "game_authoring_play_step",
+                        (henka_ui_rect){row.x, row.y, button_width, row.height},
+                        "Step Play") &&
+                    sandbox3d_game_authoring_get_play_state(state->game_authoring) == SANDBOX3D_PLAY_SESSION_PAUSED)
+                {
+                    const henka_result step_result = sandbox3d_game_authoring_step_play(state->game_authoring);
+                    sandbox3d_set_statusf(
+                        state,
+                        step_result != HENKA_SUCCESS,
+                        step_result == HENKA_SUCCESS ? "Play fixed step complete." : "Play fixed step failed: %s.",
+                        henka_result_to_string(step_result));
+                }
+                if (henka_ui_button(
+                        state->ui,
+                        "game_authoring_play_stop",
+                        (henka_ui_rect){row.x + button_width + gap, row.y, button_width, row.height},
+                        "Stop Play") &&
+                    sandbox3d_game_authoring_is_play_locked(state->game_authoring))
+                {
+                    const henka_result stop_result = sandbox3d_game_authoring_stop_play(state->game_authoring);
+                    sandbox3d_set_statusf(
+                        state,
+                        stop_result != HENKA_SUCCESS,
+                        stop_result == HENKA_SUCCESS ? "Play stopped; authored state restored." : "Play stop failed: %s.",
+                        henka_result_to_string(stop_result));
+                }
+            }
+        }
     }
     }
     goto details_group_dispatch;
@@ -23864,6 +24252,28 @@ details_group_interaction:
             row.width,
             "Object Use",
             interaction_text);
+    }
+    if (authored_object_available && state->editor_ui.details_interaction_expanded &&
+        sandbox3d_details_flow_next_row(
+            state,
+            flow_desc.bounds,
+            26.0f,
+            1U,
+            &row))
+    {
+        if (henka_ui_button(
+                state->ui,
+                "game_authoring_interaction_enabled",
+                row,
+                authored_object.interaction.enabled ? "Disable Interaction" : "Enable Interaction") &&
+            !sandbox3d_game_authoring_is_play_locked(state->game_authoring))
+        {
+            authored_object.interaction.enabled = !authored_object.interaction.enabled;
+            (void)sandbox3d_commit_game_authoring_object(
+                state,
+                entity,
+                &authored_object);
+        }
     }
     }
     goto details_group_dispatch;
@@ -24061,6 +24471,49 @@ details_group_actions:
                 sandbox3d_clear_selection(
                     state,
                     "Selection cleared from Object Details.");
+            }
+        }
+        if (state->game_authoring != NULL &&
+            sandbox3d_details_flow_next_row(
+                state,
+                flow_desc.bounds,
+                26.0f,
+                1U,
+                &row))
+        {
+            const float gap = 6.0f;
+            const float button_width = (row.width - gap) * 0.5f;
+            if (henka_ui_button(
+                    state->ui,
+                    "game_authoring_save",
+                    (henka_ui_rect){row.x, row.y, button_width, row.height},
+                    "Save Scene") &&
+                !sandbox3d_game_authoring_is_play_locked(state->game_authoring))
+            {
+                const henka_result save_result = sandbox3d_game_authoring_save(
+                    state->game_authoring,
+                    henka_engine_get_user_data_base_path(engine));
+                sandbox3d_set_statusf(
+                    state,
+                    save_result != HENKA_SUCCESS,
+                    save_result == HENKA_SUCCESS ? "Game scene saved." : "Game scene save failed: %s.",
+                    henka_result_to_string(save_result));
+            }
+            if (henka_ui_button(
+                    state->ui,
+                    "game_authoring_load",
+                    (henka_ui_rect){row.x + button_width + gap, row.y, button_width, row.height},
+                    "Reload Scene") &&
+                !sandbox3d_game_authoring_is_play_locked(state->game_authoring))
+            {
+                const henka_result load_result = sandbox3d_game_authoring_load(
+                    state->game_authoring,
+                    henka_engine_get_user_data_base_path(engine));
+                sandbox3d_set_statusf(
+                    state,
+                    load_result != HENKA_SUCCESS,
+                    load_result == HENKA_SUCCESS ? "Game scene reloaded transactionally." : "Game scene reload failed; current state retained: %s.",
+                    henka_result_to_string(load_result));
             }
         }
     }
@@ -27052,6 +27505,11 @@ static henka_result sandbox3d_initialize(henka_engine* engine, void* user_data)
     {
         goto fail;
     }
+    result = sandbox3d_initialize_game_authoring(engine, state);
+    if (result != HENKA_SUCCESS)
+    {
+        goto fail;
+    }
     if (state->authoring_object != NULL)
     {
         const henka_physics_body_id authoring_body =
@@ -27311,6 +27769,8 @@ static henka_result sandbox3d_initialize(henka_engine* engine, void* user_data)
     return HENKA_SUCCESS;
 
 fail:
+    sandbox3d_game_authoring_destroy(state->game_authoring);
+    state->game_authoring = NULL;
     sandbox3d_release_owned_resources(state);
     return result;
 }
@@ -29695,6 +30155,7 @@ static void sandbox3d_update(henka_engine* engine, double delta_seconds, void* u
     }
 
     sandbox3d_update_physics(state, delta_seconds);
+    sandbox3d_update_game_authoring(state);
     henka_scene_set_camera(state->scene, &state->camera);
     sandbox3d_report_capture_ready(engine, state);
     sandbox3d_update_gizmo_rendering(state);
@@ -29958,6 +30419,8 @@ static void sandbox3d_shutdown(henka_engine* engine, void* user_data)
     sandbox3d_destroy_material_editor_bindings(
         state->material_editor_bindings,
         SANDBOX3D_MAX_MATERIAL_EDITOR_BINDINGS);
+    sandbox3d_game_authoring_destroy(state->game_authoring);
+    state->game_authoring = NULL;
     sandbox3d_release_owned_resources(state);
 }
 

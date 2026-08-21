@@ -290,6 +290,8 @@ henka_result sandbox3d_scene_document_bridge_apply_object(
     const sandbox3d_scene_document_bridge* bridge,
     henka_scene_document_id document_id)
 {
+    henka_scene_object_info previous_info;
+    henka_interaction_desc previous_interaction;
     henka_scene_document_object object;
     henka_interaction_desc interaction;
     henka_entity entity;
@@ -297,6 +299,11 @@ henka_result sandbox3d_scene_document_bridge_apply_object(
     if (bridge == NULL || bridge->play_locked ||
         sandbox3d_scene_document_bridge_get_bound_object(
             bridge, document_id, &object, &entity) != HENKA_SUCCESS)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    if (henka_scene_get_entity_info(bridge->scene, entity, &previous_info) != HENKA_SUCCESS ||
+        henka_scene_get_entity_interaction(bridge->scene, entity, &previous_interaction) != HENKA_SUCCESS)
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
@@ -319,7 +326,31 @@ henka_result sandbox3d_scene_document_bridge_apply_object(
         object.interaction.enabled,
         object.interaction.max_distance,
         object.interaction.prompt};
-    return henka_scene_set_entity_interaction(bridge->scene, entity, &interaction);
+    result = henka_scene_set_entity_interaction(bridge->scene, entity, &interaction);
+    if (result == HENKA_SUCCESS)
+    {
+        return HENKA_SUCCESS;
+    }
+
+    /* Every value above was validated before publication. Restore the
+     * complete runtime presentation if a later setter rejects the update. */
+    (void)henka_scene_set_entity_name(
+        bridge->scene,
+        entity,
+        previous_info.name == NULL ? "" : previous_info.name);
+    (void)henka_scene_set_entity_transform(
+        bridge->scene,
+        entity,
+        previous_info.transform);
+    (void)henka_scene_set_entity_visible(
+        bridge->scene,
+        entity,
+        previous_info.visible);
+    (void)henka_scene_set_entity_interaction(
+        bridge->scene,
+        entity,
+        &previous_interaction);
+    return result;
 }
 
 henka_result sandbox3d_scene_document_bridge_sync_object(

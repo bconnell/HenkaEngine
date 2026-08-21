@@ -53,7 +53,7 @@ Other operating systems are not currently claimed as supported.
 | 2.5D | Foundation | Perspective/side/top/isometric camera workflows and orthographic zoom |
 | Networking/server | Foundation | Renderer-free runtime, dedicated host, bounded Terrain authority paths |
 | External projects | Foundation | Separate game/server templates with Windows validation |
-| Game authoring | Planned | Broader scene/project, Play, hierarchy, and content workflows remain open |
+| Game authoring | Foundation | Bounded Scene Document, authored Physics/Interaction, Save/Reload, and Play-session restoration |
 | 2D | Planned | Dedicated 2D renderer, sprites, layers, parallax, and animation remain open |
 | Audio | Planned | No current audio workflow |
 | Scripting/behaviors | Planned | No current scripting runtime |

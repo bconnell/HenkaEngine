@@ -91,6 +91,7 @@ int main(void)
     henka_scene_document_object maximum_id_object;
     henka_scene_document_object recycled_id_object;
     henka_scene_document_id first_id = HENKA_INVALID_SCENE_DOCUMENT_ID;
+    henka_scene_document_id added_id = HENKA_INVALID_SCENE_DOCUMENT_ID;
     henka_scene_document_id duplicate_id = HENKA_INVALID_SCENE_DOCUMENT_ID;
     char inspection[HENKA_SCENE_DOCUMENT_MAX_INSPECTION_BYTES];
     size_t index;
@@ -121,13 +122,14 @@ int main(void)
         object.interaction.enabled = index % 3U == 0U;
         object.interaction.max_distance = 12.0f;
         (void)snprintf(object.interaction.prompt, sizeof(object.interaction.prompt), "Use object %zu", index);
-        if (henka_scene_document_add_object(document, &object, &first_id) != HENKA_SUCCESS)
+        if (henka_scene_document_add_object(document, &object, &added_id) != HENKA_SUCCESS)
         {
             goto cleanup;
         }
         if (index == 0U)
         {
-            const henka_scene_document_id original_id = first_id;
+            const henka_scene_document_id original_id = added_id;
+            first_id = added_id;
             if (henka_scene_document_duplicate_object(document, original_id, &duplicate_id) != HENKA_SUCCESS ||
                 duplicate_id == original_id)
             {
@@ -144,6 +146,7 @@ int main(void)
             document, inspection, sizeof(inspection), &inspection_size) != HENKA_SUCCESS ||
         inspection_size == 0U || strstr(inspection, "HSCN version=1 objects=97") == NULL)
     {
+        fprintf(stderr, "scene document test failed during deterministic save/inspection\n");
         goto cleanup;
     }
     if (henka_scene_document_load_file(loaded, ".", first_path) != HENKA_SUCCESS ||
@@ -153,6 +156,7 @@ int main(void)
         loaded_object.source.kind != HENKA_SCENE_DOCUMENT_SOURCE_PRIMITIVE ||
         henka_scene_document_get_object(loaded, duplicate_id, &loaded_object) != HENKA_SUCCESS)
     {
+        fprintf(stderr, "scene document test failed during round-trip load\n");
         goto cleanup;
     }
     if (henka_scene_document_save_file(document, ".", "../escape.hscene") != HENKA_ERROR_INVALID_ARGUMENT ||
@@ -160,6 +164,7 @@ int main(void)
         henka_scene_document_load_file(loaded, ".", malformed_path) == HENKA_SUCCESS ||
         henka_scene_document_get_object_count(loaded) != 97U)
     {
+        fprintf(stderr, "scene document test failed during confinement/malformed retention\n");
         goto cleanup;
     }
     if (!test_scene_document_patch_u32(first_path, 36L, UINT32_C(1)) ||
@@ -169,6 +174,7 @@ int main(void)
         henka_scene_document_load_file(loaded, ".", second_path) == HENKA_SUCCESS ||
         henka_scene_document_get_object_count(loaded) != 97U)
     {
+        fprintf(stderr, "scene document test failed during corrupted-header retention\n");
         goto cleanup;
     }
     maximum_id_object = henka_scene_document_object_default();
@@ -180,6 +186,7 @@ int main(void)
         henka_scene_document_add_object(exhausted, &recycled_id_object, &duplicate_id) != HENKA_ERROR_LIMIT ||
         henka_scene_document_validate(exhausted) != HENKA_SUCCESS)
     {
+        fprintf(stderr, "scene document test failed during ID exhaustion checks\n");
         goto cleanup;
     }
     result = 0;

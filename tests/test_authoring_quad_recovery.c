@@ -1,9 +1,18 @@
-#include <assert.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 
 #include <henka/authoring_mesh.h>
+
+#define HENKA_TEST_ASSERT(condition) \
+    do \
+    { \
+        if (!(condition)) \
+        { \
+            fprintf(stderr, "authoring quad recovery assertion failed: %s\\n", #condition); \
+            exit(EXIT_FAILURE); \
+        } \
+    } while (0)
 
 static henka_result make_two_triangle_quad(
     bool uv_seam,
@@ -129,21 +138,21 @@ static void test_recovers_square_quad(void)
     uint32_t render_indices[12];
     henka_authoring_render_data render_data;
 
-    assert(make_two_triangle_quad(false, &mesh) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(make_two_triangle_quad(false, &mesh) == HENKA_SUCCESS);
 
-    assert(henka_authoring_mesh_recover_quads(
+    HENKA_TEST_ASSERT(henka_authoring_mesh_recover_quads(
         mesh,
         0.94f,
         1.10f,
         0.0001f,
         &merged) == HENKA_SUCCESS);
 
-    assert(merged == 1U);
+    HENKA_TEST_ASSERT(merged == 1U);
 
     counts = henka_authoring_mesh_get_counts(mesh);
-    assert(counts.vertices == 4U);
-    assert(counts.faces == 1U);
-    assert(counts.edges == 4U);
+    HENKA_TEST_ASSERT(counts.vertices == 4U);
+    HENKA_TEST_ASSERT(counts.faces == 1U);
+    HENKA_TEST_ASSERT(counts.edges == 4U);
 
     for (face_id = 1U;
          face_id <= HENKA_AUTHORING_MESH_HARD_MAX_FACES;
@@ -156,8 +165,8 @@ static void test_recovers_square_quad(void)
         }
     }
 
-    assert(recovered != NULL);
-    assert(recovered->corner_count == 4U);
+    HENKA_TEST_ASSERT(recovered != NULL);
+    HENKA_TEST_ASSERT(recovered->corner_count == 4U);
 
     render_data.vertices = render_vertices;
     render_data.vertex_capacity =
@@ -168,11 +177,11 @@ static void test_recovers_square_quad(void)
         sizeof(render_indices) / sizeof(render_indices[0]);
     render_data.index_count = 0U;
 
-    assert(henka_authoring_mesh_evaluate(
+    HENKA_TEST_ASSERT(henka_authoring_mesh_evaluate(
         mesh,
         &render_data) == HENKA_SUCCESS);
 
-    assert(render_data.index_count == 6U);
+    HENKA_TEST_ASSERT(render_data.index_count == 6U);
 
     henka_authoring_mesh_destroy(mesh);
 }
@@ -183,9 +192,9 @@ static void test_preserves_uv_seam(void)
     henka_authoring_mesh_counts counts;
     size_t merged = 0U;
 
-    assert(make_two_triangle_quad(true, &mesh) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(make_two_triangle_quad(true, &mesh) == HENKA_SUCCESS);
 
-    assert(henka_authoring_mesh_recover_quads(
+    HENKA_TEST_ASSERT(henka_authoring_mesh_recover_quads(
         mesh,
         0.94f,
         1.10f,
@@ -194,8 +203,8 @@ static void test_preserves_uv_seam(void)
 
     counts = henka_authoring_mesh_get_counts(mesh);
 
-    assert(merged == 0U);
-    assert(counts.faces == 2U);
+    HENKA_TEST_ASSERT(merged == 0U);
+    HENKA_TEST_ASSERT(counts.faces == 2U);
 
     henka_authoring_mesh_destroy(mesh);
 }

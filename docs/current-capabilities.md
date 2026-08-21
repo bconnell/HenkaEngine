@@ -79,6 +79,27 @@ turning the public README into an implementation ledger.
 - See [ui.md](ui.md), [editor-controls.md](editor-controls.md), and
   [help/sandbox3d.md](help/sandbox3d.md).
 
+## Game Authoring Foundation
+
+- The Sandbox has a bounded Game Authoring V1 path for its registered scene
+  objects. Persistent Scene Document IDs are mapped to generation-checked
+  runtime entities through a dedicated adapter; runtime handles are not
+  serialized.
+- Object Details exposes authored Physics and Interaction values for bound
+  objects, including primitive body/shape and trigger choices, interaction
+  enablement, and prompt inspection. Edits validate before the working scene
+  is updated.
+- Save Scene and Reload Scene use the confined, checksummed `.hscene` format.
+  Candidate loads, rebinding, and runtime presentation updates fail closed and
+  retain the prior authoring state on failure.
+- Play, Pause, Resume, Step, and Stop are owned by a dedicated bounded session.
+  Runtime bodies and simulation transforms remain outside persistence; Stop
+  restores the authored snapshot, and active Play rejects authoring changes
+  and scene save/reload.
+- This is a foundation, not a complete game editor. Hierarchy authoring,
+  broader imported-object registration, complete source/material/project
+  serialization, scripting, and production gameplay workflows remain open.
+
 ## Modeling / Content Authoring
 
 - Object, Vertex, Edge, and Face workflows are integrated into the sandbox.
@@ -168,9 +189,10 @@ turning the public README into an implementation ledger.
 - Settings and save slots use confined paths, bounded identifiers, complete
   record validation, same-directory temporary files, flush/close-before-replace
   behavior, and failure retention of the prior in-memory state.
-- Authoring sources use the versioned HAMS format. A complete scene/project
-  authoring serializer and remote/network-backed save policy are not yet
-  available.
+- Authoring sources use the versioned HAMS format, and the Sandbox Game
+  Authoring V1 path uses a bounded, checksummed `.hscene` Scene Document for
+  registered objects. A complete scene/project serializer and
+  remote/network-backed save policy are not yet available.
 - See [persistence.md](persistence.md) and [authoring-mesh.md](authoring-mesh.md).
 
 ## External Project Support
@@ -206,7 +228,7 @@ turning the public README into an implementation ledger.
   editor or project-authoring suite.
 - 2D workflow, audio, scripting/behaviors, character controllers, advanced
   physics, broader renderer backends, and mature Game/Play workflows remain
-  future work.
+  future work beyond the current bounded authoring/play foundation.
 - Advanced asset authoring, hierarchy authoring, animation/rigging, texture
   painting, automatic UV unwrap, complete scene serialization, and some
   renderer/terrain visual validation remain open.

@@ -226,6 +226,19 @@ The `Object Details` panel shows the current selection.
 - full Object Details mode also shows the bounded effective material description for the selected object, shared definition identity, instance override values, semantic texture dependencies, and transactional reimport status; a complete authoring panel is not implemented yet
 - safe actions for visibility, camera focus, transform reset, and console info output
 
+For a registered scene object in the Game authoring context, Object Details
+also shows authored Physics and Interaction groups. Physics exposes enabled or
+disabled state, Static or Dynamic body type, Box or Sphere shape, and Trigger
+or Solid Collider. Interaction exposes enabled state and the authored prompt.
+These values are Scene Document data, not live Play-session body state.
+
+The Actions group provides Save Scene and Reload Scene for the confined
+`sandbox3d_scene.hscene` file. While Play is running or paused, authoring edits,
+scene save/reload, and other scene mutations are rejected. Start Play creates
+bounded runtime bodies from the authored values; Pause, Resume, and Step
+control the fixed session, and Stop restores the authored transforms and
+visibility.
+
 Tools Main and Object Details use fixed panel headers and bounded scrollable
 bodies. Their property groups have stable internal identities, persistent
 expanded/collapsed state, and recomputed scroll extents after collapse or

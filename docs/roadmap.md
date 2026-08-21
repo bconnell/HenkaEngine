@@ -66,6 +66,40 @@ Planned workspace improvements include:
 
 These features should appear only when they are wired into the engine, tested, documented, and useful.
 
+## Game authoring foundation
+
+The Sandbox now has a bounded Game Authoring V1 slice. It is an integrated
+foundation that shares the Scene Document, runtime scene, physics, workspace,
+and persistence boundaries; it is not a claim that the complete game-editor
+roadmap is finished.
+
+### Available
+
+1. Persistent Scene Document object IDs mapped through a bounded adapter to
+   generation-checked runtime entities.
+2. Authored Physics and Interaction values in Object Details for registered
+   scene objects.
+3. Confined, checksummed `.hscene` Save Scene and Reload Scene operations with
+   candidate validation and failure retention.
+4. A dedicated Play session with Start, Pause, Resume, Step, Stop, authored
+   snapshot restoration, and an active-session mutation/save barrier.
+
+### In Progress
+
+1. Broader registration and materialization of imported and externally-authored
+   objects.
+2. More complete source, renderer/material, hierarchy, and scene/project
+   serialization while retaining runtime-resource ownership boundaries.
+3. Numeric inspector editing, richer gameplay components, and expanded manual
+   packaged validation.
+
+### Planned
+
+1. Hierarchy/scene-graph authoring, scripting and behavior authoring, and a
+   complete project serializer.
+2. Broader gameplay systems, input mapping, controllers, animation, and
+   production game-debugging workflows.
+
 ## Asset and material workflow
 
 The asset pipeline is still early, but it already has a manager-owned metadata,
@@ -188,19 +222,22 @@ the integrated authoring work already present.
 Settings and save slots use confined paths, bounded identifiers, validated
 records, same-directory temporary files, flush/close-before-replace behavior,
 and failure retention of prior in-memory state. Versioned HAMS authoring
-sources, bounded authoring project save/reload, material history, and workspace
-layout history are also available.
+sources, bounded authoring project save/reload, the checksummed V1 `.hscene`
+Scene Document path, material history, and workspace layout history are also
+available.
 
 ### Current Development
 
 The next persistence work is to extend these bounded foundations into broader
-scene/project data, more complete authoring history coverage, and durable
-cross-workflow versioning without weakening transactional failure behavior.
+scene/project data, imported-object and component coverage, more complete
+authoring history, and durable cross-workflow versioning without weakening
+transactional failure behavior.
 
 ### Future Work
 
-A complete scene/project authoring serializer and remote or network-backed save
-policy remain future work.
+A complete project-wide authoring serializer, hierarchy/project manifests, and
+remote or network-backed save policy remain future work beyond the current HAMS
+and V1 `.hscene` foundations.
 
 ## Longer-term systems
 

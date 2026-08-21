@@ -59,6 +59,25 @@ add_test(
     COMMAND henka_sandbox3d_play_session_tests
 )
 
+add_executable(henka_sandbox3d_game_authoring_tests
+    ../examples/sandbox3d/scene_document_bridge.c
+    ../examples/sandbox3d/play_session.c
+    ../examples/sandbox3d/game_authoring.c
+    test_sandbox3d_game_authoring.c
+)
+
+target_link_libraries(henka_sandbox3d_game_authoring_tests
+    PRIVATE
+        henka_runtime
+)
+
+henka_enable_project_warnings(henka_sandbox3d_game_authoring_tests)
+
+add_test(
+    NAME henka_sandbox3d_game_authoring_tests
+    COMMAND henka_sandbox3d_game_authoring_tests
+)
+
 if(WIN32)
     add_test(
         NAME henka_fullscreen_presentation_mapping_tests

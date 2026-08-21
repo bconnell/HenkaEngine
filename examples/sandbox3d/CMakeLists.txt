@@ -15,6 +15,7 @@ add_executable(henka_sandbox3d
     editor_layout.c
     scene_document_bridge.c
     play_session.c
+    game_authoring.c
     main.c
 )
 
