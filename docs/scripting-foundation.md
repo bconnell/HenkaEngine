@@ -15,6 +15,9 @@ HenkaScript V1 front-end.
 - A bounded Script Host that deduplicates resolved API bindings.
 - A bounded HenkaScript lexer/parser/type checker exposed through
   `<henka/henkascript.h>`.
+- Bounded callable bytecode generation and an allocation-free typed VM with
+  fixed stack storage, checked arithmetic, deterministic reports, and an
+  instruction budget.
 - Explicit typed declarations (`i32 health = 3;`) and inferred declarations
   (`count := health + 1;`).
 - Brace-delimited `fn` and `behavior` callables, arithmetic expressions,
@@ -31,14 +34,15 @@ dispatch mechanism.
 
 ## What is not available yet
 
-The HenkaScript front-end parses and type-checks source in memory; it does not
-yet emit bytecode or execute source code. The foundation does not load `.lua`
-or `.hks` assets, dispatch lifecycle events, or expose a scripting editor.
-Scene Document behavior metadata is persisted, but runtime Behavior components,
-Lua compilation/VM support, HenkaScript bytecode/VM support, Inspector
-authoring, hot reload, runtime budgets, and mixed-language events remain
-subsequent implementation slices.
+The HenkaScript compiler and VM currently execute bounded callable-local
+bytecode. They do not yet initialize persistent global state, resolve the
+language-neutral Script Host bindings, load `.lua` or `.hks` assets, dispatch
+lifecycle events, or expose a scripting editor. Scene Document behavior
+metadata is persisted, but runtime Behavior components, Lua compilation/VM
+support, Inspector authoring, hot reload, and mixed-language events remain
+subsequent implementation slices. VM instruction budgets are available now;
+per-behavior runtime ownership and lifecycle budgets are not.
 
-The current schema and HenkaScript front-end are therefore engine integration
-foundations, not a claim that executable scripting is already available to
-end-user projects.
+The current schema, HenkaScript compiler, and bounded VM are therefore engine
+integration foundations, not a claim that complete executable scripting is
+already available to end-user projects.

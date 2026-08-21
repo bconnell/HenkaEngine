@@ -12,6 +12,9 @@
 #define HENKA_HKS_MAX_BINDINGS 128U
 #define HENKA_HKS_MAX_CALLABLES 64U
 #define HENKA_HKS_MAX_AST_NODES 2048U
+#define HENKA_HKS_MAX_BYTECODE 8192U
+#define HENKA_HKS_MAX_VM_STACK 256U
+#define HENKA_HKS_DEFAULT_INSTRUCTION_BUDGET 1024U
 #define HENKA_HKS_MAX_IDENTIFIER_BYTES 64U
 #define HENKA_HKS_MAX_DIAGNOSTIC_BYTES 192U
 
@@ -104,7 +107,41 @@ typedef struct henka_hks_callable_info
 {
     char name[HENKA_HKS_MAX_IDENTIFIER_BYTES];
     bool behavior;
+    size_t bytecode_offset;
+    size_t bytecode_length;
+    size_t local_count;
 } henka_hks_callable_info;
+
+typedef struct henka_hks_value
+{
+    henka_hks_value_type type;
+    union
+    {
+        bool boolean;
+        int32_t i32;
+        uint32_t u32;
+        float f32;
+    } as;
+} henka_hks_value;
+
+typedef enum henka_hks_execution_result
+{
+    HENKA_HKS_EXECUTION_COMPLETED = 0,
+    HENKA_HKS_EXECUTION_INVALID_PROGRAM,
+    HENKA_HKS_EXECUTION_STACK_OVERFLOW,
+    HENKA_HKS_EXECUTION_STACK_UNDERFLOW,
+    HENKA_HKS_EXECUTION_TYPE_ERROR,
+    HENKA_HKS_EXECUTION_DIVIDE_BY_ZERO,
+    HENKA_HKS_EXECUTION_UNSUPPORTED_VALUE,
+    HENKA_HKS_EXECUTION_BUDGET_EXHAUSTED
+} henka_hks_execution_result;
+
+typedef struct henka_hks_execution_report
+{
+    henka_hks_execution_result result;
+    uint32_t instructions_executed;
+    size_t stack_depth;
+} henka_hks_execution_report;
 
 henka_result henka_hks_lex(
     const char* source,
@@ -132,5 +169,12 @@ henka_result henka_hks_program_get_callable(
     size_t index,
     henka_hks_callable_info* out_callable);
 size_t henka_hks_program_get_ast_node_count(const henka_hks_program* program);
+
+henka_hks_execution_result henka_hks_execute(
+    const henka_hks_program* program,
+    size_t callable_index,
+    uint32_t instruction_budget,
+    henka_hks_value* out_return_value,
+    henka_hks_execution_report* out_report);
 
 #endif

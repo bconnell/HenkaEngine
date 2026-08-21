@@ -105,6 +105,7 @@ static void test_rejects_unsafe_or_invalid_source(void)
     expect_diagnostic("i32 x = missing;", HENKA_HKS_DIAGNOSTIC_UNKNOWN_NAME);
     expect_diagnostic("fn Update() { i32 x = 1; x = missing; }", HENKA_HKS_DIAGNOSTIC_UNKNOWN_NAME);
     expect_diagnostic("fn Update() {} fn Update() {}", HENKA_HKS_DIAGNOSTIC_DUPLICATE_NAME);
+    expect_diagnostic("i32 x = 2147483648;", HENKA_HKS_DIAGNOSTIC_INVALID_LITERAL);
     expect_diagnostic("i32 x = 1", HENKA_HKS_DIAGNOSTIC_UNEXPECTED_TOKEN);
     expect_diagnostic("i32 x = \"unterminated;", HENKA_HKS_DIAGNOSTIC_INVALID_LITERAL);
 
@@ -149,6 +150,64 @@ static void test_argument_and_memory_contracts(void)
     henka_hks_program_destroy(program);
 }
 
+static henka_hks_program* compile_program(const char* source)
+{
+    henka_hks_program* program = NULL;
+    henka_hks_diagnostic diagnostic;
+
+    memset(&diagnostic, 0, sizeof(diagnostic));
+    assert(henka_hks_compile(source, strlen(source), &program, &diagnostic) == HENKA_SUCCESS);
+    assert(program != NULL);
+    return program;
+}
+
+static void test_bounded_vm_execution(void)
+{
+    henka_hks_value value;
+    henka_hks_execution_report report;
+    henka_hks_program* program;
+    henka_hks_callable_info callable;
+
+    program = compile_program("fn Compute() { i32 x = 3; x = x * 4 + 2; return x; }");
+    assert(henka_hks_program_get_callable_count(program) == 1U);
+    memset(&callable, 0, sizeof(callable));
+    assert(henka_hks_program_get_callable(program, 0U, &callable) == HENKA_SUCCESS);
+    assert(callable.bytecode_length > 0U);
+    assert(callable.local_count == 1U);
+    memset(&value, 0, sizeof(value));
+    memset(&report, 0, sizeof(report));
+    assert(henka_hks_execute(program, 0U, 100U, &value, &report) == HENKA_HKS_EXECUTION_COMPLETED);
+    assert(value.type == HENKA_HKS_TYPE_I32);
+    assert(value.as.i32 == 14);
+    assert(report.instructions_executed > 0U);
+    henka_hks_program_destroy(program);
+
+    program = compile_program("fn Toggle() { bool enabled = true; return enabled; }");
+    assert(henka_hks_execute(program, 0U, 100U, &value, &report) == HENKA_HKS_EXECUTION_COMPLETED);
+    assert(value.type == HENKA_HKS_TYPE_BOOL && value.as.boolean);
+    henka_hks_program_destroy(program);
+
+    program = compile_program("fn Divide() { f32 value = 1.5; value = value / 0.0; return value; }");
+    assert(henka_hks_execute(program, 0U, 100U, &value, &report) == HENKA_HKS_EXECUTION_DIVIDE_BY_ZERO);
+    assert(report.instructions_executed > 0U);
+    henka_hks_program_destroy(program);
+
+    program = compile_program("fn Overflow() { i32 value = 2147483647; value = value + 1; return value; }");
+    assert(henka_hks_execute(program, 0U, 100U, &value, &report) == HENKA_HKS_EXECUTION_TYPE_ERROR);
+    henka_hks_program_destroy(program);
+
+    program = compile_program("fn Unsupported() { return \"text\"; }");
+    assert(henka_hks_execute(program, 0U, 100U, &value, &report) == HENKA_HKS_EXECUTION_UNSUPPORTED_VALUE);
+    henka_hks_program_destroy(program);
+
+    program = compile_program("fn Budget() { i32 value = 1; value = value + 1; return value; }");
+    assert(henka_hks_execute(program, 0U, 1U, &value, &report) == HENKA_HKS_EXECUTION_BUDGET_EXHAUSTED);
+    assert(report.instructions_executed == 1U);
+    assert(henka_hks_execute(program, 1U, 100U, &value, &report) == HENKA_HKS_EXECUTION_INVALID_PROGRAM);
+    assert(henka_hks_execute(program, 0U, 100U, NULL, &report) == HENKA_HKS_EXECUTION_COMPLETED);
+    henka_hks_program_destroy(program);
+}
+
 int main(void)
 {
     const size_t allocations_before = henka_memory_get_allocation_count();
@@ -156,6 +215,7 @@ int main(void)
     test_lex_and_compile_valid_program();
     test_rejects_unsafe_or_invalid_source();
     test_argument_and_memory_contracts();
+    test_bounded_vm_execution();
     assert(henka_memory_get_allocation_count() == allocations_before);
     puts("henka_henkascript_tests: PASS");
     return 0;
