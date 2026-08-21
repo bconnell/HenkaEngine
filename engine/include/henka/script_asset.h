@@ -6,6 +6,7 @@
 
 #include <henka/scene_document.h>
 #include <henka/script_runtime.h>
+#include <henka/script_source.h>
 
 typedef struct henka_script_behavior_asset henka_script_behavior_asset;
 
@@ -26,6 +27,19 @@ henka_result henka_script_asset_read_source(
     const char* relative_path,
     char** out_source,
     size_t* out_source_size);
+
+/* Loads or atomically saves a bounded editable source document under a
+ * confined project-relative path. Loading marks the document clean. Saving
+ * permits invalid source for recovery, but marks the document clean only
+ * after the destination replacement succeeds. */
+henka_result henka_script_asset_load_source_document(
+    const char* project_root,
+    const char* relative_path,
+    henka_script_source_document** out_document);
+henka_result henka_script_asset_save_source_document(
+    const char* project_root,
+    const char* relative_path,
+    henka_script_source_document* document);
 
 /* Loads one persisted Scene Document behavior source from a confined project
  * path and owns the selected bounded language backend until destruction. */

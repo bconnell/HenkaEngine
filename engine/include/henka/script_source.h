@@ -36,6 +36,12 @@ henka_result henka_script_source_get_text(
     const henka_script_source_document* document,
     const char** out_source,
     size_t* out_source_size);
+henka_script_language henka_script_source_get_language(
+    const henka_script_source_document* document);
+/* Used by a persistence boundary only after the complete source has been
+ * durably replaced. Editors should not call this before a successful save. */
+henka_result henka_script_source_mark_clean(
+    henka_script_source_document* document);
 
 /* Validation delegates to the selected language backend. It does not retain
  * or activate the temporary compiled backend. */

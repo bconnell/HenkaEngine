@@ -33,7 +33,7 @@
 
 **Interfaces:**
 - Consumes: `henka_script_language`, `henka_hks_behavior_backend_create`, `henka_lua_behavior_backend_create`, `henka_malloc/calloc/free`, and the existing language size/diagnostic constants.
-- Produces: `henka_script_source_document`, `henka_script_source_diagnostic`, create/destroy, bounded set/get text, validate/get diagnostic, dirty, and revision APIs exactly as defined in the design spec.
+- Produces: `henka_script_source_document`, `henka_script_source_diagnostic`, create/destroy, bounded set/get text, language/clean-state persistence hooks, validate/get diagnostic, dirty, and revision APIs exactly as defined in the design spec.
 
 - [x] **Step 1: Write failing tests** for null arguments, both supported languages, bounded source acceptance, over-limit rejection without mutation, NUL-terminated returned text, dirty/revision transitions, and compiler/backend validation diagnostics.
 - [x] **Step 2: Run the focused test target** and confirm failure because the source-document symbols do not exist.
@@ -55,12 +55,12 @@
   `henka_script_asset_load_source_document(const char*, const char*, henka_script_source_document**)` and
   `henka_script_asset_save_source_document(const char*, const char*, const henka_script_source_document*)`.
 
-- [ ] **Step 1: Add failing persistence tests** for successful load, language suffix mismatch, traversal rejection, source-size limit rejection, successful replacement, old-file retention after a deliberately invalid destination/path failure, and temporary-file cleanup.
-- [ ] **Step 2: Run `henka_script_asset_tests`** and confirm the new symbols/tests fail before implementation.
-- [ ] **Step 3: Implement confined load** by resolving the path, reading through the existing bounded source reader, creating a document for the behavior language inferred from the suffix, and setting its loaded text clean.
-- [ ] **Step 4: Implement atomic save** with a bounded unique sibling temporary path, `wb`/`fopen_s` on the temporary file, complete write/flush/close checks, platform replacement, and cleanup on every failure path. Do not require validation before writing.
-- [ ] **Step 5: Run the script asset tests** and inspect the destination bytes before and after failure to prove transactional retention.
-- [ ] **Step 6: Commit** with `feat: add transactional script source persistence`.
+- [x] **Step 1: Add failing persistence tests** for successful load, language suffix mismatch, traversal rejection, source-size limit rejection, successful replacement, old-file retention after a deliberately invalid destination/path failure, and temporary-file cleanup.
+- [x] **Step 2: Run `henka_script_asset_tests`** and confirm the new symbols/tests fail before implementation.
+- [x] **Step 3: Implement confined load** by resolving the path, reading through the existing bounded source reader, creating a document for the behavior language inferred from the suffix, and setting its loaded text clean.
+- [x] **Step 4: Implement atomic save** with a bounded unique sibling temporary path, `wb`/`fopen_s` on the temporary file, complete write/flush/close checks, platform replacement, and cleanup on every failure path. Do not require validation before writing.
+- [x] **Step 5: Run the script asset tests** and inspect the destination bytes before and after failure to prove transactional retention.
+- [x] **Step 6: Commit** with `feat: add transactional script source persistence`.
 
 ### Task 3: Connect source documents to the structured editor
 

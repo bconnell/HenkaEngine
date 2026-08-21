@@ -7,6 +7,12 @@
 #include <henka/persistence.h>
 #include <henka/script_backends.h>
 
+#if defined(_WIN32)
+#include <windows.h>
+#else
+#include <stdatomic.h>
+#endif
+
 #ifndef HENKA_ENABLE_LUA
 #define HENKA_ENABLE_LUA 1
 #endif
@@ -18,15 +24,98 @@ struct henka_script_behavior_asset
     henka_script_behavior_desc runtime_desc;
 };
 
+#define HENKA_SCRIPT_ASSET_TEMPORARY_SUFFIX_BYTES 40U
+
+#if defined(_WIN32)
+static volatile LONG g_henka_script_asset_save_sequence = 0L;
+#else
+static atomic_uint g_henka_script_asset_save_sequence = 0U;
+#endif
+
+static uint32_t henka_script_asset_next_save_sequence(void)
+{
+#if defined(_WIN32)
+    return (uint32_t)InterlockedIncrement(&g_henka_script_asset_save_sequence);
+#else
+    return atomic_fetch_add_explicit(
+        &g_henka_script_asset_save_sequence,
+        1U,
+        memory_order_relaxed) + 1U;
+#endif
+}
+
 static bool henka_script_asset_has_suffix(
     const char* path,
     const char* suffix)
 {
     const size_t path_length = path == NULL ? 0U : strlen(path);
     const size_t suffix_length = suffix == NULL ? 0U : strlen(suffix);
-    return path_length >= suffix_length &&
-        suffix_length > 0U &&
+    return path_length >= suffix_length && suffix_length > 0U &&
         strcmp(path + path_length - suffix_length, suffix) == 0;
+}
+
+static henka_script_language henka_script_asset_language_for_path(
+    const char* relative_path)
+{
+    if (henka_script_asset_has_suffix(relative_path, ".lua"))
+    {
+        return HENKA_SCRIPT_LANGUAGE_LUA;
+    }
+    if (henka_script_asset_has_suffix(relative_path, ".hks"))
+    {
+        return HENKA_SCRIPT_LANGUAGE_HENKASCRIPT;
+    }
+    return HENKA_SCRIPT_LANGUAGE_NONE;
+}
+
+static henka_result henka_script_asset_make_temporary_relative_path(
+    const char* relative_path,
+    char** out_relative_path)
+{
+    const size_t relative_length = relative_path == NULL ? 0U : strlen(relative_path);
+    char* temporary_relative_path;
+    int written;
+    if (out_relative_path == NULL || relative_path == NULL ||
+        relative_length > SIZE_MAX - HENKA_SCRIPT_ASSET_TEMPORARY_SUFFIX_BYTES)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    temporary_relative_path = (char*)henka_malloc(
+        relative_length + HENKA_SCRIPT_ASSET_TEMPORARY_SUFFIX_BYTES);
+    if (temporary_relative_path == NULL)
+    {
+        return HENKA_ERROR_OUT_OF_MEMORY;
+    }
+    written = snprintf(
+        temporary_relative_path,
+        relative_length + HENKA_SCRIPT_ASSET_TEMPORARY_SUFFIX_BYTES,
+        "%s.tmp.%lu",
+        relative_path,
+        (unsigned long)henka_script_asset_next_save_sequence());
+    if (written < 0 ||
+        (size_t)written >= relative_length + HENKA_SCRIPT_ASSET_TEMPORARY_SUFFIX_BYTES)
+    {
+        henka_free(temporary_relative_path);
+        return HENKA_ERROR_LIMIT;
+    }
+    *out_relative_path = temporary_relative_path;
+    return HENKA_SUCCESS;
+}
+
+static bool henka_script_asset_atomic_replace(
+    const char* temporary_path,
+    const char* path)
+{
+#if defined(_WIN32)
+    return temporary_path != NULL && path != NULL &&
+        MoveFileExA(
+            temporary_path,
+            path,
+            MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH) != 0;
+#else
+    return temporary_path != NULL && path != NULL &&
+        rename(temporary_path, path) == 0;
+#endif
 }
 
 henka_result henka_script_asset_create_template(
@@ -185,6 +274,147 @@ henka_result henka_script_asset_read_source(
     *out_source = source;
     *out_source_size = source_size;
     return HENKA_SUCCESS;
+}
+
+henka_result henka_script_asset_load_source_document(
+    const char* project_root,
+    const char* relative_path,
+    henka_script_source_document** out_document)
+{
+    henka_script_language language;
+    henka_script_source_document* document = NULL;
+    char* source = NULL;
+    size_t source_size = 0U;
+    henka_result result;
+    if (out_document == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    *out_document = NULL;
+    language = henka_script_asset_language_for_path(relative_path);
+    if (project_root == NULL || project_root[0] == '\0' ||
+        relative_path == NULL || relative_path[0] == '\0' ||
+        language == HENKA_SCRIPT_LANGUAGE_NONE)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    result = henka_script_asset_read_source(
+        project_root,
+        relative_path,
+        &source,
+        &source_size);
+    if (result != HENKA_SUCCESS)
+    {
+        return result;
+    }
+    result = henka_script_source_create(language, &document);
+    if (result == HENKA_SUCCESS)
+    {
+        result = henka_script_source_set_text(document, source, source_size);
+    }
+    if (result == HENKA_SUCCESS)
+    {
+        result = henka_script_source_mark_clean(document);
+    }
+    henka_free(source);
+    if (result != HENKA_SUCCESS)
+    {
+        henka_script_source_destroy(document);
+        return result;
+    }
+    *out_document = document;
+    return HENKA_SUCCESS;
+}
+
+henka_result henka_script_asset_save_source_document(
+    const char* project_root,
+    const char* relative_path,
+    henka_script_source_document* document)
+{
+    const char* source = NULL;
+    char* path = NULL;
+    char* temporary_relative_path = NULL;
+    char* temporary_path = NULL;
+    size_t source_size = 0U;
+    henka_script_language language;
+    FILE* file = NULL;
+    henka_result result;
+    int close_result;
+    if (project_root == NULL || project_root[0] == '\0' ||
+        relative_path == NULL || relative_path[0] == '\0' || document == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    language = henka_script_source_get_language(document);
+    if (language == HENKA_SCRIPT_LANGUAGE_NONE ||
+        henka_script_asset_language_for_path(relative_path) != language ||
+        henka_script_source_get_text(document, &source, &source_size) != HENKA_SUCCESS)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    result = henka_path_resolve_confined(project_root, relative_path, &path);
+    if (result != HENKA_SUCCESS)
+    {
+        return result;
+    }
+    result = henka_script_asset_make_temporary_relative_path(
+        relative_path,
+        &temporary_relative_path);
+    if (result != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    result = henka_path_resolve_confined(
+        project_root,
+        temporary_relative_path,
+        &temporary_path);
+    if (result != HENKA_SUCCESS ||
+        henka_path_ensure_parent_directory(path) != HENKA_SUCCESS)
+    {
+        result = HENKA_ERROR_ASSET_SOURCE;
+        goto cleanup;
+    }
+#if defined(_MSC_VER)
+    if (fopen_s(&file, temporary_path, "wb") != 0)
+    {
+        file = NULL;
+    }
+#else
+    file = fopen(temporary_path, "wb");
+#endif
+    if (file == NULL)
+    {
+        result = HENKA_ERROR_ASSET_SOURCE;
+        goto cleanup;
+    }
+    if ((source_size > 0U && fwrite(source, 1U, source_size, file) != source_size) ||
+        fflush(file) != 0)
+    {
+        result = HENKA_ERROR_ASSET_SOURCE;
+        goto cleanup;
+    }
+    close_result = fclose(file);
+    file = NULL;
+    if (close_result != 0 || !henka_script_asset_atomic_replace(temporary_path, path))
+    {
+        result = HENKA_ERROR_ASSET_SOURCE;
+        goto cleanup;
+    }
+    result = henka_script_source_mark_clean(document);
+
+cleanup:
+    if (file != NULL)
+    {
+        (void)fclose(file);
+    }
+    if (result != HENKA_SUCCESS && temporary_path != NULL)
+    {
+        (void)remove(temporary_path);
+    }
+    henka_free(temporary_path);
+    henka_free(temporary_relative_path);
+    henka_free(path);
+    return result;
 }
 
 henka_result henka_script_behavior_asset_create(

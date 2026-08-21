@@ -9,6 +9,7 @@
 #include <henka/memory.h>
 #include <henka/scene_document.h>
 #include <henka/script_asset.h>
+#include <henka/script_source.h>
 
 static henka_scene_document_behavior make_behavior(
     henka_script_language language,
@@ -172,6 +173,90 @@ static void test_exclusive_script_templates(void)
     (void)remove(hks_path);
 }
 
+static void write_binary_file(const char* path, const char* source)
+{
+    FILE* file = NULL;
+    const size_t source_size = strlen(source);
+#if defined(_MSC_VER)
+    assert(fopen_s(&file, path, "wb") == 0);
+#else
+    file = fopen(path, "wb");
+    assert(file != NULL);
+#endif
+    assert(fwrite(source, 1U, source_size, file) == source_size);
+    assert(fclose(file) == 0);
+}
+
+static void test_source_document_persistence(void)
+{
+    static const char valid_source[] =
+        "function OnCreate()\n"
+        "end\n";
+    static const char invalid_source[] =
+        "function OnCreate(\n"
+        "end\n";
+    static const char lua_path[] = "test_tmp/source_authoring.lua";
+    static const char hks_path[] = "test_tmp/source_authoring.hks";
+    const char* loaded_source = NULL;
+    char* retained_source = NULL;
+    size_t loaded_source_size = 0U;
+    henka_script_source_document* document = NULL;
+    henka_script_source_document* loaded_document = NULL;
+    henka_script_source_diagnostic diagnostic;
+
+    (void)remove(lua_path);
+    (void)remove(hks_path);
+    write_binary_file(lua_path, "old source\n");
+    assert(henka_script_source_create(
+               HENKA_SCRIPT_LANGUAGE_LUA, &document) == HENKA_SUCCESS);
+    assert(henka_script_source_set_text(
+               document, valid_source, strlen(valid_source)) == HENKA_SUCCESS);
+    assert(henka_script_asset_save_source_document(
+               ".", lua_path, document) == HENKA_SUCCESS);
+    assert(!henka_script_source_is_dirty(document));
+    assert(henka_script_asset_load_source_document(
+               ".", lua_path, &loaded_document) == HENKA_SUCCESS);
+    assert(henka_script_source_get_language(loaded_document) == HENKA_SCRIPT_LANGUAGE_LUA);
+    assert(!henka_script_source_is_dirty(loaded_document));
+    assert(henka_script_source_get_text(
+               loaded_document, &loaded_source, &loaded_source_size) == HENKA_SUCCESS);
+    assert(loaded_source_size == strlen(valid_source));
+    assert(strcmp(loaded_source, valid_source) == 0);
+    henka_script_source_destroy(loaded_document);
+    loaded_document = NULL;
+
+    assert(henka_script_source_set_text(
+               document, invalid_source, strlen(invalid_source)) == HENKA_SUCCESS);
+    memset(&diagnostic, 0, sizeof(diagnostic));
+    assert(henka_script_source_validate(document, &diagnostic) != HENKA_SUCCESS);
+    assert(henka_script_asset_save_source_document(
+               ".", lua_path, document) == HENKA_SUCCESS);
+    assert(!henka_script_source_is_dirty(document));
+    assert(henka_script_asset_save_source_document(
+               ".", hks_path, document) == HENKA_ERROR_INVALID_ARGUMENT);
+    assert(henka_script_asset_load_source_document(
+               ".", "../source_authoring.lua", &loaded_document) != HENKA_SUCCESS);
+    assert(loaded_document == NULL);
+
+    assert(henka_script_source_set_text(
+               document, valid_source, strlen(valid_source)) == HENKA_SUCCESS);
+    write_binary_file(lua_path, "retained destination\n");
+    assert(henka_script_asset_save_source_document(
+               lua_path, "nested.lua", document) != HENKA_SUCCESS);
+    assert(henka_script_source_is_dirty(document));
+    retained_source = NULL;
+    loaded_source_size = 0U;
+    assert(henka_script_asset_read_source(
+               ".", lua_path, &retained_source, &loaded_source_size) == HENKA_SUCCESS);
+    assert(loaded_source_size == strlen("retained destination\n"));
+    assert(strcmp(retained_source, "retained destination\n") == 0);
+    henka_free(retained_source);
+
+    henka_script_source_destroy(document);
+    (void)remove(lua_path);
+    (void)remove(hks_path);
+}
+
 int main(void)
 {
     const size_t allocations_before = henka_memory_get_allocation_count();
@@ -182,6 +267,7 @@ int main(void)
     test_mixed_language_runtime_assets();
     test_asset_path_and_source_rejection();
     test_exclusive_script_templates();
+    test_source_document_persistence();
     assert(henka_memory_get_allocation_count() == allocations_before);
     puts("henka_script_asset_tests: PASS");
     return 0;

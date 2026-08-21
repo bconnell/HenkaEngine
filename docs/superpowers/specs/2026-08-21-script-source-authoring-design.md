@@ -48,6 +48,10 @@ henka_result henka_script_source_get_text(
     const henka_script_source_document* document,
     const char** out_source,
     size_t* out_source_size);
+henka_script_language henka_script_source_get_language(
+    const henka_script_source_document* document);
+henka_result henka_script_source_mark_clean(
+    henka_script_source_document* document);
 henka_result henka_script_source_validate(
     henka_script_source_document* document,
     henka_script_source_diagnostic* out_diagnostic);
@@ -86,8 +90,10 @@ The save path must:
 7. leave the previous destination byte-for-byte intact when validation or I/O
    fails.
 
-The source document is marked clean only after replacement succeeds. A failed
-save leaves its text and dirty state available to the editor.
+The source document is marked clean only after replacement succeeds. The
+persistence boundary is the only intended caller of
+`henka_script_source_mark_clean`; a failed save leaves its text and dirty state
+available to the editor.
 
 ## Editor behavior
 

@@ -196,6 +196,23 @@ henka_result henka_script_source_get_text(
     return HENKA_SUCCESS;
 }
 
+henka_script_language henka_script_source_get_language(
+    const henka_script_source_document* document)
+{
+    return document == NULL ? HENKA_SCRIPT_LANGUAGE_NONE : document->language;
+}
+
+henka_result henka_script_source_mark_clean(
+    henka_script_source_document* document)
+{
+    if (document == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    document->dirty = false;
+    return HENKA_SUCCESS;
+}
+
 henka_result henka_script_source_validate(
     henka_script_source_document* document,
     henka_script_source_diagnostic* out_diagnostic)
