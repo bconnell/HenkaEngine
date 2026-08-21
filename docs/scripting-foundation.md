@@ -55,7 +55,9 @@ execution adapters for both languages.
 - HenkaScript contact/interaction handlers can read the bounded
   `event_other_entity()` and `event_type()` context values; those built-ins
   fail closed when executed outside a typed signal callback, and Entity
-  equality/inequality is available for bounded signal branching.
+  equality/inequality is available for bounded signal branching. The typed
+  `entity_is_valid(entity)` intrinsic resolves through the shared
+  `Entity.IsValid` host binding and returns a checked boolean.
 - Fixed token, binding, callable, AST-node, identifier, diagnostic, and source
   size limits. `let` and `var` are rejected rather than treated as alternate
   declaration semantics.
@@ -74,8 +76,9 @@ execution adapters for both languages.
   results rather than reaching through renderer or authoring pointers.
 - Lua behaviors can call the shared host surface through checked `Entity`,
   `Transform`, `Input`, `Physics`, `Interaction`, and `Events` tables. The
-  HenkaScript V1 surface currently exposes the same event identity through the
-  bounded `emit(i32_event_id);` builtin. Both languages can receive the same
+  HenkaScript surface can call the shared `Entity.IsValid` operation and
+  exposes the same event identity through the bounded `emit(i32_event_id);`
+  builtin. Both languages can receive the same
   queued event through `OnEvent`; Lua receives `(event_id, source_entity)` and
   HenkaScript reads the event ID through `event_id()`.
 - The Scene behavior runtime drains only the events present at the beginning

@@ -304,6 +304,59 @@ static void test_signal_context_access(void)
     henka_hks_program_destroy(program);
 }
 
+static henka_result test_entity_is_valid_dispatch(
+    void* user_data,
+    uint32_t api_id,
+    const henka_script_api_value* arguments,
+    size_t argument_count,
+    henka_script_api_value* out_value)
+{
+    (void)user_data;
+    if (api_id != HENKA_SCRIPT_API_ENTITY_IS_VALID ||
+        arguments == NULL || argument_count != 1U || out_value == NULL ||
+        arguments[0].type != HENKA_SCRIPT_API_VALUE_ENTITY)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    *out_value = (henka_script_api_value){
+        HENKA_SCRIPT_API_VALUE_BOOL,
+        {.boolean = arguments[0].as.entity == 99U}};
+    return HENKA_SUCCESS;
+}
+
+static void test_entity_host_contract(void)
+{
+    henka_hks_program* program = compile_program(
+        "fn Check() { "
+        "entity target = event_other_entity(); "
+        "if (entity_is_valid(target)) { return 1; } "
+        "return 0; "
+        "}");
+    henka_script_host* host = NULL;
+    henka_hks_execution_context context;
+    henka_hks_execution_report report;
+    henka_hks_value value;
+
+    assert(henka_script_host_create(&host) == HENKA_SUCCESS);
+    assert(henka_script_host_bind_api(
+               host, HENKA_SCRIPT_API_ENTITY_IS_VALID, &(size_t){0U}) == HENKA_SUCCESS);
+    assert(henka_script_host_set_dispatcher(
+               host, test_entity_is_valid_dispatch, NULL) == HENKA_SUCCESS);
+    context = (henka_hks_execution_context){
+        host, 42U, 3U, 11U, false, 0U, 99U, 99U, 7U, true};
+    assert(henka_hks_execute_with_context(
+               program, 0U, 128U, &context, &value, &report) ==
+           HENKA_HKS_EXECUTION_COMPLETED);
+    assert(value.type == HENKA_HKS_TYPE_I32 && value.as.i32 == 1);
+    context.event_other_entity = 100U;
+    assert(henka_hks_execute_with_context(
+               program, 0U, 128U, &context, &value, &report) ==
+           HENKA_HKS_EXECUTION_COMPLETED);
+    assert(value.type == HENKA_HKS_TYPE_I32 && value.as.i32 == 0);
+    henka_script_host_destroy(host);
+    henka_hks_program_destroy(program);
+}
+
 static void test_state_host_contract(void)
 {
     static const char source[] =
@@ -372,6 +425,7 @@ int main(void)
     test_bounded_while_and_loop_control();
     test_bounded_for_and_loop_control();
     test_signal_context_access();
+    test_entity_host_contract();
     test_state_host_contract();
     assert(henka_memory_get_allocation_count() == allocations_before);
     puts("henka_henkascript_tests: PASS");
