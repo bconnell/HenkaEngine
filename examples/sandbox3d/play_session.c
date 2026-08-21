@@ -741,12 +741,6 @@ henka_result sandbox3d_play_session_start(sandbox3d_play_session* session)
         }
         if (result == HENKA_SUCCESS)
         {
-            result = henka_scene_behavior_runtime_dispatch_events(
-                session->behavior_runtime,
-                &report);
-        }
-        if (result == HENKA_SUCCESS)
-        {
             result = henka_scene_behavior_runtime_dispatch(
                 session->behavior_runtime,
                 HENKA_SCRIPT_LIFECYCLE_START,

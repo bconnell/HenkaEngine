@@ -20,9 +20,12 @@ int main(void)
     henka_transform transform;
     henka_transform stepped_transform;
     henka_script_host* script_host;
+    henka_script_state_store* script_state_store = NULL;
+    henka_script_state_value state_value = {0};
     henka_script_api_value arguments[2];
     henka_script_api_value output;
     henka_script_event script_event;
+    bool state_present = false;
     henka_result tick_result = HENKA_SUCCESS;
     size_t tick_count;
     int exit_code = 1;
@@ -35,7 +38,7 @@ int main(void)
         object.behaviors[0].asset_path,
         sizeof(object.behaviors[0].asset_path),
         "%s",
-        "tests/fixtures/scripts/mixed.hks");
+        "tests/fixtures/scripts/publisher.hks");
     object.behaviors[1] = henka_scene_document_behavior_default();
     object.behaviors[1].id = 11U;
     object.behaviors[1].language = HENKA_SCRIPT_LANGUAGE_LUA;
@@ -43,11 +46,12 @@ int main(void)
         object.behaviors[1].asset_path,
         sizeof(object.behaviors[1].asset_path),
         "%s",
-        "tests/fixtures/scripts/mixed.lua");
+        "tests/fixtures/scripts/subscriber.lua");
 
     if (henka_scene_document_create(&document) != HENKA_SUCCESS ||
         henka_scene_create(&scene) != HENKA_SUCCESS ||
-        henka_physics_world_create(&physics_world) != HENKA_SUCCESS)
+        henka_physics_world_create(&physics_world) != HENKA_SUCCESS ||
+        henka_script_state_store_create(&script_state_store) != HENKA_SUCCESS)
     {
         goto cleanup;
     }
@@ -63,10 +67,22 @@ int main(void)
         sandbox3d_scene_document_bridge_bind(bridge, object_id, entity) != HENKA_SUCCESS ||
         sandbox3d_scene_document_bridge_apply_object(bridge, object_id) != HENKA_SUCCESS ||
         sandbox3d_play_session_create(bridge, physics_world, &session) != HENKA_SUCCESS ||
+        sandbox3d_play_session_set_script_state_store(session, script_state_store) != HENKA_SUCCESS ||
         sandbox3d_play_session_get_state(session) != SANDBOX3D_PLAY_SESSION_STOPPED ||
         sandbox3d_play_session_start(session) != HENKA_SUCCESS ||
         sandbox3d_play_session_get_state(session) != SANDBOX3D_PLAY_SESSION_RUNNING ||
         (script_host = sandbox3d_play_session_get_script_host(session)) == NULL)
+    {
+        goto cleanup;
+    }
+    if (henka_script_state_store_get(
+            script_state_store,
+            (henka_script_state_identity){object_id, 11U},
+            90U,
+            &state_value,
+            &state_present) != HENKA_SUCCESS ||
+        !state_present || state_value.type != HENKA_SCRIPT_STATE_VALUE_I32 ||
+        state_value.as.i32 != 7)
     {
         goto cleanup;
     }
@@ -198,6 +214,7 @@ cleanup:
     sandbox3d_play_session_destroy(session);
     sandbox3d_scene_document_bridge_destroy(bridge);
     henka_physics_world_destroy(physics_world);
+    henka_script_state_store_destroy(script_state_store);
     henka_scene_destroy(scene);
     henka_scene_document_destroy(document);
     return exit_code;
