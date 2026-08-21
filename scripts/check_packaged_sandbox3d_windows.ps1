@@ -2184,6 +2184,27 @@ try {
         if (-not $nativeFaceModeObserved) {
             throw "The user-facing Face selection mode did not become active."
         }
+        $nativeFacePicked = $false
+        foreach ($facePickPoint in @(
+            @(0.30, 0.38),
+            @(0.33, 0.45),
+            @(0.38, 0.50),
+            @(0.42, 0.42))) {
+            if ($nativeFacePicked) { break }
+            Click-FramebufferPoint `
+                -Handle $mainWindowHandle `
+                -FramebufferWidth $framebufferWidth `
+                -FramebufferHeight $framebufferHeight `
+                -FramebufferX ($componentViewportX + $componentViewportWidth * $facePickPoint[0]) `
+                -FramebufferY ($componentViewportY + $componentViewportHeight * $facePickPoint[1])
+            $nativeFacePicked = Wait-FileContains `
+                -Path $stdoutPath `
+                -Pattern "Native authoring component picked:.*mode=face" `
+                -TimeoutMilliseconds 1200
+        }
+        if (-not $nativeFacePicked) {
+            throw "The user-facing Face mode did not select a viewport face before Bevel."
+        }
         for ($bevelStateAttempt = 0; $bevelStateAttempt -lt 6; ++$bevelStateAttempt) {
             $bevelControlCount = @(
                 Select-String -LiteralPath $stdoutPath -Pattern $bevelControlLogPattern -ErrorAction SilentlyContinue
