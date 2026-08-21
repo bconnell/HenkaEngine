@@ -13,6 +13,13 @@ HenkaScript V1 front-end.
 - Fixed typed signatures with bounded parameter counts.
 - Bind-time lookup by numeric ID or diagnostic name.
 - A bounded Script Host that deduplicates resolved API bindings.
+- A language-neutral bounded behavior runtime exposed through
+  `<henka/script_runtime.h>` with generation-checked behavior handles,
+  borrowed backend callbacks, deterministic Create/Start/Update/Stop state
+  transitions, disabled/unbound/faulted states, and batch dispatch reports.
+- Behavior callbacks receive the shared language, entity, lifecycle event,
+  frame, delta-time, and instruction-budget context. Dispatch is synchronous
+  and non-reentrant; runtime mutation from a callback is rejected.
 - A bounded HenkaScript lexer/parser/type checker exposed through
   `<henka/henkascript.h>`.
 - Bounded callable bytecode generation and an allocation-free typed VM with
@@ -35,13 +42,12 @@ dispatch mechanism.
 ## What is not available yet
 
 The HenkaScript compiler and VM currently execute bounded callable-local
-bytecode. They do not yet initialize persistent global state, resolve the
-language-neutral Script Host bindings, load `.lua` or `.hks` assets, dispatch
-lifecycle events, or expose a scripting editor. Scene Document behavior
-metadata is persisted, but runtime Behavior components, Lua compilation/VM
-support, Inspector authoring, hot reload, and mixed-language events remain
-subsequent implementation slices. VM instruction budgets are available now;
-per-behavior runtime ownership and lifecycle budgets are not.
+bytecode. The language-neutral behavior runtime now owns lifecycle state and
+per-behavior callback budgets, but it is not yet connected to Scene Document
+objects or a backend loader. Persistent global state, Script Host API
+dispatch, `.lua`/`.hks` asset loading, Lua compilation/VM support, Inspector
+authoring, hot reload, and mixed-language events remain subsequent
+implementation slices.
 
 The current schema, HenkaScript compiler, and bounded VM are therefore engine
 integration foundations, not a claim that complete executable scripting is
