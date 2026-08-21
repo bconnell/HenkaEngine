@@ -8,9 +8,12 @@
 #include <henka/math.h>
 #include <henka/physics.h>
 #include <henka/result.h>
+#include <henka/script.h>
 
-#define HENKA_SCENE_DOCUMENT_FORMAT_VERSION UINT32_C(1)
+#define HENKA_SCENE_DOCUMENT_FORMAT_VERSION UINT32_C(2)
+#define HENKA_SCENE_DOCUMENT_LEGACY_FORMAT_VERSION UINT32_C(1)
 #define HENKA_SCENE_DOCUMENT_MAX_OBJECTS 1024U
+#define HENKA_SCENE_DOCUMENT_MAX_BEHAVIORS_PER_OBJECT 8U
 #define HENKA_SCENE_DOCUMENT_MAX_NAME_BYTES 128U
 #define HENKA_SCENE_DOCUMENT_MAX_PATH_BYTES 512U
 #define HENKA_SCENE_DOCUMENT_MAX_PROMPT_BYTES 128U
@@ -88,6 +91,18 @@ typedef struct henka_scene_document_physics
     uint32_t mask;
 } henka_scene_document_physics;
 
+typedef uint64_t henka_scene_document_behavior_id;
+
+#define HENKA_INVALID_SCENE_DOCUMENT_BEHAVIOR_ID ((henka_scene_document_behavior_id)0)
+
+typedef struct henka_scene_document_behavior
+{
+    henka_scene_document_behavior_id id;
+    bool enabled;
+    henka_script_language language;
+    char asset_path[HENKA_SCENE_DOCUMENT_MAX_PATH_BYTES];
+} henka_scene_document_behavior;
+
 /* Pure authoring data. It contains no renderer pointers, asset-manager
  * ownership, physics body IDs, runtime scene handles, or UI state. */
 typedef struct henka_scene_document_object
@@ -100,9 +115,12 @@ typedef struct henka_scene_document_object
     henka_scene_document_renderer renderer;
     henka_scene_document_interaction interaction;
     henka_scene_document_physics physics;
+    size_t behavior_count;
+    henka_scene_document_behavior behaviors[HENKA_SCENE_DOCUMENT_MAX_BEHAVIORS_PER_OBJECT];
 } henka_scene_document_object;
 
 henka_scene_document_object henka_scene_document_object_default(void);
+henka_scene_document_behavior henka_scene_document_behavior_default(void);
 
 henka_result henka_scene_document_create(henka_scene_document** out_document);
 void henka_scene_document_destroy(henka_scene_document* document);
@@ -130,6 +148,27 @@ henka_result henka_scene_document_set_object(
 henka_result henka_scene_document_remove_object(
     henka_scene_document* document,
     henka_scene_document_id id);
+size_t henka_scene_document_get_behavior_count(
+    const henka_scene_document* document,
+    henka_scene_document_id object_id);
+henka_result henka_scene_document_get_behavior(
+    const henka_scene_document* document,
+    henka_scene_document_id object_id,
+    henka_scene_document_behavior_id behavior_id,
+    henka_scene_document_behavior* out_behavior);
+henka_result henka_scene_document_add_behavior(
+    henka_scene_document* document,
+    henka_scene_document_id object_id,
+    const henka_scene_document_behavior* behavior,
+    henka_scene_document_behavior_id* out_behavior_id);
+henka_result henka_scene_document_set_behavior(
+    henka_scene_document* document,
+    henka_scene_document_id object_id,
+    const henka_scene_document_behavior* behavior);
+henka_result henka_scene_document_remove_behavior(
+    henka_scene_document* document,
+    henka_scene_document_id object_id,
+    henka_scene_document_behavior_id behavior_id);
 henka_result henka_scene_document_validate(const henka_scene_document* document);
 
 /* project_root is trusted by the caller; relative_path is always confined

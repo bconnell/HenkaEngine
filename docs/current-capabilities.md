@@ -195,9 +195,11 @@ turning the public README into an implementation ledger.
   record validation, same-directory temporary files, flush/close-before-replace
   behavior, and failure retention of the prior in-memory state.
 - Authoring sources use the versioned HAMS format, and the Sandbox Game
-  Authoring V1 path uses a bounded, checksummed `.hscene` Scene Document for
-  registered objects. A complete scene/project serializer and
-  remote/network-backed save policy are not yet available.
+  Authoring V1 path uses a bounded, checksummed v2 `.hscene` Scene Document
+  for registered objects and bounded Lua/HenkaScript behavior attachments.
+  v1 documents load with behavior defaults for migration. A complete
+  scene/project serializer and remote/network-backed save policy are not yet
+  available.
 - See [persistence.md](persistence.md) and [authoring-mesh.md](authoring-mesh.md).
 
 ## External Project Support

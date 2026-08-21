@@ -32,6 +32,9 @@
     HENKA_SCENE_DOCUMENT_FLAG_INTERACTION_ENABLED | \
     HENKA_SCENE_DOCUMENT_FLAG_PHYSICS_ENABLED | \
     HENKA_SCENE_DOCUMENT_FLAG_TRIGGER)
+#define HENKA_SCENE_DOCUMENT_BEHAVIOR_FLAG_ENABLED UINT32_C(1)
+#define HENKA_SCENE_DOCUMENT_BEHAVIOR_KNOWN_FLAGS \
+    HENKA_SCENE_DOCUMENT_BEHAVIOR_FLAG_ENABLED
 
 typedef struct henka_scene_document_storage
 {
@@ -132,6 +135,40 @@ static henka_result henka_scene_document_validate_path(const char* path, bool al
     result = henka_path_resolve_confined(".", path, &resolved);
     henka_free(resolved);
     return result;
+}
+
+static bool henka_scene_document_string_has_suffix(
+    const char* value,
+    const char* suffix)
+{
+    const size_t value_length = value == NULL ? 0U : strlen(value);
+    const size_t suffix_length = suffix == NULL ? 0U : strlen(suffix);
+    return suffix_length > 0U && value_length >= suffix_length &&
+        strcmp(value + value_length - suffix_length, suffix) == 0;
+}
+
+static henka_result henka_scene_document_validate_behavior(
+    const henka_scene_document_behavior* behavior)
+{
+    const char* expected_suffix;
+    if (behavior == NULL ||
+        behavior->id == HENKA_INVALID_SCENE_DOCUMENT_BEHAVIOR_ID ||
+        behavior->language < HENKA_SCRIPT_LANGUAGE_LUA ||
+        behavior->language > HENKA_SCRIPT_LANGUAGE_HENKASCRIPT ||
+        !henka_scene_document_string_is_valid(
+            behavior->asset_path,
+            HENKA_SCENE_DOCUMENT_MAX_PATH_BYTES,
+            false) ||
+        henka_scene_document_validate_path(behavior->asset_path, false) != HENKA_SUCCESS)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    expected_suffix = behavior->language == HENKA_SCRIPT_LANGUAGE_LUA
+        ? ".lua"
+        : ".hks";
+    return henka_scene_document_string_has_suffix(behavior->asset_path, expected_suffix)
+        ? HENKA_SUCCESS
+        : HENKA_ERROR_INVALID_ARGUMENT;
 }
 
 static bool henka_scene_document_finite_vec3(henka_vec3 value)
@@ -286,6 +323,24 @@ static henka_result henka_scene_document_validate_object(
             return HENKA_ERROR_INVALID_ARGUMENT;
         }
     }
+    if (object->behavior_count > HENKA_SCENE_DOCUMENT_MAX_BEHAVIORS_PER_OBJECT)
+    {
+        return HENKA_ERROR_LIMIT;
+    }
+    for (size_t index = 0U; index < object->behavior_count; ++index)
+    {
+        if (henka_scene_document_validate_behavior(&object->behaviors[index]) != HENKA_SUCCESS)
+        {
+            return HENKA_ERROR_INVALID_ARGUMENT;
+        }
+        for (size_t other_index = 0U; other_index < index; ++other_index)
+        {
+            if (object->behaviors[other_index].id == object->behaviors[index].id)
+            {
+                return HENKA_ERROR_INVALID_ARGUMENT;
+            }
+        }
+    }
     return HENKA_SUCCESS;
 }
 
@@ -312,11 +367,53 @@ static henka_result henka_scene_document_validate_storage(
         {
             maximum_id = storage->objects[index].id;
         }
+        for (size_t behavior_index = 0U;
+             behavior_index < storage->objects[index].behavior_count;
+             ++behavior_index)
+        {
+            const henka_scene_document_behavior_id behavior_id =
+                storage->objects[index].behaviors[behavior_index].id;
+            if (behavior_id == storage->objects[index].id)
+            {
+                return HENKA_ERROR_INVALID_ARGUMENT;
+            }
+            if (behavior_id > maximum_id)
+            {
+                maximum_id = behavior_id;
+            }
+            for (size_t other_object_index = 0U;
+                 other_object_index < index;
+                 ++other_object_index)
+            {
+                if (storage->objects[other_object_index].id == behavior_id)
+                {
+                    return HENKA_ERROR_INVALID_ARGUMENT;
+                }
+                for (size_t other_behavior_index = 0U;
+                     other_behavior_index < storage->objects[other_object_index].behavior_count;
+                     ++other_behavior_index)
+                {
+                    if (storage->objects[other_object_index].behaviors[other_behavior_index].id == behavior_id)
+                    {
+                        return HENKA_ERROR_INVALID_ARGUMENT;
+                    }
+                }
+            }
+        }
         for (other_index = 0U; other_index < index; ++other_index)
         {
             if (storage->objects[other_index].id == storage->objects[index].id)
             {
                 return HENKA_ERROR_INVALID_ARGUMENT;
+            }
+            for (size_t behavior_index = 0U;
+                 behavior_index < storage->objects[other_index].behavior_count;
+                 ++behavior_index)
+            {
+                if (storage->objects[other_index].behaviors[behavior_index].id == storage->objects[index].id)
+                {
+                    return HENKA_ERROR_INVALID_ARGUMENT;
+                }
             }
         }
     }
@@ -351,6 +448,15 @@ henka_scene_document_object henka_scene_document_object_default(void)
     return object;
 }
 
+henka_scene_document_behavior henka_scene_document_behavior_default(void)
+{
+    henka_scene_document_behavior behavior;
+    memset(&behavior, 0, sizeof(behavior));
+    behavior.enabled = true;
+    behavior.language = HENKA_SCRIPT_LANGUAGE_NONE;
+    return behavior;
+}
+
 static size_t henka_scene_document_find_index(
     const henka_scene_document_storage* storage,
     henka_scene_document_id id)
@@ -368,6 +474,52 @@ static size_t henka_scene_document_find_index(
         }
     }
     return SIZE_MAX;
+}
+
+static size_t henka_scene_document_find_behavior_index(
+    const henka_scene_document_object* object,
+    henka_scene_document_behavior_id behavior_id)
+{
+    size_t index;
+    if (object == NULL || behavior_id == HENKA_INVALID_SCENE_DOCUMENT_BEHAVIOR_ID)
+    {
+        return SIZE_MAX;
+    }
+    for (index = 0U; index < object->behavior_count; ++index)
+    {
+        if (object->behaviors[index].id == behavior_id)
+        {
+            return index;
+        }
+    }
+    return SIZE_MAX;
+}
+
+static bool henka_scene_document_id_is_used(
+    const henka_scene_document_storage* storage,
+    uint64_t id)
+{
+    size_t object_index;
+    if (storage == NULL || id == 0U)
+    {
+        return true;
+    }
+    for (object_index = 0U; object_index < storage->object_count; ++object_index)
+    {
+        const henka_scene_document_object* object = &storage->objects[object_index];
+        if (object->id == id)
+        {
+            return true;
+        }
+        for (size_t behavior_index = 0U; behavior_index < object->behavior_count; ++behavior_index)
+        {
+            if (object->behaviors[behavior_index].id == id)
+            {
+                return true;
+            }
+        }
+    }
+    return false;
 }
 
 static henka_result henka_scene_document_allocate_id(
@@ -469,6 +621,8 @@ henka_result henka_scene_document_add_object(
 {
     henka_scene_document_object candidate;
     henka_result result;
+    uint64_t next_id;
+    size_t behavior_index;
 
     if (document == NULL || document->storage == NULL || object == NULL || out_id == NULL ||
         document->storage->object_count >= HENKA_SCENE_DOCUMENT_MAX_OBJECTS)
@@ -480,28 +634,65 @@ henka_result henka_scene_document_add_object(
         return HENKA_ERROR_LIMIT;
     }
     candidate = *object;
+    next_id = document->storage->next_id;
     if (candidate.id == HENKA_INVALID_SCENE_DOCUMENT_ID)
     {
-        candidate.id = document->storage->next_id;
+        candidate.id = next_id;
         if (candidate.id == 0U)
         {
             return HENKA_ERROR_LIMIT;
         }
+        next_id = candidate.id == UINT64_MAX ? 0U : candidate.id + 1U;
     }
-    else if (henka_scene_document_find_index(document->storage, candidate.id) != SIZE_MAX)
+    else if (henka_scene_document_id_is_used(document->storage, candidate.id))
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    else if (candidate.id >= next_id)
+    {
+        next_id = candidate.id == UINT64_MAX ? 0U : candidate.id + 1U;
+    }
+    for (behavior_index = 0U; behavior_index < candidate.behavior_count; ++behavior_index)
+    {
+        henka_scene_document_behavior* behavior = &candidate.behaviors[behavior_index];
+        if (behavior->id == HENKA_INVALID_SCENE_DOCUMENT_BEHAVIOR_ID)
+        {
+            behavior->id = next_id;
+            if (behavior->id == 0U)
+            {
+                return HENKA_ERROR_LIMIT;
+            }
+            next_id = behavior->id == UINT64_MAX ? 0U : behavior->id + 1U;
+        }
+        else
+        {
+            if (behavior->id == candidate.id ||
+                henka_scene_document_id_is_used(document->storage, behavior->id))
+            {
+                return HENKA_ERROR_INVALID_ARGUMENT;
+            }
+            for (size_t other_behavior_index = 0U;
+                 other_behavior_index < behavior_index;
+                 ++other_behavior_index)
+            {
+                if (candidate.behaviors[other_behavior_index].id == behavior->id)
+                {
+                    return HENKA_ERROR_INVALID_ARGUMENT;
+                }
+            }
+            if (behavior->id >= next_id && next_id != 0U)
+            {
+                next_id = behavior->id == UINT64_MAX ? 0U : behavior->id + 1U;
+            }
+        }
     }
     result = henka_scene_document_validate_object(&candidate);
     if (result != HENKA_SUCCESS)
     {
         return result;
     }
-    if (candidate.id >= document->storage->next_id)
-    {
-        document->storage->next_id = candidate.id == UINT64_MAX ? 0U : candidate.id + 1U;
-    }
     document->storage->objects[document->storage->object_count++] = candidate;
+    document->storage->next_id = next_id;
     *out_id = candidate.id;
     return HENKA_SUCCESS;
 }
@@ -513,11 +704,16 @@ henka_result henka_scene_document_duplicate_object(
 {
     henka_scene_document_object candidate;
     henka_result result = henka_scene_document_get_object(document, source_id, &candidate);
+    size_t behavior_index;
     if (result != HENKA_SUCCESS)
     {
         return result;
     }
     candidate.id = HENKA_INVALID_SCENE_DOCUMENT_ID;
+    for (behavior_index = 0U; behavior_index < candidate.behavior_count; ++behavior_index)
+    {
+        candidate.behaviors[behavior_index].id = HENKA_INVALID_SCENE_DOCUMENT_BEHAVIOR_ID;
+    }
     return henka_scene_document_add_object(document, &candidate, out_id);
 }
 
@@ -537,6 +733,44 @@ henka_result henka_scene_document_set_object(
     if (result != HENKA_SUCCESS)
     {
         return result;
+    }
+    for (size_t other_index = 0U;
+         other_index < document->storage->object_count;
+         ++other_index)
+    {
+        const henka_scene_document_object* other = &document->storage->objects[other_index];
+        if (other_index == index)
+        {
+            continue;
+        }
+        for (size_t behavior_index = 0U;
+             behavior_index < object->behavior_count;
+             ++behavior_index)
+        {
+            const henka_scene_document_behavior_id behavior_id = object->behaviors[behavior_index].id;
+            if (behavior_id == other->id)
+            {
+                return HENKA_ERROR_INVALID_ARGUMENT;
+            }
+            for (size_t other_behavior_index = 0U;
+                 other_behavior_index < other->behavior_count;
+                 ++other_behavior_index)
+            {
+                if (behavior_id == other->behaviors[other_behavior_index].id)
+                {
+                    return HENKA_ERROR_INVALID_ARGUMENT;
+                }
+            }
+        }
+        for (size_t other_behavior_index = 0U;
+             other_behavior_index < other->behavior_count;
+             ++other_behavior_index)
+        {
+            if (object->id == other->behaviors[other_behavior_index].id)
+            {
+                return HENKA_ERROR_INVALID_ARGUMENT;
+            }
+        }
     }
     document->storage->objects[index] = *object;
     return HENKA_SUCCESS;
@@ -565,6 +799,146 @@ henka_result henka_scene_document_remove_object(
         &document->storage->objects[document->storage->object_count],
         0,
         sizeof(document->storage->objects[0]));
+    return HENKA_SUCCESS;
+}
+
+size_t henka_scene_document_get_behavior_count(
+    const henka_scene_document* document,
+    henka_scene_document_id object_id)
+{
+    const size_t object_index = henka_scene_document_find_index(
+        document == NULL ? NULL : document->storage,
+        object_id);
+    return object_index == SIZE_MAX ? 0U : document->storage->objects[object_index].behavior_count;
+}
+
+henka_result henka_scene_document_get_behavior(
+    const henka_scene_document* document,
+    henka_scene_document_id object_id,
+    henka_scene_document_behavior_id behavior_id,
+    henka_scene_document_behavior* out_behavior)
+{
+    const size_t object_index = henka_scene_document_find_index(
+        document == NULL ? NULL : document->storage,
+        object_id);
+    const size_t behavior_index = object_index == SIZE_MAX
+        ? SIZE_MAX
+        : henka_scene_document_find_behavior_index(
+            &document->storage->objects[object_index],
+            behavior_id);
+    if (behavior_index == SIZE_MAX || out_behavior == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    *out_behavior = document->storage->objects[object_index].behaviors[behavior_index];
+    return HENKA_SUCCESS;
+}
+
+henka_result henka_scene_document_add_behavior(
+    henka_scene_document* document,
+    henka_scene_document_id object_id,
+    const henka_scene_document_behavior* behavior,
+    henka_scene_document_behavior_id* out_behavior_id)
+{
+    const size_t object_index = henka_scene_document_find_index(
+        document == NULL ? NULL : document->storage,
+        object_id);
+    henka_scene_document_behavior candidate;
+    uint64_t next_id;
+
+    if (object_index == SIZE_MAX || behavior == NULL || out_behavior_id == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    if (document->storage->objects[object_index].behavior_count >=
+        HENKA_SCENE_DOCUMENT_MAX_BEHAVIORS_PER_OBJECT)
+    {
+        return HENKA_ERROR_LIMIT;
+    }
+    candidate = *behavior;
+    next_id = document->storage->next_id;
+    if (candidate.id == HENKA_INVALID_SCENE_DOCUMENT_BEHAVIOR_ID)
+    {
+        if (next_id == 0U)
+        {
+            return HENKA_ERROR_LIMIT;
+        }
+        candidate.id = next_id;
+        next_id = candidate.id == UINT64_MAX ? 0U : candidate.id + 1U;
+    }
+    else
+    {
+        if (candidate.id == object_id ||
+            henka_scene_document_id_is_used(document->storage, candidate.id))
+        {
+            return HENKA_ERROR_INVALID_ARGUMENT;
+        }
+        if (next_id != 0U && candidate.id >= next_id)
+        {
+            next_id = candidate.id == UINT64_MAX ? 0U : candidate.id + 1U;
+        }
+    }
+    if (henka_scene_document_validate_behavior(&candidate) != HENKA_SUCCESS)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    document->storage->objects[object_index].behaviors[
+        document->storage->objects[object_index].behavior_count++] = candidate;
+    document->storage->next_id = next_id;
+    *out_behavior_id = candidate.id;
+    return HENKA_SUCCESS;
+}
+
+henka_result henka_scene_document_set_behavior(
+    henka_scene_document* document,
+    henka_scene_document_id object_id,
+    const henka_scene_document_behavior* behavior)
+{
+    const size_t object_index = henka_scene_document_find_index(
+        document == NULL ? NULL : document->storage,
+        object_id);
+    const size_t behavior_index = object_index == SIZE_MAX || behavior == NULL
+        ? SIZE_MAX
+        : henka_scene_document_find_behavior_index(
+            &document->storage->objects[object_index],
+            behavior->id);
+    if (behavior_index == SIZE_MAX ||
+        henka_scene_document_validate_behavior(behavior) != HENKA_SUCCESS)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    document->storage->objects[object_index].behaviors[behavior_index] = *behavior;
+    return HENKA_SUCCESS;
+}
+
+henka_result henka_scene_document_remove_behavior(
+    henka_scene_document* document,
+    henka_scene_document_id object_id,
+    henka_scene_document_behavior_id behavior_id)
+{
+    const size_t object_index = henka_scene_document_find_index(
+        document == NULL ? NULL : document->storage,
+        object_id);
+    const size_t behavior_index = object_index == SIZE_MAX
+        ? SIZE_MAX
+        : henka_scene_document_find_behavior_index(
+            &document->storage->objects[object_index],
+            behavior_id);
+    henka_scene_document_object* object;
+    if (behavior_index == SIZE_MAX)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    object = &document->storage->objects[object_index];
+    if (behavior_index + 1U < object->behavior_count)
+    {
+        memmove(
+            &object->behaviors[behavior_index],
+            &object->behaviors[behavior_index + 1U],
+            (object->behavior_count - behavior_index - 1U) * sizeof(object->behaviors[0]));
+    }
+    --object->behavior_count;
+    memset(&object->behaviors[object->behavior_count], 0, sizeof(object->behaviors[0]));
     return HENKA_SUCCESS;
 }
 
@@ -664,9 +1038,20 @@ static bool henka_scene_document_payload_size(
             !henka_scene_document_size_add(&size, 8U + 4U + 2U + name_length + 40U +
                 4U + 4U + 12U + 2U + source_path_length + 4U +
                 2U + material_path_length + 40U + 4U + 2U + prompt_length +
-                4U + 4U + 12U + 4U + 12U + 4U + 20U + 4U + 4U))
+                4U + 4U + 12U + 4U + 12U + 4U + 20U + 4U + 4U + 4U))
         {
             return false;
+        }
+        for (size_t behavior_index = 0U;
+             behavior_index < object->behavior_count;
+             ++behavior_index)
+        {
+            const size_t path_length = strlen(object->behaviors[behavior_index].asset_path);
+            if (path_length > UINT16_MAX ||
+                !henka_scene_document_size_add(&size, 8U + 4U + 4U + 2U + path_length))
+            {
+                return false;
+            }
         }
     }
     *out_size = size;
@@ -791,6 +1176,19 @@ static void henka_scene_document_encode_object(
     henka_scene_document_writer_float(writer, object->physics.material.angular_damping);
     henka_scene_document_writer_u32(writer, object->physics.layer);
     henka_scene_document_writer_u32(writer, object->physics.mask);
+    henka_scene_document_writer_u32(writer, (uint32_t)object->behavior_count);
+    for (size_t behavior_index = 0U;
+         behavior_index < object->behavior_count;
+         ++behavior_index)
+    {
+        const henka_scene_document_behavior* behavior = &object->behaviors[behavior_index];
+        henka_scene_document_writer_u32(
+            writer,
+            behavior->enabled ? HENKA_SCENE_DOCUMENT_BEHAVIOR_FLAG_ENABLED : 0U);
+        henka_scene_document_writer_u64(writer, behavior->id);
+        henka_scene_document_writer_u32(writer, (uint32_t)behavior->language);
+        henka_scene_document_writer_string(writer, behavior->asset_path);
+    }
 }
 
 static bool henka_scene_document_reader_bytes(
@@ -864,7 +1262,8 @@ static bool henka_scene_document_reader_string(
 
 static bool henka_scene_document_decode_object(
     henka_scene_document_reader* reader,
-    henka_scene_document_object* object)
+    henka_scene_document_object* object,
+    uint32_t format_version)
 {
     uint32_t flags;
     uint32_t value;
@@ -932,6 +1331,37 @@ static bool henka_scene_document_decode_object(
         !henka_scene_document_reader_float(reader, &object->physics.material.angular_damping) ||
         !henka_scene_document_reader_u32(reader, &object->physics.layer) ||
         !henka_scene_document_reader_u32(reader, &object->physics.mask)) return false;
+    if (format_version >= HENKA_SCENE_DOCUMENT_FORMAT_VERSION)
+    {
+        uint32_t behavior_count;
+        if (!henka_scene_document_reader_u32(reader, &behavior_count) ||
+            behavior_count > HENKA_SCENE_DOCUMENT_MAX_BEHAVIORS_PER_OBJECT)
+        {
+            return false;
+        }
+        object->behavior_count = (size_t)behavior_count;
+        for (size_t behavior_index = 0U;
+             behavior_index < object->behavior_count;
+             ++behavior_index)
+        {
+            uint32_t behavior_flags;
+            uint32_t language;
+            henka_scene_document_behavior* behavior = &object->behaviors[behavior_index];
+            if (!henka_scene_document_reader_u32(reader, &behavior_flags) ||
+                (behavior_flags & ~HENKA_SCENE_DOCUMENT_BEHAVIOR_KNOWN_FLAGS) != 0U ||
+                !henka_scene_document_reader_u64(reader, &behavior->id) ||
+                !henka_scene_document_reader_u32(reader, &language) ||
+                !henka_scene_document_reader_string(
+                    reader,
+                    behavior->asset_path,
+                    sizeof(behavior->asset_path)))
+            {
+                return false;
+            }
+            behavior->enabled = (behavior_flags & HENKA_SCENE_DOCUMENT_BEHAVIOR_FLAG_ENABLED) != 0U;
+            behavior->language = (henka_script_language)language;
+        }
+    }
     object->visible = (flags & HENKA_SCENE_DOCUMENT_FLAG_VISIBLE) != 0U;
     object->renderer.enabled = (flags & HENKA_SCENE_DOCUMENT_FLAG_RENDERER_ENABLED) != 0U;
     object->renderer.material_override = (flags & HENKA_SCENE_DOCUMENT_FLAG_MATERIAL_OVERRIDE) != 0U;
@@ -1146,6 +1576,7 @@ henka_result henka_scene_document_load_file(
     henka_scene_document_reader reader;
     uint64_t payload_size;
     uint64_t next_id;
+    uint32_t format_version;
     uint32_t object_count;
     uint32_t checksum;
     size_t index;
@@ -1163,9 +1594,11 @@ henka_result henka_scene_document_load_file(
     {
         return result;
     }
+    format_version = henka_scene_document_read_u32(data + 4U);
     if (data[0] != HENKA_SCENE_DOCUMENT_MAGIC_0 || data[1] != HENKA_SCENE_DOCUMENT_MAGIC_1 ||
         data[2] != HENKA_SCENE_DOCUMENT_MAGIC_2 || data[3] != HENKA_SCENE_DOCUMENT_MAGIC_3 ||
-        henka_scene_document_read_u32(data + 4U) != HENKA_SCENE_DOCUMENT_FORMAT_VERSION ||
+        (format_version != HENKA_SCENE_DOCUMENT_LEGACY_FORMAT_VERSION &&
+            format_version != HENKA_SCENE_DOCUMENT_FORMAT_VERSION) ||
         henka_scene_document_read_u32(data + 8U) != HENKA_SCENE_DOCUMENT_HEADER_BYTES ||
         henka_scene_document_read_u32(data + 36U) != 0U)
     {
@@ -1198,7 +1631,10 @@ henka_result henka_scene_document_load_file(
         false};
     for (index = 0U; index < (size_t)object_count; ++index)
     {
-        if (!henka_scene_document_decode_object(&reader, &candidate->objects[index]))
+        if (!henka_scene_document_decode_object(
+                &reader,
+                &candidate->objects[index],
+                format_version))
         {
             result = HENKA_ERROR_INVALID_ARGUMENT;
             goto load_cleanup;
@@ -1284,12 +1720,13 @@ henka_result henka_scene_document_format_inspection(
                 buffer,
                 buffer_capacity,
                 &size,
-                "object id=%llu source=%u renderer=%u interaction=%u physics=%u\n",
+                "object id=%llu source=%u renderer=%u interaction=%u physics=%u behaviors=%zu\n",
                 (unsigned long long)object->id,
                 (unsigned int)object->source.kind,
                 object->renderer.enabled ? 1U : 0U,
                 object->interaction.enabled ? 1U : 0U,
-                object->physics.enabled ? 1U : 0U))
+                object->physics.enabled ? 1U : 0U,
+                object->behavior_count))
         {
             return HENKA_ERROR_LIMIT;
         }

@@ -12,6 +12,8 @@ schema used by future Lua and HenkaScript backends.
 - Fixed typed signatures with bounded parameter counts.
 - Bind-time lookup by numeric ID or diagnostic name.
 - A bounded Script Host that deduplicates resolved API bindings.
+- Versioned Scene Document behavior attachments with stable IDs, enabled state,
+  language identity, and confined `.lua`/`.hks` project-relative asset paths.
 
 Backends should resolve IDs during load/compile and retain typed native
 bindings. Names are for diagnostics and tooling; they are not the runtime
@@ -19,11 +21,11 @@ dispatch mechanism.
 
 ## What is not available yet
 
-This foundation does not execute source code, load `.lua` or `.hks` assets,
-create Behavior components, dispatch lifecycle events, or expose a scripting
-editor. Lua support, HenkaScript compilation/VM support, persistence,
-Inspector authoring, hot reload, runtime budgets, and mixed-language events
-remain subsequent implementation slices.
+This foundation does not execute source code, load or compile `.lua` or `.hks`
+assets, dispatch lifecycle events, or expose a scripting editor. Scene Document
+behavior metadata is persisted, but runtime Behavior components, Lua support,
+HenkaScript compilation/VM support, Inspector authoring, hot reload, runtime
+budgets, and mixed-language events remain subsequent implementation slices.
 
 The current schema is therefore an engine integration contract, not a claim
 that scripting is already available to end-user projects.
