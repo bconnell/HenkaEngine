@@ -33,7 +33,7 @@
 
 **Interfaces:**
 - Consumes: `henka_script_language`, `henka_hks_behavior_backend_create`, `henka_lua_behavior_backend_create`, `henka_malloc/calloc/free`, and the existing language size/diagnostic constants.
-- Produces: `henka_script_source_document`, `henka_script_source_diagnostic`, create/destroy, bounded set/get text, language/clean-state persistence hooks, validate/get diagnostic, dirty, and revision APIs exactly as defined in the design spec.
+- Produces: `henka_script_source_document`, `henka_script_source_diagnostic`, create/destroy, bounded set/get/replace-range text, language/clean-state persistence hooks, validate/get diagnostic, dirty, and revision APIs exactly as defined in the design spec.
 
 - [x] **Step 1: Write failing tests** for null arguments, both supported languages, bounded source acceptance, over-limit rejection without mutation, NUL-terminated returned text, dirty/revision transitions, and compiler/backend validation diagnostics.
 - [x] **Step 2: Run the focused test target** and confirm failure because the source-document symbols do not exist.
@@ -78,6 +78,7 @@
 - Consumes: source-document load/set/validate/save, HKS public token spans, Lua backend diagnostics, existing `henka_ui_frame_desc`, and SDL3 text/key events.
 - Produces: a bounded editor model with explicit Edit/Save/Revert/Reload actions, caret/selection/scroll state, staged invalid text, visible diagnostics, and an application-local text-input event stream.
 
+- [x] **Step 0: Add bounded source range editing** through `henka_script_source_replace_range`; prove insertion, deletion, invalid ranges, capacity rejection without mutation, and preserved indentation before building UI controls.
 - [ ] **Step 1: Write failing editor-model tests** for preserved indentation, line/column caret movement, insertion/deletion within the bounded source limit, compiler-derived HKS spans, invalid-source staging, revert to last loaded text, and Edit rejection while Play is active.
 - [ ] **Step 2: Extend the platform/UI input seam** with a bounded per-frame text-input buffer and logical cursor coordinates; clear the buffer after consumption and keep physical cursor data separate from automation-owned coordinates.
 - [ ] **Step 3: Implement editor state** as fixed-capacity line/caret/selection state over the source document; use compiler token offsets for HenkaScript display and backend diagnostics for error markers; use no copied Lua/HenkaScript grammar.

@@ -105,10 +105,62 @@ static void test_source_document_argument_contracts(void)
     assert(henka_script_source_get_text(NULL, NULL, NULL) == HENKA_ERROR_INVALID_ARGUMENT);
 }
 
+static void test_bounded_source_range_editing(void)
+{
+    static const char source[] =
+        "fn OnCreate() {\n"
+        "    i32 value = 1;\n"
+        "}\n";
+    static const char replacement[] = "position";
+    const char* text = NULL;
+    size_t text_size = 0U;
+    size_t value_offset;
+    uint64_t revision;
+    henka_script_source_document* document = NULL;
+
+    assert(henka_script_source_create(
+               HENKA_SCRIPT_LANGUAGE_HENKASCRIPT, &document) == HENKA_SUCCESS);
+    assert(henka_script_source_set_text(
+               document, source, strlen(source)) == HENKA_SUCCESS);
+    value_offset = (size_t)(strstr(source, "value") - source);
+    revision = henka_script_source_get_revision(document);
+    assert(henka_script_source_replace_range(
+               document,
+               value_offset,
+               strlen("value"),
+               replacement,
+               strlen(replacement)) == HENKA_SUCCESS);
+    assert(henka_script_source_get_revision(document) == revision + 1U);
+    assert(henka_script_source_get_text(
+               document, &text, &text_size) == HENKA_SUCCESS);
+    assert(strstr(text, "    i32 position = 1;") != NULL);
+    assert(text_size == strlen(text));
+
+    assert(henka_script_source_replace_range(
+               document, value_offset, strlen(replacement), NULL, 0U) == HENKA_SUCCESS);
+    assert(henka_script_source_get_text(
+               document, &text, &text_size) == HENKA_SUCCESS);
+    assert(strstr(text, "    i32  = 1;") != NULL);
+    revision = henka_script_source_get_revision(document);
+    assert(henka_script_source_replace_range(
+               document,
+               0U,
+               0U,
+               "x",
+               HENKA_HKS_MAX_SOURCE_BYTES + 1U) == HENKA_ERROR_LIMIT);
+    assert(henka_script_source_get_revision(document) == revision);
+    assert(henka_script_source_replace_range(
+               document, text_size + 1U, 0U, "x", 1U) == HENKA_ERROR_INVALID_ARGUMENT);
+    assert(henka_script_source_replace_range(
+               document, 0U, text_size + 1U, NULL, 0U) == HENKA_ERROR_INVALID_ARGUMENT);
+    henka_script_source_destroy(document);
+}
+
 int main(void)
 {
     test_henkascript_source_document_contract();
     test_lua_source_document_validation();
     test_source_document_argument_contracts();
+    test_bounded_source_range_editing();
     return 0;
 }

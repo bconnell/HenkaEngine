@@ -174,6 +174,65 @@ henka_result henka_script_source_set_text(
     return HENKA_SUCCESS;
 }
 
+henka_result henka_script_source_replace_range(
+    henka_script_source_document* document,
+    size_t offset,
+    size_t remove_size,
+    const char* replacement,
+    size_t replacement_size)
+{
+    char* replacement_copy = NULL;
+    size_t remaining_size;
+    size_t tail_size;
+    size_t new_size;
+    if (document == NULL ||
+        offset > document->source_size ||
+        remove_size > document->source_size - offset ||
+        (replacement == NULL && replacement_size > 0U))
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    if (remove_size == 0U && replacement_size == 0U)
+    {
+        return HENKA_SUCCESS;
+    }
+    if (document->revision == UINT64_MAX)
+    {
+        return HENKA_ERROR_LIMIT;
+    }
+    remaining_size = document->source_size - remove_size;
+    if (replacement_size > document->source_capacity - 1U - remaining_size)
+    {
+        return HENKA_ERROR_LIMIT;
+    }
+    if (replacement_size > 0U)
+    {
+        replacement_copy = (char*)henka_malloc(replacement_size);
+        if (replacement_copy == NULL)
+        {
+            return HENKA_ERROR_OUT_OF_MEMORY;
+        }
+        memcpy(replacement_copy, replacement, replacement_size);
+    }
+    new_size = remaining_size + replacement_size;
+    tail_size = document->source_size - offset - remove_size;
+    memmove(
+        document->source + offset + replacement_size,
+        document->source + offset + remove_size,
+        tail_size);
+    if (replacement_size > 0U)
+    {
+        memcpy(document->source + offset, replacement_copy, replacement_size);
+    }
+    henka_free(replacement_copy);
+    document->source_size = new_size;
+    document->source[new_size] = '\0';
+    ++document->revision;
+    document->dirty = true;
+    henka_script_source_clear_diagnostic(&document->diagnostic);
+    return HENKA_SUCCESS;
+}
+
 henka_result henka_script_source_get_text(
     const henka_script_source_document* document,
     const char** out_source,

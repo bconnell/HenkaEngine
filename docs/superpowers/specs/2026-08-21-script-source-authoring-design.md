@@ -44,6 +44,12 @@ henka_result henka_script_source_set_text(
     henka_script_source_document* document,
     const char* source,
     size_t source_size);
+henka_result henka_script_source_replace_range(
+    henka_script_source_document* document,
+    size_t offset,
+    size_t remove_size,
+    const char* replacement,
+    size_t replacement_size);
 henka_result henka_script_source_get_text(
     const henka_script_source_document* document,
     const char** out_source,
