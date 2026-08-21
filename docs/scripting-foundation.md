@@ -157,8 +157,9 @@ lifecycle and fixed-tick dispatch, with a bounded host mapping for the current
 Entity/Transform/Physics/Event slice and an explicit behavior-state sidecar
 save/load seam. Persistent state is not implicitly saved on Stop, is not part
 of the authored `.hscene` document. The Inspector can create confined Lua or
-HenkaScript behavior templates and attach them transactionally; its attachment
-summary remains bounded and source editing is not included.
+HenkaScript behavior templates and attach them transactionally, and it provides
+a bounded read-only source preview. HenkaScript preview colors are derived from
+the compiler's public tokenization; source editing and reload are not included.
 Richer typed values and callable parameters, full Inspector authoring, hot reload,
 debugger tooling,
 replay integration, and broader project scripting workflows remain future work.

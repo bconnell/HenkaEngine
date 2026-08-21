@@ -124,7 +124,9 @@ static void test_exclusive_script_templates(void)
     static const char lua_path[] = "test_tmp/henka_template_test.lua";
     static const char hks_path[] = "test_tmp/henka_template_test.hks";
     char source[512];
+    char* loaded_source = NULL;
     size_t source_size;
+    size_t loaded_source_size = 0U;
     FILE* file;
 
     (void)remove(lua_path);
@@ -155,6 +157,17 @@ static void test_exclusive_script_templates(void)
     assert(fclose(file) == 0);
     source[source_size] = '\0';
     assert(strstr(source, "fn OnCreate()") != NULL);
+    assert(henka_script_asset_read_source(
+               ".", hks_path, &loaded_source, &loaded_source_size) == HENKA_SUCCESS);
+    assert(loaded_source != NULL && loaded_source_size > 0U);
+    assert(loaded_source_size >= strlen("fn OnCreate()") &&
+           strstr(loaded_source, "fn OnCreate()") != NULL);
+    henka_free(loaded_source);
+    loaded_source = NULL;
+    assert(henka_script_asset_read_source(
+               ".", "../henka_template_escape.lua", &loaded_source,
+               &loaded_source_size) != HENKA_SUCCESS);
+    assert(loaded_source == NULL);
     (void)remove(lua_path);
     (void)remove(hks_path);
 }

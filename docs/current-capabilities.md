@@ -113,8 +113,9 @@ turning the public README into an implementation ledger.
    explicit sidecar save/load and mixed-language `OnEvent` routing is also
    available; complete host API coverage, full Inspector authoring, hot reload,
    and debugger tooling remain unfinished. The Inspector can create confined
-   Lua or HenkaScript behavior templates and attach them transactionally; source
-   editing and reload remain unfinished.
+   Lua or HenkaScript behavior templates and attach them transactionally, and
+   provides a bounded read-only source preview whose HenkaScript colors derive
+   from compiler tokenization. Source editing and reload remain unfinished.
    Persisted `.lua` and `.hks` attachments can now be loaded through a bounded,
    confined-path asset loader and assembled into a mixed-language behavior
    runtime by persistent Scene Document object identity. The Sandbox Play

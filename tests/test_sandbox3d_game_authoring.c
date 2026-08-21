@@ -216,6 +216,51 @@ int main(void)
         fprintf(stderr, "game authoring test failed during Play lifecycle\n");
         goto cleanup;
     }
+
+    {
+        char template_path[512];
+        FILE* template_file = NULL;
+        int template_path_length;
+        (void)remove(
+            "build/test_tmp/game_authoring_scripts/scripts/behavior_5000_2.lua");
+        if (sandbox3d_game_authoring_attach_script_template(
+                authoring,
+                "build/test_tmp/game_authoring_scripts",
+                entity,
+                HENKA_SCRIPT_LANGUAGE_LUA) != HENKA_SUCCESS ||
+            sandbox3d_game_authoring_get_behavior_count_for_entity(authoring, entity) != 2U ||
+            sandbox3d_game_authoring_get_behavior_at_for_entity(
+                authoring, entity, 1U, &loaded_behavior) != HENKA_SUCCESS ||
+            loaded_behavior.language != HENKA_SCRIPT_LANGUAGE_LUA ||
+            loaded_behavior.asset_path[0] == '\0')
+        {
+            fprintf(stderr, "game authoring test failed during script template attachment\n");
+            goto cleanup;
+        }
+        template_path_length = snprintf(
+            template_path,
+            sizeof(template_path),
+            "%s/%s",
+            "build/test_tmp/game_authoring_scripts",
+            loaded_behavior.asset_path);
+        if (template_path_length < 0 ||
+            (size_t)template_path_length >= sizeof(template_path) ||
+#if defined(_MSC_VER)
+            fopen_s(&template_file, template_path, "rb") != 0 ||
+#else
+            (template_file = fopen(template_path, "rb")) == NULL ||
+#endif
+            template_file == NULL)
+        {
+            fprintf(stderr, "game authoring test failed opening generated script template\n");
+            goto cleanup;
+        }
+        if (fclose(template_file) != 0 || remove(template_path) != 0)
+        {
+            fprintf(stderr, "game authoring test failed during script template cleanup\n");
+            goto cleanup;
+        }
+    }
     exit_code = 0;
 
 cleanup:

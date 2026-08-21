@@ -103,7 +103,7 @@ henka_result henka_script_asset_create_template(
     return HENKA_SUCCESS;
 }
 
-static henka_result henka_script_asset_read_source(
+henka_result henka_script_asset_read_source(
     const char* project_root,
     const char* relative_path,
     char** out_source,
@@ -123,7 +123,8 @@ static henka_result henka_script_asset_read_source(
     {
         *out_source_size = 0U;
     }
-    if (project_root == NULL || relative_path == NULL ||
+    if (project_root == NULL || project_root[0] == '\0' ||
+        relative_path == NULL || relative_path[0] == '\0' ||
         out_source == NULL || out_source_size == NULL)
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
@@ -163,7 +164,7 @@ static henka_result henka_script_asset_read_source(
         return HENKA_ERROR_ASSET_SOURCE;
     }
     source_size = (size_t)file_size;
-    source = (char*)henka_malloc(source_size == 0U ? 1U : source_size);
+    source = (char*)henka_calloc(source_size + 1U, sizeof(*source));
     if (source == NULL)
     {
         (void)fclose(file);
@@ -175,6 +176,7 @@ static henka_result henka_script_asset_read_source(
         (void)fclose(file);
         return HENKA_ERROR_ASSET_SOURCE;
     }
+    source[source_size] = '\0';
     if (fclose(file) != 0)
     {
         henka_free(source);

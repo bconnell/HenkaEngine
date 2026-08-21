@@ -17,6 +17,16 @@ henka_result henka_script_asset_create_template(
     const char* relative_path,
     henka_script_language language);
 
+/* Reads a bounded project-relative script source without taking ownership of
+ * the caller's path. The returned buffer is engine-owned, NUL-terminated, and
+ * must be released with henka_free. Path resolution remains confined to
+ * project_root. */
+henka_result henka_script_asset_read_source(
+    const char* project_root,
+    const char* relative_path,
+    char** out_source,
+    size_t* out_source_size);
+
 /* Loads one persisted Scene Document behavior source from a confined project
  * path and owns the selected bounded language backend until destruction. */
 henka_result henka_script_behavior_asset_create(

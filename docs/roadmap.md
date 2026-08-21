@@ -275,9 +275,10 @@ and V1 `.hscene` foundations.
    current Entity/Transform/Physics/Event slice and resolve the required API
    bindings at load time.
 3. Extend behavior-state persistence and authoring ergonomics: the bounded
-   state store and explicit sidecar save/load seam are available, while
-   Inspector authoring, reload diagnostics, and transactional hot reload remain
-   in progress.
+   state store and explicit sidecar save/load seam are available. Inspector
+   template authoring, transactional attachment, and a bounded read-only
+   compiler-backed source preview are available; broader Inspector authoring,
+   reload diagnostics, and transactional hot reload remain in progress.
 4. Strengthen mixed-language event delivery and lifecycle diagnostics at the
    scene boundary; bounded queueing, Lua/HenkaScript emission, and `OnEvent`
    routing are available foundation work, while richer subscriptions and

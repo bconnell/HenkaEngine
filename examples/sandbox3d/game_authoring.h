@@ -6,6 +6,7 @@
 
 #include <henka/scene.h>
 #include <henka/scene_document.h>
+#include <henka/script.h>
 
 #include "play_session.h"
 
@@ -68,6 +69,14 @@ henka_result sandbox3d_game_authoring_remove_behavior_for_entity(
     sandbox3d_game_authoring* authoring,
     henka_entity entity,
     henka_scene_document_behavior_id behavior_id);
+/* Creates a confined template file and attaches its behavior transactionally.
+ * The authoring coordinator owns the document mutation; project_root is only
+ * borrowed for the duration of the call. */
+henka_result sandbox3d_game_authoring_attach_script_template(
+    sandbox3d_game_authoring* authoring,
+    const char* project_root,
+    henka_entity entity,
+    henka_script_language language);
 
 henka_result sandbox3d_game_authoring_save(
     sandbox3d_game_authoring* authoring,
