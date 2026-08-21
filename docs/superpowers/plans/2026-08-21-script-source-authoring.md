@@ -79,12 +79,12 @@
 - Produces: a bounded editor model with explicit Edit/Save/Revert/Reload actions, caret/selection/scroll state, staged invalid text, visible diagnostics, and an application-local text-input event stream.
 
 - [x] **Step 0: Add bounded source range editing** through `henka_script_source_replace_range`; prove insertion, deletion, invalid ranges, capacity rejection without mutation, and preserved indentation before building UI controls.
-- [ ] **Step 1: Write failing editor-model tests** for preserved indentation, line/column caret movement, insertion/deletion within the bounded source limit, compiler-derived HKS spans, invalid-source staging, revert to last loaded text, and Edit rejection while Play is active.
-- [ ] **Step 2: Extend the platform/UI input seam** with a bounded per-frame text-input buffer and logical cursor coordinates; clear the buffer after consumption and keep physical cursor data separate from automation-owned coordinates.
-- [ ] **Step 3: Implement editor state** as fixed-capacity line/caret/selection state over the source document; use compiler token offsets for HenkaScript display and backend diagnostics for error markers; use no copied Lua/HenkaScript grammar.
-- [ ] **Step 4: Implement Save/Revert controls** through the script asset API; keep invalid text staged and display the diagnostic while allowing save; never call runtime reload from a failed validation path.
-- [ ] **Step 5: Build the sandbox and run editor tests** under MSVC warning-as-error settings; verify the changed Henka modules introduce no warnings.
-- [ ] **Step 6: Commit** with `feat: add structured script editor input`.
+- [x] **Step 1: Write failing editor-model tests** for preserved indentation, line/column caret movement, insertion/deletion within the bounded source limit, compiler-derived HKS spans, invalid-source staging, revert to last loaded text, and Edit rejection while Play is active.
+- [x] **Step 2: Extend the platform/UI input seam** with a bounded per-frame text-input buffer and logical cursor coordinates; clear the buffer after consumption and keep physical cursor data separate from automation-owned coordinates.
+- [x] **Step 3: Implement editor state** as fixed-capacity line/caret/selection state over the source document; use compiler token offsets for HenkaScript display and backend diagnostics for error markers; use no copied Lua/HenkaScript grammar.
+- [x] **Step 4: Implement Save/Revert controls** through the script asset API; keep invalid text staged and display the diagnostic while allowing save; never call runtime reload from a failed validation path.
+- [x] **Step 5: Build the sandbox and run editor tests** under MSVC warning-as-error settings; verify the changed Henka modules introduce no warnings.
+- [x] **Step 6: Commit** with `feat: add structured script editor input`.
 
 ### Task 4: Add transactional Play reload
 
@@ -117,8 +117,8 @@
 - Modify: external template sources under `build/tv/external_game_minimal/external_game_minimal_src` only if the repository validation fixture is tracked and requires the new public seam.
 - Test: existing external template gate and documentation truth gate.
 
-- [ ] **Step 1: Update documentation** to mark source-document loading, staged editing, atomic save, and diagnostics as Available/Foundation only where tested; keep full debugger, schema migration, and broader project workflows unfinished.
-- [ ] **Step 2: Search public docs** for stale claims such as `source editing`, `hot reload`, `compiler authority`, and `second grammar`, then resolve contradictions against source.
+- [x] **Step 1: Update documentation** to mark source-document loading, staged editing, atomic save, and diagnostics as Available/Foundation only where tested; keep full debugger, schema migration, and broader project workflows unfinished.
+- [x] **Step 2: Search public docs** for stale claims such as `source editing`, `hot reload`, `compiler authority`, and `second grammar`, then resolve contradictions against source.
 - [ ] **Step 3: Run the focused suite, Debug build, documentation truth check, `git diff --check`, and external mixed-language project gate.**
 - [ ] **Step 4: Review the final diff** for duplicated syntax knowledge, unbounded growth, path escapes, ignored errors, and input ownership violations.
 - [ ] **Step 5: Commit and push** the integrated slice only after all gates pass.

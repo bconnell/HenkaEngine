@@ -101,8 +101,9 @@ roadmap is finished.
    isolated Play Scene Document binding, bounded behavior state, and explicit
    mixed-language event routing are foundation work already available; editor
    authoring and broader project scripting workflows remain open. Bounded
-   Inspector creation and transactional attachment of Lua/HenkaScript behavior
-   templates are already available; source editing and hot reload remain open.
+   Inspector creation, transactional attachment of Lua/HenkaScript behavior
+   templates, and the bounded compiler-backed source editor with Save/Revert are
+   already available; runtime hot reload remains open.
 2. Broader gameplay systems, input mapping, controllers, animation, and
    production game-debugging workflows.
 
@@ -276,9 +277,10 @@ and V1 `.hscene` foundations.
    bindings at load time.
 3. Extend behavior-state persistence and authoring ergonomics: the bounded
    state store and explicit sidecar save/load seam are available. Inspector
-   template authoring, transactional attachment, and a bounded read-only
-   compiler-backed source preview are available; broader Inspector authoring,
-   reload diagnostics, and transactional hot reload remain in progress.
+   template authoring, transactional attachment, and a bounded editable,
+   compiler-backed source panel with diagnostics and Save/Revert are available;
+   broader Inspector authoring, reload diagnostics, and transactional runtime
+   hot reload remain in progress.
 4. Strengthen mixed-language event delivery and lifecycle diagnostics at the
    scene boundary; bounded queueing, Lua/HenkaScript emission, and `OnEvent`
    routing are available foundation work, while richer subscriptions and
