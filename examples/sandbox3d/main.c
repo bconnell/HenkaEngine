@@ -21663,7 +21663,7 @@ details_group_authoring:
                 if (!state->native_authoring_bevel_reported)
                 {
                     printf(
-                        "Native authoring bevel control: name=%s x=%.1f y=%.1f width=82.0 height=24.0.\n",
+                        "Native authoring bevel control: name=%s x=%.1f y=%.1f width=54.0 height=24.0.\n",
                         display_name,
                         row.x,
                         row.y);

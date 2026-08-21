@@ -2222,7 +2222,7 @@ try {
         }
         $nativeBevelMatch = Get-LastLogRegexMatch `
             -Path $stdoutPath `
-            -Pattern 'Native authoring bevel control: name=(.+) x=([-0-9.]+) y=([-0-9.]+) width=82.0 height=24.0\.'
+            -Pattern 'Native authoring bevel control: name=(.+) x=([-0-9.]+) y=([-0-9.]+) width=54.0 height=24.0\.'
         if ($null -eq $nativeBevelMatch) {
             throw "The native bevel control geometry could not be parsed after Face selection."
         }
@@ -2234,7 +2234,7 @@ try {
             -FramebufferHeight $framebufferHeight `
             -X $nativeBevelX `
             -Y $nativeBevelY `
-            -Width 82.0 `
+            -Width 54.0 `
             -Height 24.0
         $nativeBevelObserved = $false
         for ($bevelAttempt = 0; $bevelAttempt -lt 3 -and -not $nativeBevelObserved; ++$bevelAttempt) {
@@ -2242,7 +2242,7 @@ try {
                 -Handle $mainWindowHandle `
                 -FramebufferWidth $framebufferWidth `
                 -FramebufferHeight $framebufferHeight `
-                -FramebufferX ($nativeBevelX + 41.0) `
+                -FramebufferX ($nativeBevelX + 27.0) `
                 -FramebufferY ($nativeBevelY + 12.0)
             $nativeBevelObserved = Wait-FileContains `
                 -Path $stdoutPath `
