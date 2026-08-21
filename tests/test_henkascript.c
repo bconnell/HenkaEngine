@@ -357,6 +357,106 @@ static void test_entity_host_contract(void)
     henka_hks_program_destroy(program);
 }
 
+typedef struct test_transform_dispatch_state
+{
+    bool set_position_called;
+    bool impulse_called;
+    henka_vec3 last_vector;
+} test_transform_dispatch_state;
+
+static henka_result test_transform_dispatch(
+    void* user_data,
+    uint32_t api_id,
+    const henka_script_api_value* arguments,
+    size_t argument_count,
+    henka_script_api_value* out_value)
+{
+    test_transform_dispatch_state* state =
+        (test_transform_dispatch_state*)user_data;
+    if (state == NULL || arguments == NULL || out_value == NULL ||
+        argument_count == 0U || arguments[0].type != HENKA_SCRIPT_API_VALUE_ENTITY)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    switch (api_id)
+    {
+        case HENKA_SCRIPT_API_ENTITY_IS_VALID:
+            out_value->type = HENKA_SCRIPT_API_VALUE_BOOL;
+            out_value->as.boolean = arguments[0].as.entity == 99U;
+            return HENKA_SUCCESS;
+        case HENKA_SCRIPT_API_TRANSFORM_GET_POSITION:
+            if (argument_count != 1U)
+            {
+                return HENKA_ERROR_INVALID_ARGUMENT;
+            }
+            out_value->type = HENKA_SCRIPT_API_VALUE_VEC3;
+            out_value->as.vec3 = (henka_vec3){4.0f, 5.0f, 6.0f};
+            return HENKA_SUCCESS;
+        case HENKA_SCRIPT_API_TRANSFORM_SET_POSITION:
+            state->set_position_called = true;
+            break;
+        case HENKA_SCRIPT_API_PHYSICS_APPLY_IMPULSE:
+            state->impulse_called = true;
+            break;
+        default:
+            return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    if (argument_count != 2U ||
+        arguments[1].type != HENKA_SCRIPT_API_VALUE_VEC3)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    state->last_vector = arguments[1].as.vec3;
+    *out_value = (henka_script_api_value){
+        HENKA_SCRIPT_API_VALUE_RESULT,
+        {.result = HENKA_SUCCESS}};
+    return HENKA_SUCCESS;
+}
+
+static void test_transform_and_physics_host_contract(void)
+{
+    henka_hks_program* program = compile_program(
+        "fn Move() { "
+        "entity target = event_other_entity(); "
+        "vec3 start = transform_get_position(target); "
+        "vec3 impulse = vec3(1.0, 2.0, 3.0); "
+        "if (entity_is_valid(target)) { "
+        "transform_set_position(target, impulse); "
+        "physics_apply_impulse(target, impulse); "
+        "} "
+        "}");
+    test_transform_dispatch_state dispatch_state = {false, false, {0.0f, 0.0f, 0.0f}};
+    henka_script_host* host = NULL;
+    henka_hks_execution_context context;
+    henka_hks_execution_report report;
+    henka_hks_value value;
+    const uint32_t api_ids[] = {
+        HENKA_SCRIPT_API_ENTITY_IS_VALID,
+        HENKA_SCRIPT_API_TRANSFORM_GET_POSITION,
+        HENKA_SCRIPT_API_TRANSFORM_SET_POSITION,
+        HENKA_SCRIPT_API_PHYSICS_APPLY_IMPULSE};
+
+    assert(henka_script_host_create(&host) == HENKA_SUCCESS);
+    for (size_t index = 0U; index < sizeof(api_ids) / sizeof(api_ids[0]); ++index)
+    {
+        assert(henka_script_host_bind_api(
+                   host, api_ids[index], &(size_t){0U}) == HENKA_SUCCESS);
+    }
+    assert(henka_script_host_set_dispatcher(
+               host, test_transform_dispatch, &dispatch_state) == HENKA_SUCCESS);
+    context = (henka_hks_execution_context){
+        host, 42U, 3U, 11U, false, 0U, 99U, 99U, 7U, true};
+    assert(henka_hks_execute_with_context(
+               program, 0U, 256U, &context, &value, &report) ==
+           HENKA_HKS_EXECUTION_COMPLETED);
+    assert(dispatch_state.set_position_called && dispatch_state.impulse_called);
+    assert(dispatch_state.last_vector.x == 1.0f &&
+           dispatch_state.last_vector.y == 2.0f &&
+           dispatch_state.last_vector.z == 3.0f);
+    henka_script_host_destroy(host);
+    henka_hks_program_destroy(program);
+}
+
 static void test_state_host_contract(void)
 {
     static const char source[] =
@@ -426,6 +526,7 @@ int main(void)
     test_bounded_for_and_loop_control();
     test_signal_context_access();
     test_entity_host_contract();
+    test_transform_and_physics_host_contract();
     test_state_host_contract();
     assert(henka_memory_get_allocation_count() == allocations_before);
     puts("henka_henkascript_tests: PASS");

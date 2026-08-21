@@ -5,6 +5,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include <henka/math.h>
 #include <henka/result.h>
 
 #define HENKA_HKS_MAX_SOURCE_BYTES (256U * 1024U)
@@ -31,6 +32,7 @@ typedef enum henka_hks_token_kind
     HENKA_HKS_TOKEN_KW_I32,
     HENKA_HKS_TOKEN_KW_U32,
     HENKA_HKS_TOKEN_KW_F32,
+    HENKA_HKS_TOKEN_KW_VEC3,
     HENKA_HKS_TOKEN_KW_ENTITY,
     HENKA_HKS_TOKEN_KW_FN,
     HENKA_HKS_TOKEN_KW_BEHAVIOR,
@@ -41,6 +43,9 @@ typedef enum henka_hks_token_kind
     HENKA_HKS_TOKEN_KW_STATE_GET_BOOL,
     HENKA_HKS_TOKEN_KW_STATE_SET_BOOL,
     HENKA_HKS_TOKEN_KW_ENTITY_IS_VALID,
+    HENKA_HKS_TOKEN_KW_TRANSFORM_GET_POSITION,
+    HENKA_HKS_TOKEN_KW_TRANSFORM_SET_POSITION,
+    HENKA_HKS_TOKEN_KW_PHYSICS_APPLY_IMPULSE,
     HENKA_HKS_TOKEN_KW_EVENT_ID,
     HENKA_HKS_TOKEN_KW_EVENT_OTHER_ENTITY,
     HENKA_HKS_TOKEN_KW_EVENT_TYPE,
@@ -91,6 +96,7 @@ typedef enum henka_hks_value_type
     HENKA_HKS_TYPE_I32,
     HENKA_HKS_TYPE_U32,
     HENKA_HKS_TYPE_F32,
+    HENKA_HKS_TYPE_VEC3,
     HENKA_HKS_TYPE_ENTITY,
     HENKA_HKS_TYPE_STRING
 } henka_hks_value_type;
@@ -142,6 +148,7 @@ typedef struct henka_hks_value
         int32_t i32;
         uint32_t u32;
         float f32;
+        henka_vec3 vec3;
         uint64_t entity;
     } as;
 } henka_hks_value;

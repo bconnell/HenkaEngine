@@ -58,6 +58,10 @@ execution adapters for both languages.
   equality/inequality is available for bounded signal branching. The typed
   `entity_is_valid(entity)` intrinsic resolves through the shared
   `Entity.IsValid` host binding and returns a checked boolean.
+- HenkaScript also has a bounded `vec3(x, y, z)` value constructor plus
+  `transform_get_position(entity)`, `transform_set_position(entity, position)`,
+  and `physics_apply_impulse(entity, impulse)` host operations. Vector values
+  are finite `f32` triples and host failures terminate the callback safely.
 - Fixed token, binding, callable, AST-node, identifier, diagnostic, and source
   size limits. `let` and `var` are rejected rather than treated as alternate
   declaration semantics.

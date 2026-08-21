@@ -39,6 +39,7 @@ typedef enum henka_hks_opcode
     HENKA_HKS_OPCODE_PUSH_I32 = 0,
     HENKA_HKS_OPCODE_PUSH_F32,
     HENKA_HKS_OPCODE_PUSH_BOOL,
+    HENKA_HKS_OPCODE_MAKE_VEC3,
     HENKA_HKS_OPCODE_PUSH_UNSUPPORTED,
     HENKA_HKS_OPCODE_LOAD,
     HENKA_HKS_OPCODE_STORE,
@@ -55,6 +56,9 @@ typedef enum henka_hks_opcode
     HENKA_HKS_OPCODE_STATE_GET_BOOL,
     HENKA_HKS_OPCODE_STATE_SET_BOOL,
     HENKA_HKS_OPCODE_ENTITY_IS_VALID,
+    HENKA_HKS_OPCODE_TRANSFORM_GET_POSITION,
+    HENKA_HKS_OPCODE_TRANSFORM_SET_POSITION,
+    HENKA_HKS_OPCODE_PHYSICS_APPLY_IMPULSE,
     HENKA_HKS_OPCODE_EVENT_GET_ID,
     HENKA_HKS_OPCODE_EVENT_GET_OTHER_ENTITY,
     HENKA_HKS_OPCODE_EVENT_GET_TYPE,
@@ -197,6 +201,7 @@ static henka_hks_token_kind henka_hks_keyword_kind(
         {"i32", HENKA_HKS_TOKEN_KW_I32},
         {"u32", HENKA_HKS_TOKEN_KW_U32},
         {"f32", HENKA_HKS_TOKEN_KW_F32},
+        {"vec3", HENKA_HKS_TOKEN_KW_VEC3},
         {"entity", HENKA_HKS_TOKEN_KW_ENTITY},
         {"fn", HENKA_HKS_TOKEN_KW_FN},
         {"behavior", HENKA_HKS_TOKEN_KW_BEHAVIOR},
@@ -207,6 +212,9 @@ static henka_hks_token_kind henka_hks_keyword_kind(
         {"state_get_bool", HENKA_HKS_TOKEN_KW_STATE_GET_BOOL},
         {"state_set_bool", HENKA_HKS_TOKEN_KW_STATE_SET_BOOL},
         {"entity_is_valid", HENKA_HKS_TOKEN_KW_ENTITY_IS_VALID},
+        {"transform_get_position", HENKA_HKS_TOKEN_KW_TRANSFORM_GET_POSITION},
+        {"transform_set_position", HENKA_HKS_TOKEN_KW_TRANSFORM_SET_POSITION},
+        {"physics_apply_impulse", HENKA_HKS_TOKEN_KW_PHYSICS_APPLY_IMPULSE},
         {"event_id", HENKA_HKS_TOKEN_KW_EVENT_ID},
         {"event_other_entity", HENKA_HKS_TOKEN_KW_EVENT_OTHER_ENTITY},
         {"event_type", HENKA_HKS_TOKEN_KW_EVENT_TYPE},
@@ -571,6 +579,7 @@ static henka_hks_value_type henka_hks_type_from_token(henka_hks_token_kind kind)
         case HENKA_HKS_TOKEN_KW_I32: return HENKA_HKS_TYPE_I32;
         case HENKA_HKS_TOKEN_KW_U32: return HENKA_HKS_TYPE_U32;
         case HENKA_HKS_TOKEN_KW_F32: return HENKA_HKS_TYPE_F32;
+        case HENKA_HKS_TOKEN_KW_VEC3: return HENKA_HKS_TYPE_VEC3;
         case HENKA_HKS_TOKEN_KW_ENTITY: return HENKA_HKS_TYPE_ENTITY;
         default: return HENKA_HKS_TYPE_UNKNOWN;
     }
@@ -810,6 +819,152 @@ static henka_result henka_hks_parse_entity_is_valid(
         parser, HENKA_HKS_OPCODE_ENTITY_IS_VALID, *out_type, 0U, 0, 0.0F);
 }
 
+static henka_result henka_hks_parse_vec3_constructor(
+    henka_hks_parser* parser,
+    henka_hks_value_type* out_type)
+{
+    henka_hks_value_type component_type;
+    henka_result result;
+    if (parser == NULL || out_type == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    ++parser->index;
+    if (henka_hks_expect(parser, HENKA_HKS_TOKEN_LPAREN, "vec3 requires '('") != HENKA_SUCCESS)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    for (size_t index = 0U; index < 3U; ++index)
+    {
+        result = henka_hks_parse_expression(parser, &component_type);
+        if (result != HENKA_SUCCESS)
+        {
+            return result;
+        }
+        if (component_type != HENKA_HKS_TYPE_F32)
+        {
+            return henka_hks_fail(
+                parser->diagnostic,
+                HENKA_HKS_DIAGNOSTIC_TYPE_MISMATCH,
+                henka_hks_current(parser),
+                "vec3 components must be f32 expressions");
+        }
+        if (index < 2U &&
+            henka_hks_expect(parser, HENKA_HKS_TOKEN_COMMA, "vec3 requires three comma-separated components") != HENKA_SUCCESS)
+        {
+            return HENKA_ERROR_INVALID_ARGUMENT;
+        }
+    }
+    if (henka_hks_expect(parser, HENKA_HKS_TOKEN_RPAREN, "vec3 requires ')'" ) != HENKA_SUCCESS)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    *out_type = HENKA_HKS_TYPE_VEC3;
+    if (henka_hks_add_node(parser, HENKA_HKS_AST_HOST_CALL, *out_type) != HENKA_SUCCESS)
+    {
+        return HENKA_ERROR_LIMIT;
+    }
+    return henka_hks_emit(
+        parser, HENKA_HKS_OPCODE_MAKE_VEC3, *out_type, 0U, 0, 0.0F);
+}
+
+static henka_result henka_hks_parse_transform_get_position(
+    henka_hks_parser* parser,
+    henka_hks_value_type* out_type)
+{
+    henka_hks_value_type argument_type;
+    henka_result result;
+    if (parser == NULL || out_type == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    ++parser->index;
+    if (henka_hks_expect(parser, HENKA_HKS_TOKEN_LPAREN, "transform_get_position requires '('") != HENKA_SUCCESS)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    result = henka_hks_parse_expression(parser, &argument_type);
+    if (result != HENKA_SUCCESS)
+    {
+        return result;
+    }
+    if (argument_type != HENKA_HKS_TYPE_ENTITY)
+    {
+        return henka_hks_fail(
+            parser->diagnostic,
+            HENKA_HKS_DIAGNOSTIC_TYPE_MISMATCH,
+            henka_hks_current(parser),
+            "transform_get_position requires an entity expression");
+    }
+    if (henka_hks_expect(parser, HENKA_HKS_TOKEN_RPAREN, "transform_get_position requires ')'" ) != HENKA_SUCCESS)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    *out_type = HENKA_HKS_TYPE_VEC3;
+    if (henka_hks_add_node(parser, HENKA_HKS_AST_HOST_CALL, *out_type) != HENKA_SUCCESS)
+    {
+        return HENKA_ERROR_LIMIT;
+    }
+    return henka_hks_emit(
+        parser, HENKA_HKS_OPCODE_TRANSFORM_GET_POSITION, *out_type, 0U, 0, 0.0F);
+}
+
+static henka_result henka_hks_parse_vec3_statement(
+    henka_hks_parser* parser,
+    henka_hks_opcode opcode,
+    const char* name)
+{
+    henka_hks_value_type argument_type;
+    henka_result result;
+    if (parser == NULL || name == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    ++parser->index;
+    if (henka_hks_expect(parser, HENKA_HKS_TOKEN_LPAREN, "host vector operation requires '('") != HENKA_SUCCESS)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    result = henka_hks_parse_expression(parser, &argument_type);
+    if (result != HENKA_SUCCESS || argument_type != HENKA_HKS_TYPE_ENTITY)
+    {
+        return result != HENKA_SUCCESS
+            ? result
+            : henka_hks_fail(
+                parser->diagnostic,
+                HENKA_HKS_DIAGNOSTIC_TYPE_MISMATCH,
+                henka_hks_current(parser),
+                "%s requires an entity expression",
+                name);
+    }
+    if (henka_hks_expect(parser, HENKA_HKS_TOKEN_COMMA, "host vector operation requires an entity and vec3") != HENKA_SUCCESS)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    result = henka_hks_parse_expression(parser, &argument_type);
+    if (result != HENKA_SUCCESS || argument_type != HENKA_HKS_TYPE_VEC3)
+    {
+        return result != HENKA_SUCCESS
+            ? result
+            : henka_hks_fail(
+                parser->diagnostic,
+                HENKA_HKS_DIAGNOSTIC_TYPE_MISMATCH,
+                henka_hks_current(parser),
+                "%s requires a vec3 expression",
+                name);
+    }
+    if (henka_hks_expect(parser, HENKA_HKS_TOKEN_RPAREN, "host vector operation requires ')'" ) != HENKA_SUCCESS ||
+        henka_hks_expect(parser, HENKA_HKS_TOKEN_SEMICOLON, "host vector operation requires a semicolon") != HENKA_SUCCESS)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    if (henka_hks_add_node(parser, HENKA_HKS_AST_HOST_CALL, HENKA_HKS_TYPE_VOID) != HENKA_SUCCESS)
+    {
+        return HENKA_ERROR_LIMIT;
+    }
+    return henka_hks_emit(parser, opcode, HENKA_HKS_TYPE_VEC3, 0U, 0, 0.0F);
+}
+
 static henka_hks_opcode henka_hks_event_opcode(henka_hks_token_kind kind)
 {
     switch (kind)
@@ -1014,6 +1169,14 @@ static henka_result henka_hks_parse_primary(
     if (token->kind == HENKA_HKS_TOKEN_KW_ENTITY_IS_VALID)
     {
         return henka_hks_parse_entity_is_valid(parser, out_type);
+    }
+    if (token->kind == HENKA_HKS_TOKEN_KW_VEC3)
+    {
+        return henka_hks_parse_vec3_constructor(parser, out_type);
+    }
+    if (token->kind == HENKA_HKS_TOKEN_KW_TRANSFORM_GET_POSITION)
+    {
+        return henka_hks_parse_transform_get_position(parser, out_type);
     }
     if (henka_hks_is_event_get_token(token->kind))
     {
@@ -1851,6 +2014,18 @@ static henka_result henka_hks_parse_statement(henka_hks_parser* parser)
             0,
             0.0F);
     }
+    if (token->kind == HENKA_HKS_TOKEN_KW_TRANSFORM_SET_POSITION ||
+        token->kind == HENKA_HKS_TOKEN_KW_PHYSICS_APPLY_IMPULSE)
+    {
+        return henka_hks_parse_vec3_statement(
+            parser,
+            token->kind == HENKA_HKS_TOKEN_KW_TRANSFORM_SET_POSITION
+                ? HENKA_HKS_OPCODE_TRANSFORM_SET_POSITION
+                : HENKA_HKS_OPCODE_PHYSICS_APPLY_IMPULSE,
+            token->kind == HENKA_HKS_TOKEN_KW_TRANSFORM_SET_POSITION
+                ? "transform_set_position"
+                : "physics_apply_impulse");
+    }
     if (henka_hks_is_state_set_token(token->kind))
     {
         const henka_hks_token_kind state_kind = token->kind;
@@ -2311,6 +2486,34 @@ henka_hks_execution_result henka_hks_execute_with_context(
                     return henka_hks_vm_finish(out_report, HENKA_HKS_EXECUTION_STACK_OVERFLOW, instructions_executed, stack_depth);
                 }
                 stack[stack_depth++] = (henka_hks_value){HENKA_HKS_TYPE_BOOL, {.boolean = instruction->i32 != 0}};
+                break;
+            case HENKA_HKS_OPCODE_MAKE_VEC3:
+                if (stack_depth < 3U)
+                {
+                    return henka_hks_vm_finish(
+                        out_report,
+                        HENKA_HKS_EXECUTION_STACK_UNDERFLOW,
+                        instructions_executed,
+                        stack_depth);
+                }
+                right = stack[--stack_depth];
+                left = stack[--stack_depth];
+                value = stack[--stack_depth];
+                if (value.type != HENKA_HKS_TYPE_F32 ||
+                    left.type != HENKA_HKS_TYPE_F32 ||
+                    right.type != HENKA_HKS_TYPE_F32 ||
+                    !isfinite(value.as.f32) || !isfinite(left.as.f32) ||
+                    !isfinite(right.as.f32))
+                {
+                    return henka_hks_vm_finish(
+                        out_report,
+                        HENKA_HKS_EXECUTION_TYPE_ERROR,
+                        instructions_executed,
+                        stack_depth);
+                }
+                stack[stack_depth++] = (henka_hks_value){
+                    HENKA_HKS_TYPE_VEC3,
+                    {.vec3 = {value.as.f32, left.as.f32, right.as.f32}}};
                 break;
             case HENKA_HKS_OPCODE_PUSH_UNSUPPORTED:
                 return henka_hks_vm_finish(out_report, HENKA_HKS_EXECUTION_UNSUPPORTED_VALUE, instructions_executed, stack_depth);
@@ -2857,6 +3060,135 @@ henka_hks_execution_result henka_hks_execute_with_context(
                     stack[stack_depth++] = (henka_hks_value){
                         HENKA_HKS_TYPE_BOOL,
                         {.boolean = output.as.boolean}};
+                }
+                break;
+            case HENKA_HKS_OPCODE_TRANSFORM_GET_POSITION:
+                {
+                    henka_script_api_value argument;
+                    henka_script_api_value output;
+                    henka_result host_result;
+                    if (stack_depth == 0U)
+                    {
+                        return henka_hks_vm_finish(
+                            out_report,
+                            HENKA_HKS_EXECUTION_STACK_UNDERFLOW,
+                            instructions_executed,
+                            stack_depth);
+                    }
+                    value = stack[--stack_depth];
+                    if (value.type != HENKA_HKS_TYPE_ENTITY ||
+                        context == NULL || context->host == NULL)
+                    {
+                        if (out_report != NULL)
+                        {
+                            out_report->host_error = HENKA_ERROR_INVALID_ARGUMENT;
+                        }
+                        return henka_hks_vm_finish(
+                            out_report,
+                            HENKA_HKS_EXECUTION_HOST_ERROR,
+                            instructions_executed,
+                            stack_depth);
+                    }
+                    argument = (henka_script_api_value){
+                        HENKA_SCRIPT_API_VALUE_ENTITY,
+                        {.entity = value.as.entity}};
+                    host_result = henka_script_host_invoke(
+                        context->host,
+                        HENKA_SCRIPT_API_TRANSFORM_GET_POSITION,
+                        &argument,
+                        1U,
+                        &output);
+                    if (host_result != HENKA_SUCCESS ||
+                        output.type != HENKA_SCRIPT_API_VALUE_VEC3 ||
+                        !isfinite(output.as.vec3.x) || !isfinite(output.as.vec3.y) ||
+                        !isfinite(output.as.vec3.z))
+                    {
+                        if (out_report != NULL)
+                        {
+                            out_report->host_error = host_result != HENKA_SUCCESS
+                                ? host_result
+                                : HENKA_ERROR_INVALID_ARGUMENT;
+                        }
+                        return henka_hks_vm_finish(
+                            out_report,
+                            HENKA_HKS_EXECUTION_HOST_ERROR,
+                            instructions_executed,
+                            stack_depth);
+                    }
+                    if (stack_depth >= HENKA_HKS_MAX_VM_STACK)
+                    {
+                        return henka_hks_vm_finish(
+                            out_report,
+                            HENKA_HKS_EXECUTION_STACK_OVERFLOW,
+                            instructions_executed,
+                            stack_depth);
+                    }
+                    stack[stack_depth++] = (henka_hks_value){
+                        HENKA_HKS_TYPE_VEC3,
+                        {.vec3 = output.as.vec3}};
+                }
+                break;
+            case HENKA_HKS_OPCODE_TRANSFORM_SET_POSITION:
+            case HENKA_HKS_OPCODE_PHYSICS_APPLY_IMPULSE:
+                {
+                    henka_script_api_value arguments[2];
+                    henka_script_api_value output;
+                    henka_result host_result;
+                    const uint32_t api_id = instruction->opcode == HENKA_HKS_OPCODE_TRANSFORM_SET_POSITION
+                        ? HENKA_SCRIPT_API_TRANSFORM_SET_POSITION
+                        : HENKA_SCRIPT_API_PHYSICS_APPLY_IMPULSE;
+                    if (stack_depth < 2U)
+                    {
+                        return henka_hks_vm_finish(
+                            out_report,
+                            HENKA_HKS_EXECUTION_STACK_UNDERFLOW,
+                            instructions_executed,
+                            stack_depth);
+                    }
+                    right = stack[--stack_depth];
+                    left = stack[--stack_depth];
+                    if (left.type != HENKA_HKS_TYPE_ENTITY ||
+                        right.type != HENKA_HKS_TYPE_VEC3 ||
+                        context == NULL || context->host == NULL)
+                    {
+                        if (out_report != NULL)
+                        {
+                            out_report->host_error = HENKA_ERROR_INVALID_ARGUMENT;
+                        }
+                        return henka_hks_vm_finish(
+                            out_report,
+                            HENKA_HKS_EXECUTION_HOST_ERROR,
+                            instructions_executed,
+                            stack_depth);
+                    }
+                    arguments[0] = (henka_script_api_value){
+                        HENKA_SCRIPT_API_VALUE_ENTITY,
+                        {.entity = left.as.entity}};
+                    arguments[1] = (henka_script_api_value){
+                        HENKA_SCRIPT_API_VALUE_VEC3,
+                        {.vec3 = right.as.vec3}};
+                    host_result = henka_script_host_invoke(
+                        context->host,
+                        api_id,
+                        arguments,
+                        2U,
+                        &output);
+                    if (host_result != HENKA_SUCCESS ||
+                        output.type != HENKA_SCRIPT_API_VALUE_RESULT ||
+                        output.as.result != HENKA_SUCCESS)
+                    {
+                        if (out_report != NULL)
+                        {
+                            out_report->host_error = host_result != HENKA_SUCCESS
+                                ? host_result
+                                : output.as.result;
+                        }
+                        return henka_hks_vm_finish(
+                            out_report,
+                            HENKA_HKS_EXECUTION_HOST_ERROR,
+                            instructions_executed,
+                            stack_depth);
+                    }
                 }
                 break;
             case HENKA_HKS_OPCODE_EVENT_GET_ID:
