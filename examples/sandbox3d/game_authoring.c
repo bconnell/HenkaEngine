@@ -421,10 +421,14 @@ henka_result sandbox3d_game_authoring_load(
     size_t rebound_count = 0U;
     henka_result result;
     if (authoring == NULL || project_root == NULL ||
-        sandbox3d_game_authoring_is_play_locked(authoring) ||
-        henka_scene_document_create(&candidate) != HENKA_SUCCESS)
+        sandbox3d_game_authoring_is_play_locked(authoring))
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    result = henka_scene_document_create(&candidate);
+    if (result != HENKA_SUCCESS)
+    {
+        return result;
     }
     result = henka_scene_document_load_file(candidate, project_root, authoring->relative_path);
     if (result != HENKA_SUCCESS)
@@ -577,6 +581,7 @@ bool sandbox3d_game_authoring_is_play_locked(
 {
     const sandbox3d_play_session_state state =
         sandbox3d_game_authoring_get_play_state(authoring);
-    return state == SANDBOX3D_PLAY_SESSION_RUNNING ||
-        state == SANDBOX3D_PLAY_SESSION_PAUSED;
+    return authoring != NULL &&
+        (state != SANDBOX3D_PLAY_SESSION_STOPPED ||
+            sandbox3d_scene_document_bridge_is_play_locked(authoring->bridge));
 }

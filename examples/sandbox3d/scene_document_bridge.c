@@ -292,10 +292,13 @@ henka_result sandbox3d_scene_document_bridge_apply_object(
 {
     henka_scene_object_info previous_info;
     henka_interaction_desc previous_interaction;
+    char previous_name[HENKA_SCENE_DOCUMENT_MAX_NAME_BYTES];
+    char previous_prompt[HENKA_SCENE_DOCUMENT_MAX_PROMPT_BYTES];
     henka_scene_document_object object;
     henka_interaction_desc interaction;
     henka_entity entity;
     henka_result result;
+    int written;
     if (bridge == NULL || bridge->play_locked ||
         sandbox3d_scene_document_bridge_get_bound_object(
             bridge, document_id, &object, &entity) != HENKA_SUCCESS)
@@ -307,20 +310,38 @@ henka_result sandbox3d_scene_document_bridge_apply_object(
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
+    written = snprintf(
+        previous_name,
+        sizeof(previous_name),
+        "%s",
+        previous_info.name == NULL ? "" : previous_info.name);
+    if (written < 0 || (size_t)written >= sizeof(previous_name))
+    {
+        return HENKA_ERROR_LIMIT;
+    }
+    written = snprintf(
+        previous_prompt,
+        sizeof(previous_prompt),
+        "%s",
+        previous_interaction.prompt == NULL ? "" : previous_interaction.prompt);
+    if (written < 0 || (size_t)written >= sizeof(previous_prompt))
+    {
+        return HENKA_ERROR_LIMIT;
+    }
     result = henka_scene_set_entity_name(bridge->scene, entity, object.name);
     if (result != HENKA_SUCCESS)
     {
-        return result;
+        goto rollback;
     }
     result = henka_scene_set_entity_transform(bridge->scene, entity, object.transform);
     if (result != HENKA_SUCCESS)
     {
-        return result;
+        goto rollback;
     }
     result = henka_scene_set_entity_visible(bridge->scene, entity, object.visible);
     if (result != HENKA_SUCCESS)
     {
-        return result;
+        goto rollback;
     }
     interaction = (henka_interaction_desc){
         object.interaction.enabled,
@@ -332,12 +353,13 @@ henka_result sandbox3d_scene_document_bridge_apply_object(
         return HENKA_SUCCESS;
     }
 
+rollback:
     /* Every value above was validated before publication. Restore the
      * complete runtime presentation if a later setter rejects the update. */
     (void)henka_scene_set_entity_name(
         bridge->scene,
         entity,
-        previous_info.name == NULL ? "" : previous_info.name);
+        previous_name);
     (void)henka_scene_set_entity_transform(
         bridge->scene,
         entity,
@@ -349,7 +371,10 @@ henka_result sandbox3d_scene_document_bridge_apply_object(
     (void)henka_scene_set_entity_interaction(
         bridge->scene,
         entity,
-        &previous_interaction);
+        &(henka_interaction_desc){
+            previous_interaction.enabled,
+            previous_interaction.max_distance,
+            previous_prompt});
     return result;
 }
 

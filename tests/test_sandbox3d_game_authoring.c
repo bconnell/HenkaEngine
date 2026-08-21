@@ -12,6 +12,7 @@ int main(void)
     sandbox3d_game_authoring* authoring = NULL;
     henka_scene_document_object object;
     henka_scene_document_object restored;
+    henka_scene_document* replacement_document = NULL;
     henka_scene_document_id object_id = HENKA_INVALID_SCENE_DOCUMENT_ID;
     henka_scene_document_id restored_id = HENKA_INVALID_SCENE_DOCUMENT_ID;
     henka_entity entity = HENKA_INVALID_ENTITY;
@@ -33,6 +34,7 @@ int main(void)
         restored_id != object_id || !object.interaction.enabled ||
         object.interaction.max_distance != 4.0f)
     {
+        fprintf(stderr, "game authoring test failed during setup\n");
         goto cleanup;
     }
 
@@ -51,6 +53,7 @@ int main(void)
         henka_scene_get_entity_interaction(scene, entity, &interaction) != HENKA_SUCCESS ||
         !interaction.enabled || interaction.max_distance != 4.0f)
     {
+        fprintf(stderr, "game authoring test failed during save/load\n");
         goto cleanup;
     }
     if (sandbox3d_game_authoring_get_object_for_entity(
@@ -59,8 +62,34 @@ int main(void)
         restored.physics.body_type != HENKA_PHYSICS_BODY_DYNAMIC ||
         !restored.interaction.enabled)
     {
+        fprintf(stderr, "game authoring test failed during authored-object verification\n");
         goto cleanup;
     }
+
+    if (henka_scene_document_create(&replacement_document) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    restored.id = UINT64_C(5000);
+    if (henka_scene_document_add_object(
+            replacement_document,
+            &restored,
+            &restored_id) != HENKA_SUCCESS ||
+        restored_id != UINT64_C(5000) ||
+        henka_scene_document_save_file(
+            replacement_document,
+            ".",
+            relative_path) != HENKA_SUCCESS ||
+        sandbox3d_game_authoring_load(authoring, ".") != HENKA_SUCCESS ||
+        sandbox3d_game_authoring_get_object_for_entity(
+            authoring, entity, &restored_id, &restored) != HENKA_SUCCESS ||
+            restored_id != UINT64_C(5000))
+    {
+        fprintf(stderr, "game authoring test failed during persistent-ID remap\n");
+        goto cleanup;
+    }
+    henka_scene_document_destroy(replacement_document);
+    replacement_document = NULL;
 
     {
         FILE* invalid_file = fopen(relative_path, "wb");
@@ -83,12 +112,13 @@ int main(void)
             !interaction.enabled || interaction.max_distance != 4.0f ||
             sandbox3d_game_authoring_get_object_for_entity(
                 authoring, entity, &restored_id, &restored) != HENKA_SUCCESS ||
-            restored_id != object_id || !restored.interaction.enabled)
+            restored_id != UINT64_C(5000) || !restored.interaction.enabled)
         {
             if (invalid_file != NULL)
             {
                 fclose(invalid_file);
             }
+            fprintf(stderr, "game authoring test failed during malformed-load retention\n");
             goto cleanup;
         }
     }
@@ -96,7 +126,12 @@ int main(void)
     transform = restored.transform;
     if (sandbox3d_game_authoring_start_play(authoring) != HENKA_SUCCESS ||
         !sandbox3d_game_authoring_is_play_locked(authoring) ||
+        sandbox3d_game_authoring_pause_play(authoring) != HENKA_SUCCESS ||
+        !sandbox3d_game_authoring_is_play_locked(authoring) ||
+        sandbox3d_game_authoring_save(authoring, ".") != HENKA_ERROR_INVALID_ARGUMENT ||
+        sandbox3d_game_authoring_load(authoring, ".") != HENKA_ERROR_INVALID_ARGUMENT ||
         sandbox3d_game_authoring_update_object_for_entity(authoring, entity, &restored) != HENKA_ERROR_INVALID_ARGUMENT ||
+        sandbox3d_game_authoring_resume_play(authoring) != HENKA_SUCCESS ||
         sandbox3d_game_authoring_step_play(authoring) != HENKA_SUCCESS ||
         henka_scene_get_entity_transform(scene, entity, &restored.transform) != HENKA_SUCCESS ||
         restored.transform.position.y >= transform.position.y ||
@@ -105,11 +140,13 @@ int main(void)
         henka_scene_get_entity_transform(scene, entity, &restored.transform) != HENKA_SUCCESS ||
         restored.transform.position.y != transform.position.y)
     {
+        fprintf(stderr, "game authoring test failed during Play lifecycle\n");
         goto cleanup;
     }
     exit_code = 0;
 
 cleanup:
+    henka_scene_document_destroy(replacement_document);
     sandbox3d_game_authoring_destroy(authoring);
     henka_scene_destroy(scene);
     return exit_code;
