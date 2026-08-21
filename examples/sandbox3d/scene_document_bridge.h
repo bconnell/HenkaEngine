@@ -18,6 +18,25 @@ void sandbox3d_scene_document_bridge_destroy(
     sandbox3d_scene_document_bridge* bridge);
 size_t sandbox3d_scene_document_bridge_get_binding_count(
     const sandbox3d_scene_document_bridge* bridge);
+henka_result sandbox3d_scene_document_bridge_get_binding_at(
+    const sandbox3d_scene_document_bridge* bridge,
+    size_t index,
+    henka_scene_document_id* out_document_id,
+    henka_entity* out_entity);
+henka_result sandbox3d_scene_document_bridge_validate(
+    const sandbox3d_scene_document_bridge* bridge);
+henka_result sandbox3d_scene_document_bridge_begin_play(
+    sandbox3d_scene_document_bridge* bridge);
+henka_result sandbox3d_scene_document_bridge_end_play(
+    sandbox3d_scene_document_bridge* bridge);
+bool sandbox3d_scene_document_bridge_is_play_locked(
+    const sandbox3d_scene_document_bridge* bridge);
+henka_scene* sandbox3d_scene_document_bridge_get_scene(
+    const sandbox3d_scene_document_bridge* bridge);
+henka_result sandbox3d_scene_document_bridge_get_object(
+    const sandbox3d_scene_document_bridge* bridge,
+    henka_scene_document_id document_id,
+    henka_scene_document_object* out_object);
 
 henka_result sandbox3d_scene_document_bridge_bind(
     sandbox3d_scene_document_bridge* bridge,

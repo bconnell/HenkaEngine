@@ -17,6 +17,7 @@ struct sandbox3d_scene_document_bridge
 {
     henka_scene_document* document;
     henka_scene* scene;
+    bool play_locked;
     size_t binding_count;
     sandbox3d_scene_document_binding bindings[
         SANDBOX3D_SCENE_DOCUMENT_BRIDGE_MAX_BINDINGS];
@@ -123,13 +124,110 @@ size_t sandbox3d_scene_document_bridge_get_binding_count(
     return bridge == NULL ? 0U : bridge->binding_count;
 }
 
+henka_result sandbox3d_scene_document_bridge_get_binding_at(
+    const sandbox3d_scene_document_bridge* bridge,
+    size_t index,
+    henka_scene_document_id* out_document_id,
+    henka_entity* out_entity)
+{
+    if (out_document_id != NULL)
+    {
+        *out_document_id = HENKA_INVALID_SCENE_DOCUMENT_ID;
+    }
+    if (out_entity != NULL)
+    {
+        *out_entity = HENKA_INVALID_ENTITY;
+    }
+    if (bridge == NULL || out_document_id == NULL || out_entity == NULL ||
+        index >= bridge->binding_count ||
+        !henka_scene_is_entity_valid(bridge->scene, bridge->bindings[index].entity))
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    *out_document_id = bridge->bindings[index].document_id;
+    *out_entity = bridge->bindings[index].entity;
+    return HENKA_SUCCESS;
+}
+
+henka_result sandbox3d_scene_document_bridge_validate(
+    const sandbox3d_scene_document_bridge* bridge)
+{
+    size_t index;
+    if (bridge == NULL || bridge->document == NULL || bridge->scene == NULL ||
+        henka_scene_document_validate(bridge->document) != HENKA_SUCCESS)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    for (index = 0U; index < bridge->binding_count; ++index)
+    {
+        if (henka_scene_document_get_object(
+                bridge->document,
+                bridge->bindings[index].document_id,
+                &(henka_scene_document_object){0}) != HENKA_SUCCESS ||
+            !henka_scene_is_entity_valid(bridge->scene, bridge->bindings[index].entity))
+        {
+            return HENKA_ERROR_INVALID_ARGUMENT;
+        }
+    }
+    return HENKA_SUCCESS;
+}
+
+henka_result sandbox3d_scene_document_bridge_begin_play(
+    sandbox3d_scene_document_bridge* bridge)
+{
+    if (bridge == NULL || bridge->play_locked ||
+        sandbox3d_scene_document_bridge_validate(bridge) != HENKA_SUCCESS)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    bridge->play_locked = true;
+    return HENKA_SUCCESS;
+}
+
+henka_result sandbox3d_scene_document_bridge_end_play(
+    sandbox3d_scene_document_bridge* bridge)
+{
+    if (bridge == NULL || !bridge->play_locked)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    bridge->play_locked = false;
+    return HENKA_SUCCESS;
+}
+
+bool sandbox3d_scene_document_bridge_is_play_locked(
+    const sandbox3d_scene_document_bridge* bridge)
+{
+    return bridge != NULL && bridge->play_locked;
+}
+
+henka_scene* sandbox3d_scene_document_bridge_get_scene(
+    const sandbox3d_scene_document_bridge* bridge)
+{
+    return bridge == NULL ? NULL : bridge->scene;
+}
+
+henka_result sandbox3d_scene_document_bridge_get_object(
+    const sandbox3d_scene_document_bridge* bridge,
+    henka_scene_document_id document_id,
+    henka_scene_document_object* out_object)
+{
+    if (bridge == NULL || out_object == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    return henka_scene_document_get_object(
+        bridge->document, document_id, out_object);
+}
+
 henka_result sandbox3d_scene_document_bridge_bind(
     sandbox3d_scene_document_bridge* bridge,
     henka_scene_document_id document_id,
     henka_entity entity)
 {
     henka_scene_document_object object;
-    if (bridge == NULL || document_id == HENKA_INVALID_SCENE_DOCUMENT_ID ||
+    if (bridge == NULL || bridge->play_locked ||
+        document_id == HENKA_INVALID_SCENE_DOCUMENT_ID ||
         entity == HENKA_INVALID_ENTITY ||
         bridge->binding_count >= SANDBOX3D_SCENE_DOCUMENT_BRIDGE_MAX_BINDINGS ||
         sandbox3d_scene_document_bridge_find_document_index(bridge, document_id) != SIZE_MAX ||
@@ -151,7 +249,7 @@ henka_result sandbox3d_scene_document_bridge_unbind(
 {
     const size_t index =
         sandbox3d_scene_document_bridge_find_document_index(bridge, document_id);
-    if (index == SIZE_MAX)
+    if (index == SIZE_MAX || bridge->play_locked)
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
@@ -196,7 +294,8 @@ henka_result sandbox3d_scene_document_bridge_apply_object(
     henka_interaction_desc interaction;
     henka_entity entity;
     henka_result result;
-    if (sandbox3d_scene_document_bridge_get_bound_object(
+    if (bridge == NULL || bridge->play_locked ||
+        sandbox3d_scene_document_bridge_get_bound_object(
             bridge, document_id, &object, &entity) != HENKA_SUCCESS)
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
@@ -233,7 +332,8 @@ henka_result sandbox3d_scene_document_bridge_sync_object(
     henka_entity entity;
     int written;
 
-    if (sandbox3d_scene_document_bridge_get_bound_object(
+    if (bridge == NULL || bridge->play_locked ||
+        sandbox3d_scene_document_bridge_get_bound_object(
             bridge, document_id, &candidate, &entity) != HENKA_SUCCESS ||
         henka_scene_get_entity_info(bridge->scene, entity, &info) != HENKA_SUCCESS ||
         henka_scene_get_entity_interaction(bridge->scene, entity, &interaction) != HENKA_SUCCESS)
