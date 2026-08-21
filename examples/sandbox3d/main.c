@@ -21085,12 +21085,22 @@ details_group_authoring:
                 }
                 else if (material_view.editor_binding != NULL)
                 {
-                    const float tint_x = row.x + row.width - 490.0f;
-                    const float metal_x = tint_x + 82.0f;
-                    const float rough_x = tint_x + 164.0f;
-                    const float emissive_x = tint_x + 246.0f;
-                    const float texture_x = tint_x + 328.0f;
-                    const float subsurface_x = tint_x + 410.0f;
+                    /* Keep the six material actions inside the bounded details
+                     * row. The Standard shell leaves less than 490px for this
+                     * content, so the previous 80px controls could overlap
+                     * Scene View and become non-deterministic to use. */
+                    const float material_control_width = 48.0f;
+                    const float material_control_gap = 8.0f;
+                    const float material_controls_width =
+                        material_control_width * 6.0f + material_control_gap * 5.0f;
+                    const float tint_x = fmaxf(
+                        row.x,
+                        row.x + row.width - material_controls_width);
+                    const float metal_x = tint_x + material_control_width + material_control_gap;
+                    const float rough_x = metal_x + material_control_width + material_control_gap;
+                    const float emissive_x = rough_x + material_control_width + material_control_gap;
+                    const float texture_x = emissive_x + material_control_width + material_control_gap;
+                    const float subsurface_x = texture_x + material_control_width + material_control_gap;
                     if (!state->native_authoring_material_editor_reported)
                     {
                         printf(
@@ -21109,7 +21119,7 @@ details_group_authoring:
                     if (henka_ui_button(
                             state->ui,
                             "authoring_material_tint",
-                            (henka_ui_rect){tint_x, row.y, 80.0f, 28.0f},
+                            (henka_ui_rect){tint_x, row.y, material_control_width, 28.0f},
                             "Color"))
                     {
                         const henka_material_instance_parameter previous_parameter =
@@ -21131,7 +21141,7 @@ details_group_authoring:
                     if (henka_ui_button(
                             state->ui,
                             "authoring_material_texture",
-                            (henka_ui_rect){texture_x, row.y, 80.0f, 28.0f},
+                            (henka_ui_rect){texture_x, row.y, material_control_width, 28.0f},
                             "Texture"))
                     {
                         char detail_identity[96];
@@ -21175,8 +21185,8 @@ details_group_authoring:
                     if (henka_ui_button(
                             state->ui,
                             "authoring_material_metallic",
-                            (henka_ui_rect){metal_x, row.y, 80.0f, 28.0f},
-                            "Metallic"))
+                            (henka_ui_rect){metal_x, row.y, material_control_width, 28.0f},
+                            "Metal"))
                     {
                         if (sandbox3d_native_authoring_edit_scalar(
                                 state,
@@ -21193,8 +21203,8 @@ details_group_authoring:
                     if (henka_ui_button(
                             state->ui,
                             "authoring_material_roughness",
-                            (henka_ui_rect){rough_x, row.y, 80.0f, 28.0f},
-                            "Roughness"))
+                            (henka_ui_rect){rough_x, row.y, material_control_width, 28.0f},
+                            "Rough"))
                     {
                         if (sandbox3d_native_authoring_edit_scalar(
                                 state,
@@ -21211,8 +21221,8 @@ details_group_authoring:
                     if (henka_ui_button(
                             state->ui,
                             "authoring_material_emissive",
-                            (henka_ui_rect){emissive_x, row.y, 80.0f, 28.0f},
-                            "Emissive"))
+                            (henka_ui_rect){emissive_x, row.y, material_control_width, 28.0f},
+                            "Emit"))
                     {
                         if (sandbox3d_native_authoring_edit_scalar(
                                 state,
@@ -21229,7 +21239,7 @@ details_group_authoring:
                     if (henka_ui_button(
                             state->ui,
                             "authoring_material_subsurface",
-                            (henka_ui_rect){subsurface_x, row.y, 80.0f, 28.0f},
+                            (henka_ui_rect){subsurface_x, row.y, material_control_width, 28.0f},
                             "Subsurface") &&
                         sandbox3d_native_authoring_edit_scalar(
                             state,
