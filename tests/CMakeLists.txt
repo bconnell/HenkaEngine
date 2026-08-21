@@ -11,6 +11,19 @@ henka_enable_project_warnings(henka_headless_runtime_tests)
 
 add_test(NAME henka_headless_runtime_tests COMMAND henka_headless_runtime_tests)
 
+add_executable(henka_scene_document_tests
+    test_scene_document.c
+)
+
+target_link_libraries(henka_scene_document_tests
+    PRIVATE
+        henka_runtime
+)
+
+henka_enable_project_warnings(henka_scene_document_tests)
+
+add_test(NAME henka_scene_document_tests COMMAND henka_scene_document_tests)
+
 if(WIN32)
     add_test(
         NAME henka_fullscreen_presentation_mapping_tests

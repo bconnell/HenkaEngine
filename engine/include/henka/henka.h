@@ -23,6 +23,7 @@
 #include <henka/result.h>
 #include <henka/runtime.h>
 #include <henka/scene.h>
+#include <henka/scene_document.h>
 #include <henka/shader.h>
 #include <henka/time.h>
 #include <henka/texture.h>
