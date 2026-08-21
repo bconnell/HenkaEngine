@@ -13,6 +13,7 @@ add_executable(henka_sandbox3d
     studio_environment.c
     workspace_tools.c
     editor_layout.c
+    scene_document_bridge.c
     main.c
 )
 

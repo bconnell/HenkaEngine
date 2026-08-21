@@ -24,6 +24,23 @@ henka_enable_project_warnings(henka_scene_document_tests)
 
 add_test(NAME henka_scene_document_tests COMMAND henka_scene_document_tests)
 
+add_executable(henka_sandbox3d_scene_document_bridge_tests
+    ../examples/sandbox3d/scene_document_bridge.c
+    test_sandbox3d_scene_document_bridge.c
+)
+
+target_link_libraries(henka_sandbox3d_scene_document_bridge_tests
+    PRIVATE
+        henka_runtime
+)
+
+henka_enable_project_warnings(henka_sandbox3d_scene_document_bridge_tests)
+
+add_test(
+    NAME henka_sandbox3d_scene_document_bridge_tests
+    COMMAND henka_sandbox3d_scene_document_bridge_tests
+)
+
 if(WIN32)
     add_test(
         NAME henka_fullscreen_presentation_mapping_tests
