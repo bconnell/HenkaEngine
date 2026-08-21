@@ -8423,6 +8423,9 @@ static henka_result sandbox3d_initialize_game_authoring(
     sandbox3d_state* state)
 {
     size_t index;
+    const size_t entity_count = state == NULL || state->scene == NULL
+        ? 0U
+        : henka_scene_get_entity_count(state->scene);
     henka_result result;
     const char* project_root;
 
@@ -8438,17 +8441,21 @@ static henka_result sandbox3d_initialize_game_authoring(
     {
         return result;
     }
-    for (index = 0U; index < SANDBOX3D_OBJECT_COUNT; ++index)
+    /* Every logical scene object is a Game Authoring subject.  The descriptor
+     * array contains only the original physics fixtures; imported showcase
+     * objects and later scene-owned authoring sources live outside it. */
+    for (index = 0U; index < entity_count; ++index)
     {
+        const henka_entity entity = henka_scene_get_entity_at_index(state->scene, index);
         henka_scene_document_id document_id;
-        if (index == SANDBOX3D_OBJECT_DEBUG_GRID ||
-            state->descriptors[index].entity == HENKA_INVALID_ENTITY)
+        if (entity == HENKA_INVALID_ENTITY ||
+            !sandbox3d_is_logical_scene_object(state, entity))
         {
             continue;
         }
         result = sandbox3d_game_authoring_register_entity(
             state->game_authoring,
-            state->descriptors[index].entity,
+            entity,
             &document_id);
         if (result != HENKA_SUCCESS)
         {
@@ -20312,6 +20319,28 @@ static bool sandbox3d_details_flow_disclosure(
                 state->native_authoring_disclosure_reported_expanded = *expanded;
             }
         }
+        if (group_id == SANDBOX3D_EDITOR_DETAILS_GROUP_PHYSICS &&
+            selected_entity != HENKA_INVALID_ENTITY &&
+            state->game_authoring != NULL)
+        {
+            henka_scene_document_id document_id = HENKA_INVALID_SCENE_DOCUMENT_ID;
+            henka_scene_document_object object = henka_scene_document_object_default();
+            if (sandbox3d_game_authoring_get_object_for_entity(
+                    state->game_authoring,
+                    selected_entity,
+                    &document_id,
+                    &object) == HENKA_SUCCESS)
+            {
+                printf(
+                    "Game authoring physics disclosure: name=%s x=%.1f y=%.1f width=%.1f height=28.0 expanded=%d.\n",
+                    sandbox3d_safe_entity_name(state, selected_entity, "authored object"),
+                    disclosure_bounds.x,
+                    disclosure_bounds.y,
+                    disclosure_bounds.width,
+                    *expanded ? 1 : 0);
+                fflush(stdout);
+            }
+        }
     }
     if (disclosure_bounds.width >= 86.0f)
     {
@@ -20445,6 +20474,7 @@ static void sandbox3d_draw_object_details_panel(
     size_t authoring_group_index;
     bool prioritize_authoring_group;
     bool authored_object_available;
+    bool stop_play_requested;
 
     if (engine == NULL ||
         state == NULL ||
@@ -20544,7 +20574,6 @@ static void sandbox3d_draw_object_details_panel(
             entity,
             &authored_document_id,
             &authored_object) == HENKA_SUCCESS;
-
     interaction_result =
         henka_scene_can_interact(
             state->scene,
@@ -20774,6 +20803,7 @@ static void sandbox3d_draw_object_details_panel(
         state->editor_ui.details_scroll_offset;
     disclosure_changed = false;
     content_height = 0.0f;
+    stop_play_requested = false;
 
     if (flow_desc.bounds.width <= 0.0f ||
         flow_desc.bounds.height <= 0.0f ||
@@ -24269,6 +24299,11 @@ details_group_physics:
                         true,
                         stop_result == HENKA_SUCCESS ? "Play stopped; authored state preserved." : "Play stop failed: %s.",
                         henka_result_to_string(stop_result));
+                    if (stop_result == HENKA_SUCCESS)
+                    {
+                        stop_play_requested = true;
+                        goto details_groups_complete;
+                    }
                 }
             }
         }
@@ -24595,6 +24630,14 @@ details_groups_complete:
         state,
         layout,
         SANDBOX3D_PANEL_SCROLL_DETAILS);
+    if (stop_play_requested)
+    {
+        sandbox3d_update_game_authoring(engine, state);
+        printf(
+            "Game authoring play stopped: state=%d.\n",
+            (int)sandbox3d_game_authoring_get_play_state(state->game_authoring));
+        fflush(stdout);
+    }
 }
 
 static void sandbox3d_draw_utility_panel(
@@ -29100,6 +29143,10 @@ static void sandbox3d_update(henka_engine* engine, double delta_seconds, void* u
     sandbox3d_state* state;
 
     state = (sandbox3d_state*)user_data;
+    /* Stop destroys the runtime scene during UI dispatch.  Reconcile the
+     * engine-owned scene before any frame work can dereference the previous
+     * runtime pointer (environment, terrain, input, or physics). */
+    sandbox3d_update_game_authoring(engine, state);
     if (state != NULL && state->terrain_world != NULL && state->terrain_storage != NULL &&
         !state->smoke_test && !state->capture_mode_requested &&
         !state->terrain_capture_mode_requested)
@@ -30205,7 +30252,6 @@ static void sandbox3d_update(henka_engine* engine, double delta_seconds, void* u
     }
 
     sandbox3d_update_physics(state, delta_seconds);
-    sandbox3d_update_game_authoring(engine, state);
     henka_scene_set_camera(state->scene, &state->camera);
     sandbox3d_report_capture_ready(engine, state);
     sandbox3d_update_gizmo_rendering(state);

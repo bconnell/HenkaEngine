@@ -2381,6 +2381,149 @@ try {
             -Path $nativeAuthoringScreenshotPath `
             -Description "Packaged native authoring screenshot"
 
+        Write-Step "Checking Game Authoring Play lifecycle"
+        $gamePhysicsDisclosure = $null
+        for ($scrollAttempt = 0; $scrollAttempt -lt 20 -and $null -eq $gamePhysicsDisclosure; ++$scrollAttempt) {
+            $gamePhysicsDisclosure = Get-LastLogRegexMatch `
+                -Path $stdoutPath `
+                -Pattern 'Game authoring physics disclosure: name=(?<name>.+) x=(?<x>[-0-9.]+) y=(?<y>[-0-9.]+) width=(?<width>[-0-9.]+) height=28.0 expanded=(?<expanded>[01])\.'
+            if ($null -eq $gamePhysicsDisclosure) {
+                Scroll-FramebufferPoint `
+                    -Handle $mainWindowHandle `
+                    -FramebufferWidth $framebufferWidth `
+                    -FramebufferHeight $framebufferHeight `
+                    -FramebufferX ($detailsX + [Math]::Max(12.0, $detailsWidth - 18.0)) `
+                    -FramebufferY ($detailsY + [Math]::Max(30.0, $detailsHeight * 0.55)) `
+                    -WheelDelta -120
+            }
+        }
+        if ($null -eq $gamePhysicsDisclosure) {
+            throw "The selected authored object did not expose the Game Authoring Physics disclosure."
+        }
+        $gamePhysicsDisclosureX = [double]$gamePhysicsDisclosure.Groups["x"].Value
+        $gamePhysicsDisclosureY = [double]$gamePhysicsDisclosure.Groups["y"].Value
+        $gamePhysicsDisclosureWidth = [double]$gamePhysicsDisclosure.Groups["width"].Value
+        Assert-FramebufferRect `
+            -Name "Game Authoring Physics disclosure" `
+            -FramebufferWidth $framebufferWidth `
+            -FramebufferHeight $framebufferHeight `
+            -X $gamePhysicsDisclosureX `
+            -Y $gamePhysicsDisclosureY `
+            -Width $gamePhysicsDisclosureWidth `
+            -Height 28.0
+        if ($gamePhysicsDisclosure.Groups["expanded"].Value -eq "0") {
+            Click-FramebufferPoint `
+                -Handle $mainWindowHandle `
+                -FramebufferWidth $framebufferWidth `
+                -FramebufferHeight $framebufferHeight `
+                -FramebufferX ($gamePhysicsDisclosureX + $gamePhysicsDisclosureWidth * 0.5) `
+                -FramebufferY ($gamePhysicsDisclosureY + 14.0)
+        }
+        $gamePlayMatch = $null
+        for ($scrollAttempt = 0; $scrollAttempt -lt 20 -and $null -eq $gamePlayMatch; ++$scrollAttempt) {
+            $gamePlayMatch = Get-LastLogRegexMatch `
+                -Path $stdoutPath `
+                -Pattern 'Game authoring play controls: name=(?<name>.+) trigger_x=(?<triggerX>[-0-9.]+) play_x=(?<playX>[-0-9.]+) y=(?<y>[-0-9.]+) width=(?<width>[-0-9.]+) height=26.0 state=(?<state>[0-9]+)\.'
+            if ($null -eq $gamePlayMatch) {
+                Scroll-FramebufferPoint `
+                    -Handle $mainWindowHandle `
+                    -FramebufferWidth $framebufferWidth `
+                    -FramebufferHeight $framebufferHeight `
+                    -FramebufferX ($detailsX + [Math]::Max(12.0, $detailsWidth - 18.0)) `
+                    -FramebufferY ($detailsY + [Math]::Max(30.0, $detailsHeight * 0.55)) `
+                    -WheelDelta -120
+            }
+        }
+        if ($null -eq $gamePlayMatch) {
+            throw "The Game Authoring Physics disclosure did not expose Play controls."
+        }
+        $gamePlayX = [double]$gamePlayMatch.Groups["playX"].Value
+        $gamePlayY = [double]$gamePlayMatch.Groups["y"].Value
+        $gamePlayWidth = [double]$gamePlayMatch.Groups["width"].Value
+        Assert-FramebufferRect `
+            -Name "Game Authoring Play control" `
+            -FramebufferWidth $framebufferWidth `
+            -FramebufferHeight $framebufferHeight `
+            -X $gamePlayX `
+            -Y $gamePlayY `
+            -Width $gamePlayWidth `
+            -Height 26.0
+        Click-FramebufferPoint `
+            -Handle $mainWindowHandle `
+            -FramebufferWidth $framebufferWidth `
+            -FramebufferHeight $framebufferHeight `
+            -FramebufferX ($gamePlayX + $gamePlayWidth * 0.5) `
+            -FramebufferY ($gamePlayY + 13.0)
+        if (-not (Wait-FileContains -Path $stdoutPath -Pattern "Play session state changed\." -TimeoutMilliseconds 5000)) {
+            throw "Game Authoring Start Play did not report a state transition."
+        }
+        Start-Sleep -Milliseconds 250
+        $gamePlayMatch = Get-LastLogRegexMatch -Path $stdoutPath -Pattern 'Game authoring play controls: name=(?<name>.+) trigger_x=(?<triggerX>[-0-9.]+) play_x=(?<playX>[-0-9.]+) y=(?<y>[-0-9.]+) width=(?<width>[-0-9.]+) height=26.0 state=(?<state>[0-9]+)\.'
+        if ($null -eq $gamePlayMatch -or $gamePlayMatch.Groups["state"].Value -ne "1") {
+            throw "Game Authoring Start Play did not reach Running state."
+        }
+        Write-Output "[pass] Game Authoring Start Play reached Running state"
+
+        $gamePlayX = [double]$gamePlayMatch.Groups["playX"].Value
+        $gamePlayY = [double]$gamePlayMatch.Groups["y"].Value
+        $gamePlayWidth = [double]$gamePlayMatch.Groups["width"].Value
+        Click-FramebufferPoint -Handle $mainWindowHandle -FramebufferWidth $framebufferWidth -FramebufferHeight $framebufferHeight -FramebufferX ($gamePlayX + $gamePlayWidth * 0.5) -FramebufferY ($gamePlayY + 13.0)
+        if (-not (Wait-FileContains -Path $stdoutPath -Pattern "Play session state changed\." -TimeoutMilliseconds 5000)) {
+            throw "Game Authoring Pause Play did not report a state transition."
+        }
+        Start-Sleep -Milliseconds 250
+        $gamePlayMatch = Get-LastLogRegexMatch -Path $stdoutPath -Pattern 'Game authoring play controls: name=(?<name>.+) trigger_x=(?<triggerX>[-0-9.]+) play_x=(?<playX>[-0-9.]+) y=(?<y>[-0-9.]+) width=(?<width>[-0-9.]+) height=26.0 state=(?<state>[0-9]+)\.'
+        if ($null -eq $gamePlayMatch -or $gamePlayMatch.Groups["state"].Value -ne "2") {
+            throw "Game Authoring Pause Play did not reach Paused state."
+        }
+        Write-Output "[pass] Game Authoring Pause Play reached Paused state"
+
+        $gamePlayX = [double]$gamePlayMatch.Groups["playX"].Value
+        $gamePlayY = [double]$gamePlayMatch.Groups["y"].Value
+        $gamePlayWidth = [double]$gamePlayMatch.Groups["width"].Value
+        Click-FramebufferPoint -Handle $mainWindowHandle -FramebufferWidth $framebufferWidth -FramebufferHeight $framebufferHeight -FramebufferX ($gamePlayX + $gamePlayWidth * 0.5) -FramebufferY ($gamePlayY + 13.0)
+        if (-not (Wait-FileContains -Path $stdoutPath -Pattern "Play session state changed\." -TimeoutMilliseconds 5000)) {
+            throw "Game Authoring Resume Play did not report a state transition."
+        }
+        Start-Sleep -Milliseconds 250
+        $gamePlayMatch = Get-LastLogRegexMatch -Path $stdoutPath -Pattern 'Game authoring play controls: name=(?<name>.+) trigger_x=(?<triggerX>[-0-9.]+) play_x=(?<playX>[-0-9.]+) y=(?<y>[-0-9.]+) width=(?<width>[-0-9.]+) height=26.0 state=(?<state>[0-9]+)\.'
+        if ($null -eq $gamePlayMatch -or $gamePlayMatch.Groups["state"].Value -ne "1") {
+            throw "Game Authoring Resume Play did not return to Running state."
+        }
+        Write-Output "[pass] Game Authoring Resume Play returned to Running state"
+
+        $gamePlayX = [double]$gamePlayMatch.Groups["playX"].Value
+        $gamePlayY = [double]$gamePlayMatch.Groups["y"].Value
+        $gamePlayWidth = [double]$gamePlayMatch.Groups["width"].Value
+        Click-FramebufferPoint -Handle $mainWindowHandle -FramebufferWidth $framebufferWidth -FramebufferHeight $framebufferHeight -FramebufferX ($gamePlayX + $gamePlayWidth * 0.5) -FramebufferY ($gamePlayY + 13.0)
+        if (-not (Wait-FileContains -Path $stdoutPath -Pattern "Play session state changed\." -TimeoutMilliseconds 5000)) {
+            throw "Game Authoring pause before Step did not report a state transition."
+        }
+        Start-Sleep -Milliseconds 250
+        $gameStepMatch = Get-LastLogRegexMatch -Path $stdoutPath -Pattern 'Game authoring step controls: name=(?<name>.+) step_x=(?<stepX>[-0-9.]+) stop_x=(?<stopX>[-0-9.]+) y=(?<y>[-0-9.]+) width=(?<width>[-0-9.]+) height=26.0\.'
+        if ($null -eq $gameStepMatch) {
+            throw "The Game Authoring Step/Stop control geometry could not be parsed."
+        }
+        $gameStepX = [double]$gameStepMatch.Groups["stepX"].Value
+        $gameStepY = [double]$gameStepMatch.Groups["y"].Value
+        $gameStepWidth = [double]$gameStepMatch.Groups["width"].Value
+        Assert-FramebufferRect -Name "Game Authoring Step control" -FramebufferWidth $framebufferWidth -FramebufferHeight $framebufferHeight -X $gameStepX -Y $gameStepY -Width $gameStepWidth -Height 26.0
+        Click-FramebufferPoint -Handle $mainWindowHandle -FramebufferWidth $framebufferWidth -FramebufferHeight $framebufferHeight -FramebufferX ($gameStepX + $gameStepWidth * 0.5) -FramebufferY ($gameStepY + 13.0)
+        if (-not (Wait-FileContains -Path $stdoutPath -Pattern "Play fixed step complete\." -TimeoutMilliseconds 5000)) {
+            throw "Game Authoring Step Play did not complete."
+        }
+        Write-Output "[pass] Game Authoring Step Play completed"
+
+        $gameStopX = [double]$gameStepMatch.Groups["stopX"].Value
+        Click-FramebufferPoint -Handle $mainWindowHandle -FramebufferWidth $framebufferWidth -FramebufferHeight $framebufferHeight -FramebufferX ($gameStopX + $gameStepWidth * 0.5) -FramebufferY ($gameStepY + 13.0)
+        if (-not (Wait-FileContains -Path $stdoutPath -Pattern "Play stopped; authored state preserved\." -TimeoutMilliseconds 5000)) {
+            throw "Game Authoring Stop Play did not preserve the authored state."
+        }
+        if (-not (Wait-FileContains -Path $stdoutPath -Pattern "Game authoring play stopped: state=0\." -TimeoutMilliseconds 5000)) {
+            throw "Game Authoring Stop Play did not return to Stopped state."
+        }
+        Write-Output "[pass] Game Authoring Stop Play returned to Stopped state with authored state preserved"
+
         Write-Step "Checking section-header context menu"
         $contextMenuPattern = "Workspace context menu: section=Tools horizontal=available vertical=available"
 
