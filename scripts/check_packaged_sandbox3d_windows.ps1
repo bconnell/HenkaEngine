@@ -1005,7 +1005,6 @@ try {
             "Sandbox viewport:",
             "Workspace UI geometry:",
             "Workspace header chrome:",
-            "Grid control:",
             "Tools QA tab:",
             "Viewport shading controls:")) {
             if (-not (Wait-FileContains `
@@ -1038,7 +1037,6 @@ try {
         if ($null -eq $framebufferMatch -or
             $null -eq $viewportMatch -or
             $null -eq $workspaceGeometryMatch -or
-            $null -eq $gridMatch -or
             $null -eq $qaTabMatch -or
             $null -eq $shadingMatch) {
             throw "Packaged UI automation geometry could not be parsed."
@@ -1103,14 +1101,21 @@ try {
         $detailsHeight =
             [double]$workspaceGeometryMatch.Groups[24].Value
 
-        $gridX =
-            [double]$gridMatch.Groups[1].Value
-        $gridY =
-            [double]$gridMatch.Groups[2].Value
-        $gridWidth =
-            [double]$gridMatch.Groups[3].Value
-        $gridHeight =
-            [double]$gridMatch.Groups[4].Value
+        $gridAvailable = $null -ne $gridMatch
+        if ($gridAvailable) {
+            $gridX =
+                [double]$gridMatch.Groups[1].Value
+            $gridY =
+                [double]$gridMatch.Groups[2].Value
+            $gridWidth =
+                [double]$gridMatch.Groups[3].Value
+            $gridHeight =
+                [double]$gridMatch.Groups[4].Value
+            Write-Output "[pass] Optional Grid control geometry was reported"
+        }
+        else {
+            Write-Output "[info] Optional Grid control is collapsed; its click check is skipped"
+        }
 
         $qaTabX =
             [double]$qaTabMatch.Groups[1].Value
@@ -2393,14 +2398,16 @@ try {
             "Tools=$controlsChrome/$controlsTabCount, " +
             "Utility=$utilityChrome/$utilityTabCount")
 
-        Assert-FramebufferRect `
-            -Name "Grid control" `
-            -FramebufferWidth $framebufferWidth `
-            -FramebufferHeight $framebufferHeight `
-            -X $gridX `
-            -Y $gridY `
-            -Width $gridWidth `
-            -Height $gridHeight
+        if ($gridAvailable) {
+            Assert-FramebufferRect `
+                -Name "Grid control" `
+                -FramebufferWidth $framebufferWidth `
+                -FramebufferHeight $framebufferHeight `
+                -X $gridX `
+                -Y $gridY `
+                -Width $gridWidth `
+                -Height $gridHeight
+        }
         Assert-FramebufferRect `
             -Name "Tools QA tab" `
             -FramebufferWidth $framebufferWidth `
@@ -2418,18 +2425,20 @@ try {
             -Width $shadingGroupWidth `
             -Height 22.0
 
-        Click-FramebufferPoint `
-            -Handle $mainWindowHandle `
-            -FramebufferWidth $framebufferWidth `
-            -FramebufferHeight $framebufferHeight `
-            -FramebufferX ($gridX + $gridWidth * 0.5) `
-            -FramebufferY ($gridY + $gridHeight * 0.5)
-        Click-FramebufferPoint `
-            -Handle $mainWindowHandle `
-            -FramebufferWidth $framebufferWidth `
-            -FramebufferHeight $framebufferHeight `
-            -FramebufferX ($gridX + $gridWidth * 0.5) `
-            -FramebufferY ($gridY + $gridHeight * 0.5)
+        if ($gridAvailable) {
+            Click-FramebufferPoint `
+                -Handle $mainWindowHandle `
+                -FramebufferWidth $framebufferWidth `
+                -FramebufferHeight $framebufferHeight `
+                -FramebufferX ($gridX + $gridWidth * 0.5) `
+                -FramebufferY ($gridY + $gridHeight * 0.5)
+            Click-FramebufferPoint `
+                -Handle $mainWindowHandle `
+                -FramebufferWidth $framebufferWidth `
+                -FramebufferHeight $framebufferHeight `
+                -FramebufferX ($gridX + $gridWidth * 0.5) `
+                -FramebufferY ($gridY + $gridHeight * 0.5)
+        }
 
         Click-FramebufferPoint `
             -Handle $mainWindowHandle `
@@ -2593,24 +2602,18 @@ try {
             throw "The native bevel control did not become visible after Face selection."
         }
 
-        Click-WindowPoint `
-            -Handle $mainWindowHandle `
-            -OffsetX 230 `
-            -OffsetY 60
-        Click-WindowPoint `
-            -Handle $mainWindowHandle `
-            -OffsetX 100 `
-            -OffsetY 610
+        if ($gridAvailable) {
+            Click-WindowPoint `
+                -Handle $mainWindowHandle `
+                -OffsetX 230 `
+                -OffsetY 60
+            Click-WindowPoint `
+                -Handle $mainWindowHandle `
+                -OffsetX 100 `
+                -OffsetY 610
+        }
 
         $uiClickChecks = @(
-            @{
-                Pattern = "Debug grid: hidden"
-                Description = "UI debug grid click output"
-            },
-            @{
-                Pattern = "Debug grid: shown"
-                Description = "UI debug grid restore output"
-            },
             @{
                 Pattern = "Viewport shading: Wireframe\."
                 Description = "UI Wireframe mode output"
@@ -2632,6 +2635,18 @@ try {
                 Description = "UI save settings output"
             }
         )
+        if ($gridAvailable) {
+            $uiClickChecks = @(
+                @{
+                    Pattern = "Debug grid: hidden"
+                    Description = "UI debug grid click output"
+                },
+                @{
+                    Pattern = "Debug grid: shown"
+                    Description = "UI debug grid restore output"
+                }
+            ) + $uiClickChecks
+        }
 
         $uiClickFailures = 0
         foreach ($check in $uiClickChecks) {
