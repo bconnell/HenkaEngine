@@ -55,6 +55,8 @@ typedef enum henka_hks_opcode
     HENKA_HKS_OPCODE_STATE_GET_BOOL,
     HENKA_HKS_OPCODE_STATE_SET_BOOL,
     HENKA_HKS_OPCODE_EVENT_GET_ID,
+    HENKA_HKS_OPCODE_EVENT_GET_OTHER_ENTITY,
+    HENKA_HKS_OPCODE_EVENT_GET_TYPE,
     HENKA_HKS_OPCODE_EQUAL,
     HENKA_HKS_OPCODE_NOT_EQUAL,
     HENKA_HKS_OPCODE_LESS,
@@ -204,6 +206,8 @@ static henka_hks_token_kind henka_hks_keyword_kind(
         {"state_get_bool", HENKA_HKS_TOKEN_KW_STATE_GET_BOOL},
         {"state_set_bool", HENKA_HKS_TOKEN_KW_STATE_SET_BOOL},
         {"event_id", HENKA_HKS_TOKEN_KW_EVENT_ID},
+        {"event_other_entity", HENKA_HKS_TOKEN_KW_EVENT_OTHER_ENTITY},
+        {"event_type", HENKA_HKS_TOKEN_KW_EVENT_TYPE},
         {"true", HENKA_HKS_TOKEN_KW_TRUE},
         {"false", HENKA_HKS_TOKEN_KW_FALSE},
         {"if", HENKA_HKS_TOKEN_KW_IF},
@@ -752,7 +756,21 @@ static bool henka_hks_is_state_set_token(henka_hks_token_kind kind)
 
 static bool henka_hks_is_event_get_token(henka_hks_token_kind kind)
 {
-    return kind == HENKA_HKS_TOKEN_KW_EVENT_ID;
+    return kind == HENKA_HKS_TOKEN_KW_EVENT_ID ||
+        kind == HENKA_HKS_TOKEN_KW_EVENT_OTHER_ENTITY ||
+        kind == HENKA_HKS_TOKEN_KW_EVENT_TYPE;
+}
+
+static henka_hks_opcode henka_hks_event_opcode(henka_hks_token_kind kind)
+{
+    switch (kind)
+    {
+        case HENKA_HKS_TOKEN_KW_EVENT_ID: return HENKA_HKS_OPCODE_EVENT_GET_ID;
+        case HENKA_HKS_TOKEN_KW_EVENT_OTHER_ENTITY:
+            return HENKA_HKS_OPCODE_EVENT_GET_OTHER_ENTITY;
+        case HENKA_HKS_TOKEN_KW_EVENT_TYPE: return HENKA_HKS_OPCODE_EVENT_GET_TYPE;
+        default: return HENKA_HKS_OPCODE_POP;
+    }
 }
 
 static henka_hks_opcode henka_hks_state_opcode(henka_hks_token_kind kind)
@@ -946,10 +964,15 @@ static henka_result henka_hks_parse_primary(
     }
     if (henka_hks_is_event_get_token(token->kind))
     {
+        const henka_hks_token_kind event_kind = token->kind;
+        const henka_hks_value_type event_value_type =
+            event_kind == HENKA_HKS_TOKEN_KW_EVENT_OTHER_ENTITY
+                ? HENKA_HKS_TYPE_ENTITY
+                : HENKA_HKS_TYPE_I32;
         henka_result result;
         ++parser->index;
         result = henka_hks_expect(
-            parser, HENKA_HKS_TOKEN_LPAREN, "event_id requires '('");
+            parser, HENKA_HKS_TOKEN_LPAREN, "event context access requires '('");
         if (result != HENKA_SUCCESS)
         {
             return result;
@@ -960,11 +983,11 @@ static henka_result henka_hks_parse_primary(
         {
             return result;
         }
-        *out_type = HENKA_HKS_TYPE_I32;
+        *out_type = event_value_type;
         if (henka_hks_add_node(parser, HENKA_HKS_AST_HOST_CALL, *out_type) != HENKA_SUCCESS ||
             henka_hks_emit(
                 parser,
-                HENKA_HKS_OPCODE_EVENT_GET_ID,
+                henka_hks_event_opcode(event_kind),
                 *out_type,
                 0U,
                 0,
@@ -2581,6 +2604,58 @@ henka_hks_execution_result henka_hks_execute_with_context(
                 stack[stack_depth++] = (henka_hks_value){
                     HENKA_HKS_TYPE_I32,
                     {.i32 = (int32_t)context->event_id}};
+                break;
+            case HENKA_HKS_OPCODE_EVENT_GET_OTHER_ENTITY:
+                if (context == NULL || !context->is_signal ||
+                    context->event_other_entity == 0U)
+                {
+                    if (out_report != NULL)
+                    {
+                        out_report->host_error = HENKA_ERROR_INVALID_ARGUMENT;
+                    }
+                    return henka_hks_vm_finish(
+                        out_report,
+                        HENKA_HKS_EXECUTION_HOST_ERROR,
+                        instructions_executed,
+                        stack_depth);
+                }
+                if (stack_depth >= HENKA_HKS_MAX_VM_STACK)
+                {
+                    return henka_hks_vm_finish(
+                        out_report,
+                        HENKA_HKS_EXECUTION_STACK_OVERFLOW,
+                        instructions_executed,
+                        stack_depth);
+                }
+                stack[stack_depth++] = (henka_hks_value){
+                    HENKA_HKS_TYPE_ENTITY,
+                    {.entity = context->event_other_entity}};
+                break;
+            case HENKA_HKS_OPCODE_EVENT_GET_TYPE:
+                if (context == NULL || !context->is_signal ||
+                    context->event_type > (uint32_t)INT32_MAX)
+                {
+                    if (out_report != NULL)
+                    {
+                        out_report->host_error = HENKA_ERROR_INVALID_ARGUMENT;
+                    }
+                    return henka_hks_vm_finish(
+                        out_report,
+                        HENKA_HKS_EXECUTION_HOST_ERROR,
+                        instructions_executed,
+                        stack_depth);
+                }
+                if (stack_depth >= HENKA_HKS_MAX_VM_STACK)
+                {
+                    return henka_hks_vm_finish(
+                        out_report,
+                        HENKA_HKS_EXECUTION_STACK_OVERFLOW,
+                        instructions_executed,
+                        stack_depth);
+                }
+                stack[stack_depth++] = (henka_hks_value){
+                    HENKA_HKS_TYPE_I32,
+                    {.i32 = (int32_t)context->event_type}};
                 break;
             default:
                 return henka_hks_vm_finish(out_report, HENKA_HKS_EXECUTION_INVALID_PROGRAM, instructions_executed, stack_depth);

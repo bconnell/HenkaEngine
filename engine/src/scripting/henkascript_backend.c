@@ -155,7 +155,9 @@ henka_script_behavior_callback_result henka_hks_behavior_backend_callback(
         context->event_id,
         context->event_source_entity,
         context->event_other_entity,
-        context->event_type};
+        context->event_type,
+        context->event >= HENKA_SCRIPT_LIFECYCLE_INTERACT &&
+            context->event <= HENKA_SCRIPT_LIFECYCLE_TRIGGER_EXIT};
     result = henka_hks_execute_with_context(
         backend->program,
         callable_index,

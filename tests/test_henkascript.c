@@ -259,6 +259,29 @@ static void test_bounded_while_and_loop_control(void)
     henka_hks_program_destroy(program);
 }
 
+static void test_signal_context_access(void)
+{
+    henka_hks_program* program = compile_program(
+        "fn Contact() { "
+        "entity other = event_other_entity(); "
+        "i32 kind = event_type(); "
+        "if (kind == 7) { return kind; } "
+        "return 0; "
+        "}");
+    henka_hks_execution_context context = {
+        NULL, 42U, 3U, 11U, false, 0U, 99U, 99U, 7U, true};
+    henka_hks_value value;
+    henka_hks_execution_report report;
+
+    assert(henka_hks_execute_with_context(
+               program, 0U, 128U, &context, &value, &report) == HENKA_HKS_EXECUTION_COMPLETED);
+    assert(value.type == HENKA_HKS_TYPE_I32 && value.as.i32 == 7);
+    context.is_signal = false;
+    assert(henka_hks_execute_with_context(
+               program, 0U, 128U, &context, &value, &report) == HENKA_HKS_EXECUTION_HOST_ERROR);
+    henka_hks_program_destroy(program);
+}
+
 static void test_state_host_contract(void)
 {
     static const char source[] =
@@ -325,6 +348,7 @@ int main(void)
     test_bounded_vm_execution();
     test_bounded_conditionals_and_comparisons();
     test_bounded_while_and_loop_control();
+    test_signal_context_access();
     test_state_host_contract();
     assert(henka_memory_get_allocation_count() == allocations_before);
     puts("henka_henkascript_tests: PASS");
