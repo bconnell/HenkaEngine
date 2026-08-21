@@ -8,11 +8,16 @@
 #include <henka/input.h>
 #include <henka/memory.h>
 
+#include "game_authoring.h"
+
 #define SANDBOX3D_SCRIPT_EDITOR_MAX_LINES 8U
 #define SANDBOX3D_SCRIPT_EDITOR_MAX_LINE_BYTES 192U
 #define SANDBOX3D_SCRIPT_EDITOR_HEADER_HEIGHT 22.0f
 #define SANDBOX3D_SCRIPT_EDITOR_LINE_HEIGHT 15.0f
 #define SANDBOX3D_SCRIPT_EDITOR_TEXT_SCALE 0.72f
+#define SANDBOX3D_SCRIPT_EDITOR_INDENT_SPACES 4U
+#define SANDBOX3D_SCRIPT_EDITOR_MAX_INDENT_SPACES \
+    (HENKA_HKS_MAX_TOKENS * SANDBOX3D_SCRIPT_EDITOR_INDENT_SPACES)
 
 static bool sandbox3d_script_editor_rect_is_valid(henka_ui_rect bounds)
 {
@@ -248,6 +253,48 @@ static size_t sandbox3d_script_editor_previous_boundary(
     return offset;
 }
 
+static size_t sandbox3d_script_editor_indent_replacement(
+    const henka_hks_token* tokens,
+    size_t token_count,
+    size_t source_offset,
+    uint32_t source_line,
+    char* out_replacement,
+    size_t replacement_capacity)
+{
+    uint32_t indent_level = 0U;
+    size_t indent_spaces;
+    size_t index;
+
+    if (out_replacement == NULL || replacement_capacity == 0U)
+    {
+        return 0U;
+    }
+    out_replacement[0] = '\0';
+    if (henka_hks_token_stream_get_indent_level(
+            tokens,
+            token_count,
+            source_offset,
+            source_line,
+            &indent_level) != HENKA_SUCCESS ||
+        indent_level > SIZE_MAX / SANDBOX3D_SCRIPT_EDITOR_INDENT_SPACES)
+    {
+        return 0U;
+    }
+    indent_spaces = (size_t)indent_level * SANDBOX3D_SCRIPT_EDITOR_INDENT_SPACES;
+    if (indent_spaces > SANDBOX3D_SCRIPT_EDITOR_MAX_INDENT_SPACES ||
+        indent_spaces + 1U > replacement_capacity)
+    {
+        return 0U;
+    }
+    out_replacement[0] = '\n';
+    for (index = 0U; index < indent_spaces; ++index)
+    {
+        out_replacement[index + 1U] = ' ';
+    }
+    out_replacement[indent_spaces + 1U] = '\0';
+    return indent_spaces + 1U;
+}
+
 static void sandbox3d_script_editor_draw_caret(
     henka_ui_context* ui,
     henka_ui_rect bounds,
@@ -277,6 +324,8 @@ henka_result sandbox3d_script_editor_draw_preview(
     henka_ui_rect bounds,
     const char* project_root,
     const henka_scene_document_behavior* behavior,
+    sandbox3d_game_authoring* authoring,
+    henka_entity entity,
     sandbox3d_script_editor_model** io_model,
     bool play_active)
 {
@@ -301,6 +350,10 @@ henka_result sandbox3d_script_editor_draw_preview(
     int character_height = 0;
     bool save_clicked;
     bool revert_clicked;
+    bool reload_clicked;
+    henka_result reload_result = HENKA_SUCCESS;
+    henka_script_source_diagnostic reload_diagnostic;
+    char indent_replacement[SANDBOX3D_SCRIPT_EDITOR_MAX_INDENT_SPACES + 2U];
     sandbox3d_script_editor_model* model;
     if (ui == NULL || !sandbox3d_script_editor_rect_is_valid(bounds) ||
         engine == NULL || project_root == NULL || behavior == NULL ||
@@ -370,6 +423,23 @@ henka_result sandbox3d_script_editor_draw_preview(
     {
         return result;
     }
+    if (behavior->language == HENKA_SCRIPT_LANGUAGE_HENKASCRIPT)
+    {
+        tokens = (henka_hks_token*)henka_calloc(
+            HENKA_HKS_MAX_TOKENS,
+            sizeof(*tokens));
+        if (tokens != NULL &&
+            henka_hks_lex(
+                source,
+                source_size,
+                tokens,
+                HENKA_HKS_MAX_TOKENS,
+                &token_count,
+                &diagnostic) == HENKA_SUCCESS)
+        {
+            tokenized = true;
+        }
+    }
     mouse_position = henka_ui_get_mouse_position(ui);
     result = henka_ui_custom_interaction(
         ui,
@@ -385,6 +455,7 @@ henka_result sandbox3d_script_editor_draw_preview(
         &code_interaction);
     if (result != HENKA_SUCCESS)
     {
+        henka_free(tokens);
         return result;
     }
     if (code_interaction.pressed)
@@ -410,8 +481,27 @@ henka_result sandbox3d_script_editor_draw_preview(
         }
         if (henka_input_was_key_pressed(engine, HENKA_KEY_ENTER))
         {
+            size_t replacement_size = 0U;
+            if (tokenized)
+            {
+                replacement_size = sandbox3d_script_editor_indent_replacement(
+                    tokens,
+                    token_count,
+                    sandbox3d_script_editor_model_get_caret_offset(model),
+                    (uint32_t)sandbox3d_script_editor_model_get_caret_line(model) + 1U,
+                    indent_replacement,
+                    sizeof(indent_replacement));
+            }
+            if (replacement_size == 0U)
+            {
+                indent_replacement[0] = '\n';
+                indent_replacement[1] = '\0';
+                replacement_size = 1U;
+            }
             (void)sandbox3d_script_editor_model_replace_selection(
-                model, "\n", 1U);
+                model,
+                indent_replacement,
+                replacement_size);
             henka_input_consume_key_press(engine, HENKA_KEY_ENTER);
         }
         else if (henka_input_was_key_pressed(engine, HENKA_KEY_TAB))
@@ -458,6 +548,11 @@ henka_result sandbox3d_script_editor_draw_preview(
         "script-editor-revert",
         (henka_ui_rect){bounds.x + bounds.width - 58.0f, bounds.y + 2.0f, 50.0f, 18.0f},
         "Revert");
+    reload_clicked = henka_ui_button(
+        ui,
+        "script-editor-reload",
+        (henka_ui_rect){bounds.x + bounds.width - 166.0f, bounds.y + 2.0f, 50.0f, 18.0f},
+        "Reload");
     if (save_clicked && !play_active)
     {
         result = sandbox3d_script_editor_model_save(
@@ -473,9 +568,62 @@ henka_result sandbox3d_script_editor_draw_preview(
         (void)sandbox3d_script_editor_model_get_source(
             model, &source, &source_size);
     }
+    if (reload_clicked)
+    {
+        if (play_active)
+        {
+            reload_result = sandbox3d_game_authoring_reload_behavior_for_entity(
+                authoring,
+                entity,
+                behavior->id,
+                &reload_diagnostic);
+        }
+        else
+        {
+            reload_result = sandbox3d_script_editor_model_load_asset(
+                model,
+                project_root,
+                behavior->asset_path);
+            if (reload_result != HENKA_SUCCESS)
+            {
+                memset(&reload_diagnostic, 0, sizeof(reload_diagnostic));
+                reload_diagnostic.result = reload_result;
+                (void)snprintf(
+                    reload_diagnostic.message,
+                    sizeof(reload_diagnostic.message),
+                    "Source reload rejected");
+            }
+        }
+        (void)sandbox3d_script_editor_model_get_source(
+            model, &source, &source_size);
+    }
     validation_result = sandbox3d_script_editor_model_validate(
         model, &source_diagnostic);
-    if (validation_result == HENKA_SUCCESS)
+    if (reload_result != HENKA_SUCCESS)
+    {
+        (void)snprintf(
+            status_text,
+            sizeof(status_text),
+            "Reload failed%s",
+            play_active ? " | Play locked" : "");
+        (void)snprintf(
+            diagnostic_text,
+            sizeof(diagnostic_text),
+            "%s",
+            reload_diagnostic.message[0] != '\0'
+                ? reload_diagnostic.message
+                : "Behavior reload rejected");
+    }
+    else if (reload_clicked && play_active)
+    {
+        (void)snprintf(
+            status_text,
+            sizeof(status_text),
+            "Reloaded%s",
+            play_active ? " | Play locked" : "");
+        diagnostic_text[0] = '\0';
+    }
+    else if (validation_result == HENKA_SUCCESS)
     {
         (void)snprintf(
             status_text,
@@ -510,20 +658,19 @@ henka_result sandbox3d_script_editor_draw_preview(
         HENKA_UI_COLOR_INFO);
     (void)henka_ui_label_colored(
         ui,
-        bounds.x + bounds.width - 176.0f,
+        bounds.x + bounds.width - 230.0f,
         bounds.y + 5.0f,
         SANDBOX3D_SCRIPT_EDITOR_TEXT_SCALE,
             status_text,
-            validation_result == HENKA_SUCCESS
+            validation_result == HENKA_SUCCESS && reload_result == HENKA_SUCCESS
                 ? HENKA_UI_COLOR_SUCCESS
                 : HENKA_UI_COLOR_WARNING);
-    if (behavior->language == HENKA_SCRIPT_LANGUAGE_HENKASCRIPT)
+    token_count = 0U;
+    tokenized = false;
+    if (behavior->language == HENKA_SCRIPT_LANGUAGE_HENKASCRIPT &&
+        tokens != NULL)
     {
-        tokens = (henka_hks_token*)henka_calloc(
-            HENKA_HKS_MAX_TOKENS,
-            sizeof(*tokens));
-        if (tokens != NULL &&
-            henka_hks_lex(
+        if (henka_hks_lex(
                 source,
                 source_size,
                 tokens,

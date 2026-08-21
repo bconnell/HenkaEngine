@@ -116,7 +116,7 @@ static void test_rebind_preserves_generation_and_lifecycle_state(void)
     henka_script_behavior_handle behavior = HENKA_INVALID_SCRIPT_BEHAVIOR_HANDLE;
     henka_script_behavior_snapshot before;
     henka_script_behavior_snapshot after;
-    henka_script_behavior_batch_report report;
+    henka_script_behavior_report report;
 
     old_desc.behavior_id = 7U;
     new_desc.behavior_id = 7U;

@@ -573,6 +573,34 @@ henka_result sandbox3d_game_authoring_remove_behavior_for_entity(
         behavior_id);
 }
 
+henka_result sandbox3d_game_authoring_reload_behavior_for_entity(
+    sandbox3d_game_authoring* authoring,
+    henka_entity entity,
+    henka_scene_document_behavior_id behavior_id,
+    henka_script_source_diagnostic* out_diagnostic)
+{
+    size_t index;
+    if (out_diagnostic != NULL)
+    {
+        memset(out_diagnostic, 0, sizeof(*out_diagnostic));
+        out_diagnostic->result = HENKA_ERROR_INVALID_ARGUMENT;
+        (void)snprintf(
+            out_diagnostic->message,
+            sizeof(out_diagnostic->message),
+            "Behavior reload rejected");
+    }
+    if (authoring == NULL || behavior_id == HENKA_INVALID_SCENE_DOCUMENT_BEHAVIOR_ID ||
+        (index = sandbox3d_game_authoring_find_binding(authoring, entity)) == SIZE_MAX)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    return sandbox3d_play_session_reload_behavior(
+        authoring->play_session,
+        authoring->bindings[index].document_id,
+        behavior_id,
+        out_diagnostic);
+}
+
 henka_result sandbox3d_game_authoring_attach_script_template(
     sandbox3d_game_authoring* authoring,
     const char* project_root,

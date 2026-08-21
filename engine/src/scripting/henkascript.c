@@ -317,6 +317,53 @@ henka_hks_token_class henka_hks_token_kind_get_class(
     }
 }
 
+henka_result henka_hks_token_stream_get_indent_level(
+    const henka_hks_token* tokens,
+    size_t token_count,
+    size_t source_offset,
+    uint32_t source_line,
+    uint32_t* out_indent_level)
+{
+    uint32_t depth = 0U;
+    size_t index;
+
+    if (out_indent_level == NULL || source_line == 0U ||
+        (tokens == NULL && token_count != 0U))
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    *out_indent_level = 0U;
+    for (index = 0U; index < token_count; ++index)
+    {
+        const henka_hks_token* token = &tokens[index];
+        if (token->kind == HENKA_HKS_TOKEN_EOF ||
+            token->offset >= source_offset)
+        {
+            if (token->offset >= source_offset &&
+                token->kind == HENKA_HKS_TOKEN_RBRACE &&
+                token->line == source_line && depth > 0U)
+            {
+                --depth;
+            }
+            break;
+        }
+        if (token->kind == HENKA_HKS_TOKEN_LBRACE)
+        {
+            if (depth == UINT32_MAX)
+            {
+                return HENKA_ERROR_LIMIT;
+            }
+            ++depth;
+        }
+        else if (token->kind == HENKA_HKS_TOKEN_RBRACE && depth > 0U)
+        {
+            --depth;
+        }
+    }
+    *out_indent_level = depth;
+    return HENKA_SUCCESS;
+}
+
 henka_result henka_hks_lex(
     const char* source,
     size_t source_size,

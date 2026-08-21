@@ -26,6 +26,7 @@ int main(void)
     henka_scene* play_scene;
     henka_script_state_store* state_store;
     henka_script_state_value state_value;
+    henka_script_source_diagnostic reload_diagnostic;
     bool state_present;
     int exit_code = 1;
 
@@ -198,6 +199,10 @@ int main(void)
         sandbox3d_game_authoring_load(authoring, ".") != HENKA_ERROR_INVALID_ARGUMENT ||
         sandbox3d_game_authoring_save_play_state(authoring, ".") != HENKA_ERROR_INVALID_ARGUMENT ||
         sandbox3d_game_authoring_load_play_state(authoring, ".") != HENKA_ERROR_INVALID_ARGUMENT ||
+        sandbox3d_game_authoring_reload_behavior_for_entity(
+            authoring, entity, behavior_id, &reload_diagnostic) != HENKA_SUCCESS ||
+        reload_diagnostic.result != HENKA_SUCCESS ||
+        reload_diagnostic.message[0] != '\0' ||
         sandbox3d_game_authoring_update_object_for_entity(authoring, entity, &restored) != HENKA_ERROR_INVALID_ARGUMENT ||
         sandbox3d_game_authoring_resume_play(authoring) != HENKA_SUCCESS ||
         sandbox3d_game_authoring_tick_play(authoring) != HENKA_SUCCESS ||
@@ -214,6 +219,15 @@ int main(void)
         restored.transform.position.y != transform.position.y)
     {
         fprintf(stderr, "game authoring test failed during Play lifecycle\n");
+        goto cleanup;
+    }
+    if (sandbox3d_game_authoring_reload_behavior_for_entity(
+            authoring, entity, behavior_id, &reload_diagnostic) !=
+            HENKA_ERROR_INVALID_ARGUMENT ||
+        reload_diagnostic.result != HENKA_ERROR_INVALID_ARGUMENT ||
+        reload_diagnostic.message[0] == '\0')
+    {
+        fprintf(stderr, "game authoring test failed stopped reload rejection\n");
         goto cleanup;
     }
 

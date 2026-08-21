@@ -147,8 +147,8 @@ entity ID remain unchanged; explicit schema/version migration is future work.
   language validation, diagnostics, confined traversal rejection, atomic save
   failure retention, and successful replacement.
 - Editor-facing tests cover preserved indentation, compiler-derived HKS token
-  spans, invalid-source staging, and Play edit rejection through stable module
-  seams.
+  spans and insertion indentation, invalid-source staging, and Play edit
+  rejection through stable module seams.
 - Runtime tests cover candidate reload success, invalid-candidate retention,
   generation-checked handles, lifecycle ordering, and state preservation.
 - The Debug MSVC warning gate, focused scripting/scene/Play suite, external

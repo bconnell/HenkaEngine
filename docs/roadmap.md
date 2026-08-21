@@ -103,9 +103,10 @@ roadmap is finished.
    authoring and broader project scripting workflows remain open. Bounded
    Inspector creation, transactional attachment of Lua/HenkaScript behavior
    templates, and the bounded compiler-backed source editor with Save/Revert are
-   already available. The Play-session seam now supports candidate-first
-   transactional behavior reload while visible reload controls and diagnostics
-   remain open.
+    already available. The Play-session seam now supports candidate-first
+    transactional behavior reload and the source-panel Edit, Save, Revert, and
+    Reload actions are available; richer reload diagnostics and debugger
+    presentation remain open.
 2. Broader gameplay systems, input mapping, controllers, animation, and
    production game-debugging workflows.
 
@@ -280,10 +281,11 @@ and V1 `.hscene` foundations.
 3. Extend behavior-state persistence and authoring ergonomics: the bounded
    state store and explicit sidecar save/load seam are available. Inspector
    template authoring, transactional attachment, and a bounded editable,
-   compiler-backed source panel with diagnostics and Save/Revert are available;
-   candidate-first transactional behavior reload is available at the Play-session
-   seam; broader Inspector authoring, visible reload controls, and reload
-   diagnostics remain in progress.
+   compiler-backed source panel with compiler-derived HenkaScript spans,
+    diagnostics, and Save/Revert are available; candidate-first transactional
+    behavior reload is available at the Play-session seam and the source-panel
+    Reload action is available, while broader Inspector authoring and richer
+    reload diagnostics remain in progress.
 4. Strengthen mixed-language event delivery and lifecycle diagnostics at the
    scene boundary; bounded queueing, Lua/HenkaScript emission, and `OnEvent`
    routing are available foundation work, while richer subscriptions and

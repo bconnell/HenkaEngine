@@ -165,12 +165,17 @@ of the authored `.hscene` document. The Inspector can create confined Lua or
     HenkaScript behavior templates and attach them transactionally, and it provides
     a bounded editable source panel. HenkaScript preview spans and colors are
     derived from the compiler's public lexer and token-class API; source bytes
-    and indentation are preserved by range editing, Save/Revert are
-    transactional. The Play-session seam can transactionally reload a persisted
-    behavior backend while preserving its generation-checked lifecycle slot;
-    visible reload controls and reload diagnostics are not included yet.
-Richer typed values and callable parameters, full Inspector authoring, visible
-reload controls, debugger tooling,
+    and insertion indentation are compiler-derived for HenkaScript; Lua keeps
+    backend validation and persisted formatting without a copied editor grammar.
+    Source bytes and existing indentation are preserved by range editing,
+    Save/Revert are transactional. The Play-session seam can transactionally
+    reload a persisted behavior backend while preserving its generation-checked
+    lifecycle slot.
+    The bounded source panel exposes Edit, Save, Revert, and Reload actions;
+    Reload uses the same coordinator seam in Play and reloads persisted source
+    outside Play. Richer reload diagnostics remain unfinished.
+Richer typed values and callable parameters, full Inspector authoring,
+debugger tooling,
 replay integration, and broader project scripting workflows remain future work.
 
 The current schema, HenkaScript compiler, and bounded VM are therefore engine

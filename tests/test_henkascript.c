@@ -113,6 +113,72 @@ static void test_compiler_owned_token_presentation_classes(void)
         HENKA_HKS_TOKEN_CLASS_NONE);
 }
 
+static void test_compiler_owned_token_indentation(void)
+{
+    static const char source[] =
+        "fn Update() {\n"
+        "    if (true) {\n"
+        "        return;\n"
+        "    }\n"
+        "}\n";
+    henka_hks_token tokens[HENKA_HKS_MAX_TOKENS];
+    henka_hks_diagnostic diagnostic;
+    size_t token_count = 0U;
+    size_t line_two_offset;
+    size_t line_three_end_offset;
+    size_t line_four_offset;
+    size_t line_five_offset;
+    uint32_t indent_level = 0U;
+
+    memset(&diagnostic, 0, sizeof(diagnostic));
+    assert(henka_hks_lex(
+               source,
+               strlen(source),
+               tokens,
+               HENKA_HKS_MAX_TOKENS,
+               &token_count,
+               &diagnostic) == HENKA_SUCCESS);
+    line_two_offset = (size_t)(strstr(source, "    if") - source);
+    line_three_end_offset = (size_t)(strstr(source, "        return;") - source) +
+        strlen("        return;");
+    line_four_offset = (size_t)(strstr(source, "    }") - source);
+    line_five_offset = (size_t)(strrchr(source, '}') - source);
+    assert(henka_hks_token_stream_get_indent_level(
+               tokens,
+               token_count,
+               line_two_offset,
+               2U,
+               &indent_level) == HENKA_SUCCESS);
+    assert(indent_level == 1U);
+    assert(henka_hks_token_stream_get_indent_level(
+               tokens,
+               token_count,
+               line_three_end_offset,
+               3U,
+               &indent_level) == HENKA_SUCCESS);
+    assert(indent_level == 2U);
+    assert(henka_hks_token_stream_get_indent_level(
+               tokens,
+               token_count,
+               line_four_offset,
+               4U,
+               &indent_level) == HENKA_SUCCESS);
+    assert(indent_level == 1U);
+    assert(henka_hks_token_stream_get_indent_level(
+               tokens,
+               token_count,
+               line_five_offset,
+               5U,
+               &indent_level) == HENKA_SUCCESS);
+    assert(indent_level == 0U);
+    assert(henka_hks_token_stream_get_indent_level(
+               NULL,
+               1U,
+               0U,
+               1U,
+               &indent_level) == HENKA_ERROR_INVALID_ARGUMENT);
+}
+
 static void test_rejects_unsafe_or_invalid_source(void)
 {
     char source[HENKA_HKS_MAX_SOURCE_BYTES + 1U];
@@ -621,6 +687,7 @@ int main(void)
 
     test_lex_and_compile_valid_program();
     test_compiler_owned_token_presentation_classes();
+    test_compiler_owned_token_indentation();
     test_rejects_unsafe_or_invalid_source();
     test_argument_and_memory_contracts();
     test_bounded_vm_execution();

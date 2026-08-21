@@ -114,12 +114,17 @@ turning the public README into an implementation ledger.
    available; complete host API coverage, full Inspector authoring, reload
     diagnostics, and debugger tooling remain unfinished. The Inspector can create confined
     Lua or HenkaScript behavior templates and attach them transactionally, and
-    provides a bounded editable source panel whose HenkaScript colors derive
-    from compiler tokenization. Source bytes, indentation, diagnostics, Save,
-    and Revert are covered by the bounded editor model. The Play-session seam
+    provides a bounded editable source panel whose HenkaScript spans, colors,
+    and insertion indentation derive from compiler tokenization/token APIs;
+    the editor contains no HenkaScript keyword or grammar table. Lua uses its
+    backend for validation while preserving persisted source formatting.
+    Source bytes, indentation, diagnostics, Save, and Revert are covered by
+    the bounded editor model. The Play-session seam
     can transactionally reload a persisted behavior backend while preserving
-    the generation-checked slot and active lifecycle state; visible reload
-    controls and richer diagnostics remain unfinished.
+    the generation-checked slot and active lifecycle state. The source panel
+    exposes Edit, Save, Revert, and Reload actions; Reload uses the same
+    coordinator seam in Play and reloads the persisted source outside Play.
+    Richer reload diagnostics and debugger tooling remain unfinished.
    Persisted `.lua` and `.hks` attachments can now be loaded through a bounded,
    confined-path asset loader and assembled into a mixed-language behavior
    runtime by persistent Scene Document object identity. The Sandbox Play

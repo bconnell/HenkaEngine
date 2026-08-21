@@ -21094,6 +21094,8 @@ details_group_overview:
                     row,
                     henka_engine_get_user_data_base_path(engine),
                     &preview_behavior,
+                    state->game_authoring,
+                    entity,
                     &state->script_editor_model,
                     sandbox3d_game_authoring_is_play_locked(
                         state->game_authoring));

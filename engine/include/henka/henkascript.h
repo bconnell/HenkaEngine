@@ -107,6 +107,18 @@ typedef struct henka_hks_token
 henka_hks_token_class henka_hks_token_kind_get_class(
     henka_hks_token_kind kind);
 
+/* Returns the structural brace indentation level at a byte insertion point.
+ * The result is derived from an already lexed compiler token stream; editor
+ * and tooling consumers must not recreate HenkaScript grammar tables. The
+ * insertion point is before any token whose offset is equal to it. A closing
+ * brace reduces the level only when it is on the insertion line. */
+henka_result henka_hks_token_stream_get_indent_level(
+    const henka_hks_token* tokens,
+    size_t token_count,
+    size_t source_offset,
+    uint32_t source_line,
+    uint32_t* out_indent_level);
+
 typedef enum henka_hks_value_type
 {
     HENKA_HKS_TYPE_UNKNOWN = 0,

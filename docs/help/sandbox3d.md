@@ -237,10 +237,11 @@ HenkaScript` actions for registered objects. Each action creates a confined
 project-relative source template and attaches it to the authored object as one
 transaction; it never overwrites an existing source file. Save Scene is still
 required to persist the attachment. The bounded source panel now supports
-compiler-backed editing, diagnostics, Save, and Revert. Exported properties and
-visible reload controls are not part of this slice. The underlying Play-session
-API can candidate-build and transactionally rebind a persisted behavior while
-Play is running or paused; failed candidates leave the active behavior intact.
+compiler-backed editing, diagnostics, Save, Revert, and Reload. Reload uses the
+underlying Play-session API while Play is running or paused and reloads the
+persisted source outside Play; failed candidates leave the active behavior
+intact. Exported properties and richer reload diagnostics are not part of this
+slice.
 
 The Actions group provides Save Scene and Reload Scene for the confined
 `sandbox3d_scene.hscene` file. While Play is running or paused, authoring edits,

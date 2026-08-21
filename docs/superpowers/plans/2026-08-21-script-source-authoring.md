@@ -81,7 +81,7 @@
 - [x] **Step 0: Add bounded source range editing** through `henka_script_source_replace_range`; prove insertion, deletion, invalid ranges, capacity rejection without mutation, and preserved indentation before building UI controls.
 - [x] **Step 1: Write failing editor-model tests** for preserved indentation, line/column caret movement, insertion/deletion within the bounded source limit, compiler-derived HKS spans, invalid-source staging, revert to last loaded text, and Edit rejection while Play is active.
 - [x] **Step 2: Extend the platform/UI input seam** with a bounded per-frame text-input buffer and logical cursor coordinates; clear the buffer after consumption and keep physical cursor data separate from automation-owned coordinates.
-- [x] **Step 3: Implement editor state** as fixed-capacity line/caret/selection state over the source document; use compiler token offsets for HenkaScript display and backend diagnostics for error markers; use no copied Lua/HenkaScript grammar.
+- [x] **Step 3: Implement editor state** as fixed-capacity line/caret/selection state over the source document; use compiler token offsets and the compiler-owned structural indentation query for HenkaScript display/editing, backend diagnostics for error markers, and no copied Lua/HenkaScript grammar.
 - [x] **Step 4: Implement Save/Revert controls** through the script asset API; keep invalid text staged and display the diagnostic while allowing save; never call runtime reload from a failed validation path.
 - [x] **Step 5: Build the sandbox and run editor tests** under MSVC warning-as-error settings; verify the changed Henka modules introduce no warnings.
 - [x] **Step 6: Commit** with `feat: add structured script editor input`.

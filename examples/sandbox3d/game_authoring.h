@@ -7,6 +7,7 @@
 #include <henka/scene.h>
 #include <henka/scene_document.h>
 #include <henka/script.h>
+#include <henka/script_source.h>
 
 #include "play_session.h"
 
@@ -69,6 +70,14 @@ henka_result sandbox3d_game_authoring_remove_behavior_for_entity(
     sandbox3d_game_authoring* authoring,
     henka_entity entity,
     henka_scene_document_behavior_id behavior_id);
+/* Reloads one persisted behavior in the isolated Play session. The authored
+ * Scene Document is not mutated; candidate construction and generation-checked
+ * runtime rebinding remain owned by the Play/script runtime layers. */
+henka_result sandbox3d_game_authoring_reload_behavior_for_entity(
+    sandbox3d_game_authoring* authoring,
+    henka_entity entity,
+    henka_scene_document_behavior_id behavior_id,
+    henka_script_source_diagnostic* out_diagnostic);
 /* Creates a confined template file and attaches its behavior transactionally.
  * The authoring coordinator owns the document mutation; project_root is only
  * borrowed for the duration of the call. */
