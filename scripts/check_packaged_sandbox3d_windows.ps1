@@ -1004,12 +1004,31 @@ try {
                 -Path $stdoutPath `
                 -Pattern "Tools QA tab:" `
                 -TimeoutMilliseconds 500)) {
-            Send-HenkaAutomationKey -EventPath $automationInputPath -KeyName "F4"
+            $preflightFramebufferMatch = Get-LastLogRegexMatch `
+                -Path $stdoutPath `
+                -Pattern 'Sandbox UI ready:.*framebuffer ([0-9]+)x([0-9]+)'
+            $preflightViewportMatch = Get-LastLogRegexMatch `
+                -Path $stdoutPath `
+                -Pattern 'Sandbox viewport: origin ([0-9]+),([0-9]+) size ([0-9]+)x([0-9]+)\.'
+            if ($null -eq $preflightFramebufferMatch -or $null -eq $preflightViewportMatch) {
+                throw "The packaged Scene View geometry was not available to open the hidden Tools dock."
+            }
+            $preflightFramebufferWidth = [int]$preflightFramebufferMatch.Groups[1].Value
+            $preflightFramebufferHeight = [int]$preflightFramebufferMatch.Groups[2].Value
+            $preflightViewportX = [double]$preflightViewportMatch.Groups[1].Value
+            $preflightViewportY = [double]$preflightViewportMatch.Groups[2].Value
+            Write-Output "[check] Opening the hidden Tools dock through the Scene View header"
+            Click-FramebufferPoint `
+                -Handle $mainWindowHandle `
+                -FramebufferWidth $preflightFramebufferWidth `
+                -FramebufferHeight $preflightFramebufferHeight `
+                -FramebufferX ($preflightViewportX + 235.0) `
+                -FramebufferY ($preflightViewportY - 23.0)
             if (-not (Wait-FileContains `
                     -Path $stdoutPath `
-                    -Pattern "Sandbox panel: shown" `
+                    -Pattern "Tools QA tab:" `
                     -TimeoutMilliseconds 4000)) {
-                throw "The packaged Tools dock was not available and could not be opened through the logical automation path."
+                throw "The packaged Tools dock was not available and could not be opened through its logical Scene View header control."
             }
         }
 
@@ -2353,10 +2372,10 @@ try {
         if (-not $contextMenuObserved) {
             throw (
                 "Right-clicking the Tools header did not open the horizontal/vertical " +
-                "section context menu after two verified real-input attempts.")
+                "section context menu after two verified logical-input attempts.")
         }
 
-        Write-Output "[pass] Tools section-header context menu opened from verified real mouse input"
+        Write-Output "[pass] Tools section-header context menu opened from verified logical input"
 
         Save-WindowScreenshot `
             -Handle $mainWindowHandle `
