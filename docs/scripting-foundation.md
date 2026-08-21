@@ -48,8 +48,10 @@ execution adapters for both languages.
   state retains the existing in-memory store.
 - Explicit typed declarations (`i32 health = 3;`) and inferred declarations
   (`count := health + 1;`).
-- Brace-delimited `fn` and `behavior` callables, arithmetic expressions,
-  assignments, returns, nested scopes, and source locations in diagnostics.
+- Brace-delimited `fn` and `behavior` callables, typed arithmetic and
+  comparison expressions, assignments, returns, nested scopes, bounded
+  `if`/`else` and `while` control flow, `break`/`continue`, and source
+  locations in diagnostics.
 - Fixed token, binding, callable, AST-node, identifier, diagnostic, and source
   size limits. `let` and `var` are rejected rather than treated as alternate
   declaration semantics.
@@ -128,7 +130,8 @@ lifecycle and fixed-tick dispatch, with a bounded host mapping for the current
 Entity/Transform/Physics/Event slice and an explicit behavior-state sidecar
 save/load seam. Persistent state is not implicitly saved on Stop, is not part
 of the authored `.hscene` document, and is not an editor Inspector workflow.
-Full host API coverage, Inspector authoring, hot reload, debugger tooling,
+Full host API coverage, richer typed values and callable parameters, `for`
+loops, Inspector authoring, hot reload, debugger tooling,
 replay integration, and broader project scripting workflows remain future work.
 
 The current schema, HenkaScript compiler, and bounded VM are therefore engine

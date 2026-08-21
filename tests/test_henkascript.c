@@ -209,6 +209,56 @@ static void test_bounded_vm_execution(void)
     henka_hks_program_destroy(program);
 }
 
+static void test_bounded_conditionals_and_comparisons(void)
+{
+    henka_hks_program* program;
+    henka_hks_value value;
+    henka_hks_execution_report report;
+
+    program = compile_program(
+        "fn Choose() { "
+        "i32 value = 3; "
+        "if (value < 4) { value = value + 6; } "
+        "else { value = 0; } "
+        "return value; "
+        "}");
+    assert(henka_hks_execute(program, 0U, 128U, &value, &report) == HENKA_HKS_EXECUTION_COMPLETED);
+    assert(value.type == HENKA_HKS_TYPE_I32 && value.as.i32 == 9);
+    henka_hks_program_destroy(program);
+
+    program = compile_program(
+        "fn Equality() { "
+        "bool enabled = true; "
+        "if (enabled == false) { return 1; } "
+        "return 2; "
+        "}");
+    assert(henka_hks_execute(program, 0U, 128U, &value, &report) == HENKA_HKS_EXECUTION_COMPLETED);
+    assert(value.type == HENKA_HKS_TYPE_I32 && value.as.i32 == 2);
+    henka_hks_program_destroy(program);
+}
+
+static void test_bounded_while_and_loop_control(void)
+{
+    henka_hks_program* program = compile_program(
+        "fn Loop() { "
+        "i32 index = 0; "
+        "i32 total = 0; "
+        "while (index < 5) { "
+        "index = index + 1; "
+        "if (index == 3) { continue; } "
+        "if (index == 5) { break; } "
+        "total = total + index; "
+        "} "
+        "return total; "
+        "}");
+    henka_hks_value value;
+    henka_hks_execution_report report;
+
+    assert(henka_hks_execute(program, 0U, 256U, &value, &report) == HENKA_HKS_EXECUTION_COMPLETED);
+    assert(value.type == HENKA_HKS_TYPE_I32 && value.as.i32 == 7);
+    henka_hks_program_destroy(program);
+}
+
 static void test_state_host_contract(void)
 {
     static const char source[] =
@@ -273,6 +323,8 @@ int main(void)
     test_rejects_unsafe_or_invalid_source();
     test_argument_and_memory_contracts();
     test_bounded_vm_execution();
+    test_bounded_conditionals_and_comparisons();
+    test_bounded_while_and_loop_control();
     test_state_host_contract();
     assert(henka_memory_get_allocation_count() == allocations_before);
     puts("henka_henkascript_tests: PASS");
