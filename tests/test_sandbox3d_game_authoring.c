@@ -16,6 +16,7 @@ int main(void)
     henka_scene_document* replacement_document = NULL;
     henka_scene_document_id object_id = HENKA_INVALID_SCENE_DOCUMENT_ID;
     henka_scene_document_id restored_id = HENKA_INVALID_SCENE_DOCUMENT_ID;
+    henka_scene_document_id duplicate_id = HENKA_INVALID_SCENE_DOCUMENT_ID;
     henka_scene_document_behavior_id behavior_id =
         HENKA_INVALID_SCENE_DOCUMENT_BEHAVIOR_ID;
     henka_scene_document_behavior behavior;
@@ -150,6 +151,47 @@ int main(void)
             restored_id != UINT64_C(5000))
     {
         fprintf(stderr, "game authoring test failed during persistent-ID remap\n");
+        goto cleanup;
+    }
+    henka_scene_document_destroy(replacement_document);
+    replacement_document = NULL;
+
+    if (henka_scene_document_create(&replacement_document) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    {
+        henka_scene_document_object duplicate = restored;
+        restored.id = UINT64_C(6000);
+        duplicate.id = UINT64_C(6001);
+        duplicate.behavior_count = 0U;
+        if (henka_scene_document_add_object(
+                replacement_document,
+                &restored,
+                &restored_id) != HENKA_SUCCESS ||
+            henka_scene_document_add_object(
+                replacement_document,
+                &duplicate,
+                &duplicate_id) != HENKA_SUCCESS ||
+            henka_scene_document_save_file(
+                replacement_document,
+                ".",
+                relative_path) != HENKA_SUCCESS ||
+            sandbox3d_game_authoring_load(authoring, ".") == HENKA_SUCCESS ||
+            sandbox3d_game_authoring_get_object_for_entity(
+                authoring, entity, &restored_id, &restored) != HENKA_SUCCESS ||
+            restored_id != UINT64_C(5000))
+        {
+            fprintf(stderr, "game authoring test failed during ambiguous-name rejection\n");
+            goto cleanup;
+        }
+    }
+    henka_scene_document_remove_object(replacement_document, duplicate_id);
+    if (henka_scene_document_save_file(
+            replacement_document,
+            ".",
+            relative_path) != HENKA_SUCCESS)
+    {
         goto cleanup;
     }
     henka_scene_document_destroy(replacement_document);

@@ -16,6 +16,11 @@ document. The Sandbox adapter maintains a bounded mapping between persistent
 IDs and the current runtime entities. The mapping is an adapter, not a second
 scene authority.
 
+When an authoring document is reloaded, bindings are restored by persistent ID
+first. A missing ID may fall back to a unique authored object name; ambiguous
+names reject the candidate document rather than silently binding the wrong
+object.
+
 ## Scene Document ownership
 
 The Scene Document is pure authoring data. It owns bounded object records,

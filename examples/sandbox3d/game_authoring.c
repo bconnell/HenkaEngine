@@ -62,6 +62,7 @@ static henka_result sandbox3d_game_authoring_find_document_id_by_name(
 {
     size_t index;
     size_t count;
+    bool found = false;
     if (document == NULL || name == NULL || out_id == NULL)
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
@@ -77,11 +78,16 @@ static henka_result sandbox3d_game_authoring_find_document_id_by_name(
         }
         if (strcmp(object.name, name) == 0)
         {
+            if (found)
+            {
+                *out_id = HENKA_INVALID_SCENE_DOCUMENT_ID;
+                return HENKA_ERROR_LIMIT;
+            }
             *out_id = object.id;
-            return HENKA_SUCCESS;
+            found = true;
         }
     }
-    return HENKA_ERROR_INVALID_ARGUMENT;
+    return found ? HENKA_SUCCESS : HENKA_ERROR_INVALID_ARGUMENT;
 }
 
 static henka_result sandbox3d_game_authoring_build_object(
@@ -733,6 +739,14 @@ henka_result sandbox3d_game_authoring_load(
     for (index = 0U; index < authoring->binding_count; ++index)
     {
         previous_ids[index] = authoring->bindings[index].document_id;
+        if (henka_scene_document_get_object(
+                candidate,
+                previous_ids[index],
+                &(henka_scene_document_object){0}) == HENKA_SUCCESS)
+        {
+            ids[index] = previous_ids[index];
+            continue;
+        }
         const char* name = henka_scene_get_entity_name(
             authoring->scene,
             authoring->bindings[index].entity);
@@ -741,10 +755,16 @@ henka_result sandbox3d_game_authoring_load(
             henka_scene_document_destroy(candidate);
             return HENKA_ERROR_INVALID_ARGUMENT;
         }
-        if (sandbox3d_game_authoring_find_document_id_by_name(
-                candidate,
-                name,
-                &ids[index]) != HENKA_SUCCESS)
+        result = sandbox3d_game_authoring_find_document_id_by_name(
+            candidate,
+            name,
+            &ids[index]);
+        if (result == HENKA_ERROR_LIMIT)
+        {
+            henka_scene_document_destroy(candidate);
+            return result;
+        }
+        if (result != HENKA_SUCCESS)
         {
             henka_scene_document_object current;
             if (henka_scene_document_get_object(
