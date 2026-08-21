@@ -2151,6 +2151,13 @@ try {
             throw "The user-facing Edge Loop control did not report a bounded result."
         }
         Write-Output "[pass] Packaged native Edge Loop control exposed and reported a bounded result"
+        $faceAfterEdgeMatch = Get-LastLogRegexMatch `
+            -Path $stdoutPath `
+            -Pattern 'Native authoring face controls: name=(.+) face_x=([-0-9.]+) face_y=([-0-9.]+) width=88.0 height=24.0\.'
+        if ($null -ne $faceAfterEdgeMatch) {
+            $nativeFaceX = [double]$faceAfterEdgeMatch.Groups[2].Value
+            $nativeFaceY = [double]$faceAfterEdgeMatch.Groups[3].Value
+        }
         $bevelControlLogPattern = 'Native authoring bevel control:'
         $bevelControlCountBefore = @(
             Select-String -LiteralPath $stdoutPath -Pattern $bevelControlLogPattern -ErrorAction SilentlyContinue
