@@ -100,7 +100,10 @@ turning the public README into an implementation ledger.
   authoring changes and scene save/reload.
 - This is a foundation, not a complete game editor. Hierarchy authoring,
   broader imported-object registration, complete source/material/project
-  serialization, scripting, and production gameplay workflows remain open.
+  serialization, and production gameplay workflows remain open. The shared
+  scripting API/host schema foundation is available through
+  [scripting-foundation.md](scripting-foundation.md), but source execution,
+  behaviors, Lua, and HenkaScript remain unfinished.
 
 ## Modeling / Content Authoring
 
@@ -228,8 +231,8 @@ turning the public README into an implementation ledger.
 
 - Henka remains early-stage. The native workspace is not a complete production
   editor or project-authoring suite.
-- 2D workflow, audio, scripting/behaviors, character controllers, advanced
-  physics, broader renderer backends, and mature Game/Play workflows remain
+- 2D workflow, audio, script execution/behaviors, character controllers,
+  advanced physics, broader renderer backends, and mature Game/Play workflows remain
   future work beyond the current bounded authoring/play foundation.
 - Advanced asset authoring, hierarchy authoring, animation/rigging, texture
   painting, automatic UV unwrap, complete scene serialization, and some
