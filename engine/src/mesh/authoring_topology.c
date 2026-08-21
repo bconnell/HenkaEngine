@@ -1,10 +1,13 @@
 #include <henka/authoring_topology.h>
+#include <henka/memory.h>
 
 #include <limits.h>
 #include <math.h>
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
+
+#include "../core/checked.h"
 
 typedef struct henka_topology_cell_bucket
 {
@@ -1459,5 +1462,286 @@ cleanup:
             sizeof(*out_report));
     }
 
+    return result;
+}
+
+henka_authoring_topology_repair_options
+henka_authoring_topology_repair_options_default(void)
+{
+    henka_authoring_topology_repair_options options;
+
+    options.policy_version = HENKA_AUTHORING_TOPOLOGY_POLICY_VERSION;
+    options.profile = HENKA_AUTHORING_TOPOLOGY_PROFILE_GENERAL;
+    options.analysis = henka_authoring_topology_options_default();
+    options.max_passes = 4U;
+    options.remove_isolated_vertices = false;
+    options.remove_duplicate_faces = false;
+    options.remove_degenerate_faces = false;
+    return options;
+}
+
+static bool henka_topology_faces_same_cycle(
+    const henka_authoring_face* first,
+    const henka_authoring_face* second,
+    float uv_tolerance)
+{
+    size_t offset;
+    size_t corner;
+    if (first == NULL || second == NULL ||
+        first->corner_count != second->corner_count ||
+        first->material_region != second->material_region ||
+        first->smooth != second->smooth ||
+        first->corner_count == 0U || !isfinite(uv_tolerance) ||
+        uv_tolerance < 0.0f)
+    {
+        return false;
+    }
+    for (offset = 0U; offset < second->corner_count; ++offset)
+    {
+        bool matches = true;
+        for (corner = 0U; corner < first->corner_count; ++corner)
+        {
+            const size_t second_corner =
+                (corner + offset) % second->corner_count;
+            if (first->vertices[corner] != second->vertices[second_corner] ||
+                fabsf(first->uvs[corner].x - second->uvs[second_corner].x) > uv_tolerance ||
+                fabsf(first->uvs[corner].y - second->uvs[second_corner].y) > uv_tolerance)
+            {
+                matches = false;
+                break;
+            }
+        }
+        if (matches)
+        {
+            return true;
+        }
+    }
+    return false;
+}
+
+static henka_result henka_topology_mark_repair_faces(
+    const henka_authoring_mesh* mesh,
+    const henka_authoring_topology_repair_options* options,
+    unsigned char* remove_faces,
+    size_t remove_face_capacity,
+    size_t* out_duplicate_count,
+    size_t* out_degenerate_count)
+{
+    const henka_authoring_mesh_desc desc = henka_authoring_mesh_get_desc(mesh);
+    size_t face_id;
+    if (mesh == NULL || options == NULL || remove_faces == NULL ||
+        remove_face_capacity <= desc.max_faces || out_duplicate_count == NULL ||
+        out_degenerate_count == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    *out_duplicate_count = 0U;
+    *out_degenerate_count = 0U;
+    memset(remove_faces, 0, remove_face_capacity);
+    for (face_id = 1U; face_id <= desc.max_faces; ++face_id)
+    {
+        const henka_authoring_face* face = henka_authoring_mesh_get_face(
+            mesh, (henka_authoring_face_id)face_id);
+        size_t prior_id;
+        if (face == NULL)
+        {
+            continue;
+        }
+        if (options->remove_degenerate_faces &&
+            henka_topology_face_is_degenerate(
+                mesh, face, options->analysis.degenerate_normal_epsilon))
+        {
+            remove_faces[face_id] = 1U;
+            *out_degenerate_count += 1U;
+            continue;
+        }
+        if (!options->remove_duplicate_faces)
+        {
+            continue;
+        }
+        for (prior_id = 1U; prior_id < face_id; ++prior_id)
+        {
+            const henka_authoring_face* prior = henka_authoring_mesh_get_face(
+                mesh, (henka_authoring_face_id)prior_id);
+            if (prior == NULL || !henka_topology_faces_same_vertex_set(face, prior))
+            {
+                continue;
+            }
+            if (!henka_topology_faces_same_cycle(
+                    prior, face, options->analysis.uv_seam_tolerance))
+            {
+                /* Same vertex set with different winding, material, smoothing,
+                 * or UV data is not a safe duplicate to discard. */
+                return HENKA_ERROR_INVALID_ARGUMENT;
+            }
+            remove_faces[face_id] = 1U;
+            *out_duplicate_count += 1U;
+            break;
+        }
+    }
+    return HENKA_SUCCESS;
+}
+
+henka_result henka_authoring_mesh_repair_topology(
+    henka_authoring_mesh* mesh,
+    const henka_authoring_topology_repair_options* options,
+    henka_authoring_topology_repair_report* out_report)
+{
+    const henka_authoring_mesh_desc desc = henka_authoring_mesh_get_desc(mesh);
+    henka_authoring_mesh* candidate = NULL;
+    henka_authoring_topology_report before;
+    henka_authoring_topology_report after;
+    unsigned char* remove_faces = NULL;
+    unsigned char* remove_vertices = NULL;
+    size_t face_capacity;
+    size_t vertex_capacity;
+    size_t face_bytes;
+    size_t vertex_bytes;
+    size_t pass;
+    henka_result result;
+
+    if (out_report != NULL)
+    {
+        memset(out_report, 0, sizeof(*out_report));
+    }
+    if (mesh == NULL || options == NULL || out_report == NULL ||
+        options->policy_version != HENKA_AUTHORING_TOPOLOGY_POLICY_VERSION ||
+        options->profile < HENKA_AUTHORING_TOPOLOGY_PROFILE_GENERAL ||
+        options->profile >= HENKA_AUTHORING_TOPOLOGY_PROFILE_COUNT ||
+        options->max_passes == 0U || !henka_authoring_mesh_validate(mesh))
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    result = henka_authoring_topology_analyze(
+        mesh, &options->analysis, &before);
+    if (result != HENKA_SUCCESS)
+    {
+        return result;
+    }
+    out_report->before = before;
+    result = henka_authoring_mesh_clone(mesh, &candidate);
+    if (result != HENKA_SUCCESS)
+    {
+        return result;
+    }
+    if (!henka_checked_size_add(desc.max_faces, 1U, &face_capacity) ||
+        !henka_checked_size_add(desc.max_vertices, 1U, &vertex_capacity) ||
+        !henka_checked_size_multiply(face_capacity, sizeof(*remove_faces), &face_bytes) ||
+        !henka_checked_size_multiply(vertex_capacity, sizeof(*remove_vertices), &vertex_bytes))
+    {
+        result = HENKA_ERROR_LIMIT;
+        goto repair_cleanup;
+    }
+    remove_faces = (unsigned char*)henka_calloc(1U, face_bytes);
+    remove_vertices = (unsigned char*)henka_calloc(1U, vertex_bytes);
+    if (remove_faces == NULL || remove_vertices == NULL)
+    {
+        result = HENKA_ERROR_OUT_OF_MEMORY;
+        goto repair_cleanup;
+    }
+
+    for (pass = 0U; pass < options->max_passes; ++pass)
+    {
+        size_t duplicate_count = 0U;
+        size_t degenerate_count = 0U;
+        size_t face_id;
+        size_t vertex_id;
+        bool changed = false;
+
+        out_report->passes = pass + 1U;
+        result = henka_topology_mark_repair_faces(
+            candidate,
+            options,
+            remove_faces,
+            face_capacity,
+            &duplicate_count,
+            &degenerate_count);
+        if (result != HENKA_SUCCESS)
+        {
+            goto repair_cleanup;
+        }
+        for (face_id = 1U; face_id <= desc.max_faces; ++face_id)
+        {
+            if (remove_faces[face_id] != 0U)
+            {
+                result = henka_authoring_mesh_remove_face(
+                    candidate, (henka_authoring_face_id)face_id);
+                if (result != HENKA_SUCCESS)
+                {
+                    goto repair_cleanup;
+                }
+                changed = true;
+            }
+        }
+        if (options->remove_isolated_vertices)
+        {
+            memset(remove_vertices, 0, vertex_bytes);
+            for (vertex_id = 1U; vertex_id <= desc.max_vertices; ++vertex_id)
+            {
+                if (henka_authoring_mesh_get_vertex_edge_count(
+                        candidate, (henka_authoring_vertex_id)vertex_id) == 0U &&
+                    henka_authoring_mesh_get_vertex(
+                        candidate, (henka_authoring_vertex_id)vertex_id) != NULL)
+                {
+                    remove_vertices[vertex_id] = 1U;
+                }
+            }
+            for (vertex_id = 1U; vertex_id <= desc.max_vertices; ++vertex_id)
+            {
+                if (remove_vertices[vertex_id] != 0U)
+                {
+                    result = henka_authoring_mesh_remove_vertex(
+                        candidate, (henka_authoring_vertex_id)vertex_id);
+                    if (result != HENKA_SUCCESS)
+                    {
+                        goto repair_cleanup;
+                    }
+                    out_report->removed_isolated_vertices += 1U;
+                    changed = true;
+                }
+            }
+        }
+        out_report->removed_duplicate_faces += duplicate_count;
+        out_report->removed_degenerate_faces += degenerate_count;
+        if (!changed)
+        {
+            break;
+        }
+        if (pass + 1U == options->max_passes)
+        {
+            result = HENKA_ERROR_LIMIT;
+            goto repair_cleanup;
+        }
+    }
+
+    if (!henka_authoring_mesh_validate(candidate))
+    {
+        result = HENKA_ERROR_INVALID_ARGUMENT;
+        goto repair_cleanup;
+    }
+    result = henka_authoring_topology_analyze(
+        candidate, &options->analysis, &after);
+    if (result != HENKA_SUCCESS || after.nonmanifold_edge_count != 0U)
+    {
+        result = result == HENKA_SUCCESS ? HENKA_ERROR_INVALID_ARGUMENT : result;
+        goto repair_cleanup;
+    }
+    result = henka_authoring_mesh_copy(mesh, candidate);
+    if (result == HENKA_SUCCESS)
+    {
+        out_report->after = after;
+        out_report->changed = out_report->before.vertex_count != after.vertex_count ||
+            out_report->before.edge_count != after.edge_count ||
+            out_report->before.face_count != after.face_count;
+    }
+
+repair_cleanup:
+    henka_free(remove_faces);
+    henka_free(remove_vertices);
+    henka_authoring_mesh_destroy(candidate);
+    if (result != HENKA_SUCCESS)
+    {
+        memset(out_report, 0, sizeof(*out_report));
+    }
     return result;
 }

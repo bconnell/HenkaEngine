@@ -18,6 +18,16 @@ The current foundation provides:
 - bounded shared topology undo/redo snapshots and versioned transactional
   mesh-file save/load with failed-load retention.
 
+`<henka/authoring_topology.h>` provides non-destructive topology analysis and
+an explicit candidate-based repair boundary. Analysis reports component,
+boundary, manifold, winding, seam, hard-edge, degeneracy, duplicate-face,
+coincident-vertex, valence, and face-shape metrics. Repair is opt-in and
+bounded: it can remove isolated vertices, exact duplicate faces only when
+their winding, UVs, material, and smoothing metadata agree, and degenerate
+faces. The source is replaced only after candidate validation and a final
+analysis; unsafe duplicate groups, non-manifold results, vertex welding, and
+winding rewrites fail closed.
+
 `<henka/authoring_modeling.h>` adds bounded plane and box constructors plus
 transactional duplicate, extrude, inset, planar bevel-ring, and face
 subdivide operations. Each operation works on a clone and publishes only a

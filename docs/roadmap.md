@@ -194,11 +194,16 @@ tracks that share renderer, asset, persistence, and workspace boundaries.
    axis-constrained movement.
 5. Vertex operations include Merge Center, Merge Active, Merge by Distance,
    Connect Vertices, Dissolve Vertex, Delete Vertex, and Vertex Bevel.
-6. Face extrude, inset, planar bevel rings, face subdivision, selected-face
+6. Non-destructive topology analysis and explicit transactional safe repair are
+   available. Repair is bounded and deterministic: it can remove enabled
+   isolated vertices, exact metadata-preserving duplicate faces, and
+   degenerate faces, while rejecting unsafe winding, UV, material, smoothing,
+   or non-manifold changes.
+7. Face extrude, inset, planar bevel rings, face subdivision, selected-face
    deletion, planar UV projection, island transforms, packing, seam detection,
    Make Editable, HAMS persistence, material promotion, and supported PBR
    material-instance editing are available in the bounded workflow.
-7. glTF/GLB import and external modeling-pipeline compatibility remain part of
+8. glTF/GLB import and external modeling-pipeline compatibility remain part of
    the implemented boundary, with explicit limitations.
 
 ### Current Development

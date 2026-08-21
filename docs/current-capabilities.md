@@ -143,6 +143,13 @@ turning the public README into an implementation ledger.
   and boundary queries, material regions, per-corner UV metadata, smoothing
   and hard-edge intent, fail-closed polygon validation, deterministic
   caller-owned triangulation, and bounded shared undo/redo.
+- Topology analysis is available as a non-destructive, deterministic report
+  covering component structure, boundaries, manifold state, winding, seams,
+  hard edges, degeneracy, duplicate faces, coincident vertices, valence, and
+  face-shape metrics. Explicit repair can transactionally remove only enabled
+  safe issues: isolated vertices, exact duplicate faces with matching winding,
+  UVs, material, and smoothing, and degenerate faces. Unsafe duplicate groups
+  are rejected; vertex welding and winding rewrites are not implicit repairs.
 - Published Vertex topology operations include Merge Center, Merge Active,
   Merge by Distance, Connect Vertices, Dissolve Vertex, Delete Vertex, and
   Vertex Bevel. These operations are transactional and exposed through the

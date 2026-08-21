@@ -3,9 +3,12 @@
 
 #include <stdbool.h>
 #include <stddef.h>
+#include <stdint.h>
 
 #include <henka/authoring_mesh.h>
 #include <henka/result.h>
+
+#define HENKA_AUTHORING_TOPOLOGY_POLICY_VERSION UINT32_C(1)
 
 typedef enum henka_authoring_topology_profile
 {
@@ -61,6 +64,28 @@ typedef struct henka_authoring_topology_report
     size_t max_vertex_valence;
 } henka_authoring_topology_report;
 
+typedef struct henka_authoring_topology_repair_options
+{
+    uint32_t policy_version;
+    henka_authoring_topology_profile profile;
+    henka_authoring_topology_options analysis;
+    size_t max_passes;
+    bool remove_isolated_vertices;
+    bool remove_duplicate_faces;
+    bool remove_degenerate_faces;
+} henka_authoring_topology_repair_options;
+
+typedef struct henka_authoring_topology_repair_report
+{
+    bool changed;
+    size_t passes;
+    size_t removed_isolated_vertices;
+    size_t removed_duplicate_faces;
+    size_t removed_degenerate_faces;
+    henka_authoring_topology_report before;
+    henka_authoring_topology_report after;
+} henka_authoring_topology_repair_report;
+
 typedef struct henka_authoring_cage_edge
 {
     henka_authoring_edge_id edge_id;
@@ -76,6 +101,9 @@ henka_authoring_topology_profile_guidance
 henka_authoring_topology_profile_get_guidance(
     henka_authoring_topology_profile profile);
 
+henka_authoring_topology_repair_options
+henka_authoring_topology_repair_options_default(void);
+
 /* Performs non-destructive topology-quality analysis.
  *
  * Structural mesh validity remains the responsibility of
@@ -86,6 +114,15 @@ henka_result henka_authoring_topology_analyze(
     const henka_authoring_mesh* mesh,
     const henka_authoring_topology_options* options,
     henka_authoring_topology_report* out_report);
+
+/* Applies only explicitly enabled, deterministic safe repairs to a candidate
+ * mesh. The source mesh is replaced only after every pass and final analysis
+ * succeeds. Repairs never weld vertices, rewrite winding, or cross material,
+ * UV, smoothing, or hard-edge boundaries implicitly. */
+henka_result henka_authoring_mesh_repair_topology(
+    henka_authoring_mesh* mesh,
+    const henka_authoring_topology_repair_options* options,
+    henka_authoring_topology_repair_report* out_report);
 
 /* Returns only authoritative authoring edges.
  *
