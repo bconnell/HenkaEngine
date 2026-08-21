@@ -746,6 +746,8 @@ henka_result henka_authoring_topology_analyze(
 
     size_t cell_capacity = 0U;
     size_t face_slot_capacity = 0U;
+    size_t vertex_index_capacity = 0U;
+    size_t allocation_bytes = 0U;
     size_t vertex_found = 0U;
     size_t edge_found = 0U;
     size_t face_found = 0U;
@@ -805,10 +807,19 @@ henka_result henka_authoring_topology_analyze(
     out_report->face_count =
         counts.faces;
 
+    if (!henka_checked_size_add(
+            HENKA_AUTHORING_MESH_HARD_MAX_VERTICES,
+            1U,
+            &vertex_index_capacity) ||
+        !henka_checked_size_multiply(
+            vertex_index_capacity,
+            sizeof(*vertex_index_by_id),
+            &allocation_bytes))
+    {
+        return HENKA_ERROR_LIMIT;
+    }
     vertex_index_by_id =
-        (size_t*)malloc(
-            (HENKA_AUTHORING_MESH_HARD_MAX_VERTICES + 1U) *
-            sizeof(*vertex_index_by_id));
+        (size_t*)henka_calloc(1U, allocation_bytes);
 
     if (vertex_index_by_id == NULL)
     {
@@ -826,30 +837,61 @@ henka_result henka_authoring_topology_analyze(
 
     if (counts.vertices > 0U)
     {
+        size_t vertex_bytes;
+        if (!henka_checked_size_multiply(
+                counts.vertices,
+                sizeof(*vertex_ids),
+                &vertex_bytes))
+        {
+            result = HENKA_ERROR_LIMIT;
+            goto cleanup;
+        }
         vertex_ids =
-            (henka_authoring_vertex_id*)calloc(
-                counts.vertices,
-                sizeof(*vertex_ids));
+            (henka_authoring_vertex_id*)henka_calloc(1U, vertex_bytes);
 
+        if (!henka_checked_size_multiply(
+                counts.vertices,
+                sizeof(*positions),
+                &vertex_bytes))
+        {
+            result = HENKA_ERROR_LIMIT;
+            goto cleanup;
+        }
         positions =
-            (henka_vec3*)calloc(
-                counts.vertices,
-                sizeof(*positions));
+            (henka_vec3*)henka_calloc(1U, vertex_bytes);
 
+        if (!henka_checked_size_multiply(
+                counts.vertices,
+                sizeof(*parent),
+                &vertex_bytes))
+        {
+            result = HENKA_ERROR_LIMIT;
+            goto cleanup;
+        }
         parent =
-            (size_t*)calloc(
-                counts.vertices,
-                sizeof(*parent));
+            (size_t*)henka_calloc(1U, vertex_bytes);
 
+        if (!henka_checked_size_multiply(
+                counts.vertices,
+                sizeof(*rank),
+                &vertex_bytes))
+        {
+            result = HENKA_ERROR_LIMIT;
+            goto cleanup;
+        }
         rank =
-            (unsigned char*)calloc(
-                counts.vertices,
-                sizeof(*rank));
+            (unsigned char*)henka_calloc(1U, vertex_bytes);
 
+        if (!henka_checked_size_multiply(
+                counts.vertices,
+                sizeof(*next_in_cell),
+                &vertex_bytes))
+        {
+            result = HENKA_ERROR_LIMIT;
+            goto cleanup;
+        }
         next_in_cell =
-            (size_t*)malloc(
-                counts.vertices *
-                sizeof(*next_in_cell));
+            (size_t*)henka_calloc(1U, vertex_bytes);
 
         if (vertex_ids == NULL ||
             positions == NULL ||
@@ -1097,8 +1139,15 @@ henka_result henka_authoring_topology_analyze(
 
     if (counts.faces > 0U)
     {
-        const size_t requested =
-            counts.faces * 2U + 1U;
+        size_t requested;
+        size_t face_bytes;
+
+        if (!henka_checked_size_multiply(counts.faces, 2U, &requested) ||
+            !henka_checked_size_add(requested, 1U, &requested))
+        {
+            result = HENKA_ERROR_LIMIT;
+            goto cleanup;
+        }
 
         face_slot_capacity =
             henka_topology_next_power_of_two(
@@ -1112,10 +1161,16 @@ henka_result henka_authoring_topology_analyze(
             goto cleanup;
         }
 
+        if (!henka_checked_size_multiply(
+                face_slot_capacity,
+                sizeof(*face_slots),
+                &face_bytes))
+        {
+            result = HENKA_ERROR_LIMIT;
+            goto cleanup;
+        }
         face_slots =
-            (henka_authoring_face_id*)malloc(
-                face_slot_capacity *
-                sizeof(*face_slots));
+            (henka_authoring_face_id*)henka_calloc(1U, face_bytes);
 
         if (face_slots == NULL)
         {
@@ -1263,8 +1318,15 @@ henka_result henka_authoring_topology_analyze(
 
     if (counts.vertices > 0U)
     {
-        const size_t requested =
-            counts.vertices * 2U + 1U;
+        size_t requested;
+        size_t cell_bytes;
+
+        if (!henka_checked_size_multiply(counts.vertices, 2U, &requested) ||
+            !henka_checked_size_add(requested, 1U, &requested))
+        {
+            result = HENKA_ERROR_LIMIT;
+            goto cleanup;
+        }
 
         cell_capacity =
             henka_topology_next_power_of_two(
@@ -1278,10 +1340,16 @@ henka_result henka_authoring_topology_analyze(
             goto cleanup;
         }
 
-        cell_buckets =
-            (henka_topology_cell_bucket*)calloc(
+        if (!henka_checked_size_multiply(
                 cell_capacity,
-                sizeof(*cell_buckets));
+                sizeof(*cell_buckets),
+                &cell_bytes))
+        {
+            result = HENKA_ERROR_LIMIT;
+            goto cleanup;
+        }
+        cell_buckets =
+            (henka_topology_cell_bucket*)henka_calloc(1U, cell_bytes);
 
         if (cell_buckets == NULL)
         {
@@ -1445,14 +1513,14 @@ henka_result henka_authoring_topology_analyze(
     }
 
 cleanup:
-    free(face_slots);
-    free(cell_buckets);
-    free(next_in_cell);
-    free(rank);
-    free(parent);
-    free(vertex_index_by_id);
-    free(positions);
-    free(vertex_ids);
+    henka_free(face_slots);
+    henka_free(cell_buckets);
+    henka_free(next_in_cell);
+    henka_free(rank);
+    henka_free(parent);
+    henka_free(vertex_index_by_id);
+    henka_free(positions);
+    henka_free(vertex_ids);
 
     if (result != HENKA_SUCCESS)
     {
