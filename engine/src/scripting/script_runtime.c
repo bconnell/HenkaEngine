@@ -28,6 +28,85 @@ struct henka_script_behavior_runtime
     henka_script_behavior_slot slots[HENKA_SCRIPT_RUNTIME_MAX_BEHAVIORS];
 };
 
+static const henka_script_lifecycle_descriptor g_lifecycle_schema[] =
+{
+    {HENKA_SCRIPT_LIFECYCLE_CREATE, "OnCreate", 0U, {HENKA_SCRIPT_API_VALUE_VOID, HENKA_SCRIPT_API_VALUE_VOID}},
+    {HENKA_SCRIPT_LIFECYCLE_START, "OnStart", 0U, {HENKA_SCRIPT_API_VALUE_VOID, HENKA_SCRIPT_API_VALUE_VOID}},
+    {HENKA_SCRIPT_LIFECYCLE_UPDATE, "OnUpdate", 0U, {HENKA_SCRIPT_API_VALUE_VOID, HENKA_SCRIPT_API_VALUE_VOID}},
+    {HENKA_SCRIPT_LIFECYCLE_STOP, "OnStop", 0U, {HENKA_SCRIPT_API_VALUE_VOID, HENKA_SCRIPT_API_VALUE_VOID}},
+    {HENKA_SCRIPT_LIFECYCLE_EVENT, "OnEvent", 2U, {HENKA_SCRIPT_API_VALUE_EVENT_ID, HENKA_SCRIPT_API_VALUE_ENTITY}},
+    {HENKA_SCRIPT_LIFECYCLE_FIXED_UPDATE, "OnFixedUpdate", 0U, {HENKA_SCRIPT_API_VALUE_VOID, HENKA_SCRIPT_API_VALUE_VOID}},
+    {HENKA_SCRIPT_LIFECYCLE_INTERACT, "OnInteract", 2U, {HENKA_SCRIPT_API_VALUE_ENTITY, HENKA_SCRIPT_API_VALUE_I32}},
+    {HENKA_SCRIPT_LIFECYCLE_COLLISION_ENTER, "OnCollisionEnter", 2U, {HENKA_SCRIPT_API_VALUE_ENTITY, HENKA_SCRIPT_API_VALUE_I32}},
+    {HENKA_SCRIPT_LIFECYCLE_COLLISION_STAY, "OnCollisionStay", 2U, {HENKA_SCRIPT_API_VALUE_ENTITY, HENKA_SCRIPT_API_VALUE_I32}},
+    {HENKA_SCRIPT_LIFECYCLE_COLLISION_EXIT, "OnCollisionExit", 2U, {HENKA_SCRIPT_API_VALUE_ENTITY, HENKA_SCRIPT_API_VALUE_I32}},
+    {HENKA_SCRIPT_LIFECYCLE_TRIGGER_ENTER, "OnTriggerEnter", 2U, {HENKA_SCRIPT_API_VALUE_ENTITY, HENKA_SCRIPT_API_VALUE_I32}},
+    {HENKA_SCRIPT_LIFECYCLE_TRIGGER_STAY, "OnTriggerStay", 2U, {HENKA_SCRIPT_API_VALUE_ENTITY, HENKA_SCRIPT_API_VALUE_I32}},
+    {HENKA_SCRIPT_LIFECYCLE_TRIGGER_EXIT, "OnTriggerExit", 2U, {HENKA_SCRIPT_API_VALUE_ENTITY, HENKA_SCRIPT_API_VALUE_I32}},
+    {HENKA_SCRIPT_LIFECYCLE_DESTROY, "OnDestroy", 0U, {HENKA_SCRIPT_API_VALUE_VOID, HENKA_SCRIPT_API_VALUE_VOID}}
+};
+
+static const size_t g_lifecycle_schema_count =
+    sizeof(g_lifecycle_schema) / sizeof(g_lifecycle_schema[0]);
+
+static bool henka_script_lifecycle_schema_is_valid(void)
+{
+    size_t index;
+    for (index = 0U; index < g_lifecycle_schema_count; ++index)
+    {
+        size_t compare_index;
+        if (g_lifecycle_schema[index].name == NULL ||
+            g_lifecycle_schema[index].parameter_count > HENKA_SCRIPT_LIFECYCLE_MAX_PARAMETERS)
+        {
+            return false;
+        }
+        for (compare_index = index + 1U; compare_index < g_lifecycle_schema_count; ++compare_index)
+        {
+            if (g_lifecycle_schema[index].event == g_lifecycle_schema[compare_index].event ||
+                strcmp(g_lifecycle_schema[index].name, g_lifecycle_schema[compare_index].name) == 0)
+            {
+                return false;
+            }
+        }
+    }
+    return true;
+}
+
+henka_result henka_script_lifecycle_schema_get(
+    const henka_script_lifecycle_descriptor** out_descriptors,
+    size_t* out_count)
+{
+    if (out_descriptors == NULL || out_count == NULL ||
+        !henka_script_lifecycle_schema_is_valid())
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    *out_descriptors = g_lifecycle_schema;
+    *out_count = g_lifecycle_schema_count;
+    return HENKA_SUCCESS;
+}
+
+henka_result henka_script_lifecycle_schema_find(
+    henka_script_lifecycle_event event,
+    const henka_script_lifecycle_descriptor** out_descriptor)
+{
+    size_t index;
+    if (out_descriptor == NULL || !henka_script_lifecycle_schema_is_valid())
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    *out_descriptor = NULL;
+    for (index = 0U; index < g_lifecycle_schema_count; ++index)
+    {
+        if (g_lifecycle_schema[index].event == event)
+        {
+            *out_descriptor = &g_lifecycle_schema[index];
+            return HENKA_SUCCESS;
+        }
+    }
+    return HENKA_ERROR_INVALID_ARGUMENT;
+}
+
 static henka_script_behavior_handle henka_script_behavior_make_handle(
     size_t index,
     uint32_t generation)

@@ -38,22 +38,24 @@ henka_result henka_hks_behavior_backend_create(
     henka_hks_behavior_backend** out_backend,
     henka_hks_diagnostic* out_diagnostic)
 {
-    static const char* const lifecycle_names[13] =
+    static const henka_script_lifecycle_event lifecycle_events[13] =
     {
-        "OnCreate",
-        "OnStart",
-        "OnUpdate",
-        "OnStop",
-        "OnFixedUpdate",
-        "OnInteract",
-        "OnCollisionEnter",
-        "OnCollisionStay",
-        "OnCollisionExit",
-        "OnTriggerEnter",
-        "OnTriggerStay",
-        "OnTriggerExit",
-        "OnDestroy"
+        HENKA_SCRIPT_LIFECYCLE_CREATE,
+        HENKA_SCRIPT_LIFECYCLE_START,
+        HENKA_SCRIPT_LIFECYCLE_UPDATE,
+        HENKA_SCRIPT_LIFECYCLE_STOP,
+        HENKA_SCRIPT_LIFECYCLE_FIXED_UPDATE,
+        HENKA_SCRIPT_LIFECYCLE_INTERACT,
+        HENKA_SCRIPT_LIFECYCLE_COLLISION_ENTER,
+        HENKA_SCRIPT_LIFECYCLE_COLLISION_STAY,
+        HENKA_SCRIPT_LIFECYCLE_COLLISION_EXIT,
+        HENKA_SCRIPT_LIFECYCLE_TRIGGER_ENTER,
+        HENKA_SCRIPT_LIFECYCLE_TRIGGER_STAY,
+        HENKA_SCRIPT_LIFECYCLE_TRIGGER_EXIT,
+        HENKA_SCRIPT_LIFECYCLE_DESTROY
     };
+    const henka_script_lifecycle_descriptor* event_descriptor = NULL;
+    const size_t lifecycle_count = sizeof(lifecycle_events) / sizeof(lifecycle_events[0]);
     henka_hks_behavior_backend* backend;
     henka_result compile_result;
     size_t index;
@@ -78,17 +80,29 @@ henka_result henka_hks_behavior_backend_create(
         henka_free(backend);
         return compile_result;
     }
-    for (index = 0U; index < sizeof(lifecycle_names) / sizeof(lifecycle_names[0]); ++index)
+    for (index = 0U; index < lifecycle_count; ++index)
     {
+        const henka_script_lifecycle_descriptor* descriptor = NULL;
+        if (henka_script_lifecycle_schema_find(lifecycle_events[index], &descriptor) != HENKA_SUCCESS ||
+            descriptor == NULL)
+        {
+            henka_hks_behavior_backend_destroy(backend);
+            return HENKA_ERROR_INVALID_ARGUMENT;
+        }
         (void)henka_hks_program_find_callable(
             backend->program,
-            lifecycle_names[index],
+            descriptor->name,
             &backend->lifecycle_callable[index]);
     }
+    if (henka_script_lifecycle_schema_find(
+            HENKA_SCRIPT_LIFECYCLE_EVENT, &event_descriptor) != HENKA_SUCCESS ||
+        event_descriptor == NULL)
+    {
+        henka_hks_behavior_backend_destroy(backend);
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
     (void)henka_hks_program_find_callable(
-        backend->program,
-        "OnEvent",
-        &backend->event_callable);
+        backend->program, event_descriptor->name, &backend->event_callable);
     *out_backend = backend;
     return HENKA_SUCCESS;
 }

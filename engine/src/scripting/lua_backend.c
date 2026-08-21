@@ -56,9 +56,9 @@ static size_t henka_lua_event_index(henka_script_lifecycle_event event)
 
 static bool henka_lua_event_has_arguments(henka_script_lifecycle_event event)
 {
-    return event == HENKA_SCRIPT_LIFECYCLE_EVENT ||
-        (event >= HENKA_SCRIPT_LIFECYCLE_INTERACT &&
-         event <= HENKA_SCRIPT_LIFECYCLE_TRIGGER_EXIT);
+    const henka_script_lifecycle_descriptor* descriptor = NULL;
+    return henka_script_lifecycle_schema_find(event, &descriptor) == HENKA_SUCCESS &&
+        descriptor != NULL && descriptor->parameter_count != 0U;
 }
 
 static void* henka_lua_allocate(
@@ -647,21 +647,21 @@ henka_result henka_lua_behavior_backend_create(
     henka_lua_behavior_backend** out_backend,
     henka_lua_diagnostic* out_diagnostic)
 {
-    static const char* const lifecycle_names[HENKA_LUA_LIFECYCLE_COUNT] =
+    static const henka_script_lifecycle_event lifecycle_events[HENKA_LUA_LIFECYCLE_COUNT] =
     {
-        "OnCreate",
-        "OnStart",
-        "OnUpdate",
-        "OnStop",
-        "OnFixedUpdate",
-        "OnInteract",
-        "OnCollisionEnter",
-        "OnCollisionStay",
-        "OnCollisionExit",
-        "OnTriggerEnter",
-        "OnTriggerStay",
-        "OnTriggerExit",
-        "OnDestroy"
+        HENKA_SCRIPT_LIFECYCLE_CREATE,
+        HENKA_SCRIPT_LIFECYCLE_START,
+        HENKA_SCRIPT_LIFECYCLE_UPDATE,
+        HENKA_SCRIPT_LIFECYCLE_STOP,
+        HENKA_SCRIPT_LIFECYCLE_FIXED_UPDATE,
+        HENKA_SCRIPT_LIFECYCLE_INTERACT,
+        HENKA_SCRIPT_LIFECYCLE_COLLISION_ENTER,
+        HENKA_SCRIPT_LIFECYCLE_COLLISION_STAY,
+        HENKA_SCRIPT_LIFECYCLE_COLLISION_EXIT,
+        HENKA_SCRIPT_LIFECYCLE_TRIGGER_ENTER,
+        HENKA_SCRIPT_LIFECYCLE_TRIGGER_STAY,
+        HENKA_SCRIPT_LIFECYCLE_TRIGGER_EXIT,
+        HENKA_SCRIPT_LIFECYCLE_DESTROY
     };
     henka_lua_behavior_backend* backend;
     size_t index;
@@ -737,7 +737,15 @@ henka_result henka_lua_behavior_backend_create(
     henka_lua_clear_stack(backend->state);
     for (index = 0U; index < HENKA_LUA_LIFECYCLE_COUNT; ++index)
     {
-        lua_getglobal(backend->state, lifecycle_names[index]);
+        const henka_script_lifecycle_descriptor* descriptor = NULL;
+        if (henka_script_lifecycle_schema_find(
+                lifecycle_events[index], &descriptor) != HENKA_SUCCESS ||
+            descriptor == NULL)
+        {
+            henka_lua_behavior_backend_destroy(backend);
+            return HENKA_ERROR_INVALID_ARGUMENT;
+        }
+        lua_getglobal(backend->state, descriptor->name);
         if (lua_isnil(backend->state, -1))
         {
             lua_pop(backend->state, 1);
@@ -757,7 +765,17 @@ henka_result henka_lua_behavior_backend_create(
                 luaL_ref(backend->state, LUA_REGISTRYINDEX);
         }
     }
-    lua_getglobal(backend->state, "OnEvent");
+    {
+        const henka_script_lifecycle_descriptor* descriptor = NULL;
+        if (henka_script_lifecycle_schema_find(
+                HENKA_SCRIPT_LIFECYCLE_EVENT, &descriptor) != HENKA_SUCCESS ||
+            descriptor == NULL)
+        {
+            henka_lua_behavior_backend_destroy(backend);
+            return HENKA_ERROR_INVALID_ARGUMENT;
+        }
+        lua_getglobal(backend->state, descriptor->name);
+    }
     if (lua_isnil(backend->state, -1))
     {
         lua_pop(backend->state, 1);

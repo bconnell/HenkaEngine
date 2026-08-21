@@ -83,6 +83,29 @@ static void test_lifecycle_transitions_and_reports(void)
     henka_script_behavior_runtime_destroy(runtime);
 }
 
+static void test_lifecycle_schema(void)
+{
+    const henka_script_lifecycle_descriptor* descriptors = NULL;
+    const henka_script_lifecycle_descriptor* event_descriptor = NULL;
+    size_t count = 0U;
+    assert(henka_script_lifecycle_schema_get(&descriptors, &count) == HENKA_SUCCESS);
+    assert(descriptors != NULL && count == 14U);
+    assert(henka_script_lifecycle_schema_find(
+               HENKA_SCRIPT_LIFECYCLE_EVENT, &event_descriptor) == HENKA_SUCCESS);
+    assert(event_descriptor != NULL && strcmp(event_descriptor->name, "OnEvent") == 0);
+    assert(event_descriptor->parameter_count == 2U);
+    assert(event_descriptor->parameters[0] == HENKA_SCRIPT_API_VALUE_EVENT_ID);
+    assert(event_descriptor->parameters[1] == HENKA_SCRIPT_API_VALUE_ENTITY);
+    assert(henka_script_lifecycle_schema_find(
+               HENKA_SCRIPT_LIFECYCLE_COLLISION_ENTER, &event_descriptor) == HENKA_SUCCESS);
+    assert(event_descriptor != NULL &&
+           strcmp(event_descriptor->name, "OnCollisionEnter") == 0 &&
+           event_descriptor->parameter_count == 2U);
+    assert(henka_script_lifecycle_schema_find(
+               (henka_script_lifecycle_event)UINT32_MAX,
+               &event_descriptor) == HENKA_ERROR_INVALID_ARGUMENT);
+}
+
 static void test_fail_closed_and_recovery(void)
 {
     callback_fixture fixture = {{0}, 0U, HENKA_SCRIPT_CALLBACK_FAILED, 1U, 0U, 0U};
@@ -250,6 +273,7 @@ int main(void)
 {
     const size_t allocations_before = henka_memory_get_allocation_count();
     test_lifecycle_transitions_and_reports();
+    test_lifecycle_schema();
     test_fail_closed_and_recovery();
     test_bounds_disabled_unbound_and_generation();
     test_batch_order_and_validation();

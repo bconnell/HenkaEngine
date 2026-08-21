@@ -36,6 +36,20 @@ typedef enum henka_script_lifecycle_event
     HENKA_SCRIPT_LIFECYCLE_DESTROY
 } henka_script_lifecycle_event;
 
+#define HENKA_SCRIPT_LIFECYCLE_SCHEMA_VERSION UINT32_C(1)
+#define HENKA_SCRIPT_LIFECYCLE_MAX_PARAMETERS 2U
+
+/* The immutable lifecycle registry is the language-neutral source of truth
+ * for callback names and bounded signal argument shapes. Backends must use
+ * this contract rather than maintaining independent callback-name tables. */
+typedef struct henka_script_lifecycle_descriptor
+{
+    henka_script_lifecycle_event event;
+    const char* name;
+    uint8_t parameter_count;
+    henka_script_api_value_type parameters[HENKA_SCRIPT_LIFECYCLE_MAX_PARAMETERS];
+} henka_script_lifecycle_descriptor;
+
 typedef enum henka_script_behavior_state
 {
     HENKA_SCRIPT_BEHAVIOR_PENDING = 0,
@@ -133,6 +147,13 @@ typedef struct henka_script_behavior_batch_report
     size_t failed;
     henka_result first_error;
 } henka_script_behavior_batch_report;
+
+henka_result henka_script_lifecycle_schema_get(
+    const henka_script_lifecycle_descriptor** out_descriptors,
+    size_t* out_count);
+henka_result henka_script_lifecycle_schema_find(
+    henka_script_lifecycle_event event,
+    const henka_script_lifecycle_descriptor** out_descriptor);
 
 henka_result henka_script_behavior_runtime_create(
     henka_script_behavior_runtime** out_runtime);
