@@ -19881,7 +19881,7 @@ static void sandbox3d_draw_scene_objects_panel(
 
         if (!henka_scene_is_entity_visible(state->scene, entity))
         {
-            sandbox3d_truncate_text("[Hidden]", subtitle_text, sizeof(subtitle_text), 12U);
+            sandbox3d_truncate_text("Hidden:", subtitle_text, sizeof(subtitle_text), 12U);
             snprintf(row_label, sizeof(row_label), "%s %s", subtitle_text, row_label);
         }
 
@@ -21663,13 +21663,26 @@ details_group_authoring:
                 if (!state->native_authoring_bevel_reported)
                 {
                     printf(
-                        "Native authoring bevel control: name=%s x=%.1f y=%.1f width=54.0 height=24.0.\n",
+                        "Native authoring bevel control: name=%s x=%.1f y=%.1f width=88.0 height=24.0.\n",
                         display_name,
                         row.x,
                         row.y);
                     fflush(stdout);
                     state->native_authoring_bevel_reported = true;
                 }
+                if (henka_ui_button(
+                        state->ui,
+                        "authoring_priority_bevel_top",
+                        (henka_ui_rect){row.x, row.y, 88.0f, 24.0f},
+                        "Bevel"))
+                {
+                    (void)sandbox3d_apply_authoring_face_bevel(state, entity, display_name);
+                }
+            }
+            if (selection_mode == SANDBOX3D_AUTHORING_SELECTION_FACE &&
+                sandbox3d_details_flow_next_row(state, flow_desc.bounds, 28.0f, 1U, &row) &&
+                row.width >= 290.0f)
+            {
                 move_controls_prioritized = true;
                 if (!state->native_authoring_move_reported ||
                     fabsf(row.y - state->native_authoring_move_reported_y) > 0.5f)
