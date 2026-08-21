@@ -31,6 +31,10 @@ jobs:
         shell: powershell
         run: .\scripts\check_documentation_truth.ps1
 
+      - name: Check scripting compiler authority
+        shell: powershell
+        run: .\scripts\check_scripting_authority.ps1
+
       - name: Check repository integrity
         shell: powershell
         run: .\scripts\check_repository_integrity.ps1

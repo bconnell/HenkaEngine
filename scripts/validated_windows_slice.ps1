@@ -390,15 +390,16 @@ try {
     Write-RepositoryState -Prefix "Before"
 
     Invoke-LoggedPowerShell -Name "01-Public-Repository-Hygiene" -ScriptPath (Join-Path $PSScriptRoot "check_public_repo_hygiene.ps1") -Arguments @("-CandidateCommitSubject", $CandidateCommitSubject)
-    Invoke-LoggedPowerShell -Name "02-Repository-Integrity" -ScriptPath (Join-Path $PSScriptRoot "check_repository_integrity.ps1")
-    Invoke-LoggedPowerShell -Name "03-Tests" -ScriptPath (Join-Path $PSScriptRoot "test_windows.ps1")
-    Invoke-LoggedPowerShell -Name "04-Debug-Build" -ScriptPath (Join-Path $PSScriptRoot "build_windows.ps1") -Arguments @("-Configuration", "Debug")
-    Invoke-LoggedPowerShell -Name "05-Package" -ScriptPath (Join-Path $PSScriptRoot "package_sandbox3d_windows.ps1") -Arguments @("-ResetUserData", "-Configuration", "Debug")
-    Invoke-LoggedPowerShell -Name "06-Package-Smoke" -ScriptPath (Join-Path $PSScriptRoot "check_packaged_sandbox3d_windows.ps1") -Arguments @("-NonInteractive")
-    Invoke-LoggedPowerShell -Name "07-Package-Contract" -ScriptPath (Join-Path $PSScriptRoot "check_packaged_sandbox3d_windows.ps1") -Arguments @("-NonInteractive", "-ContractOnly")
-    Invoke-LoggedPowerShell -Name "08-Desktop-Harness" -ScriptPath (Join-Path $PSScriptRoot "check_packaged_sandbox3d_windows.ps1")
+    Invoke-LoggedPowerShell -Name "02-Scripting-Authority" -ScriptPath (Join-Path $PSScriptRoot "check_scripting_authority.ps1")
+    Invoke-LoggedPowerShell -Name "03-Repository-Integrity" -ScriptPath (Join-Path $PSScriptRoot "check_repository_integrity.ps1")
+    Invoke-LoggedPowerShell -Name "04-Tests" -ScriptPath (Join-Path $PSScriptRoot "test_windows.ps1")
+    Invoke-LoggedPowerShell -Name "05-Debug-Build" -ScriptPath (Join-Path $PSScriptRoot "build_windows.ps1") -Arguments @("-Configuration", "Debug")
+    Invoke-LoggedPowerShell -Name "06-Package" -ScriptPath (Join-Path $PSScriptRoot "package_sandbox3d_windows.ps1") -Arguments @("-ResetUserData", "-Configuration", "Debug")
+    Invoke-LoggedPowerShell -Name "07-Package-Smoke" -ScriptPath (Join-Path $PSScriptRoot "check_packaged_sandbox3d_windows.ps1") -Arguments @("-NonInteractive")
+    Invoke-LoggedPowerShell -Name "08-Package-Contract" -ScriptPath (Join-Path $PSScriptRoot "check_packaged_sandbox3d_windows.ps1") -Arguments @("-NonInteractive", "-ContractOnly")
+    Invoke-LoggedPowerShell -Name "09-Desktop-Harness" -ScriptPath (Join-Path $PSScriptRoot "check_packaged_sandbox3d_windows.ps1")
     Save-ApplicationScreenshot
-    Invoke-LoggedPowerShell -Name "09-External-Template" -ScriptPath (Join-Path $PSScriptRoot "test_external_game_template_windows.ps1")
+    Invoke-LoggedPowerShell -Name "10-External-Template" -ScriptPath (Join-Path $PSScriptRoot "test_external_game_template_windows.ps1")
 
     $diffCheck = @(& git -C $repoRoot diff --check 2>&1)
     $diffCheck | Set-Content -LiteralPath (Join-Path $reportsDirectory "10-Git-Diff-Check.log")
