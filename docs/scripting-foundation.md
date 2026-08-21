@@ -79,10 +79,13 @@ execution adapters for both languages.
   application, and Events.Emit. Unsupported domains return safe deterministic
   results rather than reaching through renderer or authoring pointers.
 - Lua behaviors can call the shared host surface through checked `Entity`,
-  `Transform`, `Input`, `Physics`, `Interaction`, and `Events` tables. The
-  HenkaScript surface can call the shared `Entity.IsValid` operation and
-  exposes the same event identity through the bounded `emit(i32_event_id);`
-  builtin. Both languages can receive the same
+  `Transform`, `Input`, `Physics`, `Interaction`, and `Events` tables. In the
+  current Sandbox Play dispatcher, `Entity`, `Transform`, `Physics`, and
+  `Events` are operational; `Input.IsActionDown` is deliberately fail-closed
+  to `false`, and `Interaction.Try` is deliberately unavailable until Play
+  has a real input/observer interaction context. The HenkaScript surface can
+  call the shared `Entity.IsValid` operation and exposes the same event identity
+  through the bounded `emit(i32_event_id);` builtin. Both languages can receive the same
   queued event through `OnEvent`; Lua receives `(event_id, source_entity)` and
   HenkaScript reads the event ID through `event_id()`.
 - The Scene behavior runtime drains only the events present at the beginning
@@ -141,8 +144,8 @@ lifecycle and fixed-tick dispatch, with a bounded host mapping for the current
 Entity/Transform/Physics/Event slice and an explicit behavior-state sidecar
 save/load seam. Persistent state is not implicitly saved on Stop, is not part
 of the authored `.hscene` document, and is not an editor Inspector workflow.
-Full host API coverage, richer typed values and callable parameters, Inspector
-authoring, hot reload, debugger tooling,
+Input/Interaction runtime context, richer typed values and callable parameters,
+Inspector authoring, hot reload, debugger tooling,
 replay integration, and broader project scripting workflows remain future work.
 
 The current schema, HenkaScript compiler, and bounded VM are therefore engine

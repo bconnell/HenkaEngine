@@ -78,6 +78,14 @@ if ($readme -notmatch "(?im)^>\s*\*\*Support Henka Engine\*\*" -or
     Add-Finding "README.md: sponsorship callout, dedicated section, SUPPORT.md, and direct Sponsors link are all required"
 }
 
+if ($scripting -notmatch "(?i)Input\.IsActionDown.{0,180}fail-closed" -or
+    $scripting -notmatch "(?i)Interaction\.Try.{0,180}unavailable" -or
+    $scripting -notmatch "(?i)entity_is_valid\(entity\)" -or
+    $scripting -notmatch "(?i)transform_get_position\(entity\)" -or
+    $scripting -notmatch "(?i)physics_apply_impulse\(entity, impulse\)") {
+    Add-Finding "docs/scripting-foundation.md: current script host availability and HenkaScript typed gameplay surface must be explicit"
+}
+
 $trackedMarkdown = @(& (Get-HenkaGitPath) -C $repoRoot ls-files --cached --others --exclude-standard "*.md")
 if ($LASTEXITCODE -ne 0) {
     throw "Unable to enumerate Markdown files."
