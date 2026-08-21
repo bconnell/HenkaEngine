@@ -57,10 +57,11 @@ bytecode, and both language adapters can drive their bounded execution through
 the language-neutral behavior runtime. The bounded loader can create owned
 backend instances from persisted `.lua` and `.hks` attachments, and the Scene
 Document behavior runtime can assemble and dispatch them by persistent object
-identity. Binding that runtime to isolated Play-scene entities remains
-unfinished. Persistent global state, Script Host API dispatch, Inspector
-authoring, hot reload, and mixed-language event routing remain subsequent
-implementation slices.
+identity. The Sandbox Play session now owns that runtime for its isolated
+scene lifecycle and fixed-tick dispatch; runtime-entity identity mapping and
+the host API remain unfinished. Persistent global state, Script Host API
+dispatch, Inspector authoring, hot reload, and mixed-language event routing
+remain subsequent implementation slices.
 
 The current schema, HenkaScript compiler, and bounded VM are therefore engine
 integration foundations, not a claim that complete executable scripting is

@@ -26,9 +26,10 @@ adapters do not resolve project paths or own Scene Document persistence. The
 bounded script asset loader owns the selected backend instance and exposes a
 runtime descriptor for persisted `.lua` and `.hks` attachments; persistent
 behavior state remains outside that loader. The Scene Document behavior
-runtime assembles these owned assets by persistent object identity; Play-scene
-entity binding, Script Host dispatch, and editor authoring remain later layers
-above this boundary.
+runtime assembles these owned assets by persistent object identity, and the
+Sandbox Play session owns its lifecycle dispatch for the isolated scene.
+Runtime-entity identity mapping, Script Host dispatch, and editor authoring
+remain later layers above this boundary.
 
 ### Network boundary
 

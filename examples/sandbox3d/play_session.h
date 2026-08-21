@@ -20,6 +20,11 @@ henka_result sandbox3d_play_session_create(
     sandbox3d_scene_document_bridge* bridge,
     henka_physics_world* physics_world,
     sandbox3d_play_session** out_session);
+henka_result sandbox3d_play_session_create_with_project_root(
+    sandbox3d_scene_document_bridge* bridge,
+    henka_physics_world* physics_world,
+    const char* project_root,
+    sandbox3d_play_session** out_session);
 void sandbox3d_play_session_destroy(sandbox3d_play_session* session);
 sandbox3d_play_session_state sandbox3d_play_session_get_state(
     const sandbox3d_play_session* session);

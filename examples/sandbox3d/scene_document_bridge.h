@@ -33,6 +33,8 @@ bool sandbox3d_scene_document_bridge_is_play_locked(
     const sandbox3d_scene_document_bridge* bridge);
 henka_scene* sandbox3d_scene_document_bridge_get_scene(
     const sandbox3d_scene_document_bridge* bridge);
+const henka_scene_document* sandbox3d_scene_document_bridge_get_document(
+    const sandbox3d_scene_document_bridge* bridge);
 henka_result sandbox3d_scene_document_bridge_get_object(
     const sandbox3d_scene_document_bridge* bridge,
     henka_scene_document_id document_id,

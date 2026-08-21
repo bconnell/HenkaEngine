@@ -1,4 +1,5 @@
 #include <float.h>
+#include <stdio.h>
 
 #include <henka/physics.h>
 #include <henka/scene.h>
@@ -21,6 +22,24 @@ int main(void)
     henka_result tick_result = HENKA_SUCCESS;
     size_t tick_count;
     int exit_code = 1;
+
+    object.behavior_count = 2U;
+    object.behaviors[0] = henka_scene_document_behavior_default();
+    object.behaviors[0].id = 10U;
+    object.behaviors[0].language = HENKA_SCRIPT_LANGUAGE_HENKASCRIPT;
+    (void)snprintf(
+        object.behaviors[0].asset_path,
+        sizeof(object.behaviors[0].asset_path),
+        "%s",
+        "tests/fixtures/scripts/mixed.hks");
+    object.behaviors[1] = henka_scene_document_behavior_default();
+    object.behaviors[1].id = 11U;
+    object.behaviors[1].language = HENKA_SCRIPT_LANGUAGE_LUA;
+    (void)snprintf(
+        object.behaviors[1].asset_path,
+        sizeof(object.behaviors[1].asset_path),
+        "%s",
+        "tests/fixtures/scripts/mixed.lua");
 
     if (henka_scene_document_create(&document) != HENKA_SUCCESS ||
         henka_scene_create(&scene) != HENKA_SUCCESS ||

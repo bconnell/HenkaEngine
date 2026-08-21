@@ -263,8 +263,9 @@ and V1 `.hscene` foundations.
 
 ### Current Development
 
-1. Bind the Scene Document behavior runtime to isolated Play-scene entities
-   without allowing runtime callbacks to mutate authoring state.
+1. Complete runtime-entity identity mapping around the Scene Document behavior
+   runtime while keeping isolated Play-scene dispatch unable to mutate
+   authoring state.
 2. Resolve Script Host API bindings at load time and define the bounded host
    dispatch contract exposed to behaviors.
 3. Add persistent behavior state, Inspector authoring, reload diagnostics, and

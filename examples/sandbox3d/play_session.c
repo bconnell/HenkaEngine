@@ -1,10 +1,14 @@
 #include "play_session.h"
 
+#include <stdio.h>
 #include <string.h>
 
 #include <henka/memory.h>
+#include <henka/scene_behavior_runtime.h>
 
 #define SANDBOX3D_PLAY_SESSION_MAX_OBJECTS HENKA_SCENE_DOCUMENT_MAX_OBJECTS
+#define SANDBOX3D_PLAY_SESSION_MAX_PROJECT_ROOT_BYTES HENKA_SCENE_DOCUMENT_MAX_PATH_BYTES
+#define SANDBOX3D_PLAY_SESSION_FIXED_DELTA_SECONDS (1.0f / 60.0f)
 
 typedef struct sandbox3d_play_snapshot
 {
@@ -19,8 +23,11 @@ struct sandbox3d_play_session
 {
     sandbox3d_scene_document_bridge* bridge;
     henka_physics_world* physics_world;
+    henka_scene_behavior_runtime* behavior_runtime;
     sandbox3d_play_session_state state;
     henka_result last_error;
+    uint64_t frame_index;
+    char project_root[SANDBOX3D_PLAY_SESSION_MAX_PROJECT_ROOT_BYTES];
     size_t snapshot_count;
     sandbox3d_play_snapshot snapshots[SANDBOX3D_PLAY_SESSION_MAX_OBJECTS];
 };
@@ -64,6 +71,21 @@ static henka_result sandbox3d_play_session_destroy_bodies(
     return result;
 }
 
+static void sandbox3d_play_session_abort_start(
+    sandbox3d_play_session* session)
+{
+    if (session == NULL)
+    {
+        return;
+    }
+    (void)sandbox3d_play_session_destroy_bodies(session);
+    henka_scene_behavior_runtime_destroy(session->behavior_runtime);
+    session->behavior_runtime = NULL;
+    session->snapshot_count = 0U;
+    session->state = SANDBOX3D_PLAY_SESSION_STOPPED;
+    (void)sandbox3d_scene_document_bridge_end_play(session->bridge);
+}
+
 static henka_result sandbox3d_play_session_restore_scene(
     sandbox3d_play_session* session)
 {
@@ -91,18 +113,21 @@ static henka_result sandbox3d_play_session_restore_scene(
     return HENKA_SUCCESS;
 }
 
-henka_result sandbox3d_play_session_create(
+henka_result sandbox3d_play_session_create_with_project_root(
     sandbox3d_scene_document_bridge* bridge,
     henka_physics_world* physics_world,
+    const char* project_root,
     sandbox3d_play_session** out_session)
 {
     sandbox3d_play_session* session;
+    int written;
     if (out_session == NULL)
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
     *out_session = NULL;
-    if (bridge == NULL || physics_world == NULL ||
+    if (bridge == NULL || physics_world == NULL || project_root == NULL ||
+        project_root[0] == '\0' ||
         sandbox3d_scene_document_bridge_validate(bridge) != HENKA_SUCCESS)
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
@@ -116,8 +141,27 @@ henka_result sandbox3d_play_session_create(
     session->physics_world = physics_world;
     session->state = SANDBOX3D_PLAY_SESSION_STOPPED;
     session->last_error = HENKA_SUCCESS;
+    written = snprintf(
+        session->project_root,
+        sizeof(session->project_root),
+        "%s",
+        project_root);
+    if (written < 0 || (size_t)written >= sizeof(session->project_root))
+    {
+        henka_free(session);
+        return HENKA_ERROR_LIMIT;
+    }
     *out_session = session;
     return HENKA_SUCCESS;
+}
+
+henka_result sandbox3d_play_session_create(
+    sandbox3d_scene_document_bridge* bridge,
+    henka_physics_world* physics_world,
+    sandbox3d_play_session** out_session)
+{
+    return sandbox3d_play_session_create_with_project_root(
+        bridge, physics_world, ".", out_session);
 }
 
 void sandbox3d_play_session_destroy(sandbox3d_play_session* session)
@@ -150,6 +194,7 @@ henka_result sandbox3d_play_session_get_last_error(
 henka_result sandbox3d_play_session_start(sandbox3d_play_session* session)
 {
     size_t index;
+    henka_result result;
     const size_t binding_count =
         sandbox3d_scene_document_bridge_get_binding_count(session == NULL ? NULL : session->bridge);
     if (session == NULL || session->state != SANDBOX3D_PLAY_SESSION_STOPPED ||
@@ -160,6 +205,7 @@ henka_result sandbox3d_play_session_start(sandbox3d_play_session* session)
     }
     session->snapshot_count = 0U;
     session->last_error = HENKA_SUCCESS;
+    session->frame_index = 0U;
     for (index = 0U; index < binding_count; ++index)
     {
         henka_scene_document_id document_id;
@@ -175,19 +221,13 @@ henka_result sandbox3d_play_session_start(sandbox3d_play_session* session)
             sandbox3d_scene_document_bridge_get_object(
                 session->bridge, document_id, &object) != HENKA_SUCCESS)
         {
-            (void)sandbox3d_play_session_destroy_bodies(session);
-            session->snapshot_count = 0U;
-            session->state = SANDBOX3D_PLAY_SESSION_STOPPED;
-            (void)sandbox3d_scene_document_bridge_end_play(session->bridge);
+            sandbox3d_play_session_abort_start(session);
             return HENKA_ERROR_INVALID_ARGUMENT;
         }
         scene = sandbox3d_scene_document_bridge_get_scene(session->bridge);
         if (henka_scene_get_entity_transform(scene, entity, &transform) != HENKA_SUCCESS)
         {
-            (void)sandbox3d_play_session_destroy_bodies(session);
-            session->snapshot_count = 0U;
-            session->state = SANDBOX3D_PLAY_SESSION_STOPPED;
-            (void)sandbox3d_scene_document_bridge_end_play(session->bridge);
+            sandbox3d_play_session_abort_start(session);
             return HENKA_ERROR_INVALID_ARGUMENT;
         }
         session->snapshots[session->snapshot_count] = (sandbox3d_play_snapshot){
@@ -207,15 +247,44 @@ henka_result sandbox3d_play_session_start(sandbox3d_play_session* session)
                 : descriptor_result;
             if (body_result != HENKA_SUCCESS)
             {
-                (void)sandbox3d_play_session_destroy_bodies(session);
-                session->snapshot_count = 0U;
-                session->state = SANDBOX3D_PLAY_SESSION_STOPPED;
-                (void)sandbox3d_scene_document_bridge_end_play(session->bridge);
+                sandbox3d_play_session_abort_start(session);
                 return body_result;
             }
             session->snapshots[session->snapshot_count].body = body;
         }
         ++session->snapshot_count;
+    }
+    {
+        henka_script_behavior_batch_report report;
+        result = henka_scene_behavior_runtime_create(
+            sandbox3d_scene_document_bridge_get_document(session->bridge),
+            session->project_root,
+            0U,
+            &session->behavior_runtime);
+        if (result == HENKA_SUCCESS)
+        {
+            result = henka_scene_behavior_runtime_dispatch(
+                session->behavior_runtime,
+                HENKA_SCRIPT_LIFECYCLE_CREATE,
+                0.0f,
+                session->frame_index,
+                &report);
+        }
+        if (result == HENKA_SUCCESS)
+        {
+            result = henka_scene_behavior_runtime_dispatch(
+                session->behavior_runtime,
+                HENKA_SCRIPT_LIFECYCLE_START,
+                0.0f,
+                session->frame_index,
+                &report);
+        }
+        if (result != HENKA_SUCCESS)
+        {
+            sandbox3d_play_session_abort_start(session);
+            session->last_error = result;
+            return result;
+        }
     }
     session->state = SANDBOX3D_PLAY_SESSION_RUNNING;
     return HENKA_SUCCESS;
@@ -244,11 +313,24 @@ henka_result sandbox3d_play_session_resume(sandbox3d_play_session* session)
 static henka_result sandbox3d_play_session_run_fixed_tick(
     sandbox3d_play_session* session)
 {
-    const henka_result result = henka_physics_world_step_fixed(session->physics_world);
+    henka_script_behavior_batch_report report;
+    const henka_result script_result = henka_scene_behavior_runtime_dispatch(
+        session->behavior_runtime,
+        HENKA_SCRIPT_LIFECYCLE_UPDATE,
+        SANDBOX3D_PLAY_SESSION_FIXED_DELTA_SECONDS,
+        session->frame_index,
+        &report);
+    const henka_result result = script_result == HENKA_SUCCESS
+        ? henka_physics_world_step_fixed(session->physics_world)
+        : script_result;
     if (result != HENKA_SUCCESS)
     {
         session->state = SANDBOX3D_PLAY_SESSION_PAUSED_ERROR;
         session->last_error = result;
+    }
+    else
+    {
+        ++session->frame_index;
     }
     return result;
 }
@@ -273,6 +355,7 @@ henka_result sandbox3d_play_session_step_fixed(sandbox3d_play_session* session)
 
 henka_result sandbox3d_play_session_stop(sandbox3d_play_session* session)
 {
+    henka_result script_result;
     henka_result restore_result;
     henka_result body_result;
     henka_result end_result;
@@ -286,10 +369,19 @@ henka_result sandbox3d_play_session_stop(sandbox3d_play_session* session)
      * restoration fails. Play scenes may be discarded by the coordinator, so
      * physics bodies and the bridge lock must not retain references into a
      * scene that is about to be released. */
+    script_result = henka_scene_behavior_runtime_dispatch(
+        session->behavior_runtime,
+        HENKA_SCRIPT_LIFECYCLE_STOP,
+        0.0f,
+        session->frame_index,
+        &(henka_script_behavior_batch_report){0});
+    henka_scene_behavior_runtime_destroy(session->behavior_runtime);
+    session->behavior_runtime = NULL;
     restore_result = sandbox3d_play_session_restore_scene(session);
     body_result = sandbox3d_play_session_destroy_bodies(session);
     end_result = sandbox3d_scene_document_bridge_end_play(session->bridge);
-    result = restore_result != HENKA_SUCCESS ? restore_result
+    result = script_result != HENKA_SUCCESS ? script_result
+        : restore_result != HENKA_SUCCESS ? restore_result
         : (body_result != HENKA_SUCCESS ? body_result : end_result);
     for (size_t index = 0U; index < session->snapshot_count; ++index)
     {

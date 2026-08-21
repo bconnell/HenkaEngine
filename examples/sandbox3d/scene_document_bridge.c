@@ -207,6 +207,12 @@ henka_scene* sandbox3d_scene_document_bridge_get_scene(
     return bridge == NULL ? NULL : bridge->scene;
 }
 
+const henka_scene_document* sandbox3d_scene_document_bridge_get_document(
+    const sandbox3d_scene_document_bridge* bridge)
+{
+    return bridge == NULL ? NULL : bridge->document;
+}
+
 henka_result sandbox3d_scene_document_bridge_get_object(
     const sandbox3d_scene_document_bridge* bridge,
     henka_scene_document_id document_id,

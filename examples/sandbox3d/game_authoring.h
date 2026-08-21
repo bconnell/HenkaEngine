@@ -38,7 +38,7 @@ henka_result sandbox3d_game_authoring_update_object_for_entity(
     const henka_scene_document_object* object);
 
 henka_result sandbox3d_game_authoring_save(
-    const sandbox3d_game_authoring* authoring,
+    sandbox3d_game_authoring* authoring,
     const char* project_root);
 henka_result sandbox3d_game_authoring_load(
     sandbox3d_game_authoring* authoring,

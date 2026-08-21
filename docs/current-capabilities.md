@@ -109,8 +109,10 @@ turning the public README into an implementation ledger.
    dispatch, persistent global state, and editor authoring remain unfinished.
    Persisted `.lua` and `.hks` attachments can now be loaded through a bounded,
    confined-path asset loader and assembled into a mixed-language behavior
-   runtime by persistent Scene Document object identity; binding that runtime to
-   isolated Play-scene entities remains unfinished.
+   runtime by persistent Scene Document object identity. The Sandbox Play
+   session owns that runtime for isolated Create/Start/Update/Stop dispatch;
+   runtime-entity identity mapping, Script Host dispatch, persistent state, and
+   editor authoring remain unfinished.
 
 ## Modeling / Content Authoring
 
