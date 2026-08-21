@@ -95,6 +95,12 @@ typedef enum henka_script_api_id
     HENKA_SCRIPT_API_STATE_SET_BOOL = UINT32_C(0x0704)
 } henka_script_api_id;
 
+/* Interaction.Try returns HENKA_SCRIPT_API_VALUE_RESULT for ABI consistency.
+ * Its successful numeric payload is the henka_interaction_result contract:
+ * 0 unavailable, 1 disabled, 2 out of range, and 3 available. A provider
+ * must preserve those values; it must not reinterpret them as HENKA_SUCCESS
+ * versus a generic failure. */
+
 /* This is a bind-time schema, not a dynamic call payload. Backends resolve
  * these stable IDs once and can retain their own typed/native thunks for the
  * hot path. The names are for diagnostics, tooling, and serialization only. */

@@ -3266,6 +3266,9 @@ static void sandbox3d_update_physics(sandbox3d_state* state, double delta_second
 static henka_result sandbox3d_initialize_game_authoring(
     henka_engine* engine,
     sandbox3d_state* state);
+static bool sandbox3d_query_game_authoring_input(
+    void* user_data,
+    uint32_t action_id);
 static void sandbox3d_update_game_authoring(
     henka_engine* engine,
     sandbox3d_state* state);
@@ -8480,6 +8483,22 @@ static henka_result sandbox3d_initialize_game_authoring(
     return HENKA_SUCCESS;
 }
 
+static bool sandbox3d_query_game_authoring_input(
+    void* user_data,
+    uint32_t action_id)
+{
+    const henka_engine* engine = (const henka_engine*)user_data;
+    if (engine == NULL ||
+        action_id <= (uint32_t)HENKA_INPUT_ACTION_UNKNOWN ||
+        action_id >= (uint32_t)HENKA_INPUT_ACTION_COUNT)
+    {
+        return false;
+    }
+    return henka_input_action_is_down(
+        engine,
+        (henka_input_action)action_id);
+}
+
 static void sandbox3d_update_game_authoring(
     henka_engine* engine,
     sandbox3d_state* state)
@@ -8490,6 +8509,11 @@ static void sandbox3d_update_game_authoring(
     {
         return;
     }
+    (void)sandbox3d_game_authoring_set_play_input_context(
+        state->game_authoring,
+        sandbox3d_query_game_authoring_input,
+        engine,
+        state->camera.position);
     desired_scene = sandbox3d_game_authoring_get_play_scene(state->game_authoring);
     if (desired_scene == NULL)
     {
@@ -20436,6 +20460,7 @@ static void sandbox3d_draw_object_details_panel(
     bool visible;
     char action_label[32];
     char authoring_face_text[48];
+    char behavior_summary[64];
     char clear_action_id[64];
     char focus_action_id[64];
     char interaction_text[64];
@@ -20472,6 +20497,7 @@ static void sandbox3d_draw_object_details_panel(
     unsigned char details_display_order[SANDBOX3D_EDITOR_DETAILS_GROUP_COUNT];
     size_t details_group_position;
     size_t authoring_group_index;
+    size_t behavior_count;
     bool prioritize_authoring_group;
     bool authored_object_available;
     bool stop_play_requested;
@@ -20574,6 +20600,14 @@ static void sandbox3d_draw_object_details_panel(
             entity,
             &authored_document_id,
             &authored_object) == HENKA_SUCCESS;
+    behavior_count = authored_object_available
+        ? authored_object.behavior_count
+        : 0U;
+    snprintf(
+        behavior_summary,
+        sizeof(behavior_summary),
+        "%zu attached (Lua/HenkaScript)",
+        behavior_count);
     interaction_result =
         henka_scene_can_interact(
             state->scene,
@@ -20942,6 +20976,88 @@ details_group_overview:
                 row.width,
                 "Detail",
                 detail);
+        }
+        if (sandbox3d_details_flow_next_row(
+                state,
+                flow_desc.bounds,
+                22.0f,
+                1U,
+                &row))
+        {
+            sandbox3d_draw_value_row(
+                state->ui,
+                row.x,
+                row.y,
+                row.width,
+                "Scripts",
+                behavior_count == 0U ? "None attached" : behavior_summary);
+        }
+        for (size_t behavior_index = 0U;
+             behavior_index < behavior_count && behavior_index < 4U;
+             ++behavior_index)
+        {
+            henka_scene_document_behavior behavior;
+            char behavior_label[32];
+            const char* language_label;
+            if (!sandbox3d_details_flow_next_row(
+                    state,
+                    flow_desc.bounds,
+                    22.0f,
+                    1U,
+                    &row))
+            {
+                break;
+            }
+            if (sandbox3d_game_authoring_get_behavior_at_for_entity(
+                    state->game_authoring,
+                    entity,
+                    behavior_index,
+                    &behavior) != HENKA_SUCCESS)
+            {
+                sandbox3d_draw_value_row(
+                    state->ui,
+                    row.x,
+                    row.y,
+                    row.width,
+                    "Script",
+                    "Could not read attachment");
+                continue;
+            }
+            language_label = behavior.language == HENKA_SCRIPT_LANGUAGE_LUA
+                ? "Lua"
+                : behavior.language == HENKA_SCRIPT_LANGUAGE_HENKASCRIPT
+                    ? "HenkaScript"
+                    : "Unknown";
+            snprintf(
+                behavior_label,
+                sizeof(behavior_label),
+                "Script %zu (%s%s)",
+                behavior_index + 1U,
+                language_label,
+                behavior.enabled ? "" : ", disabled");
+            sandbox3d_draw_value_row(
+                state->ui,
+                row.x,
+                row.y,
+                row.width,
+                behavior_label,
+                behavior.asset_path);
+        }
+        if (behavior_count > 4U &&
+            sandbox3d_details_flow_next_row(
+                state,
+                flow_desc.bounds,
+                22.0f,
+                1U,
+                &row))
+        {
+            sandbox3d_draw_value_row(
+                state->ui,
+                row.x,
+                row.y,
+                row.width,
+                "Scripts",
+                "Additional attachments hidden by Inspector limit");
         }
         if (sandbox3d_details_flow_next_row(
                 state,

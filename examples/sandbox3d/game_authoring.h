@@ -10,6 +10,7 @@
 #include "play_session.h"
 
 typedef struct sandbox3d_game_authoring sandbox3d_game_authoring;
+typedef sandbox3d_play_input_query sandbox3d_game_authoring_input_query;
 
 /* The coordinator owns authoring persistence, the dedicated Play world, and a
  * transactional runtime scene/bridge created for each Play session. */
@@ -36,9 +37,19 @@ henka_result sandbox3d_game_authoring_update_object_for_entity(
     sandbox3d_game_authoring* authoring,
     henka_entity entity,
     const henka_scene_document_object* object);
+henka_result sandbox3d_game_authoring_set_play_input_context(
+    sandbox3d_game_authoring* authoring,
+    sandbox3d_game_authoring_input_query input_query,
+    void* input_user_data,
+    henka_vec3 observer_position);
 size_t sandbox3d_game_authoring_get_behavior_count_for_entity(
     const sandbox3d_game_authoring* authoring,
     henka_entity entity);
+henka_result sandbox3d_game_authoring_get_behavior_at_for_entity(
+    const sandbox3d_game_authoring* authoring,
+    henka_entity entity,
+    size_t index,
+    henka_scene_document_behavior* out_behavior);
 henka_result sandbox3d_game_authoring_get_behavior_for_entity(
     const sandbox3d_game_authoring* authoring,
     henka_entity entity,

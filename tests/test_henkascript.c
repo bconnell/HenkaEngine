@@ -513,6 +513,88 @@ static void test_state_host_contract(void)
     henka_hks_program_destroy(program);
 }
 
+static henka_result test_input_interaction_dispatch(
+    void* user_data,
+    uint32_t api_id,
+    const henka_script_api_value* arguments,
+    size_t argument_count,
+    henka_script_api_value* out_value)
+{
+    bool* called = (bool*)user_data;
+    if (called == NULL || arguments == NULL || out_value == NULL ||
+        argument_count != 1U)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    *called = true;
+    if (api_id == HENKA_SCRIPT_API_INPUT_IS_ACTION_DOWN)
+    {
+        if (arguments[0].type != HENKA_SCRIPT_API_VALUE_ACTION_ID ||
+            arguments[0].as.action_id != 7U)
+        {
+            return HENKA_ERROR_INVALID_ARGUMENT;
+        }
+        *out_value = (henka_script_api_value){
+            HENKA_SCRIPT_API_VALUE_BOOL,
+            {.boolean = true}};
+        return HENKA_SUCCESS;
+    }
+    if (api_id == HENKA_SCRIPT_API_INTERACTION_TRY)
+    {
+        if (arguments[0].type != HENKA_SCRIPT_API_VALUE_ENTITY ||
+            arguments[0].as.entity != 99U)
+        {
+            return HENKA_ERROR_INVALID_ARGUMENT;
+        }
+        *out_value = (henka_script_api_value){
+            HENKA_SCRIPT_API_VALUE_RESULT,
+            {.result = (henka_result)3}};
+        return HENKA_SUCCESS;
+    }
+    return HENKA_ERROR_INVALID_ARGUMENT;
+}
+
+static void test_input_and_interaction_host_contract(void)
+{
+    henka_hks_program* program = compile_program(
+        "fn Probe() { "
+        "bool down = input_is_action_down(7); "
+        "entity target = event_other_entity(); "
+        "i32 result = interaction_try(target); "
+        "if (down) { if (result == 3) { return 1; } } "
+        "return 0; "
+        "}");
+    henka_script_host* host = NULL;
+    henka_hks_execution_context context;
+    henka_hks_execution_report report;
+    henka_hks_value value;
+    bool called = false;
+    const uint32_t api_ids[] = {
+        HENKA_SCRIPT_API_INPUT_IS_ACTION_DOWN,
+        HENKA_SCRIPT_API_INTERACTION_TRY};
+
+    assert(henka_script_host_create(&host) == HENKA_SUCCESS);
+    for (size_t index = 0U; index < sizeof(api_ids) / sizeof(api_ids[0]); ++index)
+    {
+        assert(henka_script_host_bind_api(
+                   host, api_ids[index], &(size_t){0U}) == HENKA_SUCCESS);
+    }
+    assert(henka_script_host_set_dispatcher(
+               host, test_input_interaction_dispatch, &called) == HENKA_SUCCESS);
+    context = (henka_hks_execution_context){
+        host, 42U, 3U, 11U, false, 0U, 99U, 99U, 7U, true};
+    assert(henka_hks_execute_with_context(
+               program, 0U, 256U, &context, &value, &report) ==
+           HENKA_HKS_EXECUTION_COMPLETED);
+    assert(called);
+    assert(value.type == HENKA_HKS_TYPE_I32 && value.as.i32 == 1);
+    henka_script_host_destroy(host);
+    henka_hks_program_destroy(program);
+    expect_diagnostic(
+        "fn Probe() { bool down = input_is_action_down(true); }",
+        HENKA_HKS_DIAGNOSTIC_TYPE_MISMATCH);
+}
+
 int main(void)
 {
     const size_t allocations_before = henka_memory_get_allocation_count();
@@ -528,6 +610,7 @@ int main(void)
     test_entity_host_contract();
     test_transform_and_physics_host_contract();
     test_state_host_contract();
+    test_input_and_interaction_host_contract();
     assert(henka_memory_get_allocation_count() == allocations_before);
     puts("henka_henkascript_tests: PASS");
     return 0;

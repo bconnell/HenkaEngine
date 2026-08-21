@@ -1,6 +1,7 @@
 #include "game_authoring.h"
 
 #include <stdio.h>
+#include <math.h>
 #include <string.h>
 
 #include <henka/memory.h>
@@ -24,6 +25,10 @@ struct sandbox3d_game_authoring
     henka_scene* play_scene;
     sandbox3d_scene_document_bridge* play_bridge;
     sandbox3d_play_session* play_session;
+    sandbox3d_game_authoring_input_query play_input_query;
+    void* play_input_user_data;
+    henka_vec3 play_observer_position;
+    bool play_observer_position_valid;
     char relative_path[SANDBOX3D_GAME_AUTHORING_MAX_RELATIVE_PATH_BYTES];
     char project_root[HENKA_SCENE_DOCUMENT_MAX_PATH_BYTES];
     sandbox3d_game_authoring_binding bindings[SANDBOX3D_GAME_AUTHORING_MAX_BINDINGS];
@@ -469,6 +474,25 @@ size_t sandbox3d_game_authoring_get_behavior_count_for_entity(
         authoring->bindings[index].document_id);
 }
 
+henka_result sandbox3d_game_authoring_get_behavior_at_for_entity(
+    const sandbox3d_game_authoring* authoring,
+    henka_entity entity,
+    size_t behavior_index,
+    henka_scene_document_behavior* out_behavior)
+{
+    size_t index;
+    if (authoring == NULL || out_behavior == NULL ||
+        (index = sandbox3d_game_authoring_find_binding(authoring, entity)) == SIZE_MAX)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    return henka_scene_document_get_behavior_at(
+        authoring->document,
+        authoring->bindings[index].document_id,
+        behavior_index,
+        out_behavior);
+}
+
 henka_result sandbox3d_game_authoring_get_behavior_for_entity(
     const sandbox3d_game_authoring* authoring,
     henka_entity entity,
@@ -829,6 +853,14 @@ henka_result sandbox3d_game_authoring_start_play(
             play_session,
             authoring->script_state_store);
     }
+    if (result == HENKA_SUCCESS && authoring->play_observer_position_valid)
+    {
+        result = sandbox3d_play_session_set_input_context(
+            play_session,
+            authoring->play_input_query,
+            authoring->play_input_user_data,
+            authoring->play_observer_position);
+    }
     if (result == HENKA_SUCCESS)
     {
         result = sandbox3d_play_session_start(play_session);
@@ -843,6 +875,34 @@ henka_result sandbox3d_game_authoring_start_play(
         return result;
     }
     authoring->play_session = play_session;
+    return HENKA_SUCCESS;
+}
+
+henka_result sandbox3d_game_authoring_set_play_input_context(
+    sandbox3d_game_authoring* authoring,
+    sandbox3d_game_authoring_input_query input_query,
+    void* input_user_data,
+    henka_vec3 observer_position)
+{
+    if (authoring == NULL ||
+        !isfinite(observer_position.x) ||
+        !isfinite(observer_position.y) ||
+        !isfinite(observer_position.z))
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    authoring->play_input_query = input_query;
+    authoring->play_input_user_data = input_user_data;
+    authoring->play_observer_position = observer_position;
+    authoring->play_observer_position_valid = true;
+    if (authoring->play_session != NULL)
+    {
+        return sandbox3d_play_session_set_input_context(
+            authoring->play_session,
+            input_query,
+            input_user_data,
+            observer_position);
+    }
     return HENKA_SUCCESS;
 }
 

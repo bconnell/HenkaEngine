@@ -1,6 +1,7 @@
 #include "play_session.h"
 
 #include <stdio.h>
+#include <math.h>
 #include <string.h>
 
 #include <henka/memory.h>
@@ -26,6 +27,10 @@ struct sandbox3d_play_session
     henka_script_host* script_host;
     henka_script_state_store* script_state_store;
     henka_scene_behavior_runtime* behavior_runtime;
+    sandbox3d_play_input_query input_query;
+    void* input_user_data;
+    henka_vec3 observer_position;
+    bool observer_position_valid;
     sandbox3d_play_session_state state;
     henka_result last_error;
     uint64_t frame_index;
@@ -192,9 +197,18 @@ static henka_result sandbox3d_play_session_script_dispatch(
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
+    if (argument_count == 0U)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
     switch (api_id)
     {
         case HENKA_SCRIPT_API_ENTITY_IS_VALID:
+            if (argument_count != 1U ||
+                arguments[0].type != HENKA_SCRIPT_API_VALUE_ENTITY)
+            {
+                return HENKA_ERROR_INVALID_ARGUMENT;
+            }
             snapshot_index = sandbox3d_play_session_find_snapshot(
                 session, arguments[0].as.entity);
             out_value->type = HENKA_SCRIPT_API_VALUE_BOOL;
@@ -205,6 +219,11 @@ static henka_result sandbox3d_play_session_script_dispatch(
             return HENKA_SUCCESS;
 
         case HENKA_SCRIPT_API_TRANSFORM_GET_POSITION:
+            if (argument_count != 1U ||
+                arguments[0].type != HENKA_SCRIPT_API_VALUE_ENTITY)
+            {
+                return HENKA_ERROR_INVALID_ARGUMENT;
+            }
             snapshot_index = sandbox3d_play_session_find_snapshot(
                 session, arguments[0].as.entity);
             if (snapshot_index == SIZE_MAX ||
@@ -220,6 +239,15 @@ static henka_result sandbox3d_play_session_script_dispatch(
             return HENKA_SUCCESS;
 
         case HENKA_SCRIPT_API_TRANSFORM_SET_POSITION:
+            if (argument_count != 2U ||
+                arguments[0].type != HENKA_SCRIPT_API_VALUE_ENTITY ||
+                arguments[1].type != HENKA_SCRIPT_API_VALUE_VEC3 ||
+                !isfinite(arguments[1].as.vec3.x) ||
+                !isfinite(arguments[1].as.vec3.y) ||
+                !isfinite(arguments[1].as.vec3.z))
+            {
+                return HENKA_ERROR_INVALID_ARGUMENT;
+            }
             snapshot_index = sandbox3d_play_session_find_snapshot(
                 session, arguments[0].as.entity);
             if (snapshot_index == SIZE_MAX ||
@@ -261,6 +289,15 @@ static henka_result sandbox3d_play_session_script_dispatch(
             return HENKA_SUCCESS;
 
         case HENKA_SCRIPT_API_PHYSICS_APPLY_IMPULSE:
+            if (argument_count != 2U ||
+                arguments[0].type != HENKA_SCRIPT_API_VALUE_ENTITY ||
+                arguments[1].type != HENKA_SCRIPT_API_VALUE_VEC3 ||
+                !isfinite(arguments[1].as.vec3.x) ||
+                !isfinite(arguments[1].as.vec3.y) ||
+                !isfinite(arguments[1].as.vec3.z))
+            {
+                return HENKA_ERROR_INVALID_ARGUMENT;
+            }
             snapshot_index = sandbox3d_play_session_find_snapshot(
                 session, arguments[0].as.entity);
             result = snapshot_index == SIZE_MAX ||
@@ -274,6 +311,14 @@ static henka_result sandbox3d_play_session_script_dispatch(
             return HENKA_SUCCESS;
 
         case HENKA_SCRIPT_API_EVENTS_EMIT:
+            if (argument_count != 2U ||
+                arguments[0].type != HENKA_SCRIPT_API_VALUE_EVENT_ID ||
+                arguments[1].type != HENKA_SCRIPT_API_VALUE_ENTITY ||
+                arguments[0].as.event_id == 0U ||
+                arguments[1].as.entity == HENKA_INVALID_ENTITY)
+            {
+                return HENKA_ERROR_INVALID_ARGUMENT;
+            }
             result = henka_script_host_emit_event(
                 session->script_host,
                 arguments[0].as.event_id,
@@ -283,17 +328,42 @@ static henka_result sandbox3d_play_session_script_dispatch(
             return result;
 
         case HENKA_SCRIPT_API_INPUT_IS_ACTION_DOWN:
+            if (argument_count != 1U ||
+                arguments[0].type != HENKA_SCRIPT_API_VALUE_ACTION_ID)
+            {
+                return HENKA_ERROR_INVALID_ARGUMENT;
+            }
             out_value->type = HENKA_SCRIPT_API_VALUE_BOOL;
-            out_value->as.boolean = false;
+            out_value->as.boolean = session->input_query != NULL &&
+                arguments[0].as.action_id != 0U &&
+                session->input_query(
+                    session->input_user_data,
+                    arguments[0].as.action_id);
             return HENKA_SUCCESS;
 
         case HENKA_SCRIPT_API_INTERACTION_TRY:
-            sandbox3d_play_session_set_result_value(
-                out_value, HENKA_ERROR_INVALID_ARGUMENT);
+            if (argument_count != 1U ||
+                arguments[0].type != HENKA_SCRIPT_API_VALUE_ENTITY)
+            {
+                return HENKA_ERROR_INVALID_ARGUMENT;
+            }
+            snapshot_index = sandbox3d_play_session_find_snapshot(
+                session, arguments[0].as.entity);
+            if (snapshot_index == SIZE_MAX || !session->observer_position_valid)
+            {
+                sandbox3d_play_session_set_result_value(
+                    out_value,
+                    (henka_result)HENKA_INTERACTION_RESULT_UNAVAILABLE);
+                return HENKA_SUCCESS;
+            }
+            out_value->type = HENKA_SCRIPT_API_VALUE_RESULT;
+            out_value->as.result = (henka_result)henka_scene_can_interact(
+                sandbox3d_scene_document_bridge_get_scene(session->bridge),
+                session->snapshots[snapshot_index].entity,
+                session->observer_position);
             return HENKA_SUCCESS;
 
         default:
-            (void)argument_count;
             return HENKA_ERROR_INVALID_ARGUMENT;
     }
 }
@@ -547,6 +617,26 @@ henka_result sandbox3d_play_session_set_script_state_store(
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
     session->script_state_store = store;
+    return HENKA_SUCCESS;
+}
+
+henka_result sandbox3d_play_session_set_input_context(
+    sandbox3d_play_session* session,
+    sandbox3d_play_input_query input_query,
+    void* input_user_data,
+    henka_vec3 observer_position)
+{
+    if (session == NULL ||
+        !isfinite(observer_position.x) ||
+        !isfinite(observer_position.y) ||
+        !isfinite(observer_position.z))
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    session->input_query = input_query;
+    session->input_user_data = input_user_data;
+    session->observer_position = observer_position;
+    session->observer_position_valid = true;
     return HENKA_SUCCESS;
 }
 

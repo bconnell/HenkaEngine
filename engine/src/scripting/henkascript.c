@@ -56,9 +56,11 @@ typedef enum henka_hks_opcode
     HENKA_HKS_OPCODE_STATE_GET_BOOL,
     HENKA_HKS_OPCODE_STATE_SET_BOOL,
     HENKA_HKS_OPCODE_ENTITY_IS_VALID,
+    HENKA_HKS_OPCODE_INPUT_IS_ACTION_DOWN,
     HENKA_HKS_OPCODE_TRANSFORM_GET_POSITION,
     HENKA_HKS_OPCODE_TRANSFORM_SET_POSITION,
     HENKA_HKS_OPCODE_PHYSICS_APPLY_IMPULSE,
+    HENKA_HKS_OPCODE_INTERACTION_TRY,
     HENKA_HKS_OPCODE_EVENT_GET_ID,
     HENKA_HKS_OPCODE_EVENT_GET_OTHER_ENTITY,
     HENKA_HKS_OPCODE_EVENT_GET_TYPE,
@@ -212,9 +214,11 @@ static henka_hks_token_kind henka_hks_keyword_kind(
         {"state_get_bool", HENKA_HKS_TOKEN_KW_STATE_GET_BOOL},
         {"state_set_bool", HENKA_HKS_TOKEN_KW_STATE_SET_BOOL},
         {"entity_is_valid", HENKA_HKS_TOKEN_KW_ENTITY_IS_VALID},
+        {"input_is_action_down", HENKA_HKS_TOKEN_KW_INPUT_IS_ACTION_DOWN},
         {"transform_get_position", HENKA_HKS_TOKEN_KW_TRANSFORM_GET_POSITION},
         {"transform_set_position", HENKA_HKS_TOKEN_KW_TRANSFORM_SET_POSITION},
         {"physics_apply_impulse", HENKA_HKS_TOKEN_KW_PHYSICS_APPLY_IMPULSE},
+        {"interaction_try", HENKA_HKS_TOKEN_KW_INTERACTION_TRY},
         {"event_id", HENKA_HKS_TOKEN_KW_EVENT_ID},
         {"event_other_entity", HENKA_HKS_TOKEN_KW_EVENT_OTHER_ENTITY},
         {"event_type", HENKA_HKS_TOKEN_KW_EVENT_TYPE},
@@ -819,6 +823,104 @@ static henka_result henka_hks_parse_entity_is_valid(
         parser, HENKA_HKS_OPCODE_ENTITY_IS_VALID, *out_type, 0U, 0, 0.0F);
 }
 
+static henka_result henka_hks_parse_input_is_action_down(
+    henka_hks_parser* parser,
+    henka_hks_value_type* out_type)
+{
+    const henka_hks_token* call_token;
+    henka_hks_value_type argument_type;
+    henka_result result;
+    if (parser == NULL || out_type == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    call_token = henka_hks_current(parser);
+    ++parser->index;
+    result = henka_hks_expect(
+        parser, HENKA_HKS_TOKEN_LPAREN, "input_is_action_down requires '('");
+    if (result != HENKA_SUCCESS)
+    {
+        return result;
+    }
+    result = henka_hks_parse_expression(parser, &argument_type);
+    if (result != HENKA_SUCCESS)
+    {
+        return result;
+    }
+    if (argument_type != HENKA_HKS_TYPE_I32 &&
+        argument_type != HENKA_HKS_TYPE_U32)
+    {
+        return henka_hks_fail(
+            parser->diagnostic,
+            HENKA_HKS_DIAGNOSTIC_TYPE_MISMATCH,
+            call_token,
+            "input_is_action_down requires an i32 or u32 action ID");
+    }
+    result = henka_hks_expect(
+        parser, HENKA_HKS_TOKEN_RPAREN, "input_is_action_down requires ')'");
+    if (result != HENKA_SUCCESS)
+    {
+        return result;
+    }
+    *out_type = HENKA_HKS_TYPE_BOOL;
+    if (henka_hks_add_node(parser, HENKA_HKS_AST_HOST_CALL, *out_type) != HENKA_SUCCESS)
+    {
+        return HENKA_ERROR_LIMIT;
+    }
+    return henka_hks_emit(
+        parser, HENKA_HKS_OPCODE_INPUT_IS_ACTION_DOWN, *out_type, 0U, 0, 0.0F);
+}
+
+static henka_result henka_hks_parse_interaction_try(
+    henka_hks_parser* parser,
+    henka_hks_value_type* out_type)
+{
+    const henka_hks_token* call_token;
+    henka_hks_value_type argument_type;
+    henka_result result;
+    if (parser == NULL || out_type == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    call_token = henka_hks_current(parser);
+    ++parser->index;
+    result = henka_hks_expect(
+        parser, HENKA_HKS_TOKEN_LPAREN, "interaction_try requires '('");
+    if (result != HENKA_SUCCESS)
+    {
+        return result;
+    }
+    result = henka_hks_parse_expression(parser, &argument_type);
+    if (result != HENKA_SUCCESS)
+    {
+        return result;
+    }
+    if (argument_type != HENKA_HKS_TYPE_ENTITY)
+    {
+        return henka_hks_fail(
+            parser->diagnostic,
+            HENKA_HKS_DIAGNOSTIC_TYPE_MISMATCH,
+            call_token,
+            "interaction_try requires an entity expression");
+    }
+    result = henka_hks_expect(
+        parser, HENKA_HKS_TOKEN_RPAREN, "interaction_try requires ')'");
+    if (result != HENKA_SUCCESS)
+    {
+        return result;
+    }
+    /* HKS V1 exposes the stable interaction-result numeric contract.  The
+     * host API carries it as henka_result for ABI uniformity; the documented
+     * values are the scene interaction result enum values. */
+    *out_type = HENKA_HKS_TYPE_I32;
+    if (henka_hks_add_node(parser, HENKA_HKS_AST_HOST_CALL, *out_type) != HENKA_SUCCESS)
+    {
+        return HENKA_ERROR_LIMIT;
+    }
+    return henka_hks_emit(
+        parser, HENKA_HKS_OPCODE_INTERACTION_TRY, *out_type, 0U, 0, 0.0F);
+}
+
 static henka_result henka_hks_parse_vec3_constructor(
     henka_hks_parser* parser,
     henka_hks_value_type* out_type)
@@ -1170,6 +1272,10 @@ static henka_result henka_hks_parse_primary(
     {
         return henka_hks_parse_entity_is_valid(parser, out_type);
     }
+    if (token->kind == HENKA_HKS_TOKEN_KW_INPUT_IS_ACTION_DOWN)
+    {
+        return henka_hks_parse_input_is_action_down(parser, out_type);
+    }
     if (token->kind == HENKA_HKS_TOKEN_KW_VEC3)
     {
         return henka_hks_parse_vec3_constructor(parser, out_type);
@@ -1177,6 +1283,10 @@ static henka_result henka_hks_parse_primary(
     if (token->kind == HENKA_HKS_TOKEN_KW_TRANSFORM_GET_POSITION)
     {
         return henka_hks_parse_transform_get_position(parser, out_type);
+    }
+    if (token->kind == HENKA_HKS_TOKEN_KW_INTERACTION_TRY)
+    {
+        return henka_hks_parse_interaction_try(parser, out_type);
     }
     if (henka_hks_is_event_get_token(token->kind))
     {
@@ -3060,6 +3170,167 @@ henka_hks_execution_result henka_hks_execute_with_context(
                     stack[stack_depth++] = (henka_hks_value){
                         HENKA_HKS_TYPE_BOOL,
                         {.boolean = output.as.boolean}};
+                }
+                break;
+            case HENKA_HKS_OPCODE_INPUT_IS_ACTION_DOWN:
+                {
+                    henka_script_api_value argument;
+                    henka_script_api_value output;
+                    henka_result host_result;
+                    uint32_t action_id;
+                    if (stack_depth == 0U)
+                    {
+                        return henka_hks_vm_finish(
+                            out_report,
+                            HENKA_HKS_EXECUTION_STACK_UNDERFLOW,
+                            instructions_executed,
+                            stack_depth);
+                    }
+                    value = stack[--stack_depth];
+                    if (value.type == HENKA_HKS_TYPE_I32)
+                    {
+                        if (value.as.i32 < 0)
+                        {
+                            if (out_report != NULL)
+                            {
+                                out_report->host_error = HENKA_ERROR_INVALID_ARGUMENT;
+                            }
+                            return henka_hks_vm_finish(
+                                out_report,
+                                HENKA_HKS_EXECUTION_HOST_ERROR,
+                                instructions_executed,
+                                stack_depth);
+                        }
+                        action_id = (uint32_t)value.as.i32;
+                    }
+                    else if (value.type == HENKA_HKS_TYPE_U32)
+                    {
+                        action_id = value.as.u32;
+                    }
+                    else
+                    {
+                        if (out_report != NULL)
+                        {
+                            out_report->host_error = HENKA_ERROR_INVALID_ARGUMENT;
+                        }
+                        return henka_hks_vm_finish(
+                            out_report,
+                            HENKA_HKS_EXECUTION_TYPE_ERROR,
+                            instructions_executed,
+                            stack_depth);
+                    }
+                    if (context == NULL || context->host == NULL)
+                    {
+                        if (out_report != NULL)
+                        {
+                            out_report->host_error = HENKA_ERROR_INVALID_ARGUMENT;
+                        }
+                        return henka_hks_vm_finish(
+                            out_report,
+                            HENKA_HKS_EXECUTION_HOST_ERROR,
+                            instructions_executed,
+                            stack_depth);
+                    }
+                    argument = (henka_script_api_value){
+                        HENKA_SCRIPT_API_VALUE_ACTION_ID,
+                        {.action_id = action_id}};
+                    host_result = henka_script_host_invoke(
+                        context->host,
+                        HENKA_SCRIPT_API_INPUT_IS_ACTION_DOWN,
+                        &argument,
+                        1U,
+                        &output);
+                    if (host_result != HENKA_SUCCESS ||
+                        output.type != HENKA_SCRIPT_API_VALUE_BOOL)
+                    {
+                        if (out_report != NULL)
+                        {
+                            out_report->host_error = host_result != HENKA_SUCCESS
+                                ? host_result
+                                : HENKA_ERROR_INVALID_ARGUMENT;
+                        }
+                        return henka_hks_vm_finish(
+                            out_report,
+                            HENKA_HKS_EXECUTION_HOST_ERROR,
+                            instructions_executed,
+                            stack_depth);
+                    }
+                    if (stack_depth >= HENKA_HKS_MAX_VM_STACK)
+                    {
+                        return henka_hks_vm_finish(
+                            out_report,
+                            HENKA_HKS_EXECUTION_STACK_OVERFLOW,
+                            instructions_executed,
+                            stack_depth);
+                    }
+                    stack[stack_depth++] = (henka_hks_value){
+                        HENKA_HKS_TYPE_BOOL,
+                        {.boolean = output.as.boolean}};
+                }
+                break;
+            case HENKA_HKS_OPCODE_INTERACTION_TRY:
+                {
+                    henka_script_api_value argument;
+                    henka_script_api_value output;
+                    henka_result host_result;
+                    if (stack_depth == 0U)
+                    {
+                        return henka_hks_vm_finish(
+                            out_report,
+                            HENKA_HKS_EXECUTION_STACK_UNDERFLOW,
+                            instructions_executed,
+                            stack_depth);
+                    }
+                    value = stack[--stack_depth];
+                    if (value.type != HENKA_HKS_TYPE_ENTITY ||
+                        context == NULL || context->host == NULL)
+                    {
+                        if (out_report != NULL)
+                        {
+                            out_report->host_error = HENKA_ERROR_INVALID_ARGUMENT;
+                        }
+                        return henka_hks_vm_finish(
+                            out_report,
+                            HENKA_HKS_EXECUTION_HOST_ERROR,
+                            instructions_executed,
+                            stack_depth);
+                    }
+                    argument = (henka_script_api_value){
+                        HENKA_SCRIPT_API_VALUE_ENTITY,
+                        {.entity = value.as.entity}};
+                    host_result = henka_script_host_invoke(
+                        context->host,
+                        HENKA_SCRIPT_API_INTERACTION_TRY,
+                        &argument,
+                        1U,
+                        &output);
+                    if (host_result != HENKA_SUCCESS ||
+                        output.type != HENKA_SCRIPT_API_VALUE_RESULT ||
+                        (uint64_t)output.as.result > (uint64_t)INT32_MAX)
+                    {
+                        if (out_report != NULL)
+                        {
+                            out_report->host_error = host_result != HENKA_SUCCESS
+                                ? host_result
+                                : HENKA_ERROR_INVALID_ARGUMENT;
+                        }
+                        return henka_hks_vm_finish(
+                            out_report,
+                            HENKA_HKS_EXECUTION_HOST_ERROR,
+                            instructions_executed,
+                            stack_depth);
+                    }
+                    if (stack_depth >= HENKA_HKS_MAX_VM_STACK)
+                    {
+                        return henka_hks_vm_finish(
+                            out_report,
+                            HENKA_HKS_EXECUTION_STACK_OVERFLOW,
+                            instructions_executed,
+                            stack_depth);
+                    }
+                    stack[stack_depth++] = (henka_hks_value){
+                        HENKA_HKS_TYPE_I32,
+                        {.i32 = (int32_t)output.as.result}};
                 }
                 break;
             case HENKA_HKS_OPCODE_TRANSFORM_GET_POSITION:

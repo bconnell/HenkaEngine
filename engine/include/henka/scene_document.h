@@ -151,6 +151,11 @@ henka_result henka_scene_document_remove_object(
 size_t henka_scene_document_get_behavior_count(
     const henka_scene_document* document,
     henka_scene_document_id object_id);
+henka_result henka_scene_document_get_behavior_at(
+    const henka_scene_document* document,
+    henka_scene_document_id object_id,
+    size_t index,
+    henka_scene_document_behavior* out_behavior);
 henka_result henka_scene_document_get_behavior(
     const henka_scene_document* document,
     henka_scene_document_id object_id,

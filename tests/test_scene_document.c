@@ -334,6 +334,17 @@ int main(void)
     if (henka_scene_document_add_behavior(document, first_id, &behavior, &behavior_id) != HENKA_SUCCESS ||
         behavior_id == HENKA_INVALID_SCENE_DOCUMENT_BEHAVIOR_ID ||
         henka_scene_document_get_behavior_count(document, first_id) != 1U ||
+        henka_scene_document_get_behavior_at(
+            document,
+            first_id,
+            0U,
+            &loaded_behavior) != HENKA_SUCCESS ||
+        loaded_behavior.id != behavior_id ||
+        henka_scene_document_get_behavior_at(
+            document,
+            first_id,
+            1U,
+            &loaded_behavior) == HENKA_SUCCESS ||
         henka_scene_document_add_behavior(
             document,
             first_id,

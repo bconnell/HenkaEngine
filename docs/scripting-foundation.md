@@ -62,6 +62,12 @@ execution adapters for both languages.
   `transform_get_position(entity)`, `transform_set_position(entity, position)`,
   and `physics_apply_impulse(entity, impulse)` host operations. Vector values
   are finite `f32` triples and host failures terminate the callback safely.
+- HenkaScript now exposes the same bounded context contract for
+  `input_is_action_down(action_id)` and `interaction_try(entity)`. The first
+  returns a checked boolean; the second returns the documented numeric
+  interaction-result value (`0` unavailable, `1` disabled, `2` out of range,
+  `3` available). Both operations resolve through the shared typed host API,
+  so an absent provider is an execution error rather than an invented result.
 - Fixed token, binding, callable, AST-node, identifier, diagnostic, and source
   size limits. `let` and `var` are rejected rather than treated as alternate
   declaration semantics.
@@ -84,12 +90,15 @@ execution adapters for both languages.
   typed state delivery from the external executable.
 - Lua behaviors can call the shared host surface through checked `Entity`,
   `Transform`, `Input`, `Physics`, `Interaction`, and `Events` tables. In the
-  current Sandbox Play dispatcher, `Entity`, `Transform`, `Physics`, and
-  `Events` are operational; `Input.IsActionDown` is deliberately fail-closed
-  to `false`, and `Interaction.Try` is deliberately unavailable until Play
-  has a real input/observer interaction context. The HenkaScript surface can
-  call the shared `Entity.IsValid` operation and exposes the same event identity
-  through the bounded `emit(i32_event_id);` builtin. Both languages can receive the same
+  current Sandbox Play dispatcher all six domains are operational when the
+  coordinator supplies the live input engine and camera observer snapshot.
+  Without those providers, `Input.IsActionDown` is fail-closed to `false` and
+  `Interaction.Try` is unavailable, returning the stable `UNAVAILABLE` result.
+  HenkaScript has the matching
+  `input_is_action_down(action_id)` and `interaction_try(entity)` host calls
+  with the same provider requirements. The HenkaScript surface can call the
+  shared `Entity.IsValid` operation and exposes the same event identity through
+  the bounded `emit(i32_event_id);` builtin. Both languages can receive the same
   queued event through `OnEvent`; Lua receives `(event_id, source_entity)` and
   HenkaScript reads the event ID through `event_id()`.
 - The Scene behavior runtime drains only the events present at the beginning
@@ -147,9 +156,10 @@ identity. The Sandbox Play session owns that runtime for its isolated scene
 lifecycle and fixed-tick dispatch, with a bounded host mapping for the current
 Entity/Transform/Physics/Event slice and an explicit behavior-state sidecar
 save/load seam. Persistent state is not implicitly saved on Stop, is not part
-of the authored `.hscene` document, and is not an editor Inspector workflow.
-Input/Interaction runtime context, richer typed values and callable parameters,
-Inspector authoring, hot reload, debugger tooling,
+of the authored `.hscene` document, and the Inspector attachment summary is
+read-only rather than an editor authoring workflow.
+Richer typed values and callable parameters, Inspector authoring, hot reload,
+debugger tooling,
 replay integration, and broader project scripting workflows remain future work.
 
 The current schema, HenkaScript compiler, and bounded VM are therefore engine

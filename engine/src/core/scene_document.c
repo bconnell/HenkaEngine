@@ -812,6 +812,24 @@ size_t henka_scene_document_get_behavior_count(
     return object_index == SIZE_MAX ? 0U : document->storage->objects[object_index].behavior_count;
 }
 
+henka_result henka_scene_document_get_behavior_at(
+    const henka_scene_document* document,
+    henka_scene_document_id object_id,
+    size_t index,
+    henka_scene_document_behavior* out_behavior)
+{
+    const size_t object_index = henka_scene_document_find_index(
+        document == NULL ? NULL : document->storage,
+        object_id);
+    if (object_index == SIZE_MAX || out_behavior == NULL ||
+        index >= document->storage->objects[object_index].behavior_count)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    *out_behavior = document->storage->objects[object_index].behaviors[index];
+    return HENKA_SUCCESS;
+}
+
 henka_result henka_scene_document_get_behavior(
     const henka_scene_document* document,
     henka_scene_document_id object_id,
