@@ -100,18 +100,21 @@ second interaction runtime.
 Play is owned by a focused Play-session module rather than `main.c`. It has an
 explicit lifecycle:
 
-1. validate authored scene data and materialize runtime bodies;
-2. snapshot authored state required for restoration;
+1. validate authored scene data and clone the authored scene into an independent
+   runtime scene while preserving generation-checked entity handles;
+2. materialize runtime bodies against the runtime scene, with renderer-owned
+   resources borrowed rather than duplicated;
 3. run, pause, resume, or perform one bounded fixed step;
 4. keep runtime transforms, velocities, contacts, and body IDs out of authored
    persistence; and
-5. stop by restoring the authored snapshot transactionally.
+5. stop by cleaning up runtime bodies and discarding the runtime scene, leaving
+   the authored scene unchanged.
 
 Save/reload and authoring mutations are rejected while Play is active. A
 materialization or fixed-step failure transitions to a failed session without
 silently committing runtime state as authoring state. Context switching may
 change presentation, but it does not replace the Play-session owner or its
-restoration contract.
+runtime-scene isolation contract.
 
 ## Input ownership boundary
 

@@ -32,8 +32,10 @@ The executable is also a bounded public authoring and Terrain consumer smoke
 test. It creates a box authoring mesh, manipulates stable vertex, edge, and
 face identities, evaluates the mesh into a normal renderer mesh, saves and
 reloads the authored source, creates and picks a scene entity, creates a linked
-physics box, and verifies duplicate/delete of a user-owned entity. The same
-reloaded mesh is then handed to the graphical scene alongside the public
+physics box, verifies duplicate/delete of a user-owned entity, and validates
+an independent public runtime-scene clone whose entity handles remain valid
+while authored transforms stay unchanged. The same reloaded mesh is then
+handed to the graphical scene alongside the public
 Terrain render owner. The run uses only public C17 APIs, validates the shared
 four-layer Terrain material contract, deterministic raise and paint commands,
 collision raycast, CPU render-mesh rebuild, transactional region save, and

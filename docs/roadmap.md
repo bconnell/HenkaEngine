@@ -81,8 +81,8 @@ roadmap is finished.
    scene objects.
 3. Confined, checksummed `.hscene` Save Scene and Reload Scene operations with
    candidate validation and failure retention.
-4. A dedicated Play session with Start, Pause, Resume, Step, Stop, authored
-   snapshot restoration, and an active-session mutation/save barrier.
+4. A dedicated Play session with Start, Pause, Resume, Step, Stop, an isolated
+   runtime scene, and an active-session mutation/save barrier.
 
 ### In Progress
 

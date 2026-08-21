@@ -93,9 +93,11 @@ turning the public README into an implementation ledger.
   Candidate loads, rebinding, and runtime presentation updates fail closed and
   retain the prior authoring state on failure.
 - Play, Pause, Resume, Step, and Stop are owned by a dedicated bounded session.
-  Runtime bodies and simulation transforms remain outside persistence; Stop
-  restores the authored snapshot, and active Play rejects authoring changes
-  and scene save/reload.
+  Game Authoring creates an independent runtime scene clone with borrowed
+  renderer resources and generation-preserving entity handles. Runtime bodies
+  and simulation transforms remain outside persistence; Stop destroys the
+  runtime scene, leaving the authored scene unchanged. Active Play rejects
+  authoring changes and scene save/reload.
 - This is a foundation, not a complete game editor. Hierarchy authoring,
   broader imported-object registration, complete source/material/project
   serialization, scripting, and production gameplay workflows remain open.

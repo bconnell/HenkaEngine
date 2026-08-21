@@ -235,9 +235,10 @@ These values are Scene Document data, not live Play-session body state.
 The Actions group provides Save Scene and Reload Scene for the confined
 `sandbox3d_scene.hscene` file. While Play is running or paused, authoring edits,
 scene save/reload, and other scene mutations are rejected. Start Play creates
-bounded runtime bodies from the authored values; Pause, Resume, and Step
-control the fixed session, and Stop restores the authored transforms and
-visibility.
+an independent runtime scene clone and bounded runtime bodies from the authored
+values. Pause, Resume, and Step control the fixed session. Stop discards the
+runtime scene and leaves authored transforms, visibility, and document values
+unchanged.
 
 Tools Main and Object Details use fixed panel headers and bounded scrollable
 bodies. Their property groups have stable internal identities, persistent

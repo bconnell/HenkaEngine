@@ -9,6 +9,7 @@
 typedef struct external_graphical_terrain_state
 {
     henka_scene* scene;
+    henka_scene* runtime_scene;
     henka_terrain_world* world;
     henka_terrain_render_runtime* render;
     henka_terrain_sample* samples;
@@ -143,6 +144,7 @@ static void external_graphical_terrain_destroy(external_graphical_terrain_state*
         (void)henka_physics_body_destroy(state->authored_physics, state->authored_body);
     }
     henka_physics_world_destroy(state->authored_physics);
+    henka_scene_destroy(state->runtime_scene);
     henka_scene_destroy(state->scene);
     henka_shader_destroy(state->authored_shader);
     henka_terrain_world_destroy(state->world);
@@ -151,6 +153,7 @@ static void external_graphical_terrain_destroy(external_graphical_terrain_state*
     henka_free(state->samples);
     state->render = NULL;
     state->scene = NULL;
+    state->runtime_scene = NULL;
     state->world = NULL;
     state->samples = NULL;
     state->authored_render_mesh = NULL;
@@ -199,6 +202,7 @@ static henka_result external_authoring_initialize(
         printf("External authoring failure: create box (%s).\n", henka_result_to_string(result));
         return result;
     }
+
     for (uint32_t candidate_id = 1U; candidate_id < 128U; ++candidate_id)
     {
         if (vertex_id == HENKA_AUTHORING_INVALID_ID &&
@@ -303,6 +307,33 @@ static henka_result external_authoring_initialize(
         return result;
     }
 
+    result = henka_scene_clone(state->scene, &state->runtime_scene);
+    if (result != HENKA_SUCCESS || state->runtime_scene == state->scene ||
+        !henka_scene_is_entity_valid(state->runtime_scene, state->authored_entity))
+    {
+        printf("External authoring failure: runtime scene clone (%s).\n",
+            henka_result_to_string(result));
+        return result == HENKA_SUCCESS ? HENKA_ERROR_UNKNOWN : result;
+    }
+    {
+        henka_transform runtime_transform = transform;
+        henka_transform source_transform = {0};
+        henka_transform read_back = {0};
+        runtime_transform.position.x += 4.0f;
+        if (henka_scene_set_entity_transform(
+                state->runtime_scene, state->authored_entity, runtime_transform) != HENKA_SUCCESS ||
+            henka_scene_get_entity_transform(
+                state->scene, state->authored_entity, &source_transform) != HENKA_SUCCESS ||
+            henka_scene_get_entity_transform(
+                state->runtime_scene, state->authored_entity, &read_back) != HENKA_SUCCESS ||
+            source_transform.position.x != transform.position.x ||
+            read_back.position.x != runtime_transform.position.x)
+        {
+            printf("External authoring failure: runtime scene isolation.\n");
+            return HENKA_ERROR_UNKNOWN;
+        }
+    }
+
     duplicate = henka_scene_create_entity_named(state->scene, "External Authored Duplicate");
     if (duplicate == HENKA_INVALID_ENTITY ||
         henka_scene_set_entity_transform(state->scene, duplicate, transform) != HENKA_SUCCESS ||
@@ -345,7 +376,7 @@ static henka_result external_authoring_initialize(
         printf("External authoring failure: linked physics raycast.\n");
         return HENKA_ERROR_UNKNOWN;
     }
-    printf("External public authoring mesh, scene, collision, duplicate/delete, and reload handoff passed.\n");
+    printf("External public authoring mesh, scene, runtime clone isolation, collision, duplicate/delete, and reload handoff passed.\n");
     return HENKA_SUCCESS;
 }
 
