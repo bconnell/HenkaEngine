@@ -138,12 +138,74 @@ static void test_scene_behavior_runtime_event_drain(void)
     henka_scene_document_destroy(document);
 }
 
+static void test_scene_behavior_runtime_mixed_signal(void)
+{
+    henka_scene_document* document = NULL;
+    henka_scene_document_object object = make_object_with_behaviors();
+    henka_scene_behavior_runtime* runtime = NULL;
+    henka_script_host* host = NULL;
+    henka_script_state_store* store = NULL;
+    henka_script_behavior_batch_report report;
+    henka_script_state_value value;
+    bool present;
+    henka_scene_document_id object_id = HENKA_INVALID_SCENE_DOCUMENT_ID;
+
+    (void)snprintf(
+        object.behaviors[0].asset_path,
+        sizeof(object.behaviors[0].asset_path),
+        "%s",
+        "scripts/contact.hks");
+    (void)snprintf(
+        object.behaviors[1].asset_path,
+        sizeof(object.behaviors[1].asset_path),
+        "%s",
+        "scripts/contact.lua");
+    assert(henka_scene_document_create(&document) == HENKA_SUCCESS);
+    assert(henka_scene_document_add_object(document, &object, &object_id) == HENKA_SUCCESS);
+    assert(henka_script_host_create(&host) == HENKA_SUCCESS);
+    assert(henka_script_state_store_create(&store) == HENKA_SUCCESS);
+    assert(henka_script_host_bind_api(
+               host, HENKA_SCRIPT_API_STATE_SET_I32, &(size_t){0U}) == HENKA_SUCCESS);
+    assert(henka_script_host_set_state_store(host, store) == HENKA_SUCCESS);
+    assert(henka_scene_behavior_runtime_create_with_host(
+               document, "tests/fixtures", 64U, host, &runtime) == HENKA_SUCCESS);
+    assert(henka_scene_behavior_runtime_dispatch(
+               runtime, HENKA_SCRIPT_LIFECYCLE_CREATE, 0.0f, 1U, &report) == HENKA_SUCCESS);
+    assert(henka_scene_behavior_runtime_dispatch(
+               runtime, HENKA_SCRIPT_LIFECYCLE_START, 0.0f, 2U, &report) == HENKA_SUCCESS);
+    assert(henka_scene_behavior_runtime_dispatch_signal_for_entity(
+               runtime,
+               object_id,
+               HENKA_SCRIPT_LIFECYCLE_COLLISION_ENTER,
+               1.0f / 60.0f,
+               3U,
+               0U,
+               99U,
+               99U,
+               7U,
+               &report) == HENKA_SUCCESS);
+    assert(report.attempted == 2U && report.executed == 2U && report.failed == 0U);
+    assert(henka_script_state_store_get(
+               store, (henka_script_state_identity){object_id, 10U}, 81U,
+               &value, &present) == HENKA_SUCCESS);
+    assert(present && value.type == HENKA_SCRIPT_STATE_VALUE_I32 && value.as.i32 == 7);
+    assert(henka_script_state_store_get(
+               store, (henka_script_state_identity){object_id, 11U}, 81U,
+               &value, &present) == HENKA_SUCCESS);
+    assert(present && value.type == HENKA_SCRIPT_STATE_VALUE_I32 && value.as.i32 == 7);
+    henka_scene_behavior_runtime_destroy(runtime);
+    henka_script_state_store_destroy(store);
+    henka_script_host_destroy(host);
+    henka_scene_document_destroy(document);
+}
+
 int main(void)
 {
     const size_t allocations_before = henka_memory_get_allocation_count();
     test_scene_behavior_runtime_dispatch();
     test_scene_behavior_runtime_fails_closed();
     test_scene_behavior_runtime_event_drain();
+    test_scene_behavior_runtime_mixed_signal();
     assert(henka_memory_get_allocation_count() == allocations_before);
     puts("henka_scene_behavior_runtime_tests: PASS");
     return 0;
