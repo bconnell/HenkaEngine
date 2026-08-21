@@ -25,6 +25,10 @@ HenkaScript V1 front-end.
 - Bounded callable bytecode generation and an allocation-free typed VM with
   fixed stack storage, checked arithmetic, deterministic reports, and an
   instruction budget.
+- A HenkaScript behavior adapter that maps the exact `OnCreate`, `OnStart`,
+  `OnUpdate`, and `OnStop` callable names to the shared lifecycle runtime;
+  absent lifecycle callables are deterministic no-ops and the runtime budget
+  is propagated to the VM.
 - Explicit typed declarations (`i32 health = 3;`) and inferred declarations
   (`count := health + 1;`).
 - Brace-delimited `fn` and `behavior` callables, arithmetic expressions,
@@ -42,11 +46,11 @@ dispatch mechanism.
 ## What is not available yet
 
 The HenkaScript compiler and VM currently execute bounded callable-local
-bytecode. The language-neutral behavior runtime now owns lifecycle state and
-per-behavior callback budgets, but it is not yet connected to Scene Document
-objects or a backend loader. Persistent global state, Script Host API
-dispatch, `.lua`/`.hks` asset loading, Lua compilation/VM support, Inspector
-authoring, hot reload, and mixed-language events remain subsequent
+bytecode, and its lifecycle adapter can drive that bytecode through the
+language-neutral behavior runtime. The runtime is not yet connected to Scene
+Document objects or a project asset loader. Persistent global state, Script
+Host API dispatch, `.lua`/`.hks` asset loading, Lua compilation/VM support,
+Inspector authoring, hot reload, and mixed-language events remain subsequent
 implementation slices.
 
 The current schema, HenkaScript compiler, and bounded VM are therefore engine

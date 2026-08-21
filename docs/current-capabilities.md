@@ -103,10 +103,10 @@ turning the public README into an implementation ledger.
   serialization, and production gameplay workflows remain open. The shared
   scripting API/host schema and bounded HenkaScript lexer/parser/type-checking
   foundation are available through [scripting-foundation.md](scripting-foundation.md),
-  including bounded HenkaScript callable bytecode/VM execution and a
-  language-neutral generation-checked behavior lifecycle runtime. Scene
-  binding, Script Host dispatch, persistent global state, Lua, and editor
-  authoring remain unfinished.
+  including bounded HenkaScript callable bytecode/VM execution, its
+  lifecycle adapter, and a language-neutral generation-checked behavior
+  lifecycle runtime. Scene binding, Script Host dispatch, persistent global
+  state, Lua, and editor authoring remain unfinished.
 
 ## Modeling / Content Authoring
 
@@ -236,9 +236,9 @@ turning the public README into an implementation ledger.
 
 - Henka remains early-stage. The native workspace is not a complete production
   editor or project-authoring suite.
-- 2D workflow, audio, executable script behaviors, character controllers,
-  advanced physics, broader renderer backends, and mature Game/Play workflows remain
-  future work beyond the current bounded authoring/play foundation.
+- 2D workflow, audio, end-user project script behaviors, character controllers,
+  advanced physics, broader renderer backends, and mature Game/Play workflows
+  remain future work beyond the current bounded authoring/play foundation.
 - Advanced asset authoring, hierarchy authoring, animation/rigging, texture
   painting, automatic UV unwrap, complete scene serialization, and some
   renderer/terrain visual validation remain open.

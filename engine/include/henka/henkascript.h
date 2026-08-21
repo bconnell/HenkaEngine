@@ -168,6 +168,10 @@ henka_result henka_hks_program_get_callable(
     const henka_hks_program* program,
     size_t index,
     henka_hks_callable_info* out_callable);
+henka_result henka_hks_program_find_callable(
+    const henka_hks_program* program,
+    const char* name,
+    size_t* out_index);
 size_t henka_hks_program_get_ast_node_count(const henka_hks_program* program);
 
 henka_hks_execution_result henka_hks_execute(

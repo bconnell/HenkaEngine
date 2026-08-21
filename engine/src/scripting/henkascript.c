@@ -1326,6 +1326,31 @@ size_t henka_hks_program_get_callable_count(const henka_hks_program* program)
     return program == NULL ? 0U : program->callable_count;
 }
 
+henka_result henka_hks_program_find_callable(
+    const henka_hks_program* program,
+    const char* name,
+    size_t* out_index)
+{
+    size_t index;
+    if (out_index != NULL)
+    {
+        *out_index = SIZE_MAX;
+    }
+    if (program == NULL || name == NULL || name[0] == '\0' || out_index == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    for (index = 0U; index < program->callable_count; ++index)
+    {
+        if (strcmp(program->callables[index].name, name) == 0)
+        {
+            *out_index = index;
+            return HENKA_SUCCESS;
+        }
+    }
+    return HENKA_ERROR_INVALID_ARGUMENT;
+}
+
 henka_result henka_hks_program_get_callable(
     const henka_hks_program* program,
     size_t index,
