@@ -1000,6 +1000,19 @@ try {
 
         Write-Step "Checking packaged UI click controls"
 
+        if (-not (Wait-FileContains `
+                -Path $stdoutPath `
+                -Pattern "Tools QA tab:" `
+                -TimeoutMilliseconds 500)) {
+            Send-HenkaAutomationKey -EventPath $automationInputPath -KeyName "F4"
+            if (-not (Wait-FileContains `
+                    -Path $stdoutPath `
+                    -Pattern "Sandbox panel: shown" `
+                    -TimeoutMilliseconds 4000)) {
+                throw "The packaged Tools dock was not available and could not be opened through the logical automation path."
+            }
+        }
+
         foreach ($requiredPattern in @(
             "Sandbox UI ready:",
             "Sandbox viewport:",
