@@ -1,0 +1,136 @@
+#ifndef HENKA_HENKASCRIPT_H
+#define HENKA_HENKASCRIPT_H
+
+#include <stdbool.h>
+#include <stddef.h>
+#include <stdint.h>
+
+#include <henka/result.h>
+
+#define HENKA_HKS_MAX_SOURCE_BYTES (256U * 1024U)
+#define HENKA_HKS_MAX_TOKENS 4096U
+#define HENKA_HKS_MAX_BINDINGS 128U
+#define HENKA_HKS_MAX_CALLABLES 64U
+#define HENKA_HKS_MAX_AST_NODES 2048U
+#define HENKA_HKS_MAX_IDENTIFIER_BYTES 64U
+#define HENKA_HKS_MAX_DIAGNOSTIC_BYTES 192U
+
+typedef struct henka_hks_program henka_hks_program;
+
+typedef enum henka_hks_token_kind
+{
+    HENKA_HKS_TOKEN_EOF = 0,
+    HENKA_HKS_TOKEN_IDENTIFIER,
+    HENKA_HKS_TOKEN_INTEGER,
+    HENKA_HKS_TOKEN_FLOAT,
+    HENKA_HKS_TOKEN_STRING,
+    HENKA_HKS_TOKEN_KW_BOOL,
+    HENKA_HKS_TOKEN_KW_I32,
+    HENKA_HKS_TOKEN_KW_U32,
+    HENKA_HKS_TOKEN_KW_F32,
+    HENKA_HKS_TOKEN_KW_ENTITY,
+    HENKA_HKS_TOKEN_KW_FN,
+    HENKA_HKS_TOKEN_KW_BEHAVIOR,
+    HENKA_HKS_TOKEN_KW_RETURN,
+    HENKA_HKS_TOKEN_KW_TRUE,
+    HENKA_HKS_TOKEN_KW_FALSE,
+    HENKA_HKS_TOKEN_KW_LET,
+    HENKA_HKS_TOKEN_KW_VAR,
+    HENKA_HKS_TOKEN_LBRACE,
+    HENKA_HKS_TOKEN_RBRACE,
+    HENKA_HKS_TOKEN_LPAREN,
+    HENKA_HKS_TOKEN_RPAREN,
+    HENKA_HKS_TOKEN_SEMICOLON,
+    HENKA_HKS_TOKEN_COMMA,
+    HENKA_HKS_TOKEN_ASSIGN,
+    HENKA_HKS_TOKEN_INFER,
+    HENKA_HKS_TOKEN_PLUS,
+    HENKA_HKS_TOKEN_MINUS,
+    HENKA_HKS_TOKEN_STAR,
+    HENKA_HKS_TOKEN_SLASH
+} henka_hks_token_kind;
+
+typedef struct henka_hks_token
+{
+    henka_hks_token_kind kind;
+    size_t offset;
+    size_t length;
+    uint32_t line;
+    uint32_t column;
+} henka_hks_token;
+
+typedef enum henka_hks_value_type
+{
+    HENKA_HKS_TYPE_UNKNOWN = 0,
+    HENKA_HKS_TYPE_VOID,
+    HENKA_HKS_TYPE_BOOL,
+    HENKA_HKS_TYPE_I32,
+    HENKA_HKS_TYPE_U32,
+    HENKA_HKS_TYPE_F32,
+    HENKA_HKS_TYPE_ENTITY,
+    HENKA_HKS_TYPE_STRING
+} henka_hks_value_type;
+
+typedef enum henka_hks_diagnostic_code
+{
+    HENKA_HKS_DIAGNOSTIC_NONE = 0,
+    HENKA_HKS_DIAGNOSTIC_INVALID_SOURCE,
+    HENKA_HKS_DIAGNOSTIC_UNEXPECTED_TOKEN,
+    HENKA_HKS_DIAGNOSTIC_INVALID_LITERAL,
+    HENKA_HKS_DIAGNOSTIC_UNKNOWN_NAME,
+    HENKA_HKS_DIAGNOSTIC_DUPLICATE_NAME,
+    HENKA_HKS_DIAGNOSTIC_TYPE_MISMATCH,
+    HENKA_HKS_DIAGNOSTIC_FORBIDDEN_KEYWORD,
+    HENKA_HKS_DIAGNOSTIC_LIMIT
+} henka_hks_diagnostic_code;
+
+typedef struct henka_hks_diagnostic
+{
+    henka_hks_diagnostic_code code;
+    size_t offset;
+    uint32_t line;
+    uint32_t column;
+    char message[HENKA_HKS_MAX_DIAGNOSTIC_BYTES];
+} henka_hks_diagnostic;
+
+typedef struct henka_hks_binding_info
+{
+    char name[HENKA_HKS_MAX_IDENTIFIER_BYTES];
+    henka_hks_value_type type;
+    bool inferred;
+} henka_hks_binding_info;
+
+typedef struct henka_hks_callable_info
+{
+    char name[HENKA_HKS_MAX_IDENTIFIER_BYTES];
+    bool behavior;
+} henka_hks_callable_info;
+
+henka_result henka_hks_lex(
+    const char* source,
+    size_t source_size,
+    henka_hks_token* tokens,
+    size_t token_capacity,
+    size_t* out_token_count,
+    henka_hks_diagnostic* out_diagnostic);
+
+henka_result henka_hks_compile(
+    const char* source,
+    size_t source_size,
+    henka_hks_program** out_program,
+    henka_hks_diagnostic* out_diagnostic);
+
+void henka_hks_program_destroy(henka_hks_program* program);
+size_t henka_hks_program_get_binding_count(const henka_hks_program* program);
+henka_result henka_hks_program_get_binding(
+    const henka_hks_program* program,
+    size_t index,
+    henka_hks_binding_info* out_binding);
+size_t henka_hks_program_get_callable_count(const henka_hks_program* program);
+henka_result henka_hks_program_get_callable(
+    const henka_hks_program* program,
+    size_t index,
+    henka_hks_callable_info* out_callable);
+size_t henka_hks_program_get_ast_node_count(const henka_hks_program* program);
+
+#endif

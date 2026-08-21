@@ -16,10 +16,12 @@ foundation for the server and terrain work that follows.
 
 The shared runtime owns the public, language-neutral scripting schema in
 `<henka/script.h>`. It uses stable numeric API IDs and fixed typed signatures
-so future Lua and HenkaScript backends can resolve bindings once and retain
-language-specific native thunks. The current foundation does not execute
-scripts or own source assets; behavior persistence, lifecycle dispatch, and
-the two language backends remain later layers above this boundary.
+so Lua and HenkaScript backends can resolve bindings once and retain
+language-specific native thunks. The HenkaScript front-end additionally
+lexes, parses, and type-checks bounded source through `<henka/henkascript.h>`.
+The current foundation does not execute scripts or own source assets; behavior
+persistence, lifecycle dispatch, Lua execution, and HenkaScript bytecode/VM
+execution remain later layers above this boundary.
 
 ### Network boundary
 

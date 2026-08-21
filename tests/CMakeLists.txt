@@ -37,6 +37,19 @@ henka_enable_project_warnings(henka_script_host_tests)
 
 add_test(NAME henka_script_host_tests COMMAND henka_script_host_tests)
 
+add_executable(henka_henkascript_tests
+    test_henkascript.c
+)
+
+target_link_libraries(henka_henkascript_tests
+    PRIVATE
+        henka_runtime
+)
+
+henka_enable_project_warnings(henka_henkascript_tests)
+
+add_test(NAME henka_henkascript_tests COMMAND henka_henkascript_tests)
+
 add_executable(henka_sandbox3d_scene_document_bridge_tests
     ../examples/sandbox3d/scene_document_bridge.c
     test_sandbox3d_scene_document_bridge.c

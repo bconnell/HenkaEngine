@@ -1,0 +1,1101 @@
+#include <henka/henkascript.h>
+
+#include <ctype.h>
+#include <stdarg.h>
+#include <stdio.h>
+#include <string.h>
+
+#include <henka/memory.h>
+
+typedef enum henka_hks_ast_node_kind
+{
+    HENKA_HKS_AST_DECLARATION = 0,
+    HENKA_HKS_AST_CALLABLE,
+    HENKA_HKS_AST_LITERAL,
+    HENKA_HKS_AST_NAME,
+    HENKA_HKS_AST_BINARY,
+    HENKA_HKS_AST_ASSIGNMENT,
+    HENKA_HKS_AST_RETURN,
+    HENKA_HKS_AST_BLOCK
+} henka_hks_ast_node_kind;
+
+typedef struct henka_hks_ast_node
+{
+    henka_hks_ast_node_kind kind;
+    henka_hks_value_type type;
+} henka_hks_ast_node;
+
+struct henka_hks_program
+{
+    size_t binding_count;
+    henka_hks_binding_info bindings[HENKA_HKS_MAX_BINDINGS];
+    size_t callable_count;
+    henka_hks_callable_info callables[HENKA_HKS_MAX_CALLABLES];
+    size_t ast_node_count;
+    henka_hks_ast_node ast_nodes[HENKA_HKS_MAX_AST_NODES];
+};
+
+typedef struct henka_hks_parser_binding
+{
+    char name[HENKA_HKS_MAX_IDENTIFIER_BYTES];
+    henka_hks_value_type type;
+} henka_hks_parser_binding;
+
+typedef struct henka_hks_parser
+{
+    const char* source;
+    const henka_hks_token* tokens;
+    size_t token_count;
+    size_t index;
+    size_t scope_mark;
+    size_t binding_count;
+    henka_hks_parser_binding bindings[HENKA_HKS_MAX_BINDINGS];
+    henka_hks_program* program;
+    henka_hks_diagnostic* diagnostic;
+} henka_hks_parser;
+
+static void henka_hks_diagnostic_clear(henka_hks_diagnostic* diagnostic)
+{
+    if (diagnostic != NULL)
+    {
+        memset(diagnostic, 0, sizeof(*diagnostic));
+    }
+}
+
+static henka_result henka_hks_fail(
+    henka_hks_diagnostic* diagnostic,
+    henka_hks_diagnostic_code code,
+    const henka_hks_token* token,
+    const char* format,
+    ...)
+{
+    if (diagnostic != NULL)
+    {
+        va_list arguments;
+        diagnostic->code = code;
+        diagnostic->offset = token == NULL ? 0U : token->offset;
+        diagnostic->line = token == NULL ? 0U : token->line;
+        diagnostic->column = token == NULL ? 0U : token->column;
+        va_start(arguments, format);
+        (void)vsnprintf(
+            diagnostic->message,
+            sizeof(diagnostic->message),
+            format,
+            arguments);
+        va_end(arguments);
+    }
+    return code == HENKA_HKS_DIAGNOSTIC_LIMIT
+        ? HENKA_ERROR_LIMIT
+        : HENKA_ERROR_INVALID_ARGUMENT;
+}
+
+static bool henka_hks_is_identifier_start(unsigned char character)
+{
+    return (character >= (unsigned char)'a' && character <= (unsigned char)'z') ||
+        (character >= (unsigned char)'A' && character <= (unsigned char)'Z') ||
+        character == (unsigned char)'_';
+}
+
+static bool henka_hks_is_identifier_continue(unsigned char character)
+{
+    return henka_hks_is_identifier_start(character) ||
+        (character >= (unsigned char)'0' && character <= (unsigned char)'9');
+}
+
+static bool henka_hks_text_equals(
+    const char* source,
+    const henka_hks_token* token,
+    const char* text)
+{
+    const size_t length = strlen(text);
+    return source != NULL && token != NULL &&
+        token->length == length &&
+        memcmp(source + token->offset, text, length) == 0;
+}
+
+static henka_hks_token_kind henka_hks_keyword_kind(
+    const char* source,
+    size_t offset,
+    size_t length)
+{
+    struct keyword
+    {
+        const char* text;
+        henka_hks_token_kind kind;
+    };
+    static const struct keyword keywords[] =
+    {
+        {"bool", HENKA_HKS_TOKEN_KW_BOOL},
+        {"i32", HENKA_HKS_TOKEN_KW_I32},
+        {"u32", HENKA_HKS_TOKEN_KW_U32},
+        {"f32", HENKA_HKS_TOKEN_KW_F32},
+        {"entity", HENKA_HKS_TOKEN_KW_ENTITY},
+        {"fn", HENKA_HKS_TOKEN_KW_FN},
+        {"behavior", HENKA_HKS_TOKEN_KW_BEHAVIOR},
+        {"return", HENKA_HKS_TOKEN_KW_RETURN},
+        {"true", HENKA_HKS_TOKEN_KW_TRUE},
+        {"false", HENKA_HKS_TOKEN_KW_FALSE},
+        {"let", HENKA_HKS_TOKEN_KW_LET},
+        {"var", HENKA_HKS_TOKEN_KW_VAR}
+    };
+    size_t index;
+    for (index = 0U; index < sizeof(keywords) / sizeof(keywords[0]); ++index)
+    {
+        const size_t keyword_length = strlen(keywords[index].text);
+        if (length == keyword_length &&
+            memcmp(source + offset, keywords[index].text, length) == 0)
+        {
+            return keywords[index].kind;
+        }
+    }
+    return HENKA_HKS_TOKEN_IDENTIFIER;
+}
+
+henka_result henka_hks_lex(
+    const char* source,
+    size_t source_size,
+    henka_hks_token* tokens,
+    size_t token_capacity,
+    size_t* out_token_count,
+    henka_hks_diagnostic* out_diagnostic)
+{
+    size_t offset = 0U;
+    size_t token_count = 0U;
+    uint32_t line = 1U;
+    uint32_t column = 1U;
+
+    henka_hks_diagnostic_clear(out_diagnostic);
+    if ((source == NULL && source_size != 0U) || tokens == NULL ||
+        token_capacity == 0U || out_token_count == NULL)
+    {
+        return henka_hks_fail(
+            out_diagnostic,
+            HENKA_HKS_DIAGNOSTIC_INVALID_SOURCE,
+            NULL,
+            "source and token output are required");
+    }
+    *out_token_count = 0U;
+    if (source_size > HENKA_HKS_MAX_SOURCE_BYTES)
+    {
+        return henka_hks_fail(
+            out_diagnostic,
+            HENKA_HKS_DIAGNOSTIC_LIMIT,
+            NULL,
+            "source exceeds the %u-byte limit",
+            HENKA_HKS_MAX_SOURCE_BYTES);
+    }
+    while (offset < source_size)
+    {
+        const unsigned char character = (unsigned char)source[offset];
+        henka_hks_token token;
+        if (isspace(character) != 0)
+        {
+            if (character == (unsigned char)'\n')
+            {
+                ++line;
+                column = 1U;
+            }
+            else
+            {
+                ++column;
+            }
+            ++offset;
+            continue;
+        }
+        if (character == (unsigned char)'/' && offset + 1U < source_size &&
+            source[offset + 1U] == '/')
+        {
+            offset += 2U;
+            column += 2U;
+            while (offset < source_size && source[offset] != '\n')
+            {
+                ++offset;
+                ++column;
+            }
+            continue;
+        }
+        if (token_count >= token_capacity - 1U || token_count >= HENKA_HKS_MAX_TOKENS - 1U)
+        {
+            return henka_hks_fail(
+                out_diagnostic,
+                HENKA_HKS_DIAGNOSTIC_LIMIT,
+                NULL,
+                "token stream exceeds the bounded token limit");
+        }
+        token = (henka_hks_token){
+            HENKA_HKS_TOKEN_EOF,
+            offset,
+            1U,
+            line,
+            column};
+        if (henka_hks_is_identifier_start(character))
+        {
+            const size_t start = offset;
+            while (offset < source_size &&
+                   henka_hks_is_identifier_continue((unsigned char)source[offset]))
+            {
+                ++offset;
+                ++column;
+            }
+            token.length = offset - start;
+            token.kind = henka_hks_keyword_kind(source, start, token.length);
+        }
+        else if (character >= (unsigned char)'0' && character <= (unsigned char)'9')
+        {
+            bool floating = false;
+            const size_t start = offset;
+            while (offset < source_size && isdigit((unsigned char)source[offset]) != 0)
+            {
+                ++offset;
+                ++column;
+            }
+            if (offset < source_size && source[offset] == '.')
+            {
+                floating = true;
+                ++offset;
+                ++column;
+                if (offset >= source_size || isdigit((unsigned char)source[offset]) == 0)
+                {
+                    return henka_hks_fail(
+                        out_diagnostic,
+                        HENKA_HKS_DIAGNOSTIC_INVALID_LITERAL,
+                        &token,
+                        "a floating literal requires digits after the decimal point");
+                }
+                while (offset < source_size && isdigit((unsigned char)source[offset]) != 0)
+                {
+                    ++offset;
+                    ++column;
+                }
+            }
+            token.length = offset - start;
+            token.kind = floating ? HENKA_HKS_TOKEN_FLOAT : HENKA_HKS_TOKEN_INTEGER;
+        }
+        else if (character == (unsigned char)'"')
+        {
+            const size_t start = offset++;
+            ++column;
+            while (offset < source_size && source[offset] != '"')
+            {
+                if (source[offset] == '\n')
+                {
+                    return henka_hks_fail(
+                        out_diagnostic,
+                        HENKA_HKS_DIAGNOSTIC_INVALID_LITERAL,
+                        &token,
+                        "string literals cannot contain an unescaped newline");
+                }
+                if (source[offset] == '\\')
+                {
+                    if (offset + 1U >= source_size ||
+                        strchr("\\\"nrt", source[offset + 1U]) == NULL)
+                    {
+                        return henka_hks_fail(
+                            out_diagnostic,
+                            HENKA_HKS_DIAGNOSTIC_INVALID_LITERAL,
+                            &token,
+                            "unsupported string escape");
+                    }
+                    offset += 2U;
+                    column += 2U;
+                }
+                else
+                {
+                    ++offset;
+                    ++column;
+                }
+            }
+            if (offset >= source_size)
+            {
+                return henka_hks_fail(
+                    out_diagnostic,
+                    HENKA_HKS_DIAGNOSTIC_INVALID_LITERAL,
+                    &token,
+                    "unterminated string literal");
+            }
+            ++offset;
+            ++column;
+            token.length = offset - start;
+            token.kind = HENKA_HKS_TOKEN_STRING;
+        }
+        else
+        {
+            ++offset;
+            ++column;
+            switch (character)
+            {
+                case '{': token.kind = HENKA_HKS_TOKEN_LBRACE; break;
+                case '}': token.kind = HENKA_HKS_TOKEN_RBRACE; break;
+                case '(': token.kind = HENKA_HKS_TOKEN_LPAREN; break;
+                case ')': token.kind = HENKA_HKS_TOKEN_RPAREN; break;
+                case ';': token.kind = HENKA_HKS_TOKEN_SEMICOLON; break;
+                case ',': token.kind = HENKA_HKS_TOKEN_COMMA; break;
+                case '=': token.kind = HENKA_HKS_TOKEN_ASSIGN; break;
+                case '+': token.kind = HENKA_HKS_TOKEN_PLUS; break;
+                case '-': token.kind = HENKA_HKS_TOKEN_MINUS; break;
+                case '*': token.kind = HENKA_HKS_TOKEN_STAR; break;
+                case '/': token.kind = HENKA_HKS_TOKEN_SLASH; break;
+                case ':':
+                    if (offset >= source_size || source[offset] != '=')
+                    {
+                        return henka_hks_fail(
+                            out_diagnostic,
+                            HENKA_HKS_DIAGNOSTIC_UNEXPECTED_TOKEN,
+                            &token,
+                            "':' must be followed by '=' for inferred declarations");
+                    }
+                    ++offset;
+                    ++column;
+                    token.length = 2U;
+                    token.kind = HENKA_HKS_TOKEN_INFER;
+                    break;
+                default:
+                    return henka_hks_fail(
+                        out_diagnostic,
+                        HENKA_HKS_DIAGNOSTIC_UNEXPECTED_TOKEN,
+                        &token,
+                        "unsupported character '%c'",
+                        character);
+            }
+        }
+        tokens[token_count++] = token;
+    }
+    if (token_count >= token_capacity)
+    {
+        return henka_hks_fail(
+            out_diagnostic,
+            HENKA_HKS_DIAGNOSTIC_LIMIT,
+            NULL,
+            "token output capacity is exhausted");
+    }
+    tokens[token_count++] = (henka_hks_token){
+        HENKA_HKS_TOKEN_EOF,
+        source_size,
+        0U,
+        line,
+        column};
+    *out_token_count = token_count;
+    return HENKA_SUCCESS;
+}
+
+static const henka_hks_token* henka_hks_current(const henka_hks_parser* parser)
+{
+    return parser == NULL || parser->index >= parser->token_count
+        ? NULL
+        : &parser->tokens[parser->index];
+}
+
+static bool henka_hks_accept(henka_hks_parser* parser, henka_hks_token_kind kind)
+{
+    if (henka_hks_current(parser) != NULL && henka_hks_current(parser)->kind == kind)
+    {
+        ++parser->index;
+        return true;
+    }
+    return false;
+}
+
+static henka_result henka_hks_expect(
+    henka_hks_parser* parser,
+    henka_hks_token_kind kind,
+    const char* message)
+{
+    if (henka_hks_accept(parser, kind))
+    {
+        return HENKA_SUCCESS;
+    }
+    return henka_hks_fail(
+        parser->diagnostic,
+        HENKA_HKS_DIAGNOSTIC_UNEXPECTED_TOKEN,
+        henka_hks_current(parser),
+        "%s",
+        message);
+}
+
+static bool henka_hks_copy_name(
+    char* destination,
+    size_t destination_capacity,
+    const char* source,
+    const henka_hks_token* token)
+{
+    if (destination == NULL || source == NULL || token == NULL ||
+        token->length == 0U || token->length >= destination_capacity)
+    {
+        return false;
+    }
+    memcpy(destination, source + token->offset, token->length);
+    destination[token->length] = '\0';
+    return true;
+}
+
+static henka_hks_value_type henka_hks_type_from_token(henka_hks_token_kind kind)
+{
+    switch (kind)
+    {
+        case HENKA_HKS_TOKEN_KW_BOOL: return HENKA_HKS_TYPE_BOOL;
+        case HENKA_HKS_TOKEN_KW_I32: return HENKA_HKS_TYPE_I32;
+        case HENKA_HKS_TOKEN_KW_U32: return HENKA_HKS_TYPE_U32;
+        case HENKA_HKS_TOKEN_KW_F32: return HENKA_HKS_TYPE_F32;
+        case HENKA_HKS_TOKEN_KW_ENTITY: return HENKA_HKS_TYPE_ENTITY;
+        default: return HENKA_HKS_TYPE_UNKNOWN;
+    }
+}
+
+static bool henka_hks_is_type_token(henka_hks_token_kind kind)
+{
+    return henka_hks_type_from_token(kind) != HENKA_HKS_TYPE_UNKNOWN;
+}
+
+static bool henka_hks_types_compatible(
+    henka_hks_value_type expected,
+    henka_hks_value_type actual)
+{
+    return expected == actual;
+}
+
+static henka_result henka_hks_add_node(
+    henka_hks_parser* parser,
+    henka_hks_ast_node_kind kind,
+    henka_hks_value_type type)
+{
+    if (parser->program->ast_node_count >= HENKA_HKS_MAX_AST_NODES)
+    {
+        return henka_hks_fail(
+            parser->diagnostic,
+            HENKA_HKS_DIAGNOSTIC_LIMIT,
+            henka_hks_current(parser),
+            "AST node limit is exhausted");
+    }
+    parser->program->ast_nodes[parser->program->ast_node_count++] = (henka_hks_ast_node){kind, type};
+    return HENKA_SUCCESS;
+}
+
+static henka_hks_value_type henka_hks_lookup(
+    const henka_hks_parser* parser,
+    const henka_hks_token* token)
+{
+    size_t index;
+    for (index = parser->binding_count; index > 0U; --index)
+    {
+        const henka_hks_parser_binding* binding = &parser->bindings[index - 1U];
+        if (henka_hks_text_equals(parser->source, token, binding->name))
+        {
+            return binding->type;
+        }
+    }
+    return HENKA_HKS_TYPE_UNKNOWN;
+}
+
+static henka_result henka_hks_add_binding(
+    henka_hks_parser* parser,
+    const henka_hks_token* name_token,
+    henka_hks_value_type type,
+    bool inferred,
+    bool public_binding)
+{
+    henka_hks_parser_binding binding;
+    size_t index;
+    if (!henka_hks_copy_name(
+            binding.name,
+            sizeof(binding.name),
+            parser->source,
+            name_token))
+    {
+        return henka_hks_fail(
+            parser->diagnostic,
+            HENKA_HKS_DIAGNOSTIC_INVALID_SOURCE,
+            name_token,
+            "identifier exceeds the %u-byte limit",
+            HENKA_HKS_MAX_IDENTIFIER_BYTES - 1U);
+    }
+    for (index = parser->scope_mark; index < parser->binding_count; ++index)
+    {
+        if (strcmp(parser->bindings[index].name, binding.name) == 0)
+        {
+            return henka_hks_fail(
+                parser->diagnostic,
+                HENKA_HKS_DIAGNOSTIC_DUPLICATE_NAME,
+                name_token,
+                "duplicate name '%s' in the current scope",
+                binding.name);
+        }
+    }
+    if (parser->binding_count >= HENKA_HKS_MAX_BINDINGS)
+    {
+        return henka_hks_fail(
+            parser->diagnostic,
+            HENKA_HKS_DIAGNOSTIC_LIMIT,
+            name_token,
+            "binding limit is exhausted");
+    }
+    binding.type = type;
+    parser->bindings[parser->binding_count++] = binding;
+    if (public_binding)
+    {
+        if (parser->program->binding_count >= HENKA_HKS_MAX_BINDINGS)
+        {
+            return henka_hks_fail(
+                parser->diagnostic,
+                HENKA_HKS_DIAGNOSTIC_LIMIT,
+                name_token,
+                "public binding limit is exhausted");
+        }
+        (void)snprintf(
+            parser->program->bindings[parser->program->binding_count].name,
+            sizeof(parser->program->bindings[parser->program->binding_count].name),
+            "%s",
+            binding.name);
+        parser->program->bindings[parser->program->binding_count].type = type;
+        parser->program->bindings[parser->program->binding_count].inferred = inferred;
+        ++parser->program->binding_count;
+    }
+    return henka_hks_add_node(parser, HENKA_HKS_AST_DECLARATION, type);
+}
+
+static henka_result henka_hks_parse_expression(
+    henka_hks_parser* parser,
+    henka_hks_value_type* out_type);
+
+static int henka_hks_precedence(henka_hks_token_kind kind)
+{
+    return kind == HENKA_HKS_TOKEN_STAR || kind == HENKA_HKS_TOKEN_SLASH
+        ? 2
+        : kind == HENKA_HKS_TOKEN_PLUS || kind == HENKA_HKS_TOKEN_MINUS
+            ? 1
+            : 0;
+}
+
+static bool henka_hks_is_numeric(henka_hks_value_type type)
+{
+    return type == HENKA_HKS_TYPE_I32 || type == HENKA_HKS_TYPE_U32 ||
+        type == HENKA_HKS_TYPE_F32;
+}
+
+static henka_result henka_hks_parse_primary(
+    henka_hks_parser* parser,
+    henka_hks_value_type* out_type)
+{
+    const henka_hks_token* token = henka_hks_current(parser);
+    henka_hks_value_type type;
+    if (token == NULL || out_type == NULL)
+    {
+        return henka_hks_fail(
+            parser->diagnostic,
+            HENKA_HKS_DIAGNOSTIC_UNEXPECTED_TOKEN,
+            token,
+            "expression is incomplete");
+    }
+    if (henka_hks_accept(parser, HENKA_HKS_TOKEN_LPAREN))
+    {
+        henka_result result = henka_hks_parse_expression(parser, out_type);
+        if (result != HENKA_SUCCESS)
+        {
+            return result;
+        }
+        return henka_hks_expect(parser, HENKA_HKS_TOKEN_RPAREN, "expected ')' after expression");
+    }
+    if (henka_hks_accept(parser, HENKA_HKS_TOKEN_MINUS))
+    {
+        henka_result result = henka_hks_parse_primary(parser, &type);
+        if (result != HENKA_SUCCESS || !henka_hks_is_numeric(type))
+        {
+            return result == HENKA_SUCCESS
+                ? henka_hks_fail(
+                    parser->diagnostic,
+                    HENKA_HKS_DIAGNOSTIC_TYPE_MISMATCH,
+                    token,
+                    "unary '-' requires a numeric value")
+                : result;
+        }
+        *out_type = type;
+        return henka_hks_add_node(parser, HENKA_HKS_AST_BINARY, type);
+    }
+    ++parser->index;
+    switch (token->kind)
+    {
+        case HENKA_HKS_TOKEN_INTEGER:
+            *out_type = HENKA_HKS_TYPE_I32;
+            break;
+        case HENKA_HKS_TOKEN_FLOAT:
+            *out_type = HENKA_HKS_TYPE_F32;
+            break;
+        case HENKA_HKS_TOKEN_STRING:
+            *out_type = HENKA_HKS_TYPE_STRING;
+            break;
+        case HENKA_HKS_TOKEN_KW_TRUE:
+        case HENKA_HKS_TOKEN_KW_FALSE:
+            *out_type = HENKA_HKS_TYPE_BOOL;
+            break;
+        case HENKA_HKS_TOKEN_IDENTIFIER:
+            *out_type = henka_hks_lookup(parser, token);
+            if (*out_type == HENKA_HKS_TYPE_UNKNOWN)
+            {
+                return henka_hks_fail(
+                    parser->diagnostic,
+                    HENKA_HKS_DIAGNOSTIC_UNKNOWN_NAME,
+                    token,
+                    "unknown name '%.*s'",
+                    (int)token->length,
+                    parser->source + token->offset);
+            }
+            break;
+        default:
+            return henka_hks_fail(
+                parser->diagnostic,
+                HENKA_HKS_DIAGNOSTIC_UNEXPECTED_TOKEN,
+                token,
+                "expected a literal, name, or parenthesized expression");
+    }
+    return henka_hks_add_node(parser, HENKA_HKS_AST_LITERAL, *out_type);
+}
+
+static henka_result henka_hks_parse_binary(
+    henka_hks_parser* parser,
+    int minimum_precedence,
+    henka_hks_value_type* out_type)
+{
+    henka_hks_value_type left_type;
+    henka_result result = henka_hks_parse_primary(parser, &left_type);
+    if (result != HENKA_SUCCESS)
+    {
+        return result;
+    }
+    for (;;)
+    {
+        const henka_hks_token* operator_token = henka_hks_current(parser);
+        const int precedence = operator_token == NULL
+            ? 0
+            : henka_hks_precedence(operator_token->kind);
+        henka_hks_value_type right_type;
+        if (precedence < minimum_precedence || precedence == 0)
+        {
+            break;
+        }
+        ++parser->index;
+        result = henka_hks_parse_binary(parser, precedence + 1, &right_type);
+        if (result != HENKA_SUCCESS)
+        {
+            return result;
+        }
+        if (!henka_hks_is_numeric(left_type) || !henka_hks_is_numeric(right_type) ||
+            left_type != right_type)
+        {
+            return henka_hks_fail(
+                parser->diagnostic,
+                HENKA_HKS_DIAGNOSTIC_TYPE_MISMATCH,
+                operator_token,
+                "arithmetic operands must have the same numeric type");
+        }
+        result = henka_hks_add_node(parser, HENKA_HKS_AST_BINARY, left_type);
+        if (result != HENKA_SUCCESS)
+        {
+            return result;
+        }
+    }
+    *out_type = left_type;
+    return HENKA_SUCCESS;
+}
+
+static henka_result henka_hks_parse_expression(
+    henka_hks_parser* parser,
+    henka_hks_value_type* out_type)
+{
+    return henka_hks_parse_binary(parser, 1, out_type);
+}
+
+static henka_result henka_hks_parse_declaration(
+    henka_hks_parser* parser,
+    bool public_binding)
+{
+    const henka_hks_token* first = henka_hks_current(parser);
+    const henka_hks_token* name_token;
+    henka_hks_value_type declared_type = HENKA_HKS_TYPE_UNKNOWN;
+    henka_hks_value_type expression_type;
+    bool inferred = false;
+    if (first == NULL)
+    {
+        return henka_hks_fail(
+            parser->diagnostic,
+            HENKA_HKS_DIAGNOSTIC_UNEXPECTED_TOKEN,
+            first,
+            "declaration is incomplete");
+    }
+    if (henka_hks_is_type_token(first->kind))
+    {
+        declared_type = henka_hks_type_from_token(first->kind);
+        ++parser->index;
+        name_token = henka_hks_current(parser);
+        if (name_token == NULL || name_token->kind != HENKA_HKS_TOKEN_IDENTIFIER)
+        {
+            return henka_hks_fail(
+                parser->diagnostic,
+                HENKA_HKS_DIAGNOSTIC_UNEXPECTED_TOKEN,
+                name_token,
+                "expected an identifier after an explicit type");
+        }
+        ++parser->index;
+        if (henka_hks_expect(parser, HENKA_HKS_TOKEN_ASSIGN, "explicit declarations require '='") != HENKA_SUCCESS)
+        {
+            return HENKA_ERROR_INVALID_ARGUMENT;
+        }
+    }
+    else if (first->kind == HENKA_HKS_TOKEN_IDENTIFIER)
+    {
+        name_token = first;
+        ++parser->index;
+        if (henka_hks_expect(parser, HENKA_HKS_TOKEN_INFER, "inferred declarations require ':='") != HENKA_SUCCESS)
+        {
+            return HENKA_ERROR_INVALID_ARGUMENT;
+        }
+        inferred = true;
+    }
+    else
+    {
+        return henka_hks_fail(
+            parser->diagnostic,
+            HENKA_HKS_DIAGNOSTIC_UNEXPECTED_TOKEN,
+            first,
+            "expected a typed declaration or ':=' inferred declaration");
+    }
+    if (henka_hks_parse_expression(parser, &expression_type) != HENKA_SUCCESS ||
+        (!inferred && !henka_hks_types_compatible(declared_type, expression_type)))
+    {
+        if (parser->diagnostic != NULL && parser->diagnostic->code != HENKA_HKS_DIAGNOSTIC_NONE)
+        {
+            return HENKA_ERROR_INVALID_ARGUMENT;
+        }
+        return henka_hks_fail(
+            parser->diagnostic,
+            HENKA_HKS_DIAGNOSTIC_TYPE_MISMATCH,
+            henka_hks_current(parser),
+            "initializer type does not match the declaration");
+    }
+    if (inferred)
+    {
+        declared_type = expression_type;
+    }
+    if (henka_hks_expect(parser, HENKA_HKS_TOKEN_SEMICOLON, "declarations require a semicolon") != HENKA_SUCCESS)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    return henka_hks_add_binding(parser, name_token, declared_type, inferred, public_binding);
+}
+
+static henka_result henka_hks_parse_statement(henka_hks_parser* parser)
+{
+    const henka_hks_token* token = henka_hks_current(parser);
+    henka_hks_value_type expression_type;
+    if (token == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    if (token->kind == HENKA_HKS_TOKEN_LBRACE)
+    {
+        const size_t previous_scope = parser->scope_mark;
+        parser->scope_mark = parser->binding_count;
+        ++parser->index;
+        while (henka_hks_current(parser) != NULL &&
+               henka_hks_current(parser)->kind != HENKA_HKS_TOKEN_RBRACE)
+        {
+            if (henka_hks_parse_statement(parser) != HENKA_SUCCESS)
+            {
+                return HENKA_ERROR_INVALID_ARGUMENT;
+            }
+        }
+        if (henka_hks_expect(parser, HENKA_HKS_TOKEN_RBRACE, "expected '}' to close block") != HENKA_SUCCESS)
+        {
+            return HENKA_ERROR_INVALID_ARGUMENT;
+        }
+        parser->binding_count = parser->scope_mark;
+        parser->scope_mark = previous_scope;
+        return henka_hks_add_node(parser, HENKA_HKS_AST_BLOCK, HENKA_HKS_TYPE_VOID);
+    }
+    if (token->kind == HENKA_HKS_TOKEN_KW_RETURN)
+    {
+        ++parser->index;
+        if (!henka_hks_accept(parser, HENKA_HKS_TOKEN_SEMICOLON))
+        {
+            if (henka_hks_parse_expression(parser, &expression_type) != HENKA_SUCCESS ||
+                henka_hks_expect(parser, HENKA_HKS_TOKEN_SEMICOLON, "return requires a semicolon") != HENKA_SUCCESS)
+            {
+                return HENKA_ERROR_INVALID_ARGUMENT;
+            }
+        }
+        return henka_hks_add_node(parser, HENKA_HKS_AST_RETURN, HENKA_HKS_TYPE_VOID);
+    }
+    if (henka_hks_is_type_token(token->kind))
+    {
+        return henka_hks_parse_declaration(parser, false);
+    }
+    if (token->kind == HENKA_HKS_TOKEN_IDENTIFIER)
+    {
+        const henka_hks_token* name_token = token;
+        ++parser->index;
+        if (henka_hks_accept(parser, HENKA_HKS_TOKEN_INFER))
+        {
+            --parser->index;
+            return henka_hks_parse_declaration(parser, false);
+        }
+        if (henka_hks_accept(parser, HENKA_HKS_TOKEN_ASSIGN))
+        {
+            const henka_hks_value_type target_type = henka_hks_lookup(parser, name_token);
+            henka_result result;
+            if (target_type == HENKA_HKS_TYPE_UNKNOWN)
+            {
+                return henka_hks_fail(
+                    parser->diagnostic,
+                    HENKA_HKS_DIAGNOSTIC_UNKNOWN_NAME,
+                    name_token,
+                    "unknown assignment target '%.*s'",
+                    (int)name_token->length,
+                    parser->source + name_token->offset);
+            }
+            result = henka_hks_parse_expression(parser, &expression_type);
+            if (result != HENKA_SUCCESS)
+            {
+                return result;
+            }
+            if (!henka_hks_types_compatible(target_type, expression_type))
+            {
+                return henka_hks_fail(
+                    parser->diagnostic,
+                    HENKA_HKS_DIAGNOSTIC_TYPE_MISMATCH,
+                    name_token,
+                    "assignment target and value types do not match");
+            }
+            if (henka_hks_expect(parser, HENKA_HKS_TOKEN_SEMICOLON, "assignments require a semicolon") != HENKA_SUCCESS)
+            {
+                return HENKA_ERROR_INVALID_ARGUMENT;
+            }
+            return henka_hks_add_node(parser, HENKA_HKS_AST_ASSIGNMENT, target_type);
+        }
+        return henka_hks_fail(
+            parser->diagnostic,
+            HENKA_HKS_DIAGNOSTIC_UNEXPECTED_TOKEN,
+            henka_hks_current(parser),
+            "expected ':=' or '=' after identifier");
+    }
+    if (token->kind == HENKA_HKS_TOKEN_KW_LET || token->kind == HENKA_HKS_TOKEN_KW_VAR)
+    {
+        return henka_hks_fail(
+            parser->diagnostic,
+            HENKA_HKS_DIAGNOSTIC_FORBIDDEN_KEYWORD,
+            token,
+            "'%.*s' is not part of HenkaScript; use an explicit type or ':='",
+            (int)token->length,
+            parser->source + token->offset);
+    }
+    return henka_hks_fail(
+        parser->diagnostic,
+        HENKA_HKS_DIAGNOSTIC_UNEXPECTED_TOKEN,
+        token,
+        "unexpected token in block");
+}
+
+static henka_result henka_hks_parse_callable(henka_hks_parser* parser)
+{
+    const henka_hks_token* kind_token = henka_hks_current(parser);
+    const bool behavior = kind_token->kind == HENKA_HKS_TOKEN_KW_BEHAVIOR;
+    const henka_hks_token* name_token;
+    henka_hks_callable_info callable;
+    const size_t previous_scope = parser->scope_mark;
+    ++parser->index;
+    name_token = henka_hks_current(parser);
+    if (name_token == NULL || name_token->kind != HENKA_HKS_TOKEN_IDENTIFIER ||
+        !henka_hks_copy_name(callable.name, sizeof(callable.name), parser->source, name_token))
+    {
+        return henka_hks_fail(
+            parser->diagnostic,
+            HENKA_HKS_DIAGNOSTIC_UNEXPECTED_TOKEN,
+            name_token,
+            "callable requires a bounded identifier");
+    }
+    {
+        size_t index;
+        for (index = 0U; index < parser->program->callable_count; ++index)
+        {
+            if (strcmp(parser->program->callables[index].name, callable.name) == 0)
+            {
+                return henka_hks_fail(
+                    parser->diagnostic,
+                    HENKA_HKS_DIAGNOSTIC_DUPLICATE_NAME,
+                    name_token,
+                    "duplicate callable '%s'",
+                    callable.name);
+            }
+        }
+    }
+    ++parser->index;
+    if (henka_hks_expect(parser, HENKA_HKS_TOKEN_LPAREN, "callable requires '('") != HENKA_SUCCESS ||
+        henka_hks_expect(parser, HENKA_HKS_TOKEN_RPAREN, "V1 callables do not accept parameters") != HENKA_SUCCESS ||
+        henka_hks_expect(parser, HENKA_HKS_TOKEN_LBRACE, "callable requires a brace-delimited body") != HENKA_SUCCESS)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    if (parser->program->callable_count >= HENKA_HKS_MAX_CALLABLES)
+    {
+        return henka_hks_fail(
+            parser->diagnostic,
+            HENKA_HKS_DIAGNOSTIC_LIMIT,
+            name_token,
+            "callable limit is exhausted");
+    }
+    callable.behavior = behavior;
+    parser->program->callables[parser->program->callable_count++] = callable;
+    if (henka_hks_add_node(parser, HENKA_HKS_AST_CALLABLE, HENKA_HKS_TYPE_VOID) != HENKA_SUCCESS)
+    {
+        return HENKA_ERROR_LIMIT;
+    }
+    parser->scope_mark = parser->binding_count;
+    while (henka_hks_current(parser) != NULL &&
+           henka_hks_current(parser)->kind != HENKA_HKS_TOKEN_RBRACE)
+    {
+        if (henka_hks_parse_statement(parser) != HENKA_SUCCESS)
+        {
+            return HENKA_ERROR_INVALID_ARGUMENT;
+        }
+    }
+    if (henka_hks_expect(parser, HENKA_HKS_TOKEN_RBRACE, "expected '}' to close callable") != HENKA_SUCCESS)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    parser->binding_count = parser->scope_mark;
+    parser->scope_mark = previous_scope;
+    return HENKA_SUCCESS;
+}
+
+static henka_result henka_hks_parse_program(henka_hks_parser* parser)
+{
+    while (henka_hks_current(parser) != NULL &&
+           henka_hks_current(parser)->kind != HENKA_HKS_TOKEN_EOF)
+    {
+        const henka_hks_token_kind kind = henka_hks_current(parser)->kind;
+        if (kind == HENKA_HKS_TOKEN_KW_FN || kind == HENKA_HKS_TOKEN_KW_BEHAVIOR)
+        {
+            if (henka_hks_parse_callable(parser) != HENKA_SUCCESS)
+            {
+                return HENKA_ERROR_INVALID_ARGUMENT;
+            }
+        }
+        else if (kind == HENKA_HKS_TOKEN_KW_LET || kind == HENKA_HKS_TOKEN_KW_VAR)
+        {
+            return henka_hks_fail(
+                parser->diagnostic,
+                HENKA_HKS_DIAGNOSTIC_FORBIDDEN_KEYWORD,
+                henka_hks_current(parser),
+                "use an explicit type or ':='; '%.*s' is not a declaration keyword",
+                (int)henka_hks_current(parser)->length,
+                parser->source + henka_hks_current(parser)->offset);
+        }
+        else if (henka_hks_parse_declaration(parser, true) != HENKA_SUCCESS)
+        {
+            return HENKA_ERROR_INVALID_ARGUMENT;
+        }
+    }
+    return HENKA_SUCCESS;
+}
+
+henka_result henka_hks_compile(
+    const char* source,
+    size_t source_size,
+    henka_hks_program** out_program,
+    henka_hks_diagnostic* out_diagnostic)
+{
+    henka_hks_token* tokens = NULL;
+    henka_hks_program* program = NULL;
+    size_t token_count = 0U;
+    henka_hks_parser parser;
+    henka_result result;
+    henka_hks_diagnostic_clear(out_diagnostic);
+    if (out_program == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    *out_program = NULL;
+    tokens = (henka_hks_token*)henka_calloc(HENKA_HKS_MAX_TOKENS, sizeof(*tokens));
+    program = (henka_hks_program*)henka_calloc(1U, sizeof(*program));
+    if (tokens == NULL || program == NULL)
+    {
+        henka_free(tokens);
+        henka_free(program);
+        return HENKA_ERROR_OUT_OF_MEMORY;
+    }
+    result = henka_hks_lex(
+        source,
+        source_size,
+        tokens,
+        HENKA_HKS_MAX_TOKENS,
+        &token_count,
+        out_diagnostic);
+    if (result != HENKA_SUCCESS)
+    {
+        henka_free(tokens);
+        henka_free(program);
+        return result;
+    }
+    parser = (henka_hks_parser){
+        source,
+        tokens,
+        token_count,
+        0U,
+        0U,
+        0U,
+        {{0}},
+        program,
+        out_diagnostic};
+    result = henka_hks_parse_program(&parser);
+    henka_free(tokens);
+    if (result != HENKA_SUCCESS)
+    {
+        henka_free(program);
+        return result;
+    }
+    *out_program = program;
+    return HENKA_SUCCESS;
+}
+
+void henka_hks_program_destroy(henka_hks_program* program)
+{
+    henka_free(program);
+}
+
+size_t henka_hks_program_get_binding_count(const henka_hks_program* program)
+{
+    return program == NULL ? 0U : program->binding_count;
+}
+
+henka_result henka_hks_program_get_binding(
+    const henka_hks_program* program,
+    size_t index,
+    henka_hks_binding_info* out_binding)
+{
+    if (program == NULL || out_binding == NULL || index >= program->binding_count)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    *out_binding = program->bindings[index];
+    return HENKA_SUCCESS;
+}
+
+size_t henka_hks_program_get_callable_count(const henka_hks_program* program)
+{
+    return program == NULL ? 0U : program->callable_count;
+}
+
+henka_result henka_hks_program_get_callable(
+    const henka_hks_program* program,
+    size_t index,
+    henka_hks_callable_info* out_callable)
+{
+    if (program == NULL || out_callable == NULL || index >= program->callable_count)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    *out_callable = program->callables[index];
+    return HENKA_SUCCESS;
+}
+
+size_t henka_hks_program_get_ast_node_count(const henka_hks_program* program)
+{
+    return program == NULL ? 0U : program->ast_node_count;
+}

@@ -95,8 +95,10 @@ roadmap is finished.
 
 ### Planned
 
-1. Hierarchy/scene-graph authoring, scripting and behavior authoring, and a
-   complete project serializer.
+1. Hierarchy/scene-graph authoring, executable scripting and behavior
+   authoring, and a complete project serializer. The bounded HenkaScript
+   front-end and language-neutral host schema are foundation work already
+   available; execution, lifecycle dispatch, and Lua remain open.
 2. Broader gameplay systems, input mapping, controllers, animation, and
    production game-debugging workflows.
 
