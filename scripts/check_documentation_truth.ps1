@@ -26,6 +26,9 @@ $readme = Get-RepositoryText "README.md"
 $capabilities = Get-RepositoryText "docs/current-capabilities.md"
 $roadmap = Get-RepositoryText "docs/roadmap.md"
 $scripting = Get-RepositoryText "docs/scripting-foundation.md"
+$externalProjects = Get-RepositoryText "docs/external-game-projects.md"
+$externalTemplate = Get-RepositoryText "templates/external_game_minimal/src/main.c"
+$sandboxMain = Get-RepositoryText "examples/sandbox3d/main.c"
 
 foreach ($stalePattern in @(
     "(?i)modeling follows the production-quality 2\.5D track",
@@ -84,6 +87,19 @@ if ($scripting -notmatch "(?i)Input\.IsActionDown.{0,180}fail-closed" -or
     $scripting -notmatch "(?i)transform_get_position\(entity\)" -or
     $scripting -notmatch "(?i)physics_apply_impulse\(entity, impulse\)") {
     Add-Finding "docs/scripting-foundation.md: current script host availability and HenkaScript typed gameplay surface must be explicit"
+}
+
+if ($externalProjects -notmatch '(?i)package-owned `\.hks` and `\.lua` assets' -or
+    $externalProjects -notmatch "(?i)HKS-to-Lua" -or
+    $externalTemplate -notmatch "assets/scripts/publisher\.hks" -or
+    $externalTemplate -notmatch "assets/scripts/subscriber\.lua" -or
+    $externalTemplate -notmatch "HENKA_SCRIPT_LANGUAGE_HENKASCRIPT" -or
+    $externalTemplate -notmatch "HENKA_SCRIPT_LANGUAGE_LUA") {
+    Add-Finding "external game template: public mixed-language package proof must remain source-visible"
+}
+
+if ($sandboxMain -match '"Hidden:"') {
+    Add-Finding "examples/sandbox3d/main.c: hidden-object rows must use the explicit Visibility: Hidden label"
 }
 
 $trackedMarkdown = @(& (Get-HenkaGitPath) -C $repoRoot ls-files --cached --others --exclude-standard "*.md")

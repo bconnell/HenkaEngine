@@ -58,6 +58,7 @@ function Invoke-ExternalNativeDirect {
 
 $repoRoot = Get-HenkaRepoRoot -ScriptDirectory $PSScriptRoot
 $templateRoot = Join-Path $repoRoot "templates\external_game_minimal"
+$templateScriptRoot = Join-Path $templateRoot "assets\scripts"
 $validationParent = Join-Path $repoRoot "build\tv"
 $validationRoot = Join-Path $validationParent "external_game_minimal"
 $validationSource = Join-Path $validationRoot "external_game_minimal_src"
@@ -132,6 +133,13 @@ $configureArguments += "-DCMAKE_SUPPRESS_REGENERATION=ON"
 
 Write-Host "cmake: $cmake"
 Write-Host "repo: $repoRoot"
+
+foreach ($scriptAsset in @("publisher.hks", "subscriber.lua")) {
+    $scriptAssetPath = Join-Path $templateScriptRoot $scriptAsset
+    if (-not (Test-Path -LiteralPath $scriptAssetPath -PathType Leaf)) {
+        throw "The external game template is missing its package-owned script asset: $scriptAsset"
+    }
+}
 
 function Remove-GeneratedValidationTree {
     param([Parameter(Mandatory = $true)][string]$Path)
