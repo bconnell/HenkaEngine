@@ -259,6 +259,27 @@ static void test_bounded_while_and_loop_control(void)
     henka_hks_program_destroy(program);
 }
 
+static void test_bounded_for_and_loop_control(void)
+{
+    henka_hks_program* program = compile_program(
+        "fn Count() { "
+        "i32 total = 0; "
+        "for (i32 i = 0; i < 5; i = i + 1) { "
+        "if (i == 2) { continue; } "
+        "total = total + i; "
+        "if (i == 4) { break; } "
+        "} "
+        "return total; "
+        "}");
+    henka_hks_value value;
+    henka_hks_execution_report report;
+
+    assert(henka_hks_execute(
+               program, 0U, 256U, &value, &report) == HENKA_HKS_EXECUTION_COMPLETED);
+    assert(value.type == HENKA_HKS_TYPE_I32 && value.as.i32 == 8);
+    henka_hks_program_destroy(program);
+}
+
 static void test_signal_context_access(void)
 {
     henka_hks_program* program = compile_program(
@@ -348,6 +369,7 @@ int main(void)
     test_bounded_vm_execution();
     test_bounded_conditionals_and_comparisons();
     test_bounded_while_and_loop_control();
+    test_bounded_for_and_loop_control();
     test_signal_context_access();
     test_state_host_contract();
     assert(henka_memory_get_allocation_count() == allocations_before);

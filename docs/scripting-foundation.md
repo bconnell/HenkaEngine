@@ -50,8 +50,8 @@ execution adapters for both languages.
   (`count := health + 1;`).
 - Brace-delimited `fn` and `behavior` callables, typed arithmetic and
   comparison expressions, assignments, returns, nested scopes, bounded
-  `if`/`else` and `while` control flow, `break`/`continue`, and source
-  locations in diagnostics.
+  `if`/`else`, `while`, and `for` control flow, `break`/`continue`, and
+  source locations in diagnostics.
 - HenkaScript contact/interaction handlers can read the bounded
   `event_other_entity()` and `event_type()` context values; those built-ins
   fail closed when executed outside a typed signal callback.
@@ -133,8 +133,8 @@ lifecycle and fixed-tick dispatch, with a bounded host mapping for the current
 Entity/Transform/Physics/Event slice and an explicit behavior-state sidecar
 save/load seam. Persistent state is not implicitly saved on Stop, is not part
 of the authored `.hscene` document, and is not an editor Inspector workflow.
-Full host API coverage, richer typed values and callable parameters, `for`
-loops, Inspector authoring, hot reload, debugger tooling,
+Full host API coverage, richer typed values and callable parameters, Inspector
+authoring, hot reload, debugger tooling,
 replay integration, and broader project scripting workflows remain future work.
 
 The current schema, HenkaScript compiler, and bounded VM are therefore engine
