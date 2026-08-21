@@ -21732,6 +21732,14 @@ details_group_authoring:
                         sandbox3d_set_status(state, true, "Selected authoring components could not be moved; source retained.");
                     }
                 }
+                if (henka_ui_button(
+                        state->ui,
+                        "authoring_priority_delete_faces",
+                        (henka_ui_rect){row.x + 188.0f, row.y, 102.0f, 24.0f},
+                        "Delete Faces"))
+                {
+                    (void)sandbox3d_apply_authoring_face_delete(state, entity, display_name);
+                }
                 printf(
                     "Native authoring face delete control: name=%s x=%.1f y=%.1f width=102.0 height=24.0.\n",
                     display_name,
@@ -23548,7 +23556,7 @@ details_group_authoring:
                     row.x + 188.0f,
                     row.y);
                 fflush(stdout);
-                if (henka_ui_button(
+                if (!move_controls_prioritized && henka_ui_button(
                         state->ui,
                         "authoring_delete_faces",
                         (henka_ui_rect){row.x + 188.0f, row.y, 102.0f, 24.0f},
