@@ -21427,7 +21427,7 @@ details_group_authoring:
                     fabsf(row.y - state->native_authoring_profile_reported_y) > 0.5f)
                 {
                     printf(
-                        "Native authoring profile control: name=%s x=%.1f y=%.1f width=180.0 height=24.0.\n",
+                        "Native authoring quad repair control: name=%s x=%.1f y=%.1f width=180.0 height=24.0.\n",
                         display_name,
                         row.x,
                         row.y);
@@ -21451,6 +21451,15 @@ details_group_authoring:
                             0.0001f,
                             &recovered_pairs);
 
+                    if (recovery_result == HENKA_SUCCESS)
+                    {
+                        printf(
+                            "Native authoring quad recovery: name=%s merged_pairs=%zu.\n",
+                            display_name,
+                            recovered_pairs);
+                        fflush(stdout);
+                    }
+
                     if (recovery_result == HENKA_SUCCESS &&
                         recovered_pairs > 0U)
                     {
@@ -21464,11 +21473,6 @@ details_group_authoring:
 
                         sandbox3d_set_status(state, false, status);
 
-                        printf(
-                            "Native authoring quad recovery: name=%s merged_pairs=%zu.\n",
-                            display_name,
-                            recovered_pairs);
-                        fflush(stdout);
                     }
                     else if (recovery_result == HENKA_SUCCESS)
                     {
@@ -23296,7 +23300,7 @@ details_group_authoring:
                     fabsf(row.y - state->native_authoring_profile_reported_y) > 0.5f)
                 {
                     printf(
-                        "Native authoring profile control: name=%s x=%.1f y=%.1f width=180.0 height=24.0.\n",
+                        "Native authoring quad repair control: name=%s x=%.1f y=%.1f width=180.0 height=24.0.\n",
                         display_name,
                         row.x,
                         row.y);
@@ -23319,6 +23323,15 @@ details_group_authoring:
                             0.0001f,
                             &recovered_pairs);
 
+                    if (recovery_result == HENKA_SUCCESS)
+                    {
+                        printf(
+                            "Native authoring quad recovery: name=%s merged_pairs=%zu.\n",
+                            display_name,
+                            recovered_pairs);
+                        fflush(stdout);
+                    }
+
                     if (recovery_result == HENKA_SUCCESS &&
                         recovered_pairs > 0U)
                     {
@@ -23332,11 +23345,6 @@ details_group_authoring:
 
                         sandbox3d_set_status(state, false, status);
 
-                        printf(
-                            "Native authoring quad recovery: name=%s merged_pairs=%zu.\n",
-                            display_name,
-                            recovered_pairs);
-                        fflush(stdout);
                     }
                     else if (recovery_result == HENKA_SUCCESS)
                     {

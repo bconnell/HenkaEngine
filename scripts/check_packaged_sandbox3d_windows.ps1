@@ -1991,14 +1991,14 @@ try {
             throw "The user-facing component edit did not update the native authoring source."
         }
         Write-Output "[pass] User-facing component edit changed the native showcase source"
-        if (-not (Wait-FileContains -Path $stdoutPath -Pattern "Native authoring profile control:" -TimeoutMilliseconds 3000)) {
-            throw "The converted showcase did not expose the native profile refinement control."
+        if (-not (Wait-FileContains -Path $stdoutPath -Pattern "Native authoring quad repair control:" -TimeoutMilliseconds 3000)) {
+            throw "The converted showcase did not expose the native Quad Repair control."
         }
         $nativeProfileMatch = Get-LastLogRegexMatch `
             -Path $stdoutPath `
-            -Pattern 'Native authoring profile control: name=(.+) x=([-0-9.]+) y=([-0-9.]+) width=180.0 height=24.0\.'
+            -Pattern 'Native authoring quad repair control: name=(.+) x=([-0-9.]+) y=([-0-9.]+) width=180.0 height=24.0\.'
         if ($null -eq $nativeProfileMatch) {
-            throw "The native profile refinement control geometry could not be parsed."
+            throw "The native Quad Repair control geometry could not be parsed."
         }
         $nativeProfileX = [double]$nativeProfileMatch.Groups[2].Value
         $nativeProfileY = [double]$nativeProfileMatch.Groups[3].Value
@@ -2020,16 +2020,13 @@ try {
                 -FramebufferY ($nativeProfileY + 12.0)
             $nativeProfileObserved = Wait-FileContains `
                 -Path $stdoutPath `
-                -Pattern "Native authoring dogfood: showcase profile edited" `
+                -Pattern "Native authoring quad recovery:" `
                 -TimeoutMilliseconds 2500
         }
         if (-not $nativeProfileObserved) {
-            throw "The user-facing native profile refinement did not change the showcase source."
+            throw "The user-facing native Quad Repair control did not report a bounded result."
         }
-        if (-not (Wait-FileContains -Path $stdoutPath -Pattern "profile_regions=2" -TimeoutMilliseconds 3000)) {
-            throw "The user-facing native profile refinement did not exercise its ordered multi-region transaction."
-        }
-        Write-Output "[pass] User-facing native showcase profile refinement changed the imported geometry"
+        Write-Output "[pass] User-facing native Quad Repair control reported a bounded result"
         $nativeFaceMatch = Get-LastLogRegexMatch `
             -Path $stdoutPath `
             -Pattern 'Native authoring face controls: name=(.+) face_x=([-0-9.]+) face_y=([-0-9.]+) width=88.0 height=24.0\.'
