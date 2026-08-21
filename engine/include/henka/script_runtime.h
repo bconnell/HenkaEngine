@@ -61,11 +61,12 @@ typedef struct henka_script_behavior_context
     float delta_seconds;
     uint64_t frame_index;
     uint32_t instruction_budget;
+    henka_script_host* host;
 } henka_script_behavior_context;
 
-/* The callback and user_data are borrowed. The owner must keep them valid
- * until the behavior is removed or rebound. Callbacks run synchronously on
- * the dispatching thread and must not re-enter or destroy the runtime. */
+/* The callback, user_data, and host are borrowed. The owner must keep them
+ * valid until the behavior is removed or rebound. Callbacks run synchronously
+ * on the dispatching thread and must not re-enter or destroy the runtime. */
 typedef henka_script_behavior_callback_result (*henka_script_behavior_callback)(
     const henka_script_behavior_context* context,
     void* user_data,
@@ -79,6 +80,7 @@ typedef struct henka_script_behavior_desc
     uint32_t instruction_budget;
     henka_script_behavior_callback callback;
     void* user_data;
+    henka_script_host* host;
 } henka_script_behavior_desc;
 
 typedef struct henka_script_behavior_snapshot

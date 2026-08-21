@@ -5,6 +5,8 @@
 
 #include "scene_document_bridge.h"
 
+#include <henka/script.h>
+
 typedef struct sandbox3d_play_session sandbox3d_play_session;
 
 typedef enum sandbox3d_play_session_state
@@ -29,6 +31,10 @@ void sandbox3d_play_session_destroy(sandbox3d_play_session* session);
 sandbox3d_play_session_state sandbox3d_play_session_get_state(
     const sandbox3d_play_session* session);
 henka_result sandbox3d_play_session_get_last_error(
+    const sandbox3d_play_session* session);
+/* Returns the borrowed Play-only Script Host. It is valid until the session
+ * stops and must not be destroyed, retained, or reconfigured by the caller. */
+henka_script_host* sandbox3d_play_session_get_script_host(
     const sandbox3d_play_session* session);
 henka_result sandbox3d_play_session_start(sandbox3d_play_session* session);
 henka_result sandbox3d_play_session_pause(sandbox3d_play_session* session);

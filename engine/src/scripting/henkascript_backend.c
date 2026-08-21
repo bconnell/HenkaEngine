@@ -79,6 +79,7 @@ henka_script_behavior_callback_result henka_hks_behavior_backend_callback(
     henka_hks_behavior_backend* backend = (henka_hks_behavior_backend*)user_data;
     henka_hks_value return_value;
     henka_hks_execution_report report;
+    henka_hks_execution_context execution_context;
     size_t callable_index;
     henka_hks_execution_result result;
     if (out_instructions_used != NULL)
@@ -96,16 +97,25 @@ henka_script_behavior_callback_result henka_hks_behavior_backend_callback(
     {
         return HENKA_SCRIPT_CALLBACK_COMPLETED;
     }
-    result = henka_hks_execute(
+    execution_context = (henka_hks_execution_context){
+        context->host,
+        context->entity_id,
+        context->frame_index};
+    result = henka_hks_execute_with_context(
         backend->program,
         callable_index,
         context->instruction_budget,
+        &execution_context,
         &return_value,
         &report);
     *out_instructions_used = report.instructions_executed;
     if (result == HENKA_HKS_EXECUTION_BUDGET_EXHAUSTED)
     {
         return HENKA_SCRIPT_CALLBACK_BUDGET_EXHAUSTED;
+    }
+    if (result == HENKA_HKS_EXECUTION_HOST_ERROR)
+    {
+        return HENKA_SCRIPT_CALLBACK_FAILED;
     }
     return result == HENKA_HKS_EXECUTION_COMPLETED
         ? HENKA_SCRIPT_CALLBACK_COMPLETED

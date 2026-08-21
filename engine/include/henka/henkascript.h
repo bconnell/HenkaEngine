@@ -35,6 +35,7 @@ typedef enum henka_hks_token_kind
     HENKA_HKS_TOKEN_KW_FN,
     HENKA_HKS_TOKEN_KW_BEHAVIOR,
     HENKA_HKS_TOKEN_KW_RETURN,
+    HENKA_HKS_TOKEN_KW_EMIT,
     HENKA_HKS_TOKEN_KW_TRUE,
     HENKA_HKS_TOKEN_KW_FALSE,
     HENKA_HKS_TOKEN_KW_LET,
@@ -133,7 +134,8 @@ typedef enum henka_hks_execution_result
     HENKA_HKS_EXECUTION_TYPE_ERROR,
     HENKA_HKS_EXECUTION_DIVIDE_BY_ZERO,
     HENKA_HKS_EXECUTION_UNSUPPORTED_VALUE,
-    HENKA_HKS_EXECUTION_BUDGET_EXHAUSTED
+    HENKA_HKS_EXECUTION_BUDGET_EXHAUSTED,
+    HENKA_HKS_EXECUTION_HOST_ERROR
 } henka_hks_execution_result;
 
 typedef struct henka_hks_execution_report
@@ -141,7 +143,15 @@ typedef struct henka_hks_execution_report
     henka_hks_execution_result result;
     uint32_t instructions_executed;
     size_t stack_depth;
+    henka_result host_error;
 } henka_hks_execution_report;
+
+typedef struct henka_hks_execution_context
+{
+    struct henka_script_host* host;
+    uint64_t entity_id;
+    uint64_t frame_index;
+} henka_hks_execution_context;
 
 henka_result henka_hks_lex(
     const char* source,
@@ -178,6 +188,14 @@ henka_hks_execution_result henka_hks_execute(
     const henka_hks_program* program,
     size_t callable_index,
     uint32_t instruction_budget,
+    henka_hks_value* out_return_value,
+    henka_hks_execution_report* out_report);
+
+henka_hks_execution_result henka_hks_execute_with_context(
+    const henka_hks_program* program,
+    size_t callable_index,
+    uint32_t instruction_budget,
+    const henka_hks_execution_context* context,
     henka_hks_value* out_return_value,
     henka_hks_execution_report* out_report);
 

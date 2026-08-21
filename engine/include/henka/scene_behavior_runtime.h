@@ -12,11 +12,18 @@ typedef struct henka_scene_behavior_runtime henka_scene_behavior_runtime;
 
 /* Builds an owned, bounded behavior runtime from persisted Scene Document
  * attachments. The document and project root are borrowed only during
- * creation; no renderer or authoring-state pointer is retained. */
+ * creation; no renderer or authoring-state pointer is retained. The optional
+ * host is borrowed until the returned runtime is destroyed. */
 henka_result henka_scene_behavior_runtime_create(
     const henka_scene_document* document,
     const char* project_root,
     uint32_t instruction_budget,
+    henka_scene_behavior_runtime** out_runtime);
+henka_result henka_scene_behavior_runtime_create_with_host(
+    const henka_scene_document* document,
+    const char* project_root,
+    uint32_t instruction_budget,
+    henka_script_host* host,
     henka_scene_behavior_runtime** out_runtime);
 void henka_scene_behavior_runtime_destroy(
     henka_scene_behavior_runtime* runtime);

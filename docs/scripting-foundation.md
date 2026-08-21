@@ -45,6 +45,17 @@ execution adapters for both languages.
   inside the project root, validates source size and language suffix, owns the
   selected backend, and returns a runtime descriptor for mixed-language
   lifecycle dispatch.
+- A typed, synchronous Script Host dispatcher with exact schema argument and
+  return validation, non-reentrant callback protection, and a bounded FIFO
+  event queue.
+- The isolated Sandbox Play session binds the host to persistent Scene
+  Document IDs for Entity validity, Transform position access, Physics impulse
+  application, and Events.Emit. Unsupported domains return safe deterministic
+  results rather than reaching through renderer or authoring pointers.
+- Lua behaviors can call the shared host surface through checked `Entity`,
+  `Transform`, `Input`, `Physics`, `Interaction`, and `Events` tables. The
+  HenkaScript V1 surface currently exposes the same event identity through the
+  bounded `emit(i32_event_id);` builtin.
 
 Backends should resolve IDs during load/compile and retain typed native
 bindings. Names are for diagnostics and tooling; they are not the runtime
@@ -58,10 +69,11 @@ the language-neutral behavior runtime. The bounded loader can create owned
 backend instances from persisted `.lua` and `.hks` attachments, and the Scene
 Document behavior runtime can assemble and dispatch them by persistent object
 identity. The Sandbox Play session now owns that runtime for its isolated
-scene lifecycle and fixed-tick dispatch; runtime-entity identity mapping and
-the host API remain unfinished. Persistent global state, Script Host API
-dispatch, Inspector authoring, hot reload, and mixed-language event routing
-remain subsequent implementation slices.
+scene lifecycle and fixed-tick dispatch, with a bounded host mapping for the
+current Entity/Transform/Physics/Event slice. Persistent global state, full
+host API coverage in both languages, Inspector authoring, hot reload, and
+mixed-language event delivery/routing remain subsequent implementation
+slices.
 
 The current schema, HenkaScript compiler, and bounded VM are therefore engine
 integration foundations, not a claim that complete executable scripting is

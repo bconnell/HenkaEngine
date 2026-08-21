@@ -3,7 +3,78 @@
 #include <string.h>
 
 #include <henka/memory.h>
+#include <henka/script.h>
 #include <henka/script_backends.h>
+
+typedef struct lua_host_fixture
+{
+    henka_script_host* host;
+    size_t calls;
+} lua_host_fixture;
+
+static henka_result lua_host_dispatch(
+    void* user_data,
+    uint32_t api_id,
+    const henka_script_api_value* arguments,
+    size_t argument_count,
+    henka_script_api_value* out_value)
+{
+    lua_host_fixture* fixture = (lua_host_fixture*)user_data;
+    if (fixture == NULL || arguments == NULL || out_value == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    ++fixture->calls;
+    switch (api_id)
+    {
+        case HENKA_SCRIPT_API_ENTITY_IS_VALID:
+            out_value->type = HENKA_SCRIPT_API_VALUE_BOOL;
+            out_value->as.boolean = arguments[0].as.entity == 9U;
+            return HENKA_SUCCESS;
+        case HENKA_SCRIPT_API_TRANSFORM_GET_POSITION:
+            out_value->type = HENKA_SCRIPT_API_VALUE_VEC3;
+            out_value->as.vec3 = (henka_vec3){1.0f, 2.0f, 3.0f};
+            return HENKA_SUCCESS;
+        case HENKA_SCRIPT_API_TRANSFORM_SET_POSITION:
+        case HENKA_SCRIPT_API_PHYSICS_APPLY_IMPULSE:
+        case HENKA_SCRIPT_API_INTERACTION_TRY:
+            out_value->type = HENKA_SCRIPT_API_VALUE_RESULT;
+            out_value->as.result = HENKA_SUCCESS;
+            return HENKA_SUCCESS;
+        case HENKA_SCRIPT_API_INPUT_IS_ACTION_DOWN:
+            out_value->type = HENKA_SCRIPT_API_VALUE_BOOL;
+            out_value->as.boolean = false;
+            return HENKA_SUCCESS;
+        case HENKA_SCRIPT_API_EVENTS_EMIT:
+            if (argument_count != 2U ||
+                henka_script_host_emit_event(
+                    fixture->host,
+                    arguments[0].as.event_id,
+                    arguments[1].as.entity,
+                    3U) != HENKA_SUCCESS)
+            {
+                return HENKA_ERROR_LIMIT;
+            }
+            out_value->type = HENKA_SCRIPT_API_VALUE_RESULT;
+            out_value->as.result = HENKA_SUCCESS;
+            return HENKA_SUCCESS;
+        default:
+            return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+}
+
+static void bind_all_script_apis(henka_script_host* host)
+{
+    const henka_script_api_function* functions = NULL;
+    size_t count = 0U;
+    size_t index;
+    assert(henka_script_api_schema_get(&functions, &count) == HENKA_SUCCESS);
+    for (index = 0U; index < count; ++index)
+    {
+        assert(henka_script_host_bind_api(
+                   host, functions[index].id, &(size_t){0U}) == HENKA_SUCCESS);
+    }
+}
 
 static void test_lua_lifecycle_adapter(void)
 {
@@ -99,12 +170,52 @@ static void test_lua_rejection_and_memory(void)
                &backend, &diagnostic) == HENKA_ERROR_INVALID_ARGUMENT);
 }
 
+static void test_lua_shared_host_api(void)
+{
+    static const char source[] =
+        "function OnUpdate() "
+        "if Entity.IsValid(9) then "
+        "local position = Transform.GetPosition(9); "
+        "Transform.SetPosition(9, {x = position.x + 1, y = position.y, z = position.z}); "
+        "Physics.ApplyImpulse(9, {x = 0, y = -1, z = 0}); "
+        "Input.IsActionDown(1); "
+        "Interaction.Try(9); "
+        "Events.Emit(7, 9) "
+        "end end";
+    henka_lua_behavior_backend* backend = NULL;
+    henka_lua_diagnostic diagnostic;
+    henka_script_host* host = NULL;
+    lua_host_fixture fixture;
+    henka_script_behavior_context context;
+    henka_script_event event;
+    uint32_t used = 0U;
+
+    memset(&diagnostic, 0, sizeof(diagnostic));
+    assert(henka_lua_behavior_backend_create(
+               source, strlen(source), &backend, &diagnostic) == HENKA_SUCCESS);
+    assert(henka_script_host_create(&host) == HENKA_SUCCESS);
+    bind_all_script_apis(host);
+    fixture = (lua_host_fixture){host, 0U};
+    assert(henka_script_host_set_dispatcher(host, lua_host_dispatch, &fixture) == HENKA_SUCCESS);
+    context = (henka_script_behavior_context){
+        1U, 9U, HENKA_SCRIPT_LANGUAGE_LUA, HENKA_SCRIPT_LIFECYCLE_UPDATE,
+        0.016f, 3U, 128U, host};
+    assert(henka_lua_behavior_backend_callback(
+               &context, backend, &used) == HENKA_SCRIPT_CALLBACK_COMPLETED);
+    assert(used > 0U && fixture.calls == 7U);
+    assert(henka_script_host_poll_event(host, &event) == HENKA_SUCCESS);
+    assert(event.event_id == 7U && event.source_entity == 9U && event.frame_index == 3U);
+    henka_script_host_destroy(host);
+    henka_lua_behavior_backend_destroy(backend);
+}
+
 int main(void)
 {
     const size_t allocations_before = henka_memory_get_allocation_count();
     test_lua_lifecycle_adapter();
     test_lua_budget_and_sandbox();
     test_lua_rejection_and_memory();
+    test_lua_shared_host_api();
     assert(henka_memory_get_allocation_count() == allocations_before);
     puts("henka_lua_backend_tests: PASS");
     return 0;

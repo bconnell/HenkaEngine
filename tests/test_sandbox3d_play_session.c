@@ -19,6 +19,10 @@ int main(void)
     henka_entity entity = HENKA_INVALID_ENTITY;
     henka_transform transform;
     henka_transform stepped_transform;
+    henka_script_host* script_host;
+    henka_script_api_value arguments[2];
+    henka_script_api_value output;
+    henka_script_event script_event;
     henka_result tick_result = HENKA_SUCCESS;
     size_t tick_count;
     int exit_code = 1;
@@ -62,8 +66,77 @@ int main(void)
         sandbox3d_play_session_get_state(session) != SANDBOX3D_PLAY_SESSION_STOPPED ||
         sandbox3d_play_session_start(session) != HENKA_SUCCESS ||
         sandbox3d_play_session_get_state(session) != SANDBOX3D_PLAY_SESSION_RUNNING ||
+        (script_host = sandbox3d_play_session_get_script_host(session)) == NULL)
+    {
+        goto cleanup;
+    }
+    arguments[0] = (henka_script_api_value){
+        HENKA_SCRIPT_API_VALUE_ENTITY, {.entity = object_id}};
+    arguments[1] = (henka_script_api_value){
+        HENKA_SCRIPT_API_VALUE_VEC3, {.vec3 = {1.0f, 4.0f, 0.0f}}};
+    if (henka_script_host_invoke(
+            script_host,
+            HENKA_SCRIPT_API_TRANSFORM_SET_POSITION,
+            arguments,
+            2U,
+            &output) != HENKA_SUCCESS ||
+        output.type != HENKA_SCRIPT_API_VALUE_RESULT ||
+        output.as.result != HENKA_SUCCESS ||
+        henka_script_host_invoke(
+            script_host,
+            HENKA_SCRIPT_API_TRANSFORM_GET_POSITION,
+            arguments,
+            1U,
+            &output) != HENKA_SUCCESS ||
+        output.type != HENKA_SCRIPT_API_VALUE_VEC3 ||
+        output.as.vec3.x != 1.0f || output.as.vec3.y != 4.0f ||
+        output.as.vec3.z != 0.0f)
+    {
+        goto cleanup;
+    }
+    if (henka_script_host_invoke(
+            script_host,
+            HENKA_SCRIPT_API_ENTITY_IS_VALID,
+            arguments,
+            1U,
+            &output) != HENKA_SUCCESS ||
+        output.type != HENKA_SCRIPT_API_VALUE_BOOL || !output.as.boolean)
+    {
+        goto cleanup;
+    }
+    arguments[1].as.vec3 = (henka_vec3){0.0f, -1.0f, 0.0f};
+    if (henka_script_host_invoke(
+            script_host,
+            HENKA_SCRIPT_API_PHYSICS_APPLY_IMPULSE,
+            arguments,
+            2U,
+            &output) != HENKA_SUCCESS ||
+        output.type != HENKA_SCRIPT_API_VALUE_RESULT ||
+        output.as.result != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    arguments[0].type = HENKA_SCRIPT_API_VALUE_EVENT_ID;
+    arguments[0].as.event_id = 7U;
+    arguments[1].type = HENKA_SCRIPT_API_VALUE_ENTITY;
+    arguments[1].as.entity = object_id;
+    if (henka_script_host_invoke(
+            script_host,
+            HENKA_SCRIPT_API_EVENTS_EMIT,
+            arguments,
+            2U,
+            &output) != HENKA_SUCCESS ||
+        output.type != HENKA_SCRIPT_API_VALUE_RESULT ||
+        output.as.result != HENKA_SUCCESS ||
+        henka_script_host_poll_event(
+            script_host, &script_event) != HENKA_SUCCESS ||
+        script_event.event_id != 7U || script_event.source_entity != object_id ||
+        henka_script_host_get_pending_event_count(script_host) != 0U)
+    {
+        goto cleanup;
+    }
+    if (sandbox3d_scene_document_bridge_apply_object(bridge, object_id) != HENKA_ERROR_INVALID_ARGUMENT ||
         !sandbox3d_scene_document_bridge_is_play_locked(bridge) ||
-        sandbox3d_scene_document_bridge_apply_object(bridge, object_id) != HENKA_ERROR_INVALID_ARGUMENT ||
         sandbox3d_play_session_pause(session) != HENKA_SUCCESS ||
         sandbox3d_play_session_step_fixed(session) != HENKA_SUCCESS ||
         sandbox3d_play_session_get_state(session) != SANDBOX3D_PLAY_SESSION_PAUSED ||

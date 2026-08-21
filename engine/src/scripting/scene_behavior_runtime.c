@@ -28,10 +28,11 @@ static void henka_scene_behavior_runtime_release(
     runtime->asset_count = 0U;
 }
 
-henka_result henka_scene_behavior_runtime_create(
+henka_result henka_scene_behavior_runtime_create_with_host(
     const henka_scene_document* document,
     const char* project_root,
     uint32_t instruction_budget,
+    henka_script_host* host,
     henka_scene_behavior_runtime** out_runtime)
 {
     henka_scene_behavior_runtime* runtime = NULL;
@@ -104,6 +105,7 @@ henka_result henka_scene_behavior_runtime_create(
                 }
                 goto fail;
             }
+            desc.host = host;
             result = henka_script_behavior_runtime_add(
                 runtime->behavior_runtime, &desc, &ignored_handle);
             if (result != HENKA_SUCCESS)
@@ -121,6 +123,20 @@ fail:
     henka_scene_behavior_runtime_release(runtime);
     henka_free(runtime);
     return result;
+}
+
+henka_result henka_scene_behavior_runtime_create(
+    const henka_scene_document* document,
+    const char* project_root,
+    uint32_t instruction_budget,
+    henka_scene_behavior_runtime** out_runtime)
+{
+    return henka_scene_behavior_runtime_create_with_host(
+        document,
+        project_root,
+        instruction_budget,
+        NULL,
+        out_runtime);
 }
 
 void henka_scene_behavior_runtime_destroy(

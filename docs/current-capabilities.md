@@ -105,14 +105,18 @@ turning the public README into an implementation ledger.
   foundation are available through [scripting-foundation.md](scripting-foundation.md),
    including bounded HenkaScript callable bytecode/VM execution, bounded Lua
    lifecycle execution, their lifecycle adapters, and a language-neutral
-   generation-checked behavior lifecycle runtime. Scene binding, Script Host
-   dispatch, persistent global state, and editor authoring remain unfinished.
+   generation-checked behavior lifecycle runtime. A typed, bounded Script Host
+   dispatcher and FIFO event queue are available, and the isolated Play path
+   maps persistent object IDs to runtime entities for the current Entity,
+   Transform, Physics, and Events slice. Persistent global state, complete
+   host API coverage, and editor authoring remain unfinished.
    Persisted `.lua` and `.hks` attachments can now be loaded through a bounded,
    confined-path asset loader and assembled into a mixed-language behavior
    runtime by persistent Scene Document object identity. The Sandbox Play
    session owns that runtime for isolated Create/Start/Update/Stop dispatch;
-   runtime-entity identity mapping, Script Host dispatch, persistent state, and
-   editor authoring remain unfinished.
+   runtime-entity identity mapping is available in the isolated Play path;
+   broader runtime/resource mapping, persistent state, and editor authoring
+   remain unfinished.
 
 ## Modeling / Content Authoring
 

@@ -5,11 +5,13 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include <henka/math.h>
 #include <henka/result.h>
 
 #define HENKA_SCRIPT_API_SCHEMA_VERSION UINT32_C(1)
 #define HENKA_SCRIPT_API_MAX_PARAMETERS 4U
 #define HENKA_SCRIPT_HOST_MAX_BINDINGS 128U
+#define HENKA_SCRIPT_HOST_MAX_EVENTS 256U
 
 typedef struct henka_script_host henka_script_host;
 
@@ -41,6 +43,35 @@ typedef enum henka_script_api_value_type
     HENKA_SCRIPT_API_VALUE_EVENT_ID,
     HENKA_SCRIPT_API_VALUE_RESULT
 } henka_script_api_value_type;
+
+typedef struct henka_script_api_value
+{
+    henka_script_api_value_type type;
+    union
+    {
+        bool boolean;
+        float f32;
+        henka_vec3 vec3;
+        uint64_t entity;
+        uint32_t action_id;
+        uint32_t event_id;
+        henka_result result;
+    } as;
+} henka_script_api_value;
+
+typedef henka_result (*henka_script_host_dispatch_callback)(
+    void* user_data,
+    uint32_t api_id,
+    const henka_script_api_value* arguments,
+    size_t argument_count,
+    henka_script_api_value* out_value);
+
+typedef struct henka_script_event
+{
+    uint32_t event_id;
+    uint64_t source_entity;
+    uint64_t frame_index;
+} henka_script_event;
 
 typedef enum henka_script_api_id
 {
@@ -97,5 +128,36 @@ henka_result henka_script_host_get_binding(
     const henka_script_api_function** out_function);
 
 size_t henka_script_host_get_binding_count(const henka_script_host* host);
+
+/* Installs a borrowed, synchronous dispatcher for typed host calls. The
+ * dispatcher and user_data must remain valid until replaced or destruction.
+ * Host calls are single-threaded and non-reentrant; a dispatcher may emit an
+ * event through the host's event queue without recursively invoking the host. */
+henka_result henka_script_host_set_dispatcher(
+    henka_script_host* host,
+    henka_script_host_dispatch_callback callback,
+    void* user_data);
+
+/* Validates the immutable schema and argument types before invoking the
+ * dispatcher. A void return may omit out_value; all other return values must
+ * be returned with the schema-declared type. Events.Emit has a bounded queue
+ * fallback when no dispatcher is installed. */
+henka_result henka_script_host_invoke(
+    henka_script_host* host,
+    uint32_t api_id,
+    const henka_script_api_value* arguments,
+    size_t argument_count,
+    henka_script_api_value* out_value);
+
+henka_result henka_script_host_emit_event(
+    henka_script_host* host,
+    uint32_t event_id,
+    uint64_t source_entity,
+    uint64_t frame_index);
+henka_result henka_script_host_poll_event(
+    henka_script_host* host,
+    henka_script_event* out_event);
+size_t henka_script_host_get_pending_event_count(
+    const henka_script_host* host);
 
 #endif

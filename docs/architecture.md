@@ -28,7 +28,11 @@ runtime descriptor for persisted `.lua` and `.hks` attachments; persistent
 behavior state remains outside that loader. The Scene Document behavior
 runtime assembles these owned assets by persistent object identity, and the
 Sandbox Play session owns its lifecycle dispatch for the isolated scene.
-Runtime-entity identity mapping, Script Host dispatch, and editor authoring
+The public Script Host adds exact typed, synchronous, non-reentrant dispatch
+and a bounded FIFO event queue. Play binds that host to its persistent-ID to
+runtime-entity and physics-body mapping; the current Lua surface and the
+HenkaScript `emit(i32_event_id);` builtin consume the same `Events.Emit` schema
+identity. Persistent state, broader host API coverage, and editor authoring
 remain later layers above this boundary.
 
 ### Network boundary

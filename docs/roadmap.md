@@ -97,9 +97,9 @@ roadmap is finished.
 
 1. Hierarchy/scene-graph authoring, project behavior authoring, and a complete
    project serializer. The bounded HenkaScript/Lua lifecycle adapters, callable
-   VM, and language-neutral host schema are foundation work already available;
-   host dispatch, Scene Document binding, and persistent behavior state remain
-   open.
+   VM, language-neutral host schema, typed host dispatch, and isolated Play
+   Scene Document binding are foundation work already available; persistent
+   behavior state and editor authoring remain open.
 2. Broader gameplay systems, input mapping, controllers, animation, and
    production game-debugging workflows.
 
@@ -263,17 +263,19 @@ and V1 `.hscene` foundations.
 
 ### Current Development
 
-1. Complete runtime-entity identity mapping around the Scene Document behavior
-   runtime while keeping isolated Play-scene dispatch unable to mutate
-   authoring state.
-2. Resolve Script Host API bindings at load time and define the bounded host
-   dispatch contract exposed to behaviors.
+1. Generalize runtime-entity and physics-body identity mapping around the Scene
+   Document behavior runtime while keeping isolated Play-scene dispatch unable
+   to mutate authoring state; the current bounded Play mapping is foundation
+   work already available.
+2. Extend the available typed, non-reentrant Script Host dispatcher beyond the
+   current Entity/Transform/Physics/Event slice and resolve the required API
+   bindings at load time.
 3. Add persistent behavior state, Inspector authoring, reload diagnostics, and
    transactional hot reload while retaining the previous valid instance on
    failure.
-4. Define mixed-language event routing and lifecycle ordering at the scene
-   boundary; the backend/runtime seam already supports mixed-language lifecycle
-   dispatch.
+4. Define mixed-language event delivery/routing and lifecycle ordering at the
+   scene boundary; the shared bounded event queue and Lua/HenkaScript event
+   emission seam are foundation work, while subscriber routing remains open.
 
 ### Future Work
 
@@ -343,4 +345,5 @@ Current limitations include:
 7. Asset loading is still limited.
 8. The 2D workflow and the sprite, layer, parallax, animation, and movement-constraint parts of 2.5D are not implemented yet; the first 2.5D camera presets are available.
 9. Physics v1 is intentionally limited to rigid bodies and primitive colliders; mesh collision, joints, character controllers, and advanced simulation remain future work.
-10. Audio, scripting, and release distribution are later milestones.
+10. Audio, end-user scripting workflows, and release distribution remain later
+    milestones beyond the current scripting foundation.

@@ -17,6 +17,7 @@ typedef struct henka_script_behavior_slot
     uint32_t failure_count;
     henka_script_behavior_callback callback;
     void* user_data;
+    henka_script_host* host;
 } henka_script_behavior_slot;
 
 struct henka_script_behavior_runtime
@@ -173,7 +174,8 @@ static henka_result henka_script_behavior_dispatch_one(
         event,
         delta_seconds,
         frame_index,
-        slot->instruction_budget};
+        slot->instruction_budget,
+        slot->host};
     previous_state = slot->state;
     runtime->dispatching = true;
     callback_result = slot->callback(&context, slot->user_data, &instructions_used);
@@ -284,6 +286,7 @@ henka_result henka_script_behavior_runtime_add(
     slot->failure_count = 0U;
     slot->callback = desc->callback;
     slot->user_data = desc->user_data;
+    slot->host = desc->host;
     ++runtime->count;
     *out_behavior = henka_script_behavior_make_handle(index, slot->generation);
     return HENKA_SUCCESS;

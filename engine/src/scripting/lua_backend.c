@@ -1,6 +1,7 @@
 #include <henka/script_backends.h>
 
 #include <stdbool.h>
+#include <math.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
@@ -28,6 +29,7 @@ struct henka_lua_behavior_backend
     uint32_t instructions_used;
     bool budget_exhausted;
     bool dispatching;
+    henka_script_host* active_host;
 };
 
 static size_t henka_lua_event_index(henka_script_lifecycle_event event)
@@ -153,6 +155,342 @@ static void henka_lua_clear_stack(lua_State* state)
     }
 }
 
+static henka_lua_behavior_backend* henka_lua_backend_from_upvalue(
+    lua_State* state)
+{
+    return state == NULL
+        ? NULL
+        : (henka_lua_behavior_backend*)lua_touserdata(
+            state, lua_upvalueindex(1));
+}
+
+static bool henka_lua_get_unsigned_integer(
+    lua_State* state,
+    int index,
+    uint64_t maximum,
+    uint64_t* out_value)
+{
+    lua_Integer value;
+    if (state == NULL || out_value == NULL || !lua_isinteger(state, index))
+    {
+        return false;
+    }
+    value = lua_tointeger(state, index);
+    if (value < 0 || (uint64_t)value > maximum)
+    {
+        return false;
+    }
+    *out_value = (uint64_t)value;
+    return true;
+}
+
+static bool henka_lua_get_vec3(
+    lua_State* state,
+    int index,
+    henka_vec3* out_value)
+{
+    int is_number;
+    lua_Number x;
+    lua_Number y;
+    lua_Number z;
+    if (state == NULL || out_value == NULL || !lua_istable(state, index))
+    {
+        return false;
+    }
+    lua_getfield(state, index, "x");
+    x = lua_tonumberx(state, -1, &is_number);
+    if (!is_number)
+    {
+        lua_pop(state, 1);
+        return false;
+    }
+    lua_getfield(state, index, "y");
+    y = lua_tonumberx(state, -1, &is_number);
+    if (!is_number)
+    {
+        lua_pop(state, 2);
+        return false;
+    }
+    lua_getfield(state, index, "z");
+    z = lua_tonumberx(state, -1, &is_number);
+    if (!is_number)
+    {
+        lua_pop(state, 3);
+        return false;
+    }
+    lua_pop(state, 3);
+    if (!isfinite((double)x) || !isfinite((double)y) || !isfinite((double)z) ||
+        !isfinite((double)(float)x) || !isfinite((double)(float)y) ||
+        !isfinite((double)(float)z))
+    {
+        return false;
+    }
+    *out_value = (henka_vec3){(float)x, (float)y, (float)z};
+    return true;
+}
+
+static henka_result henka_lua_invoke_host(
+    henka_lua_behavior_backend* backend,
+    uint32_t api_id,
+    const henka_script_api_value* arguments,
+    size_t argument_count,
+    henka_script_api_value* out_value)
+{
+    if (backend == NULL || backend->active_host == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    return henka_script_host_invoke(
+        backend->active_host,
+        api_id,
+        arguments,
+        argument_count,
+        out_value);
+}
+
+static int henka_lua_entity_is_valid(lua_State* state)
+{
+    henka_lua_behavior_backend* backend = henka_lua_backend_from_upvalue(state);
+    henka_script_api_value argument;
+    henka_script_api_value output;
+    uint64_t entity;
+    if (!henka_lua_get_unsigned_integer(state, 1, UINT64_MAX, &entity))
+    {
+        return luaL_error(state, "Entity.IsValid requires a non-negative integer entity ID");
+    }
+    argument = (henka_script_api_value){
+        HENKA_SCRIPT_API_VALUE_ENTITY, {.entity = entity}};
+    if (henka_lua_invoke_host(
+            backend,
+            HENKA_SCRIPT_API_ENTITY_IS_VALID,
+            &argument,
+            1U,
+            &output) != HENKA_SUCCESS ||
+        output.type != HENKA_SCRIPT_API_VALUE_BOOL)
+    {
+        return luaL_error(state, "Entity.IsValid is unavailable in this runtime");
+    }
+    lua_pushboolean(state, output.as.boolean);
+    return 1;
+}
+
+static int henka_lua_transform_get_position(lua_State* state)
+{
+    henka_lua_behavior_backend* backend = henka_lua_backend_from_upvalue(state);
+    henka_script_api_value argument;
+    henka_script_api_value output;
+    uint64_t entity;
+    if (!henka_lua_get_unsigned_integer(state, 1, UINT64_MAX, &entity))
+    {
+        return luaL_error(state, "Transform.GetPosition requires a non-negative integer entity ID");
+    }
+    argument = (henka_script_api_value){
+        HENKA_SCRIPT_API_VALUE_ENTITY, {.entity = entity}};
+    if (henka_lua_invoke_host(
+            backend,
+            HENKA_SCRIPT_API_TRANSFORM_GET_POSITION,
+            &argument,
+            1U,
+            &output) != HENKA_SUCCESS ||
+        output.type != HENKA_SCRIPT_API_VALUE_VEC3)
+    {
+        return luaL_error(state, "Transform.GetPosition failed");
+    }
+    lua_createtable(state, 0, 3);
+    lua_pushnumber(state, (lua_Number)output.as.vec3.x);
+    lua_setfield(state, -2, "x");
+    lua_pushnumber(state, (lua_Number)output.as.vec3.y);
+    lua_setfield(state, -2, "y");
+    lua_pushnumber(state, (lua_Number)output.as.vec3.z);
+    lua_setfield(state, -2, "z");
+    return 1;
+}
+
+static int henka_lua_transform_set_position(lua_State* state)
+{
+    henka_lua_behavior_backend* backend = henka_lua_backend_from_upvalue(state);
+    henka_script_api_value arguments[2];
+    henka_script_api_value output;
+    henka_vec3 position;
+    uint64_t entity;
+    if (!henka_lua_get_unsigned_integer(state, 1, UINT64_MAX, &entity) ||
+        !henka_lua_get_vec3(state, 2, &position))
+    {
+        return luaL_error(state, "Transform.SetPosition requires entity ID and {x,y,z}");
+    }
+    arguments[0] = (henka_script_api_value){
+        HENKA_SCRIPT_API_VALUE_ENTITY, {.entity = entity}};
+    arguments[1] = (henka_script_api_value){
+        HENKA_SCRIPT_API_VALUE_VEC3, {.vec3 = position}};
+    if (henka_lua_invoke_host(
+            backend,
+            HENKA_SCRIPT_API_TRANSFORM_SET_POSITION,
+            arguments,
+            2U,
+            &output) != HENKA_SUCCESS ||
+        output.type != HENKA_SCRIPT_API_VALUE_RESULT)
+    {
+        return luaL_error(state, "Transform.SetPosition failed");
+    }
+    lua_pushinteger(state, (lua_Integer)output.as.result);
+    return 1;
+}
+
+static int henka_lua_input_is_action_down(lua_State* state)
+{
+    henka_lua_behavior_backend* backend = henka_lua_backend_from_upvalue(state);
+    henka_script_api_value argument;
+    henka_script_api_value output;
+    uint64_t action_id;
+    if (!henka_lua_get_unsigned_integer(state, 1, UINT32_MAX, &action_id))
+    {
+        return luaL_error(state, "Input.IsActionDown requires a uint32 action ID");
+    }
+    argument = (henka_script_api_value){
+        HENKA_SCRIPT_API_VALUE_ACTION_ID, {.action_id = (uint32_t)action_id}};
+    if (henka_lua_invoke_host(
+            backend,
+            HENKA_SCRIPT_API_INPUT_IS_ACTION_DOWN,
+            &argument,
+            1U,
+            &output) != HENKA_SUCCESS ||
+        output.type != HENKA_SCRIPT_API_VALUE_BOOL)
+    {
+        return luaL_error(state, "Input.IsActionDown is unavailable in this runtime");
+    }
+    lua_pushboolean(state, output.as.boolean);
+    return 1;
+}
+
+static int henka_lua_physics_apply_impulse(lua_State* state)
+{
+    henka_lua_behavior_backend* backend = henka_lua_backend_from_upvalue(state);
+    henka_script_api_value arguments[2];
+    henka_script_api_value output;
+    henka_vec3 impulse;
+    uint64_t entity;
+    if (!henka_lua_get_unsigned_integer(state, 1, UINT64_MAX, &entity) ||
+        !henka_lua_get_vec3(state, 2, &impulse))
+    {
+        return luaL_error(state, "Physics.ApplyImpulse requires entity ID and {x,y,z}");
+    }
+    arguments[0] = (henka_script_api_value){
+        HENKA_SCRIPT_API_VALUE_ENTITY, {.entity = entity}};
+    arguments[1] = (henka_script_api_value){
+        HENKA_SCRIPT_API_VALUE_VEC3, {.vec3 = impulse}};
+    if (henka_lua_invoke_host(
+            backend,
+            HENKA_SCRIPT_API_PHYSICS_APPLY_IMPULSE,
+            arguments,
+            2U,
+            &output) != HENKA_SUCCESS ||
+        output.type != HENKA_SCRIPT_API_VALUE_RESULT)
+    {
+        return luaL_error(state, "Physics.ApplyImpulse failed");
+    }
+    lua_pushinteger(state, (lua_Integer)output.as.result);
+    return 1;
+}
+
+static int henka_lua_interaction_try(lua_State* state)
+{
+    henka_lua_behavior_backend* backend = henka_lua_backend_from_upvalue(state);
+    henka_script_api_value argument;
+    henka_script_api_value output;
+    uint64_t entity;
+    if (!henka_lua_get_unsigned_integer(state, 1, UINT64_MAX, &entity))
+    {
+        return luaL_error(state, "Interaction.Try requires a non-negative integer entity ID");
+    }
+    argument = (henka_script_api_value){
+        HENKA_SCRIPT_API_VALUE_ENTITY, {.entity = entity}};
+    if (henka_lua_invoke_host(
+            backend,
+            HENKA_SCRIPT_API_INTERACTION_TRY,
+            &argument,
+            1U,
+            &output) != HENKA_SUCCESS ||
+        output.type != HENKA_SCRIPT_API_VALUE_RESULT)
+    {
+        return luaL_error(state, "Interaction.Try failed");
+    }
+    lua_pushinteger(state, (lua_Integer)output.as.result);
+    return 1;
+}
+
+static int henka_lua_events_emit(lua_State* state)
+{
+    henka_lua_behavior_backend* backend = henka_lua_backend_from_upvalue(state);
+    henka_script_api_value arguments[2];
+    henka_script_api_value output;
+    uint64_t event_id;
+    uint64_t entity;
+    if (!henka_lua_get_unsigned_integer(state, 1, UINT32_MAX, &event_id) ||
+        !henka_lua_get_unsigned_integer(state, 2, UINT64_MAX, &entity))
+    {
+        return luaL_error(state, "Events.Emit requires event ID and entity ID");
+    }
+    arguments[0] = (henka_script_api_value){
+        HENKA_SCRIPT_API_VALUE_EVENT_ID, {.event_id = (uint32_t)event_id}};
+    arguments[1] = (henka_script_api_value){
+        HENKA_SCRIPT_API_VALUE_ENTITY, {.entity = entity}};
+    if (henka_lua_invoke_host(
+            backend,
+            HENKA_SCRIPT_API_EVENTS_EMIT,
+            arguments,
+            2U,
+            &output) != HENKA_SUCCESS ||
+        output.type != HENKA_SCRIPT_API_VALUE_RESULT)
+    {
+        return luaL_error(state, "Events.Emit failed");
+    }
+    lua_pushinteger(state, (lua_Integer)output.as.result);
+    return 1;
+}
+
+static void henka_lua_register_api_function(
+    lua_State* state,
+    henka_lua_behavior_backend* backend,
+    const char* table_name,
+    const char* function_name,
+    lua_CFunction function)
+{
+    lua_getglobal(state, table_name);
+    if (!lua_istable(state, -1))
+    {
+        lua_pop(state, 1);
+        lua_newtable(state);
+        lua_pushvalue(state, -1);
+        lua_setglobal(state, table_name);
+    }
+    lua_pushlightuserdata(state, backend);
+    lua_pushcclosure(state, function, 1);
+    lua_setfield(state, -2, function_name);
+    lua_pop(state, 1);
+}
+
+static void henka_lua_register_api(henka_lua_behavior_backend* backend)
+{
+    if (backend == NULL || backend->state == NULL)
+    {
+        return;
+    }
+    henka_lua_register_api_function(
+        backend->state, backend, "Entity", "IsValid", henka_lua_entity_is_valid);
+    henka_lua_register_api_function(
+        backend->state, backend, "Transform", "GetPosition", henka_lua_transform_get_position);
+    henka_lua_register_api_function(
+        backend->state, backend, "Transform", "SetPosition", henka_lua_transform_set_position);
+    henka_lua_register_api_function(
+        backend->state, backend, "Input", "IsActionDown", henka_lua_input_is_action_down);
+    henka_lua_register_api_function(
+        backend->state, backend, "Physics", "ApplyImpulse", henka_lua_physics_apply_impulse);
+    henka_lua_register_api_function(
+        backend->state, backend, "Interaction", "Try", henka_lua_interaction_try);
+    henka_lua_register_api_function(
+        backend->state, backend, "Events", "Emit", henka_lua_events_emit);
+}
+
 henka_result henka_lua_behavior_backend_create(
     const char* source,
     size_t source_size,
@@ -194,6 +532,7 @@ henka_result henka_lua_behavior_backend_create(
     }
     *(henka_lua_behavior_backend**)lua_getextraspace(backend->state) = backend;
     henka_lua_open_safe_libraries(backend->state);
+    henka_lua_register_api(backend);
     backend->instruction_budget = HENKA_LUA_INITIALIZATION_BUDGET;
     backend->instructions_used = 0U;
     backend->budget_exhausted = false;
@@ -301,6 +640,8 @@ henka_script_behavior_callback_result henka_lua_behavior_backend_callback(
         return HENKA_SCRIPT_CALLBACK_COMPLETED;
     }
     backend->dispatching = true;
+    henka_lua_register_api(backend);
+    backend->active_host = context->host;
     backend->instruction_budget = context->instruction_budget;
     backend->instructions_used = 0U;
     backend->budget_exhausted = false;
@@ -308,6 +649,7 @@ henka_script_behavior_callback_result henka_lua_behavior_backend_callback(
     lua_rawgeti(backend->state, LUA_REGISTRYINDEX, callable);
     status = lua_pcall(backend->state, 0, 0, 0);
     lua_sethook(backend->state, NULL, 0, 0);
+    backend->active_host = NULL;
     backend->dispatching = false;
     *out_instructions_used = backend->instructions_used;
     henka_lua_clear_stack(backend->state);

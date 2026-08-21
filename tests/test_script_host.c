@@ -3,6 +3,137 @@
 #include <henka/memory.h>
 #include <henka/script.h>
 
+typedef struct script_host_dispatch_fixture
+{
+    henka_script_host* host;
+    size_t calls;
+    henka_result nested_result;
+} script_host_dispatch_fixture;
+
+static henka_result dispatch_transform_set_position(
+    void* user_data,
+    uint32_t api_id,
+    const henka_script_api_value* arguments,
+    size_t argument_count,
+    henka_script_api_value* out_value)
+{
+    script_host_dispatch_fixture* fixture =
+        (script_host_dispatch_fixture*)user_data;
+    if (fixture == NULL || arguments == NULL || out_value == NULL ||
+        api_id != HENKA_SCRIPT_API_TRANSFORM_SET_POSITION ||
+        argument_count != 2U ||
+        arguments[0].type != HENKA_SCRIPT_API_VALUE_ENTITY ||
+        arguments[1].type != HENKA_SCRIPT_API_VALUE_VEC3)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    ++fixture->calls;
+    fixture->nested_result = henka_script_host_invoke(
+        fixture->host,
+        api_id,
+        arguments,
+        argument_count,
+        out_value);
+    out_value->type = HENKA_SCRIPT_API_VALUE_RESULT;
+    out_value->as.result = HENKA_SUCCESS;
+    return HENKA_SUCCESS;
+}
+
+static int test_typed_dispatch_and_non_reentrancy(henka_script_host* host)
+{
+    script_host_dispatch_fixture fixture = {host, 0U, HENKA_SUCCESS};
+    henka_script_api_value arguments[2] =
+    {
+        {HENKA_SCRIPT_API_VALUE_ENTITY, {.entity = 9U}},
+        {HENKA_SCRIPT_API_VALUE_VEC3, {.vec3 = {1.0f, 2.0f, 3.0f}}}
+    };
+    henka_script_api_value output;
+    if (henka_script_host_bind_api(
+            host, HENKA_SCRIPT_API_TRANSFORM_SET_POSITION, &(size_t){0U}) != HENKA_SUCCESS ||
+        henka_script_host_set_dispatcher(
+            host, dispatch_transform_set_position, &fixture) != HENKA_SUCCESS ||
+        henka_script_host_invoke(
+            host,
+            HENKA_SCRIPT_API_TRANSFORM_SET_POSITION,
+            arguments,
+            1U,
+            &output) == HENKA_SUCCESS ||
+        henka_script_host_invoke(
+            host,
+            HENKA_SCRIPT_API_TRANSFORM_SET_POSITION,
+            arguments,
+            2U,
+            &output) != HENKA_SUCCESS ||
+        fixture.calls != 1U || fixture.nested_result != HENKA_ERROR_INVALID_ARGUMENT ||
+        output.type != HENKA_SCRIPT_API_VALUE_RESULT ||
+        output.as.result != HENKA_SUCCESS)
+    {
+        return 1;
+    }
+    arguments[0].type = HENKA_SCRIPT_API_VALUE_BOOL;
+    if (henka_script_host_invoke(
+            host,
+            HENKA_SCRIPT_API_TRANSFORM_SET_POSITION,
+            arguments,
+            2U,
+            &output) == HENKA_SUCCESS)
+    {
+        return 1;
+    }
+    return 0;
+}
+
+static int test_bounded_event_queue(void)
+{
+    henka_script_host* host = NULL;
+    henka_script_api_value arguments[2] =
+    {
+        {HENKA_SCRIPT_API_VALUE_EVENT_ID, {.event_id = 77U}},
+        {HENKA_SCRIPT_API_VALUE_ENTITY, {.entity = 42U}}
+    };
+    henka_script_api_value output;
+    henka_script_event event;
+    size_t index;
+    if (henka_script_host_create(&host) != HENKA_SUCCESS ||
+        henka_script_host_bind_api(host, HENKA_SCRIPT_API_EVENTS_EMIT, &(size_t){0U}) != HENKA_SUCCESS ||
+        henka_script_host_invoke(
+            host, HENKA_SCRIPT_API_EVENTS_EMIT, arguments, 2U, &output) != HENKA_SUCCESS ||
+        output.type != HENKA_SCRIPT_API_VALUE_RESULT ||
+        output.as.result != HENKA_SUCCESS ||
+        henka_script_host_get_pending_event_count(host) != 1U ||
+        henka_script_host_poll_event(host, &event) != HENKA_SUCCESS ||
+        event.event_id != 77U || event.source_entity != 42U ||
+        henka_script_host_poll_event(host, &event) == HENKA_SUCCESS)
+    {
+        henka_script_host_destroy(host);
+        return 1;
+    }
+    for (index = 0U; index < HENKA_SCRIPT_HOST_MAX_EVENTS; ++index)
+    {
+        if (henka_script_host_emit_event(host, (uint32_t)(index + 1U), 0U, index) != HENKA_SUCCESS)
+        {
+            henka_script_host_destroy(host);
+            return 1;
+        }
+    }
+    if (henka_script_host_emit_event(host, 999U, 0U, 0U) != HENKA_ERROR_LIMIT)
+    {
+        henka_script_host_destroy(host);
+        return 1;
+    }
+    for (index = 0U; index < HENKA_SCRIPT_HOST_MAX_EVENTS; ++index)
+    {
+        if (henka_script_host_poll_event(host, &event) != HENKA_SUCCESS ||
+            event.event_id != (uint32_t)(index + 1U) || event.frame_index != index)
+        {
+            henka_script_host_destroy(host);
+            return 1;
+        }
+    }
+    henka_script_host_destroy(host);
+    return 0;
+}
+
 int main(void)
 {
     const henka_script_api_function* functions = NULL;
@@ -82,6 +213,11 @@ int main(void)
         function == NULL || function->id != HENKA_SCRIPT_API_TRANSFORM_SET_POSITION ||
         henka_script_host_get_binding_count(host) != 1U ||
         henka_script_host_bind_api(host, UINT32_C(0xFFFF), &binding_index) == HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    if (test_typed_dispatch_and_non_reentrancy(host) != 0 ||
+        test_bounded_event_queue() != 0)
     {
         goto cleanup;
     }

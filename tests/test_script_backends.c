@@ -3,7 +3,31 @@
 #include <string.h>
 
 #include <henka/memory.h>
+#include <henka/script.h>
 #include <henka/script_backends.h>
+
+static henka_result hks_event_dispatch(
+    void* user_data,
+    uint32_t api_id,
+    const henka_script_api_value* arguments,
+    size_t argument_count,
+    henka_script_api_value* out_value)
+{
+    henka_script_host* host = (henka_script_host*)user_data;
+    if (host == NULL || api_id != HENKA_SCRIPT_API_EVENTS_EMIT ||
+        arguments == NULL || argument_count != 2U || out_value == NULL ||
+        henka_script_host_emit_event(
+            host,
+            arguments[0].as.event_id,
+            arguments[1].as.entity,
+            12U) != HENKA_SUCCESS)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    out_value->type = HENKA_SCRIPT_API_VALUE_RESULT;
+    out_value->as.result = HENKA_SUCCESS;
+    return HENKA_SUCCESS;
+}
 
 static void test_henkascript_lifecycle_adapter(void)
 {
@@ -81,12 +105,42 @@ static void test_backend_rejection_and_memory(void)
     assert(backend == NULL);
 }
 
+static void test_henkascript_shared_event_host(void)
+{
+    static const char source[] = "fn OnUpdate() { emit(7); }";
+    henka_hks_behavior_backend* backend = NULL;
+    henka_hks_diagnostic diagnostic;
+    henka_script_host* host = NULL;
+    henka_script_behavior_context context;
+    henka_script_event event;
+    uint32_t used = 0U;
+
+    memset(&diagnostic, 0, sizeof(diagnostic));
+    assert(henka_hks_behavior_backend_create(
+               source, strlen(source), &backend, &diagnostic) == HENKA_SUCCESS);
+    assert(henka_script_host_create(&host) == HENKA_SUCCESS);
+    assert(henka_script_host_bind_api(
+               host, HENKA_SCRIPT_API_EVENTS_EMIT, &(size_t){0U}) == HENKA_SUCCESS);
+    assert(henka_script_host_set_dispatcher(host, hks_event_dispatch, host) == HENKA_SUCCESS);
+    context = (henka_script_behavior_context){
+        1U, 42U, HENKA_SCRIPT_LANGUAGE_HENKASCRIPT, HENKA_SCRIPT_LIFECYCLE_UPDATE,
+        0.016f, 12U, 64U, host};
+    assert(henka_hks_behavior_backend_callback(
+               &context, backend, &used) == HENKA_SCRIPT_CALLBACK_COMPLETED);
+    assert(used > 0U);
+    assert(henka_script_host_poll_event(host, &event) == HENKA_SUCCESS);
+    assert(event.event_id == 7U && event.source_entity == 42U && event.frame_index == 12U);
+    henka_script_host_destroy(host);
+    henka_hks_behavior_backend_destroy(backend);
+}
+
 int main(void)
 {
     const size_t allocations_before = henka_memory_get_allocation_count();
     test_henkascript_lifecycle_adapter();
     test_henkascript_adapter_budget_and_noop();
     test_backend_rejection_and_memory();
+    test_henkascript_shared_event_host();
     assert(henka_memory_get_allocation_count() == allocations_before);
     puts("henka_script_backend_tests: PASS");
     return 0;
