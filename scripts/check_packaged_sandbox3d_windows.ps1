@@ -2101,21 +2101,21 @@ try {
         }
         $nativeEdgeLoopMatch = Get-LastLogRegexMatch `
             -Path $stdoutPath `
-            -Pattern 'Native authoring edge loop control: name=(.+) x=([-0-9.]+) y=([-0-9.]+) width=88.0 height=24.0\.'
+            -Pattern 'Native authoring edge topology controls: name=(.+) loop_x=([-0-9.]+) ring_x=([-0-9.]+) y=([-0-9.]+) width=88.0 height=24.0\.'
         if ($null -eq $nativeEdgeLoopMatch -and
-            -not (Wait-FileContains -Path $stdoutPath -Pattern "Native authoring edge loop control:" -TimeoutMilliseconds 2500)) {
+            -not (Wait-FileContains -Path $stdoutPath -Pattern "Native authoring edge topology controls:" -TimeoutMilliseconds 2500)) {
             throw "The converted showcase did not expose the native Edge Loop control."
         }
         if ($null -eq $nativeEdgeLoopMatch) {
             $nativeEdgeLoopMatch = Get-LastLogRegexMatch `
                 -Path $stdoutPath `
-                -Pattern 'Native authoring edge loop control: name=(.+) x=([-0-9.]+) y=([-0-9.]+) width=88.0 height=24.0\.'
+                -Pattern 'Native authoring edge topology controls: name=(.+) loop_x=([-0-9.]+) ring_x=([-0-9.]+) y=([-0-9.]+) width=88.0 height=24.0\.'
         }
         if ($null -eq $nativeEdgeLoopMatch) {
             throw "The native Edge Loop control geometry could not be parsed."
         }
         $nativeEdgeLoopX = [double]$nativeEdgeLoopMatch.Groups[2].Value
-        $nativeEdgeLoopY = [double]$nativeEdgeLoopMatch.Groups[3].Value
+        $nativeEdgeLoopY = [double]$nativeEdgeLoopMatch.Groups[4].Value
         Assert-FramebufferRect `
             -Name "Native authoring Edge Loop control" `
             -FramebufferWidth $framebufferWidth `
