@@ -15,6 +15,7 @@ $ctest = Get-HenkaCTestPath -CMakePath $cmake
 $localSdlSource = Join-Path $buildRoot "_deps\sdl3-src"
 $localKtxSource = Join-Path $buildRoot "_deps\ktxsoftware-src"
 $localEnetSource = Join-Path $buildRoot "_deps\enet-src"
+$localLuaSource = Join-Path $buildRoot "_deps\lua-src"
 $offlineProviderCount = 0
 $configureArguments = @("-S", $repoRoot, "-B", $buildRoot)
 $provenanceScript = Join-Path $PSScriptRoot "write_build_provenance.ps1"
@@ -46,7 +47,16 @@ if (Test-Path -LiteralPath (Join-Path $localEnetSource "CMakeLists.txt")) {
     $configureArguments += "-DFETCHCONTENT_FULLY_DISCONNECTED=OFF"
     Write-Host "ENet provider: FetchContent network fallback"
 }
-if ($offlineProviderCount -eq 3) {
+if (Test-Path -LiteralPath (Join-Path $localLuaSource "lua.h")) {
+    $configureArguments += "-DFETCHCONTENT_SOURCE_DIR_LUA=$localLuaSource"
+    $offlineProviderCount += 1
+    Write-Host "Lua provider: repository-local populated source"
+} else {
+    $configureArguments += "-DFETCHCONTENT_SOURCE_DIR_LUA="
+    $configureArguments += "-DFETCHCONTENT_FULLY_DISCONNECTED=OFF"
+    Write-Host "Lua provider: FetchContent network fallback"
+}
+if ($offlineProviderCount -eq 4) {
     $configureArguments += "-DFETCHCONTENT_FULLY_DISCONNECTED=ON"
     Write-Host "FetchContent mode: fully disconnected because all repository-local providers are present"
 } else {

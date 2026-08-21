@@ -19,12 +19,12 @@ The shared runtime owns the public, language-neutral scripting schema in
 so Lua and HenkaScript backends can resolve bindings once and retain
 language-specific native thunks. The HenkaScript front-end additionally
 lexes, parses, and type-checks bounded source through `<henka/henkascript.h>`.
-The current foundation executes bounded HenkaScript callable bytecode and
-provides a language-neutral generation-checked behavior lifecycle runtime. A
-HenkaScript adapter maps `OnCreate`, `OnStart`, `OnUpdate`, and `OnStop` into
-that runtime; it does not own source assets or persistent behavior state.
-Script Host dispatch, scene binding, Lua execution, and editor authoring remain
-later layers above this boundary.
+The current foundation executes bounded HenkaScript bytecode and bounded Lua
+callables through adapters that map `OnCreate`, `OnStart`, `OnUpdate`, and
+`OnStop` into the language-neutral generation-checked behavior runtime. These
+adapters do not own source assets or persistent behavior state. Script Host
+dispatch, scene binding, and editor authoring remain later layers above this
+boundary.
 
 ### Network boundary
 

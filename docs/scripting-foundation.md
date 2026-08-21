@@ -2,8 +2,8 @@
 
 Henka currently exposes the first shared scripting seam through the public
 `<henka/script.h>` API. This slice defines the language-neutral gameplay API
-schema used by the Lua and HenkaScript backends, and adds the bounded
-HenkaScript V1 front-end.
+schema used by the Lua and HenkaScript backends, and provides bounded V1
+execution adapters for both languages.
 
 ## What is available
 
@@ -29,6 +29,9 @@ HenkaScript V1 front-end.
   `OnUpdate`, and `OnStop` callable names to the shared lifecycle runtime;
   absent lifecycle callables are deterministic no-ops and the runtime budget
   is propagated to the VM.
+- A Lua 5.4.8 behavior adapter with the same lifecycle names and no-op rules,
+  a restricted standard-library surface, a bounded allocator, and an
+  instruction hook that fails closed when the per-callback budget is spent.
 - Explicit typed declarations (`i32 health = 3;`) and inferred declarations
   (`count := health + 1;`).
 - Brace-delimited `fn` and `behavior` callables, arithmetic expressions,
@@ -46,12 +49,11 @@ dispatch mechanism.
 ## What is not available yet
 
 The HenkaScript compiler and VM currently execute bounded callable-local
-bytecode, and its lifecycle adapter can drive that bytecode through the
-language-neutral behavior runtime. The runtime is not yet connected to Scene
-Document objects or a project asset loader. Persistent global state, Script
-Host API dispatch, `.lua`/`.hks` asset loading, Lua compilation/VM support,
-Inspector authoring, hot reload, and mixed-language events remain subsequent
-implementation slices.
+bytecode, and both language adapters can drive their bounded execution through
+the language-neutral behavior runtime. The runtime is not yet connected to
+Scene Document objects or a project asset loader. Persistent global state,
+Script Host API dispatch, `.lua`/`.hks` asset loading, Inspector authoring, hot
+reload, and mixed-language events remain subsequent implementation slices.
 
 The current schema, HenkaScript compiler, and bounded VM are therefore engine
 integration foundations, not a claim that complete executable scripting is

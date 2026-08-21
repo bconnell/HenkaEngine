@@ -23,6 +23,7 @@ option(HENKA_BUILD_CLIENT "Build the graphical Henka client and compatibility ta
 option(HENKA_BUILD_DEDICATED_SERVER "Build the renderer-free dedicated server." ON)
 option(HENKA_ENABLE_NETWORK "Build Henka networking support." ON)
 option(HENKA_ENABLE_KTX2_TRANSCODER "Use pinned KTX-Software for checked KTX2/Basis transcoding." ON)
+option(HENKA_ENABLE_LUA "Build the bounded Lua behavior backend." ON)
 
 if(NOT WIN32)
     message(WARNING "Henka Engine currently validates its full build, runtime, packaging, and external-project path on Windows. Other platforms are not yet supported targets.")
@@ -40,7 +41,7 @@ if(HENKA_BUILD_CLIENT AND HENKA_ENABLE_KTX2_TRANSCODER)
     enable_language(CXX)
 endif()
 
-if(HENKA_BUILD_CLIENT OR HENKA_ENABLE_NETWORK)
+if(HENKA_BUILD_CLIENT OR HENKA_ENABLE_NETWORK OR HENKA_ENABLE_LUA)
     include(FetchContent)
 endif()
 
@@ -127,6 +128,63 @@ if(HENKA_ENABLE_NETWORK)
     if(WIN32)
         target_link_libraries(henka_enet PRIVATE winmm ws2_32)
     endif()
+endif()
+
+if(HENKA_ENABLE_LUA)
+    FetchContent_Declare(
+        Lua
+        GIT_REPOSITORY https://github.com/lua/lua.git
+        GIT_TAG 6e22fedb74cf0c9b6656e9fce8b7331db847c605
+        GIT_SHALLOW TRUE
+        GIT_SUBMODULES ""
+        GIT_SUBMODULES_RECURSE FALSE
+    )
+    FetchContent_GetProperties(Lua)
+    if(NOT lua_POPULATED)
+        if(POLICY CMP0169)
+            cmake_policy(PUSH)
+            cmake_policy(SET CMP0169 OLD)
+        endif()
+        FetchContent_Populate(Lua)
+        if(POLICY CMP0169)
+            cmake_policy(POP)
+        endif()
+    endif()
+    add_library(henka_lua STATIC
+        ${lua_SOURCE_DIR}/lapi.c
+        ${lua_SOURCE_DIR}/lauxlib.c
+        ${lua_SOURCE_DIR}/lbaselib.c
+        ${lua_SOURCE_DIR}/lcode.c
+        ${lua_SOURCE_DIR}/lcorolib.c
+        ${lua_SOURCE_DIR}/lctype.c
+        ${lua_SOURCE_DIR}/ldblib.c
+        ${lua_SOURCE_DIR}/ldebug.c
+        ${lua_SOURCE_DIR}/ldo.c
+        ${lua_SOURCE_DIR}/ldump.c
+        ${lua_SOURCE_DIR}/lfunc.c
+        ${lua_SOURCE_DIR}/lgc.c
+        ${lua_SOURCE_DIR}/linit.c
+        ${lua_SOURCE_DIR}/liolib.c
+        ${lua_SOURCE_DIR}/llex.c
+        ${lua_SOURCE_DIR}/lmathlib.c
+        ${lua_SOURCE_DIR}/lmem.c
+        ${lua_SOURCE_DIR}/loadlib.c
+        ${lua_SOURCE_DIR}/lobject.c
+        ${lua_SOURCE_DIR}/lopcodes.c
+        ${lua_SOURCE_DIR}/loslib.c
+        ${lua_SOURCE_DIR}/lparser.c
+        ${lua_SOURCE_DIR}/lstate.c
+        ${lua_SOURCE_DIR}/lstring.c
+        ${lua_SOURCE_DIR}/lstrlib.c
+        ${lua_SOURCE_DIR}/ltable.c
+        ${lua_SOURCE_DIR}/ltablib.c
+        ${lua_SOURCE_DIR}/ltm.c
+        ${lua_SOURCE_DIR}/lundump.c
+        ${lua_SOURCE_DIR}/lutf8lib.c
+        ${lua_SOURCE_DIR}/lvm.c
+        ${lua_SOURCE_DIR}/lzio.c
+    )
+    target_include_directories(henka_lua PUBLIC ${lua_SOURCE_DIR})
 endif()
 
 add_subdirectory(engine)

@@ -56,7 +56,7 @@ Other operating systems are not currently claimed as supported.
 | Game authoring | Foundation | Bounded Scene Document, authored Physics/Interaction, Save/Reload, and isolated runtime Play scenes |
 | 2D | Planned | Dedicated 2D renderer, sprites, layers, parallax, and animation remain open |
 | Audio | Planned | No current audio workflow |
-| Scripting/behaviors | In Progress | Shared host schema, bounded HenkaScript compiler/VM, and lifecycle runtime; scene binding and Lua remain open |
+| Scripting/behaviors | In Progress | Shared host schema, bounded HenkaScript/Lua lifecycle adapters; scene binding and host dispatch remain open |
 
 For the detailed, code-backed inventory and explicit boundaries, see
 [docs/current-capabilities.md](docs/current-capabilities.md).
@@ -79,7 +79,7 @@ projection and info-strip controls. Detailed controls are in
 Henka is not only a modeling application. Its runtime includes scenes/entities,
 camera and input actions, asset management, rendering, physics, terrain,
 persistence, and a renderer-independent headless boundary. Full Game/Play
-authoring, character controllers, audio, scripting, and mature project
+authoring, character controllers, audio, end-user scripting, and mature project
 serialization are not yet available.
 
 ## Modeling and content authoring

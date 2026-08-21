@@ -66,6 +66,7 @@ $cmake = Get-HenkaCMakePath
 $localSdlSource = Join-Path $repoRoot "build\_deps\sdl3-src"
 $localKtxSource = Join-Path $repoRoot "build\_deps\ktxsoftware-src"
 $localEnetSource = Join-Path $repoRoot "build\_deps\enet-src"
+$localLuaSource = Join-Path $repoRoot "build\_deps\lua-src"
 $offlineProviderCount = 0
 $configureArguments = @(
     "-S", $validationSource,
@@ -105,7 +106,18 @@ else {
     Write-Host "ENet provider: FetchContent network fallback"
 }
 
-if ($offlineProviderCount -eq 3) {
+if (-not $NoLocalProviders -and (Test-Path -LiteralPath (Join-Path $localLuaSource "lua.h") -PathType Leaf)) {
+    $configureArguments += "-DFETCHCONTENT_SOURCE_DIR_LUA=$localLuaSource"
+    $offlineProviderCount += 1
+    Write-Host "Lua provider: repository-local populated source"
+}
+else {
+    $configureArguments += "-DFETCHCONTENT_SOURCE_DIR_LUA="
+    $configureArguments += "-DFETCHCONTENT_FULLY_DISCONNECTED=OFF"
+    Write-Host "Lua provider: FetchContent network fallback"
+}
+
+if ($offlineProviderCount -eq 4) {
     $configureArguments += "-DFETCHCONTENT_FULLY_DISCONNECTED=ON"
     Write-Host "FetchContent mode: fully disconnected because all repository-local providers are present"
 }

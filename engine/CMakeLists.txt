@@ -11,6 +11,7 @@ add_library(henka_runtime STATIC
     src/scripting/script_runtime.c
     src/scripting/henkascript.c
     src/scripting/henkascript_backend.c
+    $<$<BOOL:${HENKA_ENABLE_LUA}>:src/scripting/lua_backend.c>
     src/scene/camera.c
     src/scene/scene.c
     src/mesh/authoring_mesh.c
@@ -43,6 +44,10 @@ if(HENKA_ENABLE_NETWORK)
         src/network/network_enet.c
     )
     target_link_libraries(henka_runtime PRIVATE henka_enet)
+endif()
+
+if(HENKA_ENABLE_LUA)
+    target_link_libraries(henka_runtime PRIVATE henka_lua)
 endif()
 
 target_include_directories(henka_runtime

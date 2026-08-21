@@ -44,6 +44,7 @@ $validationSource = Join-Path $validationRoot "external_server_minimal_src"
 $validationBuild = Join-Path $validationRoot "external_server_minimal_build"
 $cmake = Get-HenkaCMakePath
 $localEnetSource = Join-Path $repoRoot "build\_deps\enet-src"
+$localLuaSource = Join-Path $repoRoot "build\_deps\lua-src"
 $configureArguments = @(
     "-S", $validationSource,
     "-B", $validationBuild,
@@ -60,6 +61,16 @@ else {
     $configureArguments += "-DFETCHCONTENT_SOURCE_DIR_ENET="
     $configureArguments += "-DFETCHCONTENT_FULLY_DISCONNECTED=OFF"
     Write-Host "ENet provider: FetchContent network fallback"
+}
+
+if (-not $NoLocalProviders -and (Test-Path -LiteralPath (Join-Path $localLuaSource "lua.h") -PathType Leaf)) {
+    $configureArguments += "-DFETCHCONTENT_SOURCE_DIR_LUA=$localLuaSource"
+    Write-Host "Lua provider: repository-local populated source"
+}
+else {
+    $configureArguments += "-DFETCHCONTENT_SOURCE_DIR_LUA="
+    $configureArguments += "-DFETCHCONTENT_FULLY_DISCONNECTED=OFF"
+    Write-Host "Lua provider: FetchContent network fallback"
 }
 
 Write-Host "cmake: $cmake"

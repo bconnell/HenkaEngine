@@ -63,6 +63,19 @@ henka_enable_project_warnings(henka_script_backend_tests)
 
 add_test(NAME henka_script_backend_tests COMMAND henka_script_backend_tests)
 
+add_executable(henka_lua_backend_tests
+    test_lua_backend.c
+)
+
+target_link_libraries(henka_lua_backend_tests
+    PRIVATE
+        henka_runtime
+)
+
+henka_enable_project_warnings(henka_lua_backend_tests)
+
+add_test(NAME henka_lua_backend_tests COMMAND henka_lua_backend_tests)
+
 add_executable(henka_henkascript_tests
     test_henkascript.c
 )
