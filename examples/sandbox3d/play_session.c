@@ -391,13 +391,40 @@ static void sandbox3d_play_session_abort_start(
         return;
     }
     (void)sandbox3d_play_session_destroy_bodies(session);
-    henka_scene_behavior_runtime_destroy(session->behavior_runtime);
-    session->behavior_runtime = NULL;
+    if (session->behavior_runtime != NULL)
+    {
+        (void)henka_scene_behavior_runtime_dispatch(
+            session->behavior_runtime,
+            HENKA_SCRIPT_LIFECYCLE_DESTROY,
+            0.0f,
+            session->frame_index,
+            &(henka_script_behavior_batch_report){0});
+        (void)henka_scene_behavior_runtime_dispatch(
+            session->behavior_runtime,
+            HENKA_SCRIPT_LIFECYCLE_STOP,
+            0.0f,
+            session->frame_index,
+            &(henka_script_behavior_batch_report){0});
+        henka_scene_behavior_runtime_destroy(session->behavior_runtime);
+        session->behavior_runtime = NULL;
+    }
     henka_script_host_destroy(session->script_host);
     session->script_host = NULL;
     session->snapshot_count = 0U;
     session->state = SANDBOX3D_PLAY_SESSION_STOPPED;
     (void)sandbox3d_scene_document_bridge_end_play(session->bridge);
+}
+
+static henka_result sandbox3d_play_session_abort_start_with_error(
+    sandbox3d_play_session* session,
+    henka_result error)
+{
+    sandbox3d_play_session_abort_start(session);
+    if (session != NULL)
+    {
+        session->last_error = error;
+    }
+    return error;
 }
 
 static henka_result sandbox3d_play_session_restore_scene(
@@ -533,12 +560,21 @@ henka_result sandbox3d_play_session_start(sandbox3d_play_session* session)
 {
     size_t index;
     henka_result result;
-    const size_t binding_count =
-        sandbox3d_scene_document_bridge_get_binding_count(session == NULL ? NULL : session->bridge);
-    if (session == NULL || session->state != SANDBOX3D_PLAY_SESSION_STOPPED ||
-        binding_count > SANDBOX3D_PLAY_SESSION_MAX_OBJECTS ||
-        sandbox3d_scene_document_bridge_begin_play(session == NULL ? NULL : session->bridge) != HENKA_SUCCESS)
+    size_t binding_count;
+    if (session == NULL)
     {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    if (session->state != SANDBOX3D_PLAY_SESSION_STOPPED)
+    {
+        session->last_error = HENKA_ERROR_INVALID_ARGUMENT;
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    binding_count = sandbox3d_scene_document_bridge_get_binding_count(session->bridge);
+    if (binding_count > SANDBOX3D_PLAY_SESSION_MAX_OBJECTS ||
+        sandbox3d_scene_document_bridge_begin_play(session->bridge) != HENKA_SUCCESS)
+    {
+        session->last_error = HENKA_ERROR_INVALID_ARGUMENT;
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
     session->snapshot_count = 0U;
@@ -559,14 +595,14 @@ henka_result sandbox3d_play_session_start(sandbox3d_play_session* session)
             sandbox3d_scene_document_bridge_get_object(
                 session->bridge, document_id, &object) != HENKA_SUCCESS)
         {
-            sandbox3d_play_session_abort_start(session);
-            return HENKA_ERROR_INVALID_ARGUMENT;
+            return sandbox3d_play_session_abort_start_with_error(
+                session, HENKA_ERROR_INVALID_ARGUMENT);
         }
         scene = sandbox3d_scene_document_bridge_get_scene(session->bridge);
         if (henka_scene_get_entity_transform(scene, entity, &transform) != HENKA_SUCCESS)
         {
-            sandbox3d_play_session_abort_start(session);
-            return HENKA_ERROR_INVALID_ARGUMENT;
+            return sandbox3d_play_session_abort_start_with_error(
+                session, HENKA_ERROR_INVALID_ARGUMENT);
         }
         session->snapshots[session->snapshot_count] = (sandbox3d_play_snapshot){
             document_id,
@@ -585,8 +621,8 @@ henka_result sandbox3d_play_session_start(sandbox3d_play_session* session)
                 : descriptor_result;
             if (body_result != HENKA_SUCCESS)
             {
-                sandbox3d_play_session_abort_start(session);
-                return body_result;
+                return sandbox3d_play_session_abort_start_with_error(
+                    session, body_result);
             }
             session->snapshots[session->snapshot_count].body = body;
         }
@@ -636,9 +672,7 @@ henka_result sandbox3d_play_session_start(sandbox3d_play_session* session)
         }
         if (result != HENKA_SUCCESS)
         {
-            sandbox3d_play_session_abort_start(session);
-            session->last_error = result;
-            return result;
+            return sandbox3d_play_session_abort_start_with_error(session, result);
         }
     }
     session->state = SANDBOX3D_PLAY_SESSION_RUNNING;

@@ -177,6 +177,21 @@ int main(void)
     {
         goto cleanup;
     }
+    henka_scene_destroy_entity(scene, entity);
+    {
+        const henka_result failed_start = sandbox3d_play_session_start(session);
+        const sandbox3d_play_session_state failed_state =
+            sandbox3d_play_session_get_state(session);
+        const henka_result failed_error = sandbox3d_play_session_get_last_error(session);
+        const bool failed_locked = sandbox3d_scene_document_bridge_is_play_locked(bridge);
+        if (failed_start != HENKA_ERROR_INVALID_ARGUMENT ||
+            failed_state != SANDBOX3D_PLAY_SESSION_STOPPED ||
+            failed_error != HENKA_ERROR_INVALID_ARGUMENT ||
+            failed_locked)
+        {
+            goto cleanup;
+        }
+    }
     exit_code = 0;
 
 cleanup:
