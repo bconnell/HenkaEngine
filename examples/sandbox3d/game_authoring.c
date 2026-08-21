@@ -560,6 +560,14 @@ henka_result sandbox3d_game_authoring_resume_play(
         : sandbox3d_play_session_resume(authoring->play_session);
 }
 
+henka_result sandbox3d_game_authoring_tick_play(
+    sandbox3d_game_authoring* authoring)
+{
+    return authoring == NULL
+        ? HENKA_ERROR_INVALID_ARGUMENT
+        : sandbox3d_play_session_tick(authoring->play_session);
+}
+
 henka_result sandbox3d_game_authoring_step_play(
     sandbox3d_game_authoring* authoring)
 {

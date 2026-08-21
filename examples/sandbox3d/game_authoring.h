@@ -54,6 +54,8 @@ henka_result sandbox3d_game_authoring_pause_play(
     sandbox3d_game_authoring* authoring);
 henka_result sandbox3d_game_authoring_resume_play(
     sandbox3d_game_authoring* authoring);
+henka_result sandbox3d_game_authoring_tick_play(
+    sandbox3d_game_authoring* authoring);
 henka_result sandbox3d_game_authoring_step_play(
     sandbox3d_game_authoring* authoring);
 henka_result sandbox3d_game_authoring_stop_play(

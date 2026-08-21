@@ -8481,12 +8481,12 @@ static void sandbox3d_update_game_authoring(
     {
         return;
     }
-    if (sandbox3d_game_authoring_step_play(state->game_authoring) != HENKA_SUCCESS)
+    if (sandbox3d_game_authoring_tick_play(state->game_authoring) != HENKA_SUCCESS)
     {
         sandbox3d_set_status(
             state,
             true,
-        "Play session stopped after a fixed-step failure.");
+            "Play paused after a fixed-step failure; Stop remains available.");
     }
 }
 

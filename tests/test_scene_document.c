@@ -104,7 +104,7 @@ int main(void)
     {
         goto cleanup;
     }
-    for (index = 0U; index < 96U; ++index)
+    for (index = 0U; index < 256U; ++index)
     {
         int written;
         object = henka_scene_document_object_default();
@@ -137,20 +137,20 @@ int main(void)
             }
         }
     }
-    if (henka_scene_document_get_object_count(document) != 97U ||
+    if (henka_scene_document_get_object_count(document) != 257U ||
         henka_scene_document_validate(document) != HENKA_SUCCESS ||
         henka_scene_document_save_file(document, ".", first_path) != HENKA_SUCCESS ||
         henka_scene_document_save_file(document, ".", second_path) != HENKA_SUCCESS ||
         !test_scene_document_files_equal(first_path, second_path) ||
         henka_scene_document_format_inspection(
             document, inspection, sizeof(inspection), &inspection_size) != HENKA_SUCCESS ||
-        inspection_size == 0U || strstr(inspection, "HSCN version=1 objects=97") == NULL)
+        inspection_size == 0U || strstr(inspection, "HSCN version=1 objects=257") == NULL)
     {
         fprintf(stderr, "scene document test failed during deterministic save/inspection\n");
         goto cleanup;
     }
     if (henka_scene_document_load_file(loaded, ".", first_path) != HENKA_SUCCESS ||
-        henka_scene_document_get_object_count(loaded) != 97U ||
+        henka_scene_document_get_object_count(loaded) != 257U ||
         henka_scene_document_get_object(loaded, first_id, &loaded_object) != HENKA_SUCCESS ||
         strcmp(loaded_object.name, "object_0") != 0 ||
         loaded_object.source.kind != HENKA_SCENE_DOCUMENT_SOURCE_PRIMITIVE ||
@@ -162,17 +162,17 @@ int main(void)
     if (henka_scene_document_save_file(document, ".", "../escape.hscene") != HENKA_ERROR_INVALID_ARGUMENT ||
         !test_scene_document_write_bytes(malformed_path, malformed_data, sizeof(malformed_data)) ||
         henka_scene_document_load_file(loaded, ".", malformed_path) == HENKA_SUCCESS ||
-        henka_scene_document_get_object_count(loaded) != 97U)
+        henka_scene_document_get_object_count(loaded) != 257U)
     {
         fprintf(stderr, "scene document test failed during confinement/malformed retention\n");
         goto cleanup;
     }
     if (!test_scene_document_patch_u32(first_path, 36L, UINT32_C(1)) ||
         henka_scene_document_load_file(loaded, ".", first_path) == HENKA_SUCCESS ||
-        henka_scene_document_get_object_count(loaded) != 97U ||
+        henka_scene_document_get_object_count(loaded) != 257U ||
         !test_scene_document_patch_u32(second_path, 48L, UINT32_C(0x80000000)) ||
         henka_scene_document_load_file(loaded, ".", second_path) == HENKA_SUCCESS ||
-        henka_scene_document_get_object_count(loaded) != 97U)
+        henka_scene_document_get_object_count(loaded) != 257U)
     {
         fprintf(stderr, "scene document test failed during corrupted-header retention\n");
         goto cleanup;

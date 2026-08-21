@@ -132,7 +132,7 @@ int main(void)
         sandbox3d_game_authoring_load(authoring, ".") != HENKA_ERROR_INVALID_ARGUMENT ||
         sandbox3d_game_authoring_update_object_for_entity(authoring, entity, &restored) != HENKA_ERROR_INVALID_ARGUMENT ||
         sandbox3d_game_authoring_resume_play(authoring) != HENKA_SUCCESS ||
-        sandbox3d_game_authoring_step_play(authoring) != HENKA_SUCCESS ||
+        sandbox3d_game_authoring_tick_play(authoring) != HENKA_SUCCESS ||
         henka_scene_get_entity_transform(scene, entity, &restored.transform) != HENKA_SUCCESS ||
         restored.transform.position.y >= transform.position.y ||
         sandbox3d_game_authoring_stop_play(authoring) != HENKA_SUCCESS ||

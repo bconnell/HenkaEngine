@@ -1,3 +1,5 @@
+#include <float.h>
+
 #include <henka/physics.h>
 #include <henka/scene.h>
 #include <henka/scene_document.h>
@@ -15,6 +17,9 @@ int main(void)
     henka_scene_document_id object_id = HENKA_INVALID_SCENE_DOCUMENT_ID;
     henka_entity entity = HENKA_INVALID_ENTITY;
     henka_transform transform;
+    henka_transform stepped_transform;
+    henka_result tick_result = HENKA_SUCCESS;
+    size_t tick_count;
     int exit_code = 1;
 
     if (henka_scene_document_create(&document) != HENKA_SUCCESS ||
@@ -41,18 +46,42 @@ int main(void)
         !sandbox3d_scene_document_bridge_is_play_locked(bridge) ||
         sandbox3d_scene_document_bridge_apply_object(bridge, object_id) != HENKA_ERROR_INVALID_ARGUMENT ||
         sandbox3d_play_session_pause(session) != HENKA_SUCCESS ||
-        sandbox3d_play_session_step_fixed(session) != HENKA_ERROR_INVALID_ARGUMENT ||
-        sandbox3d_play_session_resume(session) != HENKA_SUCCESS ||
         sandbox3d_play_session_step_fixed(session) != HENKA_SUCCESS ||
+        sandbox3d_play_session_get_state(session) != SANDBOX3D_PLAY_SESSION_PAUSED ||
+        henka_scene_get_entity_transform(scene, entity, &stepped_transform) != HENKA_SUCCESS ||
+        stepped_transform.position.y >= 5.0f ||
+        sandbox3d_play_session_resume(session) != HENKA_SUCCESS ||
+        sandbox3d_play_session_tick(session) != HENKA_SUCCESS ||
+        sandbox3d_play_session_get_state(session) != SANDBOX3D_PLAY_SESSION_RUNNING ||
         henka_scene_get_entity_transform(scene, entity, &transform) != HENKA_SUCCESS ||
-        transform.position.y >= 5.0f ||
+        transform.position.y >= stepped_transform.position.y ||
         henka_scene_set_entity_visible(scene, entity, false) != HENKA_SUCCESS ||
         sandbox3d_play_session_stop(session) != HENKA_SUCCESS ||
         sandbox3d_play_session_get_state(session) != SANDBOX3D_PLAY_SESSION_STOPPED ||
         sandbox3d_scene_document_bridge_is_play_locked(bridge) ||
         henka_scene_get_entity_transform(scene, entity, &transform) != HENKA_SUCCESS ||
         transform.position.y != 5.0f ||
-        !henka_scene_is_entity_visible(scene, entity))
+        !henka_scene_is_entity_visible(scene, entity) ||
+        henka_physics_world_set_gravity(
+            physics_world,
+            (henka_vec3){0.0f, FLT_MAX, 0.0f}) != HENKA_SUCCESS ||
+        sandbox3d_play_session_start(session) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    for (tick_count = 0U;
+         tick_count < 4096U &&
+             sandbox3d_play_session_get_state(session) == SANDBOX3D_PLAY_SESSION_RUNNING;
+         ++tick_count)
+    {
+        tick_result = sandbox3d_play_session_tick(session);
+    }
+    if (tick_result == HENKA_SUCCESS ||
+        sandbox3d_play_session_get_state(session) != SANDBOX3D_PLAY_SESSION_PAUSED_ERROR ||
+        sandbox3d_play_session_get_last_error(session) == HENKA_SUCCESS ||
+        sandbox3d_play_session_stop(session) != HENKA_SUCCESS ||
+        sandbox3d_play_session_get_state(session) != SANDBOX3D_PLAY_SESSION_STOPPED ||
+        sandbox3d_scene_document_bridge_is_play_locked(bridge))
     {
         goto cleanup;
     }

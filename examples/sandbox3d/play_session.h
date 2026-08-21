@@ -12,6 +12,7 @@ typedef enum sandbox3d_play_session_state
     SANDBOX3D_PLAY_SESSION_STOPPED = 0,
     SANDBOX3D_PLAY_SESSION_RUNNING,
     SANDBOX3D_PLAY_SESSION_PAUSED,
+    SANDBOX3D_PLAY_SESSION_PAUSED_ERROR,
     SANDBOX3D_PLAY_SESSION_FAILED
 } sandbox3d_play_session_state;
 
@@ -22,9 +23,12 @@ henka_result sandbox3d_play_session_create(
 void sandbox3d_play_session_destroy(sandbox3d_play_session* session);
 sandbox3d_play_session_state sandbox3d_play_session_get_state(
     const sandbox3d_play_session* session);
+henka_result sandbox3d_play_session_get_last_error(
+    const sandbox3d_play_session* session);
 henka_result sandbox3d_play_session_start(sandbox3d_play_session* session);
 henka_result sandbox3d_play_session_pause(sandbox3d_play_session* session);
 henka_result sandbox3d_play_session_resume(sandbox3d_play_session* session);
+henka_result sandbox3d_play_session_tick(sandbox3d_play_session* session);
 henka_result sandbox3d_play_session_step_fixed(sandbox3d_play_session* session);
 henka_result sandbox3d_play_session_stop(sandbox3d_play_session* session);
 
