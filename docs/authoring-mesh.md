@@ -203,8 +203,9 @@ shading data while preserving the single mesh/material ownership path.
 
 This is the bounded runtime foundation of the authoring-parity campaign. It is
 not yet a full modeling editor: weld/split/bridge/loop cuts, production
-hard-surface profiles, automatic multi-island UV unwrap and
-global packing, material editing, texture painting, editor integration for the
-history/file APIs, and showcase rebuild workflows remain unfinished. glTF
-and KTX2 material ownership continues through the existing asset paths; this
-API does not introduce a second material file format.
+hard-surface profiles, automatic multi-island UV unwrap and global packing,
+broader material authoring beyond the supported bounded material-instance
+editing, texture painting, editor integration for the history/file APIs, and
+showcase rebuild workflows remain unfinished. glTF and KTX2 material ownership
+continues through the existing asset paths; this API does not introduce a
+second material file format.

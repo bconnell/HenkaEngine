@@ -89,9 +89,13 @@ turning the public README into an implementation ledger.
   and boundary queries, material regions, per-corner UV metadata, smoothing
   and hard-edge intent, fail-closed polygon validation, deterministic
   caller-owned triangulation, and bounded shared undo/redo.
-- Transactional operations include plane/box creation, duplicate, extrude,
-  inset, planar bevel rings, face subdivision, selected-face deletion, planar
-  UV projection, island transforms, packing, and seam detection. HAMS v3
+- Published Vertex topology operations include Merge Center, Merge Active,
+  Merge by Distance, Connect Vertices, Dissolve Vertex, Delete Vertex, and
+  Vertex Bevel. These operations are transactional and exposed through the
+  integrated Vertex selection workflow.
+- Transactional operations also include plane/box creation, duplicate, face
+  extrude, inset, planar bevel rings, face subdivision, selected-face deletion,
+  planar UV projection, island transforms, packing, and seam detection. HAMS v3
   writes portable little-endian data through unique same-directory temporary
   files and retains reads for checked-in v2 sources.
 - Imported nontrivial objects can take the Make Editable path. Native source
@@ -99,10 +103,13 @@ turning the public README into an implementation ledger.
   overrides, procedural detail textures, and material undo/redo are present
   in the bounded dogfood workflow.
 - This is an integrated authoring foundation, not a production modeling suite.
-  Vertex/edge deletion, broader topology tooling, automatic UV unwrap,
-  texture painting, rigging, skinning, animation authoring, broader source
-  export, and production-quality showcase anatomy/mechanical topology remain
-  in progress.
+  Vertex Extrude remains unavailable. Broader vertex tooling, automatic UV
+  unwrap, texture painting, rigging, skinning, animation authoring, broader
+  source export, and production-quality showcase anatomy/mechanical topology
+  remain in progress.
+- Edge authoring is a separate capability boundary: bounded edge-loop/ring
+  selection is available, but Edge Delete and broader edge topology operations
+  are not claimed as complete and remain in progress.
 - See [authoring-mesh.md](authoring-mesh.md),
   [runtime-foundations.md](runtime-foundations.md), and
   [showcase-assets.md](showcase-assets.md).

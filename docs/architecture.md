@@ -229,12 +229,14 @@ The next steps should continue building upward from these boundaries:
 - broader material import
 - broader model loading beyond the current OBJ subset
 - stronger asset management
-- broader persistence and external project support once the current local-first path has settled
+- broader persistence and external-project workflows beyond the current
+  local-first save and bounded consumer-validation paths
 - production-quality 2.5D sprites, regions, layered depth, sorting, parallax, animation, movement constraints, physics constraints, and authoring tools after current defect repair
 - richer engine UI controls built on the existing docked and native detached workspace
 - object inspection and transactional authoring that can grow without an editor rewrite
 - saved workspace placement, full detached controls, bounded title-bar drag-back recognition, and detachable Scene View
-- editable authoring data compiled into runtime assets for later modeling, UV, rigging, and animation workflows
+- continued editable-authoring data and runtime-asset integration for broader
+  modeling, UV, rigging, and animation workflows
 ## Viewport shading
 
 The Scene View owns an explicit shading mode. It does not rely on a global polygon toggle. Wireframe draws neutral geometry edges without texture sampling. Solid draws neutral filled surfaces under a neutral editor surface policy while preserving explicit unlit line materials for the editor grid. Material Preview uses the same bounded Cook–Torrance material evaluation and Scene View-sized linear HDR-to-display presentation as Rendered, with deterministic editor lighting instead of scene lighting. Both HDR modes use validated scene-owned environment controls for visible surroundings and diffuse/specular response; Rendered derives its transactional IBL resources from the same environment texture. Rendered uses scene light policy, optional bounded scene fog, exposure, tone mapping, bloom, camera- and object-motion history reprojection, two fitted directional shadow cascades with an overlap blend at their transition, a second bounded depth map for the first enabled spot light, and a bounded cubemap for the first enabled point light. The built-in material shader supplies bounded camera- and object-motion plus reactive attachments; the presentation pass performs depth rejection, history clamping, and bounded reconstruction sharpening, while temporal invalidation and fallback state remain observable. Production TAA remains future work until its documented visual cases are validated. Blended materials render after opaque and masked geometry through a bounded back-to-front queue with deterministic entity-order overflow fallback. Unlit materials bypass lighting, reserved procedural materials are rejected until a real shader model exists, and helper overlays retain their own materials. Mode changes do not rewrite scene materials, and the renderer restores a filled polygon baseline before UI and detached-window presentation. The sandbox studio environment is generated as a linear periodic equirectangular source and validated before IBL ownership, avoiding presentation seams from discontinuous fixture pixels.

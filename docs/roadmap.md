@@ -46,6 +46,12 @@ Current workspace foundations include:
 
 Current runtime foundations also include rigid-body physics v1: fixed-step worlds, static/dynamic/kinematic bodies, sphere/AABB/plane collision, impulse response, friction, restitution, trigger events, raycasts, opt-in sandbox QA controls, and viewport selection highlighting for the selected real scene object.
 
+Viewport/editor tooling is a Foundation with active usability work: Scene View,
+Compass navigation, docked and detached panels, layout persistence, bounded
+interaction diagnostics, and early authoring surfaces are implemented. Native
+desktop feel, broader hierarchy/project workflows, numeric transform editing,
+and complete manual interaction QA remain open.
+
 Planned workspace improvements include:
 
 1. Complete the remaining native desktop feel and manual QA for detached controls and title-bar drag-back redocking.
@@ -53,25 +59,45 @@ Planned workspace improvements include:
 3. A detachable Scene View after multi-window rendering and viewport input are dependable.
 4. A clearer scene hierarchy.
 5. Numeric transform editing.
-6. Undo and redo for basic scene operations.
-7. Scene save and load support.
+6. Extend undo and redo beyond the current bounded workspace-layout,
+   authoring, and material histories to more basic scene operations.
+7. Extend the current settings/save-slot and HAMS authoring persistence into a
+   complete scene/project save and load workflow.
 
 These features should appear only when they are wired into the engine, tested, documented, and useful.
 
 ## Asset and material workflow
 
-The asset pipeline is still early. The goal is to move from loose sample assets toward a clearer project workflow.
+The asset pipeline is still early, but it already has a manager-owned metadata,
+dependency, import, fallback, and material-instance foundation.
 
-Planned asset and material work includes:
+### Foundation
 
-1. Stronger asset metadata.
-2. Better model import coverage.
-3. Texture and material assignment tools.
-4. Clear missing-asset fallback behavior.
-5. Material editing.
-6. Shader selection.
-7. Procedural shader planning and safe parameter handling.
-8. External project asset roots.
+1. Asset metadata and texture dependencies are manager-owned and inspectable.
+2. Bounded glTF/GLB scene/PBR import and bounded OBJ import are available within
+   their documented interchange subsets.
+3. Missing-asset fallback behavior is explicit and validated.
+4. Texture dependencies, scalar/vector values, alpha mode, and semantic PBR
+   material-instance overrides can be inspected and edited transactionally.
+5. External templates have bounded asset-root and consumer-validation paths.
+
+### Current development
+
+1. Strengthen asset cache ownership, identity, retry, metadata, and
+   failure-output contracts.
+2. Expand texture/material assignment and material-editing usability while
+   preserving manager ownership and transactional updates.
+3. Improve external project configuration and asset-root guidance across the
+   validated templates.
+
+### Future work
+
+1. Broader model import coverage beyond the current bounded glTF/GLB and OBJ
+   subsets.
+2. Dedicated user-authored material-file authority, text-entry import,
+   drag/drop, and dependency-graph tooling.
+3. Shader selection and procedural shader planning with safe parameter
+   handling.
 
 Procedural shader work should come after the material system is stable enough to support it cleanly.
 
@@ -107,16 +133,74 @@ Next 2.5D work includes:
 
 ## Integrated modeling and content authoring
 
-Integrated modeling follows the production-quality 2.5D track. Preparation begins earlier through clean authoring boundaries. Unfinished modeling screens are not part of this preparation.
+Integrated authoring is already underway in parallel with the 2D/2.5D roadmap.
+The camera-side 2.5D foundation and the modeling foundation are separate
+tracks that share renderer, asset, persistence, and workspace boundaries.
 
-Planned foundations include:
+### Implemented Foundation
 
-1. Editable authoring data separated from compiled runtime meshes, render buffers, collision data, and animation tracks.
-2. Stable identities for objects, assets, layers, mesh elements, bones, animation targets, and undo records.
-3. Transactional operations with validation, commit, rollback, undo, and redo.
-4. Mesh, UV, material, rigging, skin-weight, and animation-authoring tools.
-5. Import, export, reimport, dependency tracking, and adapter-based interchange such as glTF or GLB.
-6. Continued compatibility with external modeling, texturing, animation, and content pipelines.
+1. Editable authoring data is separated from evaluated runtime meshes, render
+   buffers, collision data, and material-instance state.
+2. Objects and mesh elements use stable identities with connectivity, boundary,
+   material-region, UV, smoothing, and hard-edge metadata.
+3. Transactional authoring operations have validation, commit/rollback
+   behavior, bounded undo/redo, and evaluated mesh replacement.
+4. Object, Vertex, Edge, and Face workflows include component selection,
+   connected selection, bounded edge-loop/ring selection, soft movement, and
+   axis-constrained movement.
+5. Vertex operations include Merge Center, Merge Active, Merge by Distance,
+   Connect Vertices, Dissolve Vertex, Delete Vertex, and Vertex Bevel.
+6. Face extrude, inset, planar bevel rings, face subdivision, selected-face
+   deletion, planar UV projection, island transforms, packing, seam detection,
+   Make Editable, HAMS persistence, material promotion, and supported PBR
+   material-instance editing are available in the bounded workflow.
+7. glTF/GLB import and external modeling-pipeline compatibility remain part of
+   the implemented boundary, with explicit limitations.
+
+### Current Development
+
+1. Continue expanding edge topology coverage and the surrounding authoring
+   UX; Edge Delete is not yet claimed as complete.
+2. Strengthen transactional modeling, UV, material, persistence, and undo/redo
+   paths while keeping failure behavior fail-closed.
+3. Improve editor integration, authoring source/project workflows, and the
+   usability of the existing operations.
+4. Keep showcase fixture work separate from claims of user-authored,
+   production-quality anatomy or mechanical topology.
+
+### Future Work
+
+1. Vertex Extrude, broader edge and vertex topology operations, weld/split/
+   bridge/loop-cut workflows, and broader source export.
+2. Automatic multi-island UV unwrap, texture painting, rigging, skinning, and
+   animation authoring.
+3. Complete scene/project serialization and wider adapter-based interchange
+   beyond the current bounded paths.
+
+2D and 2.5D remain first-class roadmap work; their future sprite, layer,
+parallax, animation, and movement-constraint systems do not defer or replace
+the integrated authoring work already present.
+
+## Persistence and undo/redo
+
+### Foundation
+
+Settings and save slots use confined paths, bounded identifiers, validated
+records, same-directory temporary files, flush/close-before-replace behavior,
+and failure retention of prior in-memory state. Versioned HAMS authoring
+sources, bounded authoring project save/reload, material history, and workspace
+layout history are also available.
+
+### Current Development
+
+The next persistence work is to extend these bounded foundations into broader
+scene/project data, more complete authoring history coverage, and durable
+cross-workflow versioning without weakening transactional failure behavior.
+
+### Future Work
+
+A complete scene/project authoring serializer and remote or network-backed save
+policy remain future work.
 
 ## Longer-term systems
 
@@ -137,14 +221,23 @@ These systems will require careful design because they affect safety, project st
 
 Henka Engine should remain a reusable engine repository. Real games built with Henka should live in separate repositories.
 
-Planned external project work includes:
+### Foundation
 
-1. Stronger starter templates.
-2. Clear project configuration.
-3. Separate asset and scene roots.
-4. Build guidance for external projects.
-5. Packaging guidance for external projects.
-6. Validation scripts that prove templates still work.
+1. Separate game and server templates consume the public runtime boundaries;
+   the external server links only the renderer-independent runtime.
+2. Separate asset and scene roots, build guidance, packaging guidance, and
+   Windows configure/build/startup validation are available.
+3. Bounded public-API consumer smokes prove that the templates remain usable
+   without depending on Sandbox source.
+
+### Current Development
+
+1. Strengthen starter templates and project configuration.
+2. Continue external-project validation and improve asset-root diagnostics.
+
+### Future Work
+
+Complete external scene/project editing and serialization remain future work.
 
 ## Sponsorship supported work
 
