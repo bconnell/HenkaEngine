@@ -285,8 +285,9 @@ static void test_signal_context_access(void)
     henka_hks_program* program = compile_program(
         "fn Contact() { "
         "entity other = event_other_entity(); "
+        "entity same = event_other_entity(); "
         "i32 kind = event_type(); "
-        "if (kind == 7) { return kind; } "
+        "if (other == same) { if (kind == 7) { return kind; } } "
         "return 0; "
         "}");
     henka_hks_execution_context context = {

@@ -54,7 +54,8 @@ execution adapters for both languages.
   source locations in diagnostics.
 - HenkaScript contact/interaction handlers can read the bounded
   `event_other_entity()` and `event_type()` context values; those built-ins
-  fail closed when executed outside a typed signal callback.
+  fail closed when executed outside a typed signal callback, and Entity
+  equality/inequality is available for bounded signal branching.
 - Fixed token, binding, callable, AST-node, identifier, diagnostic, and source
   size limits. `let` and `var` are rejected rather than treated as alternate
   declaration semantics.

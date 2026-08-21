@@ -1120,7 +1120,8 @@ static henka_result henka_hks_parse_binary(
              !(henka_hks_is_comparison(operator_token->kind) &&
                (operator_token->kind == HENKA_HKS_TOKEN_EQUAL_EQUAL ||
                 operator_token->kind == HENKA_HKS_TOKEN_NOT_EQUAL) &&
-               left_type == HENKA_HKS_TYPE_BOOL)))
+               (left_type == HENKA_HKS_TYPE_BOOL ||
+                left_type == HENKA_HKS_TYPE_ENTITY))))
         {
             return henka_hks_fail(
                 parser->diagnostic,
@@ -2407,7 +2408,8 @@ henka_hks_execution_result henka_hks_execute_with_context(
                     if (left.type != instruction->type || right.type != instruction->type ||
                         (instruction->type != HENKA_HKS_TYPE_I32 &&
                          instruction->type != HENKA_HKS_TYPE_F32 &&
-                         instruction->type != HENKA_HKS_TYPE_BOOL))
+                         instruction->type != HENKA_HKS_TYPE_BOOL &&
+                         instruction->type != HENKA_HKS_TYPE_ENTITY))
                     {
                         return henka_hks_vm_finish(
                             out_report,
@@ -2431,7 +2433,9 @@ henka_hks_execution_result henka_hks_execute_with_context(
                             ? left.as.i32 == right.as.i32
                             : instruction->type == HENKA_HKS_TYPE_F32
                                 ? left.as.f32 == right.as.f32
-                                : left.as.boolean == right.as.boolean;
+                                : instruction->type == HENKA_HKS_TYPE_BOOL
+                                    ? left.as.boolean == right.as.boolean
+                                    : left.as.entity == right.as.entity;
                     }
                     else if (instruction->opcode == HENKA_HKS_OPCODE_NOT_EQUAL)
                     {
@@ -2439,7 +2443,9 @@ henka_hks_execution_result henka_hks_execute_with_context(
                             ? left.as.i32 != right.as.i32
                             : instruction->type == HENKA_HKS_TYPE_F32
                                 ? left.as.f32 != right.as.f32
-                                : left.as.boolean != right.as.boolean;
+                                : instruction->type == HENKA_HKS_TYPE_BOOL
+                                    ? left.as.boolean != right.as.boolean
+                                    : left.as.entity != right.as.entity;
                     }
                     else if (instruction->type == HENKA_HKS_TYPE_I32)
                     {
