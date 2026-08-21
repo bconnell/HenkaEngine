@@ -17729,6 +17729,10 @@ static void sandbox3d_draw_scene_viewport_frame(
         {
             state->workspace.tools_panel_visible =
                 !state->workspace.tools_panel_visible;
+            /* Refresh the published workspace geometry after the Tools
+             * section changes visibility so automation and diagnostics do not
+             * retain the intentionally zero-sized hidden-panel rectangle. */
+            state->ui_visibility_report_pending = true;
             sandbox3d_set_status(
                 state,
                 false,
