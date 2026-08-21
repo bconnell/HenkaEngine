@@ -27,6 +27,11 @@ execution adapters for both languages.
   and non-reentrant; runtime mutation from a callback is rejected.
 - A bounded HenkaScript lexer/parser/type checker exposed through
   `<henka/henkascript.h>`.
+- The editor consumes HenkaScript token spans and compiler-owned lexical
+  presentation classes from that same public API. It does not copy the
+  compiler's keyword table or grammar; Lua source remains backend-validated
+  and is displayed with its persisted structure until a Lua tokenization seam
+  is intentionally added.
 - Bounded callable bytecode generation and an allocation-free typed VM with
   fixed stack storage, checked arithmetic, deterministic reports, and an
   instruction budget.
@@ -158,8 +163,9 @@ Entity/Transform/Physics/Event slice and an explicit behavior-state sidecar
 save/load seam. Persistent state is not implicitly saved on Stop, is not part
 of the authored `.hscene` document. The Inspector can create confined Lua or
 HenkaScript behavior templates and attach them transactionally, and it provides
-a bounded read-only source preview. HenkaScript preview colors are derived from
-the compiler's public tokenization; source editing and reload are not included.
+a bounded read-only source preview. HenkaScript preview spans and colors are
+derived from the compiler's public lexer and token-class API; source editing
+and reload are not included.
 Richer typed values and callable parameters, full Inspector authoring, hot reload,
 debugger tooling,
 replay integration, and broader project scripting workflows remain future work.

@@ -81,6 +81,20 @@ typedef enum henka_hks_token_kind
     HENKA_HKS_TOKEN_GREATER_EQUAL
 } henka_hks_token_kind;
 
+/* Compiler-owned presentation categories. They describe the lexical role
+ * already recognized by the HenkaScript lexer; consumers must not recreate
+ * keyword or grammar tables to present source text. */
+typedef enum henka_hks_token_class
+{
+    HENKA_HKS_TOKEN_CLASS_NONE = 0,
+    HENKA_HKS_TOKEN_CLASS_IDENTIFIER,
+    HENKA_HKS_TOKEN_CLASS_LITERAL,
+    HENKA_HKS_TOKEN_CLASS_TYPE,
+    HENKA_HKS_TOKEN_CLASS_KEYWORD,
+    HENKA_HKS_TOKEN_CLASS_BUILTIN,
+    HENKA_HKS_TOKEN_CLASS_PUNCTUATION
+} henka_hks_token_class;
+
 typedef struct henka_hks_token
 {
     henka_hks_token_kind kind;
@@ -89,6 +103,9 @@ typedef struct henka_hks_token
     uint32_t line;
     uint32_t column;
 } henka_hks_token;
+
+henka_hks_token_class henka_hks_token_kind_get_class(
+    henka_hks_token_kind kind);
 
 typedef enum henka_hks_value_type
 {

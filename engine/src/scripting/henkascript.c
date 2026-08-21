@@ -246,6 +246,77 @@ static henka_hks_token_kind henka_hks_keyword_kind(
     return HENKA_HKS_TOKEN_IDENTIFIER;
 }
 
+henka_hks_token_class henka_hks_token_kind_get_class(
+    henka_hks_token_kind kind)
+{
+    switch (kind)
+    {
+        case HENKA_HKS_TOKEN_IDENTIFIER:
+            return HENKA_HKS_TOKEN_CLASS_IDENTIFIER;
+        case HENKA_HKS_TOKEN_INTEGER:
+        case HENKA_HKS_TOKEN_FLOAT:
+        case HENKA_HKS_TOKEN_STRING:
+        case HENKA_HKS_TOKEN_KW_TRUE:
+        case HENKA_HKS_TOKEN_KW_FALSE:
+            return HENKA_HKS_TOKEN_CLASS_LITERAL;
+        case HENKA_HKS_TOKEN_KW_BOOL:
+        case HENKA_HKS_TOKEN_KW_I32:
+        case HENKA_HKS_TOKEN_KW_U32:
+        case HENKA_HKS_TOKEN_KW_F32:
+        case HENKA_HKS_TOKEN_KW_VEC3:
+        case HENKA_HKS_TOKEN_KW_ENTITY:
+            return HENKA_HKS_TOKEN_CLASS_TYPE;
+        case HENKA_HKS_TOKEN_KW_FN:
+        case HENKA_HKS_TOKEN_KW_BEHAVIOR:
+        case HENKA_HKS_TOKEN_KW_RETURN:
+        case HENKA_HKS_TOKEN_KW_LET:
+        case HENKA_HKS_TOKEN_KW_VAR:
+        case HENKA_HKS_TOKEN_KW_IF:
+        case HENKA_HKS_TOKEN_KW_ELSE:
+        case HENKA_HKS_TOKEN_KW_WHILE:
+        case HENKA_HKS_TOKEN_KW_FOR:
+        case HENKA_HKS_TOKEN_KW_BREAK:
+        case HENKA_HKS_TOKEN_KW_CONTINUE:
+            return HENKA_HKS_TOKEN_CLASS_KEYWORD;
+        case HENKA_HKS_TOKEN_KW_EMIT:
+        case HENKA_HKS_TOKEN_KW_STATE_GET_I32:
+        case HENKA_HKS_TOKEN_KW_STATE_SET_I32:
+        case HENKA_HKS_TOKEN_KW_STATE_GET_BOOL:
+        case HENKA_HKS_TOKEN_KW_STATE_SET_BOOL:
+        case HENKA_HKS_TOKEN_KW_ENTITY_IS_VALID:
+        case HENKA_HKS_TOKEN_KW_INPUT_IS_ACTION_DOWN:
+        case HENKA_HKS_TOKEN_KW_TRANSFORM_GET_POSITION:
+        case HENKA_HKS_TOKEN_KW_TRANSFORM_SET_POSITION:
+        case HENKA_HKS_TOKEN_KW_PHYSICS_APPLY_IMPULSE:
+        case HENKA_HKS_TOKEN_KW_INTERACTION_TRY:
+        case HENKA_HKS_TOKEN_KW_EVENT_ID:
+        case HENKA_HKS_TOKEN_KW_EVENT_OTHER_ENTITY:
+        case HENKA_HKS_TOKEN_KW_EVENT_TYPE:
+            return HENKA_HKS_TOKEN_CLASS_BUILTIN;
+        case HENKA_HKS_TOKEN_LBRACE:
+        case HENKA_HKS_TOKEN_RBRACE:
+        case HENKA_HKS_TOKEN_LPAREN:
+        case HENKA_HKS_TOKEN_RPAREN:
+        case HENKA_HKS_TOKEN_SEMICOLON:
+        case HENKA_HKS_TOKEN_COMMA:
+        case HENKA_HKS_TOKEN_ASSIGN:
+        case HENKA_HKS_TOKEN_INFER:
+        case HENKA_HKS_TOKEN_PLUS:
+        case HENKA_HKS_TOKEN_MINUS:
+        case HENKA_HKS_TOKEN_STAR:
+        case HENKA_HKS_TOKEN_SLASH:
+        case HENKA_HKS_TOKEN_EQUAL_EQUAL:
+        case HENKA_HKS_TOKEN_NOT_EQUAL:
+        case HENKA_HKS_TOKEN_LESS:
+        case HENKA_HKS_TOKEN_LESS_EQUAL:
+        case HENKA_HKS_TOKEN_GREATER:
+        case HENKA_HKS_TOKEN_GREATER_EQUAL:
+            return HENKA_HKS_TOKEN_CLASS_PUNCTUATION;
+        default:
+            return HENKA_HKS_TOKEN_CLASS_NONE;
+    }
+}
+
 henka_result henka_hks_lex(
     const char* source,
     size_t source_size,

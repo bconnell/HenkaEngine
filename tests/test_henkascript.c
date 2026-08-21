@@ -93,6 +93,26 @@ static void test_lex_and_compile_valid_program(void)
     henka_hks_program_destroy(program);
 }
 
+static void test_compiler_owned_token_presentation_classes(void)
+{
+    assert(henka_hks_token_kind_get_class(HENKA_HKS_TOKEN_IDENTIFIER) ==
+        HENKA_HKS_TOKEN_CLASS_IDENTIFIER);
+    assert(henka_hks_token_kind_get_class(HENKA_HKS_TOKEN_INTEGER) ==
+        HENKA_HKS_TOKEN_CLASS_LITERAL);
+    assert(henka_hks_token_kind_get_class(HENKA_HKS_TOKEN_STRING) ==
+        HENKA_HKS_TOKEN_CLASS_LITERAL);
+    assert(henka_hks_token_kind_get_class(HENKA_HKS_TOKEN_KW_I32) ==
+        HENKA_HKS_TOKEN_CLASS_TYPE);
+    assert(henka_hks_token_kind_get_class(HENKA_HKS_TOKEN_KW_FN) ==
+        HENKA_HKS_TOKEN_CLASS_KEYWORD);
+    assert(henka_hks_token_kind_get_class(HENKA_HKS_TOKEN_KW_EMIT) ==
+        HENKA_HKS_TOKEN_CLASS_BUILTIN);
+    assert(henka_hks_token_kind_get_class(HENKA_HKS_TOKEN_LBRACE) ==
+        HENKA_HKS_TOKEN_CLASS_PUNCTUATION);
+    assert(henka_hks_token_kind_get_class(HENKA_HKS_TOKEN_EOF) ==
+        HENKA_HKS_TOKEN_CLASS_NONE);
+}
+
 static void test_rejects_unsafe_or_invalid_source(void)
 {
     char source[HENKA_HKS_MAX_SOURCE_BYTES + 1U];
@@ -600,6 +620,7 @@ int main(void)
     const size_t allocations_before = henka_memory_get_allocation_count();
 
     test_lex_and_compile_valid_program();
+    test_compiler_owned_token_presentation_classes();
     test_rejects_unsafe_or_invalid_source();
     test_argument_and_memory_contracts();
     test_bounded_vm_execution();

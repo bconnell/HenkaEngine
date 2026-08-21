@@ -7,8 +7,8 @@
 
 /* Draws a bounded, read-only source preview for one attached behavior. Lua
  * keeps the persisted source and indentation verbatim; HenkaScript syntax
- * colors come from the compiler's public lexer/token kinds. This surface does
- * not implement a second grammar or claim source editing. */
+ * spans and presentation classes come from the compiler's public lexer API.
+ * This surface does not implement a second grammar or claim source editing. */
 henka_result sandbox3d_script_editor_draw_preview(
     henka_ui_context* ui,
     henka_ui_rect bounds,
