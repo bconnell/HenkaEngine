@@ -36,6 +36,11 @@ typedef enum henka_script_lifecycle_event
     HENKA_SCRIPT_LIFECYCLE_DESTROY
 } henka_script_lifecycle_event;
 
+/* Includes the published EVENT slot so backend callback storage can index by
+ * the enum directly without a second ordered lifecycle table. */
+#define HENKA_SCRIPT_LIFECYCLE_SLOT_COUNT \
+    (HENKA_SCRIPT_LIFECYCLE_DESTROY + 1U)
+
 #define HENKA_SCRIPT_LIFECYCLE_SCHEMA_VERSION UINT32_C(1)
 #define HENKA_SCRIPT_LIFECYCLE_MAX_PARAMETERS 2U
 

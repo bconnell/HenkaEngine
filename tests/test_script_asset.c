@@ -7,6 +7,7 @@
 #endif
 
 #include <henka/memory.h>
+#include <henka/henkascript.h>
 #include <henka/scene_document.h>
 #include <henka/script_asset.h>
 #include <henka/script_source.h>
@@ -128,6 +129,8 @@ static void test_exclusive_script_templates(void)
     char* loaded_source = NULL;
     size_t source_size;
     size_t loaded_source_size = 0U;
+    const char* compiler_source = NULL;
+    size_t compiler_source_size = 0U;
     FILE* file;
 
     (void)remove(lua_path);
@@ -158,11 +161,13 @@ static void test_exclusive_script_templates(void)
     assert(fclose(file) == 0);
     source[source_size] = '\0';
     assert(strstr(source, "fn OnCreate()") != NULL);
+    assert(henka_hks_get_default_behavior_source(
+               &compiler_source,
+               &compiler_source_size) == HENKA_SUCCESS);
     assert(henka_script_asset_read_source(
                ".", hks_path, &loaded_source, &loaded_source_size) == HENKA_SUCCESS);
-    assert(loaded_source != NULL && loaded_source_size > 0U);
-    assert(loaded_source_size >= strlen("fn OnCreate()") &&
-           strstr(loaded_source, "fn OnCreate()") != NULL);
+    assert(loaded_source != NULL && loaded_source_size == compiler_source_size);
+    assert(memcmp(loaded_source, compiler_source, compiler_source_size) == 0);
     henka_free(loaded_source);
     loaded_source = NULL;
     assert(henka_script_asset_read_source(

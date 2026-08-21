@@ -4,6 +4,7 @@
 #include <string.h>
 
 #include <henka/memory.h>
+#include <henka/henkascript.h>
 #include <henka/persistence.h>
 #include <henka/script_backends.h>
 
@@ -131,13 +132,8 @@ henka_result henka_script_asset_create_template(
         "end\n\n"
         "function OnUpdate()\n"
         "end\n";
-    static const char hks_source[] =
-        "// HenkaScript V1 behavior template.\n"
-        "fn OnCreate() { }\n"
-        "fn OnStart() { }\n"
-        "fn OnUpdate() { }\n";
-    const char* source;
-    size_t source_size;
+    const char* source = NULL;
+    size_t source_size = 0U;
     char* path = NULL;
     FILE* file = NULL;
     henka_result result;
@@ -163,10 +159,18 @@ henka_result henka_script_asset_create_template(
         henka_free(path);
         return result;
     }
-    source = language == HENKA_SCRIPT_LANGUAGE_LUA
-        ? lua_source
-        : hks_source;
-    source_size = strlen(source);
+    if (language == HENKA_SCRIPT_LANGUAGE_LUA)
+    {
+        source = lua_source;
+        source_size = strlen(source);
+    }
+    else if (henka_hks_get_default_behavior_source(
+                 &source,
+                 &source_size) != HENKA_SUCCESS)
+    {
+        henka_free(path);
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
 #if defined(_MSC_VER)
     if (fopen_s(&file, path, "wbx") != 0)
     {

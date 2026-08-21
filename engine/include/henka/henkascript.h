@@ -107,6 +107,15 @@ typedef struct henka_hks_token
 henka_hks_token_class henka_hks_token_kind_get_class(
     henka_hks_token_kind kind);
 
+/* Returns the compiler-owned minimal behavior source used for new `.hks`
+ * assets. The returned bytes are immutable and remain valid for the process
+ * lifetime; callers do not take ownership. This keeps asset creation and
+ * tooling on the compiler's language definition rather than maintaining a
+ * second template grammar. */
+henka_result henka_hks_get_default_behavior_source(
+    const char** out_source,
+    size_t* out_source_size);
+
 /* Returns the structural brace indentation level at a byte insertion point.
  * The result is derived from an already lexed compiler token stream; editor
  * and tooling consumers must not recreate HenkaScript grammar tables. The

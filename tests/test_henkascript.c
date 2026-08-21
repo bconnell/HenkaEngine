@@ -113,6 +113,31 @@ static void test_compiler_owned_token_presentation_classes(void)
         HENKA_HKS_TOKEN_CLASS_NONE);
 }
 
+static void test_compiler_owned_behavior_template(void)
+{
+    const char* source = NULL;
+    size_t source_size = 0U;
+    henka_hks_program* program = NULL;
+    henka_hks_diagnostic diagnostic;
+
+    assert(henka_hks_get_default_behavior_source(NULL, &source_size) ==
+        HENKA_ERROR_INVALID_ARGUMENT);
+    assert(henka_hks_get_default_behavior_source(&source, NULL) ==
+        HENKA_ERROR_INVALID_ARGUMENT);
+    assert(henka_hks_get_default_behavior_source(&source, &source_size) ==
+        HENKA_SUCCESS);
+    assert(source != NULL && source_size == strlen(source));
+    memset(&diagnostic, 0, sizeof(diagnostic));
+    assert(henka_hks_compile(
+               source,
+               source_size,
+               &program,
+               &diagnostic) == HENKA_SUCCESS);
+    assert(program != NULL);
+    assert(henka_hks_program_get_callable_count(program) == 3U);
+    henka_hks_program_destroy(program);
+}
+
 static void test_compiler_owned_token_indentation(void)
 {
     static const char source[] =
@@ -687,6 +712,7 @@ int main(void)
 
     test_lex_and_compile_valid_program();
     test_compiler_owned_token_presentation_classes();
+    test_compiler_owned_behavior_template();
     test_compiler_owned_token_indentation();
     test_rejects_unsafe_or_invalid_source();
     test_argument_and_memory_contracts();

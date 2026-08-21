@@ -32,6 +32,13 @@ execution adapters for both languages.
   compiler's keyword table or grammar; Lua source remains backend-validated
   and is displayed with its persisted structure until a Lua tokenization seam
   is intentionally added.
+- The compiler remains the authority for HenkaScript syntax and supplies the
+  canonical minimal behavior source through
+  `henka_hks_get_default_behavior_source`. Asset creation, editor presentation,
+  and structural indentation consume compiler/runtime contracts rather than
+  maintaining parallel language definitions. The examples on this page are
+  illustrative documentation and are not a second grammar or template
+  implementation.
 - Bounded callable bytecode generation and an allocation-free typed VM with
   fixed stack storage, checked arithmetic, deterministic reports, and an
   instruction budget.

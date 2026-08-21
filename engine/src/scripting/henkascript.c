@@ -15,6 +15,12 @@
 #define HENKA_HKS_MAX_LOOP_DEPTH 16U
 #define HENKA_HKS_MAX_LOOP_PATCHES 64U
 
+static const char g_henka_hks_default_behavior_source[] =
+    "// HenkaScript V1 behavior template.\n"
+    "fn OnCreate() { }\n"
+    "fn OnStart() { }\n"
+    "fn OnUpdate() { }\n";
+
 typedef enum henka_hks_ast_node_kind
 {
     HENKA_HKS_AST_DECLARATION = 0,
@@ -315,6 +321,19 @@ henka_hks_token_class henka_hks_token_kind_get_class(
         default:
             return HENKA_HKS_TOKEN_CLASS_NONE;
     }
+}
+
+henka_result henka_hks_get_default_behavior_source(
+    const char** out_source,
+    size_t* out_source_size)
+{
+    if (out_source == NULL || out_source_size == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    *out_source = g_henka_hks_default_behavior_source;
+    *out_source_size = sizeof(g_henka_hks_default_behavior_source) - 1U;
+    return HENKA_SUCCESS;
 }
 
 henka_result henka_hks_token_stream_get_indent_level(
