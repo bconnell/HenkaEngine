@@ -11,6 +11,8 @@ add_library(henka_runtime STATIC
     src/scripting/script_runtime.c
     src/scripting/henkascript.c
     src/scripting/henkascript_backend.c
+    src/scripting/script_asset.c
+    src/scripting/scene_behavior_runtime.c
     $<$<BOOL:${HENKA_ENABLE_LUA}>:src/scripting/lua_backend.c>
     src/scene/camera.c
     src/scene/scene.c
@@ -58,6 +60,7 @@ target_include_directories(henka_runtime
 )
 
 target_compile_definitions(henka_runtime PRIVATE HENKA_RUNTIME_HEADLESS=1)
+target_compile_definitions(henka_runtime PRIVATE HENKA_ENABLE_LUA=$<BOOL:${HENKA_ENABLE_LUA}>)
 henka_enable_project_warnings(henka_runtime)
 
 if(HENKA_BUILD_CLIENT)

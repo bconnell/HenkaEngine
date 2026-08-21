@@ -1,0 +1,161 @@
+#include <henka/scene_behavior_runtime.h>
+
+#include <henka/memory.h>
+#include <henka/script_asset.h>
+
+struct henka_scene_behavior_runtime
+{
+    henka_script_behavior_runtime* behavior_runtime;
+    size_t asset_count;
+    henka_script_behavior_asset* assets[HENKA_SCRIPT_RUNTIME_MAX_BEHAVIORS];
+};
+
+static void henka_scene_behavior_runtime_release(
+    henka_scene_behavior_runtime* runtime)
+{
+    size_t index;
+    if (runtime == NULL)
+    {
+        return;
+    }
+    henka_script_behavior_runtime_destroy(runtime->behavior_runtime);
+    runtime->behavior_runtime = NULL;
+    for (index = 0U; index < runtime->asset_count; ++index)
+    {
+        henka_script_behavior_asset_destroy(runtime->assets[index]);
+        runtime->assets[index] = NULL;
+    }
+    runtime->asset_count = 0U;
+}
+
+henka_result henka_scene_behavior_runtime_create(
+    const henka_scene_document* document,
+    const char* project_root,
+    uint32_t instruction_budget,
+    henka_scene_behavior_runtime** out_runtime)
+{
+    henka_scene_behavior_runtime* runtime = NULL;
+    size_t object_index;
+    size_t object_count;
+    henka_result result;
+    if (out_runtime == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    *out_runtime = NULL;
+    if (document == NULL || project_root == NULL || project_root[0] == '\0' ||
+        henka_scene_document_validate(document) != HENKA_SUCCESS ||
+        instruction_budget > HENKA_SCRIPT_MAX_BEHAVIOR_INSTRUCTION_BUDGET)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    if (instruction_budget == 0U)
+    {
+        instruction_budget = HENKA_SCRIPT_DEFAULT_BEHAVIOR_INSTRUCTION_BUDGET;
+    }
+    runtime = (henka_scene_behavior_runtime*)henka_calloc(1U, sizeof(*runtime));
+    if (runtime == NULL)
+    {
+        return HENKA_ERROR_OUT_OF_MEMORY;
+    }
+    result = henka_script_behavior_runtime_create(&runtime->behavior_runtime);
+    if (result != HENKA_SUCCESS)
+    {
+        henka_free(runtime);
+        return result;
+    }
+    object_count = henka_scene_document_get_object_count(document);
+    for (object_index = 0U; object_index < object_count; ++object_index)
+    {
+        henka_scene_document_object object;
+        size_t behavior_index;
+        if (henka_scene_document_get_object_at(
+                document, object_index, &object) != HENKA_SUCCESS)
+        {
+            result = HENKA_ERROR_INVALID_ARGUMENT;
+            goto fail;
+        }
+        for (behavior_index = 0U;
+             behavior_index < object.behavior_count;
+             ++behavior_index)
+        {
+            henka_script_behavior_asset* asset = NULL;
+            henka_script_behavior_desc desc;
+            henka_script_behavior_handle ignored_handle;
+            if (runtime->asset_count >= HENKA_SCRIPT_RUNTIME_MAX_BEHAVIORS)
+            {
+                result = HENKA_ERROR_LIMIT;
+                goto fail;
+            }
+            result = henka_script_behavior_asset_create(
+                project_root,
+                &object.behaviors[behavior_index],
+                object.id,
+                object.behaviors[behavior_index].enabled,
+                instruction_budget,
+                &asset);
+            if (result != HENKA_SUCCESS ||
+                henka_script_behavior_asset_get_runtime_desc(asset, &desc) != HENKA_SUCCESS)
+            {
+                henka_script_behavior_asset_destroy(asset);
+                if (result == HENKA_SUCCESS)
+                {
+                    result = HENKA_ERROR_INVALID_ARGUMENT;
+                }
+                goto fail;
+            }
+            result = henka_script_behavior_runtime_add(
+                runtime->behavior_runtime, &desc, &ignored_handle);
+            if (result != HENKA_SUCCESS)
+            {
+                henka_script_behavior_asset_destroy(asset);
+                goto fail;
+            }
+            runtime->assets[runtime->asset_count++] = asset;
+        }
+    }
+    *out_runtime = runtime;
+    return HENKA_SUCCESS;
+
+fail:
+    henka_scene_behavior_runtime_release(runtime);
+    henka_free(runtime);
+    return result;
+}
+
+void henka_scene_behavior_runtime_destroy(
+    henka_scene_behavior_runtime* runtime)
+{
+    if (runtime != NULL)
+    {
+        henka_scene_behavior_runtime_release(runtime);
+        henka_free(runtime);
+    }
+}
+
+henka_result henka_scene_behavior_runtime_dispatch(
+    henka_scene_behavior_runtime* runtime,
+    henka_script_lifecycle_event event,
+    float delta_seconds,
+    uint64_t frame_index,
+    henka_script_behavior_batch_report* out_report)
+{
+    if (runtime == NULL || runtime->behavior_runtime == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    return henka_script_behavior_runtime_dispatch_all(
+        runtime->behavior_runtime,
+        event,
+        delta_seconds,
+        frame_index,
+        out_report);
+}
+
+size_t henka_scene_behavior_runtime_get_behavior_count(
+    const henka_scene_behavior_runtime* runtime)
+{
+    return runtime == NULL || runtime->behavior_runtime == NULL
+        ? 0U
+        : henka_script_behavior_runtime_get_count(runtime->behavior_runtime);
+}

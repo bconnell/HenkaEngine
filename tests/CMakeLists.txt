@@ -76,6 +76,32 @@ henka_enable_project_warnings(henka_lua_backend_tests)
 
 add_test(NAME henka_lua_backend_tests COMMAND henka_lua_backend_tests)
 
+add_executable(henka_script_asset_tests
+    test_script_asset.c
+)
+
+target_link_libraries(henka_script_asset_tests
+    PRIVATE
+        henka_runtime
+)
+
+henka_enable_project_warnings(henka_script_asset_tests)
+
+add_test(NAME henka_script_asset_tests COMMAND henka_script_asset_tests)
+
+add_executable(henka_scene_behavior_runtime_tests
+    test_scene_behavior_runtime.c
+)
+
+target_link_libraries(henka_scene_behavior_runtime_tests
+    PRIVATE
+        henka_runtime
+)
+
+henka_enable_project_warnings(henka_scene_behavior_runtime_tests)
+
+add_test(NAME henka_scene_behavior_runtime_tests COMMAND henka_scene_behavior_runtime_tests)
+
 add_executable(henka_henkascript_tests
     test_henkascript.c
 )

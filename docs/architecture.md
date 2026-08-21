@@ -22,9 +22,13 @@ lexes, parses, and type-checks bounded source through `<henka/henkascript.h>`.
 The current foundation executes bounded HenkaScript bytecode and bounded Lua
 callables through adapters that map `OnCreate`, `OnStart`, `OnUpdate`, and
 `OnStop` into the language-neutral generation-checked behavior runtime. These
-adapters do not own source assets or persistent behavior state. Script Host
-dispatch, scene binding, and editor authoring remain later layers above this
-boundary.
+adapters do not resolve project paths or own Scene Document persistence. The
+bounded script asset loader owns the selected backend instance and exposes a
+runtime descriptor for persisted `.lua` and `.hks` attachments; persistent
+behavior state remains outside that loader. The Scene Document behavior
+runtime assembles these owned assets by persistent object identity; Play-scene
+entity binding, Script Host dispatch, and editor authoring remain later layers
+above this boundary.
 
 ### Network boundary
 

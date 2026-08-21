@@ -107,6 +107,10 @@ turning the public README into an implementation ledger.
    lifecycle execution, their lifecycle adapters, and a language-neutral
    generation-checked behavior lifecycle runtime. Scene binding, Script Host
    dispatch, persistent global state, and editor authoring remain unfinished.
+   Persisted `.lua` and `.hks` attachments can now be loaded through a bounded,
+   confined-path asset loader and assembled into a mixed-language behavior
+   runtime by persistent Scene Document object identity; binding that runtime to
+   isolated Play-scene entities remains unfinished.
 
 ## Modeling / Content Authoring
 

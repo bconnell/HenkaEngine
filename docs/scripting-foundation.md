@@ -41,6 +41,10 @@ execution adapters for both languages.
   declaration semantics.
 - Versioned Scene Document behavior attachments with stable IDs, enabled state,
   language identity, and confined `.lua`/`.hks` project-relative asset paths.
+- A bounded Scene Document behavior asset loader that resolves those paths
+  inside the project root, validates source size and language suffix, owns the
+  selected backend, and returns a runtime descriptor for mixed-language
+  lifecycle dispatch.
 
 Backends should resolve IDs during load/compile and retain typed native
 bindings. Names are for diagnostics and tooling; they are not the runtime
@@ -50,10 +54,13 @@ dispatch mechanism.
 
 The HenkaScript compiler and VM currently execute bounded callable-local
 bytecode, and both language adapters can drive their bounded execution through
-the language-neutral behavior runtime. The runtime is not yet connected to
-Scene Document objects or a project asset loader. Persistent global state,
-Script Host API dispatch, `.lua`/`.hks` asset loading, Inspector authoring, hot
-reload, and mixed-language events remain subsequent implementation slices.
+the language-neutral behavior runtime. The bounded loader can create owned
+backend instances from persisted `.lua` and `.hks` attachments, and the Scene
+Document behavior runtime can assemble and dispatch them by persistent object
+identity. Binding that runtime to isolated Play-scene entities remains
+unfinished. Persistent global state, Script Host API dispatch, Inspector
+authoring, hot reload, and mixed-language event routing remain subsequent
+implementation slices.
 
 The current schema, HenkaScript compiler, and bounded VM are therefore engine
 integration foundations, not a claim that complete executable scripting is

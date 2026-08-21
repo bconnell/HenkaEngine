@@ -242,13 +242,53 @@ A complete project-wide authoring serializer, hierarchy/project manifests, and
 remote or network-backed save policy remain future work beyond the current HAMS
 and V1 `.hscene` foundations.
 
+## Scripting and behavior authoring
+
+### Implemented Foundation
+
+1. A versioned, language-neutral Script Host schema provides bounded typed
+   gameplay API identities and diagnostics.
+2. HenkaScript has a bounded lexer, parser, type checker, callable bytecode
+   path, and allocation-free budgeted VM.
+3. Lua 5.4.8 and HenkaScript have bounded lifecycle adapters for `OnCreate`,
+   `OnStart`, `OnUpdate`, and `OnStop`, with fail-closed budgets and
+   deterministic missing-handler behavior.
+4. The generation-checked behavior runtime owns lifecycle state, borrowed
+   callbacks, synchronous non-reentrant dispatch, failure accounting, and
+   bounded batch reports.
+5. Scene Document behavior attachments persist stable IDs, enabled state,
+   language identity, and confined project-relative `.lua`/`.hks` paths. The
+   bounded asset loader validates those paths and source limits, owns each
+   selected backend, and exposes mixed-language runtime descriptors.
+
+### Current Development
+
+1. Bind the Scene Document behavior runtime to isolated Play-scene entities
+   without allowing runtime callbacks to mutate authoring state.
+2. Resolve Script Host API bindings at load time and define the bounded host
+   dispatch contract exposed to behaviors.
+3. Add persistent behavior state, Inspector authoring, reload diagnostics, and
+   transactional hot reload while retaining the previous valid instance on
+   failure.
+4. Define mixed-language event routing and lifecycle ordering at the scene
+   boundary; the backend/runtime seam already supports mixed-language lifecycle
+   dispatch.
+
+### Future Work
+
+1. End-user project scripting workflows, debugger/diagnostic presentation,
+   broader host APIs, and a stable script package/versioning policy.
+2. Sandboxed script data schemas, deterministic replay integration, and wider
+   editor tooling once the scene binding contract is stable.
+
 ## Longer-term systems
 
 Longer-term work may include:
 
 1. Expanded physics features such as joints, controllers, and additional collider types.
 2. Audio.
-3. Scripting or extension support.
+3. Additional scripting languages or extension support beyond the bounded V1
+   Lua and HenkaScript foundations.
 4. Additional renderer backends.
 5. Release packaging.
 6. Versioned builds.
