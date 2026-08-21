@@ -44,6 +44,8 @@ struct henka_ui_context
     bool mouse_left_down;
     bool mouse_left_pressed;
     bool mouse_left_released;
+    const char* text_input;
+    size_t text_input_size;
     bool active_id_set;
     char active_id[256];
     henka_ui_flow_state flow;

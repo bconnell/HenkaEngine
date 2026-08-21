@@ -123,6 +123,9 @@ typedef struct henka_input_state
     henka_vec2 mouse_position;
     henka_vec2 mouse_delta;
     henka_vec2 mouse_wheel_delta;
+    char text_input[HENKA_INPUT_MAX_TEXT_INPUT_BYTES];
+    size_t text_input_size;
+    bool text_input_overflowed;
     bool automation_input_owned;
     bool automation_input_faulted;
     char automation_input_path[1024];

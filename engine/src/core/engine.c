@@ -326,6 +326,9 @@ static void henka_input_reset_frame_state(henka_input_state* input)
     input->mouse_delta.y = 0.0f;
     input->mouse_wheel_delta.x = 0.0f;
     input->mouse_wheel_delta.y = 0.0f;
+    input->text_input_size = 0U;
+    input->text_input[0] = '\0';
+    input->text_input_overflowed = false;
     input->close_requested = false;
 }
 
@@ -2101,6 +2104,26 @@ henka_vec2 henka_input_get_mouse_wheel_delta(const henka_engine* engine)
     return engine->input.mouse_wheel_delta;
 }
 
+const char* henka_input_get_text_input(const henka_engine* engine)
+{
+    return engine == NULL ? NULL : engine->input.text_input;
+}
+
+size_t henka_input_get_text_input_size(const henka_engine* engine)
+{
+    return engine == NULL ? 0U : engine->input.text_input_size;
+}
+
+void henka_input_clear_text_input(henka_engine* engine)
+{
+    if (engine != NULL)
+    {
+        engine->input.text_input_size = 0U;
+        engine->input.text_input[0] = '\0';
+        engine->input.text_input_overflowed = false;
+    }
+}
+
 const char* henka_input_action_get_name(henka_input_action action)
 {
     return henka_input_action_default_name(action);
@@ -2111,7 +2134,7 @@ const char* henka_input_key_get_name(henka_key key)
     static const char* names[HENKA_KEY_COUNT] = {
         "Unknown", "Escape", "F", "W", "A", "S", "D", "Q", "E", "G", "R", "M", "X", "Y", "Z",
         "Enter", "Left Ctrl", "Left Alt", "Left Shift", "Home", "Up", "Down", "Left", "Right",
-        "Tab", "F1", "F2", "F3", "F4", "F5", "H"};
+        "Tab", "F1", "F2", "F3", "F4", "F5", "H", "Backspace"};
     return key >= HENKA_KEY_UNKNOWN && key < HENKA_KEY_COUNT ? names[key] : "Unknown";
 }
 

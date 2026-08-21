@@ -64,12 +64,22 @@ void henka_test_input(void)
     HENKA_TEST_ASSERT(henka_engine_set_cursor(NULL, HENKA_CURSOR_DEFAULT) == HENKA_ERROR_INVALID_ARGUMENT);
     HENKA_TEST_ASSERT(henka_engine_set_cursor(&engine, (henka_cursor_shape)99) == HENKA_ERROR_INVALID_ARGUMENT);
 
+    memcpy(engine.input.text_input, "typed", 6U);
+    engine.input.text_input_size = 5U;
+    HENKA_TEST_ASSERT(strcmp(henka_input_get_text_input(&engine), "typed") == 0);
+    HENKA_TEST_ASSERT(henka_input_get_text_input_size(&engine) == 5U);
+    henka_input_clear_text_input(&engine);
+    HENKA_TEST_ASSERT(henka_input_get_text_input_size(&engine) == 0U);
+    HENKA_TEST_ASSERT(henka_input_get_text_input(&engine)[0] == '\0');
+
     input.keys_down[HENKA_KEY_W] = true;
     input.keys_pressed[HENKA_KEY_W] = true;
     input.mouse_buttons_down[HENKA_MOUSE_BUTTON_LEFT] = true;
     input.mouse_buttons_pressed[HENKA_MOUSE_BUTTON_LEFT] = true;
     input.mouse_delta = (henka_vec2){4.0f, -3.0f};
     input.mouse_wheel_delta = (henka_vec2){1.0f, 2.0f};
+    memcpy(input.text_input, "focus", 6U);
+    input.text_input_size = 5U;
     henka_platform_release_input_on_focus_loss(&input);
     HENKA_TEST_ASSERT(!input.keys_down[HENKA_KEY_W]);
     HENKA_TEST_ASSERT(!input.keys_pressed[HENKA_KEY_W]);
@@ -81,6 +91,8 @@ void henka_test_input(void)
     HENKA_TEST_ASSERT_FLOAT_CLOSE(input.mouse_delta.y, 0.0f, 0.0001f);
     HENKA_TEST_ASSERT_FLOAT_CLOSE(input.mouse_wheel_delta.x, 0.0f, 0.0001f);
     HENKA_TEST_ASSERT_FLOAT_CLOSE(input.mouse_wheel_delta.y, 0.0f, 0.0001f);
+    HENKA_TEST_ASSERT(input.text_input_size == 0U);
+    HENKA_TEST_ASSERT(input.text_input[0] == '\0');
 
     occupied_ids[0] = 2U;
     occupied_ids[1] = 3U;

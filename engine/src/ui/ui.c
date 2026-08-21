@@ -1157,7 +1157,9 @@ henka_result henka_ui_begin_frame(
         context->frame_active ||
         frame_desc->framebuffer_width <= 0 ||
         frame_desc->framebuffer_height <= 0 ||
-        !henka_ui_vec2_is_finite(frame_desc->mouse_position))
+        !henka_ui_vec2_is_finite(frame_desc->mouse_position) ||
+        (frame_desc->text_input == NULL && frame_desc->text_input_size != 0U) ||
+        frame_desc->text_input_size > HENKA_UI_MAX_TEXT_BYTES)
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
@@ -1170,6 +1172,8 @@ henka_result henka_ui_begin_frame(
     context->mouse_left_down = frame_desc->mouse_left_down;
     context->mouse_left_pressed = frame_desc->mouse_left_pressed;
     context->mouse_left_released = frame_desc->mouse_left_released;
+    context->text_input = frame_desc->text_input;
+    context->text_input_size = frame_desc->text_input_size;
     context->draw_rect_count = 0U;
     context->draw_line_count = 0U;
     context->disclosure_id_count = 0U;
@@ -1240,6 +1244,17 @@ henka_vec2 henka_ui_get_mouse_position(const henka_ui_context* context)
         return (henka_vec2){0.0f, 0.0f};
     }
     return context->mouse_position;
+}
+
+const char* henka_ui_get_text_input(
+    const henka_ui_context* context,
+    size_t* out_text_size)
+{
+    if (out_text_size != NULL)
+    {
+        *out_text_size = context == NULL ? 0U : context->text_input_size;
+    }
+    return context == NULL ? NULL : context->text_input;
 }
 
 henka_result henka_ui_custom_interaction(

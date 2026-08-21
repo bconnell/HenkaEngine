@@ -40,6 +40,7 @@ typedef enum henka_key
     HENKA_KEY_F4,
     HENKA_KEY_F5,
     HENKA_KEY_H,
+    HENKA_KEY_BACKSPACE,
     HENKA_KEY_COUNT
 } henka_key;
 
@@ -81,6 +82,7 @@ typedef enum henka_input_action
 
 #define HENKA_MAX_ACTION_KEY_BINDINGS 2U
 #define HENKA_MAX_ACTION_MOUSE_BINDINGS 2U
+#define HENKA_INPUT_MAX_TEXT_INPUT_BYTES 256U
 
 struct henka_engine;
 
@@ -93,6 +95,11 @@ bool henka_input_was_mouse_button_released(const struct henka_engine* engine, he
 henka_vec2 henka_input_get_mouse_position(const struct henka_engine* engine);
 henka_vec2 henka_input_get_mouse_delta(const struct henka_engine* engine);
 henka_vec2 henka_input_get_mouse_wheel_delta(const struct henka_engine* engine);
+/* Borrowed UTF-8 text received during the current frame. The buffer is
+ * bounded, application-local, and replaced at the next frame boundary. */
+const char* henka_input_get_text_input(const struct henka_engine* engine);
+size_t henka_input_get_text_input_size(const struct henka_engine* engine);
+void henka_input_clear_text_input(struct henka_engine* engine);
 const char* henka_input_key_get_name(henka_key key);
 henka_key henka_input_key_find_by_name(const char* name);
 const char* henka_input_mouse_button_get_name(henka_mouse_button button);

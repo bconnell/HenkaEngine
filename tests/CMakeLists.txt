@@ -115,6 +115,28 @@ henka_enable_project_warnings(henka_script_source_tests)
 
 add_test(NAME henka_script_source_tests COMMAND henka_script_source_tests)
 
+add_executable(henka_sandbox3d_script_editor_tests
+    ../examples/sandbox3d/script_editor_model.c
+    test_script_editor.c
+)
+
+target_include_directories(henka_sandbox3d_script_editor_tests
+    PRIVATE
+        ../examples/sandbox3d
+)
+
+target_link_libraries(henka_sandbox3d_script_editor_tests
+    PRIVATE
+        henka_runtime
+)
+
+henka_enable_project_warnings(henka_sandbox3d_script_editor_tests)
+
+add_test(
+    NAME henka_sandbox3d_script_editor_tests
+    COMMAND henka_sandbox3d_script_editor_tests
+)
+
 add_executable(henka_scene_behavior_runtime_tests
     test_scene_behavior_runtime.c
 )

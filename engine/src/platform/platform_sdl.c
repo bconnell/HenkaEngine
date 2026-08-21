@@ -419,6 +419,31 @@ void henka_platform_release_input_on_focus_loss(henka_input_state* input)
 
     input->mouse_delta = (henka_vec2){0.0f, 0.0f};
     input->mouse_wheel_delta = (henka_vec2){0.0f, 0.0f};
+    input->text_input_size = 0U;
+    input->text_input[0] = '\0';
+    input->text_input_overflowed = false;
+}
+
+static bool henka_platform_append_text_input(
+    henka_input_state* input,
+    const char* text)
+{
+    size_t text_size;
+    if (input == NULL || text == NULL)
+    {
+        return false;
+    }
+    text_size = strlen(text);
+    if (text_size > (size_t)HENKA_INPUT_MAX_TEXT_INPUT_BYTES - 1U -
+        input->text_input_size)
+    {
+        input->text_input_overflowed = true;
+        return false;
+    }
+    memcpy(input->text_input + input->text_input_size, text, text_size);
+    input->text_input_size += text_size;
+    input->text_input[input->text_input_size] = '\0';
+    return true;
 }
 
 bool henka_platform_choose_tool_window_id(
@@ -824,6 +849,8 @@ static henka_key henka_translate_key(SDL_Keycode keycode)
             return HENKA_KEY_F5;
         case SDLK_H:
             return HENKA_KEY_H;
+        case SDLK_BACKSPACE:
+            return HENKA_KEY_BACKSPACE;
         default:
             return HENKA_KEY_UNKNOWN;
     }
@@ -894,6 +921,11 @@ henka_result henka_platform_create(
         return HENKA_ERROR_PLATFORM;
     }
 
+    if (!SDL_StartTextInput(platform->window))
+    {
+        HENKA_LOG_WARN("SDL text input could not be started; editor text events may be unavailable");
+    }
+
     henka_platform_apply_window_icon(platform->window);
 
     platform->main_window_id = SDL_GetWindowID(platform->window);
@@ -951,6 +983,7 @@ void henka_platform_destroy(struct henka_platform* platform)
 
     if (platform->window != NULL)
     {
+        (void)SDL_StopTextInput(platform->window);
         SDL_DestroyWindow(platform->window);
     }
 
@@ -1452,6 +1485,25 @@ henka_result henka_platform_poll_events(struct henka_platform* platform, henka_i
                 }
                 break;
             }
+
+            case SDL_EVENT_TEXT_INPUT:
+                if (!henka_platform_event_is_main_window(
+                        platform, event.text.windowID))
+                {
+                    platform->last_event_route =
+                        HENKA_WINDOW_EVENT_ROUTE_UNKNOWN;
+                    break;
+                }
+                platform->last_event_route = HENKA_WINDOW_EVENT_ROUTE_MAIN;
+                if (!input->automation_input_owned &&
+                    !henka_platform_append_text_input(input, event.text.text))
+                {
+                    if (input->text_input_overflowed)
+                    {
+                        HENKA_LOG_WARN("frame text input exceeded the bounded editor input buffer");
+                    }
+                }
+                break;
 
             case SDL_EVENT_KEY_UP:
             {

@@ -496,6 +496,7 @@ typedef struct sandbox3d_state
     henka_entity realism_entities[SANDBOX3D_REALISM_ENTITY_COUNT];
     sandbox3d_object_descriptor descriptors[SANDBOX3D_OBJECT_COUNT];
     sandbox3d_game_authoring* game_authoring;
+    sandbox3d_script_editor_model* script_editor_model;
     sandbox3d_workspace_state workspace;
     sandbox3d_gizmo_state gizmo;
     sandbox3d_gizmo_render_state gizmo_render;
@@ -21088,10 +21089,14 @@ details_group_overview:
                     &preview_behavior) == HENKA_SUCCESS)
             {
                 (void)sandbox3d_script_editor_draw_preview(
+                    engine,
                     state->ui,
                     row,
                     henka_engine_get_user_data_base_path(engine),
-                    &preview_behavior);
+                    &preview_behavior,
+                    &state->script_editor_model,
+                    sandbox3d_game_authoring_is_play_locked(
+                        state->game_authoring));
             }
         }
         if (authored_object_available &&
@@ -26254,6 +26259,8 @@ static void sandbox3d_build_ui(henka_engine* engine, sandbox3d_state* state)
         henka_input_was_key_pressed(engine, HENKA_KEY_RIGHT);
     frame_desc.navigation_enter_pressed =
         henka_input_was_key_pressed(engine, HENKA_KEY_ENTER);
+    frame_desc.text_input = henka_input_get_text_input(engine);
+    frame_desc.text_input_size = henka_input_get_text_input_size(engine);
 
     if (henka_ui_begin_frame(state->ui, &frame_desc) != HENKA_SUCCESS)
     {
@@ -26532,6 +26539,9 @@ static void sandbox3d_build_ui(henka_engine* engine, sandbox3d_state* state)
             henka_input_consume_key_press(engine, HENKA_KEY_ENTER);
         }
     }
+    /* Text input is a borrowed per-frame buffer. The code editor consumes it
+     * while building the frame; clear it only after all UI controls have run. */
+    henka_input_clear_text_input(engine);
 }
 
 static henka_result sandbox3d_initialize(henka_engine* engine, void* user_data)
@@ -28067,6 +28077,8 @@ static henka_result sandbox3d_initialize(henka_engine* engine, void* user_data)
     return HENKA_SUCCESS;
 
 fail:
+    sandbox3d_script_editor_model_destroy(state->script_editor_model);
+    state->script_editor_model = NULL;
     sandbox3d_game_authoring_destroy(state->game_authoring);
     state->game_authoring = NULL;
     sandbox3d_release_owned_resources(state);
@@ -30720,6 +30732,8 @@ static void sandbox3d_shutdown(henka_engine* engine, void* user_data)
     sandbox3d_destroy_material_editor_bindings(
         state->material_editor_bindings,
         SANDBOX3D_MAX_MATERIAL_EDITOR_BINDINGS);
+    sandbox3d_script_editor_model_destroy(state->script_editor_model);
+    state->script_editor_model = NULL;
     sandbox3d_game_authoring_destroy(state->game_authoring);
     state->game_authoring = NULL;
     sandbox3d_release_owned_resources(state);

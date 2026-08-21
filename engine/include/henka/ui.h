@@ -97,6 +97,8 @@ typedef struct henka_ui_frame_desc
     bool navigation_left_pressed;
     bool navigation_right_pressed;
     bool navigation_enter_pressed;
+    const char* text_input;
+    size_t text_input_size;
 } henka_ui_frame_desc;
 
 henka_result henka_ui_flow_begin(
@@ -157,6 +159,9 @@ void henka_ui_set_visible(henka_ui_context* context, bool visible);
 bool henka_ui_is_visible(const henka_ui_context* context);
 bool henka_ui_get_wants_mouse(const henka_ui_context* context);
 henka_vec2 henka_ui_get_mouse_position(const henka_ui_context* context);
+const char* henka_ui_get_text_input(
+    const henka_ui_context* context,
+    size_t* out_text_size);
 henka_result henka_ui_custom_interaction(
     henka_ui_context* context,
     const char* id,
