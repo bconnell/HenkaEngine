@@ -1,3 +1,12 @@
 fn OnCreate() {
-  emit(17);
+  bool action_down = input_is_action_down(7);
+  if (action_down) {
+    emit(17);
+  }
+}
+
+fn OnInteract() {
+  entity target = event_other_entity();
+  i32 interaction = interaction_try(target);
+  physics_apply_impulse(target, vec3(0.25, 0.0, 0.0));
 }

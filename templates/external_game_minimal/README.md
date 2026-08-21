@@ -41,9 +41,10 @@ four-layer Terrain material contract, deterministic raise and paint commands,
 collision raycast, CPU render-mesh rebuild, transactional region save, and
 restart reload, then requires a visible Rendered draw with HDR and shadow
 diagnostics. It also loads package-owned `.hks` and `.lua` assets through the
-public Scene Document behavior runtime and proves an HKS-to-Lua Henka event
-with typed state delivery. It does not depend on Sandbox source or a
-machine-global scripting installation.
+public Scene Document behavior runtime and proves shared input, interaction,
+and physics host calls, an HKS-to-Lua Henka event, and typed state delivery.
+It does not depend on Sandbox source or a machine-global scripting
+installation.
 
 ## Template notes
 

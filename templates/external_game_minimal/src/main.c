@@ -711,6 +711,90 @@ cleanup:
     return success;
 }
 
+typedef struct external_script_dispatch_state
+{
+    henka_script_host* host;
+    bool input_called;
+    bool interaction_called;
+    bool physics_called;
+    bool event_called;
+} external_script_dispatch_state;
+
+static henka_result external_script_dispatch(
+    void* user_data,
+    uint32_t api_id,
+    const henka_script_api_value* arguments,
+    size_t argument_count,
+    henka_script_api_value* out_value)
+{
+    external_script_dispatch_state* state =
+        (external_script_dispatch_state*)user_data;
+    if (state == NULL || arguments == NULL || out_value == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    switch (api_id)
+    {
+        case HENKA_SCRIPT_API_INPUT_IS_ACTION_DOWN:
+            if (argument_count != 1U ||
+                arguments[0].type != HENKA_SCRIPT_API_VALUE_ACTION_ID ||
+                arguments[0].as.action_id != 7U)
+            {
+                return HENKA_ERROR_INVALID_ARGUMENT;
+            }
+            state->input_called = true;
+            out_value->type = HENKA_SCRIPT_API_VALUE_BOOL;
+            out_value->as.boolean = true;
+            return HENKA_SUCCESS;
+
+        case HENKA_SCRIPT_API_INTERACTION_TRY:
+            if (argument_count != 1U ||
+                arguments[0].type != HENKA_SCRIPT_API_VALUE_ENTITY)
+            {
+                return HENKA_ERROR_INVALID_ARGUMENT;
+            }
+            state->interaction_called = true;
+            out_value->type = HENKA_SCRIPT_API_VALUE_RESULT;
+            out_value->as.result = (henka_result)HENKA_INTERACTION_RESULT_AVAILABLE;
+            return HENKA_SUCCESS;
+
+        case HENKA_SCRIPT_API_PHYSICS_APPLY_IMPULSE:
+            if (argument_count != 2U ||
+                arguments[0].type != HENKA_SCRIPT_API_VALUE_ENTITY ||
+                arguments[1].type != HENKA_SCRIPT_API_VALUE_VEC3 ||
+                !isfinite(arguments[1].as.vec3.x) ||
+                !isfinite(arguments[1].as.vec3.y) ||
+                !isfinite(arguments[1].as.vec3.z))
+            {
+                return HENKA_ERROR_INVALID_ARGUMENT;
+            }
+            state->physics_called = true;
+            out_value->type = HENKA_SCRIPT_API_VALUE_RESULT;
+            out_value->as.result = HENKA_SUCCESS;
+            return HENKA_SUCCESS;
+
+        case HENKA_SCRIPT_API_EVENTS_EMIT:
+            if (argument_count != 2U ||
+                arguments[0].type != HENKA_SCRIPT_API_VALUE_EVENT_ID ||
+                arguments[1].type != HENKA_SCRIPT_API_VALUE_ENTITY ||
+                state->host == NULL)
+            {
+                return HENKA_ERROR_INVALID_ARGUMENT;
+            }
+            state->event_called = true;
+            out_value->type = HENKA_SCRIPT_API_VALUE_RESULT;
+            out_value->as.result = henka_script_host_emit_event(
+                state->host,
+                arguments[0].as.event_id,
+                arguments[1].as.entity,
+                0U);
+            return HENKA_SUCCESS;
+
+        default:
+            return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+}
+
 static bool external_scripting_workflow(void)
 {
     henka_scene_document* document = NULL;
@@ -721,9 +805,16 @@ static bool external_scripting_workflow(void)
     henka_scene_document_id object_id = HENKA_INVALID_SCENE_DOCUMENT_ID;
     henka_script_state_value state_value = {0};
     henka_script_behavior_batch_report report = {0};
+    external_script_dispatch_state dispatch_state = {0};
     henka_result result = HENKA_SUCCESS;
     bool state_present = false;
     bool success = false;
+    const uint32_t api_ids[] = {
+        HENKA_SCRIPT_API_EVENTS_EMIT,
+        HENKA_SCRIPT_API_INPUT_IS_ACTION_DOWN,
+        HENKA_SCRIPT_API_INTERACTION_TRY,
+        HENKA_SCRIPT_API_PHYSICS_APPLY_IMPULSE,
+        HENKA_SCRIPT_API_STATE_SET_I32};
 
     (void)snprintf(object.name, sizeof(object.name), "%s", "External Script Pair");
     object.source.kind = HENKA_SCENE_DOCUMENT_SOURCE_PRIMITIVE;
@@ -761,25 +852,54 @@ static bool external_scripting_workflow(void)
     EXTERNAL_SCRIPT_STEP(
         "add behavior document", henka_scene_document_add_object(document, &object, &object_id));
     EXTERNAL_SCRIPT_STEP("create host", henka_script_host_create(&host));
+    dispatch_state.host = host;
     EXTERNAL_SCRIPT_STEP("create state store", henka_script_state_store_create(&store));
-    EXTERNAL_SCRIPT_STEP(
-        "bind Events.Emit",
-        henka_script_host_bind_api(host, HENKA_SCRIPT_API_EVENTS_EMIT, &(size_t){0U}));
-    EXTERNAL_SCRIPT_STEP(
-        "bind State.SetI32",
-        henka_script_host_bind_api(host, HENKA_SCRIPT_API_STATE_SET_I32, &(size_t){0U}));
+    for (size_t index = 0U; index < sizeof(api_ids) / sizeof(api_ids[0]); ++index)
+    {
+        EXTERNAL_SCRIPT_STEP(
+            "bind gameplay API",
+            henka_script_host_bind_api(host, api_ids[index], &(size_t){0U}));
+    }
     EXTERNAL_SCRIPT_STEP("attach state store", henka_script_host_set_state_store(host, store));
+    EXTERNAL_SCRIPT_STEP(
+        "set gameplay dispatcher",
+        henka_script_host_set_dispatcher(host, external_script_dispatch, &dispatch_state));
     EXTERNAL_SCRIPT_STEP(
         "load behavior assets",
         henka_scene_behavior_runtime_create_with_host(document, ".", 128U, host, &runtime));
-    EXTERNAL_SCRIPT_STEP(
-        "dispatch Create",
-        henka_scene_behavior_runtime_dispatch(
-            runtime, HENKA_SCRIPT_LIFECYCLE_CREATE, 0.0f, 1U, &report));
+    result = henka_scene_behavior_runtime_dispatch(
+        runtime, HENKA_SCRIPT_LIFECYCLE_CREATE, 0.0f, 1U, &report);
+    if (result != HENKA_SUCCESS)
+    {
+        fprintf(
+            stderr,
+            "External scripting failure: dispatch Create (%s), report=%d, host=%s, input=%s, interaction=%s, physics=%s, event=%s.\n",
+            henka_result_to_string(result),
+            (int)report.first_error,
+            henka_result_to_string(report.first_error),
+            dispatch_state.input_called ? "yes" : "no",
+            dispatch_state.interaction_called ? "yes" : "no",
+            dispatch_state.physics_called ? "yes" : "no",
+            dispatch_state.event_called ? "yes" : "no");
+        goto cleanup;
+    }
     EXTERNAL_SCRIPT_STEP(
         "dispatch Start",
         henka_scene_behavior_runtime_dispatch(
             runtime, HENKA_SCRIPT_LIFECYCLE_START, 0.0f, 1U, &report));
+    EXTERNAL_SCRIPT_STEP(
+        "dispatch interaction",
+        henka_scene_behavior_runtime_dispatch_signal_for_entity(
+            runtime,
+            object_id,
+            HENKA_SCRIPT_LIFECYCLE_INTERACT,
+            0.0f,
+            2U,
+            0U,
+            object_id,
+            99U,
+            1U,
+            &report));
     EXTERNAL_SCRIPT_STEP(
         "dispatch events",
         henka_scene_behavior_runtime_dispatch_events(runtime, &report));
@@ -797,9 +917,15 @@ static bool external_scripting_workflow(void)
         fprintf(stderr, "External scripting failure: subscriber state mismatch.\n");
         goto cleanup;
     }
+    if (!dispatch_state.input_called || !dispatch_state.interaction_called ||
+        !dispatch_state.physics_called || !dispatch_state.event_called)
+    {
+        fprintf(stderr, "External scripting failure: shared gameplay host calls were not exercised.\n");
+        goto cleanup;
+    }
 
     success = true;
-    printf("External Lua/HenkaScript mixed-language event workflow passed.\n");
+    printf("External Lua/HenkaScript mixed-language gameplay host workflow passed.\n");
 
 cleanup:
 #undef EXTERNAL_SCRIPT_STEP
