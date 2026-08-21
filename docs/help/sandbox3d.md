@@ -240,8 +240,9 @@ required to persist the attachment. The bounded source panel now supports
 compiler-backed editing, diagnostics, Save, Revert, and Reload. Reload uses the
 underlying Play-session API while Play is running or paused and reloads the
 persisted source outside Play; failed candidates leave the active behavior
-intact. Exported properties and richer reload diagnostics are not part of this
-slice.
+intact, and compiler/backend line, column, and message diagnostics are
+preserved for failed candidates. Exported properties and debugger presentation
+are not part of this slice.
 
 The Actions group provides Save Scene and Reload Scene for the confined
 `sandbox3d_scene.hscene` file. While Play is running or paused, authoring edits,

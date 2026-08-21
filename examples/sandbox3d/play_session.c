@@ -895,11 +895,12 @@ henka_result sandbox3d_play_session_reload_behavior(
         {
             continue;
         }
-        result = henka_scene_behavior_runtime_reload_behavior(
+        result = henka_scene_behavior_runtime_reload_behavior_with_diagnostic(
             session->behavior_runtime,
             session->project_root,
             &object.behaviors[behavior_index],
-            object.id);
+            object.id,
+            out_diagnostic);
         break;
     }
     if (out_diagnostic != NULL)
@@ -909,7 +910,7 @@ henka_result sandbox3d_play_session_reload_behavior(
         {
             out_diagnostic->message[0] = '\0';
         }
-        else
+        else if (out_diagnostic->message[0] == '\0')
         {
             (void)snprintf(
                 out_diagnostic->message,

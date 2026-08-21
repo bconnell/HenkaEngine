@@ -1,5 +1,8 @@
 #include <henka/scene_behavior_runtime.h>
 
+#include <stdio.h>
+#include <string.h>
+
 #include <henka/memory.h>
 #include <henka/script_asset.h>
 
@@ -262,29 +265,40 @@ henka_result henka_scene_behavior_runtime_dispatch_signal_for_entity(
         out_report);
 }
 
-henka_result henka_scene_behavior_runtime_reload_behavior(
+henka_result henka_scene_behavior_runtime_reload_behavior_with_diagnostic(
     henka_scene_behavior_runtime* runtime,
     const char* project_root,
     const henka_scene_document_behavior* behavior,
-    uint64_t entity_id)
+    uint64_t entity_id,
+    henka_script_source_diagnostic* out_diagnostic)
 {
     henka_script_behavior_asset* candidate_asset = NULL;
     henka_script_behavior_desc candidate_desc;
     size_t index;
     henka_result result;
+    if (out_diagnostic != NULL)
+    {
+        memset(out_diagnostic, 0, sizeof(*out_diagnostic));
+        out_diagnostic->result = HENKA_ERROR_INVALID_ARGUMENT;
+        (void)snprintf(
+            out_diagnostic->message,
+            sizeof(out_diagnostic->message),
+            "Behavior reload rejected");
+    }
     if (runtime == NULL || project_root == NULL || project_root[0] == '\0' ||
         behavior == NULL || behavior->id == HENKA_INVALID_SCENE_DOCUMENT_BEHAVIOR_ID ||
         entity_id == 0U || runtime->behavior_runtime == NULL)
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
-    result = henka_script_behavior_asset_create(
+    result = henka_script_behavior_asset_create_with_diagnostic(
         project_root,
         behavior,
         entity_id,
         behavior->enabled,
         HENKA_SCRIPT_DEFAULT_BEHAVIOR_INSTRUCTION_BUDGET,
-        &candidate_asset);
+        &candidate_asset,
+        out_diagnostic);
     if (result != HENKA_SUCCESS)
     {
         return result;
@@ -293,6 +307,10 @@ henka_result henka_scene_behavior_runtime_reload_behavior(
         candidate_asset, &candidate_desc);
     if (result != HENKA_SUCCESS)
     {
+        if (out_diagnostic != NULL)
+        {
+            out_diagnostic->result = result;
+        }
         henka_script_behavior_asset_destroy(candidate_asset);
         return result;
     }
@@ -320,12 +338,46 @@ henka_result henka_scene_behavior_runtime_reload_behavior(
             henka_script_behavior_asset_destroy(runtime->assets[index]);
             runtime->assets[index] = candidate_asset;
             candidate_asset = NULL;
+            if (out_diagnostic != NULL)
+            {
+                memset(out_diagnostic, 0, sizeof(*out_diagnostic));
+                out_diagnostic->result = HENKA_SUCCESS;
+            }
+        }
+        else if (out_diagnostic != NULL)
+        {
+            out_diagnostic->result = result;
+            if (out_diagnostic->message[0] == '\0')
+            {
+                (void)snprintf(
+                    out_diagnostic->message,
+                    sizeof(out_diagnostic->message),
+                    "Behavior reload rejected");
+            }
         }
         henka_script_behavior_asset_destroy(candidate_asset);
         return result;
     }
     henka_script_behavior_asset_destroy(candidate_asset);
+    if (out_diagnostic != NULL)
+    {
+        out_diagnostic->result = HENKA_ERROR_INVALID_ARGUMENT;
+    }
     return HENKA_ERROR_INVALID_ARGUMENT;
+}
+
+henka_result henka_scene_behavior_runtime_reload_behavior(
+    henka_scene_behavior_runtime* runtime,
+    const char* project_root,
+    const henka_scene_document_behavior* behavior,
+    uint64_t entity_id)
+{
+    return henka_scene_behavior_runtime_reload_behavior_with_diagnostic(
+        runtime,
+        project_root,
+        behavior,
+        entity_id,
+        NULL);
 }
 
 size_t henka_scene_behavior_runtime_get_behavior_count(

@@ -111,8 +111,8 @@ turning the public README into an implementation ledger.
    maps persistent object IDs to runtime entities for the current Entity,
    Transform, Physics, and Events slice. A bounded behavior-state store with
    explicit sidecar save/load and mixed-language `OnEvent` routing is also
-   available; complete host API coverage, full Inspector authoring, reload
-    diagnostics, and debugger tooling remain unfinished. The Inspector can create confined
+   available; complete host API coverage, full Inspector authoring, and
+    debugger tooling remain unfinished. The Inspector can create confined
     Lua or HenkaScript behavior templates and attach them transactionally, and
     provides a bounded editable source panel whose HenkaScript spans, colors,
     and insertion indentation derive from compiler tokenization/token APIs;
@@ -124,7 +124,8 @@ turning the public README into an implementation ledger.
     the generation-checked slot and active lifecycle state. The source panel
     exposes Edit, Save, Revert, and Reload actions; Reload uses the same
     coordinator seam in Play and reloads the persisted source outside Play.
-    Richer reload diagnostics and debugger tooling remain unfinished.
+    Debugger tooling remains unfinished; candidate reload failures preserve
+    bounded source diagnostics through the editor seam.
    Persisted `.lua` and `.hks` attachments can now be loaded through a bounded,
    confined-path asset loader and assembled into a mixed-language behavior
    runtime by persistent Scene Document object identity. The Sandbox Play

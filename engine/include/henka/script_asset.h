@@ -50,6 +50,18 @@ henka_result henka_script_behavior_asset_create(
     bool enabled,
     uint32_t instruction_budget,
     henka_script_behavior_asset** out_asset);
+/* Diagnostic-preserving variant used by editor and transactional reload
+ * paths. The candidate asset is still returned only after complete backend
+ * construction; failures leave it NULL and copy the bounded backend/source
+ * diagnostic when one is available. */
+henka_result henka_script_behavior_asset_create_with_diagnostic(
+    const char* project_root,
+    const henka_scene_document_behavior* behavior,
+    uint64_t entity_id,
+    bool enabled,
+    uint32_t instruction_budget,
+    henka_script_behavior_asset** out_asset,
+    henka_script_source_diagnostic* out_diagnostic);
 void henka_script_behavior_asset_destroy(henka_script_behavior_asset* asset);
 henka_result henka_script_behavior_asset_get_runtime_desc(
     const henka_script_behavior_asset* asset,

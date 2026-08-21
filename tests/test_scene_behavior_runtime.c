@@ -1,9 +1,11 @@
 #include <assert.h>
 #include <stdio.h>
+#include <string.h>
 
 #include <henka/memory.h>
 #include <henka/scene_behavior_runtime.h>
 #include <henka/script_state.h>
+#include <henka/script_source.h>
 
 static henka_scene_document_object make_object_with_behaviors(void)
 {
@@ -32,6 +34,20 @@ static henka_scene_document_object make_object_with_behaviors(void)
         "scripts/mixed.lua");
     object.behavior_count = 2U;
     return object;
+}
+
+static void write_text_file(const char* path, const char* source)
+{
+    FILE* file = NULL;
+    const size_t source_size = strlen(source);
+#if defined(_MSC_VER)
+    assert(fopen_s(&file, path, "wb") == 0);
+#else
+    file = fopen(path, "wb");
+    assert(file != NULL);
+#endif
+    assert(fwrite(source, 1U, source_size, file) == source_size);
+    assert(fclose(file) == 0);
 }
 
 static void test_scene_behavior_runtime_dispatch(void)
@@ -313,7 +329,9 @@ static void test_scene_behavior_runtime_reload_fails_closed(void)
     henka_scene_document_behavior replacement;
     henka_scene_behavior_runtime* runtime = NULL;
     henka_script_behavior_batch_report report;
+    henka_script_source_diagnostic diagnostic;
     henka_scene_document_id object_id = HENKA_INVALID_SCENE_DOCUMENT_ID;
+    henka_result reload_result;
 
     assert(henka_scene_document_create(&document) == HENKA_SUCCESS);
     assert(henka_scene_document_add_object(document, &object, &object_id) == HENKA_SUCCESS);
@@ -325,6 +343,24 @@ static void test_scene_behavior_runtime_reload_fails_closed(void)
                runtime, HENKA_SCRIPT_LIFECYCLE_START, 0.0f, 2U, &report) == HENKA_SUCCESS);
 
     replacement = object.behaviors[0];
+    (void)remove("tests/fixtures/scripts/reload-invalid.hks");
+    write_text_file(
+        "tests/fixtures/scripts/reload-invalid.hks",
+        "fn OnStart(\n");
+    (void)snprintf(
+        replacement.asset_path,
+        sizeof(replacement.asset_path),
+        "%s",
+        "scripts/reload-invalid.hks");
+    memset(&diagnostic, 0, sizeof(diagnostic));
+    reload_result = henka_scene_behavior_runtime_reload_behavior_with_diagnostic(
+        runtime, "tests/fixtures", &replacement, object_id, &diagnostic);
+    assert(reload_result != HENKA_SUCCESS);
+    assert(diagnostic.result == reload_result &&
+           diagnostic.line > 0U && diagnostic.column > 0U &&
+           diagnostic.message[0] != '\0');
+    assert(remove("tests/fixtures/scripts/reload-invalid.hks") == 0);
+
     (void)snprintf(
         replacement.asset_path,
         sizeof(replacement.asset_path),

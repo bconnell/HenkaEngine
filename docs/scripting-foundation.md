@@ -180,7 +180,8 @@ of the authored `.hscene` document. The Inspector can create confined Lua or
     lifecycle slot.
     The bounded source panel exposes Edit, Save, Revert, and Reload actions;
     Reload uses the same coordinator seam in Play and reloads persisted source
-    outside Play. Richer reload diagnostics remain unfinished.
+    outside Play. Candidate backend failures preserve bounded line, column,
+    and source diagnostics through the reload seam.
 Richer typed values and callable parameters, full Inspector authoring,
 debugger tooling,
 replay integration, and broader project scripting workflows remain future work.

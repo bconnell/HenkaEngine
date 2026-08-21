@@ -37,8 +37,9 @@ through `OnEvent`. A separate fixed-capacity behavior-state store provides
 data and the script asset loader. The Scene Document and Play layers expose a
 candidate-first behavior reload seam that preserves the generation-checked
 lifecycle slot on success and leaves the active backend untouched on failure.
-Broader host API coverage, full Inspector authoring, richer reload diagnostics,
-and debugger tooling remain later layers above this boundary. The current
+Broader host API coverage, full Inspector authoring, and debugger tooling remain
+later layers above this boundary. Candidate reload failures preserve bounded
+compiler/backend source diagnostics through this boundary. The current
 Sandbox exposes bounded transactional template attachment and a source-panel
 Reload action above it; that action delegates to the same candidate-first
 coordinator seam rather than defining a second runtime path.

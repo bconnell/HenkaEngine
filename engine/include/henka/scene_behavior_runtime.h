@@ -7,6 +7,7 @@
 #include <henka/result.h>
 #include <henka/scene_document.h>
 #include <henka/script_runtime.h>
+#include <henka/script_source.h>
 
 typedef struct henka_scene_behavior_runtime henka_scene_behavior_runtime;
 
@@ -60,6 +61,12 @@ henka_result henka_scene_behavior_runtime_reload_behavior(
     const char* project_root,
     const henka_scene_document_behavior* behavior,
     uint64_t entity_id);
+henka_result henka_scene_behavior_runtime_reload_behavior_with_diagnostic(
+    henka_scene_behavior_runtime* runtime,
+    const char* project_root,
+    const henka_scene_document_behavior* behavior,
+    uint64_t entity_id,
+    henka_script_source_diagnostic* out_diagnostic);
 
 size_t henka_scene_behavior_runtime_get_behavior_count(
     const henka_scene_behavior_runtime* runtime);

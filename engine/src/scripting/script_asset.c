@@ -421,22 +421,113 @@ cleanup:
     return result;
 }
 
-henka_result henka_script_behavior_asset_create(
+static void henka_script_asset_copy_diagnostic_message(
+    char* destination,
+    size_t destination_size,
+    const char* source)
+{
+    size_t source_size;
+    if (destination == NULL || destination_size == 0U)
+    {
+        return;
+    }
+    if (source == NULL)
+    {
+        destination[0] = '\0';
+        return;
+    }
+    source_size = strlen(source);
+    if (source_size >= destination_size)
+    {
+        source_size = destination_size - 1U;
+    }
+    memcpy(destination, source, source_size);
+    destination[source_size] = '\0';
+}
+
+static void henka_script_asset_set_diagnostic_message(
+    henka_script_source_diagnostic* diagnostic,
+    henka_result result,
+    const char* message)
+{
+    if (diagnostic == NULL)
+    {
+        return;
+    }
+    memset(diagnostic, 0, sizeof(*diagnostic));
+    diagnostic->result = result;
+    henka_script_asset_copy_diagnostic_message(
+        diagnostic->message,
+        sizeof(diagnostic->message),
+        message);
+}
+
+static void henka_script_asset_set_hks_diagnostic(
+    henka_script_source_diagnostic* destination,
+    henka_result result,
+    const henka_hks_diagnostic* source)
+{
+    henka_script_asset_set_diagnostic_message(destination, result, NULL);
+    if (destination != NULL && source != NULL)
+    {
+        destination->line = source->line;
+        destination->column = source->column;
+        henka_script_asset_copy_diagnostic_message(
+            destination->message,
+            sizeof(destination->message),
+            source->message);
+    }
+}
+
+static void henka_script_asset_set_lua_diagnostic(
+    henka_script_source_diagnostic* destination,
+    henka_result result,
+    const henka_lua_diagnostic* source)
+{
+    henka_script_asset_set_diagnostic_message(destination, result, NULL);
+    if (destination != NULL && source != NULL)
+    {
+        destination->line = source->line;
+        destination->column = source->column;
+        henka_script_asset_copy_diagnostic_message(
+            destination->message,
+            sizeof(destination->message),
+            source->message);
+    }
+}
+
+henka_result henka_script_behavior_asset_create_with_diagnostic(
     const char* project_root,
     const henka_scene_document_behavior* behavior,
     uint64_t entity_id,
     bool enabled,
     uint32_t instruction_budget,
-    henka_script_behavior_asset** out_asset)
+    henka_script_behavior_asset** out_asset,
+    henka_script_source_diagnostic* out_diagnostic)
 {
     henka_script_behavior_asset* asset;
     henka_hks_behavior_backend* hks_backend = NULL;
 #if HENKA_ENABLE_LUA
     henka_lua_behavior_backend* lua_backend = NULL;
 #endif
+    henka_hks_diagnostic hks_diagnostic;
+#if HENKA_ENABLE_LUA
+    henka_lua_diagnostic lua_diagnostic;
+#endif
     char* source = NULL;
     size_t source_size = 0U;
     henka_result result;
+    memset(&hks_diagnostic, 0, sizeof(hks_diagnostic));
+#if HENKA_ENABLE_LUA
+    memset(&lua_diagnostic, 0, sizeof(lua_diagnostic));
+#endif
+    if (out_diagnostic != NULL)
+    {
+        henka_script_asset_set_diagnostic_message(
+            out_diagnostic,
+            HENKA_ERROR_INVALID_ARGUMENT,
+            "Script behavior asset rejected");
+    }
     if (out_asset == NULL)
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
@@ -465,6 +556,10 @@ henka_result henka_script_behavior_asset_create(
         &source_size);
     if (result != HENKA_SUCCESS)
     {
+        henka_script_asset_set_diagnostic_message(
+            out_diagnostic,
+            result,
+            "Script source could not be loaded");
         return result;
     }
     asset = (henka_script_behavior_asset*)henka_calloc(1U, sizeof(*asset));
@@ -478,7 +573,7 @@ henka_result henka_script_behavior_asset_create(
     {
 #if HENKA_ENABLE_LUA
         result = henka_lua_behavior_backend_create(
-            source, source_size, &lua_backend, NULL);
+            source, source_size, &lua_backend, &lua_diagnostic);
         asset->backend = lua_backend;
         asset->runtime_desc.callback = henka_lua_behavior_backend_callback;
 #else
@@ -488,13 +583,35 @@ henka_result henka_script_behavior_asset_create(
     else
     {
         result = henka_hks_behavior_backend_create(
-            source, source_size, &hks_backend, NULL);
+            source, source_size, &hks_backend, &hks_diagnostic);
         asset->backend = hks_backend;
         asset->runtime_desc.callback = henka_hks_behavior_backend_callback;
     }
     henka_free(source);
     if (result != HENKA_SUCCESS)
     {
+        if (behavior->language == HENKA_SCRIPT_LANGUAGE_LUA)
+        {
+#if HENKA_ENABLE_LUA
+            henka_script_asset_set_lua_diagnostic(
+                out_diagnostic, result, &lua_diagnostic);
+#else
+            henka_script_asset_set_diagnostic_message(
+                out_diagnostic, result, "Lua scripting is disabled");
+#endif
+        }
+        else
+        {
+            henka_script_asset_set_hks_diagnostic(
+                out_diagnostic, result, &hks_diagnostic);
+        }
+        if (out_diagnostic != NULL && out_diagnostic->message[0] == '\0')
+        {
+            henka_script_asset_copy_diagnostic_message(
+                out_diagnostic->message,
+                sizeof(out_diagnostic->message),
+                "Script backend rejected the source");
+        }
         henka_free(asset);
         return result;
     }
@@ -504,7 +621,30 @@ henka_result henka_script_behavior_asset_create(
     asset->runtime_desc.instruction_budget = instruction_budget;
     asset->runtime_desc.user_data = asset->backend;
     *out_asset = asset;
+    if (out_diagnostic != NULL)
+    {
+        henka_script_asset_set_diagnostic_message(
+            out_diagnostic, HENKA_SUCCESS, NULL);
+    }
     return HENKA_SUCCESS;
+}
+
+henka_result henka_script_behavior_asset_create(
+    const char* project_root,
+    const henka_scene_document_behavior* behavior,
+    uint64_t entity_id,
+    bool enabled,
+    uint32_t instruction_budget,
+    henka_script_behavior_asset** out_asset)
+{
+    return henka_script_behavior_asset_create_with_diagnostic(
+        project_root,
+        behavior,
+        entity_id,
+        enabled,
+        instruction_budget,
+        out_asset,
+        NULL);
 }
 
 void henka_script_behavior_asset_destroy(henka_script_behavior_asset* asset)
