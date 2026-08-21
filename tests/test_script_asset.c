@@ -2,6 +2,10 @@
 #include <stdio.h>
 #include <string.h>
 
+#if defined(_MSC_VER)
+#include <crtdbg.h>
+#endif
+
 #include <henka/memory.h>
 #include <henka/scene_document.h>
 #include <henka/script_asset.h>
@@ -104,6 +108,10 @@ static void test_asset_path_and_source_rejection(void)
 int main(void)
 {
     const size_t allocations_before = henka_memory_get_allocation_count();
+#if defined(_MSC_VER) && defined(_DEBUG)
+    (void)_CrtSetReportMode(_CRT_ASSERT, _CRTDBG_MODE_FILE);
+    (void)_CrtSetReportFile(_CRT_ASSERT, _CRTDBG_FILE_STDERR);
+#endif
     test_mixed_language_runtime_assets();
     test_asset_path_and_source_rejection();
     assert(henka_memory_get_allocation_count() == allocations_before);

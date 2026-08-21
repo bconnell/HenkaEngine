@@ -8,6 +8,7 @@ struct henka_hks_behavior_backend
 {
     henka_hks_program* program;
     size_t lifecycle_callable[4];
+    size_t event_callable;
 };
 
 static size_t henka_hks_backend_event_index(henka_script_lifecycle_event event)
@@ -45,6 +46,7 @@ henka_result henka_hks_behavior_backend_create(
     {
         backend->lifecycle_callable[index] = SIZE_MAX;
     }
+    backend->event_callable = SIZE_MAX;
     compile_result = henka_hks_compile(source, source_size, &backend->program, out_diagnostic);
     if (compile_result != HENKA_SUCCESS)
     {
@@ -58,6 +60,10 @@ henka_result henka_hks_behavior_backend_create(
             lifecycle_names[index],
             &backend->lifecycle_callable[index]);
     }
+    (void)henka_hks_program_find_callable(
+        backend->program,
+        "OnEvent",
+        &backend->event_callable);
     *out_backend = backend;
     return HENKA_SUCCESS;
 }
@@ -88,11 +94,13 @@ henka_script_behavior_callback_result henka_hks_behavior_backend_callback(
     }
     if (context == NULL || backend == NULL || backend->program == NULL ||
         out_instructions_used == NULL ||
-        context->event > HENKA_SCRIPT_LIFECYCLE_STOP)
+        context->event > HENKA_SCRIPT_LIFECYCLE_EVENT)
     {
         return HENKA_SCRIPT_CALLBACK_FAILED;
     }
-    callable_index = backend->lifecycle_callable[henka_hks_backend_event_index(context->event)];
+    callable_index = context->event == HENKA_SCRIPT_LIFECYCLE_EVENT
+        ? backend->event_callable
+        : backend->lifecycle_callable[henka_hks_backend_event_index(context->event)];
     if (callable_index == SIZE_MAX)
     {
         return HENKA_SCRIPT_CALLBACK_COMPLETED;
@@ -100,7 +108,10 @@ henka_script_behavior_callback_result henka_hks_behavior_backend_callback(
     execution_context = (henka_hks_execution_context){
         context->host,
         context->entity_id,
-        context->frame_index};
+        context->frame_index,
+        context->behavior_id,
+        context->event == HENKA_SCRIPT_LIFECYCLE_EVENT,
+        context->event_id};
     result = henka_hks_execute_with_context(
         backend->program,
         callable_index,

@@ -108,15 +108,17 @@ turning the public README into an implementation ledger.
    generation-checked behavior lifecycle runtime. A typed, bounded Script Host
    dispatcher and FIFO event queue are available, and the isolated Play path
    maps persistent object IDs to runtime entities for the current Entity,
-   Transform, Physics, and Events slice. Persistent global state, complete
-   host API coverage, and editor authoring remain unfinished.
+   Transform, Physics, and Events slice. A bounded behavior-state store with
+   explicit sidecar save/load and mixed-language `OnEvent` routing is also
+   available; complete host API coverage, Inspector authoring, hot reload, and
+   debugger tooling remain unfinished.
    Persisted `.lua` and `.hks` attachments can now be loaded through a bounded,
    confined-path asset loader and assembled into a mixed-language behavior
    runtime by persistent Scene Document object identity. The Sandbox Play
-   session owns that runtime for isolated Create/Start/Update/Stop dispatch;
-   runtime-entity identity mapping is available in the isolated Play path;
-   broader runtime/resource mapping, persistent state, and editor authoring
-   remain unfinished.
+   session owns that runtime for isolated Create/Start/Update/OnEvent/Stop
+   dispatch; runtime-entity identity mapping is available in the isolated Play
+   path; broader runtime/resource mapping, Inspector authoring, and project
+   scripting workflows remain unfinished.
 
 ## Modeling / Content Authoring
 

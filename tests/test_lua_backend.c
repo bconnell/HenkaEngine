@@ -209,6 +209,58 @@ static void test_lua_shared_host_api(void)
     henka_lua_behavior_backend_destroy(backend);
 }
 
+static void test_lua_shared_state_api(void)
+{
+    static const char source[] =
+        "function OnUpdate() "
+        "local value, present = State.GetI32(17); "
+        "State.SetI32(17, value + 5); "
+        "local flag, flag_present = State.GetBool(18); "
+        "State.SetBool(18, not flag) "
+        "end";
+    henka_lua_behavior_backend* backend = NULL;
+    henka_lua_diagnostic diagnostic;
+    henka_script_host* host = NULL;
+    henka_script_state_store* store = NULL;
+    henka_script_behavior_context context;
+    henka_script_state_value value;
+    bool present;
+    uint32_t used = 0U;
+
+    memset(&diagnostic, 0, sizeof(diagnostic));
+    assert(henka_lua_behavior_backend_create(
+               source, strlen(source), &backend, &diagnostic) == HENKA_SUCCESS);
+    assert(henka_script_host_create(&host) == HENKA_SUCCESS);
+    assert(henka_script_state_store_create(&store) == HENKA_SUCCESS);
+    bind_all_script_apis(host);
+    assert(henka_script_state_store_set(
+               store,
+               (henka_script_state_identity){4U, 40U},
+               17U,
+               (henka_script_state_value){
+                   HENKA_SCRIPT_STATE_VALUE_I32, {.i32 = 10}}) == HENKA_SUCCESS);
+    assert(henka_script_host_set_state_store(host, store) == HENKA_SUCCESS);
+    assert(henka_script_host_set_execution_context(
+               host, (henka_script_state_identity){4U, 40U}) == HENKA_SUCCESS);
+    context = (henka_script_behavior_context){
+        1U, 4U, HENKA_SCRIPT_LANGUAGE_LUA, HENKA_SCRIPT_LIFECYCLE_UPDATE,
+        0.016f, 3U, 128U, host, 40U};
+    assert(henka_lua_behavior_backend_callback(
+               &context, backend, &used) == HENKA_SCRIPT_CALLBACK_COMPLETED);
+    assert(used > 0U);
+    assert(henka_script_state_store_get(
+               store, (henka_script_state_identity){4U, 40U}, 17U,
+               &value, &present) == HENKA_SUCCESS);
+    assert(present && value.type == HENKA_SCRIPT_STATE_VALUE_I32 && value.as.i32 == 15);
+    assert(henka_script_state_store_get(
+               store, (henka_script_state_identity){4U, 40U}, 18U,
+               &value, &present) == HENKA_SUCCESS);
+    assert(present && value.type == HENKA_SCRIPT_STATE_VALUE_BOOL && value.as.boolean);
+    henka_script_state_store_destroy(store);
+    henka_script_host_destroy(host);
+    henka_lua_behavior_backend_destroy(backend);
+}
+
 int main(void)
 {
     const size_t allocations_before = henka_memory_get_allocation_count();
@@ -216,6 +268,7 @@ int main(void)
     test_lua_budget_and_sandbox();
     test_lua_rejection_and_memory();
     test_lua_shared_host_api();
+    test_lua_shared_state_api();
     assert(henka_memory_get_allocation_count() == allocations_before);
     puts("henka_lua_backend_tests: PASS");
     return 0;

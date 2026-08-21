@@ -95,11 +95,12 @@ roadmap is finished.
 
 ### Planned
 
-1. Hierarchy/scene-graph authoring, project behavior authoring, and a complete
-   project serializer. The bounded HenkaScript/Lua lifecycle adapters, callable
-   VM, language-neutral host schema, typed host dispatch, and isolated Play
-   Scene Document binding are foundation work already available; persistent
-   behavior state and editor authoring remain open.
+1. Hierarchy/scene-graph authoring, Inspector behavior authoring, and a
+   complete project serializer. The bounded HenkaScript/Lua lifecycle
+   adapters, callable VM, language-neutral host schema, typed host dispatch,
+   isolated Play Scene Document binding, bounded behavior state, and explicit
+   mixed-language event routing are foundation work already available; editor
+   authoring and broader project scripting workflows remain open.
 2. Broader gameplay systems, input mapping, controllers, animation, and
    production game-debugging workflows.
 
@@ -265,17 +266,19 @@ and V1 `.hscene` foundations.
 
 1. Generalize runtime-entity and physics-body identity mapping around the Scene
    Document behavior runtime while keeping isolated Play-scene dispatch unable
-   to mutate authoring state; the current bounded Play mapping is foundation
-   work already available.
+   to mutate authoring state; the current bounded Play mapping is available
+   foundation work.
 2. Extend the available typed, non-reentrant Script Host dispatcher beyond the
    current Entity/Transform/Physics/Event slice and resolve the required API
    bindings at load time.
-3. Add persistent behavior state, Inspector authoring, reload diagnostics, and
-   transactional hot reload while retaining the previous valid instance on
-   failure.
-4. Define mixed-language event delivery/routing and lifecycle ordering at the
-   scene boundary; the shared bounded event queue and Lua/HenkaScript event
-   emission seam are foundation work, while subscriber routing remains open.
+3. Extend behavior-state persistence and authoring ergonomics: the bounded
+   state store and explicit sidecar save/load seam are available, while
+   Inspector authoring, reload diagnostics, and transactional hot reload remain
+   in progress.
+4. Strengthen mixed-language event delivery and lifecycle diagnostics at the
+   scene boundary; bounded queueing, Lua/HenkaScript emission, and `OnEvent`
+   routing are available foundation work, while richer subscriptions and
+   tooling remain open.
 
 ### Future Work
 

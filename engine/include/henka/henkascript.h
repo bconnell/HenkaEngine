@@ -36,6 +36,11 @@ typedef enum henka_hks_token_kind
     HENKA_HKS_TOKEN_KW_BEHAVIOR,
     HENKA_HKS_TOKEN_KW_RETURN,
     HENKA_HKS_TOKEN_KW_EMIT,
+    HENKA_HKS_TOKEN_KW_STATE_GET_I32,
+    HENKA_HKS_TOKEN_KW_STATE_SET_I32,
+    HENKA_HKS_TOKEN_KW_STATE_GET_BOOL,
+    HENKA_HKS_TOKEN_KW_STATE_SET_BOOL,
+    HENKA_HKS_TOKEN_KW_EVENT_ID,
     HENKA_HKS_TOKEN_KW_TRUE,
     HENKA_HKS_TOKEN_KW_FALSE,
     HENKA_HKS_TOKEN_KW_LET,
@@ -151,6 +156,9 @@ typedef struct henka_hks_execution_context
     struct henka_script_host* host;
     uint64_t entity_id;
     uint64_t frame_index;
+    uint64_t behavior_id;
+    bool is_event;
+    uint32_t event_id;
 } henka_hks_execution_context;
 
 henka_result henka_hks_lex(

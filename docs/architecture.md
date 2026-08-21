@@ -20,20 +20,22 @@ so Lua and HenkaScript backends can resolve bindings once and retain
 language-specific native thunks. The HenkaScript front-end additionally
 lexes, parses, and type-checks bounded source through `<henka/henkascript.h>`.
 The current foundation executes bounded HenkaScript bytecode and bounded Lua
-callables through adapters that map `OnCreate`, `OnStart`, `OnUpdate`, and
-`OnStop` into the language-neutral generation-checked behavior runtime. These
-adapters do not resolve project paths or own Scene Document persistence. The
-bounded script asset loader owns the selected backend instance and exposes a
-runtime descriptor for persisted `.lua` and `.hks` attachments; persistent
-behavior state remains outside that loader. The Scene Document behavior
-runtime assembles these owned assets by persistent object identity, and the
-Sandbox Play session owns its lifecycle dispatch for the isolated scene.
-The public Script Host adds exact typed, synchronous, non-reentrant dispatch
-and a bounded FIFO event queue. Play binds that host to its persistent-ID to
-runtime-entity and physics-body mapping; the current Lua surface and the
-HenkaScript `emit(i32_event_id);` builtin consume the same `Events.Emit` schema
-identity. Persistent state, broader host API coverage, and editor authoring
-remain later layers above this boundary.
+callables through adapters that map `OnCreate`, `OnStart`, `OnUpdate`, `OnEvent`,
+and `OnStop` into the language-neutral generation-checked behavior runtime.
+These adapters do not resolve project paths or own Scene Document persistence.
+The bounded script asset loader owns the selected backend instance and exposes
+a runtime descriptor for persisted `.lua` and `.hks` attachments. The Scene
+Document behavior runtime assembles these owned assets by persistent object and
+behavior identity, and the Sandbox Play session owns lifecycle and bounded
+event dispatch for the isolated scene. The public Script Host adds exact typed,
+synchronous, non-reentrant dispatch and a bounded FIFO event queue. Play binds
+that host to its persistent-ID to runtime-entity and physics-body mapping; Lua
+and HenkaScript emit into the same event queue and can receive the same event
+through `OnEvent`. A separate fixed-capacity behavior-state store provides
+explicit sidecar save/load, while remaining outside authored Scene Document
+data and the script asset loader. Broader host API coverage, Inspector
+authoring, hot reload, and debugger tooling remain later layers above this
+boundary.
 
 ### Network boundary
 

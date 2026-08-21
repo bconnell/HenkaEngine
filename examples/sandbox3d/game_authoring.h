@@ -36,6 +36,27 @@ henka_result sandbox3d_game_authoring_update_object_for_entity(
     sandbox3d_game_authoring* authoring,
     henka_entity entity,
     const henka_scene_document_object* object);
+size_t sandbox3d_game_authoring_get_behavior_count_for_entity(
+    const sandbox3d_game_authoring* authoring,
+    henka_entity entity);
+henka_result sandbox3d_game_authoring_get_behavior_for_entity(
+    const sandbox3d_game_authoring* authoring,
+    henka_entity entity,
+    henka_scene_document_behavior_id behavior_id,
+    henka_scene_document_behavior* out_behavior);
+henka_result sandbox3d_game_authoring_add_behavior_for_entity(
+    sandbox3d_game_authoring* authoring,
+    henka_entity entity,
+    const henka_scene_document_behavior* behavior,
+    henka_scene_document_behavior_id* out_behavior_id);
+henka_result sandbox3d_game_authoring_update_behavior_for_entity(
+    sandbox3d_game_authoring* authoring,
+    henka_entity entity,
+    const henka_scene_document_behavior* behavior);
+henka_result sandbox3d_game_authoring_remove_behavior_for_entity(
+    sandbox3d_game_authoring* authoring,
+    henka_entity entity,
+    henka_scene_document_behavior_id behavior_id);
 
 henka_result sandbox3d_game_authoring_save(
     sandbox3d_game_authoring* authoring,
@@ -43,6 +64,16 @@ henka_result sandbox3d_game_authoring_save(
 henka_result sandbox3d_game_authoring_load(
     sandbox3d_game_authoring* authoring,
     const char* project_root);
+henka_result sandbox3d_game_authoring_save_play_state(
+    sandbox3d_game_authoring* authoring,
+    const char* project_root);
+henka_result sandbox3d_game_authoring_load_play_state(
+    sandbox3d_game_authoring* authoring,
+    const char* project_root);
+/* Borrowed editor-owned state store. It remains valid until authoring is
+ * destroyed and is never implicitly saved when Play stops. */
+henka_script_state_store* sandbox3d_game_authoring_get_script_state_store(
+    const sandbox3d_game_authoring* authoring);
 const char* sandbox3d_game_authoring_get_relative_path(
     const sandbox3d_game_authoring* authoring);
 henka_scene* sandbox3d_game_authoring_get_authoring_scene(

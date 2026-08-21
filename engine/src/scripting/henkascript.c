@@ -46,7 +46,12 @@ typedef enum henka_hks_opcode
     HENKA_HKS_OPCODE_NEG,
     HENKA_HKS_OPCODE_RETURN,
     HENKA_HKS_OPCODE_POP,
-    HENKA_HKS_OPCODE_EMIT_EVENT
+    HENKA_HKS_OPCODE_EMIT_EVENT,
+    HENKA_HKS_OPCODE_STATE_GET_I32,
+    HENKA_HKS_OPCODE_STATE_SET_I32,
+    HENKA_HKS_OPCODE_STATE_GET_BOOL,
+    HENKA_HKS_OPCODE_STATE_SET_BOOL,
+    HENKA_HKS_OPCODE_EVENT_GET_ID
 } henka_hks_opcode;
 
 typedef struct henka_hks_instruction
@@ -173,6 +178,11 @@ static henka_hks_token_kind henka_hks_keyword_kind(
         {"behavior", HENKA_HKS_TOKEN_KW_BEHAVIOR},
         {"return", HENKA_HKS_TOKEN_KW_RETURN},
         {"emit", HENKA_HKS_TOKEN_KW_EMIT},
+        {"state_get_i32", HENKA_HKS_TOKEN_KW_STATE_GET_I32},
+        {"state_set_i32", HENKA_HKS_TOKEN_KW_STATE_SET_I32},
+        {"state_get_bool", HENKA_HKS_TOKEN_KW_STATE_GET_BOOL},
+        {"state_set_bool", HENKA_HKS_TOKEN_KW_STATE_SET_BOOL},
+        {"event_id", HENKA_HKS_TOKEN_KW_EVENT_ID},
         {"true", HENKA_HKS_TOKEN_KW_TRUE},
         {"false", HENKA_HKS_TOKEN_KW_FALSE},
         {"let", HENKA_HKS_TOKEN_KW_LET},
@@ -630,6 +640,35 @@ static henka_result henka_hks_parse_expression(
     henka_hks_parser* parser,
     henka_hks_value_type* out_type);
 
+static bool henka_hks_is_state_get_token(henka_hks_token_kind kind)
+{
+    return kind == HENKA_HKS_TOKEN_KW_STATE_GET_I32 ||
+        kind == HENKA_HKS_TOKEN_KW_STATE_GET_BOOL;
+}
+
+static bool henka_hks_is_state_set_token(henka_hks_token_kind kind)
+{
+    return kind == HENKA_HKS_TOKEN_KW_STATE_SET_I32 ||
+        kind == HENKA_HKS_TOKEN_KW_STATE_SET_BOOL;
+}
+
+static bool henka_hks_is_event_get_token(henka_hks_token_kind kind)
+{
+    return kind == HENKA_HKS_TOKEN_KW_EVENT_ID;
+}
+
+static henka_hks_opcode henka_hks_state_opcode(henka_hks_token_kind kind)
+{
+    switch (kind)
+    {
+        case HENKA_HKS_TOKEN_KW_STATE_GET_I32: return HENKA_HKS_OPCODE_STATE_GET_I32;
+        case HENKA_HKS_TOKEN_KW_STATE_SET_I32: return HENKA_HKS_OPCODE_STATE_SET_I32;
+        case HENKA_HKS_TOKEN_KW_STATE_GET_BOOL: return HENKA_HKS_OPCODE_STATE_GET_BOOL;
+        case HENKA_HKS_TOKEN_KW_STATE_SET_BOOL: return HENKA_HKS_OPCODE_STATE_SET_BOOL;
+        default: return HENKA_HKS_OPCODE_POP;
+    }
+}
+
 static int henka_hks_precedence(henka_hks_token_kind kind)
 {
     return kind == HENKA_HKS_TOKEN_STAR || kind == HENKA_HKS_TOKEN_SLASH
@@ -737,6 +776,82 @@ static henka_result henka_hks_parse_primary(
             return result;
         }
         return henka_hks_emit(parser, HENKA_HKS_OPCODE_NEG, type, 0U, 0, 0.0F);
+    }
+    if (henka_hks_is_state_get_token(token->kind))
+    {
+        const henka_hks_token_kind state_kind = token->kind;
+        henka_result result;
+        ++parser->index;
+        result = henka_hks_expect(
+            parser, HENKA_HKS_TOKEN_LPAREN, "state getter requires '('");
+        if (result != HENKA_SUCCESS)
+        {
+            return result;
+        }
+        result = henka_hks_parse_expression(parser, &type);
+        if (result != HENKA_SUCCESS)
+        {
+            return result;
+        }
+        if (type != HENKA_HKS_TYPE_I32)
+        {
+            return henka_hks_fail(
+                parser->diagnostic,
+                HENKA_HKS_DIAGNOSTIC_TYPE_MISMATCH,
+                token,
+                "state key must be an i32 expression");
+        }
+        result = henka_hks_expect(
+            parser, HENKA_HKS_TOKEN_RPAREN, "state getter requires ')'");
+        if (result != HENKA_SUCCESS)
+        {
+            return result;
+        }
+        *out_type = state_kind == HENKA_HKS_TOKEN_KW_STATE_GET_I32
+            ? HENKA_HKS_TYPE_I32
+            : HENKA_HKS_TYPE_BOOL;
+        if (henka_hks_add_node(parser, HENKA_HKS_AST_HOST_CALL, *out_type) != HENKA_SUCCESS ||
+            henka_hks_emit(
+                parser,
+                henka_hks_state_opcode(state_kind),
+                *out_type,
+                0U,
+                0,
+                0.0F) != HENKA_SUCCESS)
+        {
+            return HENKA_ERROR_LIMIT;
+        }
+        return HENKA_SUCCESS;
+    }
+    if (henka_hks_is_event_get_token(token->kind))
+    {
+        henka_result result;
+        ++parser->index;
+        result = henka_hks_expect(
+            parser, HENKA_HKS_TOKEN_LPAREN, "event_id requires '('");
+        if (result != HENKA_SUCCESS)
+        {
+            return result;
+        }
+        result = henka_hks_expect(
+            parser, HENKA_HKS_TOKEN_RPAREN, "event_id requires ')'");
+        if (result != HENKA_SUCCESS)
+        {
+            return result;
+        }
+        *out_type = HENKA_HKS_TYPE_I32;
+        if (henka_hks_add_node(parser, HENKA_HKS_AST_HOST_CALL, *out_type) != HENKA_SUCCESS ||
+            henka_hks_emit(
+                parser,
+                HENKA_HKS_OPCODE_EVENT_GET_ID,
+                *out_type,
+                0U,
+                0,
+                0.0F) != HENKA_SUCCESS)
+        {
+            return HENKA_ERROR_LIMIT;
+        }
+        return HENKA_SUCCESS;
     }
     ++parser->index;
     switch (token->kind)
@@ -1084,6 +1199,64 @@ static henka_result henka_hks_parse_statement(henka_hks_parser* parser)
             parser,
             HENKA_HKS_OPCODE_EMIT_EVENT,
             HENKA_HKS_TYPE_I32,
+            0U,
+            0,
+            0.0F);
+    }
+    if (henka_hks_is_state_set_token(token->kind))
+    {
+        const henka_hks_token_kind state_kind = token->kind;
+        const henka_hks_value_type expected_value_type =
+            state_kind == HENKA_HKS_TOKEN_KW_STATE_SET_I32
+                ? HENKA_HKS_TYPE_I32
+                : HENKA_HKS_TYPE_BOOL;
+        henka_result result;
+        ++parser->index;
+        if (henka_hks_expect(
+                parser, HENKA_HKS_TOKEN_LPAREN, "state setter requires '('") != HENKA_SUCCESS ||
+            henka_hks_parse_expression(parser, &expression_type) != HENKA_SUCCESS ||
+            expression_type != HENKA_HKS_TYPE_I32 ||
+            henka_hks_expect(
+                parser, HENKA_HKS_TOKEN_COMMA, "state setter requires a key and value") != HENKA_SUCCESS)
+        {
+            if (expression_type != HENKA_HKS_TYPE_I32 &&
+                parser->diagnostic != NULL &&
+                parser->diagnostic->code == HENKA_HKS_DIAGNOSTIC_NONE)
+            {
+                (void)henka_hks_fail(
+                    parser->diagnostic,
+                    HENKA_HKS_DIAGNOSTIC_TYPE_MISMATCH,
+                    token,
+                    "state key must be an i32 expression");
+            }
+            return HENKA_ERROR_INVALID_ARGUMENT;
+        }
+        if (henka_hks_parse_expression(parser, &expression_type) != HENKA_SUCCESS ||
+            expression_type != expected_value_type ||
+            henka_hks_expect(parser, HENKA_HKS_TOKEN_RPAREN, "state setter requires ')'") != HENKA_SUCCESS ||
+            henka_hks_expect(parser, HENKA_HKS_TOKEN_SEMICOLON, "state setter requires a semicolon") != HENKA_SUCCESS)
+        {
+            if (expression_type != expected_value_type &&
+                parser->diagnostic != NULL &&
+                parser->diagnostic->code == HENKA_HKS_DIAGNOSTIC_NONE)
+            {
+                (void)henka_hks_fail(
+                    parser->diagnostic,
+                    HENKA_HKS_DIAGNOSTIC_TYPE_MISMATCH,
+                    token,
+                    "state value type does not match the setter");
+            }
+            return HENKA_ERROR_INVALID_ARGUMENT;
+        }
+        result = henka_hks_add_node(parser, HENKA_HKS_AST_HOST_CALL, HENKA_HKS_TYPE_VOID);
+        if (result != HENKA_SUCCESS)
+        {
+            return result;
+        }
+        return henka_hks_emit(
+            parser,
+            henka_hks_state_opcode(state_kind),
+            expected_value_type,
             0U,
             0,
             0.0F);
@@ -1739,6 +1912,173 @@ henka_hks_execution_result henka_hks_execute_with_context(
                             stack_depth);
                     }
                 }
+                break;
+            case HENKA_HKS_OPCODE_STATE_GET_I32:
+            case HENKA_HKS_OPCODE_STATE_GET_BOOL:
+                {
+                    const bool get_i32 = instruction->opcode == HENKA_HKS_OPCODE_STATE_GET_I32;
+                    henka_script_api_value argument;
+                    henka_script_api_value output;
+                    uint32_t state_key;
+                    henka_result host_result;
+                    if (stack_depth == 0U)
+                    {
+                        return henka_hks_vm_finish(
+                            out_report,
+                            HENKA_HKS_EXECUTION_STACK_UNDERFLOW,
+                            instructions_executed,
+                            stack_depth);
+                    }
+                    value = stack[--stack_depth];
+                    if (value.type != HENKA_HKS_TYPE_I32 || value.as.i32 <= 0 ||
+                        context == NULL || context->host == NULL)
+                    {
+                        if (out_report != NULL)
+                        {
+                            out_report->host_error = HENKA_ERROR_INVALID_ARGUMENT;
+                        }
+                        return henka_hks_vm_finish(
+                            out_report,
+                            HENKA_HKS_EXECUTION_HOST_ERROR,
+                            instructions_executed,
+                            stack_depth);
+                    }
+                    state_key = (uint32_t)value.as.i32;
+                    argument = (henka_script_api_value){
+                        HENKA_SCRIPT_API_VALUE_STATE_KEY,
+                        {.state_key = state_key}};
+                    host_result = henka_script_host_invoke(
+                        context->host,
+                        get_i32
+                            ? HENKA_SCRIPT_API_STATE_GET_I32
+                            : HENKA_SCRIPT_API_STATE_GET_BOOL,
+                        &argument,
+                        1U,
+                        &output);
+                    if (host_result != HENKA_SUCCESS ||
+                        output.type != (get_i32
+                            ? HENKA_SCRIPT_API_VALUE_I32
+                            : HENKA_SCRIPT_API_VALUE_BOOL))
+                    {
+                        if (out_report != NULL)
+                        {
+                            out_report->host_error = host_result != HENKA_SUCCESS
+                                ? host_result
+                                : HENKA_ERROR_INVALID_ARGUMENT;
+                        }
+                        return henka_hks_vm_finish(
+                            out_report,
+                            HENKA_HKS_EXECUTION_HOST_ERROR,
+                            instructions_executed,
+                            stack_depth);
+                    }
+                    if (stack_depth >= HENKA_HKS_MAX_VM_STACK)
+                    {
+                        return henka_hks_vm_finish(
+                            out_report,
+                            HENKA_HKS_EXECUTION_STACK_OVERFLOW,
+                            instructions_executed,
+                            stack_depth);
+                    }
+                    stack[stack_depth++] = get_i32
+                        ? (henka_hks_value){HENKA_HKS_TYPE_I32, {.i32 = output.as.i32}}
+                        : (henka_hks_value){HENKA_HKS_TYPE_BOOL, {.boolean = output.as.boolean}};
+                }
+                break;
+            case HENKA_HKS_OPCODE_STATE_SET_I32:
+            case HENKA_HKS_OPCODE_STATE_SET_BOOL:
+                {
+                    const bool set_i32 = instruction->opcode == HENKA_HKS_OPCODE_STATE_SET_I32;
+                    henka_script_api_value arguments[2];
+                    henka_script_api_value output;
+                    henka_result host_result;
+                    if (stack_depth < 2U)
+                    {
+                        return henka_hks_vm_finish(
+                            out_report,
+                            HENKA_HKS_EXECUTION_STACK_UNDERFLOW,
+                            instructions_executed,
+                            stack_depth);
+                    }
+                    value = stack[--stack_depth];
+                    right = stack[--stack_depth];
+                    if (right.type != HENKA_HKS_TYPE_I32 || right.as.i32 <= 0 ||
+                        (set_i32
+                            ? value.type != HENKA_HKS_TYPE_I32
+                            : value.type != HENKA_HKS_TYPE_BOOL) ||
+                        context == NULL || context->host == NULL)
+                    {
+                        if (out_report != NULL)
+                        {
+                            out_report->host_error = HENKA_ERROR_INVALID_ARGUMENT;
+                        }
+                        return henka_hks_vm_finish(
+                            out_report,
+                            HENKA_HKS_EXECUTION_HOST_ERROR,
+                            instructions_executed,
+                            stack_depth);
+                    }
+                    arguments[0] = (henka_script_api_value){
+                        HENKA_SCRIPT_API_VALUE_STATE_KEY,
+                        {.state_key = (uint32_t)right.as.i32}};
+                    arguments[1] = set_i32
+                        ? (henka_script_api_value){
+                            HENKA_SCRIPT_API_VALUE_I32,
+                            {.i32 = value.as.i32}}
+                        : (henka_script_api_value){
+                            HENKA_SCRIPT_API_VALUE_BOOL,
+                            {.boolean = value.as.boolean}};
+                    host_result = henka_script_host_invoke(
+                        context->host,
+                        set_i32
+                            ? HENKA_SCRIPT_API_STATE_SET_I32
+                            : HENKA_SCRIPT_API_STATE_SET_BOOL,
+                        arguments,
+                        2U,
+                        &output);
+                    if (host_result != HENKA_SUCCESS ||
+                        output.type != HENKA_SCRIPT_API_VALUE_RESULT ||
+                        output.as.result != HENKA_SUCCESS)
+                    {
+                        if (out_report != NULL)
+                        {
+                            out_report->host_error = host_result != HENKA_SUCCESS
+                                ? host_result
+                                : output.as.result;
+                        }
+                        return henka_hks_vm_finish(
+                            out_report,
+                            HENKA_HKS_EXECUTION_HOST_ERROR,
+                            instructions_executed,
+                            stack_depth);
+                    }
+                }
+                break;
+            case HENKA_HKS_OPCODE_EVENT_GET_ID:
+                if (context == NULL || !context->is_event ||
+                    context->event_id == 0U || context->event_id > (uint32_t)INT32_MAX)
+                {
+                    if (out_report != NULL)
+                    {
+                        out_report->host_error = HENKA_ERROR_INVALID_ARGUMENT;
+                    }
+                    return henka_hks_vm_finish(
+                        out_report,
+                        HENKA_HKS_EXECUTION_HOST_ERROR,
+                        instructions_executed,
+                        stack_depth);
+                }
+                if (stack_depth >= HENKA_HKS_MAX_VM_STACK)
+                {
+                    return henka_hks_vm_finish(
+                        out_report,
+                        HENKA_HKS_EXECUTION_STACK_OVERFLOW,
+                        instructions_executed,
+                        stack_depth);
+                }
+                stack[stack_depth++] = (henka_hks_value){
+                    HENKA_HKS_TYPE_I32,
+                    {.i32 = (int32_t)context->event_id}};
                 break;
             default:
                 return henka_hks_vm_finish(out_report, HENKA_HKS_EXECUTION_INVALID_PROGRAM, instructions_executed, stack_depth);

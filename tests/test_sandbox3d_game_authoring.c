@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <string.h>
 
 #include <henka/physics.h>
 #include <henka/scene.h>
@@ -15,10 +16,17 @@ int main(void)
     henka_scene_document* replacement_document = NULL;
     henka_scene_document_id object_id = HENKA_INVALID_SCENE_DOCUMENT_ID;
     henka_scene_document_id restored_id = HENKA_INVALID_SCENE_DOCUMENT_ID;
+    henka_scene_document_behavior_id behavior_id =
+        HENKA_INVALID_SCENE_DOCUMENT_BEHAVIOR_ID;
+    henka_scene_document_behavior behavior;
+    henka_scene_document_behavior loaded_behavior;
     henka_entity entity = HENKA_INVALID_ENTITY;
     henka_interaction_desc interaction;
     henka_transform transform;
     henka_scene* play_scene;
+    henka_script_state_store* state_store;
+    henka_script_state_value state_value;
+    bool state_present;
     int exit_code = 1;
 
     play_scene = NULL;
@@ -41,6 +49,27 @@ int main(void)
         goto cleanup;
     }
 
+    behavior = henka_scene_document_behavior_default();
+    behavior.language = HENKA_SCRIPT_LANGUAGE_HENKASCRIPT;
+    (void)snprintf(
+        behavior.asset_path,
+        sizeof(behavior.asset_path),
+        "%s",
+        "tests/fixtures/scripts/mixed.hks");
+    if (sandbox3d_game_authoring_add_behavior_for_entity(
+            authoring, entity, &behavior, &behavior_id) != HENKA_SUCCESS ||
+        behavior_id == HENKA_INVALID_SCENE_DOCUMENT_BEHAVIOR_ID ||
+        sandbox3d_game_authoring_get_behavior_count_for_entity(authoring, entity) != 1U ||
+        sandbox3d_game_authoring_get_behavior_for_entity(
+            authoring, entity, behavior_id, &loaded_behavior) != HENKA_SUCCESS ||
+        loaded_behavior.language != HENKA_SCRIPT_LANGUAGE_HENKASCRIPT ||
+        sandbox3d_game_authoring_get_object_for_entity(
+            authoring, entity, &restored_id, &object) != HENKA_SUCCESS)
+    {
+        fprintf(stderr, "game authoring test failed during behavior authoring\n");
+        goto cleanup;
+    }
+
     object.physics.enabled = true;
     object.physics.body_type = HENKA_PHYSICS_BODY_DYNAMIC;
     object.physics.shape = HENKA_PHYSICS_SHAPE_SPHERE;
@@ -48,6 +77,29 @@ int main(void)
     object.physics.mass = 1.0f;
     if (sandbox3d_game_authoring_update_object_for_entity(authoring, entity, &object) != HENKA_SUCCESS ||
         sandbox3d_game_authoring_save(authoring, ".") != HENKA_SUCCESS ||
+        (state_store = sandbox3d_game_authoring_get_script_state_store(authoring)) == NULL ||
+        henka_script_state_store_set(
+            state_store,
+            (henka_script_state_identity){object_id, 10U},
+            3U,
+            (henka_script_state_value){
+                HENKA_SCRIPT_STATE_VALUE_I32, {.i32 = 77}}) != HENKA_SUCCESS ||
+        sandbox3d_game_authoring_save_play_state(authoring, ".") != HENKA_SUCCESS ||
+        henka_script_state_store_set(
+            state_store,
+            (henka_script_state_identity){object_id, 10U},
+            3U,
+            (henka_script_state_value){
+                HENKA_SCRIPT_STATE_VALUE_I32, {.i32 = 99}}) != HENKA_SUCCESS ||
+        sandbox3d_game_authoring_load_play_state(authoring, ".") != HENKA_SUCCESS ||
+        henka_script_state_store_get(
+            state_store,
+            (henka_script_state_identity){object_id, 10U},
+            3U,
+            &state_value,
+            &state_present) != HENKA_SUCCESS ||
+        !state_present || state_value.type != HENKA_SCRIPT_STATE_VALUE_I32 ||
+        state_value.as.i32 != 77 ||
         henka_scene_set_entity_interaction(
             scene,
             entity,
@@ -57,6 +109,14 @@ int main(void)
         !interaction.enabled || interaction.max_distance != 4.0f)
     {
         fprintf(stderr, "game authoring test failed during save/load\n");
+        goto cleanup;
+    }
+    if (sandbox3d_game_authoring_get_behavior_count_for_entity(authoring, entity) != 1U ||
+        sandbox3d_game_authoring_get_behavior_for_entity(
+            authoring, entity, behavior_id, &loaded_behavior) != HENKA_SUCCESS ||
+        strcmp(loaded_behavior.asset_path, behavior.asset_path) != 0)
+    {
+        fprintf(stderr, "game authoring test failed during behavior persistence\n");
         goto cleanup;
     }
     if (sandbox3d_game_authoring_get_object_for_entity(
@@ -136,6 +196,8 @@ int main(void)
         !sandbox3d_game_authoring_is_play_locked(authoring) ||
         sandbox3d_game_authoring_save(authoring, ".") != HENKA_ERROR_INVALID_ARGUMENT ||
         sandbox3d_game_authoring_load(authoring, ".") != HENKA_ERROR_INVALID_ARGUMENT ||
+        sandbox3d_game_authoring_save_play_state(authoring, ".") != HENKA_ERROR_INVALID_ARGUMENT ||
+        sandbox3d_game_authoring_load_play_state(authoring, ".") != HENKA_ERROR_INVALID_ARGUMENT ||
         sandbox3d_game_authoring_update_object_for_entity(authoring, entity, &restored) != HENKA_ERROR_INVALID_ARGUMENT ||
         sandbox3d_game_authoring_resume_play(authoring) != HENKA_SUCCESS ||
         sandbox3d_game_authoring_tick_play(authoring) != HENKA_SUCCESS ||

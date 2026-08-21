@@ -34,6 +34,12 @@ henka_result henka_scene_behavior_runtime_dispatch(
     float delta_seconds,
     uint64_t frame_index,
     henka_script_behavior_batch_report* out_report);
+/* Dispatches the bounded event queue entries that existed when this call
+ * began. Events emitted by handlers remain queued for the next drain, which
+ * prevents same-batch event recursion from becoming unbounded. */
+henka_result henka_scene_behavior_runtime_dispatch_events(
+    henka_scene_behavior_runtime* runtime,
+    henka_script_behavior_batch_report* out_report);
 
 size_t henka_scene_behavior_runtime_get_behavior_count(
     const henka_scene_behavior_runtime* runtime);

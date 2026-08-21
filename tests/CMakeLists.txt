@@ -37,6 +37,19 @@ henka_enable_project_warnings(henka_script_host_tests)
 
 add_test(NAME henka_script_host_tests COMMAND henka_script_host_tests)
 
+add_executable(henka_script_state_tests
+    test_script_state.c
+)
+
+target_link_libraries(henka_script_state_tests
+    PRIVATE
+        henka_runtime
+)
+
+henka_enable_project_warnings(henka_script_state_tests)
+
+add_test(NAME henka_script_state_tests COMMAND henka_script_state_tests)
+
 add_executable(henka_script_runtime_tests
     test_script_runtime.c
 )

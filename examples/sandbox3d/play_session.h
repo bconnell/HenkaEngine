@@ -27,6 +27,13 @@ henka_result sandbox3d_play_session_create_with_project_root(
     henka_physics_world* physics_world,
     const char* project_root,
     sandbox3d_play_session** out_session);
+/* The state store is borrowed by the session and must outlive the session.
+ * It may be replaced only while stopped; Play never saves or destroys it. */
+henka_result sandbox3d_play_session_set_script_state_store(
+    sandbox3d_play_session* session,
+    henka_script_state_store* store);
+henka_script_state_store* sandbox3d_play_session_get_script_state_store(
+    const sandbox3d_play_session* session);
 void sandbox3d_play_session_destroy(sandbox3d_play_session* session);
 sandbox3d_play_session_state sandbox3d_play_session_get_state(
     const sandbox3d_play_session* session);

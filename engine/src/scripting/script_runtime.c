@@ -10,6 +10,7 @@ typedef struct henka_script_behavior_slot
     uint32_t generation;
     bool occupied;
     uint64_t entity_id;
+    uint64_t behavior_id;
     henka_script_language language;
     bool enabled;
     uint32_t instruction_budget;
@@ -61,7 +62,7 @@ static bool henka_script_behavior_resolve(
 static bool henka_script_behavior_event_is_valid(henka_script_lifecycle_event event)
 {
     return event >= HENKA_SCRIPT_LIFECYCLE_CREATE &&
-        event <= HENKA_SCRIPT_LIFECYCLE_STOP;
+        event <= HENKA_SCRIPT_LIFECYCLE_EVENT;
 }
 
 static bool henka_script_behavior_delta_is_valid(float delta_seconds)
@@ -84,6 +85,8 @@ static bool henka_script_behavior_transition_is_valid(
         case HENKA_SCRIPT_LIFECYCLE_STOP:
             return state == HENKA_SCRIPT_BEHAVIOR_CREATED ||
                 state == HENKA_SCRIPT_BEHAVIOR_STARTED;
+        case HENKA_SCRIPT_LIFECYCLE_EVENT:
+            return state == HENKA_SCRIPT_BEHAVIOR_STARTED;
         default:
             return false;
     }
@@ -98,6 +101,7 @@ static henka_script_behavior_state henka_script_behavior_state_after(
         case HENKA_SCRIPT_LIFECYCLE_START:
         case HENKA_SCRIPT_LIFECYCLE_UPDATE: return HENKA_SCRIPT_BEHAVIOR_STARTED;
         case HENKA_SCRIPT_LIFECYCLE_STOP: return HENKA_SCRIPT_BEHAVIOR_STOPPED;
+        case HENKA_SCRIPT_LIFECYCLE_EVENT: return HENKA_SCRIPT_BEHAVIOR_STARTED;
         default: return HENKA_SCRIPT_BEHAVIOR_FAULTED;
     }
 }
@@ -123,6 +127,8 @@ static henka_result henka_script_behavior_dispatch_one(
     henka_script_lifecycle_event event,
     float delta_seconds,
     uint64_t frame_index,
+    uint32_t event_id,
+    uint64_t event_source_entity,
     henka_script_behavior_report* out_report)
 {
     henka_script_behavior_slot* slot = &runtime->slots[index];
@@ -131,6 +137,7 @@ static henka_result henka_script_behavior_dispatch_one(
     uint32_t instructions_used = 0U;
     henka_script_behavior_state previous_state;
     henka_result error = HENKA_SUCCESS;
+    henka_result host_context_clear_result = HENKA_SUCCESS;
 
     henka_script_behavior_report_clear(out_report, slot);
     if (!slot->enabled)
@@ -175,11 +182,36 @@ static henka_result henka_script_behavior_dispatch_one(
         delta_seconds,
         frame_index,
         slot->instruction_budget,
-        slot->host};
+        slot->host,
+        slot->behavior_id,
+        event_id,
+        event_source_entity};
     previous_state = slot->state;
+    if (slot->host != NULL &&
+        henka_script_host_set_execution_context(
+            slot->host,
+            (henka_script_state_identity){slot->entity_id, slot->behavior_id}) != HENKA_SUCCESS)
+    {
+        slot->state = HENKA_SCRIPT_BEHAVIOR_FAULTED;
+        ++slot->failure_count;
+        if (out_report != NULL)
+        {
+            out_report->result = HENKA_SCRIPT_BEHAVIOR_CALLBACK_FAILED;
+            out_report->state = slot->state;
+            out_report->failure_count = slot->failure_count;
+            out_report->state_changed = previous_state != slot->state;
+        }
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
     runtime->dispatching = true;
     callback_result = slot->callback(&context, slot->user_data, &instructions_used);
     runtime->dispatching = false;
+    if (slot->host != NULL)
+    {
+        host_context_clear_result = henka_script_host_set_execution_context(
+            slot->host,
+            (henka_script_state_identity){0U, 0U});
+    }
     if (instructions_used > slot->instruction_budget ||
         callback_result == HENKA_SCRIPT_CALLBACK_BUDGET_EXHAUSTED)
     {
@@ -207,6 +239,17 @@ static henka_result henka_script_behavior_dispatch_one(
         if (out_report != NULL)
         {
             out_report->result = HENKA_SCRIPT_BEHAVIOR_EXECUTED;
+        }
+    }
+    if (host_context_clear_result != HENKA_SUCCESS &&
+        callback_result == HENKA_SCRIPT_CALLBACK_COMPLETED)
+    {
+        slot->state = HENKA_SCRIPT_BEHAVIOR_FAULTED;
+        ++slot->failure_count;
+        error = host_context_clear_result;
+        if (out_report != NULL)
+        {
+            out_report->result = HENKA_SCRIPT_BEHAVIOR_CALLBACK_FAILED;
         }
     }
     if (out_report != NULL)
@@ -277,6 +320,7 @@ henka_result henka_script_behavior_runtime_add(
     }
     slot->occupied = true;
     slot->entity_id = desc->entity_id;
+    slot->behavior_id = desc->behavior_id;
     slot->language = desc->language;
     slot->enabled = desc->enabled;
     slot->instruction_budget = desc->instruction_budget == 0U
@@ -379,6 +423,7 @@ henka_result henka_script_behavior_runtime_get(
     slot = &runtime->slots[index];
     out_snapshot->behavior = behavior;
     out_snapshot->entity_id = slot->entity_id;
+    out_snapshot->behavior_id = slot->behavior_id;
     out_snapshot->language = slot->language;
     out_snapshot->enabled = slot->enabled;
     out_snapshot->bound = slot->callback != NULL;
@@ -402,7 +447,9 @@ henka_result henka_script_behavior_runtime_dispatch(
         memset(out_report, 0, sizeof(*out_report));
         out_report->result = HENKA_SCRIPT_BEHAVIOR_INVALID_STATE;
     }
-    if (runtime == NULL || runtime->dispatching || !henka_script_behavior_event_is_valid(event) ||
+    if (runtime == NULL || runtime->dispatching ||
+        event == HENKA_SCRIPT_LIFECYCLE_EVENT ||
+        !henka_script_behavior_event_is_valid(event) ||
         !henka_script_behavior_delta_is_valid(delta_seconds) ||
         !henka_script_behavior_resolve(runtime, behavior, &index))
     {
@@ -411,7 +458,7 @@ henka_result henka_script_behavior_runtime_dispatch(
     runtime->dispatching = true;
     {
         henka_result result = henka_script_behavior_dispatch_one(
-            runtime, index, event, delta_seconds, frame_index, out_report);
+            runtime, index, event, delta_seconds, frame_index, 0U, 0U, out_report);
         runtime->dispatching = false;
         return result;
     }
@@ -432,7 +479,9 @@ henka_result henka_script_behavior_runtime_dispatch_all(
         out_report->event = event;
         out_report->first_error = HENKA_SUCCESS;
     }
-    if (runtime == NULL || runtime->dispatching || !henka_script_behavior_event_is_valid(event) ||
+    if (runtime == NULL || runtime->dispatching ||
+        event == HENKA_SCRIPT_LIFECYCLE_EVENT ||
+        !henka_script_behavior_event_is_valid(event) ||
         !henka_script_behavior_delta_is_valid(delta_seconds))
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
@@ -451,7 +500,112 @@ henka_result henka_script_behavior_runtime_dispatch_all(
             ++out_report->attempted;
         }
         result = henka_script_behavior_dispatch_one(
-            runtime, index, event, delta_seconds, frame_index, &report);
+            runtime, index, event, delta_seconds, frame_index, 0U, 0U, &report);
+        if (result != HENKA_SUCCESS && first_error == HENKA_SUCCESS)
+        {
+            first_error = result;
+        }
+        if (out_report != NULL)
+        {
+            if (report.result == HENKA_SCRIPT_BEHAVIOR_EXECUTED)
+            {
+                ++out_report->executed;
+            }
+            else if (report.result == HENKA_SCRIPT_BEHAVIOR_SKIPPED_DISABLED ||
+                     report.result == HENKA_SCRIPT_BEHAVIOR_SKIPPED_STOPPED)
+            {
+                ++out_report->skipped;
+            }
+            else
+            {
+                ++out_report->failed;
+            }
+        }
+    }
+    runtime->dispatching = false;
+    if (out_report != NULL)
+    {
+        out_report->first_error = first_error;
+    }
+    return first_error;
+}
+
+henka_result henka_script_behavior_runtime_dispatch_event(
+    henka_script_behavior_runtime* runtime,
+    henka_script_behavior_handle behavior,
+    uint32_t event_id,
+    uint64_t source_entity,
+    uint64_t frame_index,
+    henka_script_behavior_report* out_report)
+{
+    size_t index;
+    if (out_report != NULL)
+    {
+        memset(out_report, 0, sizeof(*out_report));
+        out_report->result = HENKA_SCRIPT_BEHAVIOR_INVALID_STATE;
+    }
+    if (runtime == NULL || runtime->dispatching || event_id == 0U ||
+        !henka_script_behavior_resolve(runtime, behavior, &index))
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    runtime->dispatching = true;
+    {
+        henka_result result = henka_script_behavior_dispatch_one(
+            runtime,
+            index,
+            HENKA_SCRIPT_LIFECYCLE_EVENT,
+            0.0f,
+            frame_index,
+            event_id,
+            source_entity,
+            out_report);
+        runtime->dispatching = false;
+        return result;
+    }
+}
+
+henka_result henka_script_behavior_runtime_dispatch_event_all(
+    henka_script_behavior_runtime* runtime,
+    uint32_t event_id,
+    uint64_t source_entity,
+    uint64_t frame_index,
+    henka_script_behavior_batch_report* out_report)
+{
+    size_t index;
+    henka_result first_error = HENKA_SUCCESS;
+    if (out_report != NULL)
+    {
+        memset(out_report, 0, sizeof(*out_report));
+        out_report->event = HENKA_SCRIPT_LIFECYCLE_EVENT;
+        out_report->first_error = HENKA_SUCCESS;
+    }
+    if (runtime == NULL || runtime->dispatching || event_id == 0U)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    runtime->dispatching = true;
+    for (index = 0U; index < HENKA_SCRIPT_RUNTIME_MAX_BEHAVIORS; ++index)
+    {
+        henka_script_behavior_report report;
+        henka_result result;
+        if (!runtime->slots[index].occupied)
+        {
+            continue;
+        }
+        if (out_report != NULL)
+        {
+            ++out_report->attempted;
+        }
+        result = henka_script_behavior_dispatch_one(
+            runtime,
+            index,
+            HENKA_SCRIPT_LIFECYCLE_EVENT,
+            0.0f,
+            frame_index,
+            event_id,
+            source_entity,
+            &report);
         if (result != HENKA_SUCCESS && first_error == HENKA_SUCCESS)
         {
             first_error = result;

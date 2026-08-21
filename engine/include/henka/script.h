@@ -7,6 +7,7 @@
 
 #include <henka/math.h>
 #include <henka/result.h>
+#include <henka/script_state.h>
 
 #define HENKA_SCRIPT_API_SCHEMA_VERSION UINT32_C(1)
 #define HENKA_SCRIPT_API_MAX_PARAMETERS 4U
@@ -29,18 +30,21 @@ typedef enum henka_script_api_domain
     HENKA_SCRIPT_API_DOMAIN_INPUT,
     HENKA_SCRIPT_API_DOMAIN_PHYSICS,
     HENKA_SCRIPT_API_DOMAIN_INTERACTION,
-    HENKA_SCRIPT_API_DOMAIN_EVENTS
+    HENKA_SCRIPT_API_DOMAIN_EVENTS,
+    HENKA_SCRIPT_API_DOMAIN_STATE
 } henka_script_api_domain;
 
 typedef enum henka_script_api_value_type
 {
     HENKA_SCRIPT_API_VALUE_VOID = 0,
     HENKA_SCRIPT_API_VALUE_BOOL,
+    HENKA_SCRIPT_API_VALUE_I32,
     HENKA_SCRIPT_API_VALUE_FLOAT32,
     HENKA_SCRIPT_API_VALUE_VEC3,
     HENKA_SCRIPT_API_VALUE_ENTITY,
     HENKA_SCRIPT_API_VALUE_ACTION_ID,
     HENKA_SCRIPT_API_VALUE_EVENT_ID,
+    HENKA_SCRIPT_API_VALUE_STATE_KEY,
     HENKA_SCRIPT_API_VALUE_RESULT
 } henka_script_api_value_type;
 
@@ -50,13 +54,16 @@ typedef struct henka_script_api_value
     union
     {
         bool boolean;
+        int32_t i32;
         float f32;
         henka_vec3 vec3;
         uint64_t entity;
         uint32_t action_id;
         uint32_t event_id;
+        uint32_t state_key;
         henka_result result;
     } as;
+    bool present;
 } henka_script_api_value;
 
 typedef henka_result (*henka_script_host_dispatch_callback)(
@@ -81,7 +88,11 @@ typedef enum henka_script_api_id
     HENKA_SCRIPT_API_INPUT_IS_ACTION_DOWN = UINT32_C(0x0301),
     HENKA_SCRIPT_API_PHYSICS_APPLY_IMPULSE = UINT32_C(0x0401),
     HENKA_SCRIPT_API_INTERACTION_TRY = UINT32_C(0x0501),
-    HENKA_SCRIPT_API_EVENTS_EMIT = UINT32_C(0x0601)
+    HENKA_SCRIPT_API_EVENTS_EMIT = UINT32_C(0x0601),
+    HENKA_SCRIPT_API_STATE_GET_I32 = UINT32_C(0x0701),
+    HENKA_SCRIPT_API_STATE_SET_I32 = UINT32_C(0x0702),
+    HENKA_SCRIPT_API_STATE_GET_BOOL = UINT32_C(0x0703),
+    HENKA_SCRIPT_API_STATE_SET_BOOL = UINT32_C(0x0704)
 } henka_script_api_id;
 
 /* This is a bind-time schema, not a dynamic call payload. Backends resolve
@@ -128,6 +139,17 @@ henka_result henka_script_host_get_binding(
     const henka_script_api_function** out_function);
 
 size_t henka_script_host_get_binding_count(const henka_script_host* host);
+
+/* The state store and execution identity are borrowed. The identity must be
+ * set before a behavior callback and cleared afterward; changing it while a
+ * host call is dispatching is rejected. State access is enabled only when
+ * both entity_id and behavior_id are nonzero. */
+henka_result henka_script_host_set_state_store(
+    henka_script_host* host,
+    henka_script_state_store* store);
+henka_result henka_script_host_set_execution_context(
+    henka_script_host* host,
+    henka_script_state_identity identity);
 
 /* Installs a borrowed, synchronous dispatcher for typed host calls. The
  * dispatcher and user_data must remain valid until replaced or destruction.

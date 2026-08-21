@@ -56,7 +56,7 @@ Other operating systems are not currently claimed as supported.
 | Game authoring | Foundation | Bounded Scene Document, authored Physics/Interaction, Save/Reload, and isolated runtime Play scenes |
 | 2D | Planned | Dedicated 2D renderer, sprites, layers, parallax, and animation remain open |
 | Audio | Planned | No current audio workflow |
-| Scripting/behaviors | In Progress | Shared host schema, bounded HenkaScript/Lua lifecycle adapters; scene binding and host dispatch remain open |
+| Scripting/behaviors | In Progress | Shared host schema, bounded HenkaScript/Lua lifecycle adapters, Scene Document binding, Play dispatch, state persistence, and cross-language events |
 
 For the detailed, code-backed inventory and explicit boundaries, see
 [docs/current-capabilities.md](docs/current-capabilities.md).

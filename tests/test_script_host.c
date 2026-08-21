@@ -134,6 +134,75 @@ static int test_bounded_event_queue(void)
     return 0;
 }
 
+static int test_state_api_context_isolation(void)
+{
+    henka_script_host* host = NULL;
+    henka_script_state_store* store = NULL;
+    henka_script_api_value arguments[2];
+    henka_script_api_value output;
+    bool present;
+    henka_script_state_value state_value;
+    if (henka_script_host_create(&host) != HENKA_SUCCESS ||
+        henka_script_state_store_create(&store) != HENKA_SUCCESS ||
+        henka_script_host_bind_api(host, HENKA_SCRIPT_API_STATE_GET_I32, &(size_t){0U}) != HENKA_SUCCESS ||
+        henka_script_host_bind_api(host, HENKA_SCRIPT_API_STATE_SET_I32, &(size_t){0U}) != HENKA_SUCCESS ||
+        henka_script_host_bind_api(host, HENKA_SCRIPT_API_STATE_GET_BOOL, &(size_t){0U}) != HENKA_SUCCESS ||
+        henka_script_host_bind_api(host, HENKA_SCRIPT_API_STATE_SET_BOOL, &(size_t){0U}) != HENKA_SUCCESS ||
+        henka_script_host_set_state_store(host, store) != HENKA_SUCCESS ||
+        henka_script_host_set_execution_context(
+            host, (henka_script_state_identity){9U, 90U}) != HENKA_SUCCESS)
+    {
+        henka_script_state_store_destroy(store);
+        henka_script_host_destroy(host);
+        return 1;
+    }
+
+    arguments[0] = (henka_script_api_value){
+        HENKA_SCRIPT_API_VALUE_STATE_KEY, {.state_key = 7U}};
+    arguments[1] = (henka_script_api_value){
+        HENKA_SCRIPT_API_VALUE_I32, {.i32 = -42}};
+    if (henka_script_host_invoke(
+            host, HENKA_SCRIPT_API_STATE_SET_I32, arguments, 2U, &output) != HENKA_SUCCESS ||
+        output.type != HENKA_SCRIPT_API_VALUE_RESULT ||
+        output.as.result != HENKA_SUCCESS ||
+        henka_script_host_invoke(
+            host, HENKA_SCRIPT_API_STATE_GET_I32, arguments, 1U, &output) != HENKA_SUCCESS ||
+        output.type != HENKA_SCRIPT_API_VALUE_I32 ||
+        output.as.i32 != -42 || !output.present ||
+        henka_script_state_store_get(
+            store, (henka_script_state_identity){9U, 90U}, 7U,
+            &state_value, &present) != HENKA_SUCCESS ||
+        !present || state_value.type != HENKA_SCRIPT_STATE_VALUE_I32 ||
+        state_value.as.i32 != -42)
+    {
+        henka_script_state_store_destroy(store);
+        henka_script_host_destroy(host);
+        return 1;
+    }
+
+    arguments[1] = (henka_script_api_value){
+        HENKA_SCRIPT_API_VALUE_BOOL, {.boolean = true}};
+    if (henka_script_host_set_execution_context(
+            host, (henka_script_state_identity){9U, 91U}) != HENKA_SUCCESS ||
+        henka_script_host_invoke(
+            host, HENKA_SCRIPT_API_STATE_GET_BOOL, arguments, 1U, &output) != HENKA_SUCCESS ||
+        output.type != HENKA_SCRIPT_API_VALUE_BOOL || output.as.boolean || output.present ||
+        henka_script_host_set_execution_context(
+            host, (henka_script_state_identity){0U, 1U}) != HENKA_ERROR_INVALID_ARGUMENT ||
+        henka_script_host_set_execution_context(
+            host, (henka_script_state_identity){0U, 0U}) != HENKA_SUCCESS ||
+        henka_script_host_invoke(
+            host, HENKA_SCRIPT_API_STATE_GET_I32, arguments, 1U, &output) != HENKA_ERROR_INVALID_ARGUMENT)
+    {
+        henka_script_state_store_destroy(store);
+        henka_script_host_destroy(host);
+        return 1;
+    }
+    henka_script_state_store_destroy(store);
+    henka_script_host_destroy(host);
+    return 0;
+}
+
 int main(void)
 {
     const henka_script_api_function* functions = NULL;
@@ -145,7 +214,7 @@ int main(void)
     int result = 1;
 
     if (henka_script_api_schema_get(&functions, &count) != HENKA_SUCCESS ||
-        functions == NULL || count != 7U)
+        functions == NULL || count != 11U)
     {
         goto cleanup;
     }
@@ -217,7 +286,8 @@ int main(void)
         goto cleanup;
     }
     if (test_typed_dispatch_and_non_reentrancy(host) != 0 ||
-        test_bounded_event_queue() != 0)
+        test_bounded_event_queue() != 0 ||
+        test_state_api_context_isolation() != 0)
     {
         goto cleanup;
     }

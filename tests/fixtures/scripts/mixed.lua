@@ -7,3 +7,7 @@ function OnUpdate()
     local value = 1
     value = value * 4
 end
+
+function OnEvent(event_id, source_entity)
+    State.SetI32(90, event_id)
+end

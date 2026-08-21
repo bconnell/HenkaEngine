@@ -25,6 +25,7 @@ struct henka_lua_behavior_backend
     lua_State* state;
     henka_lua_allocator allocator;
     int lifecycle_callable[HENKA_LUA_LIFECYCLE_COUNT];
+    int event_callable;
     uint32_t instruction_budget;
     uint32_t instructions_used;
     bool budget_exhausted;
@@ -181,6 +182,25 @@ static bool henka_lua_get_unsigned_integer(
         return false;
     }
     *out_value = (uint64_t)value;
+    return true;
+}
+
+static bool henka_lua_get_i32(
+    lua_State* state,
+    int index,
+    int32_t* out_value)
+{
+    lua_Integer value;
+    if (state == NULL || out_value == NULL || !lua_isinteger(state, index))
+    {
+        return false;
+    }
+    value = lua_tointeger(state, index);
+    if (value < INT32_MIN || value > INT32_MAX)
+    {
+        return false;
+    }
+    *out_value = (int32_t)value;
     return true;
 }
 
@@ -448,6 +468,105 @@ static int henka_lua_events_emit(lua_State* state)
     return 1;
 }
 
+static int henka_lua_state_get_i32(lua_State* state)
+{
+    henka_lua_behavior_backend* backend = henka_lua_backend_from_upvalue(state);
+    henka_script_api_value argument;
+    henka_script_api_value output;
+    uint64_t state_key;
+    if (!henka_lua_get_unsigned_integer(state, 1, UINT32_MAX, &state_key) ||
+        state_key == 0U)
+    {
+        return luaL_error(state, "State.GetI32 requires a non-zero uint32 state key");
+    }
+    argument = (henka_script_api_value){
+        HENKA_SCRIPT_API_VALUE_STATE_KEY, {.state_key = (uint32_t)state_key}};
+    if (henka_lua_invoke_host(
+            backend, HENKA_SCRIPT_API_STATE_GET_I32, &argument, 1U, &output) != HENKA_SUCCESS ||
+        output.type != HENKA_SCRIPT_API_VALUE_I32)
+    {
+        return luaL_error(state, "State.GetI32 is unavailable in this runtime");
+    }
+    lua_pushinteger(state, (lua_Integer)output.as.i32);
+    lua_pushboolean(state, output.present);
+    return 2;
+}
+
+static int henka_lua_state_set_i32(lua_State* state)
+{
+    henka_lua_behavior_backend* backend = henka_lua_backend_from_upvalue(state);
+    henka_script_api_value arguments[2];
+    henka_script_api_value output;
+    uint64_t state_key;
+    int32_t value;
+    if (!henka_lua_get_unsigned_integer(state, 1, UINT32_MAX, &state_key) ||
+        state_key == 0U || !henka_lua_get_i32(state, 2, &value))
+    {
+        return luaL_error(state, "State.SetI32 requires a non-zero uint32 state key and int32 value");
+    }
+    arguments[0] = (henka_script_api_value){
+        HENKA_SCRIPT_API_VALUE_STATE_KEY, {.state_key = (uint32_t)state_key}};
+    arguments[1] = (henka_script_api_value){
+        HENKA_SCRIPT_API_VALUE_I32, {.i32 = value}};
+    if (henka_lua_invoke_host(
+            backend, HENKA_SCRIPT_API_STATE_SET_I32, arguments, 2U, &output) != HENKA_SUCCESS ||
+        output.type != HENKA_SCRIPT_API_VALUE_RESULT)
+    {
+        return luaL_error(state, "State.SetI32 failed");
+    }
+    lua_pushinteger(state, (lua_Integer)output.as.result);
+    return 1;
+}
+
+static int henka_lua_state_get_bool(lua_State* state)
+{
+    henka_lua_behavior_backend* backend = henka_lua_backend_from_upvalue(state);
+    henka_script_api_value argument;
+    henka_script_api_value output;
+    uint64_t state_key;
+    if (!henka_lua_get_unsigned_integer(state, 1, UINT32_MAX, &state_key) ||
+        state_key == 0U)
+    {
+        return luaL_error(state, "State.GetBool requires a non-zero uint32 state key");
+    }
+    argument = (henka_script_api_value){
+        HENKA_SCRIPT_API_VALUE_STATE_KEY, {.state_key = (uint32_t)state_key}};
+    if (henka_lua_invoke_host(
+            backend, HENKA_SCRIPT_API_STATE_GET_BOOL, &argument, 1U, &output) != HENKA_SUCCESS ||
+        output.type != HENKA_SCRIPT_API_VALUE_BOOL)
+    {
+        return luaL_error(state, "State.GetBool is unavailable in this runtime");
+    }
+    lua_pushboolean(state, output.as.boolean);
+    lua_pushboolean(state, output.present);
+    return 2;
+}
+
+static int henka_lua_state_set_bool(lua_State* state)
+{
+    henka_lua_behavior_backend* backend = henka_lua_backend_from_upvalue(state);
+    henka_script_api_value arguments[2];
+    henka_script_api_value output;
+    uint64_t state_key;
+    if (!henka_lua_get_unsigned_integer(state, 1, UINT32_MAX, &state_key) ||
+        state_key == 0U || !lua_isboolean(state, 2))
+    {
+        return luaL_error(state, "State.SetBool requires a non-zero uint32 state key and boolean value");
+    }
+    arguments[0] = (henka_script_api_value){
+        HENKA_SCRIPT_API_VALUE_STATE_KEY, {.state_key = (uint32_t)state_key}};
+    arguments[1] = (henka_script_api_value){
+        HENKA_SCRIPT_API_VALUE_BOOL, {.boolean = lua_toboolean(state, 2) != 0}};
+    if (henka_lua_invoke_host(
+            backend, HENKA_SCRIPT_API_STATE_SET_BOOL, arguments, 2U, &output) != HENKA_SUCCESS ||
+        output.type != HENKA_SCRIPT_API_VALUE_RESULT)
+    {
+        return luaL_error(state, "State.SetBool failed");
+    }
+    lua_pushinteger(state, (lua_Integer)output.as.result);
+    return 1;
+}
+
 static void henka_lua_register_api_function(
     lua_State* state,
     henka_lua_behavior_backend* backend,
@@ -489,6 +608,14 @@ static void henka_lua_register_api(henka_lua_behavior_backend* backend)
         backend->state, backend, "Interaction", "Try", henka_lua_interaction_try);
     henka_lua_register_api_function(
         backend->state, backend, "Events", "Emit", henka_lua_events_emit);
+    henka_lua_register_api_function(
+        backend->state, backend, "State", "GetI32", henka_lua_state_get_i32);
+    henka_lua_register_api_function(
+        backend->state, backend, "State", "SetI32", henka_lua_state_set_i32);
+    henka_lua_register_api_function(
+        backend->state, backend, "State", "GetBool", henka_lua_state_get_bool);
+    henka_lua_register_api_function(
+        backend->state, backend, "State", "SetBool", henka_lua_state_set_bool);
 }
 
 henka_result henka_lua_behavior_backend_create(
@@ -524,6 +651,7 @@ henka_result henka_lua_behavior_backend_create(
     {
         backend->lifecycle_callable[index] = LUA_NOREF;
     }
+    backend->event_callable = LUA_NOREF;
     backend->state = lua_newstate(henka_lua_allocate, &backend->allocator);
     if (backend->state == NULL)
     {
@@ -597,6 +725,24 @@ henka_result henka_lua_behavior_backend_create(
                 luaL_ref(backend->state, LUA_REGISTRYINDEX);
         }
     }
+    lua_getglobal(backend->state, "OnEvent");
+    if (lua_isnil(backend->state, -1))
+    {
+        lua_pop(backend->state, 1);
+    }
+    else if (!lua_isfunction(backend->state, -1))
+    {
+        henka_lua_set_diagnostic(
+            out_diagnostic,
+            HENKA_LUA_DIAGNOSTIC_INVALID_SOURCE,
+            backend->state);
+        henka_lua_behavior_backend_destroy(backend);
+        return HENKA_ERROR_ASSET_SOURCE;
+    }
+    else
+    {
+        backend->event_callable = luaL_ref(backend->state, LUA_REGISTRYINDEX);
+    }
     *out_backend = backend;
     return HENKA_SUCCESS;
 }
@@ -629,12 +775,14 @@ henka_script_behavior_callback_result henka_lua_behavior_backend_callback(
     if (context == NULL || backend == NULL || backend->state == NULL ||
         out_instructions_used == NULL ||
         context->language != HENKA_SCRIPT_LANGUAGE_LUA ||
-        context->event > HENKA_SCRIPT_LIFECYCLE_STOP ||
+        context->event > HENKA_SCRIPT_LIFECYCLE_EVENT ||
         backend->dispatching)
     {
         return HENKA_SCRIPT_CALLBACK_FAILED;
     }
-    callable = backend->lifecycle_callable[henka_lua_event_index(context->event)];
+    callable = context->event == HENKA_SCRIPT_LIFECYCLE_EVENT
+        ? backend->event_callable
+        : backend->lifecycle_callable[henka_lua_event_index(context->event)];
     if (callable == LUA_NOREF)
     {
         return HENKA_SCRIPT_CALLBACK_COMPLETED;
@@ -647,7 +795,16 @@ henka_script_behavior_callback_result henka_lua_behavior_backend_callback(
     backend->budget_exhausted = false;
     lua_sethook(backend->state, henka_lua_budget_hook, LUA_MASKCOUNT, 1);
     lua_rawgeti(backend->state, LUA_REGISTRYINDEX, callable);
-    status = lua_pcall(backend->state, 0, 0, 0);
+    if (context->event == HENKA_SCRIPT_LIFECYCLE_EVENT)
+    {
+        lua_pushinteger(backend->state, (lua_Integer)context->event_id);
+        lua_pushinteger(backend->state, (lua_Integer)context->event_source_entity);
+    }
+    status = lua_pcall(
+        backend->state,
+        context->event == HENKA_SCRIPT_LIFECYCLE_EVENT ? 2 : 0,
+        0,
+        0);
     lua_sethook(backend->state, NULL, 0, 0);
     backend->active_host = NULL;
     backend->dispatching = false;

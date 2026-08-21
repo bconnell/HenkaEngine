@@ -22,7 +22,8 @@ typedef enum henka_script_lifecycle_event
     HENKA_SCRIPT_LIFECYCLE_CREATE = 0,
     HENKA_SCRIPT_LIFECYCLE_START,
     HENKA_SCRIPT_LIFECYCLE_UPDATE,
-    HENKA_SCRIPT_LIFECYCLE_STOP
+    HENKA_SCRIPT_LIFECYCLE_STOP,
+    HENKA_SCRIPT_LIFECYCLE_EVENT
 } henka_script_lifecycle_event;
 
 typedef enum henka_script_behavior_state
@@ -62,6 +63,9 @@ typedef struct henka_script_behavior_context
     uint64_t frame_index;
     uint32_t instruction_budget;
     henka_script_host* host;
+    uint64_t behavior_id;
+    uint32_t event_id;
+    uint64_t event_source_entity;
 } henka_script_behavior_context;
 
 /* The callback, user_data, and host are borrowed. The owner must keep them
@@ -81,6 +85,7 @@ typedef struct henka_script_behavior_desc
     henka_script_behavior_callback callback;
     void* user_data;
     henka_script_host* host;
+    uint64_t behavior_id;
 } henka_script_behavior_desc;
 
 typedef struct henka_script_behavior_snapshot
@@ -93,6 +98,7 @@ typedef struct henka_script_behavior_snapshot
     henka_script_behavior_state state;
     uint32_t instruction_budget;
     uint32_t failure_count;
+    uint64_t behavior_id;
 } henka_script_behavior_snapshot;
 
 typedef struct henka_script_behavior_report
@@ -153,6 +159,19 @@ henka_result henka_script_behavior_runtime_dispatch_all(
     henka_script_behavior_runtime* runtime,
     henka_script_lifecycle_event event,
     float delta_seconds,
+    uint64_t frame_index,
+    henka_script_behavior_batch_report* out_report);
+henka_result henka_script_behavior_runtime_dispatch_event(
+    henka_script_behavior_runtime* runtime,
+    henka_script_behavior_handle behavior,
+    uint32_t event_id,
+    uint64_t source_entity,
+    uint64_t frame_index,
+    henka_script_behavior_report* out_report);
+henka_result henka_script_behavior_runtime_dispatch_event_all(
+    henka_script_behavior_runtime* runtime,
+    uint32_t event_id,
+    uint64_t source_entity,
     uint64_t frame_index,
     henka_script_behavior_batch_report* out_report);
 

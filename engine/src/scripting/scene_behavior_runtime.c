@@ -6,6 +6,7 @@
 struct henka_scene_behavior_runtime
 {
     henka_script_behavior_runtime* behavior_runtime;
+    henka_script_host* host;
     size_t asset_count;
     henka_script_behavior_asset* assets[HENKA_SCRIPT_RUNTIME_MAX_BEHAVIORS];
 };
@@ -59,6 +60,7 @@ henka_result henka_scene_behavior_runtime_create_with_host(
     {
         return HENKA_ERROR_OUT_OF_MEMORY;
     }
+    runtime->host = host;
     result = henka_script_behavior_runtime_create(&runtime->behavior_runtime);
     if (result != HENKA_SUCCESS)
     {
@@ -106,6 +108,7 @@ henka_result henka_scene_behavior_runtime_create_with_host(
                 goto fail;
             }
             desc.host = host;
+            desc.behavior_id = object.behaviors[behavior_index].id;
             result = henka_script_behavior_runtime_add(
                 runtime->behavior_runtime, &desc, &ignored_handle);
             if (result != HENKA_SUCCESS)
@@ -166,6 +169,66 @@ henka_result henka_scene_behavior_runtime_dispatch(
         delta_seconds,
         frame_index,
         out_report);
+}
+
+henka_result henka_scene_behavior_runtime_dispatch_events(
+    henka_scene_behavior_runtime* runtime,
+    henka_script_behavior_batch_report* out_report)
+{
+    size_t pending_count;
+    size_t index;
+    henka_result first_error = HENKA_SUCCESS;
+    if (out_report != NULL)
+    {
+        *out_report = (henka_script_behavior_batch_report){
+            HENKA_SCRIPT_LIFECYCLE_EVENT, 0U, 0U, 0U, 0U, HENKA_SUCCESS};
+    }
+    if (runtime == NULL || runtime->behavior_runtime == NULL || runtime->host == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    pending_count = henka_script_host_get_pending_event_count(runtime->host);
+    if (pending_count > HENKA_SCRIPT_HOST_MAX_EVENTS)
+    {
+        return HENKA_ERROR_LIMIT;
+    }
+    for (index = 0U; index < pending_count; ++index)
+    {
+        henka_script_event event;
+        henka_script_behavior_batch_report event_report;
+        henka_result result;
+        result = henka_script_host_poll_event(runtime->host, &event);
+        if (result != HENKA_SUCCESS)
+        {
+            if (first_error == HENKA_SUCCESS)
+            {
+                first_error = result;
+            }
+            break;
+        }
+        result = henka_script_behavior_runtime_dispatch_event_all(
+            runtime->behavior_runtime,
+            event.event_id,
+            event.source_entity,
+            event.frame_index,
+            &event_report);
+        if (result != HENKA_SUCCESS && first_error == HENKA_SUCCESS)
+        {
+            first_error = result;
+        }
+        if (out_report != NULL)
+        {
+            out_report->attempted += event_report.attempted;
+            out_report->executed += event_report.executed;
+            out_report->skipped += event_report.skipped;
+            out_report->failed += event_report.failed;
+        }
+    }
+    if (out_report != NULL)
+    {
+        out_report->first_error = first_error;
+    }
+    return first_error;
 }
 
 size_t henka_scene_behavior_runtime_get_behavior_count(

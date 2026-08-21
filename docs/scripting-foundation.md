@@ -32,6 +32,13 @@ execution adapters for both languages.
 - A Lua 5.4.8 behavior adapter with the same lifecycle names and no-op rules,
   a restricted standard-library surface, a bounded allocator, and an
   instruction hook that fails closed when the per-callback budget is spent.
+- A bounded behavior-state store keyed by the persistent object/entity ID,
+  behavior ID, and a caller-defined nonzero state key. It supports typed
+  `bool`, `i32`, `float32`, and `vec3` values, with a fixed 512-value capacity.
+- Explicit, candidate-based state sidecar persistence with a versioned
+  little-endian format, a 64 KiB file limit, confined project-relative paths,
+  same-directory temporary files, and atomic replacement. Loading malformed
+  state retains the existing in-memory store.
 - Explicit typed declarations (`i32 health = 3;`) and inferred declarations
   (`count := health + 1;`).
 - Brace-delimited `fn` and `behavior` callables, arithmetic expressions,
@@ -55,11 +62,52 @@ execution adapters for both languages.
 - Lua behaviors can call the shared host surface through checked `Entity`,
   `Transform`, `Input`, `Physics`, `Interaction`, and `Events` tables. The
   HenkaScript V1 surface currently exposes the same event identity through the
-  bounded `emit(i32_event_id);` builtin.
+  bounded `emit(i32_event_id);` builtin. Both languages can receive the same
+  queued event through `OnEvent`; Lua receives `(event_id, source_entity)` and
+  HenkaScript reads the event ID through `event_id()`.
+- The Scene behavior runtime drains only the events present at the beginning
+  of a drain pass. Events emitted while handling that pass remain queued for
+  the next pass, preventing same-batch recursive dispatch.
 
 Backends should resolve IDs during load/compile and retain typed native
 bindings. Names are for diagnostics and tooling; they are not the runtime
 dispatch mechanism.
+
+## Minimal language shapes
+
+Lua state reads return the value followed by a presence flag. A missing value
+uses the type's zero default; the flag lets a behavior distinguish that case.
+State writes return a numeric Henka result code.
+
+```lua
+function OnUpdate()
+    local count, present = State.GetI32(1)
+    if not present then count = 0 end
+    State.SetI32(1, count + 1)
+end
+
+function OnEvent(event_id, source_entity)
+    State.SetI32(2, event_id)
+end
+```
+
+HenkaScript uses typed expressions for the same operations. `event_id()` is
+valid only inside `OnEvent`.
+
+```text
+fn OnUpdate() {
+    i32 count = state_get_i32(1);
+    state_set_i32(1, count + 1);
+}
+
+fn OnEvent() {
+    state_set_i32(2, event_id());
+}
+```
+
+Both examples are bounded by the behavior instruction budget and require a
+valid Scene Document attachment in a Play session. They do not provide
+arbitrary filesystem, process, network, or renderer access.
 
 ## What is not available yet
 
@@ -68,12 +116,13 @@ bytecode, and both language adapters can drive their bounded execution through
 the language-neutral behavior runtime. The bounded loader can create owned
 backend instances from persisted `.lua` and `.hks` attachments, and the Scene
 Document behavior runtime can assemble and dispatch them by persistent object
-identity. The Sandbox Play session now owns that runtime for its isolated
-scene lifecycle and fixed-tick dispatch, with a bounded host mapping for the
-current Entity/Transform/Physics/Event slice. Persistent global state, full
-host API coverage in both languages, Inspector authoring, hot reload, and
-mixed-language event delivery/routing remain subsequent implementation
-slices.
+identity. The Sandbox Play session owns that runtime for its isolated scene
+lifecycle and fixed-tick dispatch, with a bounded host mapping for the current
+Entity/Transform/Physics/Event slice and an explicit behavior-state sidecar
+save/load seam. Persistent state is not implicitly saved on Stop, is not part
+of the authored `.hscene` document, and is not an editor Inspector workflow.
+Full host API coverage, Inspector authoring, hot reload, debugger tooling,
+replay integration, and broader project scripting workflows remain future work.
 
 The current schema, HenkaScript compiler, and bounded VM are therefore engine
 integration foundations, not a claim that complete executable scripting is

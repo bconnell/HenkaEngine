@@ -4,6 +4,7 @@
 
 #include <henka/henkascript.h>
 #include <henka/memory.h>
+#include <henka/script.h>
 
 static void expect_diagnostic(
     const char* source,
@@ -208,6 +209,62 @@ static void test_bounded_vm_execution(void)
     henka_hks_program_destroy(program);
 }
 
+static void test_state_host_contract(void)
+{
+    static const char source[] =
+        "fn Update() { "
+        "i32 current = state_get_i32(17); "
+        "state_set_i32(17, current + 2); "
+        "bool enabled = state_get_bool(18); "
+        "state_set_bool(18, true); "
+        "}";
+    henka_hks_program* program = compile_program(source);
+    henka_script_host* host = NULL;
+    henka_script_state_store* store = NULL;
+    henka_hks_execution_context context;
+    henka_hks_execution_report report;
+    henka_hks_value return_value;
+    henka_script_state_value state_value;
+    bool present;
+
+    assert(henka_script_host_create(&host) == HENKA_SUCCESS);
+    assert(henka_script_state_store_create(&store) == HENKA_SUCCESS);
+    assert(henka_script_host_bind_api(
+               host, HENKA_SCRIPT_API_STATE_GET_I32, &(size_t){0U}) == HENKA_SUCCESS);
+    assert(henka_script_host_bind_api(
+               host, HENKA_SCRIPT_API_STATE_SET_I32, &(size_t){0U}) == HENKA_SUCCESS);
+    assert(henka_script_host_bind_api(
+               host, HENKA_SCRIPT_API_STATE_GET_BOOL, &(size_t){0U}) == HENKA_SUCCESS);
+    assert(henka_script_host_bind_api(
+               host, HENKA_SCRIPT_API_STATE_SET_BOOL, &(size_t){0U}) == HENKA_SUCCESS);
+    assert(henka_script_state_store_set(
+               store,
+               (henka_script_state_identity){4U, 40U},
+               17U,
+               (henka_script_state_value){
+                   HENKA_SCRIPT_STATE_VALUE_I32, {.i32 = 5}}) == HENKA_SUCCESS);
+    assert(henka_script_host_set_state_store(host, store) == HENKA_SUCCESS);
+    assert(henka_script_host_set_execution_context(
+               host, (henka_script_state_identity){4U, 40U}) == HENKA_SUCCESS);
+    context = (henka_hks_execution_context){host, 4U, 3U, 40U};
+    assert(henka_hks_execute_with_context(
+               program, 0U, 128U, &context, &return_value, &report) ==
+           HENKA_HKS_EXECUTION_COMPLETED);
+    assert(henka_script_state_store_get(
+               store, (henka_script_state_identity){4U, 40U}, 17U,
+               &state_value, &present) == HENKA_SUCCESS);
+    assert(present && state_value.type == HENKA_SCRIPT_STATE_VALUE_I32 &&
+           state_value.as.i32 == 7);
+    assert(henka_script_state_store_get(
+               store, (henka_script_state_identity){4U, 40U}, 18U,
+               &state_value, &present) == HENKA_SUCCESS);
+    assert(present && state_value.type == HENKA_SCRIPT_STATE_VALUE_BOOL &&
+           state_value.as.boolean);
+    henka_script_state_store_destroy(store);
+    henka_script_host_destroy(host);
+    henka_hks_program_destroy(program);
+}
+
 int main(void)
 {
     const size_t allocations_before = henka_memory_get_allocation_count();
@@ -216,6 +273,7 @@ int main(void)
     test_rejects_unsafe_or_invalid_source();
     test_argument_and_memory_contracts();
     test_bounded_vm_execution();
+    test_state_host_contract();
     assert(henka_memory_get_allocation_count() == allocations_before);
     puts("henka_henkascript_tests: PASS");
     return 0;
