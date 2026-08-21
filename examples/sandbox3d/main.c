@@ -21554,88 +21554,102 @@ details_group_authoring:
                 }
                 if (selection_mode == SANDBOX3D_AUTHORING_SELECTION_EDGE)
                 {
-                    if (!state->native_authoring_edge_loop_reported ||
-                        fabsf(row.y - state->native_authoring_edge_loop_reported_y) > 0.5f)
+                    henka_ui_rect edge_topology_row;
+
+                    /* Keep Edge Loop/Ring separate from the Vertex/Edge/Face
+                     * mode row. In the compact details dock, sharing that row
+                     * placed Edge Ring over the Face mode hit target. */
+                    if (sandbox3d_details_flow_next_row(
+                            state,
+                            flow_desc.bounds,
+                            28.0f,
+                            1U,
+                            &edge_topology_row) &&
+                        edge_topology_row.width >= 290.0f)
                     {
-                        printf(
-                            "Native authoring edge topology controls: name=%s loop_x=%.1f ring_x=%.1f y=%.1f width=88.0 height=24.0.\n",
-                            display_name,
-                            row.x + 96.0f,
-                            row.x + 192.0f,
-                            row.y);
-                        fflush(stdout);
-                        state->native_authoring_edge_loop_reported = true;
-                        state->native_authoring_edge_loop_reported_y = row.y;
-                    }
-                    native_edge_loop_control_drawn = true;
-                    if (henka_ui_button(
-                            state->ui,
-                            "authoring_edge_loop_priority",
-                            (henka_ui_rect){row.x + 96.0f, row.y, 88.0f, 24.0f},
-                            "Select Edge Loop"))
-                    {
-                        const henka_result loop_result =
-                            sandbox3d_authoring_object_select_edge_loop(state->authoring_object);
-                        printf(
-                            "Native authoring edge loop selection: name=%s result=%s mode=%s selected_components=%zu.\n",
-                            display_name,
-                            henka_result_to_string(loop_result),
-                            selection_label,
-                            sandbox3d_authoring_object_get_selected_component_count(state->authoring_object));
-                        fflush(stdout);
-                        if (loop_result == HENKA_SUCCESS)
+                        if (!state->native_authoring_edge_loop_reported ||
+                            fabsf(edge_topology_row.y - state->native_authoring_edge_loop_reported_y) > 0.5f)
                         {
-                            sandbox3d_set_statusf(
-                                state,
-                                false,
-                                false,
-                                "Selected edge loop: %zu edges.",
-                                sandbox3d_authoring_object_get_selected_component_count(
-                                    state->authoring_object));
+                            printf(
+                                "Native authoring edge topology controls: name=%s loop_x=%.1f ring_x=%.1f y=%.1f width=88.0 height=24.0.\n",
+                                display_name,
+                                edge_topology_row.x + 96.0f,
+                                edge_topology_row.x + 192.0f,
+                                edge_topology_row.y);
+                            fflush(stdout);
+                            state->native_authoring_edge_loop_reported = true;
+                            state->native_authoring_edge_loop_reported_y = edge_topology_row.y;
                         }
-                        else
+                        native_edge_loop_control_drawn = true;
+                        if (henka_ui_button(
+                                state->ui,
+                                "authoring_edge_loop_priority",
+                                (henka_ui_rect){edge_topology_row.x + 96.0f, edge_topology_row.y, 88.0f, 24.0f},
+                                "Select Edge Loop"))
                         {
-                            sandbox3d_set_statusf(
-                                state,
-                                true,
-                                false,
-                                "Edge loop failed (%s); prior selection retained.",
-                                henka_result_to_string(loop_result));
+                            const henka_result loop_result =
+                                sandbox3d_authoring_object_select_edge_loop(state->authoring_object);
+                            printf(
+                                "Native authoring edge loop selection: name=%s result=%s mode=%s selected_components=%zu.\n",
+                                display_name,
+                                henka_result_to_string(loop_result),
+                                selection_label,
+                                sandbox3d_authoring_object_get_selected_component_count(state->authoring_object));
+                            fflush(stdout);
+                            if (loop_result == HENKA_SUCCESS)
+                            {
+                                sandbox3d_set_statusf(
+                                    state,
+                                    false,
+                                    false,
+                                    "Selected edge loop: %zu edges.",
+                                    sandbox3d_authoring_object_get_selected_component_count(
+                                        state->authoring_object));
+                            }
+                            else
+                            {
+                                sandbox3d_set_statusf(
+                                    state,
+                                    true,
+                                    false,
+                                    "Edge loop failed (%s); prior selection retained.",
+                                    henka_result_to_string(loop_result));
+                            }
                         }
-                    }
-                    if (henka_ui_button(
-                            state->ui,
-                            "authoring_edge_ring_priority",
-                            (henka_ui_rect){row.x + 192.0f, row.y, 88.0f, 24.0f},
-                            "Select Edge Ring"))
-                    {
-                        const henka_result ring_result =
-                            sandbox3d_authoring_object_select_edge_ring(state->authoring_object);
-                        printf(
-                            "Native authoring edge ring selection: name=%s result=%s mode=%s selected_components=%zu.\n",
-                            display_name,
-                            henka_result_to_string(ring_result),
-                            selection_label,
-                            sandbox3d_authoring_object_get_selected_component_count(state->authoring_object));
-                        fflush(stdout);
-                        if (ring_result == HENKA_SUCCESS)
+                        if (henka_ui_button(
+                                state->ui,
+                                "authoring_edge_ring_priority",
+                                (henka_ui_rect){edge_topology_row.x + 192.0f, edge_topology_row.y, 88.0f, 24.0f},
+                                "Select Edge Ring"))
                         {
-                            sandbox3d_set_statusf(
-                                state,
-                                false,
-                                false,
-                                "Selected edge ring: %zu edges.",
-                                sandbox3d_authoring_object_get_selected_component_count(
-                                    state->authoring_object));
-                        }
-                        else
-                        {
-                            sandbox3d_set_statusf(
-                                state,
-                                true,
-                                false,
-                                "Edge ring failed (%s); prior selection retained.",
-                                henka_result_to_string(ring_result));
+                            const henka_result ring_result =
+                                sandbox3d_authoring_object_select_edge_ring(state->authoring_object);
+                            printf(
+                                "Native authoring edge ring selection: name=%s result=%s mode=%s selected_components=%zu.\n",
+                                display_name,
+                                henka_result_to_string(ring_result),
+                                selection_label,
+                                sandbox3d_authoring_object_get_selected_component_count(state->authoring_object));
+                            fflush(stdout);
+                            if (ring_result == HENKA_SUCCESS)
+                            {
+                                sandbox3d_set_statusf(
+                                    state,
+                                    false,
+                                    false,
+                                    "Selected edge ring: %zu edges.",
+                                    sandbox3d_authoring_object_get_selected_component_count(
+                                        state->authoring_object));
+                            }
+                            else
+                            {
+                                sandbox3d_set_statusf(
+                                    state,
+                                    true,
+                                    false,
+                                    "Edge ring failed (%s); prior selection retained.",
+                                    henka_result_to_string(ring_result));
+                            }
                         }
                     }
                 }
