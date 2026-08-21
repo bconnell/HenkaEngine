@@ -9,6 +9,7 @@
 
 #include <henka/math.h>
 #include <henka/script.h>
+#include <henka/script_source.h>
 
 typedef struct sandbox3d_play_session sandbox3d_play_session;
 typedef bool (*sandbox3d_play_input_query)(
@@ -62,6 +63,15 @@ henka_result sandbox3d_play_session_pause(sandbox3d_play_session* session);
 henka_result sandbox3d_play_session_resume(sandbox3d_play_session* session);
 henka_result sandbox3d_play_session_tick(sandbox3d_play_session* session);
 henka_result sandbox3d_play_session_step_fixed(sandbox3d_play_session* session);
+/* Reloads one persisted behavior while Play is running or paused. Candidate
+ * backend construction and identity validation happen before the live slot is
+ * rebound; the existing generation and lifecycle state remain intact on
+ * success and every failure path leaves the active backend untouched. */
+henka_result sandbox3d_play_session_reload_behavior(
+    sandbox3d_play_session* session,
+    henka_scene_document_id document_id,
+    henka_scene_document_behavior_id behavior_id,
+    henka_script_source_diagnostic* out_diagnostic);
 henka_result sandbox3d_play_session_stop(sandbox3d_play_session* session);
 
 #endif

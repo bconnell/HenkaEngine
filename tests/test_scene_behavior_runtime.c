@@ -306,6 +306,41 @@ static void test_scene_behavior_runtime_cross_language_events(void)
     }
 }
 
+static void test_scene_behavior_runtime_reload_fails_closed(void)
+{
+    henka_scene_document* document = NULL;
+    henka_scene_document_object object = make_object_with_behaviors();
+    henka_scene_document_behavior replacement;
+    henka_scene_behavior_runtime* runtime = NULL;
+    henka_script_behavior_batch_report report;
+    henka_scene_document_id object_id = HENKA_INVALID_SCENE_DOCUMENT_ID;
+
+    assert(henka_scene_document_create(&document) == HENKA_SUCCESS);
+    assert(henka_scene_document_add_object(document, &object, &object_id) == HENKA_SUCCESS);
+    assert(henka_scene_behavior_runtime_create(
+               document, "tests/fixtures", 64U, &runtime) == HENKA_SUCCESS);
+    assert(henka_scene_behavior_runtime_dispatch(
+               runtime, HENKA_SCRIPT_LIFECYCLE_CREATE, 0.0f, 1U, &report) == HENKA_SUCCESS);
+    assert(henka_scene_behavior_runtime_dispatch(
+               runtime, HENKA_SCRIPT_LIFECYCLE_START, 0.0f, 2U, &report) == HENKA_SUCCESS);
+
+    replacement = object.behaviors[0];
+    (void)snprintf(
+        replacement.asset_path,
+        sizeof(replacement.asset_path),
+        "%s",
+        "scripts/reload-missing.hks");
+    assert(henka_scene_behavior_runtime_reload_behavior(
+               runtime, "tests/fixtures", &replacement, object_id) ==
+           HENKA_ERROR_ASSET_SOURCE);
+    assert(henka_scene_behavior_runtime_dispatch(
+               runtime, HENKA_SCRIPT_LIFECYCLE_UPDATE, 0.016f, 3U, &report) == HENKA_SUCCESS);
+    assert(report.attempted == 2U && report.executed == 2U && report.failed == 0U);
+
+    henka_scene_behavior_runtime_destroy(runtime);
+    henka_scene_document_destroy(document);
+}
+
 int main(void)
 {
     const size_t allocations_before = henka_memory_get_allocation_count();
@@ -314,6 +349,7 @@ int main(void)
     test_scene_behavior_runtime_event_drain();
     test_scene_behavior_runtime_mixed_signal();
     test_scene_behavior_runtime_cross_language_events();
+    test_scene_behavior_runtime_reload_fails_closed();
     assert(henka_memory_get_allocation_count() == allocations_before);
     puts("henka_scene_behavior_runtime_tests: PASS");
     return 0;

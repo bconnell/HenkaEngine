@@ -858,6 +858,69 @@ henka_result sandbox3d_play_session_step_fixed(sandbox3d_play_session* session)
     return sandbox3d_play_session_run_fixed_tick(session);
 }
 
+henka_result sandbox3d_play_session_reload_behavior(
+    sandbox3d_play_session* session,
+    henka_scene_document_id document_id,
+    henka_scene_document_behavior_id behavior_id,
+    henka_script_source_diagnostic* out_diagnostic)
+{
+    henka_scene_document_object object;
+    size_t behavior_index;
+    henka_result result = HENKA_ERROR_INVALID_ARGUMENT;
+    if (out_diagnostic != NULL)
+    {
+        memset(out_diagnostic, 0, sizeof(*out_diagnostic));
+        out_diagnostic->result = HENKA_ERROR_INVALID_ARGUMENT;
+        (void)snprintf(
+            out_diagnostic->message,
+            sizeof(out_diagnostic->message),
+            "Behavior reload rejected");
+    }
+    if (session == NULL ||
+        (session->state != SANDBOX3D_PLAY_SESSION_RUNNING &&
+         session->state != SANDBOX3D_PLAY_SESSION_PAUSED) ||
+        session->behavior_runtime == NULL ||
+        document_id == HENKA_INVALID_SCENE_DOCUMENT_ID ||
+        behavior_id == HENKA_INVALID_SCENE_DOCUMENT_BEHAVIOR_ID ||
+        sandbox3d_scene_document_bridge_get_object(
+            session->bridge, document_id, &object) != HENKA_SUCCESS)
+    {
+        return result;
+    }
+    for (behavior_index = 0U;
+         behavior_index < object.behavior_count;
+         ++behavior_index)
+    {
+        if (object.behaviors[behavior_index].id != behavior_id)
+        {
+            continue;
+        }
+        result = henka_scene_behavior_runtime_reload_behavior(
+            session->behavior_runtime,
+            session->project_root,
+            &object.behaviors[behavior_index],
+            object.id);
+        break;
+    }
+    if (out_diagnostic != NULL)
+    {
+        out_diagnostic->result = result;
+        if (result == HENKA_SUCCESS)
+        {
+            out_diagnostic->message[0] = '\0';
+        }
+        else
+        {
+            (void)snprintf(
+                out_diagnostic->message,
+                sizeof(out_diagnostic->message),
+                "Behavior reload rejected (%d)",
+                (int)result);
+        }
+    }
+    return result;
+}
+
 henka_result sandbox3d_play_session_stop(sandbox3d_play_session* session)
 {
     henka_result destroy_script_result;

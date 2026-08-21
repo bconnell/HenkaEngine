@@ -25,6 +25,7 @@ int main(void)
     henka_script_api_value arguments[2];
     henka_script_api_value output;
     henka_script_event script_event;
+    henka_script_source_diagnostic reload_diagnostic;
     bool state_present = false;
     henka_result tick_result = HENKA_SUCCESS;
     size_t tick_count;
@@ -72,6 +73,29 @@ int main(void)
         sandbox3d_play_session_start(session) != HENKA_SUCCESS ||
         sandbox3d_play_session_get_state(session) != SANDBOX3D_PLAY_SESSION_RUNNING ||
         (script_host = sandbox3d_play_session_get_script_host(session)) == NULL)
+    {
+        goto cleanup;
+    }
+    if (sandbox3d_play_session_reload_behavior(
+            session, object_id, 10U, &reload_diagnostic) != HENKA_SUCCESS ||
+        reload_diagnostic.result != HENKA_SUCCESS ||
+        reload_diagnostic.message[0] != '\0' ||
+        sandbox3d_play_session_reload_behavior(
+            session, object_id, 999U, &reload_diagnostic) !=
+            HENKA_ERROR_INVALID_ARGUMENT ||
+        reload_diagnostic.result != HENKA_ERROR_INVALID_ARGUMENT ||
+        reload_diagnostic.message[0] == '\0' ||
+        sandbox3d_play_session_reload_behavior(
+            session, object_id, 11U, &reload_diagnostic) != HENKA_SUCCESS ||
+        reload_diagnostic.result != HENKA_SUCCESS ||
+        henka_script_state_store_get(
+            script_state_store,
+            (henka_script_state_identity){object_id, 11U},
+            90U,
+            &state_value,
+            &state_present) != HENKA_SUCCESS ||
+        !state_present || state_value.type != HENKA_SCRIPT_STATE_VALUE_I32 ||
+        state_value.as.i32 != 7)
     {
         goto cleanup;
     }
@@ -158,6 +182,9 @@ int main(void)
         sandbox3d_play_session_get_state(session) != SANDBOX3D_PLAY_SESSION_PAUSED ||
         henka_scene_get_entity_transform(scene, entity, &stepped_transform) != HENKA_SUCCESS ||
         stepped_transform.position.y >= 5.0f ||
+        sandbox3d_play_session_reload_behavior(
+            session, object_id, 10U, &reload_diagnostic) != HENKA_SUCCESS ||
+        reload_diagnostic.result != HENKA_SUCCESS ||
         sandbox3d_play_session_resume(session) != HENKA_SUCCESS ||
         sandbox3d_play_session_tick(session) != HENKA_SUCCESS ||
         sandbox3d_play_session_get_state(session) != SANDBOX3D_PLAY_SESSION_RUNNING ||

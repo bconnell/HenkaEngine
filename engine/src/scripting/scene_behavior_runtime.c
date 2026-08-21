@@ -9,6 +9,7 @@ struct henka_scene_behavior_runtime
     henka_script_host* host;
     size_t asset_count;
     henka_script_behavior_asset* assets[HENKA_SCRIPT_RUNTIME_MAX_BEHAVIORS];
+    henka_script_behavior_handle handles[HENKA_SCRIPT_RUNTIME_MAX_BEHAVIORS];
 };
 
 static void henka_scene_behavior_runtime_release(
@@ -117,6 +118,7 @@ henka_result henka_scene_behavior_runtime_create_with_host(
                 goto fail;
             }
             runtime->assets[runtime->asset_count++] = asset;
+            runtime->handles[runtime->asset_count - 1U] = ignored_handle;
         }
     }
     *out_runtime = runtime;
@@ -258,6 +260,72 @@ henka_result henka_scene_behavior_runtime_dispatch_signal_for_entity(
         other_entity,
         event_type,
         out_report);
+}
+
+henka_result henka_scene_behavior_runtime_reload_behavior(
+    henka_scene_behavior_runtime* runtime,
+    const char* project_root,
+    const henka_scene_document_behavior* behavior,
+    uint64_t entity_id)
+{
+    henka_script_behavior_asset* candidate_asset = NULL;
+    henka_script_behavior_desc candidate_desc;
+    size_t index;
+    henka_result result;
+    if (runtime == NULL || project_root == NULL || project_root[0] == '\0' ||
+        behavior == NULL || behavior->id == HENKA_INVALID_SCENE_DOCUMENT_BEHAVIOR_ID ||
+        entity_id == 0U || runtime->behavior_runtime == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    result = henka_script_behavior_asset_create(
+        project_root,
+        behavior,
+        entity_id,
+        behavior->enabled,
+        HENKA_SCRIPT_DEFAULT_BEHAVIOR_INSTRUCTION_BUDGET,
+        &candidate_asset);
+    if (result != HENKA_SUCCESS)
+    {
+        return result;
+    }
+    result = henka_script_behavior_asset_get_runtime_desc(
+        candidate_asset, &candidate_desc);
+    if (result != HENKA_SUCCESS)
+    {
+        henka_script_behavior_asset_destroy(candidate_asset);
+        return result;
+    }
+    candidate_desc.behavior_id = behavior->id;
+    candidate_desc.host = runtime->host;
+    for (index = 0U; index < runtime->asset_count; ++index)
+    {
+        henka_script_behavior_snapshot snapshot;
+        if (henka_script_behavior_runtime_get(
+                runtime->behavior_runtime,
+                runtime->handles[index],
+                &snapshot) != HENKA_SUCCESS ||
+            snapshot.entity_id != entity_id ||
+            snapshot.behavior_id != behavior->id)
+        {
+            continue;
+        }
+        candidate_desc.instruction_budget = snapshot.instruction_budget;
+        result = henka_script_behavior_runtime_rebind(
+            runtime->behavior_runtime,
+            runtime->handles[index],
+            &candidate_desc);
+        if (result == HENKA_SUCCESS)
+        {
+            henka_script_behavior_asset_destroy(runtime->assets[index]);
+            runtime->assets[index] = candidate_asset;
+            candidate_asset = NULL;
+        }
+        henka_script_behavior_asset_destroy(candidate_asset);
+        return result;
+    }
+    henka_script_behavior_asset_destroy(candidate_asset);
+    return HENKA_ERROR_INVALID_ARGUMENT;
 }
 
 size_t henka_scene_behavior_runtime_get_behavior_count(

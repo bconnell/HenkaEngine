@@ -33,9 +33,12 @@ synchronous, non-reentrant dispatch and a bounded FIFO event queue. Play binds
 that host to its persistent-ID to runtime-entity and physics-body mapping; Lua
 and HenkaScript emit into the same event queue and can receive the same event
 through `OnEvent`. A separate fixed-capacity behavior-state store provides
-explicit sidecar save/load, while remaining outside authored Scene Document
-data and the script asset loader. Broader host API coverage, full Inspector
-authoring, hot reload, and debugger tooling remain later layers above this
+    explicit sidecar save/load, while remaining outside authored Scene Document
+data and the script asset loader. The Scene Document and Play layers expose a
+candidate-first behavior reload seam that preserves the generation-checked
+lifecycle slot on success and leaves the active backend untouched on failure.
+Broader host API coverage, full Inspector authoring, visible reload controls,
+reload diagnostics, and debugger tooling remain later layers above this
 boundary; the current Sandbox exposes a bounded transactional template-
 attachment path above it.
 

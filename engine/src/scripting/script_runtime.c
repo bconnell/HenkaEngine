@@ -460,6 +460,38 @@ henka_result henka_script_behavior_runtime_bind(
     return HENKA_SUCCESS;
 }
 
+henka_result henka_script_behavior_runtime_rebind(
+    henka_script_behavior_runtime* runtime,
+    henka_script_behavior_handle behavior,
+    const henka_script_behavior_desc* desc)
+{
+    size_t index;
+    henka_script_behavior_slot* slot;
+    if (runtime == NULL || desc == NULL || runtime->dispatching ||
+        desc->language == HENKA_SCRIPT_LANGUAGE_NONE ||
+        desc->callback == NULL ||
+        desc->instruction_budget > HENKA_SCRIPT_MAX_BEHAVIOR_INSTRUCTION_BUDGET ||
+        !henka_script_behavior_resolve(runtime, behavior, &index))
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    slot = &runtime->slots[index];
+    if (slot->entity_id != desc->entity_id ||
+        slot->behavior_id != desc->behavior_id)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    slot->language = desc->language;
+    slot->enabled = desc->enabled;
+    slot->instruction_budget = desc->instruction_budget == 0U
+        ? HENKA_SCRIPT_DEFAULT_BEHAVIOR_INSTRUCTION_BUDGET
+        : desc->instruction_budget;
+    slot->callback = desc->callback;
+    slot->user_data = desc->user_data;
+    slot->host = desc->host;
+    return HENKA_SUCCESS;
+}
+
 henka_result henka_script_behavior_runtime_remove(
     henka_script_behavior_runtime* runtime,
     henka_script_behavior_handle behavior)

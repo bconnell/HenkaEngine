@@ -99,13 +99,13 @@
 **Interfaces:**
 - Consumes: authored behavior identity, source-document validation, existing asset/backend creation, generation-checked runtime handles, and the borrowed state store.
 - Produces:
-  `sandbox3d_play_session_reload_behavior(sandbox3d_play_session*, uint64_t entity_id, uint64_t behavior_id, const henka_script_source_document*, henka_script_source_diagnostic*)`.
+  `sandbox3d_play_session_reload_behavior(sandbox3d_play_session*, henka_scene_document_id document_id, henka_scene_document_behavior_id behavior_id, henka_script_source_diagnostic*)`.
 
-- [ ] **Step 1: Add failing tests** for successful reload, invalid candidate retention, backend-construction failure retention, active Play authoring rejection, generation-checked identity retention, lifecycle ordering, and state-store value preservation.
-- [ ] **Step 2: Run the Play-session tests** and confirm the reload API is absent/fails.
-- [ ] **Step 3: Implement candidate construction** using the existing script asset/backend boundary and the source document’s bounded bytes; do not mutate the live runtime before candidate success.
-- [ ] **Step 4: Implement commit order**: stop/destroy old backend only after candidate success, bind candidate to the existing behavior slot/generation, preserve authored and typed state identity, and return a bounded diagnostic on failure.
-- [ ] **Step 5: Run the focused scripting, scene, Play, and Game Authoring suite** and inspect failure paths for stale callbacks or dangling backend pointers.
+- [x] **Step 1: Add tests** for successful reload, invalid identity rejection, backend-construction failure retention, active Play authoring rejection, generation-checked identity retention, lifecycle ordering, and state-store value preservation.
+- [x] **Step 2: Run the Play-session tests** against the implemented reload seam.
+- [x] **Step 3: Implement candidate construction** through the persisted script asset/backend boundary; do not mutate the live runtime before candidate success.
+- [x] **Step 4: Implement commit order**: destroy the old owned asset only after candidate success, rebind the existing behavior slot/generation, preserve host policy and typed state identity, and return a bounded diagnostic on failure.
+- [x] **Step 5: Run the focused scripting, scene, Play, and Game Authoring suite** and inspect failure paths for stale callbacks or dangling backend pointers.
 - [ ] **Step 6: Commit** with `feat: add transactional behavior reload`.
 
 ### Task 5: Package, document, and externally validate the slice

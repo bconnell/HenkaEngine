@@ -52,6 +52,15 @@ henka_result henka_scene_behavior_runtime_dispatch_signal_for_entity(
     uint32_t event_type,
     henka_script_behavior_batch_report* out_report);
 
+/* Builds a replacement backend from the persisted behavior source and
+ * rebinds the matching generation-checked slot only after the candidate is
+ * valid. The current callback and asset remain active on every failure path. */
+henka_result henka_scene_behavior_runtime_reload_behavior(
+    henka_scene_behavior_runtime* runtime,
+    const char* project_root,
+    const henka_scene_document_behavior* behavior,
+    uint64_t entity_id);
+
 size_t henka_scene_behavior_runtime_get_behavior_count(
     const henka_scene_behavior_runtime* runtime);
 

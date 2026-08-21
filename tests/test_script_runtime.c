@@ -106,6 +106,50 @@ static void test_lifecycle_schema(void)
                &event_descriptor) == HENKA_ERROR_INVALID_ARGUMENT);
 }
 
+static void test_rebind_preserves_generation_and_lifecycle_state(void)
+{
+    callback_fixture old_fixture = {{0}, 0U, HENKA_SCRIPT_CALLBACK_COMPLETED, 1U, 0U, 0U};
+    callback_fixture new_fixture = {{0}, 0U, HENKA_SCRIPT_CALLBACK_COMPLETED, 2U, 0U, 0U};
+    henka_script_behavior_runtime* runtime = NULL;
+    henka_script_behavior_desc old_desc = default_desc(&old_fixture);
+    henka_script_behavior_desc new_desc = default_desc(&new_fixture);
+    henka_script_behavior_handle behavior = HENKA_INVALID_SCRIPT_BEHAVIOR_HANDLE;
+    henka_script_behavior_snapshot before;
+    henka_script_behavior_snapshot after;
+    henka_script_behavior_batch_report report;
+
+    old_desc.behavior_id = 7U;
+    new_desc.behavior_id = 7U;
+    assert(henka_script_behavior_runtime_create(&runtime) == HENKA_SUCCESS);
+    assert(henka_script_behavior_runtime_add(
+               runtime, &old_desc, &behavior) == HENKA_SUCCESS);
+    assert(henka_script_behavior_runtime_dispatch(
+               runtime, behavior, HENKA_SCRIPT_LIFECYCLE_CREATE,
+               0.0f, 1U, &report) == HENKA_SUCCESS);
+    assert(henka_script_behavior_runtime_dispatch(
+               runtime, behavior, HENKA_SCRIPT_LIFECYCLE_START,
+               0.0f, 2U, &report) == HENKA_SUCCESS);
+    assert(henka_script_behavior_runtime_get(
+               runtime, behavior, &before) == HENKA_SUCCESS);
+    assert(henka_script_behavior_runtime_rebind(
+               runtime, behavior, &new_desc) == HENKA_SUCCESS);
+    assert(henka_script_behavior_runtime_get(
+               runtime, behavior, &after) == HENKA_SUCCESS);
+    assert(after.behavior == before.behavior);
+    assert(after.state == before.state);
+    assert(after.failure_count == before.failure_count);
+    assert(after.entity_id == before.entity_id && after.behavior_id == 7U);
+    assert(henka_script_behavior_runtime_dispatch(
+               runtime, behavior, HENKA_SCRIPT_LIFECYCLE_UPDATE,
+               0.016f, 3U, &report) == HENKA_SUCCESS);
+    assert(old_fixture.event_count == 2U);
+    assert(new_fixture.event_count == 1U);
+    new_desc.behavior_id = 8U;
+    assert(henka_script_behavior_runtime_rebind(
+               runtime, behavior, &new_desc) == HENKA_ERROR_INVALID_ARGUMENT);
+    henka_script_behavior_runtime_destroy(runtime);
+}
+
 static void test_fail_closed_and_recovery(void)
 {
     callback_fixture fixture = {{0}, 0U, HENKA_SCRIPT_CALLBACK_FAILED, 1U, 0U, 0U};
@@ -274,6 +318,7 @@ int main(void)
     const size_t allocations_before = henka_memory_get_allocation_count();
     test_lifecycle_transitions_and_reports();
     test_lifecycle_schema();
+    test_rebind_preserves_generation_and_lifecycle_state();
     test_fail_closed_and_recovery();
     test_bounds_disabled_unbound_and_generation();
     test_batch_order_and_validation();

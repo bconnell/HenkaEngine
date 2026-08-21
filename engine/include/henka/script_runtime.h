@@ -168,6 +168,13 @@ henka_result henka_script_behavior_runtime_bind(
     henka_script_behavior_handle behavior,
     henka_script_behavior_callback callback,
     void* user_data);
+/* Replaces the callback/backend metadata for an existing generation-checked
+ * behavior slot without resetting its lifecycle state or failure count. The
+ * persistent entity and behavior IDs must match the existing slot. */
+henka_result henka_script_behavior_runtime_rebind(
+    henka_script_behavior_runtime* runtime,
+    henka_script_behavior_handle behavior,
+    const henka_script_behavior_desc* desc);
 henka_result henka_script_behavior_runtime_remove(
     henka_script_behavior_runtime* runtime,
     henka_script_behavior_handle behavior);
