@@ -7,13 +7,29 @@
 struct henka_hks_behavior_backend
 {
     henka_hks_program* program;
-    size_t lifecycle_callable[4];
+    size_t lifecycle_callable[13];
     size_t event_callable;
 };
 
 static size_t henka_hks_backend_event_index(henka_script_lifecycle_event event)
 {
-    return (size_t)event;
+    switch (event)
+    {
+        case HENKA_SCRIPT_LIFECYCLE_CREATE: return 0U;
+        case HENKA_SCRIPT_LIFECYCLE_START: return 1U;
+        case HENKA_SCRIPT_LIFECYCLE_UPDATE: return 2U;
+        case HENKA_SCRIPT_LIFECYCLE_STOP: return 3U;
+        case HENKA_SCRIPT_LIFECYCLE_FIXED_UPDATE: return 4U;
+        case HENKA_SCRIPT_LIFECYCLE_INTERACT: return 5U;
+        case HENKA_SCRIPT_LIFECYCLE_COLLISION_ENTER: return 6U;
+        case HENKA_SCRIPT_LIFECYCLE_COLLISION_STAY: return 7U;
+        case HENKA_SCRIPT_LIFECYCLE_COLLISION_EXIT: return 8U;
+        case HENKA_SCRIPT_LIFECYCLE_TRIGGER_ENTER: return 9U;
+        case HENKA_SCRIPT_LIFECYCLE_TRIGGER_STAY: return 10U;
+        case HENKA_SCRIPT_LIFECYCLE_TRIGGER_EXIT: return 11U;
+        case HENKA_SCRIPT_LIFECYCLE_DESTROY: return 12U;
+        default: return SIZE_MAX;
+    }
 }
 
 henka_result henka_hks_behavior_backend_create(
@@ -22,12 +38,21 @@ henka_result henka_hks_behavior_backend_create(
     henka_hks_behavior_backend** out_backend,
     henka_hks_diagnostic* out_diagnostic)
 {
-    static const char* const lifecycle_names[] =
+    static const char* const lifecycle_names[13] =
     {
         "OnCreate",
         "OnStart",
         "OnUpdate",
-        "OnStop"
+        "OnStop",
+        "OnFixedUpdate",
+        "OnInteract",
+        "OnCollisionEnter",
+        "OnCollisionStay",
+        "OnCollisionExit",
+        "OnTriggerEnter",
+        "OnTriggerStay",
+        "OnTriggerExit",
+        "OnDestroy"
     };
     henka_hks_behavior_backend* backend;
     henka_result compile_result;
@@ -94,13 +119,15 @@ henka_script_behavior_callback_result henka_hks_behavior_backend_callback(
     }
     if (context == NULL || backend == NULL || backend->program == NULL ||
         out_instructions_used == NULL ||
-        context->event > HENKA_SCRIPT_LIFECYCLE_EVENT)
+        context->event > HENKA_SCRIPT_LIFECYCLE_DESTROY)
     {
         return HENKA_SCRIPT_CALLBACK_FAILED;
     }
     callable_index = context->event == HENKA_SCRIPT_LIFECYCLE_EVENT
         ? backend->event_callable
-        : backend->lifecycle_callable[henka_hks_backend_event_index(context->event)];
+        : (henka_hks_backend_event_index(context->event) == SIZE_MAX
+            ? SIZE_MAX
+            : backend->lifecycle_callable[henka_hks_backend_event_index(context->event)]);
     if (callable_index == SIZE_MAX)
     {
         return HENKA_SCRIPT_CALLBACK_COMPLETED;
@@ -111,7 +138,10 @@ henka_script_behavior_callback_result henka_hks_behavior_backend_callback(
         context->frame_index,
         context->behavior_id,
         context->event == HENKA_SCRIPT_LIFECYCLE_EVENT,
-        context->event_id};
+        context->event_id,
+        context->event_source_entity,
+        context->event_other_entity,
+        context->event_type};
     result = henka_hks_execute_with_context(
         backend->program,
         callable_index,

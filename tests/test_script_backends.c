@@ -33,7 +33,9 @@ static void test_henkascript_lifecycle_adapter(void)
 {
     static const char source[] =
         "fn OnCreate() { i32 value = 2; value = value + 3; }\n"
-        "fn OnUpdate() { i32 value = 1; value = value * 4; }\n";
+        "fn OnUpdate() { i32 value = 1; value = value * 4; }\n"
+        "fn OnFixedUpdate() { i32 value = 6; value = value + 1; }\n"
+        "fn OnDestroy() { i32 value = 8; value = value + 1; }\n";
     henka_hks_behavior_backend* backend = NULL;
     henka_hks_diagnostic diagnostic;
     henka_script_behavior_runtime* runtime = NULL;
@@ -64,7 +66,12 @@ static void test_henkascript_lifecycle_adapter(void)
                runtime, behavior, HENKA_SCRIPT_LIFECYCLE_UPDATE, 0.016f, 3U, &report) == HENKA_SUCCESS);
     assert(report.instructions_used > 0U);
     assert(henka_script_behavior_runtime_dispatch(
-               runtime, behavior, HENKA_SCRIPT_LIFECYCLE_STOP, 0.0f, 4U, &report) == HENKA_SUCCESS);
+               runtime, behavior, HENKA_SCRIPT_LIFECYCLE_FIXED_UPDATE, 0.016f, 4U, &report) == HENKA_SUCCESS);
+    assert(report.instructions_used > 0U);
+    assert(henka_script_behavior_runtime_dispatch(
+               runtime, behavior, HENKA_SCRIPT_LIFECYCLE_DESTROY, 0.0f, 5U, &report) == HENKA_SUCCESS);
+    assert(henka_script_behavior_runtime_dispatch(
+               runtime, behavior, HENKA_SCRIPT_LIFECYCLE_STOP, 0.0f, 6U, &report) == HENKA_SUCCESS);
     henka_script_behavior_runtime_destroy(runtime);
     henka_hks_behavior_backend_destroy(backend);
 }

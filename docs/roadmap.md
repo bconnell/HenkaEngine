@@ -252,11 +252,12 @@ and V1 `.hscene` foundations.
 2. HenkaScript has a bounded lexer, parser, type checker, callable bytecode
    path, and allocation-free budgeted VM.
 3. Lua 5.4.8 and HenkaScript have bounded lifecycle adapters for `OnCreate`,
-   `OnStart`, `OnUpdate`, and `OnStop`, with fail-closed budgets and
-   deterministic missing-handler behavior.
+   `OnStart`, `OnUpdate`, `OnFixedUpdate`, targeted interaction/contact signals,
+   `OnDestroy`, and `OnStop`, with fail-closed budgets and deterministic
+   missing-handler behavior.
 4. The generation-checked behavior runtime owns lifecycle state, borrowed
-   callbacks, synchronous non-reentrant dispatch, failure accounting, and
-   bounded batch reports.
+   callbacks, synchronous non-reentrant dispatch, targeted authored-entity
+   signal delivery, failure accounting, and bounded batch reports.
 5. Scene Document behavior attachments persist stable IDs, enabled state,
    language identity, and confined project-relative `.lua`/`.hks` paths. The
    bounded asset loader validates those paths and source limits, owns each

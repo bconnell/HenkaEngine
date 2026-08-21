@@ -23,7 +23,17 @@ typedef enum henka_script_lifecycle_event
     HENKA_SCRIPT_LIFECYCLE_START,
     HENKA_SCRIPT_LIFECYCLE_UPDATE,
     HENKA_SCRIPT_LIFECYCLE_STOP,
-    HENKA_SCRIPT_LIFECYCLE_EVENT
+    /* Keep EVENT at its published value for serialized/runtime compatibility. */
+    HENKA_SCRIPT_LIFECYCLE_EVENT,
+    HENKA_SCRIPT_LIFECYCLE_FIXED_UPDATE,
+    HENKA_SCRIPT_LIFECYCLE_INTERACT,
+    HENKA_SCRIPT_LIFECYCLE_COLLISION_ENTER,
+    HENKA_SCRIPT_LIFECYCLE_COLLISION_STAY,
+    HENKA_SCRIPT_LIFECYCLE_COLLISION_EXIT,
+    HENKA_SCRIPT_LIFECYCLE_TRIGGER_ENTER,
+    HENKA_SCRIPT_LIFECYCLE_TRIGGER_STAY,
+    HENKA_SCRIPT_LIFECYCLE_TRIGGER_EXIT,
+    HENKA_SCRIPT_LIFECYCLE_DESTROY
 } henka_script_lifecycle_event;
 
 typedef enum henka_script_behavior_state
@@ -32,7 +42,9 @@ typedef enum henka_script_behavior_state
     HENKA_SCRIPT_BEHAVIOR_CREATED,
     HENKA_SCRIPT_BEHAVIOR_STARTED,
     HENKA_SCRIPT_BEHAVIOR_STOPPED,
-    HENKA_SCRIPT_BEHAVIOR_FAULTED
+    HENKA_SCRIPT_BEHAVIOR_FAULTED,
+    /* Destroy has run; Stop remains available for final runtime teardown. */
+    HENKA_SCRIPT_BEHAVIOR_DESTROYED
 } henka_script_behavior_state;
 
 typedef enum henka_script_behavior_execution_result
@@ -66,6 +78,8 @@ typedef struct henka_script_behavior_context
     uint64_t behavior_id;
     uint32_t event_id;
     uint64_t event_source_entity;
+    uint64_t event_other_entity;
+    uint32_t event_type;
 } henka_script_behavior_context;
 
 /* The callback, user_data, and host are borrowed. The owner must keep them
@@ -173,6 +187,21 @@ henka_result henka_script_behavior_runtime_dispatch_event_all(
     uint32_t event_id,
     uint64_t source_entity,
     uint64_t frame_index,
+    henka_script_behavior_batch_report* out_report);
+/* Dispatches a typed signal only to behaviors attached to entity_id. The
+ * entity ID is the persistent authored identity, never a runtime pointer or
+ * body ID. event_id/source_entity are used for custom signals; other_entity
+ * and event_type carry bounded contact/interaction metadata. */
+henka_result henka_script_behavior_runtime_dispatch_signal_for_entity(
+    henka_script_behavior_runtime* runtime,
+    uint64_t entity_id,
+    henka_script_lifecycle_event event,
+    float delta_seconds,
+    uint64_t frame_index,
+    uint32_t event_id,
+    uint64_t source_entity,
+    uint64_t other_entity,
+    uint32_t event_type,
     henka_script_behavior_batch_report* out_report);
 
 size_t henka_script_behavior_runtime_get_count(

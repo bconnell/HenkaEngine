@@ -104,7 +104,8 @@ turning the public README into an implementation ledger.
   scripting API/host schema and bounded HenkaScript lexer/parser/type-checking
   foundation are available through [scripting-foundation.md](scripting-foundation.md),
    including bounded HenkaScript callable bytecode/VM execution, bounded Lua
-   lifecycle execution, their lifecycle adapters, and a language-neutral
+   lifecycle execution, fixed-update/destruction and targeted contact
+   lifecycle adapters, and a language-neutral
    generation-checked behavior lifecycle runtime. A typed, bounded Script Host
    dispatcher and FIFO event queue are available, and the isolated Play path
    maps persistent object IDs to runtime entities for the current Entity,

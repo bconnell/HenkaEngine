@@ -80,7 +80,9 @@ static void test_lua_lifecycle_adapter(void)
 {
     static const char source[] =
         "function OnCreate() local value = 2; value = value + 3 end\n"
-        "function OnUpdate() local value = 1; value = value * 4 end\n";
+        "function OnUpdate() local value = 1; value = value * 4 end\n"
+        "function OnFixedUpdate() local value = 6; value = value + 1 end\n"
+        "function OnDestroy() local value = 8; value = value + 1 end\n";
     henka_lua_behavior_backend* backend = NULL;
     henka_lua_diagnostic diagnostic;
     henka_script_behavior_runtime* runtime = NULL;
@@ -111,7 +113,12 @@ static void test_lua_lifecycle_adapter(void)
                runtime, behavior, HENKA_SCRIPT_LIFECYCLE_UPDATE, 0.016f, 3U, &report) == HENKA_SUCCESS);
     assert(report.instructions_used > 0U);
     assert(henka_script_behavior_runtime_dispatch(
-               runtime, behavior, HENKA_SCRIPT_LIFECYCLE_STOP, 0.0f, 4U, &report) == HENKA_SUCCESS);
+               runtime, behavior, HENKA_SCRIPT_LIFECYCLE_FIXED_UPDATE, 0.016f, 4U, &report) == HENKA_SUCCESS);
+    assert(report.instructions_used > 0U);
+    assert(henka_script_behavior_runtime_dispatch(
+               runtime, behavior, HENKA_SCRIPT_LIFECYCLE_DESTROY, 0.0f, 5U, &report) == HENKA_SUCCESS);
+    assert(henka_script_behavior_runtime_dispatch(
+               runtime, behavior, HENKA_SCRIPT_LIFECYCLE_STOP, 0.0f, 6U, &report) == HENKA_SUCCESS);
     henka_script_behavior_runtime_destroy(runtime);
     henka_lua_behavior_backend_destroy(backend);
 }
@@ -217,6 +224,9 @@ static void test_lua_shared_state_api(void)
         "State.SetI32(17, value + 5); "
         "local flag, flag_present = State.GetBool(18); "
         "State.SetBool(18, not flag) "
+        "end "
+        "function OnCollisionEnter(other_entity, event_type) "
+        "if other_entity == 99 and event_type == 7 then State.SetI32(17, event_type) end "
         "end";
     henka_lua_behavior_backend* backend = NULL;
     henka_lua_diagnostic diagnostic;
@@ -256,6 +266,15 @@ static void test_lua_shared_state_api(void)
                store, (henka_script_state_identity){4U, 40U}, 18U,
                &value, &present) == HENKA_SUCCESS);
     assert(present && value.type == HENKA_SCRIPT_STATE_VALUE_BOOL && value.as.boolean);
+    context.event = HENKA_SCRIPT_LIFECYCLE_COLLISION_ENTER;
+    context.event_other_entity = 99U;
+    context.event_type = 7U;
+    assert(henka_lua_behavior_backend_callback(
+               &context, backend, &used) == HENKA_SCRIPT_CALLBACK_COMPLETED);
+    assert(henka_script_state_store_get(
+               store, (henka_script_state_identity){4U, 40U}, 17U,
+               &value, &present) == HENKA_SUCCESS);
+    assert(present && value.type == HENKA_SCRIPT_STATE_VALUE_I32 && value.as.i32 == 7);
     henka_script_state_store_destroy(store);
     henka_script_host_destroy(host);
     henka_lua_behavior_backend_destroy(backend);

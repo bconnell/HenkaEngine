@@ -15,8 +15,9 @@ execution adapters for both languages.
 - A bounded Script Host that deduplicates resolved API bindings.
 - A language-neutral bounded behavior runtime exposed through
   `<henka/script_runtime.h>` with generation-checked behavior handles,
-  borrowed backend callbacks, deterministic Create/Start/Update/Stop state
-  transitions, disabled/unbound/faulted states, and batch dispatch reports.
+  borrowed backend callbacks, deterministic Create/Start/Update/FixedUpdate/
+  Destroy/Stop state transitions, targeted interaction/contact signals,
+  disabled/unbound/faulted states, and batch dispatch reports.
 - Behavior callbacks receive the shared language, entity, lifecycle event,
   frame, delta-time, and instruction-budget context. Dispatch is synchronous
   and non-reentrant; runtime mutation from a callback is rejected.
@@ -26,12 +27,14 @@ execution adapters for both languages.
   fixed stack storage, checked arithmetic, deterministic reports, and an
   instruction budget.
 - A HenkaScript behavior adapter that maps the exact `OnCreate`, `OnStart`,
-  `OnUpdate`, and `OnStop` callable names to the shared lifecycle runtime;
+  `OnUpdate`, `OnFixedUpdate`, `OnInteract`, collision/trigger enter-stay-exit,
+  `OnDestroy`, and `OnStop` callable names to the shared lifecycle runtime;
   absent lifecycle callables are deterministic no-ops and the runtime budget
   is propagated to the VM.
 - A Lua 5.4.8 behavior adapter with the same lifecycle names and no-op rules,
-  a restricted standard-library surface, a bounded allocator, and an
-  instruction hook that fails closed when the per-callback budget is spent.
+  bounded contact arguments for collision/trigger callbacks, a restricted
+  standard-library surface, a bounded allocator, and an instruction hook that
+  fails closed when the per-callback budget is spent.
 - A bounded behavior-state store keyed by the persistent object/entity ID,
   behavior ID, and a caller-defined nonzero state key. It supports typed
   `bool`, `i32`, `float32`, and `vec3` values, with a fixed 512-value capacity.
@@ -126,4 +129,6 @@ replay integration, and broader project scripting workflows remain future work.
 
 The current schema, HenkaScript compiler, and bounded VM are therefore engine
 integration foundations, not a claim that complete executable scripting is
-already available to end-user projects.
+already available to end-user projects. The current fixed-tick order is
+`Update`, queued events, `FixedUpdate`, queued events, physics, targeted
+collision/trigger signals, and queued events; `Destroy` runs before `Stop`.

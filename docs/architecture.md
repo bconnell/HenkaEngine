@@ -20,7 +20,8 @@ so Lua and HenkaScript backends can resolve bindings once and retain
 language-specific native thunks. The HenkaScript front-end additionally
 lexes, parses, and type-checks bounded source through `<henka/henkascript.h>`.
 The current foundation executes bounded HenkaScript bytecode and bounded Lua
-callables through adapters that map `OnCreate`, `OnStart`, `OnUpdate`, `OnEvent`,
+callables through adapters that map `OnCreate`, `OnStart`, `OnUpdate`,
+`OnFixedUpdate`, `OnEvent`, targeted interaction/contact signals, `OnDestroy`,
 and `OnStop` into the language-neutral generation-checked behavior runtime.
 These adapters do not resolve project paths or own Scene Document persistence.
 The bounded script asset loader owns the selected backend instance and exposes

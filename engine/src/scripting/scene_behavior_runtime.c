@@ -231,6 +231,35 @@ henka_result henka_scene_behavior_runtime_dispatch_events(
     return first_error;
 }
 
+henka_result henka_scene_behavior_runtime_dispatch_signal_for_entity(
+    henka_scene_behavior_runtime* runtime,
+    uint64_t entity_id,
+    henka_script_lifecycle_event event,
+    float delta_seconds,
+    uint64_t frame_index,
+    uint32_t event_id,
+    uint64_t source_entity,
+    uint64_t other_entity,
+    uint32_t event_type,
+    henka_script_behavior_batch_report* out_report)
+{
+    if (runtime == NULL || runtime->behavior_runtime == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    return henka_script_behavior_runtime_dispatch_signal_for_entity(
+        runtime->behavior_runtime,
+        entity_id,
+        event,
+        delta_seconds,
+        frame_index,
+        event_id,
+        source_entity,
+        other_entity,
+        event_type,
+        out_report);
+}
+
 size_t henka_scene_behavior_runtime_get_behavior_count(
     const henka_scene_behavior_runtime* runtime)
 {

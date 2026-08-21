@@ -159,6 +159,9 @@ typedef struct henka_hks_execution_context
     uint64_t behavior_id;
     bool is_event;
     uint32_t event_id;
+    uint64_t event_source_entity;
+    uint64_t event_other_entity;
+    uint32_t event_type;
 } henka_hks_execution_context;
 
 henka_result henka_hks_lex(
