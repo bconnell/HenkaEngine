@@ -1,0 +1,3 @@
+fn OnEvent() {
+  state_set_i32(80, event_id());
+}

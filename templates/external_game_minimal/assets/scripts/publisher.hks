@@ -1,0 +1,3 @@
+fn OnCreate() {
+  emit(17);
+}

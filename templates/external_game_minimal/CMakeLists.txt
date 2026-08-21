@@ -42,3 +42,12 @@ add_custom_command(TARGET external_game_minimal POST_BUILD
         "${HENKA_ENGINE_DIR}/assets"
         "$<TARGET_FILE_DIR:external_game_minimal>/assets"
 )
+
+# Keep consumer-owned script fixtures synchronized even when the executable
+# itself is already up to date in a reused validation build directory.
+add_custom_target(external_game_template_assets ALL
+    COMMAND ${CMAKE_COMMAND} -E copy_directory
+        "${CMAKE_CURRENT_SOURCE_DIR}/assets"
+        "$<TARGET_FILE_DIR:external_game_minimal>/assets"
+    DEPENDS external_game_minimal
+)

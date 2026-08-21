@@ -52,8 +52,10 @@ window, scene, camera, and Terrain render owner through public APIs; the normal
 Rendered path requires a visible draw plus HDR/shadow diagnostics. This is a
 bounded dogfood harness, not a complete external game's scene serializer or
 editor; authored scene/project persistence beyond the mesh source remains
-unfinished. The consuming game still owns its window, scene, camera, and
-presentation policy.
+unfinished. The template also consumes package-owned `.hks` and `.lua` assets
+through the public Scene Document behavior runtime and verifies an HKS-to-Lua
+event plus typed state delivery without importing Sandbox code. The consuming
+game still owns its window, scene, camera, and presentation policy.
 
 To validate that template against the current Henka checkout from this repository, run:
 

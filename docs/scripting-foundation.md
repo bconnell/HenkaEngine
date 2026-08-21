@@ -78,6 +78,10 @@ execution adapters for both languages.
   Document IDs for Entity validity, Transform position access, Physics impulse
   application, and Events.Emit. Unsupported domains return safe deterministic
   results rather than reaching through renderer or authoring pointers.
+- The external-game template consumes the same public Scene Document behavior
+  runtime without Sandbox source. Its packaged smoke path loads one `.hks`
+  publisher and one `.lua` subscriber, then verifies a shared Henka event and
+  typed state delivery from the external executable.
 - Lua behaviors can call the shared host surface through checked `Entity`,
   `Transform`, `Input`, `Physics`, `Interaction`, and `Events` tables. In the
   current Sandbox Play dispatcher, `Entity`, `Transform`, `Physics`, and

@@ -20114,7 +20114,7 @@ static void sandbox3d_draw_scene_objects_panel(
 
         if (!henka_scene_is_entity_visible(state->scene, entity))
         {
-            snprintf(subtitle_text, sizeof(subtitle_text), "%s", "Hidden:");
+            snprintf(subtitle_text, sizeof(subtitle_text), "%s", "Visibility: Hidden");
             snprintf(row_label, sizeof(row_label), "%s %s", subtitle_text, row_label);
         }
 

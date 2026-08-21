@@ -5,6 +5,8 @@
 #include <string.h>
 
 #include <henka/henka.h>
+#include <henka/scene_behavior_runtime.h>
+#include <henka/script_state.h>
 
 typedef struct external_graphical_terrain_state
 {
@@ -709,9 +711,110 @@ cleanup:
     return success;
 }
 
+static bool external_scripting_workflow(void)
+{
+    henka_scene_document* document = NULL;
+    henka_scene_behavior_runtime* runtime = NULL;
+    henka_script_host* host = NULL;
+    henka_script_state_store* store = NULL;
+    henka_scene_document_object object = henka_scene_document_object_default();
+    henka_scene_document_id object_id = HENKA_INVALID_SCENE_DOCUMENT_ID;
+    henka_script_state_value state_value = {0};
+    henka_script_behavior_batch_report report = {0};
+    henka_result result = HENKA_SUCCESS;
+    bool state_present = false;
+    bool success = false;
+
+    (void)snprintf(object.name, sizeof(object.name), "%s", "External Script Pair");
+    object.source.kind = HENKA_SCENE_DOCUMENT_SOURCE_PRIMITIVE;
+    object.source.primitive = HENKA_SCENE_DOCUMENT_PRIMITIVE_BOX;
+    object.source.primitive_dimensions = (henka_vec3){1.0f, 1.0f, 1.0f};
+    object.behaviors[0] = henka_scene_document_behavior_default();
+    object.behaviors[0].id = 10U;
+    object.behaviors[0].language = HENKA_SCRIPT_LANGUAGE_HENKASCRIPT;
+    (void)snprintf(
+        object.behaviors[0].asset_path,
+        sizeof(object.behaviors[0].asset_path),
+        "%s",
+        "assets/scripts/publisher.hks");
+    object.behaviors[1] = henka_scene_document_behavior_default();
+    object.behaviors[1].id = 11U;
+    object.behaviors[1].language = HENKA_SCRIPT_LANGUAGE_LUA;
+    (void)snprintf(
+        object.behaviors[1].asset_path,
+        sizeof(object.behaviors[1].asset_path),
+        "%s",
+        "assets/scripts/subscriber.lua");
+    object.behavior_count = 2U;
+
+#define EXTERNAL_SCRIPT_STEP(label, expression) \
+    do { \
+        result = (expression); \
+        if (result != HENKA_SUCCESS) { \
+            fprintf(stderr, "External scripting failure: %s (%s).\n", \
+                (label), henka_result_to_string(result)); \
+            goto cleanup; \
+        } \
+    } while (0)
+
+    EXTERNAL_SCRIPT_STEP("create document", henka_scene_document_create(&document));
+    EXTERNAL_SCRIPT_STEP(
+        "add behavior document", henka_scene_document_add_object(document, &object, &object_id));
+    EXTERNAL_SCRIPT_STEP("create host", henka_script_host_create(&host));
+    EXTERNAL_SCRIPT_STEP("create state store", henka_script_state_store_create(&store));
+    EXTERNAL_SCRIPT_STEP(
+        "bind Events.Emit",
+        henka_script_host_bind_api(host, HENKA_SCRIPT_API_EVENTS_EMIT, &(size_t){0U}));
+    EXTERNAL_SCRIPT_STEP(
+        "bind State.SetI32",
+        henka_script_host_bind_api(host, HENKA_SCRIPT_API_STATE_SET_I32, &(size_t){0U}));
+    EXTERNAL_SCRIPT_STEP("attach state store", henka_script_host_set_state_store(host, store));
+    EXTERNAL_SCRIPT_STEP(
+        "load behavior assets",
+        henka_scene_behavior_runtime_create_with_host(document, ".", 128U, host, &runtime));
+    EXTERNAL_SCRIPT_STEP(
+        "dispatch Create",
+        henka_scene_behavior_runtime_dispatch(
+            runtime, HENKA_SCRIPT_LIFECYCLE_CREATE, 0.0f, 1U, &report));
+    EXTERNAL_SCRIPT_STEP(
+        "dispatch Start",
+        henka_scene_behavior_runtime_dispatch(
+            runtime, HENKA_SCRIPT_LIFECYCLE_START, 0.0f, 1U, &report));
+    EXTERNAL_SCRIPT_STEP(
+        "dispatch events",
+        henka_scene_behavior_runtime_dispatch_events(runtime, &report));
+    EXTERNAL_SCRIPT_STEP(
+        "read subscriber state",
+        henka_script_state_store_get(
+            store,
+            (henka_script_state_identity){object_id, 11U},
+            77U,
+            &state_value,
+            &state_present));
+    if (!state_present || state_value.type != HENKA_SCRIPT_STATE_VALUE_I32 ||
+        state_value.as.i32 != 17)
+    {
+        fprintf(stderr, "External scripting failure: subscriber state mismatch.\n");
+        goto cleanup;
+    }
+
+    success = true;
+    printf("External Lua/HenkaScript mixed-language event workflow passed.\n");
+
+cleanup:
+#undef EXTERNAL_SCRIPT_STEP
+    henka_scene_behavior_runtime_destroy(runtime);
+    henka_script_state_store_destroy(store);
+    henka_script_host_destroy(host);
+    henka_scene_document_destroy(document);
+    return success;
+}
+
 int main(void)
 {
-    if (!external_terrain_workflow() || !external_graphical_terrain_workflow())
+    if (!external_terrain_workflow() ||
+        !external_graphical_terrain_workflow() ||
+        !external_scripting_workflow())
     {
         return 1;
     }
