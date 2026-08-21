@@ -1062,6 +1062,9 @@ try {
         $qaTabMatch = Get-LastLogRegexMatch `
             -Path $stdoutPath `
             -Pattern 'Tools QA tab: x=([-0-9.]+) y=([-0-9.]+) width=([-0-9.]+) height=([-0-9.]+)'
+        $toolsHeaderMatch = Get-LastLogRegexMatch `
+            -Path $stdoutPath `
+            -Pattern 'Tools panel header: x=([-0-9.]+) y=([-0-9.]+) width=([-0-9.]+) height=([-0-9.]+)'
         $shadingMatch = Get-LastLogRegexMatch `
             -Path $stdoutPath `
             -Pattern 'Viewport shading controls: x=([-0-9.]+) y=([-0-9.]+) button=([-0-9.]+) gap=([-0-9.]+)'
@@ -1070,6 +1073,7 @@ try {
             $null -eq $viewportMatch -or
             $null -eq $workspaceGeometryMatch -or
             $null -eq $qaTabMatch -or
+            $null -eq $toolsHeaderMatch -or
             $null -eq $shadingMatch) {
             throw "Packaged UI automation geometry could not be parsed."
         }
@@ -1157,6 +1161,23 @@ try {
             [double]$qaTabMatch.Groups[3].Value
         $qaTabHeight =
             [double]$qaTabMatch.Groups[4].Value
+
+        $toolsHeaderX =
+            [double]$toolsHeaderMatch.Groups[1].Value
+        $toolsHeaderY =
+            [double]$toolsHeaderMatch.Groups[2].Value
+        $toolsHeaderWidth =
+            [double]$toolsHeaderMatch.Groups[3].Value
+        $toolsHeaderHeight =
+            [double]$toolsHeaderMatch.Groups[4].Value
+        Assert-FramebufferRect `
+            -Name "Tools panel header" `
+            -FramebufferWidth $framebufferWidth `
+            -FramebufferHeight $framebufferHeight `
+            -X $toolsHeaderX `
+            -Y $toolsHeaderY `
+            -Width $toolsHeaderWidth `
+            -Height $toolsHeaderHeight
 
         $shadingX =
             [double]$shadingMatch.Groups[1].Value
@@ -2367,8 +2388,8 @@ try {
             -Handle $mainWindowHandle `
             -FramebufferWidth $framebufferWidth `
             -FramebufferHeight $framebufferHeight `
-            -FramebufferX ($controlsX + 18.0) `
-            -FramebufferY ($controlsY + 13.0)
+            -FramebufferX ($toolsHeaderX + 18.0) `
+            -FramebufferY ($toolsHeaderY + 13.0)
 
         $contextMenuObserved = Wait-FileContains `
             -Path $stdoutPath `
@@ -2385,8 +2406,8 @@ try {
                 -Handle $mainWindowHandle `
                 -FramebufferWidth $framebufferWidth `
                 -FramebufferHeight $framebufferHeight `
-                -FramebufferX ($controlsX + 18.0) `
-                -FramebufferY ($controlsY + 13.0)
+                -FramebufferX ($toolsHeaderX + 18.0) `
+                -FramebufferY ($toolsHeaderY + 13.0)
 
             $contextMenuObserved = Wait-FileContains `
                 -Path $stdoutPath `

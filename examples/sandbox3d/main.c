@@ -17729,10 +17729,6 @@ static void sandbox3d_draw_scene_viewport_frame(
         {
             state->workspace.tools_panel_visible =
                 !state->workspace.tools_panel_visible;
-            /* Refresh the published workspace geometry after the Tools
-             * section changes visibility so automation and diagnostics do not
-             * retain the intentionally zero-sized hidden-panel rectangle. */
-            state->ui_visibility_report_pending = true;
             sandbox3d_set_status(
                 state,
                 false,
@@ -18726,12 +18722,20 @@ static void sandbox3d_draw_controls_panel(
 
         if (!state->controls_qa_tab_bounds_reported)
         {
+            const henka_ui_rect header_bounds =
+                sandbox3d_workspace_docked_title_drag_rect(panel_bounds);
             printf(
                 "Tools QA tab: x=%.1f y=%.1f width=%.1f height=%.1f\n",
                 qa_page_bounds.x,
                 qa_page_bounds.y,
                 qa_page_bounds.width,
                 qa_page_bounds.height);
+            printf(
+                "Tools panel header: x=%.1f y=%.1f width=%.1f height=%.1f\n",
+                header_bounds.x,
+                header_bounds.y,
+                header_bounds.width,
+                header_bounds.height);
             fflush(stdout);
             state->controls_qa_tab_bounds_reported = true;
         }
