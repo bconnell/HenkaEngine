@@ -258,6 +258,30 @@ void henka_test_sandbox3d_interaction(void)
         false,
         true,
         20.0f));
+    HENKA_TEST_ASSERT(!sandbox3d_should_start_right_mouse_pan(
+        &gate,
+        true,
+        false,
+        false,
+        SANDBOX3D_RIGHT_MOUSE_PAN_DRAG_THRESHOLD_PIXELS - 0.01f));
+    HENKA_TEST_ASSERT(sandbox3d_should_start_right_mouse_pan(
+        &gate,
+        true,
+        false,
+        false,
+        SANDBOX3D_RIGHT_MOUSE_PAN_DRAG_THRESHOLD_PIXELS));
+    HENKA_TEST_ASSERT(!sandbox3d_should_start_right_mouse_pan(
+        &gate,
+        true,
+        true,
+        false,
+        SANDBOX3D_RIGHT_MOUSE_PAN_DRAG_THRESHOLD_PIXELS));
+    HENKA_TEST_ASSERT(!sandbox3d_should_start_right_mouse_pan(
+        &gate,
+        true,
+        false,
+        true,
+        SANDBOX3D_RIGHT_MOUSE_PAN_DRAG_THRESHOLD_PIXELS));
     HENKA_TEST_ASSERT(!sandbox3d_should_start_empty_viewport_pan(
         SANDBOX3D_VIEWPORT_TOOL_MOVE,
         &gate,

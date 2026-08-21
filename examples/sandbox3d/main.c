@@ -224,6 +224,9 @@ typedef struct sandbox3d_view_navigation_state
 {
     bool orbiting;
     bool panning;
+    bool right_mouse_pan_active;
+    bool right_mouse_pan_candidate;
+    henka_vec2 right_mouse_pan_origin;
     bool empty_viewport_drag_candidate;
     henka_vec2 empty_viewport_drag_origin;
     henka_vec3 orbit_target;
@@ -4223,6 +4226,8 @@ static void sandbox3d_set_viewport_tool_mode(
         state->gizmo.mode = (sandbox3d_gizmo_mode)gizmo_mode;
         state->view_navigation.orbiting = false;
         state->view_navigation.panning = false;
+        state->view_navigation.right_mouse_pan_active = false;
+        state->view_navigation.right_mouse_pan_candidate = false;
         state->view_navigation.empty_viewport_drag_candidate = false;
         sandbox3d_clear_gizmo_drag(state, true);
         if (update_status)
@@ -29241,7 +29246,10 @@ static void sandbox3d_update(henka_engine* engine, double delta_seconds, void* u
     mouse_wheel_delta = henka_input_get_mouse_wheel_delta(engine);
     framebuffer_mouse_position = mouse_position;
     sandbox3d_try_get_mouse_framebuffer_position(engine, &framebuffer_mouse_position);
-    if (!transform_input_active && ui_visible && !henka_engine_is_mouse_captured(engine))
+    if (!transform_input_active &&
+        ui_visible &&
+        !henka_engine_is_mouse_captured(engine) &&
+        !state->view_navigation.right_mouse_pan_active)
     {
         workspace_input_active = sandbox3d_handle_workspace_input(
             engine,
@@ -29290,6 +29298,8 @@ static void sandbox3d_update(henka_engine* engine, double delta_seconds, void* u
         const bool alt_orbit_pressed = henka_input_is_key_down(engine, HENKA_KEY_LEFT_ALT) && henka_input_was_mouse_button_pressed(engine, HENKA_MOUSE_BUTTON_LEFT);
         const bool middle_pan_held = henka_input_is_mouse_button_down(engine, HENKA_MOUSE_BUTTON_MIDDLE);
         const bool middle_pan_pressed = henka_input_was_mouse_button_pressed(engine, HENKA_MOUSE_BUTTON_MIDDLE);
+        const bool right_pan_held = henka_input_is_mouse_button_down(engine, HENKA_MOUSE_BUTTON_RIGHT);
+        const bool right_pan_pressed = henka_input_was_mouse_button_pressed(engine, HENKA_MOUSE_BUTTON_RIGHT);
         const bool left_pressed = henka_input_was_mouse_button_pressed(engine, HENKA_MOUSE_BUTTON_LEFT);
         const bool left_down = henka_input_is_mouse_button_down(engine, HENKA_MOUSE_BUTTON_LEFT);
         const bool terrain_mode =
@@ -29395,6 +29405,44 @@ static void sandbox3d_update(henka_engine* engine, double delta_seconds, void* u
             sandbox3d_set_view_navigation_target(state, sandbox3d_get_view_navigation_target(state));
             sandbox3d_record_success_result(state, "Pan shortcut started");
         }
+        if (right_pan_pressed &&
+            sandbox3d_evaluate_select_reject_reason(&gate) == SANDBOX3D_INTERACTION_REJECT_NONE &&
+            !alt_orbit_held &&
+            !middle_pan_held &&
+            !left_down &&
+            !state->gizmo.drag.dragging &&
+            !state->view_navigation.orbiting &&
+            !state->view_navigation.panning)
+        {
+            state->view_navigation.right_mouse_pan_candidate = true;
+            state->view_navigation.right_mouse_pan_origin = framebuffer_mouse_position;
+        }
+        if (state->view_navigation.right_mouse_pan_candidate && !right_pan_held)
+        {
+            state->view_navigation.right_mouse_pan_candidate = false;
+        }
+        if (sandbox3d_should_start_right_mouse_pan(
+                &gate,
+                state->view_navigation.right_mouse_pan_candidate,
+                state->view_navigation.orbiting ||
+                    state->view_navigation.panning ||
+                    alt_orbit_held ||
+                    middle_pan_held ||
+                    left_down,
+                state->gizmo.drag.dragging,
+                sandbox3d_vec2_length(
+                    sandbox3d_vec2_subtract(
+                        framebuffer_mouse_position,
+                        state->view_navigation.right_mouse_pan_origin))))
+        {
+            state->view_navigation.right_mouse_pan_candidate = false;
+            state->view_navigation.right_mouse_pan_active = true;
+            state->view_navigation.panning = true;
+            state->view_navigation.orbiting = false;
+            sandbox3d_clear_gizmo_drag(state, true);
+            sandbox3d_set_view_navigation_target(state, sandbox3d_get_view_navigation_target(state));
+            sandbox3d_record_success_result(state, "RMB Scene View pan started");
+        }
         if (state->view_navigation.orbiting &&
             !alt_orbit_held &&
             !(state->viewport_tool == SANDBOX3D_VIEWPORT_TOOL_ORBIT && left_down))
@@ -29403,10 +29451,15 @@ static void sandbox3d_update(henka_engine* engine, double delta_seconds, void* u
         }
         if (state->view_navigation.panning &&
             !middle_pan_held &&
+            !right_pan_held &&
             !(state->viewport_tool == SANDBOX3D_VIEWPORT_TOOL_PAN && left_down) &&
             !(state->view_navigation.empty_viewport_drag_candidate && left_down))
         {
             state->view_navigation.panning = false;
+        }
+        if (state->view_navigation.right_mouse_pan_active && !right_pan_held)
+        {
+            state->view_navigation.right_mouse_pan_active = false;
         }
 
         if (sandbox3d_should_start_empty_viewport_pan(
@@ -29452,7 +29505,8 @@ static void sandbox3d_update(henka_engine* engine, double delta_seconds, void* u
             navigation_active = true;
             sandbox3d_record_success_result(state, "Orbit updated");
         }
-        else if (state->view_navigation.panning && mouse_in_viewport)
+        else if (state->view_navigation.panning &&
+            (mouse_in_viewport || state->view_navigation.right_mouse_pan_active))
         {
             henka_vec3 target = sandbox3d_get_view_navigation_target(state);
             const float distance = henka_vec3_length(henka_vec3_subtract(target, state->camera.position));
@@ -29513,7 +29567,7 @@ static void sandbox3d_update(henka_engine* engine, double delta_seconds, void* u
         {
             state->view_navigation.orbiting = false;
         }
-        if (!left_down && !middle_pan_held)
+        if (!left_down && !middle_pan_held && !right_pan_held)
         {
             state->view_navigation.panning = false;
         }
