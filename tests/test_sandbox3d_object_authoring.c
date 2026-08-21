@@ -1342,6 +1342,88 @@ static void henka_test_sandbox3d_object_authoring_scalable_selection(void)
     henka_engine_destroy(engine);
 }
 
+static void henka_test_sandbox3d_object_authoring_connected_scalable_selection(void)
+{
+    henka_engine_config config = {0};
+    henka_engine* engine = NULL;
+    henka_scene* scene = NULL;
+    henka_authoring_mesh* source = NULL;
+    sandbox3d_authoring_object* object = NULL;
+    henka_authoring_mesh_desc desc = {128U, 256U, 128U, 8U};
+    henka_authoring_vertex_id vertices[100];
+    henka_authoring_mesh_counts counts;
+    henka_entity entity;
+    const sandbox3d_authoring_selection_mode modes[] = {
+        SANDBOX3D_AUTHORING_SELECTION_VERTEX,
+        SANDBOX3D_AUTHORING_SELECTION_EDGE,
+        SANDBOX3D_AUTHORING_SELECTION_FACE};
+    const size_t expected_counts[] = {100U, 180U, 81U};
+    size_t mode_index;
+
+    config.application_name = "Henka Connected Scalable Selection Test";
+    config.window_width = 320;
+    config.window_height = 240;
+    config.enable_vsync = false;
+    HENKA_TEST_ASSERT(henka_engine_create(&config, &engine) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_scene_create(&scene) == HENKA_SUCCESS);
+    entity = henka_scene_create_entity_named(scene, "Connected Scalable Selection");
+    HENKA_TEST_ASSERT(entity != HENKA_INVALID_ENTITY);
+    HENKA_TEST_ASSERT(henka_authoring_mesh_create(&desc, &source) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_test_make_quad_grid(source, 9U, 9U, vertices, 100U) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_authoring_mesh_validate(source));
+    counts = henka_authoring_mesh_get_counts(source);
+    HENKA_TEST_ASSERT(counts.vertices == 100U);
+    HENKA_TEST_ASSERT(counts.edges == 180U);
+    HENKA_TEST_ASSERT(counts.faces == 81U);
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_create_from_mesh(
+        engine, scene, entity, source, 8U, &object) == HENKA_SUCCESS);
+
+    for (mode_index = 0U; mode_index < sizeof(modes) / sizeof(modes[0]); ++mode_index)
+    {
+        size_t selected_index;
+        uint32_t previous_id = 0U;
+
+        sandbox3d_authoring_object_set_selection_mode(object, modes[mode_index]);
+        HENKA_TEST_ASSERT(sandbox3d_authoring_object_select_component(
+            object, 1U, false) == HENKA_SUCCESS);
+        HENKA_TEST_ASSERT(sandbox3d_authoring_object_select_connected_components(
+            object) == HENKA_SUCCESS);
+        HENKA_TEST_ASSERT(sandbox3d_authoring_object_get_selected_component_count(object) ==
+            expected_counts[mode_index]);
+        for (selected_index = 0U;
+             selected_index < expected_counts[mode_index];
+             ++selected_index)
+        {
+            uint32_t selected_id = HENKA_AUTHORING_INVALID_ID;
+            HENKA_TEST_ASSERT(sandbox3d_authoring_object_get_selected_component_at(
+                object, selected_index, &selected_id) == HENKA_SUCCESS);
+            HENKA_TEST_ASSERT(selected_id > previous_id);
+            previous_id = selected_id;
+        }
+
+        HENKA_TEST_ASSERT(sandbox3d_authoring_object_select_none_components(object) == HENKA_SUCCESS);
+        HENKA_TEST_ASSERT(sandbox3d_authoring_object_select_all_components(object) == HENKA_SUCCESS);
+        HENKA_TEST_ASSERT(sandbox3d_authoring_object_get_selected_component_count(object) ==
+            expected_counts[mode_index]);
+        previous_id = 0U;
+        for (selected_index = 0U;
+             selected_index < expected_counts[mode_index];
+             ++selected_index)
+        {
+            uint32_t selected_id = HENKA_AUTHORING_INVALID_ID;
+            HENKA_TEST_ASSERT(sandbox3d_authoring_object_get_selected_component_at(
+                object, selected_index, &selected_id) == HENKA_SUCCESS);
+            HENKA_TEST_ASSERT(selected_id > previous_id);
+            previous_id = selected_id;
+        }
+    }
+
+    sandbox3d_authoring_object_destroy(object);
+    henka_authoring_mesh_destroy(source);
+    henka_scene_destroy(scene);
+    henka_engine_destroy(engine);
+}
+
 /* HENKA_T2B_QUAD_WORKFLOW_TEST_V1 */
 static void henka_test_sandbox3d_object_authoring_quad_recovery_workflow(void)
 {
@@ -1512,4 +1594,5 @@ void henka_test_sandbox3d_object_authoring(void)
     henka_test_sandbox3d_object_authoring_edge_ring_exact_grid();
     henka_test_sandbox3d_object_authoring_edge_loop_exact_grid();
     henka_test_sandbox3d_object_authoring_scalable_selection();
+    henka_test_sandbox3d_object_authoring_connected_scalable_selection();
 }
