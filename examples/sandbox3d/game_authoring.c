@@ -904,10 +904,45 @@ henka_result sandbox3d_game_authoring_load_play_state(
     return result;
 }
 
-henka_script_state_store* sandbox3d_game_authoring_get_script_state_store(
-    const sandbox3d_game_authoring* authoring)
+henka_result sandbox3d_game_authoring_set_script_state_value(
+    sandbox3d_game_authoring* authoring,
+    henka_script_state_identity identity,
+    uint32_t key,
+    henka_script_state_value value)
 {
-    return authoring == NULL ? NULL : authoring->script_state_store;
+    if (authoring == NULL || sandbox3d_game_authoring_is_play_locked(authoring))
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    return henka_script_state_store_set(
+        authoring->script_state_store, identity, key, value);
+}
+
+henka_result sandbox3d_game_authoring_get_script_state_value(
+    const sandbox3d_game_authoring* authoring,
+    henka_script_state_identity identity,
+    uint32_t key,
+    henka_script_state_value* out_value,
+    bool* out_present)
+{
+    if (authoring == NULL || sandbox3d_game_authoring_is_play_locked(authoring))
+    {
+        if (out_value != NULL)
+        {
+            *out_value = (henka_script_state_value){HENKA_SCRIPT_STATE_VALUE_NONE};
+        }
+        if (out_present != NULL)
+        {
+            *out_present = false;
+        }
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    return henka_script_state_store_get(
+        authoring->script_state_store,
+        identity,
+        key,
+        out_value,
+        out_present);
 }
 
 const char* sandbox3d_game_authoring_get_relative_path(

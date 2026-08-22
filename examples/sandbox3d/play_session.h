@@ -47,8 +47,6 @@ henka_result sandbox3d_play_session_set_input_context(
     sandbox3d_play_input_query input_query,
     void* input_user_data,
     henka_vec3 observer_position);
-henka_script_state_store* sandbox3d_play_session_get_script_state_store(
-    const sandbox3d_play_session* session);
 void sandbox3d_play_session_destroy(sandbox3d_play_session* session);
 sandbox3d_play_session_state sandbox3d_play_session_get_state(
     const sandbox3d_play_session* session);

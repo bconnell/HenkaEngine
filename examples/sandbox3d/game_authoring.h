@@ -3,6 +3,7 @@
 
 #include <stdbool.h>
 #include <stddef.h>
+#include <stdint.h>
 
 #include <henka/scene.h>
 #include <henka/scene_document.h>
@@ -99,10 +100,20 @@ henka_result sandbox3d_game_authoring_save_play_state(
 henka_result sandbox3d_game_authoring_load_play_state(
     sandbox3d_game_authoring* authoring,
     const char* project_root);
-/* Borrowed editor-owned state store. It remains valid until authoring is
- * destroyed and is never implicitly saved when Play stops. */
-henka_script_state_store* sandbox3d_game_authoring_get_script_state_store(
-    const sandbox3d_game_authoring* authoring);
+/* State access stays behind the authoring coordinator. Both operations reject
+ * while Play is active; callers cannot mutate or inspect the borrowed runtime
+ * store through a raw pointer and bypass the Edit-vs-Play lock. */
+henka_result sandbox3d_game_authoring_set_script_state_value(
+    sandbox3d_game_authoring* authoring,
+    henka_script_state_identity identity,
+    uint32_t key,
+    henka_script_state_value value);
+henka_result sandbox3d_game_authoring_get_script_state_value(
+    const sandbox3d_game_authoring* authoring,
+    henka_script_state_identity identity,
+    uint32_t key,
+    henka_script_state_value* out_value,
+    bool* out_present);
 const char* sandbox3d_game_authoring_get_relative_path(
     const sandbox3d_game_authoring* authoring);
 henka_scene* sandbox3d_game_authoring_get_authoring_scene(

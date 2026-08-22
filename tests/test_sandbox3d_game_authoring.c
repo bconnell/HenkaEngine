@@ -25,7 +25,6 @@ int main(void)
     henka_interaction_desc interaction;
     henka_transform transform;
     henka_scene* play_scene;
-    henka_script_state_store* state_store;
     henka_script_state_value state_value;
     henka_script_source_diagnostic reload_diagnostic;
     bool state_present;
@@ -79,23 +78,22 @@ int main(void)
     object.physics.mass = 1.0f;
     if (sandbox3d_game_authoring_update_object_for_entity(authoring, entity, &object) != HENKA_SUCCESS ||
         sandbox3d_game_authoring_save(authoring, ".") != HENKA_SUCCESS ||
-        (state_store = sandbox3d_game_authoring_get_script_state_store(authoring)) == NULL ||
-        henka_script_state_store_set(
-            state_store,
+        sandbox3d_game_authoring_set_script_state_value(
+            authoring,
             (henka_script_state_identity){object_id, 10U},
             3U,
             (henka_script_state_value){
                 HENKA_SCRIPT_STATE_VALUE_I32, {.i32 = 77}}) != HENKA_SUCCESS ||
         sandbox3d_game_authoring_save_play_state(authoring, ".") != HENKA_SUCCESS ||
-        henka_script_state_store_set(
-            state_store,
+        sandbox3d_game_authoring_set_script_state_value(
+            authoring,
             (henka_script_state_identity){object_id, 10U},
             3U,
             (henka_script_state_value){
                 HENKA_SCRIPT_STATE_VALUE_I32, {.i32 = 99}}) != HENKA_SUCCESS ||
         sandbox3d_game_authoring_load_play_state(authoring, ".") != HENKA_SUCCESS ||
-        henka_script_state_store_get(
-            state_store,
+        sandbox3d_game_authoring_get_script_state_value(
+            authoring,
             (henka_script_state_identity){object_id, 10U},
             3U,
             &state_value,
@@ -241,6 +239,18 @@ int main(void)
         sandbox3d_game_authoring_load(authoring, ".") != HENKA_ERROR_INVALID_ARGUMENT ||
         sandbox3d_game_authoring_save_play_state(authoring, ".") != HENKA_ERROR_INVALID_ARGUMENT ||
         sandbox3d_game_authoring_load_play_state(authoring, ".") != HENKA_ERROR_INVALID_ARGUMENT ||
+        sandbox3d_game_authoring_set_script_state_value(
+            authoring,
+            (henka_script_state_identity){object_id, 10U},
+            3U,
+            (henka_script_state_value){
+                HENKA_SCRIPT_STATE_VALUE_I32, {.i32 = 101}}) != HENKA_ERROR_INVALID_ARGUMENT ||
+        sandbox3d_game_authoring_get_script_state_value(
+            authoring,
+            (henka_script_state_identity){object_id, 10U},
+            3U,
+            &state_value,
+            &state_present) != HENKA_ERROR_INVALID_ARGUMENT ||
         sandbox3d_game_authoring_reload_behavior_for_entity(
             authoring, entity, behavior_id, &reload_diagnostic) != HENKA_SUCCESS ||
         reload_diagnostic.result != HENKA_SUCCESS ||

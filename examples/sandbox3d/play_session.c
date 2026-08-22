@@ -640,12 +640,6 @@ henka_result sandbox3d_play_session_set_input_context(
     return HENKA_SUCCESS;
 }
 
-henka_script_state_store* sandbox3d_play_session_get_script_state_store(
-    const sandbox3d_play_session* session)
-{
-    return session == NULL ? NULL : session->script_state_store;
-}
-
 henka_result sandbox3d_play_session_start(sandbox3d_play_session* session)
 {
     size_t index;

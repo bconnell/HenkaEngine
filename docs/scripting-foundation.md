@@ -58,6 +58,10 @@ execution adapters for both languages.
   little-endian format, a 64 KiB file limit, confined project-relative paths,
   same-directory temporary files, and atomic replacement. Loading malformed
   state retains the existing in-memory store.
+- Game Authoring exposes only typed, coordinator-checked state access; it does
+  not return a mutable store pointer. State reads and writes through that
+  boundary are rejected while Play is active, so callers cannot bypass the
+  Edit-vs-Play lock or mutate runtime state through an authoring pointer.
 - Explicit typed declarations (`i32 health = 3;`) and inferred declarations
   (`count := health + 1;`).
 - Brace-delimited `fn` and `behavior` callables, typed arithmetic and

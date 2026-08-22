@@ -33,10 +33,13 @@ synchronous, non-reentrant dispatch and a bounded FIFO event queue. Play binds
 that host to its persistent-ID to runtime-entity and physics-body mapping; Lua
 and HenkaScript emit into the same event queue and can receive the same event
 through `OnEvent`. A separate fixed-capacity behavior-state store provides
-    explicit sidecar save/load, while remaining outside authored Scene Document
-data and the script asset loader. The Scene Document and Play layers expose a
-candidate-first behavior reload seam that preserves the generation-checked
-lifecycle slot on success and leaves the active backend untouched on failure.
+explicit sidecar save/load, while remaining outside authored Scene Document
+data and the script asset loader. Game Authoring keeps state access behind
+typed coordinator operations and does not expose the borrowed store as a
+mutable pointer; those operations reject while Play is active. The Scene
+Document and Play layers expose a candidate-first behavior reload seam that
+preserves the generation-checked lifecycle slot on success and leaves the
+active backend untouched on failure.
 Broader host API coverage, full Inspector authoring, and debugger tooling remain
 later layers above this boundary. Candidate reload failures preserve bounded
 compiler/backend source diagnostics through this boundary. The current
