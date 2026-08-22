@@ -56,8 +56,8 @@ execution adapters for both languages.
   `bool`, `i32`, `float32`, and `vec3` values, with a fixed 512-value capacity.
 - Explicit, candidate-based state sidecar persistence with a versioned
   little-endian format, a 64 KiB file limit, confined project-relative paths,
-  same-directory temporary files, and atomic replacement. Loading malformed
-  state retains the existing in-memory store.
+  unique same-directory temporary files, and atomic replacement. Loading
+  malformed state retains the existing in-memory store.
 - Game Authoring exposes only typed, coordinator-checked state access; it does
   not return a mutable store pointer. State reads and writes through that
   boundary are rejected while Play is active, so callers cannot bypass the

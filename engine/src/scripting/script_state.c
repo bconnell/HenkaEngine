@@ -8,6 +8,7 @@
 #include <io.h>
 #include <windows.h>
 #else
+#include <stdatomic.h>
 #include <unistd.h>
 #endif
 
@@ -17,7 +18,13 @@
 #define HENKA_SCRIPT_STATE_MAGIC UINT32_C(0x31534B48)
 #define HENKA_SCRIPT_STATE_HEADER_BYTES 16U
 #define HENKA_SCRIPT_STATE_RECORD_BYTES 40U
-#define HENKA_SCRIPT_STATE_TEMP_SUFFIX ".henka-tmp"
+#define HENKA_SCRIPT_STATE_TEMP_PATH_CAPACITY 96U
+
+#ifdef _WIN32
+static volatile LONG g_henka_script_state_save_sequence = 0L;
+#else
+static atomic_uint g_henka_script_state_save_sequence = 0U;
+#endif
 
 typedef struct henka_script_state_entry
 {
@@ -393,6 +400,66 @@ static henka_result henka_script_state_resolve_path(
     return henka_path_resolve_confined(project_root, relative_path, out_path);
 }
 
+static uint32_t henka_script_state_next_save_sequence(void)
+{
+#ifdef _WIN32
+    return (uint32_t)InterlockedIncrement(&g_henka_script_state_save_sequence);
+#else
+    return atomic_fetch_add_explicit(
+        &g_henka_script_state_save_sequence,
+        1U,
+        memory_order_relaxed) + 1U;
+#endif
+}
+
+static henka_result henka_script_state_make_temporary_path(
+    const char* path,
+    char** out_temporary_path)
+{
+    const size_t path_length = path == NULL ? 0U : strlen(path);
+    char* temporary_path;
+    int written;
+
+    if (path == NULL || path_length > SIZE_MAX - HENKA_SCRIPT_STATE_TEMP_PATH_CAPACITY ||
+        out_temporary_path == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    temporary_path = (char*)henka_malloc(
+        path_length + HENKA_SCRIPT_STATE_TEMP_PATH_CAPACITY);
+    if (temporary_path == NULL)
+    {
+        return HENKA_ERROR_OUT_OF_MEMORY;
+    }
+#ifdef _WIN32
+    written = _snprintf_s(
+        temporary_path,
+        path_length + HENKA_SCRIPT_STATE_TEMP_PATH_CAPACITY,
+        _TRUNCATE,
+        "%s.tmp.%lu.%lu.%lu",
+        path,
+        (unsigned long)GetCurrentProcessId(),
+        (unsigned long)GetCurrentThreadId(),
+        (unsigned long)henka_script_state_next_save_sequence());
+#else
+    written = snprintf(
+        temporary_path,
+        path_length + HENKA_SCRIPT_STATE_TEMP_PATH_CAPACITY,
+        "%s.tmp.%ld.%lu",
+        path,
+        (long)getpid(),
+        (unsigned long)henka_script_state_next_save_sequence());
+#endif
+    if (written < 0 ||
+        (size_t)written >= path_length + HENKA_SCRIPT_STATE_TEMP_PATH_CAPACITY)
+    {
+        henka_free(temporary_path);
+        return HENKA_ERROR_LIMIT;
+    }
+    *out_temporary_path = temporary_path;
+    return HENKA_SUCCESS;
+}
+
 static henka_result henka_script_state_flush_file(FILE* file)
 {
     if (file == NULL || fflush(file) != 0)
@@ -433,7 +500,6 @@ henka_result henka_script_state_store_save_file(
     char* path = NULL;
     char* temporary_path = NULL;
     FILE* file = NULL;
-    size_t path_length;
     size_t size;
     size_t index;
     henka_result result;
@@ -463,25 +529,12 @@ henka_result henka_script_state_store_save_file(
                 index * HENKA_SCRIPT_STATE_RECORD_BYTES,
             &store->entries[index]);
     }
-    path_length = strlen(path);
-    if (path_length > SIZE_MAX - sizeof(HENKA_SCRIPT_STATE_TEMP_SUFFIX))
+    result = henka_script_state_make_temporary_path(path, &temporary_path);
+    if (result != HENKA_SUCCESS)
     {
         henka_free(path);
-        return HENKA_ERROR_LIMIT;
+        return result;
     }
-    temporary_path = (char*)henka_malloc(
-        path_length + sizeof(HENKA_SCRIPT_STATE_TEMP_SUFFIX));
-    if (temporary_path == NULL)
-    {
-        henka_free(path);
-        return HENKA_ERROR_OUT_OF_MEMORY;
-    }
-    (void)snprintf(
-        temporary_path,
-        path_length + sizeof(HENKA_SCRIPT_STATE_TEMP_SUFFIX),
-        "%s%s",
-        path,
-        HENKA_SCRIPT_STATE_TEMP_SUFFIX);
     result = henka_path_ensure_parent_directory(path);
     if (result == HENKA_SUCCESS)
     {

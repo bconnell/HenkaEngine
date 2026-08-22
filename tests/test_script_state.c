@@ -1,13 +1,39 @@
 #include <assert.h>
+#include <errno.h>
 #include <math.h>
 #include <stdio.h>
 #include <string.h>
+
+#ifdef _WIN32
+#include <direct.h>
+#else
+#include <sys/stat.h>
+#include <unistd.h>
+#endif
 
 #include <henka/memory.h>
 #include <henka/script_state.h>
 
 static const henka_script_state_identity identity_a = {11U, 101U};
 static const henka_script_state_identity identity_b = {12U, 102U};
+
+static int test_script_state_make_directory(const char* path)
+{
+#ifdef _WIN32
+    return _mkdir(path);
+#else
+    return mkdir(path, 0777);
+#endif
+}
+
+static int test_script_state_remove_directory(const char* path)
+{
+#ifdef _WIN32
+    return _rmdir(path);
+#else
+    return rmdir(path);
+#endif
+}
 
 static void test_typed_values_and_capacity(void)
 {
@@ -86,6 +112,8 @@ static void test_transactional_file_round_trip(void)
 {
     const char* root = "build/test_tmp/script_state";
     const char* relative_path = "roundtrip.hstate";
+    const char* blocked_temporary_path =
+        "build/test_tmp/script_state/roundtrip.hstate.henka-tmp";
     henka_script_state_store* source = NULL;
     henka_script_state_store* loaded = NULL;
     henka_script_state_value value;
@@ -108,6 +136,10 @@ static void test_transactional_file_round_trip(void)
                    HENKA_SCRIPT_STATE_VALUE_BOOL,
                    {.boolean = true}}) == HENKA_SUCCESS);
     assert(henka_script_state_store_save_file(source, root, relative_path) == HENKA_SUCCESS);
+    (void)test_script_state_remove_directory(blocked_temporary_path);
+    assert(test_script_state_make_directory(blocked_temporary_path) == 0 ||
+        errno == EEXIST);
+    assert(henka_script_state_store_save_file(source, root, relative_path) == HENKA_SUCCESS);
     assert(henka_script_state_store_set(
                loaded,
                (henka_script_state_identity){99U, 99U},
@@ -125,6 +157,7 @@ static void test_transactional_file_round_trip(void)
     henka_script_state_store_destroy(loaded);
     henka_script_state_store_destroy(source);
     (void)remove("build/test_tmp/script_state/roundtrip.hstate");
+    assert(test_script_state_remove_directory(blocked_temporary_path) == 0);
 }
 
 static void test_invalid_values_and_load_retention(void)

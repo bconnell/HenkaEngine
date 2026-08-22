@@ -67,8 +67,8 @@ size_t henka_script_state_store_get_count(
     const henka_script_state_store* store);
 
 /* relative_path is confined beneath project_root. Loads are candidate-based;
- * malformed input leaves the existing store unchanged. Saves use a bounded
- * temporary file and atomic replacement. */
+ * malformed input leaves the existing store unchanged. Saves use a bounded,
+ * unique sibling temporary file and atomic replacement. */
 henka_result henka_script_state_store_load_file(
     henka_script_state_store* store,
     const char* project_root,

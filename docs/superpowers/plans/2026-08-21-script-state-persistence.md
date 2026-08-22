@@ -58,8 +58,9 @@
 
   Resolve the sidecar through `henka_path_resolve_confined`, read only bounded
   bytes, validate header/version/count/records, then move the candidate into the
-  destination. Save to a `.henka-tmp` sibling, flush/close it, replace the
-  destination atomically, and remove the temporary file on every failure.
+  destination. Save to a bounded unique sibling temporary path, flush/close it,
+  replace the destination atomically, and remove the temporary file on every
+  failure.
 
 - [ ] **Step 5: Build and run the focused state tests**
 
