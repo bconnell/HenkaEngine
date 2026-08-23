@@ -32,6 +32,13 @@ struct sandbox3d_authoring_object
     henka_mesh* previous_scene_mesh;
     bool had_previous_bounds;
     henka_bounds previous_bounds;
+    bool preview_active;
+    henka_authoring_mesh* preview_mesh;
+    henka_mesh* preview_render_mesh;
+    bool preview_had_bounds;
+    henka_bounds preview_previous_bounds;
+    bool preview_had_collider;
+    henka_physics_collider_desc preview_previous_collider;
     henka_physics_world* physics_world;
     henka_physics_body_id physics_body;
     henka_authoring_face_id selected_face;
@@ -1427,6 +1434,49 @@ static henka_result sandbox3d_authoring_publish_candidate(
     return HENKA_SUCCESS;
 }
 
+static henka_result sandbox3d_authoring_cancel_preview_internal(
+    sandbox3d_authoring_object* object)
+{
+    henka_result result = HENKA_SUCCESS;
+
+    if (object == NULL || !object->preview_active)
+    {
+        return object == NULL ? HENKA_ERROR_INVALID_ARGUMENT : HENKA_SUCCESS;
+    }
+    if (object->scene != NULL &&
+        henka_scene_is_entity_valid(object->scene, object->entity))
+    {
+        result = henka_scene_set_entity_mesh(
+            object->scene, object->entity, object->render_mesh);
+        if (result == HENKA_SUCCESS)
+        {
+            result = object->preview_had_bounds
+                ? henka_scene_set_entity_local_bounds(
+                    object->scene, object->entity, object->preview_previous_bounds)
+                : henka_scene_clear_entity_local_bounds(object->scene, object->entity);
+        }
+        if (result == HENKA_SUCCESS && object->preview_had_collider)
+        {
+            sandbox3d_authoring_restore_physics_collider(
+                object, &object->preview_previous_collider);
+        }
+    }
+    if (result != HENKA_SUCCESS)
+    {
+        return result;
+    }
+    henka_authoring_mesh_destroy(object->preview_mesh);
+    henka_mesh_destroy(object->preview_render_mesh);
+    object->preview_active = false;
+    object->preview_mesh = NULL;
+    object->preview_render_mesh = NULL;
+    object->preview_had_bounds = false;
+    object->preview_previous_bounds = (henka_bounds){{0.0f, 0.0f, 0.0f}, {0.0f, 0.0f, 0.0f}};
+    object->preview_had_collider = false;
+    object->preview_previous_collider = (henka_physics_collider_desc){0};
+    return HENKA_SUCCESS;
+}
+
 static henka_result sandbox3d_authoring_replace_loaded_source(
     sandbox3d_authoring_object* object,
     henka_authoring_mesh* candidate)
@@ -1990,6 +2040,10 @@ void sandbox3d_authoring_object_destroy(sandbox3d_authoring_object* object)
     {
         return;
     }
+    if (object->preview_active)
+    {
+        (void)sandbox3d_authoring_cancel_preview_internal(object);
+    }
     if (object->scene != NULL &&
         henka_scene_is_entity_valid(object->scene, object->entity))
     {
@@ -2074,6 +2128,128 @@ henka_entity sandbox3d_authoring_object_get_entity(const sandbox3d_authoring_obj
 const henka_authoring_mesh* sandbox3d_authoring_object_get_mesh(const sandbox3d_authoring_object* object)
 {
     return object == NULL ? NULL : object->mesh;
+}
+
+henka_result sandbox3d_authoring_object_preview_candidate(
+    sandbox3d_authoring_object* object,
+    henka_authoring_mesh* candidate)
+{
+    henka_mesh* candidate_render = NULL;
+    henka_bounds candidate_bounds = {{0.0f, 0.0f, 0.0f}, {0.0f, 0.0f, 0.0f}};
+    henka_physics_collider_desc previous_collider = {0};
+    henka_mesh* previous_scene_mesh = NULL;
+    bool had_bounds;
+    bool had_collider;
+    henka_result result;
+
+    if (object == NULL || candidate == NULL ||
+        !henka_scene_is_entity_valid(object->scene, object->entity) ||
+        !henka_authoring_mesh_validate(candidate))
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    if (object->preview_active)
+    {
+        result = sandbox3d_authoring_cancel_preview_internal(object);
+        if (result != HENKA_SUCCESS)
+        {
+            return result;
+        }
+    }
+    result = sandbox3d_authoring_evaluate_render(
+        object, candidate, &candidate_render, &candidate_bounds);
+    if (result != HENKA_SUCCESS)
+    {
+        return result;
+    }
+    if (henka_scene_get_entity_mesh(
+            object->scene, object->entity, &previous_scene_mesh) != HENKA_SUCCESS)
+    {
+        henka_mesh_destroy(candidate_render);
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    had_bounds = henka_scene_get_entity_local_bounds(
+        object->scene, object->entity, &object->preview_previous_bounds) == HENKA_SUCCESS;
+    had_collider = sandbox3d_authoring_get_physics_collider(object, &previous_collider) == HENKA_SUCCESS &&
+        object->physics_world != NULL && object->physics_body != HENKA_INVALID_PHYSICS_BODY_ID;
+    result = henka_scene_set_entity_mesh(
+        object->scene, object->entity, candidate_render);
+    if (result == HENKA_SUCCESS)
+    {
+        result = henka_scene_set_entity_local_bounds(
+            object->scene, object->entity, candidate_bounds);
+    }
+    if (result == HENKA_SUCCESS)
+    {
+        result = sandbox3d_authoring_set_physics_bounds(object, &candidate_bounds);
+    }
+    if (result != HENKA_SUCCESS)
+    {
+        (void)henka_scene_set_entity_mesh(
+            object->scene, object->entity, previous_scene_mesh);
+        if (had_bounds)
+        {
+            (void)henka_scene_set_entity_local_bounds(
+                object->scene, object->entity, object->preview_previous_bounds);
+        }
+        else
+        {
+            (void)henka_scene_clear_entity_local_bounds(object->scene, object->entity);
+        }
+        if (had_collider)
+        {
+            sandbox3d_authoring_restore_physics_collider(object, &previous_collider);
+        }
+        henka_mesh_destroy(candidate_render);
+        return result;
+    }
+    object->preview_active = true;
+    object->preview_mesh = candidate;
+    object->preview_render_mesh = candidate_render;
+    object->preview_had_bounds = had_bounds;
+    object->preview_had_collider = had_collider;
+    object->preview_previous_collider = previous_collider;
+    return HENKA_SUCCESS;
+}
+
+henka_result sandbox3d_authoring_object_commit_preview(
+    sandbox3d_authoring_object* object)
+{
+    henka_authoring_mesh* previous_mesh;
+    henka_mesh* previous_render_mesh;
+    henka_result result;
+
+    if (object == NULL || !object->preview_active ||
+        object->preview_mesh == NULL || object->preview_render_mesh == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    result = henka_authoring_mesh_history_checkpoint(
+        object->history, object->preview_mesh);
+    if (result != HENKA_SUCCESS)
+    {
+        return result;
+    }
+    previous_mesh = object->mesh;
+    previous_render_mesh = object->render_mesh;
+    object->mesh = object->preview_mesh;
+    object->render_mesh = object->preview_render_mesh;
+    object->preview_active = false;
+    object->preview_mesh = NULL;
+    object->preview_render_mesh = NULL;
+    object->preview_had_bounds = false;
+    object->preview_had_collider = false;
+    sandbox3d_authoring_repair_selection(object);
+    sandbox3d_authoring_remove_invalid_component_selection(object);
+    henka_authoring_mesh_destroy(previous_mesh);
+    henka_mesh_destroy(previous_render_mesh);
+    return HENKA_SUCCESS;
+}
+
+henka_result sandbox3d_authoring_object_cancel_preview(
+    sandbox3d_authoring_object* object)
+{
+    return sandbox3d_authoring_cancel_preview_internal(object);
 }
 
 henka_result sandbox3d_authoring_object_recover_quads(

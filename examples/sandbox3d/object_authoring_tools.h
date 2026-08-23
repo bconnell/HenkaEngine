@@ -101,6 +101,20 @@ henka_result sandbox3d_authoring_object_create_from_model_primitive(
 void sandbox3d_authoring_object_destroy(sandbox3d_authoring_object* object);
 henka_entity sandbox3d_authoring_object_get_entity(const sandbox3d_authoring_object* object);
 const henka_authoring_mesh* sandbox3d_authoring_object_get_mesh(const sandbox3d_authoring_object* object);
+/* Presents an owned candidate without replacing the authoritative source or
+ * creating an undo entry.  The candidate is retained only after success; the
+ * caller retains ownership on failure. */
+henka_result sandbox3d_authoring_object_preview_candidate(
+    sandbox3d_authoring_object* object,
+    henka_authoring_mesh* candidate);
+/* Publishes the active preview candidate as one source/render/history/
+ * physics transaction. */
+henka_result sandbox3d_authoring_object_commit_preview(
+    sandbox3d_authoring_object* object);
+/* Restores the authoritative source/render/bounds state and discards the
+ * active preview without changing history. */
+henka_result sandbox3d_authoring_object_cancel_preview(
+    sandbox3d_authoring_object* object);
 /* Reconstructs compatible triangle pairs as authoring quads through the
  * normal scene/render/history/physics transaction. */
 henka_result sandbox3d_authoring_object_recover_quads(

@@ -25,6 +25,7 @@
 #include "authoring_asset_commands.h"
 #include "authoring_asset_controller.h"
 #include "authoring_asset_ui.h"
+#include "modeling_operator.h"
 #include "object_authoring_tools.h"
 #include "object_details_tools.h"
 #include "interaction_tools.h"
@@ -548,6 +549,7 @@ typedef struct sandbox3d_state
     sandbox3d_editor_controls editor_controls;
     sandbox3d_editor_ui_state editor_ui;
     sandbox3d_transform_session transform_session;
+    sandbox3d_modeling_operator_session modeling_operator;
     bool editor_controls_loaded_safely;
     bool smoke_test;
     bool primitive_gallery;
@@ -1077,6 +1079,11 @@ static void sandbox3d_release_authoring_physics(
 static void sandbox3d_cancel_active_transform_session(
     sandbox3d_state* state,
     bool restore_original);
+static void sandbox3d_cancel_active_modeling_operator_session(
+    sandbox3d_state* state);
+static bool sandbox3d_handle_modeling_operator_hotkeys(
+    henka_engine* engine,
+    sandbox3d_state* state);
 static bool sandbox3d_apply_transform_preview(
     sandbox3d_state* state,
     henka_entity entity,
@@ -4456,6 +4463,10 @@ static void sandbox3d_set_viewport_tool_mode(
     if (state->viewport_tool != tool_mode || state->gizmo.mode != (sandbox3d_gizmo_mode)gizmo_mode)
     {
         sandbox3d_cancel_active_transform_session(state, true);
+        if (state->modeling_operator.active && tool_mode != SANDBOX3D_VIEWPORT_TOOL_MOVE)
+        {
+            sandbox3d_cancel_active_modeling_operator_session(state);
+        }
         state->viewport_tool = tool_mode;
         state->gizmo.mode = (sandbox3d_gizmo_mode)gizmo_mode;
         state->view_navigation.orbiting = false;
@@ -9988,6 +9999,7 @@ static void sandbox3d_release_owned_resources(sandbox3d_state* state)
         return;
     }
 
+    sandbox3d_cancel_active_modeling_operator_session(state);
     henka_terrain_render_runtime_destroy(state->terrain_render);
     henka_terrain_streamer_destroy(state->terrain_streamer);
     henka_terrain_storage_destroy(state->terrain_storage);
@@ -11781,6 +11793,10 @@ static void sandbox3d_select_entity(sandbox3d_state* state, henka_entity entity)
     {
         sandbox3d_cancel_active_transform_session(state, true);
     }
+    if (state->modeling_operator.active && previous_entity != entity)
+    {
+        sandbox3d_cancel_active_modeling_operator_session(state);
+    }
     memset(&request, 0, sizeof(request));
     request.command = HENKA_ACTION_COMMAND_SELECT_OBJECT;
     request.params.entity.entity = entity;
@@ -12906,6 +12922,12 @@ static bool sandbox3d_delete_selected_object(sandbox3d_state* state)
     {
         sandbox3d_cancel_active_transform_session(state, true);
     }
+    if (state->modeling_operator.active &&
+        state->modeling_operator.object != NULL &&
+        sandbox3d_authoring_object_get_entity(state->modeling_operator.object) == selected_entity)
+    {
+        sandbox3d_cancel_active_modeling_operator_session(state);
+    }
     memset(&request, 0, sizeof(request));
     request.command = HENKA_ACTION_COMMAND_DELETE_OBJECT;
     request.params.entity.entity = selected_entity;
@@ -12954,6 +12976,7 @@ static void sandbox3d_clear_selection(sandbox3d_state* state, const char* reason
 
     previous_entity = state->selected_entity;
     sandbox3d_cancel_active_transform_session(state, true);
+    sandbox3d_cancel_active_modeling_operator_session(state);
     memset(&request, 0, sizeof(request));
     request.command = HENKA_ACTION_COMMAND_CLEAR_SELECTION;
     if (sandbox3d_execute_action(state, &request, &result))
@@ -14363,6 +14386,13 @@ static bool sandbox3d_toggle_selected_transform_lock(sandbox3d_state* state)
     {
         sandbox3d_cancel_active_transform_session(state, true);
     }
+    if (!transform_locked &&
+        state->modeling_operator.active &&
+        state->modeling_operator.object != NULL &&
+        sandbox3d_authoring_object_get_entity(state->modeling_operator.object) == entity)
+    {
+        sandbox3d_cancel_active_modeling_operator_session(state);
+    }
     if (transform_locked)
     {
         flags &= ~(uint32_t)HENKA_SCENE_ENTITY_FLAG_TRANSFORM_LOCKED;
@@ -14414,6 +14444,13 @@ static bool sandbox3d_toggle_selected_entity_visibility(sandbox3d_state* state)
         state->transform_session.entity == entity)
     {
         sandbox3d_cancel_active_transform_session(state, true);
+    }
+    if (currently_visible &&
+        state->modeling_operator.active &&
+        state->modeling_operator.object != NULL &&
+        sandbox3d_authoring_object_get_entity(state->modeling_operator.object) == entity)
+    {
+        sandbox3d_cancel_active_modeling_operator_session(state);
     }
     memset(&request, 0, sizeof(request));
     request.command = currently_visible ? HENKA_ACTION_COMMAND_HIDE_OBJECT : HENKA_ACTION_COMMAND_SHOW_OBJECT;
@@ -15765,6 +15802,228 @@ static sandbox3d_viewport_tool_mode sandbox3d_get_viewport_tool_for_transform(sa
     if (tool == SANDBOX3D_TRANSFORM_TOOL_ROTATE) return SANDBOX3D_VIEWPORT_TOOL_ROTATE;
     if (tool == SANDBOX3D_TRANSFORM_TOOL_SCALE) return SANDBOX3D_VIEWPORT_TOOL_SCALE;
     return SANDBOX3D_VIEWPORT_TOOL_SELECT;
+}
+
+static const char* sandbox3d_modeling_operator_axis_name(
+    sandbox3d_modeling_operator_axis axis)
+{
+    switch (axis)
+    {
+        case SANDBOX3D_MODELING_OPERATOR_AXIS_X:
+            return "X";
+        case SANDBOX3D_MODELING_OPERATOR_AXIS_Y:
+            return "Y";
+        case SANDBOX3D_MODELING_OPERATOR_AXIS_Z:
+            return "Z";
+        case SANDBOX3D_MODELING_OPERATOR_AXIS_NONE:
+        default:
+            return "free";
+    }
+}
+
+static void sandbox3d_cancel_active_modeling_operator_session(
+    sandbox3d_state* state)
+{
+    henka_result result;
+
+    if (state == NULL || !state->modeling_operator.active)
+    {
+        return;
+    }
+    result = sandbox3d_modeling_operator_cancel(&state->modeling_operator);
+    if (result != HENKA_SUCCESS)
+    {
+        HENKA_LOG_WARN(
+            "Modeling operator cancellation failed: %s",
+            henka_result_to_string(result));
+    }
+}
+
+static bool sandbox3d_handle_modeling_operator_hotkeys(
+    henka_engine* engine,
+    sandbox3d_state* state)
+{
+    const bool workspace_busy = state != NULL &&
+        (state->workspace.model.active_drag_panel != SANDBOX3D_WORKSPACE_PANEL_NONE ||
+         state->workspace.model.active_resize_panel != SANDBOX3D_WORKSPACE_PANEL_NONE ||
+         state->workspace.model.resize_target != SANDBOX3D_WORKSPACE_RESIZE_NONE);
+    sandbox3d_authoring_object* object;
+    henka_result result;
+    henka_vec2 mouse_delta;
+    bool preview_rejected = false;
+    float delta;
+
+    if (engine == NULL || state == NULL ||
+        (state->game_authoring != NULL &&
+         sandbox3d_game_authoring_is_play_locked(state->game_authoring)))
+    {
+        return false;
+    }
+
+    object = state->authoring_object;
+    if (!state->modeling_operator.active)
+    {
+        if (!henka_input_action_was_pressed(engine, HENKA_INPUT_ACTION_MOVE_TOOL) ||
+            workspace_busy || state->gizmo.drag.dragging ||
+            henka_engine_is_mouse_captured(engine) || object == NULL ||
+            sandbox3d_authoring_object_get_selected_component_count(object) == 0U)
+        {
+            return false;
+        }
+        result = sandbox3d_modeling_operator_begin(
+            &state->modeling_operator,
+            object,
+            SANDBOX3D_MODELING_OPERATOR_MOVE);
+        if (result == HENKA_SUCCESS)
+        {
+            result = sandbox3d_modeling_operator_set_axis(
+                &state->modeling_operator,
+                SANDBOX3D_MODELING_OPERATOR_AXIS_X);
+        }
+        if (result != HENKA_SUCCESS)
+        {
+            sandbox3d_cancel_active_modeling_operator_session(state);
+            sandbox3d_set_statusf(
+                state,
+                true,
+                false,
+                "Model move could not start: %s.",
+                henka_result_to_string(result));
+            return true;
+        }
+        sandbox3d_clear_gizmo_drag(state, true);
+        sandbox3d_set_viewport_tool_mode(state, SANDBOX3D_VIEWPORT_TOOL_MOVE, false);
+        sandbox3d_set_status(
+            state,
+            false,
+            "Model move active on selected components. Move the mouse, constrain with X/Y/Z, confirm or cancel.");
+        return true;
+    }
+
+    if (state->modeling_operator.object == NULL || object == NULL ||
+        state->modeling_operator.object != object ||
+        sandbox3d_get_real_selected_entity(state) !=
+            sandbox3d_authoring_object_get_entity(state->modeling_operator.object) ||
+        state->scene == NULL ||
+        !henka_scene_is_entity_valid(
+            state->scene,
+            sandbox3d_authoring_object_get_entity(state->modeling_operator.object)) ||
+        sandbox3d_authoring_object_get_selected_component_count(object) == 0U)
+    {
+        sandbox3d_cancel_active_modeling_operator_session(state);
+        sandbox3d_set_status(
+            state,
+            true,
+            "Model move cancelled because the selected component source is no longer editable.");
+        return true;
+    }
+
+    if (henka_input_action_was_pressed(engine, HENKA_INPUT_ACTION_CANCEL_TRANSFORM))
+    {
+        result = sandbox3d_modeling_operator_cancel(&state->modeling_operator);
+        if (henka_input_was_key_pressed(engine, HENKA_KEY_ESCAPE))
+        {
+            henka_input_consume_key_press(engine, HENKA_KEY_ESCAPE);
+        }
+        if (result == HENKA_SUCCESS)
+        {
+            sandbox3d_set_status(
+                state,
+                false,
+                "Model move cancelled. Original mesh restored.");
+        }
+        else
+        {
+            sandbox3d_set_statusf(
+                state,
+                true,
+                false,
+                "Model move cancellation failed: %s.",
+                henka_result_to_string(result));
+        }
+        return true;
+    }
+
+    if (henka_input_action_was_pressed(engine, HENKA_INPUT_ACTION_CONFIRM_TRANSFORM))
+    {
+        if (state->modeling_operator.state != SANDBOX3D_MODELING_OPERATOR_STATE_PREVIEW)
+        {
+            sandbox3d_set_status(
+                state,
+                true,
+                "Model move has no preview. Move the mouse before confirming.");
+            return true;
+        }
+        result = sandbox3d_modeling_operator_commit(&state->modeling_operator);
+        if (result == HENKA_SUCCESS)
+        {
+            sandbox3d_set_status(state, false, "Model move confirmed.");
+        }
+        else
+        {
+            sandbox3d_set_statusf(
+                state,
+                true,
+                false,
+                "Model move could not be confirmed: %s.",
+                henka_result_to_string(result));
+        }
+        return true;
+    }
+
+    if (henka_input_action_was_pressed(engine, HENKA_INPUT_ACTION_CONSTRAIN_X))
+    {
+        result = sandbox3d_modeling_operator_set_axis(
+            &state->modeling_operator,
+            SANDBOX3D_MODELING_OPERATOR_AXIS_X);
+        if (result != HENKA_SUCCESS) preview_rejected = true;
+    }
+    if (henka_input_action_was_pressed(engine, HENKA_INPUT_ACTION_CONSTRAIN_Y))
+    {
+        result = sandbox3d_modeling_operator_set_axis(
+            &state->modeling_operator,
+            SANDBOX3D_MODELING_OPERATOR_AXIS_Y);
+        if (result != HENKA_SUCCESS) preview_rejected = true;
+    }
+    if (henka_input_action_was_pressed(engine, HENKA_INPUT_ACTION_CONSTRAIN_Z))
+    {
+        result = sandbox3d_modeling_operator_set_axis(
+            &state->modeling_operator,
+            SANDBOX3D_MODELING_OPERATOR_AXIS_Z);
+        if (result != HENKA_SUCCESS) preview_rejected = true;
+    }
+
+    mouse_delta = henka_input_get_mouse_delta(engine);
+    delta = mouse_delta.x - mouse_delta.y;
+    if (!workspace_busy && delta != 0.0f)
+    {
+        result = sandbox3d_modeling_operator_preview(
+            &state->modeling_operator,
+            delta * 0.01f,
+            henka_input_action_is_down(engine, HENKA_INPUT_ACTION_SNAP_MODIFIER),
+            henka_input_action_is_down(engine, HENKA_INPUT_ACTION_FINE_ADJUSTMENT_MODIFIER));
+        if (result != HENKA_SUCCESS)
+        {
+            sandbox3d_set_statusf(
+                state,
+                true,
+                false,
+                "Model move preview rejected: %s.",
+                henka_result_to_string(result));
+            preview_rejected = true;
+        }
+    }
+    if (!preview_rejected)
+    {
+        sandbox3d_set_statusf(
+            state,
+            false,
+            false,
+            "Model move active on %s axis. Amount %.3f. Confirm or cancel.",
+            sandbox3d_modeling_operator_axis_name(state->modeling_operator.axis),
+            state->modeling_operator.amount);
+    }
+    return true;
 }
 
 static bool sandbox3d_handle_transform_hotkeys(henka_engine* engine, sandbox3d_state* state)
@@ -27469,6 +27728,7 @@ static henka_result sandbox3d_initialize(henka_engine* engine, void* user_data)
     state->diagnostics.show_reflection_probes = false;
     sandbox3d_editor_controls_initialize(&state->editor_controls);
     sandbox3d_editor_ui_state_reset(&state->editor_ui);
+    sandbox3d_modeling_operator_reset(&state->modeling_operator);
     state->editor_controls_loaded_safely = true;
 
     result = henka_settings_create(&state->settings);
@@ -30286,6 +30546,7 @@ static void sandbox3d_update(henka_engine* engine, double delta_seconds, void* u
     henka_vec2 mouse_delta;
     henka_vec2 mouse_wheel_delta;
     bool navigation_active;
+    bool modeling_input_active;
     bool transform_input_active;
     bool ui_toggled_with_f4;
     bool ui_visible;
@@ -30784,7 +31045,9 @@ static void sandbox3d_update(henka_engine* engine, double delta_seconds, void* u
     framebuffer_height = 720;
     ui_toggled_with_f4 = false;
     navigation_active = false;
-    transform_input_active = sandbox3d_handle_transform_hotkeys(engine, state);
+    modeling_input_active = sandbox3d_handle_modeling_operator_hotkeys(engine, state);
+    transform_input_active = modeling_input_active ||
+        sandbox3d_handle_transform_hotkeys(engine, state);
     workspace_input_active = false;
 
     if (henka_input_was_key_pressed(engine, HENKA_KEY_H))
