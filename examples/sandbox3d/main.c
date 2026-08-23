@@ -4983,6 +4983,50 @@ static void sandbox3d_draw_authoring_face_fill(
     }
 }
 
+static void sandbox3d_draw_authoring_surface_overlay(
+    sandbox3d_state* state,
+    henka_viewport viewport,
+    henka_transform transform,
+    const sandbox3d_authoring_object* authoring)
+{
+    const henka_authoring_mesh* mesh;
+    henka_authoring_mesh_desc desc;
+    const henka_vec4 surface_colors[3] = {
+        {0.08f, 0.30f, 0.46f, 0.10f},
+        {0.16f, 0.36f, 0.30f, 0.09f},
+        {0.30f, 0.24f, 0.48f, 0.09f}};
+    size_t face_slot;
+
+    if (state == NULL || authoring == NULL)
+    {
+        return;
+    }
+    mesh = sandbox3d_authoring_object_get_mesh(authoring);
+    if (mesh == NULL)
+    {
+        return;
+    }
+    desc = henka_authoring_mesh_get_desc(mesh);
+    for (face_slot = 0U; face_slot < desc.max_faces; ++face_slot)
+    {
+        henka_authoring_face_id face_id;
+        const henka_authoring_face* face;
+
+        if (henka_authoring_mesh_get_face_id_at(mesh, face_slot, &face_id) != HENKA_SUCCESS ||
+            (face = henka_authoring_mesh_get_face(mesh, face_id)) == NULL)
+        {
+            continue;
+        }
+        sandbox3d_draw_authoring_face_fill(
+            state,
+            viewport,
+            transform,
+            authoring,
+            face_id,
+            surface_colors[face->material_region % 3U]);
+    }
+}
+
 static void sandbox3d_append_imported_silhouette_triangles(
     sandbox3d_state* state,
     henka_viewport viewport,
@@ -6105,6 +6149,14 @@ static void sandbox3d_draw_selection_highlight(sandbox3d_state* state, henka_vie
              * scene mesh remains the visible surface in Solid mode; keeping
              * renderer tessellation out of this screen-space pass prevents
              * the editor from presenting triangles as authored topology. */
+            if (authoring_topology_overlay_enabled)
+            {
+                sandbox3d_draw_authoring_surface_overlay(
+                    state,
+                    viewport,
+                    transform,
+                    state->authoring_object);
+            }
             if (authoring_topology_overlay_enabled &&
                 sandbox3d_build_authoring_cage(
                     mesh,
