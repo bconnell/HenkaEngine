@@ -1,5 +1,6 @@
 #include <math.h>
 #include <stdio.h>
+#include <stdint.h>
 #include <string.h>
 
 #include <henka/authoring_mesh.h>
@@ -24,6 +25,97 @@ static FILE* test_open_file(const char* path, const char* mode)
     file = fopen(path, mode);
 #endif
     return file;
+}
+
+static int test_write_u32(FILE* file, uint32_t value)
+{
+    const unsigned char bytes[4] = {
+        (unsigned char)(value & 0xffU),
+        (unsigned char)((value >> 8U) & 0xffU),
+        (unsigned char)((value >> 16U) & 0xffU),
+        (unsigned char)((value >> 24U) & 0xffU)};
+    return fwrite(bytes, sizeof(bytes), 1U, file) == 1U;
+}
+
+static int test_write_f32(FILE* file, float value)
+{
+    uint32_t bits;
+    memcpy(&bits, &value, sizeof(bits));
+    return test_write_u32(file, bits);
+}
+
+static int test_write_vec3(FILE* file, henka_vec3 value)
+{
+    return test_write_f32(file, value.x) && test_write_f32(file, value.y) && test_write_f32(file, value.z);
+}
+
+static int test_write_vec2(FILE* file, henka_vec2 value)
+{
+    return test_write_f32(file, value.x) && test_write_f32(file, value.y);
+}
+
+static int test_write_legacy_fixture(const char* path, uint32_t version)
+{
+    FILE* file = test_open_file(path, "wb");
+    const uint32_t invalid_id = HENKA_AUTHORING_INVALID_ID;
+    const henka_vec3 positions[3] = {
+        {0.0f, 0.0f, 0.0f},
+        {1.0f, 0.0f, 0.0f},
+        {0.0f, 1.0f, 0.0f}};
+    const henka_vec2 uvs[3] = {
+        {0.0f, 0.0f},
+        {1.0f, 0.0f},
+        {0.0f, 1.0f}};
+    const uint32_t edge_vertices[3][2] = {{1U, 2U}, {2U, 3U}, {1U, 3U}};
+    const uint32_t face_edges[3] = {1U, 2U, 3U};
+    size_t index;
+    int ok = file != NULL;
+
+    if (!ok) return 0;
+    ok = fwrite("HAMS", 4U, 1U, file) == 1U &&
+        test_write_u32(file, version) &&
+        test_write_u32(file, 3U) && test_write_u32(file, 3U) &&
+        test_write_u32(file, 1U) && test_write_u32(file, 3U) &&
+        test_write_u32(file, 3U) && test_write_u32(file, 3U) && test_write_u32(file, 1U);
+    for (index = 0U; ok && index < 3U; ++index)
+    {
+        ok = fputc(1, file) != EOF && test_write_vec3(file, positions[index]) &&
+            test_write_vec2(file, uvs[index]) && test_write_u32(file, 0U);
+    }
+    for (index = 0U; ok && index < 3U; ++index)
+    {
+        ok = fputc(1, file) != EOF && test_write_u32(file, edge_vertices[index][0]) &&
+            test_write_u32(file, edge_vertices[index][1]) && test_write_u32(file, 1U) &&
+            test_write_u32(file, invalid_id) && test_write_u32(file, 1U) &&
+            fputc(0, file) != EOF;
+    }
+    if (ok)
+    {
+        ok = fputc(1, file) != EOF && test_write_u32(file, 3U) && test_write_u32(file, 0U) &&
+            fputc(0, file) != EOF;
+        for (index = 0U; ok && index < 3U; ++index)
+        {
+            ok = test_write_u32(file, (uint32_t)(index + 1U));
+        }
+        for (index = 0U; ok && index < 3U; ++index)
+        {
+            ok = test_write_vec2(file, uvs[index]);
+        }
+        for (index = 0U; ok && index < 3U; ++index)
+        {
+            ok = test_write_u32(file, face_edges[index]);
+        }
+    }
+    if (fclose(file) != 0) ok = 0;
+    return ok;
+}
+
+static int test_append_byte(const char* path, unsigned char value)
+{
+    FILE* file = test_open_file(path, "ab");
+    const int ok = file != NULL && fputc(value, file) != EOF;
+    if (file != NULL && fclose(file) != 0) return 0;
+    return ok;
 }
 
 static int test_topology_and_evaluation(void)
@@ -213,7 +305,7 @@ static int test_history_and_persistence(void)
         goto cleanup;
     }
     saved = NULL;
-    if (memcmp(header, "HAMS\x03\0\0\0", sizeof(header)) != 0)
+    if (memcmp(header, "HAMS\x04\0\0\0", sizeof(header)) != 0)
     {
         goto cleanup;
     }
@@ -1005,6 +1097,113 @@ cleanup:
     return result ? 1 : fail("logical identity reuse/history/churn");
 }
 
+static int test_persistence_versions_and_malformed(void)
+{
+    const char* path = "build/test_tmp/authoring_nested/authoring_mesh_versions.bin";
+    const henka_authoring_mesh_desc desc = {3U, 3U, 1U, 3U};
+    henka_authoring_mesh* mesh = NULL;
+    henka_authoring_mesh* source = NULL;
+    henka_authoring_vertex_id current_id = HENKA_AUTHORING_INVALID_ID;
+    henka_authoring_vertex_id source_id;
+    const henka_authoring_vertex* vertex;
+    FILE* file;
+    int result = 0;
+
+    if (henka_authoring_mesh_create(&desc, &mesh) != HENKA_SUCCESS ||
+        henka_authoring_mesh_add_vertex(
+            mesh,
+            (henka_vec3){9.0f, 0.0f, 0.0f},
+            (henka_vec2){0.0f, 0.0f},
+            0U,
+            &current_id) != HENKA_SUCCESS ||
+        henka_authoring_mesh_create(&desc, &source) != HENKA_SUCCESS ||
+        henka_authoring_mesh_add_vertex(
+            source,
+            (henka_vec3){1.0f, 0.0f, 0.0f},
+            (henka_vec2){0.0f, 0.0f},
+            0U,
+            &source_id) != HENKA_SUCCESS ||
+        henka_authoring_mesh_add_vertex(
+            source,
+            (henka_vec3){2.0f, 0.0f, 0.0f},
+            (henka_vec2){1.0f, 0.0f},
+            0U,
+            &source_id) != HENKA_SUCCESS ||
+        henka_authoring_mesh_save_file(source, path) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    henka_authoring_mesh_destroy(source);
+    source = NULL;
+
+    file = test_open_file(path, "rb+");
+    if (file == NULL)
+    {
+        goto cleanup;
+    }
+    if (fseek(file, 76L, SEEK_SET) != 0 || !test_write_u32(file, 1U))
+    {
+        fclose(file);
+        goto cleanup;
+    }
+    if (fclose(file) != 0)
+    {
+        goto cleanup;
+    }
+    {
+        const henka_result duplicate_result = henka_authoring_mesh_load_file(mesh, path);
+        vertex = henka_authoring_mesh_get_vertex(mesh, current_id);
+        if (duplicate_result == HENKA_SUCCESS || henka_authoring_mesh_get_counts(mesh).vertices != 1U ||
+            vertex == NULL || fabsf(vertex->position.x - 9.0f) > 0.0001f)
+        {
+            goto cleanup;
+        }
+    }
+
+    if (!test_write_legacy_fixture(path, 2U))
+    {
+        goto cleanup;
+    }
+    if (henka_authoring_mesh_load_file(mesh, path) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    if (!henka_authoring_mesh_validate(mesh) ||
+        henka_authoring_mesh_get_counts(mesh).vertices != 3U ||
+        henka_authoring_mesh_get_counts(mesh).edges != 3U ||
+        henka_authoring_mesh_get_counts(mesh).faces != 1U ||
+        henka_authoring_mesh_get_vertex(mesh, 3U) == NULL)
+    {
+        goto cleanup;
+    }
+    if (!test_write_legacy_fixture(path, 3U))
+    {
+        goto cleanup;
+    }
+    if (henka_authoring_mesh_load_file(mesh, path) != HENKA_SUCCESS ||
+        !henka_authoring_mesh_validate(mesh))
+    {
+        goto cleanup;
+    }
+
+    if (henka_authoring_mesh_save_file(mesh, path) != HENKA_SUCCESS ||
+        !test_append_byte(path, 0xa5U) ||
+        henka_authoring_mesh_set_vertex_position(mesh, 1U, (henka_vec3){8.0f, 0.0f, 0.0f}) != HENKA_SUCCESS ||
+        henka_authoring_mesh_load_file(mesh, path) == HENKA_SUCCESS ||
+        (vertex = henka_authoring_mesh_get_vertex(mesh, 1U)) == NULL ||
+        fabsf(vertex->position.x - 8.0f) > 0.0001f)
+    {
+        goto cleanup;
+    }
+    result = 1;
+
+cleanup:
+    remove(path);
+    henka_authoring_mesh_destroy(source);
+    henka_authoring_mesh_destroy(mesh);
+    return result ? 1 : fail("persistence versions/malformed transaction");
+}
+
 int main(void)
 {
     return test_topology_and_evaluation() && test_rejection_and_tombstones() &&
@@ -1012,5 +1211,6 @@ int main(void)
         test_vertex_topology_operations() && test_vertex_bevel_operations() && test_uv_authoring() &&
         test_modeling_material_region_and_uv_continuity() &&
         test_bounded_primitive_constructors() &&
-        test_logical_identity_reuse_and_history() ? 0 : 1;
+        test_logical_identity_reuse_and_history() &&
+        test_persistence_versions_and_malformed() ? 0 : 1;
 }

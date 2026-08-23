@@ -151,7 +151,7 @@ static bool henka_test_edge_set_matches(
     size_t expected_count)
 {
     henka_authoring_mesh_desc desc;
-    size_t edge_id;
+    size_t physical_slot;
     size_t expected_index;
     uint32_t previous_id = 0U;
 
@@ -173,21 +173,22 @@ static bool henka_test_edge_set_matches(
         }
         previous_id = selected_id;
     }
-    for (edge_id = 1U; edge_id <= desc.max_edges; ++edge_id)
+    for (physical_slot = 0U; physical_slot < desc.max_edges; ++physical_slot)
     {
-        if (henka_authoring_mesh_get_edge(mesh, (henka_authoring_edge_id)edge_id) != NULL)
+        henka_authoring_edge_id edge_id = HENKA_AUTHORING_INVALID_ID;
+        if (henka_authoring_mesh_get_edge_id_at(mesh, physical_slot, &edge_id) == HENKA_SUCCESS)
         {
             bool expected = false;
             for (expected_index = 0U; expected_index < expected_count; ++expected_index)
             {
-                if (expected_edges[expected_index] == (henka_authoring_edge_id)edge_id)
+                if (expected_edges[expected_index] == edge_id)
                 {
                     expected = true;
                     break;
                 }
             }
             if (henka_test_selected_edge_contains(
-                    object, (henka_authoring_edge_id)edge_id) != expected)
+                    object, edge_id) != expected)
             {
                 return false;
             }
@@ -755,18 +756,26 @@ static void henka_test_sandbox3d_object_authoring_model_primitive_bridge(void)
                 sandbox3d_authoring_object_get_mesh(object);
             const henka_authoring_mesh_counts profiled_counts =
                 henka_authoring_mesh_get_counts(profiled_mesh);
+            const henka_authoring_mesh_desc profiled_desc =
+                henka_authoring_mesh_get_desc(profiled_mesh);
             size_t active_vertices = 0U;
             size_t active_edges = 0U;
             size_t active_faces = 0U;
-            uint32_t id;
+            size_t physical_slot;
             float minimum_x = 1000000.0f;
             float maximum_x = -1000000.0f;
             float minimum_y = 1000000.0f;
             float maximum_y = -1000000.0f;
-            for (id = 1U; id <= HENKA_AUTHORING_MESH_HARD_MAX_VERTICES; ++id)
+            for (physical_slot = 0U; physical_slot < profiled_desc.max_vertices; ++physical_slot)
             {
-                const henka_authoring_vertex* vertex =
-                    henka_authoring_mesh_get_vertex(profiled_mesh, id);
+                henka_authoring_vertex_id vertex_id = HENKA_AUTHORING_INVALID_ID;
+                const henka_authoring_vertex* vertex;
+                if (henka_authoring_mesh_get_vertex_id_at(
+                        profiled_mesh, physical_slot, &vertex_id) != HENKA_SUCCESS)
+                {
+                    continue;
+                }
+                vertex = henka_authoring_mesh_get_vertex(profiled_mesh, vertex_id);
                 if (vertex == NULL) continue;
                 ++active_vertices;
                 if (vertex->position.x < minimum_x) minimum_x = vertex->position.x;
@@ -774,26 +783,38 @@ static void henka_test_sandbox3d_object_authoring_model_primitive_bridge(void)
                 if (vertex->position.y < minimum_y) minimum_y = vertex->position.y;
                 if (vertex->position.y > maximum_y) maximum_y = vertex->position.y;
             }
-            for (id = 1U; id <= HENKA_AUTHORING_MESH_HARD_MAX_EDGES; ++id)
+            for (physical_slot = 0U; physical_slot < profiled_desc.max_edges; ++physical_slot)
             {
-                const henka_authoring_edge* edge =
-                    henka_authoring_mesh_get_edge(profiled_mesh, id);
+                henka_authoring_edge_id edge_id = HENKA_AUTHORING_INVALID_ID;
+                const henka_authoring_edge* edge;
                 size_t face_index;
+                if (henka_authoring_mesh_get_edge_id_at(
+                        profiled_mesh, physical_slot, &edge_id) != HENKA_SUCCESS)
+                {
+                    continue;
+                }
+                edge = henka_authoring_mesh_get_edge(profiled_mesh, edge_id);
                 if (edge == NULL) continue;
                 ++active_edges;
-                HENKA_TEST_ASSERT(henka_authoring_mesh_get_edge_face_count(profiled_mesh, id) >= 1U);
-                HENKA_TEST_ASSERT(henka_authoring_mesh_get_edge_face_count(profiled_mesh, id) <= 2U);
+                HENKA_TEST_ASSERT(henka_authoring_mesh_get_edge_face_count(profiled_mesh, edge_id) >= 1U);
+                HENKA_TEST_ASSERT(henka_authoring_mesh_get_edge_face_count(profiled_mesh, edge_id) <= 2U);
                 for (face_index = 0U; face_index < edge->face_count; ++face_index)
                 {
                     henka_authoring_face_id face_id = HENKA_AUTHORING_INVALID_ID;
                     HENKA_TEST_ASSERT(henka_authoring_mesh_get_edge_face_at(
-                        profiled_mesh, id, face_index, &face_id) == HENKA_SUCCESS);
+                        profiled_mesh, edge_id, face_index, &face_id) == HENKA_SUCCESS);
                     HENKA_TEST_ASSERT(henka_authoring_mesh_get_face(profiled_mesh, face_id) != NULL);
                 }
             }
-            for (id = 1U; id <= HENKA_AUTHORING_MESH_HARD_MAX_FACES; ++id)
+            for (physical_slot = 0U; physical_slot < profiled_desc.max_faces; ++physical_slot)
             {
-                if (henka_authoring_mesh_get_face(profiled_mesh, id) != NULL) ++active_faces;
+                henka_authoring_face_id face_id = HENKA_AUTHORING_INVALID_ID;
+                if (henka_authoring_mesh_get_face_id_at(
+                        profiled_mesh, physical_slot, &face_id) == HENKA_SUCCESS &&
+                    henka_authoring_mesh_get_face(profiled_mesh, face_id) != NULL)
+                {
+                    ++active_faces;
+                }
             }
             HENKA_TEST_ASSERT(active_vertices == profiled_counts.vertices);
             HENKA_TEST_ASSERT(active_edges == profiled_counts.edges);

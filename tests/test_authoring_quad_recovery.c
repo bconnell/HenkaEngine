@@ -132,11 +132,12 @@ static void test_recovers_square_quad(void)
     henka_authoring_mesh* mesh = NULL;
     henka_authoring_mesh_counts counts;
     size_t merged = 0U;
-    uint32_t face_id;
     const henka_authoring_face* recovered = NULL;
     henka_authoring_render_vertex render_vertices[8];
     uint32_t render_indices[12];
     henka_authoring_render_data render_data;
+    henka_authoring_mesh_desc desc;
+    size_t physical_slot;
 
     HENKA_TEST_ASSERT(make_two_triangle_quad(false, &mesh) == HENKA_SUCCESS);
 
@@ -154,13 +155,13 @@ static void test_recovers_square_quad(void)
     HENKA_TEST_ASSERT(counts.faces == 1U);
     HENKA_TEST_ASSERT(counts.edges == 4U);
 
-    for (face_id = 1U;
-         face_id <= HENKA_AUTHORING_MESH_HARD_MAX_FACES;
-         ++face_id)
+    desc = henka_authoring_mesh_get_desc(mesh);
+    for (physical_slot = 0U; physical_slot < desc.max_faces; ++physical_slot)
     {
-        recovered = henka_authoring_mesh_get_face(mesh, face_id);
-        if (recovered != NULL)
+        henka_authoring_face_id face_id = HENKA_AUTHORING_INVALID_ID;
+        if (henka_authoring_mesh_get_face_id_at(mesh, physical_slot, &face_id) == HENKA_SUCCESS)
         {
+            recovered = henka_authoring_mesh_get_face(mesh, face_id);
             break;
         }
     }
@@ -219,7 +220,8 @@ static int run_probe(const char* path)
     size_t quads_before = 0U;
     size_t triangles_after = 0U;
     size_t quads_after = 0U;
-    uint32_t face_id;
+    henka_authoring_mesh_desc desc;
+    size_t physical_slot;
 
     if (henka_authoring_mesh_load_file_new(
             path,
@@ -230,13 +232,18 @@ static int run_probe(const char* path)
     }
 
     before = henka_authoring_mesh_get_counts(mesh);
+    desc = henka_authoring_mesh_get_desc(mesh);
 
-    for (face_id = 1U;
-         face_id <= HENKA_AUTHORING_MESH_HARD_MAX_FACES;
-         ++face_id)
+    for (physical_slot = 0U; physical_slot < desc.max_faces; ++physical_slot)
     {
-        const henka_authoring_face* face =
-            henka_authoring_mesh_get_face(mesh, face_id);
+        henka_authoring_face_id face_id = HENKA_AUTHORING_INVALID_ID;
+        const henka_authoring_face* face;
+
+        if (henka_authoring_mesh_get_face_id_at(mesh, physical_slot, &face_id) != HENKA_SUCCESS)
+        {
+            continue;
+        }
+        face = henka_authoring_mesh_get_face(mesh, face_id);
 
         if (face == NULL)
         {
@@ -261,12 +268,16 @@ static int run_probe(const char* path)
 
     after = henka_authoring_mesh_get_counts(mesh);
 
-    for (face_id = 1U;
-         face_id <= HENKA_AUTHORING_MESH_HARD_MAX_FACES;
-         ++face_id)
+    for (physical_slot = 0U; physical_slot < desc.max_faces; ++physical_slot)
     {
-        const henka_authoring_face* face =
-            henka_authoring_mesh_get_face(mesh, face_id);
+        henka_authoring_face_id face_id = HENKA_AUTHORING_INVALID_ID;
+        const henka_authoring_face* face;
+
+        if (henka_authoring_mesh_get_face_id_at(mesh, physical_slot, &face_id) != HENKA_SUCCESS)
+        {
+            continue;
+        }
+        face = henka_authoring_mesh_get_face(mesh, face_id);
 
         if (face == NULL)
         {

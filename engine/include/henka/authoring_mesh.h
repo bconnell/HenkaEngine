@@ -8,8 +8,9 @@
 #include <henka/math.h>
 #include <henka/result.h>
 
-/* Bounded polygonal authoring data. IDs are slot identities and are never
- * reused during the lifetime of a mesh; deleted elements remain tombstoned. */
+/* Bounded polygonal authoring data. Logical IDs are opaque, monotonic handles
+ * for the mesh lifetime; physical vertex, edge, and face storage is bounded
+ * and reusable after deletion. */
 #define HENKA_AUTHORING_MESH_DEFAULT_MAX_VERTICES 4096U
 #define HENKA_AUTHORING_MESH_DEFAULT_MAX_EDGES 8192U
 #define HENKA_AUTHORING_MESH_DEFAULT_MAX_FACES 2048U
@@ -99,8 +100,23 @@ void henka_authoring_mesh_destroy(henka_authoring_mesh* mesh);
 henka_result henka_authoring_mesh_clone(const henka_authoring_mesh* source, henka_authoring_mesh** out_mesh);
 henka_result henka_authoring_mesh_copy(henka_authoring_mesh* destination, const henka_authoring_mesh* source);
 henka_authoring_mesh_counts henka_authoring_mesh_get_counts(const henka_authoring_mesh* mesh);
-/* Returns the bounded slot capacities that govern stable authoring IDs. */
+/* Returns the bounded physical capacities for the authoring storage. */
 henka_authoring_mesh_desc henka_authoring_mesh_get_desc(const henka_authoring_mesh* mesh);
+/* Enumerates active logical IDs in deterministic physical-slot order. The
+ * ordinal is a storage position, not the logical ID and is never used for
+ * identity resolution. */
+henka_result henka_authoring_mesh_get_vertex_id_at(
+    const henka_authoring_mesh* mesh,
+    size_t physical_slot,
+    henka_authoring_vertex_id* out_id);
+henka_result henka_authoring_mesh_get_edge_id_at(
+    const henka_authoring_mesh* mesh,
+    size_t physical_slot,
+    henka_authoring_edge_id* out_id);
+henka_result henka_authoring_mesh_get_face_id_at(
+    const henka_authoring_mesh* mesh,
+    size_t physical_slot,
+    henka_authoring_face_id* out_id);
 bool henka_authoring_mesh_validate(const henka_authoring_mesh* mesh);
 /* Returns bounds from active source vertices. */
 henka_result henka_authoring_mesh_get_bounds(

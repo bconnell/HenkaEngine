@@ -1236,7 +1236,7 @@ henka_result henka_mesh_create_from_authoring_mesh(
     henka_model_data model;
     size_t vertex_count = 0U;
     size_t index_count = 0U;
-    size_t face_id;
+    size_t face_slot;
     size_t vertex_index;
     size_t index;
     henka_result result;
@@ -1250,12 +1250,14 @@ henka_result henka_mesh_create_from_authoring_mesh(
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
 
-    /* Authoring IDs are bounded slots, not a packed range. Scan the public
-     * hard limit so tombstones remain safe and source identity is preserved. */
-    for (face_id = 1U; face_id <= HENKA_AUTHORING_MESH_HARD_MAX_FACES; ++face_id)
+    /* Enumerate active faces by deterministic physical storage order; logical
+     * IDs are opaque handles and are not array indices. */
+    for (face_slot = 0U; face_slot < henka_authoring_mesh_get_desc(source).max_faces; ++face_slot)
     {
-        const henka_authoring_face* face = henka_authoring_mesh_get_face(
-            source, (henka_authoring_face_id)face_id);
+        henka_authoring_face_id face_id;
+        const henka_authoring_face* face = henka_authoring_mesh_get_face_id_at(source, face_slot, &face_id) == HENKA_SUCCESS
+            ? henka_authoring_mesh_get_face(source, face_id)
+            : NULL;
         size_t face_indices;
 
         if (face == NULL)
