@@ -149,8 +149,9 @@ closed. Delete removes selected vertices and their incident faces, then
 removes only newly orphaned vertices in the affected neighborhood. Connect
 splits one face between two non-adjacent corners while preserving the original
 face ID and allocating the new face with a fresh logical ID in a reusable
-physical slot. Edge topology editing beyond bounded selection and component
-transforms remain incomplete; and
+physical slot. Transactional single-edge dissolve is available for compatible
+interior edges; Edge Delete and broader edge topology editing beyond bounded
+selection and component transforms remain incomplete; and
 Vertex Bevel is also available as one atomic multi-selection operation. It
 uses a deterministic edge/end-point cut table, rejects non-finite, zero,
 overlapping, non-manifold, and capacity-invalid requests, preserves

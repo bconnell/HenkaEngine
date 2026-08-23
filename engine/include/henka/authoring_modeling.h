@@ -131,6 +131,14 @@ henka_result henka_authoring_mesh_connect_vertices(
     henka_authoring_face_id* out_new_face_id,
     henka_authoring_modeling_report* out_report);
 
+/* Dissolves one compatible interior edge into its two adjacent face loops.
+ * Boundary, hard, UV-seamed, material-discontinuous, and capacity-invalid
+ * requests are rejected without changing the source mesh. */
+henka_result henka_authoring_mesh_dissolve_edge(
+    henka_authoring_mesh* mesh,
+    henka_authoring_edge_id edge_id,
+    henka_authoring_modeling_report* out_report);
+
 henka_result henka_authoring_mesh_bevel_vertices(
     henka_authoring_mesh* mesh,
     const henka_authoring_vertex_id* vertex_ids,

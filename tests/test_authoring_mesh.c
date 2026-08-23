@@ -974,6 +974,114 @@ cleanup:
     return result ? 1 : fail("bounded primitive constructors");
 }
 
+static int test_edge_dissolve_operation(void)
+{
+    const henka_authoring_mesh_desc desc = {128U, 256U, 128U, 8U};
+    henka_authoring_mesh* mesh = NULL;
+    henka_authoring_edge_id selected_edge = HENKA_AUTHORING_INVALID_ID;
+    henka_authoring_modeling_report report = {0};
+    size_t slot;
+    bool dissolved = false;
+    int result = 0;
+
+    if (henka_authoring_mesh_create_quad_sphere(&desc, 1.0f, 2U, &mesh) != HENKA_SUCCESS ||
+        !henka_authoring_mesh_validate(mesh))
+    {
+        goto cleanup;
+    }
+    for (slot = 0U; slot < desc.max_edges; ++slot)
+    {
+        henka_authoring_edge_id edge_id;
+        const henka_authoring_edge* edge;
+        henka_authoring_mesh_counts before;
+        henka_authoring_mesh_counts after;
+        henka_result dissolve_result;
+        if (henka_authoring_mesh_get_edge_id_at(mesh, slot, &edge_id) != HENKA_SUCCESS)
+        {
+            continue;
+        }
+        edge = henka_authoring_mesh_get_edge(mesh, edge_id);
+        if (edge == NULL || edge->face_count != 2U || edge->hard)
+        {
+            continue;
+        }
+        before = henka_authoring_mesh_get_counts(mesh);
+        dissolve_result = henka_authoring_mesh_dissolve_edge(mesh, edge_id, &report);
+        after = henka_authoring_mesh_get_counts(mesh);
+        if (dissolve_result == HENKA_SUCCESS)
+        {
+            const henka_authoring_face* merged_face =
+                henka_authoring_mesh_get_face(mesh, report.primary_face_id);
+            if (merged_face == NULL || merged_face->corner_count != 6U ||
+                henka_authoring_mesh_get_edge(mesh, edge_id) != NULL ||
+                !report.changed || report.removed_edges != 1U ||
+                report.removed_faces != 1U || after.vertices != before.vertices ||
+                after.edges + 1U != before.edges || after.faces + 1U != before.faces ||
+                !henka_authoring_mesh_validate(mesh))
+            {
+                goto cleanup;
+            }
+            selected_edge = edge_id;
+            dissolved = true;
+            break;
+        }
+        if (dissolve_result != HENKA_ERROR_INVALID_ARGUMENT || report.changed ||
+            after.vertices != before.vertices || after.edges != before.edges ||
+            after.faces != before.faces || !henka_authoring_mesh_validate(mesh))
+        {
+            goto cleanup;
+        }
+    }
+    if (!dissolved || selected_edge == HENKA_AUTHORING_INVALID_ID)
+    {
+        goto cleanup;
+    }
+    henka_authoring_mesh_destroy(mesh);
+    mesh = NULL;
+
+    if (henka_authoring_mesh_create_quad_sphere(&desc, 1.0f, 2U, &mesh) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    for (slot = 0U; slot < desc.max_edges; ++slot)
+    {
+        henka_authoring_edge_id edge_id;
+        const henka_authoring_edge* edge;
+        henka_authoring_mesh_counts before;
+        henka_authoring_mesh_counts after;
+        if (henka_authoring_mesh_get_edge_id_at(mesh, slot, &edge_id) != HENKA_SUCCESS)
+        {
+            continue;
+        }
+        edge = henka_authoring_mesh_get_edge(mesh, edge_id);
+        if (edge == NULL || edge->face_count != 2U)
+        {
+            continue;
+        }
+        if (henka_authoring_mesh_set_edge_hard(mesh, edge_id, true) != HENKA_SUCCESS)
+        {
+            goto cleanup;
+        }
+        before = henka_authoring_mesh_get_counts(mesh);
+        if (henka_authoring_mesh_dissolve_edge(mesh, edge_id, &report) != HENKA_ERROR_INVALID_ARGUMENT)
+        {
+            goto cleanup;
+        }
+        after = henka_authoring_mesh_get_counts(mesh);
+        if (report.changed || after.vertices != before.vertices || after.edges != before.edges ||
+            after.faces != before.faces || !henka_authoring_mesh_validate(mesh))
+        {
+            goto cleanup;
+        }
+        result = 1;
+        break;
+    }
+
+cleanup:
+    henka_authoring_mesh_destroy(mesh);
+    return result ? 1 : fail("transactional edge dissolve");
+}
+
 static int test_logical_identity_reuse_and_history(void)
 {
     henka_authoring_mesh* mesh = NULL;
@@ -1316,6 +1424,7 @@ int main(void)
         test_vertex_topology_operations() && test_vertex_bevel_operations() && test_uv_authoring() &&
         test_modeling_material_region_and_uv_continuity() &&
         test_bounded_primitive_constructors() &&
+        test_edge_dissolve_operation() &&
         test_logical_identity_reuse_and_history() &&
         test_persistence_versions_and_malformed() ? 0 : 1;
 }

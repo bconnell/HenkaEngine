@@ -23807,6 +23807,30 @@ details_group_authoring:
                             state->native_authoring_edge_loop_reported_y = edge_topology_row.y;
                         }
                         native_edge_loop_control_drawn = true;
+                        if (sandbox3d_authoring_object_get_selected_component_count(
+                                state->authoring_object) == 1U &&
+                            henka_ui_button(
+                                state->ui,
+                                "authoring_edge_dissolve_priority",
+                                (henka_ui_rect){edge_topology_row.x, edge_topology_row.y, 88.0f, 24.0f},
+                                "Dissolve Edge"))
+                        {
+                            const henka_result dissolve_result =
+                                sandbox3d_authoring_object_dissolve_selected_edge(
+                                    state->authoring_object);
+                            if (dissolve_result == HENKA_SUCCESS)
+                            {
+                                sandbox3d_mark_generic_modeling_applied(state, entity);
+                                sandbox3d_set_status(state, false, "Selected edge dissolved into one face.");
+                            }
+                            else
+                            {
+                                sandbox3d_set_status(
+                                    state,
+                                    true,
+                                    "Edge dissolve rejected; select one compatible interior edge.");
+                            }
+                        }
                         if (henka_ui_button(
                                 state->ui,
                                 "authoring_edge_loop_priority",
@@ -24593,6 +24617,30 @@ details_group_authoring:
                             false,
                             "Edge ring failed (%s); prior selection retained.",
                             henka_result_to_string(ring_result));
+                    }
+                }
+                if (sandbox3d_authoring_object_get_selected_component_count(
+                        state->authoring_object) == 1U &&
+                    henka_ui_button(
+                        state->ui,
+                        "authoring_edge_dissolve_top",
+                        (henka_ui_rect){row.x + 192.0f, row.y, 96.0f, 24.0f},
+                        "Dissolve Edge"))
+                {
+                    const henka_result dissolve_result =
+                        sandbox3d_authoring_object_dissolve_selected_edge(
+                            state->authoring_object);
+                    if (dissolve_result == HENKA_SUCCESS)
+                    {
+                        sandbox3d_mark_generic_modeling_applied(state, entity);
+                        sandbox3d_set_status(state, false, "Selected edge dissolved into one face.");
+                    }
+                    else
+                    {
+                        sandbox3d_set_status(
+                            state,
+                            true,
+                            "Edge dissolve rejected; select one compatible interior edge.");
                     }
                 }
             }
@@ -25672,6 +25720,30 @@ details_group_authoring:
                     state->native_authoring_edge_loop_reported_y = row.y;
                 }
                 native_edge_loop_control_drawn = true;
+                if (sandbox3d_authoring_object_get_selected_component_count(
+                        state->authoring_object) == 1U &&
+                    henka_ui_button(
+                        state->ui,
+                        "authoring_edge_dissolve",
+                        (henka_ui_rect){row.x + 192.0f, row.y, 96.0f, 24.0f},
+                        "Dissolve Edge"))
+                {
+                    const henka_result dissolve_result =
+                        sandbox3d_authoring_object_dissolve_selected_edge(
+                            state->authoring_object);
+                    if (dissolve_result == HENKA_SUCCESS)
+                    {
+                        sandbox3d_mark_generic_modeling_applied(state, entity);
+                        sandbox3d_set_status(state, false, "Selected edge dissolved into one face.");
+                    }
+                    else
+                    {
+                        sandbox3d_set_status(
+                            state,
+                            true,
+                            "Edge dissolve rejected; select one compatible interior edge.");
+                    }
+                }
                 if (henka_ui_button(
                         state->ui,
                         "authoring_edge_loop",
