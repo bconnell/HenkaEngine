@@ -43,6 +43,11 @@ typedef struct henka_script_state_value
 
 henka_result henka_script_state_store_create(
     henka_script_state_store** out_store);
+/* Creates an independent bounded copy. The source remains unchanged and the
+ * returned store has no shared ownership with it. */
+henka_result henka_script_state_store_clone(
+    const henka_script_state_store* source,
+    henka_script_state_store** out_store);
 void henka_script_state_store_destroy(
     henka_script_state_store* store);
 void henka_script_state_store_clear(

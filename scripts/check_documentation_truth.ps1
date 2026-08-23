@@ -29,6 +29,9 @@ $scripting = Get-RepositoryText "docs/scripting-foundation.md"
 $externalProjects = Get-RepositoryText "docs/external-game-projects.md"
 $externalTemplate = Get-RepositoryText "templates/external_game_minimal/src/main.c"
 $sandboxMain = Get-RepositoryText "examples/sandbox3d/main.c"
+$sandboxHelp = Get-RepositoryText "docs/help/sandbox3d.md"
+$sandboxQa = Get-RepositoryText "docs/qa/sandbox3d-manual-checklist.md"
+$showcaseAssets = Get-RepositoryText "docs/showcase-assets.md"
 
 foreach ($stalePattern in @(
     "(?i)modeling follows the production-quality 2\.5D track",
@@ -100,6 +103,16 @@ if ($externalProjects -notmatch '(?i)package-owned `\.hks` and `\.lua` assets' -
 
 if ($sandboxMain -match '"Hidden:"') {
     Add-Finding "examples/sandbox3d/main.c: hidden-object rows must use the explicit Visibility: Hidden label"
+}
+
+foreach ($document in @(
+    [pscustomobject]@{ Path = "docs/help/sandbox3d.md"; Text = $sandboxHelp },
+    [pscustomobject]@{ Path = "docs/qa/sandbox3d-manual-checklist.md"; Text = $sandboxQa },
+    [pscustomobject]@{ Path = "docs/showcase-assets.md"; Text = $showcaseAssets }
+)) {
+    if ($document.Text -match '(?i)Create Native Rocket') {
+        Add-Finding "$($document.Path): removed asset-specific Create Native Rocket action is still documented"
+    }
 }
 
 $trackedMarkdown = @(& (Get-HenkaGitPath) -C $repoRoot ls-files --cached --others --exclude-standard "*.md")

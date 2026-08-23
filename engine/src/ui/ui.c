@@ -91,6 +91,42 @@ static bool henka_ui_active_id_equals(const henka_ui_context* context, const cha
     return strcmp(context->active_id, id) == 0;
 }
 
+static void henka_ui_clear_focused_text_id(henka_ui_context* context)
+{
+    if (context == NULL)
+    {
+        return;
+    }
+    context->focused_text_id_set = false;
+    context->focused_text_id[0] = '\0';
+}
+
+static bool henka_ui_set_focused_text_id(henka_ui_context* context, const char* id)
+{
+    size_t length;
+
+    if (context == NULL ||
+        !henka_checked_c_string_length(id, HENKA_UI_MAX_ID_BYTES, &length))
+    {
+        return false;
+    }
+    memcpy(context->focused_text_id, id, length + 1U);
+    context->focused_text_id_set = true;
+    return true;
+}
+
+static bool henka_ui_focused_text_id_equals(const henka_ui_context* context, const char* id)
+{
+    size_t length;
+
+    if (context == NULL || !context->focused_text_id_set ||
+        !henka_checked_c_string_length(id, HENKA_UI_MAX_ID_BYTES, &length))
+    {
+        return false;
+    }
+    return strcmp(context->focused_text_id, id) == 0;
+}
+
 static bool henka_ui_register_disclosure_id(
     henka_ui_context* context,
     const char* id)
@@ -539,6 +575,7 @@ typedef struct henka_ui_draw_checkpoint
 {
     size_t draw_rect_count;
     size_t draw_line_count;
+    size_t draw_triangle_count;
     size_t disclosure_id_count;
     bool wants_mouse;
     bool active_id_set;
@@ -556,6 +593,7 @@ static void henka_ui_capture_checkpoint(
 
     checkpoint->draw_rect_count = context->draw_rect_count;
     checkpoint->draw_line_count = context->draw_line_count;
+    checkpoint->draw_triangle_count = context->draw_triangle_count;
     checkpoint->disclosure_id_count = context->disclosure_id_count;
     checkpoint->wants_mouse = context->wants_mouse;
     checkpoint->active_id_set = context->active_id_set;
@@ -573,6 +611,7 @@ static void henka_ui_restore_checkpoint(
 
     context->draw_rect_count = checkpoint->draw_rect_count;
     context->draw_line_count = checkpoint->draw_line_count;
+    context->draw_triangle_count = checkpoint->draw_triangle_count;
     context->disclosure_id_count = checkpoint->disclosure_id_count;
     context->wants_mouse = checkpoint->wants_mouse;
     context->active_id_set = checkpoint->active_id_set;
@@ -687,6 +726,50 @@ static henka_result henka_ui_ensure_line_capacity(henka_ui_context* context, siz
     return HENKA_SUCCESS;
 }
 
+static henka_result henka_ui_ensure_triangle_capacity(
+    henka_ui_context* context,
+    size_t additional_triangles)
+{
+    size_t allocation_size;
+    size_t minimum_capacity;
+    size_t new_capacity;
+    henka_ui_draw_triangle* triangles;
+
+    if (context == NULL ||
+        !henka_checked_size_add(
+            context->draw_triangle_count,
+            additional_triangles,
+            &minimum_capacity) ||
+        !henka_checked_capacity(
+            context->draw_triangle_capacity,
+            minimum_capacity,
+            128U,
+            HENKA_UI_MAX_DRAW_ITEMS,
+            &new_capacity) ||
+        !henka_checked_size_multiply(
+            new_capacity,
+            sizeof(*triangles),
+            &allocation_size))
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    if (new_capacity == context->draw_triangle_capacity)
+    {
+        return HENKA_SUCCESS;
+    }
+
+    triangles = henka_realloc(context->draw_triangles, allocation_size);
+    if (triangles == NULL)
+    {
+        return HENKA_ERROR_OUT_OF_MEMORY;
+    }
+
+    context->draw_triangles = triangles;
+    context->draw_triangle_capacity = new_capacity;
+    return HENKA_SUCCESS;
+}
+
 static henka_result henka_ui_push_rect(henka_ui_context* context, henka_ui_rect bounds, henka_vec4 color)
 {
     henka_result result;
@@ -750,6 +833,50 @@ static henka_result henka_ui_push_line(
     context->draw_lines[context->draw_line_count].thickness = thickness;
     context->draw_lines[context->draw_line_count].color = color;
     context->draw_line_count += 1U;
+    return HENKA_SUCCESS;
+}
+
+static henka_result henka_ui_push_triangle(
+    henka_ui_context* context,
+    henka_vec2 first,
+    henka_vec2 second,
+    henka_vec2 third,
+    henka_vec4 color)
+{
+    const float area =
+        (second.x - first.x) * (third.y - first.y) -
+        (second.y - first.y) * (third.x - first.x);
+    henka_result result;
+
+    if (context == NULL ||
+        !henka_ui_vec2_is_finite(first) ||
+        !henka_ui_vec2_is_finite(second) ||
+        !henka_ui_vec2_is_finite(third) ||
+        !henka_ui_vec4_is_finite(color) ||
+        !henka_ui_float_is_finite(area))
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    /* Degenerate projected faces are valid topology but have no visible
+     * surface in this 2D overlay. Treat them as a no-op rather than allowing
+     * malformed geometry to enter the renderer draw list. */
+    if (fabsf(area) <= 0.0001f)
+    {
+        return HENKA_SUCCESS;
+    }
+
+    result = henka_ui_ensure_triangle_capacity(context, 1U);
+    if (result != HENKA_SUCCESS)
+    {
+        return result;
+    }
+
+    context->draw_triangles[context->draw_triangle_count].points[0] = first;
+    context->draw_triangles[context->draw_triangle_count].points[1] = second;
+    context->draw_triangles[context->draw_triangle_count].points[2] = third;
+    context->draw_triangles[context->draw_triangle_count].color = color;
+    context->draw_triangle_count += 1U;
     return HENKA_SUCCESS;
 }
 
@@ -1119,6 +1246,7 @@ void henka_ui_destroy(henka_ui_context* context)
 
     henka_free(context->draw_rects);
     henka_free(context->draw_lines);
+    henka_free(context->draw_triangles);
     henka_free(context);
 }
 
@@ -1172,10 +1300,12 @@ henka_result henka_ui_begin_frame(
     context->mouse_left_down = frame_desc->mouse_left_down;
     context->mouse_left_pressed = frame_desc->mouse_left_pressed;
     context->mouse_left_released = frame_desc->mouse_left_released;
+    context->text_backspace_pressed = frame_desc->text_backspace_pressed;
     context->text_input = frame_desc->text_input;
     context->text_input_size = frame_desc->text_input_size;
     context->draw_rect_count = 0U;
     context->draw_line_count = 0U;
+    context->draw_triangle_count = 0U;
     context->disclosure_id_count = 0U;
     context->navigation_up_pressed =
         frame_desc->navigation_up_pressed;
@@ -1220,6 +1350,7 @@ void henka_ui_set_visible(henka_ui_context* context, bool visible)
         if (!visible)
         {
             henka_ui_clear_active_id(context);
+            henka_ui_clear_focused_text_id(context);
             henka_ui_clear_focused_disclosure_id(context);
             context->consumed_navigation_mask = 0U;
             context->wants_mouse = false;
@@ -1255,6 +1386,133 @@ const char* henka_ui_get_text_input(
         *out_text_size = context == NULL ? 0U : context->text_input_size;
     }
     return context == NULL ? NULL : context->text_input;
+}
+
+henka_result henka_ui_text_field(
+    henka_ui_context* context,
+    const char* id,
+    henka_ui_rect bounds,
+    char* value,
+    size_t value_capacity,
+    bool* out_changed)
+{
+    char candidate[HENKA_UI_MAX_TEXT_BYTES + 1U];
+    henka_ui_draw_checkpoint checkpoint;
+    size_t candidate_length;
+    size_t value_length;
+    size_t input_index;
+    bool focused;
+    bool hot;
+    bool requested_focus;
+    bool changed = false;
+    henka_result result;
+
+    if (out_changed != NULL)
+    {
+        *out_changed = false;
+    }
+    if (context == NULL || id == NULL || value == NULL || out_changed == NULL ||
+        !context->frame_active || !context->visible || !henka_ui_id_is_valid(id) ||
+        !henka_ui_rect_is_finite(bounds) || bounds.width <= 0.0f || bounds.height <= 0.0f ||
+        value_capacity == 0U || value_capacity > sizeof(candidate) ||
+        !henka_checked_c_string_length(value, value_capacity - 1U, &value_length))
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    hot = henka_ui_control_is_hot(context, bounds);
+    focused = henka_ui_focused_text_id_equals(context, id);
+    requested_focus = focused;
+    if (hot)
+    {
+        context->wants_mouse = true;
+    }
+    if (context->mouse_left_pressed)
+    {
+        requested_focus = hot;
+    }
+
+    memcpy(candidate, value, value_length + 1U);
+    candidate_length = value_length;
+    if (requested_focus && context->text_backspace_pressed && candidate_length > 0U)
+    {
+        do
+        {
+            --candidate_length;
+        } while (candidate_length > 0U &&
+                 (((unsigned char)candidate[candidate_length] & 0xC0U) == 0x80U));
+        candidate[candidate_length] = '\0';
+        changed = true;
+    }
+    if (requested_focus && context->text_input_size > 0U)
+    {
+        if (context->text_input == NULL ||
+            context->text_input_size > value_capacity - 1U - candidate_length)
+        {
+            return HENKA_ERROR_LIMIT;
+        }
+        for (input_index = 0U; input_index < context->text_input_size; ++input_index)
+        {
+            const unsigned char character = (unsigned char)context->text_input[input_index];
+            if (character < 0x20U || character == 0x7FU)
+            {
+                return HENKA_ERROR_INVALID_ARGUMENT;
+            }
+        }
+        memcpy(candidate + candidate_length, context->text_input, context->text_input_size);
+        candidate_length += context->text_input_size;
+        candidate[candidate_length] = '\0';
+        changed = true;
+    }
+
+    henka_ui_capture_checkpoint(context, &checkpoint);
+    result = henka_ui_push_rect(
+        context,
+        bounds,
+        requested_focus ? g_ui_selected_fill : (hot ? g_ui_button_hover : g_ui_value_fill));
+    if (result == HENKA_SUCCESS)
+    {
+        result = henka_ui_push_border(
+            context,
+            bounds,
+            1.0f,
+            requested_focus ? g_ui_heading_color : g_ui_panel_border);
+    }
+    if (result == HENKA_SUCCESS)
+    {
+        result = henka_ui_draw_fit_text(
+            context,
+            bounds,
+            8.0f,
+            bounds.y + (bounds.height - 8.0f) * 0.5f,
+            1.0f,
+            candidate,
+            g_ui_text_color);
+    }
+    if (result != HENKA_SUCCESS)
+    {
+        henka_ui_restore_checkpoint(context, &checkpoint);
+        return result;
+    }
+
+    if (requested_focus)
+    {
+        if (!henka_ui_set_focused_text_id(context, id))
+        {
+            henka_ui_restore_checkpoint(context, &checkpoint);
+            return HENKA_ERROR_INVALID_ARGUMENT;
+        }
+    }
+    else if (focused)
+    {
+        henka_ui_clear_focused_text_id(context);
+    }
+    if (changed)
+    {
+        memcpy(value, candidate, candidate_length + 1U);
+        *out_changed = true;
+    }
+    return HENKA_SUCCESS;
 }
 
 henka_result henka_ui_custom_interaction(
@@ -1340,6 +1598,16 @@ size_t henka_ui_get_draw_line_count(const henka_ui_context* context)
     return context->draw_line_count;
 }
 
+size_t henka_ui_get_draw_triangle_count(const henka_ui_context* context)
+{
+    if (context == NULL)
+    {
+        return 0U;
+    }
+
+    return context->draw_triangle_count;
+}
+
 henka_result henka_ui_overlay_rect(henka_ui_context* context, henka_ui_rect bounds, henka_vec4 color)
 {
     if (context == NULL || !context->frame_active)
@@ -1358,6 +1626,21 @@ henka_result henka_ui_overlay_line(henka_ui_context* context, henka_vec2 start, 
     }
 
     return henka_ui_push_line(context, start, end, thickness, color);
+}
+
+henka_result henka_ui_overlay_triangle(
+    henka_ui_context* context,
+    henka_vec2 first,
+    henka_vec2 second,
+    henka_vec2 third,
+    henka_vec4 color)
+{
+    if (context == NULL || !context->frame_active)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    return henka_ui_push_triangle(context, first, second, third, color);
 }
 
 henka_result henka_ui_overlay_disc(

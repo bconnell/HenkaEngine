@@ -280,6 +280,113 @@ static void test_lua_shared_state_api(void)
     henka_lua_behavior_backend_destroy(backend);
 }
 
+static const henka_lua_token* find_lua_token(
+    const char* source,
+    const henka_lua_token* tokens,
+    size_t token_count,
+    const char* text)
+{
+    size_t index;
+    const size_t text_size = strlen(text);
+    for (index = 0U; index < token_count; ++index)
+    {
+        if (tokens[index].length == text_size &&
+            memcmp(source + tokens[index].offset, text, text_size) == 0)
+        {
+            return &tokens[index];
+        }
+    }
+    return NULL;
+}
+
+static uint32_t lua_indent_at(
+    const char* source,
+    const henka_lua_token* tokens,
+    size_t token_count,
+    const char* marker,
+    uint32_t line)
+{
+    uint32_t indent = UINT32_MAX;
+    const char* location = strstr(source, marker);
+    assert(location != NULL);
+    const size_t offset = (size_t)(location - source);
+    assert(henka_lua_token_stream_get_indent_level(
+               source,
+               strlen(source),
+               tokens,
+               token_count,
+               offset,
+               line,
+               &indent) == HENKA_SUCCESS);
+    return indent;
+}
+
+static void test_lua_editor_lexer_and_indent_authority(void)
+{
+    static const char source[] =
+        "function OnUpdate()\n"
+        "if true then\n"
+        "State.SetI32(1, 2)\n"
+        "else\n"
+        "State.SetI32(1, 3)\n"
+        "end\n"
+        "end\n";
+    henka_lua_token tokens[HENKA_LUA_MAX_TOKENS];
+    henka_lua_diagnostic diagnostic;
+    size_t token_count = 0U;
+    const henka_lua_token* token;
+
+    memset(&diagnostic, 0, sizeof(diagnostic));
+    assert(henka_lua_lex(
+               source,
+               strlen(source),
+               tokens,
+               HENKA_LUA_MAX_TOKENS,
+               &token_count,
+               &diagnostic) == HENKA_SUCCESS);
+    assert(token_count > 0U);
+    token = find_lua_token(source, tokens, token_count, "function");
+    assert(token != NULL && token->token_class == HENKA_LUA_TOKEN_CLASS_KEYWORD);
+    token = find_lua_token(source, tokens, token_count, "State");
+    assert(token != NULL && token->token_class == HENKA_LUA_TOKEN_CLASS_BUILTIN);
+    token = find_lua_token(source, tokens, token_count, "true");
+    assert(token != NULL && token->token_class == HENKA_LUA_TOKEN_CLASS_LITERAL);
+    assert(lua_indent_at(source, tokens, token_count, "if true", 2U) == 1U);
+    assert(lua_indent_at(source, tokens, token_count, "State.SetI32(1, 2)", 3U) == 2U);
+    assert(lua_indent_at(source, tokens, token_count, "else", 4U) == 1U);
+    assert(lua_indent_at(source, tokens, token_count, "State.SetI32(1, 3)", 5U) == 2U);
+    assert(lua_indent_at(source, tokens, token_count, "end\nend", 6U) == 1U);
+    {
+        uint32_t final_indent = UINT32_MAX;
+        assert(henka_lua_token_stream_get_indent_level(
+                   source,
+                   strlen(source),
+                   tokens,
+                   token_count,
+                   strlen(source),
+                   8U,
+                   &final_indent) == HENKA_SUCCESS);
+        assert(final_indent == 0U);
+    }
+
+    assert(henka_lua_lex(
+               "--[[ unfinished",
+               strlen("--[[ unfinished"),
+               tokens,
+               HENKA_LUA_MAX_TOKENS,
+               &token_count,
+               &diagnostic) == HENKA_ERROR_ASSET_SOURCE);
+    assert(diagnostic.code == HENKA_LUA_DIAGNOSTIC_COMPILE);
+    assert(diagnostic.line == 1U && diagnostic.column == 1U);
+    assert(henka_lua_lex(
+               source,
+               HENKA_LUA_MAX_SOURCE_BYTES + 1U,
+               tokens,
+               HENKA_LUA_MAX_TOKENS,
+               &token_count,
+               &diagnostic) == HENKA_ERROR_INVALID_ARGUMENT);
+}
+
 int main(void)
 {
     const size_t allocations_before = henka_memory_get_allocation_count();
@@ -288,6 +395,7 @@ int main(void)
     test_lua_rejection_and_memory();
     test_lua_shared_host_api();
     test_lua_shared_state_api();
+    test_lua_editor_lexer_and_indent_authority();
     assert(henka_memory_get_allocation_count() == allocations_before);
     puts("henka_lua_backend_tests: PASS");
     return 0;

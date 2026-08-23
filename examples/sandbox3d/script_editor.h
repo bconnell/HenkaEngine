@@ -12,10 +12,9 @@
 struct henka_engine;
 typedef struct sandbox3d_game_authoring sandbox3d_game_authoring;
 
-/* Draws a bounded source editor for one attached behavior. Lua keeps the
- * persisted source and indentation verbatim; HenkaScript syntax spans,
- * presentation classes, and insertion indentation come from compiler-owned
- * token APIs. This surface does not implement a second grammar. */
+/* Draws a bounded source editor for one attached behavior. Both Lua and
+ * HenkaScript syntax spans and insertion indentation come from backend-owned
+ * token APIs; this surface does not implement a second grammar. */
 henka_result sandbox3d_script_editor_draw_preview(
     struct henka_engine* engine,
     henka_ui_context* ui,

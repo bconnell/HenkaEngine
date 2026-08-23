@@ -138,9 +138,22 @@ function Click-FramebufferPoint {
         $FramebufferY -gt [double]$FramebufferHeight) {
         throw "Automation framebuffer point is outside the reported application bounds."
     }
-    Send-AutomationEvent -EventLine ("move {0} {1}" -f $FramebufferX, $FramebufferY)
-    Send-AutomationEvent -EventLine ("button left down {0} {1}" -f $FramebufferX, $FramebufferY)
-    Send-AutomationEvent -EventLine ("button left up {0} {1}" -f $FramebufferX, $FramebufferY)
+    $clientRect = New-Object NativeMethods+RECT
+    if (-not [NativeMethods]::GetClientRect($Handle, [ref]$clientRect)) {
+        throw "The authoring capture client bounds could not be read."
+    }
+    $clientWidth = $clientRect.Right - $clientRect.Left
+    $clientHeight = $clientRect.Bottom - $clientRect.Top
+    $windowPoint = Convert-HenkaFramebufferPointToWindowPoint `
+        -FramebufferWidth $FramebufferWidth `
+        -FramebufferHeight $FramebufferHeight `
+        -WindowWidth $clientWidth `
+        -WindowHeight $clientHeight `
+        -FramebufferX $FramebufferX `
+        -FramebufferY $FramebufferY
+    Send-AutomationEvent -EventLine ("move {0} {1}" -f $windowPoint.X, $windowPoint.Y)
+    Send-AutomationEvent -EventLine ("button left down {0} {1}" -f $windowPoint.X, $windowPoint.Y)
+    Send-AutomationEvent -EventLine ("button left up {0} {1}" -f $windowPoint.X, $windowPoint.Y)
     Start-Sleep -Milliseconds 180
 }
 
@@ -158,7 +171,20 @@ function Scroll-FramebufferPoint {
         $FramebufferY -gt [double]$FramebufferHeight) {
         throw "Automation scroll target is invalid for the reported application bounds."
     }
-    Send-AutomationEvent -EventLine ("move {0} {1}" -f $FramebufferX, $FramebufferY)
+    $clientRect = New-Object NativeMethods+RECT
+    if (-not [NativeMethods]::GetClientRect($Handle, [ref]$clientRect)) {
+        throw "The authoring capture client bounds could not be read for scrolling."
+    }
+    $clientWidth = $clientRect.Right - $clientRect.Left
+    $clientHeight = $clientRect.Bottom - $clientRect.Top
+    $windowPoint = Convert-HenkaFramebufferPointToWindowPoint `
+        -FramebufferWidth $FramebufferWidth `
+        -FramebufferHeight $FramebufferHeight `
+        -WindowWidth $clientWidth `
+        -WindowHeight $clientHeight `
+        -FramebufferX $FramebufferX `
+        -FramebufferY $FramebufferY
+    Send-AutomationEvent -EventLine ("move {0} {1}" -f $windowPoint.X, $windowPoint.Y)
     Send-AutomationEvent -EventLine ("wheel 0 {0}" -f $WheelDelta)
     Start-Sleep -Milliseconds 220
 }
@@ -452,9 +478,13 @@ try {
     $framebufferHeight = [int]$framebuffer.Groups["height"].Value
 
     Set-HenkaAutomationForeground -Handle $handle
-    Send-AutomationKey -KeyName "F5"
-    if (-not (Wait-FileContains -Path $stdoutPath -Pattern "Sandbox layout: Focus Viewport" -TimeoutMilliseconds 5000)) {
-        throw "The visible editor did not enter Focus Viewport layout."
+    # Keep the Standard layout for the capture workflow.  Scene Objects and
+    # Object Details are the visible authoring controls used by this script;
+    # switching to Focus Viewport here hides both panels before the first
+    # selection and makes the subsequent row click target a non-interactive
+    # stale log coordinate.
+    if (-not (Wait-FileContains -Path $stdoutPath -Pattern "Sandbox layout: Standard" -TimeoutMilliseconds 5000)) {
+        throw "The visible editor did not remain in the Standard authoring layout."
     }
 
     $lastEditableControl = $null

@@ -26,6 +26,10 @@ $compilerHeader = Read-RepositoryText "engine/include/henka/henkascript.h"
 $compilerSource = Read-RepositoryText "engine/src/scripting/henkascript.c"
 $assetSource = Read-RepositoryText "engine/src/scripting/script_asset.c"
 $documentation = Read-RepositoryText "docs/scripting-foundation.md"
+$backendPaths = @(
+    "engine/src/scripting/henkascript_backend.c",
+    "engine/src/scripting/lua_backend.c"
+)
 
 if ($compilerHeader -notmatch 'henka_hks_token_kind_get_class') {
     Add-Finding "engine/include/henka/henkascript.h: compiler token presentation API is missing"
@@ -44,6 +48,17 @@ if ($assetSource -notmatch 'henka_hks_get_default_behavior_source') {
 }
 if ($assetSource -match '(?m)fn\s+On[A-Za-z0-9_]*\s*\(') {
     Add-Finding "engine/src/scripting/script_asset.c: contains a copied HenkaScript lifecycle template"
+}
+
+$lifecycleNamePattern = '"On(?:Create|Start|Update|Stop|Event|FixedUpdate|Interact|CollisionEnter|CollisionStay|CollisionExit|TriggerEnter|TriggerStay|TriggerExit|Destroy)"'
+foreach ($relativePath in $backendPaths) {
+    $backendSource = Read-RepositoryText $relativePath
+    if ($backendSource -notmatch 'henka_script_lifecycle_schema_(get|find)') {
+        Add-Finding "${relativePath}: backend is not visibly connected to the compiler/runtime lifecycle registry"
+    }
+    if ($backendSource -match $lifecycleNamePattern) {
+        Add-Finding "${relativePath}: contains a copied lifecycle-name table; use the shared lifecycle registry"
+    }
 }
 
 $editorPaths = @(

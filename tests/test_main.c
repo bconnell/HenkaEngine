@@ -27,6 +27,8 @@ int main(void)
     henka_test_camera_hardening();
     henka_test_sandbox3d_object_details();
     henka_test_sandbox3d_object_authoring();
+    henka_test_sandbox3d_authoring_asset_document();
+    henka_test_sandbox3d_authoring_asset_ui();
     henka_test_sandbox3d_asset_browser();
     henka_test_scene();
     henka_test_shader();

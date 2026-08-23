@@ -61,31 +61,26 @@ the editor-owned source capture proves the same controls produced persisted
 fixture pair or those persisted derivatives to independently user-authored
 content.
 
-The editor also exposes `Create Native Rocket`. That user-facing action
-creates a bounded 201-vertex/121-face multi-part rocket directly through the
-Henka authoring mesh API: a continuous body and nose, three open structural
-collars, a five-bell engine cluster, and four fins. It evaluates the source
-into the scene, adopts a manager-owned material instance, and seeds generated
-manager-owned normal plus metallic/roughness detail textures when GPU texture
-creation succeeds. It emits `HENKA_NATIVE_GENERATED_FIXTURE` provenance: this
-proves the authoring API, scene connection, persistence, rendering, and
-continued editing, but not that a user designed the rocket. The packaged
-relaunch gate restores the valid generated source and material sidecar
-transactionally; the current native path still uses one manager-owned material
-and does not claim native multi-material binding.
+The visible native-authoring workflow is intentionally generic. Enter an asset
+name, choose `New Asset`, then add bounded Box, Cylinder, Cone, or UV Sphere
+parts through the primitive chooser. The resulting document is editor-owned,
+uses `HENKA_PRODUCT_NATIVE_AUTHORED` provenance, and supports the bounded
+save/close/reopen path. This proves the reusable authoring foundation, not that
+the default Giraffe or Rocket was modeled by a user. The default showcase pair
+continues to use separately labeled imported/generated fixture content until
+the full visible modeling, material, visual-review, and packaged-asset workflow
+is complete.
 
 `Make Editable` on an imported `Showcase Giraffe ...` or `Showcase Rocket ...`
-also exposes the bounded `Refine Profile` operation. It applies two ordered
-local-space region transforms to the Giraffe neck/head or Rocket lower/upper
-stages through one native authoring transaction. The operation preserves
-topology, material-region assignments, evaluated bounds, and undo/redo state;
-the resulting source is covered by the existing project save/reload and
-relaunch persistence path. This is native editing dogfood, not
-a claim that the generated fixture pair itself is native-authored or that the
-bounded control replaces full anatomical or mechanical modeling tools.
+exposes only generic component, topology, UV, material, and transactional
+history tools. Multi-face extrusion and material-region assignment operate on
+the current selection without naming or recognizing either showcase subject.
+This is native editing dogfood, not a claim that the generated fixture pair
+itself is native-authored or that these bounded controls replace full
+anatomical or mechanical modeling tools.
 
-- `cheeky_giraffe.gltf` — an original realism-oriented Cheeky Giraffe mascot with a taller, slimmer body-to-head silhouette and a continuous elliptical torso-to-neck loft for the primary tan surface, plus a reduced rounded head, surface-fitted spots, a readable mane row, compact flattened ear lobes with inset inner-ear patches, connected tan ossicone stalks, outward-angled dark-brown caps, a restrained two-segment tail, layered eye whites/irises/pupils/highlights, nostrils, a defined muzzle/jaw, and a subdued mouth line. The presentation retains restrained personality, while the face is built from separately shaded anatomical features rather than a single cartoon eye material.
-- `original_realistic_rocket.gltf` — an original modern launch vehicle reference with a continuous tapered core/fairing profile, visible mission-stripe and lower avionics bands, interstage and engine-skirt hardware, dark avionics separation bands, a bounded seven-engine bell/nozzle cluster, a restrained heat response, tapered stabilization fins, and a clearly larger-than-giraffe presentation scale grounded by a six-part launch-pad assembly.
+- `cheeky_giraffe.gltf` — the original Anatomical Giraffe Study (the stable filename is retained for package compatibility): a long-legged, narrow-bodied silhouette with a continuous chest-to-neck loft, elongated head and muzzle, four articulated knee regions and grounded hooves, compact ears, ossicones, mane, tail, paired nostrils, recessed dark eyes, and a neutral lip crease. Its deterministic ochre base-color texture uses many small irregular reticulated hide cells rather than a few oversized circular patches.
+- `original_realistic_rocket.gltf` — an original generic heavy-lift launch-vehicle study: a warm insulated central core, pale tapered upper vehicle, two separately shaded tapered side boosters, graphite interstages, unbranded muted markings, dark thermal separation bands, independently shaded service-panel geometry, a seven-engine bell/nozzle cluster, perimeter fasteners, restrained stabilization fins, and a bounded adjacent steel service structure above the launch-pad assembly. It intentionally contains no agency branding, mission markings, or copied mission hardware.
 
 ## Ownership and generation
 
@@ -104,7 +99,7 @@ project controls, then copies only the resulting
 validation record; runtime generated fixtures and hard-coded C constructors do
 not count as authoring provenance.
 
-The generated glTF files use material factors plus deterministic, generated base-color, tangent-space detail-normal, and metallic/roughness textures through the same manager-owned semantic texture path as imported consumer assets. The Giraffe's flush spot pattern is a base-color texture on its tan skin material; the remaining mane and facial features stay independently shaded geometry. They also use the renderer-supported clearcoat, restrained sheen, and emissive-strength extensions; they do not bind the unrelated primitive-gallery cube texture. Their glTF, sibling binary buffers, and texture sidecars are copied beside the executable, so packaged execution resolves the showcase from package-owned files without a repository-root or runtime authoring dependency. These two models are the public visual reference set and should be regenerated and manually reviewed after material, lighting, geometry, and shading improvements. They are deliberately generic public samples; project-specific scenes and visual references are not part of this repository.
+The generated glTF files use material factors plus deterministic, generated base-color, tangent-space detail-normal, and metallic/roughness textures through the same manager-owned semantic texture path as imported consumer assets. The Giraffe's flush spot pattern is a base-color texture on its tan skin material; hooves, mane, nostrils, and remaining facial features stay independently shaded geometry. The Rocket now binds the generated base-color texture to its painted ceramic surface, while fasteners, thermal details, engine bells, and other mechanical regions retain distinct material identities. Both models use the renderer-supported clearcoat, restrained sheen, and emissive-strength extensions; they do not bind the unrelated primitive-gallery cube texture. Their glTF, sibling binary buffers, and texture sidecars are copied beside the executable, so packaged execution resolves the showcase from package-owned files without a repository-root or runtime authoring dependency. These two models are the public visual reference set and should be regenerated and manually reviewed after material, lighting, geometry, and shading improvements. They are deliberately generic public samples; project-specific scenes and visual references are not part of this repository.
 
 The packaged studio HDR fixture is also generated in memory and now contains bounded asymmetric warm-key and cool-fill area-light lobes. This gives clearcoat, brushed metal, and emissive engine details a stable highlight structure through the derived IBL path while retaining the direct local-light and shadow fixtures. It is an authored lighting reference, not a claim of photographic HDRI coverage.
 
@@ -163,7 +158,7 @@ their relationship to the current implementation is not verified.
 
 ## Runtime path
 
-Sandbox loads both files through `henka_assets_load_gltf_scene_asset` and instantiates them with `henka_assets_instantiate_gltf_scene`; normal non-smoke startup then restores the checked-in HAMS geometry when available. Materials and texture dependencies remain manager-owned and use the same glTF material path as imported consumer assets. A missing or corrupted generated file fails initialization through the normal bounded asset error path; it is not replaced by hardcoded geometry in `main.c`.
+Sandbox loads both files through `henka_assets_load_gltf_scene_asset` and instantiates them with `henka_assets_instantiate_gltf_scene`; normal non-smoke startup may then restore a compatible checked-in HAMS derivative. A stale or invalid checked-in derivative—including one with fewer authored vertices than the current imported source—is rejected with the imported render retained, so a refreshed generator cannot be silently hidden by an older fixture. User-persisted project data remains a separate user-owned restore path. Materials and texture dependencies remain manager-owned and use the same glTF material path as imported consumer assets. A missing or corrupted generated file fails initialization through the normal bounded asset error path; it is not replaced by hardcoded geometry in `main.c`.
 
 The engineering primitive gallery remains available with:
 

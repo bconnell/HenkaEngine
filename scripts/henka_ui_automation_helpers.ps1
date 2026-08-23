@@ -127,6 +127,45 @@ function Format-HenkaAutomationFloat {
     return $Value.ToString("R", [System.Globalization.CultureInfo]::InvariantCulture)
 }
 
+function Convert-HenkaFramebufferPointToWindowPoint {
+    param(
+        [Parameter(Mandatory = $true)][int]$FramebufferWidth,
+        [Parameter(Mandatory = $true)][int]$FramebufferHeight,
+        [Parameter(Mandatory = $true)][int]$WindowWidth,
+        [Parameter(Mandatory = $true)][int]$WindowHeight,
+        [Parameter(Mandatory = $true)][double]$FramebufferX,
+        [Parameter(Mandatory = $true)][double]$FramebufferY
+    )
+
+    if ($FramebufferWidth -le 0 -or $FramebufferHeight -le 0 -or
+        $WindowWidth -le 0 -or $WindowHeight -le 0 -or
+        [double]::IsNaN($FramebufferX) -or
+        [double]::IsInfinity($FramebufferX) -or
+        [double]::IsNaN($FramebufferY) -or
+        [double]::IsInfinity($FramebufferY) -or
+        $FramebufferX -lt 0.0 -or
+        $FramebufferY -lt 0.0 -or
+        $FramebufferX -ge [double]$FramebufferWidth -or
+        $FramebufferY -ge [double]$FramebufferHeight) {
+        throw "The Henka framebuffer automation point was outside its bounded client area."
+    }
+
+    $windowX = $FramebufferX * $WindowWidth / [double]$FramebufferWidth
+    $windowY = $FramebufferY * $WindowHeight / [double]$FramebufferHeight
+    if ([double]::IsNaN($windowX) -or [double]::IsInfinity($windowX) -or
+        [double]::IsNaN($windowY) -or [double]::IsInfinity($windowY) -or
+        $windowX -lt 0.0 -or $windowY -lt 0.0 -or
+        $windowX -ge [double]$WindowWidth -or
+        $windowY -ge [double]$WindowHeight) {
+        throw "The Henka framebuffer automation point could not be converted to a bounded client point."
+    }
+
+    return [pscustomobject]@{
+        X = $windowX
+        Y = $windowY
+    }
+}
+
 function Send-HenkaAutomationKey {
     param(
         [Parameter(Mandatory = $true)][string]$EventPath,
@@ -138,6 +177,30 @@ function Send-HenkaAutomationKey {
     }
     Send-HenkaAutomationEvent -EventPath $EventPath -EventLine ("key {0} down" -f $KeyName)
     Send-HenkaAutomationEvent -EventPath $EventPath -EventLine ("key {0} up" -f $KeyName)
+}
+
+function Send-HenkaAutomationText {
+    param(
+        [Parameter(Mandatory = $true)][string]$EventPath,
+        [Parameter(Mandatory = $true)][string]$Text
+    )
+
+    if ([string]::IsNullOrEmpty($Text) -or
+        $Text.Contains("`r") -or
+        $Text.Contains("`n")) {
+        throw "The Henka automation text was empty or contained a line break."
+    }
+    foreach ($character in $Text.ToCharArray()) {
+        $codePoint = [int][char]$character
+        if ($codePoint -lt 0x20 -or $codePoint -eq 0x7F) {
+            throw "The Henka automation text contained a control character."
+        }
+    }
+    $eventLine = "text " + $Text
+    if (([System.Text.Encoding]::UTF8.GetByteCount($eventLine)) -gt 220) {
+        throw "The bounded Henka automation text was too long."
+    }
+    Send-HenkaAutomationEvent -EventPath $EventPath -EventLine $eventLine
 }
 
 function Send-HenkaAutomationClick {

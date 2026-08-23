@@ -159,6 +159,8 @@ function Assert-HenkaCaptureMetadata {
         throw "Capture readiness metadata was malformed for $Label."
     }
     if ([int]$match.Groups["sss"].Value -lt 1 -or
+        [int]$match.Groups["gp"].Value -lt 13 -or
+        [int]$match.Groups["rp"].Value -lt 13 -or
         [int]$match.Groups["normal"].Value -ne [int]$match.Groups["sss"].Value -or
         [int]$match.Groups["loaded"].Value -ne [int]$match.Groups["normal"].Value -or
         [int]$match.Groups["fallback"].Value -ne 0 -or

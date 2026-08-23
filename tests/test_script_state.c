@@ -160,6 +160,40 @@ static void test_transactional_file_round_trip(void)
     assert(test_script_state_remove_directory(blocked_temporary_path) == 0);
 }
 
+static void test_clone_is_independent(void)
+{
+    henka_script_state_store* source = NULL;
+    henka_script_state_store* clone = NULL;
+    henka_script_state_value value;
+    bool present = false;
+
+    assert(henka_script_state_store_create(&source) == HENKA_SUCCESS);
+    assert(henka_script_state_store_set(
+               source,
+               identity_a,
+               21U,
+               (henka_script_state_value){
+                   HENKA_SCRIPT_STATE_VALUE_I32,
+                   {.i32 = 17}}) == HENKA_SUCCESS);
+    assert(henka_script_state_store_clone(source, &clone) == HENKA_SUCCESS);
+    assert(clone != NULL);
+    assert(henka_script_state_store_set(
+               clone,
+               identity_a,
+               21U,
+               (henka_script_state_value){
+                   HENKA_SCRIPT_STATE_VALUE_I32,
+                   {.i32 = 29}}) == HENKA_SUCCESS);
+    assert(henka_script_state_store_get(
+               source, identity_a, 21U, &value, &present) == HENKA_SUCCESS);
+    assert(present && value.as.i32 == 17);
+    assert(henka_script_state_store_get(
+               clone, identity_a, 21U, &value, &present) == HENKA_SUCCESS);
+    assert(present && value.as.i32 == 29);
+    henka_script_state_store_destroy(clone);
+    henka_script_state_store_destroy(source);
+}
+
 static void test_invalid_values_and_load_retention(void)
 {
     henka_script_state_store* store = NULL;
@@ -217,6 +251,7 @@ int main(void)
     const size_t allocations_before = henka_memory_get_allocation_count();
     test_typed_values_and_capacity();
     test_transactional_file_round_trip();
+    test_clone_is_independent();
     test_invalid_values_and_load_retention();
     assert(henka_memory_get_allocation_count() == allocations_before);
     puts("henka_script_state_tests: PASS");

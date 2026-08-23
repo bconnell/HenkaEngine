@@ -636,35 +636,71 @@ function Write-ShowcaseTexture {
                 $u = ($x + 0.5) / $size
                 $v = ($y + 0.5) / $size
                 if ($Kind -eq "base_color") {
-                    $spot = $false
-                    foreach ($spotCenter in @(
-                            @(0.04, 0.20, 0.075, 0.065), @(0.24, 0.26, 0.065, 0.085),
-                            @(0.48, 0.18, 0.085, 0.060), @(0.72, 0.28, 0.070, 0.080),
-                            @(0.92, 0.16, 0.060, 0.055), @(0.14, 0.54, 0.085, 0.070),
-                            @(0.38, 0.48, 0.065, 0.090), @(0.62, 0.58, 0.090, 0.065),
-                            @(0.86, 0.50, 0.070, 0.080), @(0.05, 0.82, 0.080, 0.065),
-                            @(0.28, 0.76, 0.065, 0.075), @(0.54, 0.84, 0.085, 0.060),
-                            @(0.78, 0.76, 0.065, 0.085))) {
-                        $du = [Math]::Abs($u - $spotCenter[0])
-                        $du = [Math]::Min($du, 1.0 - $du)
-                        $dv = $v - $spotCenter[1]
-                        $distance = ($du / $spotCenter[2]) * ($du / $spotCenter[2]) +
-                            ($dv / $spotCenter[3]) * ($dv / $spotCenter[3])
-                        $edgeVariation = 0.92 + 0.08 * [Math]::Sin(($x + 3) * 0.21 + ($y + 11) * 0.17)
-                        if ($distance -lt $edgeVariation) {
-                            $spot = $true
-                            break
+                    if ($Subject -eq "giraffe") {
+                        # A fine, jittered patch field keeps hide markings
+                        # irregular and form-following rather than reading as
+                        # a few oversized graphic circles on the torso.
+                        $gridU = $u * 8.0
+                        $gridV = $v * 13.0
+                        $baseColumn = [Math]::Floor($gridU)
+                        $baseRow = [Math]::Floor($gridV)
+                        $nearestDistance = [double]::PositiveInfinity
+                        $nearestSeed = 0.0
+                        for ($rowOffset = -1; $rowOffset -le 1; ++$rowOffset) {
+                            for ($columnOffset = -1; $columnOffset -le 1; ++$columnOffset) {
+                                $candidateColumn = $baseColumn + $columnOffset
+                                $candidateRow = $baseRow + $rowOffset
+                                $seed = 0.5 + 0.5 * [Math]::Sin(
+                                    ($candidateColumn * 127.1) + ($candidateRow * 311.7))
+                                $offsetU = 0.5 + 0.24 * [Math]::Sin(
+                                    ($candidateColumn * 47.3) + ($candidateRow * 19.1))
+                                $offsetV = 0.5 + 0.22 * [Math]::Cos(
+                                    ($candidateColumn * 29.7) + ($candidateRow * 61.9))
+                                $deltaU = $gridU - ($candidateColumn + $offsetU)
+                                $deltaV = $gridV - ($candidateRow + $offsetV)
+                                $shapeSeed = 0.5 + 0.5 * [Math]::Cos(
+                                    ($candidateColumn * 17.7) + ($candidateRow * 43.2))
+                                $radiusU = 0.24 + (0.12 * $seed)
+                                $radiusV = 0.18 + (0.12 * $shapeSeed)
+                                $warpU = 0.08 * [Math]::Sin(
+                                    ($candidateColumn * 23.1) + ($candidateRow * 13.4))
+                                $warpV = 0.08 * [Math]::Cos(
+                                    ($candidateColumn * 11.6) + ($candidateRow * 31.8))
+                                $normalizedDistance =
+                                    ((($deltaU - $warpU) / $radiusU) * (($deltaU - $warpU) / $radiusU)) +
+                                    ((($deltaV - $warpV) / $radiusV) * (($deltaV - $warpV) / $radiusV))
+                                if ($normalizedDistance -lt $nearestDistance) {
+                                    $nearestDistance = $normalizedDistance
+                                    $nearestSeed = $seed
+                                }
+                            }
+                        }
+                        # Keep the markings irregular, but large enough to
+                        # establish giraffe-like coverage at the bounded
+                        # 128px fixture resolution instead of reading as
+                        # sparse peppering on the hide.
+                        $spot = $nearestDistance -lt 1.0
+                        if ($spot) {
+                            $red = 76 + [int][Math]::Round(20.0 * $nearestSeed)
+                            $green = 35 + [int][Math]::Round(11.0 * $nearestSeed)
+                            $blue = 10 + [int][Math]::Round(6.0 * $nearestSeed)
+                        }
+                        else {
+                            $red = 194 + [int][Math]::Round(18.0 * $nearestSeed)
+                            $green = 141 + [int][Math]::Round(15.0 * $nearestSeed)
+                            $blue = 63 + [int][Math]::Round(10.0 * $nearestSeed)
                         }
                     }
-                    if ($spot) {
-                        $red = 168 + [int][Math]::Round(10.0 * [Math]::Sin(($x + 3) * 0.11))
-                        $green = 92 + [int][Math]::Round(8.0 * [Math]::Cos(($y + 5) * 0.13))
-                        $blue = 38
-                    }
                     else {
-                        $red = 255
-                        $green = 255
-                        $blue = 255
+                        # Rocket paint uses a cool ceramic panel variation, not
+                        # the giraffe spot field. Keep the texture close to
+                        # neutral so the material factor remains authoritative
+                        # while subtle panel-scale variation catches lighting.
+                        $panelVariation = 0.5 + 0.5 * [Math]::Sin(($u * 6.0 * [Math]::PI) + ($v * 0.8))
+                        $surfaceVariation = 0.5 + 0.5 * [Math]::Sin(($x + 2) * 0.19 + ($y + 5) * 0.07)
+                        $red = 184 + [int][Math]::Round(16.0 * $panelVariation + 7.0 * $surfaceVariation)
+                        $green = 191 + [int][Math]::Round(14.0 * $panelVariation + 6.0 * $surfaceVariation)
+                        $blue = 196 + [int][Math]::Round(12.0 * $panelVariation + 5.0 * $surfaceVariation)
                     }
                 }
                 elseif ($Kind -eq "normal") {
@@ -868,15 +904,19 @@ function Write-Gltf {
 
 function New-Giraffe {
     $materials = @(
-        (New-Material "Giraffe Tan" @(0.46, 0.25, 0.08, 1.0) 0.0 0.56 0.08 0.36 @(0.07, 0.025, 0.01) 0.45 -BaseColorTextureIndex 2 -NormalTextureIndex 0 -NormalTextureScale 0.14 -MetallicRoughnessTextureIndex 1),
-        (New-Material "Giraffe Spots" @(0.09, 0.018, 0.006, 1.0) 0.0 0.68 -NormalTextureIndex 0 -NormalTextureScale 0.12 -MetallicRoughnessTextureIndex 1),
-        (New-Material "Giraffe Cream" @(0.72, 0.55, 0.32, 1.0) 0.0 0.50 0.06 0.28 @(0.11, 0.06, 0.025) 0.48 -NormalTextureIndex 0 -NormalTextureScale 0.14 -MetallicRoughnessTextureIndex 1),
-        (New-Material "Giraffe Eye White" @(0.24, 0.12, 0.04, 1.0) 0.0 0.32 0.12 0.18),
+        (New-Material "Giraffe Tan" @(1.0, 1.0, 1.0, 1.0) 0.0 0.62 0.04 0.42 @(0.035, 0.012, 0.003) 0.48 -BaseColorTextureIndex 2 -NormalTextureIndex 0 -NormalTextureScale 0.12 -MetallicRoughnessTextureIndex 1),
+        (New-Material "Giraffe Spots" @(0.075, 0.025, 0.006, 1.0) 0.0 0.70 -NormalTextureIndex 0 -NormalTextureScale 0.10 -MetallicRoughnessTextureIndex 1),
+        (New-Material "Giraffe Cream" @(0.54, 0.33, 0.14, 1.0) 0.0 0.56 0.04 0.30 @(0.065, 0.028, 0.008) 0.46 -NormalTextureIndex 0 -NormalTextureScale 0.12 -MetallicRoughnessTextureIndex 1),
+        (New-Material "Giraffe Eye White" @(0.075, 0.028, 0.008, 1.0) 0.0 0.36 0.05 0.20),
         (New-Material "Giraffe Iris" @(0.035, 0.010, 0.003, 1.0) 0.0 0.22 0.18 0.06),
         (New-Material "Giraffe Eye Detail" @(0.004, 0.002, 0.001, 1.0) 0.0 0.10 0.70 0.06),
         (New-Material "Giraffe Smile" @(0.11, 0.015, 0.008, 1.0) 0.0 0.34 0.05 0.22),
         (New-Material "Giraffe Ear Inner" @(0.30, 0.065, 0.025, 1.0) 0.0 0.44 0.03 0.18 -NormalTextureIndex 0 -NormalTextureScale 0.12 -MetallicRoughnessTextureIndex 1),
-        (New-Material "Giraffe Ossicone Cap" @(0.12, 0.025, 0.006, 1.0) 0.0 0.48 0.02 0.24 -NormalTextureIndex 0 -NormalTextureScale 0.12 -MetallicRoughnessTextureIndex 1))
+        (New-Material "Giraffe Ossicone Cap" @(0.09, 0.020, 0.004, 1.0) 0.0 0.52 0.02 0.24 -NormalTextureIndex 0 -NormalTextureScale 0.12 -MetallicRoughnessTextureIndex 1),
+        (New-Material "Giraffe Hoof" @(0.055, 0.012, 0.004, 1.0) 0.0 0.66 0.01 0.26 -NormalTextureIndex 0 -NormalTextureScale 0.10 -MetallicRoughnessTextureIndex 1),
+        (New-Material "Giraffe Mane" @(0.075, 0.014, 0.003, 1.0) 0.0 0.74 0.01 0.30 -NormalTextureIndex 0 -NormalTextureScale 0.12 -MetallicRoughnessTextureIndex 1),
+        (New-Material "Giraffe Nose" @(0.055, 0.006, 0.002, 1.0) 0.0 0.58 0.01 0.22 -NormalTextureIndex 0 -NormalTextureScale 0.10 -MetallicRoughnessTextureIndex 1),
+        (New-Material "Giraffe Joint" @(0.20, 0.085, 0.022, 1.0) 0.0 0.64 0.01 0.24 -NormalTextureIndex 0 -NormalTextureScale 0.10 -MetallicRoughnessTextureIndex 1))
     $tan = New-Part 0
     $spots = New-Part 1
     $cream = New-Part 2
@@ -886,100 +926,116 @@ function New-Giraffe {
     $smile = New-Part 6
     $earInner = New-Part 7
     $ossicone = New-Part 8
+    $hoof = New-Part 9
+    $mane = New-Part 10
+    $nose = New-Part 11
+    $joint = New-Part 12
     # Keep the mascot identity restrained, but use continuous profiles and
     # believable curvature so the silhouette does not read as primitive
     # assembly when inspected from the authored front and three-quarter views.
-    # A single elliptical loft carries the chest through the shoulder and
-    # into the neck. This is the primary silhouette surface, so the body no
-    # longer reads as a stack of an ellipsoid and a separate narrow frustum.
+    # The body is a horizontal ribcage with a distinct forward neck. Earlier
+    # versions made a single upright pear-shaped loft, which read as a toy
+    # rather than a four-legged animal from three-quarter views.
+    Add-Ellipsoid $tan @(0.0, 1.62, -0.18) @(0.52, 0.58, 1.08) 40 72
     Add-AnatomicalLoft $tan `
-        @(0.55, 0.78, 1.08, 1.42, 1.78, 2.14, 2.48, 2.82, 3.18, 3.50, 3.72) `
-        @(0.58, 0.76, 0.86, 0.86, 0.80, 0.38, 0.31, 0.28, 0.25, 0.23, 0.22) `
-        @(0.42, 0.51, 0.56, 0.56, 0.51, 0.31, 0.27, 0.25, 0.23, 0.22, 0.21) `
-        0.0 @(0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.01, 0.02, 0.02) 96
+        @(1.86, 2.12, 2.46, 2.82, 3.18, 3.50, 3.74) `
+        @(0.34, 0.30, 0.265, 0.235, 0.215, 0.205, 0.22) `
+        @(0.36, 0.32, 0.28, 0.245, 0.22, 0.205, 0.24) `
+        0.0 @(0.60, 0.67, 0.74, 0.80, 0.86, 0.92, 0.98) 112
     # Keep the head subordinate to the long neck and torso. The earlier
     # mascot-scale head overwhelmed the silhouette even after the torso loft
     # was made continuous.
-    Add-Ellipsoid $tan @(0.0, 3.82, 0.03) @(0.48, 0.41, 0.38) 26 48
-    foreach ($leg in @(@(-0.48, 0.0, -0.30), @(0.48, 0.0, -0.30), @(-0.48, 0.0, 0.30), @(0.48, 0.0, 0.30))) {
-        Add-ProfiledFrustum $tan @(0.08, 0.30, 0.76, 1.12, 1.24) @(0.13, 0.15, 0.14, 0.12, 0.105) $leg[0] $leg[2] 28
+    Add-Ellipsoid $tan @(0.0, 3.91, 1.08) @(0.36, 0.31, 0.48) 36 64
+    foreach ($leg in @(@(-0.46, 0.0, -0.82), @(0.46, 0.0, -0.82), @(-0.46, 0.0, 0.72), @(0.46, 0.0, 0.72))) {
+        Add-ProfiledFrustum $tan @(0.08, 0.34, 0.82, 1.22, 1.46) @(0.115, 0.135, 0.125, 0.105, 0.090) $leg[0] $leg[2] 48
+        Add-Ellipsoid $hoof @($leg[0], 0.08, $leg[2] + 0.015) @(0.17, 0.075, 0.22) 16 28
+        Add-Ellipsoid $joint @($leg[0], 0.88, $leg[2] + 0.012) @(0.125, 0.085, 0.11) 12 22
     }
     # Model the ears as compact, flattened lobes in the head plane. The
     # previous deep capsules read like small missiles when viewed from the
     # front, especially with the inner-ear patch sitting on their top edge.
-    Add-Ellipsoid $tan @(-0.45, 4.18, 0.0) @(0.23, 0.17, 0.10) 12 24
-    Add-Ellipsoid $tan @(0.45, 4.18, 0.0) @(0.23, 0.17, 0.10) 12 24
-    Add-Frustum $tan 4.15 4.48 0.075 0.060 -0.20 0.0 16
-    Add-Frustum $tan 4.15 4.48 0.075 0.060 0.20 0.0 16
-    Add-Ellipsoid $earInner @(-0.45, 4.18, 0.13) @(0.12, 0.105, 0.022) 10 20
-    Add-Ellipsoid $earInner @(0.45, 4.18, 0.13) @(0.12, 0.105, 0.022) 10 20
+    Add-Ellipsoid $tan @(-0.39, 4.16, 0.94) @(0.17, 0.12, 0.070) 16 32
+    Add-Ellipsoid $tan @(0.39, 4.16, 0.94) @(0.17, 0.12, 0.070) 16 32
+    Add-Frustum $tan 4.18 4.49 0.062 0.050 -0.16 0.96 16
+    Add-Frustum $tan 4.18 4.49 0.062 0.050 0.16 0.96 16
+    Add-Ellipsoid $earInner @(-0.39, 4.16, 1.010) @(0.080, 0.105, 0.018) 10 20
+    Add-Ellipsoid $earInner @(0.39, 4.16, 1.010) @(0.080, 0.105, 0.018) 10 20
     # Ossicones use a visible tan stalk and a short cap angled outward from
     # the head. The previous isolated ellipsoids read as floating pegs and
     # gave the mascot an unintended, lopsided silhouette in front views.
-    Add-Frustum $tan 4.28 4.52 0.055 0.044 -0.20 0.0 16
-    Add-Frustum $tan 4.28 4.52 0.055 0.044 0.20 0.0 16
-    Add-OrientedCone $ossicone @(-0.20, 4.48, 0.0) @(-0.27, 4.72, -0.01) 0.08 16
-    Add-OrientedCone $ossicone @(0.20, 4.48, 0.0) @(0.27, 4.72, -0.01) 0.08 16
+    Add-Frustum $tan 4.30 4.56 0.050 0.040 -0.16 0.96 16
+    Add-Frustum $tan 4.30 4.56 0.050 0.040 0.16 0.96 16
+    Add-OrientedCone $ossicone @(-0.16, 4.52, 0.96) @(-0.22, 4.76, 0.95) 0.065 16
+    Add-OrientedCone $ossicone @(0.16, 4.52, 0.96) @(0.22, 4.76, 0.95) 0.065 16
     # A short mane row gives the neck a readable rear contour without making
     # the mascot realistic in the photographic sense.
-    foreach ($maneY in @(1.95, 2.18, 2.41, 2.64, 2.87, 3.10, 3.33)) {
-        Add-Ellipsoid $spots @(0.0, $maneY, -0.31) @(0.075, 0.13, 0.035) 8 16
+    foreach ($maneY in @(2.08, 2.30, 2.52, 2.74, 2.96, 3.18, 3.40, 3.60)) {
+        Add-Ellipsoid $mane @(0.0, $maneY, 0.50 + (($maneY - 2.08) * 0.17)) @(0.075, 0.13, 0.040) 10 20
     }
     # A short articulated tail restores a key rear-body relationship without
     # introducing a disconnected decorative peg.
-    Add-OrientedCone $tan @(0.0, 1.38, -0.43) @(0.08, 1.92, -0.72) 0.065 16
-    Add-OrientedCone $spots @(0.08, 1.92, -0.72) @(0.10, 2.12, -0.84) 0.085 16
-    # Spots are low-profile tangent patches, not intersecting ellipsoids. The
-    # small outward bias is a deterministic decal-style separation that keeps
-    # the pattern readable without introducing bumps or coplanar z-fighting.
-    Add-SurfaceSpot $spots @(0.0, 2.22, 0.30) @(0.0, 0.0, 1.0) 0.13 0.22 -0.15
-    Add-SurfaceSpot $spots @(0.0, 2.78, 0.30) @(0.0, 0.0, 1.0) 0.12 0.17 0.25
-    # Keep the face readable, but reduce the toy-like eye and muzzle circles.
-    # The mouth is a short level crease rather than a smiling arc, which keeps
-    # the mascot identity restrained while moving the silhouette toward a
-    # believable giraffe head.
-    Add-Ellipsoid $cream @(0.0, 3.61, 0.39) @(0.30, 0.16, 0.13) 18 32
-    Add-Ellipsoid $cream @(0.0, 3.48, 0.42) @(0.22, 0.09, 0.09) 14 28
-    Add-Ellipsoid $eyes @(-0.18, 3.96, 0.38) @(0.048, 0.070, 0.032) 16 28
-    Add-Ellipsoid $eyes @(0.18, 3.96, 0.38) @(0.048, 0.070, 0.032) 16 28
-    Add-Ellipsoid $iris @(-0.18, 3.96, 0.425) @(0.024, 0.038, 0.011) 12 24
-    Add-Ellipsoid $iris @(0.18, 3.96, 0.425) @(0.024, 0.038, 0.011) 12 24
-    Add-Ellipsoid $details @(-0.18, 3.96, 0.438) @(0.009, 0.018, 0.006) 10 18
-    Add-Ellipsoid $details @(0.18, 3.96, 0.438) @(0.009, 0.018, 0.006) 10 18
-    Add-Ellipsoid $eyes @(-0.187, 3.985, 0.445) @(0.007, 0.011, 0.004) 8 14
-    Add-Ellipsoid $eyes @(0.173, 3.985, 0.445) @(0.007, 0.011, 0.004) 8 14
-    Add-Ellipsoid $details @(-0.12, 3.66, 0.56) @(0.055, 0.030, 0.010) 8 14
-    Add-Ellipsoid $details @(0.12, 3.66, 0.56) @(0.055, 0.030, 0.010) 8 14
-    Add-Ellipsoid $smile @(0.0, 3.50, 0.52) @(0.14, 0.016, 0.008) 8 16
-    return [pscustomobject]@{ Parts = @($tan, $spots, $cream, $eyes, $iris, $details, $smile, $earInner, $ossicone); Materials = $materials }
+    Add-OrientedCone $tan @(0.0, 1.56, -1.16) @(0.08, 1.84, -1.42) 0.060 16
+    Add-OrientedCone $spots @(0.08, 1.84, -1.42) @(0.10, 2.02, -1.52) 0.075 16
+    # The face is built as an elongated muzzle with small, recessed dark eyes
+    # and a neutral lip crease. The model intentionally avoids oversized
+    # highlights or a smiling mouth so its expression remains anatomical.
+    Add-Ellipsoid $cream @(0.0, 3.67, 1.52) @(0.25, 0.13, 0.14) 20 36
+    Add-Ellipsoid $cream @(0.0, 3.53, 1.43) @(0.17, 0.070, 0.075) 16 30
+    Add-Ellipsoid $eyes @(-0.13, 3.99, 1.48) @(0.028, 0.042, 0.018) 16 28
+    Add-Ellipsoid $eyes @(0.13, 3.99, 1.48) @(0.028, 0.042, 0.018) 16 28
+    Add-Ellipsoid $iris @(-0.13, 3.99, 1.506) @(0.014, 0.024, 0.007) 12 24
+    Add-Ellipsoid $iris @(0.13, 3.99, 1.506) @(0.014, 0.024, 0.007) 12 24
+    Add-Ellipsoid $details @(-0.13, 4.035, 1.490) @(0.046, 0.009, 0.009) 8 18
+    Add-Ellipsoid $details @(0.13, 4.035, 1.490) @(0.046, 0.009, 0.009) 8 18
+    Add-Ellipsoid $details @(-0.09, 3.70, 1.645) @(0.038, 0.020, 0.008) 8 14
+    Add-Ellipsoid $details @(0.09, 3.70, 1.645) @(0.038, 0.020, 0.008) 8 14
+    Add-Ellipsoid $smile @(0.0, 3.53, 1.530) @(0.075, 0.009, 0.006) 8 16
+    Add-Ellipsoid $nose @(-0.08, 3.68, 1.665) @(0.026, 0.020, 0.012) 10 20
+    Add-Ellipsoid $nose @(0.08, 3.68, 1.665) @(0.026, 0.020, 0.012) 10 20
+    return [pscustomobject]@{ Parts = @($tan, $spots, $cream, $eyes, $iris, $details, $smile, $earInner, $ossicone, $hoof, $mane, $nose, $joint); Materials = $materials }
 }
 
 function New-Rocket {
     $materials = @(
-        (New-Material "Rocket Painted Ceramic" @(0.52, 0.58, 0.66, 1.0) 0.18 0.32 0.32 0.16 -NormalTextureIndex 0 -NormalTextureScale 0.16 -MetallicRoughnessTextureIndex 1),
-        (New-Material "Rocket Brushed Metal" @(0.36, 0.40, 0.47, 1.0) 0.86 0.24 0.08 0.20 -NormalTextureIndex 0 -NormalTextureScale 0.14 -MetallicRoughnessTextureIndex 1),
+        (New-Material "Rocket Painted Ceramic" @(0.96, 0.96, 0.94, 1.0) 0.12 0.36 0.24 0.18 -BaseColorTextureIndex 2 -NormalTextureIndex 0 -NormalTextureScale 0.14 -MetallicRoughnessTextureIndex 1),
+        (New-Material "Rocket Brushed Metal" @(0.20, 0.22, 0.24, 1.0) 0.86 0.24 0.08 0.20 -NormalTextureIndex 0 -NormalTextureScale 0.14 -MetallicRoughnessTextureIndex 1),
         (New-Material "Rocket Heat Shield" @(0.035, 0.042, 0.050, 1.0) 0.62 0.38 0.0 0.20 @(0.0, 0.0, 0.0) 0.50 @(0.18, 0.025, 0.005) 0.40 -NormalTextureIndex 0 -NormalTextureScale 0.12 -MetallicRoughnessTextureIndex 1),
-        (New-Material "Rocket Mission Stripe" @(0.68, 0.085, 0.028, 1.0) 0.18 0.34 0.12 0.20 -NormalTextureIndex 0 -NormalTextureScale 0.14 -MetallicRoughnessTextureIndex 1),
+        (New-Material "Rocket Mission Stripe" @(0.22, 0.12, 0.045, 1.0) 0.18 0.38 0.08 0.22 -NormalTextureIndex 0 -NormalTextureScale 0.12 -MetallicRoughnessTextureIndex 1),
         (New-Material "Rocket Avionics" @(0.018, 0.024, 0.034, 1.0) 0.72 0.28 0.10 0.18 -NormalTextureIndex 0 -NormalTextureScale 0.12 -MetallicRoughnessTextureIndex 1),
-        (New-Material "Rocket Launch Pad" @(0.075, 0.090, 0.105, 1.0) 0.32 0.68 0.10 0.16 -NormalTextureIndex 0 -NormalTextureScale 0.10 -MetallicRoughnessTextureIndex 1))
+        (New-Material "Rocket Launch Pad" @(0.075, 0.090, 0.105, 1.0) 0.32 0.68 0.10 0.16 -NormalTextureIndex 0 -NormalTextureScale 0.10 -MetallicRoughnessTextureIndex 1),
+        (New-Material "Rocket Fastener" @(0.20, 0.23, 0.28, 1.0) 0.78 0.22 0.12 0.18 -NormalTextureIndex 0 -NormalTextureScale 0.10 -MetallicRoughnessTextureIndex 1),
+        (New-Material "Rocket Thermal Detail" @(0.025, 0.032, 0.040, 1.0) 0.38 0.58 0.02 0.22 -NormalTextureIndex 0 -NormalTextureScale 0.12 -MetallicRoughnessTextureIndex 1),
+        (New-Material "Rocket Engine Bell" @(0.16, 0.19, 0.23, 1.0) 0.76 0.30 0.04 0.22 -NormalTextureIndex 0 -NormalTextureScale 0.14 -MetallicRoughnessTextureIndex 1),
+        (New-Material "Rocket Panel Detail" @(0.075, 0.090, 0.105, 1.0) 0.56 0.34 0.03 0.20 -NormalTextureIndex 0 -NormalTextureScale 0.10 -MetallicRoughnessTextureIndex 1),
+        (New-Material "Rocket Core Insulation" @(0.52, 0.16, 0.035, 1.0) 0.06 0.58 0.02 0.26 -NormalTextureIndex 0 -NormalTextureScale 0.12 -MetallicRoughnessTextureIndex 1),
+        (New-Material "Rocket Booster Coating" @(0.66, 0.67, 0.64, 1.0) 0.10 0.44 0.10 0.20 -NormalTextureIndex 0 -NormalTextureScale 0.12 -MetallicRoughnessTextureIndex 1),
+        (New-Material "Rocket Service Structure" @(0.090, 0.105, 0.120, 1.0) 0.64 0.30 0.02 0.24 -NormalTextureIndex 0 -NormalTextureScale 0.10 -MetallicRoughnessTextureIndex 1))
     $paint = New-Part 0
     $metal = New-Part 1
     $heat = New-Part 2
     $stripe = New-Part 3
     $avionics = New-Part 4
     $pad = New-Part 5
+    $fastener = New-Part 6
+    $thermal = New-Part 7
+    $engineBell = New-Part 8
+    $panelDetail = New-Part 9
+    $coreInsulation = New-Part 10
+    $booster = New-Part 11
+    $serviceStructure = New-Part 12
     # Staged core, interstage, and ogive-like fairing sections provide a more
     # believable modern launch-vehicle silhouette while remaining bounded.
-    Add-ProfiledFrustum $paint @(0.35, 1.15, 2.25, 2.50, 2.62, 2.76, 2.92, 3.12) @(0.62, 0.61, 0.58, 0.56, 0.54, 0.44, 0.27, 0.075) 0.0 0.0 56
-    Add-Ellipsoid $paint @(0.0, 3.17, 0.0) @(0.08, 0.11, 0.08) 16 32
-    Add-Frustum $metal 0.28 0.48 0.64 0.64 0.0 0.0 32
-    Add-Frustum $metal 0.48 0.56 0.64 0.59 0.0 0.0 32
-    Add-Frustum $metal 1.24 1.30 0.575 0.575 0.0 0.0 32
-    Add-Frustum $metal 2.28 2.38 0.60 0.60 0.0 0.0 32
-    Add-Frustum $metal 2.54 2.62 0.56 0.56 0.0 0.0 32
-    Add-Frustum $metal 2.76 2.84 0.44 0.44 0.0 0.0 32
-    Add-Frustum $avionics 1.18 1.24 0.60 0.60 0.0 0.0 32
-    Add-Frustum $avionics 2.48 2.54 0.56 0.56 0.0 0.0 32
+    Add-ProfiledFrustum $coreInsulation @(0.38, 1.55, 3.10) @(0.56, 0.55, 0.52) 0.0 0.0 88
+    Add-ProfiledFrustum $paint @(3.10, 3.48, 3.74, 4.04, 4.36, 4.64) @(0.52, 0.51, 0.49, 0.38, 0.20, 0.025) 0.0 0.0 88
+    Add-Frustum $metal 0.28 0.55 0.58 0.58 0.0 0.0 40
+    Add-Frustum $metal 0.55 0.64 0.58 0.54 0.0 0.0 40
+    Add-Frustum $metal 1.58 1.66 0.545 0.545 0.0 0.0 40
+    Add-Frustum $metal 3.15 3.25 0.54 0.54 0.0 0.0 40
+    Add-Frustum $metal 3.48 3.56 0.51 0.51 0.0 0.0 40
+    Add-Frustum $metal 3.74 3.82 0.49 0.49 0.0 0.0 40
+    Add-Frustum $metal 4.04 4.12 0.38 0.38 0.0 0.0 40
+    Add-Frustum $avionics 1.50 1.58 0.56 0.56 0.0 0.0 40
+    Add-Frustum $avionics 3.40 3.48 0.51 0.51 0.0 0.0 40
     # A bounded seven-engine cluster gives the lower stage a recognizable
     # modern launch-vehicle layout instead of three red cylinders. Each
     # engine keeps a metallic throat ring, a dark heat bell, and a smaller
@@ -988,12 +1044,44 @@ function New-Rocket {
             @(-0.28, 0.0), @(0.0, 0.0), @(0.28, 0.0),
             @(0.0, -0.28), @(0.0, 0.28), @(-0.20, -0.20), @(0.20, 0.20))) {
         Add-Frustum $metal 0.02 0.16 0.21 0.18 $engine[0] $engine[1] 20
-        Add-Frustum $heat 0.14 0.40 0.16 0.105 $engine[0] $engine[1] 20
+        Add-Frustum $engineBell 0.14 0.40 0.16 0.105 $engine[0] $engine[1] 24
         Add-Frustum $heat 0.40 0.46 0.105 0.075 $engine[0] $engine[1] 20
         Add-Frustum $avionics 0.05 0.12 0.12 0.075 $engine[0] $engine[1] 16
         Add-Ellipsoid $heat @($engine[0], 0.02, $engine[1]) @(0.17, 0.06, 0.17) 8 16
     }
-    Add-Frustum $stripe 1.72 1.91 0.607 0.607 0.0 0.0 32
+    Add-Frustum $stripe 2.35 2.54 0.535 0.535 0.0 0.0 40
+    Add-Frustum $thermal 1.08 1.16 0.555 0.555 0.0 0.0 56
+    Add-Frustum $thermal 2.95 3.04 0.535 0.535 0.0 0.0 56
+    foreach ($ring in @(@(1.58, 0.49), @(3.48, 0.44))) {
+        for ($fastenerIndex = 0; $fastenerIndex -lt 8; ++$fastenerIndex) {
+            $angle = 2.0 * [Math]::PI * $fastenerIndex / 8.0
+            Add-Ellipsoid $fastener @(
+                [float]($ring[1] * [Math]::Cos($angle)),
+                [float]$ring[0],
+                [float]($ring[1] * [Math]::Sin($angle))) @(0.035, 0.052, 0.025) 10 20
+        }
+    }
+    Add-Box $panelDetail @(0.0, 2.20, 0.555) @(0.035, 0.82, 0.016)
+    Add-Box $panelDetail @(-0.34, 2.20, 0.435) @(0.028, 0.72, 0.015)
+    Add-Box $panelDetail @(0.34, 2.20, 0.435) @(0.028, 0.72, 0.015)
+    foreach ($boosterX in @(-0.92, 0.92)) {
+        Add-ProfiledFrustum $booster @(0.34, 0.55, 2.65, 3.00, 3.24, 3.50) @(0.30, 0.29, 0.285, 0.27, 0.17, 0.025) $boosterX 0.0 64
+        Add-Frustum $metal 0.42 0.56 0.315 0.315 $boosterX 0.0 32
+        Add-Frustum $thermal 2.52 2.61 0.295 0.295 $boosterX 0.0 40
+        Add-Frustum $avionics 3.00 3.07 0.275 0.275 $boosterX 0.0 32
+        Add-Ellipsoid $heat @($boosterX, 0.30, 0.0) @(0.24, 0.06, 0.24) 10 20
+    }
+    # The service structure is a generic bounded lattice-and-arm reference:
+    # it gives the vehicle real launch-scale context without copying any
+    # specific agency tower, branding, or mission hardware.
+    foreach ($towerZ in @(-0.34, 0.34)) {
+        Add-Box $serviceStructure @(-1.55, 2.10, $towerZ) @(0.065, 2.10, 0.065)
+    }
+    foreach ($towerY in @(0.38, 1.18, 2.04, 2.90, 3.78)) {
+        Add-Box $serviceStructure @(-1.55, $towerY, 0.0) @(0.075, 0.045, 0.44)
+    }
+    Add-Box $serviceStructure @(-0.92, 3.14, 0.0) @(0.70, 0.060, 0.16)
+    Add-Box $serviceStructure @(-0.92, 2.48, 0.0) @(0.48, 0.050, 0.12)
     Add-RadialFin $metal 1.0 0.0
     Add-RadialFin $metal -1.0 0.0
     Add-RadialFin $metal 0.0 1.0
@@ -1009,11 +1097,11 @@ function New-Rocket {
             @(-0.92, 0.92), @(0.92, 0.92))) {
         Add-Box $pad @($tower[0], 0.27, $tower[1]) @(0.08, 0.32, 0.08)
     }
-    $rocketScale = 1.70
-    foreach ($part in @($paint, $metal, $heat, $stripe, $avionics, $pad)) {
+    $rocketScale = 1.80
+    foreach ($part in @($paint, $metal, $heat, $stripe, $avionics, $pad, $fastener, $thermal, $engineBell, $panelDetail, $coreInsulation, $booster, $serviceStructure)) {
         Scale-Part-Uniform $part $rocketScale
     }
-    return [pscustomobject]@{ Parts = @($paint, $metal, $heat, $stripe, $avionics, $pad); Materials = $materials }
+    return [pscustomobject]@{ Parts = @($paint, $metal, $heat, $stripe, $avionics, $pad, $fastener, $thermal, $engineBell, $panelDetail, $coreInsulation, $booster, $serviceStructure); Materials = $materials }
 }
 
 if (-not [IO.Path]::IsPathRooted($OutputDirectory)) {
@@ -1022,7 +1110,7 @@ if (-not [IO.Path]::IsPathRooted($OutputDirectory)) {
 [IO.Directory]::CreateDirectory($OutputDirectory) | Out-Null
 $giraffe = New-Giraffe
 $giraffeTextures = New-ShowcaseTextureDefinitions -OutputDirectory $OutputDirectory -Subject "giraffe" -IncludeBaseColor
-Write-Gltf (Join-Path $OutputDirectory "cheeky_giraffe.gltf") "Cheeky Giraffe Mascot" $giraffe.Parts $giraffe.Materials @(-2.15, 0.0, -1.7) $giraffeTextures
+Write-Gltf (Join-Path $OutputDirectory "cheeky_giraffe.gltf") "Anatomical Giraffe Study" $giraffe.Parts $giraffe.Materials @(-2.15, 0.0, -1.7) $giraffeTextures
 $rocket = New-Rocket
-$rocketTextures = New-ShowcaseTextureDefinitions $OutputDirectory "rocket"
+$rocketTextures = New-ShowcaseTextureDefinitions $OutputDirectory "rocket" -IncludeBaseColor
 Write-Gltf (Join-Path $OutputDirectory "original_realistic_rocket.gltf") "Original Realistic Rocket" $rocket.Parts $rocket.Materials @(2.15, 0.0, -1.7) $rocketTextures

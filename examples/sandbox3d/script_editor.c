@@ -7,6 +7,7 @@
 #include <henka/henkascript.h>
 #include <henka/input.h>
 #include <henka/memory.h>
+#include <henka/script_backends.h>
 
 #include "game_authoring.h"
 
@@ -18,6 +19,14 @@
 #define SANDBOX3D_SCRIPT_EDITOR_INDENT_SPACES 4U
 #define SANDBOX3D_SCRIPT_EDITOR_MAX_INDENT_SPACES \
     (HENKA_HKS_MAX_TOKENS * SANDBOX3D_SCRIPT_EDITOR_INDENT_SPACES)
+
+typedef struct sandbox3d_script_editor_token_span
+{
+    size_t offset;
+    size_t length;
+    uint32_t line;
+    henka_ui_semantic_color color;
+} sandbox3d_script_editor_token_span;
 
 static bool sandbox3d_script_editor_rect_is_valid(henka_ui_rect bounds)
 {
@@ -53,6 +62,105 @@ static henka_ui_semantic_color sandbox3d_script_editor_token_color(
         default:
             return HENKA_UI_COLOR_NORMAL;
     }
+}
+
+static henka_ui_semantic_color sandbox3d_script_editor_lua_token_color(
+    henka_lua_token_class token_class)
+{
+    switch (token_class)
+    {
+        case HENKA_LUA_TOKEN_CLASS_LITERAL:
+            return HENKA_UI_COLOR_ORANGE;
+        case HENKA_LUA_TOKEN_CLASS_KEYWORD:
+            return HENKA_UI_COLOR_ACCENT;
+        case HENKA_LUA_TOKEN_CLASS_BUILTIN:
+            return HENKA_UI_COLOR_WARNING;
+        case HENKA_LUA_TOKEN_CLASS_COMMENT:
+            return HENKA_UI_COLOR_MUTED;
+        case HENKA_LUA_TOKEN_CLASS_IDENTIFIER:
+        case HENKA_LUA_TOKEN_CLASS_PUNCTUATION:
+        case HENKA_LUA_TOKEN_CLASS_OPERATOR:
+        default:
+            return HENKA_UI_COLOR_NORMAL;
+    }
+}
+
+static bool sandbox3d_script_editor_tokenize(
+    henka_script_language language,
+    const char* source,
+    size_t source_size,
+    henka_hks_token* hks_tokens,
+    henka_lua_token* lua_tokens,
+    sandbox3d_script_editor_token_span* spans,
+    size_t* out_token_count,
+    henka_hks_diagnostic* hks_diagnostic,
+    henka_lua_diagnostic* lua_diagnostic)
+{
+    size_t backend_token_count = 0U;
+    size_t index;
+    if (out_token_count != NULL)
+    {
+        *out_token_count = 0U;
+    }
+    if (source == NULL || out_token_count == NULL || spans == NULL)
+    {
+        return false;
+    }
+    if (language == HENKA_SCRIPT_LANGUAGE_HENKASCRIPT)
+    {
+        if (hks_tokens == NULL ||
+            henka_hks_lex(
+                source,
+                source_size,
+                hks_tokens,
+                HENKA_HKS_MAX_TOKENS,
+                &backend_token_count,
+                hks_diagnostic) != HENKA_SUCCESS)
+        {
+            return false;
+        }
+        for (index = 0U; index < backend_token_count; ++index)
+        {
+            spans[*out_token_count] = (sandbox3d_script_editor_token_span){
+                hks_tokens[index].offset,
+                hks_tokens[index].length,
+                hks_tokens[index].line,
+                hks_tokens[index].kind == HENKA_HKS_TOKEN_EOF
+                    ? HENKA_UI_COLOR_NORMAL
+                    : sandbox3d_script_editor_token_color(
+                        henka_hks_token_kind_get_class(hks_tokens[index].kind))};
+            ++(*out_token_count);
+        }
+        return true;
+    }
+    if (language == HENKA_SCRIPT_LANGUAGE_LUA)
+    {
+        if (lua_tokens == NULL ||
+            henka_lua_lex(
+                source,
+                source_size,
+                lua_tokens,
+                HENKA_LUA_MAX_TOKENS,
+                &backend_token_count,
+                lua_diagnostic) != HENKA_SUCCESS)
+        {
+            return false;
+        }
+        for (index = 0U; index < backend_token_count; ++index)
+        {
+            spans[*out_token_count] = (sandbox3d_script_editor_token_span){
+                lua_tokens[index].offset,
+                lua_tokens[index].length,
+                lua_tokens[index].line,
+                lua_tokens[index].token_class == HENKA_LUA_TOKEN_CLASS_NONE
+                    ? HENKA_UI_COLOR_NORMAL
+                    : sandbox3d_script_editor_lua_token_color(
+                        lua_tokens[index].token_class)};
+            ++(*out_token_count);
+        }
+        return true;
+    }
+    return false;
 }
 
 static bool sandbox3d_script_editor_get_line(
@@ -163,7 +271,7 @@ static void sandbox3d_script_editor_draw_tokenized_line(
     henka_ui_rect bounds,
     const char* source,
     size_t source_size,
-    const henka_hks_token* tokens,
+    const sandbox3d_script_editor_token_span* tokens,
     size_t token_count,
     uint32_t line_number,
     size_t line_offset,
@@ -178,11 +286,11 @@ static void sandbox3d_script_editor_draw_tokenized_line(
 
     for (token_index = 0U; token_index < token_count; ++token_index)
     {
-        const henka_hks_token* token = &tokens[token_index];
+        const sandbox3d_script_editor_token_span* token = &tokens[token_index];
         size_t token_offset;
         size_t token_length;
-        if (token->kind == HENKA_HKS_TOKEN_EOF ||
-            token->line != line_number || token->offset < line_offset ||
+        if (token->length == 0U || token->line != line_number ||
+            token->offset < line_offset ||
             token->offset - line_offset >= line_length)
         {
             continue;
@@ -217,8 +325,7 @@ static void sandbox3d_script_editor_draw_tokenized_line(
             token_length,
             code_x + (float)token_offset * character_width,
             line_y,
-            sandbox3d_script_editor_token_color(
-                henka_hks_token_kind_get_class(token->kind)));
+            token->color);
         cursor = token_offset + token_length;
     }
 
@@ -295,6 +402,47 @@ static size_t sandbox3d_script_editor_indent_replacement(
     return indent_spaces + 1U;
 }
 
+static size_t sandbox3d_script_editor_lua_indent_replacement(
+    const char* source,
+    size_t source_size,
+    const henka_lua_token* tokens,
+    size_t token_count,
+    size_t source_offset,
+    uint32_t source_line,
+    char* out_replacement,
+    size_t replacement_capacity)
+{
+    uint32_t indent_level = 0U;
+    size_t indent_spaces;
+    size_t index;
+    if (out_replacement == NULL || replacement_capacity == 0U ||
+        henka_lua_token_stream_get_indent_level(
+            source,
+            source_size,
+            tokens,
+            token_count,
+            source_offset,
+            source_line,
+            &indent_level) != HENKA_SUCCESS ||
+        indent_level > SIZE_MAX / SANDBOX3D_SCRIPT_EDITOR_INDENT_SPACES)
+    {
+        return 0U;
+    }
+    indent_spaces = (size_t)indent_level * SANDBOX3D_SCRIPT_EDITOR_INDENT_SPACES;
+    if (indent_spaces > SANDBOX3D_SCRIPT_EDITOR_MAX_INDENT_SPACES ||
+        indent_spaces + 1U > replacement_capacity)
+    {
+        return 0U;
+    }
+    out_replacement[0] = '\n';
+    for (index = 0U; index < indent_spaces; ++index)
+    {
+        out_replacement[index + 1U] = ' ';
+    }
+    out_replacement[indent_spaces + 1U] = '\0';
+    return indent_spaces + 1U;
+}
+
 static void sandbox3d_script_editor_draw_caret(
     henka_ui_context* ui,
     henka_ui_rect bounds,
@@ -331,9 +479,12 @@ henka_result sandbox3d_script_editor_draw_preview(
 {
     const char* source = NULL;
     size_t source_size = 0U;
-    henka_hks_token* tokens = NULL;
+    henka_hks_token* hks_tokens = NULL;
+    henka_lua_token* lua_tokens = NULL;
+    sandbox3d_script_editor_token_span* presentation_tokens = NULL;
     size_t token_count = 0U;
     henka_hks_diagnostic diagnostic;
+    henka_lua_diagnostic lua_diagnostic;
     henka_script_source_diagnostic source_diagnostic;
     henka_ui_interaction_state code_interaction;
     henka_vec2 mouse_position;
@@ -423,23 +574,31 @@ henka_result sandbox3d_script_editor_draw_preview(
     {
         return result;
     }
+    presentation_tokens = (sandbox3d_script_editor_token_span*)henka_calloc(
+        HENKA_HKS_MAX_TOKENS,
+        sizeof(*presentation_tokens));
     if (behavior->language == HENKA_SCRIPT_LANGUAGE_HENKASCRIPT)
     {
-        tokens = (henka_hks_token*)henka_calloc(
+        hks_tokens = (henka_hks_token*)henka_calloc(
             HENKA_HKS_MAX_TOKENS,
-            sizeof(*tokens));
-        if (tokens != NULL &&
-            henka_hks_lex(
-                source,
-                source_size,
-                tokens,
-                HENKA_HKS_MAX_TOKENS,
-                &token_count,
-                &diagnostic) == HENKA_SUCCESS)
-        {
-            tokenized = true;
-        }
+            sizeof(*hks_tokens));
     }
+    else if (behavior->language == HENKA_SCRIPT_LANGUAGE_LUA)
+    {
+        lua_tokens = (henka_lua_token*)henka_calloc(
+            HENKA_LUA_MAX_TOKENS,
+            sizeof(*lua_tokens));
+    }
+    tokenized = sandbox3d_script_editor_tokenize(
+        behavior->language,
+        source,
+        source_size,
+        hks_tokens,
+        lua_tokens,
+        presentation_tokens,
+        &token_count,
+        &diagnostic,
+        &lua_diagnostic);
     mouse_position = henka_ui_get_mouse_position(ui);
     result = henka_ui_custom_interaction(
         ui,
@@ -455,7 +614,9 @@ henka_result sandbox3d_script_editor_draw_preview(
         &code_interaction);
     if (result != HENKA_SUCCESS)
     {
-        henka_free(tokens);
+        henka_free(hks_tokens);
+        henka_free(lua_tokens);
+        henka_free(presentation_tokens);
         return result;
     }
     if (code_interaction.pressed)
@@ -484,13 +645,28 @@ henka_result sandbox3d_script_editor_draw_preview(
             size_t replacement_size = 0U;
             if (tokenized)
             {
-                replacement_size = sandbox3d_script_editor_indent_replacement(
-                    tokens,
-                    token_count,
-                    sandbox3d_script_editor_model_get_caret_offset(model),
-                    (uint32_t)sandbox3d_script_editor_model_get_caret_line(model) + 1U,
-                    indent_replacement,
-                    sizeof(indent_replacement));
+                if (behavior->language == HENKA_SCRIPT_LANGUAGE_HENKASCRIPT)
+                {
+                    replacement_size = sandbox3d_script_editor_indent_replacement(
+                        hks_tokens,
+                        token_count,
+                        sandbox3d_script_editor_model_get_caret_offset(model),
+                        (uint32_t)sandbox3d_script_editor_model_get_caret_line(model) + 1U,
+                        indent_replacement,
+                        sizeof(indent_replacement));
+                }
+                else
+                {
+                    replacement_size = sandbox3d_script_editor_lua_indent_replacement(
+                        source,
+                        source_size,
+                        lua_tokens,
+                        token_count,
+                        sandbox3d_script_editor_model_get_caret_offset(model),
+                        (uint32_t)sandbox3d_script_editor_model_get_caret_line(model) + 1U,
+                        indent_replacement,
+                        sizeof(indent_replacement));
+                }
             }
             if (replacement_size == 0U)
             {
@@ -665,22 +841,16 @@ henka_result sandbox3d_script_editor_draw_preview(
             validation_result == HENKA_SUCCESS && reload_result == HENKA_SUCCESS
                 ? HENKA_UI_COLOR_SUCCESS
                 : HENKA_UI_COLOR_WARNING);
-    token_count = 0U;
-    tokenized = false;
-    if (behavior->language == HENKA_SCRIPT_LANGUAGE_HENKASCRIPT &&
-        tokens != NULL)
-    {
-        if (henka_hks_lex(
-                source,
-                source_size,
-                tokens,
-                HENKA_HKS_MAX_TOKENS,
-                &token_count,
-                &diagnostic) == HENKA_SUCCESS)
-        {
-            tokenized = true;
-        }
-    }
+    tokenized = sandbox3d_script_editor_tokenize(
+        behavior->language,
+        source,
+        source_size,
+        hks_tokens,
+        lua_tokens,
+        presentation_tokens,
+        &token_count,
+        &diagnostic,
+        &lua_diagnostic);
     (void)henka_ui_measure_text(
         "M",
         SANDBOX3D_SCRIPT_EDITOR_TEXT_SCALE,
@@ -736,7 +906,7 @@ henka_result sandbox3d_script_editor_draw_preview(
                 bounds,
                 source,
                 source_size,
-                tokens,
+                presentation_tokens,
                 token_count,
                 (uint32_t)line_index + 1U,
                 line_offset,
@@ -769,6 +939,8 @@ henka_result sandbox3d_script_editor_draw_preview(
             diagnostic_text,
             HENKA_UI_COLOR_WARNING);
     }
-    henka_free(tokens);
+    henka_free(hks_tokens);
+    henka_free(lua_tokens);
+    henka_free(presentation_tokens);
     return HENKA_SUCCESS;
 }

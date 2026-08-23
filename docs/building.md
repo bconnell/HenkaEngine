@@ -122,6 +122,18 @@ then runs this exact Release build-and-test path before checking the external ga
 template. Release validation is intentionally separate so the packaged Debug
 provenance remains authoritative for its package checks.
 
+The workflow also runs a separate first-party memory-safety gate:
+
+```powershell
+.\scripts\test_sanitized_runtime_windows.ps1
+```
+
+This builds the renderer-independent runtime and its supported test surface with
+`HENKA_ENABLE_SANITIZERS=ON`. MSVC uses AddressSanitizer; Clang and GCC use
+AddressSanitizer plus UndefinedBehaviorSanitizer. The gate intentionally does
+not instrument bundled third-party sources or replace the normal graphical,
+packaging, and external-project checks.
+
 ## Run the sandbox
 
 ```powershell
@@ -140,7 +152,7 @@ The package script creates:
 
 - `out/HenkaSandbox3D/HenkaSandbox3D.exe`
 - `out/HenkaSandbox3D/assets/`
-- `out/HenkaSandbox3D/assets/models/` with the generated Cheeky Giraffe and Original Realistic Rocket glTF scenes and sibling binary buffers
+- `out/HenkaSandbox3D/assets/models/` with the generated Anatomical Giraffe Study and Original Realistic Rocket glTF scenes and sibling binary buffers
 - `out/HenkaSandbox3D/assets/textures/residency/` with the bounded residency
   stress fixtures used by `--residency-stress`
 - `out/HenkaSandbox3D/docs/help/sandbox3d.md`

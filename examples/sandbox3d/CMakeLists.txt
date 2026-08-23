@@ -5,6 +5,10 @@ add_executable(henka_sandbox3d
     editor_preferences.c
     view_compass.c
     asset_browser_tools.c
+    authoring_asset_controller.c
+    authoring_asset_document.c
+    authoring_asset_commands.c
+    authoring_asset_ui.c
     object_authoring_tools.c
     object_details_tools.c
     interaction_tools.c

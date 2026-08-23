@@ -24,6 +24,7 @@ option(HENKA_BUILD_DEDICATED_SERVER "Build the renderer-free dedicated server." 
 option(HENKA_ENABLE_NETWORK "Build Henka networking support." ON)
 option(HENKA_ENABLE_KTX2_TRANSCODER "Use pinned KTX-Software for checked KTX2/Basis transcoding." ON)
 option(HENKA_ENABLE_LUA "Build the bounded Lua behavior backend." ON)
+option(HENKA_ENABLE_SANITIZERS "Enable AddressSanitizer/UndefinedBehaviorSanitizer for first-party targets." OFF)
 
 if(NOT WIN32)
     message(WARNING "Henka Engine currently validates its full build, runtime, packaging, and external-project path on Windows. Other platforms are not yet supported targets.")
@@ -33,7 +34,36 @@ function(henka_enable_project_warnings target_name)
     if(MSVC)
         target_compile_options(${target_name} PRIVATE /W4 /WX)
     else()
-        target_compile_options(${target_name} PRIVATE -Wall -Wextra -Wpedantic)
+        target_compile_options(${target_name} PRIVATE -Wall -Wextra -Wpedantic -Werror)
+    endif()
+
+    if(HENKA_ENABLE_SANITIZERS)
+        get_target_property(target_type ${target_name} TYPE)
+        if(MSVC)
+            # MSVC currently provides AddressSanitizer, but not a supported
+            # UndefinedBehaviorSanitizer equivalent. Keep the switch local to
+            # first-party targets. The compiler emits the required runtime
+            # directive; /fsanitize=address is not a link.exe option.
+            target_compile_options(${target_name} PRIVATE /fsanitize=address /Zi)
+            if(NOT target_type STREQUAL "STATIC_LIBRARY")
+                target_link_options(${target_name} PRIVATE /INCREMENTAL:NO)
+            endif()
+        elseif(CMAKE_C_COMPILER_ID MATCHES "Clang|GNU")
+            target_compile_options(
+                ${target_name}
+                PRIVATE
+                    -fsanitize=address,undefined
+                    -fno-omit-frame-pointer)
+            if(NOT target_type STREQUAL "STATIC_LIBRARY")
+                target_link_options(
+                    ${target_name}
+                    PRIVATE
+                        -fsanitize=address,undefined)
+            endif()
+        else()
+            message(FATAL_ERROR
+                "HENKA_ENABLE_SANITIZERS requires MSVC, Clang, or GCC.")
+        endif()
     endif()
 endfunction()
 

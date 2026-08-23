@@ -175,7 +175,7 @@ shaded mode. It writes generated images plus per-mode logs under
 
 The normal startup should show these showcase assets:
 
-- `Showcase Giraffe`: the Cheeky Giraffe mascot, loaded from the packaged glTF scene/material path.
+- `Showcase Giraffe`: the Anatomical Giraffe Study, loaded from the packaged glTF scene/material path.
 - `Showcase Rocket`: the Original Realistic Rocket, loaded from the packaged glTF scene/material path.
 - `Ground`: the restrained graphite plane beneath the showcase, with subtle surface variation, beneath the debug grid.
 
@@ -222,12 +222,16 @@ Use `--primitive-gallery` when the engineering samples are specifically under te
 - The `Controls` panel can adjust mouse sensitivity and camera speed with the mouse.
 - The `Controls` panel can reset the camera, save settings, reset sandbox settings, print help, print the scene legend, and reset the panel layout.
 - The `Scene Objects` panel lists the current scene examples by name.
-- `Create Native Rocket` creates a nontrivial generated-fixture source; verify its body, nose, nozzle, and fins render in the scene, then use Object Details component/topology controls and Save Project/Reload Project without losing the source. Do not count this hard-coded constructor as user-authored geometry proof.
+- In Scene Objects, enter a bounded asset name, choose `New Asset`, and add
+  Box, Cylinder, Cone, and UV Sphere parts through the generic primitive
+  chooser. Save, close, and reopen the document; verify the manifest retains
+  `HENKA_PRODUCT_NATIVE_AUTHORED` provenance and all four parts. Do not count
+  this generic primitive proof as final Giraffe/Rocket production modeling.
 - The `Diagnostics` utility reports current viewport, selection, and interaction state.
 - The `Transform QA` utility can move, rotate, scale, and reset the selected object through direct controls.
 - Clicking an object updates the `Object Details` panel.
 - The `Object Details` panel can toggle visibility, focus the camera, reset the selected transform, and print object info.
-- After selecting an imported `Showcase Giraffe` or `Showcase Rocket`, `Make Editable` exposes `Refine Profile`; verify the giraffe neck/head or rocket lower/upper-stage profile changes through that asset-specific preset without changing vertex/face counts, then verify the changed mesh survives Save Project, Reload Project, and a later relaunch. Do not count the preset as generic user-directed modeling proof.
+- After selecting an imported `Showcase Giraffe` or `Showcase Rocket`, `Make Editable` exposes generic component and face tools; verify a visible selection can be moved, scaled, and extruded through `Extrude Selection`, then verify the changed mesh survives Save Project, Reload Project, and a later relaunch. Do not count imported fixture edits as proof that the fixture was authored from a blank Henka document.
 - The `Object Info` utility shows the selected effective material description and the count of borrowed semantic texture dependencies; full in-panel material authoring remains outside this checklist.
 - The `Object Details` panel shows tag and interaction state when those foundations are available.
 - A selected object shows a visible transform gizmo in the viewport, and the visible handle matches the clickable region.

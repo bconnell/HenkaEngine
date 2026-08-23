@@ -55,8 +55,18 @@ static bool henka_action_name_is_valid(const char* value)
 
 static bool henka_action_primitive_is_valid(henka_action_primitive primitive)
 {
-    return primitive >= HENKA_ACTION_PRIMITIVE_CUBE &&
-        primitive <= HENKA_ACTION_PRIMITIVE_MARKER;
+    switch (primitive)
+    {
+        case HENKA_ACTION_PRIMITIVE_CUBE:
+        case HENKA_ACTION_PRIMITIVE_PLANE:
+        case HENKA_ACTION_PRIMITIVE_MARKER:
+        case HENKA_ACTION_PRIMITIVE_CYLINDER:
+        case HENKA_ACTION_PRIMITIVE_CONE:
+        case HENKA_ACTION_PRIMITIVE_UV_SPHERE:
+            return true;
+        default:
+            return false;
+    }
 }
 
 static bool henka_action_transform_is_valid(henka_transform transform)
@@ -336,6 +346,9 @@ static henka_bounds henka_action_get_primitive_bounds(henka_action_primitive pri
             return (henka_bounds){{0.0f, 0.0f, 0.0f}, {0.5f, 0.05f, 0.5f}};
         case HENKA_ACTION_PRIMITIVE_MARKER:
             return (henka_bounds){{0.0f, 0.5f, 0.0f}, {0.35f, 0.5f, 0.35f}};
+        case HENKA_ACTION_PRIMITIVE_CYLINDER:
+        case HENKA_ACTION_PRIMITIVE_CONE:
+        case HENKA_ACTION_PRIMITIVE_UV_SPHERE:
         case HENKA_ACTION_PRIMITIVE_CUBE:
         default:
             return (henka_bounds){{0.0f, 0.0f, 0.0f}, {0.5f, 0.5f, 0.5f}};
@@ -350,6 +363,12 @@ static const char* henka_action_get_primitive_tag(henka_action_primitive primiti
             return "primitive_plane";
         case HENKA_ACTION_PRIMITIVE_MARKER:
             return "primitive_marker";
+        case HENKA_ACTION_PRIMITIVE_CYLINDER:
+            return "primitive_cylinder";
+        case HENKA_ACTION_PRIMITIVE_CONE:
+            return "primitive_cone";
+        case HENKA_ACTION_PRIMITIVE_UV_SPHERE:
+            return "primitive_uv_sphere";
         case HENKA_ACTION_PRIMITIVE_CUBE:
         default:
             return "primitive_cube";

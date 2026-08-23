@@ -1,3 +1,15 @@
+# Release test binaries must keep their assertions active. The engine and
+# application targets retain the normal NDEBUG optimization contract, but a
+# test binary that compiles out its checks can hide both regressions and
+# warning-as-error failures in assertion-only code paths. Force the undefine
+# through a header so MSVC does not emit D9025 for conflicting command-line
+# definitions.
+if(MSVC)
+    add_compile_options("/FI${CMAKE_CURRENT_SOURCE_DIR}/test_assertions.h")
+else()
+    add_compile_options("-include${CMAKE_CURRENT_SOURCE_DIR}/test_assertions.h")
+endif()
+
 add_executable(henka_headless_runtime_tests
     test_headless_runtime.c
 )
@@ -545,6 +557,10 @@ add_executable(henka_tests
     ../examples/sandbox3d/editor_preferences.c
     ../examples/sandbox3d/view_compass.c
     ../examples/sandbox3d/object_details_tools.c
+    ../examples/sandbox3d/authoring_asset_controller.c
+    ../examples/sandbox3d/authoring_asset_document.c
+    ../examples/sandbox3d/authoring_asset_commands.c
+    ../examples/sandbox3d/authoring_asset_ui.c
     ../examples/sandbox3d/object_authoring_tools.c
     ../examples/sandbox3d/asset_browser_tools.c
     ../examples/sandbox3d/interaction_tools.c
@@ -569,6 +585,8 @@ add_executable(henka_tests
     test_camera_hardening.c
     test_sandbox3d_object_details.c
     test_sandbox3d_object_authoring.c
+    test_sandbox3d_authoring_asset_document.c
+    test_sandbox3d_authoring_asset_ui.c
     test_sandbox3d_asset_browser.c
     test_main.c
     test_math.c

@@ -78,8 +78,8 @@ foreach ($requiredMode in @("solid", "material_preview", "rendered")) {
             throw "Showcase $requiredMode metadata reports a cropped subject."
         }
     }
-    if ([int]$metadata.Groups["gp"].Value -lt 1 -or
-        [int]$metadata.Groups["rp"].Value -lt 1 -or
+    if ([int]$metadata.Groups["gp"].Value -lt 13 -or
+        [int]$metadata.Groups["rp"].Value -lt 13 -or
         [int]$metadata.Groups["sss"].Value -lt 1 -or
         [int]$metadata.Groups["normal"].Value -lt 1 -or
         [int]$metadata.Groups["normal"].Value -ne [int]$metadata.Groups["sss"].Value -or

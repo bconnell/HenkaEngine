@@ -1,0 +1,1 @@
+fn OnStart() { state_set_i32(80, 7); }

@@ -115,6 +115,31 @@ henka_result henka_script_state_store_create(
     return HENKA_SUCCESS;
 }
 
+henka_result henka_script_state_store_clone(
+    const henka_script_state_store* source,
+    henka_script_state_store** out_store)
+{
+    henka_script_state_store* clone = NULL;
+    henka_result result;
+    if (out_store == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    *out_store = NULL;
+    if (source == NULL || source->count > HENKA_SCRIPT_STATE_MAX_VALUES)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    result = henka_script_state_store_create(&clone);
+    if (result != HENKA_SUCCESS)
+    {
+        return result;
+    }
+    memcpy(clone, source, sizeof(*clone));
+    *out_store = clone;
+    return HENKA_SUCCESS;
+}
+
 void henka_script_state_store_destroy(
     henka_script_state_store* store)
 {

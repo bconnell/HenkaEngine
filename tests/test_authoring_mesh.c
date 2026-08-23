@@ -706,10 +706,82 @@ cleanup:
     return result ? 1 : fail("modeling material-region/UV continuity");
 }
 
+static int test_bounded_primitive_constructors(void)
+{
+    const henka_authoring_mesh_desc desc = {96U, 192U, 96U, 8U};
+    henka_authoring_mesh* mesh = NULL;
+    henka_authoring_mesh_counts counts;
+    henka_vec3 center;
+    henka_vec3 extents;
+    int result = 0;
+
+    if (henka_authoring_mesh_create_cylinder(&desc, 1.0f, 2.0f, 8U, &mesh) != HENKA_SUCCESS ||
+        !henka_authoring_mesh_validate(mesh))
+    {
+        goto cleanup;
+    }
+    counts = henka_authoring_mesh_get_counts(mesh);
+    if (counts.vertices != 16U || counts.faces != 10U ||
+        henka_authoring_mesh_get_bounds(mesh, &center, &extents) != HENKA_SUCCESS ||
+        fabsf(center.x) > 0.0001f || fabsf(center.y) > 0.0001f || fabsf(center.z) > 0.0001f ||
+        fabsf(extents.x - 1.0f) > 0.0001f || fabsf(extents.y - 1.0f) > 0.0001f ||
+        fabsf(extents.z - 1.0f) > 0.0001f)
+    {
+        goto cleanup;
+    }
+    henka_authoring_mesh_destroy(mesh);
+    mesh = NULL;
+
+    if (henka_authoring_mesh_create_cone(&desc, 1.0f, 2.0f, 8U, &mesh) != HENKA_SUCCESS ||
+        !henka_authoring_mesh_validate(mesh))
+    {
+        goto cleanup;
+    }
+    counts = henka_authoring_mesh_get_counts(mesh);
+    if (counts.vertices != 9U || counts.faces != 9U)
+    {
+        goto cleanup;
+    }
+    henka_authoring_mesh_destroy(mesh);
+    mesh = NULL;
+
+    if (henka_authoring_mesh_create_uv_sphere(&desc, 1.0f, 8U, 4U, &mesh) != HENKA_SUCCESS ||
+        !henka_authoring_mesh_validate(mesh))
+    {
+        goto cleanup;
+    }
+    counts = henka_authoring_mesh_get_counts(mesh);
+    if (counts.vertices != 26U || counts.faces != 32U ||
+        henka_authoring_mesh_get_bounds(mesh, &center, &extents) != HENKA_SUCCESS ||
+        fabsf(extents.x - 1.0f) > 0.0001f || fabsf(extents.y - 1.0f) > 0.0001f ||
+        fabsf(extents.z - 1.0f) > 0.0001f)
+    {
+        goto cleanup;
+    }
+    henka_authoring_mesh_destroy(mesh);
+    mesh = NULL;
+
+    if (henka_authoring_mesh_create_cylinder(&desc, 0.0f, 2.0f, 8U, &mesh) != HENKA_ERROR_INVALID_ARGUMENT ||
+        mesh != NULL ||
+        henka_authoring_mesh_create_cone(&desc, 1.0f, -2.0f, 8U, &mesh) != HENKA_ERROR_INVALID_ARGUMENT ||
+        mesh != NULL ||
+        henka_authoring_mesh_create_uv_sphere(&desc, 1.0f, 2U, 4U, &mesh) != HENKA_ERROR_INVALID_ARGUMENT ||
+        mesh != NULL)
+    {
+        goto cleanup;
+    }
+    result = 1;
+
+cleanup:
+    henka_authoring_mesh_destroy(mesh);
+    return result ? 1 : fail("bounded primitive constructors");
+}
+
 int main(void)
 {
     return test_topology_and_evaluation() && test_rejection_and_tombstones() &&
         test_history_and_persistence() && test_modeling_operations() && test_vertex_merge_operations() &&
         test_vertex_topology_operations() && test_vertex_bevel_operations() && test_uv_authoring() &&
-        test_modeling_material_region_and_uv_continuity() ? 0 : 1;
+        test_modeling_material_region_and_uv_continuity() &&
+        test_bounded_primitive_constructors() ? 0 : 1;
 }

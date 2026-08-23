@@ -56,7 +56,10 @@ typedef enum henka_action_primitive
 {
     HENKA_ACTION_PRIMITIVE_CUBE = 0,
     HENKA_ACTION_PRIMITIVE_PLANE,
-    HENKA_ACTION_PRIMITIVE_MARKER
+    HENKA_ACTION_PRIMITIVE_MARKER,
+    HENKA_ACTION_PRIMITIVE_CYLINDER,
+    HENKA_ACTION_PRIMITIVE_CONE,
+    HENKA_ACTION_PRIMITIVE_UV_SPHERE
 } henka_action_primitive;
 
 typedef struct henka_action_scene_summary

@@ -23,6 +23,9 @@ struct sandbox3d_game_authoring
     sandbox3d_scene_document_bridge* bridge;
     henka_physics_world* play_world;
     henka_script_state_store* script_state_store;
+    /* Edit-owned state is never borrowed by a live Play host.  The last
+     * stopped Play store is retained only for an explicit save operation. */
+    henka_script_state_store* play_script_state_store;
     henka_scene* play_scene;
     sandbox3d_scene_document_bridge* play_bridge;
     sandbox3d_play_session* play_session;
@@ -332,6 +335,7 @@ void sandbox3d_game_authoring_destroy(
     sandbox3d_scene_document_bridge_destroy(authoring->play_bridge);
     henka_scene_destroy(authoring->play_scene);
     henka_physics_world_destroy(authoring->play_world);
+    henka_script_state_store_destroy(authoring->play_script_state_store);
     henka_script_state_store_destroy(authoring->script_state_store);
     sandbox3d_scene_document_bridge_destroy(authoring->bridge);
     henka_scene_document_destroy(authoring->document);
@@ -784,7 +788,13 @@ henka_result sandbox3d_game_authoring_load(
         henka_scene_document_destroy(candidate);
         return result;
     }
-    result = henka_scene_document_load_file(authoring->document, project_root, authoring->relative_path);
+    /* Publish the already validated candidate, including any explicitly
+     * preserved current bindings that were absent from the persisted file.
+     * Re-reading the file here would discard those candidate additions and
+     * could make an otherwise recoverable identity remap fail during bind. */
+    result = sandbox3d_game_authoring_restore_document(
+        authoring->document,
+        candidate);
     if (result != HENKA_SUCCESS)
     {
         goto load_cleanup;
@@ -867,7 +877,9 @@ henka_result sandbox3d_game_authoring_save_play_state(
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
     result = henka_script_state_store_save_file(
-        authoring->script_state_store,
+        authoring->play_script_state_store != NULL
+            ? authoring->play_script_state_store
+            : authoring->script_state_store,
         project_root,
         state_relative_path);
     if (result == HENKA_SUCCESS)
@@ -899,6 +911,8 @@ henka_result sandbox3d_game_authoring_load_play_state(
         state_relative_path);
     if (result == HENKA_SUCCESS)
     {
+        henka_script_state_store_destroy(authoring->play_script_state_store);
+        authoring->play_script_state_store = NULL;
         result = sandbox3d_game_authoring_set_project_root(authoring, project_root);
     }
     return result;
@@ -977,6 +991,7 @@ henka_result sandbox3d_game_authoring_start_play(
     sandbox3d_game_authoring* authoring)
 {
     sandbox3d_play_session* play_session = NULL;
+    henka_script_state_store* play_script_state_store = NULL;
     henka_result result;
     size_t index;
 
@@ -987,7 +1002,13 @@ henka_result sandbox3d_game_authoring_start_play(
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
 
-    result = henka_scene_clone(authoring->scene, &authoring->play_scene);
+    result = henka_script_state_store_clone(
+        authoring->script_state_store,
+        &play_script_state_store);
+    if (result == HENKA_SUCCESS)
+    {
+        result = henka_scene_clone(authoring->scene, &authoring->play_scene);
+    }
     if (result == HENKA_SUCCESS)
     {
         result = sandbox3d_scene_document_bridge_create(
@@ -1014,7 +1035,7 @@ henka_result sandbox3d_game_authoring_start_play(
     {
         result = sandbox3d_play_session_set_script_state_store(
             play_session,
-            authoring->script_state_store);
+            play_script_state_store);
     }
     if (result == HENKA_SUCCESS && authoring->play_observer_position_valid)
     {
@@ -1033,10 +1054,13 @@ henka_result sandbox3d_game_authoring_start_play(
         sandbox3d_play_session_destroy(play_session);
         sandbox3d_scene_document_bridge_destroy(authoring->play_bridge);
         henka_scene_destroy(authoring->play_scene);
+        henka_script_state_store_destroy(play_script_state_store);
         authoring->play_bridge = NULL;
         authoring->play_scene = NULL;
         return result;
     }
+    henka_script_state_store_destroy(authoring->play_script_state_store);
+    authoring->play_script_state_store = play_script_state_store;
     authoring->play_session = play_session;
     return HENKA_SUCCESS;
 }

@@ -29,12 +29,23 @@ static volatile LONG g_authoring_save_sequence = 0L;
 static atomic_uint g_authoring_save_sequence = 0U;
 #endif
 
+typedef struct authoring_edge_lookup_entry
+{
+    henka_authoring_vertex_id low;
+    henka_authoring_vertex_id high;
+    henka_authoring_edge_id edge_id;
+    bool occupied;
+} authoring_edge_lookup_entry;
+
 struct henka_authoring_mesh
 {
     henka_authoring_mesh_desc desc;
     henka_authoring_vertex* vertices;
     henka_authoring_edge* edges;
     henka_authoring_face* faces;
+    authoring_edge_lookup_entry* edge_lookup;
+    size_t edge_lookup_capacity;
+    bool edge_lookup_ready;
     size_t vertex_slots;
     size_t edge_slots;
     size_t face_slots;
@@ -88,6 +99,117 @@ static size_t authoring_face_slot(const henka_authoring_mesh* mesh, henka_author
         return SIZE_MAX;
     }
     return (size_t)id - 1U;
+}
+
+static size_t authoring_edge_lookup_capacity_for(size_t max_edges)
+{
+    size_t capacity = 1U;
+
+    if (max_edges > SIZE_MAX / 2U)
+    {
+        return 0U;
+    }
+    while (capacity < max_edges * 2U)
+    {
+        if (capacity > SIZE_MAX / 2U)
+        {
+            return 0U;
+        }
+        capacity <<= 1U;
+    }
+    return capacity;
+}
+
+static size_t authoring_edge_lookup_hash(
+    henka_authoring_vertex_id low,
+    henka_authoring_vertex_id high,
+    size_t capacity)
+{
+    uint64_t key = ((uint64_t)low << 32U) | (uint64_t)high;
+
+    key ^= key >> 30U;
+    key *= UINT64_C(0xbf58476d1ce4e5b9);
+    key ^= key >> 27U;
+    key *= UINT64_C(0x94d049bb133111eb);
+    key ^= key >> 31U;
+    return (size_t)(key & (uint64_t)(capacity - 1U));
+}
+
+static bool authoring_edge_lookup_insert_raw(
+    henka_authoring_mesh* mesh,
+    henka_authoring_vertex_id low,
+    henka_authoring_vertex_id high,
+    henka_authoring_edge_id edge_id)
+{
+    size_t probe;
+
+    if (mesh == NULL || mesh->edge_lookup == NULL || mesh->edge_lookup_capacity == 0U)
+    {
+        return false;
+    }
+    probe = authoring_edge_lookup_hash(low, high, mesh->edge_lookup_capacity);
+    for (size_t attempt = 0U; attempt < mesh->edge_lookup_capacity; ++attempt)
+    {
+        authoring_edge_lookup_entry* entry = &mesh->edge_lookup[probe];
+        if (!entry->occupied || (entry->low == low && entry->high == high))
+        {
+            entry->low = low;
+            entry->high = high;
+            entry->edge_id = edge_id;
+            entry->occupied = true;
+            return true;
+        }
+        probe = (probe + 1U) & (mesh->edge_lookup_capacity - 1U);
+    }
+    return false;
+}
+
+static bool authoring_edge_lookup_rebuild(henka_authoring_mesh* mesh)
+{
+    size_t index;
+
+    if (mesh == NULL || mesh->edge_lookup == NULL || mesh->edge_lookup_capacity == 0U)
+    {
+        return false;
+    }
+    memset(
+        mesh->edge_lookup,
+        0,
+        mesh->edge_lookup_capacity * sizeof(*mesh->edge_lookup));
+    for (index = 0U; index < mesh->edge_slots; ++index)
+    {
+        const henka_authoring_edge* edge = &mesh->edges[index];
+        if (edge->active && !authoring_edge_lookup_insert_raw(
+                mesh,
+                edge->vertices[0],
+                edge->vertices[1],
+                edge->id))
+        {
+            return false;
+        }
+    }
+    mesh->edge_lookup_ready = true;
+    return true;
+}
+
+static bool authoring_edge_lookup_insert(
+    henka_authoring_mesh* mesh,
+    henka_authoring_vertex_id first,
+    henka_authoring_vertex_id second,
+    henka_authoring_edge_id edge_id)
+{
+    const henka_authoring_vertex_id low = first < second ? first : second;
+    const henka_authoring_vertex_id high = first < second ? second : first;
+
+    if (mesh == NULL)
+    {
+        return false;
+    }
+    if (!mesh->edge_lookup_ready && !authoring_edge_lookup_rebuild(mesh))
+    {
+        return false;
+    }
+    return authoring_edge_lookup_insert_raw(mesh, low, high, edge_id);
 }
 
 static henka_authoring_vertex* authoring_vertex(henka_authoring_mesh* mesh, henka_authoring_vertex_id id)
@@ -191,6 +313,34 @@ static henka_authoring_edge* authoring_find_edge(
     size_t index;
     henka_authoring_vertex_id low = first < second ? first : second;
     henka_authoring_vertex_id high = first < second ? second : first;
+
+    if (mesh != NULL && mesh->edge_lookup != NULL && mesh->edge_lookup_capacity > 0U)
+    {
+        size_t probe;
+
+        if (!mesh->edge_lookup_ready && !authoring_edge_lookup_rebuild(mesh))
+        {
+            goto linear_search;
+        }
+        probe = authoring_edge_lookup_hash(low, high, mesh->edge_lookup_capacity);
+        for (size_t attempt = 0U; attempt < mesh->edge_lookup_capacity; ++attempt)
+        {
+            const authoring_edge_lookup_entry* entry = &mesh->edge_lookup[probe];
+            if (!entry->occupied)
+            {
+                return NULL;
+            }
+            if (entry->low == low && entry->high == high)
+            {
+                henka_authoring_edge* edge = authoring_edge(mesh, entry->edge_id);
+                return edge != NULL && edge->active ? edge : NULL;
+            }
+            probe = (probe + 1U) & (mesh->edge_lookup_capacity - 1U);
+        }
+        return NULL;
+    }
+
+linear_search:
     for (index = 0U; index < mesh->edge_slots; ++index)
     {
         henka_authoring_edge* edge = &mesh->edges[index];
@@ -225,6 +375,12 @@ static henka_result authoring_append_edge(
     edge->face_count = 1U;
     edge->active = true;
     ++mesh->edge_slots;
+    if (!authoring_edge_lookup_insert(mesh, low, high, edge->id))
+    {
+        --mesh->edge_slots;
+        memset(edge, 0, sizeof(*edge));
+        return HENKA_ERROR_LIMIT;
+    }
     *out_id = edge->id;
     return HENKA_SUCCESS;
 }
@@ -241,11 +397,17 @@ henka_authoring_mesh_desc henka_authoring_mesh_desc_default(void)
 henka_result henka_authoring_mesh_create(const henka_authoring_mesh_desc* desc, henka_authoring_mesh** out_mesh)
 {
     henka_authoring_mesh* mesh;
+    size_t edge_lookup_capacity;
     if (!authoring_desc_valid(desc) || out_mesh == NULL)
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
     *out_mesh = NULL;
+    edge_lookup_capacity = authoring_edge_lookup_capacity_for(desc->max_edges);
+    if (edge_lookup_capacity == 0U)
+    {
+        return HENKA_ERROR_LIMIT;
+    }
     mesh = henka_calloc(1U, sizeof(*mesh));
     if (mesh == NULL)
     {
@@ -255,11 +417,18 @@ henka_result henka_authoring_mesh_create(const henka_authoring_mesh_desc* desc, 
     mesh->vertices = henka_calloc(desc->max_vertices, sizeof(*mesh->vertices));
     mesh->edges = henka_calloc(desc->max_edges, sizeof(*mesh->edges));
     mesh->faces = henka_calloc(desc->max_faces, sizeof(*mesh->faces));
-    if (mesh->vertices == NULL || mesh->edges == NULL || mesh->faces == NULL)
+    mesh->edge_lookup = henka_calloc(
+        edge_lookup_capacity,
+        sizeof(*mesh->edge_lookup));
+    mesh->edge_lookup_capacity = edge_lookup_capacity;
+    mesh->edge_lookup_ready = true;
+    if (mesh->vertices == NULL || mesh->edges == NULL || mesh->faces == NULL ||
+        mesh->edge_lookup == NULL)
     {
         henka_free(mesh->vertices);
         henka_free(mesh->edges);
         henka_free(mesh->faces);
+        henka_free(mesh->edge_lookup);
         henka_free(mesh);
         return HENKA_ERROR_OUT_OF_MEMORY;
     }
@@ -283,6 +452,7 @@ void henka_authoring_mesh_destroy(henka_authoring_mesh* mesh)
     henka_free(mesh->vertices);
     henka_free(mesh->edges);
     henka_free(mesh->faces);
+    henka_free(mesh->edge_lookup);
     henka_free(mesh);
 }
 
@@ -1022,6 +1192,7 @@ henka_result henka_authoring_mesh_apply_face_loop_updates_internal(
         replacement->edges = NULL;
         replacement->uvs = NULL;
     }
+    mesh->edge_lookup_ready = false;
     result = henka_authoring_mesh_validate(mesh) ? HENKA_SUCCESS : HENKA_ERROR_UNKNOWN;
 
 cleanup:
@@ -1191,16 +1362,21 @@ static henka_vec3 authoring_face_normal(const henka_authoring_mesh* mesh, const 
     return henka_vec3_normalize(henka_vec3_cross(henka_vec3_subtract(b, a), henka_vec3_subtract(c, a)));
 }
 
-static bool authoring_face_contains_vertex(const henka_authoring_face* face, henka_authoring_vertex_id vertex_id)
+static bool authoring_face_has_hard_edge_at_vertex(
+    const henka_authoring_mesh* mesh,
+    const henka_authoring_face* face,
+    henka_authoring_vertex_id vertex_id)
 {
     size_t corner;
-    if (face == NULL || !face->active)
+    if (mesh == NULL || face == NULL || !face->active || !face->smooth)
     {
         return false;
     }
     for (corner = 0U; corner < face->corner_count; ++corner)
     {
-        if (face->vertices[corner] == vertex_id)
+        const henka_authoring_edge* edge = authoring_edge_const(mesh, face->edges[corner]);
+        if (edge != NULL && edge->hard &&
+            (edge->vertices[0] == vertex_id || edge->vertices[1] == vertex_id))
         {
             return true;
         }
@@ -1208,51 +1384,17 @@ static bool authoring_face_contains_vertex(const henka_authoring_face* face, hen
     return false;
 }
 
-static henka_vec3 authoring_corner_normal(const henka_authoring_mesh* mesh, const henka_authoring_face* face, henka_authoring_vertex_id vertex_id, henka_vec3 fallback)
-{
-    henka_vec3 normal = {0.0f, 0.0f, 0.0f};
-    size_t index;
-    if (!face->smooth)
-    {
-        return fallback;
-    }
-    for (index = 0U; index < mesh->face_slots; ++index)
-    {
-        const henka_authoring_face* candidate = &mesh->faces[index];
-        size_t corner;
-        bool shares_hard_edge = false;
-        if (!candidate->active || !candidate->smooth || !authoring_face_contains_vertex(candidate, vertex_id))
-        {
-            continue;
-        }
-        for (corner = 0U; corner < candidate->corner_count; ++corner)
-        {
-            const henka_authoring_edge* edge = authoring_edge_const(mesh, candidate->edges[corner]);
-            if (edge != NULL && edge->hard && (edge->vertices[0] == vertex_id || edge->vertices[1] == vertex_id))
-            {
-                shares_hard_edge = true;
-                break;
-            }
-        }
-        if (!shares_hard_edge)
-        {
-            normal = henka_vec3_add(normal, authoring_face_normal(mesh, candidate));
-        }
-    }
-    if (henka_vec3_length(normal) <= 0.00001f)
-    {
-        return fallback;
-    }
-    return henka_vec3_normalize(normal);
-}
-
 henka_result henka_authoring_mesh_evaluate(const henka_authoring_mesh* mesh, henka_authoring_render_data* out_data)
 {
+    henka_vec3* face_normals = NULL;
+    henka_vec3* smooth_vertex_normals = NULL;
+    unsigned char* smooth_vertex_normal_valid = NULL;
     size_t required_vertices = 0U;
     size_t required_indices = 0U;
     size_t face_index;
     size_t output_vertex = 0U;
     size_t output_index = 0U;
+    henka_result result = HENKA_SUCCESS;
     if (mesh == NULL || out_data == NULL || !henka_authoring_mesh_validate(mesh) ||
         out_data->vertices == NULL || out_data->indices == NULL)
     {
@@ -1271,27 +1413,96 @@ henka_result henka_authoring_mesh_evaluate(const henka_authoring_mesh* mesh, hen
     {
         return HENKA_ERROR_LIMIT;
     }
+
+    if (mesh->face_slots > 0U)
+    {
+        face_normals = henka_calloc(mesh->face_slots, sizeof(*face_normals));
+        if (face_normals == NULL)
+        {
+            return HENKA_ERROR_OUT_OF_MEMORY;
+        }
+    }
+    if (mesh->vertex_slots > 0U)
+    {
+        smooth_vertex_normals = henka_calloc(mesh->vertex_slots, sizeof(*smooth_vertex_normals));
+        smooth_vertex_normal_valid = henka_calloc(mesh->vertex_slots, sizeof(*smooth_vertex_normal_valid));
+        if (smooth_vertex_normals == NULL || smooth_vertex_normal_valid == NULL)
+        {
+            result = HENKA_ERROR_OUT_OF_MEMORY;
+            goto cleanup;
+        }
+    }
+
     for (face_index = 0U; face_index < mesh->face_slots; ++face_index)
     {
         const henka_authoring_face* face = &mesh->faces[face_index];
-        henka_vec3 face_normal;
         size_t corner;
         if (!face->active)
         {
             continue;
         }
-        face_normal = authoring_face_normal(mesh, face);
-        if (henka_vec3_length(face_normal) <= 0.00001f)
+        face_normals[face_index] = authoring_face_normal(mesh, face);
+        if (henka_vec3_length(face_normals[face_index]) <= 0.00001f)
         {
-            return HENKA_ERROR_NUMERIC_RANGE;
+            result = HENKA_ERROR_NUMERIC_RANGE;
+            goto cleanup;
+        }
+        if (!face->smooth)
+        {
+            continue;
+        }
+        for (corner = 0U; corner < face->corner_count; ++corner)
+        {
+            const henka_authoring_vertex_id vertex_id = face->vertices[corner];
+            const size_t vertex_index = (size_t)vertex_id - 1U;
+            if (vertex_index >= mesh->vertex_slots)
+            {
+                result = HENKA_ERROR_INVALID_ARGUMENT;
+                goto cleanup;
+            }
+            if (!authoring_face_has_hard_edge_at_vertex(mesh, face, vertex_id))
+            {
+                smooth_vertex_normals[vertex_index] = henka_vec3_add(
+                    smooth_vertex_normals[vertex_index],
+                    face_normals[face_index]);
+                smooth_vertex_normal_valid[vertex_index] = 1U;
+            }
+        }
+    }
+    for (face_index = 0U; face_index < mesh->vertex_slots; ++face_index)
+    {
+        if (smooth_vertex_normal_valid[face_index] != 0U &&
+            henka_vec3_length(smooth_vertex_normals[face_index]) > 0.00001f)
+        {
+            smooth_vertex_normals[face_index] = henka_vec3_normalize(smooth_vertex_normals[face_index]);
+        }
+        else
+        {
+            smooth_vertex_normal_valid[face_index] = 0U;
+        }
+    }
+
+    for (face_index = 0U; face_index < mesh->face_slots; ++face_index)
+    {
+        const henka_authoring_face* face = &mesh->faces[face_index];
+        const henka_vec3 face_normal = face_normals[face_index];
+        size_t corner;
+        if (!face->active)
+        {
+            continue;
         }
         for (corner = 0U; corner < face->corner_count; ++corner)
         {
             const henka_authoring_vertex* source = authoring_vertex_const(mesh, face->vertices[corner]);
+            const size_t vertex_index = (size_t)source->id - 1U;
             out_data->vertices[output_vertex].position = source->position;
             out_data->vertices[output_vertex].uv = face->uvs[corner];
             out_data->vertices[output_vertex].material_region = face->material_region;
-            out_data->vertices[output_vertex].normal = authoring_corner_normal(mesh, face, source->id, face_normal);
+            out_data->vertices[output_vertex].normal = face->smooth &&
+                    vertex_index < mesh->vertex_slots &&
+                    smooth_vertex_normal_valid[vertex_index] != 0U
+                ? smooth_vertex_normals[vertex_index]
+                : face_normal;
             out_data->vertices[output_vertex].tangent = (henka_vec4){1.0f, 0.0f, 0.0f, 1.0f};
             ++output_vertex;
         }
@@ -1304,7 +1515,11 @@ henka_result henka_authoring_mesh_evaluate(const henka_authoring_mesh* mesh, hen
     }
     out_data->vertex_count = required_vertices;
     out_data->index_count = required_indices;
-    return HENKA_SUCCESS;
+cleanup:
+    henka_free(smooth_vertex_normal_valid);
+    henka_free(smooth_vertex_normals);
+    henka_free(face_normals);
+    return result;
 }
 
 static bool authoring_desc_equal(const henka_authoring_mesh_desc* left, const henka_authoring_mesh_desc* right)
@@ -1332,6 +1547,7 @@ static henka_result authoring_mesh_clone_internal(const henka_authoring_mesh* so
     clone->face_slots = source->face_slots;
     memcpy(clone->vertices, source->vertices, source->vertex_slots * sizeof(*source->vertices));
     memcpy(clone->edges, source->edges, source->edge_slots * sizeof(*source->edges));
+    clone->edge_lookup_ready = false;
     for (index = 0U; index < source->face_slots; ++index)
     {
         const henka_authoring_face* source_face = &source->faces[index];
@@ -2670,6 +2886,7 @@ henka_result henka_authoring_mesh_load_file(henka_authoring_mesh* mesh, const ch
             }
         }
     }
+    candidate->edge_lookup_ready = false;
     if (fgetc(file) != EOF || !henka_authoring_mesh_validate(candidate))
     {
         result = HENKA_ERROR_INVALID_ARGUMENT;

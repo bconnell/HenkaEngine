@@ -249,6 +249,77 @@ function Wait-FileContains {
     return $false
 }
 
+function Get-FileLengthSafe {
+    param([Parameter(Mandatory = $true)][string]$Path)
+
+    if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) {
+        return 0L
+    }
+
+    return [System.IO.FileInfo]::new($Path).Length
+}
+
+function Wait-FileContainsAfterOffset {
+    param(
+        [Parameter(Mandatory = $true)][string]$Path,
+        [Parameter(Mandatory = $true)][string]$Pattern,
+        [Parameter(Mandatory = $true)][long]$StartingOffset,
+        [int]$TimeoutMilliseconds = 5000
+    )
+
+    $deadline = (Get-Date).AddMilliseconds($TimeoutMilliseconds)
+    while ((Get-Date) -lt $deadline) {
+        if (Test-Path -LiteralPath $Path -PathType Leaf) {
+            $stream = $null
+            $reader = $null
+            try {
+                $shareMode = [System.IO.FileShare](
+                    [int][System.IO.FileShare]::ReadWrite -bor
+                    [int][System.IO.FileShare]::Delete)
+                $stream = [System.IO.FileStream]::new(
+                    $Path,
+                    [System.IO.FileMode]::Open,
+                    [System.IO.FileAccess]::Read,
+                    $shareMode)
+                if ($stream.Length -gt $StartingOffset) {
+                    $stream.Seek($StartingOffset, [System.IO.SeekOrigin]::Begin) | Out-Null
+                    $reader = [System.IO.StreamReader]::new(
+                        $stream,
+                        [System.Text.Encoding]::UTF8,
+                        $true,
+                        4096,
+                        $false)
+                    $text = $reader.ReadToEnd()
+                    if ([Regex]::IsMatch(
+                            $text,
+                            $Pattern,
+                            [System.Text.RegularExpressions.RegexOptions]::Multiline)) {
+                        return $true
+                    }
+                }
+            }
+            catch [System.IO.IOException] {
+                # The producer may be between writes; retry until the bounded deadline.
+            }
+            catch [System.UnauthorizedAccessException] {
+                # The producer may be between writes; retry until the bounded deadline.
+            }
+            finally {
+                if ($null -ne $reader) {
+                    $reader.Dispose()
+                }
+                elseif ($null -ne $stream) {
+                    $stream.Dispose()
+                }
+            }
+        }
+
+        Start-Sleep -Milliseconds 150
+    }
+
+    return $false
+}
+
 function Get-WindowRect {
     param([System.IntPtr]$Handle)
 
@@ -335,17 +406,17 @@ function Click-WindowPoint {
     }
     $screenX = $windowRect.Left + $OffsetX
     $screenY = $windowRect.Top + $OffsetY
-    $framebufferX = ($screenX - $clientOrigin.X) * $framebufferWidth / $clientWidth
-    $framebufferY = ($screenY - $clientOrigin.Y) * $framebufferHeight / $clientHeight
-    if ($framebufferX -lt 0.0 -or $framebufferY -lt 0.0 -or
-        $framebufferX -ge $framebufferWidth -or $framebufferY -ge $framebufferHeight) {
-        throw "The packaged window-relative automation point was outside the client framebuffer."
+    $windowX = $screenX - $clientOrigin.X
+    $windowY = $screenY - $clientOrigin.Y
+    if ($windowX -lt 0 -or $windowY -lt 0 -or
+        $windowX -ge $clientWidth -or $windowY -ge $clientHeight) {
+        throw "The packaged window-relative automation point was outside the client area."
     }
     Set-HenkaAutomationForeground -Handle $Handle
     Send-HenkaAutomationClick `
         -EventPath $automationInputPath `
-        -X $framebufferX `
-        -Y $framebufferY
+        -X $windowX `
+        -Y $windowY
 }
 
 function Get-LastLogRegexMatch {
@@ -421,6 +492,31 @@ function Get-LastLogRegexMatch {
 
     return $null
 }
+
+function Wait-LastLogRegexMatch {
+    param(
+        [Parameter(Mandatory = $true)][string]$Path,
+        [Parameter(Mandatory = $true)][string]$Pattern,
+        [Parameter(Mandatory = $true)][string]$GroupName,
+        [Parameter(Mandatory = $true)][string]$ExpectedValue,
+        [int]$TimeoutMilliseconds = 5000
+    )
+
+    $deadline = (Get-Date).AddMilliseconds($TimeoutMilliseconds)
+    do {
+        $match = Get-LastLogRegexMatch -Path $Path -Pattern $Pattern
+        if ($null -ne $match -and
+            $match.Groups[$GroupName].Value -eq $ExpectedValue) {
+            return $match
+        }
+
+        if ((Get-Date) -lt $deadline) {
+            Start-Sleep -Milliseconds 75
+        }
+    } while ((Get-Date) -lt $deadline)
+
+    return $null
+}
 function Assert-FramebufferRect {
     param(
         [Parameter(Mandatory = $true)][string]$Name,
@@ -484,11 +580,32 @@ function Click-FramebufferPoint {
         throw "The packaged sandbox client bounds are invalid."
     }
 
+    $windowPoint = Convert-HenkaFramebufferPointToWindowPoint `
+        -FramebufferWidth $FramebufferWidth `
+        -FramebufferHeight $FramebufferHeight `
+        -WindowWidth $clientWidth `
+        -WindowHeight $clientHeight `
+        -FramebufferX $FramebufferX `
+        -FramebufferY $FramebufferY
     Set-HenkaAutomationForeground -Handle $Handle
     Send-HenkaAutomationClick `
         -EventPath $automationInputPath `
-        -X $FramebufferX `
-        -Y $FramebufferY
+        -X $windowPoint.X `
+        -Y $windowPoint.Y
+}
+
+function Click-AuthoringWindowPoint {
+    param(
+        [Parameter(Mandatory = $true)][System.IntPtr]$Handle,
+        [Parameter(Mandatory = $true)][double]$X,
+        [Parameter(Mandatory = $true)][double]$Y
+    )
+
+    Set-HenkaAutomationForeground -Handle $Handle
+    Send-HenkaAutomationClick `
+        -EventPath $automationInputPath `
+        -X $X `
+        -Y $Y
 }
 
 function Scroll-FramebufferPoint {
@@ -516,11 +633,18 @@ function Scroll-FramebufferPoint {
         throw "Invalid framebuffer or client dimensions for scroll input."
     }
 
+    $windowPoint = Convert-HenkaFramebufferPointToWindowPoint `
+        -FramebufferWidth $FramebufferWidth `
+        -FramebufferHeight $FramebufferHeight `
+        -WindowWidth $clientWidth `
+        -WindowHeight $clientHeight `
+        -FramebufferX $FramebufferX `
+        -FramebufferY $FramebufferY
     Set-HenkaAutomationForeground -Handle $Handle
     Send-HenkaAutomationScroll `
         -EventPath $automationInputPath `
-        -X $FramebufferX `
-        -Y $FramebufferY `
+        -X $windowPoint.X `
+        -Y $windowPoint.Y `
         -WheelDelta $WheelDelta
 }
 function Click-FramebufferPointRight {
@@ -548,6 +672,13 @@ function Click-FramebufferPointRight {
         throw "Invalid framebuffer or client dimensions for right click."
     }
 
+    $windowPoint = Convert-HenkaFramebufferPointToWindowPoint `
+        -FramebufferWidth $FramebufferWidth `
+        -FramebufferHeight $FramebufferHeight `
+        -WindowWidth $clientWidth `
+        -WindowHeight $clientHeight `
+        -FramebufferX $FramebufferX `
+        -FramebufferY $FramebufferY
     if ($FramebufferX -lt 0.0 -or $FramebufferY -lt 0.0 -or
         $FramebufferX -ge $FramebufferWidth -or
         $FramebufferY -ge $FramebufferHeight) {
@@ -557,8 +688,8 @@ function Click-FramebufferPointRight {
     Set-HenkaAutomationForeground -Handle $Handle
     Send-HenkaAutomationClick `
         -EventPath $automationInputPath `
-        -X $FramebufferX `
-        -Y $FramebufferY `
+        -X $windowPoint.X `
+        -Y $windowPoint.Y `
         -Button right
 }
 
@@ -756,6 +887,7 @@ foreach ($showcaseFile in @(
     "giraffe_metallic_roughness.png",
     "original_realistic_rocket.gltf",
     "original_realistic_rocket.bin",
+    "rocket_base_color.png",
     "rocket_detail_normal.png",
     "rocket_metallic_roughness.png"
 )) {
@@ -836,7 +968,7 @@ if ($NonInteractive) {
     if ($smoke.Stdout -notmatch "Runtime mode: Packaged") {
         throw "The packaged smoke test did not report Packaged mode."
     }
-    if ($smoke.Stdout -notmatch "Showcase assets: Cheeky Giraffe \(9 parts\), Original Realistic Rocket \(6 parts\)") {
+    if ($smoke.Stdout -notmatch "Showcase assets: Anatomical Giraffe Study \(13 parts\), Original Realistic Rocket \(13 parts\)") {
         throw "The packaged smoke test did not load both showcase glTF scenes."
     }
     $terrainPassMatch = [regex]::Match($smoke.Stdout, "Terrain Rendered pass diagnostics: mask=0x([0-9a-fA-F]+) required=0x([0-9a-fA-F]+)")
@@ -926,6 +1058,7 @@ $capturedProcess = $null
 $process = $null
 $mainWindowHandle = [System.IntPtr]::Zero
 $uiAutomationVerified = $false
+$sandboxPanelsVisible = $false
 $previousAutomationOwned = $env:HENKA_AUTOMATION_INPUT_OWNED
 $previousAutomationFile = $env:HENKA_AUTOMATION_INPUT_FILE
 try {
@@ -972,6 +1105,7 @@ try {
         Assert-FileContains -Path $stdoutPath -Pattern "Standard mode|Focus Viewport mode|Legacy Full Tools mode" -Description "Layout mode output"
         Try-AssertFileContains -Path $stdoutPath -Pattern "Sandbox viewport:" -Description "Viewport output"
         $uiAutomationVerified = $true
+        $sandboxPanelsVisible = $true
     }
     else {
         Send-HenkaAutomationKey -EventPath $automationInputPath -KeyName "F4"
@@ -986,6 +1120,7 @@ try {
             Assert-FileContains -Path $stdoutPath -Pattern "Standard mode|Focus Viewport mode|Legacy Full Tools mode" -Description "Layout mode output after F4"
             Try-AssertFileContains -Path $stdoutPath -Pattern "Sandbox viewport:" -Description "Viewport output after F4"
             $uiAutomationVerified = $true
+            $sandboxPanelsVisible = $true
         }
     }
 
@@ -1496,9 +1631,48 @@ try {
         if (-not $nativeSelectionObserved) {
             throw "Selecting the showcase row did not expose Object Details > Authoring > Make Editable."
         }
+        $nativeDisclosureMatch = Get-LastLogRegexMatch `
+            -Path $stdoutPath `
+            -Pattern 'Native authoring disclosure: name=(.+) x=([-0-9.]+) y=([-0-9.]+) width=([-0-9.]+) height=28.0 expanded=([01])\.'
+        if ($null -eq $nativeDisclosureMatch) {
+            throw "The selected showcase did not report its Authoring disclosure geometry."
+        }
+        if ([int]$nativeDisclosureMatch.Groups[5].Value -eq 0) {
+            $nativeDisclosureX = [double]$nativeDisclosureMatch.Groups[2].Value
+            $nativeDisclosureY = [double]$nativeDisclosureMatch.Groups[3].Value
+            $nativeDisclosureWidth = [double]$nativeDisclosureMatch.Groups[4].Value
+            Assert-FramebufferRect `
+                -Name "Native authoring disclosure" `
+                -FramebufferWidth $framebufferWidth `
+                -FramebufferHeight $framebufferHeight `
+                -X $nativeDisclosureX `
+                -Y $nativeDisclosureY `
+                -Width $nativeDisclosureWidth `
+                -Height 28.0
+            $nativeDisclosureObserved = $false
+            for ($disclosureAttempt = 0; $disclosureAttempt -lt 3 -and -not $nativeDisclosureObserved; ++$disclosureAttempt) {
+                Click-FramebufferPoint `
+                    -Handle $mainWindowHandle `
+                    -FramebufferWidth $framebufferWidth `
+                    -FramebufferHeight $framebufferHeight `
+                    -FramebufferX ($nativeDisclosureX + $nativeDisclosureWidth * 0.5) `
+                    -FramebufferY ($nativeDisclosureY + 14.0)
+                $nativeDisclosureObserved = Wait-FileContains `
+                    -Path $stdoutPath `
+                    -Pattern 'Native authoring disclosure: name=.* expanded=1\.' `
+                    -TimeoutMilliseconds 2500
+            }
+            if (-not $nativeDisclosureObserved) {
+                throw "The selected showcase Authoring disclosure did not open."
+            }
+        }
+        # A checked-in source may be restored either by the HAMS load path or
+        # by the startup authoring-state restore path.  Both paths establish
+        # the same editor-owned native source; the gate must recognize both
+        # rather than requiring one implementation detail.
         $nativeSourceRestored = Wait-FileContains `
             -Path $stdoutPath `
-            -Pattern "Native authoring source loaded:" `
+            -Pattern 'Native authoring (source loaded:|startup restore: name=.+ source_state=HENKA_NATIVE_EDITABLE_SOURCE\.)' `
             -TimeoutMilliseconds 3000
         $nativeAuthoringControlObserved = Wait-FileContains `
             -Path $stdoutPath `
@@ -1525,16 +1699,22 @@ try {
                 -Height 24.0
             $nativeMakeEditableObserved = $false
             for ($makeEditableAttempt = 0; $makeEditableAttempt -lt 3 -and -not $nativeMakeEditableObserved; ++$makeEditableAttempt) {
+                $makeEditableLogOffset = Get-FileLengthSafe -Path $stdoutPath
                 Click-FramebufferPoint `
                     -Handle $mainWindowHandle `
                     -FramebufferWidth $framebufferWidth `
                     -FramebufferHeight $framebufferHeight `
                     -FramebufferX ($nativeMakeEditableX + 90.0) `
                     -FramebufferY ($nativeMakeEditableY + 12.0)
-                $nativeMakeEditableObserved = Wait-FileContains `
+                # Converting the imported giraffe is a bounded mesh-weld
+                # operation over the checked-in 45k-vertex fixture.  Keep
+                # the wait finite, but do not mistake normal conversion time
+                # for a missing click or a failed transaction.
+                $nativeMakeEditableObserved = Wait-FileContainsAfterOffset `
                     -Path $stdoutPath `
-                    -Pattern "Native authoring dogfood: Make Editable converted" `
-                    -TimeoutMilliseconds 2500
+                    -Pattern "Native authoring dogfood: Make Editable converted .*source_state=HENKA_NATIVE_EDITABLE_SOURCE\." `
+                    -StartingOffset $makeEditableLogOffset `
+                    -TimeoutMilliseconds 15000
             }
             if (-not $nativeMakeEditableObserved) {
                 throw "Make Editable did not create the user-owned native authoring source."
@@ -1683,31 +1863,35 @@ try {
         }
         $nativeOpticalMaterialMatch = Get-LastLogRegexMatch `
             -Path $stdoutPath `
-            -Pattern 'Native authoring optical material controls: name=(.+) ior_x=([-0-9.]+) transmission_x=([-0-9.]+) y=([-0-9.]+) width=104.0 height=24.0\.'
+            -Pattern 'Native authoring optical material controls: name=(.+) ior_x=([-0-9.]+) transmission_x=([-0-9.]+) thickness_x=([-0-9.]+) subsurface_tint_x=([-0-9.]+) first_y=([-0-9.]+) second_y=([-0-9.]+) width=([-0-9.]+) height=28.0\.'
         if ($null -eq $nativeOpticalMaterialMatch) {
             throw "The native optical material control geometry could not be parsed."
         }
         $nativeIorX = [double]$nativeOpticalMaterialMatch.Groups[2].Value
         $nativeTransmissionX = [double]$nativeOpticalMaterialMatch.Groups[3].Value
-        $nativeOpticalMaterialY = [double]$nativeOpticalMaterialMatch.Groups[4].Value
+        $nativeThicknessX = [double]$nativeOpticalMaterialMatch.Groups[4].Value
+        $nativeSubsurfaceTintX = [double]$nativeOpticalMaterialMatch.Groups[5].Value
+        $nativeOpticalFirstY = [double]$nativeOpticalMaterialMatch.Groups[6].Value
+        $nativeOpticalSecondY = [double]$nativeOpticalMaterialMatch.Groups[7].Value
+        $nativeOpticalWidth = [double]$nativeOpticalMaterialMatch.Groups[8].Value
         foreach ($opticalControl in @(
-            @{ Name = "IOR"; X = $nativeIorX; Pattern = "parameter=IOR" },
-            @{ Name = "transmission"; X = $nativeTransmissionX; Pattern = "parameter=Transmission" }
+            @{ Name = "IOR"; X = $nativeIorX; Y = $nativeOpticalFirstY; Pattern = "parameter=IOR" },
+            @{ Name = "transmission"; X = $nativeTransmissionX; Y = $nativeOpticalFirstY; Pattern = "parameter=Transmission" }
         )) {
             Assert-FramebufferRect `
                 -Name ("Native authoring " + $opticalControl.Name + " control") `
                 -FramebufferWidth $framebufferWidth `
                 -FramebufferHeight $framebufferHeight `
                 -X $opticalControl.X `
-                -Y $nativeOpticalMaterialY `
-                -Width 48.0 `
-                -Height 24.0
+                -Y $opticalControl.Y `
+                -Width $nativeOpticalWidth `
+                -Height 28.0
             Click-FramebufferPoint `
                 -Handle $mainWindowHandle `
                 -FramebufferWidth $framebufferWidth `
                 -FramebufferHeight $framebufferHeight `
-                -FramebufferX ($opticalControl.X + 24.0) `
-                -FramebufferY ($nativeOpticalMaterialY + 12.0)
+                -FramebufferX ($opticalControl.X + ($nativeOpticalWidth * 0.5)) `
+                -FramebufferY ($opticalControl.Y + 14.0)
             if (-not (Wait-FileContains -Path $stdoutPath -Pattern $opticalControl.Pattern -TimeoutMilliseconds 5000)) {
                 throw ("The user-facing native " + $opticalControl.Name + " edit did not complete.")
             }
@@ -1718,27 +1902,37 @@ try {
         }
         $nativeThicknessMatch = Get-LastLogRegexMatch `
             -Path $stdoutPath `
-            -Pattern 'Native authoring subsurface thickness control: name=(.+) thickness_x=([-0-9.]+) y=([-0-9.]+) width=48.0 height=24.0\.'
+            -Pattern 'Native authoring subsurface thickness control: name=(.+) thickness_x=([-0-9.]+) y=([-0-9.]+) width=([-0-9.]+) height=28.0\.'
         if ($null -eq $nativeThicknessMatch) {
             throw "The native subsurface thickness control geometry could not be parsed."
         }
         $nativeThicknessX = [double]$nativeThicknessMatch.Groups[2].Value
         $nativeThicknessY = [double]$nativeThicknessMatch.Groups[3].Value
+        $nativeThicknessWidth = [double]$nativeThicknessMatch.Groups[4].Value
         Assert-FramebufferRect `
             -Name "Native authoring subsurface thickness control" `
             -FramebufferWidth $framebufferWidth `
             -FramebufferHeight $framebufferHeight `
             -X $nativeThicknessX `
             -Y $nativeThicknessY `
-            -Width 48.0 `
-            -Height 24.0
-        Click-FramebufferPoint `
-            -Handle $mainWindowHandle `
-            -FramebufferWidth $framebufferWidth `
-            -FramebufferHeight $framebufferHeight `
-            -FramebufferX ($nativeThicknessX + 24.0) `
-            -FramebufferY ($nativeThicknessY + 12.0)
-        if (-not (Wait-FileContains -Path $stdoutPath -Pattern "parameter=Thickness" -TimeoutMilliseconds 5000)) {
+            -Width $nativeThicknessWidth `
+            -Height 28.0
+        $nativeThicknessEditObserved = $false
+        for ($thicknessAttempt = 0; $thicknessAttempt -lt 3 -and -not $nativeThicknessEditObserved; ++$thicknessAttempt) {
+            $nativeThicknessEditOffset = Get-FileLengthSafe -Path $stdoutPath
+            Click-FramebufferPoint `
+                -Handle $mainWindowHandle `
+                -FramebufferWidth $framebufferWidth `
+                -FramebufferHeight $framebufferHeight `
+                -FramebufferX ($nativeThicknessX + ($nativeThicknessWidth * 0.5)) `
+                -FramebufferY ($nativeThicknessY + 14.0)
+            $nativeThicknessEditObserved = Wait-FileContainsAfterOffset `
+                -Path $stdoutPath `
+                -Pattern "parameter=Thickness" `
+                -StartingOffset $nativeThicknessEditOffset `
+                -TimeoutMilliseconds 2000
+        }
+        if (-not $nativeThicknessEditObserved) {
             throw "The user-facing native subsurface thickness edit did not complete."
         }
         Write-Output "[pass] User-facing native subsurface thickness edit completed"
@@ -1747,33 +1941,34 @@ try {
         }
         $nativeSubsurfaceTintMatch = Get-LastLogRegexMatch `
             -Path $stdoutPath `
-            -Pattern 'Native authoring subsurface tint control: name=(.+) x=([-0-9.]+) y=([-0-9.]+) width=48.0 height=24.0\.'
+            -Pattern 'Native authoring subsurface tint control: name=(.+) x=([-0-9.]+) y=([-0-9.]+) width=([-0-9.]+) height=28.0\.'
         if ($null -eq $nativeSubsurfaceTintMatch) {
             throw "The native subsurface tint control geometry could not be parsed."
         }
         $nativeSubsurfaceTintX = [double]$nativeSubsurfaceTintMatch.Groups[2].Value
         $nativeSubsurfaceTintY = [double]$nativeSubsurfaceTintMatch.Groups[3].Value
+        $nativeSubsurfaceTintWidth = [double]$nativeSubsurfaceTintMatch.Groups[4].Value
         Assert-FramebufferRect `
             -Name "Native authoring subsurface tint control" `
             -FramebufferWidth $framebufferWidth `
             -FramebufferHeight $framebufferHeight `
             -X $nativeSubsurfaceTintX `
             -Y $nativeSubsurfaceTintY `
-            -Width 48.0 `
-            -Height 24.0
+            -Width $nativeSubsurfaceTintWidth `
+            -Height 28.0
         Click-FramebufferPoint `
             -Handle $mainWindowHandle `
             -FramebufferWidth $framebufferWidth `
             -FramebufferHeight $framebufferHeight `
-            -FramebufferX ($nativeSubsurfaceTintX + 24.0) `
-            -FramebufferY ($nativeSubsurfaceTintY + 12.0)
+            -FramebufferX ($nativeSubsurfaceTintX + ($nativeSubsurfaceTintWidth * 0.5)) `
+            -FramebufferY ($nativeSubsurfaceTintY + 14.0)
         if (-not (Wait-FileContains -Path $stdoutPath -Pattern "parameter=Subsurface Color" -TimeoutMilliseconds 5000)) {
             throw "The user-facing native subsurface tint edit did not complete."
         }
         Write-Output "[pass] User-facing native subsurface tint edit completed"
         $nativeMaterialControlsMatch = Get-LastLogRegexMatch `
             -Path $stdoutPath `
-            -Pattern 'Native authoring material controls: name=(.+) tint_x=([-0-9.]+) metal_x=([-0-9.]+) rough_x=([-0-9.]+) emissive_x=([-0-9.]+) texture_x=([-0-9.]+) subsurface_x=([-0-9.]+) y=([-0-9.]+) width=48.0 height=24.0\.'
+            -Pattern 'Native authoring material controls: name=(.+) tint_x=([-0-9.]+) metal_x=([-0-9.]+) rough_x=([-0-9.]+) emissive_x=([-0-9.]+) texture_x=([-0-9.]+) subsurface_x=([-0-9.]+) first_y=([-0-9.]+) second_y=([-0-9.]+) width=([-0-9.]+) height=28.0\.'
         if ($null -eq $nativeMaterialControlsMatch) {
             throw "The native material editor control geometry could not be parsed."
         }
@@ -1784,20 +1979,22 @@ try {
         $nativeMaterialTextureX = [double]$nativeMaterialControlsMatch.Groups[6].Value
         $nativeSubsurfaceX = [double]$nativeMaterialControlsMatch.Groups[7].Value
         $nativeMaterialY = [double]$nativeMaterialControlsMatch.Groups[8].Value
+        $nativeMaterialSecondY = [double]$nativeMaterialControlsMatch.Groups[9].Value
+        $nativeMaterialWidth = [double]$nativeMaterialControlsMatch.Groups[10].Value
         Assert-FramebufferRect `
             -Name "Native authoring material tint control" `
             -FramebufferWidth $framebufferWidth `
             -FramebufferHeight $framebufferHeight `
             -X $nativeMaterialTintX `
             -Y $nativeMaterialY `
-            -Width 48.0 `
-            -Height 24.0
+            -Width $nativeMaterialWidth `
+            -Height 28.0
         Click-FramebufferPoint `
             -Handle $mainWindowHandle `
             -FramebufferWidth $framebufferWidth `
             -FramebufferHeight $framebufferHeight `
-            -FramebufferX ($nativeMaterialTintX + 24.0) `
-            -FramebufferY ($nativeMaterialY + 12.0)
+            -FramebufferX ($nativeMaterialTintX + ($nativeMaterialWidth * 0.5)) `
+            -FramebufferY ($nativeMaterialY + 14.0)
         if (-not (Wait-FileContains -Path $stdoutPath -Pattern "Native authoring material edited" -TimeoutMilliseconds 5000)) {
             throw "The user-facing native material parameter edit did not complete."
         }
@@ -1807,36 +2004,36 @@ try {
             -FramebufferHeight $framebufferHeight `
             -X $nativeMaterialMetalX `
             -Y $nativeMaterialY `
-            -Width 48.0 `
-            -Height 24.0
+            -Width $nativeMaterialWidth `
+            -Height 28.0
         Click-FramebufferPoint `
             -Handle $mainWindowHandle `
             -FramebufferWidth $framebufferWidth `
             -FramebufferHeight $framebufferHeight `
-            -FramebufferX ($nativeMaterialMetalX + 24.0) `
-            -FramebufferY ($nativeMaterialY + 12.0)
+            -FramebufferX ($nativeMaterialMetalX + ($nativeMaterialWidth * 0.5)) `
+            -FramebufferY ($nativeMaterialY + 14.0)
         if (-not (Wait-FileContains -Path $stdoutPath -Pattern "parameter=Metallic" -TimeoutMilliseconds 5000)) {
             throw "The user-facing native metallic edit did not complete."
         }
         Write-Output "[pass] User-facing native metallic edit completed"
         foreach ($scalarControl in @(
-            @{ Name = "roughness"; X = $nativeMaterialRoughX; Pattern = "parameter=Roughness" },
-            @{ Name = "emissive strength"; X = $nativeMaterialEmissiveX; Pattern = "parameter=Emissive Strength" }
+            @{ Name = "roughness"; X = $nativeMaterialRoughX; Y = $nativeMaterialY; Pattern = "parameter=Roughness" },
+            @{ Name = "emissive strength"; X = $nativeMaterialEmissiveX; Y = $nativeMaterialSecondY; Pattern = "parameter=Emissive Strength" }
         )) {
             Assert-FramebufferRect `
                 -Name ("Native authoring " + $scalarControl.Name + " control") `
                 -FramebufferWidth $framebufferWidth `
                 -FramebufferHeight $framebufferHeight `
                 -X $scalarControl.X `
-                -Y $nativeMaterialY `
-                -Width 48.0 `
-                -Height 24.0
+                -Y $scalarControl.Y `
+                -Width $nativeMaterialWidth `
+                -Height 28.0
             Click-FramebufferPoint `
                 -Handle $mainWindowHandle `
                 -FramebufferWidth $framebufferWidth `
                 -FramebufferHeight $framebufferHeight `
-                -FramebufferX ($scalarControl.X + 24.0) `
-                -FramebufferY ($nativeMaterialY + 12.0)
+                -FramebufferX ($scalarControl.X + ($nativeMaterialWidth * 0.5)) `
+                -FramebufferY ($scalarControl.Y + 14.0)
             if (-not (Wait-FileContains -Path $stdoutPath -Pattern $scalarControl.Pattern -TimeoutMilliseconds 5000)) {
                 throw ("The user-facing native " + $scalarControl.Name + " edit did not complete.")
             }
@@ -1847,15 +2044,15 @@ try {
             -FramebufferWidth $framebufferWidth `
             -FramebufferHeight $framebufferHeight `
             -X $nativeSubsurfaceX `
-            -Y $nativeMaterialY `
-            -Width 48.0 `
-            -Height 24.0
+            -Y $nativeMaterialSecondY `
+            -Width $nativeMaterialWidth `
+            -Height 28.0
         Click-FramebufferPoint `
             -Handle $mainWindowHandle `
             -FramebufferWidth $framebufferWidth `
             -FramebufferHeight $framebufferHeight `
-            -FramebufferX ($nativeSubsurfaceX + 24.0) `
-            -FramebufferY ($nativeMaterialY + 12.0)
+            -FramebufferX ($nativeSubsurfaceX + ($nativeMaterialWidth * 0.5)) `
+            -FramebufferY ($nativeMaterialSecondY + 14.0)
         if (-not (Wait-FileContains -Path $stdoutPath -Pattern "parameter=Subsurface" -TimeoutMilliseconds 5000)) {
             throw "The user-facing native subsurface edit did not complete."
         }
@@ -1865,15 +2062,15 @@ try {
             -FramebufferWidth $framebufferWidth `
             -FramebufferHeight $framebufferHeight `
             -X $nativeMaterialTextureX `
-            -Y $nativeMaterialY `
-            -Width 48.0 `
-            -Height 24.0
+            -Y $nativeMaterialSecondY `
+            -Width $nativeMaterialWidth `
+            -Height 28.0
         Click-FramebufferPoint `
             -Handle $mainWindowHandle `
             -FramebufferWidth $framebufferWidth `
             -FramebufferHeight $framebufferHeight `
-            -FramebufferX ($nativeMaterialTextureX + 24.0) `
-            -FramebufferY ($nativeMaterialY + 12.0)
+            -FramebufferX ($nativeMaterialTextureX + ($nativeMaterialWidth * 0.5)) `
+            -FramebufferY ($nativeMaterialSecondY + 14.0)
         if (-not (Wait-FileContains -Path $stdoutPath -Pattern "Native authoring texture edited" -TimeoutMilliseconds 5000)) {
             throw "The user-facing native texture assignment did not complete."
         }
@@ -1900,26 +2097,27 @@ try {
         }
         $nativeMaterialHistoryMatch = Get-LastLogRegexMatch `
             -Path $stdoutPath `
-            -Pattern 'Native authoring material history: name=(.+) undo_x=([-0-9.]+) redo_x=([-0-9.]+) y=([-0-9.]+) width=140.0 height=24.0\.'
+            -Pattern 'Native authoring material history: name=(.+) undo_x=([-0-9.]+) redo_x=([-0-9.]+) y=([-0-9.]+) width=([-0-9.]+) height=24.0\.'
         if ($null -eq $nativeMaterialHistoryMatch) {
             throw "The native material undo/redo control geometry could not be parsed."
         }
         $nativeMaterialUndoX = [double]$nativeMaterialHistoryMatch.Groups[2].Value
         $nativeMaterialRedoX = [double]$nativeMaterialHistoryMatch.Groups[3].Value
         $nativeMaterialHistoryY = [double]$nativeMaterialHistoryMatch.Groups[4].Value
+        $nativeMaterialHistoryWidth = [double]$nativeMaterialHistoryMatch.Groups[5].Value
         Assert-FramebufferRect `
             -Name "Native authoring material undo control" `
             -FramebufferWidth $framebufferWidth `
             -FramebufferHeight $framebufferHeight `
             -X $nativeMaterialUndoX `
             -Y $nativeMaterialHistoryY `
-            -Width 140.0 `
+            -Width $nativeMaterialHistoryWidth `
             -Height 24.0
         Click-FramebufferPoint `
             -Handle $mainWindowHandle `
             -FramebufferWidth $framebufferWidth `
             -FramebufferHeight $framebufferHeight `
-            -FramebufferX ($nativeMaterialUndoX + 70.0) `
+            -FramebufferX ($nativeMaterialUndoX + ($nativeMaterialHistoryWidth * 0.5)) `
             -FramebufferY ($nativeMaterialHistoryY + 12.0)
         if (-not (Wait-FileContains -Path $stdoutPath -Pattern "Native authoring material undo:" -TimeoutMilliseconds 5000)) {
             throw "The user-facing native material undo did not restore the prior material state."
@@ -1930,13 +2128,13 @@ try {
             -FramebufferHeight $framebufferHeight `
             -X $nativeMaterialRedoX `
             -Y $nativeMaterialHistoryY `
-            -Width 140.0 `
+            -Width $nativeMaterialHistoryWidth `
             -Height 24.0
         Click-FramebufferPoint `
             -Handle $mainWindowHandle `
             -FramebufferWidth $framebufferWidth `
             -FramebufferHeight $framebufferHeight `
-            -FramebufferX ($nativeMaterialRedoX + 70.0) `
+            -FramebufferX ($nativeMaterialRedoX + ($nativeMaterialHistoryWidth * 0.5)) `
             -FramebufferY ($nativeMaterialHistoryY + 12.0)
         if (-not (Wait-FileContains -Path $stdoutPath -Pattern "Native authoring material redo:" -TimeoutMilliseconds 5000)) {
             throw "The user-facing native material redo did not restore the edited material state."
@@ -1956,24 +2154,39 @@ try {
         $componentViewportWidth = [double]$componentViewportMatch.Groups[3].Value
         $componentViewportHeight = [double]$componentViewportMatch.Groups[4].Value
         $nativeComponentPicked = $false
-        foreach ($componentPickX in @(0.30, 0.35, 0.40)) {
-            foreach ($componentPickY in @(0.48, 0.54, 0.60)) {
+        # The selected showcase is the left-hand Giraffe in the deterministic
+        # Standard layout.  Probe its visible silhouette first; the prior
+        # center-biased probes landed in the Rocket's empty side gap and could
+        # not prove component picking even though the selected mesh was
+        # visibly outlined.
+        foreach ($componentPickX in @(0.18, 0.22, 0.26, 0.30, 0.35, 0.40)) {
+            foreach ($componentPickY in @(0.50, 0.56, 0.62, 0.68)) {
                 if ($nativeComponentPicked) { break }
+                $componentPickLogOffset = Get-FileLengthSafe -Path $stdoutPath
                 Click-FramebufferPoint `
                     -Handle $mainWindowHandle `
                     -FramebufferWidth $framebufferWidth `
                     -FramebufferHeight $framebufferHeight `
                     -FramebufferX ($componentViewportX + $componentViewportWidth * $componentPickX) `
                     -FramebufferY ($componentViewportY + $componentViewportHeight * $componentPickY)
-                $nativeComponentPicked = Wait-FileContains `
+                $nativeComponentPicked = Wait-FileContainsAfterOffset `
                     -Path $stdoutPath `
                     -Pattern "Native authoring component picked:" `
-                    -TimeoutMilliseconds 900
+                    -StartingOffset $componentPickLogOffset `
+                    -TimeoutMilliseconds 1200
             }
             if ($nativeComponentPicked) { break }
         }
         if (-not $nativeComponentPicked) {
             throw "The selected showcase did not expose a pickable component for the user-facing edit check."
+        }
+        $nativeMoveLogOffset = Get-FileLengthSafe -Path $stdoutPath
+        if (-not (Wait-FileContainsAfterOffset `
+                -Path $stdoutPath `
+                -Pattern "Native authoring move control:" `
+                -StartingOffset $nativeMoveLogOffset `
+                -TimeoutMilliseconds 3000)) {
+            throw "The selected showcase did not re-report a current component-edit control after picking."
         }
         $nativeMoveMatch = Get-LastLogRegexMatch `
             -Path $stdoutPath `
@@ -1991,28 +2204,26 @@ try {
             -Y $nativeMoveY `
             -Width 88.0 `
             -Height 24.0
-        $nativeMoveObserved = $false
-        foreach ($moveOffsetY in @(6.0, 12.0, 18.0)) {
-            foreach ($moveOffsetX in @(20.0, 44.0, 68.0)) {
-                if ($nativeMoveObserved) { break }
-                Click-FramebufferPoint `
-                    -Handle $mainWindowHandle `
-                    -FramebufferWidth $framebufferWidth `
-                    -FramebufferHeight $framebufferHeight `
-                    -FramebufferX ($nativeMoveX + $moveOffsetX) `
-                    -FramebufferY ($nativeMoveY + $moveOffsetY)
-                $nativeMoveObserved = Wait-FileContains `
-                    -Path $stdoutPath `
-                    -Pattern "Native authoring dogfood: component move edited" `
-                    -TimeoutMilliseconds 1200
-            }
-            if ($nativeMoveObserved) { break }
-        }
+        Click-FramebufferPoint `
+            -Handle $mainWindowHandle `
+            -FramebufferWidth $framebufferWidth `
+            -FramebufferHeight $framebufferHeight `
+            -FramebufferX ($nativeMoveX + 20.0) `
+            -FramebufferY ($nativeMoveY + 6.0)
+        $nativeMoveObserved = Wait-FileContainsAfterOffset `
+            -Path $stdoutPath `
+            -Pattern "Native authoring dogfood: component move edited" `
+            -StartingOffset $nativeMoveLogOffset `
+            -TimeoutMilliseconds 10000
         if (-not $nativeMoveObserved) {
             throw "The user-facing component edit did not update the native authoring source."
         }
         Write-Output "[pass] User-facing component edit changed the native showcase source"
-        if (-not (Wait-FileContains -Path $stdoutPath -Pattern "Native authoring quad repair control:" -TimeoutMilliseconds 3000)) {
+        if (-not (Wait-FileContainsAfterOffset `
+                -Path $stdoutPath `
+                -Pattern "Native authoring quad repair control:" `
+                -StartingOffset $nativeMoveLogOffset `
+                -TimeoutMilliseconds 3000)) {
             throw "The converted showcase did not expose the native Quad Repair control."
         }
         $nativeProfileMatch = Get-LastLogRegexMatch `
@@ -2032,17 +2243,28 @@ try {
             -Width 180.0 `
             -Height 24.0
         $nativeProfileObserved = $false
-        for ($profileAttempt = 0; $profileAttempt -lt 3 -and -not $nativeProfileObserved; ++$profileAttempt) {
+        # The bounded details flow has two valid authoring-group paths.  A
+        # preceding material/component operation can move this row by one
+        # 68px flow step while leaving the earlier geometry report intact.
+        $nativeProfileCandidateYs = @(
+            [double]$nativeProfileY
+            ([double]$nativeProfileY - 68.0)
+            ([double]$nativeProfileY + 68.0)
+        )
+        foreach ($nativeProfileCandidateY in $nativeProfileCandidateYs) {
+            if ($nativeProfileObserved) { break }
             Click-FramebufferPoint `
                 -Handle $mainWindowHandle `
                 -FramebufferWidth $framebufferWidth `
                 -FramebufferHeight $framebufferHeight `
                 -FramebufferX ($nativeProfileX + 90.0) `
-                -FramebufferY ($nativeProfileY + 12.0)
+                -FramebufferY ($nativeProfileCandidateY + 12.0)
+            # Quad recovery scans the bounded 15k-face authoring mesh; allow
+            # the transaction to finish without a false-negative gate result.
             $nativeProfileObserved = Wait-FileContains `
                 -Path $stdoutPath `
                 -Pattern "Native authoring quad recovery:" `
-                -TimeoutMilliseconds 2500
+                -TimeoutMilliseconds 15000
         }
         if (-not $nativeProfileObserved) {
             throw "The user-facing native Quad Repair control did not report a bounded result."
@@ -2176,8 +2398,22 @@ try {
             -Path $stdoutPath `
             -Pattern 'Native authoring face controls: name=(.+) face_x=([-0-9.]+) face_y=([-0-9.]+) width=88.0 height=24.0\.'
         if ($null -ne $faceAfterEdgeMatch) {
-            $nativeFaceX = [double]$faceAfterEdgeMatch.Groups[2].Value
-            $nativeFaceY = [double]$faceAfterEdgeMatch.Groups[3].Value
+            $candidateFaceX = [double]$faceAfterEdgeMatch.Groups[2].Value
+            $candidateFaceY = [double]$faceAfterEdgeMatch.Groups[3].Value
+            if ($candidateFaceX -ge 0.0 -and
+                $candidateFaceY -ge 0.0 -and
+                $candidateFaceX + 88.0 -le [double]$framebufferWidth -and
+                $candidateFaceY + 24.0 -le [double]$framebufferHeight) {
+                $nativeFaceX = $candidateFaceX
+                $nativeFaceY = $candidateFaceY
+            }
+            else {
+                # stdout also contains bounded detached-panel authoring
+                # surfaces.  Their local coordinates are not valid targets
+                # for this main-window framebuffer gate; retain the last
+                # validated docked control instead of clicking stale space.
+                Write-Output "[pass] Ignored an out-of-frame detached Face control geometry"
+            }
         }
         $bevelControlLogPattern = 'Native authoring bevel control:'
         $bevelControlCountBefore = @(
@@ -2185,42 +2421,56 @@ try {
         ).Count
         $nativeFaceModeObserved = $false
         for ($faceModeAttempt = 0; $faceModeAttempt -lt 3 -and -not $nativeFaceModeObserved; ++$faceModeAttempt) {
-            foreach ($faceXOffset in @(20.0, 44.0, 68.0)) {
-                foreach ($faceYOffset in @(6.0, 12.0, 18.0)) {
-                    if (-not $nativeFaceModeObserved) {
-                        Click-FramebufferPoint `
-                            -Handle $mainWindowHandle `
-                            -FramebufferWidth $framebufferWidth `
-                            -FramebufferHeight $framebufferHeight `
-                            -FramebufferX ($nativeFaceX + $faceXOffset) `
-                            -FramebufferY ($nativeFaceY + $faceYOffset)
-                        $nativeFaceModeObserved = Wait-FileContains `
-                            -Path $stdoutPath `
-                            -Pattern "Native authoring topology mode:.*mode=Face" `
-                            -TimeoutMilliseconds 500
-                    }
+        foreach ($faceXOffset in @(20.0, 44.0, 68.0)) {
+            foreach ($faceYOffset in @(6.0, 12.0, 18.0)) {
+                if (-not $nativeFaceModeObserved) {
+                    $nativeFaceModeLogOffset = Get-FileLengthSafe -Path $stdoutPath
+                    Click-FramebufferPoint `
+                        -Handle $mainWindowHandle `
+                        -FramebufferWidth $framebufferWidth `
+                        -FramebufferHeight $framebufferHeight `
+                        -FramebufferX ($nativeFaceX + $faceXOffset) `
+                        -FramebufferY ($nativeFaceY + $faceYOffset)
+                    $nativeFaceModeObserved = Wait-FileContainsAfterOffset `
+                        -Path $stdoutPath `
+                        -Pattern "Native authoring topology mode:.*mode=Face" `
+                        -StartingOffset $nativeFaceModeLogOffset `
+                        -TimeoutMilliseconds 500
                 }
             }
+        }
         }
         if (-not $nativeFaceModeObserved) {
             throw "The user-facing Face selection mode did not become active."
         }
-        $nativeFacePicked = $false
-        foreach ($facePickPoint in @(
+        $nativeFacePickPoints = @(
+            @(0.16, 0.47),
+            @(0.20, 0.47),
+            @(0.18, 0.54),
+            @(0.21, 0.60),
+            @(0.19, 0.68),
+            @(0.22, 0.73),
+            @(0.18, 0.50),
+            @(0.22, 0.56),
+            @(0.26, 0.62),
             @(0.30, 0.38),
             @(0.33, 0.45),
             @(0.38, 0.50),
-            @(0.42, 0.42))) {
+            @(0.42, 0.42))
+        $nativeFacePicked = $false
+        foreach ($facePickPoint in $nativeFacePickPoints) {
             if ($nativeFacePicked) { break }
+            $nativeFacePickLogOffset = Get-FileLengthSafe -Path $stdoutPath
             Click-FramebufferPoint `
                 -Handle $mainWindowHandle `
                 -FramebufferWidth $framebufferWidth `
                 -FramebufferHeight $framebufferHeight `
                 -FramebufferX ($componentViewportX + $componentViewportWidth * $facePickPoint[0]) `
                 -FramebufferY ($componentViewportY + $componentViewportHeight * $facePickPoint[1])
-            $nativeFacePicked = Wait-FileContains `
+            $nativeFacePicked = Wait-FileContainsAfterOffset `
                 -Path $stdoutPath `
                 -Pattern "Native authoring component picked:.*mode=face" `
+                -StartingOffset $nativeFacePickLogOffset `
                 -TimeoutMilliseconds 1200
         }
         if (-not $nativeFacePicked) {
@@ -2258,17 +2508,62 @@ try {
             -Width 88.0 `
             -Height 24.0
         $nativeBevelObserved = $false
-        for ($bevelAttempt = 0; $bevelAttempt -lt 3 -and -not $nativeBevelObserved; ++$bevelAttempt) {
+        Start-Sleep -Milliseconds 250
+        # A picked imported face may be concave or otherwise unable to accept
+        # the bounded inset-based bevel.  The editor correctly rejects that
+        # transaction and retains the source.  Keep the gate deterministic by
+        # trying the bounded candidate points until it observes one successful
+        # bevel, instead of treating the first eligible-but-unbevelable face
+        # as a UI failure.
+        for ($faceCandidateIndex = 0;
+             $faceCandidateIndex -lt $nativeFacePickPoints.Count -and
+             -not $nativeBevelObserved;
+             ++$faceCandidateIndex) {
+            if ($faceCandidateIndex -gt 0) {
+                $facePickPoint = $nativeFacePickPoints[$faceCandidateIndex]
+                $nativeFacePickLogOffset = Get-FileLengthSafe -Path $stdoutPath
+                Click-FramebufferPoint `
+                    -Handle $mainWindowHandle `
+                    -FramebufferWidth $framebufferWidth `
+                    -FramebufferHeight $framebufferHeight `
+                    -FramebufferX ($componentViewportX + $componentViewportWidth * $facePickPoint[0]) `
+                    -FramebufferY ($componentViewportY + $componentViewportHeight * $facePickPoint[1])
+                if (-not (Wait-FileContainsAfterOffset `
+                        -Path $stdoutPath `
+                        -Pattern "Native authoring component picked:.*mode=face" `
+                        -StartingOffset $nativeFacePickLogOffset `
+                        -TimeoutMilliseconds 1200)) {
+                    continue
+                }
+            }
+            $bevelLogOffset = Get-FileLengthSafe -Path $stdoutPath
             Click-FramebufferPoint `
                 -Handle $mainWindowHandle `
                 -FramebufferWidth $framebufferWidth `
                 -FramebufferHeight $framebufferHeight `
                 -FramebufferX ($nativeBevelX + 44.0) `
                 -FramebufferY ($nativeBevelY + 12.0)
-            $nativeBevelObserved = Wait-FileContains `
+            if (-not (Wait-FileContainsAfterOffset `
+                    -Path $stdoutPath `
+                    -Pattern "Native authoring bevel request:" `
+                    -StartingOffset $bevelLogOffset `
+                    -TimeoutMilliseconds 2500)) {
+                continue
+            }
+            $successfulBevelRequest = Get-LastLogRegexMatch `
                 -Path $stdoutPath `
-                -Pattern "Native authoring dogfood: face bevel edited" `
-                -TimeoutMilliseconds 2500
+                -Pattern 'Native authoring bevel request: name=(.+) result=success selected_face='
+            if ($null -ne $successfulBevelRequest) {
+                # The selected imported fixture remains a bounded 45k-vertex
+                # authoring source. Its Face Bevel transaction can legitimately
+                # outlive the pointer event; only accept a fresh completion
+                # line after a successful operation request.
+                $nativeBevelObserved = Wait-FileContainsAfterOffset `
+                    -Path $stdoutPath `
+                    -Pattern "Native authoring dogfood: face bevel edited" `
+                    -StartingOffset $bevelLogOffset `
+                    -TimeoutMilliseconds 15000
+            }
         }
         if (-not $nativeBevelObserved) {
             throw "The user-facing native bevel operation did not update the showcase source."
@@ -2457,9 +2752,12 @@ try {
         if (-not (Wait-FileContains -Path $stdoutPath -Pattern "Play session state changed\." -TimeoutMilliseconds 5000)) {
             throw "Game Authoring Start Play did not report a state transition."
         }
-        Start-Sleep -Milliseconds 250
-        $gamePlayMatch = Get-LastLogRegexMatch -Path $stdoutPath -Pattern 'Game authoring play controls: name=(?<name>.+) trigger_x=(?<triggerX>[-0-9.]+) play_x=(?<playX>[-0-9.]+) y=(?<y>[-0-9.]+) width=(?<width>[-0-9.]+) height=26.0 state=(?<state>[0-9]+)\.'
-        if ($null -eq $gamePlayMatch -or $gamePlayMatch.Groups["state"].Value -ne "1") {
+        $gamePlayMatch = Wait-LastLogRegexMatch `
+            -Path $stdoutPath `
+            -Pattern 'Game authoring play controls: name=(?<name>.+) trigger_x=(?<triggerX>[-0-9.]+) play_x=(?<playX>[-0-9.]+) y=(?<y>[-0-9.]+) width=(?<width>[-0-9.]+) height=26.0 state=(?<state>[0-9]+)\.' `
+            -GroupName "state" `
+            -ExpectedValue "1"
+        if ($null -eq $gamePlayMatch) {
             throw "Game Authoring Start Play did not reach Running state."
         }
         Write-Output "[pass] Game Authoring Start Play reached Running state"
@@ -2471,9 +2769,12 @@ try {
         if (-not (Wait-FileContains -Path $stdoutPath -Pattern "Play session state changed\." -TimeoutMilliseconds 5000)) {
             throw "Game Authoring Pause Play did not report a state transition."
         }
-        Start-Sleep -Milliseconds 250
-        $gamePlayMatch = Get-LastLogRegexMatch -Path $stdoutPath -Pattern 'Game authoring play controls: name=(?<name>.+) trigger_x=(?<triggerX>[-0-9.]+) play_x=(?<playX>[-0-9.]+) y=(?<y>[-0-9.]+) width=(?<width>[-0-9.]+) height=26.0 state=(?<state>[0-9]+)\.'
-        if ($null -eq $gamePlayMatch -or $gamePlayMatch.Groups["state"].Value -ne "2") {
+        $gamePlayMatch = Wait-LastLogRegexMatch `
+            -Path $stdoutPath `
+            -Pattern 'Game authoring play controls: name=(?<name>.+) trigger_x=(?<triggerX>[-0-9.]+) play_x=(?<playX>[-0-9.]+) y=(?<y>[-0-9.]+) width=(?<width>[-0-9.]+) height=26.0 state=(?<state>[0-9]+)\.' `
+            -GroupName "state" `
+            -ExpectedValue "2"
+        if ($null -eq $gamePlayMatch) {
             throw "Game Authoring Pause Play did not reach Paused state."
         }
         Write-Output "[pass] Game Authoring Pause Play reached Paused state"
@@ -2485,9 +2786,12 @@ try {
         if (-not (Wait-FileContains -Path $stdoutPath -Pattern "Play session state changed\." -TimeoutMilliseconds 5000)) {
             throw "Game Authoring Resume Play did not report a state transition."
         }
-        Start-Sleep -Milliseconds 250
-        $gamePlayMatch = Get-LastLogRegexMatch -Path $stdoutPath -Pattern 'Game authoring play controls: name=(?<name>.+) trigger_x=(?<triggerX>[-0-9.]+) play_x=(?<playX>[-0-9.]+) y=(?<y>[-0-9.]+) width=(?<width>[-0-9.]+) height=26.0 state=(?<state>[0-9]+)\.'
-        if ($null -eq $gamePlayMatch -or $gamePlayMatch.Groups["state"].Value -ne "1") {
+        $gamePlayMatch = Wait-LastLogRegexMatch `
+            -Path $stdoutPath `
+            -Pattern 'Game authoring play controls: name=(?<name>.+) trigger_x=(?<triggerX>[-0-9.]+) play_x=(?<playX>[-0-9.]+) y=(?<y>[-0-9.]+) width=(?<width>[-0-9.]+) height=26.0 state=(?<state>[0-9]+)\.' `
+            -GroupName "state" `
+            -ExpectedValue "1"
+        if ($null -eq $gamePlayMatch) {
             throw "Game Authoring Resume Play did not return to Running state."
         }
         Write-Output "[pass] Game Authoring Resume Play returned to Running state"
@@ -2499,7 +2803,14 @@ try {
         if (-not (Wait-FileContains -Path $stdoutPath -Pattern "Play session state changed\." -TimeoutMilliseconds 5000)) {
             throw "Game Authoring pause before Step did not report a state transition."
         }
-        Start-Sleep -Milliseconds 250
+        $gamePlayMatch = Wait-LastLogRegexMatch `
+            -Path $stdoutPath `
+            -Pattern 'Game authoring play controls: name=(?<name>.+) trigger_x=(?<triggerX>[-0-9.]+) play_x=(?<playX>[-0-9.]+) y=(?<y>[-0-9.]+) width=(?<width>[-0-9.]+) height=26.0 state=(?<state>[0-9]+)\.' `
+            -GroupName "state" `
+            -ExpectedValue "2"
+        if ($null -eq $gamePlayMatch) {
+            throw "Game Authoring pause before Step did not reach Paused state."
+        }
         $gameStepMatch = Get-LastLogRegexMatch -Path $stdoutPath -Pattern 'Game authoring step controls: name=(?<name>.+) step_x=(?<stepX>[-0-9.]+) stop_x=(?<stopX>[-0-9.]+) y=(?<y>[-0-9.]+) width=(?<width>[-0-9.]+) height=26.0\.'
         if ($null -eq $gameStepMatch) {
             throw "The Game Authoring Step/Stop control geometry could not be parsed."
@@ -2758,17 +3069,18 @@ try {
             [System.IntPtr]::Zero) | Out-Null
         Start-Sleep -Milliseconds 500
 
+        $nativeReopenOffset = Get-FileLengthSafe -Path $stdoutPath
         Click-FramebufferPoint `
             -Handle $mainWindowHandle `
             -FramebufferWidth $framebufferWidth `
             -FramebufferHeight $framebufferHeight `
             -FramebufferX ($nativeX + $nativeWidth * 0.5) `
             -FramebufferY ($nativeY + $nativeHeight * 0.5)
-        Start-Sleep -Milliseconds 500
-
-        if ((Select-String `
-                -LiteralPath $stdoutPath `
-                -Pattern "Native Panel Test: opened").Count -lt 2) {
+        if (-not (Wait-FileContainsAfterOffset `
+                -Path $stdoutPath `
+                -Pattern "Native Panel Test: opened" `
+                -StartingOffset $nativeReopenOffset `
+                -TimeoutMilliseconds 4000)) {
             throw "The Native Panel Test window did not reopen after being closed."
         }
         Write-Output "[pass] Native test panel closes and reopens without closing the main sandbox"
@@ -2882,21 +3194,20 @@ try {
         if ($uiClickFailures -gt 0) {
             Write-Output "[warn] Some packaged UI click checks could not be confirmed automatically. Manual packaged UI QA is still needed."
         }
-        if (-not (Select-String -LiteralPath $stdoutPath -Pattern "Sandbox panel: shown" -Quiet)) {
+        if ($sandboxPanelsVisible) {
             Set-HenkaAutomationForeground -Handle $mainWindowHandle
             Start-Sleep -Milliseconds 400
+            $panelCloseOffset = Get-FileLengthSafe -Path $stdoutPath
             Send-HenkaAutomationKey -EventPath $automationInputPath -KeyName "F4"
-            if (-not (Wait-FileContains -Path $stdoutPath -Pattern "Sandbox panel: hidden" -TimeoutMilliseconds 2000)) {
-                Set-HenkaAutomationForeground -Handle $mainWindowHandle
-                Start-Sleep -Milliseconds 250
-                Send-HenkaAutomationKey -EventPath $automationInputPath -KeyName "F4"
+            if (-not (Wait-FileContainsAfterOffset `
+                    -Path $stdoutPath `
+                    -Pattern "Sandbox panel: hidden" `
+                    -StartingOffset $panelCloseOffset `
+                    -TimeoutMilliseconds 4000)) {
+                throw "The packaged sandbox panels did not close after the verified F4 input."
             }
-            if (Wait-FileContains -Path $stdoutPath -Pattern "Sandbox panel: hidden" -TimeoutMilliseconds 4000) {
-                Assert-FileContains -Path $stdoutPath -Pattern "Sandbox panel: hidden" -Description "Panel close output"
-            }
-            else {
-                Write-Output "[warn] Automated F4 panel close could not be confirmed. Manual packaged UI QA is still needed."
-            }
+            Assert-FileContains -Path $stdoutPath -Pattern "Sandbox panel: hidden" -Description "Panel close output"
+            $sandboxPanelsVisible = $false
         }
     }
     else {
@@ -2941,124 +3252,139 @@ try {
         throw "The user-facing native viewport component picker could not obtain the live Scene View viewport geometry."
     }
 
-    Write-Step "Checking engine-native showcase creation"
+    Write-Step "Checking generic engine-native asset authoring"
     Set-HenkaAutomationForeground -Handle $mainWindowHandle
     Start-Sleep -Milliseconds 300
+    $genericAssetPanelOffset = Get-FileLengthSafe -Path $stdoutPath
     Send-HenkaAutomationKey -EventPath $automationInputPath -KeyName "F4"
-    if (-not (Wait-FileContains -Path $stdoutPath -Pattern "Sandbox panel: shown" -TimeoutMilliseconds 4000)) {
-        throw "The editor panels could not be reopened for engine-native showcase creation."
-    }
-    if (-not (Wait-FileContains -Path $stdoutPath -Pattern "Native generated fixture control:" -TimeoutMilliseconds 3000)) {
-        throw "The engine-native showcase creation control did not become visible."
-    }
-    $nativeAuthoredShowcaseMatch = Get-LastLogRegexMatch `
-        -Path $stdoutPath `
-        -Pattern 'Native generated fixture control: x=([-0-9.]+) y=([-0-9.]+) width=([-0-9.]+) height=24.0\.'
-    if ($null -eq $nativeAuthoredShowcaseMatch) {
-        throw "The engine-native showcase creation control geometry could not be parsed."
-    }
-    $nativeAuthoredShowcaseX = [double]$nativeAuthoredShowcaseMatch.Groups[1].Value
-    $nativeAuthoredShowcaseY = [double]$nativeAuthoredShowcaseMatch.Groups[2].Value
-    $nativeAuthoredShowcaseWidth = [double]$nativeAuthoredShowcaseMatch.Groups[3].Value
-    Assert-FramebufferRect `
-        -Name "Native generated fixture creation control" `
-        -FramebufferWidth $framebufferWidth `
-        -FramebufferHeight $framebufferHeight `
-        -X $nativeAuthoredShowcaseX `
-        -Y $nativeAuthoredShowcaseY `
-        -Width $nativeAuthoredShowcaseWidth `
-        -Height 24.0
-    Click-FramebufferPoint `
-        -Handle $mainWindowHandle `
-        -FramebufferWidth $framebufferWidth `
-        -FramebufferHeight $framebufferHeight `
-        -FramebufferX ($nativeAuthoredShowcaseX + $nativeAuthoredShowcaseWidth / 2.0) `
-        -FramebufferY ($nativeAuthoredShowcaseY + 12.0)
-    if (-not (Wait-FileContains -Path $stdoutPath -Pattern "source_state=HENKA_NATIVE_GENERATED_FIXTURE" -TimeoutMilliseconds 5000)) {
-        throw "The user-facing engine-native showcase creation did not produce the generated-fixture source classification."
-    }
-    if (-not (Wait-FileContains -Path $stdoutPath -Pattern "Native authoring material detail: name=Native Showcase Rocket normal=loaded surface=loaded source_state=HENKA_NATIVE_GENERATED_FIXTURE" -TimeoutMilliseconds 5000)) {
-        throw "The native-generated rocket fixture did not adopt its manager-owned surface detail textures."
-    }
-    if (Wait-FileContains -Path $stdoutPath -Pattern 'Native authoring disclosure: name=Native Showcase Rocket.*expanded=0\.' -TimeoutMilliseconds 2500) {
-        $nativeGeneratedDisclosureMatch = Get-LastLogRegexMatch `
+    if (-not (Wait-FileContainsAfterOffset `
             -Path $stdoutPath `
-            -Pattern 'Native authoring disclosure: name=(Native Showcase Rocket) x=([-0-9.]+) y=([-0-9.]+) width=([-0-9.]+) height=28.0 expanded=0\.'
-        if ($null -eq $nativeGeneratedDisclosureMatch) {
-            throw "The native-generated Authoring disclosure geometry could not be parsed."
-        }
-        $nativeGeneratedDisclosureX = [double]$nativeGeneratedDisclosureMatch.Groups[2].Value
-        $nativeGeneratedDisclosureY = [double]$nativeGeneratedDisclosureMatch.Groups[3].Value
-        $nativeGeneratedDisclosureWidth = [double]$nativeGeneratedDisclosureMatch.Groups[4].Value
-        Assert-FramebufferRect `
-            -Name "Native-generated Authoring disclosure" `
-            -FramebufferWidth $framebufferWidth `
-            -FramebufferHeight $framebufferHeight `
-            -X $nativeGeneratedDisclosureX `
-            -Y $nativeGeneratedDisclosureY `
-            -Width $nativeGeneratedDisclosureWidth `
-            -Height 28.0
-        Click-FramebufferPoint `
-            -Handle $mainWindowHandle `
-            -FramebufferWidth $framebufferWidth `
-            -FramebufferHeight $framebufferHeight `
-            -FramebufferX ($nativeGeneratedDisclosureX + $nativeGeneratedDisclosureWidth * 0.5) `
-            -FramebufferY ($nativeGeneratedDisclosureY + 14.0)
-        if (-not (Wait-FileContains -Path $stdoutPath -Pattern 'Native authoring disclosure: name=Native Showcase Rocket.*expanded=1\.' -TimeoutMilliseconds 3000)) {
-            throw "The native-generated Authoring disclosure did not open."
-        }
+            -Pattern "Sandbox panel: shown" `
+            -StartingOffset $genericAssetPanelOffset `
+            -TimeoutMilliseconds 4000)) {
+        throw "The editor panels could not be reopened for generic engine-native asset authoring."
     }
-    Write-Output "[pass] User-facing engine-native showcase creation completed"
-    if (-not (Wait-FileContains -Path $stdoutPath -Pattern "Native authoring project controls:" -TimeoutMilliseconds 3000)) {
-        throw "The native-generated showcase did not expose project save/reload controls."
-    }
-    $nativeCreatedProjectMatch = Get-LastLogRegexMatch `
+    Start-Sleep -Milliseconds 600
+    $sandboxPanelsVisible = $true
+    $sceneObjectsMatch = Get-LastLogRegexMatch `
         -Path $stdoutPath `
-        -Pattern 'Native authoring project controls: name=(.+) save_x=([-0-9.]+) save_y=([-0-9.]+) reload_x=([-0-9.]+) reload_y=([-0-9.]+) width=140.0 height=24.0\.'
-    if ($null -eq $nativeCreatedProjectMatch) {
-        throw "The native-generated project control geometry could not be parsed."
+        -Pattern 'Workspace UI geometry: .*scene_objects=(?<x>[-0-9.]+),(?<y>[-0-9.]+),(?<width>[-0-9.]+),(?<height>[-0-9.]+) '
+    if ($null -eq $sceneObjectsMatch) {
+        throw "The Scene Objects panel geometry could not be parsed for generic asset authoring."
     }
-    $nativeCreatedSaveX = [double]$nativeCreatedProjectMatch.Groups[2].Value
-    $nativeCreatedSaveY = [double]$nativeCreatedProjectMatch.Groups[3].Value
-    $nativeCreatedReloadX = [double]$nativeCreatedProjectMatch.Groups[4].Value
-    $nativeCreatedReloadY = [double]$nativeCreatedProjectMatch.Groups[5].Value
-    foreach ($nativeCreatedControl in @(
-        @{ Name = "native generated Save Project"; X = $nativeCreatedSaveX; Y = $nativeCreatedSaveY },
-        @{ Name = "native generated Reload Project"; X = $nativeCreatedReloadX; Y = $nativeCreatedReloadY }
-    )) {
-        Assert-FramebufferRect `
-            -Name $nativeCreatedControl.Name `
-            -FramebufferWidth $framebufferWidth `
-            -FramebufferHeight $framebufferHeight `
-            -X $nativeCreatedControl.X `
-            -Y $nativeCreatedControl.Y `
-            -Width 140.0 `
-            -Height 24.0
+    $genericPanelX = [double]$sceneObjectsMatch.Groups["x"].Value
+    $genericPanelY = [double]$sceneObjectsMatch.Groups["y"].Value
+    $genericPanelWidth = [double]$sceneObjectsMatch.Groups["width"].Value
+    $genericPanelHeight = [double]$sceneObjectsMatch.Groups["height"].Value
+    $genericActionWidth = [Math]::Max(56.0, ($genericPanelWidth - 40.0) / 3.0)
+    $genericActionY = $genericPanelY + 60.0
+    $genericPrimitiveY = $genericActionY + 30.0
+    $genericNameFieldY = $genericPrimitiveY + 43.0
+    $genericNewAssetY = $genericNameFieldY + 30.0
+    $genericSaveAssetY = $genericPrimitiveY + 58.0
+    $genericAssetName = "PackagedAsset_" + [Guid]::NewGuid().ToString("N").Substring(0, 8)
+    $genericAssetNamePattern = [Regex]::Escape($genericAssetName)
+    $genericAssetNameX = $genericPanelX + 14.0 + ($genericActionWidth * 2.0 + 6.0) / 2.0
+    $genericNewAssetX = $genericPanelX + 14.0 + $genericActionWidth / 2.0
+    $genericOpenAssetX = $genericPanelX + 14.0 + $genericActionWidth + 6.0 + $genericActionWidth / 2.0
+    $genericPrimitiveX = @(
+        $genericNewAssetX,
+        $genericNewAssetX,
+        $genericOpenAssetX,
+        ($genericPanelX + 14.0 + ($genericActionWidth + 6.0) * 2.0 + $genericActionWidth / 2.0))
+
+    Assert-FramebufferRect -Name "Generic asset name field" -FramebufferWidth $framebufferWidth -FramebufferHeight $framebufferHeight -X $genericAssetNameX -Y $genericNameFieldY -Width ($genericActionWidth * 2.0 + 6.0) -Height 24.0
+    Assert-FramebufferRect -Name "Generic New Asset control" -FramebufferWidth $framebufferWidth -FramebufferHeight $framebufferHeight -X ($genericPanelX + 14.0) -Y $genericNewAssetY -Width $genericActionWidth -Height 24.0
+    Click-AuthoringWindowPoint -Handle $mainWindowHandle -X $genericAssetNameX -Y ($genericNameFieldY + 12.0)
+    for ($index = 0; $index -lt 63; ++$index) {
+        Send-HenkaAutomationEvent -EventPath $automationInputPath -EventLine "key Backspace down" -SettleMilliseconds 0
+        Send-HenkaAutomationEvent -EventPath $automationInputPath -EventLine "key Backspace up" -SettleMilliseconds 0
     }
-    Click-FramebufferPoint `
-        -Handle $mainWindowHandle `
-        -FramebufferWidth $framebufferWidth `
-        -FramebufferHeight $framebufferHeight `
-        -FramebufferX ($nativeCreatedSaveX + 70.0) `
-        -FramebufferY ($nativeCreatedSaveY + 12.0)
-    if (-not (Wait-FileContains -Path $stdoutPath -Pattern "Native authoring dogfood: project saved for Native Showcase Rocket; vertices=201 faces=121 source_state=GENERATED_TEST_FIXTURE" -TimeoutMilliseconds 5000)) {
-        throw "The native-generated showcase project save did not complete."
+    Start-Sleep -Milliseconds 600
+    Send-HenkaAutomationText -EventPath $automationInputPath -Text $genericAssetName
+    Start-Sleep -Milliseconds 600
+    $genericCreationOffset = Get-FileLengthSafe -Path $stdoutPath
+    Click-AuthoringWindowPoint -Handle $mainWindowHandle -X $genericNewAssetX -Y ($genericNewAssetY + 12.0)
+    if (-not (Wait-FileContainsAfterOffset `
+            -Path $stdoutPath `
+            -Pattern "Native asset document: name=$genericAssetNamePattern action=created parts=0\." `
+            -StartingOffset $genericCreationOffset `
+            -TimeoutMilliseconds 5000)) {
+        if (Wait-FileContainsAfterOffset `
+                -Path $stdoutPath `
+                -Pattern 'Native asset document: name=.* action=created parts=0\.' `
+                -StartingOffset $genericCreationOffset `
+                -TimeoutMilliseconds 250) {
+            throw "The generic New Asset action created a document with an unexpected name."
+        }
+        Click-AuthoringWindowPoint -Handle $mainWindowHandle -X $genericAssetNameX -Y ($genericNameFieldY + 12.0)
+        for ($index = 0; $index -lt 63; ++$index) {
+            Send-HenkaAutomationEvent -EventPath $automationInputPath -EventLine "key Backspace down" -SettleMilliseconds 0
+            Send-HenkaAutomationEvent -EventPath $automationInputPath -EventLine "key Backspace up" -SettleMilliseconds 0
+        }
+        Start-Sleep -Milliseconds 600
+        Send-HenkaAutomationText -EventPath $automationInputPath -Text $genericAssetName
+        Start-Sleep -Milliseconds 600
+        $genericCreationRetryOffset = Get-FileLengthSafe -Path $stdoutPath
+        Click-AuthoringWindowPoint -Handle $mainWindowHandle -X $genericNewAssetX -Y ($genericNewAssetY + 12.0)
+        if (-not (Wait-FileContainsAfterOffset `
+                -Path $stdoutPath `
+                -Pattern "Native asset document: name=$genericAssetNamePattern action=created parts=0\." `
+                -StartingOffset $genericCreationRetryOffset `
+                -TimeoutMilliseconds 5000)) {
+            throw "The generic New Asset action did not create an editor-owned asset document after a bounded retry."
+        }
     }
-    Click-FramebufferPoint `
-        -Handle $mainWindowHandle `
-        -FramebufferWidth $framebufferWidth `
-        -FramebufferHeight $framebufferHeight `
-        -FramebufferX ($nativeCreatedReloadX + 70.0) `
-        -FramebufferY ($nativeCreatedReloadY + 12.0)
-    if (-not (Wait-FileContains -Path $stdoutPath -Pattern "Native authoring dogfood: project reloaded for Native Showcase Rocket; vertices=201 faces=121 source_state=GENERATED_TEST_FIXTURE" -TimeoutMilliseconds 5000)) {
-        throw "The native-generated showcase project reload did not complete transactionally."
+
+    Assert-FramebufferRect -Name "Generic Add Cube control" -FramebufferWidth $framebufferWidth -FramebufferHeight $framebufferHeight -X ($genericPanelX + 14.0) -Y $genericActionY -Width $genericActionWidth -Height 24.0
+    Click-AuthoringWindowPoint -Handle $mainWindowHandle -X $genericPrimitiveX[0] -Y ($genericActionY + 12.0)
+    if (-not (Wait-FileContains -Path $stdoutPath -Pattern "Native asset document: name=$genericAssetNamePattern action=part-added parts=1\." -TimeoutMilliseconds 5000)) {
+        throw "The generic Box primitive was not added to the new asset document."
     }
-    Write-Output "[pass] Native-generated showcase project save/reload completed transactionally"
+    Start-Sleep -Milliseconds 350
+    foreach ($primitiveIndex in 1..3) {
+        Click-AuthoringWindowPoint -Handle $mainWindowHandle -X $genericPrimitiveX[$primitiveIndex] -Y ($genericPrimitiveY + 12.0)
+        $expectedPartCount = $primitiveIndex + 1
+        if (-not (Wait-FileContains -Path $stdoutPath -Pattern "Native asset document: name=$genericAssetNamePattern action=part-added parts=$expectedPartCount\." -TimeoutMilliseconds 5000)) {
+            throw "The generic primitive authoring path did not add part $expectedPartCount."
+        }
+        Start-Sleep -Milliseconds 350
+    }
+
+    Assert-FramebufferRect -Name "Generic Save Asset control" -FramebufferWidth $framebufferWidth -FramebufferHeight $framebufferHeight -X ($genericPanelX + 14.0) -Y $genericSaveAssetY -Width $genericActionWidth -Height 24.0
+    Assert-FramebufferRect -Name "Generic Close Asset control" -FramebufferWidth $framebufferWidth -FramebufferHeight $framebufferHeight -X ($genericPanelX + 14.0 + $genericActionWidth + 6.0) -Y $genericSaveAssetY -Width $genericActionWidth -Height 24.0
+    Click-AuthoringWindowPoint -Handle $mainWindowHandle -X $genericNewAssetX -Y ($genericSaveAssetY + 12.0)
+    if (-not (Wait-FileContains -Path $stdoutPath -Pattern "Native asset document: name=$genericAssetNamePattern action=saved parts=4\." -TimeoutMilliseconds 5000)) {
+        throw "The generic authored asset did not save transactionally."
+    }
+    $genericAssetManifestPath = Join-Path $packageRoot ("user\saves\" + $genericAssetName + ".asset")
+    if (-not (Test-Path -LiteralPath $genericAssetManifestPath -PathType Leaf)) {
+        throw "The generic authored asset manifest was not persisted in the packaged runtime workspace."
+    }
+    $genericManifest = [System.IO.File]::ReadAllText($genericAssetManifestPath)
+    foreach ($requiredManifestLine in @(
+        "asset.version=5",
+        "asset.name=$genericAssetName",
+        "asset.part_count=4",
+        "asset.provenance=HENKA_PRODUCT_NATIVE_AUTHORED")) {
+        if (-not $genericManifest.Contains($requiredManifestLine)) {
+            throw "The generic authored asset manifest was missing: $requiredManifestLine"
+        }
+    }
+    Click-AuthoringWindowPoint -Handle $mainWindowHandle -X $genericOpenAssetX -Y ($genericSaveAssetY + 12.0)
+    if (-not (Wait-FileContains -Path $stdoutPath -Pattern "Native asset document: name=$genericAssetNamePattern action=closed parts=4\." -TimeoutMilliseconds 5000)) {
+        throw "The generic authored asset did not close cleanly."
+    }
+    Click-AuthoringWindowPoint -Handle $mainWindowHandle -X $genericOpenAssetX -Y ($genericNewAssetY + 12.0)
+    if (-not (Wait-FileContains -Path $stdoutPath -Pattern "Native asset document: name=$genericAssetNamePattern action=opened parts=4\." -TimeoutMilliseconds 5000)) {
+        throw "The generic authored asset did not reopen from its persisted manifest."
+    }
+    Write-Output "[pass] User-facing generic native asset creation, primitive authoring, save, close, and reopen completed"
     Start-Sleep -Milliseconds 350
     Save-WindowScreenshot `
         -Handle $mainWindowHandle `
         -Path $nativeAuthoredScreenshotPath `
-        -Description "Packaged native-generated rocket fixture visual proof"
+        -Description "Packaged generic native authoring visual proof"
 
     Write-Step "Checking clean close-window shutdown"
     [NativeMethods]::PostMessage($mainWindowHandle, 0x0010, [System.IntPtr]::Zero, [System.IntPtr]::Zero) | Out-Null

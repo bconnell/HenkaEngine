@@ -32,6 +32,12 @@ typedef struct henka_ui_draw_line
     henka_vec4 color;
 } henka_ui_draw_line;
 
+typedef struct henka_ui_draw_triangle
+{
+    henka_vec2 points[3];
+    henka_vec4 color;
+} henka_ui_draw_triangle;
+
 struct henka_ui_context
 {
     henka_ui_theme theme;
@@ -44,10 +50,13 @@ struct henka_ui_context
     bool mouse_left_down;
     bool mouse_left_pressed;
     bool mouse_left_released;
+    bool text_backspace_pressed;
     const char* text_input;
     size_t text_input_size;
     bool active_id_set;
     char active_id[256];
+    bool focused_text_id_set;
+    char focused_text_id[256];
     henka_ui_flow_state flow;
     char disclosure_ids[HENKA_UI_MAX_DISCLOSURE_ROWS][256];
     size_t disclosure_id_count;
@@ -65,6 +74,9 @@ struct henka_ui_context
     henka_ui_draw_line* draw_lines;
     size_t draw_line_count;
     size_t draw_line_capacity;
+    henka_ui_draw_triangle* draw_triangles;
+    size_t draw_triangle_count;
+    size_t draw_triangle_capacity;
 };
 
 #endif

@@ -18,6 +18,10 @@
 #include <share.h>
 #endif
 
+static bool henka_platform_append_text_input(
+    henka_input_state* input,
+    const char* text);
+
 bool henka_input_automation_begin(
     henka_input_state* input,
     const char* event_path)
@@ -205,6 +209,30 @@ bool henka_input_automation_apply_event(
     if (!henka_input_automation_next_token(&cursor, command, sizeof(command)))
     {
         return false;
+    }
+
+    if (strcmp(command, "text") == 0)
+    {
+        const unsigned char* character;
+
+        while (isspace((unsigned char)*cursor))
+        {
+            ++cursor;
+        }
+        if (*cursor == '\0')
+        {
+            return false;
+        }
+        for (character = (const unsigned char*)cursor;
+             *character != '\0';
+             ++character)
+        {
+            if (*character < 0x20U || *character == 0x7fU)
+            {
+                return false;
+            }
+        }
+        return henka_platform_append_text_input(input, cursor);
     }
 
     if (strcmp(command, "move") == 0)

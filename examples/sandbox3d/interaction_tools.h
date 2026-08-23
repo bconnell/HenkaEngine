@@ -83,6 +83,8 @@ typedef struct sandbox3d_projected_triangle
     /* IDs are source-scoped, not mesh-local.  This lets one logical scene
      * object aggregate multiple children without inventing shared edges. */
     uint64_t vertex_ids[3];
+    /* Zero denotes a source triangle without authoring face identity. */
+    uint32_t face_id;
 } sandbox3d_projected_triangle;
 
 typedef struct sandbox3d_silhouette_segment
@@ -131,7 +133,7 @@ bool sandbox3d_should_prefer_terrain_hit(
     float terrain_distance,
     bool object_hit,
     float object_distance);
-#define SANDBOX3D_AUTHORING_RENDER_TRIANGLES_DEFAULT false
+#define SANDBOX3D_AUTHORING_RENDER_TRIANGLES_DEFAULT true
 
 typedef struct sandbox3d_authoring_cage_edge
 {

@@ -111,7 +111,9 @@ turning the public README into an implementation ledger.
    maps persistent object IDs to runtime entities for the current Entity,
    Transform, Physics, and Events slice. A bounded behavior-state store with
    explicit sidecar save/load and mixed-language `OnEvent` routing is also
-   available; complete host API coverage, full Inspector authoring, and
+   available. Play uses a bounded clone of the Edit baseline, so runtime state
+   cannot leak back into authoring on Stop; Save Play State and Load Play State
+   are explicit operations. Complete host API coverage, full Inspector authoring, and
     debugger tooling remain unfinished. The Inspector can create confined
     Lua or HenkaScript behavior templates and attach them transactionally, and
     provides a bounded editable source panel whose HenkaScript spans, colors,

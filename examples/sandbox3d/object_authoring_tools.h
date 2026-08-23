@@ -260,12 +260,42 @@ henka_result sandbox3d_authoring_object_pick_face(
 henka_result sandbox3d_authoring_object_select_face(
     sandbox3d_authoring_object* object,
     henka_authoring_face_id face_id);
+/* Selects the active face whose centroid is furthest along the supplied local
+ * axis.  This is a bounded, non-mutating selection aid for caps, extremities,
+ * and other authored profiles; it never changes mesh topology. */
+henka_result sandbox3d_authoring_object_select_extreme_face(
+    sandbox3d_authoring_object* object,
+    henka_vec3 local_axis,
+    bool maximum);
+/* Selects every active face whose centroid lies within band_width of the
+ * extreme projection along local_axis.  This is a bounded geometric
+ * selection aid for shaping rings, caps, and authored profiles; it never
+ * changes topology and preserves the existing transactional selection state
+ * when validation or allocation fails. */
+henka_result sandbox3d_authoring_object_select_extreme_face_band(
+    sandbox3d_authoring_object* object,
+    henka_vec3 local_axis,
+    bool maximum,
+    float band_width);
 /* Removes the selected faces as one bounded topology transaction.  The
  * operation fails closed when it would leave no renderable face, preserving
  * the source, evaluated mesh, bounds, physics, and history on failure. */
 henka_result sandbox3d_authoring_object_delete_selected_faces(
     sandbox3d_authoring_object* object);
 henka_result sandbox3d_authoring_object_set_selected_face_material_region(
+    sandbox3d_authoring_object* object,
+    uint32_t material_region);
+/* Extrudes every selected face as one bounded topology transaction.  The
+ * selected faces are validated before any candidate is published; on failure
+ * the source, evaluated mesh, bounds, physics, selection, and history remain
+ * unchanged.  The newly created cap faces become the active face selection. */
+henka_result sandbox3d_authoring_object_extrude_selected_faces(
+    sandbox3d_authoring_object* object,
+    float distance);
+/* Applies one material-region identity to the complete face selection as one
+ * bounded metadata transaction.  This changes no topology and is useful for
+ * authored material regions that share a common semantic surface. */
+henka_result sandbox3d_authoring_object_set_selected_faces_material_region(
     sandbox3d_authoring_object* object,
     uint32_t material_region);
 henka_result sandbox3d_authoring_object_extrude_selected_face(

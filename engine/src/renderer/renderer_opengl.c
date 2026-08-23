@@ -4934,8 +4934,13 @@ henka_result henka_opengl_renderer_draw_scene(
     struct henka_renderer* renderer,
     const struct henka_scene* scene)
 {
+    /* Keep Solid-mode surfaces visually separate from the light slate
+     * viewport field.  The previous value matched the field closely enough
+     * to erase the filled silhouette while leaving topology overlays
+     * visible, which made valid scene meshes appear disconnected from their
+     * authoring geometry. */
     static const henka_vec4 solid_color =
-        {0.56f, 0.60f, 0.66f, 1.0f};
+        {0.32f, 0.40f, 0.52f, 1.0f};
     static const henka_vec4 wire_color =
         {0.78f, 0.82f, 0.88f, 1.0f};
     static const henka_vec3 preview_light_direction =
@@ -6326,6 +6331,7 @@ static henka_result henka_opengl_renderer_draw_ui_resources(
     int gl_vertex_count;
     size_t line_vertex_count;
     size_t rect_vertex_count;
+    size_t triangle_vertex_count;
     size_t vertex_bytes;
     size_t vertex_count;
 
@@ -6335,16 +6341,20 @@ static henka_result henka_opengl_renderer_draw_ui_resources(
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
 
-    if (ui_context->draw_rect_count == 0U && ui_context->draw_line_count == 0U)
+    if (ui_context->draw_rect_count == 0U &&
+        ui_context->draw_line_count == 0U &&
+        ui_context->draw_triangle_count == 0U)
     {
         return HENKA_SUCCESS;
     }
 
     glDisable(GL_SCISSOR_TEST);
     glViewport(0, 0, framebuffer_width, framebuffer_height);
-    if (!henka_checked_size_multiply(ui_context->draw_rect_count, 6U, &rect_vertex_count) ||
+    if (!henka_checked_size_multiply(ui_context->draw_triangle_count, 3U, &triangle_vertex_count) ||
+        !henka_checked_size_multiply(ui_context->draw_rect_count, 6U, &rect_vertex_count) ||
         !henka_checked_size_multiply(ui_context->draw_line_count, 6U, &line_vertex_count) ||
-        !henka_checked_size_add(rect_vertex_count, line_vertex_count, &vertex_count) ||
+        !henka_checked_size_add(triangle_vertex_count, rect_vertex_count, &vertex_count) ||
+        !henka_checked_size_add(vertex_count, line_vertex_count, &vertex_count) ||
         vertex_count > HENKA_MAX_MESH_ELEMENTS ||
         !henka_checked_size_to_int(vertex_count, &gl_vertex_count) ||
         !henka_checked_size_multiply(vertex_count, sizeof(*vertices), &vertex_bytes) ||
@@ -6357,6 +6367,35 @@ static henka_result henka_opengl_renderer_draw_ui_resources(
     if (vertices == NULL)
     {
         return HENKA_ERROR_OUT_OF_MEMORY;
+    }
+
+    for (index = 0U; index < ui_context->draw_triangle_count; ++index)
+    {
+        const henka_ui_draw_triangle* draw_triangle = &ui_context->draw_triangles[index];
+        const henka_vec4 color = draw_triangle->color;
+        const size_t base_index = index * 3U;
+
+        vertices[base_index + 0U] = (henka_ui_vertex){
+            draw_triangle->points[0].x,
+            draw_triangle->points[0].y,
+            color.x,
+            color.y,
+            color.z,
+            color.w};
+        vertices[base_index + 1U] = (henka_ui_vertex){
+            draw_triangle->points[1].x,
+            draw_triangle->points[1].y,
+            color.x,
+            color.y,
+            color.z,
+            color.w};
+        vertices[base_index + 2U] = (henka_ui_vertex){
+            draw_triangle->points[2].x,
+            draw_triangle->points[2].y,
+            color.x,
+            color.y,
+            color.z,
+            color.w};
     }
 
     for (index = 0U; index < ui_context->draw_rect_count; ++index)
@@ -6375,7 +6414,7 @@ static henka_result henka_opengl_renderer_draw_ui_resources(
         x1 = draw_rect->bounds.x + draw_rect->bounds.width;
         y1 = draw_rect->bounds.y + draw_rect->bounds.height;
         color = draw_rect->color;
-        base_index = index * 6U;
+        base_index = triangle_vertex_count + index * 6U;
 
         vertices[base_index + 0U] = (henka_ui_vertex){x0, y0, color.x, color.y, color.z, color.w};
         vertices[base_index + 1U] = (henka_ui_vertex){x1, y0, color.x, color.y, color.z, color.w};
@@ -6455,7 +6494,7 @@ static henka_result henka_opengl_renderer_draw_ui_resources(
             return HENKA_ERROR_INVALID_ARGUMENT;
         }
 
-        base_index = rect_vertex_count + index * 6U;
+        base_index = triangle_vertex_count + rect_vertex_count + index * 6U;
         vertices[base_index + 0U] = (henka_ui_vertex){(float)x0, (float)y0, color.x, color.y, color.z, color.w};
         vertices[base_index + 1U] = (henka_ui_vertex){(float)x1, (float)y1, color.x, color.y, color.z, color.w};
         vertices[base_index + 2U] = (henka_ui_vertex){(float)x2, (float)y2, color.x, color.y, color.z, color.w};

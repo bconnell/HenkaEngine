@@ -19,6 +19,8 @@ int main(void)
     henka_scene_document_id duplicate_id = HENKA_INVALID_SCENE_DOCUMENT_ID;
     henka_scene_document_behavior_id behavior_id =
         HENKA_INVALID_SCENE_DOCUMENT_BEHAVIOR_ID;
+    henka_scene_document_behavior_id state_behavior_id =
+        HENKA_INVALID_SCENE_DOCUMENT_BEHAVIOR_ID;
     henka_scene_document_behavior behavior;
     henka_scene_document_behavior loaded_behavior;
     henka_entity entity = HENKA_INVALID_ENTITY;
@@ -71,6 +73,34 @@ int main(void)
         goto cleanup;
     }
 
+    {
+        henka_scene_document_behavior state_behavior =
+            henka_scene_document_behavior_default();
+        state_behavior.language = HENKA_SCRIPT_LANGUAGE_HENKASCRIPT;
+        (void)snprintf(
+            state_behavior.asset_path,
+            sizeof(state_behavior.asset_path),
+            "%s",
+            "tests/fixtures/scripts/state_mutator.hks");
+        if (sandbox3d_game_authoring_add_behavior_for_entity(
+                authoring,
+                entity,
+                &state_behavior,
+                &state_behavior_id) != HENKA_SUCCESS ||
+            state_behavior_id == HENKA_INVALID_SCENE_DOCUMENT_BEHAVIOR_ID ||
+            sandbox3d_game_authoring_get_behavior_count_for_entity(authoring, entity) != 2U)
+        {
+            fprintf(stderr, "game authoring test failed during state behavior authoring\n");
+            goto cleanup;
+        }
+        if (sandbox3d_game_authoring_get_object_for_entity(
+                authoring, entity, &restored_id, &object) != HENKA_SUCCESS)
+        {
+            fprintf(stderr, "game authoring test failed refreshing authored object\n");
+            goto cleanup;
+        }
+    }
+
     object.physics.enabled = true;
     object.physics.body_type = HENKA_PHYSICS_BODY_DYNAMIC;
     object.physics.shape = HENKA_PHYSICS_SHAPE_SPHERE;
@@ -111,7 +141,7 @@ int main(void)
         fprintf(stderr, "game authoring test failed during save/load\n");
         goto cleanup;
     }
-    if (sandbox3d_game_authoring_get_behavior_count_for_entity(authoring, entity) != 1U ||
+    if (sandbox3d_game_authoring_get_behavior_count_for_entity(authoring, entity) != 2U ||
         sandbox3d_game_authoring_get_behavior_for_entity(
             authoring, entity, behavior_id, &loaded_behavior) != HENKA_SUCCESS ||
         strcmp(loaded_behavior.asset_path, behavior.asset_path) != 0)
@@ -150,6 +180,43 @@ int main(void)
     {
         fprintf(stderr, "game authoring test failed during persistent-ID remap\n");
         goto cleanup;
+    }
+    henka_scene_document_destroy(replacement_document);
+    replacement_document = NULL;
+
+    if (henka_scene_document_create(&replacement_document) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    {
+        henka_scene_document_object unrelated =
+            henka_scene_document_object_default();
+        unrelated.id = UINT64_C(7000);
+        (void)snprintf(
+            unrelated.name,
+            sizeof(unrelated.name),
+            "%s",
+            "Unrelated persisted object");
+        if (henka_scene_document_add_object(
+                replacement_document,
+                &unrelated,
+                &duplicate_id) != HENKA_SUCCESS ||
+            duplicate_id != unrelated.id ||
+            henka_scene_document_save_file(
+                replacement_document,
+                ".",
+                relative_path) != HENKA_SUCCESS ||
+            sandbox3d_game_authoring_load(authoring, ".") != HENKA_SUCCESS ||
+            sandbox3d_game_authoring_get_object_for_entity(
+                authoring, entity, &restored_id, &restored) != HENKA_SUCCESS ||
+            restored_id != UINT64_C(5000) ||
+            strcmp(restored.name, "Game Authoring Object") != 0)
+        {
+            fprintf(
+                stderr,
+                "game authoring test failed during missing-object retention\n");
+            goto cleanup;
+        }
     }
     henka_scene_document_destroy(replacement_document);
     replacement_document = NULL;
@@ -273,6 +340,41 @@ int main(void)
         fprintf(stderr, "game authoring test failed during Play lifecycle\n");
         goto cleanup;
     }
+    if (sandbox3d_game_authoring_get_script_state_value(
+            authoring,
+            (henka_script_state_identity){restored_id, state_behavior_id},
+            80U,
+            &state_value,
+            &state_present) != HENKA_SUCCESS ||
+        state_present)
+    {
+        fprintf(
+            stderr,
+            "game authoring test failed: Play state leaked (present=%d type=%d value=%d)\n",
+            state_present ? 1 : 0,
+            (int)state_value.type,
+            state_value.type == HENKA_SCRIPT_STATE_VALUE_I32 ? state_value.as.i32 : 0);
+        goto cleanup;
+    }
+    if (sandbox3d_game_authoring_save_play_state(authoring, ".") != HENKA_SUCCESS ||
+        sandbox3d_game_authoring_load_play_state(authoring, ".") != HENKA_SUCCESS ||
+        sandbox3d_game_authoring_get_script_state_value(
+            authoring,
+            (henka_script_state_identity){restored_id, state_behavior_id},
+            80U,
+            &state_value,
+            &state_present) != HENKA_SUCCESS ||
+        !state_present || state_value.type != HENKA_SCRIPT_STATE_VALUE_I32 ||
+        state_value.as.i32 != 7)
+    {
+        fprintf(
+            stderr,
+            "game authoring test failed: explicit Play state save/load (present=%d type=%d value=%d)\n",
+            state_present ? 1 : 0,
+            (int)state_value.type,
+            state_value.type == HENKA_SCRIPT_STATE_VALUE_I32 ? state_value.as.i32 : 0);
+        goto cleanup;
+    }
     if (sandbox3d_game_authoring_reload_behavior_for_entity(
             authoring, entity, behavior_id, &reload_diagnostic) !=
             HENKA_ERROR_INVALID_ARGUMENT ||
@@ -288,15 +390,15 @@ int main(void)
         FILE* template_file = NULL;
         int template_path_length;
         (void)remove(
-            "build/test_tmp/game_authoring_scripts/scripts/behavior_5000_2.lua");
+            "build/test_tmp/game_authoring_scripts/scripts/behavior_5000_3.lua");
         if (sandbox3d_game_authoring_attach_script_template(
                 authoring,
                 "build/test_tmp/game_authoring_scripts",
                 entity,
                 HENKA_SCRIPT_LANGUAGE_LUA) != HENKA_SUCCESS ||
-            sandbox3d_game_authoring_get_behavior_count_for_entity(authoring, entity) != 2U ||
+            sandbox3d_game_authoring_get_behavior_count_for_entity(authoring, entity) != 3U ||
             sandbox3d_game_authoring_get_behavior_at_for_entity(
-                authoring, entity, 1U, &loaded_behavior) != HENKA_SUCCESS ||
+                authoring, entity, 2U, &loaded_behavior) != HENKA_SUCCESS ||
             loaded_behavior.language != HENKA_SCRIPT_LANGUAGE_LUA ||
             loaded_behavior.asset_path[0] == '\0')
         {

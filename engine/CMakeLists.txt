@@ -15,6 +15,7 @@ add_library(henka_runtime STATIC
     src/scripting/henkascript_backend.c
     src/scripting/script_asset.c
     src/scripting/scene_behavior_runtime.c
+    src/scripting/lua_source.c
     $<$<BOOL:${HENKA_ENABLE_LUA}>:src/scripting/lua_backend.c>
     src/scene/camera.c
     src/scene/scene.c

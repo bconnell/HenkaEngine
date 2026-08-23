@@ -97,6 +97,7 @@ typedef struct henka_ui_frame_desc
     bool navigation_left_pressed;
     bool navigation_right_pressed;
     bool navigation_enter_pressed;
+    bool text_backspace_pressed;
     const char* text_input;
     size_t text_input_size;
 } henka_ui_frame_desc;
@@ -162,6 +163,17 @@ henka_vec2 henka_ui_get_mouse_position(const henka_ui_context* context);
 const char* henka_ui_get_text_input(
     const henka_ui_context* context,
     size_t* out_text_size);
+/* Bounded single-line editable text control. The caller owns `value` and
+ * supplies its complete capacity including the NUL terminator. Input is
+ * applied transactionally: oversized or control-byte text is rejected without
+ * changing the caller buffer. */
+henka_result henka_ui_text_field(
+    henka_ui_context* context,
+    const char* id,
+    henka_ui_rect bounds,
+    char* value,
+    size_t value_capacity,
+    bool* out_changed);
 henka_result henka_ui_custom_interaction(
     henka_ui_context* context,
     const char* id,
@@ -172,10 +184,17 @@ unsigned int henka_ui_get_consumed_navigation_mask(
     const henka_ui_context* context);
 size_t henka_ui_get_draw_rect_count(const henka_ui_context* context);
 size_t henka_ui_get_draw_line_count(const henka_ui_context* context);
+size_t henka_ui_get_draw_triangle_count(const henka_ui_context* context);
 bool henka_ui_rect_contains(henka_ui_rect rect, henka_vec2 point);
 henka_result henka_ui_measure_text(const char* text, float scale, int* out_width, int* out_height);
 henka_result henka_ui_overlay_rect(henka_ui_context* context, henka_ui_rect bounds, henka_vec4 color);
 henka_result henka_ui_overlay_line(henka_ui_context* context, henka_vec2 start, henka_vec2 end, float thickness, henka_vec4 color);
+henka_result henka_ui_overlay_triangle(
+    henka_ui_context* context,
+    henka_vec2 first,
+    henka_vec2 second,
+    henka_vec2 third,
+    henka_vec4 color);
 henka_result henka_ui_overlay_disc(henka_ui_context* context, henka_vec2 center, float radius, henka_vec4 color);
 henka_result henka_ui_overlay_circle(henka_ui_context* context, henka_vec2 center, float radius, float thickness, henka_vec4 color);
 henka_result henka_ui_overlay_polyline(

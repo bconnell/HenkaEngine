@@ -169,11 +169,117 @@ static void henka_test_ui_overlay_circle_primitives(void)
     henka_ui_destroy(ui);
 }
 
+static void henka_test_ui_overlay_triangle_primitive(void)
+{
+    henka_ui_context* ui = NULL;
+    henka_ui_frame_desc frame_desc = {0};
+
+    HENKA_TEST_ASSERT(henka_ui_create(&ui) == HENKA_SUCCESS);
+    frame_desc.framebuffer_width = 640;
+    frame_desc.framebuffer_height = 480;
+    HENKA_TEST_ASSERT(henka_ui_begin_frame(ui, &frame_desc) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_ui_overlay_triangle(
+        ui,
+        (henka_vec2){40.0f, 40.0f},
+        (henka_vec2){100.0f, 40.0f},
+        (henka_vec2){40.0f, 100.0f},
+        (henka_vec4){0.2f, 0.4f, 0.6f, 0.5f}) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_ui_get_draw_triangle_count(ui) == 1U);
+    HENKA_TEST_ASSERT(henka_ui_overlay_triangle(
+        ui,
+        (henka_vec2){40.0f, 40.0f},
+        (henka_vec2){80.0f, 80.0f},
+        (henka_vec2){120.0f, 120.0f},
+        (henka_vec4){0.2f, 0.4f, 0.6f, 0.5f}) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_ui_get_draw_triangle_count(ui) == 1U);
+    HENKA_TEST_ASSERT(henka_ui_end_frame(ui) == HENKA_SUCCESS);
+    henka_ui_destroy(ui);
+}
+
+static void henka_test_ui_text_field_focus_and_bounded_edits(void)
+{
+    henka_ui_context* ui = NULL;
+    henka_ui_frame_desc frame_desc = {0};
+    const henka_ui_rect bounds = {20.0f, 20.0f, 180.0f, 28.0f};
+    char value[12] = "";
+    bool changed = false;
+
+    HENKA_TEST_ASSERT(henka_ui_create(&ui) == HENKA_SUCCESS);
+    henka_ui_set_visible(ui, true);
+    frame_desc.framebuffer_width = 640;
+    frame_desc.framebuffer_height = 480;
+    frame_desc.mouse_position = (henka_vec2){30.0f, 30.0f};
+    frame_desc.mouse_left_down = true;
+    frame_desc.mouse_left_pressed = true;
+    HENKA_TEST_ASSERT(henka_ui_begin_frame(ui, &frame_desc) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_ui_text_field(
+        ui, "asset_name", bounds, value, sizeof(value), &changed) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(!changed);
+    HENKA_TEST_ASSERT(henka_ui_end_frame(ui) == HENKA_SUCCESS);
+
+    frame_desc.mouse_left_down = false;
+    frame_desc.mouse_left_pressed = false;
+    frame_desc.text_input = "Rocket";
+    frame_desc.text_input_size = strlen(frame_desc.text_input);
+    HENKA_TEST_ASSERT(henka_ui_begin_frame(ui, &frame_desc) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_ui_text_field(
+        ui, "asset_name", bounds, value, sizeof(value), &changed) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(changed);
+    HENKA_TEST_ASSERT(strcmp(value, "Rocket") == 0);
+    HENKA_TEST_ASSERT(henka_ui_end_frame(ui) == HENKA_SUCCESS);
+
+    frame_desc.text_input = " Alpha";
+    frame_desc.text_input_size = strlen(frame_desc.text_input);
+    HENKA_TEST_ASSERT(henka_ui_begin_frame(ui, &frame_desc) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_ui_text_field(
+        ui, "asset_name", bounds, value, sizeof(value), &changed) == HENKA_ERROR_LIMIT);
+    HENKA_TEST_ASSERT(!changed);
+    HENKA_TEST_ASSERT(strcmp(value, "Rocket") == 0);
+    HENKA_TEST_ASSERT(henka_ui_end_frame(ui) == HENKA_SUCCESS);
+
+    frame_desc.text_input = NULL;
+    frame_desc.text_input_size = 0U;
+    frame_desc.text_backspace_pressed = true;
+    HENKA_TEST_ASSERT(henka_ui_begin_frame(ui, &frame_desc) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_ui_text_field(
+        ui, "asset_name", bounds, value, sizeof(value), &changed) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(changed);
+    HENKA_TEST_ASSERT(strcmp(value, "Rocke") == 0);
+    HENKA_TEST_ASSERT(henka_ui_end_frame(ui) == HENKA_SUCCESS);
+
+    frame_desc.text_backspace_pressed = false;
+    frame_desc.mouse_position = (henka_vec2){300.0f, 300.0f};
+    frame_desc.mouse_left_pressed = true;
+    HENKA_TEST_ASSERT(henka_ui_begin_frame(ui, &frame_desc) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_ui_text_field(
+        ui, "asset_name", bounds, value, sizeof(value), &changed) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(!changed);
+    HENKA_TEST_ASSERT(henka_ui_end_frame(ui) == HENKA_SUCCESS);
+
+    frame_desc.mouse_left_pressed = false;
+    frame_desc.text_input = "Ignored";
+    frame_desc.text_input_size = strlen(frame_desc.text_input);
+    HENKA_TEST_ASSERT(henka_ui_begin_frame(ui, &frame_desc) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_ui_text_field(
+        ui, "asset_name", bounds, value, sizeof(value), &changed) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(!changed);
+    HENKA_TEST_ASSERT(strcmp(value, "Rocke") == 0);
+    HENKA_TEST_ASSERT(henka_ui_end_frame(ui) == HENKA_SUCCESS);
+
+    HENKA_TEST_ASSERT(henka_ui_text_field(
+        NULL, "invalid", bounds, value, sizeof(value), &changed) == HENKA_ERROR_INVALID_ARGUMENT);
+    HENKA_TEST_ASSERT(henka_ui_text_field(
+        ui, "invalid", bounds, value, 0U, &changed) == HENKA_ERROR_INVALID_ARGUMENT);
+    henka_ui_destroy(ui);
+}
+
 void henka_test_ui(void)
 {
     henka_test_ui_theme_is_light_by_default_and_context_local();
     henka_test_ui_control_chrome_contract();
     henka_test_ui_overlay_circle_primitives();
+    henka_test_ui_overlay_triangle_primitive();
+    henka_test_ui_text_field_focus_and_bounded_edits();
     bool toggle_value;
     henka_result result;
     henka_ui_context* ui;

@@ -28,10 +28,10 @@ execution adapters for both languages.
 - A bounded HenkaScript lexer/parser/type checker exposed through
   `<henka/henkascript.h>`.
 - The editor consumes HenkaScript token spans and compiler-owned lexical
-  presentation classes from that same public API. It does not copy the
-  compiler's keyword table or grammar; Lua source remains backend-validated
-  and is displayed with its persisted structure until a Lua tokenization seam
-  is intentionally added.
+  presentation classes from that same public API. Lua uses the corresponding
+  bounded token and indentation APIs owned by its scripting backend. The editor
+  does not copy the compiler's keyword table or grammar, nor a second Lua
+  grammar; Lua's real parser remains the acceptance authority.
 - The compiler remains the authority for HenkaScript syntax and supplies the
   canonical minimal behavior source through
   `henka_hks_get_default_behavior_source`. Asset creation, editor presentation,
@@ -61,7 +61,12 @@ execution adapters for both languages.
 - Game Authoring exposes only typed, coordinator-checked state access; it does
   not return a mutable store pointer. State reads and writes through that
   boundary are rejected while Play is active, so callers cannot bypass the
-  Edit-vs-Play lock or mutate runtime state through an authoring pointer.
+  Edit-vs-Play lock or mutate runtime state through an authoring pointer. Each
+  Play start receives an independent bounded clone of the authoring store;
+  runtime mutations therefore do not leak into Edit after Stop. An explicit
+  Save Play State writes the retained stopped Play store, while an explicit
+  Load Play State replaces the authoring baseline and discards that retained
+  runtime snapshot.
 - Explicit typed declarations (`i32 health = 3;`) and inferred declarations
   (`count := health + 1;`).
 - Brace-delimited `fn` and `behavior` callables, typed arithmetic and
@@ -176,8 +181,9 @@ of the authored `.hscene` document. The Inspector can create confined Lua or
     HenkaScript behavior templates and attach them transactionally, and it provides
     a bounded editable source panel. HenkaScript preview spans and colors are
     derived from the compiler's public lexer and token-class API; source bytes
-    and insertion indentation are compiler-derived for HenkaScript; Lua keeps
-    backend validation and persisted formatting without a copied editor grammar.
+    and insertion indentation are backend-derived for both HenkaScript and Lua.
+    Lua's real parser remains the acceptance authority, without a copied editor
+    grammar.
     Source bytes and existing indentation are preserved by range editing,
     Save/Revert are transactional. The Play-session seam can transactionally
     reload a persisted behavior backend while preserving its generation-checked

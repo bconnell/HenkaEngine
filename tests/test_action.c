@@ -97,6 +97,21 @@ void henka_test_action(void)
     HENKA_TEST_ASSERT(strcmp(details[0].object.name, "Action Cube") == 0);
 
     memset(&request, 0, sizeof(request));
+    request.command = HENKA_ACTION_COMMAND_ADD_PRIMITIVE_OBJECT;
+    request.params.add_primitive.primitive = HENKA_ACTION_PRIMITIVE_CYLINDER;
+    request.params.add_primitive.name = "Action Cylinder";
+    request.params.add_primitive.transform = henka_transform_identity();
+    request.params.add_primitive.visible = true;
+    HENKA_TEST_ASSERT(henka_action_execute(actions, &request, &result) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(result.success);
+    HENKA_TEST_ASSERT(result.has_object_details);
+    HENKA_TEST_ASSERT(strcmp(result.object_details.object.tag, "primitive_cylinder") == 0);
+    HENKA_TEST_ASSERT(result.object_details.object.has_bounds);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(result.object_details.object.local_bounds.extents.x, 0.5f, 0.0001f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(result.object_details.object.local_bounds.extents.y, 0.5f, 0.0001f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(result.object_details.object.local_bounds.extents.z, 0.5f, 0.0001f);
+
+    memset(&request, 0, sizeof(request));
     request.command = HENKA_ACTION_COMMAND_SELECT_OBJECT;
     request.params.entity.entity = cube;
     HENKA_TEST_ASSERT(henka_action_execute(actions, &request, &result) == HENKA_SUCCESS);
@@ -337,11 +352,11 @@ void henka_test_action(void)
     HENKA_TEST_ASSERT(henka_action_execute(actions, &request, &result) == HENKA_SUCCESS);
     HENKA_TEST_ASSERT(result.success);
     HENKA_TEST_ASSERT(result.has_scene_summary);
-    HENKA_TEST_ASSERT(result.scene_summary.user_entity_count == 2U);
+    HENKA_TEST_ASSERT(result.scene_summary.user_entity_count == 3U);
     HENKA_TEST_ASSERT(result.scene_summary.helper_entity_count == 1U);
 
     HENKA_TEST_ASSERT(henka_action_get_scene_summary(actions, &summary) == HENKA_SUCCESS);
-    HENKA_TEST_ASSERT(summary.user_entity_count == 2U);
+    HENKA_TEST_ASSERT(summary.user_entity_count == 3U);
 
     memset(&request, 0, sizeof(request));
     request.command = HENKA_ACTION_COMMAND_CLEAR_SCENE;

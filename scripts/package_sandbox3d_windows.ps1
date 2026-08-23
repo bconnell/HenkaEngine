@@ -225,6 +225,7 @@ try {
         "giraffe_metallic_roughness.png",
         "original_realistic_rocket.gltf",
         "original_realistic_rocket.bin",
+        "rocket_base_color.png",
         "rocket_detail_normal.png",
         "rocket_metallic_roughness.png"
     )) {

@@ -332,6 +332,8 @@ static void henka_test_sandbox3d_object_authoring_source_persistence(void)
     henka_authoring_mesh_counts restored_counts;
     henka_mesh* render_mesh = NULL;
     henka_mesh* uv_render_mesh = NULL;
+    henka_mesh* render_before_extrude = NULL;
+    henka_mesh* render_after_extrude = NULL;
     henka_mesh* previous_mesh = NULL;
     henka_physics_world* physics_world = NULL;
     henka_physics_body_id physics_body = HENKA_INVALID_PHYSICS_BODY_ID;
@@ -458,6 +460,46 @@ static void henka_test_sandbox3d_object_authoring_source_persistence(void)
             HENKA_TEST_ASSERT(sandbox3d_authoring_object_get_selected_face(object) == selected_before_extrude);
         }
         {
+            henka_authoring_mesh_counts before_multi_extrude;
+            henka_authoring_mesh_counts after_multi_extrude;
+            uint32_t selected_id = HENKA_AUTHORING_INVALID_ID;
+            uint32_t selected_id_two = HENKA_AUTHORING_INVALID_ID;
+            sandbox3d_authoring_object_set_selection_mode(
+                object, SANDBOX3D_AUTHORING_SELECTION_FACE);
+            HENKA_TEST_ASSERT(sandbox3d_authoring_object_select_component(object, 1U, false) == HENKA_SUCCESS);
+            HENKA_TEST_ASSERT(sandbox3d_authoring_object_select_component(object, 3U, true) == HENKA_SUCCESS);
+            HENKA_TEST_ASSERT(sandbox3d_authoring_object_get_selected_component_count(object) == 2U);
+            HENKA_TEST_ASSERT(sandbox3d_authoring_object_set_selected_faces_material_region(
+                object, 31U) == HENKA_SUCCESS);
+            HENKA_TEST_ASSERT(henka_authoring_mesh_get_face(
+                sandbox3d_authoring_object_get_mesh(object), 1U)->material_region == 31U);
+            HENKA_TEST_ASSERT(henka_authoring_mesh_get_face(
+                sandbox3d_authoring_object_get_mesh(object), 3U)->material_region == 31U);
+            HENKA_TEST_ASSERT(sandbox3d_authoring_object_undo(object) == HENKA_SUCCESS);
+            HENKA_TEST_ASSERT(sandbox3d_authoring_object_select_component(object, 1U, false) == HENKA_SUCCESS);
+            HENKA_TEST_ASSERT(sandbox3d_authoring_object_select_component(object, 3U, true) == HENKA_SUCCESS);
+            before_multi_extrude = henka_authoring_mesh_get_counts(
+                sandbox3d_authoring_object_get_mesh(object));
+            HENKA_TEST_ASSERT(sandbox3d_authoring_object_extrude_selected_faces(
+                object, 0.125f) == HENKA_SUCCESS);
+            after_multi_extrude = henka_authoring_mesh_get_counts(
+                sandbox3d_authoring_object_get_mesh(object));
+            HENKA_TEST_ASSERT(after_multi_extrude.faces > before_multi_extrude.faces);
+            HENKA_TEST_ASSERT(sandbox3d_authoring_object_get_selected_component_count(object) == 2U);
+            HENKA_TEST_ASSERT(sandbox3d_authoring_object_get_selected_component_at(
+                object, 0U, &selected_id) == HENKA_SUCCESS);
+            HENKA_TEST_ASSERT(sandbox3d_authoring_object_get_selected_component_at(
+                object, 1U, &selected_id_two) == HENKA_SUCCESS);
+            HENKA_TEST_ASSERT(selected_id < selected_id_two);
+            HENKA_TEST_ASSERT(henka_authoring_mesh_get_face(
+                sandbox3d_authoring_object_get_mesh(object), selected_id) != NULL);
+            HENKA_TEST_ASSERT(henka_authoring_mesh_get_face(
+                sandbox3d_authoring_object_get_mesh(object), selected_id_two) != NULL);
+            HENKA_TEST_ASSERT(sandbox3d_authoring_object_undo(object) == HENKA_SUCCESS);
+            HENKA_TEST_ASSERT(henka_authoring_mesh_get_counts(
+                sandbox3d_authoring_object_get_mesh(object)).faces == before_multi_extrude.faces);
+        }
+        {
             const henka_authoring_mesh_counts before_bevel = henka_authoring_mesh_get_counts(
                 sandbox3d_authoring_object_get_mesh(object));
             HENKA_TEST_ASSERT(sandbox3d_authoring_object_bevel_selected_face(object, 0.1f) == HENKA_SUCCESS);
@@ -483,7 +525,14 @@ static void henka_test_sandbox3d_object_authoring_source_persistence(void)
     HENKA_TEST_ASSERT(sandbox3d_authoring_object_undo(object) == HENKA_SUCCESS);
     HENKA_TEST_ASSERT(sandbox3d_authoring_object_undo(object) == HENKA_SUCCESS);
 
+    HENKA_TEST_ASSERT(henka_scene_get_entity_mesh(
+        scene, entity, &render_before_extrude) == HENKA_SUCCESS);
     HENKA_TEST_ASSERT(sandbox3d_authoring_object_extrude_selected_face(object, 0.25f) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_scene_get_entity_mesh(
+        scene, entity, &render_after_extrude) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(render_before_extrude != NULL &&
+        render_after_extrude != NULL &&
+        render_after_extrude != render_before_extrude);
     HENKA_TEST_ASSERT(henka_scene_get_entity_local_bounds(
         scene, entity, &edited_physics_bounds) == HENKA_SUCCESS);
     HENKA_TEST_ASSERT(henka_physics_body_get_state(
@@ -828,6 +877,15 @@ static void henka_test_sandbox3d_object_authoring_component_selection(void)
     HENKA_TEST_ASSERT(henka_scene_set_entity_mesh(scene, entity, previous_mesh) == HENKA_SUCCESS);
     HENKA_TEST_ASSERT(sandbox3d_authoring_object_create_box(
         engine, scene, entity, 1.0f, 1.0f, 1.0f, NULL, 8U, &object) == HENKA_SUCCESS);
+
+    sandbox3d_authoring_object_set_selection_mode(object, SANDBOX3D_AUTHORING_SELECTION_FACE);
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_select_extreme_face_band(
+        object, (henka_vec3){0.0f, 1.0f, 0.0f}, true, 0.1f) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_get_selected_component_count(object) == 1U);
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_get_selected_face(object) != HENKA_AUTHORING_INVALID_ID);
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_select_extreme_face_band(
+        object, (henka_vec3){0.0f, 1.0f, 0.0f}, true, 0.0f) == HENKA_ERROR_INVALID_ARGUMENT);
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_get_selected_component_count(object) == 1U);
 
     sandbox3d_authoring_object_set_selection_mode(object, SANDBOX3D_AUTHORING_SELECTION_VERTEX);
     HENKA_TEST_ASSERT(sandbox3d_authoring_object_select_all_components(object) == HENKA_SUCCESS);

@@ -37,6 +37,27 @@ henka_result henka_authoring_mesh_create_box(
     float height,
     float depth,
     henka_authoring_mesh** out_mesh);
+/* Creates closed bounded primitive sources centred at the origin. Segment
+ * values are constrained to the authoring face-corner hard limit so caps and
+ * temporary constructor storage never require unbounded allocation. */
+henka_result henka_authoring_mesh_create_cylinder(
+    const henka_authoring_mesh_desc* desc,
+    float radius,
+    float height,
+    size_t segments,
+    henka_authoring_mesh** out_mesh);
+henka_result henka_authoring_mesh_create_cone(
+    const henka_authoring_mesh_desc* desc,
+    float radius,
+    float height,
+    size_t segments,
+    henka_authoring_mesh** out_mesh);
+henka_result henka_authoring_mesh_create_uv_sphere(
+    const henka_authoring_mesh_desc* desc,
+    float radius,
+    size_t longitude_segments,
+    size_t latitude_segments,
+    henka_authoring_mesh** out_mesh);
 
 henka_result henka_authoring_mesh_duplicate_face(
     henka_authoring_mesh* mesh,
