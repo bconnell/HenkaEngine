@@ -106,7 +106,7 @@
 - [x] **Step 3: Implement candidate construction** through the persisted script asset/backend boundary; do not mutate the live runtime before candidate success.
 - [x] **Step 4: Implement commit order**: destroy the old owned asset only after candidate success, rebind the existing behavior slot/generation, preserve host policy and typed state identity, and return a bounded diagnostic on failure.
 - [x] **Step 5: Run the focused scripting, scene, Play, and Game Authoring suite** and inspect failure paths for stale callbacks or dangling backend pointers.
-- [ ] **Step 6: Commit** with `feat: add transactional behavior reload`.
+- [x] **Step 6: Commit** with the integrated authoring/scripting foundation slice.
 
 ### Task 5: Package, document, and externally validate the slice
 
@@ -119,7 +119,7 @@
 
 - [x] **Step 1: Update documentation** to mark source-document loading, staged editing, atomic save, and diagnostics as Available/Foundation only where tested; keep full debugger, schema migration, and broader project workflows unfinished.
 - [x] **Step 2: Search public docs** for stale claims such as `source editing`, `hot reload`, `compiler authority`, and `second grammar`, then resolve contradictions against source.
-- [ ] **Step 3: Run the focused suite, Debug build, documentation truth check, `git diff --check`, and external mixed-language project gate.**
-- [ ] **Step 4: Review the final diff** for duplicated syntax knowledge, unbounded growth, path escapes, ignored errors, and input ownership violations.
-- [ ] **Step 5: Commit and push** the integrated slice only after all gates pass.
-- [ ] **Step 6: Verify** `HEAD == origin/main`, divergence `0/0`, and clean worktree.
+- [x] **Step 3: Run the focused suite, Debug build, documentation truth check, `git diff --check`, and external mixed-language project gate.**
+- [x] **Step 4: Review the final diff** for duplicated syntax knowledge, unbounded growth, path escapes, ignored errors, and input ownership violations.
+- [x] **Step 5: Commit and push** the integrated slice only after all gates pass.
+- [x] **Step 6: Verify** `HEAD == origin/main`, divergence `0/0`, and clean worktree.

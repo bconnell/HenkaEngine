@@ -34,27 +34,27 @@
 - Produces `henka_script_state_store_create/destroy/clear`, typed set/get/remove/count operations, and atomic confined `load_file/save_file` operations.
 - Produces `henka_script_state_identity` and `henka_script_state_value` types used by the host in Task 2.
 
-- [ ] **Step 1: Write the failing fixed-capacity and round-trip tests**
+- [x] **Step 1: Write the failing fixed-capacity and round-trip tests**
 
   The test must create a store, set bool/i32/f32/vec3 values for two identities,
   verify replacement and lookup, fill `HENKA_SCRIPT_STATE_MAX_VALUES`, assert
   the next write returns `HENKA_ERROR_LIMIT`, save to a temporary sidecar, load
   into a second store, and compare all values through the public getters.
 
-- [ ] **Step 2: Write malformed-input tests**
+- [x] **Step 2: Write malformed-input tests**
 
   Add truncated, duplicate-key, unknown-version, zero-identity, non-finite,
   and over-capacity fixture files. Assert each load fails and the destination
   store retains a sentinel value written before the attempted load.
 
-- [ ] **Step 3: Implement the fixed store and validation helpers**
+- [x] **Step 3: Implement the fixed store and validation helpers**
 
   Use a fixed array of entries. Validate key and identity nonzero, enum range,
   finite floats/vectors, and exact type matches. Use checked size arithmetic for
   the versioned binary record format and reject files larger than the documented
   maximum before allocation.
 
-- [ ] **Step 4: Implement candidate-based binary load and atomic save**
+- [x] **Step 4: Implement candidate-based binary load and atomic save**
 
   Resolve the sidecar through `henka_path_resolve_confined`, read only bounded
   bytes, validate header/version/count/records, then move the candidate into the
@@ -62,11 +62,11 @@
   replace the destination atomically, and remove the temporary file on every
   failure.
 
-- [ ] **Step 5: Build and run the focused state tests**
+- [x] **Step 5: Build and run the focused state tests**
 
   Run the new CTest target and confirm it passes with zero tracked allocations.
 
-- [ ] **Step 6: Commit the state-store slice**
+- [x] **Step 6: Commit the integrated state/persistence foundation slice**
 
   Commit `feat: add bounded script state store` after reviewing `git diff --check`.
 
@@ -84,30 +84,30 @@
 - Consumes `henka_script_state_store` from Task 1.
 - Produces `henka_script_host_set_state_store`, `henka_script_host_set_execution_context`, and the four typed State schema functions.
 
-- [ ] **Step 1: Add host contract tests**
+- [x] **Step 1: Add host contract tests**
 
   Bind the State schema, set a context, invoke get/set calls, verify values are
   isolated by behavior identity, verify missing defaults/presence, and assert
   context changes are rejected while a dispatcher is running.
 
-- [ ] **Step 2: Add schema IDs and typed value forms**
+- [x] **Step 2: Add schema IDs and typed value forms**
 
   Add a dedicated `I32` value type, `STATE` domain, and exact parameter/return
   declarations. Keep State functions bound like existing APIs.
 
-- [ ] **Step 3: Implement context-aware state dispatch**
+- [x] **Step 3: Implement context-aware state dispatch**
 
   Store a borrowed state-store pointer and current identity in the host. Handle
   State APIs internally after exact schema validation; leave renderer/physics
   functions on the existing dispatcher. Require a current nonzero identity for
   State access and return deterministic defaults for missing keys.
 
-- [ ] **Step 4: Propagate behavior identity around callbacks**
+- [x] **Step 4: Propagate behavior identity around callbacks**
 
   Add behavior ID to the runtime context/descriptor and set the host context
   immediately before a callback, clearing it afterward on every return path.
 
-- [ ] **Step 5: Run host/runtime tests**
+- [x] **Step 5: Run host/runtime tests**
 
   Run `henka_script_host_tests` and `henka_script_runtime_tests` and verify
   stale handles and cross-behavior state cannot alias.
@@ -127,25 +127,25 @@
 - Consumes typed State schema and current host context from Task 2.
 - Produces identical bool/i32 read/write behavior in both languages.
 
-- [ ] **Step 1: Add Lua parity tests**
+- [x] **Step 1: Add Lua parity tests**
 
   Execute a Lua `OnUpdate` that reads a missing counter, increments it, writes
   it, and verifies the next callback observes the increment; assert invalid
   numeric arguments become Lua errors without changing state.
 
-- [ ] **Step 2: Add HenkaScript state syntax tests**
+- [x] **Step 2: Add HenkaScript state syntax tests**
 
   Compile and execute `i32 value = state_get_i32(7); state_set_i32(7, value + 1);`
   twice with the same host context and assert the second invocation observes the
   first write; include bool syntax and host-error propagation.
 
-- [ ] **Step 3: Implement adapters with bounded stack/register behavior**
+- [x] **Step 3: Implement adapters with bounded stack/register behavior**
 
   Register Lua `State.GetI32`, `State.SetI32`, `State.GetBool`, and
   `State.SetBool`. Add only the narrow HKS opcodes required by the tested forms;
   reject invalid keys/types before host invocation.
 
-- [ ] **Step 4: Run both backend tests and Lua-disabled compilation**
+- [x] **Step 4: Run both backend tests and Lua-disabled compilation**
 
   Run the focused Lua/HKS targets, then configure/build `henka_runtime` with
   `HENKA_ENABLE_LUA=OFF` to verify the public state API remains linkable.
@@ -166,24 +166,24 @@
   `sandbox3d_game_authoring_save_play_state` operations; neither is callable
   while Play is running.
 
-- [ ] **Step 1: Add isolation tests first**
+- [x] **Step 1: Add isolation tests first**
 
   Set runtime state during Play, assert the authored Scene Document and Edit
   scene remain unchanged, stop Play, save explicitly, clear/restart, load the
   sidecar, and assert state returns only after explicit load.
 
-- [ ] **Step 2: Make Play own and bind the state store**
+- [x] **Step 2: Make Play own and bind the state store**
 
   Create the fixed store with the Play session, attach it to the host, and pass
   the current persistent behavior ID through the runtime without retaining
   authoring pointers.
 
-- [ ] **Step 3: Add coordinator save/load seams**
+- [x] **Step 3: Add coordinator save/load seams**
 
   Derive a confined sidecar path beside the authored scene path, reject Play
   state transitions, and preserve the previous store when load fails.
 
-- [ ] **Step 4: Run Play/authoring integration tests**
+- [x] **Step 4: Run Play/authoring integration tests**
 
   Confirm explicit save/load and failed-load retention through public APIs.
 
@@ -195,19 +195,19 @@
 - Modify: `docs/architecture.md`
 - Modify: `docs/roadmap.md`
 
-- [ ] **Step 1: Document explicit state persistence and isolation**
+- [x] **Step 1: Document explicit state persistence and isolation**
 
   Mark the typed state slice Available, retain event routing/editor authoring
   as open, and document sidecar naming, bounds, failure behavior, and the
   explicit-save rule.
 
-- [ ] **Step 2: Run repository verification**
+- [x] **Step 2: Run repository verification**
 
   Run affected CTest, full `scripts/test_windows.ps1 -Configuration Debug`,
   Lua-disabled build, external game/server templates, package contract, and
   `git diff --check`.
 
-- [ ] **Step 3: Commit and publish**
+- [x] **Step 3: Commit and publish**
 
   Regenerate provenance/package only from a clean commit, push `main`, and
   verify `HEAD == origin/main`, divergence `0/0`, clean worktree, and no runtime
