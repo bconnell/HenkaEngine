@@ -134,8 +134,9 @@ bool sandbox3d_should_prefer_terrain_hit(
     bool object_hit,
     float object_distance);
 /* Solid mode must show the authored mesh and its material by default.  The
- * bounded topology overlay remains available as an explicit inspection aid. */
-#define SANDBOX3D_AUTHORING_RENDER_TRIANGLES_DEFAULT false
+ * bounded authored-cage overlay remains available as an explicit inspection
+ * aid; it must not be mistaken for the evaluated render surface. */
+#define SANDBOX3D_AUTHORING_TOPOLOGY_OVERLAY_DEFAULT false
 
 typedef struct sandbox3d_authoring_cage_edge
 {

@@ -264,11 +264,19 @@ try {
         throw "The visible face extrude did not commit successfully."
     }
     Start-Sleep -Milliseconds 500
+    # The topology overlay is opt-in. Enable it for the first capture so the
+    # workflow proves the authored cage is quad-based without confusing it
+    # with the evaluated render surface.
+    Send-HenkaAutomationClick `
+        -EventPath $automationInputPath `
+        -X ($viewportX + 328.0) `
+        -Y ($viewportY + 26.0)
+    Start-Sleep -Milliseconds 300
     Save-ProbeWindowScreenshot `
         -Handle $capturedProcess.Process.MainWindowHandle `
         -Path (Join-Path $runtimeDirectory "after-extrude-before-inset.png")
 
-    # The cyan triangles above are an editor-only topology overlay. Capture
+    # The cyan authored cage above is an editor-only topology overlay. Capture
     # the same committed edit with that overlay disabled so visual evidence
     # proves the scene renderer is showing the evaluated mesh itself rather
     # than only the selection/topology pass.

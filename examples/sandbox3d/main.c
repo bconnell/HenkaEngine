@@ -956,6 +956,9 @@ static bool sandbox3d_is_selectable_entity(const sandbox3d_state* state, henka_e
 static void sandbox3d_select_entity(sandbox3d_state* state, henka_entity entity);
 static void sandbox3d_clear_selection(sandbox3d_state* state, const char* reason);
 static bool sandbox3d_add_primitive_object(henka_engine* engine, sandbox3d_state* state);
+static henka_vec2 sandbox3d_viewport_local_to_framebuffer_point(
+    henka_viewport viewport,
+    henka_vec2 point);
 static void sandbox3d_log_native_asset_document_event(
     const char* name,
     const char* action,
@@ -4867,6 +4870,66 @@ static void sandbox3d_append_authoring_silhouette_triangles(
     }
 }
 
+static void sandbox3d_draw_authoring_face_fill(
+    sandbox3d_state* state,
+    henka_viewport viewport,
+    henka_transform transform,
+    const sandbox3d_authoring_object* authoring,
+    henka_authoring_face_id face_id,
+    henka_vec4 color)
+{
+    henka_authoring_vertex_id corners[HENKA_AUTHORING_MESH_HARD_MAX_FACE_CORNERS];
+    henka_vec2 points[HENKA_AUTHORING_MESH_HARD_MAX_FACE_CORNERS];
+    const henka_authoring_mesh* mesh;
+    size_t corner_count = 0U;
+    size_t corner_index;
+
+    if (state == NULL || authoring == NULL || face_id == HENKA_AUTHORING_INVALID_ID)
+    {
+        return;
+    }
+    mesh = sandbox3d_authoring_object_get_mesh(authoring);
+    if (mesh == NULL ||
+        sandbox3d_authoring_object_get_face_ordered_corners(
+            authoring,
+            face_id,
+            corners,
+            sizeof(corners) / sizeof(corners[0]),
+            &corner_count) != HENKA_SUCCESS ||
+        corner_count < 3U ||
+        corner_count > sizeof(points) / sizeof(points[0]))
+    {
+        return;
+    }
+    for (corner_index = 0U; corner_index < corner_count; ++corner_index)
+    {
+        const henka_authoring_vertex* vertex =
+            henka_authoring_mesh_get_vertex(mesh, corners[corner_index]);
+        if (vertex == NULL ||
+            !sandbox3d_project_handle_point(
+                state,
+                viewport,
+                sandbox3d_transform_authoring_point(transform, vertex->position),
+                &points[corner_index]))
+        {
+            return;
+        }
+    }
+
+    /* The UI overlay accepts triangles, but this is only a fill decomposition:
+     * no diagonal is emitted and the authored face boundary remains the only
+     * topology line visible to the user. */
+    for (corner_index = 1U; corner_index + 1U < corner_count; ++corner_index)
+    {
+        (void)henka_ui_overlay_triangle(
+            state->ui,
+            sandbox3d_viewport_local_to_framebuffer_point(viewport, points[0]),
+            sandbox3d_viewport_local_to_framebuffer_point(viewport, points[corner_index]),
+            sandbox3d_viewport_local_to_framebuffer_point(viewport, points[corner_index + 1U]),
+            color);
+    }
+}
+
 static void sandbox3d_append_imported_silhouette_triangles(
     sandbox3d_state* state,
     henka_viewport viewport,
@@ -5733,14 +5796,10 @@ static void sandbox3d_draw_selection_highlight(sandbox3d_state* state, henka_vie
      * returning zero at that boundary fabricated a bounding-box outline. */
     enum { max_outline_segments = 65536 };
     static sandbox3d_silhouette_segment silhouette[max_outline_segments];
-    enum { max_authoring_overlay_triangles = 16384 };
     static sandbox3d_authoring_cage_edge
         authoring_cage_edges[HENKA_AUTHORING_MESH_HARD_MAX_EDGES];
-    static sandbox3d_projected_triangle
-        authoring_render_triangles[max_authoring_overlay_triangles];
-    static unsigned char selected_face_flags[HENKA_AUTHORING_MESH_HARD_MAX_FACES + 1U];
-    static bool authoring_render_triangles_enabled =
-        SANDBOX3D_AUTHORING_RENDER_TRIANGLES_DEFAULT;
+    static bool authoring_topology_overlay_enabled =
+        SANDBOX3D_AUTHORING_TOPOLOGY_OVERLAY_DEFAULT;
     size_t silhouette_count;
     size_t edge;
     bool component_selection_active;
@@ -5859,10 +5918,11 @@ static void sandbox3d_draw_selection_highlight(sandbox3d_state* state, henka_vie
             size_t authoring_cage_edge_count = 0U;
             size_t authoring_cage_edge_index;
 
-            /* The topology toggle owns the complete authoring topology pass:
-             * cage edges and triangulated faces must disappear together so
-             * the rendered mesh can be inspected without a wireframe mask. */
-            if (authoring_render_triangles_enabled &&
+            /* The topology toggle owns the authored cage only. The evaluated
+             * scene mesh remains the visible surface in Solid mode; keeping
+             * renderer tessellation out of this screen-space pass prevents
+             * the editor from presenting triangles as authored topology. */
+            if (authoring_topology_overlay_enabled &&
                 sandbox3d_build_authoring_cage(
                     mesh,
                     authoring_cage_edges,
@@ -5931,82 +5991,6 @@ static void sandbox3d_draw_selection_highlight(sandbox3d_state* state, henka_vie
                 }
             }
 
-            if (authoring_render_triangles_enabled)
-            {
-                const henka_vec4 base_face_color =
-                    (henka_vec4){0.24f, 0.48f, 0.62f, 0.78f};
-                const henka_vec4 selected_face_color =
-                    (henka_vec4){1.0f, 0.38f, 0.08f, 0.48f};
-                const henka_vec4 active_face_color =
-                    (henka_vec4){1.0f, 0.82f, 0.20f, 0.64f};
-
-                size_t triangle_count = 0U;
-                size_t triangle_index;
-
-                memset(
-                    selected_face_flags,
-                    0,
-                    sizeof(selected_face_flags));
-                if (selection_mode == SANDBOX3D_AUTHORING_SELECTION_FACE)
-                {
-                    for (selected_index = 0U;
-                         selected_index < selected_count;
-                         ++selected_index)
-                    {
-                        uint32_t selected_face_id;
-                        if (sandbox3d_authoring_object_get_selected_component_at(
-                                state->authoring_object,
-                                selected_index,
-                                &selected_face_id) == HENKA_SUCCESS &&
-                            selected_face_id <= HENKA_AUTHORING_MESH_HARD_MAX_FACES)
-                        {
-                            selected_face_flags[selected_face_id] = 1U;
-                        }
-                    }
-                }
-
-                sandbox3d_append_authoring_silhouette_triangles(
-                    state,
-                    viewport,
-                    transform,
-                    state->authoring_object,
-                    1U,
-                    authoring_render_triangles,
-                    sizeof(authoring_render_triangles) /
-                        sizeof(authoring_render_triangles[0]),
-                    &triangle_count);
-
-                for (triangle_index = 0U;
-                     triangle_index < triangle_count;
-                     ++triangle_index)
-                {
-                    const sandbox3d_projected_triangle* triangle =
-                        &authoring_render_triangles[triangle_index];
-                    const bool selected_face =
-                        triangle->face_id <= HENKA_AUTHORING_MESH_HARD_MAX_FACES &&
-                        selected_face_flags[triangle->face_id] != 0U;
-                    const bool active_face =
-                        selection_mode == SANDBOX3D_AUTHORING_SELECTION_FACE &&
-                        triangle->face_id == active_component_id;
-
-                    (void)henka_ui_overlay_triangle(
-                        state->ui,
-                        sandbox3d_viewport_local_to_framebuffer_point(
-                            viewport,
-                            triangle->points[0]),
-                        sandbox3d_viewport_local_to_framebuffer_point(
-                            viewport,
-                            triangle->points[1]),
-                        sandbox3d_viewport_local_to_framebuffer_point(
-                            viewport,
-                            triangle->points[2]),
-                        active_face
-                            ? active_face_color
-                            : selected_face
-                                ? selected_face_color
-                                : base_face_color);
-                }
-            }
             const henka_vec4 component_outer = (henka_vec4){0.01f, 0.03f, 0.05f, 0.95f};
             const henka_vec4 component_inner = selection_mode == SANDBOX3D_AUTHORING_SELECTION_VERTEX
                 ? (henka_vec4){1.0f, 0.78f, 0.16f, 1.0f}
@@ -6076,10 +6060,10 @@ static void sandbox3d_draw_selection_highlight(sandbox3d_state* state, henka_vie
                 state->scene_view_authoring_controls = topology_overlay_bounds;
                 (void)henka_ui_toggle(
                     state->ui,
-                    "authoring_render_triangles_overlay",
+                    "authoring_topology_overlay",
                     topology_overlay_bounds,
                     "Topology Overlay",
-                    &authoring_render_triangles_enabled);
+                    &authoring_topology_overlay_enabled);
             }
             else if (viewport.width >= 240 &&
                      viewport.height >= 84)
@@ -6093,10 +6077,10 @@ static void sandbox3d_draw_selection_highlight(sandbox3d_state* state, henka_vie
                 state->scene_view_authoring_controls = topology_overlay_bounds;
                 (void)henka_ui_toggle(
                     state->ui,
-                    "authoring_render_triangles_overlay",
+                    "authoring_topology_overlay",
                     topology_overlay_bounds,
                     "Topology Overlay",
-                    &authoring_render_triangles_enabled);
+                    &authoring_topology_overlay_enabled);
             }
             for (selected_index = 0U; selected_index < selected_count; ++selected_index)
             {
@@ -6209,6 +6193,15 @@ static void sandbox3d_draw_selection_highlight(sandbox3d_state* state, henka_vie
                          * convincing-looking fallback polygon. */
                         continue;
                     }
+                    sandbox3d_draw_authoring_face_fill(
+                        state,
+                        viewport,
+                        transform,
+                        state->authoring_object,
+                        (henka_authoring_face_id)component_id,
+                        active_component
+                            ? (henka_vec4){1.0f, 0.72f, 0.08f, 0.52f}
+                            : (henka_vec4){1.0f, 0.28f, 0.04f, 0.32f});
                     for (corner = 0U; corner < face_corner_count; ++corner)
                     {
                         const henka_authoring_vertex* first = henka_authoring_mesh_get_vertex(mesh, face_vertices[corner]);

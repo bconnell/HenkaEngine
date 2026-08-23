@@ -4940,7 +4940,7 @@ henka_result henka_opengl_renderer_draw_scene(
      * visible, which made valid scene meshes appear disconnected from their
      * authoring geometry. */
     static const henka_vec4 solid_color =
-        {0.32f, 0.40f, 0.52f, 1.0f};
+        {0.48f, 0.58f, 0.72f, 1.0f};
     static const henka_vec4 wire_color =
         {0.78f, 0.82f, 0.88f, 1.0f};
     static const henka_vec3 preview_light_direction =
