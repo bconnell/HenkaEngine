@@ -1,7 +1,9 @@
 #include "modeling_operator.h"
 
+#include <errno.h>
 #include <float.h>
 #include <math.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include <henka/memory.h>
@@ -134,6 +136,77 @@ henka_result sandbox3d_modeling_operator_set_axis(
     return HENKA_SUCCESS;
 }
 
+static bool sandbox3d_modeling_operator_numeric_character_valid(char character)
+{
+    return (character >= '0' && character <= '9') ||
+        character == '+' || character == '-' || character == '.';
+}
+
+henka_result sandbox3d_modeling_operator_numeric_begin(
+    sandbox3d_modeling_operator_session* session)
+{
+    if (session == NULL || !session->active)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    session->numeric_active = true;
+    session->numeric_length = 0U;
+    session->numeric_text[0] = '\0';
+    return HENKA_SUCCESS;
+}
+
+henka_result sandbox3d_modeling_operator_numeric_append(
+    sandbox3d_modeling_operator_session* session,
+    const char* text,
+    size_t text_size)
+{
+    size_t index;
+
+    if (session == NULL || !session->active || !session->numeric_active ||
+        (text == NULL && text_size != 0U))
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    if (text_size > sizeof(session->numeric_text) - 1U - session->numeric_length)
+    {
+        return HENKA_ERROR_LIMIT;
+    }
+    for (index = 0U; index < text_size; ++index)
+    {
+        if (!sandbox3d_modeling_operator_numeric_character_valid(text[index]))
+        {
+            return HENKA_ERROR_INVALID_ARGUMENT;
+        }
+    }
+    memcpy(session->numeric_text + session->numeric_length, text, text_size);
+    session->numeric_length += text_size;
+    session->numeric_text[session->numeric_length] = '\0';
+    return HENKA_SUCCESS;
+}
+
+henka_result sandbox3d_modeling_operator_numeric_backspace(
+    sandbox3d_modeling_operator_session* session)
+{
+    if (session == NULL || !session->active || !session->numeric_active)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    if (session->numeric_length > 0U)
+    {
+        --session->numeric_length;
+        session->numeric_text[session->numeric_length] = '\0';
+    }
+    return HENKA_SUCCESS;
+}
+
+const char* sandbox3d_modeling_operator_get_numeric_text(
+    const sandbox3d_modeling_operator_session* session)
+{
+    return session == NULL || !session->numeric_active
+        ? ""
+        : session->numeric_text;
+}
+
 static bool sandbox3d_modeling_operator_append_vertex(
     henka_authoring_vertex_id* vertices,
     size_t* inout_count,
@@ -260,10 +333,15 @@ henka_result sandbox3d_modeling_operator_preview(
 
     if (session == NULL || !session->active || session->kind != SANDBOX3D_MODELING_OPERATOR_MOVE ||
         session->source_snapshot == NULL || session->object == NULL ||
+        session->selection_ids == NULL || session->selection_count == 0U ||
         session->axis == SANDBOX3D_MODELING_OPERATOR_AXIS_NONE || !isfinite(delta) ||
-        !isfinite(session->amount) || session->preview_rebuild_count == SIZE_MAX)
+        !isfinite(session->amount))
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    if (session->preview_rebuild_count == SIZE_MAX)
+    {
+        return HENKA_ERROR_LIMIT;
     }
     next_amount = session->amount + delta * (fine_active ? 0.2f : 1.0f);
     if (!isfinite(next_amount))
@@ -329,6 +407,42 @@ henka_result sandbox3d_modeling_operator_preview(
     session->state = SANDBOX3D_MODELING_OPERATOR_STATE_PREVIEW;
     henka_free(vertices);
     return HENKA_SUCCESS;
+}
+
+henka_result sandbox3d_modeling_operator_numeric_commit(
+    sandbox3d_modeling_operator_session* session)
+{
+    char* end = NULL;
+    float target_amount;
+    float delta;
+    henka_result result;
+
+    if (session == NULL || !session->active || !session->numeric_active ||
+        session->numeric_length == 0U)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    errno = 0;
+    target_amount = strtof(session->numeric_text, &end);
+    if (errno == ERANGE || end == NULL ||
+        (size_t)(end - session->numeric_text) != session->numeric_length ||
+        !isfinite(target_amount) || !isfinite(session->amount))
+    {
+        return HENKA_ERROR_NUMERIC_RANGE;
+    }
+    delta = target_amount - session->amount;
+    if (!isfinite(delta))
+    {
+        return HENKA_ERROR_NUMERIC_RANGE;
+    }
+    result = sandbox3d_modeling_operator_preview(session, delta, false, false);
+    if (result == HENKA_SUCCESS)
+    {
+        session->numeric_active = false;
+        session->numeric_length = 0U;
+        session->numeric_text[0] = '\0';
+    }
+    return result;
 }
 
 henka_result sandbox3d_modeling_operator_commit(

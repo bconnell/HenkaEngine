@@ -319,6 +319,34 @@ static void henka_test_sandbox3d_modeling_operator_session(void)
         &session, object, SANDBOX3D_MODELING_OPERATOR_MOVE) == HENKA_SUCCESS);
     HENKA_TEST_ASSERT(sandbox3d_modeling_operator_set_axis(
         &session, SANDBOX3D_MODELING_OPERATOR_AXIS_X) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(sandbox3d_modeling_operator_numeric_begin(&session) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(sandbox3d_modeling_operator_numeric_append(
+        &session, "x", 1U) == HENKA_ERROR_INVALID_ARGUMENT);
+    HENKA_TEST_ASSERT(strcmp(
+        sandbox3d_modeling_operator_get_numeric_text(&session), "") == 0);
+    HENKA_TEST_ASSERT(sandbox3d_modeling_operator_numeric_append(
+        &session, "0.1", 3U) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(strcmp(
+        sandbox3d_modeling_operator_get_numeric_text(&session), "0.1") == 0);
+    HENKA_TEST_ASSERT(sandbox3d_modeling_operator_numeric_commit(&session) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(!session.numeric_active);
+    HENKA_TEST_ASSERT(session.state == SANDBOX3D_MODELING_OPERATOR_STATE_PREVIEW);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(session.amount, 0.1f, 0.0001f);
+    HENKA_TEST_ASSERT(sandbox3d_modeling_operator_commit(&session) == HENKA_SUCCESS);
+    vertex = henka_authoring_mesh_get_vertex(
+        sandbox3d_authoring_object_get_mesh(object), 1U);
+    HENKA_TEST_ASSERT(vertex != NULL);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(vertex->position.x, original_position.x + 0.1f, 0.0001f);
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_undo(object) == HENKA_SUCCESS);
+    vertex = henka_authoring_mesh_get_vertex(
+        sandbox3d_authoring_object_get_mesh(object), 1U);
+    HENKA_TEST_ASSERT(vertex != NULL);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(vertex->position.x, original_position.x, 0.0001f);
+
+    HENKA_TEST_ASSERT(sandbox3d_modeling_operator_begin(
+        &session, object, SANDBOX3D_MODELING_OPERATOR_MOVE) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(sandbox3d_modeling_operator_set_axis(
+        &session, SANDBOX3D_MODELING_OPERATOR_AXIS_X) == HENKA_SUCCESS);
     HENKA_TEST_ASSERT(sandbox3d_modeling_operator_preview(
         &session, 0.1f, false, false) == HENKA_SUCCESS);
     HENKA_TEST_ASSERT(sandbox3d_modeling_operator_commit(&session) == HENKA_SUCCESS);

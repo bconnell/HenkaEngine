@@ -242,6 +242,19 @@ try {
         throw "The visible editor could not pick a component on the new native mesh."
     }
 
+    # Exercise the real direct-modeling operator through its visible hotkey and
+    # bounded numeric input path. The operation remains generic component move
+    # behavior; no fixture-specific geometry is injected by the harness.
+    Send-HenkaAutomationKey -EventPath $automationInputPath -KeyName "M"
+    if (-not (Wait-FileContains -Path $stdoutPath -Pattern "Modeling operator: move begin entity=.* selected=1\." -TimeoutMilliseconds 5000)) {
+        throw "The visible modeling move operator did not begin on the selected component."
+    }
+    Send-HenkaAutomationText -EventPath $automationInputPath -Text "0.01"
+    Send-HenkaAutomationKey -EventPath $automationInputPath -KeyName "Enter"
+    if (-not (Wait-FileContains -Path $stdoutPath -Pattern "Modeling operator: numeric move committed entity=.* amount=0\.010\." -TimeoutMilliseconds 5000)) {
+        throw "The visible numeric modeling move did not commit through the operator transaction."
+    }
+
     Click-LoggedControl `
         -LogPath $stdoutPath `
         -EventPath $automationInputPath `

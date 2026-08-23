@@ -7,6 +7,8 @@
 
 #include "object_authoring_tools.h"
 
+#define SANDBOX3D_MODELING_OPERATOR_NUMERIC_CAPACITY 32U
+
 typedef enum sandbox3d_modeling_operator_kind
 {
     SANDBOX3D_MODELING_OPERATOR_NONE = 0,
@@ -46,6 +48,9 @@ typedef struct sandbox3d_modeling_operator_session
     henka_authoring_mesh* source_snapshot;
     float amount;
     size_t preview_rebuild_count;
+    bool numeric_active;
+    char numeric_text[SANDBOX3D_MODELING_OPERATOR_NUMERIC_CAPACITY];
+    size_t numeric_length;
 } sandbox3d_modeling_operator_session;
 
 void sandbox3d_modeling_operator_reset(
@@ -57,6 +62,18 @@ henka_result sandbox3d_modeling_operator_begin(
 henka_result sandbox3d_modeling_operator_set_axis(
     sandbox3d_modeling_operator_session* session,
     sandbox3d_modeling_operator_axis axis);
+henka_result sandbox3d_modeling_operator_numeric_begin(
+    sandbox3d_modeling_operator_session* session);
+henka_result sandbox3d_modeling_operator_numeric_append(
+    sandbox3d_modeling_operator_session* session,
+    const char* text,
+    size_t text_size);
+henka_result sandbox3d_modeling_operator_numeric_backspace(
+    sandbox3d_modeling_operator_session* session);
+henka_result sandbox3d_modeling_operator_numeric_commit(
+    sandbox3d_modeling_operator_session* session);
+const char* sandbox3d_modeling_operator_get_numeric_text(
+    const sandbox3d_modeling_operator_session* session);
 henka_result sandbox3d_modeling_operator_preview(
     sandbox3d_modeling_operator_session* session,
     float delta,

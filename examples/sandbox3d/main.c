@@ -15851,6 +15851,9 @@ static bool sandbox3d_handle_modeling_operator_hotkeys(
     henka_result result;
     henka_vec2 mouse_delta;
     bool preview_rejected = false;
+    bool numeric_input_rejected = false;
+    const char* text_input;
+    size_t text_input_size;
     float delta;
 
     if (engine == NULL || state == NULL ||
@@ -15893,6 +15896,11 @@ static bool sandbox3d_handle_modeling_operator_hotkeys(
         }
         sandbox3d_clear_gizmo_drag(state, true);
         sandbox3d_set_viewport_tool_mode(state, SANDBOX3D_VIEWPORT_TOOL_MOVE, false);
+        printf(
+            "Modeling operator: move begin entity=%u selected=%zu.\n",
+            (unsigned int)sandbox3d_authoring_object_get_entity(object),
+            sandbox3d_authoring_object_get_selected_component_count(object));
+        fflush(stdout);
         sandbox3d_set_status(
             state,
             false,
@@ -15944,8 +15952,121 @@ static bool sandbox3d_handle_modeling_operator_hotkeys(
         return true;
     }
 
+    text_input = henka_input_get_text_input(engine);
+    text_input_size = henka_input_get_text_input_size(engine);
+    if (text_input_size > 0U ||
+        henka_input_was_key_pressed(engine, HENKA_KEY_BACKSPACE) ||
+        state->modeling_operator.numeric_active)
+    {
+        if (!state->modeling_operator.numeric_active)
+        {
+            result = sandbox3d_modeling_operator_numeric_begin(
+                &state->modeling_operator);
+            if (result != HENKA_SUCCESS)
+            {
+                sandbox3d_set_statusf(
+                    state,
+                    true,
+                    false,
+                    "Numeric model move could not start: %s.",
+                    henka_result_to_string(result));
+                return true;
+            }
+        }
+        if (text_input_size > 0U)
+        {
+            result = sandbox3d_modeling_operator_numeric_append(
+                &state->modeling_operator,
+                text_input,
+                text_input_size);
+            henka_input_clear_text_input(engine);
+            if (result != HENKA_SUCCESS)
+            {
+                numeric_input_rejected = true;
+                sandbox3d_set_statusf(
+                    state,
+                    true,
+                    false,
+                    "Numeric model move input rejected: %s.",
+                    henka_result_to_string(result));
+            }
+        }
+        if (henka_input_was_key_pressed(engine, HENKA_KEY_BACKSPACE))
+        {
+            result = sandbox3d_modeling_operator_numeric_backspace(
+                &state->modeling_operator);
+            henka_input_consume_key_press(engine, HENKA_KEY_BACKSPACE);
+            if (result != HENKA_SUCCESS)
+            {
+                numeric_input_rejected = true;
+                sandbox3d_set_statusf(
+                    state,
+                    true,
+                    false,
+                    "Numeric model move editing rejected: %s.",
+                    henka_result_to_string(result));
+            }
+        }
+        if (henka_input_action_was_pressed(engine, HENKA_INPUT_ACTION_CONFIRM_TRANSFORM) &&
+            !numeric_input_rejected)
+        {
+            if (henka_input_was_key_pressed(engine, HENKA_KEY_ENTER))
+            {
+                henka_input_consume_key_press(engine, HENKA_KEY_ENTER);
+            }
+            result = sandbox3d_modeling_operator_numeric_commit(
+                &state->modeling_operator);
+            if (result == HENKA_SUCCESS)
+            {
+                const henka_entity committed_entity =
+                    sandbox3d_authoring_object_get_entity(
+                        state->modeling_operator.object);
+                const float committed_amount = state->modeling_operator.amount;
+                result = sandbox3d_modeling_operator_commit(
+                    &state->modeling_operator);
+                if (result == HENKA_SUCCESS)
+                {
+                    printf(
+                        "Modeling operator: numeric move committed entity=%u amount=%.3f.\n",
+                        (unsigned int)committed_entity,
+                        committed_amount);
+                    fflush(stdout);
+                }
+            }
+            if (result == HENKA_SUCCESS)
+            {
+                sandbox3d_set_status(state, false, "Numeric model move confirmed.");
+            }
+            else
+            {
+                sandbox3d_set_statusf(
+                    state,
+                    true,
+                    false,
+                    "Numeric model move could not be confirmed: %s.",
+                    henka_result_to_string(result));
+            }
+            return true;
+        }
+        if (!numeric_input_rejected)
+        {
+            sandbox3d_set_statusf(
+                state,
+                false,
+                false,
+                "Numeric model move: '%s'. Enter confirms, Escape cancels.",
+                sandbox3d_modeling_operator_get_numeric_text(
+                    &state->modeling_operator));
+        }
+        return true;
+    }
+
     if (henka_input_action_was_pressed(engine, HENKA_INPUT_ACTION_CONFIRM_TRANSFORM))
     {
+        if (henka_input_was_key_pressed(engine, HENKA_KEY_ENTER))
+        {
+            henka_input_consume_key_press(engine, HENKA_KEY_ENTER);
+        }
         if (state->modeling_operator.state != SANDBOX3D_MODELING_OPERATOR_STATE_PREVIEW)
         {
             sandbox3d_set_status(
@@ -15957,6 +16078,8 @@ static bool sandbox3d_handle_modeling_operator_hotkeys(
         result = sandbox3d_modeling_operator_commit(&state->modeling_operator);
         if (result == HENKA_SUCCESS)
         {
+            printf("Modeling operator: mouse move committed.\n");
+            fflush(stdout);
             sandbox3d_set_status(state, false, "Model move confirmed.");
         }
         else
