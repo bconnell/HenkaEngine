@@ -800,11 +800,12 @@ cleanup:
 
 static int test_bounded_primitive_constructors(void)
 {
-    const henka_authoring_mesh_desc desc = {96U, 192U, 96U, 8U};
+    const henka_authoring_mesh_desc desc = {128U, 256U, 128U, 8U};
     henka_authoring_mesh* mesh = NULL;
     henka_authoring_mesh_counts counts;
     henka_vec3 center;
     henka_vec3 extents;
+    size_t slot;
     int result = 0;
 
     if (henka_authoring_mesh_create_cylinder(&desc, 1.0f, 2.0f, 8U, &mesh) != HENKA_SUCCESS ||
@@ -853,11 +854,115 @@ static int test_bounded_primitive_constructors(void)
     henka_authoring_mesh_destroy(mesh);
     mesh = NULL;
 
+    if (henka_authoring_mesh_create_quad_sphere(&desc, 1.0f, 4U, &mesh) != HENKA_SUCCESS ||
+        !henka_authoring_mesh_validate(mesh))
+    {
+        goto cleanup;
+    }
+    counts = henka_authoring_mesh_get_counts(mesh);
+    if (counts.vertices != 98U || counts.edges != 192U || counts.faces != 96U ||
+        counts.vertices + counts.faces != counts.edges + 2U ||
+        henka_authoring_mesh_get_bounds(mesh, &center, &extents) != HENKA_SUCCESS ||
+        fabsf(center.x) > 0.0001f || fabsf(center.y) > 0.0001f || fabsf(center.z) > 0.0001f ||
+        fabsf(extents.x - 1.0f) > 0.0001f || fabsf(extents.y - 1.0f) > 0.0001f ||
+        fabsf(extents.z - 1.0f) > 0.0001f)
+    {
+        goto cleanup;
+    }
+    for (slot = 0U; slot < desc.max_vertices; ++slot)
+    {
+        henka_authoring_vertex_id vertex_id;
+        const henka_authoring_vertex* vertex;
+        if (henka_authoring_mesh_get_vertex_id_at(mesh, slot, &vertex_id) != HENKA_SUCCESS)
+        {
+            continue;
+        }
+        vertex = henka_authoring_mesh_get_vertex(mesh, vertex_id);
+        if (vertex == NULL || fabsf(henka_vec3_length(vertex->position) - 1.0f) > 0.0001f)
+        {
+            goto cleanup;
+        }
+    }
+    for (slot = 0U; slot < desc.max_edges; ++slot)
+    {
+        henka_authoring_edge_id edge_id;
+        const henka_authoring_edge* edge;
+        if (henka_authoring_mesh_get_edge_id_at(mesh, slot, &edge_id) != HENKA_SUCCESS)
+        {
+            continue;
+        }
+        edge = henka_authoring_mesh_get_edge(mesh, edge_id);
+        if (edge == NULL || edge->face_count != 2U)
+        {
+            goto cleanup;
+        }
+    }
+    for (slot = 0U; slot < desc.max_faces; ++slot)
+    {
+        henka_authoring_face_id face_id;
+        const henka_authoring_face* face;
+        if (henka_authoring_mesh_get_face_id_at(mesh, slot, &face_id) != HENKA_SUCCESS)
+        {
+            continue;
+        }
+        face = henka_authoring_mesh_get_face(mesh, face_id);
+        if (face == NULL || face->corner_count != 4U || !face->smooth)
+        {
+            goto cleanup;
+        }
+        {
+            const henka_authoring_vertex* first =
+                henka_authoring_mesh_get_vertex(mesh, face->vertices[0]);
+            const henka_authoring_vertex* second =
+                henka_authoring_mesh_get_vertex(mesh, face->vertices[1]);
+            const henka_authoring_vertex* third =
+                henka_authoring_mesh_get_vertex(mesh, face->vertices[2]);
+            henka_vec3 normal;
+            size_t corner;
+            if (first == NULL || second == NULL || third == NULL)
+            {
+                goto cleanup;
+            }
+            normal = henka_vec3_cross(
+                henka_vec3_subtract(second->position, first->position),
+                henka_vec3_subtract(third->position, first->position));
+            if (henka_vec3_dot(normal, first->position) <= 0.0f)
+            {
+                goto cleanup;
+            }
+            for (corner = 0U; corner < face->corner_count; ++corner)
+            {
+                henka_vec2 uv;
+                if (henka_authoring_mesh_get_face_corner_uv(
+                        mesh, face_id, corner, &uv) != HENKA_SUCCESS ||
+                    !isfinite(uv.x) || !isfinite(uv.y) ||
+                    uv.x < 0.0f || uv.x > 1.0f ||
+                    uv.y < 0.0f || uv.y > 1.0f)
+                {
+                    goto cleanup;
+                }
+            }
+        }
+    }
+    henka_authoring_mesh_destroy(mesh);
+    mesh = NULL;
+
     if (henka_authoring_mesh_create_cylinder(&desc, 0.0f, 2.0f, 8U, &mesh) != HENKA_ERROR_INVALID_ARGUMENT ||
         mesh != NULL ||
         henka_authoring_mesh_create_cone(&desc, 1.0f, -2.0f, 8U, &mesh) != HENKA_ERROR_INVALID_ARGUMENT ||
         mesh != NULL ||
         henka_authoring_mesh_create_uv_sphere(&desc, 1.0f, 2U, 4U, &mesh) != HENKA_ERROR_INVALID_ARGUMENT ||
+        mesh != NULL ||
+        henka_authoring_mesh_create_quad_sphere(&desc, 1.0f, 0U, &mesh) != HENKA_ERROR_INVALID_ARGUMENT ||
+        mesh != NULL ||
+        henka_authoring_mesh_create_quad_sphere(
+            &desc, 1.0f, SIZE_MAX, &mesh) != HENKA_ERROR_LIMIT ||
+        mesh != NULL ||
+        henka_authoring_mesh_create_quad_sphere(
+            &(henka_authoring_mesh_desc){97U, 192U, 96U, 4U},
+            1.0f,
+            4U,
+            &mesh) != HENKA_ERROR_LIMIT ||
         mesh != NULL)
     {
         goto cleanup;

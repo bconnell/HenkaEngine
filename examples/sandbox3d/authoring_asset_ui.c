@@ -29,6 +29,9 @@ static henka_result sandbox3d_authoring_asset_ui_action_to_primitive_kind(
         case SANDBOX3D_AUTHORING_ASSET_UI_ACTION_ADD_UV_SPHERE:
             *out_kind = SANDBOX3D_AUTHORING_PRIMITIVE_UV_SPHERE;
             return HENKA_SUCCESS;
+        case SANDBOX3D_AUTHORING_ASSET_UI_ACTION_ADD_QUAD_SPHERE:
+            *out_kind = SANDBOX3D_AUTHORING_PRIMITIVE_QUAD_SPHERE;
+            return HENKA_SUCCESS;
         default:
             return HENKA_ERROR_INVALID_ARGUMENT;
     }

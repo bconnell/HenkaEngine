@@ -7,7 +7,7 @@ static bool sandbox3d_authoring_asset_commands_is_primitive_action(
     sandbox3d_authoring_asset_ui_action action)
 {
     return action >= SANDBOX3D_AUTHORING_ASSET_UI_ACTION_ADD_BOX &&
-        action <= SANDBOX3D_AUTHORING_ASSET_UI_ACTION_ADD_UV_SPHERE;
+        action <= SANDBOX3D_AUTHORING_ASSET_UI_ACTION_ADD_QUAD_SPHERE;
 }
 
 henka_result sandbox3d_authoring_asset_commands_get_manifest_path(
@@ -138,6 +138,7 @@ henka_result sandbox3d_authoring_asset_commands_add_primitive(
      * before ordinary modeling can even be evaluated. */
     request.primitive.segments = HENKA_AUTHORING_MESH_HARD_MAX_FACE_CORNERS;
     request.primitive.latitude_segments = 24U;
+    request.primitive.subdivisions = 8U;
     if (action == SANDBOX3D_AUTHORING_ASSET_UI_ACTION_ADD_CYLINDER ||
         action == SANDBOX3D_AUTHORING_ASSET_UI_ACTION_ADD_CONE)
     {

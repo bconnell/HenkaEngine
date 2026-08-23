@@ -21563,6 +21563,7 @@ static void sandbox3d_draw_scene_objects_panel(
     float action_y;
     float native_action_y;
     float action_width;
+    float primitive_action_width;
     henka_entity entity;
     henka_ui_rect panel_bounds;
     size_t selectable_count;
@@ -21595,6 +21596,7 @@ static void sandbox3d_draw_scene_objects_panel(
     action_y = panel_bounds.y + 60.0f;
     native_action_y = action_y + 30.0f;
     action_width = fmaxf(56.0f, (panel_bounds.width - 40.0f) / 3.0f);
+    primitive_action_width = fmaxf(72.0f, (panel_bounds.width - 34.0f) / 2.0f);
     row_start_y = panel_bounds.y + 124.0f;
     has_selection = sandbox3d_get_real_selected_entity(state) != HENKA_INVALID_ENTITY;
     if (henka_ui_primary_button(
@@ -21650,7 +21652,7 @@ static void sandbox3d_draw_scene_objects_panel(
     if (henka_ui_primary_button(
             state->ui,
             "scene_object_add_cylinder",
-            (henka_ui_rect){panel_bounds.x + 14.0f, native_action_y, action_width, 24.0f},
+            (henka_ui_rect){panel_bounds.x + 14.0f, native_action_y, primitive_action_width, 24.0f},
             "Cylinder"))
     {
         if (!sandbox3d_add_native_asset_primitive(
@@ -21665,8 +21667,8 @@ static void sandbox3d_draw_scene_objects_panel(
     if (henka_ui_primary_button(
             state->ui,
             "scene_object_add_cone",
-            (henka_ui_rect){panel_bounds.x + 14.0f + action_width + 6.0f, native_action_y, action_width, 24.0f},
-            "Add Cone"))
+            (henka_ui_rect){panel_bounds.x + 20.0f + primitive_action_width, native_action_y, primitive_action_width, 24.0f},
+            "Cone"))
     {
         if (!sandbox3d_add_native_asset_primitive(
                 engine,
@@ -21680,16 +21682,31 @@ static void sandbox3d_draw_scene_objects_panel(
     if (henka_ui_primary_button(
             state->ui,
             "scene_object_add_uv_sphere",
-            (henka_ui_rect){panel_bounds.x + 14.0f + (action_width + 6.0f) * 2.0f, native_action_y, action_width, 24.0f},
-            "Sphere"))
+            (henka_ui_rect){panel_bounds.x + 14.0f, native_action_y + 30.0f, primitive_action_width, 24.0f},
+            "UV Sphere"))
     {
         if (!sandbox3d_add_native_asset_primitive(
                 engine,
                 state,
                 SANDBOX3D_AUTHORING_ASSET_UI_ACTION_ADD_UV_SPHERE,
-                "sphere"))
+                "uv_sphere"))
         {
-            sandbox3d_set_status(state, true, "The native-authored sphere part could not be created.");
+            sandbox3d_set_status(state, true, "The native-authored UV sphere part could not be created.");
+        }
+    }
+    if (henka_ui_primary_button(
+            state->ui,
+            "scene_object_add_quad_sphere",
+            (henka_ui_rect){panel_bounds.x + 20.0f + primitive_action_width, native_action_y + 30.0f, primitive_action_width, 24.0f},
+            "Quad Sphere"))
+    {
+        if (!sandbox3d_add_native_asset_primitive(
+                engine,
+                state,
+                SANDBOX3D_AUTHORING_ASSET_UI_ACTION_ADD_QUAD_SPHERE,
+                "quad_sphere"))
+        {
+            sandbox3d_set_status(state, true, "The native-authored Quad Sphere part could not be created.");
         }
     }
 
@@ -21699,16 +21716,16 @@ static void sandbox3d_draw_scene_objects_panel(
         const sandbox3d_authoring_asset_document* document =
             sandbox3d_authoring_asset_controller_get_document(
                 state->authoring_asset_controller);
-        const float asset_action_y = native_action_y + 58.0f;
+        const float asset_action_y = native_action_y + 88.0f;
         (void)henka_ui_value_row(
             state->ui,
-            (henka_ui_rect){panel_bounds.x + 14.0f, native_action_y + 28.0f, action_width * 2.0f + 6.0f, 22.0f},
+            (henka_ui_rect){panel_bounds.x + 14.0f, native_action_y + 58.0f, primitive_action_width * 2.0f + 6.0f, 22.0f},
             "Active Asset",
             sandbox3d_authoring_asset_document_get_name(document));
         if (henka_ui_primary_button(
                 state->ui,
                 "scene_asset_save",
-                (henka_ui_rect){panel_bounds.x + 14.0f, asset_action_y, action_width, 24.0f},
+                (henka_ui_rect){panel_bounds.x + 14.0f, asset_action_y, primitive_action_width, 24.0f},
                 "Save Asset"))
         {
             const bool saved = sandbox3d_save_native_asset_document(engine, state);
@@ -21721,7 +21738,7 @@ static void sandbox3d_draw_scene_objects_panel(
         if (henka_ui_button(
                 state->ui,
                 "scene_asset_close",
-                (henka_ui_rect){panel_bounds.x + 14.0f + action_width + 6.0f, asset_action_y, action_width, 24.0f},
+                (henka_ui_rect){panel_bounds.x + 20.0f + primitive_action_width, asset_action_y, primitive_action_width, 24.0f},
                 "Close Asset"))
         {
             const bool closed = sandbox3d_close_native_asset_document(state);
@@ -21736,19 +21753,19 @@ static void sandbox3d_draw_scene_objects_panel(
     else
     {
         bool name_changed = false;
-        const float name_field_y = native_action_y + 43.0f;
+        const float name_field_y = native_action_y + 73.0f;
         const float asset_action_y = name_field_y + 30.0f;
 
         (void)henka_ui_label(
             state->ui,
             panel_bounds.x + 14.0f,
-            native_action_y + 30.0f,
+            native_action_y + 60.0f,
             0.9f,
             "Asset Name");
         if (henka_ui_text_field(
                 state->ui,
                 "scene_asset_name",
-                (henka_ui_rect){panel_bounds.x + 14.0f, name_field_y, action_width * 2.0f + 6.0f, 24.0f},
+                (henka_ui_rect){panel_bounds.x + 14.0f, name_field_y, primitive_action_width * 2.0f + 6.0f, 24.0f},
                 state->authoring_asset_name,
                 sizeof(state->authoring_asset_name),
                 &name_changed) != HENKA_SUCCESS)
@@ -21758,7 +21775,7 @@ static void sandbox3d_draw_scene_objects_panel(
         if (henka_ui_primary_button(
                 state->ui,
                 "scene_asset_new",
-                (henka_ui_rect){panel_bounds.x + 14.0f, asset_action_y, action_width, 24.0f},
+                (henka_ui_rect){panel_bounds.x + 14.0f, asset_action_y, primitive_action_width, 24.0f},
                 "New Asset"))
         {
             const bool created = sandbox3d_create_native_asset_document(engine, state);
@@ -21771,7 +21788,7 @@ static void sandbox3d_draw_scene_objects_panel(
         if (henka_ui_button(
                 state->ui,
                 "scene_asset_open",
-                (henka_ui_rect){panel_bounds.x + 14.0f + action_width + 6.0f, asset_action_y, action_width, 24.0f},
+                (henka_ui_rect){panel_bounds.x + 20.0f + primitive_action_width, asset_action_y, primitive_action_width, 24.0f},
                 "Open Asset"))
         {
             const bool opened = sandbox3d_open_native_asset_document(engine, state);

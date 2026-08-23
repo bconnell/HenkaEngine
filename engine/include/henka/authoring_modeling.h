@@ -58,6 +58,13 @@ henka_result henka_authoring_mesh_create_uv_sphere(
     size_t longitude_segments,
     size_t latitude_segments,
     henka_authoring_mesh** out_mesh);
+/* Creates a closed cubed-sphere source with shared manifold vertices and only
+ * four-sided faces. Subdivisions is the number of quads along each cube edge. */
+henka_result henka_authoring_mesh_create_quad_sphere(
+    const henka_authoring_mesh_desc* desc,
+    float radius,
+    size_t subdivisions,
+    henka_authoring_mesh** out_mesh);
 
 henka_result henka_authoring_mesh_duplicate_face(
     henka_authoring_mesh* mesh,

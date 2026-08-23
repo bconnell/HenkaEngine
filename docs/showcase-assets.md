@@ -62,14 +62,16 @@ fixture pair or those persisted derivatives to independently user-authored
 content.
 
 The visible native-authoring workflow is intentionally generic. Enter an asset
-name, choose `New Asset`, then add bounded Box, Cylinder, Cone, or UV Sphere
-parts through the primitive chooser. The resulting document is editor-owned,
-uses `HENKA_PRODUCT_NATIVE_AUTHORED` provenance, and supports the bounded
-save/close/reopen path. This proves the reusable authoring foundation, not that
-the default Giraffe or Rocket was modeled by a user. The default showcase pair
-continues to use separately labeled imported/generated fixture content until
-the full visible modeling, material, visual-review, and packaged-asset workflow
-is complete.
+name, choose `New Asset`, then add bounded Box, Cylinder, Cone, UV Sphere, or
+all-quad Quad Sphere parts through the primitive chooser. UV Sphere preserves
+its latitude/longitude topology and triangular pole caps; Quad Sphere is a
+closed shared-vertex cubed sphere containing only four-sided faces. The
+resulting document is editor-owned, uses `HENKA_PRODUCT_NATIVE_AUTHORED`
+provenance, and supports the bounded save/close/reopen path. This proves the
+reusable authoring foundation, not that the default Giraffe or Rocket was
+modeled by a user. The default showcase pair continues to use separately
+labeled imported/generated fixture content until the full visible modeling,
+material, visual-review, and packaged-asset workflow is complete.
 
 `Make Editable` on an imported `Showcase Giraffe ...` or `Showcase Rocket ...`
 exposes only generic component, topology, UV, material, and transactional

@@ -223,10 +223,12 @@ Use `--primitive-gallery` when the engineering samples are specifically under te
 - The `Controls` panel can reset the camera, save settings, reset sandbox settings, print help, print the scene legend, and reset the panel layout.
 - The `Scene Objects` panel lists the current scene examples by name.
 - In Scene Objects, enter a bounded asset name, choose `New Asset`, and add
-  Box, Cylinder, Cone, and UV Sphere parts through the generic primitive
-  chooser. Save, close, and reopen the document; verify the manifest retains
-  `HENKA_PRODUCT_NATIVE_AUTHORED` provenance and all four parts. Do not count
-  this generic primitive proof as final Giraffe/Rocket production modeling.
+  Box, Cylinder, Cone, UV Sphere, and Quad Sphere parts through the generic
+  primitive chooser. Save, close, and reopen the document; verify the manifest
+  retains `HENKA_PRODUCT_NATIVE_AUTHORED` provenance and all five parts. Verify
+  UV Sphere retains its triangular pole caps while Quad Sphere is a closed
+  manifold made only from four-sided faces. Do not count this generic primitive
+  proof as final Giraffe/Rocket production modeling.
 - The `Diagnostics` utility reports current viewport, selection, and interaction state.
 - The `Transform QA` utility can move, rotate, scale, and reset the selected object through direct controls.
 - Clicking an object updates the `Object Details` panel.

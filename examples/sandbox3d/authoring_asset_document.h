@@ -26,7 +26,8 @@ typedef enum sandbox3d_authoring_primitive_kind
     SANDBOX3D_AUTHORING_PRIMITIVE_PLANE,
     SANDBOX3D_AUTHORING_PRIMITIVE_CYLINDER,
     SANDBOX3D_AUTHORING_PRIMITIVE_CONE,
-    SANDBOX3D_AUTHORING_PRIMITIVE_UV_SPHERE
+    SANDBOX3D_AUTHORING_PRIMITIVE_UV_SPHERE,
+    SANDBOX3D_AUTHORING_PRIMITIVE_QUAD_SPHERE
 } sandbox3d_authoring_primitive_kind;
 
 typedef struct sandbox3d_authoring_primitive_desc
@@ -37,6 +38,7 @@ typedef struct sandbox3d_authoring_primitive_desc
     float radius;
     size_t segments;
     size_t latitude_segments;
+    size_t subdivisions;
 } sandbox3d_authoring_primitive_desc;
 
 /* Creates one bounded editor-owned native asset document. The document begins

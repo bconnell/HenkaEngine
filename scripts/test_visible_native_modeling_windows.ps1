@@ -166,11 +166,12 @@ try {
     $panelY = [double]::Parse($sceneGeometry.Groups["y"].Value, [Globalization.CultureInfo]::InvariantCulture)
     $panelWidth = [double]::Parse($sceneGeometry.Groups["width"].Value, [Globalization.CultureInfo]::InvariantCulture)
     $actionWidth = [double][Math]::Max(56.0, ($panelWidth - 40.0) / 3.0)
+    $primitiveActionWidth = [double][Math]::Max(72.0, ($panelWidth - 34.0) / 2.0)
     $nativeActionY = [double]($panelY + 90.0)
-    $nameX = [double]($panelX + 14.0 + ($actionWidth * 2.0 + 6.0) * 0.5)
-    $nameY = [double]($nativeActionY + 55.0)
-    $newAssetX = [double]($panelX + 14.0 + $actionWidth * 0.5)
-    $newAssetY = [double]($nativeActionY + 85.0)
+    $nameX = [double]($panelX + 14.0 + ($primitiveActionWidth * 2.0 + 6.0) * 0.5)
+    $nameY = [double]($nativeActionY + 85.0)
+    $newAssetX = [double]($panelX + 14.0 + $primitiveActionWidth * 0.5)
+    $newAssetY = [double]($nativeActionY + 115.0)
 
     Send-HenkaAutomationClick -EventPath $automationInputPath -X $nameX -Y $nameY
     Clear-TextField -EventPath $automationInputPath
@@ -178,10 +179,11 @@ try {
     Send-HenkaAutomationClick -EventPath $automationInputPath -X $newAssetX -Y $newAssetY
     Wait-AssetTransition -LogPath $stdoutPath -Action "created" -PartCount 0
 
-    # Start with one UV sphere. All subsequent changes are normal editor
-    # actions against the selected component source, not fixture construction.
-    $sphereX = [double]($panelX + 14.0 + ($actionWidth + 6.0) * 2.0 + $actionWidth * 0.5)
-    Send-HenkaAutomationClick -EventPath $automationInputPath -X $sphereX -Y ($nativeActionY + 12.0)
+    # Start with one Quad Sphere so the visible workflow proves the generic
+    # all-quad primitive path. All subsequent changes are normal editor actions
+    # against the selected component source, not fixture construction.
+    $quadSphereX = [double]($panelX + 20.0 + $primitiveActionWidth + $primitiveActionWidth * 0.5)
+    Send-HenkaAutomationClick -EventPath $automationInputPath -X $quadSphereX -Y ($nativeActionY + 42.0)
     Wait-AssetTransition -LogPath $stdoutPath -Action "part-added" -PartCount 1
 
     $disclosure = Get-LastMatch `
@@ -370,8 +372,8 @@ try {
     # Save the document through its visible asset-level control after the
     # source/project save. This is the persistence boundary used to reopen the
     # complete asset, not the Object Details source reload control.
-    $assetActionY = [double]($nativeActionY + 58.0)
-    $saveAssetX = [double]($panelX + 14.0 + $actionWidth * 0.5)
+    $assetActionY = [double]($nativeActionY + 88.0)
+    $saveAssetX = [double]($panelX + 14.0 + $primitiveActionWidth * 0.5)
     Send-HenkaAutomationClick `
         -EventPath $automationInputPath `
         -X $saveAssetX `
@@ -380,7 +382,7 @@ try {
         throw "The visible native asset save did not complete."
     }
 
-    $closeAssetX = [double]($panelX + 14.0 + $actionWidth + 6.0 + $actionWidth * 0.5)
+    $closeAssetX = [double]($panelX + 20.0 + $primitiveActionWidth + $primitiveActionWidth * 0.5)
     Send-HenkaAutomationClick `
         -EventPath $automationInputPath `
         -X $closeAssetX `
@@ -392,8 +394,8 @@ try {
     # Reopen through the visible Open Asset control, then make a second visible
     # component edit. The save/reload boundary is therefore exercised before
     # the final edit, not only at process shutdown.
-    $openX = [double]($panelX + 14.0 + $actionWidth + 6.0 + $actionWidth * 0.5)
-    $openY = [double]($nativeActionY + 85.0)
+    $openX = [double]($panelX + 20.0 + $primitiveActionWidth + $primitiveActionWidth * 0.5)
+    $openY = [double]($nativeActionY + 115.0)
     Send-HenkaAutomationClick -EventPath $automationInputPath -X $openX -Y $openY
     if (-not (Wait-FileContains -Path $stdoutPath -Pattern "Native asset document: name=.* action=opened parts=1" -TimeoutMilliseconds 8000)) {
         throw "The visible native asset reopen did not complete."
@@ -435,6 +437,7 @@ try {
         "asset.version=5",
         "asset.name=$assetName",
         "asset.part_count=1",
+        "part.0.primitive=5",
         "asset.provenance=HENKA_PRODUCT_NATIVE_AUTHORED")) {
         if (-not $manifestText.Contains($requiredLine)) {
             throw "The persisted native asset manifest was missing: $requiredLine"

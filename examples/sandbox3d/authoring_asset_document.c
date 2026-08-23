@@ -407,6 +407,10 @@ henka_result sandbox3d_authoring_asset_document_add_primitive(
             result = henka_authoring_mesh_create_uv_sphere(
                 &mesh_desc, desc->radius, desc->segments, desc->latitude_segments, &mesh);
             break;
+        case SANDBOX3D_AUTHORING_PRIMITIVE_QUAD_SPHERE:
+            result = henka_authoring_mesh_create_quad_sphere(
+                &mesh_desc, desc->radius, desc->subdivisions, &mesh);
+            break;
         default:
             return HENKA_ERROR_INVALID_ARGUMENT;
     }
@@ -526,7 +530,7 @@ henka_result sandbox3d_authoring_asset_document_adopt_part(
         return document != NULL && document->part_count >= SANDBOX3D_AUTHORING_ASSET_PART_CAPACITY
             ? HENKA_ERROR_LIMIT : HENKA_ERROR_INVALID_ARGUMENT;
     }
-    if (kind > SANDBOX3D_AUTHORING_PRIMITIVE_UV_SPHERE ||
+    if (kind > SANDBOX3D_AUTHORING_PRIMITIVE_QUAD_SPHERE ||
         sandbox3d_authoring_asset_document_find_part(document, part, &existing_index))
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
@@ -1351,7 +1355,7 @@ static henka_result sandbox3d_authoring_asset_document_add_loaded_part(
     size_t name_length;
     if (document == NULL || document->part_count >= SANDBOX3D_AUTHORING_ASSET_PART_CAPACITY ||
         !sandbox3d_authoring_asset_name_is_valid(name, &name_length) ||
-        kind > SANDBOX3D_AUTHORING_PRIMITIVE_UV_SPHERE || history_steps == 0U ||
+        kind > SANDBOX3D_AUTHORING_PRIMITIVE_QUAD_SPHERE || history_steps == 0U ||
         source_path == NULL || !sandbox3d_authoring_asset_vec3_is_finite(transform.position) ||
         !sandbox3d_authoring_asset_vec3_is_finite(transform.scale) || transform.scale.x <= 0.0f ||
         transform.scale.y <= 0.0f || transform.scale.z <= 0.0f || !isfinite(transform.rotation.x) ||
@@ -1434,7 +1438,7 @@ henka_result sandbox3d_authoring_asset_document_load(
         relative_material = henka_settings_get_string(settings, key, NULL);
         if (!sandbox3d_authoring_asset_key(key, sizeof(key), index, "primitive") || !henka_settings_has_key(settings, key)) { result = HENKA_ERROR_ASSET_SOURCE; break; }
         primitive = henka_settings_get_int(settings, key, -1);
-        if (name == NULL || sandbox3d_authoring_asset_document_has_part_name(candidate, name) || primitive < 0 || primitive > (int)SANDBOX3D_AUTHORING_PRIMITIVE_UV_SPHERE ||
+        if (name == NULL || sandbox3d_authoring_asset_document_has_part_name(candidate, name) || primitive < 0 || primitive > (int)SANDBOX3D_AUTHORING_PRIMITIVE_QUAD_SPHERE ||
             sandbox3d_authoring_asset_source_relative(asset_name, name, (uint32_t)asset_revision, expected_relative, sizeof(expected_relative)) != HENKA_SUCCESS ||
             sandbox3d_authoring_asset_material_relative(asset_name, name, (uint32_t)asset_revision, expected_material_relative, sizeof(expected_material_relative)) != HENKA_SUCCESS ||
             relative_source == NULL || strcmp(relative_source, expected_relative) != 0 ||

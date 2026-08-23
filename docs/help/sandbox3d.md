@@ -136,14 +136,16 @@ The engineering sample legend is available with `--primitive-gallery`:
 - For an imported Showcase Giraffe or Showcase Rocket, use Object Details > Authoring > Make Editable, select a visible topology component, and use Grow Selection or Select Connected followed by Scale Selected, Soft Move X+/Y+/Z+, Move X+/Move Y+/Move Z+, or Extrude Selection to shape a selected anatomical or mechanical patch through generic Henka tools. These operations preserve topology and material regions while updating evaluated bounds and the native undo/redo history. There is no showcase-specific profile shortcut. Own Material then promotes a manager-owned definition: its compact controls edit base color, metallic, roughness, emissive strength, IOR, transmission, subsurface amount, subsurface thickness, and subsurface tint, and create bounded procedural detail-normal plus metallic-roughness textures. Undo Mat and Redo Mat restore those material-instance states transactionally before Save Project and Reload Project.
 - The selected editable subject uses a cached projected topology outline in the Scene View; newly-created or imported authoring wrappers start with no component selected, leaving the object outline visible until a vertex, edge, or face is explicitly picked. Small and medium meshes receive projected coverage/depth subdivision, while dense imported meshes use the same filtering through a fixed screen-space spatial index; only an index-overflow case falls back to conservative topology so selection feedback remains bounded. The transform bounds remain a separate editing aid. Hidden objects are automatically transform-locked so hiding is also a safe editing boundary; showing an object does not silently unlock it, and Unlock Transform is explicit.
 - The visible native-authoring workflow is intentionally generic. Enter an asset
-name, choose `New Asset`, then add bounded Box, Cylinder, Cone, or UV Sphere
-  parts through the primitive chooser. The resulting document is editor-owned,
-  uses `HENKA_PRODUCT_NATIVE_AUTHORED` provenance, and supports the bounded
-  save/close/reopen path. This proves the reusable authoring foundation, not that
-  the default Giraffe or Rocket was modeled by a user. The default showcase pair
-  continues to use separately labeled imported/generated fixture content until
-  the full visible modeling, material, visual-review, and packaged-asset workflow
-  is complete.
+  name, choose `New Asset`, then add bounded Box, Cylinder, Cone, UV Sphere, or
+  all-quad Quad Sphere parts through the primitive chooser. UV Sphere retains
+  its latitude/longitude topology and triangular pole caps; Quad Sphere uses a
+  closed shared-vertex cubed-sphere topology with only four-sided faces. The
+  resulting document is editor-owned, uses `HENKA_PRODUCT_NATIVE_AUTHORED`
+  provenance, and supports the bounded save/close/reopen path. This proves the
+  reusable authoring foundation, not that the default Giraffe or Rocket was
+  modeled by a user. The default showcase pair continues to use separately
+  labeled imported/generated fixture content until the full visible modeling,
+  material, visual-review, and packaged-asset workflow is complete.
 - The repository-owned showcase authoring sources are refreshed only from the visible workflow by `scripts/capture_editor_owned_authoring_sources_windows.ps1`; it uses an isolated executable copy, never generates or directly assembles showcase geometry, and reports SHA-256 hashes for the resulting `.hams` files.
 - After Make Editable, switch the imported showcase to Face mode and use Bevel on the selected nontrivial mesh face; the evaluated render, bounds, and later project save/reload follow the native source.
 - The active topology mode and selected-component count are visible in the viewport while editing. The overlay is derived from the selected source vertices, edges, or face corners: vertices use amber crosses, edges use cyan segments with endpoint markers, and faces use orange borders with a center marker. It is clipped to Scene View, so it follows resize and docking changes without changing scene materials or renderer lighting.

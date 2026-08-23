@@ -86,10 +86,42 @@ void henka_test_sandbox3d_authoring_asset_ui(void)
     HENKA_TEST_ASSERT(sandbox3d_authoring_asset_document_get_part_count(
         sandbox3d_authoring_asset_ui_get_document(&ui)) == 1U);
 
+    HENKA_TEST_ASSERT(sandbox3d_authoring_asset_commands_add_primitive(
+        &ui,
+        engine,
+        scene,
+        "commands_asset",
+        SANDBOX3D_AUTHORING_ASSET_UI_ACTION_ADD_QUAD_SPHERE,
+        "quad_sphere",
+        &part_index) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(part_index == 1U);
+    {
+        sandbox3d_authoring_object* quad_sphere =
+            sandbox3d_authoring_asset_document_get_part(
+                (sandbox3d_authoring_asset_document*)
+                    sandbox3d_authoring_asset_ui_get_document(&ui),
+                part_index);
+        sandbox3d_authoring_primitive_kind kind =
+            SANDBOX3D_AUTHORING_PRIMITIVE_BOX;
+        henka_authoring_mesh_counts counts;
+        HENKA_TEST_ASSERT(quad_sphere != NULL);
+        counts = henka_authoring_mesh_get_counts(
+            sandbox3d_authoring_object_get_mesh(quad_sphere));
+        HENKA_TEST_ASSERT(counts.vertices == 386U);
+        HENKA_TEST_ASSERT(counts.edges == 768U);
+        HENKA_TEST_ASSERT(counts.faces == 384U);
+        HENKA_TEST_ASSERT(sandbox3d_authoring_asset_document_get_part_kind(
+            sandbox3d_authoring_asset_ui_get_document(&ui),
+            quad_sphere,
+            &kind) == HENKA_SUCCESS);
+        HENKA_TEST_ASSERT(kind == SANDBOX3D_AUTHORING_PRIMITIVE_QUAD_SPHERE);
+    }
+
     {
         sandbox3d_authoring_asset_controller* controller = NULL;
         const sandbox3d_authoring_asset_document* before_failed_load;
         size_t controller_part_index = SIZE_MAX;
+        size_t controller_quad_sphere_index = SIZE_MAX;
 
         HENKA_TEST_ASSERT(sandbox3d_authoring_asset_controller_create(
             &controller) == HENKA_SUCCESS);
@@ -104,6 +136,15 @@ void henka_test_sandbox3d_authoring_asset_ui(void)
             "body",
             &controller_part_index) == HENKA_SUCCESS);
         HENKA_TEST_ASSERT(controller_part_index == 0U);
+        HENKA_TEST_ASSERT(sandbox3d_authoring_asset_controller_add_primitive(
+            controller,
+            engine,
+            scene,
+            "controller_asset",
+            SANDBOX3D_AUTHORING_ASSET_UI_ACTION_ADD_QUAD_SPHERE,
+            "quad_sphere",
+            &controller_quad_sphere_index) == HENKA_SUCCESS);
+        HENKA_TEST_ASSERT(controller_quad_sphere_index == 1U);
         {
             henka_material controller_material = henka_material_default();
             controller_material.name = "Controller Material";
@@ -116,6 +157,13 @@ void henka_test_sandbox3d_authoring_asset_ui(void)
                     sandbox3d_authoring_asset_document_get_part(
                         sandbox3d_authoring_asset_controller_get_document(controller),
                         controller_part_index)),
+                controller_material) == HENKA_SUCCESS);
+            HENKA_TEST_ASSERT(henka_scene_set_entity_material(
+                scene,
+                sandbox3d_authoring_object_get_entity(
+                    sandbox3d_authoring_asset_document_get_part(
+                        sandbox3d_authoring_asset_controller_get_document(controller),
+                        controller_quad_sphere_index)),
                 controller_material) == HENKA_SUCCESS);
         }
         HENKA_TEST_ASSERT(sandbox3d_authoring_asset_controller_save(
@@ -134,7 +182,23 @@ void henka_test_sandbox3d_authoring_asset_ui(void)
         HENKA_TEST_ASSERT(sandbox3d_authoring_asset_controller_get_document(
             controller) != before_failed_load);
         HENKA_TEST_ASSERT(sandbox3d_authoring_asset_document_get_part_count(
-            sandbox3d_authoring_asset_controller_get_document(controller)) == 1U);
+            sandbox3d_authoring_asset_controller_get_document(controller)) == 2U);
+        {
+            sandbox3d_authoring_primitive_kind reloaded_kind =
+                SANDBOX3D_AUTHORING_PRIMITIVE_BOX;
+            sandbox3d_authoring_object* reloaded_quad_sphere =
+                sandbox3d_authoring_asset_document_get_part(
+                    (sandbox3d_authoring_asset_document*)
+                        sandbox3d_authoring_asset_controller_get_document(controller),
+                    controller_quad_sphere_index);
+            HENKA_TEST_ASSERT(reloaded_quad_sphere != NULL);
+            HENKA_TEST_ASSERT(sandbox3d_authoring_asset_document_get_part_kind(
+                sandbox3d_authoring_asset_controller_get_document(controller),
+                reloaded_quad_sphere,
+                &reloaded_kind) == HENKA_SUCCESS);
+            HENKA_TEST_ASSERT(
+                reloaded_kind == SANDBOX3D_AUTHORING_PRIMITIVE_QUAD_SPHERE);
+        }
         sandbox3d_authoring_asset_controller_destroy(controller);
     }
 

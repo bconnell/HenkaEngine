@@ -2475,6 +2475,374 @@ henka_result henka_authoring_mesh_create_uv_sphere(
     return modeling_finish_primitive_constructor(mesh, out_mesh);
 }
 
+static bool modeling_quad_sphere_counts(
+    size_t subdivisions,
+    size_t* out_vertices,
+    size_t* out_edges,
+    size_t* out_faces)
+{
+    size_t square;
+    size_t vertices;
+    size_t edges;
+    size_t faces;
+
+    if (subdivisions == 0U || out_vertices == NULL || out_edges == NULL ||
+        out_faces == NULL ||
+        !henka_checked_size_multiply(subdivisions, subdivisions, &square) ||
+        !henka_checked_size_multiply(square, 6U, &faces) ||
+        !henka_checked_size_add(faces, 2U, &vertices) ||
+        !henka_checked_size_multiply(square, 12U, &edges))
+    {
+        return false;
+    }
+
+    *out_vertices = vertices;
+    *out_edges = edges;
+    *out_faces = faces;
+    return true;
+}
+
+static bool modeling_quad_sphere_surface_index(
+    size_t subdivisions,
+    size_t x,
+    size_t y,
+    size_t z,
+    size_t* out_index)
+{
+    size_t side;
+    size_t plane_stride;
+    size_t vertex_count;
+    size_t edge_count;
+    size_t face_count;
+    size_t index;
+    size_t offset;
+    size_t ring_stride;
+    size_t perimeter_offset;
+    size_t y_offset;
+
+    if (out_index == NULL || subdivisions == 0U || x > subdivisions ||
+        y > subdivisions || z > subdivisions ||
+        (x > 0U && x < subdivisions && y > 0U && y < subdivisions &&
+         z > 0U && z < subdivisions))
+    {
+        return false;
+    }
+    if (!modeling_quad_sphere_counts(
+            subdivisions, &vertex_count, &edge_count, &face_count) ||
+        !henka_checked_size_add(subdivisions, 1U, &side) ||
+        !henka_checked_size_multiply(side, side, &plane_stride))
+    {
+        return false;
+    }
+
+    if (z == 0U)
+    {
+        if (!henka_checked_size_multiply(y, side, &index) ||
+            !henka_checked_size_add(index, x, &index))
+        {
+            return false;
+        }
+    }
+    else if (z == subdivisions)
+    {
+        if (!henka_checked_size_multiply(y, side, &offset) ||
+            !henka_checked_size_add(offset, x, &offset) ||
+            !henka_checked_size_add(plane_stride, offset, &index))
+        {
+            return false;
+        }
+    }
+    else
+    {
+        if (!henka_checked_size_multiply(4U, subdivisions, &ring_stride) ||
+            !henka_checked_size_multiply(z - 1U, ring_stride, &offset) ||
+            !henka_checked_size_multiply(2U, plane_stride, &index) ||
+            !henka_checked_size_add(index, offset, &index))
+        {
+            return false;
+        }
+        if (y == 0U)
+        {
+            offset = x;
+        }
+        else if (y == subdivisions)
+        {
+            if (!henka_checked_size_add(side, x, &offset))
+            {
+                return false;
+            }
+        }
+        else
+        {
+            if (!henka_checked_size_multiply(2U, side, &perimeter_offset) ||
+                !henka_checked_size_multiply(2U, y - 1U, &y_offset) ||
+                !henka_checked_size_add(
+                    perimeter_offset, y_offset, &offset) ||
+                (x != 0U && !henka_checked_size_add(offset, 1U, &offset)))
+            {
+                return false;
+            }
+        }
+        if (!henka_checked_size_add(index, offset, &index))
+        {
+            return false;
+        }
+    }
+
+    if (index >= vertex_count)
+    {
+        return false;
+    }
+    *out_index = index;
+    return true;
+}
+
+static henka_result modeling_quad_sphere_add_vertex(
+    henka_authoring_mesh* mesh,
+    henka_authoring_vertex_id* vertex_ids,
+    size_t subdivisions,
+    float radius,
+    size_t x,
+    size_t y,
+    size_t z)
+{
+    const float scale = 2.0f / (float)subdivisions;
+    const henka_vec3 direction = {
+        -1.0f + scale * (float)x,
+        -1.0f + scale * (float)y,
+        -1.0f + scale * (float)z};
+    const float direction_length = henka_vec3_length(direction);
+    const float radial_scale = radius / direction_length;
+    const henka_vec3 position = {
+        direction.x * radial_scale,
+        direction.y * radial_scale,
+        direction.z * radial_scale};
+    const float unit_y = fmaxf(-1.0f, fminf(1.0f, position.y / radius));
+    const henka_vec2 uv = {
+        atan2f(position.z, position.x) / (2.0f * HENKA_PI) + 0.5f,
+        acosf(unit_y) / HENKA_PI};
+    size_t vertex_index;
+
+    if (!modeling_quad_sphere_surface_index(
+            subdivisions, x, y, z, &vertex_index))
+    {
+        return HENKA_ERROR_UNKNOWN;
+    }
+    return henka_authoring_mesh_add_vertex(
+        mesh, position, uv, 0U, &vertex_ids[vertex_index]);
+}
+
+static henka_result modeling_quad_sphere_add_face(
+    henka_authoring_mesh* mesh,
+    const henka_authoring_vertex_id* vertex_ids,
+    size_t subdivisions,
+    size_t face_index,
+    size_t u,
+    size_t v)
+{
+    size_t coordinates[4][3];
+    henka_authoring_vertex_id vertices[4];
+    henka_authoring_face_id new_face_id = HENKA_AUTHORING_INVALID_ID;
+    const float u0 = (float)u / (float)subdivisions;
+    const float u1 = (float)(u + 1U) / (float)subdivisions;
+    const float v0 = (float)v / (float)subdivisions;
+    const float v1 = (float)(v + 1U) / (float)subdivisions;
+    const float local_u[4] = {u0, u1, u1, u0};
+    const float local_v[4] = {v0, v0, v1, v1};
+    const size_t atlas_column = face_index % 3U;
+    const size_t atlas_row = face_index / 3U;
+    size_t corner;
+    henka_result result;
+
+    switch (face_index)
+    {
+        case 0U:
+            memcpy(coordinates, (size_t[4][3]){
+                {subdivisions, u, v},
+                {subdivisions, u + 1U, v},
+                {subdivisions, u + 1U, v + 1U},
+                {subdivisions, u, v + 1U}}, sizeof(coordinates));
+            break;
+        case 1U:
+            memcpy(coordinates, (size_t[4][3]){
+                {0U, v, u},
+                {0U, v, u + 1U},
+                {0U, v + 1U, u + 1U},
+                {0U, v + 1U, u}}, sizeof(coordinates));
+            break;
+        case 2U:
+            memcpy(coordinates, (size_t[4][3]){
+                {v, subdivisions, u},
+                {v, subdivisions, u + 1U},
+                {v + 1U, subdivisions, u + 1U},
+                {v + 1U, subdivisions, u}}, sizeof(coordinates));
+            break;
+        case 3U:
+            memcpy(coordinates, (size_t[4][3]){
+                {u, 0U, v},
+                {u + 1U, 0U, v},
+                {u + 1U, 0U, v + 1U},
+                {u, 0U, v + 1U}}, sizeof(coordinates));
+            break;
+        case 4U:
+            memcpy(coordinates, (size_t[4][3]){
+                {u, v, subdivisions},
+                {u + 1U, v, subdivisions},
+                {u + 1U, v + 1U, subdivisions},
+                {u, v + 1U, subdivisions}}, sizeof(coordinates));
+            break;
+        case 5U:
+            memcpy(coordinates, (size_t[4][3]){
+                {v, u, 0U},
+                {v, u + 1U, 0U},
+                {v + 1U, u + 1U, 0U},
+                {v + 1U, u, 0U}}, sizeof(coordinates));
+            break;
+        default:
+            return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    for (corner = 0U; corner < 4U; ++corner)
+    {
+        size_t vertex_index;
+        if (!modeling_quad_sphere_surface_index(
+                subdivisions,
+                coordinates[corner][0],
+                coordinates[corner][1],
+                coordinates[corner][2],
+                &vertex_index) ||
+            vertex_ids[vertex_index] == HENKA_AUTHORING_INVALID_ID)
+        {
+            return HENKA_ERROR_UNKNOWN;
+        }
+        vertices[corner] = vertex_ids[vertex_index];
+    }
+
+    result = henka_authoring_mesh_add_face(
+        mesh, vertices, 4U, 0U, true, &new_face_id);
+    for (corner = 0U; result == HENKA_SUCCESS && corner < 4U; ++corner)
+    {
+        const henka_vec2 uv = {
+            ((float)atlas_column + local_u[corner]) / 3.0f,
+            ((float)atlas_row + local_v[corner]) / 2.0f};
+        result = henka_authoring_mesh_set_face_corner_uv(
+            mesh, new_face_id, corner, uv);
+    }
+    return result;
+}
+
+henka_result henka_authoring_mesh_create_quad_sphere(
+    const henka_authoring_mesh_desc* desc,
+    float radius,
+    size_t subdivisions,
+    henka_authoring_mesh** out_mesh)
+{
+    henka_authoring_mesh* mesh = NULL;
+    henka_authoring_vertex_id* vertex_ids = NULL;
+    size_t vertex_count;
+    size_t edge_count;
+    size_t face_count;
+    size_t vertex_bytes;
+    size_t x;
+    size_t y;
+    size_t z;
+    size_t u;
+    size_t v;
+    size_t face_index;
+    henka_result result;
+
+    if (out_mesh == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    *out_mesh = NULL;
+    if (desc == NULL || !modeling_finite_scalar(radius) || radius <= 0.0f ||
+        subdivisions == 0U)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    if (!modeling_quad_sphere_counts(
+            subdivisions, &vertex_count, &edge_count, &face_count) ||
+        vertex_count > desc->max_vertices || edge_count > desc->max_edges ||
+        face_count > desc->max_faces || desc->max_face_corners < 4U ||
+        !henka_checked_size_multiply(
+            vertex_count, sizeof(*vertex_ids), &vertex_bytes))
+    {
+        return HENKA_ERROR_LIMIT;
+    }
+
+    result = henka_authoring_mesh_create(desc, &mesh);
+    if (result != HENKA_SUCCESS)
+    {
+        return result;
+    }
+    vertex_ids = henka_malloc(vertex_bytes);
+    if (vertex_ids == NULL)
+    {
+        henka_authoring_mesh_destroy(mesh);
+        return HENKA_ERROR_OUT_OF_MEMORY;
+    }
+    memset(vertex_ids, 0xff, vertex_bytes);
+
+    for (y = 0U; result == HENKA_SUCCESS && y <= subdivisions; ++y)
+    {
+        for (x = 0U; result == HENKA_SUCCESS && x <= subdivisions; ++x)
+        {
+            result = modeling_quad_sphere_add_vertex(
+                mesh, vertex_ids, subdivisions, radius, x, y, 0U);
+            if (result == HENKA_SUCCESS)
+            {
+                result = modeling_quad_sphere_add_vertex(
+                    mesh, vertex_ids, subdivisions, radius, x, y, subdivisions);
+            }
+        }
+    }
+    for (z = 1U; result == HENKA_SUCCESS && z < subdivisions; ++z)
+    {
+        for (x = 0U; result == HENKA_SUCCESS && x <= subdivisions; ++x)
+        {
+            result = modeling_quad_sphere_add_vertex(
+                mesh, vertex_ids, subdivisions, radius, x, 0U, z);
+            if (result == HENKA_SUCCESS)
+            {
+                result = modeling_quad_sphere_add_vertex(
+                    mesh, vertex_ids, subdivisions, radius, x, subdivisions, z);
+            }
+        }
+        for (y = 1U; result == HENKA_SUCCESS && y < subdivisions; ++y)
+        {
+            result = modeling_quad_sphere_add_vertex(
+                mesh, vertex_ids, subdivisions, radius, 0U, y, z);
+            if (result == HENKA_SUCCESS)
+            {
+                result = modeling_quad_sphere_add_vertex(
+                    mesh, vertex_ids, subdivisions, radius, subdivisions, y, z);
+            }
+        }
+    }
+
+    for (face_index = 0U; result == HENKA_SUCCESS && face_index < 6U;
+         ++face_index)
+    {
+        for (v = 0U; result == HENKA_SUCCESS && v < subdivisions; ++v)
+        {
+            for (u = 0U; result == HENKA_SUCCESS && u < subdivisions; ++u)
+            {
+                result = modeling_quad_sphere_add_face(
+                    mesh, vertex_ids, subdivisions, face_index, u, v);
+            }
+        }
+    }
+
+    henka_free(vertex_ids);
+    if (result != HENKA_SUCCESS)
+    {
+        henka_authoring_mesh_destroy(mesh);
+        return result;
+    }
+    return modeling_finish_primitive_constructor(mesh, out_mesh);
+}
+
 henka_result henka_authoring_mesh_duplicate_face(
     henka_authoring_mesh* mesh,
     henka_authoring_face_id face_id,
