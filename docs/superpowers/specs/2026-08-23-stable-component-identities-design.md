@@ -115,4 +115,3 @@ public modeling operations, active-capacity overflow, candidate failure,
 selection/history/render determinism, HAMS v4 round-trip, v2/v3 compatibility,
 malformed v4 inputs, native save/close/open/re-edit, sanitizer balance,
 MSVC warnings, and packaged visible modeling.
-

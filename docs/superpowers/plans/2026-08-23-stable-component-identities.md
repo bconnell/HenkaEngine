@@ -134,5 +134,4 @@ native Windows and sanitizer test scripts.
 - [ ] Stop before Procedural Asset Graph and report root cause, architecture,
   tests-before/tests-after, migration, HAMS version, stale-ID proof, churn,
   sanitizer, Debug/Release, package, commit SHA, synchronization, and remaining
-  modeling gaps.
-
+modeling gaps.
