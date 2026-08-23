@@ -2545,6 +2545,37 @@ henka_result sandbox3d_authoring_object_select_component(
     return HENKA_SUCCESS;
 }
 
+henka_result sandbox3d_authoring_object_replace_component_selection(
+    sandbox3d_authoring_object* object,
+    const uint32_t* component_ids,
+    size_t component_count,
+    uint32_t active_component_id)
+{
+    bool active_found = component_count == 0U &&
+        active_component_id == HENKA_AUTHORING_INVALID_ID;
+    size_t index;
+
+    if (object == NULL ||
+        (component_count > 0U && component_ids == NULL))
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    for (index = 0U; index < component_count; ++index)
+    {
+        if (component_ids[index] == active_component_id)
+        {
+            active_found = true;
+            break;
+        }
+    }
+    if (!active_found)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    return sandbox3d_authoring_replace_current_selection(
+        object, component_ids, component_count, active_component_id);
+}
+
 static henka_vec3 sandbox3d_authoring_transform_point(
     henka_transform transform,
     henka_vec3 point)

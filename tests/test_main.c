@@ -22,6 +22,7 @@ int main(void)
     henka_test_sandbox3d_physics();
     henka_test_sandbox3d_workspace();
     henka_test_sandbox3d_editor_ui();
+    henka_test_sandbox3d_modeling_selection();
     henka_test_sandbox3d_editor_layout();
     henka_test_sandbox3d_camera_tools();
     henka_test_camera_hardening();

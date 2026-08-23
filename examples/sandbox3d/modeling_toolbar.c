@@ -161,7 +161,7 @@ const char* sandbox3d_modeling_toolbar_action_tooltip(
         case SANDBOX3D_MODELING_TOOLBAR_ACTION_SNAP:
             return "Toggle the current transform snap policy.";
         case SANDBOX3D_MODELING_TOOLBAR_ACTION_XRAY:
-            return "Show components through surfaces when the depth-overlay path is available.";
+            return "Select front-facing components through occluding mesh surfaces.";
         case SANDBOX3D_MODELING_TOOLBAR_ACTION_COUNT:
         default:
             return "Unavailable modeling action.";
@@ -172,13 +172,14 @@ const char* sandbox3d_modeling_toolbar_disabled_reason(
     sandbox3d_modeling_toolbar_action action,
     const sandbox3d_modeling_toolbar_state* state)
 {
-    if (action == SANDBOX3D_MODELING_TOOLBAR_ACTION_XRAY)
-    {
-        return "X-Ray is unavailable until the depth-overlay path is implemented.";
-    }
     if (state == NULL)
     {
         return "Toolbar state is unavailable.";
+    }
+    if (action == SANDBOX3D_MODELING_TOOLBAR_ACTION_XRAY &&
+        !state->authoring_available)
+    {
+        return "Make the selected asset editable first.";
     }
     if (sandbox3d_modeling_toolbar_action_requires_selection(action))
     {

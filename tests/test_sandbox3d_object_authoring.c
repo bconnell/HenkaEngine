@@ -1034,6 +1034,23 @@ static void henka_test_sandbox3d_object_authoring_component_selection(void)
     HENKA_TEST_ASSERT(sandbox3d_authoring_object_select_component(object, 1U, false) == HENKA_SUCCESS);
     HENKA_TEST_ASSERT(sandbox3d_authoring_object_get_active_component_id(object) == 1U);
     HENKA_TEST_ASSERT(sandbox3d_authoring_object_select_component(object, 2U, true) == HENKA_SUCCESS);
+    {
+        const uint32_t replacement[] = {3U, 5U, 7U};
+        const uint32_t invalid_replacement[] = {3U, 99U};
+        const uint32_t unsorted_replacement[] = {5U, 3U};
+        HENKA_TEST_ASSERT(sandbox3d_authoring_object_replace_component_selection(
+            object, replacement, 3U, 5U) == HENKA_SUCCESS);
+        HENKA_TEST_ASSERT(sandbox3d_authoring_object_get_selected_component_count(object) == 3U);
+        HENKA_TEST_ASSERT(sandbox3d_authoring_object_get_active_component_id(object) == 5U);
+        HENKA_TEST_ASSERT(sandbox3d_authoring_object_replace_component_selection(
+            object, invalid_replacement, 2U, 3U) == HENKA_ERROR_INVALID_ARGUMENT);
+        HENKA_TEST_ASSERT(sandbox3d_authoring_object_get_selected_component_count(object) == 3U);
+        HENKA_TEST_ASSERT(sandbox3d_authoring_object_get_active_component_id(object) == 5U);
+        HENKA_TEST_ASSERT(sandbox3d_authoring_object_replace_component_selection(
+            object, unsorted_replacement, 2U, 3U) == HENKA_ERROR_INVALID_ARGUMENT);
+        HENKA_TEST_ASSERT(sandbox3d_authoring_object_get_selected_component_count(object) == 3U);
+        HENKA_TEST_ASSERT(sandbox3d_authoring_object_get_active_component_id(object) == 5U);
+    }
     HENKA_TEST_ASSERT(sandbox3d_authoring_object_shrink_component_selection(object) == HENKA_SUCCESS);
     HENKA_TEST_ASSERT(sandbox3d_authoring_object_get_selected_component_count(object) == 0U);
     HENKA_TEST_ASSERT(sandbox3d_authoring_object_select_component(object, 1U, false) == HENKA_SUCCESS);

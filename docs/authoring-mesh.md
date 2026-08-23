@@ -65,6 +65,11 @@ selected vertices as amber crosses, selected edges as cyan segments with endpoin
 markers, and selected faces as orange borders with a center marker. The most
 recently picked component is the active edit target: it receives a stronger
 mode-specific stroke/marker while the rest of a multi-selection remains visible.
+Dragging in Scene View performs bounded box selection against projected source
+components. Replace, Ctrl-add, and Shift-subtract commit atomically. Normal mode
+accepts only front-facing components proven frontmost by a source-mesh ray;
+X-Ray keeps the front-facing policy but permits selection through occluding
+mesh surfaces. Renderer triangulation is never exposed as authored edges.
 The Scene View also shows the active topology mode and selected-component count,
 including when the current mode has no component selected yet. Small Move X+, Move Y+, and Move Z+
 commands offset the selected components through a cloned mesh and the existing

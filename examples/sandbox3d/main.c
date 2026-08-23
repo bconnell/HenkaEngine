@@ -26,6 +26,8 @@
 #include "authoring_asset_controller.h"
 #include "authoring_asset_ui.h"
 #include "modeling_operator.h"
+#include "modeling_selection.h"
+#include "modeling_selection_scene.h"
 #include "modeling_toolbar.h"
 #include "object_authoring_tools.h"
 #include "object_details_tools.h"
@@ -552,6 +554,7 @@ typedef struct sandbox3d_state
     sandbox3d_editor_ui_state editor_ui;
     sandbox3d_transform_session transform_session;
     sandbox3d_modeling_operator_session modeling_operator;
+    sandbox3d_modeling_selection_session modeling_selection;
     sandbox3d_modeling_toolbar_state modeling_toolbar;
     bool editor_controls_loaded_safely;
     bool smoke_test;
@@ -4760,6 +4763,54 @@ static henka_vec3 sandbox3d_transform_authoring_point(
     return henka_vec3_add(transform.position, henka_quat_rotate_vec3(transform.rotation, point));
 }
 
+static void sandbox3d_draw_modeling_box_selection(
+    sandbox3d_state* state,
+    henka_viewport viewport)
+{
+    sandbox3d_modeling_selection_rect rect;
+    henka_ui_rect framebuffer_rect;
+    henka_vec2 minimum;
+    henka_vec2 maximum;
+
+    if (state == NULL || state->ui == NULL ||
+        !state->modeling_selection.active ||
+        !state->modeling_selection.dragging ||
+        sandbox3d_modeling_selection_get_rect(
+            &state->modeling_selection, &rect) != HENKA_SUCCESS)
+    {
+        return;
+    }
+    minimum = sandbox3d_viewport_local_to_framebuffer_point(
+        viewport, (henka_vec2){rect.minimum_x, rect.minimum_y});
+    maximum = sandbox3d_viewport_local_to_framebuffer_point(
+        viewport, (henka_vec2){rect.maximum_x, rect.maximum_y});
+    framebuffer_rect = (henka_ui_rect){
+        minimum.x,
+        minimum.y,
+        maximum.x - minimum.x,
+        maximum.y - minimum.y};
+    (void)henka_ui_overlay_rect(
+        state->ui,
+        framebuffer_rect,
+        state->modeling_toolbar.xray_enabled
+            ? (henka_vec4){0.22f, 0.62f, 1.0f, 0.20f}
+            : (henka_vec4){0.10f, 0.82f, 0.92f, 0.16f});
+    (void)henka_ui_overlay_line(
+        state->ui, minimum,
+        (henka_vec2){maximum.x, minimum.y}, 2.0f,
+        (henka_vec4){0.38f, 0.92f, 1.0f, 0.98f});
+    (void)henka_ui_overlay_line(
+        state->ui, (henka_vec2){maximum.x, minimum.y}, maximum, 2.0f,
+        (henka_vec4){0.38f, 0.92f, 1.0f, 0.98f});
+    (void)henka_ui_overlay_line(
+        state->ui, maximum,
+        (henka_vec2){minimum.x, maximum.y}, 2.0f,
+        (henka_vec4){0.38f, 0.92f, 1.0f, 0.98f});
+    (void)henka_ui_overlay_line(
+        state->ui, (henka_vec2){minimum.x, maximum.y}, minimum, 2.0f,
+        (henka_vec4){0.38f, 0.92f, 1.0f, 0.98f});
+}
+
 static bool sandbox3d_project_handle_box(
     const sandbox3d_state* state,
     henka_viewport viewport,
@@ -7498,6 +7549,7 @@ static void sandbox3d_reset_workspace_layout(sandbox3d_state* state)
     state->viewport_tool = SANDBOX3D_VIEWPORT_TOOL_SELECT;
     state->gizmo.mode = SANDBOX3D_GIZMO_MODE_SELECT;
     sandbox3d_modeling_toolbar_state_reset(&state->modeling_toolbar);
+    sandbox3d_modeling_selection_reset(&state->modeling_selection);
     sandbox3d_clear_gizmo_drag(state, true);
     sandbox3d_clear_selection(state, "Layout reset. No object selected.");
     if (state->ui != NULL)
@@ -16096,9 +16148,6 @@ static void sandbox3d_sync_modeling_toolbar_state(sandbox3d_state* state)
             break;
     }
     state->modeling_toolbar.snap_enabled = state->gizmo.snap.enabled;
-    /* The depth-tested overlay path is not implemented yet.  Keep this false
-     * until an actual x-ray render path can own the state. */
-    state->modeling_toolbar.xray_enabled = false;
 }
 
 static void sandbox3d_draw_modeling_toolbar(
@@ -16265,9 +16314,11 @@ static void sandbox3d_draw_modeling_toolbar(
                 tool_descriptors[index].action == SANDBOX3D_MODELING_TOOLBAR_ACTION_ROTATE ||
                 tool_descriptors[index].action == SANDBOX3D_MODELING_TOOLBAR_ACTION_SCALE;
             const bool enabled =
-                !is_transform ||
+                (tool_descriptors[index].action != SANDBOX3D_MODELING_TOOLBAR_ACTION_XRAY ||
+                 state->modeling_toolbar.authoring_available) &&
+                (!is_transform ||
                 (state->modeling_toolbar.authoring_available &&
-                 state->modeling_toolbar.selected_component_count > 0U);
+                 state->modeling_toolbar.selected_component_count > 0U));
             const char* tooltip = enabled
                 ? sandbox3d_modeling_toolbar_action_tooltip(tool_descriptors[index].action)
                 : sandbox3d_modeling_toolbar_disabled_reason(
@@ -16281,7 +16332,9 @@ static void sandbox3d_draw_modeling_toolbar(
                 enabled,
                 tool_descriptors[index].action == SANDBOX3D_MODELING_TOOLBAR_ACTION_SNAP
                     ? state->modeling_toolbar.snap_enabled
-                    : tool_descriptors[index].tool == state->modeling_toolbar.transform_tool};
+                    : tool_descriptors[index].action == SANDBOX3D_MODELING_TOOLBAR_ACTION_XRAY
+                        ? state->modeling_toolbar.xray_enabled
+                        : tool_descriptors[index].tool == state->modeling_toolbar.transform_tool};
             const henka_ui_rect button_bounds = {
                 x + (button_width + gap) * (float)index,
                 tool_row_y,
@@ -16293,6 +16346,17 @@ static void sandbox3d_draw_modeling_toolbar(
                 if (tool_descriptors[index].action == SANDBOX3D_MODELING_TOOLBAR_ACTION_SNAP)
                 {
                     sandbox3d_gizmo_toggle_snap(state);
+                }
+                else if (tool_descriptors[index].action == SANDBOX3D_MODELING_TOOLBAR_ACTION_XRAY)
+                {
+                    state->modeling_toolbar.xray_enabled =
+                        !state->modeling_toolbar.xray_enabled;
+                    sandbox3d_set_statusf(
+                        state,
+                        false,
+                        false,
+                        "X-Ray selection %s.",
+                        state->modeling_toolbar.xray_enabled ? "enabled" : "disabled");
                 }
                 else if (tool_descriptors[index].action != SANDBOX3D_MODELING_TOOLBAR_ACTION_XRAY)
                 {
@@ -16923,7 +16987,7 @@ static void sandbox3d_update_authoring_component_hover(
     if (engine == NULL || state->scene == NULL || state->authoring_object == NULL ||
         henka_engine_is_mouse_captured(engine) || state->gizmo.drag.dragging ||
         state->view_navigation.orbiting || state->view_navigation.panning ||
-        state->modeling_operator.active)
+        state->modeling_operator.active || state->modeling_selection.active)
     {
         return;
     }
@@ -28151,6 +28215,7 @@ static void sandbox3d_build_ui(henka_engine* engine, sandbox3d_state* state)
         sandbox3d_draw_reflection_probe_overlay(state, layout.scene_viewport);
         sandbox3d_draw_terrain_brush_preview(state, layout.scene_viewport);
         sandbox3d_draw_selection_highlight(state, layout.scene_viewport);
+        sandbox3d_draw_modeling_box_selection(state, layout.scene_viewport);
         sandbox3d_draw_gizmo_overlay(engine, state, layout.scene_viewport);
         /* Keep the editor controls above scene geometry and gizmo lines. The
          * topology status strip is drawn by selection highlighting first;
@@ -28444,6 +28509,7 @@ static henka_result sandbox3d_initialize(henka_engine* engine, void* user_data)
     sandbox3d_editor_controls_initialize(&state->editor_controls);
     sandbox3d_editor_ui_state_reset(&state->editor_ui);
     sandbox3d_modeling_operator_reset(&state->modeling_operator);
+    sandbox3d_modeling_selection_reset(&state->modeling_selection);
     sandbox3d_modeling_toolbar_state_reset(&state->modeling_toolbar);
     state->editor_controls_loaded_safely = true;
 
@@ -32061,6 +32127,7 @@ static void sandbox3d_update(henka_engine* engine, double delta_seconds, void* u
         const bool right_pan_pressed = henka_input_was_mouse_button_pressed(engine, HENKA_MOUSE_BUTTON_RIGHT);
         const bool left_pressed = henka_input_was_mouse_button_pressed(engine, HENKA_MOUSE_BUTTON_LEFT);
         const bool left_down = henka_input_is_mouse_button_down(engine, HENKA_MOUSE_BUTTON_LEFT);
+        const bool left_released = henka_input_was_mouse_button_released(engine, HENKA_MOUSE_BUTTON_LEFT);
         const bool terrain_mode =
             state->workspace.active_utility == SANDBOX3D_UTILITY_TERRAIN &&
             state->viewport_tool == SANDBOX3D_VIEWPORT_TOOL_SELECT;
@@ -32081,6 +32148,119 @@ static void sandbox3d_update(henka_engine* engine, double delta_seconds, void* u
         gate.selected_object_visible = gate.selected_object_valid && henka_scene_is_entity_visible(state->scene, selected_entity);
         gate.selected_object_selectable = gate.selected_object_valid && sandbox3d_is_selectable_entity(state, selected_entity);
         gate.selected_bounds_valid = sandbox3d_get_selected_bounds(state, &(henka_bounds){0});
+
+        if (state->modeling_selection.active &&
+            (state->frame_layout.scene_viewport.width != state->modeling_selection.viewport_width ||
+             state->frame_layout.scene_viewport.height != state->modeling_selection.viewport_height))
+        {
+            sandbox3d_modeling_selection_reset(&state->modeling_selection);
+            sandbox3d_set_status(state, true, "Box selection cancelled because Scene View changed size.");
+        }
+        if (left_pressed && mouse_in_viewport && !ui_wants_mouse &&
+            !alt_orbit_held && !middle_pan_held && !right_pan_held &&
+            state->viewport_tool == SANDBOX3D_VIEWPORT_TOOL_SELECT &&
+            state->authoring_object != NULL &&
+            selected_entity != HENKA_INVALID_ENTITY &&
+            sandbox3d_entities_share_selection_owner(
+                state,
+                selected_entity,
+                sandbox3d_authoring_object_get_entity(state->authoring_object)) &&
+            !state->modeling_operator.active &&
+            sandbox3d_evaluate_select_reject_reason(&gate) ==
+                SANDBOX3D_INTERACTION_REJECT_NONE)
+        {
+            henka_vec2 mouse_local;
+            if (henka_viewport_window_to_local(
+                    state->frame_layout.scene_viewport,
+                    framebuffer_mouse_position,
+                    &mouse_local) == HENKA_SUCCESS &&
+                sandbox3d_modeling_selection_begin(
+                    &state->modeling_selection,
+                    mouse_local,
+                    (float)state->frame_layout.scene_viewport.width,
+                    (float)state->frame_layout.scene_viewport.height,
+                    sandbox3d_modeling_selection_operation_from_modifiers(
+                        henka_input_is_key_down(engine, HENKA_KEY_LEFT_CTRL),
+                        henka_input_is_key_down(engine, HENKA_KEY_LEFT_SHIFT))) == HENKA_SUCCESS)
+            {
+                state->view_navigation.empty_viewport_drag_candidate = false;
+                navigation_active = true;
+            }
+        }
+        if (state->modeling_selection.active && left_down)
+        {
+            henka_vec2 mouse_local;
+            if (henka_viewport_window_to_local(
+                    state->frame_layout.scene_viewport,
+                    framebuffer_mouse_position,
+                    &mouse_local) == HENKA_SUCCESS)
+            {
+                (void)sandbox3d_modeling_selection_update(
+                    &state->modeling_selection, mouse_local, 5.0f);
+            }
+            state->view_navigation.empty_viewport_drag_candidate = false;
+            navigation_active = true;
+        }
+        if (state->modeling_selection.active && left_released)
+        {
+            const bool was_dragging = state->modeling_selection.dragging;
+            if (was_dragging)
+            {
+                size_t selected_count = 0U;
+                const henka_result box_result =
+                    sandbox3d_modeling_selection_apply_scene(
+                        &state->modeling_selection,
+                        state->modeling_toolbar.xray_enabled,
+                        &state->camera,
+                        state->scene,
+                        state->frame_layout.scene_viewport,
+                        state->authoring_object,
+                        &selected_count);
+                if (box_result == HENKA_SUCCESS)
+                {
+                    const char* operation_label =
+                        state->modeling_selection.operation ==
+                            SANDBOX3D_MODELING_SELECTION_ADD
+                        ? "add"
+                        : state->modeling_selection.operation ==
+                            SANDBOX3D_MODELING_SELECTION_SUBTRACT
+                            ? "subtract"
+                            : "replace";
+                    printf(
+                        "Native authoring box selection: mode=%s operation=%s xray=%s selected=%zu.\n",
+                        sandbox3d_modeling_toolbar_selection_label(
+                            sandbox3d_authoring_object_get_selection_mode(
+                                state->authoring_object)),
+                        operation_label,
+                        state->modeling_toolbar.xray_enabled ? "on" : "off",
+                        selected_count);
+                    fflush(stdout);
+                    sandbox3d_set_statusf(
+                        state,
+                        false,
+                        false,
+                        "Box selected %zu %s components%s.",
+                        selected_count,
+                        sandbox3d_modeling_toolbar_selection_label(
+                            sandbox3d_authoring_object_get_selection_mode(
+                                state->authoring_object)),
+                        state->modeling_toolbar.xray_enabled ? " through surfaces" : "");
+                }
+                else
+                {
+                    sandbox3d_set_status(
+                        state,
+                        true,
+                        "Box selection failed; the prior selection was preserved.");
+                }
+            }
+            sandbox3d_modeling_selection_reset(&state->modeling_selection);
+            if (!was_dragging)
+            {
+                (void)sandbox3d_try_pick_object(engine, state);
+            }
+            navigation_active = true;
+        }
 
         if (terrain_mode && mouse_in_viewport && !ui_wants_mouse &&
             !alt_orbit_held && !middle_pan_held && left_down)

@@ -169,6 +169,13 @@ henka_result sandbox3d_authoring_object_select_component(
     sandbox3d_authoring_object* object,
     uint32_t component_id,
     bool additive);
+/* Atomically replaces the active-mode component selection. IDs must be
+ * strictly increasing and active in the current source mesh. */
+henka_result sandbox3d_authoring_object_replace_component_selection(
+    sandbox3d_authoring_object* object,
+    const uint32_t* component_ids,
+    size_t component_count,
+    uint32_t active_component_id);
 /* Finds the nearest source-authoritative component in the active selection
  * mode without changing selection, active-component, or face state. */
 henka_result sandbox3d_authoring_object_find_component(

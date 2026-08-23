@@ -228,6 +228,42 @@ try {
     Save-ProbeWindowScreenshot `
         -Handle $capturedProcess.Process.MainWindowHandle `
         -Path (Join-Path $runtimeDirectory "face-hover-before-pick.png")
+    $boxStartX = [double]($viewportX + $viewportWidth * 0.34)
+    $boxStartY = [double]($viewportY + $viewportHeight * 0.22)
+    $boxEndX = [double]($viewportX + $viewportWidth * 0.66)
+    $boxEndY = [double]($viewportY + $viewportHeight * 0.64)
+    Send-HenkaAutomationEvent `
+        -EventPath $automationInputPath `
+        -EventLine ("move {0} {1}" -f `
+            (Format-HenkaAutomationFloat -Value $boxStartX), `
+            (Format-HenkaAutomationFloat -Value $boxStartY))
+    Send-HenkaAutomationEvent `
+        -EventPath $automationInputPath `
+        -EventLine ("button left down {0} {1}" -f `
+            (Format-HenkaAutomationFloat -Value $boxStartX), `
+            (Format-HenkaAutomationFloat -Value $boxStartY))
+    Send-HenkaAutomationEvent `
+        -EventPath $automationInputPath `
+        -EventLine ("move {0} {1}" -f `
+            (Format-HenkaAutomationFloat -Value $boxEndX), `
+            (Format-HenkaAutomationFloat -Value $boxEndY)) `
+        -SettleMilliseconds 300
+    Save-ProbeWindowScreenshot `
+        -Handle $capturedProcess.Process.MainWindowHandle `
+        -Path (Join-Path $runtimeDirectory "face-box-selection-drag.png")
+    Send-HenkaAutomationEvent `
+        -EventPath $automationInputPath `
+        -EventLine ("button left up {0} {1}" -f `
+            (Format-HenkaAutomationFloat -Value $boxEndX), `
+            (Format-HenkaAutomationFloat -Value $boxEndY)) `
+        -SettleMilliseconds 300
+    if (-not (Wait-FileContains -Path $stdoutPath -Pattern "Native authoring box selection: mode=Face operation=replace xray=off selected=" -TimeoutMilliseconds 5000)) {
+        throw "The visible editor did not complete a normal source-face box selection."
+    }
+    Start-Sleep -Milliseconds 300
+    Save-ProbeWindowScreenshot `
+        -Handle $capturedProcess.Process.MainWindowHandle `
+        -Path (Join-Path $runtimeDirectory "after-face-box-selection.png")
     Send-HenkaAutomationClick `
         -EventPath $automationInputPath `
         -X $initialPickX `

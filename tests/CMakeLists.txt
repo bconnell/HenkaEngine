@@ -563,6 +563,8 @@ add_executable(henka_tests
     ../examples/sandbox3d/authoring_asset_ui.c
     ../examples/sandbox3d/object_authoring_tools.c
     ../examples/sandbox3d/modeling_operator.c
+    ../examples/sandbox3d/modeling_selection.c
+    ../examples/sandbox3d/modeling_selection_scene.c
     ../examples/sandbox3d/modeling_toolbar.c
     ../examples/sandbox3d/asset_browser_tools.c
     ../examples/sandbox3d/interaction_tools.c
@@ -579,6 +581,7 @@ add_executable(henka_tests
     test_input.c
     test_limits.c
     test_sandbox3d_interaction.c
+    test_sandbox3d_modeling_selection.c
     test_sandbox3d_physics.c
     test_sandbox3d_workspace.c
     test_sandbox3d_editor_ui.c

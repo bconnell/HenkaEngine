@@ -49,7 +49,13 @@ void henka_test_sandbox3d_editor_ui(void)
             sandbox3d_modeling_toolbar_disabled_reason(
                 SANDBOX3D_MODELING_TOOLBAR_ACTION_XRAY,
                 &toolbar),
-            "X-Ray is unavailable until the depth-overlay path is implemented.") == 0);
+            "Make the selected asset editable first.") == 0);
+    toolbar.authoring_available = true;
+    HENKA_TEST_ASSERT(
+        strcmp(
+            sandbox3d_modeling_toolbar_action_tooltip(
+                SANDBOX3D_MODELING_TOOLBAR_ACTION_XRAY),
+            "Select front-facing components through occluding mesh surfaces.") == 0);
     HENKA_TEST_ASSERT(
         sandbox3d_modeling_toolbar_format_summary(
             &toolbar,

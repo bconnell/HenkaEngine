@@ -82,7 +82,12 @@ selection-set operations. Rotate and Scale apply bounded transactional
 component transforms around the median pivot in the sandbox controls; the
 authoring API also exposes active-component and per-face individual pivots plus
 world, local, and face-normal rotation orientation. These commands publish
-through the same mesh, bounds, physics, and undo path. General mesh-file
+through the same mesh, bounds, physics, and undo path.
+Dragging a box in Scene View replaces the active-mode selection; Ctrl-drag adds
+and Shift-drag subtracts. Normal selection accepts visible front-facing source
+components. The X-Ray toolbar toggle selects front-facing source components
+through occluding mesh surfaces without changing materials or asset data.
+General mesh-file
 open/save remains unfinished. Soft Move X+, Soft Move Y+, and Soft Move Z+ apply
 a bounded one-ring linear falloff: the active selection receives the full
 translation and directly adjacent vertices receive half strength. This reduces
