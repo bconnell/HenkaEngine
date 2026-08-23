@@ -12,10 +12,11 @@ bounded implementation detail. A long authoring session must be able to delete
 and create components repeatedly while the active topology remains within its
 configured capacities.
 
-The current slot-based representation uses `id - 1` for lookup and consumes a
-physical slot for every historical ID. The repair separates those concerns:
-physical capacity limits simultaneous active topology, while logical IDs remain
-stable and non-reused for the lifetime of a mesh.
+Before the identity repair, the slot-based representation used `id - 1` for
+lookup and consumed a physical slot for every historical ID. The current
+representation separates those concerns: physical capacity limits simultaneous
+active topology, while logical IDs remain stable and non-reused for the
+lifetime of a mesh.
 
 ## Storage model
 

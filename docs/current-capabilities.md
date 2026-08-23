@@ -159,9 +159,9 @@ turning the public README into an implementation ledger.
   integrated Vertex selection workflow.
 - Transactional operations also include plane/box creation, duplicate, face
   extrude, inset, planar bevel rings, face subdivision, selected-face deletion,
-  planar UV projection, island transforms, packing, and seam detection. HAMS v3
+  planar UV projection, island transforms, packing, and seam detection. HAMS v4
   writes portable little-endian data through unique same-directory temporary
-  files and retains reads for checked-in v2 sources.
+  files and retains reads for checked-in v2/v3 legacy sources.
 - Imported nontrivial objects can take the Make Editable path. Native source
   persistence, evaluated mesh replacement, material promotion, supported PBR
   overrides, procedural detail textures, and material undo/redo are present

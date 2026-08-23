@@ -35,6 +35,10 @@ jobs:
         shell: powershell
         run: .\scripts\check_documentation_truth.ps1
 
+      - name: Check documentation truth regression
+        shell: powershell
+        run: .\scripts\test_documentation_truth_windows.ps1
+
       - name: Check scripting compiler authority
         shell: powershell
         run: .\scripts\check_scripting_authority.ps1

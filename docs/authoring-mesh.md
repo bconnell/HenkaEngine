@@ -12,8 +12,8 @@ below remains the current implementation inventory.
 
 The current foundation provides:
 
-- stable, non-reused vertex, edge, and face IDs with tombstones for deleted
-  elements;
+- stable, non-reused logical vertex, edge, and face IDs resolved through
+  bounded maps; inactive physical slots are reusable;
 - explicit polygon corners and edges, with deterministic vertex-edge and
   edge-face adjacency and boundary queries;
 - bounded material-region and UV data, transactional face material-region
@@ -143,9 +143,9 @@ ambiguous, hard-edge, UV-seamed, non-triangle, and non-manifold cases fail
 closed. Delete removes selected vertices and their incident faces, then
 removes only newly orphaned vertices in the affected neighborhood. Connect
 splits one face between two non-adjacent corners while preserving the original
-face ID and allocating the new face from the monotonic face-slot high-water
-mark. Edge topology editing beyond bounded selection and component transforms
-remain incomplete; and
+face ID and allocating the new face with a fresh logical ID in a reusable
+physical slot. Edge topology editing beyond bounded selection and component
+transforms remain incomplete; and
 Vertex Bevel is also available as one atomic multi-selection operation. It
 uses a deterministic edge/end-point cut table, rejects non-finite, zero,
 overlapping, non-manifold, and capacity-invalid requests, preserves
@@ -183,12 +183,12 @@ must start empty, counts and indices are bounded and checked, and allocation or
 evaluation failure leaves the output slot empty. This is the reusable
 authoring-to-render boundary; it does not create a material authority or
 replace glTF scene/material ownership.
-`henka_authoring_mesh_save_file` writes HAMS v3 with explicitly little-endian
+`henka_authoring_mesh_save_file` writes HAMS v4 with explicitly little-endian
 32-bit integers and IEEE-754 float bit patterns. Each save uses a unique
 same-directory temporary name and atomically replaces the destination only
 after the complete candidate is flushed, so a failed or concurrent save does
-not remove the prior valid source. The loader accepts both the current v3
-format and the existing v2 sources shipped with the repository.
+not remove the prior valid source. The loader accepts the current v4
+format and legacy v2/v3 sources shipped with the repository.
 `henka_authoring_mesh_load_file_new` can load a versioned `.hams` source without
 requiring the consumer to duplicate the file's capacity header; it validates
 the declared bounded capacities before creating the candidate and retains an
@@ -201,8 +201,8 @@ Vertex merge is available as an explicit candidate operation through
 `henka_authoring_mesh_merge_vertices` and
 `henka_authoring_mesh_merge_vertices_by_distance`. Center and active-vertex
 modes use deterministic stable-ID selection, preserve per-face corner UVs and
-face metadata, reconcile active endpoint-pair edges without reactivating
-tombstones, and publish only after the candidate validates. Distance mode uses
+face metadata, reconcile active endpoint-pair edges without reusing retired
+logical IDs, and publish only after the candidate validates. Distance mode uses
 a finite positive tolerance, deterministic stable-ID union-find clustering, a
 bounded spatial hash, and double-precision cluster means. A no-op distance
 merge returns success without changing topology or history. The Sandbox

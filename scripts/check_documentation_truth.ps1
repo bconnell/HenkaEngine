@@ -25,6 +25,9 @@ function Get-RepositoryText {
 $readme = Get-RepositoryText "README.md"
 $capabilities = Get-RepositoryText "docs/current-capabilities.md"
 $roadmap = Get-RepositoryText "docs/roadmap.md"
+$authoringMesh = Get-RepositoryText "docs/authoring-mesh.md"
+$componentIdentities = Get-RepositoryText "docs/authoring-component-identities.md"
+$authoringMeshSource = Get-RepositoryText "engine/src/mesh/authoring_mesh.c"
 $scripting = Get-RepositoryText "docs/scripting-foundation.md"
 $externalProjects = Get-RepositoryText "docs/external-game-projects.md"
 $externalTemplate = Get-RepositoryText "templates/external_game_minimal/src/main.c"
@@ -75,6 +78,35 @@ if ($roadmap -notmatch "(?i)Integrated authoring is already underway" -or
     $roadmap -notmatch "(?im)^### Current Development" -or
     $roadmap -notmatch "(?im)^### Future Work") {
     Add-Finding "docs/roadmap.md: integrated authoring must distinguish foundation, current development, and future work"
+}
+
+$hamsVersionMatch = [regex]::Match(
+    $authoringMeshSource,
+    '(?m)^\s*#define\s+HENKA_AUTHORING_MESH_FILE_VERSION\s+(\d+)U\b')
+if (-not $hamsVersionMatch.Success) {
+    Add-Finding "engine/src/mesh/authoring_mesh.c: current HAMS writer version could not be determined"
+} else {
+    $currentHamsVersion = [int]$hamsVersionMatch.Groups[1].Value
+    $currentHamsClaim = "HAMS v$currentHamsVersion"
+    foreach ($document in @(
+        [pscustomobject]@{ Path = "docs/authoring-mesh.md"; Text = $authoringMesh },
+        [pscustomobject]@{ Path = "docs/current-capabilities.md"; Text = $capabilities },
+        [pscustomobject]@{ Path = "docs/authoring-component-identities.md"; Text = $componentIdentities }
+    )) {
+        if ($document.Text -notmatch [regex]::Escape($currentHamsClaim)) {
+            Add-Finding "$($document.Path): current HAMS writer version '$currentHamsClaim' is not documented"
+        }
+        foreach ($staleCurrentClaim in @(
+            "(?i)\bwrites\s+HAMS\s+v(?!$currentHamsVersion\b)\d+",
+            "(?i)\bcurrent\s+v(?!$currentHamsVersion\b)\d+\s+format",
+            "(?i)\bcurrent\s+HAMS\s+v(?!$currentHamsVersion\b)\d+",
+            "(?i)\bcurrent\s+writer\b.{0,40}\bHAMS\s+v(?!$currentHamsVersion\b)\d+"
+        )) {
+            if ($document.Text -match $staleCurrentClaim) {
+                Add-Finding "$($document.Path): stale current HAMS claim matches '$staleCurrentClaim'"
+            }
+        }
+    }
 }
 
 if ($readme -notmatch "(?im)^>\s*\*\*Support Henka Engine\*\*" -or
