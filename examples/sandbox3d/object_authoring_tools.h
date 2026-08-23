@@ -21,6 +21,24 @@ typedef enum sandbox3d_authoring_selection_mode
     SANDBOX3D_AUTHORING_SELECTION_FACE
 } sandbox3d_authoring_selection_mode;
 
+typedef enum sandbox3d_authoring_selection_query_kind
+{
+    SANDBOX3D_AUTHORING_SELECTION_QUERY_BOUNDARY = 0,
+    SANDBOX3D_AUTHORING_SELECTION_QUERY_HARD_EDGE,
+    SANDBOX3D_AUTHORING_SELECTION_QUERY_MATERIAL_REGION,
+    SANDBOX3D_AUTHORING_SELECTION_QUERY_FACE_SIDE_COUNT,
+    SANDBOX3D_AUTHORING_SELECTION_QUERY_SIMILAR_NORMAL,
+    SANDBOX3D_AUTHORING_SELECTION_QUERY_SIMILAR_MATERIAL_REGION
+} sandbox3d_authoring_selection_query_kind;
+
+typedef struct sandbox3d_authoring_selection_query
+{
+    sandbox3d_authoring_selection_query_kind kind;
+    uint32_t material_region;
+    size_t face_side_count;
+    float minimum_normal_dot;
+} sandbox3d_authoring_selection_query;
+
 typedef enum sandbox3d_authoring_pivot_mode
 {
     SANDBOX3D_AUTHORING_PIVOT_MEDIAN = 0,
@@ -176,6 +194,9 @@ henka_result sandbox3d_authoring_object_replace_component_selection(
     const uint32_t* component_ids,
     size_t component_count,
     uint32_t active_component_id);
+henka_result sandbox3d_authoring_object_select_matching_components(
+    sandbox3d_authoring_object* object,
+    const sandbox3d_authoring_selection_query* query);
 /* Finds the nearest source-authoritative component in the active selection
  * mode without changing selection, active-component, or face state. */
 henka_result sandbox3d_authoring_object_find_component(

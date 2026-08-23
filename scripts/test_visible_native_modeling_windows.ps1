@@ -314,14 +314,8 @@ try {
         throw "The visible face extrude did not commit successfully."
     }
     Start-Sleep -Milliseconds 500
-    # The topology overlay is opt-in. Enable it for the first capture so the
-    # workflow proves the authored cage is quad-based without confusing it
-    # with the evaluated render surface.
-    Send-HenkaAutomationClick `
-        -EventPath $automationInputPath `
-        -X ($viewportX + 328.0) `
-        -Y ($viewportY + 26.0)
-    Start-Sleep -Milliseconds 300
+    # Component editing shows the authored source cage by default over the
+    # evaluated solid surface. Capture that default presentation first.
     Save-ProbeWindowScreenshot `
         -Handle $capturedProcess.Process.MainWindowHandle `
         -Path (Join-Path $runtimeDirectory "after-extrude-before-inset.png")

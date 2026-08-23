@@ -3243,6 +3243,232 @@ static int sandbox3d_authoring_compare_ids(const void* left, const void* right)
     return first < second ? -1 : first > second ? 1 : 0;
 }
 
+static bool sandbox3d_authoring_selection_face_normal(
+    const henka_authoring_mesh* mesh,
+    henka_authoring_face_id face_id,
+    henka_vec3* out_normal)
+{
+    const henka_authoring_face* face;
+    const henka_authoring_vertex* first;
+    const henka_authoring_vertex* second;
+    const henka_authoring_vertex* third;
+    henka_vec3 normal;
+
+    if (mesh == NULL || out_normal == NULL ||
+        (face = henka_authoring_mesh_get_face(mesh, face_id)) == NULL ||
+        face->corner_count < 3U ||
+        (first = henka_authoring_mesh_get_vertex(mesh, face->vertices[0])) == NULL ||
+        (second = henka_authoring_mesh_get_vertex(mesh, face->vertices[1])) == NULL ||
+        (third = henka_authoring_mesh_get_vertex(mesh, face->vertices[2])) == NULL)
+    {
+        return false;
+    }
+    normal = henka_vec3_cross(
+        henka_vec3_subtract(second->position, first->position),
+        henka_vec3_subtract(third->position, first->position));
+    if (!sandbox3d_authoring_finite_vec3(normal) ||
+        henka_vec3_length(normal) <= 0.000001f)
+    {
+        return false;
+    }
+    *out_normal = henka_vec3_normalize(normal);
+    return true;
+}
+
+henka_result sandbox3d_authoring_object_select_matching_components(
+    sandbox3d_authoring_object* object,
+    const sandbox3d_authoring_selection_query* query)
+{
+    henka_authoring_mesh_desc desc;
+    uint32_t* matching_ids = NULL;
+    size_t slot_capacity;
+    size_t matching_count = 0U;
+    size_t slot;
+    uint32_t active_id;
+    uint32_t material_region = 0U;
+    henka_vec3 reference_normal = {0.0f, 0.0f, 0.0f};
+    bool requires_active = false;
+    henka_result result;
+
+    if (object == NULL || query == NULL || object->mesh == NULL ||
+        query->kind < SANDBOX3D_AUTHORING_SELECTION_QUERY_BOUNDARY ||
+        query->kind > SANDBOX3D_AUTHORING_SELECTION_QUERY_SIMILAR_MATERIAL_REGION)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    desc = henka_authoring_mesh_get_desc(object->mesh);
+    if (query->kind <= SANDBOX3D_AUTHORING_SELECTION_QUERY_HARD_EDGE &&
+        object->selection_mode != SANDBOX3D_AUTHORING_SELECTION_EDGE)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    if ((query->kind == SANDBOX3D_AUTHORING_SELECTION_QUERY_FACE_SIDE_COUNT ||
+         query->kind == SANDBOX3D_AUTHORING_SELECTION_QUERY_SIMILAR_NORMAL) &&
+        object->selection_mode != SANDBOX3D_AUTHORING_SELECTION_FACE)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    if ((query->kind == SANDBOX3D_AUTHORING_SELECTION_QUERY_MATERIAL_REGION ||
+         query->kind == SANDBOX3D_AUTHORING_SELECTION_QUERY_SIMILAR_MATERIAL_REGION) &&
+        object->selection_mode == SANDBOX3D_AUTHORING_SELECTION_EDGE)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    if (query->kind == SANDBOX3D_AUTHORING_SELECTION_QUERY_FACE_SIDE_COUNT &&
+        (query->face_side_count < 3U || query->face_side_count > desc.max_face_corners))
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    if (query->kind == SANDBOX3D_AUTHORING_SELECTION_QUERY_SIMILAR_NORMAL &&
+        (!isfinite(query->minimum_normal_dot) ||
+         query->minimum_normal_dot < -1.0f || query->minimum_normal_dot > 1.0f))
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    active_id = object->active_component_id;
+    requires_active =
+        query->kind == SANDBOX3D_AUTHORING_SELECTION_QUERY_SIMILAR_NORMAL ||
+        query->kind == SANDBOX3D_AUTHORING_SELECTION_QUERY_SIMILAR_MATERIAL_REGION;
+    if (requires_active && !sandbox3d_authoring_current_component_active(object, active_id))
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    if (query->kind == SANDBOX3D_AUTHORING_SELECTION_QUERY_SIMILAR_NORMAL &&
+        !sandbox3d_authoring_selection_face_normal(
+            object->mesh, (henka_authoring_face_id)active_id, &reference_normal))
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    if (query->kind == SANDBOX3D_AUTHORING_SELECTION_QUERY_SIMILAR_MATERIAL_REGION)
+    {
+        if (object->selection_mode == SANDBOX3D_AUTHORING_SELECTION_VERTEX)
+        {
+            const henka_authoring_vertex* vertex = henka_authoring_mesh_get_vertex(
+                object->mesh, (henka_authoring_vertex_id)active_id);
+        if (vertex == NULL) {
+            return HENKA_ERROR_INVALID_ARGUMENT;
+        }
+            material_region = vertex->material_region;
+        }
+        else
+        {
+            const henka_authoring_face* face = henka_authoring_mesh_get_face(
+                object->mesh, (henka_authoring_face_id)active_id);
+        if (face == NULL) {
+            return HENKA_ERROR_INVALID_ARGUMENT;
+        }
+            material_region = face->material_region;
+        }
+    }
+    else
+    {
+        material_region = query->material_region;
+    }
+
+    slot_capacity = object->selection_mode == SANDBOX3D_AUTHORING_SELECTION_VERTEX
+        ? desc.max_vertices
+        : object->selection_mode == SANDBOX3D_AUTHORING_SELECTION_EDGE
+            ? desc.max_edges
+            : desc.max_faces;
+    if (slot_capacity == 0U)
+    {
+        return HENKA_ERROR_LIMIT;
+    }
+    result = sandbox3d_authoring_allocate_id_scratch(
+        slot_capacity, &matching_ids);
+    if (result != HENKA_SUCCESS)
+    {
+        return result;
+    }
+    for (slot = 0U; slot < slot_capacity; ++slot)
+    {
+        uint32_t id = HENKA_AUTHORING_INVALID_ID;
+        bool matches = false;
+        const henka_result id_result =
+            object->selection_mode == SANDBOX3D_AUTHORING_SELECTION_VERTEX
+            ? henka_authoring_mesh_get_vertex_id_at(object->mesh, slot, &id)
+            : object->selection_mode == SANDBOX3D_AUTHORING_SELECTION_EDGE
+                ? henka_authoring_mesh_get_edge_id_at(object->mesh, slot, &id)
+                : henka_authoring_mesh_get_face_id_at(object->mesh, slot, &id);
+        if (id_result != HENKA_SUCCESS)
+        {
+            continue;
+        }
+        if (object->selection_mode == SANDBOX3D_AUTHORING_SELECTION_EDGE)
+        {
+            const henka_authoring_edge* edge = henka_authoring_mesh_get_edge(
+                object->mesh, (henka_authoring_edge_id)id);
+            matches = edge != NULL &&
+                ((query->kind == SANDBOX3D_AUTHORING_SELECTION_QUERY_BOUNDARY &&
+                  edge->face_count == 1U) ||
+                 (query->kind == SANDBOX3D_AUTHORING_SELECTION_QUERY_HARD_EDGE &&
+                  edge->hard));
+        }
+        else if (object->selection_mode == SANDBOX3D_AUTHORING_SELECTION_VERTEX)
+        {
+            const henka_authoring_vertex* vertex = henka_authoring_mesh_get_vertex(
+                object->mesh, (henka_authoring_vertex_id)id);
+            matches = vertex != NULL && vertex->material_region == material_region;
+        }
+        else
+        {
+            const henka_authoring_face* face = henka_authoring_mesh_get_face(
+                object->mesh, (henka_authoring_face_id)id);
+            if (face != NULL &&
+                (query->kind == SANDBOX3D_AUTHORING_SELECTION_QUERY_MATERIAL_REGION ||
+                 query->kind == SANDBOX3D_AUTHORING_SELECTION_QUERY_SIMILAR_MATERIAL_REGION))
+            {
+                matches = face->material_region == material_region;
+            }
+            else if (face != NULL &&
+                query->kind == SANDBOX3D_AUTHORING_SELECTION_QUERY_FACE_SIDE_COUNT)
+            {
+                matches = face->corner_count == query->face_side_count;
+            }
+            else if (face != NULL &&
+                query->kind == SANDBOX3D_AUTHORING_SELECTION_QUERY_SIMILAR_NORMAL)
+            {
+                henka_vec3 normal;
+                matches = sandbox3d_authoring_selection_face_normal(
+                    object->mesh, face->id, &normal) &&
+                    henka_vec3_dot(reference_normal, normal) >= query->minimum_normal_dot;
+            }
+        }
+        if (matches)
+        {
+            matching_ids[matching_count++] = id;
+        }
+    }
+    qsort(matching_ids, matching_count, sizeof(*matching_ids),
+        sandbox3d_authoring_compare_ids);
+    if (matching_count == 0U)
+    {
+        active_id = HENKA_AUTHORING_INVALID_ID;
+    }
+    else if (!sandbox3d_authoring_selection_contains(
+            object->selection_mode == SANDBOX3D_AUTHORING_SELECTION_VERTEX
+                ? object->selected_vertex_bits
+                : object->selection_mode == SANDBOX3D_AUTHORING_SELECTION_EDGE
+                    ? object->selected_edge_bits
+                    : object->selected_face_bits,
+            object->selection_mode == SANDBOX3D_AUTHORING_SELECTION_VERTEX
+                ? object->selected_vertex_word_count
+                : object->selection_mode == SANDBOX3D_AUTHORING_SELECTION_EDGE
+                    ? object->selected_edge_word_count
+                    : object->selected_face_word_count,
+            sandbox3d_authoring_current_selection_max_id(object), active_id) ||
+        !bsearch(&active_id, matching_ids, matching_count, sizeof(*matching_ids),
+            sandbox3d_authoring_compare_ids))
+    {
+        active_id = matching_ids[0];
+    }
+    result = sandbox3d_authoring_replace_current_selection(
+        object, matching_ids, matching_count, active_id);
+    henka_free(matching_ids);
+    return result;
+}
+
 static henka_result sandbox3d_authoring_replace_edge_selection(
     sandbox3d_authoring_object* object,
     const uint32_t* edge_ids,

@@ -564,6 +564,7 @@ add_executable(henka_tests
     ../examples/sandbox3d/object_authoring_tools.c
     ../examples/sandbox3d/modeling_operator.c
     ../examples/sandbox3d/modeling_selection.c
+    ../examples/sandbox3d/modeling_selection_commands.c
     ../examples/sandbox3d/modeling_selection_scene.c
     ../examples/sandbox3d/modeling_toolbar.c
     ../examples/sandbox3d/asset_browser_tools.c

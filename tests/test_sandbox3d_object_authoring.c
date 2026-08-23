@@ -4,8 +4,9 @@
 
 #include "test_suite.h"
 
-#include "../examples/sandbox3d/object_authoring_tools.h"
 #include "../examples/sandbox3d/modeling_operator.h"
+#include "../examples/sandbox3d/modeling_selection_commands.h"
+#include "../examples/sandbox3d/object_authoring_tools.h"
 
 static size_t henka_test_quad_grid_vertex_index(
     size_t column,
@@ -1023,6 +1024,130 @@ static void henka_test_sandbox3d_object_authoring_component_selection(void)
     HENKA_TEST_ASSERT(sandbox3d_authoring_object_select_extreme_face_band(
         object, (henka_vec3){0.0f, 1.0f, 0.0f}, true, 0.0f) == HENKA_ERROR_INVALID_ARGUMENT);
     HENKA_TEST_ASSERT(sandbox3d_authoring_object_get_selected_component_count(object) == 1U);
+    {
+        sandbox3d_authoring_selection_query query = {0};
+        query.kind = SANDBOX3D_AUTHORING_SELECTION_QUERY_FACE_SIDE_COUNT;
+        query.face_side_count = 4U;
+        HENKA_TEST_ASSERT(sandbox3d_authoring_object_select_matching_components(
+            object, &query) == HENKA_SUCCESS);
+        HENKA_TEST_ASSERT(sandbox3d_authoring_object_get_selected_component_count(object) == 6U);
+
+        query.kind = SANDBOX3D_AUTHORING_SELECTION_QUERY_MATERIAL_REGION;
+        query.material_region = 0U;
+        HENKA_TEST_ASSERT(sandbox3d_authoring_object_select_matching_components(
+            object, &query) == HENKA_SUCCESS);
+        HENKA_TEST_ASSERT(sandbox3d_authoring_object_get_selected_component_count(object) == 6U);
+
+        HENKA_TEST_ASSERT(sandbox3d_authoring_object_select_component(
+            object, 1U, false) == HENKA_SUCCESS);
+        query.kind = SANDBOX3D_AUTHORING_SELECTION_QUERY_SIMILAR_MATERIAL_REGION;
+        HENKA_TEST_ASSERT(sandbox3d_authoring_object_select_matching_components(
+            object, &query) == HENKA_SUCCESS);
+        HENKA_TEST_ASSERT(sandbox3d_authoring_object_get_selected_component_count(object) == 6U);
+        HENKA_TEST_ASSERT(sandbox3d_authoring_object_get_active_component_id(object) == 1U);
+
+        HENKA_TEST_ASSERT(sandbox3d_authoring_object_select_component(
+            object, 1U, false) == HENKA_SUCCESS);
+        query.kind = SANDBOX3D_AUTHORING_SELECTION_QUERY_SIMILAR_NORMAL;
+        query.minimum_normal_dot = 0.99f;
+        HENKA_TEST_ASSERT(sandbox3d_authoring_object_select_matching_components(
+            object, &query) == HENKA_SUCCESS);
+        HENKA_TEST_ASSERT(sandbox3d_authoring_object_get_selected_component_count(object) == 1U);
+        HENKA_TEST_ASSERT(sandbox3d_authoring_object_get_active_component_id(object) == 1U);
+
+        query.face_side_count = 2U;
+        query.kind = SANDBOX3D_AUTHORING_SELECTION_QUERY_FACE_SIDE_COUNT;
+        HENKA_TEST_ASSERT(sandbox3d_authoring_object_select_matching_components(
+            object, &query) == HENKA_ERROR_INVALID_ARGUMENT);
+        HENKA_TEST_ASSERT(sandbox3d_authoring_object_get_selected_component_count(object) == 1U);
+        HENKA_TEST_ASSERT(sandbox3d_authoring_object_get_active_component_id(object) == 1U);
+    }
+
+    {
+        henka_ui_context* ui = NULL;
+        henka_ui_frame_desc frame = {0};
+        sandbox3d_modeling_selection_command_result command = {0};
+        const henka_ui_rect bounds = {20.0f, 20.0f, 300.0f, 24.0f};
+
+        HENKA_TEST_ASSERT(henka_ui_create(&ui) == HENKA_SUCCESS);
+        henka_ui_set_visible(ui, true);
+        frame.framebuffer_width = 640;
+        frame.framebuffer_height = 480;
+        frame.mouse_position = (henka_vec2){40.0f, 30.0f};
+        frame.mouse_left_down = true;
+        frame.mouse_left_pressed = true;
+        HENKA_TEST_ASSERT(henka_ui_begin_frame(ui, &frame) == HENKA_SUCCESS);
+        sandbox3d_modeling_selection_commands_draw(
+            ui, bounds, object, &command);
+        HENKA_TEST_ASSERT(!command.invoked);
+        HENKA_TEST_ASSERT(henka_ui_end_frame(ui) == HENKA_SUCCESS);
+
+        frame.mouse_left_down = false;
+        frame.mouse_left_pressed = false;
+        frame.mouse_left_released = true;
+        HENKA_TEST_ASSERT(henka_ui_begin_frame(ui, &frame) == HENKA_SUCCESS);
+        sandbox3d_modeling_selection_commands_draw(
+            ui, bounds, object, &command);
+        HENKA_TEST_ASSERT(command.invoked);
+        HENKA_TEST_ASSERT(command.result == HENKA_SUCCESS);
+        HENKA_TEST_ASSERT(
+            command.kind == SANDBOX3D_AUTHORING_SELECTION_QUERY_FACE_SIDE_COUNT);
+        HENKA_TEST_ASSERT(command.selected_count == 6U);
+        HENKA_TEST_ASSERT(henka_ui_end_frame(ui) == HENKA_SUCCESS);
+        henka_ui_destroy(ui);
+    }
+
+    {
+        henka_authoring_mesh* plane_mesh = NULL;
+        sandbox3d_authoring_object* plane_object = NULL;
+        sandbox3d_authoring_selection_query query = {0};
+        const henka_authoring_mesh_desc plane_desc =
+            henka_authoring_mesh_desc_default();
+        henka_authoring_edge_id hard_edge = HENKA_AUTHORING_INVALID_ID;
+        const henka_entity plane_entity =
+            henka_scene_create_entity_named(scene, "Topology Selection Plane");
+
+        HENKA_TEST_ASSERT(plane_entity != HENKA_INVALID_ENTITY);
+        HENKA_TEST_ASSERT(henka_authoring_mesh_create_plane(
+            &plane_desc, 1.0f, 1.0f, &plane_mesh) == HENKA_SUCCESS);
+        HENKA_TEST_ASSERT(henka_authoring_mesh_get_edge_id_at(
+            plane_mesh, 0U, &hard_edge) == HENKA_SUCCESS);
+        HENKA_TEST_ASSERT(henka_authoring_mesh_set_edge_hard(
+            plane_mesh, hard_edge, true) == HENKA_SUCCESS);
+        HENKA_TEST_ASSERT(sandbox3d_authoring_object_create_from_mesh(
+            engine, scene, plane_entity, plane_mesh, 8U, &plane_object) == HENKA_SUCCESS);
+
+        sandbox3d_authoring_object_set_selection_mode(
+            plane_object, SANDBOX3D_AUTHORING_SELECTION_EDGE);
+        query.kind = SANDBOX3D_AUTHORING_SELECTION_QUERY_BOUNDARY;
+        HENKA_TEST_ASSERT(sandbox3d_authoring_object_select_matching_components(
+            plane_object, &query) == HENKA_SUCCESS);
+        HENKA_TEST_ASSERT(sandbox3d_authoring_object_get_selected_component_count(
+            plane_object) == 4U);
+
+        query.kind = SANDBOX3D_AUTHORING_SELECTION_QUERY_HARD_EDGE;
+        HENKA_TEST_ASSERT(sandbox3d_authoring_object_select_matching_components(
+            plane_object, &query) == HENKA_SUCCESS);
+        HENKA_TEST_ASSERT(sandbox3d_authoring_object_get_selected_component_count(
+            plane_object) == 1U);
+        HENKA_TEST_ASSERT(sandbox3d_authoring_object_get_active_component_id(
+            plane_object) == hard_edge);
+
+        sandbox3d_authoring_object_set_selection_mode(
+            plane_object, SANDBOX3D_AUTHORING_SELECTION_VERTEX);
+        HENKA_TEST_ASSERT(sandbox3d_authoring_object_select_component(
+            plane_object, 1U, false) == HENKA_SUCCESS);
+        query.kind = SANDBOX3D_AUTHORING_SELECTION_QUERY_SIMILAR_MATERIAL_REGION;
+        HENKA_TEST_ASSERT(sandbox3d_authoring_object_select_matching_components(
+            plane_object, &query) == HENKA_SUCCESS);
+        HENKA_TEST_ASSERT(sandbox3d_authoring_object_get_selected_component_count(
+            plane_object) == 4U);
+        HENKA_TEST_ASSERT(sandbox3d_authoring_object_get_active_component_id(
+            plane_object) == 1U);
+
+        sandbox3d_authoring_object_destroy(plane_object);
+        henka_authoring_mesh_destroy(plane_mesh);
+    }
 
     sandbox3d_authoring_object_set_selection_mode(object, SANDBOX3D_AUTHORING_SELECTION_VERTEX);
     HENKA_TEST_ASSERT(sandbox3d_authoring_object_select_all_components(object) == HENKA_SUCCESS);

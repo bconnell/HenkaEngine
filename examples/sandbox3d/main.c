@@ -27,6 +27,7 @@
 #include "authoring_asset_ui.h"
 #include "modeling_operator.h"
 #include "modeling_selection.h"
+#include "modeling_selection_commands.h"
 #include "modeling_selection_scene.h"
 #include "modeling_toolbar.h"
 #include "object_authoring_tools.h"
@@ -6421,29 +6422,26 @@ static void sandbox3d_draw_selection_highlight(sandbox3d_state* state, henka_vie
                     }
                     if (projected_corner_count > 0U)
                     {
-                        const float marker = 7.0f;
+                        const float outer_radius = active_component ? 4.5f : 3.5f;
+                        const float inner_radius = active_component ? 2.75f : 2.0f;
+                        const henka_vec4 marker_color =
+                            (henka_vec4){0.82f, 0.88f, 0.94f, 0.94f};
+                        henka_vec2 framebuffer_center;
                         face_center.x /= (float)projected_corner_count;
                         face_center.y /= (float)projected_corner_count;
-                        (void)sandbox3d_draw_viewport_clipped_overlay_line(
-                            state, viewport,
-                            (henka_vec2){face_center.x - marker, face_center.y},
-                            (henka_vec2){face_center.x, face_center.y - marker},
-                            active_component ? 5.0f : 3.0f, draw_inner);
-                        (void)sandbox3d_draw_viewport_clipped_overlay_line(
-                            state, viewport,
-                            (henka_vec2){face_center.x, face_center.y - marker},
-                            (henka_vec2){face_center.x + marker, face_center.y},
-                            active_component ? 5.0f : 3.0f, draw_inner);
-                        (void)sandbox3d_draw_viewport_clipped_overlay_line(
-                            state, viewport,
-                            (henka_vec2){face_center.x + marker, face_center.y},
-                            (henka_vec2){face_center.x, face_center.y + marker},
-                            active_component ? 5.0f : 3.0f, draw_inner);
-                        (void)sandbox3d_draw_viewport_clipped_overlay_line(
-                            state, viewport,
-                            (henka_vec2){face_center.x, face_center.y + marker},
-                            (henka_vec2){face_center.x - marker, face_center.y},
-                            active_component ? 5.0f : 3.0f, draw_inner);
+                        framebuffer_center = sandbox3d_viewport_local_to_framebuffer_point(
+                            viewport, face_center);
+                        if (henka_viewport_contains_point(viewport, framebuffer_center) &&
+                            !henka_ui_rect_contains(
+                                sandbox3d_get_modeling_toolbar_bounds(
+                                    state, state->frame_layout.scene_frame),
+                                framebuffer_center))
+                        {
+                            (void)henka_ui_overlay_disc(
+                                state->ui, framebuffer_center, outer_radius, draw_outer);
+                            (void)henka_ui_overlay_disc(
+                                state->ui, framebuffer_center, inner_radius, marker_color);
+                        }
                     }
                 }
             }
@@ -16150,6 +16148,42 @@ static void sandbox3d_sync_modeling_toolbar_state(sandbox3d_state* state)
     state->modeling_toolbar.snap_enabled = state->gizmo.snap.enabled;
 }
 
+static void sandbox3d_draw_topology_selection_commands(
+    sandbox3d_state* state,
+    henka_ui_rect row)
+{
+    sandbox3d_modeling_selection_command_result command;
+
+    if (state == NULL || state->ui == NULL || state->authoring_object == NULL)
+    {
+        return;
+    }
+    sandbox3d_modeling_selection_commands_draw(
+        state->ui, row, state->authoring_object, &command);
+    if (!command.invoked)
+    {
+        return;
+    }
+    if (command.result == HENKA_SUCCESS)
+    {
+        sandbox3d_set_statusf(
+            state,
+            false,
+            false,
+            "Topology selection matched %zu components.",
+            command.selected_count);
+    }
+    else
+    {
+        sandbox3d_set_statusf(
+            state,
+            true,
+            false,
+            "Topology selection failed (%s); prior selection retained.",
+            henka_result_to_string(command.result));
+    }
+}
+
 static void sandbox3d_draw_modeling_toolbar(
     henka_engine* engine,
     sandbox3d_state* state,
@@ -24549,6 +24583,12 @@ details_group_authoring:
                 sandbox3d_details_flow_next_row(state, flow_desc.bounds, 28.0f, 1U, &row) &&
                 row.width >= 290.0f)
             {
+                sandbox3d_draw_topology_selection_commands(state, row);
+            }
+            if (state->authoring_object != NULL &&
+                sandbox3d_details_flow_next_row(state, flow_desc.bounds, 28.0f, 1U, &row) &&
+                row.width >= 290.0f)
+            {
                 const float selection_button_width = (row.width - 12.0f) / 3.0f;
                 if (henka_ui_button(
                         state->ui,
@@ -25312,6 +25352,13 @@ details_group_authoring:
                         sandbox3d_set_status(state, true, "Selected topology scale was rejected; source retained.");
                     }
                 }
+            }
+            if (state->authoring_object != NULL &&
+                !selection_tools_prioritized &&
+                sandbox3d_details_flow_next_row(state, flow_desc.bounds, 28.0f, 1U, &row) &&
+                row.width >= 290.0f)
+            {
+                sandbox3d_draw_topology_selection_commands(state, row);
             }
             if (state->authoring_object != NULL &&
                 sandbox3d_details_flow_next_row(state, flow_desc.bounds, 28.0f, 1U, &row) &&

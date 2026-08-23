@@ -133,10 +133,10 @@ bool sandbox3d_should_prefer_terrain_hit(
     float terrain_distance,
     bool object_hit,
     float object_distance);
-/* Solid mode must show the authored mesh and its material by default.  The
- * bounded authored-cage overlay remains available as an explicit inspection
- * aid; it must not be mistaken for the evaluated render surface. */
-#define SANDBOX3D_AUTHORING_TOPOLOGY_OVERLAY_DEFAULT false
+/* Component editing keeps the solid evaluated surface visible and overlays
+ * only authored source edges.  This makes face structure explicit without
+ * exposing renderer tessellation as editable topology. */
+#define SANDBOX3D_AUTHORING_TOPOLOGY_OVERLAY_DEFAULT true
 
 typedef struct sandbox3d_authoring_cage_edge
 {
