@@ -217,7 +217,21 @@ try {
     Save-ProbeWindowScreenshot `
         -Handle $capturedProcess.Process.MainWindowHandle `
         -Path (Join-Path $runtimeDirectory "after-frame-before-pick.png")
-    Send-HenkaAutomationClick -EventPath $automationInputPath -X ($viewportX + $viewportWidth * 0.5) -Y ($viewportY + $viewportHeight * 0.5)
+    $initialPickX = [double]($viewportX + $viewportWidth * 0.5)
+    $initialPickY = [double]($viewportY + $viewportHeight * 0.5)
+    Send-HenkaAutomationEvent `
+        -EventPath $automationInputPath `
+        -EventLine ("move {0} {1}" -f `
+            (Format-HenkaAutomationFloat -Value $initialPickX), `
+            (Format-HenkaAutomationFloat -Value $initialPickY)) `
+        -SettleMilliseconds 300
+    Save-ProbeWindowScreenshot `
+        -Handle $capturedProcess.Process.MainWindowHandle `
+        -Path (Join-Path $runtimeDirectory "face-hover-before-pick.png")
+    Send-HenkaAutomationClick `
+        -EventPath $automationInputPath `
+        -X $initialPickX `
+        -Y $initialPickY
     Save-ProbeWindowScreenshot `
         -Handle $capturedProcess.Process.MainWindowHandle `
         -Path (Join-Path $runtimeDirectory "after-frame.png")

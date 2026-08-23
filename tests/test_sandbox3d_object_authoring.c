@@ -1315,6 +1315,107 @@ static void henka_test_sandbox3d_object_authoring_component_selection(void)
     henka_engine_destroy(engine);
 }
 
+static void henka_test_sandbox3d_object_authoring_hover_query_preserves_selection(void)
+{
+    static const sandbox3d_authoring_selection_mode modes[] = {
+        SANDBOX3D_AUTHORING_SELECTION_FACE,
+        SANDBOX3D_AUTHORING_SELECTION_VERTEX,
+        SANDBOX3D_AUTHORING_SELECTION_EDGE};
+    static const henka_ray hit_rays[] = {
+        {{0.0f, 0.0f, 3.0f}, {0.0f, 0.0f, -1.0f}},
+        {{0.5f, 0.5f, 3.0f}, {0.0f, 0.0f, -1.0f}},
+        {{0.5f, 0.0f, 3.0f}, {0.0f, 0.0f, -1.0f}}};
+    const henka_ray miss_ray = {
+        {4.0f, 4.0f, 3.0f},
+        {0.0f, 0.0f, -1.0f}};
+    henka_engine_config config = {0};
+    henka_engine* engine = NULL;
+    henka_scene* scene = NULL;
+    sandbox3d_authoring_object* object = NULL;
+    henka_mesh* previous_mesh = NULL;
+    henka_entity entity;
+    size_t mode_index;
+
+    config.application_name = "Henka Authoring Hover Query Test";
+    config.window_width = 320;
+    config.window_height = 240;
+    config.enable_vsync = false;
+    HENKA_TEST_ASSERT(henka_engine_create(&config, &engine) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_scene_create(&scene) == HENKA_SUCCESS);
+    entity = henka_scene_create_entity_named(scene, "Hover Query Source");
+    HENKA_TEST_ASSERT(entity != HENKA_INVALID_ENTITY);
+    HENKA_TEST_ASSERT(henka_mesh_create_cube(engine, &previous_mesh) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_scene_set_entity_mesh(scene, entity, previous_mesh) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_create_box(
+        engine, scene, entity, 1.0f, 1.0f, 1.0f, NULL, 8U, &object) == HENKA_SUCCESS);
+
+    for (mode_index = 0U; mode_index < sizeof(modes) / sizeof(modes[0]); ++mode_index)
+    {
+        uint32_t hovered_id = HENKA_AUTHORING_INVALID_ID;
+        uint32_t active_before;
+        henka_authoring_face_id selected_face_before;
+        size_t selected_count_before;
+        const henka_authoring_mesh* mesh;
+
+        sandbox3d_authoring_object_set_selection_mode(object, modes[mode_index]);
+        HENKA_TEST_ASSERT(
+            sandbox3d_authoring_object_select_component(object, 1U, false) == HENKA_SUCCESS);
+        active_before = sandbox3d_authoring_object_get_active_component_id(object);
+        selected_face_before = sandbox3d_authoring_object_get_selected_face(object);
+        selected_count_before = sandbox3d_authoring_object_get_selected_component_count(object);
+
+        HENKA_TEST_ASSERT(
+            sandbox3d_authoring_object_find_component(
+                object,
+                hit_rays[mode_index],
+                100.0f,
+                &hovered_id) == HENKA_SUCCESS);
+        HENKA_TEST_ASSERT(hovered_id != HENKA_AUTHORING_INVALID_ID);
+        mesh = sandbox3d_authoring_object_get_mesh(object);
+        HENKA_TEST_ASSERT(mesh != NULL);
+        if (modes[mode_index] == SANDBOX3D_AUTHORING_SELECTION_VERTEX)
+        {
+            HENKA_TEST_ASSERT(henka_authoring_mesh_get_vertex(mesh, hovered_id) != NULL);
+        }
+        else if (modes[mode_index] == SANDBOX3D_AUTHORING_SELECTION_EDGE)
+        {
+            HENKA_TEST_ASSERT(henka_authoring_mesh_get_edge(mesh, hovered_id) != NULL);
+        }
+        else
+        {
+            HENKA_TEST_ASSERT(henka_authoring_mesh_get_face(mesh, hovered_id) != NULL);
+        }
+        HENKA_TEST_ASSERT(
+            sandbox3d_authoring_object_get_selected_component_count(object) ==
+            selected_count_before);
+        HENKA_TEST_ASSERT(
+            sandbox3d_authoring_object_get_active_component_id(object) == active_before);
+        HENKA_TEST_ASSERT(
+            sandbox3d_authoring_object_get_selected_face(object) == selected_face_before);
+
+        hovered_id = 17U;
+        HENKA_TEST_ASSERT(
+            sandbox3d_authoring_object_find_component(
+                object,
+                miss_ray,
+                100.0f,
+                &hovered_id) != HENKA_SUCCESS);
+        HENKA_TEST_ASSERT(hovered_id == HENKA_AUTHORING_INVALID_ID);
+        HENKA_TEST_ASSERT(
+            sandbox3d_authoring_object_get_selected_component_count(object) ==
+            selected_count_before);
+        HENKA_TEST_ASSERT(
+            sandbox3d_authoring_object_get_active_component_id(object) == active_before);
+        HENKA_TEST_ASSERT(
+            sandbox3d_authoring_object_get_selected_face(object) == selected_face_before);
+    }
+
+    sandbox3d_authoring_object_destroy(object);
+    henka_mesh_destroy(previous_mesh);
+    henka_scene_destroy(scene);
+    henka_engine_destroy(engine);
+}
+
 static void henka_test_sandbox3d_object_authoring_edge_ring_exact_grid(void)
 {
     henka_engine_config config = {0};
@@ -1787,6 +1888,7 @@ void henka_test_sandbox3d_object_authoring(void)
     henka_test_sandbox3d_object_authoring_clone_bridge();
     henka_test_sandbox3d_object_authoring_model_primitive_bridge();
     henka_test_sandbox3d_object_authoring_component_selection();
+    henka_test_sandbox3d_object_authoring_hover_query_preserves_selection();
     henka_test_sandbox3d_object_authoring_edge_ring_exact_grid();
     henka_test_sandbox3d_object_authoring_edge_loop_exact_grid();
     henka_test_sandbox3d_object_authoring_scalable_selection();

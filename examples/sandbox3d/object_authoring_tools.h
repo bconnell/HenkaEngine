@@ -169,6 +169,13 @@ henka_result sandbox3d_authoring_object_select_component(
     sandbox3d_authoring_object* object,
     uint32_t component_id,
     bool additive);
+/* Finds the nearest source-authoritative component in the active selection
+ * mode without changing selection, active-component, or face state. */
+henka_result sandbox3d_authoring_object_find_component(
+    const sandbox3d_authoring_object* object,
+    henka_ray ray,
+    float maximum_distance,
+    uint32_t* out_component_id);
 henka_result sandbox3d_authoring_object_pick_component(
     sandbox3d_authoring_object* object,
     henka_ray ray,

@@ -393,6 +393,7 @@ typedef struct sandbox3d_state
     sandbox3d_authoring_asset_controller* authoring_asset_controller;
     char authoring_asset_name[64];
     sandbox3d_authoring_object* authoring_object;
+    uint32_t native_authoring_hovered_component_id;
     /* A component pick is a selection within the already-selected scene
      * owner.  Keep one bounded post-pick miss from routing through the
      * object-level empty-viewport clear path. */
@@ -5783,6 +5784,136 @@ static void sandbox3d_draw_terrain_brush_preview(sandbox3d_state* state, henka_v
         color);
 }
 
+static void sandbox3d_draw_authoring_component_hover(
+    sandbox3d_state* state,
+    henka_viewport viewport,
+    henka_transform transform,
+    const henka_authoring_mesh* mesh,
+    sandbox3d_authoring_selection_mode selection_mode,
+    uint32_t component_id)
+{
+    const henka_vec4 hover_outer = (henka_vec4){0.01f, 0.04f, 0.07f, 0.96f};
+    const henka_vec4 hover_inner = (henka_vec4){0.38f, 0.92f, 1.0f, 0.98f};
+
+    if (state == NULL || mesh == NULL || component_id == HENKA_AUTHORING_INVALID_ID)
+    {
+        return;
+    }
+    if (selection_mode == SANDBOX3D_AUTHORING_SELECTION_VERTEX)
+    {
+        const henka_authoring_vertex* vertex = henka_authoring_mesh_get_vertex(
+            mesh, (henka_authoring_vertex_id)component_id);
+        henka_vec2 center;
+        const float marker = 7.0f;
+        if (vertex == NULL || !sandbox3d_project_handle_point(
+                state,
+                viewport,
+                sandbox3d_transform_authoring_point(transform, vertex->position),
+                &center))
+        {
+            return;
+        }
+        (void)sandbox3d_draw_viewport_clipped_overlay_line(
+            state, viewport,
+            (henka_vec2){center.x - marker, center.y},
+            (henka_vec2){center.x + marker, center.y},
+            6.0f, hover_outer);
+        (void)sandbox3d_draw_viewport_clipped_overlay_line(
+            state, viewport,
+            (henka_vec2){center.x - marker, center.y},
+            (henka_vec2){center.x + marker, center.y},
+            3.0f, hover_inner);
+        (void)sandbox3d_draw_viewport_clipped_overlay_line(
+            state, viewport,
+            (henka_vec2){center.x, center.y - marker},
+            (henka_vec2){center.x, center.y + marker},
+            6.0f, hover_outer);
+        (void)sandbox3d_draw_viewport_clipped_overlay_line(
+            state, viewport,
+            (henka_vec2){center.x, center.y - marker},
+            (henka_vec2){center.x, center.y + marker},
+            3.0f, hover_inner);
+    }
+    else if (selection_mode == SANDBOX3D_AUTHORING_SELECTION_EDGE)
+    {
+        const henka_authoring_edge* edge = henka_authoring_mesh_get_edge(
+            mesh, (henka_authoring_edge_id)component_id);
+        const henka_authoring_vertex* first;
+        const henka_authoring_vertex* second;
+        henka_vec2 start;
+        henka_vec2 end;
+        if (edge == NULL ||
+            (first = henka_authoring_mesh_get_vertex(mesh, edge->vertices[0])) == NULL ||
+            (second = henka_authoring_mesh_get_vertex(mesh, edge->vertices[1])) == NULL ||
+            !sandbox3d_project_handle_point(
+                state,
+                viewport,
+                sandbox3d_transform_authoring_point(transform, first->position),
+                &start) ||
+            !sandbox3d_project_handle_point(
+                state,
+                viewport,
+                sandbox3d_transform_authoring_point(transform, second->position),
+                &end))
+        {
+            return;
+        }
+        (void)sandbox3d_draw_viewport_clipped_overlay_line(
+            state, viewport, start, end, 7.0f, hover_outer);
+        (void)sandbox3d_draw_viewport_clipped_overlay_line(
+            state, viewport, start, end, 4.0f, hover_inner);
+    }
+    else
+    {
+        henka_authoring_vertex_id corners[HENKA_AUTHORING_MESH_HARD_MAX_FACE_CORNERS];
+        size_t corner_count = 0U;
+        size_t corner;
+        if (sandbox3d_authoring_object_get_face_ordered_corners(
+                state->authoring_object,
+                (henka_authoring_face_id)component_id,
+                corners,
+                sizeof(corners) / sizeof(corners[0]),
+                &corner_count) != HENKA_SUCCESS)
+        {
+            return;
+        }
+        sandbox3d_draw_authoring_face_fill(
+            state,
+            viewport,
+            transform,
+            state->authoring_object,
+            (henka_authoring_face_id)component_id,
+            (henka_vec4){0.16f, 0.70f, 1.0f, 0.24f});
+        for (corner = 0U; corner < corner_count; ++corner)
+        {
+            const henka_authoring_vertex* first = henka_authoring_mesh_get_vertex(
+                mesh, corners[corner]);
+            const henka_authoring_vertex* second = henka_authoring_mesh_get_vertex(
+                mesh, corners[(corner + 1U) % corner_count]);
+            henka_vec2 start;
+            henka_vec2 end;
+            if (first == NULL || second == NULL ||
+                !sandbox3d_project_handle_point(
+                    state,
+                    viewport,
+                    sandbox3d_transform_authoring_point(transform, first->position),
+                    &start) ||
+                !sandbox3d_project_handle_point(
+                    state,
+                    viewport,
+                    sandbox3d_transform_authoring_point(transform, second->position),
+                    &end))
+            {
+                continue;
+            }
+            (void)sandbox3d_draw_viewport_clipped_overlay_line(
+                state, viewport, start, end, 7.0f, hover_outer);
+            (void)sandbox3d_draw_viewport_clipped_overlay_line(
+                state, viewport, start, end, 4.0f, hover_inner);
+        }
+    }
+}
+
 static void sandbox3d_draw_selection_highlight(sandbox3d_state* state, henka_viewport viewport)
 {
     henka_bounds bounds;
@@ -5990,6 +6121,14 @@ static void sandbox3d_draw_selection_highlight(sandbox3d_state* state, henka_vie
                             cage_color);
                 }
             }
+
+            sandbox3d_draw_authoring_component_hover(
+                state,
+                viewport,
+                transform,
+                mesh,
+                selection_mode,
+                state->native_authoring_hovered_component_id);
 
             const henka_vec4 component_outer = (henka_vec4){0.01f, 0.03f, 0.05f, 0.95f};
             const henka_vec4 component_inner = selection_mode == SANDBOX3D_AUTHORING_SELECTION_VERTEX
@@ -16762,6 +16901,61 @@ static void sandbox3d_update_gizmo_hover(henka_engine* engine, sandbox3d_state* 
         (void)in_dead_zone;
         state->gizmo.hover_axis = hit_axis;
         state->gizmo.hover_handle_type = hit_type;
+    }
+}
+
+static void sandbox3d_update_authoring_component_hover(
+    henka_engine* engine,
+    sandbox3d_state* state)
+{
+    henka_entity selected_entity;
+    henka_viewport viewport;
+    henka_vec2 mouse_framebuffer;
+    henka_vec2 mouse_local;
+    henka_ray ray;
+    uint32_t component_id = HENKA_AUTHORING_INVALID_ID;
+
+    if (state == NULL)
+    {
+        return;
+    }
+    state->native_authoring_hovered_component_id = HENKA_AUTHORING_INVALID_ID;
+    if (engine == NULL || state->scene == NULL || state->authoring_object == NULL ||
+        henka_engine_is_mouse_captured(engine) || state->gizmo.drag.dragging ||
+        state->view_navigation.orbiting || state->view_navigation.panning ||
+        state->modeling_operator.active)
+    {
+        return;
+    }
+    selected_entity = sandbox3d_get_real_selected_entity(state);
+    if (selected_entity == HENKA_INVALID_ENTITY ||
+        !henka_scene_is_entity_visible(state->scene, selected_entity) ||
+        !sandbox3d_entities_share_selection_owner(
+            state,
+            selected_entity,
+            sandbox3d_authoring_object_get_entity(state->authoring_object)) ||
+        henka_engine_get_scene_viewport(engine, &viewport) != HENKA_SUCCESS ||
+        !henka_viewport_is_valid(viewport) ||
+        !sandbox3d_try_get_mouse_viewport_local(
+            engine, viewport, &mouse_framebuffer, &mouse_local) ||
+        !henka_viewport_contains_point(viewport, mouse_framebuffer) ||
+        sandbox3d_ui_owns_mouse_at_point(state, mouse_framebuffer) ||
+        henka_camera_screen_point_to_ray(
+            &state->camera,
+            viewport.width,
+            viewport.height,
+            mouse_local,
+            &ray) != HENKA_SUCCESS)
+    {
+        return;
+    }
+    if (sandbox3d_authoring_object_find_component(
+            state->authoring_object,
+            ray,
+            1000000.0f,
+            &component_id) == HENKA_SUCCESS)
+    {
+        state->native_authoring_hovered_component_id = component_id;
     }
 }
 
@@ -32202,6 +32396,7 @@ static void sandbox3d_update(henka_engine* engine, double delta_seconds, void* u
     henka_scene_set_camera(state->scene, &state->camera);
     sandbox3d_report_capture_ready(engine, state);
     sandbox3d_update_gizmo_rendering(state);
+    sandbox3d_update_authoring_component_hover(engine, state);
     sandbox3d_refresh_interaction_diagnostics(engine, state);
     sandbox3d_build_ui(engine, state);
     sandbox3d_build_native_panel_test_ui(engine, state);
