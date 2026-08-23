@@ -141,9 +141,9 @@ turning the public README into an implementation ledger.
 - Object, Vertex, Edge, and Face workflows are integrated into the sandbox.
   Component selection, connected selection, bounded edge-loop selection,
   normal/X-Ray box selection, one-ring soft movement, axis-constrained movement,
-  visible authored-face surface and topology feedback are available. Box
-  selection uses authored component identities and does not expose renderer
-  triangulation as topology.
+  visible, contrasting authored-face surfaces and topology feedback are
+  available. Box selection uses authored component identities and does not
+  expose renderer triangulation as topology.
 - The authoring mesh API has stable vertex/edge/face identities, connectivity
   and boundary queries, material regions, per-corner UV metadata, smoothing
   and hard-edge intent, fail-closed polygon validation, deterministic
