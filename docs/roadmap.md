@@ -209,9 +209,9 @@ tracks that share renderer, asset, persistence, and workspace boundaries.
 ### Current Development
 
 1. Continue expanding edge topology coverage and the surrounding authoring UX.
-   Bounded single-edge dissolve for compatible interior edges is now available;
-   Edge Delete and broader edge topology operations are not yet claimed as
-   complete.
+   Bounded single-edge dissolve for compatible interior edges and bounded
+   single-edge delete of an incident face set are now available; broader edge
+   topology operations are not yet claimed as complete.
 2. Strengthen transactional modeling, UV, material, persistence, and undo/redo
    paths while keeping failure behavior fail-closed.
 3. Improve editor integration, authoring source/project workflows, and the

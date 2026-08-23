@@ -1501,6 +1501,71 @@ henka_result henka_authoring_mesh_dissolve_edge(
     return result;
 }
 
+henka_result henka_authoring_mesh_delete_edge(
+    henka_authoring_mesh* mesh,
+    henka_authoring_edge_id edge_id,
+    henka_authoring_modeling_report* out_report)
+{
+    henka_authoring_mesh* candidate = NULL;
+    henka_authoring_mesh_counts before;
+    henka_authoring_mesh_counts after;
+    const henka_authoring_edge* edge;
+    henka_authoring_face_id incident_faces[2] = {
+        HENKA_AUTHORING_INVALID_ID, HENKA_AUTHORING_INVALID_ID};
+    size_t incident_count;
+    size_t index;
+    henka_result result;
+
+    modeling_report_reset(out_report);
+    if (mesh == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    edge = henka_authoring_mesh_get_edge(mesh, edge_id);
+    if (edge == NULL || edge->face_count == 0U || edge->face_count > 2U)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    incident_count = edge->face_count;
+    for (index = 0U; index < incident_count; ++index)
+    {
+        if (edge->faces[index] == HENKA_AUTHORING_INVALID_ID ||
+            henka_authoring_mesh_get_face(mesh, edge->faces[index]) == NULL)
+        {
+            return HENKA_ERROR_INVALID_ARGUMENT;
+        }
+        incident_faces[index] = edge->faces[index];
+    }
+    before = henka_authoring_mesh_get_counts(mesh);
+    if (before.faces <= incident_count)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    result = henka_authoring_mesh_clone(mesh, &candidate);
+    for (index = 0U; result == HENKA_SUCCESS && index < incident_count; ++index)
+    {
+        result = henka_authoring_mesh_remove_face(candidate, incident_faces[index]);
+    }
+    if (result == HENKA_SUCCESS &&
+        (!henka_authoring_mesh_validate(candidate) ||
+         henka_authoring_mesh_get_counts(candidate).faces == 0U ||
+         !modeling_face_geometry_is_valid(candidate)))
+    {
+        result = HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    if (result == HENKA_SUCCESS)
+    {
+        after = henka_authoring_mesh_get_counts(candidate);
+        result = henka_authoring_mesh_copy(mesh, candidate);
+        if (result == HENKA_SUCCESS)
+        {
+            modeling_report_count_delta(&before, &after, out_report);
+        }
+    }
+    henka_authoring_mesh_destroy(candidate);
+    return result;
+}
+
 typedef struct modeling_bevel_cut
 {
     henka_authoring_edge_id edge_id;

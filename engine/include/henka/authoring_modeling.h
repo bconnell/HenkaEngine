@@ -139,6 +139,14 @@ henka_result henka_authoring_mesh_dissolve_edge(
     henka_authoring_edge_id edge_id,
     henka_authoring_modeling_report* out_report);
 
+/* Deletes one selected edge and its incident face set, preserving vertices.
+ * The operation rejects requests that would leave an empty or invalid source
+ * mesh and never commits a partial candidate. */
+henka_result henka_authoring_mesh_delete_edge(
+    henka_authoring_mesh* mesh,
+    henka_authoring_edge_id edge_id,
+    henka_authoring_modeling_report* out_report);
+
 henka_result henka_authoring_mesh_bevel_vertices(
     henka_authoring_mesh* mesh,
     const henka_authoring_vertex_id* vertex_ids,

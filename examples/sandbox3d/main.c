@@ -23901,6 +23901,40 @@ details_group_authoring:
                                     henka_result_to_string(ring_result));
                             }
                         }
+                        if (sandbox3d_details_flow_next_row(
+                                state,
+                                flow_desc.bounds,
+                                28.0f,
+                                1U,
+                                &edge_topology_row) &&
+                            edge_topology_row.width >= 290.0f &&
+                            sandbox3d_authoring_object_get_selected_component_count(
+                                state->authoring_object) == 1U &&
+                            henka_ui_button(
+                                state->ui,
+                                "authoring_edge_delete_priority",
+                                (henka_ui_rect){edge_topology_row.x, edge_topology_row.y, 96.0f, 24.0f},
+                                "Delete Edge"))
+                        {
+                            const henka_result delete_result =
+                                sandbox3d_authoring_object_delete_selected_edge(
+                                    state->authoring_object);
+                            if (delete_result == HENKA_SUCCESS)
+                            {
+                                sandbox3d_mark_generic_modeling_applied(state, entity);
+                                sandbox3d_set_status(
+                                    state,
+                                    false,
+                                    "Selected edge and incident faces deleted.");
+                            }
+                            else
+                            {
+                                sandbox3d_set_status(
+                                    state,
+                                    true,
+                                    "Edge delete rejected; source and selection retained.");
+                            }
+                        }
                     }
                 }
                 topology_controls_prioritized = true;
@@ -24641,6 +24675,40 @@ details_group_authoring:
                             state,
                             true,
                             "Edge dissolve rejected; select one compatible interior edge.");
+                    }
+                }
+                if (sandbox3d_details_flow_next_row(
+                        state,
+                        flow_desc.bounds,
+                        28.0f,
+                        1U,
+                        &row) &&
+                    row.width >= 290.0f &&
+                    sandbox3d_authoring_object_get_selected_component_count(
+                        state->authoring_object) == 1U &&
+                    henka_ui_button(
+                        state->ui,
+                        "authoring_edge_delete_top",
+                        (henka_ui_rect){row.x, row.y, 96.0f, 24.0f},
+                        "Delete Edge"))
+                {
+                    const henka_result delete_result =
+                        sandbox3d_authoring_object_delete_selected_edge(
+                            state->authoring_object);
+                    if (delete_result == HENKA_SUCCESS)
+                    {
+                        sandbox3d_mark_generic_modeling_applied(state, entity);
+                        sandbox3d_set_status(
+                            state,
+                            false,
+                            "Selected edge and incident faces deleted.");
+                    }
+                    else
+                    {
+                        sandbox3d_set_status(
+                            state,
+                            true,
+                            "Edge delete rejected; source and selection retained.");
                     }
                 }
             }
@@ -25813,6 +25881,38 @@ details_group_authoring:
                             "Edge ring failed (%s); prior selection retained.",
                             henka_result_to_string(ring_result));
                     }
+                }
+            }
+            if (state->authoring_object != NULL &&
+                selection_mode == SANDBOX3D_AUTHORING_SELECTION_EDGE &&
+                edge_mode_authorized_at_frame &&
+                sandbox3d_details_flow_next_row(state, flow_desc.bounds, 28.0f, 1U, &row) &&
+                row.width >= 290.0f &&
+                sandbox3d_authoring_object_get_selected_component_count(
+                    state->authoring_object) == 1U &&
+                henka_ui_button(
+                    state->ui,
+                    "authoring_edge_delete",
+                    (henka_ui_rect){row.x, row.y, 96.0f, 24.0f},
+                    "Delete Edge"))
+            {
+                const henka_result delete_result =
+                    sandbox3d_authoring_object_delete_selected_edge(
+                        state->authoring_object);
+                if (delete_result == HENKA_SUCCESS)
+                {
+                    sandbox3d_mark_generic_modeling_applied(state, entity);
+                    sandbox3d_set_status(
+                        state,
+                        false,
+                        "Selected edge and incident faces deleted.");
+                }
+                else
+                {
+                    sandbox3d_set_status(
+                        state,
+                        true,
+                        "Edge delete rejected; source and selection retained.");
                 }
             }
             if (state->authoring_object != NULL &&

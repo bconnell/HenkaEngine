@@ -1082,6 +1082,59 @@ cleanup:
     return result ? 1 : fail("transactional edge dissolve");
 }
 
+static int test_edge_delete_operation(void)
+{
+    const henka_authoring_mesh_desc desc = {128U, 256U, 128U, 8U};
+    henka_authoring_mesh* mesh = NULL;
+    henka_authoring_edge_id edge_id = HENKA_AUTHORING_INVALID_ID;
+    henka_authoring_modeling_report report = {0};
+    henka_authoring_mesh_counts before;
+    henka_authoring_mesh_counts after;
+    size_t slot;
+    int result = 0;
+
+    if (henka_authoring_mesh_create_quad_sphere(&desc, 1.0f, 2U, &mesh) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    for (slot = 0U; slot < desc.max_edges; ++slot)
+    {
+        const henka_authoring_edge* edge;
+        if (henka_authoring_mesh_get_edge_id_at(mesh, slot, &edge_id) != HENKA_SUCCESS)
+        {
+            continue;
+        }
+        edge = henka_authoring_mesh_get_edge(mesh, edge_id);
+        if (edge != NULL && edge->face_count == 2U)
+        {
+            break;
+        }
+        edge_id = HENKA_AUTHORING_INVALID_ID;
+    }
+    if (edge_id == HENKA_AUTHORING_INVALID_ID)
+    {
+        goto cleanup;
+    }
+    before = henka_authoring_mesh_get_counts(mesh);
+    if (henka_authoring_mesh_delete_edge(mesh, edge_id, &report) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    after = henka_authoring_mesh_get_counts(mesh);
+    if (!report.changed || report.removed_faces != 2U ||
+        henka_authoring_mesh_get_edge(mesh, edge_id) != NULL ||
+        after.vertices != before.vertices || after.faces + 2U != before.faces ||
+        after.edges >= before.edges || !henka_authoring_mesh_validate(mesh))
+    {
+        goto cleanup;
+    }
+    result = 1;
+
+cleanup:
+    henka_authoring_mesh_destroy(mesh);
+    return result ? 1 : fail("transactional edge delete");
+}
+
 static int test_logical_identity_reuse_and_history(void)
 {
     henka_authoring_mesh* mesh = NULL;
@@ -1425,6 +1478,7 @@ int main(void)
         test_modeling_material_region_and_uv_continuity() &&
         test_bounded_primitive_constructors() &&
         test_edge_dissolve_operation() &&
+        test_edge_delete_operation() &&
         test_logical_identity_reuse_and_history() &&
         test_persistence_versions_and_malformed() ? 0 : 1;
 }

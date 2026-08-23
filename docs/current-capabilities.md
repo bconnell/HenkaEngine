@@ -173,9 +173,10 @@ turning the public README into an implementation ledger.
   source export, and production-quality showcase anatomy/mechanical topology
   remain in progress.
 - Edge authoring is a separate capability boundary: bounded edge-loop/ring
-  selection and transactional single-edge dissolve for compatible interior
-  edges are available. Edge Delete and broader edge topology operations are not
-  claimed as complete and remain in progress.
+  selection, transactional single-edge dissolve for compatible interior edges,
+  and transactional single-edge delete of its incident face set are available.
+  Edge Delete preserves the vertex set; broader edge topology operations are
+  not claimed as complete and remain in progress.
 - See [authoring-mesh.md](authoring-mesh.md),
   [runtime-foundations.md](runtime-foundations.md), and
   [showcase-assets.md](showcase-assets.md).

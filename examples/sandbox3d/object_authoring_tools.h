@@ -255,6 +255,11 @@ henka_result sandbox3d_authoring_object_select_edge_ring(
  * rejected until a stable batch remapping contract is available. */
 henka_result sandbox3d_authoring_object_dissolve_selected_edge(
     sandbox3d_authoring_object* object);
+/* Deletes one selected edge and its incident faces through the authoritative
+ * source/render/bounds/physics/undo transaction. Multiple-edge selections are
+ * rejected until a stable batch deletion contract is available. */
+henka_result sandbox3d_authoring_object_delete_selected_edge(
+    sandbox3d_authoring_object* object);
 /* Scales the vertices touched by the current component selection around their
  * centroid and publishes the result through the normal transactional source,
  * render, bounds, physics, and undo path. */
