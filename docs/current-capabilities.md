@@ -157,8 +157,11 @@ turning the public README into an implementation ledger.
   are rejected; vertex welding and winding rewrites are not implicit repairs.
 - Published Vertex topology operations include Merge Center, Merge Active,
   Merge by Distance, Connect Vertices, Dissolve Vertex, Delete Vertex, and
-  Vertex Bevel. These operations are transactional and exposed through the
-  integrated Vertex selection workflow.
+  Vertex Bevel. Bounded Vertex Extrude is also available for one unambiguous
+  boundary corner of a single face: it preserves the base corner, creates a
+  cap vertex, and creates the two connecting side faces transactionally.
+  These operations are exposed through the integrated Vertex selection
+  workflow; multi-face vertex-fan extrusion remains unavailable.
 - Transactional operations also include plane/box creation, duplicate, face
   extrude, inset, planar bevel rings, face subdivision, selected-face deletion,
   planar UV projection, island transforms, packing, and seam detection. HAMS v4
@@ -169,10 +172,10 @@ turning the public README into an implementation ledger.
   overrides, procedural detail textures, and material undo/redo are present
   in the bounded dogfood workflow.
 - This is an integrated authoring foundation, not a production modeling suite.
-  Vertex Extrude remains unavailable. Broader vertex tooling, automatic UV
-  unwrap, texture painting, rigging, skinning, animation authoring, broader
-  source export, and production-quality showcase anatomy/mechanical topology
-  remain in progress.
+  Broader vertex-fan extrusion and topology tooling, automatic UV unwrap,
+  texture painting, rigging, skinning, animation authoring, broader source
+  export, and production-quality showcase anatomy/mechanical topology remain
+  in progress.
 - Edge authoring is a separate capability boundary: bounded edge-loop/ring
   selection, transactional single-edge dissolve for compatible interior edges,
   and transactional single-edge delete of its incident face set are available.

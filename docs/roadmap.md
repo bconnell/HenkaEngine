@@ -193,7 +193,8 @@ tracks that share renderer, asset, persistence, and workspace boundaries.
    connected selection, bounded edge-loop/ring selection, soft movement, and
    axis-constrained movement.
 5. Vertex operations include Merge Center, Merge Active, Merge by Distance,
-   Connect Vertices, Dissolve Vertex, Delete Vertex, and Vertex Bevel.
+   Connect Vertices, Dissolve Vertex, Delete Vertex, Vertex Bevel, and bounded
+   Vertex Extrude for one unambiguous boundary corner of a single face.
 6. Non-destructive topology analysis and explicit transactional safe repair are
    available. Repair is bounded and deterministic: it can remove enabled
    isolated vertices, exact metadata-preserving duplicate faces, and
@@ -221,8 +222,8 @@ tracks that share renderer, asset, persistence, and workspace boundaries.
 
 ### Future Work
 
-1. Vertex Extrude, broader edge and vertex topology operations, weld/split/
-   bridge/loop-cut workflows, and broader source export.
+1. Multi-face vertex-fan extrusion, broader edge and vertex topology
+   operations, weld/split/bridge/loop-cut workflows, and broader source export.
 2. Automatic multi-island UV unwrap, texture painting, rigging, skinning, and
    animation authoring.
 3. Complete scene/project serialization and wider adapter-based interchange

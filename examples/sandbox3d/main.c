@@ -24970,6 +24970,32 @@ details_group_authoring:
                 sandbox3d_details_flow_next_row(state, flow_desc.bounds, 24.0f, 1U, &row) &&
                 row.width >= 290.0f)
             {
+                const bool extrude_enabled =
+                    sandbox3d_authoring_object_get_selected_component_count(state->authoring_object) == 1U;
+                (void)henka_ui_label_colored(
+                    state->ui, row.x, row.y + 5.0f, 0.85f,
+                    "Extrude (1 boundary corner)", HENKA_UI_COLOR_INFO);
+                if (extrude_enabled && henka_ui_button(
+                        state->ui, "authoring_extrude_vertex_top",
+                        (henka_ui_rect){row.x + 160.0f, row.y, 120.0f, 24.0f},
+                        "Boundary Vertex"))
+                {
+                    const henka_result extrude_result =
+                        sandbox3d_authoring_object_extrude_selected_vertex(
+                            state->authoring_object, 0.25f);
+                    sandbox3d_set_status(
+                        state, extrude_result != HENKA_SUCCESS,
+                        extrude_result == HENKA_SUCCESS
+                            ? "Boundary vertex extruded transactionally."
+                            : "Vertex extrude rejected; select one boundary corner.");
+                    if (extrude_result == HENKA_SUCCESS) sandbox3d_mark_generic_modeling_applied(state, entity);
+                }
+            }
+            if (state->authoring_object != NULL &&
+                selection_mode == SANDBOX3D_AUTHORING_SELECTION_VERTEX &&
+                sandbox3d_details_flow_next_row(state, flow_desc.bounds, 24.0f, 1U, &row) &&
+                row.width >= 290.0f)
+            {
                 const bool bevel_enabled =
                     sandbox3d_authoring_object_get_selected_component_count(state->authoring_object) > 0U;
                 (void)henka_ui_label_colored(
@@ -25750,6 +25776,32 @@ details_group_authoring:
                         sandbox3d_set_status(state, false, "Selected vertices deleted.");
                     }
                     else sandbox3d_set_status(state, true, "Delete rejected; source and selection retained.");
+                }
+            }
+            if (state->authoring_object != NULL &&
+                selection_mode == SANDBOX3D_AUTHORING_SELECTION_VERTEX &&
+                sandbox3d_details_flow_next_row(state, flow_desc.bounds, 24.0f, 1U, &row) &&
+                row.width >= 290.0f)
+            {
+                const bool extrude_enabled =
+                    sandbox3d_authoring_object_get_selected_component_count(state->authoring_object) == 1U;
+                (void)henka_ui_label_colored(
+                    state->ui, row.x, row.y + 5.0f, 0.85f,
+                    "Extrude (1 boundary corner)", HENKA_UI_COLOR_INFO);
+                if (extrude_enabled && henka_ui_button(
+                        state->ui, "authoring_extrude_vertex",
+                        (henka_ui_rect){row.x + 160.0f, row.y, 120.0f, 24.0f},
+                        "Boundary Vertex"))
+                {
+                    const henka_result extrude_result =
+                        sandbox3d_authoring_object_extrude_selected_vertex(
+                            state->authoring_object, 0.25f);
+                    if (extrude_result == HENKA_SUCCESS)
+                    {
+                        sandbox3d_mark_generic_modeling_applied(state, entity);
+                        sandbox3d_set_status(state, false, "Boundary vertex extruded transactionally.");
+                    }
+                    else sandbox3d_set_status(state, true, "Vertex extrude rejected; select one boundary corner.");
                 }
             }
             if (state->authoring_object != NULL &&

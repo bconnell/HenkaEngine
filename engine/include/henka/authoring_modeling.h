@@ -131,6 +131,17 @@ henka_result henka_authoring_mesh_connect_vertices(
     henka_authoring_face_id* out_new_face_id,
     henka_authoring_modeling_report* out_report);
 
+/* Extrudes one unambiguous boundary corner of a single face. The original
+ * corner remains as the base, a new vertex becomes the cap corner, and the
+ * two connecting side faces are created transactionally. Multi-face vertex
+ * fans are rejected until a stable fan-remapping contract is available. */
+henka_result henka_authoring_mesh_extrude_vertex(
+    henka_authoring_mesh* mesh,
+    henka_authoring_vertex_id vertex_id,
+    float distance,
+    henka_authoring_vertex_id* out_new_vertex_id,
+    henka_authoring_modeling_report* out_report);
+
 /* Dissolves one compatible interior edge into its two adjacent face loops.
  * Boundary, hard, UV-seamed, material-discontinuous, and capacity-invalid
  * requests are rejected without changing the source mesh. */

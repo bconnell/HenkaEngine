@@ -152,27 +152,29 @@ face ID and allocating the new face with a fresh logical ID in a reusable
 physical slot. Transactional single-edge dissolve is available for compatible
 interior edges, and transactional single-edge delete removes the selected
 edge's incident face set while preserving vertices. Broader edge topology
-editing beyond bounded selection and component transforms remains incomplete;
-and
-Vertex Bevel is also available as one atomic multi-selection operation. It
+editing beyond bounded selection and component transforms remains incomplete.
+Bounded Vertex Extrude is available for one unambiguous boundary corner of a
+single face. It creates one cap vertex and two connecting side faces while
+preserving the operation's transactional source/render/bounds/collider/undo
+boundary; multi-face vertex fans are rejected until their remapping contract
+is stable. Vertex Bevel is also available as one atomic multi-selection operation. It
 uses a deterministic edge/end-point cut table, rejects non-finite, zero,
 overlapping, non-manifold, and capacity-invalid requests, preserves
 per-corner UV interpolation and original hard trimmed segments, creates
 same-material interior caps with deterministic planar UVs, and leaves normal
 boundary vertices open. Successful Sandbox bevels replace Vertex selection with
 the live cut vertices and use the same history/render/bounds/collider
-transaction as other authoring edits. Vertex Extrude remains intentionally
-unavailable because the surface representation has no supported loose-edge
-contract.
+transaction as other authoring edits. Bounded Vertex Extrude remains within
+the validated face-surface representation and does not create standalone
+loose edges or loose vertices.
 material-instance assignment, texture
 dependencies, general collision integration beyond the bound box contract,
 package ownership, topology-aware picking, and showcase rebuilds still need the
 shared scene/asset-manager bridge. The current authoring mesh is a validated
 surface representation: active edges must belong to at least one face, and
-standalone wire edges or loose vertices are rejected by validation. Vertex
-Extrude is therefore not claimed by the Sandbox wrapper; supporting it requires
-an explicit loose-component representation, persistence format, evaluation
-contract, and renderer/collider policy before it can be safely exposed.
+standalone wire edges or loose vertices are rejected by validation. Broader
+multi-face vertex-fan extrusion requires a stable remapping contract before
+it can be exposed.
 Material regions retain their editable numeric metadata, and the evaluated
 model-to-render-mesh upload retains the bounded minimum/maximum region range
 for diagnostics. They do not yet choose multiple shared material instances in

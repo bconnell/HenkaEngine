@@ -302,6 +302,12 @@ henka_result sandbox3d_authoring_object_connect_selected_vertices(
     sandbox3d_authoring_object* object);
 henka_result sandbox3d_authoring_object_bevel_selected_vertices(
     sandbox3d_authoring_object* object);
+/* Extrudes one selected boundary corner through the authoritative
+ * source/render/bounds/physics/undo transaction. Multi-face vertex fans are
+ * rejected until their remapping contract is stable. */
+henka_result sandbox3d_authoring_object_extrude_selected_vertex(
+    sandbox3d_authoring_object* object,
+    float distance);
 float sandbox3d_authoring_object_get_bevel_width(
     const sandbox3d_authoring_object* object);
 henka_result sandbox3d_authoring_object_set_bevel_width(

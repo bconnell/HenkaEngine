@@ -1135,6 +1135,70 @@ cleanup:
     return result ? 1 : fail("transactional edge delete");
 }
 
+static int test_vertex_extrude_operation(void)
+{
+    const henka_authoring_mesh_desc desc = {32U, 64U, 16U, 8U};
+    henka_authoring_mesh* mesh = NULL;
+    henka_authoring_vertex_id new_vertex_id = HENKA_AUTHORING_INVALID_ID;
+    henka_authoring_modeling_report report = {0};
+    henka_authoring_mesh_counts before;
+    henka_authoring_mesh_counts after;
+    const henka_authoring_vertex* new_vertex;
+    int result = 0;
+
+    if (henka_authoring_mesh_create_plane(&desc, 2.0f, 2.0f, &mesh) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    before = henka_authoring_mesh_get_counts(mesh);
+    if (henka_authoring_mesh_extrude_vertex(
+            mesh, 1U, 0.5f, &new_vertex_id, &report) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    after = henka_authoring_mesh_get_counts(mesh);
+    new_vertex = henka_authoring_mesh_get_vertex(mesh, new_vertex_id);
+    if (!report.changed || report.created_vertices != 1U || report.created_faces != 2U ||
+        new_vertex_id == HENKA_AUTHORING_INVALID_ID || new_vertex == NULL ||
+        after.vertices != before.vertices + 1U || after.faces != before.faces + 2U ||
+        after.edges <= before.edges || !henka_authoring_mesh_validate(mesh))
+    {
+        goto cleanup;
+    }
+    {
+        henka_authoring_mesh* box = NULL;
+        henka_authoring_modeling_report rejected_report = {0};
+        henka_authoring_mesh_counts box_before;
+        henka_authoring_mesh_counts box_after;
+        henka_authoring_vertex_id rejected_vertex_id = HENKA_AUTHORING_INVALID_ID;
+        if (henka_authoring_mesh_create_box(&desc, 2.0f, 2.0f, 2.0f, &box) != HENKA_SUCCESS)
+        {
+            goto cleanup;
+        }
+        box_before = henka_authoring_mesh_get_counts(box);
+        if (henka_authoring_mesh_extrude_vertex(
+                box, 1U, 0.5f, &rejected_vertex_id, &rejected_report) == HENKA_SUCCESS)
+        {
+            henka_authoring_mesh_destroy(box);
+            goto cleanup;
+        }
+        box_after = henka_authoring_mesh_get_counts(box);
+        if (rejected_vertex_id != HENKA_AUTHORING_INVALID_ID || rejected_report.changed ||
+            box_after.vertices != box_before.vertices || box_after.edges != box_before.edges ||
+            box_after.faces != box_before.faces || !henka_authoring_mesh_validate(box))
+        {
+            henka_authoring_mesh_destroy(box);
+            goto cleanup;
+        }
+        henka_authoring_mesh_destroy(box);
+    }
+    result = 1;
+
+cleanup:
+    henka_authoring_mesh_destroy(mesh);
+    return result ? 1 : fail("transactional vertex extrude");
+}
+
 static int test_logical_identity_reuse_and_history(void)
 {
     henka_authoring_mesh* mesh = NULL;
@@ -1479,6 +1543,7 @@ int main(void)
         test_bounded_primitive_constructors() &&
         test_edge_dissolve_operation() &&
         test_edge_delete_operation() &&
+        test_vertex_extrude_operation() &&
         test_logical_identity_reuse_and_history() &&
         test_persistence_versions_and_malformed() ? 0 : 1;
 }

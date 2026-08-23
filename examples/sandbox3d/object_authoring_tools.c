@@ -5200,6 +5200,56 @@ henka_result sandbox3d_authoring_object_bevel_selected_vertices(
     return result;
 }
 
+henka_result sandbox3d_authoring_object_extrude_selected_vertex(
+    sandbox3d_authoring_object* object,
+    float distance)
+{
+    const uint32_t* selected_ids;
+    henka_authoring_mesh* candidate = NULL;
+    henka_authoring_modeling_report report = {0};
+    henka_authoring_vertex_id new_vertex_id = HENKA_AUTHORING_INVALID_ID;
+    size_t selected_count = 0U;
+    bool published = false;
+    henka_result result;
+
+    if (object == NULL || object->selection_mode != SANDBOX3D_AUTHORING_SELECTION_VERTEX ||
+        !isfinite(distance))
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    selected_ids = sandbox3d_authoring_selected_ids_const(object, &selected_count);
+    if (selected_ids == NULL || selected_count != 1U)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    result = henka_authoring_mesh_clone(object->mesh, &candidate);
+    if (result == HENKA_SUCCESS)
+    {
+        result = henka_authoring_mesh_extrude_vertex(
+            candidate,
+            (henka_authoring_vertex_id)selected_ids[0U],
+            distance,
+            &new_vertex_id,
+            &report);
+    }
+    if (result == HENKA_SUCCESS)
+    {
+        result = sandbox3d_authoring_publish_candidate(
+            object, candidate, true, HENKA_AUTHORING_INVALID_ID);
+        published = result == HENKA_SUCCESS;
+    }
+    if (result == HENKA_SUCCESS)
+    {
+        sandbox3d_authoring_object_clear_component_selection(object);
+        result = sandbox3d_authoring_object_select_component(object, new_vertex_id, false);
+    }
+    if (result != HENKA_SUCCESS && !published)
+    {
+        henka_authoring_mesh_destroy(candidate);
+    }
+    return result;
+}
+
 float sandbox3d_authoring_object_get_bevel_width(
     const sandbox3d_authoring_object* object)
 {
