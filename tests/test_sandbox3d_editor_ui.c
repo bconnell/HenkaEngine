@@ -1,13 +1,17 @@
 #include "test_suite.h"
 
 #include <math.h>
+#include <string.h>
 
 #include <henka/persistence.h>
 
 #include "../examples/sandbox3d/editor_ui_state.h"
+#include "../examples/sandbox3d/modeling_toolbar.h"
 
 void henka_test_sandbox3d_editor_ui(void)
 {
+    sandbox3d_modeling_toolbar_state toolbar;
+    char toolbar_summary[96];
     henka_settings* settings;
     sandbox3d_editor_ui_state invalid_state;
     sandbox3d_editor_ui_state state;
@@ -16,6 +20,43 @@ void henka_test_sandbox3d_editor_ui(void)
     settings = NULL;
     HENKA_TEST_ASSERT(
         henka_settings_create(&settings) == HENKA_SUCCESS);
+
+    sandbox3d_modeling_toolbar_state_reset(&toolbar);
+    HENKA_TEST_ASSERT(
+        toolbar.selection_mode == SANDBOX3D_AUTHORING_SELECTION_FACE);
+    HENKA_TEST_ASSERT(
+        toolbar.transform_tool == SANDBOX3D_TRANSFORM_TOOL_NONE);
+    HENKA_TEST_ASSERT(
+        toolbar.orientation_mode == SANDBOX3D_AUTHORING_ORIENTATION_WORLD);
+    HENKA_TEST_ASSERT(
+        toolbar.pivot_mode == SANDBOX3D_AUTHORING_PIVOT_MEDIAN);
+    HENKA_TEST_ASSERT(!toolbar.snap_enabled);
+    HENKA_TEST_ASSERT(!toolbar.xray_enabled);
+    HENKA_TEST_ASSERT(!toolbar.authoring_available);
+    HENKA_TEST_ASSERT(
+        strcmp(
+            sandbox3d_modeling_toolbar_selection_label(
+                SANDBOX3D_AUTHORING_SELECTION_VERTEX),
+            "Vertex") == 0);
+    HENKA_TEST_ASSERT(
+        strcmp(
+            sandbox3d_modeling_toolbar_disabled_reason(
+                SANDBOX3D_MODELING_TOOLBAR_ACTION_MOVE,
+                &toolbar),
+            "Make the selected asset editable first.") == 0);
+    HENKA_TEST_ASSERT(
+        strcmp(
+            sandbox3d_modeling_toolbar_disabled_reason(
+                SANDBOX3D_MODELING_TOOLBAR_ACTION_XRAY,
+                &toolbar),
+            "X-Ray is unavailable until the depth-overlay path is implemented.") == 0);
+    HENKA_TEST_ASSERT(
+        sandbox3d_modeling_toolbar_format_summary(
+            &toolbar,
+            toolbar_summary,
+            sizeof(toolbar_summary)) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(
+        strcmp(toolbar_summary, "Face | Select | World | Median | 0 selected") == 0);
 
     sandbox3d_editor_ui_state_reset(&state);
 

@@ -1436,11 +1436,17 @@ void henka_test_ui(void)
         HENKA_TEST_ASSERT(
             henka_ui_get_draw_line_count(ui) > lines_before);
         descriptor.enabled = false;
-        HENKA_TEST_ASSERT(
-            henka_ui_tool_button(
-                ui,
-                (henka_ui_rect){20.0f, 60.0f, 128.0f, 32.0f},
-                &descriptor) == false);
+        frame_desc.mouse_position = (henka_vec2){32.0f, 72.0f};
+        {
+            const size_t disabled_rects_before = henka_ui_get_draw_rect_count(ui);
+            HENKA_TEST_ASSERT(
+                henka_ui_tool_button(
+                    ui,
+                    (henka_ui_rect){20.0f, 60.0f, 128.0f, 32.0f},
+                    &descriptor) == false);
+            HENKA_TEST_ASSERT(
+                henka_ui_get_draw_rect_count(ui) >= disabled_rects_before + 2U);
+        }
         HENKA_TEST_ASSERT(
             henka_ui_end_frame(ui) == HENKA_SUCCESS);
 

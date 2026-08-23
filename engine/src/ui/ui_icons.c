@@ -263,7 +263,7 @@ bool henka_ui_tool_button(
         desc->label,
         desc->enabled ? HENKA_UI_COLOR_NORMAL : HENKA_UI_COLOR_DISABLED);
 
-    if (desc->enabled && henka_ui_rect_contains(bounds, mouse_position) &&
+    if (henka_ui_rect_contains(bounds, mouse_position) &&
         desc->tooltip[0] != '\0')
     {
         (void)henka_ui_overlay_hint(
