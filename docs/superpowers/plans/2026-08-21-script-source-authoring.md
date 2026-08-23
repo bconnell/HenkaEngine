@@ -1,7 +1,5 @@
 # Henka Script Source Authoring and Reload Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
-
 **Goal:** Deliver a bounded source document, compiler/backend-backed validation, atomic script saving, structured editor interaction, and transactional Play reload for Lua and HenkaScript.
 
 **Architecture:** The engine owns a fixed-capacity source document and confined atomic-save seam. HenkaScript validation calls the public HKS backend/compiler and Lua validation calls the public Lua backend; the editor consumes diagnostics and token spans without defining syntax. The Play session builds candidate backends first and swaps them only after success.

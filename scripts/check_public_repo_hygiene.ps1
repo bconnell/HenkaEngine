@@ -38,6 +38,8 @@ function New-WholeWordPattern {
 
 $ruleSpecs = @(
     @{ Name = "unfinished public wording"; Token = Convert-CodePoints @(112, 108, 97, 99, 101, 104, 111, 108, 100, 101, 114); CaseSensitive = $false },
+    @{ Name = "private execution-agent framing 1"; Token = Convert-CodePoints @(97, 103, 101, 110, 116, 105, 99, 32, 119, 111, 114, 107, 101, 114, 115); CaseSensitive = $false },
+    @{ Name = "private execution-agent framing 2"; Token = Convert-CodePoints @(115, 117, 98, 97, 103, 101, 110, 116, 45, 100, 114, 105, 118, 101, 110, 45, 100, 101, 118, 101, 108, 111, 112, 109, 101, 110, 116); CaseSensitive = $false },
     @{ Name = "internal generation reference 1"; Token = Convert-CodePoints @(65, 73); CaseSensitive = $false },
     @{ Name = "internal generation reference 2"; Token = Convert-CodePoints @(76, 76, 77); CaseSensitive = $false },
     @{ Name = "internal generation reference 3"; Token = Convert-CodePoints @(67, 104, 97, 116, 71, 80, 84); CaseSensitive = $false },

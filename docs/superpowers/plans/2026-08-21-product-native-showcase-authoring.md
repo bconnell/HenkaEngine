@@ -1,7 +1,5 @@
 # Product-native showcase authoring Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
-
 **Goal:** Deliver normal visible Henka authoring that creates, saves, reloads,
 re-edits, packages, and renders the final Giraffe and Rocket without an
 imported, generator, direct-file, or asset-specific source path.

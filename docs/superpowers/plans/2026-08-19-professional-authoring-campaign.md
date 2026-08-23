@@ -1,7 +1,5 @@
 # Professional Authoring and Topology Campaign Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
-
 **Goal:** Turn the existing Henka authoring/editor foundation into a connected, professional Build/Game/World workspace with scalable selection, topology analysis and repair, practical modeling operations, truthful showcase currentness, and real external-project validation.
 
 **Architecture:** Preserve the current context-shell and existing engine ownership boundaries. Deliver vertical slices in dependency order: first stabilize the current workspace continuation, then move component selection and topology responsibilities into bounded engine/authoring APIs, then connect modeling, UI, persistence, showcase, and external-game validation. Ordinary user/imported topology remains analysis-only unless the user explicitly invokes a repair command; automatic refresh is limited to explicit repository-owned fixtures at the Sandbox boundary.
@@ -210,4 +208,3 @@
 ## Validation and publication boundary
 
 Each task must have a focused red/green test cycle, affected regression coverage, and a truthful runtime status. Visible editor work additionally requires packaged runtime evidence and coding-agent inspection of application-only captures; automated capture does not replace human visual QA. Commits and pushes occur only for coherent validated slices, never for incomplete scaffolding or disconnected helpers.
-

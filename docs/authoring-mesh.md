@@ -4,6 +4,12 @@ Henka exposes a bounded polygonal authoring mesh in
 `<henka/authoring_mesh.h>`. It is the topology layer for the editor and is
 separate from the renderer's evaluated mesh representation.
 
+The storage and persistence design for decoupling stable logical component
+identities from reusable physical slots is documented in
+[Stable authoring component identities](authoring-component-identities.md).
+That document describes the bounded migration contract; the capability list
+below remains the current implementation inventory.
+
 The current foundation provides:
 
 - stable, non-reused vertex, edge, and face IDs with tombstones for deleted

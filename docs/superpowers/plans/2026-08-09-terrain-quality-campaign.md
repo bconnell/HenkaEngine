@@ -1,7 +1,5 @@
 # Terrain Quality and Realism Campaign Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
-
 **Goal:** Make Terrain a fully visible, PBR-materialized, editable, pass-integrated, bounded, recoverable feature through Henka's normal graphical and external-game paths, while closing the remaining connected multiplayer, editor/runtime, package, stress, audit, and documentation gaps.
 
 **Architecture:** Preserve the completed renderer-independent Terrain world, storage, streaming, authority, replica, prediction, physics, and dedicated-server layers. Add Terrain material semantics at the existing public material/scene seam, feed authoritative four-layer weights through the existing mesh vertex channel, and use the existing Rendered shader/pass machinery for lighting, shadows, AO/SSGI/SSR, history, fog, and presentation. Keep renderer ownership in the graphical target and keep the public API C17.

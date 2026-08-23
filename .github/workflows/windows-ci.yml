@@ -27,6 +27,10 @@ jobs:
         shell: powershell
         run: .\scripts\check_public_repo_hygiene.ps1
 
+      - name: Check public hygiene regression
+        shell: powershell
+        run: .\scripts\test_public_repo_hygiene_windows.ps1
+
       - name: Check documentation truth
         shell: powershell
         run: .\scripts\check_documentation_truth.ps1

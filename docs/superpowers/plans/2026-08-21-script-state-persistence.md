@@ -1,7 +1,5 @@
 # Henka V1 Behavior State Persistence Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
-
 **Goal:** Add an explicit-save, bounded, shared behavior-state boundary for Lua and HenkaScript while preserving Scene Document and Play isolation.
 
 **Architecture:** A fixed-capacity `henka_script_state_store` owns typed values keyed by persistent object ID, behavior ID, and numeric state key. A Script Host execution context points to the current identity and borrowed store; Lua and HenkaScript adapters call the same typed host functions. The Sandbox owns the store, while Game Authoring performs explicit sidecar load/save outside Play.
