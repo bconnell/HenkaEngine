@@ -397,6 +397,7 @@ typedef struct sandbox3d_state
     char authoring_asset_name[64];
     char native_authoring_loop_cut_factor[16];
     char native_authoring_edge_slide_factor[16];
+    char native_authoring_extrude_amount[16];
     sandbox3d_authoring_object* authoring_object;
     uint32_t native_authoring_hovered_component_id;
     /* A component pick is a selection within the already-selected scene
@@ -728,6 +729,60 @@ static bool sandbox3d_apply_authoring_bevel(
         false,
         "Authoring bevel committed transactionally through the modeling operator.");
     return true;
+}
+
+static henka_result sandbox3d_preview_authoring_loose_extrude(
+    sandbox3d_state* state,
+    const char* amount_text)
+{
+    const sandbox3d_authoring_selection_mode selection_mode =
+        state == NULL || state->authoring_object == NULL
+            ? SANDBOX3D_AUTHORING_SELECTION_FACE
+            : sandbox3d_authoring_object_get_selection_mode(
+                state->authoring_object);
+    henka_result result;
+
+    if (state == NULL || state->authoring_object == NULL || amount_text == NULL ||
+        sandbox3d_authoring_object_get_selected_component_count(
+            state->authoring_object) != 1U ||
+        (selection_mode != SANDBOX3D_AUTHORING_SELECTION_VERTEX &&
+         selection_mode != SANDBOX3D_AUTHORING_SELECTION_EDGE))
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    sandbox3d_cancel_active_modeling_operator_session(state);
+    result = sandbox3d_modeling_operator_begin(
+        &state->modeling_operator,
+        state->authoring_object,
+        SANDBOX3D_MODELING_OPERATOR_EXTRUDE);
+    if (result == HENKA_SUCCESS)
+    {
+        result = sandbox3d_modeling_operator_set_axis(
+            &state->modeling_operator,
+            SANDBOX3D_MODELING_OPERATOR_AXIS_Y);
+    }
+    if (result == HENKA_SUCCESS)
+    {
+        result = sandbox3d_modeling_operator_numeric_begin(
+            &state->modeling_operator);
+    }
+    if (result == HENKA_SUCCESS)
+    {
+        result = sandbox3d_modeling_operator_numeric_append(
+            &state->modeling_operator,
+            amount_text,
+            strlen(amount_text));
+    }
+    if (result == HENKA_SUCCESS)
+    {
+        result = sandbox3d_modeling_operator_numeric_commit(
+            &state->modeling_operator);
+    }
+    if (result != HENKA_SUCCESS && state->modeling_operator.active)
+    {
+        (void)sandbox3d_modeling_operator_cancel(&state->modeling_operator);
+    }
+    return result;
 }
 
 static bool sandbox3d_apply_authoring_face_delete(
@@ -24047,6 +24102,93 @@ details_group_authoring:
                                     : "Edge Slide cancellation failed; inspect the authoring state.");
                         }
                     }
+                    if ((selection_mode == SANDBOX3D_AUTHORING_SELECTION_VERTEX ||
+                         selection_mode == SANDBOX3D_AUTHORING_SELECTION_EDGE) &&
+                        selected_component_count == 1U &&
+                        sandbox3d_details_flow_next_row(
+                            state, flow_desc.bounds, 28.0f, 1U, &row) &&
+                        row.width >= 290.0f)
+                    {
+                        const bool extrude_preview_active =
+                            state->modeling_operator.active &&
+                            state->modeling_operator.kind ==
+                                SANDBOX3D_MODELING_OPERATOR_EXTRUDE &&
+                            sandbox3d_authoring_object_has_preview(
+                                state->authoring_object);
+                        bool extrude_amount_changed = false;
+                        (void)henka_ui_label(
+                            state->ui, row.x, row.y + 7.0f, 0.8f, "Amount");
+                        (void)henka_ui_text_field(
+                            state->ui,
+                            "authoring_loose_extrude_amount_top",
+                            (henka_ui_rect){row.x + 48.0f, row.y, 72.0f, 24.0f},
+                            state->native_authoring_extrude_amount,
+                            sizeof(state->native_authoring_extrude_amount),
+                            &extrude_amount_changed);
+                        (void)extrude_amount_changed;
+                        if (henka_ui_button(
+                                state->ui,
+                                "authoring_loose_extrude_preview_top",
+                                (henka_ui_rect){row.x + 126.0f, row.y, 90.0f, 24.0f},
+                                extrude_preview_active ? "Refresh" : "Preview"))
+                        {
+                            const henka_result preview_result =
+                                sandbox3d_preview_authoring_loose_extrude(
+                                    state, state->native_authoring_extrude_amount);
+                            sandbox3d_set_status(
+                                state,
+                                preview_result != HENKA_SUCCESS,
+                                preview_result == HENKA_SUCCESS
+                                    ? "Loose Extrude preview ready on Y; Apply or Cancel."
+                                    : "Loose Extrude rejected; select one loose vertex or standalone edge and use a nonzero amount.");
+                        }
+                        if (state->modeling_operator.active &&
+                            state->modeling_operator.kind ==
+                                SANDBOX3D_MODELING_OPERATOR_EXTRUDE &&
+                            sandbox3d_authoring_object_has_preview(
+                                state->authoring_object) &&
+                            sandbox3d_details_flow_next_row(
+                                state, flow_desc.bounds, 28.0f, 1U, &row) &&
+                            row.width >= 260.0f)
+                        {
+                            if (henka_ui_button(
+                                    state->ui,
+                                    "authoring_loose_extrude_apply_top",
+                                    (henka_ui_rect){row.x, row.y, 126.0f, 24.0f},
+                                    "Apply"))
+                            {
+                                const henka_result apply_result =
+                                    sandbox3d_modeling_operator_commit(
+                                        &state->modeling_operator);
+                                sandbox3d_set_status(
+                                    state,
+                                    apply_result != HENKA_SUCCESS,
+                                    apply_result == HENKA_SUCCESS
+                                        ? "Loose Extrude applied transactionally."
+                                        : "Loose Extrude could not be applied; source retained.");
+                                if (apply_result == HENKA_SUCCESS)
+                                {
+                                    sandbox3d_mark_generic_modeling_applied(state, entity);
+                                }
+                            }
+                            if (henka_ui_button(
+                                    state->ui,
+                                    "authoring_loose_extrude_cancel_top",
+                                    (henka_ui_rect){row.x + 128.0f, row.y, 126.0f, 24.0f},
+                                    "Cancel"))
+                            {
+                                const henka_result cancel_result =
+                                    sandbox3d_modeling_operator_cancel(
+                                        &state->modeling_operator);
+                                sandbox3d_set_status(
+                                    state,
+                                    cancel_result != HENKA_SUCCESS,
+                                    cancel_result == HENKA_SUCCESS
+                                        ? "Loose Extrude canceled; source retained."
+                                        : "Loose Extrude cancellation failed; inspect the authoring state.");
+                            }
+                        }
+                    }
                 }
             }
             if (state->authoring_object != NULL &&
@@ -33826,6 +33968,11 @@ int main(int argc, char** argv)
         sizeof(state.native_authoring_edge_slide_factor),
         "%s",
         "0.0");
+    (void)snprintf(
+        state.native_authoring_extrude_amount,
+        sizeof(state.native_authoring_extrude_amount),
+        "%s",
+        "0.25");
     state.smoke_test = smoke_test;
     state.primitive_gallery = primitive_gallery;
     state.residency_stress = residency_stress;

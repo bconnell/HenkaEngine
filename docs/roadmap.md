@@ -209,10 +209,10 @@ tracks that share renderer, asset, persistence, and workspace boundaries.
    preserves explicit loose vertices and standalone wire edges with stable IDs
    and bounded reusable storage. The topology overlay presents those source
    vertices and wire edges for inspection. The shared modeling-operator session
-   also provides bounded explicit-axis extrusion for one selected loose vertex
-   or standalone edge with preview, cancel, and transactional Apply; dedicated
-   loose-component creation/edit controls and renderer line/point evaluation
-   remain current development.
+   and Authoring panel also provide bounded explicit-axis extrusion for one
+   selected loose vertex or standalone edge with numeric Preview, Cancel, and
+   transactional Apply; dedicated loose-component creation/edit controls and
+   renderer line/point evaluation remain current development.
 8. glTF/GLB import and external modeling-pipeline compatibility remain part of
    the implemented boundary, with explicit limitations.
 

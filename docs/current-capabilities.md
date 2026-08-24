@@ -197,10 +197,10 @@ turning the public README into an implementation ledger.
   Both reject unsupported source topology and invalid direction/distance
   inputs. The topology overlay now presents all authored source vertices and distinguishes
   loose vertices, boundary edges, and manifold edges with deterministic
-  high-contrast markers. The shared Sandbox modeling-operator session now
-  previews, cancels, and applies explicit-axis extrusion for exactly one
-  selected loose vertex or standalone edge through the core transactional
-  operations. Dedicated loose-component creation/edit UI, general
+  high-contrast markers. The shared Sandbox modeling-operator session and its
+  Authoring panel control now preview, cancel, and apply explicit-axis
+  extrusion for exactly one selected loose vertex or standalone edge through
+  the core transactional operations. Dedicated loose-component creation/edit UI, general
   surface-connected Vertex/Edge Extrude workflows, and renderer line/point
   evaluation remain unavailable; renderer evaluation still triangulates faces
   only.

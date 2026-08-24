@@ -208,9 +208,11 @@ edge to the new vertex without inventing a face. Zero directions, zero
 distances, connected vertices, invalid geometry, and capacity exhaustion fail
 closed. The shared Sandbox modeling-operator session now previews, cancels,
 and applies explicit-axis extrusion for exactly one selected loose vertex or
-standalone edge through these core operations. This bounded session does not
-claim general Vertex Extrude coverage, and dedicated loose-component creation
-UI remains unfinished. The core authoring representation also accepts
+standalone edge through these core operations; the Authoring panel exposes the
+same bounded Preview/Apply/Cancel path with a numeric amount on the Y axis.
+This bounded session does not claim general Vertex Extrude coverage, and
+dedicated loose-component creation UI remains unfinished. The core authoring
+representation also accepts
 explicit loose vertices and standalone wire edges: both use stable logical IDs,
 bounded physical storage, deterministic endpoint ordering, and the same HAMS v4
 transactional save/load path. A standalone edge must connect two distinct
