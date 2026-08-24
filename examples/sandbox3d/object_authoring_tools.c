@@ -5914,8 +5914,9 @@ henka_result sandbox3d_authoring_object_bevel_selected_face(
     return result;
 }
 
-henka_result sandbox3d_authoring_object_loop_cut_selected_face(
-    sandbox3d_authoring_object* object)
+henka_result sandbox3d_authoring_object_loop_cut_selected_face_at_factor(
+    sandbox3d_authoring_object* object,
+    float factor)
 {
     henka_authoring_mesh* candidate = NULL;
     const henka_authoring_face* face;
@@ -5928,6 +5929,7 @@ henka_result sandbox3d_authoring_object_loop_cut_selected_face(
     size_t corner;
     henka_result result;
     if (object == NULL ||
+        !isfinite(factor) || factor <= 0.0f || factor >= 1.0f ||
         object->selection_mode != SANDBOX3D_AUTHORING_SELECTION_FACE ||
         object->selected_face == HENKA_AUTHORING_INVALID_ID)
     {
@@ -5969,7 +5971,7 @@ henka_result sandbox3d_authoring_object_loop_cut_selected_face(
     if (result == HENKA_SUCCESS)
     {
         result = henka_authoring_mesh_loop_cut_quad_strip(
-            candidate, start_edge_id, 0.5f, &new_face_id,
+            candidate, start_edge_id, factor, &new_face_id,
             &primary_cut_edge_id, &closed, NULL);
     }
     if (result == HENKA_SUCCESS)
@@ -5990,6 +5992,14 @@ henka_result sandbox3d_authoring_object_loop_cut_selected_face(
         henka_authoring_mesh_destroy(candidate);
     }
     return result;
+}
+
+henka_result sandbox3d_authoring_object_loop_cut_selected_face(
+    sandbox3d_authoring_object* object)
+{
+    return sandbox3d_authoring_object_loop_cut_selected_face_at_factor(
+        object,
+        0.5f);
 }
 
 henka_result sandbox3d_authoring_object_subdivide_selected_face(

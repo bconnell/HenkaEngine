@@ -221,9 +221,9 @@ tracks that share renderer, asset, persistence, and workspace boundaries.
    single-edge delete of an incident face set, standalone boundary-edge bevel,
    bounded multi-edge boundary bevel for pairwise vertex-disjoint edges on
    distinct faces, and compatible interior-edge bevel for an isolated two-quad
-   patch are now available; the editor now applies one fixed-factor Loop Cut
-   across a compatible open quad strip or closed ring using the reusable
-   traversal foundation. Preview/factor adjustment, same-face/shared-endpoint
+   patch are now available; the editor now applies a validated user-entered
+   factor for one Loop Cut across a compatible open quad strip or closed ring
+   using the reusable traversal foundation. Interactive preview, same-face/shared-endpoint
    bevel batches, broader interior-edge cases, and general loop-cut networks
    remain in progress. Edge mode also provides a fixed-factor Edge Slide for
    one compatible open edge-loop or closed edge-cycle selection through the
@@ -241,7 +241,7 @@ tracks that share renderer, asset, persistence, and workspace boundaries.
    edge and vertex topology operations, weld/split/bridge workflows, general
    loop-cut networks, and broader source export. Connected open boundary fan
    extrusion is already available in the bounded workflow. Closed-ring Loop
-   Cut is also available in the bounded fixed-factor workflow; broader
+   Cut is also available in the bounded factor-controlled workflow; broader
    loop-cut network authoring remains future work.
 2. Automatic multi-island UV unwrap, texture painting, rigging, skinning, and
    animation authoring.

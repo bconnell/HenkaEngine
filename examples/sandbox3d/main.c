@@ -395,6 +395,7 @@ typedef struct sandbox3d_state
     henka_mesh* foliage_mesh;
     sandbox3d_authoring_asset_controller* authoring_asset_controller;
     char authoring_asset_name[64];
+    char native_authoring_loop_cut_factor[16];
     sandbox3d_authoring_object* authoring_object;
     uint32_t native_authoring_hovered_component_id;
     /* A component pick is a selection within the already-selected scene
@@ -3915,6 +3916,30 @@ static bool sandbox3d_parse_showcase_capture_view(
         return true;
     }
     return false;
+}
+
+static bool sandbox3d_parse_loop_cut_factor(
+    const char* text,
+    float* out_factor)
+{
+    char* end = NULL;
+    float factor;
+
+    if (text == NULL || out_factor == NULL || text[0] == '\0')
+    {
+        return false;
+    }
+
+    errno = 0;
+    factor = strtof(text, &end);
+    if (errno == ERANGE || end == NULL || *end != '\0' ||
+        !isfinite(factor) || factor <= 0.0f || factor >= 1.0f)
+    {
+        return false;
+    }
+
+    *out_factor = factor;
+    return true;
 }
 
 static henka_viewport_shading_mode
@@ -24412,23 +24437,44 @@ details_group_authoring:
             if (state->authoring_object != NULL &&
                 selection_mode == SANDBOX3D_AUTHORING_SELECTION_FACE &&
                 sandbox3d_details_flow_next_row(state, flow_desc.bounds, 28.0f, 1U, &row) &&
-                row.width >= 132.0f)
+                row.width >= 260.0f)
             {
+                float loop_cut_factor = 0.0f;
+                bool loop_cut_factor_changed = false;
+                (void)henka_ui_label(
+                    state->ui,
+                    row.x,
+                    row.y + 7.0f,
+                    0.8f,
+                    "Factor");
+                (void)henka_ui_text_field(
+                    state->ui,
+                    "authoring_loop_cut_factor_leading",
+                    (henka_ui_rect){row.x + 42.0f, row.y, 78.0f, 24.0f},
+                    state->native_authoring_loop_cut_factor,
+                    sizeof(state->native_authoring_loop_cut_factor),
+                    &loop_cut_factor_changed);
+                (void)loop_cut_factor_changed;
                 if (henka_ui_button(
                         state->ui,
                         "authoring_loop_cut_leading",
-                        (henka_ui_rect){row.x, row.y, 126.0f, 24.0f},
+                        (henka_ui_rect){row.x + 128.0f, row.y, 126.0f, 24.0f},
                         "Loop Cut"))
                 {
-                    const henka_result cut_result =
-                        sandbox3d_authoring_object_loop_cut_selected_face(
-                            state->authoring_object);
+                    const bool factor_valid = sandbox3d_parse_loop_cut_factor(
+                        state->native_authoring_loop_cut_factor,
+                        &loop_cut_factor);
+                    const henka_result cut_result = factor_valid
+                        ? sandbox3d_authoring_object_loop_cut_selected_face_at_factor(
+                            state->authoring_object,
+                            loop_cut_factor)
+                        : HENKA_ERROR_INVALID_ARGUMENT;
                     sandbox3d_set_status(
                         state,
                         cut_result != HENKA_SUCCESS,
                         cut_result == HENKA_SUCCESS
                             ? "Compatible quad strip cut transactionally."
-                            : "Loop Cut rejected; select a compatible quad strip.");
+                            : "Loop Cut rejected; use a factor between 0 and 1 and select a compatible quad strip.");
                     if (cut_result == HENKA_SUCCESS)
                     {
                         sandbox3d_mark_generic_modeling_applied(state, entity);
@@ -25411,23 +25457,44 @@ details_group_authoring:
             if (state->authoring_object != NULL &&
                 selection_mode == SANDBOX3D_AUTHORING_SELECTION_FACE &&
                 sandbox3d_details_flow_next_row(state, flow_desc.bounds, 28.0f, 1U, &row) &&
-                row.width >= 132.0f)
+                row.width >= 260.0f)
             {
+                float loop_cut_factor = 0.0f;
+                bool loop_cut_factor_changed = false;
+                (void)henka_ui_label(
+                    state->ui,
+                    row.x,
+                    row.y + 7.0f,
+                    0.8f,
+                    "Factor");
+                (void)henka_ui_text_field(
+                    state->ui,
+                    "authoring_loop_cut_factor_top",
+                    (henka_ui_rect){row.x + 42.0f, row.y, 78.0f, 24.0f},
+                    state->native_authoring_loop_cut_factor,
+                    sizeof(state->native_authoring_loop_cut_factor),
+                    &loop_cut_factor_changed);
+                (void)loop_cut_factor_changed;
                 if (henka_ui_button(
                         state->ui,
                         "authoring_loop_cut_top",
-                        (henka_ui_rect){row.x, row.y, 126.0f, 24.0f},
+                        (henka_ui_rect){row.x + 128.0f, row.y, 126.0f, 24.0f},
                         "Loop Cut"))
                 {
-                    const henka_result cut_result =
-                        sandbox3d_authoring_object_loop_cut_selected_face(
-                            state->authoring_object);
+                    const bool factor_valid = sandbox3d_parse_loop_cut_factor(
+                        state->native_authoring_loop_cut_factor,
+                        &loop_cut_factor);
+                    const henka_result cut_result = factor_valid
+                        ? sandbox3d_authoring_object_loop_cut_selected_face_at_factor(
+                            state->authoring_object,
+                            loop_cut_factor)
+                        : HENKA_ERROR_INVALID_ARGUMENT;
                     sandbox3d_set_status(
                         state,
                         cut_result != HENKA_SUCCESS,
                         cut_result == HENKA_SUCCESS
                             ? "Compatible quad strip cut transactionally."
-                            : "Loop Cut rejected; select a compatible quad strip.");
+                            : "Loop Cut rejected; use a factor between 0 and 1 and select a compatible quad strip.");
                     if (cut_result == HENKA_SUCCESS)
                     {
                         sandbox3d_mark_generic_modeling_applied(state, entity);
@@ -33543,6 +33610,11 @@ int main(int argc, char** argv)
         sizeof(state.authoring_asset_name),
         "%s",
         "NativeAsset");
+    (void)snprintf(
+        state.native_authoring_loop_cut_factor,
+        sizeof(state.native_authoring_loop_cut_factor),
+        "%s",
+        "0.5");
     state.smoke_test = smoke_test;
     state.primitive_gallery = primitive_gallery;
     state.residency_stress = residency_stress;

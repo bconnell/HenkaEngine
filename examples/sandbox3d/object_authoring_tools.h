@@ -388,6 +388,9 @@ henka_result sandbox3d_authoring_object_bevel_selected_face(
 /* Splits one compatible quad strip selected from the active quad face. Open
  * strips start at a boundary; closed strips may form a complete ring. The
  * normal source/render/bounds/physics/undo transaction owns publication. */
+henka_result sandbox3d_authoring_object_loop_cut_selected_face_at_factor(
+    sandbox3d_authoring_object* object,
+    float factor);
 henka_result sandbox3d_authoring_object_loop_cut_selected_face(
     sandbox3d_authoring_object* object);
 henka_result sandbox3d_authoring_object_subdivide_selected_face(

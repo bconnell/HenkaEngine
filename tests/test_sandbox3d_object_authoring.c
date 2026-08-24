@@ -1994,7 +1994,9 @@ static void henka_test_sandbox3d_object_authoring_loop_cut(void)
         engine, scene, entity, source, 8U, &object) == HENKA_SUCCESS);
     sandbox3d_authoring_object_set_selection_mode(object, SANDBOX3D_AUTHORING_SELECTION_FACE);
     HENKA_TEST_ASSERT(sandbox3d_authoring_object_select_component(object, 1U, false) == HENKA_SUCCESS);
-    HENKA_TEST_ASSERT(sandbox3d_authoring_object_loop_cut_selected_face(object) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_loop_cut_selected_face_at_factor(object, 0.0f) == HENKA_ERROR_INVALID_ARGUMENT);
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_loop_cut_selected_face_at_factor(object, 1.0f) == HENKA_ERROR_INVALID_ARGUMENT);
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_loop_cut_selected_face_at_factor(object, 0.25f) == HENKA_SUCCESS);
     counts = henka_authoring_mesh_get_counts(sandbox3d_authoring_object_get_mesh(object));
     HENKA_TEST_ASSERT(counts.vertices == 6U && counts.edges == 7U && counts.faces == 2U);
     HENKA_TEST_ASSERT(henka_authoring_mesh_validate(sandbox3d_authoring_object_get_mesh(object)));

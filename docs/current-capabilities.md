@@ -201,14 +201,16 @@ turning the public README into an implementation ledger.
   smoothing, UV, non-quad, non-manifold, and ambiguous crossings without
   partial output. The shared topology layer also orders connected selected edge
   chains and cycles deterministically for Edge Slide and future edge-set
-  operators. A bounded single-quad face loop cut and one fixed-factor
+  operators. A bounded single-quad face loop cut and one factor-controlled
   quad-strip Loop Cut across either a compatible open strip or closed ring are
-  available through the Face workflow. They interpolate path edges and create
-  only quad faces transactionally. Edge mode also provides a bounded
-  fixed-factor Edge Slide for one compatible open edge-loop or closed edge-cycle
+  available through the Face workflow; the editor validates a user-entered
+  factor in the open interval (0, 1) before invoking the transactional engine
+  operation. They interpolate path edges and create only quad faces
+  transactionally. Edge mode also provides a bounded fixed-factor Edge Slide
+  for one compatible open edge-loop or closed edge-cycle
   selection; it moves the selected loop through the same
   source/render/bounds/physics/undo transaction while preserving topology.
-  Interactive preview/factor adjustment, multiple cuts, broader interior-edge
+  Interactive preview, multiple cuts, broader interior-edge
   cases, and split/bridge workflows remain incomplete.
 - See [authoring-mesh.md](authoring-mesh.md),
   [runtime-foundations.md](runtime-foundations.md), and
