@@ -13,7 +13,8 @@ typedef enum sandbox3d_modeling_operator_kind
 {
     SANDBOX3D_MODELING_OPERATOR_NONE = 0,
     SANDBOX3D_MODELING_OPERATOR_MOVE,
-    SANDBOX3D_MODELING_OPERATOR_EDGE_SLIDE
+    SANDBOX3D_MODELING_OPERATOR_EDGE_SLIDE,
+    SANDBOX3D_MODELING_OPERATOR_BEVEL
 } sandbox3d_modeling_operator_kind;
 
 typedef enum sandbox3d_modeling_operator_state

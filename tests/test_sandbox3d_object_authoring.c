@@ -310,6 +310,7 @@ static void henka_test_sandbox3d_modeling_operator_session(void)
     sandbox3d_modeling_operator_session session = {0};
     const henka_authoring_mesh* mesh;
     const henka_authoring_vertex* vertex;
+    henka_authoring_mesh_counts bevel_counts;
     henka_vec3 original_position;
 
     config.application_name = "Henka Modeling Operator Test";
@@ -406,6 +407,40 @@ static void henka_test_sandbox3d_modeling_operator_session(void)
     HENKA_TEST_ASSERT(vertex != NULL);
     HENKA_TEST_ASSERT_FLOAT_CLOSE(vertex->position.x, original_position.x, 0.0001f);
     HENKA_TEST_ASSERT(sandbox3d_authoring_object_undo(object) != HENKA_SUCCESS);
+
+    sandbox3d_authoring_object_set_selection_mode(
+        object, SANDBOX3D_AUTHORING_SELECTION_FACE);
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_select_component(
+        object, 1U, false) == HENKA_SUCCESS);
+    bevel_counts = henka_authoring_mesh_get_counts(
+        sandbox3d_authoring_object_get_mesh(object));
+    HENKA_TEST_ASSERT(sandbox3d_modeling_operator_begin(
+        &session, object, SANDBOX3D_MODELING_OPERATOR_BEVEL) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(sandbox3d_modeling_operator_preview(
+        &session, 0.1f, false, false) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_authoring_mesh_get_counts(
+        sandbox3d_authoring_object_get_mesh(object)).faces == bevel_counts.faces);
+    HENKA_TEST_ASSERT(sandbox3d_modeling_operator_cancel(&session) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(sandbox3d_modeling_operator_begin(
+        &session, object, SANDBOX3D_MODELING_OPERATOR_BEVEL) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(sandbox3d_modeling_operator_numeric_begin(&session) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(sandbox3d_modeling_operator_numeric_append(
+        &session, "0.1", 3U) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(sandbox3d_modeling_operator_numeric_commit(&session) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(sandbox3d_modeling_operator_commit(&session) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_authoring_mesh_get_counts(
+        sandbox3d_authoring_object_get_mesh(object)).faces > bevel_counts.faces);
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_undo(object) == HENKA_SUCCESS);
+
+    sandbox3d_authoring_object_set_selection_mode(
+        object, SANDBOX3D_AUTHORING_SELECTION_VERTEX);
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_select_component(
+        object, 1U, false) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(sandbox3d_modeling_operator_begin(
+        &session, object, SANDBOX3D_MODELING_OPERATOR_BEVEL) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(sandbox3d_modeling_operator_preview(
+        &session, 0.1f, false, false) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(sandbox3d_modeling_operator_cancel(&session) == HENKA_SUCCESS);
 
     sandbox3d_authoring_object_destroy(object);
     henka_scene_destroy(scene);
@@ -2332,6 +2367,7 @@ static void henka_test_sandbox3d_object_authoring_interior_edge_bevel(void)
     henka_authoring_mesh_counts counts;
     henka_authoring_edge_id shared_edge = HENKA_AUTHORING_INVALID_ID;
     henka_authoring_edge_id edge_id;
+    sandbox3d_modeling_operator_session operator_session = {0};
     henka_entity entity;
     size_t index;
 
@@ -2388,6 +2424,26 @@ static void henka_test_sandbox3d_object_authoring_interior_edge_bevel(void)
     HENKA_TEST_ASSERT(sandbox3d_authoring_object_redo(object) == HENKA_SUCCESS);
     counts = henka_authoring_mesh_get_counts(sandbox3d_authoring_object_get_mesh(object));
     HENKA_TEST_ASSERT(counts.vertices == 8U && counts.edges == 10U && counts.faces == 3U);
+
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_undo(object) == HENKA_SUCCESS);
+    sandbox3d_authoring_object_set_selection_mode(object, SANDBOX3D_AUTHORING_SELECTION_EDGE);
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_select_component(
+        object, shared_edge, false) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(sandbox3d_modeling_operator_begin(
+        &operator_session, object, SANDBOX3D_MODELING_OPERATOR_BEVEL) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(sandbox3d_modeling_operator_preview(
+        &operator_session, 0.2f, false, false) == HENKA_SUCCESS);
+    counts = henka_authoring_mesh_get_counts(sandbox3d_authoring_object_get_mesh(object));
+    HENKA_TEST_ASSERT(counts.vertices == 6U && counts.edges == 7U && counts.faces == 2U);
+    HENKA_TEST_ASSERT(sandbox3d_modeling_operator_cancel(&operator_session) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(sandbox3d_modeling_operator_begin(
+        &operator_session, object, SANDBOX3D_MODELING_OPERATOR_BEVEL) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(sandbox3d_modeling_operator_preview(
+        &operator_session, 0.2f, false, false) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(sandbox3d_modeling_operator_commit(&operator_session) == HENKA_SUCCESS);
+    counts = henka_authoring_mesh_get_counts(sandbox3d_authoring_object_get_mesh(object));
+    HENKA_TEST_ASSERT(counts.vertices == 8U && counts.edges == 10U && counts.faces == 3U);
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_undo(object) == HENKA_SUCCESS);
 
     sandbox3d_authoring_object_destroy(object);
     henka_authoring_mesh_destroy(source);
