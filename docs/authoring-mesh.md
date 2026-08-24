@@ -213,7 +213,13 @@ explicit loose vertices and standalone wire edges: both use stable logical IDs,
 bounded physical storage, deterministic endpoint ordering, and the same HAMS v4
 transactional save/load path. A standalone edge must connect two distinct
 active vertices, has zero incident faces until a face consumes that endpoint
-pair, and can be removed explicitly while it remains face-less.
+pair, and can be removed explicitly while it remains face-less. The core
+modeling API also provides a bounded transactional explicit-direction
+loose-edge extrude: it creates a parallel edge and one quad face, inherits
+endpoint UV/material metadata, preserves source-edge hard intent, and rejects
+face-backed edges, mismatched endpoint materials, degenerate offsets, and
+capacity exhaustion. The Sandbox does not yet expose these loose-component
+operations as general Vertex/Edge Extrude workflows.
 material-instance assignment, texture
 dependencies, general collision integration beyond the bound box contract,
 package ownership, topology-aware picking, and showcase rebuilds still need the

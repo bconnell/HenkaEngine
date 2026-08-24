@@ -240,12 +240,13 @@ tracks that share renderer, asset, persistence, and workspace boundaries.
 ### Future Work
 
 1. Broader non-manifold or incompatible-normal vertex-fan handling, editor
-   workflows for the explicit-direction loose-vertex extrusion primitive,
-   generalized Edge Extrude, broader edge and vertex topology operations,
+   workflows for the explicit-direction loose-vertex and loose-edge extrusion
+   primitives, generalized Edge Extrude, broader edge and vertex topology operations,
    weld/split/bridge workflows, general loop-cut networks, and broader source
-   export. Connected open boundary fan extrusion and the bounded loose-vertex
-   wire extrusion primitive are already available in the core workflow, but
-   neither constitutes complete general Vertex/Edge Extrude authoring.
+   export. Connected open boundary fan extrusion, bounded loose-vertex wire
+   extrusion, and bounded loose-edge quad extrusion are already available in
+   the core workflow, but none constitutes complete general Vertex/Edge Extrude
+   authoring.
    Closed-ring Loop Cut is also available in the bounded factor-controlled
    workflow; broader loop-cut network authoring remains future work.
 2. Automatic multi-island UV unwrap, texture painting, rigging, skinning, and

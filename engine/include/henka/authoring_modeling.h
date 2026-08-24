@@ -181,6 +181,20 @@ henka_result henka_authoring_mesh_extrude_loose_vertex(
     henka_authoring_edge_id* out_new_edge_id,
     henka_authoring_modeling_report* out_report);
 
+/* Extrudes one loose edge along an explicit direction into a parallel edge
+ * and one quad face. The source endpoints remain in place and their
+ * UV/material metadata is inherited by the new endpoints and face. The
+ * operation is transactional and rejects face-backed edges, mismatched
+ * endpoint material regions, degenerate offsets, and capacity exhaustion. */
+henka_result henka_authoring_mesh_extrude_loose_edge(
+    henka_authoring_mesh* mesh,
+    henka_authoring_edge_id edge_id,
+    henka_vec3 direction,
+    float distance,
+    henka_authoring_edge_id* out_new_edge_id,
+    henka_authoring_face_id* out_new_face_id,
+    henka_authoring_modeling_report* out_report);
+
 /* Dissolves one compatible interior edge into its two adjacent face loops.
  * Boundary, hard, UV-seamed, material-discontinuous, and capacity-invalid
  * requests are rejected without changing the source mesh. */

@@ -192,9 +192,10 @@ turning the public README into an implementation ledger.
   standalone wire edges with stable logical IDs, bounded reusable storage, and
   HAMS v4 save/reload support. The core modeling API also provides a bounded
   explicit-direction loose-vertex extrude that preserves the source vertex and
-  creates one metadata-inheriting standalone wire edge transactionally; it
-  rejects connected vertices and invalid direction/distance inputs. The
-  topology overlay now presents all authored source vertices and distinguishes
+  creates one metadata-inheriting standalone wire edge transactionally, plus a
+  bounded loose-edge extrude that creates one parallel edge and one quad face.
+  Both reject unsupported source topology and invalid direction/distance
+  inputs. The topology overlay now presents all authored source vertices and distinguishes
   loose vertices, boundary edges, and manifold edges with deterministic
   high-contrast markers. Dedicated Sandbox loose-component creation/edit and
   extrusion controls and renderer line/point evaluation remain unavailable;
