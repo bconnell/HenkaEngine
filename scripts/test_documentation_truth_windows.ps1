@@ -56,10 +56,27 @@ try {
     & $git -c core.autocrlf=false -C $probeRoot add --all
 
     $authoringMeshPath = Join-Path $probeRoot "docs\authoring-mesh.md"
+    $readmePath = Join-Path $probeRoot "README.md"
 
     if ((Invoke-TruthCheck) -ne 0) {
         throw "Documentation truth baseline unexpectedly failed."
     }
+
+    $readmeSource = [System.IO.File]::ReadAllText($readmePath)
+    $statusProbe = [regex]::Replace(
+        $readmeSource,
+        '(?m)^\|\s*Renderer\s*\|\s*Available \(Unhardened\)\s*\|',
+        '| Renderer | Available |',
+        1)
+    if ($statusProbe -eq $readmeSource) {
+        throw "Documentation truth regression could not locate the Renderer status row."
+    }
+    [System.IO.File]::WriteAllText($readmePath, $statusProbe)
+    if ((Invoke-TruthCheck) -eq 0) {
+        throw "Documentation truth accepted a README status escalation unsupported by the status contract."
+    }
+    Write-Host "[pass] Documentation truth regression rejected an unsupported capability status escalation."
+    [System.IO.File]::WriteAllText($readmePath, $readmeSource)
 
     $authoringMeshSourcePath = Join-Path $probeRoot "engine\src\mesh\authoring_mesh.c"
     $authoringMeshSource = [System.IO.File]::ReadAllText($authoringMeshSourcePath)

@@ -35,6 +35,111 @@ $sandboxMain = Get-RepositoryText "examples/sandbox3d/main.c"
 $sandboxHelp = Get-RepositoryText "docs/help/sandbox3d.md"
 $sandboxQa = Get-RepositoryText "docs/qa/sandbox3d-manual-checklist.md"
 $showcaseAssets = Get-RepositoryText "docs/showcase-assets.md"
+$capabilityStatuses = Get-RepositoryText "docs/capability-statuses.tsv"
+
+$allowedCapabilityStatuses = @(
+    "Foundation",
+    "In Progress",
+    "Available (Unhardened)",
+    "Available",
+    "Planned"
+)
+$expectedCapabilityAreas = @(
+    "Core runtime",
+    "Renderer",
+    "Scene and camera",
+    "Editor workspace",
+    "Modeling and authoring",
+    "Assets and materials",
+    "Terrain and world",
+    "Physics",
+    "2.5D",
+    "Networking/server",
+    "External projects",
+    "Game authoring",
+    "2D",
+    "Audio",
+    "Scripting/behaviors"
+)
+$statusRecords = New-Object System.Collections.Generic.List[object]
+foreach ($rawLine in @($capabilityStatuses -split "`r?`n")) {
+    $line = $rawLine.Trim()
+    if ([string]::IsNullOrWhiteSpace($line) -or $line.StartsWith("#")) {
+        continue
+    }
+    $parts = $line -split '\|', 3
+    if ($parts.Count -ne 3) {
+        Add-Finding "docs/capability-statuses.tsv: malformed status record '$line'"
+        continue
+    }
+    $area = $parts[0].Trim()
+    $status = $parts[1].Trim()
+    $authoritySection = $parts[2].Trim()
+    if ([string]::IsNullOrWhiteSpace($area) -or
+        $status -notin $allowedCapabilityStatuses -or
+        [string]::IsNullOrWhiteSpace($authoritySection)) {
+        Add-Finding "docs/capability-statuses.tsv: invalid status record '$line'"
+        continue
+    }
+    $statusRecords.Add([pscustomobject]@{
+        Area = $area
+        Status = $status
+        AuthoritySection = $authoritySection
+    })
+}
+
+if ($statusRecords.Count -ne $expectedCapabilityAreas.Count) {
+    Add-Finding "docs/capability-statuses.tsv: expected $($expectedCapabilityAreas.Count) capability rows, found $($statusRecords.Count)"
+}
+foreach ($expectedArea in $expectedCapabilityAreas) {
+    $matches = @($statusRecords | Where-Object { $_.Area -eq $expectedArea })
+    if ($matches.Count -ne 1) {
+        Add-Finding "docs/capability-statuses.tsv: expected exactly one row for '$expectedArea'"
+    }
+}
+foreach ($record in $statusRecords) {
+    if ($record.Area -notin $expectedCapabilityAreas) {
+        Add-Finding "docs/capability-statuses.tsv: unknown capability area '$($record.Area)'"
+    }
+    $authorityPattern = '(?ms)^' + [regex]::Escape($record.AuthoritySection) + '\s*$\r?\n(.*?)(?=^##\s|\z)'
+    $authorityMatch = [regex]::Match($capabilities, $authorityPattern)
+    if (-not $authorityMatch.Success) {
+        Add-Finding "docs/current-capabilities.md: missing authority section '$($record.AuthoritySection)' for '$($record.Area)'"
+        continue
+    }
+    if ($record.Status -in @("Available", "Available (Unhardened)")) {
+        if ($authorityMatch.Groups[1].Value -match '(?i)\b(?:not\s+(?:a\s+)?complete|remain(?:s)?\s+(?:unfinished|incomplete|open)|future\s+work|foundation\s*(?:only|not))\b') {
+            Add-Finding "docs/current-capabilities.md: authority section '$($record.AuthoritySection)' contains an incomplete-category claim for '$($record.Status)'"
+        }
+    }
+}
+
+$matrixMatches = [regex]::Matches($readme, '(?m)^\|\s*([^|]+?)\s*\|\s*([^|]+?)\s*\|')
+foreach ($matrixMatch in $matrixMatches) {
+    $area = $matrixMatch.Groups[1].Value.Trim()
+    $status = $matrixMatch.Groups[2].Value.Trim()
+    if ($area -in @("Area", "---")) {
+        continue
+    }
+    if ($area -notin $expectedCapabilityAreas) {
+        Add-Finding "README.md: unknown capability matrix area '$area'"
+    }
+    if ($status -notin $allowedCapabilityStatuses) {
+        Add-Finding "README.md: unknown capability status '$status' for '$area'"
+    }
+}
+foreach ($record in $statusRecords) {
+    $matrixPattern = '(?m)^\|\s*' + [regex]::Escape($record.Area) + '\s*\|\s*([^|]+?)\s*\|'
+    $matches = [regex]::Matches($readme, $matrixPattern)
+    if ($matches.Count -ne 1) {
+        Add-Finding "README.md: expected exactly one capability matrix row for '$($record.Area)'"
+        continue
+    }
+    $readmeStatus = $matches[0].Groups[1].Value.Trim()
+    if ($readmeStatus -ne $record.Status) {
+        Add-Finding "README.md: status for '$($record.Area)' is '$readmeStatus', expected '$($record.Status)'"
+    }
+}
 
 foreach ($stalePattern in @(
     "(?i)modeling follows the production-quality 2\.5D track",

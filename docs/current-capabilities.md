@@ -4,6 +4,10 @@ This is the detailed, code-backed inventory for the current Henka Engine
 checkout. It records implemented foundations and their boundaries without
 turning the public README into an implementation ledger.
 
+README capability statuses are maintained in the small public contract at
+[capability-statuses.tsv](capability-statuses.tsv); each entry names the
+authoritative section below.
+
 ## Core / Platform
 
 - Henka is written in C17 and configured with CMake. The graphical `henka`
@@ -61,6 +65,8 @@ turning the public README into an implementation ledger.
   axis snapping, orbit dragging, projection switching, persisted placement
   and scale preferences, and an application-local automation input path for
   deterministic graphical validation.
+- The scene/camera feature boundary is functionally present, but broader visual
+  and manual presentation validation remains a hardening item.
 
 ## Editor Workspace
 
@@ -190,6 +196,14 @@ turning the public README into an implementation ledger.
   edges, material/smooth/UV discontinuities, non-quad faces, neighboring shared
   boundaries, and ambiguous endpoint fans; broader interior edge-set bevel and
   broader edge topology operations remain in progress.
+
+## Scripting / Behaviors
+
+- Bounded HenkaScript and Lua lifecycle adapters, compiler-owned HenkaScript
+  editor tokenization, Scene Document binding, Play dispatch, state persistence,
+  and cross-language events are implemented in the current foundation.
+- Broader runtime/resource mapping, complete Inspector authoring, and debugger
+  tooling remain unfinished; this category is therefore In Progress.
 - The core authoring representation also preserves explicit loose vertices and
   standalone wire edges with stable logical IDs, bounded reusable storage, and
   HAMS v5 save/reload support. The core modeling API also provides a bounded
@@ -263,14 +277,16 @@ turning the public README into an implementation ledger.
   are not currently implemented.
 - See [physics.md](physics.md) and [help/sandbox3d.md](help/sandbox3d.md).
 
-## 2D / 2.5D
+## 2.5D
 
 - Current 2.5D foundations are camera presets, orthographic framing/zoom,
   stable vertical orientation, and sandbox persistence.
+
+## 2D
+
 - A dedicated 2D renderer, sprites, texture regions, layered depth, parallax,
-  sprite animation, and movement-plane/physics-axis authoring are future work.
-- The project direction remains first-class 2D and 2.5D workflows; the current
-  camera foundation should not be read as a complete 2D toolchain.
+  sprite animation, and movement-plane/physics-axis authoring have not yet
+  materially begun.
 
 ## Networking / Dedicated Server
 
@@ -323,6 +339,11 @@ turning the public README into an implementation ledger.
 - See [building.md](building.md), [package-provenance.md](package-provenance.md),
   [repository-integrity.md](repository-integrity.md), and
   [showcase-assets.md](showcase-assets.md).
+
+## Audio
+
+- No current audio API or end-user audio workflow is implemented; audio remains
+  Planned.
 
 ## Known Gaps
 

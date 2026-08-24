@@ -43,9 +43,9 @@ Other operating systems are not currently claimed as supported.
 | Area | Current status | Highlights |
 | --- | --- | --- |
 | Core runtime | Available | C17 APIs, bounded validation, generation-checked scene identities |
-| Renderer | Available | OpenGL path, Solid/Material Preview/Rendered policies, PBR foundations |
-| Scene and camera | Available | Entities, input actions, framing, gizmos, Compass, 2.5D presets |
-| Editor workspace | Foundation | Docking, detached panels, tabs, layout persistence, early authoring UI |
+| Renderer | Available (Unhardened) | OpenGL path, Solid/Material Preview/Rendered policies, PBR foundations |
+| Scene and camera | Available (Unhardened) | Entities, input actions, framing, gizmos, Compass, 2.5D presets |
+| Editor workspace | In Progress | Docking, detached panels, tabs, layout persistence, early authoring UI |
 | Modeling and authoring | In Progress | Object/Vertex/Edge/Face modes, topology operations, UV and HAMS foundations |
 | Assets and materials | In Progress | glTF/GLB, OBJ, manager-owned dependencies, validated instances |
 | Terrain and world | Foundation | Four-layer terrain, streaming, edits, LOD, persistence, collision paths |
@@ -57,6 +57,16 @@ Other operating systems are not currently claimed as supported.
 | 2D | Planned | Dedicated 2D renderer, sprites, layers, parallax, and animation remain open |
 | Audio | Planned | No current audio workflow |
 | Scripting/behaviors | In Progress | Shared host schema, bounded HenkaScript/Lua lifecycle adapters, Scene Document binding, Play dispatch, state persistence, and cross-language events |
+
+Status labels are contractual: **Foundation** means core architecture exists but
+the category is incomplete; **In Progress** means substantial implementation
+exists while major functionality remains; **Available (Unhardened)** means the
+functional category is present but hardening or validation remains; **Available**
+means the category is functionally complete and hardened; and **Planned** means
+meaningful implementation has not yet begun. The maintained status ownership and
+authoritative detailed sections are recorded in
+[docs/capability-statuses.tsv](docs/capability-statuses.tsv) and
+[docs/current-capabilities.md](docs/current-capabilities.md).
 
 For the detailed, code-backed inventory and explicit boundaries, see
 [docs/current-capabilities.md](docs/current-capabilities.md).

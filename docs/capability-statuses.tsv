@@ -1,0 +1,16 @@
+# area|status|authoritative current-capabilities section
+Core runtime|Available|## Core / Platform
+Renderer|Available (Unhardened)|## Renderer
+Scene and camera|Available (Unhardened)|## Scene / Camera
+Editor workspace|In Progress|## Editor Workspace
+Modeling and authoring|In Progress|## Modeling / Content Authoring
+Assets and materials|In Progress|## Assets / Materials
+Terrain and world|Foundation|## Terrain / World
+Physics|Foundation|## Physics
+2.5D|Foundation|## 2.5D
+Networking/server|Foundation|## Networking / Dedicated Server
+External projects|Foundation|## External Project Support
+Game authoring|Foundation|## Game Authoring Foundation
+2D|Planned|## 2D
+Audio|Planned|## Audio
+Scripting/behaviors|In Progress|## Scripting / Behaviors
