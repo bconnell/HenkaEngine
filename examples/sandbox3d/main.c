@@ -1694,16 +1694,15 @@ static henka_result sandbox3d_restore_checked_in_authoring_sources(
             : sandbox3d_authoring_object_reload_source(object, sources[source_index].source_path);
         if (result != HENKA_SUCCESS)
         {
-            if (object != NULL)
-            {
-                sandbox3d_release_authoring_physics(state, object);
-                sandbox3d_unregister_authoring_object(state, object);
-                sandbox3d_authoring_object_destroy(object);
-            }
+            /* reload_source is transactional: a rejected derivative leaves
+             * the freshly converted imported source intact.  Keep that
+             * authoritative authoring object registered so Object Details,
+             * the modeling toolbar, and the rendered entity cannot disagree
+             * merely because an editor-owned derivative is stale. */
             state->authoring_object = sandbox3d_find_authoring_object(
                 state, sandbox3d_get_real_selected_entity(state));
             printf(
-                "Native authoring checked-in source ignored: name=%s path=%s result=%s imported_render_retained=1.\n",
+                "Native authoring checked-in source ignored: name=%s path=%s result=%s imported_render_retained=1 editable_source_retained=1.\n",
                 sandbox3d_safe_entity_name(state, entity, "showcase primitive"),
                 sources[source_index].source_path,
                 henka_result_to_string(result));
@@ -12354,15 +12353,12 @@ static henka_result sandbox3d_restore_persisted_native_showcase_sources(
         }
         else
         {
-            sandbox3d_release_authoring_physics(state, object);
-            sandbox3d_unregister_authoring_object(state, object);
-            if (state->authoring_object == object)
-            {
-                state->authoring_object = NULL;
-            }
-            sandbox3d_authoring_object_destroy(object);
+            /* Project load is transactional.  A stale or malformed saved
+             * derivative must not erase the valid imported authoring source
+             * that was just established for this entity. */
+            state->authoring_object = object;
             printf(
-                "Native authoring startup restore rejected: name=%s result=%s imported_render_retained=1.\n",
+                "Native authoring startup restore fallback: name=%s result=%s source_state=HENKA_NATIVE_EDITABLE_SOURCE fallback=IMPORTED_FIXTURE.\n",
                 sandbox3d_safe_entity_name(state, entity, "showcase primitive"),
                 henka_result_to_string(result));
             fflush(stdout);

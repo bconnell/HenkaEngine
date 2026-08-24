@@ -1672,13 +1672,18 @@ try {
         # rather than requiring one implementation detail.
         $nativeSourceRestored = Wait-FileContains `
             -Path $stdoutPath `
-            -Pattern 'Native authoring (source loaded:|startup restore: name=.+ source_state=HENKA_NATIVE_EDITABLE_SOURCE\.)' `
+            -Pattern 'Native authoring (source loaded:|startup restore: name=.+ source_state=HENKA_NATIVE_EDITABLE_SOURCE\.|startup restore fallback: name=.+ source_state=HENKA_NATIVE_EDITABLE_SOURCE fallback=IMPORTED_FIXTURE\.)' `
             -TimeoutMilliseconds 3000
+        $nativeAuthoringFallbackObserved = Get-LastLogRegexMatch `
+            -Path $stdoutPath `
+            -Pattern 'Native authoring startup restore fallback: name=(.+) result=(.+?) source_state=HENKA_NATIVE_EDITABLE_SOURCE fallback=IMPORTED_FIXTURE\.'
         $nativeAuthoringControlObserved = Wait-FileContains `
             -Path $stdoutPath `
             -Pattern "Native authoring Make Editable control:" `
             -TimeoutMilliseconds 3000
-        if ($nativeSourceRestored) {
+        if ($nativeAuthoringFallbackObserved -ne $null) {
+            Write-Output "[pass] Invalid persisted derivative fell back to the valid imported native authoring source"
+        } elseif ($nativeSourceRestored) {
             Write-Output "[pass] Packaged showcase restored its editor-owned native authoring source"
         } elseif ($nativeAuthoringControlObserved) {
             $nativeMakeEditableMatch = Get-LastLogRegexMatch `
