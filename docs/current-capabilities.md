@@ -208,10 +208,10 @@ turning the public README into an implementation ledger.
   Cancel, and commits the candidate through the transactional engine boundary.
   Preview changes evaluated render state only; authoritative source/history
   changes occur on Apply. The operators interpolate path edges and create only
-  quad faces transactionally. Edge mode also provides a bounded fixed-factor Edge Slide
-  for one compatible open edge-loop or closed edge-cycle
-  selection; it moves the selected loop through the same
-  source/render/bounds/physics/undo transaction while preserving topology.
+  quad faces transactionally. Edge mode also provides a bounded signed-factor
+  Edge Slide for one compatible open edge-loop or closed edge-cycle selection;
+  the shared modeling operator session supports preview, numeric factors in
+  (-1, 1), cancel, and one transactional Apply while preserving topology.
   Multiple cuts, broader interior-edge cases, and split/bridge workflows remain
   incomplete.
 - See [authoring-mesh.md](authoring-mesh.md),

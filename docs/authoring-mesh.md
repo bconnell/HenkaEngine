@@ -176,10 +176,12 @@ Edge Slide does not maintain a separate graph traversal. The editor Loop Cut
   the candidate. Preview updates evaluated render state without changing the
   authoritative source or history; Apply publishes the whole operation
   transactionally. Edge mode also exposes a
-  fixed-factor Edge Slide for one compatible open edge-loop or closed edge-cycle
-  selection. It moves the loop toward deterministic adjacent sides without
-  changing topology and publishes through the same transactional
-  source/render/bounds/collider/undo path. Multi-cut spacing,
+  signed-factor Edge Slide for one compatible open edge-loop or closed edge-cycle
+  selection. The shared modeling operator session supports numeric factors in
+  (-1, 1), preview, cancel, and one transactional Apply; it moves the loop
+  toward deterministic adjacent sides without changing topology and publishes
+  through the same transactional source/render/bounds/collider/undo path.
+  Multi-cut spacing,
   same-face/shared-endpoint bevel batches,
   broader interior edge cases, and general loop-cut networks remain
   unfinished. The same Edge workflow accepts the bounded pairwise

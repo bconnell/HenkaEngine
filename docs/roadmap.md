@@ -226,10 +226,10 @@ tracks that share renderer, asset, persistence, and workspace boundaries.
    using the reusable traversal foundation, with Preview/Refresh and explicit
    Apply/Cancel publication. Same-face/shared-endpoint bevel batches, broader
    interior-edge cases, and general loop-cut networks
-   remain in progress. Edge mode also provides a fixed-factor Edge Slide for
+   remain in progress. Edge mode also provides a signed-factor Edge Slide for
    one compatible open edge-loop or closed edge-cycle selection through the
-   transactional authoring path; variable Edge Slide factor control remains
-   planned.
+   shared modeling operator session, including numeric preview, cancel, and
+   transactional Apply. Broader edge-loop domains remain planned.
 2. Strengthen transactional modeling, UV, material, persistence, and undo/redo
    paths while keeping failure behavior fail-closed.
 3. Improve editor integration, authoring source/project workflows, and the

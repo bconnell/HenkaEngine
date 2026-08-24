@@ -396,6 +396,7 @@ typedef struct sandbox3d_state
     sandbox3d_authoring_asset_controller* authoring_asset_controller;
     char authoring_asset_name[64];
     char native_authoring_loop_cut_factor[16];
+    char native_authoring_edge_slide_factor[16];
     sandbox3d_authoring_object* authoring_object;
     uint32_t native_authoring_hovered_component_id;
     /* A component pick is a selection within the already-selected scene
@@ -3934,6 +3935,30 @@ static bool sandbox3d_parse_loop_cut_factor(
     factor = strtof(text, &end);
     if (errno == ERANGE || end == NULL || *end != '\0' ||
         !isfinite(factor) || factor <= 0.0f || factor >= 1.0f)
+    {
+        return false;
+    }
+
+    *out_factor = factor;
+    return true;
+}
+
+static bool sandbox3d_parse_edge_slide_factor(
+    const char* text,
+    float* out_factor)
+{
+    char* end = NULL;
+    float factor;
+
+    if (text == NULL || out_factor == NULL || text[0] == '\0')
+    {
+        return false;
+    }
+
+    errno = 0;
+    factor = strtof(text, &end);
+    if (errno == ERANGE || end == NULL || *end != '\0' ||
+        !isfinite(factor) || factor <= -1.0f || factor >= 1.0f)
     {
         return false;
     }
@@ -8816,7 +8841,7 @@ static void sandbox3d_print_help(const sandbox3d_state* state)
     printf("  Open Native Panel Test from the Tools QA page to validate a separate OS-level tool window.\n");
     printf("  Use the panels to inspect named scene objects, clear selection, switch gizmo modes, focus the camera, reset object transforms, toggle visibility, and open in-window Help, Scene Legend, Object Info, Assets, Paths, Settings, Diagnostics, Transform QA, and Physics QA utilities.\n");
     printf("  Select an imported glTF scene entity to edit its shared material instance in Object Details; scalar/vector, flags, alpha, and semantic texture overrides apply transactionally. Use Utility > Assets to choose manager-owned textures for editable slots.\n");
-     printf("  Select a Showcase Giraffe or Showcase Rocket primitive, open Object Details > Authoring, and choose Make Editable; the generic component Move, Edge-mode Select Edge Loop/Select Edge Ring/Slide Edge Loop, and Face Bevel/Extrude/Extrude Selection/Subdivide controls are the user-facing modeling path. Slide Edge Loop currently applies a bounded fixed 50%% factor to one compatible open loop or closed cycle. The checked-in HAMS sources are persisted editor-owned derivatives of imported fixture geometry and are reported as HENKA_NATIVE_EDITED_FIXTURE; this does not prove recognizable user-designed Giraffe/Rocket geometry. Own Material promotes a manager-owned runtime definition for bounded base-color, metallic, roughness, emissive-strength, IOR, transmission, subsurface amount, thickness, and tint, plus in-engine procedural normal and metallic-roughness texture creation. Mesh/project save-reload and the native material sidecar preserve all supported PBR scalars, colors, flags, alpha mode, and seven material texture identities; source export, native multi-material binding, and a complete authored Giraffe/Rocket production workflow remain bounded work.\n");
+     printf("  Select a Showcase Giraffe or Showcase Rocket primitive, open Object Details > Authoring, and choose Make Editable; the generic component Move, Edge-mode Select Edge Loop/Select Edge Ring/Edge Slide, and Face Bevel/Extrude/Extrude Selection/Subdivide controls are the user-facing modeling path. Edge Slide accepts a bounded signed factor in (-1,1) through the shared operator preview, numeric entry, Apply, and Cancel workflow. The checked-in HAMS sources are persisted editor-owned derivatives of imported fixture geometry and are reported as HENKA_NATIVE_EDITED_FIXTURE; this does not prove recognizable user-designed Giraffe/Rocket geometry. Own Material promotes a manager-owned runtime definition for bounded base-color, metallic, roughness, emissive-strength, IOR, transmission, subsurface amount, thickness, and tint, plus in-engine procedural normal and metallic-roughness texture creation. Mesh/project save-reload and the native material sidecar preserve all supported PBR scalars, colors, flags, alpha mode, and seven material texture identities; source export, native multi-material binding, and a complete authored Giraffe/Rocket production workflow remain bounded work.\n");
     printf("  Physics QA enables an opt-in fixed-step rigid-body demo with collider/contact debug drawing, impulses, body modes, and camera raycasts.\n");
     printf("  The Tools panel uses Main, Camera/Status, and QA pages, and Scene Objects supports paging when the dock is tighter than the full list.\n");
     printf("  Tools provides Build, Game, and World work contexts plus saved/custom workspace layouts; topology edits mark the workspace Custom.\n");
@@ -16717,6 +16742,21 @@ static bool sandbox3d_handle_modeling_operator_hotkeys(
         return true;
     }
 
+    if (state->modeling_operator.kind == SANDBOX3D_MODELING_OPERATOR_EDGE_SLIDE)
+    {
+        if (henka_input_action_was_pressed(engine, HENKA_INPUT_ACTION_CANCEL_TRANSFORM))
+        {
+            result = sandbox3d_modeling_operator_cancel(&state->modeling_operator);
+            sandbox3d_set_status(
+                state,
+                result != HENKA_SUCCESS,
+                result == HENKA_SUCCESS
+                    ? "Edge Slide canceled. Original mesh restored."
+                    : "Edge Slide cancellation failed; inspect the authoring state.");
+        }
+        return true;
+    }
+
     if (henka_input_action_was_pressed(engine, HENKA_INPUT_ACTION_CANCEL_TRANSFORM))
     {
         result = sandbox3d_modeling_operator_cancel(&state->modeling_operator);
@@ -23851,25 +23891,125 @@ details_group_authoring:
                         &row) &&
                     row.width >= 290.0f &&
                     sandbox3d_authoring_object_get_selected_component_count(
-                        state->authoring_object) > 0U &&
-                    henka_ui_button(
-                        state->ui,
-                        "authoring_edge_slide_top",
-                        (henka_ui_rect){row.x, row.y, 126.0f, 24.0f},
-                        "Slide Edge Loop"))
+                        state->authoring_object) > 0U)
                 {
-                    const henka_result slide_result =
-                        sandbox3d_authoring_object_slide_selected_edge_loop(
-                            state->authoring_object, 0.5f);
-                    sandbox3d_set_status(
-                        state,
-                        slide_result != HENKA_SUCCESS,
-                        slide_result == HENKA_SUCCESS
-                            ? "Selected compatible edge loop slid by 50%."
-                            : "Edge slide rejected; select one compatible edge loop or cycle.");
-                    if (slide_result == HENKA_SUCCESS)
+                    float edge_slide_factor = 0.0f;
+                    bool edge_slide_factor_changed = false;
+                    const bool edge_slide_preview_active =
+                        state->modeling_operator.active &&
+                        state->modeling_operator.kind == SANDBOX3D_MODELING_OPERATOR_EDGE_SLIDE &&
+                        sandbox3d_authoring_object_has_preview(state->authoring_object);
+                    (void)henka_ui_label(
+                        state->ui, row.x, row.y + 7.0f, 0.8f, "Factor");
+                    (void)henka_ui_text_field(
+                        state->ui,
+                        "authoring_edge_slide_factor_top",
+                        (henka_ui_rect){row.x + 42.0f, row.y, 72.0f, 24.0f},
+                        state->native_authoring_edge_slide_factor,
+                        sizeof(state->native_authoring_edge_slide_factor),
+                        &edge_slide_factor_changed);
+                    (void)edge_slide_factor_changed;
+                    if (henka_ui_button(
+                            state->ui,
+                            "authoring_edge_slide_preview_top",
+                            (henka_ui_rect){row.x + 120.0f, row.y, 90.0f, 24.0f},
+                            edge_slide_preview_active ? "Refresh" : "Preview"))
                     {
-                        sandbox3d_mark_generic_modeling_applied(state, entity);
+                        const bool factor_valid = sandbox3d_parse_edge_slide_factor(
+                            state->native_authoring_edge_slide_factor,
+                            &edge_slide_factor);
+                        henka_result slide_result = factor_valid
+                            ? HENKA_SUCCESS
+                            : HENKA_ERROR_INVALID_ARGUMENT;
+                        if (slide_result == HENKA_SUCCESS &&
+                            state->modeling_operator.active)
+                        {
+                            slide_result = state->modeling_operator.kind ==
+                                SANDBOX3D_MODELING_OPERATOR_EDGE_SLIDE
+                                ? sandbox3d_modeling_operator_cancel(
+                                    &state->modeling_operator)
+                                : HENKA_ERROR_INVALID_ARGUMENT;
+                        }
+                        if (slide_result == HENKA_SUCCESS)
+                        {
+                            slide_result = sandbox3d_modeling_operator_begin(
+                                &state->modeling_operator,
+                                state->authoring_object,
+                                SANDBOX3D_MODELING_OPERATOR_EDGE_SLIDE);
+                        }
+                        if (slide_result == HENKA_SUCCESS)
+                        {
+                            slide_result = sandbox3d_modeling_operator_numeric_begin(
+                                &state->modeling_operator);
+                        }
+                        if (slide_result == HENKA_SUCCESS)
+                        {
+                            slide_result = sandbox3d_modeling_operator_numeric_append(
+                                &state->modeling_operator,
+                                state->native_authoring_edge_slide_factor,
+                                strlen(state->native_authoring_edge_slide_factor));
+                        }
+                        if (slide_result == HENKA_SUCCESS)
+                        {
+                            slide_result = sandbox3d_modeling_operator_numeric_commit(
+                                &state->modeling_operator);
+                        }
+                        if (slide_result != HENKA_SUCCESS &&
+                            state->modeling_operator.active)
+                        {
+                            (void)sandbox3d_modeling_operator_cancel(
+                                &state->modeling_operator);
+                        }
+                        sandbox3d_set_status(
+                            state,
+                            slide_result != HENKA_SUCCESS,
+                            slide_result == HENKA_SUCCESS
+                                ? "Edge Slide preview ready; Apply or Cancel."
+                                : "Edge Slide rejected; use a factor between -1 and 1 and select one compatible edge loop or cycle.");
+                    }
+                    if (state->modeling_operator.active &&
+                        state->modeling_operator.kind == SANDBOX3D_MODELING_OPERATOR_EDGE_SLIDE &&
+                        sandbox3d_authoring_object_has_preview(state->authoring_object) &&
+                        sandbox3d_details_flow_next_row(
+                            state, flow_desc.bounds, 28.0f, 1U, &row) &&
+                        row.width >= 260.0f)
+                    {
+                        if (henka_ui_button(
+                                state->ui,
+                                "authoring_edge_slide_apply_top",
+                                (henka_ui_rect){row.x, row.y, 126.0f, 24.0f},
+                                "Apply"))
+                        {
+                            const henka_result apply_result =
+                                sandbox3d_modeling_operator_commit(
+                                    &state->modeling_operator);
+                            sandbox3d_set_status(
+                                state,
+                                apply_result != HENKA_SUCCESS,
+                                apply_result == HENKA_SUCCESS
+                                    ? "Edge Slide applied transactionally."
+                                    : "Edge Slide could not be applied; source retained.");
+                            if (apply_result == HENKA_SUCCESS)
+                            {
+                                sandbox3d_mark_generic_modeling_applied(state, entity);
+                            }
+                        }
+                        if (henka_ui_button(
+                                state->ui,
+                                "authoring_edge_slide_cancel_top",
+                                (henka_ui_rect){row.x + 128.0f, row.y, 126.0f, 24.0f},
+                                "Cancel"))
+                        {
+                            const henka_result cancel_result =
+                                sandbox3d_modeling_operator_cancel(
+                                    &state->modeling_operator);
+                            sandbox3d_set_status(
+                                state,
+                                cancel_result != HENKA_SUCCESS,
+                                cancel_result == HENKA_SUCCESS
+                                    ? "Edge Slide canceled; source retained."
+                                    : "Edge Slide cancellation failed; inspect the authoring state.");
+                        }
                     }
                 }
             }
@@ -33691,6 +33831,11 @@ int main(int argc, char** argv)
         sizeof(state.native_authoring_loop_cut_factor),
         "%s",
         "0.5");
+    (void)snprintf(
+        state.native_authoring_edge_slide_factor,
+        sizeof(state.native_authoring_edge_slide_factor),
+        "%s",
+        "0.0");
     state.smoke_test = smoke_test;
     state.primitive_gallery = primitive_gallery;
     state.residency_stress = residency_stress;
