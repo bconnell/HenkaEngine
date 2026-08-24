@@ -202,8 +202,8 @@ authoritative section below.
   boundaries, and ambiguous endpoint fans; broader interior edge-set bevel and
   broader edge topology operations remain in progress. The new boundary-edge
   extrusion is currently a core authoring operation; the shared Sandbox
-  modeling session now exposes its bounded preview/cancel/apply path, while
-  the Authoring panel does not yet expose it.
+  modeling session and Authoring panel now expose its bounded
+  preview/cancel/apply path.
 
 ## Scripting / Behaviors
 
