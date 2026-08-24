@@ -126,6 +126,8 @@ const henka_authoring_mesh* sandbox3d_authoring_object_get_mesh(const sandbox3d_
 henka_result sandbox3d_authoring_object_preview_candidate(
     sandbox3d_authoring_object* object,
     henka_authoring_mesh* candidate);
+bool sandbox3d_authoring_object_has_preview(
+    const sandbox3d_authoring_object* object);
 /* Publishes the active preview candidate as one source/render/history/
  * physics transaction. */
 henka_result sandbox3d_authoring_object_commit_preview(

@@ -24459,13 +24459,15 @@ details_group_authoring:
                         state->ui,
                         "authoring_loop_cut_leading",
                         (henka_ui_rect){row.x + 128.0f, row.y, 126.0f, 24.0f},
-                        "Loop Cut"))
+                        sandbox3d_authoring_object_has_preview(state->authoring_object)
+                            ? "Refresh"
+                            : "Preview"))
                 {
                     const bool factor_valid = sandbox3d_parse_loop_cut_factor(
                         state->native_authoring_loop_cut_factor,
                         &loop_cut_factor);
                     const henka_result cut_result = factor_valid
-                        ? sandbox3d_authoring_object_loop_cut_selected_face_at_factor(
+                        ? sandbox3d_authoring_object_preview_loop_cut_selected_face_at_factor(
                             state->authoring_object,
                             loop_cut_factor)
                         : HENKA_ERROR_INVALID_ARGUMENT;
@@ -24473,12 +24475,48 @@ details_group_authoring:
                         state,
                         cut_result != HENKA_SUCCESS,
                         cut_result == HENKA_SUCCESS
-                            ? "Compatible quad strip cut transactionally."
-                            : "Loop Cut rejected; use a factor between 0 and 1 and select a compatible quad strip.");
-                    if (cut_result == HENKA_SUCCESS)
+                            ? "Loop Cut preview ready; Apply or Cancel."
+                            : "Loop Cut preview rejected; use a factor between 0 and 1 and select a compatible quad strip.");
+                }
+            }
+            if (state->authoring_object != NULL &&
+                sandbox3d_authoring_object_has_preview(state->authoring_object) &&
+                sandbox3d_details_flow_next_row(state, flow_desc.bounds, 28.0f, 1U, &row) &&
+                row.width >= 260.0f)
+            {
+                if (henka_ui_button(
+                        state->ui,
+                        "authoring_loop_cut_apply_leading",
+                        (henka_ui_rect){row.x, row.y, 126.0f, 24.0f},
+                        "Apply"))
+                {
+                    const henka_result apply_result =
+                        sandbox3d_authoring_object_commit_preview(state->authoring_object);
+                    sandbox3d_set_status(
+                        state,
+                        apply_result != HENKA_SUCCESS,
+                        apply_result == HENKA_SUCCESS
+                            ? "Loop Cut preview applied transactionally."
+                            : "Loop Cut preview could not be applied; source retained.");
+                    if (apply_result == HENKA_SUCCESS)
                     {
                         sandbox3d_mark_generic_modeling_applied(state, entity);
                     }
+                }
+                if (henka_ui_button(
+                        state->ui,
+                        "authoring_loop_cut_cancel_leading",
+                        (henka_ui_rect){row.x + 128.0f, row.y, 126.0f, 24.0f},
+                        "Cancel"))
+                {
+                    const henka_result cancel_result =
+                        sandbox3d_authoring_object_cancel_preview(state->authoring_object);
+                    sandbox3d_set_status(
+                        state,
+                        cancel_result != HENKA_SUCCESS,
+                        cancel_result == HENKA_SUCCESS
+                            ? "Loop Cut preview canceled; source retained."
+                            : "Loop Cut preview could not be canceled; inspect the authoring state.");
                 }
             }
             if (state->authoring_object != NULL &&
@@ -25479,13 +25517,15 @@ details_group_authoring:
                         state->ui,
                         "authoring_loop_cut_top",
                         (henka_ui_rect){row.x + 128.0f, row.y, 126.0f, 24.0f},
-                        "Loop Cut"))
+                        sandbox3d_authoring_object_has_preview(state->authoring_object)
+                            ? "Refresh"
+                            : "Preview"))
                 {
                     const bool factor_valid = sandbox3d_parse_loop_cut_factor(
                         state->native_authoring_loop_cut_factor,
                         &loop_cut_factor);
                     const henka_result cut_result = factor_valid
-                        ? sandbox3d_authoring_object_loop_cut_selected_face_at_factor(
+                        ? sandbox3d_authoring_object_preview_loop_cut_selected_face_at_factor(
                             state->authoring_object,
                             loop_cut_factor)
                         : HENKA_ERROR_INVALID_ARGUMENT;
@@ -25493,12 +25533,48 @@ details_group_authoring:
                         state,
                         cut_result != HENKA_SUCCESS,
                         cut_result == HENKA_SUCCESS
-                            ? "Compatible quad strip cut transactionally."
-                            : "Loop Cut rejected; use a factor between 0 and 1 and select a compatible quad strip.");
-                    if (cut_result == HENKA_SUCCESS)
+                            ? "Loop Cut preview ready; Apply or Cancel."
+                            : "Loop Cut preview rejected; use a factor between 0 and 1 and select a compatible quad strip.");
+                }
+            }
+            if (state->authoring_object != NULL &&
+                sandbox3d_authoring_object_has_preview(state->authoring_object) &&
+                sandbox3d_details_flow_next_row(state, flow_desc.bounds, 28.0f, 1U, &row) &&
+                row.width >= 260.0f)
+            {
+                if (henka_ui_button(
+                        state->ui,
+                        "authoring_loop_cut_apply_top",
+                        (henka_ui_rect){row.x, row.y, 126.0f, 24.0f},
+                        "Apply"))
+                {
+                    const henka_result apply_result =
+                        sandbox3d_authoring_object_commit_preview(state->authoring_object);
+                    sandbox3d_set_status(
+                        state,
+                        apply_result != HENKA_SUCCESS,
+                        apply_result == HENKA_SUCCESS
+                            ? "Loop Cut preview applied transactionally."
+                            : "Loop Cut preview could not be applied; source retained.");
+                    if (apply_result == HENKA_SUCCESS)
                     {
                         sandbox3d_mark_generic_modeling_applied(state, entity);
                     }
+                }
+                if (henka_ui_button(
+                        state->ui,
+                        "authoring_loop_cut_cancel_top",
+                        (henka_ui_rect){row.x + 128.0f, row.y, 126.0f, 24.0f},
+                        "Cancel"))
+                {
+                    const henka_result cancel_result =
+                        sandbox3d_authoring_object_cancel_preview(state->authoring_object);
+                    sandbox3d_set_status(
+                        state,
+                        cancel_result != HENKA_SUCCESS,
+                        cancel_result == HENKA_SUCCESS
+                            ? "Loop Cut preview canceled; source retained."
+                            : "Loop Cut preview could not be canceled; inspect the authoring state.");
                 }
             }
             if (state->native_authoring_material_asset != NULL &&

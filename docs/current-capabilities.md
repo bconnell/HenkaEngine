@@ -204,14 +204,16 @@ turning the public README into an implementation ledger.
   operators. A bounded single-quad face loop cut and one factor-controlled
   quad-strip Loop Cut across either a compatible open strip or closed ring are
   available through the Face workflow; the editor validates a user-entered
-  factor in the open interval (0, 1) before invoking the transactional engine
-  operation. They interpolate path edges and create only quad faces
-  transactionally. Edge mode also provides a bounded fixed-factor Edge Slide
+  factor in the open interval (0, 1), supports Preview/Refresh plus Apply and
+  Cancel, and commits the candidate through the transactional engine boundary.
+  Preview changes evaluated render state only; authoritative source/history
+  changes occur on Apply. The operators interpolate path edges and create only
+  quad faces transactionally. Edge mode also provides a bounded fixed-factor Edge Slide
   for one compatible open edge-loop or closed edge-cycle
   selection; it moves the selected loop through the same
   source/render/bounds/physics/undo transaction while preserving topology.
-  Interactive preview, multiple cuts, broader interior-edge
-  cases, and split/bridge workflows remain incomplete.
+  Multiple cuts, broader interior-edge cases, and split/bridge workflows remain
+  incomplete.
 - See [authoring-mesh.md](authoring-mesh.md),
   [runtime-foundations.md](runtime-foundations.md), and
   [showcase-assets.md](showcase-assets.md).

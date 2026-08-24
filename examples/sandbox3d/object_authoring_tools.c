@@ -2133,6 +2133,12 @@ const henka_authoring_mesh* sandbox3d_authoring_object_get_mesh(const sandbox3d_
     return object == NULL ? NULL : object->mesh;
 }
 
+bool sandbox3d_authoring_object_has_preview(
+    const sandbox3d_authoring_object* object)
+{
+    return object != NULL && object->preview_active;
+}
+
 henka_result sandbox3d_authoring_object_preview_candidate(
     sandbox3d_authoring_object* object,
     henka_authoring_mesh* candidate)

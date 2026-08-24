@@ -171,14 +171,16 @@ non-manifold, and ambiguous crossings without partial output. The same topology
 layer also orders connected selected edge chains and cycles deterministically, so
 Edge Slide does not maintain a separate graph traversal. The editor Loop Cut
   operator now
-  accepts a validated user-entered factor and applies one cut across a
-  compatible open strip or closed ring, publishing the whole operation
+  accepts a validated user-entered factor, previews one cut across a compatible
+  open strip or closed ring, and exposes explicit Apply/Cancel publication for
+  the candidate. Preview updates evaluated render state without changing the
+  authoritative source or history; Apply publishes the whole operation
   transactionally. Edge mode also exposes a
   fixed-factor Edge Slide for one compatible open edge-loop or closed edge-cycle
   selection. It moves the loop toward deterministic adjacent sides without
   changing topology and publishes through the same transactional
-  source/render/bounds/collider/undo path. Interactive preview, multi-cut
-  spacing, same-face/shared-endpoint bevel batches,
+  source/render/bounds/collider/undo path. Multi-cut spacing,
+  same-face/shared-endpoint bevel batches,
   broader interior edge cases, and general loop-cut networks remain
   unfinished. The same Edge workflow accepts the bounded pairwise
   vertex-disjoint boundary-edge bevel selection described above and publishes
