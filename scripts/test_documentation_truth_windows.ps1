@@ -61,9 +61,19 @@ try {
         throw "Documentation truth baseline unexpectedly failed."
     }
 
+    $authoringMeshSourcePath = Join-Path $probeRoot "engine\src\mesh\authoring_mesh.c"
+    $authoringMeshSource = [System.IO.File]::ReadAllText($authoringMeshSourcePath)
+    $writerVersionMatch = [regex]::Match(
+        $authoringMeshSource,
+        '(?m)^\s*#define\s+HENKA_AUTHORING_MESH_FILE_VERSION\s+(\d+)U\b')
+    if (-not $writerVersionMatch.Success) {
+        throw "Documentation truth regression could not determine the copied writer version."
+    }
+    $writerVersion = [int]$writerVersionMatch.Groups[1].Value
+    $staleVersion = if ($writerVersion -gt 1) { $writerVersion - 1 } else { $writerVersion + 1 }
     [System.IO.File]::AppendAllText(
         $authoringMeshPath,
-        [Environment]::NewLine + "The current writer emits HAMS v4." + [Environment]::NewLine)
+        [Environment]::NewLine + "The current writer emits HAMS v$staleVersion." + [Environment]::NewLine)
     if ((Invoke-TruthCheck) -eq 0) {
         throw "Documentation truth accepted a stale current-writer version claim."
     }

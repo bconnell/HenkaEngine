@@ -2736,6 +2736,7 @@ static int test_hams_loose_topology_versioning(void)
     henka_authoring_vertex_id surface_vertices[4] = {0U, 0U, 0U, 0U};
     henka_authoring_vertex_id loose_first = HENKA_AUTHORING_INVALID_ID;
     henka_authoring_vertex_id loose_second = HENKA_AUTHORING_INVALID_ID;
+    henka_authoring_vertex_id loose_isolated = HENKA_AUTHORING_INVALID_ID;
     henka_authoring_edge_id loose_edge = HENKA_AUTHORING_INVALID_ID;
     henka_authoring_face_id surface_face = HENKA_AUTHORING_INVALID_ID;
     FILE* file = NULL;
@@ -2812,6 +2813,12 @@ static int test_hams_loose_topology_versioning(void)
             (henka_vec2){1.0f, 0.0f},
             7U,
             &loose_second) != HENKA_SUCCESS ||
+        henka_authoring_mesh_add_vertex(
+            loose,
+            (henka_vec3){8.0f, 0.0f, 0.0f},
+            (henka_vec2){0.5f, 0.5f},
+            9U,
+            &loose_isolated) != HENKA_SUCCESS ||
         henka_authoring_mesh_add_edge(
             loose, loose_first, loose_second, true, &loose_edge) != HENKA_SUCCESS ||
         henka_authoring_mesh_save_file(loose, path) != HENKA_SUCCESS)
@@ -2838,6 +2845,8 @@ static int test_hams_loose_topology_versioning(void)
         loaded == NULL ||
         henka_authoring_mesh_get_edge_face_count(loaded, loose_edge) != 0U ||
         henka_authoring_mesh_get_vertex(loaded, loose_first) == NULL ||
+        henka_authoring_mesh_get_vertex(loaded, loose_isolated) == NULL ||
+        fabsf(henka_authoring_mesh_get_vertex(loaded, loose_isolated)->position.x - 8.0f) > 0.0001f ||
         !henka_authoring_mesh_validate(loaded) ||
         henka_authoring_mesh_add_vertex(
             loaded,
@@ -2864,7 +2873,7 @@ static int test_hams_loose_topology_versioning(void)
     stage = "malformed v5 construction";
     if (henka_authoring_mesh_save_file(loose, path) != HENKA_SUCCESS ||
         !test_patch_hams_version(path, 5U) ||
-        !test_patch_hams_u32_at(path, 48L + (2L * 28L) + 20L, 1U))
+        !test_patch_hams_u32_at(path, 48L + (3L * 28L) + 20L, 1U))
     {
         goto cleanup;
     }
