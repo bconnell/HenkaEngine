@@ -95,10 +95,11 @@ hard seams while shaping imported fixture regions; it is a modeling foundation,
 not final anatomy or mechanical-topology proof.
 
 The authoring mesh represents validated polygonal surfaces plus explicit loose
-source vertices and standalone wire edges. The Sandbox does not yet expose
-dedicated loose-component create/edit controls or render them as viewport
-line/point primitives, so this is source and persistence capability rather than
-a claim of complete loose-component editor UX.
+source vertices and standalone wire edges. The Sandbox exposes bounded
+loose-component create/edit controls and renders authored loose vertices and
+standalone edges as viewport point/line primitives. This remains a foundation,
+not a claim of complete loose-component editor UX or generalized topology
+coverage.
 
 The Authoring section also reports the evaluated render-mesh material-region
 range after each successful edit, undo, redo, save, or reload. This is metadata
