@@ -25632,7 +25632,7 @@ details_group_authoring:
 
                 (void)henka_ui_label_colored(
                     state->ui, row.x, row.y + 5.0f, 0.85f,
-                    "Add Loose Vertex", HENKA_UI_COLOR_INFO);
+                    "Add Vertex X/Y/Z", HENKA_UI_COLOR_INFO);
                 (void)henka_ui_text_field(
                     state->ui,
                     "authoring_loose_vertex_x_top",
