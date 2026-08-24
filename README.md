@@ -40,23 +40,23 @@ Other operating systems are not currently claimed as supported.
 
 ## Capability matrix
 
-| Area | Current status | Highlights |
+| Area | Current status | Supported scope / highlights |
 | --- | --- | --- |
-| Core runtime | Available | C17 APIs, bounded validation, generation-checked scene identities |
-| Renderer | Available (Unhardened) | OpenGL path, Solid/Material Preview/Rendered policies, PBR foundations |
-| Scene and camera | Available (Unhardened) | Entities, input actions, framing, gizmos, Compass, 2.5D presets |
-| Editor workspace | In Progress | Docking, detached panels, tabs, layout persistence, early authoring UI |
-| Modeling and authoring | In Progress | Object/Vertex/Edge/Face modes, topology operations, UV and HAMS foundations |
-| Assets and materials | In Progress | glTF/GLB, OBJ, manager-owned dependencies, validated instances |
-| Terrain and world | Foundation | Four-layer terrain, streaming, edits, LOD, persistence, collision paths |
-| Physics | Foundation | Fixed-step rigid bodies, primitive colliders, contacts, events, raycasts |
-| 2.5D | Foundation | Perspective/side/top/isometric camera workflows and orthographic zoom |
-| Networking/server | Foundation | Renderer-free runtime, dedicated host, bounded Terrain authority paths |
-| External projects | Foundation | Separate game/server templates with Windows validation |
-| Game authoring | Foundation | Bounded Scene Document, authored Physics/Interaction, Save/Reload, and isolated runtime Play scenes |
-| 2D | Planned | Dedicated 2D renderer, sprites, layers, parallax, and animation remain open |
-| Audio | Planned | No current audio workflow |
-| Scripting/behaviors | In Progress | Shared host schema, bounded HenkaScript/Lua lifecycle adapters, Scene Document binding, Play dispatch, state persistence, and cross-language events |
+| Core runtime | Available | Current C17 runtime APIs, bounded validation, and generation-checked scene identities |
+| Renderer | Available (Unhardened) | Current OpenGL path, Solid/Material Preview/Rendered policies, and PBR foundations |
+| Scene and camera | Available (Unhardened) | Current 3D entities, input actions, framing, gizmos, Compass, and 2.5D camera presets |
+| Editor workspace | In Progress | Current native docking, detached panels, tabs, layout persistence, and early authoring UI |
+| Modeling and authoring | In Progress | Current direct Object/Vertex/Edge/Face modes, bounded topology operations, UV, and HAMS foundations |
+| Assets and materials | In Progress | Current glTF/GLB and OBJ loading, manager-owned dependencies, and validated instances |
+| Terrain and world | Foundation | Current bounded four-layer terrain, streaming, edits, LOD, persistence, and collision paths |
+| Physics | Foundation | Current fixed-step rigid bodies, primitive colliders, contacts, events, and raycasts |
+| 2.5D | Foundation | Camera-side foundation only: perspective/side/top/isometric workflows and orthographic zoom |
+| Networking/server | Foundation | Current renderer-free runtime, dedicated host, and bounded Terrain authority paths |
+| External projects | Foundation | Current separate game/server templates with Windows validation |
+| Game authoring | Foundation | Current bounded Scene Document, authored Physics/Interaction, Save/Reload, and isolated runtime Play scenes |
+| 2D | Planned | No dedicated 2D scope yet; renderer, sprites, layers, parallax, and animation remain open |
+| Audio | Planned | No current audio scope or end-user workflow |
+| Scripting/behaviors | In Progress | Current bounded HenkaScript/Lua lifecycle adapters, Scene Document binding, Play dispatch, persistence, and cross-language events |
 
 Status labels are contractual: **Foundation** means core architecture exists but
 the category is incomplete; **In Progress** means substantial implementation
@@ -192,6 +192,10 @@ bounded consumer validation paths, not complete game project serializers. See
 - [Contributing](CONTRIBUTING.md)
 
 ## Current limitations
+
+The supported scope for each capability row is stated in its matrix cell above.
+The limitations below are evaluated against that scope; future expansion beyond
+it does not lower the current status, while unfinished work inside it does.
 
 - Henka and its editor are early-stage; the native workspace is not a complete production editor.
 - 2D, audio, scripting/behaviors, character controllers, advanced physics, broader renderer backends, and mature Game/Play workflows are unfinished.
