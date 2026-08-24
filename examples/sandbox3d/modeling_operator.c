@@ -69,7 +69,8 @@ henka_result sandbox3d_modeling_operator_begin(
     if (session == NULL || object == NULL || session->active ||
         (kind != SANDBOX3D_MODELING_OPERATOR_MOVE &&
          kind != SANDBOX3D_MODELING_OPERATOR_EDGE_SLIDE &&
-         kind != SANDBOX3D_MODELING_OPERATOR_BEVEL))
+         kind != SANDBOX3D_MODELING_OPERATOR_BEVEL &&
+         kind != SANDBOX3D_MODELING_OPERATOR_EXTRUDE))
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
@@ -96,6 +97,16 @@ henka_result sandbox3d_modeling_operator_begin(
         selection_mode != SANDBOX3D_AUTHORING_SELECTION_VERTEX &&
         selection_mode != SANDBOX3D_AUTHORING_SELECTION_EDGE &&
         selection_mode != SANDBOX3D_AUTHORING_SELECTION_FACE)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    if (kind == SANDBOX3D_MODELING_OPERATOR_EXTRUDE &&
+        (selection_mode != SANDBOX3D_AUTHORING_SELECTION_VERTEX &&
+         selection_mode != SANDBOX3D_AUTHORING_SELECTION_EDGE))
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    if (kind == SANDBOX3D_MODELING_OPERATOR_EXTRUDE && selected_count != 1U)
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
@@ -347,6 +358,9 @@ henka_result sandbox3d_modeling_operator_preview(
     henka_authoring_mesh* candidate = NULL;
     henka_authoring_modeling_report report = {0};
     henka_authoring_face_id bevel_result_face = HENKA_AUTHORING_INVALID_ID;
+    henka_authoring_vertex_id extrude_result_vertex = HENKA_AUTHORING_INVALID_ID;
+    henka_authoring_edge_id extrude_result_edge = HENKA_AUTHORING_INVALID_ID;
+    henka_authoring_face_id extrude_result_face = HENKA_AUTHORING_INVALID_ID;
     henka_authoring_mesh_desc mesh_desc = {0};
     size_t affected_count = 0U;
     size_t bevel_result_count = 0U;
@@ -360,7 +374,8 @@ henka_result sandbox3d_modeling_operator_preview(
     if (session == NULL || !session->active ||
         (session->kind != SANDBOX3D_MODELING_OPERATOR_MOVE &&
          session->kind != SANDBOX3D_MODELING_OPERATOR_EDGE_SLIDE &&
-         session->kind != SANDBOX3D_MODELING_OPERATOR_BEVEL) ||
+         session->kind != SANDBOX3D_MODELING_OPERATOR_BEVEL &&
+         session->kind != SANDBOX3D_MODELING_OPERATOR_EXTRUDE) ||
         session->source_snapshot == NULL || session->object == NULL ||
         session->selection_ids == NULL || session->selection_count == 0U ||
         (session->kind == SANDBOX3D_MODELING_OPERATOR_MOVE &&
@@ -370,6 +385,13 @@ henka_result sandbox3d_modeling_operator_preview(
         (session->kind == SANDBOX3D_MODELING_OPERATOR_BEVEL &&
             session->selection_mode == SANDBOX3D_AUTHORING_SELECTION_FACE &&
             session->selection_count != 1U) ||
+        (session->kind == SANDBOX3D_MODELING_OPERATOR_EXTRUDE &&
+            (session->selection_mode != SANDBOX3D_AUTHORING_SELECTION_VERTEX &&
+             session->selection_mode != SANDBOX3D_AUTHORING_SELECTION_EDGE)) ||
+        (session->kind == SANDBOX3D_MODELING_OPERATOR_EXTRUDE &&
+            session->selection_count != 1U) ||
+        (session->kind == SANDBOX3D_MODELING_OPERATOR_EXTRUDE &&
+            session->axis == SANDBOX3D_MODELING_OPERATOR_AXIS_NONE) ||
         !isfinite(delta) ||
         !isfinite(session->amount))
     {
@@ -392,6 +414,8 @@ henka_result sandbox3d_modeling_operator_preview(
             (applied_amount <= -1.0f || applied_amount >= 1.0f)) ||
         (session->kind == SANDBOX3D_MODELING_OPERATOR_BEVEL &&
             (applied_amount <= 0.0f || applied_amount > 1000000.0f)) ||
+        (session->kind == SANDBOX3D_MODELING_OPERATOR_EXTRUDE &&
+            fabsf(applied_amount) <= 1.0e-7f) ||
         (session->kind == SANDBOX3D_MODELING_OPERATOR_MOVE &&
             (counts.vertices == 0U || counts.vertices > SIZE_MAX / sizeof(*vertices))))
     {
@@ -498,6 +522,44 @@ henka_result sandbox3d_modeling_operator_preview(
                 (henka_authoring_face_id)session->selection_ids[0U],
                 applied_amount,
                 &bevel_result_face);
+        }
+    }
+    if (result == HENKA_SUCCESS && session->kind == SANDBOX3D_MODELING_OPERATOR_EXTRUDE)
+    {
+        henka_vec3 direction = {0.0f, 0.0f, 0.0f};
+        if (session->axis == SANDBOX3D_MODELING_OPERATOR_AXIS_X)
+        {
+            direction.x = 1.0f;
+        }
+        else if (session->axis == SANDBOX3D_MODELING_OPERATOR_AXIS_Y)
+        {
+            direction.y = 1.0f;
+        }
+        else
+        {
+            direction.z = 1.0f;
+        }
+        if (session->selection_mode == SANDBOX3D_AUTHORING_SELECTION_VERTEX)
+        {
+            result = henka_authoring_mesh_extrude_loose_vertex(
+                candidate,
+                (henka_authoring_vertex_id)session->selection_ids[0U],
+                direction,
+                applied_amount,
+                &extrude_result_vertex,
+                &extrude_result_edge,
+                &report);
+        }
+        else
+        {
+            result = henka_authoring_mesh_extrude_loose_edge(
+                candidate,
+                (henka_authoring_edge_id)session->selection_ids[0U],
+                direction,
+                applied_amount,
+                &extrude_result_edge,
+                &extrude_result_face,
+                &report);
         }
     }
     if (result == HENKA_SUCCESS)

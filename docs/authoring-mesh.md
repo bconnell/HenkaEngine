@@ -206,9 +206,11 @@ explicit-direction loose-vertex extrude: it preserves the source vertex,
 inherits its UV/material metadata, and creates exactly one standalone wire
 edge to the new vertex without inventing a face. Zero directions, zero
 distances, connected vertices, invalid geometry, and capacity exhaustion fail
-closed. The Sandbox still does not expose a dedicated loose-component
-creation or extrusion control, so this primitive does not claim general
-Vertex Extrude coverage. The core authoring representation also accepts
+closed. The shared Sandbox modeling-operator session now previews, cancels,
+and applies explicit-axis extrusion for exactly one selected loose vertex or
+standalone edge through these core operations. This bounded session does not
+claim general Vertex Extrude coverage, and dedicated loose-component creation
+UI remains unfinished. The core authoring representation also accepts
 explicit loose vertices and standalone wire edges: both use stable logical IDs,
 bounded physical storage, deterministic endpoint ordering, and the same HAMS v4
 transactional save/load path. A standalone edge must connect two distinct
@@ -218,8 +220,9 @@ modeling API also provides a bounded transactional explicit-direction
 loose-edge extrude: it creates a parallel edge and one quad face, inherits
 endpoint UV/material metadata, preserves source-edge hard intent, and rejects
 face-backed edges, mismatched endpoint materials, degenerate offsets, and
-capacity exhaustion. The Sandbox does not yet expose these loose-component
-operations as general Vertex/Edge Extrude workflows.
+capacity exhaustion. The Sandbox session does not yet expose these
+loose-component operations as general surface-connected Vertex/Edge Extrude
+workflows.
 material-instance assignment, texture
 dependencies, general collision integration beyond the bound box contract,
 package ownership, topology-aware picking, and showcase rebuilds still need the

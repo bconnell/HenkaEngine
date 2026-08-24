@@ -208,9 +208,11 @@ tracks that share renderer, asset, persistence, and workspace boundaries.
    material-instance editing are available in the bounded workflow. HAMS also
    preserves explicit loose vertices and standalone wire edges with stable IDs
    and bounded reusable storage. The topology overlay presents those source
-   vertices and wire edges for inspection, while dedicated loose-component
-   creation/edit controls and renderer line/point evaluation remain current
-   development.
+   vertices and wire edges for inspection. The shared modeling-operator session
+   also provides bounded explicit-axis extrusion for one selected loose vertex
+   or standalone edge with preview, cancel, and transactional Apply; dedicated
+   loose-component creation/edit controls and renderer line/point evaluation
+   remain current development.
 8. glTF/GLB import and external modeling-pipeline compatibility remain part of
    the implemented boundary, with explicit limitations.
 
@@ -230,18 +232,20 @@ tracks that share renderer, asset, persistence, and workspace boundaries.
    one compatible open edge-loop or closed edge-cycle selection through the
    shared modeling operator session, including numeric preview, cancel, and
    transactional Apply. Broader edge-loop domains remain planned.
-2. Strengthen transactional modeling, UV, material, persistence, and undo/redo
+2. Complete dedicated loose-component creation/edit controls and renderer
+   line/point evaluation around the bounded loose extrusion session, then
+   extend the session to broader surface-connected extrusion workflows.
+3. Strengthen transactional modeling, UV, material, persistence, and undo/redo
    paths while keeping failure behavior fail-closed.
-3. Improve editor integration, authoring source/project workflows, and the
+4. Improve editor integration, authoring source/project workflows, and the
    usability of the existing operations.
-4. Keep showcase fixture work separate from claims of user-authored,
+5. Keep showcase fixture work separate from claims of user-authored,
    production-quality anatomy or mechanical topology.
 
 ### Future Work
 
-1. Broader non-manifold or incompatible-normal vertex-fan handling, editor
-   workflows for the explicit-direction loose-vertex and loose-edge extrusion
-   primitives, generalized Edge Extrude, broader edge and vertex topology operations,
+1. Broader non-manifold or incompatible-normal vertex-fan handling, generalized
+   surface-connected Edge Extrude, broader edge and vertex topology operations,
    weld/split/bridge workflows, general loop-cut networks, and broader source
    export. Connected open boundary fan extrusion, bounded loose-vertex wire
    extrusion, and bounded loose-edge quad extrusion are already available in
