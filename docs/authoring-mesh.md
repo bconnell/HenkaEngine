@@ -166,8 +166,12 @@ topology editing remains incomplete. A bounded single-quad face loop cut is also
   material, smoothing, UV, non-quad, non-manifold, and ambiguous crossings
   without partial output. The editor Loop Cut operator now applies one fixed
   factor cut across a compatible open strip and publishes the whole operation
-  transactionally. Closed rings, interactive preview/factor adjustment,
-  multi-cut spacing, and Edge Slide remain unfinished.
+  transactionally. Edge mode also exposes a fixed-factor Edge Slide for one
+  compatible open edge-loop selection. It moves the loop toward deterministic
+  adjacent sides without changing topology and publishes through the same
+  transactional source/render/bounds/collider/undo path. Closed rings,
+  interactive preview/factor adjustment, multi-cut spacing, broader interior
+  edge cases, and general loop-cut networks remain unfinished.
 Bounded Vertex Extrude is available for one unambiguous boundary corner of a
 single face. It creates one cap vertex and two connecting side faces while
 preserving the operation's transactional source/render/bounds/collider/undo

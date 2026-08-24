@@ -215,9 +215,11 @@ tracks that share renderer, asset, persistence, and workspace boundaries.
    and compatible interior-edge bevel for an isolated two-quad patch are now
    available; the editor now applies one fixed-factor Loop Cut across a
    compatible open quad strip using the reusable traversal foundation. Closed
-   rings, preview/factor adjustment, multiple cuts, Edge Slide, broader
-   interior-edge cases, batch edge operations, and general loop-cut networks
-   remain in progress.
+   rings, preview/factor adjustment, multiple cuts, broader interior-edge
+   cases, batch edge operations, and general loop-cut networks remain in
+   progress. Edge mode also provides a fixed-factor Edge Slide for one
+   compatible open edge-loop selection through the transactional authoring
+   path; interactive factor control and closed-loop sliding remain planned.
 2. Strengthen transactional modeling, UV, material, persistence, and undo/redo
    paths while keeping failure behavior fail-closed.
 3. Improve editor integration, authoring source/project workflows, and the

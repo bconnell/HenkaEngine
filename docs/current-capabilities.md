@@ -191,9 +191,12 @@ turning the public README into an implementation ledger.
   non-quad, non-manifold, and ambiguous crossings without partial output. A
   bounded single-quad face loop cut and one fixed-factor open quad-strip Loop
   Cut are available through the Face workflow. They interpolate path edges and
-  create only quad faces transactionally. Closed rings, preview/factor
-  adjustment, multiple cuts, Edge Slide, and broader split/bridge workflows
-  remain incomplete.
+  create only quad faces transactionally. Edge mode also provides a bounded
+  fixed-factor Edge Slide for one compatible open edge-loop selection; it moves
+  the selected loop through the same source/render/bounds/physics/undo
+  transaction while preserving topology. Closed rings, interactive
+  preview/factor adjustment, multiple cuts, broader interior-edge cases, and
+  split/bridge workflows remain incomplete.
 - See [authoring-mesh.md](authoring-mesh.md),
   [runtime-foundations.md](runtime-foundations.md), and
   [showcase-assets.md](showcase-assets.md).

@@ -267,6 +267,11 @@ henka_result sandbox3d_authoring_object_delete_selected_edge(
  * rejected by the core contract. */
 henka_result sandbox3d_authoring_object_bevel_selected_edge(
     sandbox3d_authoring_object* object);
+/* Slides the current compatible open edge-loop selection through the
+ * authoritative source/render/bounds/physics/undo transaction. */
+henka_result sandbox3d_authoring_object_slide_selected_edge_loop(
+    sandbox3d_authoring_object* object,
+    float factor);
 /* Scales the vertices touched by the current component selection around their
  * centroid and publishes the result through the normal transactional source,
  * render, bounds, physics, and undo path. */

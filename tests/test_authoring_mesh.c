@@ -13,6 +13,39 @@ static int fail(const char* message)
     return 0;
 }
 
+static henka_result test_find_edge_between_vertices(
+    const henka_authoring_mesh* mesh,
+    henka_authoring_vertex_id first,
+    henka_authoring_vertex_id second,
+    henka_authoring_edge_id* out_edge_id)
+{
+    const henka_authoring_mesh_desc desc = henka_authoring_mesh_get_desc(mesh);
+    size_t slot;
+    if (mesh == NULL || out_edge_id == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    *out_edge_id = HENKA_AUTHORING_INVALID_ID;
+    for (slot = 0U; slot < desc.max_edges; ++slot)
+    {
+        henka_authoring_edge_id edge_id;
+        const henka_authoring_edge* edge;
+        if (henka_authoring_mesh_get_edge_id_at(mesh, slot, &edge_id) != HENKA_SUCCESS)
+        {
+            continue;
+        }
+        edge = henka_authoring_mesh_get_edge(mesh, edge_id);
+        if (edge != NULL &&
+            ((edge->vertices[0] == first && edge->vertices[1] == second) ||
+             (edge->vertices[0] == second && edge->vertices[1] == first)))
+        {
+            *out_edge_id = edge_id;
+            return HENKA_SUCCESS;
+        }
+    }
+    return HENKA_ERROR_INVALID_ARGUMENT;
+}
+
 static FILE* test_open_file(const char* path, const char* mode)
 {
     FILE* file = NULL;
@@ -1036,6 +1069,124 @@ cleanup:
     return result ? 1 : fail("quad strip loop cut operation");
 }
 
+static int test_edge_loop_slide_operation(void)
+{
+    const henka_authoring_mesh_desc desc = {32U, 64U, 16U, 8U};
+    const henka_vec3 positions[12] = {
+        {0.0f, 0.0f, 0.0f}, {1.0f, 0.0f, 0.0f}, {2.0f, 0.0f, 0.0f},
+        {0.0f, 1.0f, 0.0f}, {1.0f, 1.0f, 0.0f}, {2.0f, 1.0f, 0.0f},
+        {0.0f, 2.0f, 0.0f}, {1.0f, 2.0f, 0.0f}, {2.0f, 2.0f, 0.0f},
+        {0.0f, 3.0f, 0.0f}, {1.0f, 3.0f, 0.0f}, {2.0f, 3.0f, 0.0f}};
+    const henka_authoring_vertex_id faces[6][4] = {
+        {1U, 2U, 5U, 4U}, {2U, 3U, 6U, 5U},
+        {4U, 5U, 8U, 7U}, {5U, 6U, 9U, 8U},
+        {7U, 8U, 11U, 10U}, {8U, 9U, 12U, 11U}};
+    henka_authoring_mesh* mesh = NULL;
+    henka_authoring_edge_id loop_edges[3] = {
+        HENKA_AUTHORING_INVALID_ID,
+        HENKA_AUTHORING_INVALID_ID,
+        HENKA_AUTHORING_INVALID_ID};
+    henka_authoring_edge_id boundary_edge = HENKA_AUTHORING_INVALID_ID;
+    henka_authoring_edge_id duplicate_edges[2];
+    henka_authoring_mesh_counts before;
+    henka_authoring_mesh_counts after;
+    henka_authoring_modeling_report report = {0};
+    henka_authoring_face_id face_id;
+    henka_authoring_edge_id edge_id;
+    size_t row;
+    size_t edge_slot;
+    int result = 0;
+
+    if (henka_authoring_mesh_create(&desc, &mesh) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    for (row = 0U; row < 12U; ++row)
+    {
+        if (henka_authoring_mesh_add_vertex(
+                mesh, positions[row], (henka_vec2){positions[row].x, positions[row].y},
+                0U, &(henka_authoring_vertex_id){0U}) != HENKA_SUCCESS)
+        {
+            goto cleanup;
+        }
+    }
+    for (row = 0U; row < 6U; ++row)
+    {
+        if (henka_authoring_mesh_add_face(
+                mesh, faces[row], 4U, 0U, true, &face_id) != HENKA_SUCCESS)
+        {
+            goto cleanup;
+        }
+    }
+    for (row = 0U; row < 3U; ++row)
+    {
+        if (test_find_edge_between_vertices(
+                mesh, (henka_authoring_vertex_id)(2U + row * 3U),
+                (henka_authoring_vertex_id)(5U + row * 3U), &loop_edges[row]) !=
+            HENKA_SUCCESS)
+        {
+            goto cleanup;
+        }
+    }
+    for (edge_slot = 0U;
+         edge_slot < henka_authoring_mesh_get_desc(mesh).max_edges;
+         ++edge_slot)
+    {
+        if (henka_authoring_mesh_get_edge_id_at(mesh, edge_slot, &edge_id) ==
+                HENKA_SUCCESS &&
+            henka_authoring_mesh_get_edge(mesh, edge_id)->face_count == 1U)
+        {
+            boundary_edge = edge_id;
+            break;
+        }
+    }
+    before = henka_authoring_mesh_get_counts(mesh);
+    if (henka_authoring_mesh_slide_edge_loop(
+            mesh, loop_edges, 3U, 0.5f, &report) != HENKA_SUCCESS ||
+        !report.changed || report.created_vertices != 0U ||
+        report.created_edges != 0U || report.created_faces != 0U)
+    {
+        goto cleanup;
+    }
+    for (row = 0U; row < 4U; ++row)
+    {
+        const henka_authoring_vertex* vertex = henka_authoring_mesh_get_vertex(
+            mesh, (henka_authoring_vertex_id)(2U + row * 3U));
+        if (vertex == NULL || fabsf(vertex->position.x - 1.5f) > 0.0001f ||
+            fabsf(vertex->position.y - (float)row) > 0.0001f)
+        {
+            goto cleanup;
+        }
+    }
+    after = henka_authoring_mesh_get_counts(mesh);
+    if (memcmp(&before, &after, sizeof(before)) != 0 ||
+        !henka_authoring_mesh_validate(mesh))
+    {
+        goto cleanup;
+    }
+    duplicate_edges[0] = loop_edges[0];
+    duplicate_edges[1] = loop_edges[0];
+    before = after;
+    if (henka_authoring_mesh_slide_edge_loop(
+            mesh, duplicate_edges, 2U, 0.25f, &report) == HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    after = henka_authoring_mesh_get_counts(mesh);
+    if (memcmp(&before, &after, sizeof(before)) != 0 ||
+        (boundary_edge != HENKA_AUTHORING_INVALID_ID &&
+         henka_authoring_mesh_slide_edge_loop(
+             mesh, &boundary_edge, 1U, 0.25f, &report) == HENKA_SUCCESS))
+    {
+        goto cleanup;
+    }
+    result = 1;
+
+cleanup:
+    henka_authoring_mesh_destroy(mesh);
+    return result ? 1 : fail("edge loop slide operation");
+}
+
 static int test_uv_authoring(void)
 {
     const henka_authoring_mesh_desc desc = {64U, 128U, 64U, 8U};
@@ -1913,6 +2064,7 @@ int main(void)
         test_vertex_topology_operations() && test_vertex_bevel_operations() &&
         test_boundary_edge_bevel_operation() && test_single_quad_face_cut_operation() &&
         test_interior_edge_bevel_operation() && test_quad_strip_loop_cut_operation() &&
+        test_edge_loop_slide_operation() &&
         test_uv_authoring() &&
         test_modeling_material_region_and_uv_continuity() &&
         test_bounded_primitive_constructors() &&

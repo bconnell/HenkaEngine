@@ -8709,7 +8709,7 @@ static void sandbox3d_print_help(const sandbox3d_state* state)
     printf("  Open Native Panel Test from the Tools QA page to validate a separate OS-level tool window.\n");
     printf("  Use the panels to inspect named scene objects, clear selection, switch gizmo modes, focus the camera, reset object transforms, toggle visibility, and open in-window Help, Scene Legend, Object Info, Assets, Paths, Settings, Diagnostics, Transform QA, and Physics QA utilities.\n");
     printf("  Select an imported glTF scene entity to edit its shared material instance in Object Details; scalar/vector, flags, alpha, and semantic texture overrides apply transactionally. Use Utility > Assets to choose manager-owned textures for editable slots.\n");
-    printf("  Select a Showcase Giraffe or Showcase Rocket primitive, open Object Details > Authoring, and choose Make Editable; the generic component Move, Edge-mode Select Edge Loop/Select Edge Ring, and Face Bevel/Extrude/Extrude Selection/Subdivide controls are the user-facing modeling path. The checked-in HAMS sources are persisted editor-owned derivatives of imported fixture geometry and are reported as HENKA_NATIVE_EDITED_FIXTURE; this does not prove recognizable user-designed Giraffe/Rocket geometry. Own Material promotes a manager-owned runtime definition for bounded base-color, metallic, roughness, emissive-strength, IOR, transmission, subsurface amount, thickness, and tint, plus in-engine procedural normal and metallic-roughness texture creation. Mesh/project save-reload and the native material sidecar preserve all supported PBR scalars, colors, flags, alpha mode, and seven material texture identities; source export, native multi-material binding, and a complete authored Giraffe/Rocket production workflow remain bounded work.\n");
+     printf("  Select a Showcase Giraffe or Showcase Rocket primitive, open Object Details > Authoring, and choose Make Editable; the generic component Move, Edge-mode Select Edge Loop/Select Edge Ring/Slide Edge Loop, and Face Bevel/Extrude/Extrude Selection/Subdivide controls are the user-facing modeling path. Slide Edge Loop currently applies a bounded fixed 50%% factor to one compatible open loop. The checked-in HAMS sources are persisted editor-owned derivatives of imported fixture geometry and are reported as HENKA_NATIVE_EDITED_FIXTURE; this does not prove recognizable user-designed Giraffe/Rocket geometry. Own Material promotes a manager-owned runtime definition for bounded base-color, metallic, roughness, emissive-strength, IOR, transmission, subsurface amount, thickness, and tint, plus in-engine procedural normal and metallic-roughness texture creation. Mesh/project save-reload and the native material sidecar preserve all supported PBR scalars, colors, flags, alpha mode, and seven material texture identities; source export, native multi-material binding, and a complete authored Giraffe/Rocket production workflow remain bounded work.\n");
     printf("  Physics QA enables an opt-in fixed-step rigid-body demo with collider/contact debug drawing, impulses, body modes, and camera raycasts.\n");
     printf("  The Tools panel uses Main, Camera/Status, and QA pages, and Scene Objects supports paging when the dock is tighter than the full list.\n");
     printf("  Tools provides Build, Game, and World work contexts plus saved/custom workspace layouts; topology edits mark the workspace Custom.\n");
@@ -23735,6 +23735,35 @@ details_group_authoring:
                         display_name);
                     fflush(stdout);
                     sandbox3d_set_status(state, false, "Native material edit redone transactionally.");
+                }
+                if (sandbox3d_details_flow_next_row(
+                        state,
+                        flow_desc.bounds,
+                        28.0f,
+                        1U,
+                        &row) &&
+                    row.width >= 290.0f &&
+                    sandbox3d_authoring_object_get_selected_component_count(
+                        state->authoring_object) > 0U &&
+                    henka_ui_button(
+                        state->ui,
+                        "authoring_edge_slide_top",
+                        (henka_ui_rect){row.x, row.y, 126.0f, 24.0f},
+                        "Slide Edge Loop"))
+                {
+                    const henka_result slide_result =
+                        sandbox3d_authoring_object_slide_selected_edge_loop(
+                            state->authoring_object, 0.5f);
+                    sandbox3d_set_status(
+                        state,
+                        slide_result != HENKA_SUCCESS,
+                        slide_result == HENKA_SUCCESS
+                            ? "Selected compatible edge loop slid by 50%."
+                            : "Edge slide rejected; select one compatible open edge loop.");
+                    if (slide_result == HENKA_SUCCESS)
+                    {
+                        sandbox3d_mark_generic_modeling_applied(state, entity);
+                    }
                 }
             }
             if (state->authoring_object != NULL &&
