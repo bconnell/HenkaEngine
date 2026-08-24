@@ -187,6 +187,15 @@ size_t henka_ui_get_draw_line_count(const henka_ui_context* context);
 size_t henka_ui_get_draw_triangle_count(const henka_ui_context* context);
 bool henka_ui_rect_contains(henka_ui_rect rect, henka_vec2 point);
 henka_result henka_ui_measure_text(const char* text, float scale, int* out_width, int* out_height);
+/* Measures text using the same framebuffer-aware readability scale as the
+ * renderer for this UI context. Use this when measured bounds control layout
+ * for text drawn through the context. */
+henka_result henka_ui_measure_text_for_context(
+    const henka_ui_context* context,
+    const char* text,
+    float scale,
+    int* out_width,
+    int* out_height);
 henka_result henka_ui_overlay_rect(henka_ui_context* context, henka_ui_rect bounds, henka_vec4 color);
 henka_result henka_ui_overlay_line(henka_ui_context* context, henka_vec2 start, henka_vec2 end, float thickness, henka_vec4 color);
 henka_result henka_ui_overlay_triangle(

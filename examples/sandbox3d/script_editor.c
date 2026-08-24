@@ -851,7 +851,8 @@ henka_result sandbox3d_script_editor_draw_preview(
         &token_count,
         &diagnostic,
         &lua_diagnostic);
-    (void)henka_ui_measure_text(
+    (void)henka_ui_measure_text_for_context(
+        ui,
         "M",
         SANDBOX3D_SCRIPT_EDITOR_TEXT_SCALE,
         &character_width,

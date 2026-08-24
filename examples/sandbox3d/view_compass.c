@@ -621,7 +621,7 @@ static void sandbox3d_compass_draw_centered_label(
     {
         return;
     }
-    if (henka_ui_measure_text(label, scale, &width, &height) != HENKA_SUCCESS)
+    if (henka_ui_measure_text_for_context(ui, label, scale, &width, &height) != HENKA_SUCCESS)
     {
         width = 0;
         height = 7;

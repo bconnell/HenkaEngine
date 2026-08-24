@@ -4993,12 +4993,12 @@ static void sandbox3d_draw_authoring_surface_overlay(
     henka_authoring_mesh_desc desc;
     /* The topology overlay must remain legible over gray showcase materials
      * and the gray editor floor. These are authored-face region tints, not
-     * renderer-material replacements; their stronger bounded alpha makes the
-     * filled polygon surface visible without adding triangulation lines. */
+     * renderer-material replacements; their bounded, readable alpha makes
+     * the filled polygon surface visible without adding triangulation lines. */
     const henka_vec4 surface_colors[3] = {
-        {0.08f, 0.42f, 0.78f, 0.26f},
-        {0.08f, 0.62f, 0.38f, 0.24f},
-        {0.48f, 0.20f, 0.78f, 0.24f}};
+        {0.06f, 0.42f, 0.92f, 0.58f},
+        {0.04f, 0.72f, 0.40f, 0.52f},
+        {0.56f, 0.18f, 0.86f, 0.52f}};
     size_t face_slot;
 
     if (state == NULL || authoring == NULL)
@@ -19860,7 +19860,7 @@ static float sandbox3d_draw_debug_text_segment(
         return x;
     }
 
-    if (henka_ui_measure_text(text, 1.0f, &text_width, &text_height) != HENKA_SUCCESS)
+    if (henka_ui_measure_text_for_context(ui, text, 1.0f, &text_width, &text_height) != HENKA_SUCCESS)
     {
         return x;
     }

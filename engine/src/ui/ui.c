@@ -956,7 +956,34 @@ static henka_result henka_ui_push_border(
         HENKA_UI_BORDER_ALL);
 }
 
-static henka_result henka_ui_draw_text(
+#define HENKA_UI_READABILITY_TEXT_SCALE 1.20f
+#define HENKA_UI_MAX_READABILITY_DISPLAY_SCALE 1.125f
+
+static float henka_ui_effective_text_scale(
+    const henka_ui_context* context,
+    float requested_scale)
+{
+    float display_scale = 1.0f;
+
+    if (context != NULL &&
+        context->framebuffer_width > 0 &&
+        context->framebuffer_height > 0)
+    {
+        const float width_scale = (float)context->framebuffer_width / 1600.0f;
+        const float height_scale = (float)context->framebuffer_height / 900.0f;
+        display_scale = fminf(width_scale, height_scale);
+        display_scale = fmaxf(1.0f, display_scale);
+        display_scale = fminf(
+            HENKA_UI_MAX_READABILITY_DISPLAY_SCALE,
+            display_scale);
+    }
+
+    return fminf(
+        HENKA_UI_MAX_SCALE,
+        requested_scale * HENKA_UI_READABILITY_TEXT_SCALE * display_scale);
+}
+
+static henka_result henka_ui_draw_text_raw(
     henka_ui_context* context,
     float x,
     float y,
@@ -1047,6 +1074,31 @@ static henka_result henka_ui_draw_text(
     return HENKA_SUCCESS;
 }
 
+static henka_result henka_ui_draw_text(
+    henka_ui_context* context,
+    float x,
+    float y,
+    float scale,
+    const char* text,
+    henka_vec4 color)
+{
+    if (context == NULL ||
+        !henka_ui_float_is_finite(scale) ||
+        scale <= 0.0f ||
+        scale > HENKA_UI_MAX_SCALE)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    return henka_ui_draw_text_raw(
+        context,
+        x,
+        y,
+        henka_ui_effective_text_scale(context, scale),
+        text,
+        color);
+}
+
 static bool henka_ui_control_is_hot(henka_ui_context* context, henka_ui_rect bounds)
 {
     if (context == NULL || !context->visible)
@@ -1104,6 +1156,7 @@ static henka_result henka_ui_draw_fit_text(
 {
     double available_width;
     char buffer[96];
+    float effective_scale;
     size_t max_characters;
 
     if (context == NULL || text == NULL || !henka_ui_rect_is_finite(bounds) ||
@@ -1113,6 +1166,8 @@ static henka_result henka_ui_draw_fit_text(
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
+
+    effective_scale = henka_ui_effective_text_scale(context, scale);
 
     available_width = (double)bounds.width - (double)padding_x * 2.0;
     if (!isfinite(available_width) ||
@@ -1124,11 +1179,17 @@ static henka_result henka_ui_draw_fit_text(
 
     max_characters = henka_ui_clamped_character_count(
         (float)available_width,
-        6.0f * scale,
+        6.0f * effective_scale,
         4U,
         sizeof(buffer) - 1U);
     henka_ui_copy_fit_text(text, buffer, sizeof(buffer), max_characters);
-    return henka_ui_draw_text(context, bounds.x + padding_x, y, scale, buffer, color);
+    return henka_ui_draw_text_raw(
+        context,
+        bounds.x + padding_x,
+        y,
+        effective_scale,
+        buffer,
+        color);
 }
 
 static bool henka_ui_button_internal(
@@ -2309,7 +2370,7 @@ henka_result henka_ui_disclosure_row(
         keyboard_consumed_mask;
     return HENKA_SUCCESS;
 }
-henka_result henka_ui_measure_text(
+static henka_result henka_ui_measure_text_raw(
     const char* text,
     float scale,
     int* out_width,
@@ -2365,6 +2426,42 @@ henka_result henka_ui_measure_text(
     *out_width = current_width > 0 ? current_width - (int)scale : 0;
     *out_height = (int)(lines * 7.0f * scale + (lines - 1) * scale);
     return HENKA_SUCCESS;
+}
+
+henka_result henka_ui_measure_text(
+    const char* text,
+    float scale,
+    int* out_width,
+    int* out_height)
+{
+    return henka_ui_measure_text_raw(text, scale, out_width, out_height);
+}
+
+henka_result henka_ui_measure_text_for_context(
+    const henka_ui_context* context,
+    const char* text,
+    float scale,
+    int* out_width,
+    int* out_height)
+{
+    if (context == NULL)
+    {
+        if (out_width != NULL)
+        {
+            *out_width = 0;
+        }
+        if (out_height != NULL)
+        {
+            *out_height = 0;
+        }
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    return henka_ui_measure_text_raw(
+        text,
+        henka_ui_effective_text_scale(context, scale),
+        out_width,
+        out_height);
 }
 
 henka_result henka_ui_panel_with_border_mask(

@@ -169,6 +169,69 @@ static void henka_test_ui_overlay_circle_primitives(void)
     henka_ui_destroy(ui);
 }
 
+static void henka_test_ui_readability_scale_is_bounded_and_fit_aware(void)
+{
+    henka_ui_context* ui = NULL;
+    henka_ui_frame_desc frame_desc = {0};
+    const henka_ui_rect bounds = {20.0f, 20.0f, 160.0f, 28.0f};
+    int measured_height = 0;
+    int measured_width = 0;
+    size_t base;
+
+    HENKA_TEST_ASSERT(henka_ui_create(&ui) == HENKA_SUCCESS);
+    henka_ui_set_visible(ui, true);
+
+    frame_desc.framebuffer_width = 640;
+    frame_desc.framebuffer_height = 480;
+    HENKA_TEST_ASSERT(henka_ui_begin_frame(ui, &frame_desc) == HENKA_SUCCESS);
+    base = ui->draw_rect_count;
+    HENKA_TEST_ASSERT(!henka_ui_button(ui, "readability_small", bounds, "Readable"));
+    HENKA_TEST_ASSERT(ui->draw_rect_count > base + 5U);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(
+        ui->draw_rects[base + 5U].bounds.width,
+        1.20f,
+        0.0001f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(
+        ui->draw_rects[base + 5U].bounds.height,
+        1.20f,
+        0.0001f);
+    HENKA_TEST_ASSERT(henka_ui_measure_text_for_context(
+        ui,
+        "MM",
+        1.0f,
+        &measured_width,
+        &measured_height) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(measured_width == 13);
+    HENKA_TEST_ASSERT(measured_height == 8);
+    HENKA_TEST_ASSERT(henka_ui_end_frame(ui) == HENKA_SUCCESS);
+
+    frame_desc.framebuffer_width = 1920;
+    frame_desc.framebuffer_height = 1080;
+    HENKA_TEST_ASSERT(henka_ui_begin_frame(ui, &frame_desc) == HENKA_SUCCESS);
+    base = ui->draw_rect_count;
+    HENKA_TEST_ASSERT(!henka_ui_button(ui, "readability_large", bounds, "Readable"));
+    HENKA_TEST_ASSERT(ui->draw_rect_count > base + 5U);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(
+        ui->draw_rects[base + 5U].bounds.width,
+        1.35f,
+        0.0001f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(
+        ui->draw_rects[base + 5U].bounds.height,
+        1.35f,
+        0.0001f);
+    HENKA_TEST_ASSERT(henka_ui_measure_text_for_context(
+        ui,
+        "MM",
+        1.0f,
+        &measured_width,
+        &measured_height) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(measured_width == 15);
+    HENKA_TEST_ASSERT(measured_height == 9);
+    HENKA_TEST_ASSERT(henka_ui_end_frame(ui) == HENKA_SUCCESS);
+
+    henka_ui_destroy(ui);
+}
+
 static void henka_test_ui_overlay_triangle_primitive(void)
 {
     henka_ui_context* ui = NULL;
@@ -277,6 +340,7 @@ void henka_test_ui(void)
 {
     henka_test_ui_theme_is_light_by_default_and_context_local();
     henka_test_ui_control_chrome_contract();
+    henka_test_ui_readability_scale_is_bounded_and_fit_aware();
     henka_test_ui_overlay_circle_primitives();
     henka_test_ui_overlay_triangle_primitive();
     henka_test_ui_text_field_focus_and_bounded_edits();
