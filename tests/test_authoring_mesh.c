@@ -1203,6 +1203,19 @@ static int test_closed_quad_ring_loop_cut_operation(void)
                 slide_edges[slide_edge_count++] = edge_id;
             }
         }
+        {
+            henka_authoring_edge_id ordered_edges[4];
+            size_t ordered_count = 0U;
+            bool ordered_closed = false;
+            if (slide_edge_count != 4U ||
+                henka_authoring_topology_order_edge_loop(
+                    mesh, slide_edges, slide_edge_count, ordered_edges, 4U,
+                    &ordered_count, &ordered_closed) != HENKA_SUCCESS ||
+                ordered_count != 4U || !ordered_closed)
+            {
+                goto cleanup;
+            }
+        }
         slide_result = henka_authoring_mesh_slide_edge_loop(
             mesh, slide_edges, slide_edge_count, 0.5f, &report);
         if (slide_edge_count != 4U || slide_result != HENKA_SUCCESS ||
@@ -1254,6 +1267,8 @@ static int test_edge_loop_slide_operation(void)
         HENKA_AUTHORING_INVALID_ID,
         HENKA_AUTHORING_INVALID_ID,
         HENKA_AUTHORING_INVALID_ID};
+    henka_authoring_edge_id ordered_edges_first[3];
+    henka_authoring_edge_id ordered_edges_second[3];
     henka_authoring_edge_id boundary_edge = HENKA_AUTHORING_INVALID_ID;
     henka_authoring_edge_id duplicate_edges[2];
     henka_authoring_mesh_counts before;
@@ -1263,6 +1278,8 @@ static int test_edge_loop_slide_operation(void)
     henka_authoring_edge_id edge_id;
     size_t row;
     size_t edge_slot;
+    size_t ordered_count = 0U;
+    bool ordered_closed = false;
     int result = 0;
 
     if (henka_authoring_mesh_create(&desc, &mesh) != HENKA_SUCCESS)
@@ -1295,6 +1312,19 @@ static int test_edge_loop_slide_operation(void)
         {
             goto cleanup;
         }
+    }
+    if (henka_authoring_topology_order_edge_loop(
+            mesh, loop_edges, 3U, ordered_edges_first, 3U,
+            &ordered_count, &ordered_closed) != HENKA_SUCCESS ||
+        ordered_count != 3U || ordered_closed ||
+        henka_authoring_topology_order_edge_loop(
+            mesh, loop_edges, 3U, ordered_edges_second, 3U,
+            &ordered_count, &ordered_closed) != HENKA_SUCCESS ||
+        ordered_count != 3U || ordered_closed ||
+        memcmp(ordered_edges_first, ordered_edges_second,
+            sizeof(ordered_edges_first)) != 0)
+    {
+        goto cleanup;
     }
     for (edge_slot = 0U;
          edge_slot < henka_authoring_mesh_get_desc(mesh).max_edges;

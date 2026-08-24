@@ -2160,8 +2160,6 @@ henka_result henka_authoring_mesh_slide_edge_loop(
 {
     henka_authoring_edge_id* sorted_edges = NULL;
     henka_authoring_vertex_id* raw_vertices = NULL;
-    unsigned char* visited_edges = NULL;
-    size_t* connected_edge_queue = NULL;
     modeling_edge_slide_vertex* vertices = NULL;
     henka_authoring_mesh* candidate = NULL;
     henka_authoring_mesh_counts before;
@@ -2169,12 +2167,12 @@ henka_result henka_authoring_mesh_slide_edge_loop(
     henka_authoring_mesh_desc desc;
     size_t vertex_count = 0U;
     size_t bytes;
-    size_t visited_edge_bytes;
-    size_t connected_edge_queue_bytes;
     size_t index;
     size_t endpoint_count = 0U;
     size_t endpoint_vertices = 0U;
     size_t usable_vertex_count = 0U;
+    size_t ordered_edge_count = 0U;
+    bool ordered_closed = false;
     henka_result result = HENKA_ERROR_INVALID_ARGUMENT;
 
     modeling_report_reset(out_report);
@@ -2187,9 +2185,6 @@ henka_result henka_authoring_mesh_slide_edge_loop(
     desc = henka_authoring_mesh_get_desc(mesh);
     if (edge_count > desc.max_edges ||
         !henka_checked_size_multiply(edge_count, sizeof(*sorted_edges), &bytes) ||
-        !henka_checked_size_multiply(edge_count, sizeof(*visited_edges), &visited_edge_bytes) ||
-        !henka_checked_size_multiply(
-            edge_count, sizeof(*connected_edge_queue), &connected_edge_queue_bytes) ||
         !henka_checked_size_multiply(edge_count, 2U, &endpoint_vertices) ||
         !henka_checked_size_multiply(
             endpoint_vertices, sizeof(*raw_vertices), &bytes))
@@ -2199,16 +2194,19 @@ henka_result henka_authoring_mesh_slide_edge_loop(
     sorted_edges = (henka_authoring_edge_id*)henka_malloc(
         edge_count * sizeof(*sorted_edges));
     raw_vertices = (henka_authoring_vertex_id*)henka_malloc(bytes);
-    visited_edges = (unsigned char*)henka_calloc(1U, visited_edge_bytes);
-    connected_edge_queue = (size_t*)henka_malloc(connected_edge_queue_bytes);
-    if (sorted_edges == NULL || raw_vertices == NULL || visited_edges == NULL ||
-        connected_edge_queue == NULL)
+    if (sorted_edges == NULL || raw_vertices == NULL)
     {
         result = HENKA_ERROR_OUT_OF_MEMORY;
         goto cleanup;
     }
-    memcpy(sorted_edges, edge_ids, edge_count * sizeof(*sorted_edges));
-    qsort(sorted_edges, edge_count, sizeof(*sorted_edges), modeling_vertex_id_compare);
+    result = henka_authoring_topology_order_edge_loop(
+        mesh, edge_ids, edge_count, sorted_edges, edge_count,
+        &ordered_edge_count, &ordered_closed);
+    if (result != HENKA_SUCCESS || ordered_edge_count != edge_count)
+    {
+        result = result == HENKA_SUCCESS ? HENKA_ERROR_INVALID_ARGUMENT : result;
+        goto cleanup;
+    }
     for (index = 0U; index < edge_count; ++index)
     {
         const henka_authoring_edge* edge =
@@ -2247,50 +2245,6 @@ henka_result henka_authoring_mesh_slide_edge_loop(
         vertices[index].id = raw_vertices[index];
         vertices[index].side_a = HENKA_AUTHORING_INVALID_ID;
         vertices[index].side_b = HENKA_AUTHORING_INVALID_ID;
-    }
-    visited_edges[0] = 1U;
-    {
-        size_t connected_edge_count = 1U;
-        size_t queue_head = 0U;
-        connected_edge_queue[0] = 0U;
-        while (queue_head < connected_edge_count)
-        {
-            const size_t current_index = connected_edge_queue[queue_head++];
-            const henka_authoring_edge* current_edge = henka_authoring_mesh_get_edge(
-                mesh, sorted_edges[current_index]);
-            size_t candidate_index;
-            if (current_edge == NULL)
-            {
-                result = HENKA_ERROR_INVALID_ARGUMENT;
-                goto cleanup;
-            }
-            for (candidate_index = 0U; candidate_index < edge_count; ++candidate_index)
-            {
-                const henka_authoring_edge* candidate_edge;
-                bool shares_vertex;
-                if (visited_edges[candidate_index] != 0U)
-                {
-                    continue;
-                }
-                candidate_edge = henka_authoring_mesh_get_edge(
-                    mesh, sorted_edges[candidate_index]);
-                shares_vertex = candidate_edge != NULL &&
-                    (candidate_edge->vertices[0] == current_edge->vertices[0] ||
-                     candidate_edge->vertices[0] == current_edge->vertices[1] ||
-                     candidate_edge->vertices[1] == current_edge->vertices[0] ||
-                     candidate_edge->vertices[1] == current_edge->vertices[1]);
-                if (shares_vertex)
-                {
-                    visited_edges[candidate_index] = 1U;
-                    connected_edge_queue[connected_edge_count++] = candidate_index;
-                }
-            }
-        }
-        if (connected_edge_count != edge_count)
-        {
-            result = HENKA_ERROR_INVALID_ARGUMENT;
-            goto cleanup;
-        }
     }
     for (index = 0U; index < edge_count; ++index)
     {
@@ -2378,7 +2332,8 @@ henka_result henka_authoring_mesh_slide_edge_loop(
         {
             if (vertices[index].selected_degree == 1U) ++open_endpoints;
         }
-        if (open_endpoints != 0U && open_endpoints != 2U)
+        if ((ordered_closed && open_endpoints != 0U) ||
+            (!ordered_closed && open_endpoints != 2U))
         {
             result = HENKA_ERROR_INVALID_ARGUMENT;
             goto cleanup;
@@ -2439,8 +2394,6 @@ henka_result henka_authoring_mesh_slide_edge_loop(
 cleanup:
     henka_authoring_mesh_destroy(candidate);
     henka_free(vertices);
-    henka_free(connected_edge_queue);
-    henka_free(visited_edges);
     henka_free(raw_vertices);
     henka_free(sorted_edges);
     return result;

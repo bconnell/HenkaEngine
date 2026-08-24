@@ -157,4 +157,20 @@ henka_result henka_authoring_topology_walk_quad_strip(
     size_t* out_count,
     bool* out_closed);
 
+/* Orders one connected edge chain or cycle deterministically. The selected
+ * edges must be unique, have degree one or two within the selection, and
+ * contain either zero or two degree-one endpoints. Boundary, manifold, and
+ * loose edges remain distinct. This helper reports graph ordering only;
+ * callers apply face and metadata compatibility policy. The output is ordered
+ * from the lowest endpoint for an open chain, or from the lowest endpoint of
+ * the lowest edge for a closed cycle. */
+henka_result henka_authoring_topology_order_edge_loop(
+    const henka_authoring_mesh* mesh,
+    const henka_authoring_edge_id* edge_ids,
+    size_t edge_count,
+    henka_authoring_edge_id* out_edge_ids,
+    size_t capacity,
+    size_t* out_count,
+    bool* out_closed);
+
 #endif
