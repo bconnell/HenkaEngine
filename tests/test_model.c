@@ -10,6 +10,7 @@
 #include <henka/model.h>
 
 #include "../engine/src/core/checked.h"
+#include "../engine/src/henka_internal.h"
 
 static void henka_test_write_u32(unsigned char* destination, uint32_t value)
 {
@@ -138,6 +139,48 @@ static void henka_test_authoring_mesh_renderer_bridge(void)
     source = NULL;
     henka_engine_destroy(engine);
     engine = NULL;
+}
+
+static void henka_test_loose_authoring_renderer_bridge(void)
+{
+    henka_engine_config config = {0};
+    henka_engine* engine = NULL;
+    henka_authoring_mesh* source = NULL;
+    henka_authoring_mesh_desc desc = {4U, 2U, 1U, 4U};
+    henka_authoring_vertex_id first = HENKA_AUTHORING_INVALID_ID;
+    henka_authoring_vertex_id second = HENKA_AUTHORING_INVALID_ID;
+    henka_authoring_edge_id edge = HENKA_AUTHORING_INVALID_ID;
+    henka_mesh* mesh = NULL;
+
+    config.application_name = "Henka Loose Authoring Renderer Bridge Test";
+    config.window_width = 320;
+    config.window_height = 240;
+    config.enable_vsync = false;
+    HENKA_TEST_ASSERT(henka_engine_create(&config, &engine) == HENKA_SUCCESS);
+
+    HENKA_TEST_ASSERT(henka_authoring_mesh_create(&desc, &source) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_authoring_mesh_add_vertex(
+        source, (henka_vec3){-1.0f, 0.0f, 0.0f}, (henka_vec2){0.0f, 0.0f}, 0U, &first) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_authoring_mesh_add_vertex(
+        source, (henka_vec3){1.0f, 0.0f, 0.0f}, (henka_vec2){1.0f, 0.0f}, 0U, &second) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_authoring_mesh_add_edge(
+        source, first, second, false, &edge) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(edge != HENKA_AUTHORING_INVALID_ID);
+    HENKA_TEST_ASSERT(henka_mesh_create_from_authoring_mesh(engine, source, &mesh) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(mesh != NULL && mesh->primitive == HENKA_MESH_PRIMITIVE_LINES);
+    henka_mesh_destroy(mesh);
+    mesh = NULL;
+    henka_authoring_mesh_destroy(source);
+    source = NULL;
+
+    HENKA_TEST_ASSERT(henka_authoring_mesh_create(&desc, &source) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_authoring_mesh_add_vertex(
+        source, (henka_vec3){0.0f, 0.0f, 0.0f}, (henka_vec2){0.5f, 0.5f}, 0U, &first) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_mesh_create_from_authoring_mesh(engine, source, &mesh) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(mesh != NULL && mesh->primitive == HENKA_MESH_PRIMITIVE_POINTS);
+    henka_mesh_destroy(mesh);
+    henka_authoring_mesh_destroy(source);
+    henka_engine_destroy(engine);
 }
 
 static void henka_test_gltf_scene_import(void)
@@ -719,5 +762,6 @@ void henka_test_model(void)
 
     henka_test_model_rejects_unsafe_bounds();
     henka_test_authoring_mesh_renderer_bridge();
+    henka_test_loose_authoring_renderer_bridge();
     henka_test_gltf_scene_import();
 }

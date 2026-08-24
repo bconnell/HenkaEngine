@@ -64,4 +64,5 @@ void main()
     fragCurrentClipPosition = projection * view * worldPosition;
     fragPreviousClipPosition = previousViewProjection * activePreviousModel * vec4(inPosition, 1.0);
     gl_Position = fragCurrentClipPosition;
+    gl_PointSize = 7.0;
 }

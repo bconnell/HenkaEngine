@@ -96,7 +96,8 @@ henka_result henka_ktx2_decode_rgba8(
 typedef enum henka_mesh_primitive
 {
     HENKA_MESH_PRIMITIVE_TRIANGLES = 0,
-    HENKA_MESH_PRIMITIVE_LINES
+    HENKA_MESH_PRIMITIVE_LINES,
+    HENKA_MESH_PRIMITIVE_POINTS
 } henka_mesh_primitive;
 
 typedef struct henka_vertex

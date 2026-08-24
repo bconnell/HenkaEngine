@@ -861,6 +861,8 @@ static GLenum henka_mesh_primitive_to_gl(henka_mesh_primitive primitive)
     {
         case HENKA_MESH_PRIMITIVE_LINES:
             return GL_LINES;
+        case HENKA_MESH_PRIMITIVE_POINTS:
+            return GL_POINTS;
         case HENKA_MESH_PRIMITIVE_TRIANGLES:
         default:
             return GL_TRIANGLES;
@@ -1506,6 +1508,7 @@ henka_opengl_renderer_create_viewport_program(
         "    fragNormal = normalMatrix * inNormal;\n"
         "    fragUv = inUv;\n"
         "    gl_Position = projection * view * model * vec4(inPosition, 1.0);\n"
+        "    gl_PointSize = 7.0;\n"
         "}\n";
     static const char* fragment_source =
         "#version 330 core\n"
@@ -7213,7 +7216,9 @@ henka_result henka_opengl_renderer_create_mesh_from_data(
 
     if (renderer == NULL || vertices == NULL || indices == NULL || out_mesh == NULL ||
         vertex_count <= 0 || index_count <= 0 ||
-        (primitive != HENKA_MESH_PRIMITIVE_TRIANGLES && primitive != HENKA_MESH_PRIMITIVE_LINES) ||
+        (primitive != HENKA_MESH_PRIMITIVE_TRIANGLES &&
+            primitive != HENKA_MESH_PRIMITIVE_LINES &&
+            primitive != HENKA_MESH_PRIMITIVE_POINTS) ||
         (primitive == HENKA_MESH_PRIMITIVE_TRIANGLES && (index_count % 3) != 0) ||
         (primitive == HENKA_MESH_PRIMITIVE_LINES && (index_count % 2) != 0) ||
         (size_t)vertex_count > HENKA_MAX_MESH_ELEMENTS ||

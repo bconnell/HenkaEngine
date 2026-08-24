@@ -230,12 +230,12 @@ dependencies, general collision integration beyond the bound box contract,
 package ownership, topology-aware picking, and showcase rebuilds still need the
 shared scene/asset-manager bridge. The current authoring mesh is a validated
 surface representation for face-backed modeling, while also preserving explicit
-loose source components. Renderer evaluation continues to triangulate faces
-only; standalone wire edges and vertices are source/persistence components and
-are not yet emitted by renderer evaluation as line/point primitives. The
-Sandbox topology overlay does present the committed source vertices and wire
-edges for inspection and selection, including a distinct loose-component
-visual treatment. The bounded fan
+loose source components. Homogeneous wire-only and isolated-vertex-only sources
+are emitted by renderer evaluation as bounded line and point primitives;
+mixed surface-plus-loose sources remain face-backed in the renderer and retain
+their loose components in the source overlay. The Sandbox topology overlay does
+present the committed source vertices and wire edges for inspection and
+selection, including a distinct loose-component visual treatment. The bounded fan
 extrusion contract is intentionally limited to connected open fans; broader
 non-manifold and incompatible-normal cases remain unsupported.
 Material regions retain their editable numeric metadata, and the evaluated
@@ -251,11 +251,16 @@ renderer or asset manager.
 
 Client applications can call `henka_mesh_create_from_authoring_mesh` from
 `<henka/mesh.h>` to evaluate the same committed source into an ordinary
-renderer-owned triangle mesh. The source remains caller-owned, the output slot
-must start empty, counts and indices are bounded and checked, and allocation or
-evaluation failure leaves the output slot empty. This is the reusable
-authoring-to-render boundary; it does not create a material authority or
-replace glTF scene/material ownership.
+renderer-owned mesh. Face-backed sources upload as bounded triangle meshes;
+homogeneous wire-only sources upload as `GL_LINES`, and isolated-vertex-only
+sources upload as `GL_POINTS`. Mixed surface-plus-loose sources continue to
+use the authored source overlay alongside the face-backed render mesh, while a
+no-face source that mixes wire edges and isolated vertices is rejected rather
+than silently dropping one primitive class. The source remains caller-owned,
+the output slot must start empty, counts and indices are bounded and checked,
+and allocation or evaluation failure leaves the output slot empty. This is the
+reusable authoring-to-render boundary; it does not create a material authority
+or replace glTF scene/material ownership.
 `henka_authoring_mesh_save_file` writes HAMS v5 with explicitly little-endian
 32-bit integers and IEEE-754 float bit patterns. Each save uses a unique
 same-directory temporary name and atomically replaces the destination only

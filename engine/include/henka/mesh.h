@@ -24,8 +24,11 @@ henka_result henka_mesh_create_line(henka_engine* engine, henka_vec3 start, henk
 henka_result henka_mesh_create_circle_ring(henka_engine* engine, float radius, int segments, henka_mesh** out_mesh);
 henka_result henka_mesh_create_from_model_data(henka_engine* engine, const henka_model_data* model, henka_mesh** out_mesh);
 /* Evaluates bounded editor-owned polygon data and uploads a transactional
- * triangle mesh. The source remains caller-owned and is never mutated. The
- * output slot must be NULL and is assigned only after a successful upload. */
+ * render mesh. Face-backed sources use triangles; homogeneous wire-only and
+ * isolated-vertex sources use lines and points respectively. Mixed loose
+ * components without faces are rejected until multi-primitive ownership is
+ * available. The source remains caller-owned and is never mutated. The output
+ * slot must be NULL and is assigned only after a successful upload. */
 henka_result henka_mesh_create_from_authoring_mesh(
     henka_engine* engine,
     const henka_authoring_mesh* source,

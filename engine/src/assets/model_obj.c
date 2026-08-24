@@ -1223,6 +1223,168 @@ henka_result henka_mesh_create_from_model_data(henka_engine* engine, const henka
     }
 }
 
+static void henka_authoring_make_renderer_vertex(
+    const henka_authoring_vertex* source,
+    henka_vertex* out_vertex)
+{
+    if (source == NULL || out_vertex == NULL)
+    {
+        return;
+    }
+    *out_vertex = (henka_vertex){
+        source->position,
+        {0.0f, 1.0f, 0.0f},
+        source->uv,
+        {0.0f, 0.0f},
+        {1.0f, 1.0f, 1.0f, 1.0f},
+        true,
+        {1.0f, 0.0f, 0.0f, 1.0f},
+        true,
+        source->material_region};
+}
+
+static henka_result henka_mesh_create_from_authoring_loose_source(
+    henka_engine* engine,
+    const henka_authoring_mesh* source,
+    henka_authoring_mesh_counts counts,
+    henka_mesh** out_mesh)
+{
+    henka_authoring_mesh_desc desc;
+    henka_vertex* vertices = NULL;
+    unsigned int* indices = NULL;
+    size_t vertex_count;
+    size_t index_count;
+    size_t vertex_slot;
+    size_t index;
+    int renderer_vertex_count;
+    int renderer_index_count;
+    const henka_mesh_primitive primitive = counts.edges > 0U
+        ? HENKA_MESH_PRIMITIVE_LINES
+        : HENKA_MESH_PRIMITIVE_POINTS;
+    henka_result result;
+
+    if (engine == NULL || source == NULL || out_mesh == NULL ||
+        counts.faces != 0U || counts.vertices == 0U)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    desc = henka_authoring_mesh_get_desc(source);
+    if (counts.edges > 0U)
+    {
+        if (!henka_checked_size_multiply(counts.edges, 2U, &vertex_count))
+        {
+            return HENKA_ERROR_LIMIT;
+        }
+        for (vertex_slot = 0U; vertex_slot < desc.max_vertices; ++vertex_slot)
+        {
+            henka_authoring_vertex_id vertex_id;
+            if (henka_authoring_mesh_get_vertex_id_at(source, vertex_slot, &vertex_id) != HENKA_SUCCESS)
+            {
+                continue;
+            }
+            if (henka_authoring_mesh_get_vertex_edge_count(source, vertex_id) == 0U)
+            {
+                return HENKA_ERROR_INVALID_ARGUMENT;
+            }
+        }
+        index_count = vertex_count;
+    }
+    else
+    {
+        vertex_count = counts.vertices;
+        index_count = counts.vertices;
+    }
+    if (vertex_count == 0U || index_count == 0U ||
+        vertex_count > HENKA_MAX_MESH_ELEMENTS ||
+        index_count > HENKA_MAX_MESH_ELEMENTS ||
+        !henka_checked_size_to_int(vertex_count, &renderer_vertex_count) ||
+        !henka_checked_size_to_int(index_count, &renderer_index_count))
+    {
+        return HENKA_ERROR_LIMIT;
+    }
+    vertices = henka_calloc(vertex_count, sizeof(*vertices));
+    indices = henka_calloc(index_count, sizeof(*indices));
+    if (vertices == NULL || indices == NULL)
+    {
+        result = HENKA_ERROR_OUT_OF_MEMORY;
+        goto cleanup;
+    }
+    index = 0U;
+    if (counts.edges > 0U)
+    {
+        size_t edge_slot;
+        size_t output_vertex = 0U;
+        for (edge_slot = 0U; edge_slot < desc.max_edges; ++edge_slot)
+        {
+            henka_authoring_edge_id edge_id;
+            const henka_authoring_edge* edge;
+            const henka_authoring_vertex* first;
+            const henka_authoring_vertex* second;
+            if (henka_authoring_mesh_get_edge_id_at(source, edge_slot, &edge_id) != HENKA_SUCCESS)
+            {
+                continue;
+            }
+            edge = henka_authoring_mesh_get_edge(source, edge_id);
+            first = edge == NULL ? NULL : henka_authoring_mesh_get_vertex(source, edge->vertices[0]);
+            second = edge == NULL ? NULL : henka_authoring_mesh_get_vertex(source, edge->vertices[1]);
+            if (edge == NULL || first == NULL || second == NULL || output_vertex + 1U >= vertex_count)
+            {
+                result = HENKA_ERROR_INVALID_ARGUMENT;
+                goto cleanup;
+            }
+            henka_authoring_make_renderer_vertex(first, &vertices[output_vertex]);
+            henka_authoring_make_renderer_vertex(second, &vertices[output_vertex + 1U]);
+            indices[index++] = (unsigned int)output_vertex;
+            indices[index++] = (unsigned int)(output_vertex + 1U);
+            output_vertex += 2U;
+        }
+        if (output_vertex != vertex_count || index != index_count)
+        {
+            result = HENKA_ERROR_INVALID_ARGUMENT;
+            goto cleanup;
+        }
+    }
+    else
+    {
+        size_t output_vertex = 0U;
+        for (vertex_slot = 0U; vertex_slot < desc.max_vertices; ++vertex_slot)
+        {
+            henka_authoring_vertex_id vertex_id;
+            const henka_authoring_vertex* vertex;
+            if (henka_authoring_mesh_get_vertex_id_at(source, vertex_slot, &vertex_id) != HENKA_SUCCESS)
+            {
+                continue;
+            }
+            vertex = henka_authoring_mesh_get_vertex(source, vertex_id);
+            if (vertex == NULL || output_vertex >= vertex_count)
+            {
+                result = HENKA_ERROR_INVALID_ARGUMENT;
+                goto cleanup;
+            }
+            henka_authoring_make_renderer_vertex(vertex, &vertices[output_vertex]);
+            indices[index++] = (unsigned int)output_vertex++;
+        }
+        if (output_vertex != vertex_count || index != index_count)
+        {
+            result = HENKA_ERROR_INVALID_ARGUMENT;
+            goto cleanup;
+        }
+    }
+    result = henka_renderer_create_mesh_from_data(
+        engine->renderer,
+        vertices,
+        renderer_vertex_count,
+        indices,
+        renderer_index_count,
+        primitive,
+        out_mesh);
+
+cleanup:
+    henka_free(indices);
+    henka_free(vertices);
+    return result;
+}
+
 henka_result henka_mesh_create_from_authoring_mesh(
     henka_engine* engine,
     const henka_authoring_mesh* source,
@@ -1240,6 +1402,7 @@ henka_result henka_mesh_create_from_authoring_mesh(
     size_t vertex_index;
     size_t index;
     henka_result result;
+    henka_authoring_mesh_counts counts;
 
     if (out_mesh == NULL)
     {
@@ -1248,6 +1411,12 @@ henka_result henka_mesh_create_from_authoring_mesh(
     if (*out_mesh != NULL || engine == NULL || source == NULL || !henka_authoring_mesh_validate(source))
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    counts = henka_authoring_mesh_get_counts(source);
+    if (counts.faces == 0U)
+    {
+        return henka_mesh_create_from_authoring_loose_source(
+            engine, source, counts, out_mesh);
     }
 
     /* Enumerate active faces by deterministic physical storage order; logical

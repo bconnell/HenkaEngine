@@ -202,10 +202,13 @@ turning the public README into an implementation ledger.
   high-contrast markers. The shared Sandbox modeling-operator session and its
   Authoring panel control now preview, cancel, and apply explicit-axis
   extrusion for exactly one selected loose vertex or standalone edge through
-  the core transactional operations. Dedicated loose-component creation/edit UI, general
-  surface-connected Vertex/Edge Extrude workflows, and renderer line/point
-  evaluation remain unavailable; renderer evaluation still triangulates faces
-  only.
+  the core transactional operations. Homogeneous wire-only and isolated-vertex-only
+  authoring sources now have bounded renderer-backed line and point evaluation.
+  Mixed surface-plus-loose sources continue to use the authored source overlay
+  beside the face-backed render mesh, and no-face sources that mix wire edges
+  with isolated vertices are rejected until multi-primitive ownership exists.
+  Dedicated loose-component creation/edit UI and general surface-connected
+  Vertex/Edge Extrude workflows remain unavailable.
 - A bounded deterministic compatible quad-strip traversal foundation is
   available for modeling operators. It records ordered face/entry/exit edges,
   terminates at boundaries or reports a closed ring, and rejects hard, material,
