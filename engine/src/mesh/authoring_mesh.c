@@ -312,13 +312,17 @@ static bool authoring_edge_lookup_insert_raw(
     for (size_t attempt = 0U; attempt < mesh->edge_lookup_capacity; ++attempt)
     {
         authoring_edge_lookup_entry* entry = &mesh->edge_lookup[probe];
-        if (!entry->occupied || (entry->low == low && entry->high == high))
+        if (!entry->occupied)
         {
             entry->low = low;
             entry->high = high;
             entry->edge_id = edge_id;
             entry->occupied = true;
             return true;
+        }
+        if (entry->low == low && entry->high == high)
+        {
+            return entry->edge_id == edge_id;
         }
         probe = (probe + 1U) & (mesh->edge_lookup_capacity - 1U);
     }
@@ -588,6 +592,7 @@ static henka_result authoring_append_edge(
     henka_authoring_vertex_id first,
     henka_authoring_vertex_id second,
     henka_authoring_face_id face_id,
+    bool hard,
     henka_authoring_edge_id* out_id)
 {
     henka_authoring_edge* edge;
@@ -613,8 +618,14 @@ static henka_result authoring_append_edge(
     }
     edge->vertices[0] = low;
     edge->vertices[1] = high;
-    edge->faces[0] = face_id;
-    edge->face_count = 1U;
+    edge->hard = hard;
+    edge->faces[0] = HENKA_AUTHORING_INVALID_ID;
+    edge->faces[1] = HENKA_AUTHORING_INVALID_ID;
+    if (face_id != HENKA_AUTHORING_INVALID_ID)
+    {
+        edge->faces[0] = face_id;
+        edge->face_count = 1U;
+    }
     edge->active = true;
     if (!authoring_id_lookup_insert(
             mesh->edge_id_lookup,
@@ -845,10 +856,18 @@ bool henka_authoring_mesh_validate(const henka_authoring_mesh* mesh)
         if (edge->id == 0U || edge->id == HENKA_AUTHORING_INVALID_ID ||
             authoring_edge_slot(mesh, edge->id) != index ||
             (mesh->next_edge_id != HENKA_AUTHORING_INVALID_ID && edge->id >= mesh->next_edge_id) ||
-            edge->vertices[0] >= edge->vertices[1] ||
-            edge->face_count == 0U || edge->face_count > 2U ||
+            edge->vertices[0] >= edge->vertices[1] || edge->face_count > 2U ||
             henka_authoring_mesh_get_vertex(mesh, edge->vertices[0]) == NULL ||
             henka_authoring_mesh_get_vertex(mesh, edge->vertices[1]) == NULL)
+        {
+            return false;
+        }
+        if ((edge->face_count == 0U &&
+             (edge->faces[0] != HENKA_AUTHORING_INVALID_ID ||
+              edge->faces[1] != HENKA_AUTHORING_INVALID_ID)) ||
+            (edge->face_count == 1U &&
+             edge->faces[1] != HENKA_AUTHORING_INVALID_ID) ||
+            (edge->face_count == 2U && edge->faces[0] == edge->faces[1]))
         {
             return false;
         }
@@ -1037,6 +1056,15 @@ henka_result henka_authoring_mesh_remove_vertex(henka_authoring_mesh* mesh, henk
             }
         }
     }
+    for (index = 0U; index < mesh->desc.max_edges; ++index)
+    {
+        const henka_authoring_edge* edge = &mesh->edges[index];
+        if (edge->active &&
+            (edge->vertices[0] == id || edge->vertices[1] == id))
+        {
+            return HENKA_ERROR_INVALID_ARGUMENT;
+        }
+    }
     (void)authoring_id_lookup_remove(mesh->vertex_lookup, mesh->vertex_lookup_capacity, id);
     memset(vertex, 0, sizeof(*vertex));
     --mesh->active_vertices;
@@ -1071,6 +1099,56 @@ henka_result henka_authoring_mesh_set_vertex_uv(henka_authoring_mesh* mesh, henk
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
     vertex->uv = uv;
+    return HENKA_SUCCESS;
+}
+
+henka_result henka_authoring_mesh_add_edge(
+    henka_authoring_mesh* mesh,
+    henka_authoring_vertex_id first_vertex_id,
+    henka_authoring_vertex_id second_vertex_id,
+    bool hard,
+    henka_authoring_edge_id* out_id)
+{
+    henka_result result;
+
+    if (out_id != NULL)
+    {
+        *out_id = HENKA_AUTHORING_INVALID_ID;
+    }
+    if (mesh == NULL || out_id == NULL || first_vertex_id == second_vertex_id ||
+        henka_authoring_mesh_get_vertex(mesh, first_vertex_id) == NULL ||
+        henka_authoring_mesh_get_vertex(mesh, second_vertex_id) == NULL ||
+        authoring_find_edge(mesh, first_vertex_id, second_vertex_id) != NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    result = authoring_append_edge(
+        mesh,
+        first_vertex_id,
+        second_vertex_id,
+        HENKA_AUTHORING_INVALID_ID,
+        hard,
+        out_id);
+    return result;
+}
+
+henka_result henka_authoring_mesh_remove_edge(
+    henka_authoring_mesh* mesh,
+    henka_authoring_edge_id id)
+{
+    henka_authoring_edge* edge = authoring_edge(mesh, id);
+
+    if (edge == NULL || !edge->active || edge->face_count != 0U)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    (void)authoring_id_lookup_remove(
+        mesh->edge_id_lookup,
+        mesh->edge_id_lookup_capacity,
+        edge->id);
+    memset(edge, 0, sizeof(*edge));
+    --mesh->active_edges;
+    mesh->edge_lookup_ready = false;
     return HENKA_SUCCESS;
 }
 
@@ -1178,7 +1256,12 @@ henka_result henka_authoring_mesh_add_face(henka_authoring_mesh* mesh, const hen
         else
         {
             result = authoring_append_edge(
-                mesh, vertices[corner], vertices[(corner + 1U) % corner_count], face->id, &new_edges[corner]);
+                mesh,
+                vertices[corner],
+                vertices[(corner + 1U) % corner_count],
+                face->id,
+                false,
+                &new_edges[corner]);
             if (result != HENKA_SUCCESS)
             {
                 goto rollback;
@@ -1217,6 +1300,7 @@ rollback:
                     edge->faces[face_index] = edge->faces[face_index + 1U];
                 }
                 --edge->face_count;
+                edge->faces[edge->face_count] = HENKA_AUTHORING_INVALID_ID;
                 if (edge->face_count == 0U)
                 {
                     edge->active = false;
@@ -1266,6 +1350,7 @@ henka_result henka_authoring_mesh_remove_face(henka_authoring_mesh* mesh, henka_
                     edge->faces[face_index] = edge->faces[face_index + 1U];
                 }
                 --edge->face_count;
+                edge->faces[edge->face_count] = HENKA_AUTHORING_INVALID_ID;
                 if (edge->face_count == 0U)
                 {
                     (void)authoring_id_lookup_remove(
@@ -1570,6 +1655,7 @@ henka_result henka_authoring_mesh_apply_face_loop_updates_internal(
                 relations[start].low,
                 relations[start].high,
                 relations[start].face_id,
+                false,
                 &edge_id);
             if (result != HENKA_SUCCESS)
             {

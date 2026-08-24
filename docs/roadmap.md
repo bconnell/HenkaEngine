@@ -203,7 +203,10 @@ tracks that share renderer, asset, persistence, and workspace boundaries.
 7. Face extrude, inset, planar bevel rings, face subdivision, selected-face
    deletion, planar UV projection, island transforms, packing, seam detection,
    Make Editable, HAMS persistence, material promotion, and supported PBR
-   material-instance editing are available in the bounded workflow.
+   material-instance editing are available in the bounded workflow. HAMS also
+   preserves explicit loose vertices and standalone wire edges with stable IDs
+   and bounded reusable storage; dedicated editor controls and viewport
+   line/point evaluation remain current development.
 8. glTF/GLB import and external modeling-pipeline compatibility remain part of
    the implemented boundary, with explicit limitations.
 

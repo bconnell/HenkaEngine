@@ -133,6 +133,21 @@ henka_result henka_authoring_mesh_set_vertex_position(
     henka_vec3 position);
 henka_result henka_authoring_mesh_set_vertex_uv(henka_authoring_mesh* mesh, henka_authoring_vertex_id id, henka_vec2 uv);
 
+/* Adds one bounded standalone edge between two distinct active vertices. The
+ * edge may later become face-backed through add_face, but it is valid with no
+ * incident faces and remains a stable source component while face-less. It can
+ * be removed explicitly before it is consumed by a face. Duplicate endpoint
+ * pairs and invalid vertices are rejected. */
+henka_result henka_authoring_mesh_add_edge(
+    henka_authoring_mesh* mesh,
+    henka_authoring_vertex_id first_vertex_id,
+    henka_authoring_vertex_id second_vertex_id,
+    bool hard,
+    henka_authoring_edge_id* out_id);
+henka_result henka_authoring_mesh_remove_edge(
+    henka_authoring_mesh* mesh,
+    henka_authoring_edge_id id);
+
 henka_result henka_authoring_mesh_add_face(henka_authoring_mesh* mesh, const henka_authoring_vertex_id* vertices, size_t corner_count, uint32_t material_region, bool smooth, henka_authoring_face_id* out_id);
 henka_result henka_authoring_mesh_remove_face(henka_authoring_mesh* mesh, henka_authoring_face_id id);
 const henka_authoring_face* henka_authoring_mesh_get_face(const henka_authoring_mesh* mesh, henka_authoring_face_id id);

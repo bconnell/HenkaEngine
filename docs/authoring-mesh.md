@@ -195,15 +195,22 @@ boundary vertices open. Successful Sandbox bevels replace Vertex selection with
 the live cut vertices and use the same history/render/bounds/collider
 transaction as other authoring edits. Bounded Vertex Extrude remains within
 the validated face-surface representation and does not create standalone
-loose edges or loose vertices.
+components. The core authoring representation also accepts explicit loose
+vertices and standalone wire edges: both use stable logical IDs, bounded
+physical storage, deterministic endpoint ordering, and the same HAMS v4
+transactional save/load path. A standalone edge must connect two distinct
+active vertices, has zero incident faces until a face consumes that endpoint
+pair, and can be removed explicitly while it remains face-less.
 material-instance assignment, texture
 dependencies, general collision integration beyond the bound box contract,
 package ownership, topology-aware picking, and showcase rebuilds still need the
 shared scene/asset-manager bridge. The current authoring mesh is a validated
-surface representation: active edges must belong to at least one face, and
-standalone wire edges or loose vertices are rejected by validation. Broader
-multi-face vertex-fan extrusion requires a stable remapping contract before
-it can be exposed.
+surface representation for face-backed modeling, while also preserving explicit
+loose source components. Renderer evaluation continues to triangulate faces
+only; standalone wire edges and vertices are source/persistence components and
+are not yet emitted as viewport line/point primitives. Broader multi-face
+vertex-fan extrusion requires a stable remapping contract before it can be
+exposed.
 Material regions retain their editable numeric metadata, and the evaluated
 model-to-render-mesh upload retains the bounded minimum/maximum region range
 for diagnostics. They do not yet choose multiple shared material instances in

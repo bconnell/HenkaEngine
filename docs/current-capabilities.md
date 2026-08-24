@@ -187,6 +187,10 @@ turning the public README into an implementation ledger.
   neighboring shared boundaries, and ambiguous endpoint fans; batch edge
   bevel on a shared face or endpoint, broader interior edge-set bevel, and
   broader edge topology operations remain in progress.
+- The core authoring representation also preserves explicit loose vertices and
+  standalone wire edges with stable logical IDs, bounded reusable storage, and
+  HAMS v4 save/reload support. Dedicated Sandbox loose-component controls and
+  viewport line/point evaluation remain unavailable.
 - A bounded deterministic compatible quad-strip traversal foundation is
   available for modeling operators. It records ordered face/entry/exit edges,
   terminates at boundaries or reports a closed ring, and rejects hard, material,

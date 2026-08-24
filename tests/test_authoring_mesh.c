@@ -2374,6 +2374,122 @@ cleanup:
     return result ? 1 : fail("persistence versions/malformed transaction");
 }
 
+static int test_loose_component_representation_and_persistence(void)
+{
+    const char* path = "build/test_tmp/authoring_loose_components.hams";
+    henka_authoring_mesh_desc desc = henka_authoring_mesh_desc_default();
+    henka_authoring_mesh* mesh = NULL;
+    henka_authoring_mesh* loaded = NULL;
+    henka_authoring_vertex_id first_vertex = HENKA_AUTHORING_INVALID_ID;
+    henka_authoring_vertex_id second_vertex = HENKA_AUTHORING_INVALID_ID;
+    henka_authoring_vertex_id extra_vertex = HENKA_AUTHORING_INVALID_ID;
+    henka_authoring_edge_id edge_id = HENKA_AUTHORING_INVALID_ID;
+    henka_authoring_edge_id loaded_edge_id = HENKA_AUTHORING_INVALID_ID;
+    henka_authoring_face_id loaded_face_id = HENKA_AUTHORING_INVALID_ID;
+    henka_authoring_mesh_counts counts;
+    int result = 0;
+
+    desc.max_vertices = 4U;
+    desc.max_edges = 4U;
+    desc.max_faces = 2U;
+    desc.max_face_corners = 4U;
+    if (henka_authoring_mesh_create(&desc, &mesh) != HENKA_SUCCESS ||
+        henka_authoring_mesh_add_vertex(
+            mesh,
+            (henka_vec3){0.0f, 0.0f, 0.0f},
+            (henka_vec2){0.0f, 0.0f},
+            0U,
+            &first_vertex) != HENKA_SUCCESS ||
+        henka_authoring_mesh_add_vertex(
+            mesh,
+            (henka_vec3){1.0f, 0.0f, 0.0f},
+            (henka_vec2){1.0f, 0.0f},
+            0U,
+            &second_vertex) != HENKA_SUCCESS ||
+        !henka_authoring_mesh_validate(mesh))
+    {
+        goto cleanup;
+    }
+    if (henka_authoring_mesh_add_edge(
+            mesh, first_vertex, second_vertex, true, &edge_id) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    counts = henka_authoring_mesh_get_counts(mesh);
+    if (!henka_authoring_mesh_validate(mesh) || counts.vertices != 2U ||
+        counts.edges != 1U || counts.faces != 0U ||
+        henka_authoring_mesh_get_edge(mesh, edge_id) == NULL ||
+        !henka_authoring_mesh_get_edge(mesh, edge_id)->hard ||
+        henka_authoring_mesh_get_edge_face_count(mesh, edge_id) != 0U ||
+        henka_authoring_mesh_edge_is_boundary(mesh, edge_id) ||
+        henka_authoring_mesh_remove_vertex(mesh, first_vertex) !=
+            HENKA_ERROR_INVALID_ARGUMENT ||
+        henka_authoring_mesh_add_edge(
+            mesh, first_vertex, second_vertex, false, &loaded_edge_id) !=
+            HENKA_ERROR_INVALID_ARGUMENT ||
+        henka_authoring_mesh_add_edge(
+            mesh, first_vertex, first_vertex, false, &loaded_edge_id) !=
+            HENKA_ERROR_INVALID_ARGUMENT ||
+        henka_authoring_mesh_add_edge(
+            mesh, first_vertex, 999U, false, &loaded_edge_id) !=
+            HENKA_ERROR_INVALID_ARGUMENT)
+    {
+        goto cleanup;
+    }
+    if (henka_authoring_mesh_save_file(mesh, path) != HENKA_SUCCESS ||
+        henka_authoring_mesh_load_file_new(path, &loaded) != HENKA_SUCCESS ||
+        loaded == NULL || !henka_authoring_mesh_validate(loaded) ||
+        henka_authoring_mesh_get_counts(loaded).vertices != 2U ||
+        henka_authoring_mesh_get_counts(loaded).edges != 1U ||
+        henka_authoring_mesh_get_counts(loaded).faces != 0U ||
+        test_find_edge_between_vertices(
+            loaded, first_vertex, second_vertex, &loaded_edge_id) !=
+            HENKA_SUCCESS ||
+        henka_authoring_mesh_get_edge_face_count(loaded, loaded_edge_id) != 0U ||
+        henka_authoring_mesh_add_vertex(
+            loaded,
+            (henka_vec3){2.0f, 0.0f, 0.0f},
+            (henka_vec2){0.0f, 0.0f},
+            0U,
+            &extra_vertex) != HENKA_SUCCESS ||
+        extra_vertex <= second_vertex ||
+        henka_authoring_mesh_add_face(
+            loaded,
+            (const henka_authoring_vertex_id[]){
+                first_vertex, second_vertex, extra_vertex},
+            3U,
+            0U,
+            false,
+            &loaded_face_id) != HENKA_SUCCESS ||
+        henka_authoring_mesh_get_edge_face_count(loaded, loaded_edge_id) != 1U ||
+        !henka_authoring_mesh_validate(loaded) ||
+        henka_authoring_mesh_remove_face(loaded, loaded_face_id) != HENKA_SUCCESS ||
+        henka_authoring_mesh_get_edge(loaded, loaded_edge_id) != NULL ||
+        !henka_authoring_mesh_validate(loaded))
+    {
+        goto cleanup;
+    }
+    if (henka_authoring_mesh_remove_edge(mesh, edge_id) != HENKA_SUCCESS ||
+        henka_authoring_mesh_get_edge(mesh, edge_id) != NULL ||
+        !henka_authoring_mesh_validate(mesh) ||
+        henka_authoring_mesh_remove_vertex(mesh, first_vertex) != HENKA_SUCCESS ||
+        henka_authoring_mesh_remove_vertex(mesh, second_vertex) != HENKA_SUCCESS ||
+        henka_authoring_mesh_get_counts(mesh).vertices != 0U ||
+        henka_authoring_mesh_get_counts(mesh).edges != 0U ||
+        henka_authoring_mesh_get_counts(mesh).faces != 0U ||
+        !henka_authoring_mesh_validate(mesh))
+    {
+        goto cleanup;
+    }
+    result = 1;
+
+cleanup:
+    remove(path);
+    henka_authoring_mesh_destroy(loaded);
+    henka_authoring_mesh_destroy(mesh);
+    return result ? 1 : fail("loose component representation/persistence");
+}
+
 int main(void)
 {
     return test_topology_and_evaluation() && test_rejection_and_tombstones() &&
@@ -2391,5 +2507,6 @@ int main(void)
         test_edge_delete_operation() &&
         test_vertex_extrude_operation() &&
         test_logical_identity_reuse_and_history() &&
-        test_persistence_versions_and_malformed() ? 0 : 1;
+        test_persistence_versions_and_malformed() &&
+        test_loose_component_representation_and_persistence() ? 0 : 1;
 }
