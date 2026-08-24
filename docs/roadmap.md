@@ -218,8 +218,8 @@ tracks that share renderer, asset, persistence, and workspace boundaries.
    foundation. Preview/factor adjustment, multiple cuts, broader interior-edge
    cases, batch edge operations, and general loop-cut networks remain in
    progress. Edge mode also provides a fixed-factor Edge Slide for one
-   compatible open edge-loop selection through the transactional authoring
-   path; interactive factor control and closed-loop sliding remain planned.
+   compatible open edge-loop or closed edge-cycle selection through the
+   transactional authoring path; interactive factor control remains planned.
 2. Strengthen transactional modeling, UV, material, persistence, and undo/redo
    paths while keeping failure behavior fail-closed.
 3. Improve editor integration, authoring source/project workflows, and the

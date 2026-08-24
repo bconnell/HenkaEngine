@@ -192,12 +192,12 @@ henka_result henka_authoring_mesh_bevel_edge(
     float width,
     henka_authoring_modeling_report* out_report);
 
-/* Slides one open, compatible quad edge loop toward either adjacent side.
- * The selected edges must form one connected chain of two-sided quads with
- * matching material, smoothing, and UV continuity. factor is bounded to the
- * open interval (-1, 1); zero is a validated no-op and positive/negative
- * values move toward deterministic opposite sides. The candidate is
- * published only after topology and geometry validation succeeds. */
+/* Slides one connected, compatible quad edge loop toward either adjacent side.
+ * The selected edges may form an open chain or a closed cycle of two-sided
+ * quads with matching material, smoothing, and UV continuity. factor is
+ * bounded to the open interval (-1, 1); zero is a validated no-op and
+ * positive/negative values move toward deterministic opposite sides. The
+ * candidate is published only after topology and geometry validation succeeds. */
 henka_result henka_authoring_mesh_slide_edge_loop(
     henka_authoring_mesh* mesh,
     const henka_authoring_edge_id* edge_ids,

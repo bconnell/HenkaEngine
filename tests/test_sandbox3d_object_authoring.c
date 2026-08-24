@@ -2069,8 +2069,10 @@ static void henka_test_sandbox3d_object_authoring_closed_quad_ring_loop_cut(void
     sandbox3d_authoring_object* object = NULL;
     const henka_authoring_mesh_desc desc = {32U, 64U, 16U, 8U};
     henka_authoring_vertex_id vertices[8];
+    henka_authoring_edge_id closed_slide_edge = HENKA_AUTHORING_INVALID_ID;
     henka_authoring_mesh_counts counts;
     henka_entity entity;
+    size_t edge_slot;
 
     config.application_name = "Henka Closed Quad Ring Loop Cut Test";
     config.window_width = 320;
@@ -2096,6 +2098,41 @@ static void henka_test_sandbox3d_object_authoring_closed_quad_ring_loop_cut(void
     HENKA_TEST_ASSERT(sandbox3d_authoring_object_redo(object) == HENKA_SUCCESS);
     counts = henka_authoring_mesh_get_counts(sandbox3d_authoring_object_get_mesh(object));
     HENKA_TEST_ASSERT(counts.vertices == 12U && counts.edges == 20U && counts.faces == 8U);
+
+    for (edge_slot = 0U; edge_slot < desc.max_edges; ++edge_slot)
+    {
+        henka_authoring_edge_id edge_id;
+        const henka_authoring_edge* edge;
+        if (henka_authoring_mesh_get_edge_id_at(
+                sandbox3d_authoring_object_get_mesh(object), edge_slot, &edge_id) != HENKA_SUCCESS)
+        {
+            continue;
+        }
+        edge = henka_authoring_mesh_get_edge(
+            sandbox3d_authoring_object_get_mesh(object), edge_id);
+        if (edge != NULL && edge->face_count == 2U &&
+            edge->vertices[0] >= 9U && edge->vertices[0] <= 12U &&
+            edge->vertices[1] >= 9U && edge->vertices[1] <= 12U)
+        {
+            closed_slide_edge = edge_id;
+            break;
+        }
+    }
+    HENKA_TEST_ASSERT(closed_slide_edge != HENKA_AUTHORING_INVALID_ID);
+    sandbox3d_authoring_object_set_selection_mode(object, SANDBOX3D_AUTHORING_SELECTION_EDGE);
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_select_component(
+        object, closed_slide_edge, false) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_select_edge_loop(object) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_get_selected_component_count(object) == 4U);
+    counts = henka_authoring_mesh_get_counts(sandbox3d_authoring_object_get_mesh(object));
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_slide_selected_edge_loop(object, 0.5f) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_authoring_mesh_get_counts(
+        sandbox3d_authoring_object_get_mesh(object)).vertices == counts.vertices &&
+        henka_authoring_mesh_get_counts(sandbox3d_authoring_object_get_mesh(object)).edges == counts.edges &&
+        henka_authoring_mesh_get_counts(sandbox3d_authoring_object_get_mesh(object)).faces == counts.faces);
+    HENKA_TEST_ASSERT(henka_authoring_mesh_validate(sandbox3d_authoring_object_get_mesh(object)));
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_undo(object) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_redo(object) == HENKA_SUCCESS);
 
     sandbox3d_authoring_object_destroy(object);
     henka_authoring_mesh_destroy(source);

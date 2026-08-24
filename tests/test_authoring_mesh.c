@@ -1093,6 +1093,9 @@ static int test_closed_quad_ring_loop_cut_operation(void)
     henka_authoring_face_id face_id;
     henka_authoring_edge_id start_edge_id = HENKA_AUTHORING_INVALID_ID;
     henka_authoring_edge_id primary_cut_edge_id = HENKA_AUTHORING_INVALID_ID;
+    henka_authoring_edge_id slide_edges[4] = {
+        HENKA_AUTHORING_INVALID_ID, HENKA_AUTHORING_INVALID_ID,
+        HENKA_AUTHORING_INVALID_ID, HENKA_AUTHORING_INVALID_ID};
     henka_authoring_face_id new_face_id = HENKA_AUTHORING_INVALID_ID;
     henka_authoring_modeling_report report = {0};
     henka_authoring_mesh_counts before;
@@ -1176,6 +1179,56 @@ static int test_closed_quad_ring_loop_cut_operation(void)
         !henka_authoring_mesh_validate(mesh))
     {
         goto cleanup;
+    }
+    {
+        size_t slide_edge_count = 0U;
+        henka_result slide_result;
+        for (index = 0U; index < henka_authoring_mesh_get_desc(mesh).max_edges; ++index)
+        {
+            henka_authoring_edge_id edge_id;
+            const henka_authoring_edge* edge;
+            if (henka_authoring_mesh_get_edge_id_at(mesh, index, &edge_id) != HENKA_SUCCESS)
+            {
+                continue;
+            }
+            edge = henka_authoring_mesh_get_edge(mesh, edge_id);
+            if (edge != NULL && edge->face_count == 2U &&
+                edge->vertices[0] >= 9U && edge->vertices[0] <= 12U &&
+                edge->vertices[1] >= 9U && edge->vertices[1] <= 12U)
+            {
+                if (slide_edge_count >= 4U)
+                {
+                    goto cleanup;
+                }
+                slide_edges[slide_edge_count++] = edge_id;
+            }
+        }
+        slide_result = henka_authoring_mesh_slide_edge_loop(
+            mesh, slide_edges, slide_edge_count, 0.5f, &report);
+        if (slide_edge_count != 4U || slide_result != HENKA_SUCCESS ||
+            !report.changed || report.created_vertices != 0U ||
+            report.created_edges != 0U || report.created_faces != 0U)
+        {
+            goto cleanup;
+        }
+        for (index = 9U; index <= 12U; ++index)
+        {
+            const henka_authoring_vertex* vertex =
+                henka_authoring_mesh_get_vertex(mesh, (henka_authoring_vertex_id)index);
+            if (vertex == NULL ||
+                (fabsf(vertex->position.y - 0.25f) > 0.0001f &&
+                 fabsf(vertex->position.y - 0.75f) > 0.0001f))
+            {
+                goto cleanup;
+            }
+        }
+        before = after;
+        after = henka_authoring_mesh_get_counts(mesh);
+        if (!henka_authoring_mesh_validate(mesh) ||
+            memcmp(&before, &after, sizeof(before)) != 0)
+        {
+            goto cleanup;
+        }
     }
     result = 1;
 
