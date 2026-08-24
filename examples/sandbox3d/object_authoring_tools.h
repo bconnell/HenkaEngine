@@ -261,10 +261,11 @@ henka_result sandbox3d_authoring_object_dissolve_selected_edge(
  * rejected until a stable batch deletion contract is available. */
 henka_result sandbox3d_authoring_object_delete_selected_edge(
     sandbox3d_authoring_object* object);
-/* Bevels one selected compatible boundary edge or isolated two-quad interior
- * edge through the authoritative source/render/bounds/physics/undo
- * transaction. Broader interior topology and ambiguous endpoint fans are
- * rejected by the core contract. */
+/* Bevels one selected compatible boundary/interior edge, or a bounded
+ * pairwise vertex-disjoint selection of boundary edges on distinct faces,
+ * through the authoritative source/render/bounds/physics/undo transaction.
+ * Broader interior topology and ambiguous endpoint fans are rejected by the
+ * core contract. */
 henka_result sandbox3d_authoring_object_bevel_selected_edge(
     sandbox3d_authoring_object* object);
 /* Slides the current compatible open edge-loop or closed edge-cycle selection

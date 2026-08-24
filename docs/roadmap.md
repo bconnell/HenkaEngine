@@ -212,13 +212,14 @@ tracks that share renderer, asset, persistence, and workspace boundaries.
 1. Continue expanding edge topology coverage and the surrounding authoring UX.
    Bounded single-edge dissolve for compatible interior edges, bounded
    single-edge delete of an incident face set, standalone boundary-edge bevel,
-   and compatible interior-edge bevel for an isolated two-quad patch are now
-   available; the editor now applies one fixed-factor Loop Cut across a
-   compatible open quad strip or closed ring using the reusable traversal
-   foundation. Preview/factor adjustment, multiple cuts, broader interior-edge
-   cases, batch edge operations, and general loop-cut networks remain in
-   progress. Edge mode also provides a fixed-factor Edge Slide for one
-   compatible open edge-loop or closed edge-cycle selection through the
+   bounded multi-edge boundary bevel for pairwise vertex-disjoint edges on
+   distinct faces, and compatible interior-edge bevel for an isolated two-quad
+   patch are now available; the editor now applies one fixed-factor Loop Cut
+   across a compatible open quad strip or closed ring using the reusable
+   traversal foundation. Preview/factor adjustment, same-face/shared-endpoint
+   bevel batches, broader interior-edge cases, and general loop-cut networks
+   remain in progress. Edge mode also provides a fixed-factor Edge Slide for
+   one compatible open edge-loop or closed edge-cycle selection through the
    transactional authoring path; interactive factor control remains planned.
 2. Strengthen transactional modeling, UV, material, persistence, and undo/redo
    paths while keeping failure behavior fail-closed.

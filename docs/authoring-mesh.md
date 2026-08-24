@@ -176,8 +176,11 @@ edge-set bevel remain incomplete. A bounded single-quad face loop cut is also
   selection. It moves the loop toward deterministic adjacent sides without
   changing topology and publishes through the same transactional
   source/render/bounds/collider/undo path. Interactive preview/factor
-  adjustment, multi-cut spacing, broader interior edge cases, and general
-  loop-cut networks remain unfinished.
+  adjustment, multi-cut spacing, same-face/shared-endpoint bevel batches,
+  broader interior edge cases, and general loop-cut networks remain
+  unfinished. The same Edge workflow accepts the bounded pairwise
+  vertex-disjoint boundary-edge bevel selection described above and publishes
+  it as one undoable transaction.
 Bounded Vertex Extrude is available for one unambiguous boundary corner of a
 single face. It creates one cap vertex and two connecting side faces while
 preserving the operation's transactional source/render/bounds/collider/undo
