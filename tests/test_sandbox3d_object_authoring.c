@@ -2130,6 +2130,8 @@ static void henka_test_sandbox3d_object_authoring_edge_loop_slide(void)
     henka_authoring_vertex_id vertices[12];
     henka_authoring_edge_id loop_edge;
     henka_authoring_vertex_id loop_vertices[4] = {2U, 5U, 8U, 11U};
+    sandbox3d_modeling_operator_session operator_session = {0};
+    float operator_baseline_x = 0.0f;
     henka_entity entity;
     size_t row;
 
@@ -2154,6 +2156,50 @@ static void henka_test_sandbox3d_object_authoring_edge_loop_slide(void)
         object, loop_edge, false) == HENKA_SUCCESS);
     HENKA_TEST_ASSERT(sandbox3d_authoring_object_select_edge_loop(object) ==
         HENKA_SUCCESS);
+    {
+        const henka_authoring_vertex* vertex = henka_authoring_mesh_get_vertex(
+            sandbox3d_authoring_object_get_mesh(object), loop_vertices[0]);
+        HENKA_TEST_ASSERT(vertex != NULL);
+        operator_baseline_x = vertex->position.x;
+    }
+    HENKA_TEST_ASSERT(sandbox3d_modeling_operator_begin(
+        &operator_session, object,
+        SANDBOX3D_MODELING_OPERATOR_EDGE_SLIDE) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(sandbox3d_modeling_operator_preview(
+        &operator_session, 0.25f, false, false) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_has_preview(object));
+    for (row = 0U; row < 4U; ++row)
+    {
+        const henka_authoring_vertex* vertex = henka_authoring_mesh_get_vertex(
+            sandbox3d_authoring_object_get_mesh(object), loop_vertices[row]);
+        HENKA_TEST_ASSERT(vertex != NULL);
+        HENKA_TEST_ASSERT(fabsf(vertex->position.x - operator_baseline_x) < 0.0001f);
+    }
+    HENKA_TEST_ASSERT(sandbox3d_modeling_operator_cancel(&operator_session) ==
+        HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(!sandbox3d_authoring_object_has_preview(object));
+    HENKA_TEST_ASSERT(sandbox3d_modeling_operator_begin(
+        &operator_session, object,
+        SANDBOX3D_MODELING_OPERATOR_EDGE_SLIDE) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(sandbox3d_modeling_operator_numeric_begin(
+        &operator_session) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(sandbox3d_modeling_operator_numeric_append(
+        &operator_session, "-0.25", 5U) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(sandbox3d_modeling_operator_numeric_commit(
+        &operator_session) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(operator_session.amount, -0.25f, 0.0001f);
+    HENKA_TEST_ASSERT(sandbox3d_modeling_operator_commit(&operator_session) ==
+        HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_authoring_mesh_validate(
+        sandbox3d_authoring_object_get_mesh(object)));
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_undo(object) == HENKA_SUCCESS);
+    for (row = 0U; row < 4U; ++row)
+    {
+        const henka_authoring_vertex* vertex = henka_authoring_mesh_get_vertex(
+            sandbox3d_authoring_object_get_mesh(object), loop_vertices[row]);
+        HENKA_TEST_ASSERT(vertex != NULL);
+        HENKA_TEST_ASSERT(fabsf(vertex->position.x - operator_baseline_x) < 0.0001f);
+    }
     HENKA_TEST_ASSERT(sandbox3d_authoring_object_slide_selected_edge_loop(
         object, 0.5f) == HENKA_SUCCESS);
     for (row = 0U; row < 4U; ++row)
@@ -2178,7 +2224,12 @@ static void henka_test_sandbox3d_object_authoring_edge_loop_slide(void)
     HENKA_TEST_ASSERT(sandbox3d_authoring_object_redo(object) == HENKA_SUCCESS);
     HENKA_TEST_ASSERT(henka_authoring_mesh_validate(
         sandbox3d_authoring_object_get_mesh(object)));
-
+    sandbox3d_authoring_object_set_selection_mode(
+        object, SANDBOX3D_AUTHORING_SELECTION_EDGE);
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_select_component(
+        object, loop_edge, false) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_select_edge_loop(object) ==
+        HENKA_SUCCESS);
     sandbox3d_authoring_object_destroy(object);
     henka_authoring_mesh_destroy(source);
     henka_scene_destroy(scene);
