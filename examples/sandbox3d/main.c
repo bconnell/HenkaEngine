@@ -645,26 +645,62 @@ static void sandbox3d_mark_generic_modeling_applied(
 }
 
 static void sandbox3d_set_status(sandbox3d_state* state, bool warning, const char* message);
+static void sandbox3d_cancel_active_modeling_operator_session(
+    sandbox3d_state* state);
 
-static bool sandbox3d_apply_authoring_face_bevel(
+static bool sandbox3d_apply_authoring_bevel(
     sandbox3d_state* state,
     henka_entity entity,
     const char* display_name)
 {
-    henka_result bevel_result;
+    char width_text[32];
+    henka_result bevel_result = HENKA_SUCCESS;
 
     if (state == NULL || state->authoring_object == NULL || display_name == NULL)
     {
         return false;
     }
-    bevel_result = sandbox3d_authoring_object_bevel_selected_face(
+    (void)snprintf(
+        width_text,
+        sizeof(width_text),
+        "%.9g",
+        sandbox3d_authoring_object_get_bevel_width(state->authoring_object));
+    sandbox3d_cancel_active_modeling_operator_session(state);
+    bevel_result = sandbox3d_modeling_operator_begin(
+        &state->modeling_operator,
         state->authoring_object,
-        0.1f);
+        SANDBOX3D_MODELING_OPERATOR_BEVEL);
+    if (bevel_result == HENKA_SUCCESS)
+    {
+        bevel_result = sandbox3d_modeling_operator_numeric_begin(
+            &state->modeling_operator);
+    }
+    if (bevel_result == HENKA_SUCCESS)
+    {
+        bevel_result = sandbox3d_modeling_operator_numeric_append(
+            &state->modeling_operator,
+            width_text,
+            strlen(width_text));
+    }
+    if (bevel_result == HENKA_SUCCESS)
+    {
+        bevel_result = sandbox3d_modeling_operator_numeric_commit(
+            &state->modeling_operator);
+    }
+    if (bevel_result == HENKA_SUCCESS)
+    {
+        bevel_result = sandbox3d_modeling_operator_commit(
+            &state->modeling_operator);
+    }
+    if (bevel_result != HENKA_SUCCESS && state->modeling_operator.active)
+    {
+        (void)sandbox3d_modeling_operator_cancel(&state->modeling_operator);
+    }
     printf(
-        "Native authoring bevel request: name=%s result=%s selected_face=%u selected_components=%zu.\n",
+        "Native authoring bevel operator: name=%s result=%s width=%s selected_components=%zu.\n",
         display_name,
         henka_result_to_string(bevel_result),
-        (unsigned int)sandbox3d_authoring_object_get_selected_face(state->authoring_object),
+        width_text,
         sandbox3d_authoring_object_get_selected_component_count(state->authoring_object));
     fflush(stdout);
     if (bevel_result != HENKA_SUCCESS)
@@ -672,7 +708,7 @@ static bool sandbox3d_apply_authoring_face_bevel(
         sandbox3d_set_status(
             state,
             true,
-            "Authoring face bevel failed; the current source was retained.");
+            "Authoring bevel failed; the current source was retained.");
         return false;
     }
     {
@@ -681,7 +717,7 @@ static bool sandbox3d_apply_authoring_face_bevel(
                 sandbox3d_authoring_object_get_mesh(state->authoring_object));
         sandbox3d_mark_generic_modeling_applied(state, entity);
         printf(
-            "Native authoring dogfood: face bevel edited %s; vertices=%zu faces=%zu source_state=HENKA_NATIVE_EDITED_FIXTURE design_authority=EDITOR_DERIVED_FIXTURE.\n",
+            "Native authoring dogfood: bevel operator edited %s; vertices=%zu faces=%zu source_state=HENKA_NATIVE_EDITED_FIXTURE design_authority=EDITOR_DERIVED_FIXTURE.\n",
             display_name,
             counts.vertices,
             counts.faces);
@@ -690,7 +726,7 @@ static bool sandbox3d_apply_authoring_face_bevel(
     sandbox3d_set_status(
         state,
         false,
-        "Authoring face beveled and evaluated into the scene.");
+        "Authoring bevel committed transactionally through the modeling operator.");
     return true;
 }
 
@@ -24294,7 +24330,7 @@ details_group_authoring:
                         (henka_ui_rect){row.x, row.y, 88.0f, 24.0f},
                         "Bevel"))
                 {
-                    (void)sandbox3d_apply_authoring_face_bevel(state, entity, display_name);
+                    (void)sandbox3d_apply_authoring_bevel(state, entity, display_name);
                 }
             }
             if (selection_mode == SANDBOX3D_AUTHORING_SELECTION_FACE &&
@@ -25143,24 +25179,7 @@ details_group_authoring:
                         (henka_ui_rect){row.x, row.y, 96.0f, 24.0f},
                         "Bevel Edge"))
                 {
-                    const henka_result bevel_result =
-                        sandbox3d_authoring_object_bevel_selected_edge(
-                            state->authoring_object);
-                    if (bevel_result == HENKA_SUCCESS)
-                    {
-                        sandbox3d_mark_generic_modeling_applied(state, entity);
-                        sandbox3d_set_status(
-                            state,
-                            false,
-                            "Compatible edge beveled transactionally.");
-                    }
-                    else
-                    {
-                        sandbox3d_set_status(
-                            state,
-                            true,
-                            "Edge bevel rejected; select a compatible boundary or two-quad interior edge.");
-                    }
+                    (void)sandbox3d_apply_authoring_bevel(state, entity, display_name);
                 }
             }
             if (state->authoring_object != NULL &&
@@ -25404,12 +25423,7 @@ details_group_authoring:
                         state->ui, "authoring_bevel_vertices_top",
                         (henka_ui_rect){row.x + 104.0f, row.y, 88.0f, 24.0f}, "Bevel"))
                 {
-                    const henka_result bevel_result =
-                        sandbox3d_authoring_object_bevel_selected_vertices(state->authoring_object);
-                    sandbox3d_set_status(state, bevel_result != HENKA_SUCCESS,
-                        bevel_result == HENKA_SUCCESS ? "Selected vertices beveled." :
-                            "Bevel rejected; width, topology, or capacity was invalid.");
-                    if (bevel_result == HENKA_SUCCESS) sandbox3d_mark_generic_modeling_applied(state, entity);
+                    (void)sandbox3d_apply_authoring_bevel(state, entity, display_name);
                 }
             }
             if (state->authoring_object != NULL &&
@@ -25458,7 +25472,7 @@ details_group_authoring:
                         (henka_ui_rect){row.x, row.y, 54.0f, 24.0f},
                         "Bevel"))
                 {
-                    (void)sandbox3d_apply_authoring_face_bevel(state, entity, display_name);
+                    (void)sandbox3d_apply_authoring_bevel(state, entity, display_name);
                 }
                 face_edit_controls_prioritized = true;
                 if (!state->native_authoring_face_edit_tools_reported)
@@ -26302,14 +26316,7 @@ details_group_authoring:
                         state->ui, "authoring_bevel_vertices",
                         (henka_ui_rect){row.x + 104.0f, row.y, 88.0f, 24.0f}, "Bevel"))
                 {
-                    const henka_result bevel_result =
-                        sandbox3d_authoring_object_bevel_selected_vertices(state->authoring_object);
-                    if (bevel_result == HENKA_SUCCESS)
-                    {
-                        sandbox3d_mark_generic_modeling_applied(state, entity);
-                        sandbox3d_set_status(state, false, "Selected vertices beveled.");
-                    }
-                    else sandbox3d_set_status(state, true, "Bevel rejected; width, topology, or capacity was invalid.");
+                    (void)sandbox3d_apply_authoring_bevel(state, entity, display_name);
                 }
             }
             if (state->authoring_object != NULL &&
@@ -26516,24 +26523,7 @@ details_group_authoring:
                     (henka_ui_rect){row.x, row.y, 96.0f, 24.0f},
                     "Bevel Edge"))
             {
-                const henka_result bevel_result =
-                    sandbox3d_authoring_object_bevel_selected_edge(
-                        state->authoring_object);
-                if (bevel_result == HENKA_SUCCESS)
-                {
-                    sandbox3d_mark_generic_modeling_applied(state, entity);
-                    sandbox3d_set_status(
-                        state,
-                        false,
-                        "Compatible edge beveled transactionally.");
-                }
-                else
-                {
-                    sandbox3d_set_status(
-                        state,
-                        true,
-                        "Edge bevel rejected; select a compatible boundary or two-quad interior edge.");
-                }
+                (void)sandbox3d_apply_authoring_bevel(state, entity, display_name);
             }
             if (state->authoring_object != NULL &&
                 sandbox3d_details_flow_next_row(state, flow_desc.bounds, 28.0f, 1U, &row) &&
