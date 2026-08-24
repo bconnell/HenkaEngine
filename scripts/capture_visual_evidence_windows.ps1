@@ -13,7 +13,12 @@ param(
 
     [switch]$IncludeGiraffeInspection,
 
-    [switch]$IncludeTerrain
+    [switch]$IncludeTerrain,
+
+    # Default capture is background-safe and must not take the user's
+    # foreground window.  Use this only for a test of Windows foreground
+    # integration itself.
+    [switch]$AllowForegroundIntegration
 )
 
 Set-StrictMode -Version Latest
@@ -57,6 +62,11 @@ if ($EvidenceProfile -eq "GEOMETRY_SOLID") {
     $IncludeGiraffeInspection = $true
 }
 
+$script:allowForegroundIntegration = $AllowForegroundIntegration.IsPresent
+if (-not $script:allowForegroundIntegration) {
+    Write-Output "[safe] Visual evidence capture will not acquire foreground focus."
+}
+
 Add-Type -TypeDefinition @"
 using System;
 using System.Runtime.InteropServices;
@@ -76,6 +86,9 @@ public static class HenkaVisualCaptureNativeMethods
     [DllImport("user32.dll")] public static extern void SwitchToThisWindow(IntPtr hWnd, bool altTab);
     [DllImport("user32.dll")] public static extern bool SetWindowPos(IntPtr hWnd, IntPtr insertAfter, int x, int y, int width, int height, uint flags);
     [DllImport("user32.dll")] public static extern bool IsWindow(IntPtr hWnd);
+    [DllImport("user32.dll")] public static extern bool IsWindowVisible(IntPtr hWnd);
+    [DllImport("user32.dll")] public static extern bool IsIconic(IntPtr hWnd);
+    [DllImport("user32.dll")] public static extern bool PrintWindow(IntPtr hWnd, IntPtr hdcBlt, uint flags);
     [DllImport("user32.dll")] public static extern bool PostMessage(IntPtr hWnd, uint message, IntPtr wParam, IntPtr lParam);
     [DllImport("dwmapi.dll")] public static extern int DwmGetWindowAttribute(IntPtr handle, int attribute, out RECT rect, int size);
     public static IntPtr FindSandboxWindow(uint processId) {
@@ -131,11 +144,22 @@ function Wait-HenkaCaptureReady {
     throw "Sandbox did not report bounded capture readiness for $Label within 20 seconds."
 }
 
-function Wait-HenkaSandboxForeground {
+function Assert-HenkaSandboxCaptureReady {
     param(
         [Parameter(Mandatory = $true)][IntPtr]$Handle,
         [Parameter(Mandatory = $true)][string]$Label
     )
+
+    if (-not [HenkaVisualCaptureNativeMethods]::IsWindowVisible($Handle) -or
+        [HenkaVisualCaptureNativeMethods]::IsIconic($Handle)) {
+        throw (
+            "Background-safe visual capture is unavailable for ${Label}: " +
+            "the Sandbox window is hidden or minimized. No focus change was attempted.")
+    }
+
+    if (-not $script:allowForegroundIntegration) {
+        return
+    }
 
     for ($attempt = 0; $attempt -lt 20; ++$attempt) {
         [HenkaVisualCaptureNativeMethods]::ActivateSandboxWindow($Handle)
@@ -145,6 +169,53 @@ function Wait-HenkaSandboxForeground {
         Start-Sleep -Milliseconds 50
     }
     throw "Sandbox window did not become the foreground capture owner for $Label."
+}
+
+function Capture-HenkaWindowBitmap {
+    param(
+        [Parameter(Mandatory = $true)][IntPtr]$Handle,
+        [Parameter(Mandatory = $true)][HenkaVisualCaptureNativeMethods+RECT]$Rect,
+        [Parameter(Mandatory = $true)][string]$Label
+    )
+
+    $width = $Rect.Right - $Rect.Left
+    $height = $Rect.Bottom - $Rect.Top
+    if ($width -le 0 -or $height -le 0) {
+        throw "Window bounds were invalid for $Label."
+    }
+
+    $bitmap = New-Object System.Drawing.Bitmap($width, $height)
+    $graphics = [System.Drawing.Graphics]::FromImage($bitmap)
+    try {
+        if ($script:allowForegroundIntegration) {
+            $graphics.CopyFromScreen($Rect.Left, $Rect.Top, 0, 0, $bitmap.Size)
+        }
+        else {
+            $deviceContext = $graphics.GetHdc()
+            try {
+                if (-not [HenkaVisualCaptureNativeMethods]::PrintWindow(
+                        $Handle,
+                        $deviceContext,
+                        2)) {
+                    throw (
+                        "Background-safe visual capture is unavailable for ${Label}: " +
+                        "the window did not render through PrintWindow. " +
+                        "No desktop or foreground capture was attempted.")
+                }
+            }
+            finally {
+                $graphics.ReleaseHdc($deviceContext) | Out-Null
+            }
+        }
+    }
+    catch {
+        $bitmap.Dispose()
+        throw
+    }
+    finally {
+        $graphics.Dispose()
+    }
+    return $bitmap
 }
 
 function Assert-HenkaCaptureMetadata {
@@ -247,7 +318,13 @@ $records.Add("Startup evidence: application-provided readiness for the ordinary 
 $records.Add("Geometry authority: GEOMETRY_SOLID uses neutral Solid captures only; generated fixtures and asset-specific presets are not native-authored proof")
 $records.Add("Giraffe inspection: optional close front, three-quarter, profile, and wide Rendered views plus front Material Preview")
 $records.Add("Terrain evidence: deterministic wide, close-material, and four-region-corner cameras")
-$records.Add("Capture: application window bounds copied from the desktop into repo-local generated output")
+$capturePolicy = if ($script:allowForegroundIntegration) {
+        "foreground desktop capture was explicitly enabled"
+    }
+    else {
+        "background-safe PrintWindow capture; no foreground or desktop ownership"
+    }
+$records.Add("Capture policy: $capturePolicy")
 $captureMetadata = New-Object System.Collections.Generic.List[object]
 
 foreach ($mode in $modes) {
@@ -266,15 +343,12 @@ foreach ($mode in $modes) {
         if ($handle -eq [IntPtr]::Zero -or -not [HenkaVisualCaptureNativeMethods]::IsWindow($handle)) {
             throw "Sandbox window did not become available for $($mode.Label)."
         }
-        Wait-HenkaSandboxForeground -Handle $handle -Label $mode.Label
+        Assert-HenkaSandboxCaptureReady -Handle $handle -Label $mode.Label
         $metadataLine = Wait-HenkaCaptureReady -StdoutPath $stdoutPath -Process $process -Label $mode.Label
         [void]$captureMetadata.Add(
             (Assert-HenkaCaptureMetadata -Line $metadataLine -Label $mode.Label))
         Start-Sleep -Milliseconds 150
-        # Readiness can be reached while another desktop window regains focus.
-        # Re-assert ownership at the last safe point before CopyFromScreen so
-        # application-only evidence cannot silently capture an unrelated app.
-        Wait-HenkaSandboxForeground -Handle $handle -Label $mode.Label
+        Assert-HenkaSandboxCaptureReady -Handle $handle -Label $mode.Label
         $rect = New-Object HenkaVisualCaptureNativeMethods+RECT
         $dwmResult = [HenkaVisualCaptureNativeMethods]::DwmGetWindowAttribute(
             $handle,
@@ -289,15 +363,11 @@ foreach ($mode in $modes) {
         if ($width -le 0 -or $height -le 0) {
             throw "Window bounds were invalid for $($mode.Label)."
         }
-        $bitmap = New-Object System.Drawing.Bitmap($width, $height)
+        $bitmap = Capture-HenkaWindowBitmap `
+            -Handle $handle `
+            -Rect $rect `
+            -Label $mode.Label
         try {
-            $graphics = [System.Drawing.Graphics]::FromImage($bitmap)
-            try {
-                $graphics.CopyFromScreen($rect.Left, $rect.Top, 0, 0, $bitmap.Size)
-            }
-            finally {
-                $graphics.Dispose()
-            }
             $path = Join-Path $OutputDirectory $mode.File
             $bitmap.Save($path, [System.Drawing.Imaging.ImageFormat]::Png)
             $hash = (Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash.ToLowerInvariant()
@@ -372,10 +442,10 @@ if ($IncludeGiraffeInspection) {
             if ($handle -eq [IntPtr]::Zero -or -not [HenkaVisualCaptureNativeMethods]::IsWindow($handle)) {
                 throw "Sandbox window did not become available for $($inspectionMode.Label)."
             }
-            Wait-HenkaSandboxForeground -Handle $handle -Label $inspectionMode.Label
+            Assert-HenkaSandboxCaptureReady -Handle $handle -Label $inspectionMode.Label
             $metadataLine = Wait-HenkaCaptureReady -StdoutPath $stdoutPath -Process $process -Label $inspectionMode.Label
             Start-Sleep -Milliseconds 150
-            Wait-HenkaSandboxForeground -Handle $handle -Label $inspectionMode.Label
+            Assert-HenkaSandboxCaptureReady -Handle $handle -Label $inspectionMode.Label
             $rect = New-Object HenkaVisualCaptureNativeMethods+RECT
             $dwmResult = [HenkaVisualCaptureNativeMethods]::DwmGetWindowAttribute(
                 $handle,
@@ -390,15 +460,11 @@ if ($IncludeGiraffeInspection) {
             if ($width -le 0 -or $height -le 0) {
                 throw "Window bounds were invalid for $($inspectionMode.Label)."
             }
-            $bitmap = New-Object System.Drawing.Bitmap($width, $height)
+            $bitmap = Capture-HenkaWindowBitmap `
+                -Handle $handle `
+                -Rect $rect `
+                -Label $inspectionMode.Label
             try {
-                $graphics = [System.Drawing.Graphics]::FromImage($bitmap)
-                try {
-                    $graphics.CopyFromScreen($rect.Left, $rect.Top, 0, 0, $bitmap.Size)
-                }
-                finally {
-                    $graphics.Dispose()
-                }
                 $path = Join-Path $OutputDirectory $inspectionMode.File
                 $bitmap.Save($path, [System.Drawing.Imaging.ImageFormat]::Png)
                 $hash = (Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash.ToLowerInvariant()
@@ -452,9 +518,9 @@ if ($IncludeTerrain) {
             if ($handle -eq [IntPtr]::Zero -or -not [HenkaVisualCaptureNativeMethods]::IsWindow($handle)) {
                 throw "Sandbox window did not become available for $($terrainMode.Label)."
             }
-            Wait-HenkaSandboxForeground -Handle $handle -Label $terrainMode.Label
+            Assert-HenkaSandboxCaptureReady -Handle $handle -Label $terrainMode.Label
             Start-Sleep -Milliseconds 1500
-            Wait-HenkaSandboxForeground -Handle $handle -Label $terrainMode.Label
+            Assert-HenkaSandboxCaptureReady -Handle $handle -Label $terrainMode.Label
             $rect = New-Object HenkaVisualCaptureNativeMethods+RECT
             $dwmResult = [HenkaVisualCaptureNativeMethods]::DwmGetWindowAttribute(
                 $handle,
@@ -469,15 +535,11 @@ if ($IncludeTerrain) {
             if ($width -le 0 -or $height -le 0) {
                 throw "Window bounds were invalid for $($terrainMode.Label)."
             }
-            $bitmap = New-Object System.Drawing.Bitmap($width, $height)
+            $bitmap = Capture-HenkaWindowBitmap `
+                -Handle $handle `
+                -Rect $rect `
+                -Label $terrainMode.Label
             try {
-                $graphics = [System.Drawing.Graphics]::FromImage($bitmap)
-                try {
-                    $graphics.CopyFromScreen($rect.Left, $rect.Top, 0, 0, $bitmap.Size)
-                }
-                finally {
-                    $graphics.Dispose()
-                }
                 $path = Join-Path $OutputDirectory $terrainMode.File
                 $bitmap.Save($path, [System.Drawing.Imaging.ImageFormat]::Png)
                 $hash = (Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash.ToLowerInvariant()

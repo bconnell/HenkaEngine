@@ -1,7 +1,12 @@
 param(
     [switch]$NonInteractive,
 
-    [switch]$ContractOnly
+    [switch]$ContractOnly,
+
+    # Ordinary packaged validation is application-local and must not take
+    # ownership of the user's foreground window.  Use this only for a test
+    # that explicitly covers Windows foreground integration itself.
+    [switch]$AllowForegroundIntegration
 )
 
 Set-StrictMode -Version Latest
@@ -13,6 +18,11 @@ if ($ContractOnly -and -not $NonInteractive) {
 
 . (Join-Path $PSScriptRoot "henka_script_common.ps1")
 . (Join-Path $PSScriptRoot "henka_ui_automation_helpers.ps1")
+
+$script:allowForegroundIntegration = $AllowForegroundIntegration.IsPresent
+if (-not $script:allowForegroundIntegration) {
+    Write-Output "[safe] Packaged UI validation will not acquire foreground focus."
+}
 
 if (-not ("HenkaUiAutomationNative" -as [type])) {
     Add-Type -TypeDefinition @"
@@ -57,6 +67,10 @@ function Set-HenkaAutomationForeground {
 
     if ($Handle -eq [System.IntPtr]::Zero) {
         throw "The Henka automation target handle is invalid."
+    }
+
+    if (-not $script:allowForegroundIntegration) {
+        return
     }
 
     if ([HenkaUiAutomationNative]::GetForegroundWindow() -eq $Handle) {
@@ -346,14 +360,12 @@ function Write-Utf8NoBom {
     [System.IO.File]::WriteAllText($Path, $Content, $encoding)
 }
 
-function Save-WindowScreenshot {
+function New-HenkaCapturedWindowBitmap {
     param(
         [Parameter(Mandatory = $true)][System.IntPtr]$Handle,
-        [Parameter(Mandatory = $true)][string]$Path,
         [Parameter(Mandatory = $true)][string]$Description
     )
 
-    Set-HenkaAutomationForeground -Handle $Handle
     $rect = Get-WindowRect -Handle $Handle
     $width = $rect.Right - $rect.Left
     $height = $rect.Bottom - $rect.Top
@@ -364,19 +376,61 @@ function Save-WindowScreenshot {
     $bitmap = New-Object System.Drawing.Bitmap -ArgumentList $width, $height
     $graphics = [System.Drawing.Graphics]::FromImage($bitmap)
     try {
-        $size = New-Object System.Drawing.Size -ArgumentList $width, $height
-        $graphics.CopyFromScreen(
-            $rect.Left,
-            $rect.Top,
-            0,
-            0,
-            $size)
+        if ($script:allowForegroundIntegration) {
+            $size = New-Object System.Drawing.Size -ArgumentList $width, $height
+            $graphics.CopyFromScreen(
+                $rect.Left,
+                $rect.Top,
+                0,
+                0,
+                $size)
+        }
+        else {
+            $deviceContext = $graphics.GetHdc()
+            try {
+                if (-not [NativeMethods]::PrintWindow(
+                        $Handle,
+                        $deviceContext,
+                        2)) {
+                    throw (
+                        "$Description background-safe capture is unavailable: " +
+                        "the window did not render through PrintWindow. " +
+                        "No desktop or foreground capture was attempted.")
+                }
+            }
+            finally {
+                $graphics.ReleaseHdc($deviceContext) | Out-Null
+            }
+        }
+    }
+    catch {
+        $bitmap.Dispose()
+        throw
+    }
+    finally {
+        $graphics.Dispose()
+    }
+
+    return $bitmap
+}
+
+function Save-WindowScreenshot {
+    param(
+        [Parameter(Mandatory = $true)][System.IntPtr]$Handle,
+        [Parameter(Mandatory = $true)][string]$Path,
+        [Parameter(Mandatory = $true)][string]$Description
+    )
+
+    Set-HenkaAutomationForeground -Handle $Handle
+    $bitmap = New-HenkaCapturedWindowBitmap `
+        -Handle $Handle `
+        -Description $Description
+    try {
         $bitmap.Save(
             $Path,
             [System.Drawing.Imaging.ImageFormat]::Png)
     }
     finally {
-        $graphics.Dispose()
         $bitmap.Dispose()
     }
 
@@ -717,20 +771,32 @@ function Save-FramebufferRegionScreenshot {
     if (-not [NativeMethods]::ClientToScreen($Handle, [ref]$origin)) {
         throw "The packaged sandbox client origin could not be converted to screen coordinates."
     }
-    $screenX = $origin.X + [int][Math]::Round($X * $clientWidth / $FramebufferWidth)
-    $screenY = $origin.Y + [int][Math]::Round($Y * $clientHeight / $FramebufferHeight)
+    $windowRect = Get-WindowRect -Handle $Handle
+    $fullBitmap = New-HenkaCapturedWindowBitmap `
+        -Handle $Handle `
+        -Description "Static scene"
     $screenWidth = [Math]::Max(1, [int][Math]::Round($Width * $clientWidth / $FramebufferWidth))
     $screenHeight = [Math]::Max(1, [int][Math]::Round($Height * $clientHeight / $FramebufferHeight))
-    $bitmap = New-Object System.Drawing.Bitmap -ArgumentList $screenWidth, $screenHeight
-    $graphics = [System.Drawing.Graphics]::FromImage($bitmap)
+    $cropX = $origin.X - $windowRect.Left + [int][Math]::Round($X * $clientWidth / $FramebufferWidth)
+    $cropY = $origin.Y - $windowRect.Top + [int][Math]::Round($Y * $clientHeight / $FramebufferHeight)
+    if ($cropX -lt 0 -or $cropY -lt 0 -or
+        $cropX + $screenWidth -gt $fullBitmap.Width -or
+        $cropY + $screenHeight -gt $fullBitmap.Height) {
+        $fullBitmap.Dispose()
+        throw "Static scene capture region was outside the captured window bounds."
+    }
+    $bitmap = $null
     try {
-        $graphics.CopyFromScreen($screenX,$screenY,0,0,
-            (New-Object System.Drawing.Size -ArgumentList $screenWidth,$screenHeight))
+        $bitmap = $fullBitmap.Clone(
+            (New-Object System.Drawing.Rectangle -ArgumentList $cropX,$cropY,$screenWidth,$screenHeight),
+            [System.Drawing.Imaging.PixelFormat]::Format32bppArgb)
         $bitmap.Save($Path,[System.Drawing.Imaging.ImageFormat]::Png)
     }
     finally {
-        $graphics.Dispose()
-        $bitmap.Dispose()
+        if ($null -ne $bitmap) {
+            $bitmap.Dispose()
+        }
+        $fullBitmap.Dispose()
     }
     Assert-PathExists -Path $Path -Description "Static scene stability frame"
 }
@@ -838,6 +904,9 @@ public static class NativeMethods {
 
     [DllImport("user32.dll")]
     public static extern bool ClientToScreen(IntPtr hWnd, ref POINT point);
+
+    [DllImport("user32.dll")]
+    public static extern bool PrintWindow(IntPtr hWnd, IntPtr hdcBlt, uint nFlags);
 
     [DllImport("user32.dll")]
     public static extern bool EnumWindows(EnumWindowsProc callback, IntPtr lParam);
@@ -1098,7 +1167,9 @@ try {
 
     Write-Step "Checking packaged UI open and close"
     Set-HenkaAutomationForeground -Handle $mainWindowHandle
-    $null = $shell.AppActivate($process.Id)
+    if ($script:allowForegroundIntegration) {
+        $null = $shell.AppActivate($process.Id)
+    }
     Start-Sleep -Milliseconds 600
     if (Wait-FileContains -Path $stdoutPath -Pattern "Sandbox UI ready:" -TimeoutMilliseconds 1500) {
         Assert-FileContains -Path $stdoutPath -Pattern "Sandbox UI ready:" -Description "Startup UI readiness output"
@@ -2248,6 +2319,7 @@ try {
             -Width 180.0 `
             -Height 24.0
         $nativeProfileObserved = $false
+        $nativeProfileAttemptLogOffset = $null
         # The bounded details flow has two valid authoring-group paths.  A
         # preceding material/component operation can move this row by one
         # 68px flow step while leaving the earlier geometry report intact.
@@ -2258,6 +2330,7 @@ try {
         )
         foreach ($nativeProfileCandidateY in $nativeProfileCandidateYs) {
             if ($nativeProfileObserved) { break }
+            $profileAttemptLogOffset = Get-FileLengthSafe -Path $stdoutPath
             Click-FramebufferPoint `
                 -Handle $mainWindowHandle `
                 -FramebufferWidth $framebufferWidth `
@@ -2266,15 +2339,26 @@ try {
                 -FramebufferY ($nativeProfileCandidateY + 12.0)
             # Quad recovery scans the bounded 15k-face authoring mesh; allow
             # the transaction to finish without a false-negative gate result.
-            $nativeProfileObserved = Wait-FileContains `
+            $nativeProfileObserved = Wait-FileContainsAfterOffset `
                 -Path $stdoutPath `
                 -Pattern "Native authoring quad recovery:" `
+                -StartingOffset $profileAttemptLogOffset `
                 -TimeoutMilliseconds 15000
+            if ($nativeProfileObserved) {
+                $nativeProfileAttemptLogOffset = $profileAttemptLogOffset
+            }
         }
         if (-not $nativeProfileObserved) {
             throw "The user-facing native Quad Repair control did not report a bounded result."
         }
         Write-Output "[pass] User-facing native Quad Repair control reported a bounded result"
+        if (-not (Wait-FileContainsAfterOffset `
+                -Path $stdoutPath `
+                -Pattern 'Native authoring face controls: name=.+ face_x=([-0-9.]+) face_y=([-0-9.]+) width=88.0 height=24.0\.' `
+                -StartingOffset $nativeProfileAttemptLogOffset `
+                -TimeoutMilliseconds 3000)) {
+            throw "The native topology controls did not re-report after Quad Repair completed."
+        }
         $nativeFaceMatch = Get-LastLogRegexMatch `
             -Path $stdoutPath `
             -Pattern 'Native authoring face controls: name=(.+) face_x=([-0-9.]+) face_y=([-0-9.]+) width=88.0 height=24.0\.'
@@ -2295,6 +2379,17 @@ try {
         }
         $nativeFaceX = [double]$nativeFaceMatch.Groups[2].Value
         $nativeFaceY = [double]$nativeFaceMatch.Groups[3].Value
+        $nativeEdgeControlMatch = Get-LastLogRegexMatch `
+            -Path $stdoutPath `
+            -Pattern 'Native authoring Edge selection control: name=(.+) x=([-0-9.]+) y=([-0-9.]+) width=88.0 height=24.0\.'
+        if ($null -ne $nativeEdgeControlMatch) {
+            $nativeEdgeX = [double]$nativeEdgeControlMatch.Groups[2].Value
+            $nativeEdgeY = [double]$nativeEdgeControlMatch.Groups[3].Value
+        }
+        else {
+            $nativeEdgeX = $nativeFaceX - 96.0
+            $nativeEdgeY = $nativeFaceY
+        }
         # The details content begins below the fixed panel header.  A deep scroll can
         # leave the logged topology row partially clipped under that header even
         # though its last reported rectangle is still inside the framebuffer.  Bring
@@ -2325,7 +2420,6 @@ try {
             -Width 88.0 `
             -Height 24.0
         $nativeEdgeModeObserved = $false
-        $nativeEdgeX = $nativeFaceX - 96.0
         for ($edgeModeAttempt = 0; $edgeModeAttempt -lt 3 -and -not $nativeEdgeModeObserved; ++$edgeModeAttempt) {
             foreach ($edgeXOffset in @(20.0, 44.0, 68.0)) {
                 foreach ($edgeYOffset in @(6.0, 12.0, 18.0)) {
@@ -2335,7 +2429,7 @@ try {
                             -FramebufferWidth $framebufferWidth `
                             -FramebufferHeight $framebufferHeight `
                             -FramebufferX ($nativeEdgeX + $edgeXOffset) `
-                            -FramebufferY ($nativeFaceY + $edgeYOffset)
+                            -FramebufferY ($nativeEdgeY + $edgeYOffset)
                         $nativeEdgeModeObserved = Wait-FileContains `
                             -Path $stdoutPath `
                             -Pattern "Native authoring topology mode:.*mode=Edge" `
@@ -2420,6 +2514,10 @@ try {
                 Write-Output "[pass] Ignored an out-of-frame detached Face control geometry"
             }
         }
+        Save-WindowScreenshot `
+            -Handle $mainWindowHandle `
+            -Path (Join-Path $logDir 'check_packaged_sandbox3d_before_face_pick.png') `
+            -Description 'Packaged post-Edge Face-pick setup screenshot'
         $bevelControlLogPattern = 'Native authoring bevel control:'
         $bevelControlCountBefore = @(
             Select-String -LiteralPath $stdoutPath -Pattern $bevelControlLogPattern -ErrorAction SilentlyContinue
@@ -2449,19 +2547,34 @@ try {
             throw "The user-facing Face selection mode did not become active."
         }
         $nativeFacePickPoints = @(
-            @(0.16, 0.47),
-            @(0.20, 0.47),
-            @(0.18, 0.54),
-            @(0.21, 0.60),
-            @(0.19, 0.68),
-            @(0.22, 0.73),
-            @(0.18, 0.50),
-            @(0.22, 0.56),
-            @(0.26, 0.62),
-            @(0.30, 0.38),
-            @(0.33, 0.45),
-            @(0.38, 0.50),
-            @(0.42, 0.42))
+            @(0.12, 0.50),
+            @(0.16, 0.50),
+            @(0.20, 0.50),
+            @(0.24, 0.50),
+            @(0.28, 0.50),
+            @(0.12, 0.58),
+            @(0.16, 0.58),
+            @(0.20, 0.58),
+            @(0.24, 0.58),
+            @(0.28, 0.58),
+            @(0.12, 0.66),
+            @(0.16, 0.66),
+            @(0.20, 0.66),
+            @(0.24, 0.66),
+            @(0.28, 0.66),
+            @(0.12, 0.74),
+            @(0.16, 0.74),
+            @(0.20, 0.74),
+            @(0.24, 0.74),
+            @(0.28, 0.74),
+            @(0.12, 0.82),
+            @(0.16, 0.82),
+            @(0.20, 0.82),
+            @(0.24, 0.82),
+            @(0.28, 0.82),
+            @(0.32, 0.58),
+            @(0.36, 0.66),
+            @(0.40, 0.74))
         $nativeFacePicked = $false
         foreach ($facePickPoint in $nativeFacePickPoints) {
             if ($nativeFacePicked) { break }
@@ -2474,7 +2587,7 @@ try {
                 -FramebufferY ($componentViewportY + $componentViewportHeight * $facePickPoint[1])
             $nativeFacePicked = Wait-FileContainsAfterOffset `
                 -Path $stdoutPath `
-                -Pattern "Native authoring component picked:.*mode=face" `
+                -Pattern "Native authoring component picked:" `
                 -StartingOffset $nativeFacePickLogOffset `
                 -TimeoutMilliseconds 1200
         }

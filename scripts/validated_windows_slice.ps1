@@ -13,6 +13,9 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
+$script:allowForegroundIntegration =
+    $env:HENKA_ALLOW_FOREGROUND_AUTOMATION -eq "1"
+
 if ($PSVersionTable.PSVersion.Major -ne 5) {
     throw "This workflow requires Windows PowerShell 5.1."
 }
@@ -223,6 +226,7 @@ public static class HenkaEvidenceNativeMethods {
     [DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(IntPtr handle, out uint processId);
     [DllImport("user32.dll")] public static extern int GetWindowText(IntPtr handle, StringBuilder text, int capacity);
     [DllImport("user32.dll")] public static extern bool PostMessage(IntPtr handle, uint message, IntPtr wParam, IntPtr lParam);
+    [DllImport("user32.dll")] public static extern bool PrintWindow(IntPtr handle, IntPtr hdcBlt, uint flags);
     [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr handle);
     [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr handle, int command);
     [DllImport("user32.dll")] public static extern bool BringWindowToTop(IntPtr handle);
@@ -271,7 +275,9 @@ public static class HenkaEvidenceNativeMethods {
         if ($handle -eq [System.IntPtr]::Zero) {
             throw "The sandbox window was not available for application-only capture."
         }
-        [HenkaEvidenceNativeMethods]::ActivateWindow($handle)
+        if ($script:allowForegroundIntegration) {
+            [HenkaEvidenceNativeMethods]::ActivateWindow($handle)
+        }
         $readyDeadline = (Get-Date).AddSeconds(10)
         while ((Get-Date) -lt $readyDeadline) {
             if ((Test-Path -LiteralPath $stdoutPath) -and
@@ -299,7 +305,26 @@ public static class HenkaEvidenceNativeMethods {
         try {
             $graphics = [System.Drawing.Graphics]::FromImage($bitmap)
             try {
-                $graphics.CopyFromScreen($rect.Left, $rect.Top, 0, 0, $bitmap.Size)
+                if ($script:allowForegroundIntegration) {
+                    $graphics.CopyFromScreen($rect.Left, $rect.Top, 0, 0, $bitmap.Size)
+                }
+                else {
+                    $deviceContext = $graphics.GetHdc()
+                    try {
+                        if (-not [HenkaEvidenceNativeMethods]::PrintWindow(
+                                $handle,
+                                $deviceContext,
+                                2)) {
+                            throw (
+                                "Background-safe archive capture is unavailable: " +
+                                "the Sandbox window did not render through PrintWindow. " +
+                                "No desktop or foreground capture was attempted.")
+                        }
+                    }
+                    finally {
+                        $graphics.ReleaseHdc($deviceContext) | Out-Null
+                    }
+                }
             }
             finally {
                 $graphics.Dispose()
@@ -317,7 +342,12 @@ public static class HenkaEvidenceNativeMethods {
             "Timestamp: $captureTime",
             "Application state: packaged startup scene and automatic panels",
             "Capture bounds: left=$($rect.Left), top=$($rect.Top), width=$width, height=$height",
-            "Capture method: DWM extended frame bounds and application-only screen copy",
+            $(if ($script:allowForegroundIntegration) {
+                "Capture method: DWM extended frame bounds and explicitly enabled foreground screen copy"
+            }
+            else {
+                "Capture method: DWM extended frame bounds and background-safe PrintWindow; no foreground ownership"
+            }),
             "Status: automated render evidence; manual visual QA remains incomplete"
         )
         $indexText | Set-Content -LiteralPath (Join-Path $screenshotsDirectory "Screenshot-Index.txt")

@@ -52,6 +52,13 @@ function Set-HenkaAutomationForeground {
         throw "The Henka automation target handle is invalid."
     }
 
+    # Application-local automation uses Henka's event channel and must not
+    # seize the user's desktop.  A foreground call is available only to an
+    # explicitly selected Windows-integration test process.
+    if ($env:HENKA_ALLOW_FOREGROUND_AUTOMATION -ne "1") {
+        return
+    }
+
     if ([HenkaUiAutomationNative]::GetForegroundWindow() -eq $Handle) {
         return
     }
