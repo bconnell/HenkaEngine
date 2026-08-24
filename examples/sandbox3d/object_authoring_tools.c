@@ -5869,6 +5869,44 @@ henka_result sandbox3d_authoring_object_bevel_selected_face(
     return result;
 }
 
+henka_result sandbox3d_authoring_object_loop_cut_selected_face(
+    sandbox3d_authoring_object* object)
+{
+    henka_authoring_mesh* candidate = NULL;
+    henka_authoring_face_id new_face_id = HENKA_AUTHORING_INVALID_ID;
+    henka_result result;
+    if (object == NULL ||
+        object->selection_mode != SANDBOX3D_AUTHORING_SELECTION_FACE ||
+        object->selected_face == HENKA_AUTHORING_INVALID_ID)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    result = henka_authoring_mesh_clone(object->mesh, &candidate);
+    if (result == HENKA_SUCCESS)
+    {
+        result = henka_authoring_mesh_loop_cut_face(
+            candidate, object->selected_face, 0U, 0.5f, &new_face_id, NULL);
+    }
+    if (result == HENKA_SUCCESS)
+    {
+        result = sandbox3d_authoring_publish_candidate(
+            object, candidate, true, new_face_id);
+        if (result == HENKA_SUCCESS)
+        {
+            object->selected_face = new_face_id;
+        }
+        else
+        {
+            henka_authoring_mesh_destroy(candidate);
+        }
+    }
+    else
+    {
+        henka_authoring_mesh_destroy(candidate);
+    }
+    return result;
+}
+
 henka_result sandbox3d_authoring_object_subdivide_selected_face(
     sandbox3d_authoring_object* object)
 {

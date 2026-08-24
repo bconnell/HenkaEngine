@@ -377,6 +377,10 @@ henka_result sandbox3d_authoring_object_inset_selected_face(
 henka_result sandbox3d_authoring_object_bevel_selected_face(
     sandbox3d_authoring_object* object,
     float width);
+/* Splits one selected isolated quad face into two quads through the normal
+ * source/render/bounds/physics/undo transaction. */
+henka_result sandbox3d_authoring_object_loop_cut_selected_face(
+    sandbox3d_authoring_object* object);
 henka_result sandbox3d_authoring_object_subdivide_selected_face(
     sandbox3d_authoring_object* object);
 henka_result sandbox3d_authoring_object_project_selected_face_uv(

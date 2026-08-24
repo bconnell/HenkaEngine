@@ -212,8 +212,9 @@ tracks that share renderer, asset, persistence, and workspace boundaries.
 1. Continue expanding edge topology coverage and the surrounding authoring UX.
    Bounded single-edge dissolve for compatible interior edges, bounded
    single-edge delete of an incident face set, and standalone boundary-edge
-   bevel are now available; interior-edge bevel, batch edge operations, and
-   broader edge topology operations are not yet claimed as complete.
+   bevel are now available; a bounded single-quad face loop cut is also
+   available, while interior-edge bevel, batch edge operations, and broader
+   edge topology operations are not yet claimed as complete.
 2. Strengthen transactional modeling, UV, material, persistence, and undo/redo
    paths while keeping failure behavior fail-closed.
 3. Improve editor integration, authoring source/project workflows, and the
@@ -224,7 +225,8 @@ tracks that share renderer, asset, persistence, and workspace boundaries.
 ### Future Work
 
 1. Multi-face vertex-fan extrusion, broader edge and vertex topology
-   operations, weld/split/bridge/loop-cut workflows, and broader source export.
+   operations, weld/split/bridge workflows, multi-face loop-cut networks, and
+   broader source export.
 2. Automatic multi-island UV unwrap, texture painting, rigging, skinning, and
    animation authoring.
 3. Complete scene/project serialization and wider adapter-based interchange

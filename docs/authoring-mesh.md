@@ -153,9 +153,12 @@ physical slot. Transactional single-edge dissolve is available for compatible
 interior edges, and transactional single-edge delete removes the selected
 edge's incident face set while preserving vertices. Bounded edge bevel is also
 available for one boundary edge whose endpoints belong to one face only; it
-creates two interpolated cut vertices and one quad bevel face transactionally.
-Interior edges, ambiguous boundary vertices, and broader batch edge topology
-editing remain incomplete.
+  creates two interpolated cut vertices and one quad bevel face transactionally.
+  Interior edges, ambiguous boundary vertices, and broader batch edge topology
+  editing remain incomplete. A bounded single-quad face loop cut is also
+  available: it interpolates two opposite boundary edges, creates two quad
+  faces, and rejects shared-boundary faces so it cannot leave a T-junction in
+  neighboring topology. Full multi-face loop-cut networks remain unfinished.
 Bounded Vertex Extrude is available for one unambiguous boundary corner of a
 single face. It creates one cap vertex and two connecting side faces while
 preserving the operation's transactional source/render/bounds/collider/undo
@@ -231,7 +234,8 @@ authoring faces from treating non-authoritative tangent metadata as finished
 shading data while preserving the single mesh/material ownership path.
 
 This is the bounded runtime foundation of the authoring-parity campaign. It is
-not yet a full modeling editor: weld/split/bridge/loop cuts, production
+not yet a full modeling editor: broader weld/split/bridge and multi-face loop-cut
+workflows, production
 hard-surface profiles, automatic multi-island UV unwrap and global packing,
 broader material authoring beyond the supported bounded material-instance
 editing, texture painting, editor integration for the history/file APIs, and

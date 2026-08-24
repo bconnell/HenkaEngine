@@ -24301,6 +24301,32 @@ details_group_authoring:
             if (state->authoring_object != NULL &&
                 selection_mode == SANDBOX3D_AUTHORING_SELECTION_FACE &&
                 sandbox3d_details_flow_next_row(state, flow_desc.bounds, 28.0f, 1U, &row) &&
+                row.width >= 132.0f)
+            {
+                if (henka_ui_button(
+                        state->ui,
+                        "authoring_loop_cut_leading",
+                        (henka_ui_rect){row.x, row.y, 126.0f, 24.0f},
+                        "Loop Cut"))
+                {
+                    const henka_result cut_result =
+                        sandbox3d_authoring_object_loop_cut_selected_face(
+                            state->authoring_object);
+                    sandbox3d_set_status(
+                        state,
+                        cut_result != HENKA_SUCCESS,
+                        cut_result == HENKA_SUCCESS
+                            ? "Selected quad face split into two quads."
+                            : "Loop Cut rejected; select one isolated quad face.");
+                    if (cut_result == HENKA_SUCCESS)
+                    {
+                        sandbox3d_mark_generic_modeling_applied(state, entity);
+                    }
+                }
+            }
+            if (state->authoring_object != NULL &&
+                selection_mode == SANDBOX3D_AUTHORING_SELECTION_FACE &&
+                sandbox3d_details_flow_next_row(state, flow_desc.bounds, 28.0f, 1U, &row) &&
                 row.width >= 290.0f)
             {
                 if (!state->native_authoring_extreme_face_band_reported)
@@ -25269,6 +25295,32 @@ details_group_authoring:
                         0.75f) == HENKA_SUCCESS)
                 {
                     sandbox3d_set_status(state, false, "Authoring face inset and evaluated into the scene.");
+                }
+            }
+            if (state->authoring_object != NULL &&
+                selection_mode == SANDBOX3D_AUTHORING_SELECTION_FACE &&
+                sandbox3d_details_flow_next_row(state, flow_desc.bounds, 28.0f, 1U, &row) &&
+                row.width >= 132.0f)
+            {
+                if (henka_ui_button(
+                        state->ui,
+                        "authoring_loop_cut_top",
+                        (henka_ui_rect){row.x, row.y, 126.0f, 24.0f},
+                        "Loop Cut"))
+                {
+                    const henka_result cut_result =
+                        sandbox3d_authoring_object_loop_cut_selected_face(
+                            state->authoring_object);
+                    sandbox3d_set_status(
+                        state,
+                        cut_result != HENKA_SUCCESS,
+                        cut_result == HENKA_SUCCESS
+                            ? "Selected quad face split into two quads."
+                            : "Loop Cut rejected; select one isolated quad face.");
+                    if (cut_result == HENKA_SUCCESS)
+                    {
+                        sandbox3d_mark_generic_modeling_applied(state, entity);
+                    }
                 }
             }
             if (state->native_authoring_material_asset != NULL &&

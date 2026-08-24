@@ -164,9 +164,10 @@ turning the public README into an implementation ledger.
   workflow; multi-face vertex-fan extrusion remains unavailable.
 - Transactional operations also include plane/box creation, duplicate, face
   extrude, inset, planar bevel rings, face subdivision, selected-face deletion,
-  planar UV projection, island transforms, packing, and seam detection. HAMS v4
-  writes portable little-endian data through unique same-directory temporary
-  files and retains reads for checked-in v2/v3 legacy sources.
+  a bounded single-quad face loop cut, planar UV projection, island transforms,
+  packing, and seam detection. HAMS v4 writes portable little-endian data
+  through unique same-directory temporary files and retains reads for
+  checked-in v2/v3 legacy sources.
 - Imported nontrivial objects can take the Make Editable path. Native source
   persistence, evaluated mesh replacement, material promotion, supported PBR
   overrides, procedural detail textures, and material undo/redo are present
@@ -182,6 +183,11 @@ turning the public README into an implementation ledger.
   boundary-edge bevel are available. Edge Delete preserves the vertex set;
   interior-edge bevel, batch edge operations, and broader edge topology
   operations are not claimed as complete and remain in progress.
+- A bounded single-quad face loop cut is available through the Face workflow.
+  It interpolates two opposite boundary edges, creates two quad faces, and
+  rejects non-quad or shared-boundary faces to avoid T-junctions. Full
+  multi-face loop-cut networks and broader split/bridge workflows remain
+  incomplete.
 - See [authoring-mesh.md](authoring-mesh.md),
   [runtime-foundations.md](runtime-foundations.md), and
   [showcase-assets.md](showcase-assets.md).

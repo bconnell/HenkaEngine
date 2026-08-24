@@ -131,6 +131,17 @@ henka_result henka_authoring_mesh_connect_vertices(
     henka_authoring_face_id* out_new_face_id,
     henka_authoring_modeling_report* out_report);
 
+/* Splits one isolated quad face into two quads at a bounded edge fraction.
+ * All four source edges must be boundary edges so the operation cannot leave
+ * a T-junction in neighboring topology. */
+henka_result henka_authoring_mesh_loop_cut_face(
+    henka_authoring_mesh* mesh,
+    henka_authoring_face_id face_id,
+    size_t edge_offset,
+    float factor,
+    henka_authoring_face_id* out_new_face_id,
+    henka_authoring_modeling_report* out_report);
+
 /* Extrudes one unambiguous boundary corner of a single face. The original
  * corner remains as the base, a new vertex becomes the cap corner, and the
  * two connecting side faces are created transactionally. Multi-face vertex
