@@ -155,10 +155,11 @@ henka_result henka_authoring_mesh_loop_cut_quad_strip(
     bool* out_closed,
     henka_authoring_modeling_report* out_report);
 
-/* Extrudes one unambiguous boundary corner of a single face. The original
- * corner remains as the base, a new vertex becomes the cap corner, and the
- * two connecting side faces are created transactionally. Multi-face vertex
- * fans are rejected until a stable fan-remapping contract is available. */
+/* Extrudes one connected open boundary vertex fan. The original vertex
+ * remains as the base, one offset vertex replaces the selected fan corner,
+ * and two boundary side faces are created transactionally. A single-face
+ * corner is the smallest supported fan; closed, disconnected, loose-edge,
+ * and incompatible-normal fans fail closed. */
 henka_result henka_authoring_mesh_extrude_vertex(
     henka_authoring_mesh* mesh,
     henka_authoring_vertex_id vertex_id,

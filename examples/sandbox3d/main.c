@@ -25067,7 +25067,7 @@ details_group_authoring:
                     sandbox3d_authoring_object_get_selected_component_count(state->authoring_object) == 1U;
                 (void)henka_ui_label_colored(
                     state->ui, row.x, row.y + 5.0f, 0.85f,
-                    "Extrude (1 boundary corner)", HENKA_UI_COLOR_INFO);
+                    "Extrude (open vertex fan)", HENKA_UI_COLOR_INFO);
                 if (extrude_enabled && henka_ui_button(
                         state->ui, "authoring_extrude_vertex_top",
                         (henka_ui_rect){row.x + 160.0f, row.y, 120.0f, 24.0f},
@@ -25080,7 +25080,7 @@ details_group_authoring:
                         state, extrude_result != HENKA_SUCCESS,
                         extrude_result == HENKA_SUCCESS
                             ? "Boundary vertex extruded transactionally."
-                            : "Vertex extrude rejected; select one boundary corner.");
+                            : "Vertex extrude rejected; select one connected open boundary fan.");
                     if (extrude_result == HENKA_SUCCESS) sandbox3d_mark_generic_modeling_applied(state, entity);
                 }
             }
@@ -25906,7 +25906,7 @@ details_group_authoring:
                     sandbox3d_authoring_object_get_selected_component_count(state->authoring_object) == 1U;
                 (void)henka_ui_label_colored(
                     state->ui, row.x, row.y + 5.0f, 0.85f,
-                    "Extrude (1 boundary corner)", HENKA_UI_COLOR_INFO);
+                    "Extrude (open vertex fan)", HENKA_UI_COLOR_INFO);
                 if (extrude_enabled && henka_ui_button(
                         state->ui, "authoring_extrude_vertex",
                         (henka_ui_rect){row.x + 160.0f, row.y, 120.0f, 24.0f},
@@ -25920,7 +25920,7 @@ details_group_authoring:
                         sandbox3d_mark_generic_modeling_applied(state, entity);
                         sandbox3d_set_status(state, false, "Boundary vertex extruded transactionally.");
                     }
-                    else sandbox3d_set_status(state, true, "Vertex extrude rejected; select one boundary corner.");
+                    else sandbox3d_set_status(state, true, "Vertex extrude rejected; select one connected open boundary fan.");
                 }
             }
             if (state->authoring_object != NULL &&

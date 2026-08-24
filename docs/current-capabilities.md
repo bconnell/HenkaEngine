@@ -157,11 +157,12 @@ turning the public README into an implementation ledger.
   are rejected; vertex welding and winding rewrites are not implicit repairs.
 - Published Vertex topology operations include Merge Center, Merge Active,
   Merge by Distance, Connect Vertices, Dissolve Vertex, Delete Vertex, and
-  Vertex Bevel. Bounded Vertex Extrude is also available for one unambiguous
-  boundary corner of a single face: it preserves the base corner, creates a
-  cap vertex, and creates the two connecting side faces transactionally.
-  These operations are exposed through the integrated Vertex selection
-  workflow; multi-face vertex-fan extrusion remains unavailable.
+  Vertex Bevel. Bounded Vertex Extrude is also available for a connected open
+  boundary vertex fan, including the one-face corner case: it preserves the
+  base vertex, creates one offset cap vertex, replaces the incident fan, and
+  creates the two boundary side faces transactionally. Closed, disconnected,
+  loose-edge, and incompatible-normal fans fail closed. These operations are
+  exposed through the integrated Vertex selection workflow.
 - Transactional operations also include plane/box creation, duplicate, face
   extrude, inset, planar bevel rings, face subdivision, selected-face deletion,
   a bounded single-quad face loop cut, planar UV projection, island transforms,

@@ -4605,6 +4605,46 @@ cleanup:
     return result;
 }
 
+typedef struct modeling_vertex_fan_face
+{
+    henka_authoring_face_id face_id;
+    size_t selected_corner;
+    size_t corner_count;
+} modeling_vertex_fan_face;
+
+static int modeling_vertex_fan_face_compare(const void* left_pointer, const void* right_pointer)
+{
+    const modeling_vertex_fan_face* left = (const modeling_vertex_fan_face*)left_pointer;
+    const modeling_vertex_fan_face* right = (const modeling_vertex_fan_face*)right_pointer;
+    return left->face_id < right->face_id ? -1 : left->face_id > right->face_id ? 1 : 0;
+}
+
+static size_t modeling_vertex_fan_face_index(
+    const modeling_vertex_fan_face* faces,
+    size_t face_count,
+    henka_authoring_face_id face_id)
+{
+    size_t first = 0U;
+    size_t last = face_count;
+    while (first < last)
+    {
+        const size_t middle = first + (last - first) / 2U;
+        if (faces[middle].face_id < face_id)
+        {
+            first = middle + 1U;
+        }
+        else if (faces[middle].face_id > face_id)
+        {
+            last = middle;
+        }
+        else
+        {
+            return middle;
+        }
+    }
+    return SIZE_MAX;
+}
+
 henka_result henka_authoring_mesh_extrude_vertex(
     henka_authoring_mesh* mesh,
     henka_authoring_vertex_id vertex_id,
@@ -4613,28 +4653,30 @@ henka_result henka_authoring_mesh_extrude_vertex(
     henka_authoring_modeling_report* out_report)
 {
     henka_authoring_mesh* candidate = NULL;
+    modeling_vertex_fan_face* fan_faces = NULL;
+    henka_authoring_vertex_id* fan_vertices = NULL;
+    henka_vec2* fan_uvs = NULL;
+    bool* fan_edge_hard = NULL;
+    bool* visited = NULL;
+    size_t* pending = NULL;
+    henka_authoring_mesh_desc desc = {0};
     henka_authoring_mesh_counts before;
     henka_authoring_mesh_counts after;
     const henka_authoring_vertex* source_vertex;
-    const henka_authoring_face* source_face = NULL;
-    henka_authoring_face_id source_face_id = HENKA_AUTHORING_INVALID_ID;
-    henka_authoring_vertex_id original[HENKA_AUTHORING_MESH_HARD_MAX_FACE_CORNERS];
-    henka_authoring_vertex_id cap[HENKA_AUTHORING_MESH_HARD_MAX_FACE_CORNERS];
-    henka_vec2 source_uvs[HENKA_AUTHORING_MESH_HARD_MAX_FACE_CORNERS];
     henka_authoring_vertex_id new_vertex_id = HENKA_AUTHORING_INVALID_ID;
     henka_authoring_face_id cap_face_id = HENKA_AUTHORING_INVALID_ID;
     henka_authoring_face_id side_face_id = HENKA_AUTHORING_INVALID_ID;
-    henka_vec3 offset;
+    size_t boundary_face_indices[2] = {0U, 0U};
+    size_t boundary_face_positions[2] = {0U, 0U};
+    henka_vec3 fan_normal = {0.0f, 0.0f, 0.0f};
+    henka_vec3 offset = {0.0f, 0.0f, 0.0f};
     size_t incident_face_count = 0U;
-    size_t selected_corner = SIZE_MAX;
-    size_t corner_count = 0U;
+    size_t boundary_count = 0U;
     size_t edge_count;
-    size_t edge_index;
     size_t face_slot;
+    size_t index;
     size_t corner;
-    uint32_t material_region;
-    bool smooth;
-    henka_result result;
+    henka_result result = HENKA_ERROR_INVALID_ARGUMENT;
 
     if (out_new_vertex_id != NULL)
     {
@@ -4645,76 +4687,247 @@ henka_result henka_authoring_mesh_extrude_vertex(
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
+    if (!henka_authoring_mesh_validate(mesh) || !modeling_face_geometry_is_valid(mesh))
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    desc = henka_authoring_mesh_get_desc(mesh);
     source_vertex = henka_authoring_mesh_get_vertex(mesh, vertex_id);
     if (source_vertex == NULL)
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
 
-    /* A single boundary corner has an unambiguous cap and two side faces.
-     * Interior fans need a separate winding/remapping contract and fail
-     * closed until that contract exists. */
     edge_count = henka_authoring_mesh_get_vertex_edge_count(mesh, vertex_id);
-    if (edge_count != 2U)
+    if (edge_count < 2U || edge_count > desc.max_faces + 1U)
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
-    for (edge_index = 0U; edge_index < edge_count; ++edge_index)
+    for (index = 0U; index < edge_count; ++index)
     {
         henka_authoring_edge_id edge_id;
         const henka_authoring_edge* edge;
         if (henka_authoring_mesh_get_vertex_edge_at(
-                mesh, vertex_id, edge_index, &edge_id) != HENKA_SUCCESS ||
+                mesh, vertex_id, index, &edge_id) != HENKA_SUCCESS ||
             (edge = henka_authoring_mesh_get_edge(mesh, edge_id)) == NULL ||
-            edge->face_count != 1U)
+            edge->face_count == 0U || edge->face_count > 2U)
         {
             return HENKA_ERROR_INVALID_ARGUMENT;
         }
+        if (edge->face_count == 1U) ++boundary_count;
     }
+    if (boundary_count != 2U)
     {
-        const henka_authoring_mesh_desc desc = henka_authoring_mesh_get_desc(mesh);
-        for (face_slot = 0U; face_slot < desc.max_faces; ++face_slot)
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    fan_faces = henka_calloc(desc.max_faces, sizeof(*fan_faces));
+    if (fan_faces == NULL)
+    {
+        return HENKA_ERROR_OUT_OF_MEMORY;
+    }
+    for (face_slot = 0U; face_slot < desc.max_faces; ++face_slot)
+    {
+        henka_authoring_face_id face_id;
+        const henka_authoring_face* face;
+        size_t face_corner;
+        if (henka_authoring_mesh_get_face_id_at(mesh, face_slot, &face_id) != HENKA_SUCCESS ||
+            (face = henka_authoring_mesh_get_face(mesh, face_id)) == NULL ||
+            !modeling_face_contains_vertex(face, vertex_id, &face_corner))
         {
-            henka_authoring_face_id face_id;
-            const henka_authoring_face* face;
-            size_t face_corner;
-            if (henka_authoring_mesh_get_face_id_at(mesh, face_slot, &face_id) != HENKA_SUCCESS ||
-                (face = henka_authoring_mesh_get_face(mesh, face_id)) == NULL ||
-                !modeling_face_contains_vertex(face, vertex_id, &face_corner))
+            continue;
+        }
+        if (incident_face_count >= desc.max_faces || face->corner_count < 3U ||
+            face->corner_count > HENKA_AUTHORING_MESH_HARD_MAX_FACE_CORNERS)
+        {
+            result = HENKA_ERROR_INVALID_ARGUMENT;
+            goto cleanup;
+        }
+        fan_faces[incident_face_count].face_id = face_id;
+        fan_faces[incident_face_count].selected_corner = face_corner;
+        fan_faces[incident_face_count].corner_count = face->corner_count;
+        ++incident_face_count;
+    }
+    if (incident_face_count == 0U || edge_count != incident_face_count + 1U)
+    {
+        result = HENKA_ERROR_INVALID_ARGUMENT;
+        goto cleanup;
+    }
+
+    qsort(fan_faces, incident_face_count, sizeof(*fan_faces), modeling_vertex_fan_face_compare);
+    visited = henka_calloc(incident_face_count, sizeof(*visited));
+    {
+        size_t pending_bytes;
+        if (!henka_checked_size_multiply(incident_face_count, sizeof(*pending), &pending_bytes))
+        {
+            result = HENKA_ERROR_LIMIT;
+            goto cleanup;
+        }
+        pending = henka_malloc(pending_bytes);
+    }
+    if (visited == NULL || pending == NULL)
+    {
+        result = HENKA_ERROR_OUT_OF_MEMORY;
+        goto cleanup;
+    }
+    pending[0] = 0U;
+    visited[0] = true;
+    {
+        size_t pending_count = 1U;
+        size_t pending_index = 0U;
+        size_t visited_count = 1U;
+        while (pending_index < pending_count)
+        {
+            const size_t fan_index = pending[pending_index++];
+            const henka_authoring_face* face = henka_authoring_mesh_get_face(
+                mesh, fan_faces[fan_index].face_id);
+            size_t selected_corner;
+            size_t radial_corners[2];
+            size_t radial_index;
+            if (face == NULL)
             {
-                continue;
+                result = HENKA_ERROR_INVALID_ARGUMENT;
+                goto cleanup;
             }
-            ++incident_face_count;
-            source_face = face;
-            source_face_id = face_id;
-            selected_corner = face_corner;
+            selected_corner = fan_faces[fan_index].selected_corner;
+            radial_corners[0] =
+                (selected_corner + face->corner_count - 1U) % face->corner_count;
+            radial_corners[1] = selected_corner;
+            for (radial_index = 0U; radial_index < 2U; ++radial_index)
+            {
+                const henka_authoring_edge* edge = henka_authoring_mesh_get_edge(
+                    mesh, face->edges[radial_corners[radial_index]]);
+                henka_authoring_face_id other_face_id;
+                size_t other_index;
+                if (edge == NULL || edge->face_count == 1U) continue;
+                if (edge->face_count != 2U ||
+                    (edge->faces[0] != face->id && edge->faces[1] != face->id))
+                {
+                    result = HENKA_ERROR_INVALID_ARGUMENT;
+                    goto cleanup;
+                }
+                other_face_id = edge->faces[0] == face->id ? edge->faces[1] : edge->faces[0];
+                other_index = modeling_vertex_fan_face_index(
+                    fan_faces, incident_face_count, other_face_id);
+                if (other_index == SIZE_MAX)
+                {
+                    result = HENKA_ERROR_INVALID_ARGUMENT;
+                    goto cleanup;
+                }
+                if (!visited[other_index])
+                {
+                    if (pending_count >= incident_face_count)
+                    {
+                        result = HENKA_ERROR_INVALID_ARGUMENT;
+                        goto cleanup;
+                    }
+                    visited[other_index] = true;
+                    pending[pending_count++] = other_index;
+                    ++visited_count;
+                }
+            }
+        }
+        if (visited_count != incident_face_count)
+        {
+            result = HENKA_ERROR_INVALID_ARGUMENT;
+            goto cleanup;
         }
     }
-    if (incident_face_count != 1U || source_face == NULL ||
-        source_face->corner_count < 3U ||
-        source_face->corner_count > HENKA_AUTHORING_MESH_HARD_MAX_FACE_CORNERS)
+
     {
-        return HENKA_ERROR_INVALID_ARGUMENT;
+        size_t value_count;
+        size_t bytes;
+        if (!henka_checked_size_multiply(
+                incident_face_count, desc.max_face_corners, &value_count) ||
+            !henka_checked_size_multiply(value_count, sizeof(*fan_vertices), &bytes))
+        {
+            result = HENKA_ERROR_LIMIT;
+            goto cleanup;
+        }
+        fan_vertices = henka_calloc(value_count, sizeof(*fan_vertices));
+        fan_uvs = henka_calloc(value_count, sizeof(*fan_uvs));
+        fan_edge_hard = henka_calloc(value_count, sizeof(*fan_edge_hard));
+        if (fan_vertices == NULL || fan_uvs == NULL || fan_edge_hard == NULL)
+        {
+            result = HENKA_ERROR_OUT_OF_MEMORY;
+            goto cleanup;
+        }
     }
-    corner_count = source_face->corner_count;
-    material_region = source_face->material_region;
-    smooth = source_face->smooth;
-    for (corner = 0U; corner < corner_count; ++corner)
+
+    boundary_count = 0U;
+    for (index = 0U; index < incident_face_count; ++index)
     {
-        original[corner] = source_face->vertices[corner];
-        cap[corner] = original[corner];
-        source_uvs[corner] = source_face->uvs[corner];
+        const henka_authoring_face* face = henka_authoring_mesh_get_face(mesh, fan_faces[index].face_id);
+        const size_t selected_corner = fan_faces[index].selected_corner;
+        const size_t previous_corner =
+            (selected_corner + face->corner_count - 1U) % face->corner_count;
+        const henka_authoring_edge* previous_edge = henka_authoring_mesh_get_edge(
+            mesh, face->edges[previous_corner]);
+        const henka_authoring_edge* next_edge = henka_authoring_mesh_get_edge(
+            mesh, face->edges[selected_corner]);
+        henka_vec3 normal;
+        if (face == NULL || previous_edge == NULL || next_edge == NULL)
+        {
+            result = HENKA_ERROR_INVALID_ARGUMENT;
+            goto cleanup;
+        }
+        normal = modeling_face_normal(mesh, face);
+        if (!modeling_finite_vec3(normal) || henka_vec3_length(normal) <= 1.0e-7f ||
+            (index > 0U && henka_vec3_dot(fan_normal, normal) < 0.999f))
+        {
+            result = HENKA_ERROR_INVALID_ARGUMENT;
+            goto cleanup;
+        }
+        fan_normal = index == 0U ? normal : henka_vec3_add(fan_normal, normal);
+        if (previous_edge->face_count == 1U)
+        {
+            if (boundary_count >= 2U)
+            {
+                result = HENKA_ERROR_INVALID_ARGUMENT;
+                goto cleanup;
+            }
+            boundary_face_indices[boundary_count] = index;
+            boundary_face_positions[boundary_count++] = previous_corner;
+        }
+        if (next_edge->face_count == 1U)
+        {
+            if (boundary_count >= 2U)
+            {
+                result = HENKA_ERROR_INVALID_ARGUMENT;
+                goto cleanup;
+            }
+            boundary_face_indices[boundary_count] = index;
+            boundary_face_positions[boundary_count++] = selected_corner;
+        }
+        fan_faces[index].corner_count = face->corner_count;
+        for (corner = 0U; corner < face->corner_count; ++corner)
+        {
+            const size_t value_index = index * desc.max_face_corners + corner;
+            fan_vertices[value_index] = face->vertices[corner];
+            fan_uvs[value_index] = face->uvs[corner];
+            fan_edge_hard[value_index] = henka_authoring_mesh_get_edge(
+                mesh, face->edges[corner])->hard;
+        }
     }
-    offset = henka_vec3_scale(modeling_face_normal(mesh, source_face), distance);
-    if (!modeling_finite_vec3(offset))
+    if (boundary_count != 2U || henka_vec3_length(fan_normal) <= 1.0e-7f)
     {
-        return HENKA_ERROR_INVALID_ARGUMENT;
+        result = HENKA_ERROR_INVALID_ARGUMENT;
+        goto cleanup;
     }
+    fan_normal = henka_vec3_normalize(fan_normal);
+    offset = henka_vec3_scale(fan_normal, distance);
     before = henka_authoring_mesh_get_counts(mesh);
-    result = henka_authoring_mesh_clone(mesh, &candidate);
-    if (result == HENKA_SUCCESS)
+    if (!modeling_finite_vec3(offset) || before.vertices >= desc.max_vertices ||
+        desc.max_faces < 2U ||
+        before.faces > desc.max_faces - 2U || before.edges > desc.max_edges - 2U)
     {
-        result = henka_authoring_mesh_remove_face(candidate, source_face_id);
+        result = HENKA_ERROR_LIMIT;
+        goto cleanup;
+    }
+    result = henka_authoring_mesh_clone(mesh, &candidate);
+    for (index = 0U; result == HENKA_SUCCESS && index < incident_face_count; ++index)
+    {
+        result = henka_authoring_mesh_remove_face(candidate, fan_faces[index].face_id);
     }
     if (result == HENKA_SUCCESS)
     {
@@ -4725,56 +4938,91 @@ henka_result henka_authoring_mesh_extrude_vertex(
             source_vertex->material_region,
             &new_vertex_id);
     }
-    if (result == HENKA_SUCCESS)
+    for (index = 0U; result == HENKA_SUCCESS && index < incident_face_count; ++index)
     {
-        cap[selected_corner] = new_vertex_id;
+        henka_authoring_vertex_id cap[HENKA_AUTHORING_MESH_HARD_MAX_FACE_CORNERS];
+        const size_t base = index * desc.max_face_corners;
+        const modeling_vertex_fan_face* fan_face = &fan_faces[index];
+        const henka_authoring_face* source_face = henka_authoring_mesh_get_face(
+            mesh, fan_face->face_id);
+        for (corner = 0U; corner < fan_face->corner_count; ++corner)
+        {
+            cap[corner] = fan_vertices[base + corner];
+        }
+        cap[fan_face->selected_corner] = new_vertex_id;
         result = henka_authoring_mesh_add_face(
-            candidate, cap, corner_count, material_region, smooth, &cap_face_id);
-    }
-    for (corner = 0U; result == HENKA_SUCCESS && corner < corner_count; ++corner)
-    {
-        result = henka_authoring_mesh_set_face_corner_uv(
-            candidate, cap_face_id, corner, source_uvs[corner]);
-    }
-    if (result == HENKA_SUCCESS)
-    {
-        const henka_authoring_vertex_id side[3] = {
-            original[selected_corner],
-            original[(selected_corner + 1U) % corner_count],
-            new_vertex_id};
-        result = henka_authoring_mesh_add_face(
-            candidate, side, 3U, material_region, false, &side_face_id);
+            candidate, cap, fan_face->corner_count, source_face->material_region,
+            source_face->smooth, &side_face_id);
+        if (index == 0U) cap_face_id = side_face_id;
         if (result == HENKA_SUCCESS)
         {
-            const henka_vec2 side_uvs[3] = {
-                source_uvs[selected_corner],
-                source_uvs[(selected_corner + 1U) % corner_count],
-                source_uvs[selected_corner]};
-            for (corner = 0U; corner < 3U && result == HENKA_SUCCESS; ++corner)
+            for (corner = 0U; corner < fan_face->corner_count; ++corner)
             {
                 result = henka_authoring_mesh_set_face_corner_uv(
-                    candidate, side_face_id, corner, side_uvs[corner]);
+                    candidate, side_face_id, corner, fan_uvs[base + corner]);
+                if (result != HENKA_SUCCESS) break;
             }
         }
     }
-    if (result == HENKA_SUCCESS)
+    for (index = 0U; result == HENKA_SUCCESS && index < 2U; ++index)
     {
-        const henka_authoring_vertex_id side[3] = {
-            original[(selected_corner + corner_count - 1U) % corner_count],
-            original[selected_corner],
-            new_vertex_id};
-        result = henka_authoring_mesh_add_face(
-            candidate, side, 3U, material_region, false, &side_face_id);
-        if (result == HENKA_SUCCESS)
+        const size_t fan_index = boundary_face_indices[index];
+        const size_t base = fan_index * desc.max_face_corners;
+        const modeling_vertex_fan_face* fan_face = &fan_faces[fan_index];
+        const size_t selected_corner = fan_face->selected_corner;
+        const size_t edge_corner = boundary_face_positions[index];
+        const size_t next_corner = (selected_corner + 1U) % fan_face->corner_count;
+        henka_authoring_vertex_id side[3];
+        henka_vec2 side_uvs[3];
+        if (edge_corner == selected_corner)
         {
-            const henka_vec2 side_uvs[3] = {
-                source_uvs[(selected_corner + corner_count - 1U) % corner_count],
-                source_uvs[selected_corner],
-                source_uvs[selected_corner]};
-            for (corner = 0U; corner < 3U && result == HENKA_SUCCESS; ++corner)
+            side[0] = fan_vertices[base + selected_corner];
+            side[1] = fan_vertices[base + next_corner];
+            side_uvs[0] = fan_uvs[base + selected_corner];
+            side_uvs[1] = fan_uvs[base + next_corner];
+        }
+        else
+        {
+            side[0] = fan_vertices[base + edge_corner];
+            side[1] = fan_vertices[base + selected_corner];
+            side_uvs[0] = fan_uvs[base + edge_corner];
+            side_uvs[1] = fan_uvs[base + selected_corner];
+        }
+        side[2] = new_vertex_id;
+        side_uvs[2] = fan_uvs[base + selected_corner];
+        result = henka_authoring_mesh_add_face(
+            candidate, side, 3U, henka_authoring_mesh_get_face(
+                mesh, fan_face->face_id)->material_region, false, &side_face_id);
+        for (corner = 0U; result == HENKA_SUCCESS && corner < 3U; ++corner)
+        {
+            result = henka_authoring_mesh_set_face_corner_uv(
+                candidate, side_face_id, corner, side_uvs[corner]);
+        }
+    }
+    for (index = 0U; result == HENKA_SUCCESS && index < incident_face_count; ++index)
+    {
+        const size_t base = index * desc.max_face_corners;
+        const modeling_vertex_fan_face* fan_face = &fan_faces[index];
+        for (corner = 0U; corner < fan_face->corner_count; ++corner)
+        {
+            const size_t next_corner = (corner + 1U) % fan_face->corner_count;
+            const henka_authoring_vertex_id original_first = fan_vertices[base + corner];
+            const henka_authoring_vertex_id original_second = fan_vertices[base + next_corner];
+            const henka_authoring_vertex_id cap_first = corner == fan_face->selected_corner
+                ? new_vertex_id : original_first;
+            const henka_authoring_vertex_id cap_second = next_corner == fan_face->selected_corner
+                ? new_vertex_id : original_second;
+            henka_authoring_edge_id edge_id = modeling_find_edge_between_vertices(
+                candidate, original_first, original_second);
+            henka_authoring_edge_id cap_edge_id = modeling_find_edge_between_vertices(
+                candidate, cap_first, cap_second);
+            if (cap_edge_id == HENKA_AUTHORING_INVALID_ID ||
+                (edge_id != HENKA_AUTHORING_INVALID_ID &&
+                    henka_authoring_mesh_set_edge_hard(candidate, edge_id, fan_edge_hard[base + corner]) != HENKA_SUCCESS) ||
+                henka_authoring_mesh_set_edge_hard(candidate, cap_edge_id, fan_edge_hard[base + corner]) != HENKA_SUCCESS)
             {
-                result = henka_authoring_mesh_set_face_corner_uv(
-                    candidate, side_face_id, corner, side_uvs[corner]);
+                result = HENKA_ERROR_INVALID_ARGUMENT;
+                break;
             }
         }
     }
@@ -4800,7 +5048,14 @@ henka_result henka_authoring_mesh_extrude_vertex(
             }
         }
     }
+cleanup:
     henka_authoring_mesh_destroy(candidate);
+    henka_free(pending);
+    henka_free(visited);
+    henka_free(fan_edge_hard);
+    henka_free(fan_uvs);
+    henka_free(fan_vertices);
+    henka_free(fan_faces);
     return result;
 }
 

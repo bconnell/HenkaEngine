@@ -194,7 +194,9 @@ tracks that share renderer, asset, persistence, and workspace boundaries.
    axis-constrained movement.
 5. Vertex operations include Merge Center, Merge Active, Merge by Distance,
    Connect Vertices, Dissolve Vertex, Delete Vertex, Vertex Bevel, and bounded
-   Vertex Extrude for one unambiguous boundary corner of a single face.
+   Vertex Extrude for connected open boundary vertex fans, including the
+   one-face corner case. Closed, disconnected, loose-edge, and incompatible-
+   normal fan cases remain fail-closed.
 6. Non-destructive topology analysis and explicit transactional safe repair are
    available. Repair is bounded and deterministic: it can remove enabled
    isolated vertices, exact metadata-preserving duplicate faces, and

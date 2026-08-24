@@ -182,11 +182,12 @@ Edge Slide does not maintain a separate graph traversal. The editor Loop Cut
   unfinished. The same Edge workflow accepts the bounded pairwise
   vertex-disjoint boundary-edge bevel selection described above and publishes
   it as one undoable transaction.
-Bounded Vertex Extrude is available for one unambiguous boundary corner of a
-single face. It creates one cap vertex and two connecting side faces while
-preserving the operation's transactional source/render/bounds/collider/undo
-boundary; multi-face vertex fans are rejected until their remapping contract
-is stable. Vertex Bevel is also available as one atomic multi-selection operation. It
+Bounded Vertex Extrude is available for a connected open boundary vertex fan,
+including the one-face corner case. It creates one offset cap vertex, replaces
+the incident fan, and creates the two boundary side faces while preserving the
+operation's transactional source/render/bounds/collider/undo boundary. Closed,
+disconnected, loose-edge, and incompatible-normal fans fail closed. Vertex
+Bevel is also available as one atomic multi-selection operation. It
 uses a deterministic edge/end-point cut table, rejects non-finite, zero,
 overlapping, non-manifold, and capacity-invalid requests, preserves
 per-corner UV interpolation and original hard trimmed segments, creates
@@ -208,9 +209,9 @@ shared scene/asset-manager bridge. The current authoring mesh is a validated
 surface representation for face-backed modeling, while also preserving explicit
 loose source components. Renderer evaluation continues to triangulate faces
 only; standalone wire edges and vertices are source/persistence components and
-are not yet emitted as viewport line/point primitives. Broader multi-face
-vertex-fan extrusion requires a stable remapping contract before it can be
-exposed.
+are not yet emitted as viewport line/point primitives. The bounded fan
+extrusion contract is intentionally limited to connected open fans; broader
+non-manifold and incompatible-normal cases remain unsupported.
 Material regions retain their editable numeric metadata, and the evaluated
 model-to-render-mesh upload retains the bounded minimum/maximum region range
 for diagnostics. They do not yet choose multiple shared material instances in

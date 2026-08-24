@@ -2039,6 +2039,71 @@ cleanup:
     return result ? 1 : fail("transactional vertex extrude");
 }
 
+static int test_vertex_extrude_boundary_fan_operation(void)
+{
+    const henka_authoring_mesh_desc desc = {16U, 32U, 8U, 4U};
+    const henka_vec3 positions[6] = {
+        {0.0f, 0.0f, 0.0f}, {1.0f, 0.0f, 0.0f}, {1.0f, 1.0f, 0.0f},
+        {0.0f, 1.0f, 0.0f}, {-1.0f, 1.0f, 0.0f}, {-1.0f, 0.0f, 0.0f}};
+    const henka_vec2 uvs[6] = {
+        {0.0f, 0.0f}, {1.0f, 0.0f}, {1.0f, 1.0f},
+        {0.0f, 1.0f}, {-1.0f, 1.0f}, {-1.0f, 0.0f}};
+    const henka_authoring_vertex_id face_vertices[2][4] = {
+        {1U, 2U, 3U, 4U}, {1U, 4U, 5U, 6U}};
+    henka_authoring_mesh* mesh = NULL;
+    henka_authoring_vertex_id vertices[6];
+    henka_authoring_vertex_id new_vertex_id = HENKA_AUTHORING_INVALID_ID;
+    henka_authoring_modeling_report report = {0};
+    henka_authoring_mesh_counts before;
+    henka_authoring_mesh_counts after;
+    const henka_authoring_vertex* new_vertex;
+    size_t index;
+    int result = 0;
+
+    if (henka_authoring_mesh_create(&desc, &mesh) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    for (index = 0U; index < 6U; ++index)
+    {
+        if (henka_authoring_mesh_add_vertex(
+                mesh, positions[index], uvs[index], 0U, &vertices[index]) != HENKA_SUCCESS)
+        {
+            goto cleanup;
+        }
+    }
+    for (index = 0U; index < 2U; ++index)
+    {
+        if (henka_authoring_mesh_add_face(
+                mesh, face_vertices[index], 4U, 0U, true, &(henka_authoring_face_id){0U}) != HENKA_SUCCESS)
+        {
+            goto cleanup;
+        }
+    }
+    before = henka_authoring_mesh_get_counts(mesh);
+    if (before.vertices != 6U || before.edges != 7U || before.faces != 2U ||
+        henka_authoring_mesh_extrude_vertex(
+            mesh, vertices[0], 0.5f, &new_vertex_id, &report) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    after = henka_authoring_mesh_get_counts(mesh);
+    new_vertex = henka_authoring_mesh_get_vertex(mesh, new_vertex_id);
+    if (!report.changed || report.created_vertices != 1U || report.created_faces != 2U ||
+        new_vertex_id == HENKA_AUTHORING_INVALID_ID || new_vertex == NULL ||
+        fabsf(new_vertex->position.z - 0.5f) > 0.0001f ||
+        after.vertices != before.vertices + 1U || after.faces != before.faces + 2U ||
+        after.edges != before.edges + 3U || !henka_authoring_mesh_validate(mesh))
+    {
+        goto cleanup;
+    }
+    result = 1;
+
+cleanup:
+    henka_authoring_mesh_destroy(mesh);
+    return result ? 1 : fail("transactional vertex boundary fan extrude");
+}
+
 static int test_logical_identity_reuse_and_history(void)
 {
     henka_authoring_mesh* mesh = NULL;
@@ -2506,6 +2571,7 @@ int main(void)
         test_edge_dissolve_operation() &&
         test_edge_delete_operation() &&
         test_vertex_extrude_operation() &&
+        test_vertex_extrude_boundary_fan_operation() &&
         test_logical_identity_reuse_and_history() &&
         test_persistence_versions_and_malformed() &&
         test_loose_component_representation_and_persistence() ? 0 : 1;
