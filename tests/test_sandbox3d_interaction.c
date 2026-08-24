@@ -135,9 +135,49 @@ static void henka_test_sandbox3d_authoring_cage_overlay(void)
 
     henka_authoring_mesh_destroy(mesh);
 }
+
+static void henka_test_sandbox3d_authoring_vertex_points(void)
+{
+    henka_authoring_mesh_desc desc = henka_authoring_mesh_desc_default();
+    henka_authoring_mesh* mesh = NULL;
+    henka_authoring_vertex_id vertices[3];
+    henka_authoring_edge_id edge_id;
+    sandbox3d_authoring_vertex_point points[4];
+    size_t point_count = 99U;
+
+    desc.max_vertices = 8U;
+    desc.max_edges = 8U;
+    desc.max_faces = 2U;
+    desc.max_face_corners = 4U;
+
+    HENKA_TEST_ASSERT(henka_authoring_mesh_create(&desc, &mesh) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_authoring_mesh_add_vertex(
+        mesh, (henka_vec3){0.0f, 0.0f, 0.0f}, (henka_vec2){0.0f, 0.0f}, 0U, &vertices[0]) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_authoring_mesh_add_vertex(
+        mesh, (henka_vec3){1.0f, 0.0f, 0.0f}, (henka_vec2){1.0f, 0.0f}, 0U, &vertices[1]) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_authoring_mesh_add_vertex(
+        mesh, (henka_vec3){2.0f, 0.0f, 0.0f}, (henka_vec2){2.0f, 0.0f}, 0U, &vertices[2]) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_authoring_mesh_add_edge(
+        mesh, vertices[0], vertices[1], false, &edge_id) == HENKA_SUCCESS);
+
+    HENKA_TEST_ASSERT(sandbox3d_build_authoring_vertex_points(
+        mesh, points, sizeof(points) / sizeof(points[0]), &point_count) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(point_count == 3U);
+    HENKA_TEST_ASSERT(points[0].id == vertices[0] && !points[0].loose);
+    HENKA_TEST_ASSERT(points[1].id == vertices[1] && !points[1].loose);
+    HENKA_TEST_ASSERT(points[2].id == vertices[2] && points[2].loose);
+
+    point_count = 99U;
+    HENKA_TEST_ASSERT(sandbox3d_build_authoring_vertex_points(
+        mesh, points, 2U, &point_count) == HENKA_ERROR_INVALID_ARGUMENT);
+    HENKA_TEST_ASSERT(point_count == 0U);
+
+    henka_authoring_mesh_destroy(mesh);
+}
 void henka_test_sandbox3d_interaction(void)
 {
     henka_test_sandbox3d_authoring_cage_overlay();
+    henka_test_sandbox3d_authoring_vertex_points();
     double autosave_elapsed_seconds = 0.0;
     henka_camera camera;
     henka_quat rotation_delta;

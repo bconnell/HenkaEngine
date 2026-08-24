@@ -190,8 +190,11 @@ turning the public README into an implementation ledger.
   broader edge topology operations remain in progress.
 - The core authoring representation also preserves explicit loose vertices and
   standalone wire edges with stable logical IDs, bounded reusable storage, and
-  HAMS v4 save/reload support. Dedicated Sandbox loose-component controls and
-  viewport line/point evaluation remain unavailable.
+  HAMS v4 save/reload support. The topology overlay now presents all authored
+  source vertices and distinguishes loose vertices, boundary edges, and
+  manifold edges with deterministic high-contrast markers. Dedicated Sandbox
+  loose-component creation/edit controls and renderer line/point evaluation
+  remain unavailable; renderer evaluation still triangulates faces only.
 - A bounded deterministic compatible quad-strip traversal foundation is
   available for modeling operators. It records ordered face/entry/exit edges,
   terminates at boundaries or reports a closed ring, and rejects hard, material,

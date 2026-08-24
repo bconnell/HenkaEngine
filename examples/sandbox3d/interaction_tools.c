@@ -489,6 +489,7 @@ henka_result sandbox3d_build_authoring_cage(
             continue;
         }
 
+        out_edges[output_count].id = edge->id;
         out_edges[output_count].vertices[0] =
             edge->vertices[0];
 
@@ -504,6 +505,74 @@ henka_result sandbox3d_build_authoring_cage(
     }
 
     *out_edge_count = output_count;
+    return HENKA_SUCCESS;
+}
+
+henka_result sandbox3d_build_authoring_vertex_points(
+    const henka_authoring_mesh* mesh,
+    sandbox3d_authoring_vertex_point* out_points,
+    size_t point_capacity,
+    size_t* out_point_count)
+{
+    henka_authoring_mesh_desc desc;
+    henka_authoring_mesh_counts counts;
+    size_t physical_slot;
+    size_t output_count = 0U;
+
+    if (out_point_count != NULL)
+    {
+        *out_point_count = 0U;
+    }
+
+    if (mesh == NULL ||
+        out_points == NULL ||
+        out_point_count == NULL ||
+        point_capacity == 0U)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    desc = henka_authoring_mesh_get_desc(mesh);
+    counts = henka_authoring_mesh_get_counts(mesh);
+    if (counts.vertices > point_capacity)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    for (physical_slot = 0U;
+         physical_slot < desc.max_vertices && output_count < counts.vertices;
+         ++physical_slot)
+    {
+        henka_authoring_vertex_id vertex_id;
+        const henka_authoring_vertex* vertex;
+
+        if (henka_authoring_mesh_get_vertex_id_at(
+                mesh,
+                physical_slot,
+                &vertex_id) != HENKA_SUCCESS)
+        {
+            continue;
+        }
+
+        vertex = henka_authoring_mesh_get_vertex(mesh, vertex_id);
+        if (vertex == NULL)
+        {
+            *out_point_count = 0U;
+            return HENKA_ERROR_UNKNOWN;
+        }
+
+        out_points[output_count].id = vertex_id;
+        out_points[output_count].loose =
+            henka_authoring_mesh_get_vertex_edge_count(mesh, vertex_id) == 0U;
+        ++output_count;
+    }
+
+    if (output_count != counts.vertices)
+    {
+        return HENKA_ERROR_UNKNOWN;
+    }
+
+    *out_point_count = output_count;
     return HENKA_SUCCESS;
 }
 bool sandbox3d_selection_highlight_is_allowed(const sandbox3d_interaction_gate* gate)

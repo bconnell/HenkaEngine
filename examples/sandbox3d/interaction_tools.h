@@ -140,14 +140,29 @@ bool sandbox3d_should_prefer_terrain_hit(
 
 typedef struct sandbox3d_authoring_cage_edge
 {
+    henka_authoring_edge_id id;
     henka_authoring_vertex_id vertices[2];
 } sandbox3d_authoring_cage_edge;
+
+/* Deterministic source-vertex presentation for the topology overlay. A loose
+ * vertex has no incident source edge; it is still a first-class authored
+ * component even though renderer evaluation does not emit point primitives. */
+typedef struct sandbox3d_authoring_vertex_point
+{
+    henka_authoring_vertex_id id;
+    bool loose;
+} sandbox3d_authoring_vertex_point;
 
 henka_result sandbox3d_build_authoring_cage(
     const henka_authoring_mesh* mesh,
     sandbox3d_authoring_cage_edge* out_edges,
     size_t edge_capacity,
     size_t* out_edge_count);
+henka_result sandbox3d_build_authoring_vertex_points(
+    const henka_authoring_mesh* mesh,
+    sandbox3d_authoring_vertex_point* out_points,
+    size_t point_capacity,
+    size_t* out_point_count);
 bool sandbox3d_selection_highlight_is_allowed(const sandbox3d_interaction_gate* gate);
 henka_vec3 sandbox3d_make_move_delta(henka_gizmo_axis axis, float magnitude);
 henka_quat sandbox3d_make_rotation_delta(henka_gizmo_axis axis, float radians);

@@ -209,7 +209,10 @@ shared scene/asset-manager bridge. The current authoring mesh is a validated
 surface representation for face-backed modeling, while also preserving explicit
 loose source components. Renderer evaluation continues to triangulate faces
 only; standalone wire edges and vertices are source/persistence components and
-are not yet emitted as viewport line/point primitives. The bounded fan
+are not yet emitted by renderer evaluation as line/point primitives. The
+Sandbox topology overlay does present the committed source vertices and wire
+edges for inspection and selection, including a distinct loose-component
+visual treatment. The bounded fan
 extrusion contract is intentionally limited to connected open fans; broader
 non-manifold and incompatible-normal cases remain unsupported.
 Material regions retain their editable numeric metadata, and the evaluated

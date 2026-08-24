@@ -6014,6 +6014,40 @@ static void sandbox3d_draw_authoring_component_hover(
     }
 }
 
+static void sandbox3d_draw_authoring_vertex_marker(
+    sandbox3d_state* state,
+    henka_viewport viewport,
+    henka_vec2 center,
+    bool loose)
+{
+    const henka_vec4 outer = (henka_vec4){0.01f, 0.02f, 0.04f, 0.98f};
+    const henka_vec4 inner = loose
+        ? (henka_vec4){1.0f, 0.30f, 0.76f, 1.0f}
+        : (henka_vec4){1.0f, 0.84f, 0.20f, 1.0f};
+    const float marker = loose ? 8.0f : 6.0f;
+
+    (void)sandbox3d_draw_viewport_clipped_overlay_line(
+        state, viewport,
+        (henka_vec2){center.x - marker, center.y},
+        (henka_vec2){center.x + marker, center.y},
+        5.0f, outer);
+    (void)sandbox3d_draw_viewport_clipped_overlay_line(
+        state, viewport,
+        (henka_vec2){center.x - marker, center.y},
+        (henka_vec2){center.x + marker, center.y},
+        2.5f, inner);
+    (void)sandbox3d_draw_viewport_clipped_overlay_line(
+        state, viewport,
+        (henka_vec2){center.x, center.y - marker},
+        (henka_vec2){center.x, center.y + marker},
+        5.0f, outer);
+    (void)sandbox3d_draw_viewport_clipped_overlay_line(
+        state, viewport,
+        (henka_vec2){center.x, center.y - marker},
+        (henka_vec2){center.x, center.y + marker},
+        2.5f, inner);
+}
+
 static void sandbox3d_draw_selection_highlight(sandbox3d_state* state, henka_viewport viewport)
 {
     henka_bounds bounds;
@@ -6029,6 +6063,8 @@ static void sandbox3d_draw_selection_highlight(sandbox3d_state* state, henka_vie
     static sandbox3d_silhouette_segment silhouette[max_outline_segments];
     static sandbox3d_authoring_cage_edge
         authoring_cage_edges[HENKA_AUTHORING_MESH_HARD_MAX_EDGES];
+    static sandbox3d_authoring_vertex_point
+        authoring_vertex_points[HENKA_AUTHORING_MESH_HARD_MAX_VERTICES];
     static bool authoring_topology_overlay_enabled =
         SANDBOX3D_AUTHORING_TOPOLOGY_OVERLAY_DEFAULT;
     size_t silhouette_count;
@@ -6169,13 +6205,6 @@ static void sandbox3d_draw_selection_highlight(sandbox3d_state* state, henka_vie
                         sizeof(authoring_cage_edges[0]),
                     &authoring_cage_edge_count) == HENKA_SUCCESS)
             {
-                const henka_vec4 cage_color =
-                    (henka_vec4){
-                        0.40f,
-                        0.70f,
-                        0.86f,
-                        0.74f};
-
                 for (authoring_cage_edge_index = 0U;
                      authoring_cage_edge_index <
                          authoring_cage_edge_count;
@@ -6192,9 +6221,18 @@ static void sandbox3d_draw_selection_highlight(sandbox3d_state* state, henka_vie
                             cage_edge->vertices[0]);
 
                     const henka_authoring_vertex* second =
-                        henka_authoring_mesh_get_vertex(
+                            henka_authoring_mesh_get_vertex(
                             mesh,
                             cage_edge->vertices[1]);
+                    const size_t face_count =
+                        henka_authoring_mesh_get_edge_face_count(
+                            mesh,
+                            cage_edge->id);
+                    const henka_vec4 cage_color = face_count == 0U
+                        ? (henka_vec4){1.0f, 0.30f, 0.76f, 0.95f}
+                        : face_count == 1U
+                            ? (henka_vec4){0.24f, 0.96f, 0.72f, 0.90f}
+                            : (henka_vec4){0.40f, 0.70f, 0.86f, 0.74f};
 
                     henka_vec2 start;
                     henka_vec2 end;
@@ -6219,7 +6257,7 @@ static void sandbox3d_draw_selection_highlight(sandbox3d_state* state, henka_vie
                         continue;
                     }
 
-                    (void)
+                        (void)
                         sandbox3d_draw_viewport_clipped_overlay_line(
                             state,
                             viewport,
@@ -6227,6 +6265,50 @@ static void sandbox3d_draw_selection_highlight(sandbox3d_state* state, henka_vie
                             end,
                             1.25f,
                             cage_color);
+                }
+
+                {
+                    size_t authoring_vertex_point_count = 0U;
+                    size_t authoring_vertex_point_index;
+
+                    if (sandbox3d_build_authoring_vertex_points(
+                            mesh,
+                            authoring_vertex_points,
+                            sizeof(authoring_vertex_points) /
+                                sizeof(authoring_vertex_points[0]),
+                            &authoring_vertex_point_count) == HENKA_SUCCESS)
+                    {
+                        for (authoring_vertex_point_index = 0U;
+                             authoring_vertex_point_index <
+                                 authoring_vertex_point_count;
+                             ++authoring_vertex_point_index)
+                        {
+                            const sandbox3d_authoring_vertex_point* point =
+                                &authoring_vertex_points[
+                                    authoring_vertex_point_index];
+                            const henka_authoring_vertex* vertex =
+                                henka_authoring_mesh_get_vertex(mesh, point->id);
+                            henka_vec2 center;
+
+                            if (vertex == NULL ||
+                                !sandbox3d_project_handle_point(
+                                    state,
+                                    viewport,
+                                    sandbox3d_transform_authoring_point(
+                                        transform,
+                                        vertex->position),
+                                    &center))
+                            {
+                                continue;
+                            }
+
+                            sandbox3d_draw_authoring_vertex_marker(
+                                state,
+                                viewport,
+                                center,
+                                point->loose);
+                        }
+                    }
                 }
             }
 
