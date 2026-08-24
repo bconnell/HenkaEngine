@@ -433,6 +433,97 @@ cleanup:
     return result ? 1 : fail("transactional safe repair");
 }
 
+static int test_quad_strip_walk(void)
+{
+    const henka_authoring_mesh_desc desc = {16U, 32U, 8U, 8U};
+    const henka_vec3 positions[8] = {
+        {0.0f, 0.0f, 0.0f}, {1.0f, 0.0f, 0.0f}, {1.0f, 1.0f, 0.0f},
+        {0.0f, 1.0f, 0.0f}, {2.0f, 0.0f, 0.0f}, {2.0f, 1.0f, 0.0f},
+        {3.0f, 0.0f, 0.0f}, {3.0f, 1.0f, 0.0f}};
+    const henka_vec2 uvs[8] = {
+        {0.0f, 0.0f}, {1.0f, 0.0f}, {1.0f, 1.0f}, {0.0f, 1.0f},
+        {2.0f, 0.0f}, {2.0f, 1.0f}, {3.0f, 0.0f}, {3.0f, 1.0f}};
+    const henka_authoring_vertex_id faces[3][4] = {
+        {1U, 2U, 3U, 4U}, {2U, 5U, 6U, 3U}, {5U, 7U, 8U, 6U}};
+    henka_authoring_mesh* mesh = NULL;
+    henka_authoring_quad_strip_step steps[3];
+    henka_authoring_face_id face_id;
+    henka_authoring_edge_id edge_id;
+    henka_authoring_edge_id start_edge_id = HENKA_AUTHORING_INVALID_ID;
+    size_t count = 0U;
+    size_t index;
+    bool closed = true;
+    int result = 0;
+
+    if (henka_authoring_mesh_create(&desc, &mesh) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    for (index = 0U; index < 8U; ++index)
+    {
+        if (henka_authoring_mesh_add_vertex(
+                mesh, positions[index], uvs[index], 0U,
+                &(henka_authoring_vertex_id){0U}) != HENKA_SUCCESS)
+        {
+            goto cleanup;
+        }
+    }
+    for (index = 0U; index < 3U; ++index)
+    {
+        if (henka_authoring_mesh_add_face(
+                mesh, faces[index], 4U, 0U, true, &face_id) != HENKA_SUCCESS)
+        {
+            goto cleanup;
+        }
+    }
+    for (index = 0U; index < henka_authoring_mesh_get_desc(mesh).max_edges; ++index)
+    {
+        if (henka_authoring_mesh_get_edge_id_at(mesh, index, &edge_id) != HENKA_SUCCESS)
+        {
+            continue;
+        }
+        {
+            const henka_authoring_edge* edge = henka_authoring_mesh_get_edge(mesh, edge_id);
+            if (edge != NULL && edge->face_count == 1U &&
+                ((edge->vertices[0] == 1U && edge->vertices[1] == 4U) ||
+                 (edge->vertices[0] == 4U && edge->vertices[1] == 1U)))
+            {
+                start_edge_id = edge_id;
+                break;
+            }
+        }
+    }
+    if (start_edge_id == HENKA_AUTHORING_INVALID_ID ||
+        henka_authoring_topology_walk_quad_strip(
+            mesh, start_edge_id, NULL, 0U, &count, &closed) != HENKA_SUCCESS ||
+        count != 3U || closed ||
+        henka_authoring_topology_walk_quad_strip(
+            mesh, start_edge_id, steps, 2U, &count, &closed) != HENKA_ERROR_LIMIT ||
+        count != 0U ||
+        henka_authoring_topology_walk_quad_strip(
+            mesh, start_edge_id, steps, 3U, &count, &closed) != HENKA_SUCCESS ||
+        count != 3U || closed || steps[0].face_id != 1U ||
+        steps[1].face_id != 2U || steps[2].face_id != 3U ||
+        steps[0].entry_edge_id != start_edge_id ||
+        steps[1].entry_edge_id != steps[0].exit_edge_id ||
+        steps[2].entry_edge_id != steps[1].exit_edge_id)
+    {
+        goto cleanup;
+    }
+    if (henka_authoring_mesh_set_edge_hard(mesh, steps[0].exit_edge_id, true) != HENKA_SUCCESS ||
+        henka_authoring_topology_walk_quad_strip(
+            mesh, start_edge_id, steps, 3U, &count, &closed) != HENKA_ERROR_INVALID_ARGUMENT ||
+        count != 0U)
+    {
+        goto cleanup;
+    }
+    result = 1;
+
+cleanup:
+    henka_authoring_mesh_destroy(mesh);
+    return result ? 1 : fail("quad strip walk");
+}
+
 static int test_degenerate_face_repair(void)
 {
     const henka_authoring_mesh_desc desc = {8U, 16U, 8U, 8U};
@@ -477,6 +568,7 @@ int main(void)
         !test_winding_and_uv_seam() ||
         !test_profiles() ||
         !test_transactional_safe_repair() ||
+        !test_quad_strip_walk() ||
         !test_degenerate_face_repair())
     {
         return 1;

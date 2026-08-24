@@ -25,6 +25,12 @@ typedef struct henka_topology_vertex_index_entry
     bool occupied;
 } henka_topology_vertex_index_entry;
 
+typedef struct henka_topology_face_visit_entry
+{
+    henka_authoring_face_id id;
+    bool occupied;
+} henka_topology_face_visit_entry;
+
 static size_t henka_topology_next_power_of_two(size_t requested)
 {
     size_t capacity = 8U;
@@ -50,6 +56,67 @@ static uint64_t henka_topology_mix64(uint64_t value)
     value *= UINT64_C(0x94d049bb133111eb);
     value ^= value >> 31U;
     return value;
+}
+
+static bool henka_topology_face_visit_contains(
+    const henka_topology_face_visit_entry* entries,
+    size_t capacity,
+    henka_authoring_face_id id)
+{
+    size_t slot;
+    size_t attempt;
+    if (entries == NULL || capacity == 0U || id == HENKA_AUTHORING_INVALID_ID)
+    {
+        return false;
+    }
+    slot = (size_t)(henka_topology_mix64((uint64_t)id) & (uint64_t)(capacity - 1U));
+    for (attempt = 0U; attempt < capacity; ++attempt)
+    {
+        const henka_topology_face_visit_entry* entry = &entries[slot];
+        if (!entry->occupied)
+        {
+            return false;
+        }
+        if (entry->id == id)
+        {
+            return true;
+        }
+        slot = (slot + 1U) & (capacity - 1U);
+    }
+    return false;
+}
+
+static bool henka_topology_face_visit_insert(
+    henka_topology_face_visit_entry* entries,
+    size_t capacity,
+    henka_authoring_face_id id)
+{
+    size_t slot;
+    size_t attempt;
+    if (entries == NULL || capacity == 0U || id == HENKA_AUTHORING_INVALID_ID)
+    {
+        return false;
+    }
+    slot = (size_t)(henka_topology_mix64((uint64_t)id) & (uint64_t)(capacity - 1U));
+    for (attempt = 0U; attempt < capacity; ++attempt)
+    {
+        henka_topology_face_visit_entry* entry = &entries[slot];
+        if (entry->occupied)
+        {
+            if (entry->id == id)
+            {
+                return false;
+            }
+        }
+        else
+        {
+            entry->id = id;
+            entry->occupied = true;
+            return true;
+        }
+        slot = (slot + 1U) & (capacity - 1U);
+    }
+    return false;
 }
 
 static size_t henka_topology_vertex_index_find(
@@ -796,6 +863,197 @@ henka_result henka_authoring_topology_get_cage_edges(
         written;
 
     return HENKA_SUCCESS;
+}
+
+static bool henka_topology_face_edge_corner(
+    const henka_authoring_face* face,
+    henka_authoring_edge_id edge_id,
+    size_t* out_corner)
+{
+    size_t corner;
+    if (face == NULL || out_corner == NULL)
+    {
+        return false;
+    }
+    for (corner = 0U; corner < face->corner_count; ++corner)
+    {
+        if (face->edges[corner] == edge_id)
+        {
+            *out_corner = corner;
+            return true;
+        }
+    }
+    return false;
+}
+
+static bool henka_topology_quad_faces_compatible(
+    const henka_authoring_mesh* mesh,
+    const henka_authoring_face* first,
+    const henka_authoring_face* second,
+    const henka_authoring_edge* edge)
+{
+    if (mesh == NULL || first == NULL || second == NULL || edge == NULL ||
+        first->corner_count != 4U || second->corner_count != 4U ||
+        first->material_region != second->material_region ||
+        first->smooth != second->smooth || edge->hard ||
+        henka_topology_edge_is_uv_seam(mesh, edge, 0.00001f))
+    {
+        return false;
+    }
+    return true;
+}
+
+henka_result henka_authoring_topology_walk_quad_strip(
+    const henka_authoring_mesh* mesh,
+    henka_authoring_edge_id start_edge_id,
+    henka_authoring_quad_strip_step* out_steps,
+    size_t capacity,
+    size_t* out_count,
+    bool* out_closed)
+{
+    const henka_authoring_mesh_desc desc = henka_authoring_mesh_get_desc(mesh);
+    const henka_authoring_edge* start_edge;
+    henka_topology_face_visit_entry* visited = NULL;
+    henka_authoring_quad_strip_step* steps = NULL;
+    size_t visit_capacity;
+    size_t visit_request;
+    size_t allocation_bytes;
+    size_t step_count = 0U;
+    henka_authoring_face_id current_face_id;
+    henka_authoring_edge_id entry_edge_id = start_edge_id;
+    bool closed = false;
+    bool terminated = false;
+    henka_result result = HENKA_ERROR_INVALID_ARGUMENT;
+
+    if (out_count != NULL) *out_count = 0U;
+    if (out_closed != NULL) *out_closed = false;
+    if (mesh == NULL || out_count == NULL ||
+        (out_steps == NULL && capacity != 0U) ||
+        !henka_authoring_mesh_validate(mesh))
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    start_edge = henka_authoring_mesh_get_edge(mesh, start_edge_id);
+    if (start_edge == NULL || start_edge->face_count == 0U ||
+        start_edge->face_count > 2U || start_edge->hard)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    current_face_id = start_edge->faces[0];
+    if (start_edge->face_count == 2U && start_edge->faces[1] < current_face_id)
+    {
+        current_face_id = start_edge->faces[1];
+    }
+    if (!henka_checked_size_add(desc.max_faces, 1U, &visit_request) ||
+        !henka_checked_size_multiply(visit_request, 2U, &visit_request) ||
+        (visit_capacity = henka_topology_next_power_of_two(visit_request)) == 0U ||
+        !henka_checked_size_multiply(
+            visit_capacity, sizeof(*visited), &allocation_bytes))
+    {
+        return HENKA_ERROR_LIMIT;
+    }
+    visited = (henka_topology_face_visit_entry*)henka_calloc(1U, allocation_bytes);
+    if (visited == NULL ||
+        !henka_checked_size_multiply(
+            desc.max_faces, sizeof(*steps), &allocation_bytes))
+    {
+        result = HENKA_ERROR_OUT_OF_MEMORY;
+        goto cleanup;
+    }
+    steps = (henka_authoring_quad_strip_step*)henka_malloc(allocation_bytes);
+    if (steps == NULL)
+    {
+        result = HENKA_ERROR_OUT_OF_MEMORY;
+        goto cleanup;
+    }
+    while (step_count < desc.max_faces)
+    {
+        const henka_authoring_face* face = henka_authoring_mesh_get_face(mesh, current_face_id);
+        const henka_authoring_edge* entry_edge = henka_authoring_mesh_get_edge(mesh, entry_edge_id);
+        const henka_authoring_edge* exit_edge;
+        henka_authoring_face_id next_face_id = HENKA_AUTHORING_INVALID_ID;
+        size_t entry_corner;
+        size_t exit_corner;
+        size_t face_ordinal;
+        if (face == NULL || entry_edge == NULL || face->corner_count != 4U ||
+            !henka_topology_face_edge_corner(face, entry_edge_id, &entry_corner) ||
+            entry_edge->hard || !henka_topology_face_visit_insert(
+                visited, visit_capacity, face->id))
+        {
+            result = HENKA_ERROR_INVALID_ARGUMENT;
+            goto cleanup;
+        }
+        exit_corner = (entry_corner + 2U) % 4U;
+        exit_edge = henka_authoring_mesh_get_edge(mesh, face->edges[exit_corner]);
+        if (exit_edge == NULL || exit_edge->face_count == 0U ||
+            exit_edge->face_count > 2U || exit_edge->hard)
+        {
+            result = HENKA_ERROR_INVALID_ARGUMENT;
+            goto cleanup;
+        }
+        if (exit_edge->face_count == 2U)
+        {
+            for (face_ordinal = 0U; face_ordinal < exit_edge->face_count; ++face_ordinal)
+            {
+                if (exit_edge->faces[face_ordinal] != face->id)
+                {
+                    next_face_id = exit_edge->faces[face_ordinal];
+                    break;
+                }
+            }
+            if (next_face_id == HENKA_AUTHORING_INVALID_ID ||
+                !henka_topology_quad_faces_compatible(
+                    mesh, face, henka_authoring_mesh_get_face(mesh, next_face_id), exit_edge))
+            {
+                result = HENKA_ERROR_INVALID_ARGUMENT;
+                goto cleanup;
+            }
+            if (exit_edge->id == start_edge_id)
+            {
+                closed = true;
+            }
+            else if (henka_topology_face_visit_contains(
+                         visited, visit_capacity, next_face_id))
+            {
+                result = HENKA_ERROR_INVALID_ARGUMENT;
+                goto cleanup;
+            }
+        }
+        steps[step_count].face_id = face->id;
+        steps[step_count].entry_edge_id = entry_edge_id;
+        steps[step_count].exit_edge_id = exit_edge->id;
+        ++step_count;
+        if (exit_edge->face_count == 1U || closed)
+        {
+            terminated = true;
+            break;
+        }
+        current_face_id = next_face_id;
+        entry_edge_id = exit_edge->id;
+    }
+    if (step_count == 0U || !terminated)
+    {
+        result = HENKA_ERROR_LIMIT;
+        goto cleanup;
+    }
+    *out_count = step_count;
+    if (out_steps != NULL)
+    {
+        if (capacity < step_count)
+        {
+            result = HENKA_ERROR_LIMIT;
+            goto cleanup;
+        }
+        memcpy(out_steps, steps, step_count * sizeof(*out_steps));
+    }
+    if (out_closed != NULL) *out_closed = closed;
+    result = HENKA_SUCCESS;
+
+cleanup:
+    if (result != HENKA_SUCCESS) *out_count = 0U;
+    henka_free(steps);
+    henka_free(visited);
+    return result;
 }
 
 henka_result henka_authoring_topology_analyze(

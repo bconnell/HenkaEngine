@@ -94,6 +94,13 @@ typedef struct henka_authoring_cage_edge
     bool hard;
 } henka_authoring_cage_edge;
 
+typedef struct henka_authoring_quad_strip_step
+{
+    henka_authoring_face_id face_id;
+    henka_authoring_edge_id entry_edge_id;
+    henka_authoring_edge_id exit_edge_id;
+} henka_authoring_quad_strip_step;
+
 henka_authoring_topology_options
 henka_authoring_topology_options_default(void);
 
@@ -134,5 +141,20 @@ henka_result henka_authoring_topology_get_cage_edges(
     henka_authoring_cage_edge* out_edges,
     size_t capacity,
     size_t* out_count);
+
+/* Walks one deterministic compatible quad strip from start_edge_id. A
+ * boundary start walks to the opposite boundary; an interior start walks
+ * until it closes back to the same face/edge. The walk rejects triangles,
+ * n-gons, non-manifold branches, hard/shared-material/smoothing boundaries,
+ * and UV seams rather than crossing unsupported topology. Query the required
+ * step count with out_steps == NULL and capacity == 0 before allocating a
+ * bounded result buffer. */
+henka_result henka_authoring_topology_walk_quad_strip(
+    const henka_authoring_mesh* mesh,
+    henka_authoring_edge_id start_edge_id,
+    henka_authoring_quad_strip_step* out_steps,
+    size_t capacity,
+    size_t* out_count,
+    bool* out_closed);
 
 #endif

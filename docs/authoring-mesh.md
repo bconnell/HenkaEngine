@@ -160,7 +160,13 @@ neighboring shared boundaries, and ambiguous endpoint fans. Broader batch edge
 topology editing remains incomplete. A bounded single-quad face loop cut is also
   available: it interpolates two opposite boundary edges, creates two quad
   faces, and rejects shared-boundary faces so it cannot leave a T-junction in
-  neighboring topology. Full multi-face loop-cut networks remain unfinished.
+  neighboring topology. The reusable topology layer also exposes a bounded
+  deterministic compatible quad-strip walk for modeling operators. It records
+  ordered face/entry/exit edges, terminates at boundaries, and rejects hard,
+  material, smoothing, UV, non-quad, non-manifold, and ambiguous crossings
+  without partial output. The editor Loop Cut operator still uses the
+  isolated-quad operation; a multi-face cut, preview, and result publication
+  remain unfinished.
 Bounded Vertex Extrude is available for one unambiguous boundary corner of a
 single face. It creates one cap vertex and two connecting side faces while
 preserving the operation's transactional source/render/bounds/collider/undo

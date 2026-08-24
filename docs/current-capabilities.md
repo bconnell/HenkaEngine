@@ -185,11 +185,14 @@ turning the public README into an implementation ledger.
   rejects hard edges, material/smooth/UV discontinuities, non-quad faces,
   neighboring shared boundaries, and ambiguous endpoint fans; batch edge
   operations and broader edge topology operations remain in progress.
-- A bounded single-quad face loop cut is available through the Face workflow.
-  It interpolates two opposite boundary edges, creates two quad faces, and
-  rejects non-quad or shared-boundary faces to avoid T-junctions. Full
-  multi-face loop-cut networks and broader split/bridge workflows remain
-  incomplete.
+- A bounded deterministic compatible quad-strip traversal foundation is
+  available for modeling operators. It records ordered face/entry/exit edges,
+  terminates at boundaries, and rejects hard, material, smoothing, UV,
+  non-quad, non-manifold, and ambiguous crossings without partial output. A
+  bounded single-quad face loop cut is available through the Face workflow; it
+  interpolates two opposite boundary edges and creates two quad faces. The
+  editor does not yet apply cuts across the traversed strip, and broader
+  split/bridge workflows remain incomplete.
 - See [authoring-mesh.md](authoring-mesh.md),
   [runtime-foundations.md](runtime-foundations.md), and
   [showcase-assets.md](showcase-assets.md).
