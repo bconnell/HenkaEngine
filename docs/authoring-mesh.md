@@ -152,12 +152,14 @@ face ID and allocating the new face with a fresh logical ID in a reusable
 physical slot. Transactional single-edge dissolve is available for compatible
 interior edges, and transactional single-edge delete removes the selected
 edge's incident face set while preserving vertices. Bounded edge bevel is also
-available for one boundary edge whose endpoints belong to one face only, or for
-one compatible interior edge in an isolated two-quad patch. Both forms create
-interpolated cut vertices and one quad bevel face transactionally. Interior
-bevel rejects hard edges, material/smooth/UV discontinuities, non-quad faces,
-neighboring shared boundaries, and ambiguous endpoint fans. Broader batch edge
-topology editing remains incomplete. A bounded single-quad face loop cut is also
+available for one boundary edge whose endpoints belong to one face only, for a
+pairwise vertex-disjoint selection of boundary edges on distinct faces, or for
+one compatible interior edge in an isolated two-quad patch. These forms create
+interpolated cut vertices and quad bevel faces transactionally. Interior bevel
+rejects hard edges, material/smooth/UV discontinuities, non-quad faces,
+neighboring shared boundaries, and ambiguous endpoint fans. Boundary batch
+bevel rejects shared faces and endpoints; same-face batches and broader interior
+edge-set bevel remain incomplete. A bounded single-quad face loop cut is also
   available: it interpolates two opposite boundary edges, creates two quad
   faces, and rejects shared-boundary faces so it cannot leave a T-junction in
   neighboring topology. The reusable topology layer also exposes a bounded

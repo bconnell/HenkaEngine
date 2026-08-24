@@ -442,7 +442,7 @@ static bool authoring_edge_lookup_insert(
 static henka_authoring_vertex* authoring_vertex(henka_authoring_mesh* mesh, henka_authoring_vertex_id id)
 {
     size_t slot = authoring_vertex_slot(mesh, id);
-    if (mesh == NULL || slot >= mesh->desc.max_vertices)
+    if (mesh == NULL || slot >= mesh->desc.max_vertices || mesh->vertices[slot].id != id)
     {
         return NULL;
     }
@@ -452,7 +452,7 @@ static henka_authoring_vertex* authoring_vertex(henka_authoring_mesh* mesh, henk
 static const henka_authoring_vertex* authoring_vertex_const(const henka_authoring_mesh* mesh, henka_authoring_vertex_id id)
 {
     size_t slot = authoring_vertex_slot(mesh, id);
-    if (mesh == NULL || slot >= mesh->desc.max_vertices)
+    if (mesh == NULL || slot >= mesh->desc.max_vertices || mesh->vertices[slot].id != id)
     {
         return NULL;
     }
@@ -462,7 +462,7 @@ static const henka_authoring_vertex* authoring_vertex_const(const henka_authorin
 static henka_authoring_edge* authoring_edge(henka_authoring_mesh* mesh, henka_authoring_edge_id id)
 {
     size_t slot = authoring_edge_slot(mesh, id);
-    if (mesh == NULL || slot >= mesh->desc.max_edges)
+    if (mesh == NULL || slot >= mesh->desc.max_edges || mesh->edges[slot].id != id)
     {
         return NULL;
     }
@@ -472,7 +472,7 @@ static henka_authoring_edge* authoring_edge(henka_authoring_mesh* mesh, henka_au
 static const henka_authoring_edge* authoring_edge_const(const henka_authoring_mesh* mesh, henka_authoring_edge_id id)
 {
     size_t slot = authoring_edge_slot(mesh, id);
-    if (mesh == NULL || slot >= mesh->desc.max_edges)
+    if (mesh == NULL || slot >= mesh->desc.max_edges || mesh->edges[slot].id != id)
     {
         return NULL;
     }
@@ -482,7 +482,7 @@ static const henka_authoring_edge* authoring_edge_const(const henka_authoring_me
 static henka_authoring_face* authoring_face(henka_authoring_mesh* mesh, henka_authoring_face_id id)
 {
     size_t slot = authoring_face_slot(mesh, id);
-    if (mesh == NULL || slot >= mesh->desc.max_faces)
+    if (mesh == NULL || slot >= mesh->desc.max_faces || mesh->faces[slot].id != id)
     {
         return NULL;
     }
@@ -492,7 +492,7 @@ static henka_authoring_face* authoring_face(henka_authoring_mesh* mesh, henka_au
 static const henka_authoring_face* authoring_face_const(const henka_authoring_mesh* mesh, henka_authoring_face_id id)
 {
     size_t slot = authoring_face_slot(mesh, id);
-    if (mesh == NULL || slot >= mesh->desc.max_faces)
+    if (mesh == NULL || slot >= mesh->desc.max_faces || mesh->faces[slot].id != id)
     {
         return NULL;
     }
@@ -561,6 +561,10 @@ static size_t authoring_find_free_edge_slot(const henka_authoring_mesh* mesh)
 {
     size_t index;
     if (mesh == NULL) return SIZE_MAX;
+    for (index = 0U; index < mesh->desc.max_edges; ++index)
+    {
+        if (mesh->edges[index].id == 0U && !mesh->edges[index].active) return index;
+    }
     for (index = 0U; index < mesh->desc.max_edges; ++index)
     {
         if (!mesh->edges[index].active) return index;
@@ -1191,6 +1195,7 @@ henka_result henka_authoring_mesh_add_face(henka_authoring_mesh* mesh, const hen
         goto rollback;
     }
     ++mesh->active_faces;
+    mesh->edge_lookup_ready = false;
     *out_id = face->id;
     return HENKA_SUCCESS;
 

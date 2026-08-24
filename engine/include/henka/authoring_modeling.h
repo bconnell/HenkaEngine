@@ -192,6 +192,18 @@ henka_result henka_authoring_mesh_bevel_edge(
     float width,
     henka_authoring_modeling_report* out_report);
 
+/* Bevels a bounded selection of pairwise vertex-disjoint boundary edges on
+ * distinct faces in one transaction. Each selected edge must belong to one
+ * face and both of its endpoints must belong to that face only. Shared faces
+ * or endpoints, interior edges, invalid widths, and capacity failures are
+ * rejected without changing the source mesh. */
+henka_result henka_authoring_mesh_bevel_edges(
+    henka_authoring_mesh* mesh,
+    const henka_authoring_edge_id* edge_ids,
+    size_t edge_count,
+    float width,
+    henka_authoring_modeling_report* out_report);
+
 /* Slides one connected, compatible quad edge loop toward either adjacent side.
  * The selected edges may form an open chain or a closed cycle of two-sided
  * quads with matching material, smoothing, and UV continuity. factor is
