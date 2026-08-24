@@ -5,6 +5,8 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
+. (Join-Path $PSScriptRoot "henka_script_common.ps1")
+
 if ([string]::IsNullOrWhiteSpace($RepositoryRoot)) {
     $RepositoryRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 } else {
@@ -22,8 +24,16 @@ $probeText = -join @(
 
 try {
     [System.IO.File]::WriteAllText($probePath, $probeText)
-    & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $hygieneScript
-    if ($LASTEXITCODE -eq 0) {
+    $exitCode = Invoke-HenkaExpectedFailure `
+        -FilePath "powershell.exe" `
+        -Arguments @(
+            "-NoProfile",
+            "-ExecutionPolicy", "Bypass",
+            "-File", $hygieneScript) `
+        -WorkingDirectory $RepositoryRoot `
+        -Label "Run public repository hygiene regression" `
+        -TimeoutMilliseconds 120000
+    if ($exitCode -eq 0) {
         throw "The public hygiene gate accepted private execution-agent terminology."
     }
     Write-Host "[pass] Public hygiene regression rejected the execution-agent probe."

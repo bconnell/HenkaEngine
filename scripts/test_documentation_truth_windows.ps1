@@ -5,6 +5,8 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
+. (Join-Path $PSScriptRoot "henka_script_common.ps1")
+
 if ([string]::IsNullOrWhiteSpace($RepositoryRoot)) {
     $RepositoryRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 } else {
@@ -27,10 +29,15 @@ $copyTargets = @(
 
 function Invoke-TruthCheck {
     $checker = Join-Path $probeRoot "scripts\check_documentation_truth.ps1"
-    $output = & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $checker 2>&1
-    $exitCode = $LASTEXITCODE
-    $output | ForEach-Object { Write-Host $_ }
-    return [int]$exitCode
+    return Invoke-HenkaExpectedFailure `
+        -FilePath "powershell.exe" `
+        -Arguments @(
+            "-NoProfile",
+            "-ExecutionPolicy", "Bypass",
+            "-File", $checker) `
+        -WorkingDirectory $probeRoot `
+        -Label "Run documentation truth check" `
+        -TimeoutMilliseconds 120000
 }
 
 try {

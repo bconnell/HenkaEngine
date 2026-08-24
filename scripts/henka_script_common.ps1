@@ -602,3 +602,64 @@ function Invoke-HenkaNativeCapture {
         Remove-Item -LiteralPath $captureRoot -Recurse -Force -ErrorAction SilentlyContinue
     }
 }
+
+function Invoke-HenkaExpectedFailure {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$FilePath,
+
+        [string[]]$Arguments = @(),
+
+        [Parameter(Mandatory = $true)]
+        [string]$WorkingDirectory,
+
+        [Parameter(Mandatory = $true)]
+        [string]$Label,
+
+        [int]$TimeoutMilliseconds = 120000
+    )
+
+    if ($TimeoutMilliseconds -le 0) {
+        throw "Expected-failure process timeout must be positive."
+    }
+
+    $captureRoot = Join-Path ([System.IO.Path]::GetTempPath()) ("henka-expected-failure-" + [Guid]::NewGuid().ToString("N"))
+    [System.IO.Directory]::CreateDirectory($captureRoot) | Out-Null
+    $stdoutPath = Join-Path $captureRoot "stdout.log"
+    $stderrPath = Join-Path $captureRoot "stderr.log"
+    $capturedProcess = $null
+
+    try {
+        Write-Host ""
+        Write-Host "==> $Label"
+        Write-Host "    $FilePath $($Arguments -join ' ')"
+
+        $capturedProcess = Start-HenkaCapturedProcess `
+            -FilePath $FilePath `
+            -Arguments $Arguments `
+            -WorkingDirectory $WorkingDirectory `
+            -StdoutPath $stdoutPath `
+            -StderrPath $stderrPath `
+            -CreateNoWindow
+
+        if (-not $capturedProcess.WaitForExit($TimeoutMilliseconds)) {
+            Stop-HenkaProcessTree -ProcessId $capturedProcess.Process.Id
+            throw "$Label exceeded timeout ${TimeoutMilliseconds}ms and its process tree was terminated."
+        }
+
+        $stdout = Read-HenkaSharedText -Path $stdoutPath
+        $stderr = Read-HenkaSharedText -Path $stderrPath
+        if (-not [string]::IsNullOrWhiteSpace($stdout)) {
+            Write-Host $stdout.TrimEnd()
+        }
+        if (-not [string]::IsNullOrWhiteSpace($stderr)) {
+            Write-Host $stderr.TrimEnd()
+        }
+
+        return [int]$capturedProcess.Process.ExitCode
+    }
+    finally {
+        Close-HenkaCapturedProcess -CapturedProcess $capturedProcess
+        Remove-Item -LiteralPath $captureRoot -Recurse -Force -ErrorAction SilentlyContinue
+    }
+}
