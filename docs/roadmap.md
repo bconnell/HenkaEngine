@@ -230,8 +230,10 @@ tracks that share renderer, asset, persistence, and workspace boundaries.
 ### Future Work
 
 1. Multi-face vertex-fan extrusion, broader edge and vertex topology
-   operations, weld/split/bridge workflows, closed-ring and general loop-cut
-   networks, and broader source export.
+   operations, weld/split/bridge workflows, general loop-cut networks, and
+   broader source export. Closed-ring Loop Cut is available in the bounded
+   fixed-factor workflow; broader loop-cut network authoring remains future
+   work.
 2. Automatic multi-island UV unwrap, texture painting, rigging, skinning, and
    animation authoring.
 3. Complete scene/project serialization and wider adapter-based interchange
