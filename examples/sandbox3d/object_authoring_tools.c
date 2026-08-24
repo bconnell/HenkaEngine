@@ -218,6 +218,7 @@ static henka_result sandbox3d_authoring_evaluate_render(
     size_t index;
     henka_vec3 minimum = {0.0f, 0.0f, 0.0f};
     henka_vec3 maximum = {0.0f, 0.0f, 0.0f};
+    henka_authoring_mesh_counts counts;
     henka_result result;
 
     if (object == NULL || source == NULL || out_render_mesh == NULL || out_bounds == NULL)
@@ -229,6 +230,30 @@ static henka_result sandbox3d_authoring_evaluate_render(
     if (!henka_authoring_mesh_validate(source))
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    counts = henka_authoring_mesh_get_counts(source);
+    if (counts.faces == 0U)
+    {
+        henka_vec3 center;
+        henka_vec3 extents;
+
+        result = henka_mesh_create_from_authoring_mesh(
+            object->engine, source, out_render_mesh);
+        if (result != HENKA_SUCCESS)
+        {
+            return result;
+        }
+        result = henka_authoring_mesh_get_bounds(source, &center, &extents);
+        if (result != HENKA_SUCCESS)
+        {
+            henka_mesh_destroy(*out_render_mesh);
+            *out_render_mesh = NULL;
+            return result;
+        }
+        out_bounds->center = center;
+        out_bounds->extents = extents;
+        return HENKA_SUCCESS;
     }
 
     for (face_id = 1U; face_id <= HENKA_AUTHORING_MESH_HARD_MAX_FACES; ++face_id)

@@ -564,6 +564,75 @@ static void henka_test_sandbox3d_modeling_operator_loose_extrude(void)
     henka_engine_destroy(engine);
 }
 
+static void henka_test_sandbox3d_loose_renderer_bridge(void)
+{
+    henka_engine_config config = {0};
+    henka_engine* engine = NULL;
+    henka_scene* scene = NULL;
+    henka_authoring_mesh* source = NULL;
+    sandbox3d_authoring_object* object = NULL;
+    henka_authoring_vertex_id first = HENKA_AUTHORING_INVALID_ID;
+    henka_authoring_vertex_id second = HENKA_AUTHORING_INVALID_ID;
+    henka_authoring_edge_id edge = HENKA_AUTHORING_INVALID_ID;
+    henka_entity edge_entity;
+    henka_entity point_entity;
+    henka_mesh* render_mesh = NULL;
+    henka_bounds bounds;
+
+    config.application_name = "Henka Sandbox Loose Renderer Bridge Test";
+    config.window_width = 320;
+    config.window_height = 240;
+    config.enable_vsync = false;
+    HENKA_TEST_ASSERT(henka_engine_create(&config, &engine) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_scene_create(&scene) == HENKA_SUCCESS);
+
+    edge_entity = henka_scene_create_entity_named(scene, "Wire Source");
+    HENKA_TEST_ASSERT(edge_entity != HENKA_INVALID_ENTITY);
+    HENKA_TEST_ASSERT(henka_authoring_mesh_create(
+        &(henka_authoring_mesh_desc){8U, 8U, 4U, 4U}, &source) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_authoring_mesh_add_vertex(
+        source, (henka_vec3){-1.0f, 0.0f, 0.0f}, (henka_vec2){0.0f, 0.0f}, 0U,
+        &first) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_authoring_mesh_add_vertex(
+        source, (henka_vec3){2.0f, 0.0f, 0.0f}, (henka_vec2){1.0f, 0.0f}, 0U,
+        &second) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_authoring_mesh_add_edge(
+        source, first, second, false, &edge) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_create_from_mesh(
+        engine, scene, edge_entity, source, 8U, &object) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_scene_get_entity_mesh(scene, edge_entity, &render_mesh) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(render_mesh != NULL);
+    HENKA_TEST_ASSERT(henka_scene_get_entity_local_bounds(scene, edge_entity, &bounds) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(bounds.center.x, 0.5f, 0.0001f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(bounds.extents.x, 1.5f, 0.0001f);
+    sandbox3d_authoring_object_destroy(object);
+    object = NULL;
+    henka_authoring_mesh_destroy(source);
+    source = NULL;
+
+    point_entity = henka_scene_create_entity_named(scene, "Point Source");
+    HENKA_TEST_ASSERT(point_entity != HENKA_INVALID_ENTITY);
+    HENKA_TEST_ASSERT(henka_authoring_mesh_create(
+        &(henka_authoring_mesh_desc){4U, 4U, 1U, 3U}, &source) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_authoring_mesh_add_vertex(
+        source, (henka_vec3){3.0f, 4.0f, 5.0f}, (henka_vec2){0.0f, 0.0f}, 0U,
+        &first) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_create_from_mesh(
+        engine, scene, point_entity, source, 8U, &object) == HENKA_SUCCESS);
+    render_mesh = NULL;
+    HENKA_TEST_ASSERT(henka_scene_get_entity_mesh(scene, point_entity, &render_mesh) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(render_mesh != NULL);
+    HENKA_TEST_ASSERT(henka_scene_get_entity_local_bounds(scene, point_entity, &bounds) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(bounds.center.x, 3.0f, 0.0001f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(bounds.center.y, 4.0f, 0.0001f);
+    HENKA_TEST_ASSERT_FLOAT_CLOSE(bounds.center.z, 5.0f, 0.0001f);
+
+    sandbox3d_authoring_object_destroy(object);
+    henka_authoring_mesh_destroy(source);
+    henka_scene_destroy(scene);
+    henka_engine_destroy(engine);
+}
+
 static void henka_test_sandbox3d_object_authoring_duplicate(void)
 {
     henka_scene* scene;
@@ -2957,6 +3026,7 @@ void henka_test_sandbox3d_object_authoring(void)
     henka_test_sandbox3d_object_authoring_scene_policy();
     henka_test_sandbox3d_modeling_operator_session();
     henka_test_sandbox3d_modeling_operator_loose_extrude();
+    henka_test_sandbox3d_loose_renderer_bridge();
     henka_test_sandbox3d_object_authoring_quad_recovery_workflow();
     henka_test_sandbox3d_object_authoring_duplicate();
     henka_test_sandbox3d_object_authoring_source_persistence();
