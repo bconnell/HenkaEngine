@@ -36,7 +36,7 @@ winding rewrites fail closed.
 
 `<henka/authoring_modeling.h>` adds bounded plane and box constructors plus
 transactional duplicate, extrude, inset, planar bevel-ring, face subdivide,
-and bounded standalone boundary-edge bevel operations. Each operation works on a clone and publishes only a
+and bounded edge bevel operations. Each operation works on a clone and publishes only a
 validated result, so capacity or non-manifold rejection leaves the source
 mesh unchanged.
 
@@ -152,10 +152,12 @@ face ID and allocating the new face with a fresh logical ID in a reusable
 physical slot. Transactional single-edge dissolve is available for compatible
 interior edges, and transactional single-edge delete removes the selected
 edge's incident face set while preserving vertices. Bounded edge bevel is also
-available for one boundary edge whose endpoints belong to one face only; it
-  creates two interpolated cut vertices and one quad bevel face transactionally.
-  Interior edges, ambiguous boundary vertices, and broader batch edge topology
-  editing remain incomplete. A bounded single-quad face loop cut is also
+available for one boundary edge whose endpoints belong to one face only, or for
+one compatible interior edge in an isolated two-quad patch. Both forms create
+interpolated cut vertices and one quad bevel face transactionally. Interior
+bevel rejects hard edges, material/smooth/UV discontinuities, non-quad faces,
+neighboring shared boundaries, and ambiguous endpoint fans. Broader batch edge
+topology editing remains incomplete. A bounded single-quad face loop cut is also
   available: it interpolates two opposite boundary edges, creates two quad
   faces, and rejects shared-boundary faces so it cannot leave a T-junction in
   neighboring topology. Full multi-face loop-cut networks remain unfinished.

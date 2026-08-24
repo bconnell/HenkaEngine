@@ -211,10 +211,11 @@ tracks that share renderer, asset, persistence, and workspace boundaries.
 
 1. Continue expanding edge topology coverage and the surrounding authoring UX.
    Bounded single-edge dissolve for compatible interior edges, bounded
-   single-edge delete of an incident face set, and standalone boundary-edge
-   bevel are now available; a bounded single-quad face loop cut is also
-   available, while interior-edge bevel, batch edge operations, and broader
-   edge topology operations are not yet claimed as complete.
+   single-edge delete of an incident face set, standalone boundary-edge bevel,
+   and compatible interior-edge bevel for an isolated two-quad patch are now
+   available; a bounded single-quad face loop cut is also available. Broader
+   interior-edge cases, batch edge operations, and general edge-topology
+   networks remain in progress.
 2. Strengthen transactional modeling, UV, material, persistence, and undo/redo
    paths while keeping failure behavior fail-closed.
 3. Improve editor integration, authoring source/project workflows, and the

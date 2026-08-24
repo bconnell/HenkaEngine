@@ -1869,6 +1869,85 @@ static void henka_test_sandbox3d_object_authoring_loop_cut(void)
     henka_engine_destroy(engine);
 }
 
+static void henka_test_sandbox3d_object_authoring_interior_edge_bevel(void)
+{
+    henka_engine_config config = {0};
+    henka_engine* engine = NULL;
+    henka_scene* scene = NULL;
+    henka_authoring_mesh* source = NULL;
+    sandbox3d_authoring_object* object = NULL;
+    const henka_authoring_mesh_desc desc = {32U, 64U, 16U, 8U};
+    const henka_vec3 positions[6] = {
+        {-1.0f, 0.0f, 0.0f}, {0.0f, 0.0f, 0.0f}, {0.0f, 1.0f, 0.0f},
+        {-1.0f, 1.0f, 0.0f}, {1.0f, 0.0f, 0.0f}, {1.0f, 1.0f, 0.0f}};
+    const henka_authoring_vertex_id first_face[] = {1U, 2U, 3U, 4U};
+    const henka_authoring_vertex_id second_face[] = {2U, 5U, 6U, 3U};
+    henka_authoring_mesh_counts counts;
+    henka_authoring_edge_id shared_edge = HENKA_AUTHORING_INVALID_ID;
+    henka_authoring_edge_id edge_id;
+    henka_entity entity;
+    size_t index;
+
+    config.application_name = "Henka Interior Edge Bevel Test";
+    config.window_width = 320;
+    config.window_height = 240;
+    config.enable_vsync = false;
+    HENKA_TEST_ASSERT(henka_engine_create(&config, &engine) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_scene_create(&scene) == HENKA_SUCCESS);
+    entity = henka_scene_create_entity_named(scene, "Interior Edge Bevel Patch");
+    HENKA_TEST_ASSERT(entity != HENKA_INVALID_ENTITY);
+    HENKA_TEST_ASSERT(henka_authoring_mesh_create(&desc, &source) == HENKA_SUCCESS);
+    for (index = 0U; index < 6U; ++index)
+    {
+        HENKA_TEST_ASSERT(henka_authoring_mesh_add_vertex(
+            source, positions[index], (henka_vec2){0.0f, 0.0f}, 0U,
+            &(henka_authoring_vertex_id){0U}) == HENKA_SUCCESS);
+    }
+    HENKA_TEST_ASSERT(henka_authoring_mesh_add_face(
+        source, first_face, 4U, 0U, true, &(henka_authoring_face_id){0U}) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_authoring_mesh_add_face(
+        source, second_face, 4U, 0U, true, &(henka_authoring_face_id){0U}) == HENKA_SUCCESS);
+    for (index = 0U; index < henka_authoring_mesh_get_desc(source).max_edges; ++index)
+    {
+        if (henka_authoring_mesh_get_edge_id_at(source, index, &edge_id) != HENKA_SUCCESS)
+        {
+            continue;
+        }
+        {
+            const henka_authoring_edge* edge = henka_authoring_mesh_get_edge(source, edge_id);
+            if (edge != NULL && edge->face_count == 2U &&
+                ((edge->vertices[0] == 2U && edge->vertices[1] == 3U) ||
+                 (edge->vertices[0] == 3U && edge->vertices[1] == 2U)))
+            {
+                shared_edge = edge_id;
+                break;
+            }
+        }
+    }
+    HENKA_TEST_ASSERT(shared_edge != HENKA_AUTHORING_INVALID_ID);
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_create_from_mesh(
+        engine, scene, entity, source, 8U, &object) == HENKA_SUCCESS);
+    sandbox3d_authoring_object_set_selection_mode(object, SANDBOX3D_AUTHORING_SELECTION_EDGE);
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_select_component(
+        object, shared_edge, false) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_set_bevel_width(object, 0.2f) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_bevel_selected_edge(object) == HENKA_SUCCESS);
+    counts = henka_authoring_mesh_get_counts(sandbox3d_authoring_object_get_mesh(object));
+    HENKA_TEST_ASSERT(counts.vertices == 8U && counts.edges == 10U && counts.faces == 3U);
+    HENKA_TEST_ASSERT(henka_authoring_mesh_validate(sandbox3d_authoring_object_get_mesh(object)));
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_undo(object) == HENKA_SUCCESS);
+    counts = henka_authoring_mesh_get_counts(sandbox3d_authoring_object_get_mesh(object));
+    HENKA_TEST_ASSERT(counts.vertices == 6U && counts.edges == 7U && counts.faces == 2U);
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_redo(object) == HENKA_SUCCESS);
+    counts = henka_authoring_mesh_get_counts(sandbox3d_authoring_object_get_mesh(object));
+    HENKA_TEST_ASSERT(counts.vertices == 8U && counts.edges == 10U && counts.faces == 3U);
+
+    sandbox3d_authoring_object_destroy(object);
+    henka_authoring_mesh_destroy(source);
+    henka_scene_destroy(scene);
+    henka_engine_destroy(engine);
+}
+
 static void henka_test_sandbox3d_object_authoring_vertex_extrude(void)
 {
     henka_engine_config config = {0};
@@ -2270,6 +2349,7 @@ void henka_test_sandbox3d_object_authoring(void)
     henka_test_sandbox3d_object_authoring_edge_delete();
     henka_test_sandbox3d_object_authoring_edge_bevel();
     henka_test_sandbox3d_object_authoring_loop_cut();
+    henka_test_sandbox3d_object_authoring_interior_edge_bevel();
     henka_test_sandbox3d_object_authoring_vertex_extrude();
     henka_test_sandbox3d_object_authoring_scalable_selection();
     henka_test_sandbox3d_object_authoring_connected_scalable_selection();

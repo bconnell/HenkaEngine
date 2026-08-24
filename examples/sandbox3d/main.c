@@ -24817,14 +24817,14 @@ details_group_authoring:
                         sandbox3d_set_status(
                             state,
                             false,
-                            "Boundary edge beveled transactionally.");
+                            "Compatible edge beveled transactionally.");
                     }
                     else
                     {
                         sandbox3d_set_status(
                             state,
                             true,
-                            "Edge bevel rejected; select one standalone boundary edge.");
+                            "Edge bevel rejected; select a compatible boundary or two-quad interior edge.");
                     }
                 }
             }
@@ -26131,14 +26131,14 @@ details_group_authoring:
                     sandbox3d_set_status(
                         state,
                         false,
-                        "Boundary edge beveled transactionally.");
+                        "Compatible edge beveled transactionally.");
                 }
                 else
                 {
                     sandbox3d_set_status(
                         state,
                         true,
-                        "Edge bevel rejected; select one standalone boundary edge.");
+                        "Edge bevel rejected; select a compatible boundary or two-quad interior edge.");
                 }
             }
             if (state->authoring_object != NULL &&

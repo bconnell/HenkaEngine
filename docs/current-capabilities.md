@@ -179,10 +179,12 @@ turning the public README into an implementation ledger.
   in progress.
 - Edge authoring is a separate capability boundary: bounded edge-loop/ring
   selection, transactional single-edge dissolve for compatible interior edges,
-  single-edge delete of its incident face set, and bounded standalone
-  boundary-edge bevel are available. Edge Delete preserves the vertex set;
-  interior-edge bevel, batch edge operations, and broader edge topology
-  operations are not claimed as complete and remain in progress.
+  single-edge delete of its incident face set, bounded standalone boundary-edge
+  bevel, and bounded compatible interior-edge bevel for an isolated two-quad
+  patch are available. Edge Delete preserves the vertex set. Interior bevel
+  rejects hard edges, material/smooth/UV discontinuities, non-quad faces,
+  neighboring shared boundaries, and ambiguous endpoint fans; batch edge
+  operations and broader edge topology operations remain in progress.
 - A bounded single-quad face loop cut is available through the Face workflow.
   It interpolates two opposite boundary edges, creates two quad faces, and
   rejects non-quad or shared-boundary faces to avoid T-junctions. Full
