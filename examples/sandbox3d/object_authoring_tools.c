@@ -39,6 +39,7 @@ struct sandbox3d_authoring_object
     henka_bounds preview_previous_bounds;
     bool preview_had_collider;
     henka_physics_collider_desc preview_previous_collider;
+    henka_authoring_face_id preview_selected_face;
     henka_physics_world* physics_world;
     henka_physics_body_id physics_body;
     henka_authoring_face_id selected_face;
@@ -1474,6 +1475,7 @@ static henka_result sandbox3d_authoring_cancel_preview_internal(
     object->preview_previous_bounds = (henka_bounds){{0.0f, 0.0f, 0.0f}, {0.0f, 0.0f, 0.0f}};
     object->preview_had_collider = false;
     object->preview_previous_collider = (henka_physics_collider_desc){0};
+    object->preview_selected_face = HENKA_AUTHORING_INVALID_ID;
     return HENKA_SUCCESS;
 }
 
@@ -1734,6 +1736,7 @@ static henka_result sandbox3d_authoring_object_create_from_owned_mesh(
      * are opt-in after the user picks a vertex, edge, or face; seeding face 1
      * here hid the real logical-object silhouette immediately after import. */
     object->selected_face = HENKA_AUTHORING_INVALID_ID;
+    object->preview_selected_face = HENKA_AUTHORING_INVALID_ID;
     object->merge_distance = 0.001f;
     object->bevel_width = 0.05f;
     object->selection_mode = SANDBOX3D_AUTHORING_SELECTION_FACE;
@@ -2209,6 +2212,7 @@ henka_result sandbox3d_authoring_object_preview_candidate(
     object->preview_had_bounds = had_bounds;
     object->preview_had_collider = had_collider;
     object->preview_previous_collider = previous_collider;
+    object->preview_selected_face = HENKA_AUTHORING_INVALID_ID;
     return HENKA_SUCCESS;
 }
 
@@ -2239,6 +2243,11 @@ henka_result sandbox3d_authoring_object_commit_preview(
     object->preview_render_mesh = NULL;
     object->preview_had_bounds = false;
     object->preview_had_collider = false;
+    if (object->preview_selected_face != HENKA_AUTHORING_INVALID_ID)
+    {
+        object->selected_face = object->preview_selected_face;
+    }
+    object->preview_selected_face = HENKA_AUTHORING_INVALID_ID;
     sandbox3d_authoring_repair_selection(object);
     sandbox3d_authoring_remove_invalid_component_selection(object);
     henka_authoring_mesh_destroy(previous_mesh);
@@ -5914,9 +5923,11 @@ henka_result sandbox3d_authoring_object_bevel_selected_face(
     return result;
 }
 
-henka_result sandbox3d_authoring_object_loop_cut_selected_face_at_factor(
+static henka_result sandbox3d_authoring_build_loop_cut_candidate(
     sandbox3d_authoring_object* object,
-    float factor)
+    float factor,
+    henka_authoring_mesh** out_candidate,
+    henka_authoring_face_id* out_new_face_id)
 {
     henka_authoring_mesh* candidate = NULL;
     const henka_authoring_face* face;
@@ -5928,15 +5939,23 @@ henka_result sandbox3d_authoring_object_loop_cut_selected_face_at_factor(
     bool best_strip_closed = false;
     size_t corner;
     henka_result result;
-    if (object == NULL ||
+    if (out_candidate != NULL)
+    {
+        *out_candidate = NULL;
+    }
+    if (out_new_face_id != NULL)
+    {
+        *out_new_face_id = HENKA_AUTHORING_INVALID_ID;
+    }
+    if (object == NULL || out_candidate == NULL || out_new_face_id == NULL ||
         !isfinite(factor) || factor <= 0.0f || factor >= 1.0f ||
         object->selection_mode != SANDBOX3D_AUTHORING_SELECTION_FACE ||
-        object->selected_face == HENKA_AUTHORING_INVALID_ID)
+        object->selected_face == HENKA_AUTHORING_INVALID_ID || object->mesh == NULL)
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
     face = henka_authoring_mesh_get_face(object->mesh, object->selected_face);
-    if (face == NULL || face->corner_count != 4U)
+    if (face == NULL || face->edges == NULL || face->corner_count != 4U)
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
@@ -5976,6 +5995,49 @@ henka_result sandbox3d_authoring_object_loop_cut_selected_face_at_factor(
     }
     if (result == HENKA_SUCCESS)
     {
+        *out_candidate = candidate;
+        *out_new_face_id = new_face_id;
+    }
+    else
+    {
+        henka_authoring_mesh_destroy(candidate);
+    }
+    return result;
+}
+
+henka_result sandbox3d_authoring_object_preview_loop_cut_selected_face_at_factor(
+    sandbox3d_authoring_object* object,
+    float factor)
+{
+    henka_authoring_mesh* candidate = NULL;
+    henka_authoring_face_id new_face_id = HENKA_AUTHORING_INVALID_ID;
+    henka_result result = sandbox3d_authoring_build_loop_cut_candidate(
+        object, factor, &candidate, &new_face_id);
+    if (result == HENKA_SUCCESS)
+    {
+        result = sandbox3d_authoring_object_preview_candidate(object, candidate);
+        if (result == HENKA_SUCCESS)
+        {
+            object->preview_selected_face = new_face_id;
+        }
+        else
+        {
+            henka_authoring_mesh_destroy(candidate);
+        }
+    }
+    return result;
+}
+
+henka_result sandbox3d_authoring_object_loop_cut_selected_face_at_factor(
+    sandbox3d_authoring_object* object,
+    float factor)
+{
+    henka_authoring_mesh* candidate = NULL;
+    henka_authoring_face_id new_face_id = HENKA_AUTHORING_INVALID_ID;
+    henka_result result = sandbox3d_authoring_build_loop_cut_candidate(
+        object, factor, &candidate, &new_face_id);
+    if (result == HENKA_SUCCESS)
+    {
         result = sandbox3d_authoring_publish_candidate(
             object, candidate, true, new_face_id);
         if (result == HENKA_SUCCESS)
@@ -5986,10 +6048,6 @@ henka_result sandbox3d_authoring_object_loop_cut_selected_face_at_factor(
         {
             henka_authoring_mesh_destroy(candidate);
         }
-    }
-    else
-    {
-        henka_authoring_mesh_destroy(candidate);
     }
     return result;
 }

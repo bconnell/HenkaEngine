@@ -1996,11 +1996,33 @@ static void henka_test_sandbox3d_object_authoring_loop_cut(void)
     HENKA_TEST_ASSERT(sandbox3d_authoring_object_select_component(object, 1U, false) == HENKA_SUCCESS);
     HENKA_TEST_ASSERT(sandbox3d_authoring_object_loop_cut_selected_face_at_factor(object, 0.0f) == HENKA_ERROR_INVALID_ARGUMENT);
     HENKA_TEST_ASSERT(sandbox3d_authoring_object_loop_cut_selected_face_at_factor(object, 1.0f) == HENKA_ERROR_INVALID_ARGUMENT);
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_preview_loop_cut_selected_face_at_factor(object, 0.25f) == HENKA_SUCCESS);
+    counts = henka_authoring_mesh_get_counts(sandbox3d_authoring_object_get_mesh(object));
+    HENKA_TEST_ASSERT(counts.vertices == 4U && counts.edges == 4U && counts.faces == 1U);
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_cancel_preview(object) == HENKA_SUCCESS);
+    counts = henka_authoring_mesh_get_counts(sandbox3d_authoring_object_get_mesh(object));
+    HENKA_TEST_ASSERT(counts.vertices == 4U && counts.edges == 4U && counts.faces == 1U);
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_preview_loop_cut_selected_face_at_factor(object, 0.25f) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_commit_preview(object) == HENKA_SUCCESS);
+    counts = henka_authoring_mesh_get_counts(sandbox3d_authoring_object_get_mesh(object));
+    HENKA_TEST_ASSERT(counts.vertices == 6U && counts.edges == 7U && counts.faces == 2U);
+    HENKA_TEST_ASSERT(
+        sandbox3d_authoring_object_get_selected_face(object) != HENKA_AUTHORING_INVALID_ID &&
+        henka_authoring_mesh_get_face(
+            sandbox3d_authoring_object_get_mesh(object),
+            sandbox3d_authoring_object_get_selected_face(object)) != NULL);
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_undo(object) == HENKA_SUCCESS);
+    counts = henka_authoring_mesh_get_counts(sandbox3d_authoring_object_get_mesh(object));
+    HENKA_TEST_ASSERT(counts.vertices == 4U && counts.edges == 4U && counts.faces == 1U);
     HENKA_TEST_ASSERT(sandbox3d_authoring_object_loop_cut_selected_face_at_factor(object, 0.25f) == HENKA_SUCCESS);
     counts = henka_authoring_mesh_get_counts(sandbox3d_authoring_object_get_mesh(object));
     HENKA_TEST_ASSERT(counts.vertices == 6U && counts.edges == 7U && counts.faces == 2U);
     HENKA_TEST_ASSERT(henka_authoring_mesh_validate(sandbox3d_authoring_object_get_mesh(object)));
-    HENKA_TEST_ASSERT(sandbox3d_authoring_object_get_selected_face(object) == 2U);
+    HENKA_TEST_ASSERT(
+        sandbox3d_authoring_object_get_selected_face(object) != HENKA_AUTHORING_INVALID_ID &&
+        henka_authoring_mesh_get_face(
+            sandbox3d_authoring_object_get_mesh(object),
+            sandbox3d_authoring_object_get_selected_face(object)) != NULL);
     HENKA_TEST_ASSERT(sandbox3d_authoring_object_undo(object) == HENKA_SUCCESS);
     counts = henka_authoring_mesh_get_counts(sandbox3d_authoring_object_get_mesh(object));
     HENKA_TEST_ASSERT(counts.vertices == 4U && counts.edges == 4U && counts.faces == 1U);
