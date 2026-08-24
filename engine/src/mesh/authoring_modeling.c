@@ -2624,24 +2624,6 @@ henka_result henka_authoring_mesh_bevel_edge(
     float width,
     henka_authoring_modeling_report* out_report)
 {
-    const henka_authoring_edge* edge;
-
-    modeling_report_reset(out_report);
-    if (mesh == NULL || !isfinite(width) || width <= 0.0f ||
-        !henka_authoring_mesh_validate(mesh))
-    {
-        return HENKA_ERROR_INVALID_ARGUMENT;
-    }
-    edge = henka_authoring_mesh_get_edge(mesh, edge_id);
-    if (edge != NULL && edge->face_count == 2U)
-    {
-        return modeling_bevel_interior_edge(mesh, edge_id, width, out_report);
-    }
-    if (edge == NULL || edge->face_count != 1U ||
-        edge->vertices[0] == edge->vertices[1])
-    {
-        return HENKA_ERROR_INVALID_ARGUMENT;
-    }
     return henka_authoring_mesh_bevel_edges(mesh, &edge_id, 1U, width, out_report);
 }
 
@@ -2838,6 +2820,16 @@ henka_result henka_authoring_mesh_bevel_edges(
         !henka_authoring_mesh_validate(mesh))
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    if (edge_count == 1U)
+    {
+        const henka_authoring_edge* edge = henka_authoring_mesh_get_edge(
+            mesh, edge_ids[0]);
+        if (edge != NULL && edge->face_count == 2U)
+        {
+            return modeling_bevel_interior_edge(
+                mesh, edge_ids[0], width, out_report);
+        }
     }
     desc = henka_authoring_mesh_get_desc(mesh);
     if (edge_count > desc.max_edges ||

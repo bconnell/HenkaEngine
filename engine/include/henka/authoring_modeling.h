@@ -182,21 +182,20 @@ henka_result henka_authoring_mesh_delete_edge(
     henka_authoring_edge_id edge_id,
     henka_authoring_modeling_report* out_report);
 
-/* Bevels one boundary edge whose endpoints belong to one face only. The
- * operation creates two cut vertices and one bevel face, preserves the source
- * face identity, and rejects interior or ambiguous boundary requests without
- * changing the source mesh. */
+/* Compatibility wrapper for the selected-edge bevel operation. It supports
+ * one compatible boundary edge, or one isolated two-quad interior edge. */
 henka_result henka_authoring_mesh_bevel_edge(
     henka_authoring_mesh* mesh,
     henka_authoring_edge_id edge_id,
     float width,
     henka_authoring_modeling_report* out_report);
 
-/* Bevels a bounded selection of pairwise vertex-disjoint boundary edges on
- * distinct faces in one transaction. Each selected edge must belong to one
- * face and both of its endpoints must belong to that face only. Shared faces
- * or endpoints, interior edges, invalid widths, and capacity failures are
- * rejected without changing the source mesh. */
+/* Bevels a bounded selected edge set in one transaction. One compatible
+ * interior edge in an isolated two-quad patch is supported, as are pairwise
+ * vertex-disjoint boundary edges on distinct faces. Boundary selections must
+ * have one face and one incident face per endpoint. Shared faces or endpoints,
+ * multiple interior edges, mixed interior/boundary selections, invalid widths,
+ * and capacity failures are rejected without changing the source mesh. */
 henka_result henka_authoring_mesh_bevel_edges(
     henka_authoring_mesh* mesh,
     const henka_authoring_edge_id* edge_ids,

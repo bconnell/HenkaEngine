@@ -154,21 +154,22 @@ interior edges, and transactional single-edge delete removes the selected
 edge's incident face set while preserving vertices. Bounded edge bevel is also
 available for one boundary edge whose endpoints belong to one face only, for a
 pairwise vertex-disjoint selection of boundary edges on distinct faces, or for
-one compatible interior edge in an isolated two-quad patch. These forms create
-interpolated cut vertices and quad bevel faces transactionally. Interior bevel
-rejects hard edges, material/smooth/UV discontinuities, non-quad faces,
-neighboring shared boundaries, and ambiguous endpoint fans. Boundary batch
-bevel rejects shared faces and endpoints; same-face batches and broader interior
-edge-set bevel remain incomplete. A bounded single-quad face loop cut is also
-  available: it interpolates two opposite boundary edges, creates two quad
-  faces, and rejects shared-boundary faces so it cannot leave a T-junction in
-  neighboring topology. The reusable topology layer also exposes a bounded
-  deterministic compatible quad-strip walk for modeling operators. It records
-  ordered face/entry/exit edges, terminates at boundaries or reports a closed
-  ring, and rejects hard, material, smoothing, UV, non-quad, non-manifold, and
-  ambiguous crossings without partial output. The same topology layer also
-  orders connected selected edge chains and cycles deterministically, so Edge
-  Slide does not maintain a separate graph traversal. The editor Loop Cut
+one compatible interior edge in an isolated two-quad patch. These forms share
+one selected-edge bevel contract and create interpolated cut vertices and quad
+bevel faces transactionally; the singular API remains a compatibility wrapper.
+Interior bevel rejects hard edges, material/smooth/UV discontinuities, non-quad
+faces, neighboring shared boundaries, and ambiguous endpoint fans. Boundary
+batch bevel rejects shared faces and endpoints; same-face batches, mixed
+selections, and broader interior edge-set bevel remain incomplete. A bounded
+single-quad face loop cut is also available: it interpolates two opposite
+boundary edges, creates two quad faces, and rejects shared-boundary faces so it
+cannot leave a T-junction in neighboring topology. The reusable topology layer
+also exposes a bounded deterministic compatible quad-strip walk for modeling
+operators. It records ordered face/entry/exit edges, terminates at boundaries or
+reports a closed ring, and rejects hard, material, smoothing, UV, non-quad,
+non-manifold, and ambiguous crossings without partial output. The same topology
+layer also orders connected selected edge chains and cycles deterministically, so
+Edge Slide does not maintain a separate graph traversal. The editor Loop Cut
   operator now
   applies one fixed factor cut across a compatible open strip or closed ring
   and publishes the whole operation transactionally. Edge mode also exposes a

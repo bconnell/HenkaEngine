@@ -1041,7 +1041,8 @@ static int test_interior_edge_bevel_operation(void)
         goto cleanup;
     }
     before = henka_authoring_mesh_get_counts(mesh);
-    if (henka_authoring_mesh_bevel_edge(mesh, shared_edge, 0.2f, &report) != HENKA_SUCCESS ||
+    if (henka_authoring_mesh_bevel_edges(
+            mesh, &shared_edge, 1U, 0.2f, &report) != HENKA_SUCCESS ||
         !report.changed || report.created_vertices != 2U || report.removed_vertices != 0U ||
         report.created_faces != 1U ||
         henka_authoring_mesh_get_counts(mesh).vertices != before.vertices + 2U ||
