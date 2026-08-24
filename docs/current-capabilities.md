@@ -207,8 +207,11 @@ turning the public README into an implementation ledger.
   Mixed surface-plus-loose sources continue to use the authored source overlay
   beside the face-backed render mesh, and no-face sources that mix wire edges
   with isolated vertices are rejected until multi-primitive ownership exists.
-  Dedicated loose-component creation/edit UI and general surface-connected
-  Vertex/Edge Extrude workflows remain unavailable.
+  Vertex-mode controls now add a loose vertex from finite X/Y/Z coordinates or
+  add a standalone edge from exactly two selected vertices through the same
+  transactional source/render/history boundary. Broader loose-component
+  editing and general surface-connected Vertex/Edge Extrude workflows remain
+  unavailable.
 - A bounded deterministic compatible quad-strip traversal foundation is
   available for modeling operators. It records ordered face/entry/exit edges,
   terminates at boundaries or reports a closed ring, and rejects hard, material,

@@ -398,6 +398,9 @@ typedef struct sandbox3d_state
     char native_authoring_loop_cut_factor[16];
     char native_authoring_edge_slide_factor[16];
     char native_authoring_extrude_amount[16];
+    char native_authoring_loose_vertex_x[16];
+    char native_authoring_loose_vertex_y[16];
+    char native_authoring_loose_vertex_z[16];
     sandbox3d_authoring_object* authoring_object;
     uint32_t native_authoring_hovered_component_id;
     /* A component pick is a selection within the already-selected scene
@@ -4055,6 +4058,29 @@ static bool sandbox3d_parse_edge_slide_factor(
     }
 
     *out_factor = factor;
+    return true;
+}
+
+static bool sandbox3d_parse_finite_float(
+    const char* text,
+    float* out_value)
+{
+    char* end = NULL;
+    float value;
+
+    if (text == NULL || out_value == NULL || text[0] == '\0')
+    {
+        return false;
+    }
+
+    errno = 0;
+    value = strtof(text, &end);
+    if (errno == ERANGE || end == NULL || *end != '\0' || !isfinite(value))
+    {
+        return false;
+    }
+
+    *out_value = value;
     return true;
 }
 
@@ -8932,7 +8958,7 @@ static void sandbox3d_print_help(const sandbox3d_state* state)
     printf("  Open Native Panel Test from the Tools QA page to validate a separate OS-level tool window.\n");
     printf("  Use the panels to inspect named scene objects, clear selection, switch gizmo modes, focus the camera, reset object transforms, toggle visibility, and open in-window Help, Scene Legend, Object Info, Assets, Paths, Settings, Diagnostics, Transform QA, and Physics QA utilities.\n");
     printf("  Select an imported glTF scene entity to edit its shared material instance in Object Details; scalar/vector, flags, alpha, and semantic texture overrides apply transactionally. Use Utility > Assets to choose manager-owned textures for editable slots.\n");
-     printf("  Select a Showcase Giraffe or Showcase Rocket primitive, open Object Details > Authoring, and choose Make Editable; the generic component Move, bounded loose Vertex/Edge Extrude, Edge-mode Select Edge Loop/Select Edge Ring/Edge Slide, and Face Bevel/Extrude/Extrude Selection/Subdivide controls are the user-facing modeling path. Loose Extrude uses a numeric Y-axis Preview/Apply/Cancel session for one selected loose vertex or standalone edge; surface-connected Vertex/Edge Extrude remains unfinished. Edge Slide accepts a bounded signed factor in (-1,1) through the shared operator preview, numeric entry, Apply, and Cancel workflow. The checked-in HAMS sources are persisted editor-owned derivatives of imported fixture geometry and are reported as HENKA_NATIVE_EDITED_FIXTURE; this does not prove recognizable user-designed Giraffe/Rocket geometry. Own Material promotes a manager-owned runtime definition for bounded base-color, metallic, roughness, emissive-strength, IOR, transmission, subsurface amount, thickness, and tint, plus in-engine procedural normal and metallic-roughness texture creation. Mesh/project save-reload and the native material sidecar preserve all supported PBR scalars, colors, flags, alpha mode, and seven material texture identities; source export, native multi-material binding, and a complete authored Giraffe/Rocket production workflow remain bounded work.\n");
+     printf("  Select a Showcase Giraffe or Showcase Rocket primitive, open Object Details > Authoring, and choose Make Editable; the generic component Move, bounded loose Vertex/Edge Extrude, finite-coordinate Add Loose Vertex, two-selected-vertex Add Edge, Edge-mode Select Edge Loop/Select Edge Ring/Edge Slide, and Face Bevel/Extrude/Extrude Selection/Subdivide controls are the user-facing modeling path. Loose Extrude uses a numeric Y-axis Preview/Apply/Cancel session for one selected loose vertex or standalone edge; surface-connected Vertex/Edge Extrude remains unfinished. Edge Slide accepts a bounded signed factor in (-1,1) through the shared operator preview, numeric entry, Apply, and Cancel workflow. The checked-in HAMS sources are persisted editor-owned derivatives of imported fixture geometry and are reported as HENKA_NATIVE_EDITED_FIXTURE; this does not prove recognizable user-designed Giraffe/Rocket geometry. Own Material promotes a manager-owned runtime definition for bounded base-color, metallic, roughness, emissive-strength, IOR, transmission, subsurface amount, thickness, and tint, plus in-engine procedural normal and metallic-roughness texture creation. Mesh/project save-reload and the native material sidecar preserve all supported PBR scalars, colors, flags, alpha mode, and seven material texture identities; source export, native multi-material binding, and a complete authored Giraffe/Rocket production workflow remain bounded work.\n");
     printf("  Physics QA enables an opt-in fixed-step rigid-body demo with collider/contact debug drawing, impulses, body modes, and camera raycasts.\n");
     printf("  The Tools panel uses Main, Camera/Status, and QA pages, and Scene Objects supports paging when the dock is tighter than the full list.\n");
     printf("  Tools provides Build, Game, and World work contexts plus saved/custom workspace layouts; topology edits mark the workspace Custom.\n");
@@ -25590,6 +25616,138 @@ details_group_authoring:
                         state->authoring_object, bevel_width * 2.0f);
                 }
             }
+            if (state->authoring_object != NULL &&
+                selection_mode == SANDBOX3D_AUTHORING_SELECTION_VERTEX &&
+                sandbox3d_details_flow_next_row(state, flow_desc.bounds, 24.0f, 1U, &row) &&
+                row.width >= 290.0f)
+            {
+                bool x_changed = false;
+                bool y_changed = false;
+                bool z_changed = false;
+                float x;
+                float y;
+                float z;
+                henka_authoring_vertex_id vertex_id = HENKA_AUTHORING_INVALID_ID;
+                henka_result add_result = HENKA_SUCCESS;
+
+                (void)henka_ui_label_colored(
+                    state->ui, row.x, row.y + 5.0f, 0.85f,
+                    "Add Loose Vertex", HENKA_UI_COLOR_INFO);
+                (void)henka_ui_text_field(
+                    state->ui,
+                    "authoring_loose_vertex_x_top",
+                    (henka_ui_rect){row.x + 104.0f, row.y, 46.0f, 24.0f},
+                    state->native_authoring_loose_vertex_x,
+                    sizeof(state->native_authoring_loose_vertex_x),
+                    &x_changed);
+                (void)henka_ui_text_field(
+                    state->ui,
+                    "authoring_loose_vertex_y_top",
+                    (henka_ui_rect){row.x + 154.0f, row.y, 46.0f, 24.0f},
+                    state->native_authoring_loose_vertex_y,
+                    sizeof(state->native_authoring_loose_vertex_y),
+                    &y_changed);
+                (void)henka_ui_text_field(
+                    state->ui,
+                    "authoring_loose_vertex_z_top",
+                    (henka_ui_rect){row.x + 204.0f, row.y, 46.0f, 24.0f},
+                    state->native_authoring_loose_vertex_z,
+                    sizeof(state->native_authoring_loose_vertex_z),
+                    &z_changed);
+                (void)x_changed;
+                (void)y_changed;
+                (void)z_changed;
+                if (henka_ui_button(
+                        state->ui,
+                        "authoring_add_loose_vertex_top",
+                        (henka_ui_rect){row.x + 254.0f, row.y, 36.0f, 24.0f},
+                        "Add"))
+                {
+                    if (!sandbox3d_parse_finite_float(
+                            state->native_authoring_loose_vertex_x, &x) ||
+                        !sandbox3d_parse_finite_float(
+                            state->native_authoring_loose_vertex_y, &y) ||
+                        !sandbox3d_parse_finite_float(
+                            state->native_authoring_loose_vertex_z, &z))
+                    {
+                        add_result = HENKA_ERROR_INVALID_ARGUMENT;
+                    }
+                    else
+                    {
+                        add_result = sandbox3d_authoring_object_add_loose_vertex(
+                            state->authoring_object,
+                            (henka_vec3){x, y, z},
+                            (henka_vec2){0.0f, 0.0f},
+                            0U,
+                            &vertex_id);
+                    }
+                    if (add_result == HENKA_SUCCESS)
+                    {
+                        sandbox3d_authoring_object_set_selection_mode(
+                            state->authoring_object,
+                            SANDBOX3D_AUTHORING_SELECTION_VERTEX);
+                        (void)sandbox3d_authoring_object_select_component(
+                            state->authoring_object, vertex_id, false);
+                        sandbox3d_mark_generic_modeling_applied(state, entity);
+                    }
+                    sandbox3d_set_status(
+                        state,
+                        add_result != HENKA_SUCCESS,
+                        add_result == HENKA_SUCCESS
+                            ? "Loose vertex added transactionally."
+                            : "Loose vertex rejected; use finite coordinates and inspect the retained source.");
+                }
+            }
+            if (state->authoring_object != NULL &&
+                selection_mode == SANDBOX3D_AUTHORING_SELECTION_VERTEX &&
+                sandbox3d_details_flow_next_row(state, flow_desc.bounds, 24.0f, 1U, &row) &&
+                row.width >= 290.0f)
+            {
+                const size_t selected_count =
+                    sandbox3d_authoring_object_get_selected_component_count(
+                        state->authoring_object);
+                const bool edge_enabled = selected_count == 2U;
+                if (henka_ui_button(
+                        state->ui,
+                        "authoring_add_loose_edge_top",
+                        (henka_ui_rect){row.x, row.y, 146.0f, 24.0f},
+                        "Add Edge (2 Vertices)"))
+                {
+                    henka_authoring_edge_id edge_id = HENKA_AUTHORING_INVALID_ID;
+                    henka_result add_result = HENKA_ERROR_INVALID_ARGUMENT;
+                    uint32_t first_id = 0U;
+                    uint32_t second_id = 0U;
+
+                    if (edge_enabled &&
+                        sandbox3d_authoring_object_get_selected_component_at(
+                            state->authoring_object, 0U, &first_id) == HENKA_SUCCESS &&
+                        sandbox3d_authoring_object_get_selected_component_at(
+                            state->authoring_object, 1U, &second_id) == HENKA_SUCCESS)
+                    {
+                        add_result = sandbox3d_authoring_object_add_loose_edge(
+                            state->authoring_object,
+                            (henka_authoring_vertex_id)first_id,
+                            (henka_authoring_vertex_id)second_id,
+                            false,
+                            &edge_id);
+                    }
+                    if (add_result == HENKA_SUCCESS)
+                    {
+                        sandbox3d_authoring_object_set_selection_mode(
+                            state->authoring_object,
+                            SANDBOX3D_AUTHORING_SELECTION_EDGE);
+                        (void)sandbox3d_authoring_object_select_component(
+                            state->authoring_object, edge_id, false);
+                        sandbox3d_mark_generic_modeling_applied(state, entity);
+                    }
+                    sandbox3d_set_status(
+                        state,
+                        add_result != HENKA_SUCCESS,
+                        add_result == HENKA_SUCCESS
+                            ? "Loose edge added transactionally."
+                            : "Loose edge rejected; select two compatible vertices and inspect the retained source.");
+                }
+            }
             if (selection_mode == SANDBOX3D_AUTHORING_SELECTION_FACE &&
                 !bevel_controls_prioritized &&
                 sandbox3d_details_flow_next_row(state, flow_desc.bounds, 28.0f, 1U, &row) &&
@@ -33973,6 +34131,21 @@ int main(int argc, char** argv)
         sizeof(state.native_authoring_extrude_amount),
         "%s",
         "0.25");
+    (void)snprintf(
+        state.native_authoring_loose_vertex_x,
+        sizeof(state.native_authoring_loose_vertex_x),
+        "%s",
+        "0.0");
+    (void)snprintf(
+        state.native_authoring_loose_vertex_y,
+        sizeof(state.native_authoring_loose_vertex_y),
+        "%s",
+        "0.0");
+    (void)snprintf(
+        state.native_authoring_loose_vertex_z,
+        sizeof(state.native_authoring_loose_vertex_z),
+        "%s",
+        "0.0");
     state.smoke_test = smoke_test;
     state.primitive_gallery = primitive_gallery;
     state.residency_stress = residency_stress;
