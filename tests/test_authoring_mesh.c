@@ -5,6 +5,7 @@
 
 #include <henka/authoring_mesh.h>
 #include <henka/authoring_modeling.h>
+#include <henka/authoring_topology.h>
 #include <henka/authoring_uv.h>
 
 static int fail(const char* message)
@@ -1069,6 +1070,120 @@ cleanup:
     return result ? 1 : fail("quad strip loop cut operation");
 }
 
+static int test_closed_quad_ring_loop_cut_operation(void)
+{
+    const henka_authoring_mesh_desc desc = {32U, 64U, 16U, 8U};
+    const henka_vec3 positions[8] = {
+        {0.0f, 0.0f, 0.0f}, {1.0f, 0.0f, 0.0f},
+        {1.0f, 0.0f, 1.0f}, {0.0f, 0.0f, 1.0f},
+        {0.0f, 1.0f, 0.0f}, {1.0f, 1.0f, 0.0f},
+        {1.0f, 1.0f, 1.0f}, {0.0f, 1.0f, 1.0f}};
+    const henka_vec2 uvs[8] = {
+        {0.00f, 0.0f}, {0.25f, 0.0f}, {0.50f, 0.0f}, {0.75f, 0.0f},
+        {0.00f, 1.0f}, {0.25f, 1.0f}, {0.50f, 1.0f}, {0.75f, 1.0f}};
+    const henka_authoring_vertex_id faces[4][4] = {
+        {1U, 5U, 6U, 2U}, {2U, 6U, 7U, 3U},
+        {3U, 7U, 8U, 4U}, {4U, 8U, 5U, 1U}};
+    const henka_vec2 face_uvs[4][4] = {
+        {{0.00f, 0.0f}, {0.00f, 1.0f}, {0.00f, 1.0f}, {0.00f, 0.0f}},
+        {{0.00f, 0.0f}, {0.00f, 1.0f}, {0.00f, 1.0f}, {0.00f, 0.0f}},
+        {{0.00f, 0.0f}, {0.00f, 1.0f}, {0.00f, 1.0f}, {0.00f, 0.0f}},
+        {{0.00f, 0.0f}, {0.00f, 1.0f}, {0.00f, 1.0f}, {0.00f, 0.0f}}};
+    henka_authoring_mesh* mesh = NULL;
+    henka_authoring_face_id face_id;
+    henka_authoring_edge_id start_edge_id = HENKA_AUTHORING_INVALID_ID;
+    henka_authoring_edge_id primary_cut_edge_id = HENKA_AUTHORING_INVALID_ID;
+    henka_authoring_face_id new_face_id = HENKA_AUTHORING_INVALID_ID;
+    henka_authoring_modeling_report report = {0};
+    henka_authoring_mesh_counts before;
+    henka_authoring_mesh_counts after;
+    bool closed = false;
+    size_t index;
+    size_t corner;
+    int result = 0;
+
+    if (henka_authoring_mesh_create(&desc, &mesh) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    for (index = 0U; index < 8U; ++index)
+    {
+        if (henka_authoring_mesh_add_vertex(
+                mesh, positions[index], uvs[index], 0U,
+                &(henka_authoring_vertex_id){0U}) != HENKA_SUCCESS)
+        {
+            goto cleanup;
+        }
+    }
+    for (index = 0U; index < 4U; ++index)
+    {
+        if (henka_authoring_mesh_add_face(
+                mesh, faces[index], 4U, 0U, true, &face_id) != HENKA_SUCCESS)
+        {
+            goto cleanup;
+        }
+        for (corner = 0U; corner < 4U; ++corner)
+        {
+            if (henka_authoring_mesh_set_face_corner_uv(
+                    mesh, face_id, corner, face_uvs[index][corner]) != HENKA_SUCCESS)
+            {
+                goto cleanup;
+            }
+        }
+    }
+    for (index = 0U; index < henka_authoring_mesh_get_desc(mesh).max_edges; ++index)
+    {
+        henka_authoring_edge_id edge_id;
+        const henka_authoring_edge* edge;
+        if (henka_authoring_mesh_get_edge_id_at(mesh, index, &edge_id) != HENKA_SUCCESS)
+        {
+            continue;
+        }
+        edge = henka_authoring_mesh_get_edge(mesh, edge_id);
+        if (edge != NULL && edge->face_count == 2U &&
+            ((edge->vertices[0] == 1U && edge->vertices[1] == 5U) ||
+             (edge->vertices[0] == 5U && edge->vertices[1] == 1U)))
+        {
+            start_edge_id = edge_id;
+            break;
+        }
+    }
+    before = henka_authoring_mesh_get_counts(mesh);
+    {
+        henka_authoring_quad_strip_step steps[8];
+        size_t step_count = 0U;
+        bool walk_closed = false;
+        const henka_result walk_result = henka_authoring_topology_walk_quad_strip(
+            mesh, start_edge_id, steps, 8U, &step_count, &walk_closed);
+        if (walk_result != HENKA_SUCCESS || step_count != 4U || !walk_closed)
+        {
+            goto cleanup;
+        }
+    }
+    if (start_edge_id == HENKA_AUTHORING_INVALID_ID ||
+        henka_authoring_mesh_loop_cut_quad_strip(
+            mesh, start_edge_id, 0.5f, &new_face_id, &primary_cut_edge_id,
+            &closed, &report) != HENKA_SUCCESS || !closed || !report.changed ||
+        report.created_vertices != 4U || report.created_edges != 8U ||
+        report.created_faces != 4U || new_face_id == HENKA_AUTHORING_INVALID_ID ||
+        primary_cut_edge_id == HENKA_AUTHORING_INVALID_ID)
+    {
+        goto cleanup;
+    }
+    after = henka_authoring_mesh_get_counts(mesh);
+    if (after.vertices != before.vertices + 4U ||
+        after.edges != before.edges + 8U || after.faces != before.faces + 4U ||
+        !henka_authoring_mesh_validate(mesh))
+    {
+        goto cleanup;
+    }
+    result = 1;
+
+cleanup:
+    henka_authoring_mesh_destroy(mesh);
+    return result ? 1 : fail("closed quad ring loop cut operation");
+}
+
 static int test_edge_loop_slide_operation(void)
 {
     const henka_authoring_mesh_desc desc = {32U, 64U, 16U, 8U};
@@ -2064,6 +2179,7 @@ int main(void)
         test_vertex_topology_operations() && test_vertex_bevel_operations() &&
         test_boundary_edge_bevel_operation() && test_single_quad_face_cut_operation() &&
         test_interior_edge_bevel_operation() && test_quad_strip_loop_cut_operation() &&
+        test_closed_quad_ring_loop_cut_operation() &&
         test_edge_loop_slide_operation() &&
         test_uv_authoring() &&
         test_modeling_material_region_and_uv_continuity() &&

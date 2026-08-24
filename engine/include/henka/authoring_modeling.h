@@ -142,11 +142,10 @@ henka_result henka_authoring_mesh_loop_cut_face(
     henka_authoring_face_id* out_new_face_id,
     henka_authoring_modeling_report* out_report);
 
-/* Splits every compatible quad in the ordered strip that starts at a
- * boundary edge. The operation creates one cut vertex per traversed path
- * edge and two quads per source face, then publishes one transactional
- * candidate. Unsupported branches, closed rings, and metadata seams are
- * rejected until their result/remapping contract is exposed. */
+/* Splits every compatible quad in the ordered strip. Open strips start at a
+ * boundary edge; closed rings use one cut vertex per traversed ring edge.
+ * Both forms create two quads per source face and publish one transactional
+ * candidate. Unsupported branches and metadata seams are rejected. */
 henka_result henka_authoring_mesh_loop_cut_quad_strip(
     henka_authoring_mesh* mesh,
     henka_authoring_edge_id start_edge_id,

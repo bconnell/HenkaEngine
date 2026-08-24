@@ -1554,16 +1554,25 @@ henka_result henka_authoring_mesh_loop_cut_quad_strip(
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
     start_edge = henka_authoring_mesh_get_edge(mesh, start_edge_id);
-    if (start_edge == NULL || start_edge->face_count != 1U || start_edge->hard)
+    if (start_edge == NULL || start_edge->face_count == 0U ||
+        start_edge->face_count > 2U || start_edge->hard)
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
     result = henka_authoring_topology_walk_quad_strip(
         mesh, start_edge_id, NULL, 0U, &step_count, &closed);
-    if (result != HENKA_SUCCESS || closed || step_count == 0U ||
-        !henka_checked_size_add(step_count, 1U, &cut_count))
+    if (result != HENKA_SUCCESS || step_count == 0U ||
+        (!closed && start_edge->face_count != 1U))
     {
         return result == HENKA_SUCCESS ? HENKA_ERROR_INVALID_ARGUMENT : result;
+    }
+    if (closed)
+    {
+        cut_count = step_count;
+    }
+    else if (!henka_checked_size_add(step_count, 1U, &cut_count))
+    {
+        return HENKA_ERROR_LIMIT;
     }
     if (!henka_checked_size_multiply(
             step_count, sizeof(*steps), &bytes))
@@ -1578,7 +1587,7 @@ henka_result henka_authoring_mesh_loop_cut_quad_strip(
     }
     result = henka_authoring_topology_walk_quad_strip(
         mesh, start_edge_id, steps, step_count, &step_count, &closed);
-    if (result != HENKA_SUCCESS || closed)
+    if (result != HENKA_SUCCESS)
     {
         result = HENKA_ERROR_INVALID_ARGUMENT;
         goto cleanup;
@@ -1706,20 +1715,20 @@ henka_result henka_authoring_mesh_loop_cut_quad_strip(
         prior = (corner + 3U) % 4U;
         first[0] = face->vertices[corner];
         first[1] = cut_vertices[index];
-        first[2] = cut_vertices[index + 1U];
+        first[2] = cut_vertices[(index + 1U) % cut_count];
         first[3] = face->vertices[prior];
         first_uv[0] = face->uvs[corner];
         first_uv[1] = cut_uvs[index];
-        first_uv[2] = cut_uvs[index + 1U];
+        first_uv[2] = cut_uvs[(index + 1U) % cut_count];
         first_uv[3] = face->uvs[prior];
         second[0] = cut_vertices[index];
         second[1] = face->vertices[next];
         second[2] = face->vertices[(corner + 2U) % 4U];
-        second[3] = cut_vertices[index + 1U];
+        second[3] = cut_vertices[(index + 1U) % cut_count];
         second_uv[0] = cut_uvs[index];
         second_uv[1] = face->uvs[next];
         second_uv[2] = face->uvs[(corner + 2U) % 4U];
-        second_uv[3] = cut_uvs[index + 1U];
+        second_uv[3] = cut_uvs[(index + 1U) % cut_count];
         updates[index].face_id = face->id;
         updates[index].vertices = first;
         updates[index].uvs = first_uv;
@@ -1757,7 +1766,7 @@ henka_result henka_authoring_mesh_loop_cut_quad_strip(
         *out_new_face_id = new_face_ids[step_count - 1U];
         *out_primary_cut_edge_id = modeling_find_edge_between_vertices(
             mesh, cut_vertices[0], cut_vertices[1]);
-        *out_closed = false;
+        *out_closed = closed;
         modeling_report_count_delta(&before, &after, out_report);
         if (out_report != NULL)
         {

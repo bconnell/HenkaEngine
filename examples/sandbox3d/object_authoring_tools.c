@@ -5923,6 +5923,7 @@ henka_result sandbox3d_authoring_object_loop_cut_selected_face(
     henka_authoring_edge_id primary_cut_edge_id = HENKA_AUTHORING_INVALID_ID;
     bool closed = false;
     size_t best_strip_length = 0U;
+    bool best_strip_closed = false;
     size_t corner;
     henka_result result;
     if (object == NULL ||
@@ -5940,19 +5941,22 @@ henka_result sandbox3d_authoring_object_loop_cut_selected_face(
     {
         const henka_authoring_edge* edge = henka_authoring_mesh_get_edge(
             object->mesh, face->edges[corner]);
-        if (edge != NULL && edge->face_count == 1U)
+        if (edge != NULL && edge->face_count > 0U && edge->face_count <= 2U)
         {
             size_t strip_length = 0U;
             bool strip_closed = false;
             if (henka_authoring_topology_walk_quad_strip(
-                    object->mesh, edge->id, NULL, 0U,
-                    &strip_length, &strip_closed) == HENKA_SUCCESS &&
-                !strip_closed && (start_edge_id == HENKA_AUTHORING_INVALID_ID ||
-                    strip_length > best_strip_length ||
-                    (strip_length == best_strip_length && edge->id < start_edge_id)))
+                object->mesh, edge->id, NULL, 0U,
+                &strip_length, &strip_closed) == HENKA_SUCCESS &&
+                (start_edge_id == HENKA_AUTHORING_INVALID_ID ||
+                    (strip_closed && !best_strip_closed) ||
+                    (strip_closed == best_strip_closed &&
+                        (strip_length > best_strip_length ||
+                            (strip_length == best_strip_length && edge->id < start_edge_id)))))
             {
                 start_edge_id = edge->id;
                 best_strip_length = strip_length;
+                best_strip_closed = strip_closed;
             }
         }
     }

@@ -162,16 +162,17 @@ topology editing remains incomplete. A bounded single-quad face loop cut is also
   faces, and rejects shared-boundary faces so it cannot leave a T-junction in
   neighboring topology. The reusable topology layer also exposes a bounded
   deterministic compatible quad-strip walk for modeling operators. It records
-  ordered face/entry/exit edges, terminates at boundaries, and rejects hard,
-  material, smoothing, UV, non-quad, non-manifold, and ambiguous crossings
-  without partial output. The editor Loop Cut operator now applies one fixed
-  factor cut across a compatible open strip and publishes the whole operation
-  transactionally. Edge mode also exposes a fixed-factor Edge Slide for one
-  compatible open edge-loop selection. It moves the loop toward deterministic
-  adjacent sides without changing topology and publishes through the same
-  transactional source/render/bounds/collider/undo path. Closed rings,
-  interactive preview/factor adjustment, multi-cut spacing, broader interior
-  edge cases, and general loop-cut networks remain unfinished.
+  ordered face/entry/exit edges, terminates at boundaries or reports a closed
+  ring, and rejects hard, material, smoothing, UV, non-quad, non-manifold, and
+  ambiguous crossings without partial output. The editor Loop Cut operator now
+  applies one fixed factor cut across a compatible open strip or closed ring
+  and publishes the whole operation transactionally. Edge mode also exposes a
+  fixed-factor Edge Slide for one compatible open edge-loop selection. It moves
+  the loop toward deterministic adjacent sides without changing topology and
+  publishes through the same transactional source/render/bounds/collider/undo
+  path. Interactive preview/factor adjustment, multi-cut spacing, broader
+  interior edge cases, closed-loop sliding, and general loop-cut networks remain
+  unfinished.
 Bounded Vertex Extrude is available for one unambiguous boundary corner of a
 single face. It creates one cap vertex and two connecting side faces while
 preserving the operation's transactional source/render/bounds/collider/undo

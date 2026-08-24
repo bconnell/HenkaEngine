@@ -214,8 +214,8 @@ tracks that share renderer, asset, persistence, and workspace boundaries.
    single-edge delete of an incident face set, standalone boundary-edge bevel,
    and compatible interior-edge bevel for an isolated two-quad patch are now
    available; the editor now applies one fixed-factor Loop Cut across a
-   compatible open quad strip using the reusable traversal foundation. Closed
-   rings, preview/factor adjustment, multiple cuts, broader interior-edge
+   compatible open quad strip or closed ring using the reusable traversal
+   foundation. Preview/factor adjustment, multiple cuts, broader interior-edge
    cases, batch edge operations, and general loop-cut networks remain in
    progress. Edge mode also provides a fixed-factor Edge Slide for one
    compatible open edge-loop selection through the transactional authoring

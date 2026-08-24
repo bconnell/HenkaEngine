@@ -187,16 +187,17 @@ turning the public README into an implementation ledger.
   operations and broader edge topology operations remain in progress.
 - A bounded deterministic compatible quad-strip traversal foundation is
   available for modeling operators. It records ordered face/entry/exit edges,
-  terminates at boundaries, and rejects hard, material, smoothing, UV,
-  non-quad, non-manifold, and ambiguous crossings without partial output. A
-  bounded single-quad face loop cut and one fixed-factor open quad-strip Loop
-  Cut are available through the Face workflow. They interpolate path edges and
-  create only quad faces transactionally. Edge mode also provides a bounded
+  terminates at boundaries or reports a closed ring, and rejects hard, material,
+  smoothing, UV, non-quad, non-manifold, and ambiguous crossings without
+  partial output. A bounded single-quad face loop cut and one fixed-factor
+  quad-strip Loop Cut across either a compatible open strip or closed ring are
+  available through the Face workflow. They interpolate path edges and create
+  only quad faces transactionally. Edge mode also provides a bounded
   fixed-factor Edge Slide for one compatible open edge-loop selection; it moves
   the selected loop through the same source/render/bounds/physics/undo
-  transaction while preserving topology. Closed rings, interactive
-  preview/factor adjustment, multiple cuts, broader interior-edge cases, and
-  split/bridge workflows remain incomplete.
+  transaction while preserving topology. Interactive preview/factor
+  adjustment, multiple cuts, broader interior-edge cases, closed-loop sliding,
+  and split/bridge workflows remain incomplete.
 - See [authoring-mesh.md](authoring-mesh.md),
   [runtime-foundations.md](runtime-foundations.md), and
   [showcase-assets.md](showcase-assets.md).

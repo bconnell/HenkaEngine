@@ -24346,7 +24346,7 @@ details_group_authoring:
                         cut_result != HENKA_SUCCESS,
                         cut_result == HENKA_SUCCESS
                             ? "Compatible quad strip cut transactionally."
-                            : "Loop Cut rejected; select a compatible open quad strip.");
+                            : "Loop Cut rejected; select a compatible quad strip.");
                     if (cut_result == HENKA_SUCCESS)
                     {
                         sandbox3d_mark_generic_modeling_applied(state, entity);
@@ -25345,7 +25345,7 @@ details_group_authoring:
                         cut_result != HENKA_SUCCESS,
                         cut_result == HENKA_SUCCESS
                             ? "Compatible quad strip cut transactionally."
-                            : "Loop Cut rejected; select a compatible open quad strip.");
+                            : "Loop Cut rejected; select a compatible quad strip.");
                     if (cut_result == HENKA_SUCCESS)
                     {
                         sandbox3d_mark_generic_modeling_applied(state, entity);
