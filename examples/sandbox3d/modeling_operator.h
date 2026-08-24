@@ -16,7 +16,9 @@ typedef enum sandbox3d_modeling_operator_kind
     SANDBOX3D_MODELING_OPERATOR_EDGE_SLIDE,
     SANDBOX3D_MODELING_OPERATOR_BEVEL,
     /* Explicit-axis extrusion of one selected loose vertex or edge. */
-    SANDBOX3D_MODELING_OPERATOR_EXTRUDE
+    SANDBOX3D_MODELING_OPERATOR_EXTRUDE,
+    /* Surface-connected extrusion of one selected open boundary edge. */
+    SANDBOX3D_MODELING_OPERATOR_EDGE_EXTRUDE
 } sandbox3d_modeling_operator_kind;
 
 typedef enum sandbox3d_modeling_operator_state

@@ -227,9 +227,10 @@ modeling API also provides a bounded transactional explicit-direction
   face normal, replaces that edge in the source face, creates one connecting
   quad, preserves selected hard-edge intent, and publishes only after topology
   and geometry validation. Interior/manifold edges and broader edge-set
-  extrusion remain rejected. The Sandbox session does not yet expose these
-  core boundary-edge or loose-component operations as general
-  surface-connected Vertex/Edge Extrude workflows.
+  extrusion remain rejected. The shared Sandbox modeling session now exposes
+  this bounded boundary-edge operation through preview, cancel, and Apply;
+  the Authoring panel does not yet expose it, and broader surface-connected
+  Vertex/Edge Extrude workflows remain unfinished.
 material-instance assignment, texture
 dependencies, general collision integration beyond the bound box contract,
 package ownership, topology-aware picking, and showcase rebuilds still need the

@@ -564,6 +564,76 @@ static void henka_test_sandbox3d_modeling_operator_loose_extrude(void)
     henka_engine_destroy(engine);
 }
 
+static void henka_test_sandbox3d_modeling_operator_boundary_edge_extrude(void)
+{
+    henka_engine_config config = {0};
+    henka_engine* engine = NULL;
+    henka_scene* scene = NULL;
+    henka_authoring_mesh* source = NULL;
+    sandbox3d_authoring_object* object = NULL;
+    sandbox3d_modeling_operator_session session = {0};
+    const henka_authoring_face* source_face;
+    henka_authoring_face_id source_face_id = HENKA_AUTHORING_INVALID_ID;
+    henka_authoring_edge_id source_edge_id = HENKA_AUTHORING_INVALID_ID;
+    henka_authoring_mesh_counts before;
+    henka_authoring_mesh_counts after;
+    henka_entity entity;
+
+    config.application_name = "Henka Boundary Edge Extrude Operator Test";
+    config.window_width = 320;
+    config.window_height = 240;
+    config.enable_vsync = false;
+    HENKA_TEST_ASSERT(henka_engine_create(&config, &engine) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_scene_create(&scene) == HENKA_SUCCESS);
+    entity = henka_scene_create_entity_named(scene, "Boundary Edge Extrude Source");
+    HENKA_TEST_ASSERT(entity != HENKA_INVALID_ENTITY);
+    HENKA_TEST_ASSERT(henka_authoring_mesh_create_plane(
+        &(henka_authoring_mesh_desc){16U, 32U, 16U, 8U}, 2.0f, 2.0f, &source) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_authoring_mesh_get_face_id_at(
+        source, 0U, &source_face_id) == HENKA_SUCCESS);
+    source_face = henka_authoring_mesh_get_face(source, source_face_id);
+    HENKA_TEST_ASSERT(source_face != NULL && source_face->corner_count == 4U);
+    source_edge_id = source_face->edges[0U];
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_create_from_mesh(
+        engine, scene, entity, source, 8U, &object) == HENKA_SUCCESS);
+    sandbox3d_authoring_object_set_selection_mode(
+        object, SANDBOX3D_AUTHORING_SELECTION_EDGE);
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_select_component(
+        object, source_edge_id, false) == HENKA_SUCCESS);
+    before = henka_authoring_mesh_get_counts(
+        sandbox3d_authoring_object_get_mesh(object));
+
+    HENKA_TEST_ASSERT(sandbox3d_modeling_operator_begin(
+        &session, object, SANDBOX3D_MODELING_OPERATOR_EDGE_EXTRUDE) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(sandbox3d_modeling_operator_preview(
+        &session, 0.5f, false, false) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(sandbox3d_authoring_object_has_preview(object));
+    HENKA_TEST_ASSERT(sandbox3d_modeling_operator_cancel(&session) == HENKA_SUCCESS);
+    after = henka_authoring_mesh_get_counts(
+        sandbox3d_authoring_object_get_mesh(object));
+    HENKA_TEST_ASSERT(after.vertices == before.vertices &&
+        after.edges == before.edges && after.faces == before.faces);
+
+    HENKA_TEST_ASSERT(sandbox3d_modeling_operator_begin(
+        &session, object, SANDBOX3D_MODELING_OPERATOR_EDGE_EXTRUDE) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(sandbox3d_modeling_operator_numeric_begin(&session) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(sandbox3d_modeling_operator_numeric_append(
+        &session, "0.5", 3U) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(sandbox3d_modeling_operator_numeric_commit(&session) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(sandbox3d_modeling_operator_commit(&session) == HENKA_SUCCESS);
+    after = henka_authoring_mesh_get_counts(
+        sandbox3d_authoring_object_get_mesh(object));
+    HENKA_TEST_ASSERT(after.vertices == before.vertices + 2U &&
+        after.edges == before.edges + 3U && after.faces == before.faces + 1U &&
+        henka_authoring_mesh_validate(
+            sandbox3d_authoring_object_get_mesh(object)));
+
+    sandbox3d_authoring_object_destroy(object);
+    henka_authoring_mesh_destroy(source);
+    henka_scene_destroy(scene);
+    henka_engine_destroy(engine);
+}
+
 static void henka_test_sandbox3d_loose_renderer_bridge(void)
 {
     henka_engine_config config = {0};
@@ -3102,6 +3172,7 @@ void henka_test_sandbox3d_object_authoring(void)
     henka_test_sandbox3d_object_authoring_scene_policy();
     henka_test_sandbox3d_modeling_operator_session();
     henka_test_sandbox3d_modeling_operator_loose_extrude();
+    henka_test_sandbox3d_modeling_operator_boundary_edge_extrude();
     henka_test_sandbox3d_loose_renderer_bridge();
     henka_test_sandbox3d_loose_component_creation();
     henka_test_sandbox3d_object_authoring_quad_recovery_workflow();
