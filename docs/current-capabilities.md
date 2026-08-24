@@ -174,10 +174,10 @@ turning the public README into an implementation ledger.
   overrides, procedural detail textures, and material undo/redo are present
   in the bounded dogfood workflow.
 - This is an integrated authoring foundation, not a production modeling suite.
-  Broader vertex-fan extrusion and topology tooling, automatic UV unwrap,
-  texture painting, rigging, skinning, animation authoring, broader source
-  export, and production-quality showcase anatomy/mechanical topology remain
-  in progress.
+  Broader non-manifold or incompatible-normal fan handling and topology
+  tooling, automatic UV unwrap, texture painting, rigging, skinning, animation
+  authoring, broader source export, and production-quality showcase
+  anatomy/mechanical topology remain in progress.
 - Edge authoring is a separate capability boundary: bounded edge-loop/ring
   selection, transactional single-edge dissolve for compatible interior edges,
   single-edge delete of its incident face set, bounded standalone boundary-edge
