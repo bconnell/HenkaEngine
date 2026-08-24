@@ -220,11 +220,13 @@ henka_result henka_authoring_mesh_bevel_edge(
     henka_authoring_modeling_report* out_report);
 
 /* Bevels a bounded selected edge set in one transaction. One compatible
- * interior edge in an isolated two-quad patch is supported, as are pairwise
- * vertex-disjoint boundary edges on distinct faces. Boundary selections must
- * have one face and one incident face per endpoint. Shared faces or endpoints,
- * multiple interior edges, mixed interior/boundary selections, invalid widths,
- * and capacity failures are rejected without changing the source mesh. */
+ * interior edge in an isolated two-quad patch is supported, as are boundary
+ * selections whose endpoints have one incident face. Boundary selections may
+ * be pairwise vertex-disjoint across distinct faces or may belong to one face;
+ * the same-face path creates a bounded inset center, side quads, and corner
+ * caps for selected shared endpoints. Multiple interior edges, mixed
+ * interior/boundary selections, invalid widths, and capacity failures are
+ * rejected without changing the source mesh. */
 henka_result henka_authoring_mesh_bevel_edges(
     henka_authoring_mesh* mesh,
     const henka_authoring_edge_id* edge_ids,

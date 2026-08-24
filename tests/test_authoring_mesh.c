@@ -911,6 +911,108 @@ cleanup:
     return result ? 1 : fail("boundary edge batch bevel operation");
 }
 
+static int test_same_face_boundary_edge_batch_bevel_operation(void)
+{
+    const henka_authoring_mesh_desc desc = {32U, 64U, 16U, 8U};
+    const henka_vec3 positions[4] = {
+        {-1.0f, -1.0f, 0.0f}, {1.0f, -1.0f, 0.0f},
+        {1.0f, 1.0f, 0.0f}, {-1.0f, 1.0f, 0.0f}};
+    const henka_authoring_vertex_id face_vertices[4] = {1U, 2U, 3U, 4U};
+    henka_authoring_mesh* mesh = NULL;
+    henka_authoring_edge_id selected_edges[2] = {
+        HENKA_AUTHORING_INVALID_ID, HENKA_AUTHORING_INVALID_ID};
+    henka_authoring_modeling_report report = {0};
+    henka_authoring_mesh_counts before;
+    henka_authoring_mesh_counts after;
+    henka_authoring_face_id face_id = HENKA_AUTHORING_INVALID_ID;
+    henka_authoring_edge_id edge_id;
+    size_t edge_slot;
+    size_t selected_count = 0U;
+    size_t vertex_slot;
+    int result = 0;
+
+    if (henka_authoring_mesh_create(&desc, &mesh) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    for (vertex_slot = 0U; vertex_slot < 4U; ++vertex_slot)
+    {
+        henka_authoring_vertex_id vertex_id = HENKA_AUTHORING_INVALID_ID;
+        if (henka_authoring_mesh_add_vertex(
+                mesh, positions[vertex_slot], (henka_vec2){0.0f, 0.0f}, 0U,
+                &vertex_id) != HENKA_SUCCESS || vertex_id != vertex_slot + 1U)
+        {
+            goto cleanup;
+        }
+    }
+    if (henka_authoring_mesh_add_face(
+            mesh, face_vertices, 4U, 0U, true, &face_id) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    for (edge_slot = 0U; edge_slot < desc.max_edges; ++edge_slot)
+    {
+        const henka_authoring_edge* edge;
+        if (henka_authoring_mesh_get_edge_id_at(mesh, edge_slot, &edge_id) != HENKA_SUCCESS)
+        {
+            continue;
+        }
+        edge = henka_authoring_mesh_get_edge(mesh, edge_id);
+        if (edge == NULL || edge->face_count != 1U)
+        {
+            goto cleanup;
+        }
+        if ((edge->vertices[0] == 1U && edge->vertices[1] == 2U) ||
+            (edge->vertices[0] == 2U && edge->vertices[1] == 1U) ||
+            (edge->vertices[0] == 2U && edge->vertices[1] == 3U) ||
+            (edge->vertices[0] == 3U && edge->vertices[1] == 2U))
+        {
+            if (selected_count >= 2U)
+            {
+                goto cleanup;
+            }
+            selected_edges[selected_count++] = edge_id;
+        }
+    }
+    if (selected_count != 2U)
+    {
+        goto cleanup;
+    }
+    before = henka_authoring_mesh_get_counts(mesh);
+    if (henka_authoring_mesh_bevel_edges(
+            mesh, selected_edges, 2U, 2.0f, &report) == HENKA_SUCCESS ||
+        report.changed)
+    {
+        goto cleanup;
+    }
+    after = henka_authoring_mesh_get_counts(mesh);
+    if (memcmp(&before, &after, sizeof(before)) != 0 ||
+        !henka_authoring_mesh_validate(mesh))
+    {
+        goto cleanup;
+    }
+    if (henka_authoring_mesh_bevel_edges(
+            mesh, selected_edges, 2U, 0.1f, &report) != HENKA_SUCCESS ||
+        !report.changed || report.created_vertices != 4U ||
+        report.created_faces != 3U ||
+        henka_authoring_mesh_get_counts(mesh).vertices != before.vertices + 4U ||
+        henka_authoring_mesh_get_counts(mesh).faces != before.faces + 3U ||
+        !henka_authoring_mesh_validate(mesh))
+    {
+        goto cleanup;
+    }
+    after = henka_authoring_mesh_get_counts(mesh);
+    if (after.edges <= before.edges)
+    {
+        goto cleanup;
+    }
+    result = 1;
+
+cleanup:
+    henka_authoring_mesh_destroy(mesh);
+    return result ? 1 : fail("same-face boundary edge batch bevel operation");
+}
+
 static int test_single_quad_face_cut_operation(void)
 {
     const henka_authoring_mesh_desc desc = {32U, 64U, 16U, 8U};
@@ -2904,6 +3006,7 @@ int main(void)
         test_history_and_persistence() && test_modeling_operations() && test_vertex_merge_operations() &&
         test_vertex_topology_operations() && test_vertex_bevel_operations() &&
         test_boundary_edge_bevel_operation() && test_boundary_edge_batch_bevel_operation() &&
+        test_same_face_boundary_edge_batch_bevel_operation() &&
         test_single_quad_face_cut_operation() &&
         test_interior_edge_bevel_operation() && test_quad_strip_loop_cut_operation() &&
         test_closed_quad_ring_loop_cut_operation() &&

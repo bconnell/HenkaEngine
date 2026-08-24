@@ -224,13 +224,13 @@ tracks that share renderer, asset, persistence, and workspace boundaries.
    Bounded single-edge dissolve for compatible interior edges, bounded
    single-edge delete of an incident face set, standalone boundary-edge bevel,
    bounded multi-edge boundary bevel for pairwise vertex-disjoint edges on
-   distinct faces, and compatible interior-edge bevel for an isolated two-quad
-   patch are now available; the editor now applies a validated user-entered
+   distinct faces, bounded same-face boundary bevel with shared-endpoint corner
+   caps, and compatible interior-edge bevel for an isolated two-quad patch are
+   now available; the editor now applies a validated user-entered
    factor for one Loop Cut across a compatible open quad strip or closed ring
    using the reusable traversal foundation, with Preview/Refresh and explicit
-   Apply/Cancel publication. Same-face/shared-endpoint bevel batches, broader
-   interior-edge cases, and general loop-cut networks
-   remain in progress. Edge mode also provides a signed-factor Edge Slide for
+   Apply/Cancel publication. Broader interior-edge cases and general loop-cut
+   networks remain in progress. Edge mode also provides a signed-factor Edge Slide for
    one compatible open edge-loop or closed edge-cycle selection through the
    shared modeling operator session, including numeric preview, cancel, and
    transactional Apply. Broader edge-loop domains remain planned.
