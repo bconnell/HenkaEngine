@@ -201,9 +201,16 @@ boundary vertices open. Successful Sandbox bevels replace Vertex selection with
 the live cut vertices and use the same history/render/bounds/collider
 transaction as other authoring edits. Bounded Vertex Extrude remains within
 the validated face-surface representation and does not create standalone
-components. The core authoring representation also accepts explicit loose
-vertices and standalone wire edges: both use stable logical IDs, bounded
-physical storage, deterministic endpoint ordering, and the same HAMS v4
+components. The core modeling API also provides a bounded transactional
+explicit-direction loose-vertex extrude: it preserves the source vertex,
+inherits its UV/material metadata, and creates exactly one standalone wire
+edge to the new vertex without inventing a face. Zero directions, zero
+distances, connected vertices, invalid geometry, and capacity exhaustion fail
+closed. The Sandbox still does not expose a dedicated loose-component
+creation or extrusion control, so this primitive does not claim general
+Vertex Extrude coverage. The core authoring representation also accepts
+explicit loose vertices and standalone wire edges: both use stable logical IDs,
+bounded physical storage, deterministic endpoint ordering, and the same HAMS v4
 transactional save/load path. A standalone edge must connect two distinct
 active vertices, has zero incident faces until a face consumes that endpoint
 pair, and can be removed explicitly while it remains face-less.

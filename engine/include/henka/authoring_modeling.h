@@ -167,6 +167,20 @@ henka_result henka_authoring_mesh_extrude_vertex(
     henka_authoring_vertex_id* out_new_vertex_id,
     henka_authoring_modeling_report* out_report);
 
+/* Extrudes one loose vertex along an explicit direction into a standalone
+ * wire edge. The source vertex remains in place, the new vertex inherits its
+ * UV/material metadata, and no face is synthesized without surface context.
+ * The operation is transactional and rejects connected vertices, zero
+ * directions, zero distances, and capacity exhaustion. */
+henka_result henka_authoring_mesh_extrude_loose_vertex(
+    henka_authoring_mesh* mesh,
+    henka_authoring_vertex_id vertex_id,
+    henka_vec3 direction,
+    float distance,
+    henka_authoring_vertex_id* out_new_vertex_id,
+    henka_authoring_edge_id* out_new_edge_id,
+    henka_authoring_modeling_report* out_report);
+
 /* Dissolves one compatible interior edge into its two adjacent face loops.
  * Boundary, hard, UV-seamed, material-discontinuous, and capacity-invalid
  * requests are rejected without changing the source mesh. */
