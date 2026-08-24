@@ -79,8 +79,19 @@ Assert-PowerShellFileParses -Path $runnerPath
 Assert-PowerShellFileParses -Path $orchestratorPath
 Assert-WorkflowManifest
 
-& $orchestratorPath `
-    -CandidateCommitSubject $CandidateCommitSubject `
-    -SliceName $SliceName `
-    -SourceAnchor $SourceAnchor `
-    -ExpectedChangedPath $ExpectedChangedPath
+try {
+    & $orchestratorPath `
+        -CandidateCommitSubject $CandidateCommitSubject `
+        -SliceName $SliceName `
+        -SourceAnchor $SourceAnchor `
+        -ExpectedChangedPath $ExpectedChangedPath
+    if ($LASTEXITCODE -ne 0) {
+        throw "Validated Windows slice returned exit code $LASTEXITCODE."
+    }
+    Write-Host "[pass] Validated Windows slice entrypoint completed."
+    exit 0
+}
+catch {
+    Write-Host "[fail] Validated Windows slice entrypoint failed: $($_.Exception.Message)"
+    exit 1
+}

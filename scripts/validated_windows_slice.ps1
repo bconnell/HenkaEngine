@@ -436,5 +436,8 @@ finally {
 }
 
 if ($status -ne "PASS") {
+    Write-Host "[fail] Validated Windows slice failed: $failureMessage"
     throw $failureMessage
 }
+
+Write-Host "[pass] Validated Windows slice completed."
