@@ -425,10 +425,26 @@ struct henka_renderer
     float exposure;
 };
 
+#define HENKA_MESH_MAX_PRIMITIVE_PARTS 3U
+
+typedef struct henka_mesh_part
+{
+    henka_mesh_primitive primitive;
+    int vertex_count;
+    int index_count;
+    uint32_t material_region_min;
+    uint32_t material_region_max;
+    void* backend_data;
+} henka_mesh_part;
+
 struct henka_mesh
 {
     struct henka_renderer* renderer;
     bool asset_manager_owned;
+    uint32_t part_count;
+    henka_mesh_part parts[HENKA_MESH_MAX_PRIMITIVE_PARTS];
+    /* These fields mirror part zero for existing terrain/authoring callers.
+     * Composite authoring meshes use parts[] as the complete ownership set. */
     henka_mesh_primitive primitive;
     int vertex_count;
     int index_count;

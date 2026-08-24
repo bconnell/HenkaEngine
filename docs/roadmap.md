@@ -212,8 +212,9 @@ tracks that share renderer, asset, persistence, and workspace boundaries.
    and Authoring panel also provide bounded explicit-axis extrusion for one
    selected loose vertex or standalone edge with numeric Preview, Cancel, and
    transactional Apply. Homogeneous wire-only and isolated-vertex-only sources
-   also have bounded renderer-backed line and point evaluation; mixed loose
-   primitive ownership remains explicitly constrained.
+   also have bounded renderer-backed line and point evaluation. Mixed
+   surface/wire/point sources now use bounded multi-primitive renderer ownership
+   without dropping valid loose components.
 8. glTF/GLB import and external modeling-pipeline compatibility remain part of
    the implemented boundary, with explicit limitations.
 
@@ -234,13 +235,11 @@ tracks that share renderer, asset, persistence, and workspace boundaries.
    shared modeling operator session, including numeric preview, cancel, and
    transactional Apply. Broader edge-loop domains remain planned.
 2. Extend the available loose-component creation controls into broader editing
-   and multi-primitive scene ownership around the bounded loose extrusion
-   session, then extend the session to broader surface-connected extrusion
-   workflows. The homogeneous renderer line/point evaluation foundation and
-   generic finite-coordinate vertex/two-selected-vertex edge creation controls
-   are already available; mixed surface-plus-loose presentation and mixed
-   wire-plus-point source evaluation remain constrained until that ownership
-   work is complete.
+   around the bounded loose extrusion session, then extend the session to
+   broader surface-connected extrusion workflows. The homogeneous line/point
+   evaluation and bounded triangle/wire/point renderer ownership foundations
+   are available; broader selection, editing, and surface-connected extrusion
+   workflows remain in progress.
 3. Strengthen transactional modeling, UV, material, persistence, and undo/redo
    paths while keeping failure behavior fail-closed.
 4. Improve editor integration, authoring source/project workflows, and the

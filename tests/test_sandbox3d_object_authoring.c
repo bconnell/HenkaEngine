@@ -696,10 +696,11 @@ static void henka_test_sandbox3d_loose_component_creation(void)
     before = after;
     HENKA_TEST_ASSERT(sandbox3d_authoring_object_add_loose_vertex(
         object, (henka_vec3){3.0f, 0.0f, 0.0f}, (henka_vec2){0.0f, 0.0f}, 0U,
-        &added) == HENKA_ERROR_INVALID_ARGUMENT);
+        &added) == HENKA_SUCCESS);
     after = henka_authoring_mesh_get_counts(
         sandbox3d_authoring_object_get_mesh(object));
-    HENKA_TEST_ASSERT(after.vertices == before.vertices &&
+    HENKA_TEST_ASSERT(added != HENKA_AUTHORING_INVALID_ID &&
+        after.vertices == before.vertices + 1U &&
         after.edges == before.edges && after.faces == before.faces);
 
     sandbox3d_authoring_object_destroy(object);

@@ -204,9 +204,9 @@ turning the public README into an implementation ledger.
   extrusion for exactly one selected loose vertex or standalone edge through
   the core transactional operations. Homogeneous wire-only and isolated-vertex-only
   authoring sources now have bounded renderer-backed line and point evaluation.
-  Mixed surface-plus-loose sources continue to use the authored source overlay
-  beside the face-backed render mesh, and no-face sources that mix wire edges
-  with isolated vertices are rejected until multi-primitive ownership exists.
+  Mixed surface-plus-loose and no-face wire-plus-point sources now use bounded
+  renderer-backed multi-primitive ownership, preserving triangle, wire, and
+  isolated-point parts instead of dropping or rejecting valid source geometry.
   Vertex-mode controls now add a loose vertex from finite X/Y/Z coordinates or
   add a standalone edge from exactly two selected vertices through the same
   transactional source/render/history boundary. Broader loose-component

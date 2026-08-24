@@ -231,11 +231,11 @@ package ownership, topology-aware picking, and showcase rebuilds still need the
 shared scene/asset-manager bridge. The current authoring mesh is a validated
 surface representation for face-backed modeling, while also preserving explicit
 loose source components. Homogeneous wire-only and isolated-vertex-only sources
-are emitted by renderer evaluation as bounded line and point primitives;
-mixed surface-plus-loose sources remain face-backed in the renderer and retain
-their loose components in the source overlay. The Sandbox topology overlay does
-present the committed source vertices and wire edges for inspection and
-selection, including a distinct loose-component visual treatment. The bounded fan
+are emitted by renderer evaluation as bounded line and point primitives; mixed
+surface-plus-loose sources use a bounded composite renderer mesh containing
+triangle, line, and point parts. The Sandbox topology overlay does present the
+committed source vertices and wire edges for inspection and selection, including
+a distinct loose-component visual treatment. The bounded fan
 extrusion contract is intentionally limited to connected open fans; broader
 non-manifold and incompatible-normal cases remain unsupported.
 Material regions retain their editable numeric metadata, and the evaluated
@@ -253,10 +253,10 @@ Client applications can call `henka_mesh_create_from_authoring_mesh` from
 `<henka/mesh.h>` to evaluate the same committed source into an ordinary
 renderer-owned mesh. Face-backed sources upload as bounded triangle meshes;
 homogeneous wire-only sources upload as `GL_LINES`, and isolated-vertex-only
-sources upload as `GL_POINTS`. Mixed surface-plus-loose sources continue to
-use the authored source overlay alongside the face-backed render mesh, while a
-no-face source that mixes wire edges and isolated vertices is rejected rather
-than silently dropping one primitive class. The source remains caller-owned,
+sources upload as `GL_POINTS`. Mixed sources upload through bounded composite
+ownership, with one renderer-owned part for each present triangle, wire, and
+point primitive class. This keeps standalone topology visible without silently
+dropping one primitive class. The source remains caller-owned,
 the output slot must start empty, counts and indices are bounded and checked,
 and allocation or evaluation failure leaves the output slot empty. This is the
 reusable authoring-to-render boundary; it does not create a material authority

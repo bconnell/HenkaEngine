@@ -1372,6 +1372,30 @@ static void henka_set_uniform_int_array_owned(
     }
 }
 
+static uint32_t henka_mesh_get_part_count(const henka_mesh* mesh)
+{
+    return mesh != NULL && mesh->part_count > 0U &&
+        mesh->part_count <= HENKA_MESH_MAX_PRIMITIVE_PARTS ? mesh->part_count : 0U;
+}
+
+static bool henka_mesh_has_primitive(
+    const henka_mesh* mesh,
+    henka_mesh_primitive primitive)
+{
+    uint32_t part_index;
+    uint32_t part_count = henka_mesh_get_part_count(mesh);
+
+    for (part_index = 0U; part_index < part_count; ++part_index)
+    {
+        if (mesh->parts[part_index].primitive == primitive &&
+            mesh->parts[part_index].backend_data != NULL)
+        {
+            return true;
+        }
+    }
+    return false;
+}
+
 static void henka_set_uniform_float_array_owned(
     GLuint program,
     const henka_opengl_shader_data* shader_data,
@@ -3334,7 +3358,7 @@ static void henka_opengl_draw_shadow_pass(
     for (index = 0U; index < scene->entity_capacity; ++index)
     {
         const henka_scene_entity_record* entity = &scene->entities[index];
-        const henka_opengl_mesh_data* mesh_data;
+        uint32_t part_index;
 
         if (!entity->active || !entity->visible || entity->mesh == NULL ||
             !entity->material.cast_shadows ||
@@ -3344,8 +3368,7 @@ static void henka_opengl_draw_shadow_pass(
         {
             continue;
         }
-        mesh_data = (const henka_opengl_mesh_data*)entity->mesh->backend_data;
-        if (mesh_data == NULL)
+        if (henka_mesh_get_part_count(entity->mesh) == 0U)
         {
             continue;
         }
@@ -3376,8 +3399,17 @@ static void henka_opengl_draw_shadow_pass(
         glBindTexture(GL_TEXTURE_2D,
             entity->material.base_color_texture != NULL && entity->material.base_color_texture->backend_data != NULL ?
             ((const henka_opengl_texture_data*)entity->material.base_color_texture->backend_data)->texture_id : 0U);
-        g_gl.BindVertexArray(mesh_data->vao);
-        glDrawElements(mesh_data->primitive_mode, mesh_data->index_count, GL_UNSIGNED_INT, 0);
+        for (part_index = 0U; part_index < henka_mesh_get_part_count(entity->mesh); ++part_index)
+        {
+            const henka_opengl_mesh_data* mesh_data =
+                (const henka_opengl_mesh_data*)entity->mesh->parts[part_index].backend_data;
+            if (mesh_data == NULL)
+            {
+                continue;
+            }
+            g_gl.BindVertexArray(mesh_data->vao);
+            glDrawElements(mesh_data->primitive_mode, mesh_data->index_count, GL_UNSIGNED_INT, 0);
+        }
         if (!state->reflection_probe_capture_active && entity->material.terrain_layers_enabled)
         {
             state->scene_terrain_shadow_draw_calls += 1U;
@@ -3432,7 +3464,7 @@ static void henka_opengl_draw_point_shadow_pass(
         for (size_t index = 0U; index < scene->entity_capacity; ++index)
         {
             const henka_scene_entity_record* entity = &scene->entities[index];
-            const henka_opengl_mesh_data* mesh_data;
+            uint32_t part_index;
             if (!entity->active || !entity->visible || entity->mesh == NULL ||
                 !entity->material.cast_shadows ||
                 entity->material.alpha_mode == HENKA_MATERIAL_ALPHA_BLENDED ||
@@ -3440,8 +3472,7 @@ static void henka_opengl_draw_point_shadow_pass(
             {
                 continue;
             }
-            mesh_data = (const henka_opengl_mesh_data*)entity->mesh->backend_data;
-            if (mesh_data == NULL) continue;
+            if (henka_mesh_get_part_count(entity->mesh) == 0U) continue;
             if (entity->material.double_sided) glDisable(GL_CULL_FACE);
             else { glEnable(GL_CULL_FACE); glCullFace(GL_FRONT); }
             henka_set_uniform_mat4_owned(state->shadow_program, &state->shadow_shader_data,
@@ -3471,8 +3502,17 @@ static void henka_opengl_draw_point_shadow_pass(
             glBindTexture(GL_TEXTURE_2D,
                 entity->material.base_color_texture != NULL && entity->material.base_color_texture->backend_data != NULL ?
                 ((const henka_opengl_texture_data*)entity->material.base_color_texture->backend_data)->texture_id : 0U);
-            g_gl.BindVertexArray(mesh_data->vao);
-            glDrawElements(mesh_data->primitive_mode, mesh_data->index_count, GL_UNSIGNED_INT, 0);
+            for (part_index = 0U; part_index < henka_mesh_get_part_count(entity->mesh); ++part_index)
+            {
+                const henka_opengl_mesh_data* mesh_data =
+                    (const henka_opengl_mesh_data*)entity->mesh->parts[part_index].backend_data;
+                if (mesh_data == NULL)
+                {
+                    continue;
+                }
+                g_gl.BindVertexArray(mesh_data->vao);
+                glDrawElements(mesh_data->primitive_mode, mesh_data->index_count, GL_UNSIGNED_INT, 0);
+            }
         }
     }
     henka_set_uniform_bool_owned(state->shadow_program, &state->shadow_shader_data,
@@ -5308,7 +5348,8 @@ henka_result henka_opengl_renderer_draw_scene(
         uint32_t reflection_probe_index = UINT32_MAX;
         bool use_reflection_probe_map;
         size_t instance_count = 1U;
-        bool occlusion_query_active = false;
+         bool occlusion_query_active = false;
+         uint32_t part_index;
 
         entity = &scene->entities[draw_index];
         if (!entity->active ||
@@ -5359,7 +5400,7 @@ henka_result henka_opengl_renderer_draw_scene(
                     break;
                 }
             }
-            if (selected_mesh == NULL || selected_mesh->backend_data == NULL)
+            if (selected_mesh == NULL || henka_mesh_get_part_count(selected_mesh) == 0U)
             {
                 state->scene_lod_fallback_entities += 1U;
                 selected_mesh = entity->mesh;
@@ -5403,9 +5444,7 @@ henka_result henka_opengl_renderer_draw_scene(
             continue;
         }
 
-        mesh_data =
-            (const henka_opengl_mesh_data*)
-                selected_mesh->backend_data;
+        mesh_data = (const henka_opengl_mesh_data*)selected_mesh->parts[0].backend_data;
         shader_data =
             (const henka_opengl_shader_data*)
                 entity->material.shader->backend_data;
@@ -5440,7 +5479,7 @@ henka_result henka_opengl_renderer_draw_scene(
             !helper_entity &&
             henka_renderer_get_viewport_shading_mode(
                 renderer) <= HENKA_VIEWPORT_SHADING_SOLID &&
-            mesh_data->primitive_mode != GL_LINES;
+            henka_mesh_has_primitive(selected_mesh, HENKA_MESH_PRIMITIVE_TRIANGLES);
         if (editor_surface)
         {
             shader_data = &state->viewport_shader_data;
@@ -5542,6 +5581,7 @@ henka_result henka_opengl_renderer_draw_scene(
             henka_transform_to_mat4(entity->previous_transform) : model;
         if (state->instancing_available &&
             pass == 0U &&
+            selected_mesh->part_count == 1U &&
             entity->lod.level_count == 0U &&
             (entity->flags & HENKA_SCENE_ENTITY_FLAG_HELPER) == 0U &&
             entity->material.alpha_mode != HENKA_MATERIAL_ALPHA_BLENDED &&
@@ -6046,12 +6086,21 @@ henka_result henka_opengl_renderer_draw_scene(
         }
         else
         {
-            g_gl.BindVertexArray(mesh_data->vao);
-            glDrawElements(
-                mesh_data->primitive_mode,
-                mesh_data->index_count,
-                GL_UNSIGNED_INT,
-                0);
+            for (part_index = 0U; part_index < henka_mesh_get_part_count(selected_mesh); ++part_index)
+            {
+                const henka_opengl_mesh_data* part_mesh_data =
+                    (const henka_opengl_mesh_data*)selected_mesh->parts[part_index].backend_data;
+                if (part_mesh_data == NULL)
+                {
+                    continue;
+                }
+                g_gl.BindVertexArray(part_mesh_data->vao);
+                glDrawElements(
+                    part_mesh_data->primitive_mode,
+                    part_mesh_data->index_count,
+                    GL_UNSIGNED_INT,
+                    0);
+            }
         }
         if (occlusion_query_active)
         {
@@ -7440,6 +7489,13 @@ henka_result henka_opengl_renderer_create_mesh_from_data(
     mesh_data->index_count = (GLsizei)index_count;
 
     mesh->renderer = renderer;
+    mesh->part_count = 1U;
+    mesh->parts[0].primitive = primitive;
+    mesh->parts[0].vertex_count = vertex_count;
+    mesh->parts[0].index_count = index_count;
+    mesh->parts[0].material_region_min = mesh->material_region_min;
+    mesh->parts[0].material_region_max = mesh->material_region_max;
+    mesh->parts[0].backend_data = mesh_data;
     mesh->primitive = primitive;
     mesh->vertex_count = vertex_count;
     mesh->index_count = index_count;
@@ -7467,35 +7523,44 @@ henka_result henka_opengl_renderer_create_mesh_from_data(
 
 void henka_opengl_renderer_destroy_mesh(struct henka_mesh* mesh)
 {
-    henka_opengl_mesh_data* mesh_data;
+    uint32_t part_index;
 
-    if (mesh == NULL || mesh->backend_data == NULL)
+    if (mesh == NULL || mesh->part_count == 0U || mesh->part_count > HENKA_MESH_MAX_PRIMITIVE_PARTS)
     {
         return;
     }
 
-    mesh_data = (henka_opengl_mesh_data*)mesh->backend_data;
-    if (mesh->renderer != NULL && mesh->renderer->backend_state != NULL)
+    for (part_index = 0U; part_index < mesh->part_count; ++part_index)
     {
-        henka_opengl_renderer_state* memory_state =
-            (henka_opengl_renderer_state*)mesh->renderer->backend_state;
-        henka_opengl_memory_remove_category(
-            memory_state,
-            &memory_state->tracked_mesh_bytes,
-            mesh_data->tracked_gpu_bytes);
-        if (memory_state->tracked_mesh_count > 0U)
+        henka_mesh_part* part = &mesh->parts[part_index];
+        henka_opengl_mesh_data* mesh_data = (henka_opengl_mesh_data*)part->backend_data;
+        if (mesh_data == NULL)
         {
-            --memory_state->tracked_mesh_count;
+            continue;
         }
+        if (mesh->renderer != NULL && mesh->renderer->backend_state != NULL)
+        {
+            henka_opengl_renderer_state* memory_state =
+                (henka_opengl_renderer_state*)mesh->renderer->backend_state;
+            henka_opengl_memory_remove_category(
+                memory_state,
+                &memory_state->tracked_mesh_bytes,
+                mesh_data->tracked_gpu_bytes);
+            if (memory_state->tracked_mesh_count > 0U)
+            {
+                --memory_state->tracked_mesh_count;
+            }
+        }
+        if (mesh_data->terrain_weight_buffer != 0U)
+        {
+            g_gl.DeleteBuffers(1, &mesh_data->terrain_weight_buffer);
+        }
+        g_gl.DeleteBuffers(1, &mesh_data->index_buffer);
+        g_gl.DeleteBuffers(1, &mesh_data->vertex_buffer);
+        g_gl.DeleteVertexArrays(1, &mesh_data->vao);
+        henka_free(mesh_data);
+        part->backend_data = NULL;
     }
-    if (mesh_data->terrain_weight_buffer != 0U)
-    {
-        g_gl.DeleteBuffers(1, &mesh_data->terrain_weight_buffer);
-    }
-    g_gl.DeleteBuffers(1, &mesh_data->index_buffer);
-    g_gl.DeleteBuffers(1, &mesh_data->vertex_buffer);
-    g_gl.DeleteVertexArrays(1, &mesh_data->vao);
-    henka_free(mesh_data);
     henka_free(mesh);
 }
 
@@ -7511,13 +7576,13 @@ henka_result henka_opengl_renderer_set_terrain_weights(
     size_t weight_size;
     uint64_t weight_bytes;
 
-    if (mesh == NULL || mesh->backend_data == NULL || weights == NULL ||
+    if (mesh == NULL || mesh->part_count != 1U || mesh->parts[0].backend_data == NULL || weights == NULL ||
         vertex_count <= 0 || vertex_count != mesh->vertex_count ||
         !henka_checked_size_multiply((size_t)vertex_count, 4U, &weight_size))
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
-    mesh_data = (henka_opengl_mesh_data*)mesh->backend_data;
+    mesh_data = (henka_opengl_mesh_data*)mesh->parts[0].backend_data;
     weight_bytes = (uint64_t)weight_size;
     previous_weight_bytes = mesh_data->terrain_weight_bytes;
     if (weight_bytes > (uint64_t)PTRDIFF_MAX)

@@ -183,6 +183,58 @@ static void henka_test_loose_authoring_renderer_bridge(void)
     henka_engine_destroy(engine);
 }
 
+static void henka_test_mixed_loose_authoring_renderer_bridge(void)
+{
+    henka_engine_config config = {0};
+    henka_engine* engine = NULL;
+    henka_authoring_mesh* source = NULL;
+    henka_authoring_mesh_desc desc = {6U, 5U, 2U, 4U};
+    henka_authoring_vertex_id vertices[6];
+    henka_authoring_vertex_id face_vertices[] = {1U, 2U, 3U};
+    henka_authoring_edge_id edge = HENKA_AUTHORING_INVALID_ID;
+    henka_authoring_face_id face = HENKA_AUTHORING_INVALID_ID;
+    henka_mesh* mesh = NULL;
+
+    config.application_name = "Henka Mixed Loose Authoring Renderer Bridge Test";
+    config.window_width = 320;
+    config.window_height = 240;
+    config.enable_vsync = false;
+    HENKA_TEST_ASSERT(henka_engine_create(&config, &engine) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_authoring_mesh_create(&desc, &source) == HENKA_SUCCESS);
+    for (size_t index = 0U; index < 6U; ++index)
+    {
+        HENKA_TEST_ASSERT(henka_authoring_mesh_add_vertex(
+            source,
+            index == 0U ? (henka_vec3){0.0f, 0.0f, 0.0f} :
+                index == 1U ? (henka_vec3){1.0f, 0.0f, 0.0f} :
+                index == 2U ? (henka_vec3){0.0f, 1.0f, 0.0f} :
+                (henka_vec3){(float)index, 0.0f, 0.0f},
+            (henka_vec2){0.0f, 0.0f},
+            0U,
+                &vertices[index]) == HENKA_SUCCESS);
+    }
+    face_vertices[0] = vertices[0];
+    face_vertices[1] = vertices[1];
+    face_vertices[2] = vertices[2];
+    HENKA_TEST_ASSERT(henka_authoring_mesh_add_face(
+        source, face_vertices, 3U, 0U, true, &face) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(henka_authoring_mesh_add_edge(
+        source, vertices[3], vertices[4], false, &edge) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(edge != HENKA_AUTHORING_INVALID_ID);
+    HENKA_TEST_ASSERT(face != HENKA_AUTHORING_INVALID_ID);
+    HENKA_TEST_ASSERT(henka_mesh_create_from_authoring_mesh(engine, source, &mesh) == HENKA_SUCCESS);
+    HENKA_TEST_ASSERT(mesh != NULL && mesh->part_count == 3U);
+    HENKA_TEST_ASSERT(mesh->parts[0].primitive == HENKA_MESH_PRIMITIVE_TRIANGLES);
+    HENKA_TEST_ASSERT(mesh->parts[1].primitive == HENKA_MESH_PRIMITIVE_LINES);
+    HENKA_TEST_ASSERT(mesh->parts[2].primitive == HENKA_MESH_PRIMITIVE_POINTS);
+    HENKA_TEST_ASSERT(mesh->parts[0].index_count == 3);
+    HENKA_TEST_ASSERT(mesh->parts[1].index_count == 2);
+    HENKA_TEST_ASSERT(mesh->parts[2].index_count == 1);
+    henka_mesh_destroy(mesh);
+    henka_authoring_mesh_destroy(source);
+    henka_engine_destroy(engine);
+}
+
 static void henka_test_gltf_scene_import(void)
 {
     static const char* scene_gltf =
@@ -763,5 +815,6 @@ void henka_test_model(void)
     henka_test_model_rejects_unsafe_bounds();
     henka_test_authoring_mesh_renderer_bridge();
     henka_test_loose_authoring_renderer_bridge();
+    henka_test_mixed_loose_authoring_renderer_bridge();
     henka_test_gltf_scene_import();
 }
