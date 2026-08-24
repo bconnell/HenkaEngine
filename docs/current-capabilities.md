@@ -190,12 +190,19 @@ authoritative section below.
   selection, transactional single-edge dissolve for compatible interior edges,
   single-edge delete of its incident face set, bounded standalone boundary-edge
   bevel, bounded multi-edge boundary bevel across distinct faces, and bounded
-  same-face boundary bevel with shared-endpoint corner caps are available.
+  same-face boundary bevel with shared-endpoint corner caps are available. The
+  core API also provides bounded surface-connected extrusion for one open
+  boundary edge: it offsets the edge along its incident face normal, preserves
+  the source face and selected hard-edge intent, and creates one connecting
+  quad transactionally. Interior/manifold edges and broader edge-set extrusion
+  remain rejected.
   Bounded compatible interior-edge bevel for an isolated two-quad patch is also
   available. Edge Delete preserves the vertex set. Interior bevel rejects hard
   edges, material/smooth/UV discontinuities, non-quad faces, neighboring shared
   boundaries, and ambiguous endpoint fans; broader interior edge-set bevel and
-  broader edge topology operations remain in progress.
+  broader edge topology operations remain in progress. The new boundary-edge
+  extrusion is currently a core authoring operation; the shared Sandbox
+  modeling session and Authoring panel do not yet expose it.
 
 ## Scripting / Behaviors
 
@@ -225,7 +232,8 @@ authoritative section below.
   add a standalone edge from exactly two selected vertices through the same
   transactional source/render/history boundary. Broader loose-component
   editing and general surface-connected Vertex/Edge Extrude workflows remain
-  unavailable.
+  unavailable; the bounded core boundary-edge operation is not a claim of
+  complete editor-integrated Edge Extrude coverage.
 - A bounded deterministic compatible quad-strip traversal foundation is
   available for modeling operators. It records ordered face/entry/exit edges,
   terminates at boundaries or reports a closed ring, and rejects hard, material,

@@ -2375,6 +2375,113 @@ cleanup:
     return result ? 1 : fail("transactional loose edge extrude");
 }
 
+static int test_boundary_edge_extrude_operation(void)
+{
+    const henka_authoring_mesh_desc desc = {16U, 32U, 8U, 8U};
+    henka_authoring_mesh* mesh = NULL;
+    henka_authoring_mesh* rejected_mesh = NULL;
+    henka_authoring_face_id source_face_id = HENKA_AUTHORING_INVALID_ID;
+    henka_authoring_edge_id source_edge_id = HENKA_AUTHORING_INVALID_ID;
+    henka_authoring_edge_id new_edge_id = HENKA_AUTHORING_INVALID_ID;
+    henka_authoring_face_id new_face_id = HENKA_AUTHORING_INVALID_ID;
+    henka_authoring_modeling_report report = {0};
+    henka_authoring_modeling_report rejected_report = {0};
+    henka_authoring_mesh_counts before;
+    henka_authoring_mesh_counts after;
+    const henka_authoring_edge* source_edge;
+    const henka_authoring_edge* new_edge;
+    const henka_authoring_face* new_face;
+    const henka_authoring_vertex* new_first;
+    const henka_authoring_vertex* new_second;
+    size_t face_slot;
+    int result = 0;
+
+    if (henka_authoring_mesh_create_plane(&desc, 2.0f, 2.0f, &mesh) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    for (face_slot = 0U; face_slot < desc.max_faces; ++face_slot)
+    {
+        if (henka_authoring_mesh_get_face_id_at(mesh, face_slot, &source_face_id) == HENKA_SUCCESS)
+        {
+            break;
+        }
+    }
+    if (source_face_id == HENKA_AUTHORING_INVALID_ID)
+    {
+        goto cleanup;
+    }
+    {
+        const henka_authoring_face* source_face =
+            henka_authoring_mesh_get_face(mesh, source_face_id);
+        if (source_face == NULL || source_face->corner_count != 4U)
+        {
+            goto cleanup;
+        }
+        source_edge_id = source_face->edges[0];
+    }
+    if (henka_authoring_mesh_set_face_material_region(mesh, source_face_id, 7U) != HENKA_SUCCESS ||
+        henka_authoring_mesh_set_edge_hard(mesh, source_edge_id, true) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    source_edge = henka_authoring_mesh_get_edge(mesh, source_edge_id);
+    if (source_edge == NULL || source_edge->face_count != 1U)
+    {
+        goto cleanup;
+    }
+    before = henka_authoring_mesh_get_counts(mesh);
+    if (henka_authoring_mesh_extrude_edge(
+            mesh, source_edge_id, 0.5f, &new_edge_id, &new_face_id, &report) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    after = henka_authoring_mesh_get_counts(mesh);
+    source_edge = henka_authoring_mesh_get_edge(mesh, source_edge_id);
+    new_edge = henka_authoring_mesh_get_edge(mesh, new_edge_id);
+    new_face = henka_authoring_mesh_get_face(mesh, new_face_id);
+    new_first = new_edge == NULL ? NULL : henka_authoring_mesh_get_vertex(
+        mesh, new_edge->vertices[0]);
+    new_second = new_edge == NULL ? NULL : henka_authoring_mesh_get_vertex(
+        mesh, new_edge->vertices[1]);
+    if (!report.changed || report.created_vertices != 2U || report.created_edges != 3U ||
+        report.created_faces != 1U || new_edge_id == HENKA_AUTHORING_INVALID_ID ||
+        new_face_id == HENKA_AUTHORING_INVALID_ID || source_edge == NULL || new_edge == NULL ||
+        new_face == NULL || new_first == NULL || new_second == NULL ||
+        after.vertices != before.vertices + 2U || after.edges != before.edges + 3U ||
+        after.faces != before.faces + 1U || source_edge->face_count != 1U ||
+        new_edge->face_count != 2U || !new_edge->hard || new_face->corner_count != 4U ||
+        new_face->material_region != 7U ||
+        fabsf(new_first->position.y + 0.5f) > 0.0001f ||
+        fabsf(new_second->position.y + 0.5f) > 0.0001f ||
+        !henka_authoring_mesh_validate(mesh))
+    {
+        goto cleanup;
+    }
+    henka_authoring_mesh_destroy(mesh);
+    mesh = NULL;
+
+    if (henka_authoring_mesh_create_box(&desc, 2.0f, 2.0f, 2.0f, &rejected_mesh) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    before = henka_authoring_mesh_get_counts(rejected_mesh);
+    if (henka_authoring_mesh_extrude_edge(
+            rejected_mesh, 1U, 0.5f, &new_edge_id, &new_face_id, &rejected_report) == HENKA_SUCCESS ||
+        rejected_report.changed ||
+        (after = henka_authoring_mesh_get_counts(rejected_mesh), memcmp(&before, &after, sizeof(before)) != 0) ||
+        !henka_authoring_mesh_validate(rejected_mesh))
+    {
+        goto cleanup;
+    }
+    result = 1;
+
+cleanup:
+    henka_authoring_mesh_destroy(rejected_mesh);
+    henka_authoring_mesh_destroy(mesh);
+    return result ? 1 : fail("transactional boundary edge extrude");
+}
+
 static int test_logical_identity_reuse_and_history(void)
 {
     henka_authoring_mesh* mesh = NULL;
@@ -3020,6 +3127,7 @@ int main(void)
         test_loose_vertex_extrude_operation() &&
         test_vertex_extrude_boundary_fan_operation() &&
         test_loose_edge_extrude_operation() &&
+        test_boundary_edge_extrude_operation() &&
         test_logical_identity_reuse_and_history() &&
         test_persistence_versions_and_malformed() &&
         test_loose_component_representation_and_persistence() &&

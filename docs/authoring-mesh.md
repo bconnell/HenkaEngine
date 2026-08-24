@@ -219,12 +219,17 @@ transactional save/load path. A standalone edge must connect two distinct
 active vertices, has zero incident faces until a face consumes that endpoint
 pair, and can be removed explicitly while it remains face-less. The core
 modeling API also provides a bounded transactional explicit-direction
-loose-edge extrude: it creates a parallel edge and one quad face, inherits
-endpoint UV/material metadata, preserves source-edge hard intent, and rejects
-face-backed edges, mismatched endpoint materials, degenerate offsets, and
-capacity exhaustion. The Sandbox session does not yet expose these
-loose-component operations as general surface-connected Vertex/Edge Extrude
-workflows.
+  loose-edge extrude: it creates a parallel edge and one quad face, inherits
+  endpoint UV/material metadata, preserves source-edge hard intent, and rejects
+  face-backed edges, mismatched endpoint materials, degenerate offsets, and
+  capacity exhaustion. The core API also provides bounded surface-connected
+  extrusion for one open boundary edge: it offsets the edge along its incident
+  face normal, replaces that edge in the source face, creates one connecting
+  quad, preserves selected hard-edge intent, and publishes only after topology
+  and geometry validation. Interior/manifold edges and broader edge-set
+  extrusion remain rejected. The Sandbox session does not yet expose these
+  core boundary-edge or loose-component operations as general
+  surface-connected Vertex/Edge Extrude workflows.
 material-instance assignment, texture
 dependencies, general collision integration beyond the bound box contract,
 package ownership, topology-aware picking, and showcase rebuilds still need the

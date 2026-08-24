@@ -195,6 +195,20 @@ henka_result henka_authoring_mesh_extrude_loose_edge(
     henka_authoring_face_id* out_new_face_id,
     henka_authoring_modeling_report* out_report);
 
+/* Extrudes one open boundary edge along its incident face normal. The source
+ * face keeps its material and smoothing metadata, the selected edge's hard
+ * intent is copied to the new edge, and one connecting quad is created. The
+ * candidate is published only after bounded topology and geometry validation;
+ * manifold/interior edges, invalid distances, and capacity failures are
+ * rejected without changing the source mesh. */
+henka_result henka_authoring_mesh_extrude_edge(
+    henka_authoring_mesh* mesh,
+    henka_authoring_edge_id edge_id,
+    float distance,
+    henka_authoring_edge_id* out_new_edge_id,
+    henka_authoring_face_id* out_new_face_id,
+    henka_authoring_modeling_report* out_report);
+
 /* Dissolves one compatible interior edge into its two adjacent face loops.
  * Boundary, hard, UV-seamed, material-discontinuous, and capacity-invalid
  * requests are rejected without changing the source mesh. */
