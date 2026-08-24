@@ -19,9 +19,10 @@
 #include "../core/checked.h"
 #include "authoring_mesh_internal.h"
 
-#define HENKA_AUTHORING_MESH_FILE_VERSION 4U
+#define HENKA_AUTHORING_MESH_FILE_VERSION 5U
 #define HENKA_AUTHORING_MESH_LEGACY_FILE_VERSION 2U
 #define HENKA_AUTHORING_MESH_LEGACY_FILE_VERSION_V3 3U
+#define HENKA_AUTHORING_MESH_LEGACY_FILE_VERSION_V4 4U
 #define HENKA_AUTHORING_TEMP_PATH_SUFFIX_CAPACITY 96U
 
 #ifdef _WIN32
@@ -3401,6 +3402,7 @@ henka_result henka_authoring_mesh_load_file(henka_authoring_mesh* mesh, const ch
             !authoring_read_u32(file, &version) ||
             (version != HENKA_AUTHORING_MESH_LEGACY_FILE_VERSION &&
              version != HENKA_AUTHORING_MESH_LEGACY_FILE_VERSION_V3 &&
+             version != HENKA_AUTHORING_MESH_LEGACY_FILE_VERSION_V4 &&
              version != HENKA_AUTHORING_MESH_FILE_VERSION) ||
             !authoring_read_u32(file, &capacities[0]) || !authoring_read_u32(file, &capacities[1]) ||
             !authoring_read_u32(file, &capacities[2]) || !authoring_read_u32(file, &capacities[3]) ||
@@ -3409,7 +3411,8 @@ henka_result henka_authoring_mesh_load_file(henka_authoring_mesh* mesh, const ch
         {
             goto cleanup;
         }
-        if (version == HENKA_AUTHORING_MESH_FILE_VERSION &&
+        if ((version == HENKA_AUTHORING_MESH_LEGACY_FILE_VERSION_V4 ||
+             version == HENKA_AUTHORING_MESH_FILE_VERSION) &&
             (!authoring_read_u32(file, &next_ids[0]) ||
              !authoring_read_u32(file, &next_ids[1]) ||
              !authoring_read_u32(file, &next_ids[2])))
@@ -3430,7 +3433,8 @@ henka_result henka_authoring_mesh_load_file(henka_authoring_mesh* mesh, const ch
         goto cleanup;
     }
     result = HENKA_ERROR_INVALID_ARGUMENT;
-    if (version == HENKA_AUTHORING_MESH_FILE_VERSION)
+    if (version == HENKA_AUTHORING_MESH_LEGACY_FILE_VERSION_V4 ||
+        version == HENKA_AUTHORING_MESH_FILE_VERSION)
     {
         candidate->next_vertex_id = next_ids[0];
         candidate->next_edge_id = next_ids[1];
@@ -3462,7 +3466,8 @@ henka_result henka_authoring_mesh_load_file(henka_authoring_mesh* mesh, const ch
                 !authoring_read_u32(file, &edge->faces[0]) ||
                 !authoring_read_u32(file, &edge->faces[1]) ||
                 !authoring_read_u32(file, &face_count) ||
-                !authoring_read_byte(file, &hard) || hard > 1U || face_count > 2U)
+                !authoring_read_byte(file, &hard) || hard > 1U || face_count > 2U ||
+                (version != HENKA_AUTHORING_MESH_FILE_VERSION && face_count == 0U))
             {
                 goto cleanup;
             }
@@ -3556,7 +3561,8 @@ henka_result henka_authoring_mesh_load_file(henka_authoring_mesh* mesh, const ch
                     !authoring_read_u32(file, &edge->faces[0]) ||
                     !authoring_read_u32(file, &edge->faces[1]) ||
                     !authoring_read_u32(file, &face_count) ||
-                    !authoring_read_byte(file, &active) || active > 1U || face_count > 2U) goto cleanup;
+                    !authoring_read_byte(file, &active) || active > 1U || face_count > 2U ||
+                    face_count == 0U) goto cleanup;
                 edge->face_count = face_count;
                 edge->hard = active != 0U;
             }
@@ -3647,6 +3653,7 @@ henka_result henka_authoring_mesh_load_file_new(const char* path, henka_authorin
             authoring_read_u32(file, &version) &&
             (version == HENKA_AUTHORING_MESH_LEGACY_FILE_VERSION ||
              version == HENKA_AUTHORING_MESH_LEGACY_FILE_VERSION_V3 ||
+             version == HENKA_AUTHORING_MESH_LEGACY_FILE_VERSION_V4 ||
              version == HENKA_AUTHORING_MESH_FILE_VERSION) &&
             authoring_read_u32(file, &capacities[0]) &&
             authoring_read_u32(file, &capacities[1]) &&

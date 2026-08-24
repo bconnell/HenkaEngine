@@ -214,7 +214,7 @@ This bounded session does not claim general Vertex Extrude coverage, and
 dedicated loose-component creation UI remains unfinished. The core authoring
 representation also accepts
 explicit loose vertices and standalone wire edges: both use stable logical IDs,
-bounded physical storage, deterministic endpoint ordering, and the same HAMS v4
+bounded physical storage, deterministic endpoint ordering, and the HAMS v5
 transactional save/load path. A standalone edge must connect two distinct
 active vertices, has zero incident faces until a face consumes that endpoint
 pair, and can be removed explicitly while it remains face-less. The core
@@ -256,12 +256,16 @@ must start empty, counts and indices are bounded and checked, and allocation or
 evaluation failure leaves the output slot empty. This is the reusable
 authoring-to-render boundary; it does not create a material authority or
 replace glTF scene/material ownership.
-`henka_authoring_mesh_save_file` writes HAMS v4 with explicitly little-endian
+`henka_authoring_mesh_save_file` writes HAMS v5 with explicitly little-endian
 32-bit integers and IEEE-754 float bit patterns. Each save uses a unique
 same-directory temporary name and atomically replaces the destination only
 after the complete candidate is flushed, so a failed or concurrent save does
-not remove the prior valid source. The loader accepts the current v4
-format and legacy v2/v3 sources shipped with the repository.
+not remove the prior valid source. HAMS v5 is the first format whose validity
+contract includes loose vertices and zero-face wire edges. The loader accepts
+the current v5 format and legacy v2/v3/v4 surface-only sources shipped with
+the repository; a legacy v4 file containing a loose edge is rejected rather
+than interpreted under two different same-version contracts. Legacy files are
+validated and migrated in memory only and are not rewritten automatically.
 `henka_authoring_mesh_load_file_new` can load a versioned `.hams` source without
 requiring the consumer to duplicate the file's capacity header; it validates
 the declared bounded capacities before creating the candidate and retains an

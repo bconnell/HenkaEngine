@@ -63,7 +63,7 @@ try {
 
     [System.IO.File]::AppendAllText(
         $authoringMeshPath,
-        [Environment]::NewLine + "The current writer emits HAMS v3." + [Environment]::NewLine)
+        [Environment]::NewLine + "The current writer emits HAMS v4." + [Environment]::NewLine)
     if ((Invoke-TruthCheck) -eq 0) {
         throw "Documentation truth accepted a stale current-writer version claim."
     }

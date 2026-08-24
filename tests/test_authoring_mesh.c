@@ -152,6 +152,21 @@ static int test_append_byte(const char* path, unsigned char value)
     return ok;
 }
 
+static int test_patch_hams_u32_at(const char* path, long offset, uint32_t value)
+{
+    FILE* file = test_open_file(path, "rb+");
+    int ok;
+    if (file == NULL) return 0;
+    ok = fseek(file, offset, SEEK_SET) == 0 && test_write_u32(file, value);
+    if (fclose(file) != 0) ok = 0;
+    return ok;
+}
+
+static int test_patch_hams_version(const char* path, uint32_t version)
+{
+    return test_patch_hams_u32_at(path, 4L, version);
+}
+
 static int test_topology_and_evaluation(void)
 {
     henka_authoring_mesh_desc desc = henka_authoring_mesh_desc_default();
@@ -339,7 +354,7 @@ static int test_history_and_persistence(void)
         goto cleanup;
     }
     saved = NULL;
-    if (memcmp(header, "HAMS\x04\0\0\0", sizeof(header)) != 0)
+    if (memcmp(header, "HAMS\x05\0\0\0", sizeof(header)) != 0)
     {
         goto cleanup;
     }
@@ -2709,6 +2724,171 @@ cleanup:
     return result ? 1 : fail("loose component representation/persistence");
 }
 
+static int test_hams_loose_topology_versioning(void)
+{
+    const char* path = "build/test_tmp/authoring_hams_loose_versioning.hams";
+    const henka_authoring_mesh_desc desc = {4U, 4U, 1U, 4U};
+    henka_authoring_mesh* destination = NULL;
+    henka_authoring_mesh* surface = NULL;
+    henka_authoring_mesh* loose = NULL;
+    henka_authoring_mesh* loaded = NULL;
+    henka_authoring_vertex_id destination_vertex = HENKA_AUTHORING_INVALID_ID;
+    henka_authoring_vertex_id surface_vertices[4] = {0U, 0U, 0U, 0U};
+    henka_authoring_vertex_id loose_first = HENKA_AUTHORING_INVALID_ID;
+    henka_authoring_vertex_id loose_second = HENKA_AUTHORING_INVALID_ID;
+    henka_authoring_edge_id loose_edge = HENKA_AUTHORING_INVALID_ID;
+    henka_authoring_face_id surface_face = HENKA_AUTHORING_INVALID_ID;
+    FILE* file = NULL;
+    unsigned char header[8] = {0U};
+    const henka_authoring_vertex* vertex;
+    const char* stage = "create";
+    int result = 0;
+
+    if (henka_authoring_mesh_create(&desc, &destination) != HENKA_SUCCESS ||
+        henka_authoring_mesh_add_vertex(
+            destination,
+            (henka_vec3){42.0f, 0.0f, 0.0f},
+            (henka_vec2){0.0f, 0.0f},
+            0U,
+            &destination_vertex) != HENKA_SUCCESS ||
+        henka_authoring_mesh_create(&desc, &surface) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    stage = "surface construction and v4 load";
+    for (size_t index = 0U; index < 4U; ++index)
+    {
+        const henka_vec3 positions[4] = {
+            {0.0f, 0.0f, 0.0f}, {1.0f, 0.0f, 0.0f},
+            {1.0f, 1.0f, 0.0f}, {0.0f, 1.0f, 0.0f}};
+        const henka_vec2 uvs[4] = {
+            {0.0f, 0.0f}, {1.0f, 0.0f}, {1.0f, 1.0f}, {0.0f, 1.0f}};
+        if (henka_authoring_mesh_add_vertex(
+                surface, positions[index], uvs[index], 0U,
+                &surface_vertices[index]) != HENKA_SUCCESS)
+        {
+            goto cleanup;
+        }
+    }
+    if (henka_authoring_mesh_add_face(
+            surface, surface_vertices, 4U, 0U, true, &surface_face) != HENKA_SUCCESS)
+    {
+        stage = "surface face";
+        goto cleanup;
+    }
+    if (henka_authoring_mesh_save_file(surface, path) != HENKA_SUCCESS)
+    {
+        stage = "surface save";
+        goto cleanup;
+    }
+    if (!test_patch_hams_version(path, 4U))
+    {
+        stage = "surface v4 patch";
+        goto cleanup;
+    }
+    if (henka_authoring_mesh_load_file(destination, path) != HENKA_SUCCESS)
+    {
+        stage = "surface v4 load result";
+        goto cleanup;
+    }
+    if (henka_authoring_mesh_get_counts(destination).faces != 1U ||
+        !henka_authoring_mesh_validate(destination))
+    {
+        stage = "surface v4 load state";
+        goto cleanup;
+    }
+
+    stage = "loose construction";
+    if (henka_authoring_mesh_create(&desc, &loose) != HENKA_SUCCESS ||
+        henka_authoring_mesh_add_vertex(
+            loose,
+            (henka_vec3){2.0f, 0.0f, 0.0f},
+            (henka_vec2){0.0f, 0.0f},
+            7U,
+            &loose_first) != HENKA_SUCCESS ||
+        henka_authoring_mesh_add_vertex(
+            loose,
+            (henka_vec3){3.0f, 0.0f, 0.0f},
+            (henka_vec2){1.0f, 0.0f},
+            7U,
+            &loose_second) != HENKA_SUCCESS ||
+        henka_authoring_mesh_add_edge(
+            loose, loose_first, loose_second, true, &loose_edge) != HENKA_SUCCESS ||
+        henka_authoring_mesh_save_file(loose, path) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    stage = "v5 header";
+    file = test_open_file(path, "rb");
+    if (file == NULL || fread(header, sizeof(header), 1U, file) != 1U ||
+        memcmp(header, "HAMS\x05\0\0\0", sizeof(header)) != 0)
+    {
+        if (file != NULL) fclose(file);
+        file = NULL;
+        goto cleanup;
+    }
+    if (fclose(file) != 0)
+    {
+        file = NULL;
+        goto cleanup;
+    }
+    file = NULL;
+    stage = "v5 loose load";
+    if (henka_authoring_mesh_load_file_new(path, &loaded) != HENKA_SUCCESS ||
+        loaded == NULL ||
+        henka_authoring_mesh_get_edge_face_count(loaded, loose_edge) != 0U ||
+        henka_authoring_mesh_get_vertex(loaded, loose_first) == NULL ||
+        !henka_authoring_mesh_validate(loaded) ||
+        henka_authoring_mesh_add_vertex(
+            loaded,
+            (henka_vec3){4.0f, 0.0f, 0.0f},
+            (henka_vec2){2.0f, 0.0f},
+            7U,
+            &destination_vertex) != HENKA_SUCCESS ||
+        destination_vertex <= loose_second)
+    {
+        goto cleanup;
+    }
+
+    stage = "v4 loose rejection";
+    if (!test_patch_hams_version(path, 4U) ||
+        henka_authoring_mesh_load_file(destination, path) == HENKA_SUCCESS ||
+        henka_authoring_mesh_get_counts(destination).faces != 1U ||
+        (vertex = henka_authoring_mesh_get_vertex(destination, 1U)) == NULL ||
+        fabsf(vertex->position.x - 0.0f) > 0.0001f ||
+        !henka_authoring_mesh_validate(destination))
+    {
+        goto cleanup;
+    }
+
+    stage = "malformed v5 construction";
+    if (henka_authoring_mesh_save_file(loose, path) != HENKA_SUCCESS ||
+        !test_patch_hams_version(path, 5U) ||
+        !test_patch_hams_u32_at(path, 48L + (2L * 28L) + 20L, 1U))
+    {
+        goto cleanup;
+    }
+    stage = "malformed v5 rejection";
+    if (henka_authoring_mesh_load_file(destination, path) == HENKA_SUCCESS ||
+        henka_authoring_mesh_get_counts(destination).faces != 1U ||
+        (vertex = henka_authoring_mesh_get_vertex(destination, 1U)) == NULL ||
+        fabsf(vertex->position.x - 0.0f) > 0.0001f ||
+        !henka_authoring_mesh_validate(destination))
+    {
+        goto cleanup;
+    }
+    result = 1;
+
+cleanup:
+    if (file != NULL) fclose(file);
+    remove(path);
+    henka_authoring_mesh_destroy(loaded);
+    henka_authoring_mesh_destroy(loose);
+    henka_authoring_mesh_destroy(surface);
+    henka_authoring_mesh_destroy(destination);
+    return result ? 1 : fail(stage);
+}
+
 int main(void)
 {
     return test_topology_and_evaluation() && test_rejection_and_tombstones() &&
@@ -2730,5 +2910,6 @@ int main(void)
         test_loose_edge_extrude_operation() &&
         test_logical_identity_reuse_and_history() &&
         test_persistence_versions_and_malformed() &&
-        test_loose_component_representation_and_persistence() ? 0 : 1;
+        test_loose_component_representation_and_persistence() &&
+        test_hams_loose_topology_versioning() ? 0 : 1;
 }

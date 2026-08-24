@@ -166,9 +166,11 @@ turning the public README into an implementation ledger.
 - Transactional operations also include plane/box creation, duplicate, face
   extrude, inset, planar bevel rings, face subdivision, selected-face deletion,
   a bounded single-quad face loop cut, planar UV projection, island transforms,
-  packing, and seam detection. HAMS v4 writes portable little-endian data
+  packing, and seam detection. HAMS v5 writes portable little-endian data
   through unique same-directory temporary files and retains reads for
-  checked-in v2/v3 legacy sources.
+  checked-in v2/v3/v4 surface-only legacy sources. HAMS v5 is required for
+  persisted loose vertices and zero-face wire edges; legacy files are migrated
+  in memory only and are not silently rewritten.
 - Imported nontrivial objects can take the Make Editable path. Native source
   persistence, evaluated mesh replacement, material promotion, supported PBR
   overrides, procedural detail textures, and material undo/redo are present
@@ -190,7 +192,7 @@ turning the public README into an implementation ledger.
   broader edge topology operations remain in progress.
 - The core authoring representation also preserves explicit loose vertices and
   standalone wire edges with stable logical IDs, bounded reusable storage, and
-  HAMS v4 save/reload support. The core modeling API also provides a bounded
+  HAMS v5 save/reload support. The core modeling API also provides a bounded
   explicit-direction loose-vertex extrude that preserves the source vertex and
   creates one metadata-inheriting standalone wire edge transactionally, plus a
   bounded loose-edge extrude that creates one parallel edge and one quad face.
