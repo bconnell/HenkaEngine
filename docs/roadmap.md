@@ -235,13 +235,13 @@ tracks that share renderer, asset, persistence, and workspace boundaries.
    shared modeling operator session, including numeric preview, cancel, and
    transactional Apply. Broader edge-loop domains remain planned.
 2. Extend the available loose-component creation controls into broader editing
-   around the bounded loose extrusion session, and expose the bounded
-   surface-connected extrusion operation for one open boundary edge through
-   the Authoring panel. The shared modeling session already provides its
-   transactional preview, cancel, and Apply path. The homogeneous line/point
-   evaluation and bounded triangle/wire/point renderer ownership foundations
-   are available; broader selection, editing, and surface-connected extrusion
-   workflows remain in progress.
+   around the bounded loose extrusion session. The bounded surface-connected
+   extrusion operation for one open boundary edge is now available through the
+   shared modeling session and Authoring panel, with transactional preview,
+   cancel, and Apply. The homogeneous line/point evaluation and bounded
+   triangle/wire/point renderer ownership foundations are available; broader
+   selection, editing, and surface-connected extrusion workflows remain in
+   progress.
 3. Strengthen transactional modeling, UV, material, persistence, and undo/redo
    paths while keeping failure behavior fail-closed.
 4. Improve editor integration, authoring source/project workflows, and the

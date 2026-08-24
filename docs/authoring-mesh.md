@@ -229,8 +229,9 @@ modeling API also provides a bounded transactional explicit-direction
   and geometry validation. Interior/manifold edges and broader edge-set
   extrusion remain rejected. The shared Sandbox modeling session now exposes
   this bounded boundary-edge operation through preview, cancel, and Apply;
-  the Authoring panel does not yet expose it, and broader surface-connected
-  Vertex/Edge Extrude workflows remain unfinished.
+  the Authoring panel routes the same operation from the shared amount control,
+  and broader surface-connected Vertex/Edge Extrude workflows remain
+  unfinished.
 material-instance assignment, texture
 dependencies, general collision integration beyond the bound box contract,
 package ownership, topology-aware picking, and showcase rebuilds still need the

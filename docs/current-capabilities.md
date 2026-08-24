@@ -224,7 +224,9 @@ authoritative section below.
   high-contrast markers. The shared Sandbox modeling-operator session and its
   Authoring panel control now preview, cancel, and apply explicit-axis
   extrusion for exactly one selected loose vertex or standalone edge through
-  the core transactional operations. Homogeneous wire-only and isolated-vertex-only
+  the core transactional operations; the same control routes one selected
+  open boundary edge through face-normal surface-connected extrusion.
+  Homogeneous wire-only and isolated-vertex-only
   authoring sources now have bounded renderer-backed line and point evaluation.
   Mixed surface-plus-loose and no-face wire-plus-point sources now use bounded
   renderer-backed multi-primitive ownership, preserving triangle, wire, and
@@ -233,8 +235,8 @@ authoritative section below.
   add a standalone edge from exactly two selected vertices through the same
   transactional source/render/history boundary. Broader loose-component
   editing and general surface-connected Vertex/Edge Extrude workflows remain
-  unavailable; the bounded core boundary-edge operation is not a claim of
-  complete editor-integrated Edge Extrude coverage.
+  unavailable; the bounded boundary-edge path is not a claim of complete
+  editor-integrated Edge Extrude coverage.
 - A bounded deterministic compatible quad-strip traversal foundation is
   available for modeling operators. It records ordered face/entry/exit edges,
   terminates at boundaries or reports a closed ring, and rejects hard, material,

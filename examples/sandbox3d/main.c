@@ -734,7 +734,55 @@ static bool sandbox3d_apply_authoring_bevel(
     return true;
 }
 
-static henka_result sandbox3d_preview_authoring_loose_extrude(
+static sandbox3d_modeling_operator_kind sandbox3d_authoring_extrude_operator_kind(
+    const sandbox3d_state* state)
+{
+    const sandbox3d_authoring_selection_mode selection_mode =
+        state == NULL || state->authoring_object == NULL
+            ? SANDBOX3D_AUTHORING_SELECTION_FACE
+            : sandbox3d_authoring_object_get_selection_mode(
+                state->authoring_object);
+    const henka_authoring_mesh* mesh;
+    uint32_t component_id = HENKA_AUTHORING_INVALID_ID;
+    const henka_authoring_edge* edge;
+
+    if (state == NULL || state->authoring_object == NULL ||
+        sandbox3d_authoring_object_get_selected_component_count(
+            state->authoring_object) != 1U)
+    {
+        return SANDBOX3D_MODELING_OPERATOR_NONE;
+    }
+    if (selection_mode == SANDBOX3D_AUTHORING_SELECTION_VERTEX)
+    {
+        return SANDBOX3D_MODELING_OPERATOR_EXTRUDE;
+    }
+    if (selection_mode != SANDBOX3D_AUTHORING_SELECTION_EDGE ||
+        sandbox3d_authoring_object_get_selected_component_at(
+            state->authoring_object, 0U, &component_id) != HENKA_SUCCESS)
+    {
+        return SANDBOX3D_MODELING_OPERATOR_NONE;
+    }
+    mesh = sandbox3d_authoring_object_get_mesh(state->authoring_object);
+    edge = mesh == NULL
+        ? NULL
+        : henka_authoring_mesh_get_edge(
+            mesh, (henka_authoring_edge_id)component_id);
+    if (edge == NULL)
+    {
+        return SANDBOX3D_MODELING_OPERATOR_NONE;
+    }
+    if (edge->face_count == 0U)
+    {
+        return SANDBOX3D_MODELING_OPERATOR_EXTRUDE;
+    }
+    if (edge->face_count == 1U)
+    {
+        return SANDBOX3D_MODELING_OPERATOR_EDGE_EXTRUDE;
+    }
+    return SANDBOX3D_MODELING_OPERATOR_NONE;
+}
+
+static henka_result sandbox3d_preview_authoring_extrude(
     sandbox3d_state* state,
     const char* amount_text)
 {
@@ -743,13 +791,16 @@ static henka_result sandbox3d_preview_authoring_loose_extrude(
             ? SANDBOX3D_AUTHORING_SELECTION_FACE
             : sandbox3d_authoring_object_get_selection_mode(
                 state->authoring_object);
+    const sandbox3d_modeling_operator_kind operator_kind =
+        sandbox3d_authoring_extrude_operator_kind(state);
     henka_result result;
 
     if (state == NULL || state->authoring_object == NULL || amount_text == NULL ||
         sandbox3d_authoring_object_get_selected_component_count(
             state->authoring_object) != 1U ||
         (selection_mode != SANDBOX3D_AUTHORING_SELECTION_VERTEX &&
-         selection_mode != SANDBOX3D_AUTHORING_SELECTION_EDGE))
+         selection_mode != SANDBOX3D_AUTHORING_SELECTION_EDGE) ||
+        operator_kind == SANDBOX3D_MODELING_OPERATOR_NONE)
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
@@ -757,8 +808,9 @@ static henka_result sandbox3d_preview_authoring_loose_extrude(
     result = sandbox3d_modeling_operator_begin(
         &state->modeling_operator,
         state->authoring_object,
-        SANDBOX3D_MODELING_OPERATOR_EXTRUDE);
-    if (result == HENKA_SUCCESS)
+        operator_kind);
+    if (result == HENKA_SUCCESS &&
+        operator_kind == SANDBOX3D_MODELING_OPERATOR_EXTRUDE)
     {
         result = sandbox3d_modeling_operator_set_axis(
             &state->modeling_operator,
@@ -24135,10 +24187,17 @@ details_group_authoring:
                             state, flow_desc.bounds, 28.0f, 1U, &row) &&
                         row.width >= 290.0f)
                     {
+                        const sandbox3d_modeling_operator_kind extrude_operator_kind =
+                            sandbox3d_authoring_extrude_operator_kind(state);
+                        const bool boundary_edge_extrude =
+                            extrude_operator_kind ==
+                                SANDBOX3D_MODELING_OPERATOR_EDGE_EXTRUDE;
                         const bool extrude_preview_active =
                             state->modeling_operator.active &&
-                            state->modeling_operator.kind ==
-                                SANDBOX3D_MODELING_OPERATOR_EXTRUDE &&
+                            (state->modeling_operator.kind ==
+                                SANDBOX3D_MODELING_OPERATOR_EXTRUDE ||
+                             state->modeling_operator.kind ==
+                                SANDBOX3D_MODELING_OPERATOR_EDGE_EXTRUDE) &&
                             sandbox3d_authoring_object_has_preview(
                                 state->authoring_object);
                         bool extrude_amount_changed = false;
@@ -24159,20 +24218,20 @@ details_group_authoring:
                                 extrude_preview_active ? "Refresh" : "Preview"))
                         {
                             const henka_result preview_result =
-                                sandbox3d_preview_authoring_loose_extrude(
+                                sandbox3d_preview_authoring_extrude(
                                     state, state->native_authoring_extrude_amount);
                             sandbox3d_set_status(
                                 state,
                                 preview_result != HENKA_SUCCESS,
                                 preview_result == HENKA_SUCCESS
-                                    ? "Loose Extrude preview ready on Y; Apply or Cancel."
-                                    : "Loose Extrude rejected; select one loose vertex or standalone edge and use a nonzero amount.");
+                                    ? (boundary_edge_extrude
+                                        ? "Boundary Edge Extrude preview ready along face normal; Apply or Cancel."
+                                        : "Loose Extrude preview ready on Y; Apply or Cancel.")
+                                    : (selection_mode == SANDBOX3D_AUTHORING_SELECTION_EDGE
+                                        ? "Edge Extrude rejected; select a standalone or open boundary edge and use a nonzero amount."
+                                        : "Loose Extrude rejected; select one loose vertex and use a nonzero amount."));
                         }
-                        if (state->modeling_operator.active &&
-                            state->modeling_operator.kind ==
-                                SANDBOX3D_MODELING_OPERATOR_EXTRUDE &&
-                            sandbox3d_authoring_object_has_preview(
-                                state->authoring_object) &&
+                        if (extrude_preview_active &&
                             sandbox3d_details_flow_next_row(
                                 state, flow_desc.bounds, 28.0f, 1U, &row) &&
                             row.width >= 260.0f)
@@ -24190,8 +24249,12 @@ details_group_authoring:
                                     state,
                                     apply_result != HENKA_SUCCESS,
                                     apply_result == HENKA_SUCCESS
-                                        ? "Loose Extrude applied transactionally."
-                                        : "Loose Extrude could not be applied; source retained.");
+                                        ? (boundary_edge_extrude
+                                            ? "Boundary Edge Extrude applied transactionally."
+                                            : "Loose Extrude applied transactionally.")
+                                        : (boundary_edge_extrude
+                                            ? "Boundary Edge Extrude could not be applied; source retained."
+                                            : "Loose Extrude could not be applied; source retained."));
                                 if (apply_result == HENKA_SUCCESS)
                                 {
                                     sandbox3d_mark_generic_modeling_applied(state, entity);
@@ -24210,8 +24273,12 @@ details_group_authoring:
                                     state,
                                     cancel_result != HENKA_SUCCESS,
                                     cancel_result == HENKA_SUCCESS
-                                        ? "Loose Extrude canceled; source retained."
-                                        : "Loose Extrude cancellation failed; inspect the authoring state.");
+                                        ? (boundary_edge_extrude
+                                            ? "Boundary Edge Extrude canceled; source retained."
+                                            : "Loose Extrude canceled; source retained.")
+                                        : (boundary_edge_extrude
+                                            ? "Boundary Edge Extrude cancellation failed; inspect the authoring state."
+                                            : "Loose Extrude cancellation failed; inspect the authoring state."));
                             }
                         }
                     }
