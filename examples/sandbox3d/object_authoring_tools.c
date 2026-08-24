@@ -3994,6 +3994,47 @@ henka_result sandbox3d_authoring_object_delete_selected_edge(
     return result;
 }
 
+henka_result sandbox3d_authoring_object_bevel_selected_edge(
+    sandbox3d_authoring_object* object)
+{
+    const uint32_t* selected_ids;
+    size_t selected_count = 0U;
+    henka_authoring_mesh* candidate = NULL;
+    henka_authoring_modeling_report report = {0};
+    bool published = false;
+    henka_result result;
+
+    if (object == NULL || object->selection_mode != SANDBOX3D_AUTHORING_SELECTION_EDGE)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    selected_ids = sandbox3d_authoring_selected_ids_const(object, &selected_count);
+    if (selected_ids == NULL || selected_count != 1U)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    result = henka_authoring_mesh_clone(object->mesh, &candidate);
+    if (result == HENKA_SUCCESS)
+    {
+        result = henka_authoring_mesh_bevel_edge(
+            candidate,
+            (henka_authoring_edge_id)selected_ids[0],
+            object->bevel_width,
+            &report);
+    }
+    if (result == HENKA_SUCCESS)
+    {
+        result = sandbox3d_authoring_publish_candidate(
+            object, candidate, true, HENKA_AUTHORING_INVALID_ID);
+        published = result == HENKA_SUCCESS;
+    }
+    if (result != HENKA_SUCCESS && !published)
+    {
+        henka_authoring_mesh_destroy(candidate);
+    }
+    return result;
+}
+
 henka_result sandbox3d_authoring_object_proportional_move_selected_components(
     sandbox3d_authoring_object* object,
     henka_vec3 offset,

@@ -24767,6 +24767,40 @@ details_group_authoring:
                             "Edge delete rejected; source and selection retained.");
                     }
                 }
+                if (sandbox3d_details_flow_next_row(
+                        state,
+                        flow_desc.bounds,
+                        28.0f,
+                        1U,
+                        &row) &&
+                    row.width >= 290.0f &&
+                    sandbox3d_authoring_object_get_selected_component_count(
+                        state->authoring_object) == 1U &&
+                    henka_ui_button(
+                        state->ui,
+                        "authoring_edge_bevel_top",
+                        (henka_ui_rect){row.x, row.y, 96.0f, 24.0f},
+                        "Bevel Edge"))
+                {
+                    const henka_result bevel_result =
+                        sandbox3d_authoring_object_bevel_selected_edge(
+                            state->authoring_object);
+                    if (bevel_result == HENKA_SUCCESS)
+                    {
+                        sandbox3d_mark_generic_modeling_applied(state, entity);
+                        sandbox3d_set_status(
+                            state,
+                            false,
+                            "Boundary edge beveled transactionally.");
+                    }
+                    else
+                    {
+                        sandbox3d_set_status(
+                            state,
+                            true,
+                            "Edge bevel rejected; select one standalone boundary edge.");
+                    }
+                }
             }
             if (state->authoring_object != NULL &&
                 sandbox3d_details_flow_next_row(state, flow_desc.bounds, 28.0f, 1U, &row) &&
@@ -26021,6 +26055,38 @@ details_group_authoring:
                         state,
                         true,
                         "Edge delete rejected; source and selection retained.");
+                }
+            }
+            if (state->authoring_object != NULL &&
+                selection_mode == SANDBOX3D_AUTHORING_SELECTION_EDGE &&
+                edge_mode_authorized_at_frame &&
+                sandbox3d_details_flow_next_row(state, flow_desc.bounds, 28.0f, 1U, &row) &&
+                row.width >= 290.0f &&
+                sandbox3d_authoring_object_get_selected_component_count(
+                    state->authoring_object) == 1U &&
+                henka_ui_button(
+                    state->ui,
+                    "authoring_edge_bevel",
+                    (henka_ui_rect){row.x, row.y, 96.0f, 24.0f},
+                    "Bevel Edge"))
+            {
+                const henka_result bevel_result =
+                    sandbox3d_authoring_object_bevel_selected_edge(
+                        state->authoring_object);
+                if (bevel_result == HENKA_SUCCESS)
+                {
+                    sandbox3d_mark_generic_modeling_applied(state, entity);
+                    sandbox3d_set_status(
+                        state,
+                        false,
+                        "Boundary edge beveled transactionally.");
+                }
+                else
+                {
+                    sandbox3d_set_status(
+                        state,
+                        true,
+                        "Edge bevel rejected; select one standalone boundary edge.");
                 }
             }
             if (state->authoring_object != NULL &&

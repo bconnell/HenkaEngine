@@ -178,9 +178,10 @@ turning the public README into an implementation ledger.
   in progress.
 - Edge authoring is a separate capability boundary: bounded edge-loop/ring
   selection, transactional single-edge dissolve for compatible interior edges,
-  and transactional single-edge delete of its incident face set are available.
-  Edge Delete preserves the vertex set; broader edge topology operations are
-  not claimed as complete and remain in progress.
+  single-edge delete of its incident face set, and bounded standalone
+  boundary-edge bevel are available. Edge Delete preserves the vertex set;
+  interior-edge bevel, batch edge operations, and broader edge topology
+  operations are not claimed as complete and remain in progress.
 - See [authoring-mesh.md](authoring-mesh.md),
   [runtime-foundations.md](runtime-foundations.md), and
   [showcase-assets.md](showcase-assets.md).

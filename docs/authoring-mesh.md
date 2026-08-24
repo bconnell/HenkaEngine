@@ -35,8 +35,8 @@ analysis; unsafe duplicate groups, non-manifold results, vertex welding, and
 winding rewrites fail closed.
 
 `<henka/authoring_modeling.h>` adds bounded plane and box constructors plus
-transactional duplicate, extrude, inset, planar bevel-ring, and face
-subdivide operations. Each operation works on a clone and publishes only a
+transactional duplicate, extrude, inset, planar bevel-ring, face subdivide,
+and bounded standalone boundary-edge bevel operations. Each operation works on a clone and publishes only a
 validated result, so capacity or non-manifold rejection leaves the source
 mesh unchanged.
 
@@ -151,8 +151,11 @@ splits one face between two non-adjacent corners while preserving the original
 face ID and allocating the new face with a fresh logical ID in a reusable
 physical slot. Transactional single-edge dissolve is available for compatible
 interior edges, and transactional single-edge delete removes the selected
-edge's incident face set while preserving vertices. Broader edge topology
-editing beyond bounded selection and component transforms remains incomplete.
+edge's incident face set while preserving vertices. Bounded edge bevel is also
+available for one boundary edge whose endpoints belong to one face only; it
+creates two interpolated cut vertices and one quad bevel face transactionally.
+Interior edges, ambiguous boundary vertices, and broader batch edge topology
+editing remain incomplete.
 Bounded Vertex Extrude is available for one unambiguous boundary corner of a
 single face. It creates one cap vertex and two connecting side faces while
 preserving the operation's transactional source/render/bounds/collider/undo

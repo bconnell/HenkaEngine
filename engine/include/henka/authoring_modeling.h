@@ -158,6 +158,16 @@ henka_result henka_authoring_mesh_delete_edge(
     henka_authoring_edge_id edge_id,
     henka_authoring_modeling_report* out_report);
 
+/* Bevels one boundary edge whose endpoints belong to one face only. The
+ * operation creates two cut vertices and one bevel face, preserves the source
+ * face identity, and rejects interior or ambiguous boundary requests without
+ * changing the source mesh. */
+henka_result henka_authoring_mesh_bevel_edge(
+    henka_authoring_mesh* mesh,
+    henka_authoring_edge_id edge_id,
+    float width,
+    henka_authoring_modeling_report* out_report);
+
 henka_result henka_authoring_mesh_bevel_vertices(
     henka_authoring_mesh* mesh,
     const henka_authoring_vertex_id* vertex_ids,
