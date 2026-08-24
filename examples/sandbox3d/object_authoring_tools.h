@@ -215,6 +215,24 @@ henka_result sandbox3d_authoring_object_pick_component(
 henka_result sandbox3d_authoring_object_move_selected_components(
     sandbox3d_authoring_object* object,
     henka_vec3 offset);
+/* Adds one loose vertex through the authoritative source/render/bounds/
+ * physics/undo transaction. The operation is generic and does not infer a
+ * fixture-specific position or material. */
+henka_result sandbox3d_authoring_object_add_loose_vertex(
+    sandbox3d_authoring_object* object,
+    henka_vec3 position,
+    henka_vec2 uv,
+    uint32_t material_region,
+    henka_authoring_vertex_id* out_vertex_id);
+/* Adds one standalone edge between two existing vertices through the
+ * authoritative source/render/bounds/physics/undo transaction. Mixed
+ * no-face wire-plus-isolated-point sources fail closed at evaluation. */
+henka_result sandbox3d_authoring_object_add_loose_edge(
+    sandbox3d_authoring_object* object,
+    henka_authoring_vertex_id first,
+    henka_authoring_vertex_id second,
+    bool hard,
+    henka_authoring_edge_id* out_edge_id);
 /* Moves the active face selection along its evaluated local-space normal.
  * The shared face vertices are moved once through the normal transactional
  * source, preserving topology continuity while providing a direct profile

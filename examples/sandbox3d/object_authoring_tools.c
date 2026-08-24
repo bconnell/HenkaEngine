@@ -2995,6 +2995,90 @@ henka_result sandbox3d_authoring_object_move_selected_components(
     return result;
 }
 
+henka_result sandbox3d_authoring_object_add_loose_vertex(
+    sandbox3d_authoring_object* object,
+    henka_vec3 position,
+    henka_vec2 uv,
+    uint32_t material_region,
+    henka_authoring_vertex_id* out_vertex_id)
+{
+    henka_authoring_mesh* candidate = NULL;
+    henka_authoring_vertex_id vertex_id = HENKA_AUTHORING_INVALID_ID;
+    henka_result result;
+
+    if (out_vertex_id != NULL)
+    {
+        *out_vertex_id = HENKA_AUTHORING_INVALID_ID;
+    }
+    if (object == NULL || out_vertex_id == NULL ||
+        !sandbox3d_authoring_finite_vec3(position) ||
+        !isfinite(uv.x) || !isfinite(uv.y))
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    result = henka_authoring_mesh_clone(object->mesh, &candidate);
+    if (result == HENKA_SUCCESS)
+    {
+        result = henka_authoring_mesh_add_vertex(
+            candidate, position, uv, material_region, &vertex_id);
+    }
+    if (result == HENKA_SUCCESS)
+    {
+        result = sandbox3d_authoring_publish_candidate(
+            object, candidate, true, HENKA_AUTHORING_INVALID_ID);
+    }
+    if (result != HENKA_SUCCESS)
+    {
+        henka_authoring_mesh_destroy(candidate);
+        return result;
+    }
+    *out_vertex_id = vertex_id;
+    return HENKA_SUCCESS;
+}
+
+henka_result sandbox3d_authoring_object_add_loose_edge(
+    sandbox3d_authoring_object* object,
+    henka_authoring_vertex_id first,
+    henka_authoring_vertex_id second,
+    bool hard,
+    henka_authoring_edge_id* out_edge_id)
+{
+    henka_authoring_mesh* candidate = NULL;
+    henka_authoring_edge_id edge_id = HENKA_AUTHORING_INVALID_ID;
+    henka_result result;
+
+    if (out_edge_id != NULL)
+    {
+        *out_edge_id = HENKA_AUTHORING_INVALID_ID;
+    }
+    if (object == NULL || out_edge_id == NULL ||
+        first == HENKA_AUTHORING_INVALID_ID ||
+        second == HENKA_AUTHORING_INVALID_ID || first == second)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+
+    result = henka_authoring_mesh_clone(object->mesh, &candidate);
+    if (result == HENKA_SUCCESS)
+    {
+        result = henka_authoring_mesh_add_edge(
+            candidate, first, second, hard, &edge_id);
+    }
+    if (result == HENKA_SUCCESS)
+    {
+        result = sandbox3d_authoring_publish_candidate(
+            object, candidate, true, HENKA_AUTHORING_INVALID_ID);
+    }
+    if (result != HENKA_SUCCESS)
+    {
+        henka_authoring_mesh_destroy(candidate);
+        return result;
+    }
+    *out_edge_id = edge_id;
+    return HENKA_SUCCESS;
+}
+
 static bool sandbox3d_authoring_append_unique_id(
     uint32_t* ids,
     size_t* count,
