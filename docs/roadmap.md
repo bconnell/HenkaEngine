@@ -213,10 +213,11 @@ tracks that share renderer, asset, persistence, and workspace boundaries.
    Bounded single-edge dissolve for compatible interior edges, bounded
    single-edge delete of an incident face set, standalone boundary-edge bevel,
    and compatible interior-edge bevel for an isolated two-quad patch are now
-   available; a reusable deterministic compatible quad-strip traversal
-   foundation is also available, while the editor still applies Loop Cut only
-   to one isolated quad. Broader interior-edge cases, batch edge operations,
-   and multi-face loop-cut publication remain in progress.
+   available; the editor now applies one fixed-factor Loop Cut across a
+   compatible open quad strip using the reusable traversal foundation. Closed
+   rings, preview/factor adjustment, multiple cuts, Edge Slide, broader
+   interior-edge cases, batch edge operations, and general loop-cut networks
+   remain in progress.
 2. Strengthen transactional modeling, UV, material, persistence, and undo/redo
    paths while keeping failure behavior fail-closed.
 3. Improve editor integration, authoring source/project workflows, and the
@@ -227,8 +228,8 @@ tracks that share renderer, asset, persistence, and workspace boundaries.
 ### Future Work
 
 1. Multi-face vertex-fan extrusion, broader edge and vertex topology
-   operations, weld/split/bridge workflows, multi-face loop-cut networks, and
-   broader source export.
+   operations, weld/split/bridge workflows, closed-ring and general loop-cut
+   networks, and broader source export.
 2. Automatic multi-island UV unwrap, texture painting, rigging, skinning, and
    animation authoring.
 3. Complete scene/project serialization and wider adapter-based interchange

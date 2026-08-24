@@ -164,9 +164,10 @@ topology editing remains incomplete. A bounded single-quad face loop cut is also
   deterministic compatible quad-strip walk for modeling operators. It records
   ordered face/entry/exit edges, terminates at boundaries, and rejects hard,
   material, smoothing, UV, non-quad, non-manifold, and ambiguous crossings
-  without partial output. The editor Loop Cut operator still uses the
-  isolated-quad operation; a multi-face cut, preview, and result publication
-  remain unfinished.
+  without partial output. The editor Loop Cut operator now applies one fixed
+  factor cut across a compatible open strip and publishes the whole operation
+  transactionally. Closed rings, interactive preview/factor adjustment,
+  multi-cut spacing, and Edge Slide remain unfinished.
 Bounded Vertex Extrude is available for one unambiguous boundary corner of a
 single face. It creates one cap vertex and two connecting side faces while
 preserving the operation's transactional source/render/bounds/collider/undo

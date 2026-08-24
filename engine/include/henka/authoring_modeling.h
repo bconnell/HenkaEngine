@@ -142,6 +142,20 @@ henka_result henka_authoring_mesh_loop_cut_face(
     henka_authoring_face_id* out_new_face_id,
     henka_authoring_modeling_report* out_report);
 
+/* Splits every compatible quad in the ordered strip that starts at a
+ * boundary edge. The operation creates one cut vertex per traversed path
+ * edge and two quads per source face, then publishes one transactional
+ * candidate. Unsupported branches, closed rings, and metadata seams are
+ * rejected until their result/remapping contract is exposed. */
+henka_result henka_authoring_mesh_loop_cut_quad_strip(
+    henka_authoring_mesh* mesh,
+    henka_authoring_edge_id start_edge_id,
+    float factor,
+    henka_authoring_face_id* out_new_face_id,
+    henka_authoring_edge_id* out_primary_cut_edge_id,
+    bool* out_closed,
+    henka_authoring_modeling_report* out_report);
+
 /* Extrudes one unambiguous boundary corner of a single face. The original
  * corner remains as the base, a new vertex becomes the cap corner, and the
  * two connecting side faces are created transactionally. Multi-face vertex

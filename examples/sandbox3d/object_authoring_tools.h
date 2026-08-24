@@ -6,6 +6,7 @@
 
 #include <henka/authoring_mesh.h>
 #include <henka/authoring_modeling.h>
+#include <henka/authoring_topology.h>
 #include <henka/authoring_uv.h>
 #include <henka/engine.h>
 #include <henka/model.h>
@@ -378,8 +379,8 @@ henka_result sandbox3d_authoring_object_inset_selected_face(
 henka_result sandbox3d_authoring_object_bevel_selected_face(
     sandbox3d_authoring_object* object,
     float width);
-/* Splits one selected isolated quad face into two quads through the normal
- * source/render/bounds/physics/undo transaction. */
+/* Splits one compatible open quad strip selected through a boundary edge into
+ * quads through the normal source/render/bounds/physics/undo transaction. */
 henka_result sandbox3d_authoring_object_loop_cut_selected_face(
     sandbox3d_authoring_object* object);
 henka_result sandbox3d_authoring_object_subdivide_selected_face(

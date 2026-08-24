@@ -5873,7 +5873,13 @@ henka_result sandbox3d_authoring_object_loop_cut_selected_face(
     sandbox3d_authoring_object* object)
 {
     henka_authoring_mesh* candidate = NULL;
+    const henka_authoring_face* face;
     henka_authoring_face_id new_face_id = HENKA_AUTHORING_INVALID_ID;
+    henka_authoring_edge_id start_edge_id = HENKA_AUTHORING_INVALID_ID;
+    henka_authoring_edge_id primary_cut_edge_id = HENKA_AUTHORING_INVALID_ID;
+    bool closed = false;
+    size_t best_strip_length = 0U;
+    size_t corner;
     henka_result result;
     if (object == NULL ||
         object->selection_mode != SANDBOX3D_AUTHORING_SELECTION_FACE ||
@@ -5881,11 +5887,41 @@ henka_result sandbox3d_authoring_object_loop_cut_selected_face(
     {
         return HENKA_ERROR_INVALID_ARGUMENT;
     }
+    face = henka_authoring_mesh_get_face(object->mesh, object->selected_face);
+    if (face == NULL || face->corner_count != 4U)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    for (corner = 0U; corner < face->corner_count; ++corner)
+    {
+        const henka_authoring_edge* edge = henka_authoring_mesh_get_edge(
+            object->mesh, face->edges[corner]);
+        if (edge != NULL && edge->face_count == 1U)
+        {
+            size_t strip_length = 0U;
+            bool strip_closed = false;
+            if (henka_authoring_topology_walk_quad_strip(
+                    object->mesh, edge->id, NULL, 0U,
+                    &strip_length, &strip_closed) == HENKA_SUCCESS &&
+                !strip_closed && (start_edge_id == HENKA_AUTHORING_INVALID_ID ||
+                    strip_length > best_strip_length ||
+                    (strip_length == best_strip_length && edge->id < start_edge_id)))
+            {
+                start_edge_id = edge->id;
+                best_strip_length = strip_length;
+            }
+        }
+    }
+    if (start_edge_id == HENKA_AUTHORING_INVALID_ID)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
     result = henka_authoring_mesh_clone(object->mesh, &candidate);
     if (result == HENKA_SUCCESS)
     {
-        result = henka_authoring_mesh_loop_cut_face(
-            candidate, object->selected_face, 0U, 0.5f, &new_face_id, NULL);
+        result = henka_authoring_mesh_loop_cut_quad_strip(
+            candidate, start_edge_id, 0.5f, &new_face_id,
+            &primary_cut_edge_id, &closed, NULL);
     }
     if (result == HENKA_SUCCESS)
     {

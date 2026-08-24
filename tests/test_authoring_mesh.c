@@ -933,6 +933,109 @@ cleanup:
     return result ? 1 : fail("interior edge bevel operation");
 }
 
+static int test_quad_strip_loop_cut_operation(void)
+{
+    const henka_authoring_mesh_desc desc = {32U, 64U, 16U, 8U};
+    const henka_vec3 positions[8] = {
+        {0.0f, 0.0f, 0.0f}, {1.0f, 0.0f, 0.0f}, {1.0f, 1.0f, 0.0f},
+        {0.0f, 1.0f, 0.0f}, {2.0f, 0.0f, 0.0f}, {2.0f, 1.0f, 0.0f},
+        {3.0f, 0.0f, 0.0f}, {3.0f, 1.0f, 0.0f}};
+    const henka_vec2 uvs[8] = {
+        {0.0f, 0.0f}, {1.0f, 0.0f}, {1.0f, 1.0f}, {0.0f, 1.0f},
+        {2.0f, 0.0f}, {2.0f, 1.0f}, {3.0f, 0.0f}, {3.0f, 1.0f}};
+    const henka_authoring_vertex_id faces[3][4] = {
+        {1U, 2U, 3U, 4U}, {2U, 5U, 6U, 3U}, {5U, 7U, 8U, 6U}};
+    henka_authoring_mesh* mesh = NULL;
+    henka_authoring_face_id face_id;
+    henka_authoring_face_id new_face_id = HENKA_AUTHORING_INVALID_ID;
+    henka_authoring_edge_id edge_id;
+    henka_authoring_edge_id start_edge_id = HENKA_AUTHORING_INVALID_ID;
+    henka_authoring_edge_id primary_cut_edge_id = HENKA_AUTHORING_INVALID_ID;
+    henka_authoring_modeling_report report = {0};
+    henka_authoring_mesh_counts before;
+    henka_authoring_mesh_counts after;
+    bool closed = true;
+    size_t index;
+    size_t face_slot;
+    int result = 0;
+
+    if (henka_authoring_mesh_create(&desc, &mesh) != HENKA_SUCCESS)
+    {
+        goto cleanup;
+    }
+    for (index = 0U; index < 8U; ++index)
+    {
+        if (henka_authoring_mesh_add_vertex(
+                mesh, positions[index], uvs[index], 0U,
+                &(henka_authoring_vertex_id){0U}) != HENKA_SUCCESS)
+        {
+            goto cleanup;
+        }
+    }
+    for (index = 0U; index < 3U; ++index)
+    {
+        if (henka_authoring_mesh_add_face(
+                mesh, faces[index], 4U, 0U, true, &face_id) != HENKA_SUCCESS)
+        {
+            goto cleanup;
+        }
+    }
+    for (index = 0U; index < henka_authoring_mesh_get_desc(mesh).max_edges; ++index)
+    {
+        if (henka_authoring_mesh_get_edge_id_at(mesh, index, &edge_id) != HENKA_SUCCESS)
+        {
+            continue;
+        }
+        {
+            const henka_authoring_edge* edge = henka_authoring_mesh_get_edge(mesh, edge_id);
+            if (edge != NULL && edge->face_count == 1U &&
+                ((edge->vertices[0] == 1U && edge->vertices[1] == 4U) ||
+                 (edge->vertices[0] == 4U && edge->vertices[1] == 1U)))
+            {
+                start_edge_id = edge_id;
+                break;
+            }
+        }
+    }
+    before = henka_authoring_mesh_get_counts(mesh);
+    if (start_edge_id == HENKA_AUTHORING_INVALID_ID ||
+        henka_authoring_mesh_loop_cut_quad_strip(
+            mesh, start_edge_id, 0.5f, &new_face_id, &primary_cut_edge_id,
+            &closed, &report) != HENKA_SUCCESS || closed || !report.changed ||
+        report.created_vertices != 4U || report.created_edges != 7U ||
+        report.created_faces != 3U || new_face_id == HENKA_AUTHORING_INVALID_ID ||
+        primary_cut_edge_id == HENKA_AUTHORING_INVALID_ID)
+    {
+        goto cleanup;
+    }
+    after = henka_authoring_mesh_get_counts(mesh);
+    if (after.vertices != before.vertices + 4U ||
+        after.edges != before.edges + 7U || after.faces != before.faces + 3U ||
+        !henka_authoring_mesh_validate(mesh))
+    {
+        goto cleanup;
+    }
+    for (face_slot = 0U; face_slot < henka_authoring_mesh_get_desc(mesh).max_faces; ++face_slot)
+    {
+        henka_authoring_face_id active_face_id = HENKA_AUTHORING_INVALID_ID;
+        const henka_authoring_face* face;
+        if (henka_authoring_mesh_get_face_id_at(mesh, face_slot, &active_face_id) != HENKA_SUCCESS)
+        {
+            continue;
+        }
+        face = henka_authoring_mesh_get_face(mesh, active_face_id);
+        if (face == NULL || face->corner_count != 4U)
+        {
+            goto cleanup;
+        }
+    }
+    result = 1;
+
+cleanup:
+    henka_authoring_mesh_destroy(mesh);
+    return result ? 1 : fail("quad strip loop cut operation");
+}
+
 static int test_uv_authoring(void)
 {
     const henka_authoring_mesh_desc desc = {64U, 128U, 64U, 8U};
@@ -1809,7 +1912,8 @@ int main(void)
         test_history_and_persistence() && test_modeling_operations() && test_vertex_merge_operations() &&
         test_vertex_topology_operations() && test_vertex_bevel_operations() &&
         test_boundary_edge_bevel_operation() && test_single_quad_face_cut_operation() &&
-        test_interior_edge_bevel_operation() && test_uv_authoring() &&
+        test_interior_edge_bevel_operation() && test_quad_strip_loop_cut_operation() &&
+        test_uv_authoring() &&
         test_modeling_material_region_and_uv_continuity() &&
         test_bounded_primitive_constructors() &&
         test_edge_dissolve_operation() &&

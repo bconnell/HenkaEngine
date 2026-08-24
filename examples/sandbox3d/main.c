@@ -24316,8 +24316,8 @@ details_group_authoring:
                         state,
                         cut_result != HENKA_SUCCESS,
                         cut_result == HENKA_SUCCESS
-                            ? "Selected quad face split into two quads."
-                            : "Loop Cut rejected; select one isolated quad face.");
+                            ? "Compatible quad strip cut transactionally."
+                            : "Loop Cut rejected; select a compatible open quad strip.");
                     if (cut_result == HENKA_SUCCESS)
                     {
                         sandbox3d_mark_generic_modeling_applied(state, entity);
@@ -25315,8 +25315,8 @@ details_group_authoring:
                         state,
                         cut_result != HENKA_SUCCESS,
                         cut_result == HENKA_SUCCESS
-                            ? "Selected quad face split into two quads."
-                            : "Loop Cut rejected; select one isolated quad face.");
+                            ? "Compatible quad strip cut transactionally."
+                            : "Loop Cut rejected; select a compatible open quad strip.");
                     if (cut_result == HENKA_SUCCESS)
                     {
                         sandbox3d_mark_generic_modeling_applied(state, entity);
