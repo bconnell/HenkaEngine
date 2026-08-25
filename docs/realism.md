@@ -49,6 +49,11 @@ overview comparison. The close reference uses a non-overlapping 3x3 grid so
 each material receives useful screen area for visual inspection without
 changing the authored fixture or its material assignments.
 
+The reference fixture's deterministic detail maps are generated at 32x32: the
+normal map is linear normal data, the macro and wood maps are color textures,
+and the wet/dry map is linear metallic/roughness data. Capture readiness reads
+the runtime texture dimensions and fails closed below that minimum.
+
 The background-safe capture harness exposes the scene with:
 
 ```text

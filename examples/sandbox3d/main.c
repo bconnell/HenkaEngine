@@ -355,6 +355,11 @@ typedef struct sandbox3d_physics_state
 
 #define SANDBOX3D_RESIDENCY_STRESS_TEXTURE_COUNT 65U
 #define SANDBOX3D_REALISM_ENTITY_COUNT 9U
+#define SANDBOX3D_REALISM_TEXTURE_EDGE 32U
+#define SANDBOX3D_REALISM_TEXTURE_CHANNEL_COUNT 4U
+#define SANDBOX3D_REALISM_TEXTURE_PIXEL_COUNT \
+    (SANDBOX3D_REALISM_TEXTURE_EDGE * SANDBOX3D_REALISM_TEXTURE_EDGE * \
+        SANDBOX3D_REALISM_TEXTURE_CHANNEL_COUNT)
 #define SANDBOX3D_TERRAIN_TEXTURE_SIZE 64U
 
 /* Keep the interactive Terrain working set small and deterministic.  The
@@ -3827,6 +3832,83 @@ static void sandbox3d_generate_terrain_fixture(
             sample->material_weights[2] = (uint8_t)(rock_weight > 1 ? rock_weight : 1);
             sample->material_weights[3] = (uint8_t)(wet_weight > 1 ? wet_weight : 1);
             (void)henka_terrain_normalize_weights(sample->material_weights);
+        }
+    }
+}
+
+static unsigned char sandbox3d_encode_realism_texture_channel(float value)
+{
+    return (unsigned char)lroundf(fmaxf(0.0f, fminf(255.0f, value)));
+}
+
+static void sandbox3d_generate_realism_detail_textures(
+    unsigned char* normal_pixels,
+    unsigned char* macro_variation_pixels,
+    unsigned char* wood_grain_pixels,
+    unsigned char* wet_dry_roughness_pixels)
+{
+    uint32_t x;
+    uint32_t y;
+
+    if (normal_pixels == NULL || macro_variation_pixels == NULL ||
+        wood_grain_pixels == NULL || wet_dry_roughness_pixels == NULL)
+    {
+        return;
+    }
+    for (y = 0U; y < SANDBOX3D_REALISM_TEXTURE_EDGE; ++y)
+    {
+        for (x = 0U; x < SANDBOX3D_REALISM_TEXTURE_EDGE; ++x)
+        {
+            const float u = ((float)x + 0.5f) /
+                (float)SANDBOX3D_REALISM_TEXTURE_EDGE;
+            const float v = ((float)y + 0.5f) /
+                (float)SANDBOX3D_REALISM_TEXTURE_EDGE;
+            const float normal_x = 0.08f * sinf(
+                2.0f * HENKA_PI * (u * 3.0f + v * 1.5f)) +
+                0.035f * cosf(2.0f * HENKA_PI * (u * 7.0f - v * 2.0f));
+            const float normal_y = 0.07f * cosf(
+                2.0f * HENKA_PI * (v * 4.0f - u * 1.25f)) +
+                0.03f * sinf(2.0f * HENKA_PI * (u * 2.0f + v * 8.0f));
+            const float normal_z = sqrtf(fmaxf(
+                0.0f, 1.0f - normal_x * normal_x - normal_y * normal_y));
+            const float macro_signal = 0.5f + 0.5f * sinf(
+                2.0f * HENKA_PI * (u * 2.5f + 0.35f * sinf(v * 2.0f * HENKA_PI)));
+            const float grain_signal = 0.5f + 0.5f * sinf(
+                2.0f * HENKA_PI * (u * 3.0f + 0.35f * sinf(v * 2.0f * HENKA_PI * 1.5f)));
+            const float wet_signal = 0.5f + 0.5f * sinf(
+                2.0f * HENKA_PI * (v * 1.25f + 0.25f * sinf(u * 2.0f * HENKA_PI * 3.0f)));
+            const size_t pixel = ((size_t)y * SANDBOX3D_REALISM_TEXTURE_EDGE + x) *
+                SANDBOX3D_REALISM_TEXTURE_CHANNEL_COUNT;
+
+            normal_pixels[pixel + 0U] = sandbox3d_encode_realism_texture_channel(
+                128.0f + normal_x * 127.0f);
+            normal_pixels[pixel + 1U] = sandbox3d_encode_realism_texture_channel(
+                128.0f + normal_y * 127.0f);
+            normal_pixels[pixel + 2U] = sandbox3d_encode_realism_texture_channel(
+                normal_z * 127.0f + 128.0f);
+            normal_pixels[pixel + 3U] = 255U;
+
+            macro_variation_pixels[pixel + 0U] = sandbox3d_encode_realism_texture_channel(
+                96.0f + macro_signal * 82.0f);
+            macro_variation_pixels[pixel + 1U] = sandbox3d_encode_realism_texture_channel(
+                58.0f + macro_signal * 54.0f);
+            macro_variation_pixels[pixel + 2U] = sandbox3d_encode_realism_texture_channel(
+                32.0f + macro_signal * 32.0f);
+            macro_variation_pixels[pixel + 3U] = 255U;
+
+            wood_grain_pixels[pixel + 0U] = sandbox3d_encode_realism_texture_channel(
+                96.0f + grain_signal * 48.0f);
+            wood_grain_pixels[pixel + 1U] = sandbox3d_encode_realism_texture_channel(
+                46.0f + grain_signal * 28.0f);
+            wood_grain_pixels[pixel + 2U] = sandbox3d_encode_realism_texture_channel(
+                20.0f + grain_signal * 16.0f);
+            wood_grain_pixels[pixel + 3U] = 255U;
+
+            wet_dry_roughness_pixels[pixel + 0U] = 255U;
+            wet_dry_roughness_pixels[pixel + 1U] = sandbox3d_encode_realism_texture_channel(
+                34.0f + wet_signal * 206.0f);
+            wet_dry_roughness_pixels[pixel + 2U] = 255U;
+            wet_dry_roughness_pixels[pixel + 3U] = 255U;
         }
     }
 }
@@ -7619,6 +7701,10 @@ static void sandbox3d_report_realism_reference_capture_ready(
     henka_bounds reference_bounds;
     henka_vec2 reference_midpoint;
     henka_viewport viewport;
+    henka_texture_info detail_normal_info;
+    henka_texture_info macro_variation_info;
+    henka_texture_info wood_grain_info;
+    henka_texture_info wet_dry_roughness_info;
     size_t reference_count;
     const char* reference_layout;
 
@@ -7628,6 +7714,26 @@ static void sandbox3d_report_realism_reference_capture_ready(
         return;
     }
     viewport = state->frame_layout.scene_viewport;
+    if (state->detail_normal_texture == NULL ||
+        state->macro_variation_texture == NULL ||
+        state->wood_grain_texture == NULL ||
+        state->wet_dry_roughness_texture == NULL ||
+        henka_texture_get_info(state->detail_normal_texture, &detail_normal_info) != HENKA_SUCCESS ||
+        henka_texture_get_info(state->macro_variation_texture, &macro_variation_info) != HENKA_SUCCESS ||
+        henka_texture_get_info(state->wood_grain_texture, &wood_grain_info) != HENKA_SUCCESS ||
+        henka_texture_get_info(state->wet_dry_roughness_texture, &wet_dry_roughness_info) != HENKA_SUCCESS ||
+        detail_normal_info.width != (int)SANDBOX3D_REALISM_TEXTURE_EDGE ||
+        detail_normal_info.height != (int)SANDBOX3D_REALISM_TEXTURE_EDGE ||
+        macro_variation_info.width != detail_normal_info.width ||
+        macro_variation_info.height != detail_normal_info.height ||
+        wood_grain_info.width != detail_normal_info.width ||
+        wood_grain_info.height != detail_normal_info.height ||
+        wet_dry_roughness_info.width != detail_normal_info.width ||
+        wet_dry_roughness_info.height != detail_normal_info.height)
+    {
+        state->capture_settled_frames = 0U;
+        return;
+    }
     if (viewport.width <= 0 || viewport.height <= 0 ||
         !state->capture_camera_aspect_applied ||
         !sandbox3d_collect_realism_reference_bounds(
@@ -7658,13 +7764,14 @@ static void sandbox3d_report_realism_reference_capture_ready(
         ? "close_grid"
         : "wide_row";
     printf(
-        "CAPTURE_READY_REFERENCE mode=%s view=%s reference_layout=%s viewport=%d,%d,%d,%d aspect=%.6f camera_position=%.4f,%.4f,%.4f yaw=%.6f pitch=%.6f roll=%.6f fov=%.6f reference_bounds=%.4f,%.4f,%.4f,%.4f,%.4f,%.4f reference_midpoint=%.2f,%.2f reference_count=%zu settled_frames=%u draw_expected=1\n",
+        "CAPTURE_READY_REFERENCE mode=%s view=%s reference_layout=%s reference_texture_edge=%d viewport=%d,%d,%d,%d aspect=%.6f camera_position=%.4f,%.4f,%.4f yaw=%.6f pitch=%.6f roll=%.6f fov=%.6f reference_bounds=%.4f,%.4f,%.4f,%.4f,%.4f,%.4f reference_midpoint=%.2f,%.2f reference_count=%zu settled_frames=%u draw_expected=1\n",
         henka_viewport_shading_mode_get_setting_value(state->capture_mode),
         state->realism_reference_capture_view ==
                 SANDBOX3D_REALISM_REFERENCE_CAPTURE_VIEW_CLOSE
             ? "close"
             : "wide",
         reference_layout,
+        detail_normal_info.width,
         viewport.x,
         viewport.y,
         viewport.width,
@@ -30939,46 +31046,10 @@ static henka_result sandbox3d_initialize(henka_engine* engine, void* user_data)
         }
         {
             unsigned char ground_surface_pixels[SANDBOX3D_GROUND_TEXTURE_PIXEL_COUNT];
-            static const unsigned char detail_normal_pixels[] =
-            {
-                128U, 128U, 255U, 255U, 142U, 116U, 246U, 255U,
-                114U, 140U, 250U, 255U, 130U, 124U, 255U, 255U,
-                138U, 120U, 248U, 255U, 118U, 136U, 252U, 255U,
-                126U, 132U, 255U, 255U, 144U, 112U, 244U, 255U,
-                116U, 138U, 250U, 255U, 134U, 122U, 252U, 255U,
-                140U, 118U, 246U, 255U, 122U, 134U, 255U, 255U,
-                128U, 128U, 255U, 255U, 146U, 110U, 242U, 255U,
-                112U, 142U, 248U, 255U, 132U, 126U, 255U, 255U
-            };
-            static const unsigned char macro_variation_pixels[] =
-            {
-                118U, 72U, 38U, 255U, 156U, 98U, 48U, 255U,
-                104U, 60U, 32U, 255U, 174U, 112U, 56U, 255U,
-                168U, 106U, 52U, 255U, 112U, 66U, 34U, 255U,
-                146U, 86U, 42U, 255U, 184U, 124U, 64U, 255U,
-                110U, 64U, 34U, 255U, 162U, 100U, 48U, 255U,
-                178U, 116U, 58U, 255U, 122U, 74U, 38U, 255U,
-                136U, 80U, 40U, 255U, 186U, 126U, 66U, 255U,
-                114U, 68U, 36U, 255U, 154U, 94U, 46U, 255U
-            };
-            static const unsigned char wood_grain_pixels[] =
-            {
-                88U, 38U, 18U, 255U, 142U, 70U, 26U, 255U,
-                104U, 46U, 20U, 255U, 176U, 94U, 34U, 255U,
-                122U, 56U, 22U, 255U, 94U, 40U, 18U, 255U,
-                188U, 104U, 38U, 255U, 132U, 62U, 24U, 255U,
-                98U, 42U, 18U, 255U, 164U, 82U, 28U, 255U,
-                116U, 52U, 22U, 255U, 196U, 112U, 42U, 255U,
-                146U, 68U, 26U, 255U, 108U, 48U, 20U, 255U,
-                174U, 88U, 30U, 255U, 126U, 58U, 22U, 255U
-            };
-            static const unsigned char wet_dry_roughness_pixels[] =
-            {
-                255U, 236U, 255U, 255U, 255U, 224U, 255U, 255U,
-                255U, 204U, 255U, 255U, 255U, 176U, 255U, 255U,
-                255U, 132U, 255U, 255U, 255U, 92U, 255U, 255U,
-                255U, 52U, 255U, 255U, 255U, 32U, 255U, 255U
-            };
+            unsigned char detail_normal_pixels[SANDBOX3D_REALISM_TEXTURE_PIXEL_COUNT];
+            unsigned char macro_variation_pixels[SANDBOX3D_REALISM_TEXTURE_PIXEL_COUNT];
+            unsigned char wood_grain_pixels[SANDBOX3D_REALISM_TEXTURE_PIXEL_COUNT];
+            unsigned char wet_dry_roughness_pixels[SANDBOX3D_REALISM_TEXTURE_PIXEL_COUNT];
             static const unsigned char foliage_mask_pixels[] =
             {
                 34U, 132U, 48U, 255U, 42U, 148U, 54U, 0U,
@@ -30997,6 +31068,11 @@ static henka_result sandbox3d_initialize(henka_engine* engine, void* user_data)
             sandbox3d_generate_ground_surface_texture(
                 ground_surface_pixels,
                 SANDBOX3D_GROUND_TEXTURE_PIXEL_COUNT);
+            sandbox3d_generate_realism_detail_textures(
+                detail_normal_pixels,
+                macro_variation_pixels,
+                wood_grain_pixels,
+                wet_dry_roughness_pixels);
             if (!sandbox3d_ground_surface_texture_is_valid(
                     ground_surface_pixels,
                     SANDBOX3D_GROUND_TEXTURE_PIXEL_COUNT))
@@ -31028,8 +31104,8 @@ static henka_result sandbox3d_initialize(henka_engine* engine, void* user_data)
             }
             result = sandbox3d_create_runtime_rgba8_texture(
                 engine,
-                4,
-                4,
+                SANDBOX3D_REALISM_TEXTURE_EDGE,
+                SANDBOX3D_REALISM_TEXTURE_EDGE,
                 detail_normal_pixels,
                 &normal_descriptor,
                 "runtime/showcase/detail_normal",
@@ -31040,8 +31116,8 @@ static henka_result sandbox3d_initialize(henka_engine* engine, void* user_data)
             }
             result = sandbox3d_create_runtime_rgba8_texture(
                 engine,
-                4,
-                4,
+                SANDBOX3D_REALISM_TEXTURE_EDGE,
+                SANDBOX3D_REALISM_TEXTURE_EDGE,
                 macro_variation_pixels,
                 &macro_descriptor,
                 "runtime/showcase/macro_variation",
@@ -31052,8 +31128,8 @@ static henka_result sandbox3d_initialize(henka_engine* engine, void* user_data)
             }
             result = sandbox3d_create_runtime_rgba8_texture(
                 engine,
-                4,
-                4,
+                SANDBOX3D_REALISM_TEXTURE_EDGE,
+                SANDBOX3D_REALISM_TEXTURE_EDGE,
                 wood_grain_pixels,
                 &macro_descriptor,
                 "runtime/showcase/wood_grain",
@@ -31064,8 +31140,8 @@ static henka_result sandbox3d_initialize(henka_engine* engine, void* user_data)
             }
             result = sandbox3d_create_runtime_rgba8_texture(
                 engine,
-                4,
-                4,
+                SANDBOX3D_REALISM_TEXTURE_EDGE,
+                SANDBOX3D_REALISM_TEXTURE_EDGE,
                 wet_dry_roughness_pixels,
                 &roughness_descriptor,
                 "runtime/showcase/wet_dry_roughness",
