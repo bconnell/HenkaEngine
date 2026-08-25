@@ -1047,7 +1047,7 @@ if ($NonInteractive) {
     if ($smoke.Stdout -notmatch "Runtime mode: Packaged") {
         throw "The packaged smoke test did not report Packaged mode."
     }
-    if ($smoke.Stdout -notmatch "Showcase assets: Anatomical Giraffe Study \(13 parts\), Original Realistic Rocket \(13 parts\)") {
+    if ($smoke.Stdout -notmatch "Showcase assets: Anatomical Giraffe Study \(14 parts\), Original Realistic Rocket \(13 parts\)") {
         throw "The packaged smoke test did not load both showcase glTF scenes."
     }
     $terrainPassMatch = [regex]::Match($smoke.Stdout, "Terrain Rendered pass diagnostics: mask=0x([0-9a-fA-F]+) required=0x([0-9a-fA-F]+)")
