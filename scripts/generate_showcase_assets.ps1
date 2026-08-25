@@ -1271,8 +1271,10 @@ function New-Rocket {
     $serviceStructure = New-Part 12
     # Staged core, interstage, and ogive-like fairing sections provide a more
     # believable modern launch-vehicle silhouette while remaining bounded.
-    Add-ProfiledFrustum $coreInsulation @(0.38, 1.55, 3.10) @(0.56, 0.55, 0.52) 0.0 0.0 88
-    Add-ProfiledFrustum $paint @(3.10, 3.48, 3.74, 4.04, 4.36, 4.64) @(0.52, 0.51, 0.49, 0.38, 0.20, 0.025) 0.0 0.0 88
+    # The extra shoulder profiles keep the tanks from reading as one perfect
+    # cylinder and give the skirt and fairing continuous, useful curvature.
+    Add-ProfiledFrustum $coreInsulation @(0.38, 0.52, 0.70, 1.55, 2.42, 2.78, 3.10) @(0.40, 0.51, 0.55, 0.55, 0.54, 0.52, 0.48) 0.0 0.0 88
+    Add-ProfiledFrustum $paint @(3.10, 3.34, 3.48, 3.74, 4.04, 4.25, 4.42, 4.64) @(0.48, 0.51, 0.51, 0.49, 0.38, 0.29, 0.18, 0.025) 0.0 0.0 88
     Add-Frustum $metal 0.28 0.55 0.58 0.58 0.0 0.0 40
     Add-Frustum $metal 0.55 0.64 0.58 0.54 0.0 0.0 40
     Add-Frustum $metal 1.58 1.66 0.545 0.545 0.0 0.0 40
@@ -1297,6 +1299,7 @@ function New-Rocket {
     }
     Add-Frustum $stripe 2.35 2.54 0.535 0.535 0.0 0.0 40
     Add-Frustum $thermal 1.08 1.16 0.555 0.555 0.0 0.0 56
+    Add-Frustum $thermal 1.92 1.99 0.55 0.55 0.0 0.0 56
     Add-Frustum $thermal 2.95 3.04 0.535 0.535 0.0 0.0 56
     foreach ($ring in @(@(1.58, 0.49), @(3.48, 0.44))) {
         for ($fastenerIndex = 0; $fastenerIndex -lt 8; ++$fastenerIndex) {
@@ -1307,15 +1310,33 @@ function New-Rocket {
                 [float]($ring[1] * [Math]::Sin($angle))) @(0.035, 0.052, 0.025) 10 20
         }
     }
+    # Low-profile tank stringers and access-panel rails break up the painted
+    # core with construction detail without turning it into a repeated debug
+    # primitive grid. They sit just proud of the four visible radial sides.
+    foreach ($stringer in @(
+            @(-0.52, 0.0), @(-0.26, -0.455), @(0.26, -0.455), @(0.52, 0.0),
+            @(0.26, 0.455), @(-0.26, 0.455))) {
+        Add-Box $panelDetail @($stringer[0], 1.86, $stringer[1]) @(0.014, 0.58, 0.014)
+    }
+    foreach ($railY in @(1.12, 1.38, 2.10, 2.36, 2.76)) {
+        Add-Box $panelDetail @(0.0, $railY, 0.548) @(0.27, 0.012, 0.014)
+        Add-Box $panelDetail @(0.0, $railY, -0.548) @(0.27, 0.012, 0.014)
+    }
     Add-Box $panelDetail @(0.0, 2.20, 0.555) @(0.035, 0.82, 0.016)
     Add-Box $panelDetail @(-0.34, 2.20, 0.435) @(0.028, 0.72, 0.015)
     Add-Box $panelDetail @(0.34, 2.20, 0.435) @(0.028, 0.72, 0.015)
     foreach ($boosterX in @(-0.92, 0.92)) {
-        Add-ProfiledFrustum $booster @(0.34, 0.55, 2.65, 3.00, 3.24, 3.50) @(0.30, 0.29, 0.285, 0.27, 0.17, 0.025) $boosterX 0.0 64
+        Add-ProfiledFrustum $booster @(0.34, 0.48, 0.62, 2.40, 2.65, 2.84, 3.00, 3.24, 3.40, 3.50) @(0.22, 0.29, 0.30, 0.30, 0.285, 0.285, 0.27, 0.22, 0.14, 0.025) $boosterX 0.0 64
         Add-Frustum $metal 0.42 0.56 0.315 0.315 $boosterX 0.0 32
+        Add-Frustum $metal 1.34 1.41 0.302 0.302 $boosterX 0.0 32
+        Add-Frustum $metal 2.06 2.13 0.292 0.292 $boosterX 0.0 32
         Add-Frustum $thermal 2.52 2.61 0.295 0.295 $boosterX 0.0 40
         Add-Frustum $avionics 3.00 3.07 0.275 0.275 $boosterX 0.0 32
         Add-Ellipsoid $heat @($boosterX, 0.30, 0.0) @(0.24, 0.06, 0.24) 10 20
+        # Short radial attachment brackets make the boosters read as mounted
+        # stages instead of two cylinders floating beside the core.
+        Add-Box $serviceStructure @([float]($boosterX * 0.72), 1.18, 0.0) @(0.18, 0.035, 0.055)
+        Add-Box $serviceStructure @([float]($boosterX * 0.72), 2.32, 0.0) @(0.18, 0.035, 0.055)
     }
     # The service structure is a generic bounded lattice-and-arm reference:
     # it gives the vehicle real launch-scale context without copying any

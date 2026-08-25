@@ -368,6 +368,12 @@ foreach ($requiredName in @("Rocket Fastener", "Rocket Thermal Detail", "Rocket 
         throw "Showcase rocket is missing geometry for authored mechanical feature material '$requiredName'."
     }
 }
+$rocketPanelMaterialIndex = [array]::IndexOf($rocketMaterialNames, "Rocket Panel Detail")
+$rocketPanelPrimitive = @($rocket.meshes[0].primitives | Where-Object { $_.material -eq $rocketPanelMaterialIndex })[0]
+$rocketPanelVertexCount = [int]$rocket.accessors[$rocketPanelPrimitive.attributes.POSITION].count
+if ($rocketPanelVertexCount -lt 450) {
+    throw "Showcase rocket lost its authored tank stringer and access-panel topology detail."
+}
 $rocketBoosterMaterialIndex = [array]::IndexOf($rocketMaterialNames, "Rocket Booster Coating")
 $rocketBoosterPrimitive = @($rocket.meshes[0].primitives | Where-Object { $_.material -eq $rocketBoosterMaterialIndex })[0]
 $rocketBoosterBounds = Get-PositionBounds -Gltf $rocket -Binary $rocketBinary -Primitive $rocketBoosterPrimitive
