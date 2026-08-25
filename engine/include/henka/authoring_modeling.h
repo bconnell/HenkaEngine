@@ -148,6 +148,20 @@ henka_result henka_authoring_mesh_loop_cut_face(
     henka_authoring_face_id* out_new_face_id,
     henka_authoring_modeling_report* out_report);
 
+/* Splits one boundary-only quad with a bounded set of uniformly spaced cuts
+ * across opposite edges. The source face keeps its logical identity, each
+ * additional strip receives a fresh face identity, and the candidate is
+ * published only after topology and geometry validation succeeds. Shared
+ * boundary faces, zero cuts, invalid capacities, and non-finite results are
+ * rejected without changing the source mesh. */
+henka_result henka_authoring_mesh_loop_cut_face_multi(
+    henka_authoring_mesh* mesh,
+    henka_authoring_face_id face_id,
+    size_t edge_offset,
+    size_t cut_count,
+    henka_authoring_face_id* out_last_face_id,
+    henka_authoring_modeling_report* out_report);
+
 /* Splits every compatible quad in the ordered strip. Open strips start at a
  * boundary edge; closed rings use one cut vertex per traversed ring edge.
  * Both forms create two quads per source face and publish one transactional
