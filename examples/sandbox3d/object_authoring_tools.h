@@ -416,9 +416,15 @@ henka_result sandbox3d_authoring_object_bevel_selected_face(
 henka_result sandbox3d_authoring_object_preview_loop_cut_selected_face_at_factor(
     sandbox3d_authoring_object* object,
     float factor);
+henka_result sandbox3d_authoring_object_preview_loop_cut_selected_face_multi(
+    sandbox3d_authoring_object* object,
+    size_t cut_count);
 henka_result sandbox3d_authoring_object_loop_cut_selected_face_at_factor(
     sandbox3d_authoring_object* object,
     float factor);
+henka_result sandbox3d_authoring_object_loop_cut_selected_face_multi(
+    sandbox3d_authoring_object* object,
+    size_t cut_count);
 henka_result sandbox3d_authoring_object_loop_cut_selected_face(
     sandbox3d_authoring_object* object);
 henka_result sandbox3d_authoring_object_subdivide_selected_face(

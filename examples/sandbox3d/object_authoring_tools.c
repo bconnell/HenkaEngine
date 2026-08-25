@@ -6159,6 +6159,64 @@ static henka_result sandbox3d_authoring_build_loop_cut_candidate(
     return result;
 }
 
+static henka_result sandbox3d_authoring_build_loop_cut_multi_candidate(
+    sandbox3d_authoring_object* object,
+    size_t cut_count,
+    henka_authoring_mesh** out_candidate,
+    henka_authoring_face_id* out_last_face_id)
+{
+    henka_authoring_mesh* candidate = NULL;
+    const henka_authoring_face* face;
+    henka_authoring_face_id last_face_id = HENKA_AUTHORING_INVALID_ID;
+    size_t corner;
+    henka_result result;
+
+    if (out_candidate != NULL)
+    {
+        *out_candidate = NULL;
+    }
+    if (out_last_face_id != NULL)
+    {
+        *out_last_face_id = HENKA_AUTHORING_INVALID_ID;
+    }
+    if (object == NULL || out_candidate == NULL || out_last_face_id == NULL ||
+        cut_count == 0U || object->selection_mode != SANDBOX3D_AUTHORING_SELECTION_FACE ||
+        object->selected_face == HENKA_AUTHORING_INVALID_ID || object->mesh == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    face = henka_authoring_mesh_get_face(object->mesh, object->selected_face);
+    if (face == NULL || face->edges == NULL || face->corner_count != 4U)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    for (corner = 0U; corner < face->corner_count; ++corner)
+    {
+        const henka_authoring_edge* edge = henka_authoring_mesh_get_edge(
+            object->mesh, face->edges[corner]);
+        if (edge == NULL || edge->face_count != 1U || edge->faces[0] != face->id)
+        {
+            return HENKA_ERROR_INVALID_ARGUMENT;
+        }
+    }
+    result = henka_authoring_mesh_clone(object->mesh, &candidate);
+    if (result == HENKA_SUCCESS)
+    {
+        result = henka_authoring_mesh_loop_cut_face_multi(
+            candidate, face->id, 0U, cut_count, &last_face_id, NULL);
+    }
+    if (result == HENKA_SUCCESS)
+    {
+        *out_candidate = candidate;
+        *out_last_face_id = last_face_id;
+    }
+    else
+    {
+        henka_authoring_mesh_destroy(candidate);
+    }
+    return result;
+}
+
 henka_result sandbox3d_authoring_object_preview_loop_cut_selected_face_at_factor(
     sandbox3d_authoring_object* object,
     float factor)
@@ -6173,6 +6231,29 @@ henka_result sandbox3d_authoring_object_preview_loop_cut_selected_face_at_factor
         if (result == HENKA_SUCCESS)
         {
             object->preview_selected_face = new_face_id;
+        }
+        else
+        {
+            henka_authoring_mesh_destroy(candidate);
+        }
+    }
+    return result;
+}
+
+henka_result sandbox3d_authoring_object_preview_loop_cut_selected_face_multi(
+    sandbox3d_authoring_object* object,
+    size_t cut_count)
+{
+    henka_authoring_mesh* candidate = NULL;
+    henka_authoring_face_id last_face_id = HENKA_AUTHORING_INVALID_ID;
+    henka_result result = sandbox3d_authoring_build_loop_cut_multi_candidate(
+        object, cut_count, &candidate, &last_face_id);
+    if (result == HENKA_SUCCESS)
+    {
+        result = sandbox3d_authoring_object_preview_candidate(object, candidate);
+        if (result == HENKA_SUCCESS)
+        {
+            object->preview_selected_face = last_face_id;
         }
         else
         {
@@ -6197,6 +6278,30 @@ henka_result sandbox3d_authoring_object_loop_cut_selected_face_at_factor(
         if (result == HENKA_SUCCESS)
         {
             object->selected_face = new_face_id;
+        }
+        else
+        {
+            henka_authoring_mesh_destroy(candidate);
+        }
+    }
+    return result;
+}
+
+henka_result sandbox3d_authoring_object_loop_cut_selected_face_multi(
+    sandbox3d_authoring_object* object,
+    size_t cut_count)
+{
+    henka_authoring_mesh* candidate = NULL;
+    henka_authoring_face_id last_face_id = HENKA_AUTHORING_INVALID_ID;
+    henka_result result = sandbox3d_authoring_build_loop_cut_multi_candidate(
+        object, cut_count, &candidate, &last_face_id);
+    if (result == HENKA_SUCCESS)
+    {
+        result = sandbox3d_authoring_publish_candidate(
+            object, candidate, true, last_face_id);
+        if (result == HENKA_SUCCESS)
+        {
+            object->selected_face = last_face_id;
         }
         else
         {
