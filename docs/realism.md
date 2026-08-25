@@ -65,19 +65,41 @@ with an unobstructed ground control. The checker requires measurable contact
 shadow contrast, providing an initial lighting/shadow regression without
 confusing ambient darkening with a claimed full lighting benchmark.
 
+The package also exposes a separate lighting reference fixture. It uses nine
+same-material UV-sphere subjects, scene-owned directional/key/fill/rim light
+sources, the shared ground receiver, real shadow maps, and the same OpenGL
+Rendered path. Its purpose is to isolate spatial light response from the PBR
+material board; it does not replace the PBR fixture or claim production
+lighting, global illumination, or cinematic light-authoring coverage.
+
+The lighting fixture is selected explicitly and remains deterministic:
+
+```text
+--capture-realism-reference lighting wide|close solid|material_preview|rendered
+```
+
+Each lighting capture emits `CAPTURE_READY_LIGHTING_REFERENCE` metadata. The
+lighting checker requires nine settled, centered subjects, stable composition
+across Solid, Material Preview, and Rendered, a meaningful Rendered-versus-
+Preview difference, and a measurable luminance difference between deterministic
+subject regions. The existing PBR close checker continues to require contact
+shadow contrast; together these checks cover the initial reference-scene
+lighting/shadow contract without treating automated metrics as human visual
+approval.
+
 The background-safe capture harness exposes the scene with:
 
 ```text
 --capture-realism-reference wide|close solid|material_preview|rendered
+--capture-realism-reference lighting wide|close solid|material_preview|rendered
 ```
 
 Each capture emits `CAPTURE_READY_REFERENCE` metadata proving the selected
-reference view, all nine settled subjects, the deterministic camera, and the
-centered reference bounds. The companion visual checker compares Solid,
-Material Preview, and Rendered captures for non-flat material response and a
-meaningful Rendered-versus-Preview difference. These are calibration and
-regression fixtures, not proof that every material or renderer effect is
-production-complete.
+PBR reference view, all nine settled subjects, the deterministic camera, and
+the centered reference bounds. Lighting captures emit the corresponding
+lighting-prefixed metadata and use the dedicated lighting checker. These are
+calibration and regression fixtures, not proof that every material or renderer
+effect is production-complete.
 
 ## Screen-space indirect diffuse lighting
 
@@ -92,7 +114,7 @@ This is not full global illumination. The screen-space method cannot see geometr
 
 The next realism work should build from reference scenes. Effects outside those scenes should wait until a concrete visual need is identified. Important follow-up tracks are:
 
-1. validate PBR energy response, texture color-space handling, normal-map behavior, roughness/metallic response, IBL calibration, and exposure against reference materials;
+1. extend the PBR and lighting reference scenes to validate energy response, texture color-space handling, normal-map behavior, roughness/metallic response, IBL calibration, exposure, HDR range, and light/shadow stability;
 2. replace the bounded subsurface approximation with a production SSS solution when profile, thickness, ownership, and performance contracts are defined;
 3. validate the screen-space indirect diffuse result for leaks, halos, over-brightening, camera-motion instability, and performance;
 4. add a scene-space indirect-light solution that can represent off-screen and hidden contributors, such as a bounded irradiance-probe or probe-grid system;
