@@ -238,6 +238,42 @@ function Get-SmoothSubjectNeighborDifference {
     }
 }
 
+function Get-SubjectLumaMetrics {
+    param(
+        [Parameter(Mandatory = $true)][string]$Path,
+        [Parameter(Mandatory = $true)][double]$CenterX,
+        [Parameter(Mandatory = $true)][double]$CenterY
+    )
+
+    $bitmap = [System.Drawing.Bitmap]::new($Path)
+    try {
+        $centerPixelX = [int][Math]::Round($bitmap.Width * $CenterX)
+        $centerPixelY = [int][Math]::Round($bitmap.Height * $CenterY)
+        $radius = 55
+        [double]$sum = 0.0
+        [int]$count = 0
+        for ($y = $centerPixelY - $radius; $y -le $centerPixelY + $radius; $y += 2) {
+            for ($x = $centerPixelX - $radius; $x -le $centerPixelX + $radius; $x += 2) {
+                $dx = $x - $centerPixelX
+                $dy = $y - $centerPixelY
+                if (($dx * $dx) + ($dy * $dy) -gt ($radius * $radius)) {
+                    continue
+                }
+                $pixel = $bitmap.GetPixel($x, $y)
+                $sum += 0.2126 * $pixel.R + 0.7152 * $pixel.G + 0.0722 * $pixel.B
+                ++$count
+            }
+        }
+        if ($count -le 0) {
+            throw "Reference subject region contained no pixels."
+        }
+        return $sum / $count
+    }
+    finally {
+        $bitmap.Dispose()
+    }
+}
+
 $files = @{
     "solid" = "realism-reference-$view-solid.png"
     "material_preview" = "realism-reference-$view-material-preview.png"
@@ -269,12 +305,23 @@ if ($renderedSmoothSubjectDifference -gt 1.25) {
     throw "Realism Rendered smooth subjects contain excessive structured variation (mean neighbor RGB difference=$([Math]::Round($renderedSmoothSubjectDifference, 2)))."
 }
 
+if ($view -eq "close") {
+    $renderedRoughMetalLuma = Get-SubjectLumaMetrics `
+        (Join-Path $InputDirectory $files["rendered"]) 0.319 0.235
+    $renderedPolishedMetalLuma = Get-SubjectLumaMetrics `
+        (Join-Path $InputDirectory $files["rendered"]) 0.506 0.235
+    if ($renderedRoughMetalLuma -le ($renderedPolishedMetalLuma + 3.0)) {
+        throw "Realism Rendered matched-metal roughness response was not distinguishable under the reference lighting (rough=$([Math]::Round($renderedRoughMetalLuma, 2)), polished=$([Math]::Round($renderedPolishedMetalLuma, 2)))."
+    }
+}
+
 $summary = @(
     "Realism reference visual evidence validation: passed",
     "Reference view: $view",
     "Nine deterministic PBR material subjects: settled and centered",
     "Rendered versus Material Preview mean RGB difference: $([Math]::Round($difference, 2))",
     "Rendered smooth-subject mean neighbor RGB difference: $([Math]::Round($renderedSmoothSubjectDifference, 2))",
+    $(if ($view -eq "close") { "Rendered matched neutral-metal roughness response is distinguishable" }),
     "Status: automated reference-scene guard passed; human visual inspection remains required"
 )
 $summary | Set-Content -LiteralPath (Join-Path $InputDirectory "realism-reference-visual-validation.txt")
