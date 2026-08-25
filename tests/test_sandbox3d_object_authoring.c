@@ -969,6 +969,54 @@ static void henka_test_sandbox3d_object_authoring_source_persistence(void)
         HENKA_TEST_ASSERT(sandbox3d_authoring_object_pick_face(object, miss_ray, 100.0f) != HENKA_SUCCESS);
         HENKA_TEST_ASSERT(sandbox3d_authoring_object_get_selected_face(object) == picked_face);
         {
+            const henka_authoring_face* before_face = henka_authoring_mesh_get_face(
+                sandbox3d_authoring_object_get_mesh(object), picked_face);
+            henka_authoring_vertex_id before_vertices[4];
+            henka_authoring_edge_id before_edges[4];
+            henka_vec2 before_uvs[4];
+            size_t corner;
+            HENKA_TEST_ASSERT(before_face != NULL && before_face->corner_count == 4U);
+            for (corner = 0U; corner < 4U; ++corner)
+            {
+                before_vertices[corner] = before_face->vertices[corner];
+                before_edges[corner] = before_face->edges[corner];
+                before_uvs[corner] = before_face->uvs[corner];
+            }
+            HENKA_TEST_ASSERT(
+                sandbox3d_authoring_object_flip_selected_face(object) == HENKA_SUCCESS);
+            {
+                const henka_authoring_face* flipped_face = henka_authoring_mesh_get_face(
+                    sandbox3d_authoring_object_get_mesh(object), picked_face);
+                HENKA_TEST_ASSERT(flipped_face != NULL && henka_authoring_mesh_validate(
+                    sandbox3d_authoring_object_get_mesh(object)));
+                for (corner = 0U; corner < 4U; ++corner)
+                {
+                    const size_t source_corner = corner == 0U ? 0U : 4U - corner;
+                    const size_t source_edge = 3U - corner;
+                    HENKA_TEST_ASSERT(
+                        flipped_face->vertices[corner] == before_vertices[source_corner] &&
+                        flipped_face->edges[corner] == before_edges[source_edge] &&
+                        flipped_face->uvs[corner].x == before_uvs[source_corner].x &&
+                        flipped_face->uvs[corner].y == before_uvs[source_corner].y);
+                }
+            }
+            HENKA_TEST_ASSERT(sandbox3d_authoring_object_undo(object) == HENKA_SUCCESS);
+            {
+                const henka_authoring_face* restored_face = henka_authoring_mesh_get_face(
+                    sandbox3d_authoring_object_get_mesh(object), picked_face);
+                HENKA_TEST_ASSERT(restored_face != NULL);
+                for (corner = 0U; corner < 4U; ++corner)
+                {
+                    HENKA_TEST_ASSERT(
+                        restored_face->vertices[corner] == before_vertices[corner] &&
+                        restored_face->edges[corner] == before_edges[corner] &&
+                        restored_face->uvs[corner].x == before_uvs[corner].x &&
+                        restored_face->uvs[corner].y == before_uvs[corner].y);
+                }
+            }
+            HENKA_TEST_ASSERT(sandbox3d_authoring_object_redo(object) == HENKA_SUCCESS);
+        }
+        {
             const henka_authoring_face_id selected_before_extrude = picked_face;
             henka_authoring_face_id selected_after_extrude;
             HENKA_TEST_ASSERT(sandbox3d_authoring_object_extrude_selected_face(object, 0.125f) == HENKA_SUCCESS);

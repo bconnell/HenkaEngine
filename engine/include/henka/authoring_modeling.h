@@ -71,6 +71,12 @@ henka_result henka_authoring_mesh_duplicate_face(
     henka_authoring_face_id face_id,
     henka_vec3 offset,
     henka_authoring_face_id* out_face_id);
+/* Reverses one face's winding while preserving its logical face identity,
+ * vertex identity, material/smoothing metadata, and per-corner UV mapping.
+ * The candidate is published only after the complete mesh validates. */
+henka_result henka_authoring_mesh_flip_face(
+    henka_authoring_mesh* mesh,
+    henka_authoring_face_id face_id);
 henka_result henka_authoring_mesh_extrude_face(
     henka_authoring_mesh* mesh,
     henka_authoring_face_id face_id,

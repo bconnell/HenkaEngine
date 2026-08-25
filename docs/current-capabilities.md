@@ -170,9 +170,10 @@ authoritative section below.
   loose-edge, and incompatible-normal fans fail closed. These operations are
   exposed through the integrated Vertex selection workflow.
 - Transactional operations also include plane/box creation, duplicate, face
-  extrude, inset, planar bevel rings, face subdivision, selected-face deletion,
-  a bounded single-quad face loop cut, planar UV projection, island transforms,
-  packing, and seam detection. HAMS v5 writes portable little-endian data
+  winding flip, face extrude, inset, planar bevel rings, face subdivision,
+  selected-face deletion, a bounded single-quad face loop cut, planar UV
+  projection, island transforms, packing, and seam detection. HAMS v5 writes
+  portable little-endian data
   through unique same-directory temporary files and retains reads for
   checked-in v2/v3/v4 surface-only legacy sources. HAMS v5 is required for
   persisted loose vertices and zero-face wire edges; legacy files are migrated

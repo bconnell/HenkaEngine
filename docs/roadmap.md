@@ -202,8 +202,8 @@ tracks that share renderer, asset, persistence, and workspace boundaries.
    isolated vertices, exact metadata-preserving duplicate faces, and
    degenerate faces, while rejecting unsafe winding, UV, material, smoothing,
    or non-manifold changes.
-7. Face extrude, inset, planar bevel rings, face subdivision, selected-face
-   deletion, planar UV projection, island transforms, packing, seam detection,
+7. Face winding flip, face extrude, inset, planar bevel rings, face subdivision,
+   selected-face deletion, planar UV projection, island transforms, packing, seam detection,
    Make Editable, HAMS persistence, material promotion, and supported PBR
    material-instance editing are available in the bounded workflow. HAMS also
    preserves explicit loose vertices and standalone wire edges with stable IDs

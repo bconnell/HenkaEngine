@@ -35,10 +35,12 @@ analysis; unsafe duplicate groups, non-manifold results, vertex welding, and
 winding rewrites fail closed.
 
 `<henka/authoring_modeling.h>` adds bounded plane and box constructors plus
-transactional duplicate, extrude, inset, planar bevel-ring, face subdivide,
-and bounded edge bevel operations. Each operation works on a clone and publishes only a
-validated result, so capacity or non-manifold rejection leaves the source
-mesh unchanged.
+transactional duplicate, face-winding flip, extrude, inset, planar bevel-ring,
+face subdivide, and bounded edge bevel operations. Face flip preserves the
+face's logical identity, vertex identity, edge identity, material/smoothing
+metadata, and per-corner UV correspondence while reversing its winding. Each
+operation works on a clone and publishes only a validated result, so capacity
+or non-manifold rejection leaves the source mesh unchanged.
 
 `<henka/authoring_uv.h>` provides per-face planar projection on each principal
 axis, bounded island transform and single-face packing helpers, finite-value
@@ -97,10 +99,11 @@ directly adjacent vertices receive half strength. These are bounded generic
 selection/modeling operations rather than showcase-specific geometry rules, and
 the falloff is a foundation for shaping rather than final anatomy or mechanical
 topology proof.
-Face mode also exposes
-the selected face plus transactional material
-region editing, Extrude, Inset, Bevel, Subdivide, Project UV, Pack UV, Undo,
-Redo, Save Project, and Reload Project commands. Save Project writes a bounded
+Face mode also exposes the selected face plus transactional material-region
+editing, Flip, Extrude, Inset, Bevel, Subdivide, Project UV, Pack UV, Undo, Redo,
+Save Project, and Reload Project commands. Flip reverses the selected face's
+ordered winding without creating a replacement face or losing its per-corner
+metadata. Save Project writes a bounded
 versioned manifest beside the existing transactional `.hams` topology source;
 the manifest retains the source path, transform, and visibility needed to
 reopen the current bridge. Each edit

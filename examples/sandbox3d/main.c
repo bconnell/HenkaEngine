@@ -23100,7 +23100,7 @@ static void sandbox3d_draw_object_details_panel(
             28.0f,
             0U,
             &row) &&
-        row.width >= 88.0f)
+        row.width >= 292.0f)
     {
         bevel_controls_prioritized = true;
         if (!state->native_authoring_bevel_reported ||
@@ -23136,6 +23136,52 @@ static void sandbox3d_draw_object_details_panel(
                 "Delete Faces"))
         {
             (void)sandbox3d_apply_authoring_face_delete(state, entity, display_name);
+        }
+        printf(
+            "Native authoring face flip control: name=%s x=%.1f y=%.1f width=88.0 height=24.0.\n",
+            display_name,
+            row.x + 204.0f,
+            row.y);
+        fflush(stdout);
+        if (henka_ui_button(
+                state->ui,
+                "authoring_priority_flip_face_stable",
+                (henka_ui_rect){row.x + 204.0f, row.y, 88.0f, 24.0f},
+                "Flip"))
+        {
+            const henka_result flip_result =
+                sandbox3d_authoring_object_flip_selected_face(state->authoring_object);
+            printf(
+                "Native authoring face flip request: name=%s result=%s face=%u.\n",
+                display_name,
+                henka_result_to_string(flip_result),
+                (unsigned int)sandbox3d_authoring_object_get_selected_face(
+                    state->authoring_object));
+            fflush(stdout);
+            if (flip_result == HENKA_SUCCESS)
+            {
+                const henka_authoring_mesh_counts counts =
+                    henka_authoring_mesh_get_counts(
+                        sandbox3d_authoring_object_get_mesh(state->authoring_object));
+                sandbox3d_mark_generic_modeling_applied(state, entity);
+                printf(
+                    "Native authoring dogfood: face winding flipped for %s; vertices=%zu faces=%zu source_state=HENKA_NATIVE_EDITED_FIXTURE design_authority=EDITOR_DERIVED_FIXTURE.\n",
+                    display_name,
+                    counts.vertices,
+                    counts.faces);
+                fflush(stdout);
+                sandbox3d_set_status(
+                    state,
+                    false,
+                    "Selected face winding flipped and evaluated into the scene.");
+            }
+            else
+            {
+                sandbox3d_set_status(
+                    state,
+                    true,
+                    "Selected face winding flip rejected; source retained.");
+            }
         }
     }
     else if (state->authoring_object != NULL &&

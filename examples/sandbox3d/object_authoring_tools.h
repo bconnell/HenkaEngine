@@ -380,6 +380,11 @@ henka_result sandbox3d_authoring_object_select_extreme_face_band(
  * the source, evaluated mesh, bounds, physics, and history on failure. */
 henka_result sandbox3d_authoring_object_delete_selected_faces(
     sandbox3d_authoring_object* object);
+/* Reverses the selected face's winding through the normal source/render/
+ * bounds/physics/history transaction while preserving its logical identity,
+ * corner UVs, material, and smoothing metadata. */
+henka_result sandbox3d_authoring_object_flip_selected_face(
+    sandbox3d_authoring_object* object);
 henka_result sandbox3d_authoring_object_set_selected_face_material_region(
     sandbox3d_authoring_object* object,
     uint32_t material_region);

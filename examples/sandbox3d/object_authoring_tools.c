@@ -5772,6 +5772,45 @@ henka_result sandbox3d_authoring_object_delete_selected_faces(
     return result;
 }
 
+henka_result sandbox3d_authoring_object_flip_selected_face(
+    sandbox3d_authoring_object* object)
+{
+    henka_authoring_mesh* candidate = NULL;
+    henka_authoring_face_id selected_face;
+    henka_result result;
+
+    if (object == NULL || object->selection_mode != SANDBOX3D_AUTHORING_SELECTION_FACE ||
+        object->mesh == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    selected_face = object->selected_face;
+    if (selected_face == HENKA_AUTHORING_INVALID_ID ||
+        henka_authoring_mesh_get_face(object->mesh, selected_face) == NULL)
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    result = henka_authoring_mesh_clone(object->mesh, &candidate);
+    if (result == HENKA_SUCCESS)
+    {
+        result = henka_authoring_mesh_flip_face(candidate, selected_face);
+    }
+    if (result == HENKA_SUCCESS)
+    {
+        result = sandbox3d_authoring_publish_candidate(
+            object, candidate, true, selected_face);
+        if (result != HENKA_SUCCESS)
+        {
+            henka_authoring_mesh_destroy(candidate);
+        }
+    }
+    else
+    {
+        henka_authoring_mesh_destroy(candidate);
+    }
+    return result;
+}
+
 henka_result sandbox3d_authoring_object_set_selected_face_material_region(
     sandbox3d_authoring_object* object,
     uint32_t material_region)

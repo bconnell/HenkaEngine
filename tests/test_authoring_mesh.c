@@ -8,6 +8,13 @@
 #include <henka/authoring_topology.h>
 #include <henka/authoring_uv.h>
 
+/* Red-test seam for the next bounded modeling operation.  The public
+ * declaration is added only after this test proves the current API is
+ * missing the behavior. */
+extern henka_result henka_authoring_mesh_flip_face(
+    henka_authoring_mesh* mesh,
+    henka_authoring_face_id face_id);
+
 static int fail(const char* message)
 {
     fprintf(stderr, "authoring mesh test failed: %s\n", message);
@@ -476,6 +483,76 @@ static int test_modeling_operations(void)
 cleanup:
     henka_authoring_mesh_destroy(mesh);
     return result ? 1 : fail("modeling operations");
+}
+
+static int test_face_flip_operation(void)
+{
+    henka_authoring_mesh_desc desc = henka_authoring_mesh_desc_default();
+    henka_authoring_mesh* mesh = NULL;
+    henka_authoring_face_id face_id = HENKA_AUTHORING_INVALID_ID;
+    henka_authoring_face_id invalid_face_id = HENKA_AUTHORING_INVALID_ID;
+    henka_authoring_vertex_id before_vertices[4];
+    henka_authoring_edge_id before_edges[4];
+    henka_vec2 before_uvs[4];
+    size_t corner;
+    int result = 0;
+
+    if (henka_authoring_mesh_create_plane(&desc, 2.0f, 2.0f, &mesh) != HENKA_SUCCESS ||
+        henka_authoring_mesh_get_face_id_at(mesh, 0U, &face_id) != HENKA_SUCCESS)
+    {
+        return fail("face flip setup");
+    }
+    {
+        const henka_authoring_face* face = henka_authoring_mesh_get_face(mesh, face_id);
+        if (face == NULL || face->corner_count != 4U)
+        {
+            henka_authoring_mesh_destroy(mesh);
+            return fail("face flip source face");
+        }
+        for (corner = 0U; corner < face->corner_count; ++corner)
+        {
+            before_vertices[corner] = face->vertices[corner];
+            before_edges[corner] = face->edges[corner];
+            before_uvs[corner] = face->uvs[corner];
+        }
+    }
+
+    if (henka_authoring_mesh_flip_face(mesh, face_id) != HENKA_SUCCESS)
+    {
+        henka_authoring_mesh_destroy(mesh);
+        return fail("face flip operation");
+    }
+    {
+        const henka_authoring_face* face = henka_authoring_mesh_get_face(mesh, face_id);
+        if (face == NULL || !henka_authoring_mesh_validate(mesh))
+        {
+            henka_authoring_mesh_destroy(mesh);
+            return fail("face flip validation");
+        }
+        for (corner = 0U; corner < 4U; ++corner)
+        {
+            const size_t source_corner = corner == 0U ? 0U : 4U - corner;
+            const size_t source_edge = 3U - corner;
+            if (face->vertices[corner] != before_vertices[source_corner] ||
+                face->edges[corner] != before_edges[source_edge] ||
+                face->uvs[corner].x != before_uvs[source_corner].x ||
+                face->uvs[corner].y != before_uvs[source_corner].y)
+            {
+                henka_authoring_mesh_destroy(mesh);
+                return fail("face flip winding or corner metadata");
+            }
+        }
+    }
+
+    if (henka_authoring_mesh_flip_face(mesh, invalid_face_id) == HENKA_SUCCESS ||
+        !henka_authoring_mesh_validate(mesh))
+    {
+        henka_authoring_mesh_destroy(mesh);
+        return fail("face flip invalid handle");
+    }
+    result = 1;
+    henka_authoring_mesh_destroy(mesh);
+    return result;
 }
 
 static int test_vertex_merge_operations(void)
@@ -3110,7 +3187,8 @@ cleanup:
 int main(void)
 {
     return test_topology_and_evaluation() && test_rejection_and_tombstones() &&
-        test_history_and_persistence() && test_modeling_operations() && test_vertex_merge_operations() &&
+        test_history_and_persistence() && test_modeling_operations() && test_face_flip_operation() &&
+        test_vertex_merge_operations() &&
         test_vertex_topology_operations() && test_vertex_bevel_operations() &&
         test_boundary_edge_bevel_operation() && test_boundary_edge_batch_bevel_operation() &&
         test_same_face_boundary_edge_batch_bevel_operation() &&

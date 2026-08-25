@@ -100,7 +100,7 @@ The current integrated authoring foundation includes:
 - Component selection, connected selection, bounded edge-loop selection, and soft movement
 - Transform, orientation, pivot, and axis-constrained editing foundations
 - Stable vertex/edge/face identities and connectivity queries
-- Extrude, inset, bevel-ring, face subdivision, selected-face deletion, UV projection, packing, and undo/redo
+- Face winding flip, extrude, inset, bevel-ring, face subdivision, selected-face deletion, UV projection, packing, and undo/redo
 - Native editable source persistence and imported-object Make Editable
 - Validated material-region and supported PBR material-instance editing
 

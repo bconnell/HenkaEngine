@@ -3858,6 +3858,61 @@ static bool modeling_face_is_valid(const henka_authoring_mesh* mesh, henka_autho
     return face != NULL && face->corner_count >= 3U;
 }
 
+henka_result henka_authoring_mesh_flip_face(
+    henka_authoring_mesh* mesh,
+    henka_authoring_face_id face_id)
+{
+    henka_authoring_mesh* candidate = NULL;
+    henka_authoring_face_loop_update update = {0};
+    henka_authoring_vertex_id vertices[HENKA_AUTHORING_MESH_HARD_MAX_FACE_CORNERS];
+    henka_vec2 uvs[HENKA_AUTHORING_MESH_HARD_MAX_FACE_CORNERS];
+    const henka_authoring_face* source;
+    size_t corner;
+    size_t corner_count;
+    henka_result result;
+
+    if (mesh == NULL || !henka_authoring_mesh_validate(mesh) ||
+        !modeling_face_is_valid(mesh, face_id))
+    {
+        return HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    source = henka_authoring_mesh_get_face(mesh, face_id);
+    if (source == NULL || source->corner_count > HENKA_AUTHORING_MESH_HARD_MAX_FACE_CORNERS)
+    {
+        return HENKA_ERROR_LIMIT;
+    }
+    corner_count = source->corner_count;
+    for (corner = 0U; corner < corner_count; ++corner)
+    {
+        const size_t source_corner = corner == 0U ? 0U : corner_count - corner;
+        vertices[corner] = source->vertices[source_corner];
+        uvs[corner] = source->uvs[source_corner];
+    }
+    update.face_id = face_id;
+    update.vertices = vertices;
+    update.uvs = uvs;
+    update.corner_count = corner_count;
+    update.material_region = source->material_region;
+    update.smooth = source->smooth;
+
+    result = henka_authoring_mesh_clone(mesh, &candidate);
+    if (result == HENKA_SUCCESS)
+    {
+        result = henka_authoring_mesh_apply_face_loop_updates_internal(candidate, &update, 1U);
+    }
+    if (result == HENKA_SUCCESS && !henka_authoring_mesh_validate(candidate))
+    {
+        result = HENKA_ERROR_INVALID_ARGUMENT;
+    }
+    if (result == HENKA_SUCCESS)
+    {
+        result = modeling_commit(mesh, candidate);
+        candidate = NULL;
+    }
+    henka_authoring_mesh_destroy(candidate);
+    return result;
+}
+
 static henka_result modeling_add_offset_face(
     henka_authoring_mesh* mesh,
     const henka_authoring_face* source,
