@@ -7620,6 +7620,7 @@ static void sandbox3d_report_realism_reference_capture_ready(
     henka_vec2 reference_midpoint;
     henka_viewport viewport;
     size_t reference_count;
+    const char* reference_layout;
 
     if (state == NULL || !state->realism_reference_capture_requested ||
         state->capture_metadata_reported)
@@ -7652,13 +7653,18 @@ static void sandbox3d_report_realism_reference_capture_ready(
         return;
     }
 
+    reference_layout = state->realism_reference_capture_view ==
+            SANDBOX3D_REALISM_REFERENCE_CAPTURE_VIEW_CLOSE
+        ? "close_grid"
+        : "wide_row";
     printf(
-        "CAPTURE_READY_REFERENCE mode=%s view=%s viewport=%d,%d,%d,%d aspect=%.6f camera_position=%.4f,%.4f,%.4f yaw=%.6f pitch=%.6f roll=%.6f fov=%.6f reference_bounds=%.4f,%.4f,%.4f,%.4f,%.4f,%.4f reference_midpoint=%.2f,%.2f reference_count=%zu settled_frames=%u draw_expected=1\n",
+        "CAPTURE_READY_REFERENCE mode=%s view=%s reference_layout=%s viewport=%d,%d,%d,%d aspect=%.6f camera_position=%.4f,%.4f,%.4f yaw=%.6f pitch=%.6f roll=%.6f fov=%.6f reference_bounds=%.4f,%.4f,%.4f,%.4f,%.4f,%.4f reference_midpoint=%.2f,%.2f reference_count=%zu settled_frames=%u draw_expected=1\n",
         henka_viewport_shading_mode_get_setting_value(state->capture_mode),
         state->realism_reference_capture_view ==
                 SANDBOX3D_REALISM_REFERENCE_CAPTURE_VIEW_CLOSE
             ? "close"
             : "wide",
+        reference_layout,
         viewport.x,
         viewport.y,
         viewport.width,
@@ -31635,8 +31641,19 @@ static henka_result sandbox3d_initialize(henka_engine* engine, void* user_data)
         for (realism_index = 0; realism_index < 9; ++realism_index)
         {
             henka_material realism_material = henka_material_default();
+            henka_vec3 realism_position = realism_positions[realism_index];
+            if (state->realism_reference_capture_requested &&
+                state->realism_reference_capture_view ==
+                    SANDBOX3D_REALISM_REFERENCE_CAPTURE_VIEW_CLOSE)
+            {
+                const int grid_column = realism_index % 3;
+                const int grid_row = realism_index / 3;
+                realism_position.x = ((float)grid_column - 1.0f) * 1.35f;
+                realism_position.y = (2.0f - (float)grid_row) * 1.25f + 0.65f;
+                realism_position.z = -2.8f;
+            }
             henka_transform realism_transform = sandbox3d_make_transform(
-                realism_positions[realism_index],
+                realism_position,
                 (henka_vec3){1.0f, 1.0f, 1.0f});
             state->realism_entities[realism_index] = henka_scene_create_entity_named(
                 state->scene,

@@ -42,7 +42,7 @@ function Get-ReferenceMetadata {
 
     $match = [regex]::Match(
         $indexText,
-        "(?m)CAPTURE_READY_REFERENCE mode=$Mode view=(?<view>wide|close) viewport=(?<vx>-?\d+),(?<vy>-?\d+),(?<vw>\d+),(?<vh>\d+) aspect=(?<aspect>[-0-9.]+) .* pitch=(?<pitch>[-0-9.]+) roll=(?<roll>[-0-9.]+) .* reference_bounds=(?<cx>[-0-9.]+),(?<cy>[-0-9.]+),(?<cz>[-0-9.]+),(?<ex>[-0-9.]+),(?<ey>[-0-9.]+),(?<ez>[-0-9.]+) reference_midpoint=(?<mx>[-0-9.]+),(?<my>[-0-9.]+) reference_count=(?<count>\d+) settled_frames=(?<settled>\d+) draw_expected=1")
+        "(?m)CAPTURE_READY_REFERENCE mode=$Mode view=(?<view>wide|close) reference_layout=(?<layout>[a-z_]+) viewport=(?<vx>-?\d+),(?<vy>-?\d+),(?<vw>\d+),(?<vh>\d+) aspect=(?<aspect>[-0-9.]+) .* pitch=(?<pitch>[-0-9.]+) roll=(?<roll>[-0-9.]+) .* reference_bounds=(?<cx>[-0-9.]+),(?<cy>[-0-9.]+),(?<cz>[-0-9.]+),(?<ex>[-0-9.]+),(?<ey>[-0-9.]+),(?<ez>[-0-9.]+) reference_midpoint=(?<mx>[-0-9.]+),(?<my>[-0-9.]+) reference_count=(?<count>\d+) settled_frames=(?<settled>\d+) draw_expected=1")
     if (-not $match.Success) {
         throw "Realism reference evidence is missing valid CAPTURE_READY_REFERENCE metadata for $Mode."
     }
@@ -55,6 +55,16 @@ $metadata = @(
     Get-ReferenceMetadata "rendered"
 )
 $view = $metadata[0].Groups["view"].Value
+$expectedLayout = if ($view -eq "close") { "close_grid" } else { "wide_row" }
+if ($metadata[0].Groups["layout"].Value -ne $expectedLayout) {
+    throw "Realism reference metadata declared an unexpected layout: $($metadata[0].Groups["layout"].Value)."
+}
+foreach ($stdoutPath in $stdoutPaths) {
+    $stdoutText = Get-Content -LiteralPath $stdoutPath.FullName -Raw
+    if ($stdoutText -notmatch "reference_layout=$expectedLayout(?:\s|$)") {
+        throw "Realism reference capture did not prove the expected $expectedLayout layout in $($stdoutPath.Name)."
+    }
+}
 $canonical = $metadata[0].Value -replace 'mode=(solid|material_preview|rendered)', 'mode=shared'
 foreach ($entry in $metadata) {
     if ($entry.Groups["view"].Value -ne $view) {
@@ -171,17 +181,39 @@ function Get-MeanRgbDifference {
 
 function Get-SmoothSubjectNeighborDifference {
     param(
-        [Parameter(Mandatory = $true)][string]$Path
+        [Parameter(Mandatory = $true)][string]$Path,
+        [Parameter(Mandatory = $true)][ValidateSet("wide", "close")][string]$View
     )
 
     $bitmap = [System.Drawing.Bitmap]::new($Path)
     try {
-        $centers = @(0.080, 0.201, 0.323, 0.445)
+        $centers = if ($View -eq "close") {
+            @(
+                [pscustomobject]@{ X = 0.319; Y = 0.235 }
+                [pscustomobject]@{ X = 0.506; Y = 0.235 }
+                [pscustomobject]@{ X = 0.693; Y = 0.235 }
+                [pscustomobject]@{ X = 0.319; Y = 0.543 }
+                [pscustomobject]@{ X = 0.506; Y = 0.543 }
+                [pscustomobject]@{ X = 0.693; Y = 0.543 }
+                [pscustomobject]@{ X = 0.319; Y = 0.851 }
+                [pscustomobject]@{ X = 0.506; Y = 0.851 }
+                [pscustomobject]@{ X = 0.693; Y = 0.851 }
+            )
+        }
+        else {
+            @(
+                [pscustomobject]@{ X = 0.125; Y = 0.520 }
+                [pscustomobject]@{ X = 0.234; Y = 0.520 }
+                [pscustomobject]@{ X = 0.344; Y = 0.520 }
+                [pscustomobject]@{ X = 0.453; Y = 0.520 }
+            )
+        }
         [double]$sum = 0.0
         [int]$count = 0
         foreach ($center in $centers) {
-            $centerX = [int][Math]::Round($bitmap.Width * $center)
-            for ($y = [int]($bitmap.Height * 0.505); $y -lt [int]($bitmap.Height * 0.575); $y += 2) {
+            $centerX = [int][Math]::Round($bitmap.Width * $center.X)
+            $centerY = [int][Math]::Round($bitmap.Height * $center.Y)
+            for ($y = $centerY - 22; $y -lt $centerY + 22; $y += 2) {
                 for ($x = $centerX - 22; $x -lt $centerX + 22; $x += 2) {
                     $pixel = $bitmap.GetPixel($x, $y)
                     $right = $bitmap.GetPixel($x + 2, $y)
@@ -228,7 +260,8 @@ if ($difference -lt 2.0) {
 }
 
 $renderedSmoothSubjectDifference = Get-SmoothSubjectNeighborDifference `
-    (Join-Path $InputDirectory $files["rendered"])
+    (Join-Path $InputDirectory $files["rendered"]) `
+    $view
 if ($renderedSmoothSubjectDifference -gt 1.25) {
     throw "Realism Rendered smooth subjects contain excessive structured variation (mean neighbor RGB difference=$([Math]::Round($renderedSmoothSubjectDifference, 2)))."
 }

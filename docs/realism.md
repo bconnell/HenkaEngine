@@ -44,6 +44,11 @@ approximation. The fixture uses the same scene, material, texture, lighting,
 environment, and post-processing paths as the editor showcase; it is not a
 showcase-only shader path.
 
+The wide reference keeps the nine subjects in a single deterministic row for
+overview comparison. The close reference uses a non-overlapping 3x3 grid so
+each material receives useful screen area for visual inspection without
+changing the authored fixture or its material assignments.
+
 The background-safe capture harness exposes the scene with:
 
 ```text
