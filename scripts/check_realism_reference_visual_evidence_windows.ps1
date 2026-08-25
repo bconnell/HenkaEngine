@@ -19,6 +19,14 @@ if ($indexText -notmatch "(?m)^Evidence profile: REALISM_REFERENCE\s*$") {
     throw "Realism reference evidence does not declare the REALISM_REFERENCE profile."
 }
 
+$stderrPaths = Get-ChildItem -LiteralPath $InputDirectory -Filter "realism_reference_*.stderr.txt" -File
+foreach ($stderrPath in $stderrPaths) {
+    $stderrText = Get-Content -LiteralPath $stderrPath.FullName -Raw
+    if ($stderrText -match "Realism reference capture could not frame its bounded fixture\.") {
+        throw "Realism reference capture reported a framing failure in $($stderrPath.Name)."
+    }
+}
+
 function Get-ReferenceMetadata {
     param(
         [Parameter(Mandatory = $true)][string]$Mode

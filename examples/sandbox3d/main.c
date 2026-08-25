@@ -32295,7 +32295,6 @@ static henka_result sandbox3d_initialize(henka_engine* engine, void* user_data)
         goto fail;
     }
 
-    sandbox3d_apply_loaded_settings(engine, state);
     if (state->realism_reference_capture_requested)
     {
         result = sandbox3d_prepare_realism_reference_capture(state);
@@ -32307,6 +32306,7 @@ static henka_result sandbox3d_initialize(henka_engine* engine, void* user_data)
             goto fail;
         }
     }
+    sandbox3d_apply_loaded_settings(engine, state);
     state->startup_frame_pending = !state->capture_mode_requested;
     sandbox3d_editor_ui_state_load(
         state->settings,

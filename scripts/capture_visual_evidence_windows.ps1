@@ -157,6 +157,19 @@ function Assert-HenkaSandboxCaptureReady {
         [Parameter(Mandatory = $true)][string]$Label
     )
 
+    # The capture process owns this window. Restore its visibility without
+    # assigning foreground focus so PrintWindow can render it in background-
+    # safe mode, even when the process was created with a hidden/minimized
+    # initial presentation state.
+    for ($attempt = 0; $attempt -lt 20; ++$attempt) {
+        [HenkaVisualCaptureNativeMethods]::ShowWindow($Handle, 9)
+        if ([HenkaVisualCaptureNativeMethods]::IsWindowVisible($Handle) -and
+            -not [HenkaVisualCaptureNativeMethods]::IsIconic($Handle)) {
+            break
+        }
+        Start-Sleep -Milliseconds 25
+    }
+
     if (-not [HenkaVisualCaptureNativeMethods]::IsWindowVisible($Handle) -or
         [HenkaVisualCaptureNativeMethods]::IsIconic($Handle)) {
         throw (
