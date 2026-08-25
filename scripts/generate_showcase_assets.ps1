@@ -832,7 +832,21 @@ function Write-ShowcaseTexture {
         [pscustomobject]@{ U = 0.49; V = 0.81; Ru = 0.085; Rv = 0.100; Angle = -0.20 },
         [pscustomobject]@{ U = 0.72; V = 0.91; Ru = 0.110; Rv = 0.075; Angle = 0.35 },
         [pscustomobject]@{ U = 0.94; V = 0.84; Ru = 0.080; Rv = 0.110; Angle = -0.65 },
-        [pscustomobject]@{ U = 0.62; V = 0.04; Ru = 0.080; Rv = 0.055; Angle = 0.50 })
+        [pscustomobject]@{ U = 0.62; V = 0.04; Ru = 0.080; Rv = 0.055; Angle = 0.50 },
+        # Secondary off-grid cells break up large contiguous patches without
+        # introducing a repeated stamp cadence on the neck or ribcage.
+        [pscustomobject]@{ U = 0.31; V = 0.18; Ru = 0.055; Rv = 0.045; Angle = 0.80 },
+        [pscustomobject]@{ U = 0.68; V = 0.20; Ru = 0.060; Rv = 0.050; Angle = -0.35 },
+        [pscustomobject]@{ U = 0.02; V = 0.34; Ru = 0.050; Rv = 0.040; Angle = -0.70 },
+        [pscustomobject]@{ U = 0.52; V = 0.36; Ru = 0.058; Rv = 0.045; Angle = 0.25 },
+        [pscustomobject]@{ U = 0.91; V = 0.39; Ru = 0.052; Rv = 0.060; Angle = -0.50 },
+        [pscustomobject]@{ U = 0.18; V = 0.55; Ru = 0.060; Rv = 0.045; Angle = 0.40 },
+        [pscustomobject]@{ U = 0.70; V = 0.57; Ru = 0.050; Rv = 0.058; Angle = -0.15 },
+        [pscustomobject]@{ U = 0.42; V = 0.73; Ru = 0.055; Rv = 0.042; Angle = 0.65 },
+        [pscustomobject]@{ U = 0.98; V = 0.74; Ru = 0.048; Rv = 0.055; Angle = -0.25 },
+        [pscustomobject]@{ U = 0.06; V = 0.93; Ru = 0.052; Rv = 0.045; Angle = 0.15 },
+        [pscustomobject]@{ U = 0.57; V = 0.96; Ru = 0.060; Rv = 0.040; Angle = -0.60 },
+        [pscustomobject]@{ U = 0.84; V = 0.94; Ru = 0.050; Rv = 0.052; Angle = 0.35 })
     try {
         for ($y = 0; $y -lt $size; ++$y) {
             for ($x = 0; $x -lt $size; ++$x) {
