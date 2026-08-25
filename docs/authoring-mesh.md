@@ -162,8 +162,9 @@ one selected-edge bevel contract and create interpolated cut vertices and quad
 bevel faces transactionally; the singular API remains a compatibility wrapper.
 Interior bevel rejects hard edges, material/smooth/UV discontinuities, non-quad
 faces, neighboring shared boundaries, and ambiguous endpoint fans. Boundary
-batch bevel rejects shared faces and endpoints; same-face batches, mixed
-selections, and broader interior edge-set bevel remain incomplete. A bounded
+batch bevel rejects shared faces and endpoints; same-face batches with shared
+endpoint corner caps are available, while mixed selections and broader
+interior edge-set bevel remain incomplete. A bounded
 single-quad face loop cut is also available: it interpolates two opposite
 boundary edges, creates two quad faces, and rejects shared-boundary faces so it
 cannot leave a T-junction in neighboring topology. The reusable topology layer
@@ -184,10 +185,8 @@ Edge Slide does not maintain a separate graph traversal. The editor Loop Cut
   (-1, 1), preview, cancel, and one transactional Apply; it moves the loop
   toward deterministic adjacent sides without changing topology and publishes
   through the same transactional source/render/bounds/collider/undo path.
-  Multi-cut spacing,
-  same-face/shared-endpoint bevel batches,
-  broader interior edge cases, and general loop-cut networks remain
-  unfinished. The same Edge workflow accepts the bounded pairwise
+  Multi-cut spacing, broader interior edge cases, and general loop-cut networks
+  remain unfinished. The same Edge workflow accepts the bounded pairwise
   vertex-disjoint boundary-edge bevel selection described above and publishes
   it as one undoable transaction.
 Bounded Vertex Extrude is available for a connected open boundary vertex fan,
