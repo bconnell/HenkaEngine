@@ -169,6 +169,40 @@ function Get-MeanRgbDifference {
     }
 }
 
+function Get-SmoothSubjectNeighborDifference {
+    param(
+        [Parameter(Mandatory = $true)][string]$Path
+    )
+
+    $bitmap = [System.Drawing.Bitmap]::new($Path)
+    try {
+        $centers = @(0.080, 0.201, 0.323, 0.445)
+        [double]$sum = 0.0
+        [int]$count = 0
+        foreach ($center in $centers) {
+            $centerX = [int][Math]::Round($bitmap.Width * $center)
+            for ($y = [int]($bitmap.Height * 0.505); $y -lt [int]($bitmap.Height * 0.575); $y += 2) {
+                for ($x = $centerX - 22; $x -lt $centerX + 22; $x += 2) {
+                    $pixel = $bitmap.GetPixel($x, $y)
+                    $right = $bitmap.GetPixel($x + 2, $y)
+                    $down = $bitmap.GetPixel($x, $y + 2)
+                    $sum += ([Math]::Abs($pixel.R - $right.R) +
+                        [Math]::Abs($pixel.G - $right.G) +
+                        [Math]::Abs($pixel.B - $right.B)) / 3.0
+                    $sum += ([Math]::Abs($pixel.R - $down.R) +
+                        [Math]::Abs($pixel.G - $down.G) +
+                        [Math]::Abs($pixel.B - $down.B)) / 3.0
+                    $count += 2
+                }
+            }
+        }
+        return $sum / $count
+    }
+    finally {
+        $bitmap.Dispose()
+    }
+}
+
 $files = @{
     "solid" = "realism-reference-$view-solid.png"
     "material_preview" = "realism-reference-$view-material-preview.png"
@@ -193,11 +227,18 @@ if ($difference -lt 2.0) {
     throw "Realism Rendered evidence is not materially distinct from Material Preview (mean RGB difference=$([Math]::Round($difference, 2)))."
 }
 
+$renderedSmoothSubjectDifference = Get-SmoothSubjectNeighborDifference `
+    (Join-Path $InputDirectory $files["rendered"])
+if ($renderedSmoothSubjectDifference -gt 1.25) {
+    throw "Realism Rendered smooth subjects contain excessive structured variation (mean neighbor RGB difference=$([Math]::Round($renderedSmoothSubjectDifference, 2)))."
+}
+
 $summary = @(
     "Realism reference visual evidence validation: passed",
     "Reference view: $view",
     "Nine deterministic PBR material subjects: settled and centered",
     "Rendered versus Material Preview mean RGB difference: $([Math]::Round($difference, 2))",
+    "Rendered smooth-subject mean neighbor RGB difference: $([Math]::Round($renderedSmoothSubjectDifference, 2))",
     "Status: automated reference-scene guard passed; human visual inspection remains required"
 )
 $summary | Set-Content -LiteralPath (Join-Path $InputDirectory "realism-reference-visual-validation.txt")

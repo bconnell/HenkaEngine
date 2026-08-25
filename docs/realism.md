@@ -13,11 +13,20 @@ The current Rendered path includes:
 - local reflection probes;
 - directional, cascade, spot, and point shadow-map foundations;
 - depth-derived ambient occlusion;
-- bounded depth-derived screen-space reflections;
+- a validated environment/probe reflection fallback; the retained depth-derived
+  screen-space reflection implementation is fail-closed until the post-process
+  has per-pixel material roughness data;
 - bloom, exposure, ACES-style tone mapping, a restrained rendered grade, and reconstruction sharpening;
 - bounded temporal history with motion, previous-depth, disocclusion, reactive-mask, and history-clamping safeguards.
 
-Rendered post-processing keeps the bounded screen-space reflection and ambient-occlusion contributions in the linear HDR target until the single final exposure/tone-map/presentation transform. Reflection misses still retain the existing IBL, probe, or analytical fallback. This improves color-space correctness but does not turn the screen-space paths into full-scene reflections or production GTAO.
+Rendered post-processing keeps the calibrated screen-space indirect-diffuse and
+ambient-occlusion contributions in the linear HDR target until the single final
+exposure/tone-map/presentation transform. Reflection uses the environment,
+probe, or analytical fallback while the retained screen-space reflection
+implementation is disabled without a material-aware roughness buffer. This
+improves color-space correctness without emitting false self-reflections, but
+does not turn the screen-space paths into full-scene reflections or production
+GTAO.
 
 The shared fullscreen-triangle presentation path maps its oversized clip-space
 triangle to the complete normalized texture domain. Material Preview and

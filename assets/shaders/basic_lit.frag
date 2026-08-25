@@ -326,7 +326,7 @@ float nearCascadeShadowFactor(vec3 normal, vec3 lightDir)
     }
 
     float nDotL = saturate(dot(normal, lightDir));
-    float slopeBias = max(0.0005 * (1.0 - nDotL), 0.00025);
+    float slopeBias = max(0.0025 * (1.0 - nDotL), 0.0010);
     float currentDepth = shadowCoordinate.z - slopeBias;
     vec2 texelSize = 1.0 / vec2(textureSize(shadowMap, 0));
     float centerDepth = texture(shadowMap, shadowCoordinate.xy).r;
@@ -381,7 +381,7 @@ float farCascadeShadowFactor(vec3 normal, vec3 lightDir)
         return 1.0;
     }
     float nDotL = saturate(dot(normal, lightDir));
-    float currentDepth = shadowCoordinate.z - max(0.0007 * (1.0 - nDotL), 0.0003);
+    float currentDepth = shadowCoordinate.z - max(0.0030 * (1.0 - nDotL), 0.0012);
     vec2 texelSize = 1.0 / vec2(textureSize(cascadeShadowMap, 0));
     float visible = 0.0;
     for (int x = -1; x <= 1; ++x)
