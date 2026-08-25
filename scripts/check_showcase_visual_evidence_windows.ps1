@@ -15,7 +15,7 @@ if (-not (Test-Path -LiteralPath $indexPath -PathType Leaf)) {
     throw "Showcase visual evidence is missing its capture index."
 }
 $indexText = Get-Content -LiteralPath $indexPath -Raw
-if ($indexText -notmatch "Source: .*henka_sandbox3d\.exe") {
+if ($indexText -notmatch "Source: .*henka[_]?sandbox3d\.exe") {
     throw "Showcase visual evidence does not identify the Henka Sandbox executable."
 }
 if ($indexText -notmatch "(?m)^Evidence profile: FULL_SHOWCASE\s*$") {

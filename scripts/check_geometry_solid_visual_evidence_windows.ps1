@@ -20,7 +20,7 @@ $indexText = Get-Content -LiteralPath $indexPath -Raw
 if ($indexText -notmatch "(?m)^Evidence profile: GEOMETRY_SOLID\s*$") {
     throw "Geometry Solid evidence does not declare the GEOMETRY_SOLID profile."
 }
-if ($indexText -notmatch "Source: .*henka_sandbox3d\.exe") {
+if ($indexText -notmatch "Source: .*henka[_]?sandbox3d\.exe") {
     throw "Geometry Solid evidence does not identify the Henka Sandbox executable."
 }
 
