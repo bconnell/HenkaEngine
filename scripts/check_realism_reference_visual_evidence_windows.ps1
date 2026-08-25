@@ -274,6 +274,40 @@ function Get-SubjectLumaMetrics {
     }
 }
 
+function Get-MeanLumaRect {
+    param(
+        [Parameter(Mandatory = $true)][string]$Path,
+        [Parameter(Mandatory = $true)][double]$X,
+        [Parameter(Mandatory = $true)][double]$Y,
+        [Parameter(Mandatory = $true)][double]$Width,
+        [Parameter(Mandatory = $true)][double]$Height
+    )
+
+    $bitmap = [System.Drawing.Bitmap]::new($Path)
+    try {
+        $minimumX = [int][Math]::Round($bitmap.Width * $X)
+        $minimumY = [int][Math]::Round($bitmap.Height * $Y)
+        $maximumX = [Math]::Min($bitmap.Width, [int][Math]::Round($bitmap.Width * ($X + $Width)))
+        $maximumY = [Math]::Min($bitmap.Height, [int][Math]::Round($bitmap.Height * ($Y + $Height)))
+        [double]$sum = 0.0
+        [int]$count = 0
+        for ($y = $minimumY; $y -lt $maximumY; $y += 2) {
+            for ($x = $minimumX; $x -lt $maximumX; $x += 2) {
+                $pixel = $bitmap.GetPixel($x, $y)
+                $sum += 0.2126 * $pixel.R + 0.7152 * $pixel.G + 0.0722 * $pixel.B
+                ++$count
+            }
+        }
+        if ($count -le 0) {
+            throw "Reference luma region contained no pixels."
+        }
+        return $sum / $count
+    }
+    finally {
+        $bitmap.Dispose()
+    }
+}
+
 $files = @{
     "solid" = "realism-reference-$view-solid.png"
     "material_preview" = "realism-reference-$view-material-preview.png"
@@ -313,6 +347,14 @@ if ($view -eq "close") {
     if ($renderedRoughMetalLuma -le ($renderedPolishedMetalLuma + 3.0)) {
         throw "Realism Rendered matched-metal roughness response was not distinguishable under the reference lighting (rough=$([Math]::Round($renderedRoughMetalLuma, 2)), polished=$([Math]::Round($renderedPolishedMetalLuma, 2)))."
     }
+
+    $renderedShadowLuma = Get-MeanLumaRect `
+        (Join-Path $InputDirectory $files["rendered"]) 0.133 0.896 0.266 0.080
+    $renderedGroundControlLuma = Get-MeanLumaRect `
+        (Join-Path $InputDirectory $files["rendered"]) 0.703 0.896 0.219 0.080
+    if ($renderedGroundControlLuma -le ($renderedShadowLuma + 12.0)) {
+        throw "Realism Rendered contact-shadow contrast was not preserved (shadow=$([Math]::Round($renderedShadowLuma, 2)), ground_control=$([Math]::Round($renderedGroundControlLuma, 2)))."
+    }
 }
 
 $summary = @(
@@ -322,6 +364,7 @@ $summary = @(
     "Rendered versus Material Preview mean RGB difference: $([Math]::Round($difference, 2))",
     "Rendered smooth-subject mean neighbor RGB difference: $([Math]::Round($renderedSmoothSubjectDifference, 2))",
     $(if ($view -eq "close") { "Rendered matched neutral-metal roughness response is distinguishable" }),
+    $(if ($view -eq "close") { "Rendered contact-shadow contrast is present" }),
     "Status: automated reference-scene guard passed; human visual inspection remains required"
 )
 $summary | Set-Content -LiteralPath (Join-Path $InputDirectory "realism-reference-visual-validation.txt")

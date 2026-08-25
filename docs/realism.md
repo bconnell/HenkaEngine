@@ -60,6 +60,11 @@ requires their rendered luminance responses to remain distinguishable under the
 deterministic reference lighting. This is a fixture-specific calibration guard,
 not a claim that one universal luminance ordering applies to every scene.
 
+The close capture also compares a normalized ground region beneath the subjects
+with an unobstructed ground control. The checker requires measurable contact
+shadow contrast, providing an initial lighting/shadow regression without
+confusing ambient darkening with a claimed full lighting benchmark.
+
 The background-safe capture harness exposes the scene with:
 
 ```text
