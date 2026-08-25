@@ -1157,15 +1157,27 @@ function New-Giraffe {
             ($legXBase * [float]0.94),
             ($legXBase * [float]0.78),
             ($legXBase * [float]0.58))
-        $legZ = @(
-            $legZBase,
-            ($legZBase * [float]1.01),
-            ($legZBase * [float]0.98),
-            ($legZBase * [float]0.92),
-            ($legZBase * [float]0.80),
-            ($legZBase * [float]0.68))
-        Add-CurvedLimb $tan $legY $legX $legZ @(0.15, 0.16, 0.155, 0.16, 0.24, 0.32) @(0.16, 0.17, 0.16, 0.17, 0.27, 0.36) 48
-        Add-Ellipsoid $hoof @($legXBase, 0.08, $legZBase + 0.015) @(0.15, 0.060, 0.19) 16 28
+        $isHindLeg = $legZBase -lt 0.0
+        $legZ = if ($isHindLeg) {
+            @(
+                $legZBase,
+                ($legZBase * [float]1.06),
+                ($legZBase * [float]1.10),
+                ($legZBase * [float]0.96),
+                ($legZBase * [float]0.76),
+                ($legZBase * [float]0.68))
+        }
+        else {
+            @(
+                $legZBase,
+                ($legZBase * [float]1.01),
+                ($legZBase * [float]0.98),
+                ($legZBase * [float]0.92),
+                ($legZBase * [float]0.80),
+                ($legZBase * [float]0.68))
+        }
+        Add-CurvedLimb $tan $legY $legX $legZ @(0.12, 0.13, 0.125, 0.13, 0.20, 0.28) @(0.13, 0.14, 0.13, 0.14, 0.23, 0.32) 48
+        Add-Ellipsoid $hoof @($legXBase, 0.08, $legZBase + 0.015) @(0.13, 0.055, 0.17) 16 28
         Add-Ellipsoid $joint @($legXBase, 0.88, $legZBase + 0.012) @(0.125, 0.085, 0.11) 12 22
     }
     # Model the ears as compact, flattened lobes in the head plane. The
