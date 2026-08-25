@@ -1315,6 +1315,9 @@ static bool sandbox3d_try_pick_terrain(
     henka_ray ray,
     henka_terrain_physics_hit* out_hit);
 static bool sandbox3d_get_selected_bounds(const sandbox3d_state* state, henka_bounds* out_bounds);
+static bool sandbox3d_get_selected_authoring_face_bounds(
+    const sandbox3d_state* state,
+    henka_bounds* out_bounds);
 static bool sandbox3d_get_logical_owner_bounds(
     const sandbox3d_state* state,
     henka_entity owner,
@@ -5261,12 +5264,14 @@ static void sandbox3d_draw_authoring_surface_overlay(
     henka_authoring_mesh_desc desc;
     /* The topology overlay must remain legible over gray showcase materials
      * and the gray editor floor. These are authored-face region tints, not
-     * renderer-material replacements; their bounded, readable alpha makes
-     * the filled polygon surface visible without adding triangulation lines. */
+     * renderer-material replacements. Use a deliberate, high-contrast wash so
+     * a selected authored object reads as filled geometry before the cage is
+     * drawn; translucent low-contrast color made dense imported fixtures look
+     * like wire-only meshes in the editor. */
     const henka_vec4 surface_colors[3] = {
-        {0.06f, 0.42f, 0.92f, 0.58f},
-        {0.04f, 0.72f, 0.40f, 0.52f},
-        {0.56f, 0.18f, 0.86f, 0.52f}};
+        {0.04f, 0.60f, 0.96f, 0.96f},
+        {0.02f, 0.88f, 0.54f, 0.94f},
+        {0.72f, 0.28f, 0.98f, 0.94f}};
     size_t face_slot;
 
     if (state == NULL || authoring == NULL)
@@ -6797,8 +6802,8 @@ static void sandbox3d_draw_selection_highlight(sandbox3d_state* state, henka_vie
                         state->authoring_object,
                         (henka_authoring_face_id)component_id,
                         active_component
-                            ? (henka_vec4){1.0f, 0.72f, 0.08f, 0.52f}
-                            : (henka_vec4){1.0f, 0.28f, 0.04f, 0.32f});
+                            ? (henka_vec4){0.04f, 0.86f, 1.0f, 0.92f}
+                            : (henka_vec4){0.12f, 0.48f, 0.92f, 0.38f});
                     for (corner = 0U; corner < face_corner_count; ++corner)
                     {
                         const henka_authoring_vertex* first = henka_authoring_mesh_get_vertex(mesh, face_vertices[corner]);
@@ -6852,8 +6857,28 @@ static void sandbox3d_draw_selection_highlight(sandbox3d_state* state, henka_vie
                 }
             }
         }
+        if (selection_mode == SANDBOX3D_AUTHORING_SELECTION_FACE)
+        {
+            const henka_authoring_face_id selected_face =
+                sandbox3d_authoring_object_get_selected_face(state->authoring_object);
+
+            /* The selected-face handle is the authoring object's authoritative
+             * identity. Re-emit its fill after the component-list pass so a
+             * stale presentation list cannot leave a valid selected face
+             * looking like an unfilled cage. */
+            if (selected_face != HENKA_AUTHORING_INVALID_ID)
+            {
+                sandbox3d_draw_authoring_face_fill(
+                    state,
+                    viewport,
+                    transform,
+                    state->authoring_object,
+                    selected_face,
+                    (henka_vec4){0.04f, 0.86f, 1.0f, 0.92f});
+            }
+        }
     }
-    }
+}
 }
 
 static void sandbox3d_draw_reflection_probe_overlay(sandbox3d_state* state, henka_viewport viewport)
@@ -15304,9 +15329,102 @@ static bool sandbox3d_get_selected_bounds(const sandbox3d_state* state, henka_bo
         sandbox3d_get_logical_owner_bounds(state, entity, out_bounds);
 }
 
+static bool sandbox3d_get_selected_authoring_face_bounds(
+    const sandbox3d_state* state,
+    henka_bounds* out_bounds)
+{
+    const sandbox3d_authoring_object* object;
+    const henka_authoring_mesh* mesh;
+    henka_authoring_face_id face_id;
+    henka_authoring_vertex_id corners[HENKA_AUTHORING_MESH_HARD_MAX_FACE_CORNERS];
+    henka_transform transform;
+    henka_vec3 minimum = {0.0f, 0.0f, 0.0f};
+    henka_vec3 maximum = {0.0f, 0.0f, 0.0f};
+    size_t corner_count = 0U;
+    size_t corner_index;
+    bool have_point = false;
+
+    if (state == NULL || state->scene == NULL || out_bounds == NULL ||
+        (object = state->authoring_object) == NULL ||
+        sandbox3d_authoring_object_get_selection_mode(object) !=
+            SANDBOX3D_AUTHORING_SELECTION_FACE ||
+        (face_id = sandbox3d_authoring_object_get_selected_face(object)) ==
+            HENKA_AUTHORING_INVALID_ID ||
+        (mesh = sandbox3d_authoring_object_get_mesh(object)) == NULL ||
+        henka_scene_get_entity_transform(
+            state->scene,
+            sandbox3d_authoring_object_get_entity(object),
+            &transform) != HENKA_SUCCESS ||
+        sandbox3d_authoring_object_get_face_ordered_corners(
+            object,
+            face_id,
+            corners,
+            sizeof(corners) / sizeof(corners[0]),
+            &corner_count) != HENKA_SUCCESS ||
+        corner_count < 3U)
+    {
+        return false;
+    }
+
+    for (corner_index = 0U; corner_index < corner_count; ++corner_index)
+    {
+        const henka_authoring_vertex* vertex = henka_authoring_mesh_get_vertex(
+            mesh,
+            corners[corner_index]);
+        const henka_vec3 point = vertex == NULL
+            ? (henka_vec3){0.0f, 0.0f, 0.0f}
+            : sandbox3d_transform_authoring_point(transform, vertex->position);
+
+        if (vertex == NULL || !sandbox3d_vec3_is_finite(point))
+        {
+            return false;
+        }
+        if (!have_point)
+        {
+            minimum = point;
+            maximum = point;
+            have_point = true;
+        }
+        else
+        {
+            minimum.x = fminf(minimum.x, point.x);
+            minimum.y = fminf(minimum.y, point.y);
+            minimum.z = fminf(minimum.z, point.z);
+            maximum.x = fmaxf(maximum.x, point.x);
+            maximum.y = fmaxf(maximum.y, point.y);
+            maximum.z = fmaxf(maximum.z, point.z);
+        }
+    }
+
+    if (!have_point)
+    {
+        return false;
+    }
+    out_bounds->center = (henka_vec3){
+        (minimum.x + maximum.x) * 0.5f,
+        (minimum.y + maximum.y) * 0.5f,
+        (minimum.z + maximum.z) * 0.5f};
+    out_bounds->extents = (henka_vec3){
+        (maximum.x - minimum.x) * 0.5f,
+        (maximum.y - minimum.y) * 0.5f,
+        (maximum.z - minimum.z) * 0.5f};
+    return sandbox3d_vec3_is_finite(out_bounds->center) &&
+        sandbox3d_vec3_is_finite(out_bounds->extents);
+}
+
 static henka_vec3 sandbox3d_get_view_navigation_target(const sandbox3d_state* state)
 {
     henka_bounds bounds;
+
+    /* A focused modeling component is the navigation subject. Without this
+     * precedence, the first wheel/orbit after Face-mode framing silently
+     * re-centers on the logical object and makes a valid face look invisible
+     * again. Object and scene navigation retain their existing targets when
+     * no valid face is selected. */
+    if (sandbox3d_get_selected_authoring_face_bounds(state, &bounds))
+    {
+        return bounds.center;
+    }
 
     if (sandbox3d_get_selected_bounds(state, &bounds))
     {
@@ -15376,7 +15494,10 @@ static void sandbox3d_zoom_camera_to_target(sandbox3d_state* state, float direct
 
 static void sandbox3d_frame_selected_object(sandbox3d_state* state, bool print_status)
 {
-    henka_bounds bounds;
+    henka_bounds bounds = (henka_bounds){{0.0f, 0.0f, 0.0f}, {0.0f, 0.0f, 0.0f}};
+    henka_vec3 navigation_target;
+    bool framed_face = false;
+    bool camera_frame_applied;
 
     if (state == NULL)
     {
@@ -15384,27 +15505,72 @@ static void sandbox3d_frame_selected_object(sandbox3d_state* state, bool print_s
     }
 
     sandbox3d_view_compass_cancel_transition(&state->compass);
-    if (!sandbox3d_get_selected_bounds(state, &bounds))
+    framed_face = sandbox3d_get_selected_authoring_face_bounds(state, &bounds);
+    if (!framed_face && !sandbox3d_get_selected_bounds(state, &bounds))
     {
         sandbox3d_set_status(state, true, "Select an object before framing the view.");
         return;
     }
 
-    if (henka_camera_frame_bounds(
+    camera_frame_applied = henka_camera_frame_bounds(
             &state->camera,
             bounds,
             state->camera.yaw_radians,
-            state->camera.pitch_radians))
+            state->camera.pitch_radians);
+    if (camera_frame_applied)
     {
-        sandbox3d_set_view_navigation_target(state, bounds.center);
+        navigation_target = bounds.center;
+        {
+            const henka_ui_rect scene_frame = state->frame_layout.scene_frame;
+            const henka_ui_rect toolbar_bounds =
+                sandbox3d_get_modeling_toolbar_bounds(state, scene_frame);
+            const float scene_center_y =
+                scene_frame.y + scene_frame.height * 0.5f;
+            const float visible_top = toolbar_bounds.y + toolbar_bounds.height + 12.0f;
+            const float visible_center_y =
+                (visible_top + scene_frame.y + scene_frame.height) * 0.5f;
+            const float normalized_pan =
+                scene_frame.height > 0.0f
+                    ? (visible_center_y - scene_center_y) / (scene_frame.height * 0.5f)
+                    : 0.0f;
+            const float pan_up = normalized_pan * bounds.extents.y * 1.15f;
+
+            /* Frame against the visible modeling area, not the full viewport:
+             * the authoring toolbar is an intentional overlay and must not
+             * hide the surface currently being inspected. */
+            if (toolbar_bounds.width > 0.0f &&
+                toolbar_bounds.height > 0.0f &&
+                isfinite(pan_up))
+            {
+                (void)henka_camera_pan_target(
+                    &state->camera,
+                    &navigation_target,
+                    0.0f,
+                    pan_up);
+            }
+        }
+        sandbox3d_set_view_navigation_target(state, navigation_target);
         if (print_status)
         {
-            sandbox3d_set_statusf(
-                state,
-                false,
-                false,
-                "Framed %s.",
-                sandbox3d_safe_entity_name(state, sandbox3d_get_real_selected_entity(state), "object"));
+            if (framed_face)
+            {
+                sandbox3d_set_status(
+                    state,
+                    false,
+                    "Framed selected face.");
+            }
+            else
+            {
+                sandbox3d_set_statusf(
+                    state,
+                    false,
+                    false,
+                    "Framed %s.",
+                    sandbox3d_safe_entity_name(
+                        state,
+                        sandbox3d_get_real_selected_entity(state),
+                        "object"));
+            }
         }
     }
 }

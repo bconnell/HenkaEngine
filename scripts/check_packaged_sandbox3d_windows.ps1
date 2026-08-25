@@ -376,7 +376,13 @@ function New-HenkaCapturedWindowBitmap {
     $bitmap = New-Object System.Drawing.Bitmap -ArgumentList $width, $height
     $graphics = [System.Drawing.Graphics]::FromImage($bitmap)
     try {
-        if ($script:allowForegroundIntegration) {
+        # A window that is already foreground can be sampled directly without
+        # changing focus. This keeps ordinary validation application-local,
+        # while avoiding stale OpenGL pixels from background PrintWindow when
+        # Windows has naturally foregrounded the newly launched test window.
+        $window_already_foreground =
+            [HenkaUiAutomationNative]::GetForegroundWindow() -eq $Handle
+        if ($script:allowForegroundIntegration -or $window_already_foreground) {
             $size = New-Object System.Drawing.Size -ArgumentList $width, $height
             $graphics.CopyFromScreen(
                 $rect.Left,
@@ -435,6 +441,10 @@ function Save-WindowScreenshot {
     }
 
     Assert-PathExists -Path $Path -Description $Description
+    $artifact = Get-Item -LiteralPath $Path -ErrorAction Stop
+    if ($artifact.Length -le 0) {
+        throw "$Description produced an empty screenshot artifact: $Path"
+    }
 }
 
 function Click-WindowPoint {
@@ -2736,6 +2746,24 @@ try {
         if (-not $nativeFacePicked) {
             throw "The user-facing Face mode did not select a viewport face before Bevel."
         }
+        # Capture the face while its freshly picked stable handle is still
+        # authoritative. Later bevel/flip transactions may intentionally
+        # remap component identities, so their proof must not be responsible
+        # for preparing this close-up.
+        Send-HenkaAutomationKey -EventPath $automationInputPath -KeyName "F"
+        Start-Sleep -Milliseconds 350
+        for ($closeupWheel = 0; $closeupWheel -lt 1; ++$closeupWheel) {
+            Send-HenkaAutomationScroll `
+                -EventPath $automationInputPath `
+                -X ($componentViewportX + $componentViewportWidth * 0.5) `
+                -Y ($componentViewportY + $componentViewportHeight * 0.5) `
+                -WheelDelta 1
+            Start-Sleep -Milliseconds 800
+        }
+        Save-WindowScreenshot `
+            -Handle $mainWindowHandle `
+            -Path (Join-Path $logDir 'check_packaged_sandbox3d_selected_face_closeup.png') `
+            -Description 'Packaged selected-face rendered geometry close-up'
         $nativeBevelMatch = $null
         $nativeBevelControlLogOffset = $nativeFacePickLogOffset
         for ($bevelStateAttempt = 0; $bevelStateAttempt -lt 8 -and $null -eq $nativeBevelMatch; ++$bevelStateAttempt) {
@@ -2858,6 +2886,18 @@ try {
             throw "The user-facing native bevel operation did not update the showcase source."
         }
         Write-Output "[pass] User-facing topology selection and bevel changed the native showcase source"
+        # Bevel publishes a fresh candidate and rebuilds the details flow. Let
+        # one render/input turn settle before reading and activating the next
+        # control so the subsequent click cannot race that publication.
+        $nativeFlipLayoutLogOffset = Get-FileLengthSafe -Path $stdoutPath
+        Start-Sleep -Milliseconds 350
+        if (-not (Wait-FileContainsAfterOffset `
+                -Path $stdoutPath `
+                -Pattern 'Native authoring face flip control: name=.* width=88.0 height=24.0\.' `
+                -StartingOffset $nativeFlipLayoutLogOffset `
+                -TimeoutMilliseconds 2500)) {
+            throw "The fresh native Face-mode Flip control geometry was not reported after bevel."
+        }
         $nativeFlipMatch = Get-LastLogRegexMatch `
             -Path $stdoutPath `
             -Pattern 'Native authoring face flip control: name=(.+) x=([-0-9.]+) y=([-0-9.]+) width=88.0 height=24.0\.'
@@ -2890,6 +2930,7 @@ try {
                 -FramebufferHeight $framebufferHeight `
                 -FramebufferX ($nativeFlipX + $flipXOffset) `
                 -FramebufferY ($nativeFlipY + $flipYOffset)
+            Start-Sleep -Milliseconds 150
             $nativeFlipObserved = Wait-FileContainsAfterOffset `
                 -Path $stdoutPath `
                 -Pattern "Native authoring dogfood: face winding flipped for" `
@@ -2899,10 +2940,6 @@ try {
         if (-not $nativeFlipObserved) {
             throw "The user-facing native Face-mode Flip operation did not update the showcase source."
         }
-        Save-WindowScreenshot `
-            -Handle $mainWindowHandle `
-            -Path (Join-Path $logDir 'check_packaged_sandbox3d_after_face_flip.png') `
-            -Description 'Packaged post-Face-Flip rendered geometry screenshot'
         Write-Output "[pass] User-facing Face-mode winding flip changed the native showcase source"
         $nativeDeleteFaceObserved = $false
         foreach ($deleteFacePoint in $nativeFacePickPoints) {
