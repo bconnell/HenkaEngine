@@ -112,14 +112,27 @@ This is not full global illumination. The screen-space method cannot see geometr
 
 ## Direction
 
-The next realism work should build from reference scenes. Effects outside those scenes should wait until a concrete visual need is identified. Important follow-up tracks are:
+The next realism work should build from reference scenes. Effects outside those scenes should wait until a concrete visual need is identified. The current reference coverage includes a deterministic exposure-range fixture in addition to the PBR and lighting fixtures. Important follow-up tracks are:
 
-1. extend the PBR and lighting reference scenes to validate energy response, texture color-space handling, normal-map behavior, roughness/metallic response, IBL calibration, exposure, HDR range, and light/shadow stability;
+1. extend the PBR, lighting, and HDR reference scenes to validate energy response, texture color-space handling, normal-map behavior, roughness/metallic response, IBL calibration, and light/shadow stability;
 2. replace the bounded subsurface approximation with a production SSS solution when profile, thickness, ownership, and performance contracts are defined;
 3. validate the screen-space indirect diffuse result for leaks, halos, over-brightening, camera-motion instability, and performance;
 4. add a scene-space indirect-light solution that can represent off-screen and hidden contributors, such as a bounded irradiance-probe or probe-grid system;
+
 5. improve local reflection-probe placement, blending, capture policy, and interaction with indirect diffuse lighting;
 6. retain rasterization as the broad hardware baseline while designing future renderer-backend boundaries for optional hardware ray tracing;
 7. consider a path-traced reference renderer later as a visual ground-truth tool, even if production games continue to use hybrid real-time rendering.
+
+## Exposure and HDR-range reference
+
+The renderer applies viewport exposure in linear HDR before the final ACES-style tone map. The public engine boundary accepts finite exposure values from -16 to +16 stops and rejects invalid values. The deterministic HDR-range reference captures the same nine-subject fixture, camera, layout, environment, and rendered path at three explicit settings:
+
+```text
+--capture-realism-reference hdr close -2 rendered
+--capture-realism-reference hdr close 0 rendered
+--capture-realism-reference hdr close 2 rendered
+```
+
+The `HDR_RANGE_REFERENCE` profile records the requested exposure in readiness metadata and `scripts/check_hdr_range_visual_evidence_windows.ps1` verifies that the captures retain the same composition, show a monotonic luminance response, remain spatially non-flat, and do not become overwhelmingly clipped at +2 stops. This proves bounded exposure/HDR response in the supported OpenGL presentation path; it does not claim automatic exposure, HDR display calibration, or full HDR mastering.
 
 Spectral rendering is not part of the current implementation. It should remain research work until RGB PBR, indirect lighting, material import, color management, and reference-scene validation are mature.

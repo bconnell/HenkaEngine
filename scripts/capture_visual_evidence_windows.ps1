@@ -6,7 +6,7 @@ param(
 
     [string]$ExecutablePath = "",
 
-    [ValidateSet("FULL_SHOWCASE", "GIRAFFE_INSPECTION", "GEOMETRY_SOLID", "REALISM_REFERENCE", "LIGHTING_REFERENCE")]
+    [ValidateSet("FULL_SHOWCASE", "GIRAFFE_INSPECTION", "GEOMETRY_SOLID", "REALISM_REFERENCE", "LIGHTING_REFERENCE", "HDR_RANGE_REFERENCE")]
     [string]$EvidenceProfile = "FULL_SHOWCASE",
 
     [ValidateSet("wide", "close")]
@@ -137,7 +137,7 @@ function Wait-HenkaCaptureReady {
 
     for ($attempt = 0; $attempt -lt 200; ++$attempt) {
         if (Test-Path -LiteralPath $StdoutPath -PathType Leaf) {
-            $line = Select-String -LiteralPath $StdoutPath -Pattern '^CAPTURE_READY(_REFERENCE|_LIGHTING_REFERENCE)? ' |
+            $line = Select-String -LiteralPath $StdoutPath -Pattern '^CAPTURE_READY(_REFERENCE|_LIGHTING_REFERENCE|_HDR_REFERENCE)? ' |
                 Select-Object -Last 1
             if ($null -ne $line) {
                 return $line.Line
@@ -363,7 +363,7 @@ function Assert-HenkaReferenceCaptureMetadata {
         [Parameter(Mandatory = $true)][string]$ExpectedView
     )
 
-    $pattern = '^\s*CAPTURE_READY_REFERENCE mode=(?<mode>[a-z_]+) view=(?<view>wide|close) reference_layout=(?<layout>[a-z_]+) reference_texture_edge=(?<texture_edge>\d+) viewport=(?<vx>-?\d+),(?<vy>-?\d+),(?<vw>\d+),(?<vh>\d+) aspect=(?<aspect>[-0-9.]+) camera_position=(?<px>[-0-9.]+),(?<py>[-0-9.]+),(?<pz>[-0-9.]+) yaw=(?<yaw>[-0-9.]+) pitch=(?<pitch>[-0-9.]+) roll=(?<roll>[-0-9.]+) fov=(?<fov>[-0-9.]+) reference_bounds=(?<cx>[-0-9.]+),(?<cy>[-0-9.]+),(?<cz>[-0-9.]+),(?<ex>[-0-9.]+),(?<ey>[-0-9.]+),(?<ez>[-0-9.]+) reference_midpoint=(?<mx>[-0-9.]+),(?<my>[-0-9.]+) reference_count=(?<count>\d+) settled_frames=(?<sf>\d+) draw_expected=1\s*$'
+    $pattern = '^\s*CAPTURE_READY_REFERENCE mode=(?<mode>[a-z_]+) view=(?<view>wide|close) reference_layout=(?<layout>[a-z_]+) reference_texture_edge=(?<texture_edge>\d+) reference_exposure_stops=(?<exposure>[-0-9.]+) viewport=(?<vx>-?\d+),(?<vy>-?\d+),(?<vw>\d+),(?<vh>\d+) aspect=(?<aspect>[-0-9.]+) camera_position=(?<px>[-0-9.]+),(?<py>[-0-9.]+),(?<pz>[-0-9.]+) yaw=(?<yaw>[-0-9.]+) pitch=(?<pitch>[-0-9.]+) roll=(?<roll>[-0-9.]+) fov=(?<fov>[-0-9.]+) reference_bounds=(?<cx>[-0-9.]+),(?<cy>[-0-9.]+),(?<cz>[-0-9.]+),(?<ex>[-0-9.]+),(?<ey>[-0-9.]+),(?<ez>[-0-9.]+) reference_midpoint=(?<mx>[-0-9.]+),(?<my>[-0-9.]+) reference_count=(?<count>\d+) settled_frames=(?<sf>\d+) draw_expected=1\s*$'
     $match = [regex]::Match($Line, $pattern)
     if (-not $match.Success) {
         throw "Reference capture readiness metadata was malformed for $Label."
@@ -381,6 +381,7 @@ function Assert-HenkaReferenceCaptureMetadata {
         Mode = $match.Groups["mode"].Value
         View = $match.Groups["view"].Value
         Layout = $match.Groups["layout"].Value
+        Exposure = [double]::Parse($match.Groups["exposure"].Value, [Globalization.CultureInfo]::InvariantCulture)
     }
 }
 
@@ -391,7 +392,7 @@ function Assert-HenkaLightingReferenceCaptureMetadata {
         [Parameter(Mandatory = $true)][string]$ExpectedView
     )
 
-    $pattern = '^\s*CAPTURE_READY_LIGHTING_REFERENCE mode=(?<mode>[a-z_]+) view=(?<view>wide|close) reference_layout=(?<layout>[a-z_]+) reference_texture_edge=(?<texture_edge>\d+) viewport=(?<vx>-?\d+),(?<vy>-?\d+),(?<vw>\d+),(?<vh>-?\d+) aspect=(?<aspect>[-0-9.]+) camera_position=(?<px>[-0-9.]+),(?<py>[-0-9.]+),(?<pz>[-0-9.]+) yaw=(?<yaw>[-0-9.]+) pitch=(?<pitch>[-0-9.]+) roll=(?<roll>[-0-9.]+) fov=(?<fov>[-0-9.]+) reference_bounds=(?<cx>[-0-9.]+),(?<cy>[-0-9.]+),(?<cz>[-0-9.]+),(?<ex>[-0-9.]+),(?<ey>[-0-9.]+),(?<ez>[-0-9.]+) reference_midpoint=(?<mx>[-0-9.]+),(?<my>[-0-9.]+) reference_count=(?<count>\d+) settled_frames=(?<sf>\d+) draw_expected=1\s*$'
+    $pattern = '^\s*CAPTURE_READY_LIGHTING_REFERENCE mode=(?<mode>[a-z_]+) view=(?<view>wide|close) reference_layout=(?<layout>[a-z_]+) reference_texture_edge=(?<texture_edge>\d+) reference_exposure_stops=(?<exposure>[-0-9.]+) viewport=(?<vx>-?\d+),(?<vy>-?\d+),(?<vw>\d+),(?<vh>-?\d+) aspect=(?<aspect>[-0-9.]+) camera_position=(?<px>[-0-9.]+),(?<py>[-0-9.]+),(?<pz>[-0-9.]+) yaw=(?<yaw>[-0-9.]+) pitch=(?<pitch>[-0-9.]+) roll=(?<roll>[-0-9.]+) fov=(?<fov>[-0-9.]+) reference_bounds=(?<cx>[-0-9.]+),(?<cy>[-0-9.]+),(?<cz>[-0-9.]+),(?<ex>[-0-9.]+),(?<ey>[-0-9.]+),(?<ez>[-0-9.]+) reference_midpoint=(?<mx>[-0-9.]+),(?<my>[-0-9.]+) reference_count=(?<count>\d+) settled_frames=(?<sf>\d+) draw_expected=1\s*$'
     $match = [regex]::Match($Line, $pattern)
     if (-not $match.Success) {
         throw "Lighting reference capture readiness metadata was malformed for $Label."
@@ -408,6 +409,39 @@ function Assert-HenkaLightingReferenceCaptureMetadata {
         Mode = $match.Groups["mode"].Value
         View = $match.Groups["view"].Value
         Layout = $match.Groups["layout"].Value
+        Exposure = [double]::Parse($match.Groups["exposure"].Value, [Globalization.CultureInfo]::InvariantCulture)
+    }
+}
+
+function Assert-HenkaHdrReferenceCaptureMetadata {
+    param(
+        [Parameter(Mandatory = $true)][string]$Line,
+        [Parameter(Mandatory = $true)][string]$Label,
+        [Parameter(Mandatory = $true)][string]$ExpectedView,
+        [Parameter(Mandatory = $true)][double]$ExpectedExposure
+    )
+
+    $pattern = '^\s*CAPTURE_READY_HDR_REFERENCE mode=(?<mode>[a-z_]+) view=(?<view>wide|close) reference_layout=(?<layout>[a-z_]+) reference_texture_edge=(?<texture_edge>\d+) reference_exposure_stops=(?<exposure>[-0-9.]+) viewport=(?<vx>-?\d+),(?<vy>-?\d+),(?<vw>\d+),(?<vh>-?\d+) aspect=(?<aspect>[-0-9.]+) camera_position=(?<px>[-0-9.]+),(?<py>[-0-9.]+),(?<pz>[-0-9.]+) yaw=(?<yaw>[-0-9.]+) pitch=(?<pitch>[-0-9.]+) roll=(?<roll>[-0-9.]+) fov=(?<fov>[-0-9.]+) reference_bounds=(?<cx>[-0-9.]+),(?<cy>[-0-9.]+),(?<cz>[-0-9.]+),(?<ex>[-0-9.]+),(?<ey>[-0-9.]+),(?<ez>[-0-9.]+) reference_midpoint=(?<mx>[-0-9.]+),(?<my>[-0-9.]+) reference_count=(?<count>\d+) settled_frames=(?<sf>\d+) draw_expected=1\s*$'
+    $match = [regex]::Match($Line, $pattern)
+    if (-not $match.Success) {
+        throw "HDR reference capture readiness metadata was malformed for $Label."
+    }
+    $expectedLayout = if ($ExpectedView -eq "close") { "close_grid" } else { "wide_row" }
+    $exposure = [double]::Parse($match.Groups["exposure"].Value, [Globalization.CultureInfo]::InvariantCulture)
+    if ($match.Groups["view"].Value -ne $ExpectedView -or
+        $match.Groups["layout"].Value -ne $expectedLayout -or
+        [Math]::Abs($exposure - $ExpectedExposure) -gt 0.001 -or
+        [int]$match.Groups["texture_edge"].Value -lt 32 -or
+        [int]$match.Groups["count"].Value -ne 9 -or
+        [int]$match.Groups["sf"].Value -lt 3) {
+        throw "HDR reference capture readiness metadata is incomplete for $Label."
+    }
+    return [pscustomobject]@{
+        Canonical = ($Line -replace 'mode=[^ ]+', 'mode=shared' -replace 'reference_exposure_stops=[^ ]+', 'reference_exposure_stops=varied')
+        Mode = $match.Groups["mode"].Value
+        View = $match.Groups["view"].Value
+        Layout = $match.Groups["layout"].Value
+        Exposure = $exposure
     }
 }
 
@@ -430,6 +464,13 @@ if ($EvidenceProfile -eq "LIGHTING_REFERENCE") {
         @{ Label = "lighting_reference_solid"; Arguments = @("--capture-realism-reference", "lighting", $ReferenceView, "solid"); File = "lighting-reference-$ReferenceView-solid.png" },
         @{ Label = "lighting_reference_material_preview"; Arguments = @("--capture-realism-reference", "lighting", $ReferenceView, "material_preview"); File = "lighting-reference-$ReferenceView-material-preview.png" },
         @{ Label = "lighting_reference_rendered"; Arguments = @("--capture-realism-reference", "lighting", $ReferenceView, "rendered"); File = "lighting-reference-$ReferenceView-rendered.png" }
+    )
+}
+if ($EvidenceProfile -eq "HDR_RANGE_REFERENCE") {
+    $modes = @(
+        @{ Label = "hdr_reference_minus2"; Arguments = @("--capture-realism-reference", "hdr", $ReferenceView, "-2", "rendered"); File = "hdr-reference-$ReferenceView-minus2.png"; Exposure = -2.0 },
+        @{ Label = "hdr_reference_base"; Arguments = @("--capture-realism-reference", "hdr", $ReferenceView, "0", "rendered"); File = "hdr-reference-$ReferenceView-base.png"; Exposure = 0.0 },
+        @{ Label = "hdr_reference_plus2"; Arguments = @("--capture-realism-reference", "hdr", $ReferenceView, "2", "rendered"); File = "hdr-reference-$ReferenceView-plus2.png"; Exposure = 2.0 }
     )
 }
 if ($EvidenceProfile -eq "GEOMETRY_SOLID") {
@@ -458,6 +499,9 @@ if ($EvidenceProfile -eq "REALISM_REFERENCE") {
 }
 if ($EvidenceProfile -eq "LIGHTING_REFERENCE") {
     $records.Add("Lighting reference: nine deterministic same-material subjects with scene-owned key, fill, and rim sources; view=$ReferenceView")
+}
+if ($EvidenceProfile -eq "HDR_RANGE_REFERENCE") {
+    $records.Add("HDR range reference: deterministic rendered captures at -2, 0, and +2 exposure stops; same nine-subject camera and view=$ReferenceView")
 }
 $capturePolicy = if ($script:allowForegroundIntegration) {
         "foreground desktop capture was explicitly enabled"
@@ -493,6 +537,10 @@ foreach ($mode in $modes) {
         elseif ($EvidenceProfile -eq "LIGHTING_REFERENCE") {
             [void]$captureMetadata.Add(
                 (Assert-HenkaLightingReferenceCaptureMetadata -Line $metadataLine -Label $mode.Label -ExpectedView $ReferenceView))
+        }
+        elseif ($EvidenceProfile -eq "HDR_RANGE_REFERENCE") {
+            [void]$captureMetadata.Add(
+                (Assert-HenkaHdrReferenceCaptureMetadata -Line $metadataLine -Label $mode.Label -ExpectedView $ReferenceView -ExpectedExposure $mode.Exposure))
         }
         else {
             [void]$captureMetadata.Add(
@@ -734,6 +782,11 @@ if ($EvidenceProfile -eq "REALISM_REFERENCE") {
 if ($EvidenceProfile -eq "LIGHTING_REFERENCE") {
     $records | Set-Content -LiteralPath (Join-Path $OutputDirectory "INDEX.txt")
     & (Join-Path $PSScriptRoot "check_lighting_reference_visual_evidence_windows.ps1") `
+        -InputDirectory $OutputDirectory
+}
+if ($EvidenceProfile -eq "HDR_RANGE_REFERENCE") {
+    $records | Set-Content -LiteralPath (Join-Path $OutputDirectory "INDEX.txt")
+    & (Join-Path $PSScriptRoot "check_hdr_range_visual_evidence_windows.ps1") `
         -InputDirectory $OutputDirectory
 }
 
