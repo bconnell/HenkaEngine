@@ -71,11 +71,26 @@ public static class HenkaVisibleProbeNative
     [DllImport("user32.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
     public static extern bool GetWindowRect(IntPtr hWnd, out RECT rect);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static extern bool IsWindowVisible(IntPtr hWnd);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static extern bool IsIconic(IntPtr hWnd);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static extern bool PrintWindow(IntPtr hWnd, IntPtr hdcBlt, uint flags);
 }
 "@
     }
 
-    Set-HenkaAutomationForeground -Handle $Handle
+    if (-not [HenkaVisibleProbeNative]::IsWindowVisible($Handle) -or
+        [HenkaVisibleProbeNative]::IsIconic($Handle)) {
+        throw "The visible authoring probe window is hidden or minimized; no focus change was attempted."
+    }
     $rect = New-Object HenkaVisibleProbeNative+RECT
     if (-not [HenkaVisibleProbeNative]::GetWindowRect($Handle, [ref]$rect)) {
         throw "The visible authoring probe window bounds could not be read."
@@ -88,12 +103,15 @@ public static class HenkaVisibleProbeNative
     $bitmap = New-Object System.Drawing.Bitmap -ArgumentList $width, $height
     $graphics = [System.Drawing.Graphics]::FromImage($bitmap)
     try {
-        $graphics.CopyFromScreen(
-            $rect.Left,
-            $rect.Top,
-            0,
-            0,
-            (New-Object System.Drawing.Size -ArgumentList $width, $height))
+        $deviceContext = $graphics.GetHdc()
+        try {
+            if (-not [HenkaVisibleProbeNative]::PrintWindow($Handle, $deviceContext, 2)) {
+                throw "The visible authoring probe window did not render through background-safe PrintWindow; no focus change was attempted."
+            }
+        }
+        finally {
+            $graphics.ReleaseHdc($deviceContext) | Out-Null
+        }
         $bitmap.Save($Path, [System.Drawing.Imaging.ImageFormat]::Png)
     }
     finally {
