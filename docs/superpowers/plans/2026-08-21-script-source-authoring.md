@@ -4,7 +4,7 @@
 
 **Architecture:** The engine owns a fixed-capacity source document and confined atomic-save seam. HenkaScript validation calls the public HKS backend/compiler and Lua validation calls the public Lua backend; the editor consumes diagnostics and token spans without defining syntax. The Play session builds candidate backends first and swaps them only after success.
 
-**Tech Stack:** C11, existing Henka result/memory/persistence APIs, HenkaScript public lexer/compiler, Lua 5.4 backend, SDL3 input, CMake, MSVC Debug warnings-as-errors, existing sandbox and external-project gates.
+**Tech Stack:** C17, existing Henka result/memory/persistence APIs, HenkaScript public lexer/compiler, Lua 5.4 backend, SDL3 input, CMake, MSVC Debug warnings-as-errors, existing sandbox and external-project gates.
 
 **Spec:** `docs/superpowers/specs/2026-08-21-script-source-authoring-design.md`
 
