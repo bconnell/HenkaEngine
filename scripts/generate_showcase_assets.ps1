@@ -299,6 +299,8 @@ function Add-AnatomicalLoft {
             $phi = 2.0 * [Math]::PI * $segment / $Segments
             $sinPhi = [Math]::Sin($phi)
             $cosPhi = [Math]::Cos($phi)
+            if ([Math]::Abs($sinPhi) -lt 0.000001) { $sinPhi = 0.0 }
+            if ([Math]::Abs($cosPhi) -lt 0.000001) { $cosPhi = 0.0 }
             $normal = Normalize-Vector @(
                 [float]($cosPhi / $RadiusX[$profileIndex]),
                 [float](-($slopeX * $cosPhi * $cosPhi / $RadiusX[$profileIndex]) -
@@ -326,6 +328,182 @@ function Add-AnatomicalLoft {
             $b = $rings[$ringOffset + $segment + 1]
             $c = $rings[$nextRingOffset + $segment + 1]
             $d = $rings[$nextRingOffset + $segment]
+            Add-Triangle $Part $a $c $b
+            Add-Triangle $Part $a $d $c
+        }
+    }
+}
+
+function Add-HorizontalLoft {
+    param(
+        [object]$Part,
+        [float[]]$Z,
+        [float[]]$RadiusX,
+        [float[]]$RadiusY,
+        [float]$CenterX = 0.0,
+        [float[]]$CenterY = @(),
+        [int]$Segments = 32
+    )
+    if ($Z.Count -lt 2 -or
+        $Z.Count -ne $RadiusX.Count -or
+        $Z.Count -ne $RadiusY.Count -or
+        ($CenterY.Count -ne 0 -and $CenterY.Count -ne $Z.Count) -or
+        $Segments -lt 3) {
+        throw "Showcase horizontal loft requires matching bounded profiles."
+    }
+    for ($profileIndex = 0; $profileIndex -lt $Z.Count; ++$profileIndex) {
+        if ($RadiusX[$profileIndex] -le 0.0 -or $RadiusY[$profileIndex] -le 0.0) {
+            throw "Showcase horizontal loft profile has an invalid radius."
+        }
+        if ($profileIndex -gt 0 -and $Z[$profileIndex] -le $Z[$profileIndex - 1]) {
+            throw "Showcase horizontal loft profile is not strictly increasing."
+        }
+    }
+    $centerYProfiles = if ($CenterY.Count -eq 0) {
+        @($Z | ForEach-Object { [float]0.0 })
+    }
+    else {
+        @($CenterY)
+    }
+    $rings = New-Object 'System.Collections.Generic.List[int]'
+    $firstZ = [float]$Z[0]
+    $lastZ = [float]$Z[$Z.Count - 1]
+    for ($profileIndex = 0; $profileIndex -lt $Z.Count; ++$profileIndex) {
+        if ($profileIndex -eq 0) {
+            $previous = 0
+            $next = 1
+        }
+        elseif ($profileIndex -eq ($Z.Count - 1)) {
+            $previous = $profileIndex - 1
+            $next = $profileIndex
+        }
+        else {
+            $previous = $profileIndex - 1
+            $next = $profileIndex + 1
+        }
+        $slopeX = ($RadiusX[$next] - $RadiusX[$previous]) /
+            [Math]::Max(0.000001, ($Z[$next] - $Z[$previous]))
+        $slopeY = ($RadiusY[$next] - $RadiusY[$previous]) /
+            [Math]::Max(0.000001, ($Z[$next] - $Z[$previous]))
+        $centerSlopeY = if ($CenterY.Count -eq 0) { 0.0 } else {
+            ($centerYProfiles[$next] - $centerYProfiles[$previous]) /
+                [Math]::Max(0.000001, ($Z[$next] - $Z[$previous]))
+        }
+        $yCenter = [float]$centerYProfiles[$profileIndex]
+        for ($segment = 0; $segment -le $Segments; ++$segment) {
+            $phi = 2.0 * [Math]::PI * $segment / $Segments
+            $sinPhi = [Math]::Sin($phi)
+            $cosPhi = [Math]::Cos($phi)
+            if ([Math]::Abs($sinPhi) -lt 0.000001) { $sinPhi = 0.0 }
+            if ([Math]::Abs($cosPhi) -lt 0.000001) { $cosPhi = 0.0 }
+            $normal = Normalize-Vector @(
+                [float]($cosPhi / $RadiusX[$profileIndex]),
+                [float]($sinPhi / $RadiusY[$profileIndex]),
+                [float](-($slopeX * $cosPhi * $cosPhi / $RadiusX[$profileIndex]) -
+                    (($centerSlopeY + $slopeY * $sinPhi) * $sinPhi / $RadiusY[$profileIndex])))
+            $position = @(
+                [float]($CenterX + $RadiusX[$profileIndex] * $cosPhi),
+                [float]($yCenter + $RadiusY[$profileIndex] * $sinPhi),
+                [float]$Z[$profileIndex])
+            $tangent = Normalize-Vector @(
+                [float](-$RadiusX[$profileIndex] * $sinPhi),
+                [float]($RadiusY[$profileIndex] * $cosPhi),
+                0.0)
+            [void]$rings.Add((Add-Vertex $Part $position $normal @(
+                [float]($segment / $Segments),
+                [float](($Z[$profileIndex] - $firstZ) / ($lastZ - $firstZ))) @(
+                    [float]$tangent[0], [float]$tangent[1], [float]$tangent[2], 1.0)))
+        }
+    }
+    for ($profileIndex = 0; $profileIndex -lt ($Z.Count - 1); ++$profileIndex) {
+        $ringOffset = $profileIndex * ($Segments + 1)
+        $nextRingOffset = ($profileIndex + 1) * ($Segments + 1)
+        for ($segment = 0; $segment -lt $Segments; ++$segment) {
+            $a = $rings[$ringOffset + $segment]
+            $b = $rings[$ringOffset + $segment + 1]
+            $c = $rings[$nextRingOffset + $segment + 1]
+            $d = $rings[$nextRingOffset + $segment]
+            Add-Triangle $Part $a $b $c
+            Add-Triangle $Part $a $c $d
+        }
+    }
+    $rearCenter = Add-Vertex $Part @([float]$CenterX, [float]$centerYProfiles[0], [float]$firstZ) @(0.0, 0.0, -1.0) @(0.5, 0.0) @(1.0, 0.0, 0.0, 1.0)
+    $frontCenter = Add-Vertex $Part @([float]$CenterX, [float]$centerYProfiles[$centerYProfiles.Count - 1], [float]$lastZ) @(0.0, 0.0, 1.0) @(0.5, 1.0) @(1.0, 0.0, 0.0, 1.0)
+    for ($segment = 0; $segment -lt $Segments; ++$segment) {
+        $rearA = $rings[$segment]
+        $rearB = $rings[$segment + 1]
+        $frontOffset = ($Z.Count - 1) * ($Segments + 1)
+        $frontA = $rings[$frontOffset + $segment]
+        $frontB = $rings[$frontOffset + $segment + 1]
+        Add-Triangle $Part $rearCenter $rearB $rearA
+        Add-Triangle $Part $frontCenter $frontA $frontB
+    }
+}
+
+function Add-CurvedLimb {
+    param(
+        [object]$Part,
+        [float[]]$Y,
+        [float[]]$CenterX,
+        [float[]]$CenterZ,
+        [float[]]$RadiusX,
+        [float[]]$RadiusZ,
+        [int]$Segments = 32
+    )
+    if ($Y.Count -lt 2 -or
+        $Y.Count -ne $CenterX.Count -or
+        $Y.Count -ne $CenterZ.Count -or
+        $Y.Count -ne $RadiusX.Count -or
+        $Y.Count -ne $RadiusZ.Count -or
+        $Segments -lt 8) {
+        throw "Showcase curved limb requires matching bounded profiles."
+    }
+    for ($profileIndex = 1; $profileIndex -lt $Y.Count; ++$profileIndex) {
+        if ($Y[$profileIndex] -le $Y[$profileIndex - 1] -or
+            $RadiusX[$profileIndex] -le 0.0 -or
+            $RadiusZ[$profileIndex] -le 0.0) {
+            throw "Showcase curved limb profile is not strictly increasing and positive."
+        }
+    }
+    if ($RadiusX[0] -le 0.0 -or $RadiusZ[0] -le 0.0) {
+        throw "Showcase curved limb profile has an invalid base radius."
+    }
+    $rings = New-Object 'System.Collections.Generic.List[int]'
+    for ($profileIndex = 0; $profileIndex -lt $Y.Count; ++$profileIndex) {
+        $previous = [Math]::Max(0, $profileIndex - 1)
+        $next = [Math]::Min($Y.Count - 1, $profileIndex + 1)
+        $pathSlopeX = ($CenterX[$next] - $CenterX[$previous]) / ($Y[$next] - $Y[$previous])
+        $pathSlopeZ = ($CenterZ[$next] - $CenterZ[$previous]) / ($Y[$next] - $Y[$previous])
+        for ($segment = 0; $segment -le $Segments; ++$segment) {
+            $phi = 2.0 * [Math]::PI * $segment / $Segments
+            $cosPhi = [Math]::Cos($phi)
+            $sinPhi = [Math]::Sin($phi)
+            $tangentPhi = @(
+                [float](-$RadiusX[$profileIndex] * $sinPhi),
+                0.0,
+                [float]($RadiusZ[$profileIndex] * $cosPhi))
+            $pathTangent = @([float]$pathSlopeX, 1.0, [float]$pathSlopeZ)
+            $normal = Normalize-Vector (Cross-Vector $pathTangent $tangentPhi)
+            $position = @(
+                [float]($CenterX[$profileIndex] + $RadiusX[$profileIndex] * $cosPhi),
+                [float]$Y[$profileIndex],
+                [float]($CenterZ[$profileIndex] + $RadiusZ[$profileIndex] * $sinPhi))
+            $tangent = Normalize-Vector $tangentPhi
+            [void]$rings.Add((Add-Vertex $Part $position $normal @(
+                    [float]($segment / $Segments),
+                    [float]($profileIndex / ($Y.Count - 1))) @(
+                    [float]$tangent[0],
+                    [float]$tangent[1],
+                    [float]$tangent[2],
+                    1.0)))
+        }
+    }
+    for ($profileIndex = 0; $profileIndex -lt ($Y.Count - 1); ++$profileIndex) {
+        for ($segment = 0; $segment -lt $Segments; ++$segment) {
+            $a = $rings[$profileIndex * ($Segments + 1) + $segment]
+            $b = $rings[$profileIndex * ($Segments + 1) + $segment + 1]
+            $c = $rings[($profileIndex + 1) * ($Segments + 1) + $segment + 1]
+            $d = $rings[($profileIndex + 1) * ($Segments + 1) + $segment]
             Add-Triangle $Part $a $c $b
             Add-Triangle $Part $a $d $c
         }
@@ -630,6 +808,31 @@ function Write-ShowcaseTexture {
     Add-Type -AssemblyName System.Drawing
     $size = if ($Kind -eq "base_color") { 128 } else { 64 }
     $bitmap = [System.Drawing.Bitmap]::new($size, $size, [System.Drawing.Imaging.PixelFormat]::Format32bppArgb)
+    $giraffeSeeds = @(
+        [pscustomobject]@{ U = 0.08; V = 0.11; Ru = 0.075; Rv = 0.055; Angle = 0.30 },
+        [pscustomobject]@{ U = 0.26; V = 0.07; Ru = 0.100; Rv = 0.070; Angle = -0.25 },
+        [pscustomobject]@{ U = 0.48; V = 0.13; Ru = 0.085; Rv = 0.065; Angle = 0.15 },
+        [pscustomobject]@{ U = 0.73; V = 0.08; Ru = 0.120; Rv = 0.060; Angle = -0.35 },
+        [pscustomobject]@{ U = 0.91; V = 0.16; Ru = 0.070; Rv = 0.090; Angle = 0.45 },
+        [pscustomobject]@{ U = 0.15; V = 0.28; Ru = 0.110; Rv = 0.075; Angle = -0.50 },
+        [pscustomobject]@{ U = 0.39; V = 0.25; Ru = 0.075; Rv = 0.110; Angle = 0.10 },
+        [pscustomobject]@{ U = 0.63; V = 0.31; Ru = 0.120; Rv = 0.080; Angle = 0.60 },
+        [pscustomobject]@{ U = 0.84; V = 0.27; Ru = 0.090; Rv = 0.060; Angle = -0.20 },
+        [pscustomobject]@{ U = 0.05; V = 0.45; Ru = 0.100; Rv = 0.080; Angle = 0.70 },
+        [pscustomobject]@{ U = 0.25; V = 0.42; Ru = 0.080; Rv = 0.060; Angle = -0.15 },
+        [pscustomobject]@{ U = 0.52; V = 0.48; Ru = 0.130; Rv = 0.090; Angle = -0.40 },
+        [pscustomobject]@{ U = 0.78; V = 0.43; Ru = 0.080; Rv = 0.110; Angle = 0.25 },
+        [pscustomobject]@{ U = 0.96; V = 0.52; Ru = 0.110; Rv = 0.070; Angle = -0.55 },
+        [pscustomobject]@{ U = 0.13; V = 0.65; Ru = 0.090; Rv = 0.060; Angle = 0.25 },
+        [pscustomobject]@{ U = 0.35; V = 0.60; Ru = 0.120; Rv = 0.080; Angle = -0.70 },
+        [pscustomobject]@{ U = 0.61; V = 0.68; Ru = 0.090; Rv = 0.110; Angle = 0.40 },
+        [pscustomobject]@{ U = 0.86; V = 0.63; Ru = 0.130; Rv = 0.070; Angle = -0.10 },
+        [pscustomobject]@{ U = 0.05; V = 0.82; Ru = 0.080; Rv = 0.100; Angle = -0.30 },
+        [pscustomobject]@{ U = 0.24; V = 0.87; Ru = 0.120; Rv = 0.065; Angle = 0.55 },
+        [pscustomobject]@{ U = 0.49; V = 0.81; Ru = 0.085; Rv = 0.100; Angle = -0.20 },
+        [pscustomobject]@{ U = 0.72; V = 0.91; Ru = 0.110; Rv = 0.075; Angle = 0.35 },
+        [pscustomobject]@{ U = 0.94; V = 0.84; Ru = 0.080; Rv = 0.110; Angle = -0.65 },
+        [pscustomobject]@{ U = 0.62; V = 0.04; Ru = 0.080; Rv = 0.055; Angle = 0.50 })
     try {
         for ($y = 0; $y -lt $size; ++$y) {
             for ($x = 0; $x -lt $size; ++$x) {
@@ -637,49 +840,34 @@ function Write-ShowcaseTexture {
                 $v = ($y + 0.5) / $size
                 if ($Kind -eq "base_color") {
                     if ($Subject -eq "giraffe") {
-                        # A fine, jittered patch field keeps hide markings
-                        # irregular and form-following rather than reading as
-                        # a few oversized graphic circles on the torso.
-                        $gridU = $u * 8.0
-                        $gridV = $v * 13.0
-                        $baseColumn = [Math]::Floor($gridU)
-                        $baseRow = [Math]::Floor($gridV)
+                        # Hand-authored deterministic seed patches avoid the
+                        # rows, columns, and repeated stamps that made the
+                        # earlier hide field look procedural at close range.
                         $nearestDistance = [double]::PositiveInfinity
                         $nearestSeed = 0.0
-                        for ($rowOffset = -1; $rowOffset -le 1; ++$rowOffset) {
-                            for ($columnOffset = -1; $columnOffset -le 1; ++$columnOffset) {
-                                $candidateColumn = $baseColumn + $columnOffset
-                                $candidateRow = $baseRow + $rowOffset
-                                $seed = 0.5 + 0.5 * [Math]::Sin(
-                                    ($candidateColumn * 127.1) + ($candidateRow * 311.7))
-                                $offsetU = 0.5 + 0.24 * [Math]::Sin(
-                                    ($candidateColumn * 47.3) + ($candidateRow * 19.1))
-                                $offsetV = 0.5 + 0.22 * [Math]::Cos(
-                                    ($candidateColumn * 29.7) + ($candidateRow * 61.9))
-                                $deltaU = $gridU - ($candidateColumn + $offsetU)
-                                $deltaV = $gridV - ($candidateRow + $offsetV)
-                                $shapeSeed = 0.5 + 0.5 * [Math]::Cos(
-                                    ($candidateColumn * 17.7) + ($candidateRow * 43.2))
-                                $radiusU = 0.24 + (0.12 * $seed)
-                                $radiusV = 0.18 + (0.12 * $shapeSeed)
-                                $warpU = 0.08 * [Math]::Sin(
-                                    ($candidateColumn * 23.1) + ($candidateRow * 13.4))
-                                $warpV = 0.08 * [Math]::Cos(
-                                    ($candidateColumn * 11.6) + ($candidateRow * 31.8))
-                                $normalizedDistance =
-                                    ((($deltaU - $warpU) / $radiusU) * (($deltaU - $warpU) / $radiusU)) +
-                                    ((($deltaV - $warpV) / $radiusV) * (($deltaV - $warpV) / $radiusV))
-                                if ($normalizedDistance -lt $nearestDistance) {
-                                    $nearestDistance = $normalizedDistance
-                                    $nearestSeed = $seed
-                                }
+                        foreach ($seed in $giraffeSeeds) {
+                            $seedU = [float]$seed.U
+                            $seedV = [float]$seed.V
+                            $seedRu = [float]$seed.Ru
+                            $seedRv = [float]$seed.Rv
+                            $seedAngle = [float]$seed.Angle
+                            $deltaU = $u - $seedU
+                            $deltaV = $v - $seedV
+                            $cosAngle = [Math]::Cos($seedAngle)
+                            $sinAngle = [Math]::Sin($seedAngle)
+                            $localU = ($deltaU * $cosAngle) + ($deltaV * $sinAngle)
+                            $localV = (-$deltaU * $sinAngle) + ($deltaV * $cosAngle)
+                            $edgeWarp = 0.10 * [Math]::Sin(($localU * 41.0) + ($localV * 23.0) + ($seedU * 17.0))
+                            $normalizedDistance =
+                                ((($localU / $seedRu) * ($localU / $seedRu)) +
+                                 (($localV / $seedRv) * ($localV / $seedRv))) +
+                                $edgeWarp
+                            if ($normalizedDistance -lt $nearestDistance) {
+                                $nearestDistance = $normalizedDistance
+                                $nearestSeed = 0.5 + (0.5 * [Math]::Sin(($seedU * 127.1) + ($seedV * 311.7)))
                             }
                         }
-                        # Keep the markings irregular, but large enough to
-                        # establish giraffe-like coverage at the bounded
-                        # 128px fixture resolution instead of reading as
-                        # sparse peppering on the hide.
-                        $spot = $nearestDistance -lt 1.0
+                        $spot = $nearestDistance -lt 0.45
                         if ($spot) {
                             $red = 76 + [int][Math]::Round(20.0 * $nearestSeed)
                             $green = 35 + [int][Math]::Round(11.0 * $nearestSeed)
@@ -904,9 +1092,9 @@ function Write-Gltf {
 
 function New-Giraffe {
     $materials = @(
-        (New-Material "Giraffe Tan" @(1.0, 1.0, 1.0, 1.0) 0.0 0.62 0.04 0.42 @(0.035, 0.012, 0.003) 0.48 -BaseColorTextureIndex 2 -NormalTextureIndex 0 -NormalTextureScale 0.12 -MetallicRoughnessTextureIndex 1),
-        (New-Material "Giraffe Spots" @(0.075, 0.025, 0.006, 1.0) 0.0 0.70 -NormalTextureIndex 0 -NormalTextureScale 0.10 -MetallicRoughnessTextureIndex 1),
-        (New-Material "Giraffe Cream" @(0.54, 0.33, 0.14, 1.0) 0.0 0.56 0.04 0.30 @(0.065, 0.028, 0.008) 0.46 -NormalTextureIndex 0 -NormalTextureScale 0.12 -MetallicRoughnessTextureIndex 1),
+        (New-Material "Giraffe Tan" @(1.0, 1.0, 1.0, 1.0) 0.0 0.82 0.0 0.62 @(0.028, 0.009, 0.002) 0.66 -BaseColorTextureIndex 2 -NormalTextureIndex 0 -NormalTextureScale 0.12 -MetallicRoughnessTextureIndex 1),
+        (New-Material "Giraffe Spots" @(0.075, 0.025, 0.006, 1.0) 0.0 0.84 -NormalTextureIndex 0 -NormalTextureScale 0.10 -MetallicRoughnessTextureIndex 1),
+        (New-Material "Giraffe Cream" @(0.54, 0.33, 0.14, 1.0) 0.0 0.76 0.0 0.58 @(0.045, 0.018, 0.005) 0.68 -NormalTextureIndex 0 -NormalTextureScale 0.12 -MetallicRoughnessTextureIndex 1),
         (New-Material "Giraffe Eye White" @(0.075, 0.028, 0.008, 1.0) 0.0 0.36 0.05 0.20),
         (New-Material "Giraffe Iris" @(0.035, 0.010, 0.003, 1.0) 0.0 0.22 0.18 0.06),
         (New-Material "Giraffe Eye Detail" @(0.004, 0.002, 0.001, 1.0) 0.0 0.10 0.70 0.06),
@@ -916,7 +1104,8 @@ function New-Giraffe {
         (New-Material "Giraffe Hoof" @(0.055, 0.012, 0.004, 1.0) 0.0 0.66 0.01 0.26 -NormalTextureIndex 0 -NormalTextureScale 0.10 -MetallicRoughnessTextureIndex 1),
         (New-Material "Giraffe Mane" @(0.075, 0.014, 0.003, 1.0) 0.0 0.74 0.01 0.30 -NormalTextureIndex 0 -NormalTextureScale 0.12 -MetallicRoughnessTextureIndex 1),
         (New-Material "Giraffe Nose" @(0.055, 0.006, 0.002, 1.0) 0.0 0.58 0.01 0.22 -NormalTextureIndex 0 -NormalTextureScale 0.10 -MetallicRoughnessTextureIndex 1),
-        (New-Material "Giraffe Joint" @(0.20, 0.085, 0.022, 1.0) 0.0 0.64 0.01 0.24 -NormalTextureIndex 0 -NormalTextureScale 0.10 -MetallicRoughnessTextureIndex 1))
+        (New-Material "Giraffe Joint" @(0.20, 0.085, 0.022, 1.0) 0.0 0.64 0.01 0.24 -NormalTextureIndex 0 -NormalTextureScale 0.10 -MetallicRoughnessTextureIndex 1),
+        (New-Material "Giraffe Skin Transition" @(1.0, 1.0, 1.0, 1.0) 0.0 0.82 0.0 0.62 @(0.028, 0.009, 0.002) 0.66 -BaseColorTextureIndex 2 -NormalTextureIndex 0 -NormalTextureScale 0.12 -MetallicRoughnessTextureIndex 1))
     $tan = New-Part 0
     $spots = New-Part 1
     $cream = New-Part 2
@@ -930,13 +1119,18 @@ function New-Giraffe {
     $mane = New-Part 10
     $nose = New-Part 11
     $joint = New-Part 12
+    $transition = New-Part 13
     # Keep the mascot identity restrained, but use continuous profiles and
     # believable curvature so the silhouette does not read as primitive
     # assembly when inspected from the authored front and three-quarter views.
     # The body is a horizontal ribcage with a distinct forward neck. Earlier
     # versions made a single upright pear-shaped loft, which read as a toy
     # rather than a four-legged animal from three-quarter views.
-    Add-Ellipsoid $tan @(0.0, 1.62, -0.18) @(0.52, 0.58, 1.08) 40 72
+    Add-HorizontalLoft $tan `
+        @(-1.23, -1.18, -1.08, -0.92, -0.72, -0.48, -0.20, 0.08, 0.34, 0.56, 0.74, 0.88, 0.96, 1.02, 1.06, 1.08) `
+        @(0.20, 0.34, 0.44, 0.50, 0.53, 0.54, 0.55, 0.55, 0.53, 0.49, 0.44, 0.38, 0.30, 0.24, 0.18, 0.14) `
+        @(0.22, 0.34, 0.45, 0.52, 0.57, 0.59, 0.60, 0.58, 0.54, 0.49, 0.43, 0.36, 0.30, 0.24, 0.18, 0.12) `
+        0.0 @(1.60, 1.60, 1.62, 1.65, 1.68, 1.70, 1.71, 1.72, 1.70, 1.68, 1.65, 1.63, 1.60, 1.57, 1.54, 1.52) 192
     Add-AnatomicalLoft $tan `
         @(1.86, 2.12, 2.46, 2.82, 3.18, 3.50, 3.74) `
         @(0.34, 0.30, 0.265, 0.235, 0.215, 0.205, 0.22) `
@@ -946,10 +1140,34 @@ function New-Giraffe {
     # mascot-scale head overwhelmed the silhouette even after the torso loft
     # was made continuous.
     Add-Ellipsoid $tan @(0.0, 3.91, 1.08) @(0.36, 0.31, 0.48) 36 64
-    foreach ($leg in @(@(-0.46, 0.0, -0.82), @(0.46, 0.0, -0.82), @(-0.46, 0.0, 0.72), @(0.46, 0.0, 0.72))) {
-        Add-ProfiledFrustum $tan @(0.08, 0.34, 0.82, 1.22, 1.46) @(0.115, 0.135, 0.125, 0.105, 0.090) $leg[0] $leg[2] 48
-        Add-Ellipsoid $hoof @($leg[0], 0.08, $leg[2] + 0.015) @(0.17, 0.075, 0.22) 16 28
-        Add-Ellipsoid $joint @($leg[0], 0.88, $leg[2] + 0.012) @(0.125, 0.085, 0.11) 12 22
+    foreach ($leg in @(
+            [pscustomobject]@{ X = -0.46; Z = -0.82 },
+            [pscustomobject]@{ X = 0.46; Z = -0.82 },
+            [pscustomobject]@{ X = -0.46; Z = 0.72 },
+            [pscustomobject]@{ X = 0.46; Z = 0.72 })) {
+        $legXBase = [float]$leg.X
+        $legZBase = [float]$leg.Z
+        $legY = @(0.08, 0.30, 0.72, 1.08, 1.40, 1.62)
+        $legX = @(
+            $legXBase,
+            ($legXBase * [float]1.02),
+            ($legXBase * [float]1.00),
+            ($legXBase * [float]0.94),
+            ($legXBase * [float]0.78),
+            ($legXBase * [float]0.58))
+        $legZ = @(
+            $legZBase,
+            ($legZBase * [float]1.01),
+            ($legZBase * [float]0.98),
+            ($legZBase * [float]0.92),
+            ($legZBase * [float]0.80),
+            ($legZBase * [float]0.68))
+        Add-CurvedLimb $tan $legY $legX $legZ @(0.15, 0.16, 0.155, 0.145, 0.20, 0.27) @(0.16, 0.17, 0.16, 0.15, 0.22, 0.30) 48
+        Add-Ellipsoid $hoof @($legXBase, 0.08, $legZBase + 0.015) @(0.15, 0.060, 0.19) 16 28
+        Add-Ellipsoid $joint @($legXBase, 0.88, $legZBase + 0.012) @(0.125, 0.085, 0.11) 12 22
+        $transitionX = [float]($legXBase * 0.58)
+        $transitionZ = [float]($legZBase * 0.68)
+        Add-Ellipsoid $transition @($transitionX, 1.42, $transitionZ) @(0.29, 0.28, 0.36) 20 32
     }
     # Model the ears as compact, flattened lobes in the head plane. The
     # previous deep capsules read like small missiles when viewed from the
@@ -979,20 +1197,20 @@ function New-Giraffe {
     # The face is built as an elongated muzzle with small, recessed dark eyes
     # and a neutral lip crease. The model intentionally avoids oversized
     # highlights or a smiling mouth so its expression remains anatomical.
-    Add-Ellipsoid $cream @(0.0, 3.67, 1.52) @(0.25, 0.13, 0.14) 20 36
-    Add-Ellipsoid $cream @(0.0, 3.53, 1.43) @(0.17, 0.070, 0.075) 16 30
-    Add-Ellipsoid $eyes @(-0.13, 3.99, 1.48) @(0.028, 0.042, 0.018) 16 28
-    Add-Ellipsoid $eyes @(0.13, 3.99, 1.48) @(0.028, 0.042, 0.018) 16 28
-    Add-Ellipsoid $iris @(-0.13, 3.99, 1.506) @(0.014, 0.024, 0.007) 12 24
-    Add-Ellipsoid $iris @(0.13, 3.99, 1.506) @(0.014, 0.024, 0.007) 12 24
-    Add-Ellipsoid $details @(-0.13, 4.035, 1.490) @(0.046, 0.009, 0.009) 8 18
-    Add-Ellipsoid $details @(0.13, 4.035, 1.490) @(0.046, 0.009, 0.009) 8 18
-    Add-Ellipsoid $details @(-0.09, 3.70, 1.645) @(0.038, 0.020, 0.008) 8 14
-    Add-Ellipsoid $details @(0.09, 3.70, 1.645) @(0.038, 0.020, 0.008) 8 14
-    Add-Ellipsoid $smile @(0.0, 3.53, 1.530) @(0.075, 0.009, 0.006) 8 16
-    Add-Ellipsoid $nose @(-0.08, 3.68, 1.665) @(0.026, 0.020, 0.012) 10 20
-    Add-Ellipsoid $nose @(0.08, 3.68, 1.665) @(0.026, 0.020, 0.012) 10 20
-    return [pscustomobject]@{ Parts = @($tan, $spots, $cream, $eyes, $iris, $details, $smile, $earInner, $ossicone, $hoof, $mane, $nose, $joint); Materials = $materials }
+    Add-Ellipsoid $cream @(0.0, 3.67, 1.56) @(0.22, 0.12, 0.24) 20 36
+    Add-Ellipsoid $cream @(0.0, 3.53, 1.73) @(0.15, 0.065, 0.14) 16 30
+    Add-Ellipsoid $eyes @(-0.155, 4.02, 1.39) @(0.020, 0.034, 0.022) 16 28
+    Add-Ellipsoid $eyes @(0.155, 4.02, 1.39) @(0.020, 0.034, 0.022) 16 28
+    Add-Ellipsoid $iris @(-0.155, 4.02, 1.415) @(0.010, 0.020, 0.008) 12 24
+    Add-Ellipsoid $iris @(0.155, 4.02, 1.415) @(0.010, 0.020, 0.008) 12 24
+    Add-Ellipsoid $details @(-0.155, 4.058, 1.402) @(0.036, 0.008, 0.010) 8 18
+    Add-Ellipsoid $details @(0.155, 4.058, 1.402) @(0.036, 0.008, 0.010) 8 18
+    Add-Ellipsoid $details @(-0.075, 3.69, 1.895) @(0.030, 0.018, 0.010) 8 14
+    Add-Ellipsoid $details @(0.075, 3.69, 1.895) @(0.030, 0.018, 0.010) 8 14
+    Add-Ellipsoid $smile @(0.0, 3.53, 1.855) @(0.065, 0.008, 0.006) 8 16
+    Add-Ellipsoid $nose @(-0.075, 3.69, 1.915) @(0.024, 0.018, 0.012) 10 20
+    Add-Ellipsoid $nose @(0.075, 3.69, 1.915) @(0.024, 0.018, 0.012) 10 20
+    return [pscustomobject]@{ Parts = @($tan, $spots, $cream, $eyes, $iris, $details, $smile, $earInner, $ossicone, $hoof, $mane, $nose, $joint, $transition); Materials = $materials }
 }
 
 function New-Rocket {

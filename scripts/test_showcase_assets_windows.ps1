@@ -14,7 +14,43 @@ if (-not [IO.Path]::IsPathRooted($OutputDirectory)) {
 }
 [IO.Directory]::CreateDirectory($OutputDirectory) | Out-Null
 
-& powershell.exe -NoProfile -ExecutionPolicy Bypass -File $generator -OutputDirectory $OutputDirectory
+& $generator -OutputDirectory $OutputDirectory
+if ($LASTEXITCODE -ne 0) {
+    throw "Showcase generator failed with exit code $LASTEXITCODE."
+}
+$determinismDirectory = Join-Path $OutputDirectory "determinism_second_run"
+try {
+    if (Test-Path -LiteralPath $determinismDirectory) {
+        Remove-Item -LiteralPath $determinismDirectory -Recurse -Force
+    }
+    [IO.Directory]::CreateDirectory($determinismDirectory) | Out-Null
+    & $generator -OutputDirectory $determinismDirectory
+    if ($LASTEXITCODE -ne 0) {
+        throw "Showcase generator determinism rerun failed with exit code $LASTEXITCODE."
+    }
+    foreach ($deterministicFile in @(
+            "cheeky_giraffe.gltf",
+            "cheeky_giraffe.bin",
+            "giraffe_base_color.png",
+            "giraffe_detail_normal.png",
+            "giraffe_metallic_roughness.png",
+            "original_realistic_rocket.gltf",
+            "original_realistic_rocket.bin",
+            "rocket_base_color.png",
+            "rocket_detail_normal.png",
+            "rocket_metallic_roughness.png")) {
+        $firstHash = (Get-FileHash -LiteralPath (Join-Path $OutputDirectory $deterministicFile) -Algorithm SHA256).Hash
+        $secondHash = (Get-FileHash -LiteralPath (Join-Path $determinismDirectory $deterministicFile) -Algorithm SHA256).Hash
+        if ($firstHash -ne $secondHash) {
+            throw "Showcase generator output is not deterministic for '$deterministicFile'."
+        }
+    }
+}
+finally {
+    if (Test-Path -LiteralPath $determinismDirectory) {
+        Remove-Item -LiteralPath $determinismDirectory -Recurse -Force
+    }
+}
 foreach ($name in @("cheeky_giraffe", "original_realistic_rocket")) {
     $path = Join-Path $OutputDirectory ($name + ".gltf")
     $json = Get-Content -LiteralPath $path -Raw | ConvertFrom-Json
@@ -132,6 +168,27 @@ function Get-DarkPixelRowCoverage {
 
 $giraffe = Get-Content -LiteralPath (Join-Path $OutputDirectory "cheeky_giraffe.gltf") -Raw | ConvertFrom-Json
 $giraffeMaterialNames = @($giraffe.materials | ForEach-Object { $_.name })
+$giraffeBinary = [IO.File]::ReadAllBytes((Join-Path $OutputDirectory "cheeky_giraffe.bin"))
+$giraffeTransitionMaterialIndex = [array]::IndexOf($giraffeMaterialNames, "Giraffe Skin Transition")
+if ($giraffeTransitionMaterialIndex -lt 0) {
+    throw "Showcase giraffe is missing the authored skin-transition material required for continuous limb attachment."
+}
+$giraffeTransitionPrimitive = @($giraffe.meshes[0].primitives | Where-Object { $_.material -eq $giraffeTransitionMaterialIndex })[0]
+if ($null -eq $giraffeTransitionPrimitive) {
+    throw "Showcase giraffe is missing the authored shoulder/hip transition geometry."
+}
+$giraffeTransitionBounds = Get-PositionBounds `
+    -Gltf $giraffe `
+    -Binary $giraffeBinary `
+    -Primitive $giraffeTransitionPrimitive
+$giraffeTransitionWidth = $giraffeTransitionBounds.Maximum[0] - $giraffeTransitionBounds.Minimum[0]
+$giraffeTransitionHeight = $giraffeTransitionBounds.Maximum[1] - $giraffeTransitionBounds.Minimum[1]
+$giraffeTransitionDepth = $giraffeTransitionBounds.Maximum[2] - $giraffeTransitionBounds.Minimum[2]
+if ($giraffeTransitionWidth -lt 1.00 -or
+    $giraffeTransitionHeight -lt 0.55 -or
+    $giraffeTransitionDepth -lt 1.45) {
+    throw "Showcase giraffe skin-transition geometry does not span both shoulder/hip attachments with a bounded continuous form."
+}
 foreach ($requiredName in @("Giraffe Eye White", "Giraffe Iris", "Giraffe Eye Detail", "Giraffe Ear Inner", "Giraffe Ossicone Cap", "Giraffe Hoof", "Giraffe Mane", "Giraffe Nose", "Giraffe Joint")) {
     if ($giraffeMaterialNames -notcontains $requiredName) {
         throw "Showcase giraffe is missing authored feature material '$requiredName'."
@@ -153,7 +210,6 @@ if ($null -eq $giraffeEyeMaterial -or
     throw "Showcase giraffe eye material would incorrectly enter the body-only subsurface and normal-texture evidence path."
 }
 $giraffeVertexCount = 0
-$giraffeBinary = [IO.File]::ReadAllBytes((Join-Path $OutputDirectory "cheeky_giraffe.bin"))
 foreach ($primitive in $giraffe.meshes[0].primitives) {
     $giraffeVertexCount += [int]$giraffe.accessors[$primitive.attributes.POSITION].count
 }
@@ -161,6 +217,10 @@ if ($giraffeVertexCount -lt 16000) {
     throw "Showcase giraffe lost its bounded anatomical topology detail."
 }
 $giraffeTanPrimitive = @($giraffe.meshes[0].primitives | Where-Object { $_.material -eq 0 })[0]
+$giraffeTanVertexCount = [int]$giraffe.accessors[$giraffeTanPrimitive.attributes.POSITION].count
+if ($giraffeTanVertexCount -lt 8500) {
+    throw "Showcase giraffe limb topology did not retain the curved multi-profile attachment detail."
+}
 $giraffeTanBounds = Get-PositionBounds -Gltf $giraffe -Binary $giraffeBinary -Primitive $giraffeTanPrimitive
 $giraffeTanWidth = $giraffeTanBounds.Maximum[0] - $giraffeTanBounds.Minimum[0]
 $giraffeTanHeight = $giraffeTanBounds.Maximum[1] - $giraffeTanBounds.Minimum[1]
