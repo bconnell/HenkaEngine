@@ -26,6 +26,29 @@ their intended shading and post-processing differences. The Windows regression
 covers the triangle contract and normalized edge/corner coverage; application
 captures remain the visual authority for subject placement and quality.
 
+## Deterministic reference scene
+
+The Sandbox3D package contains a Henka-owned PBR reference scene made from nine
+bounded UV-sphere subjects: rough metal, polished metal, painted clearcoat,
+plastic, stone, fabric sheen, dry wood, wet/dry stone, and a subsurface wax
+approximation. The fixture uses the same scene, material, texture, lighting,
+environment, and post-processing paths as the editor showcase; it is not a
+showcase-only shader path.
+
+The background-safe capture harness exposes the scene with:
+
+```text
+--capture-realism-reference wide|close solid|material_preview|rendered
+```
+
+Each capture emits `CAPTURE_READY_REFERENCE` metadata proving the selected
+reference view, all nine settled subjects, the deterministic camera, and the
+centered reference bounds. The companion visual checker compares Solid,
+Material Preview, and Rendered captures for non-flat material response and a
+meaningful Rendered-versus-Preview difference. These are calibration and
+regression fixtures, not proof that every material or renderer effect is
+production-complete.
+
 ## Screen-space indirect diffuse lighting
 
 Rendered presentation also contains a bounded screen-space indirect diffuse approximation. It reconstructs the current receiver position and normal from depth, samples nearby visible HDR surfaces in eight directions, rejects samples outside bounded distance and thickness limits, caps source radiance, and adds the gathered indirect contribution in HDR before bloom and tone mapping.

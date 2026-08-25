@@ -6,8 +6,11 @@ param(
 
     [string]$ExecutablePath = "",
 
-    [ValidateSet("FULL_SHOWCASE", "GIRAFFE_INSPECTION", "GEOMETRY_SOLID")]
+    [ValidateSet("FULL_SHOWCASE", "GIRAFFE_INSPECTION", "GEOMETRY_SOLID", "REALISM_REFERENCE")]
     [string]$EvidenceProfile = "FULL_SHOWCASE",
+
+    [ValidateSet("wide", "close")]
+    [string]$ReferenceView = "wide",
 
     [switch]$IncludeStartupShowcase,
 
@@ -60,6 +63,10 @@ if ($EvidenceProfile -eq "GEOMETRY_SOLID" -and -not $IncludeStartupShowcase) {
 }
 if ($EvidenceProfile -eq "GEOMETRY_SOLID") {
     $IncludeGiraffeInspection = $true
+}
+if ($EvidenceProfile -eq "REALISM_REFERENCE" -and
+    ($IncludeStartupShowcase -or $IncludeGiraffeInspection -or $IncludeTerrain)) {
+    throw "REALISM_REFERENCE evidence is a dedicated reference-scene capture and cannot include showcase or terrain extras."
 }
 
 $script:allowForegroundIntegration = $AllowForegroundIntegration.IsPresent
@@ -130,7 +137,7 @@ function Wait-HenkaCaptureReady {
 
     for ($attempt = 0; $attempt -lt 200; ++$attempt) {
         if (Test-Path -LiteralPath $StdoutPath -PathType Leaf) {
-            $line = Select-String -LiteralPath $StdoutPath -Pattern '^CAPTURE_READY ' |
+            $line = Select-String -LiteralPath $StdoutPath -Pattern '^CAPTURE_READY(_REFERENCE)? ' |
                 Select-Object -Last 1
             if ($null -ne $line) {
                 return $line.Line
@@ -336,6 +343,30 @@ function Assert-HenkaCaptureMetadata {
     }
 }
 
+function Assert-HenkaReferenceCaptureMetadata {
+    param(
+        [Parameter(Mandatory = $true)][string]$Line,
+        [Parameter(Mandatory = $true)][string]$Label,
+        [Parameter(Mandatory = $true)][string]$ExpectedView
+    )
+
+    $pattern = '^\s*CAPTURE_READY_REFERENCE mode=(?<mode>[a-z_]+) view=(?<view>wide|close) viewport=(?<vx>-?\d+),(?<vy>-?\d+),(?<vw>\d+),(?<vh>\d+) aspect=(?<aspect>[-0-9.]+) camera_position=(?<px>[-0-9.]+),(?<py>[-0-9.]+),(?<pz>[-0-9.]+) yaw=(?<yaw>[-0-9.]+) pitch=(?<pitch>[-0-9.]+) roll=(?<roll>[-0-9.]+) fov=(?<fov>[-0-9.]+) reference_bounds=(?<cx>[-0-9.]+),(?<cy>[-0-9.]+),(?<cz>[-0-9.]+),(?<ex>[-0-9.]+),(?<ey>[-0-9.]+),(?<ez>[-0-9.]+) reference_midpoint=(?<mx>[-0-9.]+),(?<my>[-0-9.]+) reference_count=(?<count>\d+) settled_frames=(?<sf>\d+) draw_expected=1\s*$'
+    $match = [regex]::Match($Line, $pattern)
+    if (-not $match.Success) {
+        throw "Reference capture readiness metadata was malformed for $Label."
+    }
+    if ($match.Groups["view"].Value -ne $ExpectedView -or
+        [int]$match.Groups["count"].Value -ne 9 -or
+        [int]$match.Groups["sf"].Value -lt 3) {
+        throw "Reference capture readiness metadata is incomplete for $Label."
+    }
+    return [pscustomobject]@{
+        Canonical = ($Line -replace 'mode=[^ ]+', 'mode=shared')
+        Mode = $match.Groups["mode"].Value
+        View = $match.Groups["view"].Value
+    }
+}
+
 [System.IO.Directory]::CreateDirectory($OutputDirectory) | Out-Null
 Add-Type -AssemblyName System.Drawing
 $modes = @(
@@ -343,6 +374,13 @@ $modes = @(
     @{ Label = "material_preview"; Arguments = @("--capture-mode", "material_preview"); File = "same-camera-material-preview.png" },
     @{ Label = "rendered"; Arguments = @("--capture-mode", "rendered"); File = "same-camera-rendered.png" }
 )
+if ($EvidenceProfile -eq "REALISM_REFERENCE") {
+    $modes = @(
+        @{ Label = "realism_reference_solid"; Arguments = @("--capture-realism-reference", $ReferenceView, "solid"); File = "realism-reference-$ReferenceView-solid.png" },
+        @{ Label = "realism_reference_material_preview"; Arguments = @("--capture-realism-reference", $ReferenceView, "material_preview"); File = "realism-reference-$ReferenceView-material-preview.png" },
+        @{ Label = "realism_reference_rendered"; Arguments = @("--capture-realism-reference", $ReferenceView, "rendered"); File = "realism-reference-$ReferenceView-rendered.png" }
+    )
+}
 if ($EvidenceProfile -eq "GEOMETRY_SOLID") {
     $modes = @(
         @{ Label = "solid"; Arguments = @("--capture-mode", "solid"); File = "same-camera-solid.png" }
@@ -364,6 +402,7 @@ $records.Add("Startup evidence: application-provided readiness for the ordinary 
 $records.Add("Geometry authority: GEOMETRY_SOLID uses neutral Solid captures only; generated fixtures and asset-specific presets are not native-authored proof")
 $records.Add("Giraffe inspection: optional close front, three-quarter, profile, and wide Rendered views plus front Material Preview")
 $records.Add("Terrain evidence: deterministic wide, close-material, and four-region-corner cameras")
+$records.Add("Realism reference: nine deterministic PBR material subjects; view=$ReferenceView")
 $capturePolicy = if ($script:allowForegroundIntegration) {
         "foreground desktop capture was explicitly enabled"
     }
@@ -391,8 +430,14 @@ foreach ($mode in $modes) {
         }
         Assert-HenkaSandboxCaptureReady -Handle $handle -Label $mode.Label
         $metadataLine = Wait-HenkaCaptureReady -StdoutPath $stdoutPath -Process $process -Label $mode.Label
-        [void]$captureMetadata.Add(
-            (Assert-HenkaCaptureMetadata -Line $metadataLine -Label $mode.Label))
+        if ($EvidenceProfile -eq "REALISM_REFERENCE") {
+            [void]$captureMetadata.Add(
+                (Assert-HenkaReferenceCaptureMetadata -Line $metadataLine -Label $mode.Label -ExpectedView $ReferenceView))
+        }
+        else {
+            [void]$captureMetadata.Add(
+                (Assert-HenkaCaptureMetadata -Line $metadataLine -Label $mode.Label))
+        }
         Start-Sleep -Milliseconds 150
         Assert-HenkaSandboxCaptureReady -Handle $handle -Label $mode.Label
         $rect = New-Object HenkaVisualCaptureNativeMethods+RECT
@@ -619,6 +664,12 @@ if ($IncludeTerrain) {
             }
         }
     }
+}
+
+if ($EvidenceProfile -eq "REALISM_REFERENCE") {
+    $records | Set-Content -LiteralPath (Join-Path $OutputDirectory "INDEX.txt")
+    & (Join-Path $PSScriptRoot "check_realism_reference_visual_evidence_windows.ps1") `
+        -InputDirectory $OutputDirectory
 }
 
 if ($IncludeTerrain) {
